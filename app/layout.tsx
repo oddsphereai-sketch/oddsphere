@@ -3,9 +3,9 @@ import "./globals.css";
 import Navbar from "./components/Navbar";
 
 export const metadata: Metadata = {
-  title: "Oddsphere - MLB Stats, Streaks & Trends",
+  title: "Oddsphere AI — AI-Powered Sports Predictions",
   description:
-    "MLB player and team stats, streaks, and trend analysis. For entertainment and informational purposes only.",
+    "AI-powered sports predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL. Where data meets winning. For entertainment and informational purposes only.",
 };
 
 export default function RootLayout({
@@ -15,9 +15,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="bg-gray-900 text-white min-h-screen">
+      <body className="bg-gray-950 text-white min-h-screen flex flex-col">
         <Navbar />
-        {children}
+        <div className="flex-1">{children}</div>
         <footer className="bg-gray-950 border-t border-gray-800 mt-16 py-6">
           <div className="max-w-7xl mx-auto px-4 text-center text-sm text-gray-500">
             <p className="mb-1">
