@@ -3,8 +3,9 @@ import {
   CHARTER_PRICE,
   CHARTER_SPOTS_LEFT,
   CHARTER_SPOTS_TOTAL,
+  X_HANDLE,
+  X_URL,
 } from "./data/trackRecord";
-import NotifyForm from "./components/NotifyForm";
 
 const HERO_STATS = [
   { label: "CFB Moneyline", value: "76.7%", caption: "Lifetime" },
@@ -74,7 +75,7 @@ export default function Home() {
           </h1>
         </div>
         <p className="text-xl sm:text-2xl md:text-3xl text-gray-200 mb-10 max-w-3xl mx-auto leading-relaxed">
-          AI-powered sports predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL.
+          Publicly-tracked AI predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center mb-16">
           <Link href="/join" className={PRIMARY_CTA}>
@@ -136,11 +137,21 @@ export default function Home() {
         </div>
 
         <div className="text-center">
-          <p className="text-sm text-gray-200 mb-3 font-semibold">
+          <p className="text-sm text-gray-200 mb-2 font-semibold">
             Be the first to access The Lab when it launches.
           </p>
-          <NotifyForm context="The Lab" />
-          <p className="mt-4">
+          <p className="text-base text-gray-200 mb-5">
+            Follow @{X_HANDLE} on X for launch updates.
+          </p>
+          <a
+            href={X_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={PRIMARY_CTA}
+          >
+            Follow on X →
+          </a>
+          <p className="mt-5">
             <Link
               href="/tools"
               className="text-sm text-violet-400 hover:text-violet-300"
@@ -197,6 +208,22 @@ export default function Home() {
 
         <p className="text-center mt-10 text-lg font-semibold text-violet-300">
           Same edge. Half the price. Forever.
+        </p>
+      </section>
+
+      {/* Trust paragraph */}
+      <section className="text-center text-sm sm:text-base text-gray-300 max-w-2xl mx-auto leading-relaxed">
+        <p>
+          Built by{" "}
+          <a
+            href={X_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-violet-300 hover:text-violet-200 font-semibold"
+          >
+            @{X_HANDLE}
+          </a>{" "}
+          — running publicly-tracked AI sports predictions since 2024. 2,100+ followers on X watching every pick, hit and miss. No hype. Just the data.
         </p>
       </section>
 

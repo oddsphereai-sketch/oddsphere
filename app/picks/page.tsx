@@ -3,15 +3,15 @@ import Link from "next/link";
 import { WHOP_URL, X_HANDLE, X_URL } from "../data/trackRecord";
 
 const LOCKED_PICKS = [
-  { league: "NFL", emoji: "🏈" },
-  { league: "MLB", emoji: "⚾" },
-  { league: "CFB", emoji: "🏈" },
+  { league: "NFL", emoji: "🏈", matchup: "Chiefs vs. Eagles" },
+  { league: "MLB", emoji: "⚾", matchup: "Yankees vs. Red Sox" },
+  { league: "CFB", emoji: "🏈", matchup: "Alabama vs. Georgia" },
 ];
 
 export const metadata = {
   title: "Today's Picks — Oddsphere AI",
   description:
-    "Daily free picks live on X. Premium subscribers get the full slate in Discord. AI predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL.",
+    "Daily free picks live on X. Premium subscribers get the full slate in Discord. Publicly-tracked AI predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL.",
 };
 
 function CheckIcon() {
@@ -41,10 +41,10 @@ export default function PicksPage() {
             Free Picks, Live on X
           </p>
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-black mb-4 tracking-tight">
-            Today's free picks, live from @{X_HANDLE}
+            Free picks. Daily. Public.
           </h1>
           <p className="text-lg text-gray-200 max-w-2xl mx-auto">
-            We post free picks daily on X. Premium subscribers get the full slate in Discord.
+            Daily AI picks drop on X. The full premium slate drops in Discord.
           </p>
         </header>
 
@@ -111,7 +111,7 @@ export default function PicksPage() {
                 <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
                   {pick.league} {pick.emoji}
                 </p>
-                <p className="text-xl font-bold mt-1">Lorem Ipsum vs. Dolor</p>
+                <p className="text-xl font-bold mt-1">{pick.matchup}</p>
                 <p className="text-sm text-violet-400 mt-2 font-bold">
                   Pick — Premium
                 </p>

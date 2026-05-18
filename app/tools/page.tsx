@@ -1,5 +1,4 @@
-import { WHOP_URL } from "../data/trackRecord";
-import NotifyForm from "../components/NotifyForm";
+import { WHOP_URL, X_HANDLE, X_URL } from "../data/trackRecord";
 
 const LAB_FEATURES = [
   {
@@ -121,18 +120,22 @@ export default function ToolsPage() {
         </p>
       </section>
 
-      {/* Email signup */}
+      {/* Launch updates via X */}
       <section className="bg-gradient-to-br from-violet-950/60 via-purple-950/40 to-fuchsia-950/30 border border-violet-800/40 rounded-2xl p-8 sm:p-14 text-center transition-all duration-300 hover:border-violet-500 hover:shadow-[0_0_40px_rgba(167,139,250,0.25)]">
         <h2 className="text-3xl sm:text-4xl md:text-5xl font-black mb-4 tracking-tight">
           Be the first to access The Lab.
         </h2>
         <p className="text-lg text-gray-200 mb-8 max-w-xl mx-auto">
-          One email, the moment we launch.
+          Follow @{X_HANDLE} on X for launch updates.
         </p>
-        <NotifyForm context="The Lab" />
-        <p className="text-xs text-gray-300 mt-5">
-          We'll send one email when The Lab launches. No spam.
-        </p>
+        <a
+          href={X_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block bg-violet-600 hover:bg-violet-500 text-white text-lg font-semibold px-10 py-4 rounded-md transition-all duration-200 shadow-lg shadow-violet-900/50 hover:shadow-[0_0_30px_rgba(167,139,250,0.55)] hover:scale-[1.02]"
+        >
+          Follow on X →
+        </a>
       </section>
 
       {/* Final CTA */}

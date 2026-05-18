@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 const SITE_URL = "https://oddsphere-ruby.vercel.app";
 const SITE_TITLE = "Oddsphere AI — AI-Powered Sports Predictions";
 const SITE_DESCRIPTION =
-  "AI-powered sports predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL. Where data meets winning. For entertainment and informational purposes only.";
+  "Publicly-tracked AI sports predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL. Where data meets winning. For entertainment and informational purposes only.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
