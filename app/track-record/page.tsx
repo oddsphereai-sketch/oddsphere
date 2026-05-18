@@ -3,20 +3,19 @@ import { TRACK_RECORD, LAST_UPDATED, WHOP_URL } from "../data/trackRecord";
 export const metadata = {
   title: "Track Record — Oddsphere AI",
   description:
-    "Publicly tracked lifetime performance for Oddsphere AI predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL.",
+    "Publicly tracked lifetime and current-season performance for Oddsphere AI predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL.",
 };
 
 export default function TrackRecordPage() {
   return (
-    <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
       <header className="mb-10 text-center">
         <h1 className="text-4xl sm:text-5xl font-bold mb-3">
           Lifetime Model Tracking
         </h1>
         <p className="text-lg text-gray-300">
-          Across 7 leagues. Publicly tracked, fully transparent.
+          Updated {LAST_UPDATED} — fully transparent and publicly tracked.
         </p>
-        <p className="text-sm text-gray-500 mt-2">Last updated: {LAST_UPDATED}</p>
       </header>
 
       <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
@@ -25,37 +24,48 @@ export default function TrackRecordPage() {
             <thead className="bg-gray-950/80 text-gray-400 uppercase text-xs tracking-wider">
               <tr>
                 <th className="text-left py-3 px-4 sm:px-6 font-semibold">
-                  Model Tracking
+                  Sport / Bet Type
                 </th>
                 <th className="text-right py-3 px-4 sm:px-6 font-semibold">
-                  Lifetime Tally
+                  Lifetime
                 </th>
                 <th className="text-right py-3 px-4 sm:px-6 font-semibold">
-                  Lifetime %
+                  Current Season
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
               {TRACK_RECORD.map((row) => {
-                const highlight = row.percent >= 60;
+                const highlight = row.lifetimePercent >= 60;
+                const noCurrent =
+                  row.currentSeasonWins == null || row.currentSeasonTotal == null;
                 return (
                   <tr
                     key={row.market}
                     className="hover:bg-gray-800/40 transition-colors"
                   >
                     <td className="py-3 px-4 sm:px-6 whitespace-nowrap font-medium">
-                      {row.market}{" "}
-                      <span className="ml-0.5">{row.emoji}</span>
+                      {row.market} <span className="ml-0.5">{row.emoji}</span>
                     </td>
-                    <td className="py-3 px-4 sm:px-6 text-right text-gray-300 tabular-nums whitespace-nowrap">
-                      {row.wins.toLocaleString()}/{row.total.toLocaleString()}
+                    <td className="py-3 px-4 sm:px-6 text-right tabular-nums whitespace-nowrap">
+                      <span className="text-gray-300">
+                        {row.lifetimeWins.toLocaleString()}/
+                        {row.lifetimeTotal.toLocaleString()}
+                      </span>
+                      <span
+                        className={`ml-3 font-semibold ${
+                          highlight ? "text-violet-400" : "text-gray-300"
+                        }`}
+                      >
+                        {row.lifetimePercent.toFixed(1)}%
+                      </span>
                     </td>
-                    <td
-                      className={`py-3 px-4 sm:px-6 text-right tabular-nums font-semibold whitespace-nowrap ${
-                        highlight ? "text-violet-400" : "text-gray-300"
-                      }`}
-                    >
-                      {row.percent.toFixed(1)}%
+                    <td className="py-3 px-4 sm:px-6 text-right tabular-nums whitespace-nowrap text-gray-300">
+                      {noCurrent ? (
+                        <span className="text-gray-600">—</span>
+                      ) : (
+                        `${row.currentSeasonWins!.toLocaleString()}/${row.currentSeasonTotal!.toLocaleString()}`
+                      )}
                     </td>
                   </tr>
                 );
@@ -74,7 +84,7 @@ export default function TrackRecordPage() {
           Get tomorrow's picks today.
         </h2>
         <p className="text-gray-300 mb-6 max-w-xl mx-auto">
-          Join the Whop to unlock daily AI predictions in Discord — and the premium site when it launches.
+          Join the Whop to unlock daily AI predictions in Discord — and The Lab the moment it launches.
         </p>
         <a
           href={WHOP_URL}

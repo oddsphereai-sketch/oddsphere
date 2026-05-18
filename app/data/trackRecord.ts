@@ -1,34 +1,38 @@
-// Lifetime model tracking — update manually each week until the Google Sheets
-// automation lands in Week 2.
+// Lifetime model tracking + current-season splits.
+// Update manually each week until the Google Sheets automation lands.
 
 export type TrackRecordRow = {
   market: string;
   emoji: string;
-  wins: number;
-  total: number;
-  percent: number;
+  lifetimeWins: number;
+  lifetimeTotal: number;
+  lifetimePercent: number;
+  currentSeasonWins: number | null; // null = no current-season data (off-season)
+  currentSeasonTotal: number | null;
 };
 
 export const TRACK_RECORD: TrackRecordRow[] = [
-  { market: "NFL (ML)", emoji: "🏈", wins: 181, total: 284, percent: 63.7 },
-  { market: "NFL (O/U)", emoji: "🏈", wins: 155, total: 285, percent: 54.4 },
-  { market: "CFB (ML)", emoji: "🏈", wins: 708, total: 923, percent: 76.7 },
-  { market: "CFB (O/U)", emoji: "🏈", wins: 493, total: 923, percent: 53.4 },
-  { market: "NBA (ML)", emoji: "🏀", wins: 1391, total: 2003, percent: 69.4 },
-  { market: "NBA (O/U's)", emoji: "🏀", wins: 700, total: 1319, percent: 53.1 },
-  { market: "CBB (ML)", emoji: "🏀", wins: 4624, total: 6444, percent: 71.8 },
-  { market: "CBB (O/U's)", emoji: "🏀", wins: 2884, total: 5404, percent: 53.4 },
-  { market: "MLB (ML)", emoji: "⚾", wins: 1524, total: 2684, percent: 56.8 },
-  { market: "MLB (NRFI/YRFI)", emoji: "⚾", wins: 1277, total: 2247, percent: 56.8 },
-  { market: "MLB (NRFI*)", emoji: "⚾", wins: 546, total: 969, percent: 56.3 },
-  { market: "MLB (YRFI*)", emoji: "⚾", wins: 419, total: 734, percent: 57.1 },
-  { market: "MLB (O/U*)", emoji: "⚾", wins: 1096, total: 1989, percent: 55.1 },
-  { market: "UCL (ML)", emoji: "⚽️", wins: 100, total: 174, percent: 57.5 },
-  { market: "UCL (Double Chance)", emoji: "⚽️", wins: 129, total: 174, percent: 74.1 },
-  { market: "NHL (ML)", emoji: "🏒", wins: 22, total: 44, percent: 50.0 },
-  { market: "NHL (O/U)", emoji: "🏒", wins: 28, total: 44, percent: 63.6 },
+  { market: "NFL (ML)",            emoji: "🏈", lifetimeWins:  181, lifetimeTotal:  284, lifetimePercent: 63.7, currentSeasonWins: null, currentSeasonTotal: null },
+  { market: "NFL (O/U)",           emoji: "🏈", lifetimeWins:  155, lifetimeTotal:  285, lifetimePercent: 54.4, currentSeasonWins: null, currentSeasonTotal: null },
+  { market: "CFB (ML)",            emoji: "🏈", lifetimeWins:  708, lifetimeTotal:  923, lifetimePercent: 76.7, currentSeasonWins: null, currentSeasonTotal: null },
+  { market: "CFB (O/U)",           emoji: "🏈", lifetimeWins:  493, lifetimeTotal:  923, lifetimePercent: 53.4, currentSeasonWins: null, currentSeasonTotal: null },
+  { market: "NBA (ML)",            emoji: "🏀", lifetimeWins: 1395, lifetimeTotal: 2010, lifetimePercent: 69.4, currentSeasonWins:  920, currentSeasonTotal: 1340 },
+  { market: "NBA (O/U)",           emoji: "🏀", lifetimeWins:  706, lifetimeTotal: 1326, lifetimePercent: 53.2, currentSeasonWins:  706, currentSeasonTotal: 1326 },
+  { market: "CBB (ML)",            emoji: "🏀", lifetimeWins: 4624, lifetimeTotal: 6444, lifetimePercent: 71.8, currentSeasonWins: 3962, currentSeasonTotal: 5480 },
+  { market: "CBB (O/U)",           emoji: "🏀", lifetimeWins: 2884, lifetimeTotal: 5404, lifetimePercent: 53.4, currentSeasonWins: 2925, currentSeasonTotal: 5480 },
+  { market: "MLB (ML)",            emoji: "⚾", lifetimeWins: 1575, lifetimeTotal: 2776, lifetimePercent: 56.7, currentSeasonWins:  372, currentSeasonTotal:  698 },
+  { market: "MLB (NRFI/YRFI)",     emoji: "⚾", lifetimeWins: 1311, lifetimeTotal: 2315, lifetimePercent: 56.6, currentSeasonWins:  301, currentSeasonTotal:  564 },
+  { market: "MLB (NRFI*)",         emoji: "⚾", lifetimeWins:  568, lifetimeTotal: 1009, lifetimePercent: 56.3, currentSeasonWins:  174, currentSeasonTotal:  321 },
+  { market: "MLB (YRFI*)",         emoji: "⚾", lifetimeWins:  431, lifetimeTotal:  762, lifetimePercent: 56.6, currentSeasonWins:  127, currentSeasonTotal:  243 },
+  { market: "MLB (O/U*)",          emoji: "⚾", lifetimeWins: 1142, lifetimeTotal: 2081, lifetimePercent: 54.9, currentSeasonWins:  370, currentSeasonTotal:  698 },
+  { market: "UCL (ML)",            emoji: "⚽️", lifetimeWins:  100, lifetimeTotal:  174, lifetimePercent: 57.5, currentSeasonWins:    5, currentSeasonTotal:    8 },
+  { market: "UCL (Double Chance)", emoji: "⚽️", lifetimeWins:  129, lifetimeTotal:  174, lifetimePercent: 74.1, currentSeasonWins:    6, currentSeasonTotal:    8 },
+  { market: "NHL (ML)",            emoji: "🏒", lifetimeWins:   27, lifetimeTotal:   51, lifetimePercent: 52.9, currentSeasonWins:   27, currentSeasonTotal:   51 },
+  { market: "NHL (O/U)",           emoji: "🏒", lifetimeWins:   31, lifetimeTotal:   51, lifetimePercent: 60.8, currentSeasonWins:   31, currentSeasonTotal:   51 },
 ];
 
-export const LAST_UPDATED = "May 15, 2026";
+export const LAST_UPDATED = "May 18, 2026";
 
 export const WHOP_URL = "https://whop.com/oddsphereai";
+export const X_HANDLE = "OddSphereAI";
+export const X_URL = "https://x.com/OddSphereAI";

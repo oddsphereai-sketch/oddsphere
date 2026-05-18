@@ -1,14 +1,6 @@
-import { WHOP_URL } from "../data/trackRecord";
-
-const SAMPLE_PICK = {
-  league: "NBA",
-  emoji: "🏀",
-  matchup: "Lakers vs. Celtics",
-  pick: "Lakers ML",
-  confidence: "High — model edge +6.2%",
-  reasoning:
-    "Model favors LAL on recent form, pace differential, and rest advantage. Illustrative sample only.",
-};
+import Link from "next/link";
+import Script from "next/script";
+import { WHOP_URL, X_HANDLE, X_URL } from "../data/trackRecord";
 
 const LOCKED_PICKS = [
   { league: "NFL", emoji: "🏈" },
@@ -19,48 +11,67 @@ const LOCKED_PICKS = [
 export const metadata = {
   title: "Today's Picks — Oddsphere AI",
   description:
-    "A free sample pick plus the full premium AI slate — daily predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL.",
+    "Daily free picks live on X. Premium subscribers get the full slate in Discord. AI predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL.",
 };
 
 export default function PicksPage() {
   return (
-    <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-      <header className="mb-10 text-center">
-        <h1 className="text-4xl sm:text-5xl font-bold mb-3">Today's Picks</h1>
-        <p className="text-gray-400">
-          One free sample. Full slate unlocked for Whop members.
-        </p>
-      </header>
+    <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 space-y-16">
+      {/* Top: Free picks on X */}
+      <section>
+        <header className="mb-6 text-center">
+          <p className="text-xs font-bold uppercase tracking-wider text-violet-400 mb-2">
+            Free Picks, Live on X
+          </p>
+          <h1 className="text-4xl sm:text-5xl font-bold mb-3">
+            Today's free picks, live from @{X_HANDLE}
+          </h1>
+          <p className="text-gray-400 max-w-2xl mx-auto">
+            We post free picks daily on X. Premium subscribers get the full slate in Discord.
+          </p>
+        </header>
 
-      {/* Free Pick */}
-      <section className="mb-12">
-        <p className="text-xs font-bold uppercase tracking-wider text-violet-400 mb-3">
-          Free Sample Pick
-        </p>
-        <div className="bg-gray-900 border border-violet-800/60 rounded-lg p-6">
-          <div className="flex items-start justify-between gap-4 mb-2">
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                {SAMPLE_PICK.league} {SAMPLE_PICK.emoji}
-              </p>
-              <h2 className="text-2xl font-bold mt-1">{SAMPLE_PICK.matchup}</h2>
-            </div>
-            <div className="text-right shrink-0">
-              <p className="text-xs text-gray-500 uppercase tracking-wider">Pick</p>
-              <p className="text-xl font-bold text-violet-400">{SAMPLE_PICK.pick}</p>
-            </div>
-          </div>
-          <p className="text-sm text-gray-300 mt-3">{SAMPLE_PICK.confidence}</p>
-          <p className="text-sm text-gray-500 mt-2">{SAMPLE_PICK.reasoning}</p>
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-2 sm:p-4">
+          <a
+            className="twitter-timeline"
+            data-theme="dark"
+            data-height="600"
+            data-chrome="noheader nofooter transparent"
+            href={`https://twitter.com/${X_HANDLE}?ref_src=twsrc%5Etfw`}
+          >
+            Tweets by @{X_HANDLE}
+          </a>
+          <Script
+            src="https://platform.twitter.com/widgets.js"
+            strategy="lazyOnload"
+          />
         </div>
+
+        <p className="text-center mt-5">
+          <a
+            href={X_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-violet-400 hover:text-violet-300 text-sm font-medium"
+          >
+            Follow @{X_HANDLE} for daily free picks →
+          </a>
+        </p>
       </section>
 
-      {/* Locked Premium Picks */}
-      <section className="mb-12">
-        <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
-          🔒 Premium Picks
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Middle: Locked premium */}
+      <section>
+        <header className="mb-6 text-center">
+          <p className="text-xs font-bold uppercase tracking-wider text-violet-400 mb-2">
+            Want the Full Slate?
+          </p>
+          <h2 className="text-3xl sm:text-4xl font-bold mb-3">
+            Premium picks drop daily in Discord.
+          </h2>
+          <p className="text-gray-400">Locked for Whop members. Want in?</p>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           {LOCKED_PICKS.map((pick, i) => (
             <div
               key={i}
@@ -85,24 +96,34 @@ export default function PicksPage() {
             </div>
           ))}
         </div>
+
+        <div className="text-center">
+          <a
+            href={WHOP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block bg-violet-600 hover:bg-violet-500 text-white font-semibold px-8 py-3 rounded-md transition-colors shadow-lg shadow-violet-900/50"
+          >
+            Join Premium for Full Slate →
+          </a>
+        </div>
       </section>
 
-      {/* CTA */}
-      <section className="bg-gradient-to-br from-violet-900/40 to-fuchsia-900/20 border border-violet-800/40 rounded-xl p-8 sm:p-10 text-center">
-        <h2 className="text-2xl sm:text-3xl font-bold mb-3">
-          Unlock today's full slate.
-        </h2>
-        <p className="text-gray-300 mb-6 max-w-xl mx-auto">
-          Daily AI predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL — delivered in Discord.
+      {/* Bottom: Lab teaser */}
+      <section className="bg-gray-900 border border-violet-800/40 rounded-xl p-6 sm:p-8 text-center">
+        <p className="text-xs font-bold uppercase tracking-wider text-violet-400 mb-2">
+          Coming Soon
         </p>
-        <a
-          href={WHOP_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-block bg-violet-600 hover:bg-violet-500 text-white font-semibold px-8 py-3 rounded-md transition-colors shadow-lg shadow-violet-900/50"
+        <h3 className="text-2xl font-bold mb-2">Plus, The Lab is coming.</h3>
+        <p className="text-gray-400 mb-4 max-w-xl mx-auto text-sm leading-relaxed">
+          Members also get first access to The Lab — our upcoming player props research tool. Don't miss it.
+        </p>
+        <Link
+          href="/tools"
+          className="text-sm text-violet-400 hover:text-violet-300 font-medium"
         >
-          Join Premium on Whop →
-        </a>
+          See what's launching →
+        </Link>
       </section>
     </main>
   );
