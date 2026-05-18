@@ -30,7 +30,7 @@ export default function NotifyForm({ context = "The Lab" }: { context?: string }
         type="email"
         required
         placeholder="you@example.com"
-        className="flex-1 bg-gray-900 border border-gray-700 rounded-md px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500"
+        className="flex-1 bg-gray-900 border border-gray-700 rounded-md px-4 py-3 text-sm text-white placeholder:text-gray-400 focus:outline-none focus:border-violet-500"
       />
       <button
         type="submit"

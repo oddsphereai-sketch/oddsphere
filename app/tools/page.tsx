@@ -45,13 +45,13 @@ export default function ToolsPage() {
     <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 space-y-20">
       {/* Hero */}
       <header className="text-center">
-        <p className="text-xs font-bold uppercase tracking-wider text-violet-400 mb-3">
+        <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-3">
           Premium Research Suite — Coming Soon
         </p>
         <h1 className="text-5xl sm:text-7xl font-bold mb-5 leading-tight bg-gradient-to-r from-violet-400 via-purple-500 to-fuchsia-500 bg-clip-text text-transparent">
           Introducing The Lab.
         </h1>
-        <p className="text-xl sm:text-2xl text-gray-300 mb-4 max-w-3xl mx-auto leading-relaxed">
+        <p className="text-xl sm:text-2xl text-gray-200 mb-4 max-w-3xl mx-auto leading-relaxed">
           The most powerful sports stats research tool you've never had — built for serious bettors and stat junkies.
         </p>
         <p className="text-sm text-violet-300 font-semibold">
@@ -62,7 +62,7 @@ export default function ToolsPage() {
       {/* What is The Lab */}
       <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-8 sm:p-10">
         <h2 className="text-3xl font-bold mb-6">What is The Lab?</h2>
-        <div className="space-y-4 text-gray-300 leading-relaxed">
+        <div className="space-y-4 text-gray-100 leading-relaxed">
           <p>
             Sports data is broken. Hit rates live on one site, recent form on another, sportsbook lines on a third, and nobody puts model edge vs. market line in front of you in one place. You end up with twelve tabs open and still no clear edge.
           </p>
@@ -94,10 +94,10 @@ export default function ToolsPage() {
                   {feat.title}
                 </h3>
                 <p className="text-violet-300 font-semibold mb-4">{feat.pitch}</p>
-                <ul className="space-y-2 text-gray-300 text-sm sm:text-base">
+                <ul className="space-y-2 text-gray-100 text-sm sm:text-base">
                   {feat.bullets.map((b) => (
                     <li key={b} className="flex gap-2">
-                      <span className="text-violet-500 shrink-0">▸</span>
+                      <span className="text-violet-400 shrink-0">▸</span>
                       <span>{b}</span>
                     </li>
                   ))}
@@ -111,7 +111,7 @@ export default function ToolsPage() {
       {/* Sports rollout */}
       <section className="text-center bg-gray-900/50 border border-gray-800 rounded-xl p-8">
         <h2 className="text-2xl sm:text-3xl font-bold mb-3">Launching with MLB.</h2>
-        <p className="text-gray-300 max-w-2xl mx-auto">
+        <p className="text-gray-200 max-w-2xl mx-auto">
           NFL, NBA, NHL, CBB, CFB, and UCL rolling out through season.
         </p>
       </section>
@@ -121,11 +121,11 @@ export default function ToolsPage() {
         <h2 className="text-3xl sm:text-4xl font-bold mb-3">
           Be the first to access The Lab.
         </h2>
-        <p className="text-gray-300 mb-6 max-w-xl mx-auto">
+        <p className="text-gray-200 mb-6 max-w-xl mx-auto">
           One email, the moment we launch.
         </p>
         <NotifyForm context="The Lab" />
-        <p className="text-xs text-gray-500 mt-4">
+        <p className="text-xs text-gray-300 mt-4">
           We'll send one email when The Lab launches. No spam.
         </p>
       </section>
@@ -135,7 +135,7 @@ export default function ToolsPage() {
         <h2 className="text-3xl sm:text-4xl font-bold mb-3">
           Already a Whop member? You're in.
         </h2>
-        <p className="text-gray-300 mb-6 max-w-xl mx-auto leading-relaxed">
+        <p className="text-gray-200 mb-6 max-w-xl mx-auto leading-relaxed">
           Charter Members locked in at $25/month — your rate stays the same when The Lab launches, even after standard pricing goes to $35.
         </p>
         <a

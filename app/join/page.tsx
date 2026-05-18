@@ -86,7 +86,7 @@ const COMPARISON: CompareCol[] = [
 
 function ValueIcon({ value }: { value: Cell }) {
   if (value === "yes") return <span className="text-violet-400">✅</span>;
-  if (value === "no") return <span className="text-gray-600">❌</span>;
+  if (value === "no") return <span className="text-gray-400">❌</span>;
   return <span className="text-yellow-400">❓</span>;
 }
 
@@ -102,27 +102,27 @@ export default function JoinPage() {
     <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 space-y-16">
       {/* Hero */}
       <header className="text-center">
-        <p className="text-xs font-bold uppercase tracking-wider text-violet-400 mb-3">
+        <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-3">
           Join Oddsphere AI
         </p>
         <h1 className="text-4xl sm:text-5xl font-bold mb-4">
           One subscription. Every edge.
         </h1>
-        <p className="text-lg text-gray-300 max-w-2xl mx-auto">
+        <p className="text-lg text-gray-200 max-w-2xl mx-auto">
           Daily AI sports predictions in Discord — plus first access to The Lab — all bundled into a single Whop membership.
         </p>
       </header>
 
       {/* Charter pricing hero */}
       <section className="bg-gradient-to-br from-violet-900/60 via-purple-900/40 to-fuchsia-900/30 border border-violet-600/60 rounded-2xl p-8 sm:p-12 text-center">
-        <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-3">
+        <p className="text-xs font-bold uppercase tracking-wider text-violet-200 mb-3">
           Charter Member Pricing
         </p>
         <h2 className="text-5xl sm:text-6xl font-bold mb-3">
           <span className="text-white">{CHARTER_PRICE}</span>
-          <span className="text-2xl sm:text-3xl text-gray-300 font-medium">/month</span>
+          <span className="text-2xl sm:text-3xl text-gray-200 font-medium">/month</span>
         </h2>
-        <p className="text-lg text-gray-200 mb-8">
+        <p className="text-lg text-gray-100 mb-8">
           Locked in for life. Limited to the first {CHARTER_SPOTS_TOTAL} members.
         </p>
 
@@ -141,7 +141,7 @@ export default function JoinPage() {
             />
           </div>
         </div>
-        <p className="text-violet-200 font-bold mb-6">
+        <p className="text-violet-100 font-bold mb-6">
           {CHARTER_SPOTS_TAKEN} of {CHARTER_SPOTS_TOTAL} charter spots taken — {CHARTER_SPOTS_LEFT} left at this rate
         </p>
 
@@ -154,7 +154,7 @@ export default function JoinPage() {
           Claim Your Charter Spot →
         </a>
 
-        <p className="text-xs text-gray-400 mt-6 max-w-xl mx-auto leading-relaxed">
+        <p className="text-xs text-gray-300 mt-6 max-w-xl mx-auto leading-relaxed">
           After {CHARTER_SPOTS_TOTAL} charter members, pricing increases to {STANDARD_PRICE}/month. Your Charter rate stays locked forever.
         </p>
       </section>
@@ -173,7 +173,7 @@ export default function JoinPage() {
               <span className="text-violet-400 text-xl shrink-0">✅</span>
               <div>
                 <h3 className="font-semibold mb-1">{item.title}</h3>
-                <p className="text-sm text-gray-400">{item.blurb}</p>
+                <p className="text-sm text-gray-100">{item.blurb}</p>
               </div>
             </div>
           ))}
@@ -185,7 +185,7 @@ export default function JoinPage() {
         <h2 className="text-2xl sm:text-3xl font-bold mb-3 text-center">
           Compare for yourself.
         </h2>
-        <p className="text-gray-400 text-center mb-8">
+        <p className="text-gray-200 text-center mb-8">
           We're cheaper. We're more transparent. We're more useful.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
@@ -196,19 +196,19 @@ export default function JoinPage() {
                 col.highlight
                   ? "bg-gradient-to-br from-violet-900/60 to-fuchsia-900/30 border border-violet-600"
                   : col.future
-                  ? "bg-gray-900/50 border border-gray-800"
+                  ? "bg-gray-900/60 border border-gray-800"
                   : "bg-gray-900 border border-gray-800"
               }`}
             >
               <div className="flex items-baseline gap-2 mb-1 flex-wrap">
                 <h3 className="text-xl font-bold">{col.name}</h3>
                 {col.highlight && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-violet-300 bg-violet-900/60 px-2 py-0.5 rounded">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-violet-200 bg-violet-900/60 px-2 py-0.5 rounded">
                     Current
                   </span>
                 )}
                 {col.future && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 bg-gray-800 px-2 py-0.5 rounded">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-300 bg-gray-800 px-2 py-0.5 rounded">
                     Future
                   </span>
                 )}
@@ -216,10 +216,10 @@ export default function JoinPage() {
               <p
                 className={`text-2xl font-bold mb-5 tabular-nums ${
                   col.highlight
-                    ? "text-violet-300"
+                    ? "text-violet-200"
                     : col.future
-                    ? "text-gray-500"
-                    : "text-gray-300"
+                    ? "text-gray-300"
+                    : "text-gray-100"
                 }`}
               >
                 {col.price}
@@ -228,7 +228,7 @@ export default function JoinPage() {
                 {col.rows.map((r) => (
                   <li key={r.label} className="flex gap-2 items-start">
                     <ValueIcon value={r.value} />
-                    <span className="text-gray-300">{r.label}</span>
+                    <span className="text-gray-100">{r.label}</span>
                   </li>
                 ))}
               </ul>
@@ -245,7 +245,7 @@ export default function JoinPage() {
         <p className="text-violet-300 font-semibold">
           Join {CHARTER_SPOTS_TAKEN} active members.
         </p>
-        <p className="text-sm text-gray-500">Cancel anytime.</p>
+        <p className="text-sm text-gray-300">Cancel anytime.</p>
       </section>
 
       {/* Final CTA */}
@@ -253,7 +253,7 @@ export default function JoinPage() {
         <h2 className="text-3xl sm:text-4xl font-bold mb-3">
           Ready to join the edge?
         </h2>
-        <p className="text-gray-300 mb-2 max-w-xl mx-auto">
+        <p className="text-gray-200 mb-2 max-w-xl mx-auto">
           {CHARTER_PRICE}/month Charter pricing — first {CHARTER_SPOTS_TOTAL} members only.
         </p>
         <p className="text-violet-300 mb-8 font-semibold">
@@ -267,7 +267,7 @@ export default function JoinPage() {
         >
           Claim Your Charter Spot →
         </a>
-        <p className="text-xs text-gray-500 italic mt-6">
+        <p className="text-xs text-gray-400 italic mt-6">
           For entertainment and informational purposes only.
         </p>
       </section>

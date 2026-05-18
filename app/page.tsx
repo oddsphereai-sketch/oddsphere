@@ -64,7 +64,7 @@ export default function Home() {
         <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold mb-4 leading-tight bg-gradient-to-r from-violet-400 via-purple-500 to-fuchsia-500 bg-clip-text text-transparent">
           Where data meets winning.
         </h1>
-        <p className="text-lg sm:text-2xl text-gray-300 mb-8 max-w-2xl mx-auto">
+        <p className="text-lg sm:text-2xl text-gray-200 mb-8 max-w-2xl mx-auto">
           AI-powered sports predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center mb-12">
@@ -76,7 +76,7 @@ export default function Home() {
           </Link>
           <Link
             href="/track-record"
-            className="inline-block border border-gray-700 hover:border-violet-500 hover:text-violet-300 text-gray-300 font-semibold px-8 py-3 rounded-md transition-colors"
+            className="inline-block border border-gray-700 hover:border-violet-500 hover:text-violet-300 text-gray-200 font-semibold px-8 py-3 rounded-md transition-colors"
           >
             See the Track Record
           </Link>
@@ -92,7 +92,7 @@ export default function Home() {
                 {stat.value}
               </p>
               <p className="text-sm font-semibold text-white mb-1">{stat.label}</p>
-              <p className="text-xs text-gray-500">{stat.caption}</p>
+              <p className="text-xs text-gray-300 uppercase tracking-wider">{stat.caption}</p>
             </div>
           ))}
         </div>
@@ -109,11 +109,11 @@ export default function Home() {
       {/* The Lab — Coming Soon */}
       <section className="bg-gradient-to-br from-violet-950/60 via-purple-950/40 to-fuchsia-950/30 border border-violet-800/40 rounded-2xl p-8 sm:p-12">
         <div className="text-center mb-10">
-          <p className="text-xs font-bold uppercase tracking-wider text-violet-400 mb-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-3">
             Premium Research Suite
           </p>
           <h2 className="text-4xl sm:text-5xl font-bold mb-4">The Lab is coming.</h2>
-          <p className="text-lg text-gray-300 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-lg text-gray-200 max-w-2xl mx-auto leading-relaxed">
             The most powerful sports stats research tool you've never had. Player props streaks, team trends, model edge vs. market lines. Included with every Whop membership.
           </p>
         </div>
@@ -125,13 +125,13 @@ export default function Home() {
               className="bg-gray-900/70 border border-gray-800 rounded-lg p-6"
             >
               <h3 className="text-xl font-bold mb-3">{feat.title}</h3>
-              <p className="text-gray-400 text-sm leading-relaxed">{feat.blurb}</p>
+              <p className="text-gray-100 text-sm leading-relaxed">{feat.blurb}</p>
             </div>
           ))}
         </div>
 
         <div className="text-center">
-          <p className="text-sm text-gray-300 mb-3 font-semibold">
+          <p className="text-sm text-gray-200 mb-3 font-semibold">
             Be the first to access The Lab when it launches.
           </p>
           <NotifyForm context="The Lab" />
@@ -152,7 +152,7 @@ export default function Home() {
           <h2 className="text-4xl sm:text-5xl font-bold mb-3">
             Why {CHARTER_PRICE}/month is a steal.
           </h2>
-          <p className="text-gray-400">Side-by-side with what's out there.</p>
+          <p className="text-gray-200">Side-by-side with what's out there.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
@@ -167,7 +167,7 @@ export default function Home() {
             >
               <p
                 className={`text-xs font-bold uppercase tracking-wider mb-2 ${
-                  item.highlight ? "text-violet-300" : "text-gray-500"
+                  item.highlight ? "text-violet-200" : "text-gray-300"
                 }`}
               >
                 {item.highlight ? "Our pricing" : "Compare"}
@@ -175,18 +175,18 @@ export default function Home() {
               <h3 className="text-xl font-bold mb-1">{item.name}</h3>
               <p
                 className={`text-2xl font-bold mb-4 tabular-nums ${
-                  item.highlight ? "text-violet-300" : "text-gray-300"
+                  item.highlight ? "text-violet-200" : "text-gray-100"
                 }`}
               >
                 {item.price}
               </p>
-              <ul className="space-y-2 text-sm text-gray-300 flex-1">
+              <ul className="space-y-2 text-sm text-gray-100 flex-1">
                 {item.bullets.map((b) => (
                   <li key={b} className="flex gap-2">
                     <span
-                      className={item.highlight ? "text-violet-400" : "text-gray-500"}
+                      className={item.highlight ? "text-violet-400" : "text-violet-400"}
                     >
-                      {item.highlight ? "✓" : "•"}
+                      {item.highlight ? "✓" : "▸"}
                     </span>
                     <span>{b}</span>
                   </li>
@@ -204,7 +204,7 @@ export default function Home() {
       {/* Final CTA */}
       <section className="bg-gradient-to-br from-violet-900/40 to-fuchsia-900/20 border border-violet-800/40 rounded-xl p-8 sm:p-12 text-center">
         <h2 className="text-3xl sm:text-4xl font-bold mb-3">Join the edge.</h2>
-        <p className="text-gray-300 mb-2 max-w-xl mx-auto">
+        <p className="text-gray-200 mb-2 max-w-xl mx-auto">
           Daily AI picks in Discord plus first access to The Lab — all with one Whop subscription.
         </p>
         <p className="text-sm text-violet-300 font-semibold mb-6">
@@ -219,7 +219,7 @@ export default function Home() {
         <p className="text-sm text-violet-300 font-semibold mt-4">
           {CHARTER_SPOTS_LEFT} charter spots left.
         </p>
-        <p className="text-xs text-gray-500 italic mt-6">
+        <p className="text-xs text-gray-400 italic mt-6">
           For entertainment and informational purposes only.
         </p>
       </section>
