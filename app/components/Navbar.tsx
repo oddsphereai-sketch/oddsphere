@@ -17,7 +17,7 @@ export default function Navbar() {
   return (
     <nav className="bg-gray-950/80 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-20">
+        <div className="flex items-center justify-between h-20 sm:h-24">
           <Link
             href="/"
             aria-label="Oddsphere AI — Home"
@@ -30,8 +30,8 @@ export default function Navbar() {
               width={300}
               height={300}
               priority
-              sizes="40px"
-              className="block sm:hidden h-10 w-auto invert drop-shadow-[0_0_8px_rgba(167,139,250,0.5)]"
+              sizes="48px"
+              className="block sm:hidden h-12 w-auto invert drop-shadow-[0_0_8px_rgba(167,139,250,0.5)]"
             />
             {/* Desktop: full combo */}
             <Image
@@ -40,8 +40,8 @@ export default function Navbar() {
               width={500}
               height={300}
               priority
-              sizes="220px"
-              className="hidden sm:block h-12 w-auto invert drop-shadow-[0_0_8px_rgba(167,139,250,0.5)]"
+              sizes="280px"
+              className="hidden sm:block h-16 w-auto invert drop-shadow-[0_0_8px_rgba(167,139,250,0.5)]"
             />
           </Link>
           <div className="flex items-center space-x-0.5 sm:space-x-2">

@@ -7,10 +7,10 @@ const LAB_FEATURES = [
     title: "PLAYER PROPS RESEARCH",
     pitch: "Find players riding hot streaks across every prop type.",
     bullets: [
-      "Filter by sport, prop (hits, HRs, Ks, RBIs, total bases), and game date.",
+      "Filter by sport, prop type, and game date.",
       "See hit rate over last 5, 10, and 20 games.",
-      "Compare to tonight's line.",
-      "AI flags the top edge plays.",
+      "Compare to tonight's line — find the divergences.",
+      "Launching with MLB markets. Expanding to NFL, NBA, NHL, CBB, CFB, and UCL through season.",
     ],
   },
   {
@@ -18,18 +18,19 @@ const LAB_FEATURES = [
     title: "TEAM TRENDS",
     pitch: "Validate the line with real team data.",
     bullets: [
-      "Recent form, home/away splits, vs. LHP/RHP, head-to-head matchups.",
+      "Recent form, home/away splits, head-to-head matchups.",
+      "Matchup context adapted to each sport — handedness for MLB, pace and rest for NBA, weather for NFL.",
       "Cross-reference team trends with our score model in seconds.",
     ],
   },
   {
     icon: "🎯",
-    title: "EDGE FINDER",
-    pitch: "Side-by-side model edge vs. market line.",
+    title: "MODEL vs. MARKET",
+    pitch: "See where our model disagrees most with the line.",
     bullets: [
-      "Every game in every league, model output beside the sportsbook line.",
-      "AI flags the biggest mispricings.",
-      "The same intelligence behind our daily picks — now searchable, filterable, yours.",
+      "Every game, every market — our model's probability next to the implied probability from the line.",
+      "Sort by the size of the gap. Filter by sport.",
+      "The same models behind our tracked daily picks — now in a sortable view.",
     ],
   },
 ];
@@ -37,7 +38,7 @@ const LAB_FEATURES = [
 export const metadata = {
   title: "The Lab — Oddsphere AI",
   description:
-    "Introducing The Lab — the most powerful sports stats research tool you've never had. Player props streaks, team trends, edge finder. Launching soon, included with Whop membership.",
+    "The bet research tool built on tested signals, transparent math, and real edge. Player props streaks, team trends, model vs. market. Launching with MLB.",
 };
 
 export default function ToolsPage() {
@@ -46,7 +47,7 @@ export default function ToolsPage() {
       {/* Hero */}
       <header className="text-center">
         <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-4">
-          Premium Research Suite — Coming Soon
+          Research Suite — Coming Soon
         </p>
         <div className="relative isolate inline-block">
           <div className="hero-glow"></div>
@@ -55,10 +56,10 @@ export default function ToolsPage() {
           </h1>
         </div>
         <p className="text-xl sm:text-2xl md:text-3xl text-gray-200 mb-4 max-w-3xl mx-auto leading-relaxed">
-          The most powerful sports stats research tool you've never had — built for serious bettors and stat junkies.
+          The bet research tool built on tested signals, transparent math, and real edge.
         </p>
         <p className="text-sm text-violet-300 font-semibold">
-          Launching soon. Included with Whop membership.
+          Launching with MLB. Included with every Whop membership.
         </p>
       </header>
 
@@ -72,10 +73,7 @@ export default function ToolsPage() {
             Sports data is broken. Hit rates live on one site, recent form on another, sportsbook lines on a third, and nobody puts model edge vs. market line in front of you in one place. You end up with twelve tabs open and still no clear edge.
           </p>
           <p>
-            The Lab fixes that. One searchable, filterable interface for every prop, every team, every game — powered by the same AI model behind our daily picks. Sort by hit rate over the last 10 games, filter to props within 5% of the market line, surface the games where our model disagrees most with the book.
-          </p>
-          <p className="text-violet-300 font-semibold">
-            Real-time data, real edges, no spreadsheets.
+            The Lab brings it together. One searchable view of the props and games that matter tonight, with tested signals layered on top — hot streaks, matchup history, weather impact, model edge vs. market line. Every signal is backtested across thousands of historical games. We show you the hit rate, the sample size, and how each one works. No black boxes.
           </p>
         </div>
       </section>

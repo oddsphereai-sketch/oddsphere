@@ -17,17 +17,17 @@ const LAB_FEATURES = [
   {
     title: "🔥 Player Props Streaks",
     blurb:
-      "Find the hottest hitters, pitchers, and scorers riding hit streaks. Search by sport, prop type, last 5/10/20 games. See hit rate vs. tonight's line — find your edge instantly.",
+      "Hot streaks across every prop type, with hit rates vs. tonight's line.",
   },
   {
     title: "📊 Team Trends",
     blurb:
-      "Recent form, home/away splits, head-to-head matchups across every team in every league we cover.",
+      "Recent form, splits, and matchup context across every team in every league we cover.",
   },
   {
-    title: "🎯 Edge Finder",
+    title: "🎯 Model vs. Market",
     blurb:
-      "Side-by-side model edge vs. market lines for every game. AI flags the biggest mispriced bets daily.",
+      "Where our model disagrees most with the sportsbook line, surfaced automatically.",
   },
 ];
 
@@ -47,12 +47,6 @@ const COMPARISON = [
     price: "$50–200/mo",
     highlight: false,
     bullets: ["Picks only", "No transparency", "No research tools"],
-  },
-  {
-    name: "BettingPros",
-    price: "$30–50/mo",
-    highlight: false,
-    bullets: ["Analytics only", "No daily picks", "No AI model"],
   },
 ];
 
@@ -122,13 +116,13 @@ export default function Home() {
       <section className="bg-gradient-to-br from-violet-950/60 via-purple-950/40 to-fuchsia-950/30 border border-violet-800/40 rounded-2xl p-8 sm:p-14">
         <div className="text-center mb-12">
           <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-3">
-            Premium Research Suite
+            Research Suite — Coming Soon
           </p>
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-black mb-4 tracking-tight">
             The Lab is coming.
           </h2>
           <p className="text-lg sm:text-xl text-gray-200 max-w-2xl mx-auto leading-relaxed">
-            The most powerful sports stats research tool you've never had. Player props streaks, team trends, model edge vs. market lines. Included with every Whop membership.
+            Tested signals. Real edge. Transparent methodology. The bet research tool serious bettors have been asking for — included with every Whop membership.
           </p>
         </div>
 
@@ -166,7 +160,7 @@ export default function Home() {
           <p className="text-lg text-gray-200">Side-by-side with what's out there.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 max-w-4xl mx-auto">
           {COMPARISON.map((item) => (
             <div
               key={item.name}

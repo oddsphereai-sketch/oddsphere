@@ -1,5 +1,5 @@
+import Image from "next/image";
 import Link from "next/link";
-import Script from "next/script";
 import { WHOP_URL, X_HANDLE, X_URL } from "../data/trackRecord";
 
 const LOCKED_PICKS = [
@@ -14,12 +14,29 @@ export const metadata = {
     "Daily free picks live on X. Premium subscribers get the full slate in Discord. AI predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL.",
 };
 
+function CheckIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="w-4 h-4 text-violet-400 shrink-0"
+      fill="currentColor"
+      viewBox="0 0 20 20"
+    >
+      <path
+        fillRule="evenodd"
+        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
 export default function PicksPage() {
   return (
     <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 space-y-20 sm:space-y-28">
       {/* Top: Free picks on X */}
       <section>
-        <header className="mb-8 text-center">
+        <header className="mb-10 text-center">
           <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-3">
             Free Picks, Live on X
           </p>
@@ -31,32 +48,45 @@ export default function PicksPage() {
           </p>
         </header>
 
-        <div className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-lg p-2 sm:p-4">
-          <a
-            className="twitter-timeline"
-            data-theme="dark"
-            data-height="600"
-            data-chrome="noheader nofooter transparent"
-            href={`https://twitter.com/${X_HANDLE}?ref_src=twsrc%5Etfw`}
-          >
-            Tweets by @{X_HANDLE}
-          </a>
-          <Script
-            src="https://platform.twitter.com/widgets.js"
-            strategy="lazyOnload"
-          />
-        </div>
-
-        <p className="text-center mt-6">
+        {/* Follow on X CTA card */}
+        <div className="max-w-2xl mx-auto bg-gradient-to-br from-gray-900 to-gray-950 border border-violet-800/50 rounded-2xl p-8 sm:p-12 text-center transition-all duration-300 hover:border-violet-500 hover:shadow-[0_0_40px_rgba(167,139,250,0.25)]">
+          <div className="flex justify-center mb-6">
+            <Image
+              src="/icon-logo.png"
+              alt="Oddsphere AI"
+              width={300}
+              height={300}
+              sizes="80px"
+              className="h-16 w-auto invert drop-shadow-[0_0_10px_rgba(167,139,250,0.5)]"
+            />
+          </div>
+          <p className="text-2xl sm:text-3xl font-black text-white mb-2 tracking-tight">
+            @{X_HANDLE}
+          </p>
+          <p className="text-lg text-gray-200 mb-8">Daily free picks. Live on X.</p>
           <a
             href={X_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-violet-400 hover:text-violet-300 text-sm font-medium"
+            className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white font-semibold px-8 py-3 rounded-md transition-all duration-200 shadow-lg shadow-violet-900/40 hover:shadow-[0_0_25px_rgba(167,139,250,0.5)] hover:scale-[1.02]"
           >
-            Follow @{X_HANDLE} for daily free picks →
+            Follow on X →
           </a>
-        </p>
+          <div className="mt-8 pt-6 border-t border-gray-800 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-gray-200">
+            <span className="inline-flex items-center gap-1.5">
+              <CheckIcon />
+              2.1K+ followers
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <CheckIcon />
+              Verified
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <CheckIcon />
+              Updated daily
+            </span>
+          </div>
+        </div>
       </section>
 
       {/* Middle: Locked premium */}

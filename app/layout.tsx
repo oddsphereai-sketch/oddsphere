@@ -74,8 +74,8 @@ export default function RootLayout({
                 alt="Oddsphere AI"
                 width={500}
                 height={300}
-                sizes="200px"
-                className="h-8 sm:h-10 w-auto invert drop-shadow-[0_0_6px_rgba(167,139,250,0.3)]"
+                sizes="240px"
+                className="h-10 sm:h-14 w-auto invert drop-shadow-[0_0_6px_rgba(167,139,250,0.3)]"
               />
             </div>
             <p className="mb-1">

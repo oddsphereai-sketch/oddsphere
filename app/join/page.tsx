@@ -46,9 +46,10 @@ const COMPARISON: CompareCol[] = [
     highlight: true,
     rows: [
       { label: "Daily AI picks across NFL, NBA, MLB, CBB, CFB, UCL, NHL", value: "yes" },
-      { label: "Lifetime tracked record", value: "yes" },
+      { label: "Public lifetime tracked record", value: "yes" },
       { label: "The Lab access at launch", value: "yes" },
       { label: "Locked-in rate forever", value: "yes" },
+      { label: "One subscription = Discord + premium website", value: "yes" },
     ],
   },
   {
@@ -57,9 +58,10 @@ const COMPARISON: CompareCol[] = [
     future: true,
     rows: [
       { label: "Daily AI picks across NFL, NBA, MLB, CBB, CFB, UCL, NHL", value: "yes" },
-      { label: "Lifetime tracked record", value: "yes" },
+      { label: "Public lifetime tracked record", value: "yes" },
       { label: "The Lab access at launch", value: "yes" },
       { label: "Locked-in rate forever", value: "no" },
+      { label: "One subscription = Discord + premium website", value: "yes" },
     ],
   },
   {
@@ -68,18 +70,9 @@ const COMPARISON: CompareCol[] = [
     rows: [
       { label: "Daily picks", value: "yes" },
       { label: "Multi-sport coverage", value: "maybe" },
-      { label: "Tracked record", value: "no" },
+      { label: "Public lifetime tracked record", value: "no" },
       { label: "Research tools", value: "no" },
-    ],
-  },
-  {
-    name: "BettingPros",
-    price: "$30–50/mo",
-    rows: [
-      { label: "Daily picks", value: "no" },
-      { label: "Multi-sport coverage", value: "yes" },
-      { label: "Tracked record", value: "yes" },
-      { label: "AI predictions", value: "no" },
+      { label: "AI model predictions", value: "no" },
     ],
   },
 ];
@@ -191,7 +184,7 @@ export default function JoinPage() {
         <p className="text-lg text-gray-200 text-center mb-10">
           We're cheaper. We're more transparent. We're more useful.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
           {COMPARISON.map((col) => (
             <div
               key={col.name}
