@@ -36,3 +36,13 @@ export const LAST_UPDATED = "May 18, 2026";
 export const WHOP_URL = "https://whop.com/oddsphereai";
 export const X_HANDLE = "OddSphereAI";
 export const X_URL = "https://x.com/OddSphereAI";
+
+// Charter pricing — bump CHARTER_SPOTS_TAKEN as new members sign up.
+// When it reaches CHARTER_SPOTS_TOTAL, the Charter offer closes and new
+// signups pay STANDARD_PRICE; existing Charter members keep CHARTER_PRICE
+// for life.
+export const CHARTER_PRICE = "$25";
+export const STANDARD_PRICE = "$35";
+export const CHARTER_SPOTS_TOTAL = 50;
+export const CHARTER_SPOTS_TAKEN = 20;
+export const CHARTER_SPOTS_LEFT = CHARTER_SPOTS_TOTAL - CHARTER_SPOTS_TAKEN;

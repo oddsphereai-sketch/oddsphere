@@ -135,8 +135,8 @@ export default function ToolsPage() {
         <h2 className="text-3xl sm:text-4xl font-bold mb-3">
           Already a Whop member? You're in.
         </h2>
-        <p className="text-gray-300 mb-6 max-w-xl mx-auto">
-          Not yet? Join now — pricing locks in when The Lab launches.
+        <p className="text-gray-300 mb-6 max-w-xl mx-auto leading-relaxed">
+          Charter Members locked in at $25/month — your rate stays the same when The Lab launches, even after standard pricing goes to $35.
         </p>
         <a
           href={WHOP_URL}

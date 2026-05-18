@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { WHOP_URL } from "./data/trackRecord";
+import {
+  CHARTER_PRICE,
+  CHARTER_SPOTS_LEFT,
+  CHARTER_SPOTS_TOTAL,
+} from "./data/trackRecord";
 import NotifyForm from "./components/NotifyForm";
 
 const HERO_STATS = [
@@ -29,34 +33,26 @@ const LAB_FEATURES = [
 
 const COMPARISON = [
   {
-    name: "Oddsphere AI",
-    price: "$20/mo",
+    name: "Oddsphere AI — Charter",
+    price: `${CHARTER_PRICE}/mo`,
     highlight: true,
     bullets: [
       "Daily AI picks across 7 sports",
       "The Lab access (when launched)",
-      "Lifetime tracked record",
+      "Locked-in rate — forever",
     ],
   },
   {
     name: "Typical Picks Discord",
     price: "$50–200/mo",
     highlight: false,
-    bullets: [
-      "Picks only",
-      "No transparency",
-      "No research tools",
-    ],
+    bullets: ["Picks only", "No transparency", "No research tools"],
   },
   {
     name: "BettingPros",
     price: "$30–50/mo",
     highlight: false,
-    bullets: [
-      "Analytics only",
-      "No daily picks",
-      "No AI model",
-    ],
+    bullets: ["Analytics only", "No daily picks", "No AI model"],
   },
 ];
 
@@ -150,11 +146,11 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Why Oddsphere AI */}
+      {/* Why $25/month is a steal */}
       <section>
         <div className="text-center mb-10">
           <h2 className="text-4xl sm:text-5xl font-bold mb-3">
-            Why $20/month is a steal.
+            Why {CHARTER_PRICE}/month is a steal.
           </h2>
           <p className="text-gray-400">Side-by-side with what's out there.</p>
         </div>
@@ -201,15 +197,18 @@ export default function Home() {
         </div>
 
         <p className="text-center mt-8 text-lg font-semibold text-violet-300">
-          Same data edge. Half the price.
+          Same edge. Half the price. Forever.
         </p>
       </section>
 
       {/* Final CTA */}
       <section className="bg-gradient-to-br from-violet-900/40 to-fuchsia-900/20 border border-violet-800/40 rounded-xl p-8 sm:p-12 text-center">
         <h2 className="text-3xl sm:text-4xl font-bold mb-3">Join the edge.</h2>
-        <p className="text-gray-300 mb-6 max-w-xl mx-auto">
+        <p className="text-gray-300 mb-2 max-w-xl mx-auto">
           Daily AI picks in Discord plus first access to The Lab — all with one Whop subscription.
+        </p>
+        <p className="text-sm text-violet-300 font-semibold mb-6">
+          {CHARTER_PRICE}/month — Charter pricing, first {CHARTER_SPOTS_TOTAL} members only.
         </p>
         <Link
           href="/join"
@@ -217,6 +216,9 @@ export default function Home() {
         >
           Join Premium →
         </Link>
+        <p className="text-sm text-violet-300 font-semibold mt-4">
+          {CHARTER_SPOTS_LEFT} charter spots left.
+        </p>
         <p className="text-xs text-gray-500 italic mt-6">
           For entertainment and informational purposes only.
         </p>
