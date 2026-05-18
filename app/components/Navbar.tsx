@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -19,10 +20,18 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           <Link
             href="/"
-            className="text-lg sm:text-2xl font-bold tracking-tight whitespace-nowrap"
+            aria-label="Oddsphere AI — Home"
+            className="flex items-center shrink-0 transition hover:brightness-125"
           >
-            <span className="text-white">ODDSPHERE</span>
-            <span className="text-violet-500 ml-1">AI</span>
+            <Image
+              src="/logo.png"
+              alt="Oddsphere AI"
+              width={500}
+              height={300}
+              priority
+              sizes="(min-width: 640px) 200px, 150px"
+              className="h-8 sm:h-10 w-auto invert mix-blend-lighten"
+            />
           </Link>
           <div className="flex items-center space-x-0.5 sm:space-x-2">
             {navLinks.map((link) => (
