@@ -42,16 +42,19 @@ export const metadata = {
 
 export default function ToolsPage() {
   return (
-    <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 space-y-20">
+    <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 space-y-20 sm:space-y-28">
       {/* Hero */}
       <header className="text-center">
-        <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-3">
+        <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-4">
           Premium Research Suite — Coming Soon
         </p>
-        <h1 className="text-5xl sm:text-7xl font-bold mb-5 leading-tight bg-gradient-to-r from-violet-400 via-purple-500 to-fuchsia-500 bg-clip-text text-transparent">
-          Introducing The Lab.
-        </h1>
-        <p className="text-xl sm:text-2xl text-gray-200 mb-4 max-w-3xl mx-auto leading-relaxed">
+        <div className="relative isolate inline-block">
+          <div className="hero-glow"></div>
+          <h1 className="relative text-5xl sm:text-7xl md:text-8xl font-black mb-6 leading-[1.05] tracking-tight bg-gradient-to-r from-violet-400 via-purple-500 to-fuchsia-500 bg-clip-text text-transparent">
+            Introducing The Lab.
+          </h1>
+        </div>
+        <p className="text-xl sm:text-2xl md:text-3xl text-gray-200 mb-4 max-w-3xl mx-auto leading-relaxed">
           The most powerful sports stats research tool you've never had — built for serious bettors and stat junkies.
         </p>
         <p className="text-sm text-violet-300 font-semibold">
@@ -60,9 +63,11 @@ export default function ToolsPage() {
       </header>
 
       {/* What is The Lab */}
-      <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-8 sm:p-10">
-        <h2 className="text-3xl font-bold mb-6">What is The Lab?</h2>
-        <div className="space-y-4 text-gray-100 leading-relaxed">
+      <section className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl p-8 sm:p-12 transition-all duration-300 hover:border-violet-500/50 hover:shadow-[0_0_30px_rgba(167,139,250,0.15)]">
+        <h2 className="text-3xl sm:text-4xl font-black mb-6 tracking-tight">
+          What is The Lab?
+        </h2>
+        <div className="space-y-5 text-gray-100 leading-relaxed text-base sm:text-lg">
           <p>
             Sports data is broken. Hit rates live on one site, recent form on another, sportsbook lines on a third, and nobody puts model edge vs. market line in front of you in one place. You end up with twelve tabs open and still no clear edge.
           </p>
@@ -77,14 +82,14 @@ export default function ToolsPage() {
 
       {/* What you'll be able to do */}
       <section>
-        <h2 className="text-3xl sm:text-4xl font-bold mb-8 text-center">
+        <h2 className="text-3xl sm:text-4xl md:text-5xl font-black mb-10 text-center tracking-tight">
           What you'll be able to do
         </h2>
         <div className="space-y-6">
           {LAB_FEATURES.map((feat) => (
             <div
               key={feat.title}
-              className="bg-gray-900 border border-gray-800 rounded-xl p-6 sm:p-8 grid grid-cols-1 md:grid-cols-[120px_1fr] gap-6 items-start"
+              className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl p-6 sm:p-8 grid grid-cols-1 md:grid-cols-[120px_1fr] gap-6 items-start transition-all duration-300 hover:border-violet-500/50 hover:shadow-[0_0_30px_rgba(167,139,250,0.15)]"
             >
               <div className="text-5xl sm:text-6xl text-center md:text-left">
                 {feat.icon}
@@ -109,40 +114,42 @@ export default function ToolsPage() {
       </section>
 
       {/* Sports rollout */}
-      <section className="text-center bg-gray-900/50 border border-gray-800 rounded-xl p-8">
-        <h2 className="text-2xl sm:text-3xl font-bold mb-3">Launching with MLB.</h2>
-        <p className="text-gray-200 max-w-2xl mx-auto">
+      <section className="text-center bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl p-10 transition-all duration-300 hover:border-violet-500/50 hover:shadow-[0_0_30px_rgba(167,139,250,0.15)]">
+        <h2 className="text-2xl sm:text-3xl font-black mb-3 tracking-tight">
+          Launching with MLB.
+        </h2>
+        <p className="text-lg text-gray-200 max-w-2xl mx-auto">
           NFL, NBA, NHL, CBB, CFB, and UCL rolling out through season.
         </p>
       </section>
 
       {/* Email signup */}
-      <section className="bg-gradient-to-br from-violet-950/60 via-purple-950/40 to-fuchsia-950/30 border border-violet-800/40 rounded-xl p-8 sm:p-12 text-center">
-        <h2 className="text-3xl sm:text-4xl font-bold mb-3">
+      <section className="bg-gradient-to-br from-violet-950/60 via-purple-950/40 to-fuchsia-950/30 border border-violet-800/40 rounded-2xl p-8 sm:p-14 text-center transition-all duration-300 hover:border-violet-500 hover:shadow-[0_0_40px_rgba(167,139,250,0.25)]">
+        <h2 className="text-3xl sm:text-4xl md:text-5xl font-black mb-4 tracking-tight">
           Be the first to access The Lab.
         </h2>
-        <p className="text-gray-200 mb-6 max-w-xl mx-auto">
+        <p className="text-lg text-gray-200 mb-8 max-w-xl mx-auto">
           One email, the moment we launch.
         </p>
         <NotifyForm context="The Lab" />
-        <p className="text-xs text-gray-300 mt-4">
+        <p className="text-xs text-gray-300 mt-5">
           We'll send one email when The Lab launches. No spam.
         </p>
       </section>
 
       {/* Final CTA */}
       <section className="text-center">
-        <h2 className="text-3xl sm:text-4xl font-bold mb-3">
+        <h2 className="text-3xl sm:text-4xl md:text-5xl font-black mb-4 tracking-tight">
           Already a Whop member? You're in.
         </h2>
-        <p className="text-gray-200 mb-6 max-w-xl mx-auto leading-relaxed">
+        <p className="text-lg text-gray-200 mb-8 max-w-xl mx-auto leading-relaxed">
           Charter Members locked in at $25/month — your rate stays the same when The Lab launches, even after standard pricing goes to $35.
         </p>
         <a
           href={WHOP_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-block bg-violet-600 hover:bg-violet-500 text-white font-semibold px-8 py-3 rounded-md transition-colors shadow-lg shadow-violet-900/50"
+          className="inline-block bg-violet-600 hover:bg-violet-500 text-white font-semibold px-8 py-3 rounded-md transition-all duration-200 shadow-lg shadow-violet-900/50 hover:shadow-[0_0_25px_rgba(167,139,250,0.5)] hover:scale-[1.02]"
         >
           Join Premium →
         </a>

@@ -16,22 +16,22 @@ export const metadata = {
 
 export default function PicksPage() {
   return (
-    <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 space-y-16">
+    <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 space-y-20 sm:space-y-28">
       {/* Top: Free picks on X */}
       <section>
-        <header className="mb-6 text-center">
-          <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-2">
+        <header className="mb-8 text-center">
+          <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-3">
             Free Picks, Live on X
           </p>
-          <h1 className="text-4xl sm:text-5xl font-bold mb-3">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-black mb-4 tracking-tight">
             Today's free picks, live from @{X_HANDLE}
           </h1>
-          <p className="text-gray-200 max-w-2xl mx-auto">
+          <p className="text-lg text-gray-200 max-w-2xl mx-auto">
             We post free picks daily on X. Premium subscribers get the full slate in Discord.
           </p>
         </header>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-2 sm:p-4">
+        <div className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-lg p-2 sm:p-4">
           <a
             className="twitter-timeline"
             data-theme="dark"
@@ -47,7 +47,7 @@ export default function PicksPage() {
           />
         </div>
 
-        <p className="text-center mt-5">
+        <p className="text-center mt-6">
           <a
             href={X_URL}
             target="_blank"
@@ -61,21 +61,21 @@ export default function PicksPage() {
 
       {/* Middle: Locked premium */}
       <section>
-        <header className="mb-6 text-center">
-          <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-2">
+        <header className="mb-8 text-center">
+          <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-3">
             Want the Full Slate?
           </p>
-          <h2 className="text-3xl sm:text-4xl font-bold mb-3">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-black mb-4 tracking-tight">
             Premium picks drop daily in Discord.
           </h2>
-          <p className="text-gray-200">Locked for Whop members. Want in?</p>
+          <p className="text-lg text-gray-200">Locked for Whop members. Want in?</p>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
           {LOCKED_PICKS.map((pick, i) => (
             <div
               key={i}
-              className="bg-gray-900 border border-gray-800 rounded-lg p-6 relative overflow-hidden h-44"
+              className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-lg p-6 relative overflow-hidden h-44 transition-all duration-300 hover:border-violet-500/50 hover:shadow-[0_0_30px_rgba(167,139,250,0.15)]"
             >
               <div className="filter blur-md select-none pointer-events-none">
                 <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
@@ -102,7 +102,7 @@ export default function PicksPage() {
             href={WHOP_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block bg-violet-600 hover:bg-violet-500 text-white font-semibold px-8 py-3 rounded-md transition-colors shadow-lg shadow-violet-900/50"
+            className="inline-block bg-violet-600 hover:bg-violet-500 text-white font-semibold px-8 py-3 rounded-md transition-all duration-200 shadow-lg shadow-violet-900/40 hover:shadow-[0_0_25px_rgba(167,139,250,0.5)] hover:scale-[1.02]"
           >
             Join Premium for Full Slate →
           </a>
@@ -110,11 +110,13 @@ export default function PicksPage() {
       </section>
 
       {/* Bottom: Lab teaser */}
-      <section className="bg-gray-900 border border-violet-800/40 rounded-xl p-6 sm:p-8 text-center">
+      <section className="bg-gradient-to-br from-gray-900 to-gray-950 border border-violet-800/40 rounded-xl p-6 sm:p-8 text-center transition-all duration-300 hover:border-violet-500/60 hover:shadow-[0_0_30px_rgba(167,139,250,0.15)]">
         <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-2">
           Coming Soon
         </p>
-        <h3 className="text-2xl font-bold mb-2">Plus, The Lab is coming.</h3>
+        <h3 className="text-2xl sm:text-3xl font-bold mb-2 tracking-tight">
+          Plus, The Lab is coming.
+        </h3>
         <p className="text-gray-200 mb-4 max-w-xl mx-auto text-sm leading-relaxed">
           Members also get first access to The Lab — our upcoming player props research tool. Don't miss it.
         </p>

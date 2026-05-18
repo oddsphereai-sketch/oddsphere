@@ -99,30 +99,33 @@ export default function JoinPage() {
   const progressPct = Math.round((CHARTER_SPOTS_TAKEN / CHARTER_SPOTS_TOTAL) * 100);
 
   return (
-    <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 space-y-16">
+    <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 space-y-20 sm:space-y-28">
       {/* Hero */}
       <header className="text-center">
-        <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-3">
+        <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-4">
           Join Oddsphere AI
         </p>
-        <h1 className="text-4xl sm:text-5xl font-bold mb-4">
-          One subscription. Every edge.
-        </h1>
-        <p className="text-lg text-gray-200 max-w-2xl mx-auto">
+        <div className="relative isolate inline-block">
+          <div className="hero-glow"></div>
+          <h1 className="relative text-4xl sm:text-6xl md:text-7xl font-black mb-6 leading-[1.05] tracking-tight">
+            One subscription. Every edge.
+          </h1>
+        </div>
+        <p className="text-lg sm:text-xl text-gray-200 max-w-2xl mx-auto">
           Daily AI sports predictions in Discord — plus first access to The Lab — all bundled into a single Whop membership.
         </p>
       </header>
 
       {/* Charter pricing hero */}
-      <section className="bg-gradient-to-br from-violet-900/60 via-purple-900/40 to-fuchsia-900/30 border border-violet-600/60 rounded-2xl p-8 sm:p-12 text-center">
+      <section className="bg-gradient-to-br from-violet-900/60 via-purple-900/40 to-fuchsia-900/30 border border-violet-600/60 rounded-2xl p-8 sm:p-14 text-center transition-all duration-300 hover:border-violet-500 hover:shadow-[0_0_40px_rgba(167,139,250,0.3)]">
         <p className="text-xs font-bold uppercase tracking-wider text-violet-200 mb-3">
           Charter Member Pricing
         </p>
-        <h2 className="text-5xl sm:text-6xl font-bold mb-3">
+        <h2 className="text-6xl sm:text-7xl font-black mb-4 tracking-tight">
           <span className="text-white">{CHARTER_PRICE}</span>
           <span className="text-2xl sm:text-3xl text-gray-200 font-medium">/month</span>
         </h2>
-        <p className="text-lg text-gray-100 mb-8">
+        <p className="text-lg sm:text-xl text-gray-100 mb-10">
           Locked in for life. Limited to the first {CHARTER_SPOTS_TOTAL} members.
         </p>
 
@@ -141,7 +144,7 @@ export default function JoinPage() {
             />
           </div>
         </div>
-        <p className="text-violet-100 font-bold mb-6">
+        <p className="text-violet-100 font-bold mb-8 text-lg">
           {CHARTER_SPOTS_TAKEN} of {CHARTER_SPOTS_TOTAL} charter spots taken — {CHARTER_SPOTS_LEFT} left at this rate
         </p>
 
@@ -149,7 +152,7 @@ export default function JoinPage() {
           href={WHOP_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-block bg-violet-600 hover:bg-violet-500 text-white text-lg font-semibold px-10 py-4 rounded-md transition-colors shadow-lg shadow-violet-900/50"
+          className="inline-block bg-violet-600 hover:bg-violet-500 text-white text-lg font-semibold px-10 py-4 rounded-md transition-all duration-200 shadow-lg shadow-violet-900/50 hover:shadow-[0_0_30px_rgba(167,139,250,0.55)] hover:scale-[1.02]"
         >
           Claim Your Charter Spot →
         </a>
@@ -161,14 +164,14 @@ export default function JoinPage() {
 
       {/* What's Included */}
       <section>
-        <h2 className="text-2xl sm:text-3xl font-bold mb-6 text-center">
+        <h2 className="text-2xl sm:text-4xl font-black mb-8 text-center tracking-tight">
           What's Included
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {INCLUDED.map((item) => (
             <div
               key={item.title}
-              className="bg-gray-900 border border-gray-800 rounded-lg p-5 flex gap-3"
+              className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-lg p-5 flex gap-3 transition-all duration-300 hover:border-violet-500/50 hover:shadow-[0_0_30px_rgba(167,139,250,0.15)]"
             >
               <span className="text-violet-400 text-xl shrink-0">✅</span>
               <div>
@@ -182,22 +185,20 @@ export default function JoinPage() {
 
       {/* Compare */}
       <section>
-        <h2 className="text-2xl sm:text-3xl font-bold mb-3 text-center">
+        <h2 className="text-2xl sm:text-4xl font-black mb-3 text-center tracking-tight">
           Compare for yourself.
         </h2>
-        <p className="text-gray-200 text-center mb-8">
+        <p className="text-lg text-gray-200 text-center mb-10">
           We're cheaper. We're more transparent. We're more useful.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           {COMPARISON.map((col) => (
             <div
               key={col.name}
-              className={`rounded-lg p-6 flex flex-col ${
+              className={`rounded-lg p-6 flex flex-col transition-all duration-300 hover:shadow-[0_0_30px_rgba(167,139,250,0.15)] ${
                 col.highlight
-                  ? "bg-gradient-to-br from-violet-900/60 to-fuchsia-900/30 border border-violet-600"
-                  : col.future
-                  ? "bg-gray-900/60 border border-gray-800"
-                  : "bg-gray-900 border border-gray-800"
+                  ? "bg-gradient-to-br from-violet-900/60 to-fuchsia-900/30 border border-violet-600 hover:border-violet-500"
+                  : "bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 hover:border-violet-500/50"
               }`}
             >
               <div className="flex items-baseline gap-2 mb-1 flex-wrap">
@@ -214,7 +215,7 @@ export default function JoinPage() {
                 )}
               </div>
               <p
-                className={`text-2xl font-bold mb-5 tabular-nums ${
+                className={`text-2xl font-black mb-5 tabular-nums ${
                   col.highlight
                     ? "text-violet-200"
                     : col.future
@@ -235,39 +236,39 @@ export default function JoinPage() {
             </div>
           ))}
         </div>
-        <p className="text-center mt-8 text-lg font-semibold text-violet-300">
+        <p className="text-center mt-10 text-lg font-semibold text-violet-300">
           Same edge. Half the price. Forever.
         </p>
       </section>
 
       {/* Trust signals */}
       <section className="text-center space-y-1">
-        <p className="text-violet-300 font-semibold">
+        <p className="text-violet-300 font-semibold text-lg">
           Join {CHARTER_SPOTS_TAKEN} active members.
         </p>
         <p className="text-sm text-gray-300">Cancel anytime.</p>
       </section>
 
       {/* Final CTA */}
-      <section className="bg-gradient-to-br from-violet-900/60 to-fuchsia-900/30 border border-violet-700/50 rounded-xl p-8 sm:p-12 text-center">
-        <h2 className="text-3xl sm:text-4xl font-bold mb-3">
+      <section className="bg-gradient-to-br from-violet-900/60 to-fuchsia-900/30 border border-violet-700/50 rounded-2xl p-8 sm:p-14 text-center transition-all duration-300 hover:border-violet-500 hover:shadow-[0_0_40px_rgba(167,139,250,0.3)]">
+        <h2 className="text-3xl sm:text-4xl md:text-5xl font-black mb-4 tracking-tight">
           Ready to join the edge?
         </h2>
-        <p className="text-gray-200 mb-2 max-w-xl mx-auto">
+        <p className="text-lg text-gray-200 mb-3 max-w-xl mx-auto">
           {CHARTER_PRICE}/month Charter pricing — first {CHARTER_SPOTS_TOTAL} members only.
         </p>
-        <p className="text-violet-300 mb-8 font-semibold">
+        <p className="text-violet-300 mb-10 font-semibold">
           {CHARTER_SPOTS_LEFT} charter spots left.
         </p>
         <a
           href={WHOP_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-block bg-violet-600 hover:bg-violet-500 text-white text-lg font-semibold px-10 py-4 rounded-md transition-colors shadow-lg shadow-violet-900/50"
+          className="inline-block bg-violet-600 hover:bg-violet-500 text-white text-lg font-semibold px-10 py-4 rounded-md transition-all duration-200 shadow-lg shadow-violet-900/50 hover:shadow-[0_0_30px_rgba(167,139,250,0.55)] hover:scale-[1.02]"
         >
           Claim Your Charter Spot →
         </a>
-        <p className="text-xs text-gray-400 italic mt-6">
+        <p className="text-xs text-gray-400 italic mt-8">
           For entertainment and informational purposes only.
         </p>
       </section>

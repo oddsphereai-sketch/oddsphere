@@ -8,9 +8,9 @@ export const metadata = {
 
 export default function TrackRecordPage() {
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-      <header className="mb-10 text-center">
-        <h1 className="text-4xl sm:text-5xl font-bold mb-3">
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
+      <header className="mb-12 text-center">
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-black mb-4 tracking-tight">
           Lifetime Model Tracking
         </h1>
         <p className="text-lg text-gray-200">
@@ -18,7 +18,7 @@ export default function TrackRecordPage() {
         </p>
       </header>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+      <div className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-lg overflow-hidden transition-all duration-300 hover:border-violet-500/40 hover:shadow-[0_0_30px_rgba(167,139,250,0.12)]">
         <div className="overflow-x-auto">
           <table className="w-full text-sm sm:text-base">
             <thead className="bg-gray-950/80 text-gray-300 uppercase text-xs tracking-wider">
@@ -79,18 +79,18 @@ export default function TrackRecordPage() {
         * Subset of total MLB tracking.
       </p>
 
-      <section className="mt-14 bg-gradient-to-br from-violet-900/40 to-fuchsia-900/20 border border-violet-800/40 rounded-xl p-8 sm:p-10 text-center">
-        <h2 className="text-2xl sm:text-3xl font-bold mb-3">
+      <section className="mt-20 bg-gradient-to-br from-violet-900/40 to-fuchsia-900/20 border border-violet-800/40 rounded-2xl p-8 sm:p-12 text-center transition-all duration-300 hover:border-violet-500 hover:shadow-[0_0_40px_rgba(167,139,250,0.25)]">
+        <h2 className="text-2xl sm:text-4xl font-black mb-4 tracking-tight">
           Get tomorrow's picks today.
         </h2>
-        <p className="text-gray-200 mb-6 max-w-xl mx-auto">
+        <p className="text-lg text-gray-200 mb-8 max-w-xl mx-auto">
           Join the Whop to unlock daily AI predictions in Discord — and The Lab the moment it launches.
         </p>
         <a
           href={WHOP_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-block bg-violet-600 hover:bg-violet-500 text-white font-semibold px-8 py-3 rounded-md transition-colors shadow-lg shadow-violet-900/50"
+          className="inline-block bg-violet-600 hover:bg-violet-500 text-white font-semibold px-8 py-3 rounded-md transition-all duration-200 shadow-lg shadow-violet-900/50 hover:shadow-[0_0_25px_rgba(167,139,250,0.5)] hover:scale-[1.02]"
         >
           Join Premium on Whop →
         </a>

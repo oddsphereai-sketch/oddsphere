@@ -15,22 +15,33 @@ export default function Navbar() {
   ];
 
   return (
-    <nav className="bg-gray-950 border-b border-gray-800 sticky top-0 z-50">
+    <nav className="bg-gray-950/80 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-16 sm:h-20">
           <Link
             href="/"
             aria-label="Oddsphere AI — Home"
-            className="flex items-center shrink-0 transition hover:brightness-125"
+            className="flex items-center shrink-0 transition-all duration-200 hover:brightness-110 hover:scale-105"
           >
+            {/* Mobile: icon only */}
             <Image
-              src="/logo.png"
+              src="/icon-logo.png"
+              alt="Oddsphere AI"
+              width={300}
+              height={300}
+              priority
+              sizes="40px"
+              className="block sm:hidden h-10 w-auto invert drop-shadow-[0_0_8px_rgba(167,139,250,0.5)]"
+            />
+            {/* Desktop: full combo */}
+            <Image
+              src="/logo-transparent.png"
               alt="Oddsphere AI"
               width={500}
               height={300}
               priority
-              sizes="(min-width: 640px) 200px, 150px"
-              className="h-8 sm:h-10 w-auto invert mix-blend-lighten"
+              sizes="220px"
+              className="hidden sm:block h-12 w-auto invert drop-shadow-[0_0_8px_rgba(167,139,250,0.5)]"
             />
           </Link>
           <div className="flex items-center space-x-0.5 sm:space-x-2">
@@ -56,7 +67,7 @@ export default function Navbar() {
             ))}
             <Link
               href="/join"
-              className="ml-1 sm:ml-2 px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-colors whitespace-nowrap shadow-sm shadow-violet-900/40"
+              className="ml-1 sm:ml-2 px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-all duration-200 whitespace-nowrap shadow-sm shadow-violet-900/40 hover:shadow-[0_0_15px_rgba(167,139,250,0.45)] hover:scale-[1.03]"
             >
               <span className="sm:hidden">Join</span>
               <span className="hidden sm:inline">Join Premium</span>

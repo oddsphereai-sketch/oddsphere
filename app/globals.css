@@ -6,12 +6,56 @@
   --foreground: #ededed;
 }
 
+@theme inline {
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
 html {
   background: var(--background);
 }
 
 body {
-  background: var(--background);
+  min-height: 100vh;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Fixed violet glow overlay — applied via a div in layout.tsx */
+.violet-overlay {
+  background: radial-gradient(
+    ellipse 80% 60% at top right,
+    rgba(124, 58, 237, 0.12),
+    transparent 70%
+  );
+}
+
+/* Hero h1 backlight glow */
+.hero-glow {
+  position: absolute;
+  inset: -25%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(124, 58, 237, 0.3),
+    transparent 60%
+  );
+  filter: blur(50px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.6s ease-out backwards;
 }
