@@ -2,10 +2,25 @@ import Image from "next/image";
 import Link from "next/link";
 import { WHOP_URL, X_HANDLE, X_URL } from "../data/trackRecord";
 
-const LOCKED_PICKS = [
-  { league: "NFL", emoji: "🏈", matchup: "Chiefs vs. Eagles" },
-  { league: "MLB", emoji: "⚾", matchup: "Yankees vs. Red Sox" },
-  { league: "CFB", emoji: "🏈", matchup: "Alabama vs. Georgia" },
+const BENEFITS = [
+  {
+    icon: "📊",
+    title: "Full Daily Slate",
+    blurb:
+      "3-7 model picks per day across all 7 leagues. Moneylines, totals, and props — delivered every day in Discord.",
+  },
+  {
+    icon: "🎯",
+    title: "Confidence Tiers",
+    blurb:
+      "Every pick rated High / Medium / Low confidence based on our model's edge. Size your bets accordingly.",
+  },
+  {
+    icon: "🔬",
+    title: "The Lab — Coming Soon",
+    blurb:
+      "Premium research suite for player props, team trends, and model vs. market analysis. Included with your membership at launch.",
+  },
 ];
 
 export const metadata = {
@@ -89,40 +104,30 @@ export default function PicksPage() {
         </div>
       </section>
 
-      {/* Middle: Locked premium */}
+      {/* Middle: What you get with premium */}
       <section>
-        <header className="mb-8 text-center">
+        <header className="mb-10 text-center">
           <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-3">
             Want the Full Slate?
           </p>
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-black mb-4 tracking-tight">
             Premium picks drop daily in Discord.
           </h2>
-          <p className="text-lg text-gray-200">Locked for Whop members. Want in?</p>
+          <p className="text-lg text-gray-200">
+            Here's what's included with every Whop membership.
+          </p>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-          {LOCKED_PICKS.map((pick, i) => (
+          {BENEFITS.map((b, i) => (
             <div
-              key={i}
-              className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-lg p-6 relative overflow-hidden h-44 transition-all duration-300 hover:border-violet-500/50 hover:shadow-[0_0_30px_rgba(167,139,250,0.15)]"
+              key={b.title}
+              className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-lg p-6 transition-all duration-300 hover:border-violet-500/50 hover:shadow-[0_0_30px_rgba(167,139,250,0.15)] animate-fade-up"
+              style={{ animationDelay: `${i * 80}ms` }}
             >
-              <div className="filter blur-md select-none pointer-events-none">
-                <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                  {pick.league} {pick.emoji}
-                </p>
-                <p className="text-xl font-bold mt-1">{pick.matchup}</p>
-                <p className="text-sm text-violet-400 mt-2 font-bold">
-                  Pick — Premium
-                </p>
-                <p className="text-xs text-gray-300 mt-3">Confidence: High</p>
-              </div>
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-950/70">
-                <span className="text-3xl mb-2">🔒</span>
-                <span className="text-xs uppercase tracking-wider text-gray-200 font-semibold">
-                  Premium
-                </span>
-              </div>
+              <div className="text-4xl mb-3">{b.icon}</div>
+              <h3 className="text-xl font-bold mb-2 tracking-tight">{b.title}</h3>
+              <p className="text-gray-100 text-sm leading-relaxed">{b.blurb}</p>
             </div>
           ))}
         </div>

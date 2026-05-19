@@ -37,7 +37,7 @@ const LAB_FEATURES = [
 export const metadata = {
   title: "The Lab — Oddsphere AI",
   description:
-    "The bet research tool built on tested signals, transparent math, and real edge. Player props streaks, team trends, model vs. market. Launching with MLB.",
+    "The bet research tool built on tested signals, transparent math, and real edge. Player props streaks, team trends, model vs. market. Launching with MLB Q3 2026.",
 };
 
 export default function ToolsPage() {
@@ -47,6 +47,9 @@ export default function ToolsPage() {
       <header className="text-center">
         <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-4">
           Research Suite — Coming Soon
+        </p>
+        <p className="text-2xl sm:text-3xl font-bold italic text-violet-300 mb-3">
+          The signal layer above the stats.
         </p>
         <div className="relative isolate inline-block">
           <div className="hero-glow"></div>
@@ -58,7 +61,7 @@ export default function ToolsPage() {
           The bet research tool built on tested signals, transparent math, and real edge.
         </p>
         <p className="text-sm text-violet-300 font-semibold">
-          Launching with MLB. Included with every Whop membership.
+          MLB launch — Q3 2026. Other sports rolling out by season. Included with every Whop membership.
         </p>
       </header>
 
@@ -72,7 +75,13 @@ export default function ToolsPage() {
             Sports data is broken. Hit rates live on one site, recent form on another, sportsbook lines on a third, and nobody puts model edge vs. market line in front of you in one place. You end up with twelve tabs open and still no clear edge.
           </p>
           <p>
-            The Lab brings it together. One searchable view of the props and games that matter tonight, with tested signals layered on top — hot streaks, matchup history, weather impact, model edge vs. market line. Every signal is backtested across thousands of historical games. We show you the hit rate, the sample size, and how each one works. No black boxes.
+            The Lab brings it together. Every prop. Every game. Tested signals layered on top — hot streaks, matchup history, weather, model edge vs. market.
+          </p>
+          <p>
+            Every signal is backtested. We show you the hit rate, the sample size, and how each one works.
+          </p>
+          <p className="text-violet-300 font-bold text-lg sm:text-xl">
+            No black boxes.
           </p>
         </div>
       </section>

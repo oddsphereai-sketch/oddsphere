@@ -1,17 +1,25 @@
 import Link from "next/link";
 import {
   CHARTER_PRICE,
-  CHARTER_SPOTS_LEFT,
-  CHARTER_SPOTS_TOTAL,
   X_HANDLE,
   X_URL,
 } from "./data/trackRecord";
+import CountUp from "./components/CountUp";
+import FloatingDots from "./components/FloatingDots";
+import SectionDivider from "./components/SectionDivider";
 
-const HERO_STATS = [
-  { label: "CFB Moneyline", value: "76.7%", caption: "Lifetime" },
-  { label: "CBB Moneyline", value: "71.8%", caption: "Lifetime" },
-  { label: "NBA Moneyline", value: "69.4%", caption: "Lifetime" },
-  { label: "Predictions Tracked", value: "25,000+", caption: "Across 7 leagues" },
+const HEADLINE_STAT = {
+  end: 76.7,
+  decimals: 1,
+  suffix: "%",
+  label: "CFB Moneyline",
+  caption: "Lifetime",
+};
+
+const SUPPORTING_STATS = [
+  { label: "CBB Moneyline", end: 71.8, decimals: 1, suffix: "%", caption: "Lifetime" },
+  { label: "NBA Moneyline", end: 69.4, decimals: 1, suffix: "%", caption: "Lifetime" },
+  { label: "Predictions Tracked", end: 25000, decimals: 0, suffix: "+", caption: "Across 7 leagues" },
 ];
 
 const LAB_FEATURES = [
@@ -67,7 +75,8 @@ export default function Home() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 space-y-20 sm:space-y-28">
       {/* Hero */}
-      <section className="text-center">
+      <section className="text-center relative isolate">
+        <FloatingDots density="large" />
         <div className="relative isolate inline-block">
           <div className="hero-glow"></div>
           <h1 className="relative text-5xl sm:text-7xl md:text-8xl font-black mb-6 leading-[1.05] tracking-tight bg-gradient-to-r from-violet-400 via-purple-500 to-fuchsia-500 bg-clip-text text-transparent">
@@ -86,22 +95,46 @@ export default function Home() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-          {HERO_STATS.map((stat, i) => (
-            <div
-              key={stat.label}
-              className={`${CARD} p-5 sm:p-6 text-center animate-fade-up hover:-translate-y-0.5`}
-              style={{ animationDelay: `${i * 80}ms` }}
-            >
-              <p className="text-4xl sm:text-5xl font-black text-violet-400 mb-2 tabular-nums">
-                {stat.value}
-              </p>
-              <p className="text-sm font-semibold text-white mb-1">{stat.label}</p>
-              <p className="text-xs text-gray-300 uppercase tracking-wider">
-                {stat.caption}
-              </p>
-            </div>
-          ))}
+        {/* Hero stat hierarchy: 1 big + 3 supporting */}
+        <div className="space-y-4 sm:space-y-6">
+          {/* Headline stat */}
+          <div className={`${CARD} relative isolate overflow-hidden p-8 sm:p-14 text-center`}>
+            <FloatingDots density="small" />
+            <p className="relative text-7xl sm:text-8xl md:text-9xl font-black mb-3 leading-none tracking-tight bg-gradient-to-r from-violet-400 via-purple-500 to-fuchsia-500 bg-clip-text text-transparent tabular-nums">
+              <CountUp
+                end={HEADLINE_STAT.end}
+                decimals={HEADLINE_STAT.decimals}
+                suffix={HEADLINE_STAT.suffix}
+              />
+            </p>
+            <p className="relative text-xl sm:text-2xl font-bold text-white mb-1">
+              {HEADLINE_STAT.label}
+            </p>
+            <p className="relative text-xs sm:text-sm text-gray-300 uppercase tracking-wider">
+              {HEADLINE_STAT.caption}
+            </p>
+          </div>
+
+          {/* Supporting stats */}
+          <div className="grid grid-cols-3 gap-3 sm:gap-6">
+            {SUPPORTING_STATS.map((stat, i) => (
+              <div
+                key={stat.label}
+                className={`${CARD} p-4 sm:p-6 text-center animate-fade-up hover:-translate-y-0.5`}
+                style={{ animationDelay: `${(i + 1) * 80}ms` }}
+              >
+                <p className="text-2xl sm:text-4xl md:text-5xl font-black text-violet-400 mb-1 sm:mb-2 tabular-nums">
+                  <CountUp end={stat.end} decimals={stat.decimals} suffix={stat.suffix} />
+                </p>
+                <p className="text-xs sm:text-sm font-semibold text-white mb-1">
+                  {stat.label}
+                </p>
+                <p className="text-[10px] sm:text-xs text-gray-300 uppercase tracking-wider">
+                  {stat.caption}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
         <p className="mt-6">
           <Link
@@ -111,6 +144,8 @@ export default function Home() {
             See the full track record →
           </Link>
         </p>
+
+        <SectionDivider />
       </section>
 
       {/* The Lab — Coming Soon */}
@@ -160,6 +195,8 @@ export default function Home() {
             </Link>
           </p>
         </div>
+
+        <SectionDivider />
       </section>
 
       {/* Why $25/month is a steal */}
@@ -209,6 +246,8 @@ export default function Home() {
         <p className="text-center mt-10 text-lg font-semibold text-violet-300">
           Same edge. Half the price. Forever.
         </p>
+
+        <SectionDivider />
       </section>
 
       {/* Trust paragraph */}
@@ -223,8 +262,10 @@ export default function Home() {
           >
             @{X_HANDLE}
           </a>{" "}
-          — running publicly-tracked AI sports predictions since 2024. 2,100+ followers on X watching every pick, hit and miss. No hype. Just the data.
+          — running publicly-tracked AI sports predictions since January 2025. 2,100+ followers on X watching every pick, hit and miss. No hype. Just the data.
         </p>
+
+        <SectionDivider />
       </section>
 
       {/* Final CTA */}
@@ -236,16 +277,13 @@ export default function Home() {
           Daily AI picks in Discord plus first access to The Lab — all with one Whop subscription.
         </p>
         <p className="text-sm text-violet-300 font-semibold mb-8">
-          {CHARTER_PRICE}/month — Charter pricing, first {CHARTER_SPOTS_TOTAL} members only.
+          {CHARTER_PRICE}/month — Charter pricing, first 50 members only.
         </p>
         <Link href="/join" className={PRIMARY_CTA}>
           Join Premium →
         </Link>
-        <p className="text-sm text-violet-300 font-semibold mt-5">
-          {CHARTER_SPOTS_LEFT} charter spots left.
-        </p>
         <p className="text-xs text-gray-400 italic mt-8">
-          For entertainment and informational purposes only.
+          For entertainment and informational purposes only. Gamble responsibly, 21+.
         </p>
       </section>
     </main>

@@ -78,8 +78,10 @@ export default function RootLayout({
                 className="h-10 sm:h-14 w-auto invert drop-shadow-[0_0_6px_rgba(167,139,250,0.3)]"
               />
             </div>
-            <p className="mb-1">
-              ⚠️ For entertainment and informational purposes only. Not betting advice.
+            <p className="mb-2 max-w-3xl mx-auto leading-relaxed">
+              ⚠️ All content on Oddsphere AI is for entertainment and informational
+              purposes only. Not financial or betting advice. Gambling involves risk —
+              bet responsibly, 21+ only. Need help? Call 1-800-GAMBLER.
             </p>
             <p>© 2026 Oddsphere. All stats and odds are publicly available data.</p>
           </div>

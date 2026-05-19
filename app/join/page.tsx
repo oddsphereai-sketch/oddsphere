@@ -2,9 +2,6 @@ import {
   WHOP_URL,
   CHARTER_PRICE,
   STANDARD_PRICE,
-  CHARTER_SPOTS_TOTAL,
-  CHARTER_SPOTS_TAKEN,
-  CHARTER_SPOTS_LEFT,
 } from "../data/trackRecord";
 
 const INCLUDED = [
@@ -85,12 +82,10 @@ function ValueIcon({ value }: { value: Cell }) {
 
 export const metadata = {
   title: "Join Premium — Oddsphere AI",
-  description: `Unlock daily AI sports predictions and first access to The Lab. ${CHARTER_PRICE}/month Charter pricing — locked in for life. Limited to the first ${CHARTER_SPOTS_TOTAL} members.`,
+  description: `Unlock daily AI sports predictions and first access to The Lab. ${CHARTER_PRICE}/month Charter pricing — locked in for life. Limited to the first 50 members.`,
 };
 
 export default function JoinPage() {
-  const progressPct = Math.round((CHARTER_SPOTS_TAKEN / CHARTER_SPOTS_TOTAL) * 100);
-
   return (
     <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 space-y-20 sm:space-y-28">
       {/* Hero */}
@@ -118,27 +113,13 @@ export default function JoinPage() {
           <span className="text-white">{CHARTER_PRICE}</span>
           <span className="text-2xl sm:text-3xl text-gray-200 font-medium">/month</span>
         </h2>
-        <p className="text-lg sm:text-xl text-gray-100 mb-10">
-          Locked in for life. Limited to the first {CHARTER_SPOTS_TOTAL} members.
+        <p className="text-lg sm:text-xl text-gray-100 mb-8">
+          Locked in for life. Limited to the first 50 members.
         </p>
 
-        {/* Scarcity progress bar */}
-        <div className="max-w-md mx-auto mb-3">
-          <div
-            className="bg-gray-900/70 border border-violet-700/40 rounded-full h-3 overflow-hidden"
-            role="progressbar"
-            aria-valuenow={CHARTER_SPOTS_TAKEN}
-            aria-valuemin={0}
-            aria-valuemax={CHARTER_SPOTS_TOTAL}
-          >
-            <div
-              className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-        </div>
-        <p className="text-violet-100 font-bold mb-8 text-lg">
-          {CHARTER_SPOTS_TAKEN} of {CHARTER_SPOTS_TOTAL} charter spots taken — {CHARTER_SPOTS_LEFT} left at this rate
+        {/* Urgency line (was progress bar) */}
+        <p className="text-lg text-violet-100 font-bold mb-8 drop-shadow-[0_0_8px_rgba(167,139,250,0.4)]">
+          Charter pricing — limited to the first 50 members.
         </p>
 
         <a
@@ -151,7 +132,7 @@ export default function JoinPage() {
         </a>
 
         <p className="text-xs text-gray-300 mt-6 max-w-xl mx-auto leading-relaxed">
-          After {CHARTER_SPOTS_TOTAL} charter members, pricing increases to {STANDARD_PRICE}/month. Your Charter rate stays locked forever.
+          After 50 members, pricing increases to $35/month. Your Charter rate stays locked forever.
         </p>
       </section>
 
@@ -234,11 +215,8 @@ export default function JoinPage() {
         </p>
       </section>
 
-      {/* Trust signals */}
-      <section className="text-center space-y-1">
-        <p className="text-violet-300 font-semibold text-lg">
-          Join {CHARTER_SPOTS_TAKEN} active members.
-        </p>
+      {/* Trust signal */}
+      <section className="text-center">
         <p className="text-sm text-gray-300">Cancel anytime.</p>
       </section>
 
@@ -248,10 +226,10 @@ export default function JoinPage() {
           Ready to join the edge?
         </h2>
         <p className="text-lg text-gray-200 mb-3 max-w-xl mx-auto">
-          {CHARTER_PRICE}/month Charter pricing — first {CHARTER_SPOTS_TOTAL} members only.
+          {CHARTER_PRICE}/month Charter pricing — first 50 members only.
         </p>
         <p className="text-violet-300 mb-10 font-semibold">
-          {CHARTER_SPOTS_LEFT} charter spots left.
+          Charter pricing — first 50 members only.
         </p>
         <a
           href={WHOP_URL}
@@ -262,7 +240,7 @@ export default function JoinPage() {
           Claim Your Charter Spot →
         </a>
         <p className="text-xs text-gray-400 italic mt-8">
-          For entertainment and informational purposes only.
+          For entertainment and informational purposes only. Gamble responsibly, 21+.
         </p>
       </section>
     </main>
