@@ -39,7 +39,7 @@ const COMPARISON = [
     price: `${CHARTER_PRICE}/mo`,
     highlight: true,
     bullets: [
-      "Daily AI picks across 7 sports",
+      "Daily AI predictions across 7 leagues",
       "The Lab access (when launched)",
       "Locked-in rate — forever",
     ],
@@ -246,7 +246,7 @@ export default function Home() {
           Join the edge.
         </h2>
         <p className="text-lg text-gray-200 mb-2 max-w-xl mx-auto">
-          Daily AI picks in Discord plus first access to The Lab — all with one Whop subscription.
+          Daily AI predictions in Discord plus first access to The Lab — all with one Whop subscription.
         </p>
         <p className="text-sm text-violet-300 font-semibold mb-8">
           {CHARTER_PRICE}/month — Charter pricing, first 50 members only.

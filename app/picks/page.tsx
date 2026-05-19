@@ -5,15 +5,15 @@ import { WHOP_URL, X_HANDLE, X_URL } from "../data/trackRecord";
 const BENEFITS = [
   {
     icon: "📊",
-    title: "Full Daily Slate",
+    title: "Full Prediction Slates",
     blurb:
-      "3-7 model picks per day across all 7 leagues. Moneylines, totals, and props — delivered every day in Discord.",
+      "Model predictions for every game we cover, daily. Moneylines, totals, and sport-specific markets like MLB NRFI/YRFI and UCL Double Chance — across 7 leagues. No cherry-picking.",
   },
   {
     icon: "🎯",
-    title: "Confidence Tiers",
+    title: "Edge vs. Market",
     blurb:
-      "Every pick rated High / Medium / Low confidence based on our model's edge. Size your bets accordingly.",
+      "Where the model has confidence percentages, you can match them against sportsbook implied probabilities to spot mispriced lines. No vague 'leans' — just numbers.",
   },
   {
     icon: "🔬",
@@ -111,7 +111,7 @@ export default function PicksPage() {
             Want the Full Slate?
           </p>
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-black mb-4 tracking-tight">
-            Premium picks drop daily in Discord.
+            Premium predictions drop daily in Discord.
           </h2>
           <p className="text-lg text-gray-200">
             Here's what's included with every Whop membership.

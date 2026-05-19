@@ -6,9 +6,9 @@ import {
 
 const INCLUDED = [
   {
-    title: "Daily AI Picks in Discord",
+    title: "Daily AI Predictions in Discord",
     blurb:
-      "Model-driven predictions for the NFL, NBA, MLB, CBB, CFB, UCL, and NHL — delivered every day.",
+      "Full model prediction slates across all 7 leagues — moneylines, totals, and sport-specific markets like MLB NRFI/YRFI and UCL Double Chance. Delivered daily.",
   },
   {
     title: "Lifetime Track Record",
@@ -42,7 +42,7 @@ const COMPARISON: CompareCol[] = [
     price: `${CHARTER_PRICE}/mo`,
     highlight: true,
     rows: [
-      { label: "Daily AI picks across NFL, NBA, MLB, CBB, CFB, UCL, NHL", value: "yes" },
+      { label: "Daily AI predictions across all 7 leagues", value: "yes" },
       { label: "Public lifetime tracked record", value: "yes" },
       { label: "The Lab access at launch", value: "yes" },
       { label: "Locked-in rate forever", value: "yes" },
@@ -54,7 +54,7 @@ const COMPARISON: CompareCol[] = [
     price: `${STANDARD_PRICE}/mo`,
     future: true,
     rows: [
-      { label: "Daily AI picks across NFL, NBA, MLB, CBB, CFB, UCL, NHL", value: "yes" },
+      { label: "Daily AI predictions across all 7 leagues", value: "yes" },
       { label: "Public lifetime tracked record", value: "yes" },
       { label: "The Lab access at launch", value: "yes" },
       { label: "Locked-in rate forever", value: "no" },

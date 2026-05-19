@@ -77,8 +77,8 @@ export default function TrackRecordPage() {
       {/* Explainer */}
       <p className="text-center text-base text-gray-300 max-w-3xl mx-auto mb-10 leading-relaxed italic">
         Every prediction we've made, organized by sport. Lifetime hit rates shown
-        alongside current season performance. All numbers sourced from publicly
-        tracked data — every pick lives on X.
+        alongside current season performance. Free predictions live on X daily.
+        Full prediction slates go in Discord for members.
       </p>
 
       {/* Grouped table */}

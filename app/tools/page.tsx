@@ -29,7 +29,7 @@ const LAB_FEATURES = [
     bullets: [
       "Every game, every market — our model's probability next to the implied probability from the line.",
       "Sort by the size of the gap. Filter by sport.",
-      "The same models behind our tracked daily picks — now in a sortable view.",
+      "The same models behind our tracked daily predictions — now in a sortable view.",
     ],
   },
 ];
