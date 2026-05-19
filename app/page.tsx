@@ -233,7 +233,7 @@ export default function Home() {
             >
               @{X_HANDLE}
             </a>{" "}
-            — running publicly-tracked AI sports predictions since January 2025. 2,100+ followers on X watching every pick, hit and miss. No hype. Just the data.
+            — running publicly-tracked AI sports predictions since January 2025. 2,100+ followers on X watching every prediction, hit and miss. No hype. Just the data.
           </p>
         </div>
 
