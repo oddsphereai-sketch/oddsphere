@@ -8,15 +8,8 @@ import CountUp from "./components/CountUp";
 import FloatingDots from "./components/FloatingDots";
 import SectionDivider from "./components/SectionDivider";
 
-const HEADLINE_STAT = {
-  end: 76.7,
-  decimals: 1,
-  suffix: "%",
-  label: "CFB Moneyline",
-  caption: "Lifetime",
-};
-
-const SUPPORTING_STATS = [
+const HERO_STATS = [
+  { label: "CFB Moneyline", end: 76.7, decimals: 1, suffix: "%", caption: "Lifetime" },
   { label: "CBB Moneyline", end: 71.8, decimals: 1, suffix: "%", caption: "Lifetime" },
   { label: "NBA Moneyline", end: 69.4, decimals: 1, suffix: "%", caption: "Lifetime" },
   { label: "Predictions Tracked", end: 25000, decimals: 0, suffix: "+", caption: "Across 7 leagues" },
@@ -26,7 +19,7 @@ const LAB_FEATURES = [
   {
     title: "🔥 Player Props Streaks",
     blurb:
-      "Hot streaks across every prop type, with hit rates vs. tonight's line.",
+      "Hot streaks across core MLB props at launch, with hit rates vs. tonight's line. Expanding to NBA, NFL, NHL.",
   },
   {
     title: "📊 Team Trends",
@@ -95,46 +88,23 @@ export default function Home() {
           </Link>
         </div>
 
-        {/* Hero stat hierarchy: 1 big + 3 supporting */}
-        <div className="space-y-4 sm:space-y-6">
-          {/* Headline stat */}
-          <div className={`${CARD} relative isolate overflow-hidden p-8 sm:p-14 text-center`}>
-            <FloatingDots density="small" />
-            <p className="relative text-7xl sm:text-8xl md:text-9xl font-black mb-3 leading-none tracking-tight bg-gradient-to-r from-violet-400 via-purple-500 to-fuchsia-500 bg-clip-text text-transparent tabular-nums">
-              <CountUp
-                end={HEADLINE_STAT.end}
-                decimals={HEADLINE_STAT.decimals}
-                suffix={HEADLINE_STAT.suffix}
-              />
-            </p>
-            <p className="relative text-xl sm:text-2xl font-bold text-white mb-1">
-              {HEADLINE_STAT.label}
-            </p>
-            <p className="relative text-xs sm:text-sm text-gray-300 uppercase tracking-wider">
-              {HEADLINE_STAT.caption}
-            </p>
-          </div>
-
-          {/* Supporting stats */}
-          <div className="grid grid-cols-3 gap-3 sm:gap-6">
-            {SUPPORTING_STATS.map((stat, i) => (
-              <div
-                key={stat.label}
-                className={`${CARD} p-4 sm:p-6 text-center animate-fade-up hover:-translate-y-0.5`}
-                style={{ animationDelay: `${(i + 1) * 80}ms` }}
-              >
-                <p className="text-2xl sm:text-4xl md:text-5xl font-black text-violet-400 mb-1 sm:mb-2 tabular-nums">
-                  <CountUp end={stat.end} decimals={stat.decimals} suffix={stat.suffix} />
-                </p>
-                <p className="text-xs sm:text-sm font-semibold text-white mb-1">
-                  {stat.label}
-                </p>
-                <p className="text-[10px] sm:text-xs text-gray-300 uppercase tracking-wider">
-                  {stat.caption}
-                </p>
-              </div>
-            ))}
-          </div>
+        {/* Hero stat cards — 4 equal */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+          {HERO_STATS.map((stat, i) => (
+            <div
+              key={stat.label}
+              className={`${CARD} p-5 sm:p-6 text-center animate-fade-up hover:-translate-y-0.5`}
+              style={{ animationDelay: `${i * 80}ms` }}
+            >
+              <p className="text-4xl sm:text-5xl font-black text-violet-400 mb-2 tabular-nums">
+                <CountUp end={stat.end} decimals={stat.decimals} suffix={stat.suffix} />
+              </p>
+              <p className="text-sm font-semibold text-white mb-1">{stat.label}</p>
+              <p className="text-xs text-gray-300 uppercase tracking-wider">
+                {stat.caption}
+              </p>
+            </div>
+          ))}
         </div>
         <p className="mt-6">
           <Link
@@ -250,20 +220,22 @@ export default function Home() {
         <SectionDivider />
       </section>
 
-      {/* Trust paragraph */}
-      <section className="text-center text-sm sm:text-base text-gray-300 max-w-2xl mx-auto leading-relaxed">
-        <p>
-          Built by{" "}
-          <a
-            href={X_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-violet-300 hover:text-violet-200 font-semibold"
-          >
-            @{X_HANDLE}
-          </a>{" "}
-          — running publicly-tracked AI sports predictions since January 2025. 2,100+ followers on X watching every pick, hit and miss. No hype. Just the data.
-        </p>
+      {/* Trust paragraph (subtle card treatment) */}
+      <section className="max-w-2xl mx-auto">
+        <div className="bg-gray-900/40 border border-gray-800/50 rounded-xl p-6 sm:p-8 text-center text-sm sm:text-base text-gray-300 leading-relaxed transition-all duration-300 hover:border-violet-500/30">
+          <p>
+            Built by{" "}
+            <a
+              href={X_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-violet-300 hover:text-violet-200 font-semibold"
+            >
+              @{X_HANDLE}
+            </a>{" "}
+            — running publicly-tracked AI sports predictions since January 2025. 2,100+ followers on X watching every pick, hit and miss. No hype. Just the data.
+          </p>
+        </div>
 
         <SectionDivider />
       </section>

@@ -4,12 +4,12 @@ const LAB_FEATURES = [
   {
     icon: "🔥",
     title: "PLAYER PROPS RESEARCH",
-    pitch: "Find players riding hot streaks across every prop type.",
+    pitch: "Hot streaks across the props that matter most.",
     bullets: [
-      "Filter by sport, prop type, and game date.",
+      "Core MLB props at launch: hits, strikeouts, home runs, total bases.",
       "See hit rate over last 5, 10, and 20 games.",
       "Compare to tonight's line — find the divergences.",
-      "Launching with MLB markets. Expanding to NFL, NBA, NHL, CBB, CFB, and UCL through season.",
+      "Expanding to NBA, NFL, and NHL through the year.",
     ],
   },
   {
@@ -18,7 +18,7 @@ const LAB_FEATURES = [
     pitch: "Validate the line with real team data.",
     bullets: [
       "Recent form, home/away splits, head-to-head matchups.",
-      "Matchup context adapted to each sport — handedness for MLB, pace and rest for NBA, weather for NFL.",
+      "Matchup context for MLB, NBA, NFL, and NHL.",
       "Cross-reference team trends with our score model in seconds.",
     ],
   },
@@ -37,7 +37,7 @@ const LAB_FEATURES = [
 export const metadata = {
   title: "The Lab — Oddsphere AI",
   description:
-    "The bet research tool built on tested signals, transparent math, and real edge. Player props streaks, team trends, model vs. market. Launching with MLB Q3 2026.",
+    "The bet research tool built on tested signals, transparent math, and real edge. Player props streaks, team trends, model vs. market. Launching with MLB.",
 };
 
 export default function ToolsPage() {
@@ -61,7 +61,7 @@ export default function ToolsPage() {
           The bet research tool built on tested signals, transparent math, and real edge.
         </p>
         <p className="text-sm text-violet-300 font-semibold">
-          MLB launch — Q3 2026. Other sports rolling out by season. Included with every Whop membership.
+          Launching soon. Included with every Whop membership.
         </p>
       </header>
 
@@ -75,7 +75,7 @@ export default function ToolsPage() {
             Sports data is broken. Hit rates live on one site, recent form on another, sportsbook lines on a third, and nobody puts model edge vs. market line in front of you in one place. You end up with twelve tabs open and still no clear edge.
           </p>
           <p>
-            The Lab brings it together. Every prop. Every game. Tested signals layered on top — hot streaks, matchup history, weather, model edge vs. market.
+            The Lab brings it together. The props and games that matter most. Tested signals layered on top — hot streaks, matchup history, weather, model edge vs. market.
           </p>
           <p>
             Every signal is backtested. We show you the hit rate, the sample size, and how each one works.
@@ -125,7 +125,7 @@ export default function ToolsPage() {
           Launching with MLB.
         </h2>
         <p className="text-lg text-gray-200 max-w-2xl mx-auto">
-          NFL, NBA, NHL, CBB, CFB, and UCL rolling out through season.
+          NBA, NFL, and NHL rolling out through the year.
         </p>
       </section>
 

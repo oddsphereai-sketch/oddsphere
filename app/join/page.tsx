@@ -225,11 +225,8 @@ export default function JoinPage() {
         <h2 className="text-3xl sm:text-4xl md:text-5xl font-black mb-4 tracking-tight">
           Ready to join the edge?
         </h2>
-        <p className="text-lg text-gray-200 mb-3 max-w-xl mx-auto">
+        <p className="text-lg text-gray-200 mb-10 max-w-xl mx-auto">
           {CHARTER_PRICE}/month Charter pricing — first 50 members only.
-        </p>
-        <p className="text-violet-300 mb-10 font-semibold">
-          Charter pricing — first 50 members only.
         </p>
         <a
           href={WHOP_URL}
