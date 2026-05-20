@@ -9,7 +9,7 @@ import {
   getPropsByType,
 } from "./data/mockData";
 import LabNav, { type LabSection } from "./components/LabNav";
-import DailyEdgeStub from "./components/DailyEdgeStub";
+import DailyEdgeView from "./components/DailyEdgeView";
 import MyBetsStub from "./components/MyBetsStub";
 import SportSelector from "./components/SportSelector";
 import PropTabs from "./components/PropTabs";
@@ -20,7 +20,20 @@ import PlayerDrillDown from "./components/PlayerDrillDown";
 import ComingSoonState from "./components/ComingSoonState";
 
 const VALID_SECTIONS: LabSection[] = ["edge", "props", "mybets"];
-const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "nhl"];
+const VALID_SPORTS: Sport[] = [
+  "mlb",
+  "nba",
+  "nfl",
+  "cbb",
+  "cfb",
+  "nhl",
+  "ucl",
+];
+
+// Sports surfaced inside Player Props (subset of VALID_SPORTS). When the URL
+// requests a sport outside this set while section=props, the props subtree
+// falls back to MLB for the active highlight.
+const PROPS_SPORTS: Sport[] = ["mlb", "nba", "nfl", "nhl"];
 
 function isSection(v: string | null): v is LabSection {
   return !!v && (VALID_SECTIONS as string[]).includes(v);
@@ -44,17 +57,21 @@ export default function LabApp() {
 
   const sportParam = searchParams.get("sport");
   const sport: Sport = isSport(sportParam) ? sportParam : "mlb";
-  const sportMeta = SPORT_META[sport];
+  // Inside Player Props, fall back to MLB if the active sport isn't in
+  // PROPS_SPORTS — keeps the SportSelector showing an active tab.
+  const propsSport: Sport =
+    section === "props" && !PROPS_SPORTS.includes(sport) ? "mlb" : sport;
+  const sportMeta = SPORT_META[propsSport];
 
   const sportPropTypes = useMemo(
-    () => Object.keys(PROP_TYPE_META[sport]),
-    [sport]
+    () => Object.keys(PROP_TYPE_META[propsSport]),
+    [propsSport]
   );
   const propTypeParam = searchParams.get("prop");
   const propType =
     propTypeParam && sportPropTypes.includes(propTypeParam)
       ? propTypeParam
-      : defaultPropTypeForSport(sport);
+      : defaultPropTypeForSport(propsSport);
   const mode: Mode = searchParams.get("mode") === "search" ? "search" : "best";
 
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
@@ -62,8 +79,7 @@ export default function LabApp() {
   const setSection = useCallback(
     (newSection: LabSection) => {
       // Section change is a hard reset: drop player-props-specific params
-      // (sport / prop / mode) and close any open drill-down. Those params
-      // are scoped to the props section only.
+      // and close any open drill-down.
       setSelectedPlayer(null);
       const params = new URLSearchParams();
       params.set("section", newSection);
@@ -100,9 +116,9 @@ export default function LabApp() {
   const entries = useMemo(
     () =>
       section === "props" && sportMeta.isLive
-        ? getPropsByType(sport, propType)
+        ? getPropsByType(propsSport, propType)
         : [],
-    [section, sport, sportMeta.isLive, propType]
+    [section, propsSport, sportMeta.isLive, propType]
   );
 
   return (
@@ -111,13 +127,15 @@ export default function LabApp() {
         <LabNav active={section} onChange={setSection} />
       </div>
 
-      {section === "edge" && <DailyEdgeStub />}
+      {section === "edge" && (
+        <DailyEdgeView sport={sport} onSportChange={setSport} />
+      )}
       {section === "mybets" && <MyBetsStub />}
 
       {section === "props" && (
         <>
           <div className="mb-8">
-            <SportSelector active={sport} onChange={setSport} />
+            <SportSelector active={propsSport} onChange={setSport} />
           </div>
 
           {sportMeta.isLive ? (
@@ -143,7 +161,7 @@ export default function LabApp() {
 
               <div className="mb-8">
                 <PropTabs
-                  sport={sport}
+                  sport={propsSport}
                   active={propType}
                   onChange={(p) => setParam("prop", p)}
                 />
@@ -151,7 +169,7 @@ export default function LabApp() {
 
               {mode === "best" ? (
                 <TonightsBestView
-                  sport={sport}
+                  sport={propsSport}
                   entries={entries}
                   onSelectPlayer={setSelectedPlayer}
                 />
@@ -163,14 +181,14 @@ export default function LabApp() {
               )}
             </>
           ) : (
-            <ComingSoonState sport={sport} />
+            <ComingSoonState sport={propsSport} />
           )}
         </>
       )}
 
       {section === "props" && selectedPlayer && (
         <PlayerDrillDown
-          sport={sport}
+          sport={propsSport}
           playerId={selectedPlayer}
           onClose={() => setSelectedPlayer(null)}
         />

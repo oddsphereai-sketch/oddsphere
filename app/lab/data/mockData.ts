@@ -3,7 +3,7 @@
 // Phase 1; other sports' metadata is stubbed so the architecture is in
 // place.
 
-export type Sport = "mlb" | "nba" | "nfl" | "nhl";
+export type Sport = "mlb" | "nba" | "nfl" | "cbb" | "cfb" | "nhl" | "ucl";
 
 // Per-sport prop type unions. Note that "assists" and "points" intentionally
 // collide between NBA and NHL — they're disambiguated at runtime by the
@@ -79,7 +79,10 @@ export const SPORT_META: Record<
   mlb: { label: "MLB", icon: "⚾", isLive: true },
   nba: { label: "NBA", icon: "🏀", isLive: false, comingSoonLabel: "Coming soon" },
   nfl: { label: "NFL", icon: "🏈", isLive: false, comingSoonLabel: "Coming this season" },
+  cbb: { label: "CBB", icon: "🏀", isLive: false, comingSoonLabel: "Coming soon" },
+  cfb: { label: "CFB", icon: "🏈", isLive: false, comingSoonLabel: "Coming this season" },
   nhl: { label: "NHL", icon: "🏒", isLive: false, comingSoonLabel: "Coming soon" },
+  ucl: { label: "UCL", icon: "⚽", isLive: false, comingSoonLabel: "Coming soon" },
 };
 
 type PropTypeMeta = {
@@ -120,6 +123,12 @@ export const PROP_TYPE_META: Record<Sport, Record<string, PropTypeMeta>> = {
     saves:    { label: "Saves",   icon: "🛡️", unit: "SV", isPitcher: false },
     points:   { label: "Points",  icon: "🔥", unit: "P",  isPitcher: false },
   },
+  // CBB / CFB / UCL: no player-props surface area in Phase 2B-2. Stubs
+  // exist so PROP_TYPE_META[sport] lookups don't crash when these sports
+  // appear in the Daily Edge sport selector.
+  cbb: {},
+  cfb: {},
+  ucl: {},
 };
 
 export function getPropTypeMeta(sport: Sport, propType: string): PropTypeMeta {
