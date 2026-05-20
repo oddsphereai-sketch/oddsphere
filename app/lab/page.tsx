@@ -1,150 +1,111 @@
 // Hidden internal route. Not linked from the Navbar; reachable only by
-// typing /lab directly. Used during build-out to confirm route works
-// and Supabase env vars are wired correctly. Future home of the
-// authenticated player-props research dashboard.
+// typing /lab directly. UI preview of The Lab — fully mocked data, no
+// backend wiring yet. Connection-status check stays here as a small
+// footer note (not prominent).
+
+import { Suspense } from "react";
+import LabApp from "./LabApp";
 
 export const metadata = {
   title: "The Lab — Oddsphere AI (Internal)",
   robots: { index: false, follow: false },
 };
 
-type CheckResult =
-  | { kind: "missing" }
-  | { kind: "placeholder" }
-  | { kind: "error"; message: string }
-  | { kind: "ok" };
+type ConnectionStatus = {
+  state: "ok" | "missing" | "placeholder" | "error";
+  detail?: string;
+  host?: string;
+};
 
-async function checkSupabase(): Promise<{
-  url: string | undefined;
-  result: CheckResult;
-}> {
+async function checkSupabase(): Promise<ConnectionStatus> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!url || !key) return { url, result: { kind: "missing" } };
-
+  if (!url || !key) return { state: "missing" };
   if (url.includes("YOUR_PROJECT_URL") || key.includes("YOUR_KEY_HERE")) {
-    return { url, result: { kind: "placeholder" } };
+    return { state: "placeholder" };
   }
 
-  // Client-init check: importing app/lib/supabase.ts throws if env vars are
-  // missing, otherwise calls createClient() which constructs the client
-  // without making a network request. A live query check will replace this
-  // once we add our first table.
   try {
-    const mod = await import("../lib/supabase");
+    const mod = await import("./lib-shim");
     if (!mod.supabase || typeof mod.supabase.from !== "function") {
-      return {
-        url,
-        result: {
-          kind: "error",
-          message: "Supabase client export is malformed.",
-        },
-      };
+      return { state: "error", detail: "Supabase client export malformed." };
     }
-    return { url, result: { kind: "ok" } };
+    let host: string | undefined;
+    try {
+      host = new URL(url).host;
+    } catch {
+      host = url;
+    }
+    return { state: "ok", host };
   } catch (e) {
     return {
-      url,
-      result: {
-        kind: "error",
-        message: e instanceof Error ? e.message : "Unknown error",
-      },
+      state: "error",
+      detail: e instanceof Error ? e.message : "Unknown error",
     };
   }
 }
 
-function StatusLine({ result }: { result: CheckResult }) {
-  if (result.kind === "ok") {
+function ConnectionPill({ status }: { status: ConnectionStatus }) {
+  if (status.state === "ok") {
     return (
-      <span className="inline-flex items-center gap-2 text-green-300">
-        <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]" />
-        Connected (client initialized)
+      <span className="inline-flex items-center gap-2 text-emerald-300/80">
+        <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]" />
+        Supabase: connected
+        {status.host && (
+          <>
+            {" "}
+            <span className="text-gray-500">·</span>{" "}
+            <span className="font-mono text-gray-400">{status.host}</span>
+          </>
+        )}
       </span>
     );
   }
-  if (result.kind === "missing") {
+  if (status.state === "missing" || status.state === "placeholder") {
     return (
-      <span className="inline-flex items-center gap-2 text-yellow-300">
-        <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-400" />
-        Env vars not set
-      </span>
-    );
-  }
-  if (result.kind === "placeholder") {
-    return (
-      <span className="inline-flex items-center gap-2 text-yellow-300">
-        <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-400" />
-        Placeholder values — fill in .env.local
+      <span className="inline-flex items-center gap-2 text-yellow-300/80">
+        <span className="inline-block w-2 h-2 rounded-full bg-yellow-400" />
+        Supabase: env vars not configured
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-2 text-red-300">
-      <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.6)]" />
-      Error
+    <span className="inline-flex items-center gap-2 text-rose-300/80">
+      <span className="inline-block w-2 h-2 rounded-full bg-rose-400" />
+      Supabase: error {status.detail && <>· {status.detail}</>}
     </span>
   );
 }
 
 export default async function LabPage() {
-  const { url, result } = await checkSupabase();
+  const status = await checkSupabase();
 
   return (
-    <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
-      <header className="text-center mb-12">
-        <h1 className="text-5xl sm:text-6xl font-black mb-3 tracking-tight">
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+      <header className="text-center mb-10 sm:mb-14">
+        <h1 className="text-5xl sm:text-6xl md:text-7xl font-black mb-3 tracking-tight">
           🔬 The Lab
         </h1>
-        <p className="text-base text-gray-300">
-          Build environment — internal use only
+        <p className="text-base sm:text-lg text-gray-300 max-w-2xl mx-auto">
+          MLB player props research — sortable, filterable, and built on tested signals.
         </p>
       </header>
 
-      <section className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl p-6 sm:p-8 space-y-4">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-xs font-bold uppercase tracking-wider text-gray-300">
-            Supabase Status
-          </span>
-          <StatusLine result={result} />
-        </div>
-
-        <div className="border-t border-gray-800 pt-4 space-y-3 text-sm">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-gray-400 mb-1">
-              Project URL
-            </div>
-            <div className="font-mono text-gray-100 break-all">
-              {url ?? <span className="text-gray-500">— not set —</span>}
-            </div>
+      <Suspense
+        fallback={
+          <div className="text-center text-gray-400 py-16">
+            Loading research view…
           </div>
+        }
+      >
+        <LabApp />
+      </Suspense>
 
-          {result.kind === "error" && (
-            <div>
-              <div className="text-xs uppercase tracking-wider text-gray-400 mb-1">
-                Error
-              </div>
-              <div className="font-mono text-red-300">{result.message}</div>
-            </div>
-          )}
-
-          {(result.kind === "missing" || result.kind === "placeholder") && (
-            <div className="text-gray-200 leading-relaxed">
-              Open <code className="font-mono text-violet-300">.env.local</code>{" "}
-              in the project root and fill in your Supabase project URL and
-              publishable anon key, then restart the dev server.
-            </div>
-          )}
-        </div>
-
-        <p className="border-t border-gray-800 pt-4 text-xs text-gray-400 italic leading-relaxed">
-          Real database connection will be tested when we add tables in the next step.
-        </p>
-      </section>
-
-      <p className="text-center text-xs text-gray-500 mt-8">
-        Route loaded successfully. This page is unlinked and noindex.
-      </p>
+      <footer className="mt-16 pt-6 border-t border-gray-800/60 text-center text-xs text-gray-500 space-y-1">
+        <ConnectionPill status={status} />
+        <p>Route unlinked from public navigation. Internal preview only.</p>
+      </footer>
     </main>
   );
 }
