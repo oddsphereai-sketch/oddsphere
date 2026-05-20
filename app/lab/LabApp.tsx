@@ -8,6 +8,9 @@ import {
   SPORT_META,
   getPropsByType,
 } from "./data/mockData";
+import LabNav, { type LabSection } from "./components/LabNav";
+import DailyEdgeStub from "./components/DailyEdgeStub";
+import MyBetsStub from "./components/MyBetsStub";
 import SportSelector from "./components/SportSelector";
 import PropTabs from "./components/PropTabs";
 import ModeToggle, { type Mode } from "./components/ModeToggle";
@@ -16,7 +19,12 @@ import SearchFilterView from "./components/SearchFilterView";
 import PlayerDrillDown from "./components/PlayerDrillDown";
 import ComingSoonState from "./components/ComingSoonState";
 
+const VALID_SECTIONS: LabSection[] = ["edge", "props", "mybets"];
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "nhl"];
+
+function isSection(v: string | null): v is LabSection {
+  return !!v && (VALID_SECTIONS as string[]).includes(v);
+}
 
 function isSport(v: string | null): v is Sport {
   return !!v && (VALID_SPORTS as string[]).includes(v);
@@ -30,6 +38,9 @@ export default function LabApp() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+
+  const sectionParam = searchParams.get("section");
+  const section: LabSection = isSection(sectionParam) ? sectionParam : "edge";
 
   const sportParam = searchParams.get("sport");
   const sport: Sport = isSport(sportParam) ? sportParam : "mlb";
@@ -48,12 +59,22 @@ export default function LabApp() {
 
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
 
+  const setSection = useCallback(
+    (newSection: LabSection) => {
+      // Section change is a hard reset: drop player-props-specific params
+      // (sport / prop / mode) and close any open drill-down. Those params
+      // are scoped to the props section only.
+      setSelectedPlayer(null);
+      const params = new URLSearchParams();
+      params.set("section", newSection);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [router, pathname]
+  );
+
   const setSport = useCallback(
     (newSport: Sport) => {
-      // Close any open drill-down when sport changes — the selectedPlayer id
-      // is sport-scoped, not global, so leaving it open would render empty.
       setSelectedPlayer(null);
-
       const params = new URLSearchParams(Array.from(searchParams.entries()));
       params.set("sport", newSport);
       const firstPropType = defaultPropTypeForSport(newSport);
@@ -77,63 +98,77 @@ export default function LabApp() {
   );
 
   const entries = useMemo(
-    () => (sportMeta.isLive ? getPropsByType(sport, propType) : []),
-    [sport, sportMeta.isLive, propType]
+    () =>
+      section === "props" && sportMeta.isLive
+        ? getPropsByType(sport, propType)
+        : [],
+    [section, sport, sportMeta.isLive, propType]
   );
 
   return (
     <>
       <div className="mb-8">
-        <SportSelector active={sport} onChange={setSport} />
+        <LabNav active={section} onChange={setSection} />
       </div>
 
-      {sportMeta.isLive ? (
+      {section === "edge" && <DailyEdgeStub />}
+      {section === "mybets" && <MyBetsStub />}
+
+      {section === "props" && (
         <>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-1">
-                Research Suite — UI Preview
-              </p>
-              <p className="text-sm text-gray-300">
-                Mocked data for layout and interaction testing.{" "}
-                <span className="text-violet-300">
-                  {sportMeta.icon} {sportMeta.label}
-                </span>{" "}
-                · viewing as{" "}
-                <span className="text-violet-300">
-                  {mode === "best" ? "Tonight's Best" : "Search & Filter"}
-                </span>
-              </p>
-            </div>
-            <ModeToggle active={mode} onChange={(m) => setParam("mode", m)} />
-          </div>
-
           <div className="mb-8">
-            <PropTabs
-              sport={sport}
-              active={propType}
-              onChange={(p) => setParam("prop", p)}
-            />
+            <SportSelector active={sport} onChange={setSport} />
           </div>
 
-          {mode === "best" ? (
-            <TonightsBestView
-              sport={sport}
-              entries={entries}
-              onSelectPlayer={setSelectedPlayer}
-            />
+          {sportMeta.isLive ? (
+            <>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-1">
+                    Research Suite — UI Preview
+                  </p>
+                  <p className="text-sm text-gray-300">
+                    Mocked data for layout and interaction testing.{" "}
+                    <span className="text-violet-300">
+                      {sportMeta.icon} {sportMeta.label}
+                    </span>{" "}
+                    · viewing as{" "}
+                    <span className="text-violet-300">
+                      {mode === "best" ? "Tonight's Best" : "Search & Filter"}
+                    </span>
+                  </p>
+                </div>
+                <ModeToggle active={mode} onChange={(m) => setParam("mode", m)} />
+              </div>
+
+              <div className="mb-8">
+                <PropTabs
+                  sport={sport}
+                  active={propType}
+                  onChange={(p) => setParam("prop", p)}
+                />
+              </div>
+
+              {mode === "best" ? (
+                <TonightsBestView
+                  sport={sport}
+                  entries={entries}
+                  onSelectPlayer={setSelectedPlayer}
+                />
+              ) : (
+                <SearchFilterView
+                  entries={entries}
+                  onSelectPlayer={setSelectedPlayer}
+                />
+              )}
+            </>
           ) : (
-            <SearchFilterView
-              entries={entries}
-              onSelectPlayer={setSelectedPlayer}
-            />
+            <ComingSoonState sport={sport} />
           )}
         </>
-      ) : (
-        <ComingSoonState sport={sport} />
       )}
 
-      {selectedPlayer && (
+      {section === "props" && selectedPlayer && (
         <PlayerDrillDown
           sport={sport}
           playerId={selectedPlayer}
