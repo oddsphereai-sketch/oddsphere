@@ -10,6 +10,7 @@ import {
 } from "./data/mockData";
 import LabNav, { type LabSection } from "./components/LabNav";
 import DailyEdgeView from "./components/DailyEdgeView";
+import TrackingView from "./components/TrackingView";
 import MyBetsStub from "./components/MyBetsStub";
 import SportSelector from "./components/SportSelector";
 import PropTabs from "./components/PropTabs";
@@ -19,7 +20,7 @@ import SearchFilterView from "./components/SearchFilterView";
 import PlayerDrillDown from "./components/PlayerDrillDown";
 import ComingSoonState from "./components/ComingSoonState";
 
-const VALID_SECTIONS: LabSection[] = ["edge", "props", "mybets"];
+const VALID_SECTIONS: LabSection[] = ["edge", "props", "tracking", "mybets"];
 const VALID_SPORTS: Sport[] = [
   "mlb",
   "nba",
@@ -57,8 +58,6 @@ export default function LabApp() {
 
   const sportParam = searchParams.get("sport");
   const sport: Sport = isSport(sportParam) ? sportParam : "mlb";
-  // Inside Player Props, fall back to MLB if the active sport isn't in
-  // PROPS_SPORTS — keeps the SportSelector showing an active tab.
   const propsSport: Sport =
     section === "props" && !PROPS_SPORTS.includes(sport) ? "mlb" : sport;
   const sportMeta = SPORT_META[propsSport];
@@ -78,8 +77,6 @@ export default function LabApp() {
 
   const setSection = useCallback(
     (newSection: LabSection) => {
-      // Section change is a hard reset: drop player-props-specific params
-      // and close any open drill-down.
       setSelectedPlayer(null);
       const params = new URLSearchParams();
       params.set("section", newSection);
@@ -130,6 +127,7 @@ export default function LabApp() {
       {section === "edge" && (
         <DailyEdgeView sport={sport} onSportChange={setSport} />
       )}
+      {section === "tracking" && <TrackingView />}
       {section === "mybets" && <MyBetsStub />}
 
       {section === "props" && (

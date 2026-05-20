@@ -1,6 +1,6 @@
 "use client";
 
-export type LabSection = "edge" | "props" | "mybets";
+export type LabSection = "edge" | "props" | "tracking" | "mybets";
 
 type Tab = {
   key: LabSection;
@@ -11,6 +11,7 @@ type Tab = {
 const TABS: Tab[] = [
   { key: "edge", icon: "🎯", label: "Daily Edge" },
   { key: "props", icon: "🎮", label: "Player Props" },
+  { key: "tracking", icon: "📈", label: "Tracking" },
   { key: "mybets", icon: "📊", label: "My Bets" },
 ];
 
@@ -25,7 +26,7 @@ export default function LabNav({ active, onChange }: Props) {
       <nav
         role="tablist"
         aria-label="Lab section"
-        className="flex gap-1 px-4 sm:px-0 sm:grid sm:grid-cols-3 sm:gap-2 min-w-max sm:min-w-0 border-b border-gray-800"
+        className="flex gap-1 px-4 sm:px-0 sm:grid sm:grid-cols-4 sm:gap-2 min-w-max sm:min-w-0 border-b border-gray-800"
       >
         {TABS.map((t) => {
           const isActive = active === t.key;
