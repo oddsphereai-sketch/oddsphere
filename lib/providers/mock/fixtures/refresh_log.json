@@ -1,0 +1,112 @@
+[
+  {
+    "data_source": "balldontlie_games",
+    "sport": "mlb",
+    "refresh_started_at": "2026-05-22T08:00:00.000Z",
+    "refresh_completed_at": "2026-05-22T08:00:12.000Z",
+    "refresh_status": "success",
+    "records_updated": 12,
+    "api_calls_made": 1,
+    "scheduled_next_refresh": "2026-05-23T08:00:00.000Z"
+  },
+  {
+    "data_source": "balldontlie_lineups",
+    "sport": "mlb",
+    "refresh_started_at": "2026-05-22T16:00:00.000Z",
+    "refresh_completed_at": "2026-05-22T16:00:08.000Z",
+    "refresh_status": "success",
+    "records_updated": 84,
+    "api_calls_made": 12,
+    "scheduled_next_refresh": "2026-05-22T17:00:00.000Z"
+  },
+  {
+    "data_source": "balldontlie_injuries",
+    "sport": "mlb",
+    "refresh_started_at": "2026-05-22T06:00:00.000Z",
+    "refresh_completed_at": "2026-05-22T06:00:05.000Z",
+    "refresh_status": "success",
+    "records_updated": 7,
+    "api_calls_made": 1,
+    "scheduled_next_refresh": "2026-05-23T06:00:00.000Z"
+  },
+  {
+    "data_source": "balldontlie_player_stats",
+    "sport": "mlb",
+    "refresh_started_at": "2026-05-22T05:00:00.000Z",
+    "refresh_completed_at": "2026-05-22T05:08:42.000Z",
+    "refresh_status": "success",
+    "records_updated": 270,
+    "api_calls_made": 90,
+    "scheduled_next_refresh": "2026-05-23T05:00:00.000Z"
+  },
+  {
+    "data_source": "balldontlie_splits",
+    "sport": "mlb",
+    "refresh_started_at": "2026-05-22T05:10:00.000Z",
+    "refresh_completed_at": "2026-05-22T05:12:18.000Z",
+    "refresh_status": "success",
+    "records_updated": 120,
+    "api_calls_made": 60,
+    "scheduled_next_refresh": "2026-05-23T05:10:00.000Z"
+  },
+  {
+    "data_source": "balldontlie_pitch_stats",
+    "sport": "mlb",
+    "refresh_started_at": "2026-05-22T05:13:00.000Z",
+    "refresh_completed_at": "2026-05-22T05:14:05.000Z",
+    "refresh_status": "success",
+    "records_updated": 360,
+    "api_calls_made": 90,
+    "scheduled_next_refresh": "2026-05-23T05:13:00.000Z"
+  },
+  {
+    "data_source": "sharpapi_game_lines",
+    "sport": "mlb",
+    "refresh_started_at": "2026-05-22T17:00:00.000Z",
+    "refresh_completed_at": "2026-05-22T17:00:11.000Z",
+    "refresh_status": "success",
+    "records_updated": 360,
+    "api_calls_made": 1,
+    "scheduled_next_refresh": "2026-05-22T17:15:00.000Z"
+  },
+  {
+    "data_source": "sharpapi_player_props",
+    "sport": "mlb",
+    "refresh_started_at": "2026-05-22T17:30:00.000Z",
+    "refresh_completed_at": "2026-05-22T17:30:15.000Z",
+    "refresh_status": "success",
+    "records_updated": 144,
+    "api_calls_made": 1,
+    "scheduled_next_refresh": "2026-05-22T17:45:00.000Z"
+  },
+  {
+    "data_source": "sharpapi_signals",
+    "sport": "mlb",
+    "refresh_started_at": "2026-05-22T17:00:00.000Z",
+    "refresh_completed_at": "2026-05-22T17:00:09.000Z",
+    "refresh_status": "success",
+    "records_updated": 4,
+    "api_calls_made": 1,
+    "scheduled_next_refresh": "2026-05-22T17:15:00.000Z"
+  },
+  {
+    "data_source": "openweather_forecasts",
+    "sport": "mlb",
+    "refresh_started_at": "2026-05-22T15:00:00.000Z",
+    "refresh_completed_at": "2026-05-22T15:00:14.000Z",
+    "refresh_status": "success",
+    "records_updated": 12,
+    "api_calls_made": 12,
+    "scheduled_next_refresh": "2026-05-22T18:00:00.000Z"
+  },
+  {
+    "data_source": "fangraphs_park_factors",
+    "sport": "mlb",
+    "refresh_started_at": "2026-05-20T03:00:00.000Z",
+    "refresh_completed_at": "2026-05-20T03:00:32.000Z",
+    "refresh_status": "success",
+    "records_updated": 30,
+    "api_calls_made": 1,
+    "scheduled_next_refresh": "2026-05-27T03:00:00.000Z"
+  }
+]

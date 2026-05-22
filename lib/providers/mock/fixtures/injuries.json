@@ -1,0 +1,86 @@
+[
+  {
+    "player_external_id": 700026,
+    "injury_date": "2024-09-22T00:00:00.000Z",
+    "return_date": null,
+    "type": "UCL Reconstruction",
+    "detail": "Tommy John surgery",
+    "side": "Right",
+    "status": "Out",
+    "long_comment": "Alcantara is recovering from Tommy John surgery on his right elbow performed in September 2024. Expected to miss the 2026 season.",
+    "short_comment": "UCL reconstruction, out for season",
+    "is_active": true
+  },
+  {
+    "player_external_id": 600025,
+    "injury_date": "2026-05-18T00:00:00.000Z",
+    "return_date": null,
+    "type": "Knee",
+    "detail": "Tendinitis",
+    "side": "Right",
+    "status": "Day-to-Day",
+    "long_comment": "Buxton is dealing with chronic right knee tendinitis. Listed as day-to-day; managers continue to monitor before each game.",
+    "short_comment": "Knee tendinitis, day-to-day",
+    "is_active": true
+  },
+  {
+    "player_external_id": 600035,
+    "injury_date": "2026-05-08T00:00:00.000Z",
+    "return_date": "2026-06-05T00:00:00.000Z",
+    "type": "Hand",
+    "detail": "Fracture (HBP)",
+    "side": "Right",
+    "status": "15-Day IL",
+    "long_comment": "Ward was hit by a pitch on 2026-05-08 and suffered a non-displaced right hand fracture. Expected back in early June.",
+    "short_comment": "Right hand fracture, 15-day IL",
+    "is_active": true
+  },
+  {
+    "player_external_id": 600015,
+    "injury_date": "2026-05-12T00:00:00.000Z",
+    "return_date": null,
+    "type": "Hip",
+    "detail": "Strain",
+    "side": "Right",
+    "status": "10-Day IL",
+    "long_comment": "Torkelson strained his right hip on 2026-05-12 and was placed on the 10-day IL. Working toward a rehab assignment.",
+    "short_comment": "Right hip strain, 10-day IL",
+    "is_active": true
+  },
+  {
+    "player_external_id": 600027,
+    "injury_date": "2026-05-20T00:00:00.000Z",
+    "return_date": null,
+    "type": "Hamstring",
+    "detail": "Mild Strain",
+    "side": "Right",
+    "status": "Day-to-Day",
+    "long_comment": "Altuve felt tightness in his right hamstring during Tuesday's game and was lifted as a precaution. Day-to-day; expected to play tonight.",
+    "short_comment": "Right hamstring tightness, day-to-day",
+    "is_active": true
+  },
+  {
+    "player_external_id": 600013,
+    "injury_date": "2026-05-15T00:00:00.000Z",
+    "return_date": null,
+    "type": "Back",
+    "detail": "Lower-back strain",
+    "side": null,
+    "status": "10-Day IL",
+    "long_comment": "Springer was placed on the 10-day IL with a lower-back strain. The Blue Jays are taking a cautious approach.",
+    "short_comment": "Lower-back strain, 10-day IL",
+    "is_active": true
+  },
+  {
+    "player_external_id": 600049,
+    "injury_date": "2026-05-21T00:00:00.000Z",
+    "return_date": null,
+    "type": "Back",
+    "detail": "Stiffness",
+    "side": null,
+    "status": "Day-to-Day",
+    "long_comment": "Yelich reported lower-back stiffness pre-game on 2026-05-21. He sat out yesterday; listed as day-to-day for tonight.",
+    "short_comment": "Back stiffness, day-to-day",
+    "is_active": true
+  }
+]

@@ -1,0 +1,758 @@
+[
+  {
+    "game_external_id": 18599100,
+    "team_external_id": 1,
+    "player_external_id": 600003,
+    "batting_position": 1,
+    "starting_position": "SS",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599100,
+    "team_external_id": 1,
+    "player_external_id": 600002,
+    "batting_position": 2,
+    "starting_position": "LF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599100,
+    "team_external_id": 1,
+    "player_external_id": 592450,
+    "batting_position": 3,
+    "starting_position": "RF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599100,
+    "team_external_id": 1,
+    "player_external_id": 543037,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599100,
+    "team_external_id": 2,
+    "player_external_id": 600004,
+    "batting_position": 3,
+    "starting_position": "3B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599100,
+    "team_external_id": 2,
+    "player_external_id": 600005,
+    "batting_position": 5,
+    "starting_position": "1B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599100,
+    "team_external_id": 2,
+    "player_external_id": 700002,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599101,
+    "team_external_id": 4,
+    "player_external_id": 600009,
+    "batting_position": 1,
+    "starting_position": "SS",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599101,
+    "team_external_id": 4,
+    "player_external_id": 600010,
+    "batting_position": 3,
+    "starting_position": "C",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599101,
+    "team_external_id": 4,
+    "player_external_id": 700004,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599101,
+    "team_external_id": 5,
+    "player_external_id": 600006,
+    "batting_position": 1,
+    "starting_position": "1B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599101,
+    "team_external_id": 5,
+    "player_external_id": 600007,
+    "batting_position": 4,
+    "starting_position": "2B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599101,
+    "team_external_id": 5,
+    "player_external_id": 600008,
+    "batting_position": 5,
+    "starting_position": "3B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599101,
+    "team_external_id": 5,
+    "player_external_id": 700003,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599102,
+    "team_external_id": 3,
+    "player_external_id": 600011,
+    "batting_position": 1,
+    "starting_position": "SS",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599102,
+    "team_external_id": 3,
+    "player_external_id": 600013,
+    "batting_position": 2,
+    "starting_position": "RF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599102,
+    "team_external_id": 3,
+    "player_external_id": 600012,
+    "batting_position": 3,
+    "starting_position": "1B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599102,
+    "team_external_id": 3,
+    "player_external_id": 700005,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599102,
+    "team_external_id": 8,
+    "player_external_id": 600014,
+    "batting_position": 2,
+    "starting_position": "CF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599102,
+    "team_external_id": 8,
+    "player_external_id": 600015,
+    "batting_position": 4,
+    "starting_position": "1B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599102,
+    "team_external_id": 8,
+    "player_external_id": 700006,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599103,
+    "team_external_id": 6,
+    "player_external_id": 600018,
+    "batting_position": 1,
+    "starting_position": "LF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599103,
+    "team_external_id": 6,
+    "player_external_id": 600016,
+    "batting_position": 3,
+    "starting_position": "CF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599103,
+    "team_external_id": 6,
+    "player_external_id": 600017,
+    "batting_position": 4,
+    "starting_position": "1B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599103,
+    "team_external_id": 6,
+    "player_external_id": 700007,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599103,
+    "team_external_id": 7,
+    "player_external_id": 600020,
+    "batting_position": 1,
+    "starting_position": "LF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599103,
+    "team_external_id": 7,
+    "player_external_id": 600019,
+    "batting_position": 3,
+    "starting_position": "3B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599103,
+    "team_external_id": 7,
+    "player_external_id": 700008,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599104,
+    "team_external_id": 9,
+    "player_external_id": 600021,
+    "batting_position": 1,
+    "starting_position": "SS",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599104,
+    "team_external_id": 9,
+    "player_external_id": 600022,
+    "batting_position": 3,
+    "starting_position": "1B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599104,
+    "team_external_id": 9,
+    "player_external_id": 600023,
+    "batting_position": 4,
+    "starting_position": "C",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599104,
+    "team_external_id": 9,
+    "player_external_id": 700009,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599104,
+    "team_external_id": 10,
+    "player_external_id": 600025,
+    "batting_position": 1,
+    "starting_position": "CF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599104,
+    "team_external_id": 10,
+    "player_external_id": 600024,
+    "batting_position": 3,
+    "starting_position": "SS",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599104,
+    "team_external_id": 10,
+    "player_external_id": 700010,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599105,
+    "team_external_id": 11,
+    "player_external_id": 600027,
+    "batting_position": 1,
+    "starting_position": "2B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599105,
+    "team_external_id": 11,
+    "player_external_id": 600026,
+    "batting_position": 3,
+    "starting_position": "DH",
+    "is_confirmed": true,
+    "is_dh": true
+  },
+  {
+    "game_external_id": 18599105,
+    "team_external_id": 11,
+    "player_external_id": 600028,
+    "batting_position": 5,
+    "starting_position": "C",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599105,
+    "team_external_id": 11,
+    "player_external_id": 700011,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599105,
+    "team_external_id": 14,
+    "player_external_id": 600029,
+    "batting_position": 3,
+    "starting_position": "CF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599105,
+    "team_external_id": 14,
+    "player_external_id": 600030,
+    "batting_position": 4,
+    "starting_position": "C",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599105,
+    "team_external_id": 14,
+    "player_external_id": 700012,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599106,
+    "team_external_id": 12,
+    "player_external_id": 600035,
+    "batting_position": 1,
+    "starting_position": "LF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599106,
+    "team_external_id": 12,
+    "player_external_id": 600034,
+    "batting_position": 3,
+    "starting_position": "CF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599106,
+    "team_external_id": 12,
+    "player_external_id": 700014,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599106,
+    "team_external_id": 15,
+    "player_external_id": 600032,
+    "batting_position": 1,
+    "starting_position": "2B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599106,
+    "team_external_id": 15,
+    "player_external_id": 600031,
+    "batting_position": 2,
+    "starting_position": "SS",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599106,
+    "team_external_id": 15,
+    "player_external_id": 600033,
+    "batting_position": 5,
+    "starting_position": "LF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599106,
+    "team_external_id": 15,
+    "player_external_id": 700013,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599107,
+    "team_external_id": 16,
+    "player_external_id": 600036,
+    "batting_position": 1,
+    "starting_position": "RF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599107,
+    "team_external_id": 16,
+    "player_external_id": 600037,
+    "batting_position": 3,
+    "starting_position": "1B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599107,
+    "team_external_id": 16,
+    "player_external_id": 600038,
+    "batting_position": 4,
+    "starting_position": "3B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599107,
+    "team_external_id": 16,
+    "player_external_id": 700015,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599107,
+    "team_external_id": 20,
+    "player_external_id": 600040,
+    "batting_position": 1,
+    "starting_position": "SS",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599107,
+    "team_external_id": 20,
+    "player_external_id": 600039,
+    "batting_position": 3,
+    "starting_position": "RF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599107,
+    "team_external_id": 20,
+    "player_external_id": 700016,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599108,
+    "team_external_id": 18,
+    "player_external_id": 600044,
+    "batting_position": 1,
+    "starting_position": "SS",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599108,
+    "team_external_id": 18,
+    "player_external_id": 600045,
+    "batting_position": 4,
+    "starting_position": "1B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599108,
+    "team_external_id": 18,
+    "player_external_id": 700018,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599108,
+    "team_external_id": 19,
+    "player_external_id": 600043,
+    "batting_position": 1,
+    "starting_position": "DH",
+    "is_confirmed": true,
+    "is_dh": true
+  },
+  {
+    "game_external_id": 18599108,
+    "team_external_id": 19,
+    "player_external_id": 600042,
+    "batting_position": 2,
+    "starting_position": "SS",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599108,
+    "team_external_id": 19,
+    "player_external_id": 600041,
+    "batting_position": 3,
+    "starting_position": "1B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599108,
+    "team_external_id": 19,
+    "player_external_id": 700017,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599109,
+    "team_external_id": 21,
+    "player_external_id": 600046,
+    "batting_position": 1,
+    "starting_position": "CF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599109,
+    "team_external_id": 21,
+    "player_external_id": 600047,
+    "batting_position": 2,
+    "starting_position": "LF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599109,
+    "team_external_id": 21,
+    "player_external_id": 600048,
+    "batting_position": 3,
+    "starting_position": "RF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599109,
+    "team_external_id": 21,
+    "player_external_id": 700019,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599109,
+    "team_external_id": 23,
+    "player_external_id": 600049,
+    "batting_position": 1,
+    "starting_position": "LF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599109,
+    "team_external_id": 23,
+    "player_external_id": 600050,
+    "batting_position": 3,
+    "starting_position": "CF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599109,
+    "team_external_id": 23,
+    "player_external_id": 700020,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599110,
+    "team_external_id": 22,
+    "player_external_id": 600054,
+    "batting_position": 3,
+    "starting_position": "SS",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599110,
+    "team_external_id": 22,
+    "player_external_id": 600055,
+    "batting_position": 5,
+    "starting_position": "1B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599110,
+    "team_external_id": 22,
+    "player_external_id": 700022,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599110,
+    "team_external_id": 25,
+    "player_external_id": 600053,
+    "batting_position": 1,
+    "starting_position": "RF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599110,
+    "team_external_id": 25,
+    "player_external_id": 600051,
+    "batting_position": 4,
+    "starting_position": "3B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599110,
+    "team_external_id": 25,
+    "player_external_id": 600052,
+    "batting_position": 5,
+    "starting_position": "C",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599110,
+    "team_external_id": 25,
+    "player_external_id": 700021,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599111,
+    "team_external_id": 28,
+    "player_external_id": 600057,
+    "batting_position": 1,
+    "starting_position": "RF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599111,
+    "team_external_id": 28,
+    "player_external_id": 600056,
+    "batting_position": 2,
+    "starting_position": "DH",
+    "is_confirmed": true,
+    "is_dh": true
+  },
+  {
+    "game_external_id": 18599111,
+    "team_external_id": 28,
+    "player_external_id": 600058,
+    "batting_position": 3,
+    "starting_position": "1B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599111,
+    "team_external_id": 28,
+    "player_external_id": 700023,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599111,
+    "team_external_id": 29,
+    "player_external_id": 600060,
+    "batting_position": 1,
+    "starting_position": "RF",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599111,
+    "team_external_id": 29,
+    "player_external_id": 600059,
+    "batting_position": 3,
+    "starting_position": "3B",
+    "is_confirmed": true,
+    "is_dh": false
+  },
+  {
+    "game_external_id": 18599111,
+    "team_external_id": 29,
+    "player_external_id": 700024,
+    "batting_position": null,
+    "starting_position": "P",
+    "is_confirmed": true,
+    "is_dh": false
+  }
+]
