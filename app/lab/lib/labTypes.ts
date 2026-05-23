@@ -210,3 +210,111 @@ export type PlayerPropsResponse = {
   };
   entries: PlayerPropDto[];
 };
+
+// ───────────────────────────────────────────────────────────────────────────
+// /api/lab/tracking
+// ───────────────────────────────────────────────────────────────────────────
+
+export type WindowTally = {
+  wins: number;
+  losses: number;
+  pushes: number;
+  total: number;
+  /** wins / (wins + losses), 0..1; 0 if no decided picks. */
+  hitRate: number;
+};
+
+export type SportMarketTally = {
+  sport: Sport;
+  /** UI-facing market label (ML, O/U, NRFI, YRFI, NRFI/YRFI, etc.). */
+  market: string;
+  lifetime: WindowTally;
+  /** Current season tally; null if no data this season. */
+  currentSeason: WindowTally | null;
+  /** Last-7-days tally; null if no activity. */
+  weekly: WindowTally | null;
+};
+
+export type DailyMarketResult = {
+  sport: Sport;
+  market: string;
+  wins: number;
+  losses: number;
+  pushes: number;
+  total: number;
+};
+
+export type DailyRecap = {
+  /** YYYY-MM-DD of the day shown. */
+  date: string;
+  /** Display label, e.g., "May 21". */
+  label: string;
+  /** True when `date` is calendar-yesterday; false when we fell back to the most recent day with data. */
+  isYesterday: boolean;
+  results: DailyMarketResult[];
+  totalPicks: number;
+  totalWins: number;
+  totalLosses: number;
+  hitRate: number;
+};
+
+export type WeeklyAggregate = {
+  /** YYYY-MM-DD inclusive. */
+  weekStart: string;
+  weekEnd: string;
+  /** "May 16" — display labels. */
+  weekStartLabel: string;
+  weekEndLabel: string;
+  totalPicks: number;
+  wins: number;
+  losses: number;
+  pushes: number;
+  hitRate: number;
+};
+
+export type DailyHitRatePoint = {
+  date: string;
+  picks: number;
+  wins: number;
+  hitRate: number;
+};
+
+export type LastThirtyDays = {
+  days: DailyHitRatePoint[];
+  aggregate: {
+    picks: number;
+    wins: number;
+    losses: number;
+    hitRate: number;
+  };
+  bestDay: { date: string; dateLabel: string; record: string } | null;
+  worstDay: { date: string; dateLabel: string; record: string } | null;
+  mostPicks: { date: string; dateLabel: string; count: number } | null;
+};
+
+export type AllTimeAggregate = {
+  totalPredictions: number;
+  wins: number;
+  losses: number;
+  pushes: number;
+  hitRate: number;
+};
+
+export type Streak = {
+  /** "W" = consecutive winning days, "L" = consecutive losing days, "NONE" = no activity. */
+  type: "W" | "L" | "NONE";
+  count: number;
+  description: string;
+};
+
+export type TrackingResponse = {
+  as_of: string;
+  /** Sports that appear in `tallies` in display order. */
+  sportOrder: Sport[];
+  yesterdayRecap: DailyRecap;
+  weeklyAggregate: WeeklyAggregate;
+  last30Days: LastThirtyDays;
+  allTimeAggregate: AllTimeAggregate;
+  streak: Streak;
+  tallies: SportMarketTally[];
+};
