@@ -19,29 +19,13 @@ import TonightsBestView from "./components/TonightsBestView";
 import SearchFilterView from "./components/SearchFilterView";
 import PlayerDrillDown from "./components/PlayerDrillDown";
 import ComingSoonState from "./components/ComingSoonState";
+import { useSportSelection } from "./hooks/useSportSelection";
+import { useRefreshStatus } from "./hooks/useRefreshStatus";
 
 const VALID_SECTIONS: LabSection[] = ["edge", "props", "tracking", "mybets"];
-const VALID_SPORTS: Sport[] = [
-  "mlb",
-  "nba",
-  "nfl",
-  "cbb",
-  "cfb",
-  "nhl",
-  "ucl",
-];
-
-// Sports surfaced inside Player Props (subset of VALID_SPORTS). When the URL
-// requests a sport outside this set while section=props, the props subtree
-// falls back to MLB for the active highlight.
-const PROPS_SPORTS: Sport[] = ["mlb", "nba", "nfl", "nhl"];
 
 function isSection(v: string | null): v is LabSection {
   return !!v && (VALID_SECTIONS as string[]).includes(v);
-}
-
-function isSport(v: string | null): v is Sport {
-  return !!v && (VALID_SPORTS as string[]).includes(v);
 }
 
 function defaultPropTypeForSport(sport: Sport): string {
@@ -56,11 +40,13 @@ export default function LabApp() {
   const sectionParam = searchParams.get("section");
   const section: LabSection = isSection(sectionParam) ? sectionParam : "edge";
 
-  const sportParam = searchParams.get("sport");
-  const sport: Sport = isSport(sportParam) ? sportParam : "mlb";
-  const propsSport: Sport =
-    section === "props" && !PROPS_SPORTS.includes(sport) ? "mlb" : sport;
+  const { sport, propsSport } = useSportSelection();
   const sportMeta = SPORT_META[propsSport];
+
+  // Prime the refresh-status SWR cache. The RefreshIndicator (5E) reads the
+  // same key; calling here keeps data warm so the badge renders without
+  // a fetch the moment 5E lands. Result intentionally unused for 5A.
+  useRefreshStatus({ sport });
 
   const sportPropTypes = useMemo(
     () => Object.keys(PROP_TYPE_META[propsSport]),
