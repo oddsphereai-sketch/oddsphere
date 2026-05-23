@@ -13,9 +13,9 @@
 
 import { supabase } from "../lib/db/supabase";
 import {
-  ingestDanielsModel,
+  ingestScoresModel,
   type DanielsModelRow,
-} from "../lib/models/dailyEdge/scoresModelIngester";
+} from "../lib/scoresModel/ingester";
 import { evaluateSignal } from "../lib/models/dailyEdge/sharpSignalEvaluator";
 import { generateVerdictText } from "../lib/models/dailyEdge/verdictGenerator";
 import danielsModelJson from "../lib/providers/mock/fixtures/daniels_model.json";
@@ -67,16 +67,16 @@ async function main() {
   console.log(`  loaded ${gameIdByExternal.size} games`);
 
   const rows = danielsModelJson as DanielsModelRow[];
-  const result = await ingestDanielsModel(supabase, rows, gameIdByExternal);
+  const result = await ingestScoresModel(supabase, "mlb", rows, gameIdByExternal);
   console.log(`  ingested ${rows.length} rows: ${result.inserted} inserted, ${result.updated} updated, ${result.failed.length} failed`);
   if (result.failed.length > 0) {
     result.failed.forEach((f) =>
-      console.log(`    failed game_external_id=${f.row.game_external_id}: ${f.error}`)
+      console.log(`    failed game_external_id=${f.row.game_external_id}: ${f.errors.join("; ")}`)
     );
   }
 
   // Demonstrate idempotency by re-running
-  const second = await ingestDanielsModel(supabase, rows, gameIdByExternal);
+  const second = await ingestScoresModel(supabase, "mlb", rows, gameIdByExternal);
   console.log(
     `  re-ingest (idempotency check): ${second.inserted} inserted, ${second.updated} updated, ${second.failed.length} failed`
   );

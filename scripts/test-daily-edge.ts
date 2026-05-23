@@ -15,7 +15,7 @@ import { generateVerdictText } from "../lib/models/dailyEdge/verdictGenerator";
 import {
   validateDanielsModelRow,
   type DanielsModelRow,
-} from "../lib/models/dailyEdge/scoresModelIngester";
+} from "../lib/scoresModel/ingester";
 
 let pass = 0;
 let fail = 0;
