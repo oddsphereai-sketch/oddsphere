@@ -30,6 +30,7 @@ import {
 // fields the provider strips — weather notable flags, line_history shape,
 // daniels_model output, historical_results FK reconstruction, refresh_log.
 import danielsModelJson from "../lib/providers/mock/fixtures/daniels_model.json";
+import tonightPropsJson from "../lib/providers/mock/fixtures/tonight_props.json";
 import historicalResultsJson from "../lib/providers/mock/fixtures/historical_results.json";
 import lineHistoryJson from "../lib/providers/mock/fixtures/line_history.json";
 import refreshLogJson from "../lib/providers/mock/fixtures/refresh_log.json";
@@ -698,6 +699,75 @@ async function seedTonightPredictions(gameIdByExternal: GameMap) {
   logStep("game_predictions (tonight)", rows.length, ms);
 }
 
+// ─── Stage 4b: tonight's prop_predictions (curated tier distribution) ────
+// Showcase fixture targeting a realistic daily handicapping output:
+//   6 premium (15%) · 10 strong (25%) · 13 good (33%) · 10 skip (25%)
+//   Edge ranges: premium 12-18%, strong 6-11%, good 2-5%, skip <2% (signed).
+// Anchors on the 7 game IDs in the 2026-05-23 slate so the Lab's default
+// "today" view always has interesting cards for evaluation.
+async function seedTonightPropPredictions(
+  gameIdByExternal: GameMap,
+  playerIdByExternal: Map<number, number>
+) {
+  logSection("Stage 4b · tonight's prop_predictions (curated)");
+
+  type TonightPropRow = {
+    game_external_id: number;
+    player_external_id: number;
+    prop_market: string;
+    prop_line: number;
+    model_probability: number;
+    fair_probability: number;
+    edge_pct: number;
+    confidence_score: number;
+    tier: "premium" | "strong" | "good" | "skip";
+    best_sportsbook: string;
+    best_odds_american: number;
+    reasoning: string;
+  };
+
+  const fixture = tonightPropsJson as TonightPropRow[];
+  const computedAt = "2026-05-23T13:00:00.000Z";
+  const rows: Record<string, unknown>[] = [];
+  let skipped = 0;
+  for (const r of fixture) {
+    const gameId = gameIdByExternal.get(r.game_external_id);
+    const playerId = playerIdByExternal.get(r.player_external_id);
+    if (gameId === undefined || playerId === undefined) {
+      skipped++;
+      continue;
+    }
+    rows.push({
+      game_id: gameId,
+      player_id: playerId,
+      prop_market: r.prop_market,
+      prop_line: r.prop_line,
+      model_probability: r.model_probability,
+      fair_probability: r.fair_probability,
+      edge_pct: r.edge_pct,
+      confidence_score: r.confidence_score,
+      confidence_stars: Math.max(1, Math.min(5, Math.round(r.confidence_score / 20))),
+      tier: r.tier,
+      best_sportsbook: r.best_sportsbook,
+      best_odds_american: r.best_odds_american,
+      ev_pct: r.edge_pct,
+      reasoning: r.reasoning,
+      caveat: null,
+      bet_odds_american: r.best_odds_american,
+      closing_odds_american: null,
+      clv_pct: null,
+      beat_closing_line: null,
+      model_version: "daniels-v3.2",
+      computed_at: computedAt,
+    });
+  }
+  const [inserted, ms] = await timed(() => bulkInsert("prop_predictions", rows));
+  if (skipped > 0) {
+    console.log(`  ⚠ skipped ${skipped} fixture rows (game/player not found in DB)`);
+  }
+  logStep("prop_predictions (tonight)", inserted.length, ms);
+}
+
 // ─── Stage 5: historical chain (games → predictions → results) ──────────
 type HistoricalRow = {
   pick_id: number;
@@ -1023,7 +1093,7 @@ const EXPECTED_COUNTS: Record<string, number> = {
   line_history: 48,
   sharp_signals: 4,
   game_predictions: 12 + 360, // tonight + game-level historical (~360)
-  prop_predictions: 90, // historical prop picks
+  prop_predictions: 39 + 90, // curated tonight slate (39) + historical (90)
   prediction_results: 450,
   tracking_aggregates: -1, // varies — just verify > 0
   data_refresh_log: 11,
@@ -1083,6 +1153,7 @@ async function main() {
   );
   await seedBetting(gameIdByExternal, playerIdByExternal);
   await seedTonightPredictions(gameIdByExternal);
+  await seedTonightPropPredictions(gameIdByExternal, playerIdByExternal);
   await seedHistorical(
     teamIdByExternal,
     playerIdByExternal,

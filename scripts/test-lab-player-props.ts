@@ -141,18 +141,21 @@ async function main() {
   check(`tier=premium returns entries`, bPrem.entries.length >= 1);
   check(`tier=premium: all tier='premium'`, bPrem.entries.every((e) => e.tier === "premium"));
 
+  // Seed targets: 6 premium + 10 strong + 13 good + 10 skip = 39 total on the
+  // 5/22 slate (which shares its 7 late-night games with the 5/23 slate per the
+  // slate-date convention).
   const rPS = await playerProps(
     new Request(`https://x/api/lab/player-props?sport=mlb&date=${SLATE_DATE}&tier=premium,strong`)
   );
   const bPS = (await rPS.json()) as PlayerPropsResponse;
-  check(`tier=premium,strong returns 2 entries`, bPS.entries.length === 2, `got: ${bPS.entries.length}`);
+  check(`tier=premium,strong returns 16 entries`, bPS.entries.length === 16, `got: ${bPS.entries.length}`);
   check(`tier=premium,strong: all in {premium,strong}`, bPS.entries.every((e) => e.tier === "premium" || e.tier === "strong"));
 
   const rSkip = await playerProps(
     new Request(`https://x/api/lab/player-props?sport=mlb&date=${SLATE_DATE}&tier=skip`)
   );
   const bSkip = (await rSkip.json()) as PlayerPropsResponse;
-  check(`tier=skip returns the 37 skip entries`, bSkip.entries.length === 37);
+  check(`tier=skip returns the 10 skip entries`, bSkip.entries.length === 10);
   check(`tier=skip: all tier='skip'`, bSkip.entries.every((e) => e.tier === "skip"));
 
   // ─── (4) minEdge filter ───────────────────────────────────────────────────
