@@ -16,19 +16,34 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/**
+ * Daniel's MLB scores-model row shape (V1 manual upload).
+ *
+ * The column names use sport-agnostic naming (predicted_home_score /
+ * predicted_away_score) post-V2 migration. MLB-specific fields like NRFI
+ * remain top-level for back-compat AND are mirrored into sport_specific
+ * during ingestion. Other sports (NBA, NFL, etc.) get their own row shapes
+ * in lib/scoresModel/sportSchemas.ts and use the same ingester with a
+ * sport parameter — see 4B.
+ */
 export type DanielsModelRow = {
   game_external_id: number;
-  predicted_home_runs: number;
-  predicted_away_runs: number;
+  // Sport-agnostic predicted scores
+  predicted_home_score: number;
+  predicted_away_score: number;
   predicted_total: number;
-  predicted_ml_winner: string;       // 'home' | 'away'
-  ml_confidence: number;             // 0-100
-  predicted_ou_side: string;          // 'over' | 'under'
+  // ML pick
+  predicted_ml_winner: string;        // 'home' | 'away'
+  ml_confidence: number;              // 0-100
+  // O/U pick
+  predicted_ou_side: string;           // 'over' | 'under'
   ou_confidence: number;
+  // MLB-specific
   predicted_nrfi: boolean;
   nrfi_confidence: number;
+  // Metadata
   model_version: string;
-  computed_at: string;                // ISO 8601
+  computed_at: string;                 // ISO 8601
 };
 
 export type IngestionResult = {
@@ -70,8 +85,8 @@ export function validateDanielsModelRow(
   if (row.predicted_ou_side !== "over" && row.predicted_ou_side !== "under") {
     return { ok: false, error: `predicted_ou_side must be 'over' or 'under'` };
   }
-  if (row.predicted_home_runs < 0 || row.predicted_away_runs < 0) {
-    return { ok: false, error: `predicted runs must be ≥ 0` };
+  if (row.predicted_home_score < 0 || row.predicted_away_score < 0) {
+    return { ok: false, error: `predicted scores must be ≥ 0` };
   }
   if (!row.model_version || row.model_version.trim().length === 0) {
     return { ok: false, error: `model_version is required` };
@@ -141,11 +156,14 @@ export async function ingestDanielsModel(
     ((existing ?? []) as { game_id: number }[]).map((r) => r.game_id)
   );
 
-  // Build upsert payload
+  // Build upsert payload. sport_specific mirrors MLB-specific fields so the
+  // multi-sport read path doesn't need to special-case MLB. prediction_source
+  // defaults to 'manual_daniel' for this ingester (the auto-model ingester
+  // in 4B will set its own value).
   const payload = validated.map(({ row, gameId }) => ({
     game_id: gameId,
-    predicted_home_runs: row.predicted_home_runs,
-    predicted_away_runs: row.predicted_away_runs,
+    predicted_home_score: row.predicted_home_score,
+    predicted_away_score: row.predicted_away_score,
     predicted_total: row.predicted_total,
     predicted_ml_winner: row.predicted_ml_winner,
     ml_confidence: row.ml_confidence,
@@ -153,6 +171,13 @@ export async function ingestDanielsModel(
     ou_confidence: row.ou_confidence,
     predicted_nrfi: row.predicted_nrfi,
     nrfi_confidence: row.nrfi_confidence,
+    sport_specific: {
+      nrfi_pred: row.predicted_nrfi,
+      nrfi_confidence: row.nrfi_confidence,
+    },
+    prediction_source: "manual_daniel",
+    is_override: false,
+    original_auto_prediction: null,
     model_version: row.model_version,
     computed_at: row.computed_at,
   }));

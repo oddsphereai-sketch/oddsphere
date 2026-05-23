@@ -325,8 +325,8 @@ section("validateDanielsModelRow — pure validator");
 
 const validRow: DanielsModelRow = {
   game_external_id: 18599100,
-  predicted_home_runs: 4.6,
-  predicted_away_runs: 3.8,
+  predicted_home_score: 4.6,
+  predicted_away_score: 3.8,
   predicted_total: 8.4,
   predicted_ml_winner: "home",
   ml_confidence: 64.5,
@@ -362,8 +362,8 @@ check(
   !validateDanielsModelRow({ ...validRow, predicted_ou_side: "push" }, known).ok
 );
 check(
-  "negative predicted_home_runs fails",
-  !validateDanielsModelRow({ ...validRow, predicted_home_runs: -1 }, known).ok
+  "negative predicted_home_score fails",
+  !validateDanielsModelRow({ ...validRow, predicted_home_score: -1 }, known).ok
 );
 check(
   "empty model_version fails",

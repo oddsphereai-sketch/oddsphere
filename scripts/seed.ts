@@ -661,8 +661,8 @@ async function seedTonightPredictions(gameIdByExternal: GameMap) {
 
   type DanielsRow = {
     game_external_id: number;
-    predicted_home_runs: number;
-    predicted_away_runs: number;
+    predicted_home_score: number;
+    predicted_away_score: number;
     predicted_total: number;
     predicted_ml_winner: string;
     ml_confidence: number;
@@ -679,14 +679,16 @@ async function seedTonightPredictions(gameIdByExternal: GameMap) {
       "game_predictions",
       dm.map((d) => ({
         game_id: gameIdByExternal.get(d.game_external_id),
-        predicted_home_runs: d.predicted_home_runs,
-        predicted_away_runs: d.predicted_away_runs,
+        predicted_home_score: d.predicted_home_score,
+        predicted_away_score: d.predicted_away_score,
         predicted_total: d.predicted_total,
         predicted_ml_winner: d.predicted_ml_winner,
         ml_confidence: d.ml_confidence,
         predicted_ou_side: d.predicted_ou_side,
         ou_confidence: d.ou_confidence,
         predicted_nrfi: d.predicted_nrfi,
+        sport_specific: { nrfi_pred: d.predicted_nrfi, nrfi_confidence: d.nrfi_confidence },
+        prediction_source: "manual_daniel",
         nrfi_confidence: d.nrfi_confidence,
         model_version: d.model_version,
         computed_at: d.computed_at,
@@ -822,8 +824,8 @@ async function seedHistorical(
       rowToGamePredIdx.set(r.pick_id, gamePredRows.length);
       gamePredRows.push({
         game_id: gameId,
-        predicted_home_runs: null,
-        predicted_away_runs: null,
+        predicted_home_score: null,
+        predicted_away_score: null,
         predicted_total: null,
         predicted_ml_winner: isML ? r.predicted_side : null,
         ml_confidence: isML ? 60.0 : null,
@@ -831,6 +833,7 @@ async function seedHistorical(
         ou_confidence: isTotal ? 56.0 : null,
         predicted_nrfi: isNrfi ? r.predicted_side === "under" : null,
         nrfi_confidence: isNrfi ? 58.0 : null,
+        prediction_source: "manual_daniel",
         bet_odds_american: r.bet_odds_american,
         closing_odds_american: r.closing_odds_american,
         clv_pct: r.clv_pct,
