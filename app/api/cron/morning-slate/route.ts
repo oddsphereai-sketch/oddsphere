@@ -18,6 +18,7 @@
  */
 
 import { cronHandlerPerSport } from "@/lib/cron/runCron";
+import { parseDateFromUrl } from "@/lib/cron/dates";
 import { sportsInSeasonToday } from "@/lib/cron/seasons";
 import { slateService } from "@/lib/services/slateService";
 import { linesService } from "@/lib/services/linesService";
@@ -26,25 +27,6 @@ import { predictionService } from "@/lib/services/predictionService";
 import { loadGameIdMap } from "@/lib/services/_idMaps";
 
 export const maxDuration = 300; // Vercel Pro — morning-slate can be heavy
-
-function todaySlateDate(): string {
-  // ET-aligned slate date. For V1 simplicity, use UTC date — the slate-date
-  // convention inside the providers handles late-night UTC games.
-  return new Date().toISOString().slice(0, 10);
-}
-
-function parseDateFromUrl(request: Request): string {
-  // Support ?date=YYYY-MM-DD for manual testing / backfills. Production
-  // Vercel cron invokes without query params → falls back to today.
-  try {
-    const url = new URL(request.url);
-    const dateParam = url.searchParams.get("date");
-    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return dateParam;
-  } catch {
-    // URL parsing failed — ignore and fall back
-  }
-  return todaySlateDate();
-}
 
 export async function GET(request: Request) {
   const date = parseDateFromUrl(request);
