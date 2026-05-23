@@ -26,6 +26,10 @@ import {
   computeAggregates,
   type PredictionResultRow,
 } from "../models/tracking/aggregator";
+import {
+  computeCalibration,
+  type PredictionForCalibration,
+} from "../models/tracking/calibrationComputer";
 import { computeClv } from "../models/tracking/clvCalculator";
 import {
   resolveGame,
@@ -294,6 +298,132 @@ export const resultsService = {
       }
     }
     return { records_updated: aggregates.length, api_calls_made: 0 };
+  },
+
+  /**
+   * Recompute calibration_buckets from prediction_results joined with the
+   * prediction tables (to get confidence values). DELETE-then-INSERT so
+   * the table reflects current calibration data.
+   *
+   * Drives the "honest tracking" calibration display in Phase 5 UI — gates
+   * via is_displayable for buckets with sample_count >= 30.
+   */
+  async refreshCalibrationBuckets(): Promise<CronHandlerResult> {
+    // Pull predictions with their confidence values via the FK join. Two
+    // queries (game-level vs prop) because the confidence column differs.
+    const { data: gameRes } = await supabase
+      .from("prediction_results")
+      .select(
+        "prediction_type, sport, market, outcome, game_date, game_predictions:game_prediction_id (ml_confidence, ou_confidence, nrfi_confidence)"
+      )
+      .not("game_prediction_id", "is", null);
+
+    const { data: propRes } = await supabase
+      .from("prediction_results")
+      .select(
+        "prediction_type, sport, market, outcome, game_date, prop_predictions:prop_prediction_id (confidence_score)"
+      )
+      .not("prop_prediction_id", "is", null);
+
+    const inputs: PredictionForCalibration[] = [];
+
+    for (const r of (gameRes ?? []) as unknown as Array<{
+      prediction_type: "game_ml" | "game_total" | "game_nrfi";
+      sport: string;
+      market: string;
+      outcome: "win" | "loss" | "push" | "void";
+      game_date: string;
+      game_predictions: {
+        ml_confidence: number | null;
+        ou_confidence: number | null;
+        nrfi_confidence: number | null;
+      } | null;
+    }>) {
+      const gp = r.game_predictions;
+      if (!gp) continue;
+      const confidence =
+        r.prediction_type === "game_ml" ? gp.ml_confidence
+        : r.prediction_type === "game_total" ? gp.ou_confidence
+        : r.prediction_type === "game_nrfi" ? gp.nrfi_confidence
+        : null;
+      if (confidence === null) continue;
+      inputs.push({
+        prediction_type: r.prediction_type,
+        sport: r.sport,
+        market: r.market,
+        confidence,
+        outcome: r.outcome,
+        game_date: r.game_date,
+      });
+    }
+
+    for (const r of (propRes ?? []) as unknown as Array<{
+      prediction_type: "prop";
+      sport: string;
+      market: string;
+      outcome: "win" | "loss" | "push" | "void";
+      game_date: string;
+      prop_predictions: { confidence_score: number | null } | null;
+    }>) {
+      const pp = r.prop_predictions;
+      if (!pp || pp.confidence_score === null) continue;
+      inputs.push({
+        prediction_type: r.prediction_type,
+        sport: r.sport,
+        market: r.market,
+        confidence: pp.confidence_score,
+        outcome: r.outcome,
+        game_date: r.game_date,
+      });
+    }
+
+    const buckets = computeCalibration(inputs, {
+      today: todayUTC(),
+      seasonStart: SEASON_START,
+    });
+
+    const { error: delErr } = await supabase
+      .from("calibration_buckets")
+      .delete()
+      .gte("id", 0);
+    if (delErr) {
+      throw new Error(`refreshCalibrationBuckets delete failed: ${delErr.message}`);
+    }
+
+    if (buckets.length === 0) {
+      return { records_updated: 0, api_calls_made: 0 };
+    }
+
+    const dbRows = buckets.map((c) => ({
+      sport: c.sport,
+      prediction_type: c.prediction_type,
+      market: c.market,
+      confidence_bucket_lower: c.confidence_bucket_lower,
+      confidence_bucket_upper: c.confidence_bucket_upper,
+      confidence_bucket_label: c.confidence_bucket_label,
+      predictions_in_bucket: c.sample_count,
+      actual_hit_rate: c.hit_rate,
+      expected_hit_rate: c.expected_hit_rate,
+      calibration_delta: c.calibration_delta,
+      is_displayable: c.is_displayable,
+      min_sample_size: 30,
+      time_window: c.time_window,
+    }));
+    const { error: insErr } = await supabase
+      .from("calibration_buckets")
+      .insert(dbRows);
+    if (insErr) {
+      throw new Error(`refreshCalibrationBuckets insert failed: ${insErr.message}`);
+    }
+
+    return {
+      records_updated: buckets.length,
+      api_calls_made: 0,
+      details: {
+        total_inputs: inputs.length,
+        displayable_buckets: buckets.filter((b) => b.is_displayable).length,
+      },
+    };
   },
 
   /**

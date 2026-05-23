@@ -1,0 +1,46 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "_comment": "Cron schedules are UTC. Times optimized for EST (UTC-5); during EDT (Mar-Nov, UTC-4) every cron fires one hour later than the labeled ET time. V1 launch in 2026 begins during EDT so all schedules effectively run at (labeled ET + 1 hour). Phase 8 will introduce per-cron schedules with a DST-aware wrapper if exact ET alignment becomes necessary.",
+  "crons": [
+    {
+      "path": "/api/cron/daily-refresh",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/morning-slate",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/midday-refresh",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/afternoon-refresh",
+      "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/evening-refresh",
+      "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/cron/lineup-watch",
+      "schedule": "*/30 22-23,0-2 * * *"
+    },
+    {
+      "path": "/api/cron/pregame-sweep",
+      "schedule": "*/15 23,0-2 * * *"
+    },
+    {
+      "path": "/api/cron/post-game-results",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-park-factors",
+      "schedule": "0 9 * * 1"
+    },
+    {
+      "path": "/api/cron/weekly-calibration",
+      "schedule": "0 8 * * 0"
+    }
+  ]
+}
