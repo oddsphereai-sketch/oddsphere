@@ -12,7 +12,9 @@
     "test:props-math": "tsx scripts/test-props-math.ts",
     "predict": "tsx --env-file=.env.local scripts/predict-tonight.ts",
     "test:daily-edge": "tsx scripts/test-daily-edge.ts",
-    "daily-edge": "tsx --env-file=.env.local scripts/daily-edge.ts"
+    "daily-edge": "tsx --env-file=.env.local scripts/daily-edge.ts",
+    "test:tracking": "tsx scripts/test-tracking.ts",
+    "tracking-refresh": "tsx --env-file=.env.local scripts/tracking-refresh.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
