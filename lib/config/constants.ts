@@ -168,6 +168,40 @@ export const WEATHER = {
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────
+// Sharp signal thresholds (Daily Edge verdict logic)
+// ─────────────────────────────────────────────────────────────────────────
+// Composite STRONG/CAUTION/neutral classification for sharp_signals rows.
+//
+// STRONG fires when there's asymmetric sharp signal:
+//   (ev_pct ≥ 2.0 AND is_plus_ev) AND ≥1 of {steam ≥ 3 books, RLM, sharp money divergence ≥ 10pp}
+//   OR a "stack" of ≥3 weak signals all confirming the same side.
+//
+// CAUTION fires when something looks fishy:
+//   public-heavy (≥ 70%) AND no_steam AND no_RLM AND |money − betting| < 5pp
+//     → public side without sharp confirmation
+//   OR conflicting signals (steam vs RLM in opposite directions)
+//   OR ev_pct < -2.0 (market believes the bet is mispriced)
+//
+// Re-tune in Phase 7 with backtested signal-to-outcome data.
+
+export const SHARP_SIGNAL_THRESHOLDS = {
+  // Primary STRONG components
+  MIN_EV_FOR_PLUS_EV_SIGNAL: 2.0,           // below 2% is Pinnacle juice noise
+  MIN_STEAM_BOOKS: 3,                        // need multi-book confirmation
+  MIN_SHARP_MONEY_DIVERGENCE_PP: 10,        // money_pct − betting_pct ≥ 10
+  // Weak signal stack (3+ stacked weak → STRONG)
+  WEAK_SIGNAL_STACK_MIN: 3,
+  LIGHT_EV_MIN: 0.5,                         // ≥ 0.5% but < MIN_EV_FOR_PLUS_EV_SIGNAL
+  LIGHT_STEAM_BOOKS_MIN: 1,                  // 1-2 books = light steam confirmation
+  LIGHT_SHARP_DIVERGENCE_PP: 5,              // 5pp-10pp = light divergence
+  PINNACLE_FAIR_PROB_CONFIRM: 0.52,          // Pinnacle thinks side is > 52% likely
+  // CAUTION conditions
+  MIN_PUBLIC_HEAVY_PCT: 70,
+  PUBLIC_MONEY_FLATNESS_PP: 5,               // |money − betting| < 5pp = no sharp $ flow
+  NEGATIVE_EV_CAUTION_THRESHOLD: -2.0,
+} as const;
+
+// ─────────────────────────────────────────────────────────────────────────
 // CLV silence window
 // ─────────────────────────────────────────────────────────────────────────
 // Closing Line Value is computed for all picks but hidden from members for

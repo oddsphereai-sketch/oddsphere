@@ -10,7 +10,9 @@
     "seed": "tsx --env-file=.env.local scripts/seed.ts",
     "test:distributions": "tsx scripts/test-distributions.ts",
     "test:props-math": "tsx scripts/test-props-math.ts",
-    "predict": "tsx --env-file=.env.local scripts/predict-tonight.ts"
+    "predict": "tsx --env-file=.env.local scripts/predict-tonight.ts",
+    "test:daily-edge": "tsx scripts/test-daily-edge.ts",
+    "daily-edge": "tsx --env-file=.env.local scripts/daily-edge.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
