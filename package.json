@@ -15,6 +15,7 @@
     "daily-edge": "tsx --env-file=.env.local scripts/daily-edge.ts",
     "test:tracking": "tsx scripts/test-tracking.ts",
     "test:scores-model": "tsx scripts/test-scores-model.ts",
+    "test:cron-infra": "tsx --env-file=.env.local scripts/test-cron-infra.ts",
     "tracking-refresh": "tsx --env-file=.env.local scripts/tracking-refresh.ts"
   },
   "dependencies": {
