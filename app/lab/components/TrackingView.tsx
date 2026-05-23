@@ -14,6 +14,7 @@ import type {
 import type { Sport } from "../data/mockData";
 import { SPORT_META } from "../data/mockData";
 import { useTracking } from "../hooks/useTracking";
+import CalibrationDisplay from "./tracking/CalibrationDisplay";
 
 const CARD =
   "bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl transition-all duration-200 hover:border-gray-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]";
@@ -141,6 +142,9 @@ function TrackingContent({ data }: { data: TrackingResponse }) {
 
       {/* 30-day chart */}
       <ThirtyDaySection last30={last30Days} />
+
+      {/* Calibration honesty — between 30-day and All-Time per spec 5E. */}
+      <CalibrationDisplay />
 
       {/* All-Time Record */}
       <AllTimeRecordSection tallies={tallies} sportOrder={sportOrder} />

@@ -318,3 +318,49 @@ export type TrackingResponse = {
   streak: Streak;
   tallies: SportMarketTally[];
 };
+
+// ───────────────────────────────────────────────────────────────────────────
+// /api/lab/calibration
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Game-level prediction types only — Phase 5C locked the V1 launch decision
+ * to EXCLUDE prop calibration from the Tracking page. The prop model is
+ * unproven; raw W-L on binary props at ~10-15% baseline looks bad even when
+ * edge is good. Surface again in Phase 9+ with ROI/CLV-based tracking.
+ */
+export type CalibrationPredictionType = "game_ml" | "game_total" | "game_nrfi";
+
+export type CalibrationBucket = {
+  sport: Sport;
+  predictionType: CalibrationPredictionType;
+  market: string | null;
+  /** "55-60%", "60-70%", etc. */
+  label: string;
+  bucketLower: number;
+  bucketUpper: number;
+  sampleSize: number;
+  /** 0..1, mid-point of the bucket (e.g., 0.65 for 60-70%). */
+  expectedHitRate: number;
+  /** 0..1, observed. */
+  actualHitRate: number;
+  /** Signed percentage-point delta (actual - expected), e.g., -7.13. */
+  calibrationDelta: number;
+  /** time_window column: 'all_time' | 'season' | 'this_week'. */
+  timeWindow: "all_time" | "season" | "this_week";
+};
+
+export type CalibrationHeadline = {
+  /** Bucket with the biggest sample-weighted miss (most newsworthy "we admit"). */
+  bucket: CalibrationBucket;
+  /** Plain-English summary, e.g., "When we say 60% confidence on game moneylines, we hit 57% of the time." */
+  summary: string;
+};
+
+export type CalibrationResponse = {
+  as_of: string;
+  /** Lifetime buckets only — `time_window='all_time'`. The other windows are exposed for future drill-downs. */
+  buckets: CalibrationBucket[];
+  /** Auto-selected headline finding for the hero callout. Null when no displayable bucket has the minimum sample size. */
+  headline: CalibrationHeadline | null;
+};

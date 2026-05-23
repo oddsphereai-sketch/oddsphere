@@ -8,6 +8,7 @@ import SportSelector from "./SportSelector";
 import ComingSoonState from "./ComingSoonState";
 import SimpleDailyEdgeCard from "./SimpleDailyEdgeCard";
 import DailyEdgeLegend from "./DailyEdgeLegend";
+import HowWeUpdatePanel from "./HowWeUpdatePanel";
 
 const DAILY_EDGE_SPORTS: Sport[] = [
   "mlb",
@@ -119,6 +120,10 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
               ))
             )}
           </div>
+
+          {/* "How we update this page" lives below the games list — out of
+              the way for power users, available for new members. */}
+          <HowWeUpdatePanel />
         </>
       )}
 

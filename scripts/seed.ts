@@ -34,6 +34,7 @@ import tonightPropsJson from "../lib/providers/mock/fixtures/tonight_props.json"
 import historicalResultsJson from "../lib/providers/mock/fixtures/historical_results.json";
 import lineHistoryJson from "../lib/providers/mock/fixtures/line_history.json";
 import refreshLogJson from "../lib/providers/mock/fixtures/refresh_log.json";
+import { resultsService } from "../lib/services/resultsService";
 import weatherJson from "../lib/providers/mock/fixtures/weather.json";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -1094,10 +1095,26 @@ const EXPECTED_COUNTS: Record<string, number> = {
   sharp_signals: 4,
   game_predictions: 12 + 360, // tonight + game-level historical (~360)
   prop_predictions: 39 + 90, // curated tonight slate (39) + historical (90)
+  calibration_buckets: -1, // varies — service recomputes from prediction_results
   prediction_results: 450,
   tracking_aggregates: -1, // varies — just verify > 0
   data_refresh_log: 11,
 };
+
+// ─── Stage 7b: calibration_buckets (driven by resultsService) ────────────
+// The weekly-calibration cron normally populates this table on a schedule;
+// for the seed we call the service directly so npm run seed produces a
+// browsable Tracking page out of the box. Inputs are the historical
+// prediction_results + their joined game_predictions confidences seeded
+// earlier in this run.
+async function seedCalibrationBuckets() {
+  logSection("Stage 7b · calibration_buckets (via resultsService)");
+  const r = await resultsService.refreshCalibrationBuckets();
+  const details = r.details as { total_inputs?: number; displayable_buckets?: number } | undefined;
+  console.log(
+    `  calibration_buckets               ${String(r.records_updated ?? 0).padStart(5)} rows · ${details?.displayable_buckets ?? 0} displayable from ${details?.total_inputs ?? 0} inputs`
+  );
+}
 
 async function verify() {
   logSection("Stage 8 · verification (row counts vs expected)");
@@ -1161,6 +1178,7 @@ async function main() {
   );
   await seedRefreshLog();
   await computeTrackingAggregates();
+  await seedCalibrationBuckets();
   await verify();
 
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);

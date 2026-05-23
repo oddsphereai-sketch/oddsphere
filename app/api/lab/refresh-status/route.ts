@@ -183,11 +183,28 @@ function deriveOverall(
     ? Math.floor((now.getTime() - new Date(freshest).getTime()) / 1000)
     : null;
 
+  // "Next refresh" = earliest projected next run across frontline sources.
+  // Projection: last_started_at + cadence_minutes for each source we've seen
+  // run at least once. If projection is in the past (we missed the window),
+  // surface the soonest in the future by adding cadence until > now. Sources
+  // that have never run are skipped — they'd otherwise dominate the minimum.
+  let nextScheduled: number | null = null;
+  for (const s of frontline) {
+    if (!s.last_started_at) continue;
+    const startMs = new Date(s.last_started_at).getTime();
+    const cadenceMs = s.expected_cadence_minutes * 60_000;
+    let projected = startMs + cadenceMs;
+    while (projected <= now.getTime()) projected += cadenceMs;
+    if (nextScheduled === null || projected < nextScheduled) {
+      nextScheduled = projected;
+    }
+  }
+
   return {
     state: worst,
     last_updated_at: freshest,
     age_seconds,
-    next_scheduled_at: null, // Filled when next-scheduled is wired in 5E.
+    next_scheduled_at: nextScheduled ? new Date(nextScheduled).toISOString() : null,
   };
 }
 

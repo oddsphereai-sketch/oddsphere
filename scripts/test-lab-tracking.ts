@@ -63,12 +63,29 @@ async function main() {
   check("recap.label is non-empty", typeof r.label === "string" && r.label.length > 0);
   check("recap.isYesterday is boolean", typeof r.isYesterday === "boolean");
   check("recap.results is array", Array.isArray(r.results));
-  // Seed has no rows for today / yesterday — should fall back to 5/21.
-  check(
-    "seed: recap falls back to most recent day with data (isYesterday=false)",
-    r.isYesterday === false,
-    `isYesterday=${r.isYesterday} date=${r.date}`
-  );
+  // Recap date should be either calendar yesterday OR the most recent activity
+  // day. The route auto-falls-back when calendar yesterday is empty. Which
+  // path applies depends on whether post-game-results / other cron tests have
+  // populated the slate — assert the property holds either way.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const yesterdayIso = (() => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+  if (r.isYesterday) {
+    check(
+      `isYesterday=true → recap.date matches calendar yesterday (${yesterdayIso})`,
+      r.date === yesterdayIso,
+      `got date=${r.date}`
+    );
+  } else {
+    check(
+      `isYesterday=false → recap.date is before today (most recent activity fallback)`,
+      r.date < todayIso,
+      `got date=${r.date}`
+    );
+  }
   check("recap totals are consistent with results array", r.totalPicks === r.results.reduce((s, x) => s + x.wins + x.losses + x.pushes, 0));
   check("recap totalWins matches sum of results.wins", r.totalWins === r.results.reduce((s, x) => s + x.wins, 0));
 
