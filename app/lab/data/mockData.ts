@@ -1,7 +1,11 @@
-// UI-only mock data for The Lab. Sport-scoped so adding NBA/NFL/NHL props
-// later is a data-only change. MLB is the only sport with live data in
-// Phase 1; other sports' metadata is stubbed so the architecture is in
-// place.
+// UI presentation lookups for The Lab. Sport-scoped so adding NBA/NFL/NHL
+// props later is a data-only change. MLB is the only sport with live data
+// today; other sports' metadata is stubbed so the layout is in place.
+//
+// Phase 5C dropped the SPECS/PLAYERS/PATTERNS/ALL_PROPS/getPropsByType mock
+// machinery — entries now come from /api/lab/player-props and the wire-shape
+// types live in /app/lab/lib/labTypes.ts. Everything that remains here is
+// pure presentation: icons, labels, signal-tag explanations.
 
 export type Sport = "mlb" | "nba" | "nfl" | "cbb" | "cfb" | "nhl" | "ucl";
 
@@ -23,14 +27,10 @@ export type NflPropType =
   | "tds";
 export type NhlPropType = "goals" | "assists" | "shots" | "saves" | "points";
 
-// Union of every defined prop type string. Duplicates dedupe naturally.
-// Stored on PropEntry.propType as a string so it can be used across sports
-// without TS gymnastics; meta lookup goes through getPropTypeMeta(sport, ...).
-export type PropType =
-  | MlbPropType
-  | NbaPropType
-  | NflPropType
-  | NhlPropType;
+// Union of every defined prop type string. Stored on PlayerPropDto.propType
+// as a string so it can be used across sports without TS gymnastics; meta
+// lookup goes through getPropTypeMeta(sport, ...).
+export type PropType = MlbPropType | NbaPropType | NflPropType | NhlPropType;
 
 export type Signal =
   | "hot"
@@ -43,29 +43,6 @@ export type Signal =
   | "warning"
   | "rest_advantage"
   | "platoon";
-
-export type Player = {
-  id: string;
-  name: string;
-  team: string;
-  opponent: string;
-  gameTime: string;
-  position: string;
-};
-
-export type PropEntry = {
-  id: string;
-  sport: Sport;
-  player: Player;
-  propType: string;
-  line: number;
-  side: "over" | "under";
-  odds: string;
-  hitsLast10: number; // 0..10
-  edge: number; // 0.28 = +28%
-  signals: Signal[];
-  recent10: boolean[]; // length 10
-};
 
 export const SPORT_META: Record<
   Sport,
@@ -93,7 +70,7 @@ type PropTypeMeta = {
 };
 
 // Keyed by sport so collisions like "assists" can carry different meta.
-// Non-MLB sport meta is stubbed for architecture; not rendered in Phase 1.
+// Non-MLB sport meta is stubbed for architecture; not rendered live in V1.
 export const PROP_TYPE_META: Record<Sport, Record<string, PropTypeMeta>> = {
   mlb: {
     hits:         { label: "Hits",         icon: "🎯", unit: "Hits", isPitcher: false },
@@ -123,9 +100,9 @@ export const PROP_TYPE_META: Record<Sport, Record<string, PropTypeMeta>> = {
     saves:    { label: "Saves",   icon: "🛡️", unit: "SV", isPitcher: false },
     points:   { label: "Points",  icon: "🔥", unit: "P",  isPitcher: false },
   },
-  // CBB / CFB / UCL: no player-props surface area in Phase 2B-2. Stubs
-  // exist so PROP_TYPE_META[sport] lookups don't crash when these sports
-  // appear in the Daily Edge sport selector.
+  // CBB / CFB / UCL: no player-props surface area in V1. Stubs exist so
+  // PROP_TYPE_META[sport] lookups don't crash when these sports appear in
+  // the Daily Edge sport selector.
   cbb: {},
   cfb: {},
   ucl: {},
@@ -134,9 +111,14 @@ export const PROP_TYPE_META: Record<Sport, Record<string, PropTypeMeta>> = {
 export function getPropTypeMeta(sport: Sport, propType: string): PropTypeMeta {
   const meta = PROP_TYPE_META[sport]?.[propType];
   if (!meta) {
-    throw new Error(
-      `Missing PROP_TYPE_META for ${sport}/${propType}. This is a bug — either the entry's sport/propType is wrong or the meta wasn't registered.`
-    );
+    // Soft fallback rather than throwing — the DB can return a prop_market
+    // we haven't mapped yet (e.g., "batter_rbis"). Caller still renders.
+    return {
+      label: propType.replace(/_/g, " "),
+      icon: "🎯",
+      unit: propType.toUpperCase(),
+      isPitcher: false,
+    };
   }
   return meta;
 }
@@ -196,145 +178,3 @@ export const SIGNAL_META: Record<
     explain: "Favorable platoon matchup based on splits.",
   },
 };
-
-const PLAYERS: Record<string, Player> = {
-  judge:    { id: "judge",    name: "Aaron Judge",          team: "NYY", opponent: "vs BOS",   gameTime: "7:10 PM ET",  position: "RF" },
-  soto:     { id: "soto",     name: "Juan Soto",            team: "NYM", opponent: "@ PHI",    gameTime: "7:10 PM ET",  position: "RF" },
-  betts:    { id: "betts",    name: "Mookie Betts",         team: "LAD", opponent: "vs SD",    gameTime: "10:10 PM ET", position: "RF" },
-  ohtani:   { id: "ohtani",   name: "Shohei Ohtani",        team: "LAD", opponent: "vs SD",    gameTime: "10:10 PM ET", position: "DH" },
-  acuna:    { id: "acuna",    name: "Ronald Acuña Jr.",     team: "ATL", opponent: "@ MIA",    gameTime: "7:05 PM ET",  position: "RF" },
-  vladdy:   { id: "vladdy",   name: "Vladimir Guerrero Jr.",team: "TOR", opponent: "@ CHW",    gameTime: "8:10 PM ET",  position: "1B" },
-  yordan:   { id: "yordan",   name: "Yordan Alvarez",       team: "HOU", opponent: "vs SEA",   gameTime: "8:10 PM ET",  position: "DH" },
-  witt:     { id: "witt",     name: "Bobby Witt Jr.",       team: "KC",  opponent: "vs MIN",   gameTime: "8:10 PM ET",  position: "SS" },
-  freeman:  { id: "freeman",  name: "Freddie Freeman",      team: "LAD", opponent: "vs SD",    gameTime: "10:10 PM ET", position: "1B" },
-  seager:   { id: "seager",   name: "Corey Seager",         team: "TEX", opponent: "vs OAK",   gameTime: "8:05 PM ET",  position: "SS" },
-  ragans:   { id: "ragans",   name: "Cole Ragans",          team: "KC",  opponent: "vs MIN",   gameTime: "8:10 PM ET",  position: "SP" },
-  wheeler:  { id: "wheeler",  name: "Zack Wheeler",         team: "PHI", opponent: "vs NYM",   gameTime: "7:10 PM ET",  position: "SP" },
-  skubal:   { id: "skubal",   name: "Tarik Skubal",         team: "DET", opponent: "@ CLE",    gameTime: "7:10 PM ET",  position: "SP" },
-  webb:     { id: "webb",     name: "Logan Webb",           team: "SF",  opponent: "@ COL",    gameTime: "8:40 PM ET",  position: "SP" },
-  strider:  { id: "strider",  name: "Spencer Strider",      team: "ATL", opponent: "@ MIA",    gameTime: "7:05 PM ET",  position: "SP" },
-  skenes:   { id: "skenes",   name: "Paul Skenes",          team: "PIT", opponent: "vs CIN",   gameTime: "7:05 PM ET",  position: "SP" },
-};
-
-const PATTERNS: Record<number, boolean[]> = {
-  10: [true, true, true, true, true, true, true, true, true, true],
-  9:  [true, true, true, true, false, true, true, true, true, true],
-  8:  [false, true, true, true, true, true, false, true, true, true],
-  7:  [true, false, true, true, true, false, true, true, false, true],
-  6:  [true, true, false, true, false, true, true, false, true, true],
-  5:  [true, false, true, false, true, true, false, true, false, true],
-  4:  [false, true, false, true, false, true, false, true, false, true],
-  3:  [true, false, false, true, false, false, true, false, false, false],
-  2:  [false, true, false, false, false, false, true, false, false, false],
-  1:  [false, false, false, true, false, false, false, false, false, false],
-  0:  [false, false, false, false, false, false, false, false, false, false],
-};
-
-function r10(hits: number): boolean[] {
-  return PATTERNS[hits] ?? PATTERNS[0];
-}
-
-type EntrySpec = {
-  sport: Sport;
-  player: keyof typeof PLAYERS;
-  propType: string;
-  line: number;
-  side: "over" | "under";
-  odds: string;
-  hitsLast10: number;
-  edge: number;
-  signals: Signal[];
-};
-
-const SPECS: EntrySpec[] = [
-  // HITS — 10 batters
-  { sport: "mlb", player: "judge",   propType: "hits", line: 1.5, side: "over", odds: "-120", hitsLast10: 9, edge:  0.32, signals: ["hot", "park", "vs_lhp"] },
-  { sport: "mlb", player: "soto",    propType: "hits", line: 1.5, side: "over", odds: "-140", hitsLast10: 8, edge:  0.18, signals: ["hot", "vs_rhp"] },
-  { sport: "mlb", player: "ohtani",  propType: "hits", line: 1.5, side: "over", odds: "-130", hitsLast10: 8, edge:  0.14, signals: ["hot", "park"] },
-  { sport: "mlb", player: "yordan",  propType: "hits", line: 1.5, side: "over", odds: "-135", hitsLast10: 8, edge:  0.12, signals: ["hot"] },
-  { sport: "mlb", player: "betts",   propType: "hits", line: 1.5, side: "over", odds: "-110", hitsLast10: 7, edge:  0.08, signals: ["hot"] },
-  { sport: "mlb", player: "witt",    propType: "hits", line: 1.5, side: "over", odds: "-125", hitsLast10: 7, edge:  0.06, signals: ["hot"] },
-  { sport: "mlb", player: "vladdy",  propType: "hits", line: 1.5, side: "over", odds: "-110", hitsLast10: 7, edge:  0.04, signals: ["park"] },
-  { sport: "mlb", player: "acuna",   propType: "hits", line: 1.5, side: "over", odds: "-120", hitsLast10: 6, edge:  0.02, signals: ["vs_lhp"] },
-  { sport: "mlb", player: "freeman", propType: "hits", line: 1.5, side: "over", odds: "-115", hitsLast10: 5, edge: -0.03, signals: [] },
-  { sport: "mlb", player: "seager",  propType: "hits", line: 1.5, side: "over", odds: "-130", hitsLast10: 4, edge: -0.12, signals: ["cold", "warning"] },
-
-  // HOME RUNS — 10 batters
-  { sport: "mlb", player: "judge",   propType: "home_runs", line: 0.5, side: "over", odds: "+180", hitsLast10: 5, edge:  0.28, signals: ["hot", "park", "wind_out"] },
-  { sport: "mlb", player: "ohtani",  propType: "home_runs", line: 0.5, side: "over", odds: "+210", hitsLast10: 4, edge:  0.20, signals: ["park", "wind_out"] },
-  { sport: "mlb", player: "yordan",  propType: "home_runs", line: 0.5, side: "over", odds: "+200", hitsLast10: 4, edge:  0.12, signals: ["hot", "park"] },
-  { sport: "mlb", player: "vladdy",  propType: "home_runs", line: 0.5, side: "over", odds: "+240", hitsLast10: 3, edge:  0.06, signals: ["park"] },
-  { sport: "mlb", player: "acuna",   propType: "home_runs", line: 0.5, side: "over", odds: "+260", hitsLast10: 3, edge:  0.04, signals: ["vs_lhp"] },
-  { sport: "mlb", player: "soto",    propType: "home_runs", line: 0.5, side: "over", odds: "+220", hitsLast10: 3, edge:  0.02, signals: ["vs_rhp"] },
-  { sport: "mlb", player: "betts",   propType: "home_runs", line: 0.5, side: "over", odds: "+320", hitsLast10: 2, edge: -0.04, signals: [] },
-  { sport: "mlb", player: "witt",    propType: "home_runs", line: 0.5, side: "over", odds: "+350", hitsLast10: 2, edge: -0.02, signals: ["hot"] },
-  { sport: "mlb", player: "freeman", propType: "home_runs", line: 0.5, side: "over", odds: "+400", hitsLast10: 1, edge: -0.14, signals: ["cold"] },
-  { sport: "mlb", player: "seager",  propType: "home_runs", line: 0.5, side: "over", odds: "+280", hitsLast10: 2, edge: -0.08, signals: ["warning"] },
-
-  // TOTAL BASES — 10 batters
-  { sport: "mlb", player: "judge",   propType: "total_bases", line: 1.5, side: "over", odds: "-125", hitsLast10: 9, edge:  0.26, signals: ["hot", "park", "wind_out"] },
-  { sport: "mlb", player: "ohtani",  propType: "total_bases", line: 1.5, side: "over", odds: "-130", hitsLast10: 8, edge:  0.16, signals: ["hot", "park"] },
-  { sport: "mlb", player: "soto",    propType: "total_bases", line: 1.5, side: "over", odds: "-135", hitsLast10: 8, edge:  0.14, signals: ["hot", "vs_rhp"] },
-  { sport: "mlb", player: "yordan",  propType: "total_bases", line: 1.5, side: "over", odds: "-140", hitsLast10: 8, edge:  0.10, signals: ["hot"] },
-  { sport: "mlb", player: "vladdy",  propType: "total_bases", line: 1.5, side: "over", odds: "-115", hitsLast10: 7, edge:  0.06, signals: ["park"] },
-  { sport: "mlb", player: "witt",    propType: "total_bases", line: 1.5, side: "over", odds: "-110", hitsLast10: 6, edge:  0.04, signals: ["hot"] },
-  { sport: "mlb", player: "acuna",   propType: "total_bases", line: 1.5, side: "over", odds: "-120", hitsLast10: 6, edge:  0.02, signals: ["vs_lhp"] },
-  { sport: "mlb", player: "betts",   propType: "total_bases", line: 1.5, side: "over", odds: "-105", hitsLast10: 5, edge: -0.02, signals: [] },
-  { sport: "mlb", player: "freeman", propType: "total_bases", line: 1.5, side: "over", odds: "-125", hitsLast10: 4, edge: -0.08, signals: ["cold"] },
-  { sport: "mlb", player: "seager",  propType: "total_bases", line: 1.5, side: "over", odds: "-130", hitsLast10: 4, edge: -0.16, signals: ["cold", "warning"] },
-
-  // STRIKEOUTS — 6 pitchers
-  { sport: "mlb", player: "skenes",  propType: "strikeouts", line: 7.5, side: "over", odds: "-130", hitsLast10: 9, edge:  0.22, signals: ["hot", "vs_rhp"] },
-  { sport: "mlb", player: "ragans",  propType: "strikeouts", line: 6.5, side: "over", odds: "-110", hitsLast10: 8, edge:  0.14, signals: ["hot"] },
-  { sport: "mlb", player: "skubal",  propType: "strikeouts", line: 7.5, side: "over", odds: "-120", hitsLast10: 7, edge:  0.10, signals: ["hot"] },
-  { sport: "mlb", player: "strider", propType: "strikeouts", line: 8.5, side: "over", odds: "+110", hitsLast10: 6, edge:  0.06, signals: ["rest_advantage"] },
-  { sport: "mlb", player: "wheeler", propType: "strikeouts", line: 6.5, side: "over", odds: "+100", hitsLast10: 6, edge:  0.04, signals: [] },
-  { sport: "mlb", player: "webb",    propType: "strikeouts", line: 5.5, side: "over", odds: "-115", hitsLast10: 3, edge: -0.14, signals: ["cold", "warning"] },
-
-  // EARNED RUNS ALLOWED — 6 pitchers
-  { sport: "mlb", player: "skenes",  propType: "er_allowed", line: 2.5, side: "under", odds: "+115", hitsLast10: 8, edge:  0.16, signals: ["hot", "park"] },
-  { sport: "mlb", player: "ragans",  propType: "er_allowed", line: 2.5, side: "under", odds: "+110", hitsLast10: 7, edge:  0.10, signals: ["hot"] },
-  { sport: "mlb", player: "skubal",  propType: "er_allowed", line: 2.5, side: "under", odds: "+105", hitsLast10: 7, edge:  0.08, signals: ["hot"] },
-  { sport: "mlb", player: "strider", propType: "er_allowed", line: 3.5, side: "under", odds: "-120", hitsLast10: 6, edge:  0.04, signals: [] },
-  { sport: "mlb", player: "wheeler", propType: "er_allowed", line: 3.5, side: "under", odds: "-110", hitsLast10: 5, edge:  0.00, signals: [] },
-  { sport: "mlb", player: "webb",    propType: "er_allowed", line: 2.5, side: "under", odds: "-120", hitsLast10: 3, edge: -0.18, signals: ["cold", "warning"] },
-];
-
-export const ALL_PROPS: PropEntry[] = SPECS.map((s, i) => ({
-  id: `${s.sport}-${s.player}-${s.propType}-${i}`,
-  sport: s.sport,
-  player: PLAYERS[s.player],
-  propType: s.propType,
-  line: s.line,
-  side: s.side,
-  odds: s.odds,
-  hitsLast10: s.hitsLast10,
-  edge: s.edge,
-  signals: s.signals,
-  recent10: r10(s.hitsLast10),
-}));
-
-export function getPropsByType(sport: Sport, propType: string): PropEntry[] {
-  return ALL_PROPS.filter((p) => p.sport === sport && p.propType === propType);
-}
-
-export function getPropsByPlayer(sport: Sport, playerId: string): PropEntry[] {
-  return ALL_PROPS.filter((p) => p.sport === sport && p.player.id === playerId);
-}
-
-export function getPropCountForSport(sport: Sport): number {
-  return ALL_PROPS.filter((p) => p.sport === sport).length;
-}
-
-export function getGlobalStats(sport: Sport) {
-  const sportProps = ALL_PROPS.filter((p) => p.sport === sport);
-  const games = new Set(
-    sportProps.map((p) =>
-      [p.player.team, p.player.opponent.replace(/^@\s*|^vs\s*/i, "")]
-        .sort()
-        .join("-")
-    )
-  );
-  const positiveEdge = sportProps.filter((p) => p.edge > 0.1).length;
-  return { games: games.size, props: sportProps.length, positiveEdge };
-}

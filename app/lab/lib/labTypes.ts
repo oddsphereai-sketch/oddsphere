@@ -147,3 +147,66 @@ export type DailyEdgeResponse = {
   date: string;
   games: DailyEdgeGameDto[];
 };
+
+// ───────────────────────────────────────────────────────────────────────────
+// /api/lab/player-props
+// ───────────────────────────────────────────────────────────────────────────
+
+export type PropTier = "premium" | "strong" | "good" | "skip";
+
+export type PlayerDto = {
+  id: string;
+  name: string;
+  /** Team abbreviation (e.g., "NYY"). */
+  team: string;
+  /** Display string: "vs OPP" for home, "@ OPP" for away. */
+  opponent: string;
+  /** ET time string (e.g., "7:10 PM"). */
+  gameTime: string;
+  /** Position abbreviation (e.g., "RF", "SP"). */
+  position: string;
+};
+
+export type PlayerPropDto = {
+  /** Stable identifier — `prop_predictions.id` as string. */
+  id: string;
+  sport: Sport;
+  player: PlayerDto;
+  /** UI prop-type key (e.g., "hits"), translated from DB `prop_market`. */
+  propType: string;
+  line: number;
+  side: "over" | "under";
+  /** ±NNN American odds string. */
+  odds: string;
+  /**
+   * Count of "win" outcomes over the player's last N resolved predictions for
+   * the same `prop_market`. May be fewer than 10 — see `recent10.length`.
+   */
+  hitsLast10: number;
+  /**
+   * Outcome pattern: true = win, false = loss, ordered oldest-first to
+   * newest-last. Length is 0..10 based on available history.
+   */
+  recent10: boolean[];
+  /** Absolute edge as 0..1 decimal. Always positive on the recommended side. */
+  edge: number;
+  /** Signed edge_pct/100 — preserves direction info for honest display. */
+  edgeRaw: number;
+  tier: PropTier;
+  /** Categorical context tags (e.g., "hot", "vs_lhp"). V1: always empty. */
+  signals: string[];
+};
+
+export type PlayerPropsResponse = {
+  as_of: string;
+  sport: Sport;
+  date: string;
+  filters: {
+    prop_market: string | null;
+    tiers: PropTier[];
+    minEdge: number;
+    signals: string[];
+    player_id: string | null;
+  };
+  entries: PlayerPropDto[];
+};

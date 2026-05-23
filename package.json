@@ -24,6 +24,7 @@
     "test:weekly-crons": "tsx --env-file=.env.local scripts/test-weekly-crons.ts",
     "test:lab-api": "tsx --env-file=.env.local scripts/test-lab-api.ts",
     "test:lab-daily-edge": "tsx --env-file=.env.local scripts/test-lab-daily-edge.ts",
+    "test:lab-player-props": "tsx --env-file=.env.local scripts/test-lab-player-props.ts",
     "tracking-refresh": "tsx --env-file=.env.local scripts/tracking-refresh.ts"
   },
   "dependencies": {

@@ -3,11 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import type { Sport } from "./data/mockData";
-import {
-  PROP_TYPE_META,
-  SPORT_META,
-  getPropsByType,
-} from "./data/mockData";
+import { PROP_TYPE_META, SPORT_META } from "./data/mockData";
 import LabNav, { type LabSection } from "./components/LabNav";
 import DailyEdgeView from "./components/DailyEdgeView";
 import TrackingView from "./components/TrackingView";
@@ -96,14 +92,6 @@ export default function LabApp() {
     [router, pathname, searchParams]
   );
 
-  const entries = useMemo(
-    () =>
-      section === "props" && sportMeta.isLive
-        ? getPropsByType(propsSport, propType)
-        : [],
-    [section, propsSport, sportMeta.isLive, propType]
-  );
-
   return (
     <>
       <div className="mb-8">
@@ -154,12 +142,13 @@ export default function LabApp() {
               {mode === "best" ? (
                 <TonightsBestView
                   sport={propsSport}
-                  entries={entries}
+                  propType={propType}
                   onSelectPlayer={setSelectedPlayer}
                 />
               ) : (
                 <SearchFilterView
-                  entries={entries}
+                  sport={propsSport}
+                  propType={propType}
                   onSelectPlayer={setSelectedPlayer}
                 />
               )}

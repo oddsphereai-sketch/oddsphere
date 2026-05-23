@@ -202,7 +202,7 @@ async function main() {
     number,
     { ml: string; ou: string; nrfi: boolean }
   >();
-  for (const row of (gameRows ?? []) as Array<{
+  for (const row of (gameRows ?? []) as unknown as Array<{
     id: number;
     external_id: number;
     game_predictions: { predicted_ml_winner: string | null; predicted_ou_side: string | null; predicted_nrfi: boolean | null } | null;

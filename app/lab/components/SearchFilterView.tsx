@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { PropEntry, Signal } from "../data/mockData";
-import { getPropTypeMeta, SIGNAL_META } from "../data/mockData";
+import type { PlayerPropDto } from "../lib/labTypes";
+import type { Signal, Sport } from "../data/mockData";
+import { getPropTypeMeta, SIGNAL_META, SPORT_META } from "../data/mockData";
+import { usePlayerProps } from "../hooks/usePlayerProps";
 
 const MIN_EDGE_OPTIONS = [0, 0.05, 0.1, 0.15] as const;
 type MinEdge = (typeof MIN_EDGE_OPTIONS)[number];
@@ -13,17 +15,44 @@ type MinHr = (typeof MIN_HR_OPTIONS)[number];
 type SortKey = "player" | "edge" | "hit_rate" | "line";
 
 type Props = {
-  entries: PropEntry[];
+  sport: Sport;
+  propType: string;
   onSelectPlayer: (playerId: string) => void;
 };
 
-export default function SearchFilterView({ entries, onSelectPlayer }: Props) {
+const ALL_SIGNALS: Signal[] = [
+  "hot",
+  "vs_lhp",
+  "vs_rhp",
+  "wind_out",
+  "wind_in",
+  "park",
+  "cold",
+  "warning",
+  "rest_advantage",
+  "platoon",
+];
+
+export default function SearchFilterView({ sport, propType, onSelectPlayer }: Props) {
   const [query, setQuery] = useState("");
   const [minEdge, setMinEdge] = useState<MinEdge>(0);
   const [minHr, setMinHr] = useState<MinHr>(0);
   const [signalFilter, setSignalFilter] = useState<Set<Signal>>(new Set());
   const [sortBy, setSortBy] = useState<SortKey>("edge");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const isLive = SPORT_META[sport].isLive;
+
+  // Server-side: prop_market (from current tab) + minEdge + signals.
+  // All four tiers fetched so Search & Filter sees every graded prop.
+  const { data, error, isLoading } = usePlayerProps({
+    sport,
+    propMarket: propType,
+    minEdge,
+    signals: Array.from(signalFilter),
+    enabled: isLive,
+  });
+
+  const entries: PlayerPropDto[] = useMemo(() => data?.entries ?? [], [data]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -35,11 +64,12 @@ export default function SearchFilterView({ entries, onSelectPlayer }: Props) {
       ) {
         return false;
       }
-      if (e.edge < minEdge) return false;
-      if (e.hitsLast10 * 10 < minHr) return false;
-      if (signalFilter.size > 0) {
-        const overlap = e.signals.some((s) => signalFilter.has(s));
-        if (!overlap) return false;
+      // Hit-rate filter applied client-side — requires recent10 history.
+      if (minHr > 0) {
+        const sample = e.recent10.length;
+        if (sample === 0) return false;
+        const ratePct = (e.hitsLast10 / sample) * 100;
+        if (ratePct < minHr) return false;
       }
       return true;
     });
@@ -48,13 +78,16 @@ export default function SearchFilterView({ entries, onSelectPlayer }: Props) {
       let cmp = 0;
       if (sortBy === "player") cmp = a.player.name.localeCompare(b.player.name);
       else if (sortBy === "edge") cmp = a.edge - b.edge;
-      else if (sortBy === "hit_rate") cmp = a.hitsLast10 - b.hitsLast10;
-      else if (sortBy === "line") cmp = a.line - b.line;
+      else if (sortBy === "hit_rate") {
+        const ra = a.recent10.length > 0 ? a.hitsLast10 / a.recent10.length : 0;
+        const rb = b.recent10.length > 0 ? b.hitsLast10 / b.recent10.length : 0;
+        cmp = ra - rb;
+      } else if (sortBy === "line") cmp = a.line - b.line;
       return sortDir === "desc" ? -cmp : cmp;
     });
 
     return result;
-  }, [entries, query, minEdge, minHr, signalFilter, sortBy, sortDir]);
+  }, [entries, query, minHr, sortBy, sortDir]);
 
   function toggleSignal(s: Signal) {
     const next = new Set(signalFilter);
@@ -79,10 +112,13 @@ export default function SearchFilterView({ entries, onSelectPlayer }: Props) {
     setSignalFilter(new Set());
   }
 
+  // Available signals: union of any signals actually present + the canonical
+  // set so users can experiment even when no entry currently has tags. V1 has
+  // no server-side signal derivation, so this is a UX-forward stub.
   const availableSignals = useMemo(() => {
-    const set = new Set<Signal>();
-    entries.forEach((e) => e.signals.forEach((s) => set.add(s)));
-    return Array.from(set);
+    const present = new Set<Signal>();
+    entries.forEach((e) => e.signals.forEach((s) => present.add(s as Signal)));
+    return present.size > 0 ? Array.from(present) : ALL_SIGNALS;
   }, [entries]);
 
   return (
@@ -140,8 +176,8 @@ export default function SearchFilterView({ entries, onSelectPlayer }: Props) {
             <strong className="font-bold text-white tabular-nums">
               {filtered.length}
             </strong>{" "}
-            of{" "}
-            <span className="tabular-nums">{entries.length}</span> props matching
+            of <span className="tabular-nums">{entries.length}</span> props matching
+            {isLoading && entries.length === 0 ? " · loading…" : ""}
           </span>
           <button
             type="button"
@@ -152,6 +188,8 @@ export default function SearchFilterView({ entries, onSelectPlayer }: Props) {
           </button>
         </div>
       </div>
+
+      {error && <InlineError message={error.message} />}
 
       <div className="hidden sm:block bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
@@ -180,7 +218,9 @@ export default function SearchFilterView({ entries, onSelectPlayer }: Props) {
                     colSpan={6}
                     className="py-10 text-center text-gray-300 italic"
                   >
-                    No props match the current filters.
+                    {isLoading
+                      ? "Loading props…"
+                      : "No props match the current filters."}
                   </td>
                 </tr>
               )}
@@ -192,7 +232,9 @@ export default function SearchFilterView({ entries, onSelectPlayer }: Props) {
       <div className="sm:hidden space-y-3">
         {filtered.length === 0 ? (
           <div className="bg-gray-900/60 border border-gray-800 rounded-lg p-8 text-center text-gray-300 italic">
-            No props match the current filters.
+            {isLoading
+              ? "Loading props…"
+              : "No props match the current filters."}
           </div>
         ) : (
           filtered.map((e) => (
@@ -290,13 +332,14 @@ function TableRow({
   entry,
   onClick,
 }: {
-  entry: PropEntry;
+  entry: PlayerPropDto;
   onClick: () => void;
 }) {
   const meta = getPropTypeMeta(entry.sport, entry.propType);
   const edgePct = entry.edge * 100;
   const edgeColor =
     edgePct > 4 ? "text-emerald-400" : edgePct < -4 ? "text-rose-400" : "text-gray-300";
+  const sample = entry.recent10.length;
   return (
     <tr
       className="hover:bg-gray-800/40 transition-colors cursor-pointer"
@@ -319,7 +362,7 @@ function TableRow({
         <span className="font-mono text-gray-300">{entry.odds}</span>
       </td>
       <td className="py-3 px-4 text-right tabular-nums text-gray-200 whitespace-nowrap">
-        {entry.hitsLast10}/10
+        {sample === 0 ? "—" : `${entry.hitsLast10}/${sample}`}
       </td>
       <td
         className={`py-3 px-4 text-right tabular-nums font-bold whitespace-nowrap ${edgeColor}`}
@@ -332,16 +375,20 @@ function TableRow({
           {entry.signals.length === 0 ? (
             <span className="text-gray-500 text-xs italic">—</span>
           ) : (
-            entry.signals.map((s) => (
-              <span
-                key={s}
-                title={SIGNAL_META[s].short}
-                className="text-base"
-                aria-label={SIGNAL_META[s].short}
-              >
-                {SIGNAL_META[s].icon}
-              </span>
-            ))
+            entry.signals.map((s) => {
+              const m = SIGNAL_META[s as Signal];
+              if (!m) return null;
+              return (
+                <span
+                  key={s}
+                  title={m.short}
+                  className="text-base"
+                  aria-label={m.short}
+                >
+                  {m.icon}
+                </span>
+              );
+            })
           )}
         </div>
       </td>
@@ -353,13 +400,14 @@ function CompactRow({
   entry,
   onClick,
 }: {
-  entry: PropEntry;
+  entry: PlayerPropDto;
   onClick: () => void;
 }) {
   const meta = getPropTypeMeta(entry.sport, entry.propType);
   const edgePct = entry.edge * 100;
   const edgeColor =
     edgePct > 4 ? "text-emerald-400" : edgePct < -4 ? "text-rose-400" : "text-gray-300";
+  const sample = entry.recent10.length;
   return (
     <button
       type="button"
@@ -384,22 +432,33 @@ function CompactRow({
           <span className="font-mono text-gray-400 ml-1">{entry.odds}</span>
         </span>
         <span className="text-gray-300 tabular-nums">
-          {entry.hitsLast10}/10
+          {sample === 0 ? "—" : `${entry.hitsLast10}/${sample}`}
         </span>
       </div>
       {entry.signals.length > 0 && (
         <div className="flex gap-1.5 mt-2">
-          {entry.signals.map((s) => (
-            <span
-              key={s}
-              aria-label={SIGNAL_META[s].short}
-              title={SIGNAL_META[s].short}
-            >
-              {SIGNAL_META[s].icon}
-            </span>
-          ))}
+          {entry.signals.map((s) => {
+            const m = SIGNAL_META[s as Signal];
+            if (!m) return null;
+            return (
+              <span key={s} aria-label={m.short} title={m.short}>
+                {m.icon}
+              </span>
+            );
+          })}
         </div>
       )}
     </button>
+  );
+}
+
+function InlineError({ message }: { message: string }) {
+  return (
+    <div className="bg-rose-950/40 border border-rose-800/50 rounded-lg p-4 text-sm text-rose-100">
+      <p className="font-semibold text-rose-200 mb-1">
+        Couldn&rsquo;t load props.
+      </p>
+      <p className="text-rose-100/80 leading-relaxed">{message}</p>
+    </div>
   );
 }

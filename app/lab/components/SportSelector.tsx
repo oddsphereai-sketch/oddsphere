@@ -1,7 +1,7 @@
 "use client";
 
 import type { Sport } from "../data/mockData";
-import { SPORT_META, getPropCountForSport } from "../data/mockData";
+import { SPORT_META } from "../data/mockData";
 
 // Player-Props default (4 sports). Daily Edge passes its own 7-sport list.
 const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nfl", "nhl"];
@@ -34,7 +34,6 @@ export default function SportSelector({
         {sports.map((sport) => {
           const meta = SPORT_META[sport];
           const isActive = sport === active;
-          const count = getPropCountForSport(sport);
 
           const base =
             "relative flex-shrink-0 sm:flex-1 sm:flex-shrink min-w-[120px] sm:min-w-0 inline-flex flex-col items-center justify-center gap-1 whitespace-nowrap rounded-xl px-4 sm:px-5 py-3 sm:py-4 min-h-16 transition-all duration-200";
@@ -67,7 +66,7 @@ export default function SportSelector({
                       isActive ? "text-violet-200" : "text-gray-400"
                     }`}
                   >
-                    {count} props
+                    Live tonight
                   </span>
                 ) : null
               ) : (

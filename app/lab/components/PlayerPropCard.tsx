@@ -1,10 +1,11 @@
 "use client";
 
-import type { PropEntry } from "../data/mockData";
+import type { PlayerPropDto } from "../lib/labTypes";
+import type { Signal } from "../data/mockData";
 import { getPropTypeMeta, SIGNAL_META } from "../data/mockData";
 
 type Props = {
-  entry: PropEntry;
+  entry: PlayerPropDto;
   onClick: () => void;
 };
 
@@ -18,6 +19,12 @@ export default function PlayerPropCard({ entry, onClick }: Props) {
       ? "text-rose-400"
       : "text-gray-300";
   const edgeSign = edgePct > 0 ? "+" : "";
+
+  // Honest last-N display: server returns up to 10 resolved outcomes. Show
+  // the actual sample size rather than fabricating a /10 denominator when
+  // history is sparse.
+  const sample = entry.recent10.length;
+  const hitPct = sample > 0 ? Math.round((entry.hitsLast10 / sample) * 100) : 0;
 
   return (
     <button
@@ -60,38 +67,50 @@ export default function PlayerPropCard({ entry, onClick }: Props) {
       <div className="mb-4">
         <div className="flex items-center justify-between gap-2 mb-2">
           <span className="text-[10px] uppercase tracking-wider text-gray-400">
-            Last 10
+            {sample === 0 ? "No History" : `Last ${sample}`}
           </span>
           <span className="text-xs font-semibold text-gray-200 tabular-nums">
-            {entry.hitsLast10}/10 ({entry.hitsLast10 * 10}%)
+            {sample === 0
+              ? "—"
+              : `${entry.hitsLast10}/${sample} (${hitPct}%)`}
           </span>
         </div>
         <div className="flex gap-1.5">
-          {entry.recent10.map((hit, i) => (
-            <span
-              key={i}
-              aria-hidden="true"
-              className={`block w-2.5 h-2.5 rounded-full ${
-                hit
-                  ? "bg-violet-400 shadow-[0_0_4px_rgba(167,139,250,0.5)]"
-                  : "bg-gray-700"
-              }`}
-            />
-          ))}
+          {entry.recent10.length === 0 ? (
+            <span className="text-[11px] text-gray-500 italic">
+              Resolved history not yet available for this prop.
+            </span>
+          ) : (
+            entry.recent10.map((hit, i) => (
+              <span
+                key={i}
+                aria-hidden="true"
+                className={`block w-2.5 h-2.5 rounded-full ${
+                  hit
+                    ? "bg-violet-400 shadow-[0_0_4px_rgba(167,139,250,0.5)]"
+                    : "bg-gray-700"
+                }`}
+              />
+            ))
+          )}
         </div>
       </div>
 
       {entry.signals.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-4">
-          {entry.signals.map((s) => (
-            <span
-              key={s}
-              className="inline-flex items-center gap-1 bg-gray-800/70 border border-gray-700 rounded-full px-2.5 py-1 text-[11px] font-medium text-gray-100"
-            >
-              <span aria-hidden="true">{SIGNAL_META[s].icon}</span>
-              {SIGNAL_META[s].short}
-            </span>
-          ))}
+          {entry.signals.map((s) => {
+            const meta = SIGNAL_META[s as Signal];
+            if (!meta) return null;
+            return (
+              <span
+                key={s}
+                className="inline-flex items-center gap-1 bg-gray-800/70 border border-gray-700 rounded-full px-2.5 py-1 text-[11px] font-medium text-gray-100"
+              >
+                <span aria-hidden="true">{meta.icon}</span>
+                {meta.short}
+              </span>
+            );
+          })}
         </div>
       )}
 
