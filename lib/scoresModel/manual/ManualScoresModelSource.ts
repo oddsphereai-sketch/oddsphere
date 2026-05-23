@@ -68,10 +68,12 @@ export class ManualScoresModelSource implements IScoresModelSource {
       games: { external_id: number; sport: Sport; game_date: string };
     }>;
 
-    // Filter to the requested sport + slate date.
+    // Filter to the requested sport + slate date. Slate-date convention:
+    // games starting before 06:00 UTC belong to the previous UTC day's
+    // slate (Pacific evening games run into next-day UTC).
     return rows
       .filter((r) => r.games.sport === this.sport)
-      .filter((r) => String(r.games.game_date).slice(0, 10) === date)
+      .filter((r) => slateDateForGameTime(r.games.game_date) === date)
       .map((r) => ({
         game_external_id: r.games.external_id,
         sport: this.sport,
@@ -109,4 +111,18 @@ export class ManualScoresModelSource implements IScoresModelSource {
     if (!data?.completed_at) return null;
     return new Date(data.completed_at);
   }
+}
+
+/**
+ * Slate-date helper: games starting before 06:00 UTC roll back to the
+ * previous UTC date so Pacific evening games (02:10 UTC) match the same
+ * slate as the East-coast 23:10 UTC games from the same evening.
+ */
+function slateDateForGameTime(gameDateIso: string | Date): string {
+  const t = typeof gameDateIso === "string" ? new Date(gameDateIso) : gameDateIso;
+  if (t.getUTCHours() < 6) {
+    const rolled = new Date(t.getTime() - 24 * 60 * 60 * 1000);
+    return rolled.toISOString().slice(0, 10);
+  }
+  return t.toISOString().slice(0, 10);
 }
