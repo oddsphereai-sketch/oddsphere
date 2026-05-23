@@ -61,3 +61,89 @@ export type RefreshStatusResponse = {
   /** Per-source detail — drives HowWeUpdatePanel + the cron-status admin page. */
   sources: RefreshSource[];
 };
+
+// ───────────────────────────────────────────────────────────────────────────
+// /api/lab/daily-edge
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Per-market sharp posture relative to the model's pick.
+ *   • confirm — a sharp_signals row exists with signal_strength="strong" on
+ *               the same side our model picked
+ *   • caution — sharps are flagged as caution on our side, OR sharps are
+ *               strong on the opposite side
+ *   • mixed   — no actionable signal for this market
+ */
+export type SharpStatus = "confirm" | "mixed" | "caution";
+
+/**
+ * Game-level verdict aggregated from per-market sharpStatus values. Mirrors
+ * the V1 mock's tiering so the existing card visuals stay intact. Computed
+ * SERVER-SIDE per Decision G — UI components do not re-derive.
+ */
+export type DailyEdgeVerdict = "triple_lock" | "strong" | "lean" | "caution";
+
+export type DailyEdgePredictionDto = {
+  /** Display label: ML → team abbr, total → "Over"/"Under", NRFI → "NRFI"/"YRFI"/"Toss-Up". */
+  pick: string;
+  /** 0..1 (server normalizes the 0..100 column). */
+  confidence: number;
+  sharpStatus: SharpStatus;
+};
+
+export type DailyEdgeTotalPredictionDto = DailyEdgePredictionDto & {
+  /** O/U line (e.g., 8.5). */
+  line: number;
+};
+
+export type SharpSignalCategory =
+  | "pinnacle_agree"
+  | "pinnacle_disagree"
+  | "line_move_toward"
+  | "line_move_away"
+  | "steam"
+  | "handle_gap"
+  | "context_weather"
+  | "context_park"
+  | "no_signal";
+
+export type SharpSignalDto = {
+  /** UI label: ML / OU / NRFI. */
+  market: "ML" | "OU" | "NRFI";
+  category: SharpSignalCategory;
+  description: string;
+  source?: string;
+  /** Relative-time string for display (e.g., "3H AGO"). */
+  timestamp?: string;
+  direction: "positive" | "negative" | "neutral";
+};
+
+export type DailyEdgeGameDto = {
+  /** Stable ID for React keys: `${sport}-${external_id}`. */
+  id: string;
+  sport: Sport;
+  external_id: number;
+  awayTeam: string;
+  homeTeam: string;
+  /** Display string in ET (e.g., "7:10 PM"). */
+  gameTime: string;
+  /** Minutes-from-midnight-ET for sort stability. */
+  gameStartMinutes: number;
+  predictions: {
+    ml: DailyEdgePredictionDto;
+    total: DailyEdgeTotalPredictionDto;
+    nrfi: DailyEdgePredictionDto;
+  };
+  projected: { away: number; home: number };
+  sharpSignals: SharpSignalDto[];
+  verdict: DailyEdgeVerdict;
+  verdictSubtitle: string;
+};
+
+export type DailyEdgeResponse = {
+  as_of: string;
+  sport: Sport;
+  /** Slate date in YYYY-MM-DD (request param or default). */
+  date: string;
+  games: DailyEdgeGameDto[];
+};

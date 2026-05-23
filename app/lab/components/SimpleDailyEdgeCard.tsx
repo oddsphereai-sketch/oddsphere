@@ -2,20 +2,19 @@
 
 import { useState } from "react";
 import type {
-  DailyEdgeGame,
-  SharpSignal,
+  DailyEdgeGameDto,
+  DailyEdgeVerdict,
+  SharpSignalDto,
   SharpStatus,
-  Verdict,
-} from "../data/dailyEdgeMockData";
-import { calculateVerdict } from "../data/dailyEdgeMockData";
+} from "../lib/labTypes";
 import Icon, { type IconName } from "./Icon";
 
 type Props = {
-  game: DailyEdgeGame;
+  game: DailyEdgeGameDto;
 };
 
 const VERDICT_STYLES: Record<
-  Verdict,
+  DailyEdgeVerdict,
   {
     label: string;
     barBg: string;
@@ -65,27 +64,6 @@ const VERDICT_STYLES: Record<
   },
 };
 
-function getVerdictSubtitle(game: DailyEdgeGame, verdict: Verdict): string {
-  const confirmedMarkets: string[] = [];
-  if (game.predictions.ml.sharpStatus === "confirm")
-    confirmedMarkets.push("ML");
-  if (game.predictions.total.sharpStatus === "confirm")
-    confirmedMarkets.push("Total");
-  if (game.predictions.nrfi.sharpStatus === "confirm")
-    confirmedMarkets.push("NRFI");
-
-  if (verdict === "triple_lock") {
-    return `All three confirm · ${game.predictions.ml.pick} ML lead`;
-  }
-  if (verdict === "strong") {
-    return `${confirmedMarkets.join(" + ")} · sharps confirm`;
-  }
-  if (verdict === "lean") {
-    return `${confirmedMarkets[0]} only · proceed with care`;
-  }
-  return "Mixed signals · proceed with caution";
-}
-
 function getTileBorder(status: SharpStatus): string {
   if (status === "confirm") return "border-emerald-500/30";
   if (status === "caution") return "border-amber-500/30";
@@ -132,14 +110,14 @@ function getNrfiPickGlow(pick: string): string {
   return "";
 }
 
-const MARKET_ORDER: Record<SharpSignal["market"], number> = {
+const MARKET_ORDER: Record<SharpSignalDto["market"], number> = {
   ML: 0,
   OU: 1,
   NRFI: 2,
 };
 
-function signalIcon(type: SharpSignal["type"]): IconName {
-  switch (type) {
+function signalIcon(category: SharpSignalDto["category"]): IconName {
+  switch (category) {
     case "pinnacle_agree":
       return "check";
     case "pinnacle_disagree":
@@ -161,7 +139,7 @@ function signalIcon(type: SharpSignal["type"]): IconName {
   }
 }
 
-function getDirectionStyles(direction: SharpSignal["direction"]) {
+function getDirectionStyles(direction: SharpSignalDto["direction"]) {
   if (direction === "positive") {
     return {
       border: "border-emerald-500",
@@ -191,9 +169,11 @@ function getDirectionStyles(direction: SharpSignal["direction"]) {
 
 export default function SimpleDailyEdgeCard({ game }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const verdict = calculateVerdict(game.predictions);
-  const style = VERDICT_STYLES[verdict];
-  const subtitle = getVerdictSubtitle(game, verdict);
+  // Verdict + subtitle come from the server (Decision G — UI does not
+  // re-derive). The API route's computeVerdict + composeVerdictSubtitle in
+  // /api/lab/daily-edge/route.ts is the single source of truth.
+  const style = VERDICT_STYLES[game.verdict];
+  const subtitle = game.verdictSubtitle;
 
   const sortedSignals = [...game.sharpSignals].sort(
     (a, b) => MARKET_ORDER[a.market] - MARKET_ORDER[b.market]
@@ -281,18 +261,22 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
         <span>
           {expanded
             ? "Hide signal breakdown"
+            : game.sharpSignals.length === 0
+            ? "No sharp signals tonight"
             : `Show signal breakdown · ${game.sharpSignals.length} signals`}
         </span>
-        <Icon
-          name="chevron-down"
-          className={`w-3.5 h-3.5 transition-transform duration-200 ${
-            expanded ? "rotate-180" : ""
-          }`}
-        />
+        {game.sharpSignals.length > 0 && (
+          <Icon
+            name="chevron-down"
+            className={`w-3.5 h-3.5 transition-transform duration-200 ${
+              expanded ? "rotate-180" : ""
+            }`}
+          />
+        )}
       </button>
 
       {/* Sharp signals breakdown */}
-      {expanded && (
+      {expanded && game.sharpSignals.length > 0 && (
         <div className="mt-4 pt-4 border-t border-gray-800/60">
           <div className="flex items-center justify-between mb-3">
             <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.12em] text-violet-400">
@@ -306,7 +290,7 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
           </div>
           <div className="space-y-2">
             {sortedSignals.map((signal, i) => (
-              <SignalRow key={`${signal.market}-${signal.type}-${i}`} signal={signal} />
+              <SignalRow key={`${signal.market}-${signal.category}-${i}`} signal={signal} />
             ))}
           </div>
         </div>
@@ -360,7 +344,7 @@ function PredictionTile({
   );
 }
 
-function SignalRow({ signal }: { signal: SharpSignal }) {
+function SignalRow({ signal }: { signal: SharpSignalDto }) {
   const styles = getDirectionStyles(signal.direction);
   return (
     <div
@@ -373,7 +357,7 @@ function SignalRow({ signal }: { signal: SharpSignal }) {
       </span>
       <div className="shrink-0 mt-0.5">
         <Icon
-          name={signalIcon(signal.type)}
+          name={signalIcon(signal.category)}
           className={`w-4 h-4 ${styles.iconColor}`}
         />
       </div>

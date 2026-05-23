@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { Sport } from "../data/mockData";
 import { SPORT_META } from "../data/mockData";
-import { getDailyEdgeGames } from "../data/dailyEdgeMockData";
+import { useDailyEdge } from "../hooks/useDailyEdge";
 import SportSelector from "./SportSelector";
 import ComingSoonState from "./ComingSoonState";
 import SimpleDailyEdgeCard from "./SimpleDailyEdgeCard";
@@ -60,8 +60,16 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
   const [legendOpen, setLegendOpen] = useState(true);
 
   const sportMeta = SPORT_META[sport];
-  const isMlb = sport === "mlb";
-  const games = isMlb ? getDailyEdgeGames("mlb") : [];
+  const isLive = sportMeta.isLive;
+
+  const { data, error, isLoading } = useDailyEdge({
+    sport,
+    // Skip the request entirely for sports without coverage — hook returns
+    // a placeholder shape; pass a poll interval of 0 to also avoid polling.
+    refreshIntervalMs: isLive ? 300_000 : 0,
+  });
+
+  const games = data?.games ?? [];
   const today = getTodayString();
 
   return (
@@ -81,7 +89,9 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
         />
       </div>
 
-      {sportMeta.isLive && isMlb ? (
+      {!isLive ? (
+        <ComingSoonState sport={sport} />
+      ) : (
         <>
           <header className="mb-6 max-w-3xl mx-auto">
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2">
@@ -89,19 +99,27 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
             </h1>
             <p className="text-sm text-gray-300">
               {today} ·{" "}
-              <span className="tabular-nums">{games.length}</span> MLB games
-              tonight · sorted by start time
+              <span className="tabular-nums">
+                {isLoading ? "—" : games.length}
+              </span>{" "}
+              MLB games tonight · sorted by start time
             </p>
           </header>
 
           <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
-            {games.map((game) => (
-              <SimpleDailyEdgeCard key={game.id} game={game} />
-            ))}
+            {error ? (
+              <ErrorState message={error.message} />
+            ) : isLoading && games.length === 0 ? (
+              <LoadingSkeleton />
+            ) : games.length === 0 ? (
+              <EmptyState />
+            ) : (
+              games.map((game) => (
+                <SimpleDailyEdgeCard key={game.id} game={game} />
+              ))
+            )}
           </div>
         </>
-      ) : (
-        <ComingSoonState sport={sport} />
       )}
 
       {!legendOpen && (
@@ -116,5 +134,57 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
         </div>
       )}
     </>
+  );
+}
+
+// ─── Loading skeleton (3 placeholder cards) ─────────────────────────────────
+
+function LoadingSkeleton() {
+  return (
+    <>
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl p-4 sm:p-5 animate-pulse"
+          aria-hidden="true"
+        >
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="h-4 w-32 rounded bg-gray-800" />
+            <div className="h-6 w-20 rounded-full bg-gray-800" />
+          </div>
+          <div className="h-8 rounded bg-gray-800/70 mb-4" />
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
+            <div className="h-20 rounded-md bg-gray-800/70" />
+            <div className="h-20 rounded-md bg-gray-800/70" />
+            <div className="h-20 rounded-md bg-gray-800/70" />
+          </div>
+          <div className="h-6 rounded bg-gray-800/50" />
+        </div>
+      ))}
+    </>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-10 text-center text-gray-300">
+      <p className="text-base font-medium text-gray-100 mb-1">
+        No games on this slate.
+      </p>
+      <p className="text-sm text-gray-400">
+        Check back after the morning slate refresh, or pick another date.
+      </p>
+    </div>
+  );
+}
+
+function ErrorState({ message }: { message: string }) {
+  return (
+    <div className="bg-rose-950/40 border border-rose-800/50 rounded-xl p-6 text-sm text-rose-100">
+      <p className="font-semibold text-rose-200 mb-1">
+        Couldn&rsquo;t load tonight&rsquo;s slate.
+      </p>
+      <p className="text-rose-100/80 leading-relaxed">{message}</p>
+    </div>
   );
 }
