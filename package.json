@@ -18,6 +18,7 @@
     "test:cron-infra": "tsx --env-file=.env.local scripts/test-cron-infra.ts",
     "test:data-services": "tsx --env-file=.env.local scripts/test-data-services.ts",
     "test:prediction-results": "tsx --env-file=.env.local scripts/test-prediction-results.ts",
+    "test:foundational-crons": "tsx --env-file=.env.local scripts/test-foundational-crons.ts",
     "tracking-refresh": "tsx --env-file=.env.local scripts/tracking-refresh.ts"
   },
   "dependencies": {

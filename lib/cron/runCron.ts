@@ -48,7 +48,16 @@ export type CronHandlerContext = {
   sport: Sport | null;
 };
 
+/** Per-sport handler context — `sport` is guaranteed non-null. */
+export type PerSportCronHandlerContext = {
+  logId: number;
+  sport: Sport;
+};
+
 export type CronHandler = (ctx: CronHandlerContext) => Promise<CronHandlerResult>;
+export type PerSportCronHandler = (
+  ctx: PerSportCronHandlerContext
+) => Promise<CronHandlerResult>;
 
 export type CronHandlerOptions = {
   sport?: Sport | null;
@@ -83,7 +92,7 @@ export async function cronHandlerPerSport(
   request: Request,
   dataSource: string,
   sports: readonly Sport[],
-  handler: CronHandler,
+  handler: PerSportCronHandler,
   options: Omit<CronHandlerOptions, "sport"> = {}
 ): Promise<Response> {
   const auth = validateCronAuth(request);
@@ -100,8 +109,11 @@ export async function cronHandlerPerSport(
     details?: Record<string, unknown>;
   }> = [];
 
+  // PerSportCronHandler requires non-null sport. We wrap it to match the
+  // wider CronHandler signature for runOneStructured's internal use.
+  const wrapped: CronHandler = async (ctx) => handler({ logId: ctx.logId, sport: ctx.sport! });
   for (const sport of sports) {
-    const single = await runOneStructured(dataSource, sport, lockMinutes, handler);
+    const single = await runOneStructured(dataSource, sport, lockMinutes, wrapped);
     runs.push({ sport, ...single });
   }
 
