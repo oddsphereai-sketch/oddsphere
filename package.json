@@ -9,7 +9,8 @@
     "lint": "eslint",
     "seed": "tsx --env-file=.env.local scripts/seed.ts",
     "test:distributions": "tsx scripts/test-distributions.ts",
-    "test:props-math": "tsx scripts/test-props-math.ts"
+    "test:props-math": "tsx scripts/test-props-math.ts",
+    "predict": "tsx --env-file=.env.local scripts/predict-tonight.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
