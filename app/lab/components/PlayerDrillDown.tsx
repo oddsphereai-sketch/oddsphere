@@ -124,7 +124,7 @@ export default function PlayerDrillDown({ sport, playerId, onClose }: Props) {
 
               <section className="pt-2">
                 <p className="text-[11px] text-gray-500 italic">
-                  Per-prop game logs coming in Phase 6.
+                  Per-prop game logs coming soon.
                 </p>
               </section>
             </>

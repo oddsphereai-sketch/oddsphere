@@ -50,7 +50,7 @@ export default function CalibrationDisplay() {
   return (
     <section>
       <header className="mb-4">
-        <h2 className="text-xl font-medium tracking-tight">
+        <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">
           🎯 Calibration Honesty
         </h2>
         <p className="text-sm text-gray-400 mt-1">

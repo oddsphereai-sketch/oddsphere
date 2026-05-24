@@ -8,7 +8,7 @@ export default function MyBetsStub() {
           📊
         </div>
         <p className="inline-block text-[10px] font-bold uppercase tracking-wider text-gray-300 bg-gray-800/60 border border-gray-700 rounded-full px-3 py-1 mb-4">
-          Coming soon · Phase 2C
+          Coming soon
         </p>
         <h2 className="text-2xl sm:text-3xl font-black mb-4 tracking-tight">
           My Bets

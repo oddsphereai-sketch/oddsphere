@@ -117,7 +117,7 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
                 <span className="tabular-nums">
                   {isLoading ? "—" : games.length}
                 </span>{" "}
-                MLB games tonight · sorted by start time
+                {sportMeta.label} games tonight · sorted by start time
               </p>
             </div>
             <SlateDatePicker sport={sport} />

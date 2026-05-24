@@ -109,21 +109,21 @@ export default function TonightsBestView({
       </div>
 
       <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
-        <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
+        <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">
           <span aria-hidden="true" className="mr-2">
             {meta.icon}
           </span>
           <span className="uppercase">{meta.label}</span>{" "}
           <span className="text-gray-400 font-bold">— Tonight</span>
         </h2>
-        <label className="inline-flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm">
+        <label className="inline-flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm focus-within:border-violet-500 focus-within:shadow-[0_0_14px_rgba(167,139,250,0.25)] transition-all">
           <span className="text-xs uppercase tracking-wider text-gray-400">
             Sort
           </span>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortKey)}
-            className="bg-transparent text-white font-semibold focus:outline-none"
+            className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer"
           >
             {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
               <option key={k} value={k} className="bg-gray-900">

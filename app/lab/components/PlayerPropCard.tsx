@@ -30,7 +30,7 @@ export default function PlayerPropCard({ entry, onClick }: Props) {
     <button
       type="button"
       onClick={onClick}
-      className="group text-left w-full bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl p-6 transition-all duration-300 hover:border-violet-500/60 hover:shadow-[0_0_30px_rgba(167,139,250,0.18)] hover:-translate-y-0.5 active:scale-[0.99]"
+      className="group text-left w-full bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl p-6 transition-all duration-300 hover:border-violet-500/60 hover:shadow-[0_0_30px_rgba(167,139,250,0.18)] hover:-translate-y-0.5 active:scale-[0.99] focus-visible:outline-none focus-visible:border-violet-400 focus-visible:shadow-[0_0_24px_rgba(167,139,250,0.45)]"
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">

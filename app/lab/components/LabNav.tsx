@@ -43,7 +43,7 @@ export default function LabNav({ active, onChange }: Props) {
                   role="tab"
                   aria-selected={isActive}
                   onClick={() => onChange(t.key)}
-                  className={`relative inline-flex items-center justify-center gap-2 whitespace-nowrap px-4 py-3 sm:py-4 min-h-12 text-xs sm:text-sm font-bold uppercase tracking-[0.12em] transition-colors ${
+                  className={`relative inline-flex items-center justify-center gap-2 whitespace-nowrap px-4 py-3 sm:py-4 min-h-12 text-xs sm:text-sm font-bold uppercase tracking-[0.12em] transition-colors focus-visible:outline-none focus-visible:bg-gray-900/40 focus-visible:text-white rounded-t ${
                     isActive
                       ? "text-white"
                       : "text-gray-400 hover:text-violet-300"

@@ -180,12 +180,12 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
     >
       {/* Header — team logos + abbreviations + time pill */}
       <div className="flex items-start justify-between gap-3 mb-3">
-        <h3 className="inline-flex items-center gap-2 text-[15px] font-medium tracking-tight text-white">
+        <h3 className="inline-flex items-center gap-2 text-base sm:text-lg font-semibold tracking-tight text-white">
           <TeamBadge logo={game.awayTeamLogo} abbreviation={game.awayTeam} />
           <span className="text-gray-500">@</span>
           <TeamBadge logo={game.homeTeamLogo} abbreviation={game.homeTeam} />
         </h3>
-        <span className="inline-flex items-center gap-1.5 bg-gray-900/60 border border-gray-800 rounded-full px-3 py-1 text-xs font-medium text-violet-300 tracking-tight whitespace-nowrap">
+        <span className="inline-flex items-center gap-1.5 bg-gray-900/60 border border-gray-800 rounded-full px-3 py-1 text-xs font-medium text-violet-300 tracking-tight whitespace-nowrap tabular-nums">
           <Icon name="clock" className="w-3 h-3" />
           {game.gameTime}
         </span>

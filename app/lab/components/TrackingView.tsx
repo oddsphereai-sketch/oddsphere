@@ -192,7 +192,7 @@ function YesterdayRecapSection({ recap }: { recap: DailyRecap }) {
   return (
     <section>
       <header className="mb-4">
-        <h2 className="text-xl font-medium tracking-tight">
+        <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">
           🎯 {recap.isYesterday ? "Yesterday" : "Last activity"} —{" "}
           <span className="text-gray-300">{recap.label}</span>
         </h2>
@@ -319,7 +319,7 @@ function ThisWeekSection({
   return (
     <section>
       <header className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="text-xl font-medium tracking-tight">📅 This Week</h2>
+        <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">📅 This Week</h2>
         <span className="text-sm text-gray-400 tabular-nums">
           {week.weekStartLabel} — {week.weekEndLabel}
         </span>
@@ -504,7 +504,7 @@ function ThirtyDaySection({ last30 }: { last30: LastThirtyDays }) {
   return (
     <section>
       <header className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="text-xl font-medium tracking-tight">📊 Last 30 Days</h2>
+        <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">📊 Last 30 Days</h2>
         <span className="text-sm text-gray-300 tabular-nums">
           · {last30.aggregate.wins}-{last30.aggregate.losses}{" "}
           <span className="text-violet-300">
@@ -623,7 +623,7 @@ function AllTimeRecordSection({
   return (
     <section>
       <header className="mb-4">
-        <h2 className="text-xl font-medium tracking-tight">
+        <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">
           🏆 All-Time Record
         </h2>
         <p className="text-sm text-gray-400 mt-1">

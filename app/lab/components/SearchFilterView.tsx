@@ -285,7 +285,7 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold transition-all duration-200 min-h-9 ${
+      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold transition-all duration-200 min-h-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70 focus-visible:ring-offset-1 focus-visible:ring-offset-gray-950 ${
         active
           ? "bg-violet-600 text-white shadow-[0_0_14px_rgba(167,139,250,0.4)]"
           : "bg-gray-800/60 text-gray-300 hover:text-white hover:bg-gray-700/60 border border-gray-700"

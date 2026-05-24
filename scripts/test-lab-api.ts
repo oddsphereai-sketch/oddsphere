@@ -102,15 +102,22 @@ function isoMinutesAgo(min: number): string {
 async function main() {
   // ─── Setup: clear existing rows for sources we'll touch ───────────────────
   // The route returns the most recent row per (data_source, sport). To make
-  // assertions deterministic, delete prior rows for these sources before
-  // inserting fresh fixtures. Cleanup at the end re-deletes our inserts; the
-  // original seed rows are gone for these sources after the test runs, but
-  // that's fine — these are operational logs, not domain data.
-  for (const cfg of Object.values(SOURCES)) {
+  // assertions deterministic, delete prior rows for ALL Phase 4 cron source
+  // names (not just the ones this test inserts fixtures for) — the seed in
+  // 5F.3 now pre-populates the data_refresh_log table with realistic recent
+  // timestamps for every cron, so the "unknown" assertions below need a
+  // truly empty table for the sources the test DOESN'T touch.
+  const ALL_PHASE_4_SOURCES = [
+    "morning_slate", "daily_refresh", "midday_refresh", "afternoon_refresh",
+    "evening_refresh", "lineup_watch", "pregame_sweep",
+    "post_game_results", "weekly_park_factors", "weekly_calibration",
+    "daniel_scores_model",
+  ];
+  for (const ds of ALL_PHASE_4_SOURCES) {
     const { error } = await supabase
       .from("data_refresh_log")
       .delete()
-      .eq("data_source", cfg.data_source);
+      .eq("data_source", ds);
     if (error) throw new Error(`setup cleanup failed: ${error.message}`);
   }
 
