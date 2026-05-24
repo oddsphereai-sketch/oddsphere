@@ -416,6 +416,9 @@ Semantic Colors:
 - Signal derivation service with real data (mock in 5F)
 - Per-game adaptive refresh scheduling
 
+### Deferred to Phase 7.5 (After Real-API Cutover)
+- Tracking baseline import (was 5G in the original roadmap; moved post-7 to avoid a hybrid mock+real-data tracking state). Daniel's spreadsheet of lifetime + season totals for all 16 markets gets imported as `tracking_baseline` rows on the same day real scores-model uploads start landing. Combining the baseline before real APIs are flowing would pollute prediction_results aggregations with mock + real picks indistinguishably; deferring keeps the cutover clean.
+
 ### Deferred to Phase 8 (Launch Prep)
 - Whop OAuth integration
 - Auth gate on /lab/* routes
