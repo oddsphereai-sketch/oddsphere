@@ -119,14 +119,12 @@ export default function SearchFilterView({ sport, propType, onSelectPlayer }: Pr
     setSignalFilter(new Set());
   }
 
-  // Available signals: union of any signals actually present + the canonical
-  // set so users can experiment even when no entry currently has tags. V1 has
-  // no server-side signal derivation, so this is a UX-forward stub.
-  const availableSignals = useMemo(() => {
-    const present = new Set<Signal>();
-    entries.forEach((e) => e.signals.forEach((s) => present.add(s as Signal)));
-    return present.size > 0 ? Array.from(present) : ALL_SIGNALS;
-  }, [entries]);
+  // Signal chips always show the canonical 10 (5F.2). Composing filters
+  // would be confusing if the chip set shrank as you applied each filter —
+  // a user clicking "hot" would lose access to "cold" or "vs_lhp" entirely.
+  // The chip set is part of the static UI vocabulary; the server applies
+  // the actual filtering via .contains() on the signals JSONB column.
+  const availableSignals = ALL_SIGNALS;
 
   return (
     <div className="space-y-5">
@@ -443,16 +441,21 @@ function CompactRow({
         </span>
       </div>
       {entry.signals.length > 0 && (
-        <div className="flex gap-1.5 mt-2">
-          {entry.signals.map((s) => {
+        <div className="flex gap-1.5 mt-2 items-center">
+          {entry.signals.slice(0, 3).map((s) => {
             const m = SIGNAL_META[s as Signal];
             if (!m) return null;
             return (
-              <span key={s} aria-label={m.short} title={m.short}>
+              <span key={s} aria-label={m.short} title={m.explain}>
                 {m.icon}
               </span>
             );
           })}
+          {entry.signals.length > 3 && (
+            <span className="text-[10px] text-gray-400 font-medium">
+              +{entry.signals.length - 3}
+            </span>
+          )}
         </div>
       )}
     </button>

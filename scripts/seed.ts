@@ -35,6 +35,7 @@ import historicalResultsJson from "../lib/providers/mock/fixtures/historical_res
 import lineHistoryJson from "../lib/providers/mock/fixtures/line_history.json";
 import refreshLogJson from "../lib/providers/mock/fixtures/refresh_log.json";
 import { resultsService } from "../lib/services/resultsService";
+import * as signalDerivationService from "../lib/services/signalDerivationService";
 import { computeSlateDate } from "../lib/dates/slateDate";
 import type { Sport } from "../lib/types/domain/Sport";
 import weatherJson from "../lib/providers/mock/fixtures/weather.json";
@@ -1123,6 +1124,49 @@ async function seedCalibrationBuckets() {
   );
 }
 
+// ─── Stage 7c: derive signals for every prop_prediction (5F.2) ───────────
+// signalDerivationService.updateSignalsForSlate is sport+slate scoped, so we
+// enumerate distinct slate_dates that have props and run once per slate.
+// Idempotent — re-running over the same slate produces identical signals.
+async function seedPropSignals() {
+  logSection("Stage 7c · prop_predictions.signals (via signalDerivationService)");
+  // Distinct (sport, slate_date) pairs that have props. Pull via a JOIN: every
+  // prop_predictions row belongs to a game with a slate_date.
+  const { data: pairs, error } = await supabase
+    .from("games")
+    .select("sport, slate_date, prop_predictions!inner ( id )")
+    .order("slate_date", { ascending: false });
+  if (error) {
+    console.log(`  ⚠ slate enumeration failed: ${error.message}`);
+    return;
+  }
+  const seen = new Set<string>();
+  const slates: Array<{ sport: Sport; slate_date: string }> = [];
+  for (const row of (pairs ?? []) as Array<{ sport: string; slate_date: string }>) {
+    const key = `${row.sport}::${row.slate_date}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    slates.push({ sport: row.sport as Sport, slate_date: row.slate_date });
+  }
+
+  let totalUpdated = 0;
+  const totalCounts: Record<string, number> = {};
+  for (const { sport, slate_date } of slates) {
+    const r = await signalDerivationService.updateSignalsForSlate(sport, slate_date);
+    totalUpdated += r.updated;
+    for (const [k, v] of Object.entries(r.signalCounts)) {
+      totalCounts[k] = (totalCounts[k] ?? 0) + v;
+    }
+  }
+  const sigSummary = Object.entries(totalCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `${k}=${v}`)
+    .join(", ");
+  console.log(
+    `  prop_predictions.signals          ${String(totalUpdated).padStart(5)} updated across ${slates.length} slates · ${sigSummary || "no signals derived"}`
+  );
+}
+
 async function verify() {
   logSection("Stage 8 · verification (row counts vs expected)");
   let pass = 0;
@@ -1186,6 +1230,7 @@ async function main() {
   await seedRefreshLog();
   await computeTrackingAggregates();
   await seedCalibrationBuckets();
+  await seedPropSignals();
   await verify();
 
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);

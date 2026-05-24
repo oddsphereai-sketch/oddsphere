@@ -153,6 +153,8 @@ type PropRow = {
   tier: string | null;
   best_odds_american: number | null;
   computed_at: string;
+  /** JSONB array of Signal strings (5F.2); empty if signals haven't been derived. */
+  signals: string[] | null;
   player: {
     full_name: string;
     position_abbr: string | null;
@@ -258,7 +260,7 @@ export async function GET(request: Request) {
     .select(
       `id, game_id, player_id, prop_market, prop_line,
        model_probability, edge_pct, confidence_score, tier,
-       best_odds_american, computed_at,
+       best_odds_american, computed_at, signals,
        player:player_id (full_name, position_abbr, team_id)`
     )
     .in("game_id", Array.from(gameById.keys()))
@@ -285,6 +287,16 @@ export async function GET(request: Request) {
 
   if (playerId !== null) {
     propsQuery = propsQuery.eq("player_id", playerId);
+  }
+
+  // Signal chip filter (5F.2): AND-semantics — each requested signal must be
+  // present in the row's signals[]. Uses the JSONB containment operator (@>)
+  // via a stringified JSON array. PostgREST routes this through the GIN index
+  // from migration v4. (Note: passing the raw array to .contains() fails as
+  // "invalid input syntax for type json" because PostgREST emits `cs.[a,b]`
+  // which is text-array syntax, not JSONB.)
+  if (signals.length > 0) {
+    propsQuery = propsQuery.contains("signals", JSON.stringify(signals));
   }
 
   const { data: propData, error: propErr } = await propsQuery;
@@ -426,7 +438,7 @@ export async function GET(request: Request) {
       edge: edgeAbs,
       edgeRaw: edgePct / 100,
       tier: (row.tier ?? "good") as PropTier,
-      signals: [], // V1: per-prop signal derivation not yet wired.
+      signals: Array.isArray(row.signals) ? row.signals : [],
     };
   }
 
@@ -436,8 +448,10 @@ export async function GET(request: Request) {
     if (dto) entries.push(dto);
   }
 
-  // Signals filter: V1 has none, so any signals constraint yields empty.
-  const finalEntries = signals.length > 0 ? entries.filter((e) => e.signals.some((s) => signals.includes(s))) : entries;
+  // Signal filter applied server-side via .contains() above (AND-semantics
+  // against the GIN index). DTO list is already correctly filtered — no
+  // post-process needed.
+  const finalEntries = entries;
 
   const body: PlayerPropsResponse = {
     as_of: new Date().toISOString(),

@@ -163,6 +163,29 @@ function DrillPropCard({ entry }: { entry: PlayerPropDto }) {
         </span>
         <span className="font-mono text-gray-300">{entry.odds}</span>
       </div>
+      {entry.signals.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {entry.signals.slice(0, 3).map((s) => {
+            const m = SIGNAL_META[s as Signal];
+            if (!m) return null;
+            return (
+              <span
+                key={s}
+                title={m.explain}
+                className="inline-flex items-center gap-1 bg-gray-800/60 border border-gray-700/70 rounded-full px-2 py-0.5 text-[10px] font-medium text-gray-200"
+              >
+                <span aria-hidden="true">{m.icon}</span>
+                {m.short}
+              </span>
+            );
+          })}
+          {entry.signals.length > 3 && (
+            <span className="inline-flex items-center text-[10px] text-gray-400 font-medium px-1">
+              +{entry.signals.length - 3}
+            </span>
+          )}
+        </div>
+      )}
       <div>
         <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-gray-400 mb-1">
           <span>{sample === 0 ? "No History" : `Last ${sample}`}</span>

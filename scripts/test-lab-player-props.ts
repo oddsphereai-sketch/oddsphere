@@ -93,7 +93,17 @@ async function main() {
   );
   check("entry.recent10 is array (may be empty)", Array.isArray(e0.recent10) && e0.recent10.length <= 10);
   check("entry.hitsLast10 matches recent10 wins", e0.hitsLast10 === e0.recent10.filter(Boolean).length);
-  check("entry.signals is array (V1: empty)", Array.isArray(e0.signals) && e0.signals.length === 0);
+  check("entry.signals is an array", Array.isArray(e0.signals));
+  // 5F.2: at least one entry on the slate has at least one signal.
+  const anyEntryHasSignals = body.entries.some((e) => e.signals.length > 0);
+  check("at least one entry on the slate has populated signals (5F.2)", anyEntryHasSignals);
+  // Every signal string is one of the canonical Signal-union values.
+  const ALLOWED_SIGNALS = new Set([
+    "hot", "cold", "vs_lhp", "vs_rhp", "wind_out", "wind_in",
+    "park", "rest_advantage", "platoon", "warning",
+  ]);
+  const allValid = body.entries.every((e) => e.signals.every((s) => ALLOWED_SIGNALS.has(s)));
+  check("every signal is in the canonical Signal union", allValid);
 
   // ─── Sort order: edge DESC (edge_pct descending) ─────────────────────────
   section("Sort order");
@@ -281,6 +291,67 @@ async function main() {
     `tier=premium,strong + prop_market=hits: all entries match both`,
     bPS2.entries.every((e) => (e.tier === "premium" || e.tier === "strong") && e.propType === "hits")
   );
+
+  // ─── (10) Signal-chip filter (5F.2) ───────────────────────────────────────
+  section("Signal-chip filter");
+
+  // Pull every signal that appears at least once on the slate, then probe
+  // each one with a single-signal filter. AND-semantics — entries returned
+  // must include the filter signal in their signals[].
+  const allSignals = new Set<string>();
+  for (const e of body.entries) e.signals.forEach((s) => allSignals.add(s));
+  const sampleSignal = Array.from(allSignals)[0];
+  if (sampleSignal) {
+    const rSig = await playerProps(
+      new Request(`https://x/api/lab/player-props?sport=mlb&date=${SLATE_DATE}&signals=${sampleSignal}`)
+    );
+    const bSig = (await rSig.json()) as PlayerPropsResponse;
+    check(
+      `signals=${sampleSignal}: every returned entry includes the signal`,
+      bSig.entries.length > 0 && bSig.entries.every((e) => e.signals.includes(sampleSignal))
+    );
+  } else {
+    console.log("  ~ no signals present on the slate — skipping single-chip test");
+  }
+
+  // Two-chip AND filter — entries must include BOTH signals. Find a pair
+  // that actually has overlap so the test isn't trivially empty.
+  const pairsByCount = new Map<string, number>();
+  for (const e of body.entries) {
+    if (e.signals.length < 2) continue;
+    for (let i = 0; i < e.signals.length; i++) {
+      for (let j = i + 1; j < e.signals.length; j++) {
+        const key = [e.signals[i], e.signals[j]].sort().join("|");
+        pairsByCount.set(key, (pairsByCount.get(key) ?? 0) + 1);
+      }
+    }
+  }
+  const topPair = Array.from(pairsByCount.entries()).sort((a, b) => b[1] - a[1])[0];
+  if (topPair) {
+    const [pairKey, expectedCount] = topPair;
+    const [s1, s2] = pairKey.split("|");
+    const rPair = await playerProps(
+      new Request(`https://x/api/lab/player-props?sport=mlb&date=${SLATE_DATE}&signals=${s1},${s2}`)
+    );
+    const bPair = (await rPair.json()) as PlayerPropsResponse;
+    check(
+      `signals=${s1},${s2} (AND): every entry has both`,
+      bPair.entries.every((e) => e.signals.includes(s1!) && e.signals.includes(s2!))
+    );
+    check(
+      `signals AND-filter count matches pre-counted overlap (${bPair.entries.length} vs ${expectedCount})`,
+      bPair.entries.length === expectedCount
+    );
+  } else {
+    console.log("  ~ no entry has 2+ signals — skipping AND-filter test");
+  }
+
+  // Unknown signal returns empty.
+  const rBogus2 = await playerProps(
+    new Request(`https://x/api/lab/player-props?sport=mlb&date=${SLATE_DATE}&signals=unicorn`)
+  );
+  const bBogus2 = (await rBogus2.json()) as PlayerPropsResponse;
+  check(`unknown signal yields empty result`, bBogus2.entries.length === 0);
 
   // ─── Summary ──────────────────────────────────────────────────────────────
   console.log(`\n${"━".repeat(70)}`);

@@ -98,12 +98,13 @@ export default function PlayerPropCard({ entry, onClick }: Props) {
 
       {entry.signals.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-4">
-          {entry.signals.map((s) => {
+          {entry.signals.slice(0, 3).map((s) => {
             const meta = SIGNAL_META[s as Signal];
             if (!meta) return null;
             return (
               <span
                 key={s}
+                title={meta.explain}
                 className="inline-flex items-center gap-1 bg-gray-800/70 border border-gray-700 rounded-full px-2.5 py-1 text-[11px] font-medium text-gray-100"
               >
                 <span aria-hidden="true">{meta.icon}</span>
@@ -111,6 +112,14 @@ export default function PlayerPropCard({ entry, onClick }: Props) {
               </span>
             );
           })}
+          {entry.signals.length > 3 && (
+            <span
+              title={entry.signals.slice(3).join(", ")}
+              className="inline-flex items-center bg-gray-900/60 border border-gray-800 rounded-full px-2.5 py-1 text-[11px] font-medium text-gray-400"
+            >
+              +{entry.signals.length - 3} more
+            </span>
+          )}
         </div>
       )}
 

@@ -34,6 +34,7 @@ import type {
 } from "../models/props/propModelOrchestrator";
 import { evaluateSignal } from "../models/dailyEdge/sharpSignalEvaluator";
 import { generateVerdictText } from "../models/dailyEdge/verdictGenerator";
+import * as signalDerivationService from "./signalDerivationService";
 import type { SharpSignalRecord } from "../providers/interfaces/IBettingProvider";
 import type { Sport } from "../types/domain/Sport";
 import type { PropMarketType } from "../types/domain/Lines";
@@ -422,6 +423,20 @@ export const predictionService = {
       throw new Error(`prediction_breakdowns insert failed: ${bdErr.message}`);
     }
 
+    // 5F.2: derive + persist signals for the inserted props. Runs as a
+    // separate pass (rather than inline) so predictionService doesn't need
+    // to plumb the full context assembly that signalDerivationService
+    // already does over the slate's joined DB state. Idempotent.
+    let signalCounts: Record<string, number> = {};
+    try {
+      const sigResult = await signalDerivationService.updateSignalsForSlate(sport, date);
+      signalCounts = sigResult.signalCounts;
+    } catch (e) {
+      // Don't fail the whole prediction run on signal-derivation issues —
+      // props are already persisted and useful without the chips populated.
+      console.error("signal derivation failed:", (e as Error).message);
+    }
+
     // Tier distribution for caller diagnostics
     const tierCounts = predictions.reduce<Record<string, number>>((acc, p) => {
       acc[p.tier] = (acc[p.tier] ?? 0) + 1;
@@ -431,7 +446,7 @@ export const predictionService = {
     return {
       records_updated: predictions.length,
       api_calls_made: apiCalls,
-      details: { tier_counts: tierCounts, skipped },
+      details: { tier_counts: tierCounts, skipped, signal_counts: signalCounts },
     };
   },
 
