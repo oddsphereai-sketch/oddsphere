@@ -35,6 +35,8 @@ import historicalResultsJson from "../lib/providers/mock/fixtures/historical_res
 import lineHistoryJson from "../lib/providers/mock/fixtures/line_history.json";
 import refreshLogJson from "../lib/providers/mock/fixtures/refresh_log.json";
 import { resultsService } from "../lib/services/resultsService";
+import { computeSlateDate } from "../lib/dates/slateDate";
+import type { Sport } from "../lib/types/domain/Sport";
 import weatherJson from "../lib/providers/mock/fixtures/weather.json";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -427,6 +429,7 @@ async function seedSlate(
               : null,
           ballpark_id: ballparkId,
           game_date: g.game_date,
+          slate_date: computeSlateDate(g.sport as Sport, g.game_date),
           season: g.season,
           season_type: g.season_type,
           postseason: g.postseason,
@@ -816,6 +819,7 @@ async function seedHistorical(
   // 5a. Insert 450 game shells
   const histGameRows: Record<string, unknown>[] = rows.map((r) => {
     const homeId = teamIdByExternal.get(r.home_team_external_id);
+    const gameDateIso = `${r.game_date}T23:10:00.000Z`;
     return {
       sport: r.sport,
       external_id: r.game_external_id,
@@ -824,7 +828,10 @@ async function seedHistorical(
       home_pitcher_id: null,
       away_pitcher_id: null,
       ballpark_id: homeId !== undefined ? ballparkIdByTeamId.get(homeId) ?? null : null,
-      game_date: `${r.game_date}T23:10:00.000Z`,
+      game_date: gameDateIso,
+      // historical_results.game_date is the slate date string from the fixture.
+      // For 23:10Z (7:10 PM ET), the slate_date matches the YYYY-MM-DD string.
+      slate_date: computeSlateDate(r.sport as Sport, gameDateIso),
       season: 2026,
       season_type: "regular",
       postseason: false,

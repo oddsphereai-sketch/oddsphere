@@ -23,6 +23,7 @@
 
 import { supabase } from "@/lib/db/supabase";
 import type { Sport } from "@/lib/types/domain/Sport";
+import { currentSlateDate, isSlateDate } from "@/lib/dates/slateDate";
 import type {
   DailyEdgeGameDto,
   DailyEdgeResponse,
@@ -34,6 +35,40 @@ import type {
 
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl"];
 const LIVE_SPORTS: Sport[] = ["mlb"];
+
+/**
+ * Resolve the slate_date to query. If `requested` has games for this sport,
+ * use it. Otherwise return the most recent slate_date for the sport that has
+ * games — so the page never goes blank when a member loads it during the
+ * morning before tonight's slate is up, or on an off-day.
+ */
+async function resolveSlateDate(sport: Sport, requested: string): Promise<string> {
+  const { data: req } = await supabase
+    .from("games")
+    .select("id", { head: true, count: "exact" })
+    .eq("sport", sport)
+    .eq("slate_date", requested);
+  // Supabase head:true returns count via the response; the data is null.
+  // We need a row check; do a tiny select instead.
+  const { data: probe } = await supabase
+    .from("games")
+    .select("slate_date")
+    .eq("sport", sport)
+    .eq("slate_date", requested)
+    .limit(1);
+  void req;
+  if ((probe ?? []).length > 0) return requested;
+
+  // Fallback: most recent slate_date for the sport.
+  const { data: latest } = await supabase
+    .from("games")
+    .select("slate_date")
+    .eq("sport", sport)
+    .order("slate_date", { ascending: false })
+    .limit(1);
+  const fallback = (latest ?? [])[0]?.slate_date;
+  return fallback ?? requested;
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // Time helpers (ET display)
@@ -72,22 +107,9 @@ function relativeTimeAgo(iso: string | null): string | undefined {
   return `${days}D AGO`;
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Slate-date window
-// ───────────────────────────────────────────────────────────────────────────
-
-function slateWindow(date: string): { startIso: string; endIso: string } {
-  const startIso = `${date}T00:00:00.000Z`;
-  const next = new Date(`${date}T00:00:00.000Z`);
-  next.setUTCDate(next.getUTCDate() + 1);
-  next.setUTCHours(6, 0, 0, 0);
-  return { startIso, endIso: next.toISOString() };
-}
-
-function todayUTC(): string {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
-}
+// (slate-date window helpers removed in 5E.1 — filters now hit
+// games.slate_date directly. See lib/dates/slateDate.ts for the canonical
+// "today's slate" computation.)
 
 // ───────────────────────────────────────────────────────────────────────────
 // Sharp signal mapping
@@ -337,16 +359,18 @@ export async function GET(request: Request) {
       ? (sportParam as Sport)
       : "mlb";
 
-  const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
-    ? dateParam
-    : todayUTC();
+  // Resolve the requested slate_date. Explicit ?date= wins; otherwise today's
+  // slate in the sport's anchor timezone (ET for North American, London for UCL).
+  const requestedDate = isSlateDate(dateParam) ? dateParam : currentSlateDate(sport);
 
   // Non-live sports return empty — UI's ComingSoonState handles the message.
   if (!LIVE_SPORTS.includes(sport)) {
     const body: DailyEdgeResponse = {
       as_of: new Date().toISOString(),
       sport,
-      date,
+      date: requestedDate,
+      requested_date: requestedDate,
+      fallback_used: false,
       games: [],
     };
     return Response.json(body, {
@@ -354,13 +378,16 @@ export async function GET(request: Request) {
     });
   }
 
-  const { startIso, endIso } = slateWindow(date);
+  // Resolve the slate_date actually used: prefer the requested date; if empty,
+  // fall back to the most recent slate_date that has games for this sport.
+  // The UI can detect the fallback by comparing response.date to the URL param.
+  const effectiveDate = await resolveSlateDate(sport, requestedDate);
 
   // ─── Games + teams + predictions (one round-trip) ────────────────────────
   const { data: gameData, error: gamesErr } = await supabase
     .from("games")
     .select(
-      `id, external_id, sport, game_date,
+      `id, external_id, sport, game_date, slate_date,
        home_team:home_team_id (abbreviation),
        away_team:away_team_id (abbreviation),
        game_predictions (
@@ -371,8 +398,7 @@ export async function GET(request: Request) {
        )`
     )
     .eq("sport", sport)
-    .gte("game_date", startIso)
-    .lt("game_date", endIso)
+    .eq("slate_date", effectiveDate)
     .order("game_date", { ascending: true });
 
   if (gamesErr) {
@@ -413,7 +439,9 @@ export async function GET(request: Request) {
   const body: DailyEdgeResponse = {
     as_of: new Date().toISOString(),
     sport,
-    date,
+    date: effectiveDate,
+    requested_date: requestedDate,
+    fallback_used: effectiveDate !== requestedDate,
     games: dtos,
   };
   return Response.json(body, {

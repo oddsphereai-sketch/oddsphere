@@ -7,9 +7,10 @@
  * swap in an AutoScoresModelSource per-sport later (Phase 10+) without
  * touching any consumers.
  *
- * Reads happen via a games JOIN so we can filter by sport and game_date.
- * Both filters are required for production crons that target a specific
- * slate.
+ * Reads happen via a games JOIN filtered by sport + slate_date (Phase 5E.1).
+ * slate_date is the local-evening date in the sport's anchor timezone, so
+ * Pacific evening games + the Saturday/Sunday seam map cleanly without the
+ * UTC-window hack that earlier versions used.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -41,12 +42,17 @@ export class ManualScoresModelSource implements IScoresModelSource {
   }
 
   async getPredictionsForDate(date: string): Promise<ScoresModelPrediction[]> {
+    // Filter on the games side via FK: sport + slate_date. The .eq() on a
+    // joined-table column needs the `<alias>.<column>` syntax; Supabase
+    // supports this for embedded relations.
     const { data, error } = await this.client
       .from("game_predictions")
       .select(
-        "predicted_home_score, predicted_away_score, predicted_total, predicted_ml_winner, ml_confidence, predicted_ou_side, ou_confidence, predicted_nrfi, nrfi_confidence, sport_specific, prediction_source, is_override, original_auto_prediction, model_version, computed_at, games!inner ( external_id, sport, game_date )"
+        "predicted_home_score, predicted_away_score, predicted_total, predicted_ml_winner, ml_confidence, predicted_ou_side, ou_confidence, predicted_nrfi, nrfi_confidence, sport_specific, prediction_source, is_override, original_auto_prediction, model_version, computed_at, games!inner ( external_id, sport, game_date, slate_date )"
       )
-      .eq("prediction_source", this.source);
+      .eq("prediction_source", this.source)
+      .eq("games.sport", this.sport)
+      .eq("games.slate_date", date);
     if (error) throw new Error(`ManualScoresModelSource read failed: ${error.message}`);
 
     const rows = (data ?? []) as unknown as Array<{
@@ -65,15 +71,10 @@ export class ManualScoresModelSource implements IScoresModelSource {
       original_auto_prediction: Record<string, unknown> | null;
       model_version: string;
       computed_at: string;
-      games: { external_id: number; sport: Sport; game_date: string };
+      games: { external_id: number; sport: Sport; game_date: string; slate_date: string };
     }>;
 
-    // Filter to the requested sport + slate date. Slate-date convention:
-    // games starting before 06:00 UTC belong to the previous UTC day's
-    // slate (Pacific evening games run into next-day UTC).
     return rows
-      .filter((r) => r.games.sport === this.sport)
-      .filter((r) => slateDateForGameTime(r.games.game_date) === date)
       .map((r) => ({
         game_external_id: r.games.external_id,
         sport: this.sport,
@@ -113,16 +114,6 @@ export class ManualScoresModelSource implements IScoresModelSource {
   }
 }
 
-/**
- * Slate-date helper: games starting before 06:00 UTC roll back to the
- * previous UTC date so Pacific evening games (02:10 UTC) match the same
- * slate as the East-coast 23:10 UTC games from the same evening.
- */
-function slateDateForGameTime(gameDateIso: string | Date): string {
-  const t = typeof gameDateIso === "string" ? new Date(gameDateIso) : gameDateIso;
-  if (t.getUTCHours() < 6) {
-    const rolled = new Date(t.getTime() - 24 * 60 * 60 * 1000);
-    return rolled.toISOString().slice(0, 10);
-  }
-  return t.toISOString().slice(0, 10);
-}
+// (Phase 5E.1: slateDateForGameTime removed. Filtering now uses
+// games.slate_date directly. See lib/dates/slateDate.ts for the canonical
+// TS computation.)

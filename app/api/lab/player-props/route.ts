@@ -29,6 +29,7 @@
 
 import { supabase } from "@/lib/db/supabase";
 import type { Sport } from "@/lib/types/domain/Sport";
+import { currentSlateDate, isSlateDate } from "@/lib/dates/slateDate";
 import type {
   PlayerDto,
   PlayerPropDto,
@@ -77,16 +78,27 @@ function formatOdds(americanOdds: number | null): string {
   return String(americanOdds);
 }
 
-function todayUTC(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+// (slate-window helpers removed in 5E.1 — see lib/dates/slateDate.ts.)
+//
+// Date resolution: if ?date= is present and games exist on that slate, use it.
+// Otherwise fall back to the most recent slate_date with games for this sport,
+// signalled to the client via `fallback_used`.
+async function resolveSlateDate(sport: Sport, requested: string): Promise<string> {
+  const { data: probe } = await supabase
+    .from("games")
+    .select("slate_date")
+    .eq("sport", sport)
+    .eq("slate_date", requested)
+    .limit(1);
+  if ((probe ?? []).length > 0) return requested;
 
-function slateWindow(date: string): { startIso: string; endIso: string } {
-  const startIso = `${date}T00:00:00.000Z`;
-  const next = new Date(`${date}T00:00:00.000Z`);
-  next.setUTCDate(next.getUTCDate() + 1);
-  next.setUTCHours(6, 0, 0, 0);
-  return { startIso, endIso: next.toISOString() };
+  const { data: latest } = await supabase
+    .from("games")
+    .select("slate_date")
+    .eq("sport", sport)
+    .order("slate_date", { ascending: false })
+    .limit(1);
+  return (latest ?? [])[0]?.slate_date ?? requested;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -174,7 +186,7 @@ export async function GET(request: Request) {
       : "mlb";
 
   const dateParam = url.searchParams.get("date");
-  const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : todayUTC();
+  const requestedDate = isSlateDate(dateParam) ? dateParam : currentSlateDate(sport);
 
   const propMarketUi = url.searchParams.get("prop_market");
   const tiers = parseTiers(url.searchParams.get("tier"));
@@ -196,7 +208,9 @@ export async function GET(request: Request) {
     const body: PlayerPropsResponse = {
       as_of: new Date().toISOString(),
       sport,
-      date,
+      date: requestedDate,
+      requested_date: requestedDate,
+      fallback_used: false,
       filters: baseFilters,
       entries: [],
     };
@@ -205,18 +219,19 @@ export async function GET(request: Request) {
     });
   }
 
+  // Resolve actual slate (fallback to most recent if requested is empty).
+  const effectiveDate = await resolveSlateDate(sport, requestedDate);
+
   // ─── (1) Games for the slate ─────────────────────────────────────────────
-  const { startIso, endIso } = slateWindow(date);
   const { data: gameData, error: gameErr } = await supabase
     .from("games")
     .select(
-      `id, game_date,
+      `id, game_date, slate_date,
        home_team:home_team_id (id, abbreviation),
        away_team:away_team_id (id, abbreviation)`
     )
     .eq("sport", sport)
-    .gte("game_date", startIso)
-    .lt("game_date", endIso);
+    .eq("slate_date", effectiveDate);
   if (gameErr) return Response.json({ error: gameErr.message }, { status: 500 });
 
   const games = (gameData ?? []) as unknown as GameRow[];
@@ -224,7 +239,9 @@ export async function GET(request: Request) {
     const body: PlayerPropsResponse = {
       as_of: new Date().toISOString(),
       sport,
-      date,
+      date: effectiveDate,
+      requested_date: requestedDate,
+      fallback_used: effectiveDate !== requestedDate,
       filters: baseFilters,
       entries: [],
     };
@@ -256,7 +273,9 @@ export async function GET(request: Request) {
       const body: PlayerPropsResponse = {
         as_of: new Date().toISOString(),
         sport,
-        date,
+        date: effectiveDate,
+        requested_date: requestedDate,
+        fallback_used: effectiveDate !== requestedDate,
         filters: baseFilters,
         entries: [],
       };
@@ -284,7 +303,9 @@ export async function GET(request: Request) {
     const body: PlayerPropsResponse = {
       as_of: new Date().toISOString(),
       sport,
-      date,
+      date: effectiveDate,
+      requested_date: requestedDate,
+      fallback_used: effectiveDate !== requestedDate,
       filters: baseFilters,
       entries: [],
     };
@@ -421,7 +442,9 @@ export async function GET(request: Request) {
   const body: PlayerPropsResponse = {
     as_of: new Date().toISOString(),
     sport,
-    date,
+    date: effectiveDate,
+    requested_date: requestedDate,
+    fallback_used: effectiveDate !== requestedDate,
     filters: baseFilters,
     entries: finalEntries,
   };

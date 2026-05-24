@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { PlayerPropDto } from "../lib/labTypes";
 import type { Signal, Sport } from "../data/mockData";
 import { getPropTypeMeta, SIGNAL_META, SPORT_META } from "../data/mockData";
 import { usePlayerProps } from "../hooks/usePlayerProps";
+import { isSlateDate } from "@/lib/dates/slateDate";
 
 const MIN_EDGE_OPTIONS = [0, 0.05, 0.1, 0.15] as const;
 type MinEdge = (typeof MIN_EDGE_OPTIONS)[number];
@@ -42,6 +44,10 @@ export default function SearchFilterView({ sport, propType, onSelectPlayer }: Pr
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const isLive = SPORT_META[sport].isLive;
 
+  const searchParams = useSearchParams();
+  const dateParam = searchParams.get("date");
+  const requestedDate = isSlateDate(dateParam) ? dateParam : undefined;
+
   // Server-side: prop_market (from current tab) + minEdge + signals.
   // All four tiers fetched so Search & Filter sees every graded prop.
   const { data, error, isLoading } = usePlayerProps({
@@ -49,6 +55,7 @@ export default function SearchFilterView({ sport, propType, onSelectPlayer }: Pr
     propMarket: propType,
     minEdge,
     signals: Array.from(signalFilter),
+    date: requestedDate,
     enabled: isLive,
   });
 

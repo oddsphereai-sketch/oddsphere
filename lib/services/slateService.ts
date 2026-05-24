@@ -15,6 +15,7 @@ import { supabase } from "../db/supabase";
 import { getStatsProvider } from "../providers/factory";
 import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
+import { computeSlateDate } from "../dates/slateDate";
 import {
   loadBallparkIdByTeamId,
   loadPlayerIdMap,
@@ -74,6 +75,9 @@ export const slateService = {
             : null,
         ballpark_id: ballparkId,
         game_date: g.game_date,
+        // slate_date is the local-evening date in the sport's anchor timezone
+        // (5E.1). Compute from the game's UTC start time + its sport.
+        slate_date: computeSlateDate(g.sport as Sport, g.game_date),
         season: g.season,
         season_type: g.season_type,
         postseason: g.postseason,

@@ -59,27 +59,20 @@ export async function loadPlayerMetadata(
 /**
  * Load (game_external_id → game_id) map for games on a given slate date.
  *
- * Date matching handles the slate-date convention: games starting before
- * 06:00 UTC are considered the previous local day's slate (Pacific evening
- * games run into next-day UTC). We widen the window to capture them.
+ * Uses the games.slate_date column (added in Phase 5E.1) — the local-evening
+ * date in the sport's broadcast anchor timezone. Direct equality replaces
+ * the UTC-window hack that previously misclassified games at the
+ * midnight-UTC seam.
  */
 export async function loadGameIdMap(
   sport: Sport,
   date: string
 ): Promise<Map<number, number>> {
-  const startOfDay = `${date}T00:00:00.000Z`;
-  // End: next day at 06:00 UTC catches Pacific games starting at 02:10 UTC the next day
-  const next = new Date(`${date}T00:00:00.000Z`);
-  next.setUTCDate(next.getUTCDate() + 1);
-  next.setUTCHours(6, 0, 0, 0);
-  const endOfSlate = next.toISOString();
-
   const { data, error } = await supabase
     .from("games")
     .select("id, external_id")
     .eq("sport", sport)
-    .gte("game_date", startOfDay)
-    .lt("game_date", endOfSlate);
+    .eq("slate_date", date);
   if (error) throw new Error(`loadGameIdMap failed: ${error.message}`);
   return new Map(
     ((data ?? []) as { id: number; external_id: number }[]).map((r) => [

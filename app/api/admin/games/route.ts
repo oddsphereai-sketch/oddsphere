@@ -33,22 +33,17 @@ export async function GET(request: Request) {
     );
   }
 
-  // Slate-date convention: games starting before 06:00 UTC on date+1 belong
-  // to `date`'s slate (Pacific evening start). Widen the window accordingly.
-  const startOfDay = `${date}T00:00:00.000Z`;
-  const next = new Date(`${date}T00:00:00.000Z`);
-  next.setUTCDate(next.getUTCDate() + 1);
-  next.setUTCHours(6, 0, 0, 0);
-  const endOfSlate = next.toISOString();
-
+  // Slate-date filter (5E.1): games.slate_date is the local-evening date in
+  // the sport's anchor timezone, populated at insert time. Direct equality
+  // replaces the UTC-window hack that mishandled Pacific games + the
+  // Saturday/Sunday seam.
   const { data, error } = await supabase
     .from("games")
     .select(
       "external_id, game_date, status, home_team:home_team_id (abbreviation, display_name), away_team:away_team_id (abbreviation, display_name)"
     )
     .eq("sport", sport)
-    .gte("game_date", startOfDay)
-    .lt("game_date", endOfSlate)
+    .eq("slate_date", date)
     .order("game_date", { ascending: true });
 
   if (error) {

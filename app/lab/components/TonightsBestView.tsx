@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { PlayerPropDto } from "../lib/labTypes";
 import type { Sport } from "../data/mockData";
 import { getPropTypeMeta, SPORT_META } from "../data/mockData";
 import { usePlayerProps } from "../hooks/usePlayerProps";
+import { isSlateDate } from "@/lib/dates/slateDate";
 import PlayerPropCard from "./PlayerPropCard";
 
 type SortKey = "edge" | "hit_rate" | "line";
@@ -29,6 +31,10 @@ export default function TonightsBestView({
   const [sortBy, setSortBy] = useState<SortKey>("edge");
   const isLive = SPORT_META[sport].isLive;
 
+  const searchParams = useSearchParams();
+  const dateParam = searchParams.get("date");
+  const requestedDate = isSlateDate(dateParam) ? dateParam : undefined;
+
   // Tonight's Best mode: show only premium + strong tiers (per locked Phase 3C
   // decision — tier is a query-time filter). Edge filter at 5% to keep noise out.
   const { data, error, isLoading } = usePlayerProps({
@@ -36,10 +42,13 @@ export default function TonightsBestView({
     propMarket: propType,
     tiers: ["premium", "strong"],
     minEdge: 0,
+    date: requestedDate,
     enabled: isLive,
   });
 
   const entries = useMemo(() => data?.entries ?? [], [data]);
+  const fallbackUsed = !!data?.fallback_used;
+  const effectiveDate = data?.date;
 
   const sorted = useMemo(() => {
     const copy = [...entries];
@@ -69,6 +78,18 @@ export default function TonightsBestView({
 
   return (
     <div>
+      {fallbackUsed && effectiveDate && (
+        <div className="mb-4 bg-amber-950/30 border border-amber-800/40 rounded-lg px-4 py-3 text-sm text-amber-100">
+          <span className="font-semibold text-amber-200">
+            Showing most recent slate ({effectiveDate})
+          </span>
+          {" — "}
+          <span className="text-amber-100/80">
+            no graded props for today&rsquo;s slate yet.
+          </span>
+        </div>
+      )}
+
       {/* Top stats banner */}
       <div className="mb-6 bg-gradient-to-br from-violet-950/40 to-fuchsia-950/30 border border-violet-800/40 rounded-xl px-5 py-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
         <span className="text-violet-300 font-semibold uppercase tracking-wider text-[10px]">

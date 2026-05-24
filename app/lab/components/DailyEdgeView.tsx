@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { Sport } from "../data/mockData";
 import { SPORT_META } from "../data/mockData";
 import { useDailyEdge } from "../hooks/useDailyEdge";
+import { isSlateDate } from "@/lib/dates/slateDate";
 import SportSelector from "./SportSelector";
 import ComingSoonState from "./ComingSoonState";
 import SimpleDailyEdgeCard from "./SimpleDailyEdgeCard";
@@ -63,14 +65,24 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
   const sportMeta = SPORT_META[sport];
   const isLive = sportMeta.isLive;
 
+  // 5E.1: read optional ?date= from URL so deep-links to specific slates
+  // work. When absent, the hook (and route) default to currentSlateDate in
+  // the sport's anchor timezone.
+  const searchParams = useSearchParams();
+  const dateParam = searchParams.get("date");
+  const requestedDate = isSlateDate(dateParam) ? dateParam : undefined;
+
   const { data, error, isLoading } = useDailyEdge({
     sport,
+    date: requestedDate,
     // Skip the request entirely for sports without coverage — hook returns
     // a placeholder shape; pass a poll interval of 0 to also avoid polling.
     refreshIntervalMs: isLive ? 300_000 : 0,
   });
 
   const games = data?.games ?? [];
+  const fallbackUsed = !!data?.fallback_used;
+  const effectiveDate = data?.date;
   const today = getTodayString();
 
   return (
@@ -106,6 +118,20 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
               MLB games tonight · sorted by start time
             </p>
           </header>
+
+          {fallbackUsed && effectiveDate && (
+            <div className="max-w-3xl mx-auto mb-4">
+              <div className="bg-amber-950/30 border border-amber-800/40 rounded-lg px-4 py-3 text-sm text-amber-100">
+                <span className="font-semibold text-amber-200">
+                  Showing most recent slate ({effectiveDate})
+                </span>
+                {" — "}
+                <span className="text-amber-100/80">
+                  no games scheduled for today&rsquo;s slate yet.
+                </span>
+              </div>
+            </div>
+          )}
 
           <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
             {error ? (

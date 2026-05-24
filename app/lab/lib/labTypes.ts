@@ -143,8 +143,15 @@ export type DailyEdgeGameDto = {
 export type DailyEdgeResponse = {
   as_of: string;
   sport: Sport;
-  /** Slate date in YYYY-MM-DD (request param or default). */
+  /**
+   * The slate_date the response is for — equals `requested_date` when games
+   * exist on it, otherwise the most recent slate_date with games (fallback).
+   */
   date: string;
+  /** What the caller asked for (URL ?date= or auto-today). */
+  requested_date: string;
+  /** True when `date !== requested_date` (server fell back to most recent slate). */
+  fallback_used: boolean;
   games: DailyEdgeGameDto[];
 };
 
@@ -200,7 +207,10 @@ export type PlayerPropDto = {
 export type PlayerPropsResponse = {
   as_of: string;
   sport: Sport;
+  /** Slate the response is for (equals requested_date or fallback). */
   date: string;
+  requested_date: string;
+  fallback_used: boolean;
   filters: {
     prop_market: string | null;
     tiers: PropTier[];

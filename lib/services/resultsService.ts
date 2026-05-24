@@ -41,11 +41,18 @@ import {
 import type { PropMarketType } from "../types/domain/Lines";
 import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
+import { currentSlateDate } from "../dates/slateDate";
 
 const SEASON_START = "2026-03-28";
 
+/**
+ * "Today" for tracking-aggregator window math. Uses the MLB anchor timezone
+ * (ET) — game outcomes resolve at the same broadcast-day boundary the rest
+ * of the Lab uses. Replaces the pre-5E.1 todayUTC() that drifted when the
+ * UTC date had crossed but the ET broadcast day hadn't.
+ */
 function todayUTC(): string {
-  return new Date().toISOString().slice(0, 10);
+  return currentSlateDate("mlb");
 }
 
 function marketShortName(propMarket: PropMarketType): string {
@@ -87,14 +94,17 @@ export const resultsService = {
 
     // Clear stale prediction_results for these games to keep the resolver
     // idempotent (re-running on the same finals doesn't double-write).
+    // Pull slate_date (5E.1) instead of slicing game_date — slate_date is the
+    // local-evening date in the sport's anchor timezone, which is the value
+    // we want stored on prediction_results.game_date for tracking aggregations.
     const { data: gameRows } = await supabase
       .from("games")
-      .select("id, game_date")
+      .select("id, slate_date")
       .in("id", gameDbIds);
     const gameDateById = new Map<number, string>(
-      ((gameRows ?? []) as Array<{ id: number; game_date: string }>).map((r) => [
+      ((gameRows ?? []) as Array<{ id: number; slate_date: string }>).map((r) => [
         r.id,
-        String(r.game_date).slice(0, 10),
+        r.slate_date,
       ])
     );
 

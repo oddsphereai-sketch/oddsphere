@@ -27,6 +27,7 @@
     "test:lab-player-props": "tsx --env-file=.env.local scripts/test-lab-player-props.ts",
     "test:lab-tracking": "tsx --env-file=.env.local scripts/test-lab-tracking.ts",
     "test:lab-calibration": "tsx --env-file=.env.local scripts/test-lab-calibration.ts",
+    "test:slate-dates": "tsx --env-file=.env.local scripts/test-slate-dates.ts",
     "tracking-refresh": "tsx --env-file=.env.local scripts/tracking-refresh.ts"
   },
   "dependencies": {
