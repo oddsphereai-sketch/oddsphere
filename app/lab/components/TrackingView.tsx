@@ -38,8 +38,14 @@ export default function TrackingView() {
         <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2">
           📈 Track Record
         </h1>
-        <p className="text-sm text-gray-300">
-          Every prediction tracked. Every result verified.
+        <p className="text-sm text-gray-300 max-w-3xl">
+          Track record for our scores models across all 7 sports. Every
+          prediction tracked. Every result verified.
+        </p>
+        <p className="text-xs text-gray-500 mt-2 italic max-w-3xl">
+          Player props are tracked separately — see the Player Props tab for
+          individual edge ratings. Aggregate prop tracking arrives once the
+          model has enough resolved history to publish honestly.
         </p>
       </header>
 

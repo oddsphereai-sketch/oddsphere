@@ -114,15 +114,14 @@ export default function LabApp() {
             <>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-violet-300 mb-1">
-                    Research Suite — UI Preview
-                  </p>
-                  <p className="text-sm text-gray-300">
-                    Mocked data for layout and interaction testing.{" "}
-                    <span className="text-violet-300">
-                      {sportMeta.icon} {sportMeta.label}
-                    </span>{" "}
-                    · viewing as{" "}
+                  <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
+                    <span aria-hidden="true" className="mr-2">
+                      {sportMeta.icon}
+                    </span>
+                    {sportMeta.label} Player Props
+                  </h1>
+                  <p className="text-sm text-gray-300 mt-1">
+                    Viewing as{" "}
                     <span className="text-violet-300">
                       {mode === "best" ? "Tonight's Best" : "Search & Filter"}
                     </span>

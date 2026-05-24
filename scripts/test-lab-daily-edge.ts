@@ -56,13 +56,11 @@ function expectedVerdict(
   total: SharpStatus,
   nrfi: SharpStatus
 ): DailyEdgeVerdict {
+  // 5F.1: 3-state verdict — caution wins, then strong, else null (no banner).
   const statuses = [ml, total, nrfi];
-  const confirms = statuses.filter((s) => s === "confirm").length;
-  const cautions = statuses.filter((s) => s === "caution").length;
-  if (confirms === 3) return "triple_lock";
-  if (confirms === 2) return "strong";
-  if (confirms === 1 && cautions === 0) return "lean";
-  return "caution";
+  if (statuses.includes("caution")) return "caution";
+  if (statuses.includes("confirm")) return "strong";
+  return null;
 }
 
 async function main() {
@@ -125,11 +123,19 @@ async function main() {
   check("game.projected is { away, home }", typeof first.projected === "object" && typeof first.projected.away === "number" && typeof first.projected.home === "number");
   check("game.sharpSignals is an array", Array.isArray(first.sharpSignals));
   check(
-    "game.verdict is one of the 4 tiers",
-    ["triple_lock", "strong", "lean", "caution"].includes(first.verdict),
+    "game.verdict is one of the 3 states (strong / caution / null)",
+    first.verdict === null || first.verdict === "strong" || first.verdict === "caution",
     `got: ${first.verdict}`
   );
-  check("game.verdictSubtitle is a non-empty string", typeof first.verdictSubtitle === "string" && first.verdictSubtitle.length > 0);
+  // verdictSubtitle is null iff verdict is null (no banner = no subtitle).
+  if (first.verdict === null) {
+    check("game.verdictSubtitle is null when verdict is null", first.verdictSubtitle === null);
+  } else {
+    check(
+      "game.verdictSubtitle is a non-empty string when banner renders",
+      typeof first.verdictSubtitle === "string" && first.verdictSubtitle.length > 0
+    );
+  }
 
   // ─── Confidence values are in [0, 1] for every game ───────────────────────
   section("Confidence range");
@@ -167,13 +173,17 @@ async function main() {
     invariantFailures === 0
   );
 
-  // Subtitle ⇄ verdict: triple_lock / caution have specific text shapes.
+  // Subtitle ⇄ verdict (5F.1 3-state):
+  //   null    → subtitle is null (no banner renders)
+  //   strong  → subtitle starts with "Sharps support"
+  //   caution → subtitle starts with "Sharps moving against"
   let subtitleFailures = 0;
   for (const g of body.games) {
-    if (g.verdict === "caution" && g.verdictSubtitle !== "Mixed signals · proceed with caution") {
+    if (g.verdict === null && g.verdictSubtitle !== null) {
       subtitleFailures++;
-    }
-    if (g.verdict === "triple_lock" && !g.verdictSubtitle.startsWith("All three confirm")) {
+    } else if (g.verdict === "strong" && !(g.verdictSubtitle ?? "").startsWith("Sharps support")) {
+      subtitleFailures++;
+    } else if (g.verdict === "caution" && !(g.verdictSubtitle ?? "").startsWith("Sharps moving against")) {
       subtitleFailures++;
     }
   }

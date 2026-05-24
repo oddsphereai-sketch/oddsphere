@@ -39,20 +39,18 @@ export default function DailyEdgeLegend({ onClose }: Props) {
                 className="inline-block w-2 h-2 rounded-full bg-emerald-400 mt-1.5 shrink-0 shadow-[0_0_6px_rgba(52,211,153,0.6)]"
               />
               <span>
-                <strong className="font-semibold text-emerald-300">
-                  TRIPLE LOCK / STRONG
-                </strong>{" "}
-                — model + sharps aligned
+                <strong className="font-semibold text-emerald-300">STRONG</strong>{" "}
+                — sharps support the model&rsquo;s pick on at least one market
               </span>
             </li>
             <li className="flex items-start gap-2 text-gray-200">
               <span
                 aria-hidden="true"
-                className="inline-block w-2 h-2 rounded-full bg-violet-400 mt-1.5 shrink-0 shadow-[0_0_6px_rgba(167,139,250,0.6)]"
+                className="inline-block w-2 h-2 rounded-full bg-gray-500 mt-1.5 shrink-0"
               />
               <span>
-                <strong className="font-semibold text-violet-300">LEAN</strong>{" "}
-                — model picks, sharps neutral
+                <strong className="font-semibold text-gray-200">No banner</strong>{" "}
+                — no sharp signals detected. The model&rsquo;s pick speaks for itself.
               </span>
             </li>
             <li className="flex items-start gap-2 text-gray-200">
@@ -62,7 +60,7 @@ export default function DailyEdgeLegend({ onClose }: Props) {
               />
               <span>
                 <strong className="font-semibold text-amber-300">CAUTION</strong>{" "}
-                — model picks, sharps moving away
+                — sharps moving against the model&rsquo;s pick on at least one market
               </span>
             </li>
           </ul>

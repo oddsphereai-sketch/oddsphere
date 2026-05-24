@@ -13,8 +13,15 @@ type Props = {
   game: DailyEdgeGameDto;
 };
 
+// ─── Verdict visuals (3 states per locked UI spec §4) ───────────────────────
+// "strong"  → green banner (sharps support pick)
+// "caution" → amber/rose banner (sharps moving against pick)
+// null      → NO BANNER (default for most games; absence ≠ negative)
+
+type NonNullVerdict = Exclude<DailyEdgeVerdict, null>;
+
 const VERDICT_STYLES: Record<
-  DailyEdgeVerdict,
+  NonNullVerdict,
   {
     label: string;
     barBg: string;
@@ -24,34 +31,15 @@ const VERDICT_STYLES: Record<
     cardShadowHover: string;
   }
 > = {
-  triple_lock: {
-    label: "TRIPLE LOCK",
+  strong: {
+    label: "STRONG",
     barBg: "bg-emerald-500/10",
     borderColor: "border-emerald-500",
     textColor: "text-emerald-400",
     cardShadow:
       "shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_24px_rgba(16,185,129,0.10)]",
     cardShadowHover:
-      "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_32px_rgba(16,185,129,0.18)]",
-  },
-  strong: {
-    label: "STRONG",
-    barBg: "bg-emerald-500/8",
-    borderColor: "border-emerald-500",
-    textColor: "text-emerald-400",
-    cardShadow:
-      "shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_24px_rgba(16,185,129,0.08)]",
-    cardShadowHover:
-      "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_28px_rgba(16,185,129,0.12)]",
-  },
-  lean: {
-    label: "LEAN",
-    barBg: "bg-violet-500/8",
-    borderColor: "border-violet-500",
-    textColor: "text-violet-400",
-    cardShadow: "shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
-    cardShadowHover:
-      "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_24px_rgba(167,139,250,0.10)]",
+      "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_28px_rgba(16,185,129,0.14)]",
   },
   caution: {
     label: "CAUTION",
@@ -62,6 +50,11 @@ const VERDICT_STYLES: Record<
     cardShadowHover:
       "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_24px_rgba(245,158,11,0.08)]",
   },
+};
+
+const NEUTRAL_CARD_SHADOW = {
+  cardShadow: "shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
+  cardShadowHover: "hover:border-gray-700",
 };
 
 function getTileBorder(status: SharpStatus): string {
@@ -170,10 +163,12 @@ function getDirectionStyles(direction: SharpSignalDto["direction"]) {
 export default function SimpleDailyEdgeCard({ game }: Props) {
   const [expanded, setExpanded] = useState(false);
   // Verdict + subtitle come from the server (Decision G — UI does not
-  // re-derive). The API route's computeVerdict + composeVerdictSubtitle in
-  // /api/lab/daily-edge/route.ts is the single source of truth.
-  const style = VERDICT_STYLES[game.verdict];
-  const subtitle = game.verdictSubtitle;
+  // re-derive). 5F.1: verdict is now nullable — null means "no banner".
+  const verdict = game.verdict;
+  const style = verdict !== null ? VERDICT_STYLES[verdict] : null;
+  const cardShadowClasses = style
+    ? `${style.cardShadow} ${style.cardShadowHover}`
+    : `${NEUTRAL_CARD_SHADOW.cardShadow} ${NEUTRAL_CARD_SHADOW.cardShadowHover}`;
 
   const sortedSignals = [...game.sharpSignals].sort(
     (a, b) => MARKET_ORDER[a.market] - MARKET_ORDER[b.market]
@@ -181,9 +176,9 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
 
   return (
     <article
-      className={`bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl p-4 sm:p-5 transition-all duration-200 hover:border-gray-700 ${style.cardShadow} ${style.cardShadowHover}`}
+      className={`bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl p-4 sm:p-5 transition-all duration-200 hover:border-gray-700 ${cardShadowClasses}`}
     >
-      {/* Header */}
+      {/* Header — teams + time pill */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <h3 className="text-[15px] font-medium tracking-tight text-white">
           {game.awayTeam} <span className="text-gray-500">@</span>{" "}
@@ -195,19 +190,47 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
         </span>
       </div>
 
-      {/* Verdict bar */}
-      <div
-        className={`flex items-center gap-2 flex-wrap ${style.barBg} ${style.borderColor} border-l-[3px] rounded-r-md pl-3 pr-3 py-2 mb-4`}
-      >
-        <span
-          className={`text-[11px] uppercase font-medium tracking-[0.08em] ${style.textColor}`}
+      {/* Verdict bar — only renders for "strong" or "caution"; null = no banner */}
+      {style && game.verdictSubtitle && (
+        <div
+          className={`flex items-center gap-2 flex-wrap ${style.barBg} ${style.borderColor} border-l-[3px] rounded-r-md pl-3 pr-3 py-2 mb-4`}
         >
-          {style.label}
-        </span>
-        <span className="text-sm text-gray-200">{subtitle}</span>
+          <span
+            className={`text-[11px] uppercase font-medium tracking-[0.08em] ${style.textColor}`}
+          >
+            {style.label}
+          </span>
+          <span className="text-sm text-gray-200">{game.verdictSubtitle}</span>
+        </div>
+      )}
+
+      {/* PROJECTED FINAL — HERO STAT (5F.1, per locked UI spec §3). 44px bold. */}
+      <div className="mb-4">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500 font-semibold mb-1.5 text-center">
+          Projected final
+        </p>
+        <div className="flex items-baseline justify-center gap-3 sm:gap-4">
+          <span className="inline-flex items-baseline gap-2">
+            <span className="text-xs uppercase tracking-wider text-gray-400 font-semibold">
+              {game.awayTeam}
+            </span>
+            <span className="text-[44px] leading-none font-black tabular-nums tracking-tight text-white">
+              {game.projected.away.toFixed(1)}
+            </span>
+          </span>
+          <span className="text-2xl font-bold text-gray-600 leading-none">—</span>
+          <span className="inline-flex items-baseline gap-2">
+            <span className="text-[44px] leading-none font-black tabular-nums tracking-tight text-white">
+              {game.projected.home.toFixed(1)}
+            </span>
+            <span className="text-xs uppercase tracking-wider text-gray-400 font-semibold">
+              {game.homeTeam}
+            </span>
+          </span>
+        </div>
       </div>
 
-      {/* 3-column prediction grid */}
+      {/* 3 pick boxes */}
       <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
         <PredictionTile
           label="ML"
@@ -238,32 +261,19 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
         />
       </div>
 
-      {/* Projected score */}
-      <div className="border-y border-gray-800/60 py-2.5 flex items-center justify-center gap-2 text-xs flex-wrap text-center">
-        <span className="uppercase tracking-[0.12em] text-gray-500 font-semibold">
-          Projected
-        </span>
-        <span className="text-gray-700">·</span>
-        <span className="tabular-nums text-gray-200">
-          {game.awayTeam} {game.projected.away.toFixed(1)}{" "}
-          <span className="text-gray-700">—</span> {game.homeTeam}{" "}
-          {game.projected.home.toFixed(1)}
-        </span>
-      </div>
-
-      {/* Expand/collapse toggle */}
+      {/* Expand/collapse toggle — "Show signal breakdown · N signals" */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        className="w-full mt-3 -mb-1 py-2 text-xs text-gray-400 hover:text-violet-300 hover:bg-gray-900/40 rounded transition-all duration-200 inline-flex items-center justify-center gap-1.5"
+        className="w-full py-2 text-xs text-gray-400 hover:text-violet-300 hover:bg-gray-900/40 rounded transition-all duration-200 inline-flex items-center justify-center gap-1.5 border-t border-gray-800/60"
       >
         <span>
           {expanded
             ? "Hide signal breakdown"
             : game.sharpSignals.length === 0
             ? "No sharp signals tonight"
-            : `Show signal breakdown · ${game.sharpSignals.length} signals`}
+            : `Show signal breakdown · ${game.sharpSignals.length} ${game.sharpSignals.length === 1 ? "signal" : "signals"}`}
         </span>
         {game.sharpSignals.length > 0 && (
           <Icon

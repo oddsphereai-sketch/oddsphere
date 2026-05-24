@@ -77,11 +77,25 @@ export type RefreshStatusResponse = {
 export type SharpStatus = "confirm" | "mixed" | "caution";
 
 /**
- * Game-level verdict aggregated from per-market sharpStatus values. Mirrors
- * the V1 mock's tiering so the existing card visuals stay intact. Computed
- * SERVER-SIDE per Decision G — UI components do not re-derive.
+ * Game-level sharp-signal verdict, locked to THREE states per the
+ * locked UI spec (planning-docs/07-locked-ui-specs.md §4):
+ *
+ *   • "strong"  — at least one market has a confirming sharp signal AND no
+ *                 contradicting signal. Renders as the green banner.
+ *   • "caution" — at least one market has a contradicting signal. Wins over
+ *                 "strong" — caution is a red flag and stays visible. Renders
+ *                 as the amber/rose banner.
+ *   • null      — no sharp signals on any market. No banner at all. This is
+ *                 the DEFAULT state for most games — absence of signal is
+ *                 NOT a negative signal.
+ *
+ * Replaces the pre-5F.1 4-tier model (triple_lock/strong/lean/caution) which
+ * conflated "no data" with "negative signal" and showed CAUTION on every
+ * game without sharp_signals rows.
+ *
+ * Computed SERVER-SIDE per Decision G. UI components do not re-derive.
  */
-export type DailyEdgeVerdict = "triple_lock" | "strong" | "lean" | "caution";
+export type DailyEdgeVerdict = "strong" | "caution" | null;
 
 export type DailyEdgePredictionDto = {
   /** Display label: ML → team abbr, total → "Over"/"Under", NRFI → "NRFI"/"YRFI"/"Toss-Up". */
@@ -92,7 +106,10 @@ export type DailyEdgePredictionDto = {
 };
 
 export type DailyEdgeTotalPredictionDto = DailyEdgePredictionDto & {
-  /** O/U line (e.g., 8.5). */
+  /**
+   * Actual SPORTSBOOK total line (5F.1) — what members would bet on.
+   * Falls back to the model projection when no lines.total row exists.
+   */
   line: number;
 };
 
@@ -136,8 +153,10 @@ export type DailyEdgeGameDto = {
   };
   projected: { away: number; home: number };
   sharpSignals: SharpSignalDto[];
+  /** Three-state verdict — null when no banner should render (most games). */
   verdict: DailyEdgeVerdict;
-  verdictSubtitle: string;
+  /** Short brand-voice subtitle for the banner — null when verdict is null. */
+  verdictSubtitle: string | null;
 };
 
 export type DailyEdgeResponse = {

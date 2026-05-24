@@ -201,7 +201,11 @@ function buildSignalDtos(rows: SignalRow[]): SharpSignalDto[] {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Verdict aggregation (server-side per Decision G)
+// Verdict aggregation — 3-state (5F.1, per locked UI spec §4)
+//   STRONG  — ≥1 confirming signal AND zero contradicting signals
+//   CAUTION — ≥1 contradicting signal (wins over STRONG; red flags stick)
+//   null    — no signals on any market (no banner; most games are here)
+// Absence of signal ≠ negative signal — the model's pick speaks for itself.
 // ───────────────────────────────────────────────────────────────────────────
 
 function computeVerdict(
@@ -210,36 +214,34 @@ function computeVerdict(
   nrfiStatus: SharpStatus
 ): DailyEdgeVerdict {
   const statuses = [mlStatus, totalStatus, nrfiStatus];
-  const confirms = statuses.filter((s) => s === "confirm").length;
-  const cautions = statuses.filter((s) => s === "caution").length;
-  if (confirms === 3) return "triple_lock";
-  if (confirms === 2) return "strong";
-  if (confirms === 1 && cautions === 0) return "lean";
-  return "caution";
+  if (statuses.includes("caution")) return "caution";
+  if (statuses.includes("confirm")) return "strong";
+  return null;
 }
 
 function composeVerdictSubtitle(
   verdict: DailyEdgeVerdict,
-  mlPick: string,
   mlStatus: SharpStatus,
   totalStatus: SharpStatus,
   nrfiStatus: SharpStatus
-): string {
-  const confirmed: string[] = [];
-  if (mlStatus === "confirm") confirmed.push("ML");
-  if (totalStatus === "confirm") confirmed.push("Total");
-  if (nrfiStatus === "confirm") confirmed.push("NRFI");
+): string | null {
+  if (verdict === null) return null;
 
-  if (verdict === "triple_lock") {
-    return `All three confirm · ${mlPick} ML lead`;
-  }
+  const labels = (status: SharpStatus): string[] => {
+    const matched: string[] = [];
+    if (mlStatus === status) matched.push("ML");
+    if (totalStatus === status) matched.push("Total");
+    if (nrfiStatus === status) matched.push("NRFI");
+    return matched;
+  };
+
   if (verdict === "strong") {
-    return `${confirmed.join(" + ")} · sharps confirm`;
+    const confirmed = labels("confirm");
+    return `Sharps support ${confirmed.join(" + ")}`;
   }
-  if (verdict === "lean") {
-    return `${confirmed[0]} only · proceed with care`;
-  }
-  return "Mixed signals · proceed with caution";
+  // caution
+  const against = labels("caution");
+  return `Sharps moving against ${against.join(" + ")}`;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -273,7 +275,8 @@ type GameRow = {
 
 function buildGameDto(
   row: GameRow,
-  signals: SignalRow[]
+  signals: SignalRow[],
+  sportsbookTotalLine: number | null
 ): DailyEdgeGameDto | null {
   const home = row.home_team?.abbreviation ?? "—";
   const away = row.away_team?.abbreviation ?? "—";
@@ -287,8 +290,12 @@ function buildGameDto(
   const mlStatus = deriveSharpStatus(mlSignal, mlWinnerKey);
 
   // ── Total ──
+  // 5F.1: display the SPORTSBOOK total line for betting, not the model
+  // projection. The model projection lives in `projected` (hero stat); the
+  // O/U pick box shows what members would actually bet on. Fall back to
+  // the model projection only when no lines.total row exists.
   const ouSide = pred.predicted_ou_side ?? "under";
-  const totalLine = pred.predicted_total ?? 0;
+  const totalLine = sportsbookTotalLine ?? pred.predicted_total ?? 0;
   const totalSignal = signals.find((s) => s.market_type === "total");
   const totalStatus = deriveSharpStatus(totalSignal, ouSide);
   const totalPick = ouSide === "over" ? "Over" : "Under";
@@ -301,13 +308,7 @@ function buildGameDto(
   const nrfiPick = isNrfi ? "NRFI" : "YRFI";
 
   const verdict = computeVerdict(mlStatus, totalStatus, nrfiStatus);
-  const subtitle = composeVerdictSubtitle(
-    verdict,
-    mlPick,
-    mlStatus,
-    totalStatus,
-    nrfiStatus
-  );
+  const subtitle = composeVerdictSubtitle(verdict, mlStatus, totalStatus, nrfiStatus);
 
   return {
     id: `${row.sport}-${row.external_id}`,
@@ -412,6 +413,9 @@ export async function GET(request: Request) {
   // ─── Sharp signals for these games (batched) ─────────────────────────────
   const gameIds = games.map((g) => g.id);
   let signalsByGame = new Map<number, SignalRow[]>();
+  // Sportsbook total lines per game (5F.1). Prefer Pinnacle as the de-vig
+  // reference; fall back to DraftKings, then the first book we see.
+  const totalLineByGame = new Map<number, number>();
   if (gameIds.length > 0) {
     const { data: signalData, error: sigErr } = await supabase
       .from("sharp_signals")
@@ -427,12 +431,46 @@ export async function GET(request: Request) {
       arr.push(row);
       signalsByGame.set(row.game_id, arr);
     }
+
+    // Pull totals lines for the slate's games.
+    const { data: lineData, error: lineErr } = await supabase
+      .from("lines")
+      .select("game_id, sportsbook, line_value")
+      .in("game_id", gameIds)
+      .eq("market_type", "total");
+    if (lineErr) {
+      return Response.json({ error: lineErr.message }, { status: 500 });
+    }
+    // Group by game, then pick the preferred book per game.
+    const grouped = new Map<number, Array<{ sportsbook: string; line_value: number | null }>>();
+    for (const row of (lineData ?? []) as Array<{ game_id: number; sportsbook: string; line_value: number | null }>) {
+      const arr = grouped.get(row.game_id) ?? [];
+      arr.push({ sportsbook: row.sportsbook, line_value: row.line_value });
+      grouped.set(row.game_id, arr);
+    }
+    const BOOK_PRIORITY = ["pinnacle", "draftkings", "fanduel", "betmgm", "caesars"];
+    for (const [gameId, rows] of grouped.entries()) {
+      let chosen: number | null = null;
+      for (const book of BOOK_PRIORITY) {
+        const hit = rows.find((r) => r.sportsbook === book && r.line_value !== null);
+        if (hit) { chosen = hit.line_value!; break; }
+      }
+      if (chosen === null) {
+        const any = rows.find((r) => r.line_value !== null);
+        if (any) chosen = any.line_value!;
+      }
+      if (chosen !== null) totalLineByGame.set(gameId, chosen);
+    }
   }
 
   // ─── Assemble DTOs ───────────────────────────────────────────────────────
   const dtos: DailyEdgeGameDto[] = [];
   for (const g of games) {
-    const dto = buildGameDto(g, signalsByGame.get(g.id) ?? []);
+    const dto = buildGameDto(
+      g,
+      signalsByGame.get(g.id) ?? [],
+      totalLineByGame.get(g.id) ?? null
+    );
     if (dto) dtos.push(dto);
   }
 
