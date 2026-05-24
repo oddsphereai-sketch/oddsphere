@@ -140,7 +140,14 @@ async function seedReference() {
         location: t.location,
         league: t.league,
         division: t.division,
-        logo_url: t.logo_url,
+        // 5F.3 — MLB logos from the official mlbstatic CDN. The fixture's
+        // espncdn URLs are correct fallbacks but Daniel prefers mlbstatic
+        // (MLB's own public asset CDN used by mlb.com itself). The pattern
+        // works for every MLB team external_id we seed; Phase 7 swap to
+        // BALLDONTLIE returns the same URL shape so no UI change.
+        logo_url: t.sport === "mlb"
+          ? `https://www.mlbstatic.com/team-logos/${t.external_id}-72.png`
+          : t.logo_url,
         primary_color: t.primary_color,
       })),
       "id, external_id"
@@ -979,15 +986,54 @@ async function seedHistorical(
 }
 
 // ─── Stage 6: data_refresh_log ───────────────────────────────────────────
+// 5F.3 migration: rows now use Phase 4 cron identifiers (morning_slate,
+// daily_refresh, etc. — matching CRON_CONFIGS in /api/lab/refresh-status)
+// and timestamps relative to NOW so the RefreshIndicator goes live out of
+// the box. The legacy refresh_log.json fixture (Phase 1 balldontlie_*/
+// sharpapi_* names) is no longer used.
 async function seedRefreshLog() {
-  logSection("Stage 6 · data_refresh_log");
-  const rows = refreshLogJson as Array<Record<string, unknown>>;
-  const [r, ms] = await timed(() =>
-    bulkInsert(
-      "data_refresh_log",
-      rows.map((x) => ({ ...x }))
-    )
-  );
+  logSection("Stage 6 · data_refresh_log (Phase 4 cron names, dynamic timestamps)");
+  void refreshLogJson; // legacy fixture; kept on disk for reference
+  const now = Date.now();
+  function rowAt(
+    data_source: string,
+    sport: string | null,
+    minutesAgo: number,
+    durationSeconds: number,
+    records_updated: number,
+    nextRefreshMinutes: number
+  ) {
+    const started = new Date(now - minutesAgo * 60_000);
+    const completed = new Date(started.getTime() + durationSeconds * 1_000);
+    const nextRefresh = new Date(now + nextRefreshMinutes * 60_000);
+    return {
+      data_source,
+      sport,
+      refresh_started_at: started.toISOString(),
+      refresh_completed_at: completed.toISOString(),
+      refresh_status: "success",
+      records_updated,
+      api_calls_made: null,
+      scheduled_next_refresh: nextRefresh.toISOString(),
+    };
+  }
+  const rows = [
+    // Frontline per-sport cycle (mlb) — recent enough to show "Live"
+    rowAt("morning_slate",     "mlb", 480,   12, 12,  960),  // 8h ago, next in 16h
+    rowAt("midday_refresh",    "mlb", 240,    8, 372,  720),
+    rowAt("afternoon_refresh", "mlb", 120,    8, 372,  840),
+    rowAt("evening_refresh",   "mlb",  45,    8, 372,  995),
+    rowAt("daily_refresh",     "mlb", 360,   15, 462,  720),
+    rowAt("lineup_watch",      "mlb",  20,    5,  84,   10),  // 20m ago, next in 10m
+    rowAt("pregame_sweep",     "mlb",   8,    3,  12,    7),  // 8m ago, next in 7m
+    // Cross-sport jobs
+    rowAt("post_game_results",  null, 720,   18, 12,   720),
+    rowAt("weekly_park_factors", null, 60 * 24 * 2, 32, 30, 60 * 24 * 5),
+    rowAt("weekly_calibration",  null, 60 * 24,     45, 12, 60 * 24 * 6),
+    // Admin manual upload
+    rowAt("daniel_scores_model", "mlb", 480, 4, 12, 960),
+  ];
+  const [r, ms] = await timed(() => bulkInsert("data_refresh_log", rows));
   logStep("data_refresh_log", r.length, ms);
 }
 

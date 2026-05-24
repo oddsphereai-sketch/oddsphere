@@ -11,6 +11,7 @@ import ComingSoonState from "./ComingSoonState";
 import SimpleDailyEdgeCard from "./SimpleDailyEdgeCard";
 import DailyEdgeLegend from "./DailyEdgeLegend";
 import HowWeUpdatePanel from "./HowWeUpdatePanel";
+import SlateDatePicker from "./SlateDatePicker";
 
 const DAILY_EDGE_SPORTS: Sport[] = [
   "mlb",
@@ -106,17 +107,20 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
         <ComingSoonState sport={sport} />
       ) : (
         <>
-          <header className="mb-6 max-w-3xl mx-auto">
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2">
-              Daily Edge
-            </h1>
-            <p className="text-sm text-gray-300">
-              {today} ·{" "}
-              <span className="tabular-nums">
-                {isLoading ? "—" : games.length}
-              </span>{" "}
-              MLB games tonight · sorted by start time
-            </p>
+          <header className="mb-6 max-w-3xl mx-auto flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2">
+                Daily Edge
+              </h1>
+              <p className="text-sm text-gray-300">
+                {today} ·{" "}
+                <span className="tabular-nums">
+                  {isLoading ? "—" : games.length}
+                </span>{" "}
+                MLB games tonight · sorted by start time
+              </p>
+            </div>
+            <SlateDatePicker sport={sport} />
           </header>
 
           {fallbackUsed && effectiveDate && (

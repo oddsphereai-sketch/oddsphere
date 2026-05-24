@@ -141,7 +141,11 @@ export type DailyEdgeGameDto = {
   sport: Sport;
   external_id: number;
   awayTeam: string;
+  /** CDN URL for the away team logo (5F.3). Null for sports without logos populated yet. */
+  awayTeamLogo: string | null;
   homeTeam: string;
+  /** CDN URL for the home team logo. Null when unavailable — UI falls back to abbreviation alone. */
+  homeTeamLogo: string | null;
   /** Display string in ET (e.g., "7:10 PM"). */
   gameTime: string;
   /** Minutes-from-midnight-ET for sort stability. */

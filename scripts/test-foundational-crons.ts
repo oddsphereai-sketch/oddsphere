@@ -16,6 +16,7 @@ import { supabase } from "../lib/db/supabase";
 import { GET as dailyRefresh } from "../app/api/cron/daily-refresh/route";
 import { GET as morningSlate } from "../app/api/cron/morning-slate/route";
 import { GET as postGameResults } from "../app/api/cron/post-game-results/route";
+import { restoreCuratedFixtures } from "./lib/restoreCuratedFixtures";
 
 let pass = 0;
 let fail = 0;
@@ -195,6 +196,16 @@ async function main() {
   // Restore env
   if (origSecret) process.env.CRON_SECRET = origSecret;
   else delete process.env.CRON_SECRET;
+
+  // 5F.3: restore the curated tonight_props fixture that the cron's
+  // generatePropPredictions wiped. Self-healing so Daniel doesn't need to
+  // `npm run seed` between cron-test runs and Lab browser QA.
+  try {
+    const r = await restoreCuratedFixtures("mlb");
+    console.log(`\n  ↺ restored curated fixture: ${r.restored} props · ${r.signals_updated} signals re-derived`);
+  } catch (e) {
+    console.warn(`\n  ⚠ curated-fixture restore failed: ${(e as Error).message}`);
+  }
 
   // ─── Summary ─────────────────────────────────────────────────────────────
   console.log(`\n${"━".repeat(70)}`);

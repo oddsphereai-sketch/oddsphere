@@ -268,8 +268,8 @@ type GameRow = {
   // To-one FK expansions: Supabase typegen renders these as arrays but the
   // runtime returns a single object. game_predictions has UNIQUE(game_id)
   // and team FKs are to-one. Cast as single-object | null.
-  home_team: { abbreviation: string } | null;
-  away_team: { abbreviation: string } | null;
+  home_team: { abbreviation: string; logo_url: string | null } | null;
+  away_team: { abbreviation: string; logo_url: string | null } | null;
   game_predictions: PredictionRow | null;
 };
 
@@ -280,6 +280,8 @@ function buildGameDto(
 ): DailyEdgeGameDto | null {
   const home = row.home_team?.abbreviation ?? "—";
   const away = row.away_team?.abbreviation ?? "—";
+  const homeLogo = row.home_team?.logo_url ?? null;
+  const awayLogo = row.away_team?.logo_url ?? null;
   const pred = row.game_predictions;
   if (!pred) return null; // Skip games without a model prediction.
 
@@ -315,7 +317,9 @@ function buildGameDto(
     sport: row.sport as Sport,
     external_id: row.external_id,
     awayTeam: away,
+    awayTeamLogo: awayLogo,
     homeTeam: home,
+    homeTeamLogo: homeLogo,
     gameTime: formatTimeET(row.game_date),
     gameStartMinutes: minutesFromMidnightET(row.game_date),
     predictions: {
@@ -389,8 +393,8 @@ export async function GET(request: Request) {
     .from("games")
     .select(
       `id, external_id, sport, game_date, slate_date,
-       home_team:home_team_id (abbreviation),
-       away_team:away_team_id (abbreviation),
+       home_team:home_team_id (abbreviation, logo_url),
+       away_team:away_team_id (abbreviation, logo_url),
        game_predictions (
          predicted_home_score, predicted_away_score, predicted_total,
          predicted_ml_winner, ml_confidence,

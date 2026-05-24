@@ -15,6 +15,7 @@ import TonightsBestView from "./components/TonightsBestView";
 import SearchFilterView from "./components/SearchFilterView";
 import PlayerDrillDown from "./components/PlayerDrillDown";
 import ComingSoonState from "./components/ComingSoonState";
+import SlateDatePicker from "./components/SlateDatePicker";
 import { useSportSelection } from "./hooks/useSportSelection";
 import { useRefreshStatus } from "./hooks/useRefreshStatus";
 
@@ -112,7 +113,7 @@ export default function LabApp() {
 
           {sportMeta.isLive ? (
             <>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
                 <div>
                   <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
                     <span aria-hidden="true" className="mr-2">
@@ -127,7 +128,10 @@ export default function LabApp() {
                     </span>
                   </p>
                 </div>
-                <ModeToggle active={mode} onChange={(m) => setParam("mode", m)} />
+                <div className="flex flex-wrap items-center gap-3">
+                  <SlateDatePicker sport={propsSport} />
+                  <ModeToggle active={mode} onChange={(m) => setParam("mode", m)} />
+                </div>
               </div>
 
               <div className="mb-8">

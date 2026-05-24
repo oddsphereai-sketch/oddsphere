@@ -18,6 +18,7 @@ import { GET as midday } from "../app/api/cron/midday-refresh/route";
 import { GET as afternoon } from "../app/api/cron/afternoon-refresh/route";
 import { GET as evening } from "../app/api/cron/evening-refresh/route";
 import { GET as lineupWatch } from "../app/api/cron/lineup-watch/route";
+import { restoreCuratedFixtures } from "./lib/restoreCuratedFixtures";
 import { GET as pregameSweep } from "../app/api/cron/pregame-sweep/route";
 import { supabase } from "../lib/db/supabase";
 
@@ -140,6 +141,15 @@ async function main() {
   // Restore env
   if (origSecret) process.env.CRON_SECRET = origSecret;
   else delete process.env.CRON_SECRET;
+
+  // 5F.3: restore the curated tonight_props fixture so the Lab keeps showing
+  // realistic premium/strong/good/skip distribution after this suite runs.
+  try {
+    const r = await restoreCuratedFixtures("mlb");
+    console.log(`\n  ↺ restored curated fixture: ${r.restored} props · ${r.signals_updated} signals re-derived`);
+  } catch (e) {
+    console.warn(`\n  ⚠ curated-fixture restore failed: ${(e as Error).message}`);
+  }
 
   // ─── Summary ─────────────────────────────────────────────────────────────
   console.log(`\n${"━".repeat(70)}`);

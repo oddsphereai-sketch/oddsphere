@@ -178,11 +178,12 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
     <article
       className={`bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl p-4 sm:p-5 transition-all duration-200 hover:border-gray-700 ${cardShadowClasses}`}
     >
-      {/* Header — teams + time pill */}
+      {/* Header — team logos + abbreviations + time pill */}
       <div className="flex items-start justify-between gap-3 mb-3">
-        <h3 className="text-[15px] font-medium tracking-tight text-white">
-          {game.awayTeam} <span className="text-gray-500">@</span>{" "}
-          {game.homeTeam}
+        <h3 className="inline-flex items-center gap-2 text-[15px] font-medium tracking-tight text-white">
+          <TeamBadge logo={game.awayTeamLogo} abbreviation={game.awayTeam} />
+          <span className="text-gray-500">@</span>
+          <TeamBadge logo={game.homeTeamLogo} abbreviation={game.homeTeam} />
         </h3>
         <span className="inline-flex items-center gap-1.5 bg-gray-900/60 border border-gray-800 rounded-full px-3 py-1 text-xs font-medium text-violet-300 tracking-tight whitespace-nowrap">
           <Icon name="clock" className="w-3 h-3" />
@@ -351,6 +352,42 @@ function PredictionTile({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Team badge — 24px logo + abbreviation, or just the abbreviation when no
+ * logo URL is available (5F.3). Logo uses native <img> instead of next/image
+ * because the source is an external CDN we don't pre-register; if loading
+ * fails we hide the broken-image icon and fall back to the abbreviation.
+ */
+function TeamBadge({
+  logo,
+  abbreviation,
+}: {
+  logo: string | null;
+  abbreviation: string;
+}) {
+  if (!logo) {
+    return <span className="font-medium">{abbreviation}</span>;
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={logo}
+        alt=""
+        aria-hidden="true"
+        width={24}
+        height={24}
+        className="w-6 h-6 rounded-sm object-contain"
+        onError={(e) => {
+          // Hide broken images gracefully — the abbreviation alone is fine.
+          (e.currentTarget as HTMLImageElement).style.display = "none";
+        }}
+      />
+      <span className="font-medium">{abbreviation}</span>
+    </span>
   );
 }
 
