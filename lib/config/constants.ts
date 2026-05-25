@@ -202,6 +202,32 @@ export const SHARP_SIGNAL_THRESHOLDS = {
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────
+// Grade engine thresholds (V2.1 6.2 — gradeDerivationService synthesis)
+// ─────────────────────────────────────────────────────────────────────────
+// gradeDerivationService blends Layer 1 (model edge) + Layer 3 (market
+// signal) into the final 7-category grade. These knobs control the
+// strict-vs-loose tradeoff for "Best Signal" and the "no model edge"
+// fallback boundary.
+//
+// V2.1 6.2 explicitly: 5%+ edge for games, 10%+ for props, market alignment
+// required, no artificial cap. SLATE_MONITOR_PCT triggers a console.warn
+// when >25% of a slate qualifies as best_signal — signal that the bar may
+// have drifted too loose for the current data.
+
+export const GRADE_THRESHOLDS = {
+  /** Pinnacle EV % on the primary pick required for game best_signal. */
+  BEST_SIGNAL_GAME_EDGE: 5,
+  /** prop_predictions.edge_pct required for prop best_signal. */
+  BEST_SIGNAL_PROP_EDGE: 10,
+  /** Below this, a game pick is treated as "no model edge". */
+  MIN_GAME_EDGE: 1,
+  /** Below this, a prop is treated as "no model edge" (matches tier=skip line). */
+  MIN_PROP_EDGE: 3,
+  /** Warn when best_signal share of slate exceeds this percentage. */
+  BEST_SIGNAL_SLATE_MONITOR_PCT: 25,
+} as const;
+
+// ─────────────────────────────────────────────────────────────────────────
 // CLV silence window
 // ─────────────────────────────────────────────────────────────────────────
 // Closing Line Value is computed for all picks but hidden from members for
