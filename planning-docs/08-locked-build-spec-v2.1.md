@@ -196,6 +196,15 @@ Layer 2: Context (10 existing signals)
 Layer 3: Market (NEW — market_confirmed / market_neutral / market_resistance / public_smoke / steam_alert)
 
 
+V2.1.1 Evolution — Per-Pick Grade Granularity (Phase 6.3.5)
+
+The V2.1 schema landed row-level grades on game_predictions: ONE grade per row, derived from the row's "primary pick" via ML → OU → NRFI precedence. External review surfaced the limitation — a game can be Sharp Confirmed on the moneyline and Market Watch on the total; the headline-only model collapses that nuance. Phase 6.3.5 refactors game_predictions to carry per-pick grade triplets (ml_grade / ou_grade / nrfi_grade plus matching signal_type and market_signal columns). prop_predictions is unchanged — props were already per-pick by table shape.
+
+The "headline grade" remains a meaningful surface concept; it's derived from the per-pick grades via the same ML → OU → NRFI precedence (with grade rank as tiebreaker). Tonight's Board now counts both games AND picks ("12 games · 36 picks"). Top Reads pulls the single highest-graded pick of each market type. The Daily Edge card surfaces per-pick GradeBadges on each tile instead of one row-level badge.
+
+This section is a forward-pointer. Comprehensive Part 6 + Part 11 spec updates land in Phase 6.3.5f when the refactor is verified end-to-end. See migration V13 in Part 7 for the schema entry. Phase 6.3.5 sub-commit arc: V13 migration (6.3.5a) → service rewrites (6.3.5b) → DTO + route (6.3.5c) → UI refactor (6.3.5d) → tests (6.3.5e) → backfill + visual QA + final spec update (6.3.5f).
+
+
 Part 7 — Data & Schema
 V1 Migrations
 V6 — Market signals
@@ -245,9 +254,27 @@ CREATE TABLE admin_audit_log (
   before_state JSONB, after_state JSONB, source_type, created_at
 );
 ```
+V13 — Per-pick grade columns on game_predictions (V2.1.1 evolution — Phase 6.3.5a)
+```sql
+ALTER TABLE game_predictions
+  ADD COLUMN ml_grade           TEXT,    -- 7-grade vocab, same as legacy `grade`
+  ADD COLUMN ml_signal_type     TEXT,    -- 5-attribution vocab
+  ADD COLUMN ml_market_signal   TEXT,    -- 5-Layer-3 vocab
+  ADD COLUMN ou_grade           TEXT,
+  ADD COLUMN ou_signal_type     TEXT,
+  ADD COLUMN ou_market_signal   TEXT,
+  ADD COLUMN nrfi_grade         TEXT,
+  ADD COLUMN nrfi_signal_type   TEXT,
+  ADD COLUMN nrfi_market_signal TEXT;
+-- 9 CHECK constraints inherit the V6/V7 value lists. Nullable; populated
+-- by Phase 6.3.5b services. Legacy row-level grade/signal_type/market_signal
+-- columns kept during transition (dual-write through Phase 6.3.5f) and
+-- dropped in a future V14 cleanup commit once nothing reads them.
+```
 DEFERRED to post-launch:
 
-V13+ — user_bets, user_settings (My Bets)
+V14 — Cleanup: drop legacy game_predictions.grade / signal_type / market_signal columns (post-Phase 6.3.5f)
+V15+ — user_bets, user_settings (My Bets)
 
 
 Part 8 — Manual Upload Validation Pattern
