@@ -1,10 +1,24 @@
 /**
- * signalDerivationService — compute categorical context signals for each
+ * signalDerivationService — compute Layer 2 (CONTEXT) signals for each
  * prop_prediction.
  *
- * Phase 5F.2 introduces this service to make the Lab's signal filter chips
- * functional. The 10 signals are the canonical UI vocabulary already used
- * by SIGNAL_META + the Signal type union in /app/lab/data/mockData.ts:
+ * V2.1's 3-layer signal architecture has a service per layer:
+ *   • Layer 1 (model)   — predictionService writes ml_confidence /
+ *                         ou_confidence / edge_pct / model_probability into
+ *                         game_predictions + prop_predictions.
+ *   • Layer 2 (context) — THIS SERVICE. Writes the 10-signal UI vocabulary
+ *                         (hot, cold, vs_lhp, etc.) into
+ *                         prop_predictions.signals JSONB.
+ *   • Layer 3 (market)  — marketSignalDerivationService writes the 5-value
+ *                         market read into game_predictions.market_signal +
+ *                         prop_predictions.market_signal TEXT.
+ *
+ * The three layers don't interact in code — each service writes to its own
+ * column independently. The grade engine (Phase 6.3d) blends all three into
+ * the final 7-category grade.
+ *
+ * The 10 Layer-2 signals match the SIGNAL_META + Signal type union in
+ * /app/lab/data/mockData.ts:
  *
  *   hot · cold · vs_lhp · vs_rhp · wind_out · wind_in · park
  *   rest_advantage · platoon · warning

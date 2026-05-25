@@ -24,6 +24,7 @@ import {
   type Signal,
   type SignalDerivationContext,
 } from "../lib/services/signalDerivationService";
+import { updateMarketSignalsForSlate } from "../lib/services/marketSignalDerivationService";
 import { supabase } from "../lib/db/supabase";
 
 let pass = 0;
@@ -319,6 +320,47 @@ async function main() {
       if (JSON.stringify(expected) !== JSON.stringify(actual)) mismatch++;
     }
     check(`DB rows match derived signals for sampled props`, mismatch === 0);
+
+    // ─── Layer 2 / Layer 3 independence (Phase 6.3c) ────────────────────
+    // Running marketSignalDerivationService (Layer 3) after this service
+    // (Layer 2) must NOT touch the signals[] column, and must populate
+    // market_signal with a valid value. The two columns are independent.
+    await updateMarketSignalsForSlate("mlb", targetSlate);
+    const { data: bothLayersRows } = await supabase
+      .from("prop_predictions")
+      .select("id, signals, market_signal")
+      .in("id", propIds);
+    const validMarketSignals = new Set([
+      "market_confirmed",
+      "market_neutral",
+      "market_resistance",
+      "public_smoke",
+      "steam_alert",
+    ]);
+    let layer2Clobbered = 0;
+    let layer3Missing = 0;
+    for (const row of (bothLayersRows ?? []) as Array<{
+      id: number;
+      signals: string[] | null;
+      market_signal: string | null;
+    }>) {
+      const expectedLayer2 = derived.get(row.id) ?? [];
+      const actualLayer2 = Array.isArray(row.signals) ? row.signals : [];
+      if (JSON.stringify(expectedLayer2) !== JSON.stringify(actualLayer2)) {
+        layer2Clobbered++;
+      }
+      if (!row.market_signal || !validMarketSignals.has(row.market_signal)) {
+        layer3Missing++;
+      }
+    }
+    check(
+      `Layer 3 derivation does NOT clobber Layer 2 signals[]`,
+      layer2Clobbered === 0
+    );
+    check(
+      `Layer 3 derivation writes a valid market_signal on every sampled prop`,
+      layer3Missing === 0
+    );
   }
 
   // ─── Summary ──────────────────────────────────────────────────────────────

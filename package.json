@@ -29,6 +29,7 @@
     "test:lab-calibration": "tsx --env-file=.env.local scripts/test-lab-calibration.ts",
     "test:slate-dates": "tsx --env-file=.env.local scripts/test-slate-dates.ts",
     "test:signal-derivation": "tsx --env-file=.env.local scripts/test-signal-derivation.ts",
+    "test:market-signal-derivation": "tsx --env-file=.env.local scripts/test-market-signal-derivation.ts",
     "test:adapter-factory": "tsx scripts/test-adapter-factory.ts",
     "tracking-refresh": "tsx --env-file=.env.local scripts/tracking-refresh.ts"
   },
