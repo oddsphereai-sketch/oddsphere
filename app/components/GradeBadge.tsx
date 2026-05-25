@@ -2,82 +2,106 @@
  * GradeBadge — V2.1 6.3 final-grade pill.
  *
  * Renders one of the 7 grade categories with its canonical emoji, label, and
- * color. Built standalone in Phase 6.3d; wired into Daily Edge in 6.4 and
- * Player Props in 6.5.
+ * color. The `context` prop selects between Daily Edge and Player Props
+ * label vocabularies per V2.1 spec Part 6 — four grades have surface-
+ * specific names (Best Signal vs Elite Prop, Sharp Confirmed vs Confirmed
+ * Edge, Market-Led Signal vs Market-Led, Sharp Conflict vs Caution). The
+ * three "neutral" grades (Model Only, Market Watch, Public Smoke) share
+ * one label on both surfaces.
  *
  * Colors per V2.1 6.3:
- *   best_signal / sharp_confirmed → green-500   (#22C55E)
- *   market_led / market_watch     → sky-400     (#38BDF8)  cyan
- *   model_only                    → gray-400    (#94A3B8)
- *   public_smoke                  → violet-400  (#A78BFA)
+ *   best_signal / sharp_confirmed → emerald-500 (#22C55E)
+ *   market_led / market_watch     → sky-500     (#38BDF8) cyan
+ *   model_only                    → gray-500    (#94A3B8)
+ *   public_smoke                  → violet-500  (#A78BFA)
  *   sharp_conflict                → amber-500   (#F59E0B)
  *
- * Backgrounds use a tinted layer on top of the dark surface so the pill
- * reads on the dark Lab + public marketing surfaces alike.
+ * Backgrounds tint at 15% opacity, borders at 40%, so the pill reads on
+ * the dark Lab + public marketing surfaces alike.
  */
 
 import type { Grade } from "@/lib/types/domain/Grade";
 
+export type GradeContext = "daily-edge" | "player-props";
+
 type GradeMeta = {
   emoji: string;
-  label: string;
-  /** Foreground text color (Tailwind). */
   text: string;
-  /** Background tint (Tailwind, with /15 opacity). */
   bg: string;
-  /** Border color. */
   border: string;
 };
 
+/**
+ * Emoji + color treatment per grade — invariant across surface contexts.
+ */
 const META: Record<Grade, GradeMeta> = {
   best_signal: {
     emoji: "🔥",
-    label: "Best Signal",
     text: "text-emerald-300",
     bg: "bg-emerald-500/15",
     border: "border-emerald-500/40",
   },
   sharp_confirmed: {
     emoji: "✅",
-    label: "Sharp Confirmed",
     text: "text-emerald-300",
     bg: "bg-emerald-500/15",
     border: "border-emerald-500/40",
   },
   market_led: {
     emoji: "⚡",
-    label: "Market-Led",
     text: "text-sky-300",
     bg: "bg-sky-500/15",
     border: "border-sky-500/40",
   },
   model_only: {
     emoji: "📊",
-    label: "Model Only",
     text: "text-gray-300",
     bg: "bg-gray-500/15",
     border: "border-gray-500/40",
   },
   market_watch: {
     emoji: "👀",
-    label: "Market Watch",
     text: "text-sky-300",
     bg: "bg-sky-500/15",
     border: "border-sky-500/40",
   },
   public_smoke: {
     emoji: "💨",
-    label: "Public Smoke",
     text: "text-violet-300",
     bg: "bg-violet-500/15",
     border: "border-violet-500/40",
   },
   sharp_conflict: {
     emoji: "⚠️",
-    label: "Sharp Conflict",
     text: "text-amber-300",
     bg: "bg-amber-500/15",
     border: "border-amber-500/40",
+  },
+};
+
+/**
+ * Surface-specific label maps. V2.1 Part 6 mandates different names for
+ * Daily Edge vs Player Props on four of the seven grades — the other three
+ * share one label.
+ */
+const LABELS: Record<GradeContext, Record<Grade, string>> = {
+  "daily-edge": {
+    best_signal: "Best Signal",
+    sharp_confirmed: "Sharp Confirmed",
+    market_led: "Market-Led Signal",
+    model_only: "Model Only",
+    market_watch: "Market Watch",
+    public_smoke: "Public Smoke",
+    sharp_conflict: "Sharp Conflict",
+  },
+  "player-props": {
+    best_signal: "Elite Prop",
+    sharp_confirmed: "Confirmed Edge",
+    market_led: "Market-Led",
+    model_only: "Model Only",
+    market_watch: "Market Watch",
+    public_smoke: "Public Smoke",
+    sharp_conflict: "Caution",
   },
 };
 
@@ -88,6 +112,12 @@ const SIZE_CLASSES = {
 
 export type GradeBadgeProps = {
   grade: Grade;
+  /**
+   * Which surface vocabulary to render. Daily Edge uses "Best Signal" /
+   * "Market-Led Signal" / etc.; Player Props uses "Elite Prop" / "Market-Led" /
+   * etc. per V2.1 Part 6 table.
+   */
+  context: GradeContext;
   size?: keyof typeof SIZE_CLASSES;
   /** Show only the emoji (compact mode). Useful in dense tables. */
   emojiOnly?: boolean;
@@ -95,14 +125,16 @@ export type GradeBadgeProps = {
 
 export default function GradeBadge({
   grade,
+  context,
   size = "md",
   emojiOnly = false,
 }: GradeBadgeProps) {
   const meta = META[grade];
+  const label = LABELS[context][grade];
   return (
     <span
       role="status"
-      aria-label={`Grade: ${meta.label}`}
+      aria-label={`Grade: ${label}`}
       className={[
         "inline-flex items-center font-semibold tracking-tight rounded-full border whitespace-nowrap",
         SIZE_CLASSES[size],
@@ -112,12 +144,12 @@ export default function GradeBadge({
       ].join(" ")}
     >
       <span aria-hidden="true">{meta.emoji}</span>
-      {!emojiOnly && <span>{meta.label}</span>}
+      {!emojiOnly && <span>{label}</span>}
     </span>
   );
 }
 
-/** All 7 grades in canonical priority order — exported for the dev preview. */
+/** All 7 grades in canonical priority order — exported for the dev preview + legend. */
 export const ALL_GRADES: Grade[] = [
   "best_signal",
   "sharp_confirmed",

@@ -1,6 +1,8 @@
 "use client";
 
 import Icon from "./Icon";
+import GradeBadge, { ALL_GRADES } from "@/app/components/GradeBadge";
+import { getAttribution, PICK_PLACEHOLDER } from "../lib/gradeAttribution";
 
 type Props = {
   onClose: () => void;
@@ -26,47 +28,30 @@ export default function DailyEdgeLegend({ onClose }: Props) {
         How to read this
       </h2>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 sm:gap-6 mb-5 text-sm">
-        {/* Column 1: Verdict colors */}
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.12em] text-gray-400 font-bold mb-3">
-            Verdict colors
-          </p>
-          <ul className="space-y-2.5">
-            <li className="flex items-start gap-2 text-gray-200">
-              <span
-                aria-hidden="true"
-                className="inline-block w-2 h-2 rounded-full bg-emerald-400 mt-1.5 shrink-0 shadow-[0_0_6px_rgba(52,211,153,0.6)]"
-              />
-              <span>
-                <strong className="font-semibold text-emerald-300">STRONG</strong>{" "}
-                — sharps support the model&rsquo;s pick on at least one market
+      {/* Grade catalog — 7 rows of badge + V2.1-verbatim attribution copy.
+          The legend pulls from the SAME getAttribution source the card does,
+          passing the literal "[pick]" placeholder so members see the
+          variable's position in the best_signal sentence. */}
+      <div className="mb-6">
+        <p className="text-[10px] uppercase tracking-[0.12em] text-gray-400 font-bold mb-3">
+          Grades
+        </p>
+        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-2.5 text-sm">
+          {ALL_GRADES.map((g) => (
+            <li key={g} className="flex items-start gap-2.5">
+              <span className="shrink-0 mt-0.5">
+                <GradeBadge grade={g} context="daily-edge" size="sm" />
+              </span>
+              <span className="text-gray-300 leading-snug">
+                {getAttribution(g, PICK_PLACEHOLDER)}
               </span>
             </li>
-            <li className="flex items-start gap-2 text-gray-200">
-              <span
-                aria-hidden="true"
-                className="inline-block w-2 h-2 rounded-full bg-gray-500 mt-1.5 shrink-0"
-              />
-              <span>
-                <strong className="font-semibold text-gray-200">No banner</strong>{" "}
-                — no sharp signals detected. The model&rsquo;s pick speaks for itself.
-              </span>
-            </li>
-            <li className="flex items-start gap-2 text-gray-200">
-              <span
-                aria-hidden="true"
-                className="inline-block w-2 h-2 rounded-full bg-amber-400 mt-1.5 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]"
-              />
-              <span>
-                <strong className="font-semibold text-amber-300">CAUTION</strong>{" "}
-                — sharps moving against the model&rsquo;s pick on at least one market
-              </span>
-            </li>
-          </ul>
-        </div>
+          ))}
+        </ul>
+      </div>
 
-        {/* Column 2: Sharp status per pick */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6 mb-5 text-sm">
+        {/* Sharp status per pick (unchanged — still relevant per-tile) */}
         <div>
           <p className="text-[10px] uppercase tracking-[0.12em] text-gray-400 font-bold mb-3">
             Sharp status per pick
@@ -96,10 +81,10 @@ export default function DailyEdgeLegend({ onClose }: Props) {
           </ul>
         </div>
 
-        {/* Column 3: Model coloring */}
+        {/* Model coloring — V2.1 6.4 fix: YRFI in violet, not rose */}
         <div>
           <p className="text-[10px] uppercase tracking-[0.12em] text-gray-400 font-bold mb-3">
-            Model coloring
+            1st-inning pick coloring
           </p>
           <ul className="space-y-2.5 text-gray-200">
             <li>
@@ -107,18 +92,19 @@ export default function DailyEdgeLegend({ onClose }: Props) {
               green — model predicts no first-inning run
             </li>
             <li>
-              <strong className="font-bold text-rose-400">YRFI</strong> in red —
-              model predicts a first-inning run
+              <strong className="font-bold text-violet-400">YRFI</strong> in
+              violet — model predicts a first-inning run
             </li>
             <li className="text-gray-400 text-xs italic pt-1">
-              Coloring shows model output only — sharp status is separate.
+              Both are valid picks — the color is direction, not value.
             </li>
           </ul>
         </div>
       </div>
 
       <p className="text-xs sm:text-sm text-violet-200/90 border-t border-gray-800/60 pt-4 italic leading-relaxed">
-        Your model is the primary signal. Sharp data is context to help you weigh each play.
+        The grade blends the model edge with the market read. Sharp status on
+        each tile is the per-pick detail behind the headline grade.
       </p>
     </section>
   );

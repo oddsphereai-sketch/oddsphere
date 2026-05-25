@@ -72,7 +72,8 @@ export type RefreshStatusResponse = {
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * Per-market sharp posture relative to the model's pick.
+ * Per-market sharp posture relative to the model's pick. Drives the
+ * per-tile ✓ / — / ⚠ icon on the three pick tiles.
  *   • confirm — a sharp_signals row exists with signal_strength="strong" on
  *               the same side our model picked
  *   • caution — sharps are flagged as caution on our side, OR sharps are
@@ -80,27 +81,6 @@ export type RefreshStatusResponse = {
  *   • mixed   — no actionable signal for this market
  */
 export type SharpStatus = "confirm" | "mixed" | "caution";
-
-/**
- * Game-level sharp-signal verdict, locked to THREE states per the
- * locked UI spec (planning-docs/07-locked-ui-specs.md §4):
- *
- *   • "strong"  — at least one market has a confirming sharp signal AND no
- *                 contradicting signal. Renders as the green banner.
- *   • "caution" — at least one market has a contradicting signal. Wins over
- *                 "strong" — caution is a red flag and stays visible. Renders
- *                 as the amber/rose banner.
- *   • null      — no sharp signals on any market. No banner at all. This is
- *                 the DEFAULT state for most games — absence of signal is
- *                 NOT a negative signal.
- *
- * Replaces the pre-5F.1 4-tier model (triple_lock/strong/lean/caution) which
- * conflated "no data" with "negative signal" and showed CAUTION on every
- * game without sharp_signals rows.
- *
- * Computed SERVER-SIDE per Decision G. UI components do not re-derive.
- */
-export type DailyEdgeVerdict = "strong" | "caution" | null;
 
 export type DailyEdgePredictionDto = {
   /** Display label: ML → team abbr, total → "Over"/"Under", NRFI → "NRFI"/"YRFI"/"Toss-Up". */
@@ -163,20 +143,9 @@ export type DailyEdgeGameDto = {
   projected: { away: number; home: number };
   sharpSignals: SharpSignalDto[];
   /**
-   * Three-state legacy verdict — null when no banner should render (most games).
-   *
-   * @deprecated Phase 6.4b removes the verdict banner in favor of GradeBadge.
-   * Kept on the DTO during 6.4a so the existing card renders unchanged until
-   * the 6.4b card overhaul ships. Remove from the DTO after 6.4b lands.
-   */
-  verdict: DailyEdgeVerdict;
-  /** Short brand-voice subtitle for the banner — null when verdict is null. */
-  verdictSubtitle: string | null;
-  /**
    * V2.1 7-category final grade (Phase 6.3d). Reflects the row's primary
    * pick (ML → OU → NRFI precedence). Null when the grade engine has not
-   * yet run for this slate — UI in 6.4b shows market_watch as the
-   * defensive default.
+   * yet run for this slate — UI shows market_watch as the defensive default.
    */
   grade: Grade | null;
   /** Attribution: which signal layer(s) drove the grade. */

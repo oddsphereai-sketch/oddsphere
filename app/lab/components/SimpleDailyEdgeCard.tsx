@@ -3,59 +3,48 @@
 import { useState } from "react";
 import type {
   DailyEdgeGameDto,
-  DailyEdgeVerdict,
   SharpSignalDto,
   SharpStatus,
 } from "../lib/labTypes";
+import type { Grade } from "@/lib/types/domain/Grade";
 import Icon, { type IconName } from "./Icon";
+import GradeBadge from "@/app/components/GradeBadge";
+import { getAttribution } from "../lib/gradeAttribution";
 
 type Props = {
   game: DailyEdgeGameDto;
 };
 
-// ─── Verdict visuals (3 states per locked UI spec §4) ───────────────────────
-// "strong"  → green banner (sharps support pick)
-// "caution" → amber/rose banner (sharps moving against pick)
-// null      → NO BANNER (default for most games; absence ≠ negative)
-
-type NonNullVerdict = Exclude<DailyEdgeVerdict, null>;
-
-const VERDICT_STYLES: Record<
-  NonNullVerdict,
-  {
-    label: string;
-    barBg: string;
-    borderColor: string;
-    textColor: string;
-    cardShadow: string;
-    cardShadowHover: string;
+/**
+ * Derive the row's primary pick for display in the best_signal attribution
+ * sentence. Mirrors the ML → OU → NRFI precedence used server-side by
+ * marketSignalDerivationService (6.3c) + gradeDerivationService (6.3d) so
+ * the visible pick matches the pick the grade engine actually classified.
+ *
+ * Format:
+ *   ML  → "{team} ML"        (e.g. "NYY ML")
+ *   OU  → "{side} {line}"    (e.g. "Over 9.5")
+ *   NRFI→ "{NRFI|YRFI}"
+ *
+ * Used only for best_signal — the other six grades carry generic copy that
+ * ignores the primary pick. We always compute it (cheap) so the call site
+ * stays uniform.
+ */
+function deriveCardPrimaryPick(
+  predictions: DailyEdgeGameDto["predictions"]
+): string {
+  const ml = predictions.ml.pick;
+  if (ml && ml !== "—") {
+    return `${ml} ML`;
   }
-> = {
-  strong: {
-    label: "STRONG",
-    barBg: "bg-emerald-500/10",
-    borderColor: "border-emerald-500",
-    textColor: "text-emerald-400",
-    cardShadow:
-      "shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_24px_rgba(16,185,129,0.10)]",
-    cardShadowHover:
-      "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_28px_rgba(16,185,129,0.14)]",
-  },
-  caution: {
-    label: "CAUTION",
-    barBg: "bg-amber-500/8",
-    borderColor: "border-amber-500",
-    textColor: "text-amber-400",
-    cardShadow: "shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
-    cardShadowHover:
-      "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_24px_rgba(245,158,11,0.08)]",
-  },
-};
+  const total = predictions.total;
+  if (total.pick) {
+    return `${total.pick} ${total.line}`;
+  }
+  return predictions.nrfi.pick;
+}
 
-const NEUTRAL_CARD_SHADOW = {
-  cardShadow: "shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
-  cardShadowHover: "hover:border-gray-700",
-};
+// ─── Per-pick sharpStatus visuals (tile border + leading icon) ────────────
 
 function getTileBorder(status: SharpStatus): string {
   if (status === "confirm") return "border-emerald-500/30";
@@ -84,24 +73,33 @@ function SharpStatusIcon({ status }: { status: SharpStatus }) {
   return <Icon name="minus" className="w-[13px] h-[13px] text-gray-400" />;
 }
 
+// ─── Tile pick formatters ─────────────────────────────────────────────────
+
 function formatTotalPick(pick: string, line: number): string {
   if (pick === "Over") return `O ${line}`;
   if (pick === "Under") return `U ${line}`;
   return `${pick} ${line}`;
 }
 
+/**
+ * NRFI = "no first-inning run" (semantic green, the under-bet side).
+ * YRFI = "yes first-inning run" — V2.1 6.4 fix: violet, NOT rose. The prior
+ * rose color falsely conveyed "bad news"; YRFI is a valid pick, just a
+ * different direction.
+ */
 function getNrfiPickColor(pick: string): string {
   if (pick === "NRFI") return "text-emerald-400";
-  if (pick === "YRFI") return "text-rose-400";
+  if (pick === "YRFI") return "text-violet-400";
   return "text-gray-200";
 }
 
 function getNrfiPickGlow(pick: string): string {
-  if (pick === "NRFI")
-    return "drop-shadow-[0_0_8px_rgba(52,211,153,0.45)]";
-  if (pick === "YRFI") return "drop-shadow-[0_0_8px_rgba(244,63,94,0.45)]";
+  if (pick === "NRFI") return "drop-shadow-[0_0_8px_rgba(52,211,153,0.45)]";
+  if (pick === "YRFI") return "drop-shadow-[0_0_8px_rgba(167,139,250,0.45)]";
   return "";
 }
+
+// ─── Sharp signals breakdown row visuals ──────────────────────────────────
 
 const MARKET_ORDER: Record<SharpSignalDto["market"], number> = {
   ML: 0,
@@ -140,6 +138,8 @@ function getDirectionStyles(direction: SharpSignalDto["direction"]) {
       badgeBg: "bg-emerald-500/15",
       badgeText: "text-emerald-300",
       iconColor: "text-emerald-400",
+      bulletIcon: "check" as IconName,
+      bulletColor: "text-emerald-400",
     };
   }
   if (direction === "negative") {
@@ -149,6 +149,8 @@ function getDirectionStyles(direction: SharpSignalDto["direction"]) {
       badgeBg: "bg-amber-500/15",
       badgeText: "text-amber-300",
       iconColor: "text-amber-400",
+      bulletIcon: "alert-triangle" as IconName,
+      bulletColor: "text-amber-400",
     };
   }
   return {
@@ -157,27 +159,29 @@ function getDirectionStyles(direction: SharpSignalDto["direction"]) {
     badgeBg: "bg-gray-500/15",
     badgeText: "text-gray-300",
     iconColor: "text-gray-300",
+    bulletIcon: "minus" as IconName,
+    bulletColor: "text-gray-400",
   };
 }
 
+// ─── Card ─────────────────────────────────────────────────────────────────
+
 export default function SimpleDailyEdgeCard({ game }: Props) {
   const [expanded, setExpanded] = useState(false);
-  // Verdict + subtitle come from the server (Decision G — UI does not
-  // re-derive). 5F.1: verdict is now nullable — null means "no banner".
-  const verdict = game.verdict;
-  const style = verdict !== null ? VERDICT_STYLES[verdict] : null;
-  const cardShadowClasses = style
-    ? `${style.cardShadow} ${style.cardShadowHover}`
-    : `${NEUTRAL_CARD_SHADOW.cardShadow} ${NEUTRAL_CARD_SHADOW.cardShadowHover}`;
+
+  // V2.1 grade is the headline verdict. Defensive default: a slate that ran
+  // before the grade engine landed will return grade=null — render the
+  // market_watch fallback so every card always has a badge.
+  const displayGrade: Grade = game.grade ?? "market_watch";
+  const primaryPick = deriveCardPrimaryPick(game.predictions);
+  const attribution = getAttribution(displayGrade, primaryPick);
 
   const sortedSignals = [...game.sharpSignals].sort(
     (a, b) => MARKET_ORDER[a.market] - MARKET_ORDER[b.market]
   );
 
   return (
-    <article
-      className={`bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl p-4 sm:p-5 transition-all duration-200 hover:border-gray-700 ${cardShadowClasses}`}
-    >
+    <article className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl p-4 sm:p-5 transition-all duration-200 hover:border-gray-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       {/* Header — team logos + abbreviations + time pill */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <h3 className="inline-flex items-center gap-2 text-base sm:text-lg font-semibold tracking-tight text-white">
@@ -191,19 +195,14 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
         </span>
       </div>
 
-      {/* Verdict bar — only renders for "strong" or "caution"; null = no banner */}
-      {style && game.verdictSubtitle && (
-        <div
-          className={`flex items-center gap-2 flex-wrap ${style.barBg} ${style.borderColor} border-l-[3px] rounded-r-md pl-3 pr-3 py-2 mb-4`}
-        >
-          <span
-            className={`text-[11px] uppercase font-medium tracking-[0.08em] ${style.textColor}`}
-          >
-            {style.label}
-          </span>
-          <span className="text-sm text-gray-200">{game.verdictSubtitle}</span>
-        </div>
-      )}
+      {/* V2.1 grade band — badge + attribution copy. Always renders (uses
+          the market_watch defensive default when game.grade is null). */}
+      <div className="mb-4 flex items-center gap-3 flex-wrap">
+        <GradeBadge grade={displayGrade} context="daily-edge" />
+        <p className="text-sm text-gray-300 leading-snug flex-1 min-w-0">
+          {attribution}
+        </p>
+      </div>
 
       {/* PROJECTED FINAL — HERO STAT (5F.1, per locked UI spec §3). 44px bold. */}
       <div className="mb-4">
@@ -219,7 +218,9 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
               {game.projected.away.toFixed(1)}
             </span>
           </span>
-          <span className="text-2xl font-bold text-gray-600 leading-none">—</span>
+          <span className="text-2xl font-bold text-gray-600 leading-none">
+            —
+          </span>
           <span className="inline-flex items-baseline gap-2">
             <span className="text-[44px] leading-none font-black tabular-nums tracking-tight text-white">
               {game.projected.home.toFixed(1)}
@@ -231,10 +232,12 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
         </div>
       </div>
 
-      {/* 3 pick boxes */}
+      {/* 3 pick tiles — labels per V2.1 spec Part 11: Moneyline / Total /
+          1st Inning. Stored in title case to match the spec; the tile's
+          CSS uppercase transform handles display rendering. */}
       <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
         <PredictionTile
-          label="ML"
+          label="Moneyline"
           pick={game.predictions.ml.pick}
           confidence={game.predictions.ml.confidence}
           sharpStatus={game.predictions.ml.sharpStatus}
@@ -242,7 +245,7 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
           pickGlow=""
         />
         <PredictionTile
-          label="TOTAL"
+          label="Total"
           pick={formatTotalPick(
             game.predictions.total.pick,
             game.predictions.total.line
@@ -253,7 +256,7 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
           pickGlow=""
         />
         <PredictionTile
-          label="NRFI"
+          label="1st Inning"
           pick={game.predictions.nrfi.pick}
           confidence={game.predictions.nrfi.confidence}
           sharpStatus={game.predictions.nrfi.sharpStatus}
@@ -262,7 +265,7 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
         />
       </div>
 
-      {/* Expand/collapse toggle — "Show signal breakdown · N signals" */}
+      {/* Expand/collapse toggle — "Why this matters · N signals" */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -271,10 +274,12 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
       >
         <span>
           {expanded
-            ? "Hide signal breakdown"
+            ? "Hide why this matters"
             : game.sharpSignals.length === 0
-            ? "No sharp signals tonight"
-            : `Show signal breakdown · ${game.sharpSignals.length} ${game.sharpSignals.length === 1 ? "signal" : "signals"}`}
+            ? "No additional signals tonight"
+            : `Why this matters · ${game.sharpSignals.length} ${
+                game.sharpSignals.length === 1 ? "signal" : "signals"
+              }`}
         </span>
         {game.sharpSignals.length > 0 && (
           <Icon
@@ -286,13 +291,12 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
         )}
       </button>
 
-      {/* Sharp signals breakdown */}
+      {/* "Why this matters" breakdown — ✓ / ⚠ / — bullets by direction */}
       {expanded && game.sharpSignals.length > 0 && (
         <div className="mt-4 pt-4 border-t border-gray-800/60">
           <div className="flex items-center justify-between mb-3">
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.12em] text-violet-400">
-              <span aria-hidden="true">🦈</span>
-              Sharp Signals
+            <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-300">
+              Why this matters
             </span>
             <span className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">
               {game.sharpSignals.length}{" "}
@@ -301,7 +305,10 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
           </div>
           <div className="space-y-2">
             {sortedSignals.map((signal, i) => (
-              <SignalRow key={`${signal.market}-${signal.category}-${i}`} signal={signal} />
+              <SignalRow
+                key={`${signal.market}-${signal.category}-${i}`}
+                signal={signal}
+              />
             ))}
           </div>
         </div>
@@ -357,9 +364,9 @@ function PredictionTile({
 
 /**
  * Team badge — 24px logo + abbreviation, or just the abbreviation when no
- * logo URL is available (5F.3). Logo uses native <img> instead of next/image
- * because the source is an external CDN we don't pre-register; if loading
- * fails we hide the broken-image icon and fall back to the abbreviation.
+ * logo URL is available. Uses native <img> instead of next/image because
+ * the source is an external CDN we don't pre-register; if loading fails we
+ * hide the broken-image icon and fall back to the abbreviation.
  */
 function TeamBadge({
   logo,
@@ -382,7 +389,6 @@ function TeamBadge({
         height={24}
         className="w-6 h-6 rounded-sm object-contain"
         onError={(e) => {
-          // Hide broken images gracefully — the abbreviation alone is fine.
           (e.currentTarget as HTMLImageElement).style.display = "none";
         }}
       />
@@ -397,6 +403,12 @@ function SignalRow({ signal }: { signal: SharpSignalDto }) {
     <div
       className={`flex items-start gap-2.5 ${styles.border} ${styles.bg} border-l-[3px] rounded-r-md pl-3 pr-3 py-2`}
     >
+      {/* Leading ✓ / ⚠ / — bullet by direction (V2.1 6.4 6) */}
+      <Icon
+        name={styles.bulletIcon}
+        className={`shrink-0 w-4 h-4 mt-0.5 ${styles.bulletColor}`}
+        strokeWidth={styles.bulletIcon === "check" ? 2.5 : undefined}
+      />
       <span
         className={`shrink-0 inline-flex items-center font-mono text-[10px] uppercase tracking-wider font-bold rounded px-1.5 py-0.5 mt-0.5 ${styles.badgeBg} ${styles.badgeText}`}
       >

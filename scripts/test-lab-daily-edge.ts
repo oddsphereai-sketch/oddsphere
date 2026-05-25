@@ -24,9 +24,13 @@ import { supabase } from "../lib/db/supabase";
 import type {
   DailyEdgeGameDto,
   DailyEdgeResponse,
-  DailyEdgeVerdict,
   SharpStatus,
 } from "../app/lab/lib/labTypes";
+import type {
+  Grade,
+  MarketSignal,
+  SignalType,
+} from "../lib/types/domain/Grade";
 
 let pass = 0;
 let fail = 0;
@@ -50,18 +54,31 @@ function section(t: string) {
 
 const SLATE_DATE = "2026-05-22";
 
-/** Pure restatement of the route's verdict aggregator — used for consistency checks. */
-function expectedVerdict(
-  ml: SharpStatus,
-  total: SharpStatus,
-  nrfi: SharpStatus
-): DailyEdgeVerdict {
-  // 5F.1: 3-state verdict — caution wins, then strong, else null (no banner).
-  const statuses = [ml, total, nrfi];
-  if (statuses.includes("caution")) return "caution";
-  if (statuses.includes("confirm")) return "strong";
-  return null;
-}
+const VALID_GRADES = new Set<Grade>([
+  "best_signal",
+  "sharp_confirmed",
+  "market_led",
+  "model_only",
+  "market_watch",
+  "public_smoke",
+  "sharp_conflict",
+]);
+
+const VALID_SIGNAL_TYPES = new Set<SignalType>([
+  "model_dominant",
+  "market_dominant",
+  "balanced",
+  "model_only",
+  "market_only",
+]);
+
+const VALID_MARKET_SIGNALS = new Set<MarketSignal>([
+  "market_confirmed",
+  "market_neutral",
+  "market_resistance",
+  "public_smoke",
+  "steam_alert",
+]);
 
 async function main() {
   // ─── Happy path: MLB slate ────────────────────────────────────────────────
@@ -123,19 +140,20 @@ async function main() {
   check("game.projected is { away, home }", typeof first.projected === "object" && typeof first.projected.away === "number" && typeof first.projected.home === "number");
   check("game.sharpSignals is an array", Array.isArray(first.sharpSignals));
   check(
-    "game.verdict is one of the 3 states (strong / caution / null)",
-    first.verdict === null || first.verdict === "strong" || first.verdict === "caution",
-    `got: ${first.verdict}`
+    "game.grade is null or one of the 7 canonical grades",
+    first.grade === null || VALID_GRADES.has(first.grade),
+    `got: ${first.grade}`
   );
-  // verdictSubtitle is null iff verdict is null (no banner = no subtitle).
-  if (first.verdict === null) {
-    check("game.verdictSubtitle is null when verdict is null", first.verdictSubtitle === null);
-  } else {
-    check(
-      "game.verdictSubtitle is a non-empty string when banner renders",
-      typeof first.verdictSubtitle === "string" && first.verdictSubtitle.length > 0
-    );
-  }
+  check(
+    "game.signalType is null or one of the 5 canonical signal types",
+    first.signalType === null || VALID_SIGNAL_TYPES.has(first.signalType),
+    `got: ${first.signalType}`
+  );
+  check(
+    "game.marketSignal is null or one of the 5 canonical market signals",
+    first.marketSignal === null || VALID_MARKET_SIGNALS.has(first.marketSignal),
+    `got: ${first.marketSignal}`
+  );
 
   // ─── Confidence values are in [0, 1] for every game ───────────────────────
   section("Confidence range");
@@ -153,41 +171,50 @@ async function main() {
   );
   check("games sorted by gameStartMinutes asc", isSorted);
 
-  // ─── Verdict-status invariant (Decision G — server is source of truth) ────
-  section("Server-derived verdict invariants");
+  // ─── V2.1 grade invariants ────────────────────────────────────────────────
+  section("V2.1 grade invariants");
 
-  let invariantFailures = 0;
+  let gradeUnionFailures = 0;
+  let signalTypeUnionFailures = 0;
+  let marketSignalUnionFailures = 0;
+  let coDerivationFailures = 0;
   for (const g of body.games) {
-    const recomputed = expectedVerdict(
-      g.predictions.ml.sharpStatus,
-      g.predictions.total.sharpStatus,
-      g.predictions.nrfi.sharpStatus
-    );
-    if (recomputed !== g.verdict) {
-      invariantFailures++;
-      console.log(`    inconsistency: ext_id=${g.external_id} verdict=${g.verdict} but ml/total/nrfi=${g.predictions.ml.sharpStatus}/${g.predictions.total.sharpStatus}/${g.predictions.nrfi.sharpStatus} → expected=${recomputed}`);
-    }
+    if (g.grade !== null && !VALID_GRADES.has(g.grade)) gradeUnionFailures++;
+    if (g.signalType !== null && !VALID_SIGNAL_TYPES.has(g.signalType))
+      signalTypeUnionFailures++;
+    if (g.marketSignal !== null && !VALID_MARKET_SIGNALS.has(g.marketSignal))
+      marketSignalUnionFailures++;
+    // Grade + signalType are co-derived by gradeDerivationService — a row
+    // with a grade always has a signal_type alongside it.
+    if (g.grade !== null && g.signalType === null) coDerivationFailures++;
   }
   check(
-    `every game's verdict matches the aggregation of its 3 sharpStatuses`,
-    invariantFailures === 0
+    `every game's grade is null or in the canonical union`,
+    gradeUnionFailures === 0
+  );
+  check(
+    `every game's signalType is null or in the canonical union`,
+    signalTypeUnionFailures === 0
+  );
+  check(
+    `every game's marketSignal is null or in the canonical union`,
+    marketSignalUnionFailures === 0
+  );
+  check(
+    `grade and signalType are co-derived: non-null grade ⇒ non-null signalType`,
+    coDerivationFailures === 0
   );
 
-  // Subtitle ⇄ verdict (5F.1 3-state):
-  //   null    → subtitle is null (no banner renders)
-  //   strong  → subtitle starts with "Sharps support"
-  //   caution → subtitle starts with "Sharps moving against"
-  let subtitleFailures = 0;
-  for (const g of body.games) {
-    if (g.verdict === null && g.verdictSubtitle !== null) {
-      subtitleFailures++;
-    } else if (g.verdict === "strong" && !(g.verdictSubtitle ?? "").startsWith("Sharps support")) {
-      subtitleFailures++;
-    } else if (g.verdict === "caution" && !(g.verdictSubtitle ?? "").startsWith("Sharps moving against")) {
-      subtitleFailures++;
-    }
-  }
-  check(`subtitle text matches verdict semantics`, subtitleFailures === 0);
+  // Sanity: at least one game on the seeded slate has a graded result.
+  // Confirms the grade engine pipeline (marketSignal → grade) actually ran
+  // upstream — a slate where every game is grade=null suggests the cron
+  // wiring or DB derivation regressed.
+  const gradedCount = body.games.filter((g) => g.grade !== null).length;
+  check(
+    `at least one game on the seeded slate has a non-null grade`,
+    gradedCount > 0,
+    `gradedCount=${gradedCount}`
+  );
 
   // ─── sharpStatus mapping consistency against DB sharp_signals ─────────────
   section("sharpStatus mapping consistency");

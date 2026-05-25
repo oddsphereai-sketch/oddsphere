@@ -32,7 +32,6 @@ import { currentSlateDate, isSlateDate } from "@/lib/dates/slateDate";
 import type {
   DailyEdgeGameDto,
   DailyEdgeResponse,
-  DailyEdgeVerdict,
   SharpSignalCategory,
   SharpSignalDto,
   SharpStatus,
@@ -213,51 +212,14 @@ function buildSignalDtos(rows: SignalRow[]): SharpSignalDto[] {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Verdict aggregation — 3-state (5F.1, per locked UI spec §4)
-//   STRONG  — ≥1 confirming signal AND zero contradicting signals
-//   CAUTION — ≥1 contradicting signal (wins over STRONG; red flags stick)
-//   null    — no signals on any market (no banner; most games are here)
-// Absence of signal ≠ negative signal — the model's pick speaks for itself.
-// ───────────────────────────────────────────────────────────────────────────
-
-function computeVerdict(
-  mlStatus: SharpStatus,
-  totalStatus: SharpStatus,
-  nrfiStatus: SharpStatus
-): DailyEdgeVerdict {
-  const statuses = [mlStatus, totalStatus, nrfiStatus];
-  if (statuses.includes("caution")) return "caution";
-  if (statuses.includes("confirm")) return "strong";
-  return null;
-}
-
-function composeVerdictSubtitle(
-  verdict: DailyEdgeVerdict,
-  mlStatus: SharpStatus,
-  totalStatus: SharpStatus,
-  nrfiStatus: SharpStatus
-): string | null {
-  if (verdict === null) return null;
-
-  const labels = (status: SharpStatus): string[] => {
-    const matched: string[] = [];
-    if (mlStatus === status) matched.push("ML");
-    if (totalStatus === status) matched.push("Total");
-    if (nrfiStatus === status) matched.push("NRFI");
-    return matched;
-  };
-
-  if (verdict === "strong") {
-    const confirmed = labels("confirm");
-    return `Sharps support ${confirmed.join(" + ")}`;
-  }
-  // caution
-  const against = labels("caution");
-  return `Sharps moving against ${against.join(" + ")}`;
-}
-
-// ───────────────────────────────────────────────────────────────────────────
 // Row → DTO
+//
+// Note: pre-6.4 a 3-state verdict banner (strong/caution/null) was computed
+// here from per-market sharpStatus values. Phase 6.4b replaces the banner
+// with the V2.1 grade badge (Grade + SignalType + MarketSignal, populated
+// upstream by gradeDerivationService) and removes the verdict aggregator
+// helpers entirely — the per-tile sharpStatus on each pick tile is the
+// only remaining per-market signal on the card.
 // ───────────────────────────────────────────────────────────────────────────
 
 type PredictionRow = {
@@ -327,9 +289,6 @@ function buildGameDto(
   const nrfiStatus = deriveSharpStatus(nrfiSignal, nrfiSide);
   const nrfiPick = isNrfi ? "NRFI" : "YRFI";
 
-  const verdict = computeVerdict(mlStatus, totalStatus, nrfiStatus);
-  const subtitle = composeVerdictSubtitle(verdict, mlStatus, totalStatus, nrfiStatus);
-
   return {
     id: `${row.sport}-${row.external_id}`,
     sport: row.sport as Sport,
@@ -363,10 +322,8 @@ function buildGameDto(
       home: pred.predicted_home_score ?? 0,
     },
     sharpSignals: buildSignalDtos(signals),
-    verdict,
-    verdictSubtitle: subtitle,
-    // V2.1 grade engine fields (Phase 6.3d). Surfaced on the DTO in 6.4a;
-    // consumed by GradeBadge + attribution copy in 6.4b.
+    // V2.1 grade engine fields (Phase 6.3d). Consumed by GradeBadge +
+    // attribution copy on SimpleDailyEdgeCard.
     grade: pred.grade,
     signalType: pred.signal_type,
     marketSignal: pred.market_signal,

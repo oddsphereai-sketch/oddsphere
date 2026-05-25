@@ -1,11 +1,19 @@
 /**
  * /dev/grades — Phase 6.3d visual verification surface for GradeBadge.
  *
- * Renders the badge in every grade × size × variant permutation so QA can
+ * Renders the badge in every grade × size × context permutation so QA can
  * eyeball it without wiring the component into Daily Edge / Player Props
- * (which is 6.4/6.5 work). Not linked from any nav — direct URL only.
+ * (Daily Edge is wired in 6.4b; Player Props wires in 6.5). Not linked
+ * from any nav — direct URL only.
  *
- * Will be deleted once the badge is integrated into real UI in Phase 6.4.
+ * Per V2.1 Part 6, four grades have surface-specific labels:
+ *   Daily Edge       vs  Player Props
+ *   Best Signal      vs  Elite Prop
+ *   Sharp Confirmed  vs  Confirmed Edge
+ *   Market-Led Signal vs Market-Led
+ *   Sharp Conflict   vs  Caution
+ *
+ * Removed once Player Props is also wired (Phase 6.5).
  */
 
 import GradeBadge, { ALL_GRADES } from "@/app/components/GradeBadge";
@@ -23,47 +31,77 @@ export default function GradesPreviewPage() {
           Phase 6.3d · dev preview
         </p>
         <h1 className="text-3xl font-black tracking-tight">
-          GradeBadge — all 7 variants
+          GradeBadge — all 7 variants, both surfaces
         </h1>
         <p className="text-sm text-gray-300 mt-2 leading-relaxed">
           V2.1 6.3 final-grade pills. This page exists for visual QA of the
-          new component. Removed when the badge is wired into Daily Edge in
-          Phase 6.4.
+          new component. Removed when the badge is wired into both Daily
+          Edge (6.4b) and Player Props (6.5).
         </p>
       </header>
 
-      {/* Default (md) size, full label */}
+      {/* Daily Edge context — default size (md) */}
       <section className="mb-10">
         <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400 mb-3">
-          Default size (md)
+          Daily Edge labels — md
         </h2>
         <div className="flex flex-wrap gap-3 p-5 bg-gray-900/60 border border-gray-800 rounded-xl">
           {ALL_GRADES.map((g) => (
-            <GradeBadge key={g} grade={g} />
+            <GradeBadge key={g} grade={g} context="daily-edge" />
           ))}
         </div>
       </section>
 
-      {/* Small variant */}
+      {/* Player Props context — default size (md) */}
+      <section className="mb-10">
+        <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400 mb-3">
+          Player Props labels — md
+        </h2>
+        <div className="flex flex-wrap gap-3 p-5 bg-gray-900/60 border border-gray-800 rounded-xl">
+          {ALL_GRADES.map((g) => (
+            <GradeBadge key={g} grade={g} context="player-props" />
+          ))}
+        </div>
+      </section>
+
+      {/* Small variant — both contexts */}
       <section className="mb-10">
         <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400 mb-3">
           Small (sm)
         </h2>
-        <div className="flex flex-wrap gap-2 p-5 bg-gray-900/60 border border-gray-800 rounded-xl">
-          {ALL_GRADES.map((g) => (
-            <GradeBadge key={g} grade={g} size="sm" />
-          ))}
+        <div className="space-y-3 p-5 bg-gray-900/60 border border-gray-800 rounded-xl">
+          <div className="flex flex-wrap gap-2">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-gray-500 self-center mr-2 w-24">
+              Daily Edge
+            </span>
+            {ALL_GRADES.map((g) => (
+              <GradeBadge key={g} grade={g} context="daily-edge" size="sm" />
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-gray-500 self-center mr-2 w-24">
+              Player Props
+            </span>
+            {ALL_GRADES.map((g) => (
+              <GradeBadge key={g} grade={g} context="player-props" size="sm" />
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* Emoji-only compact mode */}
+      {/* Emoji-only compact mode (context-agnostic — emoji is identical across surfaces) */}
       <section className="mb-10">
         <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400 mb-3">
           Emoji-only (table mode)
         </h2>
         <div className="flex flex-wrap gap-2 p-5 bg-gray-900/60 border border-gray-800 rounded-xl">
           {ALL_GRADES.map((g) => (
-            <GradeBadge key={g} grade={g} emojiOnly />
+            <GradeBadge
+              key={g}
+              grade={g}
+              context="daily-edge"
+              emojiOnly
+            />
           ))}
         </div>
       </section>
