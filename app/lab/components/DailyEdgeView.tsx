@@ -12,6 +12,9 @@ import SimpleDailyEdgeCard from "./SimpleDailyEdgeCard";
 import DailyEdgeLegend from "./DailyEdgeLegend";
 import HowWeUpdatePanel from "./HowWeUpdatePanel";
 import SlateDatePicker from "./SlateDatePicker";
+import SlateFreshness from "./SlateFreshness";
+import TonightsBoard from "./TonightsBoard";
+import TopReads from "./TopReads";
 
 const DAILY_EDGE_SPORTS: Sport[] = [
   "mlb",
@@ -58,10 +61,10 @@ function getTodayString(): string {
 }
 
 export default function DailyEdgeView({ sport, onSportChange }: Props) {
-  // Legend visible by default each page load. No persistence (localStorage is
-  // out of scope and not reliable here); when user accounts ship we'll
-  // remember dismissal per-user.
-  const [legendOpen, setLegendOpen] = useState(true);
+  // 6.4c: legend collapsed by default per founder review. Returning users
+  // shouldn't see the explainer every page load. Phase 7 auth will own
+  // per-user "remember dismissal" once accounts ship.
+  const [legendOpen, setLegendOpen] = useState(false);
 
   const sportMeta = SPORT_META[sport];
   const isLive = sportMeta.isLive;
@@ -108,33 +111,55 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
       ) : (
         <>
           <header className="mb-6 max-w-3xl mx-auto flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2">
                 Daily Edge
               </h1>
-              <p className="text-sm text-gray-300">
-                {today} ·{" "}
-                <span className="tabular-nums">
-                  {isLoading ? "—" : games.length}
-                </span>{" "}
-                {sportMeta.label} games tonight · sorted by start time
-              </p>
+              {/* 6.4c: inlined slate message per founder review. When the
+                  resolver fell back to an older published slate, the header
+                  subtitle carries the full "what is happening / what we're
+                  showing instead" copy (V2.1 Part 10 phrase verbatim) and
+                  the separate amber banner is dropped. Normal-path header
+                  stays as the original today-with-count phrasing. */}
+              {fallbackUsed && effectiveDate ? (
+                <p className="text-sm text-gray-300 leading-snug">
+                  No finalized board for{" "}
+                  <span className="font-semibold text-gray-100">{today}</span>{" "}
+                  yet. Showing latest available slate:{" "}
+                  <span className="font-semibold text-gray-100 tabular-nums">
+                    {effectiveDate}
+                  </span>{" "}
+                  ·{" "}
+                  <span className="tabular-nums">
+                    {isLoading ? "—" : games.length}
+                  </span>{" "}
+                  {sportMeta.label}{" "}
+                  {games.length === 1 ? "game" : "games"}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-300">
+                  {today} ·{" "}
+                  <span className="tabular-nums">
+                    {isLoading ? "—" : games.length}
+                  </span>{" "}
+                  {sportMeta.label} games tonight · sorted by start time
+                </p>
+              )}
+              <div className="mt-2">
+                <SlateFreshness sport={sport} />
+              </div>
             </div>
             <SlateDatePicker sport={sport} />
           </header>
 
-          {fallbackUsed && effectiveDate && (
-            <div className="max-w-3xl mx-auto mb-4">
-              <div className="bg-amber-950/30 border border-amber-800/40 rounded-lg px-4 py-3 text-sm text-amber-100">
-                <span className="font-semibold text-amber-200">
-                  Showing most recent slate ({effectiveDate})
-                </span>
-                {" — "}
-                <span className="text-amber-100/80">
-                  no games scheduled for today&rsquo;s slate yet.
-                </span>
-              </div>
-            </div>
+          {/* V2.1 Part 11 — Tonight's Board summary + Top Reads, both above
+              the full games list. Hidden during the initial loading state
+              (empty games[]); EmptyState handles the "no games at all" case. */}
+          {!isLoading && games.length > 0 && (
+            <>
+              <TonightsBoard games={games} sportLabel={sportMeta.label} />
+              <TopReads games={games} />
+            </>
           )}
 
           <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
@@ -146,7 +171,9 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
               <EmptyState />
             ) : (
               games.map((game) => (
-                <SimpleDailyEdgeCard key={game.id} game={game} />
+                <div key={game.id} id={`game-${game.external_id}`}>
+                  <SimpleDailyEdgeCard game={game} />
+                </div>
               ))
             )}
           </div>
@@ -164,7 +191,7 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
             onClick={() => setLegendOpen(true)}
             className="text-sm text-violet-400 hover:text-violet-300 transition-colors"
           >
-            Show how to read
+            How signals work?
           </button>
         </div>
       )}

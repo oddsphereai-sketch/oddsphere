@@ -10,7 +10,7 @@
  *   • updating — amber dot, "Updating now"
  *   • stale    — red dot, "Stale · Last update Nh ago"
  *   • error    — red dot, "Refresh failed · Last successful Nh ago"
- *   • unknown  — gray dot, "No recent activity"
+ *   • unknown  — gray dot, "No status yet"
  *
  * Mobile collapses to the dot + a short label. Clicking expands a panel that
  * lists every cron source with its individual state (powered by the same
@@ -96,7 +96,10 @@ const STATE_STYLES: Record<RefreshState, StateStyle> = {
     pulse: false,
   },
   unknown: {
-    label: "No activity",
+    // 6.4c: "No activity" read as "no betting activity" to reviewers; this
+    // pill is the pipeline-status indicator (means "no cron status reported
+    // yet"). Renamed to remove the My Bets-style ambiguity.
+    label: "No status yet",
     dot: "bg-gray-500",
     dotShadow: "",
     text: "text-gray-400",
@@ -150,7 +153,7 @@ export default function RefreshIndicator() {
   } else if (state === "error") {
     detail = `Last successful ${ageStr}`;
   } else {
-    detail = isLoading ? "Loading…" : "No recent activity";
+    detail = isLoading ? "Loading…" : "No status reported yet";
   }
 
   return (
