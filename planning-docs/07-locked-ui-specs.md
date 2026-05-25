@@ -4,7 +4,12 @@
 
 **Last Updated:** Day 6 (May 23, 2026) — after Phase 4 + Phase 5A-5E.1 build sessions.
 
-**Status:** AUTHORITATIVE. Reconcile any drift back to this spec.
+**Status:** SUPERSEDED for product scope, page list, footer copy, and V1 boundaries by [`08-locked-build-spec-v2.1.md`](./08-locked-build-spec-v2.1.md). This document remains AUTHORITATIVE for Lab-internal visual + interaction details (card layouts, drill-downs, typography rules, signal-language copy). When the two docs disagree on what ships in V1 or how the public site is structured, V2.1 wins.
+
+> ⚠️ **Read order for any UI change going forward:**
+> 1. Open `08-locked-build-spec-v2.1.md` first — confirm the page/feature is in V1 scope.
+> 2. Then use this doc for the per-component visual + interaction spec.
+> 3. If V2.1 is silent on a visual detail covered here, this doc still holds.
 
 ---
 

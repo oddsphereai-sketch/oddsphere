@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Image from "next/image";
 import "./globals.css";
 import Navbar from "./components/Navbar";
+import Footer from "./components/Footer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -66,26 +66,7 @@ export default function RootLayout({
         />
         <Navbar />
         <div className="flex-1">{children}</div>
-        <footer className="bg-gray-950/80 border-t border-gray-800 mt-20 py-10 relative">
-          <div className="max-w-7xl mx-auto px-4 text-center text-sm text-gray-400">
-            <div className="flex justify-center mb-4 opacity-70">
-              <Image
-                src="/logo-transparent.png"
-                alt="Oddsphere AI"
-                width={500}
-                height={300}
-                sizes="240px"
-                className="h-10 sm:h-14 w-auto invert drop-shadow-[0_0_6px_rgba(167,139,250,0.3)]"
-              />
-            </div>
-            <p className="mb-2 max-w-3xl mx-auto leading-relaxed">
-              ⚠️ All content on Oddsphere AI is for entertainment and informational
-              purposes only. Not financial or betting advice. Gambling involves risk —
-              bet responsibly, 21+ only. Need help? Call 1-800-GAMBLER.
-            </p>
-            <p>© 2026 Oddsphere. All stats and odds are publicly available data.</p>
-          </div>
-        </footer>
+        <Footer />
       </body>
     </html>
   );
