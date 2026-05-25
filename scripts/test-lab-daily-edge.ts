@@ -163,6 +163,90 @@ async function main() {
     `got: ${first.primaryMarket}`
   );
 
+  // ─── V2.1.1 per-pick DTO invariants (Phase 6.3.5c) ────────────────────────
+  section("Per-pick DTO invariants");
+
+  // 9 union checks — grade × {ml,total,nrfi} × {grade, signalType, marketSignal}
+  for (const market of ["ml", "total", "nrfi"] as const) {
+    const tile = first.predictions[market];
+    check(
+      `first.predictions.${market}.grade is null or in the canonical Grade union`,
+      tile.grade === null || VALID_GRADES.has(tile.grade),
+      `got: ${tile.grade}`
+    );
+    check(
+      `first.predictions.${market}.signalType is null or in the canonical SignalType union`,
+      tile.signalType === null || VALID_SIGNAL_TYPES.has(tile.signalType),
+      `got: ${tile.signalType}`
+    );
+    check(
+      `first.predictions.${market}.marketSignal is null or in the canonical MarketSignal union`,
+      tile.marketSignal === null || VALID_MARKET_SIGNALS.has(tile.marketSignal),
+      `got: ${tile.marketSignal}`
+    );
+  }
+
+  // Co-derivation / skip-NULL coherence: when any per-pick field is null,
+  // the other two on the same tile must also be null. Verified across all
+  // 12 games, all 3 tiles.
+  let perPickTripletNonAtomic = 0;
+  for (const g of body.games) {
+    for (const market of ["ml", "total", "nrfi"] as const) {
+      const tile = g.predictions[market];
+      const nullCount =
+        (tile.grade === null ? 1 : 0) +
+        (tile.signalType === null ? 1 : 0) +
+        (tile.marketSignal === null ? 1 : 0);
+      // Atomic: either all 3 null or all 3 populated. Never mixed.
+      if (nullCount !== 0 && nullCount !== 3) perPickTripletNonAtomic++;
+    }
+  }
+  check(
+    "per-pick triplet is atomic: all 3 fields null together or all 3 populated",
+    perPickTripletNonAtomic === 0
+  );
+
+  // Internal consistency: for every game with a primary pick, the legacy
+  // top-level grade/signalType/marketSignal MUST match
+  // predictions[primaryMarket].* (precedence-1 dual-shape parity).
+  type DtoMarketKey = "ml" | "total" | "nrfi";
+  const PRIMARY_TO_TILE: Record<string, DtoMarketKey> = {
+    moneyline: "ml",
+    total: "total",
+    first_inning_total: "nrfi",
+  };
+  let parityFailures = 0;
+  for (const g of body.games) {
+    if (g.primaryMarket === null) continue;
+    const tileKey = PRIMARY_TO_TILE[g.primaryMarket];
+    if (!tileKey) continue;
+    const tile = g.predictions[tileKey];
+    if (
+      g.grade !== tile.grade ||
+      g.signalType !== tile.signalType ||
+      g.marketSignal !== tile.marketSignal
+    ) {
+      parityFailures++;
+    }
+  }
+  check(
+    "dual-shape parity: legacy top-level grade/signalType/marketSignal === predictions[primaryMarket].* (precedence-1)",
+    parityFailures === 0
+  );
+
+  // Sanity: at least one game has a non-null per-pick grade triplet on
+  // ML (the precedence-1 market). Confirms the V13 columns are being
+  // populated end-to-end through marketSignalDerivationService +
+  // gradeDerivationService + the route SELECT + the DTO mapping.
+  const mlGradedCount = body.games.filter(
+    (g) => g.predictions.ml.grade !== null
+  ).length;
+  check(
+    "at least one game has a non-null predictions.ml.grade (V13 pipeline end-to-end)",
+    mlGradedCount > 0,
+    `mlGradedCount=${mlGradedCount}`
+  );
+
   // ─── Confidence values are in [0, 1] for every game ───────────────────────
   section("Confidence range");
 

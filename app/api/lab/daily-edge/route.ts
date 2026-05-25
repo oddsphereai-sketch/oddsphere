@@ -232,12 +232,28 @@ type PredictionRow = {
   ou_confidence: number | null;
   predicted_nrfi: boolean | null;
   nrfi_confidence: number | null;
-  /** V2.1 7-category grade (Phase 6.3d); null until first derivation run. */
+  /** Legacy V2.1 row-level 7-category grade (Phase 6.3d). Dual-written
+   * by gradeDerivationService — mirrors the precedence-1 per-pick grade.
+   * Surfaced on the DTO as the deprecated top-level `grade` field. */
   grade: Grade | null;
-  /** Attribution: which layer(s) drove the grade. */
+  /** Legacy attribution. Mirrors precedence-1 per-pick signal_type. */
   signal_type: SignalType | null;
-  /** Layer 3 market read (Phase 6.3c). */
+  /** Legacy Layer 3 market read. Mirrors precedence-1 per-pick market_signal. */
   market_signal: MarketSignal | null;
+  /** V13 per-pick grade triplets (Phase 6.3.5). All three fields per
+   * market are NULL together when the model didn't pick that market.
+   * Column names use the DB convention: ml_* / ou_* / nrfi_* — the
+   * DTO surfaces them as predictions.ml / predictions.total / predictions.nrfi
+   * respectively (note ou_ → total name swap). */
+  ml_grade: Grade | null;
+  ml_signal_type: SignalType | null;
+  ml_market_signal: MarketSignal | null;
+  ou_grade: Grade | null;
+  ou_signal_type: SignalType | null;
+  ou_market_signal: MarketSignal | null;
+  nrfi_grade: Grade | null;
+  nrfi_signal_type: SignalType | null;
+  nrfi_market_signal: MarketSignal | null;
 };
 
 type GameRow = {
@@ -320,17 +336,30 @@ function buildGameDto(
         pick: mlPick,
         confidence: Math.max(0, Math.min(1, (pred.ml_confidence ?? 0) / 100)),
         sharpStatus: mlStatus,
+        // V13 per-pick triplet for ML — sourced from ml_* DB columns.
+        grade: pred.ml_grade,
+        signalType: pred.ml_signal_type,
+        marketSignal: pred.ml_market_signal,
       },
       total: {
         pick: totalPick,
         confidence: Math.max(0, Math.min(1, (pred.ou_confidence ?? 0) / 100)),
         sharpStatus: totalStatus,
         line: totalLine,
+        // V13 per-pick triplet for the total — sourced from ou_* DB columns
+        // (note DB ou_* ↔ DTO predictions.total name asymmetry).
+        grade: pred.ou_grade,
+        signalType: pred.ou_signal_type,
+        marketSignal: pred.ou_market_signal,
       },
       nrfi: {
         pick: nrfiPick,
         confidence: Math.max(0, Math.min(1, (pred.nrfi_confidence ?? 0) / 100)),
         sharpStatus: nrfiStatus,
+        // V13 per-pick triplet for 1st inning — sourced from nrfi_* DB columns.
+        grade: pred.nrfi_grade,
+        signalType: pred.nrfi_signal_type,
+        marketSignal: pred.nrfi_market_signal,
       },
     },
     projected: {
@@ -403,7 +432,10 @@ export async function GET(request: Request) {
          predicted_ml_winner, ml_confidence,
          predicted_ou_side, ou_confidence,
          predicted_nrfi, nrfi_confidence,
-         grade, signal_type, market_signal
+         grade, signal_type, market_signal,
+         ml_grade, ml_signal_type, ml_market_signal,
+         ou_grade, ou_signal_type, ou_market_signal,
+         nrfi_grade, nrfi_signal_type, nrfi_market_signal
        )`
     )
     .eq("sport", sport)

@@ -88,6 +88,24 @@ export type DailyEdgePredictionDto = {
   /** 0..1 (server normalizes the 0..100 column). */
   confidence: number;
   sharpStatus: SharpStatus;
+  /**
+   * V2.1.1 per-pick grade fields (Phase 6.3.5c). Populated from the
+   * per-pick columns added by schema-migration-v13.sql:
+   *   ml.*   ← game_predictions.ml_*
+   *   total.*← game_predictions.ou_*   (note name asymmetry — preserved
+   *                                     from pre-6.3.5 pattern where the
+   *                                     DB column uses "ou_" prefix while
+   *                                     the DTO surface calls the market
+   *                                     "total")
+   *   nrfi.* ← game_predictions.nrfi_*
+   *
+   * All three fields NULL together when the model didn't pick this market
+   * (predicted_<market>_* IS NULL upstream). Consumers should treat the
+   * triplet as atomic — never one populated while another is null.
+   */
+  grade: Grade | null;
+  signalType: SignalType | null;
+  marketSignal: MarketSignal | null;
 };
 
 export type DailyEdgeTotalPredictionDto = DailyEdgePredictionDto & {
@@ -143,22 +161,31 @@ export type DailyEdgeGameDto = {
   projected: { away: number; home: number };
   sharpSignals: SharpSignalDto[];
   /**
-   * V2.1 7-category final grade (Phase 6.3d). Reflects the row's primary
-   * pick (ML → OU → NRFI precedence). Null when the grade engine has not
-   * yet run for this slate — UI shows market_watch as the defensive default.
+   * @deprecated V2.1.1 (Phase 6.3.5c). Read the per-pick grade from
+   *   predictions.{ml,total,nrfi}.grade directly. This top-level field
+   *   mirrors predictions[primaryMarket].grade (precedence-1 winner)
+   *   via server-side dual-write. Kept on the DTO so 6.4d UI keeps
+   *   working unchanged through 6.3.5d's per-pick UI refactor; dropped
+   *   in 6.3.5e once UI migration is verified.
    */
   grade: Grade | null;
-  /** Attribution: which signal layer(s) drove the grade. */
+  /**
+   * @deprecated V2.1.1 (Phase 6.3.5c). See `grade` deprecation note.
+   *   Mirrors predictions[primaryMarket].signalType.
+   */
   signalType: SignalType | null;
-  /** Layer 3 market read fed into the grade (informational; not a UI badge of its own). */
+  /**
+   * @deprecated V2.1.1 (Phase 6.3.5c). See `grade` deprecation note.
+   *   Mirrors predictions[primaryMarket].marketSignal.
+   */
   marketSignal: MarketSignal | null;
   /**
-   * The market the row's grade is "about" — derived server-side via the same
-   * ML → OU → NRFI precedence marketSignalDerivationService + gradeDerivationService
-   * use. Surfaced on the DTO in 6.4d so the Daily Edge Market filter chips
-   * (Moneyline / Totals / 1st Inning) can card-filter without duplicating the
-   * server's primary-pick logic in the client. Null when no model pick exists
-   * (every side column was NULL).
+   * @deprecated V2.1.1 (Phase 6.3.5c). The market the row's headline grade
+   *   is "about" — derived via ML → OU → NRFI precedence on the
+   *   predicted_<market>_* columns. Still useful semantically as the
+   *   row's "primary pick" identifier, but per-pick UI in 6.3.5d reads
+   *   per-tile grades directly. Decision to drop or keep this field
+   *   lands in 6.3.5d/e once the new filter-chip predicate shape is final.
    */
   primaryMarket: "moneyline" | "total" | "first_inning_total" | null;
 };
