@@ -385,8 +385,16 @@ async function main() {
   } else {
     const derived = await deriveMarketSignalsForSlate("mlb", targetSlate);
     check(
-      "deriveMarketSignalsForSlate returned non-empty maps for seeded slate",
-      derived.games.size > 0 || derived.props.size > 0
+      "deriveMarketSignalsForSlate returned non-empty per-pick maps for seeded slate",
+      derived.games.ml.size > 0 ||
+        derived.games.ou.size > 0 ||
+        derived.games.nrfi.size > 0 ||
+        derived.props.size > 0
+    );
+    check(
+      "gamesLegacy populated for every game_prediction with a pick (precedence-1)",
+      derived.gamesLegacy.size === derived.games.ml.size ||
+        derived.gamesLegacy.size >= derived.games.ml.size
     );
 
     // Every value is in the canonical MarketSignal union.
@@ -398,7 +406,12 @@ async function main() {
       "steam_alert",
     ]);
     let badGame = 0;
-    for (const v of derived.games.values()) {
+    for (const market of ["ml", "ou", "nrfi"] as const) {
+      for (const v of derived.games[market].values()) {
+        if (!ALL_VALID.has(v)) badGame++;
+      }
+    }
+    for (const v of derived.gamesLegacy.values()) {
       if (!ALL_VALID.has(v)) badGame++;
     }
     let badProp = 0;
@@ -406,12 +419,27 @@ async function main() {
       if (!ALL_VALID.has(v)) badProp++;
     }
     check(
-      "every derived game signal is in the canonical MarketSignal union",
+      "every derived per-pick + legacy game signal is in the canonical MarketSignal union",
       badGame === 0
     );
     check(
       "every derived prop signal is in the canonical MarketSignal union",
       badProp === 0
+    );
+
+    // Dual-write parity: gamesLegacy[id] === first non-null per-pick
+    // (ML → OU → NRFI precedence) for every id in the legacy map.
+    let parityMismatch = 0;
+    for (const [id, legacyValue] of derived.gamesLegacy.entries()) {
+      const expectedLegacy =
+        derived.games.ml.get(id) ??
+        derived.games.ou.get(id) ??
+        derived.games.nrfi.get(id);
+      if (expectedLegacy !== legacyValue) parityMismatch++;
+    }
+    check(
+      "dual-write parity: gamesLegacy = first non-null in ML→OU→NRFI per-pick precedence",
+      parityMismatch === 0
     );
 
     // Write + idempotency.
@@ -420,32 +448,60 @@ async function main() {
       "updateMarketSignalsForSlate wrote at least one row",
       r1.gamePredictionsUpdated > 0 || r1.propPredictionsUpdated > 0
     );
+    check(
+      "result includes perMarket sub-counts (derived === written)",
+      r1.perMarket.ml.derived === r1.perMarket.ml.written &&
+        r1.perMarket.ou.derived === r1.perMarket.ou.written &&
+        r1.perMarket.nrfi.derived === r1.perMarket.nrfi.written
+    );
 
     const r2 = await updateMarketSignalsForSlate("mlb", targetSlate);
     check(
-      "re-running updateMarketSignalsForSlate is idempotent (same counts)",
+      "re-running updateMarketSignalsForSlate is idempotent (same row counts)",
       r2.gamePredictionsUpdated === r1.gamePredictionsUpdated &&
         r2.propPredictionsUpdated === r1.propPredictionsUpdated
     );
 
-    // Spot-check: DB rows match the derived map for a sample.
-    const sampleGameIds = Array.from(derived.games.keys()).slice(0, 5);
-    const sampleGameIdsLength = sampleGameIds.length;
-    if (sampleGameIdsLength > 0) {
+    // Spot-check: DB rows match the derived per-pick + legacy values for a sample.
+    const sampleGameIds = Array.from(derived.gamesLegacy.keys()).slice(0, 5);
+    if (sampleGameIds.length > 0) {
       const { data: gameDbRows } = await supabase
         .from("game_predictions")
-        .select("id, market_signal")
+        .select(
+          "id, market_signal, ml_market_signal, ou_market_signal, nrfi_market_signal"
+        )
         .in("id", sampleGameIds);
-      let mismatch = 0;
+      let legacyMismatch = 0;
+      let perPickMismatch = 0;
       for (const row of (gameDbRows ?? []) as Array<{
         id: number;
         market_signal: string | null;
+        ml_market_signal: string | null;
+        ou_market_signal: string | null;
+        nrfi_market_signal: string | null;
       }>) {
-        if (derived.games.get(row.id) !== row.market_signal) mismatch++;
+        if ((derived.gamesLegacy.get(row.id) ?? null) !== row.market_signal) {
+          legacyMismatch++;
+        }
+        if ((derived.games.ml.get(row.id) ?? null) !== row.ml_market_signal) {
+          perPickMismatch++;
+        }
+        if ((derived.games.ou.get(row.id) ?? null) !== row.ou_market_signal) {
+          perPickMismatch++;
+        }
+        if (
+          (derived.games.nrfi.get(row.id) ?? null) !== row.nrfi_market_signal
+        ) {
+          perPickMismatch++;
+        }
       }
       check(
-        "game_predictions DB market_signal matches derived map for sampled rows",
-        mismatch === 0
+        "DB legacy market_signal matches derived gamesLegacy for sampled rows",
+        legacyMismatch === 0
+      );
+      check(
+        "DB per-pick ml/ou/nrfi_market_signal match derived maps for sampled rows",
+        perPickMismatch === 0
       );
     }
 
@@ -469,7 +525,7 @@ async function main() {
     }
 
     // Skip-NULL-side rows: any game_prediction with all three picks NULL
-    // should NOT appear in derived.games (we skip rather than default).
+    // should NOT appear in ANY per-pick or legacy map.
     const { data: nullSideRows } = await supabase
       .from("game_predictions")
       .select("id, predicted_ml_winner, predicted_ou_side, predicted_nrfi")
@@ -484,10 +540,17 @@ async function main() {
     if (nullSideCount > 0) {
       let leaked = 0;
       for (const row of (nullSideRows ?? []) as Array<{ id: number }>) {
-        if (derived.games.has(row.id)) leaked++;
+        if (
+          derived.games.ml.has(row.id) ||
+          derived.games.ou.has(row.id) ||
+          derived.games.nrfi.has(row.id) ||
+          derived.gamesLegacy.has(row.id)
+        ) {
+          leaked++;
+        }
       }
       check(
-        "game_predictions with NULL on all three picks are skipped (no entry in derived map)",
+        "game_predictions with NULL on all three picks are skipped (absent from all per-pick + legacy maps)",
         leaked === 0
       );
     } else {

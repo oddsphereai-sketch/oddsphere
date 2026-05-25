@@ -54,7 +54,8 @@ export async function GET(request: Request) {
 
       // V2.1 Layer 3 + final grade — derived AFTER sharp signals + verdicts
       // are settled. updateMarketSignalsForSlate reads sharp_signals; the
-      // grade step reads market_signal (just written) + edge_pct/ev_pct.
+      // grade step reads per-pick market_signal (just written) + edge_pct/ev_pct.
+      // 6.3.5b: both services dual-write per-pick (ml/ou/nrfi) + legacy columns.
       const marketSignals = await updateMarketSignalsForSlate(sport, date);
       const marketTouched =
         marketSignals.gamePredictionsUpdated +
@@ -74,8 +75,12 @@ export async function GET(request: Request) {
           sharp_signals: signals.records_updated,
           verdicts: verdicts.records_updated,
           market_signals: marketTouched,
+          market_signals_perMarket: marketSignals.perMarket,
           grades: gradeTouched,
+          grades_perMarket: grades.perMarket,
           best_signal_pct: grades.monitor.bestSignalPct.toFixed(1),
+          best_signal_picks: grades.monitor.bestSignalPicks,
+          total_derived_picks: grades.monitor.totalDerivedPicks,
         },
       };
     }

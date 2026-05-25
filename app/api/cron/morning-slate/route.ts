@@ -120,23 +120,29 @@ export async function GET(request: Request) {
 
       // 9. V2.1 Layer 3 — market signal derivation. Reads sharp_signals
       // (written in step 4) + predictions (step 6/7); writes market_signal
-      // onto game_predictions + prop_predictions.
+      // onto game_predictions + prop_predictions. 6.3.5b: dual-writes
+      // per-pick (ml/ou/nrfi) + legacy market_signal columns.
       const marketSignals = await updateMarketSignalsForSlate(sport, date);
       const marketTouched =
         marketSignals.gamePredictionsUpdated +
         marketSignals.propPredictionsUpdated;
       records += marketTouched;
       stepDetails.market_signals = marketTouched;
+      stepDetails.market_signals_perMarket = marketSignals.perMarket;
 
-      // 10. V2.1 grade engine. Reads market_signal (just written) + ev_pct
-      // from sharp_signals + prop edge_pct; writes the 7-category grade +
-      // signal_type attribution onto both prediction tables.
+      // 10. V2.1 grade engine. Reads per-pick market_signal (just written)
+      // + ev_pct from sharp_signals + prop edge_pct; writes the 7-category
+      // grade + signal_type attribution. 6.3.5b: dual-writes per-pick
+      // (ml/ou/nrfi grade + signal_type) + legacy grade/signal_type columns.
       const grades = await updateGradesForSlate(sport, date);
       const gradeTouched =
         grades.gamePredictionsUpdated + grades.propPredictionsUpdated;
       records += gradeTouched;
       stepDetails.grades = gradeTouched;
+      stepDetails.grades_perMarket = grades.perMarket;
       stepDetails.best_signal_pct = grades.monitor.bestSignalPct.toFixed(1);
+      stepDetails.best_signal_picks = grades.monitor.bestSignalPicks;
+      stepDetails.total_derived_picks = grades.monitor.totalDerivedPicks;
 
       // 11. Auto-publish the slate. V1 has no admin review UI — successful
       // morning-slate cron IS the admin promotion. Phase 7.5 swaps this for

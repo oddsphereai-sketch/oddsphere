@@ -311,22 +311,33 @@ async function main() {
   // ─── Best-signal slate monitor ─────────────────────────────────────────
   section("monitorBestSignalShare");
 
+  /**
+   * Synthesize a SlateGrades with `bestSignalCount` best_signal picks +
+   * `otherCount` model_only picks. The 6.3.5b monitor counts picks across
+   * games.{ml,ou,nrfi} + props — for simplicity we put all picks in the
+   * ML market (one pick per row × N rows). Pick-count semantics are the
+   * same regardless of which market the picks land in.
+   */
   function fakeSlate(
     bestSignalCount: number,
     otherCount: number
   ): SlateGrades {
-    const games = new Map<
+    const ml = new Map<
       number,
       { grade: import("../lib/types/domain/Grade").Grade; signal_type: import("../lib/types/domain/Grade").SignalType }
     >();
     let id = 1;
     for (let i = 0; i < bestSignalCount; i++) {
-      games.set(id++, { grade: "best_signal", signal_type: "balanced" });
+      ml.set(id++, { grade: "best_signal", signal_type: "balanced" });
     }
     for (let i = 0; i < otherCount; i++) {
-      games.set(id++, { grade: "model_only", signal_type: "model_only" });
+      ml.set(id++, { grade: "model_only", signal_type: "model_only" });
     }
-    return { games, props: new Map() };
+    return {
+      games: { ml, ou: new Map(), nrfi: new Map() },
+      gamesLegacy: new Map(ml),
+      props: new Map(),
+    };
   }
 
   // Capture console.warn to test the monitor without polluting test output.
@@ -356,10 +367,47 @@ async function main() {
     m2.result.bestSignalPct === 30 && m2.result.exceededThreshold === true && m2.warned
   );
 
-  const m3 = withMutedWarn(() => monitorBestSignalShare({ games: new Map(), props: new Map() }, "test"));
+  const m3 = withMutedWarn(() =>
+    monitorBestSignalShare(
+      {
+        games: { ml: new Map(), ou: new Map(), nrfi: new Map() },
+        gamesLegacy: new Map(),
+        props: new Map(),
+      },
+      "test"
+    )
+  );
   check(
     "Empty slate → monitor returns pct=0, does NOT warn",
     m3.result.bestSignalPct === 0 && m3.result.exceededThreshold === false && !m3.warned
+  );
+
+  // Pick-count semantics: 1 best_signal in ML + 1 best_signal in OU + 1 in
+  // NRFI + 1 in props = 4 best_signal across 4 derived picks (100% — must warn).
+  const crossMarketSlate: SlateGrades = {
+    games: {
+      ml: new Map([[1, { grade: "best_signal", signal_type: "balanced" }]]),
+      ou: new Map([[1, { grade: "best_signal", signal_type: "balanced" }]]),
+      nrfi: new Map([[1, { grade: "best_signal", signal_type: "balanced" }]]),
+    },
+    gamesLegacy: new Map([[1, { grade: "best_signal", signal_type: "balanced" }]]),
+    props: new Map([[100, { grade: "best_signal", signal_type: "balanced" }]]),
+  };
+  const m4 = withMutedWarn(() =>
+    monitorBestSignalShare(crossMarketSlate, "test")
+  );
+  check(
+    "monitor counts picks across ml + ou + nrfi + props (not games)",
+    m4.result.totalDerivedPicks === 4 && m4.result.bestSignalPicks === 4
+  );
+  check(
+    "perMarket sub-counts surface in monitor result",
+    m4.result.perMarket.ml.derived === 1 &&
+      m4.result.perMarket.ou.derived === 1 &&
+      m4.result.perMarket.nrfi.derived === 1 &&
+      m4.result.perMarket.ml.bestSignals === 1 &&
+      m4.result.perMarket.ou.bestSignals === 1 &&
+      m4.result.perMarket.nrfi.bestSignals === 1
   );
 
   // ─── Batch + DB integration ────────────────────────────────────────────
@@ -383,10 +431,17 @@ async function main() {
     // Ensure Layer 3 is populated before grading.
     await updateMarketSignalsForSlate("mlb", targetSlate);
 
+    // First ensure marketSignalDerivationService has populated the per-pick
+    // market_signal columns gradeDerivationService reads from.
+    await updateMarketSignalsForSlate("mlb", targetSlate);
+
     const derived = await deriveGradesForSlate("mlb", targetSlate);
     check(
-      "deriveGradesForSlate returned non-empty maps for seeded slate",
-      derived.games.size > 0 || derived.props.size > 0
+      "deriveGradesForSlate returned non-empty per-pick maps for seeded slate",
+      derived.games.ml.size > 0 ||
+        derived.games.ou.size > 0 ||
+        derived.games.nrfi.size > 0 ||
+        derived.props.size > 0
     );
 
     const ALL_GRADES = new Set([
@@ -407,7 +462,13 @@ async function main() {
     ]);
     let badGrade = 0;
     let badSignalType = 0;
-    for (const out of derived.games.values()) {
+    for (const market of ["ml", "ou", "nrfi"] as const) {
+      for (const out of derived.games[market].values()) {
+        if (!ALL_GRADES.has(out.grade)) badGrade++;
+        if (!ALL_SIGNAL_TYPES.has(out.signal_type)) badSignalType++;
+      }
+    }
+    for (const out of derived.gamesLegacy.values()) {
       if (!ALL_GRADES.has(out.grade)) badGrade++;
       if (!ALL_SIGNAL_TYPES.has(out.signal_type)) badSignalType++;
     }
@@ -421,43 +482,106 @@ async function main() {
       badSignalType === 0
     );
 
+    // Dual-write parity: gamesLegacy[id] === first non-null per-pick
+    // GradeOutput in ML → OU → NRFI precedence. Both fields (grade +
+    // signal_type) come from the same precedence-winning pick.
+    let parityMismatch = 0;
+    for (const [id, legacyOut] of derived.gamesLegacy.entries()) {
+      const expected =
+        derived.games.ml.get(id) ??
+        derived.games.ou.get(id) ??
+        derived.games.nrfi.get(id);
+      if (
+        !expected ||
+        expected.grade !== legacyOut.grade ||
+        expected.signal_type !== legacyOut.signal_type
+      ) {
+        parityMismatch++;
+      }
+    }
+    check(
+      "dual-write parity: gamesLegacy GradeOutput = first non-null in ML→OU→NRFI precedence",
+      parityMismatch === 0
+    );
+
     const r1 = await updateGradesForSlate("mlb", targetSlate);
     check(
       "updateGradesForSlate wrote at least one row",
       r1.gamePredictionsUpdated > 0 || r1.propPredictionsUpdated > 0
     );
+    check(
+      "result includes perMarket sub-counts (derived === written)",
+      r1.perMarket.ml.derived === r1.perMarket.ml.written &&
+        r1.perMarket.ou.derived === r1.perMarket.ou.written &&
+        r1.perMarket.nrfi.derived === r1.perMarket.nrfi.written
+    );
 
     const r2 = await updateGradesForSlate("mlb", targetSlate);
     check(
-      "re-running updateGradesForSlate is idempotent (same counts)",
+      "re-running updateGradesForSlate is idempotent (same row counts)",
       r2.gamePredictionsUpdated === r1.gamePredictionsUpdated &&
         r2.propPredictionsUpdated === r1.propPredictionsUpdated
     );
 
-    // DB spot-check: sampled rows match derived (both columns).
-    const sampleGameIds = Array.from(derived.games.keys()).slice(0, 5);
+    // DB spot-check: per-pick + legacy columns match derived values.
+    const sampleGameIds = Array.from(derived.gamesLegacy.keys()).slice(0, 5);
     if (sampleGameIds.length > 0) {
       const { data: gameDbRows } = await supabase
         .from("game_predictions")
-        .select("id, grade, signal_type")
+        .select(
+          "id, grade, signal_type, ml_grade, ml_signal_type, ou_grade, ou_signal_type, nrfi_grade, nrfi_signal_type"
+        )
         .in("id", sampleGameIds);
-      let mismatch = 0;
+      let legacyMismatch = 0;
+      let perPickMismatch = 0;
       for (const row of (gameDbRows ?? []) as Array<{
         id: number;
         grade: string | null;
         signal_type: string | null;
+        ml_grade: string | null;
+        ml_signal_type: string | null;
+        ou_grade: string | null;
+        ou_signal_type: string | null;
+        nrfi_grade: string | null;
+        nrfi_signal_type: string | null;
       }>) {
-        const expected = derived.games.get(row.id);
+        const legacyExpected = derived.gamesLegacy.get(row.id);
         if (
-          !expected ||
-          expected.grade !== row.grade ||
-          expected.signal_type !== row.signal_type
-        )
-          mismatch++;
+          !legacyExpected ||
+          legacyExpected.grade !== row.grade ||
+          legacyExpected.signal_type !== row.signal_type
+        ) {
+          legacyMismatch++;
+        }
+        const mlExpected = derived.games.ml.get(row.id) ?? null;
+        if (
+          (mlExpected?.grade ?? null) !== row.ml_grade ||
+          (mlExpected?.signal_type ?? null) !== row.ml_signal_type
+        ) {
+          perPickMismatch++;
+        }
+        const ouExpected = derived.games.ou.get(row.id) ?? null;
+        if (
+          (ouExpected?.grade ?? null) !== row.ou_grade ||
+          (ouExpected?.signal_type ?? null) !== row.ou_signal_type
+        ) {
+          perPickMismatch++;
+        }
+        const nrfiExpected = derived.games.nrfi.get(row.id) ?? null;
+        if (
+          (nrfiExpected?.grade ?? null) !== row.nrfi_grade ||
+          (nrfiExpected?.signal_type ?? null) !== row.nrfi_signal_type
+        ) {
+          perPickMismatch++;
+        }
       }
       check(
-        "game_predictions DB grade+signal_type match derived map for sampled rows",
-        mismatch === 0
+        "DB legacy grade+signal_type match derived gamesLegacy for sampled rows",
+        legacyMismatch === 0
+      );
+      check(
+        "DB per-pick ml/ou/nrfi grade+signal_type match derived maps for sampled rows",
+        perPickMismatch === 0
       );
     }
 
@@ -488,10 +612,12 @@ async function main() {
     }
 
     // Best-signal monitor on the real slate — should NOT throw regardless
-    // of whether it warns. Just confirm it returns a sane structure.
+    // of whether it warns. Confirm the structured result.
     check(
-      "real-slate monitor returns a structured result (total >= 0)",
-      r1.monitor.total >= 0 && typeof r1.monitor.bestSignalPct === "number"
+      "real-slate monitor returns a structured result (totalDerivedPicks >= 0)",
+      r1.monitor.totalDerivedPicks >= 0 &&
+        typeof r1.monitor.bestSignalPct === "number" &&
+        typeof r1.monitor.perMarket.ml.derived === "number"
     );
   }
 
