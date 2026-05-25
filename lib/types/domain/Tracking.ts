@@ -1,4 +1,5 @@
 import type { Sport } from "./Sport";
+import type { SignalType, SourceType } from "./Grade";
 
 /** Outcome of a resolved prediction. */
 export type PredictionOutcome = "win" | "loss" | "push" | "void";
@@ -24,7 +25,16 @@ export type TrackingMarket =
   | "prop_hits_allowed"
   | (string & {});
 
-/** Mirrors the `prediction_results` table. */
+/**
+ * Mirrors the `prediction_results` table.
+ *
+ * Schema V7/V11 fields (Phase 6.3a):
+ *   • signal_type — carried forward from the prediction at resolve time so
+ *     tracking can pivot historical W/L by signal source without rejoining
+ *     a predictions table that gets regenerated each slate.
+ *   • source_type — provenance carried forward likewise. NOT NULL with
+ *     DB DEFAULT 'mock'; existing rows backfilled to 'mock'.
+ */
 export type PredictionResult = {
   id: number;
   prediction_type: PredictionType;
@@ -42,6 +52,9 @@ export type PredictionResult = {
   closing_odds_american: number | null;
   clv_pct: number | null;
   beat_closing_line: boolean | null;
+  // V2.1 attribution (V7) + provenance (V11) carried forward from the prediction
+  signal_type: SignalType | null;
+  source_type: SourceType;
   created_at: string;
 };
 

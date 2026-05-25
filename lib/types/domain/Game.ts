@@ -1,4 +1,5 @@
 import type { Sport } from "./Sport";
+import type { SlateStatus } from "./Grade";
 
 /** Game status codes mirroring BALLDONTLIE / ESPN conventions. */
 export type GameStatus =
@@ -43,6 +44,9 @@ export type Game = {
   first_inning_runs: number | null;
   venue: string | null;
   attendance: number | null;
+  // V8 publish lifecycle — NOT NULL with DB DEFAULT 'draft'. Read paths in
+  // 6.3a do not filter on this; slatePublishService (Phase 6.3d) does.
+  slate_status: SlateStatus;
   created_at: string;
   updated_at: string;
 };

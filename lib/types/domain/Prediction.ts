@@ -1,3 +1,5 @@
+import type { Grade, MarketSignal, SignalType, SourceType } from "./Grade";
+
 /**
  * Mirrors the `game_predictions` table — scores-model output per game, with
  * CLV columns folded inline.
@@ -11,6 +13,13 @@
  *     future auto-model.
  *   • is_override + original_auto_prediction track hybrid mode where Daniel
  *     manually overrides specific auto-predictions.
+ *
+ * Schema V6/V7/V11 changes (Phase 6.3a):
+ *   • market_signal — Layer 3 market read (populated by Phase 6.3c).
+ *   • grade — final 7-category V2.1 grade (populated by Phase 6.3d).
+ *   • signal_type — attribution of which layer drove the grade.
+ *   • source_type — data provenance (mock / manual / real_api). NOT NULL
+ *     in DB with DEFAULT 'mock'; existing rows backfilled to 'mock'.
  *
  * MLB-specific fields (predicted_nrfi, nrfi_confidence) remain top-level
  * for back-compat with the MLB cron flow but ALSO appear in sport_specific
@@ -51,6 +60,12 @@ export type GamePrediction = {
   closing_odds_american: number | null;
   clv_pct: number | null;
   beat_closing_line: boolean | null;
+  // V2.1 grade engine (V6/V7 — populated by Phase 6.3c/6.3d)
+  market_signal: MarketSignal | null;
+  grade: Grade | null;
+  signal_type: SignalType | null;
+  // V11 provenance — NOT NULL with DB DEFAULT 'mock'
+  source_type: SourceType;
   model_version: string | null;
   computed_at: string;
   created_at: string;

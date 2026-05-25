@@ -1,4 +1,5 @@
 import type { PropMarketType } from "./Lines";
+import type { Grade, MarketSignal, SignalType, SourceType } from "./Grade";
 
 /**
  * Tier classification of edge:
@@ -9,7 +10,14 @@ import type { PropMarketType } from "./Lines";
  */
 export type PropTier = "premium" | "strong" | "good" | "skip";
 
-/** Mirrors the `prop_predictions` table — our prop model's output. */
+/**
+ * Mirrors the `prop_predictions` table — our prop model's output.
+ *
+ * Schema V6/V7/V11 fields (Phase 6.3a) sit alongside the existing model
+ * output: market_signal (Layer 3 market read), grade (7-category V2.1
+ * grade), signal_type (attribution), source_type (provenance). Same shape
+ * as GamePrediction — same engine, different display labels.
+ */
 export type PropPrediction = {
   id: number;
   game_id: number | null;
@@ -36,6 +44,12 @@ export type PropPrediction = {
   closing_odds_american: number | null;
   clv_pct: number | null;
   beat_closing_line: boolean | null;
+  // V2.1 grade engine (V6/V7 — populated by Phase 6.3c/6.3d)
+  market_signal: MarketSignal | null;
+  grade: Grade | null;
+  signal_type: SignalType | null;
+  // V11 provenance — NOT NULL with DB DEFAULT 'mock'
+  source_type: SourceType;
   model_version: string | null;
   computed_at: string;
   created_at: string;
