@@ -19,7 +19,7 @@ import {
 import { evaluateSignal } from "../lib/models/dailyEdge/sharpSignalEvaluator";
 import { generateVerdictText } from "../lib/models/dailyEdge/verdictGenerator";
 import danielsModelJson from "../lib/providers/mock/fixtures/daniels_model.json";
-import type { SharpSignalRecord } from "../lib/providers/interfaces/IBettingProvider";
+import type { SharpSignalRecord } from "../lib/providers/interfaces/ISharpSignalProvider";
 
 function logSection(title: string) {
   console.log(`\n${"─".repeat(70)}\n${title}\n${"─".repeat(70)}`);

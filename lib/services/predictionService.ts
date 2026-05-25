@@ -21,8 +21,8 @@
 
 import { supabase } from "../db/supabase";
 import {
-  getBettingProvider,
-  getStatsProvider,
+  getOddsProvider,
+  getPlayerStatsProvider,
   getWeatherProvider,
 } from "../providers/factory";
 import { getScoresModelSource } from "../scoresModel/factory";
@@ -35,7 +35,7 @@ import type {
 import { evaluateSignal } from "../models/dailyEdge/sharpSignalEvaluator";
 import { generateVerdictText } from "../models/dailyEdge/verdictGenerator";
 import * as signalDerivationService from "./signalDerivationService";
-import type { SharpSignalRecord } from "../providers/interfaces/IBettingProvider";
+import type { SharpSignalRecord } from "../providers/interfaces/ISharpSignalProvider";
 import type { Sport } from "../types/domain/Sport";
 import type { PropMarketType } from "../types/domain/Lines";
 import type { CronHandlerResult } from "../cron/runCron";
@@ -105,8 +105,8 @@ export const predictionService = {
     sport: Sport,
     date: string
   ): Promise<CronHandlerResult> {
-    const stats = getStatsProvider();
-    const betting = getBettingProvider();
+    const stats = getPlayerStatsProvider();
+    const odds = getOddsProvider();
 
     const gameIdByExternal = await loadGameIdMap(sport, date);
     if (gameIdByExternal.size === 0) {
@@ -177,7 +177,7 @@ export const predictionService = {
     );
 
     // Prop lines for tonight (player_id NOT NULL filters to props)
-    const allLines = await betting.getPlayerProps(date, sport);
+    const allLines = await odds.getPlayerProps(date, sport);
     let apiCalls = 1;
 
     // Group lines by unique (game, player, market, line)

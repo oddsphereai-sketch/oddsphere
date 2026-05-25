@@ -8,7 +8,7 @@
  * (`is_notable`, `notable_reason`, `wind_direction_relative`) are computed by
  * our cron logic, not by OpenWeather.
  *
- * RECORD SHAPES: see IStatsProvider header for the conventions.
+ * RECORD SHAPES: see IPlayerStatsProvider header for the conventions.
  */
 
 /**

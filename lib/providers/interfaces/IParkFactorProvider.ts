@@ -8,7 +8,7 @@
  * >100 favor the stat in question; <100 suppress it (e.g., Coors park_factor_runs
  * ~115, Tropicana ~96). Updated quarterly via the weekly-park-factors cron.
  *
- * RECORD SHAPES: see IStatsProvider header for the conventions. Records use
+ * RECORD SHAPES: see IPlayerStatsProvider header for the conventions. Records use
  * team abbreviation (NOT our DB id) — service resolves to team_id and then
  * to ballpark_id during upsert.
  */

@@ -1,7 +1,7 @@
 /**
  * IScoresModelSource — contract for the scores-model data source per sport.
  *
- * Mirrors the Phase 1 provider abstraction (IStatsProvider, IBettingProvider).
+ * Mirrors the Phase 1 provider abstraction (IPlayerStatsProvider, IOddsProvider, ISharpSignalProvider).
  * Two implementations:
  *   • ManualScoresModelSource (V1)  — reads from game_predictions rows
  *                                       that Daniel uploaded via the admin UI.

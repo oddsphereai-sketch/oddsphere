@@ -2,7 +2,7 @@
  * Sharp Signal Evaluator — classify a sharp_signals row as STRONG / CAUTION / neutral.
  *
  * Pure function. Input: one SharpSignalRecord (raw signal bundle from SharpAPI
- * via IBettingProvider). Output: composite verdict + the signal_strength /
+ * via ISharpSignalProvider). Output: composite verdict + the signal_strength /
  * signal_summary fields that will overwrite the row in the sharp_signals
  * table.
  *
@@ -18,7 +18,7 @@
  * by the audit log for "why did this signal classify the way it did".
  */
 
-import type { SharpSignalRecord } from "../../providers/interfaces/IBettingProvider";
+import type { SharpSignalRecord } from "../../providers/interfaces/ISharpSignalProvider";
 import type { SignalStrength } from "../../types/domain/SharpSignal";
 import { SHARP_SIGNAL_THRESHOLDS } from "../../config/constants";
 

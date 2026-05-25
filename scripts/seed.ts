@@ -1,9 +1,10 @@
 /**
  * scripts/seed.ts — populate Supabase with the mock dataset.
  *
- * Pulls data through the provider abstraction (getStatsProvider() etc.) so
+ * Pulls data through the provider abstraction (getPlayerStatsProvider() etc.) so
  * the seed exercises the same code path the production crons will use.
- * Mock is hard-wired in this script via USE_REAL_*=false (set in .env.local).
+ * Mock is hard-wired in this script via *_PROVIDER=mock (the default when
+ * the env var is unset; explicitly setting mock has the same effect).
  *
  * Strategy:
  *   1. Delete in reverse FK order — idempotent reset every run.
@@ -20,8 +21,9 @@
 
 import { supabase } from "../lib/db/supabase";
 import {
-  getStatsProvider,
-  getBettingProvider,
+  getPlayerStatsProvider,
+  getOddsProvider,
+  getSharpSignalProvider,
   getWeatherProvider,
   getParkFactorProvider,
 } from "../lib/providers/factory";
@@ -121,7 +123,7 @@ async function deleteAll() {
 async function seedReference() {
   logSection("Stage 1 · reference data (teams, ballparks, players)");
 
-  const stats = getStatsProvider();
+  const stats = getPlayerStatsProvider();
   const parks = getParkFactorProvider();
 
   // Teams
@@ -255,7 +257,7 @@ async function seedSeasonStats(
   playerIdByExternal: Map<number, number>,
   teamIdByExternal: Map<number, number>
 ) {
-  const stats = getStatsProvider();
+  const stats = getPlayerStatsProvider();
   const all: Record<string, unknown>[] = [];
   for (const [extId, dbId] of playerIdByExternal) {
     const rows = await stats.getPlayerSeasonStats(extId, [2024, 2025, 2026]);
@@ -316,7 +318,7 @@ async function seedSeasonStats(
 }
 
 async function seedSplits(playerIdByExternal: Map<number, number>) {
-  const stats = getStatsProvider();
+  const stats = getPlayerStatsProvider();
   const all: Record<string, unknown>[] = [];
   for (const [extId, dbId] of playerIdByExternal) {
     const rows = await stats.getPlayerSplits(extId, 2025);
@@ -345,7 +347,7 @@ async function seedSplits(playerIdByExternal: Map<number, number>) {
 }
 
 async function seedPitchStats(playerIdByExternal: Map<number, number>) {
-  const stats = getStatsProvider();
+  const stats = getPlayerStatsProvider();
   const pitcherAll: Record<string, unknown>[] = [];
   const hitterAll: Record<string, unknown>[] = [];
   for (const [extId, dbId] of playerIdByExternal) {
@@ -403,7 +405,7 @@ async function seedSlate(
 ): Promise<GameMap> {
   logSection("Stage 2 · tonight's slate");
 
-  const stats = getStatsProvider();
+  const stats = getPlayerStatsProvider();
   const weather = getWeatherProvider();
 
   // Games
@@ -551,10 +553,11 @@ async function seedBetting(
 ) {
   logSection("Stage 3 · betting (lines, line_history, sharp_signals)");
 
-  const betting = getBettingProvider();
+  const odds = getOddsProvider();
+  const sharp = getSharpSignalProvider();
 
   // Game lines
-  const gameLines = await betting.getGameLines("2026-05-22", "mlb");
+  const gameLines = await odds.getGameLines("2026-05-22", "mlb");
   const [glRows, t1] = await timed(() =>
     bulkInsert(
       "lines",
@@ -581,7 +584,7 @@ async function seedBetting(
   logStep("lines (game)", glRows.length, t1);
 
   // Player props
-  const propLines = await betting.getPlayerProps("2026-05-22", "mlb");
+  const propLines = await odds.getPlayerProps("2026-05-22", "mlb");
   const [plRows, t2] = await timed(() =>
     bulkInsert(
       "lines",
@@ -641,7 +644,7 @@ async function seedBetting(
   logStep("line_history", lhRows.length, t3);
 
   // Sharp signals
-  const signals = await betting.getSharpSignals("2026-05-22");
+  const signals = await sharp.getSharpSignals("2026-05-22");
   const [ssRows, t4] = await timed(() =>
     bulkInsert(
       "sharp_signals",

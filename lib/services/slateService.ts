@@ -12,7 +12,7 @@
  */
 
 import { supabase } from "../db/supabase";
-import { getStatsProvider } from "../providers/factory";
+import { getPlayerStatsProvider } from "../providers/factory";
 import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
 import { computeSlateDate } from "../dates/slateDate";
@@ -28,7 +28,7 @@ export const slateService = {
    * Upserts the games table. Returns counts for refreshLogger.
    */
   async refreshGames(sport: Sport, date: string): Promise<CronHandlerResult> {
-    const stats = getStatsProvider();
+    const stats = getPlayerStatsProvider();
     let apiCalls = 0;
 
     const teamIdByExternal = await loadTeamIdMap(sport);

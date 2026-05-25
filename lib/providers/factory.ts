@@ -1,78 +1,130 @@
 /**
  * Provider factory.
  *
- * Reads the four USE_REAL_* env vars and returns the corresponding
- * implementation — Mock during Phase 2/3 builds, Real (live API) from Phase 4
- * onward. Instances are cached per-process (singletons).
+ * Rewritten in Phase 6.3b to align with V2.1's tri-state provider routing.
+ * Each provider reads a `<DOMAIN>_PROVIDER` env var whose value is one of:
  *
- * Env flag semantics: only the literal string "true" enables the real
- * provider. Any other value (including "1", "TRUE", undefined, empty) keeps
- * the mock. This is intentional — a typo'd env var should NOT silently swap
- * in the live API and start spending paid quota.
+ *   mock      (V1 default, also chosen when var is unset or unrecognized)
+ *   manual    (admin-pasted via Phase 7.25 — throws notImplemented until then)
+ *   real_api  (paid live feed — throws notImplemented until Phase 8)
+ *
+ * Defensive default: any value other than the three above falls back to
+ * mock. A typo'd env var must NEVER silently swap in a paid feed and start
+ * spending quota.
+ *
+ * Instances are cached per-process (singletons). `__resetProviderCache()` is
+ * a test-only escape hatch — production code never calls it.
  */
 
-import type { IBettingProvider } from "./interfaces/IBettingProvider";
-import type { IParkFactorProvider } from "./interfaces/IParkFactorProvider";
-import type { IStatsProvider } from "./interfaces/IStatsProvider";
+import type { IOddsProvider } from "./interfaces/IOddsProvider";
+import type { ISharpSignalProvider } from "./interfaces/ISharpSignalProvider";
+import type { IPlayerStatsProvider } from "./interfaces/IPlayerStatsProvider";
 import type { IWeatherProvider } from "./interfaces/IWeatherProvider";
+import type { IParkFactorProvider } from "./interfaces/IParkFactorProvider";
 
-import { MockBettingProvider } from "./mock/MockBettingProvider";
-import { MockParkFactorProvider } from "./mock/MockParkFactorProvider";
-import { MockStatsProvider } from "./mock/MockStatsProvider";
+import { MockOddsProvider } from "./mock/MockOddsProvider";
+import { MockSharpSignalProvider } from "./mock/MockSharpSignalProvider";
+import { MockPlayerStatsProvider } from "./mock/MockPlayerStatsProvider";
 import { MockWeatherProvider } from "./mock/MockWeatherProvider";
+import { MockParkFactorProvider } from "./mock/MockParkFactorProvider";
 
-let statsInstance: IStatsProvider | null = null;
-let bettingInstance: IBettingProvider | null = null;
+type ProviderMode = "mock" | "manual" | "real_api";
+
+let oddsInstance: IOddsProvider | null = null;
+let sharpSignalInstance: ISharpSignalProvider | null = null;
+let playerStatsInstance: IPlayerStatsProvider | null = null;
 let weatherInstance: IWeatherProvider | null = null;
 let parkFactorInstance: IParkFactorProvider | null = null;
 
-function useReal(envKey: string): boolean {
-  return process.env[envKey] === "true";
+/**
+ * Read the provider mode from the named env var. Defaults to "mock" when
+ * unset OR when the value isn't one of the three valid modes — defensive
+ * to typos so we never accidentally route to a paid API.
+ */
+function readMode(envKey: string): ProviderMode {
+  const raw = process.env[envKey];
+  if (raw === "manual" || raw === "real_api") return raw;
+  return "mock";
 }
 
 function notImplemented(
-  envFlagSuffix: string,
+  envKey: string,
+  mode: ProviderMode,
   realClassName: string,
   phase: string
 ): never {
   throw new Error(
-    `USE_REAL_${envFlagSuffix}=true but ${realClassName} is not yet implemented (planned for ${phase}). ` +
-      `Set USE_REAL_${envFlagSuffix}=false (or unset) to use the mock.`
+    `${envKey}=${mode} but ${realClassName} is not yet implemented (planned for ${phase}). ` +
+      `Set ${envKey}=mock (or unset) to use the mock.`
   );
 }
 
-export function getStatsProvider(): IStatsProvider {
-  if (statsInstance === null) {
-    statsInstance = useReal("USE_REAL_STATS")
-      ? notImplemented("STATS", "BallDontLieProvider", "Phase 4")
-      : new MockStatsProvider();
+export function getOddsProvider(): IOddsProvider {
+  if (oddsInstance === null) {
+    const mode = readMode("ODDS_PROVIDER");
+    if (mode === "mock") {
+      oddsInstance = new MockOddsProvider();
+    } else if (mode === "manual") {
+      notImplemented("ODDS_PROVIDER", mode, "AdminUploadOddsProvider", "Phase 7.25");
+    } else {
+      notImplemented("ODDS_PROVIDER", mode, "SharpAPIOddsProvider", "Phase 8");
+    }
   }
-  return statsInstance;
+  return oddsInstance;
 }
 
-export function getBettingProvider(): IBettingProvider {
-  if (bettingInstance === null) {
-    bettingInstance = useReal("USE_REAL_BETTING")
-      ? notImplemented("BETTING", "SharpAPIProvider", "Phase 4")
-      : new MockBettingProvider();
+export function getSharpSignalProvider(): ISharpSignalProvider {
+  if (sharpSignalInstance === null) {
+    const mode = readMode("SHARP_SIGNAL_PROVIDER");
+    if (mode === "mock") {
+      sharpSignalInstance = new MockSharpSignalProvider();
+    } else if (mode === "manual") {
+      notImplemented("SHARP_SIGNAL_PROVIDER", mode, "AdminUploadSharpSignalProvider", "Phase 7.25");
+    } else {
+      notImplemented("SHARP_SIGNAL_PROVIDER", mode, "SharpAPISignalProvider", "Phase 8");
+    }
   }
-  return bettingInstance;
+  return sharpSignalInstance;
+}
+
+export function getPlayerStatsProvider(): IPlayerStatsProvider {
+  if (playerStatsInstance === null) {
+    const mode = readMode("PLAYER_STATS_PROVIDER");
+    if (mode === "mock") {
+      playerStatsInstance = new MockPlayerStatsProvider();
+    } else if (mode === "manual") {
+      notImplemented("PLAYER_STATS_PROVIDER", mode, "AdminUploadStatsProvider", "Phase 7.25");
+    } else {
+      notImplemented("PLAYER_STATS_PROVIDER", mode, "BallDontLieProvider", "Phase 8");
+    }
+  }
+  return playerStatsInstance;
 }
 
 export function getWeatherProvider(): IWeatherProvider {
   if (weatherInstance === null) {
-    weatherInstance = useReal("USE_REAL_WEATHER")
-      ? notImplemented("WEATHER", "OpenWeatherProvider", "Phase 4")
-      : new MockWeatherProvider();
+    const mode = readMode("WEATHER_PROVIDER");
+    if (mode === "mock") {
+      weatherInstance = new MockWeatherProvider();
+    } else if (mode === "manual") {
+      notImplemented("WEATHER_PROVIDER", mode, "AdminUploadWeatherProvider", "Phase 7.25");
+    } else {
+      notImplemented("WEATHER_PROVIDER", mode, "OpenWeatherProvider", "Phase 8");
+    }
   }
   return weatherInstance;
 }
 
 export function getParkFactorProvider(): IParkFactorProvider {
   if (parkFactorInstance === null) {
-    parkFactorInstance = useReal("USE_REAL_PARK_FACTORS")
-      ? notImplemented("PARK_FACTORS", "FanGraphsProvider", "Phase 4")
-      : new MockParkFactorProvider();
+    const mode = readMode("PARK_FACTOR_PROVIDER");
+    if (mode === "mock") {
+      parkFactorInstance = new MockParkFactorProvider();
+    } else if (mode === "manual") {
+      notImplemented("PARK_FACTOR_PROVIDER", mode, "AdminUploadParkFactorProvider", "Phase 7.25");
+    } else {
+      notImplemented("PARK_FACTOR_PROVIDER", mode, "FanGraphsProvider", "Phase 8");
+    }
   }
   return parkFactorInstance;
 }
@@ -83,8 +135,9 @@ export function getParkFactorProvider(): IParkFactorProvider {
  * runs without restarting the process.
  */
 export function __resetProviderCache(): void {
-  statsInstance = null;
-  bettingInstance = null;
+  oddsInstance = null;
+  sharpSignalInstance = null;
+  playerStatsInstance = null;
   weatherInstance = null;
   parkFactorInstance = null;
 }

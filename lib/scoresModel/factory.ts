@@ -3,8 +3,9 @@
  *
  * Mirrors the Phase 1 provider factory pattern. Strict env-flag check:
  * ONLY the literal string "true" enables the auto model. A typo'd value
- * (e.g., "1", "TRUE") stays on manual — same defensive posture as
- * USE_REAL_STATS et al.
+ * (e.g., "1", "TRUE") stays on manual — same defensive posture as the
+ * provider factory's tri-state PLAYER_STATS_PROVIDER / ODDS_PROVIDER vars
+ * (anything other than the three known modes falls back to mock).
  *
  * Auto sources aren't implemented yet (Phase 10+). Trying to enable one
  * throws a helpful error naming the missing class so future-me knows

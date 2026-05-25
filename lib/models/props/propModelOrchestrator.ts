@@ -25,8 +25,8 @@ import type {
   StatsPlayerRecord,
   StatsSeasonRecord,
   StatsSplitRecord,
-} from "../../providers/interfaces/IStatsProvider";
-import type { LineRecord } from "../../providers/interfaces/IBettingProvider";
+} from "../../providers/interfaces/IPlayerStatsProvider";
+import type { LineRecord } from "../../providers/interfaces/IOddsProvider";
 import type { PropMarketType, Sportsbook } from "../../types/domain/Lines";
 import type { WindRelative } from "./contextAdjustments";
 

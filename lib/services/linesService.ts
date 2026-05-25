@@ -12,7 +12,7 @@
  */
 
 import { supabase } from "../db/supabase";
-import { getBettingProvider } from "../providers/factory";
+import { getOddsProvider, getSharpSignalProvider } from "../providers/factory";
 import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
 import { loadGameIdMap, loadPlayerIdMap } from "./_idMaps";
@@ -24,7 +24,7 @@ export const linesService = {
    * Also writes an append-only row to line_history per line.
    */
   async refreshGameLines(sport: Sport, date: string): Promise<CronHandlerResult> {
-    const betting = getBettingProvider();
+    const odds = getOddsProvider();
     const gameIdByExternal = await loadGameIdMap(sport, date);
     const gameIds = [...gameIdByExternal.values()];
 
@@ -32,7 +32,7 @@ export const linesService = {
       return { records_updated: 0, api_calls_made: 0 };
     }
 
-    const lines = await betting.getGameLines(date, sport);
+    const lines = await odds.getGameLines(date, sport);
     const apiCalls = 1;
     const skipped: number[] = [];
 
@@ -113,7 +113,7 @@ export const linesService = {
    * (player_id IS NOT NULL) for tonight's games, then INSERT fresh.
    */
   async refreshPlayerProps(sport: Sport, date: string): Promise<CronHandlerResult> {
-    const betting = getBettingProvider();
+    const odds = getOddsProvider();
     const gameIdByExternal = await loadGameIdMap(sport, date);
     const gameIds = [...gameIdByExternal.values()];
     const playerIdByExternal = await loadPlayerIdMap(sport);
@@ -122,7 +122,7 @@ export const linesService = {
       return { records_updated: 0, api_calls_made: 0 };
     }
 
-    const props = await betting.getPlayerProps(date, sport);
+    const props = await odds.getPlayerProps(date, sport);
     const apiCalls = 1;
     const skipped: number[] = [];
 
@@ -183,7 +183,7 @@ export const linesService = {
    * want the DB to reflect *current* signals only.)
    */
   async refreshSharpSignals(sport: Sport, date: string): Promise<CronHandlerResult> {
-    const betting = getBettingProvider();
+    const sharp = getSharpSignalProvider();
     const gameIdByExternal = await loadGameIdMap(sport, date);
     const gameIds = [...gameIdByExternal.values()];
 
@@ -191,7 +191,7 @@ export const linesService = {
       return { records_updated: 0, api_calls_made: 0 };
     }
 
-    const signals = await betting.getSharpSignals(date);
+    const signals = await sharp.getSharpSignals(date);
     const apiCalls = 1;
     const skipped: number[] = [];
 

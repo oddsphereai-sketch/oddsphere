@@ -17,8 +17,8 @@
 
 import { supabase } from "../lib/db/supabase";
 import {
-  getBettingProvider,
-  getStatsProvider,
+  getOddsProvider,
+  getPlayerStatsProvider,
 } from "../lib/providers/factory";
 import { predictPlayerProp } from "../lib/models/props/propModelOrchestrator";
 import type {
@@ -31,8 +31,8 @@ import type {
   StatsPlayerRecord,
   StatsSeasonRecord,
   StatsSplitRecord,
-} from "../lib/providers/interfaces/IStatsProvider";
-import type { LineRecord } from "../lib/providers/interfaces/IBettingProvider";
+} from "../lib/providers/interfaces/IPlayerStatsProvider";
+import type { LineRecord } from "../lib/providers/interfaces/IOddsProvider";
 import type { PropMarketType, Sportsbook } from "../lib/types/domain/Lines";
 import type { WindRelative } from "../lib/models/props/contextAdjustments";
 
@@ -175,8 +175,8 @@ async function main() {
   console.log(`Predict-tonight · slate ${SLATE_DATE}\n`);
   const startedAt = Date.now();
 
-  const stats = getStatsProvider();
-  const betting = getBettingProvider();
+  const stats = getPlayerStatsProvider();
+  const odds = getOddsProvider();
 
   // ── 1. Load DB resolution maps ──────────────────────────────────────────
   logSection("Stage 1 · load slate + resolution maps");
@@ -201,7 +201,7 @@ async function main() {
 
   // ── 2. Get prop lines from the betting provider ─────────────────────────
   logSection("Stage 2 · load prop lines + group by unique opportunity");
-  const allPropLines = await betting.getPlayerProps(SLATE_DATE, "mlb");
+  const allPropLines = await odds.getPlayerProps(SLATE_DATE, "mlb");
   console.log(`  loaded ${allPropLines.length} prop-line records`);
 
   // Group by (game, player, market, line)

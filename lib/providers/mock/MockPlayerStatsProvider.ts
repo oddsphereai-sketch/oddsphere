@@ -1,7 +1,7 @@
 import type { Sport } from "../../types/domain/Sport";
 import type {
   HitterPitchRecord,
-  IStatsProvider,
+  IPlayerStatsProvider,
   PitcherPitchRecord,
   StatsGameRecord,
   StatsInjuryRecord,
@@ -10,7 +10,7 @@ import type {
   StatsSeasonRecord,
   StatsSplitRecord,
   StatsTeamRecord,
-} from "../interfaces/IStatsProvider";
+} from "../interfaces/IPlayerStatsProvider";
 
 import teamsJson from "./fixtures/teams.json";
 import playersJson from "./fixtures/players.json";
@@ -51,7 +51,7 @@ function slateDate(g: StatsGameRecord): string {
   return g.game_date.slice(0, 10);
 }
 
-export class MockStatsProvider implements IStatsProvider {
+export class MockPlayerStatsProvider implements IPlayerStatsProvider {
   async getTeams(sport: Sport): Promise<StatsTeamRecord[]> {
     return TEAMS.filter((t) => t.sport === sport);
   }

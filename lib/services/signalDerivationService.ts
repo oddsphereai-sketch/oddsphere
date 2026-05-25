@@ -26,10 +26,10 @@
  *   • `updateSignalsForSlate(...)` — applies the derived signals to the DB.
  *     Idempotent — re-running over the same slate produces identical rows.
  *
- * Phase 7 swap: provider env flags (USE_REAL_BALLDONTLIE, USE_REAL_WEATHER,
- * etc.) already drive the data sources for player_splits, weather_forecasts,
- * and ballparks. The derivation logic here doesn't change — it just sees
- * real inputs instead of seeded ones.
+ * Phase 7 swap: the tri-state provider env vars (PLAYER_STATS_PROVIDER,
+ * WEATHER_PROVIDER, etc.) drive the data sources for player_splits,
+ * weather_forecasts, and ballparks. The derivation logic here doesn't
+ * change — it just sees real inputs instead of seeded ones.
  */
 
 import { supabase } from "../db/supabase";

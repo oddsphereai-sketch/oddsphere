@@ -18,7 +18,7 @@
  */
 
 import { supabase } from "../db/supabase";
-import { getStatsProvider } from "../providers/factory";
+import { getPlayerStatsProvider } from "../providers/factory";
 import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
 import {
@@ -33,7 +33,7 @@ export const statsService = {
    * Updates team_id (handles trades, call-ups) + active flag.
    */
   async refreshPlayers(sport: Sport): Promise<CronHandlerResult> {
-    const stats = getStatsProvider();
+    const stats = getPlayerStatsProvider();
     const teamIdByExternal = await loadTeamIdMap(sport);
 
     const recs = await stats.getPlayers();
@@ -86,7 +86,7 @@ export const statsService = {
     sport: Sport,
     seasons: number[]
   ): Promise<CronHandlerResult> {
-    const stats = getStatsProvider();
+    const stats = getPlayerStatsProvider();
     const teamIdByExternal = await loadTeamIdMap(sport);
     const playerIdByExternal = await loadPlayerIdMap(sport);
 
@@ -140,7 +140,7 @@ export const statsService = {
    * Skips pitchers (their splits don't drive the prop model).
    */
   async refreshSplits(sport: Sport, season: number): Promise<CronHandlerResult> {
-    const stats = getStatsProvider();
+    const stats = getPlayerStatsProvider();
     const players = await loadPlayerMetadata(sport);
 
     const allRows: Array<Record<string, unknown>> = [];
@@ -177,7 +177,7 @@ export const statsService = {
    * Writes to pitcher_pitch_stats AND hitter_pitch_stats; counts combined.
    */
   async refreshPitchStats(sport: Sport, season: number): Promise<CronHandlerResult> {
-    const stats = getStatsProvider();
+    const stats = getPlayerStatsProvider();
     const players = await loadPlayerMetadata(sport);
 
     const pitcherRows: Array<Record<string, unknown>> = [];
@@ -241,7 +241,7 @@ export const statsService = {
    * resolved injuries (is_active=false) keep their historical row.
    */
   async refreshInjuries(sport: Sport): Promise<CronHandlerResult> {
-    const stats = getStatsProvider();
+    const stats = getPlayerStatsProvider();
     const players = await loadPlayerMetadata(sport);
     const playerIds = [...players.values()].map((p) => p.id);
 

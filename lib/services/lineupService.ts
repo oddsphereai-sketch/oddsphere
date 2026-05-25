@@ -10,7 +10,7 @@
  */
 
 import { supabase } from "../db/supabase";
-import { getStatsProvider } from "../providers/factory";
+import { getPlayerStatsProvider } from "../providers/factory";
 import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
 import { loadGameIdMap, loadPlayerIdMap, loadTeamIdMap } from "./_idMaps";
@@ -21,7 +21,7 @@ export const lineupService = {
    * Returns total lineup rows written + provider call count.
    */
   async refreshLineups(sport: Sport, date: string): Promise<CronHandlerResult> {
-    const stats = getStatsProvider();
+    const stats = getPlayerStatsProvider();
     const gameIdByExternal = await loadGameIdMap(sport, date);
     const teamIdByExternal = await loadTeamIdMap(sport);
     const playerIdByExternal = await loadPlayerIdMap(sport);

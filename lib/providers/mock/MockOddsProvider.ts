@@ -1,9 +1,5 @@
 import type { Sport } from "../../types/domain/Sport";
-import type {
-  IBettingProvider,
-  LineRecord,
-  SharpSignalRecord,
-} from "../interfaces/IBettingProvider";
+import type { IOddsProvider, LineRecord } from "../interfaces/IOddsProvider";
 import type {
   MarketType,
   PropMarketType,
@@ -11,7 +7,6 @@ import type {
 
 import linesJson from "./fixtures/lines.json";
 import propsJson from "./fixtures/player_props.json";
-import sharpSignalsJson from "./fixtures/sharp_signals.json";
 import gamesJson from "./fixtures/games.json";
 import playersJson from "./fixtures/players.json";
 
@@ -19,7 +14,6 @@ const GAME_LINES = linesJson as unknown as LineRecord[];
 const RAW_PROPS = propsJson as unknown as Array<
   LineRecord & { event_external_id?: string }
 >;
-const SHARP_SIGNALS = sharpSignalsJson as unknown as SharpSignalRecord[];
 
 // Slate-date + sport indexing of games (mock games only have UTC timestamps)
 type GameMeta = { id: number; sport: Sport; slate: string };
@@ -85,7 +79,7 @@ function gamesOnSlate(date: string, sport?: Sport): Set<number> {
   );
 }
 
-export class MockBettingProvider implements IBettingProvider {
+export class MockOddsProvider implements IOddsProvider {
   async getGameLines(date: string, sport?: Sport): Promise<LineRecord[]> {
     const ids = gamesOnSlate(date, sport);
     return GAME_LINES.filter((l) => ids.has(l.game_external_id));
@@ -104,18 +98,5 @@ export class MockBettingProvider implements IBettingProvider {
         player_external_id,
       };
     });
-  }
-
-  async getSharpSignals(
-    date: string,
-    gameExternalId?: number
-  ): Promise<SharpSignalRecord[]> {
-    if (gameExternalId !== undefined) {
-      return SHARP_SIGNALS.filter(
-        (s) => s.game_external_id === gameExternalId
-      );
-    }
-    const ids = gamesOnSlate(date);
-    return SHARP_SIGNALS.filter((s) => ids.has(s.game_external_id));
   }
 }

@@ -1,12 +1,17 @@
 /**
- * IStatsProvider — contract for the stats data source.
+ * IPlayerStatsProvider — contract for the stats data source.
  *
- * Real implementation: BallDontLieProvider (paid GOAT tier).
- * Mock implementation: MockStatsProvider (reads from JSON fixtures).
+ * The surface covers more than just players (teams, games, injuries) but the
+ * "player stats" name reflects the dominant call path. Future splits may
+ * carve out separate providers for team-level and schedule data.
+ *
+ * Real implementation: BallDontLieProvider (paid GOAT tier) — Phase 8.
+ * Manual implementation: AdminUploadStatsProvider — Phase 7.25.
+ * Mock implementation: MockPlayerStatsProvider (reads from JSON fixtures).
  *
  * Both implementations return the same record shapes — services that consume
  * this interface never know which is active. The factory picks based on the
- * USE_REAL_STATS env var.
+ * PLAYER_STATS_PROVIDER env var.
  *
  * RECORD SHAPES: methods return "insertable" records — DB-assigned fields
  * (id, created_at, updated_at) are stripped, and foreign keys are expressed
@@ -175,7 +180,7 @@ export type HitterPitchRecord = {
 // Interface
 // ─────────────────────────────────────────────────────────────
 
-export interface IStatsProvider {
+export interface IPlayerStatsProvider {
   /**
    * Fetch all teams for a sport.
    */

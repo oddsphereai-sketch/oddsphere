@@ -17,7 +17,7 @@
  * Returns null for neutral verdicts (no banner rendered).
  */
 
-import type { SharpSignalRecord } from "../../providers/interfaces/IBettingProvider";
+import type { SharpSignalRecord } from "../../providers/interfaces/ISharpSignalProvider";
 import type { SignalEvaluation } from "./sharpSignalEvaluator";
 
 export type GameContext = {

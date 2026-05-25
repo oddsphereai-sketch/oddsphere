@@ -9,7 +9,7 @@
  *   • scoresModelIngester — validateDanielsModelRow (pure validator)
  */
 
-import type { SharpSignalRecord } from "../lib/providers/interfaces/IBettingProvider";
+import type { SharpSignalRecord } from "../lib/providers/interfaces/ISharpSignalProvider";
 import { evaluateSignal } from "../lib/models/dailyEdge/sharpSignalEvaluator";
 import { generateVerdictText } from "../lib/models/dailyEdge/verdictGenerator";
 import {
