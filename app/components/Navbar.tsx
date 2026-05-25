@@ -7,14 +7,21 @@ import { usePathname } from "next/navigation";
 export default function Navbar() {
   const pathname = usePathname();
 
-  // 5F.3: "Tools" replaced with "🔒 The Lab" — member-gated research suite.
-  // Phase 8 will add the actual auth gate at /lab/*; until then non-members
-  // landing on /lab will see the same page members do (internal preview).
-  const navLinks: Array<{ href: string; label: string; lab?: boolean }> = [
+  // 6.2a: hide the public marketing Navbar on premium + admin shells. /lab/*
+  // gets its own LabAppNav (app-style header); /admin/* uses its scoped chrome.
+  // This way the marketing chrome only ever appears on actual marketing pages.
+  if (pathname.startsWith("/lab") || pathname.startsWith("/admin")) {
+    return null;
+  }
+
+  // 6.2a: nav per V2.1 spec § Part 4 — Home / Track Record / Pricing / Log In / Join Premium.
+  // "Tools" link retired entirely (it had been re-purposed as "The Lab" in 5F.3,
+  // but the V2.1 spec puts Lab access behind the Join Premium CTA flow instead).
+  const navLinks: Array<{ href: string; label: string }> = [
     { href: "/", label: "Home" },
-    { href: "/picks", label: "Picks" },
     { href: "/track-record", label: "Track Record" },
-    { href: "/lab", label: "The Lab", lab: true },
+    { href: "/pricing", label: "Pricing" },
+    { href: "/login", label: "Log In" },
   ];
 
   return (
@@ -49,40 +56,27 @@ export default function Navbar() {
           </Link>
           <div className="flex items-center space-x-0.5 sm:space-x-2">
             {navLinks.map((link) => {
-              const isActive =
-                link.href === "/lab"
-                  ? pathname === "/lab" || pathname.startsWith("/lab/")
-                  : pathname === link.href;
+              const isActive = pathname === link.href;
               const baseClasses =
-                "inline-flex items-center gap-1 px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors";
+                "inline-flex items-center px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:bg-gray-800 focus-visible:text-white";
               const stateClasses = isActive
                 ? "bg-violet-600 text-white"
-                : link.lab
-                ? // Lab link: premium-coded styling even when inactive — small
-                  // visual cue that this surface is gated.
-                  "text-violet-200 bg-violet-900/30 border border-violet-700/40 hover:bg-violet-800/40 hover:text-white"
                 : "text-gray-300 hover:bg-gray-800 hover:text-white";
               return (
                 <Link
                   key={link.href}
                   href={link.href}
                   className={`${baseClasses} ${stateClasses}`}
-                  aria-label={link.lab ? `${link.label} — premium research suite` : undefined}
                 >
-                  {link.lab && (
-                    <span aria-hidden="true" className="text-[11px] leading-none">
-                      🔒
-                    </span>
-                  )}
                   {link.label === "Track Record" ? (
                     <>
                       <span className="sm:hidden">Record</span>
                       <span className="hidden sm:inline">Track Record</span>
                     </>
-                  ) : link.label === "The Lab" ? (
+                  ) : link.label === "Log In" ? (
                     <>
-                      <span className="sm:hidden">Lab</span>
-                      <span className="hidden sm:inline">The Lab</span>
+                      <span className="sm:hidden">Login</span>
+                      <span className="hidden sm:inline">Log In</span>
                     </>
                   ) : (
                     link.label
@@ -91,7 +85,7 @@ export default function Navbar() {
               );
             })}
             <Link
-              href="/join"
+              href="/pricing"
               className="ml-1 sm:ml-2 px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-all duration-200 whitespace-nowrap shadow-sm shadow-violet-900/40 hover:shadow-[0_0_15px_rgba(167,139,250,0.45)] hover:scale-[1.03]"
             >
               <span className="sm:hidden">Join</span>
