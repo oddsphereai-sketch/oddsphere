@@ -23,6 +23,11 @@
 
 import { supabase } from "@/lib/db/supabase";
 import type { Sport } from "@/lib/types/domain/Sport";
+import type {
+  Grade,
+  MarketSignal,
+  SignalType,
+} from "@/lib/types/domain/Grade";
 import { currentSlateDate, isSlateDate } from "@/lib/dates/slateDate";
 import type {
   DailyEdgeGameDto,
@@ -37,33 +42,40 @@ const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl"];
 const LIVE_SPORTS: Sport[] = ["mlb"];
 
 /**
- * Resolve the slate_date to query. If `requested` has games for this sport,
- * use it. Otherwise return the most recent slate_date for the sport that has
- * games — so the page never goes blank when a member loads it during the
+ * V2.1 Part 9 — only `published` and `final` slates are visible to members.
+ * `draft` slates are admin-loaded but not yet live; `hidden` slates have
+ * been retracted. This array is the single source of truth for the filter
+ * applied to every games query in this route.
+ */
+const VISIBLE_SLATE_STATUSES = ["published", "final"] as const;
+
+/**
+ * Resolve the slate_date to query. If `requested` has visible games for this
+ * sport, use it. Otherwise return the most recent visible slate_date for the
+ * sport — so the page never goes blank when a member loads it during the
  * morning before tonight's slate is up, or on an off-day.
+ *
+ * Visibility is gated by VISIBLE_SLATE_STATUSES — draft / hidden slates are
+ * invisible to the resolver too, so a draft slate doesn't trigger a stale
+ * fallback to an older published one. If only drafts exist, fallback finds
+ * the latest published slate from history.
  */
 async function resolveSlateDate(sport: Sport, requested: string): Promise<string> {
-  const { data: req } = await supabase
-    .from("games")
-    .select("id", { head: true, count: "exact" })
-    .eq("sport", sport)
-    .eq("slate_date", requested);
-  // Supabase head:true returns count via the response; the data is null.
-  // We need a row check; do a tiny select instead.
   const { data: probe } = await supabase
     .from("games")
     .select("slate_date")
     .eq("sport", sport)
     .eq("slate_date", requested)
+    .in("slate_status", [...VISIBLE_SLATE_STATUSES])
     .limit(1);
-  void req;
   if ((probe ?? []).length > 0) return requested;
 
-  // Fallback: most recent slate_date for the sport.
+  // Fallback: most recent visible slate_date for the sport.
   const { data: latest } = await supabase
     .from("games")
     .select("slate_date")
     .eq("sport", sport)
+    .in("slate_status", [...VISIBLE_SLATE_STATUSES])
     .order("slate_date", { ascending: false })
     .limit(1);
   const fallback = (latest ?? [])[0]?.slate_date;
@@ -258,6 +270,12 @@ type PredictionRow = {
   ou_confidence: number | null;
   predicted_nrfi: boolean | null;
   nrfi_confidence: number | null;
+  /** V2.1 7-category grade (Phase 6.3d); null until first derivation run. */
+  grade: Grade | null;
+  /** Attribution: which layer(s) drove the grade. */
+  signal_type: SignalType | null;
+  /** Layer 3 market read (Phase 6.3c). */
+  market_signal: MarketSignal | null;
 };
 
 type GameRow = {
@@ -347,6 +365,11 @@ function buildGameDto(
     sharpSignals: buildSignalDtos(signals),
     verdict,
     verdictSubtitle: subtitle,
+    // V2.1 grade engine fields (Phase 6.3d). Surfaced on the DTO in 6.4a;
+    // consumed by GradeBadge + attribution copy in 6.4b.
+    grade: pred.grade,
+    signalType: pred.signal_type,
+    marketSignal: pred.market_signal,
   };
 }
 
@@ -389,6 +412,9 @@ export async function GET(request: Request) {
   const effectiveDate = await resolveSlateDate(sport, requestedDate);
 
   // ─── Games + teams + predictions (one round-trip) ────────────────────────
+  // VISIBLE_SLATE_STATUSES gates draft / hidden slates out of member view per
+  // V2.1 Part 9. Both the resolver (above) and this query use the same filter
+  // so the response is consistent across the date fallback path.
   const { data: gameData, error: gamesErr } = await supabase
     .from("games")
     .select(
@@ -399,11 +425,13 @@ export async function GET(request: Request) {
          predicted_home_score, predicted_away_score, predicted_total,
          predicted_ml_winner, ml_confidence,
          predicted_ou_side, ou_confidence,
-         predicted_nrfi, nrfi_confidence
+         predicted_nrfi, nrfi_confidence,
+         grade, signal_type, market_signal
        )`
     )
     .eq("sport", sport)
     .eq("slate_date", effectiveDate)
+    .in("slate_status", [...VISIBLE_SLATE_STATUSES])
     .order("game_date", { ascending: true });
 
   if (gamesErr) {

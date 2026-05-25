@@ -8,13 +8,27 @@
  *   4. linesService.refreshSharpSignals(sport, date)
  *   5. weatherService.refreshForecasts(sport, date)
  *   6. predictionService.generateGamePredictions(sport, date)
- *      — if partial:true (no Daniel upload yet), SKIP step 7
+ *      — if partial:true (no Daniel upload yet), SKIP steps 7-11
  *   7. predictionService.generatePropPredictions(sport, date)
  *   8. predictionService.regenerateSharpVerdicts(tonightGameIds)
+ *   9. marketSignalDerivationService.updateMarketSignalsForSlate (V2.1 Layer 3)
+ *  10. gradeDerivationService.updateGradesForSlate           (V2.1 grade engine)
+ *  11. slatePublishService.publishSlate                      (auto-publish for V1)
+ *
+ * Steps 9-11 are V2.1 additions (Phase 6.4a) — they sit at the end of the
+ * pipeline because each depends on the prior step's writes:
+ *   • marketSignal reads sharp_signals (step 4 already wrote them)
+ *   • grade reads market_signal (step 9 just wrote it) + ev_pct from sharp_signals
+ *   • publish is the final V1 gate — until Phase 7.5 ships an admin review UI,
+ *     "morning-slate ran successfully" IS the admin promotion action, so we
+ *     auto-promote draft → published immediately after grades land. Phase 7.5
+ *     replaces this auto-publish with a manual review step.
  *
  * Sport-scoped lock means MLB and NBA can run in parallel without blocking.
  * If Daniel hasn't uploaded scores model yet (step 6 partial:true), the
- * sport's prop predictions defer to the next refresh cron.
+ * sport's prop predictions defer to the next refresh cron — and grade
+ * derivation + publish are also skipped so a draft slate doesn't surface
+ * to members before the model lands.
  */
 
 import { cronHandlerPerSport } from "@/lib/cron/runCron";
@@ -24,6 +38,9 @@ import { slateService } from "@/lib/services/slateService";
 import { linesService } from "@/lib/services/linesService";
 import { weatherService } from "@/lib/services/weatherService";
 import { predictionService } from "@/lib/services/predictionService";
+import { updateMarketSignalsForSlate } from "@/lib/services/marketSignalDerivationService";
+import { updateGradesForSlate } from "@/lib/services/gradeDerivationService";
+import { publishSlate } from "@/lib/services/slatePublishService";
 import { loadGameIdMap } from "@/lib/services/_idMaps";
 
 export const maxDuration = 300; // Vercel Pro — morning-slate can be heavy
@@ -100,6 +117,33 @@ export async function GET(request: Request) {
       records += verdicts.records_updated ?? 0;
       apiCalls += verdicts.api_calls_made ?? 0;
       stepDetails.sharp_verdicts = verdicts.records_updated;
+
+      // 9. V2.1 Layer 3 — market signal derivation. Reads sharp_signals
+      // (written in step 4) + predictions (step 6/7); writes market_signal
+      // onto game_predictions + prop_predictions.
+      const marketSignals = await updateMarketSignalsForSlate(sport, date);
+      const marketTouched =
+        marketSignals.gamePredictionsUpdated +
+        marketSignals.propPredictionsUpdated;
+      records += marketTouched;
+      stepDetails.market_signals = marketTouched;
+
+      // 10. V2.1 grade engine. Reads market_signal (just written) + ev_pct
+      // from sharp_signals + prop edge_pct; writes the 7-category grade +
+      // signal_type attribution onto both prediction tables.
+      const grades = await updateGradesForSlate(sport, date);
+      const gradeTouched =
+        grades.gamePredictionsUpdated + grades.propPredictionsUpdated;
+      records += gradeTouched;
+      stepDetails.grades = gradeTouched;
+      stepDetails.best_signal_pct = grades.monitor.bestSignalPct.toFixed(1);
+
+      // 11. Auto-publish the slate. V1 has no admin review UI — successful
+      // morning-slate cron IS the admin promotion. Phase 7.5 swaps this for
+      // a manual review gate. Idempotent on already-published slates.
+      const publish = await publishSlate(sport, date);
+      records += publish.promoted;
+      stepDetails.slate_published = publish.promoted;
 
       return {
         records_updated: records,

@@ -13,6 +13,11 @@
  */
 
 import type { Sport } from "@/lib/types/domain/Sport";
+import type {
+  Grade,
+  MarketSignal,
+  SignalType,
+} from "@/lib/types/domain/Grade";
 
 // ───────────────────────────────────────────────────────────────────────────
 // /api/lab/refresh-status
@@ -157,10 +162,27 @@ export type DailyEdgeGameDto = {
   };
   projected: { away: number; home: number };
   sharpSignals: SharpSignalDto[];
-  /** Three-state verdict — null when no banner should render (most games). */
+  /**
+   * Three-state legacy verdict — null when no banner should render (most games).
+   *
+   * @deprecated Phase 6.4b removes the verdict banner in favor of GradeBadge.
+   * Kept on the DTO during 6.4a so the existing card renders unchanged until
+   * the 6.4b card overhaul ships. Remove from the DTO after 6.4b lands.
+   */
   verdict: DailyEdgeVerdict;
   /** Short brand-voice subtitle for the banner — null when verdict is null. */
   verdictSubtitle: string | null;
+  /**
+   * V2.1 7-category final grade (Phase 6.3d). Reflects the row's primary
+   * pick (ML → OU → NRFI precedence). Null when the grade engine has not
+   * yet run for this slate — UI in 6.4b shows market_watch as the
+   * defensive default.
+   */
+  grade: Grade | null;
+  /** Attribution: which signal layer(s) drove the grade. */
+  signalType: SignalType | null;
+  /** Layer 3 market read fed into the grade (informational; not a UI badge of its own). */
+  marketSignal: MarketSignal | null;
 };
 
 export type DailyEdgeResponse = {
