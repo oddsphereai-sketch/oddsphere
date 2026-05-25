@@ -134,9 +134,16 @@ export default function RefreshIndicator() {
     };
   }, [open]);
 
-  // Loading + error fall back to "unknown" visuals so the pill always renders.
+  // Loading + error fall back to "unknown" visuals.
   const state: RefreshState =
     error ? "error" : !data ? "unknown" : data.overall.state;
+
+  // 6.4d founder review #6: hide the pill entirely in the unknown state.
+  // It adds no value to members when the pipeline has nothing to report
+  // (typically only the initial empty-DB state). Healthy/updating/stale/
+  // error all still render — only "unknown" hides.
+  if (state === "unknown") return null;
+
   const style = STATE_STYLES[state];
   const ageStr = formatAgo(data?.overall.age_seconds ?? null);
   const untilStr = formatUntil(data?.overall.next_scheduled_at ?? null);

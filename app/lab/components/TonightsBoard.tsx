@@ -27,13 +27,22 @@ type Props = {
 /**
  * Short chip labels for the Tonight's Board summary. Pluralized; matches
  * the brand voice ("Best Signals" reads as a count, not a category name).
+ *
+ * SURFACE-SPECIFIC OVERRIDE — market_watch
+ *   Everywhere else in the Lab (GradeBadge on cards, filter chip in
+ *   DailyEdgeFilters, the legend) the V2.1 Part 6 label "Market Watch" is
+ *   used verbatim. In the Tonight's Board SUMMARY, that category is the
+ *   bulk-of-the-slate default; "10 Market Watch" reads mechanical, while
+ *   "10 Watchlist" reads naturally as a count. The grade itself is still
+ *   Market Watch — the override is purely a count-context wording fix and
+ *   does NOT touch any other surface (6.4d external review #7).
  */
 const CHIP_LABEL: Record<Grade, string> = {
   best_signal: "Best Signals",
   sharp_confirmed: "Sharp Confirmed",
   market_led: "Market-Led",
   model_only: "Model Only",
-  market_watch: "Market Watch",
+  market_watch: "Watchlist",
   public_smoke: "Public Smoke",
   sharp_conflict: "Conflict",
 };

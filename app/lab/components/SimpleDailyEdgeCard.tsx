@@ -44,13 +44,28 @@ function deriveCardPrimaryPick(
   return predictions.nrfi.pick;
 }
 
-// ─── Per-pick sharpStatus visuals (tile border + leading icon) ────────────
+// ─── Per-pick sharpStatus visuals (tile border + leading icon + tag) ──────
 
 function getTileBorder(status: SharpStatus): string {
   if (status === "confirm") return "border-emerald-500/30";
   if (status === "caution") return "border-amber-500/30";
   return "border-gray-800";
 }
+
+/**
+ * V2.1 6.4d tile-tag rename: pre-6.4d the bottom-right tag rendered "SHARPS"
+ * only when sharpStatus === "confirm", which collided with the card-level
+ * "Sharp Confirmed" GradeBadge label. The new 3-state mapping reads as
+ * tile-relative status (per V2.1 6.4d founder review item 3):
+ *   confirm → "Confirmed" (emerald)
+ *   mixed   → "Mixed"     (subdued gray — reads as background, not callout)
+ *   caution → "Against"   (amber)
+ */
+const TILE_TAG: Record<SharpStatus, { text: string; color: string }> = {
+  confirm: { text: "Confirmed", color: "text-emerald-400" },
+  mixed: { text: "Mixed", color: "text-gray-500" },
+  caution: { text: "Against", color: "text-amber-400" },
+};
 
 function SharpStatusIcon({ status }: { status: SharpStatus }) {
   if (status === "confirm") {
@@ -352,11 +367,11 @@ function PredictionTile({
         <span className="text-sm font-medium tabular-nums text-gray-300">
           {Math.round(confidence * 100)}%
         </span>
-        {sharpStatus === "confirm" && (
-          <span className="text-[9px] font-medium tracking-[0.1em] text-emerald-400 uppercase">
-            Sharps
-          </span>
-        )}
+        <span
+          className={`text-[9px] font-medium tracking-[0.1em] uppercase ${TILE_TAG[sharpStatus].color}`}
+        >
+          {TILE_TAG[sharpStatus].text}
+        </span>
       </div>
     </div>
   );

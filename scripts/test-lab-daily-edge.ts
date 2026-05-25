@@ -154,6 +154,14 @@ async function main() {
     first.marketSignal === null || VALID_MARKET_SIGNALS.has(first.marketSignal),
     `got: ${first.marketSignal}`
   );
+  check(
+    "game.primaryMarket is null or one of moneyline/total/first_inning_total",
+    first.primaryMarket === null ||
+      first.primaryMarket === "moneyline" ||
+      first.primaryMarket === "total" ||
+      first.primaryMarket === "first_inning_total",
+    `got: ${first.primaryMarket}`
+  );
 
   // ─── Confidence values are in [0, 1] for every game ───────────────────────
   section("Confidence range");
@@ -214,6 +222,17 @@ async function main() {
     `at least one game on the seeded slate has a non-null grade`,
     gradedCount > 0,
     `gradedCount=${gradedCount}`
+  );
+
+  // primaryMarket consistency — every game with a grade should also have a
+  // primaryMarket (they're co-derived from the same precedence in the route).
+  let primaryMarketMissing = 0;
+  for (const g of body.games) {
+    if (g.grade !== null && g.primaryMarket === null) primaryMarketMissing++;
+  }
+  check(
+    `grade and primaryMarket are co-derived: non-null grade ⇒ non-null primaryMarket`,
+    primaryMarketMissing === 0
   );
 
   // ─── sharpStatus mapping consistency against DB sharp_signals ─────────────

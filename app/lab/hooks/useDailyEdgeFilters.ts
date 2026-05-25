@@ -1,0 +1,299 @@
+"use client";
+
+/**
+ * useDailyEdgeFilters — URL-driven filter + sort state for the Daily Edge page.
+ *
+ * Persists the active filter chip set + sort key in the URL so:
+ *   • Filter state survives a page reload
+ *   • Members can share direct links: /lab/daily-edge?filter=best_signals,unders&sort=signal_strength
+ *   • Browser back/forward replays state via the normal history mechanism
+ *
+ * URL contract:
+ *   • Filters: comma-separated value set in `?filter=...`. Empty / missing
+ *     means no filter (show all).
+ *   • Sort: single string in `?sort=...`. Missing or "start_time" omits the
+ *     param so the default URL stays clean.
+ *
+ * Filter chip semantics (V2.1 Part 11 + 6.4d founder hybrid decision):
+ *   • Grade chips (8 keys): OR within group. "All" clears the group.
+ *   • Market chips (Moneyline / Totals / 1st Inning): card-filter against
+ *     DailyEdgeGameDto.primaryMarket — surfaced server-side via the same
+ *     precedence (ML → OU → NRFI) marketSignalDerivationService uses.
+ *   • Side sub-group Overs / Unders: filter by predictions.total.pick value.
+ *   • Side sub-group NRFI / YRFI: filter by predictions.nrfi.pick value.
+ *   • Across groups: AND.
+ *
+ * Sort options per V2.1:
+ *   • start_time (default) — ascending gameStartMinutes
+ *   • signal_strength — ascending grade rank (best_signal first), ML
+ *                       confidence tiebreaker
+ *   • confidence — descending ML confidence
+ */
+
+import { useCallback, useMemo } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import type { Grade } from "@/lib/types/domain/Grade";
+import type { DailyEdgeGameDto } from "../lib/labTypes";
+
+// ─── Filter / sort vocabulary ─────────────────────────────────────────────
+
+export type DailyEdgeSortKey =
+  | "start_time"
+  | "signal_strength"
+  | "confidence";
+
+export const SORT_KEYS: readonly DailyEdgeSortKey[] = [
+  "start_time",
+  "signal_strength",
+  "confidence",
+];
+export const DEFAULT_SORT: DailyEdgeSortKey = "start_time";
+
+export type GradeFilter =
+  | "best_signal"
+  | "sharp_confirmed"
+  | "market_led"
+  | "model_only"
+  | "market_watch"
+  | "public_smoke"
+  | "sharp_conflict";
+
+export type MarketFilter = "moneyline" | "totals" | "first_inning";
+export type SideFilter = "nrfi" | "yrfi" | "overs" | "unders";
+
+export type FilterKey = GradeFilter | MarketFilter | SideFilter;
+
+export const GRADE_FILTER_KEYS: readonly GradeFilter[] = [
+  "best_signal",
+  "sharp_confirmed",
+  "market_led",
+  "model_only",
+  "market_watch",
+  "public_smoke",
+  "sharp_conflict",
+];
+export const MARKET_FILTER_KEYS: readonly MarketFilter[] = [
+  "moneyline",
+  "totals",
+  "first_inning",
+];
+export const SIDE_FILTER_KEYS: readonly SideFilter[] = [
+  "nrfi",
+  "yrfi",
+  "overs",
+  "unders",
+];
+const ALL_FILTER_KEYS: readonly FilterKey[] = [
+  ...GRADE_FILTER_KEYS,
+  ...MARKET_FILTER_KEYS,
+  ...SIDE_FILTER_KEYS,
+];
+
+function isFilterKey(k: string): k is FilterKey {
+  return (ALL_FILTER_KEYS as readonly string[]).includes(k);
+}
+
+function isSortKey(k: string): k is DailyEdgeSortKey {
+  return (SORT_KEYS as readonly string[]).includes(k);
+}
+
+// ─── State ────────────────────────────────────────────────────────────────
+
+export type DailyEdgeFilterState = {
+  filters: Set<FilterKey>;
+  sort: DailyEdgeSortKey;
+};
+
+function parseFromUrl(searchParams: URLSearchParams): DailyEdgeFilterState {
+  const filters = new Set<FilterKey>();
+  const raw = searchParams.get("filter") ?? "";
+  for (const part of raw.split(",")) {
+    const key = part.trim();
+    if (key && isFilterKey(key)) filters.add(key);
+  }
+  const sortRaw = searchParams.get("sort") ?? "";
+  const sort: DailyEdgeSortKey = isSortKey(sortRaw) ? sortRaw : DEFAULT_SORT;
+  return { filters, sort };
+}
+
+function serializeToUrl(
+  state: DailyEdgeFilterState,
+  existing: URLSearchParams
+): URLSearchParams {
+  const next = new URLSearchParams(existing);
+  // Always strip our own params first, then re-add only the non-default
+  // ones — keeps the URL clean when state returns to defaults.
+  next.delete("filter");
+  next.delete("sort");
+  if (state.filters.size > 0) {
+    next.set("filter", Array.from(state.filters).join(","));
+  }
+  if (state.sort !== DEFAULT_SORT) {
+    next.set("sort", state.sort);
+  }
+  return next;
+}
+
+// ─── Hook ─────────────────────────────────────────────────────────────────
+
+export function useDailyEdgeFilters() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const state = useMemo(
+    () => parseFromUrl(new URLSearchParams(searchParams.toString())),
+    [searchParams]
+  );
+
+  const updateUrl = useCallback(
+    (nextState: DailyEdgeFilterState) => {
+      const params = serializeToUrl(
+        nextState,
+        new URLSearchParams(searchParams.toString())
+      );
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, {
+        scroll: false,
+      });
+    },
+    [pathname, router, searchParams]
+  );
+
+  const toggleFilter = useCallback(
+    (key: FilterKey) => {
+      const next = new Set(state.filters);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      updateUrl({ filters: next, sort: state.sort });
+    },
+    [state, updateUrl]
+  );
+
+  const clearGradeFilters = useCallback(() => {
+    const next = new Set(state.filters);
+    for (const g of GRADE_FILTER_KEYS) next.delete(g);
+    updateUrl({ filters: next, sort: state.sort });
+  }, [state, updateUrl]);
+
+  const setSort = useCallback(
+    (sort: DailyEdgeSortKey) => {
+      updateUrl({ filters: state.filters, sort });
+    },
+    [state.filters, updateUrl]
+  );
+
+  return {
+    filters: state.filters,
+    sort: state.sort,
+    toggleFilter,
+    clearGradeFilters,
+    setSort,
+  };
+}
+
+// ─── Pure transform ───────────────────────────────────────────────────────
+
+const GRADE_RANK: Record<Grade, number> = {
+  best_signal: 0,
+  sharp_confirmed: 1,
+  market_led: 2,
+  model_only: 3,
+  market_watch: 4,
+  public_smoke: 5,
+  sharp_conflict: 6,
+};
+
+function gradeFromGame(g: DailyEdgeGameDto): Grade {
+  // Defensive null fallback matches SimpleDailyEdgeCard's market_watch default.
+  return g.grade ?? "market_watch";
+}
+
+function gamePassesFilters(
+  g: DailyEdgeGameDto,
+  filters: Set<FilterKey>
+): boolean {
+  // ── Grade group — OR within ─────────────────────────────────────────────
+  const gradeActive = GRADE_FILTER_KEYS.filter((k) => filters.has(k));
+  if (gradeActive.length > 0) {
+    if (!(gradeActive as string[]).includes(gradeFromGame(g))) return false;
+  }
+
+  // ── Market group — OR within. Maps chip key → primaryMarket value. ──────
+  const marketActive = MARKET_FILTER_KEYS.filter((k) => filters.has(k));
+  if (marketActive.length > 0) {
+    const market = g.primaryMarket;
+    if (market === null) return false;
+    let matched = false;
+    for (const m of marketActive) {
+      if (m === "moneyline" && market === "moneyline") matched = true;
+      else if (m === "totals" && market === "total") matched = true;
+      else if (m === "first_inning" && market === "first_inning_total") {
+        matched = true;
+      }
+    }
+    if (!matched) return false;
+  }
+
+  // ── Totals side sub-group — OR within. Filters by predictions.total.pick
+  // value regardless of primaryMarket (per 6.4d Daniel clarification: side
+  // chips filter by pick value across all cards, not narrowed to primary). ─
+  const totalsSide = (["overs", "unders"] as const).filter((k) =>
+    filters.has(k)
+  );
+  if (totalsSide.length > 0) {
+    // Set<string> rather than Set<"Over" | "Under"> because the DTO types
+    // predictions.total.pick as plain string — keep the .has() check loose.
+    const wants = new Set<string>(
+      totalsSide.map((s) => (s === "overs" ? "Over" : "Under"))
+    );
+    if (!wants.has(g.predictions.total.pick)) return false;
+  }
+
+  // ── 1st-inning side sub-group — OR within. Filters by predictions.nrfi.pick. ──
+  const innSide = (["nrfi", "yrfi"] as const).filter((k) => filters.has(k));
+  if (innSide.length > 0) {
+    const wants = new Set<string>(innSide.map((s) => s.toUpperCase()));
+    if (!wants.has(g.predictions.nrfi.pick)) return false;
+  }
+
+  return true;
+}
+
+function sortGames(
+  games: DailyEdgeGameDto[],
+  sort: DailyEdgeSortKey
+): DailyEdgeGameDto[] {
+  const sorted = [...games];
+  if (sort === "start_time") {
+    sorted.sort((a, b) => a.gameStartMinutes - b.gameStartMinutes);
+  } else if (sort === "signal_strength") {
+    sorted.sort((a, b) => {
+      const aR = GRADE_RANK[gradeFromGame(a)];
+      const bR = GRADE_RANK[gradeFromGame(b)];
+      if (aR !== bR) return aR - bR;
+      return b.predictions.ml.confidence - a.predictions.ml.confidence;
+    });
+  } else {
+    // confidence — descending ML confidence
+    sorted.sort(
+      (a, b) => b.predictions.ml.confidence - a.predictions.ml.confidence
+    );
+  }
+  return sorted;
+}
+
+/**
+ * Pure transform: filter + sort the games array per the current state.
+ * Used by DailyEdgeView to drive Board / TopReads / cards list in lockstep.
+ */
+export function applyFilterAndSort(
+  games: DailyEdgeGameDto[],
+  state: DailyEdgeFilterState
+): DailyEdgeGameDto[] {
+  const filtered =
+    state.filters.size === 0
+      ? games
+      : games.filter((g) => gamePassesFilters(g, state.filters));
+  return sortGames(filtered, state.sort);
+}

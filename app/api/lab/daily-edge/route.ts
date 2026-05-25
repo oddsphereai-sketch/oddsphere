@@ -253,6 +253,22 @@ type GameRow = {
   game_predictions: PredictionRow | null;
 };
 
+/**
+ * Mirror of marketSignalDerivationService.primaryGamePick + the same logic
+ * gradeDerivationService uses to pick the row's "headline" market. Returns
+ * null when the row has no model pick at all. Single source of truth for
+ * "which market is this row's grade about" — surfaced on the DTO so the
+ * Daily Edge Market filter chips don't have to re-derive in the client.
+ */
+function derivePrimaryMarket(
+  pred: PredictionRow
+): DailyEdgeGameDto["primaryMarket"] {
+  if (pred.predicted_ml_winner !== null) return "moneyline";
+  if (pred.predicted_ou_side !== null) return "total";
+  if (pred.predicted_nrfi !== null) return "first_inning_total";
+  return null;
+}
+
 function buildGameDto(
   row: GameRow,
   signals: SignalRow[],
@@ -327,6 +343,10 @@ function buildGameDto(
     grade: pred.grade,
     signalType: pred.signal_type,
     marketSignal: pred.market_signal,
+    // V2.1 6.4d — primary market for the Market filter chips (Daily Edge
+    // filter bar). Server-derived so the client doesn't re-implement
+    // precedence logic.
+    primaryMarket: derivePrimaryMarket(pred),
   };
 }
 

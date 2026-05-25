@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Sport } from "../data/mockData";
 import { SPORT_META } from "../data/mockData";
 import { useDailyEdge } from "../hooks/useDailyEdge";
+import {
+  useDailyEdgeFilters,
+  applyFilterAndSort,
+} from "../hooks/useDailyEdgeFilters";
 import { isSlateDate } from "@/lib/dates/slateDate";
 import SportSelector from "./SportSelector";
 import ComingSoonState from "./ComingSoonState";
@@ -15,6 +19,8 @@ import SlateDatePicker from "./SlateDatePicker";
 import SlateFreshness from "./SlateFreshness";
 import TonightsBoard from "./TonightsBoard";
 import TopReads from "./TopReads";
+import DailyEdgeFilters from "./DailyEdgeFilters";
+import DailyEdgeSort from "./DailyEdgeSort";
 
 const DAILY_EDGE_SPORTS: Sport[] = [
   "mlb",
@@ -60,6 +66,25 @@ function getTodayString(): string {
   return `${DAYS[now.getDay()]}, ${MONTHS[now.getMonth()]} ${now.getDate()}`;
 }
 
+/**
+ * Format a YYYY-MM-DD slate_date string as a human-readable date.
+ *   "2026-05-22" → "May 22"        (same year as today)
+ *   "2025-12-28" → "Dec 28, 2025"  (cross-year, year shown)
+ * Used in the fallback subtitle so the rendered slate date doesn't read as
+ * a database string (6.4d founder review item 2).
+ */
+function formatSlateDate(yyyymmdd: string): string {
+  // Anchor at noon to dodge any local TZ rollover ambiguity.
+  const d = new Date(`${yyyymmdd}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return yyyymmdd;
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: sameYear ? undefined : "numeric",
+  }).format(d);
+}
+
 export default function DailyEdgeView({ sport, onSportChange }: Props) {
   // 6.4c: legend collapsed by default per founder review. Returning users
   // shouldn't see the explainer every page load. Phase 7 auth will own
@@ -88,6 +113,18 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
   const fallbackUsed = !!data?.fallback_used;
   const effectiveDate = data?.date;
   const today = getTodayString();
+
+  // 6.4d — filter + sort state lives in the URL via useDailyEdgeFilters.
+  // applyFilterAndSort drives the displayed games AND the inputs to the
+  // Tonight's Board count chips + Top Reads curation so the entire visible
+  // slate reacts to chip toggles in lockstep.
+  const { filters, sort, toggleFilter, clearGradeFilters, setSort } =
+    useDailyEdgeFilters();
+  const visibleGames = useMemo(
+    () => applyFilterAndSort(games, { filters, sort }),
+    [games, filters, sort]
+  );
+  const hasActiveFilters = filters.size > 0;
 
   return (
     <>
@@ -126,8 +163,8 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
                   No finalized board for{" "}
                   <span className="font-semibold text-gray-100">{today}</span>{" "}
                   yet. Showing latest available slate:{" "}
-                  <span className="font-semibold text-gray-100 tabular-nums">
-                    {effectiveDate}
+                  <span className="font-semibold text-gray-100">
+                    {formatSlateDate(effectiveDate)}
                   </span>{" "}
                   ·{" "}
                   <span className="tabular-nums">
@@ -152,13 +189,35 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
             <SlateDatePicker sport={sport} />
           </header>
 
+          {/* V2.1 Part 11 — Filter chip row + sort dropdown above the
+              summary panel so Board counts + Top Reads + the cards list
+              all reflect the active filter together. Sort dropdown is
+              right-aligned on the same row when space allows. */}
+          {!isLoading && games.length > 0 && (
+            <div className="max-w-3xl mx-auto mb-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <DailyEdgeFilters
+                  filters={filters}
+                  toggleFilter={toggleFilter}
+                  clearGradeFilters={clearGradeFilters}
+                />
+              </div>
+              <div className="shrink-0 sm:mt-1">
+                <DailyEdgeSort sort={sort} setSort={setSort} />
+              </div>
+            </div>
+          )}
+
           {/* V2.1 Part 11 — Tonight's Board summary + Top Reads, both above
-              the full games list. Hidden during the initial loading state
-              (empty games[]); EmptyState handles the "no games at all" case. */}
+              the full games list. Driven by the filtered+sorted game set so
+              chip toggles update counts and curation in lockstep. */}
           {!isLoading && games.length > 0 && (
             <>
-              <TonightsBoard games={games} sportLabel={sportMeta.label} />
-              <TopReads games={games} />
+              <TonightsBoard
+                games={visibleGames}
+                sportLabel={sportMeta.label}
+              />
+              <TopReads games={visibleGames} />
             </>
           )}
 
@@ -169,8 +228,10 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
               <LoadingSkeleton />
             ) : games.length === 0 ? (
               <EmptyState />
+            ) : visibleGames.length === 0 ? (
+              <FilteredEmptyState hasActiveFilters={hasActiveFilters} />
             ) : (
-              games.map((game) => (
+              visibleGames.map((game) => (
                 <div key={game.id} id={`game-${game.external_id}`}>
                   <SimpleDailyEdgeCard game={game} />
                 </div>
@@ -235,6 +296,26 @@ function EmptyState() {
       </p>
       <p className="text-sm text-gray-400">
         Check back after the morning slate refresh, or pick another date.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Distinct empty state for "the slate has games, but the active filter
+ * excludes all of them." V2.1 Part 12 copy rule: what is happening / why /
+ * what to do next.
+ */
+function FilteredEmptyState({ hasActiveFilters }: { hasActiveFilters: boolean }) {
+  return (
+    <div className="bg-gray-900/40 border border-gray-800/60 border-dashed rounded-xl p-8 text-center">
+      <p className="text-sm font-medium text-gray-200 mb-1">
+        No games match the current filters.
+      </p>
+      <p className="text-xs text-gray-400">
+        {hasActiveFilters
+          ? "Tap an active chip to remove it, or pick “All” in Grades to reset."
+          : "Try another sort or come back after the next refresh."}
       </p>
     </div>
   );

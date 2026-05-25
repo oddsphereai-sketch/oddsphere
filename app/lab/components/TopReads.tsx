@@ -55,16 +55,22 @@ type SlotMeta = {
   emptyCopy: string;
 };
 
+/**
+ * Empty-state copy refreshed in 6.4d (founder review item 4): "no best X
+ * tonight" read as "we don't have anything to show"; the new phrasing makes
+ * it clear that nothing currently CLEARS the quality floor, not that data
+ * is missing.
+ */
 const SLOT_META: Record<Slot, SlotMeta> = {
-  best_ml: { title: "Best Moneyline", emptyCopy: "No best moneyline tonight" },
-  best_total: { title: "Best Total", emptyCopy: "No best total tonight" },
+  best_ml: { title: "Best Moneyline", emptyCopy: "No standout moneyline edge" },
+  best_total: { title: "Best Total", emptyCopy: "No standout total edge" },
   best_first_inning: {
     title: "Best 1st Inning",
-    emptyCopy: "No best 1st inning tonight",
+    emptyCopy: "No standout 1st inning edge",
   },
   biggest_caution: {
     title: "Biggest Caution",
-    emptyCopy: "No major conflicts tonight",
+    emptyCopy: "No major caution spots",
   },
 };
 
@@ -159,13 +165,15 @@ export default function TopReads({ games }: Props) {
       aria-label="Top Reads"
       className="max-w-3xl mx-auto mb-6"
     >
-      <header className="mb-3 flex items-baseline justify-between">
+      {/* Single-line section header (6.4d founder review item 5): violet
+          title + muted gray subtitle on the same line, no float. */}
+      <header className="mb-3">
         <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-violet-300">
           Top Reads
+          <span className="text-gray-500 font-medium normal-case ml-2 tracking-normal">
+            · Curated from today&rsquo;s model + market signals
+          </span>
         </h2>
-        <p className="text-[10px] uppercase tracking-[0.12em] text-gray-500">
-          Curated for tonight
-        </p>
       </header>
       <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         {slotsInOrder.map((slot) => (
@@ -188,8 +196,10 @@ function TopReadSlot({
   const meta = SLOT_META[slot];
 
   if (game === null) {
+    // 6.4d founder review item 4: softer visual treatment so the placeholder
+    // reads as "nothing qualifies right now" rather than "data missing."
     return (
-      <div className="h-full bg-gray-900/40 border border-gray-800/60 border-dashed rounded-xl px-4 py-4 flex flex-col gap-1">
+      <div className="h-full bg-gray-900/30 border border-gray-800/40 border-dashed rounded-xl px-4 py-4 flex flex-col gap-1 opacity-50">
         <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500 font-bold">
           {meta.title}
         </p>

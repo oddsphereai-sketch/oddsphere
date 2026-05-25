@@ -152,6 +152,15 @@ export type DailyEdgeGameDto = {
   signalType: SignalType | null;
   /** Layer 3 market read fed into the grade (informational; not a UI badge of its own). */
   marketSignal: MarketSignal | null;
+  /**
+   * The market the row's grade is "about" — derived server-side via the same
+   * ML → OU → NRFI precedence marketSignalDerivationService + gradeDerivationService
+   * use. Surfaced on the DTO in 6.4d so the Daily Edge Market filter chips
+   * (Moneyline / Totals / 1st Inning) can card-filter without duplicating the
+   * server's primary-pick logic in the client. Null when no model pick exists
+   * (every side column was NULL).
+   */
+  primaryMarket: "moneyline" | "total" | "first_inning_total" | null;
 };
 
 export type DailyEdgeResponse = {
