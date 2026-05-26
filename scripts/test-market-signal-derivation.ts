@@ -49,9 +49,15 @@ function section(t: string) {
  * Build a SharpSignalSource with sensible "no signal" defaults. Tests
  * override the fields they care about. Mirrors the ctx() helper pattern in
  * test-signal-derivation.ts.
+ *
+ * V2.1.1 fix (Phase 6.3.5e-fix): side defaults to "home" so existing tests
+ * that pass modelSide="home" naturally exercise the aligned-case branches.
+ * New alignment-aware tests explicitly override side to "away" / "over" /
+ * etc. to exercise the opposing-case branches.
  */
 function sig(overrides: Partial<MarketSignalSource> = {}): MarketSignalSource {
   return {
+    side: "home",
     is_plus_ev: false,
     ev_pct: null,
     has_steam_move: false,
@@ -288,6 +294,7 @@ async function main() {
   // Build a signal that would trigger MULTIPLE verdicts if priority were
   // wrong — steam + opposing RLM + positive EV + heavy flat public.
   const allTriggers: MarketSignalSource = {
+    side: "home",
     has_steam_move: true,
     steam_books_count: SHARP_SIGNAL_THRESHOLDS.MIN_STEAM_BOOKS,
     has_reverse_line_movement: true,
@@ -303,6 +310,7 @@ async function main() {
   );
 
   const noSteamAllOthers: MarketSignalSource = {
+    side: "home",
     has_steam_move: false,
     steam_books_count: null,
     has_reverse_line_movement: true,
@@ -318,6 +326,7 @@ async function main() {
   );
 
   const noSteamNoRlmEvSmoke: MarketSignalSource = {
+    side: "home",
     has_steam_move: false,
     steam_books_count: null,
     has_reverse_line_movement: false,
@@ -359,6 +368,104 @@ async function main() {
     deriveMarketSignal(
       "over",
       sig({ has_reverse_line_movement: true, rlm_direction: "toward_home" })
+    ) === "market_resistance"
+  );
+
+  // ─── Alignment-aware branches (6.3.5e-fix) ─────────────────────────────
+  // Pre-fix the service keyed the lookup by (game, market, side) using the
+  // model's side; sharp_signals on the opposing side were silently dropped.
+  // Post-fix the pure function reads signal.side and compares it to
+  // modelSide. These eight cases lock the alignment semantics.
+  section("alignment-aware steam / EV (6.3.5e-fix)");
+
+  check(
+    "opposing steam → market_resistance (Pinnacle steaming the other side ≠ our pick)",
+    deriveMarketSignal(
+      "under",
+      sig({
+        side: "over",
+        has_steam_move: true,
+        steam_books_count: SHARP_SIGNAL_THRESHOLDS.MIN_STEAM_BOOKS,
+      })
+    ) === "market_resistance"
+  );
+
+  check(
+    "aligned steam → steam_alert (Pinnacle steam confirms our pick)",
+    deriveMarketSignal(
+      "under",
+      sig({
+        side: "under",
+        has_steam_move: true,
+        steam_books_count: SHARP_SIGNAL_THRESHOLDS.MIN_STEAM_BOOKS,
+      })
+    ) === "steam_alert"
+  );
+
+  check(
+    "opposing +EV → market_resistance (Pinnacle +EV on the other side)",
+    deriveMarketSignal(
+      "under",
+      sig({ side: "over", is_plus_ev: true, ev_pct: 4.2 })
+    ) === "market_resistance"
+  );
+
+  check(
+    "aligned +EV → market_confirmed (Pinnacle +EV agrees with our pick)",
+    deriveMarketSignal(
+      "under",
+      sig({ side: "under", is_plus_ev: true, ev_pct: 4.2 })
+    ) === "market_confirmed"
+  );
+
+  check(
+    "aligned steam + opposing EV → steam_alert (steam priority wins, alignment checked at steam branch)",
+    deriveMarketSignal(
+      "under",
+      sig({
+        side: "under",
+        has_steam_move: true,
+        steam_books_count: SHARP_SIGNAL_THRESHOLDS.MIN_STEAM_BOOKS,
+        is_plus_ev: true,
+        ev_pct: 4.2,
+      })
+    ) === "steam_alert"
+  );
+
+  // Steam branch sees signal.side="over" ≠ modelSide="under" → market_resistance.
+  // EV branch is never reached because steam fires first (priority 1).
+  check(
+    "opposing steam + aligned EV → market_resistance (steam priority wins even when opposing)",
+    deriveMarketSignal(
+      "under",
+      sig({
+        side: "over",
+        has_steam_move: true,
+        steam_books_count: SHARP_SIGNAL_THRESHOLDS.MIN_STEAM_BOOKS,
+        is_plus_ev: true,
+        ev_pct: 4.2,
+      })
+    ) === "market_resistance"
+  );
+
+  // signal.side="home" and modelSide="home" but no triggers fire → neutral.
+  // Verifies aligned-side has no implicit signal — must have actual trigger.
+  check(
+    "aligned side with no triggers → market_neutral (alignment alone is not a signal)",
+    deriveMarketSignal("home", sig({ side: "home" })) === "market_neutral"
+  );
+
+  // RLM was already alignment-aware pre-fix — regression-check the
+  // alignment branch still picks up signal.side semantics by routing.
+  check(
+    "opposing RLM (rlm_direction toward opposing side) → market_resistance",
+    deriveMarketSignal(
+      "under",
+      sig({
+        side: "over",
+        has_reverse_line_movement: true,
+        rlm_direction: "toward_over",
+      })
     ) === "market_resistance"
   );
 
@@ -440,6 +547,60 @@ async function main() {
       r2.gamePredictionsUpdated === r1.gamePredictionsUpdated &&
         r2.propPredictionsUpdated === r1.propPredictionsUpdated
     );
+
+    // ── Alignment audit (6.3.5e-fix WSH @ ATL pattern) ─────────────────
+    // Locate total-market sharp signals on the OPPOSING side from the
+    // model's pick; verify the derived ou map flags them market_resistance.
+    // Pre-fix the (game, market, side) lookup keyed by modelSide silently
+    // dropped these rows and the signal collapsed to market_neutral.
+    const gameIdList = ((mlbGames ?? []) as Array<{ id: number }>).map(
+      (g) => g.id
+    );
+    const { data: ouSignals } = await supabase
+      .from("sharp_signals")
+      .select("game_id, side")
+      .eq("market_type", "total")
+      .in("game_id", gameIdList);
+    const { data: ouPicks } = await supabase
+      .from("game_predictions")
+      .select("id, game_id, predicted_ou_side")
+      .in("game_id", gameIdList);
+    const ouPickByGame = new Map<
+      number,
+      { id: number; side: string | null }
+    >();
+    for (const p of (ouPicks ?? []) as Array<{
+      id: number;
+      game_id: number;
+      predicted_ou_side: string | null;
+    }>) {
+      ouPickByGame.set(p.game_id, { id: p.id, side: p.predicted_ou_side });
+    }
+    const opposingOuRows: number[] = [];
+    for (const s of (ouSignals ?? []) as Array<{
+      game_id: number;
+      side: string;
+    }>) {
+      const pick = ouPickByGame.get(s.game_id);
+      if (pick && pick.side !== null && pick.side !== s.side) {
+        opposingOuRows.push(pick.id);
+      }
+    }
+    if (opposingOuRows.length > 0) {
+      let nonResistance = 0;
+      for (const id of opposingOuRows) {
+        const v = derived.games.ou.get(id);
+        if (v !== "market_resistance") nonResistance++;
+      }
+      check(
+        "opposing-side total signals in seed slate derive market_resistance (6.3.5e-fix WSH @ ATL pattern)",
+        nonResistance === 0
+      );
+    } else {
+      console.log(
+        "  (no opposing-side total signals in seed slate — 6.3.5e-fix coverage relies on pure-function cases above)"
+      );
+    }
 
     // Spot-check: DB per-pick columns match derived per-pick maps for a sample.
     // (6.3.5e dropped the legacy market_signal DB column spot-check — that

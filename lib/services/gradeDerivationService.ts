@@ -187,6 +187,10 @@ type PropPredRow = {
 type SharpSignalEvRow = {
   game_id: number;
   market_type: string;
+  /** Side the sharp_signals row was recorded for. V2.1.1 fix (Phase
+   * 6.3.5e-fix): used by edgeForModelSide() to attribute EV only when
+   * aligned with the model's pick. Pre-fix the lookup filtered by side
+   * and silently dropped opposing-side rows, leaving modelEdgePct=null. */
   side: string;
   ev_pct: number | null;
 };
@@ -233,8 +237,30 @@ function picksFromRow(row: GamePredRow): Record<
   };
 }
 
-function evKey(game_id: number, market: string, side: Side): string {
-  return `${game_id}:${market}:${side}`;
+/**
+ * Lookup key for sharp_signals.ev_pct — V2.1.1 fix (Phase 6.3.5e-fix):
+ * keyed by (game_id, market) only. The pure function and the
+ * edgeForModelSide helper compare signal.side vs modelSide internally.
+ */
+function evKey(game_id: number, market: string): string {
+  return `${game_id}:${market}`;
+}
+
+/**
+ * Return the model's edge from a sharp_signals row. When the signal's side
+ * matches the model's pick, return ev_pct (Pinnacle agrees with our pick).
+ * When the signal's side opposes, return null — Pinnacle's EV is on the
+ * OTHER side, which means our pick has negative implied edge, but we
+ * conservatively decline to extrapolate inverse EV and treat it as "no
+ * edge data on our side." The grade engine's null-edge branch handles it.
+ */
+function edgeForModelSide(
+  signal: SharpSignalEvRow | undefined,
+  modelSide: Side
+): number | null {
+  if (!signal) return null;
+  if (signal.side !== modelSide) return null;
+  return signal.ev_pct;
 }
 
 export type SlateGrades = {
@@ -293,16 +319,17 @@ export async function deriveGradesForSlate(
     .in("game_id", gameIds);
   const propPreds = (propsRaw ?? []) as PropPredRow[];
 
-  // Index sharp_signals.ev_pct by (game_id, market, side) — per-market
-  // edge lookup. Each market gets its own EV (ml → moneyline, ou → total,
-  // nrfi → first_inning_total).
+  // Index sharp_signals by (game_id, market) — V2.1.1 fix: alignment is
+  // a property of (signal.side vs modelSide), checked by edgeForModelSide
+  // at read time. Pre-fix the key included side and the lookup silently
+  // missed opposing-side rows.
   const { data: signalsRaw } = await supabase
     .from("sharp_signals")
     .select("game_id, market_type, side, ev_pct")
     .in("game_id", gameIds);
-  const evByKey = new Map<string, number | null>();
+  const evByKey = new Map<string, SharpSignalEvRow>();
   for (const row of (signalsRaw ?? []) as SharpSignalEvRow[]) {
-    evByKey.set(evKey(row.game_id, row.market_type, row.side as Side), row.ev_pct);
+    evByKey.set(evKey(row.game_id, row.market_type), row);
   }
 
   const result: SlateGrades = {
@@ -317,8 +344,11 @@ export async function deriveGradesForSlate(
     for (const key of GAME_MARKET_KEYS) {
       const pick = picks[key];
       if (pick === null) continue;
-      const modelEdgePct =
-        evByKey.get(evKey(row.game_id, pick.market, pick.side)) ?? null;
+      // 6.3.5e-fix: look up by (game_id, market); edgeForModelSide attributes
+      // EV only when signal.side matches modelSide, returning null when
+      // opposing (Pinnacle's EV is on the other side from our pick).
+      const sig = evByKey.get(evKey(row.game_id, pick.market));
+      const modelEdgePct = edgeForModelSide(sig, pick.side);
       result.games[key].set(
         row.id,
         deriveGrade({

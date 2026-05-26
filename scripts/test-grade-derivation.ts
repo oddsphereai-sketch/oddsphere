@@ -308,6 +308,43 @@ async function main() {
     })()
   );
 
+  // ─── Opposing-EV alignment flow (6.3.5e-fix WSH @ ATL pattern) ────────
+  // The fix's contract for gradeDerivationService: when a sharp signal's
+  // side opposes the model pick, edgeForModelSide() returns null (Pinnacle's
+  // +EV is on the OTHER side; we conservatively decline inverse extrapolation
+  // rather than fabricate a negative edge). The market_signal pure function
+  // independently flips the signal to market_resistance for opposing +EV.
+  // Together: modelEdgePct=null + marketSignal=market_resistance →
+  // sharp_conflict/market_only. These two cases lock that downstream shape.
+
+  check(
+    "Game with NULL edge + market_resistance (opposing +EV path) → sharp_conflict/market_only",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "market_resistance",
+        })
+      );
+      return r.grade === "sharp_conflict" && r.signal_type === "market_only";
+    })()
+  );
+
+  check(
+    "Prop with NULL edge + market_resistance (opposing +EV path) → sharp_conflict/market_only",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "prop",
+          modelEdgePct: null,
+          marketSignal: "market_resistance",
+        })
+      );
+      return r.grade === "sharp_conflict" && r.signal_type === "market_only";
+    })()
+  );
+
   // ─── Best-signal slate monitor ─────────────────────────────────────────
   section("monitorBestSignalShare");
 
@@ -577,6 +614,110 @@ async function main() {
         typeof r1.monitor.bestSignalPct === "number" &&
         typeof r1.monitor.perMarket.ml.derived === "number"
     );
+
+    // ── Alignment audit (6.3.5e-fix WSH @ ATL pattern) ─────────────────
+    // End-to-end: for any game where the total-market sharp signal opposes
+    // the model's predicted_ou_side, the resulting ou_grade should be
+    // sharp_conflict (driven by market_signal=market_resistance and
+    // modelEdgePct=null from edgeForModelSide). Pre-fix it would be
+    // market_watch (signal silently dropped, edge null, no resistance).
+    const gameIdList = ((mlbGames ?? []) as Array<{ id: number }>).map(
+      (g) => g.id
+    );
+    const { data: alignSignals } = await supabase
+      .from("sharp_signals")
+      .select("game_id, side")
+      .eq("market_type", "total")
+      .in("game_id", gameIdList);
+    const { data: alignPicks } = await supabase
+      .from("game_predictions")
+      .select("id, game_id, predicted_ou_side")
+      .in("game_id", gameIdList);
+    const alignPickByGame = new Map<
+      number,
+      { id: number; side: string | null }
+    >();
+    for (const p of (alignPicks ?? []) as Array<{
+      id: number;
+      game_id: number;
+      predicted_ou_side: string | null;
+    }>) {
+      alignPickByGame.set(p.game_id, {
+        id: p.id,
+        side: p.predicted_ou_side,
+      });
+    }
+    const opposingPickIds: number[] = [];
+    for (const s of (alignSignals ?? []) as Array<{
+      game_id: number;
+      side: string;
+    }>) {
+      const pick = alignPickByGame.get(s.game_id);
+      if (pick && pick.side !== null && pick.side !== s.side) {
+        opposingPickIds.push(pick.id);
+      }
+    }
+
+    if (opposingPickIds.length > 0) {
+      // (1) Every opposing-side pick grades sharp_conflict (was market_watch pre-fix).
+      let nonConflict = 0;
+      for (const id of opposingPickIds) {
+        const out = derived.games.ou.get(id);
+        if (out?.grade !== "sharp_conflict") nonConflict++;
+      }
+      check(
+        "opposing-side total signals derive sharp_conflict ou_grade (WSH @ ATL pattern)",
+        nonConflict === 0
+      );
+
+      // (2) signal_type is market_only — modelEdgePct=null from edgeForModelSide
+      // means there's no balanced/model_dominant path; pure market call.
+      let wrongSignalType = 0;
+      for (const id of opposingPickIds) {
+        const out = derived.games.ou.get(id);
+        if (out?.signal_type !== "market_only") wrongSignalType++;
+      }
+      check(
+        "opposing-side total signals carry signal_type=market_only (modelEdgePct null from edgeForModelSide)",
+        wrongSignalType === 0
+      );
+
+      // (3) DB reflects sharp_conflict for the same picks (write path is wired).
+      const { data: alignDbRows } = await supabase
+        .from("game_predictions")
+        .select("id, ou_grade, ou_signal_type")
+        .in("id", opposingPickIds);
+      let dbMismatch = 0;
+      for (const row of (alignDbRows ?? []) as Array<{
+        id: number;
+        ou_grade: string | null;
+        ou_signal_type: string | null;
+      }>) {
+        if (row.ou_grade !== "sharp_conflict") dbMismatch++;
+        if (row.ou_signal_type !== "market_only") dbMismatch++;
+      }
+      check(
+        "DB ou_grade=sharp_conflict + ou_signal_type=market_only persisted for opposing-side picks",
+        dbMismatch === 0
+      );
+
+      // (4) Pre-fix regression guard: NONE of these picks should derive
+      // market_watch. (Pre-fix bug shape: edge null + signal collapsed to
+      // market_neutral → market_watch grade.)
+      let regressedToWatch = 0;
+      for (const id of opposingPickIds) {
+        const out = derived.games.ou.get(id);
+        if (out?.grade === "market_watch") regressedToWatch++;
+      }
+      check(
+        "opposing-side total picks do NOT grade market_watch (pre-fix bug shape)",
+        regressedToWatch === 0
+      );
+    } else {
+      console.log(
+        "  (no opposing-side total signals in seed slate — alignment-audit coverage relies on pure-function cases above)"
+      );
+    }
   }
 
   // ─── Summary ──────────────────────────────────────────────────────────

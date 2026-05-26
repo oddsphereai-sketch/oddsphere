@@ -73,9 +73,15 @@ import type { SharpSignalRecord } from "../providers/interfaces/ISharpSignalProv
  * Minimal sharp-signal shape the pure derivation needs. Accepts either a
  * SharpSignalRecord (provider boundary) or a `sharp_signals` DB row — both
  * carry the same fields.
+ *
+ * V2.1.1 fix (Phase 6.3.5e-fix): `side` was added so the pure function can
+ * classify alignment vs the model's pick. Pre-6.3.5e-fix the caller filtered
+ * signals by side at lookup time and silently dropped opposing-side signals;
+ * fix moves alignment awareness into the function itself.
  */
 export type MarketSignalSource = Pick<
   SharpSignalRecord,
+  | "side"
   | "is_plus_ev"
   | "ev_pct"
   | "has_steam_move"
@@ -90,12 +96,18 @@ export type MarketSignalSource = Pick<
 
 /**
  * Classify the market read for ONE pick against ONE sharp-signal observation.
- * Pure function — no I/O. Caller is responsible for matching the signal to
- * the prediction's (game, market, side) tuple before invocation.
+ * Pure function — no I/O.
  *
- * Priority (highest first): steam > resistance > confirmed > smoke > neutral.
- * If no signal exists (`signal === null`) the result is `market_neutral` —
- * the explicit "derivation ran, found no market read" verdict, NOT NULL.
+ * V2.1.1 fix (Phase 6.3.5e-fix): branches are now alignment-aware. The
+ * caller passes the signal for the (game, market) tuple regardless of which
+ * side the signal row was recorded for; this function checks
+ * `signal.side === modelSide` internally and routes opposing-side signals
+ * to `market_resistance` for steam/EV (matching the user mental model
+ * "sharp money fading our pick"). RLM branch was already alignment-aware
+ * via `rlm_direction.endsWith(modelSide)` — preserved.
+ *
+ * Priority (highest first): steam > RLM > +EV > public_smoke > neutral.
+ * If no signal exists (`signal === null`) the result is `market_neutral`.
  */
 export function deriveMarketSignal(
   modelSide: Side,
@@ -103,46 +115,52 @@ export function deriveMarketSignal(
 ): MarketSignal {
   if (signal === null) return "market_neutral";
 
-  // ── 1. steam_alert ─────────────────────────────────────────────────────
-  // Coordinated multi-book sharp move. Always wins — regardless of alignment
-  // with the model. The user wants to know that steam is happening.
+  const aligned = signal.side === modelSide;
+
+  // ── 1. Steam — alignment determines verdict ────────────────────────────
+  // Coordinated multi-book sharp move. Aligned with our pick → steam_alert
+  // (dramatic confirming move). Opposing → market_resistance (sharps fading
+  // us via steam). Pre-6.3.5e-fix this branch was alignment-agnostic and
+  // always returned steam_alert — caused the WSH @ ATL bug where steam on
+  // the opposing total side classified as steam_alert → market_led grade
+  // instead of sharp_conflict.
   if (
     signal.has_steam_move &&
     (signal.steam_books_count ?? 0) >= SHARP_SIGNAL_THRESHOLDS.MIN_STEAM_BOOKS
   ) {
-    return "steam_alert";
+    return aligned ? "steam_alert" : "market_resistance";
   }
 
-  // ── 2. market_resistance — RLM AGAINST the model's side ────────────────
-  // Both directions of RLM matter; check resistance first so an opposing
-  // line move isn't mis-tagged as confirmation by a separate EV signal
-  // elsewhere on the same row.
+  // ── 2. RLM — alignment-aware via rlm_direction.endsWith(modelSide) ─────
+  // Pre-existing behavior preserved. The rlm_direction format encodes the
+  // destination side directly, so this branch never needed signal.side
+  // for alignment.
   if (
     signal.has_reverse_line_movement &&
-    signal.rlm_direction !== null &&
-    !signal.rlm_direction.endsWith(modelSide)
+    signal.rlm_direction !== null
   ) {
-    return "market_resistance";
+    return signal.rlm_direction.endsWith(modelSide)
+      ? "market_confirmed"
+      : "market_resistance";
   }
 
-  // ── 3. market_confirmed — RLM aligned OR Pinnacle positive EV ──────────
-  if (
-    signal.has_reverse_line_movement &&
-    signal.rlm_direction !== null &&
-    signal.rlm_direction.endsWith(modelSide)
-  ) {
-    return "market_confirmed";
-  }
+  // ── 3. +EV — alignment determines verdict ──────────────────────────────
+  // Pinnacle de-vig EV on the aligned side → market_confirmed (Pinnacle
+  // agrees with our pick). Opposing side → market_resistance (Pinnacle says
+  // the OTHER side is the smart play, which means OUR pick has negative EV
+  // by inverse). Pre-6.3.5e-fix this branch ignored side and incorrectly
+  // returned market_confirmed for opposing-side EV.
   if (
     signal.is_plus_ev === true &&
     (signal.ev_pct ?? 0) >= SHARP_SIGNAL_THRESHOLDS.MIN_EV_FOR_PLUS_EV_SIGNAL
   ) {
-    return "market_confirmed";
+    return aligned ? "market_confirmed" : "market_resistance";
   }
 
-  // ── 4. public_smoke — heavy tickets, flat money, no Pinnacle EV ────────
-  // Money tracks tickets within the flatness threshold = recreational chase
-  // (lots of small bets, no sharp dollar flow). And Pinnacle doesn't see EV.
+  // ── 4. public_smoke — alignment-agnostic by nature ─────────────────────
+  // Heavy public tickets with flat money flow and no Pinnacle EV. Public
+  // action is a property of the market state, not a directional verdict on
+  // our pick. Preserved unchanged from pre-6.3.5e-fix.
   if (
     signal.is_plus_ev !== true &&
     signal.public_betting_pct !== null &&
@@ -221,8 +239,16 @@ function picksFromRow(row: GamePredRow): Record<
   };
 }
 
-function signalKey(game_id: number, market: string, side: Side): string {
-  return `${game_id}:${market}:${side}`;
+/**
+ * Lookup key for sharp signals — V2.1.1 fix (Phase 6.3.5e-fix): keyed by
+ * (game_id, market) only. SQL data confirmed signals are always single-
+ * sided per (game, market) tuple, so the side axis was unnecessary and
+ * pre-6.3.5e-fix it caused the lookup to MISS opposing-side signals
+ * entirely (silently returning null → market_neutral verdict). The pure
+ * function reads signal.side internally for alignment.
+ */
+function marketKey(game_id: number, market: string): string {
+  return `${game_id}:${market}`;
 }
 
 /**
@@ -232,6 +258,7 @@ function signalKey(game_id: number, market: string, side: Side): string {
  */
 function normalizeSignal(row: SharpSignalRow): MarketSignalSource {
   return {
+    side: row.side as Side,
     is_plus_ev: row.is_plus_ev ?? false,
     ev_pct: row.ev_pct,
     has_steam_move: row.has_steam_move ?? false,
@@ -300,17 +327,21 @@ export async function deriveMarketSignalsForSlate(
     .in("game_id", gameIds);
   const propPreds = (propsRaw ?? []) as PropPredRow[];
 
-  // ── 2. sharp_signals for the slate, indexed by (game_id, market, side) ─
+  // ── 2. sharp_signals for the slate, indexed by (game_id, market) ──────
+  // V2.1.1 fix: lookup no longer filters by side at the indexing layer.
+  // SQL audit confirmed signals are always single-sided per (game, market)
+  // tuple, so the Map is unambiguous. Alignment is handled in the pure
+  // function via signal.side vs modelSide.
   const { data: signalsRaw } = await supabase
     .from("sharp_signals")
     .select(
       "game_id, market_type, side, is_plus_ev, ev_pct, has_steam_move, steam_books_count, has_reverse_line_movement, rlm_direction, public_betting_pct, public_money_pct"
     )
     .in("game_id", gameIds);
-  const signalByKey = new Map<string, MarketSignalSource>();
+  const signalByMarket = new Map<string, MarketSignalSource>();
   for (const raw of (signalsRaw ?? []) as SharpSignalRow[]) {
-    signalByKey.set(
-      signalKey(raw.game_id, raw.market_type, raw.side as Side),
+    signalByMarket.set(
+      marketKey(raw.game_id, raw.market_type),
       normalizeSignal(raw)
     );
   }
@@ -331,8 +362,11 @@ export async function deriveMarketSignalsForSlate(
     for (const key of GAME_MARKET_KEYS) {
       const pick = picks[key];
       if (pick === null) continue;
+      // 6.3.5e-fix: lookup by (game_id, market) ignores which side the
+      // signal was recorded for. The pure function classifies alignment
+      // via signal.side vs modelSide.
       const signal =
-        signalByKey.get(signalKey(row.game_id, pick.market, pick.side)) ?? null;
+        signalByMarket.get(marketKey(row.game_id, pick.market)) ?? null;
       result.games[key].set(row.id, deriveMarketSignal(pick.side, signal));
     }
   }
@@ -341,7 +375,7 @@ export async function deriveMarketSignalsForSlate(
     if (row.game_id === null) continue;
     // Props are over-only (see edgeCalculator.ts:34).
     const signal =
-      signalByKey.get(signalKey(row.game_id, row.prop_market, "over")) ?? null;
+      signalByMarket.get(marketKey(row.game_id, row.prop_market)) ?? null;
     result.props.set(row.id, deriveMarketSignal("over", signal));
   }
 
