@@ -34,6 +34,10 @@ import { useCallback, useMemo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import type { Grade } from "@/lib/types/domain/Grade";
 import type { DailyEdgeGameDto } from "../lib/labTypes";
+import {
+  headlineGrade,
+  headlinePrimaryMarket,
+} from "../lib/perPickHeadline";
 
 // ─── Filter / sort vocabulary ─────────────────────────────────────────────
 
@@ -205,12 +209,12 @@ const GRADE_RANK: Record<Grade, number> = {
 };
 
 function gradeFromGame(g: DailyEdgeGameDto): Grade {
-  // Headline grade for SORT — the row-level legacy field is dual-write-
-  // parity-equal to predictions[primaryMarket].grade (precedence-1 winner),
-  // so reading the legacy field gives the same result as picking the
-  // precedence-1 per-pick grade. Defensive null fallback matches
-  // SimpleDailyEdgeCard's market_watch default.
-  return g.grade ?? "market_watch";
+  // Headline grade for SORT — first non-null per-pick grade in
+  // ML → OU → NRFI precedence (perPickHeadline.headlineGrade). 6.3.5e
+  // replaced the pre-dropped legacy g.grade read with this client-side
+  // derivation; values are bit-for-bit identical to the pre-6.3.5e
+  // dual-write behavior.
+  return headlineGrade(g);
 }
 
 /**
@@ -246,10 +250,12 @@ function gamePassesFilters(
     if (!matched) return false;
   }
 
-  // ── Market group — OR within. Maps chip key → primaryMarket value. ──────
+  // ── Market group — OR within. 6.3.5e: derives primary market client-
+  // side from per-pick grades (headlinePrimaryMarket) instead of reading
+  // the dropped g.primaryMarket DTO field. Same ML → OU → NRFI precedence.
   const marketActive = MARKET_FILTER_KEYS.filter((k) => filters.has(k));
   if (marketActive.length > 0) {
-    const market = g.primaryMarket;
+    const market = headlinePrimaryMarket(g);
     if (market === null) return false;
     let matched = false;
     for (const m of marketActive) {

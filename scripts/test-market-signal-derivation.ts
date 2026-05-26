@@ -391,13 +391,10 @@ async function main() {
         derived.games.nrfi.size > 0 ||
         derived.props.size > 0
     );
-    check(
-      "gamesLegacy populated for every game_prediction with a pick (precedence-1)",
-      derived.gamesLegacy.size === derived.games.ml.size ||
-        derived.gamesLegacy.size >= derived.games.ml.size
-    );
 
-    // Every value is in the canonical MarketSignal union.
+    // Every value is in the canonical MarketSignal union (per-pick only —
+    // 6.3.5e dropped gamesLegacy along with dual-write to the legacy
+    // game_predictions.market_signal column).
     const ALL_VALID = new Set([
       "market_confirmed",
       "market_neutral",
@@ -411,35 +408,17 @@ async function main() {
         if (!ALL_VALID.has(v)) badGame++;
       }
     }
-    for (const v of derived.gamesLegacy.values()) {
-      if (!ALL_VALID.has(v)) badGame++;
-    }
     let badProp = 0;
     for (const v of derived.props.values()) {
       if (!ALL_VALID.has(v)) badProp++;
     }
     check(
-      "every derived per-pick + legacy game signal is in the canonical MarketSignal union",
+      "every derived per-pick game signal is in the canonical MarketSignal union",
       badGame === 0
     );
     check(
       "every derived prop signal is in the canonical MarketSignal union",
       badProp === 0
-    );
-
-    // Dual-write parity: gamesLegacy[id] === first non-null per-pick
-    // (ML → OU → NRFI precedence) for every id in the legacy map.
-    let parityMismatch = 0;
-    for (const [id, legacyValue] of derived.gamesLegacy.entries()) {
-      const expectedLegacy =
-        derived.games.ml.get(id) ??
-        derived.games.ou.get(id) ??
-        derived.games.nrfi.get(id);
-      if (expectedLegacy !== legacyValue) parityMismatch++;
-    }
-    check(
-      "dual-write parity: gamesLegacy = first non-null in ML→OU→NRFI per-pick precedence",
-      parityMismatch === 0
     );
 
     // Write + idempotency.
@@ -462,27 +441,24 @@ async function main() {
         r2.propPredictionsUpdated === r1.propPredictionsUpdated
     );
 
-    // Spot-check: DB rows match the derived per-pick + legacy values for a sample.
-    const sampleGameIds = Array.from(derived.gamesLegacy.keys()).slice(0, 5);
+    // Spot-check: DB per-pick columns match derived per-pick maps for a sample.
+    // (6.3.5e dropped the legacy market_signal DB column spot-check — that
+    // column is no longer written. V14 cleanup migration drops it from the DB.)
+    const sampleGameIds = Array.from(derived.games.ml.keys()).slice(0, 5);
     if (sampleGameIds.length > 0) {
       const { data: gameDbRows } = await supabase
         .from("game_predictions")
         .select(
-          "id, market_signal, ml_market_signal, ou_market_signal, nrfi_market_signal"
+          "id, ml_market_signal, ou_market_signal, nrfi_market_signal"
         )
         .in("id", sampleGameIds);
-      let legacyMismatch = 0;
       let perPickMismatch = 0;
       for (const row of (gameDbRows ?? []) as Array<{
         id: number;
-        market_signal: string | null;
         ml_market_signal: string | null;
         ou_market_signal: string | null;
         nrfi_market_signal: string | null;
       }>) {
-        if ((derived.gamesLegacy.get(row.id) ?? null) !== row.market_signal) {
-          legacyMismatch++;
-        }
         if ((derived.games.ml.get(row.id) ?? null) !== row.ml_market_signal) {
           perPickMismatch++;
         }
@@ -495,10 +471,6 @@ async function main() {
           perPickMismatch++;
         }
       }
-      check(
-        "DB legacy market_signal matches derived gamesLegacy for sampled rows",
-        legacyMismatch === 0
-      );
       check(
         "DB per-pick ml/ou/nrfi_market_signal match derived maps for sampled rows",
         perPickMismatch === 0
@@ -543,14 +515,13 @@ async function main() {
         if (
           derived.games.ml.has(row.id) ||
           derived.games.ou.has(row.id) ||
-          derived.games.nrfi.has(row.id) ||
-          derived.gamesLegacy.has(row.id)
+          derived.games.nrfi.has(row.id)
         ) {
           leaked++;
         }
       }
       check(
-        "game_predictions with NULL on all three picks are skipped (absent from all per-pick + legacy maps)",
+        "game_predictions with NULL on all three picks are skipped (absent from all per-pick maps)",
         leaked === 0
       );
     } else {

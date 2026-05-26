@@ -335,7 +335,6 @@ async function main() {
     }
     return {
       games: { ml, ou: new Map(), nrfi: new Map() },
-      gamesLegacy: new Map(ml),
       props: new Map(),
     };
   }
@@ -371,7 +370,6 @@ async function main() {
     monitorBestSignalShare(
       {
         games: { ml: new Map(), ou: new Map(), nrfi: new Map() },
-        gamesLegacy: new Map(),
         props: new Map(),
       },
       "test"
@@ -390,7 +388,6 @@ async function main() {
       ou: new Map([[1, { grade: "best_signal", signal_type: "balanced" }]]),
       nrfi: new Map([[1, { grade: "best_signal", signal_type: "balanced" }]]),
     },
-    gamesLegacy: new Map([[1, { grade: "best_signal", signal_type: "balanced" }]]),
     props: new Map([[100, { grade: "best_signal", signal_type: "balanced" }]]),
   };
   const m4 = withMutedWarn(() =>
@@ -468,10 +465,6 @@ async function main() {
         if (!ALL_SIGNAL_TYPES.has(out.signal_type)) badSignalType++;
       }
     }
-    for (const out of derived.gamesLegacy.values()) {
-      if (!ALL_GRADES.has(out.grade)) badGrade++;
-      if (!ALL_SIGNAL_TYPES.has(out.signal_type)) badSignalType++;
-    }
     for (const out of derived.props.values()) {
       if (!ALL_GRADES.has(out.grade)) badGrade++;
       if (!ALL_SIGNAL_TYPES.has(out.signal_type)) badSignalType++;
@@ -480,28 +473,6 @@ async function main() {
     check(
       `every derived signal_type is in the canonical SignalType union`,
       badSignalType === 0
-    );
-
-    // Dual-write parity: gamesLegacy[id] === first non-null per-pick
-    // GradeOutput in ML → OU → NRFI precedence. Both fields (grade +
-    // signal_type) come from the same precedence-winning pick.
-    let parityMismatch = 0;
-    for (const [id, legacyOut] of derived.gamesLegacy.entries()) {
-      const expected =
-        derived.games.ml.get(id) ??
-        derived.games.ou.get(id) ??
-        derived.games.nrfi.get(id);
-      if (
-        !expected ||
-        expected.grade !== legacyOut.grade ||
-        expected.signal_type !== legacyOut.signal_type
-      ) {
-        parityMismatch++;
-      }
-    }
-    check(
-      "dual-write parity: gamesLegacy GradeOutput = first non-null in ML→OU→NRFI precedence",
-      parityMismatch === 0
     );
 
     const r1 = await updateGradesForSlate("mlb", targetSlate);
@@ -523,21 +494,20 @@ async function main() {
         r2.propPredictionsUpdated === r1.propPredictionsUpdated
     );
 
-    // DB spot-check: per-pick + legacy columns match derived values.
-    const sampleGameIds = Array.from(derived.gamesLegacy.keys()).slice(0, 5);
+    // DB spot-check: per-pick columns match derived values. (6.3.5e
+    // dropped the legacy grade/signal_type DB column spot-check —
+    // those columns are no longer written. V14 migration drops them.)
+    const sampleGameIds = Array.from(derived.games.ml.keys()).slice(0, 5);
     if (sampleGameIds.length > 0) {
       const { data: gameDbRows } = await supabase
         .from("game_predictions")
         .select(
-          "id, grade, signal_type, ml_grade, ml_signal_type, ou_grade, ou_signal_type, nrfi_grade, nrfi_signal_type"
+          "id, ml_grade, ml_signal_type, ou_grade, ou_signal_type, nrfi_grade, nrfi_signal_type"
         )
         .in("id", sampleGameIds);
-      let legacyMismatch = 0;
       let perPickMismatch = 0;
       for (const row of (gameDbRows ?? []) as Array<{
         id: number;
-        grade: string | null;
-        signal_type: string | null;
         ml_grade: string | null;
         ml_signal_type: string | null;
         ou_grade: string | null;
@@ -545,14 +515,6 @@ async function main() {
         nrfi_grade: string | null;
         nrfi_signal_type: string | null;
       }>) {
-        const legacyExpected = derived.gamesLegacy.get(row.id);
-        if (
-          !legacyExpected ||
-          legacyExpected.grade !== row.grade ||
-          legacyExpected.signal_type !== row.signal_type
-        ) {
-          legacyMismatch++;
-        }
         const mlExpected = derived.games.ml.get(row.id) ?? null;
         if (
           (mlExpected?.grade ?? null) !== row.ml_grade ||
@@ -575,10 +537,6 @@ async function main() {
           perPickMismatch++;
         }
       }
-      check(
-        "DB legacy grade+signal_type match derived gamesLegacy for sampled rows",
-        legacyMismatch === 0
-      );
       check(
         "DB per-pick ml/ou/nrfi grade+signal_type match derived maps for sampled rows",
         perPickMismatch === 0

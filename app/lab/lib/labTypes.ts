@@ -160,34 +160,12 @@ export type DailyEdgeGameDto = {
   };
   projected: { away: number; home: number };
   sharpSignals: SharpSignalDto[];
-  /**
-   * @deprecated V2.1.1 (Phase 6.3.5c). Read the per-pick grade from
-   *   predictions.{ml,total,nrfi}.grade directly. This top-level field
-   *   mirrors predictions[primaryMarket].grade (precedence-1 winner)
-   *   via server-side dual-write. Kept on the DTO so 6.4d UI keeps
-   *   working unchanged through 6.3.5d's per-pick UI refactor; dropped
-   *   in 6.3.5e once UI migration is verified.
-   */
-  grade: Grade | null;
-  /**
-   * @deprecated V2.1.1 (Phase 6.3.5c). See `grade` deprecation note.
-   *   Mirrors predictions[primaryMarket].signalType.
-   */
-  signalType: SignalType | null;
-  /**
-   * @deprecated V2.1.1 (Phase 6.3.5c). See `grade` deprecation note.
-   *   Mirrors predictions[primaryMarket].marketSignal.
-   */
-  marketSignal: MarketSignal | null;
-  /**
-   * @deprecated V2.1.1 (Phase 6.3.5c). The market the row's headline grade
-   *   is "about" — derived via ML → OU → NRFI precedence on the
-   *   predicted_<market>_* columns. Still useful semantically as the
-   *   row's "primary pick" identifier, but per-pick UI in 6.3.5d reads
-   *   per-tile grades directly. Decision to drop or keep this field
-   *   lands in 6.3.5d/e once the new filter-chip predicate shape is final.
-   */
-  primaryMarket: "moneyline" | "total" | "first_inning_total" | null;
+  // V2.1.1 (Phase 6.3.5e): legacy top-level grade / signalType /
+  // marketSignal / primaryMarket fields dropped. Headline derivation
+  // moves client-side to perPickHeadline.ts (headlineGrade /
+  // headlinePrimaryMarket) which reads from predictions.<market>.grade
+  // in ML → OU → NRFI precedence. The DB legacy columns are orphaned
+  // post-6.3.5e — V14 cleanup migration drops them in a future commit.
 };
 
 export type DailyEdgeResponse = {

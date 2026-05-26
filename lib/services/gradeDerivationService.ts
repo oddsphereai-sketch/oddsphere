@@ -241,19 +241,17 @@ export type SlateGrades = {
   /**
    * Per-pick grades indexed by game_prediction.id. Rows where the model
    * didn't pick a side for a market are ABSENT from that market's inner Map.
+   *
+   * V2.1.1 (Phase 6.3.5e): the previous `gamesLegacy` Map was removed
+   * along with dual-write to the legacy game_predictions.grade /
+   * signal_type columns. Consumers that need a row-level "headline"
+   * grade derive it client-side (perPickHeadline.ts).
    */
   games: {
     ml: Map<number, GradeOutput>;
     ou: Map<number, GradeOutput>;
     nrfi: Map<number, GradeOutput>;
   };
-  /**
-   * Legacy headline derived via ML → OU → NRFI precedence: first non-null
-   * per-pick GradeOutput wins. Both fields (grade + signal_type) come from
-   * the same precedence-winning pick. Preserved for dual-write so existing
-   * UI keeps reading game_predictions.grade + signal_type unchanged.
-   */
-  gamesLegacy: Map<number, GradeOutput>;
   props: Map<number, GradeOutput>;
 };
 
@@ -274,7 +272,6 @@ export async function deriveGradesForSlate(
   const gameIds = ((games ?? []) as Array<{ id: number }>).map((g) => g.id);
   const empty: SlateGrades = {
     games: { ml: new Map(), ou: new Map(), nrfi: new Map() },
-    gamesLegacy: new Map(),
     props: new Map(),
   };
   if (gameIds.length === 0) return empty;
@@ -310,7 +307,6 @@ export async function deriveGradesForSlate(
 
   const result: SlateGrades = {
     games: { ml: new Map(), ou: new Map(), nrfi: new Map() },
-    gamesLegacy: new Map(),
     props: new Map(),
   };
 
@@ -332,14 +328,6 @@ export async function deriveGradesForSlate(
         })
       );
     }
-
-    // Legacy headline = precedence-1 winner's GradeOutput (both fields
-    // come from the same pick to stay internally consistent).
-    const legacy =
-      result.games.ml.get(row.id) ??
-      result.games.ou.get(row.id) ??
-      result.games.nrfi.get(row.id);
-    if (legacy !== undefined) result.gamesLegacy.set(row.id, legacy);
   }
 
   for (const row of propPreds) {
@@ -453,10 +441,14 @@ export type UpdateGradesResult = {
 
 /**
  * Apply derived grades + signal_types to game_predictions + prop_predictions.
- * game_predictions uses per-row UPDATEs (one statement per row touching
- * up to 8 columns) for clarity + transactional consistency across the
- * per-pick triplets + legacy columns. prop_predictions retains bucketed
- * UPDATEs grouped by (grade, signal_type).
+ * game_predictions uses per-row UPDATEs (one statement per row touching up
+ * to 6 columns — 3 per-pick grade + 3 per-pick signal_type). prop_predictions
+ * retains bucketed UPDATEs grouped by (grade, signal_type).
+ *
+ * V2.1.1 (Phase 6.3.5e): the legacy game_predictions.grade + signal_type
+ * columns are no longer written. Headline derivation moved to the client
+ * (perPickHeadline.ts). Legacy DB columns are orphaned post-6.3.5e —
+ * V14 cleanup migration drops them.
  */
 export async function updateGradesForSlate(
   sport: Sport,
@@ -471,11 +463,10 @@ export async function updateGradesForSlate(
     nrfi: { derived: slate.games.nrfi.size, written: 0 },
   };
 
-  // Build the universe of game_prediction.ids that received ANY derivation
-  // (legacy or per-pick). Rows in this set get one UPDATE setting all 8
+  // Build the universe of game_prediction.ids that received ANY per-pick
+  // derivation. Rows in this set get one UPDATE setting up to 6 per-pick
   // columns; absent rows stay NULL everywhere.
   const allIds = new Set<number>([
-    ...slate.gamesLegacy.keys(),
     ...slate.games.ml.keys(),
     ...slate.games.ou.keys(),
     ...slate.games.nrfi.keys(),
@@ -486,7 +477,6 @@ export async function updateGradesForSlate(
     const ml = slate.games.ml.get(id) ?? null;
     const ou = slate.games.ou.get(id) ?? null;
     const nrfi = slate.games.nrfi.get(id) ?? null;
-    const legacy = slate.gamesLegacy.get(id) ?? null;
 
     const { error } = await supabase
       .from("game_predictions")
@@ -497,8 +487,6 @@ export async function updateGradesForSlate(
         ou_signal_type: ou?.signal_type ?? null,
         nrfi_grade: nrfi?.grade ?? null,
         nrfi_signal_type: nrfi?.signal_type ?? null,
-        grade: legacy?.grade ?? null,
-        signal_type: legacy?.signal_type ?? null,
       })
       .eq("id", id);
     if (error) {

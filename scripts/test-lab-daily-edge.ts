@@ -139,29 +139,11 @@ async function main() {
   );
   check("game.projected is { away, home }", typeof first.projected === "object" && typeof first.projected.away === "number" && typeof first.projected.home === "number");
   check("game.sharpSignals is an array", Array.isArray(first.sharpSignals));
-  check(
-    "game.grade is null or one of the 7 canonical grades",
-    first.grade === null || VALID_GRADES.has(first.grade),
-    `got: ${first.grade}`
-  );
-  check(
-    "game.signalType is null or one of the 5 canonical signal types",
-    first.signalType === null || VALID_SIGNAL_TYPES.has(first.signalType),
-    `got: ${first.signalType}`
-  );
-  check(
-    "game.marketSignal is null or one of the 5 canonical market signals",
-    first.marketSignal === null || VALID_MARKET_SIGNALS.has(first.marketSignal),
-    `got: ${first.marketSignal}`
-  );
-  check(
-    "game.primaryMarket is null or one of moneyline/total/first_inning_total",
-    first.primaryMarket === null ||
-      first.primaryMarket === "moneyline" ||
-      first.primaryMarket === "total" ||
-      first.primaryMarket === "first_inning_total",
-    `got: ${first.primaryMarket}`
-  );
+
+  // V2.1.1 (Phase 6.3.5e): legacy top-level grade / signalType /
+  // marketSignal / primaryMarket fields were dropped from the DTO.
+  // Per-pick fields (predictions.{ml,total,nrfi}.{grade,signalType,marketSignal})
+  // are the new source of truth — invariants below cover them.
 
   // ─── V2.1.1 per-pick DTO invariants (Phase 6.3.5c) ────────────────────────
   section("Per-pick DTO invariants");
@@ -215,24 +197,10 @@ async function main() {
     total: "total",
     first_inning_total: "nrfi",
   };
-  let parityFailures = 0;
-  for (const g of body.games) {
-    if (g.primaryMarket === null) continue;
-    const tileKey = PRIMARY_TO_TILE[g.primaryMarket];
-    if (!tileKey) continue;
-    const tile = g.predictions[tileKey];
-    if (
-      g.grade !== tile.grade ||
-      g.signalType !== tile.signalType ||
-      g.marketSignal !== tile.marketSignal
-    ) {
-      parityFailures++;
-    }
-  }
-  check(
-    "dual-shape parity: legacy top-level grade/signalType/marketSignal === predictions[primaryMarket].* (precedence-1)",
-    parityFailures === 0
-  );
+  // 6.3.5e: the dual-shape parity assertion (legacy top-level fields ===
+  // predictions[primaryMarket].*) was removed when the legacy DTO fields
+  // were dropped. perPickHeadline.ts now derives the headline client-side
+  // for UI consumers; there's nothing on the wire to compare against.
 
   // Sanity: at least one game has a non-null per-pick grade triplet on
   // ML (the precedence-1 market). Confirms the V13 columns are being
@@ -263,61 +231,11 @@ async function main() {
   );
   check("games sorted by gameStartMinutes asc", isSorted);
 
-  // ─── V2.1 grade invariants ────────────────────────────────────────────────
-  section("V2.1 grade invariants");
-
-  let gradeUnionFailures = 0;
-  let signalTypeUnionFailures = 0;
-  let marketSignalUnionFailures = 0;
-  let coDerivationFailures = 0;
-  for (const g of body.games) {
-    if (g.grade !== null && !VALID_GRADES.has(g.grade)) gradeUnionFailures++;
-    if (g.signalType !== null && !VALID_SIGNAL_TYPES.has(g.signalType))
-      signalTypeUnionFailures++;
-    if (g.marketSignal !== null && !VALID_MARKET_SIGNALS.has(g.marketSignal))
-      marketSignalUnionFailures++;
-    // Grade + signalType are co-derived by gradeDerivationService — a row
-    // with a grade always has a signal_type alongside it.
-    if (g.grade !== null && g.signalType === null) coDerivationFailures++;
-  }
-  check(
-    `every game's grade is null or in the canonical union`,
-    gradeUnionFailures === 0
-  );
-  check(
-    `every game's signalType is null or in the canonical union`,
-    signalTypeUnionFailures === 0
-  );
-  check(
-    `every game's marketSignal is null or in the canonical union`,
-    marketSignalUnionFailures === 0
-  );
-  check(
-    `grade and signalType are co-derived: non-null grade ⇒ non-null signalType`,
-    coDerivationFailures === 0
-  );
-
-  // Sanity: at least one game on the seeded slate has a graded result.
-  // Confirms the grade engine pipeline (marketSignal → grade) actually ran
-  // upstream — a slate where every game is grade=null suggests the cron
-  // wiring or DB derivation regressed.
-  const gradedCount = body.games.filter((g) => g.grade !== null).length;
-  check(
-    `at least one game on the seeded slate has a non-null grade`,
-    gradedCount > 0,
-    `gradedCount=${gradedCount}`
-  );
-
-  // primaryMarket consistency — every game with a grade should also have a
-  // primaryMarket (they're co-derived from the same precedence in the route).
-  let primaryMarketMissing = 0;
-  for (const g of body.games) {
-    if (g.grade !== null && g.primaryMarket === null) primaryMarketMissing++;
-  }
-  check(
-    `grade and primaryMarket are co-derived: non-null grade ⇒ non-null primaryMarket`,
-    primaryMarketMissing === 0
-  );
+  // ─── V2.1.1 per-pick grade invariants (post-6.3.5e) ───────────────────────
+  // The legacy row-level grade/signalType/marketSignal/primaryMarket fields
+  // were removed from the DTO in 6.3.5e. Equivalent invariants now run
+  // against the per-pick triplets — covered in the "Per-pick DTO invariants"
+  // section above (atomicity + union checks per tile + pipeline sanity).
 
   // ─── sharpStatus mapping consistency against DB sharp_signals ─────────────
   section("sharpStatus mapping consistency");

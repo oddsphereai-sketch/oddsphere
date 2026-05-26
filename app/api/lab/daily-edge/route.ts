@@ -232,19 +232,15 @@ type PredictionRow = {
   ou_confidence: number | null;
   predicted_nrfi: boolean | null;
   nrfi_confidence: number | null;
-  /** Legacy V2.1 row-level 7-category grade (Phase 6.3d). Dual-written
-   * by gradeDerivationService — mirrors the precedence-1 per-pick grade.
-   * Surfaced on the DTO as the deprecated top-level `grade` field. */
-  grade: Grade | null;
-  /** Legacy attribution. Mirrors precedence-1 per-pick signal_type. */
-  signal_type: SignalType | null;
-  /** Legacy Layer 3 market read. Mirrors precedence-1 per-pick market_signal. */
-  market_signal: MarketSignal | null;
   /** V13 per-pick grade triplets (Phase 6.3.5). All three fields per
    * market are NULL together when the model didn't pick that market.
    * Column names use the DB convention: ml_* / ou_* / nrfi_* — the
    * DTO surfaces them as predictions.ml / predictions.total / predictions.nrfi
-   * respectively (note ou_ → total name swap). */
+   * respectively (note ou_ → total name swap).
+   *
+   * 6.3.5e dropped the legacy single-grade columns (grade, signal_type,
+   * market_signal) from this type and from the SELECT — those DB columns
+   * are now orphaned and get cleaned up by a future V14 migration. */
   ml_grade: Grade | null;
   ml_signal_type: SignalType | null;
   ml_market_signal: MarketSignal | null;
@@ -268,22 +264,6 @@ type GameRow = {
   away_team: { abbreviation: string; logo_url: string | null } | null;
   game_predictions: PredictionRow | null;
 };
-
-/**
- * Mirror of marketSignalDerivationService.primaryGamePick + the same logic
- * gradeDerivationService uses to pick the row's "headline" market. Returns
- * null when the row has no model pick at all. Single source of truth for
- * "which market is this row's grade about" — surfaced on the DTO so the
- * Daily Edge Market filter chips don't have to re-derive in the client.
- */
-function derivePrimaryMarket(
-  pred: PredictionRow
-): DailyEdgeGameDto["primaryMarket"] {
-  if (pred.predicted_ml_winner !== null) return "moneyline";
-  if (pred.predicted_ou_side !== null) return "total";
-  if (pred.predicted_nrfi !== null) return "first_inning_total";
-  return null;
-}
 
 function buildGameDto(
   row: GameRow,
@@ -367,15 +347,9 @@ function buildGameDto(
       home: pred.predicted_home_score ?? 0,
     },
     sharpSignals: buildSignalDtos(signals),
-    // V2.1 grade engine fields (Phase 6.3d). Consumed by GradeBadge +
-    // attribution copy on SimpleDailyEdgeCard.
-    grade: pred.grade,
-    signalType: pred.signal_type,
-    marketSignal: pred.market_signal,
-    // V2.1 6.4d — primary market for the Market filter chips (Daily Edge
-    // filter bar). Server-derived so the client doesn't re-implement
-    // precedence logic.
-    primaryMarket: derivePrimaryMarket(pred),
+    // V2.1.1 (Phase 6.3.5e): legacy top-level grade / signalType /
+    // marketSignal / primaryMarket dropped. Headline derivation lives in
+    // perPickHeadline.ts (client-side) reading the per-pick fields below.
   };
 }
 
@@ -432,7 +406,6 @@ export async function GET(request: Request) {
          predicted_ml_winner, ml_confidence,
          predicted_ou_side, ou_confidence,
          predicted_nrfi, nrfi_confidence,
-         grade, signal_type, market_signal,
          ml_grade, ml_signal_type, ml_market_signal,
          ou_grade, ou_signal_type, ou_market_signal,
          nrfi_grade, nrfi_signal_type, nrfi_market_signal

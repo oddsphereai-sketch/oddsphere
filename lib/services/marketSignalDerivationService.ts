@@ -249,21 +249,17 @@ export type SlateMarketSignals = {
    * model didn't pick a side for that specific market are ABSENT from the
    * inner Map (no entry, not null entry) — caller distinguishes "no model
    * pick" from "derived market_neutral."
+   *
+   * V2.1.1 (Phase 6.3.5e): the previous `gamesLegacy` Map was removed
+   * along with the dual-write to the legacy game_predictions.market_signal
+   * column. Consumers that need a "headline" market_signal derive it
+   * client-side (perPickHeadline.ts) from these per-pick maps.
    */
   games: {
     ml: Map<number, MarketSignal>;
     ou: Map<number, MarketSignal>;
     nrfi: Map<number, MarketSignal>;
   };
-  /**
-   * Legacy headline derived via ML → OU → NRFI precedence: first non-null
-   * per-pick value wins. Preserved for dual-write so existing UI keeps
-   * reading the legacy game_predictions.market_signal column unchanged
-   * during the 6.3.5b → 6.3.5f transition.
-   *
-   * Rows where NO model pick exists at all are absent from this map.
-   */
-  gamesLegacy: Map<number, MarketSignal>;
   /** prop_predictions are already per-pick by table shape. */
   props: Map<number, MarketSignal>;
 };
@@ -286,7 +282,6 @@ export async function deriveMarketSignalsForSlate(
   const gameIds = ((games ?? []) as Array<{ id: number }>).map((g) => g.id);
   const empty: SlateMarketSignals = {
     games: { ml: new Map(), ou: new Map(), nrfi: new Map() },
-    gamesLegacy: new Map(),
     props: new Map(),
   };
   if (gameIds.length === 0) return empty;
@@ -320,10 +315,9 @@ export async function deriveMarketSignalsForSlate(
     );
   }
 
-  // ── 3. Derive per-pick + legacy headline for each game_predictions row ──
+  // ── 3. Derive per-pick market_signal for each game_predictions row ──
   const result: SlateMarketSignals = {
     games: { ml: new Map(), ou: new Map(), nrfi: new Map() },
-    gamesLegacy: new Map(),
     props: new Map(),
   };
 
@@ -341,15 +335,6 @@ export async function deriveMarketSignalsForSlate(
         signalByKey.get(signalKey(row.game_id, pick.market, pick.side)) ?? null;
       result.games[key].set(row.id, deriveMarketSignal(pick.side, signal));
     }
-
-    // Legacy headline = first non-null per-pick result in ML → OU → NRFI
-    // precedence order. Matches pre-6.3.5b behavior exactly — preserves
-    // existing UI reads during the dual-write transition.
-    const legacy =
-      result.games.ml.get(row.id) ??
-      result.games.ou.get(row.id) ??
-      result.games.nrfi.get(row.id);
-    if (legacy !== undefined) result.gamesLegacy.set(row.id, legacy);
   }
 
   for (const row of propPreds) {
@@ -366,8 +351,8 @@ export async function deriveMarketSignalsForSlate(
 // ─── DB write — per-row dual-write ────────────────────────────────────────
 
 export type UpdateMarketSignalsResult = {
-  /** Distinct game_predictions rows updated (one row may carry up to 4
-   * column writes — three per-pick + legacy). */
+  /** Distinct game_predictions rows updated (one row carries up to 3
+   * column writes — one per market). */
   gamePredictionsUpdated: number;
   propPredictionsUpdated: number;
   /** Per-market derivation counts for cron-status visibility. `derived`
@@ -385,9 +370,13 @@ export type UpdateMarketSignalsResult = {
  * Apply derived market signals to game_predictions + prop_predictions for
  * the slate. Idempotent — a second run over the same input writes the same
  * values. game_predictions uses per-row UPDATEs (one statement per row
- * touching up to 4 columns) for clarity + transactional consistency across
- * the per-pick triplet + legacy column. prop_predictions retains the
+ * touching up to 3 per-pick columns). prop_predictions retains the
  * bucketed UPDATE pattern (one column per row).
+ *
+ * V2.1.1 (Phase 6.3.5e): the legacy game_predictions.market_signal column
+ * is no longer written. Headline derivation moved to the client
+ * (perPickHeadline.ts). The legacy DB column is orphaned post-6.3.5e —
+ * V14 cleanup migration drops it.
  */
 export async function updateMarketSignalsForSlate(
   sport: Sport,
@@ -401,11 +390,10 @@ export async function updateMarketSignalsForSlate(
     nrfi: { derived: slate.games.nrfi.size, written: 0 },
   };
 
-  // Build the universe of game_prediction.ids that received ANY derivation
-  // (legacy or per-pick). Rows in this set get one UPDATE setting all four
+  // Build the universe of game_prediction.ids that received ANY per-pick
+  // derivation. Rows in this set get one UPDATE setting the 3 per-pick
   // columns; absent rows stay NULL everywhere.
   const allIds = new Set<number>([
-    ...slate.gamesLegacy.keys(),
     ...slate.games.ml.keys(),
     ...slate.games.ou.keys(),
     ...slate.games.nrfi.keys(),
@@ -416,7 +404,6 @@ export async function updateMarketSignalsForSlate(
     const ml = slate.games.ml.get(id) ?? null;
     const ou = slate.games.ou.get(id) ?? null;
     const nrfi = slate.games.nrfi.get(id) ?? null;
-    const legacy = slate.gamesLegacy.get(id) ?? null;
 
     const { error } = await supabase
       .from("game_predictions")
@@ -424,7 +411,6 @@ export async function updateMarketSignalsForSlate(
         ml_market_signal: ml,
         ou_market_signal: ou,
         nrfi_market_signal: nrfi,
-        market_signal: legacy,
       })
       .eq("id", id);
     if (error) {

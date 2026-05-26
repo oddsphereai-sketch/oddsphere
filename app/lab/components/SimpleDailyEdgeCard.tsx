@@ -10,6 +10,10 @@ import type { Grade } from "@/lib/types/domain/Grade";
 import Icon, { type IconName } from "./Icon";
 import GradeBadge from "@/app/components/GradeBadge";
 import { getAttribution } from "../lib/gradeAttribution";
+import {
+  headlineGrade,
+  headlinePrimaryMarket,
+} from "../lib/perPickHeadline";
 
 type Props = {
   game: DailyEdgeGameDto;
@@ -219,10 +223,12 @@ function getDirectionStyles(direction: SharpSignalDto["direction"]) {
 export default function SimpleDailyEdgeCard({ game }: Props) {
   const [expanded, setExpanded] = useState(false);
 
-  // V2.1 grade is the headline verdict. Defensive default: a slate that ran
-  // before the grade engine landed will return grade=null — render the
-  // market_watch fallback so every card always has a badge.
-  const displayGrade: Grade = game.grade ?? "market_watch";
+  // V2.1.1 (Phase 6.3.5e): headline derives client-side from per-pick
+  // via headlineGrade — first non-null per-pick grade in ML → OU → NRFI
+  // precedence, with "market_watch" defensive fallback. Pre-6.3.5e read
+  // the legacy game.grade column directly; that field has been dropped
+  // from the DTO.
+  const displayGrade: Grade = headlineGrade(game);
   const primaryPick = deriveCardPrimaryPick(game.predictions);
   const attribution = getAttribution(displayGrade, primaryPick);
 
@@ -262,16 +268,17 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
       </div>
 
       {/* V2.1 grade band — badge + attribution copy. Always renders (uses
-          the market_watch defensive default when game.grade is null).
+          the market_watch defensive default when no per-pick grade exists).
           V2.1.1 (Phase 6.3.5d core item 1): headline badge appends the
           primary market — "✅ Sharp Confirmed · Moneyline" — so members
           see which market the headline grade is "about" without expanding
-          the breakdown. */}
+          the breakdown. 6.3.5e derives both fields client-side via
+          headlineGrade + headlinePrimaryMarket. */}
       <div className="mb-4 flex items-center gap-3 flex-wrap">
         <GradeBadge
           grade={displayGrade}
           context="daily-edge"
-          market={game.primaryMarket}
+          market={headlinePrimaryMarket(game)}
         />
         <p className="text-sm text-gray-300 leading-snug flex-1 min-w-0">
           {attribution}
