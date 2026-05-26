@@ -114,13 +114,48 @@ function getNrfiPickGlow(pick: string): string {
   return "";
 }
 
-// ─── Sharp signals breakdown row visuals ──────────────────────────────────
+// ─── Per-market display helpers (V2.1.1 Pick Breakdown) ──────────────────
 
-const MARKET_ORDER: Record<SharpSignalDto["market"], number> = {
-  ML: 0,
-  OU: 1,
-  NRFI: 2,
+type MarketKey = "ml" | "total" | "nrfi";
+
+const MARKET_HEADING: Record<MarketKey, string> = {
+  ml: "Moneyline",
+  total: "Total",
+  nrfi: "1st Inning",
 };
+
+/** Map DTO market key to the sharp-signal market tag for filtering. */
+const SIGNAL_MARKET_FOR: Record<MarketKey, SharpSignalDto["market"]> = {
+  ml: "ML",
+  total: "OU",
+  nrfi: "NRFI",
+};
+
+/**
+ * Per-market pick formatter for the Pick Breakdown block. Matches the
+ * readable format used by the headline attribution copy + Top Reads:
+ *   ml    → "{team} ML"   (e.g. "NYY ML")
+ *   total → "{Over|Under} {line}"
+ *   nrfi  → "{NRFI|YRFI}"
+ *
+ * Returns "—" when the model didn't pick that market (rare in V1 MLB but
+ * the helper handles it defensively).
+ */
+function formatPickFor(
+  market: MarketKey,
+  game: DailyEdgeGameDto
+): string {
+  if (market === "ml") {
+    const pick = game.predictions.ml.pick;
+    return pick && pick !== "—" ? `${pick} ML` : "—";
+  }
+  if (market === "total") {
+    return `${game.predictions.total.pick} ${game.predictions.total.line}`;
+  }
+  return game.predictions.nrfi.pick;
+}
+
+// ─── Sharp signals breakdown row visuals ──────────────────────────────────
 
 function signalIcon(category: SharpSignalDto["category"]): IconName {
   switch (category) {
@@ -191,9 +226,25 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
   const primaryPick = deriveCardPrimaryPick(game.predictions);
   const attribution = getAttribution(displayGrade, primaryPick);
 
-  const sortedSignals = [...game.sharpSignals].sort(
-    (a, b) => MARKET_ORDER[a.market] - MARKET_ORDER[b.market]
-  );
+  // V2.1.1 CTA suffix (Phase 6.3.5d core item 2): counts per-pick grades
+  // across ml + total + nrfi tiles. "confirmed" = any of best_signal /
+  // sharp_confirmed / market_led (the quality floor that gates Top Reads).
+  // "caution" = sharp_conflict only. Confirmed wins precedence when both
+  // are present.
+  const pickGrades: Grade[] = [];
+  if (game.predictions.ml.grade !== null) pickGrades.push(game.predictions.ml.grade);
+  if (game.predictions.total.grade !== null) pickGrades.push(game.predictions.total.grade);
+  if (game.predictions.nrfi.grade !== null) pickGrades.push(game.predictions.nrfi.grade);
+  const confirmedCount = pickGrades.filter(
+    (g) => g === "best_signal" || g === "sharp_confirmed" || g === "market_led"
+  ).length;
+  const cautionCount = pickGrades.filter((g) => g === "sharp_conflict").length;
+  const ctaSuffix =
+    confirmedCount > 0
+      ? ` · ${confirmedCount} confirmed`
+      : cautionCount > 0
+      ? ` · ${cautionCount} caution`
+      : "";
 
   return (
     <article className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl p-4 sm:p-5 transition-all duration-200 hover:border-gray-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
@@ -211,9 +262,17 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
       </div>
 
       {/* V2.1 grade band — badge + attribution copy. Always renders (uses
-          the market_watch defensive default when game.grade is null). */}
+          the market_watch defensive default when game.grade is null).
+          V2.1.1 (Phase 6.3.5d core item 1): headline badge appends the
+          primary market — "✅ Sharp Confirmed · Moneyline" — so members
+          see which market the headline grade is "about" without expanding
+          the breakdown. */}
       <div className="mb-4 flex items-center gap-3 flex-wrap">
-        <GradeBadge grade={displayGrade} context="daily-edge" />
+        <GradeBadge
+          grade={displayGrade}
+          context="daily-edge"
+          market={game.primaryMarket}
+        />
         <p className="text-sm text-gray-300 leading-snug flex-1 min-w-0">
           {attribution}
         </p>
@@ -249,13 +308,18 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
 
       {/* 3 pick tiles — labels per V2.1 spec Part 11: Moneyline / Total /
           1st Inning. Stored in title case to match the spec; the tile's
-          CSS uppercase transform handles display rendering. */}
+          CSS uppercase transform handles display rendering. V2.1.1 (Phase
+          6.3.5d core): each tile gets its own GradeBadge sourced from the
+          per-pick column (predictions.<market>.grade). Badge renders only
+          when the model picked that market — a tile with no model pick
+          stays clean (no badge). */}
       <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
         <PredictionTile
           label="Moneyline"
           pick={game.predictions.ml.pick}
           confidence={game.predictions.ml.confidence}
           sharpStatus={game.predictions.ml.sharpStatus}
+          grade={game.predictions.ml.grade}
           pickColor="text-white"
           pickGlow=""
         />
@@ -267,6 +331,7 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
           )}
           confidence={game.predictions.total.confidence}
           sharpStatus={game.predictions.total.sharpStatus}
+          grade={game.predictions.total.grade}
           pickColor="text-white"
           pickGlow=""
         />
@@ -275,60 +340,115 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
           pick={game.predictions.nrfi.pick}
           confidence={game.predictions.nrfi.confidence}
           sharpStatus={game.predictions.nrfi.sharpStatus}
+          grade={game.predictions.nrfi.grade}
           pickColor={getNrfiPickColor(game.predictions.nrfi.pick)}
           pickGlow={getNrfiPickGlow(game.predictions.nrfi.pick)}
         />
       </div>
 
-      {/* Expand/collapse toggle — "Why this matters · N signals" */}
+      {/* Expand toggle — V2.1.1 (Phase 6.3.5d core item 2): per-pick
+          CTA replaces the old sharp-signal count. "View all 3 reads ·
+          N confirmed" surfaces how many of the row's picks land at or
+          above the market_led quality floor; falls back to caution count
+          for sharp_conflict; no suffix when neither bucket fires. Every
+          card now has a 3-pick breakdown worth opening — no "no signals
+          tonight" branch. */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
         className="w-full py-2 text-xs text-gray-400 hover:text-violet-300 hover:bg-gray-900/40 rounded transition-all duration-200 inline-flex items-center justify-center gap-1.5 border-t border-gray-800/60"
       >
-        <span>
-          {expanded
-            ? "Hide why this matters"
-            : game.sharpSignals.length === 0
-            ? "No additional signals tonight"
-            : `Why this matters · ${game.sharpSignals.length} ${
-                game.sharpSignals.length === 1 ? "signal" : "signals"
-              }`}
-        </span>
-        {game.sharpSignals.length > 0 && (
-          <Icon
-            name="chevron-down"
-            className={`w-3.5 h-3.5 transition-transform duration-200 ${
-              expanded ? "rotate-180" : ""
-            }`}
-          />
-        )}
+        <span>{expanded ? "Hide pick breakdown" : `View all 3 reads${ctaSuffix}`}</span>
+        <Icon
+          name="chevron-down"
+          className={`w-3.5 h-3.5 transition-transform duration-200 ${
+            expanded ? "rotate-180" : ""
+          }`}
+        />
       </button>
 
-      {/* "Why this matters" breakdown — ✓ / ⚠ / — bullets by direction */}
-      {expanded && game.sharpSignals.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-gray-800/60">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-300">
-              Why this matters
-            </span>
-            <span className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">
-              {game.sharpSignals.length}{" "}
-              {game.sharpSignals.length === 1 ? "signal" : "signals"}
-            </span>
-          </div>
-          <div className="space-y-2">
-            {sortedSignals.map((signal, i) => (
-              <SignalRow
-                key={`${signal.market}-${signal.category}-${i}`}
-                signal={signal}
-              />
-            ))}
-          </div>
+      {/* V2.1.1 Pick Breakdown (Phase 6.3.5d core item 3): per-market
+          blocks always render when expanded. Each block carries its own
+          grade, pick, attribution, and the sharp signals tagged to that
+          market (Option B — sharp signals folded into per-market blocks
+          for self-contained per-market story). */}
+      {expanded && <PickBreakdown game={game} />}
+    </article>
+  );
+}
+
+/**
+ * V2.1.1 Pick Breakdown (Phase 6.3.5d core item 3) — replaces the
+ * pre-6.3.5d flat sharp-signals list in the expanded section. Renders all
+ * 3 markets unconditionally so members can compare per-pick grades + see
+ * why the same game can carry divergent reads across markets.
+ *
+ * Sharp signals are folded INTO each market's block (Option B per kickoff
+ * design flag) so each market's story — grade, pick, attribution,
+ * supporting signal detail — lives in one self-contained spot.
+ */
+function PickBreakdown({ game }: { game: DailyEdgeGameDto }) {
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-800/60">
+      <div className="mb-3">
+        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-300">
+          Pick Breakdown
+        </span>
+      </div>
+      <div className="space-y-4">
+        <MarketBlock game={game} market="ml" />
+        <MarketBlock game={game} market="total" />
+        <MarketBlock game={game} market="nrfi" />
+      </div>
+    </div>
+  );
+}
+
+function MarketBlock({
+  game,
+  market,
+}: {
+  game: DailyEdgeGameDto;
+  market: MarketKey;
+}) {
+  const tile = game.predictions[market];
+  // Defensive null fallback matches headline + tile behavior — a market
+  // with no grade derivation renders market_watch.
+  const displayGrade: Grade = tile.grade ?? "market_watch";
+  const pickText = formatPickFor(market, game);
+  const attribution = getAttribution(displayGrade, pickText);
+  const signalsForMarket = game.sharpSignals.filter(
+    (s) => s.market === SIGNAL_MARKET_FOR[market]
+  );
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <p className="text-xs font-bold uppercase tracking-[0.1em] text-gray-300">
+          {MARKET_HEADING[market]}
+        </p>
+        <GradeBadge grade={displayGrade} context="daily-edge" size="sm" />
+      </div>
+      <p className="text-sm font-medium text-white tracking-tight mb-1">
+        {pickText}
+        <span className="text-gray-400 tabular-nums">
+          {" · "}
+          {Math.round(tile.confidence * 100)}%
+        </span>
+      </p>
+      <p className="text-xs text-gray-300 leading-snug mb-2">{attribution}</p>
+      {signalsForMarket.length > 0 && (
+        <div className="space-y-1.5">
+          {signalsForMarket.map((signal, i) => (
+            <SignalRow
+              key={`${signal.market}-${signal.category}-${i}`}
+              signal={signal}
+            />
+          ))}
         </div>
       )}
-    </article>
+    </div>
   );
 }
 
@@ -337,6 +457,7 @@ function PredictionTile({
   pick,
   confidence,
   sharpStatus,
+  grade,
   pickColor,
   pickGlow,
 }: {
@@ -344,6 +465,9 @@ function PredictionTile({
   pick: string;
   confidence: number;
   sharpStatus: SharpStatus;
+  /** V2.1.1 per-pick grade (Phase 6.3.5d core). NULL when the model didn't
+   * pick this market — the tile renders without a badge. */
+  grade: Grade | null;
   pickColor: string;
   pickGlow: string;
 }) {
@@ -355,9 +479,22 @@ function PredictionTile({
       <div className="absolute top-2 right-2">
         <SharpStatusIcon status={sharpStatus} />
       </div>
-      <p className="text-[10px] uppercase tracking-[0.1em] text-gray-400 mb-1.5 font-semibold">
-        {label}
-      </p>
+      {/* Label row — V2.1.1: prefix with per-pick GradeBadge (emoji-only,
+          small) when grade is non-null. Inline with label keeps the tile's
+          existing vertical rhythm intact while making the grade visible. */}
+      <div className="flex items-center gap-1.5 mb-1.5">
+        {grade !== null && (
+          <GradeBadge
+            grade={grade}
+            context="daily-edge"
+            size="sm"
+            emojiOnly
+          />
+        )}
+        <p className="text-[10px] uppercase tracking-[0.1em] text-gray-400 font-semibold">
+          {label}
+        </p>
+      </div>
       <p
         className={`text-xl font-medium tracking-tight mb-1.5 truncate leading-tight ${pickColor} ${pickGlow}`}
       >

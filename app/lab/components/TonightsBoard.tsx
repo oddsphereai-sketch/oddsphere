@@ -58,16 +58,32 @@ const CHIP_EMOJI: Record<Grade, string> = {
 };
 
 export default function TonightsBoard({ games, sportLabel }: Props) {
-  const counts = useMemo(() => {
+  // V2.1.1 hybrid count (Phase 6.3.5d core): the summary now counts both
+  // GAMES (rows) and PICKS (non-null grades across ml + total + nrfi tiles).
+  // Pre-6.3.5d counted by row.grade — one grade per game. Per-pick counts
+  // surface market-by-market signal divergence: 12 games on the slate can
+  // produce up to 36 picks, with each pick independently graded.
+  //
+  // Defensive fallback for a tile with grade=null: SKIPPED from the count
+  // (the model didn't pick that market — not a "market_watch" classification).
+  // This matches SimpleDailyEdgeCard's behavior where null-grade tiles render
+  // without a badge.
+  const { byGrade, pickTotal } = useMemo(() => {
     const acc: Partial<Record<Grade, number>> = {};
+    let pickTotal = 0;
     for (const g of games) {
-      // Defensive fallback matches SimpleDailyEdgeCard's null handling — a
-      // grade-null game counts as market_watch so the board never silently
-      // drops cards from the visible totals.
-      const grade: Grade = g.grade ?? "market_watch";
-      acc[grade] = (acc[grade] ?? 0) + 1;
+      for (const tile of [
+        g.predictions.ml,
+        g.predictions.total,
+        g.predictions.nrfi,
+      ]) {
+        if (tile.grade !== null) {
+          acc[tile.grade] = (acc[tile.grade] ?? 0) + 1;
+          pickTotal++;
+        }
+      }
     }
-    return acc;
+    return { byGrade: acc, pickTotal };
   }, [games]);
 
   if (games.length === 0) return null;
@@ -82,8 +98,14 @@ export default function TonightsBoard({ games, sportLabel }: Props) {
           {games.length} {sportLabel}{" "}
           {games.length === 1 ? "game" : "games"}
         </li>
+        <li className="inline-flex items-center gap-1.5 text-gray-300 whitespace-nowrap before:content-['·'] before:text-gray-600 before:mr-1">
+          <span className="tabular-nums font-medium text-gray-100">
+            {pickTotal}
+          </span>
+          <span>{pickTotal === 1 ? "pick" : "picks"}</span>
+        </li>
         {ALL_GRADES.map((g) => {
-          const count = counts[g];
+          const count = byGrade[g];
           if (!count) return null;
           return (
             <li

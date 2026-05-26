@@ -76,24 +76,59 @@ const SLOT_META: Record<Slot, SlotMeta> = {
 
 type Selections = Record<Slot, DailyEdgeGameDto | null>;
 
+/**
+ * V2.1.1 per-pick Top Reads selection (Phase 6.3.5d core).
+ *
+ * Pre-6.3.5d: row-level grade picked the top 3 distinct rows for the three
+ * "Best" slots, displaying each row's own market pick. A side-effect was
+ * that the SAME row's "best market" got priority across all slots —
+ * collapsing per-market nuance.
+ *
+ * Per-pick selection: each slot independently picks the highest-graded
+ * PICK ON THAT MARKET across all 12 games. Quality floor still applies
+ * (must be in QUALITY_FLOOR). Best Moneyline + Best Total + Best 1st Inning
+ * can now share the same game when multiple of its picks qualify, or
+ * select different games when the top market reads diverge.
+ */
 function selectTopReads(games: DailyEdgeGameDto[]): Selections {
-  const qualified = games
-    .filter((g) => g.grade !== null && QUALITY_FLOOR.has(g.grade))
-    .sort((a, b) => {
-      const aR = GRADE_RANK[a.grade as Grade];
-      const bR = GRADE_RANK[b.grade as Grade];
-      if (aR !== bR) return aR - bR;
-      return b.predictions.ml.confidence - a.predictions.ml.confidence;
-    });
+  type PickMarket = "ml" | "total" | "nrfi";
 
+  function bestForMarket(market: PickMarket): DailyEdgeGameDto | null {
+    const qualified = games
+      .filter((g) => {
+        const grade = g.predictions[market].grade;
+        return grade !== null && QUALITY_FLOOR.has(grade);
+      })
+      .sort((a, b) => {
+        const aGrade = a.predictions[market].grade as Grade;
+        const bGrade = b.predictions[market].grade as Grade;
+        if (GRADE_RANK[aGrade] !== GRADE_RANK[bGrade]) {
+          return GRADE_RANK[aGrade] - GRADE_RANK[bGrade];
+        }
+        // Tiebreaker: the SAME market's confidence (matches what the slot displays).
+        return (
+          b.predictions[market].confidence - a.predictions[market].confidence
+        );
+      });
+    return qualified[0] ?? null;
+  }
+
+  // Biggest Caution: any game with sharp_conflict on ANY pick. Tiebreaker
+  // by the primary pick's confidence (precedence ML → OU → NRFI for the
+  // displayed pick; selection just needs a stable rank across candidates).
   const cautions = games
-    .filter((g) => g.grade === "sharp_conflict")
+    .filter(
+      (g) =>
+        g.predictions.ml.grade === "sharp_conflict" ||
+        g.predictions.total.grade === "sharp_conflict" ||
+        g.predictions.nrfi.grade === "sharp_conflict"
+    )
     .sort((a, b) => b.predictions.ml.confidence - a.predictions.ml.confidence);
 
   return {
-    best_ml: qualified[0] ?? null,
-    best_total: qualified[1] ?? null,
-    best_first_inning: qualified[2] ?? null,
+    best_ml: bestForMarket("ml"),
+    best_total: bestForMarket("total"),
+    best_first_inning: bestForMarket("nrfi"),
     biggest_caution: cautions[0] ?? null,
   };
 }
@@ -101,48 +136,74 @@ function selectTopReads(games: DailyEdgeGameDto[]): Selections {
 /**
  * The pick value the slot displays — pulled from the selected game's
  * predictions object based on which slot is being rendered.
+ *
+ * V2.1.1 (Phase 6.3.5d core): Biggest Caution now finds the FIRST market
+ * with sharp_conflict (precedence ML → OU → NRFI) and displays THAT
+ * market's pick. Pre-6.3.5d showed the row's primary pick regardless of
+ * which market actually carried the conflict — could mislead members.
  */
 function pickDisplayFor(slot: Slot, game: DailyEdgeGameDto): {
   marketLabel: string;
   pickText: string;
   confidence: number;
 } {
+  function mlDisplay() {
+    return {
+      marketLabel: "Moneyline",
+      pickText: `${game.predictions.ml.pick} ML`,
+      confidence: game.predictions.ml.confidence,
+    };
+  }
+  function totalDisplay() {
+    return {
+      marketLabel: "Total",
+      pickText: `${game.predictions.total.pick} ${game.predictions.total.line}`,
+      confidence: game.predictions.total.confidence,
+    };
+  }
+  function nrfiDisplay() {
+    return {
+      marketLabel: "1st Inning",
+      pickText: game.predictions.nrfi.pick,
+      confidence: game.predictions.nrfi.confidence,
+    };
+  }
   switch (slot) {
     case "best_ml":
-      return {
-        marketLabel: "Moneyline",
-        pickText: `${game.predictions.ml.pick} ML`,
-        confidence: game.predictions.ml.confidence,
-      };
+      return mlDisplay();
     case "best_total":
-      return {
-        marketLabel: "Total",
-        pickText: `${game.predictions.total.pick} ${game.predictions.total.line}`,
-        confidence: game.predictions.total.confidence,
-      };
+      return totalDisplay();
     case "best_first_inning":
-      return {
-        marketLabel: "1st Inning",
-        pickText: game.predictions.nrfi.pick,
-        confidence: game.predictions.nrfi.confidence,
-      };
+      return nrfiDisplay();
     case "biggest_caution": {
-      // Mirror SimpleDailyEdgeCard's deriveCardPrimaryPick precedence so
-      // the displayed pick matches the row's headline grade.
-      const ml = game.predictions.ml.pick;
-      if (ml && ml !== "—") {
-        return {
-          marketLabel: "Moneyline",
-          pickText: `${ml} ML`,
-          confidence: game.predictions.ml.confidence,
-        };
-      }
-      return {
-        marketLabel: "Total",
-        pickText: `${game.predictions.total.pick} ${game.predictions.total.line}`,
-        confidence: game.predictions.total.confidence,
-      };
+      // Find the first market (ML → OU → NRFI precedence) carrying
+      // sharp_conflict and display THAT market's pick. The slot's badge
+      // (rendered in TopReadSlot) will show sharp_conflict explicitly.
+      if (game.predictions.ml.grade === "sharp_conflict") return mlDisplay();
+      if (game.predictions.total.grade === "sharp_conflict") return totalDisplay();
+      if (game.predictions.nrfi.grade === "sharp_conflict") return nrfiDisplay();
+      // Defensive fallback (shouldn't happen — selection requires at least
+      // one sharp_conflict pick). Use ML primary-pick display.
+      return mlDisplay();
     }
+  }
+}
+
+/**
+ * The grade to badge for a slot — pulled from the SLOT's market on the
+ * selected game (not the row-level legacy field). For Biggest Caution
+ * the badge always reads sharp_conflict by definition of the slot.
+ */
+function slotGradeFor(slot: Slot, game: DailyEdgeGameDto): Grade {
+  switch (slot) {
+    case "best_ml":
+      return game.predictions.ml.grade ?? "market_watch";
+    case "best_total":
+      return game.predictions.total.grade ?? "market_watch";
+    case "best_first_inning":
+      return game.predictions.nrfi.grade ?? "market_watch";
+    case "biggest_caution":
+      return "sharp_conflict";
   }
 }
 
@@ -209,7 +270,7 @@ function TopReadSlot({
   }
 
   const display = pickDisplayFor(slot, game);
-  const displayGrade: Grade = game.grade ?? "market_watch";
+  const displayGrade: Grade = slotGradeFor(slot, game);
 
   return (
     <Link

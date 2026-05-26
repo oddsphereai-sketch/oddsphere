@@ -205,18 +205,45 @@ const GRADE_RANK: Record<Grade, number> = {
 };
 
 function gradeFromGame(g: DailyEdgeGameDto): Grade {
-  // Defensive null fallback matches SimpleDailyEdgeCard's market_watch default.
+  // Headline grade for SORT — the row-level legacy field is dual-write-
+  // parity-equal to predictions[primaryMarket].grade (precedence-1 winner),
+  // so reading the legacy field gives the same result as picking the
+  // precedence-1 per-pick grade. Defensive null fallback matches
+  // SimpleDailyEdgeCard's market_watch default.
   return g.grade ?? "market_watch";
+}
+
+/**
+ * V2.1.1 per-pick filter predicate (Phase 6.3.5d core).
+ *
+ * Returns the non-null per-pick grades on the game across ml/total/nrfi.
+ * Used by the Grade filter chip predicate so a chip matches whenever ANY
+ * pick on the card carries the grade — not just the row's primary pick.
+ * Pre-6.3.5d the filter matched on g.grade (row-level legacy), which
+ * collapsed nuance: a card with sharp_confirmed on the total but
+ * market_watch on the ML wouldn't match a "Sharp Confirmed" filter
+ * because the row's headline was market_watch.
+ */
+function gamePickGrades(g: DailyEdgeGameDto): Grade[] {
+  const out: Grade[] = [];
+  if (g.predictions.ml.grade !== null) out.push(g.predictions.ml.grade);
+  if (g.predictions.total.grade !== null) out.push(g.predictions.total.grade);
+  if (g.predictions.nrfi.grade !== null) out.push(g.predictions.nrfi.grade);
+  return out;
 }
 
 function gamePassesFilters(
   g: DailyEdgeGameDto,
   filters: Set<FilterKey>
 ): boolean {
-  // ── Grade group — OR within ─────────────────────────────────────────────
+  // ── Grade group — match when ANY pick has the grade (V2.1.1 / 6.3.5d) ──
   const gradeActive = GRADE_FILTER_KEYS.filter((k) => filters.has(k));
   if (gradeActive.length > 0) {
-    if (!(gradeActive as string[]).includes(gradeFromGame(g))) return false;
+    const pickGrades = gamePickGrades(g);
+    const matched = pickGrades.some((pg) =>
+      (gradeActive as string[]).includes(pg)
+    );
+    if (!matched) return false;
   }
 
   // ── Market group — OR within. Maps chip key → primaryMarket value. ──────

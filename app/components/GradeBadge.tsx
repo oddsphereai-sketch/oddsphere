@@ -105,6 +105,25 @@ const LABELS: Record<GradeContext, Record<Grade, string>> = {
   },
 };
 
+/**
+ * Display label for an optional market suffix appended to the badge text
+ * (V2.1.1 / Phase 6.3.5d clarity item 1). Used on the Daily Edge card
+ * headline to surface which market the headline grade is "about" —
+ * "✅ Sharp Confirmed · Moneyline" reads more honestly than just
+ * "✅ Sharp Confirmed" when the row's other markets carry different grades.
+ *
+ * Per-tile badges (emojiOnly mode) ignore this prop — the tile's market
+ * is implicit from its position in the 3-tile grid.
+ */
+const MARKET_LABEL: Record<
+  "moneyline" | "total" | "first_inning_total",
+  string
+> = {
+  moneyline: "Moneyline",
+  total: "Total",
+  first_inning_total: "1st Inning",
+};
+
 const SIZE_CLASSES = {
   sm: "text-[11px] px-2 py-0.5 gap-1",
   md: "text-xs px-2.5 py-1 gap-1.5",
@@ -119,8 +138,15 @@ export type GradeBadgeProps = {
    */
   context: GradeContext;
   size?: keyof typeof SIZE_CLASSES;
-  /** Show only the emoji (compact mode). Useful in dense tables. */
+  /** Show only the emoji (compact mode). Useful in dense tables and on
+   * per-tile badges where the market is implicit. */
   emojiOnly?: boolean;
+  /**
+   * Optional market suffix. When provided AND emojiOnly is false, the badge
+   * text reads "{grade label} · {market label}". Used on the Daily Edge
+   * card headline (V2.1.1). NULL or absent → no suffix.
+   */
+  market?: "moneyline" | "total" | "first_inning_total" | null;
 };
 
 export default function GradeBadge({
@@ -128,13 +154,15 @@ export default function GradeBadge({
   context,
   size = "md",
   emojiOnly = false,
+  market,
 }: GradeBadgeProps) {
   const meta = META[grade];
   const label = LABELS[context][grade];
+  const marketSuffix = market ? ` · ${MARKET_LABEL[market]}` : "";
   return (
     <span
       role="status"
-      aria-label={`Grade: ${label}`}
+      aria-label={`Grade: ${label}${marketSuffix}`}
       className={[
         "inline-flex items-center font-semibold tracking-tight rounded-full border whitespace-nowrap",
         SIZE_CLASSES[size],
@@ -144,7 +172,12 @@ export default function GradeBadge({
       ].join(" ")}
     >
       <span aria-hidden="true">{meta.emoji}</span>
-      {!emojiOnly && <span>{label}</span>}
+      {!emojiOnly && (
+        <span>
+          {label}
+          {marketSuffix}
+        </span>
+      )}
     </span>
   );
 }
