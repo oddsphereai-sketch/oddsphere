@@ -217,41 +217,62 @@ async function main() {
   );
 
   check(
-    "Public exactly at MIN_PUBLIC_HEAVY_PCT with flat money fires public_smoke",
-    deriveMarketSignal(
-      "home",
-      sig({
-        is_plus_ev: false,
-        public_betting_pct: SHARP_SIGNAL_THRESHOLDS.MIN_PUBLIC_HEAVY_PCT,
-        public_money_pct: SHARP_SIGNAL_THRESHOLDS.MIN_PUBLIC_HEAVY_PCT,
-      })
-    ) === "public_smoke"
-  );
-
-  check(
-    "Public below MIN_PUBLIC_HEAVY_PCT does NOT fire public_smoke",
+    "Public exactly at PUBLIC_SMOKE_TICKET_THRESHOLD with flat money fires public_smoke",
     deriveMarketSignal(
       "home",
       sig({
         is_plus_ev: false,
         public_betting_pct:
-          SHARP_SIGNAL_THRESHOLDS.MIN_PUBLIC_HEAVY_PCT - 1,
-        public_money_pct: SHARP_SIGNAL_THRESHOLDS.MIN_PUBLIC_HEAVY_PCT - 1,
+          SHARP_SIGNAL_THRESHOLDS.PUBLIC_SMOKE_TICKET_THRESHOLD,
+        public_money_pct:
+          SHARP_SIGNAL_THRESHOLDS.PUBLIC_SMOKE_TICKET_THRESHOLD,
+      })
+    ) === "public_smoke"
+  );
+
+  check(
+    "Public below PUBLIC_SMOKE_TICKET_THRESHOLD does NOT fire public_smoke",
+    deriveMarketSignal(
+      "home",
+      sig({
+        is_plus_ev: false,
+        public_betting_pct:
+          SHARP_SIGNAL_THRESHOLDS.PUBLIC_SMOKE_TICKET_THRESHOLD - 1,
+        public_money_pct:
+          SHARP_SIGNAL_THRESHOLDS.PUBLIC_SMOKE_TICKET_THRESHOLD - 1,
       })
     ) === "market_neutral"
   );
 
+  // Framework: PUBLIC_SMOKE_FLAT_GAP_MAX is INCLUSIVE — gap of exactly 8pp
+  // counts as flat. Boundary test uses GAP_MAX + 1 to exceed flatness.
   check(
-    "Public heavy but money divergence >= PUBLIC_MONEY_FLATNESS_PP does NOT fire public_smoke (sharps flowing)",
+    "Public heavy but money divergence > PUBLIC_SMOKE_FLAT_GAP_MAX does NOT fire public_smoke (sharps flowing)",
     deriveMarketSignal(
       "home",
       sig({
         is_plus_ev: false,
         public_betting_pct: 75,
         public_money_pct:
-          75 - SHARP_SIGNAL_THRESHOLDS.PUBLIC_MONEY_FLATNESS_PP, // exactly at the boundary — not strictly less than
+          75 - (SHARP_SIGNAL_THRESHOLDS.PUBLIC_SMOKE_FLAT_GAP_MAX + 1),
       })
     ) === "market_neutral"
+  );
+
+  // V2.1.1 framework conformance: gap of EXACTLY PUBLIC_SMOKE_FLAT_GAP_MAX
+  // (8pp) fires public_smoke under the ≤ operator. Pre-Fix-1.2 the operator
+  // was strict `<` and this case would have fallen to market_neutral.
+  check(
+    "Public heavy + money divergence == PUBLIC_SMOKE_FLAT_GAP_MAX (inclusive) fires public_smoke",
+    deriveMarketSignal(
+      "home",
+      sig({
+        is_plus_ev: false,
+        public_betting_pct: 75,
+        public_money_pct:
+          75 - SHARP_SIGNAL_THRESHOLDS.PUBLIC_SMOKE_FLAT_GAP_MAX,
+      })
+    ) === "public_smoke"
   );
 
   check(

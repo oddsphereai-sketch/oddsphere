@@ -160,14 +160,18 @@ export function deriveMarketSignal(
   // ── 4. public_smoke — alignment-agnostic by nature ─────────────────────
   // Heavy public tickets with flat money flow and no Pinnacle EV. Public
   // action is a property of the market state, not a directional verdict on
-  // our pick. Preserved unchanged from pre-6.3.5e-fix.
+  // our pick. Framework Signal 5: tickets ≥ 65% (PUBLIC_SMOKE_TICKET_
+  // THRESHOLD) AND |money − tickets| ≤ 8pp (PUBLIC_SMOKE_FLAT_GAP_MAX).
+  // The ≤ operator matches framework "MAX" semantics — a gap of exactly
+  // 8pp still counts as flat.
   if (
     signal.is_plus_ev !== true &&
     signal.public_betting_pct !== null &&
     signal.public_money_pct !== null &&
-    signal.public_betting_pct >= SHARP_SIGNAL_THRESHOLDS.MIN_PUBLIC_HEAVY_PCT &&
-    Math.abs(signal.public_money_pct - signal.public_betting_pct) <
-      SHARP_SIGNAL_THRESHOLDS.PUBLIC_MONEY_FLATNESS_PP
+    signal.public_betting_pct >=
+      SHARP_SIGNAL_THRESHOLDS.PUBLIC_SMOKE_TICKET_THRESHOLD &&
+    Math.abs(signal.public_money_pct - signal.public_betting_pct) <=
+      SHARP_SIGNAL_THRESHOLDS.PUBLIC_SMOKE_FLAT_GAP_MAX
   ) {
     return "public_smoke";
   }

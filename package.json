@@ -34,6 +34,7 @@
     "test:slate-publish": "tsx --env-file=.env.local scripts/test-slate-publish.ts",
     "test:adapter-factory": "tsx scripts/test-adapter-factory.ts",
     "test:production-source-filter": "tsx --env-file=.env.local scripts/test-production-source-filter.ts",
+    "test:threshold-constants": "tsx scripts/test-threshold-constants.ts",
     "tracking-refresh": "tsx --env-file=.env.local scripts/tracking-refresh.ts",
     "promote-drafts": "tsx --env-file=.env.local scripts/promote-historical-drafts.ts"
   },

@@ -170,23 +170,42 @@ export const WEATHER = {
 // ─────────────────────────────────────────────────────────────────────────
 // Sharp signal thresholds (Daily Edge verdict logic)
 // ─────────────────────────────────────────────────────────────────────────
-// Composite STRONG/CAUTION/neutral classification for sharp_signals rows.
+// SOURCE OF TRUTH: planning-docs/SHARP_SIGNAL_FRAMEWORK.md §"Threshold
+// constants". The values below must match the framework table verbatim;
+// scripts/test-threshold-constants.ts pins each one with a framework-
+// reference assertion so silent drift surfaces immediately. If you tune
+// a value here, update the framework first and the test will guide you
+// through both sides.
 //
 // STRONG fires when there's asymmetric sharp signal:
-//   (ev_pct ≥ 2.0 AND is_plus_ev) AND ≥1 of {steam ≥ 3 books, RLM, sharp money divergence ≥ 10pp}
+//   (ev_pct ≥ 1.5 AND is_plus_ev) AND ≥1 of {steam ≥ 3 books, RLM, sharp money divergence ≥ 10pp}
 //   OR a "stack" of ≥3 weak signals all confirming the same side.
 //
 // CAUTION fires when something looks fishy:
-//   public-heavy (≥ 70%) AND no_steam AND no_RLM AND |money − betting| < 5pp
+//   public-heavy (≥ 65%) AND no_steam AND no_RLM AND |money − betting| ≤ 8pp
 //     → public side without sharp confirmation
 //   OR conflicting signals (steam vs RLM in opposite directions)
 //   OR ev_pct < -2.0 (market believes the bet is mispriced)
 //
-// Re-tune in Phase 7 with backtested signal-to-outcome data.
+// V2.1.1 (Phase 6 framework conformance):
+//   • MIN_EV_FOR_PLUS_EV_SIGNAL 2.0 → 1.5 (framework moderate tier starts at 1.5%)
+//   • EV_STRONG_THRESHOLD / EV_VERY_STRONG_THRESHOLD added — constants only,
+//     wiring lands in Session 2 (Gap-9 tier-aware grade engine).
+//   • MIN_PUBLIC_HEAVY_PCT → PUBLIC_SMOKE_TICKET_THRESHOLD (renamed) and
+//     value 70 → 65 per framework.
+//   • PUBLIC_MONEY_FLATNESS_PP → PUBLIC_SMOKE_FLAT_GAP_MAX (renamed) and
+//     value 5 → 8. Comparison operator changed from `<` to `≤` per
+//     framework "MAX" semantics (gap of exactly 8pp counts as flat).
 
 export const SHARP_SIGNAL_THRESHOLDS = {
-  // Primary STRONG components
-  MIN_EV_FOR_PLUS_EV_SIGNAL: 2.0,           // below 2% is Pinnacle juice noise
+  // Primary STRONG components — Pinnacle EV tiers (framework Signal 1)
+  /** Moderate-tier EV floor. Below this is market noise. */
+  MIN_EV_FOR_PLUS_EV_SIGNAL: 1.5,
+  /** Strong-tier EV (framework Signal 1). NOT YET WIRED into the grade
+   *  engine — Session 2 (Gap-9) lands tier-aware classification. */
+  EV_STRONG_THRESHOLD: 3.0,
+  /** Very-strong-tier EV (framework Signal 1). NOT YET WIRED — see Gap-9. */
+  EV_VERY_STRONG_THRESHOLD: 5.0,
   MIN_STEAM_BOOKS: 3,                        // need multi-book confirmation
   MIN_SHARP_MONEY_DIVERGENCE_PP: 10,        // money_pct − betting_pct ≥ 10
   // Weak signal stack (3+ stacked weak → STRONG)
@@ -195,9 +214,13 @@ export const SHARP_SIGNAL_THRESHOLDS = {
   LIGHT_STEAM_BOOKS_MIN: 1,                  // 1-2 books = light steam confirmation
   LIGHT_SHARP_DIVERGENCE_PP: 5,              // 5pp-10pp = light divergence
   PINNACLE_FAIR_PROB_CONFIRM: 0.52,          // Pinnacle thinks side is > 52% likely
-  // CAUTION conditions
-  MIN_PUBLIC_HEAVY_PCT: 70,
-  PUBLIC_MONEY_FLATNESS_PP: 5,               // |money − betting| < 5pp = no sharp $ flow
+  // Public smoke (framework Signal 5)
+  /** Public ticket % threshold for public_smoke detection. Framework
+   *  rename: was MIN_PUBLIC_HEAVY_PCT (70). */
+  PUBLIC_SMOKE_TICKET_THRESHOLD: 65,
+  /** Max |money% − ticket%| gap that still counts as "flat". Framework
+   *  rename: was PUBLIC_MONEY_FLATNESS_PP (5). Comparison is `≤`. */
+  PUBLIC_SMOKE_FLAT_GAP_MAX: 8,
   NEGATIVE_EV_CAUTION_THRESHOLD: -2.0,
 } as const;
 

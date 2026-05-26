@@ -95,11 +95,15 @@ function isPublicHeavyNoConfirm(s: SharpSignalRecord): boolean {
     s.public_money_pct !== null && s.public_betting_pct !== null
       ? Math.abs(s.public_money_pct - s.public_betting_pct)
       : 0;
+  // Framework Signal 5: tickets ≥ PUBLIC_SMOKE_TICKET_THRESHOLD (65) AND
+  // |money − tickets| ≤ PUBLIC_SMOKE_FLAT_GAP_MAX (8pp). The ≤ comparison
+  // matches framework "MAX" semantics. The OLD evaluator's "public-heavy
+  // no-confirm CAUTION" verdict shares this detection — see Gap-19.
   return (
-    bp >= T.MIN_PUBLIC_HEAVY_PCT &&
+    bp >= T.PUBLIC_SMOKE_TICKET_THRESHOLD &&
     !s.has_steam_move &&
     !s.has_reverse_line_movement &&
-    moneyDiff < T.PUBLIC_MONEY_FLATNESS_PP
+    moneyDiff <= T.PUBLIC_SMOKE_FLAT_GAP_MAX
   );
 }
 
