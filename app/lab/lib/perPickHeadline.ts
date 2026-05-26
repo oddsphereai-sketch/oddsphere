@@ -103,10 +103,20 @@ export function headlinePrimaryMarket(g: DailyEdgeGameDto): HeadlineMarket {
 
 /**
  * The headline grade for the row — strongest per-pick grade across the
- * triplet, ML → OU → NRFI precedence on ties. Defensive fallback to
- * "market_watch" matches SimpleDailyEdgeCard's pre-6.3.5e behavior when
- * every per-pick grade was null (slate ran before the grade engine landed).
+ * triplet, ML → OU → NRFI precedence on ties.
+ *
+ * Returns `null` when every per-pick grade is null (the model didn't pick
+ * any of the three markets). Consumers render this as "No Pick" /
+ * "Unavailable" per SHARP_SIGNAL_FRAMEWORK.md §"Edge Case Handling —
+ * Model didn't pick the market": "Rendering Market Watch when no model
+ * pick exists falsely implies there IS market activity worth watching.
+ * 'No Pick' is the honest representation."
+ *
+ * Fix 1.3 (Gap-21): dropped the pre-fix `?? "market_watch"` coercion.
+ * Pre-fix, every all-null row appeared as Market Watch in the headline;
+ * post-fix, the UI renders an honest "No Pick" treatment via GradeBadge's
+ * null-grade variant.
  */
-export function headlineGrade(g: DailyEdgeGameDto): Grade {
-  return rankedCandidates(g)[0]?.grade ?? "market_watch";
+export function headlineGrade(g: DailyEdgeGameDto): Grade | null {
+  return rankedCandidates(g)[0]?.grade ?? null;
 }

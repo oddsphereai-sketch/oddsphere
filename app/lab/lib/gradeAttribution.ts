@@ -26,8 +26,19 @@ export const PICK_PLACEHOLDER = "[pick]" as const;
 
 /**
  * Verbatim from V2.1 Part 6 lines 184-190. Periods included.
+ *
+ * Fix 1.3 (Gap-21/26/27): accepts `Grade | null`. When grade is null the
+ * model didn't generate a pick for this market — copy is the honest
+ * "No Pick" attribution per SHARP_SIGNAL_FRAMEWORK.md §"Edge Case
+ * Handling — Model didn't pick the market".
  */
-export function getAttribution(grade: Grade, primaryPick: string): string {
+export function getAttribution(
+  grade: Grade | null,
+  primaryPick: string
+): string {
+  if (grade === null) {
+    return "Model didn't generate a pick for this market.";
+  }
   switch (grade) {
     case "best_signal":
       return `Model + sharps agree on ${primaryPick}.`;

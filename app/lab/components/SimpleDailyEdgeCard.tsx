@@ -224,11 +224,12 @@ export default function SimpleDailyEdgeCard({ game }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   // V2.1.1 (Phase 6.3.5e): headline derives client-side from per-pick
-  // via headlineGrade — first non-null per-pick grade in ML → OU → NRFI
-  // precedence, with "market_watch" defensive fallback. Pre-6.3.5e read
-  // the legacy game.grade column directly; that field has been dropped
-  // from the DTO.
-  const displayGrade: Grade = headlineGrade(game);
+  // via headlineGrade — strongest per-pick grade across ML/OU/NRFI with
+  // ML→OU→NRFI tiebreaker. Fix 1.3 (Gap-21): returns `Grade | null`; the
+  // null branch is the framework-honest "No Pick" treatment for games where
+  // the model didn't pick any market. GradeBadge + getAttribution both
+  // accept null and render the No Pick variant.
+  const displayGrade: Grade | null = headlineGrade(game);
   const primaryPick = deriveCardPrimaryPick(game.predictions);
   const attribution = getAttribution(displayGrade, primaryPick);
 
@@ -420,10 +421,15 @@ function MarketBlock({
   market: MarketKey;
 }) {
   const tile = game.predictions[market];
-  // Defensive null fallback matches headline + tile behavior — a market
-  // with no grade derivation renders market_watch.
-  const displayGrade: Grade = tile.grade ?? "market_watch";
-  const pickText = formatPickFor(market, game);
+  // Fix 1.3 (Gap-27): null grade signals "model didn't pick this market".
+  // Pre-fix this branch coerced null to "market_watch" — framework-violating
+  // per SHARP_SIGNAL_FRAMEWORK.md §"Edge Case Handling — Model didn't pick
+  // the market". Now the null state flows through GradeBadge + getAttribution
+  // which render the honest No Pick treatment. Pick text + confidence
+  // become "—" per Flag E1 (no fake pick alongside a No Pick badge).
+  const displayGrade: Grade | null = tile.grade;
+  const isNoPick = displayGrade === null;
+  const pickText = isNoPick ? "—" : formatPickFor(market, game);
   const attribution = getAttribution(displayGrade, pickText);
   const signalsForMarket = game.sharpSignals.filter(
     (s) => s.market === SIGNAL_MARKET_FOR[market]
@@ -441,7 +447,7 @@ function MarketBlock({
         {pickText}
         <span className="text-gray-400 tabular-nums">
           {" · "}
-          {Math.round(tile.confidence * 100)}%
+          {isNoPick ? "—" : `${Math.round(tile.confidence * 100)}%`}
         </span>
       </p>
       <p className="text-xs text-gray-300 leading-snug mb-2">{attribution}</p>
@@ -473,49 +479,64 @@ function PredictionTile({
   confidence: number;
   sharpStatus: SharpStatus;
   /** V2.1.1 per-pick grade (Phase 6.3.5d core). NULL when the model didn't
-   * pick this market — the tile renders without a badge. */
+   * pick this market — tile renders the No Pick treatment per Fix 1.3
+   * (Gap-26): em-dash badge + "—" pick text + "—" confidence + hidden
+   * sharpStatus tag. Pre-Fix-1.3 the tile silently dropped the badge but
+   * kept showing pick/confidence, creating a contradictory state with
+   * the upstream null-grade semantics. */
   grade: Grade | null;
   pickColor: string;
   pickGlow: string;
 }) {
+  const isNoPick = grade === null;
   const borderClass = getTileBorder(sharpStatus);
+  // Fix 1.3 (Gap-26): when no model pick exists, suppress the pick text,
+  // confidence, and sharpStatus tag. Showing "PHI · 0% · Mixed" alongside
+  // a No Pick badge would contradict the framework's "honest representation"
+  // mandate. The No Pick badge alone carries the meaning.
+  const displayPick = isNoPick ? "—" : pick;
+  const displayConfidence = isNoPick ? "—" : `${Math.round(confidence * 100)}%`;
   return (
     <div
       className={`bg-gray-900/60 border ${borderClass} rounded-md p-3.5 transition-colors duration-150 hover:bg-gray-900/80 relative`}
     >
       <div className="absolute top-2 right-2">
-        <SharpStatusIcon status={sharpStatus} />
+        {/* sharpStatus icon hidden in no-pick state — same honesty principle:
+            no model pick means no per-market sharp posture to surface. */}
+        {!isNoPick && <SharpStatusIcon status={sharpStatus} />}
       </div>
       {/* Label row — V2.1.1: prefix with per-pick GradeBadge (emoji-only,
-          small) when grade is non-null. Inline with label keeps the tile's
-          existing vertical rhythm intact while making the grade visible. */}
+          small). Fix 1.3 (Gap-26): badge always renders, using the No Pick
+          variant when grade is null. */}
       <div className="flex items-center gap-1.5 mb-1.5">
-        {grade !== null && (
-          <GradeBadge
-            grade={grade}
-            context="daily-edge"
-            size="sm"
-            emojiOnly
-          />
-        )}
+        <GradeBadge
+          grade={grade}
+          context="daily-edge"
+          size="sm"
+          emojiOnly
+        />
         <p className="text-[10px] uppercase tracking-[0.1em] text-gray-400 font-semibold">
           {label}
         </p>
       </div>
       <p
-        className={`text-xl font-medium tracking-tight mb-1.5 truncate leading-tight ${pickColor} ${pickGlow}`}
+        className={`text-xl font-medium tracking-tight mb-1.5 truncate leading-tight ${
+          isNoPick ? "text-gray-500" : pickColor
+        } ${isNoPick ? "" : pickGlow}`}
       >
-        {pick}
+        {displayPick}
       </p>
       <div className="flex items-center justify-between gap-1">
         <span className="text-sm font-medium tabular-nums text-gray-300">
-          {Math.round(confidence * 100)}%
+          {displayConfidence}
         </span>
-        <span
-          className={`text-[9px] font-medium tracking-[0.1em] uppercase ${TILE_TAG[sharpStatus].color}`}
-        >
-          {TILE_TAG[sharpStatus].text}
-        </span>
+        {!isNoPick && (
+          <span
+            className={`text-[9px] font-medium tracking-[0.1em] uppercase ${TILE_TAG[sharpStatus].color}`}
+          >
+            {TILE_TAG[sharpStatus].text}
+          </span>
+        )}
       </div>
     </div>
   );

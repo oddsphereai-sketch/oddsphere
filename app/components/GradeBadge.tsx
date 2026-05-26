@@ -32,6 +32,23 @@ type GradeMeta = {
 };
 
 /**
+ * Visual treatment for the "No Pick" state — fires when the badge receives
+ * `grade={null}` (Fix 1.3, framework §"Edge Case Handling — Model didn't
+ * pick the market"). Distinct from every Grade variant: muted gray, em-dash
+ * glyph, no emoji. The label is "No Pick" in both surface contexts —
+ * Daily Edge and Player Props use the same label since "no model
+ * prediction generated" is the same concept on both surfaces.
+ */
+const NO_PICK_META: GradeMeta = {
+  emoji: "—",
+  text: "text-gray-400",
+  bg: "bg-gray-500/10",
+  border: "border-gray-500/30",
+};
+
+const NO_PICK_LABEL = "No Pick";
+
+/**
  * Emoji + color treatment per grade — invariant across surface contexts.
  */
 const META: Record<Grade, GradeMeta> = {
@@ -130,11 +147,18 @@ const SIZE_CLASSES = {
 } as const;
 
 export type GradeBadgeProps = {
-  grade: Grade;
+  /**
+   * Fix 1.3 (Gap-21/26/27): accepts `null` for the "No Pick" / "Unavailable"
+   * state per SHARP_SIGNAL_FRAMEWORK.md §"Edge Case Handling". When null the
+   * badge renders muted gray with em-dash glyph and "No Pick" label; the
+   * `market` suffix is suppressed since there's no grade to qualify.
+   */
+  grade: Grade | null;
   /**
    * Which surface vocabulary to render. Daily Edge uses "Best Signal" /
    * "Market-Led Signal" / etc.; Player Props uses "Elite Prop" / "Market-Led" /
-   * etc. per V2.1 Part 6 table.
+   * etc. per V2.1 Part 6 table. Ignored when grade is null — "No Pick" is
+   * the same label on both surfaces.
    */
   context: GradeContext;
   size?: keyof typeof SIZE_CLASSES;
@@ -142,9 +166,10 @@ export type GradeBadgeProps = {
    * per-tile badges where the market is implicit. */
   emojiOnly?: boolean;
   /**
-   * Optional market suffix. When provided AND emojiOnly is false, the badge
-   * text reads "{grade label} · {market label}". Used on the Daily Edge
-   * card headline (V2.1.1). NULL or absent → no suffix.
+   * Optional market suffix. When provided AND emojiOnly is false AND grade
+   * is non-null, the badge text reads "{grade label} · {market label}".
+   * Used on the Daily Edge card headline (V2.1.1). NULL or absent → no
+   * suffix. Also suppressed when grade is null.
    */
   market?: "moneyline" | "total" | "first_inning_total" | null;
 };
@@ -156,9 +181,13 @@ export default function GradeBadge({
   emojiOnly = false,
   market,
 }: GradeBadgeProps) {
-  const meta = META[grade];
-  const label = LABELS[context][grade];
-  const marketSuffix = market ? ` · ${MARKET_LABEL[market]}` : "";
+  const meta = grade === null ? NO_PICK_META : META[grade];
+  const label = grade === null ? NO_PICK_LABEL : LABELS[context][grade];
+  // Suppress market suffix on no-pick: a market qualifier would imply
+  // there IS market context to qualify, which is the dishonesty the
+  // framework is trying to prevent.
+  const marketSuffix =
+    market && grade !== null ? ` · ${MARKET_LABEL[market]}` : "";
   return (
     <span
       role="status"

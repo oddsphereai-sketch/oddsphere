@@ -30,6 +30,7 @@ import {
   headlineGrade,
   headlinePrimaryMarket,
 } from "../app/lab/lib/perPickHeadline";
+import { getAttribution } from "../app/lab/lib/gradeAttribution";
 import type {
   Grade,
   MarketSignal,
@@ -505,10 +506,14 @@ async function main() {
     ) === "total"
   );
 
-  // Defensive: all-null grades → "market_watch" / null
+  // Fix 1.3 (Gap-21): all-null grades → null (NOT market_watch fallback).
+  // Pre-Fix-1.3 this branch returned market_watch as a defensive coerce,
+  // which falsely implied market activity per framework §"Edge Case
+  // Handling — Model didn't pick the market". Post-Fix-1.3 the UI renders
+  // the honest "No Pick" treatment via GradeBadge's null variant.
   check(
-    "all per-pick grades null → headlineGrade falls back to market_watch",
-    headlineGrade(mkDto(null, null, null)) === "market_watch"
+    "all per-pick grades null → headlineGrade returns null (No Pick — Fix 1.3 Gap-21)",
+    headlineGrade(mkDto(null, null, null)) === null
   );
   check(
     "all per-pick grades null → headlinePrimaryMarket returns null",
@@ -523,10 +528,19 @@ async function main() {
         "first_inning_total"
   );
 
+  // Fix 1.3 (Gap-21/26/27): getAttribution accepts null and returns the
+  // "No Pick" copy. Locks the Flag D1 copy at the test boundary so a future
+  // edit doesn't silently drift the member-facing message.
+  check(
+    "getAttribution(null, ...) returns 'Model didn't generate a pick...' (Flag D1 copy)",
+    getAttribution(null, "—") ===
+      "Model didn't generate a pick for this market."
+  );
+
   // Live-slate audit: every game in the API response should have a
-  // headline grade and market that match a non-null per-pick triplet —
-  // headline grade is in the candidate set; if a strictly higher-ranked
-  // grade exists on the row, the headline must pick it.
+  // headline grade and market that match a non-null per-pick triplet.
+  // Fix 1.3: games with all-null grades skip the rank check (they would
+  // produce headlineGrade=null — covered by the pure-function test above).
   section("perPickHeadline live-slate consistency");
   let headlineMismatches = 0;
   const GRADE_RANK_LOCAL: Record<Grade, number> = {
@@ -546,12 +560,20 @@ async function main() {
       candidates.push(g.predictions.total.grade);
     if (g.predictions.nrfi.grade !== null)
       candidates.push(g.predictions.nrfi.grade);
-    if (candidates.length === 0) continue;
+    if (candidates.length === 0) {
+      // All-null row — headline must be null too (Fix 1.3 Gap-21).
+      if (hg !== null) headlineMismatches++;
+      continue;
+    }
+    if (hg === null) {
+      headlineMismatches++;
+      continue;
+    }
     const strongestRank = Math.max(...candidates.map((c) => GRADE_RANK_LOCAL[c]));
     if (GRADE_RANK_LOCAL[hg] !== strongestRank) headlineMismatches++;
   }
   check(
-    "every live-slate game's headline grade equals the strongest per-pick grade",
+    "every live-slate game's headline grade equals the strongest per-pick grade (or null when all picks null)",
     headlineMismatches === 0
   );
 

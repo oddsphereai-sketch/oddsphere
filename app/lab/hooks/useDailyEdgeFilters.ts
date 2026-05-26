@@ -208,12 +208,28 @@ const GRADE_RANK: Record<Grade, number> = {
   sharp_conflict: 6,
 };
 
-function gradeFromGame(g: DailyEdgeGameDto): Grade {
-  // Headline grade for SORT — first non-null per-pick grade in
-  // ML → OU → NRFI precedence (perPickHeadline.headlineGrade). 6.3.5e
-  // replaced the pre-dropped legacy g.grade read with this client-side
-  // derivation; values are bit-for-bit identical to the pre-6.3.5e
-  // dual-write behavior.
+/**
+ * Sort rank for the headline grade. Null = no model pick on any market;
+ * those games sort LAST per Fix 1.3 Flag F1 (rank below sharp_conflict).
+ *
+ * Note: this rank order treats sharp_conflict as low-strength signal
+ * (rank 6), but perPickHeadline.GRADE_RANK places sharp_conflict at
+ * rank 50 (above market_led=40) for headline prominence. The discrepancy
+ * is pre-existing and intentional — sort by "signal strength" puts caution
+ * last; headline selection puts caution prominently so members see it.
+ * If a future fix unifies the two rank tables, null-grade handling moves
+ * with it.
+ */
+function gradeSortRank(g: Grade | null): number {
+  if (g === null) return Number.POSITIVE_INFINITY;
+  return GRADE_RANK[g];
+}
+
+function gradeFromGame(g: DailyEdgeGameDto): Grade | null {
+  // Headline grade for SORT — strongest per-pick grade across ML/OU/NRFI
+  // (perPickHeadline.headlineGrade). Fix 1.3 (Gap-21): returns Grade | null
+  // — null when the model didn't pick any market. Sort path treats null
+  // as worst-rank so no-pick games surface at the end.
   return headlineGrade(g);
 }
 
@@ -302,8 +318,8 @@ function sortGames(
     sorted.sort((a, b) => a.gameStartMinutes - b.gameStartMinutes);
   } else if (sort === "signal_strength") {
     sorted.sort((a, b) => {
-      const aR = GRADE_RANK[gradeFromGame(a)];
-      const bR = GRADE_RANK[gradeFromGame(b)];
+      const aR = gradeSortRank(gradeFromGame(a));
+      const bR = gradeSortRank(gradeFromGame(b));
       if (aR !== bR) return aR - bR;
       return b.predictions.ml.confidence - a.predictions.ml.confidence;
     });
