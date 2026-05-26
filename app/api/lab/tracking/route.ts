@@ -30,6 +30,7 @@
  */
 
 import { supabase } from "@/lib/db/supabase";
+import { applyProductionSourceFilter } from "@/lib/db/productionFilter";
 import type { Sport } from "@/lib/types/domain/Sport";
 import type {
   AllTimeAggregate,
@@ -431,11 +432,16 @@ export async function GET(_request: Request) {
   let from = 0;
   // Bound the loop defensively — at 1M rows we'd want to materialize anyway.
   for (let i = 0; i < 100; i++) {
-    const { data, error } = await supabase
-      .from("prediction_results")
-      .select("sport, market, outcome, game_date, prediction_type")
-      .order("game_date", { ascending: true })
-      .range(from, from + PAGE - 1);
+    // Production data-mode filter (Framework §"Signal Source Quality") drops
+    // mock-sourced results before they roll up into member-facing tallies.
+    // No-op in dev / preview.
+    const { data, error } = await applyProductionSourceFilter(
+      supabase
+        .from("prediction_results")
+        .select("sport, market, outcome, game_date, prediction_type")
+        .order("game_date", { ascending: true })
+        .range(from, from + PAGE - 1)
+    );
     if (error) return Response.json({ error: error.message }, { status: 500 });
     const rows = (data ?? []) as ResultRow[];
     allRows.push(...rows);

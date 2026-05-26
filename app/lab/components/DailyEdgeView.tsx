@@ -289,13 +289,19 @@ function LoadingSkeleton() {
 }
 
 function EmptyState() {
+  // Copy aligned to SHARP_SIGNAL_FRAMEWORK.md §"Signal Source Quality" — when
+  // production data-mode filter (lib/db/productionFilter.ts) drops all rows
+  // because only mock-sourced data is available, members see an honest
+  // "data not ready" message rather than fake numbers. Same copy in dev
+  // covers the off-day / pre-seed case acceptably.
   return (
     <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-10 text-center text-gray-300">
       <p className="text-base font-medium text-gray-100 mb-1">
-        No games on this slate.
+        Live data hasn&rsquo;t arrived for tonight&rsquo;s slate yet.
       </p>
       <p className="text-sm text-gray-400">
-        Check back after the morning slate refresh, or pick another date.
+        We&rsquo;ll update once books open and signals load. Or pick another
+        date to see prior coverage.
       </p>
     </div>
   );

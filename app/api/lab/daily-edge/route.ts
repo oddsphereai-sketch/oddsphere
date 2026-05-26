@@ -22,6 +22,7 @@
  */
 
 import { supabase } from "@/lib/db/supabase";
+import { filterMockSourceRows } from "@/lib/db/productionFilter";
 import type { Sport } from "@/lib/types/domain/Sport";
 import type {
   Grade,
@@ -223,6 +224,10 @@ function buildSignalDtos(rows: SignalRow[]): SharpSignalDto[] {
 // ───────────────────────────────────────────────────────────────────────────
 
 type PredictionRow = {
+  /** Data provenance (V11 migration). Read by the production data-mode
+   * filter to suppress mock rows from member-facing responses per
+   * SHARP_SIGNAL_FRAMEWORK.md §"Signal Source Quality". */
+  source_type: string | null;
   predicted_home_score: number | null;
   predicted_away_score: number | null;
   predicted_total: number | null;
@@ -402,6 +407,7 @@ export async function GET(request: Request) {
        home_team:home_team_id (abbreviation, logo_url),
        away_team:away_team_id (abbreviation, logo_url),
        game_predictions (
+         source_type,
          predicted_home_score, predicted_away_score, predicted_total,
          predicted_ml_winner, ml_confidence,
          predicted_ou_side, ou_confidence,
@@ -422,7 +428,18 @@ export async function GET(request: Request) {
 
   // Supabase typegen renders FK expansions as arrays; runtime returns the
   // single object for to-one relations. Cast accordingly.
-  const games = (gameData ?? []) as unknown as GameRow[];
+  const rawGames = (gameData ?? []) as unknown as GameRow[];
+
+  // ─── Production data-mode filter (Framework §"Signal Source Quality") ──
+  // Drops mock-sourced predictions before they reach members. No-op in
+  // dev / preview modes; activated by ODDSPHERE_DATA_MODE=production.
+  // TODO Gap-25: sharp_signals table needs source_type column. Currently
+  // transitively safe because mock predictions get filtered here, before
+  // their sharp_signals are even joined below.
+  const games = filterMockSourceRows(
+    rawGames,
+    (g) => g.game_predictions?.source_type
+  );
 
   // ─── Sharp signals for these games (batched) ─────────────────────────────
   const gameIds = games.map((g) => g.id);

@@ -28,6 +28,7 @@
  */
 
 import { supabase } from "@/lib/db/supabase";
+import { applyProductionSourceFilter } from "@/lib/db/productionFilter";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { currentSlateDate, isSlateDate } from "@/lib/dates/slateDate";
 import type {
@@ -255,17 +256,21 @@ export async function GET(request: Request) {
   const gameById = new Map<number, GameRow>(games.map((g) => [g.id, g]));
 
   // ─── (2) Prop predictions with filters ───────────────────────────────────
-  let propsQuery = supabase
-    .from("prop_predictions")
-    .select(
-      `id, game_id, player_id, prop_market, prop_line,
-       model_probability, edge_pct, confidence_score, tier,
-       best_odds_american, computed_at, signals,
-       player:player_id (full_name, position_abbr, team_id)`
-    )
-    .in("game_id", Array.from(gameById.keys()))
-    .in("tier", tiers as string[])
-    .order("edge_pct", { ascending: false, nullsFirst: false });
+  // Production data-mode filter (Framework §"Signal Source Quality") drops
+  // mock-sourced props from member-facing responses; no-op in dev.
+  let propsQuery = applyProductionSourceFilter(
+    supabase
+      .from("prop_predictions")
+      .select(
+        `id, game_id, player_id, prop_market, prop_line,
+         model_probability, edge_pct, confidence_score, tier,
+         best_odds_american, computed_at, signals,
+         player:player_id (full_name, position_abbr, team_id)`
+      )
+      .in("game_id", Array.from(gameById.keys()))
+      .in("tier", tiers as string[])
+      .order("edge_pct", { ascending: false, nullsFirst: false })
+  );
 
   if (propMarketUi) {
     const dbMarket = UI_TO_DB_PROP_MARKET[propMarketUi];
@@ -335,13 +340,17 @@ export async function GET(request: Request) {
   const distinctMarkets = Array.from(new Set(edgeFiltered.map((p) => p.prop_market)));
 
   // Pull historical prop_predictions for these players+markets, ordered by
-  // computed_at DESC so we can take the most recent N per pair.
-  const { data: historyData, error: histErr } = await supabase
-    .from("prop_predictions")
-    .select("id, player_id, prop_market, computed_at")
-    .in("player_id", distinctPlayerIds)
-    .in("prop_market", distinctMarkets)
-    .order("computed_at", { ascending: false });
+  // computed_at DESC so we can take the most recent N per pair. Production
+  // data-mode filter applies to history too — members shouldn't see "last 10"
+  // shaped by mock outcomes.
+  const { data: historyData, error: histErr } = await applyProductionSourceFilter(
+    supabase
+      .from("prop_predictions")
+      .select("id, player_id, prop_market, computed_at")
+      .in("player_id", distinctPlayerIds)
+      .in("prop_market", distinctMarkets)
+      .order("computed_at", { ascending: false })
+  );
   if (histErr) return Response.json({ error: histErr.message }, { status: 500 });
   const historyRows = (historyData ?? []) as HistoryRow[];
 
@@ -349,10 +358,14 @@ export async function GET(request: Request) {
   const allHistoryIds = historyRows.map((h) => h.id);
   let resultsRows: ResultRow[] = [];
   if (allHistoryIds.length > 0) {
-    const { data: resultData, error: resultErr } = await supabase
-      .from("prediction_results")
-      .select("prop_prediction_id, outcome, resolved_at")
-      .in("prop_prediction_id", allHistoryIds);
+    // Filter mock results — production mode hides mock-sourced outcomes from
+    // the "last 10" trail.
+    const { data: resultData, error: resultErr } = await applyProductionSourceFilter(
+      supabase
+        .from("prediction_results")
+        .select("prop_prediction_id, outcome, resolved_at")
+        .in("prop_prediction_id", allHistoryIds)
+    );
     if (resultErr) return Response.json({ error: resultErr.message }, { status: 500 });
     resultsRows = (resultData ?? []) as ResultRow[];
   }

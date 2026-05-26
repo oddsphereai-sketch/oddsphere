@@ -83,6 +83,20 @@ function selectHeadline(buckets: CalibrationBucket[]): CalibrationHeadline | nul
 }
 
 export async function GET(_request: Request) {
+  // ── Production data-mode filter — KNOWN LIMITATION ─────────────────────
+  // Framework §"Signal Source Quality" requires mock-sourced data to be
+  // excluded from member-facing surfaces. `calibration_buckets` is a
+  // pre-aggregated table built from prediction_results without carrying
+  // source_type forward, so the filter cannot be applied here at read time.
+  // Correct fix lives at aggregation time: the calibration aggregator must
+  // exclude source_type='mock' rows from prediction_results before computing
+  // buckets. Tracked as a follow-up to Gap-23 / Gap-25.
+  //
+  // Until the aggregator filters at compute time, this route returns
+  // calibration data derived from whatever prediction_results rows exist —
+  // production deploys depend on the aggregator running over real_api /
+  // manual data only.
+
   // Filter at the DB level for the carve-out, but the response shape still
   // reflects the intent (only game-level types come back).
   const { data, error } = await supabase
