@@ -26,6 +26,10 @@ import type {
   DailyEdgeResponse,
   SharpStatus,
 } from "../app/lab/lib/labTypes";
+import {
+  headlineGrade,
+  headlinePrimaryMarket,
+} from "../app/lab/lib/perPickHeadline";
 import type {
   Grade,
   MarketSignal,
@@ -380,6 +384,175 @@ async function main() {
     "date param normalized to YYYY-MM-DD",
     /^\d{4}-\d{2}-\d{2}$/.test(badDateBody.date),
     `got: ${badDateBody.date}`
+  );
+
+  // ─── perPickHeadline rank-based selection (6.3.5e-fix-2) ──────────────
+  // Pre-fix the headline used first-non-null precedence (ML → OU → NRFI)
+  // which buried a sharp_conflict on Total under a market_watch on ML. The
+  // fix sorts per-pick candidates by GRADE_RANK desc with ML→OU→NRFI as
+  // the tiebreaker. These pure-function tests lock the rank table + tie
+  // behavior; the end-to-end smoke is covered by the live slate audit
+  // below.
+  section("perPickHeadline rank-based selection (6.3.5e-fix-2)");
+
+  function mkDto(
+    ml: Grade | null,
+    total: Grade | null,
+    nrfi: Grade | null
+  ): DailyEdgeGameDto {
+    const tile = (grade: Grade | null) => ({
+      pick: "X",
+      confidence: 0.5,
+      sharpStatus: "mixed" as SharpStatus,
+      grade,
+      signalType: null,
+      marketSignal: null,
+    });
+    return {
+      id: "test-1",
+      sport: "mlb",
+      external_id: 1,
+      awayTeam: "AAA",
+      awayTeamLogo: null,
+      homeTeam: "BBB",
+      homeTeamLogo: null,
+      gameTime: "7:10 PM",
+      gameStartMinutes: 0,
+      predictions: {
+        ml: tile(ml),
+        total: { ...tile(total), line: 9 },
+        nrfi: tile(nrfi),
+      },
+      projected: { away: 0, home: 0 },
+      sharpSignals: [],
+    };
+  }
+
+  // WSH @ ATL pattern: weak ML + strong OU caution → OU wins
+  check(
+    "ML=market_watch + Total=sharp_conflict + NRFI=market_watch → headline grade = sharp_conflict (WSH @ ATL pattern)",
+    headlineGrade(mkDto("market_watch", "sharp_conflict", "market_watch")) ===
+      "sharp_conflict"
+  );
+  check(
+    "ML=market_watch + Total=sharp_conflict + NRFI=market_watch → headline market = total",
+    headlinePrimaryMarket(
+      mkDto("market_watch", "sharp_conflict", "market_watch")
+    ) === "total"
+  );
+
+  // 6.3.5d core pattern: ML carries the strongest grade — ML wins (precedence-1)
+  check(
+    "ML=sharp_confirmed + Total=market_watch → headline grade = sharp_confirmed (preserves 6.3.5d core 4 cards)",
+    headlineGrade(mkDto("sharp_confirmed", "market_watch", "market_watch")) ===
+      "sharp_confirmed"
+  );
+  check(
+    "ML=sharp_confirmed + Total=market_watch → headline market = moneyline",
+    headlinePrimaryMarket(
+      mkDto("sharp_confirmed", "market_watch", "market_watch")
+    ) === "moneyline"
+  );
+
+  // Rank ordering: best_signal beats sharp_confirmed beats sharp_conflict
+  check(
+    "best_signal on NRFI outranks sharp_confirmed on ML (rank 70 > 60)",
+    headlineGrade(mkDto("sharp_confirmed", "market_watch", "best_signal")) ===
+      "best_signal" &&
+      headlinePrimaryMarket(
+        mkDto("sharp_confirmed", "market_watch", "best_signal")
+      ) === "first_inning_total"
+  );
+  check(
+    "sharp_confirmed on OU outranks sharp_conflict on ML (rank 60 > 50)",
+    headlineGrade(
+      mkDto("sharp_conflict", "sharp_confirmed", "market_watch")
+    ) === "sharp_confirmed" &&
+      headlinePrimaryMarket(
+        mkDto("sharp_conflict", "sharp_confirmed", "market_watch")
+      ) === "total"
+  );
+  check(
+    "sharp_conflict on OU outranks market_led on ML (rank 50 > 40)",
+    headlineGrade(mkDto("market_led", "sharp_conflict", "market_watch")) ===
+      "sharp_conflict" &&
+      headlinePrimaryMarket(
+        mkDto("market_led", "sharp_conflict", "market_watch")
+      ) === "total"
+  );
+  check(
+    "public_smoke outranks model_only (rank 30 > 20)",
+    headlineGrade(mkDto("model_only", "public_smoke", "market_watch")) ===
+      "public_smoke"
+  );
+  check(
+    "model_only outranks market_watch (rank 20 > 10)",
+    headlineGrade(mkDto("market_watch", "model_only", "market_watch")) ===
+      "model_only"
+  );
+
+  // Tiebreaker: equal grades → ML → OU → NRFI precedence
+  check(
+    "ML=sharp_confirmed + Total=sharp_confirmed → ML wins (precedence tiebreaker)",
+    headlinePrimaryMarket(
+      mkDto("sharp_confirmed", "sharp_confirmed", "market_watch")
+    ) === "moneyline"
+  );
+  check(
+    "Total=sharp_confirmed + NRFI=sharp_confirmed (ML=market_watch) → Total wins (precedence over NRFI)",
+    headlinePrimaryMarket(
+      mkDto("market_watch", "sharp_confirmed", "sharp_confirmed")
+    ) === "total"
+  );
+
+  // Defensive: all-null grades → "market_watch" / null
+  check(
+    "all per-pick grades null → headlineGrade falls back to market_watch",
+    headlineGrade(mkDto(null, null, null)) === "market_watch"
+  );
+  check(
+    "all per-pick grades null → headlinePrimaryMarket returns null",
+    headlinePrimaryMarket(mkDto(null, null, null)) === null
+  );
+
+  // Partial-null: NRFI has the only grade → NRFI is the headline
+  check(
+    "ML/Total null + NRFI=best_signal → headline = best_signal on NRFI",
+    headlineGrade(mkDto(null, null, "best_signal")) === "best_signal" &&
+      headlinePrimaryMarket(mkDto(null, null, "best_signal")) ===
+        "first_inning_total"
+  );
+
+  // Live-slate audit: every game in the API response should have a
+  // headline grade and market that match a non-null per-pick triplet —
+  // headline grade is in the candidate set; if a strictly higher-ranked
+  // grade exists on the row, the headline must pick it.
+  section("perPickHeadline live-slate consistency");
+  let headlineMismatches = 0;
+  const GRADE_RANK_LOCAL: Record<Grade, number> = {
+    best_signal: 70,
+    sharp_confirmed: 60,
+    sharp_conflict: 50,
+    market_led: 40,
+    public_smoke: 30,
+    model_only: 20,
+    market_watch: 10,
+  };
+  for (const g of body.games) {
+    const hg = headlineGrade(g);
+    const candidates: Grade[] = [];
+    if (g.predictions.ml.grade !== null) candidates.push(g.predictions.ml.grade);
+    if (g.predictions.total.grade !== null)
+      candidates.push(g.predictions.total.grade);
+    if (g.predictions.nrfi.grade !== null)
+      candidates.push(g.predictions.nrfi.grade);
+    if (candidates.length === 0) continue;
+    const strongestRank = Math.max(...candidates.map((c) => GRADE_RANK_LOCAL[c]));
+    if (GRADE_RANK_LOCAL[hg] !== strongestRank) headlineMismatches++;
+  }
+  check(
+    "every live-slate game's headline grade equals the strongest per-pick grade",
+    headlineMismatches === 0
   );
 
   // ─── Summary ──────────────────────────────────────────────────────────────

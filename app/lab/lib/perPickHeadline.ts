@@ -6,12 +6,15 @@
  * game_predictions.grade / signal_type / market_signal / primaryMarket
  * fields are dropped from the DTO in Phase 6.3.5e.
  *
- * Mirrors the ML → OU → NRFI precedence used server-side by
- * marketSignalDerivationService + gradeDerivationService: the first
- * non-null per-pick value wins. Pre-6.3.5e the legacy top-level DTO
- * fields carried this same precedence-1 result via dual-write — these
- * helpers produce identical values from the per-pick fields the DTO
- * still ships, so consumers swap without any behavioral change.
+ * V2.1.1 fix (Phase 6.3.5e-fix-2): selection is RANK-BASED — the strongest
+ * grade across the per-pick triplet drives the headline, with ML → OU →
+ * NRFI as the precedence tiebreaker for equal grades. Pre-fix the headline
+ * used pure first-non-null precedence (ML → OU → NRFI) which buried strong
+ * grades on totals / NRFI under a weaker ML grade. Real-slate example:
+ * WSH @ ATL had ML=market_watch + Total=sharp_conflict; pre-fix headline
+ * read "Market Watch · Moneyline" while the Pick Breakdown showed the
+ * sharp_conflict on the total. The contradiction obscured the most
+ * notable signal on the card.
  *
  * Used by:
  *   • SimpleDailyEdgeCard headline GradeBadge (displayGrade + market
@@ -31,29 +34,79 @@ import type { DailyEdgeGameDto } from "./labTypes";
 export type HeadlineMarket = "moneyline" | "total" | "first_inning_total" | null;
 
 /**
- * The market the row's headline grade is "about" — first market with a
- * non-null per-pick grade in ML → OU → NRFI precedence. Returns null
- * when the model didn't pick any of the three markets (defensive — rare
- * in V1 MLB; every game has all 3 picks predicted).
+ * V2.1 GRADE_RANK — higher = stronger headline. Mirrors the V2.1 spec
+ * "signal strength" ordering. sharp_conflict ranks above market_led /
+ * public_smoke / model_only / market_watch because cautions are a load-
+ * bearing UX signal: a beginner glancing at the headline should see the
+ * fade ahead of the noisier middle grades.
  */
-export function headlinePrimaryMarket(g: DailyEdgeGameDto): HeadlineMarket {
-  if (g.predictions.ml.grade !== null) return "moneyline";
-  if (g.predictions.total.grade !== null) return "total";
-  if (g.predictions.nrfi.grade !== null) return "first_inning_total";
-  return null;
+const GRADE_RANK: Record<Grade, number> = {
+  best_signal: 70,
+  sharp_confirmed: 60,
+  sharp_conflict: 50,
+  market_led: 40,
+  public_smoke: 30,
+  model_only: 20,
+  market_watch: 10,
+};
+
+type Candidate = { market: HeadlineMarket; grade: Grade; precedence: number };
+
+/**
+ * Build the per-pick candidate list and sort by (rank DESC, precedence ASC).
+ * Candidates with null grade are excluded — they have no headline contribution.
+ * Tiebreaker: ML → OU → NRFI precedence preserves the pre-fix headline for
+ * cards where ML carries the strongest grade (which is the common case from
+ * the seed slate's 6.3.5d core 4 "sharp_confirmed on ML" pattern).
+ */
+function rankedCandidates(g: DailyEdgeGameDto): Candidate[] {
+  const out: Candidate[] = [];
+  if (g.predictions.ml.grade !== null) {
+    out.push({
+      market: "moneyline",
+      grade: g.predictions.ml.grade,
+      precedence: 0,
+    });
+  }
+  if (g.predictions.total.grade !== null) {
+    out.push({
+      market: "total",
+      grade: g.predictions.total.grade,
+      precedence: 1,
+    });
+  }
+  if (g.predictions.nrfi.grade !== null) {
+    out.push({
+      market: "first_inning_total",
+      grade: g.predictions.nrfi.grade,
+      precedence: 2,
+    });
+  }
+  out.sort((a, b) => {
+    const r = GRADE_RANK[b.grade] - GRADE_RANK[a.grade];
+    if (r !== 0) return r;
+    return a.precedence - b.precedence;
+  });
+  return out;
 }
 
 /**
- * The headline grade for the row — first non-null per-pick grade in
- * ML → OU → NRFI precedence. Defensive fallback to "market_watch" matches
- * SimpleDailyEdgeCard's pre-6.3.5e behavior when every per-pick grade
- * was null (slate ran before the grade engine landed).
+ * The market the row's headline grade is "about" — the market carrying the
+ * strongest grade across the per-pick triplet, with ML → OU → NRFI as the
+ * tiebreaker for equal-strength grades. Returns null when the model didn't
+ * pick any of the three markets (defensive — rare in V1 MLB; every game
+ * has all 3 picks predicted).
+ */
+export function headlinePrimaryMarket(g: DailyEdgeGameDto): HeadlineMarket {
+  return rankedCandidates(g)[0]?.market ?? null;
+}
+
+/**
+ * The headline grade for the row — strongest per-pick grade across the
+ * triplet, ML → OU → NRFI precedence on ties. Defensive fallback to
+ * "market_watch" matches SimpleDailyEdgeCard's pre-6.3.5e behavior when
+ * every per-pick grade was null (slate ran before the grade engine landed).
  */
 export function headlineGrade(g: DailyEdgeGameDto): Grade {
-  return (
-    g.predictions.ml.grade ??
-    g.predictions.total.grade ??
-    g.predictions.nrfi.grade ??
-    "market_watch"
-  );
+  return rankedCandidates(g)[0]?.grade ?? "market_watch";
 }
