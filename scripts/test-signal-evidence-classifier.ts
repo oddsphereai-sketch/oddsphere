@@ -287,14 +287,14 @@ function main() {
   // ─── classifyEvidence (top-level) ─────────────────────────────────────────
   section("classifyEvidence — top-level alignment");
 
-  check("null signal → all slots null/false", (() => {
+  check("null signal → all slots null", (() => {
     const e = classifyEvidence("home", null);
     return (
       e.ev === null &&
       e.steam === null &&
       e.rlm === null &&
       e.sharpDivergence === null &&
-      e.publicSmoke === false
+      e.publicSmoke === null
     );
   })());
 
@@ -415,6 +415,59 @@ function main() {
       e.sharpDivergence === null
     );
   })());
+
+  // ─── Public smoke alignment (Fix 3.1 — Flag F1 shape change) ─────────────
+  // publicSmoke reshape from boolean → { aligned } | null. classifyEvidence
+  // computes alignment as signal.side === modelSide when detection fires.
+  section("classifyEvidence — publicSmoke alignment (Fix 3.1 Flag F1)");
+
+  check(
+    "public_smoke fires + model picks public side → publicSmoke={aligned:true}",
+    (() => {
+      const e = classifyEvidence(
+        "home",
+        sig({
+          side: "home",
+          is_plus_ev: false,
+          public_betting_pct: 70,
+          public_money_pct: 72,
+        })
+      );
+      return e.publicSmoke !== null && e.publicSmoke.aligned === true;
+    })()
+  );
+
+  check(
+    "public_smoke fires + model fades public → publicSmoke={aligned:false}",
+    (() => {
+      const e = classifyEvidence(
+        "away",
+        sig({
+          side: "home",
+          is_plus_ev: false,
+          public_betting_pct: 70,
+          public_money_pct: 72,
+        })
+      );
+      return e.publicSmoke !== null && e.publicSmoke.aligned === false;
+    })()
+  );
+
+  check(
+    "public_smoke NOT detected (gap too wide) → publicSmoke=null",
+    (() => {
+      const e = classifyEvidence(
+        "home",
+        sig({
+          side: "home",
+          is_plus_ev: false,
+          public_betting_pct: 70,
+          public_money_pct: 79, // gap=9 > MAX
+        })
+      );
+      return e.publicSmoke === null;
+    })()
+  );
 
   // ─── Summary ──────────────────────────────────────────────────────────────
   console.log(`\n${"━".repeat(70)}`);

@@ -86,6 +86,22 @@ export type AlignedTier = {
  * below its lowest actionable tier or absent from the row. The grade
  * engine reads this to enforce framework rules.
  */
+/**
+ * Public smoke evidence slot. Fix 3.1 (Flag F1): reshaped from `boolean` to
+ * `{ aligned: boolean } | null` for slot-API consistency with the four
+ * tiered signals. The Public Smoke grade bar (Gap-17) needs alignment info
+ * — framework §"Public Smoke" requires the model to pick the public side
+ * for the grade to fire (otherwise it's supportive, not cautionary).
+ *
+ * `null`     — public_smoke detection didn't fire on this row
+ * `{aligned:true}`  — fired and signal.side === modelSide (model picks the public side)
+ * `{aligned:false}` — fired but signal.side !== modelSide (model fades public)
+ *
+ * Distinct from the tiered slots: public_smoke is a flag, not a tier-graded
+ * signal. The `AlignedTier` union doesn't apply here.
+ */
+export type PublicSmokeEvidence = { aligned: boolean } | null;
+
 export type SignalEvidence = {
   /** Pinnacle de-vig EV (framework Signal 1). */
   ev: AlignedTier | null;
@@ -95,9 +111,8 @@ export type SignalEvidence = {
   rlm: AlignedTier | null;
   /** Sharp money vs ticket divergence (framework Signal 4). */
   sharpDivergence: AlignedTier | null;
-  /** Public smoke (framework Signal 5). Boolean — public_smoke is a flag,
-   *  not a tiered signal. */
-  publicSmoke: boolean;
+  /** Public smoke (framework Signal 5). See PublicSmokeEvidence above. */
+  publicSmoke: PublicSmokeEvidence;
 };
 
 // ─── Per-signal tier classifiers ──────────────────────────────────────────
@@ -241,7 +256,7 @@ export function classifyEvidence(
       steam: null,
       rlm: null,
       sharpDivergence: null,
-      publicSmoke: false,
+      publicSmoke: null,
     };
   }
 
@@ -273,7 +288,12 @@ export function classifyEvidence(
     ? { tier: sdTier, aligned }
     : null;
 
-  const publicSmoke = detectPublicSmoke(signal);
+  // Fix 3.1 (Flag F1): publicSmoke carries alignment for the Gap-17 bar.
+  // When detection fires, signal.side IS the public side (the side with
+  // ticket% ≥ 65). Alignment with model = signal.side === modelSide.
+  const publicSmoke: PublicSmokeEvidence = detectPublicSmoke(signal)
+    ? { aligned }
+    : null;
 
   return { ev, steam, rlm, sharpDivergence, publicSmoke };
 }

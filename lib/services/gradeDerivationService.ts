@@ -66,6 +66,7 @@ import {
   classifyEvidence,
   tierAtLeast,
   type SignalEvidence,
+  type SignalTier,
 } from "./signalEvidenceClassifier";
 import type { MarketSignalSource } from "./marketSignalDerivationService";
 
@@ -120,6 +121,217 @@ function minEdgeThreshold(kind: GradeKind): number {
   return kind === "game"
     ? GRADE_THRESHOLDS.MIN_GAME_EDGE
     : GRADE_THRESHOLDS.MIN_PROP_EDGE;
+}
+
+/**
+ * Helper: are there opposing strong-tier signals (any of EV / steam / RLM /
+ * sharp_div) that would disqualify an aligned grade? Used by Best Signal,
+ * Sharp Confirmed, and Market-Led bars.
+ *
+ * Fix 3.1 Flag D1: EV at strong+ opposing IS a disqualifier here. This is
+ * asymmetric vs the Sharp Conflict bar — and principled: Sharp Conflict
+ * requires EV alone to be paired with confirming sharp action (avoid
+ * over-flagging); Best Signal / Sharp Confirmed / Market-Led require NO
+ * opposing strong signal of ANY kind (avoid over-confidence).
+ */
+function hasNoOpposingStrongSignals(evidence: SignalEvidence): boolean {
+  if (
+    evidence.ev !== null &&
+    !evidence.ev.aligned &&
+    tierAtLeast(evidence.ev.tier, "strong")
+  ) {
+    return false;
+  }
+  if (
+    evidence.steam !== null &&
+    !evidence.steam.aligned &&
+    tierAtLeast(evidence.steam.tier, "strong")
+  ) {
+    return false;
+  }
+  if (
+    evidence.rlm !== null &&
+    !evidence.rlm.aligned &&
+    tierAtLeast(evidence.rlm.tier, "strong")
+  ) {
+    return false;
+  }
+  if (
+    evidence.sharpDivergence !== null &&
+    !evidence.sharpDivergence.aligned &&
+    tierAtLeast(evidence.sharpDivergence.tier, "strong")
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Best Signal bar (Fix 3.1 — Gap-13).
+ *
+ * Framework reference: SHARP_SIGNAL_FRAMEWORK.md §"Best Signal":
+ *   Required (ALL must hold):
+ *     • Model edge ≥ +3% (already gated by caller via bestSignalThreshold)
+ *     • AT LEAST TWO of: strong/very-strong aligned EV, strong steam,
+ *       strong RLM, strong sharp money divergence
+ *     • No opposing signals of strong tier (includes EV per Flag D1)
+ *
+ * Returns true when the evidence meets the framework bar. Conservatism
+ * lives in the tier-counting + opposing exclusion. Framework "Should be
+ * rare. Member-facing intuition: 'this is the strongest read on the slate.'"
+ */
+function meetsBestSignalBar(evidence: SignalEvidence): boolean {
+  let strongAlignedCount = 0;
+  if (
+    evidence.ev !== null &&
+    evidence.ev.aligned &&
+    tierAtLeast(evidence.ev.tier, "strong")
+  ) {
+    strongAlignedCount++;
+  }
+  if (
+    evidence.steam !== null &&
+    evidence.steam.aligned &&
+    tierAtLeast(evidence.steam.tier, "strong")
+  ) {
+    strongAlignedCount++;
+  }
+  if (
+    evidence.rlm !== null &&
+    evidence.rlm.aligned &&
+    tierAtLeast(evidence.rlm.tier, "strong")
+  ) {
+    strongAlignedCount++;
+  }
+  if (
+    evidence.sharpDivergence !== null &&
+    evidence.sharpDivergence.aligned &&
+    tierAtLeast(evidence.sharpDivergence.tier, "strong")
+  ) {
+    strongAlignedCount++;
+  }
+  if (strongAlignedCount < 2) return false;
+  return hasNoOpposingStrongSignals(evidence);
+}
+
+/**
+ * Sharp Confirmed bar (Fix 3.1 — Gap-14).
+ *
+ * Framework reference: SHARP_SIGNAL_FRAMEWORK.md §"Sharp Confirmed":
+ *   Required:
+ *     • Model picks the side (gated by caller via hasModelEdge per Flag C1
+ *       — keeps the existing ≥1% edge floor; framework's "positive
+ *       confidence" wording is more permissive but C1 preserves the
+ *       current conservative posture; tracked as Gap-14.5 follow-up)
+ *     • AT LEAST ONE strong-tier aligned signal OR AT LEAST TWO
+ *       moderate-tier aligned signals
+ *     • No opposing strong signals
+ */
+function meetsSharpConfirmedBar(evidence: SignalEvidence): boolean {
+  let strongAlignedCount = 0;
+  let moderateAlignedCount = 0;
+  const tally = (slot: { tier: SignalTier; aligned: boolean } | null) => {
+    if (slot === null || !slot.aligned) return;
+    if (tierAtLeast(slot.tier, "strong")) strongAlignedCount++;
+    if (tierAtLeast(slot.tier, "moderate")) moderateAlignedCount++;
+  };
+  tally(evidence.ev);
+  tally(evidence.steam);
+  tally(evidence.rlm);
+  tally(evidence.sharpDivergence);
+
+  const meetsCount = strongAlignedCount >= 1 || moderateAlignedCount >= 2;
+  if (!meetsCount) return false;
+  return hasNoOpposingStrongSignals(evidence);
+}
+
+/**
+ * Market-Led bar (Fix 3.1 — Gap-15, v1.1 tightening).
+ *
+ * Framework reference: SHARP_SIGNAL_FRAMEWORK.md §"Market-Led" v1.1:
+ *   "Market-Led should NOT fire on weak or mixed movement. If the market
+ *    signal is unclear, conflicting, or below strong tier, use Market
+ *    Watch instead."
+ *
+ * Required:
+ *   • AT LEAST ONE strong-tier aligned signal (any of EV / steam / RLM /
+ *     sharp_div)
+ *   • No opposing strong signals
+ *
+ * Caller enters this branch only when there's no model edge (hasModelEdge
+ * is false) — Market-Led is "market alone." A strong-tier aligned signal
+ * is what makes the market "loud and decisive."
+ */
+function meetsMarketLedBar(evidence: SignalEvidence): boolean {
+  const hasStrongAligned =
+    (evidence.ev !== null &&
+      evidence.ev.aligned &&
+      tierAtLeast(evidence.ev.tier, "strong")) ||
+    (evidence.steam !== null &&
+      evidence.steam.aligned &&
+      tierAtLeast(evidence.steam.tier, "strong")) ||
+    (evidence.rlm !== null &&
+      evidence.rlm.aligned &&
+      tierAtLeast(evidence.rlm.tier, "strong")) ||
+    (evidence.sharpDivergence !== null &&
+      evidence.sharpDivergence.aligned &&
+      tierAtLeast(evidence.sharpDivergence.tier, "strong"));
+  if (!hasStrongAligned) return false;
+  return hasNoOpposingStrongSignals(evidence);
+}
+
+/**
+ * Model Only bar (Fix 3.1 — Gap-16).
+ *
+ * Framework reference: SHARP_SIGNAL_FRAMEWORK.md §"Model Only":
+ *   Required:
+ *     • Model edge ≥ +2% or model confidence ≥ 58% (caller-gated via
+ *       hasModelEdge; current MIN_GAME_EDGE=1 retained per Flag H1,
+ *       tracked as Gap-16.5 follow-up)
+ *     • No signal at moderate or stronger tier in any of the five inputs
+ *     • Market is silent; model speaks alone
+ *
+ * The bar checks BOTH aligned and opposing for moderate+ signals — "any
+ * direction" per framework. publicSmoke fires at moderate-equivalent
+ * intensity and also disqualifies (the model is "alone" only when the
+ * market is fully silent).
+ */
+function meetsModelOnlyBar(evidence: SignalEvidence): boolean {
+  if (evidence.ev !== null && tierAtLeast(evidence.ev.tier, "moderate")) {
+    return false;
+  }
+  if (evidence.steam !== null && tierAtLeast(evidence.steam.tier, "moderate")) {
+    return false;
+  }
+  if (evidence.rlm !== null && tierAtLeast(evidence.rlm.tier, "moderate")) {
+    return false;
+  }
+  if (
+    evidence.sharpDivergence !== null &&
+    tierAtLeast(evidence.sharpDivergence.tier, "moderate")
+  ) {
+    return false;
+  }
+  if (evidence.publicSmoke !== null) return false;
+  return true;
+}
+
+/**
+ * Public Smoke bar (Fix 3.1 — Gap-17).
+ *
+ * Framework reference: SHARP_SIGNAL_FRAMEWORK.md §"Public Smoke":
+ *   Required:
+ *     • All public smoke detection criteria met (Signal 5)
+ *     • Model picks the public side (otherwise this signal is supportive,
+ *       not cautionary)
+ *
+ * Returns true when publicSmoke fires AND model aligns with the public
+ * side. When model fades public, the underlying public_smoke detection is
+ * actually a positive signal for our pick — framework routes to
+ * market_watch, not public_smoke grade.
+ */
+function meetsPublicSmokeBar(evidence: SignalEvidence): boolean {
+  return evidence.publicSmoke !== null && evidence.publicSmoke.aligned;
 }
 
 /**
@@ -221,14 +433,34 @@ export function deriveGrade(input: GradeInput): GradeOutput {
   switch (marketSignal) {
     case "steam_alert":
     case "market_confirmed": {
-      if (hasModelEdge && (modelEdgePct as number) >= bestThreshold) {
+      // Fix 3.1 (Gap-13/14/15): tier-aware bars decide between Best Signal,
+      // Sharp Confirmed, Market-Led, and the conservative Market Watch
+      // fallback. Evidence-null bypass keeps legacy permissive behavior
+      // for props (Flag D1 carry-over from Fix 2.1).
+      if (evidence === null) {
+        if (hasModelEdge && (modelEdgePct as number) >= bestThreshold) {
+          return { grade: "best_signal", signal_type: "balanced" };
+        }
+        if (hasModelEdge) {
+          return { grade: "sharp_confirmed", signal_type: "balanced" };
+        }
+        return { grade: "market_led", signal_type: "market_only" };
+      }
+      if (
+        hasModelEdge &&
+        (modelEdgePct as number) >= bestThreshold &&
+        meetsBestSignalBar(evidence)
+      ) {
         return { grade: "best_signal", signal_type: "balanced" };
       }
-      if (hasModelEdge) {
+      if (hasModelEdge && meetsSharpConfirmedBar(evidence)) {
         return { grade: "sharp_confirmed", signal_type: "balanced" };
       }
-      // Market-only conviction — no model edge to confirm.
-      return { grade: "market_led", signal_type: "market_only" };
+      if (meetsMarketLedBar(evidence)) {
+        return { grade: "market_led", signal_type: "market_only" };
+      }
+      // None of the bars passed — framework's conservative default.
+      return { grade: "market_watch", signal_type: "balanced" };
     }
 
     case "market_resistance": {
@@ -249,11 +481,28 @@ export function deriveGrade(input: GradeInput): GradeOutput {
     }
 
     case "public_smoke": {
-      return { grade: "public_smoke", signal_type: "market_only" };
+      // Fix 3.1 (Gap-17): public_smoke grade fires only when the model picks
+      // the public side. Model fading public → publicSmoke not aligned →
+      // bar fails → market_watch (the underlying public_smoke read is
+      // actually supportive of our pick, not cautionary, per framework).
+      // Evidence-null bypass for props.
+      if (evidence === null || meetsPublicSmokeBar(evidence)) {
+        return { grade: "public_smoke", signal_type: "market_only" };
+      }
+      return { grade: "market_watch", signal_type: "balanced" };
     }
 
     case "market_neutral": {
-      if (hasModelEdge) {
+      // Fix 3.1 (Gap-16): Model Only requires the market to be silent —
+      // no moderate+ signals in any direction. Evidence-null bypass keeps
+      // legacy permissive behavior for props.
+      if (evidence === null) {
+        if (hasModelEdge) {
+          return { grade: "model_only", signal_type: "model_only" };
+        }
+        return { grade: "market_watch", signal_type: "balanced" };
+      }
+      if (hasModelEdge && meetsModelOnlyBar(evidence)) {
         return { grade: "model_only", signal_type: "model_only" };
       }
       return { grade: "market_watch", signal_type: "balanced" };

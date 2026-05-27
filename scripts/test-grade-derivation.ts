@@ -77,7 +77,7 @@ function evidence(overrides: Partial<SignalEvidence> = {}): SignalEvidence {
     steam: null,
     rlm: null,
     sharpDivergence: null,
-    publicSmoke: false,
+    publicSmoke: null,
     ...overrides,
   };
 }
@@ -107,10 +107,10 @@ async function main() {
   );
 
   check(
-    "Game @ 5% with market_confirmed → best_signal (game threshold)",
+    "Game @ 3% with market_confirmed → best_signal (game threshold, evidence-null legacy path)",
     (() => {
       const r = deriveGrade(
-        input({ kind: "game", modelEdgePct: 5, marketSignal: "market_confirmed" })
+        input({ kind: "game", modelEdgePct: 3, marketSignal: "market_confirmed" })
       );
       return r.grade === "best_signal";
     })()
@@ -126,11 +126,14 @@ async function main() {
     })()
   );
 
+  // Fix 3.1 (Flag A→A2): BEST_SIGNAL_GAME_EDGE moved from 5 to 3 to match
+  // framework §"Best Signal" verbatim. Below the threshold → sharp_confirmed
+  // in the evidence-null (legacy) path.
   check(
-    "Game @ 4.9% (just under 5%) with market_confirmed → sharp_confirmed",
+    "Game @ 2.9% (just under 3% threshold) with market_confirmed → sharp_confirmed",
     (() => {
       const r = deriveGrade(
-        input({ kind: "game", modelEdgePct: 4.9, marketSignal: "market_confirmed" })
+        input({ kind: "game", modelEdgePct: 2.9, marketSignal: "market_confirmed" })
       );
       return r.grade === "sharp_confirmed";
     })()
@@ -569,6 +572,382 @@ async function main() {
         })
       );
       return r.grade === "sharp_conflict" && r.signal_type === "balanced";
+    })()
+  );
+
+  // ─── Tier-aware Best Signal bar (Fix 3.1 — Gap-13) ──────────────────
+  // Framework §"Best Signal" requires:
+  //   • Model edge ≥ 3% (gated by caller via bestSignalThreshold)
+  //   • AT LEAST TWO strong/very_strong aligned (EV/steam/RLM/sharp_div)
+  //   • No opposing strong-tier signals (includes EV per Flag D1)
+  section("tier-aware Best Signal bar (Fix 3.1 — Gap-13)");
+
+  // SEA @ HOU shape: aligned strong steam + aligned strong EV — should fire.
+  check(
+    "SEA @ HOU shape (aligned strong steam + aligned strong EV) → best_signal",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 3.8,
+          marketSignal: "steam_alert",
+          evidence: evidence({
+            steam: { tier: "strong", aligned: true },
+            ev: { tier: "strong", aligned: true },
+          }),
+        })
+      );
+      return r.grade === "best_signal";
+    })()
+  );
+
+  // Single strong aligned + one moderate → fails (need 2 strong+).
+  check(
+    "One strong aligned + one moderate aligned → sharp_confirmed (fails Best Signal bar, falls to Sharp Confirmed)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 3.5,
+          marketSignal: "market_confirmed",
+          evidence: evidence({
+            ev: { tier: "strong", aligned: true },
+            steam: { tier: "moderate", aligned: true },
+          }),
+        })
+      );
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  // Two strong aligned + opposing strong EV → blocked by opposing exclusion.
+  check(
+    "Two strong aligned + opposing strong EV → market_watch (opposing strong blocks Best Signal AND Sharp Confirmed)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 5,
+          marketSignal: "market_confirmed",
+          evidence: evidence({
+            steam: { tier: "strong", aligned: true },
+            rlm: { tier: "strong", aligned: true },
+            ev: { tier: "strong", aligned: false },
+          }),
+        })
+      );
+      // Best Signal bar fails (opposing strong EV exists).
+      // Sharp Confirmed bar also fails (same opposing exclusion).
+      // Market-Led bar also fails for same reason.
+      // → market_watch
+      return r.grade === "market_watch";
+    })()
+  );
+
+  // Edge: very_strong alone counts as one — still needs ≥2 of any strong+.
+  check(
+    "Single very_strong aligned (only signal) → sharp_confirmed (not best_signal — count=1)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 5,
+          marketSignal: "steam_alert",
+          evidence: evidence({
+            steam: { tier: "very_strong", aligned: true },
+          }),
+        })
+      );
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  // Below edge threshold (modelEdgePct < 3) → can't fire best_signal even
+  // with strong-tier evidence; falls to sharp_confirmed.
+  check(
+    "Strong aligned ev + steam but modelEdgePct=2 (below 3% bestThreshold) → sharp_confirmed",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 2,
+          marketSignal: "market_confirmed",
+          evidence: evidence({
+            ev: { tier: "strong", aligned: true },
+            steam: { tier: "strong", aligned: true },
+          }),
+        })
+      );
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  // ─── Tier-aware Sharp Confirmed bar (Fix 3.1 — Gap-14) ────────────────
+  // Framework §"Sharp Confirmed" requires:
+  //   • hasModelEdge (caller-gated per Flag C1)
+  //   • ≥1 strong-tier aligned OR ≥2 moderate-tier aligned
+  //   • No opposing strong signals
+  section("tier-aware Sharp Confirmed bar (Fix 3.1 — Gap-14)");
+
+  check(
+    "Single strong aligned (e.g., strong RLM only) → sharp_confirmed",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 2,
+          marketSignal: "market_confirmed",
+          evidence: evidence({
+            rlm: { tier: "strong", aligned: true },
+          }),
+        })
+      );
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  check(
+    "Two moderate aligned (e.g., moderate EV + moderate steam) → sharp_confirmed",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 2,
+          marketSignal: "market_confirmed",
+          evidence: evidence({
+            ev: { tier: "moderate", aligned: true },
+            steam: { tier: "moderate", aligned: true },
+          }),
+        })
+      );
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  check(
+    "Single moderate aligned (no other signals) → market_watch (fails Sharp Confirmed bar)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 2,
+          marketSignal: "market_confirmed",
+          evidence: evidence({
+            ev: { tier: "moderate", aligned: true },
+          }),
+        })
+      );
+      // Sharp Confirmed bar: ≥1 strong (no) OR ≥2 moderate (only 1) → fail
+      // Market-Led bar: ≥1 strong aligned → fail (only moderate)
+      // → market_watch
+      return r.grade === "market_watch";
+    })()
+  );
+
+  check(
+    "Strong aligned + opposing strong steam → market_watch (opposing block)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 2,
+          marketSignal: "market_confirmed",
+          evidence: evidence({
+            ev: { tier: "strong", aligned: true },
+            steam: { tier: "strong", aligned: false },
+          }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  // ─── Tier-aware Market-Led bar (Fix 3.1 — Gap-15, v1.1 tightening) ────
+  // Framework v1.1: "Market-Led should NOT fire on weak or mixed movement."
+  //   • ≥1 strong-tier aligned signal
+  //   • No opposing strong signals
+  // Caller enters this branch with hasModelEdge=false.
+  section("tier-aware Market-Led bar (Fix 3.1 — Gap-15)");
+
+  check(
+    "Strong aligned signal, no model edge → market_led",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "steam_alert",
+          evidence: evidence({
+            steam: { tier: "strong", aligned: true },
+          }),
+        })
+      );
+      return r.grade === "market_led";
+    })()
+  );
+
+  check(
+    "Only moderate aligned, no model edge → market_watch (v1.1: not Market-Led on weak movement)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "market_confirmed",
+          evidence: evidence({
+            steam: { tier: "moderate", aligned: true },
+          }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  check(
+    "Strong aligned + opposing strong → market_watch (opposing block on Market-Led too)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "steam_alert",
+          evidence: evidence({
+            steam: { tier: "strong", aligned: true },
+            rlm: { tier: "strong", aligned: false },
+          }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  // ─── Tier-aware Model Only bar (Fix 3.1 — Gap-16) ─────────────────────
+  // Framework §"Model Only": "No signal at moderate or stronger tier in
+  // any of the five inputs. Market is silent; model speaks alone."
+  section("tier-aware Model Only bar (Fix 3.1 — Gap-16)");
+
+  check(
+    "market_neutral + model edge + no moderate+ evidence → model_only",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 5,
+          marketSignal: "market_neutral",
+          evidence: evidence(),
+        })
+      );
+      return r.grade === "model_only" && r.signal_type === "model_only";
+    })()
+  );
+
+  check(
+    "market_neutral + model edge BUT moderate-aligned steam → market_watch (market is not silent)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 5,
+          marketSignal: "market_neutral",
+          evidence: evidence({
+            steam: { tier: "moderate", aligned: true },
+          }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  check(
+    "market_neutral + model edge BUT moderate-opposing sharp_div → market_watch",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 5,
+          marketSignal: "market_neutral",
+          evidence: evidence({
+            sharpDivergence: { tier: "moderate", aligned: false },
+          }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  check(
+    "market_neutral + model edge BUT publicSmoke fires → market_watch",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 5,
+          marketSignal: "market_neutral",
+          evidence: evidence({ publicSmoke: { aligned: true } }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  // ─── Tier-aware Public Smoke bar (Fix 3.1 — Gap-17) ───────────────────
+  // Framework §"Public Smoke": model must pick the public side. When
+  // model fades public, the underlying public_smoke read is supportive.
+  section("tier-aware Public Smoke bar (Fix 3.1 — Gap-17)");
+
+  check(
+    "public_smoke market_signal + publicSmoke aligned → public_smoke grade",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 0.5,
+          marketSignal: "public_smoke",
+          evidence: evidence({ publicSmoke: { aligned: true } }),
+        })
+      );
+      return r.grade === "public_smoke" && r.signal_type === "market_only";
+    })()
+  );
+
+  check(
+    "public_smoke market_signal + publicSmoke opposing → market_watch (model fades public)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 0.5,
+          marketSignal: "public_smoke",
+          evidence: evidence({ publicSmoke: { aligned: false } }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  check(
+    "public_smoke market_signal + publicSmoke=null in evidence → market_watch",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 0.5,
+          marketSignal: "public_smoke",
+          evidence: evidence(),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  // Props with evidence=null bypass the Public Smoke bar (Flag D1 legacy).
+  check(
+    "prop with public_smoke + evidence=null → public_smoke (Flag D1 legacy bypass)",
+    (() => {
+      const r = deriveGrade(
+        input({ kind: "prop", marketSignal: "public_smoke" })
+      );
+      return r.grade === "public_smoke";
     })()
   );
 

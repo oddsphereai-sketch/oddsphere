@@ -35,7 +35,10 @@
  * Run with: npm run test:threshold-constants
  */
 
-import { SHARP_SIGNAL_THRESHOLDS } from "../lib/config/constants";
+import {
+  SHARP_SIGNAL_THRESHOLDS,
+  GRADE_THRESHOLDS,
+} from "../lib/config/constants";
 
 let pass = 0;
 let fail = 0;
@@ -150,6 +153,25 @@ function main() {
     8,
     "§'Threshold constants' PUBLIC_SMOKE_FLAT_GAP_MAX"
   );
+
+  // ─── Grade engine edge thresholds ─────────────────────────────────────────
+  // Fix 3.1 (Gap-13 / Flag A→A2): BEST_SIGNAL_GAME_EDGE matches framework
+  // §"Best Signal" verbatim — "Model edge ≥ +3%". Pre-3.1 the constant
+  // was 5 (more conservative than framework). The framework's conservatism
+  // lives in the tier-counting bar, not the edge floor.
+  section("Grade engine — game-side edge thresholds (Fix 3.1 Gap-13)");
+
+  if (GRADE_THRESHOLDS.BEST_SIGNAL_GAME_EDGE !== 3) {
+    fail++;
+    const msg = `  ✗ GRADE_THRESHOLDS.BEST_SIGNAL_GAME_EDGE = ${GRADE_THRESHOLDS.BEST_SIGNAL_GAME_EDGE} but framework §"Best Signal" specifies 3. Update either code or framework — they must agree.`;
+    console.log(msg);
+    failures.push(msg);
+  } else {
+    pass++;
+    console.log(
+      `  ✓ GRADE_THRESHOLDS.BEST_SIGNAL_GAME_EDGE = 3 (framework §"Best Signal" — "Model edge ≥ +3%")`
+    );
+  }
 
   // ─── Renamed-constant fail-fast ───────────────────────────────────────────
   // Defensive: if anything in code still references the pre-rename names

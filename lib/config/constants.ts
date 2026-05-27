@@ -263,8 +263,11 @@ export const SHARP_SIGNAL_THRESHOLDS = {
 // have drifted too loose for the current data.
 
 export const GRADE_THRESHOLDS = {
-  /** Pinnacle EV % on the primary pick required for game best_signal. */
-  BEST_SIGNAL_GAME_EDGE: 5,
+  /** Pinnacle EV % on the primary pick required for game best_signal.
+   *  Framework §"Best Signal": "Model edge ≥ +3%". Fix 3.1 (Flag A→A2):
+   *  matched literally to framework — conservatism lives in the tier-
+   *  counting bar (AT LEAST TWO strong aligned), not in the edge floor. */
+  BEST_SIGNAL_GAME_EDGE: 3,
   /** prop_predictions.edge_pct required for prop best_signal. */
   BEST_SIGNAL_PROP_EDGE: 10,
   /** Below this, a game pick is treated as "no model edge". */
