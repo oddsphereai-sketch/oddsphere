@@ -62,6 +62,12 @@ import {
 import type { Sport } from "../types/domain/Sport";
 import type { Side } from "../types/domain/Lines";
 import type { Grade, MarketSignal, SignalType } from "../types/domain/Grade";
+import {
+  classifyEvidence,
+  tierAtLeast,
+  type SignalEvidence,
+} from "./signalEvidenceClassifier";
+import type { MarketSignalSource } from "./marketSignalDerivationService";
 
 // ─── Public types ─────────────────────────────────────────────────────────
 
@@ -81,6 +87,20 @@ export type GradeInput = {
    * market_watch (the "neither convincing" verdict).
    */
   marketSignal: MarketSignal | null;
+  /**
+   * Fix 2.1 (Gap-9): tier-aware per-signal evidence record. The grade engine
+   * consumes this to enforce framework rules — most notably the Sharp
+   * Conflict bar (§"Sharp Conflict": strong-tier opposing primary signal
+   * PLUS confirming opposing secondary).
+   *
+   * Game picks SHOULD pass evidence; null falls back to the pre-2.1
+   * permissive "any market_resistance → sharp_conflict" behavior.
+   *
+   * Props pass evidence=null per Flag D1 (prop-side tier infrastructure is
+   * Gap-12.5 follow-up). Props rarely hit market_resistance in practice —
+   * the deferred carve-out is bounded.
+   */
+  evidence: SignalEvidence | null;
 };
 
 export type GradeOutput = {
@@ -103,11 +123,91 @@ function minEdgeThreshold(kind: GradeKind): number {
 }
 
 /**
+ * Sharp Conflict bar (Fix 2.1 — Gap-12).
+ *
+ * Framework reference: SHARP_SIGNAL_FRAMEWORK.md §"Sharp Conflict":
+ *   Required conditions (ALL must hold):
+ *     • Model picks one side
+ *     • OPPOSING signal at strong tier from AT LEAST ONE of:
+ *         - Steam ≥ 3 books opposing
+ *         - RLM clearly opposing
+ *         - Sharp money divergence ≥ 15pp opposing
+ *     • PLUS at least one confirming opposing indicator (typically EV
+ *       opposing at moderate+ tier)
+ *
+ *   Critical carve-out: "Pinnacle EV opposing alone does NOT trigger
+ *   Sharp Conflict. It triggers Market Watch."
+ *
+ *   Edge case (§"Edge Case Handling — Single signal at 'very strong' tier"):
+ *     A single very-strong opposing primary signal (steam 5+, RLM ≥70%
+ *     public, sharp_div ≥25pp) suffices alone. EV at very_strong does NOT
+ *     trigger alone — the EV-alone carve-out wins over the very-strong-
+ *     alone allowance.
+ *
+ * Returns true when the evidence meets the framework bar for Sharp Conflict.
+ * Caller routes market_resistance → sharp_conflict on true, → market_watch
+ * on false. Evidence=null bypasses the bar (legacy / prop-side behavior).
+ */
+function meetsSharpConflictBar(evidence: SignalEvidence | null): boolean {
+  if (evidence === null) return false;
+
+  // Opposing signals (signal exists and is on the side opposite to the model)
+  const evOpposing = evidence.ev !== null && !evidence.ev.aligned;
+  const steamOpposing = evidence.steam !== null && !evidence.steam.aligned;
+  const rlmOpposing = evidence.rlm !== null && !evidence.rlm.aligned;
+  const sdOpposing =
+    evidence.sharpDivergence !== null && !evidence.sharpDivergence.aligned;
+
+  // Very-strong opposing PRIMARY (steam / RLM / sharp_div, NOT EV) suffices
+  // alone per framework §"Edge Case Handling". EV at very_strong is excluded
+  // by the explicit "EV alone" carve-out.
+  if (steamOpposing && evidence.steam!.tier === "very_strong") return true;
+  if (rlmOpposing && evidence.rlm!.tier === "very_strong") return true;
+  if (sdOpposing && evidence.sharpDivergence!.tier === "very_strong") return true;
+
+  // Strong-tier opposing primary (one of steam/RLM/sharp_div at strong+).
+  // EV is never primary per framework — it's the typical secondary.
+  const hasStrongPrimary =
+    (steamOpposing && tierAtLeast(evidence.steam!.tier, "strong")) ||
+    (rlmOpposing && tierAtLeast(evidence.rlm!.tier, "strong")) ||
+    (sdOpposing && tierAtLeast(evidence.sharpDivergence!.tier, "strong"));
+
+  if (!hasStrongPrimary) return false;
+
+  // Confirming secondary: AT LEAST ONE OTHER opposing signal at moderate+
+  // tier. Count distinct opposing moderate+ signals; need ≥2 to satisfy
+  // "primary + secondary". (A single strong opposing primary alone counts
+  // as 1; we need a different signal type at moderate+ for the +1.)
+  let opposingModeratePlusCount = 0;
+  if (evOpposing && tierAtLeast(evidence.ev!.tier, "moderate")) {
+    opposingModeratePlusCount++;
+  }
+  if (steamOpposing && tierAtLeast(evidence.steam!.tier, "moderate")) {
+    opposingModeratePlusCount++;
+  }
+  if (rlmOpposing && tierAtLeast(evidence.rlm!.tier, "moderate")) {
+    opposingModeratePlusCount++;
+  }
+  if (sdOpposing && tierAtLeast(evidence.sharpDivergence!.tier, "moderate")) {
+    opposingModeratePlusCount++;
+  }
+  return opposingModeratePlusCount >= 2;
+}
+
+/**
  * Classify ONE pick into a final grade + signal_type attribution. Pure
  * function — no I/O. Single-pass decision tree, priority by branch order.
+ *
+ * Fix 2.1 (Gap-12): `market_resistance` branch now consults the Sharp
+ * Conflict bar via `meetsSharpConflictBar(evidence)`. Pre-fix any
+ * market_resistance escalated to sharp_conflict; post-fix, only the
+ * framework-confirmed shape (strong-tier opposing primary + confirming
+ * secondary, OR single very-strong opposing primary) earns sharp_conflict.
+ * Unconfirmed market_resistance (e.g., EV-only opposing) routes to
+ * market_watch per framework §"Sharp Conflict" carve-out.
  */
 export function deriveGrade(input: GradeInput): GradeOutput {
-  const { kind, modelEdgePct, marketSignal } = input;
+  const { kind, modelEdgePct, marketSignal, evidence } = input;
   const hasModelEdge =
     modelEdgePct !== null && modelEdgePct >= minEdgeThreshold(kind);
   const bestThreshold = bestSignalThreshold(kind);
@@ -132,11 +232,20 @@ export function deriveGrade(input: GradeInput): GradeOutput {
     }
 
     case "market_resistance": {
-      // Sharps fading our pick — caution flag regardless of model edge.
-      return {
-        grade: "sharp_conflict",
-        signal_type: hasModelEdge ? "balanced" : "market_only",
-      };
+      // Fix 2.1 (Gap-12): tier-aware Sharp Conflict bar. Evidence-null
+      // path (props per Flag D1, or pre-2.1 callers) bypasses the bar
+      // and keeps the legacy permissive behavior.
+      if (evidence === null || meetsSharpConflictBar(evidence)) {
+        return {
+          grade: "sharp_conflict",
+          signal_type: hasModelEdge ? "balanced" : "market_only",
+        };
+      }
+      // Opposing signal exists but doesn't meet the strong-primary +
+      // confirming-secondary bar — framework routes to Market Watch.
+      // signal_type "balanced" matches the existing market_watch case
+      // per Flag H1 (no new SignalType union value).
+      return { grade: "market_watch", signal_type: "balanced" };
     }
 
     case "public_smoke": {
@@ -184,16 +293,44 @@ type PropPredRow = {
   market_signal: MarketSignal | null;
 };
 
+/**
+ * Sharp signal row shape needed by the grade engine. Fix 2.1 (Gap-9)
+ * widens this from just (side, ev_pct) to the full evidence-bearing field
+ * set so classifyEvidence can tier every signal axis (EV, steam, RLM,
+ * sharp money divergence, public smoke).
+ */
 type SharpSignalEvRow = {
   game_id: number;
   market_type: string;
-  /** Side the sharp_signals row was recorded for. V2.1.1 fix (Phase
-   * 6.3.5e-fix): used by edgeForModelSide() to attribute EV only when
-   * aligned with the model's pick. Pre-fix the lookup filtered by side
-   * and silently dropped opposing-side rows, leaving modelEdgePct=null. */
   side: string;
+  is_plus_ev: boolean | null;
   ev_pct: number | null;
+  has_steam_move: boolean | null;
+  steam_books_count: number | null;
+  has_reverse_line_movement: boolean | null;
+  rlm_direction: string | null;
+  public_betting_pct: number | null;
+  public_money_pct: number | null;
 };
+
+/**
+ * Project a sharp_signals row into the MarketSignalSource shape consumed
+ * by classifyEvidence. Mirrors the normalizer in marketSignalDerivation
+ * service — boolean DEFAULTs FALSE, nullable numerics stay nullable.
+ */
+function toEvidenceSource(row: SharpSignalEvRow): MarketSignalSource {
+  return {
+    side: row.side as Side,
+    is_plus_ev: row.is_plus_ev ?? false,
+    ev_pct: row.ev_pct,
+    has_steam_move: row.has_steam_move ?? false,
+    steam_books_count: row.steam_books_count,
+    has_reverse_line_movement: row.has_reverse_line_movement ?? false,
+    rlm_direction: row.rlm_direction,
+    public_betting_pct: row.public_betting_pct,
+    public_money_pct: row.public_money_pct,
+  };
+}
 
 /** The three game markets that get per-pick derivation. */
 type GameMarketKey = "ml" | "ou" | "nrfi";
@@ -319,13 +456,14 @@ export async function deriveGradesForSlate(
     .in("game_id", gameIds);
   const propPreds = (propsRaw ?? []) as PropPredRow[];
 
-  // Index sharp_signals by (game_id, market) — V2.1.1 fix: alignment is
-  // a property of (signal.side vs modelSide), checked by edgeForModelSide
-  // at read time. Pre-fix the key included side and the lookup silently
-  // missed opposing-side rows.
+  // Index sharp_signals by (game_id, market). Fix 2.1 (Gap-9) widens the
+  // SELECT to include every evidence field — classifyEvidence needs them
+  // to tier each signal axis for the Sharp Conflict bar.
   const { data: signalsRaw } = await supabase
     .from("sharp_signals")
-    .select("game_id, market_type, side, ev_pct")
+    .select(
+      "game_id, market_type, side, is_plus_ev, ev_pct, has_steam_move, steam_books_count, has_reverse_line_movement, rlm_direction, public_betting_pct, public_money_pct"
+    )
     .in("game_id", gameIds);
   const evByKey = new Map<string, SharpSignalEvRow>();
   for (const row of (signalsRaw ?? []) as SharpSignalEvRow[]) {
@@ -349,12 +487,19 @@ export async function deriveGradesForSlate(
       // opposing (Pinnacle's EV is on the other side from our pick).
       const sig = evByKey.get(evKey(row.game_id, pick.market));
       const modelEdgePct = edgeForModelSide(sig, pick.side);
+      // Fix 2.1 (Gap-9): build tier-aware evidence for the grade engine's
+      // Sharp Conflict bar. classifyEvidence handles null signals cleanly.
+      const evidence = classifyEvidence(
+        pick.side,
+        sig ? toEvidenceSource(sig) : null
+      );
       result.games[key].set(
         row.id,
         deriveGrade({
           kind: "game",
           modelEdgePct,
           marketSignal: pick.marketSignal,
+          evidence,
         })
       );
     }
@@ -362,12 +507,17 @@ export async function deriveGradesForSlate(
 
   for (const row of propPreds) {
     if (row.game_id === null) continue;
+    // Props pass evidence=null per Fix 2.1 Flag D1 — prop-side tier
+    // infrastructure is Gap-12.5 follow-up. The market_resistance branch
+    // in deriveGrade bypasses the Sharp Conflict bar when evidence is null
+    // and keeps legacy permissive behavior on props.
     result.props.set(
       row.id,
       deriveGrade({
         kind: "prop",
         modelEdgePct: row.edge_pct,
         marketSignal: row.market_signal,
+        evidence: null,
       })
     );
   }

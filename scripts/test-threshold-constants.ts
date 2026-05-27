@@ -98,19 +98,43 @@ function main() {
     3,
     "§'Threshold constants' (strong tier — Signal 2)"
   );
+  expectConstant(
+    "STEAM_VERY_STRONG_BOOKS",
+    5,
+    "§'Threshold constants' (very-strong tier — Signal 2 — Fix 2.1 Gap-3)"
+  );
+
+  // ─── Signal 3 — Reverse line movement ─────────────────────────────────────
+  section("Signal 3 — Reverse line movement (Fix 2.1 Gap-4)");
+
+  expectConstant(
+    "RLM_PUBLIC_THRESHOLD",
+    60,
+    "§'Threshold constants' RLM_PUBLIC_THRESHOLD (weak-tier floor)"
+  );
+  expectConstant(
+    "RLM_STRONG_PUBLIC_THRESHOLD",
+    65,
+    "§'Threshold constants' RLM_STRONG_PUBLIC_THRESHOLD (strong tier)"
+  );
 
   // ─── Signal 4 — Sharp money divergence ────────────────────────────────────
-  // Framework table specifies tiers MODERATE (10), STRONG (15), VERY_STRONG
-  // (25). Code today has the MODERATE tier locked in (MIN_SHARP_MONEY_
-  // DIVERGENCE_PP) and the LIGHT_SHARP_DIVERGENCE_PP weak-tier knob. Adding
-  // STRONG / VERY_STRONG constants is Gap-5 (Session 2). This test pins
-  // only the constants that currently exist.
-  section("Signal 4 — Sharp money divergence (partial — Gap-5 covers strong/very-strong tiers)");
+  section("Signal 4 — Sharp money divergence (Fix 2.1 Gap-5 completes tier coverage)");
 
   expectConstant(
     "MIN_SHARP_MONEY_DIVERGENCE_PP",
     10,
     "§'Threshold constants' SHARP_DIVERGENCE_MODERATE"
+  );
+  expectConstant(
+    "SHARP_DIVERGENCE_STRONG",
+    15,
+    "§'Threshold constants' SHARP_DIVERGENCE_STRONG (strong tier — Fix 2.1 Gap-5)"
+  );
+  expectConstant(
+    "SHARP_DIVERGENCE_VERY_STRONG",
+    25,
+    "§'Threshold constants' SHARP_DIVERGENCE_VERY_STRONG (very-strong tier — Fix 2.1 Gap-5)"
   );
 
   // ─── Signal 5 — Public smoke detection ────────────────────────────────────

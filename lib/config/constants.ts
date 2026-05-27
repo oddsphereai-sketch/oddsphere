@@ -201,14 +201,39 @@ export const SHARP_SIGNAL_THRESHOLDS = {
   // Primary STRONG components — Pinnacle EV tiers (framework Signal 1)
   /** Moderate-tier EV floor. Below this is market noise. */
   MIN_EV_FOR_PLUS_EV_SIGNAL: 1.5,
-  /** Strong-tier EV (framework Signal 1). NOT YET WIRED into the grade
-   *  engine — Session 2 (Gap-9) lands tier-aware classification. */
+  /** Strong-tier EV (framework Signal 1). Consumed by Fix 2.1's
+   *  signalEvidenceClassifier for tier-aware Sharp Conflict bar enforcement. */
   EV_STRONG_THRESHOLD: 3.0,
-  /** Very-strong-tier EV (framework Signal 1). NOT YET WIRED — see Gap-9. */
+  /** Very-strong-tier EV (framework Signal 1). Note: EV alone — even at
+   *  very-strong tier — does NOT trigger Sharp Conflict per framework
+   *  §"Sharp Conflict" carve-out. Used for tier classification only. */
   EV_VERY_STRONG_THRESHOLD: 5.0,
-  MIN_STEAM_BOOKS: 3,                        // need multi-book confirmation
-  MIN_SHARP_MONEY_DIVERGENCE_PP: 10,        // money_pct − betting_pct ≥ 10
-  // Weak signal stack (3+ stacked weak → STRONG)
+  // Steam tiers (framework Signal 2)
+  /** Strong-tier steam — multi-book confirmation. */
+  MIN_STEAM_BOOKS: 3,
+  /** Very-strong-tier steam (framework Signal 2). Fix 2.1 (Gap-3): single
+   *  very-strong opposing steam suffices alone for Sharp Conflict per
+   *  framework §"Edge Case Handling — Single signal at 'very strong' tier". */
+  STEAM_VERY_STRONG_BOOKS: 5,
+  // RLM tiers (framework Signal 3)
+  /** Public ticket % floor for RLM detection — weak-tier threshold.
+   *  Below this, line drift isn't classified as RLM at all. Fix 2.1 (Gap-4). */
+  RLM_PUBLIC_THRESHOLD: 60,
+  /** Strong-tier RLM public ticket %. With sharp money confirming, this
+   *  crosses into strong-tier RLM per framework. Fix 2.1 (Gap-4). */
+  RLM_STRONG_PUBLIC_THRESHOLD: 65,
+  // Sharp money divergence tiers (framework Signal 4)
+  /** Moderate-tier sharp money divergence floor. */
+  MIN_SHARP_MONEY_DIVERGENCE_PP: 10,
+  /** Strong-tier sharp money divergence (framework Signal 4). Fix 2.1
+   *  (Gap-5): used by Sharp Conflict bar as one of the three strong-tier
+   *  opposing primary candidates. */
+  SHARP_DIVERGENCE_STRONG: 15,
+  /** Very-strong-tier sharp money divergence (framework Signal 4). Single
+   *  very-strong opposing divergence suffices alone for Sharp Conflict per
+   *  framework §"Edge Case Handling". Fix 2.1 (Gap-5). */
+  SHARP_DIVERGENCE_VERY_STRONG: 25,
+  // Weak signal stack (3+ stacked weak → STRONG) — legacy evaluator pipeline
   WEAK_SIGNAL_STACK_MIN: 3,
   LIGHT_EV_MIN: 0.5,                         // ≥ 0.5% but < MIN_EV_FOR_PLUS_EV_SIGNAL
   LIGHT_STEAM_BOOKS_MIN: 1,                  // 1-2 books = light steam confirmation

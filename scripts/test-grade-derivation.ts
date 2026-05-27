@@ -26,8 +26,12 @@ import {
   type SlateGrades,
 } from "../lib/services/gradeDerivationService";
 import { updateMarketSignalsForSlate } from "../lib/services/marketSignalDerivationService";
+import type { SignalEvidence } from "../lib/services/signalEvidenceClassifier";
 import { supabase } from "../lib/db/supabase";
-import { GRADE_THRESHOLDS } from "../lib/config/constants";
+import {
+  GRADE_THRESHOLDS,
+  SHARP_SIGNAL_THRESHOLDS,
+} from "../lib/config/constants";
 
 let pass = 0;
 let fail = 0;
@@ -54,6 +58,26 @@ function input(overrides: Partial<GradeInput>): GradeInput {
     kind: "prop",
     modelEdgePct: null,
     marketSignal: null,
+    // Fix 2.1 (Gap-9): evidence defaults to null so existing tests that
+    // don't set it exercise the legacy permissive path (market_resistance
+    // → sharp_conflict). Tests that need the new tier-aware Sharp Conflict
+    // bar pass an explicit evidence record.
+    evidence: null,
+    ...overrides,
+  };
+}
+
+/**
+ * Build a SignalEvidence record for tier-aware Sharp Conflict tests.
+ * Defaults every slot to null/false; tests override only the slots they need.
+ */
+function evidence(overrides: Partial<SignalEvidence> = {}): SignalEvidence {
+  return {
+    ev: null,
+    steam: null,
+    rlm: null,
+    sharpDivergence: null,
+    publicSmoke: false,
     ...overrides,
   };
 }
@@ -345,6 +369,209 @@ async function main() {
     })()
   );
 
+  // ─── Tier-aware Sharp Conflict bar (Fix 2.1 — Gap-12) ─────────────────
+  // Framework reference: SHARP_SIGNAL_FRAMEWORK.md §"Sharp Conflict" —
+  //   Required: AT LEAST ONE strong-tier opposing primary (steam ≥3 books,
+  //   RLM clearly opposing, sharp_div ≥15pp) PLUS confirming opposing
+  //   secondary (typically EV moderate+).
+  //
+  //   Edge case: single very-strong opposing primary suffices alone (steam
+  //   5+, RLM ≥70% public, sharp_div ≥25pp). EV at very_strong is excluded
+  //   by the explicit "EV alone" carve-out.
+  //
+  //   Critical carve-out: "Pinnacle EV opposing alone does NOT trigger
+  //   Sharp Conflict. It triggers Market Watch."
+  //
+  // These cases exercise the bar via explicit evidence records.
+  section("tier-aware Sharp Conflict bar (Fix 2.1 — Gap-12)");
+
+  // MIL @ CHC shape: opposing EV alone, no other opposing signals.
+  // Framework says: market_watch, NOT sharp_conflict.
+  check(
+    "MIL @ CHC shape (opposing very_strong EV, no steam/RLM/sharp_div) → market_watch (NOT sharp_conflict)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "market_resistance",
+          evidence: evidence({
+            ev: { tier: "very_strong", aligned: false },
+            // No opposing steam/RLM/sharp_div — bar must fail.
+          }),
+        })
+      );
+      return r.grade === "market_watch" && r.signal_type === "balanced";
+    })()
+  );
+
+  // WSH @ ATL shape: opposing strong steam + opposing strong EV.
+  // Framework says: sharp_conflict (strong primary + confirming secondary).
+  check(
+    "WSH @ ATL shape (opposing strong steam + opposing strong EV) → sharp_conflict",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "market_resistance",
+          evidence: evidence({
+            steam: { tier: "strong", aligned: false },
+            ev: { tier: "strong", aligned: false },
+          }),
+        })
+      );
+      return r.grade === "sharp_conflict" && r.signal_type === "market_only";
+    })()
+  );
+
+  // Edge case: single very-strong opposing steam (5+ books) alone fires
+  // sharp_conflict per framework §"Edge Case Handling".
+  check(
+    "Single very_strong opposing steam alone → sharp_conflict (very-strong shortcut)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "market_resistance",
+          evidence: evidence({
+            steam: { tier: "very_strong", aligned: false },
+          }),
+        })
+      );
+      return r.grade === "sharp_conflict";
+    })()
+  );
+
+  // Edge case: single very-strong opposing sharp_div (25pp+) alone fires.
+  check(
+    "Single very_strong opposing sharp_div alone → sharp_conflict",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "market_resistance",
+          evidence: evidence({
+            sharpDivergence: { tier: "very_strong", aligned: false },
+          }),
+        })
+      );
+      return r.grade === "sharp_conflict";
+    })()
+  );
+
+  // Carve-out: very_strong opposing EV ALONE does NOT trigger (EV is
+  // explicitly excluded from the very-strong-alone shortcut).
+  check(
+    "Single very_strong opposing EV alone → market_watch (EV-alone carve-out wins)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "market_resistance",
+          evidence: evidence({
+            ev: { tier: "very_strong", aligned: false },
+          }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  // Bar fail: opposing strong steam ALONE (no secondary) — needs confirming.
+  check(
+    "Opposing strong steam alone (no secondary) → market_watch (needs confirming)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "market_resistance",
+          evidence: evidence({
+            steam: { tier: "strong", aligned: false },
+          }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  // Bar pass: opposing strong sharp_div + opposing moderate EV (different signal as confirming).
+  check(
+    "Opposing strong sharp_div + opposing moderate EV → sharp_conflict",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "market_resistance",
+          evidence: evidence({
+            sharpDivergence: { tier: "strong", aligned: false },
+            ev: { tier: "moderate", aligned: false },
+          }),
+        })
+      );
+      return r.grade === "sharp_conflict";
+    })()
+  );
+
+  // Bar fail: opposing moderate primary (not strong) — never satisfies primary requirement.
+  check(
+    "Opposing moderate steam (2 books) + opposing moderate EV → market_watch (no strong primary)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "market_resistance",
+          evidence: evidence({
+            steam: { tier: "moderate", aligned: false },
+            ev: { tier: "moderate", aligned: false },
+          }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  // Props with evidence=null: bar bypassed (legacy permissive behavior per Flag D1).
+  check(
+    "Prop with market_resistance + evidence=null → sharp_conflict (Flag D1 legacy bypass)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "prop",
+          modelEdgePct: 8,
+          marketSignal: "market_resistance",
+          // evidence defaults to null via the input() helper
+        })
+      );
+      return r.grade === "sharp_conflict";
+    })()
+  );
+
+  // hasModelEdge → signal_type "balanced"; no edge → "market_only" — Fix 2.1
+  // preserves the existing attribution rule for the sharp_conflict outcome.
+  check(
+    "Sharp Conflict with model edge → signal_type 'balanced'",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 8,
+          marketSignal: "market_resistance",
+          evidence: evidence({
+            steam: { tier: "very_strong", aligned: false },
+          }),
+        })
+      );
+      return r.grade === "sharp_conflict" && r.signal_type === "balanced";
+    })()
+  );
+
   // ─── Best-signal slate monitor ─────────────────────────────────────────
   section("monitorBestSignalShare");
 
@@ -615,18 +842,27 @@ async function main() {
         typeof r1.monitor.perMarket.ml.derived === "number"
     );
 
-    // ── Alignment audit (6.3.5e-fix WSH @ ATL pattern) ─────────────────
-    // End-to-end: for any game where the total-market sharp signal opposes
-    // the model's predicted_ou_side, the resulting ou_grade should be
-    // sharp_conflict (driven by market_signal=market_resistance and
-    // modelEdgePct=null from edgeForModelSide). Pre-fix it would be
-    // market_watch (signal silently dropped, edge null, no resistance).
+    // ── Alignment + Sharp Conflict bar audit (Fix 2.1 — Gap-12) ────────
+    // End-to-end: for opposing-side total signals on the seed slate, the
+    // outcome depends on whether the framework Sharp Conflict bar is met.
+    //   WSH @ ATL pattern: opposing steam (strong) + opposing EV (strong)
+    //     → meets bar → sharp_conflict.
+    //   MIL @ CHC pattern: opposing EV only (no opposing steam/RLM/div)
+    //     → bar NOT met (no strong primary) → market_watch.
+    //
+    // Pre-Fix-2.1 both patterns escalated unconditionally to sharp_conflict
+    // (Gap-12 regression). Post-fix the bar gates the escalation.
     const gameIdList = ((mlbGames ?? []) as Array<{ id: number }>).map(
       (g) => g.id
     );
+    // Pull the full evidence-bearing fields, not just (game_id, side),
+    // so we can classify each opposing signal's evidence shape and form
+    // the correct expectation per pick.
     const { data: alignSignals } = await supabase
       .from("sharp_signals")
-      .select("game_id, side")
+      .select(
+        "game_id, side, is_plus_ev, ev_pct, has_steam_move, steam_books_count, has_reverse_line_movement, rlm_direction, public_betting_pct, public_money_pct"
+      )
       .eq("market_type", "total")
       .in("game_id", gameIdList);
     const { data: alignPicks } = await supabase
@@ -647,71 +883,153 @@ async function main() {
         side: p.predicted_ou_side,
       });
     }
-    const opposingPickIds: number[] = [];
-    for (const s of (alignSignals ?? []) as Array<{
+
+    type SignalRow = {
       game_id: number;
       side: string;
-    }>) {
+      is_plus_ev: boolean | null;
+      ev_pct: number | null;
+      has_steam_move: boolean | null;
+      steam_books_count: number | null;
+      has_reverse_line_movement: boolean | null;
+      rlm_direction: string | null;
+      public_betting_pct: number | null;
+      public_money_pct: number | null;
+    };
+
+    // Classify each opposing-side signal: does it have strong-tier confirming
+    // sharp action (steam/RLM/sharp_div) or is it EV-only? The expectation
+    // forks accordingly per Fix 2.1's Sharp Conflict bar.
+    const opposingExpectations: Array<{
+      pickId: number;
+      gameId: number;
+      expectsSharpConflict: boolean;
+      hasStrongPrimary: boolean;
+    }> = [];
+
+    for (const s of (alignSignals ?? []) as SignalRow[]) {
       const pick = alignPickByGame.get(s.game_id);
-      if (pick && pick.side !== null && pick.side !== s.side) {
-        opposingPickIds.push(pick.id);
-      }
+      if (!pick || pick.side === null || pick.side === s.side) continue;
+      // Opposing-side signal. Check whether it carries strong-tier primary
+      // confirming evidence.
+      const opposingStrongSteam =
+        (s.has_steam_move ?? false) &&
+        (s.steam_books_count ?? 0) >= SHARP_SIGNAL_THRESHOLDS.MIN_STEAM_BOOKS;
+      const opposingStrongRlm =
+        (s.has_reverse_line_movement ?? false) &&
+        s.rlm_direction !== null &&
+        !s.rlm_direction.endsWith(pick.side) &&
+        (s.public_betting_pct ?? 0) >=
+          SHARP_SIGNAL_THRESHOLDS.RLM_STRONG_PUBLIC_THRESHOLD;
+      const gap =
+        s.public_betting_pct !== null && s.public_money_pct !== null
+          ? Math.abs(s.public_money_pct - s.public_betting_pct)
+          : 0;
+      const opposingStrongSharpDiv =
+        gap >= SHARP_SIGNAL_THRESHOLDS.SHARP_DIVERGENCE_STRONG;
+      const hasStrongPrimary =
+        opposingStrongSteam || opposingStrongRlm || opposingStrongSharpDiv;
+
+      // Bar requires a confirming secondary too. For seed slate purposes,
+      // assume EV at moderate+ tier counts as confirming (matches MIL @ CHC
+      // and WSH @ ATL data shape — both have EV opposing at moderate+).
+      const evModeratePlus =
+        (s.is_plus_ev ?? false) &&
+        (s.ev_pct ?? 0) >= SHARP_SIGNAL_THRESHOLDS.MIN_EV_FOR_PLUS_EV_SIGNAL;
+
+      // Edge case: very-strong primary alone suffices regardless of secondary.
+      const veryStrongSteamAlone =
+        (s.has_steam_move ?? false) &&
+        (s.steam_books_count ?? 0) >=
+          SHARP_SIGNAL_THRESHOLDS.STEAM_VERY_STRONG_BOOKS;
+      const veryStrongSharpDivAlone =
+        gap >= SHARP_SIGNAL_THRESHOLDS.SHARP_DIVERGENCE_VERY_STRONG;
+      const veryStrongRlmAlone =
+        (s.has_reverse_line_movement ?? false) &&
+        s.rlm_direction !== null &&
+        !s.rlm_direction.endsWith(pick.side) &&
+        (s.public_betting_pct ?? 0) >= 70;
+      const veryStrongAloneShortcut =
+        veryStrongSteamAlone || veryStrongSharpDivAlone || veryStrongRlmAlone;
+
+      const expectsSharpConflict =
+        veryStrongAloneShortcut || (hasStrongPrimary && evModeratePlus);
+
+      opposingExpectations.push({
+        pickId: pick.id,
+        gameId: s.game_id,
+        expectsSharpConflict,
+        hasStrongPrimary,
+      });
     }
 
-    if (opposingPickIds.length > 0) {
-      // (1) Every opposing-side pick grades sharp_conflict (was market_watch pre-fix).
-      let nonConflict = 0;
-      for (const id of opposingPickIds) {
-        const out = derived.games.ou.get(id);
-        if (out?.grade !== "sharp_conflict") nonConflict++;
+    if (opposingExpectations.length > 0) {
+      // (1) WSH @ ATL pattern: opposing strong primary + confirming EV →
+      //     sharp_conflict.
+      // (2) MIL @ CHC pattern: opposing EV only (no strong primary) →
+      //     market_watch.
+      let conflictMismatches = 0;
+      let watchMismatches = 0;
+      const conflictExpectedCount = opposingExpectations.filter(
+        (e) => e.expectsSharpConflict
+      ).length;
+      const watchExpectedCount = opposingExpectations.filter(
+        (e) => !e.expectsSharpConflict
+      ).length;
+
+      for (const e of opposingExpectations) {
+        const out = derived.games.ou.get(e.pickId);
+        if (e.expectsSharpConflict) {
+          if (out?.grade !== "sharp_conflict") conflictMismatches++;
+        } else {
+          if (out?.grade !== "market_watch") watchMismatches++;
+        }
       }
+
       check(
-        "opposing-side total signals derive sharp_conflict ou_grade (WSH @ ATL pattern)",
-        nonConflict === 0
+        `opposing-side totals with strong-tier confirming evidence → sharp_conflict (${conflictExpectedCount} expected, WSH @ ATL pattern)`,
+        conflictMismatches === 0
+      );
+      check(
+        `opposing-side totals with EV-only evidence (no strong primary) → market_watch (${watchExpectedCount} expected, MIL @ CHC pattern — Gap-12 fix)`,
+        watchMismatches === 0
       );
 
-      // (2) signal_type is market_only — modelEdgePct=null from edgeForModelSide
-      // means there's no balanced/model_dominant path; pure market call.
-      let wrongSignalType = 0;
-      for (const id of opposingPickIds) {
-        const out = derived.games.ou.get(id);
-        if (out?.signal_type !== "market_only") wrongSignalType++;
-      }
-      check(
-        "opposing-side total signals carry signal_type=market_only (modelEdgePct null from edgeForModelSide)",
-        wrongSignalType === 0
-      );
-
-      // (3) DB reflects sharp_conflict for the same picks (write path is wired).
+      // (3) DB persistence — derived grades match the written columns.
+      const allOpposingIds = opposingExpectations.map((e) => e.pickId);
       const { data: alignDbRows } = await supabase
         .from("game_predictions")
         .select("id, ou_grade, ou_signal_type")
-        .in("id", opposingPickIds);
-      let dbMismatch = 0;
+        .in("id", allOpposingIds);
+      const dbById = new Map<
+        number,
+        { ou_grade: string | null; ou_signal_type: string | null }
+      >();
       for (const row of (alignDbRows ?? []) as Array<{
         id: number;
         ou_grade: string | null;
         ou_signal_type: string | null;
       }>) {
-        if (row.ou_grade !== "sharp_conflict") dbMismatch++;
-        if (row.ou_signal_type !== "market_only") dbMismatch++;
+        dbById.set(row.id, {
+          ou_grade: row.ou_grade,
+          ou_signal_type: row.ou_signal_type,
+        });
+      }
+      let dbMismatch = 0;
+      for (const e of opposingExpectations) {
+        const db = dbById.get(e.pickId);
+        if (!db) {
+          dbMismatch++;
+          continue;
+        }
+        const expectedGrade = e.expectsSharpConflict
+          ? "sharp_conflict"
+          : "market_watch";
+        if (db.ou_grade !== expectedGrade) dbMismatch++;
       }
       check(
-        "DB ou_grade=sharp_conflict + ou_signal_type=market_only persisted for opposing-side picks",
+        "DB ou_grade matches the per-pick framework expectation (sharp_conflict vs market_watch) — write path wired",
         dbMismatch === 0
-      );
-
-      // (4) Pre-fix regression guard: NONE of these picks should derive
-      // market_watch. (Pre-fix bug shape: edge null + signal collapsed to
-      // market_neutral → market_watch grade.)
-      let regressedToWatch = 0;
-      for (const id of opposingPickIds) {
-        const out = derived.games.ou.get(id);
-        if (out?.grade === "market_watch") regressedToWatch++;
-      }
-      check(
-        "opposing-side total picks do NOT grade market_watch (pre-fix bug shape)",
-        regressedToWatch === 0
       );
     } else {
       console.log(
