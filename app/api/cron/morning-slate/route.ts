@@ -110,13 +110,11 @@ export async function GET(request: Request) {
       apiCalls += propPreds.api_calls_made ?? 0;
       stepDetails.prop_predictions = propPreds.records_updated;
 
-      // 8. Regenerate sharp verdicts for tonight's games
-      const gameIdByExt = await loadGameIdMap(sport, date);
-      const gameIds = [...gameIdByExt.values()];
-      const verdicts = await predictionService.regenerateSharpVerdicts(gameIds);
-      records += verdicts.records_updated ?? 0;
-      apiCalls += verdicts.api_calls_made ?? 0;
-      stepDetails.sharp_verdicts = verdicts.records_updated;
+      // 8. Fix 4.1 (Gap-18+19): sharp verdict regeneration removed. The
+      // legacy pipeline (sharpSignalEvaluator + verdictGenerator) is gone;
+      // signal text derives at API response time via signalSummaryGenerator.
+      // Sharp signals were already ingested in step 4; no cron-side
+      // signal-text pass needed.
 
       // 9. V2.1 Layer 3 — market signal derivation. Reads sharp_signals
       // (written in step 4) + predictions (step 6/7); writes market_signal

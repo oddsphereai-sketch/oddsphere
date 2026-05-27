@@ -23,6 +23,9 @@
 
 import { supabase } from "@/lib/db/supabase";
 import { filterMockSourceRows } from "@/lib/db/productionFilter";
+import { classifyEvidence } from "@/lib/services/signalEvidenceClassifier";
+import { generateSignalSummary } from "@/lib/services/signalSummaryGenerator";
+import type { Side } from "@/lib/types/domain/Lines";
 import type { Sport } from "@/lib/types/domain/Sport";
 import type {
   Grade,
@@ -127,6 +130,13 @@ function relativeTimeAgo(iso: string | null): string | undefined {
 // Sharp signal mapping
 // ───────────────────────────────────────────────────────────────────────────
 
+/**
+ * Sharp signal row shape consumed by the route. Fix 4.1 (K1) dropped
+ * `signal_strength` and `signal_summary` from the SELECT — those legacy
+ * columns are no longer the source of truth for member-facing signal data.
+ * sharpStatus and direction now derive from the per-pick grade; description
+ * text comes from generateSignalSummary() at response time.
+ */
 type SignalRow = {
   game_id: number;
   market_type: string;
@@ -141,8 +151,6 @@ type SignalRow = {
   rlm_direction: string | null;
   public_betting_pct: number | null;
   public_money_pct: number | null;
-  signal_strength: string | null;
-  signal_summary: string | null;
   computed_at: string | null;
 };
 
@@ -152,18 +160,36 @@ const MARKET_LABEL: Record<string, SharpSignalDto["market"]> = {
   first_inning_total: "NRFI",
 };
 
-function deriveSharpStatus(
-  signal: SignalRow | undefined,
-  predictedSide: string
-): SharpStatus {
-  if (!signal) return "mixed";
-  const strength = (signal.signal_strength ?? "").toLowerCase();
-  const sameSide = signal.side === predictedSide;
-
-  if (sameSide && strength === "strong") return "confirm";
-  if (sameSide && strength === "caution") return "caution";
-  if (!sameSide && strength === "strong") return "caution"; // sharps strong on opposite side
+/**
+ * Fix 4.1 (Flag D1): three-state sharpStatus derived from the per-pick
+ * grade rather than legacy `signal_strength`. Per the framework's grade
+ * vocabulary, the grade IS the user-facing verdict — sharpStatus is the
+ * compact per-tile visualization of that verdict.
+ *
+ *   best_signal / sharp_confirmed → confirm  (market agrees with model)
+ *   sharp_conflict               → caution   (market opposes model)
+ *   everything else              → mixed     (no clear verdict)
+ *
+ * Gap-19.5 follow-up: the "mixed" label is shared by genuinely silent
+ * states (model_only) and middle-tier states (market_watch, market_led).
+ * Member feedback post-launch should inform whether to split this into
+ * "neutral" / "quiet" sub-states. Not a launch blocker.
+ */
+function deriveSharpStatus(grade: Grade | null): SharpStatus {
+  if (grade === "best_signal" || grade === "sharp_confirmed") return "confirm";
+  if (grade === "sharp_conflict") return "caution";
   return "mixed";
+}
+
+/**
+ * Direction maps to the same three-state grade-derived verdict. Drives the
+ * signal-row border color (emerald / amber / gray). Mirrors the legacy
+ * mapping post-Fix-4.1 but sourced from grade instead of signal_strength.
+ */
+function deriveDirection(grade: Grade | null): SharpSignalDto["direction"] {
+  if (grade === "best_signal" || grade === "sharp_confirmed") return "positive";
+  if (grade === "sharp_conflict") return "negative";
+  return "neutral";
 }
 
 function categorizeSignal(s: SignalRow): SharpSignalCategory {
@@ -183,30 +209,82 @@ function categorizeSignal(s: SignalRow): SharpSignalCategory {
     return "handle_gap";
   }
   if (s.is_plus_ev) return "pinnacle_agree";
-  if (s.signal_strength === "caution") return "pinnacle_disagree";
   return "no_signal";
 }
 
-function buildSignalDtos(rows: SignalRow[]): SharpSignalDto[] {
+/**
+ * Project the per-pick grade and modelSide for a given (market, prediction)
+ * tuple. Returns null when the model didn't pick that market (per-pick
+ * triplet all-null upstream).
+ */
+type MarketSignalLookup = {
+  modelSide: Side;
+  grade: Grade | null;
+};
+
+function buildSignalDtos(
+  rows: SignalRow[],
+  lookup: Map<string, MarketSignalLookup>,
+  ctx: { homeTeamAbbr: string; awayTeamAbbr: string }
+): SharpSignalDto[] {
   return rows
     .map((s): SharpSignalDto | null => {
       const market = MARKET_LABEL[s.market_type];
       if (!market) return null;
-      const strength = (s.signal_strength ?? "").toLowerCase();
-      const direction: SharpSignalDto["direction"] =
-        strength === "strong"
-          ? "positive"
-          : strength === "caution"
-          ? "negative"
-          : "neutral";
+
+      // Look up the per-pick grade + modelSide for this market. When the
+      // model didn't pick, fall back to the signal's own side and grade=null
+      // (generator yields the honest fallback copy).
+      const pick = lookup.get(s.market_type);
+      const modelSide: Side = (pick?.modelSide ?? (s.side as Side));
+      const grade = pick?.grade ?? null;
+
+      // Fix 4.1: classifyEvidence + generateSignalSummary derive the text
+      // at response time from the same evidence record the grade engine
+      // already computed. One pipeline. Replaces the legacy
+      // verdictGenerator pre-write path.
+      const evidence = classifyEvidence(modelSide, {
+        side: s.side as Side,
+        is_plus_ev: s.is_plus_ev ?? false,
+        ev_pct: s.ev_pct,
+        has_steam_move: s.has_steam_move ?? false,
+        steam_books_count: s.steam_books_count,
+        has_reverse_line_movement: s.has_reverse_line_movement ?? false,
+        rlm_direction: s.rlm_direction,
+        public_betting_pct: s.public_betting_pct,
+        public_money_pct: s.public_money_pct,
+      });
+      const description = generateSignalSummary(
+        modelSide,
+        s.market_type,
+        {
+          side: s.side as Side,
+          is_plus_ev: s.is_plus_ev ?? false,
+          ev_pct: s.ev_pct,
+          has_steam_move: s.has_steam_move ?? false,
+          steam_books_count: s.steam_books_count,
+          has_reverse_line_movement: s.has_reverse_line_movement ?? false,
+          rlm_direction: s.rlm_direction,
+          public_betting_pct: s.public_betting_pct,
+          public_money_pct: s.public_money_pct,
+        },
+        evidence,
+        grade,
+        {
+          homeTeamAbbr: ctx.homeTeamAbbr,
+          awayTeamAbbr: ctx.awayTeamAbbr,
+          steamDetectedAt: s.steam_detected_at,
+        }
+      );
+
       const category = categorizeSignal(s);
       return {
         market,
         category,
-        description: s.signal_summary ?? "",
+        description,
         source: s.is_plus_ev ? "PINNACLE" : "MARKET",
         timestamp: relativeTimeAgo(s.steam_detected_at ?? s.computed_at),
-        direction,
+        direction: deriveDirection(grade),
       };
     })
     .filter((x): x is SharpSignalDto => x !== null);
@@ -285,8 +363,9 @@ function buildGameDto(
   // ── ML ──
   const mlWinnerKey = pred.predicted_ml_winner ?? "home";
   const mlPick = mlWinnerKey === "home" ? home : away;
-  const mlSignal = signals.find((s) => s.market_type === "moneyline");
-  const mlStatus = deriveSharpStatus(mlSignal, mlWinnerKey);
+  // Fix 4.1 (Flag D1): sharpStatus derives from the per-pick grade, not
+  // from legacy signal_strength. See deriveSharpStatus() comment.
+  const mlStatus = deriveSharpStatus(pred.ml_grade);
 
   // ── Total ──
   // 5F.1: display the SPORTSBOOK total line for betting, not the model
@@ -295,16 +374,36 @@ function buildGameDto(
   // the model projection only when no lines.total row exists.
   const ouSide = pred.predicted_ou_side ?? "under";
   const totalLine = sportsbookTotalLine ?? pred.predicted_total ?? 0;
-  const totalSignal = signals.find((s) => s.market_type === "total");
-  const totalStatus = deriveSharpStatus(totalSignal, ouSide);
+  const totalStatus = deriveSharpStatus(pred.ou_grade);
   const totalPick = ouSide === "over" ? "Over" : "Under";
 
   // ── NRFI ──
   const isNrfi = pred.predicted_nrfi ?? true;
   const nrfiSide = isNrfi ? "under" : "over"; // sharp_signals.side for first_inning_total
-  const nrfiSignal = signals.find((s) => s.market_type === "first_inning_total");
-  const nrfiStatus = deriveSharpStatus(nrfiSignal, nrfiSide);
+  const nrfiStatus = deriveSharpStatus(pred.nrfi_grade);
   const nrfiPick = isNrfi ? "NRFI" : "YRFI";
+
+  // Build the (market → modelSide + grade) lookup that buildSignalDtos
+  // consumes for both alignment-aware text generation and direction color.
+  const signalLookup = new Map<string, MarketSignalLookup>();
+  if (pred.predicted_ml_winner !== null) {
+    signalLookup.set("moneyline", {
+      modelSide: pred.predicted_ml_winner as Side,
+      grade: pred.ml_grade,
+    });
+  }
+  if (pred.predicted_ou_side !== null) {
+    signalLookup.set("total", {
+      modelSide: pred.predicted_ou_side as Side,
+      grade: pred.ou_grade,
+    });
+  }
+  if (pred.predicted_nrfi !== null) {
+    signalLookup.set("first_inning_total", {
+      modelSide: nrfiSide,
+      grade: pred.nrfi_grade,
+    });
+  }
 
   return {
     id: `${row.sport}-${row.external_id}`,
@@ -351,7 +450,10 @@ function buildGameDto(
       away: pred.predicted_away_score ?? 0,
       home: pred.predicted_home_score ?? 0,
     },
-    sharpSignals: buildSignalDtos(signals),
+    sharpSignals: buildSignalDtos(signals, signalLookup, {
+      homeTeamAbbr: home,
+      awayTeamAbbr: away,
+    }),
     // V2.1.1 (Phase 6.3.5e): legacy top-level grade / signalType /
     // marketSignal / primaryMarket dropped. Headline derivation lives in
     // perPickHeadline.ts (client-side) reading the per-pick fields below.
@@ -451,7 +553,11 @@ export async function GET(request: Request) {
     const { data: signalData, error: sigErr } = await supabase
       .from("sharp_signals")
       .select(
-        "game_id, market_type, side, pinnacle_fair_probability, is_plus_ev, ev_pct, has_steam_move, steam_detected_at, steam_books_count, has_reverse_line_movement, rlm_direction, public_betting_pct, public_money_pct, signal_strength, signal_summary, computed_at"
+        // Fix 4.1: dropped signal_strength + signal_summary — those legacy
+      // DB columns are orphaned post-Fix-4.1 (V15 future migration drops
+      // them). sharpStatus and description now derive at response time
+      // from the per-pick grade + classifyEvidence + generateSignalSummary.
+      "game_id, market_type, side, pinnacle_fair_probability, is_plus_ev, ev_pct, has_steam_move, steam_detected_at, steam_books_count, has_reverse_line_movement, rlm_direction, public_betting_pct, public_money_pct, computed_at"
       )
       .in("game_id", gameIds);
     if (sigErr) {

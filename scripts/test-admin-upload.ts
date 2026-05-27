@@ -117,7 +117,14 @@ async function main() {
   };
   check(`upload: 12 updated (UPSERT existing)`, uploadBody.updated === 12);
   check(`upload: 0 failed`, uploadBody.failed === 0);
-  check(`upload: triggered verdict regeneration (4 signals updated)`, uploadBody.verdicts_updated === 4);
+  // Fix 4.1 (Gap-18+19): verdicts_updated returns 0 — legacy
+  // regenerateSharpVerdicts removed; signal text derives at API response
+  // time via signalSummaryGenerator. The response field is preserved for
+  // wire-shape stability but no longer triggers cron-side text generation.
+  check(
+    `upload: verdicts_updated === 0 (legacy regeneration removed)`,
+    uploadBody.verdicts_updated === 0
+  );
   check(`upload: run_id populated`, typeof uploadBody.run_id === "number");
 
   // Verify the upload landed

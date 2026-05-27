@@ -34,12 +34,8 @@ export async function GET(request: Request) {
       records += signals.records_updated ?? 0;
       apiCalls += signals.api_calls_made ?? 0;
 
-      const gameIdByExt = await loadGameIdMap(sport, date);
-      const verdicts = await predictionService.regenerateSharpVerdicts(
-        [...gameIdByExt.values()]
-      );
-      records += verdicts.records_updated ?? 0;
-      apiCalls += verdicts.api_calls_made ?? 0;
+      // Fix 4.1: regenerateSharpVerdicts removed. Legacy pipeline deleted;
+      // signal text derives at API response time.
 
       return {
         records_updated: records,
@@ -47,7 +43,6 @@ export async function GET(request: Request) {
         details: {
           game_lines: gameLines.records_updated,
           sharp_signals: signals.records_updated,
-          verdicts: verdicts.records_updated,
         },
       };
     }

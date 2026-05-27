@@ -12,11 +12,12 @@
  *     prop_predictions + prediction_breakdowns. DELETE-then-INSERT scoped
  *     to tonight's game IDs for idempotency.
  *
- *   • regenerateSharpVerdicts(gameIds)
- *     For each sharp_signal row whose game is in the input list, runs
- *     sharpSignalEvaluator + verdictGenerator and UPDATEs signal_strength
- *     + signal_summary in place. Called from Phase 4E orchestrator either
- *     after a lines refresh OR after Daniel publishes a new scores model.
+ *   • regenerateSharpVerdicts(gameIds) — REMOVED in Fix 4.1 (Gap-18+19).
+ *     The legacy sharpSignalEvaluator + verdictGenerator pipeline was
+ *     deleted; signal_strength + signal_summary are no longer written to
+ *     the sharp_signals table. signalSummaryGenerator now derives text at
+ *     API response time from the per-pick grade + evidence. See K1
+ *     architecture in lib/services/signalSummaryGenerator.ts header.
  */
 
 import { supabase } from "../db/supabase";
@@ -32,10 +33,7 @@ import type {
   PropPredictionInput,
   WeatherContext,
 } from "../models/props/propModelOrchestrator";
-import { evaluateSignal } from "../models/dailyEdge/sharpSignalEvaluator";
-import { generateVerdictText } from "../models/dailyEdge/verdictGenerator";
 import * as signalDerivationService from "./signalDerivationService";
-import type { SharpSignalRecord } from "../providers/interfaces/ISharpSignalProvider";
 import type { Sport } from "../types/domain/Sport";
 import type { PropMarketType } from "../types/domain/Lines";
 import type { CronHandlerResult } from "../cron/runCron";
@@ -450,106 +448,12 @@ export const predictionService = {
     };
   },
 
-  /**
-   * Re-evaluate sharp signals for the given game IDs and update their
-   * signal_strength + signal_summary in place. Called by:
-   *   • lines-refresh crons (when underlying signals change)
-   *   • the admin scores-model upload endpoint (when new context arrives)
-   */
-  async regenerateSharpVerdicts(gameIds: number[]): Promise<CronHandlerResult> {
-    if (gameIds.length === 0) return { records_updated: 0, api_calls_made: 0 };
-
-    const { data: signals, error: sErr } = await supabase
-      .from("sharp_signals")
-      .select(
-        "id, game_id, market_type, side, pinnacle_fair_probability, is_plus_ev, ev_pct, has_steam_move, steam_detected_at, steam_books_count, has_reverse_line_movement, rlm_direction, public_betting_pct, public_money_pct, computed_at"
-      )
-      .in("game_id", gameIds);
-    if (sErr) {
-      throw new Error(`regenerateSharpVerdicts read failed: ${sErr.message}`);
-    }
-
-    // Game + team context for verdict text
-    const { data: gamesData } = await supabase
-      .from("games")
-      .select("id, home_team:home_team_id (abbreviation), away_team:away_team_id (abbreviation)")
-      .in("id", gameIds);
-    const gameContext = new Map<number, { home: string; away: string }>(
-      ((gamesData ?? []) as unknown as Array<{
-        id: number;
-        home_team: { abbreviation: string } | null;
-        away_team: { abbreviation: string } | null;
-      }>).map((g) => {
-        const home = g.home_team as unknown as { abbreviation: string } | null;
-        const away = g.away_team as unknown as { abbreviation: string } | null;
-        return [g.id, { home: home?.abbreviation ?? "—", away: away?.abbreviation ?? "—" }];
-      })
-    );
-
-    // Weather per game
-    const { data: weatherRows } = await supabase
-      .from("weather_forecasts")
-      .select("game_id, wind_speed_mph, wind_direction_relative")
-      .in("game_id", gameIds);
-    const weatherByGameId = new Map<number, { mph: number; dir: string | null }>(
-      ((weatherRows ?? []) as Array<{ game_id: number; wind_speed_mph: number; wind_direction_relative: string | null }>).map(
-        (w) => [w.game_id, { mph: w.wind_speed_mph, dir: w.wind_direction_relative }]
-      )
-    );
-
-    let updated = 0;
-    for (const raw of (signals ?? []) as Array<{
-      id: number; game_id: number; market_type: string; side: string;
-      pinnacle_fair_probability: number | null; is_plus_ev: boolean;
-      ev_pct: number | null;
-      has_steam_move: boolean; steam_detected_at: string | null; steam_books_count: number | null;
-      has_reverse_line_movement: boolean; rlm_direction: string | null;
-      public_betting_pct: number | null; public_money_pct: number | null;
-      computed_at: string;
-    }>) {
-      const signalRec: SharpSignalRecord = {
-        game_external_id: raw.game_id,
-        market_type: raw.market_type as SharpSignalRecord["market_type"],
-        side: raw.side as SharpSignalRecord["side"],
-        pinnacle_fair_probability: raw.pinnacle_fair_probability,
-        is_plus_ev: raw.is_plus_ev,
-        ev_pct: raw.ev_pct,
-        has_steam_move: raw.has_steam_move,
-        steam_detected_at: raw.steam_detected_at,
-        steam_books_count: raw.steam_books_count,
-        has_reverse_line_movement: raw.has_reverse_line_movement,
-        rlm_direction: raw.rlm_direction,
-        public_betting_pct: raw.public_betting_pct,
-        public_money_pct: raw.public_money_pct,
-        signal_strength: null,
-        signal_summary: null,
-        computed_at: raw.computed_at,
-      };
-      const evaluation = evaluateSignal(signalRec);
-      const ctx = gameContext.get(raw.game_id) ?? { home: "—", away: "—" };
-      const weather = weatherByGameId.get(raw.game_id);
-      const verdictText = generateVerdictText(evaluation, signalRec, {
-        homeTeamAbbr: ctx.home,
-        awayTeamAbbr: ctx.away,
-        weatherWindMph: weather?.mph ?? null,
-        weatherWindDirRelative: weather?.dir ?? null,
-      });
-      const { error } = await supabase
-        .from("sharp_signals")
-        .update({
-          signal_strength: evaluation.signalStrength,
-          signal_summary: verdictText,
-        })
-        .eq("id", raw.id);
-      if (!error) updated++;
-    }
-
-    return {
-      records_updated: updated,
-      api_calls_made: 0,
-      details: { signals_evaluated: (signals ?? []).length },
-    };
-  },
+  // regenerateSharpVerdicts removed in Fix 4.1 (Gap-18+19).
+  // The legacy sharpSignalEvaluator + verdictGenerator pipeline was deleted;
+  // signal_strength + signal_summary are no longer cron-written to the
+  // sharp_signals table. The DB columns are orphaned post-Fix-4.1 and a
+  // future V15 migration drops them. signalSummaryGenerator now produces
+  // member-facing text at API response time per the K1 architecture.
 };
 
 // Silence unused-import lint for the weather provider (we only use it

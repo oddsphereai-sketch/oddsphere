@@ -64,15 +64,11 @@ export async function POST(request: Request) {
     { runDate: body.date, source: "manual_daniel" }
   );
 
-  // Trigger sharp verdict regeneration for affected games (only if any
-  // predictions actually wrote). Verdicts re-compose using the new scores
-  // model context — same pipeline whether triggered here or by a cron.
-  let verdictsUpdated = 0;
-  if (result.inserted + result.updated > 0) {
-    const gameIds = [...gameIdByExternal.values()];
-    const v = await predictionService.regenerateSharpVerdicts(gameIds);
-    verdictsUpdated = v.records_updated ?? 0;
-  }
+  // Fix 4.1 (Gap-18+19): sharp verdict regeneration removed. The legacy
+  // pipeline (sharpSignalEvaluator + verdictGenerator) was deleted; signal
+  // text now derives at API response time via signalSummaryGenerator. No
+  // cron-side trigger needed when admin uploads a new scores model.
+  const verdictsUpdated = 0;
 
   return Response.json({
     sport: body.sport,

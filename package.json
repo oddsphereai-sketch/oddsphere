@@ -11,8 +11,6 @@
     "test:distributions": "tsx scripts/test-distributions.ts",
     "test:props-math": "tsx scripts/test-props-math.ts",
     "predict": "tsx --env-file=.env.local scripts/predict-tonight.ts",
-    "test:daily-edge": "tsx scripts/test-daily-edge.ts",
-    "daily-edge": "tsx --env-file=.env.local scripts/daily-edge.ts",
     "test:tracking": "tsx scripts/test-tracking.ts",
     "test:scores-model": "tsx scripts/test-scores-model.ts",
     "test:cron-infra": "tsx --env-file=.env.local scripts/test-cron-infra.ts",
@@ -37,6 +35,7 @@
     "test:threshold-constants": "tsx scripts/test-threshold-constants.ts",
     "test:derive-market-signal-regression": "tsx --env-file=.env.local scripts/test-derive-market-signal-regression.ts",
     "test:signal-evidence-classifier": "tsx scripts/test-signal-evidence-classifier.ts",
+    "test:signal-summary-generator": "tsx scripts/test-signal-summary-generator.ts",
     "tracking-refresh": "tsx --env-file=.env.local scripts/tracking-refresh.ts",
     "promote-drafts": "tsx --env-file=.env.local scripts/promote-historical-drafts.ts"
   },

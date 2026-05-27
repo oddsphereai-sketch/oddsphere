@@ -281,39 +281,23 @@ async function main() {
     }
   }
 
-  const gameDbIds = Array.from(idByExternal.values());
-  const { data: signalRows } = await supabase
-    .from("sharp_signals")
-    .select("game_id, market_type, side, signal_strength")
-    .in("game_id", gameDbIds);
-
-  const signalsByGameAndMarket = new Map<string, { side: string; strength: string | null }>();
-  for (const s of (signalRows ?? []) as Array<{ game_id: number; market_type: string; side: string; signal_strength: string | null }>) {
-    signalsByGameAndMarket.set(`${s.game_id}:${s.market_type}`, { side: s.side, strength: s.signal_strength });
-  }
-
-  function expectStatus(predicted: string, signal: { side: string; strength: string | null } | undefined): SharpStatus {
-    if (!signal) return "mixed";
-    const strength = (signal.strength ?? "").toLowerCase();
-    const same = signal.side === predicted;
-    if (same && strength === "strong") return "confirm";
-    if (same && strength === "caution") return "caution";
-    if (!same && strength === "strong") return "caution";
+  // Fix 4.1 (Gap-18+19, Flag D1): sharpStatus derives from per-pick grade,
+  // not from legacy signal_strength. Mirror the route's deriveSharpStatus()
+  // rule here for the cross-check:
+  //   best_signal / sharp_confirmed → confirm
+  //   sharp_conflict                → caution
+  //   everything else (incl. null)  → mixed
+  function expectStatusFromGrade(grade: Grade | null): SharpStatus {
+    if (grade === "best_signal" || grade === "sharp_confirmed") return "confirm";
+    if (grade === "sharp_conflict") return "caution";
     return "mixed";
   }
 
   let mapFailures = 0;
   for (const g of body.games) {
-    const dbId = idByExternal.get(g.external_id);
-    const pred = predByExternal.get(g.external_id);
-    if (dbId === undefined || !pred) continue;
-    const mlSignal = signalsByGameAndMarket.get(`${dbId}:moneyline`);
-    const totalSignal = signalsByGameAndMarket.get(`${dbId}:total`);
-    const nrfiSignal = signalsByGameAndMarket.get(`${dbId}:first_inning_total`);
-    const nrfiSide = pred.nrfi ? "under" : "over";
-    const expectedMl = expectStatus(pred.ml, mlSignal);
-    const expectedTotal = expectStatus(pred.ou, totalSignal);
-    const expectedNrfi = expectStatus(nrfiSide, nrfiSignal);
+    const expectedMl = expectStatusFromGrade(g.predictions.ml.grade);
+    const expectedTotal = expectStatusFromGrade(g.predictions.total.grade);
+    const expectedNrfi = expectStatusFromGrade(g.predictions.nrfi.grade);
     if (
       g.predictions.ml.sharpStatus !== expectedMl ||
       g.predictions.total.sharpStatus !== expectedTotal ||
@@ -326,13 +310,19 @@ async function main() {
     }
   }
   check(
-    `route's per-market sharpStatus matches the deriveSharpStatus rule for every game`,
+    `route's per-market sharpStatus matches the grade-based deriveSharpStatus rule for every game (Fix 4.1)`,
     mapFailures === 0
   );
 
   // ─── sharpSignals[] count matches DB row count ────────────────────────────
   section("sharpSignals[] count");
 
+  // Fix 4.1: re-query sharp_signals (now without signal_strength column).
+  const gameDbIds = Array.from(idByExternal.values());
+  const { data: signalRows } = await supabase
+    .from("sharp_signals")
+    .select("game_id, market_type")
+    .in("game_id", gameDbIds);
   const dbSignalCount = signalRows?.length ?? 0;
   const responseSignalCount = body.games.reduce((acc, g) => acc + g.sharpSignals.length, 0);
   check(
@@ -340,8 +330,8 @@ async function main() {
     responseSignalCount === dbSignalCount
   );
 
-  // At least one signal carries actionable strength (strong/caution) — i.e.,
-  // the route correctly surfaces sharp data when present.
+  // At least one signal carries actionable direction (positive or negative)
+  // — i.e., the route correctly surfaces grade-aligned signals.
   if (dbSignalCount > 0) {
     const actionable = body.games.flatMap((g) => g.sharpSignals).filter((s) => s.direction !== "neutral");
     check(

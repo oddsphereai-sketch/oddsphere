@@ -216,8 +216,10 @@ export const linesService = {
         rlm_direction: s.rlm_direction,
         public_betting_pct: s.public_betting_pct,
         public_money_pct: s.public_money_pct,
-        signal_strength: s.signal_strength,
-        signal_summary: s.signal_summary,
+        // Fix 4.1 (Gap-18+19, Flag E1): signal_strength + signal_summary
+        // no longer written. DB columns orphaned post-Fix-4.1; V15 future
+        // migration drops them. Member-facing text now derives at API
+        // response time via signalSummaryGenerator.
         computed_at: s.computed_at,
       });
     }

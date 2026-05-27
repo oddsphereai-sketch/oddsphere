@@ -94,23 +94,29 @@ async function main() {
     await supabase.from("data_refresh_log").delete().eq("data_source", ds);
   }
 
+  // Fix 4.1 (Gap-18+19): "verdicts" removed from cron details across all
+  // refresh cycles. Legacy sharpSignalEvaluator + verdictGenerator pipeline
+  // deleted; signal text now derives at API response time via
+  // signalSummaryGenerator. Each cron no longer touches signal_strength /
+  // signal_summary columns on sharp_signals.
+
   // ─── midday-refresh ──────────────────────────────────────────────────────
   section("/api/cron/midday-refresh");
   check("midday: bad auth → 401", (await midday(unauthed())).status === 401);
-  // lines (360) + signals (4) + verdicts (4) = 368
-  await runAuthedFor(midday, "midday", 350, ["game_lines", "sharp_signals", "verdicts"]);
+  // lines (360) + signals (4) = 364
+  await runAuthedFor(midday, "midday", 350, ["game_lines", "sharp_signals"]);
 
   // ─── afternoon-refresh ───────────────────────────────────────────────────
   section("/api/cron/afternoon-refresh");
   check("afternoon: bad auth → 401", (await afternoon(unauthed())).status === 401);
-  // lines (360) + signals (4) + weather (12) + verdicts (4) = 380
-  await runAuthedFor(afternoon, "afternoon", 370, ["game_lines", "sharp_signals", "weather", "verdicts"]);
+  // lines (360) + signals (4) + weather (12) = 376
+  await runAuthedFor(afternoon, "afternoon", 370, ["game_lines", "sharp_signals", "weather"]);
 
   // ─── evening-refresh ─────────────────────────────────────────────────────
   section("/api/cron/evening-refresh");
   check("evening: bad auth → 401", (await evening(unauthed())).status === 401);
   // game_lines (360) + props (156) + signals (4) + lineups (84) + weather (12)
-  //   + prop_predictions (39) + verdicts (4) = 659
+  //   + prop_predictions (39) = 655
   await runAuthedFor(evening, "evening", 600, [
     "game_lines",
     "player_props_lines",
@@ -118,20 +124,19 @@ async function main() {
     "lineups",
     "weather",
     "prop_predictions",
-    "verdicts",
   ]);
 
   // ─── lineup-watch ────────────────────────────────────────────────────────
   section("/api/cron/lineup-watch");
   check("lineup-watch: bad auth → 401", (await lineupWatch(unauthed())).status === 401);
-  // lineups (84) + prop_predictions (39) + verdicts (4) = 127
-  await runAuthedFor(lineupWatch, "lineup-watch", 120, ["lineups", "prop_predictions", "verdicts"]);
+  // lineups (84) + prop_predictions (39) = 123
+  await runAuthedFor(lineupWatch, "lineup-watch", 120, ["lineups", "prop_predictions"]);
 
   // ─── pregame-sweep ───────────────────────────────────────────────────────
   section("/api/cron/pregame-sweep");
   check("pregame-sweep: bad auth → 401", (await pregameSweep(unauthed())).status === 401);
-  // lines (360) + signals (4) + verdicts (4) = 368
-  await runAuthedFor(pregameSweep, "pregame-sweep", 350, ["game_lines", "sharp_signals", "verdicts"]);
+  // lines (360) + signals (4) = 364
+  await runAuthedFor(pregameSweep, "pregame-sweep", 350, ["game_lines", "sharp_signals"]);
 
   // Cleanup
   for (const ds of ["midday_refresh", "afternoon_refresh", "evening_refresh", "lineup_watch", "pregame_sweep"]) {

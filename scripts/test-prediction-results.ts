@@ -128,28 +128,15 @@ async function main() {
   const propResNba = await predictionService.generatePropPredictions("nba", "2026-05-22");
   check("NBA: 0 prop predictions (no mock games)", propResNba.records_updated === 0);
 
-  // ─── predictionService.regenerateSharpVerdicts ──────────────────────────
-  section("predictionService.regenerateSharpVerdicts");
-
-  const sharpRes = await predictionService.regenerateSharpVerdicts(tonightGameIds);
-  check(
-    `regenerated signals: records=${sharpRes.records_updated} (expect 4)`,
-    sharpRes.records_updated === 4
-  );
-
-  // Verify the 3 STRONG + 1 NEUTRAL pattern from Phase 3D
-  const { data: signals } = await supabase
-    .from("sharp_signals")
-    .select("signal_strength, signal_summary")
-    .in("game_id", tonightGameIds);
-  const strongCount = ((signals ?? []) as Array<{ signal_strength: string | null }>).filter(
-    (s) => s.signal_strength === "strong"
-  ).length;
-  check(`sharp signal verdicts: 3 STRONG`, strongCount === 3);
-
-  // Empty array short-circuits
-  const sharpEmpty = await predictionService.regenerateSharpVerdicts([]);
-  check("empty gameIds → 0 records (short-circuit)", sharpEmpty.records_updated === 0);
+  // Fix 4.1 (Gap-18+19): regenerateSharpVerdicts removed. The legacy
+  // pipeline (sharpSignalEvaluator + verdictGenerator) was deleted in
+  // favor of signalSummaryGenerator at API response time. The previous
+  // tests in this section asserted the cron-time signal_strength /
+  // signal_summary write path — that path no longer exists. Coverage of
+  // the new pipeline lives in:
+  //   • scripts/test-signal-summary-generator.ts (41 framework-anchored cases)
+  //   • scripts/test-signal-evidence-classifier.ts (69 tier classification cases)
+  //   • scripts/test-grade-derivation.ts (69 grade engine cases)
 
   // ─── resultsService.resolveFinishedGames ────────────────────────────────
   section("resultsService.resolveFinishedGames — synthetic NYY-BOS outcome");
