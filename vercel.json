@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "_comment": "Cron schedules are UTC. Times optimized for EST (UTC-5); during EDT (Mar-Nov, UTC-4) every cron fires one hour later than the labeled ET time. V1 launch in 2026 begins during EDT so all schedules effectively run at (labeled ET + 1 hour). Phase 8 will introduce per-cron schedules with a DST-aware wrapper if exact ET alignment becomes necessary.",
   "crons": [
     {
       "path": "/api/cron/daily-refresh",
