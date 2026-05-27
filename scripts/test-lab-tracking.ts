@@ -15,6 +15,10 @@
  */
 
 import { GET as tracking } from "../app/api/lab/tracking/route";
+// Fix 5.1 (Flag C1): productionFilter fails closed by default. Tests
+// exercise mock seed data — opt into dev mode explicitly.
+process.env.ODDSPHERE_DATA_MODE = "development";
+
 import { supabase } from "../lib/db/supabase";
 import type { TrackingResponse } from "../app/lab/lib/labTypes";
 

@@ -14,12 +14,17 @@
  * member-facing service) so a single env-var flip switches the deploy
  * between dev-data and live-data modes.
  *
- * MECHANISM
- *   `process.env.ODDSPHERE_DATA_MODE === 'production'` activates the filter.
- *   Decoupled from NODE_ENV so Vercel preview deploys (which run
- *   NODE_ENV='production' by default) can continue surfacing mock data for
- *   pre-launch QA. Set the var explicitly on the production environment
- *   to flip the gate on. Document in `.env.example`.
+ * MECHANISM — Fix 5.1 Flag C1 (fail-closed inversion):
+ *   Filter is ACTIVE by default. Only an exact literal `ODDSPHERE_DATA_MODE
+ *   === "development"` disables it. Any other value — including unset,
+ *   empty string, "production", "Production", "dev", typos — leaves the
+ *   filter active. This means production env-var omission or capitalization
+ *   mistakes can no longer leak mock data; local dev must explicitly
+ *   opt-out with `ODDSPHERE_DATA_MODE=development` in `.env.local`.
+ *
+ *   Pre-Fix-5.1 the semantics were inverted (`=== "production"` opted IN,
+ *   default opted OUT) — that pattern failed OPEN on missing env. Fix 5.1
+ *   inverted to fail CLOSED.
  *
  * APPLY SITES
  *   Two patterns ship in this file:
@@ -46,12 +51,17 @@
  */
 
 /**
- * Returns true when the runtime is in production data mode and should hide
- * mock-sourced rows from member-facing responses. Read this in code paths
- * that need to branch on the data-mode state (e.g., empty-state copy).
+ * Returns true when the runtime should HIDE mock-sourced rows from
+ * member-facing responses. Read this in code paths that need to branch
+ * on the data-mode state (e.g., empty-state copy).
+ *
+ * Fix 5.1 Flag C1 (fail-closed inversion): default is `true` (filter
+ * active) unless the env var is exactly the literal `"development"`.
+ * Production fails CLOSED — a typo, capitalization mistake, or missing
+ * env var leaves the filter active.
  */
 export function isProductionDataMode(): boolean {
-  return process.env.ODDSPHERE_DATA_MODE === "production";
+  return process.env.ODDSPHERE_DATA_MODE !== "development";
 }
 
 /**

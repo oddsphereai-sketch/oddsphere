@@ -15,6 +15,10 @@
  * Run with: npm run test:lab-player-props
  */
 
+// Fix 5.1 (Flag C1): productionFilter fails closed by default. Tests
+// exercise mock seed data — opt into dev mode explicitly.
+process.env.ODDSPHERE_DATA_MODE = "development";
+
 import { GET as playerProps } from "../app/api/lab/player-props/route";
 import { supabase } from "../lib/db/supabase";
 import type { PlayerPropsResponse } from "../app/lab/lib/labTypes";

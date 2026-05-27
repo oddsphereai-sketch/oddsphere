@@ -19,6 +19,14 @@
  * Run with: npm run test:lab-daily-edge
  */
 
+// Fix 5.1 (Flag C1): the production source filter now fails CLOSED by
+// default — filters mock rows unless ODDSPHERE_DATA_MODE === "development".
+// This suite exercises the seed slate's mock data and depends on the dev-
+// mode pass-through, so opt in explicitly here. Runs before the route's
+// module imports any filter helpers; isProductionDataMode reads env at
+// call time, so this assignment is effective.
+process.env.ODDSPHERE_DATA_MODE = "development";
+
 import { GET as dailyEdge } from "../app/api/lab/daily-edge/route";
 import { supabase } from "../lib/db/supabase";
 import type {

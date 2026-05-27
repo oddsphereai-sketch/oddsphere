@@ -16,6 +16,11 @@
  * Prerequisite: schema-migration-v3.sql applied (games.slate_date NOT NULL).
  */
 
+// Fix 5.1 (Flag C1): productionFilter fails closed by default. Tests
+// exercise mock seed data via the daily-edge route — opt into dev mode
+// explicitly.
+process.env.ODDSPHERE_DATA_MODE = "development";
+
 import {
   addDaysToSlate,
   computeSlateDate,

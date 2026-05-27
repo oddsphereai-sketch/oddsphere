@@ -1,24 +1,40 @@
-"use client";
-
 /**
- * /login — sign-in page (Phase 6.2b, UI only per V2.1 spec).
+ * /login — pre-launch V1 beta-password gate UI (Fix 5.1).
  *
- * Two auth methods promised in V2.1 Part 5:
- *   • Continue with Whop (OAuth) — Phase 7
- *   • Continue with Email (passwordless magic link) — Phase 7
+ * Server Component. Reads `next` + `error` query params and renders a
+ * password form that POSTs to /api/auth/login. On success, the route
+ * sets the beta session cookie and redirects to the sanitized `next`.
  *
- * For 6.2b the buttons are visual-only placeholders so the marketing flow
- * (CTA → /login → "Join Premium" link → /pricing) is walkable end-to-end.
- * Phase 7 wires real auth without changing this surface.
+ * Whop OAuth ships in Phase 7 — the button stays as a disabled placeholder
+ * so the marketing flow + login surface are stable. When Phase 7 lands,
+ * this page swaps the password form for the Whop OAuth button without
+ * changing the surrounding URL contract.
  *
- * Marked as a Client Component because the form uses an onSubmit handler
- * to prevent the placeholder submit from actually navigating. Once Phase 7
- * wires real auth this stays a client component for the form interactivity.
+ * Error states:
+ *   • ?error=invalid      → "Incorrect password" inline notice
+ *   • ?error=unavailable  → "Beta access temporarily unavailable" (LAB_BETA_PASSWORD env missing on server). Avoids disclosing the env var name to anonymous visitors.
  */
 
 import Link from "next/link";
 
-export default function LoginPage() {
+type SearchParams = { next?: string; error?: string };
+
+const ERROR_COPY: Record<string, string> = {
+  invalid: "Incorrect password. Try again.",
+  unavailable:
+    "Beta access is temporarily unavailable. Please contact support if this persists.",
+};
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
+  const nextValue = typeof params.next === "string" ? params.next : "";
+  const errorKey = typeof params.error === "string" ? params.error : "";
+  const errorMessage = ERROR_COPY[errorKey] ?? null;
+
   return (
     <main className="max-w-md mx-auto px-4 sm:px-6 py-16 sm:py-24">
       <header className="text-center mb-10">
@@ -29,11 +45,14 @@ export default function LoginPage() {
           Welcome to The Lab
         </h1>
         <p className="text-sm text-gray-300">
-          Sign in to access daily model picks, player props, and tracking.
+          Enter your beta access password to continue.
         </p>
       </header>
 
       <div className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-2xl p-6 sm:p-8 space-y-4">
+        {/* Whop OAuth placeholder — Phase 7 swaps this disabled button for
+            the real OAuth handler. Keeps the visual structure stable for
+            the eventual migration. */}
         <button
           type="button"
           disabled
@@ -47,39 +66,49 @@ export default function LoginPage() {
 
         <div className="flex items-center gap-3 text-xs text-gray-500 uppercase tracking-wider">
           <span className="flex-1 h-px bg-gray-800" aria-hidden="true" />
-          <span>or</span>
+          <span>beta access</span>
           <span className="flex-1 h-px bg-gray-800" aria-hidden="true" />
         </div>
 
+        {errorMessage && (
+          <div
+            role="alert"
+            className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2"
+          >
+            {errorMessage}
+          </div>
+        )}
+
         <form
-          onSubmit={(e) => e.preventDefault()}
+          action="/api/auth/login"
+          method="POST"
           className="space-y-3"
-          aria-label="Email magic link form"
+          aria-label="Beta password sign-in form"
         >
+          <input type="hidden" name="next" value={nextValue} />
           <label className="block">
-            <span className="sr-only">Email address</span>
+            <span className="sr-only">Beta access password</span>
             <input
-              type="email"
-              placeholder="you@example.com"
-              disabled
-              aria-disabled="true"
-              className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-3 text-base text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500 focus:shadow-[0_0_16px_rgba(167,139,250,0.25)] transition-all cursor-not-allowed"
+              type="password"
+              name="password"
+              placeholder="Beta access password"
+              required
+              autoComplete="current-password"
+              autoFocus
+              className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-3 text-base text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500 focus:shadow-[0_0_16px_rgba(167,139,250,0.25)] transition-all"
             />
           </label>
           <button
             type="submit"
-            disabled
-            aria-disabled="true"
-            title="Email magic link ships in Phase 7"
-            className="w-full inline-flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-100 font-semibold rounded-lg px-4 py-3 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950 cursor-not-allowed opacity-90"
+            className="w-full inline-flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg px-4 py-3 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
           >
-            <span aria-hidden="true">✉</span>
-            Continue with Email
+            Continue
           </button>
         </form>
 
         <p className="text-[11px] text-gray-500 leading-relaxed italic pt-2 border-t border-gray-800/60">
-          We&rsquo;ll email you a one-time sign-in link — no password to remember.
+          Beta members received the access password via Whop. Full Whop sign-in
+          ships in Phase 7.
         </p>
       </div>
 

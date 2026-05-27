@@ -69,36 +69,54 @@ function restoreMode() {
 }
 
 async function main() {
-  // ─── isProductionDataMode env-var reading ─────────────────────────────────
-  section("isProductionDataMode env-var reading");
+  // ─── isProductionDataMode env-var reading (Fix 5.1 Flag C1 fail-closed) ──
+  section(
+    "isProductionDataMode — Fix 5.1 Flag C1 inverted-default (fail-closed)"
+  );
+
+  // Pre-Fix-5.1 the default opted OUT (production behavior required
+  // explicit `=== "production"`). Fix 5.1 inverts: production-mode is the
+  // default; only the exact literal "development" disables the filter.
 
   setMode(undefined);
   check(
-    "unset ODDSPHERE_DATA_MODE → isProductionDataMode() === false",
-    isProductionDataMode() === false
+    "unset ODDSPHERE_DATA_MODE → isProductionDataMode() === true (fail-closed default)",
+    isProductionDataMode() === true
+  );
+
+  setMode("");
+  check(
+    "empty string ODDSPHERE_DATA_MODE → true (fail-closed default)",
+    isProductionDataMode() === true
   );
 
   setMode("development");
   check(
-    "ODDSPHERE_DATA_MODE='development' → false",
+    "ODDSPHERE_DATA_MODE='development' → false (only literal 'development' opts out)",
     isProductionDataMode() === false
   );
 
-  setMode("preview");
+  setMode("dev");
   check(
-    "ODDSPHERE_DATA_MODE='preview' → false (only 'production' activates)",
-    isProductionDataMode() === false
+    "ODDSPHERE_DATA_MODE='dev' → true (must be literal 'development', not 'dev')",
+    isProductionDataMode() === true
   );
 
-  setMode("PRODUCTION");
+  setMode("Development");
   check(
-    "ODDSPHERE_DATA_MODE='PRODUCTION' (uppercase) → false (case-sensitive)",
-    isProductionDataMode() === false
+    "ODDSPHERE_DATA_MODE='Development' (capital D) → true (case-sensitive)",
+    isProductionDataMode() === true
   );
 
   setMode("production");
   check(
-    "ODDSPHERE_DATA_MODE='production' → true",
+    "ODDSPHERE_DATA_MODE='production' → true (anything other than 'development' is production-mode)",
+    isProductionDataMode() === true
+  );
+
+  setMode("preview");
+  check(
+    "ODDSPHERE_DATA_MODE='preview' → true",
     isProductionDataMode() === true
   );
 
