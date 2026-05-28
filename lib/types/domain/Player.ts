@@ -1,4 +1,5 @@
 import type { Sport } from "./Sport";
+import type { ProviderIds } from "./ProviderIds";
 
 /** Handedness for batting and pitching. 'S' (switch) only applies to bats. */
 export type BatsHand = "L" | "R" | "S";
@@ -27,6 +28,8 @@ export type Player = {
   weight: string | null;
   debut_year: number | null;
   draft: string | null;
+  /** Fix 7.1 — per-provider id attachments. See ProviderIds.ts. */
+  provider_ids: ProviderIds;
   created_at: string;
   updated_at: string;
 };

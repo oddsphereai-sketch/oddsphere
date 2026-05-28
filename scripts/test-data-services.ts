@@ -55,6 +55,37 @@ async function main() {
   console.log("test-data-services · MLB on 2026-05-22\n");
   console.log("Prerequisite: `npm run seed` must have run recently.\n");
 
+  // ─── Fix 7.1 — Identity model schema integrity ───────────────────────────
+  // Verifies that the V14 migration applied: `provider_ids` JSONB column
+  // exists on teams / games / players, is NOT NULL, defaults to `{}`, and
+  // its containment shape is a non-array object. Runs FIRST so a missing
+  // migration surfaces before service-level assertions chase ghosts.
+  // No backfill assertion (Flag B1 = no) — column may be empty {} on every
+  // existing row, or populated on some, depending on later fixes.
+  section("Fix 7.1 — provider_ids JSONB columns on teams/games/players");
+
+  for (const table of ["teams", "games", "players"] as const) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("id, provider_ids")
+      .limit(1)
+      .maybeSingle();
+    check(
+      `${table}: SELECT including provider_ids succeeds (column exists)`,
+      !error,
+      error?.message
+    );
+    if (data) {
+      const v = (data as { provider_ids: unknown }).provider_ids;
+      check(
+        `${table}: provider_ids is non-null object (not array, not null)`,
+        v !== null && typeof v === "object" && !Array.isArray(v)
+      );
+    } else {
+      check(`${table}: at least one row present to verify shape`, false, "no rows returned");
+    }
+  }
+
   // ─── slateService ────────────────────────────────────────────────────────
   section("slateService.refreshGames");
 

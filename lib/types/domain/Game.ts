@@ -1,5 +1,6 @@
 import type { Sport } from "./Sport";
 import type { SlateStatus } from "./Grade";
+import type { ProviderIds } from "./ProviderIds";
 
 /** Game status codes mirroring BALLDONTLIE / ESPN conventions. */
 export type GameStatus =
@@ -47,6 +48,8 @@ export type Game = {
   // V8 publish lifecycle — NOT NULL with DB DEFAULT 'draft'. Read paths in
   // 6.3a do not filter on this; slatePublishService (Phase 6.3d) does.
   slate_status: SlateStatus;
+  /** Fix 7.1 — per-provider id attachments. See ProviderIds.ts. */
+  provider_ids: ProviderIds;
   created_at: string;
   updated_at: string;
 };
