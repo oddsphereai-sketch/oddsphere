@@ -1,17 +1,18 @@
 /**
- * IPlayerStatsProvider — contract for the stats data source.
+ * IPlayerStatsProvider — contract for the player-stats data source.
  *
- * The surface covers more than just players (teams, games, injuries) but the
- * "player stats" name reflects the dominant call path. Future splits may
- * carve out separate providers for team-level and schedule data.
+ * Fix 7.2 split slate-related methods (getTeams, getGames) out into a
+ * separate ISlateProvider. This interface now covers only player-scoped
+ * data: players, season stats, splits, pitch stats, injuries, lineups.
  *
  * Real implementation: BallDontLieProvider (paid GOAT tier) — Phase 8.
  * Manual implementation: AdminUploadStatsProvider — Phase 7.25.
  * Mock implementation: MockPlayerStatsProvider (reads from JSON fixtures).
  *
- * Both implementations return the same record shapes — services that consume
+ * All implementations return the same record shapes — services that consume
  * this interface never know which is active. The factory picks based on the
- * PLAYER_STATS_PROVIDER env var.
+ * PLAYER_STATS_PROVIDER env var (separate from SLATE_PROVIDER, which
+ * routes ISlateProvider).
  *
  * RECORD SHAPES: methods return "insertable" records — DB-assigned fields
  * (id, created_at, updated_at) are stripped, and foreign keys are expressed
@@ -20,17 +21,12 @@
  */
 
 import type { Sport } from "../../types/domain/Sport";
-import type { Team } from "../../types/domain/Team";
 import type { Player } from "../../types/domain/Player";
-import type { Game } from "../../types/domain/Game";
 import type { PlayerInjury } from "../../types/domain/Lineup";
 
 // ─────────────────────────────────────────────────────────────
 // Provider record types
 // ─────────────────────────────────────────────────────────────
-
-/** Team insert record. Omits DB-assigned fields. */
-export type StatsTeamRecord = Omit<Team, "id" | "created_at" | "updated_at">;
 
 /** Player insert record. Swaps team_id for team_external_id. */
 export type StatsPlayerRecord = Omit<
@@ -38,25 +34,6 @@ export type StatsPlayerRecord = Omit<
   "id" | "team_id" | "created_at" | "updated_at"
 > & {
   team_external_id: number | null;
-};
-
-/** Game insert record. All FK columns expressed as external_ids. */
-export type StatsGameRecord = Omit<
-  Game,
-  | "id"
-  | "home_team_id"
-  | "away_team_id"
-  | "home_pitcher_id"
-  | "away_pitcher_id"
-  | "ballpark_id"
-  | "created_at"
-  | "updated_at"
-> & {
-  home_team_external_id: number | null;
-  away_team_external_id: number | null;
-  home_pitcher_external_id: number | null;
-  away_pitcher_external_id: number | null;
-  /** Ballpark resolved by service from home_team_external_id (1:1 home park). */
 };
 
 /** One row per player in a game's lineup. */
@@ -182,11 +159,6 @@ export type HitterPitchRecord = {
 
 export interface IPlayerStatsProvider {
   /**
-   * Fetch all teams for a sport.
-   */
-  getTeams(sport: Sport): Promise<StatsTeamRecord[]>;
-
-  /**
    * Fetch active players. Optionally scoped to a single team.
    * @param teamExternalId Provider's team id (NOT our DB team_id). Omit to fetch all.
    */
@@ -231,13 +203,6 @@ export interface IPlayerStatsProvider {
     hitterExternalId: number,
     season: number
   ): Promise<HitterPitchRecord[]>;
-
-  /**
-   * Games scheduled for a single date.
-   * @param date YYYY-MM-DD format.
-   * @param sport Optional sport filter. Omit for cross-sport.
-   */
-  getGames(date: string, sport?: Sport): Promise<StatsGameRecord[]>;
 
   /**
    * Lineups for a single game.

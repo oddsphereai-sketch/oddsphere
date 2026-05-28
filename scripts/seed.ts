@@ -22,6 +22,7 @@
 import { supabase } from "../lib/db/supabase";
 import {
   getPlayerStatsProvider,
+  getSlateProvider,
   getOddsProvider,
   getSharpSignalProvider,
   getWeatherProvider,
@@ -124,10 +125,11 @@ async function seedReference() {
   logSection("Stage 1 · reference data (teams, ballparks, players)");
 
   const stats = getPlayerStatsProvider();
+  const slate = getSlateProvider();
   const parks = getParkFactorProvider();
 
-  // Teams
-  const teamRecs = await stats.getTeams("mlb");
+  // Teams — Fix 7.2: now sourced from ISlateProvider (split out of IPlayerStatsProvider).
+  const teamRecs = await slate.getTeams("mlb");
   const [teamRows, t1] = await timed(() =>
     bulkInsert<{ id: number; external_id: number }>(
       "teams",
@@ -405,11 +407,12 @@ async function seedSlate(
 ): Promise<GameMap> {
   logSection("Stage 2 · tonight's slate");
 
+  const slate = getSlateProvider();
   const stats = getPlayerStatsProvider();
   const weather = getWeatherProvider();
 
-  // Games
-  const gameRecs = await stats.getGames("2026-05-22", "mlb");
+  // Games — Fix 7.2: now sourced from ISlateProvider (split out of IPlayerStatsProvider).
+  const gameRecs = await slate.getGames("2026-05-22", "mlb");
   const [gameRows, t1] = await timed(() =>
     bulkInsert<{ id: number; external_id: number }>(
       "games",

@@ -19,20 +19,24 @@
 import type { IOddsProvider } from "./interfaces/IOddsProvider";
 import type { ISharpSignalProvider } from "./interfaces/ISharpSignalProvider";
 import type { IPlayerStatsProvider } from "./interfaces/IPlayerStatsProvider";
+import type { ISlateProvider } from "./interfaces/ISlateProvider";
 import type { IWeatherProvider } from "./interfaces/IWeatherProvider";
 import type { IParkFactorProvider } from "./interfaces/IParkFactorProvider";
 
 import { MockOddsProvider } from "./mock/MockOddsProvider";
 import { MockSharpSignalProvider } from "./mock/MockSharpSignalProvider";
 import { MockPlayerStatsProvider } from "./mock/MockPlayerStatsProvider";
+import { MockSlateProvider } from "./mock/MockSlateProvider";
 import { MockWeatherProvider } from "./mock/MockWeatherProvider";
 import { MockParkFactorProvider } from "./mock/MockParkFactorProvider";
+import { ManualSlateProvider } from "./manual/ManualSlateProvider";
 
 type ProviderMode = "mock" | "manual" | "real_api";
 
 let oddsInstance: IOddsProvider | null = null;
 let sharpSignalInstance: ISharpSignalProvider | null = null;
 let playerStatsInstance: IPlayerStatsProvider | null = null;
+let slateInstance: ISlateProvider | null = null;
 let weatherInstance: IWeatherProvider | null = null;
 let parkFactorInstance: IParkFactorProvider | null = null;
 
@@ -101,6 +105,27 @@ export function getPlayerStatsProvider(): IPlayerStatsProvider {
   return playerStatsInstance;
 }
 
+/**
+ * Fix 7.2 — separate factory for slate (games + teams) so manual slate
+ * ingestion can be enabled without taking the rest of the player-stats
+ * surface with it. Reads SLATE_PROVIDER env (mock | manual | real_api).
+ * Default mock. Manual mode wires the staging-table-backed ingestion
+ * (lib/providers/manual/ManualSlateProvider.ts).
+ */
+export function getSlateProvider(): ISlateProvider {
+  if (slateInstance === null) {
+    const mode = readMode("SLATE_PROVIDER");
+    if (mode === "mock") {
+      slateInstance = new MockSlateProvider();
+    } else if (mode === "manual") {
+      slateInstance = new ManualSlateProvider();
+    } else {
+      notImplemented("SLATE_PROVIDER", mode, "SharpAPISlateProvider", "Phase 8");
+    }
+  }
+  return slateInstance;
+}
+
 export function getWeatherProvider(): IWeatherProvider {
   if (weatherInstance === null) {
     const mode = readMode("WEATHER_PROVIDER");
@@ -138,6 +163,7 @@ export function __resetProviderCache(): void {
   oddsInstance = null;
   sharpSignalInstance = null;
   playerStatsInstance = null;
+  slateInstance = null;
   weatherInstance = null;
   parkFactorInstance = null;
 }

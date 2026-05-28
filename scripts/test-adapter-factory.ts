@@ -13,6 +13,7 @@ import {
   getOddsProvider,
   getSharpSignalProvider,
   getPlayerStatsProvider,
+  getSlateProvider,
   getWeatherProvider,
   getParkFactorProvider,
   __resetProviderCache,
@@ -21,8 +22,10 @@ import {
 import { MockOddsProvider } from "../lib/providers/mock/MockOddsProvider";
 import { MockSharpSignalProvider } from "../lib/providers/mock/MockSharpSignalProvider";
 import { MockPlayerStatsProvider } from "../lib/providers/mock/MockPlayerStatsProvider";
+import { MockSlateProvider } from "../lib/providers/mock/MockSlateProvider";
 import { MockWeatherProvider } from "../lib/providers/mock/MockWeatherProvider";
 import { MockParkFactorProvider } from "../lib/providers/mock/MockParkFactorProvider";
+import { ManualSlateProvider } from "../lib/providers/manual/ManualSlateProvider";
 
 let pass = 0;
 let fail = 0;
@@ -57,6 +60,7 @@ function withEnv(
     "ODDS_PROVIDER",
     "SHARP_SIGNAL_PROVIDER",
     "PLAYER_STATS_PROVIDER",
+    "SLATE_PROVIDER",
     "WEATHER_PROVIDER",
     "PARK_FACTOR_PROVIDER",
   ] as const;
@@ -89,7 +93,7 @@ function withEnv(
 }
 
 // ─── 1. Default (no env vars set) returns mock for every provider ─────────
-withEnv("1. Default (env unset) → mock for all 5 providers", {}, () => {
+withEnv("1. Default (env unset) → mock for all 6 providers", {}, () => {
   check(
     "getOddsProvider() is MockOddsProvider",
     getOddsProvider() instanceof MockOddsProvider
@@ -101,6 +105,10 @@ withEnv("1. Default (env unset) → mock for all 5 providers", {}, () => {
   check(
     "getPlayerStatsProvider() is MockPlayerStatsProvider",
     getPlayerStatsProvider() instanceof MockPlayerStatsProvider
+  );
+  check(
+    "getSlateProvider() is MockSlateProvider (Fix 7.2)",
+    getSlateProvider() instanceof MockSlateProvider
   );
   check(
     "getWeatherProvider() is MockWeatherProvider",
@@ -119,6 +127,7 @@ withEnv(
     ODDS_PROVIDER: "mock",
     SHARP_SIGNAL_PROVIDER: "mock",
     PLAYER_STATS_PROVIDER: "mock",
+    SLATE_PROVIDER: "mock",
     WEATHER_PROVIDER: "mock",
     PARK_FACTOR_PROVIDER: "mock",
   },
@@ -133,12 +142,28 @@ withEnv(
       getPlayerStatsProvider() instanceof MockPlayerStatsProvider
     );
     check(
+      "SLATE_PROVIDER=mock (Fix 7.2)",
+      getSlateProvider() instanceof MockSlateProvider
+    );
+    check(
       "WEATHER_PROVIDER=mock",
       getWeatherProvider() instanceof MockWeatherProvider
     );
     check(
       "PARK_FACTOR_PROVIDER=mock",
       getParkFactorProvider() instanceof MockParkFactorProvider
+    );
+  }
+);
+
+// ─── 2b. SLATE_PROVIDER=manual returns ManualSlateProvider (Fix 7.2) ──────
+withEnv(
+  "2b. SLATE_PROVIDER=manual returns ManualSlateProvider (Fix 7.2)",
+  { SLATE_PROVIDER: "manual" },
+  () => {
+    check(
+      "SLATE_PROVIDER=manual returns ManualSlateProvider instance",
+      getSlateProvider() instanceof ManualSlateProvider
     );
   }
 );
@@ -264,6 +289,19 @@ withEnv(
   }
 );
 
+withEnv(
+  "    SLATE_PROVIDER=real_api (Fix 7.2)",
+  { SLATE_PROVIDER: "real_api" },
+  () => {
+    const r = throwsWith(getSlateProvider, "Phase 8");
+    check(
+      "SLATE_PROVIDER=real_api throws and mentions Phase 8",
+      r.threw,
+      r.message
+    );
+  }
+);
+
 // ─── 5. Unknown values fall back to mock (typo defense) ───────────────────
 withEnv(
   "5. Unknown *_PROVIDER value (typo) falls back to mock",
@@ -312,6 +350,10 @@ withEnv("6. Singleton caching: same instance per process", {}, () => {
   const c2 = getPlayerStatsProvider();
   check("getPlayerStatsProvider() cached", c1 === c2);
 
+  const c1s = getSlateProvider();
+  const c2s = getSlateProvider();
+  check("getSlateProvider() cached (Fix 7.2)", c1s === c2s);
+
   const d1 = getWeatherProvider();
   const d2 = getWeatherProvider();
   check("getWeatherProvider() cached", d1 === d2);
@@ -321,12 +363,13 @@ withEnv("6. Singleton caching: same instance per process", {}, () => {
   check("getParkFactorProvider() cached", e1 === e2);
 });
 
-// ─── 7. __resetProviderCache() clears all 5 singletons ────────────────────
+// ─── 7. __resetProviderCache() clears all 6 singletons ────────────────────
 withEnv("7. __resetProviderCache() returns fresh instances afterwards", {}, () => {
   const before = {
     odds: getOddsProvider(),
     sharp: getSharpSignalProvider(),
     stats: getPlayerStatsProvider(),
+    slate: getSlateProvider(),
     weather: getWeatherProvider(),
     park: getParkFactorProvider(),
   };
@@ -335,12 +378,14 @@ withEnv("7. __resetProviderCache() returns fresh instances afterwards", {}, () =
     odds: getOddsProvider(),
     sharp: getSharpSignalProvider(),
     stats: getPlayerStatsProvider(),
+    slate: getSlateProvider(),
     weather: getWeatherProvider(),
     park: getParkFactorProvider(),
   };
   check("odds reset", before.odds !== after.odds);
   check("sharp signal reset", before.sharp !== after.sharp);
   check("player stats reset", before.stats !== after.stats);
+  check("slate reset (Fix 7.2)", before.slate !== after.slate);
   check("weather reset", before.weather !== after.weather);
   check("park factor reset", before.park !== after.park);
 });

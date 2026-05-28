@@ -12,7 +12,8 @@
  */
 
 import { supabase } from "../db/supabase";
-import { getPlayerStatsProvider } from "../providers/factory";
+import { getSlateProvider } from "../providers/factory";
+import type { ISlateProvider } from "../providers/interfaces/ISlateProvider";
 import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
 import { computeSlateDate } from "../dates/slateDate";
@@ -26,9 +27,19 @@ export const slateService = {
   /**
    * Refresh today's game slate for `sport` on `date` (YYYY-MM-DD).
    * Upserts the games table. Returns counts for refreshLogger.
+   *
+   * Fix 7.2: `providerOverride` lets the admin upload route pass a fresh
+   * ManualSlateProvider scoped to a specific staging row, avoiding any
+   * process.env mutation (concurrent-request safe). When omitted, falls
+   * through to `getSlateProvider()` which reads SLATE_PROVIDER env (cron
+   * path).
    */
-  async refreshGames(sport: Sport, date: string): Promise<CronHandlerResult> {
-    const stats = getPlayerStatsProvider();
+  async refreshGames(
+    sport: Sport,
+    date: string,
+    providerOverride?: ISlateProvider
+  ): Promise<CronHandlerResult> {
+    const stats = providerOverride ?? getSlateProvider();
     let apiCalls = 0;
 
     const teamIdByExternal = await loadTeamIdMap(sport);
@@ -60,7 +71,7 @@ export const slateService = {
         continue;
       }
       const ballparkId = ballparkIdByTeamId.get(homeTeamId) ?? null;
-      payload.push({
+      const row: Record<string, unknown> = {
         sport: g.sport,
         external_id: g.external_id,
         home_team_id: homeTeamId,
@@ -86,7 +97,14 @@ export const slateService = {
         home_score: g.home_score,
         away_score: g.away_score,
         inning_scores: g.inning_scores,
-      });
+      };
+      // Fix 7.2: propagate provider_ids when the provider attached one
+      // (manual provider always does — see ManualSlateProvider.getGames).
+      // Mock provider omits it; the DB default '{}' applies in that case.
+      if (g.provider_ids !== undefined && g.provider_ids !== null) {
+        row.provider_ids = g.provider_ids;
+      }
+      payload.push(row);
     }
 
     if (payload.length > 0) {
