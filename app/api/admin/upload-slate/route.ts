@@ -27,11 +27,18 @@
 import { supabase } from "@/lib/db/supabase";
 import { validateAdminAuth } from "@/lib/auth/admin";
 import { slateService } from "@/lib/services/slateService";
+import { publishSlate } from "@/lib/services/slatePublishService";
 import {
   ManualSlateProvider,
   type ManualSlateGameInput,
 } from "@/lib/providers/manual/ManualSlateProvider";
 import type { Sport } from "@/lib/types/domain/Sport";
+
+// Fix 7.2.2: defensive validation patterns used to reject malformed inputs
+// before they reach the deterministic-hash code path. Keeping the regex
+// strict prevents "2030-1-15" vs "2030-01-15" from hashing differently
+// and producing two game rows for the same logical matchup.
+const STRICT_ABBREV_RE = /^[A-Z0-9]{2,5}$/;
 
 const VALID_SPORTS: ReadonlySet<Sport> = new Set([
   "mlb",
@@ -70,7 +77,13 @@ export async function POST(request: Request) {
   }
 
   // ─── 1. Body shape validation ──────────────────────────────────────────
-  const sport = body.sport;
+  // Fix 7.2.2: normalize sport upfront (trim + lowercase) so case-variant
+  // operator input ("MLB" vs "mlb") reaches the same canonical branch and
+  // produces the same downstream hash. The VALID_SPORTS check then runs
+  // against the normalized form.
+  const sportRaw = body.sport;
+  const sport =
+    typeof sportRaw === "string" ? sportRaw.trim().toLowerCase() : sportRaw;
   const slate_date = body.slate_date;
   const games = body.games;
 
@@ -86,7 +99,7 @@ export async function POST(request: Request) {
   if (!VALID_SPORTS.has(sport as Sport)) {
     return Response.json(
       {
-        error: `Unknown sport '${sport}'. Valid: mlb, nba, nfl, cbb, cfb, nhl, ucl`,
+        error: `Unknown sport '${sportRaw}'. Valid: mlb, nba, nfl, cbb, cfb, nhl, ucl`,
       },
       { status: 400 }
     );
@@ -104,16 +117,36 @@ export async function POST(request: Request) {
     );
   }
 
-  // Per-game shape validation
+  // Per-game shape validation + Fix 7.2.2 defensive normalization. We
+  // uppercase + trim every abbreviation in place so the staging payload
+  // stores already-normalized values; downstream consumers (provider,
+  // hash, team lookup) trust the staging row and don't re-normalize.
+  // Malformed inputs are rejected at this gate with helpful error text
+  // before any DB write happens.
   const shapeErrors: Array<{ index: number; errors: string[] }> = [];
+  const normalizedGames: ManualSlateGameInput[] = [];
   for (let i = 0; i < games.length; i++) {
     const g = games[i]!;
     const errs: string[] = [];
-    if (typeof g.home_team_abbrev !== "string" || !g.home_team_abbrev) {
-      errs.push("home_team_abbrev is required (string)");
+
+    const homeRaw = typeof g.home_team_abbrev === "string" ? g.home_team_abbrev : "";
+    const awayRaw = typeof g.away_team_abbrev === "string" ? g.away_team_abbrev : "";
+    const home = homeRaw.trim().toUpperCase();
+    const away = awayRaw.trim().toUpperCase();
+
+    if (!home) {
+      errs.push("home_team_abbrev is required (non-empty string)");
+    } else if (!STRICT_ABBREV_RE.test(home)) {
+      errs.push(
+        `home_team_abbrev '${homeRaw}' is invalid (expected 2-5 uppercase alphanumeric characters after trim)`
+      );
     }
-    if (typeof g.away_team_abbrev !== "string" || !g.away_team_abbrev) {
-      errs.push("away_team_abbrev is required (string)");
+    if (!away) {
+      errs.push("away_team_abbrev is required (non-empty string)");
+    } else if (!STRICT_ABBREV_RE.test(away)) {
+      errs.push(
+        `away_team_abbrev '${awayRaw}' is invalid (expected 2-5 uppercase alphanumeric characters after trim)`
+      );
     }
     if (typeof g.game_date !== "string" || !isIsoTimestamp(g.game_date)) {
       errs.push("game_date must be an ISO 8601 timestamp");
@@ -121,14 +154,19 @@ export async function POST(request: Request) {
     if (typeof g.season !== "number" || !Number.isInteger(g.season)) {
       errs.push("season must be an integer");
     }
-    if (
-      g.home_team_abbrev &&
-      g.away_team_abbrev &&
-      g.home_team_abbrev === g.away_team_abbrev
-    ) {
+    if (home && away && home === away) {
       errs.push("home_team_abbrev and away_team_abbrev must differ");
     }
-    if (errs.length > 0) shapeErrors.push({ index: i, errors: errs });
+
+    if (errs.length > 0) {
+      shapeErrors.push({ index: i, errors: errs });
+    } else {
+      normalizedGames.push({
+        ...g,
+        home_team_abbrev: home,
+        away_team_abbrev: away,
+      });
+    }
   }
   if (shapeErrors.length > 0) {
     return Response.json(
@@ -136,17 +174,22 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  // Sport already normalized upfront; re-cast to the Sport union for type
+  // narrowing on downstream consumers.
+  const normalizedSport = sport as Sport;
 
   // ─── 2. Team abbreviation resolution (Flag B1) ─────────────────────────
+  // Fix 7.2.2: use the normalizedGames list (uppercase abbrevs) so the
+  // lookup against teams.abbreviation matches the seed convention.
   const requestedAbbrevs = new Set<string>();
-  for (const g of games) {
+  for (const g of normalizedGames) {
     requestedAbbrevs.add(g.home_team_abbrev);
     requestedAbbrevs.add(g.away_team_abbrev);
   }
   const { data: teamRows, error: teamErr } = await supabase
     .from("teams")
     .select("abbreviation")
-    .eq("sport", sport)
+    .eq("sport", normalizedSport)
     .in("abbreviation", Array.from(requestedAbbrevs));
   if (teamErr) {
     return Response.json(
@@ -168,16 +211,16 @@ export async function POST(request: Request) {
     const { count: totalForSport } = await supabase
       .from("teams")
       .select("*", { count: "exact", head: true })
-      .eq("sport", sport);
+      .eq("sport", normalizedSport);
     const hint =
       (totalForSport ?? 0) === 0
-        ? `No teams seeded for sport='${sport}'. Manual slate uploads require teams to exist first (Fix 7.2.1 will seed the remaining sports).`
-        : `Unknown team abbreviation(s) for sport='${sport}'.`;
+        ? `No teams seeded for sport='${normalizedSport}'. Manual slate uploads require teams to exist first (Fix 7.2.1 will seed the remaining sports).`
+        : `Unknown team abbreviation(s) for sport='${normalizedSport}'.`;
     return Response.json(
       {
         error: hint,
         unknown_teams: unknownAbbrevs,
-        sport,
+        sport: normalizedSport,
         teams_seeded_for_sport: totalForSport ?? 0,
       },
       { status: 400 }
@@ -185,12 +228,15 @@ export async function POST(request: Request) {
   }
 
   // ─── 3. INSERT staging row ─────────────────────────────────────────────
+  // Fix 7.2.2: stash the already-normalized sport + games payload so any
+  // downstream re-read (manual provider's cron path) operates on the same
+  // canonical form. The hash and the natural-key string land in lockstep.
   const { data: stagingInsert, error: stagingErr } = await supabase
     .from("manual_slate_staging")
     .insert({
-      sport,
+      sport: normalizedSport,
       slate_date,
-      payload: { games },
+      payload: { games: normalizedGames },
       status: "pending",
       created_by: auth.email,
     })
@@ -211,29 +257,53 @@ export async function POST(request: Request) {
   // bound to its own staging row (no shared singleton, no env mutation).
   const provider = new ManualSlateProvider({ stagingRowId });
 
+  type PublishPayload = {
+    promoted: number;
+    status: "published" | "draft";
+    error?: string;
+  };
+
   try {
     const result = await slateService.refreshGames(
-      sport as Sport,
+      normalizedSport,
       slate_date,
       provider
     );
+
+    // ─── 5. Auto-publish (Fix 7.2.2 — Flag A1) ──────────────────────────
+    // After the slate refresh succeeds we promote the games from 'draft'
+    // to 'published' so they appear in /lab/daily-edge immediately. The
+    // smoke test's manual `UPDATE games SET slate_status='published'` SQL
+    // workaround is no longer needed. Structured partial success: if
+    // publishSlate throws we do NOT roll back the slate ingest — the
+    // games are valid as draft and can be promoted later by re-uploading
+    // or via a follow-up admin action.
+    let publish: PublishPayload;
+    try {
+      const promoted = await publishSlate(normalizedSport, slate_date);
+      publish = { promoted: promoted.promoted, status: "published" };
+    } catch (publishErr) {
+      const message = publishErr instanceof Error ? publishErr.message : String(publishErr);
+      publish = { promoted: 0, status: "draft", error: message };
+    }
 
     await supabase
       .from("manual_slate_staging")
       .update({
         status: "ingested",
         ingested_at: new Date().toISOString(),
-        ingest_result: result,
+        ingest_result: { ...result, publish },
       })
       .eq("id", stagingRowId);
 
     return Response.json({
-      sport,
+      sport: normalizedSport,
       slate_date,
       staging_id: stagingRowId,
       records_updated: result.records_updated,
       api_calls_made: result.api_calls_made,
       details: result.details ?? null,
+      publish,
       source: "manual_slate_upload",
     });
   } catch (e) {

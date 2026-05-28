@@ -461,6 +461,13 @@ function FieldInput({
       <input
         id={id}
         type="number"
+        // Fix 7.2.2: inputMode='decimal' hints to the browser (especially
+        // mobile keyboards) that the operator will enter decimal values.
+        // Combined with step='any' it prevents the "can't type a dot"
+        // friction the smoke surfaced. If issues persist on specific
+        // browsers/locales, the next escalation is type='text' +
+        // pattern='[0-9]*\.?[0-9]*' + onBlur normalization.
+        inputMode="decimal"
         step="any"
         value={value === undefined || value === null ? "" : String(value)}
         onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}

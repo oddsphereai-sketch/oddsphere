@@ -42,8 +42,52 @@ import type {
 } from "../interfaces/ISlateProvider";
 
 /**
+ * Strict YYYY-MM-DD regex used to guard the slate_date input. Manual slate
+ * uploads with malformed dates would otherwise produce diverging hashes
+ * (e.g. "2030-1-15" vs "2030-01-15" hash differently) and create duplicate
+ * game rows that the operator wouldn't expect — Fix 7.2.2 normalization.
+ */
+const STRICT_SLATE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Normalize the four inputs that compose the natural key. Fix 7.2.2: keeps
+ * `manualGameExternalId` and `manualProviderIdKey` in lockstep regardless
+ * of operator input casing or whitespace, so the deterministic hash
+ * resolves to the same external_id for the same logical (sport, date,
+ * home, away) tuple. Returns the canonical pieces or throws when the
+ * inputs are malformed (callers should validate at the route layer too).
+ *
+ * Convention (matches the teams table seed convention):
+ *   sport       → lowercase
+ *   slate_date  → strict YYYY-MM-DD (throws on mismatch)
+ *   abbrev      → uppercase + trim (teams.abbreviation is uppercase)
+ */
+function normalizeNaturalKey(
+  sport: string,
+  slateDate: string,
+  homeAbbrev: string,
+  awayAbbrev: string
+): { sport: string; slateDate: string; homeAbbrev: string; awayAbbrev: string } {
+  if (typeof slateDate !== "string" || !STRICT_SLATE_DATE_RE.test(slateDate)) {
+    throw new Error(
+      `Manual slate provider: slate_date must be strict YYYY-MM-DD (got '${slateDate}')`
+    );
+  }
+  return {
+    sport: String(sport).trim().toLowerCase(),
+    slateDate,
+    homeAbbrev: String(homeAbbrev).trim().toUpperCase(),
+    awayAbbrev: String(awayAbbrev).trim().toUpperCase(),
+  };
+}
+
+/**
  * Compute the deterministic external_id for a manually-uploaded game.
  * Exported for tests + the upload route's payload-preview path.
+ *
+ * Fix 7.2.2: inputs normalized via `normalizeNaturalKey` first so casing
+ * or whitespace differences don't produce divergent hashes for the same
+ * logical matchup.
  */
 export function manualGameExternalId(
   sport: string,
@@ -51,7 +95,8 @@ export function manualGameExternalId(
   homeAbbrev: string,
   awayAbbrev: string
 ): number {
-  const naturalKey = `${sport}:${slateDate}:${homeAbbrev}:${awayAbbrev}`;
+  const n = normalizeNaturalKey(sport, slateDate, homeAbbrev, awayAbbrev);
+  const naturalKey = `${n.sport}:${n.slateDate}:${n.homeAbbrev}:${n.awayAbbrev}`;
   const hash = createHash("sha256").update(naturalKey).digest();
   const u32 = hash.readUInt32BE(0);
   return 1_000_000_000 + (u32 & 0x3fffffff);
@@ -60,6 +105,9 @@ export function manualGameExternalId(
 /**
  * Build the natural-key string used as the `provider_ids.manual` value.
  * Exported for tests + reconciliation-by-tuple code paths.
+ *
+ * Fix 7.2.2: same normalization as `manualGameExternalId` so the JSONB
+ * value and the hash stay in lockstep.
  */
 export function manualProviderIdKey(
   sport: string,
@@ -67,7 +115,8 @@ export function manualProviderIdKey(
   homeAbbrev: string,
   awayAbbrev: string
 ): string {
-  return `${sport}:${slateDate}:${homeAbbrev}:${awayAbbrev}`;
+  const n = normalizeNaturalKey(sport, slateDate, homeAbbrev, awayAbbrev);
+  return `${n.sport}:${n.slateDate}:${n.homeAbbrev}:${n.awayAbbrev}`;
 }
 
 /**

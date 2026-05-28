@@ -165,6 +165,63 @@ async function main() {
       "mlb:2026-05-28:NYY:BOS"
   );
 
+  // ─── Fix 7.2.2 — Defensive normalization (Item 2) ────────────────────────
+  // Inputs to manualGameExternalId / manualProviderIdKey are normalized
+  // (sport lowercase, abbrev uppercase+trimmed, strict YYYY-MM-DD) so the
+  // same logical matchup always hashes to the same external_id regardless
+  // of operator input casing or whitespace.
+  section("Fix 7.2.2 — manual key normalization");
+
+  check(
+    "manualGameExternalId is case-invariant on sport",
+    manualGameExternalId("MLB", "2026-05-28", "NYY", "BOS") ===
+      manualGameExternalId("mlb", "2026-05-28", "NYY", "BOS")
+  );
+  check(
+    "manualGameExternalId is case-invariant on team abbreviations",
+    manualGameExternalId("mlb", "2026-05-28", "nyy", "bos") ===
+      manualGameExternalId("mlb", "2026-05-28", "NYY", "BOS")
+  );
+  check(
+    "manualGameExternalId trims whitespace on abbreviations",
+    manualGameExternalId("mlb", "2026-05-28", "  NYY  ", " BOS ") ===
+      manualGameExternalId("mlb", "2026-05-28", "NYY", "BOS")
+  );
+  check(
+    "manualProviderIdKey normalizes to canonical lowercase:uppercase form",
+    manualProviderIdKey("MLB", "2026-05-28", " nyy ", "BOS") ===
+      "mlb:2026-05-28:NYY:BOS"
+  );
+  check(
+    "manualProviderIdKey + manualGameExternalId stay in lockstep across casing",
+    manualProviderIdKey("MLB", "2026-05-28", " nyy ", "BOS") ===
+      manualProviderIdKey("mlb", "2026-05-28", "NYY", "BOS") &&
+      manualGameExternalId("MLB", "2026-05-28", " nyy ", "BOS") ===
+        manualGameExternalId("mlb", "2026-05-28", "NYY", "BOS")
+  );
+
+  // Strict slate_date enforcement — throws on malformed input.
+  function throwsOn(fn: () => unknown): boolean {
+    try {
+      fn();
+      return false;
+    } catch {
+      return true;
+    }
+  }
+  check(
+    "manualGameExternalId throws on '2030-1-15' (single-digit month/day)",
+    throwsOn(() => manualGameExternalId("mlb", "2030-1-15", "NYY", "BOS"))
+  );
+  check(
+    "manualGameExternalId throws on '2030/01/15' (wrong separator)",
+    throwsOn(() => manualGameExternalId("mlb", "2030/01/15", "NYY", "BOS"))
+  );
+  check(
+    "manualGameExternalId throws on empty slate_date",
+    throwsOn(() => manualGameExternalId("mlb", "", "NYY", "BOS"))
+  );
+
   // ─── /api/admin/teams auth + validation ──────────────────────────────────
   section("/api/admin/teams — auth + validation");
 
@@ -275,6 +332,31 @@ async function main() {
   );
   check("home == away → 400", sameTeam.status === 400);
 
+  // Fix 7.2.2 (Item 2) — defensive abbrev rejection. The new STRICT_ABBREV
+  // regex rejects abbreviations with non-alphanumeric characters even
+  // after trim+upper. Whitespace alone is normalized; punctuation is not.
+  // Reject case — no DB side effects, safe to run inline with other
+  // validation tests.
+  const badAbbrev = await uploadSlatePost(
+    authed("https://x", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sport: "mlb",
+        slate_date: TEST_SLATE_DATE,
+        games: [
+          {
+            home_team_abbrev: "N.Y",
+            away_team_abbrev: awayAbbrev,
+            game_date: "2030-01-15T23:05:00.000Z",
+            season: 2030,
+          },
+        ],
+      }),
+    })
+  );
+  check("malformed abbrev with punctuation → 400 (Fix 7.2.2 — Item 2)", badAbbrev.status === 400);
+
   // ─── Unknown team abbreviation — Flag B1 ────────────────────────────────
   section("/api/admin/upload-slate — unknown team handling (Flag B1)");
 
@@ -362,18 +444,52 @@ async function main() {
     staging_id: number;
     records_updated: number;
     source: string;
+    publish?: { promoted: number; status: "published" | "draft"; error?: string };
   };
   check(`happy path: records_updated === 1 (got ${happyBody.records_updated})`, happyBody.records_updated === 1);
   check("happy path: source = manual_slate_upload", happyBody.source === "manual_slate_upload");
   check("happy path: staging_id is a number", typeof happyBody.staging_id === "number");
 
-  // Verify DB shape — games row + provider_ids attachment
+  // Fix 7.2.2 — auto-publish (Item 1). After the slate refresh the route
+  // promotes draft → published via slatePublishService.publishSlate so the
+  // game becomes visible in /lab/daily-edge immediately, without manual
+  // SQL workaround.
+  check(
+    "happy path: publish present in response (Fix 7.2.2 — Item 1)",
+    happyBody.publish !== undefined
+  );
+  check(
+    `happy path: publish.status === 'published' (got '${happyBody.publish?.status}')`,
+    happyBody.publish?.status === "published"
+  );
+  check(
+    `happy path: publish.promoted === 1 (got ${happyBody.publish?.promoted})`,
+    happyBody.publish?.promoted === 1
+  );
+  check(
+    "happy path: no publish error on happy path",
+    happyBody.publish?.error === undefined
+  );
+
+  // Verify DB shape — games row + provider_ids attachment + slate_status.
+  // Fix 7.2.2 (Item 1): slate_status must be 'published' after upload —
+  // proves the auto-publish call took effect and removes the SQL workaround.
   const expectedExtId = manualGameExternalId("mlb", TEST_SLATE_DATE, homeAbbrev, awayAbbrev);
   const expectedProviderKey = manualProviderIdKey(
     "mlb",
     TEST_SLATE_DATE,
     homeAbbrev,
     awayAbbrev
+  );
+  const { data: gameStatusRow } = await supabase
+    .from("games")
+    .select("slate_status")
+    .eq("sport", "mlb")
+    .eq("external_id", expectedExtId)
+    .maybeSingle();
+  check(
+    `DB: games.slate_status === 'published' after upload (Fix 7.2.2 — Item 1)`,
+    (gameStatusRow as { slate_status: string } | null)?.slate_status === "published"
   );
   const { data: gameRow } = await supabase
     .from("games")
@@ -447,6 +563,67 @@ async function main() {
     .eq("sport", "mlb")
     .eq("slate_date", TEST_SLATE_DATE);
   check("staging table records both upload attempts (count = 2)", (stagingCount ?? 0) === 2);
+
+  // ─── Fix 7.2.2 (Item 2) — case-invariant happy path ─────────────────────
+  // Run AFTER the idempotency section so the staging-count math above
+  // stays clean. Upload with sport='MLB' (uppercase) + lowercase team
+  // abbreviations; the route's upfront normalization should accept it
+  // and UPSERT into the same external_id as the canonical-form upload
+  // (no duplicate row produced).
+  section("Fix 7.2.2 — case-invariant upload happy path");
+
+  const lowercaseAbbrev = await uploadSlatePost(
+    authed("https://x", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sport: "MLB",
+        slate_date: TEST_SLATE_DATE,
+        games: [
+          {
+            home_team_abbrev: homeAbbrev.toLowerCase(),
+            away_team_abbrev: awayAbbrev.toLowerCase(),
+            game_date: "2030-01-15T23:05:00.000Z",
+            season: 2030,
+          },
+        ],
+      }),
+    })
+  );
+  check(
+    `lowercase sport + lowercase abbrev normalize and reach happy path → 200 (got ${lowercaseAbbrev.status})`,
+    lowercaseAbbrev.status === 200
+  );
+  // Confirm UPSERT semantics held — no second row created at a different
+  // external_id from the case-variant input.
+  const normalizedExtId = manualGameExternalId(
+    "mlb",
+    TEST_SLATE_DATE,
+    homeAbbrev,
+    awayAbbrev
+  );
+  const { count: normalizedRowCount } = await supabase
+    .from("games")
+    .select("*", { count: "exact", head: true })
+    .eq("sport", "mlb")
+    .eq("external_id", normalizedExtId);
+  check(
+    "Fix 7.2.2: case-variant upload UPSERTed the same external_id (no duplicate row)",
+    (normalizedRowCount ?? 0) === 1
+  );
+  // Confirm there are no OTHER manual game rows for this slate_date that
+  // could indicate a divergent hash bug. Any second row would mean
+  // normalization is leaking somewhere.
+  const { count: anyManualForDateCount } = await supabase
+    .from("games")
+    .select("*", { count: "exact", head: true })
+    .eq("sport", "mlb")
+    .eq("slate_date", TEST_SLATE_DATE)
+    .filter("provider_ids->>manual", "neq", null);
+  check(
+    "Fix 7.2.2: only one manual game row exists for this slate_date across all uploads",
+    (anyManualForDateCount ?? 0) === 1
+  );
 
   // ─── Provider unit test: stagingRowId constructor reads specific row ─────
   section("ManualSlateProvider — stagingRowId constructor");

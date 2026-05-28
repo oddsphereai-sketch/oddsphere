@@ -157,22 +157,46 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
                   subtitle carries the full "what is happening / what we're
                   showing instead" copy (V2.1 Part 10 phrase verbatim) and
                   the separate amber banner is dropped. Normal-path header
-                  stays as the original today-with-count phrasing. */}
+                  stays as the original today-with-count phrasing.
+                  Fix 7.2.2: split the fallback path into two cases so the
+                  copy is honest when a member/operator explicitly picked
+                  a non-today date that has no published slate — instead
+                  of saying "No finalized board for today" we name the
+                  requested date directly. */}
               {fallbackUsed && effectiveDate ? (
-                <p className="text-sm text-gray-300 leading-snug">
-                  No finalized board for{" "}
-                  <span className="font-semibold text-gray-100">{today}</span>{" "}
-                  yet. Showing latest available slate:{" "}
-                  <span className="font-semibold text-gray-100">
-                    {formatSlateDate(effectiveDate)}
-                  </span>{" "}
-                  ·{" "}
-                  <span className="tabular-nums">
-                    {isLoading ? "—" : games.length}
-                  </span>{" "}
-                  {sportMeta.label}{" "}
-                  {games.length === 1 ? "game" : "games"}
-                </p>
+                requestedDate && requestedDate !== effectiveDate ? (
+                  <p className="text-sm text-gray-300 leading-snug">
+                    No published slate for{" "}
+                    <span className="font-semibold text-gray-100">
+                      {formatSlateDate(requestedDate)}
+                    </span>
+                    . Showing latest available:{" "}
+                    <span className="font-semibold text-gray-100">
+                      {formatSlateDate(effectiveDate)}
+                    </span>{" "}
+                    ·{" "}
+                    <span className="tabular-nums">
+                      {isLoading ? "—" : games.length}
+                    </span>{" "}
+                    {sportMeta.label}{" "}
+                    {games.length === 1 ? "game" : "games"}
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-300 leading-snug">
+                    No finalized board for{" "}
+                    <span className="font-semibold text-gray-100">{today}</span>{" "}
+                    yet. Showing latest available slate:{" "}
+                    <span className="font-semibold text-gray-100">
+                      {formatSlateDate(effectiveDate)}
+                    </span>{" "}
+                    ·{" "}
+                    <span className="tabular-nums">
+                      {isLoading ? "—" : games.length}
+                    </span>{" "}
+                    {sportMeta.label}{" "}
+                    {games.length === 1 ? "game" : "games"}
+                  </p>
+                )
               ) : (
                 <p className="text-sm text-gray-300">
                   {today} ·{" "}
