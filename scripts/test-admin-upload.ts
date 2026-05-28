@@ -112,19 +112,30 @@ async function main() {
     body: JSON.stringify({ sport: "mlb", date: "2026-05-22", predictions }),
   }));
   check("upload happy path → 200", uploadRes.status === 200);
+  type GradesUpdatedShape = {
+    game_predictions: number;
+    prop_predictions: number;
+    per_market: {
+      ml: { derived: number; written: number };
+      ou: { derived: number; written: number };
+      nrfi: { derived: number; written: number };
+    };
+    error?: string;
+  };
   const uploadBody = (await uploadRes.json()) as {
-    inserted: number; updated: number; failed: number; verdicts_updated: number; errors: unknown[]; run_id: number | null;
+    inserted: number; updated: number; failed: number; errors: unknown[]; run_id: number | null;
     source_type_written?: string;
+    grades_updated?: GradesUpdatedShape;
+    verdicts_updated?: number; // expected absent — Fix 6.1.1 dropped it
   };
   check(`upload: 12 updated (UPSERT existing)`, uploadBody.updated === 12);
   check(`upload: 0 failed`, uploadBody.failed === 0);
-  // Fix 4.1 (Gap-18+19): verdicts_updated returns 0 — legacy
-  // regenerateSharpVerdicts removed; signal text derives at API response
-  // time via signalSummaryGenerator. The response field is preserved for
-  // wire-shape stability but no longer triggers cron-side text generation.
+  // Fix 6.1.1 (Flag C1): verdicts_updated dropped from the response. The
+  // field was a Fix-4.1 vestige (always 0); replaced by grades_updated
+  // which reflects actual at-rest derivation work.
   check(
-    `upload: verdicts_updated === 0 (legacy regeneration removed)`,
-    uploadBody.verdicts_updated === 0
+    `upload: response no longer includes verdicts_updated (Fix 6.1.1 / Flag C1)`,
+    uploadBody.verdicts_updated === undefined
   );
   check(`upload: run_id populated`, typeof uploadBody.run_id === "number");
 
@@ -133,6 +144,34 @@ async function main() {
   check(
     `upload: response.source_type_written === "manual"`,
     uploadBody.source_type_written === "manual"
+  );
+
+  // Fix 6.1.1 (Flag E1): grades_updated populated with full per-market
+  // shape. After upload, all 12 game_predictions rows should have grades
+  // derived (one per uploaded game).
+  check(
+    `upload: grades_updated present in response`,
+    uploadBody.grades_updated !== undefined
+  );
+  check(
+    `upload: grades_updated.game_predictions === 12 (all uploaded rows graded)`,
+    uploadBody.grades_updated?.game_predictions === 12
+  );
+  check(
+    `upload: grades_updated.per_market.ml.derived === 12`,
+    uploadBody.grades_updated?.per_market.ml.derived === 12
+  );
+  check(
+    `upload: grades_updated.per_market.ou.derived === 12`,
+    uploadBody.grades_updated?.per_market.ou.derived === 12
+  );
+  check(
+    `upload: grades_updated.per_market.nrfi.derived === 12`,
+    uploadBody.grades_updated?.per_market.nrfi.derived === 12
+  );
+  check(
+    `upload: grades_updated has no derivation error on happy path`,
+    uploadBody.grades_updated?.error === undefined
   );
 
   // Verify the upload landed
@@ -166,6 +205,27 @@ async function main() {
   check(
     `DB: every uploaded game_predictions row carries source_type='manual' (12 rows)`,
     allManual && (allManualRows ?? []).length === 12
+  );
+
+  // Fix 6.1.1: every uploaded row should carry per-pick grades after the
+  // sync derivation call in the route. With seed sharp_signals present for
+  // the seed slate, some games will get model_only or sharp_confirmed; for
+  // games without sharp signals the framework returns market_watch. All
+  // three columns must be non-null — that's the contract we're enforcing.
+  const { data: allGradedRows } = await supabase
+    .from("game_predictions")
+    .select("id, ml_grade, ou_grade, nrfi_grade")
+    .eq("model_version", "daniels-v3.2-test");
+  const allGraded = ((allGradedRows ?? []) as Array<{
+    ml_grade: string | null;
+    ou_grade: string | null;
+    nrfi_grade: string | null;
+  }>).every(
+    (r) => r.ml_grade !== null && r.ou_grade !== null && r.nrfi_grade !== null
+  );
+  check(
+    `DB: every uploaded game_predictions row has ml_grade/ou_grade/nrfi_grade non-null after sync derivation (Fix 6.1.1)`,
+    allGraded && (allGradedRows ?? []).length === 12
   );
 
   // Idempotency: re-upload same payload → all 12 updated again

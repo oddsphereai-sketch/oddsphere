@@ -33,13 +33,26 @@ type SlateGame = {
 
 type FormValuesByGame = Record<number, Record<string, unknown>>;
 
+type GradesUpdated = {
+  game_predictions: number;
+  prop_predictions: number;
+  per_market: {
+    ml: { derived: number; written: number };
+    ou: { derived: number; written: number };
+    nrfi: { derived: number; written: number };
+  };
+  /** Set only when synchronous derivation throws — see Flag B1. */
+  error?: string;
+};
+
 type PublishResult = {
   sport: Sport;
   date: string;
   inserted: number;
   updated: number;
   failed: number;
-  verdicts_updated: number;
+  /** Fix 6.1.1: grades derived at upload time (replaces verdicts_updated). */
+  grades_updated: GradesUpdated;
   errors: Array<{ game_external_id: number; errors: string[] }>;
 };
 
@@ -335,7 +348,24 @@ function ScoresModelForm({
         <div style={{ marginTop: 24, padding: 16, background: publishResult.failed === 0 ? "#efe" : "#fee", borderRadius: 4 }}>
           <h3 style={{ marginTop: 0 }}>Publish result</h3>
           <p>
-            Inserted: {publishResult.inserted} · Updated: {publishResult.updated} · Failed: {publishResult.failed} · Verdicts updated: {publishResult.verdicts_updated}
+            Inserted: {publishResult.inserted} · Updated: {publishResult.updated} · Failed: {publishResult.failed}
+          </p>
+          {/* Fix 6.1.1: surface per-market grade-derivation counts so the
+              operator can see Daily Edge will render actual pick cards. */}
+          <p style={{ marginTop: 8 }}>
+            Grades derived: {publishResult.grades_updated.game_predictions} game(s)
+            {" · "}
+            ML {publishResult.grades_updated.per_market.ml.derived}/{publishResult.grades_updated.per_market.ml.written}
+            {" · "}
+            OU {publishResult.grades_updated.per_market.ou.derived}/{publishResult.grades_updated.per_market.ou.written}
+            {" · "}
+            NRFI {publishResult.grades_updated.per_market.nrfi.derived}/{publishResult.grades_updated.per_market.nrfi.written}
+            {publishResult.grades_updated.error && (
+              <span style={{ color: "#b00" }}>
+                {" · Derivation error: "}
+                {publishResult.grades_updated.error}
+              </span>
+            )}
           </p>
           {publishResult.errors.length > 0 && (
             <ul style={{ marginTop: 8, paddingLeft: 20 }}>
