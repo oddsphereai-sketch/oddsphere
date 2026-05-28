@@ -17,6 +17,7 @@ import {
 import {
   validateScoresModelRow,
   validateDanielsModelRow,
+  reconcilePredictedTotal,
   type ScoresModelInputRow,
   type DanielsModelRow,
 } from "../lib/scoresModel/ingester";
@@ -331,6 +332,81 @@ check("back-compat: valid row passes", validateDanielsModelRow(legacyMlbRow, kno
 check(
   "back-compat: bad row fails with single error string",
   !validateDanielsModelRow({ ...legacyMlbRow, ml_confidence: -1 }, known).ok
+);
+
+// ─── Fix 7.2.3 — reconcilePredictedTotal (server-side invariant) ────────
+// The ingester silently recomputes predicted_total = round(home + away, 1)
+// for any sport whose schema declares the computeFrom marker. Direct-API
+// callers that submit a mismatched total get it corrected before UPSERT.
+section("Fix 7.2.3 — reconcilePredictedTotal");
+
+const reconciledMismatch = reconcilePredictedTotal("mlb", {
+  ...legacyMlbRow,
+  predicted_home_score: 4.3,
+  predicted_away_score: 3.5,
+  predicted_total: 8, // caller-submitted; wrong
+});
+check(
+  `MLB mismatched total (4.3 + 3.5 → 8) silently recomputed to 7.8 (got ${(reconciledMismatch as { predicted_total: number }).predicted_total})`,
+  (reconciledMismatch as { predicted_total: number }).predicted_total === 7.8
+);
+
+const reconciledMatch = reconcilePredictedTotal("mlb", {
+  ...legacyMlbRow,
+  predicted_home_score: 4.5,
+  predicted_away_score: 3.5,
+  predicted_total: 8.0,
+});
+check(
+  `MLB matched total (4.5 + 3.5 = 8.0) preserved as 8.0 (got ${(reconciledMatch as { predicted_total: number }).predicted_total})`,
+  (reconciledMatch as { predicted_total: number }).predicted_total === 8.0
+);
+
+const reconciledFloatArtifact = reconcilePredictedTotal("mlb", {
+  ...legacyMlbRow,
+  predicted_home_score: 4.1,
+  predicted_away_score: 3.2,
+  predicted_total: 99, // wrong on purpose
+});
+check(
+  `MLB float-artifact case (4.1 + 3.2) rounds to clean 7.3, not 7.300000000000001 (got ${(reconciledFloatArtifact as { predicted_total: number }).predicted_total})`,
+  (reconciledFloatArtifact as { predicted_total: number }).predicted_total === 7.3
+);
+
+const reconciledInteger = reconcilePredictedTotal("mlb", {
+  ...legacyMlbRow,
+  predicted_home_score: 4,
+  predicted_away_score: 3,
+  predicted_total: 99,
+});
+check(
+  `MLB integer inputs (4 + 3 → 7) recomputed cleanly (got ${(reconciledInteger as { predicted_total: number }).predicted_total})`,
+  (reconciledInteger as { predicted_total: number }).predicted_total === 7
+);
+
+const reconciledMissingHome = reconcilePredictedTotal("mlb", {
+  ...legacyMlbRow,
+  predicted_home_score: undefined as unknown as number,
+  predicted_away_score: 3.5,
+  predicted_total: 99,
+});
+check(
+  `MLB missing home score: total left unchanged (defensive — got ${(reconciledMissingHome as { predicted_total: number }).predicted_total})`,
+  (reconciledMissingHome as { predicted_total: number }).predicted_total === 99
+);
+
+// NBA also has computeFrom; verify it applies cross-sport.
+const reconciledNba = reconcilePredictedTotal("nba", {
+  game_external_id: 1,
+  predicted_home_score: 112.5,
+  predicted_away_score: 108.5,
+  predicted_total: 200, // wrong
+  model_version: "x",
+  computed_at: "2026-01-01T00:00:00.000Z",
+} as unknown as ScoresModelInputRow);
+check(
+  `NBA reconcile (112.5 + 108.5 → 221) — confirms cross-sport behavior (got ${(reconciledNba as { predicted_total: number }).predicted_total})`,
+  (reconciledNba as { predicted_total: number }).predicted_total === 221
 );
 
 // ─── Summary ─────────────────────────────────────────────────────────────

@@ -267,9 +267,72 @@ async function main() {
     badBody.errors[0]?.errors.some(e => e.toLowerCase().includes("home_score")) ?? false
   );
 
+  // ─── Fix 7.2.3 — server-side predicted_total invariant ───────────────────
+  // The ingester re-derives predicted_total = round(home + away, 1) on
+  // every UPSERT. A direct API caller (curl, future automation) that
+  // submits home=4.3, away=3.5, total=8 should have the DB row stored
+  // with total=7.8 — the form's disabled-input display matches but the
+  // server is the source of truth for the invariant.
+  section("Fix 7.2.3 — server-side predicted_total recompute");
+
+  const targetExtId = okBody.games[0]!.external_id;
+  const mismatchUpload = await uploadPost(authed("https://x", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sport: "mlb",
+      date: "2026-05-22",
+      predictions: [
+        {
+          game_external_id: targetExtId,
+          predicted_home_score: 4.3,
+          predicted_away_score: 3.5,
+          predicted_total: 8, // wrong — server should override to 7.8
+          predicted_ml_winner: "home" as const,
+          ml_confidence: 60,
+          predicted_ou_side: "under" as const,
+          ou_confidence: 55,
+          predicted_nrfi: true,
+          nrfi_confidence: 58,
+          model_version: "daniels-v3.2-fix-7.2.3-mismatch",
+          computed_at: new Date().toISOString(),
+        },
+      ],
+    }),
+  }));
+  check("Fix 7.2.3: mismatched-total upload → 200", mismatchUpload.status === 200);
+
+  const { data: mismatchRow } = await supabase
+    .from("game_predictions")
+    .select("predicted_home_score, predicted_away_score, predicted_total")
+    .eq("model_version", "daniels-v3.2-fix-7.2.3-mismatch")
+    .maybeSingle();
+  const mismatchTotal = (mismatchRow as { predicted_total: number } | null)?.predicted_total;
+  check(
+    `Fix 7.2.3: DB stores predicted_total = 7.8 (not 8) after server recompute (got ${mismatchTotal})`,
+    mismatchTotal === 7.8
+  );
+  // Restore source_type cleanup is handled by the catch-all UPDATE below.
+
   // Restore env
   if (origToken) process.env.ADMIN_TOKEN = origToken; else delete process.env.ADMIN_TOKEN;
   if (origAllowlist) process.env.ADMIN_EMAIL_ALLOWLIST = origAllowlist; else delete process.env.ADMIN_EMAIL_ALLOWLIST;
+
+  // Fix 7.2.3 cleanup: also restore the seed row touched by the mismatch
+  // assertion. Two ways: revert source_type AND restore the original
+  // predicted_total / model_version. The catch-all source_type UPDATE
+  // below handles 'daniels-v3.2-test' but not '-fix-7.2.3-mismatch'; do
+  // a separate revert for that specific row using the targetExtId.
+  await supabase
+    .from("game_predictions")
+    .update({
+      source_type: "mock",
+      model_version: "daniels-v3.2-test",
+      // Note: we don't restore predicted_total here because the seed
+      // slate's per-game total may differ; the production filter just
+      // needs source_type='mock' to hide the row again.
+    })
+    .eq("model_version", "daniels-v3.2-fix-7.2.3-mismatch");
 
   // Fix 6.1 (Gap-23.5): the admin upload above flipped 12 seed
   // game_predictions rows to source_type='manual'. Restore to 'mock' so

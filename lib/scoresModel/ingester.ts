@@ -195,6 +195,45 @@ function validateFieldValue(field: SportSchemaField, value: unknown): string | n
 // Payload builder — drives top-level + sport_specific writes from schema
 // ─────────────────────────────────────────────────────────────────────────
 
+/**
+ * Fix 7.2.3 — invariant `predicted_total = home + away`. The form's
+ * disabled-total input already submits the computed value, but the
+ * ingester re-derives defensively before UPSERT so any direct-API caller
+ * (curl, future automation) that submits a mismatched total has it
+ * silently corrected. Rounds to 1 decimal place to dodge float artifacts
+ * (4.1 + 3.2 → 7.3, not 7.300000000000001).
+ *
+ * Applies only when both component fields are numeric AND the schema
+ * declares a `computeFrom: "predicted_home_score + predicted_away_score"`
+ * field. For sports that don't declare it the row passes through
+ * unchanged.
+ *
+ * Exported for direct unit testing.
+ */
+export function reconcilePredictedTotal(
+  sport: Sport,
+  row: ScoresModelInputRow
+): ScoresModelInputRow {
+  const schema = getSportSchema(sport);
+  const hasComputedTotal = schema.fields.some(
+    (f) =>
+      f.key === "predicted_total" &&
+      f.computeFrom === "predicted_home_score + predicted_away_score"
+  );
+  if (!hasComputedTotal) return row;
+
+  const home = (row as Record<string, unknown>).predicted_home_score;
+  const away = (row as Record<string, unknown>).predicted_away_score;
+  if (typeof home !== "number" || typeof away !== "number") return row;
+  if (!Number.isFinite(home) || !Number.isFinite(away)) return row;
+
+  const total = Math.round((home + away) * 10) / 10;
+  return {
+    ...row,
+    predicted_total: total,
+  } as ScoresModelInputRow;
+}
+
 function buildPayload(
   sport: Sport,
   row: ScoresModelInputRow,
@@ -202,6 +241,8 @@ function buildPayload(
   source: PredictionSource
 ): Record<string, unknown> {
   const schema = getSportSchema(sport);
+  // Fix 7.2.3: server-side recompute of predicted_total. See helper above.
+  const reconciledRow = reconcilePredictedTotal(sport, row);
   // Fix 6.1 (Gap-23.5): set source_type explicitly. Pre-Fix-6.1 this column
   // was omitted, so the DB default 'mock' applied to every row — including
   // Daniel's manual uploads, which then got filtered out in production.
@@ -213,13 +254,13 @@ function buildPayload(
     source_type: inferSourceType(source),
     is_override: false,
     original_auto_prediction: null,
-    model_version: row.model_version,
-    computed_at: row.computed_at,
+    model_version: reconciledRow.model_version,
+    computed_at: reconciledRow.computed_at,
   };
   const sportSpecific: Record<string, unknown> = {};
 
   for (const field of schema.fields) {
-    const value = readFieldValue(field, row);
+    const value = readFieldValue(field, reconciledRow);
     if (value === undefined || value === null) continue;
     if (field.scope === "top_level") {
       topLevel[field.key] = value;

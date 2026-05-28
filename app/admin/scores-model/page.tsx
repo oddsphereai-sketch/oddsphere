@@ -17,7 +17,7 @@
  * V1 priorities: WORKS, sport-aware, idempotent. Polish is Phase 6.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SPORT_SCHEMAS, type SportSchemaField } from "@/lib/scoresModel/sportSchemas";
 import type { Sport } from "@/lib/types/domain/Sport";
 
@@ -226,7 +226,13 @@ function ScoresModelForm({
       };
       const sportSpecific: Record<string, unknown> = {};
       for (const f of schema.fields) {
-        const v = values[f.key];
+        // Fix 7.2.3 (Q1 = BOTH): for fields declared `computeFrom`, derive
+        // the value here instead of reading from formValues. The server-side
+        // ingester also recomputes defensively, so client + server agree.
+        let v: unknown = values[f.key];
+        if (f.computeFrom === "predicted_home_score + predicted_away_score") {
+          v = computeTotalFromValues(values);
+        }
         if (v === undefined || v === "") continue;
         if (f.scope === "top_level") topLevel[f.key] = v;
         else sportSpecific[f.key] = v;
@@ -411,6 +417,7 @@ function GameRow({
             key={field.key}
             field={field}
             value={values[field.key]}
+            allValues={values}
             onChange={(v) => onChange(field.key, v)}
           />
         ))}
@@ -419,16 +426,97 @@ function GameRow({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Fix 7.2.3 — decimal-safe parsing helpers used by both the form's
+// computed-total derivation and the DecimalInput component.
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Strict decimal regex used to validate the raw string before committing
+ * to parent state. Accepts integers and positive decimals; rejects
+ * intermediate states like "4." or ".5" that JavaScript's Number() would
+ * silently coerce in surprising ways.
+ */
+const STRICT_DECIMAL_RE = /^\d+(\.\d+)?$/;
+
+/** Parse a value (string or number) into a number, returning undefined for any unparseable input. */
+function parseDecimal(raw: unknown): number | undefined {
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw !== "string" || raw.trim() === "") return undefined;
+  if (!STRICT_DECIMAL_RE.test(raw)) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * Compute predicted_total from a row's values map. Returns undefined when
+ * either component is missing/unparseable so the disabled total input
+ * renders "—" instead of a misleading 0 or NaN.
+ */
+function computeTotalFromValues(values: Record<string, unknown>): number | undefined {
+  const home = parseDecimal(values.predicted_home_score);
+  const away = parseDecimal(values.predicted_away_score);
+  if (home === undefined || away === undefined) return undefined;
+  return Math.round((home + away) * 10) / 10;
+}
+
 function FieldInput({
   field,
   value,
+  allValues,
   onChange,
 }: {
   field: SportSchemaField;
   value: unknown;
+  allValues: Record<string, unknown>;
   onChange: (v: unknown) => void;
 }) {
   const id = `field-${field.key}`;
+
+  // Fix 7.2.3: computed field (predicted_total) renders as a disabled
+  // text input showing the live home + away derivation. Operator can see
+  // the value that will be submitted but cannot edit it directly.
+  if (field.computeFrom === "predicted_home_score + predicted_away_score") {
+    const computed = computeTotalFromValues(allValues);
+    return (
+      <label htmlFor={id} style={{ display: "flex", flexDirection: "column", fontSize: 13 }}>
+        <span style={{ marginBottom: 4 }}>{field.label}{field.required && " *"}</span>
+        <input
+          id={id}
+          type="text"
+          disabled
+          value={computed !== undefined ? String(computed) : "—"}
+          title="Auto-calculated from away + home."
+          style={{ padding: 6, background: "#f5f5f5", color: "#555", cursor: "not-allowed" }}
+        />
+        <span style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
+          Auto-calculated from away + home.
+        </span>
+      </label>
+    );
+  }
+
+  // Fix 7.2.3: decimal-safe text input. Holds the raw user-typed string
+  // in local state while editing so intermediate values like "4." don't
+  // get mangled by Number() round-tripping. Pushes parsed numbers to
+  // parent on any keystroke that produces a clean integer/decimal; on
+  // blur, snaps back to the parent's value if the raw is unparseable
+  // (rejects garbage cleanly).
+  if (field.decimal) {
+    return (
+      <DecimalInput
+        id={id}
+        label={field.label}
+        required={field.required}
+        helpText={field.helpText}
+        min={field.min}
+        max={field.max}
+        value={value as number | undefined}
+        onChange={onChange}
+      />
+    );
+  }
+
   if (field.type === "enum") {
     return (
       <label htmlFor={id} style={{ display: "flex", flexDirection: "column", fontSize: 13 }}>
@@ -476,6 +564,102 @@ function FieldInput({
         style={{ padding: 6 }}
       />
       {field.helpText && <span style={{ fontSize: 11, color: "#888", marginTop: 2 }}>{field.helpText}</span>}
+    </label>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Fix 7.2.3 — decimal-safe text input.
+//
+// Holds the user-typed string in local state during editing so React's
+// controlled-input round-trip doesn't lose intermediate characters like
+// "4." that JavaScript's Number() coerces to 4 (then the value prop
+// re-renders as "4" instead of "4."). On any keystroke that produces a
+// clean integer/decimal we push the parsed number to parent; on blur we
+// clamp the raw to the last valid parent value if the current text is
+// unparseable (rejects garbage cleanly).
+// ─────────────────────────────────────────────────────────────────────────
+function DecimalInput({
+  id,
+  label,
+  required,
+  helpText,
+  min,
+  max,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  required: boolean;
+  helpText?: string;
+  min?: number;
+  max?: number;
+  value: number | undefined;
+  onChange: (v: number | undefined) => void;
+}) {
+  const valueAsString = value === undefined ? "" : String(value);
+  const [raw, setRaw] = useState<string>(valueAsString);
+  const isFocusedRef = useRef(false);
+
+  // Sync raw → parent's value when parent changes externally (e.g.
+  // localStorage hydration, game switch). Skip the sync while the user
+  // is actively typing so we don't clobber their input mid-edit.
+  useEffect(() => {
+    if (!isFocusedRef.current && raw !== valueAsString) {
+      setRaw(valueAsString);
+    }
+    // raw intentionally omitted from deps: this hook reacts to parent
+    // value changes only; raw changes are driven by user input below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valueAsString]);
+
+  return (
+    <label htmlFor={id} style={{ display: "flex", flexDirection: "column", fontSize: 13 }}>
+      <span style={{ marginBottom: 4 }}>{label}{required && " *"}</span>
+      <input
+        id={id}
+        type="text"
+        inputMode="decimal"
+        pattern="[0-9]*\.?[0-9]*"
+        value={raw}
+        onFocus={() => {
+          isFocusedRef.current = true;
+        }}
+        onChange={(e) => {
+          const next = e.target.value;
+          setRaw(next);
+          if (next === "") {
+            onChange(undefined);
+          } else if (STRICT_DECIMAL_RE.test(next)) {
+            onChange(Number(next));
+          }
+          // Otherwise: keep raw as-is, don't push to parent (intermediate
+          // state like "4." — wait for the user to keep typing or blur).
+        }}
+        onBlur={() => {
+          isFocusedRef.current = false;
+          if (raw === "") {
+            onChange(undefined);
+          } else if (STRICT_DECIMAL_RE.test(raw)) {
+            onChange(Number(raw));
+          } else {
+            // Invalid at blur — snap raw back to last valid parent value.
+            setRaw(value === undefined ? "" : String(value));
+          }
+        }}
+        style={{ padding: 6 }}
+      />
+      {/* Honor min/max as advisory hints for the operator; final
+          enforcement lives in the schema validator server-side. */}
+      {(min !== undefined || max !== undefined) && (
+        <span style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
+          {min !== undefined && max !== undefined && `${min}–${max}`}
+          {min !== undefined && max === undefined && `min ${min}`}
+          {min === undefined && max !== undefined && `max ${max}`}
+        </span>
+      )}
+      {helpText && <span style={{ fontSize: 11, color: "#888", marginTop: 2 }}>{helpText}</span>}
     </label>
   );
 }

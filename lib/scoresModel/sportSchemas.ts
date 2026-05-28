@@ -42,6 +42,26 @@ export type SportSchemaField = {
   max?: number;
   /** Optional tooltip / help text rendered next to the form input. */
   helpText?: string;
+  /**
+   * Fix 7.2.3: when true, the admin UI renders this field as a decimal-safe
+   * text input (type="text" + inputMode="decimal") with a raw-string-while-
+   * editing state, instead of the default type="number". Solves the
+   * "can't type a dot" UX bug caused by Number() round-tripping in the
+   * default onChange path. Validator still treats the value as a number.
+   */
+  decimal?: boolean;
+  /**
+   * Fix 7.2.3: when set, the field is derived from other fields rather
+   * than entered by the operator. The UI renders it as a disabled input
+   * showing the computed value. The form's buildPredictions also computes
+   * the value when assembling the payload; the ingester recomputes
+   * defensively before UPSERT (server-side invariant).
+   *
+   * Currently supported computeFrom values:
+   *   "predicted_home_score + predicted_away_score"
+   *     → round((home + away) * 10) / 10
+   */
+  computeFrom?: "predicted_home_score + predicted_away_score";
 };
 
 export type SportSchema = {
@@ -57,9 +77,9 @@ export const MLB_SCHEMA: SportSchema = {
   sport: "mlb",
   displayName: "MLB ⚾",
   fields: [
-    { key: "predicted_home_score", label: "Home Runs", type: "number", required: true, min: 0, scope: "top_level" },
-    { key: "predicted_away_score", label: "Away Runs", type: "number", required: true, min: 0, scope: "top_level" },
-    { key: "predicted_total", label: "Total Runs", type: "number", required: true, min: 0, scope: "top_level" },
+    { key: "predicted_home_score", label: "Home Runs", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+    { key: "predicted_away_score", label: "Away Runs", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+    { key: "predicted_total", label: "Total Runs", type: "number", required: true, min: 0, scope: "top_level", computeFrom: "predicted_home_score + predicted_away_score" },
     { key: "predicted_ml_winner", label: "ML Winner", type: "enum", required: true, options: ["home", "away"], scope: "top_level" },
     { key: "ml_confidence", label: "ML Confidence %", type: "percent", required: true, min: 0, max: 100, scope: "top_level" },
     { key: "predicted_ou_side", label: "O/U Lean", type: "enum", required: true, options: ["over", "under"], scope: "top_level" },
@@ -77,9 +97,9 @@ export const NBA_SCHEMA: SportSchema = {
   sport: "nba",
   displayName: "NBA 🏀",
   fields: [
-    { key: "predicted_home_score", label: "Home Score", type: "number", required: true, min: 0, scope: "top_level" },
-    { key: "predicted_away_score", label: "Away Score", type: "number", required: true, min: 0, scope: "top_level" },
-    { key: "predicted_total", label: "Predicted Total", type: "number", required: true, min: 0, scope: "top_level" },
+    { key: "predicted_home_score", label: "Home Score", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+    { key: "predicted_away_score", label: "Away Score", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+    { key: "predicted_total", label: "Predicted Total", type: "number", required: true, min: 0, scope: "top_level", computeFrom: "predicted_home_score + predicted_away_score" },
     { key: "listed_line", label: "Listed Line", type: "number", required: false, scope: "sport_specific", helpText: "Sportsbook total at upload" },
   ],
 };
@@ -88,9 +108,9 @@ export const NBA_SCHEMA: SportSchema = {
 // NFL / NCAAF — identical shape per spec
 // ─────────────────────────────────────────────────────────────────────────
 const FOOTBALL_FIELDS: readonly SportSchemaField[] = [
-  { key: "predicted_home_score", label: "Home Score", type: "number", required: true, min: 0, scope: "top_level" },
-  { key: "predicted_away_score", label: "Away Score", type: "number", required: true, min: 0, scope: "top_level" },
-  { key: "predicted_total", label: "Predicted Total", type: "number", required: true, min: 0, scope: "top_level" },
+  { key: "predicted_home_score", label: "Home Score", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+  { key: "predicted_away_score", label: "Away Score", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+  { key: "predicted_total", label: "Predicted Total", type: "number", required: true, min: 0, scope: "top_level", computeFrom: "predicted_home_score + predicted_away_score" },
   { key: "predicted_ml_winner", label: "ML Winner", type: "enum", required: true, options: ["home", "away"], scope: "top_level" },
   { key: "ml_confidence", label: "ML Confidence %", type: "percent", required: true, min: 0, max: 100, scope: "top_level" },
   { key: "predicted_ou_side", label: "O/U Lean", type: "enum", required: true, options: ["over", "under"], scope: "top_level" },
@@ -116,9 +136,9 @@ export const NHL_SCHEMA: SportSchema = {
   sport: "nhl",
   displayName: "NHL 🏒",
   fields: [
-    { key: "predicted_home_score", label: "Home Goals", type: "number", required: true, min: 0, scope: "top_level" },
-    { key: "predicted_away_score", label: "Away Goals", type: "number", required: true, min: 0, scope: "top_level" },
-    { key: "predicted_total", label: "Predicted Total", type: "number", required: true, min: 0, scope: "top_level" },
+    { key: "predicted_home_score", label: "Home Goals", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+    { key: "predicted_away_score", label: "Away Goals", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+    { key: "predicted_total", label: "Predicted Total", type: "number", required: true, min: 0, scope: "top_level", computeFrom: "predicted_home_score + predicted_away_score" },
     { key: "predicted_ml_winner", label: "ML Winner", type: "enum", required: true, options: ["home", "away"], scope: "top_level" },
     { key: "ml_confidence", label: "ML Confidence %", type: "percent", required: true, min: 0, max: 100, scope: "top_level" },
     { key: "predicted_ou_side", label: "O/U Lean", type: "enum", required: true, options: ["over", "under"], scope: "top_level" },
@@ -134,9 +154,9 @@ export const UCL_SCHEMA: SportSchema = {
   sport: "ucl",
   displayName: "UCL ⚽",
   fields: [
-    { key: "predicted_home_score", label: "Expected Goals (Home)", type: "number", required: true, min: 0, scope: "top_level" },
-    { key: "predicted_away_score", label: "Expected Goals (Away)", type: "number", required: true, min: 0, scope: "top_level" },
-    { key: "predicted_total", label: "Predicted Total Goals", type: "number", required: true, min: 0, scope: "top_level" },
+    { key: "predicted_home_score", label: "Expected Goals (Home)", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+    { key: "predicted_away_score", label: "Expected Goals (Away)", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+    { key: "predicted_total", label: "Predicted Total Goals", type: "number", required: true, min: 0, scope: "top_level", computeFrom: "predicted_home_score + predicted_away_score" },
     { key: "predicted_ml_winner", label: "Pick", type: "enum", required: true, options: ["home", "away", "draw"], scope: "top_level" },
     { key: "home_win_pct", label: "Home Win %", type: "percent", required: true, min: 0, max: 100, scope: "sport_specific" },
     { key: "draw_pct", label: "Draw %", type: "percent", required: true, min: 0, max: 100, scope: "sport_specific" },
@@ -151,9 +171,9 @@ export const NCAAB_SCHEMA: SportSchema = {
   sport: "cbb",
   displayName: "NCAAB 🏀",
   fields: [
-    { key: "predicted_home_score", label: "Home Score", type: "number", required: true, min: 0, scope: "top_level" },
-    { key: "predicted_away_score", label: "Away Score", type: "number", required: true, min: 0, scope: "top_level" },
-    { key: "predicted_total", label: "Predicted Total", type: "number", required: true, min: 0, scope: "top_level" },
+    { key: "predicted_home_score", label: "Home Score", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+    { key: "predicted_away_score", label: "Away Score", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+    { key: "predicted_total", label: "Predicted Total", type: "number", required: true, min: 0, scope: "top_level", computeFrom: "predicted_home_score + predicted_away_score" },
     { key: "listed_line", label: "Listed Line", type: "number", required: false, scope: "sport_specific", helpText: "Sportsbook total at upload" },
   ],
 };
