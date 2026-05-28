@@ -36,10 +36,21 @@ import type { SlateStatus } from "../types/domain/Grade";
 
 // ─── Audit helper ─────────────────────────────────────────────────────────
 
+/**
+ * Fix 6.1 (Gap-23.5 / Flag D1): the audit row's `source_type` now matches
+ * the data-provenance tier of the action being recorded. Defaults to
+ * `'manual'` because slate transitions (publish / finalize / hide /
+ * promote_historical) are driven by admin operators; Phase 8 automation
+ * may pass `'real_api'` when an automated provider triggers a transition.
+ * Pre-Fix-6.1 the column was hardcoded `'mock'`, which made the audit
+ * trail misleading post-launch — every admin action looked like seed.
+ */
 type AuditPayload = {
   action_type: string;
   before_state: Record<string, unknown> | null;
   after_state: Record<string, unknown> | null;
+  /** Optional override; defaults to 'manual' (admin action). */
+  source_type?: "mock" | "manual" | "real_api";
 };
 
 async function writeAudit(payload: AuditPayload): Promise<void> {
@@ -49,7 +60,7 @@ async function writeAudit(payload: AuditPayload): Promise<void> {
     target_id: null,
     before_state: payload.before_state,
     after_state: payload.after_state,
-    source_type: "mock", // V1: every action is mock-mode; Phase 7.25/8 override
+    source_type: payload.source_type ?? "manual",
     // admin_user_id: NULL until Phase 7 auth wires real admin claims
   });
   if (error) {

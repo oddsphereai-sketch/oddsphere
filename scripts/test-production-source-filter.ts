@@ -319,6 +319,105 @@ async function main() {
     );
   }
 
+  // ─── Fix 6.1 (Gap-23.5): manual / real_api visibility audit ─────────
+  // Temporarily flip one seed row to source_type='manual' and another to
+  // 'real_api'; verify both surface in production mode while 'mock' stays
+  // hidden. Restores both rows to 'mock' afterwards. The seed slate's
+  // size + game IDs are known so the assertion is deterministic.
+  section("Fix 6.1 (Gap-23.5) — manual + real_api pass production filter");
+
+  if (gameIds.length >= 2) {
+    const { data: predRows } = await supabase
+      .from("game_predictions")
+      .select("id, game_id, source_type")
+      .in("game_id", gameIds)
+      .order("id", { ascending: true });
+    const allPredRows = (predRows ?? []) as Array<{
+      id: number;
+      game_id: number;
+      source_type: string;
+    }>;
+
+    if (allPredRows.length >= 2) {
+      const manualRow = allPredRows[0]!;
+      const realApiRow = allPredRows[1]!;
+
+      // Flip provenance on two seed rows.
+      await supabase
+        .from("game_predictions")
+        .update({ source_type: "manual" })
+        .eq("id", manualRow.id);
+      await supabase
+        .from("game_predictions")
+        .update({ source_type: "real_api" })
+        .eq("id", realApiRow.id);
+
+      try {
+        setMode("production");
+        const res = await dailyEdge(
+          new Request(
+            "http://localhost/api/lab/daily-edge?sport=mlb&date=2026-05-22"
+          )
+        );
+        const body = (await res.json()) as DailyEdgeResponse;
+
+        // Expect exactly the 2 non-mock rows to surface (the other 10 mock
+        // rows remain filtered).
+        check(
+          `prod mode + 2 non-mock rows: daily-edge returns exactly 2 games (got ${body.games.length})`,
+          body.games.length === 2
+        );
+
+        // The 2 visible games should correspond to the manual + real_api
+        // rows we just flipped (matched by external_id).
+        const { data: gameRowsForFlip } = await supabase
+          .from("games")
+          .select("id, external_id")
+          .in("id", [manualRow.game_id, realApiRow.game_id]);
+        const externalIds = new Set(
+          ((gameRowsForFlip ?? []) as Array<{ external_id: number }>).map(
+            (g) => g.external_id
+          )
+        );
+        const responseExternalIds = new Set(
+          body.games.map((g: { external_id: number }) => g.external_id)
+        );
+        check(
+          "prod mode: visible games match the flipped rows (manual + real_api)",
+          externalIds.size === 2 &&
+            responseExternalIds.size === 2 &&
+            Array.from(externalIds).every((id) =>
+              responseExternalIds.has(id as number)
+            )
+        );
+      } finally {
+        // Always restore both rows to 'mock' so subsequent suites see
+        // the seed slate in its original state.
+        await supabase
+          .from("game_predictions")
+          .update({ source_type: "mock" })
+          .eq("id", manualRow.id);
+        await supabase
+          .from("game_predictions")
+          .update({ source_type: "mock" })
+          .eq("id", realApiRow.id);
+      }
+
+      // Confirm the cleanup landed.
+      const { data: cleanedRows } = await supabase
+        .from("game_predictions")
+        .select("source_type")
+        .in("id", [manualRow.id, realApiRow.id]);
+      const allBackToMock = (
+        (cleanedRows ?? []) as Array<{ source_type: string }>
+      ).every((r) => r.source_type === "mock");
+      check(
+        "Fix 6.1 visibility audit: cleanup restored both flipped rows to 'mock'",
+        allBackToMock
+      );
+    }
+  }
+
   // ─── Summary ──────────────────────────────────────────────────────────────
   console.log(`\n${"━".repeat(70)}`);
   console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);

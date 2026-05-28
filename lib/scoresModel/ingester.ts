@@ -20,10 +20,42 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Sport } from "../types/domain/Sport";
 import type { PredictionSource } from "../types/domain/Prediction";
+import type { SourceType } from "../types/domain/Grade";
 import {
   getSportSchema,
   type SportSchemaField,
 } from "./sportSchemas";
+
+/**
+ * Fix 6.1 (Gap-23.5) — infer the data-provenance `source_type` from the
+ * caller's `prediction_source` value. The production filter at
+ * lib/db/productionFilter.ts excludes `source_type='mock'` rows from
+ * member-facing responses; rows uploaded by Daniel via the admin route
+ * must be tagged `'manual'` so they pass the filter.
+ *
+ * Mapping (Flag B1 — inference, not explicit param):
+ *   • manual_daniel → "manual"    (V1 admin upload path — pass filter)
+ *   • auto_v1/v2/auto_*  → "real_api" (future cron-driven real providers)
+ *   • anything unrecognized → "mock" (defensive — never accidentally leak
+ *     unverified data into production)
+ *
+ * Tracked follow-ups: when Phase 8 real_api providers land, their write
+ * path may call ingestScoresModel with a new PredictionSource value; this
+ * helper auto-maps `auto_*` → `real_api`, so no caller changes needed.
+ */
+function inferSourceType(predictionSource: PredictionSource): SourceType {
+  if (predictionSource === "manual_daniel") return "manual";
+  if (
+    typeof predictionSource === "string" &&
+    predictionSource.startsWith("auto_")
+  ) {
+    return "real_api";
+  }
+  return "mock";
+}
+
+/** Exported for the test suite to verify the inference contract. */
+export { inferSourceType };
 
 // ─────────────────────────────────────────────────────────────────────────
 // Input row shape (loose — schema enforces what's required per sport)
@@ -170,9 +202,15 @@ function buildPayload(
   source: PredictionSource
 ): Record<string, unknown> {
   const schema = getSportSchema(sport);
+  // Fix 6.1 (Gap-23.5): set source_type explicitly. Pre-Fix-6.1 this column
+  // was omitted, so the DB default 'mock' applied to every row — including
+  // Daniel's manual uploads, which then got filtered out in production.
+  // The inferSourceType helper maps the existing prediction_source ("who
+  // wrote this") to source_type ("what provenance tier").
   const topLevel: Record<string, unknown> = {
     game_id: gameId,
     prediction_source: source,
+    source_type: inferSourceType(source),
     is_override: false,
     original_auto_prediction: null,
     model_version: row.model_version,

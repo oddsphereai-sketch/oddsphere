@@ -78,6 +78,10 @@ export async function POST(request: Request) {
     failed: result.failed.length,
     verdicts_updated: verdictsUpdated,
     run_id: result.run_id,
+    // Fix 6.1 (Gap-23.5): explicit provenance tag so the admin tool can
+    // surface "this upload IS production-visible" feedback. Mirrors what
+    // ingestScoresModel actually wrote to game_predictions.source_type.
+    source_type_written: "manual" as const,
     errors: result.failed.map((f) => ({
       game_external_id: f.row.game_external_id,
       errors: f.errors,

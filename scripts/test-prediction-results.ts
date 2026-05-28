@@ -181,6 +181,42 @@ async function main() {
     propWins === 3
   );
 
+  // Fix 6.1 (Gap-23.5) — prediction_results carry-forward of source_type.
+  // The seed slate's game_predictions + prop_predictions are 'mock', so
+  // every prediction_results row spawned from them should inherit 'mock'.
+  // Pre-Fix-6.1 the column relied on DB DEFAULT 'mock' which gave the
+  // right answer for the wrong reason; Fix 6.1 reads + writes the column
+  // explicitly so future 'manual'/'real_api' source predictions carry
+  // forward correctly.
+  const { data: propCarryRows } = await supabase
+    .from("prediction_results")
+    .select("source_type")
+    .eq("game_date", "2026-05-22")
+    .in("prop_prediction_id", await getNyyBosPropPredIds(nyyBosGame.id));
+  const allPropMock = ((propCarryRows ?? []) as Array<{ source_type: string }>).every(
+    (r) => r.source_type === "mock"
+  );
+  check(
+    `prediction_results inherit source_type from source prop_predictions (all 'mock' for seed)`,
+    (propCarryRows ?? []).length > 0 && allPropMock
+  );
+
+  // Same check for game-level results spawned from NYY-BOS's game_prediction.
+  const { data: gameCarryRows } = await supabase
+    .from("prediction_results")
+    .select("source_type, prediction_type")
+    .eq("game_date", "2026-05-22")
+    .eq("prediction_type", "game_ml")
+    .order("id", { ascending: false })
+    .limit(5);
+  const allGameMock = ((gameCarryRows ?? []) as Array<{ source_type: string }>).every(
+    (r) => r.source_type === "mock"
+  );
+  check(
+    `prediction_results inherit source_type from source game_predictions (all 'mock' for seed game-level results)`,
+    (gameCarryRows ?? []).length > 0 && allGameMock
+  );
+
   // Idempotency check
   const resolveRes2 = await resultsService.resolveFinishedGames("mlb", "2026-05-22", actuals);
   check(

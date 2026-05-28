@@ -267,6 +267,14 @@ function ScoresModelForm({
         </button>
       </header>
 
+      {/* Fix 6.1 (Gap-23.5) — Daniel-facing provenance note. Uploads here
+          write source_type='manual' and pass the production filter at
+          lib/db/productionFilter.ts. */}
+      <div style={{ background: "#eef6ff", border: "1px solid #bcd9f5", color: "#1d4d8c", padding: "10px 14px", borderRadius: 4, marginBottom: 24, fontSize: 13, lineHeight: 1.5 }}>
+        Uploads are tagged <strong>manual</strong> and can surface in
+        Production Daily Edge. Use seed/dev data only for mock testing.
+      </div>
+
       <div style={{ display: "flex", gap: 16, marginBottom: 24, alignItems: "center" }}>
         <label>
           Sport

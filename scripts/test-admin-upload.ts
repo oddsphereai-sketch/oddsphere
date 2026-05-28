@@ -114,6 +114,7 @@ async function main() {
   check("upload happy path → 200", uploadRes.status === 200);
   const uploadBody = (await uploadRes.json()) as {
     inserted: number; updated: number; failed: number; verdicts_updated: number; errors: unknown[]; run_id: number | null;
+    source_type_written?: string;
   };
   check(`upload: 12 updated (UPSERT existing)`, uploadBody.updated === 12);
   check(`upload: 0 failed`, uploadBody.failed === 0);
@@ -127,15 +128,44 @@ async function main() {
   );
   check(`upload: run_id populated`, typeof uploadBody.run_id === "number");
 
+  // Fix 6.1 (Gap-23.5): admin upload response advertises the source_type
+  // that was actually written. Confirms the new provenance contract.
+  check(
+    `upload: response.source_type_written === "manual"`,
+    uploadBody.source_type_written === "manual"
+  );
+
   // Verify the upload landed
   const { data: gpRow } = await supabase
     .from("game_predictions")
-    .select("ml_confidence, model_version")
+    .select("ml_confidence, model_version, source_type")
     .eq("model_version", "daniels-v3.2-test")
     .limit(1);
   check(
     `DB: game_predictions updated with new model_version`,
     (gpRow ?? []).length === 1
+  );
+
+  // Fix 6.1 (Gap-23.5): manual upload writes source_type='manual' so the
+  // production filter at lib/db/productionFilter.ts passes the row through
+  // to member-facing /lab/* responses. Pre-Fix-6.1 the column relied on
+  // DB DEFAULT 'mock' and the filter hid Daniel's uploads in production.
+  check(
+    `DB: game_predictions.source_type === "manual" after admin upload (Fix 6.1 / Gap-23.5)`,
+    ((gpRow ?? []) as Array<{ source_type: string | null }>)[0]?.source_type === "manual"
+  );
+
+  // Bulk check: every row touched by the upload now carries source_type='manual'.
+  const { data: allManualRows } = await supabase
+    .from("game_predictions")
+    .select("id, source_type")
+    .eq("model_version", "daniels-v3.2-test");
+  const allManual = ((allManualRows ?? []) as Array<{ source_type: string | null }>).every(
+    (r) => r.source_type === "manual"
+  );
+  check(
+    `DB: every uploaded game_predictions row carries source_type='manual' (12 rows)`,
+    allManual && (allManualRows ?? []).length === 12
   );
 
   // Idempotency: re-upload same payload → all 12 updated again
@@ -180,6 +210,17 @@ async function main() {
   // Restore env
   if (origToken) process.env.ADMIN_TOKEN = origToken; else delete process.env.ADMIN_TOKEN;
   if (origAllowlist) process.env.ADMIN_EMAIL_ALLOWLIST = origAllowlist; else delete process.env.ADMIN_EMAIL_ALLOWLIST;
+
+  // Fix 6.1 (Gap-23.5): the admin upload above flipped 12 seed
+  // game_predictions rows to source_type='manual'. Restore to 'mock' so
+  // subsequent suites (test:production-source-filter, test:lab-daily-edge)
+  // see the seed slate in its original mock state. Without this restore,
+  // the production-filter E2E "prod mode → 0 games" assertion would fail
+  // because the seed slate rows would surface as 'manual'.
+  await supabase
+    .from("game_predictions")
+    .update({ source_type: "mock" })
+    .eq("model_version", "daniels-v3.2-test");
 
   // ─── Summary ─────────────────────────────────────────────────────────────
   console.log(`\n${"━".repeat(70)}`);

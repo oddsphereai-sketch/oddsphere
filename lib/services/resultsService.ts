@@ -127,16 +127,20 @@ export const resultsService = {
       await supabase.from("prediction_results").delete().in("prop_prediction_id", ppIds);
     }
 
-    // Prop predictions with their player external_id
+    // Prop predictions with their player external_id.
+    // Fix 6.1 (Gap-23.5): read source_type so prediction_results carries
+    // provenance forward. Production filter at lib/db/productionFilter.ts
+    // can then keep mock/manual/real_api separation cohesive across
+    // predictions → results → tracking/calibration aggregates.
     const { data: propPredRows } = await supabase
       .from("prop_predictions")
-      .select("id, game_id, prop_market, prop_line, players:player_id (external_id)")
+      .select("id, game_id, prop_market, prop_line, source_type, players:player_id (external_id)")
       .in("game_id", gameDbIds);
 
-    // Game predictions
+    // Game predictions — also read source_type for carry-forward.
     const { data: gamePredRows } = await supabase
       .from("game_predictions")
-      .select("id, game_id, predicted_ml_winner, predicted_ou_side, predicted_nrfi, bet_odds_american")
+      .select("id, game_id, predicted_ml_winner, predicted_ou_side, predicted_nrfi, bet_odds_american, source_type")
       .in("game_id", gameDbIds);
 
     const inserts: Array<Record<string, unknown>> = [];
@@ -144,6 +148,7 @@ export const resultsService = {
     // Resolve prop predictions
     type PropPredRow = {
       id: number; game_id: number; prop_market: string; prop_line: number;
+      source_type: string | null;
       players: { external_id: number } | null;
     };
     for (const p of (propPredRows ?? []) as unknown as PropPredRow[]) {
@@ -175,23 +180,30 @@ export const resultsService = {
         closing_odds_american: null,
         clv_pct: null,
         beat_closing_line: null,
+        // Fix 6.1: inherit provenance from the source prop_prediction.
+        // null source_type falls back to DB default 'mock' (defensive).
+        source_type: p.source_type ?? "mock",
       });
     }
 
     // Resolve game-level predictions (one game_prediction → up to 3 results
-    // for ML/total/NRFI).
+    // for ML/total/NRFI). Fix 6.1: source_type inherited from source row.
     type GamePredRow = {
       id: number; game_id: number;
       predicted_ml_winner: "home" | "away" | null;
       predicted_ou_side: "over" | "under" | null;
       predicted_nrfi: boolean | null;
       bet_odds_american: number | null;
+      source_type: string | null;
     };
     for (const gp of (gamePredRows ?? []) as GamePredRow[]) {
       const actual = actuals.find((a) => a.game_db_id === gp.game_id);
       if (!actual) continue;
       const gameDate = gameDateById.get(gp.game_id) ?? date;
       const resolvedAtIso = `${gameDate}T23:30:00.000Z`;
+      // Fix 6.1: carry forward source_type for every result row spawned
+      // from this game_prediction (ML / total / NRFI all share provenance).
+      const inheritedSourceType = gp.source_type ?? "mock";
 
       if (gp.predicted_ml_winner) {
         const r = resolveGame({
@@ -213,6 +225,7 @@ export const resultsService = {
           closing_odds_american: gp.bet_odds_american,
           clv_pct: null,
           beat_closing_line: null,
+          source_type: inheritedSourceType,
         });
       }
       if (gp.predicted_ou_side) {
@@ -235,6 +248,7 @@ export const resultsService = {
           closing_odds_american: null,
           clv_pct: null,
           beat_closing_line: null,
+          source_type: inheritedSourceType,
         });
       }
       if (gp.predicted_nrfi !== null) {
@@ -258,6 +272,7 @@ export const resultsService = {
           closing_odds_american: null,
           clv_pct: null,
           beat_closing_line: null,
+          source_type: inheritedSourceType,
         });
       }
     }
