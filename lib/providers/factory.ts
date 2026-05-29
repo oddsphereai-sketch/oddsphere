@@ -31,6 +31,15 @@ import { MockWeatherProvider } from "./mock/MockWeatherProvider";
 import { MockParkFactorProvider } from "./mock/MockParkFactorProvider";
 import { ManualSlateProvider } from "./manual/ManualSlateProvider";
 
+// Gate B.1 Phase 1 — real_api implementations.
+import { BallDontLieProvider } from "./real_api/BallDontLieProvider";
+import { BallDontLieSlateProvider } from "./real_api/BallDontLieSlateProvider";
+import { SharpAPIOddsProvider, type SharpApiGameResolver } from "./real_api/SharpAPIOddsProvider";
+import { SharpAPISignalProvider } from "./real_api/SharpAPISignalProvider";
+import type { MlbTeamAbbrev } from "./real_api/_teamNameNormalizer";
+import { supabase } from "../db/supabase";
+import type { Sport } from "../types/domain/Sport";
+
 type ProviderMode = "mock" | "manual" | "real_api";
 
 let oddsInstance: IOddsProvider | null = null;
@@ -63,6 +72,68 @@ function notImplemented(
   );
 }
 
+/**
+ * Gate B.1 Phase 1 — read a required env var with a clear error when
+ * missing. Used by the real_api branches to surface a friendly error
+ * naming the env var (BALLDONTLIE_API_KEY / SHARPAPI_KEY) instead of a
+ * cryptic "apiKey must be non-empty" from a downstream constructor.
+ */
+function readRequiredEnv(envKey: string, providerName: string): string {
+  const value = process.env[envKey];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(
+      `${providerName} requires ${envKey} to be set in the environment. ` +
+        `Found: ${value === undefined ? "unset" : `'${value}'`}.`
+    );
+  }
+  return value;
+}
+
+/**
+ * Gate B.1 Phase 1 — resolver closure that maps a SharpAPI event's natural
+ * key (sport + slate_date + team abbreviations) to the BDL integer
+ * external_id already stored in the `games` table. Both
+ * SharpAPIOddsProvider and SharpAPISignalProvider receive an instance of
+ * this resolver at construction time. Returns null when no matching game
+ * is found — caller skips the event without throwing.
+ *
+ * Implementation strategy: two-step lookup (teams by abbreviation, then
+ * games by home/away team id + slate_date). Avoids the need for a
+ * server-side join. The Supabase server-side client uses the
+ * SERVICE_ROLE_KEY so RLS is bypassed.
+ */
+function makeSharpApiGameResolver(): SharpApiGameResolver {
+  return async (
+    sport: Sport,
+    date: string,
+    homeAbbrev: MlbTeamAbbrev,
+    awayAbbrev: MlbTeamAbbrev
+  ): Promise<number | null> => {
+    const { data: teams, error: teamsError } = await supabase
+      .from("teams")
+      .select("id, abbreviation")
+      .eq("sport", sport)
+      .in("abbreviation", [homeAbbrev, awayAbbrev]);
+    if (teamsError) return null;
+    if (!teams || teams.length < 2) return null;
+    const homeRow = teams.find((t) => t.abbreviation === homeAbbrev);
+    const awayRow = teams.find((t) => t.abbreviation === awayAbbrev);
+    if (homeRow === undefined || awayRow === undefined) return null;
+
+    const { data: game, error: gameError } = await supabase
+      .from("games")
+      .select("external_id")
+      .eq("sport", sport)
+      .eq("slate_date", date)
+      .eq("home_team_id", homeRow.id)
+      .eq("away_team_id", awayRow.id)
+      .limit(1)
+      .maybeSingle();
+    if (gameError) return null;
+    return game?.external_id ?? null;
+  };
+}
+
 export function getOddsProvider(): IOddsProvider {
   if (oddsInstance === null) {
     const mode = readMode("ODDS_PROVIDER");
@@ -71,7 +142,9 @@ export function getOddsProvider(): IOddsProvider {
     } else if (mode === "manual") {
       notImplemented("ODDS_PROVIDER", mode, "AdminUploadOddsProvider", "Phase 7.25");
     } else {
-      notImplemented("ODDS_PROVIDER", mode, "SharpAPIOddsProvider", "Phase 8");
+      // Gate B.1 Phase 1 — SharpAPI wired.
+      const key = readRequiredEnv("SHARPAPI_KEY", "SharpAPIOddsProvider");
+      oddsInstance = new SharpAPIOddsProvider(key, makeSharpApiGameResolver());
     }
   }
   return oddsInstance;
@@ -85,7 +158,12 @@ export function getSharpSignalProvider(): ISharpSignalProvider {
     } else if (mode === "manual") {
       notImplemented("SHARP_SIGNAL_PROVIDER", mode, "AdminUploadSharpSignalProvider", "Phase 7.25");
     } else {
-      notImplemented("SHARP_SIGNAL_PROVIDER", mode, "SharpAPISignalProvider", "Phase 8");
+      // Gate B.1 Phase 1 — SharpAPI wired.
+      const key = readRequiredEnv("SHARPAPI_KEY", "SharpAPISignalProvider");
+      sharpSignalInstance = new SharpAPISignalProvider(
+        key,
+        makeSharpApiGameResolver()
+      );
     }
   }
   return sharpSignalInstance;
@@ -99,7 +177,9 @@ export function getPlayerStatsProvider(): IPlayerStatsProvider {
     } else if (mode === "manual") {
       notImplemented("PLAYER_STATS_PROVIDER", mode, "AdminUploadStatsProvider", "Phase 7.25");
     } else {
-      notImplemented("PLAYER_STATS_PROVIDER", mode, "BallDontLieProvider", "Phase 8");
+      // Gate B.1 Phase 1 — Ball Don't Lie wired.
+      const key = readRequiredEnv("BALLDONTLIE_API_KEY", "BallDontLieProvider");
+      playerStatsInstance = new BallDontLieProvider(key);
     }
   }
   return playerStatsInstance;
@@ -111,6 +191,10 @@ export function getPlayerStatsProvider(): IPlayerStatsProvider {
  * surface with it. Reads SLATE_PROVIDER env (mock | manual | real_api).
  * Default mock. Manual mode wires the staging-table-backed ingestion
  * (lib/providers/manual/ManualSlateProvider.ts).
+ *
+ * Gate B.1 Phase 1 — real_api branch now wires BallDontLieSlateProvider.
+ * SharpAPI slate provider deferred (post-launch enhancement per Gate B
+ * roadmap; BDL is canonical for V1).
  */
 export function getSlateProvider(): ISlateProvider {
   if (slateInstance === null) {
@@ -120,7 +204,9 @@ export function getSlateProvider(): ISlateProvider {
     } else if (mode === "manual") {
       slateInstance = new ManualSlateProvider();
     } else {
-      notImplemented("SLATE_PROVIDER", mode, "SharpAPISlateProvider", "Phase 8");
+      // Gate B.1 Phase 1 — Ball Don't Lie wired as canonical slate provider.
+      const key = readRequiredEnv("BALLDONTLIE_API_KEY", "BallDontLieSlateProvider");
+      slateInstance = new BallDontLieSlateProvider(key);
     }
   }
   return slateInstance;

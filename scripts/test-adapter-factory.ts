@@ -235,40 +235,13 @@ withEnv(
   }
 );
 
-// ─── 4. "real_api" throws notImplemented (Phase 8) ────────────────────────
+// ─── 4. "real_api" — WEATHER + PARK_FACTOR still throw Phase 8 ────────────
+// Gate B.1 Phase 1: ODDS / SHARP_SIGNAL / PLAYER_STATS / SLATE real_api
+// branches are now wired to real providers (BallDontLie + SharpAPI).
+// Coverage for the 4 wired branches lives in test-real-api-factory.ts.
+// Here we assert only the still-unimplemented branches.
 withEnv(
-  "4. *_PROVIDER=real_api throws notImplemented for Phase 8",
-  { ODDS_PROVIDER: "real_api" },
-  () => {
-    const r = throwsWith(getOddsProvider, "Phase 8");
-    check("ODDS_PROVIDER=real_api throws and mentions Phase 8", r.threw, r.message);
-  }
-);
-
-withEnv(
-  "    SHARP_SIGNAL_PROVIDER=real_api",
-  { SHARP_SIGNAL_PROVIDER: "real_api" },
-  () => {
-    const r = throwsWith(getSharpSignalProvider, "Phase 8");
-    check("SHARP_SIGNAL_PROVIDER=real_api throws and mentions Phase 8", r.threw, r.message);
-  }
-);
-
-withEnv(
-  "    PLAYER_STATS_PROVIDER=real_api",
-  { PLAYER_STATS_PROVIDER: "real_api" },
-  () => {
-    const r = throwsWith(getPlayerStatsProvider, "Phase 8");
-    check(
-      "PLAYER_STATS_PROVIDER=real_api throws and mentions Phase 8",
-      r.threw,
-      r.message
-    );
-  }
-);
-
-withEnv(
-  "    WEATHER_PROVIDER=real_api",
+  "4. WEATHER_PROVIDER=real_api still throws notImplemented for Phase 8",
   { WEATHER_PROVIDER: "real_api" },
   () => {
     const r = throwsWith(getWeatherProvider, "Phase 8");
@@ -277,25 +250,12 @@ withEnv(
 );
 
 withEnv(
-  "    PARK_FACTOR_PROVIDER=real_api",
+  "    PARK_FACTOR_PROVIDER=real_api still throws notImplemented for Phase 8",
   { PARK_FACTOR_PROVIDER: "real_api" },
   () => {
     const r = throwsWith(getParkFactorProvider, "Phase 8");
     check(
       "PARK_FACTOR_PROVIDER=real_api throws and mentions Phase 8",
-      r.threw,
-      r.message
-    );
-  }
-);
-
-withEnv(
-  "    SLATE_PROVIDER=real_api (Fix 7.2)",
-  { SLATE_PROVIDER: "real_api" },
-  () => {
-    const r = throwsWith(getSlateProvider, "Phase 8");
-    check(
-      "SLATE_PROVIDER=real_api throws and mentions Phase 8",
       r.threw,
       r.message
     );
