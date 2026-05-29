@@ -46,19 +46,26 @@ const MAX_CALLS_PER_INVOCATION = 8;
 type RawOpportunity = {
   event_id?: string | number | null;
   sport?: string | null;
+  league?: string | null;
   home_team?: string | null;
   away_team?: string | null;
   market_type?: string | null;
   market?: string | null;
   selection?: string | null;
+  selection_type?: string | null;
   side?: string | null;
   pinnacle_fair_probability?: number | string | null;
+  partner_fair_probability?: number | string | null;
   fair_probability?: number | string | null;
   fair_odds?: number | string | null;
+  no_vig_odds?: number | string | null;
   ev_pct?: number | string | null;
   ev_percent?: number | string | null;
+  ev_percentage?: number | string | null;
   edge?: number | string | null;
   detected_at?: string | null;
+  is_player_prop?: boolean | null;
+  is_alternate_line?: boolean | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -77,26 +84,42 @@ function asStringOrNull(v: unknown): string | null {
   return s.length === 0 ? null : s;
 }
 
+/**
+ * Map SharpAPI market_type strings to our internal MarketType union.
+ *
+ * Phase 1.5 correction (Task #162): SharpAPI returns specific names
+ * observed in the live data:
+ *   - "moneyline" / "h2h"          → moneyline
+ *   - "total_runs" / "total"       → total
+ *   - "run_line" / "runline"       → spread
+ *   - "first_inning_total"         → first_inning_total (true 1-inning O/U)
+ *
+ * Intentionally NOT mapped to first_inning_total:
+ *   - "1st_5_innings_total_runs" / "f5" — that's the FIRST 5 INNINGS market,
+ *     not the first inning. Different market; would mis-grade NRFI picks.
+ *
+ * Intentionally skipped (return null → caller drops the row):
+ *   - team_total            (per-team runs O/U; not a V1 market)
+ *   - player props          (no Player Props in V1)
+ *   - alternate lines       (alt totals/spreads; ignore non-main lines)
+ *   - F5 / first 5 innings  (different market than first_inning)
+ *   - outright / futures / championship
+ */
 function mapMarketType(raw: string | null): MarketType | null {
   if (raw === null) return null;
   const v = raw.toLowerCase().trim();
   if (v === "h2h" || v === "moneyline" || v === "ml") return "moneyline";
-  if (v === "total" || v === "totals" || v === "over_under" || v === "ou") return "total";
+  if (v === "total" || v === "totals" || v === "total_runs" || v === "over_under" || v === "ou") {
+    return "total";
+  }
   if (v === "spread" || v === "spreads" || v === "runline" || v === "run_line") {
     return "spread";
   }
-  if (
-    v === "first_inning_total" ||
-    v === "1st_inning_total" ||
-    v === "first_5_innings" ||
-    v === "f5" ||
-    v === "1h_total"
-  ) {
+  if (v === "first_inning_total" || v === "1st_inning_total") {
     return "first_inning_total";
   }
-  if (v === "outright" || v.includes("future") || v.includes("championship")) {
-    return null;
-  }
+  // Everything else (team_total, player props, alternate lines, F5,
+  // futures, championships) → skip.
   return null;
 }
 
@@ -156,6 +179,13 @@ async function mapOpportunity(
   resolveGame: SharpApiGameResolver,
   fallbackComputedAt: string
 ): Promise<SharpSignalRecord | null> {
+  // Phase 1.5 correction (Task #162): SharpAPI tags game-level opportunities
+  // as is_player_prop=false and is_alternate_line=false. Skip player prop
+  // rows (no Player Props in V1) and alternate-line rows (we only ingest the
+  // main line per market for V1).
+  if (row.is_player_prop === true) return null;
+  if (row.is_alternate_line === true) return null;
+
   const homeAbbrev = normalizeMlbTeamName(row.home_team);
   const awayAbbrev = normalizeMlbTeamName(row.away_team);
   if (homeAbbrev === null || awayAbbrev === null) return null;
@@ -165,7 +195,7 @@ async function mapOpportunity(
 
   const side = mapSide(
     asStringOrNull(row.selection),
-    asStringOrNull(row.side),
+    asStringOrNull(row.side ?? row.selection_type),
     marketType,
     homeAbbrev,
     awayAbbrev
@@ -180,18 +210,29 @@ async function mapOpportunity(
   );
   if (gameExternalId === null) return null;
 
+  // Phase 1.5: SharpAPI exposes both pinnacle_fair_probability and
+  // partner_fair_probability on /opportunities/ev rows. partner_* refers to
+  // the sharp-book partner (Pinnacle in practice; sharp_book="pinnacle"
+  // observed). Prefer pinnacle_* when explicitly named; fall back to
+  // partner_* then generic fair_probability.
+  const pinnacleProb =
+    asNumberOrNull(row.pinnacle_fair_probability) ??
+    asNumberOrNull(row.partner_fair_probability) ??
+    asNumberOrNull(row.fair_probability);
+
+  const evPct =
+    asNumberOrNull(row.ev_pct) ??
+    asNumberOrNull(row.ev_percent) ??
+    asNumberOrNull(row.ev_percentage) ??
+    asNumberOrNull(row.edge);
+
   return {
     game_external_id: gameExternalId,
     market_type: marketType,
     side,
-    pinnacle_fair_probability:
-      asNumberOrNull(row.pinnacle_fair_probability) ??
-      asNumberOrNull(row.fair_probability),
+    pinnacle_fair_probability: pinnacleProb,
     is_plus_ev: source === "ev",
-    ev_pct:
-      asNumberOrNull(row.ev_pct) ??
-      asNumberOrNull(row.ev_percent) ??
-      asNumberOrNull(row.edge),
+    ev_pct: evPct,
     has_steam_move: false,
     steam_detected_at: null,
     steam_books_count: null,
@@ -269,8 +310,14 @@ export class SharpAPISignalProvider implements ISharpSignalProvider {
       }
 
       for (const row of rows) {
-        const sportTag = asStringOrNull(row.sport)?.toLowerCase();
-        if (sportTag !== null && sportTag !== undefined && sportTag !== "mlb") {
+        // Phase 1.5 correction (Task #162): SharpAPI tags game rows as
+        // sport="baseball" + league="mlb". The earlier sport==="mlb" check
+        // rejected every row. Filter on league instead. Fall through if
+        // league is missing (defense — let downstream team-name mapping
+        // decide), but skip explicit non-mlb leagues (college_baseball,
+        // kbo, npb, etc.).
+        const leagueTag = asStringOrNull(row.league)?.toLowerCase();
+        if (leagueTag !== null && leagueTag !== "mlb") {
           continue;
         }
         const record = await mapOpportunity(

@@ -1,24 +1,33 @@
 /**
  * SharpAPIOddsProvider — IOddsProvider implementation backed by SharpAPI.
- * Phase 1 (Gate B.1).
+ * Phase 1.5 correction (Task #162).
  *
- * Verified by Gate A probe — /events and /odds confirmed live with
- * documented field shapes. Pro $229 vs Sharp $399 tier difference does
- * not affect provider code; current operating assumption is Sharp tier
- * (task #149 to verify Pro tier later).
+ * DISCOVERY ENDPOINT: /opportunities/ev — not /events.
+ *
+ * Phase 1's earlier /events flow returned 0 rows in live smoke because
+ * (a) SharpAPI tags game rows as sport="baseball" + league="mlb" rather
+ * than sport="mlb", and (b) /events returns a mostly-junk mix of Kalshi
+ * futures, college baseball, KBO, NPB, golf, and fictional MiLB-style
+ * teams under sport="baseball" — even when filtering for league=mlb,
+ * the team strings come back compressed ("TOR Toronto") in ways our
+ * normalizer can't safely resolve.
+ *
+ * /opportunities/ev returns ONLY real game-level opportunities with full
+ * team names ("Toronto Blue Jays" / "Baltimore Orioles") and a clean
+ * event_id that /odds accepts. Even though it filters to +EV-positive
+ * opportunities, every active MLB game with sharp-book reference odds
+ * surfaces multiple opportunity rows, so we get the full slate of
+ * discoverable events. Games with NO +EV opportunity are invisible —
+ * that's acceptable for V1 because without a sharp reference we have no
+ * Pinnacle context for that game anyway.
  *
  * Bridge problem: SharpAPI events have string IDs like
- * "mlb__nyy_bos_2026-05-29_b1" but our lines.game_id FK resolves via the
- * BDL integer external_id stored in games. The provider receives a
- * resolver closure at construction (the factory wires it to a Supabase
- * query against games + teams). For each SharpAPI event, the provider
- * normalizes the team strings, calls the resolver, and uses the returned
- * BDL external_id as LineRecord.game_external_id.
- *
- * Futures filter: SharpAPI's /events returns ALL MLB-tagged events
- * including Kalshi championship outright markets. The provider skips
- * events where market_type === "outright" (Gate A probe encountered one
- * and falsely flagged downstream coverage gaps).
+ * "mlb_bluejays_orioles_2026-05-29_b3" but our lines.game_id FK resolves
+ * via the BDL integer external_id stored in games. The provider receives
+ * a resolver closure at construction (the factory wires it to a Supabase
+ * query). For each unique SharpAPI event, we normalize teams, call the
+ * resolver, and use the returned BDL external_id as
+ * LineRecord.game_external_id.
  *
  * V1: getPlayerProps returns []. No Player Props in V1.
  */
@@ -57,43 +66,45 @@ const MAX_CALLS_PER_INVOCATION = 30;
 // Raw shapes
 // ─────────────────────────────────────────────────────────────
 
-type RawEvent = {
-  id?: string | number | null;
+/**
+ * /opportunities/ev row used as discovery source. Only fields the
+ * provider reads — SharpAPI returns ~40 keys per row; we ignore the
+ * ones we don't use.
+ */
+type RawOpportunity = {
   event_id?: string | number | null;
   sport?: string | null;
   league?: string | null;
   home_team?: string | null;
   away_team?: string | null;
-  start_time?: string | null;
-  status?: string | null;
-  is_live?: boolean | null;
-  market_type?: string | null;
-  market_count?: number | null;
-  book_count?: number | null;
+  is_player_prop?: boolean | null;
+  is_alternate_line?: boolean | null;
 };
 
+/**
+ * /odds row — Phase 1.5 inspection (Task #162). Verified live keys
+ * include `sportsbook`, `market_type`, `selection_type` (the clean side
+ * field — "home" / "away" / "over" / "under"), `selection` (string
+ * label), `line`, `odds_american`, `odds_decimal`, `odds_probability`,
+ * `league`, `sport`, `last_seen_at`, `wire_received_at`.
+ */
 type RawOddsRow = {
   event_id?: string | number | null;
   sportsbook?: string | null;
-  book?: string | null;
+  sport?: string | null;
+  league?: string | null;
   market_type?: string | null;
-  market?: string | null;
   selection?: string | null;
-  side?: string | null;
+  selection_type?: string | null;
+  is_main_line?: boolean | null;
+  is_alternate_line?: boolean | null;
+  is_live?: boolean | null;
   line?: number | string | null;
-  line_value?: number | string | null;
-  price?: number | string | null;
-  odds?: number | string | null;
   odds_american?: number | string | null;
   odds_decimal?: number | string | null;
-  implied_probability?: number | string | null;
-  // EV/fair fields can appear on /odds for some books; usually live on /opportunities/ev
-  ev_percent?: number | string | null;
-  ev_pct?: number | string | null;
-  fair_odds?: number | string | null;
-  is_ev_positive?: boolean | null;
-  detected_at?: string | null;
-  fetched_at?: string | null;
+  odds_probability?: number | string | null;
+  last_seen_at?: string | null;
+  wire_received_at?: string | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -112,27 +123,34 @@ function asStringOrNull(v: unknown): string | null {
   return s.length === 0 ? null : s;
 }
 
+/**
+ * Map SharpAPI market_type strings to our internal MarketType union.
+ *
+ * Phase 1.5 correction (Task #162): SharpAPI returns specific names
+ * observed in the live data:
+ *   - "moneyline" / "h2h"          → moneyline
+ *   - "total_runs" / "total"       → total
+ *   - "run_line" / "runline"       → spread
+ *   - "first_inning_total"         → first_inning_total (true 1-inning O/U)
+ *
+ * Intentionally NOT mapped:
+ *   - "1st_5_innings_total_runs" / "f5" — that's the FIRST 5 INNINGS market,
+ *     not the first inning. Different market; would mis-grade NRFI picks.
+ *   - team_total, player props, alternate lines, futures, championships →
+ *     return null; caller drops the row.
+ */
 function mapMarketType(raw: string | null): MarketType | null {
   if (raw === null) return null;
   const v = raw.toLowerCase().trim();
   if (v === "h2h" || v === "moneyline" || v === "ml") return "moneyline";
-  if (v === "total" || v === "totals" || v === "over_under" || v === "ou") return "total";
+  if (v === "total" || v === "totals" || v === "total_runs" || v === "over_under" || v === "ou") {
+    return "total";
+  }
   if (v === "spread" || v === "spreads" || v === "runline" || v === "run_line") {
     return "spread";
   }
-  if (
-    v === "first_inning_total" ||
-    v === "1st_inning_total" ||
-    v === "first_5_innings" ||
-    v === "f5" ||
-    v === "1h_total"
-  ) {
+  if (v === "first_inning_total" || v === "1st_inning_total") {
     return "first_inning_total";
-  }
-  // Skip outrights (futures) — caller filters at /events level too, but
-  // defense in depth.
-  if (v === "outright" || v.includes("future") || v.includes("championship")) {
-    return null;
   }
   return null;
 }
@@ -144,40 +162,26 @@ function mapSportsbook(raw: string | null): Sportsbook | null {
 }
 
 /**
- * Map SharpAPI's selection string to our Side enum, given the event's
- * market_type and the resolved home/away abbreviations. Returns null when
- * we can't confidently classify — caller skips the row.
+ * Map SharpAPI's `selection_type` field directly to our Side enum.
+ * Phase 1.5 (Task #162): /odds rows include selection_type as a clean
+ * enum-like field ("home" / "away" / "over" / "under" / "yes" / "no"),
+ * eliminating the need for team-string parsing. Returns null when the
+ * value isn't recognized — caller skips the row.
  */
-function mapSide(
-  rawSelection: string | null,
-  rawSide: string | null,
-  marketType: MarketType,
-  homeAbbrev: MlbTeamAbbrev,
-  awayAbbrev: MlbTeamAbbrev
-): Side | null {
-  // Explicit side field wins when present.
-  const explicit = asStringOrNull(rawSide);
-  if (explicit !== null) {
-    const v = explicit.toLowerCase();
-    if (v === "home" || v === "away" || v === "over" || v === "under" || v === "yes" || v === "no") {
-      return v;
-    }
+function mapSide(rawSelectionType: unknown): Side | null {
+  const s = asStringOrNull(rawSelectionType);
+  if (s === null) return null;
+  const v = s.toLowerCase();
+  if (
+    v === "home" ||
+    v === "away" ||
+    v === "over" ||
+    v === "under" ||
+    v === "yes" ||
+    v === "no"
+  ) {
+    return v;
   }
-  const selection = asStringOrNull(rawSelection);
-  if (selection === null) return null;
-  const sel = selection.toLowerCase();
-
-  if (marketType === "total" || marketType === "first_inning_total") {
-    if (sel.includes("over") || sel === "o") return "over";
-    if (sel.includes("under") || sel === "u") return "under";
-    return null;
-  }
-
-  // Moneyline + spread: resolve team string → abbrev → home/away.
-  const abbrev = normalizeMlbTeamName(selection);
-  if (abbrev === null) return null;
-  if (abbrev === homeAbbrev) return "home";
-  if (abbrev === awayAbbrev) return "away";
   return null;
 }
 
@@ -203,52 +207,63 @@ export class SharpAPIOddsProvider implements IOddsProvider {
     const sportKey = sport ?? "mlb";
     if (sportKey !== "mlb") return [];
 
-    // Step 1: fetch events for the date.
-    let events: RawEvent[];
+    // Step 1: discover unique game events via /opportunities/ev.
+    // /events is intentionally NOT used (Task #162) — see file header.
+    let opportunities: RawOpportunity[];
     let callsUsed = 1;
     try {
-      events = await this.client.fetchAll<RawEvent>({
-        path: "/events",
-        query: { sport: "mlb", start_time_gte: date },
-        maxPages: 3,
+      opportunities = await this.client.fetchAll<RawOpportunity>({
+        path: "/opportunities/ev",
+        query: { sport: "mlb" },
+        maxPages: 5,
       });
     } catch (e) {
       if (e instanceof SharpApiNotFoundError) return [];
       throw e;
     }
 
-    // Step 2: filter to single-game events and resolve to BDL game ids.
+    // Step 2: dedupe to unique events, filter league === "mlb", drop
+    // player props and alternate lines, then resolve to BDL game ids.
     type ResolvedEvent = {
-      sharpEventId: string | number;
+      sharpEventId: string;
       homeAbbrev: MlbTeamAbbrev;
       awayAbbrev: MlbTeamAbbrev;
       gameExternalId: number;
     };
-    const resolved: ResolvedEvent[] = [];
 
-    for (const ev of events) {
-      // Filter market_type=outright (futures).
-      const marketTypeRaw = asStringOrNull(ev.market_type);
-      if (marketTypeRaw !== null && marketTypeRaw.toLowerCase() === "outright") {
+    type EventCandidate = {
+      sharpEventId: string;
+      homeRaw: string | null;
+      awayRaw: string | null;
+    };
+    const eventCandidates = new Map<string, EventCandidate>();
+    for (const opp of opportunities) {
+      if (opp.is_player_prop === true) continue;
+      if (opp.is_alternate_line === true) continue;
+      const league = asStringOrNull(opp.league)?.toLowerCase();
+      if (league !== null && league !== undefined && league !== "mlb") {
         continue;
       }
-      // Only MLB.
-      const sportTag = asStringOrNull(ev.sport)?.toLowerCase();
-      if (sportTag !== null && sportTag !== undefined && sportTag !== "mlb") {
-        continue;
-      }
-      const homeAbbrev = normalizeMlbTeamName(ev.home_team);
-      const awayAbbrev = normalizeMlbTeamName(ev.away_team);
+      const id = asStringOrNull(opp.event_id);
+      if (id === null) continue;
+      if (eventCandidates.has(id)) continue;
+      eventCandidates.set(id, {
+        sharpEventId: id,
+        homeRaw: asStringOrNull(opp.home_team),
+        awayRaw: asStringOrNull(opp.away_team),
+      });
+    }
+
+    const resolved: ResolvedEvent[] = [];
+    for (const cand of eventCandidates.values()) {
+      const homeAbbrev = normalizeMlbTeamName(cand.homeRaw);
+      const awayAbbrev = normalizeMlbTeamName(cand.awayRaw);
       if (homeAbbrev === null || awayAbbrev === null) {
-        // Log via console.warn so cron output preserves the diagnostic;
-        // no exception — skip and move on.
         console.warn(
-          `[SharpAPIOddsProvider] skipping event — unmatched team string(s): home="${ev.home_team ?? ""}" away="${ev.away_team ?? ""}"`
+          `[SharpAPIOddsProvider] skipping event ${cand.sharpEventId} — unmatched team string(s): home="${cand.homeRaw ?? ""}" away="${cand.awayRaw ?? ""}"`
         );
         continue;
       }
-      const sharpEventId = ev.event_id ?? ev.id ?? null;
-      if (sharpEventId === null) continue;
       const gameExternalId = await this.resolveGame(
         sportKey,
         date,
@@ -260,7 +275,12 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         // or doubleheader edge cases — silent skip.
         continue;
       }
-      resolved.push({ sharpEventId, homeAbbrev, awayAbbrev, gameExternalId });
+      resolved.push({
+        sharpEventId: cand.sharpEventId,
+        homeAbbrev,
+        awayAbbrev,
+        gameExternalId,
+      });
     }
 
     // Step 3: fetch /odds per resolved event, map to LineRecord.
@@ -278,7 +298,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
       try {
         oddsRows = await this.client.fetchAll<RawOddsRow>({
           path: "/odds",
-          query: { event_id: String(ev.sharpEventId) },
+          query: { event_id: ev.sharpEventId },
           maxPages: 3,
         });
       } catch (e) {
@@ -286,40 +306,42 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         throw e;
       }
       for (const row of oddsRows) {
-        const marketType = mapMarketType(asStringOrNull(row.market_type ?? row.market));
+        // Defense-in-depth: cross-check league on each odds row. Already
+        // filtered upstream at /opportunities/ev discovery, but a row
+        // tagged non-mlb here would still be a defect to skip.
+        const rowLeague = asStringOrNull(row.league)?.toLowerCase();
+        if (rowLeague !== null && rowLeague !== undefined && rowLeague !== "mlb") {
+          continue;
+        }
+        // Drop alternate lines — V1 only ingests the main line per market.
+        if (row.is_alternate_line === true) continue;
+
+        const marketType = mapMarketType(asStringOrNull(row.market_type));
         if (marketType === null) continue;
-        const sportsbook = mapSportsbook(asStringOrNull(row.sportsbook ?? row.book));
+        const sportsbook = mapSportsbook(asStringOrNull(row.sportsbook));
         if (sportsbook === null) continue;
-        const side = mapSide(
-          asStringOrNull(row.selection),
-          asStringOrNull(row.side),
-          marketType,
-          ev.homeAbbrev,
-          ev.awayAbbrev
-        );
+        const side = mapSide(row.selection_type);
         if (side === null) continue;
-        const lineValue = asNumberOrNull(row.line_value ?? row.line);
-        const oddsAmerican = asNumberOrNull(
-          row.odds_american ?? row.price ?? row.odds
-        );
-        const oddsDecimal = asNumberOrNull(row.odds_decimal);
+
         out.push({
           game_external_id: ev.gameExternalId,
           market_type: marketType,
           player_external_id: null,
           sportsbook,
           side,
-          line_value: lineValue,
-          odds_american: oddsAmerican,
-          odds_decimal: oddsDecimal,
-          implied_probability: asNumberOrNull(row.implied_probability),
-          ev_percent: asNumberOrNull(row.ev_percent ?? row.ev_pct),
-          fair_odds: asNumberOrNull(row.fair_odds),
-          is_ev_positive:
-            row.is_ev_positive === undefined || row.is_ev_positive === null
-              ? null
-              : row.is_ev_positive === true,
-          fetched_at: asStringOrNull(row.fetched_at) ?? fetchedAt,
+          line_value: asNumberOrNull(row.line),
+          odds_american: asNumberOrNull(row.odds_american),
+          odds_decimal: asNumberOrNull(row.odds_decimal),
+          implied_probability: asNumberOrNull(row.odds_probability),
+          // EV / fair fields live on /opportunities/ev rows (handled by
+          // SharpAPISignalProvider), NOT on /odds rows. Leave null.
+          ev_percent: null,
+          fair_odds: null,
+          is_ev_positive: null,
+          fetched_at:
+            asStringOrNull(row.last_seen_at) ??
+            asStringOrNull(row.wire_received_at) ??
+            fetchedAt,
         });
       }
     }

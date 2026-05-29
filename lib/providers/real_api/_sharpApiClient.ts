@@ -32,13 +32,24 @@ export type SharpApiRequestOptions = {
   signal?: AbortSignal;
 };
 
+/**
+ * SharpAPI uses offset-based pagination (verified Phase 1.5 investigation
+ * Task #162). Response shape:
+ *   { data: [...], pagination: { limit, offset, count, total, has_more,
+ *                                 next_offset } }
+ * Page-based ?page=N was originally guessed at and is silently ignored by
+ * SharpAPI — every page request returns the same first slice unless an
+ * explicit ?offset=N is supplied.
+ */
 export type SharpApiResponse<T> = {
   data: T;
   pagination?: {
+    limit?: number;
+    offset?: number;
+    count?: number;
     total?: number;
-    current_page?: number;
-    per_page?: number;
-    last_page?: number;
+    has_more?: boolean;
+    next_offset?: number;
   } | null;
 };
 
@@ -267,18 +278,30 @@ export class SharpApiClient {
   }
 
   /**
-   * Page-based pagination via `?page=N`. SharpAPI returns `pagination.total`
-   * and `pagination.last_page`; we walk pages until `current_page >=
-   * last_page` or the data array is empty. Hard maxPages cap defends
-   * against runaway loops.
+   * Offset-based pagination via `?offset=N`. The first request omits
+   * `offset` (SharpAPI starts at 0). Subsequent requests use
+   * `pagination.next_offset` from the previous response. Stops when:
+   *   - chunk is empty (no more rows)
+   *   - pagination.next_offset is missing
+   *   - next_offset does not advance (defensive — guards against the
+   *     observed Task #162 bug where ?page=N pagination silently
+   *     returned the same first slice forever)
+   *   - hard maxPages cap reached
+   *
+   * The Task #162 investigation found SharpAPI ignores `?page=N` entirely
+   * but honors `?offset=N` correctly.
    */
   async fetchAll<T>(
     opts: SharpApiRequestOptions & { maxPages?: number }
   ): Promise<T[]> {
     const maxPages = opts.maxPages ?? 10;
     const out: T[] = [];
-    for (let page = 1; page <= maxPages; page++) {
-      const query: QueryParams = { ...(opts.query ?? {}), page };
+    let offset: number | null = null;
+    for (let page = 0; page < maxPages; page++) {
+      const query: QueryParams = { ...(opts.query ?? {}) };
+      if (offset !== null && offset > 0) {
+        query.offset = offset;
+      }
       const res = await this.fetch<T[]>({
         path: opts.path,
         query,
@@ -286,9 +309,15 @@ export class SharpApiClient {
       });
       const chunk = Array.isArray(res.data) ? res.data : [];
       out.push(...chunk);
-      const lastPage = res.pagination?.last_page ?? null;
       if (chunk.length === 0) break;
-      if (lastPage !== null && page >= lastPage) break;
+      const nextOffset = res.pagination?.next_offset;
+      if (typeof nextOffset !== "number") break;
+      if (offset !== null && nextOffset <= offset) {
+        // Defensive: server reported an offset that doesn't advance.
+        // Avoid an infinite loop returning the same slice forever.
+        break;
+      }
+      offset = nextOffset;
     }
     return out;
   }

@@ -137,16 +137,65 @@ async function main() {
           !Number.isNaN(Date.parse(sample.fetched_at))
       );
     }
-    // Resolver invoked at least once if any events came back from /events
-    // and matched our normalizer table. Soft check — slate may be empty.
+    // Phase 1.5 (Task #162): Provider now uses /opportunities/ev for
+    // event discovery. The resolver MUST be invoked at least once when
+    // there are any +EV MLB opportunities on today's slate. Empty-slate
+    // case (no +EV opps today) is acceptable but reported as a soft warn.
     if (oddsMock.seen.length > 0) {
       check(
-        `resolver invoked ${oddsMock.seen.length} times (bridge exercised)`,
+        `resolver invoked ${oddsMock.seen.length} unique event(s) (bridge exercised via /opportunities/ev)`,
         true
+      );
+      // Each resolver invocation should have been for league=mlb only.
+      const allMlb = oddsMock.seen.every(
+        (s) => s.sport === "mlb"
+      );
+      check(
+        `every resolver call was sport=mlb (league filter held)`,
+        allMlb
+      );
+      // Resolved abbreviations should be uppercase 2-3 letter codes.
+      const allValidAbbrevs = oddsMock.seen.every(
+        (s) => /^[A-Z]{2,3}$/.test(s.home) && /^[A-Z]{2,3}$/.test(s.away)
+      );
+      check(
+        "every resolver call passed valid 2-3 letter abbreviations",
+        allValidAbbrevs
       );
     } else {
       console.log(
-        "  ! resolver was not invoked — likely empty SharpAPI slate or no recognizable teams"
+        "  ! resolver was not invoked — likely empty +EV slate today (no real MLB games returning +EV opportunities)"
+      );
+    }
+
+    // Phase 1.5: if we got any lines, verify they're game-level (no Player Props)
+    // and from supported markets only.
+    if (lines.length > 0) {
+      const allGameLevel = lines.every((l) => l.player_external_id === null);
+      check(
+        "every LineRecord has player_external_id=null (no Player Props from V1 odds provider)",
+        allGameLevel
+      );
+      const supportedMarkets = new Set(["moneyline", "total", "spread", "first_inning_total"]);
+      const allSupported = lines.every((l) =>
+        supportedMarkets.has(String(l.market_type))
+      );
+      check(
+        "every LineRecord has supported market_type (no team_total/F5/player_prop leakage)",
+        allSupported
+      );
+      // /odds rows don't carry ev_percent/fair_odds — those live on
+      // /opportunities/ev. Verify our provider didn't mistakenly populate
+      // those fields from /odds.
+      const allEvFieldsClean = lines.every(
+        (l) =>
+          l.ev_percent === null &&
+          l.fair_odds === null &&
+          l.is_ev_positive === null
+      );
+      check(
+        "every LineRecord has ev_percent/fair_odds/is_ev_positive = null (EV fields belong to /opportunities/ev, not /odds)",
+        allEvFieldsClean
       );
     }
   } catch (e) {
@@ -260,6 +309,20 @@ async function main() {
       "dedup invariant: no two rows share (game_external_id, market_type, side)",
       !dupeFound
     );
+
+    // Phase 1.5 (Task #162): resolver invocation evidence — confirms the
+    // league filter is permitting MLB rows rather than rejecting them all
+    // (Phase 1 had a sport==="mlb" filter that rejected every row).
+    if (signalMock.seen.length > 0) {
+      check(
+        `signal provider resolver invoked ${signalMock.seen.length} times (league=mlb filter permits real MLB games)`,
+        true
+      );
+    } else if (signals.length === 0) {
+      console.log(
+        "  ! signal provider resolver not invoked — acceptable when SharpAPI returns 0 MLB opportunities today, but check upstream if unexpected"
+      );
+    }
   } catch (e) {
     if (e instanceof SharpApiAuthError) {
       console.log(`  ✗ SharpAPI auth failed — ${e.message}`);
