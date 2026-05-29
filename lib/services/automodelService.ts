@@ -1,28 +1,44 @@
 /**
- * Phase 3B — automodelService dry-run orchestration.
+ * Phase 3B + 3C — automodelService orchestration.
  *
  * Single entry point `generatePredictionsForSlate` that wires together
  * the feature snapshot pipeline (Phase 3B), the pure rule-seeded model
- * (Phase 3A), and the AI sanity boundary (Phase 3A). Returns predictions
- * + diagnostic counts.
+ * (Phase 3A), the AI sanity boundary (Phase 3A), and — when explicitly
+ * opted into — controlled DB writes via the existing ingestScoresModel
+ * pipeline plus downstream market-signal + grade derivation.
  *
- * Phase 3B DISCIPLINE: strictly DRY-RUN.
- *   • `opts.writeToDb` defaults to false.
- *   • Setting `opts.writeToDb=true` THROWS immediately with a clear
- *     "Phase 3C scope" error message. The write branch is intentionally
- *     not implemented in this phase.
+ * Phase 3B DISCIPLINE (dry-run path) — defaults:
+ *   • `opts.writeToDb` defaults to false → dry-run; no DB writes.
  *   • No ingestScoresModel call.
- *   • No scores_model_runs audit write — strict no-write posture
- *     applies to audit tables too in Phase 3B.
- *   • No updateMarketSignalsForSlate or updateGradesForSlate call.
+ *   • No downstream service calls.
  *   • No slatePublishService call.
  *
+ * Phase 3C WRITE PATH (two-key opt-in):
+ *   • Caller passes `opts.writeToDb === true` AND
+ *     `process.env.AUTOMODEL_DB_WRITES_ENABLED === "true"` is set.
+ *   • Either missing → throws BEFORE any DB read/write.
+ *   • Reuses existing ingestScoresModel:
+ *       - UPSERTs game_predictions on game_id (preserves manual override
+ *         semantics: a later manual upload with `is_override=true` will
+ *         overwrite the auto row and snapshot the original).
+ *       - Writes scores_model_runs audit row internally via UPSERT on
+ *         (sport, source, run_date) — no separate audit write here.
+ *   • prediction_source="auto_v1_mlb_rules" → inferSourceType maps to
+ *     source_type="real_api" → passes production filter.
+ *   • validationMode="auto_model" — allows nulls on pick fields when
+ *     justified by sport_specific.held/hold_picks. Manual upload stays
+ *     strict (its callers pass validationMode="manual" or omit it).
+ *   • After successful ingest: triggers updateMarketSignalsForSlate and
+ *     updateGradesForSlate (same chain manual upload route uses post-
+ *     ingest). Partial-failure tolerant — each downstream call's error
+ *     is captured in the result, ingest is NOT rolled back.
+ *   • slate_status STAYS `draft` — no auto-publish. Phase 5 will add the
+ *     operator publish workflow.
+ *
  * Manual workflow stays the override path:
- *   • Phase 3B does not invoke ingestScoresModel — manual upload via
- *     /api/admin/upload-scores-model is unaffected.
- *   • When Phase 3C eventually adds the write branch behind an operator
- *     env flag, the manual UPSERT + is_override + original_auto_prediction
- *     semantics in ingestScoresModel handle the auto/manual coexistence.
+ *   • Phase 3C does not call /api/admin/upload-scores-model.
+ *   • Manual UPSERT + is_override=true + original_auto_prediction snapshot
+ *     semantics in ingestScoresModel handle the auto-then-manual flow.
  */
 
 import type { Sport } from "../types/domain/Sport";
@@ -34,6 +50,15 @@ import type {
   GameSnapshot,
   ModelStage,
 } from "../automodel/types";
+import { supabase } from "../db/supabase";
+import {
+  ingestScoresModel,
+  type IngestionResult,
+  type ScoresModelInputRow,
+} from "../scoresModel/ingester";
+import { loadGameIdMap } from "./_idMaps";
+import { updateMarketSignalsForSlate } from "./marketSignalDerivationService";
+import { updateGradesForSlate } from "./gradeDerivationService";
 
 // ─────────────────────────────────────────────────────────────
 // Public types
@@ -41,11 +66,60 @@ import type {
 
 export type AutoModelRunOpts = {
   /**
-   * Phase 3B: defaults false. Setting true THROWS "Phase 3C scope".
-   * The write branch (ingestScoresModel + scores_model_runs audit)
-   * is intentionally not implemented in this phase.
+   * Phase 3C: explicit caller opt-in for DB writes. Defaults false.
+   *
+   * Two-key gate: writeToDb=true AND env AUTOMODEL_DB_WRITES_ENABLED="true"
+   * BOTH required. Either missing throws BEFORE any DB read/write.
+   *
+   * When false (or omitted), runs pure dry-run (Phase 3B behavior — no
+   * DB writes anywhere).
    */
   writeToDb?: boolean;
+};
+
+/**
+ * Phase 3C — DB write outcomes. Structured partial-success: a successful
+ * ingest may be followed by a failed market_signals or grades step; this
+ * object surfaces every step's result independently so the caller can
+ * tell exactly what landed and what didn't.
+ */
+export type AutoModelDbWriteOutcome = {
+  attempted: true;
+  ingest: {
+    inserted: number;
+    updated: number;
+    failed: number;
+    run_id: number | null;
+    errors: Array<{ game_external_id: number; errors: string[] }>;
+  };
+  /** null when ingest produced 0 successful rows (downstream skipped). */
+  market_signals:
+    | {
+        game_predictions_updated: number;
+        prop_predictions_updated: number;
+        per_market: {
+          ml: { derived: number; written: number };
+          ou: { derived: number; written: number };
+          nrfi: { derived: number; written: number };
+        };
+        error: null;
+      }
+    | { error: string; game_predictions_updated: 0 }
+    | null;
+  /** null when ingest produced 0 successful rows (downstream skipped). */
+  grades:
+    | {
+        game_predictions_updated: number;
+        prop_predictions_updated: number;
+        per_market: {
+          ml: { derived: number; written: number };
+          ou: { derived: number; written: number };
+          nrfi: { derived: number; written: number };
+        };
+        error: null;
+      }
+    | { error: string; game_predictions_updated: 0 }
+    | null;
 };
 
 export type AutoModelRunResult = {
@@ -80,27 +154,111 @@ export type AutoModelRunResult = {
     error: string;
   }>;
   duration_ms: number;
+  /**
+   * Phase 3C: DB write outcome. `null` when writeToDb=false (dry-run).
+   * `{ attempted: true, ... }` when writeToDb=true succeeded the gate
+   * check. Each inner step (ingest / market_signals / grades) carries
+   * its own success-or-error shape — partial failure is surfaced, never
+   * thrown.
+   */
+  db_writes: AutoModelDbWriteOutcome | null;
 };
+
+// ─────────────────────────────────────────────────────────────
+// Internal — map AutoModelOutput → ingester input row
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Adapt one AutoModelOutput into the shape ingestScoresModel expects.
+ *
+ * Field-by-field rules:
+ *   • Top-level pick fields (predicted_ml_winner, ml_confidence,
+ *     predicted_ou_side, ou_confidence, predicted_nrfi, nrfi_confidence)
+ *     are OMITTED from the row when null. The auto_model validation mode
+ *     accepts the omission only when sport_specific.held=true OR the
+ *     market is in sport_specific.hold_picks (which Phase 3A populates
+ *     automatically for held picks).
+ *   • Scores + total are required by every sport schema. Phase 3A always
+ *     produces them, so they're never null here. We assert non-null with
+ *     the `!` operator and rely on the validator to surface a clear
+ *     error if a bug ever produces a null score.
+ *   • sport_specific carries the full Phase 3A audit record (model_version,
+ *     stage, starter_confirmed, lineup_confirmed, market_line_available,
+ *     opposing_deterministic_warning, listed_line, held, hold_reason,
+ *     hold_picks, stale flags, auto_factors, ai_sanity). All flow through
+ *     to game_predictions.sport_specific JSONB.
+ *   • model_version is hoisted from sport_specific.model_version onto the
+ *     top-level metadata field the ingester writes to game_predictions.
+ *   • computed_at is set at adapt-time (one ISO timestamp per slate run).
+ */
+function autoModelOutputToScoresRow(
+  output: AutoModelOutput,
+  computed_at: string
+): ScoresModelInputRow {
+  const row: ScoresModelInputRow = {
+    game_external_id: output.game_external_id,
+    model_version: output.sport_specific.model_version,
+    computed_at,
+    sport_specific: output.sport_specific as unknown as Record<string, unknown>,
+  };
+  if (output.predicted_home_score !== null) {
+    row.predicted_home_score = output.predicted_home_score;
+  }
+  if (output.predicted_away_score !== null) {
+    row.predicted_away_score = output.predicted_away_score;
+  }
+  if (output.predicted_total !== null) {
+    row.predicted_total = output.predicted_total;
+  }
+  if (output.predicted_ml_winner !== null) {
+    row.predicted_ml_winner = output.predicted_ml_winner;
+  }
+  if (output.ml_confidence !== null) {
+    row.ml_confidence = output.ml_confidence;
+  }
+  if (output.predicted_ou_side !== null) {
+    row.predicted_ou_side = output.predicted_ou_side;
+  }
+  if (output.ou_confidence !== null) {
+    row.ou_confidence = output.ou_confidence;
+  }
+  if (output.predicted_nrfi !== null) {
+    row.predicted_nrfi = output.predicted_nrfi;
+  }
+  if (output.nrfi_confidence !== null) {
+    row.nrfi_confidence = output.nrfi_confidence;
+  }
+  return row;
+}
 
 // ─────────────────────────────────────────────────────────────
 // Service implementation
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Generate auto-model predictions for a slate. Phase 3B: dry-run only.
+ * Generate auto-model predictions for a slate.
  *
- * Steps:
+ * Dry-run (writeToDb=false / omitted):
  *   1. Build feature snapshots (Phase 3B DB read pipeline).
- *   2. For each snapshot:
- *        a. Run pure model (Phase 3A runMlbAutoModelV1).
- *        b. Run AI sanity boundary (Phase 3A reviewAutoModelOutput stub).
- *        c. Tally diagnostic counts.
- *      Per-game exceptions are caught and recorded in `errors`; other
- *      games continue processing.
- *   3. If opts.writeToDb === true: throw immediately.
- *   4. Return AutoModelRunResult.
+ *   2. Per snapshot: pure model → AI sanity stub → tally.
+ *   3. Return result with db_writes=null.
  *
- * No DB writes occur in Phase 3B.
+ * Write path (writeToDb=true + AUTOMODEL_DB_WRITES_ENABLED="true"):
+ *   1. Verify two-key gate (throws BEFORE any DB I/O if either missing).
+ *   2. Steps 1-2 of dry-run.
+ *   3. Build gameIdByExternal map for the slate.
+ *   4. Adapt predictions → ScoresModelInputRow[].
+ *   5. ingestScoresModel(... { source: "auto_v1_mlb_rules", runDate,
+ *      validationMode: "auto_model" }) — UPSERTs game_predictions, writes
+ *      scores_model_runs audit row internally.
+ *   6. If ingest produced ≥1 successful row: updateMarketSignalsForSlate
+ *      then updateGradesForSlate. Each is partial-fail tolerant — errors
+ *      are captured in db_writes.{market_signals,grades}.error and do not
+ *      throw.
+ *   7. Return result with db_writes populated.
+ *
+ * Per-game model exceptions are recorded in `errors` (dry-run or write
+ * path); other games continue processing.
  */
 export async function generatePredictionsForSlate(
   sport: Sport,
@@ -109,13 +267,26 @@ export async function generatePredictionsForSlate(
   opts: AutoModelRunOpts = {}
 ): Promise<AutoModelRunResult> {
   const t0 = Date.now();
+  const wantWrite = opts.writeToDb === true;
+  const envEnabled = process.env.AUTOMODEL_DB_WRITES_ENABLED === "true";
 
-  // Hard guard — Phase 3B is strictly dry-run.
-  if (opts.writeToDb === true) {
+  // Two-key gate (Phase 3C): EITHER missing while caller asked for a
+  // write → throw immediately, BEFORE any DB read or model work. This is
+  // defense-in-depth — the env flag alone never writes; the caller flag
+  // alone never writes.
+  if (wantWrite && !envEnabled) {
     throw new Error(
-      "automodelService.generatePredictionsForSlate: writeToDb=true is " +
-        "Phase 3C scope and is NOT implemented in Phase 3B. Set writeToDb=false " +
-        "(or omit) to run dry-run."
+      "automodelService.generatePredictionsForSlate: writeToDb=true " +
+        "requires AUTOMODEL_DB_WRITES_ENABLED=true in the environment. " +
+        "Both opt-ins must be present (defense in depth) before any DB write."
+    );
+  }
+  if (!wantWrite && envEnabled) {
+    // Informational only — operator may have left the env flag set after
+    // a smoke test. Proceeding with dry-run is the safe choice.
+    console.warn(
+      "[automodelService] AUTOMODEL_DB_WRITES_ENABLED is set but " +
+        "writeToDb=false on this call — proceeding with dry-run."
     );
   }
 
@@ -133,6 +304,7 @@ export async function generatePredictionsForSlate(
       total_deterministic_corrections: 0,
       errors: [],
       duration_ms: Date.now() - t0,
+      db_writes: null,
     };
   }
 
@@ -193,6 +365,12 @@ export async function generatePredictionsForSlate(
     }
   }
 
+  // ─── Step 3 — DB writes (Phase 3C) ─────────────────────────────────
+  let db_writes: AutoModelDbWriteOutcome | null = null;
+  if (wantWrite) {
+    db_writes = await runDbWrites(sport, slate_date, predictions);
+  }
+
   return {
     sport,
     slate_date,
@@ -205,5 +383,132 @@ export async function generatePredictionsForSlate(
     total_deterministic_corrections,
     errors,
     duration_ms: Date.now() - t0,
+    db_writes,
+  };
+}
+
+/**
+ * Phase 3C — controlled DB write step. Called only when the two-key gate
+ * passed (caller's writeToDb=true + env AUTOMODEL_DB_WRITES_ENABLED=true).
+ *
+ * Returns a structured outcome rather than throwing. The caller embeds
+ * the outcome in AutoModelRunResult.db_writes so partial success
+ * (ingest OK, grades failed) is observable instead of hidden behind
+ * an exception.
+ */
+async function runDbWrites(
+  sport: Sport,
+  slate_date: string,
+  predictions: AutoModelOutput[]
+): Promise<AutoModelDbWriteOutcome> {
+  const computed_at = new Date().toISOString();
+
+  // Map external_id → game_id for the slate (loadGameIdMap is the same
+  // helper the manual upload route uses).
+  const gameIdByExternal = await loadGameIdMap(sport, slate_date);
+
+  // Adapt model outputs to the ingester's input row shape.
+  const rows = predictions.map((p) =>
+    autoModelOutputToScoresRow(p, computed_at)
+  );
+
+  // Reuse the validated ingest pipeline. Audit row in scores_model_runs
+  // is written internally by ingestScoresModel via UPSERT on
+  // (sport, source, run_date) — no separate audit code here.
+  let ingestResult: IngestionResult;
+  try {
+    ingestResult = await ingestScoresModel(
+      supabase,
+      sport,
+      rows,
+      gameIdByExternal,
+      {
+        source: "auto_v1_mlb_rules",
+        runDate: slate_date,
+        validationMode: "auto_model",
+      }
+    );
+  } catch (e) {
+    // ingestScoresModel itself doesn't throw under normal conditions
+    // (row-level errors land in result.failed). But defensively surface
+    // any bulk-level failure as a structured result rather than letting
+    // it escape to the caller, so the manual workflow can never end up
+    // in a state where the model ran but the operator never sees why.
+    const message = e instanceof Error ? e.message : String(e);
+    return {
+      attempted: true,
+      ingest: {
+        inserted: 0,
+        updated: 0,
+        failed: rows.length,
+        run_id: null,
+        errors: [
+          {
+            game_external_id: -1,
+            errors: [`ingest threw before completion: ${message}`],
+          },
+        ],
+      },
+      market_signals: null,
+      grades: null,
+    };
+  }
+
+  const ingest = {
+    inserted: ingestResult.inserted,
+    updated: ingestResult.updated,
+    failed: ingestResult.failed.length,
+    run_id: ingestResult.run_id,
+    errors: ingestResult.failed.map((f) => ({
+      game_external_id: f.row.game_external_id,
+      errors: f.errors,
+    })),
+  };
+
+  // Skip downstream when nothing landed.
+  if (ingest.inserted + ingest.updated === 0) {
+    return {
+      attempted: true,
+      ingest,
+      market_signals: null,
+      grades: null,
+    };
+  }
+
+  // Downstream 1 — market signals. Partial-fail tolerant.
+  let market_signals: AutoModelDbWriteOutcome["market_signals"];
+  try {
+    const ms = await updateMarketSignalsForSlate(sport, slate_date);
+    market_signals = {
+      game_predictions_updated: ms.gamePredictionsUpdated,
+      prop_predictions_updated: ms.propPredictionsUpdated,
+      per_market: ms.perMarket,
+      error: null,
+    };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    market_signals = { error: message, game_predictions_updated: 0 };
+  }
+
+  // Downstream 2 — grades. Partial-fail tolerant.
+  let grades: AutoModelDbWriteOutcome["grades"];
+  try {
+    const g = await updateGradesForSlate(sport, slate_date);
+    grades = {
+      game_predictions_updated: g.gamePredictionsUpdated,
+      prop_predictions_updated: g.propPredictionsUpdated,
+      per_market: g.perMarket,
+      error: null,
+    };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    grades = { error: message, game_predictions_updated: 0 };
+  }
+
+  return {
+    attempted: true,
+    ingest,
+    market_signals,
+    grades,
   };
 }

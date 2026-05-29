@@ -409,6 +409,180 @@ check(
   (reconciledNba as { predicted_total: number }).predicted_total === 221
 );
 
+// ─── Phase 3C — validationMode (manual vs auto_model) ────────────────────
+// The auto-model relaxation lets ingestScoresModel accept rows with null
+// pick fields when justified by sport_specific.held / hold_picks. Manual
+// upload MUST stay strict — these tests pin both behaviors.
+section("Phase 3C — validationMode (manual stays strict; auto allows justified holds)");
+
+// MLB row with NRFI held — auto-model would output predicted_nrfi=null
+// + nrfi_confidence=null and record sport_specific.hold_picks=["nrfi"].
+const mlbRowNrfiHeld: ScoresModelInputRow = {
+  game_external_id: 18599100,
+  predicted_home_score: 5.1,
+  predicted_away_score: 4.4,
+  predicted_total: 9.5,
+  predicted_ml_winner: "home",
+  ml_confidence: 58.5,
+  predicted_ou_side: "over",
+  ou_confidence: 53.0,
+  // predicted_nrfi + nrfi_confidence omitted (auto held NRFI)
+  model_version: "auto_v1.0_mlb_rules",
+  computed_at: "2026-05-22T13:00:00.000Z",
+  sport_specific: {
+    held: false,
+    hold_picks: ["nrfi"],
+    model_version: "auto_v1.0_mlb_rules",
+  },
+};
+
+// 1. Manual mode rejects NRFI hold (preserves V1 strict behavior).
+const manualVerdict = validateScoresModelRow(
+  "mlb",
+  mlbRowNrfiHeld,
+  known,
+  "manual"
+);
+check(
+  "Manual mode REJECTS held-NRFI row (manual upload stays strict — required fields enforced)",
+  !manualVerdict.ok &&
+    (manualVerdict as { errors: string[] }).errors.some((e) =>
+      e.includes("predicted_nrfi")
+    )
+);
+
+// 2. Auto mode ACCEPTS the same row (NRFI null is justified by hold_picks).
+const autoVerdictJustified = validateScoresModelRow(
+  "mlb",
+  mlbRowNrfiHeld,
+  known,
+  "auto_model"
+);
+check(
+  "Auto mode ACCEPTS held-NRFI row when sport_specific.hold_picks=['nrfi']",
+  autoVerdictJustified.ok
+);
+
+// 3. Auto mode also accepts when sport_specific.held=true (whole row held).
+const mlbRowAllHeld: ScoresModelInputRow = {
+  game_external_id: 18599101,
+  predicted_home_score: 4.5,
+  predicted_away_score: 4.5,
+  predicted_total: 9.0,
+  // ALL three picks omitted (sport_specific.held=true)
+  model_version: "auto_v1.0_mlb_rules",
+  computed_at: "2026-05-22T13:00:00.000Z",
+  sport_specific: {
+    held: true,
+    hold_picks: ["ml", "ou", "nrfi"],
+    model_version: "auto_v1.0_mlb_rules",
+    hold_reason: "starter not confirmed",
+  },
+};
+check(
+  "Auto mode ACCEPTS all-held row when sport_specific.held=true",
+  validateScoresModelRow("mlb", mlbRowAllHeld, known, "auto_model").ok
+);
+
+// 4. Auto mode REJECTS unjustified nulls — pick is null but no hold context.
+const mlbRowUnjustified: ScoresModelInputRow = {
+  game_external_id: 18599102,
+  predicted_home_score: 5.0,
+  predicted_away_score: 4.0,
+  predicted_total: 9.0,
+  predicted_ml_winner: "home",
+  ml_confidence: 60.0,
+  predicted_ou_side: "over",
+  ou_confidence: 55.0,
+  // predicted_nrfi + nrfi_confidence missing, but sport_specific does
+  // NOT justify the null (held=false, hold_picks doesn't include "nrfi")
+  model_version: "auto_v1.0_mlb_rules",
+  computed_at: "2026-05-22T13:00:00.000Z",
+  sport_specific: {
+    held: false,
+    hold_picks: [],
+    model_version: "auto_v1.0_mlb_rules",
+  },
+};
+const autoVerdictUnjustified = validateScoresModelRow(
+  "mlb",
+  mlbRowUnjustified,
+  known,
+  "auto_model"
+);
+check(
+  "Auto mode REJECTS unjustified NRFI null (no hold_picks entry)",
+  !autoVerdictUnjustified.ok &&
+    (autoVerdictUnjustified as { errors: string[] }).errors.some((e) =>
+      e.includes("unjustified null")
+    )
+);
+
+// 5. Auto mode REJECTS null score even when sport_specific.held=true.
+//    Scores are not in the relaxable pick list — auto-model always
+//    produces predicted_home_score / predicted_away_score / predicted_total.
+const mlbRowMissingScore: ScoresModelInputRow = {
+  game_external_id: 18599100,
+  // predicted_home_score MISSING
+  predicted_away_score: 4.0,
+  predicted_total: 8.0,
+  model_version: "auto_v1.0_mlb_rules",
+  computed_at: "2026-05-22T13:00:00.000Z",
+  sport_specific: {
+    held: true,
+    hold_picks: ["ml", "ou", "nrfi"],
+    model_version: "auto_v1.0_mlb_rules",
+  },
+};
+const autoVerdictMissingScore = validateScoresModelRow(
+  "mlb",
+  mlbRowMissingScore,
+  known,
+  "auto_model"
+);
+check(
+  "Auto mode REJECTS missing predicted_home_score even when held=true (scores not relaxable)",
+  !autoVerdictMissingScore.ok &&
+    (autoVerdictMissingScore as { errors: string[] }).errors.some(
+      (e) => e.includes("Home Runs") || e.includes("predicted_home_score")
+    )
+);
+
+// 6. Auto mode still enforces format on PRESENT pick fields (e.g.
+//    confidence > 100 still fails, even though confidence is relaxable).
+const mlbRowBadConfidence: ScoresModelInputRow = {
+  ...mlbRowAllHeld,
+  predicted_ml_winner: "home",
+  ml_confidence: 150,  // OUT OF RANGE
+  sport_specific: {
+    held: false,
+    hold_picks: ["ou", "nrfi"],
+    model_version: "auto_v1.0_mlb_rules",
+  },
+};
+const autoVerdictBadConf = validateScoresModelRow(
+  "mlb",
+  mlbRowBadConfidence,
+  known,
+  "auto_model"
+);
+check(
+  "Auto mode still enforces format on PRESENT pick fields (ml_confidence=150 fails)",
+  !autoVerdictBadConf.ok
+);
+
+// 7. Default validationMode is "manual" — back-compat for all existing callers.
+const defaultModeVerdict = validateScoresModelRow(
+  "mlb",
+  mlbRowNrfiHeld,
+  known
+  // no validationMode argument
+);
+check(
+  "Default validationMode is 'manual' — back-compat preserved (held-NRFI row rejected)",
+  !defaultModeVerdict.ok
+);
+
 // ─── Summary ─────────────────────────────────────────────────────────────
 console.log(`\n${"━".repeat(70)}`);
 console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);

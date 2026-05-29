@@ -58,6 +58,88 @@ function inferSourceType(predictionSource: PredictionSource): SourceType {
 export { inferSourceType };
 
 // ─────────────────────────────────────────────────────────────────────────
+// Validation mode (Phase 3C)
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Phase 3C — validation mode for `validateScoresModelRow`.
+ *
+ *   • "manual" (default): every `required: true` schema field MUST be
+ *     present. Matches V1 behavior — preserves the strict admin-upload
+ *     contract (no silent incomplete manual uploads).
+ *
+ *   • "auto_model": pick fields (predicted_ml_winner, ml_confidence,
+ *     predicted_ou_side, ou_confidence, predicted_nrfi, nrfi_confidence)
+ *     MAY be null/undefined when justified by sport_specific hold context
+ *     — i.e. `sport_specific.held === true` OR
+ *     `sport_specific.hold_picks` includes the corresponding market
+ *     ("ml" / "ou" / "nrfi"). Unjustified nulls still fail with a clear
+ *     "auto_model: unjustified null" message. Non-pick required fields
+ *     (scores, totals, model_version, etc.) and all format checks are
+ *     mode-agnostic.
+ *
+ * Daniel approved this narrow relaxation in Phase 3C planning so that
+ * the auto-model's hold-per-market design (Phase 3A's `null` pick when
+ * data is thin or confidence is below floor) writes honestly through
+ * `ingestScoresModel` without forcing fake 51% picks or skipping
+ * partially-held games entirely.
+ */
+export type ScoresModelValidationMode = "manual" | "auto_model";
+
+/**
+ * Pick fields eligible for the auto_model null-justification relaxation.
+ * Keyed by field key → which market (ml/ou/nrfi) the null must be
+ * justified against in `sport_specific.hold_picks`.
+ *
+ * Non-pick required fields (predicted_home_score, predicted_total, etc.)
+ * are intentionally NOT in this map — the auto-model always produces
+ * scores, so a null score is always an error.
+ */
+const AUTO_MODEL_RELAXABLE_PICK_FIELDS: Readonly<
+  Record<string, "ml" | "ou" | "nrfi">
+> = {
+  predicted_ml_winner: "ml",
+  ml_confidence: "ml",
+  predicted_ou_side: "ou",
+  ou_confidence: "ou",
+  predicted_nrfi: "nrfi",
+  nrfi_confidence: "nrfi",
+};
+
+/**
+ * Check whether a null on `field` is justified by sport_specific hold
+ * context. Used by `validateScoresModelRow` only when
+ * `validationMode === "auto_model"`.
+ *
+ * Justified when EITHER:
+ *   • `sport_specific.held === true` (whole row held), OR
+ *   • `sport_specific.hold_picks` is an array including the field's market
+ *
+ * Anything else (missing sport_specific, non-array hold_picks, market
+ * not listed) → unjustified → caller emits the required-field error.
+ */
+function isAutoNullJustified(
+  field: SportSchemaField,
+  row: ScoresModelInputRow
+): boolean {
+  const market = AUTO_MODEL_RELAXABLE_PICK_FIELDS[field.key];
+  if (!market) return false;
+  const sportSpecific = row.sport_specific as
+    | { held?: unknown; hold_picks?: unknown }
+    | null
+    | undefined;
+  if (!sportSpecific) return false;
+  if (sportSpecific.held === true) return true;
+  if (
+    Array.isArray(sportSpecific.hold_picks) &&
+    (sportSpecific.hold_picks as unknown[]).includes(market)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Input row shape (loose — schema enforces what's required per sport)
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -108,11 +190,17 @@ export type IngestionResult = {
 /**
  * Validate one row against the sport's schema.
  * Returns the row when valid, or a list of error messages.
+ *
+ * Phase 3C: `validationMode` defaults to "manual" — strict, every
+ * required field present. Pass "auto_model" from the automodelService
+ * write branch to permit nulls on pick fields when justified by
+ * sport_specific hold context. See ScoresModelValidationMode docs.
  */
 export function validateScoresModelRow(
   sport: Sport,
   row: ScoresModelInputRow,
-  knownGameExternalIds: Set<number>
+  knownGameExternalIds: Set<number>,
+  validationMode: ScoresModelValidationMode = "manual"
 ): { ok: true } | { ok: false; errors: string[] } {
   const errors: string[] = [];
 
@@ -136,7 +224,24 @@ export function validateScoresModelRow(
   for (const field of schema.fields) {
     const value = readFieldValue(field, row);
     if (value === undefined || value === null) {
-      if (field.required) errors.push(`${field.label} (${field.key}) is required`);
+      if (!field.required) continue;
+      // Phase 3C: in auto_model mode, allow nulls on pick fields when
+      // justified by sport_specific hold context. Unjustified nulls
+      // surface a distinct error so the operator can tell at a glance
+      // whether the row was malformed vs missing hold context.
+      if (
+        validationMode === "auto_model" &&
+        field.key in AUTO_MODEL_RELAXABLE_PICK_FIELDS
+      ) {
+        if (isAutoNullJustified(field, row)) continue;
+        errors.push(
+          `${field.label} (${field.key}) is required (auto_model: ` +
+            `unjustified null — sport_specific.held !== true and ` +
+            `hold_picks does not include "${AUTO_MODEL_RELAXABLE_PICK_FIELDS[field.key]}")`
+        );
+        continue;
+      }
+      errors.push(`${field.label} (${field.key}) is required`);
       continue;
     }
     const fieldError = validateFieldValue(field, value);
@@ -257,7 +362,20 @@ function buildPayload(
     model_version: reconciledRow.model_version,
     computed_at: reconciledRow.computed_at,
   };
-  const sportSpecific: Record<string, unknown> = {};
+  // Phase 3C: preserve caller-supplied sport_specific fields as the base
+  // so Phase 3A audit context (model_version, stage, held, hold_picks,
+  // hold_reason, auto_factors, ai_sanity, …) survives ingest. Schema-
+  // declared sport_specific fields (e.g. MLB listed_line, UCL win-pct,
+  // mirrored predicted_nrfi) overlay the base in the schema loop below
+  // and remain canonical for keys both sides care about.
+  //
+  // Manual-upload back-compat: callers that don't pass sport_specific
+  // (or pass only schema-declared fields) see the identical output they
+  // got pre-3C. The spread of `null`/`undefined` yields `{}` — no extra
+  // keys leak in.
+  const sportSpecific: Record<string, unknown> = {
+    ...(reconciledRow.sport_specific ?? {}),
+  };
 
   for (const field of schema.fields) {
     const value = readFieldValue(field, reconciledRow);
@@ -285,6 +403,13 @@ export type IngestOptions = {
   runDate?: string;
   /** prediction_source value. Defaults to 'manual_daniel' (V1 manual upload). */
   source?: PredictionSource;
+  /**
+   * Phase 3C — validation mode. Defaults to "manual" (strict). Pass
+   * "auto_model" from automodelService to permit nulls on pick fields
+   * when justified by sport_specific hold context. See
+   * `ScoresModelValidationMode` for the full contract.
+   */
+  validationMode?: ScoresModelValidationMode;
 };
 
 export async function ingestScoresModel(
@@ -297,6 +422,8 @@ export async function ingestScoresModel(
   const source = options.source ?? "manual_daniel";
   const runDate =
     options.runDate ?? new Date().toISOString().slice(0, 10);
+  const validationMode: ScoresModelValidationMode =
+    options.validationMode ?? "manual";
   const startedAt = new Date().toISOString();
 
   const result: IngestionResult = {
@@ -311,7 +438,12 @@ export async function ingestScoresModel(
   const validated: ToUpsert[] = [];
 
   for (const row of rows) {
-    const v = validateScoresModelRow(sport, row, knownExternalIds);
+    const v = validateScoresModelRow(
+      sport,
+      row,
+      knownExternalIds,
+      validationMode
+    );
     if (!v.ok) {
       result.failed.push({ row, errors: v.errors });
       continue;

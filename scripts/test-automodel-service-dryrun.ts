@@ -1,17 +1,26 @@
 /**
- * Phase 3B — Live end-to-end dry-run test for automodelService.
+ * Phase 3B + 3C — Live end-to-end dry-run test for automodelService.
  *
  * Verifies:
  *   1. generatePredictionsForSlate runs to completion against today's slate
  *   2. NO DB WRITES (row counts unchanged before/after across the 4 target
  *      tables: game_predictions, scores_model_runs, sharp_signals, lines)
- *   3. writeToDb=true throws "Phase 3C scope" immediately
- *   4. Output shape is well-formed
+ *   3. writeToDb=true WITHOUT AUTOMODEL_DB_WRITES_ENABLED throws the
+ *      two-key-gate error BEFORE any DB read/write (Phase 3C)
+ *   4. Output shape is well-formed (db_writes=null on dry-runs)
  *   5. Each prediction respects Phase 3A invariants (predicted_total math,
  *      confidence cap/floor, deterministic guards recorded)
  *
+ * Defensive: this script forcibly deletes AUTOMODEL_DB_WRITES_ENABLED
+ * from process.env at startup so a stale shell variable can never let
+ * a write slip through during a dry-run regression sweep.
+ *
  * Run: npx tsx --env-file=.env.local scripts/test-automodel-service-dryrun.ts
  */
+
+// MUST run before importing automodelService so the env state is
+// deterministic across both the throw test and any subsequent dry-run.
+delete process.env.AUTOMODEL_DB_WRITES_ENABLED;
 
 import { generatePredictionsForSlate } from "../lib/services/automodelService";
 import type { AutoModelOutput } from "../lib/automodel/types";
@@ -55,8 +64,11 @@ async function tableRowCount(table: string): Promise<number> {
 async function main() {
   const today = new Date().toISOString().slice(0, 10);
 
-  // ── writeToDb=true throws immediately ──────────────────────────
-  section("writeToDb=true throws 'Phase 3C scope'");
+  // ── writeToDb=true without env flag throws ─────────────────────
+  // Phase 3C two-key gate: env flag was DELETED at top of file.
+  section(
+    "writeToDb=true without AUTOMODEL_DB_WRITES_ENABLED throws two-key-gate error"
+  );
 
   let threw = false;
   let errMsg = "";
@@ -70,8 +82,12 @@ async function main() {
   }
   check("generatePredictionsForSlate({ writeToDb: true }) throws", threw);
   check(
-    'error message mentions "Phase 3C"',
-    errMsg.includes("Phase 3C")
+    'error message mentions "AUTOMODEL_DB_WRITES_ENABLED"',
+    errMsg.includes("AUTOMODEL_DB_WRITES_ENABLED")
+  );
+  check(
+    'error message mentions "defense in depth"',
+    errMsg.includes("defense in depth")
   );
 
   // ── DB row counts BEFORE the dry-run run ───────────────────────
@@ -116,6 +132,11 @@ async function main() {
   check(
     "result.duration_ms is a positive number",
     typeof morningResult.duration_ms === "number" && morningResult.duration_ms > 0
+  );
+  // Phase 3C: dry-run leaves db_writes=null (no write attempted).
+  check(
+    "result.db_writes === null (dry-run leaves DB write outcome empty)",
+    morningResult.db_writes === null
   );
 
   // AI sanity counts add up to game_count
