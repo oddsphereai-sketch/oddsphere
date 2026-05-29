@@ -1,23 +1,46 @@
 /**
  * SharpAPISignalProvider — ISharpSignalProvider implementation backed by
- * SharpAPI. Phase 1 (Gate B.1).
+ * SharpAPI. Phase 1 (Gate B.1) + Phase 1.5 (Task #162 corrections) +
+ * Phase 1.6 (/splits integration — Task #172).
  *
- * Verified by Gate A probe — /opportunities/ev confirmed Pinnacle EV math
- * (pinnacle_fair_probability + fair_odds + ev_pct + devig_method="POWER").
- * /opportunities/low_hold and /opportunities/arbitrage also work; both are
- * fetched as secondary context, deduplicated with /opportunities/ev rows
- * taking precedence.
+ * Data sources:
+ *   • /opportunities/ev          — Pinnacle EV math (primary)
+ *   • /opportunities/low_hold    — secondary low-vig context
+ *   • /opportunities/arbitrage   — secondary arbitrage context
+ *   • /splits?sport=mlb          — Phase 1.6: public betting % + public
+ *                                  money % across moneyline / spread /
+ *                                  total markets. Consensus aggregate
+ *                                  (sportsbook="consensus"). Available
+ *                                  on the Sharp $399 tier; confirmed
+ *                                  via /account.features list.
  *
- * Strict NULL discipline on gap fields per Gate B framework decisions:
- *   • has_steam_move      → false (SharpAPI does NOT expose steam)
+ * Strict discipline on framework gap fields:
+ *   • has_steam_move      → false (SharpAPI does NOT expose steam in
+ *                                  Sharp tier)
  *   • steam_books_count   → null
  *   • steam_detected_at   → null
  *   • has_reverse_line_movement → false (SharpAPI does NOT expose RLM)
  *   • rlm_direction       → null
- *   • public_betting_pct  → null  (SharpAPI does NOT expose public splits)
- *   • public_money_pct    → null
  *   • signal_strength     → null  (derived downstream by classifier)
  *   • signal_summary      → null  (generated downstream by summaryGenerator)
+ *
+ * Phase 1.6 enables (when /splits returns a matching row):
+ *   • public_betting_pct  → bets_pct[side]  × 100 (0-100 scale)
+ *   • public_money_pct    → handle_pct[side] × 100
+ *   • Sharp divergence axis (Signal 4) becomes detectable downstream
+ *   • public_smoke detection (Signal 5) becomes detectable downstream
+ *
+ * /splits does NOT cover first-inning markets. NRFI / first_inning_total
+ * signals continue to have public_betting_pct = null and public_money_pct
+ * = null. This is a documented V1 limitation.
+ *
+ * Event identity bridge for /splits merge:
+ *   /opportunities/ev event_ids include a `_b\d+` market-bucket suffix
+ *   (e.g. mlb_marlins_mets_2026-05-29_b3). /splits event_ids strip that
+ *   suffix (mlb_marlins_mets_2026-05-29). Phase 1.6 merges by team-pair
+ *   match rather than event_id string — the home/away abbrevs derived
+ *   from each /splits row are matched against the abbrevs the
+ *   opportunity row already resolved through the TeamNameNormalizer.
  *
  * Same bridge problem as SharpAPIOddsProvider — uses an injected resolver
  * to map SharpAPI events to BDL integer game external_ids.
@@ -36,8 +59,26 @@ import {
 } from "./_teamNameNormalizer";
 import type { SharpApiGameResolver } from "./SharpAPIOddsProvider";
 
-/** Hard cap on SharpAPI calls per getSharpSignals invocation. */
+/**
+ * Hard cap on SharpAPI calls per getSharpSignals invocation.
+ *
+ * Current pattern: 3 /opportunities/* endpoints + 1 /splits = 4 calls
+ * with no pagination beyond defaults. Cap of 8 leaves headroom for
+ * pagination should an endpoint return more than expected.
+ */
 const MAX_CALLS_PER_INVOCATION = 8;
+
+/**
+ * Phase 1.6: SharpAPI's /opportunities/ev event_ids include a market
+ * bucket suffix (`_b0`, `_b1`, `_b2`, `_b3`). /splits event_ids strip
+ * that suffix. Used by both helpers to normalize event_ids before
+ * comparing across endpoints. NOT used for merging today (we merge by
+ * team-pair), but exported for diagnostics and any future event_id-keyed
+ * merge.
+ */
+function stripEventBucketSuffix(eventId: string): string {
+  return eventId.replace(/_b\d+$/, "");
+}
 
 // ─────────────────────────────────────────────────────────────
 // Raw shapes
@@ -66,6 +107,35 @@ type RawOpportunity = {
   detected_at?: string | null;
   is_player_prop?: boolean | null;
   is_alternate_line?: boolean | null;
+};
+
+/**
+ * Phase 1.6: /splits response row shape (verified live 2026-05-29).
+ *
+ * Each row covers ONE game with three nested market objects:
+ *   moneyline.{bets_pct, handle_pct}.{home, away}
+ *   spread.{bets_pct, handle_pct}.{home, away}
+ *   total.{bets_pct, handle_pct}.{over, under}
+ *
+ * Values in bets_pct / handle_pct are 0-1 floats. First-inning markets
+ * are NOT included in /splits.
+ */
+type RawSplitMarket = {
+  bets_pct?: Record<string, number | string | null> | null;
+  handle_pct?: Record<string, number | string | null> | null;
+};
+
+type RawSplitsRow = {
+  event_id?: string | null;
+  sport?: string | null;
+  league?: string | null;
+  away_team?: string | null;
+  home_team?: string | null;
+  sportsbook?: string | null;
+  moneyline?: RawSplitMarket | null;
+  spread?: RawSplitMarket | null;
+  total?: RawSplitMarket | null;
+  fetched_at?: string | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -163,6 +233,88 @@ function buildDedupeKey(
 }
 
 /**
+ * Phase 1.6: build a lookup map from /splits rows keyed by
+ * `${homeAbbrev}|${awayAbbrev}`. Rows that don't resolve to a team pair
+ * via the TeamNameNormalizer are silently dropped (mirrors the same
+ * gate the opportunity-row flow uses).
+ *
+ * The map points to the RAW /splits row so callers can pluck whichever
+ * market they need at merge time.
+ */
+function buildSplitsMap(
+  rows: RawSplitsRow[]
+): Map<string, RawSplitsRow> {
+  const map = new Map<string, RawSplitsRow>();
+  for (const row of rows) {
+    const leagueTag = asStringOrNull(row.league)?.toLowerCase();
+    if (leagueTag !== null && leagueTag !== "mlb") continue;
+    const home = normalizeMlbTeamName(row.home_team);
+    const away = normalizeMlbTeamName(row.away_team);
+    if (home === null || away === null) continue;
+    const key = `${home}|${away}`;
+    if (!map.has(key)) {
+      map.set(key, row);
+    }
+  }
+  return map;
+}
+
+/**
+ * Phase 1.6: given a SharpSignalRecord (already-mapped) and the
+ * matching /splits row for the game, plus the bookkeeping context
+ * needed to pick the right (market, side) cell, return the pair
+ * `[public_betting_pct, public_money_pct]` as 0-100 numbers, or
+ * `[null, null]` when the splits row doesn't cover this market/side
+ * (notably first_inning_total — /splits has no first-inning data).
+ *
+ * Values in /splits are 0-1 floats; conversion to the 0-100 scale used
+ * by sharp_signals happens here via × 100.
+ */
+function publicPctsFromSplits(
+  market: MarketType,
+  side: Side,
+  splits: RawSplitsRow
+): { betting: number | null; money: number | null } {
+  // Phase 1.6: first-inning is not covered by /splits. Return nulls so
+  // the SharpSignalRecord retains its existing null discipline for
+  // NRFI / first_inning_total picks.
+  if (market === "first_inning_total") {
+    return { betting: null, money: null };
+  }
+
+  let marketObj: RawSplitMarket | null | undefined = null;
+  if (market === "moneyline") marketObj = splits.moneyline;
+  else if (market === "spread") marketObj = splits.spread;
+  else if (market === "total") marketObj = splits.total;
+
+  if (marketObj === null || marketObj === undefined) {
+    return { betting: null, money: null };
+  }
+
+  const betsRaw = marketObj.bets_pct?.[side];
+  const handleRaw = marketObj.handle_pct?.[side];
+  const betsFraction = asNumberOrNull(betsRaw);
+  const handleFraction = asNumberOrNull(handleRaw);
+
+  return {
+    betting: betsFraction === null ? null : betsFraction * 100,
+    money: handleFraction === null ? null : handleFraction * 100,
+  };
+}
+
+/**
+ * Phase 1.6: enriched mapOpportunity return — the SharpSignalRecord plus
+ * the home/away team abbrevs we already resolved from the row. The
+ * abbrevs let getSharpSignals merge /splits data without re-normalizing
+ * team strings.
+ */
+type MappedSignal = {
+  signal: SharpSignalRecord;
+  home: MlbTeamAbbrev;
+  away: MlbTeamAbbrev;
+};
+
+/**
  * Maps a /opportunities/* row to a SharpSignalRecord. Returns null when
  * the row can't be confidently mapped (e.g., team unresolved, market
  * type unsupported).
@@ -178,7 +330,7 @@ async function mapOpportunity(
   date: string,
   resolveGame: SharpApiGameResolver,
   fallbackComputedAt: string
-): Promise<SharpSignalRecord | null> {
+): Promise<MappedSignal | null> {
   // Phase 1.5 correction (Task #162): SharpAPI tags game-level opportunities
   // as is_player_prop=false and is_alternate_line=false. Skip player prop
   // rows (no Player Props in V1) and alternate-line rows (we only ingest the
@@ -226,7 +378,7 @@ async function mapOpportunity(
     asNumberOrNull(row.ev_percentage) ??
     asNumberOrNull(row.edge);
 
-  return {
+  const signal: SharpSignalRecord = {
     game_external_id: gameExternalId,
     market_type: marketType,
     side,
@@ -238,12 +390,17 @@ async function mapOpportunity(
     steam_books_count: null,
     has_reverse_line_movement: false,
     rlm_direction: null,
+    // Phase 1.6: public_betting_pct and public_money_pct start NULL.
+    // Merge step in getSharpSignals patches them from /splits when a
+    // matching row is found for (homeAbbrev, awayAbbrev) and the
+    // signal's market is one of moneyline / spread / total.
     public_betting_pct: null,
     public_money_pct: null,
     signal_strength: null,
     signal_summary: null,
     computed_at: asStringOrNull(row.detected_at) ?? fallbackComputedAt,
   };
+  return { signal, home: homeAbbrev, away: awayAbbrev };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -270,13 +427,16 @@ export class SharpAPISignalProvider implements ISharpSignalProvider {
   ): Promise<SharpSignalRecord[]> {
     const sportKey: Sport = "mlb";
     const fallbackComputedAt = new Date().toISOString();
-    const seen = new Map<string, SharpSignalRecord>();
+    // Phase 1.6: track each signal alongside its (homeAbbrev, awayAbbrev)
+    // so the splits merge step can look up /splits rows by team pair
+    // without re-normalizing team strings on the SharpSignalRecord.
+    const seen = new Map<string, MappedSignal>();
 
     // Fetch order matters for dedup: /opportunities/ev FIRST so its rows
     // become the precedent. Subsequent low_hold/arbitrage rows for the
     // same (game, market, side) are skipped — preserves EV's richer data
     // (pinnacle_fair_probability, ev_pct, is_plus_ev=true).
-    const endpoints: Array<{
+    const opportunityEndpoints: Array<{
       path: string;
       source: "ev" | "low_hold" | "arbitrage";
     }> = [
@@ -286,7 +446,7 @@ export class SharpAPISignalProvider implements ISharpSignalProvider {
     ];
 
     let callsUsed = 0;
-    for (const { path, source } of endpoints) {
+    for (const { path, source } of opportunityEndpoints) {
       if (callsUsed >= MAX_CALLS_PER_INVOCATION) {
         console.warn(
           `[SharpAPISignalProvider] call cap (${MAX_CALLS_PER_INVOCATION}) reached at ${path} — returning partial`
@@ -320,7 +480,7 @@ export class SharpAPISignalProvider implements ISharpSignalProvider {
         if (leagueTag !== null && leagueTag !== "mlb") {
           continue;
         }
-        const record = await mapOpportunity(
+        const mapped = await mapOpportunity(
           row,
           source,
           sportKey,
@@ -328,26 +488,92 @@ export class SharpAPISignalProvider implements ISharpSignalProvider {
           this.resolveGame,
           fallbackComputedAt
         );
-        if (record === null) continue;
+        if (mapped === null) continue;
         if (
           gameExternalId !== undefined &&
-          record.game_external_id !== gameExternalId
+          mapped.signal.game_external_id !== gameExternalId
         ) {
           continue;
         }
         const key = buildDedupeKey(
-          record.game_external_id,
-          record.market_type,
-          record.side
+          mapped.signal.game_external_id,
+          mapped.signal.market_type,
+          mapped.signal.side
         );
         if (!seen.has(key)) {
-          seen.set(key, record);
+          seen.set(key, mapped);
         }
         // Else: keep the earlier (higher-precedence) record. /opportunities/ev
         // rows land first; low_hold/arbitrage duplicates are dropped.
       }
     }
 
-    return Array.from(seen.values());
+    // Phase 1.6 — /splits merge.
+    // After the three opportunity endpoints land, fetch /splits ONCE
+    // and merge public_betting_pct + public_money_pct into any signal
+    // whose (homeAbbrev, awayAbbrev) appears in the splits payload AND
+    // whose market is moneyline / spread / total. First-inning signals
+    // are intentionally skipped — /splits does not include first-inning
+    // markets in V1 (documented limitation).
+    if (callsUsed < MAX_CALLS_PER_INVOCATION) {
+      callsUsed++;
+      let splitsRows: RawSplitsRow[];
+      try {
+        splitsRows = await this.client.fetchAll<RawSplitsRow>({
+          path: "/splits",
+          query: { sport: "mlb" },
+          maxPages: 2,
+        });
+      } catch (e) {
+        // 404 or any other failure is non-fatal: SharpSignalRecords keep
+        // public_betting_pct / public_money_pct null, framework rules
+        // fall back to the pre-Phase-1.6 behavior. Log via console.warn
+        // so cron output preserves the diagnostic.
+        if (e instanceof SharpApiNotFoundError) {
+          splitsRows = [];
+        } else {
+          console.warn(
+            `[SharpAPISignalProvider] /splits fetch failed: ${
+              e instanceof Error ? e.message : String(e)
+            }`
+          );
+          splitsRows = [];
+        }
+      }
+      const splitsByPair = buildSplitsMap(splitsRows);
+      for (const entry of seen.values()) {
+        // Skip first_inning_total — no first-inning splits in V1.
+        if (entry.signal.market_type === "first_inning_total") continue;
+        const splitsRow = splitsByPair.get(`${entry.home}|${entry.away}`);
+        if (splitsRow === undefined) continue;
+        const { betting, money } = publicPctsFromSplits(
+          entry.signal.market_type,
+          entry.signal.side,
+          splitsRow
+        );
+        // Mutate in place — the entry holds a reference, the returned
+        // array maps `entry.signal` from `seen.values()`.
+        if (betting !== null) entry.signal.public_betting_pct = betting;
+        if (money !== null) entry.signal.public_money_pct = money;
+      }
+    } else {
+      console.warn(
+        `[SharpAPISignalProvider] call cap (${MAX_CALLS_PER_INVOCATION}) reached — /splits merge skipped, public_betting_pct / public_money_pct stay null`
+      );
+    }
+
+    return Array.from(seen.values()).map((e) => e.signal);
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Test-only exports — accessible via the module but never invoked by
+// services. Tests use these to verify pure helper behavior without
+// hitting the SharpAPI network.
+// ─────────────────────────────────────────────────────────────
+
+export const __TEST__ = {
+  stripEventBucketSuffix,
+  buildSplitsMap,
+  publicPctsFromSplits,
+};

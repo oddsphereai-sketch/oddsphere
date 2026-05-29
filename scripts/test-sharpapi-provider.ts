@@ -19,7 +19,10 @@
  */
 
 import { SharpAPIOddsProvider } from "../lib/providers/real_api/SharpAPIOddsProvider";
-import { SharpAPISignalProvider } from "../lib/providers/real_api/SharpAPISignalProvider";
+import {
+  SharpAPISignalProvider,
+  __TEST__ as SignalProviderTest,
+} from "../lib/providers/real_api/SharpAPISignalProvider";
 import { SharpApiAuthError } from "../lib/providers/real_api/_sharpApiClient";
 import type { MlbTeamAbbrev } from "../lib/providers/real_api/_teamNameNormalizer";
 import type { Sport } from "../lib/types/domain/Sport";
@@ -87,6 +90,149 @@ function makeMockResolver() {
 async function main() {
   const today = new Date().toISOString().slice(0, 10);
   const t0 = Date.now();
+
+  // ───────────────────────────────────────────────────────────
+  // Phase 1.6 — Offline helper assertions (no network)
+  // ───────────────────────────────────────────────────────────
+  section("Phase 1.6 — offline helpers (stripEventBucketSuffix, splits maps, public pcts)");
+
+  check(
+    'stripEventBucketSuffix strips "_b0" suffix',
+    SignalProviderTest.stripEventBucketSuffix(
+      "mlb_marlins_mets_2026-05-29_b0"
+    ) === "mlb_marlins_mets_2026-05-29"
+  );
+  check(
+    'stripEventBucketSuffix strips "_b3" suffix',
+    SignalProviderTest.stripEventBucketSuffix(
+      "mlb_rangers_royals_2026-05-29_b3"
+    ) === "mlb_rangers_royals_2026-05-29"
+  );
+  check(
+    "stripEventBucketSuffix passes through event_ids without a _b suffix",
+    SignalProviderTest.stripEventBucketSuffix(
+      "mlb_diamondbacks_mariners_2026-05-29"
+    ) === "mlb_diamondbacks_mariners_2026-05-29"
+  );
+  check(
+    "stripEventBucketSuffix does not strip a non-numeric tail",
+    SignalProviderTest.stripEventBucketSuffix("mlb_yankees_redsox_2026-05-29_baz") ===
+      "mlb_yankees_redsox_2026-05-29_baz"
+  );
+
+  // buildSplitsMap — team-pair lookup excludes non-mlb leagues and
+  // unresolvable team strings.
+  {
+    const fakeRows = [
+      {
+        event_id: "mlb_marlins_mets_2026-05-29",
+        sport: "baseball",
+        league: "mlb",
+        home_team: "New York Mets",
+        away_team: "Miami Marlins",
+        moneyline: { bets_pct: { home: 0.68, away: 0.32 } },
+      },
+      {
+        event_id: "kbo_doosan_lg_2026-05-29",
+        sport: "baseball",
+        league: "kbo",
+        home_team: "Doosan",
+        away_team: "LG Twins",
+      },
+      {
+        event_id: "mlb_unknown_unknown_2026-05-29",
+        sport: "baseball",
+        league: "mlb",
+        home_team: "Unknown Team",
+        away_team: "Other Unknown",
+      },
+    ];
+    const m = SignalProviderTest.buildSplitsMap(fakeRows);
+    check(
+      "buildSplitsMap keys real MLB games by 'home|away' abbrev pair",
+      m.has("NYM|MIA")
+    );
+    check(
+      "buildSplitsMap drops non-MLB league rows (kbo)",
+      !m.has("LG|DOOSAN") && !Array.from(m.keys()).some((k) => k.includes("DOOSAN"))
+    );
+    check(
+      "buildSplitsMap drops rows with unresolvable team strings",
+      m.size === 1
+    );
+  }
+
+  // publicPctsFromSplits — exercises every market × side path plus the
+  // first_inning_total skip rule.
+  {
+    const splitsRow = {
+      event_id: "mlb_marlins_mets_2026-05-29",
+      league: "mlb",
+      home_team: "New York Mets",
+      away_team: "Miami Marlins",
+      moneyline: {
+        bets_pct: { home: 0.68, away: 0.32 },
+        handle_pct: { home: 0.47, away: 0.53 },
+      },
+      spread: {
+        bets_pct: { home: 0.36, away: 0.64 },
+        handle_pct: { home: 0.96, away: 0.04 },
+      },
+      total: {
+        bets_pct: { over: 0.79, under: 0.21 },
+        handle_pct: { over: 0.74, under: 0.26 },
+      },
+    };
+    const ml = SignalProviderTest.publicPctsFromSplits("moneyline", "home", splitsRow);
+    check(
+      "publicPctsFromSplits(moneyline, home) returns 0-1 floats × 100 as 0-100 numbers",
+      ml.betting === 68 && ml.money === 47
+    );
+    const mlAway = SignalProviderTest.publicPctsFromSplits("moneyline", "away", splitsRow);
+    check(
+      "publicPctsFromSplits(moneyline, away) reads the right side",
+      mlAway.betting === 32 && mlAway.money === 53
+    );
+    const spreadHome = SignalProviderTest.publicPctsFromSplits("spread", "home", splitsRow);
+    check(
+      "publicPctsFromSplits(spread, home) reads spread.bets_pct.home + handle_pct.home",
+      spreadHome.betting === 36 && spreadHome.money === 96
+    );
+    const totalOver = SignalProviderTest.publicPctsFromSplits("total", "over", splitsRow);
+    check(
+      "publicPctsFromSplits(total, over) reads total.bets_pct.over + handle_pct.over",
+      totalOver.betting === 79 && totalOver.money === 74
+    );
+    const firstInning = SignalProviderTest.publicPctsFromSplits(
+      "first_inning_total",
+      "under",
+      splitsRow
+    );
+    check(
+      "publicPctsFromSplits(first_inning_total, *) returns nulls — no first-inning splits in V1",
+      firstInning.betting === null && firstInning.money === null
+    );
+    // Missing market — handle_pct only, no bets_pct.
+    const partial = SignalProviderTest.publicPctsFromSplits(
+      "total",
+      "over",
+      { home_team: "x", away_team: "y", total: { handle_pct: { over: 0.6 } } }
+    );
+    check(
+      "publicPctsFromSplits handles missing bets_pct gracefully",
+      partial.betting === null && partial.money === 60
+    );
+    // Completely absent market on the splits row
+    const noTotal = SignalProviderTest.publicPctsFromSplits(
+      "total",
+      "over",
+      { home_team: "x", away_team: "y" }
+    );
+    check(
+      "publicPctsFromSplits returns null/null when the requested market is absent on the splits row",
+      noTotal.betting === null && noTotal.money === null
+    );
+  }
 
   // ───────────────────────────────────────────────────────────
   // SharpAPIOddsProvider
@@ -240,29 +386,89 @@ async function main() {
       Array.isArray(signals)
     );
 
-    // STRICT NULL DISCIPLINE — every row must have NULL on the gap fields
-    // and false (not null) on the boolean steam/RLM flags.
-    let allNullDisciplineHeld = true;
-    let allBooleanDisciplineHeld = true;
+    // STRICT NULL DISCIPLINE — every row must have NULL on the GENUINELY
+    // unavailable framework gap fields. Phase 1.6 introduces /splits
+    // integration: public_betting_pct and public_money_pct may now be
+    // populated on ML / spread / total signals when SharpAPI returns a
+    // matching /splits row. They MUST remain null on first_inning_total
+    // signals (no first-inning data in /splits).
+    let steamRlmStrengthDisciplineHeld = true;
+    let booleanDisciplineHeld = true;
+    let firstInningSplitsRemainNull = true;
     for (const s of signals) {
-      if (s.steam_detected_at !== null) allNullDisciplineHeld = false;
-      if (s.steam_books_count !== null) allNullDisciplineHeld = false;
-      if (s.rlm_direction !== null) allNullDisciplineHeld = false;
-      if (s.public_betting_pct !== null) allNullDisciplineHeld = false;
-      if (s.public_money_pct !== null) allNullDisciplineHeld = false;
-      if (s.signal_strength !== null) allNullDisciplineHeld = false;
-      if (s.signal_summary !== null) allNullDisciplineHeld = false;
-      if (s.has_steam_move !== false) allBooleanDisciplineHeld = false;
-      if (s.has_reverse_line_movement !== false) allBooleanDisciplineHeld = false;
+      if (s.steam_detected_at !== null) steamRlmStrengthDisciplineHeld = false;
+      if (s.steam_books_count !== null) steamRlmStrengthDisciplineHeld = false;
+      if (s.rlm_direction !== null) steamRlmStrengthDisciplineHeld = false;
+      if (s.signal_strength !== null) steamRlmStrengthDisciplineHeld = false;
+      if (s.signal_summary !== null) steamRlmStrengthDisciplineHeld = false;
+      if (s.has_steam_move !== false) booleanDisciplineHeld = false;
+      if (s.has_reverse_line_movement !== false) booleanDisciplineHeld = false;
+      // First-inning signals must continue to have null public splits
+      // because /splits does not cover first-inning markets in V1.
+      if (s.market_type === "first_inning_total") {
+        if (s.public_betting_pct !== null) firstInningSplitsRemainNull = false;
+        if (s.public_money_pct !== null) firstInningSplitsRemainNull = false;
+      }
     }
     check(
-      "STRICT NULL: steam_detected_at, steam_books_count, rlm_direction, public_betting_pct, public_money_pct, signal_strength, signal_summary all null on every row",
-      allNullDisciplineHeld
+      "STRICT NULL: steam_detected_at, steam_books_count, rlm_direction, signal_strength, signal_summary all null on every row",
+      steamRlmStrengthDisciplineHeld
     );
     check(
-      "STRICT BOOL: has_steam_move=false and has_reverse_line_movement=false on every row (SharpAPI does not expose these)",
-      allBooleanDisciplineHeld
+      "STRICT BOOL: has_steam_move=false and has_reverse_line_movement=false on every row (SharpAPI Sharp tier does not expose these)",
+      booleanDisciplineHeld
     );
+    check(
+      "Phase 1.6: first_inning_total signals have null public_betting_pct + public_money_pct (no first-inning splits in V1)",
+      firstInningSplitsRemainNull
+    );
+
+    // ── Phase 1.6 — /splits merge assertions ─────────────────────────
+    // We expect AT LEAST ONE ML / spread / total signal to receive a
+    // non-null public_betting_pct or public_money_pct via the /splits
+    // merge when SharpAPI returns a populated splits row for the
+    // matching team pair. Empty-slate cases are still acceptable.
+    const gameMarketSignals = signals.filter((s) =>
+      s.market_type === "moneyline" ||
+      s.market_type === "spread" ||
+      s.market_type === "total"
+    );
+    const splitsMergedCount = gameMarketSignals.filter(
+      (s) => s.public_betting_pct !== null || s.public_money_pct !== null
+    ).length;
+    console.log(
+      `  Phase 1.6 splits-merge: ${splitsMergedCount} / ${gameMarketSignals.length} ML/spread/total signals received public splits data`
+    );
+    if (gameMarketSignals.length > 0) {
+      check(
+        `Phase 1.6: at least one ML/spread/total signal carries public_betting_pct or public_money_pct from /splits merge (got ${splitsMergedCount}/${gameMarketSignals.length})`,
+        splitsMergedCount > 0
+      );
+
+      // Scale assertion: when populated, public_betting_pct and
+      // public_money_pct must be on the 0-100 scale (the SharpSignal
+      // table column convention). /splits returns 0-1 floats; the
+      // provider multiplies by 100. Sanity-check the upper bound here.
+      const scaleOk = signals.every(
+        (s) =>
+          (s.public_betting_pct === null || s.public_betting_pct <= 100) &&
+          (s.public_money_pct === null || s.public_money_pct <= 100)
+      );
+      check(
+        "Phase 1.6: public_betting_pct and public_money_pct are on the 0-100 scale (≤ 100 when not null)",
+        scaleOk
+      );
+      // And the lower bound — should be ≥ 0 always.
+      const scaleNonNegative = signals.every(
+        (s) =>
+          (s.public_betting_pct === null || s.public_betting_pct >= 0) &&
+          (s.public_money_pct === null || s.public_money_pct >= 0)
+      );
+      check(
+        "Phase 1.6: public_betting_pct and public_money_pct are non-negative when populated",
+        scaleNonNegative
+      );
+    }
 
     if (signals.length > 0) {
       const sample = signals[0]!;
