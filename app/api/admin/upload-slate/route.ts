@@ -32,6 +32,7 @@ import {
   ManualSlateProvider,
   type ManualSlateGameInput,
 } from "@/lib/providers/manual/ManualSlateProvider";
+import { computeSlateDate } from "@/lib/dates/slateDate";
 import type { Sport } from "@/lib/types/domain/Sport";
 
 // Fix 7.2.2: defensive validation patterns used to reject malformed inputs
@@ -156,6 +157,43 @@ export async function POST(request: Request) {
     }
     if (home && away && home === away) {
       errs.push("home_team_abbrev and away_team_abbrev must differ");
+    }
+
+    // Fix 7.2.4: slate-date consistency guard. The operator-selected
+    // slate_date drives staging row identity + manual provider keys +
+    // the auto-publish target; games.slate_date is independently derived
+    // from game_date via computeSlateDate. If the two disagree, the
+    // published-slate auto-publish step targets the wrong date and
+    // promotes 0 rows — leaving the actual game stuck in draft.
+    //
+    // We compute the canonical slate_date from game_date here (same
+    // function slateService.refreshGames uses) and reject if it doesn't
+    // match the operator's selected slate_date. All-or-nothing: even
+    // one mismatch rejects the whole upload BEFORE any DB write,
+    // because partial success would re-create the same bug for the
+    // bad games.
+    //
+    // Requires game_date already valid + sport already validated.
+    if (
+      typeof g.game_date === "string" &&
+      isIsoTimestamp(g.game_date) &&
+      errs.length === 0
+    ) {
+      try {
+        const computed = computeSlateDate(sport as Sport, g.game_date);
+        if (computed !== slate_date) {
+          errs.push(
+            `game_date '${g.game_date}' rolls into slate '${computed}' but the upload is targeting slate '${slate_date}'. ` +
+              `Either change the start time/date to match the selected slate, or change the slate-date selector.`
+          );
+        }
+      } catch (computeErr) {
+        // computeSlateDate throws on invalid input; should be caught by
+        // isIsoTimestamp above, but defensive guard so we don't 500.
+        errs.push(
+          `Failed to compute slate date from game_date '${g.game_date}': ${(computeErr as Error).message}`
+        );
+      }
     }
 
     if (errs.length > 0) {

@@ -25,6 +25,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { computeSlateDate } from "@/lib/dates/slateDate";
 
 const SPORTS = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl"] as const;
 type Sport = (typeof SPORTS)[number];
@@ -70,11 +71,18 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function blankGame(): GameRow {
+/**
+ * Fix 7.2.4: when a new game row is added, prefill `game_local` to the
+ * selected slate_date at 19:00 (a generic evening time). Reduces the
+ * surface area for the operator to type a mismatched date — they only
+ * have to set the time, and even an unchanged default lands on the
+ * correct slate.
+ */
+function blankGame(slateDateForDefault?: string): GameRow {
   return {
     home_team_abbrev: "",
     away_team_abbrev: "",
-    game_local: "",
+    game_local: slateDateForDefault ? `${slateDateForDefault}T19:00` : "",
     venue: "",
     notes: "",
   };
@@ -85,6 +93,26 @@ function localToIso(local: string): string {
   if (!local) return "";
   const d = new Date(local);
   return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+}
+
+/**
+ * Fix 7.2.4: compute the canonical slate_date a given local-input
+ * datetime would map to, using the same `computeSlateDate` the server
+ * uses. Returns undefined when the input can't be parsed so the warning
+ * UI silently skips empty/invalid rows. Wrapped in try/catch so an
+ * unparseable date doesn't crash the form.
+ */
+function deriveSlateDateForGame(
+  sport: Sport,
+  gameLocal: string
+): string | undefined {
+  const iso = localToIso(gameLocal);
+  if (!iso) return undefined;
+  try {
+    return computeSlateDate(sport, iso);
+  } catch {
+    return undefined;
+  }
 }
 
 export default function AdminSlatePage() {
@@ -187,7 +215,12 @@ function SlateForm({
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [teamsError, setTeamsError] = useState<string | null>(null);
-  const [games, setGames] = useState<GameRow[]>([blankGame()]);
+  // Fix 7.2.4: initial blank game prefills game_local to {slateDate}T19:00
+  // so the operator only needs to set the time, not re-type the date. The
+  // initial state runs once at mount; subsequent slate-date changes don't
+  // retroactively rewrite existing rows (operator may have intentionally
+  // entered something else; the per-row warning catches divergence).
+  const [games, setGames] = useState<GameRow[]>(() => [blankGame(slateDate)]);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
@@ -220,9 +253,12 @@ function SlateForm({
     setGames((prev) => prev.filter((_, i) => i !== idx));
   }, []);
 
+  // Fix 7.2.4: when the operator clicks "Add game", prefill the new
+  // row's game_local to the currently-selected slate_date at 19:00 so
+  // the default is consistent and the per-row warning starts silent.
   const addGame = useCallback(() => {
-    setGames((prev) => [...prev, blankGame()]);
-  }, []);
+    setGames((prev) => [...prev, blankGame(slateDate)]);
+  }, [slateDate]);
 
   const canPublish = useMemo(() => {
     if (!teamsSeeded) return false;
@@ -371,6 +407,8 @@ function SlateForm({
               index={idx}
               row={g}
               teams={teams}
+              sport={sport}
+              selectedSlateDate={slateDate}
               onChange={(patch) => updateGame(idx, patch)}
               onRemove={() => removeGame(idx)}
               canRemove={games.length > 1}
@@ -444,6 +482,8 @@ function GameRowEditor({
   index,
   row,
   teams,
+  sport,
+  selectedSlateDate,
   onChange,
   onRemove,
   canRemove,
@@ -451,10 +491,23 @@ function GameRowEditor({
   index: number;
   row: GameRow;
   teams: TeamRow[];
+  sport: Sport;
+  selectedSlateDate: string;
   onChange: (patch: Partial<GameRow>) => void;
   onRemove: () => void;
   canRemove: boolean;
 }) {
+  // Fix 7.2.4: compute the slate_date this game's start time would map
+  // to, using the same canonical computeSlateDate the server uses for
+  // validation + the games table for slate_date. Renders a warning
+  // below the start-time input when the operator's entry diverges from
+  // the slate-date selector. The server-side check is authoritative;
+  // this is just an early heads-up so the operator can fix it before
+  // clicking Publish.
+  const derivedSlateDate = deriveSlateDateForGame(sport, row.game_local);
+  const mismatchedSlateDate =
+    derivedSlateDate !== undefined && derivedSlateDate !== selectedSlateDate;
+
   return (
     <div
       style={{
@@ -504,8 +557,32 @@ function GameRowEditor({
           type="datetime-local"
           value={row.game_local}
           onChange={(e) => onChange({ game_local: e.target.value })}
-          style={{ display: "block", marginTop: 4, padding: 6, width: "100%" }}
+          style={{
+            display: "block",
+            marginTop: 4,
+            padding: 6,
+            width: "100%",
+            borderColor: mismatchedSlateDate ? "#d18b1c" : undefined,
+            borderWidth: mismatchedSlateDate ? 2 : undefined,
+            borderStyle: mismatchedSlateDate ? "solid" : undefined,
+          }}
         />
+        {mismatchedSlateDate && (
+          <span
+            style={{
+              fontSize: 11,
+              color: "#a06400",
+              marginTop: 4,
+              display: "block",
+              lineHeight: 1.35,
+            }}
+            title="The start time you entered rolls into a different slate than the selected slate-date."
+          >
+            ⚠ Start time rolls into slate{" "}
+            <strong>{derivedSlateDate}</strong>, not the selected slate{" "}
+            <strong>{selectedSlateDate}</strong>. The server will reject this.
+          </span>
+        )}
       </label>
       <label style={{ fontSize: 13 }}>
         Venue (optional)

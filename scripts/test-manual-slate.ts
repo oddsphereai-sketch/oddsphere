@@ -357,6 +357,125 @@ async function main() {
   );
   check("malformed abbrev with punctuation → 400 (Fix 7.2.2 — Item 2)", badAbbrev.status === 400);
 
+  // ─── Fix 7.2.4 — slate-date consistency guard ───────────────────────────
+  // Operator selects slate_date X but enters game_date that rolls into
+  // slate_date Y (per computeSlateDate, in the sport's anchor timezone).
+  // Route rejects the whole upload before staging insert.
+  section("Fix 7.2.4 — slate-date consistency guard");
+
+  // (1) game_date rolls into a different slate date than the operator
+  //     selected → 400 with structured details[].
+  //     TEST_SLATE_DATE = 2030-01-15. game at 2030-01-16T12:00Z in
+  //     America/New_York is a midday Jan 16 game → slate_date '2030-01-16'
+  //     → mismatch with selected '2030-01-15' → reject.
+  const dateMismatch = await uploadSlatePost(
+    authed("https://x", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sport: "mlb",
+        slate_date: TEST_SLATE_DATE, // 2030-01-15
+        games: [
+          {
+            home_team_abbrev: homeAbbrev,
+            away_team_abbrev: awayAbbrev,
+            game_date: "2030-01-16T17:00:00.000Z", // ET noon Jan 16 → slate Jan 16
+            season: 2030,
+          },
+        ],
+      }),
+    })
+  );
+  check("date mismatch → 400 (Fix 7.2.4)", dateMismatch.status === 400);
+  const dateMismatchBody = (await dateMismatch.json()) as {
+    error?: string;
+    details?: Array<{ index: number; errors: string[] }>;
+  };
+  check(
+    "date mismatch returns structured details[] with offending game index",
+    Array.isArray(dateMismatchBody.details) &&
+      dateMismatchBody.details.length === 1 &&
+      dateMismatchBody.details[0]!.index === 0 &&
+      dateMismatchBody.details[0]!.errors.some((e) =>
+        e.includes("rolls into slate")
+      )
+  );
+
+  // (2 — DEFERRED, runs after idempotency section to avoid polluting
+  //  the happy-path staging-row count math. See "Fix 7.2.4 — timezone-
+  //  safe accept" section near the bottom of this file.)
+
+  // (3) Boundary: clearly next-day-in-ET game → 400.
+  //     Jan 16 11 AM ET = 2030-01-16T16:00Z → slate_date 2030-01-16
+  //     vs TEST_SLATE_DATE 2030-01-15 → mismatch.
+  const morningBoundary = await uploadSlatePost(
+    authed("https://x", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sport: "mlb",
+        slate_date: TEST_SLATE_DATE,
+        games: [
+          {
+            home_team_abbrev: homeAbbrev,
+            away_team_abbrev: awayAbbrev,
+            game_date: "2030-01-16T16:00:00.000Z", // ET 11 AM Jan 16 → slate Jan 16
+            season: 2030,
+          },
+        ],
+      }),
+    })
+  );
+  check(
+    "next-day-ET morning game → 400 (boundary case)",
+    morningBoundary.status === 400
+  );
+
+  // (4) All-or-nothing: one good game + one bad game → 400 and NO
+  //     staging row written. Snapshot staging row count for this slate
+  //     before + after the bad-mix upload and verify it didn't grow.
+  const { count: stagingCountBefore } = await supabase
+    .from("manual_slate_staging")
+    .select("*", { count: "exact", head: true })
+    .eq("sport", "mlb")
+    .eq("slate_date", TEST_SLATE_DATE);
+
+  const badMix = await uploadSlatePost(
+    authed("https://x", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sport: "mlb",
+        slate_date: TEST_SLATE_DATE,
+        games: [
+          {
+            home_team_abbrev: homeAbbrev,
+            away_team_abbrev: awayAbbrev,
+            game_date: "2030-01-16T01:00:00.000Z", // good — ET evening Jan 15
+            season: 2030,
+          },
+          {
+            home_team_abbrev: homeAbbrev,
+            away_team_abbrev: awayAbbrev,
+            game_date: "2030-02-15T22:00:00.000Z", // bad — different month entirely
+            season: 2030,
+          },
+        ],
+      }),
+    })
+  );
+  check("all-or-nothing: mixed valid + invalid → 400", badMix.status === 400);
+
+  const { count: stagingCountAfter } = await supabase
+    .from("manual_slate_staging")
+    .select("*", { count: "exact", head: true })
+    .eq("sport", "mlb")
+    .eq("slate_date", TEST_SLATE_DATE);
+  check(
+    `all-or-nothing: no staging row written when any game fails (before=${stagingCountBefore}, after=${stagingCountAfter})`,
+    (stagingCountAfter ?? 0) === (stagingCountBefore ?? 0)
+  );
+
   // ─── Unknown team abbreviation — Flag B1 ────────────────────────────────
   section("/api/admin/upload-slate — unknown team handling (Flag B1)");
 
@@ -623,6 +742,38 @@ async function main() {
   check(
     "Fix 7.2.2: only one manual game row exists for this slate_date across all uploads",
     (anyManualForDateCount ?? 0) === 1
+  );
+
+  // ─── Fix 7.2.4 — timezone-safe accept (post-idempotency) ────────────────
+  // Anchors the positive case: an ET late-evening game whose UTC date
+  // portion is the NEXT day but whose anchor-TZ slate_date is the
+  // selected day. Validates we use computeSlateDate (canonical) instead
+  // of raw UTC date-portion comparison. Same TEST_SLATE_DATE + same
+  // matchup as the happy path — deterministic external_id makes the
+  // UPSERT idempotent. Adds one staging row (handled by cleanup).
+  section("Fix 7.2.4 — timezone-safe accept (late-evening ET game)");
+
+  const lateEvening = await uploadSlatePost(
+    authed("https://x", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sport: "mlb",
+        slate_date: TEST_SLATE_DATE, // 2030-01-15
+        games: [
+          {
+            home_team_abbrev: homeAbbrev,
+            away_team_abbrev: awayAbbrev,
+            game_date: "2030-01-16T01:00:00.000Z", // ET 8 PM Jan 15 → slate Jan 15
+            season: 2030,
+          },
+        ],
+      }),
+    })
+  );
+  check(
+    `late-evening ET game (UTC midnight rollover) accepted (got ${lateEvening.status}) — proves canonical computeSlateDate used, not raw UTC slice`,
+    lateEvening.status === 200
   );
 
   // ─── Provider unit test: stagingRowId constructor reads specific row ─────
