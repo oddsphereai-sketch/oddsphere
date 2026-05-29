@@ -102,6 +102,51 @@ export type GradeInput = {
    * the deferred carve-out is bounded.
    */
   evidence: SignalEvidence | null;
+  // ───────────────────────────────────────────────────────────────────────
+  // Phase 2 (Daniel-approved Adjustments A + B). All four are OPTIONAL and
+  // default to "guardrail fails" semantics. The EV-axis-only paths to
+  // best_signal and market_led only fire when callers explicitly supply
+  // these fields.
+  //
+  // V1 NOTE — confidence-edge proxy, NOT final model edge:
+  //   `modelConfidence` is the per-pick confidence value already on
+  //   game_predictions (ml_confidence / ou_confidence / nrfi_confidence,
+  //   each on 0-100 scale). Phase 2 uses (modelConfidence - 50) as a
+  //   TEMPORARY proxy for "model edge" because the Phase 3 rule-seeded
+  //   auto-model does not yet exist. When Phase 3 lands and supplies a
+  //   true per-pick edge metric, these helpers should be revisited.
+  // ───────────────────────────────────────────────────────────────────────
+  /**
+   * Per-pick prediction confidence on a 0-100 scale. When present, the
+   * Phase 2 EV-axis helpers compute confidenceEdgeProxy = modelConfidence
+   * - 50. NULL/undefined → Adjustment A and B cannot fire.
+   */
+  modelConfidence?: number | null;
+  /**
+   * Adjustment A guardrail 4: the probable starter for this pick is
+   * confirmed (e.g., BDL `/lineups.is_probable_pitcher` + `is_confirmed`
+   * or an explicit operator override). Default false → Adjustment A
+   * cannot fire. Phase 3 (auto-model) is expected to populate this from
+   * BDL data; in Phase 2 the field stays false for all production
+   * callers, keeping Adjustment A structurally inactive until then.
+   */
+  starterConfirmed?: boolean;
+  /**
+   * Adjustment A guardrail 3 + Adjustment B guardrail 3: a deterministic
+   * upstream warning that OPPOSES the model's pick (e.g., wind-out
+   * forecast opposing an Under, scratched probable starter, top-3 hitter
+   * scratched). When true, neither EV-axis grade can fire. Default false
+   * → guardrail passes by absence; must be explicitly set true when
+   * upstream supplies the data.
+   */
+  opposingDeterministicWarning?: boolean;
+  /**
+   * Adjustment A guardrail 5: a sportsbook market line is available for
+   * the pick (V1 best-effort: sport_specific.listed_line is not null,
+   * OR a lines.line_value lookup yields a value). Default false →
+   * Adjustment A cannot fire. Phase 3/4 may strengthen this check.
+   */
+  marketLineAvailable?: boolean;
 };
 
 export type GradeOutput = {
@@ -212,6 +257,132 @@ function meetsBestSignalBar(evidence: SignalEvidence): boolean {
   }
   if (strongAlignedCount < 2) return false;
   return hasNoOpposingStrongSignals(evidence);
+}
+
+/**
+ * Phase 2 Adjustment A — Daniel-approved EV-axis-only path to best_signal.
+ *
+ * V1 confidence-edge proxy note:
+ *   "Model edge" in this helper is a TEMPORARY proxy defined as
+ *   (modelConfidence - 50) because the Phase 3 rule-seeded auto-model
+ *   does not yet exist. Once Phase 3 supplies a true per-pick edge metric
+ *   this helper should be revisited.
+ *
+ * Bar (ALL six guardrails must hold AND no opposing strong signals):
+ *   1. Pinnacle EV aligned at very_strong tier (≥ 5%)
+ *   2. confidenceEdgeProxy (modelConfidence - 50) ≥ 3 points
+ *   3. No opposing deterministic warning
+ *   4. Probable starter confirmed
+ *   5. Market line available
+ *   6. Model confidence ≥ 60%
+ *
+ * Defaults are intentionally safe-fail: when callers omit the Phase 2
+ * optional fields, the helper returns false and the existing chain
+ * (sharp_confirmed → market_led → market_watch) runs as before. This
+ * keeps Adjustment A WIRED in V1 but ACTIVE only when upstream supplies
+ * the data (Phase 3+ auto-model).
+ *
+ * Caller order: this helper runs AFTER the primary multi-axis
+ * meetsBestSignalBar check in deriveGrade. If both bars pass on the same
+ * input, the primary multi-axis bar wins (it fires first).
+ */
+function meetsBestSignalEvAlone(
+  input: GradeInput,
+  evidence: SignalEvidence
+): boolean {
+  // Guardrail 1: EV must be aligned at very_strong tier (≥ 5%).
+  if (evidence.ev === null) return false;
+  if (!evidence.ev.aligned) return false;
+  if (evidence.ev.tier !== "very_strong") return false;
+
+  // Guardrail 2: confidence-edge proxy ≥ 3 points above neutral.
+  // Phase 2 V1 proxy — NOT final model edge.
+  if (input.modelConfidence === null || input.modelConfidence === undefined) {
+    return false;
+  }
+  const confidenceEdgeProxy = input.modelConfidence - 50;
+  if (
+    confidenceEdgeProxy <
+    GRADE_THRESHOLDS.BEST_SIGNAL_EV_ALONE_CONFIDENCE_EDGE_PROXY_POINTS
+  ) {
+    return false;
+  }
+
+  // Guardrail 3: no opposing deterministic warning.
+  if (input.opposingDeterministicWarning === true) return false;
+
+  // Guardrail 4: probable starter confirmed (explicit true required;
+  // default false makes the bar fail until upstream supplies the data).
+  if (input.starterConfirmed !== true) return false;
+
+  // Guardrail 5: market line available.
+  if (input.marketLineAvailable !== true) return false;
+
+  // Guardrail 6: confidence ≥ floor.
+  if (
+    input.modelConfidence <
+    GRADE_THRESHOLDS.BEST_SIGNAL_EV_ALONE_CONFIDENCE_FLOOR_PCT
+  ) {
+    return false;
+  }
+
+  // Defense in depth: reuse the existing opposing-strong-signal check.
+  if (!hasNoOpposingStrongSignals(evidence)) return false;
+
+  return true;
+}
+
+/**
+ * Phase 2 Adjustment B — Daniel-approved EV-axis-only path to market_led.
+ *
+ * V1 confidence-edge proxy note: same as meetsBestSignalEvAlone above.
+ *
+ * Bar (ALL four guardrails must hold):
+ *   1. Pinnacle EV aligned at strong tier or higher (≥ 3%)
+ *   2. confidenceEdgeProxy is "weak/neutral": (modelConfidence - 50) < 3
+ *      → fires when the market is moving but the model has no meaningful
+ *      conviction. Required so this doesn't double up with sharp_confirmed.
+ *   3. No opposing deterministic warning (reuses guardrail field from A)
+ *   4. No opposing strong signals (defense in depth)
+ *
+ * Critical: caller MUST run this BEFORE meetsSharpConfirmedBar in the
+ * deriveGrade switch — otherwise a strong aligned EV + weak confidence
+ * proxy would route to sharp_confirmed instead of market_led. The
+ * `confidenceEdgeProxy < threshold` guardrail makes sure this helper
+ * does NOT poach cases that legitimately belong to sharp_confirmed
+ * (model has conviction → sharp_confirmed; model is neutral → market_led).
+ *
+ * Defaults are intentionally safe-fail: when modelConfidence is null,
+ * the helper returns false and the existing chain runs as before.
+ */
+function meetsMarketLedEvAlone(
+  input: GradeInput,
+  evidence: SignalEvidence
+): boolean {
+  // Guardrail 1: EV must be aligned at strong tier or higher (≥ 3%).
+  if (evidence.ev === null) return false;
+  if (!evidence.ev.aligned) return false;
+  if (!tierAtLeast(evidence.ev.tier, "strong")) return false;
+
+  // Guardrail 2: confidence-edge proxy is weak/neutral.
+  if (input.modelConfidence === null || input.modelConfidence === undefined) {
+    return false;
+  }
+  const confidenceEdgeProxy = input.modelConfidence - 50;
+  if (
+    confidenceEdgeProxy >=
+    GRADE_THRESHOLDS.MARKET_LED_EV_ALONE_CONFIDENCE_EDGE_PROXY_POINTS
+  ) {
+    return false;
+  }
+
+  // Guardrail 3: no opposing deterministic warning.
+  if (input.opposingDeterministicWarning === true) return false;
+
+  // Guardrail 4: defense in depth.
+  if (!hasNoOpposingStrongSignals(evidence)) return false;
+
+  return true;
 }
 
 /**
@@ -446,12 +617,29 @@ export function deriveGrade(input: GradeInput): GradeOutput {
         }
         return { grade: "market_led", signal_type: "market_only" };
       }
+      // Primary best_signal bar — multi-axis ≥ 2 strong-tier aligned.
       if (
         hasModelEdge &&
         (modelEdgePct as number) >= bestThreshold &&
         meetsBestSignalBar(evidence)
       ) {
         return { grade: "best_signal", signal_type: "balanced" };
+      }
+      // Phase 2 Adjustment A — Daniel-approved EV-axis-only secondary
+      // path to best_signal. Safe-by-default: all 6 guardrails must
+      // pass (incl. starterConfirmed + marketLineAvailable, which
+      // default false until Phase 3+ supplies upstream data).
+      if (meetsBestSignalEvAlone(input, evidence)) {
+        return { grade: "best_signal", signal_type: "balanced" };
+      }
+      // Phase 2 Adjustment B — Daniel-approved EV-axis-only path to
+      // market_led. MUST run BEFORE meetsSharpConfirmedBar so a strong
+      // aligned EV + weak confidence-edge proxy routes to market_led
+      // instead of being absorbed by sharp_confirmed. The "weak/neutral"
+      // guardrail (confidenceEdgeProxy < 3) protects cases that
+      // legitimately belong to sharp_confirmed (model has conviction).
+      if (meetsMarketLedEvAlone(input, evidence)) {
+        return { grade: "market_led", signal_type: "market_only" };
       }
       if (hasModelEdge && meetsSharpConfirmedBar(evidence)) {
         return { grade: "sharp_confirmed", signal_type: "balanced" };
@@ -532,6 +720,17 @@ type GamePredRow = {
   ml_market_signal: MarketSignal | null;
   ou_market_signal: MarketSignal | null;
   nrfi_market_signal: MarketSignal | null;
+  // Phase 2: per-pick confidence values from the prediction. Used by the
+  // EV-axis-only paths to best_signal / market_led as a TEMPORARY proxy
+  // for "model edge" (confidenceEdgeProxy = confidence - 50). V1-only;
+  // Phase 3 auto-model will eventually supply a true per-pick edge.
+  ml_confidence: number | null;
+  ou_confidence: number | null;
+  nrfi_confidence: number | null;
+  // Phase 2: sport_specific JSONB holds operator-supplied extras including
+  // (MLB) listed_line — the best-effort source for `marketLineAvailable`
+  // until Phase 4 wires a proper lines-table lookup.
+  sport_specific: Record<string, unknown> | null;
 };
 
 type PropPredRow = {
@@ -691,13 +890,17 @@ export async function deriveGradesForSlate(
   // Reads PER-PICK ml_market_signal / ou_market_signal / nrfi_market_signal
   // columns. The legacy market_signal column is NOT read — gradeDerivation
   // pairs each market's grade with its OWN market read.
+  //
+  // Phase 2 additions: per-pick confidence values + sport_specific JSONB
+  // are now selected so the EV-axis-only grade helpers can compute the
+  // confidence-edge proxy and check listed_line availability.
   const { data: gamePredsRaw } = await supabase
     .from("game_predictions")
     .select(
-      "id, game_id, predicted_ml_winner, predicted_ou_side, predicted_nrfi, ml_market_signal, ou_market_signal, nrfi_market_signal"
+      "id, game_id, predicted_ml_winner, predicted_ou_side, predicted_nrfi, ml_market_signal, ou_market_signal, nrfi_market_signal, ml_confidence, ou_confidence, nrfi_confidence, sport_specific"
     )
     .in("game_id", gameIds);
-  const gamePreds = (gamePredsRaw ?? []) as GamePredRow[];
+  const gamePreds = (gamePredsRaw ?? []) as unknown as GamePredRow[];
 
   const { data: propsRaw } = await supabase
     .from("prop_predictions")
@@ -728,6 +931,12 @@ export async function deriveGradesForSlate(
     if (row.game_id === null) continue;
     const picks = picksFromRow(row);
 
+    // Phase 2: best-effort listed_line check from sport_specific JSONB.
+    // V1 only — Phase 3/4 may strengthen with a lines table lookup.
+    const listedLineRaw = (row.sport_specific as { listed_line?: unknown } | null)
+      ?.listed_line;
+    const marketLineAvailable = typeof listedLineRaw === "number";
+
     for (const key of GAME_MARKET_KEYS) {
       const pick = picks[key];
       if (pick === null) continue;
@@ -742,6 +951,17 @@ export async function deriveGradesForSlate(
         pick.side,
         sig ? toEvidenceSource(sig) : null
       );
+      // Phase 2: per-pick confidence routed to the EV-axis helpers as a
+      // confidence-edge proxy. Adjustment A also needs starterConfirmed
+      // + opposingDeterministicWarning, which default false in V1 because
+      // upstream data sources land in Phase 3+. Adjustment A is therefore
+      // structurally inactive in V1 until those defaults flip.
+      const modelConfidence =
+        key === "ml"
+          ? row.ml_confidence
+          : key === "ou"
+            ? row.ou_confidence
+            : row.nrfi_confidence;
       result.games[key].set(
         row.id,
         deriveGrade({
@@ -749,6 +969,10 @@ export async function deriveGradesForSlate(
           modelEdgePct,
           marketSignal: pick.marketSignal,
           evidence,
+          modelConfidence,
+          starterConfirmed: false,
+          opposingDeterministicWarning: false,
+          marketLineAvailable,
         })
       );
     }

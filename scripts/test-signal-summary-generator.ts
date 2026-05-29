@@ -174,8 +174,12 @@ function main() {
       text.includes("+2.1%") && text.includes("EV")
     );
     check(
-      'mentions "No confirming steam or sharp money divergence" (template 2 verbatim)',
-      text.includes("No confirming steam or sharp money divergence")
+      'mentions "Conviction below the bar for sharp confirmed" (Phase 2 V1 rewording)',
+      text.includes("Conviction below the bar for sharp confirmed")
+    );
+    check(
+      'does NOT mention "No confirming steam or sharp money divergence" (Phase 2: misleading in V1 because SharpAPI does not expose those signals)',
+      !text.includes("No confirming steam or sharp money divergence")
     );
     assertBrandVoice("Template 2 brand voice", text);
   }
@@ -206,8 +210,12 @@ function main() {
       text.includes("+5.4%") && text.includes("on Over")
     );
     check(
-      'mentions "No confirming steam or sharp money divergence on the opposing side"',
-      text.includes("No confirming steam or sharp money divergence on the opposing side")
+      'mentions "Below the bar for sharp conflict" (Phase 2 V1 rewording)',
+      text.includes("Below the bar for sharp conflict")
+    );
+    check(
+      'does NOT mention "No confirming steam or sharp money divergence" (Phase 2: misleading in V1)',
+      !text.includes("No confirming steam or sharp money divergence")
     );
     assertBrandVoice("Template 3 brand voice", text);
   }
@@ -489,6 +497,160 @@ function main() {
 
   for (const s of samples) {
     assertBrandVoice(s.label, s.text);
+  }
+
+  // ─── Phase 2 — V1 EV-axis copy assertions (Daniel-approved guardrails) ───
+  //
+  // V1 SharpAPI does not expose public_betting_pct, public_money_pct, steam,
+  // or RLM. EV-only copy paths MUST:
+  //   • Use the literal "Market-led EV signal" phrase in market_led copy
+  //   • Cite Pinnacle as the devig reference in EV-only sharp_confirmed /
+  //     best_signal copy
+  //   • Never include "Sharp money", "public bets", or "No confirming
+  //     steam or sharp money divergence" wording in EV-only outputs
+  //   • New market_watch wording uses "Conviction below the bar for sharp
+  //     confirmed" / "Below the bar for sharp conflict"
+  section("Phase 2 V1 EV-axis copy (Adjustments A + B + market_watch rewording)");
+
+  // V1 signal shape: EV present, all other sharp fields null/false.
+  function v1Signal(overrides: Partial<MarketSignalSource> = {}): MarketSignalSource {
+    return sig({
+      side: "home",
+      is_plus_ev: true,
+      ev_pct: 4.2,
+      // V1 shape — public + steam + RLM all absent / null
+      has_steam_move: false,
+      steam_books_count: null,
+      has_reverse_line_movement: false,
+      rlm_direction: null,
+      public_betting_pct: null,
+      public_money_pct: null,
+      ...overrides,
+    });
+  }
+
+  // EV-only market_led (Adjustment B path) — must contain "Market-led EV signal"
+  {
+    const text = generateSignalSummary(
+      "home",
+      "moneyline",
+      v1Signal({ ev_pct: 3.4 }),
+      evidence({ ev: tier("strong", true) }),
+      "market_led",
+      CTX
+    );
+    console.log(`  market_led EV-only → "${text}"`);
+    check(
+      'V1 market_led EV-only contains literal "Market-led EV signal"',
+      text.includes("Market-led EV signal")
+    );
+    check(
+      'V1 market_led EV-only cites "Pinnacle fair value"',
+      text.includes("Pinnacle fair value")
+    );
+    check(
+      'V1 market_led EV-only does NOT contain "Sharp money" (V1 has no public splits)',
+      !text.includes("Sharp money")
+    );
+    check(
+      'V1 market_led EV-only does NOT contain "public bets" (V1 has no public splits)',
+      !text.includes("public bets")
+    );
+    assertBrandVoice("V1 market_led EV-only brand voice", text);
+  }
+
+  // EV-only sharp_confirmed (Adjustment A path also routes through this composer)
+  {
+    const text = generateSignalSummary(
+      "home",
+      "moneyline",
+      v1Signal({ ev_pct: 3.4 }),
+      evidence({ ev: tier("strong", true) }),
+      "sharp_confirmed",
+      CTX
+    );
+    console.log(`  sharp_confirmed EV-only → "${text}"`);
+    check(
+      'V1 sharp_confirmed EV-only cites "Pinnacle fair value supports"',
+      text.includes("Pinnacle fair value supports")
+    );
+    check(
+      'V1 sharp_confirmed EV-only includes "devig reference" wording',
+      text.includes("devig reference")
+    );
+    check(
+      'V1 sharp_confirmed EV-only does NOT contain "Sharp money" detail',
+      !text.includes("Sharp money")
+    );
+    check(
+      'V1 sharp_confirmed EV-only does NOT contain "public bets" detail',
+      !text.includes("public bets")
+    );
+    assertBrandVoice("V1 sharp_confirmed EV-only brand voice", text);
+  }
+
+  // EV-only best_signal (when Adjustment A fires — composer is composeConfirmed)
+  {
+    const text = generateSignalSummary(
+      "home",
+      "moneyline",
+      v1Signal({ ev_pct: 5.4 }),
+      evidence({ ev: tier("very_strong", true) }),
+      "best_signal",
+      CTX
+    );
+    console.log(`  best_signal EV-only → "${text}"`);
+    check(
+      'V1 best_signal EV-only cites "Pinnacle fair value supports"',
+      text.includes("Pinnacle fair value supports")
+    );
+    check(
+      'V1 best_signal EV-only does NOT contain "Sharp money" detail',
+      !text.includes("Sharp money")
+    );
+    assertBrandVoice("V1 best_signal EV-only brand voice", text);
+  }
+
+  // market_watch aligned EV (new "Conviction below the bar" wording)
+  {
+    const text = generateSignalSummary(
+      "home",
+      "moneyline",
+      v1Signal({ ev_pct: 2.1 }),
+      evidence({ ev: tier("moderate", true) }),
+      "market_watch",
+      CTX
+    );
+    console.log(`  market_watch aligned EV → "${text}"`);
+    check(
+      'V1 market_watch aligned EV includes "Conviction below the bar for sharp confirmed"',
+      text.includes("Conviction below the bar for sharp confirmed")
+    );
+    check(
+      'V1 market_watch aligned EV does NOT mention "No confirming steam or sharp money divergence"',
+      !text.includes("No confirming steam or sharp money divergence")
+    );
+  }
+
+  // market_watch opposing EV (new "Below the bar for sharp conflict" wording)
+  {
+    const text = generateSignalSummary(
+      "under",
+      "total",
+      v1Signal({ side: "over", ev_pct: 5.4 }),
+      evidence({ ev: tier("very_strong", false) }),
+      "market_watch",
+      CTX
+    );
+    console.log(`  market_watch opposing EV → "${text}"`);
+    check(
+      'V1 market_watch opposing EV includes "Below the bar for sharp conflict"',
+      text.includes("Below the bar for sharp conflict")
+    );
+    check(
+      'V1 market_watch opposing EV does NOT mention "No confirming steam or sharp money divergence"',
+      !text.includes("No confirming steam or sharp money divergence")
+    );
   }
 
   // ─── Summary ──────────────────────────────────────────────────────────────

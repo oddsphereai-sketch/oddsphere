@@ -276,6 +276,47 @@ export const GRADE_THRESHOLDS = {
   MIN_PROP_EDGE: 3,
   /** Warn when best_signal share of slate exceeds this percentage. */
   BEST_SIGNAL_SLATE_MONITOR_PCT: 25,
+  // ───────────────────────────────────────────────────────────────────────
+  // Phase 2 — Daniel-approved EV-axis-only paths for best_signal and
+  // market_led (Adjustments A and B).
+  //
+  // V1 NOTE — confidence-edge proxy, not final model edge:
+  //   The Phase 3 rule-seeded auto-model does not yet exist, so a true
+  //   model_edge metric is not available. For Phase 2, "model edge" is a
+  //   TEMPORARY proxy derived from prediction confidence:
+  //       confidenceEdgeProxy = modelConfidence - 50
+  //   The proxy reuses the existing `game_predictions.*_confidence`
+  //   columns as a stand-in. When Phase 3 lands, the rule-seeded model
+  //   will provide a real per-pick edge metric and the *_CONFIDENCE_EDGE_*
+  //   constants below SHOULD BE REVISITED to align with the real edge.
+  // ───────────────────────────────────────────────────────────────────────
+  /** Adjustment A guardrail 1: Pinnacle EV % floor for the EV-axis-alone
+   *  path to best_signal. Matches SHARP_SIGNAL_THRESHOLDS.EV_VERY_STRONG_
+   *  THRESHOLD (5.0%) by design — Adjustment A requires very-strong-tier
+   *  EV. Hardcoded separately so operators can tune Phase 2 independently
+   *  of the framework tier definitions. */
+  BEST_SIGNAL_EV_ALONE_EV_FLOOR_PCT: 5,
+  /** Adjustment A guardrail 2: confidence-edge proxy floor for best_signal
+   *  EV-alone. "Model edge ≥ 3 points above neutral" maps to
+   *  modelConfidence - 50 ≥ 3 → modelConfidence ≥ 53. */
+  BEST_SIGNAL_EV_ALONE_CONFIDENCE_EDGE_PROXY_POINTS: 3,
+  /** Adjustment A guardrail 6: confidence floor for best_signal EV-alone.
+   *  When confidence is below this, the model isn't conviction-loud
+   *  enough to back the very-strong EV signal alone. */
+  BEST_SIGNAL_EV_ALONE_CONFIDENCE_FLOOR_PCT: 60,
+  /** Adjustment B guardrail 1: Pinnacle EV % floor for the EV-axis-alone
+   *  path to market_led. Matches SHARP_SIGNAL_THRESHOLDS.EV_STRONG_
+   *  THRESHOLD (3.0%) — Adjustment B requires strong-tier or better EV. */
+  MARKET_LED_EV_ALONE_EV_FLOOR_PCT: 3,
+  /** Adjustment B guardrail 2 (boundary): confidence-edge proxy ceiling
+   *  for "weak/neutral" model behavior. When confidence - 50 is BELOW this,
+   *  the model has not asserted a meaningful conviction — market is
+   *  leading. When confidence - 50 is at or above this, the model HAS
+   *  conviction and the case routes to sharp_confirmed instead.
+   *
+   *  Boundary semantics: the EV-alone market_led path fires when
+   *  (modelConfidence - 50) < this value. At exactly the value, fails. */
+  MARKET_LED_EV_ALONE_CONFIDENCE_EDGE_PROXY_POINTS: 3,
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────

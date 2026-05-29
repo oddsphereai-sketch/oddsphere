@@ -951,6 +951,360 @@ async function main() {
     })()
   );
 
+  // ─── Phase 2 Adjustment A — Best Signal EV-axis-only path ─────────────
+  //
+  // Daniel-approved guardrails (ALL must hold):
+  //   1. Pinnacle EV aligned at very_strong tier (≥ 5%)
+  //   2. confidenceEdgeProxy (modelConfidence - 50) ≥ 3 points
+  //   3. No opposing deterministic warning
+  //   4. starterConfirmed === true
+  //   5. marketLineAvailable === true
+  //   6. modelConfidence ≥ 60
+  //
+  // V1 note: "model edge" is a confidence-edge proxy, NOT a final model
+  // edge. Phase 3 auto-model will eventually provide a true edge metric.
+  //
+  // Safe-by-default: when callers omit the optional fields, the bar
+  // fails and the existing chain runs as before.
+  section("Phase 2 Adjustment A — best_signal EV-axis-only (Daniel guardrails)");
+
+  // Helper for Adjustment A inputs — all 6 guardrails satisfied except
+  // overrides supplied by the test.
+  function adjustmentAInput(overrides: Partial<GradeInput> = {}): GradeInput {
+    return input({
+      kind: "game",
+      modelEdgePct: 5,
+      marketSignal: "market_confirmed",
+      evidence: evidence({ ev: { tier: "very_strong", aligned: true } }),
+      modelConfidence: 70,
+      starterConfirmed: true,
+      opposingDeterministicWarning: false,
+      marketLineAvailable: true,
+      ...overrides,
+    });
+  }
+
+  // Positive cases — all 6 guardrails pass.
+  check(
+    "Adj A: EV very_strong + confidence=70 + all guardrails → best_signal",
+    (() => {
+      const r = deriveGrade(adjustmentAInput());
+      return r.grade === "best_signal" && r.signal_type === "balanced";
+    })()
+  );
+
+  check(
+    "Adj A: EV very_strong + confidence=80 (well above floor) → best_signal",
+    (() => {
+      const r = deriveGrade(adjustmentAInput({ modelConfidence: 80 }));
+      return r.grade === "best_signal";
+    })()
+  );
+
+  check(
+    "Adj A: EV very_strong + confidence=60 (exactly at floor) → best_signal",
+    (() => {
+      const r = deriveGrade(adjustmentAInput({ modelConfidence: 60 }));
+      return r.grade === "best_signal";
+    })()
+  );
+
+  // Guardrail-failure cases — each should fall back to sharp_confirmed.
+
+  check(
+    "Adj A guardrail 1 fail: EV strong (not very_strong) → sharp_confirmed",
+    (() => {
+      const r = deriveGrade(
+        adjustmentAInput({
+          evidence: evidence({ ev: { tier: "strong", aligned: true } }),
+        })
+      );
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  check(
+    "Adj A guardrail 2 fail: confidence-edge proxy < 3 (modelConfidence=52) → market_led (Adj B catches the case; A and B share the proxy=3 boundary)",
+    (() => {
+      const r = deriveGrade(adjustmentAInput({ modelConfidence: 52 }));
+      // 52 - 50 = 2 < 3 → Adjustment A guardrail 2 fails. The same value
+      // satisfies Adjustment B's "weak/neutral" guardrail (proxy < 3),
+      // and EV very_strong is strong+ aligned, so Adjustment B fires
+      // → market_led. This proves the A/B ordering works correctly:
+      // weak-model + strong+ EV routes to market_led, not sharp_confirmed.
+      return r.grade === "market_led";
+    })()
+  );
+
+  check(
+    "Adj A guardrail 6 fail: confidence=59 (just under 60 floor) → sharp_confirmed",
+    (() => {
+      const r = deriveGrade(adjustmentAInput({ modelConfidence: 59 }));
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  check(
+    "Adj A guardrail 3 fail: opposingDeterministicWarning=true → sharp_confirmed",
+    (() => {
+      const r = deriveGrade(
+        adjustmentAInput({ opposingDeterministicWarning: true })
+      );
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  check(
+    "Adj A guardrail 4 fail: starterConfirmed=false → sharp_confirmed",
+    (() => {
+      const r = deriveGrade(adjustmentAInput({ starterConfirmed: false }));
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  check(
+    "Adj A guardrail 5 fail: marketLineAvailable=false → sharp_confirmed",
+    (() => {
+      const r = deriveGrade(adjustmentAInput({ marketLineAvailable: false }));
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  check(
+    "Adj A opposing-strong defense in depth: EV very_strong aligned + opposing very_strong steam → sharp_confirmed",
+    (() => {
+      // Both bars (primary multi-axis AND Adjustment A) require no
+      // opposing strong signals. Multi-axis bar will not fire (only 1
+      // strong aligned). Adjustment A will not fire (opposing strong
+      // signal). Falls to sharp_confirmed via existing meetsSharpConfirmedBar
+      // which ALSO requires no opposing strong... wait — meets sharp
+      // confirmed bar's opposing check returns false too. So this should
+      // fall further to market_watch.
+      const r = deriveGrade(
+        adjustmentAInput({
+          evidence: evidence({
+            ev: { tier: "very_strong", aligned: true },
+            steam: { tier: "very_strong", aligned: false },
+          }),
+        })
+      );
+      // sharp_confirmed bar's hasNoOpposingStrongSignals check should
+      // also reject this. Expect market_watch fallback.
+      return r.grade === "market_watch";
+    })()
+  );
+
+  // Null-default safety — proves safe-by-default posture.
+  check(
+    "Adj A null-default: EV very_strong aligned + ZERO Phase 2 fields supplied → sharp_confirmed (default-deny posture)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 5,
+          marketSignal: "market_confirmed",
+          evidence: evidence({ ev: { tier: "very_strong", aligned: true } }),
+          // Phase 2 optional fields entirely absent — guardrails 2/4/5/6
+          // all fail by default.
+        })
+      );
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  // ─── Phase 2 Adjustment B — Market-Led EV-axis-only path ──────────────
+  //
+  // Daniel-approved guardrails (ALL must hold):
+  //   1. Pinnacle EV aligned at strong tier or higher (≥ 3%)
+  //   2. confidenceEdgeProxy (modelConfidence - 50) < 3 (weak/neutral)
+  //   3. No opposing deterministic warning
+  //   4. No opposing strong signals (defense in depth)
+  //
+  // Critical: B must fire BEFORE sharp_confirmed so an aligned strong
+  // EV + weak confidence routes to market_led instead of being absorbed.
+  section("Phase 2 Adjustment B — market_led EV-axis-only (confidence-edge proxy weak)");
+
+  function adjustmentBInput(overrides: Partial<GradeInput> = {}): GradeInput {
+    return input({
+      kind: "game",
+      modelEdgePct: 3,
+      marketSignal: "market_confirmed",
+      evidence: evidence({ ev: { tier: "strong", aligned: true } }),
+      modelConfidence: 50, // neutral — confidence-edge proxy = 0
+      opposingDeterministicWarning: false,
+      ...overrides,
+    });
+  }
+
+  check(
+    "Adj B: EV strong + confidence=50 (proxy=0, neutral) → market_led",
+    (() => {
+      const r = deriveGrade(adjustmentBInput());
+      return r.grade === "market_led" && r.signal_type === "market_only";
+    })()
+  );
+
+  check(
+    "Adj B: EV strong + confidence=52 (proxy=2, still weak) → market_led",
+    (() => {
+      const r = deriveGrade(adjustmentBInput({ modelConfidence: 52 }));
+      return r.grade === "market_led";
+    })()
+  );
+
+  check(
+    "Adj B: EV very_strong + confidence=50 → market_led (Adj A guardrails 4/5 fail; Adj B still fires)",
+    (() => {
+      const r = deriveGrade(
+        adjustmentBInput({
+          evidence: evidence({ ev: { tier: "very_strong", aligned: true } }),
+        })
+      );
+      // EV very_strong + low confidence: Adj A fails on multiple
+      // guardrails (4/5/6) and Adj B catches the case.
+      return r.grade === "market_led";
+    })()
+  );
+
+  // Guardrail-failure cases.
+
+  check(
+    "Adj B guardrail 1 fail: EV at moderate tier (below strong) → market_watch",
+    (() => {
+      const r = deriveGrade(
+        adjustmentBInput({
+          evidence: evidence({ ev: { tier: "moderate", aligned: true } }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  check(
+    "Adj B guardrail 2 fail: confidence=53 (proxy=3, at boundary) → sharp_confirmed",
+    (() => {
+      const r = deriveGrade(adjustmentBInput({ modelConfidence: 53 }));
+      // proxy=3 is NOT weak/neutral; market_led EV-alone bar fails.
+      // Falls to sharp_confirmed (model has edge + strong aligned EV).
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  check(
+    "Adj B guardrail 2 fail: confidence=70 (proxy=20, strong) → sharp_confirmed",
+    (() => {
+      const r = deriveGrade(adjustmentBInput({ modelConfidence: 70 }));
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  check(
+    "Adj B guardrail 3 fail: EV strong + opposingDeterministicWarning=true → sharp_confirmed (Adj B blocked; sharp_confirmed bar still passes on EV strong)",
+    (() => {
+      const r = deriveGrade(
+        adjustmentBInput({
+          opposingDeterministicWarning: true,
+        })
+      );
+      // Adj B is gated by no-warning. sharp_confirmed bar doesn't check
+      // the warning (intentional — warning gates the EV-alone graduation
+      // to higher grades, not the baseline sharp_confirmed bar). So
+      // strong aligned EV with model edge falls to sharp_confirmed.
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  check(
+    "Adj B modelConfidence=null → guardrail fails → sharp_confirmed",
+    (() => {
+      const r = deriveGrade(
+        adjustmentBInput({ modelConfidence: null })
+      );
+      return r.grade === "sharp_confirmed";
+    })()
+  );
+
+  // ─── Phase 2 anti-regression — public_smoke and sharp_conflict remain
+  // structurally unreachable on V1-shape SharpAPI data ───────────────────
+  //
+  // In V1, SharpAPI does not expose public_betting_pct, public_money_pct,
+  // steam_books_count, or rlm_direction. These tests prove the
+  // corresponding grades cannot accidentally fire on V1-shape inputs.
+  section("Phase 2 anti-regression — public_smoke / sharp_conflict unreachable on V1-shape data");
+
+  check(
+    "V1 shape: EV only, evidence.publicSmoke=null (because public_betting + public_money null) → never public_smoke",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: 2,
+          marketSignal: "market_neutral",
+          // V1-shape evidence: only EV present, all other slots null,
+          // publicSmoke null because detectPublicSmoke needs public_betting_pct.
+          evidence: evidence({ ev: { tier: "moderate", aligned: true } }),
+        })
+      );
+      return r.grade !== "public_smoke";
+    })()
+  );
+
+  check(
+    "V1 shape: marketSignal='public_smoke' (hypothetical upstream) + evidence.publicSmoke=null → market_watch (not public_smoke)",
+    (() => {
+      // Even if upstream incorrectly set marketSignal='public_smoke',
+      // meetsPublicSmokeBar requires evidence.publicSmoke to fire. With
+      // V1 data publicSmoke is null → bar fails → market_watch.
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "public_smoke",
+          evidence: evidence({
+            ev: { tier: "moderate", aligned: true },
+            // publicSmoke explicitly null (V1 data shape)
+          }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  check(
+    "V1 shape: opposing very_strong EV alone + market_resistance → market_watch (NOT sharp_conflict — framework EV-alone carve-out)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "market_resistance",
+          evidence: evidence({
+            ev: { tier: "very_strong", aligned: false },
+            // No steam/RLM/sharp_div data — V1 SharpAPI shape
+          }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
+  check(
+    "V1 shape: opposing moderate EV alone + market_resistance → market_watch (NOT sharp_conflict)",
+    (() => {
+      const r = deriveGrade(
+        input({
+          kind: "game",
+          modelEdgePct: null,
+          marketSignal: "market_resistance",
+          evidence: evidence({
+            ev: { tier: "moderate", aligned: false },
+          }),
+        })
+      );
+      return r.grade === "market_watch";
+    })()
+  );
+
   // ─── Best-signal slate monitor ─────────────────────────────────────────
   section("monitorBestSignalShare");
 

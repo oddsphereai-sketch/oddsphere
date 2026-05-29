@@ -209,7 +209,14 @@ function composeConfirmed(
         : "";
     lead = `Reverse line movement confirms ${pick}${pubFragment}.`;
   } else if (evidence.ev?.aligned) {
-    lead = `Pinnacle fair value supports ${pick} — +${formatPct(signal.ev_pct, 1)}% EV.`;
+    // Phase 2 (Daniel-approved copy guardrail): V1 EV-axis copy when the
+    // bar passes on EV alone (Adjustment A best_signal-EV-alone or
+    // sharp_confirmed on a strong-tier EV). Cite Pinnacle as the devig
+    // reference; do not imply public money, RLM, or steam. Early return
+    // suppresses the public_money / EV-detail append below — V1 SharpAPI
+    // does not expose public splits, and the EV-axis path should not
+    // falsely imply we checked them.
+    return `${header} · Pinnacle fair value supports ${pick} at +${formatPct(signal.ev_pct, 1)}% EV — devig reference shows positive expected value.`.trim();
   } else if (evidence.sharpDivergence?.aligned) {
     const pubMoney = publicMoneyFragment(signal);
     lead = pubMoney
@@ -247,19 +254,37 @@ function composeMarketLed(
   ctx: SignalSummaryContext
 ): string {
   const pick = pickLabel(market_type, modelSide, ctx);
-  let lead: string;
   if (evidence.steam?.aligned) {
     const books = signal.steam_books_count ?? 0;
-    lead = `Steam across ${books} books moves toward ${pick}; model edge is light.`;
-  } else if (evidence.rlm?.aligned) {
-    lead = `Reverse line movement toward ${pick}; model edge is light.`;
-  } else if (evidence.ev?.aligned) {
-    lead = `Pinnacle fair value favors ${pick} (+${formatPct(signal.ev_pct, 1)}% EV); model edge is light.`;
-  } else if (evidence.sharpDivergence?.aligned) {
-    lead = `Sharp money divergence favors ${pick}; model edge is light.`;
-  } else {
-    lead = `Market moves toward ${pick}; model edge is light.`;
+    const lead = `Steam across ${books} books moves toward ${pick}; model edge is light.`;
+    const pubMoney = publicMoneyFragment(signal);
+    const detail = pubMoney && !lead.includes("Sharp money") ? ` ${pubMoney}.` : "";
+    return `STRONG · ${lead}${detail}`.trim();
   }
+  if (evidence.rlm?.aligned) {
+    const lead = `Reverse line movement toward ${pick}; model edge is light.`;
+    const pubMoney = publicMoneyFragment(signal);
+    const detail = pubMoney && !lead.includes("Sharp money") ? ` ${pubMoney}.` : "";
+    return `STRONG · ${lead}${detail}`.trim();
+  }
+  if (evidence.ev?.aligned) {
+    // Phase 2 (Daniel-approved Adjustment B copy guardrail):
+    // V1 EV-axis-only path. Lead with the literal "Market-led EV signal"
+    // phrasing so members never read this as implying public money, RLM,
+    // or steam. Early return suppresses the public_money fragment
+    // unconditionally — in V1 SharpAPI does not expose public splits,
+    // and even when SharpAPI adds them later, the EV-axis-only path
+    // should not append that detail and falsely imply we checked it.
+    const lead = `Market-led EV signal — Pinnacle fair value favors ${pick} at +${formatPct(signal.ev_pct, 1)}% EV; model edge is light.`;
+    return `STRONG · ${lead}`.trim();
+  }
+  if (evidence.sharpDivergence?.aligned) {
+    const lead = `Sharp money divergence favors ${pick}; model edge is light.`;
+    const pubMoney = publicMoneyFragment(signal);
+    const detail = pubMoney && !lead.includes("Sharp money") ? ` ${pubMoney}.` : "";
+    return `STRONG · ${lead}${detail}`.trim();
+  }
+  const lead = `Market moves toward ${pick}; model edge is light.`;
   const pubMoney = publicMoneyFragment(signal);
   const detail = pubMoney && !lead.includes("Sharp money") ? ` ${pubMoney}.` : "";
   return `STRONG · ${lead}${detail}`.trim();
@@ -361,19 +386,26 @@ function composeMarketWatch(
   const pick = pickLabel(market_type, modelSide, ctx);
   const oppSide = oppositeSideLabel(market_type, modelSide, ctx);
 
-  // Opposing EV-only path — framework template 3 verbatim shape.
+  // Opposing EV-only path — framework template 3 shape.
+  // Phase 2 (Daniel-approved copy guardrail): replaced the older
+  // "No confirming steam or sharp money divergence on the opposing
+  // side" wording, which implied we LOOKED for those signals and
+  // didn't find them. In V1 SharpAPI does not expose steam / sharp
+  // divergence at all, so the previous wording was misleading. New
+  // wording cites the framework bar directly without implying we
+  // checked V1-absent data sources.
   if (evidence.ev && !evidence.ev.aligned) {
     return (
       `WATCH · Pinnacle fair value opposes the model's ${pickRef} pick — ` +
-      `+${formatPct(signal.ev_pct, 1)}% EV on ${oppSide}. No confirming steam or sharp money divergence on the opposing side.`
+      `+${formatPct(signal.ev_pct, 1)}% EV on ${oppSide}. Below the bar for sharp conflict.`
     );
   }
 
-  // Aligned EV-only path — framework template 2 verbatim shape.
+  // Aligned EV-only path — framework template 2 shape, same V1 rewording.
   if (evidence.ev?.aligned) {
     return (
       `MODERATE · Pinnacle fair value supports ${pick} — ` +
-      `+${formatPct(signal.ev_pct, 1)}% EV. No confirming steam or sharp money divergence.`
+      `+${formatPct(signal.ev_pct, 1)}% EV. Conviction below the bar for sharp confirmed.`
     );
   }
 
