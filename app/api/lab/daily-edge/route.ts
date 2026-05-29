@@ -333,6 +333,13 @@ type PredictionRow = {
   nrfi_grade: Grade | null;
   nrfi_signal_type: SignalType | null;
   nrfi_market_signal: MarketSignal | null;
+  /**
+   * Fix 7.2.5: sport_specific JSONB — operator-entered listed_line
+   * (MLB) or other per-sport extras. Daily Edge prefers the lines
+   * table sportsbook total; falls back to sport_specific.listed_line
+   * when no lines row exists.
+   */
+  sport_specific: Record<string, unknown> | null;
 };
 
 type GameRow = {
@@ -368,12 +375,31 @@ function buildGameDto(
   const mlStatus = deriveSharpStatus(pred.ml_grade);
 
   // ── Total ──
-  // 5F.1: display the SPORTSBOOK total line for betting, not the model
-  // projection. The model projection lives in `projected` (hero stat); the
-  // O/U pick box shows what members would actually bet on. Fall back to
-  // the model projection only when no lines.total row exists.
+  // 5F.1 / Fix 7.2.5: display the SPORTSBOOK total line — what members
+  // would actually bet on. The model projection lives separately in
+  // `projected` (hero stat) and never substitutes here.
+  //
+  // Priority chain (Fix 7.2.5):
+  //   1. lines table (Pinnacle preferred, then DK/FD/MGM/Caesars) —
+  //      most current; populated by sharp-signal provider
+  //   2. game_predictions.sport_specific.listed_line — operator-
+  //      entered at upload time; useful for manual MLB slates without
+  //      sharp data
+  //   3. null — neither source available; UI renders the side alone
+  //      ("Under") rather than misleadingly showing predicted_total
+  //
+  // Pre-Fix-7.2.5 the route fell through to `pred.predicted_total ?? 0`
+  // which surfaced "Under 7.8" on manual slates — the 7.8 looked like
+  // a market line but was actually the model projection (home + away).
+  // The fallback is removed; the field is now allowed to be null and
+  // the UI handles null cleanly.
   const ouSide = pred.predicted_ou_side ?? "under";
-  const totalLine = sportsbookTotalLine ?? pred.predicted_total ?? 0;
+  const manualListedLine =
+    typeof pred.sport_specific?.listed_line === "number"
+      ? pred.sport_specific.listed_line
+      : null;
+  const totalLine: number | null =
+    sportsbookTotalLine ?? manualListedLine ?? null;
   const totalStatus = deriveSharpStatus(pred.ou_grade);
   const totalPick = ouSide === "over" ? "Over" : "Under";
 
@@ -516,7 +542,8 @@ export async function GET(request: Request) {
          predicted_nrfi, nrfi_confidence,
          ml_grade, ml_signal_type, ml_market_signal,
          ou_grade, ou_signal_type, ou_market_signal,
-         nrfi_grade, nrfi_signal_type, nrfi_market_signal
+         nrfi_grade, nrfi_signal_type, nrfi_market_signal,
+         sport_specific
        )`
     )
     .eq("sport", sport)

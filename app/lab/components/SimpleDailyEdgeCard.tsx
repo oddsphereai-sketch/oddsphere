@@ -43,7 +43,11 @@ function deriveCardPrimaryPick(
   }
   const total = predictions.total;
   if (total.pick) {
-    return `${total.pick} ${total.line}`;
+    // Fix 7.2.5: total.line may be null when no market line is available
+    // (manual slate without sharp_signals + no listed_line). Render the
+    // side alone in that case — "Under 7.8" would falsely imply the
+    // model projection is the market line.
+    return total.line !== null ? `${total.pick} ${total.line}` : total.pick;
   }
   return predictions.nrfi.pick;
 }
@@ -94,7 +98,15 @@ function SharpStatusIcon({ status }: { status: SharpStatus }) {
 
 // ─── Tile pick formatters ─────────────────────────────────────────────────
 
-function formatTotalPick(pick: string, line: number): string {
+// Fix 7.2.5: `line` may be null when no market line is available. Render
+// the side alone ("U", "O", "Under", "Over") in that case rather than
+// falsely showing the model projection as the market line.
+function formatTotalPick(pick: string, line: number | null): string {
+  if (line === null) {
+    if (pick === "Over") return "O";
+    if (pick === "Under") return "U";
+    return pick;
+  }
   if (pick === "Over") return `O ${line}`;
   if (pick === "Under") return `U ${line}`;
   return `${pick} ${line}`;
@@ -154,7 +166,9 @@ function formatPickFor(
     return pick && pick !== "—" ? `${pick} ML` : "—";
   }
   if (market === "total") {
-    return `${game.predictions.total.pick} ${game.predictions.total.line}`;
+    // Fix 7.2.5: handle null line — render side alone.
+    const t = game.predictions.total;
+    return t.line !== null ? `${t.pick} ${t.line}` : t.pick;
   }
   return game.predictions.nrfi.pick;
 }

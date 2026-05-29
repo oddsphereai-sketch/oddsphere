@@ -86,6 +86,14 @@ export const MLB_SCHEMA: SportSchema = {
     { key: "ou_confidence", label: "O/U Confidence %", type: "percent", required: true, min: 0, max: 100, scope: "top_level" },
     { key: "predicted_nrfi", label: "NRFI", type: "boolean", required: true, scope: "top_level", mirrorToSportSpecific: true, helpText: "NO Run First Inning" },
     { key: "nrfi_confidence", label: "NRFI Confidence %", type: "percent", required: true, min: 0, max: 100, scope: "top_level", mirrorToSportSpecific: true },
+    // Fix 7.2.5: optional market O/U line — operator can enter the
+    // sportsbook total at upload time so the Daily Edge total card has
+    // a real line to display when sharp_signals / lines data isn't
+    // populated. Lives in sport_specific JSONB (same pattern as NBA +
+    // NCAAB). Daily Edge route falls back to this value when the lines
+    // table has no entry for the game; lines table still wins when both
+    // are present (more current via real-time sharp data).
+    { key: "listed_line", label: "Listed Line (O/U)", type: "number", required: false, scope: "sport_specific", decimal: true, helpText: "Sportsbook total at upload (e.g. 8.5). Optional — leave blank if unknown." },
   ],
 };
 

@@ -155,10 +155,14 @@ function pickDisplayFor(slot: Slot, game: DailyEdgeGameDto): {
     };
   }
   function totalDisplay() {
+    // Fix 7.2.5: total.line may be null when no market line is available
+    // (manual slate without sharp data + no listed_line). Render the
+    // side alone rather than "Under null" or substituting predicted_total.
+    const t = game.predictions.total;
     return {
       marketLabel: "Total",
-      pickText: `${game.predictions.total.pick} ${game.predictions.total.line}`,
-      confidence: game.predictions.total.confidence,
+      pickText: t.line !== null ? `${t.pick} ${t.line}` : t.pick,
+      confidence: t.confidence,
     };
   }
   function nrfiDisplay() {

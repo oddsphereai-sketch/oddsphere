@@ -111,9 +111,16 @@ export type DailyEdgePredictionDto = {
 export type DailyEdgeTotalPredictionDto = DailyEdgePredictionDto & {
   /**
    * Actual SPORTSBOOK total line (5F.1) — what members would bet on.
-   * Falls back to the model projection when no lines.total row exists.
+   *
+   * Fix 7.2.5: nullable. Priority chain in the route:
+   *   1. lines table sportsbook total (Pinnacle preferred)
+   *   2. game_predictions.sport_specific.listed_line
+   *      (operator-entered at upload; MLB optional field)
+   *   3. null — UI renders the side alone ("Under") rather than
+   *      misleadingly substituting predicted_total (the model
+   *      projection, which is a DIFFERENT concept from a market line).
    */
-  line: number;
+  line: number | null;
 };
 
 export type SharpSignalCategory =
