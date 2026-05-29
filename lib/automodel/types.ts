@@ -248,8 +248,8 @@ export type AutoModelSportSpecific = {
    *  produced but others didn't. */
   hold_picks: Array<"ml" | "ou" | "nrfi">;
   /** T-60 only — true when probable starter changed since the morning
-   *  draft. Phase 3A leaves this false (T-60 stale detection is a
-   *  Phase 3B service-level concern). */
+   *  draft. Phase 3A leaves this false; Phase 4B/4C will populate at T-60
+   *  using the pure stale-detection helper added in Phase 4A. */
   stale: boolean;
   stale_reason: string | null;
   /** V2 mirror of top-level fields — preserves multi-sport convention. */
@@ -257,6 +257,160 @@ export type AutoModelSportSpecific = {
   nrfi_confidence: number | null;
   auto_factors: AutoFactors;
   ai_sanity: AiSanityRecord;
+  // ─────────────────────────────────────────────────────────────
+  // Phase 4 audit fields (anticipatory — Phase 4A reserves the
+  // shape; Phase 4B/4C populates in the orchestrator). All optional
+  // so Phase 3A's runMlbAutoModelV1 can keep producing the existing
+  // shape without modification.
+  // ─────────────────────────────────────────────────────────────
+  /** ISO timestamp of the PREVIOUS run for this game (null on first run). */
+  previous_run_at?: string | null;
+  /** Stage of the previous run (null on first run). */
+  previous_stage?: ModelStage | null;
+  /** Structured deltas vs previous run (null on first run). */
+  movement_deltas?: MovementDeltas | null;
+  /** Which trigger produced this row (null on Phase 3A direct callers). */
+  run_kind?: "morning" | "t60" | "manual_rerun" | "held_rerun" | null;
+};
+
+// ─────────────────────────────────────────────────────────────
+// Phase 4A — stale-detection contracts (pure)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Movement deltas between a prior auto prediction and the current
+ * snapshot. Null values mean "delta could not be computed" (one side
+ * missing). Booleans are derived flags — direction-agnostic, just "did
+ * this change?"
+ *
+ * Stored on `sport_specific.movement_deltas` for operator audit. Does
+ * NOT trigger reruns in V1 (planning §4.3 — audit-only).
+ */
+export type MovementDeltas = {
+  /** Listed total absolute change (current - prior) in runs. */
+  total_line_delta: number | null;
+  /** Pinnacle ML fair-prob absolute change (current - prior), pp. */
+  ml_fair_prob_delta: number | null;
+  /** Pinnacle ML EV percentage absolute change (current - prior), pct. */
+  ev_delta: number | null;
+  /** Public betting % absolute change (current - prior), pp. Picks the
+   *  side (home vs over) with the larger magnitude move. */
+  public_betting_delta: number | null;
+  /** Public money % absolute change (current - prior), pp. Picks the
+   *  side with the larger magnitude move. */
+  public_money_delta: number | null;
+  /** True when home OR away starter player_external_id changed. */
+  starter_changed: boolean;
+  /** True when lineup_confirmed regressed from true → false. */
+  lineup_status_changed: boolean;
+  /** True when sharp grade direction flipped support↔conflict. */
+  sharp_grade_changed: boolean;
+  /** True when current snapshot's provider data is missing/delayed. */
+  provider_data_missing: boolean;
+};
+
+/**
+ * Starter-change diff. Per-side booleans plus the actual IDs for the
+ * operator audit string. Either side may be null when prior or current
+ * data is incomplete; a null on either side does NOT count as a change
+ * (handled separately by the hold-reason / provider-missing path).
+ */
+export type StarterChangeReport = {
+  home_changed: boolean;
+  away_changed: boolean;
+  home_previous: number | null;
+  home_current: number | null;
+  away_previous: number | null;
+  away_current: number | null;
+};
+
+/**
+ * Output of buildStaleReport. The orchestrator (Phase 4B/4C) writes:
+ *   sport_specific.stale          ← report.is_stale
+ *   sport_specific.stale_reason   ← report.reasons.join("; ")
+ *   sport_specific.movement_deltas ← report.movement_deltas
+ *
+ * V1 policy (planning §4.3): is_stale is AUDIT-ONLY — it does NOT
+ * gate the rerun decision. T-60 always reruns eligible games.
+ */
+export type StaleReport = {
+  is_stale: boolean;
+  /** Human-readable reasons, one per material change. Joined with "; "
+   *  by the orchestrator for sport_specific.stale_reason. */
+  reasons: string[];
+  movement_deltas: MovementDeltas;
+  starter_change: StarterChangeReport;
+};
+
+/**
+ * Minimal subset of prior-prediction data the stale detector needs.
+ * All fields are optional/null because:
+ *   • Some prior rows pre-date Phase 4's audit-field reservation
+ *     and won't carry these keys.
+ *   • Phase 3A's sport_specific has a subset of these fields already
+ *     (e.g. starter_confirmed, lineup_confirmed); Phase 4 callers
+ *     stash the remainder onto sport_specific when writing.
+ *
+ * The detector treats every missing field as "unknown" and skips the
+ * corresponding stale reason — avoids false positives from missing
+ * baselines.
+ */
+export type PriorPredictionForStale = {
+  starter_confirmed?: boolean | null;
+  lineup_confirmed?: boolean | null;
+  home_starter_id?: number | null;
+  away_starter_id?: number | null;
+  home_starter_was_scratched?: boolean | null;
+  away_starter_was_scratched?: boolean | null;
+  listed_total?: number | null;
+  pinnacle_ml_fair_prob_home?: number | null;
+  pinnacle_ml_ev_pct?: number | null;
+  public_betting_pct_home?: number | null;
+  public_money_pct_home?: number | null;
+  public_betting_pct_over?: number | null;
+  public_money_pct_over?: number | null;
+  home_top3_hitters_injured_count?: number | null;
+  away_top3_hitters_injured_count?: number | null;
+  /** Direction the sharp grade pointed at the time of prior run. The
+   *  orchestrator derives this from the row's grade columns before
+   *  passing in. "neutral" includes market_neutral / no-pick. */
+  sharp_grade_direction?: "support" | "conflict" | "neutral" | null;
+};
+
+/**
+ * Subset of the CURRENT GameSnapshot the stale detector needs. The full
+ * GameSnapshot carries lineup details and other heavy fields the
+ * detector doesn't read; this projection keeps the type narrow.
+ */
+export type CurrentSnapshotForStale = {
+  home_starter_external_id: number | null;
+  away_starter_external_id: number | null;
+  home_starter_is_scratched: boolean;
+  away_starter_is_scratched: boolean;
+  starter_confirmed: boolean;
+  lineup_confirmed: boolean;
+  listed_total: number | null;
+  pinnacle_ml_fair_prob_home: number | null;
+  pinnacle_ml_ev_pct: number | null;
+  public_betting_pct_home: number | null;
+  public_money_pct_home: number | null;
+  public_betting_pct_over: number | null;
+  public_money_pct_over: number | null;
+  home_top3_hitters_injured_count: number;
+  away_top3_hitters_injured_count: number;
+  /** False when current snapshot has no sharp signal AND no lines — i.e.
+   *  the provider data is missing or significantly delayed. */
+  provider_data_present: boolean;
+};
+
+/**
+ * Derived state the orchestrator computes from the CURRENT slate before
+ * calling buildStaleReport. Currently just the sharp grade direction
+ * (which needs Phase 2 framework logic to derive, so the detector
+ * accepts it pre-computed rather than re-deriving).
+ */
+export type CurrentDerivedForStale = {
+  sharp_grade_direction: "support" | "conflict" | "neutral" | null;
 };
 
 /**
