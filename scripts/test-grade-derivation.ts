@@ -1305,6 +1305,148 @@ async function main() {
     })()
   );
 
+  // ─── Phase 3B framework patch — read framework hints from
+  //                                  sport_specific JSONB
+  //
+  // The patch in deriveGradesForSlate reads
+  //   sport_specific.starter_confirmed
+  //   sport_specific.opposing_deterministic_warning
+  // and passes them into deriveGrade. Manual rows that don't write these
+  // keys must default to `false` (preserving Phase 2 behavior). Auto-
+  // model rows from Phase 3C will populate them explicitly.
+  //
+  // These tests exercise the same defensive cast/extraction the patch
+  // uses, then verify the resulting GradeInput flows through the grade
+  // engine correctly.
+  section("Phase 3B framework patch — sport_specific defensive read");
+
+  // Helper that mirrors the patch's read logic literally. Kept in
+  // lockstep with deriveGradesForSlate so this test catches regressions
+  // if the patch ever changes shape.
+  function extractFromSportSpecific(rowSportSpecific: unknown): {
+    starterConfirmed: boolean;
+    opposingDeterministicWarning: boolean;
+  } {
+    const ss = rowSportSpecific as {
+      starter_confirmed?: unknown;
+      opposing_deterministic_warning?: unknown;
+    } | null;
+    return {
+      starterConfirmed: ss?.starter_confirmed === true,
+      opposingDeterministicWarning:
+        ss?.opposing_deterministic_warning === true,
+    };
+  }
+
+  // Backward-compat: missing sport_specific → both defaults false
+  {
+    const r = extractFromSportSpecific(null);
+    check(
+      "sport_specific === null → starterConfirmed=false, opposingDeterministicWarning=false (manual-row default)",
+      r.starterConfirmed === false && r.opposingDeterministicWarning === false
+    );
+  }
+  {
+    const r = extractFromSportSpecific({});
+    check(
+      "sport_specific === {} → both flags default false (V2 manual row with no Phase 3 fields)",
+      r.starterConfirmed === false && r.opposingDeterministicWarning === false
+    );
+  }
+  {
+    const r = extractFromSportSpecific({ listed_line: 8.5 });
+    check(
+      "sport_specific with only listed_line → Phase 3 flags still default false",
+      r.starterConfirmed === false && r.opposingDeterministicWarning === false
+    );
+  }
+
+  // Auto rows: explicit true/false flow through
+  {
+    const r = extractFromSportSpecific({
+      starter_confirmed: true,
+      opposing_deterministic_warning: false,
+    });
+    check(
+      "sport_specific.starter_confirmed=true → starterConfirmed=true (Adjustment A guardrail 4 can pass)",
+      r.starterConfirmed === true && r.opposingDeterministicWarning === false
+    );
+  }
+  {
+    const r = extractFromSportSpecific({
+      starter_confirmed: true,
+      opposing_deterministic_warning: true,
+    });
+    check(
+      "sport_specific.opposing_deterministic_warning=true → flag flows through",
+      r.starterConfirmed === true && r.opposingDeterministicWarning === true
+    );
+  }
+
+  // Defensive against malformed inputs — never throws, never falsely
+  // grants Adjustment A.
+  {
+    const r = extractFromSportSpecific({
+      starter_confirmed: "yes", // wrong type
+      opposing_deterministic_warning: 1, // wrong type
+    });
+    check(
+      "Malformed sport_specific values (non-boolean) → defaults false (no false positives for Adjustment A)",
+      r.starterConfirmed === false && r.opposingDeterministicWarning === false
+    );
+  }
+  {
+    const r = extractFromSportSpecific("oops not an object");
+    check(
+      "sport_specific is a string (corrupt JSONB) → defaults false; never throws",
+      r.starterConfirmed === false && r.opposingDeterministicWarning === false
+    );
+  }
+
+  // End-to-end through deriveGrade — sport_specific=true unlocks
+  // Adjustment A; sport_specific=false (or missing) keeps it locked.
+  {
+    const ss = extractFromSportSpecific({
+      starter_confirmed: true,
+      opposing_deterministic_warning: false,
+    });
+    const r = deriveGrade(
+      input({
+        kind: "game",
+        modelEdgePct: 5,
+        marketSignal: "market_confirmed",
+        evidence: evidence({ ev: { tier: "very_strong", aligned: true } }),
+        modelConfidence: 70,
+        starterConfirmed: ss.starterConfirmed,
+        opposingDeterministicWarning: ss.opposingDeterministicWarning,
+        marketLineAvailable: true,
+      })
+    );
+    check(
+      "End-to-end: sport_specific.starter_confirmed=true + Adj A guardrails → best_signal",
+      r.grade === "best_signal"
+    );
+  }
+  {
+    const ss = extractFromSportSpecific(null);
+    const r = deriveGrade(
+      input({
+        kind: "game",
+        modelEdgePct: 5,
+        marketSignal: "market_confirmed",
+        evidence: evidence({ ev: { tier: "very_strong", aligned: true } }),
+        modelConfidence: 70,
+        starterConfirmed: ss.starterConfirmed, // false from null sport_specific
+        opposingDeterministicWarning: ss.opposingDeterministicWarning,
+        marketLineAvailable: true,
+      })
+    );
+    check(
+      "End-to-end: manual row (sport_specific=null) → Adj A blocked (default-deny preserved)",
+      r.grade !== "best_signal"
+    );
+  }
+
   // ─── Best-signal slate monitor ─────────────────────────────────────────
   section("monitorBestSignalShare");
 

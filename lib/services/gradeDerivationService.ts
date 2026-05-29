@@ -933,9 +933,22 @@ export async function deriveGradesForSlate(
 
     // Phase 2: best-effort listed_line check from sport_specific JSONB.
     // V1 only — Phase 3/4 may strengthen with a lines table lookup.
-    const listedLineRaw = (row.sport_specific as { listed_line?: unknown } | null)
-      ?.listed_line;
+    const sportSpecific = row.sport_specific as {
+      listed_line?: unknown;
+      starter_confirmed?: unknown;
+      opposing_deterministic_warning?: unknown;
+    } | null;
+
+    const listedLineRaw = sportSpecific?.listed_line;
     const marketLineAvailable = typeof listedLineRaw === "number";
+
+    // Phase 3B framework patch — read the new Phase 3 hint fields
+    // defensively. Manual rows (which do not write these keys) keep
+    // the previous Phase 2 behavior because both default to `false`.
+    // Auto-model rows from Phase 3C+ will populate these explicitly.
+    const starterConfirmed = sportSpecific?.starter_confirmed === true;
+    const opposingDeterministicWarning =
+      sportSpecific?.opposing_deterministic_warning === true;
 
     for (const key of GAME_MARKET_KEYS) {
       const pick = picks[key];
@@ -952,10 +965,12 @@ export async function deriveGradesForSlate(
         sig ? toEvidenceSource(sig) : null
       );
       // Phase 2: per-pick confidence routed to the EV-axis helpers as a
-      // confidence-edge proxy. Adjustment A also needs starterConfirmed
-      // + opposingDeterministicWarning, which default false in V1 because
-      // upstream data sources land in Phase 3+. Adjustment A is therefore
-      // structurally inactive in V1 until those defaults flip.
+      // confidence-edge proxy. Phase 3B: starterConfirmed +
+      // opposingDeterministicWarning are now sourced from
+      // sport_specific (defaults preserve manual-row Phase 2 behavior).
+      // Adjustment A's `starterConfirmed=true` guardrail can fire once
+      // an auto-model writes the field; manual rows continue to behave
+      // exactly as in Phase 2.
       const modelConfidence =
         key === "ml"
           ? row.ml_confidence
@@ -970,8 +985,8 @@ export async function deriveGradesForSlate(
           marketSignal: pick.marketSignal,
           evidence,
           modelConfidence,
-          starterConfirmed: false,
-          opposingDeterministicWarning: false,
+          starterConfirmed,
+          opposingDeterministicWarning,
           marketLineAvailable,
         })
       );
