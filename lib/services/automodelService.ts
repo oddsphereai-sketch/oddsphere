@@ -47,6 +47,8 @@ import { runMlbAutoModelV1 } from "../automodel/mlbAutoModelV1";
 import { reviewAutoModelOutput } from "../automodel/aiSanityBoundary";
 import type {
   AutoModelOutput,
+  AutoModelSportSpecific,
+  EnrichmentHook,
   GameSnapshot,
   ModelStage,
 } from "../automodel/types";
@@ -75,6 +77,33 @@ export type AutoModelRunOpts = {
    * DB writes anywhere).
    */
   writeToDb?: boolean;
+  /**
+   * Phase 4C: optional filter to restrict snapshot building (and thus
+   * ingest) to a subset of slate games by `external_id`. Passed through
+   * to `buildFeatureSnapshots`.
+   *
+   * • `undefined` → whole slate (Phase 3B/3C behavior — unchanged)
+   * • `[]` → explicit "no games" — short-circuit; returns empty result
+   * • `[id, id, …]` → restrict snapshot + ingest to those games
+   *
+   * Used by the Phase 4C orchestrator write paths to write only T-60 /
+   * single-game / held-only subsets and to exclude manual-override
+   * rows from morning writes.
+   */
+  gameExternalIdsFilter?: number[];
+  /**
+   * Phase 4C: optional hook called per-game after the model + AI sanity
+   * boundary, BEFORE the prediction is added to the result array and
+   * (if writeToDb=true) ingested. Returns a partial `sport_specific`
+   * that is merged into the prediction's sport_specific.
+   *
+   * Used by the Phase 4C orchestrator to inject audit fields
+   * (snapshot_stash, previous_run_at, previous_stage, movement_deltas,
+   * stale, stale_reason, run_kind) computed from data the orchestrator
+   * owns. Hook errors are caught per-game; the un-enriched prediction
+   * proceeds.
+   */
+  enrichmentHook?: EnrichmentHook;
 };
 
 /**
@@ -308,10 +337,14 @@ export async function generatePredictionsForSlate(
     };
   }
 
-  // Step 1 — build feature snapshots
+  // Step 1 — build feature snapshots (Phase 4C: filter optional)
   let snapshots: GameSnapshot[];
   try {
-    snapshots = await buildFeatureSnapshots(sport, slate_date);
+    snapshots = await buildFeatureSnapshots(
+      sport,
+      slate_date,
+      opts.gameExternalIdsFilter
+    );
   } catch (e) {
     throw new Error(
       `automodelService.generatePredictionsForSlate: featureSnapshot build ` +
@@ -349,14 +382,42 @@ export async function generatePredictionsForSlate(
       });
       ai_sanity_actions[verdict.action]++;
 
-      // 2c — tally
-      predictions.push(rawPrediction);
-      if (rawPrediction.sport_specific.held) held_count++;
-      if (rawPrediction.predicted_ml_winner === null) pick_null_counts.ml++;
-      if (rawPrediction.predicted_ou_side === null) pick_null_counts.ou++;
-      if (rawPrediction.predicted_nrfi === null) pick_null_counts.nrfi++;
+      // 2c — Phase 4C: enrich sport_specific via the optional hook.
+      // Hook errors do NOT fail the game — log + proceed with the
+      // un-enriched prediction so a single buggy hook can't sink the
+      // whole slate. When hook is undefined (Phase 3B/3C callers),
+      // this branch is skipped entirely → existing behavior preserved.
+      let enrichedSportSpecific: AutoModelSportSpecific =
+        rawPrediction.sport_specific;
+      if (opts.enrichmentHook !== undefined) {
+        try {
+          const extra = opts.enrichmentHook(snap, rawPrediction);
+          enrichedSportSpecific = {
+            ...rawPrediction.sport_specific,
+            ...extra,
+          };
+        } catch (hookErr) {
+          console.warn(
+            `[automodelService] enrichmentHook threw for game_external_id=` +
+              `${snap.game_external_id}: ${
+                hookErr instanceof Error ? hookErr.message : String(hookErr)
+              }. Proceeding with un-enriched sport_specific.`
+          );
+        }
+      }
+      const finalPrediction: AutoModelOutput = {
+        ...rawPrediction,
+        sport_specific: enrichedSportSpecific,
+      };
+
+      // 2d — tally
+      predictions.push(finalPrediction);
+      if (finalPrediction.sport_specific.held) held_count++;
+      if (finalPrediction.predicted_ml_winner === null) pick_null_counts.ml++;
+      if (finalPrediction.predicted_ou_side === null) pick_null_counts.ou++;
+      if (finalPrediction.predicted_nrfi === null) pick_null_counts.nrfi++;
       total_deterministic_corrections +=
-        rawPrediction.sport_specific.ai_sanity.deterministic_corrections.length;
+        finalPrediction.sport_specific.ai_sanity.deterministic_corrections.length;
     } catch (e) {
       errors.push({
         game_external_id: snap.game_external_id,

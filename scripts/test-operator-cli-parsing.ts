@@ -24,6 +24,7 @@ import {
   readStringFlag,
   rejectWriteFlag,
   todayUTC,
+  validateWriteGate,
 } from "../scripts/operator/_cliCommon";
 
 let pass = 0;
@@ -208,8 +209,10 @@ checkThrows(
   "Invalid --stage"
 );
 
-// ─── rejectWriteFlag (process.exit stub) ──────────────────────────────
-section("rejectWriteFlag — process.exit on --write");
+// ─── rejectWriteFlag — Phase 4C semantics ────────────────────────────
+// Phase 4C: rejectWriteFlag now belongs to the 2 READ-ONLY scripts only
+// (status + show-deltas). Message updated to "READ-ONLY by design".
+section("rejectWriteFlag — process.exit on --write (read-only scripts)");
 
 const originalExit = process.exit;
 const originalError = console.error;
@@ -234,8 +237,10 @@ try {
     );
   }
   check(
-    "rejectWriteFlag(--write) wrote rejection message to stderr",
-    stderr.includes("not supported in Phase 4B") && stderr.includes("Phase 4C")
+    "rejectWriteFlag(--write) wrote READ-ONLY-by-design rejection message",
+    stderr.includes("READ-ONLY by design") &&
+      stderr.includes("automodel-morning-card") &&
+      stderr.includes("-rerun-game.ts")
   );
 
   // No --write → does NOT exit
@@ -255,16 +260,109 @@ try {
   console.error = originalError;
 }
 
-// ─── End-to-end: spawn morning-card with --write ─────────────────────
-section("End-to-end — spawn morning-card --write expects exit 1 + Phase 4C message");
+// ─── validateWriteGate — Phase 4C three-key gate ────────────────────
+section("validateWriteGate — Phase 4C three-key gate");
 
-// Spawn needs --env-file=.env.local because the operator script imports
-// the orchestrator (which imports supabase) at module load. Without env,
-// the process would die during import with a "Missing NEXT_PUBLIC_SUPABASE_URL"
-// error and exit 1, masking the actual rejectWriteFlag rejection. With env,
-// modules load cleanly, main() runs, rejectWriteFlag exits 1 with the
-// approved Phase 4B rejection message.
-const result = spawnSync(
+const originalExit2 = process.exit;
+const originalError2 = console.error;
+let exitCode2: number | null = null;
+let stderr2 = "";
+const exitStub2: (code?: number) => never = ((code?: number) => {
+  exitCode2 = code ?? 0;
+  throw new Error("__test_exit__");
+}) as unknown as (code?: number) => never;
+console.error = (msg: string) => {
+  stderr2 += msg + "\n";
+};
+const originalEnv = process.env.AUTOMODEL_DB_WRITES_ENABLED;
+
+try {
+  process.exit = exitStub2;
+
+  // 1. No --write → writeMode=false, no exit
+  delete process.env.AUTOMODEL_DB_WRITES_ENABLED;
+  exitCode2 = null;
+  stderr2 = "";
+  const noWriteFlag = validateWriteGate(["--date", "2026-05-22"]);
+  check(
+    "validateWriteGate(no --write) → { writeMode: false } AND no exit",
+    noWriteFlag.writeMode === false && exitCode2 === null
+  );
+
+  // 2. --write WITHOUT env → exits 1 with AUTOMODEL_DB_WRITES_ENABLED message
+  delete process.env.AUTOMODEL_DB_WRITES_ENABLED;
+  exitCode2 = null;
+  stderr2 = "";
+  try {
+    validateWriteGate(["--write"]);
+    check("validateWriteGate(--write, no env) called process.exit", false);
+  } catch (e) {
+    check(
+      "validateWriteGate(--write, no env) triggered process.exit(1)",
+      (e as Error).message === "__test_exit__" && exitCode2 === 1
+    );
+  }
+  check(
+    "validateWriteGate(--write, no env) error mentions AUTOMODEL_DB_WRITES_ENABLED",
+    stderr2.includes("AUTOMODEL_DB_WRITES_ENABLED")
+  );
+  check(
+    "validateWriteGate(--write, no env) error mentions defense in depth",
+    stderr2.includes("Defense in depth") || stderr2.includes("defense in depth")
+  );
+
+  // 3. --write WITH env → writeMode=true, no exit
+  process.env.AUTOMODEL_DB_WRITES_ENABLED = "true";
+  exitCode2 = null;
+  stderr2 = "";
+  const bothGates = validateWriteGate(["--write"]);
+  check(
+    "validateWriteGate(--write, env=true) → { writeMode: true } AND no exit",
+    bothGates.writeMode === true && exitCode2 === null
+  );
+
+  // 4. Env=true but no --write → writeMode=false (lone env doesn't write)
+  process.env.AUTOMODEL_DB_WRITES_ENABLED = "true";
+  exitCode2 = null;
+  stderr2 = "";
+  const envOnly = validateWriteGate(["--date", "2026-05-22"]);
+  check(
+    "validateWriteGate(env=true, no --write) → { writeMode: false } (env alone never writes)",
+    envOnly.writeMode === false && exitCode2 === null
+  );
+
+  // 5. Env=anything-but-"true" → treated as missing
+  process.env.AUTOMODEL_DB_WRITES_ENABLED = "1";
+  exitCode2 = null;
+  stderr2 = "";
+  try {
+    validateWriteGate(["--write"]);
+    check('validateWriteGate(--write, env="1") called process.exit', false);
+  } catch (e) {
+    check(
+      'validateWriteGate(--write, env="1" — not literal "true") still triggers exit(1)',
+      (e as Error).message === "__test_exit__" && exitCode2 === 1
+    );
+  }
+} finally {
+  process.exit = originalExit2;
+  console.error = originalError2;
+  if (originalEnv === undefined) {
+    delete process.env.AUTOMODEL_DB_WRITES_ENABLED;
+  } else {
+    process.env.AUTOMODEL_DB_WRITES_ENABLED = originalEnv;
+  }
+}
+
+// ─── End-to-end: spawn write-capable script with --write, no env ─────
+section(
+  "End-to-end — spawn morning-card --write (no env) expects exit 1 + AUTOMODEL_DB_WRITES_ENABLED message"
+);
+
+// Phase 4C: morning-card uses validateWriteGate now (not rejectWriteFlag).
+// With --write but no env, the script exits 1 BEFORE any DB call.
+// The spawned process must NOT have AUTOMODEL_DB_WRITES_ENABLED set.
+const writeNoEnvResult = spawnSync(
   "npx",
   [
     "tsx",
@@ -272,24 +370,56 @@ const result = spawnSync(
     "scripts/operator/automodel-morning-card.ts",
     "--write",
   ],
+  {
+    encoding: "utf-8",
+    cwd: process.cwd(),
+    // Defensive: ensure no inherited AUTOMODEL_DB_WRITES_ENABLED
+    env: { ...process.env, AUTOMODEL_DB_WRITES_ENABLED: "" },
+  }
+);
+check(
+  "spawn morning-card --write (no env) exited with non-zero status",
+  writeNoEnvResult.status !== 0
+);
+check(
+  "spawn morning-card --write (no env) status === 1",
+  writeNoEnvResult.status === 1
+);
+const writeNoEnvOutput =
+  (writeNoEnvResult.stdout ?? "") + (writeNoEnvResult.stderr ?? "");
+check(
+  "spawn morning-card --write (no env) output mentions AUTOMODEL_DB_WRITES_ENABLED",
+  writeNoEnvOutput.includes("AUTOMODEL_DB_WRITES_ENABLED")
+);
+
+// ─── End-to-end: spawn READ-ONLY script with --write ─────────────────
+section(
+  "End-to-end — spawn automodel-status.ts --write expects exit 1 + READ-ONLY message"
+);
+
+const readOnlyResult = spawnSync(
+  "npx",
+  [
+    "tsx",
+    "--env-file=.env.local",
+    "scripts/operator/automodel-status.ts",
+    "--write",
+  ],
   { encoding: "utf-8", cwd: process.cwd() }
 );
 check(
-  "spawn morning-card --write exited with non-zero status",
-  result.status !== 0
+  "spawn status --write exited with non-zero status",
+  readOnlyResult.status !== 0
 );
 check(
-  "spawn morning-card --write status === 1 (rejection)",
-  result.status === 1
+  "spawn status --write status === 1",
+  readOnlyResult.status === 1
 );
-const combinedOutput = (result.stdout ?? "") + (result.stderr ?? "");
+const readOnlyOutput =
+  (readOnlyResult.stdout ?? "") + (readOnlyResult.stderr ?? "");
 check(
-  "spawn morning-card --write stderr/stdout contains 'not supported in Phase 4B'",
-  combinedOutput.includes("not supported in Phase 4B")
-);
-check(
-  "spawn morning-card --write stderr/stdout points to Phase 4C",
-  combinedOutput.includes("Phase 4C")
+  "spawn status --write output mentions READ-ONLY by design",
+  readOnlyOutput.includes("READ-ONLY by design")
 );
 
 // ─── Summary ──────────────────────────────────────────────────────────

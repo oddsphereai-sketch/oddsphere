@@ -258,10 +258,11 @@ export type AutoModelSportSpecific = {
   auto_factors: AutoFactors;
   ai_sanity: AiSanityRecord;
   // ─────────────────────────────────────────────────────────────
-  // Phase 4 audit fields (anticipatory — Phase 4A reserves the
-  // shape; Phase 4B/4C populates in the orchestrator). All optional
-  // so Phase 3A's runMlbAutoModelV1 can keep producing the existing
-  // shape without modification.
+  // Phase 4 audit fields. Phase 4A reserved the shape; Phase 4B
+  // deferred persistence; Phase 4C populates from the orchestrator's
+  // write entry points via the enrichment hook on generatePredictionsForSlate.
+  // All optional so Phase 3A's runMlbAutoModelV1 can keep producing
+  // the existing shape without modification.
   // ─────────────────────────────────────────────────────────────
   /** ISO timestamp of the PREVIOUS run for this game (null on first run). */
   previous_run_at?: string | null;
@@ -271,7 +272,79 @@ export type AutoModelSportSpecific = {
   movement_deltas?: MovementDeltas | null;
   /** Which trigger produced this row (null on Phase 3A direct callers). */
   run_kind?: "morning" | "t60" | "manual_rerun" | "held_rerun" | null;
+  /**
+   * Phase 4C — compact snapshot of the 10 GameSnapshot primitives that
+   * Phase 4A's stale rules 3, 4, 6, 7, 8, 9 need at NEXT-run comparison
+   * time. Null on rows pre-dating 4C. Bounded ~120 bytes per row by
+   * design — see lib/automodel/snapshotStash.ts.
+   */
+  snapshot_stash?: SnapshotStash | null;
 };
+
+// ─────────────────────────────────────────────────────────────
+// Phase 4C — compact snapshot stash for next-run stale comparison
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Phase 4C — minimum set of GameSnapshot primitives needed by Phase 4A
+ * stale detection rules at the NEXT run. Persisted on each write to
+ * `sport_specific.snapshot_stash` so a later run can detect:
+ *
+ *   • starter became scratched (rule 3)
+ *   • new top-3 hitter scratched (rule 4)
+ *   • Pinnacle ML fair-prob move (rule 6)
+ *   • Pinnacle ML EV flip/move (rule 7)
+ *   • public betting moves (rule 8)
+ *   • public money moves (rule 9)
+ *
+ * Intentionally BOUNDED: 10 primitives, no nested arrays/objects,
+ * ~120 bytes per row × 12 games = ~1.5 KB per slate. Avoids storing
+ * the full GameSnapshot (which would balloon JSONB).
+ *
+ * Daniel's guidance (Phase 4C planning §7): "keep snapshot_stash
+ * compact exactly as proposed. Do not store full raw snapshots or
+ * large nested data."
+ */
+export type SnapshotStash = {
+  home_starter_was_scratched: boolean;
+  away_starter_was_scratched: boolean;
+  home_top3_hitters_injured_count: number;
+  away_top3_hitters_injured_count: number;
+  pinnacle_ml_fair_prob_home: number | null;
+  pinnacle_ml_ev_pct: number | null;
+  public_betting_pct_home: number | null;
+  public_money_pct_home: number | null;
+  public_betting_pct_over: number | null;
+  public_money_pct_over: number | null;
+};
+
+// ─────────────────────────────────────────────────────────────
+// Phase 4C — enrichment hook for generatePredictionsForSlate
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Phase 4C — hook called by `generatePredictionsForSlate` after the
+ * model runs for each game (and AI sanity boundary) but BEFORE the
+ * prediction is added to the predictions array and ingested.
+ *
+ * Returns a partial `AutoModelSportSpecific` to MERGE into the
+ * prediction's sport_specific. Used by the orchestrator to inject
+ * Phase 4 audit fields (snapshot_stash, previous_run_at,
+ * previous_stage, movement_deltas, stale, stale_reason, run_kind)
+ * computed from data the orchestrator owns (pre-fetched prior auto
+ * rows + the live GameSnapshot the hook receives).
+ *
+ * The hook is OPTIONAL. When omitted, `generatePredictionsForSlate`
+ * runs exactly as Phase 3B/3C did — Phase 3C tests pass unchanged.
+ *
+ * Errors thrown by the hook are caught per-game and logged; the
+ * game's prediction proceeds with un-enriched sport_specific rather
+ * than failing the whole slate.
+ */
+export type EnrichmentHook = (
+  snapshot: GameSnapshot,
+  output: AutoModelOutput
+) => Partial<AutoModelSportSpecific>;
 
 // ─────────────────────────────────────────────────────────────
 // Phase 4A — stale-detection contracts (pure)

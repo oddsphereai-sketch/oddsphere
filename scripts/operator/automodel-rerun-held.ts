@@ -23,15 +23,17 @@ import {
   parseStageFlag,
   printBanner,
   readBoolFlag,
-  rejectWriteFlag,
+  validateWriteGate,
 } from "./_cliCommon";
 import {
   runHeldOnlyRerunDryRun,
+  runHeldOnlyRerunWrite,
   type HeldOnlyRerunReport,
+  type HeldOnlyRerunWriteReport,
 } from "../../lib/services/automodelOrchestratorService";
 
 async function main() {
-  rejectWriteFlag(process.argv);
+  const { writeMode } = validateWriteGate(process.argv);
   const opts = parseCommonCliOptions(process.argv);
   const stage = parseStageFlag(process.argv, "morning_draft");
   // Default true; --no-include-partial-holds opts out.
@@ -42,9 +44,24 @@ async function main() {
     include_partial_holds = true;
   }
   printBanner("automodel-rerun-held", opts, {
+    mode: writeMode ? "WRITE" : "DRY-RUN",
     stage,
     include_partial_holds,
   });
+
+  if (writeMode) {
+    const report = await runHeldOnlyRerunWrite(
+      opts.sport,
+      opts.date,
+      stage,
+      include_partial_holds
+    );
+    emitReport(report, opts, () => formatWriteText(report, opts.verbose));
+    console.log(
+      "\n⚠ REMINDER: unset AUTOMODEL_DB_WRITES_ENABLED in your shell when done."
+    );
+    return;
+  }
 
   const report = await runHeldOnlyRerunDryRun(
     opts.sport,
@@ -52,7 +69,6 @@ async function main() {
     stage,
     include_partial_holds
   );
-
   emitReport(report, opts, () => formatText(report, opts.verbose));
 }
 
@@ -109,6 +125,36 @@ function formatText(report: HeldOnlyRerunReport, verbose: boolean) {
   console.log(`\nNotes:`);
   for (const n of report.notes) {
     console.log(`  • ${n}`);
+  }
+  console.log();
+}
+
+function formatWriteText(report: HeldOnlyRerunWriteReport, verbose: boolean) {
+  formatText(report, verbose);
+  console.log(`━━━ Write outcome ━━━`);
+  if (report.db_writes === null) {
+    console.log(
+      `  (no DB writes attempted — no held candidates after override skip)`
+    );
+  } else {
+    const w = report.db_writes;
+    console.log(
+      `  ingest: ${w.ingest.inserted} inserted · ${w.ingest.updated} updated · ${w.ingest.failed} failed · run_id=${w.ingest.run_id}`
+    );
+    if (w.market_signals && "error" in w.market_signals && w.market_signals.error) {
+      console.log(`  market_signals ERROR: ${w.market_signals.error}`);
+    } else if (w.market_signals && "game_predictions_updated" in w.market_signals) {
+      console.log(
+        `  market_signals: ${w.market_signals.game_predictions_updated} game rows updated`
+      );
+    }
+    if (w.grades && "error" in w.grades && w.grades.error) {
+      console.log(`  grades ERROR: ${w.grades.error}`);
+    } else if (w.grades && "game_predictions_updated" in w.grades) {
+      console.log(
+        `  grades: ${w.grades.game_predictions_updated} game rows updated`
+      );
+    }
   }
   console.log();
 }

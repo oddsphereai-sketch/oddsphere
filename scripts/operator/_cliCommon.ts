@@ -32,22 +32,57 @@ export type CommonCliOptions = {
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "nhl", "ucl", "cfb", "cbb"];
 
 /**
- * Reject --write with a clear pointer to Phase 4C. Call FIRST in every
- * script's main(), before any other parsing or I/O.
+ * Reject --write for scripts that are READ-ONLY by design (status,
+ * show-deltas). Call FIRST in those scripts' main(), before any other
+ * parsing or I/O.
  *
- * Phase 4B scripts are dry-run only. The exact rejection text matches
- * Daniel's approved §15 decision #10 wording.
+ * Phase 4C-write-capable scripts use `validateWriteGate` instead.
  */
 export function rejectWriteFlag(argv: string[]): void {
   if (argv.includes("--write")) {
     console.error(
-      "✗ --write is not supported in Phase 4B.\n" +
-        "  Phase 4B operator scripts are dry-run only. To enable writes, use\n" +
-        "  the Phase 4C scripts (when available) which require both --write\n" +
-        "  and AUTOMODEL_DB_WRITES_ENABLED=true."
+      "✗ --write is not supported by this script.\n" +
+        "  This script is READ-ONLY by design. Use\n" +
+        "  automodel-morning-card.ts / -t60-refresh.ts / -rerun-game.ts /\n" +
+        "  -rerun-held.ts for write-capable operator flows."
     );
     process.exit(1);
   }
+}
+
+/**
+ * Phase 4C — three-key write gate for the 4 write-capable scripts
+ * (morning-card / t60-refresh / rerun-game / rerun-held).
+ *
+ * Returns:
+ *   { writeMode: false } — operator omitted --write; script runs dry-run
+ *   { writeMode: true }  — --write present AND env flag set; script writes
+ *
+ * Exits process with code 1 when:
+ *   --write present AND AUTOMODEL_DB_WRITES_ENABLED !== "true"
+ *
+ * Defense in depth: the orchestrator service also enforces the env
+ * check internally (Phase 3C two-key gate). This script-level check
+ * gives the operator a clearer error message at the CLI surface
+ * BEFORE any DB I/O.
+ */
+export function validateWriteGate(argv: string[]): {
+  writeMode: boolean;
+} {
+  const writeFlag = argv.includes("--write");
+  if (!writeFlag) return { writeMode: false };
+  const envEnabled = process.env.AUTOMODEL_DB_WRITES_ENABLED === "true";
+  if (!envEnabled) {
+    console.error(
+      "✗ --write requires AUTOMODEL_DB_WRITES_ENABLED=true in the\n" +
+        "  environment. Defense in depth: both opt-ins must be present\n" +
+        "  before any DB write. To opt in for this command:\n\n" +
+        "    AUTOMODEL_DB_WRITES_ENABLED=true npx tsx --env-file=.env.local \\\n" +
+        "      scripts/operator/<script>.ts --write [...other flags]\n"
+    );
+    process.exit(1);
+  }
+  return { writeMode: true };
 }
 
 /** Today's date in UTC as YYYY-MM-DD. */

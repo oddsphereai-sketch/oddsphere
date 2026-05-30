@@ -33,11 +33,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Sport } from "../types/domain/Sport";
 import { supabase } from "../db/supabase";
-import { generatePredictionsForSlate } from "./automodelService";
+import {
+  generatePredictionsForSlate,
+  type AutoModelDbWriteOutcome,
+} from "./automodelService";
 import type {
   AutoModelOutput,
+  AutoModelSportSpecific,
   CurrentDerivedForStale,
   CurrentSnapshotForStale,
+  EnrichmentHook,
+  GameSnapshot,
   ModelStage,
   MovementDeltas,
   PriorPredictionForStale,
@@ -51,6 +57,7 @@ import {
   type T60SkipReason,
 } from "../automodel/t60Selection";
 import { deriveRowSharpGradeDirection } from "../automodel/sharpGradeDirection";
+import { buildSnapshotStash } from "../automodel/snapshotStash";
 
 // ─────────────────────────────────────────────────────────────
 // Internal row shapes
@@ -1330,6 +1337,680 @@ export async function getSlateDeltasReport(
 }
 
 // ─────────────────────────────────────────────────────────────
+// Phase 4C — operator-triggered guarded writes
+// ─────────────────────────────────────────────────────────────
+//
+// Four write entry points alongside the Phase 4B dry-run entries.
+// Phase 4B entry points are UNTOUCHED — they keep calling
+// generatePredictionsForSlate({ writeToDb: false }) with no
+// enrichment hook. Phase 4C entry points call
+// generatePredictionsForSlate({ writeToDb: true, ... }) with a
+// gameExternalIdsFilter and an enrichmentHook so each write row
+// lands with snapshot_stash + previous_run_at + previous_stage +
+// movement_deltas + stale + stale_reason + run_kind populated.
+//
+// Phase 3C's two-key gate (writeToDb + AUTOMODEL_DB_WRITES_ENABLED)
+// is enforced INSIDE generatePredictionsForSlate. Phase 4C scripts
+// add a third gate (CLI --write) at the script layer via
+// scripts/operator/_cliCommon.validateWriteGate.
+//
+// Manual override safety:
+//   • morning / T-60 / held-only: silent skip via gameExternalIdsFilter
+//     (orchestrator pre-filters override game_external_ids out of the
+//     filter set).
+//   • single-game: HARD BLOCK at the orchestrator (returns blocked=true
+//     in the result; the script exits 1 with a clear message).
+// No --force flag in 4C.
+
+export type WriteRunKind =
+  | "morning"
+  | "t60"
+  | "manual_rerun"
+  | "held_rerun";
+
+/**
+ * Phase 4C — richer projection from a live GameSnapshot to
+ * CurrentSnapshotForStale. Used by the orchestrator's enrichment hook
+ * during write paths. Carries the real `is_scratched` flags, Pinnacle
+ * metrics, public splits, and top-3 injury counts — fields the
+ * Phase 4B (output-only) projection had to fake as null/0.
+ *
+ * Phase 4A's stale rules now have rich `current` data on write paths.
+ * Combined with the snapshot_stash Phase 4C persists on each write,
+ * the NEXT run has rich prior+current data and the full stale
+ * detection (rules 3, 4, 6, 7, 8, 9) activates.
+ */
+function projectToCurrentSnapshotForStaleFromSnapshot(
+  snap: GameSnapshot
+): CurrentSnapshotForStale {
+  const sharp = snap.sharp;
+  return {
+    home_starter_external_id: snap.home_starter?.player_external_id ?? null,
+    away_starter_external_id: snap.away_starter?.player_external_id ?? null,
+    home_starter_is_scratched: snap.home_starter?.is_scratched ?? false,
+    away_starter_is_scratched: snap.away_starter?.is_scratched ?? false,
+    starter_confirmed: snap.data_quality.starter_confirmed,
+    lineup_confirmed: snap.data_quality.lineup_confirmed,
+    listed_total: snap.market.listed_total,
+    pinnacle_ml_fair_prob_home: sharp?.pinnacle_ml_fair_prob_home ?? null,
+    pinnacle_ml_ev_pct: sharp?.pinnacle_ml_ev_pct ?? null,
+    public_betting_pct_home: sharp?.public_betting_pct_home ?? null,
+    public_money_pct_home: sharp?.public_money_pct_home ?? null,
+    public_betting_pct_over: sharp?.public_betting_pct_over ?? null,
+    public_money_pct_over: sharp?.public_money_pct_over ?? null,
+    home_top3_hitters_injured_count:
+      snap.active_injuries.home_top3_hitters_injured_count,
+    away_top3_hitters_injured_count:
+      snap.active_injuries.away_top3_hitters_injured_count,
+    // True when EITHER sharp signals OR market lines populated
+    // (sparse-providers-as-baseline pattern Phase 4A established).
+    provider_data_present: snap.sharp !== null || snap.market.listed_total !== null,
+  };
+}
+
+/**
+ * Phase 4C — build the enrichment hook for write entry points.
+ *
+ * Closure captures the pre-fetched prior auto rows for the slate so
+ * the hook can compute a StaleReport per game without re-querying.
+ * Returns a partial sport_specific the hook merges into the
+ * prediction — `generatePredictionsForSlate` handles the merge.
+ *
+ * For games with no prior auto row: stash + run_kind populated;
+ * previous_run_at / previous_stage / movement_deltas left null;
+ * stale=false, stale_reason=null.
+ */
+function makeWriteEnrichmentHook(
+  priors: Map<number, PriorAutoRow>,
+  runKind: WriteRunKind
+): EnrichmentHook {
+  return (snapshot, output) => {
+    const stash = buildSnapshotStash(snapshot);
+    const prior = priors.get(output.game_external_id);
+    if (!prior) {
+      return {
+        snapshot_stash: stash,
+        run_kind: runKind,
+        previous_run_at: null,
+        previous_stage: null,
+        movement_deltas: null,
+        stale: false,
+        stale_reason: null,
+      } satisfies Partial<AutoModelSportSpecific>;
+    }
+    const priorStaleInputs = projectToPriorPredictionForStale(prior);
+    const currentSnap = projectToCurrentSnapshotForStaleFromSnapshot(snapshot);
+    const currentDerived: CurrentDerivedForStale = {
+      // Phase 4C: derive prior direction from grade columns; current
+      // direction stays null because the CURRENT run's grades won't
+      // exist until updateGradesForSlate runs AFTER ingest. Rule 10
+      // (sharp grade flip) still fires on the NEXT comparison —
+      // bootstrap delay of 1 run, same as documented in planning §9.
+      sharp_grade_direction: null,
+    };
+    void priorStaleInputs; // captured by buildStaleReport below
+    const staleReport = buildStaleReport(
+      priorStaleInputs,
+      currentSnap,
+      currentDerived
+    );
+    const priorStage =
+      (prior.sport_specific as { stage?: unknown } | null)?.stage;
+    const previousStage =
+      priorStage === "morning_draft" || priorStage === "t60_locked"
+        ? priorStage
+        : null;
+    return {
+      snapshot_stash: stash,
+      run_kind: runKind,
+      previous_run_at: prior.computed_at,
+      previous_stage: previousStage,
+      movement_deltas: staleReport.movement_deltas,
+      stale: staleReport.is_stale,
+      stale_reason: staleReport.is_stale
+        ? staleReport.reasons.join("; ")
+        : null,
+    } satisfies Partial<AutoModelSportSpecific>;
+  };
+}
+
+/**
+ * Compute the filter for write paths that needs to exclude manual
+ * overrides. Used by morning/T-60/held-only — single-game has its own
+ * hard-block path.
+ */
+function excludeOverrides(
+  candidateExternalIds: number[],
+  overrideSet: Set<number>
+): { included: number[]; skipped: number[] } {
+  const included: number[] = [];
+  const skipped: number[] = [];
+  for (const ext of candidateExternalIds) {
+    if (overrideSet.has(ext)) skipped.push(ext);
+    else included.push(ext);
+  }
+  return { included, skipped };
+}
+
+// ─── Public write report types ────────────────────────────────────────
+
+export type MorningCardWriteReport = MorningCardReport & {
+  db_writes: AutoModelDbWriteOutcome | null;
+  skipped_override_ids: number[];
+};
+
+export type T60RefreshWriteReport = T60RefreshReport & {
+  db_writes: AutoModelDbWriteOutcome | null;
+};
+
+export type SingleGameRerunWriteReport = SingleGameRerunReport & {
+  db_writes: AutoModelDbWriteOutcome | null;
+  blocked: boolean;
+  block_reason: string | null;
+};
+
+export type HeldOnlyRerunWriteReport = HeldOnlyRerunReport & {
+  db_writes: AutoModelDbWriteOutcome | null;
+};
+
+// ─── Entry point 1W — Morning Card WRITE ─────────────────────────────
+
+export async function runMorningCardWrite(
+  sport: Sport,
+  slate_date: string
+): Promise<MorningCardWriteReport> {
+  const t0 = Date.now();
+  const generated_at = new Date().toISOString();
+
+  // Compute filter: all slate games minus manual overrides.
+  const games = await fetchGamesForSlate(supabase, sport, slate_date);
+  const allExt = games.map((g) => g.external_id);
+  const overrideSet = await listManualOverrideExternalIds(
+    supabase,
+    sport,
+    slate_date
+  );
+  const { included: filterIds, skipped: skipped_override_ids } =
+    excludeOverrides(allExt, overrideSet);
+
+  // Pre-fetch priors for enrichment.
+  const priors = await fetchPriorAutoRows(supabase, sport, slate_date);
+  const enrichmentHook = makeWriteEnrichmentHook(priors, "morning");
+
+  const writeResult = await generatePredictionsForSlate(
+    sport,
+    slate_date,
+    "morning_draft",
+    {
+      writeToDb: true,
+      gameExternalIdsFilter: filterIds,
+      enrichmentHook,
+    }
+  );
+
+  // Build the same report shape as Morning Card dry-run for parity.
+  const predictionsWithStale = writeResult.predictions.map((p) => {
+    const prior = priors.get(p.game_external_id);
+    const stale_report: StaleReport | null = prior
+      ? buildStaleReport(
+          projectToPriorPredictionForStale(prior),
+          // Use the OUTPUT-projection here since this report is built
+          // post-run and we don't carry the live snapshots back out of
+          // generatePredictionsForSlate. The richer-from-snapshot path
+          // already ran inside the enrichment hook and persisted to DB.
+          projectToCurrentSnapshotForStale(p),
+          CURRENT_DERIVED_DEFAULT
+        )
+      : null;
+    return { ...projectToProposedPrediction(p), stale_report };
+  });
+
+  const stale_summary = {
+    games_with_prior: predictionsWithStale.filter((p) => p.stale_report !== null)
+      .length,
+    games_stale_vs_prior: predictionsWithStale.filter(
+      (p) => p.stale_report?.is_stale === true
+    ).length,
+    top_reasons: topStaleReasons(predictionsWithStale.map((p) => p.stale_report)),
+    notes: [
+      `Wrote ${writeResult.predictions.length} games; skipped ${skipped_override_ids.length} manual override row(s).`,
+      "snapshot_stash + run_kind=morning + audit fields persisted via enrichmentHook.",
+      "slate_status unchanged — no auto-publish.",
+    ],
+  };
+
+  return {
+    sport,
+    slate_date,
+    stage: "morning_draft",
+    generated_at,
+    game_count: writeResult.game_count,
+    predictions_count: writeResult.predictions.length,
+    held_count: writeResult.held_count,
+    pick_null_counts: writeResult.pick_null_counts,
+    ai_sanity_actions: writeResult.ai_sanity_actions,
+    total_deterministic_corrections: writeResult.total_deterministic_corrections,
+    errors: writeResult.errors,
+    missing_starter_count: countMissingStarter(writeResult.predictions),
+    missing_market_line_count: countMissingMarketLine(writeResult.predictions),
+    confidence_bands: buildConfidenceBands(writeResult.predictions),
+    stale_summary,
+    predictions: predictionsWithStale,
+    duration_ms: Date.now() - t0,
+    db_writes: writeResult.db_writes,
+    skipped_override_ids,
+  };
+}
+
+// ─── Entry point 2W — T-60 Refresh WRITE ─────────────────────────────
+
+export async function runT60RefreshWrite(
+  sport: Sport,
+  slate_date: string,
+  now: Date,
+  window_minutes: number = T60_WINDOW_MINUTES_DEFAULT,
+  include_started: boolean = false
+): Promise<T60RefreshWriteReport> {
+  const t0 = Date.now();
+  const generated_at = new Date().toISOString();
+
+  const games = await fetchGamesForSlate(supabase, sport, slate_date);
+  const candidates: T60Candidate[] = games.map((g) => ({
+    game_external_id: g.external_id,
+    start_time: g.game_date,
+  }));
+  const selection = selectGamesInT60Window(
+    candidates,
+    now,
+    window_minutes,
+    include_started
+  );
+
+  const overrideSet = await listManualOverrideExternalIds(
+    supabase,
+    sport,
+    slate_date
+  );
+  const selectedExt = selection.selected.map((s) => s.game_external_id);
+  const { included: filterIds, skipped: skipped_override } = excludeOverrides(
+    selectedExt,
+    overrideSet
+  );
+
+  const priors = await fetchPriorAutoRows(supabase, sport, slate_date);
+  const enrichmentHook = makeWriteEnrichmentHook(priors, "t60");
+
+  // If nothing to write, skip the service call (no-op).
+  let writeResult:
+    | Awaited<ReturnType<typeof generatePredictionsForSlate>>
+    | null = null;
+  if (filterIds.length > 0) {
+    writeResult = await generatePredictionsForSlate(
+      sport,
+      slate_date,
+      "t60_locked",
+      {
+        writeToDb: true,
+        gameExternalIdsFilter: filterIds,
+        enrichmentHook,
+      }
+    );
+  }
+
+  // Build per-game entries (only for filtered selection).
+  const startTimeByExt = new Map(
+    candidates
+      .filter((c): c is { game_external_id: number; start_time: string } =>
+        typeof c.start_time === "string"
+      )
+      .map((c) => [c.game_external_id, c.start_time])
+  );
+
+  const predictions: T60RefreshPredictionEntry[] = [];
+  if (writeResult) {
+    for (const out of writeResult.predictions) {
+      const prior = priors.get(out.game_external_id);
+      const stale = prior
+        ? buildStaleReport(
+            projectToPriorPredictionForStale(prior),
+            projectToCurrentSnapshotForStale(out),
+            CURRENT_DERIVED_DEFAULT
+          )
+        : null;
+      predictions.push({
+        game_external_id: out.game_external_id,
+        start_time: startTimeByExt.get(out.game_external_id) ?? "",
+        prior_present: prior !== undefined,
+        prior_stage: prior ? projectToPriorSummary(prior).prior_stage : null,
+        prior_summary: prior ? projectToPriorSummary(prior) : null,
+        proposed: projectToProposedPrediction(out),
+        stale_report: stale,
+      });
+    }
+  }
+
+  const movement_summary = {
+    games_with_listed_total_move: 0,
+    games_with_ml_fair_prob_move: 0,
+    games_with_ev_flip: 0,
+    games_with_public_betting_move: 0,
+    games_with_public_money_move: 0,
+    games_with_starter_change: 0,
+    games_with_provider_data_missing: 0,
+  };
+  for (const entry of predictions) {
+    const d = entry.stale_report?.movement_deltas;
+    if (!d) continue;
+    if (d.total_line_delta !== null && Math.abs(d.total_line_delta) >= 0.0001)
+      movement_summary.games_with_listed_total_move++;
+    if (
+      d.ml_fair_prob_delta !== null &&
+      Math.abs(d.ml_fair_prob_delta) >= 0.0001
+    )
+      movement_summary.games_with_ml_fair_prob_move++;
+    if (d.ev_delta !== null && Math.abs(d.ev_delta) >= 0.0001)
+      movement_summary.games_with_ev_flip++;
+    if (
+      d.public_betting_delta !== null &&
+      Math.abs(d.public_betting_delta) >= 0.0001
+    )
+      movement_summary.games_with_public_betting_move++;
+    if (
+      d.public_money_delta !== null &&
+      Math.abs(d.public_money_delta) >= 0.0001
+    )
+      movement_summary.games_with_public_money_move++;
+    if (d.starter_changed) movement_summary.games_with_starter_change++;
+    if (d.provider_data_missing)
+      movement_summary.games_with_provider_data_missing++;
+  }
+
+  const stale_count = predictions.filter(
+    (p) => p.stale_report?.is_stale === true
+  ).length;
+
+  return {
+    sport,
+    slate_date,
+    stage: "t60_locked",
+    now: now.toISOString(),
+    window_minutes,
+    include_started,
+    generated_at,
+    candidates_count: candidates.length,
+    selected_count: filterIds.length,
+    skipped_window: selection.skipped,
+    skipped_override,
+    predictions,
+    stale_count,
+    movement_summary,
+    notes: [
+      `Wrote ${predictions.length} T-60 game(s); skipped ${skipped_override.length} manual override row(s) within window.`,
+      "snapshot_stash + run_kind=t60 + audit fields persisted via enrichmentHook.",
+      "slate_status unchanged — no auto-publish.",
+    ],
+    duration_ms: Date.now() - t0,
+    db_writes: writeResult?.db_writes ?? null,
+  };
+}
+
+// ─── Entry point 3W — Single-Game Rerun WRITE (with HARD BLOCK) ──────
+
+export async function runSingleGameRerunWrite(
+  sport: Sport,
+  slate_date: string,
+  game_external_id: number,
+  stage: ModelStage
+): Promise<SingleGameRerunWriteReport> {
+  const t0 = Date.now();
+
+  const games = await fetchGamesForSlate(supabase, sport, slate_date);
+  const target = games.find((g) => g.external_id === game_external_id);
+  if (!target) {
+    return {
+      sport,
+      slate_date,
+      stage,
+      game_external_id,
+      found: false,
+      manual_override_present: false,
+      prior: null,
+      proposed: null,
+      stale_report: null,
+      notes: [
+        `Game ${game_external_id} not found in ${sport} slate ${slate_date}.`,
+      ],
+      duration_ms: Date.now() - t0,
+      db_writes: null,
+      blocked: false,
+      block_reason: null,
+    };
+  }
+
+  const overrideSet = await listManualOverrideExternalIds(
+    supabase,
+    sport,
+    slate_date
+  );
+  const manual_override_present = overrideSet.has(game_external_id);
+
+  // HARD BLOCK: single-game write refuses to overwrite a manual override.
+  // The script handles this by exiting 1 with the block_reason.
+  if (manual_override_present) {
+    const blockMsg =
+      `Game ${game_external_id} has a manual override (is_override=true). ` +
+      `Phase 4C single-game write refuses to overwrite operator's manual ` +
+      `pick. Delete the manual_daniel row via /admin/scores-model first ` +
+      `if you intentionally want auto to replace it. No --force flag in 4C.`;
+    return {
+      sport,
+      slate_date,
+      stage,
+      game_external_id,
+      found: true,
+      manual_override_present: true,
+      prior: null,
+      proposed: null,
+      stale_report: null,
+      notes: [blockMsg],
+      duration_ms: Date.now() - t0,
+      db_writes: null,
+      blocked: true,
+      block_reason: blockMsg,
+    };
+  }
+
+  const priors = await fetchPriorAutoRows(supabase, sport, slate_date);
+  const prior = priors.get(game_external_id) ?? null;
+  const enrichmentHook = makeWriteEnrichmentHook(priors, "manual_rerun");
+
+  const writeResult = await generatePredictionsForSlate(sport, slate_date, stage, {
+    writeToDb: true,
+    gameExternalIdsFilter: [game_external_id],
+    enrichmentHook,
+  });
+
+  const out = writeResult.predictions.find(
+    (p) => p.game_external_id === game_external_id
+  );
+  if (!out) {
+    return {
+      sport,
+      slate_date,
+      stage,
+      game_external_id,
+      found: true,
+      manual_override_present: false,
+      prior: prior ? projectToPriorSummary(prior) : null,
+      proposed: null,
+      stale_report: null,
+      notes: [
+        `Game ${game_external_id} found in slate but model did not produce a prediction. See errors[].`,
+        ...writeResult.errors
+          .filter((e) => e.game_external_id === game_external_id)
+          .map((e) => `model error: ${e.error}`),
+      ],
+      duration_ms: Date.now() - t0,
+      db_writes: writeResult.db_writes,
+      blocked: false,
+      block_reason: null,
+    };
+  }
+
+  const stale = prior
+    ? buildStaleReport(
+        projectToPriorPredictionForStale(prior),
+        projectToCurrentSnapshotForStale(out),
+        CURRENT_DERIVED_DEFAULT
+      )
+    : null;
+
+  return {
+    sport,
+    slate_date,
+    stage,
+    game_external_id,
+    found: true,
+    manual_override_present: false,
+    prior: prior ? projectToPriorSummary(prior) : null,
+    proposed: projectToProposedPrediction(out),
+    stale_report: stale,
+    notes: [
+      "snapshot_stash + run_kind=manual_rerun + audit fields persisted via enrichmentHook.",
+      "slate_status unchanged — no auto-publish.",
+    ],
+    duration_ms: Date.now() - t0,
+    db_writes: writeResult.db_writes,
+    blocked: false,
+    block_reason: null,
+  };
+}
+
+// ─── Entry point 4W — Held-Only Rerun WRITE ──────────────────────────
+
+export async function runHeldOnlyRerunWrite(
+  sport: Sport,
+  slate_date: string,
+  stage: ModelStage,
+  include_partial_holds: boolean
+): Promise<HeldOnlyRerunWriteReport> {
+  const t0 = Date.now();
+  const generated_at = new Date().toISOString();
+
+  const priors = await fetchPriorAutoRows(supabase, sport, slate_date);
+  const overrideSet = await listManualOverrideExternalIds(
+    supabase,
+    sport,
+    slate_date
+  );
+
+  const candidateExtIds: number[] = [];
+  const skipped_override: number[] = [];
+  for (const [ext, row] of priors.entries()) {
+    const ss = (row.sport_specific ?? {}) as Record<string, unknown>;
+    const held = ss.held === true;
+    const holdPicks = Array.isArray(ss.hold_picks)
+      ? (ss.hold_picks as unknown[])
+      : [];
+    const isHeld = held || (include_partial_holds && holdPicks.length > 0);
+    if (!isHeld) continue;
+    if (overrideSet.has(ext)) {
+      skipped_override.push(ext);
+      continue;
+    }
+    candidateExtIds.push(ext);
+  }
+
+  const enrichmentHook = makeWriteEnrichmentHook(priors, "held_rerun");
+
+  let writeResult:
+    | Awaited<ReturnType<typeof generatePredictionsForSlate>>
+    | null = null;
+  if (candidateExtIds.length > 0) {
+    writeResult = await generatePredictionsForSlate(sport, slate_date, stage, {
+      writeToDb: true,
+      gameExternalIdsFilter: candidateExtIds,
+      enrichmentHook,
+    });
+  }
+
+  const predictions: HeldOnlyRerunPredictionEntry[] = [];
+  const resolution_summary = {
+    resolved: 0,
+    still_held: 0,
+    partially_resolved: 0,
+    newly_held: 0,
+  };
+  if (writeResult) {
+    for (const out of writeResult.predictions) {
+      const prior = priors.get(out.game_external_id);
+      const priorSummary = prior ? projectToPriorSummary(prior) : null;
+      const prior_held = priorSummary?.prior_held ?? false;
+      const prior_hold_picks = priorSummary?.prior_hold_picks ?? [];
+      const proposed_held = out.sport_specific.held;
+      const proposed_hold_picks = out.sport_specific.hold_picks;
+
+      let resolution: HeldRerunResolution;
+      const priorHadAnyHold = prior_held || prior_hold_picks.length > 0;
+      const proposedHasAnyHold =
+        proposed_held || proposed_hold_picks.length > 0;
+      if (!priorHadAnyHold && proposedHasAnyHold) {
+        resolution = "newly_held";
+      } else if (priorHadAnyHold && !proposedHasAnyHold) {
+        resolution = "resolved";
+      } else if (priorHadAnyHold && proposedHasAnyHold) {
+        const someResolved = prior_hold_picks.some(
+          (h) => !proposed_hold_picks.includes(h)
+        );
+        resolution = someResolved ? "partially_resolved" : "still_held";
+      } else {
+        resolution = "resolved";
+      }
+      resolution_summary[resolution]++;
+
+      const stale = prior
+        ? buildStaleReport(
+            projectToPriorPredictionForStale(prior),
+            projectToCurrentSnapshotForStale(out),
+            CURRENT_DERIVED_DEFAULT
+          )
+        : null;
+
+      predictions.push({
+        game_external_id: out.game_external_id,
+        prior_held,
+        prior_hold_picks,
+        proposed: projectToProposedPrediction(out),
+        proposed_held,
+        proposed_hold_picks,
+        resolution,
+        stale_report: stale,
+      });
+    }
+  }
+
+  return {
+    sport,
+    slate_date,
+    stage,
+    include_partial_holds,
+    generated_at,
+    candidates_count: candidateExtIds.length + skipped_override.length,
+    skipped_override,
+    selected_count: predictions.length,
+    predictions,
+    resolution_summary,
+    notes: [
+      `Wrote ${predictions.length} held game(s); skipped ${skipped_override.length} manual override row(s).`,
+      "snapshot_stash + run_kind=held_rerun + audit fields persisted via enrichmentHook.",
+      "slate_status unchanged — no auto-publish.",
+    ],
+    duration_ms: Date.now() - t0,
+    db_writes: writeResult?.db_writes ?? null,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
 // Phase 4B — exported pure helpers for unit tests
 // ─────────────────────────────────────────────────────────────
 //
@@ -1352,4 +2033,8 @@ export const __internalForTests = {
   countMissingStarter,
   countMissingMarketLine,
   topStaleReasons,
+  // Phase 4C additions
+  projectToCurrentSnapshotForStaleFromSnapshot,
+  makeWriteEnrichmentHook,
+  excludeOverrides,
 };

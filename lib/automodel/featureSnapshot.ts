@@ -498,21 +498,45 @@ function buildSharpSnapshot(
 
 export async function buildFeatureSnapshots(
   sport: Sport,
-  slate_date: string
+  slate_date: string,
+  /**
+   * Phase 4C — optional filter to restrict the snapshot build to a
+   * subset of slate games by `external_id`. When provided, the initial
+   * `games` query restricts to those external_ids; all downstream
+   * batched lookups naturally restrict to the filtered set (because
+   * they join on the resulting `games.id`).
+   *
+   * When `undefined` or an empty array → behaves as Phase 3B did
+   * (whole slate). Phase 3B/3C tests pass unchanged.
+   *
+   * Used by Phase 4C orchestrator write paths to write only T-60 /
+   * single-game / held-only / non-override-morning subsets.
+   */
+  gameExternalIdsFilter?: number[]
 ): Promise<GameSnapshot[]> {
   // V1 scope — MLB only. Other sports return [] without DB roundtrips.
   if (sport !== "mlb") return [];
 
   const season = deriveSeason(slate_date);
 
+  // Phase 4C: empty-array filter is treated as "explicit no games" —
+  // short-circuit before any DB I/O. Distinct from `undefined` (no filter).
+  if (gameExternalIdsFilter !== undefined && gameExternalIdsFilter.length === 0) {
+    return [];
+  }
+
   // ── Query 1: games on this slate ────────────────────────────────
-  const { data: gamesRaw, error: gamesErr } = await supabase
+  let gamesQuery = supabase
     .from("games")
     .select(
       "id, external_id, sport, slate_date, game_date, home_team_id, away_team_id, home_pitcher_id, away_pitcher_id, ballpark_id"
     )
     .eq("sport", sport)
     .eq("slate_date", slate_date);
+  if (gameExternalIdsFilter !== undefined) {
+    gamesQuery = gamesQuery.in("external_id", gameExternalIdsFilter);
+  }
+  const { data: gamesRaw, error: gamesErr } = await gamesQuery;
 
   if (gamesErr) {
     throw new Error(

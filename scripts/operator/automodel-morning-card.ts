@@ -1,39 +1,58 @@
 /**
- * Phase 4B — operator dry-run script for the Morning Card.
+ * Phase 4B/4C — operator script for the Morning Card.
  *
  * USAGE:
  *   npx tsx --env-file=.env.local scripts/operator/automodel-morning-card.ts \
  *     [--date YYYY-MM-DD]   (default: today UTC)
  *     [--sport mlb]         (default: mlb; V1 MLB-only)
+ *     [--write]             (Phase 4C — requires AUTOMODEL_DB_WRITES_ENABLED=true)
  *     [--json]              (default: text output)
  *     [--verbose]           (default: false; include per-game prediction detail)
  *
  * EXAMPLES:
+ *   # Phase 4B dry-run
  *   npx tsx --env-file=.env.local scripts/operator/automodel-morning-card.ts
- *   npx tsx --env-file=.env.local scripts/operator/automodel-morning-card.ts \
- *     --date 2026-05-22 --verbose
  *
- * Dry-run only. Rejects --write with a pointer to Phase 4C.
+ *   # Phase 4C guarded write (writes whole slate minus manual overrides)
+ *   AUTOMODEL_DB_WRITES_ENABLED=true npx tsx --env-file=.env.local \
+ *     scripts/operator/automodel-morning-card.ts --write --date 2026-05-22
+ *
+ * Three-key gate for writes: --write + AUTOMODEL_DB_WRITES_ENABLED=true +
+ * service writeToDb=true (enforced inside generatePredictionsForSlate).
  */
 
 import {
   emitReport,
   parseCommonCliOptions,
   printBanner,
-  rejectWriteFlag,
+  validateWriteGate,
 } from "./_cliCommon";
 import {
   runMorningCardDryRun,
+  runMorningCardWrite,
   type MorningCardReport,
+  type MorningCardWriteReport,
 } from "../../lib/services/automodelOrchestratorService";
 
 async function main() {
-  rejectWriteFlag(process.argv);
+  const { writeMode } = validateWriteGate(process.argv);
   const opts = parseCommonCliOptions(process.argv);
-  printBanner("automodel-morning-card", opts);
+  printBanner("automodel-morning-card", opts, {
+    mode: writeMode ? "WRITE" : "DRY-RUN",
+  });
+
+  if (writeMode) {
+    const report = await runMorningCardWrite(opts.sport, opts.date);
+    emitReport(report, opts, () => formatWriteText(report, opts.verbose));
+    if (writeMode) {
+      console.log(
+        "\n⚠ REMINDER: unset AUTOMODEL_DB_WRITES_ENABLED in your shell when done."
+      );
+    }
+    return;
+  }
 
   const report = await runMorningCardDryRun(opts.sport, opts.date);
-
   emitReport(report, opts, () => formatText(report, opts.verbose));
 }
 
@@ -122,6 +141,47 @@ function formatText(report: MorningCardReport, verbose: boolean) {
       console.log(`  • ${n}`);
     }
   }
+  console.log();
+}
+
+function formatWriteText(report: MorningCardWriteReport, verbose: boolean) {
+  // Re-use the dry-run renderer for the model-side report, then add the
+  // write-outcome section.
+  formatText(report, verbose);
+
+  console.log(`━━━ Write outcome ━━━`);
+  if (report.db_writes === null) {
+    console.log(`  (no DB writes attempted — likely empty filter)`);
+  } else {
+    const w = report.db_writes;
+    console.log(
+      `  ingest: ${w.ingest.inserted} inserted · ${w.ingest.updated} updated · ${w.ingest.failed} failed · run_id=${w.ingest.run_id}`
+    );
+    if (w.ingest.failed > 0) {
+      for (const f of w.ingest.errors) {
+        console.log(
+          `    ext_id=${f.game_external_id}: ${f.errors.join(", ")}`
+        );
+      }
+    }
+    if (w.market_signals && "game_predictions_updated" in w.market_signals && w.market_signals.error === null) {
+      console.log(
+        `  market_signals: ${w.market_signals.game_predictions_updated} game rows updated`
+      );
+    } else if (w.market_signals && "error" in w.market_signals && w.market_signals.error) {
+      console.log(`  market_signals ERROR: ${w.market_signals.error}`);
+    }
+    if (w.grades && "game_predictions_updated" in w.grades && w.grades.error === null) {
+      console.log(
+        `  grades: ${w.grades.game_predictions_updated} game rows updated`
+      );
+    } else if (w.grades && "error" in w.grades && w.grades.error) {
+      console.log(`  grades ERROR: ${w.grades.error}`);
+    }
+  }
+  console.log(
+    `  skipped_override_ids: [${report.skipped_override_ids.join(",")}] (${report.skipped_override_ids.length} game(s))`
+  );
   console.log();
 }
 

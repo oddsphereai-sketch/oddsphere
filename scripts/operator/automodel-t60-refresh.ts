@@ -25,15 +25,17 @@ import {
   readBoolFlag,
   readNumberFlag,
   readStringFlag,
-  rejectWriteFlag,
+  validateWriteGate,
 } from "./_cliCommon";
 import {
   runT60RefreshDryRun,
+  runT60RefreshWrite,
   type T60RefreshReport,
+  type T60RefreshWriteReport,
 } from "../../lib/services/automodelOrchestratorService";
 
 async function main() {
-  rejectWriteFlag(process.argv);
+  const { writeMode } = validateWriteGate(process.argv);
   const opts = parseCommonCliOptions(process.argv);
   const nowFlag = readStringFlag(process.argv, "--now");
   const now = nowFlag ? new Date(nowFlag) : new Date();
@@ -51,10 +53,26 @@ async function main() {
   const include_started = readBoolFlag(process.argv, "--include-started");
 
   printBanner("automodel-t60-refresh", opts, {
+    mode: writeMode ? "WRITE" : "DRY-RUN",
     now: now.toISOString(),
     window_minutes,
     include_started,
   });
+
+  if (writeMode) {
+    const report = await runT60RefreshWrite(
+      opts.sport,
+      opts.date,
+      now,
+      window_minutes,
+      include_started
+    );
+    emitReport(report, opts, () => formatWriteText(report, opts.verbose));
+    console.log(
+      "\n⚠ REMINDER: unset AUTOMODEL_DB_WRITES_ENABLED in your shell when done."
+    );
+    return;
+  }
 
   const report = await runT60RefreshDryRun(
     opts.sport,
@@ -63,7 +81,6 @@ async function main() {
     window_minutes,
     include_started
   );
-
   emitReport(report, opts, () => formatText(report, opts.verbose));
 }
 
@@ -142,6 +159,36 @@ function formatText(report: T60RefreshReport, verbose: boolean) {
   console.log(`\nNotes:`);
   for (const n of report.notes) {
     console.log(`  • ${n}`);
+  }
+  console.log();
+}
+
+function formatWriteText(report: T60RefreshWriteReport, verbose: boolean) {
+  formatText(report, verbose);
+  console.log(`━━━ Write outcome ━━━`);
+  if (report.db_writes === null) {
+    console.log(
+      `  (no DB writes attempted — no games in T-60 window after override skip)`
+    );
+  } else {
+    const w = report.db_writes;
+    console.log(
+      `  ingest: ${w.ingest.inserted} inserted · ${w.ingest.updated} updated · ${w.ingest.failed} failed · run_id=${w.ingest.run_id}`
+    );
+    if (w.market_signals && "error" in w.market_signals && w.market_signals.error) {
+      console.log(`  market_signals ERROR: ${w.market_signals.error}`);
+    } else if (w.market_signals && "game_predictions_updated" in w.market_signals) {
+      console.log(
+        `  market_signals: ${w.market_signals.game_predictions_updated} game rows updated`
+      );
+    }
+    if (w.grades && "error" in w.grades && w.grades.error) {
+      console.log(`  grades ERROR: ${w.grades.error}`);
+    } else if (w.grades && "game_predictions_updated" in w.grades) {
+      console.log(
+        `  grades: ${w.grades.game_predictions_updated} game rows updated`
+      );
+    }
   }
   console.log();
 }

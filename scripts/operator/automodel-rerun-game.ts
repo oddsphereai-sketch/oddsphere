@@ -23,15 +23,17 @@ import {
   parseStageFlag,
   printBanner,
   readNumberFlag,
-  rejectWriteFlag,
+  validateWriteGate,
 } from "./_cliCommon";
 import {
   runSingleGameRerunDryRun,
+  runSingleGameRerunWrite,
   type SingleGameRerunReport,
+  type SingleGameRerunWriteReport,
 } from "../../lib/services/automodelOrchestratorService";
 
 async function main() {
-  rejectWriteFlag(process.argv);
+  const { writeMode } = validateWriteGate(process.argv);
   const opts = parseCommonCliOptions(process.argv);
   const game_external_id = readNumberFlag(process.argv, "--game-external-id");
   if (game_external_id === undefined) {
@@ -41,9 +43,28 @@ async function main() {
   }
   const stage = parseStageFlag(process.argv, "t60_locked");
   printBanner("automodel-rerun-game", opts, {
+    mode: writeMode ? "WRITE" : "DRY-RUN",
     game_external_id,
     stage,
   });
+
+  if (writeMode) {
+    const report = await runSingleGameRerunWrite(
+      opts.sport,
+      opts.date,
+      game_external_id,
+      stage
+    );
+    emitReport(report, opts, () => formatWriteText(report, opts.verbose));
+    // HARD BLOCK on manual override: exit 1 so operator sees clear failure.
+    if (report.blocked) {
+      process.exit(1);
+    }
+    console.log(
+      "\n⚠ REMINDER: unset AUTOMODEL_DB_WRITES_ENABLED in your shell when done."
+    );
+    return;
+  }
 
   const report = await runSingleGameRerunDryRun(
     opts.sport,
@@ -51,7 +72,6 @@ async function main() {
     game_external_id,
     stage
   );
-
   emitReport(report, opts, () => formatText(report, opts.verbose));
 }
 
@@ -126,6 +146,42 @@ function formatText(report: SingleGameRerunReport, _verbose: boolean) {
     console.log(`\nNotes:`);
     for (const n of report.notes) {
       console.log(`  • ${n}`);
+    }
+  }
+  console.log();
+}
+
+function formatWriteText(report: SingleGameRerunWriteReport, verbose: boolean) {
+  if (report.blocked) {
+    console.log(
+      `\n━━━ Single-Game Rerun BLOCKED · ext_id=${report.game_external_id} ━━━\n`
+    );
+    console.log(`✗ ${report.block_reason}`);
+    console.log();
+    return;
+  }
+  formatText(report, verbose);
+  console.log(`━━━ Write outcome ━━━`);
+  if (report.db_writes === null) {
+    console.log(`  (no DB writes attempted)`);
+  } else {
+    const w = report.db_writes;
+    console.log(
+      `  ingest: ${w.ingest.inserted} inserted · ${w.ingest.updated} updated · ${w.ingest.failed} failed · run_id=${w.ingest.run_id}`
+    );
+    if (w.market_signals && "error" in w.market_signals && w.market_signals.error) {
+      console.log(`  market_signals ERROR: ${w.market_signals.error}`);
+    } else if (w.market_signals && "game_predictions_updated" in w.market_signals) {
+      console.log(
+        `  market_signals: ${w.market_signals.game_predictions_updated} game rows updated`
+      );
+    }
+    if (w.grades && "error" in w.grades && w.grades.error) {
+      console.log(`  grades ERROR: ${w.grades.error}`);
+    } else if (w.grades && "game_predictions_updated" in w.grades) {
+      console.log(
+        `  grades: ${w.grades.game_predictions_updated} game rows updated`
+      );
     }
   }
   console.log();
