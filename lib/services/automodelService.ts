@@ -61,6 +61,7 @@ import {
 import { loadGameIdMap } from "./_idMaps";
 import { updateMarketSignalsForSlate } from "./marketSignalDerivationService";
 import { updateGradesForSlate } from "./gradeDerivationService";
+import { generatePickBreakdown } from "./pickBreakdownGenerator";
 
 // ─────────────────────────────────────────────────────────────
 // Public types
@@ -405,12 +406,59 @@ export async function generatePredictionsForSlate(
           );
         }
       }
+      // 2d — Phase 4.1.3: optional deterministic pick-breakdown generation.
+      // Two-key gate: env flag + MLB-only (V1 scope). Wrapped in try/catch
+      // so generator failure NEVER blocks the prediction write — we log
+      // and proceed with no breakdown.
+      let withBreakdown: AutoModelSportSpecific = enrichedSportSpecific;
+      if (
+        sport === "mlb" &&
+        process.env.PICK_BREAKDOWN_GEN_ENABLED === "true"
+      ) {
+        try {
+          const breakdown = generatePickBreakdown(
+            { ...rawPrediction, sport_specific: enrichedSportSpecific },
+            {
+              sport,
+              home_pitcher_name: snap.home_starter?.player_name ?? null,
+              away_pitcher_name: snap.away_starter?.player_name ?? null,
+              home_team_abbr: snap.home_team.abbreviation,
+              away_team_abbr: snap.away_team.abbreviation,
+              home_first_inning_starts:
+                snap.home_starter?.first_inning_starts ?? null,
+              away_first_inning_starts:
+                snap.away_starter?.first_inning_starts ?? null,
+              home_first_inning_era:
+                snap.home_starter?.first_inning_era ?? null,
+              away_first_inning_era:
+                snap.away_starter?.first_inning_era ?? null,
+              home_season_era: snap.home_starter?.season_era ?? null,
+              away_season_era: snap.away_starter?.season_era ?? null,
+            }
+          );
+          withBreakdown = {
+            ...enrichedSportSpecific,
+            member_summary: breakdown.member_summary,
+            operator_detail: breakdown.operator_detail,
+            breakdown_version: breakdown.breakdown_version,
+            breakdown_generated_at: breakdown.breakdown_generated_at,
+          } as AutoModelSportSpecific;
+        } catch (bdErr) {
+          console.warn(
+            `[automodelService] pickBreakdownGenerator threw for ` +
+              `game_external_id=${snap.game_external_id}: ${
+                bdErr instanceof Error ? bdErr.message : String(bdErr)
+              }. Proceeding without breakdown.`
+          );
+        }
+      }
+
       const finalPrediction: AutoModelOutput = {
         ...rawPrediction,
-        sport_specific: enrichedSportSpecific,
+        sport_specific: withBreakdown,
       };
 
-      // 2d — tally
+      // 2e — tally
       predictions.push(finalPrediction);
       if (finalPrediction.sport_specific.held) held_count++;
       if (finalPrediction.predicted_ml_winner === null) pick_null_counts.ml++;
