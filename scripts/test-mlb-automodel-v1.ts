@@ -1080,6 +1080,588 @@ async function main() {
   }
 
   // ═══════════════════════════════════════════════════════════════
+  section("Phase 4D.2 — NRFI formula enrichment (modifiers + reason codes)");
+  // ═══════════════════════════════════════════════════════════════
+
+  // Helper: assemble a snapshot tuned to land in the Toss-Up zone for
+  // baseline (expected ~0.55), so modifier shifts move it across zones.
+  function tossupSnap(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
+    return baseSnapshot({
+      home_starter: starter({
+        player_external_id: 7100,
+        season_era: 3.6,
+        first_inning_era: 2.5,
+        // pitch_quality_score deliberately at exactly 1.0 (neutral)
+        pitch_quality_score: 1.0,
+      }),
+      away_starter: starter({
+        player_external_id: 7101,
+        season_era: 3.6,
+        first_inning_era: 2.5,
+        pitch_quality_score: 1.0,
+        throws: "L",
+      }),
+      ...overrides,
+    });
+  }
+
+  // ─── Pitch quality direction ─────────────────────────────────────
+  {
+    const neutral = runMlbAutoModelV1(tossupSnap(), "morning_draft");
+    const whiffy = runMlbAutoModelV1(
+      tossupSnap({
+        home_starter: starter({
+          player_external_id: 7100,
+          season_era: 3.6,
+          first_inning_era: 2.5,
+          pitch_quality_score: 0.92, // whiffiest → biggest suppression
+        }),
+      }),
+      "morning_draft"
+    );
+    const contact = runMlbAutoModelV1(
+      tossupSnap({
+        home_starter: starter({
+          player_external_id: 7100,
+          season_era: 3.6,
+          first_inning_era: 2.5,
+          pitch_quality_score: 1.08, // contact-friendly → biggest boost
+        }),
+      }),
+      "morning_draft"
+    );
+    check(
+      "[4D.2 pitch] whiffy pitcher (score=0.92) SUPPRESSES expected runs vs neutral",
+      whiffy.sport_specific.auto_factors.nrfi_expected_runs !== null &&
+        neutral.sport_specific.auto_factors.nrfi_expected_runs !== null &&
+        whiffy.sport_specific.auto_factors.nrfi_expected_runs! <
+          neutral.sport_specific.auto_factors.nrfi_expected_runs!
+    );
+    check(
+      "[4D.2 pitch] contact-friendly pitcher (score=1.08) BOOSTS expected runs vs neutral",
+      contact.sport_specific.auto_factors.nrfi_expected_runs !== null &&
+        neutral.sport_specific.auto_factors.nrfi_expected_runs !== null &&
+        contact.sport_specific.auto_factors.nrfi_expected_runs! >
+          neutral.sport_specific.auto_factors.nrfi_expected_runs!
+    );
+    check(
+      "[4D.2 pitch] whiffy pitcher emits 'pitcher_quality_supports_nrfi' reason code",
+      (whiffy.sport_specific.nrfi_reason_codes ?? []).includes(
+        "pitcher_quality_supports_nrfi"
+      )
+    );
+    check(
+      "[4D.2 pitch] contact-friendly pitcher emits 'pitcher_quality_risk' reason code",
+      (contact.sport_specific.nrfi_reason_codes ?? []).includes(
+        "pitcher_quality_risk"
+      )
+    );
+  }
+
+  // ─── Handedness-aware top-order OPS + season fallback ────────────
+  {
+    // Home batters FACE the away starter. tossupSnap()'s away starter is
+    // L-handed, so home batters consult vs_lhp_ops. Set vs_lhp_ops > season
+    // to create a platoon advantage for the home side.
+    const handedLineup = leagueAverageLineup("R").map((b, i) =>
+      i < 3
+        ? batter({
+            ...b,
+            season_ops: 0.730, // league avg
+            vs_lhp_ops: 0.850, // strong vs LHP (matches the L away starter)
+            vs_rhp_ops: 0.700,
+          })
+        : b
+    );
+    const neutralLineup = leagueAverageLineup("R");
+    const handedSnap: GameSnapshot = {
+      ...tossupSnap(),
+      home_lineup_top8: handedLineup,
+    };
+    const neutralSnap: GameSnapshot = {
+      ...tossupSnap(),
+      home_lineup_top8: neutralLineup,
+    };
+    const handedOut = runMlbAutoModelV1(handedSnap, "morning_draft");
+    const neutralOut = runMlbAutoModelV1(neutralSnap, "morning_draft");
+    check(
+      "[4D.2 handedness] vs_lhp_ops 0.850 > season_ops 0.730 (vs L starter) → handed snap > neutral",
+      handedOut.sport_specific.auto_factors.nrfi_expected_runs !== null &&
+        neutralOut.sport_specific.auto_factors.nrfi_expected_runs !== null &&
+        handedOut.sport_specific.auto_factors.nrfi_expected_runs! >
+          neutralOut.sport_specific.auto_factors.nrfi_expected_runs!
+    );
+    check(
+      "[4D.2 handedness] platoon_advantage_home reason code fires when handed OPS > season + 0.030",
+      (handedOut.sport_specific.nrfi_reason_codes ?? []).includes(
+        "platoon_advantage_home"
+      )
+    );
+  }
+
+  // ─── Season-OPS fallback when handedness data missing ────────────
+  {
+    // Lineup has season_ops only (vs_lhp/vs_rhp all null). Should still
+    // produce a valid expected_runs without crash.
+    const seasonOnlyLineup = leagueAverageLineup("R").map((b, i) =>
+      i < 3
+        ? batter({
+            ...b,
+            season_ops: 0.750,
+            vs_lhp_ops: null,
+            vs_rhp_ops: null,
+          })
+        : b
+    );
+    const out = runMlbAutoModelV1(
+      { ...tossupSnap(), home_lineup_top8: seasonOnlyLineup },
+      "morning_draft"
+    );
+    check(
+      "[4D.2 fallback] season_ops fallback when vs_*_ops null → no crash, picks valid",
+      out.sport_specific.auto_factors.nrfi_expected_runs !== null
+    );
+    check(
+      "[4D.2 fallback] no platoon_advantage when handedness data missing",
+      !(out.sport_specific.nrfi_reason_codes ?? []).includes(
+        "platoon_advantage_home"
+      )
+    );
+  }
+
+  // ─── Single-batter fallback (Phase 4D.2 §3) ──────────────────────
+  {
+    // Lineup with only ONE batter at top-3 having OPS — 4D.1 required ≥2,
+    // 4D.2 accepts 1. Verify no crash + reason code reflects no missing.
+    const sparseLineup = leagueAverageLineup("R").map((b, i) =>
+      i === 0
+        ? batter({ ...b, season_ops: 0.750 })
+        : batter({ ...b, season_ops: null, vs_lhp_ops: null, vs_rhp_ops: null })
+    );
+    const out = runMlbAutoModelV1(
+      { ...tossupSnap(), home_lineup_top8: sparseLineup },
+      "morning_draft"
+    );
+    check(
+      "[4D.2 single-batter] single-batter top-3 OPS → no crash, expected_runs non-null",
+      out.sport_specific.auto_factors.nrfi_expected_runs !== null
+    );
+    check(
+      "[4D.2 single-batter] used_top_of_order_data === true (single counts)",
+      out.sport_specific.auto_factors.nrfi_used_top_of_order_data === true
+    );
+  }
+
+  // ─── Park factor — light shift, tightly clamped ──────────────────
+  {
+    const neutral = runMlbAutoModelV1(
+      { ...tossupSnap(), ballpark: { park_factor_runs: 100, is_dome: false } },
+      "morning_draft"
+    );
+    const coorsLike = runMlbAutoModelV1(
+      { ...tossupSnap(), ballpark: { park_factor_runs: 115, is_dome: false } }, // hits 1.05 cap
+      "morning_draft"
+    );
+    const petcoLike = runMlbAutoModelV1(
+      { ...tossupSnap(), ballpark: { park_factor_runs: 90, is_dome: false } }, // hits 0.95 cap
+      "morning_draft"
+    );
+    check(
+      "[4D.2 park] hitter park (115) BOOSTS expected vs neutral (100)",
+      coorsLike.sport_specific.auto_factors.nrfi_expected_runs! >
+        neutral.sport_specific.auto_factors.nrfi_expected_runs!
+    );
+    check(
+      "[4D.2 park] pitcher park (90) SUPPRESSES expected vs neutral (100)",
+      petcoLike.sport_specific.auto_factors.nrfi_expected_runs! <
+        neutral.sport_specific.auto_factors.nrfi_expected_runs!
+    );
+    // Tight clamp: at most ±5% from neutral
+    const upRatio =
+      coorsLike.sport_specific.auto_factors.nrfi_expected_runs! /
+      neutral.sport_specific.auto_factors.nrfi_expected_runs!;
+    const downRatio =
+      petcoLike.sport_specific.auto_factors.nrfi_expected_runs! /
+      neutral.sport_specific.auto_factors.nrfi_expected_runs!;
+    check(
+      "[4D.2 park] hitter-park boost is tightly clamped (≤ 1.06 ratio — 5% +tolerance)",
+      upRatio <= 1.06
+    );
+    check(
+      "[4D.2 park] pitcher-park suppression is tightly clamped (≥ 0.94 ratio)",
+      downRatio >= 0.94
+    );
+    check(
+      "[4D.2 park] hitter park emits 'park_boosts_runs' reason code",
+      (coorsLike.sport_specific.nrfi_reason_codes ?? []).includes(
+        "park_boosts_runs"
+      )
+    );
+    check(
+      "[4D.2 park] pitcher park emits 'park_suppresses_runs' reason code",
+      (petcoLike.sport_specific.nrfi_reason_codes ?? []).includes(
+        "park_suppresses_runs"
+      )
+    );
+  }
+
+  // ─── Weather — light, dome suppresses ────────────────────────────
+  {
+    const noWeather = runMlbAutoModelV1(
+      { ...tossupSnap(), weather: null },
+      "morning_draft"
+    );
+    const hotWindyOut = runMlbAutoModelV1(
+      {
+        ...tossupSnap(),
+        weather: {
+          temperature_f: 95, // >90 → +0.1
+          humidity_pct: 80, // >70 → +0.05
+          wind_speed_mph: 15,
+          wind_direction_degrees: 90, // 0-180 → out → +0.3
+          is_notable: true,
+          notable_reason: "wind out 15mph",
+        },
+      },
+      "morning_draft"
+    );
+    const coldWindyIn = runMlbAutoModelV1(
+      {
+        ...tossupSnap(),
+        weather: {
+          temperature_f: 45, // <50 → -0.2
+          humidity_pct: 50,
+          wind_speed_mph: 15,
+          wind_direction_degrees: 270, // 180-360 → in → -0.2
+          is_notable: true,
+          notable_reason: "wind in 15mph cold",
+        },
+      },
+      "morning_draft"
+    );
+    check(
+      "[4D.2 weather] hot+windy-out BOOSTS expected vs no weather",
+      hotWindyOut.sport_specific.auto_factors.nrfi_expected_runs! >
+        noWeather.sport_specific.auto_factors.nrfi_expected_runs!
+    );
+    check(
+      "[4D.2 weather] cold+windy-in SUPPRESSES expected vs no weather",
+      coldWindyIn.sport_specific.auto_factors.nrfi_expected_runs! <
+        noWeather.sport_specific.auto_factors.nrfi_expected_runs!
+    );
+    // Tight clamp: at most ±5% from neutral
+    check(
+      "[4D.2 weather] hot+windy boost is tightly clamped (≤ 1.06)",
+      hotWindyOut.sport_specific.auto_factors.nrfi_expected_runs! /
+        noWeather.sport_specific.auto_factors.nrfi_expected_runs! <=
+        1.06
+    );
+    check(
+      "[4D.2 weather] cold+windy suppression is tightly clamped (≥ 0.94)",
+      coldWindyIn.sport_specific.auto_factors.nrfi_expected_runs! /
+        noWeather.sport_specific.auto_factors.nrfi_expected_runs! >=
+        0.94
+    );
+    check(
+      "[4D.2 weather] hot+windy emits 'weather_boosts_runs' reason code",
+      (hotWindyOut.sport_specific.nrfi_reason_codes ?? []).includes(
+        "weather_boosts_runs"
+      )
+    );
+    check(
+      "[4D.2 weather] cold+windy emits 'weather_suppresses_runs' reason code",
+      (coldWindyIn.sport_specific.nrfi_reason_codes ?? []).includes(
+        "weather_suppresses_runs"
+      )
+    );
+  }
+
+  // ─── Dome suppresses weather ─────────────────────────────────────
+  {
+    const domeHotWeather = runMlbAutoModelV1(
+      {
+        ...tossupSnap(),
+        ballpark: { park_factor_runs: 100, is_dome: true }, // is_dome=true
+        weather: {
+          temperature_f: 95,
+          humidity_pct: 80,
+          wind_speed_mph: 15,
+          wind_direction_degrees: 90,
+          is_notable: true,
+          notable_reason: "wind out 15mph",
+        },
+      },
+      "morning_draft"
+    );
+    const outdoorHotWeather = runMlbAutoModelV1(
+      {
+        ...tossupSnap(),
+        ballpark: { park_factor_runs: 100, is_dome: false },
+        weather: {
+          temperature_f: 95,
+          humidity_pct: 80,
+          wind_speed_mph: 15,
+          wind_direction_degrees: 90,
+          is_notable: true,
+          notable_reason: "wind out 15mph",
+        },
+      },
+      "morning_draft"
+    );
+    check(
+      "[4D.2 dome] dome suppresses weather effect (expected_runs unchanged from neutral)",
+      Math.abs(
+        domeHotWeather.sport_specific.auto_factors.nrfi_expected_runs! -
+          outdoorHotWeather.sport_specific.auto_factors.nrfi_expected_runs!
+      ) > 0.001 // they SHOULD differ
+    );
+    // Verify dome got no weather_boosts_runs reason code
+    check(
+      "[4D.2 dome] dome does NOT emit 'weather_boosts_runs' reason code",
+      !(domeHotWeather.sport_specific.nrfi_reason_codes ?? []).includes(
+        "weather_boosts_runs"
+      )
+    );
+  }
+
+  // ─── Market total — small modifier only ──────────────────────────
+  {
+    const noMarket = runMlbAutoModelV1(
+      { ...tossupSnap(), market: { ...tossupSnap().market, listed_total: null } },
+      "morning_draft"
+    );
+    const highTotal = runMlbAutoModelV1(
+      { ...tossupSnap(), market: { ...tossupSnap().market, listed_total: 10.5 } },
+      "morning_draft"
+    );
+    const lowTotal = runMlbAutoModelV1(
+      { ...tossupSnap(), market: { ...tossupSnap().market, listed_total: 7.0 } },
+      "morning_draft"
+    );
+    check(
+      "[4D.2 market] listed_total ≥ 9.5 BOOSTS expected vs no market",
+      highTotal.sport_specific.auto_factors.nrfi_expected_runs! >
+        noMarket.sport_specific.auto_factors.nrfi_expected_runs!
+    );
+    check(
+      "[4D.2 market] listed_total ≤ 7.5 SUPPRESSES expected vs no market",
+      lowTotal.sport_specific.auto_factors.nrfi_expected_runs! <
+        noMarket.sport_specific.auto_factors.nrfi_expected_runs!
+    );
+    // Small effect: ≤ 2% in either direction
+    check(
+      "[4D.2 market] high total boost is small (≤ 1.025 ratio — 2% +tolerance)",
+      highTotal.sport_specific.auto_factors.nrfi_expected_runs! /
+        noMarket.sport_specific.auto_factors.nrfi_expected_runs! <=
+        1.025
+    );
+    check(
+      "[4D.2 market] low total suppression is small (≥ 0.975 ratio)",
+      lowTotal.sport_specific.auto_factors.nrfi_expected_runs! /
+        noMarket.sport_specific.auto_factors.nrfi_expected_runs! >=
+        0.975
+    );
+    check(
+      "[4D.2 market] high total emits 'market_total_high' reason code",
+      (highTotal.sport_specific.nrfi_reason_codes ?? []).includes(
+        "market_total_high"
+      )
+    );
+    check(
+      "[4D.2 market] low total emits 'market_total_low' reason code",
+      (lowTotal.sport_specific.nrfi_reason_codes ?? []).includes(
+        "market_total_low"
+      )
+    );
+  }
+
+  // ─── Top-order risk codes ────────────────────────────────────────
+  {
+    const powerLineup = leagueAverageLineup("R").map((b, i) =>
+      i < 3
+        ? batter({
+            ...b,
+            season_ops: 0.800,
+            season_slg: 0.500, // ≥ 0.480
+            season_obp: 0.330, // below 0.360
+          })
+        : b
+    );
+    const obpLineup = leagueAverageLineup("R").map((b, i) =>
+      i < 3
+        ? batter({
+            ...b,
+            season_ops: 0.800,
+            season_slg: 0.400, // below 0.480
+            season_obp: 0.380, // ≥ 0.360
+          })
+        : b
+    );
+    const powerOut = runMlbAutoModelV1(
+      { ...tossupSnap(), home_lineup_top8: powerLineup },
+      "morning_draft"
+    );
+    const obpOut = runMlbAutoModelV1(
+      { ...tossupSnap(), home_lineup_top8: obpLineup },
+      "morning_draft"
+    );
+    check(
+      "[4D.2 risk codes] high SLG top-3 → 'top_order_power_risk' fires",
+      (powerOut.sport_specific.nrfi_reason_codes ?? []).includes(
+        "top_order_power_risk"
+      )
+    );
+    check(
+      "[4D.2 risk codes] high OBP top-3 → 'top_order_obp_risk' fires",
+      (obpOut.sport_specific.nrfi_reason_codes ?? []).includes(
+        "top_order_obp_risk"
+      )
+    );
+    check(
+      "[4D.2 risk codes] high SLG only does NOT fire OBP risk",
+      !(powerOut.sport_specific.nrfi_reason_codes ?? []).includes(
+        "top_order_obp_risk"
+      )
+    );
+    check(
+      "[4D.2 risk codes] high OBP only does NOT fire power risk",
+      !(obpOut.sport_specific.nrfi_reason_codes ?? []).includes(
+        "top_order_power_risk"
+      )
+    );
+  }
+
+  // ─── Combined modifiers can move Toss-Up only with real signals ──
+  {
+    // Baseline Toss-Up snapshot at expected ~0.555 (between 0.50 and
+    // 0.62). Stack suppressive modifiers: whiffy pitcher + pitcher park
+    // + cold/windy-in weather + low market → should push into lean NRFI.
+    const baseline = runMlbAutoModelV1(tossupSnap(), "morning_draft");
+    const suppressed = runMlbAutoModelV1(
+      {
+        ...tossupSnap(),
+        home_starter: starter({
+          player_external_id: 7100,
+          season_era: 3.6,
+          first_inning_era: 2.5,
+          pitch_quality_score: 0.92,
+        }),
+        away_starter: starter({
+          player_external_id: 7101,
+          season_era: 3.6,
+          first_inning_era: 2.5,
+          pitch_quality_score: 0.92,
+          throws: "L",
+        }),
+        ballpark: { park_factor_runs: 90, is_dome: false },
+        weather: {
+          temperature_f: 45,
+          humidity_pct: 50,
+          wind_speed_mph: 15,
+          wind_direction_degrees: 270,
+          is_notable: true,
+          notable_reason: "wind in 15mph cold",
+        },
+        market: { ...tossupSnap().market, listed_total: 7.0 },
+      },
+      "morning_draft"
+    );
+    check(
+      "[4D.2 combined] baseline is Toss-Up",
+      baseline.sport_specific.nrfi_decision_kind === "toss_up"
+    );
+    check(
+      "[4D.2 combined] stacking suppressive modifiers (real signals) moves baseline → NRFI",
+      suppressed.sport_specific.nrfi_decision_kind === "nrfi"
+    );
+    check(
+      "[4D.2 combined] reason codes reflect the stacked signals",
+      (suppressed.sport_specific.nrfi_reason_codes ?? []).includes(
+        "pitcher_quality_supports_nrfi"
+      ) &&
+        (suppressed.sport_specific.nrfi_reason_codes ?? []).includes(
+          "park_suppresses_runs"
+        ) &&
+        (suppressed.sport_specific.nrfi_reason_codes ?? []).includes(
+          "weather_suppresses_runs"
+        ) &&
+        (suppressed.sport_specific.nrfi_reason_codes ?? []).includes(
+          "market_total_low"
+        )
+    );
+  }
+
+  // ─── Missing data remains safe ────────────────────────────────────
+  {
+    // Snapshot with NO modifier inputs populated → all modifiers default
+    // to 1.0; expected_runs computed from starter + offense only.
+    const snap = baseSnapshot({
+      home_starter: starter({
+        player_external_id: 8100,
+        season_era: 3.6,
+        first_inning_era: 2.5,
+        pitch_quality_score: null,
+      }),
+      away_starter: starter({
+        player_external_id: 8101,
+        season_era: 3.6,
+        first_inning_era: 2.5,
+        pitch_quality_score: null,
+      }),
+      ballpark: null,
+      weather: null,
+      market: {
+        listed_total: null,
+        home_ml_odds_american: null,
+        away_ml_odds_american: null,
+        has_pinnacle_total: false,
+      },
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    check(
+      "[4D.2 missing data] all modifiers absent → no crash; expected_runs valid",
+      out.sport_specific.auto_factors.nrfi_expected_runs !== null
+    );
+    check(
+      "[4D.2 missing data] no spurious park/weather/market reason codes",
+      !(out.sport_specific.nrfi_reason_codes ?? []).includes(
+        "park_boosts_runs"
+      ) &&
+        !(out.sport_specific.nrfi_reason_codes ?? []).includes(
+          "weather_boosts_runs"
+        ) &&
+        !(out.sport_specific.nrfi_reason_codes ?? []).includes(
+          "market_total_high"
+        )
+    );
+    check(
+      "[4D.2 missing data] no spurious pitch-quality reason codes",
+      !(out.sport_specific.nrfi_reason_codes ?? []).includes(
+        "pitcher_quality_supports_nrfi"
+      ) &&
+        !(out.sport_specific.nrfi_reason_codes ?? []).includes(
+          "pitcher_quality_risk"
+        )
+    );
+  }
+
+  // ─── No regression: ML / O/U behavior unaffected ─────────────────
+  {
+    const snap = tossupSnap();
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    check(
+      "[4D.2 no-regression] ML pick still produced for non-held games",
+      out.predicted_ml_winner !== null || out.sport_specific.hold_picks.includes("ml")
+    );
+    check(
+      "[4D.2 no-regression] OU pick still produced when market line available",
+      snap.market.listed_total === null ||
+        out.predicted_ou_side !== null ||
+        out.sport_specific.hold_picks.includes("ou")
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   section("Confidence cap/floor invariants on EVERY output");
   // ═══════════════════════════════════════════════════════════════
 

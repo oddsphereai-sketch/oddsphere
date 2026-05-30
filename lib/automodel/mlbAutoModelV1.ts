@@ -295,19 +295,170 @@ type NrfiResult = {
   reason_codes: string[];
 };
 
-function topOfOrderOps(lineup: BatterSnapshot[]): number | null {
+// ─── Phase 4D.2 — top-order helpers (handedness-aware) ──────────────
+//
+// Replaces the Phase 3A `topOfOrderOps()` helper, which used only
+// `season_ops` and required ≥2 batters at positions 1-3. Daniel's
+// Phase 4D.2 approval (decision #3): prefer handedness-split OPS when
+// the starter's `throws` is known; fall back to `season_ops`; allow
+// single-batter fallback for V1 (was ≥2 in 4D.1).
+//
+// The richer return shape carries:
+//   • value           — weighted top-3 OPS (or null when no data at all)
+//   • usedHandedness  — true when ANY batter contributed a vs_*_ops value
+//   • count           — how many batters contributed
+//
+// Used by computeNrfi for both the offense factor AND the platoon-
+// advantage reason code detection (compare handedness-aware vs season-
+// only outputs).
+
+type TopOrderOpsResult = {
+  value: number | null;
+  usedHandedness: boolean;
+  count: number;
+};
+
+function handednessAwareTopOps(
+  lineup: BatterSnapshot[],
+  opposingThrows: "L" | "R" | null
+): TopOrderOpsResult {
   const top3 = lineup.filter(
     (b) =>
       b.batting_position !== null &&
       b.batting_position >= 1 &&
       b.batting_position <= 3
   );
-  if (top3.length < 2) return null;
-  const opsValues = top3
-    .map((b) => b.season_ops)
+  const collected: number[] = [];
+  let usedAnyHandedness = false;
+  for (const b of top3) {
+    let ops: number | null = null;
+    if (opposingThrows === "L" && b.vs_lhp_ops !== null) {
+      ops = b.vs_lhp_ops;
+      usedAnyHandedness = true;
+    } else if (opposingThrows === "R" && b.vs_rhp_ops !== null) {
+      ops = b.vs_rhp_ops;
+      usedAnyHandedness = true;
+    } else if (b.season_ops !== null) {
+      ops = b.season_ops;
+    }
+    if (ops !== null) collected.push(ops);
+  }
+  if (collected.length === 0) {
+    return { value: null, usedHandedness: false, count: 0 };
+  }
+  // Phase 4D.2 single-batter fallback approved by Daniel (decision #3) —
+  // 4D.1 required ≥2; 4D.2 accepts 1 because sparse lineups are common
+  // on morning slates before lineups are confirmed.
+  const avg = collected.reduce((s, v) => s + v, 0) / collected.length;
+  return {
+    value: avg,
+    usedHandedness: usedAnyHandedness,
+    count: collected.length,
+  };
+}
+
+/**
+ * Pure top-3 average for the named stat. Used for reason-code triggers
+ * (`top_order_power_risk` for SLG, `top_order_obp_risk` for OBP).
+ * Returns null when no batters at positions 1-3 have the stat populated.
+ */
+function topOrderStatAvg(
+  lineup: BatterSnapshot[],
+  picker: (b: BatterSnapshot) => number | null
+): number | null {
+  const top3 = lineup.filter(
+    (b) =>
+      b.batting_position !== null &&
+      b.batting_position >= 1 &&
+      b.batting_position <= 3
+  );
+  const values = top3
+    .map(picker)
     .filter((v): v is number => v !== null);
-  if (opsValues.length < 2) return null;
-  return opsValues.reduce((sum, v) => sum + v, 0) / opsValues.length;
+  if (values.length === 0) return null;
+  return values.reduce((s, v) => s + v, 0) / values.length;
+}
+
+// ─── Phase 4D.2 — per-side and global modifiers ─────────────────────
+//
+// Layer A (per-side): pitch quality, handedness-aware top-order OPS
+// Layer B (global):   park (tighter than full-game), weather (FI share),
+//                     market total (tiny guardrail)
+//
+// All modifiers default to 1.0 (no effect) when data is missing —
+// progressive enhancement, no crashes on sparse data.
+
+/**
+ * Pitch-quality factor for first-inning runs.
+ *
+ * `pitch_quality_score` is whiff-derived: lower = whiffier = pitcher-
+ * friendly. Range [0.92, 1.08] (clamped by the source helper). Direction:
+ *
+ *   score ≤ 1.0 → factor < 1.0 (SUPPRESSES expected runs)
+ *   score ≥ 1.0 → factor > 1.0 (BOOSTS expected runs)
+ *
+ * Linear remap [0.92, 1.08] → [0.95, 1.05] (Phase 4D.2 §6 decision —
+ * NRFI is more sensitive than full-game, so tighter clamp).
+ *
+ * Symmetric around 1.0: 0.92 → 0.95, 1.0 → 1.0, 1.08 → 1.05.
+ * Missing → 1.0 (neutral).
+ */
+function nrfiPitchQualityFactor(score: number | null): number {
+  if (score === null) return 1.0;
+  const clamped = clamp(score, 0.92, 1.08);
+  // (clamped - 1.0) is in [-0.08, 0.08]; we want output in [0.95, 1.05]
+  // → multiply by 0.05/0.08 = 0.625
+  return 1.0 + (clamped - 1.0) * (0.05 / 0.08);
+}
+
+/**
+ * NRFI-specific park modifier. Tighter clamp than the full-game
+ * parkMultiplier (which uses [0.92, 1.15]). One-inning effect is
+ * smaller than nine-inning effect, so we clamp to [0.95, 1.05].
+ *
+ * Missing park or park_factor_runs → 1.0 (neutral).
+ */
+function nrfiParkMod(park: ParkSnapshot | null): number {
+  if (park === null || park.park_factor_runs === null) return 1.0;
+  return clamp(park.park_factor_runs / 100, 0.95, 1.05);
+}
+
+/**
+ * NRFI-specific weather multiplier. Reuses full-game `weatherDelta`
+ * but scales down to first-inning share and clamps tightly.
+ *
+ *   delta (full game, ±0.45 max) → /9 (first-inning share)
+ *                                → /4.5 (express as multiplier % around
+ *                                        a typical 0.5 expected runs)
+ *
+ * Result clamped to [0.95, 1.05]. Dome / null weather → 1.0 (dome
+ * suppression preserved via existing weatherDelta returning 0).
+ */
+function nrfiWeatherMult(
+  weather: WeatherSnapshot | null,
+  park: ParkSnapshot | null
+): number {
+  const delta = weatherDelta(weather, park);
+  if (delta === 0) return 1.0;
+  return clamp(1.0 + delta / 9 / 4.5, 0.95, 1.05);
+}
+
+/**
+ * Market total guardrail. Full-game listed_total as a tiny context
+ * nudge for first-inning expectations. Daniel's Phase 4D.2 spec (§7):
+ *
+ *   listed_total ≥ 9.5 → 1.02 (high run env hint)
+ *   listed_total ≤ 7.5 → 0.98 (low run env hint)
+ *   else / null        → 1.00 (no nudge)
+ *
+ * Deliberately tertiary — full-game expectations should NOT dominate a
+ * first-inning model.
+ */
+function marketTotalMod(listed_total: number | null): number {
+  if (listed_total === null) return 1.0;
+  if (listed_total >= 9.5) return 1.02;
+  if (listed_total <= 7.5) return 0.98;
+  return 1.0;
 }
 
 /** Map expected_first_inning_runs to one of the 5 zones. */
@@ -458,9 +609,19 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
   }
   if (used_fallback) reason_codes.push("fallback_first_inning_era");
 
-  // Top-of-order OPS strength per side
-  const homeTopOps = topOfOrderOps(snapshot.home_lineup_top8);
-  const awayTopOps = topOfOrderOps(snapshot.away_lineup_top8);
+  // Top-of-order OPS strength per side — Phase 4D.2 handedness-aware.
+  // Home batters face the AWAY starter (and vice versa), so we pass the
+  // opposing starter's `throws` for matchup-aware OPS lookup.
+  const homeTopOpsResult = handednessAwareTopOps(
+    snapshot.home_lineup_top8,
+    away_starter.throws
+  );
+  const awayTopOpsResult = handednessAwareTopOps(
+    snapshot.away_lineup_top8,
+    home_starter.throws
+  );
+  const homeTopOps = homeTopOpsResult.value;
+  const awayTopOps = awayTopOpsResult.value;
   const used_top_of_order_data = homeTopOps !== null || awayTopOps !== null;
   if (homeTopOps === null) reason_codes.push("top_order_missing_home");
   if (awayTopOps === null) reason_codes.push("top_order_missing_away");
@@ -481,16 +642,120 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
     };
   }
 
-  // Compute expected first-inning runs per side. Away scores against
-  // home starter; home scores against away starter. ERA is per 9 IP;
-  // first inning is 1/9.
+  // ── Phase 4D.2 — platoon advantage detection ──────────────────────
+  // Compare handedness-aware top-OPS against the season-only equivalent.
+  // If the handedness-aware value materially exceeds the season-only
+  // value, the home/away side has a top-order platoon edge worth
+  // surfacing as a reason code.
+  if (homeTopOpsResult.usedHandedness && homeTopOps !== null) {
+    const seasonOnly = handednessAwareTopOps(snapshot.home_lineup_top8, null);
+    if (
+      seasonOnly.value !== null &&
+      homeTopOps > seasonOnly.value + 0.03
+    ) {
+      reason_codes.push("platoon_advantage_home");
+    }
+  }
+  if (awayTopOpsResult.usedHandedness && awayTopOps !== null) {
+    const seasonOnly = handednessAwareTopOps(snapshot.away_lineup_top8, null);
+    if (
+      seasonOnly.value !== null &&
+      awayTopOps > seasonOnly.value + 0.03
+    ) {
+      reason_codes.push("platoon_advantage_away");
+    }
+  }
+
+  // ── Phase 4D.2 — top-order SLG/OBP risk reason codes ─────────────
+  const homeSlg = topOrderStatAvg(snapshot.home_lineup_top8, (b) => b.season_slg);
+  const awaySlg = topOrderStatAvg(snapshot.away_lineup_top8, (b) => b.season_slg);
+  if (
+    (homeSlg !== null && homeSlg >= 0.48) ||
+    (awaySlg !== null && awaySlg >= 0.48)
+  ) {
+    reason_codes.push("top_order_power_risk");
+  }
+  const homeObp = topOrderStatAvg(snapshot.home_lineup_top8, (b) => b.season_obp);
+  const awayObp = topOrderStatAvg(snapshot.away_lineup_top8, (b) => b.season_obp);
+  if (
+    (homeObp !== null && homeObp >= 0.36) ||
+    (awayObp !== null && awayObp >= 0.36)
+  ) {
+    reason_codes.push("top_order_obp_risk");
+  }
+
+  // ── Phase 4D.2 — Layer A: per-side modifiers ──────────────────────
+  // Pitch-quality factor: whiffy pitchers suppress runs, contact-friendly
+  // pitchers boost runs. Clamp [0.95, 1.05] per Phase 4D.2 §6.
+  const homePitchFactor = nrfiPitchQualityFactor(home_starter.pitch_quality_score);
+  const awayPitchFactor = nrfiPitchQualityFactor(away_starter.pitch_quality_score);
+
+  if (
+    (home_starter.pitch_quality_score !== null &&
+      home_starter.pitch_quality_score <= 0.96) ||
+    (away_starter.pitch_quality_score !== null &&
+      away_starter.pitch_quality_score <= 0.96)
+  ) {
+    reason_codes.push("pitcher_quality_supports_nrfi");
+  }
+  if (
+    (home_starter.pitch_quality_score !== null &&
+      home_starter.pitch_quality_score >= 1.04) ||
+    (away_starter.pitch_quality_score !== null &&
+      away_starter.pitch_quality_score >= 1.04)
+  ) {
+    reason_codes.push("pitcher_quality_risk");
+  }
+
+  // Offense factor — clamp [0.80, 1.20] per Phase 4D.2 §3.
   const homeOffenseFactor =
-    homeTopOps !== null ? homeTopOps / LEAGUE_CONSTANTS_V1.AVG_OPS : 1.0;
+    homeTopOps !== null
+      ? clamp(homeTopOps / LEAGUE_CONSTANTS_V1.AVG_OPS, 0.8, 1.2)
+      : 1.0;
   const awayOffenseFactor =
-    awayTopOps !== null ? awayTopOps / LEAGUE_CONSTANTS_V1.AVG_OPS : 1.0;
-  const expectedAwayRuns = (homeFirstInning / 9) * awayOffenseFactor;
-  const expectedHomeRuns = (awayFirstInning / 9) * homeOffenseFactor;
-  const expected_first_inning_runs = expectedAwayRuns + expectedHomeRuns;
+    awayTopOps !== null
+      ? clamp(awayTopOps / LEAGUE_CONSTANTS_V1.AVG_OPS, 0.8, 1.2)
+      : 1.0;
+
+  // Per-side expected runs (away scores against home starter; home
+  // scores against away starter). ERA is per 9 IP; first inning is 1/9.
+  // Pitch quality multiplies the starter's effective FI ERA.
+  const expectedAwayRuns =
+    ((homeFirstInning * homePitchFactor) / 9) * awayOffenseFactor;
+  const expectedHomeRuns =
+    ((awayFirstInning * awayPitchFactor) / 9) * homeOffenseFactor;
+  const per_side_subtotal = expectedAwayRuns + expectedHomeRuns;
+
+  // ── Phase 4D.2 — Layer B: global modifiers ───────────────────────
+  // park (tight clamp), weather (FI-share scaled-down), market total
+  // (tiny guardrail). Each defaults to 1.0 on missing data.
+  const parkMod = nrfiParkMod(snapshot.ballpark);
+  const weatherMult = nrfiWeatherMult(snapshot.weather, snapshot.ballpark);
+  const marketMod = marketTotalMod(snapshot.market.listed_total);
+
+  // Reason codes from RAW underlying values (not clamped multipliers)
+  // so the threshold reflects actual park/weather/market presence.
+  if (
+    snapshot.ballpark !== null &&
+    snapshot.ballpark.park_factor_runs !== null
+  ) {
+    if (snapshot.ballpark.park_factor_runs >= 105)
+      reason_codes.push("park_boosts_runs");
+    if (snapshot.ballpark.park_factor_runs <= 95)
+      reason_codes.push("park_suppresses_runs");
+  }
+  const rawWeatherDelta = weatherDelta(snapshot.weather, snapshot.ballpark);
+  if (rawWeatherDelta > 0.2) reason_codes.push("weather_boosts_runs");
+  if (rawWeatherDelta < -0.2) reason_codes.push("weather_suppresses_runs");
+  if (snapshot.market.listed_total !== null) {
+    if (snapshot.market.listed_total >= 9.5)
+      reason_codes.push("market_total_high");
+    if (snapshot.market.listed_total <= 7.5)
+      reason_codes.push("market_total_low");
+  }
+
+  const expected_first_inning_runs =
+    per_side_subtotal * parkMod * weatherMult * marketMod;
 
   // ── Classify zone ────────────────────────────────────────────────
   const naturalZone = classifyZone(expected_first_inning_runs);
