@@ -82,6 +82,13 @@ import {
 } from "./types";
 import { applyDeterministicGuards } from "./aiSanityBoundary";
 
+// Phase 3.x.1 — minimum first-inning starts required to trust the real
+// FI ERA. Below the gate, real FI data is treated as too thin and the
+// model falls back to the season-ERA × 0.7 proxy while emitting the
+// `low_first_inning_sample` reason code so operators can distinguish
+// "thin sample" from "no FI data at all" (`fallback_first_inning_era`).
+const FIRST_INNING_SAMPLE_GATE = 3;
+
 // ─────────────────────────────────────────────────────────────
 // Math utilities
 // ─────────────────────────────────────────────────────────────
@@ -580,19 +587,42 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
     };
   }
 
-  // First-inning ERA: prefer real first-inning data (Phase 3.x), fall
-  // back to season-ERA × 0.7 proxy.
-  let used_fallback = false;
-  function effectiveFirstInningEra(s: StarterSnapshot): number | null {
-    if (s.first_inning_era !== null) return s.first_inning_era;
-    if (s.season_era !== null) {
-      used_fallback = true;
-      return s.season_era * 0.7;
+  // First-inning ERA: prefer real FI data when sample is ≥ FIRST_INNING_SAMPLE_GATE.
+  // Phase 3.x.1 sources (in priority order):
+  //   "real"       — real FI ERA from MLB Stats API, starts ≥ gate
+  //   "low_sample" — real FI ERA present but starts < gate; falls back
+  //                  to season-ERA × 0.7 and flags low_first_inning_sample
+  //   "proxy"      — no FI ERA; falls back to season-ERA × 0.7 and flags
+  //                  fallback_first_inning_era (the pre-3.x.1 behavior)
+  //   "missing"    — no FI ERA and no season ERA; existing hold path
+  type FirstInningSource = "real" | "low_sample" | "proxy" | "missing";
+  function effectiveFirstInningEra(s: StarterSnapshot): {
+    value: number | null;
+    source: FirstInningSource;
+  } {
+    const era = s.first_inning_era;
+    const starts = s.first_inning_starts ?? 0;
+    if (era !== null && starts >= FIRST_INNING_SAMPLE_GATE) {
+      return { value: era, source: "real" };
     }
-    return null;
+    if (era !== null) {
+      if (s.season_era !== null) {
+        return { value: s.season_era * 0.7, source: "low_sample" };
+      }
+      return { value: null, source: "missing" };
+    }
+    if (s.season_era !== null) {
+      return { value: s.season_era * 0.7, source: "proxy" };
+    }
+    return { value: null, source: "missing" };
   }
-  const homeFirstInning = effectiveFirstInningEra(home_starter);
-  const awayFirstInning = effectiveFirstInningEra(away_starter);
+  const homeFirst = effectiveFirstInningEra(home_starter);
+  const awayFirst = effectiveFirstInningEra(away_starter);
+  const homeFirstInning = homeFirst.value;
+  const awayFirstInning = awayFirst.value;
+  const fiSources: FirstInningSource[] = [homeFirst.source, awayFirst.source];
+  const used_fallback =
+    fiSources.includes("proxy") || fiSources.includes("low_sample");
 
   if (homeFirstInning === null || awayFirstInning === null) {
     return {
@@ -607,7 +637,9 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
       reason_codes: ["starter_era_unavailable"],
     };
   }
-  if (used_fallback) reason_codes.push("fallback_first_inning_era");
+  if (fiSources.includes("real")) reason_codes.push("first_inning_data_used");
+  if (fiSources.includes("low_sample")) reason_codes.push("low_first_inning_sample");
+  if (fiSources.includes("proxy")) reason_codes.push("fallback_first_inning_era");
 
   // Top-of-order OPS strength per side — Phase 4D.2 handedness-aware.
   // Home batters face the AWAY starter (and vice versa), so we pass the

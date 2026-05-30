@@ -103,6 +103,7 @@ function starter(overrides: Partial<StarterSnapshot> = {}): StarterSnapshot {
     is_confirmed: true,
     is_scratched: false,
     first_inning_era: null,
+    first_inning_starts: null,
     ...overrides,
   };
 }
@@ -605,11 +606,13 @@ async function main() {
         player_external_id: 3001,
         season_era: 1.8,
         first_inning_era: 1.8,
+        first_inning_starts: 10,
       }),
       away_starter: starter({
         player_external_id: 3002,
         season_era: 1.8,
         first_inning_era: 1.8,
+        first_inning_starts: 10,
         throws: "L",
       }),
     });
@@ -638,11 +641,13 @@ async function main() {
         player_external_id: 4001,
         season_era: 6.0,
         first_inning_era: 6.0,
+        first_inning_starts: 10,
       }),
       away_starter: starter({
         player_external_id: 4002,
         season_era: 6.0,
         first_inning_era: 6.0,
+        first_inning_starts: 10,
         throws: "L",
       }),
       home_lineup_top8: greatLineup,
@@ -774,11 +779,14 @@ async function main() {
         player_external_id: 9001,
         season_era: args.homeSeason ?? 4.0,
         first_inning_era: args.homeFI,
+        // Phase 3.x.1 — sample ≥ gate when real FI ERA is provided.
+        first_inning_starts: args.homeFI === null ? null : 10,
       }),
       away_starter: starter({
         player_external_id: 9002,
         season_era: args.awaySeason ?? 4.0,
         first_inning_era: args.awayFI,
+        first_inning_starts: args.awayFI === null ? null : 10,
         throws: "L",
       }),
       home_lineup_top8:
@@ -1091,6 +1099,7 @@ async function main() {
         player_external_id: 7100,
         season_era: 3.6,
         first_inning_era: 2.5,
+        first_inning_starts: 10,
         // pitch_quality_score deliberately at exactly 1.0 (neutral)
         pitch_quality_score: 1.0,
       }),
@@ -1098,6 +1107,7 @@ async function main() {
         player_external_id: 7101,
         season_era: 3.6,
         first_inning_era: 2.5,
+        first_inning_starts: 10,
         pitch_quality_score: 1.0,
         throws: "L",
       }),
@@ -1114,6 +1124,7 @@ async function main() {
           player_external_id: 7100,
           season_era: 3.6,
           first_inning_era: 2.5,
+          first_inning_starts: 10,
           pitch_quality_score: 0.92, // whiffiest → biggest suppression
         }),
       }),
@@ -1125,6 +1136,7 @@ async function main() {
           player_external_id: 7100,
           season_era: 3.6,
           first_inning_era: 2.5,
+          first_inning_starts: 10,
           pitch_quality_score: 1.08, // contact-friendly → biggest boost
         }),
       }),
@@ -1544,12 +1556,14 @@ async function main() {
           player_external_id: 7100,
           season_era: 3.6,
           first_inning_era: 2.5,
+          first_inning_starts: 10,
           pitch_quality_score: 0.92,
         }),
         away_starter: starter({
           player_external_id: 7101,
           season_era: 3.6,
           first_inning_era: 2.5,
+          first_inning_starts: 10,
           pitch_quality_score: 0.92,
           throws: "L",
         }),
@@ -1600,12 +1614,14 @@ async function main() {
         player_external_id: 8100,
         season_era: 3.6,
         first_inning_era: 2.5,
+        first_inning_starts: 10,
         pitch_quality_score: null,
       }),
       away_starter: starter({
         player_external_id: 8101,
         season_era: 3.6,
         first_inning_era: 2.5,
+        first_inning_starts: 10,
         pitch_quality_score: null,
       }),
       ballpark: null,
@@ -2123,6 +2139,213 @@ async function main() {
       check(
         `[${c.label}] predicted_total is null when home or away is null`,
         out.predicted_total === null
+      );
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // Phase 3.x.1 — first-inning sample-size gate + reason codes
+  // ═══════════════════════════════════════════════════════════════
+  {
+    const realStarter = () =>
+      starter({ first_inning_era: 3.0, first_inning_starts: 10 });
+    const lowSampleStarter = () =>
+      starter({ first_inning_era: 3.0, first_inning_starts: 2 });
+    const noFiStarter = () => starter({ first_inning_era: null, first_inning_starts: null });
+
+    // Helper: build a toss-up snap with overridable starters so the run
+    // succeeds (lineups present, market present, ballpark present).
+    const fiSnap = (
+      home: StarterSnapshot,
+      away: StarterSnapshot
+    ): GameSnapshot => ({
+      ...tossupSnap(),
+      home_starter: home,
+      away_starter: away,
+    });
+
+    // [1] both real → first_inning_data_used; NO fallback codes
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(realStarter(), realStarter()),
+        "morning_draft"
+      );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
+      check(
+        "[3x1.1a] both real → first_inning_data_used emitted",
+        codes.includes("first_inning_data_used")
+      );
+      check(
+        "[3x1.1b] both real → NO fallback_first_inning_era",
+        !codes.includes("fallback_first_inning_era")
+      );
+      check(
+        "[3x1.1c] both real → NO low_first_inning_sample",
+        !codes.includes("low_first_inning_sample")
+      );
+    }
+
+    // [2] one real, one no-FI → both first_inning_data_used AND fallback codes
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(realStarter(), noFiStarter()),
+        "morning_draft"
+      );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
+      check(
+        "[3x1.2a] real + no-FI → first_inning_data_used emitted",
+        codes.includes("first_inning_data_used")
+      );
+      check(
+        "[3x1.2b] real + no-FI → fallback_first_inning_era emitted",
+        codes.includes("fallback_first_inning_era")
+      );
+      check(
+        "[3x1.2c] real + no-FI → NO low_first_inning_sample",
+        !codes.includes("low_first_inning_sample")
+      );
+    }
+
+    // [3] one real, one low-sample → first_inning_data_used + low_first_inning_sample
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(realStarter(), lowSampleStarter()),
+        "morning_draft"
+      );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
+      check(
+        "[3x1.3a] real + low-sample → first_inning_data_used emitted",
+        codes.includes("first_inning_data_used")
+      );
+      check(
+        "[3x1.3b] real + low-sample → low_first_inning_sample emitted",
+        codes.includes("low_first_inning_sample")
+      );
+      check(
+        "[3x1.3c] real + low-sample → NO fallback_first_inning_era",
+        !codes.includes("fallback_first_inning_era")
+      );
+    }
+
+    // [4] both low-sample → ONLY low_first_inning_sample (no fallback, no data_used)
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(lowSampleStarter(), lowSampleStarter()),
+        "morning_draft"
+      );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
+      check(
+        "[3x1.4a] both low-sample → low_first_inning_sample emitted",
+        codes.includes("low_first_inning_sample")
+      );
+      check(
+        "[3x1.4b] both low-sample → NO fallback_first_inning_era",
+        !codes.includes("fallback_first_inning_era")
+      );
+      check(
+        "[3x1.4c] both low-sample → NO first_inning_data_used",
+        !codes.includes("first_inning_data_used")
+      );
+    }
+
+    // [5] both no-FI (today's seed-slate behavior) → fallback only
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(noFiStarter(), noFiStarter()),
+        "morning_draft"
+      );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
+      check(
+        "[3x1.5a] both no-FI → fallback_first_inning_era (anti-regression)",
+        codes.includes("fallback_first_inning_era")
+      );
+      check(
+        "[3x1.5b] both no-FI → NO first_inning_data_used",
+        !codes.includes("first_inning_data_used")
+      );
+      check(
+        "[3x1.5c] both no-FI → NO low_first_inning_sample",
+        !codes.includes("low_first_inning_sample")
+      );
+    }
+
+    // [6] real path produces different expected_runs than proxy path
+    {
+      const realOut = runMlbAutoModelV1(
+        fiSnap(
+          starter({ first_inning_era: 1.5, first_inning_starts: 10, season_era: 4.0 }),
+          starter({ first_inning_era: 1.5, first_inning_starts: 10, season_era: 4.0 })
+        ),
+        "morning_draft"
+      );
+      const proxyOut = runMlbAutoModelV1(
+        fiSnap(
+          starter({ first_inning_era: null, first_inning_starts: null, season_era: 4.0 }),
+          starter({ first_inning_era: null, first_inning_starts: null, season_era: 4.0 })
+        ),
+        "morning_draft"
+      );
+      const realRuns = realOut.sport_specific.auto_factors.nrfi_expected_runs;
+      const proxyRuns = proxyOut.sport_specific.auto_factors.nrfi_expected_runs;
+      check(
+        "[3x1.6] real FI ERA 1.5 produces lower expected_runs than proxy(4.0 × 0.7 = 2.8)",
+        realRuns !== null && proxyRuns !== null && realRuns < proxyRuns
+      );
+    }
+
+    // [7a] sample-gate boundary — starts=3 → real (>= gate)
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(
+          starter({ first_inning_era: 2.5, first_inning_starts: 3 }),
+          starter({ first_inning_era: 2.5, first_inning_starts: 3 })
+        ),
+        "morning_draft"
+      );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
+      check(
+        "[3x1.7a] starts=3 (boundary) → real (first_inning_data_used emitted)",
+        codes.includes("first_inning_data_used") &&
+          !codes.includes("low_first_inning_sample")
+      );
+    }
+
+    // [7b] sample-gate boundary — starts=2 → low_sample (below gate)
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(
+          starter({ first_inning_era: 2.5, first_inning_starts: 2 }),
+          starter({ first_inning_era: 2.5, first_inning_starts: 2 })
+        ),
+        "morning_draft"
+      );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
+      check(
+        "[3x1.7b] starts=2 (below boundary) → low_sample (NOT first_inning_data_used)",
+        codes.includes("low_first_inning_sample") &&
+          !codes.includes("first_inning_data_used")
+      );
+    }
+
+    // [8] real FI does NOT regress ML/OU layers (those don't read FI fields)
+    {
+      const baseline = runMlbAutoModelV1(
+        fiSnap(noFiStarter(), noFiStarter()),
+        "morning_draft"
+      );
+      const withReal = runMlbAutoModelV1(
+        fiSnap(realStarter(), realStarter()),
+        "morning_draft"
+      );
+      check(
+        "[3x1.8a] ML winner still emitted with real FI",
+        withReal.predicted_ml_winner !== null ||
+          baseline.predicted_ml_winner === null
+      );
+      check(
+        "[3x1.8b] ML confidence within bounds with real FI",
+        withReal.ml_confidence === null ||
+          (withReal.ml_confidence >= 51 && withReal.ml_confidence <= 65)
       );
     }
   }

@@ -200,6 +200,8 @@ type SeasonStatsRow = {
   batting_obp: number | null;
   batting_slg: number | null;
   batting_ops: number | null;
+  first_inning_era: number | null;
+  first_inning_starts: number | null;
 };
 
 type SplitRow = {
@@ -344,8 +346,8 @@ function buildStarterSnapshot(
     pitch_quality_score: computePitchQualityScore(pitchStats),
     is_confirmed: isConfirmed,
     is_scratched: isScratched,
-    // V1: no BDL plays-derived first-inning ERA. Phase 3.x.
-    first_inning_era: null,
+    first_inning_era: seasonStats?.first_inning_era ?? null,
+    first_inning_starts: seasonStats?.first_inning_starts ?? null,
   };
 }
 
@@ -642,7 +644,9 @@ export async function buildFeatureSnapshots(
   const { data: seasonStatsRaw, error: ssErr } = await supabase
     .from("player_season_stats")
     .select(
-      "player_id, season, season_type, pitching_era, pitching_whip, pitching_k_per_9, batting_obp, batting_slg, batting_ops"
+      "player_id, season, season_type, pitching_era, pitching_whip, pitching_k_per_9, " +
+        "batting_obp, batting_slg, batting_ops, " +
+        "first_inning_era, first_inning_starts"
     )
     .in("player_id", Array.from(allPlayerIds))
     .eq("season", season)

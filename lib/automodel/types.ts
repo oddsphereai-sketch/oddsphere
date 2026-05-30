@@ -55,11 +55,18 @@ export type StarterSnapshot = {
    *  side's picks as held. */
   is_scratched: boolean;
   /**
-   * True first-inning ERA from BDL plays data when available; null in
-   * V1 (BDL plays integration is a Phase 3.x optimization). When null,
-   * the NRFI helper falls back to a season-ERA proxy.
+   * Per-pitcher first-inning ERA sourced from MLB Stats API statSplits
+   * (sitCode i01). Null when no FI data has been ingested for this
+   * pitcher's season. When non-null, `first_inning_starts` carries the
+   * sample size used for the gate in mlbAutoModelV1.
    */
   first_inning_era: number | null;
+  /**
+   * First-inning starts (sample size for the model's FI-ERA gate).
+   * Sourced from MLB Stats API's first-inning split `gamesPlayed`. Null
+   * when no FI data has been ingested for this pitcher's season.
+   */
+  first_inning_starts: number | null;
 };
 
 export type BatterSnapshot = {

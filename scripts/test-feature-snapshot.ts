@@ -351,6 +351,59 @@ async function main() {
     );
   }
 
+  // ── Phase 3.x.1 — FI columns flow through SELECT ───────────────
+  section("Phase 3.x.1 first-inning column read path");
+  {
+    // Exercise the same SELECT shape featureSnapshot uses. Confirms the
+    // new FI columns are in the projection and that the 2 backfilled
+    // fixtures (Crochet 6272 / Bradish 6274) return populated values.
+    const { data, error } = await supabase
+      .from("player_season_stats")
+      .select(
+        "player_id, season, season_type, pitching_era, pitching_whip, pitching_k_per_9, " +
+          "batting_obp, batting_slg, batting_ops, " +
+          "first_inning_era, first_inning_starts"
+      )
+      .in("player_id", [6272, 6274, 6271])
+      .eq("season", 2025)
+      .eq("season_type", "regular");
+    check(
+      "SELECT including FI columns succeeds",
+      error === null,
+      error?.message
+    );
+    const rows = ((data ?? []) as unknown) as Array<{
+      player_id: number;
+      first_inning_era: number | null;
+      first_inning_starts: number | null;
+      pitching_era: number | null;
+    }>;
+    const crochet = rows.find((r) => r.player_id === 6272);
+    const bradish = rows.find((r) => r.player_id === 6274);
+    const cole = rows.find((r) => r.player_id === 6271);
+    check(
+      "Crochet (6272) FI columns populated by Phase 3.x.0d backfill",
+      crochet !== undefined &&
+        Number(crochet.first_inning_era) === 2.25 &&
+        crochet.first_inning_starts === 32
+    );
+    check(
+      "Bradish (6274) FI columns populated by Phase 3.x.0d backfill",
+      bradish !== undefined &&
+        Number(bradish.first_inning_era) === 4.5 &&
+        bradish.first_inning_starts === 6
+    );
+    check(
+      "non-backfilled pitcher's FI columns remain NULL (cleanly handled)",
+      cole === undefined ||
+        (cole.first_inning_era === null && cole.first_inning_starts === null)
+    );
+    check(
+      "Crochet's pitching_era preserved (non-FI columns untouched by 3.x.0d)",
+      crochet !== undefined && crochet.pitching_era !== null
+    );
+  }
+
   // ── Summary ────────────────────────────────────────────────────
   console.log(`\n${"━".repeat(70)}`);
   console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
