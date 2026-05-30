@@ -61,8 +61,19 @@ import {
   LEAGUE_CONSTANTS_V1,
   MODEL_VERSION,
   NRFI_CONFIDENCE_CAP,
-  NRFI_THRESHOLD_HIGH,
-  NRFI_THRESHOLD_LOW,
+  NRFI_CONFIDENCE_LEAN_MAX,
+  NRFI_CONFIDENCE_LEAN_MIN,
+  NRFI_CONFIDENCE_STRONG_MAX,
+  NRFI_CONFIDENCE_STRONG_MIN,
+  NRFI_CONFIDENCE_TOSS_UP,
+  NRFI_FALLBACK_CONFIDENCE_CAP,
+  NRFI_THRESHOLD_LEAN,
+  NRFI_THRESHOLD_STRONG,
+  NRFI_UNCONFIRMED_CONFIDENCE_PENALTY,
+  YRFI_THRESHOLD_LEAN,
+  YRFI_THRESHOLD_STRONG,
+  type NrfiDecisionKind,
+  type NrfiThresholdZone,
   PREDICTED_SCORE_MAX,
   PREDICTED_SCORE_MIN,
   STAGE_CONFIDENCE_CAPS,
@@ -258,16 +269,30 @@ function injuryOffenseReduction(injuredCount: number): number {
 }
 
 // ─────────────────────────────────────────────────────────────
-// NRFI / YRFI / no-play — blended logic
+// NRFI / YRFI / Toss-Up — Phase 4D.1 5-zone framework
 // ─────────────────────────────────────────────────────────────
 
 type NrfiResult = {
+  /** Decision kind — explicit Toss-Up vs Held distinction. */
+  decision_kind: NrfiDecisionKind;
+  /** Zone the expected_first_inning_runs landed in. */
+  threshold_zone: NrfiThresholdZone;
+  /** Boolean view for the legacy DB column. true=NRFI, false=YRFI,
+   *  null=Toss-Up OR held. */
   decision: boolean | null;
+  /** Display confidence. Toss-Up: 52. Lean: 53-56. Strong: 57-62.
+   *  Null only when decision_kind="held". */
   confidence: number | null;
+  /** Expected first-inning runs (both teams summed). */
   expected_runs: number | null;
+  /** Whether the starter ERA fallback (`season_era × 0.7`) was used. */
   used_fallback_era: boolean;
+  /** Whether either side's top-of-order OPS data was used. */
   used_top_of_order_data: boolean;
+  /** Hold reason — ONLY set when decision_kind="held". Null on Toss-Up. */
   hold_reason: string | null;
+  /** Audit tags. Minimal in 4D.1; expands in 4D.3. */
+  reason_codes: string[];
 };
 
 function topOfOrderOps(lineup: BatterSnapshot[]): number | null {
@@ -285,29 +310,122 @@ function topOfOrderOps(lineup: BatterSnapshot[]): number | null {
   return opsValues.reduce((sum, v) => sum + v, 0) / opsValues.length;
 }
 
+/** Map expected_first_inning_runs to one of the 5 zones. */
+function classifyZone(expected_runs: number): NrfiThresholdZone {
+  if (expected_runs <= NRFI_THRESHOLD_STRONG) return "strong_nrfi";
+  if (expected_runs <= NRFI_THRESHOLD_LEAN) return "lean_nrfi";
+  if (expected_runs >= YRFI_THRESHOLD_STRONG) return "strong_yrfi";
+  if (expected_runs >= YRFI_THRESHOLD_LEAN) return "lean_yrfi";
+  return "toss_up";
+}
+
+/**
+ * Natural confidence for a NRFI/YRFI zone, linearly interpolated within
+ * the zone's band by distance from the boundary. Toss-Up always
+ * returns NRFI_CONFIDENCE_TOSS_UP regardless of expected_runs.
+ */
+function naturalConfidenceForZone(
+  zone: NrfiThresholdZone,
+  expected_runs: number
+): number {
+  switch (zone) {
+    case "strong_nrfi": {
+      // expected ≤ 0.40. Boundary at 0.40 → low end (57). Lower runs
+      // → high end (62). Use a span of 0.40 (0 → far edge).
+      const distance = Math.max(0, NRFI_THRESHOLD_STRONG - expected_runs);
+      const t = Math.min(1, distance / NRFI_THRESHOLD_STRONG);
+      return (
+        NRFI_CONFIDENCE_STRONG_MIN +
+        (NRFI_CONFIDENCE_STRONG_MAX - NRFI_CONFIDENCE_STRONG_MIN) * t
+      );
+    }
+    case "lean_nrfi": {
+      // 0.40 < expected ≤ 0.50. Span 0.10. Boundary at 0.50 → low end (53),
+      // boundary at 0.40 → high end (56).
+      const distance = NRFI_THRESHOLD_LEAN - expected_runs;
+      const t = Math.min(
+        1,
+        Math.max(0, distance / (NRFI_THRESHOLD_LEAN - NRFI_THRESHOLD_STRONG))
+      );
+      return (
+        NRFI_CONFIDENCE_LEAN_MIN +
+        (NRFI_CONFIDENCE_LEAN_MAX - NRFI_CONFIDENCE_LEAN_MIN) * t
+      );
+    }
+    case "lean_yrfi": {
+      // 0.62 ≤ expected < 0.72. Boundary at 0.62 → low end (53),
+      // boundary at 0.72 → high end (56).
+      const distance = expected_runs - YRFI_THRESHOLD_LEAN;
+      const t = Math.min(
+        1,
+        Math.max(0, distance / (YRFI_THRESHOLD_STRONG - YRFI_THRESHOLD_LEAN))
+      );
+      return (
+        NRFI_CONFIDENCE_LEAN_MIN +
+        (NRFI_CONFIDENCE_LEAN_MAX - NRFI_CONFIDENCE_LEAN_MIN) * t
+      );
+    }
+    case "strong_yrfi": {
+      // expected ≥ 0.72. Boundary at 0.72 → low end (57). Higher runs
+      // → high end (62). Span of 0.40 above the boundary.
+      const distance = Math.max(0, expected_runs - YRFI_THRESHOLD_STRONG);
+      const t = Math.min(1, distance / NRFI_THRESHOLD_STRONG);
+      return (
+        NRFI_CONFIDENCE_STRONG_MIN +
+        (NRFI_CONFIDENCE_STRONG_MAX - NRFI_CONFIDENCE_STRONG_MIN) * t
+      );
+    }
+    case "toss_up":
+    case "below_floor":
+      return NRFI_CONFIDENCE_TOSS_UP;
+  }
+}
+
+/** Map zone → boolean predicted_nrfi for legacy DB column. */
+function zoneToDecision(zone: NrfiThresholdZone): boolean | null {
+  switch (zone) {
+    case "strong_nrfi":
+    case "lean_nrfi":
+      return true;
+    case "lean_yrfi":
+    case "strong_yrfi":
+      return false;
+    case "toss_up":
+    case "below_floor":
+      return null;
+  }
+}
+
 function computeNrfi(snapshot: GameSnapshot): NrfiResult {
   const home_starter = snapshot.home_starter;
   const away_starter = snapshot.away_starter;
+  const reason_codes: string[] = [];
 
-  // Missing/scratched starter → hold
+  // ── Hard holds (data unavailable; not Toss-Ups) ──────────────────
   if (home_starter === null || away_starter === null) {
     return {
+      decision_kind: "held",
+      threshold_zone: "below_floor",
       decision: null,
       confidence: null,
       expected_runs: null,
       used_fallback_era: false,
       used_top_of_order_data: false,
       hold_reason: "missing_starter_nrfi",
+      reason_codes: ["missing_starter"],
     };
   }
   if (home_starter.is_scratched || away_starter.is_scratched) {
     return {
+      decision_kind: "held",
+      threshold_zone: "below_floor",
       decision: null,
       confidence: null,
       expected_runs: null,
       used_fallback_era: false,
       used_top_of_order_data: false,
       hold_reason: "starter_scratch_nrfi",
+      reason_codes: ["starter_scratched"],
     };
   }
 
@@ -327,90 +445,135 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
 
   if (homeFirstInning === null || awayFirstInning === null) {
     return {
+      decision_kind: "held",
+      threshold_zone: "below_floor",
       decision: null,
       confidence: null,
       expected_runs: null,
       used_fallback_era: false,
       used_top_of_order_data: false,
       hold_reason: "missing_starter_era_nrfi",
+      reason_codes: ["starter_era_unavailable"],
     };
   }
+  if (used_fallback) reason_codes.push("fallback_first_inning_era");
 
   // Top-of-order OPS strength per side
   const homeTopOps = topOfOrderOps(snapshot.home_lineup_top8);
   const awayTopOps = topOfOrderOps(snapshot.away_lineup_top8);
   const used_top_of_order_data = homeTopOps !== null || awayTopOps !== null;
+  if (homeTopOps === null) reason_codes.push("top_order_missing_home");
+  if (awayTopOps === null) reason_codes.push("top_order_missing_away");
 
-  // Hold rule: if BOTH starters use fallback ERA AND no top-of-order
-  // data → too thin to render an NRFI verdict.
+  // Hold: BOTH starters use fallback ERA AND no top-of-order data → too
+  // thin. (Preserves pre-4D.1 "thin_nrfi_data" hold semantic.)
   if (used_fallback && !used_top_of_order_data) {
     return {
+      decision_kind: "held",
+      threshold_zone: "below_floor",
       decision: null,
       confidence: null,
       expected_runs: null,
       used_fallback_era: true,
       used_top_of_order_data: false,
       hold_reason: "thin_nrfi_data",
+      reason_codes: [...reason_codes, "thin_top_order"],
     };
   }
 
   // Compute expected first-inning runs per side. Away scores against
-  // home starter; home scores against away starter.
+  // home starter; home scores against away starter. ERA is per 9 IP;
+  // first inning is 1/9.
   const homeOffenseFactor =
     homeTopOps !== null ? homeTopOps / LEAGUE_CONSTANTS_V1.AVG_OPS : 1.0;
   const awayOffenseFactor =
     awayTopOps !== null ? awayTopOps / LEAGUE_CONSTANTS_V1.AVG_OPS : 1.0;
-
-  // ERA is per 9 IP; first inning is 1/9.
   const expectedAwayRuns = (homeFirstInning / 9) * awayOffenseFactor;
   const expectedHomeRuns = (awayFirstInning / 9) * homeOffenseFactor;
   const expected_first_inning_runs = expectedAwayRuns + expectedHomeRuns;
 
-  // Decision
-  if (expected_first_inning_runs <= NRFI_THRESHOLD_LOW) {
-    // NRFI
-    const strength = (NRFI_THRESHOLD_LOW - expected_first_inning_runs) / 0.1;
-    const confidence = clamp(
-      50 + 15 * Math.min(strength, 1),
-      50,
-      NRFI_CONFIDENCE_CAP
+  // ── Classify zone ────────────────────────────────────────────────
+  const naturalZone = classifyZone(expected_first_inning_runs);
+
+  // Reason codes for picks (lightweight, 4D.1-minimal).
+  if (naturalZone === "strong_nrfi" || naturalZone === "lean_nrfi") {
+    reason_codes.push(
+      `expected_first_inning_runs_${expected_first_inning_runs.toFixed(2)}`
     );
+  }
+  if (naturalZone === "strong_yrfi" || naturalZone === "lean_yrfi") {
+    reason_codes.push(
+      `expected_first_inning_runs_${expected_first_inning_runs.toFixed(2)}`
+    );
+  }
+
+  // ── Toss-Up branch (no caps applied) ─────────────────────────────
+  if (naturalZone === "toss_up") {
     return {
-      decision: confidence >= HARD_CONFIDENCE_FLOOR ? true : null,
-      confidence: confidence >= HARD_CONFIDENCE_FLOOR ? confidence : null,
+      decision_kind: "toss_up",
+      threshold_zone: "toss_up",
+      decision: null,
+      confidence: NRFI_CONFIDENCE_TOSS_UP,
       expected_runs: expected_first_inning_runs,
       used_fallback_era: used_fallback,
       used_top_of_order_data,
       hold_reason: null,
+      reason_codes,
     };
   }
 
-  if (expected_first_inning_runs >= NRFI_THRESHOLD_HIGH) {
-    // YRFI
-    const strength = (expected_first_inning_runs - NRFI_THRESHOLD_HIGH) / 0.1;
-    const confidence = clamp(
-      50 + 15 * Math.min(strength, 1),
-      50,
-      NRFI_CONFIDENCE_CAP
-    );
+  // ── NRFI / YRFI branch — natural confidence + data-quality caps ─
+  let natural_confidence = naturalConfidenceForZone(
+    naturalZone,
+    expected_first_inning_runs
+  );
+
+  // Build the confidence cap from data-quality signals.
+  let cap = NRFI_CONFIDENCE_CAP; // hard ceiling (65) — rarely reached
+  if (used_fallback) {
+    cap = Math.min(cap, NRFI_FALLBACK_CONFIDENCE_CAP);
+  }
+  if (snapshot.data_quality.lineup_confirmed === false) {
+    cap -= NRFI_UNCONFIRMED_CONFIDENCE_PENALTY;
+    reason_codes.push("lineup_unconfirmed");
+  }
+  if (snapshot.data_quality.starter_confirmed === false) {
+    cap -= NRFI_UNCONFIRMED_CONFIDENCE_PENALTY;
+    reason_codes.push("starter_unconfirmed");
+  }
+
+  const effective_confidence = Math.min(natural_confidence, cap);
+
+  // ── Downgrade to Toss-Up when caps push confidence below floor ──
+  if (effective_confidence < HARD_CONFIDENCE_FLOOR) {
     return {
-      decision: confidence >= HARD_CONFIDENCE_FLOOR ? false : null,
-      confidence: confidence >= HARD_CONFIDENCE_FLOOR ? confidence : null,
+      decision_kind: "toss_up",
+      threshold_zone: "below_floor",
+      decision: null,
+      confidence: NRFI_CONFIDENCE_TOSS_UP,
       expected_runs: expected_first_inning_runs,
       used_fallback_era: used_fallback,
       used_top_of_order_data,
       hold_reason: null,
+      reason_codes: [...reason_codes, "data_quality_downgrade"],
     };
   }
 
-  // In the no-play zone (between thresholds)
+  // Round confidence to 1 decimal for downstream display consistency.
+  const rounded_confidence = Math.round(effective_confidence * 10) / 10;
+
   return {
-    decision: null,
-    confidence: null,
+    decision_kind: naturalZone.startsWith("strong_nrfi") || naturalZone === "lean_nrfi"
+      ? "nrfi"
+      : "yrfi",
+    threshold_zone: naturalZone,
+    decision: zoneToDecision(naturalZone),
+    confidence: rounded_confidence,
     expected_runs: expected_first_inning_runs,
     used_fallback_era: used_fallback,
     used_top_of_order_data,
-    hold_reason: null, // not held — just no-play
+    hold_reason: null,
+    reason_codes,
   };
 }
 
@@ -661,6 +824,13 @@ export function runMlbAutoModelV1(
   };
 
   // ── Assemble sport_specific output ──────────────────────────────
+  // Phase 4D.1: nrfi_decision_kind / nrfi_threshold_zone / nrfi_reason_codes /
+  // nrfi_hold_reason expose the 5-zone classification so consumers can
+  // distinguish Toss-Up from data-thin holds. The legacy predicted_nrfi
+  // boolean stays for DB compat (true=NRFI, false=YRFI, null=Toss-Up OR
+  // held). On Toss-Up rows nrfi_confidence is non-null (52) even though
+  // predicted_nrfi is null — the orphan-check tests are aware of this
+  // exception.
   const sport_specific: AutoModelSportSpecific = {
     model_version: MODEL_VERSION,
     stage,
@@ -686,6 +856,11 @@ export function runMlbAutoModelV1(
       warnings: [],
       deterministic_corrections: [], // populated by applyDeterministicGuards
     },
+    // Phase 4D.1 NRFI audit fields
+    nrfi_decision_kind: nrfi.decision_kind,
+    nrfi_threshold_zone: nrfi.threshold_zone,
+    nrfi_reason_codes: nrfi.reason_codes,
+    nrfi_hold_reason: nrfi.hold_reason,
   };
 
   // ── Build raw output. When held, top-level score columns stay

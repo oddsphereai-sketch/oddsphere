@@ -658,12 +658,23 @@ async function main() {
   }
 
   {
-    // Middling pitchers + middling lineups → no-play
+    // Phase 4D.1: with the 5-zone framework, league-average ERA 4.0 (fallback
+    // proxy 2.8 per pitcher / 9 IP = 0.311 × 2 = 0.622) lands in lean_yrfi.
+    // This used to be "no-play" under the old 2-threshold scheme; now it's
+    // a lean YRFI pick. Test updated to reflect the new behavior.
     const snap = baseSnapshot(); // all league-average
     const out = runMlbAutoModelV1(snap, "morning_draft");
     check(
-      "League-average inputs → NRFI in no-play zone (predicted_nrfi=null)",
-      out.predicted_nrfi === null
+      "[Phase 4D.1] league-average inputs → predicted_nrfi=false (lean YRFI zone)",
+      out.predicted_nrfi === false
+    );
+    check(
+      "[Phase 4D.1] league-avg lean YRFI: nrfi_decision_kind === 'yrfi'",
+      out.sport_specific.nrfi_decision_kind === "yrfi"
+    );
+    check(
+      "[Phase 4D.1] league-avg lean YRFI: nrfi_threshold_zone === 'lean_yrfi'",
+      out.sport_specific.nrfi_threshold_zone === "lean_yrfi"
     );
   }
 
@@ -722,6 +733,349 @@ async function main() {
     check(
       "Scratched starter → predicted_nrfi=null",
       out.predicted_nrfi === null
+    );
+    check(
+      "[Phase 4D.1] Scratched starter → decision_kind='held' (not toss_up)",
+      out.sport_specific.nrfi_decision_kind === "held"
+    );
+    check(
+      "[Phase 4D.1] Scratched starter → nrfi_hold_reason mentions scratch",
+      typeof out.sport_specific.nrfi_hold_reason === "string" &&
+        out.sport_specific.nrfi_hold_reason.includes("scratch")
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  section("Phase 4D.1 — NRFI / YRFI / Toss-Up 5-zone classification");
+  // ═══════════════════════════════════════════════════════════════
+
+  // Helper: builds a snapshot with two pitchers of a target real-FI-ERA
+  // and a configurable top-of-order OPS (same on both sides).
+  function nrfiSnap(args: {
+    homeFI: number | null;
+    awayFI: number | null;
+    homeSeason?: number;
+    awaySeason?: number;
+    topOps?: number | null;
+  }): GameSnapshot {
+    const lineupWithOps = (ops: number | null) =>
+      leagueAverageLineup("R").map((b, i) =>
+        i < 3
+          ? batter({
+              ...b,
+              season_ops: ops,
+              vs_lhp_ops: ops,
+              vs_rhp_ops: ops,
+            })
+          : b
+      );
+    return baseSnapshot({
+      home_starter: starter({
+        player_external_id: 9001,
+        season_era: args.homeSeason ?? 4.0,
+        first_inning_era: args.homeFI,
+      }),
+      away_starter: starter({
+        player_external_id: 9002,
+        season_era: args.awaySeason ?? 4.0,
+        first_inning_era: args.awayFI,
+        throws: "L",
+      }),
+      home_lineup_top8:
+        args.topOps === undefined
+          ? leagueAverageLineup("R")
+          : lineupWithOps(args.topOps),
+      away_lineup_top8:
+        args.topOps === undefined
+          ? leagueAverageLineup("L")
+          : lineupWithOps(args.topOps),
+    });
+  }
+
+  // ─── Zone 1: strong NRFI (expected ≤ 0.40) ───────────────────────
+  {
+    // Two aces — FI 1.5 each, top-of-order 0.700. Expected ≈
+    // 2 × (1.5/9 × (0.700/0.73)) ≈ 0.32 → strong_nrfi
+    const out = runMlbAutoModelV1(
+      nrfiSnap({ homeFI: 1.5, awayFI: 1.5, topOps: 0.7 }),
+      "morning_draft"
+    );
+    check(
+      "[Phase 4D.1 zone] strong NRFI: predicted_nrfi === true",
+      out.predicted_nrfi === true
+    );
+    check(
+      "[Phase 4D.1 zone] strong NRFI: nrfi_decision_kind === 'nrfi'",
+      out.sport_specific.nrfi_decision_kind === "nrfi"
+    );
+    check(
+      "[Phase 4D.1 zone] strong NRFI: nrfi_threshold_zone === 'strong_nrfi'",
+      out.sport_specific.nrfi_threshold_zone === "strong_nrfi"
+    );
+    check(
+      "[Phase 4D.1 zone] strong NRFI: confidence in [57, 62]",
+      out.nrfi_confidence !== null &&
+        out.nrfi_confidence >= 57 &&
+        out.nrfi_confidence <= 62
+    );
+  }
+
+  // ─── Zone 2: lean NRFI (0.40 < expected ≤ 0.50) ──────────────────
+  {
+    // FI 2.0 each, league-avg top-of-order (0.73). Expected =
+    // 2 × (2.0/9 × 1.0) = 0.444 → lean_nrfi
+    const out = runMlbAutoModelV1(
+      nrfiSnap({ homeFI: 2.0, awayFI: 2.0, topOps: 0.73 }),
+      "morning_draft"
+    );
+    check(
+      "[Phase 4D.1 zone] lean NRFI: predicted_nrfi === true",
+      out.predicted_nrfi === true
+    );
+    check(
+      "[Phase 4D.1 zone] lean NRFI: nrfi_decision_kind === 'nrfi'",
+      out.sport_specific.nrfi_decision_kind === "nrfi"
+    );
+    check(
+      "[Phase 4D.1 zone] lean NRFI: nrfi_threshold_zone === 'lean_nrfi'",
+      out.sport_specific.nrfi_threshold_zone === "lean_nrfi"
+    );
+    check(
+      "[Phase 4D.1 zone] lean NRFI: confidence in [53, 56]",
+      out.nrfi_confidence !== null &&
+        out.nrfi_confidence >= 53 &&
+        out.nrfi_confidence <= 56
+    );
+  }
+
+  // ─── Zone 3: Toss-Up (0.50 < expected < 0.62) ────────────────────
+  {
+    // FI 2.5 each, league-avg top-of-order. Expected =
+    // 2 × (2.5/9 × 1.0) = 0.556 → toss_up
+    const out = runMlbAutoModelV1(
+      nrfiSnap({ homeFI: 2.5, awayFI: 2.5, topOps: 0.73 }),
+      "morning_draft"
+    );
+    check(
+      "[Phase 4D.1 zone] Toss-Up: predicted_nrfi === null (no side)",
+      out.predicted_nrfi === null
+    );
+    check(
+      "[Phase 4D.1 zone] Toss-Up: nrfi_decision_kind === 'toss_up'",
+      out.sport_specific.nrfi_decision_kind === "toss_up"
+    );
+    check(
+      "[Phase 4D.1 zone] Toss-Up: nrfi_threshold_zone === 'toss_up'",
+      out.sport_specific.nrfi_threshold_zone === "toss_up"
+    );
+    check(
+      "[Phase 4D.1 zone] Toss-Up: nrfi_confidence === 52 (display value)",
+      out.nrfi_confidence === 52
+    );
+    check(
+      "[Phase 4D.1 zone] Toss-Up: nrfi_hold_reason === null (NOT a hold)",
+      out.sport_specific.nrfi_hold_reason === null
+    );
+    check(
+      "[Phase 4D.1 zone] Toss-Up: 'nrfi' included in hold_picks (for write path)",
+      out.sport_specific.hold_picks.includes("nrfi")
+    );
+  }
+
+  // ─── Zone 4: lean YRFI (0.62 ≤ expected < 0.72) ──────────────────
+  {
+    // FI 3.0 each, league-avg top-of-order. Expected =
+    // 2 × (3.0/9 × 1.0) = 0.667 → lean_yrfi
+    const out = runMlbAutoModelV1(
+      nrfiSnap({ homeFI: 3.0, awayFI: 3.0, topOps: 0.73 }),
+      "morning_draft"
+    );
+    check(
+      "[Phase 4D.1 zone] lean YRFI: predicted_nrfi === false",
+      out.predicted_nrfi === false
+    );
+    check(
+      "[Phase 4D.1 zone] lean YRFI: nrfi_decision_kind === 'yrfi'",
+      out.sport_specific.nrfi_decision_kind === "yrfi"
+    );
+    check(
+      "[Phase 4D.1 zone] lean YRFI: nrfi_threshold_zone === 'lean_yrfi'",
+      out.sport_specific.nrfi_threshold_zone === "lean_yrfi"
+    );
+    check(
+      "[Phase 4D.1 zone] lean YRFI: confidence in [53, 56]",
+      out.nrfi_confidence !== null &&
+        out.nrfi_confidence >= 53 &&
+        out.nrfi_confidence <= 56
+    );
+  }
+
+  // ─── Zone 5: strong YRFI (expected ≥ 0.72) ───────────────────────
+  {
+    // FI 5.0 each, top-of-order 0.85. Expected =
+    // 2 × (5.0/9 × (0.85/0.73)) = 2 × 0.647 = 1.293 → strong_yrfi
+    const out = runMlbAutoModelV1(
+      nrfiSnap({ homeFI: 5.0, awayFI: 5.0, topOps: 0.85 }),
+      "morning_draft"
+    );
+    check(
+      "[Phase 4D.1 zone] strong YRFI: predicted_nrfi === false",
+      out.predicted_nrfi === false
+    );
+    check(
+      "[Phase 4D.1 zone] strong YRFI: nrfi_decision_kind === 'yrfi'",
+      out.sport_specific.nrfi_decision_kind === "yrfi"
+    );
+    check(
+      "[Phase 4D.1 zone] strong YRFI: nrfi_threshold_zone === 'strong_yrfi'",
+      out.sport_specific.nrfi_threshold_zone === "strong_yrfi"
+    );
+    check(
+      "[Phase 4D.1 zone] strong YRFI: confidence in [57, 62]",
+      out.nrfi_confidence !== null &&
+        out.nrfi_confidence >= 57 &&
+        out.nrfi_confidence <= 62
+    );
+  }
+
+  // ─── Toss-Up vs Held distinctness ────────────────────────────────
+  {
+    // Toss-Up case: data adequate, expected lands in toss_up zone
+    const tossOut = runMlbAutoModelV1(
+      nrfiSnap({ homeFI: 2.5, awayFI: 2.5, topOps: 0.73 }),
+      "morning_draft"
+    );
+    // Held case: missing starter
+    const heldOut = runMlbAutoModelV1(
+      baseSnapshot({ home_starter: null }),
+      "morning_draft"
+    );
+
+    check(
+      "[Phase 4D.1] Toss-Up vs Held: both have predicted_nrfi=null",
+      tossOut.predicted_nrfi === null && heldOut.predicted_nrfi === null
+    );
+    check(
+      "[Phase 4D.1] Toss-Up vs Held: decision_kind discriminates ('toss_up' vs 'held')",
+      tossOut.sport_specific.nrfi_decision_kind === "toss_up" &&
+        heldOut.sport_specific.nrfi_decision_kind === "held"
+    );
+    check(
+      "[Phase 4D.1] Toss-Up has non-null nrfi_confidence; Held does not",
+      tossOut.nrfi_confidence !== null && heldOut.nrfi_confidence === null
+    );
+    check(
+      "[Phase 4D.1] Toss-Up has null nrfi_hold_reason; Held has a string",
+      tossOut.sport_specific.nrfi_hold_reason === null &&
+        typeof heldOut.sport_specific.nrfi_hold_reason === "string"
+    );
+  }
+
+  // ─── Data-quality caps + downgrade-to-Toss-Up ────────────────────
+  {
+    // Setup that would normally produce a lean NRFI (FI 2.0/2.0, league-
+    // avg ops, expected ≈ 0.444 → lean_nrfi at confidence ~54.5).
+    // Then layer on data-quality penalties: fallback ERA (cap=60),
+    // unconfirmed lineup (-5), unconfirmed starter (-5) → cap=50,
+    // which is below floor → downgrade to Toss-Up.
+    const snap: GameSnapshot = {
+      ...nrfiSnap({ homeFI: null, awayFI: null, homeSeason: 2.857, awaySeason: 2.857, topOps: 0.73 }),
+      data_quality: {
+        starter_confirmed: false, // -5
+        lineup_confirmed: false,  // -5
+        weather_available: false,
+        season_stats_present: true,
+      },
+    };
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    // After caps: 60 (fallback) - 5 (lineup) - 5 (starter) = 50 < 51 floor
+    // → downgrade to Toss-Up
+    check(
+      "[Phase 4D.1] data-quality downgrade: predicted_nrfi=null when caps drop below floor",
+      out.predicted_nrfi === null
+    );
+    check(
+      "[Phase 4D.1] data-quality downgrade: decision_kind='toss_up'",
+      out.sport_specific.nrfi_decision_kind === "toss_up"
+    );
+    check(
+      "[Phase 4D.1] data-quality downgrade: zone='below_floor'",
+      out.sport_specific.nrfi_threshold_zone === "below_floor"
+    );
+    check(
+      "[Phase 4D.1] data-quality downgrade: reason_codes include lineup_unconfirmed + starter_unconfirmed",
+      (out.sport_specific.nrfi_reason_codes ?? []).includes("lineup_unconfirmed") &&
+        (out.sport_specific.nrfi_reason_codes ?? []).includes("starter_unconfirmed")
+    );
+  }
+
+  // ─── Confidence caps applied but pick survives ───────────────────
+  {
+    // Strong NRFI (FI 1.5/1.5, top 0.65) — natural conf ~62. Layer one
+    // -5 penalty (lineup unconfirmed) → final ~57, still in strong band.
+    const snap: GameSnapshot = {
+      ...nrfiSnap({ homeFI: 1.5, awayFI: 1.5, topOps: 0.65 }),
+      data_quality: {
+        starter_confirmed: true,
+        lineup_confirmed: false, // -5
+        weather_available: false,
+        season_stats_present: true,
+      },
+    };
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    check(
+      "[Phase 4D.1] confidence cap survives: strong NRFI keeps the pick",
+      out.predicted_nrfi === true
+    );
+    check(
+      "[Phase 4D.1] reason_codes include 'lineup_unconfirmed'",
+      (out.sport_specific.nrfi_reason_codes ?? []).includes("lineup_unconfirmed")
+    );
+  }
+
+  // ─── reason_codes for fallback FI ERA ────────────────────────────
+  {
+    // FI null → falls back; expects reason_code "fallback_first_inning_era"
+    const snap = nrfiSnap({
+      homeFI: null,
+      awayFI: null,
+      homeSeason: 2.85,
+      awaySeason: 2.85,
+      topOps: 0.73,
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    check(
+      "[Phase 4D.1] reason_codes include 'fallback_first_inning_era' when FI ERA null",
+      (out.sport_specific.nrfi_reason_codes ?? []).includes(
+        "fallback_first_inning_era"
+      )
+    );
+  }
+
+  // ─── Confidence floor: no decision ever produces below-51 official conf ─
+  {
+    // Sweep a few zones; assert nrfi_confidence is either null (held)
+    // or ≥ 51 (the hard floor). Toss-Up's 52 satisfies this.
+    const sweep = [
+      { homeFI: 1.5, awayFI: 1.5, topOps: 0.7 },  // strong NRFI
+      { homeFI: 2.0, awayFI: 2.0, topOps: 0.73 }, // lean NRFI
+      { homeFI: 2.5, awayFI: 2.5, topOps: 0.73 }, // Toss-Up
+      { homeFI: 3.0, awayFI: 3.0, topOps: 0.73 }, // lean YRFI
+      { homeFI: 5.0, awayFI: 5.0, topOps: 0.85 }, // strong YRFI
+    ];
+    let allOK = true;
+    for (const args of sweep) {
+      const out = runMlbAutoModelV1(nrfiSnap(args), "morning_draft");
+      if (
+        out.nrfi_confidence !== null &&
+        out.nrfi_confidence < HARD_CONFIDENCE_FLOOR
+      ) {
+        allOK = false;
+      }
+    }
+    check(
+      "[Phase 4D.1] no decision ever reports nrfi_confidence below HARD_CONFIDENCE_FLOOR (51)",
+      allOK
     );
   }
 
@@ -791,9 +1145,16 @@ async function main() {
     );
     check(
       `[${c.label}] picks are either non-null with confidence or both null (no orphans)`,
+      // ML and OU obey strict orphan invariant
       (out.predicted_ml_winner === null) === (out.ml_confidence === null) &&
         (out.predicted_ou_side === null) === (out.ou_confidence === null) &&
-        (out.predicted_nrfi === null) === (out.nrfi_confidence === null)
+        // NRFI: Phase 4D.1 exception. predicted_nrfi=null is valid with
+        // non-null nrfi_confidence ONLY when decision_kind='toss_up'
+        // (Toss-Up has a 52 display confidence by design). Otherwise the
+        // strict orphan rule still applies.
+        (out.sport_specific.nrfi_decision_kind === "toss_up"
+          ? out.predicted_nrfi === null && out.nrfi_confidence !== null
+          : (out.predicted_nrfi === null) === (out.nrfi_confidence === null))
     );
   }
 

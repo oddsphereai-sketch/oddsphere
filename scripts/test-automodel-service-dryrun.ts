@@ -220,7 +220,15 @@ async function main() {
       ) {
         pick_orphan_check = false;
       }
-      if (
+      // Phase 4D.1 NRFI exception: Toss-Up rows legitimately have
+      // predicted_nrfi=null with non-null nrfi_confidence (52 by design).
+      // The strict orphan rule still applies otherwise.
+      const nrfiKind = p.sport_specific.nrfi_decision_kind;
+      if (nrfiKind === "toss_up") {
+        if (p.predicted_nrfi !== null || p.nrfi_confidence === null) {
+          pick_orphan_check = false;
+        }
+      } else if (
         (p.predicted_nrfi === null) !==
         (p.nrfi_confidence === null)
       ) {
@@ -361,7 +369,14 @@ async function main() {
       ) {
         seed_pick_orphan = false;
       }
-      if (
+      // Phase 4D.1 NRFI exception: Toss-Up rows have predicted_nrfi=null
+      // with non-null nrfi_confidence (52) by design.
+      const nrfiKindSeed = p.sport_specific.nrfi_decision_kind;
+      if (nrfiKindSeed === "toss_up") {
+        if (p.predicted_nrfi !== null || p.nrfi_confidence === null) {
+          seed_pick_orphan = false;
+        }
+      } else if (
         (p.predicted_nrfi === null) !==
         (p.nrfi_confidence === null)
       ) {

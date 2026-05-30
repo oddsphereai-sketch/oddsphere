@@ -279,6 +279,26 @@ export type AutoModelSportSpecific = {
    * design — see lib/automodel/snapshotStash.ts.
    */
   snapshot_stash?: SnapshotStash | null;
+  // ─────────────────────────────────────────────────────────────
+  // Phase 4D.1 — NRFI / YRFI / Toss-Up classification audit fields
+  // ─────────────────────────────────────────────────────────────
+  /** Explicit decision kind. Replaces the predicted_nrfi-null-as-multi-
+   *  meaning ambiguity (held vs Toss-Up). Optional for back-compat with
+   *  pre-4D.1 rows. */
+  nrfi_decision_kind?: NrfiDecisionKind | null;
+  /** Zone the expected_first_inning_runs landed in. Pairs with
+   *  decision_kind — "below_floor" means a NRFI/YRFI pick was
+   *  downgraded to Toss-Up because data-quality caps pushed confidence
+   *  under HARD_CONFIDENCE_FLOOR. */
+  nrfi_threshold_zone?: NrfiThresholdZone | null;
+  /** Tags describing which factors / data-quality issues contributed
+   *  to this NRFI decision. Reserved for future AI breakdown — kept
+   *  minimal in 4D.1. Empty array OK; null on legacy rows. */
+  nrfi_reason_codes?: string[] | null;
+  /** NRFI-specific hold reason. Distinct from the game-level
+   *  `hold_reason` (which only fires when ALL three picks held). Set
+   *  ONLY when nrfi_decision_kind === "held". */
+  nrfi_hold_reason?: string | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -545,6 +565,10 @@ export const STAGE_CONFIDENCE_CAPS: Record<ModelStage, number> = {
 /**
  * NRFI is capped lower than ML/OU because the first-inning data is
  * proxy-derived in V1 (BDL plays integration is a Phase 3.x improvement).
+ * The natural cap on the strong-zone band is 62; the absolute hard cap
+ * (65) only applies when ALL data inputs are present (real first-inning
+ * ERA + confirmed lineup + confirmed starter, none of which happen yet
+ * in V1).
  */
 export const NRFI_CONFIDENCE_CAP = 65;
 
@@ -554,15 +578,89 @@ export const NRFI_CONFIDENCE_CAP = 65;
  */
 export const HARD_CONFIDENCE_FLOOR = 51;
 
+// ─────────────────────────────────────────────────────────────
+// Phase 4D.1 — 5-zone NRFI / YRFI / Toss-Up framework
+// ─────────────────────────────────────────────────────────────
+//
+// Expected first-inning runs (both teams summed) routes into one of
+// five zones. Pre-4D.1, the model used a 2-threshold scheme (0.45 /
+// 0.65) that placed ~90% of typical MLB matchups in the no-play band,
+// producing 11/12 "held" on the seed slate. The 5-zone scheme widens
+// the active-pick range and adds an explicit "Toss-Up" output for
+// contested first-inning matchups (rather than collapsing them into
+// the same null bucket as data-thin holds).
+//
+//   expected ≤ 0.40              → strong NRFI
+//   0.40 < expected ≤ 0.50       → lean NRFI
+//   0.50 < expected < 0.62       → Toss-Up
+//   0.62 ≤ expected < 0.72       → lean YRFI
+//   expected ≥ 0.72              → strong YRFI
+//
+// Hard hold reasons (missing/scratched starter, no ERA available) still
+// produce a `held` decision_kind separately — Toss-Up is reserved for
+// data-adequate-but-contested rows.
+
+export const NRFI_THRESHOLD_STRONG = 0.40;
+export const NRFI_THRESHOLD_LEAN = 0.50;
+export const YRFI_THRESHOLD_LEAN = 0.62;
+export const YRFI_THRESHOLD_STRONG = 0.72;
+
 /**
- * NRFI decision thresholds. Expected first-inning runs (both teams
- * summed) below LOW → NRFI; above HIGH → YRFI; in-between → no-play.
+ * Confidence bands per zone. Pre-4D.1 used a single linear formula
+ * `50 + 15 × strength`. New bands are tighter and zone-aware:
  *
- * Tuning: 0.45 / 0.65 is a conservative V1 baseline. ~50% of MLB games
- * see a first-inning run; thresholds bracket that midpoint.
+ *   Toss-Up:           52         (literally a toss; small display number)
+ *   lean NRFI / YRFI:  53 – 56
+ *   strong NRFI / YRFI:57 – 62    (62 is the natural cap; 65 is reserved
+ *                                  for "all-data-present" cases that don't
+ *                                  yet exist in V1)
+ *
+ * Data-quality caps below can lower confidence further. If a NRFI/YRFI
+ * pick's effective confidence drops below the floor (51), the decision
+ * is downgraded to Toss-Up rather than nulled to "held".
  */
-export const NRFI_THRESHOLD_LOW = 0.45;
-export const NRFI_THRESHOLD_HIGH = 0.65;
+export const NRFI_CONFIDENCE_TOSS_UP = 52;
+export const NRFI_CONFIDENCE_LEAN_MIN = 53;
+export const NRFI_CONFIDENCE_LEAN_MAX = 56;
+export const NRFI_CONFIDENCE_STRONG_MIN = 57;
+export const NRFI_CONFIDENCE_STRONG_MAX = 62;
+
+/**
+ * Data-quality caps applied after the natural confidence is computed.
+ * Each cap reduces the maximum confidence allowed for a NRFI/YRFI pick;
+ * if cumulative caps push confidence below the floor, the pick
+ * downgrades to Toss-Up.
+ *
+ * Toss-Up itself is NOT subject to these caps — it's already at 52.
+ *
+ *   FALLBACK_CAP        — when starter has no real first_inning_era
+ *                         and we used `season_era × 0.7` proxy
+ *   UNCONFIRMED_PENALTY — applied per unconfirmed-data-source flag
+ *                         (lineup_confirmed=false; starter_confirmed=false)
+ */
+export const NRFI_FALLBACK_CONFIDENCE_CAP = 60;
+export const NRFI_UNCONFIRMED_CONFIDENCE_PENALTY = 5;
+
+/**
+ * Phase 4D.1 — explicit decision kind on sport_specific so Toss-Up is
+ * distinguishable from data-thin holds. Operator and downstream
+ * consumers read this field; the legacy `predicted_nrfi: boolean | null`
+ * stays for back-compat (true=NRFI, false=YRFI, null=Toss-Up OR held).
+ */
+export type NrfiDecisionKind = "nrfi" | "yrfi" | "toss_up" | "held";
+
+/**
+ * Phase 4D.1 — the zone the expected_first_inning_runs landed in.
+ * `below_floor` indicates the natural-zone pick was downgraded by data
+ * quality caps to under the confidence floor (and thus to Toss-Up).
+ */
+export type NrfiThresholdZone =
+  | "strong_nrfi"
+  | "lean_nrfi"
+  | "toss_up"
+  | "lean_yrfi"
+  | "strong_yrfi"
+  | "below_floor";
 
 /**
  * Innings of expected starter vs bullpen workload. Reflects typical
