@@ -89,6 +89,13 @@ import { applyDeterministicGuards } from "./aiSanityBoundary";
 // "thin sample" from "no FI data at all" (`fallback_first_inning_era`).
 const FIRST_INNING_SAMPLE_GATE = 3;
 
+// Phase 3.x.3 — fallback multiplier applied to season ERA when real
+// first-inning ERA is unavailable. Was 0.7 in Phase 3A–3.x.2 (an
+// inverted heuristic that systematically underestimated FI damage).
+// Real first-inning ERA averages ≈ 1.0× season ERA over large samples
+// per MLB historical data, not 0.7×.
+const FIRST_INNING_PROXY_MULTIPLIER = 1.0;
+
 // ─────────────────────────────────────────────────────────────
 // Math utilities
 // ─────────────────────────────────────────────────────────────
@@ -607,12 +614,12 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
     }
     if (era !== null) {
       if (s.season_era !== null) {
-        return { value: s.season_era * 0.7, source: "low_sample" };
+        return { value: s.season_era * FIRST_INNING_PROXY_MULTIPLIER, source: "low_sample" };
       }
       return { value: null, source: "missing" };
     }
     if (s.season_era !== null) {
-      return { value: s.season_era * 0.7, source: "proxy" };
+      return { value: s.season_era * FIRST_INNING_PROXY_MULTIPLIER, source: "proxy" };
     }
     return { value: null, source: "missing" };
   }
@@ -792,20 +799,38 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
   // ── Classify zone ────────────────────────────────────────────────
   const naturalZone = classifyZone(expected_first_inning_runs);
 
+  // Phase 3.x.3 — both-sides-fallback guardrail. When NEITHER starter
+  // has real first-inning data (both source ∈ {proxy, low_sample}), cap
+  // the decision to toss_up so the model doesn't surface confident
+  // NRFI/YRFI picks on games where it has no real FI evidence. The
+  // expected_runs value still flows through for transparency.
+  const hasAnyRealFI = fiSources.includes("real");
+  let effectiveZone = naturalZone;
+  if (
+    !hasAnyRealFI &&
+    (naturalZone === "strong_nrfi" ||
+      naturalZone === "lean_nrfi" ||
+      naturalZone === "lean_yrfi" ||
+      naturalZone === "strong_yrfi")
+  ) {
+    effectiveZone = "toss_up";
+    reason_codes.push("both_starters_fallback_capped_to_toss_up");
+  }
+
   // Reason codes for picks (lightweight, 4D.1-minimal).
-  if (naturalZone === "strong_nrfi" || naturalZone === "lean_nrfi") {
+  if (effectiveZone === "strong_nrfi" || effectiveZone === "lean_nrfi") {
     reason_codes.push(
       `expected_first_inning_runs_${expected_first_inning_runs.toFixed(2)}`
     );
   }
-  if (naturalZone === "strong_yrfi" || naturalZone === "lean_yrfi") {
+  if (effectiveZone === "strong_yrfi" || effectiveZone === "lean_yrfi") {
     reason_codes.push(
       `expected_first_inning_runs_${expected_first_inning_runs.toFixed(2)}`
     );
   }
 
   // ── Toss-Up branch (no caps applied) ─────────────────────────────
-  if (naturalZone === "toss_up") {
+  if (effectiveZone === "toss_up") {
     return {
       decision_kind: "toss_up",
       threshold_zone: "toss_up",
@@ -821,7 +846,7 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
 
   // ── NRFI / YRFI branch — natural confidence + data-quality caps ─
   let natural_confidence = naturalConfidenceForZone(
-    naturalZone,
+    effectiveZone,
     expected_first_inning_runs
   );
 
@@ -860,11 +885,11 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
   const rounded_confidence = Math.round(effective_confidence * 10) / 10;
 
   return {
-    decision_kind: naturalZone.startsWith("strong_nrfi") || naturalZone === "lean_nrfi"
+    decision_kind: effectiveZone.startsWith("strong_nrfi") || effectiveZone === "lean_nrfi"
       ? "nrfi"
       : "yrfi",
-    threshold_zone: naturalZone,
-    decision: zoneToDecision(naturalZone),
+    threshold_zone: effectiveZone,
+    decision: zoneToDecision(effectiveZone),
     confidence: rounded_confidence,
     expected_runs: expected_first_inning_runs,
     used_fallback_era: used_fallback,

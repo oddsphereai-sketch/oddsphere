@@ -607,10 +607,16 @@ export const HARD_CONFIDENCE_FLOOR = 51;
 // produce a `held` decision_kind separately — Toss-Up is reserved for
 // data-adequate-but-contested rows.
 
-export const NRFI_THRESHOLD_STRONG = 0.40;
-export const NRFI_THRESHOLD_LEAN = 0.50;
-export const YRFI_THRESHOLD_LEAN = 0.62;
-export const YRFI_THRESHOLD_STRONG = 0.72;
+// Phase 3.x.3 recalibration — anchored on observed real-FI distribution
+// (median ≈ 1.07 runs per game on the 5/22 backfilled slate; MLB historical
+// first-inning runs per game ≈ 0.9–1.1). The pre-3.x.3 thresholds were
+// calibrated against the season_era × 0.7 proxy, which systematically
+// underestimated first-inning damage and clustered every real-FI game as
+// strong_yrfi. See Phase 3.x.2.C-prime analytical report.
+export const NRFI_THRESHOLD_STRONG = 0.50;
+export const NRFI_THRESHOLD_LEAN = 0.85;
+export const YRFI_THRESHOLD_LEAN = 1.15;
+export const YRFI_THRESHOLD_STRONG = 1.45;
 
 /**
  * Confidence bands per zone. Pre-4D.1 used a single linear formula

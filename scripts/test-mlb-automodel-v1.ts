@@ -663,24 +663,30 @@ async function main() {
   }
 
   {
-    // Phase 4D.1: with the 5-zone framework, league-average ERA 4.0 (fallback
-    // proxy 2.8 per pitcher / 9 IP = 0.311 × 2 = 0.622) lands in lean_yrfi.
-    // This used to be "no-play" under the old 2-threshold scheme; now it's
-    // a lean YRFI pick. Test updated to reflect the new behavior.
+    // Phase 3.x.3: league-average baseSnapshot uses fallback proxy on
+    // both starters (no first_inning_era set by default). The new
+    // both-sides-fallback guardrail caps the decision to toss_up
+    // regardless of the natural zone — the model shouldn't surface a
+    // confident NRFI/YRFI pick on a game where it has no real FI data
+    // for either side.
     const snap = baseSnapshot(); // all league-average
     const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
     check(
-      "[Phase 4D.1] league-average inputs → predicted_nrfi=false (lean YRFI zone)",
-      out.predicted_nrfi === false
+      "[Phase 3.x.3] league-average (both proxy) → predicted_nrfi=null (toss_up)",
+      out.predicted_nrfi === null
     );
     check(
-      "[Phase 4D.1] league-avg lean YRFI: nrfi_decision_kind === 'yrfi'",
-      out.sport_specific.nrfi_decision_kind === "yrfi"
+      "[Phase 3.x.3] league-average (both proxy) → decision_kind === 'toss_up'",
+      out.sport_specific.nrfi_decision_kind === "toss_up"
     );
     check(
-      "[Phase 4D.1] league-avg lean YRFI: nrfi_threshold_zone === 'lean_yrfi'",
-      out.sport_specific.nrfi_threshold_zone === "lean_yrfi"
+      "[Phase 3.x.3] league-average (both proxy) → fallback_first_inning_era emitted",
+      codes.includes("fallback_first_inning_era")
     );
+    // Note: the both-sides guardrail does NOT fire here because the natural
+    // zone under new thresholds + proxy ×1.0 is already toss_up. Guardrail
+    // only emits its code when it actually caps a decisive zone.
   }
 
   {
@@ -828,12 +834,12 @@ async function main() {
     );
   }
 
-  // ─── Zone 2: lean NRFI (0.40 < expected ≤ 0.50) ──────────────────
+  // ─── Zone 2: lean NRFI (0.50 < expected ≤ 0.85) — Phase 3.x.3 bands ─
   {
-    // FI 2.0 each, league-avg top-of-order (0.73). Expected =
-    // 2 × (2.0/9 × 1.0) = 0.444 → lean_nrfi
+    // FI 3.0 each, league-avg top-of-order (0.73). Expected =
+    // 2 × (3.0/9 × 1.0) = 0.667 → lean_nrfi
     const out = runMlbAutoModelV1(
-      nrfiSnap({ homeFI: 2.0, awayFI: 2.0, topOps: 0.73 }),
+      nrfiSnap({ homeFI: 3.0, awayFI: 3.0, topOps: 0.73 }),
       "morning_draft"
     );
     check(
@@ -856,12 +862,12 @@ async function main() {
     );
   }
 
-  // ─── Zone 3: Toss-Up (0.50 < expected < 0.62) ────────────────────
+  // ─── Zone 3: Toss-Up (0.85 ≤ expected ≤ 1.15) — Phase 3.x.3 bands ─
   {
-    // FI 2.5 each, league-avg top-of-order. Expected =
-    // 2 × (2.5/9 × 1.0) = 0.556 → toss_up
+    // FI 4.5 each, league-avg top-of-order. Expected =
+    // 2 × (4.5/9 × 1.0) = 1.0 → toss_up
     const out = runMlbAutoModelV1(
-      nrfiSnap({ homeFI: 2.5, awayFI: 2.5, topOps: 0.73 }),
+      nrfiSnap({ homeFI: 4.5, awayFI: 4.5, topOps: 0.73 }),
       "morning_draft"
     );
     check(
@@ -890,12 +896,12 @@ async function main() {
     );
   }
 
-  // ─── Zone 4: lean YRFI (0.62 ≤ expected < 0.72) ──────────────────
+  // ─── Zone 4: lean YRFI (1.15 ≤ expected < 1.45) — Phase 3.x.3 bands ─
   {
-    // FI 3.0 each, league-avg top-of-order. Expected =
-    // 2 × (3.0/9 × 1.0) = 0.667 → lean_yrfi
+    // FI 5.5 each, league-avg top-of-order. Expected =
+    // 2 × (5.5/9 × 1.0) = 1.222 → lean_yrfi
     const out = runMlbAutoModelV1(
-      nrfiSnap({ homeFI: 3.0, awayFI: 3.0, topOps: 0.73 }),
+      nrfiSnap({ homeFI: 5.5, awayFI: 5.5, topOps: 0.73 }),
       "morning_draft"
     );
     check(
@@ -918,12 +924,12 @@ async function main() {
     );
   }
 
-  // ─── Zone 5: strong YRFI (expected ≥ 0.72) ───────────────────────
+  // ─── Zone 5: strong YRFI (expected ≥ 1.45) — Phase 3.x.3 bands ─────
   {
-    // FI 5.0 each, top-of-order 0.85. Expected =
-    // 2 × (5.0/9 × (0.85/0.73)) = 2 × 0.647 = 1.293 → strong_yrfi
+    // FI 7.0 each, top-of-order 0.85. Expected =
+    // 2 × (7.0/9 × (0.85/0.73)) = 2 × 0.905 = 1.811 → strong_yrfi
     const out = runMlbAutoModelV1(
-      nrfiSnap({ homeFI: 5.0, awayFI: 5.0, topOps: 0.85 }),
+      nrfiSnap({ homeFI: 7.0, awayFI: 7.0, topOps: 0.85 }),
       "morning_draft"
     );
     check(
@@ -948,9 +954,9 @@ async function main() {
 
   // ─── Toss-Up vs Held distinctness ────────────────────────────────
   {
-    // Toss-Up case: data adequate, expected lands in toss_up zone
+    // Toss-Up case: data adequate (real FI), expected lands in toss_up zone
     const tossOut = runMlbAutoModelV1(
-      nrfiSnap({ homeFI: 2.5, awayFI: 2.5, topOps: 0.73 }),
+      nrfiSnap({ homeFI: 4.5, awayFI: 4.5, topOps: 0.73 }),
       "morning_draft"
     );
     // Held case: missing starter
@@ -981,13 +987,25 @@ async function main() {
 
   // ─── Data-quality caps + downgrade-to-Toss-Up ────────────────────
   {
-    // Setup that would normally produce a lean NRFI (FI 2.0/2.0, league-
-    // avg ops, expected ≈ 0.444 → lean_nrfi at confidence ~54.5).
-    // Then layer on data-quality penalties: fallback ERA (cap=60),
-    // unconfirmed lineup (-5), unconfirmed starter (-5) → cap=50,
-    // which is below floor → downgrade to Toss-Up.
+    // Setup uses MIXED FI sources (home real, away fallback) so:
+    //   - has_any_real_fi = true → Phase 3.x.3 guardrail does NOT fire
+    //   - used_fallback = true → fallback confidence cap kicks in (60)
+    //
+    // homeFI=5.5 (real, starts=10), awayFI=null with awaySeason=5.5
+    // (proxy × 1.0 = 5.5). Expected ≈ 2 × (5.5/9 × 1.0) = 1.222 →
+    // lean_yrfi (natural confidence ~55). Then layer data-quality
+    // penalties:
+    //   fallback cap (60) − 5 lineup − 5 starter = 50
+    //   effective_confidence = min(55, 50) = 50 < 51 floor
+    //   → downgrade to Toss-Up via below_floor zone
     const snap: GameSnapshot = {
-      ...nrfiSnap({ homeFI: null, awayFI: null, homeSeason: 2.857, awaySeason: 2.857, topOps: 0.73 }),
+      ...nrfiSnap({
+        homeFI: 5.5,
+        awayFI: null,
+        homeSeason: 5.5,
+        awaySeason: 5.5,
+        topOps: 0.73,
+      }),
       data_quality: {
         starter_confirmed: false, // -5
         lineup_confirmed: false,  // -5
@@ -996,8 +1014,6 @@ async function main() {
       },
     };
     const out = runMlbAutoModelV1(snap, "morning_draft");
-    // After caps: 60 (fallback) - 5 (lineup) - 5 (starter) = 50 < 51 floor
-    // → downgrade to Toss-Up
     check(
       "[Phase 4D.1] data-quality downgrade: predicted_nrfi=null when caps drop below floor",
       out.predicted_nrfi === null
@@ -1092,21 +1108,22 @@ async function main() {
   // ═══════════════════════════════════════════════════════════════
 
   // Helper: assemble a snapshot tuned to land in the Toss-Up zone for
-  // baseline (expected ~0.55), so modifier shifts move it across zones.
+  // baseline (expected ~1.0, the center of the Phase 3.x.3 toss-up band
+  // 0.85-1.15), so modifier shifts move it across zones.
   function tossupSnap(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
     return baseSnapshot({
       home_starter: starter({
         player_external_id: 7100,
-        season_era: 3.6,
-        first_inning_era: 2.5,
+        season_era: 4.5,
+        first_inning_era: 4.5,
         first_inning_starts: 10,
         // pitch_quality_score deliberately at exactly 1.0 (neutral)
         pitch_quality_score: 1.0,
       }),
       away_starter: starter({
         player_external_id: 7101,
-        season_era: 3.6,
-        first_inning_era: 2.5,
+        season_era: 4.5,
+        first_inning_era: 4.5,
         first_inning_starts: 10,
         pitch_quality_score: 1.0,
         throws: "L",
@@ -1122,8 +1139,8 @@ async function main() {
       tossupSnap({
         home_starter: starter({
           player_external_id: 7100,
-          season_era: 3.6,
-          first_inning_era: 2.5,
+          season_era: 4.5,
+          first_inning_era: 4.5,
           first_inning_starts: 10,
           pitch_quality_score: 0.92, // whiffiest → biggest suppression
         }),
@@ -1134,8 +1151,8 @@ async function main() {
       tossupSnap({
         home_starter: starter({
           player_external_id: 7100,
-          season_era: 3.6,
-          first_inning_era: 2.5,
+          season_era: 4.5,
+          first_inning_era: 4.5,
           first_inning_starts: 10,
           pitch_quality_score: 1.08, // contact-friendly → biggest boost
         }),
@@ -2346,6 +2363,230 @@ async function main() {
         "[3x1.8b] ML confidence within bounds with real FI",
         withReal.ml_confidence === null ||
           (withReal.ml_confidence >= 51 && withReal.ml_confidence <= 65)
+      );
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // Phase 3.x.3 — recalibrated thresholds + proxy 1.0 + both-sides guardrail
+  // ═══════════════════════════════════════════════════════════════
+  {
+    const realStarter = (fi: number) =>
+      starter({ first_inning_era: fi, first_inning_starts: 10, season_era: fi });
+    const proxyStarter = (seasonEra: number) =>
+      starter({ first_inning_era: null, first_inning_starts: null, season_era: seasonEra });
+    const lowSampleStarter = (fi: number) =>
+      starter({ first_inning_era: fi, first_inning_starts: 2, season_era: fi });
+
+    const fiSnap = (home: StarterSnapshot, away: StarterSnapshot): GameSnapshot => ({
+      ...tossupSnap(),
+      home_starter: home,
+      away_starter: away,
+    });
+
+    // [1] Both real FI, expected ≈ 0.33 → strong_nrfi (new threshold ≤ 0.50)
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(realStarter(1.5), realStarter(1.5)),
+        "morning_draft"
+      );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
+      check(
+        "[3x3.1a] both real, expected ≈ 0.33 → strong_nrfi (new ≤ 0.50)",
+        out.sport_specific.nrfi_threshold_zone === "strong_nrfi"
+      );
+      check(
+        "[3x3.1b] both real strong_nrfi → guardrail does NOT fire",
+        !codes.includes("both_starters_fallback_capped_to_toss_up")
+      );
+    }
+
+    // [2] Both real FI, expected ≈ 0.67 → lean_nrfi (0.50 < x ≤ 0.85)
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(realStarter(3.0), realStarter(3.0)),
+        "morning_draft"
+      );
+      check(
+        "[3x3.2] both real, expected ≈ 0.67 → lean_nrfi (new band 0.50-0.85)",
+        out.sport_specific.nrfi_threshold_zone === "lean_nrfi"
+      );
+    }
+
+    // [3] Both real FI, expected ≈ 1.0 → toss_up (0.85-1.15)
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(realStarter(4.5), realStarter(4.5)),
+        "morning_draft"
+      );
+      check(
+        "[3x3.3a] both real, expected ≈ 1.0 → toss_up (new band 0.85-1.15)",
+        out.sport_specific.nrfi_threshold_zone === "toss_up"
+      );
+      check(
+        "[3x3.3b] toss_up confidence === NRFI_CONFIDENCE_TOSS_UP (52)",
+        out.nrfi_confidence === 52
+      );
+    }
+
+    // [4] Both real FI, expected ≈ 1.22 → lean_yrfi (1.15-1.45)
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(realStarter(5.5), realStarter(5.5)),
+        "morning_draft"
+      );
+      check(
+        "[3x3.4] both real, expected ≈ 1.22 → lean_yrfi (new band 1.15-1.45)",
+        out.sport_specific.nrfi_threshold_zone === "lean_yrfi"
+      );
+    }
+
+    // [5] Both real FI, expected ≈ 1.56 → strong_yrfi (≥ 1.45)
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(realStarter(7.0), realStarter(7.0)),
+        "morning_draft"
+      );
+      check(
+        "[3x3.5] both real, expected ≈ 1.56 → strong_yrfi (new ≥ 1.45)",
+        out.sport_specific.nrfi_threshold_zone === "strong_yrfi"
+      );
+    }
+
+    // [6] Proxy on BOTH starters, natural zone would be decisive →
+    //     guardrail fires, capped to toss_up, reason code emitted.
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(proxyStarter(7.0), proxyStarter(7.0)),
+        "morning_draft"
+      );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
+      // proxy × 1.0 = 7.0 each → expected ≈ 1.56 → would be strong_yrfi
+      check(
+        "[3x3.6a] both proxy + strong_yrfi-equiv expected → guardrail caps to toss_up",
+        out.sport_specific.nrfi_threshold_zone === "toss_up"
+      );
+      check(
+        "[3x3.6b] both proxy → decision_kind = toss_up",
+        out.sport_specific.nrfi_decision_kind === "toss_up"
+      );
+      check(
+        "[3x3.6c] both proxy decisive → both_starters_fallback_capped_to_toss_up emitted",
+        codes.includes("both_starters_fallback_capped_to_toss_up")
+      );
+      check(
+        "[3x3.6d] both proxy → fallback_first_inning_era also emitted",
+        codes.includes("fallback_first_inning_era")
+      );
+      check(
+        "[3x3.6e] both proxy capped → expected_runs still populated (transparency)",
+        out.sport_specific.auto_factors.nrfi_expected_runs !== null
+      );
+    }
+
+    // [7] Low_sample on both → guardrail fires (low_sample is NOT real)
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(lowSampleStarter(7.0), lowSampleStarter(7.0)),
+        "morning_draft"
+      );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
+      check(
+        "[3x3.7a] both low_sample decisive → guardrail caps to toss_up",
+        out.sport_specific.nrfi_threshold_zone === "toss_up"
+      );
+      check(
+        "[3x3.7b] both low_sample → guardrail + low_first_inning_sample both emitted",
+        codes.includes("both_starters_fallback_capped_to_toss_up") &&
+          codes.includes("low_first_inning_sample")
+      );
+    }
+
+    // [8] One real + one proxy → guardrail does NOT fire (one side has real)
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(realStarter(7.0), proxyStarter(7.0)),
+        "morning_draft"
+      );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
+      check(
+        "[3x3.8a] mix real+proxy → guardrail does NOT fire",
+        !codes.includes("both_starters_fallback_capped_to_toss_up")
+      );
+      check(
+        "[3x3.8b] mix real+proxy → both first_inning_data_used and fallback_first_inning_era emit",
+        codes.includes("first_inning_data_used") &&
+          codes.includes("fallback_first_inning_era")
+      );
+    }
+
+    // [9] One real + one low_sample → guardrail does NOT fire (one side has real)
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(realStarter(7.0), lowSampleStarter(7.0)),
+        "morning_draft"
+      );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
+      check(
+        "[3x3.9] mix real+low_sample → guardrail does NOT fire",
+        !codes.includes("both_starters_fallback_capped_to_toss_up")
+      );
+    }
+
+    // [10] Proxy multiplier 1.0: starter with season_era=4.0 + no FI →
+    //      effective FI = 4.0 (not 2.8 like the old 0.7 multiplier)
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(realStarter(4.5), proxyStarter(4.0)),
+        "morning_draft"
+      );
+      // home real FI 4.5, away proxy uses 4.0 × 1.0 = 4.0
+      // per-side: (4.5/9) + (4.0/9) = 0.5 + 0.444 = 0.944 (before mods)
+      // Should land in toss_up zone (0.85-1.15) under new thresholds.
+      check(
+        "[3x3.10] proxy ×1.0 + real FI mix → expected near 0.94, toss_up zone",
+        out.sport_specific.nrfi_threshold_zone === "toss_up" ||
+          out.sport_specific.nrfi_threshold_zone === "lean_nrfi"
+      );
+    }
+
+    // [11] Anti-regression: ML/OU layers structurally intact when guardrail fires
+    {
+      // Asymmetric proxy starters so ML layer has an edge to compute.
+      const outProxy = runMlbAutoModelV1(
+        fiSnap(proxyStarter(4.5), proxyStarter(3.0)),
+        "morning_draft"
+      );
+      check(
+        "[3x3.11a] guardrail-fired game still emits ML pick (ML doesn't read FI)",
+        outProxy.predicted_ml_winner !== null
+      );
+      check(
+        "[3x3.11b] guardrail-fired game still produces predicted_home/away_score",
+        outProxy.predicted_home_score !== null &&
+          outProxy.predicted_away_score !== null
+      );
+      check(
+        "[3x3.11c] guardrail-fired game still produces predicted_total",
+        outProxy.predicted_total !== null
+      );
+    }
+
+    // [12] Held path still works: starter with NO season_era and NO FI →
+    //      held with starter_era_unavailable (guardrail does NOT apply to held)
+    {
+      const heldStarter = starter({
+        season_era: null,
+        first_inning_era: null,
+        first_inning_starts: null,
+      });
+      const out = runMlbAutoModelV1(
+        fiSnap(heldStarter, realStarter(4.5)),
+        "morning_draft"
+      );
+      check(
+        "[3x3.12] held path: missing season ERA → held (not toss_up)",
+        out.sport_specific.nrfi_decision_kind === "held"
       );
     }
   }
