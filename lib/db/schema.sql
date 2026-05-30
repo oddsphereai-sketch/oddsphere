@@ -67,6 +67,7 @@ CREATE INDEX idx_teams_abbreviation  ON teams (sport, abbreviation);
 CREATE TABLE players (
   id            BIGSERIAL PRIMARY KEY,
   external_id   INT  NOT NULL,                        -- BALLDONTLIE player id
+  mlb_person_id INT,                                  -- MLB AM Person ID (Phase 3.x first-inning enrichment); nullable, resolved via name+DOB match
   sport         TEXT NOT NULL,
   team_id       BIGINT REFERENCES teams(id),
   first_name    TEXT NOT NULL,
@@ -97,6 +98,10 @@ CREATE INDEX idx_players_team        ON players (team_id);
 CREATE INDEX idx_players_position    ON players (sport, position_abbr);
 CREATE INDEX idx_players_is_pitcher  ON players (sport, is_pitcher);
 CREATE INDEX idx_players_name        ON players (full_name);
+-- Partial unique index — MLB Person IDs are globally unique within MLB
+-- but the column is nullable while backfill is incremental.
+CREATE UNIQUE INDEX idx_players_mlb_person_id_unique
+  ON players (mlb_person_id) WHERE mlb_person_id IS NOT NULL;
 
 
 -- ── 1.3 ballparks (MLB-specific for V1) ────────────────────────────────────
@@ -302,6 +307,17 @@ CREATE TABLE player_season_stats (
   pitching_k        INT,
   pitching_k_per_9  DECIMAL(5,2),
   pitching_war      DECIMAL(5,2),
+
+  -- First-inning splits (Phase 3.x — sourced from MLB Stats API
+  -- statSplits sitCode i01). innings_pitched stores converted decimal
+  -- innings (e.g. 5.667 for the baseball notation "5.2"), NOT the raw
+  -- baseball-notation string. starts is the sample-size gate input.
+  first_inning_era             DECIMAL(5,2),
+  first_inning_starts          INT,
+  first_inning_runs_allowed    INT,
+  first_inning_earned_runs     INT,
+  first_inning_innings_pitched DECIMAL(5,3),
+  first_inning_whip            DECIMAL(5,3),
 
   created_at        TIMESTAMPTZ DEFAULT NOW(),
   updated_at        TIMESTAMPTZ DEFAULT NOW(),
