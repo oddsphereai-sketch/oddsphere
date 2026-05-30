@@ -188,9 +188,23 @@ function bullpenFactor(team: TeamSnapshot): { factor: number } {
 // Layer 4 — Park factor
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Park factor convention: `park_factor_runs` is an INDEX where 100 = league
+ * neutral (standard MLB statistical convention — Coors ≈ 112, Petco ≈ 94).
+ * The DB column `ballparks.park_factor_runs` (DECIMAL(5,2), schema.sql:115)
+ * stores values in this convention; featureSnapshot passes them through
+ * unchanged. The score formula needs a MULTIPLIER (1.0 = neutral), so we
+ * divide by 100 here.
+ *
+ * Phase 4D.0 fix: pre-fix code returned the index value as-is, which
+ * multiplied raw runs by ~100 and saturated every prediction at
+ * PREDICTED_SCORE_MAX (15.0). The 2026-05-30 launch-readiness
+ * investigation pinpointed this; regression test in
+ * `test-mlb-automodel-v1.ts` pins the convention.
+ */
 function parkMultiplier(park: ParkSnapshot | null): number {
   if (park === null || park.park_factor_runs === null) return 1.0;
-  return park.park_factor_runs;
+  return park.park_factor_runs / 100;
 }
 
 // ─────────────────────────────────────────────────────────────

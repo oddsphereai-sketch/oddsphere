@@ -136,7 +136,9 @@ function baseSnapshot(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
     }),
     home_lineup_top8: leagueAverageLineup("L"),
     away_lineup_top8: leagueAverageLineup("R"),
-    ballpark: { park_factor_runs: 1.0, is_dome: false },
+    // Phase 4D.0 — park_factor_runs is an INDEX where 100=neutral
+    // (standard MLB convention). parkMultiplier divides by 100.
+    ballpark: { park_factor_runs: 100, is_dome: false },
     weather: null,
     market: {
       listed_total: 8.5,
@@ -998,10 +1000,11 @@ async function main() {
   }
 
   {
-    // Coors-like park (factor 1.15) → both teams score more
+    // Coors-like park (index 115 = 1.15 multiplier) → both teams score more.
+    // Phase 4D.0: park_factor_runs is an INDEX (100=neutral).
     const baseOut = runMlbAutoModelV1(baseSnapshot(), "morning_draft");
     const coorsOut = runMlbAutoModelV1(
-      baseSnapshot({ ballpark: { park_factor_runs: 1.15, is_dome: false } }),
+      baseSnapshot({ ballpark: { park_factor_runs: 115, is_dome: false } }),
       "morning_draft"
     );
     check(
@@ -1009,6 +1012,57 @@ async function main() {
       coorsOut.predicted_total !== null &&
         baseOut.predicted_total !== null &&
         coorsOut.predicted_total > baseOut.predicted_total
+    );
+  }
+
+  // ─── Phase 4D.0 — park-factor convention regression ────────────────
+  // Pins the DB-storage convention (park_factor_runs INDEX where 100 =
+  // neutral) so a future code change that returns the raw value instead
+  // of dividing by 100 will saturate scores at PREDICTED_SCORE_MAX and
+  // fail these asserts loudly. Same scenario as the 2026-05-30 incident
+  // on seed slate 2026-05-22 that produced 15.0–15.0 across the slate.
+  {
+    const out = runMlbAutoModelV1(
+      baseSnapshot({ ballpark: { park_factor_runs: 103, is_dome: false } }),
+      "morning_draft"
+    );
+    // With park=103 (slight hitter park) the model should produce
+    // realistic MLB-scale scores, not the PREDICTED_SCORE_MAX clamp.
+    check(
+      "[Phase 4D.0 park-convention] park=103 does NOT saturate clamp (home<15)",
+      out.predicted_home_score !== null && out.predicted_home_score < 14.5
+    );
+    check(
+      "[Phase 4D.0 park-convention] park=103 does NOT saturate clamp (away<15)",
+      out.predicted_away_score !== null && out.predicted_away_score < 14.5
+    );
+    check(
+      "[Phase 4D.0 park-convention] park=103 produces realistic MLB total in [5, 14]",
+      out.predicted_total !== null &&
+        out.predicted_total >= 5 &&
+        out.predicted_total <= 14
+    );
+    // park=103 should produce slightly higher total than park=100 (the
+    // INDEX is 3% above neutral). If the code returns 103 raw, this
+    // would still pass (both saturate at 15) — the >=5 check above is
+    // what catches the bug.
+    const neutralOut = runMlbAutoModelV1(
+      baseSnapshot({ ballpark: { park_factor_runs: 100, is_dome: false } }),
+      "morning_draft"
+    );
+    check(
+      "[Phase 4D.0 park-convention] park=103 total > park=100 total (3% hitter park)",
+      out.predicted_total !== null &&
+        neutralOut.predicted_total !== null &&
+        out.predicted_total > neutralOut.predicted_total
+    );
+    // Park=100 itself must produce normal scores (this is league
+    // neutral; the most common real-world value).
+    check(
+      "[Phase 4D.0 park-convention] park=100 (league neutral) produces realistic total in [5, 14]",
+      neutralOut.predicted_total !== null &&
+        neutralOut.predicted_total >= 5 &&
+        neutralOut.predicted_total <= 14
     );
   }
 
@@ -1064,7 +1118,8 @@ async function main() {
     // Dome ignores weather
     const out = runMlbAutoModelV1(
       baseSnapshot({
-        ballpark: { park_factor_runs: 1.0, is_dome: true },
+        // Phase 4D.0: park_factor_runs is an INDEX (100=neutral).
+        ballpark: { park_factor_runs: 100, is_dome: true },
         weather: {
           temperature_f: 95,
           humidity_pct: 90,
