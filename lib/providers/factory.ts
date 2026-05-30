@@ -36,6 +36,8 @@ import { BallDontLieProvider } from "./real_api/BallDontLieProvider";
 import { BallDontLieSlateProvider } from "./real_api/BallDontLieSlateProvider";
 import { SharpAPIOddsProvider, type SharpApiGameResolver } from "./real_api/SharpAPIOddsProvider";
 import { SharpAPISignalProvider } from "./real_api/SharpAPISignalProvider";
+// Phase 4W — real OpenWeather provider.
+import { OpenWeatherProvider } from "./real_api/OpenWeatherProvider";
 import type { MlbTeamAbbrev } from "./real_api/_teamNameNormalizer";
 import { supabase } from "../db/supabase";
 import type { Sport } from "../types/domain/Sport";
@@ -220,7 +222,13 @@ export function getWeatherProvider(): IWeatherProvider {
     } else if (mode === "manual") {
       notImplemented("WEATHER_PROVIDER", mode, "AdminUploadWeatherProvider", "Phase 7.25");
     } else {
-      notImplemented("WEATHER_PROVIDER", mode, "OpenWeatherProvider", "Phase 8");
+      // Phase 4W — real OpenWeather. Reached only when WEATHER_PROVIDER
+      // is explicitly set to "real_api" (readMode coerces unknown/typo'd
+      // values to mock per the factory's defensive tri-state contract).
+      // Requires OPENWEATHER_API_KEY; throws clear error if missing
+      // rather than silently falling back to mock.
+      const key = readRequiredEnv("OPENWEATHER_API_KEY", "OpenWeatherProvider");
+      weatherInstance = new OpenWeatherProvider(key);
     }
   }
   return weatherInstance;

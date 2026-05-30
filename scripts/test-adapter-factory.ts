@@ -24,6 +24,7 @@ import { MockSharpSignalProvider } from "../lib/providers/mock/MockSharpSignalPr
 import { MockPlayerStatsProvider } from "../lib/providers/mock/MockPlayerStatsProvider";
 import { MockSlateProvider } from "../lib/providers/mock/MockSlateProvider";
 import { MockWeatherProvider } from "../lib/providers/mock/MockWeatherProvider";
+import { OpenWeatherProvider } from "../lib/providers/real_api/OpenWeatherProvider";
 import { MockParkFactorProvider } from "../lib/providers/mock/MockParkFactorProvider";
 import { ManualSlateProvider } from "../lib/providers/manual/ManualSlateProvider";
 
@@ -235,19 +236,71 @@ withEnv(
   }
 );
 
-// ─── 4. "real_api" — WEATHER + PARK_FACTOR still throw Phase 8 ────────────
+// ─── 4. "real_api" — WEATHER now wired (Phase 4W); PARK_FACTOR still Phase 8
 // Gate B.1 Phase 1: ODDS / SHARP_SIGNAL / PLAYER_STATS / SLATE real_api
-// branches are now wired to real providers (BallDontLie + SharpAPI).
-// Coverage for the 4 wired branches lives in test-real-api-factory.ts.
-// Here we assert only the still-unimplemented branches.
+// branches are wired (BallDontLie + SharpAPI). Coverage for those 4 lives
+// in test-real-api-factory.ts. Phase 4W adds WEATHER. PARK_FACTOR is the
+// only remaining branch deferred to Phase 8.
+
+// Save/restore OPENWEATHER_API_KEY outside of withEnv (withEnv only
+// manages the 6 *_PROVIDER vars).
+const savedOpenWeatherKey = process.env.OPENWEATHER_API_KEY;
+
+// 4a. real_api + key MISSING → throws clear error naming the env var.
 withEnv(
-  "4. WEATHER_PROVIDER=real_api still throws notImplemented for Phase 8",
+  "4a. WEATHER_PROVIDER=real_api WITHOUT OPENWEATHER_API_KEY throws",
   { WEATHER_PROVIDER: "real_api" },
   () => {
-    const r = throwsWith(getWeatherProvider, "Phase 8");
-    check("WEATHER_PROVIDER=real_api throws and mentions Phase 8", r.threw, r.message);
+    const before = process.env.OPENWEATHER_API_KEY;
+    delete process.env.OPENWEATHER_API_KEY;
+    try {
+      const r = throwsWith(getWeatherProvider, "OPENWEATHER_API_KEY");
+      check(
+        "real_api without key throws mentioning OPENWEATHER_API_KEY",
+        r.threw,
+        r.message
+      );
+      check(
+        "real_api without key error names OpenWeatherProvider",
+        r.message?.includes("OpenWeatherProvider") === true
+      );
+    } finally {
+      if (before === undefined) delete process.env.OPENWEATHER_API_KEY;
+      else process.env.OPENWEATHER_API_KEY = before;
+    }
   }
 );
+
+// 4b. real_api + key SET → returns OpenWeatherProvider instance.
+withEnv(
+  "4b. WEATHER_PROVIDER=real_api WITH OPENWEATHER_API_KEY returns OpenWeatherProvider",
+  { WEATHER_PROVIDER: "real_api" },
+  () => {
+    const before = process.env.OPENWEATHER_API_KEY;
+    process.env.OPENWEATHER_API_KEY = "test_fixture_key_NEVER_used_for_real_calls";
+    try {
+      const instance = getWeatherProvider();
+      check(
+        "real_api with key returns OpenWeatherProvider instance",
+        instance instanceof OpenWeatherProvider
+      );
+      check(
+        "real_api with key returns NOT a MockWeatherProvider",
+        !(instance instanceof MockWeatherProvider)
+      );
+    } finally {
+      if (before === undefined) delete process.env.OPENWEATHER_API_KEY;
+      else process.env.OPENWEATHER_API_KEY = before;
+    }
+  }
+);
+
+// Restore in case the suite expects the original env state below.
+if (savedOpenWeatherKey === undefined) {
+  delete process.env.OPENWEATHER_API_KEY;
+} else {
+  process.env.OPENWEATHER_API_KEY = savedOpenWeatherKey;
+}
 
 withEnv(
   "    PARK_FACTOR_PROVIDER=real_api still throws notImplemented for Phase 8",
