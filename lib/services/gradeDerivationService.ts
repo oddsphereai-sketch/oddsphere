@@ -795,8 +795,20 @@ function picksFromRow(row: GamePredRow): Record<
   { market: string; side: Side; marketSignal: MarketSignal | null } | null
 > {
   return {
+    // Triplet-atomicity gate (per pre-existing per-pick invariant test):
+    //   Grade derivation requires BOTH a model pick (predicted_<market>)
+    //   AND the market-signal column populated. When market_signal is
+    //   null — whether legitimately (no sharp data exists for that game)
+    //   or transiently (race during morning-card ingest/derive sequence
+    //   where the new pick's market_signal hasn't been written yet) —
+    //   produce no grade entry. That keeps the on-disk (grade,
+    //   signal_type, market_signal) triplet atomic: either all three
+    //   columns null together, or all three populated together. The
+    //   alternative — letting deriveGrade fall through to "market_watch"
+    //   on null marketSignal — produces a partial triplet that violates
+    //   the invariant the daily-edge route's atomicity test enforces.
     ml:
-      row.predicted_ml_winner !== null
+      row.predicted_ml_winner !== null && row.ml_market_signal !== null
         ? {
             market: "moneyline",
             side: row.predicted_ml_winner,
@@ -804,7 +816,7 @@ function picksFromRow(row: GamePredRow): Record<
           }
         : null,
     ou:
-      row.predicted_ou_side !== null
+      row.predicted_ou_side !== null && row.ou_market_signal !== null
         ? {
             market: "total",
             side: row.predicted_ou_side,
@@ -812,7 +824,7 @@ function picksFromRow(row: GamePredRow): Record<
           }
         : null,
     nrfi:
-      row.predicted_nrfi !== null
+      row.predicted_nrfi !== null && row.nrfi_market_signal !== null
         ? {
             market: "first_inning_total",
             side: row.predicted_nrfi ? "under" : "over",

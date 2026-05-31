@@ -1680,6 +1680,53 @@ async function main() {
         "DB per-pick ml/ou/nrfi grade+signal_type match derived maps for sampled rows",
         perPickMismatch === 0
       );
+
+      // Path-A regression test (gradeDerivationService null-market_signal
+      // gate). For every row × market, the (grade, signal_type,
+      // market_signal) triplet must be atomic — either all 3 null
+      // together, or all 3 populated together. Prior bug: when
+      // market_signal was null (legitimate "no sharp data" OR transient
+      // race in morning-card sequence), grade derivation fell through to
+      // "market_watch" anyway, leaving a partial triplet that the
+      // daily-edge route's atomicity test caught. Fix in picksFromRow
+      // now gates on market_signal !== null.
+      const { data: tripletRows } = await supabase
+        .from("game_predictions")
+        .select(
+          "id, ml_grade, ml_signal_type, ml_market_signal, ou_grade, ou_signal_type, ou_market_signal, nrfi_grade, nrfi_signal_type, nrfi_market_signal"
+        )
+        .in("id", sampleGameIds);
+      let nonAtomic = 0;
+      const examples: string[] = [];
+      for (const row of (tripletRows ?? []) as Array<{
+        id: number;
+        ml_grade: string | null;
+        ml_signal_type: string | null;
+        ml_market_signal: string | null;
+        ou_grade: string | null;
+        ou_signal_type: string | null;
+        ou_market_signal: string | null;
+        nrfi_grade: string | null;
+        nrfi_signal_type: string | null;
+        nrfi_market_signal: string | null;
+      }>) {
+        for (const market of ["ml", "ou", "nrfi"] as const) {
+          const g = row[`${market}_grade`];
+          const s = row[`${market}_signal_type`];
+          const ms = row[`${market}_market_signal`];
+          const nulls = (g === null ? 1 : 0) + (s === null ? 1 : 0) + (ms === null ? 1 : 0);
+          if (nulls !== 0 && nulls !== 3) {
+            nonAtomic++;
+            if (examples.length < 3) {
+              examples.push(`id=${row.id} ${market}: grade=${g} signalType=${s} marketSignal=${ms}`);
+            }
+          }
+        }
+      }
+      check(
+        `Path-A: per-pick (grade, signal_type, market_signal) triplet is atomic on sampled rows ${examples.length > 0 ? `(examples: ${examples.join("; ")})` : ""}`,
+        nonAtomic === 0
+      );
     }
 
     const samplePropIds = Array.from(derived.props.keys()).slice(0, 5);
