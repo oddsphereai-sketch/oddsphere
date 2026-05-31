@@ -167,6 +167,18 @@ export type DailyEdgeGameDto = {
   };
   projected: { away: number; home: number };
   sharpSignals: SharpSignalDto[];
+  /**
+   * Phase 4.1.6 — member-facing pick breakdown (deterministic template
+   * output from pickBreakdownGenerator, persisted into
+   * `game_predictions.sport_specific.member_summary`).
+   *
+   * Member API exposes ONLY the member-safe summary; `operator_detail`
+   * stays inside the JSONB and is never sent to public clients.
+   *
+   * `null` when the prediction was written before Phase 4.1.5 (no
+   * breakdown keys in sport_specific) — backward-compatible by design.
+   */
+  breakdown: { memberSummary: string } | null;
   // V2.1.1 (Phase 6.3.5e): legacy top-level grade / signalType /
   // marketSignal / primaryMarket fields dropped. Headline derivation
   // moves client-side to perPickHeadline.ts (headlineGrade /

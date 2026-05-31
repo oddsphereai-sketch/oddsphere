@@ -430,6 +430,7 @@ async function main() {
       },
       projected: { away: 0, home: 0 },
       sharpSignals: [],
+      breakdown: null,
     };
   }
 
@@ -768,6 +769,96 @@ async function main() {
       `Fix 7.2.5 cleanup: lines.total rows restored for game_id=${fix725GameDbId} (count=${linesAfter}, snapshot=${linesSnapshot.length})`,
       (linesAfter ?? 0) === linesSnapshot.length
     );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase 4.1.6 — DTO extension: member-safe breakdown summary
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    const { extractMemberBreakdown } = await import(
+      "../app/api/lab/daily-edge/route"
+    ).then((m) => (m as { __TEST__: { extractMemberBreakdown: (s: unknown) => unknown } }).__TEST__);
+
+    // Helper to typecheck the return shape
+    type BR = { memberSummary: string } | null;
+    const call = (input: unknown): BR =>
+      extractMemberBreakdown(input as Record<string, unknown> | null) as BR;
+
+    // 1. Happy path
+    {
+      const r = call({ member_summary: "Lean YRFI — moderate edge (55% confidence)." });
+      check(
+        "[4.1.6.1] sport_specific with non-empty member_summary → breakdown populated",
+        r !== null && r.memberSummary === "Lean YRFI — moderate edge (55% confidence)."
+      );
+    }
+    // 2. Missing key
+    {
+      const r = call({ other_key: "x" });
+      check(
+        "[4.1.6.2] sport_specific without member_summary → breakdown null",
+        r === null
+      );
+    }
+    // 3. Null sport_specific
+    check(
+      "[4.1.6.3] sport_specific === null → breakdown null",
+      call(null) === null
+    );
+    // 4. Undefined sport_specific
+    check(
+      "[4.1.6.4] sport_specific === undefined → breakdown null",
+      call(undefined) === null
+    );
+    // 5. member_summary is not a string (number)
+    {
+      const r = call({ member_summary: 123 });
+      check(
+        "[4.1.6.5] non-string member_summary → breakdown null (no leaking junk)",
+        r === null
+      );
+    }
+    // 6. member_summary is an empty string
+    {
+      const r = call({ member_summary: "" });
+      check(
+        "[4.1.6.6] empty-string member_summary → breakdown null",
+        r === null
+      );
+    }
+    // 7. member_summary is an object (malformed)
+    {
+      const r = call({ member_summary: { text: "nope" } });
+      check(
+        "[4.1.6.7] object-shaped member_summary → breakdown null",
+        r === null
+      );
+    }
+    // 8. operator_detail is NEVER exposed
+    {
+      const r = call({
+        member_summary: "Strong YRFI play.",
+        operator_detail: "INTERNAL: full reason codes etc.",
+        breakdown_version: "v1.0",
+        breakdown_generated_at: "2026-05-30T12:00:00Z",
+      });
+      check(
+        "[4.1.6.8a] breakdown only exposes memberSummary key",
+        r !== null && Object.keys(r).length === 1 && "memberSummary" in r
+      );
+      check(
+        "[4.1.6.8b] breakdown does NOT include operator_detail field",
+        r !== null && !("operatorDetail" in r) && !("operator_detail" in r)
+      );
+      check(
+        "[4.1.6.8c] breakdown does NOT include breakdown_version field",
+        r !== null && !("breakdownVersion" in r) && !("breakdown_version" in r)
+      );
+      check(
+        "[4.1.6.8d] breakdown does NOT include breakdown_generated_at field",
+        r !== null && !("breakdownGeneratedAt" in r) && !("breakdown_generated_at" in r)
+      );
+    }
   }
 
   // ─── Summary ──────────────────────────────────────────────────────────────

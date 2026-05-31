@@ -480,11 +480,40 @@ function buildGameDto(
       homeTeamAbbr: home,
       awayTeamAbbr: away,
     }),
+    // Phase 4.1.6 — member-safe breakdown summary. Reads ONLY
+    // `sport_specific.member_summary`; operator_detail and other
+    // breakdown_* keys remain server-side and are never sent to the
+    // public API.
+    breakdown: extractMemberBreakdown(pred.sport_specific),
     // V2.1.1 (Phase 6.3.5e): legacy top-level grade / signalType /
     // marketSignal / primaryMarket dropped. Headline derivation lives in
     // perPickHeadline.ts (client-side) reading the per-pick fields below.
   };
 }
+
+/**
+ * Extracts the member-safe breakdown summary from a prediction's
+ * sport_specific JSONB. Returns null when:
+ *   • sport_specific is null/missing (older predictions)
+ *   • member_summary key is absent (prediction written before Phase 4.1.5)
+ *   • member_summary is present but not a non-empty string (malformed)
+ *
+ * Operator-only keys (operator_detail, breakdown_version,
+ * breakdown_generated_at) are intentionally ignored — they never appear
+ * in the member API response.
+ */
+function extractMemberBreakdown(
+  sportSpecific: Record<string, unknown> | null | undefined
+): { memberSummary: string } | null {
+  if (!sportSpecific) return null;
+  const raw = sportSpecific.member_summary;
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  return { memberSummary: raw };
+}
+
+// Exported for unit-test access (mirrors the __TEST__ pattern in
+// featureSnapshot.ts). Production callers go through the GET handler.
+export const __TEST__ = { buildGameDto, extractMemberBreakdown };
 
 // ───────────────────────────────────────────────────────────────────────────
 // Route handler
