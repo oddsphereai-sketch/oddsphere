@@ -1,36 +1,71 @@
 /**
- * Phase 4.1.3 — deterministic template-based pick breakdown generator.
+ * Phase 4.1.8.A — deterministic template-based MODEL BREAKDOWN generator.
  *
  * Pure function. Takes the model's `AutoModelOutput` plus a small
- * snapshot context (pitcher names, team abbreviations, sample sizes)
- * and returns a `BreakdownPayload` with member-facing and operator-only
- * text. No DB, no env reads, no network, no LLM.
+ * snapshot context (pitcher names, team abbreviations, FI sample sizes)
+ * and returns a `BreakdownPayload` with member-facing model prose +
+ * operator-only diagnostic text. No DB, no env reads, no network, no LLM.
  *
- * Grounding contract:
+ * Phase 4.1.8.A scope shift (vs Phase 4.1.3):
+ *   • The generator now produces ONLY the model-side prose
+ *     (`model_breakdown`). The verdict word and Sharp Read sentence are
+ *     derived CLIENT-SIDE at render time by lib/services/verdictDerivation
+ *     and lib/services/sharpReadSelector, because grades and sharp
+ *     signals are computed AFTER pickBreakdownGenerator runs in
+ *     automodelService. Persisting verdict / sharp_read at generator
+ *     time would always be stale. See PHASE_4.1.8 Option B rationale.
+ *   • The ML / O/U tail (e.g. "ML NYY 58% · O/U over 56%") has been
+ *     DROPPED. The 3 pick tiles on the card already show per-market
+ *     pick + confidence; the tail was redundancy that made the prose
+ *     feel article-y.
+ *   • Actionability lead ("Strong YRFI play (55% confidence).") has
+ *     been DROPPED. The verdict pill carries the actionability cue.
+ *   • Numeric confidence parentheticals ("(60% confidence)") have been
+ *     DROPPED for the same reason — tiles + verdict carry quantitative
+ *     weight.
+ *   • New char cap: MODEL_BREAKDOWN_CAP = 180 (was MEMBER_TEXT_CAP = 280).
+ *   • Expanded forbidden-phrase regex bars the technical vocabulary
+ *     Daniel flagged (fallback, FI ERA, FI data, fair value, +EV, etc.).
+ *
+ * Back-compat shim (Phase 4.1.8.A → 4.1.8.B transition):
+ *   The returned payload exposes both `model_breakdown` (canonical v2
+ *   field) and `member_summary` (alias = model_breakdown). The existing
+ *   automodelService write code still reads `breakdown.member_summary`,
+ *   so the alias keeps the call site compiling without an out-of-scope
+ *   automodelService edit. Phase 4.1.8.B drops the alias when the
+ *   orchestrator migrates to write under sport_specific.breakdown_v2.
+ *
+ * Grounding contract (unchanged):
  *   • Every member-facing sentence traces to either a structured
- *     field (kind, zone, confidence, score, pitcher name) or a reason
- *     code from `MEMBER_FRAGMENTS`.
+ *     field (kind, zone, score, pitcher name) or a reason code from
+ *     `MEMBER_FRAGMENTS`.
  *   • Codes in `MEMBER_HIDDEN` never appear in member text.
- *   • Forbidden phrases (technical code names, leaked operator-only
- *     metric names) are blocked by post-generation regex.
- *   • Member text is hard-capped at MEMBER_TEXT_CAP characters.
+ *   • Forbidden phrases are blocked by post-generation regex.
+ *   • Member text is hard-capped at MODEL_BREAKDOWN_CAP characters.
  *
- * V1 scope: MLB only. Other sports return an empty payload (string fields
- * empty, metadata populated). Future phases add per-sport fragment maps.
- *
- * Completeness assertion: the test suite enforces that every reason code
- * known to be emitted by mlbAutoModelV1.ts has either a member fragment
- * OR is in MEMBER_HIDDEN.
+ * V1 scope: MLB only. Other sports return an empty payload (string
+ * fields empty, metadata populated).
  */
 
 import type { AutoModelOutput } from "../automodel/types";
 import type { Sport } from "../types/domain/Sport";
 
-export const BREAKDOWN_VERSION = "v1.0";
-export const MEMBER_TEXT_CAP = 280;
+export const BREAKDOWN_VERSION = "v2.0";
+/** Phase 4.1.8.A — model breakdown is short by design (decision support,
+ *  not an article). 1 sentence preferred; 2 max when a caveat is material. */
+export const MODEL_BREAKDOWN_CAP = 180;
+/** Back-compat alias used by the existing test imports. Will be removed
+ *  alongside the `member_summary` alias when 4.1.8.B lands. */
+export const MEMBER_TEXT_CAP = MODEL_BREAKDOWN_CAP;
 
 export type BreakdownPayload = {
+  /** Phase 4.1.8.A v2 canonical field — model-side prose only. */
+  model_breakdown: string;
+  /** Back-compat alias = model_breakdown. Maintained through 4.1.8.A so
+   *  automodelService's existing `breakdown.member_summary` read keeps
+   *  compiling without an out-of-scope edit. Dropped in 4.1.8.B. */
   member_summary: string;
+  /** Unchanged from v1. Admin-surface diagnostic prose. */
   operator_detail: string;
   breakdown_version: string;
   breakdown_generated_at: string;
@@ -44,8 +79,6 @@ export type BreakdownContext = {
   away_team_abbr: string;
   home_first_inning_starts: number | null;
   away_first_inning_starts: number | null;
-  // Phase 4.1.3.b — per-pitcher FI ERA + season ERA for member-facing
-  // pitcher-driven reasoning. Pulled from snapshot.{home,away}_starter.
   home_first_inning_era: number | null;
   away_first_inning_era: number | null;
   home_season_era: number | null;
@@ -56,27 +89,37 @@ export type BreakdownContext = {
 
 type MemberFragment = (ctx: BreakdownContext) => string;
 
+/**
+ * Member-facing fragments per reason code. Phase 4.1.8.A rewrote three
+ * fragments that previously used forbidden vocabulary (`FI ERA`,
+ * `FI data on file`, `season ERA`, `fallback`): low_first_inning_sample,
+ * fallback_first_inning_era, both_starters_fallback_capped_to_toss_up.
+ * The others were already plain-English clean.
+ */
 const MEMBER_FRAGMENTS: Record<string, MemberFragment> = {
   // Hold-path codes
-  missing_starter: () => "Probable starter has not been announced.",
-  starter_scratched: () => "A starter has been scratched.",
-  starter_era_unavailable: () => "Pitcher stats are not yet available.",
+  missing_starter: () =>
+    "Probable starters haven't been announced for this matchup yet.",
+  starter_scratched: () => "A starter has been scratched from this matchup.",
+  starter_era_unavailable: () =>
+    "Starter stats aren't available for this matchup yet.",
   thin_top_order: () =>
-    "Lineup data is too sparse to support a confident first-inning call.",
-  // FI source codes
+    "Lineup details aren't deep enough yet to call this matchup.",
+  // FI-source codes (Phase 4.1.8.A vocabulary cleanup)
   low_first_inning_sample: (ctx) => {
     const thin = thinSidePitcher(ctx);
-    if (thin === null) return "One starter's first-inning sample is small.";
-    return `${thin.name}'s first-inning sample is small (${thin.starts} starts) — season ERA used as fallback.`;
+    if (thin === null) return "One starter's early-inning sample is still small.";
+    return `${thin.name}'s early-inning sample is still small this year.`;
   },
   fallback_first_inning_era: (ctx) => {
     const missing = fallbackSidePitchers(ctx);
-    if (missing.length === 0) return "Season-ERA fallback used for one side.";
-    if (missing.length === 1) return `No first-inning data on file for ${missing[0]} — season ERA used as fallback.`;
-    return `No first-inning data on file for ${missing.join(" or ")} — season ERA used as fallback.`;
+    if (missing.length === 0) return "One side has limited early-inning data.";
+    if (missing.length === 1)
+      return `Limited early-inning data on ${missing[0]} this year.`;
+    return `Limited early-inning data on ${missing.join(" and ")} this year.`;
   },
   both_starters_fallback_capped_to_toss_up: () =>
-    "Neither pitcher has enough first-inning data on file yet — model is holding off on a confident call.",
+    "Limited first-inning data on both starters tonight, so the model is holding off on a confident first-inning call.",
   // Offense codes
   platoon_advantage_home: (ctx) => {
     const away = ctx.away_pitcher_name ?? "the away starter";
@@ -86,8 +129,8 @@ const MEMBER_FRAGMENTS: Record<string, MemberFragment> = {
     const home = ctx.home_pitcher_name ?? "the home starter";
     return `Away lineup has a platoon edge against ${home}.`;
   },
-  top_order_power_risk: () => "Top of the order shows strong slugging.",
-  top_order_obp_risk: () => "Top of the order has strong on-base ability.",
+  top_order_power_risk: () => "The top of the order adds scoring risk.",
+  top_order_obp_risk: () => "The top of the order adds on-base risk.",
   // Pitcher codes
   pitcher_quality_supports_nrfi: () =>
     "Starter quality favors strikeouts and weak contact.",
@@ -99,8 +142,8 @@ const MEMBER_FRAGMENTS: Record<string, MemberFragment> = {
   weather_boosts_runs: () => "Weather conditions favor scoring.",
   weather_suppresses_runs: () => "Weather conditions suppress scoring.",
   // Market codes
-  market_total_high: () => "Market total is on the high end.",
-  market_total_low: () => "Market total is on the low end.",
+  market_total_high: () => "Listed total is on the high end.",
+  market_total_low: () => "Listed total is on the low end.",
   // Data-quality cap codes
   lineup_unconfirmed: () => "Lineup not yet confirmed.",
   starter_unconfirmed: () => "Starter not yet confirmed.",
@@ -127,7 +170,8 @@ function parseExpectedRunsCode(code: string): number | null {
 }
 
 // Operator-side fragments — one entry per finite known code. Same trigger
-// conditions as the model emissions; prose is more technical.
+// conditions as the model emissions; prose is more technical. Unchanged
+// from Phase 4.1.3; operator surface stays admin-only.
 const OPERATOR_FRAGMENTS: Record<string, string> = {
   missing_starter: "Hold: missing_starter (home or away pitcher null).",
   starter_scratched: "Hold: starter_scratched (is_scratched=true).",
@@ -199,19 +243,30 @@ function fallbackSidePitchers(ctx: BreakdownContext): string[] {
   return out;
 }
 
-function formatConfidence(c: number | null): string {
-  if (c === null) return "—";
-  return `${Math.round(c)}%`;
+function capModelBreakdown(text: string): string {
+  if (text.length <= MODEL_BREAKDOWN_CAP) return text;
+  return text.slice(0, MODEL_BREAKDOWN_CAP - 1).trimEnd() + "…";
 }
 
-function capMemberText(text: string): string {
-  if (text.length <= MEMBER_TEXT_CAP) return text;
-  return text.slice(0, MEMBER_TEXT_CAP - 1).trimEnd() + "…";
-}
+/** Back-compat alias for tests that imported the v1 helper name. */
+const capMemberText = capModelBreakdown;
 
-// Forbidden phrases — these must NEVER appear in member text. The regex
-// is conservative; the unit-test suite asserts non-presence per fragment.
+/**
+ * Forbidden phrases — these must NEVER appear in member text. Phase
+ * 4.1.8.A expanded the v1 list with Daniel's vocab guardrails:
+ *   • Generator-internal identifiers (fallback, reason code, market
+ *     signal, +EV, fair value, positive EV).
+ *   • FI-specific shorthand (FI ERA, FI data, FI starts).
+ *   • Grade enum names (best_signal, sharp_confirmed, etc.).
+ *   • V1 tail patterns ("ML XXX NN%", "O/U over NN%").
+ *   • The actionability lead's confidence parenthetical
+ *     ("(NN% confidence)") — verdict + tiles carry this now.
+ *
+ * Tests assert non-presence on every fragment AND every composed
+ * model_breakdown across the slate fixtures.
+ */
 const FORBIDDEN_MEMBER_PATTERNS: RegExp[] = [
+  // v1 patterns preserved
   /first_inning_data_used/,
   /both_starters_fallback_capped_to_toss_up/,
   /expected_first_inning_runs/,
@@ -220,43 +275,72 @@ const FORBIDDEN_MEMBER_PATTERNS: RegExp[] = [
   /\bthreshold_zone\b/i,
   /\bbelow_floor\b/i,
   /\bsport_specific\b/i,
+  // Phase 4.1.8.A expanded vocab guards
+  /\bfallback\b/i,
+  /\bFI ERA\b/,
+  /\bFI data\b/i,
+  /\bFI starts\b/,
+  /\bfair value\b/i,
+  /\bpositive EV\b/i,
+  /\+EV\b/,
+  /\bmarket signal\b/i,
+  /\breason code\b/i,
+  /\bbest_signal\b/,
+  /\bsharp_confirmed\b/,
+  /\bmarket_led\b/,
+  /\bmodel_only\b/,
+  /\bmarket_watch\b/,
+  /\bpublic_smoke\b/,
+  /\bsharp_conflict\b/,
+  /capped to toss[- ]up/i,
+  // Drop the v1 ML/OU tail
+  /\bML\s+[A-Z]{2,4}\s+\d+%/,
+  /\bO\/U\s+(over|under)\s+\d+%/i,
+  // Drop the v1 actionability confidence parenthetical
+  /\d+%\s*confidence/i,
+  // Drop the v1 actionability lead verbs
+  /^Strong (NRFI|YRFI) play/,
+  /^Lean (NRFI|YRFI)\b/,
 ];
 
 function assertNoForbiddenPhrases(text: string): void {
   for (const re of FORBIDDEN_MEMBER_PATTERNS) {
     if (re.test(text)) {
       throw new Error(
-        `pickBreakdownGenerator: forbidden phrase ${re} detected in member text: "${text.slice(0, 80)}…"`
+        `pickBreakdownGenerator: forbidden phrase ${re} detected in model breakdown: "${text.slice(0, 80)}…"`
       );
     }
   }
 }
 
-// ─── Member summary composition (Phase 4.1.3.b — member-first priorities) ─
+// ─── Model breakdown composition ─────────────────────────────────────
 
-// Member-priority order for the "fallback" secondary signal slot when no
-// FI-driven primary reason is available. Used by toss-up natural and by
-// decisive picks where neither side has real FI data.
-const SECONDARY_PRIORITY = [
+/**
+ * Priority list for the "primary fallback" signal slot — used when no
+ * real-FI pitcher driver is available. Order: pitcher → lineup → park
+ * → weather → market. Keeps the prose pitcher-narrative when possible,
+ * which is what members find easiest to parse.
+ */
+const PRIMARY_FALLBACK_PRIORITY = [
   "pitcher_quality_supports_nrfi",
   "pitcher_quality_risk",
   "platoon_advantage_home",
   "platoon_advantage_away",
+  "top_order_power_risk",
+  "top_order_obp_risk",
   "park_boosts_runs",
   "park_suppresses_runs",
   "weather_boosts_runs",
   "weather_suppresses_runs",
-  "top_order_power_risk",
-  "top_order_obp_risk",
   "market_total_high",
   "market_total_low",
 ];
 
-function pickSecondarySignal(
+function pickPrimaryFallbackSignal(
   codes: string[],
   ctx: BreakdownContext
 ): string {
-  for (const code of SECONDARY_PRIORITY) {
+  for (const code of PRIMARY_FALLBACK_PRIORITY) {
     if (codes.includes(code) && MEMBER_FRAGMENTS[code]) {
       return MEMBER_FRAGMENTS[code](ctx);
     }
@@ -319,33 +403,46 @@ function yrfiDriver(ctx: BreakdownContext): FiSideInfo | null {
   return sides.reduce((a, b) => (a.fi_era >= b.fi_era ? a : b));
 }
 
-/** Caveat string for fallback / low-sample data quality, if applicable. */
-function caveatLine(codes: string[], ctx: BreakdownContext): string {
-  // Suppress the per-side caveats when the guardrail already explains
-  // the no-data situation in the lead — avoid double-billing.
+/**
+ * Caveat clause appended to the lead sentence when data-quality issues
+ * are material to the model's read. Returns "" when no caveat is needed
+ * (or when the guardrail code already handled the framing in the lead).
+ *
+ * Phase 4.1.8.A — phrasings updated to plain-English forms Daniel approved:
+ *   "though early-inning data on [Name] is still thin."     (low_sample)
+ *   "though early-inning data on [Name] is limited."         (1 fallback)
+ *   "though early-inning data on both starters is limited tonight." (2)
+ */
+function buildCaveat(codes: string[], ctx: BreakdownContext): string {
+  // Guardrail already explains the no-data situation in the lead — avoid
+  // double-billing.
   if (codes.includes("both_starters_fallback_capped_to_toss_up")) return "";
+
   if (codes.includes("low_first_inning_sample")) {
     const thin = thinSidePitcher(ctx);
     if (thin !== null) {
-      return `Caveat: ${thin.name} has only ${thin.starts} FI starts, so his side uses season ERA.`;
+      return `though early-inning data on ${thin.name} is still thin.`;
     }
-    return "Caveat: one starter has a thin FI sample.";
+    return "though one starter's early-inning data is still thin.";
   }
+
   if (codes.includes("fallback_first_inning_era")) {
     const missing = fallbackSidePitchers(ctx);
     if (missing.length === 1) {
-      return `Caveat: no FI data on file for ${missing[0]}, so his side uses season ERA.`;
+      return `though early-inning data on ${missing[0]} is limited.`;
     }
     if (missing.length > 1) {
-      return `Caveat: no FI data on file for ${missing.join(" or ")} — season ERA used as fallback.`;
+      return "though early-inning data on both starters is limited tonight.";
     }
-    return "Caveat: one side uses season-ERA fallback.";
+    return "though early-inning data on one side is limited.";
   }
+
   return "";
 }
 
-/** Held framing: short, no-play, with the specific hold reason. */
-function buildHoldMemberText(
+/** Held framing: short, plain-English hold reason. No "Held — no play."
+ *  prefix anymore (the verdict pill carries "No Play"). */
+function buildHeldLead(
   output: AutoModelOutput,
   ctx: BreakdownContext
 ): string {
@@ -358,123 +455,117 @@ function buildHoldMemberText(
     "thin_top_order",
   ]) {
     if (codes.includes(code)) {
-      return `Held — no play. ${MEMBER_FRAGMENTS[code](ctx)}`;
+      return MEMBER_FRAGMENTS[code](ctx);
     }
   }
-  const reason = ss.nrfi_hold_reason ?? "";
-  return reason
-    ? `Held — no play. ${reason}.`
-    : "Held — no play.";
+  // Generic hold fallback when no specific reason code fires.
+  return "The model is holding off on this matchup tonight.";
 }
 
-/** Toss-up framing: explain WHY the model is staying away. */
-function buildTossUpMemberText(
+/**
+ * Toss-up natural framing: explain WHY the model isn't picking a side,
+ * without the v1 "Toss-up —" prefix and without quoting the expected
+ * runs number. Verdict pill carries the actionability.
+ */
+function buildTossUpLead(
   output: AutoModelOutput,
   ctx: BreakdownContext
 ): string {
-  const ss = output.sport_specific;
-  const codes = ss.nrfi_reason_codes ?? [];
-  // Guardrail: no real FI on either side — flag prominently.
+  const codes = output.sport_specific.nrfi_reason_codes ?? [];
+  // Guardrail: no real FI on either side — surface the data caveat
+  // directly as the lead.
   if (codes.includes("both_starters_fallback_capped_to_toss_up")) {
-    return "Toss-up — the model lacks real first-inning data for both starters, so it is not forcing a pick.";
+    return MEMBER_FRAGMENTS.both_starters_fallback_capped_to_toss_up(ctx);
   }
-  // Real FI on at least one side but expected runs land in toss-up band.
-  // Try to surface a secondary contextual signal if available.
-  const exp = ss.auto_factors.nrfi_expected_runs;
-  const expStr = exp !== null ? `~${exp.toFixed(2)} runs` : "near average";
-  const secondary = pickSecondarySignal(codes, ctx);
+  // Real FI on at least one side but expected runs landed in toss-up
+  // band. Lead with the strongest secondary signal when available;
+  // generic "thin edge" fallback otherwise. Phase 4.1.8.A copy refresh:
+  // "Early-inning edge is thin, but ..." reads cleaner than the older
+  // "Both starters look roughly even early, but ..." which clashed when
+  // the secondary signal was a scoring-risk note (the lead implied low
+  // scoring, the appended clause implied the opposite).
+  const secondary = pickPrimaryFallbackSignal(codes, ctx);
   if (secondary) {
-    return `Toss-up — projected first-inning runs land in the middle (${expStr}); no clear NRFI/YRFI edge. ${secondary}`;
+    return `Early-inning edge is thin, but ${lcFirst(secondary)}`;
   }
-  return `Toss-up — projected first-inning runs land in the middle (${expStr}); no clear NRFI/YRFI edge.`;
+  return "Early-inning edge is thin, with no clear lean either way.";
 }
 
-/** Decisive NRFI/YRFI: actionability lead + primary FI-driven reason + caveat. */
-function buildDecisiveMemberText(
+/**
+ * Decisive NRFI/YRFI framing: lead with the pitcher-driven primary
+ * reason when real FI data is available; fall back to the strongest
+ * secondary signal otherwise. Caveat appended when material.
+ */
+function buildDecisiveLead(
   output: AutoModelOutput,
   ctx: BreakdownContext
 ): string {
   const ss = output.sport_specific;
   const codes = ss.nrfi_reason_codes ?? [];
-  const direction = ss.nrfi_decision_kind === "nrfi" ? "NRFI" : "YRFI";
-  const isStrong =
-    ss.nrfi_threshold_zone === "strong_nrfi" ||
-    ss.nrfi_threshold_zone === "strong_yrfi";
-  const conf = formatConfidence(output.nrfi_confidence);
-  // Lead — actionability language, not just a confidence number.
-  const lead = isStrong
-    ? `Strong ${direction} play (${conf} confidence).`
-    : `Lean ${direction} — moderate edge (${conf} confidence).`;
 
-  // Primary reason — prefer pitcher-driven FI signal when real data is
-  // available; fall back to a secondary contextual code when not.
-  let primary = "";
+  let lead = "";
   if (ss.nrfi_decision_kind === "nrfi") {
     const driver = nrfiDriver(ctx);
     if (driver !== null) {
-      primary = `${driver.name} has been strong in first innings (${driver.fi_era.toFixed(2)} FI ERA in ${driver.starts} starts).`;
+      lead = `${driver.name} has been strong in first innings this year.`;
     }
-  } else {
+  } else if (ss.nrfi_decision_kind === "yrfi") {
     const driver = yrfiDriver(ctx);
     if (driver !== null) {
-      primary = `${driver.name} has struggled in first innings (${driver.fi_era.toFixed(2)} FI ERA in ${driver.starts} starts).`;
+      lead = `${driver.name} has struggled in early innings this year.`;
     }
   }
-  // If no real-FI primary, surface the strongest secondary signal so the
-  // member still gets a "why".
-  if (!primary) {
-    primary = pickSecondarySignal(codes, ctx);
+
+  // No real-FI driver — surface the strongest secondary signal so the
+  // member still gets a "why."
+  if (!lead) {
+    const secondary = pickPrimaryFallbackSignal(codes, ctx);
+    lead = secondary || "The matchup leans one way on the model's read, with no single factor standing out.";
   }
 
-  const caveat = caveatLine(codes, ctx);
-
-  const parts = [lead];
-  if (primary) parts.push(primary);
-  if (caveat) parts.push(caveat);
-  return parts.join(" ");
+  const caveat = buildCaveat(codes, ctx);
+  if (caveat) {
+    // Connect with a comma + the caveat (which already starts with
+    // "though"). Strip the lead's trailing period so the sentence reads
+    // as one continuous thought.
+    const leadNoPeriod = lead.replace(/\.\s*$/, "");
+    return `${leadNoPeriod}, ${caveat}`;
+  }
+  return lead;
 }
 
-/** Compact ML+OU tail. Short by design so it doesn't dominate the blurb. */
-function buildMlOuTail(
-  output: AutoModelOutput,
-  ctx: BreakdownContext
-): string {
-  const segments: string[] = [];
-  if (output.predicted_ml_winner !== null) {
-    const winner =
-      output.predicted_ml_winner === "home"
-        ? ctx.home_team_abbr
-        : ctx.away_team_abbr;
-    const conf = formatConfidence(output.ml_confidence);
-    segments.push(`ML ${winner} ${conf}`);
-  }
-  if (output.predicted_ou_side !== null) {
-    const conf = formatConfidence(output.ou_confidence);
-    segments.push(`O/U ${output.predicted_ou_side} ${conf}`);
-  }
-  return segments.length > 0 ? segments.join(" · ") + "." : "";
+/** Lowercase the first character — used when embedding a fragment after
+ *  a conjunction ("but", "and"). Keeps the result grammatical. */
+function lcFirst(s: string): string {
+  if (s.length === 0) return s;
+  return s.charAt(0).toLowerCase() + s.slice(1);
 }
 
-function buildMemberSummary(
+function buildModelBreakdown(
   output: AutoModelOutput,
   ctx: BreakdownContext
 ): string {
   const ss = output.sport_specific;
-  let main = "";
+  let text = "";
   if (ss.nrfi_decision_kind === "held") {
-    main = buildHoldMemberText(output, ctx);
+    text = buildHeldLead(output, ctx);
   } else if (ss.nrfi_decision_kind === "toss_up") {
-    main = buildTossUpMemberText(output, ctx);
+    text = buildTossUpLead(output, ctx);
   } else {
-    main = buildDecisiveMemberText(output, ctx);
+    text = buildDecisiveLead(output, ctx);
   }
-  const tail = buildMlOuTail(output, ctx);
-  const text = tail ? `${main} ${tail}` : main;
   assertNoForbiddenPhrases(text);
-  return capMemberText(text);
+  return capModelBreakdown(text);
 }
 
 // ─── Operator detail composition ────────────────────────────────────
+// Unchanged from Phase 4.1.3. Admin-surface diagnostic prose; never
+// exposed to the member API per the Phase 4.1.6 contract.
+
+function formatConfidence(c: number | null): string {
+  if (c === null) return "—";
+  return `${Math.round(c)}%`;
+}
 
 function buildOperatorDetail(
   output: AutoModelOutput,
@@ -495,14 +586,14 @@ function buildOperatorDetail(
   }
   lines.push(
     `ML: winner=${output.predicted_ml_winner ?? "null"} ` +
-      `confidence=${output.ml_confidence ?? "null"} ` +
+      `confidence=${formatConfidence(output.ml_confidence)} ` +
       `predicted_home=${output.predicted_home_score ?? "null"} ` +
       `predicted_away=${output.predicted_away_score ?? "null"} ` +
       `predicted_total=${output.predicted_total ?? "null"}`
   );
   lines.push(
     `O/U: side=${output.predicted_ou_side ?? "null"} ` +
-      `confidence=${output.ou_confidence ?? "null"}`
+      `confidence=${formatConfidence(output.ou_confidence)}`
   );
 
   lines.push("Reason codes:");
@@ -534,6 +625,7 @@ function buildOperatorDetail(
 
 function emptyPayload(now?: Date): BreakdownPayload {
   return {
+    model_breakdown: "",
     member_summary: "",
     operator_detail: "",
     breakdown_version: BREAKDOWN_VERSION,
@@ -550,10 +642,13 @@ export function generatePickBreakdown(
   if (ctx.sport !== "mlb") {
     return emptyPayload(opts?.now);
   }
-  const member_summary = buildMemberSummary(output, ctx);
+  const model_breakdown = buildModelBreakdown(output, ctx);
   const operator_detail = buildOperatorDetail(output, ctx);
   return {
-    member_summary,
+    model_breakdown,
+    // Back-compat alias = model_breakdown. Maintained through 4.1.8.A so
+    // automodelService's existing reads keep compiling; dropped in 4.1.8.B.
+    member_summary: model_breakdown,
     operator_detail,
     breakdown_version: BREAKDOWN_VERSION,
     breakdown_generated_at: (opts?.now ?? new Date()).toISOString(),
@@ -605,11 +700,12 @@ export const __TEST__ = {
   MEMBER_FRAGMENTS,
   MEMBER_HIDDEN,
   OPERATOR_FRAGMENTS,
-  SECONDARY_PRIORITY,
+  PRIMARY_FALLBACK_PRIORITY,
   parseExpectedRunsCode,
   capMemberText,
+  capModelBreakdown,
   assertNoForbiddenPhrases,
   FORBIDDEN_MEMBER_PATTERNS,
-  buildMemberSummary,
+  buildModelBreakdown,
   buildOperatorDetail,
 };
