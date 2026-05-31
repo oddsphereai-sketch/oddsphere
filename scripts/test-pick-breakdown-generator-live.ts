@@ -206,7 +206,19 @@ async function main(): Promise<void> {
     const pred = g.game_predictions;
     if (!pred) continue;
     const ss = (pred.sport_specific ?? {}) as Record<string, unknown>;
-    const ms = typeof ss.member_summary === "string" ? ss.member_summary : null;
+    // Phase 4.1.8.B: persisted "previous" text is whichever shape is on the
+    // row. Prefer the v2 namespace (post-4.1.8.B regen rows), fall back to
+    // the legacy v1 `member_summary` for rows that haven't been regenerated.
+    // The label in the per-game printout still says "V1" for continuity, but
+    // is really "current persisted text — v2 if regenned, else v1 legacy."
+    const v2Obj = ss.breakdown_v2 as Record<string, unknown> | undefined;
+    const v2Text =
+      v2Obj && typeof v2Obj === "object" && typeof v2Obj.model_breakdown === "string"
+        ? (v2Obj.model_breakdown as string)
+        : null;
+    const legacyText =
+      typeof ss.member_summary === "string" ? ss.member_summary : null;
+    const ms = v2Text ?? legacyText;
     persistedByExt.set(g.external_id, {
       game_id: g.id,
       external_id: g.external_id,
@@ -277,8 +289,12 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // v1 from DB
-    const v1 = persisted.member_summary_v1 ?? "(no v1 member_summary persisted)";
+    // Persisted "previous" text — v2 if regenned, legacy v1 otherwise, else
+    // the fallback placeholder. Phase 4.1.8.B: post-regen, this surfaces the
+    // v2 breakdown_v2.model_breakdown string so the comparison shows what's
+    // actually live in the DB.
+    const v1 =
+      persisted.member_summary_v1 ?? "(no persisted breakdown text on this row)";
     v1Lengths.push(v1.length);
 
     // v2 model_breakdown from new generator

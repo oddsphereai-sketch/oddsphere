@@ -406,10 +406,19 @@ export async function generatePredictionsForSlate(
           );
         }
       }
-      // 2d — Phase 4.1.3: optional deterministic pick-breakdown generation.
+      // 2d — Phase 4.1.8.B: optional deterministic pick-breakdown generation.
       // Two-key gate: env flag + MLB-only (V1 scope). Wrapped in try/catch
       // so generator failure NEVER blocks the prediction write — we log
       // and proceed with no breakdown.
+      //
+      // Writes new shape: sport_specific.breakdown_v2.model_breakdown +
+      // operator_detail + breakdown_version="v2.0" + breakdown_generated_at.
+      // Per Phase 4.1.8.B Sub-D1, explicitly destructures out any legacy
+      // `member_summary` carried in enrichedSportSpecific so v1 and v2
+      // copy never live side-by-side after a regen. The API reader
+      // (route.ts) still falls back to legacy member_summary for rows
+      // that haven't been regenerated yet; this writer ensures NEW rows
+      // are clean.
       let withBreakdown: AutoModelSportSpecific = enrichedSportSpecific;
       if (
         sport === "mlb" &&
@@ -436,9 +445,18 @@ export async function generatePredictionsForSlate(
               away_season_era: snap.away_starter?.season_era ?? null,
             }
           );
+          // Explicit legacy drop (Sub-D1): pull member_summary out of the
+          // spread so it doesn't persist alongside the new breakdown_v2
+          // namespace. ESLint-suppressed underscore prefix documents the
+          // intentional unused destructure.
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { member_summary: _legacyMs, ...withoutLegacy } =
+            enrichedSportSpecific as AutoModelSportSpecific & {
+              member_summary?: string | null;
+            };
           withBreakdown = {
-            ...enrichedSportSpecific,
-            member_summary: breakdown.member_summary,
+            ...withoutLegacy,
+            breakdown_v2: { model_breakdown: breakdown.model_breakdown },
             operator_detail: breakdown.operator_detail,
             breakdown_version: breakdown.breakdown_version,
             breakdown_generated_at: breakdown.breakdown_generated_at,

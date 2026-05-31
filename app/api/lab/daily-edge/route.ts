@@ -25,6 +25,18 @@ import { supabase } from "@/lib/db/supabase";
 import { filterMockSourceRows } from "@/lib/db/productionFilter";
 import { classifyEvidence } from "@/lib/services/signalEvidenceClassifier";
 import { generateSignalSummary } from "@/lib/services/signalSummaryGenerator";
+import {
+  deriveVerdict,
+  VERDICT_LABEL,
+  type Verdict,
+} from "@/lib/services/verdictDerivation";
+import {
+  selectSharpReadKey,
+  SHARP_READ_SENTENCES,
+  type SharpReadKey,
+  type SharpReadMarket,
+  type SharpSignalProjection,
+} from "@/lib/services/sharpReadSelector";
 import type { Side } from "@/lib/types/domain/Lines";
 import type { Sport } from "@/lib/types/domain/Sport";
 import type {
@@ -480,11 +492,19 @@ function buildGameDto(
       homeTeamAbbr: home,
       awayTeamAbbr: away,
     }),
-    // Phase 4.1.6 — member-safe breakdown summary. Reads ONLY
-    // `sport_specific.member_summary`; operator_detail and other
-    // breakdown_* keys remain server-side and are never sent to the
-    // public API.
-    breakdown: extractMemberBreakdown(pred.sport_specific),
+    // Phase 4.1.8.B — member-facing breakdown surface. Three fields:
+    //   • verdict       — derived at read time from headline grade +
+    //                     per-market confidences (never persisted)
+    //   • sharpRead     — derived at read time from headline grade +
+    //                     sharp signals (never persisted)
+    //   • modelBreakdown— prefers sport_specific.breakdown_v2.model_breakdown
+    //                     (v2), falls back to sport_specific.member_summary
+    //                     (legacy v1) for rows that haven't been regenerated
+    //                     under 4.1.8.B yet
+    // operator_detail / breakdown_version / breakdown_generated_at
+    // remain server-side and are never sent to the public API — this
+    // function builds the DTO field-by-field; never spreads sport_specific.
+    breakdown: buildBreakdownDto(pred, signals),
     // V2.1.1 (Phase 6.3.5e): legacy top-level grade / signalType /
     // marketSignal / primaryMarket dropped. Headline derivation lives in
     // perPickHeadline.ts (client-side) reading the per-pick fields below.
@@ -492,28 +512,168 @@ function buildGameDto(
 }
 
 /**
- * Extracts the member-safe breakdown summary from a prediction's
- * sport_specific JSONB. Returns null when:
+ * Phase 4.1.8.B — Extracts the model-side breakdown prose from a
+ * prediction's sport_specific JSONB. Reader-tolerant: prefers the v2
+ * namespace (`sport_specific.breakdown_v2.model_breakdown`), falls back
+ * to the legacy v1 single-blob (`sport_specific.member_summary`) for
+ * rows that haven't been regenerated under Phase 4.1.8.B yet.
+ *
+ * Returns null when:
  *   • sport_specific is null/missing (older predictions)
- *   • member_summary key is absent (prediction written before Phase 4.1.5)
- *   • member_summary is present but not a non-empty string (malformed)
+ *   • Neither breakdown_v2.model_breakdown nor member_summary is a
+ *     non-empty string
  *
  * Operator-only keys (operator_detail, breakdown_version,
  * breakdown_generated_at) are intentionally ignored — they never appear
  * in the member API response.
  */
-function extractMemberBreakdown(
+function extractModelBreakdown(
   sportSpecific: Record<string, unknown> | null | undefined
-): { memberSummary: string } | null {
+): string | null {
   if (!sportSpecific) return null;
-  const raw = sportSpecific.member_summary;
-  if (typeof raw !== "string" || raw.length === 0) return null;
-  return { memberSummary: raw };
+
+  // Prefer v2.
+  const v2 = sportSpecific.breakdown_v2;
+  if (v2 && typeof v2 === "object" && v2 !== null) {
+    const mb = (v2 as Record<string, unknown>).model_breakdown;
+    if (typeof mb === "string" && mb.length > 0) return mb;
+  }
+
+  // Fall back to legacy member_summary.
+  const legacy = sportSpecific.member_summary;
+  if (typeof legacy === "string" && legacy.length > 0) return legacy;
+
+  return null;
+}
+
+/**
+ * Phase 4.1.8.B — headline-grade derivation for verdict computation.
+ *
+ * Mirrors the ranking logic in app/lab/lib/perPickHeadline.ts exactly,
+ * inlined here per Sub-D2: keep 4.1.8.B scope tight; consolidation
+ * deferred to 4.1.8.C. Tests verify both implementations stay in sync.
+ *
+ * Ranking: GRADE_RANK descending, ML → OU → NRFI precedence on ties.
+ * Returns null grade + null market when the model picked no markets
+ * (all three per-pick grades null).
+ */
+const GRADE_RANK: Record<Grade, number> = {
+  best_signal: 70,
+  sharp_confirmed: 60,
+  sharp_conflict: 50,
+  market_led: 40,
+  public_smoke: 30,
+  model_only: 20,
+  market_watch: 10,
+};
+
+function deriveVerdictForRow(pred: PredictionRow): {
+  headlineGrade: Grade | null;
+  headlineMarket: SharpReadMarket | null;
+  verdict: Verdict;
+} {
+  const candidates: Array<{
+    grade: Grade;
+    market: SharpReadMarket;
+    precedence: number;
+  }> = [];
+  if (pred.ml_grade !== null) {
+    candidates.push({ grade: pred.ml_grade, market: "ml", precedence: 0 });
+  }
+  if (pred.ou_grade !== null) {
+    candidates.push({ grade: pred.ou_grade, market: "total", precedence: 1 });
+  }
+  if (pred.nrfi_grade !== null) {
+    candidates.push({ grade: pred.nrfi_grade, market: "nrfi", precedence: 2 });
+  }
+  candidates.sort((a, b) => {
+    const r = GRADE_RANK[b.grade] - GRADE_RANK[a.grade];
+    if (r !== 0) return r;
+    return a.precedence - b.precedence;
+  });
+
+  const headline = candidates[0] ?? null;
+  const headlineGrade = headline?.grade ?? null;
+  const headlineMarket = headline?.market ?? null;
+
+  const verdict = deriveVerdict({
+    headlineGrade,
+    perMarketConfidence: {
+      ml: pred.ml_confidence !== null ? pred.ml_confidence / 100 : null,
+      total: pred.ou_confidence !== null ? pred.ou_confidence / 100 : null,
+      nrfi: pred.nrfi_confidence !== null ? pred.nrfi_confidence / 100 : null,
+    },
+  });
+  return { headlineGrade, headlineMarket, verdict };
+}
+
+/**
+ * Project the row's sharp_signals into the minimal {market, direction}
+ * shape that sharpReadSelector consumes. Direction is derived from the
+ * matching per-market grade (mirrors deriveDirection on the SharpSignalDto
+ * side — both surfaces compute direction from grade, not from raw signal
+ * row fields).
+ */
+function projectSharpSignalsForRead(
+  signals: SignalRow[],
+  pred: PredictionRow
+): SharpSignalProjection[] {
+  return signals.map((s) => {
+    let market: SharpReadMarket;
+    let gradeForMarket: Grade | null;
+    if (s.market_type === "moneyline") {
+      market = "ml";
+      gradeForMarket = pred.ml_grade;
+    } else if (s.market_type === "total") {
+      market = "total";
+      gradeForMarket = pred.ou_grade;
+    } else {
+      market = "nrfi";
+      gradeForMarket = pred.nrfi_grade;
+    }
+    return { market, direction: deriveDirection(gradeForMarket) };
+  });
+}
+
+/**
+ * Phase 4.1.8.B — assemble the breakdown DTO field. ALWAYS returns a
+ * populated object — verdict + sharpRead derive deterministically from
+ * the row's grades + signals (with "no_play" / "no_data" branches for
+ * empty states). modelBreakdown is the only field that can be null.
+ */
+function buildBreakdownDto(
+  pred: PredictionRow,
+  signals: SignalRow[]
+): DailyEdgeGameDto["breakdown"] {
+  const { headlineGrade, headlineMarket, verdict } = deriveVerdictForRow(pred);
+
+  const sharpProjection = projectSharpSignalsForRead(signals, pred);
+  const sharpReadKey = selectSharpReadKey({
+    headlineGrade,
+    headlineMarket,
+    sharpSignals: sharpProjection,
+  });
+
+  return {
+    verdict: { key: verdict, label: VERDICT_LABEL[verdict] },
+    sharpRead: {
+      key: sharpReadKey,
+      sentence: SHARP_READ_SENTENCES[sharpReadKey],
+    },
+    modelBreakdown: extractModelBreakdown(pred.sport_specific),
+  };
 }
 
 // Exported for unit-test access (mirrors the __TEST__ pattern in
 // featureSnapshot.ts). Production callers go through the GET handler.
-export const __TEST__ = { buildGameDto, extractMemberBreakdown };
+export const __TEST__ = {
+  buildGameDto,
+  extractModelBreakdown,
+  deriveVerdictForRow,
+  projectSharpSignalsForRead,
+  buildBreakdownDto,
+  GRADE_RANK,
+};
 
 // ───────────────────────────────────────────────────────────────────────────
 // Route handler

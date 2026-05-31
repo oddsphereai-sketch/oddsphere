@@ -306,6 +306,28 @@ export type AutoModelSportSpecific = {
    *  `hold_reason` (which only fires when ALL three picks held). Set
    *  ONLY when nrfi_decision_kind === "held". */
   nrfi_hold_reason?: string | null;
+  // ─────────────────────────────────────────────────────────────
+  // Phase 4.1.8 — member-first breakdown payload
+  // ─────────────────────────────────────────────────────────────
+  /** Phase 4.1.8.B v2 — model-side prose written by pickBreakdownGenerator.
+   *  Only the model_breakdown text is persisted here; verdict + sharpRead
+   *  are derived client-side (route.ts) at read time because per-pick
+   *  grades + sharp signals are computed AFTER the generator runs in the
+   *  orchestrator. Persisting them would always be stale. */
+  breakdown_v2?: { model_breakdown: string } | null;
+  /** Phase 4.1.3 v1 legacy single-blob member summary. New v2 writes
+   *  explicitly omit this key (Sub-D1) so v1 and v2 copy never live
+   *  side-by-side. Kept as an optional read field for backward-compat
+   *  with rows written before 4.1.8.B regenerated them. */
+  member_summary?: string | null;
+  /** Admin-surface diagnostic prose. Never exposed via the member API
+   *  (route.ts builds the DTO field-by-field; never spreads sport_specific). */
+  operator_detail?: string | null;
+  /** "v1.0" for pre-4.1.8 writes; "v2.0" once the 4.1.8 generator has
+   *  run for the row. */
+  breakdown_version?: string | null;
+  /** ISO 8601 timestamp of the most recent breakdown generation run. */
+  breakdown_generated_at?: string | null;
 };
 
 // ─────────────────────────────────────────────────────────────

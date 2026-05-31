@@ -18,6 +18,8 @@ import type {
   MarketSignal,
   SignalType,
 } from "@/lib/types/domain/Grade";
+import type { Verdict } from "@/lib/services/verdictDerivation";
+import type { SharpReadKey } from "@/lib/services/sharpReadSelector";
 
 // ───────────────────────────────────────────────────────────────────────────
 // /api/lab/refresh-status
@@ -168,17 +170,34 @@ export type DailyEdgeGameDto = {
   projected: { away: number; home: number };
   sharpSignals: SharpSignalDto[];
   /**
-   * Phase 4.1.6 — member-facing pick breakdown (deterministic template
-   * output from pickBreakdownGenerator, persisted into
-   * `game_predictions.sport_specific.member_summary`).
+   * Phase 4.1.8.B — member-facing pick breakdown surface.
    *
-   * Member API exposes ONLY the member-safe summary; `operator_detail`
-   * stays inside the JSONB and is never sent to public clients.
+   * Three fields:
+   *   • `verdict`      — ALWAYS present. Member-friendly verb word + display
+   *                      label. Derived server-side at read time from the
+   *                      headline grade + per-market confidences (see
+   *                      lib/services/verdictDerivation). The "no_play"
+   *                      branch handles rows where the model picked no
+   *                      market — the field never has to be null-checked.
+   *   • `sharpRead`    — ALWAYS present. One sentence from a 6-template
+   *                      pool. Derived server-side at read time from the
+   *                      headline grade + sharp_signals projection (see
+   *                      lib/services/sharpReadSelector).
+   *   • `modelBreakdown` — Model-side prose from the v2 generator. Null
+   *                      when neither `sport_specific.breakdown_v2.model_breakdown`
+   *                      NOR legacy `sport_specific.member_summary` is
+   *                      populated. The reader prefers v2 and falls back
+   *                      to legacy for rows written pre-4.1.8.B regen.
    *
-   * `null` when the prediction was written before Phase 4.1.5 (no
-   * breakdown keys in sport_specific) — backward-compatible by design.
+   * Member API never exposes `operator_detail`, `breakdown_version`, or
+   * `breakdown_generated_at` — those stay server-side per Phase 4.1.6
+   * contract.
    */
-  breakdown: { memberSummary: string } | null;
+  breakdown: {
+    verdict: { key: Verdict; label: string };
+    sharpRead: { key: SharpReadKey; sentence: string };
+    modelBreakdown: string | null;
+  };
   // V2.1.1 (Phase 6.3.5e): legacy top-level grade / signalType /
   // marketSignal / primaryMarket fields dropped. Headline derivation
   // moves client-side to perPickHeadline.ts (headlineGrade /

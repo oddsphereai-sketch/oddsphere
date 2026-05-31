@@ -430,7 +430,18 @@ async function main() {
       },
       projected: { away: 0, home: 0 },
       sharpSignals: [],
-      breakdown: null,
+      // Phase 4.1.8.B — breakdown is non-nullable on the DTO. Headline-grade
+      // tests don't exercise breakdown semantics; supply a minimal stub that
+      // satisfies the type. The verdict + sharpRead derivation are tested
+      // separately below.
+      breakdown: {
+        verdict: { key: "no_play", label: "No Play" },
+        sharpRead: {
+          key: "no_data",
+          sentence: "No clear sharp read on this matchup yet.",
+        },
+        modelBreakdown: null,
+      },
     };
   }
 
@@ -772,91 +783,472 @@ async function main() {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Phase 4.1.6 — DTO extension: member-safe breakdown summary
+  // Phase 4.1.8.B — DTO extension: model-side breakdown extraction + verdict
+  // and Sharp Read derivation in the API
   // ═══════════════════════════════════════════════════════════════════════════
   {
-    const { extractMemberBreakdown } = await import(
-      "../app/api/lab/daily-edge/route"
-    ).then((m) => (m as { __TEST__: { extractMemberBreakdown: (s: unknown) => unknown } }).__TEST__);
-
-    // Helper to typecheck the return shape
-    type BR = { memberSummary: string } | null;
-    const call = (input: unknown): BR =>
-      extractMemberBreakdown(input as Record<string, unknown> | null) as BR;
-
-    // 1. Happy path
-    {
-      const r = call({ member_summary: "Lean YRFI — moderate edge (55% confidence)." });
-      check(
-        "[4.1.6.1] sport_specific with non-empty member_summary → breakdown populated",
-        r !== null && r.memberSummary === "Lean YRFI — moderate edge (55% confidence)."
-      );
-    }
-    // 2. Missing key
-    {
-      const r = call({ other_key: "x" });
-      check(
-        "[4.1.6.2] sport_specific without member_summary → breakdown null",
-        r === null
-      );
-    }
-    // 3. Null sport_specific
-    check(
-      "[4.1.6.3] sport_specific === null → breakdown null",
-      call(null) === null
+    type ExtractFn = (s: unknown) => string | null;
+    type DeriveVerdictFn = (pred: Record<string, unknown>) => {
+      headlineGrade: string | null;
+      headlineMarket: string | null;
+      verdict: string;
+    };
+    type ProjectFn = (
+      signals: Array<Record<string, unknown>>,
+      pred: Record<string, unknown>
+    ) => Array<{ market: string; direction: string }>;
+    type BuildBreakdownFn = (
+      pred: Record<string, unknown>,
+      signals: Array<Record<string, unknown>>
+    ) => {
+      verdict: { key: string; label: string };
+      sharpRead: { key: string; sentence: string };
+      modelBreakdown: string | null;
+    };
+    const {
+      extractModelBreakdown,
+      deriveVerdictForRow,
+      projectSharpSignalsForRead,
+      buildBreakdownDto,
+      GRADE_RANK,
+    } = await import("../app/api/lab/daily-edge/route").then(
+      (m) =>
+        // Cast through unknown so the test helper signatures (which use loose
+        // Record<string,unknown> shapes) can address the strictly-typed
+        // production __TEST__ exports. Mirrors the existing loose-cast pattern
+        // used elsewhere in this file for the pre-4.1.8 extractMemberBreakdown.
+        (m as unknown as {
+          __TEST__: {
+            extractModelBreakdown: ExtractFn;
+            deriveVerdictForRow: DeriveVerdictFn;
+            projectSharpSignalsForRead: ProjectFn;
+            buildBreakdownDto: BuildBreakdownFn;
+            GRADE_RANK: Record<string, number>;
+          };
+        }).__TEST__
     );
-    // 4. Undefined sport_specific
-    check(
-      "[4.1.6.4] sport_specific === undefined → breakdown null",
-      call(undefined) === null
-    );
-    // 5. member_summary is not a string (number)
+
+    // ─── extractModelBreakdown: v2 namespace + legacy fallback ─────────────
+    section("Phase 4.1.8.B — extractModelBreakdown reader");
     {
-      const r = call({ member_summary: 123 });
-      check(
-        "[4.1.6.5] non-string member_summary → breakdown null (no leaking junk)",
-        r === null
-      );
-    }
-    // 6. member_summary is an empty string
-    {
-      const r = call({ member_summary: "" });
-      check(
-        "[4.1.6.6] empty-string member_summary → breakdown null",
-        r === null
-      );
-    }
-    // 7. member_summary is an object (malformed)
-    {
-      const r = call({ member_summary: { text: "nope" } });
-      check(
-        "[4.1.6.7] object-shaped member_summary → breakdown null",
-        r === null
-      );
-    }
-    // 8. operator_detail is NEVER exposed
-    {
-      const r = call({
-        member_summary: "Strong YRFI play.",
-        operator_detail: "INTERNAL: full reason codes etc.",
-        breakdown_version: "v1.0",
-        breakdown_generated_at: "2026-05-30T12:00:00Z",
+      // 1. v2 happy path
+      const r = extractModelBreakdown({
+        breakdown_v2: { model_breakdown: "Cole has been sharp early." },
       });
       check(
-        "[4.1.6.8a] breakdown only exposes memberSummary key",
-        r !== null && Object.keys(r).length === 1 && "memberSummary" in r
+        "[4.1.8.B.1] sport_specific.breakdown_v2.model_breakdown populated → returns string",
+        r === "Cole has been sharp early."
+      );
+    }
+    {
+      // 2. Legacy fallback
+      const r = extractModelBreakdown({
+        member_summary: "Legacy single-blob copy from Phase 4.1.5.",
+      });
+      check(
+        "[4.1.8.B.2] sport_specific.member_summary only → falls back to legacy",
+        r === "Legacy single-blob copy from Phase 4.1.5."
+      );
+    }
+    {
+      // 3. Both present → v2 wins
+      const r = extractModelBreakdown({
+        breakdown_v2: { model_breakdown: "v2 wins." },
+        member_summary: "stale v1 should not appear",
+      });
+      check(
+        "[4.1.8.B.3] both v2 and legacy present → v2 wins",
+        r === "v2 wins."
+      );
+    }
+    {
+      // 4. Neither present
+      const r = extractModelBreakdown({ other_key: "x" });
+      check("[4.1.8.B.4] neither v2 nor legacy present → null", r === null);
+    }
+    {
+      // 5. Null sport_specific
+      check(
+        "[4.1.8.B.5] sport_specific null → null",
+        extractModelBreakdown(null) === null
+      );
+    }
+    {
+      // 6. Undefined sport_specific
+      check(
+        "[4.1.8.B.6] sport_specific undefined → null",
+        extractModelBreakdown(undefined) === null
+      );
+    }
+    {
+      // 7. v2 with empty model_breakdown → falls through to legacy/null
+      const r1 = extractModelBreakdown({
+        breakdown_v2: { model_breakdown: "" },
+        member_summary: "legacy here",
+      });
+      check(
+        "[4.1.8.B.7a] v2.model_breakdown empty + legacy present → returns legacy",
+        r1 === "legacy here"
+      );
+      const r2 = extractModelBreakdown({
+        breakdown_v2: { model_breakdown: "" },
+      });
+      check("[4.1.8.B.7b] v2.model_breakdown empty + no legacy → null", r2 === null);
+    }
+    {
+      // 8. v2 with non-string model_breakdown → falls through
+      const r = extractModelBreakdown({
+        breakdown_v2: { model_breakdown: 42 },
+        member_summary: "ok legacy",
+      });
+      check(
+        "[4.1.8.B.8] v2.model_breakdown non-string + legacy present → returns legacy",
+        r === "ok legacy"
+      );
+    }
+    {
+      // 9. Legacy non-string → null
+      const r = extractModelBreakdown({ member_summary: 123 });
+      check("[4.1.8.B.9] legacy non-string + no v2 → null", r === null);
+    }
+    {
+      // 10. Malformed v2 (not an object) is gracefully ignored
+      const r = extractModelBreakdown({
+        breakdown_v2: "should-be-object",
+        member_summary: "fallback works",
+      });
+      check(
+        "[4.1.8.B.10] v2 not an object → falls back to legacy",
+        r === "fallback works"
+      );
+    }
+
+    // ─── deriveVerdictForRow: mirrors perPickHeadline + verdictDerivation ──
+    section("Phase 4.1.8.B — deriveVerdictForRow");
+    function predRow(over: Record<string, unknown>): Record<string, unknown> {
+      return {
+        ml_grade: null,
+        ou_grade: null,
+        nrfi_grade: null,
+        ml_confidence: null,
+        ou_confidence: null,
+        nrfi_confidence: null,
+        sport_specific: {},
+        ...over,
+      };
+    }
+    {
+      const r = deriveVerdictForRow(predRow({}));
+      check(
+        "[4.1.8.B.11] all grades null → verdict=no_play",
+        r.verdict === "no_play" && r.headlineGrade === null && r.headlineMarket === null
+      );
+    }
+    {
+      const r = deriveVerdictForRow(
+        predRow({ ml_grade: "best_signal", ml_confidence: 60 })
       );
       check(
-        "[4.1.6.8b] breakdown does NOT include operator_detail field",
-        r !== null && !("operatorDetail" in r) && !("operator_detail" in r)
+        "[4.1.8.B.12] ml=best_signal @ 0.60 conf → verdict=best_angle, market=ml",
+        r.verdict === "best_angle" && r.headlineMarket === "ml"
+      );
+    }
+    {
+      // ML has weaker grade than total — total wins headline
+      const r = deriveVerdictForRow(
+        predRow({
+          ml_grade: "market_watch",
+          ml_confidence: 64,
+          ou_grade: "sharp_conflict",
+          ou_confidence: 55,
+        })
       );
       check(
-        "[4.1.6.8c] breakdown does NOT include breakdown_version field",
-        r !== null && !("breakdownVersion" in r) && !("breakdown_version" in r)
+        "[4.1.8.B.13] WSH @ ATL pattern: total=sharp_conflict outranks ml=market_watch → market=total, verdict=caution",
+        r.headlineMarket === "total" && r.verdict === "caution"
+      );
+    }
+    {
+      // sharp_conflict + low confidence → still caution (4.1.8.A invariant
+      // exercised through the API surface)
+      const r = deriveVerdictForRow(
+        predRow({
+          ml_grade: "sharp_conflict",
+          ml_confidence: 51,
+          ou_confidence: 51,
+          nrfi_confidence: 51,
+        })
       );
       check(
-        "[4.1.6.8d] breakdown does NOT include breakdown_generated_at field",
-        r !== null && !("breakdownGeneratedAt" in r) && !("breakdown_generated_at" in r)
+        "[4.1.8.B.14] sharp_conflict + all confidences below floor → verdict=caution (NEVER no_play)",
+        r.verdict === "caution"
+      );
+    }
+    {
+      // best_signal + all confidences below floor → no_play (floor wins
+      // when sharp_conflict is NOT the grade)
+      const r = deriveVerdictForRow(
+        predRow({
+          ml_grade: "best_signal",
+          ml_confidence: 52,
+          ou_confidence: 52,
+          nrfi_confidence: 52,
+        })
+      );
+      check(
+        "[4.1.8.B.15] best_signal + all confidences below 0.53 → verdict=no_play",
+        r.verdict === "no_play"
+      );
+    }
+    {
+      // Cross-equivalence with GRADE_RANK
+      check(
+        "[4.1.8.B.16] GRADE_RANK ordering: best_signal > sharp_confirmed > sharp_conflict",
+        GRADE_RANK.best_signal > GRADE_RANK.sharp_confirmed &&
+          GRADE_RANK.sharp_confirmed > GRADE_RANK.sharp_conflict
+      );
+    }
+
+    // ─── projectSharpSignalsForRead: market normalization + direction ─────
+    section("Phase 4.1.8.B — projectSharpSignalsForRead");
+    {
+      const projected = projectSharpSignalsForRead(
+        [
+          { market_type: "moneyline" },
+          { market_type: "total" },
+          { market_type: "first_inning_total" },
+        ],
+        predRow({
+          ml_grade: "best_signal",
+          ou_grade: "sharp_conflict",
+          nrfi_grade: null,
+        })
+      );
+      check(
+        "[4.1.8.B.17] moneyline → market=ml, best_signal → direction=positive",
+        projected[0]?.market === "ml" && projected[0]?.direction === "positive"
+      );
+      check(
+        "[4.1.8.B.18] total → market=total, sharp_conflict → direction=negative",
+        projected[1]?.market === "total" && projected[1]?.direction === "negative"
+      );
+      check(
+        "[4.1.8.B.19] first_inning_total → market=nrfi, null grade → direction=neutral",
+        projected[2]?.market === "nrfi" && projected[2]?.direction === "neutral"
+      );
+    }
+
+    // ─── buildBreakdownDto: integration through the full surface ──────────
+    section("Phase 4.1.8.B — buildBreakdownDto integration");
+    {
+      // 20. Empty row → no_play + no_data + null modelBreakdown
+      const r = buildBreakdownDto(predRow({}), []);
+      check(
+        "[4.1.8.B.20] empty row → verdict=no_play + sharpRead=no_data + modelBreakdown=null",
+        r.verdict.key === "no_play" &&
+          r.verdict.label === "No Play" &&
+          r.sharpRead.key === "no_data" &&
+          r.modelBreakdown === null
+      );
+    }
+    {
+      // 21. Strong play + sharp support
+      const r = buildBreakdownDto(
+        predRow({
+          ml_grade: "best_signal",
+          ml_confidence: 60,
+          sport_specific: {
+            breakdown_v2: { model_breakdown: "Cole has been sharp early." },
+          },
+        }),
+        [{ market_type: "moneyline" }]
+      );
+      check(
+        "[4.1.8.B.21] best_signal + sharp signal on ml → verdict=best_angle + sharpRead=support + modelBreakdown=v2",
+        r.verdict.key === "best_angle" &&
+          r.verdict.label === "Best Angle" &&
+          r.sharpRead.key === "support" &&
+          r.sharpRead.sentence === "Sharp signals support this pick." &&
+          r.modelBreakdown === "Cole has been sharp early."
+      );
+    }
+    {
+      // 22. Caution: sharp_conflict on total
+      const r = buildBreakdownDto(
+        predRow({
+          ml_grade: "market_watch",
+          ou_grade: "sharp_conflict",
+          ou_confidence: 55,
+          sport_specific: {
+            breakdown_v2: { model_breakdown: "Top of the order adds risk." },
+          },
+        }),
+        [{ market_type: "total" }]
+      );
+      check(
+        "[4.1.8.B.22] sharp_conflict on total → verdict=caution + sharpRead=push_against",
+        r.verdict.key === "caution" &&
+          r.sharpRead.key === "push_against" &&
+          r.sharpRead.sentence ===
+            "Sharp signals push against the model, so use caution."
+      );
+    }
+    {
+      // 23. Legacy fallback path still works (no v2 namespace)
+      const r = buildBreakdownDto(
+        predRow({
+          ml_grade: "market_watch",
+          ml_confidence: 64,
+          sport_specific: {
+            member_summary: "Pre-4.1.8.B legacy text.",
+          },
+        }),
+        []
+      );
+      check(
+        "[4.1.8.B.23] legacy member_summary surfaces as modelBreakdown when v2 absent",
+        r.modelBreakdown === "Pre-4.1.8.B legacy text." &&
+          r.verdict.key === "watchlist" &&
+          r.sharpRead.key === "no_data"
+      );
+    }
+    {
+      // 24. Operator keys never leak — verify the returned object has only
+      //     the three approved fields
+      const r = buildBreakdownDto(
+        predRow({
+          ml_grade: "best_signal",
+          ml_confidence: 60,
+          sport_specific: {
+            breakdown_v2: { model_breakdown: "ok" },
+            operator_detail: "INTERNAL: should never leak",
+            breakdown_version: "v2.0",
+            breakdown_generated_at: "2026-05-30T12:00:00Z",
+          },
+        }),
+        []
+      );
+      const keys = Object.keys(r).sort();
+      check(
+        "[4.1.8.B.24a] breakdown DTO has exactly {verdict, sharpRead, modelBreakdown}",
+        keys.length === 3 &&
+          keys[0] === "modelBreakdown" &&
+          keys[1] === "sharpRead" &&
+          keys[2] === "verdict"
+      );
+      check(
+        "[4.1.8.B.24b] breakdown DTO does not include operator_detail",
+        !("operator_detail" in r) && !("operatorDetail" in r)
+      );
+      check(
+        "[4.1.8.B.24c] breakdown DTO does not include breakdown_version",
+        !("breakdown_version" in r) && !("breakdownVersion" in r)
+      );
+      check(
+        "[4.1.8.B.24d] breakdown DTO does not include breakdown_generated_at",
+        !("breakdown_generated_at" in r) && !("breakdownGeneratedAt" in r)
+      );
+    }
+    {
+      // 25. v2 wins over legacy when both present (integration form)
+      const r = buildBreakdownDto(
+        predRow({
+          sport_specific: {
+            breakdown_v2: { model_breakdown: "v2 fresh text" },
+            member_summary: "stale v1 lingering",
+          },
+        }),
+        []
+      );
+      check(
+        "[4.1.8.B.25] both v2 and legacy present → modelBreakdown is v2",
+        r.modelBreakdown === "v2 fresh text"
+      );
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase 4.1.8.B — cross-equivalence with perPickHeadline.ts (Sub-D2 risk R3)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Confirm the inlined GRADE_RANK + ordering in route.ts matches the
+  // client helper at app/lab/lib/perPickHeadline.ts. Single failure here
+  // means the two derivations drifted; consolidate before shipping.
+  {
+    const { headlineGrade } = await import("../app/lab/lib/perPickHeadline");
+    const { deriveVerdictForRow } = await import(
+      "../app/api/lab/daily-edge/route"
+    ).then(
+      (m) =>
+        (m as unknown as {
+          __TEST__: {
+            deriveVerdictForRow: (
+              p: Record<string, unknown>
+            ) => { headlineGrade: string | null; headlineMarket: string | null };
+          };
+        }).__TEST__
+    );
+
+    // Three patterns drawn from observed 5/22 slate behavior
+    const fixtures: Array<{
+      label: string;
+      ml: string | null;
+      ou: string | null;
+      nrfi: string | null;
+      expectGrade: string | null;
+    }> = [
+      {
+        label: "WSH @ ATL pattern: ml=market_watch + total=sharp_conflict + nrfi=market_watch",
+        ml: "market_watch",
+        ou: "sharp_conflict",
+        nrfi: "market_watch",
+        expectGrade: "sharp_conflict",
+      },
+      {
+        label: "NYM @ PHI pattern: ml=sharp_confirmed + rest=market_watch",
+        ml: "sharp_confirmed",
+        ou: "market_watch",
+        nrfi: "market_watch",
+        expectGrade: "sharp_confirmed",
+      },
+      {
+        label: "All null pattern: no grades",
+        ml: null,
+        ou: null,
+        nrfi: null,
+        expectGrade: null,
+      },
+    ];
+
+    for (const fx of fixtures) {
+      const clientGrade = headlineGrade({
+        predictions: {
+          ml: { grade: fx.ml as never, signalType: null, marketSignal: null } as never,
+          total: {
+            grade: fx.ou as never,
+            signalType: null,
+            marketSignal: null,
+          } as never,
+          nrfi: {
+            grade: fx.nrfi as never,
+            signalType: null,
+            marketSignal: null,
+          } as never,
+        },
+      } as never);
+      const serverResult = deriveVerdictForRow({
+        ml_grade: fx.ml,
+        ou_grade: fx.ou,
+        nrfi_grade: fx.nrfi,
+        ml_confidence: 60,
+        ou_confidence: 60,
+        nrfi_confidence: 60,
+      });
+      check(
+        `[4.1.8.B.equiv] ${fx.label} — server headlineGrade matches client (${
+          serverResult.headlineGrade ?? "null"
+        })`,
+        serverResult.headlineGrade === fx.expectGrade &&
+          clientGrade === fx.expectGrade
       );
     }
   }
