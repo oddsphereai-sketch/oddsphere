@@ -33,27 +33,46 @@ import { BdlClient, BdlNotFoundError } from "./_bdlClient";
 // Internal raw shapes (loose — BDL may add fields; we read what we need)
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Raw BDL /players row.
+ *
+ * Phase 4.2.C.1.M correction — the BDL MLB API actually returns:
+ *   • `dob` (string, MM/DD/YY)
+ *   • `age` (number)
+ *   • `birth_place` (single string, e.g. "Linden, CA")
+ *   • `bats_throws` (combined string, e.g. "R/R")
+ * The old field names below (`birth_date`, `birth_city/state/country`,
+ * separate `bats`/`throws`) were never populated by BDL. Kept as optional
+ * here only as defensive aliases — if BDL ever adds them, we still read
+ * them as a fallback.
+ */
 type RawPlayer = {
   id: number;
   first_name?: string | null;
   last_name?: string | null;
   position?: string | null;
   jersey?: string | null;
-  bats?: string | null;
-  throws?: string | null;
+  dob?: string | null;
+  age?: number | null;
+  birth_place?: string | null;
+  bats_throws?: string | null;
+  height?: string | null;
+  weight?: string | number | null;
+  debut_year?: number | null;
+  draft?: string | null;
+  team?: { id?: number; abbreviation?: string | null } | null;
+  team_id?: number | null;
+  active?: boolean | null;
+  // Legacy / defensive aliases (BDL may add these in future).
   birth_date?: string | null;
   birth_city?: string | null;
   birth_state?: string | null;
   birth_country?: string | null;
-  height?: string | null;
-  weight?: string | number | null;
-  debut_year?: number | null;
+  bats?: string | null;
+  throws?: string | null;
   draft_round?: number | null;
   draft_pick?: number | null;
   draft_year?: number | null;
-  team?: { id?: number } | null;
-  team_id?: number | null;
-  active?: boolean | null;
 };
 
 type RawSeasonStats = {
@@ -225,6 +244,8 @@ function isPitcherFromPosition(positionAbbr: string | null): boolean {
 }
 
 function buildBirthPlace(raw: RawPlayer): string | null {
+  const direct = asStringOrNull(raw.birth_place);
+  if (direct !== null) return direct;
   const parts = [raw.birth_city, raw.birth_state, raw.birth_country]
     .map(asStringOrNull)
     .filter((s): s is string => s !== null);
@@ -232,6 +253,8 @@ function buildBirthPlace(raw: RawPlayer): string | null {
 }
 
 function buildDraftString(raw: RawPlayer): string | null {
+  const direct = asStringOrNull(raw.draft);
+  if (direct !== null) return direct;
   const year = asNumberOrNull(raw.draft_year);
   const round = asNumberOrNull(raw.draft_round);
   const pick = asNumberOrNull(raw.draft_pick);
@@ -252,16 +275,79 @@ function ageFromDob(dob: string | null): number | null {
   return Math.floor(ms / (365.25 * 24 * 3600 * 1000));
 }
 
-function mapBats(raw: string | null | undefined): BatsHand | null {
-  if (raw === null || raw === undefined) return null;
-  const v = raw.trim().toUpperCase();
-  return v === "L" || v === "R" || v === "S" ? v : null;
+/**
+ * Convert BDL's `MM/DD/YY` DOB to ISO `YYYY-MM-DD`, using `age` (also
+ * returned by BDL) to disambiguate century. Passthrough if input is
+ * already ISO. Returns null on malformed input.
+ *
+ * Same century-disambiguation policy as
+ * `providerMappingService.normalizeBdlDob` — kept inline here so the
+ * provider doesn't depend on the service.
+ */
+function bdlDobToIso(
+  raw: string | null,
+  age: number | null,
+  now: Date = new Date()
+): string | null {
+  if (raw === null) return null;
+  const trimmed = raw.trim();
+  const iso = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso !== null) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const m = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{2})$/);
+  if (m === null) return null;
+  const month = Number(m[1]);
+  const day = Number(m[2]);
+  const yy = Number(m[3]);
+  if (
+    month < 1 || month > 12 ||
+    day < 1 || day > 31 ||
+    !Number.isFinite(yy)
+  ) {
+    return null;
+  }
+  const currentYear = now.getUTCFullYear();
+  let year = 2000 + yy;
+  if (age !== null) {
+    const age2000 = currentYear - year;
+    const age1900 = currentYear - (1900 + yy);
+    if (Math.abs(age1900 - age) < Math.abs(age2000 - age)) {
+      year = 1900 + yy;
+    }
+  } else if (year > currentYear) {
+    year = 1900 + yy;
+  }
+  const mm = String(month).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  return `${year}-${mm}-${dd}`;
 }
 
-function mapThrows(raw: string | null | undefined): ThrowsHand | null {
-  if (raw === null || raw === undefined) return null;
-  const v = raw.trim().toUpperCase();
-  return v === "L" || v === "R" ? v : null;
+/**
+ * Parse BDL's combined `bats_throws` string (e.g. "R/R", "L/R", "S/R").
+ * Falls back to separate `bats` / `throws` fields if combined is absent.
+ */
+function parseBatsThrows(
+  combined: string | null | undefined,
+  fallbackBats: string | null | undefined,
+  fallbackThrows: string | null | undefined
+): { bats: BatsHand | null; throws: ThrowsHand | null } {
+  const s = asStringOrNull(combined);
+  let batsRaw: string | null | undefined = fallbackBats;
+  let throwsRaw: string | null | undefined = fallbackThrows;
+  if (s !== null) {
+    const parts = s.split("/");
+    if (parts.length === 2) {
+      batsRaw = parts[0];
+      throwsRaw = parts[1];
+    }
+  }
+  const batsU =
+    batsRaw === null || batsRaw === undefined ? null : batsRaw.trim().toUpperCase();
+  const throwsU =
+    throwsRaw === null || throwsRaw === undefined ? null : throwsRaw.trim().toUpperCase();
+  return {
+    bats: batsU === "L" || batsU === "R" || batsU === "S" ? (batsU as BatsHand) : null,
+    throws: throwsU === "L" || throwsU === "R" ? (throwsU as ThrowsHand) : null,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -276,7 +362,12 @@ function mapPlayer(raw: RawPlayer, defaultSport: Sport): StatsPlayerRecord {
   const positionAbbr = shortPositionAbbr(position);
   const teamExternalId =
     asNumberOrNull(raw.team?.id) ?? asNumberOrNull(raw.team_id);
-  const dob = asStringOrNull(raw.birth_date);
+  // Prefer BDL's actual field names (dob, age, birth_place, bats_throws).
+  // Legacy field names are kept as fallbacks for forward-compat.
+  const rawDob = asStringOrNull(raw.dob) ?? asStringOrNull(raw.birth_date);
+  const rawAge = asNumberOrNull(raw.age);
+  const isoDob = bdlDobToIso(rawDob, rawAge);
+  const { bats, throws } = parseBatsThrows(raw.bats_throws, raw.bats, raw.throws);
   return {
     external_id: raw.id,
     sport: defaultSport,
@@ -289,11 +380,11 @@ function mapPlayer(raw: RawPlayer, defaultSport: Sport): StatsPlayerRecord {
     position_abbr: positionAbbr,
     is_pitcher: isPitcherFromPosition(positionAbbr),
     active: raw.active === false ? false : true,
-    bats: mapBats(raw.bats),
-    throws: mapThrows(raw.throws),
+    bats,
+    throws,
     birth_place: buildBirthPlace(raw),
-    dob,
-    age: ageFromDob(dob),
+    dob: isoDob,
+    age: rawAge ?? ageFromDob(isoDob),
     height: asStringOrNull(raw.height),
     weight:
       raw.weight === null || raw.weight === undefined
@@ -488,6 +579,34 @@ export class BallDontLieProvider implements IPlayerStatsProvider {
       if (e instanceof BdlNotFoundError) return null;
       throw e;
     }
+  }
+
+  /**
+   * Phase 4.2.C.1.M — name-based search for provider ID mapping.
+   *
+   * Calls BDL `/players?search=<query>` and returns every candidate
+   * matching the search term (typically a last name). Used by
+   * `providerMappingService` to find BDL candidates for an MLB Stats
+   * person profile, then filter by DOB / city / team on the caller
+   * side.
+   *
+   * Returns full `StatsPlayerRecord` shape so the matcher can compare
+   * dob, birth_place, throws, bats, position, height, weight all in one
+   * call. Empty array when BDL returns no candidates.
+   *
+   * Pagination: BDL search results are typically small (<25). We page
+   * up to 2 pages × 100 = 200 results as a defensive ceiling — searching
+   * for a common last name like "Rodriguez" still fits well under that.
+   */
+  async searchPlayersByName(query: string): Promise<StatsPlayerRecord[]> {
+    const trimmed = query.trim();
+    if (trimmed === "") return [];
+    const rows = await this.client.fetchAll<RawPlayer>({
+      path: "/players",
+      query: { search: trimmed, per_page: 100 },
+      maxPages: 2,
+    });
+    return rows.map((r) => mapPlayer(r, "mlb"));
   }
 
   async getPlayerSeasonStats(
