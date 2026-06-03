@@ -572,6 +572,48 @@ export function mapBreakdownSplitNameToSplitType(
 }
 
 /**
+ * Convert BDL's `innings_pitched` value to true decimal innings.
+ *
+ * BDL follows the baseball convention where the fractional part is a
+ * count of additional outs in the partial inning, not a true decimal:
+ *   • `107.0` → 107      innings (clean integer)
+ *   • `107.1` → 107.333… (107 + 1/3)
+ *   • `107.2` → 107.667… (107 + 2/3)
+ *
+ * If we treat the raw number as a real decimal we under-state the
+ * denominator in WHIP and K/9 by up to ~0.6%. This helper normalizes
+ * to true decimal innings before any rate-stat math.
+ *
+ * Returns null for malformed inputs (negative, non-finite, fractional
+ * digit outside 0/1/2 — e.g. `.3` is invalid baseball IP).
+ */
+export function parseBdlInningsPitched(
+  raw: number | string | null | undefined
+): number | null {
+  if (raw === null || raw === undefined) return null;
+  let str: string;
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw)) return null;
+    if (raw < 0) return null;
+    // Snap to one fractional digit so floating-point noise like
+    // 107.19999... doesn't slip into the regex check below.
+    str = raw.toFixed(1);
+  } else if (typeof raw === "string") {
+    str = raw.trim();
+    if (str === "") return null;
+  } else {
+    return null;
+  }
+  const parts = str.split(".");
+  if (parts.length > 2 || parts[0] === "") return null;
+  const whole = parseInt(parts[0]!, 10);
+  if (!Number.isFinite(whole) || whole < 0) return null;
+  const fracStr = parts[1] ?? "0";
+  if (!/^[0-2]$/.test(fracStr)) return null;
+  return whole + parseInt(fracStr, 10) / 3;
+}
+
+/**
  * Compute WHIP from raw counters when BDL doesn't pre-aggregate it.
  * WHIP = (hits + walks) / innings_pitched. Returns null when IP is 0
  * or any input is null.
@@ -702,7 +744,11 @@ export function mapSplitsRowToSeasonRecord(
 ): StatsSeasonRecord {
   const ab = asNumberOrNull(row.at_bats);
   const h = asNumberOrNull(row.hits);
-  const ip = asNumberOrNull(row.innings_pitched);
+  // BDL `innings_pitched` follows baseball convention: `.1` and `.2`
+  // mean +1/3 and +2/3 of an inning, not true decimal. Convert before
+  // using in rate-stat math so WHIP and K/9 use the correct
+  // denominator. `pitching_ip` stored is the true-decimal value.
+  const ip = parseBdlInningsPitched(asNumberOrNull(row.innings_pitched));
   const ha = asNumberOrNull(row.hits_allowed);
   const ba = asNumberOrNull(row.walks_allowed);
   const k = asNumberOrNull(row.strikeouts_pitched);

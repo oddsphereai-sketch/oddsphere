@@ -19,6 +19,7 @@ import {
   mapBreakdownSplitNameToSplitType,
   mapSplitsRowToSeasonRecord,
   mapSplitsRowToSplitRecord,
+  parseBdlInningsPitched,
 } from "../lib/providers/real_api/BallDontLieProvider";
 
 let pass = 0;
@@ -174,6 +175,75 @@ async function testMapBreakdownSplitName() {
   check(`"By Arena" → null`, mapBreakdownSplitNameToSplitType("By Arena") === null);
 }
 
+async function testParseBdlInningsPitched() {
+  section("parseBdlInningsPitched — baseball-decimal convention");
+  // Happy path: integers
+  check("number 192 → 192", parseBdlInningsPitched(192) === 192);
+  check("number 0 → 0", parseBdlInningsPitched(0) === 0);
+  check("number 192.0 → 192", parseBdlInningsPitched(192.0) === 192);
+  // .1 = +1/3, .2 = +2/3
+  check(
+    "number 107.1 → 107 + 1/3",
+    approxEq(parseBdlInningsPitched(107.1), 107 + 1 / 3)
+  );
+  check(
+    "number 107.2 → 107 + 2/3",
+    approxEq(parseBdlInningsPitched(107.2), 107 + 2 / 3)
+  );
+  check(
+    "number 195.1 → 195 + 1/3 (Skubal style)",
+    approxEq(parseBdlInningsPitched(195.1), 195 + 1 / 3)
+  );
+  check(
+    "number 142.2 → 142 + 2/3 (Davis Martin style)",
+    approxEq(parseBdlInningsPitched(142.2), 142 + 2 / 3)
+  );
+
+  section("parseBdlInningsPitched — string inputs");
+  check(
+    "string '6.0' → 6",
+    parseBdlInningsPitched("6.0") === 6
+  );
+  check(
+    "string '6.1' → 6 + 1/3",
+    approxEq(parseBdlInningsPitched("6.1"), 6 + 1 / 3)
+  );
+  check(
+    "string '6.2' → 6 + 2/3",
+    approxEq(parseBdlInningsPitched("6.2"), 6 + 2 / 3)
+  );
+  check(
+    "string '  192  ' (whitespace, no decimal) → 192",
+    parseBdlInningsPitched("  192  ") === 192
+  );
+
+  section("parseBdlInningsPitched — null/empty cases");
+  check("null → null", parseBdlInningsPitched(null) === null);
+  check("undefined → null", parseBdlInningsPitched(undefined) === null);
+  check("empty string → null", parseBdlInningsPitched("") === null);
+  check("whitespace-only string → null", parseBdlInningsPitched("   ") === null);
+
+  section("parseBdlInningsPitched — invalid fractional digit");
+  // BDL convention only allows .0/.1/.2 — anything else is corrupt
+  check("number 6.3 → null", parseBdlInningsPitched(6.3) === null);
+  check("number 6.5 → null", parseBdlInningsPitched(6.5) === null);
+  check("string '6.3' → null", parseBdlInningsPitched("6.3") === null);
+  check("string '6.9' → null", parseBdlInningsPitched("6.9") === null);
+
+  section("parseBdlInningsPitched — defensive against bad inputs");
+  check("NaN → null", parseBdlInningsPitched(Number.NaN) === null);
+  check("Infinity → null", parseBdlInningsPitched(Number.POSITIVE_INFINITY) === null);
+  check("negative number -1 → null", parseBdlInningsPitched(-1) === null);
+  check("negative string '-1' → null", parseBdlInningsPitched("-1") === null);
+  check("non-numeric string 'foo' → null", parseBdlInningsPitched("foo") === null);
+  check("string '6.1.2' (extra dots) → null", parseBdlInningsPitched("6.1.2") === null);
+  // Floating-point edge: BDL might serialize 107.2 with noise
+  check(
+    "floating-point noise '107.199999' rounds to 107.2 → 107 + 2/3",
+    approxEq(parseBdlInningsPitched(107.19999999), 107 + 2 / 3)
+  );
+}
+
 async function testComputeWhip() {
   section("computeWhip");
   check("ip=192, h=140, bb=35 → 0.911...", approxEq(computeWhip(192, 140, 35), 0.91145833));
@@ -270,7 +340,7 @@ async function testMapSplitsRowToSeasonRecord_hitter() {
 async function testMapSplitsRowToSeasonRecord_pitcher() {
   section("mapSplitsRowToSeasonRecord — pitcher season aggregate + derived WHIP/K9");
   const rec = mapSplitsRowToSeasonRecord(seasonRowPitcher, 178, 2025);
-  check("pitching_ip === 192", rec.pitching_ip === 192);
+  check("pitching_ip === 192 (integer, no conversion needed)", rec.pitching_ip === 192);
   check("pitching_h === 140", rec.pitching_h === 140);
   check("pitching_bb === 35", rec.pitching_bb === 35);
   check("pitching_k === 245", rec.pitching_k === 245);
@@ -284,6 +354,106 @@ async function testMapSplitsRowToSeasonRecord_pitcher() {
   check("pitching_war === null (not from BDL)", rec.pitching_war === null);
 }
 
+async function testMapSplitsRowToSeasonRecord_pitcherWithFractionalIp() {
+  section("mapSplitsRowToSeasonRecord — pitcher with baseball-decimal IP (.2 = +2/3)");
+  // Hunter Greene-style row: IP=107.2 in BDL convention = 107 + 2/3 in true decimal.
+  const row = {
+    player: { id: 591 },
+    season: 2025,
+    category: "pitching",
+    split_category: "split",
+    split_name: "Season",
+    games_played: 18,
+    games_started: 18,
+    innings_pitched: 107.2,
+    hits_allowed: 75,
+    walks_allowed: 26,
+    strikeouts_pitched: 133,
+    earned_runs: 33,
+    home_runs_allowed: 13,
+    era: 2.76,
+    wins: 7,
+    losses: 4,
+    saves: 0,
+  };
+  const rec = mapSplitsRowToSeasonRecord(row, 591, 2025);
+  // pitching_ip stored should be the TRUE-decimal value (107.667…), not 107.2.
+  check(
+    "pitching_ip converted to 107 + 2/3 (≈107.667)",
+    approxEq(rec.pitching_ip, 107 + 2 / 3)
+  );
+  // WHIP uses converted IP: (75 + 26) / 107.667 ≈ 0.9381
+  check(
+    "pitching_whip uses converted IP (≈ 0.938)",
+    approxEq(rec.pitching_whip, (75 + 26) / (107 + 2 / 3))
+  );
+  // K/9 uses converted IP: 133 * 9 / 107.667 ≈ 11.118
+  check(
+    "pitching_k_per_9 uses converted IP (≈ 11.118)",
+    approxEq(rec.pitching_k_per_9, (133 * 9) / (107 + 2 / 3))
+  );
+  // Sanity: derived WHIP differs from the buggy raw-decimal result.
+  const buggyWhip = (75 + 26) / 107.2;
+  check(
+    "derived WHIP differs from buggy raw-decimal WHIP (sanity)",
+    Math.abs((rec.pitching_whip ?? 0) - buggyWhip) > 0.001
+  );
+}
+
+async function testMapSplitsRowToSeasonRecord_pitcherWithIpDotOne() {
+  section("mapSplitsRowToSeasonRecord — pitcher with IP .1 = +1/3");
+  // Skubal real-data style: IP=195.1 → 195 + 1/3
+  const row = {
+    player: { id: 178 },
+    season: 2025,
+    category: "pitching",
+    games_played: 31,
+    games_started: 31,
+    innings_pitched: 195.1,
+    hits_allowed: 145,
+    walks_allowed: 40,
+    strikeouts_pitched: 242,
+    earned_runs: 48,
+    era: 2.21,
+    wins: 17,
+    losses: 5,
+  };
+  const rec = mapSplitsRowToSeasonRecord(row, 178, 2025);
+  check(
+    "pitching_ip converted to 195 + 1/3",
+    approxEq(rec.pitching_ip, 195 + 1 / 3)
+  );
+  check(
+    "WHIP uses converted IP",
+    approxEq(rec.pitching_whip, (145 + 40) / (195 + 1 / 3))
+  );
+  check(
+    "K/9 uses converted IP",
+    approxEq(rec.pitching_k_per_9, (242 * 9) / (195 + 1 / 3))
+  );
+}
+
+async function testMapSplitsRowToSeasonRecord_pitcherInvalidIp() {
+  section("mapSplitsRowToSeasonRecord — pitcher with invalid IP fractional digit");
+  // Defensive: if BDL ever returns IP=.3 (corrupt), parser returns null
+  // and downstream derivations are null too.
+  const row = {
+    player: { id: 999 },
+    season: 2025,
+    category: "pitching",
+    games_played: 10,
+    innings_pitched: 50.3,
+    hits_allowed: 40,
+    walks_allowed: 15,
+    strikeouts_pitched: 60,
+    era: 3.5,
+  };
+  const rec = mapSplitsRowToSeasonRecord(row, 999, 2025);
+  check("pitching_ip === null (invalid fractional)", rec.pitching_ip === null);
+  check("pitching_whip === null (ip null)", rec.pitching_whip === null);
+  check("pitching_k_per_9 === null (ip null)", rec.pitching_k_per_9 === null);
+}
+
 // ─── Runner ──────────────────────────────────────────────────────────
 
 async function main() {
@@ -291,6 +461,7 @@ async function main() {
   console.log("=========================================================");
 
   await testMapBreakdownSplitName();
+  await testParseBdlInningsPitched();
   await testComputeWhip();
   await testComputeKper9();
   await testComputeTotalBases();
@@ -300,6 +471,9 @@ async function main() {
   await testMapSplitsRowToSplitRecord_skipsUnknown();
   await testMapSplitsRowToSeasonRecord_hitter();
   await testMapSplitsRowToSeasonRecord_pitcher();
+  await testMapSplitsRowToSeasonRecord_pitcherWithFractionalIp();
+  await testMapSplitsRowToSeasonRecord_pitcherWithIpDotOne();
+  await testMapSplitsRowToSeasonRecord_pitcherInvalidIp();
 
   console.log();
   console.log("=========================================================");
