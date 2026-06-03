@@ -233,30 +233,100 @@ function buildDedupeKey(
 }
 
 /**
- * Phase 1.6: build a lookup map from /splits rows keyed by
- * `${homeAbbrev}|${awayAbbrev}`. Rows that don't resolve to a team pair
- * via the TeamNameNormalizer are silently dropped (mirrors the same
- * gate the opportunity-row flow uses).
+ * Phase 4.1.9.C-1c.ix — splits date guard.
+ *
+ * Extracts the YYYY-MM-DD slate date encoded in a SharpAPI /splits event_id
+ * (e.g., `mlb_twins_whitesox_2026-06-01` → `"2026-06-01"`). The bucket
+ * suffix (`_b\d+`) is stripped first so event_ids returned by /opportunities
+ * variants normalize to the same form.
+ *
+ * Returns null if the event_id is missing or doesn't carry a parseable
+ * trailing date — caller treats null as "untrusted; do not merge."
+ */
+function extractSlateDateFromEventId(eventId: string | null): string | null {
+  if (eventId === null) return null;
+  const stripped = stripEventBucketSuffix(eventId);
+  const m = stripped.match(/_(\d{4}-\d{2}-\d{2})$/);
+  return m ? m[1] ?? null : null;
+}
+
+/**
+ * Stats accumulator for the /splits merge. Surfaced to the caller so the
+ * provider can log a warning when the date guard skips rows — important
+ * diagnostic for late-evening runs where SharpAPI has already rolled
+ * forward to the next slate.
+ */
+export type SplitsMergeStats = {
+  totalRows: number;
+  keptRows: number;
+  skippedNonMlb: number;
+  skippedTeamUnresolved: number;
+  skippedDateUnparseable: number;
+  skippedWrongDate: number;
+};
+
+/**
+ * Phase 1.6 + Phase 4.1.9.C-1c.ix — build a lookup map from /splits rows
+ * keyed by `${homeAbbrev}|${awayAbbrev}`.
+ *
+ * Now applies a DATE GUARD: each row must carry an event_id whose trailing
+ * YYYY-MM-DD date equals `expectedDate`. Rows with a different (or
+ * unparseable) date are skipped. This prevents tomorrow's pre-game splits
+ * from being silently merged onto today's signal rows when the same
+ * matchup repeats across consecutive days (multi-game series safety).
+ *
+ * Skip categories are tracked via the returned stats so callers can log
+ * diagnostics (the operator script's verbose dry-run reports these).
  *
  * The map points to the RAW /splits row so callers can pluck whichever
  * market they need at merge time.
  */
 function buildSplitsMap(
-  rows: RawSplitsRow[]
-): Map<string, RawSplitsRow> {
+  rows: RawSplitsRow[],
+  expectedDate: string
+): { map: Map<string, RawSplitsRow>; stats: SplitsMergeStats } {
   const map = new Map<string, RawSplitsRow>();
+  const stats: SplitsMergeStats = {
+    totalRows: rows.length,
+    keptRows: 0,
+    skippedNonMlb: 0,
+    skippedTeamUnresolved: 0,
+    skippedDateUnparseable: 0,
+    skippedWrongDate: 0,
+  };
   for (const row of rows) {
     const leagueTag = asStringOrNull(row.league)?.toLowerCase();
-    if (leagueTag !== null && leagueTag !== "mlb") continue;
+    if (leagueTag !== null && leagueTag !== "mlb") {
+      stats.skippedNonMlb++;
+      continue;
+    }
+    // Date guard. Skip rows without a parseable event_id date OR whose
+    // date doesn't match the slate being processed. This is the V1.1c
+    // multi-game-series safety: at late evening, /splits rolls to the
+    // next day; the team-pair merge alone would silently bind tomorrow's
+    // splits to today's game.
+    const rowDate = extractSlateDateFromEventId(asStringOrNull(row.event_id));
+    if (rowDate === null) {
+      stats.skippedDateUnparseable++;
+      continue;
+    }
+    if (rowDate !== expectedDate) {
+      stats.skippedWrongDate++;
+      continue;
+    }
     const home = normalizeMlbTeamName(row.home_team);
     const away = normalizeMlbTeamName(row.away_team);
-    if (home === null || away === null) continue;
+    if (home === null || away === null) {
+      stats.skippedTeamUnresolved++;
+      continue;
+    }
     const key = `${home}|${away}`;
     if (!map.has(key)) {
       map.set(key, row);
+      stats.keptRows++;
     }
   }
-  return map;
+  return { map, stats };
 }
 
 /**
@@ -540,7 +610,22 @@ export class SharpAPISignalProvider implements ISharpSignalProvider {
           splitsRows = [];
         }
       }
-      const splitsByPair = buildSplitsMap(splitsRows);
+      const { map: splitsByPair, stats: splitsStats } = buildSplitsMap(
+        splitsRows,
+        date
+      );
+      if (splitsStats.skippedWrongDate > 0) {
+        console.warn(
+          `[SharpAPISignalProvider] /splits date guard: skipped ${splitsStats.skippedWrongDate} row(s) with event_id date != ${date} ` +
+            `(multi-game-series safety — likely SharpAPI rolled forward to the next slate). Total rows=${splitsStats.totalRows}, kept=${splitsStats.keptRows}.`
+        );
+      }
+      if (splitsStats.skippedDateUnparseable > 0) {
+        console.warn(
+          `[SharpAPISignalProvider] /splits date guard: skipped ${splitsStats.skippedDateUnparseable} row(s) with unparseable event_id date. ` +
+            `These would otherwise have merged on team-pair alone and risked cross-slate contamination.`
+        );
+      }
       for (const entry of seen.values()) {
         // Skip first_inning_total — no first-inning splits in V1.
         if (entry.signal.market_type === "first_inning_total") continue;
@@ -576,4 +661,5 @@ export const __TEST__ = {
   stripEventBucketSuffix,
   buildSplitsMap,
   publicPctsFromSplits,
+  extractSlateDateFromEventId,
 };

@@ -24,6 +24,7 @@ import type {
   SlateTeamRecord,
 } from "../interfaces/ISlateProvider";
 import { BdlClient, BdlNotFoundError } from "./_bdlClient";
+import { computeSlateDate } from "../../dates/slateDate";
 
 // ─────────────────────────────────────────────────────────────
 // Raw shapes
@@ -109,6 +110,21 @@ function asStringOrNull(v: unknown): string | null {
 
 function asBoolOrFalse(v: unknown): boolean {
   return v === true || v === "true" || v === 1 || v === "1";
+}
+
+/**
+ * Add one calendar day to a YYYY-MM-DD string. Pure UTC math — independent
+ * of any timezone. Used to widen the BDL fetch window from `dates[]=D` to
+ * `[dates[]=D, dates[]=D+1]` so we can recover late West Coast games whose
+ * UTC date crosses midnight relative to the ET sports day.
+ */
+function addOneCalendarDayUTC(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) {
+    throw new Error(`addOneCalendarDayUTC: invalid input "${date}"`);
+  }
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
 }
 
 function normalizeGameStatus(raw: string | null): string {
@@ -283,25 +299,67 @@ export class BallDontLieSlateProvider implements ISlateProvider {
     // sport param is informational. The output's sport field is "mlb"; if
     // the caller asked for a non-mlb sport, return [].
     if (sport !== undefined && sport !== "mlb") return [];
+    const sportKey: Sport = "mlb";
 
-    let rawGames: RawGame[];
-    try {
-      rawGames = await this.client.fetchAll<RawGame>({
-        path: "/games",
-        query: { "dates[]": [date], per_page: 100 },
-        maxPages: 5,
-      });
-    } catch (e) {
-      if (e instanceof BdlNotFoundError) return [];
-      throw e;
+    // ET sports-day correction (4.1.9.C-1c.iv):
+    //   BDL's `dates[]=D` filter is a UTC-date string equality. Late West
+    //   Coast games whose UTC instant rolls past midnight (e.g., a 10:10
+    //   PM ET first pitch is 02:10 UTC on D+1) are filed under D+1 in
+    //   BDL's response, but belong to the ET sports day of D for our
+    //   canonical slate.
+    //
+    //   Strategy: fetch both `dates[]=D` and `dates[]=D+1`, merge by id,
+    //   then filter to games whose anchor-timezone date (per computeSlateDate)
+    //   equals `date`. Genuine D+1 games still in the D+1 response are
+    //   dropped by the filter.
+    const dPlus1 = addOneCalendarDayUTC(date);
+
+    const fetchForDate = async (d: string): Promise<RawGame[]> => {
+      try {
+        return await this.client.fetchAll<RawGame>({
+          path: "/games",
+          query: { "dates[]": [d], per_page: 100 },
+          maxPages: 5,
+        });
+      } catch (e) {
+        // BdlNotFoundError → BDL responded with no data for this query.
+        // Treat as empty rather than failure; the merge step handles it.
+        if (e instanceof BdlNotFoundError) return [];
+        // Any other error (HTTP 5xx, network, auth, parse) propagates —
+        // failing the slate refresh loudly. A partial slate is more
+        // dangerous than no slate.
+        throw e;
+      }
+    };
+
+    const [rowsD, rowsD1] = await Promise.all([
+      fetchForDate(date),
+      fetchForDate(dPlus1),
+    ]);
+
+    // Dedupe by BDL game id. BDL's `dates[]=D` and `dates[]=D+1` should
+    // return disjoint sets in practice (a game's `date` field maps to
+    // exactly one UTC day), but dedupe defensively.
+    const byId = new Map<number, RawGame>();
+    for (const r of rowsD) byId.set(r.id, r);
+    for (const r of rowsD1) if (!byId.has(r.id)) byId.set(r.id, r);
+
+    // Filter to games belonging to the ET sports day for `date`.
+    // computeSlateDate(sport, utcInstant) returns YYYY-MM-DD in the sport's
+    // anchor timezone (America/New_York for MLB; see lib/dates/slateDate).
+    const inSlate: RawGame[] = [];
+    for (const r of byId.values()) {
+      const sd = computeSlateDate(sportKey, pickGameDate(r));
+      if (sd === date) inSlate.push(r);
     }
 
     // For each game where probable starter is missing on either side,
     // make a follow-up /lineups call to resolve from is_probable_pitcher.
     // Protects Morning Card draft generation when /games hasn't been
-    // populated with probable starters yet.
+    // populated with probable starters yet. Runs AFTER the sports-day
+    // filter so we don't burn /lineups calls on D+1's true games.
     const out: SlateGameRecord[] = [];
-    for (const raw of rawGames) {
+    for (const raw of inSlate) {
       const homeExisting = pickHomePitcherId(raw);
       const awayExisting = pickAwayPitcherId(raw);
       let homeFromLineup: number | null = null;
@@ -316,6 +374,25 @@ export class BallDontLieSlateProvider implements ISlateProvider {
         awayFromLineup = resolved.away;
       }
       out.push(mapGame(raw, homeFromLineup, awayFromLineup));
+    }
+    return out;
+  }
+
+  /**
+   * Test-only seam for filtering raw BDL responses by ET sports day.
+   * Bypasses network — accepts already-fetched rows and applies the
+   * dedupe + sports-day filter without hitting `/games` or `/lineups`.
+   * Used by the BDL slate test fixture suite.
+   *
+   * Not part of the ISlateProvider contract; not called by services.
+   */
+  __testOnly_filterToSportsDay(rowsD: unknown[], rowsD1: unknown[], date: string, sport: Sport = "mlb"): unknown[] {
+    const byId = new Map<number, RawGame>();
+    for (const r of rowsD as RawGame[]) byId.set(r.id, r);
+    for (const r of rowsD1 as RawGame[]) if (!byId.has(r.id)) byId.set(r.id, r);
+    const out: RawGame[] = [];
+    for (const r of byId.values()) {
+      if (computeSlateDate(sport, pickGameDate(r)) === date) out.push(r);
     }
     return out;
   }

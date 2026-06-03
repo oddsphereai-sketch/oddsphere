@@ -33,12 +33,19 @@ export const slateService = {
    * process.env mutation (concurrent-request safe). When omitted, falls
    * through to `getSlateProvider()` which reads SLATE_PROVIDER env (cron
    * path).
+   *
+   * `opts.dryRun` (default false) is a Phase 4.1.9.C-1b operator-script
+   * affordance: when true, the provider fetch + payload build still run
+   * normally, but the UPSERT against `games` is skipped. Behavior for
+   * existing callers (crons, admin upload route, tests) is unchanged.
    */
   async refreshGames(
     sport: Sport,
     date: string,
-    providerOverride?: ISlateProvider
+    providerOverride?: ISlateProvider,
+    opts?: { dryRun?: boolean }
   ): Promise<CronHandlerResult> {
+    const dryRun = opts?.dryRun === true;
     const stats = providerOverride ?? getSlateProvider();
     let apiCalls = 0;
 
@@ -107,7 +114,7 @@ export const slateService = {
       payload.push(row);
     }
 
-    if (payload.length > 0) {
+    if (payload.length > 0 && !dryRun) {
       const { error } = await supabase
         .from("games")
         .upsert(payload, { onConflict: "sport,external_id" });

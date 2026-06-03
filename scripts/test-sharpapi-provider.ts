@@ -147,7 +147,11 @@ async function main() {
         away_team: "Other Unknown",
       },
     ];
-    const m = SignalProviderTest.buildSplitsMap(fakeRows);
+    // 4.1.9.C-1c.ix: buildSplitsMap now requires an expectedDate. All
+    // fixture rows here use 2026-05-29, so we pass that. Same-date merges
+    // are the happy path; wrong-date cases are exercised below.
+    const built = SignalProviderTest.buildSplitsMap(fakeRows, "2026-05-29");
+    const m = built.map;
     check(
       "buildSplitsMap keys real MLB games by 'home|away' abbrev pair",
       m.has("NYM|MIA")
@@ -159,6 +163,151 @@ async function main() {
     check(
       "buildSplitsMap drops rows with unresolvable team strings",
       m.size === 1
+    );
+    check(
+      "buildSplitsMap stats: 1 kept, 1 skippedNonMlb, 1 skippedTeamUnresolved",
+      built.stats.keptRows === 1 &&
+        built.stats.skippedNonMlb === 1 &&
+        built.stats.skippedTeamUnresolved === 1 &&
+        built.stats.skippedWrongDate === 0 &&
+        built.stats.skippedDateUnparseable === 0
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────
+  // 4.1.9.C-1c.ix — splits date guard
+  // ───────────────────────────────────────────────────────────────────
+  {
+    // Case 1: same team pair, same date → merges.
+    const sameDate = SignalProviderTest.buildSplitsMap(
+      [
+        {
+          event_id: "mlb_marlins_mets_2026-06-01",
+          league: "mlb",
+          home_team: "New York Mets",
+          away_team: "Miami Marlins",
+        },
+      ],
+      "2026-06-01"
+    );
+    check(
+      "date guard: same date → kept",
+      sameDate.map.has("NYM|MIA") &&
+        sameDate.stats.keptRows === 1 &&
+        sameDate.stats.skippedWrongDate === 0
+    );
+
+    // Case 2: same team pair, NEXT date → skipped.
+    const wrongDate = SignalProviderTest.buildSplitsMap(
+      [
+        {
+          event_id: "mlb_marlins_mets_2026-06-02",
+          league: "mlb",
+          home_team: "New York Mets",
+          away_team: "Miami Marlins",
+        },
+      ],
+      "2026-06-01"
+    );
+    check(
+      "date guard: wrong date → skipped (not merged)",
+      !wrongDate.map.has("NYM|MIA") &&
+        wrongDate.stats.keptRows === 0 &&
+        wrongDate.stats.skippedWrongDate === 1
+    );
+
+    // Case 3: repeating series across consecutive days — only the matching
+    // date is kept; tomorrow's row is skipped even though the team pair is
+    // identical.
+    const series = SignalProviderTest.buildSplitsMap(
+      [
+        {
+          event_id: "mlb_marlins_mets_2026-06-01",
+          league: "mlb",
+          home_team: "New York Mets",
+          away_team: "Miami Marlins",
+          moneyline: { bets_pct: { home: 0.6, away: 0.4 } },
+        },
+        {
+          event_id: "mlb_marlins_mets_2026-06-02",
+          league: "mlb",
+          home_team: "New York Mets",
+          away_team: "Miami Marlins",
+          moneyline: { bets_pct: { home: 0.31, away: 0.69 } },
+        },
+      ],
+      "2026-06-01"
+    );
+    check(
+      "date guard: multi-day series → only matching-date row merges",
+      series.stats.keptRows === 1 && series.stats.skippedWrongDate === 1
+    );
+    // Confirm the row stored is the matching-date one
+    const stored = series.map.get("NYM|MIA");
+    check(
+      "date guard: the stored row is the matching-date one (not the next-day overwrite)",
+      stored?.event_id === "mlb_marlins_mets_2026-06-01"
+    );
+
+    // Case 4: missing event_id → skipped (untrusted, do not merge).
+    const missing = SignalProviderTest.buildSplitsMap(
+      [
+        {
+          event_id: null,
+          league: "mlb",
+          home_team: "New York Mets",
+          away_team: "Miami Marlins",
+        },
+        {
+          // event_id without a trailing date is unparseable.
+          event_id: "mlb_marlins_mets_no_date",
+          league: "mlb",
+          home_team: "New York Mets",
+          away_team: "Miami Marlins",
+        },
+      ],
+      "2026-06-01"
+    );
+    check(
+      "date guard: missing/unparseable event_id → skipped",
+      !missing.map.has("NYM|MIA") &&
+        missing.stats.keptRows === 0 &&
+        missing.stats.skippedDateUnparseable === 2
+    );
+
+    // Case 5: bucket-suffixed event_id still parses correctly
+    const bucketed = SignalProviderTest.buildSplitsMap(
+      [
+        {
+          event_id: "mlb_marlins_mets_2026-06-01_b3",
+          league: "mlb",
+          home_team: "New York Mets",
+          away_team: "Miami Marlins",
+        },
+      ],
+      "2026-06-01"
+    );
+    check(
+      "date guard: bucket-suffixed event_id is still recognized as the matching date",
+      bucketed.map.has("NYM|MIA") && bucketed.stats.keptRows === 1
+    );
+
+    // Case 6: extractSlateDateFromEventId helper directly
+    check(
+      "extractSlateDateFromEventId: trailing date parses",
+      SignalProviderTest.extractSlateDateFromEventId("mlb_marlins_mets_2026-06-01") === "2026-06-01"
+    );
+    check(
+      "extractSlateDateFromEventId: bucket suffix stripped",
+      SignalProviderTest.extractSlateDateFromEventId("mlb_marlins_mets_2026-06-01_b2") === "2026-06-01"
+    );
+    check(
+      "extractSlateDateFromEventId: null on missing input",
+      SignalProviderTest.extractSlateDateFromEventId(null) === null
+    );
+    check(
+      "extractSlateDateFromEventId: null on no trailing date",
+      SignalProviderTest.extractSlateDateFromEventId("mlb_marlins_mets") === null
     );
   }
 

@@ -1,0 +1,670 @@
+{
+  "data": [
+    {
+      "id": 5058668,
+      "home_team_name": "Los Angeles Angels",
+      "away_team_name": "Colorado Rockies",
+      "home_team": {
+        "id": 13,
+        "slug": "los-angeles-angels",
+        "abbreviation": "LAA",
+        "display_name": "Los Angeles Angels",
+        "short_display_name": "Angels",
+        "name": "Angels",
+        "location": "Los Angeles",
+        "league": "American",
+        "division": "West"
+      },
+      "away_team": {
+        "id": 9,
+        "slug": "colorado-rockies",
+        "abbreviation": "COL",
+        "display_name": "Colorado Rockies",
+        "short_display_name": "Rockies",
+        "name": "Rockies",
+        "location": "Colorado",
+        "league": "National",
+        "division": "West"
+      },
+      "season": 2026,
+      "postseason": false,
+      "season_type": "regular",
+      "date": "2026-06-02T01:38:00.000Z",
+      "home_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "away_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "venue": "Angel Stadium",
+      "attendance": 0,
+      "conference_play": false,
+      "status": "STATUS_SCHEDULED",
+      "period": 1,
+      "clock": 0,
+      "display_clock": "0:00",
+      "scoring_summary": []
+    },
+    {
+      "id": 5058669,
+      "home_team_name": "Arizona Diamondbacks",
+      "away_team_name": "Los Angeles Dodgers",
+      "home_team": {
+        "id": 1,
+        "slug": "arizona-diamondbacks",
+        "abbreviation": "ARI",
+        "display_name": "Arizona Diamondbacks",
+        "short_display_name": "Diamondbacks",
+        "name": "Diamondbacks",
+        "location": "Arizona",
+        "league": "National",
+        "division": "West"
+      },
+      "away_team": {
+        "id": 14,
+        "slug": "los-angeles-dodgers",
+        "abbreviation": "LAD",
+        "display_name": "Los Angeles Dodgers",
+        "short_display_name": "Dodgers",
+        "name": "Dodgers",
+        "location": "Los Angeles",
+        "league": "National",
+        "division": "West"
+      },
+      "season": 2026,
+      "postseason": false,
+      "season_type": "regular",
+      "date": "2026-06-02T01:40:00.000Z",
+      "home_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "away_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "venue": "Chase Field",
+      "attendance": 0,
+      "conference_play": false,
+      "status": "STATUS_SCHEDULED",
+      "period": 1,
+      "clock": 0,
+      "display_clock": "0:00",
+      "scoring_summary": []
+    },
+    {
+      "id": 5058670,
+      "home_team_name": "Seattle Mariners",
+      "away_team_name": "New York Mets",
+      "home_team": {
+        "id": 25,
+        "slug": "seattle-mariners",
+        "abbreviation": "SEA",
+        "display_name": "Seattle Mariners",
+        "short_display_name": "Mariners",
+        "name": "Mariners",
+        "location": "Seattle",
+        "league": "American",
+        "division": "West"
+      },
+      "away_team": {
+        "id": 18,
+        "slug": "new-york-mets",
+        "abbreviation": "NYM",
+        "display_name": "New York Mets",
+        "short_display_name": "Mets",
+        "name": "Mets",
+        "location": "New York",
+        "league": "National",
+        "division": "East"
+      },
+      "season": 2026,
+      "postseason": false,
+      "season_type": "regular",
+      "date": "2026-06-02T01:40:00.000Z",
+      "home_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "away_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "venue": "T-Mobile Park",
+      "attendance": 0,
+      "conference_play": false,
+      "status": "STATUS_SCHEDULED",
+      "period": 1,
+      "clock": 0,
+      "display_clock": "0:00",
+      "scoring_summary": []
+    },
+    {
+      "id": 5058671,
+      "home_team_name": "Tampa Bay Rays",
+      "away_team_name": "Detroit Tigers",
+      "home_team": {
+        "id": 27,
+        "slug": "tampa-bay-rays",
+        "abbreviation": "TB",
+        "display_name": "Tampa Bay Rays",
+        "short_display_name": "Rays",
+        "name": "Rays",
+        "location": "Tampa Bay",
+        "league": "American",
+        "division": "East"
+      },
+      "away_team": {
+        "id": 10,
+        "slug": "detroit-tigers",
+        "abbreviation": "DET",
+        "display_name": "Detroit Tigers",
+        "short_display_name": "Tigers",
+        "name": "Tigers",
+        "location": "Detroit",
+        "league": "American",
+        "division": "Central"
+      },
+      "season": 2026,
+      "postseason": false,
+      "season_type": "regular",
+      "date": "2026-06-02T22:40:00.000Z",
+      "home_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "away_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "venue": "Tropicana Field",
+      "attendance": 0,
+      "conference_play": false,
+      "status": "STATUS_SCHEDULED",
+      "period": 1,
+      "clock": 0,
+      "display_clock": "0:00",
+      "scoring_summary": []
+    },
+    {
+      "id": 5058672,
+      "home_team_name": "Philadelphia Phillies",
+      "away_team_name": "San Diego Padres",
+      "home_team": {
+        "id": 21,
+        "slug": "philadelphia-phillies",
+        "abbreviation": "PHI",
+        "display_name": "Philadelphia Phillies",
+        "short_display_name": "Phillies",
+        "name": "Phillies",
+        "location": "Philadelphia",
+        "league": "National",
+        "division": "East"
+      },
+      "away_team": {
+        "id": 23,
+        "slug": "san-diego-padres",
+        "abbreviation": "SD",
+        "display_name": "San Diego Padres",
+        "short_display_name": "Padres",
+        "name": "Padres",
+        "location": "San Diego",
+        "league": "National",
+        "division": "West"
+      },
+      "season": 2026,
+      "postseason": false,
+      "season_type": "regular",
+      "date": "2026-06-02T22:40:00.000Z",
+      "home_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "away_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "venue": "Citizens Bank Park",
+      "attendance": 0,
+      "conference_play": false,
+      "status": "STATUS_SCHEDULED",
+      "period": 1,
+      "clock": 0,
+      "display_clock": "0:00",
+      "scoring_summary": []
+    },
+    {
+      "id": 5058673,
+      "home_team_name": "Boston Red Sox",
+      "away_team_name": "Baltimore Orioles",
+      "home_team": {
+        "id": 4,
+        "slug": "boston-red-sox",
+        "abbreviation": "BOS",
+        "display_name": "Boston Red Sox",
+        "short_display_name": "Red Sox",
+        "name": "Red Sox",
+        "location": "Boston",
+        "league": "American",
+        "division": "East"
+      },
+      "away_team": {
+        "id": 3,
+        "slug": "baltimore-orioles",
+        "abbreviation": "BAL",
+        "display_name": "Baltimore Orioles",
+        "short_display_name": "Orioles",
+        "name": "Orioles",
+        "location": "Baltimore",
+        "league": "American",
+        "division": "East"
+      },
+      "season": 2026,
+      "postseason": false,
+      "season_type": "regular",
+      "date": "2026-06-02T22:45:00.000Z",
+      "home_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "away_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "venue": "Fenway Park",
+      "attendance": 0,
+      "conference_play": false,
+      "status": "STATUS_SCHEDULED",
+      "period": 1,
+      "clock": 0,
+      "display_clock": "0:00",
+      "scoring_summary": []
+    },
+    {
+      "id": 5058674,
+      "home_team_name": "Washington Nationals",
+      "away_team_name": "Miami Marlins",
+      "home_team": {
+        "id": 30,
+        "slug": "washington-nationals",
+        "abbreviation": "WSH",
+        "display_name": "Washington Nationals",
+        "short_display_name": "Nationals",
+        "name": "Nationals",
+        "location": "Washington",
+        "league": "National",
+        "division": "East"
+      },
+      "away_team": {
+        "id": 15,
+        "slug": "miami-marlins",
+        "abbreviation": "MIA",
+        "display_name": "Miami Marlins",
+        "short_display_name": "Marlins",
+        "name": "Marlins",
+        "location": "Miami",
+        "league": "National",
+        "division": "East"
+      },
+      "season": 2026,
+      "postseason": false,
+      "season_type": "regular",
+      "date": "2026-06-02T22:45:00.000Z",
+      "home_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "away_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "venue": "Nationals Park",
+      "attendance": 0,
+      "conference_play": false,
+      "status": "STATUS_SCHEDULED",
+      "period": 1,
+      "clock": 0,
+      "display_clock": "0:00",
+      "scoring_summary": []
+    },
+    {
+      "id": 5058675,
+      "home_team_name": "New York Yankees",
+      "away_team_name": "Cleveland Guardians",
+      "home_team": {
+        "id": 19,
+        "slug": "new-york-yankees",
+        "abbreviation": "NYY",
+        "display_name": "New York Yankees",
+        "short_display_name": "Yankees",
+        "name": "Yankees",
+        "location": "New York",
+        "league": "American",
+        "division": "East"
+      },
+      "away_team": {
+        "id": 8,
+        "slug": "cleveland-guardians",
+        "abbreviation": "CLE",
+        "display_name": "Cleveland Guardians",
+        "short_display_name": "Guardians",
+        "name": "Guardians",
+        "location": "Cleveland",
+        "league": "American",
+        "division": "Central"
+      },
+      "season": 2026,
+      "postseason": false,
+      "season_type": "regular",
+      "date": "2026-06-02T23:05:00.000Z",
+      "home_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "away_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "venue": "Yankee Stadium",
+      "attendance": 0,
+      "conference_play": false,
+      "status": "STATUS_SCHEDULED",
+      "period": 1,
+      "clock": 0,
+      "display_clock": "0:00",
+      "scoring_summary": []
+    },
+    {
+      "id": 5058676,
+      "home_team_name": "Cincinnati Reds",
+      "away_team_name": "Kansas City Royals",
+      "home_team": {
+        "id": 7,
+        "slug": "cincinnati-reds",
+        "abbreviation": "CIN",
+        "display_name": "Cincinnati Reds",
+        "short_display_name": "Reds",
+        "name": "Reds",
+        "location": "Cincinnati",
+        "league": "National",
+        "division": "Central"
+      },
+      "away_team": {
+        "id": 12,
+        "slug": "kansas-city-royals",
+        "abbreviation": "KC",
+        "display_name": "Kansas City Royals",
+        "short_display_name": "Royals",
+        "name": "Royals",
+        "location": "Kansas City",
+        "league": "American",
+        "division": "Central"
+      },
+      "season": 2026,
+      "postseason": false,
+      "season_type": "regular",
+      "date": "2026-06-02T23:10:00.000Z",
+      "home_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "away_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "venue": "Great American Ball Park",
+      "attendance": 0,
+      "conference_play": false,
+      "status": "STATUS_SCHEDULED",
+      "period": 1,
+      "clock": 0,
+      "display_clock": "0:00",
+      "scoring_summary": []
+    },
+    {
+      "id": 5058677,
+      "home_team_name": "Atlanta Braves",
+      "away_team_name": "Toronto Blue Jays",
+      "home_team": {
+        "id": 2,
+        "slug": "atlanta-braves",
+        "abbreviation": "ATL",
+        "display_name": "Atlanta Braves",
+        "short_display_name": "Braves",
+        "name": "Braves",
+        "location": "Atlanta",
+        "league": "National",
+        "division": "East"
+      },
+      "away_team": {
+        "id": 29,
+        "slug": "toronto-blue-jays",
+        "abbreviation": "TOR",
+        "display_name": "Toronto Blue Jays",
+        "short_display_name": "Blue Jays",
+        "name": "Blue Jays",
+        "location": "Toronto",
+        "league": "American",
+        "division": "East"
+      },
+      "season": 2026,
+      "postseason": false,
+      "season_type": "regular",
+      "date": "2026-06-02T23:15:00.000Z",
+      "home_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "away_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "venue": "Truist Park",
+      "attendance": 0,
+      "conference_play": false,
+      "status": "STATUS_SCHEDULED",
+      "period": 1,
+      "clock": 0,
+      "display_clock": "0:00",
+      "scoring_summary": []
+    },
+    {
+      "id": 5058678,
+      "home_team_name": "Minnesota Twins",
+      "away_team_name": "Chicago White Sox",
+      "home_team": {
+        "id": 17,
+        "slug": "minnesota-twins",
+        "abbreviation": "MIN",
+        "display_name": "Minnesota Twins",
+        "short_display_name": "Twins",
+        "name": "Twins",
+        "location": "Minnesota",
+        "league": "American",
+        "division": "Central"
+      },
+      "away_team": {
+        "id": 6,
+        "slug": "chicago-white-sox",
+        "abbreviation": "CHW",
+        "display_name": "Chicago White Sox",
+        "short_display_name": "White Sox",
+        "name": "White Sox",
+        "location": "Chicago",
+        "league": "American",
+        "division": "Central"
+      },
+      "season": 2026,
+      "postseason": false,
+      "season_type": "regular",
+      "date": "2026-06-02T23:40:00.000Z",
+      "home_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "away_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "venue": "Target Field",
+      "attendance": 0,
+      "conference_play": false,
+      "status": "STATUS_SCHEDULED",
+      "period": 1,
+      "clock": 0,
+      "display_clock": "0:00",
+      "scoring_summary": []
+    },
+    {
+      "id": 5058679,
+      "home_team_name": "Milwaukee Brewers",
+      "away_team_name": "San Francisco Giants",
+      "home_team": {
+        "id": 16,
+        "slug": "milwaukee-brewers",
+        "abbreviation": "MIL",
+        "display_name": "Milwaukee Brewers",
+        "short_display_name": "Brewers",
+        "name": "Brewers",
+        "location": "Milwaukee",
+        "league": "National",
+        "division": "Central"
+      },
+      "away_team": {
+        "id": 24,
+        "slug": "san-francisco-giants",
+        "abbreviation": "SF",
+        "display_name": "San Francisco Giants",
+        "short_display_name": "Giants",
+        "name": "Giants",
+        "location": "San Francisco",
+        "league": "National",
+        "division": "West"
+      },
+      "season": 2026,
+      "postseason": false,
+      "season_type": "regular",
+      "date": "2026-06-02T23:40:00.000Z",
+      "home_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "away_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "venue": "American Family Field",
+      "attendance": 0,
+      "conference_play": false,
+      "status": "STATUS_SCHEDULED",
+      "period": 1,
+      "clock": 0,
+      "display_clock": "0:00",
+      "scoring_summary": []
+    },
+    {
+      "id": 5058680,
+      "home_team_name": "St. Louis Cardinals",
+      "away_team_name": "Texas Rangers",
+      "home_team": {
+        "id": 26,
+        "slug": "st-louis-cardinals",
+        "abbreviation": "STL",
+        "display_name": "St. Louis Cardinals",
+        "short_display_name": "Cardinals",
+        "name": "Cardinals",
+        "location": "St. Louis",
+        "league": "National",
+        "division": "Central"
+      },
+      "away_team": {
+        "id": 28,
+        "slug": "texas-rangers",
+        "abbreviation": "TEX",
+        "display_name": "Texas Rangers",
+        "short_display_name": "Rangers",
+        "name": "Rangers",
+        "location": "Texas",
+        "league": "American",
+        "division": "West"
+      },
+      "season": 2026,
+      "postseason": false,
+      "season_type": "regular",
+      "date": "2026-06-02T23:45:00.000Z",
+      "home_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "away_team_data": {
+        "hits": 0,
+        "runs": 0,
+        "errors": 0,
+        "inning_scores": []
+      },
+      "venue": "Busch Stadium",
+      "attendance": 0,
+      "conference_play": false,
+      "status": "STATUS_SCHEDULED",
+      "period": 1,
+      "clock": 0,
+      "display_clock": "0:00",
+      "scoring_summary": []
+    }
+  ],
+  "meta": {
+    "per_page": 100
+  }
+}

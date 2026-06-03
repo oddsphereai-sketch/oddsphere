@@ -181,8 +181,18 @@ export const linesService = {
    * Refresh sharp signals for the slate. DELETE-then-INSERT scoped to
    * tonight's games. (Signals can disappear when markets normalize — we
    * want the DB to reflect *current* signals only.)
+   *
+   * `opts.dryRun` (default false) is a Phase 4.1.9.C operator-script
+   * affordance: when true, the provider fetch + mapping still run normally,
+   * but the DELETE / INSERT against `sharp_signals` is skipped. Behavior
+   * for existing callers (crons, tests, services) is unchanged.
    */
-  async refreshSharpSignals(sport: Sport, date: string): Promise<CronHandlerResult> {
+  async refreshSharpSignals(
+    sport: Sport,
+    date: string,
+    opts?: { dryRun?: boolean }
+  ): Promise<CronHandlerResult> {
+    const dryRun = opts?.dryRun === true;
     const sharp = getSharpSignalProvider();
     const gameIdByExternal = await loadGameIdMap(sport, date);
     const gameIds = [...gameIdByExternal.values()];
@@ -224,18 +234,20 @@ export const linesService = {
       });
     }
 
-    const { error: delErr } = await supabase
-      .from("sharp_signals")
-      .delete()
-      .in("game_id", gameIds);
-    if (delErr) {
-      throw new Error(`linesService.refreshSharpSignals delete failed: ${delErr.message}`);
-    }
+    if (!dryRun) {
+      const { error: delErr } = await supabase
+        .from("sharp_signals")
+        .delete()
+        .in("game_id", gameIds);
+      if (delErr) {
+        throw new Error(`linesService.refreshSharpSignals delete failed: ${delErr.message}`);
+      }
 
-    if (payload.length > 0) {
-      const { error } = await supabase.from("sharp_signals").insert(payload);
-      if (error) {
-        throw new Error(`linesService.refreshSharpSignals insert failed: ${error.message}`);
+      if (payload.length > 0) {
+        const { error } = await supabase.from("sharp_signals").insert(payload);
+        if (error) {
+          throw new Error(`linesService.refreshSharpSignals insert failed: ${error.message}`);
+        }
       }
     }
 
