@@ -57,6 +57,59 @@ export async function loadPlayerMetadata(
 }
 
 /**
+ * Phase 4.2.C.1.S.A — keyed by `provider_ids.bdl.id` (the BDL ID),
+ * which is the namespace BDL stats endpoints understand. Skips rows
+ * that don't have a populated bdl block — those are still unmapped.
+ *
+ * `team_id` is the DB id; `external_id` and `mlb_stats_id` are kept
+ * around so callers can audit the row or fan out to MLB Stats.
+ */
+export type PlayerMappingMetadata = {
+  id: number;
+  external_id: number;
+  bdl_id: number;
+  mlb_stats_id: number | null;
+  is_pitcher: boolean;
+  team_id: number | null;
+};
+
+export async function loadPlayerBdlIdMap(
+  sport?: Sport
+): Promise<Map<number, PlayerMappingMetadata>> {
+  let q = supabase
+    .from("players")
+    .select("id, external_id, is_pitcher, team_id, provider_ids");
+  if (sport !== undefined) q = q.eq("sport", sport);
+  const { data, error } = await q;
+  if (error) throw new Error(`loadPlayerBdlIdMap failed: ${error.message}`);
+  const out = new Map<number, PlayerMappingMetadata>();
+  for (const r of (data ?? []) as Array<{
+    id: number;
+    external_id: number;
+    is_pitcher: boolean;
+    team_id: number | null;
+    provider_ids: Record<string, unknown> | null;
+  }>) {
+    const pi = r.provider_ids ?? {};
+    const bdl = pi.bdl as { id?: unknown } | undefined;
+    const mlbStats = pi.mlb_stats as { id?: unknown } | undefined;
+    const bdlId = typeof bdl?.id === "number" ? bdl.id : null;
+    const mlbStatsId =
+      typeof mlbStats?.id === "number" ? mlbStats.id : null;
+    if (bdlId === null) continue;
+    out.set(bdlId, {
+      id: r.id,
+      external_id: r.external_id,
+      bdl_id: bdlId,
+      mlb_stats_id: mlbStatsId,
+      is_pitcher: r.is_pitcher,
+      team_id: r.team_id,
+    });
+  }
+  return out;
+}
+
+/**
  * Load (game_external_id → game_id) map for games on a given slate date.
  *
  * Uses the games.slate_date column (added in Phase 5E.1) — the local-evening

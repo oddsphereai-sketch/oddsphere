@@ -122,22 +122,84 @@ type RawSeasonStats = {
   pitching_war?: number | null;
 };
 
-type RawSplit = {
-  player_id: number;
-  season: number;
-  split_type?: string | null;
-  ab?: number | null;
-  h?: number | null;
+/**
+ * Phase 4.2.C.1.S.A — BDL `/players/splits` actual response shape.
+ *
+ * The endpoint returns `data` as an OBJECT (not a flat array) with
+ * named buckets. Each bucket is an array of rows; each row carries the
+ * full per-player stat block (batting + pitching fields together).
+ *
+ * For our model we read two buckets:
+ *   • `data.split[0]`    — season aggregate (length 1) → player_season_stats
+ *   • `data.byBreakdown` — handedness/home/away/day/night → player_splits
+ *
+ * Other buckets (byArena, byBattingOrder, byCount, byDayMonth, byOpponent,
+ * byPosition, bySituation) are not used by the V1 model.
+ */
+type RawSplitsResponse = {
+  data?: {
+    byArena?: RawSplitsRow[] | null;
+    byBattingOrder?: RawSplitsRow[] | null;
+    byBreakdown?: RawSplitsRow[] | null;
+    byCount?: RawSplitsRow[] | null;
+    byDayMonth?: RawSplitsRow[] | null;
+    byOpponent?: RawSplitsRow[] | null;
+    byPosition?: RawSplitsRow[] | null;
+    bySituation?: RawSplitsRow[] | null;
+    split?: RawSplitsRow[] | null;
+  } | null;
+};
+
+/**
+ * One row in any of the splits buckets. BDL uses long field names
+ * (`at_bats`, `walks`, `strikeouts`, …) rather than the abbreviated
+ * names our DB schema uses (`ab`, `bb`, `so`, …) — the mappers below
+ * translate.
+ */
+type RawSplitsRow = {
+  player?: { id?: number | null } | null;
+  season?: number | null;
+  season_type?: string | null;
+  postseason?: boolean | null;
+  category?: string | null;            // "batting" | "pitching"
+  split_category?: string | null;      // e.g. "byBreakdown"
+  split_name?: string | null;          // e.g. "vs. Left"
+  split_abbreviation?: string | null;  // typically same as split_name today
+  // batting counters
+  at_bats?: number | null;
+  runs?: number | null;
+  hits?: number | null;
+  doubles?: number | null;
+  triples?: number | null;
+  home_runs?: number | null;
+  rbis?: number | null;
+  walks?: number | null;
+  hit_by_pitch?: number | null;
+  strikeouts?: number | null;
+  stolen_bases?: number | null;
+  caught_stealing?: number | null;
+  // batting rates
   avg?: number | null;
   obp?: number | null;
   slg?: number | null;
   ops?: number | null;
-  hr?: number | null;
-  rbi?: number | null;
-  so?: number | null;
-  bb?: number | null;
-  tb?: number | null;
-  pa?: number | null;
+  // pitching counters
+  era?: number | null;
+  wins?: number | null;
+  losses?: number | null;
+  saves?: number | null;
+  save_opportunities?: number | null;
+  games_played?: number | null;
+  games_started?: number | null;
+  complete_games?: number | null;
+  innings_pitched?: number | null;
+  hits_allowed?: number | null;
+  runs_allowed?: number | null;
+  earned_runs?: number | null;
+  home_runs_allowed?: number | null;
+  walks_allowed?: number | null;
+  strikeouts_pitched?: number | null;
+  opponent_avg?: number | null;
 };
 
 type RawPitcherPitch = {
@@ -479,23 +541,228 @@ function mapSeasonStats(raw: RawSeasonStats): StatsSeasonRecord {
   };
 }
 
-function mapSplit(raw: RawSplit): StatsSplitRecord {
+/**
+ * Phase 4.2.C.1.S.A — pure helpers for mapping `/players/splits` rows.
+ * Exported so unit tests can verify the parsing logic without HTTP.
+ */
+
+/**
+ * Map BDL's `split_name` (or `split_abbreviation`) string to our
+ * `player_splits.split_type` enum. BDL byBreakdown buckets observed:
+ *   "vs. Left"  → vs_lhp
+ *   "vs. Right" → vs_rhp
+ *   "Home"      → home
+ *   "Away"      → away
+ *   "Day"       → day
+ *   "Night"     → night
+ * Returns null for any other value (caller skips the row).
+ */
+export function mapBreakdownSplitNameToSplitType(
+  name: string | null | undefined
+): string | null {
+  if (typeof name !== "string") return null;
+  const trimmed = name.trim();
+  if (trimmed === "vs. Left") return "vs_lhp";
+  if (trimmed === "vs. Right") return "vs_rhp";
+  if (trimmed === "Home") return "home";
+  if (trimmed === "Away") return "away";
+  if (trimmed === "Day") return "day";
+  if (trimmed === "Night") return "night";
+  return null;
+}
+
+/**
+ * Compute WHIP from raw counters when BDL doesn't pre-aggregate it.
+ * WHIP = (hits + walks) / innings_pitched. Returns null when IP is 0
+ * or any input is null.
+ */
+export function computeWhip(
+  innings_pitched: number | null,
+  hits_allowed: number | null,
+  walks_allowed: number | null
+): number | null {
+  if (
+    innings_pitched === null ||
+    hits_allowed === null ||
+    walks_allowed === null
+  )
+    return null;
+  if (innings_pitched <= 0) return null;
+  return (hits_allowed + walks_allowed) / innings_pitched;
+}
+
+/**
+ * Compute K/9 from raw counters.
+ * K/9 = strikeouts * 9 / innings_pitched. Returns null when IP is 0
+ * or any input is null.
+ */
+export function computeKper9(
+  innings_pitched: number | null,
+  strikeouts_pitched: number | null
+): number | null {
+  if (innings_pitched === null || strikeouts_pitched === null) return null;
+  if (innings_pitched <= 0) return null;
+  return (strikeouts_pitched * 9) / innings_pitched;
+}
+
+/**
+ * Compute total bases (TB) from raw counters when BDL doesn't include it.
+ * TB = singles + 2×doubles + 3×triples + 4×home_runs
+ *    = (hits − 2B − 3B − HR) + 2×2B + 3×3B + 4×HR
+ *    = hits + 2B + 2×3B + 3×HR
+ */
+export function computeTotalBases(
+  hits: number | null,
+  doubles: number | null,
+  triples: number | null,
+  home_runs: number | null
+): number | null {
+  if (hits === null) return null;
+  const d = doubles ?? 0;
+  const t = triples ?? 0;
+  const hr = home_runs ?? 0;
+  return hits + d + 2 * t + 3 * hr;
+}
+
+/**
+ * Compute plate appearances (PA) from raw counters when BDL doesn't
+ * include it. PA = AB + BB + HBP (sacrifices unavailable from this
+ * endpoint, so this is a slight under-count — acceptable for V1).
+ */
+export function computePlateAppearances(
+  at_bats: number | null,
+  walks: number | null,
+  hit_by_pitch: number | null
+): number | null {
+  if (at_bats === null) return null;
+  return at_bats + (walks ?? 0) + (hit_by_pitch ?? 0);
+}
+
+/**
+ * Map a single byBreakdown row to our StatsSplitRecord. Returns null
+ * when the split_name doesn't translate to a known split_type or the
+ * player id is missing.
+ */
+export function mapSplitsRowToSplitRecord(
+  row: RawSplitsRow,
+  playerExternalId: number,
+  season: number
+): StatsSplitRecord | null {
+  const splitType = mapBreakdownSplitNameToSplitType(
+    row.split_name ?? row.split_abbreviation
+  );
+  if (splitType === null) return null;
+  const ab = asNumberOrNull(row.at_bats);
+  const h = asNumberOrNull(row.hits);
   return {
-    player_external_id: raw.player_id,
-    season: raw.season,
-    split_type: (asStringOrNull(raw.split_type) ?? "") as StatsSplitRecord["split_type"],
-    ab: asNumberOrNull(raw.ab),
-    h: asNumberOrNull(raw.h),
-    avg: asNumberOrNull(raw.avg),
-    obp: asNumberOrNull(raw.obp),
-    slg: asNumberOrNull(raw.slg),
-    ops: asNumberOrNull(raw.ops),
-    hr: asNumberOrNull(raw.hr),
-    rbi: asNumberOrNull(raw.rbi),
-    so: asNumberOrNull(raw.so),
-    bb: asNumberOrNull(raw.bb),
-    tb: asNumberOrNull(raw.tb),
-    pa: asNumberOrNull(raw.pa),
+    player_external_id: playerExternalId,
+    season,
+    split_type: splitType as StatsSplitRecord["split_type"],
+    ab,
+    h,
+    avg: asNumberOrNull(row.avg),
+    obp: asNumberOrNull(row.obp),
+    slg: asNumberOrNull(row.slg),
+    ops: asNumberOrNull(row.ops),
+    hr: asNumberOrNull(row.home_runs),
+    rbi: asNumberOrNull(row.rbis),
+    so: asNumberOrNull(row.strikeouts),
+    bb: asNumberOrNull(row.walks),
+    tb: computeTotalBases(
+      h,
+      asNumberOrNull(row.doubles),
+      asNumberOrNull(row.triples),
+      asNumberOrNull(row.home_runs)
+    ),
+    pa: computePlateAppearances(
+      ab,
+      asNumberOrNull(row.walks),
+      asNumberOrNull(row.hit_by_pitch)
+    ),
+  };
+}
+
+/**
+ * Map a `data.split[0]` season-aggregate row to our StatsSeasonRecord.
+ *
+ * Derived fields (BDL doesn't return them directly):
+ *   • pitching_whip   = (H_allowed + BB_allowed) / IP
+ *   • pitching_k_per_9 = K * 9 / IP
+ *   • batting_tb      = H + 2B + 2·3B + 3·HR
+ *   • batting_pa      = AB + BB + HBP
+ *
+ * Fields BDL doesn't supply via this endpoint stay null:
+ *   batting_war, batting_sf, pitching_qs, pitching_hld, pitching_war.
+ */
+export function mapSplitsRowToSeasonRecord(
+  row: RawSplitsRow,
+  playerExternalId: number,
+  season: number,
+  fallbackSeasonType: string = "regular"
+): StatsSeasonRecord {
+  const ab = asNumberOrNull(row.at_bats);
+  const h = asNumberOrNull(row.hits);
+  const ip = asNumberOrNull(row.innings_pitched);
+  const ha = asNumberOrNull(row.hits_allowed);
+  const ba = asNumberOrNull(row.walks_allowed);
+  const k = asNumberOrNull(row.strikeouts_pitched);
+  return {
+    player_external_id: playerExternalId,
+    // team comes from a different source — left null here, statsService
+    // joins from its own loaded metadata.
+    team_external_id: null,
+    season,
+    season_type:
+      asStringOrNull(row.season_type) ?? fallbackSeasonType,
+    postseason: asBoolOrFalse(row.postseason),
+    // ── Batting ─────────────────────────────────────────────
+    batting_gp: asNumberOrNull(row.games_played),
+    batting_ab: ab,
+    batting_r: asNumberOrNull(row.runs),
+    batting_h: h,
+    batting_avg: asNumberOrNull(row.avg),
+    batting_2b: asNumberOrNull(row.doubles),
+    batting_3b: asNumberOrNull(row.triples),
+    batting_hr: asNumberOrNull(row.home_runs),
+    batting_rbi: asNumberOrNull(row.rbis),
+    batting_tb: computeTotalBases(
+      h,
+      asNumberOrNull(row.doubles),
+      asNumberOrNull(row.triples),
+      asNumberOrNull(row.home_runs)
+    ),
+    batting_bb: asNumberOrNull(row.walks),
+    batting_so: asNumberOrNull(row.strikeouts),
+    batting_sb: asNumberOrNull(row.stolen_bases),
+    batting_obp: asNumberOrNull(row.obp),
+    batting_slg: asNumberOrNull(row.slg),
+    batting_ops: asNumberOrNull(row.ops),
+    batting_war: null,
+    batting_pa: computePlateAppearances(
+      ab,
+      asNumberOrNull(row.walks),
+      asNumberOrNull(row.hit_by_pitch)
+    ),
+    batting_hbp: asNumberOrNull(row.hit_by_pitch),
+    batting_sf: null,
+    // ── Pitching ────────────────────────────────────────────
+    pitching_gp: asNumberOrNull(row.games_played),
+    pitching_gs: asNumberOrNull(row.games_started),
+    pitching_qs: null,
+    pitching_w: asNumberOrNull(row.wins),
+    pitching_l: asNumberOrNull(row.losses),
+    pitching_era: asNumberOrNull(row.era),
+    pitching_sv: asNumberOrNull(row.saves),
+    pitching_hld: null,
+    pitching_ip: ip,
+    pitching_h: ha,
+    pitching_er: asNumberOrNull(row.earned_runs),
+    pitching_hr: asNumberOrNull(row.home_runs_allowed),
+    pitching_bb: ba,
+    pitching_whip: computeWhip(ip, ha, ba),
+    pitching_k: k,
+    pitching_k_per_9: computeKper9(ip, k),
+    pitching_war: null,
   };
 }
 
@@ -643,42 +910,95 @@ export class BallDontLieProvider implements IPlayerStatsProvider {
     return rows.map((r) => mapPlayer(r, "mlb"));
   }
 
+  /**
+   * Phase 4.2.C.1.S.A — fetch raw `/players/splits` response once. The
+   * endpoint returns `data` as a keyed object (not a flat array), so
+   * we bypass `fetchAll` (which assumes array shape) and use `fetch`
+   * directly. The endpoint is the only BDL stats endpoint with a
+   * working `player_id` filter, so it's the canonical per-player
+   * source for both season aggregates AND handedness/situational
+   * splits.
+   *
+   * `playerExternalId` here is the BDL ID (from `provider_ids.bdl.id`),
+   * NOT the MLB Stats Person ID stored in `players.external_id`.
+   */
+  private async fetchPlayerSplitsResponse(
+    bdlPlayerId: number,
+    season: number
+  ): Promise<RawSplitsResponse["data"]> {
+    try {
+      const res = await this.client.fetch<RawSplitsResponse["data"]>({
+        path: "/players/splits",
+        query: { player_id: bdlPlayerId, season },
+      });
+      // BdlClient.fetch defaults missing `data` to []; for this endpoint
+      // a real response is the keyed object. Reject array fallback.
+      const d = res.data;
+      if (d === null || d === undefined) return null;
+      if (Array.isArray(d)) return null;
+      return d;
+    } catch (e) {
+      if (e instanceof BdlNotFoundError) return null;
+      throw e;
+    }
+  }
+
+  /**
+   * Season aggregate stats for one player, derived from
+   * `/players/splits` → `data.split[0]`.
+   *
+   * NOTE: BDL's own `/season_stats` endpoint ignores the `player_id`
+   * filter (confirmed via Phase 4.2.C.1.S Step 1 endpoint audit). We
+   * route around it by reading the season-aggregate row from the
+   * splits endpoint, which DOES filter per-player.
+   *
+   * `seasons` is honored as a loop — one HTTP call per season per
+   * player. For the typical refresh (1 season), that's 1 call.
+   */
   async getPlayerSeasonStats(
-    playerExternalId: number,
+    bdlPlayerId: number,
     seasons: number[]
   ): Promise<StatsSeasonRecord[]> {
     const out: StatsSeasonRecord[] = [];
     for (const season of seasons) {
-      try {
-        const rows = await this.client.fetchAll<RawSeasonStats>({
-          path: "/season_stats",
-          query: { player_id: playerExternalId, season, per_page: 100 },
-          maxPages: 5,
-        });
-        for (const r of rows) out.push(mapSeasonStats(r));
-      } catch (e) {
-        if (e instanceof BdlNotFoundError) continue;
-        throw e;
-      }
+      const data = await this.fetchPlayerSplitsResponse(bdlPlayerId, season);
+      if (data === null || data === undefined) continue;
+      const splitArr = data.split;
+      if (!Array.isArray(splitArr) || splitArr.length === 0) continue;
+      const row = splitArr[0];
+      if (row === undefined || row === null) continue;
+      // Defensive: row.player.id should equal bdlPlayerId. If not, the
+      // endpoint returned for a different player (shouldn't happen for
+      // /players/splits but be safe).
+      const rowPlayerId = asNumberOrNull(row.player?.id);
+      if (rowPlayerId !== null && rowPlayerId !== bdlPlayerId) continue;
+      out.push(mapSplitsRowToSeasonRecord(row, bdlPlayerId, season));
     }
     return out;
   }
 
+  /**
+   * Handedness/situational splits for one player, derived from
+   * `/players/splits` → `data.byBreakdown[]`. Returns one record per
+   * recognized split bucket (vs_lhp, vs_rhp, home, away, day, night).
+   *
+   * `playerExternalId` is the BDL ID — pass `provider_ids.bdl.id`,
+   * not `players.external_id`.
+   */
   async getPlayerSplits(
-    playerExternalId: number,
+    bdlPlayerId: number,
     season: number
   ): Promise<StatsSplitRecord[]> {
-    try {
-      const rows = await this.client.fetchAll<RawSplit>({
-        path: "/players/splits",
-        query: { player_id: playerExternalId, season, per_page: 100 },
-        maxPages: 5,
-      });
-      return rows.map(mapSplit);
-    } catch (e) {
-      if (e instanceof BdlNotFoundError) return [];
-      throw e;
+    const data = await this.fetchPlayerSplitsResponse(bdlPlayerId, season);
+    if (data === null || data === undefined) return [];
+    const breakdown = data.byBreakdown;
+    if (!Array.isArray(breakdown)) return [];
+    const out: StatsSplitRecord[] = [];
+    for (const row of breakdown) {
+      const rec = mapSplitsRowToSplitRecord(row, bdlPlayerId, season);
+      if (rec !== null) out.push(rec);
     }
+    return out;
   }
 
   async getPitcherPitchStats(

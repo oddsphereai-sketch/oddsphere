@@ -22,7 +22,7 @@ import { getPlayerStatsProvider } from "../providers/factory";
 import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
 import {
-  loadPlayerIdMap,
+  loadPlayerBdlIdMap,
   loadPlayerMetadata,
   loadTeamIdMap,
 } from "./_idMaps";
@@ -82,27 +82,38 @@ export const statsService = {
    * Refresh season stats for all players in the sport.
    * Per-player API call (provider handles batching internally if available).
    */
+  /**
+   * Phase 4.2.C.1.S.A — refresh season stats per player by calling the
+   * stats provider with the BDL id from `provider_ids.bdl.id`, not the
+   * MLB-Stats-Person-ID stored in `players.external_id`. Players
+   * without a BDL mapping are silently skipped (loadPlayerBdlIdMap
+   * filters them out).
+   *
+   * Per-player season aggregates come from BDL's `/players/splits` →
+   * `data.split[0]` because BDL's `/season_stats` endpoint ignores its
+   * own `player_id` filter (audited Phase 4.2.C.1.S Step 1). The
+   * provider transparently routes through that endpoint.
+   */
   async refreshSeasonStats(
     sport: Sport,
     seasons: number[]
   ): Promise<CronHandlerResult> {
     const stats = getPlayerStatsProvider();
-    const teamIdByExternal = await loadTeamIdMap(sport);
-    const playerIdByExternal = await loadPlayerIdMap(sport);
+    const playersByBdl = await loadPlayerBdlIdMap(sport);
 
     const allRows: Array<Record<string, unknown>> = [];
     let apiCalls = 0;
 
-    for (const [extId, dbId] of playerIdByExternal) {
-      const rows = await stats.getPlayerSeasonStats(extId, seasons);
+    for (const [bdlId, meta] of playersByBdl) {
+      const rows = await stats.getPlayerSeasonStats(bdlId, seasons);
       apiCalls++;
       for (const r of rows) {
         allRows.push({
-          player_id: dbId,
-          team_id:
-            r.team_external_id !== null
-              ? teamIdByExternal.get(r.team_external_id) ?? null
-              : null,
+          player_id: meta.id,
+          // BDL's per-player splits endpoint doesn't return a team_id
+          // we can FK-resolve. Leave null; team membership is tracked
+          // separately on the players row.
+          team_id: meta.team_id,
           season: r.season,
           season_type: r.season_type,
           postseason: r.postseason,
@@ -136,22 +147,24 @@ export const statsService = {
   },
 
   /**
-   * Refresh hitter splits (vs_lhp / vs_rhp etc.) for a season.
-   * Skips pitchers (their splits don't drive the prop model).
+   * Phase 4.2.C.1.S.A — refresh hitter splits (vs_lhp / vs_rhp etc.)
+   * via BDL `/players/splits` → `data.byBreakdown[]`, keyed by
+   * `provider_ids.bdl.id`. Skips pitchers (their splits don't drive
+   * the V1 prop model).
    */
   async refreshSplits(sport: Sport, season: number): Promise<CronHandlerResult> {
     const stats = getPlayerStatsProvider();
-    const players = await loadPlayerMetadata(sport);
+    const playersByBdl = await loadPlayerBdlIdMap(sport);
 
     const allRows: Array<Record<string, unknown>> = [];
     let apiCalls = 0;
-    for (const [extId, p] of players) {
-      if (p.is_pitcher) continue;
-      const rows = await stats.getPlayerSplits(extId, season);
+    for (const [bdlId, meta] of playersByBdl) {
+      if (meta.is_pitcher) continue;
+      const rows = await stats.getPlayerSplits(bdlId, season);
       apiCalls++;
       for (const r of rows) {
         allRows.push({
-          player_id: p.id,
+          player_id: meta.id,
           season: r.season,
           split_type: r.split_type,
           ab: r.ab, h: r.h, avg: r.avg, obp: r.obp, slg: r.slg, ops: r.ops,
