@@ -1,39 +1,29 @@
 "use client";
 
 /**
- * /lab/daily-edge — Daily Edge module page (Phase 6.2a).
+ * /lab/daily-edge — Phase 4.1.11 production UI port.
  *
- * Lifted out of the old LabApp section dispatcher. Owns its own sport URL
- * state via useSportSelection; renders DailyEdgeView (the existing component
- * still drives data fetch via useDailyEdge and the slate-date picker via
- * URL ?date= param).
+ * The legacy DailyEdgeView (Hero/Watchlist/Caution card grouping) is
+ * superseded by DailyEdgeShell, which renders the v13.1 locked-reader
+ * + scrollable Edge Board architecture against the new
+ * `games[].markets.{moneyline, total, first_inning}` DTO shape.
+ *
+ * The old `predictions` block stays in the DTO during 4.1.11 as a
+ * backwards-compatibility safety net — see app/lab/lib/labTypes.ts —
+ * and the old components remain in the tree until the new UI is
+ * visually approved.
  */
 
-import { useCallback } from "react";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import type { Sport } from "../data/mockData";
-import DailyEdgeView from "../components/DailyEdgeView";
 import { useSportSelection } from "../hooks/useSportSelection";
 import { useRefreshStatus } from "../hooks/useRefreshStatus";
+import DailyEdgeShell from "../components/daily-edge/DailyEdgeShell";
 
 export default function DailyEdgePage() {
   const { sport } = useSportSelection();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   // Prime the refresh-status SWR cache so the navbar pill renders without
   // a fetch round-trip on first paint (same intent as the old LabApp).
   useRefreshStatus({ sport });
 
-  const setSport = useCallback(
-    (next: Sport) => {
-      const params = new URLSearchParams(Array.from(searchParams.entries()));
-      params.set("sport", next);
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [router, pathname, searchParams]
-  );
-
-  return <DailyEdgeView sport={sport} onSportChange={setSport} />;
+  return <DailyEdgeShell sport={sport} />;
 }

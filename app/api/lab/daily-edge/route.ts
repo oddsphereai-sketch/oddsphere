@@ -48,10 +48,16 @@ import { currentSlateDate, isSlateDate } from "@/lib/dates/slateDate";
 import type {
   DailyEdgeGameDto,
   DailyEdgeResponse,
+  MarketEdgeDto,
+  GameStatusDto,
   SharpSignalCategory,
   SharpSignalDto,
   SharpStatus,
 } from "@/app/lab/lib/labTypes";
+import { marketVerdictFor, type SharpDirection, type MarketVerdict } from "@/lib/services/marketVerdictDerivation";
+import { generatePerMarketCopy } from "@/lib/services/perMarketCopyGenerator";
+import { formatKeyStats } from "@/lib/services/keyStatsFormatter";
+import { assertNoBannedTerms } from "@/lib/services/bannedTermsLinter";
 
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl"];
 const LIVE_SPORTS: Sport[] = ["mlb"];
@@ -164,6 +170,34 @@ type SignalRow = {
   public_betting_pct: number | null;
   public_money_pct: number | null;
   computed_at: string | null;
+};
+
+/**
+ * 4.1.10 — current `lines` row for the v13.1 Edge Stack per-market price.
+ * Selected with `player_id IS NULL` so player props don't leak in.
+ */
+type LineRow = {
+  game_id: number;
+  market_type: string;
+  sportsbook: string;
+  side: string | null;
+  line_value: number | null;
+  odds_american: number | null;
+  fetched_at: string | null;
+};
+
+/**
+ * 4.1.10 — first-seen line for `lineOpenAmerican`. Per 4.1.9.B section 10,
+ * we derive "first seen" from MIN(recorded_at) on `line_history` because
+ * `linesService.refreshGameLines` hardcodes `is_opener=false` today.
+ */
+type LineHistoryRow = {
+  game_id: number;
+  market_type: string;
+  sportsbook: string;
+  side: string | null;
+  odds_american: number | null;
+  recorded_at: string;
 };
 
 const MARKET_LABEL: Record<string, SharpSignalDto["market"]> = {
@@ -370,7 +404,9 @@ type GameRow = {
 function buildGameDto(
   row: GameRow,
   signals: SignalRow[],
-  sportsbookTotalLine: number | null
+  sportsbookTotalLine: number | null,
+  currentLinesByGameMarket: Map<string, LineRow[]>,
+  openLinesByGameMarket: Map<string, LineHistoryRow>
 ): DailyEdgeGameDto | null {
   const home = row.home_team?.abbreviation ?? "—";
   const away = row.away_team?.abbreviation ?? "—";
@@ -416,10 +452,56 @@ function buildGameDto(
   const totalPick = ouSide === "over" ? "Over" : "Under";
 
   // ── NRFI ──
+  //
+  // Toss-Up display fix (Change A):
+  //   The legacy `predicted_nrfi` boolean column can't represent the
+  //   model's Phase 4D.1 5-zone Toss-Up state — it always collapses to
+  //   true (NRFI) for Toss-Up rows. That makes the displayed pick read
+  //   as "NRFI 52%" with a projection of ~1.00 runs, which is squarely
+  //   in the model's Toss-Up band [0.85, 1.15] and reads as a
+  //   contradiction to users.
+  //
+  //   Detection strategy (safest signal first):
+  //     1. `sport_specific.nrfi_decision_kind === "toss_up"` — the
+  //        canonical model field added in Phase 4D.1. Honest, distinguishes
+  //        Toss-Up from held cleanly.
+  //     2. Heuristic fallback for pre-4D.1 rows that don't have
+  //        nrfi_decision_kind populated: nrfi_confidence === 52 (the
+  //        sentinel) AND nrfi_expected_runs in [0.85, 1.15) (the exact
+  //        Toss-Up band the model uses).
+  //
+  //   This is a DISPLAY-only fix. Model, thresholds, confidence,
+  //   projected runs, and the underlying DB columns are unchanged. The
+  //   route just chooses a different pick label for Toss-Up zone rows.
   const isNrfi = pred.predicted_nrfi ?? true;
   const nrfiSide = isNrfi ? "under" : "over"; // sharp_signals.side for first_inning_total
   const nrfiStatus = deriveSharpStatus(pred.nrfi_grade);
-  const nrfiPick = isNrfi ? "NRFI" : "YRFI";
+  const nrfiDecisionKind =
+    typeof pred.sport_specific?.nrfi_decision_kind === "string"
+      ? pred.sport_specific.nrfi_decision_kind
+      : null;
+  const nrfiExpectedRunsRaw =
+    pred.sport_specific?.auto_factors &&
+    typeof pred.sport_specific.auto_factors === "object"
+      ? (pred.sport_specific.auto_factors as Record<string, unknown>).nrfi_expected_runs
+      : null;
+  const nrfiExpectedRuns =
+    typeof nrfiExpectedRunsRaw === "number" && Number.isFinite(nrfiExpectedRunsRaw)
+      ? nrfiExpectedRunsRaw
+      : null;
+  const isNrfiTossUp =
+    nrfiDecisionKind === "toss_up" ||
+    (nrfiDecisionKind === null &&
+      pred.nrfi_confidence !== null &&
+      Math.round(pred.nrfi_confidence) === 52 &&
+      nrfiExpectedRuns !== null &&
+      nrfiExpectedRuns >= 0.85 &&
+      nrfiExpectedRuns < 1.15);
+  const nrfiPick: string = isNrfiTossUp
+    ? "Toss-Up"
+    : isNrfi
+      ? "NRFI"
+      : "YRFI";
 
   // Build the (market → modelSide + grade) lookup that buildSignalDtos
   // consumes for both alignment-aware text generation and direction color.
@@ -443,6 +525,86 @@ function buildGameDto(
     });
   }
 
+  // 4.1.10 — assemble per-market enriched MarketEdgeDto for the v13.1 UI
+  // alongside the legacy `predictions` block. Each market gets its own
+  // verdict / copy / quantification / keyStats. First-inning is treated
+  // specially: marketDataLimited never downgrades, sharpDirection is forced
+  // to "none" (V1 has no first-inning sharp data), and copy never refers
+  // to splits.
+  const autoFactors = extractAutoFactors(pred.sport_specific);
+  const ml = buildMarketEdge({
+    market: "moneyline",
+    pick: mlPick,
+    confidence: Math.max(0, Math.min(1, (pred.ml_confidence ?? 0) / 100)),
+    grade: pred.ml_grade,
+    signalType: pred.ml_signal_type,
+    marketSignal: pred.ml_market_signal,
+    sharpStatus: mlStatus,
+    modelSide: pred.predicted_ml_winner as Side | null,
+    signals,
+    linesCurrent: currentLinesByGameMarket.get(`${row.id}::moneyline`) ?? [],
+    lineOpen: openLinesByGameMarket.get(`${row.id}::moneyline`) ?? null,
+    autoFactors,
+    homeAbbr: home,
+    awayAbbr: away,
+  });
+  const total = buildMarketEdge({
+    market: "total",
+    pick: totalPick,
+    confidence: Math.max(0, Math.min(1, (pred.ou_confidence ?? 0) / 100)),
+    grade: pred.ou_grade,
+    signalType: pred.ou_signal_type,
+    marketSignal: pred.ou_market_signal,
+    sharpStatus: totalStatus,
+    modelSide: pred.predicted_ou_side as Side | null,
+    signals,
+    linesCurrent: currentLinesByGameMarket.get(`${row.id}::total`) ?? [],
+    lineOpen: openLinesByGameMarket.get(`${row.id}::total`) ?? null,
+    autoFactors,
+    homeAbbr: home,
+    awayAbbr: away,
+    totalsExtras: {
+      modelTotal: pred.predicted_total,
+      marketTotal: totalLine,
+      sportsbookLine: totalLine,
+    },
+  });
+  const firstInning = buildMarketEdge({
+    market: "first_inning",
+    pick: nrfiPick,
+    confidence: Math.max(0, Math.min(1, (pred.nrfi_confidence ?? 0) / 100)),
+    grade: pred.nrfi_grade,
+    signalType: pred.nrfi_signal_type,
+    marketSignal: pred.nrfi_market_signal,
+    sharpStatus: nrfiStatus,
+    modelSide: nrfiSide as Side,
+    signals,
+    linesCurrent: currentLinesByGameMarket.get(`${row.id}::first_inning_total`) ?? [],
+    lineOpen: openLinesByGameMarket.get(`${row.id}::first_inning_total`) ?? null,
+    autoFactors,
+    homeAbbr: home,
+    awayAbbr: away,
+  });
+
+  // 4.1.10 — per-game status flags.
+  const status: GameStatusDto = {
+    lineupConfirmed: extractLineupConfirmed(pred.sport_specific),
+    linesLocked:
+      (currentLinesByGameMarket.get(`${row.id}::moneyline`)?.length ?? 0) > 0 ||
+      (currentLinesByGameMarket.get(`${row.id}::total`)?.length ?? 0) > 0 ||
+      (currentLinesByGameMarket.get(`${row.id}::first_inning_total`)?.length ?? 0) > 0,
+    sharpSignalPending: signals.length === 0,
+    marketDataLimited: computeGameMarketDataLimited({ ml, total, firstInning }),
+  };
+
+  // 4.1.10 — decision line for the v13.1 Edge Board card. Picks the strongest
+  // (rank-by-grade) market and frames it directively.
+  const decisionLine = buildDecisionLine({ ml, total, firstInning, awayAbbr: away, homeAbbr: home });
+
+  // 4.1.10 — generatedAt from sport_specific.breakdown_generated_at when
+  // present. Reflects WHEN the model output was last refreshed for this row.
+  const generatedAt = extractGeneratedAt(pred.sport_specific);
+
   return {
     id: `${row.sport}-${row.external_id}`,
     sport: row.sport as Sport,
@@ -453,6 +615,15 @@ function buildGameDto(
     homeTeamLogo: homeLogo,
     gameTime: formatTimeET(row.game_date),
     gameStartMinutes: minutesFromMidnightET(row.game_date),
+    // 4.1.10 — raw UTC ISO + lock placeholder fields (hardcoded until 4.1.12).
+    scheduledLockAt: row.game_date,
+    lockState: "open",
+    lockedAt: null,
+    generatedAt,
+    markets: { moneyline: ml, total, first_inning: firstInning },
+    decisionLine,
+    status,
+    result: null,
     predictions: {
       ml: {
         pick: mlPick,
@@ -509,6 +680,358 @@ function buildGameDto(
     // marketSignal / primaryMarket dropped. Headline derivation lives in
     // perPickHeadline.ts (client-side) reading the per-pick fields below.
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 4.1.10 — per-market enrichment helpers
+// ─────────────────────────────────────────────────────────────────────
+
+const BOOK_PRIORITY = ["pinnacle", "draftkings", "fanduel", "betmgm", "caesars"] as const;
+
+/** Pick the best (by book priority + matching side) row from a candidate set. */
+function pickPriceRow<T extends { sportsbook: string; side: string | null; odds_american: number | null }>(
+  rows: T[],
+  preferredSide: Side | null
+): T | null {
+  if (rows.length === 0) return null;
+  const sideMatch = preferredSide === null ? rows : rows.filter((r) => r.side === preferredSide);
+  const pool = sideMatch.length > 0 ? sideMatch : rows;
+  for (const book of BOOK_PRIORITY) {
+    const hit = pool.find((r) => r.sportsbook === book && r.odds_american !== null);
+    if (hit) return hit;
+  }
+  return pool.find((r) => r.odds_american !== null) ?? null;
+}
+
+function extractAutoFactors(
+  ss: Record<string, unknown> | null | undefined
+): Record<string, unknown> | null {
+  if (!ss) return null;
+  const af = ss.auto_factors;
+  if (af && typeof af === "object" && af !== null) {
+    return af as Record<string, unknown>;
+  }
+  return null;
+}
+
+function extractLineupConfirmed(
+  ss: Record<string, unknown> | null | undefined
+): boolean | null {
+  if (!ss) return null;
+  const v = ss.lineup_confirmed;
+  if (v === true || v === false) return v;
+  return null;
+}
+
+function extractGeneratedAt(
+  ss: Record<string, unknown> | null | undefined
+): string | null {
+  if (!ss) return null;
+  const v = ss.breakdown_generated_at;
+  if (typeof v === "string" && v.length > 0) return v;
+  return null;
+}
+
+/**
+ * Derive `sharpDirection` for a single market from sharp_signals + the
+ * model's picked side. "support" when a +EV row exists on the same side;
+ * "push_against" when sharp signals back the OPPOSITE side; "none"
+ * otherwise. First_inning callers should pass an empty signals array;
+ * the helper returns "none".
+ */
+function deriveSharpDirection(
+  signals: SignalRow[],
+  marketDbKey: "moneyline" | "total" | "first_inning_total",
+  modelSide: Side | null
+): SharpDirection {
+  if (modelSide === null) return "none";
+  const relevant = signals.filter((s) => s.market_type === marketDbKey);
+  if (relevant.length === 0) return "none";
+
+  // Look for ANY +EV signal on the same side OR opposite side. Same-side
+  // is "support"; opposite is "push_against".
+  const sameSide = relevant.find((s) => s.side === modelSide && s.is_plus_ev === true);
+  if (sameSide !== undefined) return "support";
+  const oppositeSide = relevant.find((s) => s.side !== modelSide && s.is_plus_ev === true);
+  if (oppositeSide !== undefined) return "push_against";
+  return "none";
+}
+
+/**
+ * 4.1.10 — short technical phrase to surface as the "primary driver"
+ * in whyLine. Picked greedily from auto_factors based on which factor
+ * is most extreme. Returns null when no factor is dominant enough.
+ */
+function pickModelDriver(
+  af: Record<string, unknown> | null,
+  market: "moneyline" | "total" | "first_inning"
+): string | null {
+  if (!af) return null;
+  const n = (k: string): number | null => {
+    const v = af[k];
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  };
+  if (market === "moneyline") {
+    const hsf = n("home_starter_era_factor");
+    const asf = n("away_starter_era_factor");
+    if (hsf !== null && asf !== null && Math.abs(hsf - asf) > 0.1) {
+      return "starter ERA edge";
+    }
+    const hlf = n("home_lineup_ops_factor_adjusted");
+    const alf = n("away_lineup_ops_factor_adjusted");
+    if (hlf !== null && alf !== null && Math.abs(hlf - alf) > 0.06) {
+      return "lineup-vs-starter matchup";
+    }
+    return null;
+  }
+  if (market === "total") {
+    const park = n("park_factor_runs");
+    if (park !== null && Math.abs(park - 1) > 0.07) {
+      return park > 1 ? "hitter-friendly park" : "pitcher-friendly park";
+    }
+    const w = n("weather_total_adjust");
+    if (w !== null && Math.abs(w) > 0.25) {
+      return w > 0 ? "weather favors offense" : "weather suppresses offense";
+    }
+    return null;
+  }
+  // first_inning
+  const fiRuns = n("nrfi_expected_runs");
+  if (fiRuns !== null && (fiRuns < 0.7 || fiRuns > 1.1)) {
+    return fiRuns < 0.7
+      ? "low projected 1st-inning runs"
+      : "elevated projected 1st-inning runs";
+  }
+  const top = af.nrfi_used_top_of_order_data;
+  if (top === true) return "confirmed top-of-order matchup";
+  return null;
+}
+
+function pickRiskDriver(
+  af: Record<string, unknown> | null,
+  market: "moneyline" | "total" | "first_inning"
+): string | null {
+  if (!af) return null;
+  const n = (k: string): number | null => {
+    const v = af[k];
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  };
+  if (market === "moneyline") {
+    const hb = n("home_bullpen_factor");
+    const ab = n("away_bullpen_factor");
+    // "Risk" = the WORSE bullpen for the side we'd be backing. Without knowing
+    // which side, just flag any clearly bad bullpen as a risk.
+    if (hb !== null && hb > 1.1) return "home bullpen below league average";
+    if (ab !== null && ab > 1.1) return "away bullpen below league average";
+    return null;
+  }
+  if (market === "total") {
+    const w = n("weather_total_adjust");
+    if (w !== null && Math.abs(w) > 0.4) {
+      return "weather effect could shift the line";
+    }
+    return null;
+  }
+  // first_inning
+  const top = af.nrfi_used_top_of_order_data;
+  if (top === false || top === null || top === undefined) {
+    return "top-of-order data not yet confirmed";
+  }
+  return null;
+}
+
+type BuildMarketEdgeInput = {
+  market: "moneyline" | "total" | "first_inning";
+  pick: string | null;
+  confidence: number;
+  grade: Grade | null;
+  signalType: SignalType | null;
+  marketSignal: MarketSignal | null;
+  sharpStatus: SharpStatus;
+  modelSide: Side | null;
+  signals: SignalRow[];
+  linesCurrent: LineRow[];
+  lineOpen: LineHistoryRow | null;
+  autoFactors: Record<string, unknown> | null;
+  homeAbbr: string;
+  awayAbbr: string;
+  /** Totals-only — when supplied, modelTotal/marketTotal/line get populated. */
+  totalsExtras?: {
+    modelTotal: number | null;
+    marketTotal: number | null;
+    sportsbookLine: number | null;
+  };
+};
+
+function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
+  // DB key — the JSONB uses "first_inning_total" for the FI market.
+  const dbMarket: "moneyline" | "total" | "first_inning_total" =
+    input.market === "first_inning" ? "first_inning_total" : input.market;
+
+  // Sharp direction (per-market, forced "none" for first_inning by the
+  // verdict helper but useful here too for copy phrasing).
+  const sharpDirection: SharpDirection =
+    input.market === "first_inning"
+      ? "none"
+      : deriveSharpDirection(input.signals, dbMarket, input.modelSide);
+
+  // Pricing — best available American odds for the picked side.
+  const priceRow = pickPriceRow(input.linesCurrent, input.modelSide);
+  const priceAmerican = priceRow?.odds_american ?? null;
+
+  // First-seen line for the same side.
+  const openAmerican: number | null = (() => {
+    if (input.lineOpen === null) return null;
+    if (input.modelSide !== null && input.lineOpen.side !== input.modelSide) {
+      return null;
+    }
+    return input.lineOpen.odds_american;
+  })();
+
+  // Per-market signal-derived quantitative fields. Pick the +EV signal on
+  // the model's side (preferred), falling back to ANY signal for this
+  // market-side. nulls allowed when no signal row exists.
+  const sigForSide =
+    input.modelSide !== null
+      ? input.signals.find(
+          (s) => s.market_type === dbMarket && s.side === input.modelSide
+        ) ?? null
+      : input.signals.find((s) => s.market_type === dbMarket) ?? null;
+
+  const marketFairProb = sigForSide?.pinnacle_fair_probability ?? null;
+  const pinnacleEvPct = sigForSide?.ev_pct ?? null;
+  const moneyPct = sigForSide?.public_money_pct ?? null;
+  const betsPct = sigForSide?.public_betting_pct ?? null;
+
+  // marketDataLimited rule diverges per Daniel's adjustment #3:
+  //   ML/Total:     true when EVERY quant field is null (no quantitative data)
+  //   first_inning: true only when BOTH priceAmerican is null AND
+  //                 nrfi_expected_runs is null (truly nothing to show)
+  const marketDataLimited =
+    input.market === "first_inning"
+      ? priceAmerican === null &&
+        (input.autoFactors === null ||
+          input.autoFactors.nrfi_expected_runs === null ||
+          input.autoFactors.nrfi_expected_runs === undefined)
+      : pinnacleEvPct === null &&
+        marketFairProb === null &&
+        moneyPct === null &&
+        betsPct === null &&
+        openAmerican === null;
+
+  // Per-market verdict.
+  const verdict = marketVerdictFor({
+    market: input.market,
+    confidence: input.confidence,
+    grade: input.grade ?? ("market_watch" as Grade),
+    sharpDirection,
+    marketDataLimited,
+  });
+
+  // Server-generated copy (banned-terms-linted at output time).
+  const modelDriver = pickModelDriver(input.autoFactors, input.market);
+  const riskDriver = pickRiskDriver(input.autoFactors, input.market);
+  const copy = generatePerMarketCopy({
+    market: input.market,
+    verdict: verdict.key,
+    pick: input.pick ?? "—",
+    confidence: input.confidence,
+    sharpDirection,
+    modelDriver,
+    riskDriver,
+    marketDataLimited,
+  });
+
+  // KeyStats.
+  const keyStats = formatKeyStats(input.autoFactors, input.market);
+
+  return {
+    pick: input.pick,
+    confidence: input.confidence,
+    grade: input.grade,
+    signalType: input.signalType,
+    marketSignal: input.marketSignal,
+    sharpStatus: input.sharpStatus,
+    verdict,
+    guidedGuide: copy.guidedGuide,
+    guidedWatchOut: copy.guidedWatchOut,
+    whyLine: copy.whyLine,
+    riskLine: copy.riskLine,
+    modelProb: input.confidence,        // already 0-1 by the caller
+    marketFairProb,
+    pinnacleEvPct,
+    moneyPct,
+    betsPct,
+    priceAmerican,
+    lineOpenAmerican: openAmerican,
+    modelTotal: input.totalsExtras?.modelTotal ?? null,
+    marketTotal: input.totalsExtras?.marketTotal ?? null,
+    line: input.totalsExtras?.sportsbookLine ?? null,
+    keyStats,
+  };
+}
+
+/**
+ * 4.1.10 — true when every market lacks quantitative data. For first_inning,
+ * its own marketDataLimited rule applies (see buildMarketEdge); the game-level
+ * status field combines all three.
+ */
+function computeGameMarketDataLimited(args: {
+  ml: MarketEdgeDto;
+  total: MarketEdgeDto;
+  firstInning: MarketEdgeDto;
+}): boolean {
+  const nullish = (m: MarketEdgeDto) =>
+    m.pinnacleEvPct === null &&
+    m.marketFairProb === null &&
+    m.moneyPct === null &&
+    m.betsPct === null &&
+    m.lineOpenAmerican === null &&
+    m.priceAmerican === null;
+  return nullish(args.ml) && nullish(args.total) && nullish(args.firstInning);
+}
+
+/**
+ * 4.1.10 — short directive sentence for the v13.1 Edge Board card. Picks
+ * the strongest verdict across the three markets and frames it. Banned-
+ * terms-linted at output.
+ */
+function buildDecisionLine(args: {
+  ml: MarketEdgeDto;
+  total: MarketEdgeDto;
+  firstInning: MarketEdgeDto;
+  awayAbbr: string;
+  homeAbbr: string;
+}): string {
+  const verdictRank: Record<MarketVerdict, number> = {
+    best_angle: 4,
+    lean: 3,
+    watchlist: 2,
+    caution: 1,
+    no_play: 0,
+  };
+  const candidates: Array<{ m: MarketEdgeDto; label: string }> = [
+    { m: args.ml, label: "moneyline" },
+    { m: args.total, label: "total" },
+    { m: args.firstInning, label: "1st inning" },
+  ];
+  candidates.sort((a, b) => verdictRank[b.m.verdict.key] - verdictRank[a.m.verdict.key]);
+  const top = candidates[0]!;
+  const pick = top.m.pick ?? "—";
+  let line: string;
+  if (top.m.verdict.key === "best_angle") {
+    line = `Best angle tonight: ${pick} on the ${top.label}.`;
+  } else if (top.m.verdict.key === "lean") {
+    line = `Lean toward ${pick} on the ${top.label}.`;
+  } else if (top.m.verdict.key === "watchlist") {
+    line = `On the watchlist: ${pick} on the ${top.label}.`;
+  } else if (top.m.verdict.key === "caution") {
+    line = `Caution flagged on the ${top.label} — model and market disagree.`;
+  } else {
+    line = `No clean play on this slate.`;
+  }
+  assertNoBannedTerms(line, "decisionLine");
+  return line;
 }
 
 /**
@@ -765,6 +1288,9 @@ export async function GET(request: Request) {
   // Sportsbook total lines per game (5F.1). Prefer Pinnacle as the de-vig
   // reference; fall back to DraftKings, then the first book we see.
   const totalLineByGame = new Map<number, number>();
+  // 4.1.10 — per-market price + open price for the v13.1 Edge Stack.
+  const currentLinesByGameMarket = new Map<string, LineRow[]>();
+  const openLinesByGameMarket = new Map<string, LineHistoryRow>();
   if (gameIds.length > 0) {
     const { data: signalData, error: sigErr } = await supabase
       .from("sharp_signals")
@@ -785,24 +1311,37 @@ export async function GET(request: Request) {
       signalsByGame.set(row.game_id, arr);
     }
 
-    // Pull totals lines for the slate's games.
+    // 4.1.10 — pull lines for ALL three game-level markets, with odds_american
+    // and side, so per-market priceAmerican + the totals line both come from
+    // the same fetch. Player-prop rows are filtered server-side via player_id IS NULL.
     const { data: lineData, error: lineErr } = await supabase
       .from("lines")
-      .select("game_id, sportsbook, line_value")
+      .select(
+        "game_id, market_type, sportsbook, side, line_value, odds_american, fetched_at"
+      )
       .in("game_id", gameIds)
-      .eq("market_type", "total");
+      .in("market_type", ["moneyline", "total", "first_inning_total"])
+      .is("player_id", null);
     if (lineErr) {
       return Response.json({ error: lineErr.message }, { status: 500 });
     }
     // Group by game, then pick the preferred book per game.
-    const grouped = new Map<number, Array<{ sportsbook: string; line_value: number | null }>>();
-    for (const row of (lineData ?? []) as Array<{ game_id: number; sportsbook: string; line_value: number | null }>) {
-      const arr = grouped.get(row.game_id) ?? [];
-      arr.push({ sportsbook: row.sportsbook, line_value: row.line_value });
-      grouped.set(row.game_id, arr);
+    const totalsByGame = new Map<number, Array<{ sportsbook: string; line_value: number | null }>>();
+    for (const row of (lineData ?? []) as LineRow[]) {
+      const key = `${row.game_id}::${row.market_type}`;
+      const arr = currentLinesByGameMarket.get(key) ?? [];
+      arr.push(row);
+      currentLinesByGameMarket.set(key, arr);
+
+      // Maintain the legacy totals-line map for predictions.total.line.
+      if (row.market_type === "total") {
+        const tot = totalsByGame.get(row.game_id) ?? [];
+        tot.push({ sportsbook: row.sportsbook, line_value: row.line_value });
+        totalsByGame.set(row.game_id, tot);
+      }
     }
     const BOOK_PRIORITY = ["pinnacle", "draftkings", "fanduel", "betmgm", "caesars"];
-    for (const [gameId, rows] of grouped.entries()) {
+    for (const [gameId, rows] of totalsByGame.entries()) {
       let chosen: number | null = null;
       for (const book of BOOK_PRIORITY) {
         const hit = rows.find((r) => r.sportsbook === book && r.line_value !== null);
@@ -814,6 +1353,27 @@ export async function GET(request: Request) {
       }
       if (chosen !== null) totalLineByGame.set(gameId, chosen);
     }
+
+    // 4.1.10 — per-game-market first-seen line price for `lineOpenAmerican`.
+    // Per Daniel's direction (4.1.9.B section 10): use MIN(recorded_at) as
+    // the "first seen" since linesService hardcodes is_opener=false.
+    const { data: histData, error: histErr } = await supabase
+      .from("line_history")
+      .select("game_id, market_type, sportsbook, side, odds_american, recorded_at")
+      .in("game_id", gameIds)
+      .in("market_type", ["moneyline", "total", "first_inning_total"])
+      .is("player_id", null)
+      .order("recorded_at", { ascending: true });
+    if (histErr) {
+      return Response.json({ error: histErr.message }, { status: 500 });
+    }
+    for (const row of (histData ?? []) as LineHistoryRow[]) {
+      // First seen wins (ASC order, first insert sticks).
+      const key = `${row.game_id}::${row.market_type}`;
+      if (!openLinesByGameMarket.has(key)) {
+        openLinesByGameMarket.set(key, row);
+      }
+    }
   }
 
   // ─── Assemble DTOs ───────────────────────────────────────────────────────
@@ -822,7 +1382,9 @@ export async function GET(request: Request) {
     const dto = buildGameDto(
       g,
       signalsByGame.get(g.id) ?? [],
-      totalLineByGame.get(g.id) ?? null
+      totalLineByGame.get(g.id) ?? null,
+      currentLinesByGameMarket,
+      openLinesByGameMarket
     );
     if (dto) dtos.push(dto);
   }

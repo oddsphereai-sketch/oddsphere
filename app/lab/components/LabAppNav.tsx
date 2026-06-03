@@ -37,9 +37,17 @@ const TABS: Tab[] = [
   { href: "/lab/my-bets",      label: "My Bets",      icon: "📊" },
 ];
 
+// Routes that should highlight a given tab even if their own pathname
+// doesn't start with the tab's href. /lab/design-preview is the
+// in-progress Daily Edge prototype, so the Daily Edge tab should read
+// as active while we're reviewing it.
+const ALIASED_AS: Record<string, string> = {
+  "/lab/design-preview": "/lab/daily-edge",
+};
+
 function isActive(currentPath: string, tabHref: string): boolean {
-  // Exact match OR currentPath is a nested child of the tab's route.
-  return currentPath === tabHref || currentPath.startsWith(`${tabHref}/`);
+  const effective = ALIASED_AS[currentPath] ?? currentPath;
+  return effective === tabHref || effective.startsWith(`${tabHref}/`);
 }
 
 export default function LabAppNav() {
@@ -49,24 +57,38 @@ export default function LabAppNav() {
     <header className="sticky top-0 z-40 bg-gray-950/85 backdrop-blur-md border-b border-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-4 h-14 sm:h-16">
-          {/* Left: wordmark */}
+          {/* Left: real OddSphere brand mark — matches production Navbar
+              pattern (icon-logo on mobile, full wordmark on sm+). */}
           <Link
             href="/lab/daily-edge"
-            className="inline-flex items-center gap-2 font-semibold text-sm sm:text-base text-white hover:text-violet-200 transition-colors whitespace-nowrap"
+            className="inline-flex items-center transition-all duration-200 hover:brightness-110 hover:scale-[1.02] whitespace-nowrap"
             aria-label="OddSphere AI Lab"
           >
-            <span aria-hidden="true" className="text-lg sm:text-xl">🧪</span>
-            <span className="hidden sm:inline">OddSphere AI Lab</span>
-            <span className="sm:hidden">The Lab</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/icon-logo.png"
+              alt="OddSphere"
+              className="block sm:hidden h-9 w-auto invert drop-shadow-[0_0_8px_rgba(167,139,250,0.5)]"
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo-transparent.png"
+              alt="OddSphere AI Lab"
+              className="hidden sm:block h-11 w-auto invert drop-shadow-[0_0_8px_rgba(167,139,250,0.5)]"
+            />
           </Link>
 
           {/* Center / mobile: section tabs */}
+          {/* Mobile: justify-start so the leftmost (and usually active)
+              tab is fully visible rather than getting the leading letter
+              clipped by the centered-overflow scroll. Desktop keeps the
+              centered layout. */}
           <nav
             role="tablist"
             aria-label="Lab sections"
-            className="flex-1 flex justify-center -mx-2 sm:mx-0 overflow-x-auto sm:overflow-visible"
+            className="flex-1 flex justify-start sm:justify-center -mx-2 sm:mx-0 overflow-x-auto sm:overflow-visible"
           >
-            <div className="flex gap-0.5 sm:gap-1 px-2 sm:px-0 min-w-max">
+            <div className="flex gap-0.5 sm:gap-1 pl-1 sm:px-0 min-w-max">
               {TABS.map((t) => {
                 const active = isActive(pathname, t.href);
                 return (

@@ -413,6 +413,33 @@ async function main() {
       signalType: null,
       marketSignal: null,
     });
+    // 4.1.10 — stub MarketEdgeDto for fixtures that test headline-grade
+    // ranking, which targets the legacy `predictions` block. The new
+    // per-market enriched fields are not exercised by these assertions.
+    const stubMarket = () => ({
+      pick: "X",
+      confidence: 0.5,
+      grade: null,
+      signalType: null,
+      marketSignal: null,
+      sharpStatus: "mixed" as SharpStatus,
+      verdict: { key: "no_play" as const, label: "No Play" },
+      guidedGuide: "stub",
+      guidedWatchOut: "stub",
+      whyLine: "stub",
+      riskLine: "stub",
+      modelProb: null,
+      marketFairProb: null,
+      pinnacleEvPct: null,
+      moneyPct: null,
+      betsPct: null,
+      priceAmerican: null,
+      lineOpenAmerican: null,
+      modelTotal: null,
+      marketTotal: null,
+      line: null,
+      keyStats: [],
+    });
     return {
       id: "test-1",
       sport: "mlb",
@@ -423,13 +450,30 @@ async function main() {
       homeTeamLogo: null,
       gameTime: "7:10 PM",
       gameStartMinutes: 0,
+      scheduledLockAt: "2026-05-29T23:10:00.000Z",
+      lockState: "open" as const,
+      lockedAt: null,
+      generatedAt: null,
       predictions: {
         ml: tile(ml),
         total: { ...tile(total), line: 9 },
         nrfi: tile(nrfi),
       },
+      markets: {
+        moneyline: stubMarket(),
+        total: stubMarket(),
+        first_inning: stubMarket(),
+      },
+      decisionLine: "stub decision line",
       projected: { away: 0, home: 0 },
       sharpSignals: [],
+      status: {
+        lineupConfirmed: null,
+        linesLocked: false,
+        sharpSignalPending: true,
+        marketDataLimited: false,
+      },
+      result: null,
       // Phase 4.1.8.B — breakdown is non-nullable on the DTO. Headline-grade
       // tests don't exercise breakdown semantics; supply a minimal stub that
       // satisfies the type. The verdict + sharpRead derivation are tested
@@ -1250,6 +1294,111 @@ async function main() {
         serverResult.headlineGrade === fx.expectGrade &&
           clientGrade === fx.expectGrade
       );
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // 4.1.10 — per-market enrichment + status + lock placeholders
+  // ──────────────────────────────────────────────────────────────────────
+  section("4.1.10: DTO additives (per-market markets, status, lock placeholders)");
+  {
+    // Use the same live response we fetched at the top of main().
+    const liveRes = await dailyEdge(
+      new Request(`https://x/api/lab/daily-edge?sport=mlb&date=${SLATE_DATE}`)
+    );
+    const liveBody = (await liveRes.json()) as DailyEdgeResponse;
+    if (!liveBody.games || liveBody.games.length === 0) {
+      check("response has at least one game (precondition)", false);
+    } else {
+      const sample = liveBody.games[0]!;
+
+      // ── lock placeholder fields ──
+      check(
+        "[4.1.10] scheduledLockAt is a valid ISO string",
+        typeof sample.scheduledLockAt === "string" &&
+          !Number.isNaN(Date.parse(sample.scheduledLockAt))
+      );
+      check(`[4.1.10] lockState === "open" pre-DDL`, sample.lockState === "open");
+      check(`[4.1.10] lockedAt === null pre-DDL`, sample.lockedAt === null);
+      check(
+        `[4.1.10] generatedAt is string|null`,
+        sample.generatedAt === null || typeof sample.generatedAt === "string"
+      );
+      check(`[4.1.10] result === null pre-grading`, sample.result === null);
+
+      // ── status block ──
+      check(
+        "[4.1.10] status.lineupConfirmed is boolean|null",
+        sample.status.lineupConfirmed === null || typeof sample.status.lineupConfirmed === "boolean"
+      );
+      check("[4.1.10] status.linesLocked is boolean", typeof sample.status.linesLocked === "boolean");
+      check("[4.1.10] status.sharpSignalPending is boolean", typeof sample.status.sharpSignalPending === "boolean");
+      check("[4.1.10] status.marketDataLimited is boolean", typeof sample.status.marketDataLimited === "boolean");
+
+      // ── decisionLine ──
+      check("[4.1.10] decisionLine is a non-empty string", typeof sample.decisionLine === "string" && sample.decisionLine.length > 0);
+
+      // ── markets block: all three present ──
+      check("[4.1.10] markets.moneyline is present", typeof sample.markets?.moneyline === "object" && sample.markets.moneyline !== null);
+      check("[4.1.10] markets.total is present", typeof sample.markets?.total === "object" && sample.markets.total !== null);
+      check("[4.1.10] markets.first_inning is present", typeof sample.markets?.first_inning === "object" && sample.markets.first_inning !== null);
+
+      // ── per-market shape ──
+      const m = sample.markets.moneyline;
+      check("[4.1.10] moneyline.verdict.key set", typeof m.verdict?.key === "string");
+      check("[4.1.10] moneyline.verdict.label set", typeof m.verdict?.label === "string");
+      check("[4.1.10] moneyline.guidedGuide non-empty", typeof m.guidedGuide === "string" && m.guidedGuide.length > 0);
+      check("[4.1.10] moneyline.guidedWatchOut non-empty", typeof m.guidedWatchOut === "string" && m.guidedWatchOut.length > 0);
+      check("[4.1.10] moneyline.whyLine non-empty", typeof m.whyLine === "string" && m.whyLine.length > 0);
+      check("[4.1.10] moneyline.riskLine non-empty", typeof m.riskLine === "string" && m.riskLine.length > 0);
+      check("[4.1.10] moneyline.modelProb is number 0-1", typeof m.modelProb === "number" && m.modelProb >= 0 && m.modelProb <= 1);
+      check("[4.1.10] moneyline.keyStats is an array", Array.isArray(m.keyStats));
+
+      // ── first_inning: splits fields are always null in V1 ──
+      const fi = sample.markets.first_inning;
+      check("[4.1.10] first_inning.moneyPct === null (V1)", fi.moneyPct === null);
+      check("[4.1.10] first_inning.betsPct === null (V1)", fi.betsPct === null);
+      // First-inning copy must not reference public splits / sharps
+      const fiCopy = `${fi.guidedGuide} ${fi.guidedWatchOut} ${fi.whyLine} ${fi.riskLine}`.toLowerCase();
+      const forbidden = ["public split", "public bet", "public money", "handle %", "bet %", "sharp action", "sharp money"];
+      const dirty = forbidden.find((t) => fiCopy.includes(t));
+      check(`[4.1.10] first_inning copy does not reference splits/sharps`, dirty === undefined, dirty ? `contained "${dirty}"` : undefined);
+
+      // ── totals-only fields ──
+      const t = sample.markets.total;
+      check(`[4.1.10] total.modelTotal is number|null`, t.modelTotal === null || typeof t.modelTotal === "number");
+      check(`[4.1.10] total.marketTotal is number|null`, t.marketTotal === null || typeof t.marketTotal === "number");
+
+      // ── existing `predictions` block STILL present (backwards compat) ──
+      check("[4.1.10] predictions.ml still present (backwards compat)", typeof sample.predictions?.ml === "object");
+      check("[4.1.10] predictions.total still present", typeof sample.predictions?.total === "object");
+      check("[4.1.10] predictions.nrfi still present", typeof sample.predictions?.nrfi === "object");
+
+      // ── no banned terms in user-facing copy across ALL games ──
+      const allCopyOk = liveBody.games.every((g) => {
+        const fields = [
+          g.decisionLine,
+          g.markets.moneyline.guidedGuide,
+          g.markets.moneyline.guidedWatchOut,
+          g.markets.moneyline.whyLine,
+          g.markets.moneyline.riskLine,
+          g.markets.total.guidedGuide,
+          g.markets.total.guidedWatchOut,
+          g.markets.total.whyLine,
+          g.markets.total.riskLine,
+          g.markets.first_inning.guidedGuide,
+          g.markets.first_inning.guidedWatchOut,
+          g.markets.first_inning.whyLine,
+          g.markets.first_inning.riskLine,
+          ...g.markets.moneyline.keyStats.map((k) => k.label),
+          ...g.markets.total.keyStats.map((k) => k.label),
+          ...g.markets.first_inning.keyStats.map((k) => k.label),
+        ];
+        // Replicate the banned-terms regex locally to keep the test self-contained.
+        const bannedRe = /\b(pinnacle|expected value|vig|vigorish|juice|consensus|reverse line movement|closing line value|book hold|arbitrage|arb)\b|\+\s*EV\b|\bEV\b|\bRLM\b|\bCLV\b|\bno[- ]vig\b|\bde[- ]vig(?:ged)?\b/i;
+        return fields.every((f) => !bannedRe.test(f));
+      });
+      check(`[4.1.10] no banned terms across ${liveBody.games.length} games × all copy fields`, allCopyOk);
     }
   }
 

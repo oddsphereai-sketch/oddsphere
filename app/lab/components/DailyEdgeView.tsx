@@ -13,12 +13,14 @@ import { isSlateDate } from "@/lib/dates/slateDate";
 import SportSelector from "./SportSelector";
 import ComingSoonState from "./ComingSoonState";
 import SimpleDailyEdgeCard from "./SimpleDailyEdgeCard";
+import { NoPlayStrip } from "./daily-edge/sharedCardParts";
+import TonightsMlbEdge from "./daily-edge/TonightsMlbEdge";
+import { composeTakeaway } from "../lib/composeTakeaway";
+import type { DailyEdgeGameDto } from "../lib/labTypes";
 import DailyEdgeLegend from "./DailyEdgeLegend";
 import HowWeUpdatePanel from "./HowWeUpdatePanel";
 import SlateDatePicker from "./SlateDatePicker";
 import SlateFreshness from "./SlateFreshness";
-import TonightsBoard from "./TonightsBoard";
-import TopReads from "./TopReads";
 import DailyEdgeFilters from "./DailyEdgeFilters";
 import DailyEdgeSort from "./DailyEdgeSort";
 
@@ -232,34 +234,39 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
             </div>
           )}
 
-          {/* V2.1 Part 11 — Tonight's Board summary + Top Reads, both above
-              the full games list. Driven by the filtered+sorted game set so
-              chip toggles update counts and curation in lockstep. */}
+          {/* Phase 4.1.8.C-final (B+C Hybrid) — Tonight's MLB Edge briefing
+              module. Consolidated curation replaces the prior TonightsBoard
+              + TopReads pair into one editorial briefing per Daniel's D4
+              decision. Driven by the filtered+sorted game set so chip
+              toggles update counts + best-of in lockstep. */}
           {!isLoading && games.length > 0 && (
-            <>
-              <TonightsBoard
+            <div className="max-w-6xl mx-auto">
+              <TonightsMlbEdge
                 games={visibleGames}
-                sportLabel={sportMeta.label}
+                slateDate={data?.date ?? ""}
               />
-              <TopReads games={visibleGames} />
-            </>
+            </div>
           )}
 
-          <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
+          {/* Phase 4.1.8.C-final (B+C Hybrid) — page-level verdict grouping.
+              Tonight's Top Angles (best_angle + lean) render as hero cards
+              in a responsive grid; the Rest of the Slate (caution +
+              watchlist + no_play) renders in a denser secondary grid below.
+              max-w-6xl per Sub-D7 — the page should breathe and feel like
+              a premium product, not a narrow list. */}
+          <div className="max-w-6xl mx-auto">
             {error ? (
               <ErrorState message={error.message} />
             ) : isLoading && games.length === 0 ? (
-              <LoadingSkeleton />
+              <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
+                <LoadingSkeleton />
+              </div>
             ) : games.length === 0 ? (
               <EmptyState />
             ) : visibleGames.length === 0 ? (
               <FilteredEmptyState hasActiveFilters={hasActiveFilters} />
             ) : (
-              visibleGames.map((game) => (
-                <div key={game.id} id={`game-${game.external_id}`}>
-                  <SimpleDailyEdgeCard game={game} />
-                </div>
-              ))
+              <GroupedSlate games={visibleGames} />
             )}
           </div>
 
@@ -281,6 +288,129 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
         </div>
       )}
     </>
+  );
+}
+
+// ─── Page-level verdict grouping (Phase 4.1.8.C-final) ─────────────────────
+
+type VerdictKey = DailyEdgeGameDto["breakdown"]["verdict"]["key"];
+
+type GroupedGames = Record<VerdictKey, DailyEdgeGameDto[]>;
+
+/**
+ * Group games by their server-derived verdict and sort each group by
+ * earliest start time. Pure helper — no DOM, no side effects.
+ */
+function groupGamesByVerdict(games: DailyEdgeGameDto[]): GroupedGames {
+  const groups: GroupedGames = {
+    best_angle: [],
+    lean: [],
+    caution: [],
+    watchlist: [],
+    no_play: [],
+  };
+  for (const g of games) {
+    groups[g.breakdown.verdict.key].push(g);
+  }
+  for (const k of Object.keys(groups) as VerdictKey[]) {
+    groups[k].sort((a, b) => a.gameStartMinutes - b.gameStartMinutes);
+  }
+  return groups;
+}
+
+/**
+ * Renders the slate in two editorial sections: "Tonight's Top Angles"
+ * (best_angle + lean) and "Rest of the Slate" (caution + watchlist +
+ * no_play). Each variant gets the layout density that matches its
+ * importance — hero cards in a responsive 1–3 column grid; Caution full-
+ * width within its group; Watchlist 2-col on md+; No Play as compact
+ * stacked strips.
+ */
+function GroupedSlate({ games }: { games: DailyEdgeGameDto[] }) {
+  const grouped = groupGamesByVerdict(games);
+  const topAngles = [...grouped.best_angle, ...grouped.lean];
+  const restCount =
+    grouped.caution.length + grouped.watchlist.length + grouped.no_play.length;
+
+  // Choose a hero grid breakpoint based on the top-angle count. Avoid
+  // empty cells: 1 → centered single-col; 2 → 2-col on md+; 3+ → 3-col
+  // on lg+, 2-col on md.
+  const heroGridClass =
+    topAngles.length === 1
+      ? "grid grid-cols-1 gap-4"
+      : topAngles.length === 2
+      ? "grid grid-cols-1 md:grid-cols-2 gap-4"
+      : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4";
+
+  const restHeading = topAngles.length > 0 ? "Rest of the Slate" : "Tonight's Slate";
+
+  return (
+    <>
+      {topAngles.length > 0 && (
+        <section className="mb-10">
+          <SectionHeading title="Tonight's Top Angles" count={topAngles.length} />
+          <div className={heroGridClass}>
+            {topAngles.map((game) => (
+              <div key={game.id} id={`game-${game.external_id}`}>
+                <SimpleDailyEdgeCard game={game} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {restCount > 0 && (
+        <section>
+          <SectionHeading title={restHeading} count={restCount} />
+
+          {/* Caution: full-width, stacked. */}
+          {grouped.caution.length > 0 && (
+            <div className="space-y-3 mb-4">
+              {grouped.caution.map((game) => (
+                <div key={game.id} id={`game-${game.external_id}`}>
+                  <SimpleDailyEdgeCard game={game} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Watchlist: 2-col on md+, 1-col on mobile. */}
+          {grouped.watchlist.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              {grouped.watchlist.map((game) => (
+                <div key={game.id} id={`game-${game.external_id}`}>
+                  <SimpleDailyEdgeCard game={game} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* No Play: ultra-compact stacked strips. */}
+          {grouped.no_play.length > 0 && (
+            <div className="space-y-1.5">
+              {grouped.no_play.map((game) => (
+                <div key={game.id} id={`game-${game.external_id}`}>
+                  <NoPlayStrip game={game} takeaway={composeTakeaway(game)} />
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+    </>
+  );
+}
+
+function SectionHeading({ title, count }: { title: string; count: number }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 mb-4 pb-2 border-b border-gray-800/40">
+      <h2 className="text-[12px] sm:text-[13px] uppercase tracking-[0.16em] font-semibold text-gray-300">
+        {title}
+      </h2>
+      <span className="text-[11px] tabular-nums text-gray-500 font-medium">
+        {count}
+      </span>
+    </div>
   );
 }
 

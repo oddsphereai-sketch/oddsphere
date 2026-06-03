@@ -1,0 +1,2613 @@
+"use client";
+
+/**
+ * Phase 4.1.11 — Production Daily Edge UI port.
+ *
+ * Ports the v13.1 design-preview architecture into production, consuming
+ * the new `markets.{moneyline, total, first_inning}` DTO shape from 4.1.10.
+ *
+ * Layout: locked Selected Edge Reader at the top of the viewport with a
+ * scrollable Edge Board below. Full View / Compact toggle collapses the
+ * reader to a single-row summary so the slate gets more vertical space.
+ *
+ * Per-market rules locked from earlier phases:
+ *   • First-inning never uses public-split copy. When splits are null
+ *     (always the case in V1), MarketPulse shows the honest fallback:
+ *     "No first-inning public split data. Model, price, and matchup
+ *     factors shown below."
+ *   • ML/Total fall back to "No public split data" when both moneyPct
+ *     and betsPct are null.
+ *   • No banned terms in user-facing copy — all copy comes from the
+ *     server-side helpers (perMarketCopyGenerator + decisionLine) which
+ *     are banned-terms-linted at generation time.
+ *
+ * First pass focus: architectural correctness over pixel-perfect polish.
+ * Visual review with Daniel after this lands, then iterate on detail.
+ */
+
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useDailyEdge } from "../../hooks/useDailyEdge";
+import type {
+  DailyEdgeGameDto,
+  MarketEdgeDto,
+} from "../../lib/labTypes";
+import type { Sport } from "@/lib/types/domain/Sport";
+import { teamPrimaryColor } from "./teamColors";
+
+// ─── Types ─────────────────────────────────────────────────────────────
+
+type MarketKey = "moneyline" | "total" | "first_inning";
+type VerdictKey =
+  | "best_angle"
+  | "lean"
+  | "watchlist"
+  | "caution"
+  | "no_play";
+
+const MARKET_SHORT_LABEL: Record<MarketKey, string> = {
+  moneyline: "ML",
+  total: "Total",
+  first_inning: "1st",
+};
+
+const MARKET_LONG_LABEL: Record<MarketKey, string> = {
+  moneyline: "Moneyline",
+  total: "Total",
+  first_inning: "1st Inning",
+};
+
+const VERDICT_LABEL: Record<VerdictKey, string> = {
+  best_angle: "Best Angle",
+  lean: "Lean",
+  watchlist: "Watchlist",
+  caution: "Caution",
+  no_play: "No Play",
+};
+
+const VERDICT_GLYPH: Record<VerdictKey, string> = {
+  best_angle: "★",
+  lean: "↗",
+  watchlist: "◐",
+  caution: "⚠",
+  no_play: "○",
+};
+
+/**
+ * Verdict color system — v3 palette (2026-06-02 — indigo Lean).
+ *
+ * Each tier on its own hue. Lean shifted to indigo so it carries a real
+ * "moderate actionable" identity without conflating with Best Angle's
+ * emerald (peak actionable) or Watchlist's sky (observational):
+ *
+ *   No Play     → dim gray              (off / skip)
+ *   Caution     → amber + subtle glow   (warning)
+ *   Watchlist   → sky                   (cool informational)
+ *   Lean        → indigo (periwinkle)   (moderate actionable, common)
+ *   Best Angle  → emerald + strong glow (peak actionable, rare)
+ *
+ * Violet stays reserved exclusively for "selected/active" UI state and
+ * never appears as a verdict tone. Indigo-300 is bluer/distinct from
+ * violet-400, and Lean's indigo is applied to inline text/tints while
+ * selected uses violet on the CARD CHROME (border + ring + glow) — so
+ * the two visual languages live on different surfaces and don't
+ * compete.
+ */
+const VERDICT_TEXT_COLOR: Record<VerdictKey, string> = {
+  best_angle: "text-emerald-300",
+  lean: "text-indigo-300",
+  watchlist: "text-sky-300",
+  caution: "text-amber-300",
+  no_play: "text-gray-500",
+};
+
+const VERDICT_BAND_TINT: Record<VerdictKey, string> = {
+  best_angle: "from-emerald-500/[0.12] via-emerald-500/[0.04] to-transparent border-emerald-500/30",
+  lean: "from-white/[0.04] via-white/[0.015] to-transparent border-white/[0.08]",
+  watchlist: "from-sky-500/[0.10] via-sky-500/[0.03] to-transparent border-sky-500/25",
+  caution: "from-amber-500/[0.12] via-amber-500/[0.04] to-transparent border-amber-500/30",
+  no_play: "from-gray-800/40 via-gray-800/15 to-transparent border-gray-700/40",
+};
+
+/**
+ * Optional text-shadow drop-glow applied to the VerdictChip glyph + label.
+ * Only the rare/strong verdicts get a glow so the common ones (Lean,
+ * Watchlist) don't visually shout. Empty string = no glow.
+ */
+const VERDICT_GLOW: Record<VerdictKey, string> = {
+  best_angle: "drop-shadow-[0_0_6px_rgba(110,231,183,0.55)]",
+  lean: "",
+  watchlist: "",
+  caution: "drop-shadow-[0_0_5px_rgba(251,191,36,0.50)]",
+  no_play: "",
+};
+
+/**
+ * Per-verdict tint applied to the three market pills inside each slate
+ * card (ML / Total / 1st). Each pill wears its OWN market's verdict
+ * tone so users can scan vertical slice down the grid and spot which
+ * markets carry value, without clicking in.
+ *
+ * Lean stays neutral (the most common verdict — must not paint cards).
+ * Watchlist / Caution / Best Angle get their tones at low saturation
+ * so a card with all three markets at different verdicts reads as
+ * three quiet tones, not three loud ones.
+ */
+const VERDICT_PILL_TINT: Record<VerdictKey, string> = {
+  best_angle: "bg-emerald-500/[0.12] border-emerald-500/35 hover:bg-emerald-500/[0.18] hover:border-emerald-400/50",
+  // Lean is its own indigo identity — clearly distinct from Best Angle's
+  // emerald AND from Watchlist's sky. Sized at a moderate saturation so
+  // it reads "actionable but not peak."
+  lean: "bg-indigo-500/[0.08] border-indigo-500/25 hover:bg-indigo-500/[0.14] hover:border-indigo-400/45",
+  watchlist: "bg-sky-500/[0.09] border-sky-500/25 hover:bg-sky-500/[0.16] hover:border-sky-400/45",
+  caution: "bg-amber-500/[0.10] border-amber-500/30 hover:bg-amber-500/[0.16] hover:border-amber-400/45",
+  no_play: "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.05] hover:border-white/[0.10]",
+};
+
+const SHARP_GLYPH: Record<string, string> = {
+  confirm: "✓",
+  mixed: "○",
+  caution: "⚠",
+};
+
+const SHARP_TONE: Record<string, string> = {
+  confirm: "text-emerald-300",
+  mixed: "text-gray-400",
+  caution: "text-amber-300",
+};
+
+// ─── Helpers ───────────────────────────────────────────────────────────
+
+/**
+ * ESPN logo slugs by our DB abbreviation. Most teams are just the lowercase
+ * abbreviation, but two have post-rebrand differences:
+ *   CWS (our DB) → "chw" at ESPN's CDN
+ *   ATH (our DB, post-rebrand) → "oak" at ESPN's CDN
+ * Anything not in the map falls through to lowercase(abbr).
+ */
+const ESPN_LOGO_SLUG: Record<string, string> = {
+  CWS: "chw",
+  ATH: "oak",
+};
+
+function espnLogoUrl(abbr: string): string {
+  const slug = ESPN_LOGO_SLUG[abbr] ?? abbr.toLowerCase();
+  return `https://a.espncdn.com/i/teamlogos/mlb/500/${slug}.png`;
+}
+
+function formatAmerican(price: number | null): string {
+  if (price === null) return "—";
+  return price > 0 ? `+${price}` : String(price);
+}
+
+/**
+ * Defensive: return null if the game's markets block is missing or the
+ * requested market slot is empty. This protects against stale SWR cache
+ * entries returned before the 4.1.10 DTO additives shipped — without it
+ * the shell would throw "Cannot read properties of undefined" during a
+ * transient cache state. The caller renders an empty-state fallback in
+ * that case so the page never blanks.
+ */
+function pickMarket(game: DailyEdgeGameDto, market: MarketKey): MarketEdgeDto | null {
+  if (!game || !game.markets) return null;
+  const m = game.markets[market];
+  return m ?? null;
+}
+
+function asVerdictKey(s: string): VerdictKey {
+  if (
+    s === "best_angle" ||
+    s === "lean" ||
+    s === "watchlist" ||
+    s === "caution" ||
+    s === "no_play"
+  ) {
+    return s;
+  }
+  return "no_play";
+}
+
+function moveDirection(open: number, current: number): "toward" | "against" | "flat" {
+  // For underdogs (positive American), price moving DOWN (toward 0) = market moving toward this side.
+  // For favorites (negative American), price moving MORE negative = market moving toward this side.
+  // We use simple sign comparison vs the open.
+  const diff = current - open;
+  if (Math.abs(diff) < 5) return "flat";
+  // Heuristic for V1 — a more sophisticated rule lives in V1.1.
+  return diff < 0 ? "toward" : "against";
+}
+
+/**
+ * Build the single "edge row" surfaced in the Compact reader. Picks the
+ * strongest available signal in priority order: value gap → model vs
+ * market → bet split → line move. Returns null when none of those have
+ * meaningful data (caller decides whether to show a soft fallback).
+ *
+ * Beginner-friendly language only. No banned terms (Pinnacle, EV, +EV,
+ * no-vig, RLM, CLV, etc.) — the route's banned-terms linter doesn't run
+ * on UI-side strings, so we follow the same rules manually.
+ */
+type EdgeRow = { label: string; value: string; tone: "emerald" | "amber" | "sky" | "gray" };
+
+function buildEdgeRow(market: MarketKey, m: MarketEdgeDto): EdgeRow | null {
+  // 1. Value gap — strongest signal when present and material.
+  if (m.pinnacleEvPct !== null && Math.abs(m.pinnacleEvPct) >= 0.3) {
+    const sign = m.pinnacleEvPct >= 0 ? "+" : "";
+    const priceTail =
+      m.priceAmerican !== null ? ` at ${formatAmerican(m.priceAmerican)}` : "";
+    return {
+      label: "Value edge",
+      value: `${sign}${m.pinnacleEvPct.toFixed(1)}%${priceTail}`,
+      tone: m.pinnacleEvPct >= 0 ? "emerald" : "amber",
+    };
+  }
+
+  // 2. Model vs market gap — clean side-by-side read of the model's
+  //    probability vs the market's fair probability for the pick.
+  if (m.modelProb !== null && m.marketFairProb !== null) {
+    const modelPct = Math.round(m.modelProb * 100);
+    const marketPct = Math.round(m.marketFairProb * 100);
+    const gap = modelPct - marketPct;
+    if (market === "total" && m.modelTotal !== null && m.marketTotal !== null) {
+      // For totals, the gap on probability is less intuitive than runs.
+      const diff = m.modelTotal - m.marketTotal;
+      const sign = diff >= 0 ? "+" : "";
+      return {
+        label: "Model read",
+        value: `${m.modelTotal.toFixed(1)} runs vs market ${m.marketTotal.toFixed(1)} (${sign}${diff.toFixed(1)})`,
+        tone: Math.abs(diff) >= 0.2 ? "sky" : "gray",
+      };
+    }
+    return {
+      label: "Model read",
+      value: `${modelPct}% vs market ${marketPct}%`,
+      tone: gap >= 1 ? "sky" : gap <= -1 ? "amber" : "gray",
+    };
+  }
+
+  // 3. Bet split — only when both halves are present.
+  if (m.moneyPct !== null && m.betsPct !== null) {
+    return {
+      label: "Bet split",
+      value: `${m.moneyPct}% money / ${m.betsPct}% bets`,
+      tone: m.moneyPct - m.betsPct >= 3 ? "emerald" : m.moneyPct - m.betsPct <= -3 ? "amber" : "gray",
+    };
+  }
+
+  // 4. Line move — only when we have both endpoints.
+  if (m.lineOpenAmerican !== null && m.priceAmerican !== null) {
+    const open = m.lineOpenAmerican;
+    const cur = m.priceAmerican;
+    const moved = Math.abs(cur - open) >= 5;
+    if (moved) {
+      return {
+        label: "Price move",
+        value: `${formatAmerican(open)} → ${formatAmerican(cur)}`,
+        tone: "sky",
+      };
+    }
+  }
+
+  return null;
+}
+
+const EDGE_TONE_TEXT: Record<EdgeRow["tone"], string> = {
+  emerald: "text-emerald-300",
+  amber: "text-amber-300",
+  sky: "text-sky-300",
+  gray: "text-gray-400",
+};
+
+/**
+ * Best edge tag for a single market — used as the small chip on
+ * SlateCards. Compact form (label only, no numbers) so the card stays
+ * readable. Returns null when no meaningful signal exists.
+ */
+function buildCardEdgeChip(m: MarketEdgeDto): { label: string; tone: EdgeRow["tone"] } | null {
+  if (m.pinnacleEvPct !== null && m.pinnacleEvPct >= 0.5) {
+    return { label: `+${m.pinnacleEvPct.toFixed(1)}% value`, tone: "emerald" };
+  }
+  if (m.modelProb !== null && m.marketFairProb !== null) {
+    const gap = (m.modelProb - m.marketFairProb) * 100;
+    if (gap >= 1.5) return { label: "Model edge", tone: "sky" };
+  }
+  if (m.moneyPct !== null && m.betsPct !== null && m.moneyPct - m.betsPct >= 5) {
+    return { label: "Market support", tone: "emerald" };
+  }
+  return null;
+}
+
+function headlineMarketFor(game: DailyEdgeGameDto): MarketKey {
+  // Pick the market with the strongest verdict, ML > Total > 1st on ties.
+  const rank: Record<VerdictKey, number> = {
+    best_angle: 4,
+    lean: 3,
+    watchlist: 2,
+    caution: 1,
+    no_play: 0,
+  };
+  const candidates: Array<{ key: MarketKey; r: number }> = [
+    { key: "moneyline", r: rank[asVerdictKey(game.markets.moneyline.verdict.key)] },
+    { key: "total", r: rank[asVerdictKey(game.markets.total.verdict.key)] },
+    { key: "first_inning", r: rank[asVerdictKey(game.markets.first_inning.verdict.key)] },
+  ];
+  candidates.sort((a, b) => b.r - a.r);
+  return candidates[0]!.key;
+}
+
+// ─── Parts ─────────────────────────────────────────────────────────────
+
+function TeamBadge({ abbr, logo, size }: { abbr: string; logo: string | null; size: number }) {
+  // The DB's `teams.logo_url` column is unreliable today (broken
+  // mlbstatic.com URLs across all 30 teams). Bypass it and use ESPN as
+  // the primary CDN source. Kept the `logo` prop for API parity but
+  // intentionally don't read it. When ESPN slugs are missing (unknown
+  // team) or the request 404s, the abbr-disc fallback engages.
+  void logo;
+  const [errored, setErrored] = useState(false);
+  const src = espnLogoUrl(abbr);
+
+  if (errored) {
+    // Brighter, intentional-looking disc so it doesn't read as a broken
+    // logo. Violet-tinted with a soft glow — clearly a deliberate
+    // placeholder, not a missing image.
+    return (
+      <div
+        className="inline-flex items-center justify-center rounded-full bg-violet-500/[0.12] border border-violet-400/30 text-violet-100 font-bold tracking-tight shrink-0 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.10)]"
+        style={{ width: size, height: size, fontSize: Math.max(9, Math.floor(size * 0.38)) }}
+        aria-label={abbr}
+      >
+        {abbr}
+      </div>
+    );
+  }
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={src}
+      alt={abbr}
+      width={size}
+      height={size}
+      className="rounded-full shrink-0"
+      style={{ width: size, height: size, objectFit: "contain" }}
+      onError={() => setErrored(true)}
+    />
+  );
+}
+
+function VerdictChip({
+  verdict,
+  selected = false,
+  showActionPrefix = false,
+}: {
+  verdict: VerdictKey;
+  selected?: boolean;
+  /**
+   * When true, prefix the chip with a small muted "Action" label so the
+   * user can tell the chip is the action/verdict — NOT the pick (e.g.
+   * "Watchlist" vs "NRFI"). Used in the reader header where the pick
+   * and the verdict sit side-by-side.
+   */
+  showActionPrefix?: boolean;
+}) {
+  const glow = VERDICT_GLOW[verdict];
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] uppercase tracking-[0.14em] font-bold whitespace-nowrap ${
+        selected ? "bg-violet-500/[0.16]" : "bg-white/[0.04]"
+      }`}
+    >
+      {showActionPrefix && (
+        <span className="text-gray-500 font-bold pr-1 border-r border-white/[0.10] mr-0.5">
+          Action
+        </span>
+      )}
+      <span
+        aria-hidden="true"
+        className={`${VERDICT_TEXT_COLOR[verdict]} text-[12px] leading-none ${glow}`}
+      >
+        {VERDICT_GLYPH[verdict]}
+      </span>
+      <span className={`${VERDICT_TEXT_COLOR[verdict]} ${glow}`}>{VERDICT_LABEL[verdict]}</span>
+    </span>
+  );
+}
+
+function MarketPill({
+  market,
+  pick,
+  confidence,
+  verdict,
+  selected,
+  onClick,
+}: {
+  market: MarketKey;
+  pick: string | null;
+  confidence: number;
+  verdict: VerdictKey;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 px-2.5 py-1 min-h-[30px] rounded-md text-left transition-all ${
+        selected
+          ? "bg-violet-500/[0.18] text-white border border-violet-400/45"
+          : "bg-white/[0.03] text-gray-300 border border-transparent hover:bg-white/[0.06]"
+      }`}
+    >
+      <span className={`text-[10px] uppercase tracking-[0.14em] font-bold shrink-0 ${selected ? "text-violet-100" : "text-gray-500"}`}>
+        {MARKET_SHORT_LABEL[market]}
+      </span>
+      <span className="text-[12px] font-bold tabular-nums shrink-0">{pick ?? "—"}</span>
+      <span className={`text-[10.5px] tabular-nums shrink-0 ${selected ? "text-gray-300" : "text-gray-500"}`}>
+        {Math.round(confidence * 100)}%
+      </span>
+      <span
+        aria-hidden="true"
+        className={`ml-auto text-[12px] leading-none shrink-0 ${VERDICT_TEXT_COLOR[verdict]} ${VERDICT_GLOW[verdict]}`}
+      >
+        {VERDICT_GLYPH[verdict]}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * Render the headline pick line for the reader's market selector, with
+ * the totals line stitched on when applicable.
+ *   moneyline   → "PHI" or "—"
+ *   total       → "Over 8.5" / "Under 8.5" / "Over" / "—"
+ *   first_inning→ "NRFI" / "YRFI" / "—"
+ */
+function formatPickWithLine(market: MarketKey, pick: string | null, line: number | null): string {
+  if (pick === null) return "—";
+  if (market === "total" && line !== null) return `${pick} ${line}`;
+  return pick;
+}
+
+/**
+ * Larger segmented market selector for the reader header. One segment
+ * per market (Moneyline / Total / 1st Inning), each showing the long
+ * label + headline pick + confidence. The selected segment has full
+ * violet treatment so the user can tell at a glance which market the
+ * body is reading.
+ */
+function ReaderMarketSegment({
+  market,
+  pick,
+  line,
+  confidence,
+  verdict,
+  selected,
+  onClick,
+}: {
+  market: MarketKey;
+  pick: string | null;
+  line: number | null;
+  confidence: number;
+  verdict: VerdictKey;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const pickText = formatPickWithLine(market, pick, line);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`group flex-1 min-w-0 px-3 py-2.5 rounded-lg text-left transition-colors border ${
+        selected
+          ? "bg-violet-500/[0.18] border-violet-400/55 text-white shadow-[inset_0_0_0_1px_rgba(167,139,250,0.12),0_0_20px_-10px_rgba(139,92,246,0.55)]"
+          : "bg-white/[0.025] border-white/[0.06] text-gray-300 hover:bg-white/[0.05] hover:border-white/[0.10]"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className={`text-[10.5px] uppercase tracking-[0.14em] font-bold ${
+            selected ? "text-violet-200" : "text-gray-500"
+          }`}
+        >
+          {MARKET_LONG_LABEL[market]}
+        </span>
+        <span
+          aria-hidden="true"
+          className={`text-[13px] leading-none ${VERDICT_TEXT_COLOR[verdict]} ${VERDICT_GLOW[verdict]}`}
+        >
+          {VERDICT_GLYPH[verdict]}
+        </span>
+      </div>
+      <div className="mt-1 flex items-baseline gap-2 min-w-0">
+        <span
+          className={`text-[15px] font-bold tabular-nums truncate ${
+            selected ? "text-white" : "text-gray-100"
+          }`}
+          style={{ letterSpacing: "-0.01em" }}
+        >
+          {pickText}
+        </span>
+        <span
+          className={`text-[12px] tabular-nums ml-auto shrink-0 ${
+            selected ? "text-violet-100/85" : "text-gray-500"
+          }`}
+        >
+          {Math.round(confidence * 100)}%
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function ConfidenceRing({ value, size = 48, stroke = 4 }: { value: number; size?: number; stroke?: number }) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(1, value / 100));
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
+      <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} fill="none" />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        stroke="rgba(167,139,250,0.75)"
+        strokeWidth={stroke}
+        strokeDasharray={`${c * pct} ${c}`}
+        strokeLinecap="round"
+        fill="none"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+      <text x="50%" y="52%" textAnchor="middle" dominantBaseline="middle" className="fill-gray-100" style={{ fontSize: size * 0.28, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>
+        {Math.round(value)}
+      </text>
+    </svg>
+  );
+}
+
+/**
+ * One-sentence beginner-friendly explanation of each play grade. Read by
+ * the PlayGradeMeter so the user doesn't have to interpret the meter
+ * alone — the grade and what it means are stated plainly.
+ */
+const PLAY_GRADE_EXPLANATION: Record<VerdictKey, string> = {
+  best_angle: "Strongest read tonight — clear value and aligned signals.",
+  lean: "Moderate model edge. Not a top-tier Best Angle.",
+  watchlist: "Interesting read, but not clean enough to act on yet.",
+  caution: "Signals conflict — pass unless you have a strong external read.",
+  no_play: "No actionable angle on this market.",
+};
+
+/**
+ * Fill color used for the SINGLE cell that marks the current verdict's
+ * position on the 5-cell meter. The other 4 cells stay neutral so the
+ * meter reads as "you are here on the scale" rather than "all five
+ * tiers at once."
+ */
+const PLAY_GRADE_TINT: Record<VerdictKey, string> = {
+  no_play: "bg-gray-600/80",
+  caution: "bg-amber-400/85",
+  watchlist: "bg-sky-400/85",
+  // Lean cell is indigo so the bar's highlighted position visibly
+  // belongs to a different hue than Best Angle's emerald — even though
+  // they're adjacent tiers on the ladder.
+  lean: "bg-indigo-400/80",
+  best_angle: "bg-emerald-400/95",
+};
+
+function PlayGradeMeter({ verdict }: { verdict: VerdictKey }) {
+  // Order is strict actionability: No Play (lowest) → Best Angle (highest).
+  // Only the current tier is highlighted on the meter + in the text
+  // scale. The other tiers stay neutral so the meter reads as a "you
+  // are here" indicator, not a rainbow legend.
+  const order: VerdictKey[] = ["no_play", "caution", "watchlist", "lean", "best_angle"];
+  const idx = order.indexOf(verdict);
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[9.5px] uppercase tracking-[0.14em] text-gray-500 font-bold">Play Grade</p>
+      <p
+        className={`text-[15px] font-black leading-none ${VERDICT_TEXT_COLOR[verdict]} ${VERDICT_GLOW[verdict]}`}
+        style={{ letterSpacing: "-0.01em" }}
+      >
+        <span aria-hidden="true" className="mr-1.5">{VERDICT_GLYPH[verdict]}</span>
+        {VERDICT_LABEL[verdict]}
+      </p>
+      <p className="text-[11.5px] text-gray-400 leading-snug">
+        {PLAY_GRADE_EXPLANATION[verdict]}
+      </p>
+      {/* 5-cell position bar — only the cell at the current verdict's
+          index is tinted. The other four cells render as a faint
+          neutral track. Communicates POSITION on a 5-tier scale, not
+          all tier colors at once. */}
+      <div className="grid grid-cols-5 gap-0.5 pt-1">
+        {order.map((v, i) => (
+          <div
+            key={v}
+            className={`h-1.5 rounded-sm ${i === idx ? PLAY_GRADE_TINT[v] : "bg-white/[0.06]"}`}
+          />
+        ))}
+      </div>
+      {/* Plain-text scale aligned conceptually with the bar above. Only
+          the current tier is tinted; the rest stay muted. Word "Best
+          Angle" sits at the right so the ladder direction is clear. */}
+      <div className="flex items-center flex-wrap gap-x-1 text-[9px] uppercase tracking-[0.10em] font-bold">
+        {order.map((v, i) => {
+          const isCurrent = v === verdict;
+          return (
+            <span key={v} className="inline-flex items-center">
+              {i > 0 && <span aria-hidden="true" className="text-gray-700 mr-1">·</span>}
+              <span
+                className={
+                  isCurrent
+                    ? `${VERDICT_TEXT_COLOR[v]} ${VERDICT_GLOW[v]}`
+                    : "text-gray-700"
+                }
+              >
+                {VERDICT_LABEL[v]}
+              </span>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Top-of-shell: sport rail + slate strip ────────────────────────────
+
+/**
+ * Filled sport-glyph SVG with natural sport coloring. Inline so we never
+ * load a remote logo asset and never run into the licensing question for
+ * league marks. These are generic sport silhouettes (baseball,
+ * basketball, football, puck) — NOT league logos.
+ *
+ * `active` controls visual energy: active sports render at full
+ * saturation; inactive ones render at reduced opacity but keep their
+ * shape and color so the rail stays premium-feeling rather than dead-gray.
+ */
+function SportIcon({ sport, size = 18, active }: { sport: Sport; size?: number; active: boolean }) {
+  const wrapperOpacity = active ? 1 : 0.55;
+  if (sport === "mlb") {
+    // Baseball — cream disc with red stitch arcs
+    return (
+      <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" className="shrink-0" style={{ opacity: wrapperOpacity }}>
+        <defs>
+          <radialGradient id="mlb-disc" cx="38%" cy="35%" r="70%">
+            <stop offset="0%" stopColor="#fafaf9" />
+            <stop offset="100%" stopColor="#d6d3d1" />
+          </radialGradient>
+        </defs>
+        <circle cx="10" cy="10" r="8.5" fill="url(#mlb-disc)" />
+        <circle cx="10" cy="10" r="8.5" fill="none" stroke="rgba(0,0,0,0.18)" strokeWidth="0.4" />
+        <path d="M4.5 6.5 Q10 10 15.5 6.5" stroke="#dc2626" strokeWidth="0.9" fill="none" strokeLinecap="round" />
+        <path d="M4.5 13.5 Q10 10 15.5 13.5" stroke="#dc2626" strokeWidth="0.9" fill="none" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (sport === "nba" || sport === "cbb") {
+    // Basketball — orange disc with darker seams
+    return (
+      <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" className="shrink-0" style={{ opacity: wrapperOpacity }}>
+        <defs>
+          <radialGradient id="nba-disc" cx="38%" cy="35%" r="72%">
+            <stop offset="0%" stopColor="#fb923c" />
+            <stop offset="100%" stopColor="#c2410c" />
+          </radialGradient>
+        </defs>
+        <circle cx="10" cy="10" r="8.5" fill="url(#nba-disc)" />
+        <line x1="10" y1="1.5" x2="10" y2="18.5" stroke="#1c1917" strokeWidth="0.8" strokeLinecap="round" />
+        <line x1="1.5" y1="10" x2="18.5" y2="10" stroke="#1c1917" strokeWidth="0.8" strokeLinecap="round" />
+        <path d="M2.5 10 Q10 4 17.5 10" stroke="#1c1917" strokeWidth="0.8" fill="none" strokeLinecap="round" />
+        <path d="M2.5 10 Q10 16 17.5 10" stroke="#1c1917" strokeWidth="0.8" fill="none" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (sport === "nfl" || sport === "cfb") {
+    // Football — brown pointed ellipse with white laces
+    return (
+      <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" className="shrink-0" style={{ opacity: wrapperOpacity }}>
+        <defs>
+          <radialGradient id="nfl-disc" cx="35%" cy="35%" r="78%">
+            <stop offset="0%" stopColor="#a16207" />
+            <stop offset="100%" stopColor="#7c2d12" />
+          </radialGradient>
+        </defs>
+        <path d="M2.5 10 Q10 1.5 17.5 10 Q10 18.5 2.5 10 Z" fill="url(#nfl-disc)" stroke="rgba(0,0,0,0.18)" strokeWidth="0.3" />
+        <line x1="10" y1="6.5" x2="10" y2="13.5" stroke="#fafaf9" strokeWidth="0.9" strokeLinecap="round" />
+        <line x1="8.4" y1="7.8" x2="8.4" y2="12.2" stroke="#fafaf9" strokeWidth="0.6" strokeLinecap="round" />
+        <line x1="11.6" y1="7.8" x2="11.6" y2="12.2" stroke="#fafaf9" strokeWidth="0.6" strokeLinecap="round" />
+        <line x1="7" y1="8.8" x2="7" y2="11.2" stroke="#fafaf9" strokeWidth="0.55" strokeLinecap="round" />
+        <line x1="13" y1="8.8" x2="13" y2="11.2" stroke="#fafaf9" strokeWidth="0.55" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (sport === "nhl") {
+    // Hockey puck — dark flat ellipse with subtle highlight
+    return (
+      <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" className="shrink-0" style={{ opacity: wrapperOpacity }}>
+        <defs>
+          <linearGradient id="nhl-side" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#334155" />
+            <stop offset="100%" stopColor="#0f172a" />
+          </linearGradient>
+        </defs>
+        <ellipse cx="10" cy="11.5" rx="8" ry="3.2" fill="url(#nhl-side)" />
+        <ellipse cx="10" cy="8.5" rx="8" ry="3.2" fill="#1e293b" stroke="#475569" strokeWidth="0.4" />
+      </svg>
+    );
+  }
+  // Default fallback — small disc
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" className="shrink-0" style={{ opacity: wrapperOpacity }}>
+      <circle cx="10" cy="10" r="8.5" fill="#52525b" />
+    </svg>
+  );
+}
+
+/**
+ * Top-of-page sports rail. Full-width inside the standard max-w-7xl
+ * gutter so the page reads as a multi-sport platform — MLB is the only
+ * live model right now but the other leagues are visible as "Coming
+ * <Month>" placeholders. League glyphs are inline SVGs (no licensing
+ * concerns + no remote asset fetches).
+ */
+function SportRail({ sport }: { sport: Sport }) {
+  // V1 — MLB only is live. Status copy stays neutral to avoid implying a
+  // hard launch date for unfinished sports ("Coming Soon" is the safe
+  // default until each league's model is closer to ship).
+  const ROW: Array<{ key: Sport; label: string; live: boolean }> = [
+    { key: "mlb", label: "MLB", live: true },
+    { key: "nba", label: "NBA", live: false },
+    { key: "nhl", label: "NHL", live: false },
+    { key: "nfl", label: "NFL", live: false },
+    { key: "cfb", label: "CFB", live: false },
+    { key: "cbb", label: "CBB", live: false },
+  ];
+  return (
+    <div className="border-b border-white/[0.05] bg-gradient-to-b from-white/[0.015] to-transparent">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto -mx-1 px-1">
+          {ROW.map((s) => {
+            const isActive = s.key === sport && s.live;
+            return (
+              <div
+                key={s.key}
+                className={`group flex-1 min-w-[120px] sm:min-w-0 inline-flex items-center gap-2.5 px-3 py-2 rounded-lg border whitespace-nowrap transition-colors ${
+                  isActive
+                    ? "border-violet-400/55 bg-violet-500/[0.14] text-violet-50 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.10),0_0_18px_-8px_rgba(139,92,246,0.45)]"
+                    : "border-white/[0.06] bg-white/[0.02] text-gray-400"
+                }`}
+                aria-label={`${s.label} — ${isActive ? "active model" : "coming soon"}`}
+              >
+                {/* Circular icon container — tinted violet for active,
+                    neutral for inactive. The container itself, not just
+                    the icon, carries the "active" cue. */}
+                <span
+                  className={`inline-flex items-center justify-center w-7 h-7 rounded-full shrink-0 ${
+                    isActive
+                      ? "bg-violet-500/[0.22] ring-1 ring-violet-400/40 shadow-[0_0_10px_-2px_rgba(167,139,250,0.45)]"
+                      : "bg-white/[0.04] ring-1 ring-white/[0.06]"
+                  }`}
+                >
+                  <SportIcon sport={s.key} size={18} active={isActive} />
+                </span>
+                <div className="flex flex-col leading-tight min-w-0">
+                  <span
+                    className={`text-[11px] uppercase tracking-[0.16em] font-bold ${
+                      isActive ? "text-white" : "text-gray-300"
+                    }`}
+                  >
+                    {s.label}
+                  </span>
+                  <span
+                    className={`text-[9.5px] tracking-[0.06em] truncate ${
+                      isActive ? "text-emerald-300" : "text-gray-500"
+                    }`}
+                  >
+                    {isActive ? (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(110,231,183,0.6)]" />
+                        Active
+                      </span>
+                    ) : (
+                      "Coming Soon"
+                    )}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SlateControlStrip({
+  date,
+  gameCount,
+  updatedAt,
+  fallbackUsed,
+}: {
+  date: string;
+  gameCount: number;
+  updatedAt: string;
+  fallbackUsed: boolean;
+}) {
+  // Locale-dependent time format produces different output on server vs
+  // client which trips React's hydration check. Defer formatting until
+  // after mount so server and initial client HTML agree (empty string).
+  const [updatedTime, setUpdatedTime] = useState<string>("");
+  useEffect(() => {
+    try {
+      const d = new Date(updatedAt);
+      setUpdatedTime(d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }));
+    } catch {
+      setUpdatedTime("");
+    }
+  }, [updatedAt]);
+
+  // Format the slate date as a short, friendly month-day (no year — the
+  // year never reads as actionable info for users).
+  const slateDateLabel = useMemo(() => {
+    try {
+      const [y, m, d] = date.split("-").map(Number) as [number, number, number];
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+    } catch {
+      return date;
+    }
+  }, [date]);
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-2">
+      {/* Two-group layout: left = slate metadata text, right = fallback
+          badge when applicable. The badge is visually grouped with the
+          metadata (same flex row) but has its own pill styling so it
+          doesn't get lost in the dot-separated string. Dots tinted
+          gray-700 to recede behind the gray-400/500 text. */}
+      <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap text-[11px] text-gray-500">
+        <span className="inline-flex items-center gap-2">
+          <span className="uppercase tracking-[0.14em] font-bold text-gray-400">MLB slate</span>
+          <span aria-hidden="true" className="text-gray-700">·</span>
+          <span className="tabular-nums text-gray-400">{gameCount} games</span>
+          <span aria-hidden="true" className="text-gray-700">·</span>
+          <span className="tabular-nums">{slateDateLabel}</span>
+          {updatedTime && (
+            <>
+              <span aria-hidden="true" className="text-gray-700">·</span>
+              <span>Updated {updatedTime}</span>
+            </>
+          )}
+        </span>
+        {fallbackUsed && (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-amber-500/35 bg-amber-500/[0.10] text-[10px] uppercase tracking-[0.12em] font-bold text-amber-200">
+            <span aria-hidden="true" className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400/85" />
+            Showing latest available slate
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── How this works (popover) ──────────────────────────────────────────
+
+function HowThisWorks() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-violet-400/35 bg-violet-500/[0.10] text-[10px] uppercase tracking-[0.14em] font-bold text-violet-100 hover:bg-violet-500/[0.18] hover:border-violet-400/55 transition-colors"
+      >
+        How this works
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-30 w-[320px] bg-[#0F0F1A] border border-white/[0.10] rounded-lg shadow-xl p-4 text-[12px] text-gray-300 leading-relaxed">
+          <p className="font-bold text-gray-100 mb-2">How to use this page</p>
+          <ol className="space-y-1.5 list-decimal list-inside">
+            <li>Browse tonight&apos;s slate in the Edge Board below.</li>
+            <li>Click any game card to focus the reader on it.</li>
+            <li>Click a market pill (ML / Total / 1st) to focus that read.</li>
+            <li>Quick Read on the left shows the takeaway.</li>
+            <li>Supporting Evidence in the middle shows price + market data.</li>
+            <li>Market Notes on the right show why and the risk.</li>
+          </ol>
+          <p className="mt-3 font-bold text-gray-100 mb-1">Signals</p>
+          <ul className="space-y-0.5 list-disc list-inside text-[11.5px]">
+            <li><span className="text-emerald-300 drop-shadow-[0_0_4px_rgba(110,231,183,0.45)]">★ Best Angle</span> — strongest read</li>
+            <li><span className="text-indigo-300">↗ Lean</span> — moderate read</li>
+            <li><span className="text-sky-300">◐ Watchlist</span> — interesting, not clean</li>
+            <li><span className="text-amber-300">⚠ Caution</span> — signals conflict</li>
+            <li><span className="text-gray-500">○ No Play</span> — skip</li>
+          </ul>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="mt-3 text-[10.5px] uppercase tracking-[0.14em] font-bold text-gray-500 hover:text-gray-300"
+          >
+            Close
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Expanded reader sub-renderers (used by SlateCard expansion + MobileDetailSheet) ──
+
+function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; market: MarketKey; marketData: MarketEdgeDto }) {
+  const verdict = asVerdictKey(marketData.verdict.key);
+  return (
+    <div className="bg-white/[0.015] border border-white/[0.04] rounded-xl px-3.5 py-2.5 space-y-2 min-w-0">
+      <div className="flex items-center gap-2 pb-1 border-b border-white/[0.06]">
+        <span aria-hidden="true" className="w-1 h-3.5 rounded-full bg-violet-400/85 shadow-[0_0_8px_rgba(167,139,250,0.35)]" />
+        <p className="text-[10.5px] uppercase tracking-[0.18em] font-bold text-violet-200/90">Quick Read</p>
+      </div>
+
+      {/* Matchup */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={32} />
+          <span className="text-[14px] font-bold text-gray-100" style={{ letterSpacing: "-0.02em" }}>{game.awayTeam}</span>
+          <span className="text-gray-700 text-[12px]">@</span>
+          <span className="text-[14px] font-bold text-gray-100" style={{ letterSpacing: "-0.02em" }}>{game.homeTeam}</span>
+          <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={32} />
+        </div>
+      </div>
+
+      {/* Projected */}
+      <div className="bg-white/[0.02] border border-white/[0.04] rounded-lg px-3 py-1.5">
+        <p className="text-[9.5px] uppercase tracking-[0.16em] text-gray-500 font-bold mb-0.5">Projected</p>
+        <div className="flex items-baseline justify-between gap-2">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[10px] uppercase tracking-[0.12em] text-gray-500 font-bold">{game.awayTeam}</span>
+            <span className="text-[18px] font-black tabular-nums text-gray-100 leading-none">{game.projected.away.toFixed(1)}</span>
+          </div>
+          <span className="text-gray-700">—</span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[18px] font-black tabular-nums text-gray-100 leading-none">{game.projected.home.toFixed(1)}</span>
+            <span className="text-[10px] uppercase tracking-[0.12em] text-gray-500 font-bold">{game.homeTeam}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Selected pick */}
+      <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+        <div className="min-w-0">
+          <h2 className="text-[24px] font-black tabular-nums text-white leading-none" style={{ letterSpacing: "-0.04em" }}>
+            {marketData.pick ?? "—"}
+          </h2>
+          <div className="mt-1.5 flex items-baseline gap-1.5 flex-wrap">
+            <span className="text-[12.5px] tabular-nums font-bold text-gray-300">
+              {Math.round(marketData.confidence * 100)}%
+            </span>
+            {marketData.priceAmerican !== null ? (
+              <>
+                <span className="text-gray-700">·</span>
+                <span className="text-[12.5px] tabular-nums font-semibold text-gray-300">
+                  {formatAmerican(marketData.priceAmerican)}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-gray-700">·</span>
+                <span className="text-[10.5px] uppercase tracking-[0.14em] font-bold text-gray-500">not priced</span>
+              </>
+            )}
+            <span className="text-gray-700">·</span>
+            <span className="text-[10px] uppercase tracking-[0.14em] text-gray-500 font-bold">
+              {MARKET_LONG_LABEL[market]}
+            </span>
+          </div>
+        </div>
+        <ConfidenceRing value={marketData.confidence * 100} size={48} stroke={4} />
+      </div>
+
+      {/* Guided read */}
+      <div className="bg-white/[0.02] border border-white/[0.04] rounded-lg px-3 py-2 space-y-1.5">
+        <p className="text-[13px] text-gray-200 leading-snug">{marketData.guidedGuide}</p>
+        {marketData.guidedWatchOut && (
+          <p className="text-[12px] text-amber-200/80 leading-snug">
+            <span aria-hidden="true" className="text-amber-400/70 mr-1">⚠</span>
+            {marketData.guidedWatchOut}
+          </p>
+        )}
+      </div>
+
+      <PlayGradeMeter verdict={verdict} />
+    </div>
+  );
+}
+
+function EdgeStack({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
+  type Row = { label: string; evidence: string; delta: string; tone: "emerald" | "amber" | "gray" };
+  const rows: Row[] = [];
+
+  // Model Edge
+  if (market === "total" && marketData.modelTotal !== null && marketData.marketTotal !== null) {
+    const diff = marketData.modelTotal - marketData.marketTotal;
+    const isOver = (marketData.pick ?? "").toUpperCase().startsWith("OVER");
+    const supports = (isOver && diff > 0) || (!isOver && diff < 0);
+    const mag = Math.abs(diff);
+    const tone: Row["tone"] = mag < 0.2 ? "gray" : supports ? "emerald" : "amber";
+    rows.push({
+      label: "Model Edge",
+      evidence: `Model ${marketData.modelTotal.toFixed(1)} vs market ${marketData.marketTotal.toFixed(1)}`,
+      delta: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} runs`,
+      tone,
+    });
+  } else if (marketData.marketFairProb !== null) {
+    const gap = (marketData.modelProb !== null ? marketData.modelProb - marketData.marketFairProb : 0) * 100;
+    rows.push({
+      label: "Model Edge",
+      evidence: `${(((marketData.modelProb ?? 0) * 100)).toFixed(0)}% vs market ${(marketData.marketFairProb * 100).toFixed(0)}%`,
+      delta: `${gap >= 0 ? "+" : ""}${gap.toFixed(1)}%`,
+      tone: gap >= 1 ? "emerald" : gap <= -1 ? "amber" : "gray",
+    });
+  } else {
+    rows.push({
+      label: "Model Edge",
+      evidence: `${(((marketData.modelProb ?? 0) * 100)).toFixed(0)}% · market unavailable`,
+      delta: "—",
+      tone: "gray",
+    });
+  }
+
+  // Market Value (EV)
+  if (marketData.pinnacleEvPct === null) {
+    rows.push({ label: "Market Value", evidence: "Sharper price check", delta: "unavailable", tone: "gray" });
+  } else {
+    const ev = marketData.pinnacleEvPct;
+    rows.push({
+      label: "Market Value",
+      evidence: "Sharper price check",
+      delta: `${ev >= 0 ? "+" : ""}${ev.toFixed(1)}%`,
+      tone: ev >= 0.3 ? "emerald" : ev <= -1 ? "amber" : "gray",
+    });
+  }
+
+  // Money vs Bets
+  if (marketData.moneyPct === null || marketData.betsPct === null) {
+    rows.push({ label: "Money vs Bets", evidence: "Public split", delta: "unavailable", tone: "gray" });
+  } else {
+    const gap = marketData.moneyPct - marketData.betsPct;
+    rows.push({
+      label: "Money vs Bets",
+      evidence: `Money ${marketData.moneyPct}% / Bets ${marketData.betsPct}%`,
+      delta: `${gap >= 0 ? "+" : ""}${gap}`,
+      tone: gap >= 3 ? "emerald" : gap <= -3 ? "amber" : "gray",
+    });
+  }
+
+  // Line Move
+  if (marketData.lineOpenAmerican === null || marketData.priceAmerican === null) {
+    rows.push({ label: "Line Move", evidence: "Open → Current", delta: "unavailable", tone: "gray" });
+  } else {
+    const dir = moveDirection(marketData.lineOpenAmerican, marketData.priceAmerican);
+    const arrow = dir === "toward" ? "↗" : dir === "against" ? "↘" : "→";
+    rows.push({
+      label: "Line Move",
+      evidence: `${formatAmerican(marketData.lineOpenAmerican)} → ${formatAmerican(marketData.priceAmerican)}`,
+      delta: arrow,
+      tone: dir === "toward" ? "emerald" : dir === "against" ? "amber" : "gray",
+    });
+  }
+
+  return (
+    <div className="min-w-0">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80 mb-1.5">
+        Edge Stack · {MARKET_LONG_LABEL[market]}
+      </p>
+      <div className="space-y-1.5">
+        {rows.map((r) => (
+          <div key={r.label} className="grid grid-cols-[88px_1fr_auto] items-baseline gap-3">
+            <span className="text-[10px] uppercase tracking-[0.14em] font-semibold text-gray-500">{r.label}</span>
+            <span className="text-[12px] text-gray-300 tabular-nums leading-snug">{r.evidence}</span>
+            <span
+              className={`text-[12px] font-black tabular-nums leading-snug whitespace-nowrap ${
+                r.tone === "emerald" ? "text-emerald-300" : r.tone === "amber" ? "text-amber-300" : "text-gray-500"
+              }`}
+            >
+              {r.delta}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MarketPulse({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
+  const hasSplits = marketData.moneyPct !== null && marketData.betsPct !== null;
+
+  // First-inning never uses split copy — locked fallback per 4.1.10.
+  if (market === "first_inning") {
+    return (
+      <div className="space-y-1.5">
+        <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse</p>
+        <p className="text-[11.5px] text-gray-400 leading-snug">
+          No first-inning public split data. Model, price, and matchup factors shown below.
+        </p>
+      </div>
+    );
+  }
+
+  if (!hasSplits) {
+    return (
+      <div className="space-y-1.5">
+        <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse</p>
+        <p className="text-[11.5px] text-gray-500 leading-snug">No public split data available for this market.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse</p>
+      <div className="space-y-1">
+        <SplitBar label="Money" pct={marketData.moneyPct ?? 0} />
+        <SplitBar label="Bets" pct={marketData.betsPct ?? 0} />
+      </div>
+    </div>
+  );
+}
+
+function SplitBar({ label, pct }: { label: string; pct: number }) {
+  const v = Math.max(0, Math.min(100, pct));
+  return (
+    <div className="grid grid-cols-[40px_1fr_36px] items-center gap-2">
+      <span className="text-[9.5px] uppercase tracking-[0.14em] text-gray-500 font-bold">{label}</span>
+      <div className="h-2 bg-white/[0.04] rounded-full overflow-hidden">
+        <div className="h-full bg-violet-400/70 rounded-full" style={{ width: `${v}%` }} />
+      </div>
+      <span className="text-[10.5px] tabular-nums text-gray-400 font-bold text-right">{Math.round(v)}%</span>
+    </div>
+  );
+}
+
+// ─── Key Stats helpers ─────────────────────────────────────────────────
+//
+// The DTO's KeyStatRow shape is awayValue/homeValue strings — already
+// beginner-formatted by lib/services/keyStatsFormatter.ts. The UI's job
+// here is to render them as TEAM-LABELED rows with a plain-English edge
+// interpretation chip ("PHI slight edge" / "Even") so a beginner can
+// immediately tell which team owns which number and who has the
+// advantage. All interpretation is derived from the existing label +
+// value strings — no DTO change required.
+//
+// Pitcher names are NOT shown yet — those require a DTO/API follow-up
+// (DB has games.home_pitcher_id / away_pitcher_id → players(first_name,
+// last_name) but the daily-edge route doesn't currently SELECT them).
+
+type KeyStatTone = "emerald" | "amber" | "sky" | "gray";
+
+type KeyStatInterpretation = {
+  /** Short chip text: "PHI slight edge", "Even", "Hitter-friendly", or null when no interpretation. */
+  edgeLine: string | null;
+  tone: KeyStatTone;
+  /** Which side to highlight in the team rows. Null = neither. */
+  winner: "away" | "home" | null;
+  /** True iff both away and home values are meaningful (drives the two-row vs one-row layout). */
+  twoSided: boolean;
+};
+
+function parsePctBetterWorse(v: string | null): number | null {
+  if (v === null) return null;
+  if (v === "league average") return 0;
+  const better = v.match(/(\d+)% better/);
+  if (better) return parseInt(better[1], 10);
+  const worse = v.match(/(\d+)% worse/);
+  if (worse) return -parseInt(worse[1], 10);
+  return null;
+}
+
+function parsePctStrongerWeaker(v: string | null): number | null {
+  if (v === null) return null;
+  if (v === "league average") return 0;
+  const stronger = v.match(/(\d+)% stronger/);
+  if (stronger) return parseInt(stronger[1], 10);
+  const weaker = v.match(/(\d+)% weaker/);
+  if (weaker) return -parseInt(weaker[1], 10);
+  return null;
+}
+
+function compareEdge(
+  diff: number,
+  slightThreshold: number,
+  clearThreshold: number,
+  awayBetterWhen: "positive" | "negative",
+  awayAbbr: string,
+  homeAbbr: string
+): { winner: "away" | "home" | null; line: string; tone: KeyStatTone } {
+  const abs = Math.abs(diff);
+  if (abs < slightThreshold) {
+    return { winner: null, line: "Even", tone: "gray" };
+  }
+  const isAway = awayBetterWhen === "positive" ? diff > 0 : diff < 0;
+  const winner: "away" | "home" = isAway ? "away" : "home";
+  const magnitude = abs >= clearThreshold ? "clear" : "slight";
+  return {
+    winner,
+    line: `${winner === "away" ? awayAbbr : homeAbbr} ${magnitude} edge`,
+    tone: "emerald",
+  };
+}
+
+/**
+ * For directional totals/FI stats, return a "supports / risk to / neutral"
+ * chip relative to the side the model picked. This prevents the UI from
+ * announcing "Leans YRFI" while the pick is NRFI — which is what the old
+ * pick-agnostic interpretation did. The numeric thresholds stay the same;
+ * what changes is the framing.
+ *
+ * `confirms` is true when the stat's natural direction agrees with the
+ * pick (e.g. high projected first-inning runs + YRFI pick), false when
+ * it contradicts (e.g. high projected first-inning runs + NRFI pick).
+ */
+function pickRelativeChip(
+  confirms: boolean,
+  pickLabel: string,
+  neutralLabel: string | null
+): { edgeLine: string; tone: KeyStatTone } | null {
+  if (neutralLabel !== null && !confirms) {
+    // Caller indicated we should suppress the conflict framing and just
+    // show the neutral label (used when the projection is on the fence).
+    return { edgeLine: neutralLabel, tone: "gray" };
+  }
+  if (confirms) return { edgeLine: `Supports ${pickLabel}`, tone: "emerald" };
+  return { edgeLine: `Risk to ${pickLabel}`, tone: "amber" };
+}
+
+function interpretKeyStat(
+  label: string,
+  awayValue: string | null,
+  homeValue: string | null,
+  awayAbbr: string,
+  homeAbbr: string,
+  market: MarketKey,
+  pick: string | null
+): KeyStatInterpretation {
+  // Two-sided ML stats ────────────────────────────────────────────────
+  if (label === "Starter ERA" && awayValue !== null && homeValue !== null) {
+    const a = parseFloat(awayValue);
+    const h = parseFloat(homeValue);
+    if (!Number.isFinite(a) || !Number.isFinite(h)) {
+      return { edgeLine: null, tone: "gray", winner: null, twoSided: true };
+    }
+    // Lower ERA is better → away wins when (a - h) is NEGATIVE.
+    const cmp = compareEdge(a - h, 0.20, 0.50, "negative", awayAbbr, homeAbbr);
+    return { edgeLine: cmp.line, tone: cmp.tone, winner: cmp.winner, twoSided: true };
+  }
+
+  if (label === "Lineup OPS (weighted)" && awayValue !== null && homeValue !== null) {
+    const a = parseFloat(awayValue);
+    const h = parseFloat(homeValue);
+    if (!Number.isFinite(a) || !Number.isFinite(h)) {
+      return { edgeLine: null, tone: "gray", winner: null, twoSided: true };
+    }
+    // Higher OPS is better → away wins when (a - h) is POSITIVE.
+    const cmp = compareEdge(a - h, 0.020, 0.050, "positive", awayAbbr, homeAbbr);
+    return { edgeLine: cmp.line, tone: cmp.tone, winner: cmp.winner, twoSided: true };
+  }
+
+  if (label === "Bullpen quality" && awayValue !== null && homeValue !== null) {
+    const a = parsePctBetterWorse(awayValue);
+    const h = parsePctBetterWorse(homeValue);
+    if (a === null || h === null) {
+      return { edgeLine: null, tone: "gray", winner: null, twoSided: true };
+    }
+    // Higher score (= more "better-than-league") is better.
+    const cmp = compareEdge(a - h, 3, 7, "positive", awayAbbr, homeAbbr);
+    return { edgeLine: cmp.line, tone: cmp.tone, winner: cmp.winner, twoSided: true };
+  }
+
+  if (label === "Lineup vs starter" && awayValue !== null && homeValue !== null) {
+    const a = parsePctStrongerWeaker(awayValue);
+    const h = parsePctStrongerWeaker(homeValue);
+    if (a === null || h === null) {
+      return { edgeLine: null, tone: "gray", winner: null, twoSided: true };
+    }
+    // Higher score (= stronger matchup) is better.
+    const cmp = compareEdge(a - h, 3, 7, "positive", awayAbbr, homeAbbr);
+    return { edgeLine: cmp.line, tone: cmp.tone, winner: cmp.winner, twoSided: true };
+  }
+
+  // Single-value totals stats ─────────────────────────────────────────
+  // Park factor + Weather adjust have natural directions: positive →
+  // more runs (favors Over), negative → fewer runs (favors Under). We
+  // frame the chip relative to the model's Over/Under pick so the UI
+  // never tells the user the stat "leans" the opposite side from the
+  // pick. When the pick is missing, fall back to the older neutral
+  // copy.
+  const pickOverUnder: "over" | "under" | null =
+    market === "total" && pick !== null
+      ? (pick.toLowerCase().startsWith("over") ? "over" : pick.toLowerCase().startsWith("under") ? "under" : null)
+      : null;
+
+  if (label === "Park factor" && homeValue !== null) {
+    if (homeValue === "neutral") {
+      return { edgeLine: "Neutral park", tone: "gray", winner: null, twoSided: false };
+    }
+    const m = homeValue.match(/([+-]?\d+)% runs/);
+    if (m) {
+      const pct = parseInt(m[1], 10);
+      // Magnitude has to clear ±3% to count as directional.
+      if (Math.abs(pct) < 3) {
+        return { edgeLine: "Neutral park", tone: "gray", winner: null, twoSided: false };
+      }
+      // Pick-agnostic fallback when we don't have a clear Over/Under context.
+      if (pickOverUnder === null) {
+        return {
+          edgeLine: pct >= 3 ? "Hitter-friendly" : "Pitcher-friendly",
+          tone: pct >= 3 ? "emerald" : "sky",
+          winner: null,
+          twoSided: false,
+        };
+      }
+      const favorsOver = pct >= 3;
+      const confirms = (pickOverUnder === "over") === favorsOver;
+      const chip = pickRelativeChip(confirms, pickOverUnder === "over" ? "Over" : "Under", null);
+      return { edgeLine: chip?.edgeLine ?? null, tone: chip?.tone ?? "gray", winner: null, twoSided: false };
+    }
+    return { edgeLine: null, tone: "gray", winner: null, twoSided: false };
+  }
+
+  if (label === "Weather adjust" && homeValue !== null) {
+    if (homeValue === "neutral") {
+      return { edgeLine: "Neutral", tone: "gray", winner: null, twoSided: false };
+    }
+    const m = homeValue.match(/([+-]?\d*\.?\d+) runs/);
+    if (m) {
+      const v = parseFloat(m[1]);
+      if (Math.abs(v) < 0.3) {
+        return { edgeLine: "Neutral", tone: "gray", winner: null, twoSided: false };
+      }
+      if (pickOverUnder === null) {
+        return {
+          edgeLine: v >= 0.3 ? "Boosts runs" : "Suppresses runs",
+          tone: v >= 0.3 ? "emerald" : "amber",
+          winner: null,
+          twoSided: false,
+        };
+      }
+      const favorsOver = v >= 0.3;
+      const confirms = (pickOverUnder === "over") === favorsOver;
+      const chip = pickRelativeChip(confirms, pickOverUnder === "over" ? "Over" : "Under", null);
+      return { edgeLine: chip?.edgeLine ?? null, tone: chip?.tone ?? "gray", winner: null, twoSided: false };
+    }
+    return { edgeLine: null, tone: "gray", winner: null, twoSided: false };
+  }
+
+  // Single-value first-inning stats ───────────────────────────────────
+  // Projected first-inning runs is the model's actual NRFI/YRFI driver.
+  // The zone boundaries here MIRROR the model's published thresholds in
+  // lib/automodel/types.ts (NRFI_THRESHOLD_LEAN = 0.85, YRFI_THRESHOLD_LEAN
+  // = 1.15) so the displayed chip stays consistent with the pick label
+  // ("Toss-Up" for the [0.85, 1.15) Toss-Up band).
+  if (label === "Projected 1st-inning runs" && homeValue !== null) {
+    const v = parseFloat(homeValue);
+    if (!Number.isFinite(v)) {
+      return { edgeLine: null, tone: "gray", winner: null, twoSided: false };
+    }
+    // Toss-Up band — model is neutral here. Pick-agnostic chip in gray
+    // matches the "Toss-Up" pick label rendered by the route.
+    if (v >= 0.85 && v < 1.15) {
+      return { edgeLine: "Toss-up", tone: "gray", winner: null, twoSided: false };
+    }
+    const favorsYrfi = v >= 1.15;
+    const fiPickLabel: "NRFI" | "YRFI" | null =
+      market === "first_inning" && pick !== null
+        ? (pick.toUpperCase().startsWith("YRFI") ? "YRFI" : pick.toUpperCase().startsWith("NRFI") ? "NRFI" : null)
+        : null;
+    if (fiPickLabel === null) {
+      // No clean NRFI/YRFI pick (e.g. pick === "Toss-Up"). Show the
+      // projection's natural direction without pick-relative framing.
+      return {
+        edgeLine: favorsYrfi ? "Leans YRFI" : "Leans NRFI",
+        tone: favorsYrfi ? "amber" : "emerald",
+        winner: null,
+        twoSided: false,
+      };
+    }
+    const confirms = (fiPickLabel === "YRFI") === favorsYrfi;
+    const chip = pickRelativeChip(confirms, fiPickLabel, null);
+    return { edgeLine: chip?.edgeLine ?? null, tone: chip?.tone ?? "gray", winner: null, twoSided: false };
+  }
+
+  if (label === "Top-of-order data" && homeValue !== null) {
+    // The value already says "Available" / "Unavailable" — no extra chip needed.
+    return { edgeLine: null, tone: "gray", winner: null, twoSided: false };
+  }
+
+  // Fallback: unknown stat — show as one or two rows depending on what's present.
+  const twoSided = awayValue !== null && homeValue !== null;
+  return { edgeLine: null, tone: "gray", winner: null, twoSided };
+}
+
+function TeamStatRow({
+  abbr,
+  value,
+  highlight,
+}: {
+  abbr: string;
+  value: string;
+  highlight: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <span
+        className={`text-[10.5px] uppercase tracking-[0.10em] font-bold ${
+          highlight ? "text-emerald-300" : "text-gray-400"
+        }`}
+      >
+        {abbr}
+      </span>
+      <span
+        className={`text-[11.5px] tabular-nums ${
+          highlight ? "text-emerald-200 font-semibold" : "text-gray-300"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function KEY_STAT_TONE_TEXT(tone: KeyStatTone): string {
+  if (tone === "emerald") return "text-emerald-300";
+  if (tone === "amber") return "text-amber-300";
+  if (tone === "sky") return "text-sky-300";
+  return "text-gray-500";
+}
+
+function MarketNotes({
+  marketData,
+  awayAbbr,
+  homeAbbr,
+  market,
+}: {
+  marketData: MarketEdgeDto;
+  awayAbbr: string;
+  homeAbbr: string;
+  market: MarketKey;
+}) {
+  return (
+    <div className="space-y-2.5">
+      {/* Key Stats — team-labeled with plain-English edge interpretation */}
+      {marketData.keyStats.length > 0 && (
+        <section className="space-y-1.5">
+          <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/70">Key Stats</p>
+          <div className="space-y-2.5">
+            {marketData.keyStats.map((s) => {
+              const interp = interpretKeyStat(
+                s.label,
+                s.awayValue,
+                s.homeValue,
+                awayAbbr,
+                homeAbbr,
+                market,
+                marketData.pick,
+              );
+              return (
+                <div key={s.label} className="space-y-0.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-[10.5px] uppercase tracking-[0.12em] text-gray-400 font-semibold">{s.label}</p>
+                    {interp.edgeLine !== null && (
+                      <span className={`text-[10px] font-semibold tracking-tight ${KEY_STAT_TONE_TEXT(interp.tone)}`}>
+                        {interp.edgeLine}
+                      </span>
+                    )}
+                  </div>
+                  {interp.twoSided ? (
+                    <div className="space-y-0">
+                      <TeamStatRow
+                        abbr={awayAbbr}
+                        value={s.awayValue ?? "—"}
+                        highlight={interp.winner === "away"}
+                      />
+                      <TeamStatRow
+                        abbr={homeAbbr}
+                        value={s.homeValue ?? "—"}
+                        highlight={interp.winner === "home"}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-[11.5px] tabular-nums text-gray-300">
+                      {s.homeValue ?? s.awayValue ?? "—"}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+      <div className="border-t border-white/[0.04]" />
+      <section className="space-y-1">
+        <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/70">Market Notes</p>
+        <div className="space-y-1.5">
+          <ReadLine label="Why" body={marketData.whyLine} />
+          <ReadLine label="Risk" body={marketData.riskLine} tone="amber" />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ReadLine({ label, body, tone = "default" }: { label: string; body: string; tone?: "default" | "amber" }) {
+  return (
+    <div className="grid grid-cols-[42px_1fr] gap-2 items-start">
+      <span
+        className={`text-[9.5px] uppercase tracking-[0.14em] font-bold ${
+          tone === "amber" ? "text-amber-300" : "text-gray-500"
+        }`}
+      >
+        {label}
+      </span>
+      <p className="text-[12px] text-gray-300 leading-snug">{body}</p>
+    </div>
+  );
+}
+
+// ─── Verdict-aware card chrome ─────────────────────────────────────────
+
+/**
+ * Verdict treatment on the slate card — visual weight only, never a sort
+ * key. Top-edge accent + border tone + headline-market chip tint do the
+ * hierarchy work. No container gradients (kept solid `bg-[#0D0D14]`) —
+ * gradients muddied the look in the previous pass.
+ */
+/**
+ * Verdict treatment — consistent system across all 5 states. Only
+ * best_angle gets the subtle glow (it's the premium pop). All others
+ * use a 3px solid top-edge accent of the verdict tone + matched border
+ * tone. Headline-market chip tint stays soft so it whispers rather
+ * than shouts. The five cards should read as one product, not five.
+ */
+const CARD_TREATMENT: Record<VerdictKey, {
+  topAccent: string;        // top-edge color strip (3px, same height for all)
+  ring: string;             // border / hover when not active
+  headlineMarketBg: string; // tint behind the headline market chip
+}> = {
+  best_angle: {
+    topAccent: "bg-emerald-400/80 shadow-[0_0_10px_-2px_rgba(52,211,153,0.40)]",
+    ring: "border-emerald-500/25 hover:border-emerald-400/45",
+    headlineMarketBg: "bg-emerald-500/[0.07] border-emerald-500/25",
+  },
+  // Lean → INDIGO (v3 palette). Own hue identity, distinct from
+  // emerald (Best Angle) AND violet (selected). Subtle saturation —
+  // Best Angle outshines via glow + brighter pill tint + ★ glyph.
+  // NOTE: the top-edge accent isn't applied to cards anymore
+  // (team-color gradient replaced it), so topAccent here is dead —
+  // kept for type completeness.
+  lean: {
+    topAccent: "bg-indigo-400/40",
+    ring: "border-indigo-500/15 hover:border-indigo-400/35",
+    headlineMarketBg: "bg-indigo-500/[0.05] border-indigo-500/20",
+  },
+  // Watchlist → SKY (repurposed from Lean). Cool blue informational tone
+  // applied only to the smaller subset of games that actually have a
+  // Watchlist somewhere.
+  watchlist: {
+    topAccent: "bg-sky-400/65",
+    ring: "border-sky-500/20 hover:border-sky-400/40",
+    headlineMarketBg: "bg-sky-500/[0.06] border-sky-500/25",
+  },
+  caution: {
+    topAccent: "bg-amber-400/70",
+    ring: "border-amber-500/20 hover:border-amber-400/40",
+    headlineMarketBg: "bg-amber-500/[0.06] border-amber-500/25",
+  },
+  no_play: {
+    topAccent: "bg-gray-700/45",
+    ring: "border-white/[0.04] hover:border-white/[0.08]",
+    headlineMarketBg: "bg-white/[0.025] border-white/[0.07]",
+  },
+};
+
+const ACTIVE_RING =
+  "border-violet-400/55 shadow-[0_0_0_1px_rgba(167,139,250,0.30),0_8px_28px_-8px_rgba(167,139,250,0.40),inset_0_1px_0_0_rgba(167,139,250,0.18)]";
+
+/**
+ * Shared base depth treatment applied to every slate card regardless of
+ * verdict. This is what makes the cards feel like premium clickable
+ * panels — a faint top-to-bottom gradient, a 1px inset highlight, and a
+ * soft drop shadow. Verdict-specific styling (top accent strip, ring
+ * tone) layers on top of this baseline.
+ */
+const CARD_BASE_DEPTH =
+  "bg-gradient-to-b from-white/[0.03] via-white/[0.005] to-black/[0.10] " +
+  "shadow-[0_4px_16px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] " +
+  "hover:shadow-[0_8px_22px_-6px_rgba(0,0,0,0.65),inset_0_1px_0_0_rgba(255,255,255,0.08)]";
+
+// ─── SlateCard ─────────────────────────────────────────────────────────
+
+/**
+ * Premium slate card. Renders matchup + time + decision line + 3 market
+ * pills + sharp glyphs + a "View breakdown" affordance.
+ *
+ * Verdict treatment lives in CARD_TREATMENT — visual weight only, never
+ * a sort key. Game-time order is preserved.
+ *
+ * Card is the click target (the entire surface) on both desktop and
+ * mobile. On desktop/tablet the shell renders an inline ExpandedReader
+ * underneath this card when expanded; on mobile the shell opens a
+ * MobileDetailSheet portal instead.
+ */
+function SlateCard({
+  game,
+  active,
+  activeMarket,
+  onSelectGame,
+  onSelectMarket,
+}: {
+  game: DailyEdgeGameDto;
+  /** True when this card is the one currently shown in the reader. */
+  active: boolean;
+  /** Which market the reader is currently showing for this game (only meaningful when `active`). */
+  activeMarket: MarketKey | null;
+  /** Card body click — selects game with its headline market. */
+  onSelectGame: () => void;
+  /** Market chip click — selects game with the chip's market. */
+  onSelectMarket: (m: MarketKey) => void;
+}) {
+  const headlineMarket = headlineMarketFor(game);
+  const headlineMarketData = game.markets[headlineMarket];
+  const headlineVerdict = asVerdictKey(headlineMarketData.verdict.key);
+  const t = CARD_TREATMENT[headlineVerdict];
+
+  return (
+    <article
+      role="button"
+      tabIndex={0}
+      aria-pressed={active}
+      onClick={onSelectGame}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelectGame();
+        }
+      }}
+      className={`group relative rounded-xl overflow-hidden border cursor-pointer transition-all bg-[#0D0D14] ${CARD_BASE_DEPTH} ${
+        active ? ACTIVE_RING : t.ring
+      }`}
+    >
+      {/* Top-edge accent — team-color gradient (away → home). Carries
+          team identity at the very top of the card. The 3px strip stays
+          the same geometry as before; verdict signal is now carried by
+          the per-market pill tints below + the top-right verdict chip +
+          the per-market verdict strip. */}
+      <div
+        className="h-[3px] w-full"
+        aria-hidden="true"
+        style={{
+          background: `linear-gradient(to right, ${teamPrimaryColor(game.awayTeam)} 0%, ${teamPrimaryColor(game.awayTeam)} 28%, rgba(255,255,255,0.06) 50%, ${teamPrimaryColor(game.homeTeam)} 72%, ${teamPrimaryColor(game.homeTeam)} 100%)`,
+        }}
+      />
+
+      <div className="p-5">
+        {/* Team row + verdict + time. Cleaner: logos and abbrs only, no
+            Away/Home micro-labels. The order conveys it. */}
+        <div className="flex items-center justify-between gap-3 mb-3.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={36} />
+            <span className="text-[16px] font-bold text-gray-100 tabular-nums" style={{ letterSpacing: "-0.01em" }}>
+              {game.awayTeam}
+            </span>
+            <span className="text-gray-700 text-[13px]">@</span>
+            <span className="text-[16px] font-bold text-gray-100 tabular-nums" style={{ letterSpacing: "-0.01em" }}>
+              {game.homeTeam}
+            </span>
+            <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={36} />
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <VerdictChip verdict={headlineVerdict} />
+            <span className="text-[11px] text-gray-500 tabular-nums">{game.gameTime}</span>
+          </div>
+        </div>
+
+        {/* Headline pick — the visual focal point. Edge chip surfaces a
+            single quiet badge when the pick has meaningful value/edge
+            data ("+2.6% value", "Model edge", "Market support"). */}
+        <div className="flex items-baseline gap-2 mb-2.5 flex-wrap">
+          <span
+            className="text-[28px] font-black tabular-nums leading-none text-white"
+            style={{ letterSpacing: "-0.03em" }}
+          >
+            {headlineMarketData.pick ?? "—"}
+          </span>
+          <span className="text-[11px] uppercase tracking-[0.14em] text-gray-500 font-bold">
+            {MARKET_SHORT_LABEL[headlineMarket]}
+          </span>
+          <span className="text-[13px] tabular-nums font-bold text-gray-300">
+            {Math.round(headlineMarketData.confidence * 100)}%
+          </span>
+          {headlineMarketData.priceAmerican !== null && (
+            <span className="text-[12px] tabular-nums font-medium text-gray-500 ml-1">
+              {formatAmerican(headlineMarketData.priceAmerican)}
+            </span>
+          )}
+          {(() => {
+            const chip = buildCardEdgeChip(headlineMarketData);
+            if (chip === null) return null;
+            const tone =
+              chip.tone === "emerald"
+                ? "bg-emerald-500/[0.10] text-emerald-200 border-emerald-500/25"
+                : chip.tone === "sky"
+                ? "bg-sky-500/[0.10] text-sky-200 border-sky-500/25"
+                : chip.tone === "amber"
+                ? "bg-amber-500/[0.10] text-amber-200 border-amber-500/25"
+                : "bg-white/[0.04] text-gray-300 border-white/[0.08]";
+            return (
+              <span
+                className={`ml-auto inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase tracking-[0.12em] font-bold whitespace-nowrap border ${tone}`}
+              >
+                {chip.label}
+              </span>
+            );
+          })()}
+        </div>
+
+        {/* Decision line — softer color, single tight line */}
+        <p className="text-[12.5px] text-gray-500 leading-snug mb-2 line-clamp-2">{game.decisionLine}</p>
+
+        {/* Projection — model's per-team run estimate, scannable from
+            the grid without opening the reader. Compact one-liner: small
+            "PROJ" eyebrow + team-labeled run values. No chip, no border.
+            Numbers brightened to text-white + font-black for stronger
+            contrast against the muted PROJ + abbr labels — same line
+            height, no card-height growth. */}
+        <div className="flex items-baseline gap-2 mb-2.5">
+          <span className="text-[9px] uppercase tracking-[0.14em] font-bold text-gray-500/85 shrink-0">
+            Proj
+          </span>
+          <span className="text-[11px] tabular-nums">
+            <span className="text-gray-500 mr-1">{game.awayTeam}</span>
+            <span className="text-white font-black">{game.projected.away.toFixed(1)}</span>
+            <span aria-hidden="true" className="text-gray-700 mx-1.5">·</span>
+            <span className="text-gray-500 mr-1">{game.homeTeam}</span>
+            <span className="text-white font-black">{game.projected.home.toFixed(1)}</span>
+          </span>
+        </div>
+
+        {/* Per-market verdict strip — quietly communicates the spread
+            across ML / Total / 1st so the eye registers that the
+            headline chip is one market of three. The market label is
+            muted; the verdict glyph + label carries the tone. Subtle
+            saturation keeps three different tones from feeling busy. */}
+        <div className="flex items-center justify-between gap-1 mb-3 px-0.5 text-[10px] uppercase tracking-[0.10em] font-bold whitespace-nowrap overflow-hidden">
+          {(["moneyline", "total", "first_inning"] as MarketKey[]).map((m, i) => {
+            const v = asVerdictKey(game.markets[m].verdict.key);
+            return (
+              <span key={m} className="inline-flex items-center gap-1 min-w-0">
+                {i > 0 && <span aria-hidden="true" className="text-gray-700 mr-1">·</span>}
+                <span className="text-gray-500">{MARKET_SHORT_LABEL[m]}</span>
+                <span className={VERDICT_TEXT_COLOR[v]}>
+                  <span aria-hidden="true" className="mr-0.5">{VERDICT_GLYPH[v]}</span>
+                  <span>{VERDICT_LABEL[v]}</span>
+                </span>
+              </span>
+            );
+          })}
+        </div>
+
+        {/* Market chips. Cleaner: drop the verdict glyph inside each chip
+            (the top-edge accent + headline tint already carry verdict).
+            Less visual noise. Confidence stays on the headline pick only.
+            stopPropagation so chip click doesn't fire the card-body handler. */}
+        {/* Market pills — each one now tinted by ITS OWN market's verdict
+            so the user can scan ML / Total / 1st verdicts at a glance.
+            Active state (violet) overrides the verdict tint when the
+            reader is showing this market. Total pill includes the line. */}
+        <div className="grid grid-cols-3 gap-1.5 mb-3.5">
+          {(["moneyline", "total", "first_inning"] as MarketKey[]).map((m) => {
+            const md = game.markets[m];
+            const mv = asVerdictKey(md.verdict.key);
+            const isActiveMarket = active && activeMarket === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectMarket(m);
+                }}
+                className={`text-left px-2.5 py-1.5 rounded-md border transition-colors ${
+                  isActiveMarket
+                    ? "bg-violet-500/[0.16] border-violet-400/50"
+                    : VERDICT_PILL_TINT[mv]
+                }`}
+              >
+                <span
+                  className={`block text-[9.5px] uppercase tracking-[0.14em] font-bold mb-0.5 ${
+                    isActiveMarket ? "text-violet-200/85" : VERDICT_TEXT_COLOR[mv]
+                  }`}
+                >
+                  {MARKET_SHORT_LABEL[m]}
+                </span>
+                <span className="block text-[12.5px] font-bold tabular-nums text-gray-100 truncate">
+                  {formatPickWithLine(m, md.pick, md.line)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Action affordance — slimmer, link-style. The whole card is a
+            click target anyway; this is just the eye-cue. */}
+        <div className="flex items-center justify-end">
+          <span
+            className={`inline-flex items-center gap-1 text-[10.5px] uppercase tracking-[0.16em] font-bold transition-colors ${
+              active ? "text-violet-200" : "text-violet-200/70 group-hover:text-violet-200"
+            }`}
+          >
+            {active ? "In the reader" : "View breakdown"}
+            <span aria-hidden="true" className="text-[11px]">↑</span>
+          </span>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// ─── SelectedEdgeReader (top-of-page, compact-default) ─────────────────
+
+/**
+ * Selected Edge reader. Lives at the top of the slate page (NOT sticky —
+ * scrolls away naturally as the user browses the board). Compact mode is
+ * the resting state — ~110px tall identity row + helper + market tabs +
+ * one-line guide + Expand affordance. Full mode opt-in shows the same
+ * three-column body the locked v1 reader used.
+ *
+ * Reader state lives in the parent shell so card clicks update what's
+ * shown here. The reader itself only owns the compact/full toggle.
+ */
+function SelectedEdgeReader({
+  game,
+  market,
+  marketData,
+  mode,
+  onMarketChange,
+  onExpand,
+  onCollapse,
+}: {
+  game: DailyEdgeGameDto;
+  market: MarketKey;
+  marketData: MarketEdgeDto;
+  mode: "compact" | "full";
+  onMarketChange: (m: MarketKey) => void;
+  onExpand: () => void;
+  onCollapse: () => void;
+}) {
+  const verdict = asVerdictKey(marketData.verdict.key);
+
+  return (
+    <section
+      aria-label="Selected Edge"
+      className={
+        "relative bg-[#0D0D14] " +
+        // Subtle vertical depth gradient + bottom darken so the panel
+        // feels like a contained surface, not flat dark space.
+        "bg-gradient-to-b from-violet-500/[0.045] via-white/[0.005] to-black/[0.18] " +
+        // Stronger violet border than the prior 0.22 — reads as an
+        // intentional premium container without becoming loud.
+        "border border-violet-400/40 rounded-xl overflow-hidden " +
+        // Stronger drop shadow + inset violet ring + inset top
+        // highlight: the combo makes it visibly hover above the slate
+        // grid below without adding height.
+        "shadow-[0_12px_36px_-12px_rgba(167,139,250,0.32),0_0_0_1px_rgba(167,139,250,0.10),inset_0_1px_0_0_rgba(167,139,250,0.10)]"
+      }
+    >
+      {/* Header — two clear rows: title row + meta row. Less inline-dot noise. */}
+      <div className="px-5 pt-3.5 pb-3 border-b border-white/[0.05] bg-gradient-to-r from-violet-500/[0.07] via-violet-500/[0.015] to-transparent">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <span aria-hidden="true" className="w-1 h-3.5 rounded-full bg-violet-400/85 shadow-[0_0_6px_rgba(167,139,250,0.35)]" />
+            <h2 className="text-[10.5px] uppercase tracking-[0.18em] font-bold text-violet-200/95 whitespace-nowrap">
+              Selected Edge
+            </h2>
+            <span className="hidden sm:inline text-[11px] text-gray-500 ml-2">
+              Click any game below to update this read.
+            </span>
+          </div>
+          {mode === "full" ? (
+            <button
+              type="button"
+              onClick={onCollapse}
+              aria-label="Collapse reader"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-violet-400/60 bg-violet-500/[0.22] text-[10.5px] uppercase tracking-[0.14em] font-bold text-violet-50 hover:bg-violet-500/[0.32] hover:border-violet-300/75 shadow-[0_0_0_1px_rgba(167,139,250,0.10),0_4px_12px_-6px_rgba(139,92,246,0.35)] transition-colors whitespace-nowrap"
+            >
+              Collapse read <span aria-hidden="true">↑</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onExpand}
+              aria-label="Expand full read"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-violet-400/60 bg-violet-500/[0.18] text-[10.5px] uppercase tracking-[0.14em] font-bold text-violet-50 hover:bg-violet-500/[0.28] hover:border-violet-300/75 shadow-[0_0_0_1px_rgba(167,139,250,0.10),0_4px_12px_-6px_rgba(139,92,246,0.35)] transition-colors whitespace-nowrap"
+            >
+              Expand full read <span aria-hidden="true">↓</span>
+            </button>
+          )}
+        </div>
+
+        {/* Matchup + verdict + time row. The verdict chip carries an
+            "Action" prefix here so the user reads it as the
+            actionability rating ("Watchlist", "Lean"), not as another
+            pick label. The actual pick lives in the segmented selector
+            below + the compact "Pick" block. */}
+        <div className="mt-2 flex items-center gap-2 flex-wrap">
+          <span className="text-[16px] font-bold text-gray-100 whitespace-nowrap" style={{ letterSpacing: "-0.01em" }}>
+            {game.awayTeam} <span className="text-gray-700 font-normal mx-0.5">@</span> {game.homeTeam}
+          </span>
+          <VerdictChip verdict={verdict} showActionPrefix />
+          <span className="text-[11px] text-gray-500 tabular-nums">{game.gameTime}</span>
+        </div>
+
+        {/* Market selector — segmented buttons. One per market with pick +
+            confidence + verdict glyph. Replaces the older tiny-chip row. */}
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {(["moneyline", "total", "first_inning"] as MarketKey[]).map((m) => (
+            <ReaderMarketSegment
+              key={m}
+              market={m}
+              pick={game.markets[m].pick}
+              line={game.markets[m].line}
+              confidence={game.markets[m].confidence}
+              verdict={asVerdictKey(game.markets[m].verdict.key)}
+              selected={market === m}
+              onClick={() => onMarketChange(m)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {mode === "compact" ? (
+        /* Compact body — structured 3-panel quick summary. Each panel
+           sits in its own slot so the eye lands cleanly on each piece
+           instead of skimming over loose text. Bottom row is the
+           beginner-friendly guide sentence spanning the full width.
+           Total height stays compact (no taller than the previous
+           layout); the difference is hierarchy, not size. */
+        <div className="px-5 py-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-2 items-stretch divide-y sm:divide-y-0 sm:divide-x divide-white/[0.05]">
+            {/* ── Left: Pick block ────────────────────────────────────── */}
+            <div className="pb-2 sm:pb-0 sm:pr-3 min-w-0">
+              <p className="text-[9px] uppercase tracking-[0.16em] font-bold text-gray-500/85 mb-1.5">Pick</p>
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-1 shrink-0">
+                  <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={28} />
+                  <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={28} />
+                </div>
+                <div className="flex flex-col min-w-0 leading-tight">
+                  <span className="text-[18px] font-black tabular-nums text-white truncate" style={{ letterSpacing: "-0.02em" }}>
+                    {marketData.pick ?? "—"}
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="text-[9.5px] uppercase tracking-[0.14em] text-violet-200/75 font-bold">
+                      {MARKET_SHORT_LABEL[market]}
+                    </span>
+                    <span aria-hidden="true" className="text-gray-700 text-[10px]">·</span>
+                    <span className="text-[11px] tabular-nums font-bold text-gray-200">
+                      {Math.round(marketData.confidence * 100)}%
+                    </span>
+                    {marketData.priceAmerican !== null && (
+                      <>
+                        <span aria-hidden="true" className="text-gray-700 text-[10px]">·</span>
+                        <span className="text-[11px] tabular-nums font-medium text-gray-400">
+                          {formatAmerican(marketData.priceAmerican)}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Middle: Edge block ──────────────────────────────────── */}
+            <div className="py-2 sm:py-0 sm:px-3 min-w-0">
+              {(() => {
+                const edge = buildEdgeRow(market, marketData);
+                if (edge === null) {
+                  return (
+                    <>
+                      <p className="text-[9px] uppercase tracking-[0.16em] font-bold text-gray-500/85 mb-1.5">Edge</p>
+                      <p className="text-[12.5px] text-gray-500 italic leading-snug">
+                        Awaiting market signal
+                      </p>
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    <p className="text-[9px] uppercase tracking-[0.16em] font-bold text-gray-500/85 mb-1.5">
+                      {edge.label}
+                    </p>
+                    <p className={`text-[13.5px] tabular-nums font-bold leading-snug ${EDGE_TONE_TEXT[edge.tone]}`}>
+                      {edge.value}
+                    </p>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* ── Right: Projection block ─────────────────────────────── */}
+            <div className="pt-2 sm:pt-0 sm:pl-3 min-w-0">
+              <p className="text-[9px] uppercase tracking-[0.16em] font-bold text-gray-500/85 mb-1.5">Projection</p>
+              <p
+                className="text-[16px] tabular-nums font-black text-white leading-snug"
+                style={{ letterSpacing: "-0.01em" }}
+              >
+                <span className="text-[11px] text-gray-500 font-bold mr-1">{game.awayTeam}</span>
+                {game.projected.away.toFixed(1)}
+                <span aria-hidden="true" className="text-gray-700 mx-1.5">·</span>
+                <span className="text-[11px] text-gray-500 font-bold mr-1">{game.homeTeam}</span>
+                {game.projected.home.toFixed(1)}
+              </p>
+            </div>
+          </div>
+
+          {/* Bottom row — plain-English guide sentence, spans full width */}
+          <p className="mt-3 pt-2.5 border-t border-white/[0.05] text-[12.5px] text-gray-400 leading-snug line-clamp-2">
+            {marketData.guidedGuide}
+          </p>
+        </div>
+      ) : (
+        /* Full body — 3-column expanded read */
+        <div className="px-4 sm:px-5 py-3">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] gap-5">
+            <QuickRead game={game} market={market} marketData={marketData} />
+            <div className="min-w-0 space-y-2">
+              <div className="flex items-center gap-2 pb-1 border-b border-white/[0.06]">
+                <span aria-hidden="true" className="w-1 h-3.5 rounded-full bg-violet-400/60 shadow-[0_0_6px_rgba(167,139,250,0.22)]" />
+                <p className="text-[10.5px] uppercase tracking-[0.18em] font-bold text-violet-200/75">Supporting Evidence</p>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)] gap-5">
+                <div className="space-y-2.5">
+                  <EdgeStack market={market} marketData={marketData} />
+                  <div className="border-t border-white/[0.04]" />
+                  <MarketPulse market={market} marketData={marketData} />
+                </div>
+                <MarketNotes
+                  marketData={marketData}
+                  awayAbbr={game.awayTeam}
+                  homeAbbr={game.homeTeam}
+                  market={market}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── MobileDetailSheet (full-screen portal) ────────────────────────────
+
+/**
+ * Full-screen bottom-sheet detail for mobile. Locks body scroll while open
+ * and closes on scrim tap / × tap. Same content surface as ExpandedReader.
+ */
+function MobileDetailSheet({
+  game,
+  onClose,
+  selectedMarket,
+  onMarketChange,
+  onPrev,
+  onNext,
+  index,
+  total,
+}: {
+  game: DailyEdgeGameDto;
+  onClose: () => void;
+  selectedMarket: MarketKey;
+  onMarketChange: (m: MarketKey) => void;
+  /** Called when user taps the prev chevron. Null = at first game, disable button. */
+  onPrev: (() => void) | null;
+  /** Called when user taps the next chevron. Null = at last game, disable button. */
+  onNext: (() => void) | null;
+  /** 1-indexed position for the "3 of 12" caption. */
+  index: number;
+  total: number;
+}) {
+  const marketData = pickMarket(game, selectedMarket);
+
+  // Lock body scroll while open.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true">
+      {/* Scrim */}
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      {/* Sheet */}
+      <div className="absolute inset-x-0 bottom-0 top-12 bg-[#0A0A0F] border-t border-violet-400/30 rounded-t-xl overflow-hidden flex flex-col">
+        {/* Header — top row: matchup + close. Second row: prev/next nav. */}
+        <div className="px-4 pt-3 pb-2 border-b border-white/[0.06]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={26} />
+              <span className="text-[15px] font-bold text-gray-100">{game.awayTeam}</span>
+              <span className="text-gray-700 text-[12px]">@</span>
+              <span className="text-[15px] font-bold text-gray-100">{game.homeTeam}</span>
+              <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={26} />
+              <span className="text-gray-700 ml-1">·</span>
+              <span className="text-[12px] text-gray-400 tabular-nums">{game.gameTime}</span>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center justify-center w-9 h-9 rounded-md text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+              aria-label="Close"
+            >
+              <span aria-hidden="true" className="text-[20px] leading-none">×</span>
+            </button>
+          </div>
+          {/* Prev/Next strip — lets the user browse the slate without
+              closing the sheet. Selected market is preserved across the
+              switch (state lives in the parent shell). */}
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onPrev ?? undefined}
+              disabled={onPrev === null}
+              aria-label="Previous game"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] uppercase tracking-[0.12em] font-bold transition-colors ${
+                onPrev === null
+                  ? "border-white/[0.05] bg-white/[0.02] text-gray-700 cursor-not-allowed"
+                  : "border-violet-400/40 bg-violet-500/[0.10] text-violet-100 hover:bg-violet-500/[0.18]"
+              }`}
+            >
+              <span aria-hidden="true">←</span>
+              Prev
+            </button>
+            <span className="text-[10.5px] tabular-nums uppercase tracking-[0.14em] font-bold text-gray-500">
+              Game {index} of {total}
+            </span>
+            <button
+              type="button"
+              onClick={onNext ?? undefined}
+              disabled={onNext === null}
+              aria-label="Next game"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] uppercase tracking-[0.12em] font-bold transition-colors ${
+                onNext === null
+                  ? "border-white/[0.05] bg-white/[0.02] text-gray-700 cursor-not-allowed"
+                  : "border-violet-400/40 bg-violet-500/[0.10] text-violet-100 hover:bg-violet-500/[0.18]"
+              }`}
+            >
+              Next
+              <span aria-hidden="true">→</span>
+            </button>
+          </div>
+        </div>
+        {/* Market tabs */}
+        <div className="px-4 py-2 border-b border-white/[0.06] flex items-center gap-1.5 overflow-x-auto">
+          {(["moneyline", "total", "first_inning"] as MarketKey[]).map((m) => (
+            <MarketPill
+              key={m}
+              market={m}
+              pick={game.markets[m].pick}
+              confidence={game.markets[m].confidence}
+              verdict={asVerdictKey(game.markets[m].verdict.key)}
+              selected={selectedMarket === m}
+              onClick={() => onMarketChange(m)}
+            />
+          ))}
+        </div>
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          {marketData === null ? (
+            <p className="text-[13px] text-gray-400 text-center py-10">Loading enriched market data…</p>
+          ) : (
+            <>
+              <QuickRead game={game} market={selectedMarket} marketData={marketData} />
+              <EdgeStack market={selectedMarket} marketData={marketData} />
+              <MarketPulse market={selectedMarket} marketData={marketData} />
+              <MarketNotes
+                marketData={marketData}
+                awayAbbr={game.awayTeam}
+                homeAbbr={game.homeTeam}
+                market={selectedMarket}
+              />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Empty / loading / error states ────────────────────────────────────
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="max-w-7xl mx-auto px-6 py-20 text-center">
+      <p className="text-[14px] text-gray-400">{message}</p>
+    </div>
+  );
+}
+
+function LoadingState() {
+  return <EmptyState message="Loading tonight's slate…" />;
+}
+
+function ErrorState({ error }: { error: string }) {
+  return (
+    <div className="max-w-7xl mx-auto px-6 py-20 text-center">
+      <p className="text-[14px] text-amber-200">Something went wrong loading the slate.</p>
+      <p className="text-[12px] text-gray-500 mt-2">{error}</p>
+    </div>
+  );
+}
+
+// ─── Slate Board header + verdict filter ───────────────────────────────
+
+/**
+ * Filter applied to the slate grid. "all" = unfiltered (default). Any
+ * verdict key = show only games where AT LEAST ONE market (ML, Total,
+ * or 1st) carries that verdict. Filtering NEVER changes:
+ *   • the card headline (still picked by `headlineMarketFor`)
+ *   • the per-market verdict strip
+ *   • verdict logic / thresholds / model
+ * It only changes which cards are visible.
+ */
+type SlateFilter = "all" | VerdictKey;
+
+/**
+ * Count of games that have AT LEAST ONE market matching each verdict.
+ * Used for the filter chip counts so users see e.g. "Watchlist 8" — i.e.
+ * eight games have a Watchlist on Total OR 1st OR ML even when the
+ * headline (ML) is Lean. This surfaces non-headline opportunity.
+ */
+function computeVerdictCounts(games: DailyEdgeGameDto[]): Record<SlateFilter, number> {
+  const counts: Record<SlateFilter, number> = {
+    all: games.length,
+    best_angle: 0,
+    lean: 0,
+    watchlist: 0,
+    caution: 0,
+    no_play: 0,
+  };
+  for (const g of games) {
+    const seen = new Set<VerdictKey>();
+    for (const mk of ["moneyline", "total", "first_inning"] as MarketKey[]) {
+      seen.add(asVerdictKey(g.markets[mk].verdict.key));
+    }
+    for (const v of seen) counts[v]++;
+  }
+  return counts;
+}
+
+function gameMatchesFilter(game: DailyEdgeGameDto, filter: SlateFilter): boolean {
+  if (filter === "all") return true;
+  for (const mk of ["moneyline", "total", "first_inning"] as MarketKey[]) {
+    if (asVerdictKey(game.markets[mk].verdict.key) === filter) return true;
+  }
+  return false;
+}
+
+const SLATE_FILTERS: Array<{ key: SlateFilter; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "best_angle", label: "Best Angle" },
+  { key: "lean", label: "Lean" },
+  { key: "watchlist", label: "Watchlist" },
+  { key: "caution", label: "Caution" },
+];
+
+function SlateBoardHeader({
+  totalGames,
+  counts,
+  active,
+  onFilterChange,
+}: {
+  totalGames: number;
+  counts: Record<SlateFilter, number>;
+  active: SlateFilter;
+  onFilterChange: (f: SlateFilter) => void;
+}) {
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 pb-3 border-b border-white/[0.06]">
+        {/* Eyebrow + total game count. Mirrors the SportRail label style
+            so the section reads as an intentional surface break between
+            the Selected Edge reader above and the browseable grid below. */}
+        <div className="flex items-baseline gap-2">
+          <span aria-hidden="true" className="w-1 h-3.5 rounded-full bg-violet-400/65" />
+          <h2 className="text-[10.5px] uppercase tracking-[0.18em] font-bold text-violet-200/85 whitespace-nowrap">
+            Slate Board
+          </h2>
+          <span aria-hidden="true" className="text-gray-700 text-[11px]">·</span>
+          <span className="text-[11px] text-gray-400 tabular-nums whitespace-nowrap">
+            {totalGames} {totalGames === 1 ? "game" : "games"}
+          </span>
+        </div>
+        {/* Filter chips. Active uses violet (UI state, distinct from any
+            verdict tone). Disabled when count = 0 so users can't enter
+            an empty filter state. */}
+        <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0">
+          {SLATE_FILTERS.map((f) => {
+            const count = counts[f.key];
+            const isActive = active === f.key;
+            const isDisabled = f.key !== "all" && count === 0;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => !isDisabled && onFilterChange(f.key)}
+                disabled={isDisabled}
+                aria-pressed={isActive}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] uppercase tracking-[0.12em] font-bold whitespace-nowrap transition-colors ${
+                  isActive
+                    ? "bg-violet-500/[0.18] border-violet-400/55 text-white shadow-[0_0_0_1px_rgba(167,139,250,0.15)]"
+                    : isDisabled
+                    ? "bg-white/[0.015] border-white/[0.04] text-gray-700 cursor-not-allowed"
+                    : "bg-white/[0.03] border-white/[0.08] text-gray-300 hover:bg-white/[0.07] hover:border-white/[0.16]"
+                }`}
+              >
+                {f.label}
+                <span
+                  className={`tabular-nums ${
+                    isActive
+                      ? "text-violet-100/85"
+                      : isDisabled
+                      ? "text-gray-700"
+                      : "text-gray-500"
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shell ──────────────────────────────────────────────────────────────
+
+export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
+  const { data, error, isLoading } = useDailyEdge({ sport });
+
+  // Reader state. Preselected to the first game (game-time-ASC from the
+  // route) once data lands. Compact is the resting state.
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
+  const [selectedMarket, setSelectedMarket] = useState<MarketKey>("moneyline");
+  const [readerMode, setReaderMode] = useState<"compact" | "full">("compact");
+  // Mobile: tapping a card also opens the bottom sheet; on desktop the
+  // top reader updates instead. Separate state so Esc behavior is sane.
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  // Slate Board filter. Filtering only changes which cards are visible
+  // in the grid — never touches the reader, headlines, or model state.
+  const [slateFilter, setSlateFilter] = useState<SlateFilter>("all");
+
+  const games = data?.games ?? [];
+  const verdictCounts = useMemo(() => computeVerdictCounts(games), [games]);
+  const filteredGames = useMemo(
+    () =>
+      slateFilter === "all"
+        ? games
+        : games.filter((g) => gameMatchesFilter(g, slateFilter)),
+    [games, slateFilter]
+  );
+
+  // If the slate's data shape changes and the active filter becomes
+  // empty (e.g. fresh slate has 0 of the previously-selected verdict),
+  // gracefully fall back to "all" so the user isn't stuck on an empty
+  // grid with a disabled chip they can't see.
+  useEffect(() => {
+    if (slateFilter !== "all" && verdictCounts[slateFilter] === 0) {
+      setSlateFilter("all");
+    }
+  }, [slateFilter, verdictCounts]);
+
+  // Preselect the first game once data arrives, and whenever the slate
+  // changes shape (different date). Never null after the first paint.
+  useEffect(() => {
+    if (games.length === 0) return;
+    if (selectedGameId !== null && games.some((g) => g.id === selectedGameId)) return;
+    const first = games[0]!;
+    setSelectedGameId(first.id);
+    setSelectedMarket(headlineMarketFor(first));
+  }, [games, selectedGameId]);
+
+  // Esc → collapse Full to Compact (if open) OR close mobile sheet.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (mobileSheetOpen) {
+        setMobileSheetOpen(false);
+        return;
+      }
+      if (readerMode === "full") {
+        setReaderMode("compact");
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [readerMode, mobileSheetOpen]);
+
+  if (isLoading) return <LoadingState />;
+  if (error) return <ErrorState error={error.message} />;
+  if (!data || games.length === 0) {
+    return <EmptyState message="No games on tonight's slate." />;
+  }
+
+  const selectedGame = selectedGameId
+    ? games.find((g) => g.id === selectedGameId) ?? games[0]!
+    : games[0]!;
+  const selectedMarketData = pickMarket(selectedGame, selectedMarket);
+
+  /**
+   * Click a card body — select the game with its headline market. Reader
+   * mode (compact/full) is intentionally preserved across game switches:
+   * the mode is a "viewing preference" independent of which game is
+   * selected. Esc / the Collapse button are the only paths back to
+   * compact.
+   */
+  function handleSelectGame(g: DailyEdgeGameDto) {
+    setSelectedGameId(g.id);
+    setSelectedMarket(headlineMarketFor(g));
+    // Mobile: also open the sheet so the user sees the read on the small screen.
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches) {
+      setMobileSheetOpen(true);
+    }
+  }
+
+  /** Click a market chip inside a card — select that game + that market. */
+  function handleSelectMarket(g: DailyEdgeGameDto, m: MarketKey) {
+    setSelectedGameId(g.id);
+    setSelectedMarket(m);
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches) {
+      setMobileSheetOpen(true);
+    }
+  }
+
+  /**
+   * Click a verdict filter chip — narrows the grid AND jumps the reader
+   * to the first game in the filtered set, focused on the first market
+   * on that game that matches the verdict. Makes filter + reader feel
+   * connected instead of independent.
+   *
+   * "All" preserves the current game/market selection (no force-reset).
+   * Disabled chips (count === 0) never get here because the button is
+   * disabled at the SlateBoardHeader level.
+   */
+  function handleFilterChange(next: SlateFilter) {
+    setSlateFilter(next);
+    if (next === "all") return;
+    const matching = games.filter((g) => gameMatchesFilter(g, next));
+    if (matching.length === 0) return; // belt-and-suspenders; chip should be disabled
+    const firstGame = matching[0]!;
+    const firstMarket = (["moneyline", "total", "first_inning"] as MarketKey[]).find(
+      (mk) => asVerdictKey(firstGame.markets[mk].verdict.key) === next
+    );
+    setSelectedGameId(firstGame.id);
+    setSelectedMarket(firstMarket ?? headlineMarketFor(firstGame));
+  }
+
+  return (
+    <div className="bg-[#0A0A0F] text-gray-200 min-h-screen">
+      <SportRail sport={sport} />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-1 flex items-center justify-between gap-3">
+        <SlateControlStrip
+          date={data.date}
+          gameCount={games.length}
+          updatedAt={data.as_of}
+          fallbackUsed={data.fallback_used === true}
+        />
+        <div className="hidden sm:block">
+          <HowThisWorks />
+        </div>
+      </div>
+
+      {/* Selected Edge reader — top of page, NOT sticky. Scrolls out of
+          view as the user browses the board below. Desktop/tablet only;
+          mobile uses the bottom sheet instead. */}
+      <div className="hidden sm:block max-w-7xl mx-auto px-4 sm:px-6 mt-3 mb-9">
+        {selectedMarketData === null ? (
+          <div className="bg-[#0D0D14] border border-violet-400/22 rounded-xl p-4 text-[13px] text-gray-400 text-center">
+            Loading enriched market data…
+          </div>
+        ) : (
+          <SelectedEdgeReader
+            game={selectedGame}
+            market={selectedMarket}
+            marketData={selectedMarketData}
+            mode={readerMode}
+            onMarketChange={setSelectedMarket}
+            onExpand={() => setReaderMode("full")}
+            onCollapse={() => setReaderMode("compact")}
+          />
+        )}
+      </div>
+
+      {/* Slate Board header — quiet section break + filter chips. Filter
+          click also jumps the reader to the first matching game/market
+          via handleFilterChange so the two surfaces stay connected. */}
+      <SlateBoardHeader
+        totalGames={games.length}
+        counts={verdictCounts}
+        active={slateFilter}
+        onFilterChange={handleFilterChange}
+      />
+
+      {/* Slate board — game-time ordered (route returns ASC). Always 3 cols
+          on lg, 2 on sm/md, 1 on mobile. No grid collapse based on reader
+          state — board geometry stays stable so the eye doesn't reflow on
+          every click. Filter only changes the visible card set; nothing
+          else about the rendering logic changes. */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 pb-6">
+        {filteredGames.length === 0 ? (
+          <div className="text-center py-14 text-[13px] text-gray-500">
+            No {slateFilter === "all" ? "games" : VERDICT_LABEL[slateFilter as VerdictKey]} on tonight&apos;s slate.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredGames.map((g) => (
+              <SlateCard
+                key={g.id}
+                game={g}
+                active={g.id === selectedGameId}
+                activeMarket={g.id === selectedGameId ? selectedMarket : null}
+                onSelectGame={() => handleSelectGame(g)}
+                onSelectMarket={(m) => handleSelectMarket(g, m)}
+              />
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* Mobile bottom sheet — opens on card tap; closes via × / scrim / Esc.
+          Prev/Next buttons walk the FILTERED games list (same as the
+          visible grid behind the sheet) so navigation respects the
+          active filter. When filter is "all", filteredGames === games so
+          prev/next walks the whole slate as before. Selected market is
+          preserved across game switches. */}
+      {mobileSheetOpen && selectedMarketData !== null && (() => {
+        const navList = filteredGames;
+        const idx = navList.findIndex((g) => g.id === selectedGame.id);
+        // Defensive: if the selected game isn't in the current nav list
+        // (e.g. filter changed externally and the auto-jump didn't apply
+        // to the sheet) just disable prev/next rather than walking to a
+        // surprising game.
+        const canPrev = idx > 0;
+        const canNext = idx >= 0 && idx < navList.length - 1;
+        return (
+          <div className="sm:hidden">
+            <MobileDetailSheet
+              game={selectedGame}
+              onClose={() => setMobileSheetOpen(false)}
+              selectedMarket={selectedMarket}
+              onMarketChange={setSelectedMarket}
+              onPrev={canPrev ? () => setSelectedGameId(navList[idx - 1]!.id) : null}
+              onNext={canNext ? () => setSelectedGameId(navList[idx + 1]!.id) : null}
+              index={Math.max(1, idx + 1)}
+              total={navList.length}
+            />
+          </div>
+        );
+      })()}
+
+      <footer className="text-center pb-10">
+        <p className="text-[11px] uppercase tracking-[0.16em] text-gray-600 font-medium">
+          OddSphere · Daily Edge · MLB
+        </p>
+      </footer>
+    </div>
+  );
+}
+

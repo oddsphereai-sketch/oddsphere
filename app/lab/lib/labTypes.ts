@@ -147,6 +147,109 @@ export type SharpSignalDto = {
   direction: "positive" | "negative" | "neutral";
 };
 
+// ───────────────────────────────────────────────────────────────────────────
+// 4.1.10 — per-market enrichment DTO types
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * One stat row for the v13.1 KeyStats panel. Beginner-formatted by
+ * keyStatsFormatter — never raw multipliers like 1.08.
+ *
+ * `awayValue` may be null when the stat is a single-game-level value
+ * (e.g., park factor) rather than a per-side value. UI renders only
+ * the `homeValue` cell in that case.
+ */
+export type KeyStatRow = {
+  label: string;
+  awayValue: string | null;
+  homeValue: string | null;
+  source: "feature_snapshot" | "computed";
+};
+
+/**
+ * Per-market enriched edge data — the v13.1 Daily Edge card consumes
+ * this shape for each of moneyline / total / first_inning. The shape
+ * mirrors the existing `DailyEdgePredictionDto` but adds the verdict,
+ * beginner copy, edge-stack quantification, and KeyStats.
+ *
+ * Nulls mean "data unavailable" — the UI must render honest fallback
+ * copy ("No public split data", "Open price unavailable", etc.) rather
+ * than substituting other fields.
+ */
+export type MarketEdgeDto = {
+  // ── existing per-pick fields (preserved from DailyEdgePredictionDto) ──
+  pick: string | null;
+  confidence: number;
+  grade: Grade | null;
+  signalType: SignalType | null;
+  marketSignal: MarketSignal | null;
+  sharpStatus: SharpStatus;
+
+  // ── 4.1.10 per-market verdict ──
+  verdict: { key: Verdict; label: string };
+
+  // ── 4.1.10 server-generated beginner copy (banned-terms-linted) ──
+  guidedGuide: string;
+  guidedWatchOut: string;
+  whyLine: string;
+  riskLine: string;
+
+  // ── 4.1.10 edge-stack quantification (nulls allowed) ──
+  modelProb: number | null;
+  marketFairProb: number | null;
+  pinnacleEvPct: number | null;
+  moneyPct: number | null;
+  betsPct: number | null;
+  priceAmerican: number | null;
+  lineOpenAmerican: number | null;
+
+  // ── totals-only (null for moneyline / first_inning) ──
+  modelTotal: number | null;
+  marketTotal: number | null;
+  line: number | null;
+
+  // ── 4.1.10 KeyStats panel input ──
+  keyStats: KeyStatRow[];
+};
+
+/**
+ * Per-game lock + status block. Most fields are placeholders until the
+ * lock DDL lands in Phase 4.1.12 — `lockState` is hardcoded "open" and
+ * `lockedAt` is hardcoded null in this phase.
+ */
+export type LockState = "open" | "locking" | "locked";
+
+/**
+ * Per-game post-grading result. Null pre-grading; populated by the
+ * grader cron after the game finishes. Lives OUTSIDE the locked-snapshot
+ * payload so it can mutate after the snapshot is frozen.
+ */
+export type PickResult = "win" | "loss" | "push" | "void";
+
+export type ResultDto = {
+  finalScore: { away: number; home: number } | null;
+  markets: {
+    moneyline: { pickResult: PickResult | null; gradeUnits: number | null };
+    total: { pickResult: PickResult | null; gradeUnits: number | null };
+    first_inning: { pickResult: PickResult | null; gradeUnits: number | null };
+  };
+};
+
+/**
+ * Per-game live-status block. UI uses these for "lineup pending" /
+ * "sharp signal pending" / "market data limited" badges.
+ */
+export type GameStatusDto = {
+  /** Null = unknown (lineup not yet posted), false = posted but unconfirmed, true = confirmed */
+  lineupConfirmed: boolean | null;
+  /** True iff at least one `lines` row exists for the game */
+  linesLocked: boolean;
+  /** True iff NO `sharp_signals` row exists for the game */
+  sharpSignalPending: boolean;
+  /** Per-game flag: true when every quantitative market field is null across all three markets */
+  marketDataLimited: boolean;
+};
+
 export type DailyEdgeGameDto = {
   /** Stable ID for React keys: `${sport}-${external_id}`. */
   id: string;
@@ -162,13 +265,48 @@ export type DailyEdgeGameDto = {
   gameTime: string;
   /** Minutes-from-midnight-ET for sort stability. */
   gameStartMinutes: number;
+  /**
+   * 4.1.10 — raw UTC ISO of `games.game_date`. Lock cron (4.1.12+) reads
+   * this to know the lock fire time. UI may use it for "locks in X" copy.
+   */
+  scheduledLockAt: string;
+  /**
+   * 4.1.10 — lock state machine. Hardcoded "open" until Phase 4.1.12
+   * lands the `games.locked_at` column and the lock cron.
+   */
+  lockState: LockState;
+  /** 4.1.10 — null until Phase 4.1.12. */
+  lockedAt: string | null;
+  /** 4.1.10 — read from `sport_specific.breakdown_generated_at` when present. */
+  generatedAt: string | null;
   predictions: {
     ml: DailyEdgePredictionDto;
     total: DailyEdgeTotalPredictionDto;
     nrfi: DailyEdgePredictionDto;
   };
+  /**
+   * 4.1.10 — per-market enriched edge data for the v13.1 UI. Lives
+   * ALONGSIDE the existing `predictions` block during the dual-DTO
+   * period. The current Daily Edge UI continues to read `predictions`;
+   * the v13.1 UI port (4.1.11) switches to `markets` and `predictions`
+   * is removed in 4.1.11.
+   */
+  markets: {
+    moneyline: MarketEdgeDto;
+    total: MarketEdgeDto;
+    first_inning: MarketEdgeDto;
+  };
+  /**
+   * 4.1.10 — short directive sentence for the v13.1 Edge Board card.
+   * Server-generated, banned-terms-linted. Example: "Best angle tonight: KC ML".
+   */
+  decisionLine: string;
   projected: { away: number; home: number };
   sharpSignals: SharpSignalDto[];
+  /** 4.1.10 — per-game live status flags. */
+  status: GameStatusDto;
+  /** 4.1.10 — post-grading result. Null pre-grade. Populated by the grader cron. */
+  result: ResultDto | null;
   /**
    * Phase 4.1.8.B — member-facing pick breakdown surface.
    *

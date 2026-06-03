@@ -1,0 +1,119 @@
+/**
+ * Phase 4.1.8.C-final (B+C Hybrid) — best-of-market selector.
+ *
+ * Pure helper used by TonightsMlbEdge to populate the 3-up "Best of"
+ * row: BEST MONEYLINE / BEST TOTAL / BEST 1ST INNING.
+ *
+ * Selection: among games whose verdict is best_angle OR lean AND whose
+ * headline market matches the requested market, pick the strongest read
+ * — ranked first by per-pick grade strength (best_signal > sharp_confirmed
+ * > market_led > model_only > market_watch > public_smoke), then by
+ * per-pick confidence DESC.
+ *
+ * Returns null when no qualifying game exists. The briefing cell then
+ * renders "No standout edge tonight."
+ */
+
+import type { DailyEdgeGameDto } from "../../lib/labTypes";
+import type { Grade } from "@/lib/types/domain/Grade";
+import { headlinePrimaryMarket, type HeadlineMarket } from "../../lib/perPickHeadline";
+
+// Higher = stronger. Mirrors the GRADE_RANK already used in route.ts +
+// perPickHeadline (kept locally to avoid an out-of-scope import dance).
+const GRADE_RANK: Record<Grade, number> = {
+  best_signal: 70,
+  sharp_confirmed: 60,
+  sharp_conflict: 50,
+  market_led: 40,
+  public_smoke: 30,
+  model_only: 20,
+  market_watch: 10,
+};
+
+type EligibleMarket = "moneyline" | "total" | "first_inning_total";
+
+function perMarketGrade(
+  game: DailyEdgeGameDto,
+  market: EligibleMarket
+): Grade | null {
+  if (market === "moneyline") return game.predictions.ml.grade;
+  if (market === "total") return game.predictions.total.grade;
+  return game.predictions.nrfi.grade;
+}
+
+function perMarketConfidence(
+  game: DailyEdgeGameDto,
+  market: EligibleMarket
+): number {
+  if (market === "moneyline") return game.predictions.ml.confidence;
+  if (market === "total") return game.predictions.total.confidence;
+  return game.predictions.nrfi.confidence;
+}
+
+/**
+ * Find the strongest game whose verdict is best_angle/lean AND whose
+ * headline market matches `market`. Ties broken by per-market grade
+ * strength → per-market confidence DESC → earliest game time.
+ */
+export function findBestOfMarket(
+  games: DailyEdgeGameDto[],
+  market: EligibleMarket
+): DailyEdgeGameDto | null {
+  const candidates = games
+    .filter(
+      (g) =>
+        g.breakdown.verdict.key === "best_angle" ||
+        g.breakdown.verdict.key === "lean"
+    )
+    .filter((g) => headlinePrimaryMarket(g) === market);
+
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => {
+    const aGrade = perMarketGrade(a, market);
+    const bGrade = perMarketGrade(b, market);
+    const aRank = aGrade !== null ? GRADE_RANK[aGrade] : 0;
+    const bRank = bGrade !== null ? GRADE_RANK[bGrade] : 0;
+    if (bRank !== aRank) return bRank - aRank;
+    const aConf = perMarketConfidence(a, market);
+    const bConf = perMarketConfidence(b, market);
+    if (bConf !== aConf) return bConf - aConf;
+    return a.gameStartMinutes - b.gameStartMinutes;
+  });
+
+  return candidates[0] ?? null;
+}
+
+/**
+ * Render the headline pick as a compact "Best of" cell hero string:
+ *   moneyline → team abbreviation (e.g. "HOU")
+ *   total     → "Over 8.5" / "Under" when no line
+ *   first_inning_total → "NRFI" / "YRFI"
+ */
+export function bestOfHeroLabel(
+  game: DailyEdgeGameDto,
+  market: HeadlineMarket
+): string {
+  if (market === "moneyline") {
+    return game.predictions.ml.pick;
+  }
+  if (market === "total") {
+    const t = game.predictions.total;
+    return t.line !== null ? `${t.pick} ${t.line}` : t.pick;
+  }
+  if (market === "first_inning_total") {
+    return game.predictions.nrfi.pick;
+  }
+  return "—";
+}
+
+/** Confidence for the Best-of cell's metadata line. */
+export function bestOfConfidence(
+  game: DailyEdgeGameDto,
+  market: HeadlineMarket
+): number | null {
+  if (market === "moneyline") return game.predictions.ml.confidence;
+  if (market === "total") return game.predictions.total.confidence;
+  if (market === "first_inning_total") return game.predictions.nrfi.confidence;
+  return null;
+}
