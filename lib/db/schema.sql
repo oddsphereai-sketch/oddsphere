@@ -298,7 +298,7 @@ CREATE TABLE player_season_stats (
   pitching_era      DECIMAL(5,2),
   pitching_sv       INT,
   pitching_hld      INT,
-  pitching_ip       DECIMAL(5,1),                     -- Innings pitched
+  pitching_ip       DECIMAL(6,3),                     -- Innings pitched (true decimal — BDL X.1 → X+1/3, X.2 → X+2/3 converted in parser before write)
   pitching_h        INT,
   pitching_er       INT,
   pitching_hr       INT,
