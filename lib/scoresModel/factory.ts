@@ -19,6 +19,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Sport } from "../types/domain/Sport";
 import type { IScoresModelSource } from "./interfaces/IScoresModelSource";
 import { ManualScoresModelSource } from "./manual/ManualScoresModelSource";
+import { AutoMlbScoresModelSource } from "./auto/AutoMlbScoresModelSource";
 
 const SPORT_TO_ENV_SUFFIX: Record<Sport, string> = {
   mlb:  "MLB",
@@ -50,6 +51,11 @@ export function getScoresModelSource(
   if (cached) return cached;
 
   if (useAutoFor(sport)) {
+    if (sport === "mlb") {
+      const source = new AutoMlbScoresModelSource(client);
+      cache.set(sport, source);
+      return source;
+    }
     throw new Error(
       `USE_AUTO_SCORES_MODEL_${SPORT_TO_ENV_SUFFIX[sport]}=true but ${autoSourceClassName(sport)} is not yet implemented (planned for Phase 10+). ` +
         `Set the env var to false (or unset) to use ManualScoresModelSource.`
