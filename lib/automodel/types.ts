@@ -217,6 +217,35 @@ export type AutoFactors = {
   nrfi_used_fallback_era: boolean;
   /** True when NRFI logic incorporated top-of-order OPS data. */
   nrfi_used_top_of_order_data: boolean;
+  // ─────────────────────────────────────────────────────────────
+  // First-inning starter detail (added 2026-06-02 for FI Key Stats)
+  // ─────────────────────────────────────────────────────────────
+  // These mirror values the model already loads into StarterSnapshot
+  // and uses inside nrfiPick. Persisted so the UI can surface the
+  // actual FI-specific stats it consumes (vs the full-season ERA
+  // fallback we used to show). All optional for backward compat with
+  // rows generated before this field set was added.
+  /** Raw first-inning ERA per starter (DECIMAL 5,2 in player_season_stats).
+   *  Null when no FI data has been ingested OR the starter is missing. */
+  home_first_inning_era?: number | null;
+  away_first_inning_era?: number | null;
+  /** First-inning starts (sample-size context). Same gating semantics as
+   *  FIRST_INNING_SAMPLE_GATE in mlbAutoModelV1. */
+  home_first_inning_starts?: number | null;
+  away_first_inning_starts?: number | null;
+  /** Raw first-inning WHIP per starter. Consumed by nrfiWhipFactor since
+   *  Phase 4.1.12. Null when no FI data ingested. */
+  home_first_inning_whip?: number | null;
+  away_first_inning_whip?: number | null;
+  /** Handedness-aware top-of-order OPS used by nrfiPick. Side's lineup
+   *  vs the OPPOSING starter's throws (home OPS uses away starter's
+   *  throws, and vice versa). Null when no top-of-order data available. */
+  home_top_order_ops?: number | null;
+  away_top_order_ops?: number | null;
+  /** Starter handedness (L / R). Useful for FI Key Stats handedness
+   *  display ("vs RHP" / "vs LHP"). */
+  home_starter_throws?: "L" | "R" | null;
+  away_starter_throws?: "L" | "R" | null;
 };
 
 /**

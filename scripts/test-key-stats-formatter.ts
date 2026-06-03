@@ -25,7 +25,10 @@ function check(label: string, cond: boolean, hint?: string) {
   }
 }
 
-// Full happy-path fixture — every relevant field populated
+// Full happy-path fixture — every relevant field populated. Includes
+// the FI-specific keys added 2026-06-02 (FI ERA / FI starts / FI WHIP /
+// top-order OPS / starter throws) so the first-inning happy path shows
+// real model-consumed stats instead of falling back to season ERA.
 const FULL = {
   home_starter_era: 3.42,
   away_starter_era: 4.18,
@@ -41,6 +44,17 @@ const FULL = {
   weather_total_adjust: -0.35,
   nrfi_expected_runs: 0.85,
   nrfi_used_top_of_order_data: true,
+  // FI-specific (sufficient sample on both sides)
+  home_first_inning_era: 2.85,
+  away_first_inning_era: 3.91,
+  home_first_inning_starts: 10,
+  away_first_inning_starts: 12,
+  home_first_inning_whip: 1.05,
+  away_first_inning_whip: 1.32,
+  home_top_order_ops: 0.852,
+  away_top_order_ops: 0.711,
+  home_starter_throws: "R",
+  away_starter_throws: "L",
 };
 
 console.log("━━━ Moneyline: full fixture ━━━");
@@ -73,23 +87,134 @@ console.log("━━━ Total: full fixture ━━━");
 }
 
 console.log();
-console.log("━━━ First-inning: full fixture ━━━");
+console.log("━━━ First-inning: full fixture (FI stats present, all above sample gate) ━━━");
 {
   const rows = formatKeyStats(FULL, "first_inning");
-  check("returns exactly 3 rows", rows.length === 3);
+  // 4 rows: Projected runs, FI ERA, FI WHIP, Top-of-order OPS. Season
+  // ERA fallback is NOT shown because real FI ERA is present.
+  check("returns exactly 4 rows", rows.length === 4);
   check("row 1 = 'Projected 1st-inning runs'", rows[0]?.label === "Projected 1st-inning runs");
   check("row 1 home = '0.85'", rows[0]?.homeValue === "0.85");
-  check("row 2 = 'Top-of-order data'", rows[1]?.label === "Top-of-order data");
-  check("row 2 home = 'Available'", rows[1]?.homeValue === "Available");
-  check("row 3 = 'Starter ERA'", rows[2]?.label === "Starter ERA");
+  check("row 2 = 'Starter 1st-inning ERA'", rows[1]?.label === "Starter 1st-inning ERA");
+  check("row 2 home shows value + starts footnote", rows[1]?.homeValue === "2.85 (10 starts)");
+  check("row 2 away shows value + starts footnote", rows[1]?.awayValue === "3.91 (12 starts)");
+  check("row 3 = 'Starter 1st-inning WHIP'", rows[2]?.label === "Starter 1st-inning WHIP");
+  check("row 3 home shows WHIP + starts footnote", rows[2]?.homeValue === "1.05 (10 starts)");
+  check("row 3 away shows WHIP + starts footnote", rows[2]?.awayValue === "1.32 (12 starts)");
+  check("row 4 = 'Top-of-order OPS'", rows[3]?.label === "Top-of-order OPS");
+  // home_top_order_ops 0.852 faces away starter throws=L → "vs LHP"
+  check("row 4 home shows OPS + handedness context", rows[3]?.homeValue === "0.852 vs LHP");
+  // away_top_order_ops 0.711 faces home starter throws=R → "vs RHP"
+  check("row 4 away shows OPS + handedness context", rows[3]?.awayValue === "0.711 vs RHP");
+  // Critical: no "Starter ERA" season row when FI ERA is present
+  check("no fallback 'Starter ERA (season)' row when FI ERA present",
+    !rows.some((r) => r.label === "Starter ERA (season)"));
 }
 
 console.log();
-console.log("━━━ Top-of-order false → 'Unavailable' ━━━");
+console.log("━━━ First-inning: thin-sample FI stats (starts < 3 gate) ━━━");
 {
-  const rows = formatKeyStats({ ...FULL, nrfi_used_top_of_order_data: false }, "first_inning");
-  const topOrderRow = rows.find((r) => r.label === "Top-of-order data");
-  check("top-of-order=false → 'Unavailable'", topOrderRow?.homeValue === "Unavailable");
+  const thin = {
+    ...FULL,
+    home_first_inning_starts: 2,
+    away_first_inning_starts: 1,
+  };
+  const rows = formatKeyStats(thin, "first_inning");
+  const eraRow = rows.find((r) => r.label === "Starter 1st-inning ERA");
+  const whipRow = rows.find((r) => r.label === "Starter 1st-inning WHIP");
+  check("thin-sample ERA home shows 'thin sample' badge",
+    eraRow?.homeValue === "2.85 (thin sample · 2 starts)");
+  check("thin-sample ERA away shows 'thin sample · 1 start' (singular)",
+    eraRow?.awayValue === "3.91 (thin sample · 1 start)");
+  check("thin-sample WHIP home shows 'thin sample' badge",
+    whipRow?.homeValue === "1.05 (thin sample · 2 starts)");
+}
+
+console.log();
+console.log("━━━ First-inning: missing FI data → falls back to full-season Starter ERA ━━━");
+{
+  // Strip all FI ERA/WHIP fields. Top-order OPS is also stripped to
+  // simulate the "no FI data at all" worst case.
+  const noFi = {
+    ...FULL,
+    home_first_inning_era: null,
+    away_first_inning_era: null,
+    home_first_inning_starts: null,
+    away_first_inning_starts: null,
+    home_first_inning_whip: null,
+    away_first_inning_whip: null,
+    home_top_order_ops: null,
+    away_top_order_ops: null,
+  };
+  const rows = formatKeyStats(noFi, "first_inning");
+  // Only 2 rows: Projected runs (still derived from nrfi_expected_runs)
+  // + fallback "Starter ERA (season)" row.
+  check("missing FI data → exactly 2 rows", rows.length === 2);
+  check("row 1 = 'Projected 1st-inning runs'", rows[0]?.label === "Projected 1st-inning runs");
+  check("row 2 = 'Starter ERA (season)' fallback fires", rows[1]?.label === "Starter ERA (season)");
+  check("season ERA row shows full-season values",
+    rows[1]?.homeValue === "3.42" && rows[1]?.awayValue === "4.18");
+  check("no 'Starter 1st-inning ERA' row when FI data missing",
+    !rows.some((r) => r.label === "Starter 1st-inning ERA"));
+  check("no 'Starter 1st-inning WHIP' row when FI data missing",
+    !rows.some((r) => r.label === "Starter 1st-inning WHIP"));
+  check("no 'Top-of-order OPS' row when no OPS data",
+    !rows.some((r) => r.label === "Top-of-order OPS"));
+}
+
+console.log();
+console.log("━━━ First-inning: one starter has FI data, other does not ━━━");
+{
+  const mixed = {
+    ...FULL,
+    away_first_inning_era: null,
+    away_first_inning_starts: null,
+    away_first_inning_whip: null,
+  };
+  const rows = formatKeyStats(mixed, "first_inning");
+  const eraRow = rows.find((r) => r.label === "Starter 1st-inning ERA");
+  const whipRow = rows.find((r) => r.label === "Starter 1st-inning WHIP");
+  check("ERA row still shown when only one side has data",
+    eraRow !== undefined);
+  check("ERA home value shown, away null (formatter renders dash)",
+    eraRow?.homeValue === "2.85 (10 starts)" && eraRow?.awayValue === null);
+  check("WHIP row still shown when only one side has data",
+    whipRow !== undefined);
+  check("WHIP home value shown, away null",
+    whipRow?.homeValue === "1.05 (10 starts)" && whipRow?.awayValue === null);
+  // Season ERA fallback should NOT fire — at least one side has FI ERA
+  check("no season-ERA fallback when one side has FI data",
+    !rows.some((r) => r.label === "Starter ERA (season)"));
+}
+
+console.log();
+console.log("━━━ First-inning: top-order OPS without starter throws (no handedness context) ━━━");
+{
+  const noThrows = {
+    ...FULL,
+    home_starter_throws: null,
+    away_starter_throws: null,
+  };
+  const rows = formatKeyStats(noThrows, "first_inning");
+  const topRow = rows.find((r) => r.label === "Top-of-order OPS");
+  check("top OPS home shows raw value, no handedness context",
+    topRow?.homeValue === "0.852");
+  check("top OPS away shows raw value, no handedness context",
+    topRow?.awayValue === "0.711");
+}
+
+console.log();
+console.log("━━━ First-inning: nrfi_used_top_of_order_data flag no longer surfaces as a row ━━━");
+{
+  // The legacy "Top-of-order data: Available" row is gone. Confirm
+  // that toggling the boolean flag has zero effect on the rendered
+  // rows now that we show actual top-order OPS values.
+  const withFlag = formatKeyStats(FULL, "first_inning");
+  const noFlag = formatKeyStats({ ...FULL, nrfi_used_top_of_order_data: false }, "first_inning");
+  check("'Top-of-order data' label no longer in output",
+    !withFlag.some((r) => r.label === "Top-of-order data"));
+  check("toggling boolean flag does not change rendered row count",
+    withFlag.length === noFlag.length);
 }
 
 console.log();

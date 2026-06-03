@@ -178,10 +178,42 @@ function totalRows(af: AutoFactors): KeyStatRow[] {
   return rows;
 }
 
+/**
+ * Sample-size gate mirroring FIRST_INNING_SAMPLE_GATE in
+ * lib/automodel/mlbAutoModelV1.ts. Per-starter FI ERA / WHIP rows are
+ * only shown at full confidence when starts ≥ this threshold. Kept in
+ * sync with the model gate so the UI never represents a value the
+ * model itself would have gated.
+ */
+const FI_UI_SAMPLE_GATE = 3;
+
+/**
+ * Format a per-starter raw stat with a small "(N starts)" sample-size
+ * footnote, OR a "(thin sample · N starts)" badge when the starter is
+ * below the gate, OR null when no value at all. Used by the FI ERA and
+ * FI WHIP rows so users always see how much data backs each number.
+ */
+function fmtFiStarterValue(
+  rawValue: number | null,
+  starts: number | null,
+  decimals: number
+): string | null {
+  if (rawValue === null) return null;
+  const startsStr = starts !== null && starts > 0
+    ? ` (${starts} ${starts === 1 ? "start" : "starts"})`
+    : "";
+  // Below-gate: show value with explicit "thin sample" flag so users
+  // don't over-weight a tiny-sample number.
+  if (starts !== null && starts > 0 && starts < FI_UI_SAMPLE_GATE) {
+    return `${rawValue.toFixed(decimals)} (thin sample · ${starts} ${starts === 1 ? "start" : "starts"})`;
+  }
+  return `${rawValue.toFixed(decimals)}${startsStr}`;
+}
+
 function firstInningRows(af: AutoFactors): KeyStatRow[] {
   const rows: KeyStatRow[] = [];
 
-  // Row 1 — Projected first-inning runs (raw)
+  // Row 1 — Projected first-inning runs (model output, unchanged)
   const nrfiRuns = num(af.nrfi_expected_runs);
   if (nrfiRuns !== null) {
     rows.push({
@@ -192,27 +224,81 @@ function firstInningRows(af: AutoFactors): KeyStatRow[] {
     });
   }
 
-  // Row 2 — Top-of-order data flag (boolean)
-  const topOrder = bool(af.nrfi_used_top_of_order_data);
-  if (topOrder !== null) {
+  // Row 2 — Starter 1st-inning ERA per starter, with sample-size
+  // footnote. Sourced from auto_factors.{home,away}_first_inning_era
+  // (added 2026-06-02). Only shown when at least one starter has FI
+  // data; falls back gracefully when both are missing (Row 5 below
+  // catches that case with full-season ERA).
+  const aFiEra = num(af.away_first_inning_era);
+  const hFiEra = num(af.home_first_inning_era);
+  const aFiStarts = num(af.away_first_inning_starts);
+  const hFiStarts = num(af.home_first_inning_starts);
+  if (aFiEra !== null || hFiEra !== null) {
     rows.push({
-      label: "Top-of-order data",
-      awayValue: null,
-      homeValue: topOrder ? "Available" : "Unavailable",
+      label: "Starter 1st-inning ERA",
+      awayValue: fmtFiStarterValue(aFiEra, aFiStarts, 2),
+      homeValue: fmtFiStarterValue(hFiEra, hFiStarts, 2),
       source: "feature_snapshot",
     });
   }
 
-  // Row 3 — Starter ERA (same as moneyline row 1; useful for FI context)
-  const aSe = num(af.away_starter_era);
-  const hSe = num(af.home_starter_era);
-  if (aSe !== null || hSe !== null) {
+  // Row 3 — Starter 1st-inning WHIP per starter, with sample-size
+  // footnote. Model-consumed since Phase 4.1.12 (FI WHIP modifier).
+  const aFiWhip = num(af.away_first_inning_whip);
+  const hFiWhip = num(af.home_first_inning_whip);
+  if (aFiWhip !== null || hFiWhip !== null) {
     rows.push({
-      label: "Starter ERA",
-      awayValue: fmtRaw(aSe, 2),
-      homeValue: fmtRaw(hSe, 2),
+      label: "Starter 1st-inning WHIP",
+      awayValue: fmtFiStarterValue(aFiWhip, aFiStarts, 2),
+      homeValue: fmtFiStarterValue(hFiWhip, hFiStarts, 2),
       source: "feature_snapshot",
     });
+  }
+
+  // Row 4 — Top-of-order OPS (actual values, not just a boolean flag).
+  // Sourced from auto_factors.{home,away}_top_order_ops (added
+  // 2026-06-02). The model uses handedness-aware top-3 OPS vs the
+  // OPPOSING starter, so a small "vs RHP" / "vs LHP" hint clarifies
+  // what each side's value represents when we know the opposing
+  // starter's throws.
+  const aTopOps = num(af.away_top_order_ops);
+  const hTopOps = num(af.home_top_order_ops);
+  if (aTopOps !== null || hTopOps !== null) {
+    const homeThrows = af.home_starter_throws;
+    const awayThrows = af.away_starter_throws;
+    // The HOME lineup faces the AWAY starter; if we know the away
+    // starter's throws, we can add "vs LHP" / "vs RHP" as context on
+    // the home row (and vice versa).
+    const homeContext =
+      awayThrows === "L" ? " vs LHP" : awayThrows === "R" ? " vs RHP" : "";
+    const awayContext =
+      homeThrows === "L" ? " vs LHP" : homeThrows === "R" ? " vs RHP" : "";
+    rows.push({
+      label: "Top-of-order OPS",
+      awayValue: aTopOps !== null ? `${aTopOps.toFixed(3)}${awayContext}` : null,
+      homeValue: hTopOps !== null ? `${hTopOps.toFixed(3)}${homeContext}` : null,
+      source: "feature_snapshot",
+    });
+  }
+
+  // Row 5 — Full-season Starter ERA, ONLY as fallback when neither
+  // starter has FI ERA data ingested. When real FI data is available
+  // for either side, the FI ERA row above is the more honest signal
+  // and the full-season row would just be noise. Sample-gate concerns
+  // around showing thin FI data still produce the row above with a
+  // "(thin sample)" footnote, so this fallback fires strictly on the
+  // "no FI data at all" path.
+  if (aFiEra === null && hFiEra === null) {
+    const aSe = num(af.away_starter_era);
+    const hSe = num(af.home_starter_era);
+    if (aSe !== null || hSe !== null) {
+      rows.push({
+        label: "Starter ERA (season)",
+        awayValue: fmtRaw(aSe, 2),
+        homeValue: fmtRaw(hSe, 2),
+        source: "feature_snapshot",
+      });
+    }
   }
 
   return rows;

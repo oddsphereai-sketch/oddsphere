@@ -1184,6 +1184,27 @@ export function runMlbAutoModelV1(
     else hold_reason = "all_picks_below_floor";
   }
 
+  // First-inning + top-order detail persisted for FI Key Stats UI
+  // (added 2026-06-02). The model already loads these into the
+  // StarterSnapshot and uses them inside nrfiPick; we just expose them
+  // so the formatter can render real FI-specific Key Stats instead of
+  // the full-season ERA fallback. Top-of-order OPS is recomputed here
+  // using the same handednessAwareTopOps() helper nrfiPick uses, so the
+  // displayed value matches what the model actually consumed (home
+  // batters face the AWAY starter's throws, and vice versa).
+  const homeTopOrderForAuto = snapshot.home_starter && snapshot.away_starter
+    ? handednessAwareTopOps(
+        snapshot.home_lineup_top8,
+        snapshot.away_starter.throws
+      ).value
+    : null;
+  const awayTopOrderForAuto = snapshot.home_starter && snapshot.away_starter
+    ? handednessAwareTopOps(
+        snapshot.away_lineup_top8,
+        snapshot.home_starter.throws
+      ).value
+    : null;
+
   // ── Debug audit factors ─────────────────────────────────────────
   const auto_factors: AutoFactors = {
     home_starter_id: snapshot.home_starter?.player_external_id ?? null,
@@ -1216,6 +1237,23 @@ export function runMlbAutoModelV1(
         : null,
     nrfi_used_fallback_era: nrfi.used_fallback_era,
     nrfi_used_top_of_order_data: nrfi.used_top_of_order_data,
+    // ── New FI Key Stats fields (additive, all optional) ──────────
+    home_first_inning_era: snapshot.home_starter?.first_inning_era ?? null,
+    away_first_inning_era: snapshot.away_starter?.first_inning_era ?? null,
+    home_first_inning_starts: snapshot.home_starter?.first_inning_starts ?? null,
+    away_first_inning_starts: snapshot.away_starter?.first_inning_starts ?? null,
+    home_first_inning_whip: snapshot.home_starter?.first_inning_whip ?? null,
+    away_first_inning_whip: snapshot.away_starter?.first_inning_whip ?? null,
+    home_top_order_ops:
+      homeTopOrderForAuto !== null
+        ? round1(homeTopOrderForAuto * 1000) / 1000
+        : null,
+    away_top_order_ops:
+      awayTopOrderForAuto !== null
+        ? round1(awayTopOrderForAuto * 1000) / 1000
+        : null,
+    home_starter_throws: snapshot.home_starter?.throws ?? null,
+    away_starter_throws: snapshot.away_starter?.throws ?? null,
   };
 
   // ── Assemble sport_specific output ──────────────────────────────
