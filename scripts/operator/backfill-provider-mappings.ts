@@ -129,16 +129,16 @@ type Bucket = {
 async function confirmApply(buckets: Bucket): Promise<boolean> {
   const rl = readline.createInterface({ input, output });
   const writes = buckets.high + buckets.medium;
-  const queues = buckets.low + buckets.none;
+  const skipped = buckets.low + buckets.none;
   try {
     const ans = await rl.question(
       `About to UPDATE players.provider_ids for the following counts:\n` +
         `  Tier 1 HIGH   (auto-write 'bdl' block):              ${buckets.high}\n` +
         `  Tier 2 MEDIUM (auto-write 'bdl' block w/ audit flag):${buckets.medium}\n` +
-        `  Tier 3 LOW    (queue 'unresolved_bdl'):              ${buckets.low}\n` +
-        `  None          (queue 'unresolved_bdl'):              ${buckets.none}\n` +
+        `  Tier 3 LOW    (skipped — manual review):             ${buckets.low}\n` +
+        `  None          (skipped — manual review):             ${buckets.none}\n` +
         `  -----\n` +
-        `  Total writes: ${writes + queues}  (${writes} mappings + ${queues} queue entries)\n` +
+        `  Will write: ${writes} mappings  ·  Skip-from-write: ${skipped} (queue-marker writes disabled)\n` +
         `  Each UPDATE touches players.provider_ids JSONB only.\n` +
         `  Reads-then-merges existing keys; no overwrites of other fields.\n` +
         `  Continue? [y/N]: `
@@ -410,13 +410,31 @@ async function main() {
   }
 
   console.log();
-  console.log("Writing provider_ids updates…");
+  console.log("Writing provider_ids updates… (Tier 1/2 only — queue-marker writes disabled)");
   let written = 0;
+  let skippedFromWrite = 0;
   let errors = 0;
+  // Strip queue markers from the proposed JSONB so that only the `bdl`
+  // (and `mlb_stats`) keys actually land on the row. This is defense in
+  // depth: the tier filter below catches the case where match.tier is
+  // low/none, but if proposedProviderIds ever sneaks in an
+  // `unresolved_bdl` key on a high/medium row we strip it here too.
+  function stripQueueKeys(
+    obj: Record<string, unknown>
+  ): Record<string, unknown> {
+    const copy = { ...obj };
+    delete copy.unresolved_bdl;
+    return copy;
+  }
   for (const r of results) {
+    if (r.match === null) continue;
+    if (r.match.tier !== "high" && r.match.tier !== "medium") {
+      skippedFromWrite++;
+      continue;
+    }
     if (r.proposedProviderIds === null) continue;
     try {
-      await writeMapping(supabase, r.player_id, r.proposedProviderIds);
+      await writeMapping(supabase, r.player_id, stripQueueKeys(r.proposedProviderIds));
       written++;
     } catch (e) {
       errors++;
@@ -427,12 +445,12 @@ async function main() {
   }
   console.log();
   console.log("━━━ Apply complete ━━━");
-  console.log(`  Rows updated:     ${written}`);
-  console.log(`  Errors:           ${errors}`);
+  console.log(`  Rows updated:           ${written}`);
+  console.log(`  Skipped (low/none tier):${skippedFromWrite}`);
+  console.log(`  Errors:                 ${errors}`);
   console.log();
-  console.log("  Next: review players with provider_ids ? 'unresolved_bdl' for manual mapping.");
-  console.log("  Query: SELECT id, full_name, provider_ids->'unresolved_bdl' AS unresolved");
-  console.log("         FROM players WHERE provider_ids ? 'unresolved_bdl';");
+  console.log("  Note: 15 None-tier players + 3 skipped (synthetic id) remain unmapped.");
+  console.log("  Their provider_ids was NOT touched this run. Manual review pending.");
 }
 
 main().catch((err) => {
