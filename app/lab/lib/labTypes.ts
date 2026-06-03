@@ -85,10 +85,22 @@ export type RefreshStatusResponse = {
 export type SharpStatus = "confirm" | "mixed" | "caution";
 
 export type DailyEdgePredictionDto = {
-  /** Display label: ML → team abbr, total → "Over"/"Under", NRFI → "NRFI"/"YRFI"/"Toss-Up". */
-  pick: string;
-  /** 0..1 (server normalizes the 0..100 column). */
-  confidence: number;
+  /**
+   * Display label: ML → team abbr, total → "Over"/"Under", NRFI →
+   * "NRFI"/"YRFI"/"Toss-Up".
+   *
+   * Phase 4.2.C.2 — null when the auto-model held this market. Pre-4.2.C.2
+   * the route surfaced fake defaults (home team / "Under" / "NRFI") for
+   * held games, which caused the "all games look the same" bug on the
+   * 2026-06-03 smoke. Held games now pass null through. The canonical
+   * member-facing path is the per-market `markets.{ml,total,first_inning}`
+   * block (which carries the per-market `held` flag and renders cleanly);
+   * this legacy `predictions.*` block is kept as a back-compat surface
+   * for any consumers that haven't migrated.
+   */
+  pick: string | null;
+  /** 0..1 (server normalizes the 0..100 column). Null when held. */
+  confidence: number | null;
   sharpStatus: SharpStatus;
   /**
    * V2.1.1 per-pick grade fields (Phase 6.3.5c). Populated from the
@@ -179,11 +191,31 @@ export type KeyStatRow = {
 export type MarketEdgeDto = {
   // ── existing per-pick fields (preserved from DailyEdgePredictionDto) ──
   pick: string | null;
-  confidence: number;
+  /**
+   * Phase 4.2.C.2 — nullable confidence. When the model holds this market
+   * (held=true), `pick`, `confidence`, and `grade` are ALL null. The UI
+   * renders "—" instead of fake "0%". Pre-4.2.C.2 this field was `number`
+   * with confidence defaulted to 0 for held markets, which surfaced as a
+   * misleading "0%" label.
+   */
+  confidence: number | null;
   grade: Grade | null;
   signalType: SignalType | null;
   marketSignal: MarketSignal | null;
   sharpStatus: SharpStatus;
+
+  /**
+   * Phase 4.2.C.2 — per-market held flag. True when the auto-model held
+   * this specific market (i.e., `sport_specific.held === true` AND this
+   * market key is in `sport_specific.hold_picks`). Held markets:
+   *   • carry pick=null, confidence=null, grade=null
+   *   • route to verdict.key="no_play" via verdictDerivation
+   *   • render as "Held" in the UI, not as a fake default pick
+   * Held is per-market: a game can have ML held while Total is playable.
+   * For the typical "all 3 held" case (every market in hold_picks), the
+   * DailyEdgeGameDto.holdReason carries the model's reason string.
+   */
+  held: boolean;
 
   // ── 4.1.10 per-market verdict ──
   verdict: { key: Verdict; label: string };
@@ -296,6 +328,19 @@ export type DailyEdgeGameDto = {
   updatedAt: string | null;
   /** 4.1.10 — read from `sport_specific.breakdown_generated_at` when present. */
   generatedAt: string | null;
+  /**
+   * Phase 4.2.C.2 — `sport_specific.hold_reason` from the auto-model.
+   * Surfaces in the UI under a held banner ("Held — starter data pending"
+   * / "Held — game postponed" / etc.) so members understand WHY a game
+   * has no picks rather than seeing 0% defaults. Null when the model
+   * didn't hold any market.
+   *
+   * Known values today (Phase 4D.1):
+   *   • "missing_or_scratched_starter" — most common; renders as
+   *     "Held — starter data pending"
+   *   • Other values map to a generic "Held" fallback in the UI
+   */
+  holdReason: string | null;
   predictions: {
     ml: DailyEdgePredictionDto;
     total: DailyEdgeTotalPredictionDto;

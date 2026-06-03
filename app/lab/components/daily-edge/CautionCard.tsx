@@ -39,6 +39,8 @@ type Props = {
 
 // ─── Helpers for the Model side of the contrast block ────────────────
 
+// Phase 4.2.C.2 — held markets carry null pick AND null confidence. Either
+// nullable triggers the early return (no headline label possible).
 function headlinePickLabel(game: DailyEdgeGameDto): {
   market: HeadlineMarket;
   label: string;
@@ -47,12 +49,12 @@ function headlinePickLabel(game: DailyEdgeGameDto): {
   const market = headlinePrimaryMarket(game);
   if (market === "moneyline") {
     const ml = game.predictions.ml;
-    if (!ml.pick || ml.pick === "—") return null;
+    if (!ml.pick || ml.pick === "—" || ml.confidence === null) return null;
     return { market, label: `${ml.pick} ML`, confidence: ml.confidence };
   }
   if (market === "total") {
     const t = game.predictions.total;
-    if (!t.pick) return null;
+    if (!t.pick || t.confidence === null) return null;
     return {
       market,
       label: t.line !== null ? `${t.pick} ${t.line}` : t.pick,
@@ -61,7 +63,7 @@ function headlinePickLabel(game: DailyEdgeGameDto): {
   }
   if (market === "first_inning_total") {
     const n = game.predictions.nrfi;
-    if (!n.pick || n.pick === "—") return null;
+    if (!n.pick || n.pick === "—" || n.confidence === null) return null;
     return { market, label: n.pick, confidence: n.confidence };
   }
   return null;

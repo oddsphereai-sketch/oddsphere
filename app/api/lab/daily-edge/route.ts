@@ -431,9 +431,42 @@ function buildGameDto(
   const pred = row.game_predictions;
   if (!pred) return null; // Skip games without a model prediction.
 
+  // Phase 4.2.C.2 — held extraction. The auto-model marks a market as
+  // held when it refuses to make a pick (e.g., missing starter, scratched
+  // starter, insufficient data). Held markets carry null pick / null
+  // confidence / null grade — the UI must render "Held", NEVER a fake
+  // default. Pre-4.2.C.2 the route used `?? "home"` / `?? "under"` /
+  // `?? true` defaults which surfaced as misleading 0%/Under/NRFI on the
+  // card. Those defaults are removed below.
+  const heldFlag =
+    pred.sport_specific !== null &&
+    (pred.sport_specific as Record<string, unknown>).held === true;
+  const holdPicksRaw =
+    pred.sport_specific === null
+      ? []
+      : ((pred.sport_specific as Record<string, unknown>).hold_picks as
+          | string[]
+          | undefined) ?? [];
+  const holdPicks = Array.isArray(holdPicksRaw) ? holdPicksRaw : [];
+  const isMlHeld = heldFlag && holdPicks.includes("ml");
+  const isOuHeld = heldFlag && holdPicks.includes("ou");
+  const isNrfiHeld = heldFlag && holdPicks.includes("nrfi");
+  const holdReason =
+    pred.sport_specific === null
+      ? null
+      : (((pred.sport_specific as Record<string, unknown>).hold_reason as
+          | string
+          | undefined) ?? null);
+
   // ── ML ──
-  const mlWinnerKey = pred.predicted_ml_winner ?? "home";
-  const mlPick = mlWinnerKey === "home" ? home : away;
+  // Phase 4.2.C.2 — null pick passes through honestly when held. The
+  // home/away resolution only fires when predicted_ml_winner is non-null.
+  // UI renders the null pick as "Held" via MarketEdgeDto.held.
+  const mlWinnerKey = pred.predicted_ml_winner;
+  const mlPick: string | null =
+    mlWinnerKey === null ? null
+      : mlWinnerKey === "home" ? home
+        : away;
   // Fix 4.1 (Flag D1): sharpStatus derives from the per-pick grade, not
   // from legacy signal_strength. See deriveSharpStatus() comment.
   const mlStatus = deriveSharpStatus(pred.ml_grade);
@@ -457,7 +490,12 @@ function buildGameDto(
   // a market line but was actually the model projection (home + away).
   // The fallback is removed; the field is now allowed to be null and
   // the UI handles null cleanly.
-  const ouSide = pred.predicted_ou_side ?? "under";
+  // Phase 4.2.C.2 — held total. Pre-4.2.C.2 `?? "under"` defaulted the
+  // ou_side to "under" when null, which surfaced as fake "Under" picks
+  // on held games (one of the symptoms in the 2026-06-03 smoke test).
+  // Null is now passed through honestly; the UI renders held markets
+  // explicitly.
+  const ouSide = pred.predicted_ou_side;
   const manualListedLine =
     typeof pred.sport_specific?.listed_line === "number"
       ? pred.sport_specific.listed_line
@@ -465,7 +503,10 @@ function buildGameDto(
   const totalLine: number | null =
     sportsbookTotalLine ?? manualListedLine ?? null;
   const totalStatus = deriveSharpStatus(pred.ou_grade);
-  const totalPick = ouSide === "over" ? "Over" : "Under";
+  const totalPick: string | null =
+    ouSide === null ? null
+      : ouSide === "over" ? "Over"
+        : "Under";
 
   // ── NRFI ──
   //
@@ -489,8 +530,16 @@ function buildGameDto(
   //   This is a DISPLAY-only fix. Model, thresholds, confidence,
   //   projected runs, and the underlying DB columns are unchanged. The
   //   route just chooses a different pick label for Toss-Up zone rows.
-  const isNrfi = pred.predicted_nrfi ?? true;
-  const nrfiSide = isNrfi ? "under" : "over"; // sharp_signals.side for first_inning_total
+  // Phase 4.2.C.2 — held FI. Pre-4.2.C.2 `?? true` defaulted predicted_nrfi
+  // to NRFI when null, surfacing fake "NRFI" picks on held games. Null
+  // is now passed through honestly. Toss-Up display logic still fires
+  // for valid non-held Toss-Up rows (nrfi_decision_kind="toss_up") —
+  // those have non-null predicted_nrfi and aren't in hold_picks, so they
+  // remain unaffected.
+  const isNrfi = pred.predicted_nrfi; // boolean | null — null when held
+  // nrfiSide used for sharp_signals lookup; defensive default when null
+  // doesn't affect display because nrfiPick handles null separately
+  const nrfiSide: Side = isNrfi === true || isNrfi === null ? "under" : "over";
   const nrfiStatus = deriveSharpStatus(pred.nrfi_grade);
   const nrfiDecisionKind =
     typeof pred.sport_specific?.nrfi_decision_kind === "string"
@@ -505,19 +554,22 @@ function buildGameDto(
     typeof nrfiExpectedRunsRaw === "number" && Number.isFinite(nrfiExpectedRunsRaw)
       ? nrfiExpectedRunsRaw
       : null;
+  // Toss-Up detection only fires for non-held games. Held games always
+  // route to nrfiPick=null below, regardless of decision_kind.
   const isNrfiTossUp =
-    nrfiDecisionKind === "toss_up" ||
-    (nrfiDecisionKind === null &&
-      pred.nrfi_confidence !== null &&
-      Math.round(pred.nrfi_confidence) === 52 &&
-      nrfiExpectedRuns !== null &&
-      nrfiExpectedRuns >= 0.85 &&
-      nrfiExpectedRuns < 1.15);
-  const nrfiPick: string = isNrfiTossUp
-    ? "Toss-Up"
-    : isNrfi
-      ? "NRFI"
-      : "YRFI";
+    !isNrfiHeld &&
+    (nrfiDecisionKind === "toss_up" ||
+      (nrfiDecisionKind === null &&
+        pred.nrfi_confidence !== null &&
+        Math.round(pred.nrfi_confidence) === 52 &&
+        nrfiExpectedRuns !== null &&
+        nrfiExpectedRuns >= 0.85 &&
+        nrfiExpectedRuns < 1.15));
+  const nrfiPick: string | null =
+    isNrfi === null ? null
+      : isNrfiTossUp ? "Toss-Up"
+        : isNrfi ? "NRFI"
+          : "YRFI";
 
   // Build the (market → modelSide + grade) lookup that buildSignalDtos
   // consumes for both alignment-aware text generation and direction color.
@@ -547,11 +599,28 @@ function buildGameDto(
   // specially: marketDataLimited never downgrades, sharpDirection is forced
   // to "none" (V1 has no first-inning sharp data), and copy never refers
   // to splits.
+  // Phase 4.2.C.2 — null confidence passes through honestly for held
+  // markets. Pre-4.2.C.2 the route coerced null→0 here which surfaced as
+  // "0%" on the card. The MarketEdgeDto.confidence field is now nullable
+  // (lib/lab/labTypes.ts) and UI helpers render "—" for null.
+  const mlConfidence: number | null =
+    pred.ml_confidence === null
+      ? null
+      : Math.max(0, Math.min(1, pred.ml_confidence / 100));
+  const ouConfidence: number | null =
+    pred.ou_confidence === null
+      ? null
+      : Math.max(0, Math.min(1, pred.ou_confidence / 100));
+  const nrfiConfidence: number | null =
+    pred.nrfi_confidence === null
+      ? null
+      : Math.max(0, Math.min(1, pred.nrfi_confidence / 100));
+
   const autoFactors = extractAutoFactors(pred.sport_specific);
   const ml = buildMarketEdge({
     market: "moneyline",
     pick: mlPick,
-    confidence: Math.max(0, Math.min(1, (pred.ml_confidence ?? 0) / 100)),
+    confidence: mlConfidence,
     grade: pred.ml_grade,
     signalType: pred.ml_signal_type,
     marketSignal: pred.ml_market_signal,
@@ -563,11 +632,12 @@ function buildGameDto(
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
+    held: isMlHeld,
   });
   const total = buildMarketEdge({
     market: "total",
     pick: totalPick,
-    confidence: Math.max(0, Math.min(1, (pred.ou_confidence ?? 0) / 100)),
+    confidence: ouConfidence,
     grade: pred.ou_grade,
     signalType: pred.ou_signal_type,
     marketSignal: pred.ou_market_signal,
@@ -579,6 +649,7 @@ function buildGameDto(
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
+    held: isOuHeld,
     totalsExtras: {
       modelTotal: pred.predicted_total,
       marketTotal: totalLine,
@@ -588,7 +659,7 @@ function buildGameDto(
   const firstInning = buildMarketEdge({
     market: "first_inning",
     pick: nrfiPick,
-    confidence: Math.max(0, Math.min(1, (pred.nrfi_confidence ?? 0) / 100)),
+    confidence: nrfiConfidence,
     grade: pred.nrfi_grade,
     signalType: pred.nrfi_signal_type,
     marketSignal: pred.nrfi_market_signal,
@@ -600,6 +671,7 @@ function buildGameDto(
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
+    held: isNrfiHeld,
   });
 
   // 4.1.10 — per-game status flags.
@@ -663,14 +735,19 @@ function buildGameDto(
     lockedAt: pred.locked_at,
     generatedAt,
     updatedAt: pred.computed_at,
+    holdReason,
     markets: { moneyline: ml, total, first_inning: firstInning },
     decisionLine,
     status,
     result: null,
+    // Phase 4.2.C.2 — legacy predictions block. Null picks and null
+    // confidences pass through honestly (was `?? 0` / fake defaults
+    // pre-4.2.C.2). The canonical member surface is `markets.*` above;
+    // this block remains for back-compat consumers.
     predictions: {
       ml: {
         pick: mlPick,
-        confidence: Math.max(0, Math.min(1, (pred.ml_confidence ?? 0) / 100)),
+        confidence: mlConfidence,
         sharpStatus: mlStatus,
         // V13 per-pick triplet for ML — sourced from ml_* DB columns.
         grade: pred.ml_grade,
@@ -679,7 +756,7 @@ function buildGameDto(
       },
       total: {
         pick: totalPick,
-        confidence: Math.max(0, Math.min(1, (pred.ou_confidence ?? 0) / 100)),
+        confidence: ouConfidence,
         sharpStatus: totalStatus,
         line: totalLine,
         // V13 per-pick triplet for the total — sourced from ou_* DB columns
@@ -690,7 +767,7 @@ function buildGameDto(
       },
       nrfi: {
         pick: nrfiPick,
-        confidence: Math.max(0, Math.min(1, (pred.nrfi_confidence ?? 0) / 100)),
+        confidence: nrfiConfidence,
         sharpStatus: nrfiStatus,
         // V13 per-pick triplet for 1st inning — sourced from nrfi_* DB columns.
         grade: pred.nrfi_grade,
@@ -886,7 +963,13 @@ function pickRiskDriver(
 type BuildMarketEdgeInput = {
   market: "moneyline" | "total" | "first_inning";
   pick: string | null;
-  confidence: number;
+  /**
+   * Phase 4.2.C.2 — null when this market is held by the auto-model.
+   * Pre-4.2.C.2 callers coerced null to 0 with `?? 0`, which surfaced
+   * as a misleading "0%" label. The DTO now passes null through honestly
+   * and the UI renders "—" for held confidence.
+   */
+  confidence: number | null;
   grade: Grade | null;
   signalType: SignalType | null;
   marketSignal: MarketSignal | null;
@@ -898,6 +981,12 @@ type BuildMarketEdgeInput = {
   autoFactors: Record<string, unknown> | null;
   homeAbbr: string;
   awayAbbr: string;
+  /**
+   * Phase 4.2.C.2 — true when this specific market is in the auto-model's
+   * hold_picks list. Surfaces to MarketEdgeDto.held so the UI renders
+   * "Held" instead of a fake default pick.
+   */
+  held: boolean;
   /** Totals-only — when supplied, modelTotal/marketTotal/line get populated. */
   totalsExtras?: {
     modelTotal: number | null;
@@ -963,22 +1052,36 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
         openAmerican === null;
 
   // Per-market verdict.
-  const verdict = marketVerdictFor({
-    market: input.market,
-    confidence: input.confidence,
-    grade: input.grade ?? ("market_watch" as Grade),
-    sharpDirection,
-    marketDataLimited,
-  });
+  //
+  // Phase 4.2.C.2 — held markets route to "no_play" directly. The
+  // marketVerdictFor function takes a numeric confidence, so we'd need
+  // to pass 0 anyway when confidence is null; the floor checks would
+  // route a 0-confidence call to no_play. The short-circuit here is
+  // explicit and avoids passing misleading 0 values through the verdict
+  // engine for held markets.
+  const verdict: { key: MarketVerdict; label: string } =
+    input.held || input.confidence === null
+      ? { key: "no_play", label: "No Play" }
+      : marketVerdictFor({
+          market: input.market,
+          confidence: input.confidence,
+          grade: input.grade ?? ("market_watch" as Grade),
+          sharpDirection,
+          marketDataLimited,
+        });
 
   // Server-generated copy (banned-terms-linted at output time).
   const modelDriver = pickModelDriver(input.autoFactors, input.market);
   const riskDriver = pickRiskDriver(input.autoFactors, input.market);
+  // Phase 4.2.C.2 — held markets pass 0 confidence to the copy generator.
+  // generatePerMarketCopy takes a numeric confidence; held markets always
+  // route to verdict="no_play" (short-circuit above) so the no_play
+  // template fires regardless of the confidence value.
   const copy = generatePerMarketCopy({
     market: input.market,
     verdict: verdict.key,
     pick: input.pick ?? "—",
-    confidence: input.confidence,
+    confidence: input.confidence ?? 0,
     sharpDirection,
     modelDriver,
     riskDriver,
@@ -995,12 +1098,13 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     signalType: input.signalType,
     marketSignal: input.marketSignal,
     sharpStatus: input.sharpStatus,
+    held: input.held,
     verdict,
     guidedGuide: copy.guidedGuide,
     guidedWatchOut: copy.guidedWatchOut,
     whyLine: copy.whyLine,
     riskLine: copy.riskLine,
-    modelProb: input.confidence,        // already 0-1 by the caller
+    modelProb: input.confidence,        // already 0-1 by the caller; null for held
     marketFairProb,
     pinnacleEvPct,
     moneyPct,

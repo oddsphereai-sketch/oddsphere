@@ -423,7 +423,8 @@ function MarketPill({
 }: {
   market: MarketKey;
   pick: string | null;
-  confidence: number;
+  /** Phase 4.2.C.2 — nullable; held markets render "—". */
+  confidence: number | null;
   verdict: VerdictKey;
   selected: boolean;
   onClick: () => void;
@@ -443,7 +444,7 @@ function MarketPill({
       </span>
       <span className="text-[12px] font-bold tabular-nums shrink-0">{pick ?? "—"}</span>
       <span className={`text-[10.5px] tabular-nums shrink-0 ${selected ? "text-gray-300" : "text-gray-500"}`}>
-        {Math.round(confidence * 100)}%
+        {confidence === null ? "—" : `${Math.round(confidence * 100)}%`}
       </span>
       <span
         aria-hidden="true"
@@ -487,7 +488,8 @@ function ReaderMarketSegment({
   market: MarketKey;
   pick: string | null;
   line: number | null;
-  confidence: number;
+  /** Phase 4.2.C.2 — nullable; held markets render "—" for confidence. */
+  confidence: number | null;
   verdict: VerdictKey;
   selected: boolean;
   onClick: () => void;
@@ -533,7 +535,7 @@ function ReaderMarketSegment({
             selected ? "text-violet-100/85" : "text-gray-500"
           }`}
         >
-          {Math.round(confidence * 100)}%
+          {confidence === null ? "—" : `${Math.round(confidence * 100)}%`}
         </span>
       </div>
     </button>
@@ -982,7 +984,9 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
           </h2>
           <div className="mt-1.5 flex items-baseline gap-1.5 flex-wrap">
             <span className="text-[12.5px] tabular-nums font-bold text-gray-300">
-              {Math.round(marketData.confidence * 100)}%
+              {marketData.confidence === null
+                ? "—"
+                : `${Math.round(marketData.confidence * 100)}%`}
             </span>
             {marketData.priceAmerican !== null ? (
               <>
@@ -1003,7 +1007,7 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
             </span>
           </div>
         </div>
-        <ConfidenceRing value={marketData.confidence * 100} size={48} stroke={4} />
+        <ConfidenceRing value={(marketData.confidence ?? 0) * 100} size={48} stroke={4} />
       </div>
 
       {/* Guided read */}
@@ -1714,6 +1718,26 @@ function SlateCard({
           </div>
         </div>
 
+        {/* Phase 4.2.C.2 — held-state banner.
+            When ALL three markets are held (sport_specific.held=true AND
+            hold_picks contains ml+ou+nrfi), surface a single quiet line
+            explaining why instead of cluttering the headline area with
+            "—". The headline area below still renders "—" for the pick;
+            this banner gives context for why. Mixed-hold cases (some
+            held, some playable) skip the banner — per-market verdict
+            chips already speak for themselves. */}
+        {game.holdReason !== null &&
+        game.markets.moneyline.held &&
+        game.markets.total.held &&
+        game.markets.first_inning.held ? (
+          <div className="mb-2.5 text-[11px] uppercase tracking-[0.14em] font-semibold text-gray-500">
+            Held —{" "}
+            {game.holdReason === "missing_or_scratched_starter"
+              ? "starter data pending"
+              : game.holdReason.replace(/_/g, " ")}
+          </div>
+        ) : null}
+
         {/* Headline pick — the visual focal point. Edge chip surfaces a
             single quiet badge when the pick has meaningful value/edge
             data ("+2.6% value", "Model edge", "Market support"). */}
@@ -1728,7 +1752,9 @@ function SlateCard({
             {MARKET_SHORT_LABEL[headlineMarket]}
           </span>
           <span className="text-[13px] tabular-nums font-bold text-gray-300">
-            {Math.round(headlineMarketData.confidence * 100)}%
+            {headlineMarketData.confidence === null
+              ? "—"
+              : `${Math.round(headlineMarketData.confidence * 100)}%`}
           </span>
           {headlineMarketData.priceAmerican !== null && (
             <span className="text-[12px] tabular-nums font-medium text-gray-500 ml-1">
@@ -1997,7 +2023,9 @@ function SelectedEdgeReader({
                     </span>
                     <span aria-hidden="true" className="text-gray-700 text-[10px]">·</span>
                     <span className="text-[11px] tabular-nums font-bold text-gray-200">
-                      {Math.round(marketData.confidence * 100)}%
+                      {marketData.confidence === null
+                        ? "—"
+                        : `${Math.round(marketData.confidence * 100)}%`}
                     </span>
                     {marketData.priceAmerican !== null && (
                       <>

@@ -106,8 +106,12 @@ function selectTopReads(games: DailyEdgeGameDto[]): Selections {
           return GRADE_RANK[aGrade] - GRADE_RANK[bGrade];
         }
         // Tiebreaker: the SAME market's confidence (matches what the slot displays).
+        // Phase 4.2.C.2 — confidence is nullable; held markets sort to bottom
+        // via `?? -1`. The grade filter above already excluded held picks
+        // (grade=null filtered out via QUALITY_FLOOR), so this is defensive.
         return (
-          b.predictions[market].confidence - a.predictions[market].confidence
+          (b.predictions[market].confidence ?? -1) -
+          (a.predictions[market].confidence ?? -1)
         );
       });
     return qualified[0] ?? null;
@@ -116,6 +120,7 @@ function selectTopReads(games: DailyEdgeGameDto[]): Selections {
   // Biggest Caution: any game with sharp_conflict on ANY pick. Tiebreaker
   // by the primary pick's confidence (precedence ML → OU → NRFI for the
   // displayed pick; selection just needs a stable rank across candidates).
+  // Phase 4.2.C.2 — confidence nullable; defensive `?? -1` for sort stability.
   const cautions = games
     .filter(
       (g) =>
@@ -123,7 +128,11 @@ function selectTopReads(games: DailyEdgeGameDto[]): Selections {
         g.predictions.total.grade === "sharp_conflict" ||
         g.predictions.nrfi.grade === "sharp_conflict"
     )
-    .sort((a, b) => b.predictions.ml.confidence - a.predictions.ml.confidence);
+    .sort(
+      (a, b) =>
+        (b.predictions.ml.confidence ?? -1) -
+        (a.predictions.ml.confidence ?? -1)
+    );
 
   return {
     best_ml: bestForMarket("ml"),
@@ -147,11 +156,18 @@ function pickDisplayFor(slot: Slot, game: DailyEdgeGameDto): {
   pickText: string;
   confidence: number;
 } {
+  // Phase 4.2.C.2 — predictions.* may carry null pick/confidence for held
+  // markets. TopReads only selects games for slots that the slot's
+  // selection logic decided are PLAYABLE (e.g., best_ml requires a real
+  // ML pick exists), so null shouldn't reach this function in practice.
+  // Defensive fallback: "Held" / 0 confidence — surfaces visibly rather
+  // than crashing if a held game somehow reaches a TopReads slot.
   function mlDisplay() {
+    const pick = game.predictions.ml.pick;
     return {
       marketLabel: "Moneyline",
-      pickText: `${game.predictions.ml.pick} ML`,
-      confidence: game.predictions.ml.confidence,
+      pickText: pick === null ? "Held" : `${pick} ML`,
+      confidence: game.predictions.ml.confidence ?? 0,
     };
   }
   function totalDisplay() {
@@ -159,17 +175,23 @@ function pickDisplayFor(slot: Slot, game: DailyEdgeGameDto): {
     // (manual slate without sharp data + no listed_line). Render the
     // side alone rather than "Under null" or substituting predicted_total.
     const t = game.predictions.total;
+    const pick = t.pick;
     return {
       marketLabel: "Total",
-      pickText: t.line !== null ? `${t.pick} ${t.line}` : t.pick,
-      confidence: t.confidence,
+      pickText: pick === null
+        ? "Held"
+        : t.line !== null
+          ? `${pick} ${t.line}`
+          : pick,
+      confidence: t.confidence ?? 0,
     };
   }
   function nrfiDisplay() {
+    const pick = game.predictions.nrfi.pick;
     return {
       marketLabel: "1st Inning",
-      pickText: game.predictions.nrfi.pick,
-      confidence: game.predictions.nrfi.confidence,
+      pickText: pick === null ? "Held" : pick,
+      confidence: game.predictions.nrfi.confidence ?? 0,
     };
   }
   switch (slot) {

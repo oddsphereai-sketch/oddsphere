@@ -291,19 +291,24 @@ function gamePassesFilters(
     filters.has(k)
   );
   if (totalsSide.length > 0) {
-    // Set<string> rather than Set<"Over" | "Under"> because the DTO types
-    // predictions.total.pick as plain string — keep the .has() check loose.
+    // Phase 4.2.C.2 — held markets have predictions.total.pick === null.
+    // Held games never match an active side filter (they're not playable).
+    const totalPick = g.predictions.total.pick;
+    if (totalPick === null) return false;
     const wants = new Set<string>(
       totalsSide.map((s) => (s === "overs" ? "Over" : "Under"))
     );
-    if (!wants.has(g.predictions.total.pick)) return false;
+    if (!wants.has(totalPick)) return false;
   }
 
   // ── 1st-inning side sub-group — OR within. Filters by predictions.nrfi.pick. ──
   const innSide = (["nrfi", "yrfi"] as const).filter((k) => filters.has(k));
   if (innSide.length > 0) {
+    // Phase 4.2.C.2 — held first-inning markets have null pick; filter rejects.
+    const nrfiPick = g.predictions.nrfi.pick;
+    if (nrfiPick === null) return false;
     const wants = new Set<string>(innSide.map((s) => s.toUpperCase()));
-    if (!wants.has(g.predictions.nrfi.pick)) return false;
+    if (!wants.has(nrfiPick)) return false;
   }
 
   return true;
@@ -314,6 +319,10 @@ function sortGames(
   sort: DailyEdgeSortKey
 ): DailyEdgeGameDto[] {
   const sorted = [...games];
+  // Phase 4.2.C.2 — predictions.ml.confidence is nullable (held games carry
+  // null). Held games sort to the bottom of confidence-based sorts via
+  // the `?? -1` coercion below (-1 is below any valid 0..1 confidence).
+  const conf = (g: DailyEdgeGameDto): number => g.predictions.ml.confidence ?? -1;
   if (sort === "start_time") {
     sorted.sort((a, b) => a.gameStartMinutes - b.gameStartMinutes);
   } else if (sort === "signal_strength") {
@@ -321,13 +330,11 @@ function sortGames(
       const aR = gradeSortRank(gradeFromGame(a));
       const bR = gradeSortRank(gradeFromGame(b));
       if (aR !== bR) return aR - bR;
-      return b.predictions.ml.confidence - a.predictions.ml.confidence;
+      return conf(b) - conf(a);
     });
   } else {
-    // confidence — descending ML confidence
-    sorted.sort(
-      (a, b) => b.predictions.ml.confidence - a.predictions.ml.confidence
-    );
+    // confidence — descending ML confidence; held games trail
+    sorted.sort((a, b) => conf(b) - conf(a));
   }
   return sorted;
 }

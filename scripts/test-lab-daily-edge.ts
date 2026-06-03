@@ -153,8 +153,11 @@ async function main() {
     first.predictions.nrfi.pick === "NRFI" || first.predictions.nrfi.pick === "YRFI"
   );
   check(
-    "game.predictions.ml.pick is a team abbreviation (not 'home'/'away')",
-    first.predictions.ml.pick !== "home" && first.predictions.ml.pick !== "away" && first.predictions.ml.pick.length > 0
+    "game.predictions.ml.pick is a team abbreviation (not 'home'/'away') or null for held",
+    first.predictions.ml.pick === null ||
+      (first.predictions.ml.pick !== "home" &&
+        first.predictions.ml.pick !== "away" &&
+        first.predictions.ml.pick.length > 0)
   );
   check("game.projected is { away, home }", typeof first.projected === "object" && typeof first.projected.away === "number" && typeof first.projected.home === "number");
   check("game.sharpSignals is an array", Array.isArray(first.sharpSignals));
@@ -237,10 +240,14 @@ async function main() {
   // ─── Confidence values are in [0, 1] for every game ───────────────────────
   section("Confidence range");
 
+  // Phase 4.2.C.2 — confidence is nullable (held markets). Null is
+  // acceptable; only non-null values must be in [0, 1].
   const allInRange = body.games.every((g) =>
-    [g.predictions.ml.confidence, g.predictions.total.confidence, g.predictions.nrfi.confidence].every((c) => c >= 0 && c <= 1)
+    [g.predictions.ml.confidence, g.predictions.total.confidence, g.predictions.nrfi.confidence].every(
+      (c) => c === null || (c >= 0 && c <= 1)
+    )
   );
-  check("every game's ml/total/nrfi confidence in [0, 1]", allInRange);
+  check("every game's ml/total/nrfi confidence is null or in [0, 1]", allInRange);
 
   // ─── Sort order: gameStartMinutes ascending ──────────────────────────────
   section("Sort order");
@@ -423,6 +430,7 @@ async function main() {
       signalType: null,
       marketSignal: null,
       sharpStatus: "mixed" as SharpStatus,
+      held: false,  // Phase 4.2.C.2 — stub default
       verdict: { key: "no_play" as const, label: "No Play" },
       guidedGuide: "stub",
       guidedWatchOut: "stub",
@@ -455,6 +463,7 @@ async function main() {
       lockedAt: null,
       updatedAt: null,
       generatedAt: null,
+      holdReason: null,
       predictions: {
         ml: tile(ml),
         total: { ...tile(total), line: 9 },

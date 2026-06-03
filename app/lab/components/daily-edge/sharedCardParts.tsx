@@ -119,9 +119,10 @@ export function otherMarketsLabels(game: DailyEdgeGameDto): string[] {
   if (headline !== "moneyline" && game.predictions.ml.pick && game.predictions.ml.pick !== "—") {
     out.push(`${game.predictions.ml.pick} ML`);
   }
-  if (headline !== "total" && game.predictions.total.pick) {
+  if (headline !== "total" && game.predictions.total.pick !== null && game.predictions.total.pick !== "—") {
     const t = game.predictions.total;
-    out.push(t.line !== null ? `${t.pick} ${t.line}` : t.pick);
+    const pick = t.pick as string;  // narrowed by the guard above
+    out.push(t.line !== null ? `${pick} ${t.line}` : pick);
   }
   if (
     headline !== "first_inning_total" &&
@@ -408,19 +409,27 @@ function getTileBorder(status: SharpStatus): string {
   return "border-gray-800";
 }
 
-function getNrfiPickColor(pick: string): string {
+// Phase 4.2.C.2 — accept null pick for held FI markets. Held returns the
+// neutral gray treatment; PredictionTile's isNoPick check overrides the
+// pick display to "—" anyway, but the prop type must allow null.
+function getNrfiPickColor(pick: string | null): string {
   if (pick === "NRFI") return "text-emerald-400";
   if (pick === "YRFI") return "text-violet-400";
   return "text-gray-200";
 }
 
-function getNrfiPickGlow(pick: string): string {
+function getNrfiPickGlow(pick: string | null): string {
   if (pick === "NRFI") return "drop-shadow-[0_0_8px_rgba(52,211,153,0.45)]";
   if (pick === "YRFI") return "drop-shadow-[0_0_8px_rgba(167,139,250,0.45)]";
   return "";
 }
 
-function formatTotalPickShort(pick: string, line: number | null): string {
+// Phase 4.2.C.2 — accept null pick. PredictionTile's isNoPick check
+// renders "—" instead of this formatted output for held markets, but the
+// signature must permit null. Null pick returns "—" defensively in case
+// a caller bypasses PredictionTile.
+function formatTotalPickShort(pick: string | null, line: number | null): string {
+  if (pick === null) return "—";
   if (line === null) {
     if (pick === "Over") return "O";
     if (pick === "Under") return "U";
@@ -478,17 +487,24 @@ function PredictionTile({
   pickGlow,
 }: {
   label: string;
-  pick: string;
-  confidence: number;
+  /** Phase 4.2.C.2 — null when the auto-model held this market. */
+  pick: string | null;
+  /** Phase 4.2.C.2 — null when the auto-model held this market. */
+  confidence: number | null;
   sharpStatus: SharpStatus;
   grade: Grade | null;
   pickColor: string;
   pickGlow: string;
 }) {
-  const isNoPick = grade === null;
+  // Phase 4.2.C.2 — isNoPick treats either null pick OR null grade as
+  // "held / no displayable pick". Either condition fires the "—" treatment.
+  // Pre-4.2.C.2 only checked grade === null; held games still rendered fake
+  // pick strings because the route defaulted them to "Under" / "NRFI" etc.
+  const isNoPick = grade === null || pick === null || confidence === null;
   const borderClass = getTileBorder(sharpStatus);
   const displayPick = isNoPick ? "—" : pick;
-  const displayConfidence = isNoPick ? "—" : `${Math.round(confidence * 100)}%`;
+  const displayConfidence =
+    isNoPick || confidence === null ? "—" : `${Math.round(confidence * 100)}%`;
   return (
     <div
       className={`bg-gray-900/60 border ${borderClass} rounded-md p-3 sm:p-3.5 transition-colors duration-150 hover:bg-gray-900/80 relative`}
@@ -544,15 +560,19 @@ const SIGNAL_MARKET_FOR: Record<MarketKey, SharpSignalDto["market"]> = {
 };
 
 function formatPickFor(market: MarketKey, game: DailyEdgeGameDto): string {
+  // Phase 4.2.C.2 — null pick (held market) renders as "—". Pre-4.2.C.2
+  // this returned fake strings like "Under undefined" because pick was
+  // typed as string but ran as null at runtime for held games.
   if (market === "ml") {
     const pick = game.predictions.ml.pick;
-    return pick && pick !== "—" ? `${pick} ML` : "—";
+    return pick !== null && pick !== "—" ? `${pick} ML` : "—";
   }
   if (market === "total") {
     const t = game.predictions.total;
+    if (t.pick === null) return "—";
     return t.line !== null ? `${t.pick} ${t.line}` : t.pick;
   }
-  return game.predictions.nrfi.pick;
+  return game.predictions.nrfi.pick ?? "—";
 }
 
 export function FullBreakdownExpandable({
@@ -620,7 +640,9 @@ function MarketBlock({
 }) {
   const tile = game.predictions[market];
   const displayGrade: Grade | null = tile.grade;
-  const isNoPick = displayGrade === null;
+  // Phase 4.2.C.2 — isNoPick also true when pick or confidence is null
+  // (held market). Pre-4.2.C.2 only checked grade.
+  const isNoPick = displayGrade === null || tile.pick === null || tile.confidence === null;
   const pickText = isNoPick ? "—" : formatPickFor(market, game);
   const signalsForMarket = game.sharpSignals.filter(
     (s) => s.market === SIGNAL_MARKET_FOR[market]
@@ -638,7 +660,9 @@ function MarketBlock({
         {pickText}
         <span className="text-gray-400 tabular-nums">
           {" · "}
-          {isNoPick ? "—" : `${Math.round(tile.confidence * 100)}%`}
+          {isNoPick || tile.confidence === null
+            ? "—"
+            : `${Math.round(tile.confidence * 100)}%`}
         </span>
       </p>
       {signalsForMarket.length > 0 && (

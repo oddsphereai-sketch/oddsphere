@@ -41,13 +41,18 @@ function perMarketGrade(
   return game.predictions.nrfi.grade;
 }
 
+// Phase 4.2.C.2 — confidence is nullable (held markets carry null).
+// Held games are filtered out of the candidates list by the
+// "best_angle/lean" verdict check at the top of findBestOfMarket
+// (held markets route to "no_play"), so this helper is only invoked
+// for non-held games in practice. Defensive `?? 0` for sort stability.
 function perMarketConfidence(
   game: DailyEdgeGameDto,
   market: EligibleMarket
 ): number {
-  if (market === "moneyline") return game.predictions.ml.confidence;
-  if (market === "total") return game.predictions.total.confidence;
-  return game.predictions.nrfi.confidence;
+  if (market === "moneyline") return game.predictions.ml.confidence ?? 0;
+  if (market === "total") return game.predictions.total.confidence ?? 0;
+  return game.predictions.nrfi.confidence ?? 0;
 }
 
 /**
@@ -90,19 +95,23 @@ export function findBestOfMarket(
  *   total     → "Over 8.5" / "Under" when no line
  *   first_inning_total → "NRFI" / "YRFI"
  */
+// Phase 4.2.C.2 — held picks (null) render as "—". Best-of selection
+// already filters held games via the verdict gate, so this is defensive
+// for any caller that reaches it with a held market.
 export function bestOfHeroLabel(
   game: DailyEdgeGameDto,
   market: HeadlineMarket
 ): string {
   if (market === "moneyline") {
-    return game.predictions.ml.pick;
+    return game.predictions.ml.pick ?? "—";
   }
   if (market === "total") {
     const t = game.predictions.total;
+    if (t.pick === null) return "—";
     return t.line !== null ? `${t.pick} ${t.line}` : t.pick;
   }
   if (market === "first_inning_total") {
-    return game.predictions.nrfi.pick;
+    return game.predictions.nrfi.pick ?? "—";
   }
   return "—";
 }

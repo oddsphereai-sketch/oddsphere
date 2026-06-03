@@ -58,6 +58,7 @@ function stubMarketEdge(pick: string | null = "X") {
     signalType: null,
     marketSignal: null,
     sharpStatus: "mixed" as const,
+    held: false,  // Phase 4.2.C.2 — stub defaults to non-held
     verdict: { key: "lean" as const, label: "Lean" },
     guidedGuide: "stub",
     guidedWatchOut: "stub",
@@ -129,6 +130,7 @@ function mkGame(overrides: GameOverrides = {}): DailyEdgeGameDto {
     lockedAt: null,
     updatedAt: null,
     generatedAt: null,
+    holdReason: null,
     markets: {
       moneyline: stubMarketEdge(overrides.mlPick ?? "NYY"),
       total: stubMarketEdge(overrides.ouPick ?? "Over"),
