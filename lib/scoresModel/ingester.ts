@@ -160,6 +160,21 @@ export type ScoresModelInputRow = {
   // Metadata
   model_version: string;
   computed_at: string;       // ISO 8601
+  /**
+   * Phase 4.2.B — optional manual-override flag. When true, this write
+   * bypasses the Layer 1 lock guard and updates locked predictions. Used
+   * by the (future) manual-edit route to fix a bad pick after T-60 lock
+   * has passed. Defaults to false / undefined for every existing caller
+   * (cron path, manual upload via admin route, automodelService) so no
+   * existing behavior changes.
+   *
+   * The persisted DB column `is_override` is set by buildPayload from
+   * source semantics, not from this field — this field is a directive
+   * to the GUARD only, not a write to the column. The guard reads it
+   * pre-upsert; if it ever needs to be persisted as well, a separate
+   * change can wire that in.
+   */
+  is_override?: boolean;
 };
 
 /** Back-compat alias — Phase 3D callers used this name. */
@@ -482,18 +497,90 @@ export async function ingestScoresModel(
     return result;
   }
 
-  // Pre-existing snapshot for insert-vs-update counts
+  // Pre-existing snapshot for insert-vs-update counts AND (Phase 4.2.B)
+  // Layer 1 lock guard. We read game_id + locked_at + is_override here so
+  // the same query feeds the existing-vs-new accounting AND the lock-skip
+  // decision below — keeps the round-trip count at one.
   const validatedIds = validated.map((v) => v.gameId);
   const { data: existing } = await client
     .from("game_predictions")
-    .select("game_id")
+    .select("game_id, locked_at, is_override")
     .in("game_id", validatedIds);
-  const existingSet = new Set(
-    ((existing ?? []) as { game_id: number }[]).map((r) => r.game_id)
+  type ExistingRow = {
+    game_id: number;
+    locked_at: string | null;
+    is_override: boolean;
+  };
+  const existingByGameId = new Map<number, ExistingRow>(
+    ((existing ?? []) as ExistingRow[]).map((r) => [r.game_id, r])
   );
+  const existingSet = new Set(existingByGameId.keys());
 
-  // Build payload and upsert
-  const payload = validated.map(({ row, gameId }) =>
+  // Phase 4.2.B Layer 1 — lock guard.
+  //
+  // Filter out validated rows that target an already-locked
+  // game_predictions row, UNLESS the incoming row is a manual override.
+  // Locked-and-skipped rows are pushed onto result.failed[] with a
+  // stable errors marker so callers (cron audit log, operator scripts)
+  // can detect lock-related skips distinctly from validation failures.
+  //
+  // Manual override semantics (incoming row carries is_override=true):
+  //   • V1 status: no code path currently sets incoming is_override=true.
+  //     The bypass exists as the documented escape hatch promised by
+  //     Phase 4.2.B planning ("manual overrides may still update locked
+  //     games"). When a future manual-edit route lands, it sets
+  //     is_override=true on the input row and bypasses this guard.
+  //   • The bypass is checked on the INCOMING row's is_override field
+  //     (added below as an optional field on ScoresModelInputRow), NOT
+  //     on the existing DB row's is_override. The DB-side flag tracks
+  //     "this row has been overridden in the past"; the incoming flag
+  //     declares "this write is an override action".
+  //
+  // The audit row's failed_count reflects locked-skipped rows so the
+  // refresh_log surfaces them as visible activity.
+  const writable: ToUpsert[] = [];
+  for (const v of validated) {
+    const ex = existingByGameId.get(v.gameId);
+    const isLocked = ex !== undefined && ex.locked_at !== null;
+    const incomingIsOverride =
+      (v.row as { is_override?: boolean }).is_override === true;
+    if (isLocked && !incomingIsOverride) {
+      result.failed.push({
+        row: v.row,
+        errors: ["locked: cron write blocked because locked_at is set; manual override path required to update"],
+      });
+      continue;
+    }
+    writable.push(v);
+  }
+
+  // If lock guard skipped every row, we still need to record an audit
+  // entry with the skipped count and return cleanly — same shape as the
+  // validated.length === 0 path above but reached for a different reason.
+  if (writable.length === 0) {
+    const lockMessages: string[] = result.failed.flatMap((f) =>
+      f.errors
+        .filter((e) => e.startsWith("locked:"))
+        .map((e) => `[ext_id ${f.row.game_external_id}] ${e}`)
+    );
+    const runId = await writeAuditRow(client, {
+      sport,
+      source,
+      run_date: runDate,
+      predictions_count: rows.length,
+      successful_count: 0,
+      failed_count: result.failed.length,
+      model_version: rows[0]?.model_version ?? null,
+      started_at: startedAt,
+      completed_at: new Date().toISOString(),
+      error_messages: [...errorMessages, ...lockMessages],
+    });
+    result.run_id = runId;
+    return result;
+  }
+
+  // Build payload and upsert (only the rows that passed the lock guard).
+  const payload = writable.map(({ row, gameId }) =>
     buildPayload(sport, row, gameId, source)
   );
   const { error } = await client
@@ -501,7 +588,9 @@ export async function ingestScoresModel(
     .upsert(payload, { onConflict: "game_id" });
 
   if (error) {
-    for (const { row } of validated) {
+    // Bulk upsert blew up — every `writable` row failed. (Rows that were
+    // already pushed to result.failed by the lock guard above stay there.)
+    for (const { row } of writable) {
       result.failed.push({
         row,
         errors: [`bulk upsert failed: ${error.message}`],
@@ -514,7 +603,7 @@ export async function ingestScoresModel(
       run_date: runDate,
       predictions_count: rows.length,
       successful_count: 0,
-      failed_count: rows.length,
+      failed_count: result.failed.length,
       model_version: rows[0]?.model_version ?? null,
       started_at: startedAt,
       completed_at: new Date().toISOString(),
@@ -524,22 +613,33 @@ export async function ingestScoresModel(
     return result;
   }
 
-  for (const { gameId } of validated) {
+  // Only the rows that actually got upserted count as inserts/updates.
+  for (const { gameId } of writable) {
     if (existingSet.has(gameId)) result.updated++;
     else result.inserted++;
   }
 
+  // Audit row reflects rows that actually wrote (writable.length), not the
+  // pre-lock-guard count (validated.length). Phase 4.2.B lock-skipped rows
+  // appear in result.failed and propagate to failed_count + error_messages
+  // — but successful_count is now exclusively for rows that hit the UPSERT.
+  const lockMessages: string[] = result.failed.flatMap((f) =>
+    f.errors
+      .filter((e) => e.startsWith("locked:"))
+      .map((e) => `[ext_id ${f.row.game_external_id}] ${e}`)
+  );
+  const allErrorMessages = [...errorMessages, ...lockMessages];
   const runId = await writeAuditRow(client, {
     sport,
     source,
     run_date: runDate,
     predictions_count: rows.length,
-    successful_count: validated.length,
+    successful_count: writable.length,
     failed_count: result.failed.length,
     model_version: rows[0]?.model_version ?? null,
     started_at: startedAt,
     completed_at: new Date().toISOString(),
-    error_messages: errorMessages.length > 0 ? errorMessages : null,
+    error_messages: allErrorMessages.length > 0 ? allErrorMessages : null,
   });
   result.run_id = runId;
   return result;

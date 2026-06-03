@@ -33,6 +33,7 @@ import type {
 } from "../../lib/labTypes";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { teamPrimaryColor } from "./teamColors";
+import { LockBadge } from "./LockBadge";
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -1705,6 +1706,11 @@ function SlateCard({
           <div className="flex items-center gap-2 shrink-0">
             <VerdictChip verdict={headlineVerdict} />
             <span className="text-[11px] text-gray-500 tabular-nums">{game.gameTime}</span>
+            <LockBadge
+              lockState={game.lockState}
+              lockedAt={game.lockedAt}
+              scheduledLockAt={game.scheduledLockAt}
+            />
           </div>
         </div>
 
@@ -2145,6 +2151,13 @@ function MobileDetailSheet({
               <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={26} />
               <span className="text-gray-700 ml-1">·</span>
               <span className="text-[12px] text-gray-400 tabular-nums">{game.gameTime}</span>
+              <LockBadge
+                lockState={game.lockState}
+                lockedAt={game.lockedAt}
+                scheduledLockAt={game.scheduledLockAt}
+                withSeparator
+                className="text-[12px] text-gray-400"
+              />
             </div>
             <button
               type="button"

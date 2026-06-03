@@ -266,17 +266,34 @@ export type DailyEdgeGameDto = {
   /** Minutes-from-midnight-ET for sort stability. */
   gameStartMinutes: number;
   /**
-   * 4.1.10 — raw UTC ISO of `games.game_date`. Lock cron (4.1.12+) reads
-   * this to know the lock fire time. UI may use it for "locks in X" copy.
+   * Phase 4.2.B — ISO 8601 UTC of when the per-game lock cron will fire
+   * for this game (= `games.game_date` minus the lock window, default
+   * 60 min). The UI uses this for "Locks in 23 min" copy. Falls back to
+   * `games.game_date` itself when computeLocksAt returns null (invalid
+   * game_date), so the field is always a usable timestamp.
    */
   scheduledLockAt: string;
   /**
-   * 4.1.10 — lock state machine. Hardcoded "open" until Phase 4.1.12
-   * lands the `games.locked_at` column and the lock cron.
+   * Phase 4.2.B — three-state lock indicator mapped from the four-state
+   * `classifyLockState` output:
+   *   • "locked"  → game_predictions.locked_at is set, OR game has started
+   *   • "locking" → game is within the T-60 window AND not yet locked
+   *                  (next pregame-sweep run will set locked_at)
+   *   • "open"    → game is far from T-60; cron will keep refreshing
    */
   lockState: LockState;
-  /** 4.1.10 — null until Phase 4.1.12. */
+  /**
+   * Phase 4.2.B — game_predictions.locked_at. Non-null when the per-game
+   * cron has frozen this row. Future writes from cron are blocked; the
+   * lockState above is "locked" or "locking" depending on the four-state
+   * classifier mapping. Null while the game is still being refreshed.
+   */
   lockedAt: string | null;
+  /**
+   * Phase 4.2.B — game_predictions.computed_at. Null when no prediction
+   * has been recorded yet. Surfaces as "Updated HH:MM" in the UI.
+   */
+  updatedAt: string | null;
   /** 4.1.10 — read from `sport_specific.breakdown_generated_at` when present. */
   generatedAt: string | null;
   predictions: {

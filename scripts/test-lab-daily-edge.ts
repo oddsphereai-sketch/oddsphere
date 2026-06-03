@@ -453,6 +453,7 @@ async function main() {
       scheduledLockAt: "2026-05-29T23:10:00.000Z",
       lockState: "open" as const,
       lockedAt: null,
+      updatedAt: null,
       generatedAt: null,
       predictions: {
         ml: tile(ml),
@@ -1312,14 +1313,34 @@ async function main() {
     } else {
       const sample = liveBody.games[0]!;
 
-      // ── lock placeholder fields ──
+      // ── lock fields (Phase 4.2.B) ──
       check(
         "[4.1.10] scheduledLockAt is a valid ISO string",
         typeof sample.scheduledLockAt === "string" &&
           !Number.isNaN(Date.parse(sample.scheduledLockAt))
       );
-      check(`[4.1.10] lockState === "open" pre-DDL`, sample.lockState === "open");
-      check(`[4.1.10] lockedAt === null pre-DDL`, sample.lockedAt === null);
+      // Phase 4.2.B — lockState is now driven by classifyLockState. The
+      // visible-slate fallback (2026-05-22) has game_date in the past so
+      // classifier returns "already_started", which the DTO maps to
+      // "locked". For an actively-running slate the value would be "open"
+      // or "locking". Accept any of the three valid enum values.
+      check(
+        `[4.2.B] lockState is one of "open"|"locking"|"locked"`,
+        sample.lockState === "open" ||
+          sample.lockState === "locking" ||
+          sample.lockState === "locked"
+      );
+      // Pre-Phase 4.2.D cron activation, locked_at is NULL for every
+      // existing row (the DDL added the column with no backfill). Lock
+      // transitions only happen when pregame-sweep cron runs. So this
+      // assertion still holds: until cron is scheduled, lockedAt stays
+      // null even though lockState may map to "locked" (via the
+      // already_started fallback for past slates).
+      check(`[4.2.B] lockedAt === null pre-cron-activation`, sample.lockedAt === null);
+      check(
+        `[4.2.B] updatedAt is string|null`,
+        sample.updatedAt === null || typeof sample.updatedAt === "string"
+      );
       check(
         `[4.1.10] generatedAt is string|null`,
         sample.generatedAt === null || typeof sample.generatedAt === "string"

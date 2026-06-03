@@ -127,6 +127,7 @@ function mkGame(overrides: GameOverrides = {}): DailyEdgeGameDto {
     scheduledLockAt: "2026-05-29T23:10:00.000Z",
     lockState: "open" as const,
     lockedAt: null,
+    updatedAt: null,
     generatedAt: null,
     markets: {
       moneyline: stubMarketEdge(overrides.mlPick ?? "NYY"),

@@ -105,6 +105,22 @@ export type AutoModelRunOpts = {
    * proceeds.
    */
   enrichmentHook?: EnrichmentHook;
+  /**
+   * Phase 4.2.B — Layer 2 lock guard.
+   *
+   * When `true` (default), the service pre-filters out games whose
+   * existing game_predictions row has `locked_at IS NOT NULL`. Saves the
+   * snapshot-build + model-run work for games that the Layer 1 ingester
+   * guard would reject anyway.
+   *
+   * When `false`, the filter is skipped — locked games are included in
+   * the snapshot build and pass to ingestScoresModel. Layer 1 still
+   * catches them (defense in depth). The opt-out exists for explicit
+   * operator re-runs / debugging where we want the full pipeline to
+   * execute even on locked rows so we can compare model output without
+   * actually writing.
+   */
+  respectLocks?: boolean;
 };
 
 /**
@@ -221,6 +237,61 @@ export type AutoModelRunResult = {
  *     top-level metadata field the ingester writes to game_predictions.
  *   • computed_at is set at adapt-time (one ISO timestamp per slate run).
  */
+/**
+ * Phase 4.2.B — read external_ids of games on this slate whose
+ * game_predictions row already has locked_at set. Used by the Layer 2
+ * filter to pre-exclude locked games from the snapshot build.
+ *
+ * Returns a Set of external_ids for O(1) lookup. Empty set when no
+ * locked rows exist (typical morning state).
+ */
+async function fetchLockedExternalIds(
+  sport: Sport,
+  slate_date: string
+): Promise<Set<number>> {
+  const { data, error } = await supabase
+    .from("game_predictions")
+    .select("games!inner ( external_id, sport, slate_date ), locked_at")
+    .not("locked_at", "is", null)
+    .eq("games.sport", sport)
+    .eq("games.slate_date", slate_date);
+  if (error) {
+    throw new Error(
+      `automodelService.fetchLockedExternalIds failed for ${sport}/${slate_date}: ${error.message}`
+    );
+  }
+  const rows = (data ?? []) as unknown as Array<{
+    games: { external_id: number };
+    locked_at: string;
+  }>;
+  return new Set(rows.map((r) => r.games.external_id));
+}
+
+/**
+ * Phase 4.2.B — read all external_ids for the slate. Used by the Layer 2
+ * filter when the caller did NOT pass an explicit gameExternalIdsFilter
+ * but locked games exist: we need to build a "whole slate minus locked"
+ * filter, which requires knowing the whole slate first.
+ */
+async function fetchSlateExternalIds(
+  sport: Sport,
+  slate_date: string
+): Promise<number[]> {
+  const { data, error } = await supabase
+    .from("games")
+    .select("external_id")
+    .eq("sport", sport)
+    .eq("slate_date", slate_date);
+  if (error) {
+    throw new Error(
+      `automodelService.fetchSlateExternalIds failed for ${sport}/${slate_date}: ${error.message}`
+    );
+  }
+  return ((data ?? []) as Array<{ external_id: number }>).map(
+    (r) => r.external_id
+  );
+}
+
 function autoModelOutputToScoresRow(
   output: AutoModelOutput,
   computed_at: string
@@ -338,13 +409,44 @@ export async function generatePredictionsForSlate(
     };
   }
 
-  // Step 1 — build feature snapshots (Phase 4C: filter optional)
+  // Phase 4.2.B — Layer 2 lock filter.
+  //
+  // Pre-filter out games whose game_predictions row is already locked, so
+  // we don't waste API calls / CPU building snapshots and running the
+  // model on rows that the Layer 1 ingester guard would reject anyway.
+  //
+  // Default: respectLocks=true. Operator escape hatch passes false to
+  // run the full pipeline even on locked games (Layer 1 still catches
+  // any actual write).
+  const respectLocks = opts.respectLocks !== false;
+  let effectiveFilter: number[] | undefined = opts.gameExternalIdsFilter;
+  if (respectLocks) {
+    const lockedExternalIds = await fetchLockedExternalIds(sport, slate_date);
+    if (lockedExternalIds.size > 0) {
+      if (effectiveFilter === undefined) {
+        // No prior filter — build one that excludes locked games.
+        // We need the full slate's external ids to subtract from, so a
+        // bare "exclude locked" needs the slate's external_id list first.
+        const allExternalIds = await fetchSlateExternalIds(sport, slate_date);
+        effectiveFilter = allExternalIds.filter(
+          (id) => !lockedExternalIds.has(id)
+        );
+      } else {
+        effectiveFilter = effectiveFilter.filter(
+          (id) => !lockedExternalIds.has(id)
+        );
+      }
+    }
+  }
+
+  // Step 1 — build feature snapshots (Phase 4C: filter optional;
+  // Phase 4.2.B: locked games already excluded above).
   let snapshots: GameSnapshot[];
   try {
     snapshots = await buildFeatureSnapshots(
       sport,
       slate_date,
-      opts.gameExternalIdsFilter
+      effectiveFilter
     );
   } catch (e) {
     throw new Error(

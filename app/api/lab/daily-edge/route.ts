@@ -45,6 +45,11 @@ import type {
   SignalType,
 } from "@/lib/types/domain/Grade";
 import { currentSlateDate, isSlateDate } from "@/lib/dates/slateDate";
+import {
+  classifyLockState,
+  computeLocksAt,
+} from "@/lib/automodel/lockState";
+import type { LockState as DtoLockState } from "@/app/lab/lib/labTypes";
 import type {
   DailyEdgeGameDto,
   DailyEdgeResponse,
@@ -386,6 +391,17 @@ type PredictionRow = {
    * when no lines row exists.
    */
   sport_specific: Record<string, unknown> | null;
+  /**
+   * Phase 4.2.B — when the prediction was last refreshed. Surfaces as
+   * `updatedAt` in the DTO so the UI can show "Updated 4:12 PM".
+   */
+  computed_at: string | null;
+  /**
+   * Phase 4.2.B — per-game T-60 lock timestamp. NULL = unlocked.
+   * Surfaces as `lockedAt` in the DTO and feeds the `lockState`
+   * classification via lockState.classifyLockState.
+   */
+  locked_at: string | null;
 };
 
 type GameRow = {
@@ -605,6 +621,31 @@ function buildGameDto(
   // present. Reflects WHEN the model output was last refreshed for this row.
   const generatedAt = extractGeneratedAt(pred.sport_specific);
 
+  // Phase 4.2.B — derive lock state for the DTO surface.
+  //   • scheduledLockAt = game_date minus the lock window (default 60min).
+  //     This is when the per-game cron will set locked_at; the UI uses it
+  //     for "Locks in 23 min" copy. If game_date is invalid this resolves
+  //     to row.game_date as a defensive fallback so the UI still has a
+  //     usable string to render.
+  //   • lockedAt        = the actual locked_at timestamp from
+  //     game_predictions. Null when the row hasn't been locked yet.
+  //   • lockState       = three-state DTO enum mapped from our four-state
+  //     classifier output: locked|already_started → "locked";
+  //     entering_lock → "locking"; still_unlocked → "open".
+  //   • updatedAt       = game_predictions.computed_at. Surfaces "when did
+  //     this prediction last refresh" so the UI can render "Updated 4:12 PM".
+  const lockClassification = classifyLockState(
+    { locked_at: pred.locked_at, game_date: row.game_date },
+    new Date()
+  );
+  const dtoLockState: DtoLockState =
+    lockClassification === "locked" || lockClassification === "already_started"
+      ? "locked"
+      : lockClassification === "entering_lock"
+        ? "locking"
+        : "open";
+  const scheduledLockAt = computeLocksAt(row.game_date) ?? row.game_date;
+
   return {
     id: `${row.sport}-${row.external_id}`,
     sport: row.sport as Sport,
@@ -615,11 +656,13 @@ function buildGameDto(
     homeTeamLogo: homeLogo,
     gameTime: formatTimeET(row.game_date),
     gameStartMinutes: minutesFromMidnightET(row.game_date),
-    // 4.1.10 — raw UTC ISO + lock placeholder fields (hardcoded until 4.1.12).
-    scheduledLockAt: row.game_date,
-    lockState: "open",
-    lockedAt: null,
+    // Phase 4.2.B — actual lock-time ISO + per-game lock state from
+    // game_predictions.locked_at. Pre-4.2.B these were placeholders.
+    scheduledLockAt,
+    lockState: dtoLockState,
+    lockedAt: pred.locked_at,
     generatedAt,
+    updatedAt: pred.computed_at,
     markets: { moneyline: ml, total, first_inning: firstInning },
     decisionLine,
     status,
@@ -1255,7 +1298,8 @@ export async function GET(request: Request) {
          ml_grade, ml_signal_type, ml_market_signal,
          ou_grade, ou_signal_type, ou_market_signal,
          nrfi_grade, nrfi_signal_type, nrfi_market_signal,
-         sport_specific
+         sport_specific,
+         computed_at, locked_at
        )`
     )
     .eq("sport", sport)

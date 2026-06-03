@@ -1,0 +1,263 @@
+-- ═════════════════════════════════════════════════════════════════════════════
+-- Oddsphere · Schema Migration V16 — game_predictions.locked_at (Phase 4.2.B)
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- ⚠️  PROPOSAL ONLY — DO NOT APPLY UNTIL EXPLICITLY APPROVED BY THE OPERATOR.
+--
+-- This file exists in the repo as the documented migration the operator can
+-- review BEFORE running it. Apply via the production apply plan at the
+-- bottom of this file, not via any automated tool.
+--
+-- PHASE 4.2.B (Per-game T-60 locking)
+--
+-- WHY
+--   Daily Edge's launch model:
+--     • Generate today's slate + initial predictions at ~04:00 ET (morning-slate cron)
+--     • Continue refreshing unlocked games throughout the day (pregame-sweep cron)
+--     • Each game locks INDIVIDUALLY around 60 minutes before its scheduled
+--       first pitch, NOT slate-wide. A 1pm game locks at noon; a 10pm game
+--       keeps updating until 9pm.
+--     • Once a game is locked, the public-facing pick + grade for that game
+--       are frozen for the remainder of the day. Cron-driven writes refuse
+--       to update locked rows. Manual operator overrides (is_override=true)
+--       remain allowed as the human escape hatch.
+--
+--   Today there is no way to record "this prediction is locked" — every
+--   write to game_predictions is unconditional. Phase 4.2.B introduces a
+--   single nullable timestamptz column (`locked_at`) that the cron write
+--   path (ingester.ts Layer 1 guard) honors and the pregame-sweep cron
+--   sets at T-60 entry. A nullable timestamptz is the minimum representation
+--   that captures both "is locked" (NOT NULL) and "when did it lock"
+--   (the value itself, used by audit + UI).
+--
+--   Per-game (not per-market) locking is the V1 contract: all three markets
+--   (ML, Total, FI) on a game share a single locked_at because they all
+--   settle around the same wall-clock moment (first pitch).
+--
+-- SHAPE
+--   1 column addition on existing table `game_predictions`:
+--     locked_at  TIMESTAMPTZ  NULL
+--       NULL    → prediction is unlocked (cron writes allowed)
+--       NOT NULL → prediction is locked (cron writes refused;
+--                  manual overrides via is_override=true still allowed)
+--
+--   No constraints, no defaults, no triggers. Lock state transitions happen
+--   purely in application code (pregame-sweep route + ingester guard).
+--
+--   No indexes added. Query patterns are scoped to today's slate (~12-15
+--   rows per slate) joined to games on slate_date. Adding an index to a
+--   small lookup table is premature optimization.
+--
+-- BACKFILL
+--   NONE. All existing game_predictions rows keep locked_at = NULL.
+--
+--   This is intentional:
+--     • The lock mechanic is prospective — it starts fresh at Phase 4.2.D
+--       launch. Backfilling old slates with synthetic "post-game" lock
+--       timestamps would be misleading (those games weren't ever subject
+--       to the lock mechanic) and serves no operational purpose.
+--     • Already-published historical slates (2026-05-22) display
+--       correctly as "unlocked" — which is technically true (the lock
+--       mechanic wasn't in place when they were generated). The UI
+--       renders these as "Live" until they're naturally past their game
+--       date, at which point the natural sort order moves them out of
+--       the active surface.
+--
+--   If a future operator decides retroactive locking is needed (e.g., for
+--   historical audit fidelity), an optional one-shot UPDATE statement is
+--   captured in the BACKFILL OPTIONAL block below. It is NOT part of this
+--   migration. Run separately, with explicit operator approval.
+--
+-- COMPATIBILITY
+--   ✓ Purely additive — single nullable column. No changes to existing
+--     queries, constraints, indexes, or types.
+--   ✓ ScoresModelPrediction reads in lib/scoresModel/interfaces continue
+--     to work — they SELECT explicit field lists and don't enumerate
+--     unknown columns.
+--   ✓ Manual upload route's ingestScoresModel call continues to work —
+--     locked_at is not in its payload and Postgres defaults nullable
+--     columns to NULL on INSERT-via-UPSERT.
+--   ✓ All Phase 4.2.A tests (86 cases) continue to pass without changes —
+--     the adapter doesn't reference locked_at yet.
+--   ✓ All existing slates' display behavior is unchanged. The UI badge
+--     additions in Phase 4.2.B code render "Live" for locked_at IS NULL
+--     and only switch to "Locked" once cron sets the column.
+--   ✓ Idempotent: re-running the migration is a no-op via IF NOT EXISTS
+--     on the column.
+--
+-- ROLLBACK
+--   BEGIN;
+--   ALTER TABLE game_predictions DROP COLUMN IF EXISTS locked_at;
+--   COMMIT;
+--
+--   Rollback is fully reversible because the column is additive and no
+--   downstream constraint, FK, or trigger references it. If Phase 4.2.B
+--   code has already shipped that reads locked_at, rolling back DDL
+--   without first reverting the code commit would cause runtime errors —
+--   so any rollback must roll back code first, then DDL.
+--
+-- VERIFICATION
+--   Run these SELECTs after the migration to confirm correct shape:
+--
+--   -- 1. Column exists with correct type and nullability
+--   SELECT column_name, data_type, is_nullable
+--     FROM information_schema.columns
+--    WHERE table_schema = 'public'
+--      AND table_name   = 'game_predictions'
+--      AND column_name  = 'locked_at';
+--   -- Expected exactly one row:
+--   --   locked_at | timestamp with time zone | YES
+--
+--   -- 2. All existing rows are NULL (no backfill applied)
+--   SELECT COUNT(*)                          AS total_predictions,
+--          COUNT(locked_at)                  AS locked_rows,
+--          COUNT(*) - COUNT(locked_at)       AS unlocked_rows
+--     FROM game_predictions;
+--   -- Expected: locked_rows = 0; unlocked_rows = total_predictions.
+--
+--   -- 3. Column accepts ISO timestamp writes (smoke test in a transaction
+--   --    that we rollback so production state is untouched)
+--   BEGIN;
+--   UPDATE game_predictions
+--      SET locked_at = NOW()
+--    WHERE game_id = (
+--      SELECT g.id FROM games g
+--       WHERE g.sport = 'mlb' AND g.slate_date = '2026-05-22'
+--       ORDER BY g.id LIMIT 1
+--    );
+--   SELECT game_id, locked_at FROM game_predictions
+--    WHERE game_id = (
+--      SELECT g.id FROM games g
+--       WHERE g.sport = 'mlb' AND g.slate_date = '2026-05-22'
+--       ORDER BY g.id LIMIT 1
+--    );
+--   ROLLBACK;
+--   -- Expected: locked_at populated by NOW(); rollback restores NULL.
+--
+--   -- 4. Column comment is queryable (operator docs landed)
+--   SELECT col_description(
+--     ('public.game_predictions'::regclass)::oid,
+--     (SELECT ordinal_position FROM information_schema.columns
+--       WHERE table_name = 'game_predictions' AND column_name = 'locked_at')
+--   ) AS column_comment;
+--   -- Expected: non-empty comment string.
+--
+-- BACKFILL OPTIONAL (NOT PART OF THIS MIGRATION — separate operator decision)
+--   If a future operator decides historical lock state is needed (e.g.,
+--   to test the Layer 1 guard against pre-launch data without waiting
+--   for tonight's slate), this one-shot UPDATE may be applied. NOT to
+--   be run as part of Phase 4.2.B initial rollout.
+--
+--     BEGIN;
+--     UPDATE game_predictions gp
+--        SET locked_at = g.game_date
+--       FROM games g
+--      WHERE gp.game_id = g.id
+--        AND g.slate_status IN ('published', 'final')
+--        AND g.game_date < NOW();
+--     -- Verify expected row count BEFORE COMMIT — rollback if surprising:
+--     SELECT COUNT(*) FROM game_predictions WHERE locked_at IS NOT NULL;
+--     COMMIT;
+--
+--   Per Phase 4.2.B planning: this is SKIPPED for V1. Lock state starts
+--   fresh from launch.
+--
+-- RISKS
+--   • DDL fails mid-flight on prod
+--     Severity: low. Single ALTER TABLE ADD COLUMN is atomic in Postgres;
+--     no partial state possible. The transaction either succeeds entirely
+--     or rolls back entirely.
+--
+--   • Concurrent writes during migration block on table lock
+--     Severity: low. ADD COLUMN with NULL default in modern Postgres
+--     (≥11) takes only a brief ACCESS EXCLUSIVE lock on the table metadata,
+--     not a per-row rewrite. Concurrent reads continue; concurrent writes
+--     queue for the brief duration of the metadata change (milliseconds
+--     on our row counts).
+--
+--   • Supabase auto-generated types lag the schema
+--     Severity: low. After this migration, run the Supabase type
+--     regeneration step (npm script or `supabase gen types typescript`)
+--     so TypeScript sees the new column. If skipped, code that
+--     references locked_at via the generated types fails to compile;
+--     code that uses raw `.select("locked_at")` works regardless.
+--     Phase 4.2.B code uses raw selects to stay decoupled from the
+--     generated types' release cadence.
+--
+--   • Phase 4.2.B code references locked_at before DDL applies in prod
+--     Severity: medium. Mitigation: deploy DDL FIRST, then deploy code.
+--     The production apply plan below enforces this ordering.
+--
+-- NUMBERING NOTE
+--   V16 follows V15 (Fix 7.2 — manual_slate_staging). No reserved gaps.
+--
+-- ═════════════════════════════════════════════════════════════════════════════
+-- PRODUCTION APPLY PLAN (PROPOSED — pending operator approval)
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- Step 1: Apply locally first (in your dev Supabase project)
+--   • Open Supabase Studio → SQL Editor for the local/dev project
+--   • Paste the migration body (the BEGIN/COMMIT block below)
+--   • Run
+--   • Run the 4 VERIFICATION queries (above)
+--   • Confirm: locked_at column exists, all rows NULL, smoke test passes,
+--     comment is set
+--
+-- Step 2: Smoke test the Phase 4.2.B code against the locally-migrated DB
+--   • Run the full Phase 4.2.B test sweep
+--   • Confirm: all new tests pass + Phase 4.2.A regression suite still
+--     1025/1025
+--
+-- Step 3: Get explicit operator approval BEFORE prod apply
+--   • The operator (Daniel) confirms in writing that they've reviewed:
+--       - This migration file
+--       - The verification SELECT outputs from local
+--       - The Phase 4.2.B code's test results against the locally-migrated DB
+--   • Operator approves prod apply
+--
+-- Step 4: Apply to production
+--   • Open Supabase Studio → SQL Editor for the production project
+--   • Paste the migration body (BEGIN/COMMIT block below) — same SQL as Step 1
+--   • Run
+--   • Immediately re-run the 4 VERIFICATION queries
+--   • Confirm same expected outputs as Step 1
+--
+-- Step 5: Deploy the Phase 4.2.B code (only after Step 4 succeeds)
+--   • Push the code commit
+--   • Vercel deploys
+--   • locked_at column is now populated by cron at T-60 entry
+--
+-- Step 6: Smoke test prod
+--   • Manually curl pregame-sweep against today's slate
+--   • Observe: locked_at gets populated for games inside T-60
+--   • Observe: unlocked games refresh normally
+--   • Observe: locked games are skipped by subsequent cron runs
+--
+-- Rollback procedure (if needed at any step):
+--   • If Step 1-4 fail: drop the column on the affected DB
+--       BEGIN;
+--       ALTER TABLE game_predictions DROP COLUMN IF EXISTS locked_at;
+--       COMMIT;
+--   • If Step 5 deploys broken code: git revert the Phase 4.2.B code commit
+--     and redeploy. The DDL can stay (column is harmless with all NULLs).
+--   • If Step 6 surfaces production issues: hide today's slate via
+--     scripts/operator/hide-slate.ts (built in Phase 4.2.A), then revert
+--     code and DDL in order.
+--
+-- ═════════════════════════════════════════════════════════════════════════════
+
+BEGIN;
+
+-- ── 1. Add the column ─────────────────────────────────────────────────────
+-- IF NOT EXISTS is defensive: re-running the migration on an already-
+-- migrated DB is a no-op. Re-runnability matters because Supabase Studio
+-- doesn't have a built-in "applied migrations" registry the way Knex/
+-- Prisma do — operators may accidentally re-paste this block.
+ALTER TABLE game_predictions
+  ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ NULL;
+
+-- ── 2. Column comment (operator-facing docs) ──────────────────────────────
+COMMENT ON COLUMN game_predictions.locked_at IS
+  'Phase 4.2.B per-game T-60 lock timestamp. NULL = unlocked (cron-driven writes refresh the prediction freely). NOT NULL = locked (cron-driven writes via ingestScoresModel SKIP this row; manual override writes with is_override=true still pass through as the human escape hatch). Set automatically by the pregame-sweep cron when a game enters the T-60 window (game_date - now <= 60 min). Per-game lock — all three markets (ML, Total, FI) for the game share this single timestamp.';
+
+COMMIT;
