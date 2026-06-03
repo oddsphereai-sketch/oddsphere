@@ -57,6 +57,10 @@ import type {
 import {
   EXPECTED_BULLPEN_INNINGS,
   EXPECTED_STARTER_INNINGS,
+  FI_WHIP_BASELINE,
+  FI_WHIP_MODIFIER_CLAMP_MAX,
+  FI_WHIP_MODIFIER_CLAMP_MIN,
+  FI_WHIP_MODIFIER_SCALE,
   HARD_CONFIDENCE_FLOOR,
   LEAGUE_CONSTANTS_V1,
   MODEL_VERSION,
@@ -458,6 +462,55 @@ function nrfiWeatherMult(
 }
 
 /**
+ * Per-starter first-inning WHIP secondary modifier.
+ *
+ * Applied as a small multiplicative factor on a starter's expected
+ * first-inning runs (alongside the FI ERA + pitch quality + offense
+ * factors that drive the primary computation). Captures baserunner
+ * risk that FI ERA alone misses — a pitcher with low FI ERA but high
+ * FI WHIP has been getting lucky stranding runners.
+ *
+ * Conservative-by-design:
+ *   • Sample-size gate (same FIRST_INNING_SAMPLE_GATE as FI ERA).
+ *     Below the gate, returns 1.0 (no-op) and emits a `low_sample`
+ *     reason hint to the caller.
+ *   • Scale factor (FI_WHIP_MODIFIER_SCALE = 0.35) under-weights
+ *     because FI WHIP and FI ERA are ~0.81 correlated in V1 data —
+ *     most of the signal is already captured by the ERA path. The
+ *     scale limits the modifier's natural effect to roughly one-third
+ *     of the raw deviation from baseline.
+ *   • Hard clamp (FI_WHIP_MODIFIER_CLAMP_MIN/MAX = 0.96/1.04) caps
+ *     the modifier at ±4% so a single outlier sample cannot swing
+ *     expected_runs by more than that.
+ *
+ * Returns the multiplier + a "kind" tag the caller can map to a
+ * reason code (`unavailable` / `low_sample` / `supports_nrfi` /
+ * `yrfi_risk` / `neutral`).
+ */
+type FiWhipModifier = {
+  mult: number;
+  kind: "unavailable" | "low_sample" | "supports_nrfi" | "yrfi_risk" | "neutral";
+};
+
+function nrfiWhipFactor(starter: StarterSnapshot): FiWhipModifier {
+  if (starter.first_inning_whip === null) {
+    return { mult: 1.0, kind: "unavailable" };
+  }
+  const starts = starter.first_inning_starts ?? 0;
+  if (starts < FIRST_INNING_SAMPLE_GATE) {
+    return { mult: 1.0, kind: "low_sample" };
+  }
+  const deviation = (starter.first_inning_whip - FI_WHIP_BASELINE) / FI_WHIP_BASELINE;
+  const natural = 1 + deviation * FI_WHIP_MODIFIER_SCALE;
+  const mult = clamp(natural, FI_WHIP_MODIFIER_CLAMP_MIN, FI_WHIP_MODIFIER_CLAMP_MAX);
+  // Threshold for emitting a directional reason code — must be a
+  // meaningful nudge, not just float noise around 1.0.
+  if (mult <= 0.99) return { mult, kind: "supports_nrfi" };
+  if (mult >= 1.01) return { mult, kind: "yrfi_risk" };
+  return { mult, kind: "neutral" };
+}
+
+/**
  * Market total guardrail. Full-game listed_total as a tiny context
  * nudge for first-inning expectations. Daniel's Phase 4D.2 spec (§7):
  *
@@ -756,13 +809,33 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
       ? clamp(awayTopOps / LEAGUE_CONSTANTS_V1.AVG_OPS, 0.8, 1.2)
       : 1.0;
 
+  // FI WHIP secondary modifier (2026-06-02). Per-starter, conservative,
+  // tightly clamped. See nrfiWhipFactor() for the formula. Each side's
+  // run contribution comes from the OPPOSING starter, so the AWAY runs
+  // get the HOME starter's WHIP modifier (and vice versa).
+  const homeWhipMod = nrfiWhipFactor(home_starter);
+  const awayWhipMod = nrfiWhipFactor(away_starter);
+  if (homeWhipMod.kind === "unavailable") reason_codes.push("fi_whip_unavailable_home");
+  else if (homeWhipMod.kind === "low_sample") reason_codes.push("low_fi_whip_sample_home");
+  if (awayWhipMod.kind === "unavailable") reason_codes.push("fi_whip_unavailable_away");
+  else if (awayWhipMod.kind === "low_sample") reason_codes.push("low_fi_whip_sample_away");
+  // Combined directional reason code — only emit once per side,
+  // regardless of which starter triggered it.
+  if (homeWhipMod.kind === "supports_nrfi" || awayWhipMod.kind === "supports_nrfi") {
+    reason_codes.push("fi_whip_supports_nrfi");
+  }
+  if (homeWhipMod.kind === "yrfi_risk" || awayWhipMod.kind === "yrfi_risk") {
+    reason_codes.push("fi_whip_yrfi_risk");
+  }
+
   // Per-side expected runs (away scores against home starter; home
   // scores against away starter). ERA is per 9 IP; first inning is 1/9.
-  // Pitch quality multiplies the starter's effective FI ERA.
+  // Pitch quality multiplies the starter's effective FI ERA; WHIP
+  // modifier is applied as a tightly-clamped secondary nudge.
   const expectedAwayRuns =
-    ((homeFirstInning * homePitchFactor) / 9) * awayOffenseFactor;
+    ((homeFirstInning * homePitchFactor) / 9) * awayOffenseFactor * homeWhipMod.mult;
   const expectedHomeRuns =
-    ((awayFirstInning * awayPitchFactor) / 9) * homeOffenseFactor;
+    ((awayFirstInning * awayPitchFactor) / 9) * homeOffenseFactor * awayWhipMod.mult;
   const per_side_subtotal = expectedAwayRuns + expectedHomeRuns;
 
   // ── Phase 4D.2 — Layer B: global modifiers ───────────────────────

@@ -202,6 +202,7 @@ type SeasonStatsRow = {
   batting_ops: number | null;
   first_inning_era: number | null;
   first_inning_starts: number | null;
+  first_inning_whip: number | null;
 };
 
 type SplitRow = {
@@ -348,6 +349,7 @@ function buildStarterSnapshot(
     is_scratched: isScratched,
     first_inning_era: seasonStats?.first_inning_era ?? null,
     first_inning_starts: seasonStats?.first_inning_starts ?? null,
+    first_inning_whip: seasonStats?.first_inning_whip ?? null,
   };
 }
 
@@ -646,7 +648,7 @@ export async function buildFeatureSnapshots(
     .select(
       "player_id, season, season_type, pitching_era, pitching_whip, pitching_k_per_9, " +
         "batting_obp, batting_slg, batting_ops, " +
-        "first_inning_era, first_inning_starts"
+        "first_inning_era, first_inning_starts, first_inning_whip"
     )
     .in("player_id", Array.from(allPlayerIds))
     .eq("season", season)

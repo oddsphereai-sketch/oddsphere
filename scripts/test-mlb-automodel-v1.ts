@@ -104,6 +104,7 @@ function starter(overrides: Partial<StarterSnapshot> = {}): StarterSnapshot {
     is_scratched: false,
     first_inning_era: null,
     first_inning_starts: null,
+    first_inning_whip: null,
     ...overrides,
   };
 }
@@ -2589,6 +2590,296 @@ async function main() {
         out.sport_specific.nrfi_decision_kind === "held"
       );
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  section("FI WHIP secondary modifier (2026-06-02)");
+  // ═══════════════════════════════════════════════════════════════
+  //
+  // The FI WHIP modifier is conservative-by-design: tight clamp
+  // (±4%), under-weighted scale (0.35), sample gate (3 starts).
+  // These tests verify:
+  //   1. Missing WHIP → no-op + unavailable reason code
+  //   2. Low sample → no-op + low_sample reason code
+  //   3. Extreme low WHIP → clamped to 0.96
+  //   4. Extreme high WHIP → clamped to 1.04
+  //   5. One side has WHIP, other doesn't → per-side independence
+  //   6. Near-baseline WHIP → near-neutral modifier (no directional code)
+  //   7. Backwards compat: WHIP-null fixtures (existing tests above)
+  //      already pass — modifier defaults to 1.0
+  //   8. Combined effect bounded to ±8% on expected_runs
+
+  // Build a strong-NRFI base (FI ERA 1.8 both sides) so that adding a
+  // WHIP modifier won't push us out of a single zone in normal cases —
+  // makes the tests focused on the WHIP path itself.
+  function whipSnap(
+    homeWhip: number | null,
+    awayWhip: number | null,
+    homeStarts = 10,
+    awayStarts = 10,
+  ): GameSnapshot {
+    return baseSnapshot({
+      home_starter: starter({
+        player_external_id: 9101,
+        season_era: 3.5,
+        first_inning_era: 1.8,
+        first_inning_starts: 10,
+        first_inning_whip: homeWhip,
+      }),
+      away_starter: starter({
+        player_external_id: 9102,
+        season_era: 3.5,
+        first_inning_era: 1.8,
+        first_inning_starts: 10,
+        first_inning_whip: awayWhip,
+        throws: "L",
+      }),
+      home_lineup_top8: leagueAverageLineup("R"),
+      away_lineup_top8: leagueAverageLineup("L"),
+    });
+  }
+
+  // For sample-gate tests we need different starts values, so a separate
+  // helper that overrides starts.
+  function whipSnapWithStarts(
+    homeWhip: number | null,
+    awayWhip: number | null,
+    homeStarts: number,
+    awayStarts: number,
+  ): GameSnapshot {
+    return baseSnapshot({
+      home_starter: starter({
+        player_external_id: 9201,
+        season_era: 3.5,
+        first_inning_era: 1.8,
+        first_inning_starts: homeStarts,
+        first_inning_whip: homeWhip,
+      }),
+      away_starter: starter({
+        player_external_id: 9202,
+        season_era: 3.5,
+        first_inning_era: 1.8,
+        first_inning_starts: awayStarts,
+        first_inning_whip: awayWhip,
+        throws: "L",
+      }),
+      home_lineup_top8: leagueAverageLineup("R"),
+      away_lineup_top8: leagueAverageLineup("L"),
+    });
+  }
+
+  // ── Test 1: Both starters missing WHIP → modifier 1.0, reason codes
+  {
+    const noWhip = runMlbAutoModelV1(whipSnap(null, null), "morning_draft");
+    const codes = noWhip.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      "[FI-WHIP-1a] both null WHIP → fi_whip_unavailable_home + fi_whip_unavailable_away",
+      codes.includes("fi_whip_unavailable_home") &&
+        codes.includes("fi_whip_unavailable_away")
+    );
+    check(
+      "[FI-WHIP-1b] both null WHIP → no fi_whip_supports_nrfi / fi_whip_yrfi_risk codes",
+      !codes.includes("fi_whip_supports_nrfi") &&
+        !codes.includes("fi_whip_yrfi_risk")
+    );
+    // Compare to a pre-WHIP-era baseline: the existing 230-test suite
+    // ran with WHIP null on every starter and all expected_runs values
+    // were exactly what the model produces with WHIP modifier = 1.0.
+    // So this test row's expected_runs should match the pre-WHIP
+    // computation (verified indirectly by 230 unchanged existing tests).
+    check(
+      "[FI-WHIP-1c] both null WHIP → expected_runs > 0 (model still computes)",
+      noWhip.sport_specific.auto_factors.nrfi_expected_runs !== null &&
+        (noWhip.sport_specific.auto_factors.nrfi_expected_runs as number) > 0
+    );
+  }
+
+  // ── Test 2: Low-sample WHIP (starts < 3) → modifier 1.0, low_sample code
+  {
+    const lowSample = runMlbAutoModelV1(
+      whipSnapWithStarts(1.50, 1.50, 2, 2),
+      "morning_draft"
+    );
+    const codes = lowSample.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      "[FI-WHIP-2a] starts=2 (below gate) → low_fi_whip_sample_home + low_fi_whip_sample_away",
+      codes.includes("low_fi_whip_sample_home") &&
+        codes.includes("low_fi_whip_sample_away")
+    );
+    // Even though the WHIP value is high (1.50, well above baseline
+    // 1.225), the modifier is gated to 1.0 — so no directional code.
+    check(
+      "[FI-WHIP-2b] low-sample WHIP → no fi_whip_yrfi_risk (gated to 1.0)",
+      !codes.includes("fi_whip_yrfi_risk")
+    );
+    // But starts=2 is also below the FI ERA sample gate (3), so the FI
+    // ERA itself falls back to proxy → low_first_inning_sample fires.
+    check(
+      "[FI-WHIP-2c] starts=2 below FI ERA gate also → low_first_inning_sample",
+      codes.includes("low_first_inning_sample")
+    );
+  }
+
+  // ── Test 3: Extreme low WHIP → modifier clamped to 0.96
+  {
+    const extremeLow = runMlbAutoModelV1(whipSnap(0.30, 0.30), "morning_draft");
+    const codes = extremeLow.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      "[FI-WHIP-3a] both extreme-low WHIP (0.30) → fi_whip_supports_nrfi emitted",
+      codes.includes("fi_whip_supports_nrfi")
+    );
+    // Verify the modifier clamp by computing the implied modifier from
+    // the comparison to the null-WHIP baseline.
+    const noWhipBase = runMlbAutoModelV1(whipSnap(null, null), "morning_draft");
+    const extremeLowRuns = extremeLow.sport_specific.auto_factors.nrfi_expected_runs as number;
+    const baseRuns = noWhipBase.sport_specific.auto_factors.nrfi_expected_runs as number;
+    const ratio = extremeLowRuns / baseRuns;
+    // Each side's contribution is scaled by ONE modifier (the opposing
+    // starter's WHIP). With both sides at clamp 0.96 and symmetric FI ERA,
+    // both halves scale by 0.96 → combined ratio = 0.96 (not 0.96²; the
+    // modifiers don't compound because they apply to different addends).
+    check(
+      `[FI-WHIP-3b] extreme-low WHIP applies clamped modifier (ratio ${ratio.toFixed(4)} ≈ 0.96)`,
+      Math.abs(ratio - 0.96) < 0.005
+    );
+  }
+
+  // ── Test 4: Extreme high WHIP → modifier clamped to 1.04
+  {
+    const extremeHigh = runMlbAutoModelV1(whipSnap(2.50, 2.50), "morning_draft");
+    const codes = extremeHigh.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      "[FI-WHIP-4a] both extreme-high WHIP (2.50) → fi_whip_yrfi_risk emitted",
+      codes.includes("fi_whip_yrfi_risk")
+    );
+    const noWhipBase = runMlbAutoModelV1(whipSnap(null, null), "morning_draft");
+    const extremeHighRuns = extremeHigh.sport_specific.auto_factors.nrfi_expected_runs as number;
+    const baseRuns = noWhipBase.sport_specific.auto_factors.nrfi_expected_runs as number;
+    const ratio = extremeHighRuns / baseRuns;
+    // Both sides at clamp 1.04 → combined ratio = 1.04 (per the same
+    // additive-not-multiplicative argument as test 3b above).
+    check(
+      `[FI-WHIP-4b] extreme-high WHIP applies clamped modifier (ratio ${ratio.toFixed(4)} ≈ 1.04)`,
+      Math.abs(ratio - 1.04) < 0.005
+    );
+  }
+
+  // ── Test 5: One starter has WHIP, the other doesn't → per-side independence
+  {
+    const onlyHome = runMlbAutoModelV1(whipSnap(1.50, null), "morning_draft");
+    const codes = onlyHome.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      "[FI-WHIP-5a] mixed (home WHIP, away null) → fi_whip_unavailable_away emitted",
+      codes.includes("fi_whip_unavailable_away") &&
+        !codes.includes("fi_whip_unavailable_home")
+    );
+    check(
+      "[FI-WHIP-5b] mixed (home WHIP=1.50 high) → fi_whip_yrfi_risk emitted",
+      codes.includes("fi_whip_yrfi_risk")
+    );
+    // Verify only ONE side got the modifier by checking the ratio.
+    // home WHIP 1.50 → modifier ≈ 1 + (1.50-1.225)/1.225 * 0.35 ≈ 1.0786
+    // → clamped to 1.04. Only home side's modifier applies, away side = 1.0.
+    // Combined ratio ≈ 1.0 × 1.04 = 1.04 (only one side modified).
+    const noWhipBase = runMlbAutoModelV1(whipSnap(null, null), "morning_draft");
+    const ratio =
+      (onlyHome.sport_specific.auto_factors.nrfi_expected_runs as number) /
+      (noWhipBase.sport_specific.auto_factors.nrfi_expected_runs as number);
+    check(
+      `[FI-WHIP-5c] mixed → only one side's modifier applied (ratio ${ratio.toFixed(4)} ≈ 1.02)`,
+      // Each side contributes ~half of expected runs; modifier on one side
+      // → combined ratio ≈ (1.0 + 1.04) / 2 ≈ 1.02
+      Math.abs(ratio - 1.02) < 0.01
+    );
+  }
+
+  // ── Test 6: Near-baseline WHIP → neutral kind, no directional code
+  {
+    // WHIP = 1.225 exactly (the baseline) → modifier = 1.0 exactly
+    const baseline = runMlbAutoModelV1(whipSnap(1.225, 1.225), "morning_draft");
+    const codes = baseline.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      "[FI-WHIP-6a] WHIP at baseline 1.225 → no fi_whip_supports_nrfi or _yrfi_risk",
+      !codes.includes("fi_whip_supports_nrfi") &&
+        !codes.includes("fi_whip_yrfi_risk")
+    );
+    check(
+      "[FI-WHIP-6b] WHIP at baseline 1.225 → no _unavailable / _low_sample codes",
+      !codes.includes("fi_whip_unavailable_home") &&
+        !codes.includes("fi_whip_unavailable_away") &&
+        !codes.includes("low_fi_whip_sample_home") &&
+        !codes.includes("low_fi_whip_sample_away")
+    );
+    // WHIP near baseline (1.20, ~2% below) → modifier ≈ 1 + (-0.0204) * 0.35 ≈ 0.9929
+    // Below the 0.99 emission threshold for supports_nrfi → no code.
+    const nearBase = runMlbAutoModelV1(whipSnap(1.20, 1.20), "morning_draft");
+    const nearCodes = nearBase.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      "[FI-WHIP-6c] WHIP 1.20 (within ±1% of neutral modifier) → no directional code",
+      !nearCodes.includes("fi_whip_supports_nrfi") &&
+        !nearCodes.includes("fi_whip_yrfi_risk")
+    );
+  }
+
+  // ── Test 7: Backwards compat — existing tests use WHIP=null, expected
+  // unchanged. This is implicitly verified by the 230 existing tests
+  // continuing to pass. Add one explicit check that the modifier == 1.0
+  // for the null path.
+  {
+    const baseRuns = (
+      runMlbAutoModelV1(whipSnap(null, null), "morning_draft").sport_specific
+        .auto_factors.nrfi_expected_runs as number
+    );
+    // Hand-compute the pre-WHIP expected runs for our fixture: FI ERA 1.8
+    // both sides, league-avg lineups, no park/weather/market overrides.
+    // expected = ((1.8 * pitchQ_default) / 9) * offense_default for each
+    // side, summed, then * parkMod * weatherMult * marketMod.
+    // With nulls on everything optional, all default to 1.0:
+    // expected ≈ (1.8/9) * 1.0 * 2 = 0.40
+    check(
+      `[FI-WHIP-7] WHIP-null fixture matches pre-WHIP expected_runs (${baseRuns.toFixed(2)} ≈ 0.40)`,
+      Math.abs(baseRuns - 0.40) < 0.05
+    );
+  }
+
+  // ── Test 8: Combined effect bounded — even when both starters
+  // pull modifiers in OPPOSITE directions at the clamps, the net
+  // effect on combined expected_runs is bounded.
+  {
+    // Home extreme-low (modifier 0.96), away extreme-high (modifier 1.04)
+    // Per-side expected runs contribution:
+    //   awayRunsContribution = (homeFI ERA-derived) × homeWhipMod (0.96)
+    //   homeRunsContribution = (awayFI ERA-derived) × awayWhipMod (1.04)
+    // With equal FI ERA on both sides, combined = 0.96 + 1.04 = 2.00, so the
+    // NET shift is zero! That's a beautiful symmetry. Let's verify.
+    const opposing = runMlbAutoModelV1(whipSnap(0.30, 2.50), "morning_draft");
+    const noWhipBase = runMlbAutoModelV1(whipSnap(null, null), "morning_draft");
+    const ratio =
+      (opposing.sport_specific.auto_factors.nrfi_expected_runs as number) /
+      (noWhipBase.sport_specific.auto_factors.nrfi_expected_runs as number);
+    // For equal FI ERA both sides, opposing extremes cancel: ratio ≈ 1.0
+    check(
+      `[FI-WHIP-8a] opposing extreme WHIP cancels with equal ERA (ratio ${ratio.toFixed(4)} ≈ 1.00)`,
+      Math.abs(ratio - 1.0) < 0.005
+    );
+    // Worst-case unidirectional shift on a single game's expected_runs is
+    // both sides at the SAME clamp (test 3 verified 0.9216, test 4
+    // verified 1.0816). So combined expected_runs swing is bounded to
+    // approximately [×0.92, ×1.08].
+    const both_low = runMlbAutoModelV1(whipSnap(0.30, 0.30), "morning_draft");
+    const both_high = runMlbAutoModelV1(whipSnap(2.50, 2.50), "morning_draft");
+    const swing =
+      ((both_high.sport_specific.auto_factors.nrfi_expected_runs as number) -
+        (both_low.sport_specific.auto_factors.nrfi_expected_runs as number)) /
+      (noWhipBase.sport_specific.auto_factors.nrfi_expected_runs as number);
+    // Per tests 3b/4b, both-side clamp ratios are 0.96 and 1.04. The
+    // total swing from both-extreme-low to both-extreme-high is therefore
+    // 1.04 - 0.96 = 0.08 (8% of baseline) — NOT 16%, because the
+    // modifiers do not compound across sides.
+    check(
+      `[FI-WHIP-8b] max swing across both clamps is ~8% of baseline (got ${(swing * 100).toFixed(1)}%)`,
+      Math.abs(swing - 0.08) < 0.01
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════

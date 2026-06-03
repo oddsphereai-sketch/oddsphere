@@ -64,6 +64,7 @@ function makeSnapshot(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
       is_scratched: false,
       first_inning_era: null,
       first_inning_starts: null,
+      first_inning_whip: null,
     },
     away_starter: {
       player_external_id: 200,
@@ -78,6 +79,7 @@ function makeSnapshot(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
       is_scratched: false,
       first_inning_era: null,
       first_inning_starts: null,
+      first_inning_whip: null,
     },
     home_lineup_top8: [],
     away_lineup_top8: [],

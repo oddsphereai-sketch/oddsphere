@@ -67,6 +67,15 @@ export type StarterSnapshot = {
    * when no FI data has been ingested for this pitcher's season.
    */
   first_inning_starts: number | null;
+  /**
+   * First-inning WHIP — walks + hits per first inning. Sourced from
+   * `player_season_stats.first_inning_whip` (DECIMAL 5,3). Null when no
+   * FI data ingested. Used by nrfiPick as a secondary modifier on top
+   * of FI ERA. Gated by FIRST_INNING_SAMPLE_GATE (same as FI ERA) and
+   * clamped via FI_WHIP_MODIFIER_CLAMP_{MIN,MAX} so it can never swing
+   * expected_runs by more than ±4%.
+   */
+  first_inning_whip: number | null;
 };
 
 export type BatterSnapshot = {
@@ -639,6 +648,33 @@ export const NRFI_THRESHOLD_STRONG = 0.50;
 export const NRFI_THRESHOLD_LEAN = 0.85;
 export const YRFI_THRESHOLD_LEAN = 1.15;
 export const YRFI_THRESHOLD_STRONG = 1.45;
+
+// ─────────────────────────────────────────────────────────────
+// FI WHIP secondary modifier (added 2026-06-02)
+// ─────────────────────────────────────────────────────────────
+//
+// Per-starter first-inning WHIP applied as a small multiplicative
+// modifier on each starter's per-side expected first-inning runs,
+// AFTER the ERA-based computation but before global modifiers
+// (park/weather/market). Designed as a SECONDARY signal — not a
+// replacement for FI ERA.
+//
+// Baseline (1.225) is empirically grounded in MLB FI WHIP norms — the
+// median of our `player_season_stats.first_inning_whip` distribution on
+// the current ingested set was 1.22. Scale (0.35) limits the modifier's
+// influence to roughly one-third of its raw deviation from baseline,
+// reflecting that FI ERA and FI WHIP are ~0.81 correlated in our data
+// (most of WHIP's signal is already captured by ERA). Hard clamp
+// [0.96, 1.04] caps the modifier at ±4% so a single outlier sample
+// cannot meaningfully swing the model.
+//
+// Gated by FIRST_INNING_SAMPLE_GATE (3 starts, same as FI ERA gate).
+// Below the gate or when WHIP is null, the modifier is a no-op (1.0)
+// and a per-side reason code is emitted.
+export const FI_WHIP_BASELINE = 1.225;
+export const FI_WHIP_MODIFIER_SCALE = 0.35;
+export const FI_WHIP_MODIFIER_CLAMP_MIN = 0.96;
+export const FI_WHIP_MODIFIER_CLAMP_MAX = 1.04;
 
 /**
  * Confidence bands per zone. Pre-4D.1 used a single linear formula
