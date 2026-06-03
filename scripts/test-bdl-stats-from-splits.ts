@@ -306,6 +306,122 @@ async function testMapSplitsRowToSplitRecord_vsRhp() {
   check("ops === 1.104", rec.ops === 1.104);
 }
 
+async function testMapSplitsRowToSplitRecord_categoryFilter() {
+  section("mapSplitsRowToSplitRecord — category filter (TWP duplicate guard)");
+
+  // Batting category passes through normally.
+  const battingHome = {
+    player: { id: 660271 },
+    season: 2025,
+    category: "batting",
+    split_category: "byBreakdown",
+    split_name: "Home",
+    split_abbreviation: "Home",
+    at_bats: 250,
+    hits: 90,
+    home_runs: 22,
+    walks: 40,
+    strikeouts: 60,
+    doubles: 18,
+    triples: 1,
+    rbis: 70,
+    hit_by_pitch: 3,
+    avg: 0.36,
+    obp: 0.45,
+    slg: 0.7,
+    ops: 1.15,
+  };
+  const recBatting = mapSplitsRowToSplitRecord(battingHome, 660271, 2025);
+  check("batting home row → mapped (not null)", recBatting !== null);
+  if (recBatting !== null) {
+    check("batting home split_type === 'home'", recBatting.split_type === "home");
+    check("batting home ab === 250", recBatting.ab === 250);
+    check("batting home ops === 1.15", recBatting.ops === 1.15);
+  }
+
+  // Pitching category dropped — same Ohtani row body, just different category.
+  const pitchingHome = {
+    ...battingHome,
+    category: "pitching",
+  };
+  const recPitching = mapSplitsRowToSplitRecord(pitchingHome, 660271, 2025);
+  check("pitching home row → null", recPitching === null);
+
+  // Other unknown category dropped (defensive).
+  const fieldingHome = { ...battingHome, category: "fielding" };
+  check(
+    "fielding home row → null (unknown category dropped)",
+    mapSplitsRowToSplitRecord(fieldingHome, 660271, 2025) === null
+  );
+  const baserunningHome = { ...battingHome, category: "baserunning" };
+  check(
+    "baserunning home row → null",
+    mapSplitsRowToSplitRecord(baserunningHome, 660271, 2025) === null
+  );
+
+  // Null / undefined category — defensive skip (documented in code).
+  const nullCategoryRow = { ...battingHome, category: null };
+  check(
+    "null category → null (defensive skip)",
+    mapSplitsRowToSplitRecord(nullCategoryRow, 660271, 2025) === null
+  );
+  // Use explicit undefined via object that simply omits the field
+  const noCategoryRow = {
+    player: { id: 660271 },
+    season: 2025,
+    split_category: "byBreakdown",
+    split_name: "Home",
+    split_abbreviation: "Home",
+    at_bats: 250,
+    hits: 90,
+    home_runs: 22,
+    walks: 40,
+    avg: 0.36,
+    obp: 0.45,
+    slg: 0.7,
+    ops: 1.15,
+  };
+  check(
+    "missing category → null (defensive skip)",
+    mapSplitsRowToSplitRecord(noCategoryRow, 660271, 2025) === null
+  );
+
+  // Ohtani-style: two same-split_type rows (batting + pitching). Mapped
+  // separately, only the batting one is kept. Reflects the operator's
+  // per-row mapping path that previously emitted duplicates.
+  const ohtaniBatting = { ...battingHome, category: "batting" };
+  const ohtaniPitching = { ...battingHome, category: "pitching" };
+  const kept = [ohtaniBatting, ohtaniPitching]
+    .map((r) => mapSplitsRowToSplitRecord(r, 660271, 2025))
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+  check("Ohtani-style: 1 batting + 1 pitching → 1 kept", kept.length === 1);
+  if (kept.length > 0) {
+    check("Ohtani-style: kept record is batting (split_type='home', ab===250)", kept[0]!.split_type === "home" && kept[0]!.ab === 250);
+  }
+
+  // Regression: vs_lhp / vs_rhp batting rows still mapped (the buckets
+  // already-tested in testMapSplitsRowToSplitRecord_vsLhp/vsRhp use
+  // category="batting" implicitly; this is the explicit assertion).
+  const battingVsLeft = {
+    ...battingHome,
+    split_name: "vs. Left",
+    split_abbreviation: "vs. Left",
+  };
+  check(
+    "batting 'vs. Left' → vs_lhp (still mapped)",
+    mapSplitsRowToSplitRecord(battingVsLeft, 660271, 2025)?.split_type === "vs_lhp"
+  );
+  const battingVsRight = {
+    ...battingHome,
+    split_name: "vs. Right",
+    split_abbreviation: "vs. Right",
+  };
+  check(
+    "batting 'vs. Right' → vs_rhp (still mapped)",
+    mapSplitsRowToSplitRecord(battingVsRight, 660271, 2025)?.split_type === "vs_rhp"
+  );
+}
+
 async function testMapSplitsRowToSplitRecord_skipsUnknown() {
   section("mapSplitsRowToSplitRecord — unknown split_name → null");
   const row = { ...vsLeftRow, split_name: "vs Lefty (variant)", split_abbreviation: "vs Lefty (variant)" };
@@ -468,6 +584,7 @@ async function main() {
   await testComputePlateAppearances();
   await testMapSplitsRowToSplitRecord_vsLhp();
   await testMapSplitsRowToSplitRecord_vsRhp();
+  await testMapSplitsRowToSplitRecord_categoryFilter();
   await testMapSplitsRowToSplitRecord_skipsUnknown();
   await testMapSplitsRowToSeasonRecord_hitter();
   await testMapSplitsRowToSeasonRecord_pitcher();

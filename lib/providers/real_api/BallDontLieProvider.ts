@@ -690,6 +690,21 @@ export function mapSplitsRowToSplitRecord(
   playerExternalId: number,
   season: number
 ): StatsSplitRecord | null {
+  // Phase 4.2.C.1.S.A two-way-player fix:
+  // BDL returns `byBreakdown` rows for BOTH the batting and pitching
+  // perspectives for two-way players (currently only Shohei Ohtani).
+  // Both would map to the same `split_type` (e.g. "home" appears once
+  // with category="batting" and once with category="pitching"),
+  // producing duplicate (player_id, season, split_type) keys that blow
+  // up the player_splits UPSERT. Our schema is hitter-oriented, so
+  // pitcher-perspective rows are meaningless here; skip them.
+  //
+  // Defensive on null/undefined category: also skip rows where BDL
+  // omits the category field, rather than letting them through with
+  // unknown semantics. The trade-off is that if BDL ever changes the
+  // shape we'd silently lose data, but for V1 the safety of
+  // unique-key guarantees outweighs the risk.
+  if (row.category !== "batting") return null;
   const splitType = mapBreakdownSplitNameToSplitType(
     row.split_name ?? row.split_abbreviation
   );
