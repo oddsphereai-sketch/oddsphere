@@ -224,11 +224,28 @@ export function positionCompatible(
   mlbAbbr: string | null
 ): boolean {
   if (bdlAbbr === null || mlbAbbr === null) return true;
+  const bUp = bdlAbbr.toUpperCase();
+  const mUp = mlbAbbr.toUpperCase();
+  // MLB Stats uses "TWP" for two-way players (currently Ohtani). BDL
+  // has no TWP category — it lists two-way players under whichever
+  // role they're filling that season (SP / DH / etc.). Treat TWP on
+  // the MLB side as universally compatible so we don't block these
+  // identity matches on the position check.
+  if (mUp === "TWP") return true;
   const isPitcher = (a: string): boolean =>
     a === "P" || a === "SP" || a === "RP" || a === "CP";
-  if (isPitcher(bdlAbbr) && isPitcher(mlbAbbr)) return true;
-  if (isPitcher(bdlAbbr) !== isPitcher(mlbAbbr)) return false;
-  return bdlAbbr.toUpperCase() === mlbAbbr.toUpperCase();
+  // Outfield equivalence: providers disagree on which corner an
+  // outfielder is "primarily" assigned to (e.g., MLB Stats lists Lars
+  // Nootbaar as LF, BDL as RF; he's played both). Treat LF / RF / CF
+  // / OF as mutually compatible. Pitchers stay in their own bucket;
+  // infield positions still require exact match.
+  const isOutfielder = (a: string): boolean =>
+    a === "OF" || a === "LF" || a === "RF" || a === "CF";
+  if (isPitcher(bUp) && isPitcher(mUp)) return true;
+  if (isPitcher(bUp) !== isPitcher(mUp)) return false;
+  if (isOutfielder(bUp) && isOutfielder(mUp)) return true;
+  if (isOutfielder(bUp) !== isOutfielder(mUp)) return false;
+  return bUp === mUp;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -540,16 +557,26 @@ export async function attemptMatchForPlayer(
   // distinctive.
   const lastName = mlb.lastName ?? mlb.useLastName ?? "";
   const fallback = lastName === "" ? mlb.fullName : lastName;
-  let candidates = await deps.searchBdlByName(fallback);
-  // Accent-fold retry: BDL's `?search=` does not match accent variants.
-  // If MLB's lastName has accents (e.g. "Acuña", "López") and the first
-  // search comes back empty, retry with the folded form.
-  if (candidates.length === 0) {
-    const folded = fallback
-      .normalize("NFD")
-      .replace(new RegExp("[\\u0300-\\u036f]", "g"), "");
-    if (folded !== fallback) {
-      candidates = await deps.searchBdlByName(folded);
+  const candidates = await deps.searchBdlByName(fallback);
+  // Accent-fold supplemental: BDL's `?search=` does not match accent
+  // variants reliably — for names like "Díaz" / "Ramírez" / "Rodríguez"
+  // the accented search sometimes returns wrong-person results (e.g.,
+  // an old "Víctor Díaz" with no Yandy Díaz in the list), which masks
+  // the right player. Always also run a folded-name search if the
+  // lastName has accents, then merge by `external_id`. The folded search
+  // costs one extra BDL call per accent-bearing player; deduped union
+  // ensures we don't double-count.
+  const folded = fallback
+    .normalize("NFD")
+    .replace(new RegExp("[\\u0300-\\u036f]", "g"), "");
+  if (folded !== fallback) {
+    const supplemental = await deps.searchBdlByName(folded);
+    const seen = new Set(candidates.map((c) => c.external_id));
+    for (const c of supplemental) {
+      if (!seen.has(c.external_id)) {
+        candidates.push(c);
+        seen.add(c.external_id);
+      }
     }
   }
   const match = attemptMatch(mlb, candidates, today);

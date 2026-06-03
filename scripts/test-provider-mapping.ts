@@ -22,6 +22,7 @@ import {
   type BdlCandidate,
 } from "../lib/services/providerMappingService";
 import type { MlbPersonProfile } from "../lib/providers/real_api/_mlbStatsApiClient";
+import { bdlDobToIso } from "../lib/providers/real_api/BallDontLieProvider";
 
 let pass = 0;
 let fail = 0;
@@ -543,6 +544,423 @@ async function testEndToEnd_NoCandidates() {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Part 1 fix-bundle tests (4.2.C.1.M-fix-bundle)
+// ─────────────────────────────────────────────────────────────────────
+
+async function testBdlDobToIso_DdMmYyyy() {
+  section("bdlDobToIso — BDL's DD/MM/YYYY format (modern entries)");
+  // Garrett Crochet's actual BDL DOB string
+  check(
+    "Crochet: '21/6/1999' age=25 → '1999-06-21'",
+    bdlDobToIso("21/6/1999", 25, TODAY) === "1999-06-21"
+  );
+  // Lindor: zero-padded both fields
+  check(
+    "Lindor: '14/11/1993' age=30 → '1993-11-14'",
+    bdlDobToIso("14/11/1993", 30, TODAY) === "1993-11-14"
+  );
+  // Senga: padded day, single-digit month
+  check(
+    "Senga: '30/1/1993' age=31 → '1993-01-30'",
+    bdlDobToIso("30/1/1993", 31, TODAY) === "1993-01-30"
+  );
+  // Anderson: full DD/MM/YYYY
+  check(
+    "Anderson: '30/12/1989' age=34 → '1989-12-30'",
+    bdlDobToIso("30/12/1989", 34, TODAY) === "1989-12-30"
+  );
+  // Pepiot: DD/M/YYYY
+  check(
+    "Pepiot: '21/8/1997' age=27 → '1997-08-21'",
+    bdlDobToIso("21/8/1997", 27, TODAY) === "1997-08-21"
+  );
+}
+
+async function testBdlDobToIso_DSlashMSlashYyyy() {
+  section("bdlDobToIso — BDL's D/M/YYYY single-digit format");
+  // Hunter Greene: D/M/YYYY
+  check(
+    "Hunter Greene: '6/8/1999' age=25 → '1999-08-06'",
+    bdlDobToIso("6/8/1999", 25, TODAY) === "1999-08-06"
+  );
+  // Pablo López: D/M/YYYY
+  check(
+    "López: '7/3/1996' age=28 → '1996-03-07'",
+    bdlDobToIso("7/3/1996", 28, TODAY) === "1996-03-07"
+  );
+  // Robert Jr.: D/M/YYYY
+  check(
+    "Robert Jr.: '3/8/1997' age=27 → '1997-08-03'",
+    bdlDobToIso("3/8/1997", 27, TODAY) === "1997-08-03"
+  );
+  // Casas: DD/M/YYYY (mix)
+  check(
+    "Casas: '15/1/2000' age=24 → '2000-01-15'",
+    bdlDobToIso("15/1/2000", 24, TODAY) === "2000-01-15"
+  );
+  // Nootbaar: D/M/YYYY
+  check(
+    "Nootbaar: '8/9/1997' age=27 → '1997-09-08'",
+    bdlDobToIso("8/9/1997", 27, TODAY) === "1997-09-08"
+  );
+}
+
+async function testBdlDobToIso_MmDdYyRegression() {
+  section("bdlDobToIso — legacy MM/DD/YY still parses (regression)");
+  // Aaron Judge: original BDL format
+  check(
+    "Judge: '04/26/92' age=34 → '1992-04-26'",
+    bdlDobToIso("04/26/92", 34, TODAY) === "1992-04-26"
+  );
+  // Ohtani's BDL DOB
+  check(
+    "Ohtani: '07/05/94' age=31 → '1994-07-05'",
+    bdlDobToIso("07/05/94", 31, TODAY) === "1994-07-05"
+  );
+  // Davis Martin: MM/DD/YY
+  check(
+    "Davis Martin: '01/04/97' age=29 → '1997-01-04'",
+    bdlDobToIso("01/04/97", 29, TODAY) === "1997-01-04"
+  );
+}
+
+async function testBdlDobToIso_IsoPassthrough() {
+  section("bdlDobToIso — ISO YYYY-MM-DD passthrough (regression)");
+  check(
+    "ISO passthrough: '1992-04-26' → '1992-04-26'",
+    bdlDobToIso("1992-04-26", null, TODAY) === "1992-04-26"
+  );
+  check(
+    "ISO passthrough with whitespace: '  1995-01-15 ' → '1995-01-15'",
+    bdlDobToIso("  1995-01-15 ", null, TODAY) === "1995-01-15"
+  );
+}
+
+async function testBdlDobToIso_Malformed() {
+  section("bdlDobToIso — malformed inputs → null");
+  check("null input → null", bdlDobToIso(null, null, TODAY) === null);
+  check("empty string → null", bdlDobToIso("", null, TODAY) === null);
+  check(
+    "unrecognized 'foo' → null",
+    bdlDobToIso("foo", null, TODAY) === null
+  );
+  check(
+    "out-of-range month '13/15/1999' → null",
+    bdlDobToIso("13/15/1999", null, TODAY) === null
+  );
+  check(
+    "out-of-range day '15/13/1999' → null (treated as DD=15, MM=13)",
+    bdlDobToIso("15/13/1999", null, TODAY) === null
+  );
+  check(
+    "MM/DD/YY out-of-range '13/45/99' → null",
+    bdlDobToIso("13/45/99", null, TODAY) === null
+  );
+}
+
+async function testPositionCompatible_Twp() {
+  section("positionCompatible — TWP (two-way player) compatibility");
+  // MLB pos = TWP → universally compatible
+  check("TWP (mlb) + SP (bdl) → compatible", positionCompatible("SP", "TWP") === true);
+  check("TWP (mlb) + DH (bdl) → compatible", positionCompatible("DH", "TWP") === true);
+  check("TWP (mlb) + P (bdl) → compatible", positionCompatible("P", "TWP") === true);
+  check("TWP (mlb) + 1B (bdl) → compatible", positionCompatible("1B", "TWP") === true);
+  check("TWP (mlb) + OF (bdl) → compatible", positionCompatible("OF", "TWP") === true);
+  // Lowercase normalization
+  check("TWP case-insensitive: 'twp' → compatible", positionCompatible("SP", "twp") === true);
+  // Regression: TWP rule does NOT loosen other checks
+  check(
+    "regression: DH (mlb) + SP (bdl) → still incompatible",
+    positionCompatible("SP", "DH") === false
+  );
+  check(
+    "regression: 1B (mlb) + OF (bdl) → still incompatible",
+    positionCompatible("OF", "1B") === false
+  );
+  check(
+    "regression: SP (mlb) + RP (bdl) → still compatible (both pitchers)",
+    positionCompatible("RP", "SP") === true
+  );
+}
+
+async function testPositionCompatible_Outfield() {
+  section("positionCompatible — outfield equivalence (LF/RF/CF/OF)");
+  // Cross-corner / cross-source compatibility
+  check("LF (mlb) + RF (bdl) → compatible", positionCompatible("RF", "LF") === true);
+  check("RF (mlb) + LF (bdl) → compatible", positionCompatible("LF", "RF") === true);
+  check("CF (mlb) + RF (bdl) → compatible", positionCompatible("RF", "CF") === true);
+  check("RF (mlb) + CF (bdl) → compatible", positionCompatible("CF", "RF") === true);
+  check("OF (mlb) + LF (bdl) → compatible", positionCompatible("LF", "OF") === true);
+  check("OF (mlb) + RF (bdl) → compatible", positionCompatible("RF", "OF") === true);
+  check("OF (mlb) + CF (bdl) → compatible", positionCompatible("CF", "OF") === true);
+  check("LF (mlb) + OF (bdl) → compatible", positionCompatible("OF", "LF") === true);
+  check("OF (mlb) + OF (bdl) → compatible", positionCompatible("OF", "OF") === true);
+  // Case-insensitive
+  check("lf + rf case-insensitive → compatible", positionCompatible("rf", "lf") === true);
+
+  // Anti-regression: outfield NOT compatible with infield
+  check(
+    "regression: OF (mlb) + 1B (bdl) → incompatible",
+    positionCompatible("1B", "OF") === false
+  );
+  check(
+    "regression: LF (mlb) + 1B (bdl) → incompatible",
+    positionCompatible("1B", "LF") === false
+  );
+  check(
+    "regression: OF (mlb) + 2B (bdl) → incompatible",
+    positionCompatible("2B", "OF") === false
+  );
+  check(
+    "regression: OF (mlb) + SS (bdl) → incompatible",
+    positionCompatible("SS", "OF") === false
+  );
+  check(
+    "regression: OF (mlb) + 3B (bdl) → incompatible",
+    positionCompatible("3B", "OF") === false
+  );
+  check(
+    "regression: OF (mlb) + C (bdl) → incompatible",
+    positionCompatible("C", "OF") === false
+  );
+  check(
+    "regression: OF (mlb) + DH (bdl) → incompatible",
+    positionCompatible("DH", "OF") === false
+  );
+
+  // Anti-regression: outfield NOT compatible with pitchers
+  check(
+    "regression: OF (mlb) + P (bdl) → incompatible",
+    positionCompatible("P", "OF") === false
+  );
+  check(
+    "regression: OF (mlb) + SP (bdl) → incompatible",
+    positionCompatible("SP", "OF") === false
+  );
+  check(
+    "regression: OF (mlb) + RP (bdl) → incompatible",
+    positionCompatible("RP", "OF") === false
+  );
+  check(
+    "regression: LF (mlb) + SP (bdl) → incompatible",
+    positionCompatible("SP", "LF") === false
+  );
+
+  // Anti-regression: other rules still hold
+  check(
+    "regression: 1B + 1B still compatible",
+    positionCompatible("1B", "1B") === true
+  );
+  check(
+    "regression: 1B + 2B still incompatible",
+    positionCompatible("2B", "1B") === false
+  );
+}
+
+async function testAccentFoldSupplementalSearch() {
+  section("attemptMatchForPlayer — accent-fold supplemental search");
+
+  // Setup: MLB profile with accented last name where the accented BDL
+  // search returns a wrong-person result, but the folded search
+  // surfaces the right player.
+  const mlb = makeMlbProfile({
+    id: 650490,
+    fullName: "Yandy Díaz",
+    firstName: "Yandy",
+    lastName: "Díaz",
+    useName: "Yandy",
+    useLastName: "Díaz",
+    birthDate: "1991-08-08",
+    primaryPositionAbbr: "1B",
+    birthCity: "Sagua la Grande",
+    birthCountry: "Cuba",
+  });
+
+  let calls: string[] = [];
+  const stubFn = async (name: string): Promise<BdlCandidate[]> => {
+    calls.push(name);
+    if (name === "Díaz") {
+      // Accented search: returns only a wrong-person result
+      return [
+        makeBdlCandidate({
+          external_id: 999999,
+          full_name: "Víctor Díaz",
+          first_name: "Víctor",
+          last_name: "Díaz",
+          dob: "1981-12-10",
+          age: 42,
+          birth_place: "Chicago, IL",
+          position_abbr: "RF",
+        }),
+      ];
+    }
+    if (name === "Diaz") {
+      // Folded search: returns the right player
+      return [
+        makeBdlCandidate({
+          external_id: 401,
+          full_name: "Yandy Díaz",
+          first_name: "Yandy",
+          last_name: "Díaz",
+          dob: "1991-08-08",
+          age: 34,
+          birth_place: "Sagua La Grande, Cuba",
+          position_abbr: "1B",
+        }),
+        // Same wrong-person result (should be deduped)
+        makeBdlCandidate({
+          external_id: 999999,
+          full_name: "Víctor Díaz",
+          first_name: "Víctor",
+          last_name: "Díaz",
+          dob: "1981-12-10",
+          age: 42,
+          birth_place: "Chicago, IL",
+          position_abbr: "RF",
+        }),
+      ];
+    }
+    return [];
+  };
+
+  const { match } = await attemptMatchForPlayer(
+    mlb,
+    { searchBdlByName: stubFn },
+    TODAY
+  );
+
+  check("supplemental search invoked twice", calls.length === 2);
+  check(
+    "first call uses accented form",
+    calls[0] === "Díaz"
+  );
+  check(
+    "second call uses folded form",
+    calls[1] === "Diaz"
+  );
+  check("match.tier === 'high' (Yandy resolved)", match.tier === "high");
+  if (match.tier === "high" || match.tier === "medium") {
+    check("matched bdl id === 401", match.bdlId === 401);
+  }
+
+  // Regression: when lastName has no accents, no supplemental call.
+  calls = [];
+  const mlb2 = makeMlbProfile({
+    fullName: "Aaron Judge",
+    firstName: "Aaron",
+    lastName: "Judge",
+    useName: "Aaron",
+    useLastName: "Judge",
+    birthDate: "1992-04-26",
+    primaryPositionAbbr: "RF",
+  });
+  const stubFn2 = async (name: string): Promise<BdlCandidate[]> => {
+    calls.push(name);
+    return [
+      makeBdlCandidate({
+        external_id: 569,
+        full_name: "Aaron Judge",
+        first_name: "Aaron",
+        last_name: "Judge",
+        dob: "1992-04-26",
+        age: 34,
+        birth_place: "Linden, CA",
+        position_abbr: "RF",
+      }),
+    ];
+  };
+  await attemptMatchForPlayer(mlb2, { searchBdlByName: stubFn2 }, TODAY);
+  check(
+    "no-accents lastName → only 1 call (no supplemental)",
+    calls.length === 1
+  );
+}
+
+async function testEndToEnd_OhtaniTwp() {
+  section("attemptMatchForPlayer — Shohei Ohtani two-way player fixture");
+  // MLB Stats lists Ohtani as primaryPosition="TWP" (two-way player).
+  // BDL lists him as SP. With the TWP compat fix, identity match should
+  // still resolve to Tier 1 HIGH.
+  const mlb = makeMlbProfile({
+    id: 660271,
+    fullName: "Shohei Ohtani",
+    firstName: "Shohei",
+    lastName: "Ohtani",
+    useName: "Shohei",
+    useLastName: "Ohtani",
+    birthDate: "1994-07-05",
+    primaryPositionAbbr: "TWP",
+    primaryPositionName: "Two-Way Player",
+    birthCity: "Oshu",
+    birthCountry: "Japan",
+  });
+  const bdl: BdlCandidate = makeBdlCandidate({
+    external_id: 208,
+    full_name: "Shohei Ohtani",
+    first_name: "Shohei",
+    last_name: "Ohtani",
+    dob: "1994-07-05", // already ISO from our bdlDobToIso conversion
+    age: 31,
+    birth_place: "Oshu, Japan",
+    position_abbr: "SP",
+    team_abbreviation: "LAD",
+  });
+  const { match, proposedProviderIds } = await attemptMatchForPlayer(
+    mlb,
+    { searchBdlByName: async () => [bdl] },
+    TODAY
+  );
+  check("Ohtani match.tier === 'high'", match.tier === "high");
+  if (match.tier === "high" || match.tier === "medium") {
+    check("Ohtani matched bdl id === 208", match.bdlId === 208);
+  }
+  check("provider_ids has bdl block", "bdl" in proposedProviderIds);
+  const bdlBlock = proposedProviderIds.bdl as { id: number; confidence: string };
+  check("Ohtani bdl confidence === 'high'", bdlBlock.confidence === "high");
+}
+
+async function testEndToEnd_DdMmYyyyPlayer() {
+  section("attemptMatchForPlayer — DD/MM/YYYY player fixture (Garrett Crochet)");
+  // Crochet's BDL DOB is "21/6/1999" — the new parser yields
+  // "1999-06-21" which matches his MLB DOB exactly.
+  const mlb = makeMlbProfile({
+    id: 676979,
+    fullName: "Garrett Crochet",
+    firstName: "Garrett",
+    lastName: "Crochet",
+    useName: "Garrett",
+    useLastName: "Crochet",
+    birthDate: "1999-06-21",
+    primaryPositionAbbr: "P",
+    birthCity: "Ocean Springs",
+    birthCountry: "USA",
+  });
+  // BdlCandidate.dob is post-conversion ISO (BallDontLieProvider's
+  // mapPlayer runs bdlDobToIso at ingest time).
+  const bdl: BdlCandidate = makeBdlCandidate({
+    external_id: 555,
+    full_name: "Garrett Crochet",
+    first_name: "Garrett",
+    last_name: "Crochet",
+    dob: "1999-06-21",
+    age: 25,
+    birth_place: "Ocean Springs, MS",
+    position_abbr: "SP",
+    team_abbreviation: "BOS",
+  });
+  const { match } = await attemptMatchForPlayer(
+    mlb,
+    { searchBdlByName: async () => [bdl] },
+    TODAY
+  );
+  check("Crochet match.tier === 'high'", match.tier === "high");
+  if (match.tier === "high" || match.tier === "medium") {
+    check("Crochet matched bdl id === 555", match.bdlId === 555);
+    check("Crochet method === 'name_dob_v1'", match.method === "name_dob_v1");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Runner
 // ─────────────────────────────────────────────────────────────────────
 
@@ -568,6 +986,18 @@ async function main() {
   await testEndToEnd_HighConfidenceMatch();
   await testEndToEnd_UnresolvedMatch();
   await testEndToEnd_NoCandidates();
+
+  // Part 1 fix-bundle tests (4.2.C.1.M-fix-bundle)
+  await testBdlDobToIso_DdMmYyyy();
+  await testBdlDobToIso_DSlashMSlashYyyy();
+  await testBdlDobToIso_MmDdYyRegression();
+  await testBdlDobToIso_IsoPassthrough();
+  await testBdlDobToIso_Malformed();
+  await testPositionCompatible_Twp();
+  await testPositionCompatible_Outfield();
+  await testAccentFoldSupplementalSearch();
+  await testEndToEnd_OhtaniTwp();
+  await testEndToEnd_DdMmYyyyPlayer();
 
   console.log();
   console.log("===================================================");

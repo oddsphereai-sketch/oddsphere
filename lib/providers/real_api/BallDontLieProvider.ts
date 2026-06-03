@@ -276,23 +276,57 @@ function ageFromDob(dob: string | null): number | null {
 }
 
 /**
- * Convert BDL's `MM/DD/YY` DOB to ISO `YYYY-MM-DD`, using `age` (also
- * returned by BDL) to disambiguate century. Passthrough if input is
- * already ISO. Returns null on malformed input.
+ * Convert BDL's raw `dob` string to ISO `YYYY-MM-DD`.
  *
- * Same century-disambiguation policy as
- * `providerMappingService.normalizeBdlDob` — kept inline here so the
- * provider doesn't depend on the service.
+ * BDL's MLB API uses TWO date formats, observed empirically:
+ *   • `DD/MM/YYYY` or `D/M/YYYY` (4-digit year, day-first) — used for
+ *     most modern player entries, e.g. "21/6/1999" (Crochet),
+ *     "14/11/1993" (Lindor), "6/8/1999" (Hunter Greene).
+ *   • `MM/DD/YY` (2-digit year, month-first) — used for some older
+ *     entries and some name-collision-prone players, e.g. "04/26/92"
+ *     (Aaron Judge), "07/05/94" (Ohtani), "01/04/97" (Davis Martin).
+ *
+ * Disambiguation rule:
+ *   • If the year group is 4 digits → treat the leading two groups as
+ *     day-then-month (DD/MM/YYYY family). The year is unambiguous.
+ *   • If the year group is 2 digits → treat as MM/DD/YY and use BDL's
+ *     `age` field to pick century (2000+YY vs 1900+YY).
+ *   • ISO `YYYY-MM-DD` is passed through unchanged.
+ *
+ * Returns null on malformed input or out-of-range day/month. Exported
+ * for direct unit-testing in scripts/test-provider-mapping.ts.
  */
-function bdlDobToIso(
+export function bdlDobToIso(
   raw: string | null,
   age: number | null,
   now: Date = new Date()
 ): string | null {
   if (raw === null) return null;
   const trimmed = raw.trim();
+
+  // 1. ISO passthrough
   const iso = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (iso !== null) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  // 2. Modern BDL: D/M/YYYY .. DD/MM/YYYY (year always 4 digits)
+  const ymd = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (ymd !== null) {
+    const day = Number(ymd[1]);
+    const month = Number(ymd[2]);
+    const year = Number(ymd[3]);
+    if (
+      month < 1 || month > 12 ||
+      day < 1 || day > 31 ||
+      !Number.isFinite(year)
+    ) {
+      return null;
+    }
+    const mm = String(month).padStart(2, "0");
+    const dd = String(day).padStart(2, "0");
+    return `${year}-${mm}-${dd}`;
+  }
+
+  // 3. Legacy BDL: MM/DD/YY (year always 2 digits)
   const m = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{2})$/);
   if (m === null) return null;
   const month = Number(m[1]);
