@@ -660,6 +660,7 @@ function buildGameDto(
     homeAbbr: home,
     awayAbbr: away,
     held: isMlHeld,
+    sportSpecific: pred.sport_specific,
   });
   const total = buildMarketEdge({
     market: "total",
@@ -677,6 +678,7 @@ function buildGameDto(
     homeAbbr: home,
     awayAbbr: away,
     held: isOuHeld,
+    sportSpecific: pred.sport_specific,
     totalsExtras: {
       modelTotal: pred.predicted_total,
       marketTotal: totalLine,
@@ -699,6 +701,7 @@ function buildGameDto(
     homeAbbr: home,
     awayAbbr: away,
     held: isNrfiHeld,
+    sportSpecific: pred.sport_specific,
   });
 
   // 4.1.10 — per-game status flags.
@@ -1028,7 +1031,165 @@ type BuildMarketEdgeInput = {
     marketTotal: number | null;
     sportsbookLine: number | null;
   };
+  /**
+   * R-14C1 — full sport_specific JSONB. Used to extract `review_v1`
+   * (reviewer audit record) for the Model/Market/Take strip. Optional
+   * for backward compatibility with callers that don't surface review
+   * metadata. Never spread into the DTO — only specific fields are
+   * extracted via the typed helper.
+   */
+  sportSpecific?: Record<string, unknown> | null;
 };
+
+// ─────────────────────────────────────────────────────────────
+// Phase 4.2.C.1.R-14C1 — Model / Market / Take strip helpers
+// ─────────────────────────────────────────────────────────────
+
+const NO_VIG_BOOK_PRIORITY = [
+  "pinnacle",
+  "draftkings",
+  "bet365 us",
+  "bookmaker",
+  "ballybet",
+  "kalshi",
+  "fliff",
+  "onexbet",
+  "saba",
+];
+
+function americanToImpliedLocal(american: number): number {
+  if (american > 0) return 100 / (american + 100);
+  return -american / (-american + 100);
+}
+
+/**
+ * Compute no-vig market-implied probability for the model's picked
+ * side. Walks the book priority list; first book that has BOTH sides
+ * wins. Falls back to `pinnacle_fair_probability` from sharp_signals
+ * (pre-de-vigged by SharpAPI) when no two-sided book is available.
+ *
+ * Returns:
+ *   • { pickPct, source, quality: "two_sided_consensus" } when both
+ *     sides exist at a real book
+ *   • { pickPct, source: null, quality: "pinnacle_only" } when only
+ *     the sharp-signal Pinnacle fair is available
+ *   • { pickPct: null, ..., quality: "single_book" | "unavailable" }
+ *     otherwise — the strip renders "Market: unavailable"
+ */
+function computeMarketImplied(
+  market: "moneyline" | "total" | "first_inning",
+  dbMarket: "moneyline" | "total" | "first_inning_total",
+  linesCurrent: LineRow[],
+  modelSide: Side | null,
+  signalPinnacleFairForPick: number | null
+): {
+  pickPct: number | null;
+  source: string | null;
+  quality:
+    | "two_sided_consensus"
+    | "single_book"
+    | "pinnacle_only"
+    | "unavailable";
+} {
+  if (market === "first_inning" || modelSide === null) {
+    return { pickPct: null, source: null, quality: "unavailable" };
+  }
+  const lines = linesCurrent.filter((l) => l.market_type === dbMarket);
+  if (lines.length === 0) {
+    return signalPinnacleFairForPick !== null
+      ? { pickPct: signalPinnacleFairForPick * 100, source: null, quality: "pinnacle_only" }
+      : { pickPct: null, source: null, quality: "unavailable" };
+  }
+  // Two-sided book search
+  for (const book of NO_VIG_BOOK_PRIORITY) {
+    const home = lines.find(
+      (l) =>
+        l.sportsbook === book &&
+        (l.side === "home" || l.side === "over") &&
+        l.odds_american !== null
+    );
+    const away = lines.find(
+      (l) =>
+        l.sportsbook === book &&
+        (l.side === "away" || l.side === "under") &&
+        l.odds_american !== null
+    );
+    if (home && away && home.odds_american !== null && away.odds_american !== null) {
+      const hImp = americanToImpliedLocal(home.odds_american);
+      const aImp = americanToImpliedLocal(away.odds_american);
+      const sum = hImp + aImp;
+      const homeNoVig = hImp / sum;
+      const awayNoVig = aImp / sum;
+      const pickSide = modelSide as string;
+      // Map side names: ML "home"/"away" match directly; total "over"/"under"
+      const pickNoVig =
+        (pickSide === "home" || pickSide === "over")
+          ? homeNoVig
+          : awayNoVig;
+      return { pickPct: pickNoVig * 100, source: book, quality: "two_sided_consensus" };
+    }
+  }
+  // Pinnacle fair fallback when no two-sided book exists
+  if (signalPinnacleFairForPick !== null) {
+    return { pickPct: signalPinnacleFairForPick * 100, source: null, quality: "pinnacle_only" };
+  }
+  // We have at least one side but no two-sided pair
+  return { pickPct: null, source: null, quality: "single_book" };
+}
+
+/**
+ * Extract review flags + per-market action from `sport_specific.review_v1`.
+ * Returns "keep" + [] when the reviewer didn't run for this row.
+ */
+function extractReviewMeta(
+  ss: Record<string, unknown> | null | undefined,
+  market: "moneyline" | "total" | "first_inning"
+): {
+  flags: string[];
+  action:
+    | "keep"
+    | "cap_confidence"
+    | "hold"
+    | "adjust_score_toward_market"
+    | "flip_side"
+    | "dampen_confidence"
+    | "downgrade_grade";
+} {
+  if (!ss || typeof ss !== "object") {
+    return { flags: [], action: "keep" };
+  }
+  const review = (ss as { review_v1?: unknown }).review_v1;
+  if (!review || typeof review !== "object") {
+    return { flags: [], action: "keep" };
+  }
+  const r = review as Record<string, unknown>;
+  const flags = Array.isArray(r.flags) ? (r.flags as string[]) : [];
+  const actions = (r.actions ?? {}) as Record<string, unknown>;
+  const marketKey =
+    market === "moneyline" ? "ml" : market === "total" ? "ou" : "nrfi";
+  const raw = actions[marketKey];
+  const allowed = new Set([
+    "keep",
+    "cap_confidence",
+    "hold",
+    "adjust_score_toward_market",
+    "flip_side",
+    "dampen_confidence",
+    "downgrade_grade",
+  ]);
+  const action =
+    typeof raw === "string" && allowed.has(raw)
+      ? (raw as
+          | "keep"
+          | "cap_confidence"
+          | "hold"
+          | "adjust_score_toward_market"
+          | "flip_side"
+          | "dampen_confidence"
+          | "downgrade_grade")
+      : "keep";
+  return { flags, action };
+}
 
 function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // DB key — the JSONB uses "first_inning_total" for the FI market.
@@ -1142,6 +1303,30 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     totalsLine: input.totalsExtras?.sportsbookLine ?? null,
   });
 
+  // ── R-14C1 — Model / Market / Take strip fields ────────────────
+  // modelTrustPct mirrors `confidence` on a 0..100 scale for the strip
+  // (the existing `confidence` field is 0..1 to match
+  // DailyEdgePredictionDto.confidence). Null when held.
+  const modelTrustPct = input.confidence !== null ? input.confidence * 100 : null;
+  // marketImplied: compute no-vig from a two-sided book; fall back to
+  // Pinnacle fair-prob from sharp_signals when no book has both sides.
+  const implied = computeMarketImplied(
+    input.market,
+    dbMarket,
+    input.linesCurrent,
+    input.modelSide,
+    marketFairProb,
+  );
+  const marketImpliedPct = implied.pickPct;
+  const marketSource = implied.source;
+  const marketDataQuality = implied.quality;
+  const modelMarketGapPct =
+    modelTrustPct !== null && marketImpliedPct !== null
+      ? +(modelTrustPct - marketImpliedPct).toFixed(1)
+      : null;
+  // Reviewer trail from sport_specific.review_v1 (R-16 wiring).
+  const reviewMeta = extractReviewMeta(input.sportSpecific, input.market);
+
   return {
     pick: input.pick,
     confidence: input.confidence,
@@ -1167,6 +1352,14 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     marketTotal: input.totalsExtras?.marketTotal ?? null,
     line: input.totalsExtras?.sportsbookLine ?? null,
     keyStats,
+    // R-14C1 additions
+    modelTrustPct,
+    marketImpliedPct,
+    modelMarketGapPct,
+    marketSource,
+    marketDataQuality,
+    reviewFlags: reviewMeta.flags,
+    reviewActionSummary: reviewMeta.action,
   };
 }
 

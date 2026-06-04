@@ -1205,6 +1205,173 @@ function EdgeStack({ market, marketData }: { market: MarketKey; marketData: Mark
   );
 }
 
+/**
+ * Phase 4.2.C.1.R-14C1 — Model / Market / Take strip.
+ *
+ * Reader-only component (does NOT appear on slate cards per the
+ * "do not clutter the card" guidance). Shows:
+ *   • Model — reviewed model trust % (NEVER raw model %)
+ *   • Market — no-vig market-implied % when a two-sided book exists;
+ *              "Market: unavailable" honest-empty otherwise
+ *   • Gap — Model − Market in percentage points; rendered with sign;
+ *           suppressed when Market is unavailable (no fake gap)
+ *   • Reviewer caution badge + flag list when reviewActionSummary ≠ "keep"
+ *
+ * Wording is intentionally cautious — "Gap" not "Edge", "Model vs Market"
+ * not "true model edge". Until the model probability is calibrated
+ * against historical hit rates, the gap is read-only context, not a
+ * calibrated betting edge.
+ *
+ * FI markets: this strip does not render. SharpAPI doesn't provide FI
+ * lines/odds; the FI section already has its own zone-based block.
+ */
+function ModelMarketTakeStrip({
+  market,
+  marketData,
+}: {
+  market: MarketKey;
+  marketData: MarketEdgeDto;
+}) {
+  // FI has no market data — show nothing.
+  if (market === "first_inning") return null;
+  // Held market — show nothing (verdict pill already communicates this).
+  if (marketData.held) return null;
+
+  const modelPct = marketData.modelTrustPct;
+  const marketPct = marketData.marketImpliedPct;
+  const gap = marketData.modelMarketGapPct;
+  const source = marketData.marketSource;
+  const quality = marketData.marketDataQuality;
+  const flags = marketData.reviewFlags;
+  const action = marketData.reviewActionSummary;
+  const cautionFiring = action !== "keep" || flags.includes("review_recommends_caution");
+
+  // Honest-empty when we have no model number at all.
+  if (modelPct === null) return null;
+
+  const marketLabel =
+    marketPct !== null
+      ? `${Math.round(marketPct)}%`
+      : "unavailable";
+  const sourceLabel =
+    source ?? (quality === "pinnacle_only" ? "Pinnacle fair" : null);
+  const showGap = gap !== null;
+  const gapTone: "neutral" | "positive" | "negative" =
+    gap === null
+      ? "neutral"
+      : gap >= 5
+        ? "positive"
+        : gap <= -5
+          ? "negative"
+          : "neutral";
+  const gapColor =
+    gapTone === "positive"
+      ? "text-emerald-300"
+      : gapTone === "negative"
+        ? "text-rose-300"
+        : "text-gray-300";
+
+  // Friendly flag → label map (only the ones members benefit from seeing).
+  const friendlyFlag = (f: string): string | null => {
+    switch (f) {
+      case "small_sample_starter_driver":
+        return "small-sample starter";
+      case "extreme_run_diff_with_coinflip_market":
+        return "extreme run gap vs coinflip market";
+      case "huge_model_market_gap":
+        return "large model vs market gap";
+      case "raw_conf_extreme_fragile":
+        return "fragile model input";
+      case "public_smoke_aligned_with_pick":
+        return "model agrees with heavy public";
+      case "ou_sharp_conflict":
+        return "sharp +EV opposes total side";
+      case "bullpen_fallback":
+        return "bullpen data fallback";
+      case "missing_starter":
+        return "missing starter";
+      case "missing_market_line":
+        return "missing market line";
+      case "review_recommends_caution":
+        return null; // already conveyed by the badge
+      default:
+        return null;
+    }
+  };
+  const memberFlags = flags
+    .map(friendlyFlag)
+    .filter((s): s is string => s !== null);
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">
+        Model vs Market
+      </p>
+      <div className="grid grid-cols-[68px_1fr] gap-y-1 gap-x-2 items-baseline">
+        <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Model</span>
+        <span className="text-[12.5px] tabular-nums text-gray-200 font-bold">
+          {Math.round(modelPct)}%
+          <span className="ml-2 text-[9.5px] font-normal text-gray-500 normal-case tracking-normal">
+            reviewed trust
+          </span>
+        </span>
+
+        <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Market</span>
+        <span className={`text-[12.5px] tabular-nums font-bold ${marketPct === null ? "text-gray-500 italic" : "text-gray-200"}`}>
+          {marketLabel}
+          {sourceLabel !== null && marketPct !== null && (
+            <span className="ml-2 text-[9.5px] font-normal text-gray-500 normal-case tracking-normal">
+              {sourceLabel}
+            </span>
+          )}
+        </span>
+
+        {showGap && (
+          <>
+            <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Gap</span>
+            <span className={`text-[12.5px] tabular-nums font-bold ${gapColor}`}>
+              {gap! > 0 ? "+" : ""}{gap!.toFixed(1)} pt
+              <span className="ml-2 text-[9.5px] font-normal text-gray-500 normal-case tracking-normal">
+                model vs market context
+              </span>
+            </span>
+          </>
+        )}
+      </div>
+
+      {cautionFiring && (
+        <div className="mt-1.5 p-1.5 rounded border border-amber-500/30 bg-amber-500/[0.06] space-y-0.5">
+          <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-amber-400/90">
+            ⚠ Reviewer caution
+            {action === "cap_confidence" && (
+              <span className="ml-1.5 text-[9px] font-normal text-amber-300/70 normal-case tracking-normal">
+                · confidence capped
+              </span>
+            )}
+            {action === "hold" && (
+              <span className="ml-1.5 text-[9px] font-normal text-amber-300/70 normal-case tracking-normal">
+                · market held
+              </span>
+            )}
+            {action === "adjust_score_toward_market" && (
+              <span className="ml-1.5 text-[9px] font-normal text-amber-300/70 normal-case tracking-normal">
+                · projection dampened
+              </span>
+            )}
+          </p>
+          {memberFlags.length > 0 && (
+            <ul className="text-[10.5px] text-amber-200/80 leading-tight pl-2.5 list-disc">
+              {memberFlags.slice(0, 4).map((f, i) => (
+                <li key={i}>{f}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MarketPulse({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
   // First-inning never uses split copy — V1 SharpAPI tier does not cover
   // first-inning public splits. Phrase as provider-coverage, not failure.
@@ -2229,6 +2396,8 @@ function SelectedEdgeReader({
                 <div className="space-y-2.5">
                   <EdgeStack market={market} marketData={marketData} />
                   <div className="border-t border-white/[0.04]" />
+                  <ModelMarketTakeStrip market={market} marketData={marketData} />
+                  <div className="border-t border-white/[0.04]" />
                   <MarketPulse market={market} marketData={marketData} />
                 </div>
                 <MarketNotes
@@ -2382,6 +2551,7 @@ function MobileDetailSheet({
             <>
               <QuickRead game={game} market={selectedMarket} marketData={marketData} />
               <EdgeStack market={selectedMarket} marketData={marketData} />
+              <ModelMarketTakeStrip market={selectedMarket} marketData={marketData} />
               <MarketPulse market={selectedMarket} marketData={marketData} />
               <MarketNotes
                 marketData={marketData}

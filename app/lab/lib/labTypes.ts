@@ -264,6 +264,74 @@ export type MarketEdgeDto = {
 
   // ── 4.1.10 KeyStats panel input ──
   keyStats: KeyStatRow[];
+
+  // ─────────────────────────────────────────────────────────────
+  // Phase 4.2.C.1.R-14C1 — Model / Market / Take strip
+  // ─────────────────────────────────────────────────────────────
+  /**
+   * Reviewed model confidence on a 0..100 scale. Same numeric value as
+   * `confidence * 100` but exposed as an explicit `modelTrustPct` so
+   * the strip and the verdict layer can read distinct fields. Null when
+   * the market is held.
+   */
+  modelTrustPct: number | null;
+  /**
+   * No-vig market-implied probability for the model's picked side, in
+   * percent (0..100). Computed once per game from a two-sided
+   * consensus book (Pinnacle preferred, then DraftKings, then
+   * available books). Null when fewer than both sides are available,
+   * or for first-inning where no market data exists.
+   */
+  marketImpliedPct: number | null;
+  /**
+   * `modelTrustPct − marketImpliedPct` in percentage points. Positive
+   * means the model trusts the pick more than the market prices it.
+   * Null when either input is null — the UI MUST render "—" instead
+   * of guessing a gap. Read-only stat, not a calibrated edge.
+   */
+  modelMarketGapPct: number | null;
+  /**
+   * Sportsbook that produced the no-vig pair. Diagnostic display so
+   * members can see "Market 50% · ballybet" or "Market 50% · pinnacle".
+   * Null when no book had both sides.
+   */
+  marketSource: string | null;
+  /**
+   * Quality classification of the market data feeding `marketImpliedPct`:
+   *   • `"two_sided_consensus"` — both sides found at one book; reliable
+   *   • `"single_book"` — only one side priced; no-vig not derivable
+   *   • `"pinnacle_only"` — Pinnacle fair-prob from sharp_signals only
+   *   • `"unavailable"` — no usable market data at all
+   * Drives the "Market: unavailable" honest-empty UI path.
+   */
+  marketDataQuality:
+    | "two_sided_consensus"
+    | "single_book"
+    | "pinnacle_only"
+    | "unavailable";
+  /**
+   * Compact review-trail surfaced to the reader strip. Sourced from
+   * `sport_specific.review_v1.flags` when the reviewer fired. Empty
+   * array when reviewer is OFF or produced no flags. The full audit
+   * record lives in `sport_specific.review_v1` for operator inspection.
+   */
+  reviewFlags: string[];
+  /**
+   * Short label summarizing what the reviewer did to THIS market.
+   *   • `"keep"` — no reviewer change (default)
+   *   • `"cap_confidence"` — reviewer dampened confidence
+   *   • `"hold"` — reviewer forced a hold
+   *   • `"adjust_score_toward_market"` — score projection was adjusted
+   * Members see "Reviewer caution" + flags when the action ≠ "keep".
+   */
+  reviewActionSummary:
+    | "keep"
+    | "cap_confidence"
+    | "hold"
+    | "adjust_score_toward_market"
+    | "flip_side"
+    | "dampen_confidence"
+    | "downgrade_grade";
 };
 
 /**

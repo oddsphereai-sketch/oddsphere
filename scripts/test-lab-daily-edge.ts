@@ -448,6 +448,13 @@ async function main() {
       marketTotal: null,
       line: null,
       keyStats: [],
+      modelTrustPct: null,
+      marketImpliedPct: null,
+      modelMarketGapPct: null,
+      marketSource: null,
+      marketDataQuality: "unavailable" as const,
+      reviewFlags: [],
+      reviewActionSummary: "keep" as const,
     });
     return {
       id: "test-1",
