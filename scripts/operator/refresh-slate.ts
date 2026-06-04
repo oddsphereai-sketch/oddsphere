@@ -1,12 +1,13 @@
 /**
- * Phase 4.1.9.C-1b — Operator script: refresh slate (games table only) for
- * one sport/date.
+ * Phase 4.1.9.C-1b / R-1 — Operator script: refresh slate (games table only)
+ * for one sport/date.
  *
  * USAGE:
  *   npx tsx --env-file=.env.local scripts/operator/refresh-slate.ts \
  *     [--sport mlb] [--date YYYY-MM-DD] [--verbose] \
  *     [--provider real_api] \
- *     [--apply]
+ *     [--apply] \
+ *     [--allow-validation-mismatch]
  *
  * GUARDS (defense in depth, mirrors refresh-sharp-signals.ts):
  *   1. Provider mode must be EXPLICITLY real_api. Either:
@@ -21,6 +22,16 @@
  *   3. --apply also triggers an interactive y/N confirmation showing the
  *      exact sport/date and game count about to be written.
  *
+ *   4. BDL ↔ SharpAPI cross-provider validation must agree on ≥ 90% of
+ *      games. Below that, apply BLOCKS by default — wrong games are
+ *      worse than missing games. (Phase 4.1.9.C-1c.v safety guard.)
+ *
+ *   5. (Phase R-1) `--allow-validation-mismatch` is a loud, audit-visible
+ *      override for the BDL↔SharpAPI block. Use ONLY when BDL + MLB
+ *      Stats + a manual canonical-schedule check agree and SharpAPI is
+ *      the noisy outlier. The override does NOT unblock a SharpAPI
+ *      fetch error — that remains a hard block.
+ *
  * WRITES (when --apply confirmed):
  *   • Only `games` (UPSERT on (sport, external_id)).
  *   • No game_predictions, no lines, no sharp_signals, no slate_status
@@ -31,6 +42,8 @@
  * DEFAULT BEHAVIOR (no --apply): DRY-RUN
  *   • Calls slate provider, builds payload, reports per-game what would
  *     be upserted, prints DRY RUN — NO DB WRITES banner.
+ *   • Dry-run with `--allow-validation-mismatch` reports the override
+ *     state but performs no DB writes.
  */
 
 import * as readline from "node:readline/promises";
@@ -45,6 +58,10 @@ import { slateService } from "../../lib/services/slateService";
 import { supabase } from "../../lib/db/supabase";
 import { getSlateProvider } from "../../lib/providers/factory";
 import { normalizeMlbTeamName } from "../../lib/providers/real_api/_teamNameNormalizer";
+import {
+  decideSlateApply,
+  type SlateApplyDecision,
+} from "../../lib/services/slateValidationDecision";
 import type {
   ISlateProvider,
   SlateGameRecord,
@@ -361,6 +378,40 @@ function printValidationReport(
   console.log(`  Verdict: ${v.passed ? "🟢 GREEN" : "🔴 RED — block apply"}`);
 }
 
+/**
+ * Phase R-1 — print the loud audit notice when the operator uses
+ * `--allow-validation-mismatch` to bypass the BDL↔SharpAPI overlap
+ * block. Identical text in dry-run preview and apply paths so the
+ * audit trail looks the same either way.
+ */
+function printValidationOverrideNotice(
+  v: ValidationResult,
+  mode: "DRY-RUN" | "APPLY"
+): void {
+  console.log();
+  console.log("━━━ ⚠ Validation override engaged ━━━");
+  console.log("  validation_override=true");
+  console.log(`  mode=${mode}`);
+  console.log(`  override_source=--allow-validation-mismatch`);
+  console.log(`  BDL game count:               ${v.bdlCount}`);
+  console.log(`  SharpAPI game count:          ${v.sharpApiCount}`);
+  console.log(`  Overlap (pairs in both):      ${v.overlap}`);
+  console.log(`  Overlap percentage:           ${(v.overlapPct * 100).toFixed(1)}%`);
+  console.log(`  Threshold:                    ${(SHARP_API_OVERLAP_THRESHOLD * 100).toFixed(0)}%`);
+  if (v.bdlOnly.length > 0) {
+    console.log(`  BDL-only pairs (${v.bdlOnly.length}): ${v.bdlOnly.join(", ")}`);
+  }
+  if (v.sharpApiOnly.length > 0) {
+    console.log(`  SharpAPI-only pairs (${v.sharpApiOnly.length}): ${v.sharpApiOnly.join(", ")}`);
+  }
+  console.log();
+  console.log("  Operator accepted validation mismatch risk by passing");
+  console.log("  --allow-validation-mismatch. This override is intended ONLY for");
+  console.log("  manual launch workflow when BDL + MLB Stats + a manual canonical");
+  console.log("  schedule check agree and SharpAPI is the noisy outlier.");
+  console.log("  Do NOT use as a default. Audit logs should surface this entry.");
+}
+
 async function confirmApply(sport: Sport, date: string, gamesToUpsert: number): Promise<boolean> {
   const rl = readline.createInterface({ input, output });
   try {
@@ -397,13 +448,14 @@ async function main() {
   const applyGate = resolveApplyGate(argv);
   refuseApplyMisconfig(applyGate.applyRequested, applyGate.envEnabled);
   const writeMode = applyGate.canApply;
+  const allowValidationMismatch = readBoolFlag(argv, "--allow-validation-mismatch");
 
   console.log(
     `[refresh-slate] mode=${
       writeMode ? "APPLY" : "DRY-RUN"
     } provider=real_api(source:${
       providerResolution.source === "neither" ? "?" : providerResolution.source
-    }) sport=${common.sport} date=${common.date} verbose=${common.verbose}`
+    }) sport=${common.sport} date=${common.date} verbose=${common.verbose} allow_validation_mismatch=${allowValidationMismatch}`
   );
   if (!writeMode) {
     console.log("           DRY RUN — NO DB WRITES");
@@ -460,9 +512,17 @@ async function main() {
   console.log("  No other tables. No predictions, no publish, no sharp_signals.");
 
   // SharpAPI cross-provider validation runs in BOTH dry-run and apply.
-  // In dry-run it informs; in apply it BLOCKS if overlap < threshold.
+  // In dry-run it informs; in apply it BLOCKS if overlap < threshold
+  // (unless the operator passed --allow-validation-mismatch).
   const validation = await runValidation(fetchedGames);
   printValidationReport(validation);
+
+  const decision: SlateApplyDecision = decideSlateApply({
+    passed: validation.passed,
+    reason: validation.reason,
+    sharpApiFetchError: validation.sharpApiFetchError,
+    allowMismatch: allowValidationMismatch,
+  });
 
   if (!writeMode) {
     console.log();
@@ -472,18 +532,26 @@ async function main() {
       console.log("     - Provider has no games for this date (off-day, late evening, etc.)");
       console.log("     - Provider failed silently (check verbose logs)");
       console.log("     - Wrong date");
-    } else if (validation.sharpApiFetchError !== null) {
-      console.log(`  🟡 Provider returned ${dryResult.records_updated} games but SharpAPI validation could not run.`);
-      console.log(`     Reason: ${validation.sharpApiFetchError}`);
-      console.log("     Dry-run is permissive on this. Apply mode will block.");
-    } else if (validation.passed) {
+    } else if (decision.kind === "allow") {
       console.log(`  🟢 Provider returned ${dryResult.records_updated} games for ${common.sport}/${common.date}.`);
       console.log(`     SharpAPI validation: ${(validation.overlapPct * 100).toFixed(1)}% overlap (>= 90% threshold).`);
       console.log("     Safe to --apply (operator confirmation required).");
+    } else if (decision.kind === "allow_with_override") {
+      console.log(`  🟠 Provider returned ${dryResult.records_updated} games for ${common.sport}/${common.date}.`);
+      console.log(`     SharpAPI validation FAILED: ${decision.reason}`);
+      console.log(`     Override engaged (${decision.override_source}).`);
+      console.log("     Apply mode would PROCEED (validation override). DRY RUN ONLY — no DB writes.");
+      printValidationOverrideNotice(validation, "DRY-RUN");
+    } else if (validation.sharpApiFetchError !== null) {
+      console.log(`  🔴 Provider returned ${dryResult.records_updated} games but SharpAPI validation could not run.`);
+      console.log(`     Reason: ${validation.sharpApiFetchError}`);
+      console.log("     Apply mode would BLOCK this slate (override does NOT bypass fetch errors).");
     } else {
       console.log(`  🔴 Provider returned ${dryResult.records_updated} games BUT SharpAPI validation FAILED.`);
-      console.log(`     ${validation.reason}`);
+      console.log(`     ${decision.reason}`);
       console.log("     Apply mode would BLOCK this slate.");
+      console.log("     To override (BDL + MLB Stats + manual canonical schedule agree, SharpAPI is the outlier):");
+      console.log("       re-run with --allow-validation-mismatch");
     }
     console.log();
     console.log("  DRY RUN — NO DB WRITES PERFORMED.");
@@ -491,23 +559,29 @@ async function main() {
   }
 
   // APPLY: enforce validation gate before any write.
-  if (validation.sharpApiFetchError !== null) {
+  if (decision.kind === "block") {
     console.error();
-    console.error("✗ APPLY BLOCKED — SharpAPI validation could not run.");
-    console.error(`  ${validation.sharpApiFetchError}`);
-    console.error("  Wrong games are worse than missing games. Re-run after the validation");
-    console.error("  layer can reach SharpAPI.");
+    if (validation.sharpApiFetchError !== null) {
+      console.error("✗ APPLY BLOCKED — SharpAPI validation could not run.");
+      console.error(`  ${validation.sharpApiFetchError}`);
+      console.error("  Wrong games are worse than missing games. Re-run after the validation");
+      console.error("  layer can reach SharpAPI.");
+      console.error("  --allow-validation-mismatch does NOT bypass fetch errors by design.");
+    } else {
+      console.error("✗ APPLY BLOCKED — SharpAPI cross-provider overlap below threshold.");
+      console.error(`  ${decision.reason}`);
+      console.error("  BDL-only pairs:      " + (validation.bdlOnly.join(", ") || "(none)"));
+      console.error("  SharpAPI-only pairs: " + (validation.sharpApiOnly.join(", ") || "(none)"));
+      console.error("  No games will be upserted. Investigate the BDL slate or SharpAPI catalog");
+      console.error("  before retrying.");
+      console.error("  To override (BDL + MLB Stats + manual canonical schedule agree, SharpAPI is");
+      console.error("  the outlier), re-run with --allow-validation-mismatch.");
+    }
     process.exit(1);
   }
-  if (!validation.passed) {
-    console.error();
-    console.error("✗ APPLY BLOCKED — SharpAPI cross-provider overlap below threshold.");
-    console.error(`  ${validation.reason}`);
-    console.error("  BDL-only pairs:    " + (validation.bdlOnly.join(", ") || "(none)"));
-    console.error("  SharpAPI-only pairs: " + (validation.sharpApiOnly.join(", ") || "(none)"));
-    console.error("  No games will be upserted. Investigate the BDL slate or SharpAPI catalog");
-    console.error("  before retrying. (Cannot override — this is the V1 safety guard.)");
-    process.exit(1);
+
+  if (decision.kind === "allow_with_override") {
+    printValidationOverrideNotice(validation, "APPLY");
   }
 
   // APPLY: confirm + write.
