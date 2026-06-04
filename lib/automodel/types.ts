@@ -397,6 +397,25 @@ export type AutoModelSportSpecific = {
   breakdown_version?: string | null;
   /** ISO 8601 timestamp of the most recent breakdown generation run. */
   breakdown_generated_at?: string | null;
+  // ─────────────────────────────────────────────────────────────
+  // Phase 4.2.C.1.R-16 — AI reviewer audit record
+  // ─────────────────────────────────────────────────────────────
+  /**
+   * Compact audit-trail emitted by the V1 deterministic AI reviewer.
+   * Optional for back-compat with predictions written before R-16
+   * wiring. Sized ≤ ~700 bytes per row. Carries raw vs reviewed
+   * prediction snapshot, per-market actions, review flags, reasons
+   * count, reviewer version, and the logic_audit_passed boolean.
+   * Full reasons text is intentionally not persisted (review_reasons
+   * is rebuildable from the input + flag set when needed).
+   *
+   * `unknown` here because the concrete shape (`ReviewV1AuditRecord`)
+   * lives in `lib/services/aiReviewerV1.ts` and we don't want a
+   * dependency cycle from automodel types into a service module.
+   * The reviewer's `buildAuditRecord` is what writes here; readers
+   * cast to the concrete type via that module.
+   */
+  review_v1?: unknown | null;
 };
 
 // ─────────────────────────────────────────────────────────────

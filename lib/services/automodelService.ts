@@ -62,6 +62,11 @@ import { loadGameIdMap } from "./_idMaps";
 import { updateMarketSignalsForSlate } from "./marketSignalDerivationService";
 import { updateGradesForSlate } from "./gradeDerivationService";
 import { generatePickBreakdown } from "./pickBreakdownGenerator";
+import {
+  applyReviewerIfEnabled,
+  fetchReviewerSlateContext,
+  type ReviewerSlateContext,
+} from "./aiReviewerWiring";
 
 // ─────────────────────────────────────────────────────────────
 // Public types
@@ -457,6 +462,27 @@ export async function generatePredictionsForSlate(
     );
   }
 
+  // R-16 — fetch slate-scoped market context once per slate (no-vig ML
+  // probabilities) for the AI reviewer. Single DB query. Empty map is
+  // fine — reviewer handles missing data gracefully.
+  let reviewerContext: ReviewerSlateContext;
+  try {
+    reviewerContext = await fetchReviewerSlateContext(
+      supabase,
+      "mlb",
+      slate_date
+    );
+  } catch (e) {
+    // Don't fail the run if the context fetch fails — proceed with an
+    // empty map. Reviewer will simply lack no-vig data on every game.
+    console.warn(
+      `[automodelService] reviewer slate-context fetch failed: ${
+        e instanceof Error ? e.message : String(e)
+      }. Proceeding with empty context.`
+    );
+    reviewerContext = { noVigByExternalId: new Map() };
+  }
+
   // Step 2 — per-game pipeline
   const predictions: AutoModelOutput[] = [];
   const errors: AutoModelRunResult["errors"] = [];
@@ -485,18 +511,35 @@ export async function generatePredictionsForSlate(
       });
       ai_sanity_actions[verdict.action]++;
 
+      // 2b.5 — R-16 AI reviewer (deterministic V1). No-op unless
+      // `REVIEWER_V1_ENABLED=true` is set in the operator env. When
+      // enabled, the reviewer may cap confidence, hold a market, adjust
+      // projected scores toward market, and emit a compact audit record.
+      // On logic_audit failure it fails closed by holding all markets
+      // with hold_reason="reviewer_logic_audit_failed". When disabled
+      // this returns `rawPrediction` unchanged → existing behavior.
+      const reviewedPrediction = applyReviewerIfEnabled(
+        snap,
+        rawPrediction,
+        stage,
+        reviewerContext
+      );
+
       // 2c — Phase 4C: enrich sport_specific via the optional hook.
       // Hook errors do NOT fail the game — log + proceed with the
       // un-enriched prediction so a single buggy hook can't sink the
       // whole slate. When hook is undefined (Phase 3B/3C callers),
       // this branch is skipped entirely → existing behavior preserved.
       let enrichedSportSpecific: AutoModelSportSpecific =
-        rawPrediction.sport_specific;
+        reviewedPrediction.sport_specific;
       if (opts.enrichmentHook !== undefined) {
         try {
-          const extra = opts.enrichmentHook(snap, rawPrediction);
+          // Hook receives the reviewed prediction so any reviewer-driven
+          // changes (score adjustment, confidence cap, held markets) are
+          // visible to enrichment logic.
+          const extra = opts.enrichmentHook(snap, reviewedPrediction);
           enrichedSportSpecific = {
-            ...rawPrediction.sport_specific,
+            ...reviewedPrediction.sport_specific,
             ...extra,
           };
         } catch (hookErr) {
@@ -527,8 +570,11 @@ export async function generatePredictionsForSlate(
         process.env.PICK_BREAKDOWN_GEN_ENABLED === "true"
       ) {
         try {
+          // Breakdown reads the REVIEWED prediction so the member-facing
+          // copy reflects any reviewer adjustments (capped confidence,
+          // halved score differential, held markets).
           const breakdown = generatePickBreakdown(
-            { ...rawPrediction, sport_specific: enrichedSportSpecific },
+            { ...reviewedPrediction, sport_specific: enrichedSportSpecific },
             {
               sport,
               home_pitcher_name: snap.home_starter?.player_name ?? null,
@@ -574,7 +620,7 @@ export async function generatePredictionsForSlate(
       }
 
       const finalPrediction: AutoModelOutput = {
-        ...rawPrediction,
+        ...reviewedPrediction,
         sport_specific: withBreakdown,
       };
 

@@ -172,8 +172,8 @@ async function main() {
       out.ml_action === "cap_confidence"
     );
     check(
-      "[R-16] PIT@HOU — ml_confidence capped at 55",
-      out.ml_confidence === 55
+      "[R-16] PIT@HOU — ml_confidence capped at 52",
+      out.ml_confidence === 52
     );
     check(
       "[R-16] PIT@HOU — review_recommends_caution flag added",
@@ -674,7 +674,7 @@ async function main() {
     );
     check(
       "[R-16] audit reviewed snapshot reflects cap",
-      audit.reviewed.ml_confidence === 55
+      audit.reviewed.ml_confidence === 52
     );
     check(
       "[R-16] audit actions populated",

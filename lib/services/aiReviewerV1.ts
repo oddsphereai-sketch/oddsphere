@@ -194,10 +194,20 @@ const COINFLIP_HIGH_PCT = 55;
 const RAW_CONF_EXTREME_THRESHOLD = 150;
 const HUGE_GAP_PP_THRESHOLD = 12;
 /** When the reviewer caps confidence after a strong intervention.
- *  55 sits intentionally above the floor (50) but BELOW
- *  PLAYABLE_CONFIDENCE_FLOOR (53 in 0..1 scale = 53). Cap of 55
- *  preserves the pick as informational without claiming actionable edge. */
-const STRONG_INTERVENTION_CAP = 55;
+ *  52 sits intentionally above the floor (50 — "no read") and BELOW
+ *  PLAYABLE_CONFIDENCE_FLOOR (0.53 = 53 on 0-100 scale, the threshold
+ *  the verdict layer uses to route below-floor picks to no_play).
+ *
+ *  Why 52, not 55: at 55 the pick still clears the playable floor,
+ *  so the verdict layer renders it as a normal lean/watchlist row.
+ *  At 52, the verdict layer routes the row to no_play automatically
+ *  without any reviewer-flag plumbing into verdictDerivation. The
+ *  member sees an explicit "no_play" pill with the reviewer's flags
+ *  surfaced in the audit record for operator inspection. R-16B (LLM
+ *  layer) may revisit by adding an explicit `reviewer_recommends_caution`
+ *  pathway into the verdict layer for cases that should land at
+ *  Caution rather than No Play. */
+const STRONG_INTERVENTION_CAP = 52;
 /** Number of strong fragility flags that together trigger cap. */
 const STRONG_INTERVENTION_FLAG_COUNT = 2;
 /** Strong-fragility flag set. */
