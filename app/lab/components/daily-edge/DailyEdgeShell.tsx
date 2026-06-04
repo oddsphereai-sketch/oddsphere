@@ -1253,8 +1253,17 @@ function ModelMarketTakeStrip({
     marketPct !== null
       ? `${Math.round(marketPct)}%`
       : "unavailable";
+  // R-16E — honest labeling for splits-consensus reads. When SharpAPI's
+  // /odds endpoint has no rows but /splits has both-sided American ML
+  // odds, the no-vig math runs but we label the read as "splits
+  // consensus" instead of pretending it's a real sportsbook price. The
+  // pinnacle-fair fallback retains its own honest label.
   const sourceLabel =
-    source ?? (quality === "pinnacle_only" ? "Pinnacle fair" : null);
+    quality === "splits_consensus"
+      ? "splits consensus"
+      : quality === "pinnacle_only"
+        ? "Pinnacle fair"
+        : source;
   const showGap = gap !== null;
   const gapTone: "neutral" | "positive" | "negative" =
     gap === null

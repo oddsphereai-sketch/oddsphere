@@ -298,7 +298,11 @@ export type MarketEdgeDto = {
   marketSource: string | null;
   /**
    * Quality classification of the market data feeding `marketImpliedPct`:
-   *   • `"two_sided_consensus"` — both sides found at one book; reliable
+   *   • `"two_sided_consensus"` — both sides found at one real book; reliable
+   *   • `"splits_consensus"` — both sides synthesized from SharpAPI's
+   *     `/splits` payload because `/odds` returned nothing for this
+   *     market. Lower confidence than a real book pair; the reader is
+   *     told it's a splits-consensus read (R-16E).
    *   • `"single_book"` — only one side priced; no-vig not derivable
    *   • `"pinnacle_only"` — Pinnacle fair-prob from sharp_signals only
    *   • `"unavailable"` — no usable market data at all
@@ -306,6 +310,7 @@ export type MarketEdgeDto = {
    */
   marketDataQuality:
     | "two_sided_consensus"
+    | "splits_consensus"
     | "single_book"
     | "pinnacle_only"
     | "unavailable";

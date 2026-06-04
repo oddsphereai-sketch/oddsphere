@@ -46,7 +46,22 @@ import {
 import {
   discoverEventsFromSplits,
   type DiscoveryStats,
+  type RawSplitsRow,
 } from "./_splitsDiscovery";
+
+/**
+ * Phase 4.2.C.1.R-16E — provenance label for game-line rows synthesized
+ * from SharpAPI's `/splits` consensus payload when `/odds` returns no
+ * rows for a market. Used as the `sportsbook` column on the synthetic
+ * `lines` row so downstream code (no-vig math, UI label, audit) can
+ * distinguish splits-fallback from real-book data.
+ *
+ * Lower priority than every real book in NO_VIG_BOOK_PRIORITY — the
+ * Daily Edge route reads from real books first and only consults
+ * `splits_consensus` when no real-book two-sided pair exists for a
+ * market.
+ */
+export const SPLITS_CONSENSUS_BOOK = "splits_consensus";
 
 /**
  * Resolver injected at construction time. Maps a SharpAPI event's natural
@@ -172,6 +187,37 @@ function mapSportsbook(raw: string | null): Sportsbook | null {
  * eliminating the need for team-string parsing. Returns null when the
  * value isn't recognized — caller skips the row.
  */
+/**
+ * R-16E — build a synthetic LineRecord tagged with the splits-consensus
+ * provenance book. Centralized so all three markets share identical
+ * field discipline (ev_percent / fair_odds / is_ev_positive are always
+ * null on these rows — /splits does not de-vig).
+ */
+function makeSplitsLineRecord(opts: {
+  gameExternalId: number;
+  marketType: MarketType;
+  side: Side;
+  odds_american: number | null;
+  line_value: number | null;
+  fetched_at: string;
+}): LineRecord {
+  return {
+    game_external_id: opts.gameExternalId,
+    market_type: opts.marketType,
+    player_external_id: null,
+    sportsbook: SPLITS_CONSENSUS_BOOK as Sportsbook,
+    side: opts.side,
+    line_value: opts.line_value,
+    odds_american: opts.odds_american,
+    odds_decimal: null,
+    implied_probability: null,
+    ev_percent: null,
+    fair_odds: null,
+    is_ev_positive: null,
+    fetched_at: opts.fetched_at,
+  };
+}
+
 function mapSide(rawSelectionType: unknown): Side | null {
   const s = asStringOrNull(rawSelectionType);
   if (s === null) return null;
@@ -493,8 +539,18 @@ export class SharpAPIOddsProvider implements IOddsProvider {
       });
     }
 
-    // Step 4: per-event /odds. Per-game coverage detail captured so the
-    // service can decide preserve-vs-replace per game.
+    // Build a quick lookup from (home, away) → /splits raw row so
+    // Step 4's per-event loop can synthesize fallback rows for markets
+    // where /odds returned nothing (R-16E).
+    const splitsRowByPair = new Map<string, RawSplitsRow>();
+    for (const evt of splitsResult.events) {
+      splitsRowByPair.set(`${evt.home}|${evt.away}`, evt.rawRow);
+    }
+
+    // Step 4: per-event /odds + R-16E /splits fallback. Per-game coverage
+    // detail captured so the service can decide preserve-vs-replace per
+    // (game, market) — and so the operator can see which rows came from
+    // a real book vs the splits-consensus fallback.
     const records: LineRecord[] = [];
     const perGame: V2DiscoveryPerGame[] = [];
 
@@ -513,6 +569,12 @@ export class SharpAPIOddsProvider implements IOddsProvider {
           spreadRows: 0,
           otherRows: 0,
           books: [],
+          mlRowsFromOdds: 0,
+          totalRowsFromOdds: 0,
+          spreadRowsFromOdds: 0,
+          mlRowsFromSplits: 0,
+          totalRowsFromSplits: 0,
+          spreadRowsFromSplits: 0,
         });
         continue;
       }
@@ -535,9 +597,9 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         }
       }
 
-      let ml = 0,
-        tot = 0,
-        spr = 0,
+      let mlFromOdds = 0,
+        totFromOdds = 0,
+        sprFromOdds = 0,
         other = 0;
       const books = new Set<string>();
       for (const row of oddsRows) {
@@ -554,9 +616,9 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         const side = mapSide(row.selection_type);
         if (side === null) continue;
 
-        if (marketType === "moneyline") ml++;
-        else if (marketType === "total") tot++;
-        else if (marketType === "spread") spr++;
+        if (marketType === "moneyline") mlFromOdds++;
+        else if (marketType === "total") totFromOdds++;
+        else if (marketType === "spread") sprFromOdds++;
         else other++;
         books.add(sportsbook);
 
@@ -580,6 +642,120 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         });
       }
 
+      // R-16E — per-market /splits fallback.
+      // For each game-level market where /odds returned ZERO rows, look
+      // at the /splits payload for this team-pair and synthesize rows
+      // labeled `sportsbook = "splits_consensus"`. This restores ML
+      // no-vig for games where /odds is silent at this minute, and
+      // surfaces total/spread line values (no juice — /splits does not
+      // carry over/under or runline juice odds).
+      let mlFromSplits = 0,
+        totFromSplits = 0,
+        sprFromSplits = 0;
+      const splitsRow = splitsRowByPair.get(`${ev.home}|${ev.away}`);
+      const splitsFetchedAt =
+        asStringOrNull(splitsRow?.fetched_at as unknown) ?? fetchedAt;
+
+      if (splitsRow !== undefined) {
+        // ML — both sides + American odds present → full fallback.
+        if (mlFromOdds === 0) {
+          const ml = (splitsRow as Record<string, unknown>).moneyline as
+            | Record<string, unknown>
+            | undefined
+            | null;
+          const homeAm = asNumberOrNull(ml?.home_odds);
+          const awayAm = asNumberOrNull(ml?.away_odds);
+          if (ml !== undefined && ml !== null && homeAm !== null && awayAm !== null) {
+            records.push(makeSplitsLineRecord({
+              gameExternalId: ev.gameExternalId,
+              marketType: "moneyline",
+              side: "home",
+              odds_american: homeAm,
+              line_value: null,
+              fetched_at: splitsFetchedAt,
+            }));
+            records.push(makeSplitsLineRecord({
+              gameExternalId: ev.gameExternalId,
+              marketType: "moneyline",
+              side: "away",
+              odds_american: awayAm,
+              line_value: null,
+              fetched_at: splitsFetchedAt,
+            }));
+            mlFromSplits = 2;
+            books.add(SPLITS_CONSENSUS_BOOK);
+          }
+        }
+
+        // Total — only the LINE value is in /splits (no over/under
+        // juice). Synthesize over/under rows with line_value populated
+        // and odds_american = null. Downstream no-vig will NOT compute
+        // a market implied prob from these (it requires odds_american
+        // on both sides) — that's correct: no juice → no honest implied
+        // prob. But the UI can display the listed total.
+        if (totFromOdds === 0) {
+          const total = (splitsRow as Record<string, unknown>).total as
+            | Record<string, unknown>
+            | undefined
+            | null;
+          const totalLine = asNumberOrNull(total?.line);
+          if (total !== undefined && total !== null && totalLine !== null) {
+            records.push(makeSplitsLineRecord({
+              gameExternalId: ev.gameExternalId,
+              marketType: "total",
+              side: "over",
+              odds_american: null,
+              line_value: totalLine,
+              fetched_at: splitsFetchedAt,
+            }));
+            records.push(makeSplitsLineRecord({
+              gameExternalId: ev.gameExternalId,
+              marketType: "total",
+              side: "under",
+              odds_american: null,
+              line_value: totalLine,
+              fetched_at: splitsFetchedAt,
+            }));
+            totFromSplits = 2;
+            books.add(SPLITS_CONSENSUS_BOOK);
+          }
+        }
+
+        // Spread — same shape as total. SharpAPI's /splits encodes the
+        // runline LINE in `spread.home_odds`/`spread.away_odds` (despite
+        // the misleading field name). We store the absolute line as
+        // line_value on home/away rows; odds_american stays null because
+        // /splits does NOT carry runline juice.
+        if (sprFromOdds === 0) {
+          const spread = (splitsRow as Record<string, unknown>).spread as
+            | Record<string, unknown>
+            | undefined
+            | null;
+          const homeLine = asNumberOrNull(spread?.home_odds);
+          const awayLine = asNumberOrNull(spread?.away_odds);
+          if (spread !== undefined && spread !== null && homeLine !== null && awayLine !== null) {
+            records.push(makeSplitsLineRecord({
+              gameExternalId: ev.gameExternalId,
+              marketType: "spread",
+              side: "home",
+              odds_american: null,
+              line_value: homeLine,
+              fetched_at: splitsFetchedAt,
+            }));
+            records.push(makeSplitsLineRecord({
+              gameExternalId: ev.gameExternalId,
+              marketType: "spread",
+              side: "away",
+              odds_american: null,
+              line_value: awayLine,
+              fetched_at: splitsFetchedAt,
+            }));
+            sprFromSplits = 2;
+            books.add(SPLITS_CONSENSUS_BOOK);
+          }
+        }
+      }
+
       perGame.push({
         gameExternalId: ev.gameExternalId,
         home: ev.home,
@@ -588,11 +764,17 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         effectiveEventId: ev.effectiveEventId,
         eventIdSource: ev.eventIdSource,
         oddsCallStatus: status,
-        mlRows: ml,
-        totalRows: tot,
-        spreadRows: spr,
+        mlRows: mlFromOdds + mlFromSplits,
+        totalRows: totFromOdds + totFromSplits,
+        spreadRows: sprFromOdds + sprFromSplits,
         otherRows: other,
         books: [...books].sort(),
+        mlRowsFromOdds: mlFromOdds,
+        totalRowsFromOdds: totFromOdds,
+        spreadRowsFromOdds: sprFromOdds,
+        mlRowsFromSplits: mlFromSplits,
+        totalRowsFromSplits: totFromSplits,
+        spreadRowsFromSplits: sprFromSplits,
       });
     }
 
@@ -635,11 +817,21 @@ export type V2DiscoveryPerGame = {
   effectiveEventId: string;
   eventIdSource: "opportunities_suffixed" | "splits_stripped";
   oddsCallStatus: V2OddsCallStatus;
+  /** Combined row counts (real /odds + R-16E /splits fallback). */
   mlRows: number;
   totalRows: number;
   spreadRows: number;
   otherRows: number;
+  /** Distinct sportsbook names contributing rows (includes
+   *  `"splits_consensus"` when /splits fallback fired). */
   books: string[];
+  /** R-16E — per-source breakdown for the operator report. */
+  mlRowsFromOdds: number;
+  totalRowsFromOdds: number;
+  spreadRowsFromOdds: number;
+  mlRowsFromSplits: number;
+  totalRowsFromSplits: number;
+  spreadRowsFromSplits: number;
 };
 
 export type V2DiscoveryReport = {

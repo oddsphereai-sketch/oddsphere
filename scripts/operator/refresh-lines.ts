@@ -336,17 +336,24 @@ async function runV2Flow(args: {
   console.log();
   console.log("━━━ Per-game decisions (would-write) ━━━");
   console.log(
-    "  game_id  ext_id      home/away      ml/tot/spr  per-market    books  decision"
+    "  game     ml(odds/splits)  tot(odds/splits)  spr(odds/splits)  per-mkt       books  decision"
   );
   for (const d of details.per_game_decisions) {
-    const ext = String(d.external_id).padStart(8);
     const pg = details.discovery.perGame.find(
       (g) => g.gameExternalId === d.external_id
     );
     const teams = pg !== undefined ? `${pg.away}@${pg.home}` : "—@—";
-    const counts = `${d.ml_rows}/${d.total_rows}/${d.spread_rows}`;
+    const ml = pg !== undefined
+      ? `${pg.mlRowsFromOdds}/${pg.mlRowsFromSplits}`
+      : "—";
+    const tot = pg !== undefined
+      ? `${pg.totalRowsFromOdds}/${pg.totalRowsFromSplits}`
+      : "—";
+    const spr = pg !== undefined
+      ? `${pg.spreadRowsFromOdds}/${pg.spreadRowsFromSplits}`
+      : "—";
     console.log(
-      `  ${String(d.game_id).padStart(7)}  ${ext}  ${teams.padEnd(14)} ${counts.padEnd(10)} ${marketDecisionsBadge(
+      `  ${teams.padEnd(8)} ${ml.padStart(15)}  ${tot.padStart(16)}  ${spr.padStart(16)}  ${marketDecisionsBadge(
         d.market_decisions
       ).padEnd(13)} ${String(d.books_count).padStart(5)}  ${decisionLabel(d.decision)}`
     );
@@ -363,6 +370,28 @@ async function runV2Flow(args: {
   console.log(
     `  after  : games_with_any=${ca.games_with_any_line}/${slate}  ml=${ca.games_with_ml}/${slate}  total=${ca.games_with_total}/${slate}  spread=${ca.games_with_spread}/${slate}  rows≈${ca.total_game_rows}`
   );
+
+  console.log();
+  console.log("━━━ R-16E splits-consensus fallback ━━━");
+  let mlFromSplits = 0,
+    totFromSplits = 0,
+    sprFromSplits = 0,
+    gamesUsingSplits = 0;
+  for (const pg of details.discovery.perGame) {
+    mlFromSplits += pg.mlRowsFromSplits;
+    totFromSplits += pg.totalRowsFromSplits;
+    sprFromSplits += pg.spreadRowsFromSplits;
+    if (
+      pg.mlRowsFromSplits + pg.totalRowsFromSplits + pg.spreadRowsFromSplits >
+      0
+    ) {
+      gamesUsingSplits++;
+    }
+  }
+  console.log(`  games using /splits fallback: ${gamesUsingSplits}/${gameIds.length}`);
+  console.log(`  ML rows synthesized:          ${mlFromSplits}`);
+  console.log(`  Total rows synthesized:       ${totFromSplits}   (line only — no juice)`);
+  console.log(`  Spread rows synthesized:      ${sprFromSplits}   (line only — no juice)`);
 
   console.log();
   console.log("━━━ Decision counts ━━━");

@@ -542,6 +542,254 @@ async function testV2WhenSlateResolutionFails() {
   );
 }
 
+async function testR16ESplitsFallback() {
+  section("R-16E — /splits fallback synthesizes lines when /odds is empty");
+
+  // /splits has full ML American odds, total line, spread line. /odds
+  // returns 0 rows for the game. V2 must:
+  //   • synthesize 2 ML lines (home/away with american odds)
+  //   • synthesize 2 total lines (over/under with line_value only, no juice)
+  //   • synthesize 2 spread lines (home/away with line_value only, no juice)
+  //   • tag every synthesized row sportsbook="splits_consensus"
+  const splits = [
+    {
+      ...splitsRow({ home: "Chicago Cubs", away: "Athletics" }),
+      moneyline: { home_odds: -143, away_odds: 119, bets_pct: { home: 0.68, away: 0.32 }, handle_pct: { home: 0.18, away: 0.82 } },
+      total: { line: 10, bets_pct: { over: 0.53, under: 0.47 }, handle_pct: { over: 0.87, under: 0.13 } },
+      spread: { home_odds: -1.5, away_odds: 1.5, bets_pct: { home: 0.46, away: 0.54 }, handle_pct: { home: 0.37, away: 0.63 } },
+    },
+  ];
+  const stubClient = new StubSharpApiClient({
+    splits,
+    opportunitiesEv: [],
+    oddsByEventId: { "mlb_chicagocubs_athletics_2026-06-04": [] }, // EMPTY /odds
+  });
+  const provider = new SharpAPIOddsProvider(
+    "ignored-key",
+    makeResolverFromMap({ "CHC|ATH": 1001 }),
+    { client: stubClient }
+  );
+  const out = await provider.getGameLinesV2(DATE, "mlb");
+
+  check(
+    "R-16E: 6 synthetic lines produced (2 ML + 2 Total + 2 Spread)",
+    out.records.length === 6,
+    `got ${out.records.length}`
+  );
+
+  // ML rows
+  const mlRows = out.records.filter((r) => r.market_type === "moneyline");
+  check("R-16E ML: 2 rows", mlRows.length === 2);
+  check(
+    "R-16E ML: all rows tagged sportsbook=splits_consensus",
+    mlRows.every((r) => r.sportsbook === "splits_consensus")
+  );
+  const mlHome = mlRows.find((r) => r.side === "home");
+  const mlAway = mlRows.find((r) => r.side === "away");
+  check(
+    "R-16E ML home: odds_american = -143",
+    mlHome?.odds_american === -143
+  );
+  check(
+    "R-16E ML away: odds_american = +119",
+    mlAway?.odds_american === 119
+  );
+  check(
+    "R-16E ML: line_value is null (ML has no line)",
+    mlHome?.line_value === null && mlAway?.line_value === null
+  );
+
+  // Total rows — line only, no juice
+  const totalRows = out.records.filter((r) => r.market_type === "total");
+  check("R-16E Total: 2 rows", totalRows.length === 2);
+  check(
+    "R-16E Total: both sides have line_value=10",
+    totalRows.every((r) => r.line_value === 10)
+  );
+  check(
+    "R-16E Total: odds_american is null (no juice in /splits)",
+    totalRows.every((r) => r.odds_american === null)
+  );
+  check(
+    "R-16E Total: over+under sides present",
+    new Set(totalRows.map((r) => r.side)).size === 2
+  );
+
+  // Spread rows — line only, no juice
+  const spreadRows = out.records.filter((r) => r.market_type === "spread");
+  check("R-16E Spread: 2 rows", spreadRows.length === 2);
+  const sprHome = spreadRows.find((r) => r.side === "home");
+  const sprAway = spreadRows.find((r) => r.side === "away");
+  check(
+    "R-16E Spread home line_value = -1.5 (the runline, not a price)",
+    sprHome?.line_value === -1.5
+  );
+  check(
+    "R-16E Spread away line_value = +1.5",
+    sprAway?.line_value === 1.5
+  );
+  check(
+    "R-16E Spread: odds_american is null (no juice in /splits)",
+    spreadRows.every((r) => r.odds_american === null)
+  );
+
+  // Discovery report breakdown
+  const pg = out.discovery.perGame[0];
+  check("R-16E discovery: mlRowsFromOdds=0", pg?.mlRowsFromOdds === 0);
+  check("R-16E discovery: mlRowsFromSplits=2", pg?.mlRowsFromSplits === 2);
+  check("R-16E discovery: totalRowsFromSplits=2", pg?.totalRowsFromSplits === 2);
+  check("R-16E discovery: spreadRowsFromSplits=2", pg?.spreadRowsFromSplits === 2);
+  check(
+    "R-16E discovery: books list contains splits_consensus",
+    pg?.books.includes("splits_consensus") === true
+  );
+}
+
+async function testR16ERealOddsBeatsSplits() {
+  section("R-16E — real /odds rows take priority over /splits fallback");
+
+  // /splits has ML home_odds=-143, away_odds=119
+  // /odds returns real DraftKings ML rows
+  // V2 must use the REAL /odds rows and NOT synthesize splits-consensus
+  const splits = [
+    {
+      ...splitsRow({ home: "Chicago Cubs", away: "Athletics" }),
+      moneyline: { home_odds: -143, away_odds: 119, bets_pct: { home: 0.68, away: 0.32 }, handle_pct: { home: 0.18, away: 0.82 } },
+    },
+  ];
+  const stubClient = new StubSharpApiClient({
+    splits,
+    opportunitiesEv: [],
+    oddsByEventId: {
+      "mlb_chicagocubs_athletics_2026-06-04": [
+        oddsRow({ market: "moneyline", side: "home", book: "draftkings", american: -135 }),
+        oddsRow({ market: "moneyline", side: "away", book: "draftkings", american: 115 }),
+      ],
+    },
+  });
+  const provider = new SharpAPIOddsProvider(
+    "ignored-key",
+    makeResolverFromMap({ "CHC|ATH": 1001 }),
+    { client: stubClient }
+  );
+  const out = await provider.getGameLinesV2(DATE, "mlb");
+
+  const mlRows = out.records.filter((r) => r.market_type === "moneyline");
+  check(
+    "R-16E priority: ML records from real /odds only (no splits fallback)",
+    mlRows.length === 2 &&
+      mlRows.every((r) => r.sportsbook === "draftkings"),
+    `got ${mlRows.length} rows, sportsbooks=[${mlRows.map((r) => r.sportsbook).join(",")}]`
+  );
+
+  // The /splits ML data should NOT have been synthesized
+  const splitsConsensusMl = mlRows.filter(
+    (r) => r.sportsbook === "splits_consensus"
+  );
+  check(
+    "R-16E priority: 0 splits_consensus ML rows when real /odds returned ML",
+    splitsConsensusMl.length === 0
+  );
+
+  // Discovery report
+  const pg = out.discovery.perGame[0];
+  check(
+    "R-16E discovery: mlRowsFromOdds=2, mlRowsFromSplits=0",
+    pg?.mlRowsFromOdds === 2 && pg?.mlRowsFromSplits === 0
+  );
+}
+
+async function testR16EPerMarketGranularity() {
+  section("R-16E — per-market fallback (ML from /odds, Total from /splits)");
+
+  // /odds returns only ML rows (no total, no spread)
+  // /splits has all 3 markets
+  // V2 must: use real /odds ML, but synthesize splits-consensus Total + Spread
+  const splits = [
+    {
+      ...splitsRow({ home: "Chicago Cubs", away: "Athletics" }),
+      moneyline: { home_odds: -143, away_odds: 119, bets_pct: { home: 0.68, away: 0.32 }, handle_pct: { home: 0.18, away: 0.82 } },
+      total: { line: 10, bets_pct: { over: 0.53, under: 0.47 }, handle_pct: { over: 0.87, under: 0.13 } },
+      spread: { home_odds: -1.5, away_odds: 1.5, bets_pct: { home: 0.46, away: 0.54 }, handle_pct: { home: 0.37, away: 0.63 } },
+    },
+  ];
+  const stubClient = new StubSharpApiClient({
+    splits,
+    opportunitiesEv: [],
+    oddsByEventId: {
+      "mlb_chicagocubs_athletics_2026-06-04": [
+        oddsRow({ market: "moneyline", side: "home", book: "draftkings", american: -135 }),
+        oddsRow({ market: "moneyline", side: "away", book: "draftkings", american: 115 }),
+      ],
+    },
+  });
+  const provider = new SharpAPIOddsProvider(
+    "ignored-key",
+    makeResolverFromMap({ "CHC|ATH": 1001 }),
+    { client: stubClient }
+  );
+  const out = await provider.getGameLinesV2(DATE, "mlb");
+
+  const pg = out.discovery.perGame[0];
+  check(
+    "R-16E mixed: ML from /odds (2), Total from /splits (2), Spread from /splits (2)",
+    pg?.mlRowsFromOdds === 2 &&
+      pg?.mlRowsFromSplits === 0 &&
+      pg?.totalRowsFromOdds === 0 &&
+      pg?.totalRowsFromSplits === 2 &&
+      pg?.spreadRowsFromOdds === 0 &&
+      pg?.spreadRowsFromSplits === 2
+  );
+  check(
+    "R-16E mixed: 6 total records",
+    out.records.length === 6
+  );
+  // Verify real ML rows are DK
+  const ml = out.records.filter((r) => r.market_type === "moneyline");
+  check("R-16E mixed: ML rows sportsbook=draftkings", ml.every((r) => r.sportsbook === "draftkings"));
+  // Verify total/spread are splits_consensus
+  const tot = out.records.filter((r) => r.market_type === "total");
+  const spr = out.records.filter((r) => r.market_type === "spread");
+  check("R-16E mixed: Total rows sportsbook=splits_consensus", tot.every((r) => r.sportsbook === "splits_consensus"));
+  check("R-16E mixed: Spread rows sportsbook=splits_consensus", spr.every((r) => r.sportsbook === "splits_consensus"));
+}
+
+async function testR16ENoSynthWhenSplitsLacksFields() {
+  section("R-16E — no synthesis when /splits lacks required fields");
+
+  // /splits row exists but moneyline.home_odds is null. /odds is empty.
+  // V2 must NOT synthesize ML splits rows when the home/away odds aren't both present.
+  const splits = [
+    {
+      ...splitsRow({ home: "Chicago Cubs", away: "Athletics" }),
+      moneyline: { home_odds: null, away_odds: 119, bets_pct: { home: 0.68, away: 0.32 }, handle_pct: { home: 0.18, away: 0.82 } },
+      total: null, // No total payload at all
+    },
+  ];
+  const stubClient = new StubSharpApiClient({
+    splits,
+    opportunitiesEv: [],
+    oddsByEventId: { "mlb_chicagocubs_athletics_2026-06-04": [] },
+  });
+  const provider = new SharpAPIOddsProvider(
+    "ignored-key",
+    makeResolverFromMap({ "CHC|ATH": 1001 }),
+    { client: stubClient }
+  );
+  const out = await provider.getGameLinesV2(DATE, "mlb");
+
+  const ml = out.records.filter((r) => r.market_type === "moneyline");
+  const tot = out.records.filter((r) => r.market_type === "total");
+  check(
+    "R-16E refuses to synthesize ML when one side's odds is null",
+    ml.length === 0
+  );
+  check(
+    "R-16E refuses to synthesize Total when /splits.total is null",
+    tot.length === 0
+  );
+}
+
 async function testV2PartialMarketReturn() {
   section("V2 — partial market return surfaces in per-game perGame breakdown");
 
@@ -606,6 +854,10 @@ async function main() {
   await testV2WhenOpportunitiesUnavailable();
   await testV2WhenSlateResolutionFails();
   await testV2PartialMarketReturn();
+  await testR16ESplitsFallback();
+  await testR16ERealOddsBeatsSplits();
+  await testR16EPerMarketGranularity();
+  await testR16ENoSynthWhenSplitsLacksFields();
   await testMarketCoverageGate();
 
   console.log();
