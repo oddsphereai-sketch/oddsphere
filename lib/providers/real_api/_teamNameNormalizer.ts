@@ -127,16 +127,30 @@ const TEAM_VARIANTS: Record<string, MlbTeamAbbrev> = {
   "ny yankees": "NYY",
   "yankees": "NYY",
   "nyy": "NYY",
-  // OAK (Sacramento/Las Vegas Athletics — `ATH` is the abbreviation our
-  // teams table uses post-2025 relocation; `OAK` retained for legacy
-  // SharpAPI inputs that still emit it). Both map to the same MLB Stats id.
-  "oakland athletics": "OAK",
-  "athletics": "OAK",
-  "oakland": "OAK",
-  "oak": "OAK",
+  // Athletics — post-2025 franchise relocation. Our teams table uses the
+  // new abbreviation `ATH`; SharpAPI continues to emit "Athletics" and
+  // "Oakland Athletics" as the away/home team strings on 2026 events.
+  //
+  // Phase 4.2.C.1.R-16C (fix): every "Athletics" / "Oakland" / variant
+  // now normalizes to ATH so the SharpAPI event matcher can resolve
+  // these games to our `games` row. Pre-R-16C, "Athletics" → "OAK"
+  // caused 100% of Athletics-game market data (lines + sharp_signals)
+  // to be silently dropped at the resolver step, because the games row
+  // is keyed on ATH.
+  //
+  // `oak` (the bare abbreviation) is kept mapping to ATH too for
+  // round-trip safety — any code path holding the legacy abbreviation
+  // string now resolves to the same canonical ATH. The MlbTeamAbbrev
+  // type retains "OAK" for historical / pre-relocation rows.
+  "oakland athletics": "ATH",
+  "athletics": "ATH",
+  "oakland": "ATH",
+  "oak": "ATH",
   "ath": "ATH",
   "athletics (sacramento)": "ATH",
   "athletics (las vegas)": "ATH",
+  "sacramento athletics": "ATH",
+  "las vegas athletics": "ATH",
   // PHI
   "philadelphia phillies": "PHI",
   "phillies": "PHI",

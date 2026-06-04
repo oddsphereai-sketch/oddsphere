@@ -288,9 +288,14 @@ console.log("\n4. Direct constructor exercise — no network calls");
 
 console.log("\n5. TeamNameNormalizer table coverage");
 
+// Phase 4.2.C.1.R-16C — "Oakland Athletics" / "Athletics" / "Oakland"
+// now normalize to ATH (post-2025 relocation; SharpAPI still emits the
+// legacy team strings but our games table uses ATH). OAK is removed
+// from the full-name round-trip set; the bare "OAK" → ATH case is
+// tested below in the round-trip section.
 const ALL_ABBREVS = [
   "ARI","ATL","BAL","BOS","CHC","CWS","CIN","CLE","COL","DET",
-  "HOU","KC","LAA","LAD","MIA","MIL","MIN","NYM","NYY","OAK",
+  "HOU","KC","LAA","LAD","MIA","MIL","MIN","NYM","NYY",
   "PHI","PIT","SD","SEA","SF","STL","TB","TEX","TOR","WSH",
 ] as const;
 
@@ -314,7 +319,6 @@ const FULL_NAMES: Record<typeof ALL_ABBREVS[number], string> = {
   MIN: "Minnesota Twins",
   NYM: "New York Mets",
   NYY: "New York Yankees",
-  OAK: "Oakland Athletics",
   PHI: "Philadelphia Phillies",
   PIT: "Pittsburgh Pirates",
   SD: "San Diego Padres",
@@ -334,6 +338,16 @@ for (const abbrev of ALL_ABBREVS) {
     normalizeMlbTeamName(fullName) === abbrev
   );
 }
+
+// R-16C — Athletics franchise normalization (post-2025 relocation).
+// SharpAPI keeps emitting legacy strings; our games table uses ATH.
+check('"Oakland Athletics" → ATH (R-16C)', normalizeMlbTeamName("Oakland Athletics") === "ATH");
+check('"Athletics" → ATH (R-16C)', normalizeMlbTeamName("Athletics") === "ATH");
+check('"Oakland" → ATH (R-16C)', normalizeMlbTeamName("Oakland") === "ATH");
+check('"OAK" → ATH (legacy abbreviation routes to canonical)', normalizeMlbTeamName("OAK") === "ATH");
+check('"ATH" → ATH (round-trip)', normalizeMlbTeamName("ATH") === "ATH");
+check('"Sacramento Athletics" → ATH', normalizeMlbTeamName("Sacramento Athletics") === "ATH");
+check('"Las Vegas Athletics" → ATH', normalizeMlbTeamName("Las Vegas Athletics") === "ATH");
 
 // Nickname-only variants
 check('"Yankees" → NYY', normalizeMlbTeamName("Yankees") === "NYY");
