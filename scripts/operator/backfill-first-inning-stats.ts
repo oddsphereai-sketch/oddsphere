@@ -3,15 +3,35 @@
  * first-inning pitcher stats.
  *
  * USAGE:
- *   Per-player (explicit ids):
+ *   Per-player (explicit ids — requires --season):
  *     npx tsx --env-file=.env.local \
  *       scripts/operator/backfill-first-inning-stats.ts \
- *       --player-ids 6272,6274 --season 2025 [--write]
+ *       --player-ids 6272,6274 --season 2026 [--write]
  *
- *   Slate-date (resolves probable starters automatically):
+ *   Slate-date (defaults --season from slate year — Phase 4.2.C.1.H-6.3b):
  *     npx tsx --env-file=.env.local \
  *       scripts/operator/backfill-first-inning-stats.ts \
- *       --slate-date 2026-05-22 --season 2025 [--write]
+ *       --slate-date 2026-06-15 [--season 2026] [--write]
+ *
+ *   Explicit override (rare — write data under a different year than
+ *   the slate; loud on purpose):
+ *     npx tsx --env-file=.env.local \
+ *       scripts/operator/backfill-first-inning-stats.ts \
+ *       --slate-date 2026-06-15 --season 2025 --allow-season-mismatch [--write]
+ *
+ * SEASON RESOLUTION (Phase 4.2.C.1.H-6.3b):
+ *   • --slate-date alone   → season defaults to slate-date's year
+ *   • --season alone       → use the flag value
+ *   • both, years match    → use the value (safe)
+ *   • both, years differ   → FAIL unless --allow-season-mismatch (the
+ *                            H-6.3a bug shape)
+ *   • neither              → FAIL
+ *
+ *   Why this exists: H-5.6 ran the operator with `--season 2025`
+ *   against a 2026-MM-DD slate (test-env clock skew). Rows landed
+ *   under season=2025 while `featureSnapshot` queried season=2026
+ *   → every NRFI held. H-6.3a fixed the data; this resolver prevents
+ *   the same mistake recurring silently.
  *
  * GATING — writes require BOTH:
  *   • CLI flag: --write
@@ -52,6 +72,7 @@ import {
   type IdResolution,
   type MlbStatsIdSource,
 } from "../../lib/services/firstInningResolver";
+import { resolveOperatorSeason } from "../../lib/services/firstInningSeasonResolver";
 import { readBoolFlag, readStringFlag } from "./_cliCommon";
 
 type DbPlayer = {
@@ -164,6 +185,7 @@ async function main(): Promise<void> {
   const slateDateRaw = readStringFlag(argv, "--slate-date");
   const seasonRaw = readStringFlag(argv, "--season");
   const writeFlag = readBoolFlag(argv, "--write");
+  const allowSeasonMismatch = readBoolFlag(argv, "--allow-season-mismatch");
 
   // Validate input mode: exactly one of --player-ids / --slate-date
   if (playerIdsRaw === undefined && slateDateRaw === undefined) {
@@ -178,11 +200,20 @@ async function main(): Promise<void> {
     );
     process.exit(1);
   }
-  const season = seasonRaw !== undefined ? parseInt(seasonRaw, 10) : NaN;
-  if (!Number.isFinite(season) || season < 2020 || season > 2099) {
-    console.error("✗ Missing or invalid --season <YYYY>");
+
+  // Phase 4.2.C.1.H-6.3b — stage-aware season resolution. See
+  // lib/services/firstInningSeasonResolver.ts for the decision matrix.
+  const seasonResolution = resolveOperatorSeason({
+    slateDate: slateDateRaw,
+    seasonFlag: seasonRaw,
+    allowMismatch: allowSeasonMismatch,
+  });
+  if (seasonResolution.kind === "error") {
+    console.error(`✗ ${seasonResolution.message}`);
     process.exit(1);
   }
+  const season = seasonResolution.season;
+  const seasonSource = seasonResolution.source;
 
   // Two-key gate
   let write = false;
@@ -203,7 +234,7 @@ async function main(): Promise<void> {
   const targetLabel =
     mode === "slate-date" ? `slate=${slateDateRaw}` : `player_ids=${playerIdsRaw}`;
   console.log(
-    `[backfill-fi-stats] mode=${write ? "WRITE" : "DRY-RUN"}  resolver=${mode}  season=${season}  ${targetLabel}`
+    `[backfill-fi-stats] mode=${write ? "WRITE" : "DRY-RUN"}  resolver=${mode}  season=${season} (${seasonSource})  ${targetLabel}`
   );
   console.log("─".repeat(64));
 
