@@ -1136,15 +1136,26 @@ export function runMlbAutoModelV1(
     weatherDeltaTotal / 2;
 
   // Clamp to plausible bounds before rounding.
-  const predicted_home_score = round1(
-    clamp(homeRunsRaw, PREDICTED_SCORE_MIN, PREDICTED_SCORE_MAX)
-  );
-  const predicted_away_score = round1(
-    clamp(awayRunsRaw, PREDICTED_SCORE_MIN, PREDICTED_SCORE_MAX)
-  );
+  const clampedHomeRaw = clamp(homeRunsRaw, PREDICTED_SCORE_MIN, PREDICTED_SCORE_MAX);
+  const clampedAwayRaw = clamp(awayRunsRaw, PREDICTED_SCORE_MIN, PREDICTED_SCORE_MAX);
+  const predicted_home_score = round1(clampedHomeRaw);
+  const predicted_away_score = round1(clampedAwayRaw);
   const predicted_total = round1(predicted_home_score + predicted_away_score);
 
   // ── Pick logic ──────────────────────────────────────────────────
+  //
+  // Phase 4.2.C.1.R-4 — separation of raw-prediction layer from play-grade
+  // layer. ML/O/U picks are now populated whenever data exists (starters
+  // present, market line present for OU). Confidence keeps its baseline-50
+  // lower bound from clamp(rawConfidence, 50, stageCap), and we no longer
+  // null the side when confidence sits below HARD_CONFIDENCE_FLOOR.
+  //
+  // The HARD_CONFIDENCE_FLOOR check used to live HERE (it nulled both
+  // picks below 51); after R-4 it lives only at the play-grade /
+  // verdict layer (verdictDerivation.PLAYABLE_CONFIDENCE_FLOOR = 0.53),
+  // which converts low-confidence picks to verdict=no_play without
+  // erasing the underlying lean. NRFI's own toss-up architecture
+  // remains untouched — it has its own zone-based handling.
 
   // Whether the ML/OU picks are eligible at all. Missing or scratched
   // starter → both picks held; NRFI is handled separately by
@@ -1169,15 +1180,21 @@ export function runMlbAutoModelV1(
     // similar magnitude to runDiff in the linear sum.
     const rawConfidence = 50 + 10 * runDiff + 5 * eraGap * 10;
     const cappedConfidence = clamp(rawConfidence, 50, stageCap);
-    if (cappedConfidence >= HARD_CONFIDENCE_FLOOR) {
-      // Avoid pathological ties (Layer 0 invariant; deterministic
-      // guard #2 also defends against this).
-      if (predicted_home_score !== predicted_away_score) {
-        predicted_ml_winner =
-          predicted_home_score > predicted_away_score ? "home" : "away";
-        ml_confidence = round1(cappedConfidence);
-      }
+
+    // Side selection uses the UNROUNDED clamped scores so that two games
+    // displaying as "4.5–4.5" (rounded tie, true differential ~0.04)
+    // still get a deterministic lean. True floating-point equality is
+    // astronomically rare with continuous-factor pipelines; if it does
+    // occur we fall back to "home" (homefield convention) so the
+    // prediction layer never holds for an arithmetic coincidence.
+    if (clampedHomeRaw > clampedAwayRaw) {
+      predicted_ml_winner = "home";
+    } else if (clampedAwayRaw > clampedHomeRaw) {
+      predicted_ml_winner = "away";
+    } else {
+      predicted_ml_winner = "home"; // exact-tie tiebreak
     }
+    ml_confidence = round1(cappedConfidence);
   }
 
   // ── O/U ─────────────────────────────────────────────────────────
@@ -1187,15 +1204,24 @@ export function runMlbAutoModelV1(
 
   if (market_line_available && !mlHeldByStarter) {
     const marketLine = snapshot.market.listed_total!;
-    const ouSide: "over" | "under" =
-      predicted_total > marketLine ? "over" : "under";
+    // Side selection uses the UNROUNDED total (sum of clamped raw
+    // scores) so a rounded-equal predicted_total vs market_line still
+    // gets a deterministic lean. Exact equality is rare in practice
+    // (line values are typically .5 or .0; raw totals carry decimals);
+    // when it does occur the convention is to lean "under" (the safer
+    // side on a true push).
+    const totalRaw = clampedHomeRaw + clampedAwayRaw;
+    if (totalRaw > marketLine) {
+      predicted_ou_side = "over";
+    } else if (totalRaw < marketLine) {
+      predicted_ou_side = "under";
+    } else {
+      predicted_ou_side = "under"; // exact-tie tiebreak
+    }
     const ouDiff = Math.abs(predicted_total - marketLine);
     const rawConfidence = 50 + 8 * ouDiff;
     const cappedConfidence = clamp(rawConfidence, 50, stageCap);
-    if (cappedConfidence >= HARD_CONFIDENCE_FLOOR) {
-      predicted_ou_side = ouSide;
-      ou_confidence = round1(cappedConfidence);
-    }
+    ou_confidence = round1(cappedConfidence);
   }
 
   // ── NRFI ────────────────────────────────────────────────────────
@@ -1214,6 +1240,11 @@ export function runMlbAutoModelV1(
   );
 
   // ── Hold tracking ───────────────────────────────────────────────
+  //
+  // Phase 4.2.C.1.R-4 — `hold_picks` now reflects data-missing holds
+  // only (not low-confidence holds). NRFI keeps its existing zone-based
+  // hold semantics (`predicted_nrfi === null` covers both "thin data"
+  // and the Toss-Up zone — see Phase 4D.1).
   const hold_picks: Array<"ml" | "ou" | "nrfi"> = [];
   if (predicted_ml_winner === null) hold_picks.push("ml");
   if (predicted_ou_side === null) hold_picks.push("ou");
@@ -1225,9 +1256,9 @@ export function runMlbAutoModelV1(
     if (mlHeldByStarter) hold_reason = "missing_or_scratched_starter";
     else if (!market_line_available && nrfi.hold_reason !== null)
       hold_reason = `${nrfi.hold_reason}_and_no_market_line`;
-    else if (!market_line_available) hold_reason = "no_market_line_and_low_confidence";
+    else if (!market_line_available) hold_reason = "no_market_line";
     else if (nrfi.hold_reason !== null) hold_reason = nrfi.hold_reason;
-    else hold_reason = "all_picks_below_floor";
+    else hold_reason = "data_incomplete";
   }
 
   // First-inning + top-order detail persisted for FI Key Stats UI

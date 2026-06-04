@@ -114,11 +114,19 @@ function round1(n: number): number {
  *      (tolerance ±0.01). Recompute or clear when home/away null.
  *   2. predicted_ml_winner matches the side with the higher projected
  *      score. Mismatch → null the ML pick (no auto-flip; conservative).
- *      ML pick with one or both scores null → null the ML pick.
+ *      ML pick with one or both scores null → null the ML pick. Tied
+ *      rounded scores are ALLOWED (Phase R-4): the model's tiebreak
+ *      is by design and rests on the unrounded differential — Guard 2
+ *      does not second-guess it. (A pre-R-4 version nulled equal-score
+ *      picks; we removed that gate so display-ties don't erase leans.)
  *   3. predicted_ou_side requires market_line_available=true. Without
  *      a market line we cannot validate the O/U comparison — null it.
- *   4. Each confidence value < HARD_CONFIDENCE_FLOOR (51) → null the
- *      corresponding pick and its confidence.
+ *   4. NRFI-only confidence floor (Phase R-4). nrfi_confidence <
+ *      HARD_CONFIDENCE_FLOOR (51) → null the NRFI pick. ML and OU no
+ *      longer get nulled by Guard 4 — low-confidence ML/OU leans are
+ *      now part of the raw-prediction layer; the verdict layer
+ *      (verdictDerivation.PLAYABLE_CONFIDENCE_FLOOR = 0.53) maps them
+ *      to no_play without erasing the side.
  *   5. stage=t60_locked AND any starter missing/scratched → null the
  *      official ML and OU picks. Morning Card allows preliminary picks
  *      with reduced confidence (already enforced by the model itself).
@@ -160,6 +168,12 @@ export function applyDeterministicGuards(
   }
 
   // ── Guard 2 — ML winner matches higher score ────────────────────
+  //
+  // Phase R-4: a tied-rounded-score pick is ALLOWED. The model's
+  // tiebreak (decided on the unrounded differential) is by design;
+  // Guard 2's job is to catch obvious bugs (winner doesn't match
+  // higher rounded score, or scores are null), not to second-guess
+  // legitimate display-ties.
   if (predicted_ml_winner !== null) {
     if (predicted_home_score === null || predicted_away_score === null) {
       corrections.push(
@@ -168,12 +182,8 @@ export function applyDeterministicGuards(
       predicted_ml_winner = null;
       ml_confidence = null;
     } else if (predicted_home_score === predicted_away_score) {
-      // Tie at the score level — model should not pick. Conservative null.
-      corrections.push(
-        "Guard 2: projected scores are equal — ML pick nulled (no clear winner)"
-      );
-      predicted_ml_winner = null;
-      ml_confidence = null;
+      // Rounded-tie case — accept the model's tiebreak. No correction
+      // recorded; the underlying unrounded differential drove the pick.
     } else {
       const trueWinner = predicted_home_score > predicted_away_score ? "home" : "away";
       if (predicted_ml_winner !== trueWinner) {
@@ -204,21 +214,16 @@ export function applyDeterministicGuards(
     ou_confidence = null;
   }
 
-  // ── Guard 4 — confidence floor ──────────────────────────────────
-  if (ml_confidence !== null && ml_confidence < HARD_CONFIDENCE_FLOOR) {
-    corrections.push(
-      `Guard 4: ml_confidence ${ml_confidence} below floor ${HARD_CONFIDENCE_FLOOR} — ML pick nulled`
-    );
-    predicted_ml_winner = null;
-    ml_confidence = null;
-  }
-  if (ou_confidence !== null && ou_confidence < HARD_CONFIDENCE_FLOOR) {
-    corrections.push(
-      `Guard 4: ou_confidence ${ou_confidence} below floor ${HARD_CONFIDENCE_FLOOR} — O/U pick nulled`
-    );
-    predicted_ou_side = null;
-    ou_confidence = null;
-  }
+  // ── Guard 4 — NRFI confidence floor (Phase R-4) ─────────────────
+  //
+  // ML and OU no longer get nulled below HARD_CONFIDENCE_FLOOR. Their
+  // low-confidence handling moved to the verdict layer
+  // (verdictDerivation.PLAYABLE_CONFIDENCE_FLOOR = 0.53), which maps
+  // low-confidence picks to verdict=no_play without erasing the side
+  // — that's the product-correct split between raw-prediction and
+  // play-grade layers. NRFI keeps its safety net here because its
+  // confidence is set deterministically by computeNrfi and should
+  // never fall below 51 in practice; this guard is a sanity belt.
   if (nrfi_confidence !== null && nrfi_confidence < HARD_CONFIDENCE_FLOOR) {
     corrections.push(
       `Guard 4: nrfi_confidence ${nrfi_confidence} below floor ${HARD_CONFIDENCE_FLOOR} — NRFI pick nulled`

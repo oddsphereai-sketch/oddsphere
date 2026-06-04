@@ -261,11 +261,17 @@ async function main() {
   {
     const out = runMlbAutoModelV1(baseSnapshot(), "morning_draft");
     check(
-      "When out has predicted scores, ML winner matches higher side",
+      // Phase R-4: a rounded-tie at the display level is allowed; the
+      // model decides the side from unrounded scores. So the assertion
+      // is: when rounded scores DIFFER, ML follows the higher side;
+      // when equal, ML is non-null (tiebreak applies).
+      "When out has predicted scores, ML winner consistent with display (or tiebroken on tie)",
       out.predicted_home_score === null ||
         out.predicted_away_score === null ||
         out.predicted_ml_winner === null ||
-        (out.predicted_home_score > out.predicted_away_score
+        (out.predicted_home_score === out.predicted_away_score
+          ? out.predicted_ml_winner === "home" || out.predicted_ml_winner === "away"
+          : out.predicted_home_score > out.predicted_away_score
           ? out.predicted_ml_winner === "home"
           : out.predicted_ml_winner === "away")
     );
@@ -295,9 +301,11 @@ async function main() {
   }
 
   {
-    // Tied scores → null ML
+    // Phase R-4: tied rounded scores → Guard 2 ALLOWS the pick. The
+    // model's tiebreak (driven by the unrounded differential) is by
+    // design; Guard 2 only catches obvious bugs, not display ties.
     const out = runMlbAutoModelV1(baseSnapshot(), "morning_draft");
-    const bad: AutoModelOutput = {
+    const synthetic: AutoModelOutput = {
       ...out,
       predicted_home_score: 4.5,
       predicted_away_score: 4.5,
@@ -306,17 +314,17 @@ async function main() {
       ml_confidence: 55,
     };
     const { guarded, corrections } = applyDeterministicGuards(
-      bad,
+      synthetic,
       baseSnapshot(),
       "morning_draft"
     );
     check(
-      "Guard 2 nulls ML pick when projected scores are equal",
-      guarded.predicted_ml_winner === null
+      "[R-4] Guard 2 allows ML pick when projected scores tie (was: nulled)",
+      guarded.predicted_ml_winner === "home" && guarded.ml_confidence === 55
     );
     check(
-      "Guard 2 records the tie correction",
-      corrections.some((c) => c.includes("projected scores are equal"))
+      "[R-4] Guard 2 records NO tie correction (display-tie is by design)",
+      !corrections.some((c) => c.includes("scores are equal"))
     );
   }
 
@@ -394,13 +402,15 @@ async function main() {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  section("Guard 4 — confidence floor (HARD_CONFIDENCE_FLOOR = 51)");
+  section("Guard 4 — Phase R-4: NRFI-only confidence floor (ML/OU pass-through)");
   // ═══════════════════════════════════════════════════════════════
 
   {
-    // Construct a synthetic output that passes Guards 1-3 (so we can
-    // isolate Guard 4). Scores asymmetric, ML winner matches higher
-    // side, OU has a market line. All three confidences below floor.
+    // Phase R-4: Guard 4 no longer nulls ML or OU below the
+    // HARD_CONFIDENCE_FLOOR — that filtering moved to the verdict layer.
+    // It still defends NRFI as a sanity belt (NRFI confidence is set
+    // deterministically by computeNrfi and should never fall below 51
+    // in practice).
     const baseOut = runMlbAutoModelV1(baseSnapshot(), "morning_draft");
     const synthetic: AutoModelOutput = {
       ...baseOut,
@@ -408,11 +418,11 @@ async function main() {
       predicted_away_score: 3.5,
       predicted_total: 9.0,
       predicted_ml_winner: "home", // matches higher
-      ml_confidence: 50, // below floor
+      ml_confidence: 50, // would have been below the pre-R-4 floor
       predicted_ou_side: "over",
-      ou_confidence: 50, // below floor
+      ou_confidence: 50, // would have been below the pre-R-4 floor
       predicted_nrfi: true,
-      nrfi_confidence: 50, // below floor
+      nrfi_confidence: 50, // still defended by Guard 4
       sport_specific: {
         ...baseOut.sport_specific,
         market_line_available: true,
@@ -425,20 +435,132 @@ async function main() {
       "morning_draft"
     );
     check(
-      "Guard 4 nulls ML pick when ml_confidence < 51",
-      guarded.predicted_ml_winner === null && guarded.ml_confidence === null
+      "[R-4] Guard 4 PRESERVES low-confidence ML pick (no longer nulled)",
+      guarded.predicted_ml_winner === "home" && guarded.ml_confidence === 50
     );
     check(
-      "Guard 4 nulls O/U pick when ou_confidence < 51",
-      guarded.predicted_ou_side === null && guarded.ou_confidence === null
+      "[R-4] Guard 4 PRESERVES low-confidence O/U pick (no longer nulled)",
+      guarded.predicted_ou_side === "over" && guarded.ou_confidence === 50
     );
     check(
-      "Guard 4 nulls NRFI pick when nrfi_confidence < 51",
+      "Guard 4 still nulls NRFI pick when nrfi_confidence < 51",
       guarded.predicted_nrfi === null && guarded.nrfi_confidence === null
     );
     check(
-      "Guard 4 records floor-below corrections for all three picks",
-      corrections.filter((c) => c.includes("below floor")).length === 3
+      "[R-4] Guard 4 records ONE correction (NRFI only, not ML or OU)",
+      corrections.filter((c) => c.includes("below floor")).length === 1 &&
+        corrections.some((c) => c.includes("nrfi_confidence"))
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  section("Phase R-4: low-confidence ML/OU survive into prediction layer");
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    // Build a snapshot where pitchers + lineups are very close to even
+    // → runDiff and eraGap small → confidence stays near baseline 50.
+    // Pre-R-4 the model would have nulled both picks; post-R-4 both
+    // sides are populated so the UI / grade layer can render them.
+    const snap = baseSnapshot();
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    check(
+      "[R-4] Low-edge ML produces a side (home or away, never null)",
+      out.predicted_ml_winner === "home" || out.predicted_ml_winner === "away"
+    );
+    check(
+      "[R-4] Low-edge ML has confidence value (≥ 50, no longer null)",
+      typeof out.ml_confidence === "number" && out.ml_confidence >= 50
+    );
+    check(
+      "[R-4] Low-edge OU produces a side when market line present",
+      out.predicted_ou_side === "over" || out.predicted_ou_side === "under"
+    );
+    check(
+      "[R-4] Low-edge OU has confidence value (≥ 50, no longer null)",
+      typeof out.ou_confidence === "number" && out.ou_confidence >= 50
+    );
+    check(
+      "[R-4] Low-edge prediction does NOT use Toss-Up language for ML/OU",
+      // The Toss-Up token is exclusive to NRFI's threshold_zone enum.
+      // ML/OU side stays "home"/"away"/"over"/"under" — no Toss-Up.
+      (out.predicted_ml_winner === "home" || out.predicted_ml_winner === "away") &&
+        (out.predicted_ou_side === "over" || out.predicted_ou_side === "under")
+    );
+  }
+
+  {
+    // OU is correctly held when there is no market line.
+    const snap = baseSnapshot({
+      market: {
+        listed_total: null,
+        home_ml_odds_american: null,
+        away_ml_odds_american: null,
+        has_pinnacle_total: false,
+      },
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    check(
+      "[R-4] OU still held when market line is missing (data-missing branch)",
+      out.predicted_ou_side === null && out.ou_confidence === null
+    );
+    check(
+      "[R-4] ML still set when market line missing (ML doesn't need OU line)",
+      out.predicted_ml_winner === "home" || out.predicted_ml_winner === "away"
+    );
+  }
+
+  {
+    // ML still held when a starter is missing — that's a genuine
+    // data-missing case (Phase R-4 only relaxes the confidence floor).
+    const snap = baseSnapshot({ home_starter: null });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    check(
+      "[R-4] ML still held when home starter is missing",
+      out.predicted_ml_winner === null && out.ml_confidence === null
+    );
+    check(
+      "[R-4] OU still held when home starter is missing",
+      out.predicted_ou_side === null && out.ou_confidence === null
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  section("Phase R-4: Guard 2 allows tied-rounded-score ML picks");
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    // The model now uses unrounded scores for ML side selection. When
+    // rounded scores are equal but unrounded differential is non-zero,
+    // Guard 2 must accept the model's tiebreak rather than nulling.
+    const baseOut = runMlbAutoModelV1(baseSnapshot(), "morning_draft");
+    const synthetic: AutoModelOutput = {
+      ...baseOut,
+      predicted_home_score: 4.5, // rounded tie at display level
+      predicted_away_score: 4.5,
+      predicted_total: 9.0,
+      predicted_ml_winner: "home", // model's tiebreak
+      ml_confidence: 50,
+      predicted_ou_side: null,
+      ou_confidence: null,
+      sport_specific: {
+        ...baseOut.sport_specific,
+        market_line_available: false,
+        listed_line: null,
+      },
+    };
+    const { guarded, corrections } = applyDeterministicGuards(
+      synthetic,
+      baseSnapshot(),
+      "morning_draft"
+    );
+    check(
+      "[R-4] Guard 2 allows ML pick when rounded scores tie (tiebreak preserved)",
+      guarded.predicted_ml_winner === "home" && guarded.ml_confidence === 50
+    );
+    check(
+      "[R-4] Guard 2 emits no equal-score correction when ML pick is allowed",
+      !corrections.some((c) => c.includes("scores are equal"))
     );
   }
 
@@ -576,7 +698,10 @@ async function main() {
   }
 
   {
-    // Predicted total ≈ market line → low confidence, possibly null
+    // Phase R-4: Predicted total ≈ market line → low confidence, but
+    // O/U side STILL POPULATED. The pre-R-4 floor moved to the verdict
+    // layer, which converts low-confidence to verdict=no_play without
+    // erasing the underlying lean.
     const snap = baseSnapshot({
       market: {
         listed_total: 9.0, // matches expected ~9
@@ -586,11 +711,13 @@ async function main() {
       },
     });
     const out = runMlbAutoModelV1(snap, "morning_draft");
-    // When |predicted_total - market_line| ≈ 0, raw confidence = 50,
-    // below the 51 floor → null
     check(
-      "Predicted total ≈ market line → O/U held (below confidence floor)",
-      out.predicted_ou_side === null
+      "[R-4] Predicted total ≈ market line → O/U lean SET (low confidence, was null)",
+      out.predicted_ou_side === "over" || out.predicted_ou_side === "under"
+    );
+    check(
+      "[R-4] Low-edge O/U confidence is set (≥ 50)",
+      typeof out.ou_confidence === "number" && out.ou_confidence >= 50
     );
   }
 
@@ -1748,14 +1875,16 @@ async function main() {
     const out = runMlbAutoModelV1(c.snap, c.stage);
     const cap = STAGE_CONFIDENCE_CAPS[c.stage];
     check(
-      `[${c.label}] ml_confidence is either null or in [${HARD_CONFIDENCE_FLOOR}, ${cap}]`,
+      // Phase R-4: ML lower bound is 50 (clamped baseline), not 51.
+      // The pre-R-4 floor of 51 moved to the verdict layer.
+      `[${c.label}] ml_confidence is either null or in [50, ${cap}]`,
       out.ml_confidence === null ||
-        (out.ml_confidence >= HARD_CONFIDENCE_FLOOR && out.ml_confidence <= cap)
+        (out.ml_confidence >= 50 && out.ml_confidence <= cap)
     );
     check(
-      `[${c.label}] ou_confidence is either null or in [${HARD_CONFIDENCE_FLOOR}, ${cap}]`,
+      `[${c.label}] ou_confidence is either null or in [50, ${cap}]`,
       out.ou_confidence === null ||
-        (out.ou_confidence >= HARD_CONFIDENCE_FLOOR && out.ou_confidence <= cap)
+        (out.ou_confidence >= 50 && out.ou_confidence <= cap)
     );
     check(
       `[${c.label}] nrfi_confidence is either null or in [${HARD_CONFIDENCE_FLOOR}, ${NRFI_CONFIDENCE_CAP}]`,
@@ -2365,9 +2494,10 @@ async function main() {
           baseline.predicted_ml_winner === null
       );
       check(
+        // Phase R-4: lower bound is 50 (clamped baseline), not 51.
         "[3x1.8b] ML confidence within bounds with real FI",
         withReal.ml_confidence === null ||
-          (withReal.ml_confidence >= 51 && withReal.ml_confidence <= 65)
+          (withReal.ml_confidence >= 50 && withReal.ml_confidence <= 65)
       );
     }
   }
