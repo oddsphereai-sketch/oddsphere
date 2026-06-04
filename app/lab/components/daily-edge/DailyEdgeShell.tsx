@@ -361,17 +361,27 @@ function TeamBadge({ abbr, logo, size }: { abbr: string; logo: string | null; si
       </div>
     );
   }
+  // Subtle backing container (R-9): some MLB logos (notably SD, OAK/ATH)
+  // use near-black or dark-navy palettes that vanish against the page's
+  // dark background. A faint white wash + 1px ring gives every logo a
+  // consistent silhouette without overwhelming high-contrast logos.
   return (
-    /* eslint-disable-next-line @next/next/no-img-element */
-    <img
-      src={src}
-      alt={abbr}
-      width={size}
-      height={size}
-      className="rounded-full shrink-0"
-      style={{ width: size, height: size, objectFit: "contain" }}
-      onError={() => setErrored(true)}
-    />
+    <span
+      className="inline-flex items-center justify-center rounded-full shrink-0 bg-white/[0.04] ring-1 ring-white/10"
+      style={{ width: size, height: size }}
+      aria-label={abbr}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={abbr}
+        width={Math.max(1, size - 4)}
+        height={Math.max(1, size - 4)}
+        className="rounded-full"
+        style={{ width: Math.max(1, size - 4), height: Math.max(1, size - 4), objectFit: "contain" }}
+        onError={() => setErrored(true)}
+      />
+    </span>
   );
 }
 
@@ -1125,35 +1135,62 @@ function EdgeStack({ market, marketData }: { market: MarketKey; marketData: Mark
 }
 
 function MarketPulse({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
-  const hasSplits = marketData.moneyPct !== null && marketData.betsPct !== null;
+  const hasMoney = marketData.moneyPct !== null;
+  const hasBets = marketData.betsPct !== null;
+  const hasAnySplit = hasMoney || hasBets;
 
-  // First-inning never uses split copy — locked fallback per 4.1.10.
+  // First-inning never uses split copy — V1 SharpAPI tier does not cover
+  // first-inning public splits (documented limitation). Phrase as a
+  // provider-coverage statement, not a system failure.
   if (market === "first_inning") {
     return (
       <div className="space-y-1.5">
         <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse</p>
         <p className="text-[11.5px] text-gray-400 leading-snug">
-          No first-inning public split data. Model, price, and matchup factors shown below.
+          Public splits aren&rsquo;t offered for first-inning markets — model, price, and matchup factors below.
         </p>
       </div>
     );
   }
 
-  if (!hasSplits) {
+  // No splits at all for this game/market — distinct phrasing from the
+  // first-inning case so the user can tell it apart from the provider-
+  // coverage gap above.
+  if (!hasAnySplit) {
     return (
       <div className="space-y-1.5">
         <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse</p>
-        <p className="text-[11.5px] text-gray-500 leading-snug">No public split data available for this market.</p>
+        <p className="text-[11.5px] text-gray-500 leading-snug">
+          Public split data unavailable for this game today.
+        </p>
       </div>
     );
   }
 
+  // Partial coverage — one of (money %, bets %) returned, the other null.
+  // Show what we have rather than dropping the section entirely.
   return (
     <div className="space-y-1.5">
       <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse</p>
       <div className="space-y-1">
-        <SplitBar label="Money" pct={marketData.moneyPct ?? 0} />
-        <SplitBar label="Bets" pct={marketData.betsPct ?? 0} />
+        {hasMoney ? (
+          <SplitBar label="Money" pct={marketData.moneyPct ?? 0} />
+        ) : (
+          <div className="grid grid-cols-[40px_1fr_36px] items-center gap-2">
+            <span className="text-[9.5px] uppercase tracking-[0.14em] text-gray-500 font-bold">Money</span>
+            <span className="text-[10px] text-gray-600 italic">not reported</span>
+            <span />
+          </div>
+        )}
+        {hasBets ? (
+          <SplitBar label="Bets" pct={marketData.betsPct ?? 0} />
+        ) : (
+          <div className="grid grid-cols-[40px_1fr_36px] items-center gap-2">
+            <span className="text-[9.5px] uppercase tracking-[0.14em] text-gray-500 font-bold">Bets</span>
+            <span className="text-[10px] text-gray-600 italic">not reported</span>
+            <span />
+          </div>
+        )}
       </div>
     </div>
   );
