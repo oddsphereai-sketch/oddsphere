@@ -463,3 +463,110 @@ export function mergeStarter(
   }
   return { kind: "no_change", reason: "different_player_lower_confidence" };
 }
+
+// ─── Source-priority picker ───────────────────────────────────────────
+
+/**
+ * Variadic priority picker. Returns the first non-null candidate, or
+ * `null` if all sources are null. Used by the starter-refresh operator
+ * to enforce "MLB Stats primary, BDL fallback" without conditionals at
+ * the call site.
+ */
+export function pickPrimaryCandidate(
+  ...sources: Array<ParsedStarter | null>
+): ParsedStarter | null {
+  for (const s of sources) if (s !== null) return s;
+  return null;
+}
+
+// ─── MLB Stats team-id → internal-abbreviation mapping ───────────────
+
+/**
+ * MLB Stats Person/Team API uses its own team-id space (stable across
+ * seasons). Our `teams.abbreviation` column carries 3-letter codes that
+ * mostly match the conventional MLB Stats names — with one repo-specific
+ * choice: `ATH` for the Athletics (verified against the live `teams`
+ * table). Anything not in this map → `null`; the operator caller treats
+ * the schedule row as "no match" and logs it.
+ *
+ * 30 entries. Frozen to prevent accidental mutation.
+ */
+export const MLB_STATS_TEAM_ID_TO_ABBR: Readonly<Record<number, string>> = Object.freeze({
+  108: "LAA",
+  109: "ARI",
+  110: "BAL",
+  111: "BOS",
+  112: "CHC",
+  113: "CIN",
+  114: "CLE",
+  115: "COL",
+  116: "DET",
+  117: "HOU",
+  118: "KC",
+  119: "LAD",
+  120: "WSH",
+  121: "NYM",
+  133: "ATH",
+  134: "PIT",
+  135: "SD",
+  136: "SEA",
+  137: "SF",
+  138: "STL",
+  139: "TB",
+  140: "TEX",
+  141: "TOR",
+  142: "MIN",
+  143: "PHI",
+  144: "ATL",
+  145: "CWS",
+  146: "MIA",
+  147: "NYY",
+  158: "MIL",
+});
+
+/** Lookup helper. `null` input or unknown id → `null`. */
+export function mlbStatsTeamIdToAbbr(id: number | null): string | null {
+  if (id === null) return null;
+  return MLB_STATS_TEAM_ID_TO_ABBR[id] ?? null;
+}
+
+// ─── Schedule-game ↔ DB-game matcher ─────────────────────────────────
+
+/**
+ * Internal-id shape that the matcher accepts. The operator builds these
+ * from the `games` table at runtime; the matcher is pure so it can be
+ * unit-tested without DB I/O.
+ */
+export interface CandidateDbGame {
+  id: number;
+  externalId: number;
+  homeAbbr: string | null;
+  awayAbbr: string | null;
+}
+
+/**
+ * Match a parsed MLB Stats schedule game to a DB game by team
+ * abbreviation. Both sides must match exactly (caller has already
+ * translated MLB Stats team_ids → abbreviations via
+ * `mlbStatsTeamIdToAbbr`).
+ *
+ * Returns the first matching candidate. For doubleheaders the caller is
+ * responsible for handling the multiple-MLB-games-per-matchup case
+ * (typically by tracking which DB games have already been claimed and
+ * filtering them out of subsequent calls).
+ *
+ * Either-side `null` → no match.
+ */
+export function matchScheduleGameToDbGame(
+  scheduleHomeAbbr: string | null,
+  scheduleAwayAbbr: string | null,
+  candidates: ReadonlyArray<CandidateDbGame>
+): CandidateDbGame | null {
+  if (scheduleHomeAbbr === null || scheduleAwayAbbr === null) return null;
+  for (const c of candidates) {
+    if (c.homeAbbr === scheduleHomeAbbr && c.awayAbbr === scheduleAwayAbbr) {
+      return c;
+    }
+  }
+  return null;
+}

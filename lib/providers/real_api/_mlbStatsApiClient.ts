@@ -18,6 +18,11 @@
  *                                    Stats ID is already known.
  *   • getPitcherFirstInningStats  — first-inning splits via statSplits
  *                                    sitCodes=i01. Unchanged.
+ *   • fetchMlbStatsScheduleRaw    — Phase 4.2.C.1.G-2: raw /schedule
+ *                                    fetch for one date, hydrate=
+ *                                    probablePitcher. Consumed by
+ *                                    `parseMlbStatsSchedule` in the
+ *                                    starter-refresh operator.
  *
  * User-Agent: every request carries `OddSphereAI/1.0 (contact:
  * support@oddsphereai.com)` per Phase 4.2.C.1 conventions. The header
@@ -413,4 +418,47 @@ export async function searchPersonsByName(
     if (mapped !== null) out.push(mapped);
   }
   return out;
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Phase 4.2.C.1.G-2 — /schedule with probablePitcher hydrate
+// ───────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch the raw MLB Stats `/api/v1/schedule` payload for one slate date.
+ *
+ *   GET https://statsapi.mlb.com/api/v1/schedule
+ *       ?date=YYYY-MM-DD&sportId=1&hydrate=probablePitcher
+ *
+ * Returns the raw JSON for `parseMlbStatsSchedule` (in
+ * lib/services/starterResolver) to consume.
+ *
+ * Fail-closed: any network / HTTP / parse error returns `null` with a log
+ * line. The operator caller checks for `null` and decides whether to
+ * proceed with degraded coverage or abort the run.
+ */
+export async function fetchMlbStatsScheduleRaw(
+  date: string,
+  opts?: Opts
+): Promise<unknown> {
+  const url =
+    `${BASE_URL}/schedule?date=${encodeURIComponent(date)}` +
+    `&sportId=1&hydrate=probablePitcher`;
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: HEADERS });
+  } catch {
+    log(opts, `network error on /schedule for ${date}`);
+    return null;
+  }
+  if (!res.ok) {
+    log(opts, `non-200 on /schedule for ${date}: HTTP ${res.status}`);
+    return null;
+  }
+  try {
+    return await res.json();
+  } catch {
+    log(opts, `JSON parse error on /schedule for ${date}`);
+    return null;
+  }
 }

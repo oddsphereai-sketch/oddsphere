@@ -16,14 +16,19 @@
  */
 
 import {
+  type CandidateDbGame,
   type ExistingStarter,
   type MergeDecision,
   type NormalizedStarterCandidate,
   type ParsedStarter,
+  MLB_STATS_TEAM_ID_TO_ABBR,
+  matchScheduleGameToDbGame,
   mergeStarter,
+  mlbStatsTeamIdToAbbr,
   parseBdlGameStarters,
   parseBdlLineupsForStarter,
   parseMlbStatsSchedule,
+  pickPrimaryCandidate,
 } from "../lib/services/starterResolver";
 
 let pass = 0;
@@ -547,6 +552,102 @@ async function testMerge_LegacyNullProvenance_NotManualProtected() {
   if (d.kind === "write") check("reason === 'same_tier_scratch'", d.reason === "same_tier_scratch");
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// pickPrimaryCandidate
+// ─────────────────────────────────────────────────────────────────────
+
+const stubMlb: ParsedStarter = {
+  source: "mlb_stats_probable",
+  confidence: "probable",
+  externalId: 543037,
+  externalIdKind: "mlb_person_id",
+  fullName: null,
+};
+const stubBdl: ParsedStarter = {
+  source: "bdl_games",
+  confidence: "probable",
+  externalId: 6271,
+  externalIdKind: "bdl_player_id",
+  fullName: null,
+};
+
+async function testPick_FirstNonNullWins() {
+  section("pickPrimaryCandidate — first non-null wins (MLB-first)");
+  const r = pickPrimaryCandidate(stubMlb, stubBdl);
+  check("returns mlbStats", r === stubMlb);
+}
+
+async function testPick_FallsBack() {
+  section("pickPrimaryCandidate — falls back to BDL when MLB is null");
+  const r = pickPrimaryCandidate(null, stubBdl);
+  check("returns BDL", r === stubBdl);
+}
+
+async function testPick_AllNullYieldsNull() {
+  section("pickPrimaryCandidate — all null → null");
+  check("returns null (0 sources)", pickPrimaryCandidate() === null);
+  check("returns null (all null)", pickPrimaryCandidate(null, null, null) === null);
+}
+
+async function testPick_VariadicOrder() {
+  section("pickPrimaryCandidate — variadic order respected");
+  const r = pickPrimaryCandidate(null, null, stubBdl, stubMlb);
+  check("third non-null wins, not the fourth", r === stubBdl);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// mlbStatsTeamIdToAbbr + MLB_STATS_TEAM_ID_TO_ABBR
+// ─────────────────────────────────────────────────────────────────────
+
+async function testMlbTeamIdToAbbr() {
+  section("mlbStatsTeamIdToAbbr");
+  check("147 → NYY", mlbStatsTeamIdToAbbr(147) === "NYY");
+  check("144 → ATL", mlbStatsTeamIdToAbbr(144) === "ATL");
+  check("133 → ATH (Athletics)", mlbStatsTeamIdToAbbr(133) === "ATH");
+  check("119 → LAD", mlbStatsTeamIdToAbbr(119) === "LAD");
+  check("null input → null", mlbStatsTeamIdToAbbr(null) === null);
+  check("unknown id → null", mlbStatsTeamIdToAbbr(999) === null);
+  check("map has 30 entries (one per MLB team)",
+    Object.keys(MLB_STATS_TEAM_ID_TO_ABBR).length === 30);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// matchScheduleGameToDbGame
+// ─────────────────────────────────────────────────────────────────────
+
+const candA: CandidateDbGame = { id: 1, externalId: 5058686, homeAbbr: "NYY", awayAbbr: "BOS" };
+const candB: CandidateDbGame = { id: 2, externalId: 5058687, homeAbbr: "LAD", awayAbbr: "SF" };
+const candC: CandidateDbGame = { id: 3, externalId: 5058688, homeAbbr: "ATL", awayAbbr: "PHI" };
+
+async function testMatch_ExactMatch() {
+  section("matchScheduleGameToDbGame — exact home+away match");
+  const r = matchScheduleGameToDbGame("LAD", "SF", [candA, candB, candC]);
+  check("returns candB", r === candB);
+}
+
+async function testMatch_SwappedSidesIsMiss() {
+  section("matchScheduleGameToDbGame — swapped sides do NOT match (home/away matter)");
+  const r = matchScheduleGameToDbGame("SF", "LAD", [candA, candB, candC]);
+  check("returns null", r === null);
+}
+
+async function testMatch_NoMatch() {
+  section("matchScheduleGameToDbGame — no candidate matches");
+  const r = matchScheduleGameToDbGame("STL", "MIL", [candA, candB, candC]);
+  check("returns null", r === null);
+}
+
+async function testMatch_NullAbbrShortCircuit() {
+  section("matchScheduleGameToDbGame — null abbreviation → no match");
+  check("home null → null", matchScheduleGameToDbGame(null, "BOS", [candA]) === null);
+  check("away null → null", matchScheduleGameToDbGame("NYY", null, [candA]) === null);
+}
+
+async function testMatch_EmptyCandidates() {
+  section("matchScheduleGameToDbGame — empty candidates");
+  check("returns null", matchScheduleGameToDbGame("NYY", "BOS", []) === null);
+}
+
 // ─── Runner ──────────────────────────────────────────────────────────
 
 async function main() {
@@ -588,6 +689,19 @@ async function main() {
   await testMerge_LegacyNullProvenance_ConfirmedUpgrades();
   await testMerge_LegacyNullProvenance_ProbableSamePlayerNoOp();
   await testMerge_LegacyNullProvenance_NotManualProtected();
+
+  await testPick_FirstNonNullWins();
+  await testPick_FallsBack();
+  await testPick_AllNullYieldsNull();
+  await testPick_VariadicOrder();
+
+  await testMlbTeamIdToAbbr();
+
+  await testMatch_ExactMatch();
+  await testMatch_SwappedSidesIsMiss();
+  await testMatch_NoMatch();
+  await testMatch_NullAbbrShortCircuit();
+  await testMatch_EmptyCandidates();
 
   // Silence unused-import warnings — ParsedStarter / MergeDecision are
   // load-bearing for the test fixtures' typing surface but not directly
