@@ -191,3 +191,24 @@ export function planPlayerInsertFromMlbProfile(
     },
   };
 }
+
+// ─── Limit truncation ────────────────────────────────────────────────
+
+/**
+ * Phase 4.2.C.1.H-3a — pure helper for the operator's `--limit N` flag.
+ * Returns the first `limit` elements of the input array; passes the
+ * input through when `limit` is `undefined`; returns `[]` when `limit`
+ * is `0` or negative.
+ *
+ * The operator MUST sort its candidates deterministically (e.g. by
+ * `mlb_person_id` ascending) BEFORE calling this so that re-running
+ * with the same `--limit` always picks the same rows.
+ */
+export function truncatePlannedInserts<T>(
+  rows: ReadonlyArray<T>,
+  limit: number | undefined
+): T[] {
+  if (limit === undefined) return [...rows];
+  if (limit <= 0) return [];
+  return rows.slice(0, limit);
+}

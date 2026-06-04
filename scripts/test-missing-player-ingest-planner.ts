@@ -9,6 +9,7 @@
 import type { MlbPersonProfile } from "../lib/providers/real_api/_mlbStatsApiClient";
 import {
   planPlayerInsertFromMlbProfile,
+  truncatePlannedInserts,
   type PlannerResult,
 } from "../lib/services/missingPlayerIngestPlanner";
 
@@ -331,6 +332,57 @@ async function testPlanner_ExternalIdAlwaysNull() {
   }
 }
 
+// ─── truncatePlannedInserts ──────────────────────────────────────────
+
+async function testTruncate_UndefinedReturnsAll() {
+  section("truncatePlannedInserts — undefined limit returns all");
+  const r = truncatePlannedInserts([1, 2, 3], undefined);
+  check("returns [1,2,3]", JSON.stringify(r) === "[1,2,3]");
+  // Confirm it's a copy, not the same reference
+  const input: number[] = [1, 2, 3];
+  const out = truncatePlannedInserts(input, undefined);
+  check("returns a NEW array (defensive copy)", out !== (input as unknown));
+}
+
+async function testTruncate_ZeroReturnsEmpty() {
+  section("truncatePlannedInserts — limit=0 returns empty");
+  check("[]", truncatePlannedInserts([1, 2, 3], 0).length === 0);
+}
+
+async function testTruncate_OneReturnsFirst() {
+  section("truncatePlannedInserts — limit=1 returns first element");
+  const r = truncatePlannedInserts([10, 20, 30], 1);
+  check("length === 1", r.length === 1);
+  check("first === 10", r[0] === 10);
+}
+
+async function testTruncate_LargerThanInputReturnsAll() {
+  section("truncatePlannedInserts — limit > length returns all");
+  const r = truncatePlannedInserts([1, 2, 3], 10);
+  check("returns [1,2,3]", JSON.stringify(r) === "[1,2,3]");
+}
+
+async function testTruncate_NegativeReturnsEmpty() {
+  section("truncatePlannedInserts — negative limit returns empty");
+  check("limit=-1 → []", truncatePlannedInserts([1, 2, 3], -1).length === 0);
+  check("limit=-100 → []", truncatePlannedInserts([1, 2, 3], -100).length === 0);
+}
+
+async function testTruncate_EmptyInput() {
+  section("truncatePlannedInserts — empty input");
+  check("[] + undefined → []", truncatePlannedInserts([], undefined).length === 0);
+  check("[] + 1 → []", truncatePlannedInserts([], 1).length === 0);
+}
+
+async function testTruncate_PreservesOrder() {
+  section("truncatePlannedInserts — preserves input order (caller is responsible for sorting)");
+  // The operator sorts by mlb_person_id ASC before calling; verify
+  // truncate doesn't re-sort or otherwise alter ordering.
+  const sorted = [547179, 571578, 605135, 605488, 607067];
+  const r = truncatePlannedInserts(sorted, 3);
+  check("first 3 in input order", JSON.stringify(r) === "[547179,571578,605135]");
+}
+
 // ─── Runner ──────────────────────────────────────────────────────────
 
 async function main() {
@@ -350,6 +402,14 @@ async function main() {
   await testPlanner_SkipMissingFullName();
   await testPlanner_SkipMissingPositionAbbr();
   await testPlanner_ExternalIdAlwaysNull();
+
+  await testTruncate_UndefinedReturnsAll();
+  await testTruncate_ZeroReturnsEmpty();
+  await testTruncate_OneReturnsFirst();
+  await testTruncate_LargerThanInputReturnsAll();
+  await testTruncate_NegativeReturnsEmpty();
+  await testTruncate_EmptyInput();
+  await testTruncate_PreservesOrder();
 
   // Silence unused-import warning — PlannerResult is load-bearing for
   // typing but not directly referenced as a value.
