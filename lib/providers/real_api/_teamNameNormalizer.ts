@@ -17,7 +17,7 @@
  */
 
 export type MlbTeamAbbrev =
-  | "ARI" | "ATL" | "BAL" | "BOS" | "CHC" | "CWS" | "CIN" | "CLE" | "COL"
+  | "ARI" | "ATH" | "ATL" | "BAL" | "BOS" | "CHC" | "CWS" | "CIN" | "CLE" | "COL"
   | "DET" | "HOU" | "KC"  | "LAA" | "LAD" | "MIA" | "MIL" | "MIN" | "NYM"
   | "NYY" | "OAK" | "PHI" | "PIT" | "SD"  | "SEA" | "SF"  | "STL" | "TB"
   | "TEX" | "TOR" | "WSH";
@@ -127,11 +127,16 @@ const TEAM_VARIANTS: Record<string, MlbTeamAbbrev> = {
   "ny yankees": "NYY",
   "yankees": "NYY",
   "nyy": "NYY",
-  // OAK
+  // OAK (Sacramento/Las Vegas Athletics — `ATH` is the abbreviation our
+  // teams table uses post-2025 relocation; `OAK` retained for legacy
+  // SharpAPI inputs that still emit it). Both map to the same MLB Stats id.
   "oakland athletics": "OAK",
   "athletics": "OAK",
   "oakland": "OAK",
   "oak": "OAK",
+  "ath": "ATH",
+  "athletics (sacramento)": "ATH",
+  "athletics (las vegas)": "ATH",
   // PHI
   "philadelphia phillies": "PHI",
   "phillies": "PHI",
@@ -190,6 +195,66 @@ const TEAM_VARIANTS: Record<string, MlbTeamAbbrev> = {
   "wsh": "WSH",
   "was": "WSH",
 };
+
+/**
+ * Phase 4.2.C.1.R-15 — static MLB Stats team-id map.
+ *
+ * MLB Stats team IDs are stable across seasons. Hard-coding here avoids
+ * a DB round-trip and decouples bullpen ingestion from the `teams`
+ * table's `provider_ids.mlb_stats.id` column (which is currently null
+ * for all teams). When that column is backfilled, callers can switch
+ * to it — until then, lookups go through this map.
+ *
+ * `OAK` and `ATH` resolve to the same MLB Stats id (133) — MLB never
+ * reissued the franchise's id when the team relocated.
+ */
+export const MLB_STATS_TEAM_IDS: Record<MlbTeamAbbrev, number> = {
+  ARI: 109,
+  ATH: 133, // post-relocation Athletics — same MLB Stats id as OAK
+  ATL: 144,
+  BAL: 110,
+  BOS: 111,
+  CHC: 112,
+  CWS: 145,
+  CIN: 113,
+  CLE: 114,
+  COL: 115,
+  DET: 116,
+  HOU: 117,
+  KC:  118,
+  LAA: 108,
+  LAD: 119,
+  MIA: 146,
+  MIL: 158,
+  MIN: 142,
+  NYM: 121,
+  NYY: 147,
+  OAK: 133, // legacy abbreviation — same id as ATH
+  PHI: 143,
+  PIT: 134,
+  SD:  135,
+  SEA: 136,
+  SF:  137,
+  STL: 138,
+  TB:  139,
+  TEX: 140,
+  TOR: 141,
+  WSH: 120,
+};
+
+/**
+ * Look up an MLB Stats team id by abbreviation. Returns `null` for an
+ * abbreviation outside the 30-team set, including `null`/`undefined`
+ * input (callers should log + skip rather than guess).
+ */
+export function mlbStatsTeamIdFromAbbr(
+  abbr: string | null | undefined
+): number | null {
+  if (typeof abbr !== "string") return null;
+  const upper = abbr.trim().toUpperCase();
+  if (upper.length === 0) return null;
+  return (MLB_STATS_TEAM_IDS as Record<string, number | undefined>)[upper] ?? null;
+}
 
 /**
  * Normalize a SharpAPI team string to a 3-letter MLB abbreviation.

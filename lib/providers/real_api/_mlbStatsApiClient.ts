@@ -622,3 +622,87 @@ export async function fetchMlbStatsScheduleRaw(
     return null;
   }
 }
+
+// ───────────────────────────────────────────────────────────────────
+// Phase 4.2.C.1.R-15 — active-roster helper for bullpen ingestion
+// ───────────────────────────────────────────────────────────────────
+
+/**
+ * Light roster-entry shape returned by `getActiveRoster`. Just enough
+ * for the bullpen planner to classify (position abbreviation + person
+ * id + name). The full profile required for `players` row insert is
+ * fetched separately via `getPersonById` on the selected candidates.
+ */
+export type MlbRosterEntry = {
+  personId: number;
+  fullName: string;
+  positionAbbreviation: string | null; // typically "P" for all pitchers
+  positionType: string | null;          // "Pitcher" / "Hitter" / etc.
+  status: string | null;                // "Active" / "Disabled List" / etc.
+};
+
+/**
+ * R-15 — fetch a team's active roster.
+ *
+ *   GET /api/v1/teams/{teamId}/roster?rosterType=active
+ *
+ * Returns the list of active roster entries (40-man + injured-list
+ * variants depending on `rosterType`). For bullpen ingestion we use
+ * `rosterType=active` to get the players physically on the team.
+ *
+ * Fail-closed: network / HTTP / parse / shape errors all return `null`
+ * so callers can log + skip without throwing.
+ */
+export async function getActiveRoster(
+  teamId: number,
+  opts?: Opts
+): Promise<MlbRosterEntry[] | null> {
+  const url = `${BASE_URL}/teams/${teamId}/roster?rosterType=active`;
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: HEADERS });
+  } catch {
+    log(opts, `network error on /teams/${teamId}/roster`);
+    return null;
+  }
+  if (!res.ok) {
+    log(opts, `non-200 on /teams/${teamId}/roster: HTTP ${res.status}`);
+    return null;
+  }
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    log(opts, `JSON parse error on /teams/${teamId}/roster`);
+    return null;
+  }
+  const roster = (body as { roster?: unknown[] })?.roster;
+  if (!Array.isArray(roster)) {
+    log(opts, `unexpected shape on /teams/${teamId}/roster`);
+    return null;
+  }
+  const out: MlbRosterEntry[] = [];
+  for (const r of roster) {
+    const row = r as Record<string, unknown>;
+    const person = (row.person ?? null) as Record<string, unknown> | null;
+    const position = (row.position ?? null) as Record<string, unknown> | null;
+    const status = (row.status ?? null) as Record<string, unknown> | null;
+    const personId = parseIntSafe(person?.id);
+    if (personId === null) continue;
+    const fullName = typeof person?.fullName === "string" ? person.fullName : "";
+    if (fullName === "") continue;
+    out.push({
+      personId,
+      fullName,
+      positionAbbreviation:
+        typeof position?.abbreviation === "string"
+          ? position.abbreviation
+          : null,
+      positionType:
+        typeof position?.type === "string" ? position.type : null,
+      status:
+        typeof status?.description === "string" ? status.description : null,
+    });
+  }
+  return out;
+}
