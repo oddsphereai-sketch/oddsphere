@@ -81,6 +81,10 @@ import {
   PREDICTED_SCORE_MAX,
   PREDICTED_SCORE_MIN,
   STAGE_CONFIDENCE_CAPS,
+  STAGE_CONFIDENCE_CAPS_V2,
+  compressConfidence,
+  dampenRawConfidence,
+  type DampeningFlags,
   TOP3_HITTER_INJURY_REDUCTION_CAP,
   TOP3_HITTER_INJURY_REDUCTION_PER,
 } from "./types";
@@ -1166,9 +1170,77 @@ export function runMlbAutoModelV1(
     (snapshot.home_starter !== null && snapshot.home_starter.is_scratched) ||
     (snapshot.away_starter !== null && snapshot.away_starter.is_scratched);
 
+  // ── R-14B — pre-compute dampening signals shared by ML and OU ──
+  // These flags are evaluated once and reused for both branches. Each
+  // flag defaults to false when the underlying data is missing.
+  const market_line_available_for_flags =
+    snapshot.market.listed_total !== null;
+  const bullpenFallbackActive =
+    snapshot.home_team.bullpen_era_proxy === null ||
+    snapshot.away_team.bullpen_era_proxy === null;
+  const morningUnconfirmed =
+    stage === "morning_draft" || !snapshot.data_quality.lineup_confirmed;
+  const lowGsThreshold = 5;
+  const lowIpThreshold = 20;
+  const relieverGpMin = 10;
+  const relieverGsMax = 2;
+  const homeGs = snapshot.home_starter?.season_games_started ?? null;
+  const awayGs = snapshot.away_starter?.season_games_started ?? null;
+  const homeIp = snapshot.home_starter?.season_innings_pitched ?? null;
+  const awayIp = snapshot.away_starter?.season_innings_pitched ?? null;
+  const homeGp = snapshot.home_starter?.season_games_pitched ?? null;
+  const awayGp = snapshot.away_starter?.season_games_pitched ?? null;
+  const homeLowGs = homeGs !== null && homeGs < lowGsThreshold;
+  const awayLowGs = awayGs !== null && awayGs < lowGsThreshold;
+  const homeLowIp = homeIp !== null && homeIp < lowIpThreshold;
+  const awayLowIp = awayIp !== null && awayIp < lowIpThreshold;
+  const homeRpAsSp =
+    homeGp !== null &&
+    homeGs !== null &&
+    homeGp >= relieverGpMin &&
+    homeGs <= relieverGsMax;
+  const awayRpAsSp =
+    awayGp !== null &&
+    awayGs !== null &&
+    awayGp >= relieverGpMin &&
+    awayGs <= relieverGsMax;
+
+  // Public-smoke alignment: heavy public tickets on a side AND tickets ~
+  // money (flat split) AND model's pick is that same side. Threshold
+  // mirrors the constants used by gradeDerivationService so the dampening
+  // and the grade pipeline agree on what "smoke" looks like.
+  const PUBLIC_SMOKE_BETS_THRESHOLD = 65;
+  const PUBLIC_SMOKE_FLAT_GAP_MAX = 8;
+  const sharp = snapshot.sharp;
+  const homeIsPublicHeavySmoke =
+    sharp !== null &&
+    sharp.public_betting_pct_home !== null &&
+    sharp.public_money_pct_home !== null &&
+    sharp.public_betting_pct_home >= PUBLIC_SMOKE_BETS_THRESHOLD &&
+    Math.abs(
+      sharp.public_betting_pct_home - sharp.public_money_pct_home
+    ) <= PUBLIC_SMOKE_FLAT_GAP_MAX;
+  const awayIsPublicHeavySmoke =
+    sharp !== null &&
+    sharp.public_betting_pct_home !== null &&
+    sharp.public_money_pct_home !== null &&
+    // away splits derive from 100 - home for /splits data
+    100 - sharp.public_betting_pct_home >= PUBLIC_SMOKE_BETS_THRESHOLD &&
+    Math.abs(
+      sharp.public_betting_pct_home - sharp.public_money_pct_home
+    ) <= PUBLIC_SMOKE_FLAT_GAP_MAX;
+  const noMlSplitData =
+    sharp === null || sharp.public_betting_pct_home === null;
+  const noTotalSplitData =
+    sharp === null || sharp.public_betting_pct_over === null;
+  const partialMarketCoverage = !market_line_available_for_flags;
+
   // ── ML ──────────────────────────────────────────────────────────
   let predicted_ml_winner: "home" | "away" | null = null;
   let ml_confidence: number | null = null;
+  let ml_raw_confidence: number | null = null;
+  let ml_dampening_penalty = 0;
+  let ml_dampening_reasons: string[] = [];
 
   if (!mlHeldByStarter) {
     const runDiff = Math.abs(predicted_home_score - predicted_away_score);
@@ -1176,10 +1248,13 @@ export function runMlbAutoModelV1(
       homeStarterFactor.factor - awayStarterFactor.factor
     );
     // Confidence formula: baseline 50 + run-difference bonus + ERA-gap
-    // bonus, clamped to [50, stageCap]. ERA gap scaled × 10 to give it
-    // similar magnitude to runDiff in the linear sum.
+    // bonus. Pre-R-14 this was clamped to [50, stageCap]; R-14
+    // replaced that flat clamp with soft/hard cap + linear compression.
+    // R-14B adds a pre-compression dampening step that subtracts a
+    // small per-flag penalty for low data quality and weak/conflicting
+    // market context. Penalty defaults to 0 when no flag fires.
     const rawConfidence = 50 + 10 * runDiff + 5 * eraGap * 10;
-    const cappedConfidence = clamp(rawConfidence, 50, stageCap);
+    ml_raw_confidence = round1(rawConfidence);
 
     // Side selection uses the UNROUNDED clamped scores so that two games
     // displaying as "4.5–4.5" (rounded tie, true differential ~0.04)
@@ -1194,6 +1269,35 @@ export function runMlbAutoModelV1(
     } else {
       predicted_ml_winner = "home"; // exact-tie tiebreak
     }
+
+    // Build ML-specific flags now that the pick side is known.
+    const publicSmokeAlignedWithPick =
+      (predicted_ml_winner === "home" && homeIsPublicHeavySmoke) ||
+      (predicted_ml_winner === "away" && awayIsPublicHeavySmoke);
+
+    const mlFlags: DampeningFlags = {
+      home_starter_low_gs: homeLowGs,
+      away_starter_low_gs: awayLowGs,
+      home_starter_low_ip: homeLowIp,
+      away_starter_low_ip: awayLowIp,
+      home_starter_reliever_as_starter: homeRpAsSp,
+      away_starter_reliever_as_starter: awayRpAsSp,
+      bullpen_fallback: bullpenFallbackActive,
+      morning_unconfirmed: morningUnconfirmed,
+      public_smoke_aligned_with_pick: publicSmokeAlignedWithPick,
+      no_ml_split_data: noMlSplitData,
+      partial_market_coverage: partialMarketCoverage,
+      // OU-only flags — irrelevant for ML but must be defined.
+      sharp_plus_ev_opposes_ou: false,
+      no_total_split_data: false,
+    };
+    const damp = dampenRawConfidence(rawConfidence, mlFlags, "ml");
+    ml_dampening_penalty = damp.penalty;
+    ml_dampening_reasons = damp.reasons;
+    const cappedConfidence = Math.max(
+      50,
+      compressConfidence(damp.dampened, STAGE_CONFIDENCE_CAPS_V2[stage])
+    );
     ml_confidence = round1(cappedConfidence);
   }
 
@@ -1201,6 +1305,9 @@ export function runMlbAutoModelV1(
   const market_line_available = snapshot.market.listed_total !== null;
   let predicted_ou_side: "over" | "under" | null = null;
   let ou_confidence: number | null = null;
+  let ou_raw_confidence: number | null = null;
+  let ou_dampening_penalty = 0;
+  let ou_dampening_reasons: string[] = [];
 
   if (market_line_available && !mlHeldByStarter) {
     const marketLine = snapshot.market.listed_total!;
@@ -1219,8 +1326,40 @@ export function runMlbAutoModelV1(
       predicted_ou_side = "under"; // exact-tie tiebreak
     }
     const ouDiff = Math.abs(predicted_total - marketLine);
+    // R-14: same compression treatment as ML. OU's natural raw range
+    // is tighter (max ~85 even at 4-run total gaps), so the same
+    // soft/slope/hard config works without overcompressing.
     const rawConfidence = 50 + 8 * ouDiff;
-    const cappedConfidence = clamp(rawConfidence, 50, stageCap);
+    ou_raw_confidence = round1(rawConfidence);
+
+    const sharpEvOpposes =
+      sharp !== null &&
+      sharp.total_plus_ev_side !== null &&
+      sharp.total_plus_ev_side !== predicted_ou_side;
+
+    const ouFlags: DampeningFlags = {
+      // ML-only flags must be defined but don't apply.
+      home_starter_low_gs: false,
+      away_starter_low_gs: false,
+      home_starter_low_ip: false,
+      away_starter_low_ip: false,
+      home_starter_reliever_as_starter: false,
+      away_starter_reliever_as_starter: false,
+      bullpen_fallback: bullpenFallbackActive,
+      morning_unconfirmed: morningUnconfirmed,
+      public_smoke_aligned_with_pick: false,
+      no_ml_split_data: false,
+      partial_market_coverage: false,
+      sharp_plus_ev_opposes_ou: sharpEvOpposes,
+      no_total_split_data: noTotalSplitData,
+    };
+    const damp = dampenRawConfidence(rawConfidence, ouFlags, "ou");
+    ou_dampening_penalty = damp.penalty;
+    ou_dampening_reasons = damp.reasons;
+    const cappedConfidence = Math.max(
+      50,
+      compressConfidence(damp.dampened, STAGE_CONFIDENCE_CAPS_V2[stage])
+    );
     ou_confidence = round1(cappedConfidence);
   }
 
@@ -1331,6 +1470,13 @@ export function runMlbAutoModelV1(
         : null,
     home_starter_throws: snapshot.home_starter?.throws ?? null,
     away_starter_throws: snapshot.away_starter?.throws ?? null,
+    // ── R-14B dampening diagnostics ──────────────────────────────
+    ml_raw_confidence,
+    ml_dampening_penalty,
+    ml_dampening_reasons,
+    ou_raw_confidence,
+    ou_dampening_penalty,
+    ou_dampening_reasons,
   };
 
   // ── Assemble sport_specific output ──────────────────────────────

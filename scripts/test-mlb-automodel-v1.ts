@@ -3585,6 +3585,670 @@ async function main() {
   }
 
   // ═══════════════════════════════════════════════════════════════
+  section("R-14 — confidence compression (soft cap + slope + hard cap)");
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    const { compressConfidence, STAGE_CONFIDENCE_CAPS_V2 } = await import(
+      "../lib/automodel/types"
+    );
+    const morning = STAGE_CONFIDENCE_CAPS_V2.morning_draft; // R-14B: soft=60 hard=68 slope=0.20
+    const t60 = STAGE_CONFIDENCE_CAPS_V2.t60_locked;        // R-14B: soft=75 hard=82 slope=0.20
+
+    // R-14.1 — raw <= soft passes through unchanged.
+    check(
+      "[R-14] raw 50 → display 50 (no change at floor)",
+      compressConfidence(50, morning) === 50
+    );
+    check(
+      "[R-14] raw 55 → display 55 (under soft cap, unchanged)",
+      compressConfidence(55, morning) === 55
+    );
+    check(
+      "[R-14] raw 60 (= soft cap) → display 60 (boundary unchanged)",
+      compressConfidence(60, morning) === 60
+    );
+
+    // R-14.2 — above soft compresses linearly.
+    check(
+      "[R-14] raw 70 → display 62 (60 + 10*0.20)",
+      compressConfidence(70, morning) === 62
+    );
+    check(
+      "[R-14] raw 90 → display 66 (60 + 30*0.20)",
+      compressConfidence(90, morning) === 66
+    );
+    check(
+      "[R-14] raw 100 → display 68 (60 + 40*0.20)",
+      compressConfidence(100, morning) === 68
+    );
+
+    // R-14.3 — hard cap clip (R-14B lowered to 68).
+    check(
+      "[R-14] raw 150 → display 68 (clipped at hard cap)",
+      compressConfidence(150, morning) === 68
+    );
+    check(
+      "[R-14] raw 206.6 (PIT@HOU shape) → display 68 (still clipped)",
+      compressConfidence(206.6, morning) === 68
+    );
+    check(
+      "[R-14] raw 1000 → display 68 (any extreme stays bounded)",
+      compressConfidence(1000, morning) === 68
+    );
+
+    // R-14.4 — differentiation across the 60–68 band (R-14B lowered hard cap).
+    const ml60 = compressConfidence(60.5, morning);
+    const ml206 = compressConfidence(206.6, morning);
+    check(
+      "[R-14] raw 60.5 vs raw 206.6 produce VISIBLY different display values",
+      ml206 - ml60 >= 7
+    );
+    check(
+      "[R-14] raw 60.5 display stays just above soft cap (~60.1)",
+      Math.abs(ml60 - 60.1) < 0.001
+    );
+
+    // R-14.5 — t60_locked has its own (higher) cap.
+    check(
+      "[R-14] t60 raw 75 (= soft) → display 75",
+      compressConfidence(75, t60) === 75
+    );
+    check(
+      "[R-14] t60 raw 100 → display 80 (75 + 25*0.20)",
+      compressConfidence(100, t60) === 80
+    );
+    check(
+      "[R-14] t60 raw 200 → display 82 (hard cap, R-14B)",
+      compressConfidence(200, t60) === 82
+    );
+    check(
+      "[R-14] t60 display > morning display for same raw above both soft caps",
+      compressConfidence(120, t60) > compressConfidence(120, morning)
+    );
+
+    // R-14.6 — slate-shape integration: model produces visibly
+    // different ML confidences across the test base snapshot.
+    const snapBig = baseSnapshot({
+      home_starter: starter({
+        player_external_id: 8001,
+        season_era: 2.0, // dominant
+      }),
+      away_starter: starter({
+        player_external_id: 8002,
+        season_era: 8.0, // very bad
+        throws: "L",
+      }),
+    });
+    const snapSmall = baseSnapshot({
+      home_starter: starter({
+        player_external_id: 8003,
+        season_era: 4.0,
+      }),
+      away_starter: starter({
+        player_external_id: 8004,
+        season_era: 4.2,
+        throws: "L",
+      }),
+    });
+    const bigOut = runMlbAutoModelV1(snapBig, "morning_draft");
+    const smallOut = runMlbAutoModelV1(snapSmall, "morning_draft");
+    check(
+      "[R-14] big ERA gap → ml_confidence > small ERA gap (no flattening)",
+      bigOut.ml_confidence !== null &&
+        smallOut.ml_confidence !== null &&
+        bigOut.ml_confidence - smallOut.ml_confidence >= 4
+    );
+    check(
+      "[R-14] big ERA gap morning ml_confidence ≤ 68 (hard cap, R-14B)",
+      bigOut.ml_confidence !== null && bigOut.ml_confidence <= 68
+    );
+    check(
+      "[R-14] small ERA gap morning ml_confidence ≥ 50 (floor)",
+      smallOut.ml_confidence !== null && smallOut.ml_confidence >= 50
+    );
+
+    // R-14.7 — NRFI confidence is NOT affected by stage caps (its
+    // own zone-based cap NRFI_CONFIDENCE_CAP=65 still governs).
+    check(
+      "[R-14] NRFI confidence still respects its own cap, not stage cap",
+      // NRFI never emits > 65 regardless of stage; toss-up = 52,
+      // firm decisive band caps at 65. Both well under morning_draft
+      // hard cap of 68 (R-14B).
+      bigOut.nrfi_confidence === null || bigOut.nrfi_confidence <= 65
+    );
+
+    // R-14.8 — OU compression: a 4-run total gap (raw ~82) is now
+    // distinct from a 2-run total gap (raw ~66), where pre-R-14
+    // both clamped to 60.
+    const snapHighTotal = baseSnapshot({
+      market: {
+        listed_total: 6.0, // implies a big over edge given the default ~9.0 projection
+        home_ml_odds_american: null,
+        away_ml_odds_american: null,
+        has_pinnacle_total: false,
+      },
+    });
+    const snapMidTotal = baseSnapshot({
+      market: {
+        listed_total: 8.0,
+        home_ml_odds_american: null,
+        away_ml_odds_american: null,
+        has_pinnacle_total: false,
+      },
+    });
+    const highOut = runMlbAutoModelV1(snapHighTotal, "morning_draft");
+    const midOut = runMlbAutoModelV1(snapMidTotal, "morning_draft");
+    check(
+      "[R-14] large OU edge confidence > moderate OU edge confidence",
+      highOut.ou_confidence !== null &&
+        midOut.ou_confidence !== null &&
+        highOut.ou_confidence - midOut.ou_confidence >= 2
+    );
+    check(
+      "[R-14] OU confidence respects the morning hard cap (≤ 68, R-14B)",
+      highOut.ou_confidence === null || highOut.ou_confidence <= 68
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  section("R-14B — confidence dampening (data quality + market context)");
+  // ═══════════════════════════════════════════════════════════════
+
+  {
+    const { dampenRawConfidence } = await import("../lib/automodel/types");
+
+    const noFlags = {
+      home_starter_low_gs: false,
+      away_starter_low_gs: false,
+      home_starter_low_ip: false,
+      away_starter_low_ip: false,
+      home_starter_reliever_as_starter: false,
+      away_starter_reliever_as_starter: false,
+      bullpen_fallback: false,
+      morning_unconfirmed: false,
+      public_smoke_aligned_with_pick: false,
+      no_ml_split_data: false,
+      partial_market_coverage: false,
+      sharp_plus_ev_opposes_ou: false,
+      no_total_split_data: false,
+    };
+
+    // R-14B.1 — zero flags ⇒ zero penalty.
+    {
+      const r = dampenRawConfidence(80, noFlags, "ml");
+      check("[R-14B] no flags → zero penalty (ML)", r.penalty === 0);
+      check("[R-14B] no flags → dampened == raw (ML)", r.dampened === 80);
+      check("[R-14B] no flags → no reasons (ML)", r.reasons.length === 0);
+      const r2 = dampenRawConfidence(80, noFlags, "ou");
+      check("[R-14B] no flags → zero penalty (OU)", r2.penalty === 0);
+    }
+
+    // R-14B.2 — every ML flag fires ⇒ correct penalty sum.
+    {
+      const all: typeof noFlags = {
+        ...noFlags,
+        home_starter_low_gs: true,
+        away_starter_low_gs: true,
+        home_starter_low_ip: true,
+        away_starter_low_ip: true,
+        home_starter_reliever_as_starter: true,
+        away_starter_reliever_as_starter: true,
+        bullpen_fallback: true,
+        morning_unconfirmed: true,
+        public_smoke_aligned_with_pick: true,
+        no_ml_split_data: true,
+        partial_market_coverage: true,
+      };
+      const r = dampenRawConfidence(200, all, "ml");
+      // 6+6+4+4+4+4+3+3+4+2+2 = 42
+      check("[R-14B] all ML flags → penalty == 42", r.penalty === 42);
+      check(
+        "[R-14B] all ML flags → dampened == raw-penalty",
+        r.dampened === 200 - 42
+      );
+    }
+
+    // R-14B.3 — penalty cannot drop dampened below 50.
+    {
+      const heavy: typeof noFlags = {
+        ...noFlags,
+        home_starter_low_gs: true,
+        away_starter_low_gs: true,
+        morning_unconfirmed: true,
+      };
+      const r = dampenRawConfidence(55, heavy, "ml");
+      check("[R-14B] floor → dampened never < 50", r.dampened >= 50);
+    }
+
+    // R-14B.4 — OU sharp-conflict penalty fires only on OU.
+    {
+      const oneFlag: typeof noFlags = {
+        ...noFlags,
+        sharp_plus_ev_opposes_ou: true,
+      };
+      const ml = dampenRawConfidence(80, oneFlag, "ml");
+      const ou = dampenRawConfidence(80, oneFlag, "ou");
+      check(
+        "[R-14B] sharp_plus_ev_opposes_ou not applied to ML",
+        ml.penalty === 0
+      );
+      check(
+        "[R-14B] sharp_plus_ev_opposes_ou applies to OU (-6)",
+        ou.penalty === 6
+      );
+    }
+
+    // R-14B.5 — ML public-smoke flag fires only on ML.
+    {
+      const oneFlag: typeof noFlags = {
+        ...noFlags,
+        public_smoke_aligned_with_pick: true,
+      };
+      const ml = dampenRawConfidence(80, oneFlag, "ml");
+      const ou = dampenRawConfidence(80, oneFlag, "ou");
+      check("[R-14B] public_smoke_aligned applies to ML (-4)", ml.penalty === 4);
+      check("[R-14B] public_smoke_aligned not applied to OU", ou.penalty === 0);
+    }
+
+    // R-14B.6 — PIT @ HOU-style: huge raw with multiple starter penalties
+    // stays at-or-under the new morning hard cap (68).
+    {
+      const flags: typeof noFlags = {
+        ...noFlags,
+        home_starter_low_gs: true,
+        away_starter_low_gs: true,
+        morning_unconfirmed: true,
+        bullpen_fallback: true,
+      };
+      const r = dampenRawConfidence(206.6, flags, "ml");
+      // raw 206.6 - (6+6+3+3) = 188.6 — still huge; compression clips to 68.
+      const { compressConfidence, STAGE_CONFIDENCE_CAPS_V2 } = await import(
+        "../lib/automodel/types"
+      );
+      const display = compressConfidence(
+        r.dampened,
+        STAGE_CONFIDENCE_CAPS_V2.morning_draft
+      );
+      check(
+        "[R-14B] huge raw + starter penalties ≤ morning hard cap 68",
+        display <= 68
+      );
+    }
+
+    // R-14B.7 — model integration: starter with 1 GS dampens ML
+    // confidence relative to identical snapshot with 30 GS.
+    {
+      const snapLowGs = baseSnapshot({
+        home_starter: starter({
+          player_external_id: 9101,
+          season_era: 2.0,
+          season_games_started: 1,
+          season_games_pitched: 1,
+          season_innings_pitched: 5,
+        }),
+        away_starter: starter({
+          player_external_id: 9102,
+          season_era: 8.0,
+          throws: "L",
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+      });
+      const snapNormalGs = baseSnapshot({
+        home_starter: starter({
+          player_external_id: 9201,
+          season_era: 2.0,
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+        away_starter: starter({
+          player_external_id: 9202,
+          season_era: 8.0,
+          throws: "L",
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+      });
+      const lowOut = runMlbAutoModelV1(snapLowGs, "morning_draft");
+      const normOut = runMlbAutoModelV1(snapNormalGs, "morning_draft");
+      const lowAf = lowOut.sport_specific.auto_factors;
+      const normAf = normOut.sport_specific.auto_factors;
+      // Both fixtures saturate the hard cap so ml_confidence ties; the
+      // penalty itself is the unambiguous signal.
+      check(
+        "[R-14B] low-GS fixture incurs larger ml_dampening_penalty than normal-GS",
+        (lowAf.ml_dampening_penalty ?? 0) > (normAf.ml_dampening_penalty ?? 0)
+      );
+      check(
+        "[R-14B] low-GS reason surfaces in auto_factors.ml_dampening_reasons",
+        (lowAf.ml_dampening_reasons ?? []).some((r) =>
+          r.startsWith("home_low_gs")
+        )
+      );
+    }
+
+    // R-14B.8 — reliever-as-starter fires its own penalty (gp>=10 && gs<=2).
+    {
+      const snapRp = baseSnapshot({
+        home_starter: starter({
+          player_external_id: 9301,
+          season_era: 2.0,
+          season_games_started: 1,
+          season_games_pitched: 17,
+          season_innings_pitched: 25,
+        }),
+        away_starter: starter({
+          player_external_id: 9302,
+          season_era: 8.0,
+          throws: "L",
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+      });
+      const snapNorm = baseSnapshot({
+        home_starter: starter({
+          player_external_id: 9401,
+          season_era: 2.0,
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+        away_starter: starter({
+          player_external_id: 9402,
+          season_era: 8.0,
+          throws: "L",
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+      });
+      const rpOut = runMlbAutoModelV1(snapRp, "morning_draft");
+      const normOut = runMlbAutoModelV1(snapNorm, "morning_draft");
+      const rpFactors = rpOut.sport_specific.auto_factors;
+      const normFactors = normOut.sport_specific.auto_factors;
+      check(
+        "[R-14B] reliever-as-starter pattern incurs larger ml_dampening_penalty",
+        (rpFactors.ml_dampening_penalty ?? 0) >
+          (normFactors.ml_dampening_penalty ?? 0)
+      );
+      check(
+        "[R-14B] reliever-as-starter reasons surface in auto_factors",
+        (rpFactors.ml_dampening_reasons ?? []).some((r) =>
+          r.startsWith("home_rp_as_sp")
+        )
+      );
+    }
+
+    // R-14B.9 — bullpen-fallback (null bullpen ERA) dampens both ML and OU.
+    {
+      const snapBpFb = baseSnapshot({
+        home_team: {
+          team_external_id: 21,
+          abbreviation: "NYM",
+          bullpen_era_proxy: null, // fallback
+          season_runs_per_game: 4.5,
+        },
+        home_starter: starter({
+          player_external_id: 9501,
+          season_era: 2.0,
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+        away_starter: starter({
+          player_external_id: 9502,
+          season_era: 8.0,
+          throws: "L",
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+      });
+      const out = runMlbAutoModelV1(snapBpFb, "morning_draft");
+      const factors = out.sport_specific.auto_factors;
+      check(
+        "[R-14B] bullpen_fallback reason fires when team bullpen_era_proxy null",
+        (factors.ml_dampening_reasons ?? []).some((r) =>
+          r.startsWith("bullpen_fallback")
+        ) ||
+          (factors.ou_dampening_reasons ?? []).some((r) =>
+            r.startsWith("bullpen_fallback")
+          )
+      );
+    }
+
+    // R-14B.10 — sharp +EV on opposing OU side dampens OU confidence.
+    {
+      const snapWithConflict = baseSnapshot({
+        market: {
+          listed_total: 6.0, // model projects ~9.0 → over with large diff
+          home_ml_odds_american: null,
+          away_ml_odds_american: null,
+          has_pinnacle_total: false,
+        },
+        sharp: {
+          pinnacle_ml_fair_prob_home: null,
+          pinnacle_ml_fair_prob_away: null,
+          pinnacle_total_ev_pct: 2.0,
+          pinnacle_ml_ev_pct: null,
+          public_betting_pct_home: null,
+          public_money_pct_home: null,
+          public_betting_pct_over: 45,
+          public_money_pct_over: 50,
+          ml_plus_ev_side: null,
+          total_plus_ev_side: "under", // OPPOSES model's "over"
+        },
+      });
+      const snapNoConflict = baseSnapshot({
+        market: {
+          listed_total: 6.0,
+          home_ml_odds_american: null,
+          away_ml_odds_american: null,
+          has_pinnacle_total: false,
+        },
+        sharp: {
+          pinnacle_ml_fair_prob_home: null,
+          pinnacle_ml_fair_prob_away: null,
+          pinnacle_total_ev_pct: 2.0,
+          pinnacle_ml_ev_pct: null,
+          public_betting_pct_home: null,
+          public_money_pct_home: null,
+          public_betting_pct_over: 45,
+          public_money_pct_over: 50,
+          ml_plus_ev_side: null,
+          total_plus_ev_side: "over", // ALIGNS with model's over
+        },
+      });
+      const conflictOut = runMlbAutoModelV1(snapWithConflict, "morning_draft");
+      const alignedOut = runMlbAutoModelV1(snapNoConflict, "morning_draft");
+      check(
+        "[R-14B] sharp +EV opposing model OU pick dampens ou_confidence",
+        conflictOut.ou_confidence !== null &&
+          alignedOut.ou_confidence !== null &&
+          conflictOut.ou_confidence < alignedOut.ou_confidence
+      );
+    }
+
+    // R-14B.11 — public_smoke-aligned ML dampens model side that already
+    // matches the heavy public.
+    {
+      const snapSmoke = baseSnapshot({
+        home_starter: starter({
+          player_external_id: 9601,
+          season_era: 2.0,
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+        away_starter: starter({
+          player_external_id: 9602,
+          season_era: 8.0,
+          throws: "L",
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+        sharp: {
+          pinnacle_ml_fair_prob_home: null,
+          pinnacle_ml_fair_prob_away: null,
+          pinnacle_total_ev_pct: null,
+          pinnacle_ml_ev_pct: null,
+          public_betting_pct_home: 82, // heavy on home
+          public_money_pct_home: 80, // gap = 2pp, flat → smoke
+          public_betting_pct_over: null,
+          public_money_pct_over: null,
+          ml_plus_ev_side: null,
+          total_plus_ev_side: null,
+        },
+      });
+      const snapNoSmoke = baseSnapshot({
+        home_starter: starter({
+          player_external_id: 9701,
+          season_era: 2.0,
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+        away_starter: starter({
+          player_external_id: 9702,
+          season_era: 8.0,
+          throws: "L",
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+        sharp: {
+          pinnacle_ml_fair_prob_home: null,
+          pinnacle_ml_fair_prob_away: null,
+          pinnacle_total_ev_pct: null,
+          pinnacle_ml_ev_pct: null,
+          public_betting_pct_home: 52, // not heavy
+          public_money_pct_home: 50,
+          public_betting_pct_over: null,
+          public_money_pct_over: null,
+          ml_plus_ev_side: null,
+          total_plus_ev_side: null,
+        },
+      });
+      const smokeOut = runMlbAutoModelV1(snapSmoke, "morning_draft");
+      const noSmokeOut = runMlbAutoModelV1(snapNoSmoke, "morning_draft");
+      const smokeAf = smokeOut.sport_specific.auto_factors;
+      const noSmokeAf = noSmokeOut.sport_specific.auto_factors;
+      check(
+        "[R-14B] public_smoke aligned incurs larger ml_dampening_penalty",
+        (smokeAf.ml_dampening_penalty ?? 0) >
+          (noSmokeAf.ml_dampening_penalty ?? 0)
+      );
+      check(
+        "[R-14B] public_smoke_aligned reason surfaces when fixture triggers it",
+        (smokeAf.ml_dampening_reasons ?? []).some((r) =>
+          r.startsWith("public_smoke_aligned")
+        )
+      );
+    }
+
+    // R-14B.12 — KC@MIN-style thin edge: raw 60.5 stays close to 60.
+    {
+      // Build a tiny-edge fixture so rawConfidence ~ 60.
+      const snapThin = baseSnapshot({
+        home_starter: starter({
+          player_external_id: 9801,
+          season_era: 4.0,
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+        away_starter: starter({
+          player_external_id: 9802,
+          season_era: 4.2,
+          throws: "L",
+          season_games_started: 30,
+          season_games_pitched: 30,
+          season_innings_pitched: 180,
+        }),
+      });
+      const out = runMlbAutoModelV1(snapThin, "morning_draft");
+      check(
+        "[R-14B] thin ML edge keeps ml_confidence near 50–62 band",
+        out.ml_confidence !== null && out.ml_confidence <= 62
+      );
+    }
+
+    // R-14B.13 — NRFI is NOT touched by R-14B (no plumbing change).
+    {
+      const out = runMlbAutoModelV1(baseSnapshot(), "morning_draft");
+      check(
+        "[R-14B] NRFI confidence stays ≤ 65 (own cap) and not dampened",
+        out.nrfi_confidence === null || out.nrfi_confidence <= 65
+      );
+    }
+
+    // R-14B.14 — pick side is unchanged by dampening (only the number moves).
+    {
+      const snap = baseSnapshot({
+        home_starter: starter({
+          player_external_id: 9901,
+          season_era: 2.0,
+          season_games_started: 1, // triggers dampening
+          season_games_pitched: 1,
+          season_innings_pitched: 4,
+        }),
+        away_starter: starter({
+          player_external_id: 9902,
+          season_era: 8.0,
+          throws: "L",
+        }),
+      });
+      const out = runMlbAutoModelV1(snap, "morning_draft");
+      check(
+        "[R-14B] pick side preserved despite dampening (home favored)",
+        out.predicted_ml_winner === "home"
+      );
+    }
+
+    // R-14B.15 — diagnostic fields populated in auto_factors.
+    {
+      const out = runMlbAutoModelV1(
+        baseSnapshot({
+          home_starter: starter({
+            player_external_id: 9911,
+            season_era: 2.0,
+            season_games_started: 1,
+            season_games_pitched: 1,
+            season_innings_pitched: 5,
+          }),
+          away_starter: starter({
+            player_external_id: 9912,
+            season_era: 8.0,
+            throws: "L",
+          }),
+        }),
+        "morning_draft"
+      );
+      const af = out.sport_specific.auto_factors;
+      check(
+        "[R-14B] auto_factors.ml_raw_confidence populated",
+        typeof af.ml_raw_confidence === "number"
+      );
+      check(
+        "[R-14B] auto_factors.ml_dampening_penalty populated",
+        typeof af.ml_dampening_penalty === "number" &&
+          af.ml_dampening_penalty > 0
+      );
+      check(
+        "[R-14B] auto_factors.ml_dampening_reasons populated",
+        Array.isArray(af.ml_dampening_reasons) &&
+          (af.ml_dampening_reasons ?? []).length > 0
+      );
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   console.log(`\n${"━".repeat(70)}`);
   console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
   if (fail > 0) {

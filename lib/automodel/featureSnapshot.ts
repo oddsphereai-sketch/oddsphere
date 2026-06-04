@@ -203,6 +203,10 @@ type SeasonStatsRow = {
   first_inning_era: number | null;
   first_inning_starts: number | null;
   first_inning_whip: number | null;
+  // R-14B — workload counters for confidence dampening flags.
+  pitching_gs: number | null;
+  pitching_gp: number | null;
+  pitching_ip: number | null;
 };
 
 type SplitRow = {
@@ -350,6 +354,9 @@ function buildStarterSnapshot(
     first_inning_era: seasonStats?.first_inning_era ?? null,
     first_inning_starts: seasonStats?.first_inning_starts ?? null,
     first_inning_whip: seasonStats?.first_inning_whip ?? null,
+    season_games_started: seasonStats?.pitching_gs ?? null,
+    season_games_pitched: seasonStats?.pitching_gp ?? null,
+    season_innings_pitched: seasonStats?.pitching_ip ?? null,
   };
 }
 
@@ -493,6 +500,15 @@ function buildSharpSnapshot(
     public_money_pct_home: mlHome?.public_money_pct ?? null,
     public_betting_pct_over: totalOver?.public_betting_pct ?? null,
     public_money_pct_over: totalOver?.public_money_pct ?? null,
+    // R-14B — plus-EV side per market; null when no +EV row exists.
+    ml_plus_ev_side:
+      mlEvRow?.side === "home" || mlEvRow?.side === "away"
+        ? mlEvRow.side
+        : null,
+    total_plus_ev_side:
+      totalEvRow?.side === "over" || totalEvRow?.side === "under"
+        ? totalEvRow.side
+        : null,
   };
 }
 
@@ -648,7 +664,8 @@ export async function buildFeatureSnapshots(
     .select(
       "player_id, season, season_type, pitching_era, pitching_whip, pitching_k_per_9, " +
         "batting_obp, batting_slg, batting_ops, " +
-        "first_inning_era, first_inning_starts, first_inning_whip"
+        "first_inning_era, first_inning_starts, first_inning_whip, " +
+        "pitching_gs, pitching_gp, pitching_ip"
     )
     .in("player_id", Array.from(allPlayerIds))
     .eq("season", season)

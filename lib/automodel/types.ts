@@ -76,6 +76,17 @@ export type StarterSnapshot = {
    * expected_runs by more than ±4%.
    */
   first_inning_whip: number | null;
+  /**
+   * R-14B — starter workload counters for confidence-dampening flags.
+   * Sourced from `player_season_stats.pitching_{gs,gp,ip}`. Null when no
+   * season row exists for this pitcher; absent (`undefined`) on fixtures
+   * built before R-14B. Used to detect low-sample starters and reliever-
+   * as-starter situations; dampening defaults to "no penalty" when null
+   * or absent, so missing data never inflates confidence.
+   */
+  season_games_started?: number | null;
+  season_games_pitched?: number | null;
+  season_innings_pitched?: number | null;
 };
 
 export type BatterSnapshot = {
@@ -136,6 +147,14 @@ export type SharpSnapshot = {
   public_money_pct_home: number | null;
   public_betting_pct_over: number | null;
   public_money_pct_over: number | null;
+  /**
+   * R-14B — which side carries Pinnacle +EV. Null when no +EV row exists
+   * for that market; absent (`undefined`) on fixtures built before R-14B.
+   * Used by the dampening layer to detect "sharp +EV opposes model pick"
+   * (an OU-specific dampening flag).
+   */
+  ml_plus_ev_side?: "home" | "away" | null;
+  total_plus_ev_side?: "over" | "under" | null;
 };
 
 export type ActiveInjuries = {
@@ -246,6 +265,18 @@ export type AutoFactors = {
    *  display ("vs RHP" / "vs LHP"). */
   home_starter_throws?: "L" | "R" | null;
   away_starter_throws?: "L" | "R" | null;
+  /**
+   * R-14B — diagnostic fields for the dampening layer. Records the raw
+   * model confidence, the penalty applied, and which flags fired. Optional
+   * for backward compat with predictions written before R-14B; the model
+   * always populates them on new writes.
+   */
+  ml_raw_confidence?: number | null;
+  ml_dampening_penalty?: number;
+  ml_dampening_reasons?: string[];
+  ou_raw_confidence?: number | null;
+  ou_dampening_penalty?: number;
+  ou_dampening_reasons?: string[];
 };
 
 /**
@@ -620,14 +651,148 @@ export const LEAGUE_CONSTANTS_V1 = {
 } as const;
 
 /**
- * Per-stage confidence caps. Morning Card stays conservative
- * (preliminary). T-60 Locked Refresh permits higher confidence
- * (publish-quality).
+ * Phase R-14 — per-stage confidence cap configuration.
+ *
+ * Pre-R-14 we had a single `clamp(raw, 50, cap)` per stage, which
+ * meant any raw confidence above the cap (e.g., PIT @ HOU's 206.6
+ * ML on 2026-06-04) was indistinguishable from raw values just at
+ * the cap (KC @ MIN's 60.5). That flattening hid real model signal
+ * — a 5.9-run projected gap read as the same 60% as a 0.4-run gap.
+ *
+ * The new shape introduces a "soft cap" and a "hard cap" per
+ * stage, with a linear compression slope in between:
+ *
+ *   raw ≤ soft        → display = raw                  (unchanged)
+ *   soft < raw ≤ ...  → display = soft + (raw - soft) * compressionSlope
+ *   compressed > hard → display = hard                 (clamp)
+ *
+ * This preserves the existing behavior for thin-edge games (raw at
+ * or below the previous cap) while letting strong edges show
+ * visibly higher confidence — still bounded by the hard cap so we
+ * don't pretend a morning-draft pick is publish-quality.
+ *
+ * Defaults: compressionSlope = 0.20 (a doubling of raw above the
+ * soft cap adds ~20% of that surplus to display). Morning draft
+ * hard cap raised from 60 → 72 to capture realistic max edges;
+ * T-60 from 75 → 85 to match the higher conviction allowed once
+ * lineups confirm.
+ *
+ * `STAGE_CONFIDENCE_CAPS` (singular cap) is preserved as an alias
+ * to the HARD cap for backward compatibility with existing test
+ * assertions of the form `confidence <= STAGE_CONFIDENCE_CAPS[stage]`.
+ */
+export type StageConfidenceCaps = {
+  /** Pre-R-14 cap value. Raw at or below this is unchanged. */
+  soft: number;
+  /** Final value never exceeds this, even after compression. */
+  hard: number;
+  /** Linear slope applied to raw - soft. 0.20 = aggressive compression;
+   *  0.50 = mild. 0.20 chosen to give a slate range of ~18 points
+   *  spread on 2026-06-04 (52→70) instead of all-60 bunching. */
+  compressionSlope: number;
+};
+
+export const STAGE_CONFIDENCE_CAPS_V2: Record<ModelStage, StageConfidenceCaps> = {
+  // R-14B — hard caps lowered (72→68 morning, 85→82 locked) so the
+  // R-14B dampening layer can actually pull strong-edge games down. The
+  // soft caps and compression slope are unchanged.
+  morning_draft: { soft: 60, hard: 68, compressionSlope: 0.20 },
+  t60_locked: { soft: 75, hard: 82, compressionSlope: 0.20 },
+};
+
+/**
+ * Back-compat alias = `.hard` of STAGE_CONFIDENCE_CAPS_V2. Existing
+ * callers reading this constant get the new hard cap value (72 for
+ * morning_draft, 85 for t60_locked). Existing test assertions of
+ * `confidence <= STAGE_CONFIDENCE_CAPS[stage]` still hold because
+ * the model never emits a confidence above the hard cap.
  */
 export const STAGE_CONFIDENCE_CAPS: Record<ModelStage, number> = {
-  morning_draft: 60,
-  t60_locked: 75,
+  morning_draft: STAGE_CONFIDENCE_CAPS_V2.morning_draft.hard,
+  t60_locked: STAGE_CONFIDENCE_CAPS_V2.t60_locked.hard,
 };
+
+/**
+ * R-14 — apply soft-cap + linear-compression + hard-cap. Pure
+ * function; used by mlbAutoModelV1's ML and OU branches. NRFI uses
+ * its own zone-based cap (NRFI_CONFIDENCE_CAP) and is untouched.
+ */
+export function compressConfidence(raw: number, caps: StageConfidenceCaps): number {
+  if (raw <= caps.soft) return raw;
+  const compressed = caps.soft + (raw - caps.soft) * caps.compressionSlope;
+  return Math.min(compressed, caps.hard);
+}
+
+/**
+ * R-14B — confidence dampening flags. Each flag defaults to `false` when
+ * the underlying data is unavailable, so missing data never inflates the
+ * displayed number. `dampenRawConfidence` applies these BEFORE the
+ * soft/hard compression in `compressConfidence`, so the dampening can
+ * pull a strong raw value down below the hard cap.
+ */
+export type DampeningFlags = {
+  // ── Starter quality (ML only) ──
+  home_starter_low_gs: boolean;
+  away_starter_low_gs: boolean;
+  home_starter_low_ip: boolean;
+  away_starter_low_ip: boolean;
+  home_starter_reliever_as_starter: boolean;
+  away_starter_reliever_as_starter: boolean;
+  // ── Cross-market data quality ──
+  bullpen_fallback: boolean;
+  morning_unconfirmed: boolean;
+  // ── ML market context ──
+  public_smoke_aligned_with_pick: boolean;
+  no_ml_split_data: boolean;
+  partial_market_coverage: boolean;
+  // ── OU market context ──
+  sharp_plus_ev_opposes_ou: boolean;
+  no_total_split_data: boolean;
+};
+
+/**
+ * R-14B — applies per-flag additive penalties to raw confidence BEFORE
+ * compression. Returns the dampened raw plus the penalty + reason list
+ * for diagnostic output. Floor: dampened raw never drops below 50.
+ *
+ * The thin-OU-edge case ("ouDiff < 0.25 → should stay low") is handled
+ * naturally by the raw formula `50 + 8*ouDiff` (≤ 52), which is below
+ * every soft cap, so no explicit penalty is needed.
+ */
+export function dampenRawConfidence(
+  raw: number,
+  flags: DampeningFlags,
+  market: "ml" | "ou"
+): { dampened: number; penalty: number; reasons: string[] } {
+  let penalty = 0;
+  const reasons: string[] = [];
+  const add = (n: number, reason: string) => {
+    penalty += n;
+    reasons.push(`${reason}(-${n})`);
+  };
+
+  if (market === "ml") {
+    if (flags.home_starter_low_gs) add(6, "home_low_gs");
+    if (flags.away_starter_low_gs) add(6, "away_low_gs");
+    if (flags.home_starter_low_ip) add(4, "home_low_ip");
+    if (flags.away_starter_low_ip) add(4, "away_low_ip");
+    if (flags.home_starter_reliever_as_starter) add(4, "home_rp_as_sp");
+    if (flags.away_starter_reliever_as_starter) add(4, "away_rp_as_sp");
+    if (flags.bullpen_fallback) add(3, "bullpen_fallback");
+    if (flags.morning_unconfirmed) add(3, "morning_unconfirmed");
+    if (flags.public_smoke_aligned_with_pick) add(4, "public_smoke_aligned");
+    if (flags.no_ml_split_data) add(2, "no_ml_splits");
+    if (flags.partial_market_coverage) add(2, "partial_market");
+  } else {
+    if (flags.sharp_plus_ev_opposes_ou) add(6, "sharp_ev_opposes");
+    if (flags.bullpen_fallback) add(3, "bullpen_fallback");
+    if (flags.morning_unconfirmed) add(3, "morning_unconfirmed");
+    if (flags.no_total_split_data) add(2, "no_total_splits");
+  }
+
+  const dampened = Math.max(50, raw - penalty);
+  return { dampened, penalty, reasons };
+}
 
 /**
  * NRFI is capped lower than ML/OU because the first-inning data is
