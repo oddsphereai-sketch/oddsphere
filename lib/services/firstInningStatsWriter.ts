@@ -1,12 +1,17 @@
 /**
- * Phase 3.x.0d — first-inning persistence helpers.
+ * Phase 3.x.0d / 4.2.C.1.H-5 — first-inning persistence helpers.
  *
- * Two UPDATE-only writers:
- *   • persistMlbPersonId      — sets players.mlb_person_id with a defensive
- *                                refuse-to-overwrite check.
- *   • persistFirstInningStats — updates only the six first_inning_* columns
- *                                on the matching player_season_stats row;
- *                                never inserts a partial row.
+ * Two writers:
+ *   • persistMlbPersonId       — UPDATE-only on `players.mlb_person_id`,
+ *                                 with a defensive refuse-to-overwrite check.
+ *   • persistFirstInningStats  — UPSERT on `player_season_stats`. INSERTs
+ *                                 an FI-only row when one doesn't exist for
+ *                                 (player_id, season, season_type='regular')
+ *                                 yet, otherwise UPDATEs ONLY the six
+ *                                 first_inning_* columns + updated_at.
+ *                                 Non-FI columns (pitching_*, batting_*)
+ *                                 are preserved on UPDATE and left to
+ *                                 schema defaults (NULL) on INSERT.
  *
  * Both default to DRY-RUN (`{ write: false }`). The operator script gates
  * the `write: true` call behind FIRST_INNING_DB_WRITES_ENABLED=true plus
@@ -14,6 +19,11 @@
  *
  * The optional `client` argument is for testability — production callers
  * pass nothing and the canonical service-role client is used.
+ *
+ * `PersistResult.skipped_no_row` is retained in the union for backward
+ * compatibility but is no longer produced by persistFirstInningStats —
+ * the UPSERT path always succeeds (or errors). Callers handling that
+ * variant remain correct (the case is now dead but not wrong).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -101,7 +111,14 @@ export async function persistFirstInningStats(
   record: PitcherFirstInningStatsRecord,
   opts: WriterOpts
 ): Promise<PersistResult> {
-  const fiUpdate = {
+  // The natural-key columns must be in the payload so PostgREST's
+  // INSERT path (on conflict miss) has the values it needs. PostgREST's
+  // UPDATE clause only sets columns present in the payload, so non-FI
+  // BDL fields (pitching_*, batting_*) on an existing row are preserved.
+  const fiPayload = {
+    player_id: playerId,
+    season,
+    season_type: "regular",
     first_inning_era: record.first_inning_era,
     first_inning_starts: record.first_inning_starts,
     first_inning_runs_allowed: record.first_inning_runs_allowed,
@@ -114,14 +131,15 @@ export async function persistFirstInningStats(
   if (!opts.write) {
     log(
       opts,
-      `DRY-RUN: would UPDATE player_season_stats SET first_inning_* WHERE player_id=${playerId} season=${season} season_type=regular`
+      `DRY-RUN: would UPSERT player_season_stats (first_inning_* + updated_at) ON CONFLICT (player_id=${playerId}, season=${season}, season_type=regular)`
     );
     return {
       kind: "dry_run",
       intended_update: {
         table: "player_season_stats",
-        set: fiUpdate,
-        where: { player_id: playerId, season, season_type: "regular" },
+        op: "upsert",
+        payload: fiPayload,
+        on_conflict: "player_id,season,season_type",
       },
     };
   }
@@ -129,26 +147,16 @@ export async function persistFirstInningStats(
   const client = opts.client ?? defaultClient;
   const { data, error } = await client
     .from("player_season_stats")
-    .update(fiUpdate)
-    .eq("player_id", playerId)
-    .eq("season", season)
-    .eq("season_type", "regular")
+    .upsert(fiPayload, { onConflict: "player_id,season,season_type" })
     .select("id");
   if (error) {
     log(
       opts,
-      `update error on persistFirstInningStats player_id=${playerId} season=${season}: ${error.message}`
+      `upsert error on persistFirstInningStats player_id=${playerId} season=${season}: ${error.message}`
     );
     return { kind: "error", reason: error.message };
   }
   const rows = (data as unknown[] | null) ?? [];
-  if (rows.length === 0) {
-    log(
-      opts,
-      `no player_season_stats row for player_id=${playerId} season=${season} season_type=regular; skipping`
-    );
-    return { kind: "skipped_no_row" };
-  }
   return { kind: "updated", rows_affected: rows.length };
 }
 

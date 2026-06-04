@@ -17,9 +17,10 @@ import type { PitcherFirstInningStatsRecord } from "../lib/providers/real_api/_m
 
 type CallShape = {
   table: string;
-  op?: "select" | "update";
+  op?: "select" | "update" | "upsert";
   selectCols?: string;
   values?: Record<string, unknown>;
+  upsertOpts?: Record<string, unknown>;
   eqs: Array<[string, unknown]>;
   isSingle: boolean;
   awaited: boolean;
@@ -49,6 +50,12 @@ function makeMockClient(programmed: ProgrammedResult[]): MockClient {
       call.values = values;
       return builder;
     };
+    const upsert = (values: Record<string, unknown>, upsertOpts?: Record<string, unknown>) => {
+      call.op = "upsert";
+      call.values = values;
+      call.upsertOpts = upsertOpts;
+      return builder;
+    };
     const eq = (col: string, val: unknown) => {
       call.eqs.push([col, val]);
       return builder;
@@ -66,6 +73,7 @@ function makeMockClient(programmed: ProgrammedResult[]): MockClient {
     };
     builder.select = select;
     builder.update = update;
+    builder.upsert = upsert;
     builder.eq = eq;
     builder.single = single;
     builder.then = then;
@@ -107,7 +115,10 @@ const FI_COLUMNS = [
   "first_inning_whip",
 ];
 
-const ALLOWED_NON_FI_KEYS = ["updated_at"];
+// Natural-key columns must be in the upsert payload so PostgREST's
+// INSERT path has the data it needs on conflict-miss.
+const NATURAL_KEY_KEYS = ["player_id", "season", "season_type"];
+const ALLOWED_NON_FI_KEYS = ["updated_at", ...NATURAL_KEY_KEYS];
 
 async function main(): Promise<void> {
   // ── persistMlbPersonId ───────────────────────────────────────────────
@@ -231,16 +242,29 @@ async function main(): Promise<void> {
     check("[7a] persistFirstInningStats dry-run → dry_run kind", r.kind === "dry_run");
     check("[7b] persistFirstInningStats dry-run → zero client calls", mock.calls.length === 0);
     check(
-      "[7c] dry-run intended_update contains all 6 FI columns",
+      "[7c] dry-run intended_update.op === 'upsert'",
+      r.kind === "dry_run" && r.intended_update.op === "upsert"
+    );
+    check(
+      "[7d] dry-run intended_update.on_conflict === 'player_id,season,season_type'",
+      r.kind === "dry_run" && r.intended_update.on_conflict === "player_id,season,season_type"
+    );
+    check(
+      "[7e] dry-run payload contains all 6 FI columns",
       r.kind === "dry_run" &&
-        FI_COLUMNS.every((c) => c in (r.intended_update.set as Record<string, unknown>))
+        FI_COLUMNS.every((c) => c in (r.intended_update.payload as Record<string, unknown>))
+    );
+    check(
+      "[7f] dry-run payload contains natural-key columns",
+      r.kind === "dry_run" &&
+        NATURAL_KEY_KEYS.every((c) => c in (r.intended_update.payload as Record<string, unknown>))
     );
   }
 
-  // [8] Write — UPDATE succeeds, 1 row affected
+  // [8] Write — UPSERT succeeds, 1 row affected (UPDATE-existing path)
   {
     const mock = makeMockClient([
-      { data: [{ id: 999 }], error: null }, // UPDATE + .select() returns 1 row
+      { data: [{ id: 999 }], error: null }, // UPSERT + .select() returns 1 row
     ]);
     const r = await persistFirstInningStats(6272, 2025, FI_RECORD, {
       write: true,
@@ -253,52 +277,73 @@ async function main(): Promise<void> {
       r.kind === "updated" && r.rows_affected === 1
     );
     const call = mock.calls[0];
-    check("[8c] call is UPDATE on player_season_stats", call?.op === "update" && call?.table === "player_season_stats");
+    check("[8c] call is UPSERT on player_season_stats", call?.op === "upsert" && call?.table === "player_season_stats");
     check(
-      "[8d] UPDATE set keys are exactly the 6 FI columns + updated_at",
+      "[8d] UPSERT payload keys are exactly the 6 FI cols + updated_at + 3 natural-key cols",
       call?.values !== undefined &&
         Object.keys(call.values).sort().join(",") ===
           [...FI_COLUMNS, ...ALLOWED_NON_FI_KEYS].sort().join(",")
     );
     check(
-      "[8e] UPDATE never touches pitching_era / batting_obp / pitching_whip",
+      "[8e] UPSERT never includes pitching/batting BDL fields",
       call?.values !== undefined &&
         !("pitching_era" in call.values!) &&
+        !("pitching_whip" in call.values!) &&
+        !("pitching_ip" in call.values!) &&
         !("batting_obp" in call.values!) &&
-        !("pitching_whip" in call.values!)
+        !("batting_ab" in call.values!)
     );
     check(
-      "[8f] UPDATE has WHERE player_id=6272 AND season=2025 AND season_type=regular",
-      call?.eqs.length === 3 &&
-        call.eqs.some(([c, v]) => c === "player_id" && v === 6272) &&
-        call.eqs.some(([c, v]) => c === "season" && v === 2025) &&
-        call.eqs.some(([c, v]) => c === "season_type" && v === "regular")
+      "[8f] UPSERT onConflict target is 'player_id,season,season_type'",
+      call?.upsertOpts?.onConflict === "player_id,season,season_type"
     );
     check(
-      "[8g] UPDATE values mirror record fields (era=2.25)",
-      call?.values?.first_inning_era === 2.25
+      "[8g] UPSERT payload natural-key values: player_id=6272, season=2025, season_type='regular'",
+      call?.values?.player_id === 6272 &&
+        call?.values?.season === 2025 &&
+        call?.values?.season_type === "regular"
     );
     check(
-      "[8h] UPDATE values mirror record fields (starts=32)",
-      call?.values?.first_inning_starts === 32
+      "[8h] UPSERT payload mirrors record fields (era=2.25, starts=32, ip=32.0)",
+      call?.values?.first_inning_era === 2.25 &&
+        call?.values?.first_inning_starts === 32 &&
+        call?.values?.first_inning_innings_pitched === 32.0
     );
     check(
-      "[8i] UPDATE values mirror record fields (ip=32.0)",
-      call?.values?.first_inning_innings_pitched === 32.0
+      "[8i] UPSERT uses .eq() for nothing (key is in payload via onConflict, not WHERE)",
+      call?.eqs.length === 0
     );
   }
 
-  // [9] Write — 0 rows match → skipped_no_row
+  // [9] Write — INSERT path (missing row): PostgREST upsert returns the
+  // newly-inserted id; from the mock's perspective this is identical to
+  // the UPDATE path. Asserts that the writer returns "updated" and that
+  // the payload carries enough info for PostgREST to INSERT (natural-key
+  // columns present).
   {
     const mock = makeMockClient([
-      { data: [], error: null }, // UPDATE returns empty array (no rows matched)
+      { data: [{ id: 12345 }], error: null }, // UPSERT INSERT path
     ]);
-    const r = await persistFirstInningStats(99999, 2025, FI_RECORD, {
+    const r = await persistFirstInningStats(13771, 2025, FI_RECORD, {
       write: true,
       quiet: true,
       client: mock as never,
     });
-    check("[9] zero-match → skipped_no_row", r.kind === "skipped_no_row");
+    check("[9a] write success → updated (INSERT path)", r.kind === "updated");
+    check(
+      "[9b] rows_affected = 1 (insert produces 1 row in PostgREST return)",
+      r.kind === "updated" && r.rows_affected === 1
+    );
+    const call = mock.calls[0];
+    check("[9c] INSERT path uses upsert", call?.op === "upsert");
+    check(
+      "[9d] INSERT-path payload contains player_id=13771 (so PostgREST has the value)",
+      call?.values?.player_id === 13771
+    );
+    check(
+      "[9e] INSERT-path payload contains season + season_type",
+      call?.values?.season === 2025 && call?.values?.season_type === "regular"
+    );
   }
 
   // [10] Write — DB error → error
@@ -314,7 +359,7 @@ async function main(): Promise<void> {
     check("[10] db error → error kind", r.kind === "error");
   }
 
-  // [11] All-null FI record → still UPDATE-only with nulls (preserves
+  // [11] All-null FI record → still UPSERT with nulls (preserves
   // explicit "we tried and got nothing" — fallback path continues to work)
   {
     const mock = makeMockClient([
@@ -339,10 +384,15 @@ async function main(): Promise<void> {
     check("[11a] all-null record → write succeeds", r.kind === "updated");
     const call = mock.calls[0];
     check(
-      "[11b] all-null record UPDATE values still have all 6 FI keys (with null values)",
+      "[11b] all-null UPSERT payload still has all 6 FI keys (with null values)",
       call?.values !== undefined &&
         FI_COLUMNS.every((c) => c in call.values!) &&
         FI_COLUMNS.every((c) => call.values![c] === null)
+    );
+    check(
+      "[11c] all-null UPSERT still includes natural-key columns",
+      call?.values !== undefined &&
+        NATURAL_KEY_KEYS.every((c) => c in call.values!)
     );
   }
 
