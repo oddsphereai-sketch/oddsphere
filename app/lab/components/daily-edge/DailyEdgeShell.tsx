@@ -27,6 +27,10 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useDailyEdge } from "../../hooks/useDailyEdge";
+import {
+  buildEdgeStackRows,
+  marketSourceLabel,
+} from "../../lib/edgeStackRows";
 import type {
   DailyEdgeGameDto,
   MarketEdgeDto,
@@ -1108,79 +1112,11 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
 }
 
 function EdgeStack({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
-  type Row = { label: string; evidence: string; delta: string; tone: "emerald" | "amber" | "gray" };
-  const rows: Row[] = [];
-
-  // Model Edge
-  if (market === "total" && marketData.modelTotal !== null && marketData.marketTotal !== null) {
-    const diff = marketData.modelTotal - marketData.marketTotal;
-    const isOver = (marketData.pick ?? "").toUpperCase().startsWith("OVER");
-    const supports = (isOver && diff > 0) || (!isOver && diff < 0);
-    const mag = Math.abs(diff);
-    const tone: Row["tone"] = mag < 0.2 ? "gray" : supports ? "emerald" : "amber";
-    rows.push({
-      label: "Model Edge",
-      evidence: `Model ${marketData.modelTotal.toFixed(1)} vs market ${marketData.marketTotal.toFixed(1)}`,
-      delta: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} runs`,
-      tone,
-    });
-  } else if (marketData.marketFairProb !== null) {
-    const gap = (marketData.modelProb !== null ? marketData.modelProb - marketData.marketFairProb : 0) * 100;
-    rows.push({
-      label: "Model Edge",
-      evidence: `${(((marketData.modelProb ?? 0) * 100)).toFixed(0)}% vs market ${(marketData.marketFairProb * 100).toFixed(0)}%`,
-      delta: `${gap >= 0 ? "+" : ""}${gap.toFixed(1)}%`,
-      tone: gap >= 1 ? "emerald" : gap <= -1 ? "amber" : "gray",
-    });
-  } else {
-    rows.push({
-      label: "Model Edge",
-      evidence: `${(((marketData.modelProb ?? 0) * 100)).toFixed(0)}% · market unavailable`,
-      delta: "—",
-      tone: "gray",
-    });
-  }
-
-  // Market Value (EV)
-  if (marketData.pinnacleEvPct === null) {
-    rows.push({ label: "Market Value", evidence: "Sharper price check", delta: "unavailable", tone: "gray" });
-  } else {
-    const ev = marketData.pinnacleEvPct;
-    rows.push({
-      label: "Market Value",
-      evidence: "Sharper price check",
-      delta: `${ev >= 0 ? "+" : ""}${ev.toFixed(1)}%`,
-      tone: ev >= 0.3 ? "emerald" : ev <= -1 ? "amber" : "gray",
-    });
-  }
-
-  // Money vs Bets
-  if (marketData.moneyPct === null || marketData.betsPct === null) {
-    rows.push({ label: "Money vs Bets", evidence: "Public split", delta: "unavailable", tone: "gray" });
-  } else {
-    const gap = marketData.moneyPct - marketData.betsPct;
-    rows.push({
-      label: "Money vs Bets",
-      evidence: `Money ${marketData.moneyPct}% / Bets ${marketData.betsPct}%`,
-      delta: `${gap >= 0 ? "+" : ""}${gap}`,
-      tone: gap >= 3 ? "emerald" : gap <= -3 ? "amber" : "gray",
-    });
-  }
-
-  // Line Move
-  if (marketData.lineOpenAmerican === null || marketData.priceAmerican === null) {
-    rows.push({ label: "Line Move", evidence: "Open → Current", delta: "unavailable", tone: "gray" });
-  } else {
-    const dir = moveDirection(marketData.lineOpenAmerican, marketData.priceAmerican);
-    const arrow = dir === "toward" ? "↗" : dir === "against" ? "↘" : "→";
-    rows.push({
-      label: "Line Move",
-      evidence: `${formatAmerican(marketData.lineOpenAmerican)} → ${formatAmerican(marketData.priceAmerican)}`,
-      delta: arrow,
-      tone: dir === "toward" ? "emerald" : dir === "against" ? "amber" : "gray",
-    });
-  }
-
+  // R-16F-B — row construction lives in app/lab/lib/edgeStackRows.ts so
+  // the data shape can be unit-tested without a React renderer. This
+  // component only handles JSX layout + tone coloring.
+  const edgeMarket: "moneyline" | "total" | "first_inning" = market;
+  const rows = buildEdgeStackRows(edgeMarket, marketData);
   return (
     <div className="min-w-0">
       <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80 mb-1.5">
@@ -1253,17 +1189,10 @@ function ModelMarketTakeStrip({
     marketPct !== null
       ? `${Math.round(marketPct)}%`
       : "unavailable";
-  // R-16E — honest labeling for splits-consensus reads. When SharpAPI's
-  // /odds endpoint has no rows but /splits has both-sided American ML
-  // odds, the no-vig math runs but we label the read as "splits
-  // consensus" instead of pretending it's a real sportsbook price. The
-  // pinnacle-fair fallback retains its own honest label.
-  const sourceLabel =
-    quality === "splits_consensus"
-      ? "splits consensus"
-      : quality === "pinnacle_only"
-        ? "Pinnacle fair"
-        : source;
+  // R-16E + R-16F-B — honest labeling for splits-consensus reads.
+  // Shares the marketSourceLabel helper with EdgeStack so both
+  // sections always render the same human-facing source string.
+  const sourceLabel = marketSourceLabel(quality, source);
   const showGap = gap !== null;
   const gapTone: "neutral" | "positive" | "negative" =
     gap === null

@@ -185,7 +185,17 @@ function mapMarketType(raw: string | null): MarketType | null {
   if (v === "spread" || v === "spreads" || v === "runline" || v === "run_line") {
     return "spread";
   }
-  if (v === "first_inning_total" || v === "1st_inning_total") {
+  // R-16F-C — accept SharpAPI's live emission "1st_inning_total_runs"
+  // alongside the previously-recognized short forms. Kept consistent
+  // with SharpAPIOddsProvider.mapMarketType so signal/odds behavior
+  // stays in lock-step. /splits has no first-inning section so this
+  // currently doesn't fire on signal-provider paths, but the mapper
+  // must accept the same vocabulary the odds path does.
+  if (
+    v === "first_inning_total" ||
+    v === "1st_inning_total" ||
+    v === "1st_inning_total_runs"
+  ) {
     return "first_inning_total";
   }
   // Everything else (team_total, player props, alternate lines, F5,

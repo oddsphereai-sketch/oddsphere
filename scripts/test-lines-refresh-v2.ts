@@ -824,6 +824,121 @@ async function testV2PartialMarketReturn() {
   check("partial: 4 line records returned", out.records.length === 4);
 }
 
+async function testR16FCFirstInningTotalMapping() {
+  section("R-16F-C — 1st_inning_total_runs maps to first_inning_total");
+
+  // SharpAPI emits market_type = "1st_inning_total_runs" on /odds.
+  // Pre-R-16F-C the provider silently dropped these rows because the
+  // mapper only accepted the short forms. This test exercises the full
+  // provider path: stubbed /odds returns the FI rows, V2 produces
+  // LineRecords with the correct internal market_type + sides intact.
+  const splits = [splitsRow({ home: "Chicago Cubs", away: "Athletics" })];
+  const fiOver = {
+    sportsbook: "draftkings",
+    sport: "baseball",
+    league: "mlb",
+    market_type: "1st_inning_total_runs",
+    selection: "Over",
+    selection_type: "over",
+    is_main_line: true,
+    is_alternate_line: false,
+    is_live: false,
+    line: 0.5,
+    odds_american: 220,
+    odds_decimal: 3.2,
+    odds_probability: 0.31,
+    last_seen_at: `${DATE}T18:00:00Z`,
+  };
+  const fiUnder = {
+    ...fiOver,
+    selection: "Under",
+    selection_type: "under",
+    odds_american: -310,
+    odds_decimal: 1.32,
+    odds_probability: 0.76,
+  };
+  // Also include a real-game total row to confirm regular total mapping
+  // still works alongside the new FI mapping.
+  const fullTotalOver = {
+    ...fiOver,
+    market_type: "total_runs",
+    line: 8.5,
+    odds_american: -110,
+    odds_decimal: 1.91,
+    odds_probability: 0.524,
+  };
+  // Negative cases — F3/F5/3-way ML should NEVER fold into first_inning_total
+  const f3Total = { ...fiOver, market_type: "1st_3_innings_total_runs" };
+  const f5Total = { ...fiOver, market_type: "1st_5_innings_total_runs" };
+  const inning3wayMl = {
+    ...fiOver,
+    market_type: "1st_inning_moneyline_3-way",
+    selection_type: "home",
+  };
+
+  const stubClient = new StubSharpApiClient({
+    splits,
+    opportunitiesEv: [],
+    oddsByEventId: {
+      "mlb_chicagocubs_athletics_2026-06-04": [
+        fiOver,
+        fiUnder,
+        fullTotalOver,
+        f3Total,
+        f5Total,
+        inning3wayMl,
+      ],
+    },
+  });
+  const provider = new SharpAPIOddsProvider(
+    "ignored-key",
+    makeResolverFromMap({ "CHC|ATH": 1001 }),
+    { client: stubClient }
+  );
+  const out = await provider.getGameLinesV2(DATE, "mlb");
+
+  const fiRows = out.records.filter((r) => r.market_type === "first_inning_total");
+  check(
+    "R-16F-C: 1st_inning_total_runs → 2 first_inning_total rows (over + under)",
+    fiRows.length === 2,
+    `got ${fiRows.length} (records: ${out.records.map((r) => r.market_type).join(",")})`
+  );
+
+  const fiOverRow = fiRows.find((r) => r.side === "over");
+  const fiUnderRow = fiRows.find((r) => r.side === "under");
+  check(
+    "R-16F-C: over side preserved (odds_american=+220, YRFI-style price)",
+    fiOverRow?.side === "over" && fiOverRow?.odds_american === 220
+  );
+  check(
+    "R-16F-C: under side preserved (odds_american=-310, NRFI-style price)",
+    fiUnderRow?.side === "under" && fiUnderRow?.odds_american === -310
+  );
+  check(
+    "R-16F-C: FI line_value preserved at 0.5",
+    fiOverRow?.line_value === 0.5 && fiUnderRow?.line_value === 0.5
+  );
+  check(
+    "R-16F-C: regular total_runs row still maps to first_inning_total=NO (preserves total mapping)",
+    out.records.filter((r) => r.market_type === "total").length === 1
+  );
+
+  // Negative cases — these must NOT pollute first_inning_total
+  check(
+    "R-16F-C negative: 1st_3_innings_total_runs is dropped (not FI)",
+    !out.records.some((r) => r.market_type === "first_inning_total" && (r as { line_value: number | null }).line_value !== 0.5),
+    `FI rows: ${JSON.stringify(fiRows.map((r) => ({ market: r.market_type, line: r.line_value, side: r.side })))}`
+  );
+  check(
+    "R-16F-C negative: 1st_5_innings_total_runs is NOT in records as any mapped market",
+    !out.records.some((r) => (r as { market_type: string }).market_type === "1st_5_innings_total_runs")
+  );
+  check(
+    "R-16F-C negative: 1st_inning_moneyline_3-way is dropped (different market than NRFI/YRFI)",
+    out.records.filter((r) => r.market_type === "moneyline").length === 0
+  );
+}
+
 async function testMarketCoverageGate() {
   section("marketCoverageGate — read-only assessment");
 
@@ -858,6 +973,7 @@ async function main() {
   await testR16ERealOddsBeatsSplits();
   await testR16EPerMarketGranularity();
   await testR16ENoSynthWhenSplitsLacksFields();
+  await testR16FCFirstInningTotalMapping();
   await testMarketCoverageGate();
 
   console.log();

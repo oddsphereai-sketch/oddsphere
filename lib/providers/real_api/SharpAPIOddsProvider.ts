@@ -168,7 +168,22 @@ function mapMarketType(raw: string | null): MarketType | null {
   if (v === "spread" || v === "spreads" || v === "runline" || v === "run_line") {
     return "spread";
   }
-  if (v === "first_inning_total" || v === "1st_inning_total") {
+  // R-16F-C — accept SharpAPI's live emission "1st_inning_total_runs"
+  // alongside the previously-recognized short forms. SharpAPI's /odds
+  // endpoint returns the long form per audit; the short forms are kept
+  // for back-compat / defensive coverage.
+  //
+  // Intentionally NOT mapped to first_inning_total:
+  //   - "1st_inning_moneyline_3-way" — a 3-way ML at the END of the 1st
+  //     (home/away/tie). Different market than NRFI/YRFI.
+  //   - "1st_3_innings_total_runs" / "1st_5_innings_total_runs" — F3/F5
+  //     totals; different windows than first-inning. Would mis-grade
+  //     NRFI picks.
+  if (
+    v === "first_inning_total" ||
+    v === "1st_inning_total" ||
+    v === "1st_inning_total_runs"
+  ) {
     return "first_inning_total";
   }
   return null;
