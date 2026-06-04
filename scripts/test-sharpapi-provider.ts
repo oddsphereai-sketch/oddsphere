@@ -384,6 +384,229 @@ async function main() {
   }
 
   // ───────────────────────────────────────────────────────────
+  // Phase R-5 — buildSplitsOnlySignalsForRow (splits-anchored signals)
+  // ───────────────────────────────────────────────────────────
+  section("Phase R-5 — buildSplitsOnlySignalsForRow");
+
+  {
+    // Full-coverage /splits row: ML + Total + Spread all present with
+    // both sides populated. No /opportunities-anchored signals exist
+    // (excludedDedupeKeys empty), so the helper should emit 6 records:
+    // moneyline × 2, total × 2, spread × 2.
+    const splitsRow = {
+      event_id: "mlb_marlins_mets_2026-05-29",
+      league: "mlb",
+      home_team: "New York Mets",
+      away_team: "Miami Marlins",
+      fetched_at: "2026-05-29T15:00:00Z",
+      moneyline: {
+        bets_pct: { home: 0.68, away: 0.32 },
+        handle_pct: { home: 0.47, away: 0.53 },
+      },
+      spread: {
+        bets_pct: { home: 0.36, away: 0.64 },
+        handle_pct: { home: 0.96, away: 0.04 },
+      },
+      total: {
+        bets_pct: { over: 0.79, under: 0.21 },
+        handle_pct: { over: 0.74, under: 0.26 },
+      },
+    };
+    const out = SignalProviderTest.buildSplitsOnlySignalsForRow({
+      gameExternalId: 12345,
+      home: "NYM" as MlbTeamAbbrev,
+      away: "MIA" as MlbTeamAbbrev,
+      splitsRow,
+      fallbackComputedAt: "2026-05-29T16:00:00Z",
+      excludedDedupeKeys: new Set(),
+    });
+    check(
+      "[R-5] full-coverage /splits row emits 6 signal records (ML×2 + Total×2 + Spread×2)",
+      out.length === 6
+    );
+    const byMarket = (m: string) => out.filter((r) => r.signal.market_type === m);
+    check(
+      "[R-5] emits 2 moneyline records (home + away)",
+      byMarket("moneyline").length === 2
+    );
+    check(
+      "[R-5] emits 2 total records (over + under)",
+      byMarket("total").length === 2
+    );
+    check(
+      "[R-5] emits 2 spread records (home + away)",
+      byMarket("spread").length === 2
+    );
+    const mlHome = out.find(
+      (r) => r.signal.market_type === "moneyline" && r.signal.side === "home"
+    );
+    check(
+      "[R-5] ML home record carries public_betting_pct=68, public_money_pct=47",
+      mlHome !== undefined &&
+        mlHome.signal.public_betting_pct === 68 &&
+        mlHome.signal.public_money_pct === 47
+    );
+    check(
+      "[R-5] splits-only records have is_plus_ev=false and ev_pct=null",
+      out.every(
+        (r) => r.signal.is_plus_ev === false && r.signal.ev_pct === null
+      )
+    );
+    check(
+      "[R-5] splits-only records have pinnacle_fair_probability=null",
+      out.every((r) => r.signal.pinnacle_fair_probability === null)
+    );
+    check(
+      "[R-5] splits-only records have steam/RLM fields null/false",
+      out.every(
+        (r) =>
+          r.signal.has_steam_move === false &&
+          r.signal.has_reverse_line_movement === false &&
+          r.signal.steam_books_count === null &&
+          r.signal.rlm_direction === null
+      )
+    );
+    check(
+      "[R-5] splits-only records use the /splits row's fetched_at when present",
+      out.every((r) => r.signal.computed_at === "2026-05-29T15:00:00Z")
+    );
+    check(
+      "[R-5] every record carries the correct game_external_id + abbrev pair",
+      out.every(
+        (r) =>
+          r.signal.game_external_id === 12345 &&
+          r.home === ("NYM" as MlbTeamAbbrev) &&
+          r.away === ("MIA" as MlbTeamAbbrev)
+      )
+    );
+  }
+
+  {
+    // Excluded-keys dedupe: when /opportunities-anchored signals already
+    // cover ML home + Total over, the helper must skip those two and
+    // emit only the remaining 4 records.
+    const splitsRow = {
+      moneyline: {
+        bets_pct: { home: 0.55, away: 0.45 },
+        handle_pct: { home: 0.5, away: 0.5 },
+      },
+      total: {
+        bets_pct: { over: 0.6, under: 0.4 },
+        handle_pct: { over: 0.55, under: 0.45 },
+      },
+      spread: {
+        bets_pct: { home: 0.5, away: 0.5 },
+        handle_pct: { home: 0.5, away: 0.5 },
+      },
+    };
+    const excluded = new Set<string>([
+      `99::moneyline::home`,
+      `99::total::over`,
+    ]);
+    const out = SignalProviderTest.buildSplitsOnlySignalsForRow({
+      gameExternalId: 99,
+      home: "NYM" as MlbTeamAbbrev,
+      away: "MIA" as MlbTeamAbbrev,
+      splitsRow,
+      fallbackComputedAt: "2026-05-29T16:00:00Z",
+      excludedDedupeKeys: excluded,
+    });
+    check(
+      "[R-5] excluded-keys dedupe drops the already-anchored slots",
+      out.length === 4 &&
+        !out.some(
+          (r) =>
+            (r.signal.market_type === "moneyline" && r.signal.side === "home") ||
+            (r.signal.market_type === "total" && r.signal.side === "over")
+        )
+    );
+  }
+
+  {
+    // Partial /splits row: only the total market is present. Helper
+    // should emit exactly 2 records (over + under) and skip ML/spread.
+    const splitsRow = {
+      total: {
+        bets_pct: { over: 0.65, under: 0.35 },
+        handle_pct: { over: 0.5, under: 0.5 },
+      },
+    };
+    const out = SignalProviderTest.buildSplitsOnlySignalsForRow({
+      gameExternalId: 7,
+      home: "NYM" as MlbTeamAbbrev,
+      away: "MIA" as MlbTeamAbbrev,
+      splitsRow,
+      fallbackComputedAt: "2026-05-29T16:00:00Z",
+      excludedDedupeKeys: new Set(),
+    });
+    check(
+      "[R-5] partial /splits row (total only) emits only the present markets",
+      out.length === 2 && out.every((r) => r.signal.market_type === "total")
+    );
+  }
+
+  {
+    // Empty /splits row: no markets populated → no records emitted.
+    const out = SignalProviderTest.buildSplitsOnlySignalsForRow({
+      gameExternalId: 7,
+      home: "NYM" as MlbTeamAbbrev,
+      away: "MIA" as MlbTeamAbbrev,
+      splitsRow: { home_team: "x", away_team: "y" },
+      fallbackComputedAt: "2026-05-29T16:00:00Z",
+      excludedDedupeKeys: new Set(),
+    });
+    check("[R-5] empty /splits row emits zero records", out.length === 0);
+  }
+
+  {
+    // Side-only data: one side has handle_pct, the other has nothing.
+    // Helper should still emit ONE record (for the populated side).
+    const splitsRow = {
+      moneyline: {
+        handle_pct: { home: 0.7 },
+      },
+    };
+    const out = SignalProviderTest.buildSplitsOnlySignalsForRow({
+      gameExternalId: 5,
+      home: "NYM" as MlbTeamAbbrev,
+      away: "MIA" as MlbTeamAbbrev,
+      splitsRow,
+      fallbackComputedAt: "2026-05-29T16:00:00Z",
+      excludedDedupeKeys: new Set(),
+    });
+    check(
+      "[R-5] one-sided /splits data emits the populated side only",
+      out.length === 1 &&
+        out[0]!.signal.side === "home" &&
+        out[0]!.signal.public_money_pct === 70 &&
+        out[0]!.signal.public_betting_pct === null
+    );
+  }
+
+  {
+    // fetched_at fallback — when /splits row has no fetched_at, the
+    // helper uses the provided fallbackComputedAt.
+    const splitsRow = {
+      moneyline: {
+        bets_pct: { home: 0.5, away: 0.5 },
+        handle_pct: { home: 0.5, away: 0.5 },
+      },
+    };
+    const out = SignalProviderTest.buildSplitsOnlySignalsForRow({
+      gameExternalId: 5,
+      home: "NYM" as MlbTeamAbbrev,
+      away: "MIA" as MlbTeamAbbrev,
+      splitsRow,
+      fallbackComputedAt: "2026-05-29T16:00:00Z",
+      excludedDedupeKeys: new Set(),
+    });
+    check(
+      "[R-5] fallback computed_at used when /splits row has no fetched_at",
+      out.every((r) => r.signal.computed_at === "2026-05-29T16:00:00Z")
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────
   // SharpAPIOddsProvider
   // ───────────────────────────────────────────────────────────
   section("SharpAPIOddsProvider");

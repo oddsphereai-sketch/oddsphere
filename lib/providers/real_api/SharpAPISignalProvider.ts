@@ -385,6 +385,85 @@ type MappedSignal = {
 };
 
 /**
+ * Phase 4.2.C.1.R-5 — pure helper that emits 0..6 splits-only
+ * SharpSignalRecords for a single (game, /splits row) pair.
+ *
+ * Iterates the three game-level markets (moneyline + total + spread)
+ * × two sides each; for each (market, side) pair where /splits carries
+ * a non-null bets_pct OR handle_pct, emits a sharp_signals record that
+ * carries ONLY the public-betting fields. EV / steam / RLM / Pinnacle
+ * fair-probability fields are explicitly null because /splits does not
+ * provide them — those are sourced from /opportunities/* and would
+ * have already created a signal row via the existing anchor flow.
+ *
+ * Why this exists (R-5 audit finding): SharpAPI's /splits returns full
+ * public-betting data per game/market regardless of whether the same
+ * game has a +EV opportunity. Pre-R-5 the merge step only patched
+ * EXISTING /opportunities-anchored rows, so when no opportunity row
+ * existed for ML or spread we dropped all the public-betting data.
+ * That blocked `public_smoke` market_signal detection on the majority
+ * of slate games.
+ *
+ * Caller is responsible for resolving the game_external_id and for
+ * de-duplicating against signals already produced by the
+ * /opportunities/* pass (use `buildDedupeKey` + the caller's `seen` map).
+ *
+ * Pure / testable / no I/O. Unit-tested in test-sharpapi-provider.ts.
+ */
+function buildSplitsOnlySignalsForRow(opts: {
+  gameExternalId: number;
+  home: MlbTeamAbbrev;
+  away: MlbTeamAbbrev;
+  splitsRow: RawSplitsRow;
+  fallbackComputedAt: string;
+  excludedDedupeKeys: Set<string>;
+}): MappedSignal[] {
+  const { gameExternalId, home, away, splitsRow, fallbackComputedAt, excludedDedupeKeys } = opts;
+  const out: MappedSignal[] = [];
+  const computedAt = asStringOrNull(splitsRow.fetched_at) ?? fallbackComputedAt;
+
+  // (market, sides) pairs covered by /splits. first_inning_total is
+  // intentionally excluded — /splits has no first-inning section.
+  const markets: ReadonlyArray<{ key: MarketType; sides: ReadonlyArray<Side> }> = [
+    { key: "moneyline", sides: ["home", "away"] },
+    { key: "total", sides: ["over", "under"] },
+    { key: "spread", sides: ["home", "away"] },
+  ];
+
+  for (const { key: market, sides } of markets) {
+    for (const side of sides) {
+      const dedupeKey = buildDedupeKey(gameExternalId, market, side);
+      if (excludedDedupeKeys.has(dedupeKey)) continue;
+      const { betting, money } = publicPctsFromSplits(market, side, splitsRow);
+      if (betting === null && money === null) continue;
+      out.push({
+        signal: {
+          game_external_id: gameExternalId,
+          market_type: market,
+          side,
+          pinnacle_fair_probability: null,
+          is_plus_ev: false,
+          ev_pct: null,
+          has_steam_move: false,
+          steam_detected_at: null,
+          steam_books_count: null,
+          has_reverse_line_movement: false,
+          rlm_direction: null,
+          public_betting_pct: betting,
+          public_money_pct: money,
+          signal_strength: null,
+          signal_summary: null,
+          computed_at: computedAt,
+        },
+        home,
+        away,
+      });
+    }
+  }
+  return out;
+}
+
+/**
  * Maps a /opportunities/* row to a SharpSignalRecord. Returns null when
  * the row can't be confidently mapped (e.g., team unresolved, market
  * type unsupported).
@@ -641,6 +720,49 @@ export class SharpAPISignalProvider implements ISharpSignalProvider {
         if (betting !== null) entry.signal.public_betting_pct = betting;
         if (money !== null) entry.signal.public_money_pct = money;
       }
+
+      // Phase 4.2.C.1.R-5 — splits-anchored second pass.
+      //
+      // For every game/market/side in /splits that does NOT already have
+      // a signal row from /opportunities/*, create one carrying only the
+      // public-betting fields. This unblocks `public_smoke` detection on
+      // games where SharpAPI surfaced no +EV opportunity but the public
+      // is heavily on one side — the audit found ML coverage at 0%
+      // pre-R-5 even though /splits returned full ML public_betting_pct
+      // / public_money_pct data for every game.
+      const existingDedupeKeys = new Set(seen.keys());
+      for (const [pairKey, splitsRow] of splitsByPair.entries()) {
+        const [homeStr, awayStr] = pairKey.split("|");
+        if (homeStr === undefined || awayStr === undefined) continue;
+        // The buildSplitsMap keys are MlbTeamAbbrev values produced by
+        // normalizeMlbTeamName — safe to cast back.
+        const home = homeStr as MlbTeamAbbrev;
+        const away = awayStr as MlbTeamAbbrev;
+        const gameExtId = await this.resolveGame(sportKey, date, home, away);
+        if (gameExtId === null) continue;
+        if (gameExternalId !== undefined && gameExtId !== gameExternalId) continue;
+        const splitsOnly = buildSplitsOnlySignalsForRow({
+          gameExternalId: gameExtId,
+          home,
+          away,
+          splitsRow,
+          fallbackComputedAt,
+          excludedDedupeKeys: existingDedupeKeys,
+        });
+        for (const mapped of splitsOnly) {
+          const key = buildDedupeKey(
+            mapped.signal.game_external_id,
+            mapped.signal.market_type,
+            mapped.signal.side
+          );
+          // Belt-and-suspenders: the helper already filtered against
+          // excludedDedupeKeys, but a duplicate in `splitsByPair` (same
+          // pair appearing twice) could still produce a collision. Skip
+          // any that slip through.
+          if (seen.has(key)) continue;
+          seen.set(key, mapped);
+        }
+      }
     } else {
       console.warn(
         `[SharpAPISignalProvider] call cap (${MAX_CALLS_PER_INVOCATION}) reached — /splits merge skipped, public_betting_pct / public_money_pct stay null`
@@ -661,5 +783,6 @@ export const __TEST__ = {
   stripEventBucketSuffix,
   buildSplitsMap,
   publicPctsFromSplits,
+  buildSplitsOnlySignalsForRow,
   extractSlateDateFromEventId,
 };
