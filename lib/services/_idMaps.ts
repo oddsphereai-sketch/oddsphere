@@ -28,7 +28,13 @@ export async function loadTeamIdMap(
 export async function loadPlayerIdMap(
   sport?: Sport
 ): Promise<Map<number, number>> {
-  let q = supabase.from("players").select("id, external_id");
+  // Phase 4.2.C.1.H-0: external_id is nullable for MLB-Stats-only rows;
+  // skip them — this map is keyed by BDL external_id and a null key would
+  // be meaningless to every caller.
+  let q = supabase
+    .from("players")
+    .select("id, external_id")
+    .not("external_id", "is", null);
   if (sport !== undefined) q = q.eq("sport", sport);
   const { data, error } = await q;
   if (error) throw new Error(`loadPlayerIdMap failed: ${error.message}`);
@@ -45,9 +51,12 @@ export type PlayerMetadata = { id: number; external_id: number; is_pitcher: bool
 export async function loadPlayerMetadata(
   sport?: Sport
 ): Promise<Map<number, PlayerMetadata>> {
+  // Phase 4.2.C.1.H-0: skip MLB-Stats-only rows (external_id null) — same
+  // rationale as loadPlayerIdMap; the map is keyed by BDL external_id.
   let q = supabase
     .from("players")
-    .select("id, external_id, is_pitcher, team_id");
+    .select("id, external_id, is_pitcher, team_id")
+    .not("external_id", "is", null);
   if (sport !== undefined) q = q.eq("sport", sport);
   const { data, error } = await q;
   if (error) throw new Error(`loadPlayerMetadata failed: ${error.message}`);

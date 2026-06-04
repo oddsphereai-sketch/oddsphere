@@ -8,7 +8,12 @@ export type ThrowsHand = "L" | "R";
 /** Mirrors the `players` table. */
 export type Player = {
   id: number;
-  external_id: number;
+  /**
+   * BallDontLie player id. NULL for MLB-Stats-only players ingested by
+   * the missing-pitcher operator (Phase 4.2.C.1.H-0 relaxed the DB
+   * NOT NULL constraint).
+   */
+  external_id: number | null;
   sport: Sport;
   team_id: number | null;
   first_name: string;

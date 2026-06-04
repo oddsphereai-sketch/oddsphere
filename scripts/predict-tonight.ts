@@ -80,8 +80,10 @@ async function loadSlate(): Promise<GameRow[]> {
 }
 
 async function loadPlayerIdMap(): Promise<Map<number, number>> {
+  // Phase 4.2.C.1.H-0: external_id is nullable for MLB-Stats-only rows;
+  // skip them — this script's map is keyed by BDL external_id.
   const players = await ensureOrThrow(
-    supabase.from("players").select("id, external_id")
+    supabase.from("players").select("id, external_id").not("external_id", "is", null)
   );
   return new Map<number, number>(
     (players as { id: number; external_id: number }[]).map((p) => [
@@ -326,6 +328,9 @@ async function main() {
     const batterSplits = isPitcherMkt ? [] : await getSplits(playerExtId);
     const batterPitchStats = isPitcherMkt ? [] : await getHitterPitch(playerExtId);
 
+    // Phase 4.2.C.1.H-0: external_id is nullable for MLB-Stats-only
+    // pitchers (BDL doesn't know them yet). Skip the prop in that case.
+    if (pitcher.external_id === null) { skipped++; continue; }
     const pitcherStats = await getSeasonStats(pitcher.external_id);
     const pitcherPitchStats = await getPitcherPitch(pitcher.external_id);
 

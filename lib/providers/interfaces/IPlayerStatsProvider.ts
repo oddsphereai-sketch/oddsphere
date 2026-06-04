@@ -31,9 +31,16 @@ import type { PlayerInjury } from "../../types/domain/Lineup";
 /** Player insert record. Swaps team_id for team_external_id. */
 export type StatsPlayerRecord = Omit<
   Player,
-  "id" | "team_id" | "created_at" | "updated_at"
+  "id" | "team_id" | "created_at" | "updated_at" | "external_id"
 > & {
   team_external_id: number | null;
+  /**
+   * Always non-null in a stats-provider record — the BDL stats provider
+   * keys by BDL player id, so any row it emits must have one. (Phase
+   * 4.2.C.1.H-0 made `Player.external_id` nullable for MLB-Stats-only
+   * rows, but stats-provider records never carry those.)
+   */
+  external_id: number;
 };
 
 /** One row per player in a game's lineup. */

@@ -277,6 +277,10 @@ export const predictionService = {
         pitcher = oppPlayer;
       }
 
+      // Phase 4.2.C.1.H-0: external_id is nullable for MLB-Stats-only
+      // pitchers (BDL doesn't know them yet). BDL season-stats queries
+      // would return null for those — skip the prop.
+      if (pitcher.external_id === null) { skipped++; continue; }
       const batterStats = isPitcherMkt ? [] : await getSeasons(subjectExtId);
       const batterSplits = isPitcherMkt ? [] : await getSplits(subjectExtId);
       const batterPitchStats = isPitcherMkt ? [] : await getHitterPitch(subjectExtId);
