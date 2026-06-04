@@ -214,6 +214,166 @@ function emptyRecord(
   };
 }
 
+/**
+ * Phase 4.2.C.1.R-11 — season-aggregate pitching stats shape.
+ *
+ * Sourced from MLB Stats API `/people/{id}/stats?stats=season&group=pitching`.
+ * Unlike the first-inning variant which uses statSplits + sitCodes=i01,
+ * this one returns the full season aggregate across all innings.
+ *
+ * All numeric fields are nullable — when MLB Stats returns no row for
+ * the requested season (e.g., minor leagues, pre-debut, etc.) the
+ * function emits an "empty" record with every field null. Callers
+ * decide whether to write the empty row or skip it.
+ *
+ * `raw_source` lets downstream loggers attribute the row to its origin.
+ */
+export type PitcherSeasonStatsRecord = {
+  mlb_person_id: number;
+  season: number;
+  /** GamesPlayed from the stat block. Maps to schema's `pitching_gp`. */
+  games_played: number | null;
+  /** GamesStarted. Maps to `pitching_gs`. */
+  games_started: number | null;
+  wins: number | null;
+  losses: number | null;
+  /** ERA from MLB Stats. Maps to `pitching_era` DECIMAL(5,2). */
+  era: number | null;
+  /** WHIP from MLB Stats. Maps to `pitching_whip` DECIMAL(5,3). */
+  whip: number | null;
+  /** Innings pitched as a true decimal (X.1 → X+1/3, X.2 → X+2/3
+   * parsed via `parseBaseballInningsPitched`). Maps to `pitching_ip`
+   * DECIMAL(6,3). */
+  innings_pitched: number | null;
+  hits_allowed: number | null;
+  earned_runs: number | null;
+  home_runs_allowed: number | null;
+  walks: number | null;
+  strikeouts: number | null;
+  /** K/9 either as returned by MLB Stats (`strikeoutsPer9Inn`) or
+   * computed as `strikeouts * 9 / innings_pitched` when IP > 0.
+   * Maps to `pitching_k_per_9` DECIMAL(5,2). Null when uncomputable. */
+  strikeouts_per_9: number | null;
+  /** Saves + holds — usually 0 for starters but included for relief
+   * usage. Map to `pitching_sv` / `pitching_hld`. */
+  saves: number | null;
+  holds: number | null;
+  raw_source: "mlb_stats_api" | "empty";
+};
+
+function emptySeasonRecord(personId: number, season: number): PitcherSeasonStatsRecord {
+  return {
+    mlb_person_id: personId,
+    season,
+    games_played: null,
+    games_started: null,
+    wins: null,
+    losses: null,
+    era: null,
+    whip: null,
+    innings_pitched: null,
+    hits_allowed: null,
+    earned_runs: null,
+    home_runs_allowed: null,
+    walks: null,
+    strikeouts: null,
+    strikeouts_per_9: null,
+    saves: null,
+    holds: null,
+    raw_source: "empty",
+  };
+}
+
+/**
+ * Fetch season-aggregate pitching stats for a single MLB person ID.
+ *
+ * Returns a single record by picking the LAST split (most recent team
+ * — MLB Stats returns one split per team when a pitcher was traded
+ * mid-season; the last split is the current team). Sum-across-teams
+ * isn't needed here: in V1 the model reads season ERA / WHIP per
+ * starter and a player's current-team aggregate is what matters for
+ * tonight's prediction. A future phase can aggregate cross-team if
+ * traded pitchers' season-level stats need to combine.
+ *
+ * Behavior on missing data is identical to the FI helper:
+ *   - Endpoint OK but no stats block → empty record (caller skips or
+ *     writes empty)
+ *   - Network / non-200 / parse errors → null (caller logs + skips)
+ *
+ * Pure / no DB I/O. Used by `seasonPitchingStatsWriter` and the
+ * `backfill-season-pitching-stats` operator.
+ */
+export async function getPitcherSeasonStats(
+  personId: number,
+  season: number,
+  opts?: Opts
+): Promise<PitcherSeasonStatsRecord | null> {
+  const url =
+    `${BASE_URL}/people/${personId}/stats?stats=season` +
+    `&group=pitching&season=${season}&sportId=1`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: HEADERS });
+  } catch {
+    log(opts, "network error on /people/{id}/stats?stats=season");
+    return null;
+  }
+  if (!res.ok) {
+    log(opts, `non-200 on /people/{id}/stats?stats=season: HTTP ${res.status}`);
+    return null;
+  }
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    log(opts, "JSON parse error on /people/{id}/stats?stats=season");
+    return null;
+  }
+
+  const stats = (body as { stats?: unknown[] })?.stats;
+  if (!Array.isArray(stats) || stats.length === 0) {
+    return emptySeasonRecord(personId, season);
+  }
+  const block = stats[0] as Record<string, unknown>;
+  const splits = block.splits;
+  if (!Array.isArray(splits) || splits.length === 0) {
+    return emptySeasonRecord(personId, season);
+  }
+  // Pick the LATEST split (current team after any trade).
+  const split = splits[splits.length - 1] as Record<string, unknown>;
+  const stat = (split as { stat?: Record<string, unknown> })?.stat;
+  if (!stat) return emptySeasonRecord(personId, season);
+
+  const ip = parseBaseballInningsPitched(stat.inningsPitched);
+  const k = parseIntSafe(stat.strikeOuts);
+  // Prefer MLB Stats' own K/9 when present; fall back to computed when IP > 0
+  let k9 = parseFloatSafe(stat.strikeoutsPer9Inn);
+  if (k9 === null && k !== null && ip !== null && ip > 0) {
+    k9 = (k * 9) / ip;
+  }
+  return {
+    mlb_person_id: personId,
+    season,
+    games_played: parseIntSafe(stat.gamesPlayed),
+    games_started: parseIntSafe(stat.gamesStarted),
+    wins: parseIntSafe(stat.wins),
+    losses: parseIntSafe(stat.losses),
+    era: parseFloatSafe(stat.era),
+    whip: parseFloatSafe(stat.whip),
+    innings_pitched: ip,
+    hits_allowed: parseIntSafe(stat.hits),
+    earned_runs: parseIntSafe(stat.earnedRuns),
+    home_runs_allowed: parseIntSafe(stat.homeRuns),
+    walks: parseIntSafe(stat.baseOnBalls),
+    strikeouts: k,
+    strikeouts_per_9: k9,
+    saves: parseIntSafe(stat.saves),
+    holds: parseIntSafe(stat.holds),
+    raw_source: "mlb_stats_api",
+  };
+}
+
 export async function getPitcherFirstInningStats(
   personId: number,
   season: number,
