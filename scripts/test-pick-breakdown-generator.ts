@@ -1219,6 +1219,280 @@ async function main(): Promise<void> {
     );
   }
 
+  // ───────────────────────────────────────────────────────────────
+  // Phase R-12 — full-game lead (ML/OU decisive overrides NRFI lead)
+  // ───────────────────────────────────────────────────────────────
+  console.log("\n━━━ R-12: ML/OU decisive overrides FI-only lead ━━━");
+
+  // R-12.1 — ML decisive: large projected score gap, NRFI still toss-up.
+  //         Models the PIT @ HOU shape after R-11.
+  {
+    const o = output({
+      predicted_home_score: 9.4,
+      predicted_away_score: 3.5,
+      predicted_total: 12.9,
+      predicted_ml_winner: "home",
+      ml_confidence: 60,
+      predicted_ou_side: "over",
+      ou_confidence: 60,
+      predicted_nrfi: null,
+      nrfi_confidence: 52,
+      sport_specific: {
+        ...output().sport_specific,
+        nrfi_decision_kind: "toss_up",
+        nrfi_threshold_zone: "toss_up",
+        nrfi_reason_codes: ["first_inning_data_used"],
+        held: false,
+        listed_line: 8.5,
+      } as AutoModelOutput["sport_specific"],
+    });
+    const r = generatePickBreakdown(o, ctx({ home_pitcher_name: "Kai-Wei Teng", away_pitcher_name: "Jared Jones", away_season_era: 10.38 }));
+    check(
+      "[R-12] ML decisive (5.9-run gap) overrides FI toss-up framing",
+      !/Early-inning edge is thin/.test(r.model_breakdown)
+    );
+    check(
+      "[R-12] ML decisive mentions favored starter by name",
+      /Kai-Wei Teng/.test(r.model_breakdown)
+    );
+    check(
+      "[R-12] ML decisive mentions underdog starter by name",
+      /Jared Jones/.test(r.model_breakdown)
+    );
+    check(
+      "[R-12] ML decisive surfaces sizable-gap phrasing for >=3 run gap",
+      /sizable run-prevention edge/.test(r.model_breakdown)
+    );
+    check(
+      "[R-12] ML decisive secondary clause mentions underdog ERA when extreme",
+      /10\.38 ERA/.test(r.model_breakdown)
+    );
+  }
+
+  // R-12.2 — ML decisive in the 2.0–3.0 gap band: medium phrasing.
+  {
+    const o = output({
+      predicted_home_score: 5.3,
+      predicted_away_score: 3.3,
+      predicted_total: 8.6,
+      predicted_ml_winner: "home",
+      ml_confidence: 60,
+      predicted_ou_side: "under",
+      ou_confidence: 52,
+      sport_specific: {
+        ...output().sport_specific,
+        nrfi_decision_kind: "toss_up",
+        nrfi_reason_codes: ["first_inning_data_used"],
+        held: false,
+        listed_line: 8.5,
+      } as AutoModelOutput["sport_specific"],
+    });
+    const r = generatePickBreakdown(o, ctx({ home_pitcher_name: "Zack Wheeler", away_pitcher_name: "Lucas Giolito" }));
+    check(
+      "[R-12] ML decisive (2.0-run gap) uses 'projects to outpitch' phrasing",
+      /projects to outpitch/.test(r.model_breakdown)
+    );
+    check(
+      "[R-12] medium gap does NOT surface 'sizable' wording",
+      !/sizable/.test(r.model_breakdown)
+    );
+  }
+
+  // R-12.3 — Small ML edge (>=1.0 but <2.0): small-gap phrasing.
+  {
+    const o = output({
+      predicted_home_score: 5.2,
+      predicted_away_score: 3.7,
+      predicted_total: 8.9,
+      predicted_ml_winner: "home",
+      ml_confidence: 60,
+      predicted_ou_side: "under",
+      ou_confidence: 50,
+      sport_specific: {
+        ...output().sport_specific,
+        nrfi_decision_kind: "yrfi",
+        nrfi_reason_codes: [],
+        held: false,
+      } as AutoModelOutput["sport_specific"],
+    });
+    const r = generatePickBreakdown(o, ctx({ home_pitcher_name: "Justin Wrobleski", away_pitcher_name: "Ryne Nelson" }));
+    check(
+      "[R-12] small ML edge (1.5 gap) uses 'small starter edge' phrasing",
+      /small starter edge/.test(r.model_breakdown)
+    );
+    check(
+      "[R-12] ML decisive overrides even a decisive YRFI NRFI lead",
+      !/struggled in early innings/.test(r.model_breakdown)
+    );
+  }
+
+  // R-12.4 — Below-ML-threshold gap, O/U decisive instead.
+  //         Models the BAL @ BOS shape.
+  {
+    const o = output({
+      predicted_home_score: 7.0,
+      predicted_away_score: 6.1,
+      predicted_total: 13.1,
+      predicted_ml_winner: "home",
+      ml_confidence: 60,
+      predicted_ou_side: "over",
+      ou_confidence: 60,
+      sport_specific: {
+        ...output().sport_specific,
+        nrfi_decision_kind: "yrfi",
+        nrfi_reason_codes: [],
+        held: false,
+        listed_line: 10.5,
+      } as AutoModelOutput["sport_specific"],
+    });
+    const r = generatePickBreakdown(o, ctx({}));
+    check(
+      "[R-12] when ML gap (<1.0) but OU gap (>1.0) → OU decisive lead",
+      /total runs/.test(r.model_breakdown) && /listed/.test(r.model_breakdown)
+    );
+    check(
+      "[R-12] OU over decisive lead reads 'above the listed'",
+      /above the listed/.test(r.model_breakdown)
+    );
+    check(
+      "[R-12] OU decisive lead does NOT fall into FI toss-up framing",
+      !/Early-inning edge is thin/.test(r.model_breakdown)
+    );
+  }
+
+  // R-12.5 — OU decisive under.
+  {
+    const o = output({
+      predicted_home_score: 3.0,
+      predicted_away_score: 3.8,
+      predicted_total: 6.8,
+      predicted_ml_winner: "away",
+      ml_confidence: 52,
+      predicted_ou_side: "under",
+      ou_confidence: 60,
+      sport_specific: {
+        ...output().sport_specific,
+        nrfi_decision_kind: "toss_up",
+        nrfi_reason_codes: ["first_inning_data_used"],
+        held: false,
+        listed_line: 8.5,
+      } as AutoModelOutput["sport_specific"],
+    });
+    const r = generatePickBreakdown(o, ctx({}));
+    check(
+      "[R-12] OU decisive under reads 'under the listed'",
+      /under the listed/.test(r.model_breakdown)
+    );
+  }
+
+  // R-12.6 — Tight ML + no listed line + NRFI toss-up → legacy FI lead.
+  //         Verifies R-12 does NOT change behavior when no full-game
+  //         signal is decisive. Models KC @ MIN today (runGap 0.4,
+  //         no decisive OU signal because listed_line lacks a big gap).
+  {
+    const o = output({
+      predicted_home_score: 4.5,
+      predicted_away_score: 4.1,
+      predicted_total: 8.6,
+      predicted_ml_winner: "away",
+      ml_confidence: 60,
+      predicted_ou_side: "under",
+      ou_confidence: 53,
+      sport_specific: {
+        ...output().sport_specific,
+        nrfi_decision_kind: "toss_up",
+        nrfi_reason_codes: ["first_inning_data_used"],
+        held: false,
+        listed_line: 9.0,
+      } as AutoModelOutput["sport_specific"],
+    });
+    const r = generatePickBreakdown(o, ctx({}));
+    check(
+      "[R-12] when no full-game signal is decisive → legacy FI toss-up framing preserved",
+      /Early-inning edge is thin/.test(r.model_breakdown)
+    );
+  }
+
+  // R-12.7 — Held still routes through buildHeldLead (R-12 doesn't
+  //          override held).
+  {
+    const o = output({
+      predicted_home_score: 4.5,
+      predicted_away_score: 3.0,
+      predicted_ml_winner: null,
+      ml_confidence: null,
+      predicted_ou_side: null,
+      ou_confidence: null,
+      predicted_nrfi: null,
+      nrfi_confidence: null,
+      sport_specific: {
+        ...output().sport_specific,
+        held: true,
+        nrfi_decision_kind: "held",
+        nrfi_hold_reason: "missing_starter_nrfi",
+        nrfi_reason_codes: ["missing_starter"],
+      } as AutoModelOutput["sport_specific"],
+    });
+    const r = generatePickBreakdown(o, ctx({ away_pitcher_name: null }));
+    check(
+      "[R-12] held games still surface the missing-starter held copy (not ML lead)",
+      /Probable starters haven't been announced/.test(r.model_breakdown)
+    );
+  }
+
+  // R-12.8 — operator_detail stays server-only (no ERA/run-gap leak
+  //          out of operator_detail when ML decisive fires).
+  {
+    const o = output({
+      predicted_home_score: 9.4,
+      predicted_away_score: 3.5,
+      predicted_total: 12.9,
+      predicted_ml_winner: "home",
+      ml_confidence: 60,
+      sport_specific: {
+        ...output().sport_specific,
+        nrfi_decision_kind: "toss_up",
+        nrfi_reason_codes: ["first_inning_data_used"],
+        held: false,
+        listed_line: 8.5,
+      } as AutoModelOutput["sport_specific"],
+    });
+    const r = generatePickBreakdown(o, ctx({}));
+    check(
+      "[R-12] operator_detail still contains diagnostic NRFI/ML/OU section",
+      /NRFI: kind=/.test(r.operator_detail) && /ML: winner=/.test(r.operator_detail)
+    );
+    check(
+      "[R-12] operator_detail is NOT a substring of model_breakdown",
+      !r.model_breakdown.includes(r.operator_detail.slice(0, 30))
+    );
+  }
+
+  // R-12.9 — Don't overstate confidence: small-gap ML decisive uses
+  //          hedge phrasing ("small starter edge"), not "best", "lock",
+  //          or "lean" language.
+  {
+    const o = output({
+      predicted_home_score: 5.2,
+      predicted_away_score: 3.7,
+      predicted_ml_winner: "home",
+      ml_confidence: 60,
+      predicted_ou_side: "under",
+      ou_confidence: 50,
+      sport_specific: {
+        ...output().sport_specific,
+        nrfi_decision_kind: "toss_up",
+        nrfi_reason_codes: ["first_inning_data_used"],
+        held: false,
+      } as AutoModelOutput["sport_specific"],
+    });
+    const r = generatePickBreakdown(o, ctx({}));
+    check(
+      "[R-12] small-gap ML lead doesn't claim 'lock' / 'best angle' / 'lean'",
+      !/(lock|best angle|lean)/i.test(r.model_breakdown)
+    );
+  }
+
   console.log("\n" + "━".repeat(70));
   console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
   if (fail > 0) {

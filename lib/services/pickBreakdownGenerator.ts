@@ -541,11 +541,225 @@ function lcFirst(s: string): string {
   return s.charAt(0).toLowerCase() + s.slice(1);
 }
 
+// ─── Phase R-12: multi-market lead-signal chooser ───────────────────
+//
+// Pre-R-12 the generator branched ONLY on `nrfi_decision_kind` — even
+// when the full-game ML or O/U markets had a clear edge, the copy
+// stayed FI-flavored. R-11 surfaced this when real season ERAs landed:
+// PIT @ HOU started projecting 9.4–3.5 from a Jones 10.38 / Teng 2.57
+// gap, but the breakdown still read "Early-inning edge is thin…".
+//
+// R-12 introduces a per-game lead-signal picker that surveys ML run
+// gap, O/U total-vs-line gap, and NRFI decision, then picks the
+// strongest model signal as the lead. The held path is unchanged
+// (fully held games still route through `buildHeldLead`). When no
+// market is materially decisive, the generator falls back to one of a
+// small set of honest "thin signal" variants — not always the same
+// "Early-inning edge is thin…" line.
+
+/** R-12: ML run-gap threshold. ≥ 1.0 projected run difference fires
+ *  the ML-decisive lead. Below this the gap is treated as thin
+ *  (tonight's "tight game" framing). 1.0 catches PIT@HOU (5.9),
+ *  SD@PHI (2.0), CLE@NYY (1.5), SF@MIL (1.8), LAD@ARI (1.5),
+ *  TOR@ATL projected gap (1.5) — i.e. real edges — and skips
+ *  KC@MIN (0.4) + BAL@BOS (0.9). */
+const ML_RUN_GAP_THRESHOLD = 1.0;
+
+/** R-12: O/U projected-total-vs-market-line threshold. ≥ 1.0 run
+ *  gap fires the O/U-decisive lead. Catches BAL@BOS (~2.6) and
+ *  PIT@HOU (~4.4); skips thin-edge games (SD@PHI, LAD@ARI ~0.1). */
+const OU_TOTAL_GAP_THRESHOLD = 1.0;
+
+/**
+ * R-12: full-game lead signal. Returns one of three "override" kinds
+ * (`held` / `ml_decisive` / `ou_decisive`) when a full-game read
+ * deserves to drive the lead, OR `fall_through` to let the legacy
+ * NRFI-based path handle it. Limiting the override surface to ML +
+ * OU decisive cases preserves every pre-R-12 test for held / NRFI
+ * decisive / NRFI toss-up / thin-signal copy paths.
+ */
+type LeadSignal =
+  | { kind: "held" }
+  | {
+      kind: "ml_decisive";
+      runGap: number;
+      winner: "home" | "away";
+      favoredPitcher: string | null;
+      underdogPitcher: string | null;
+    }
+  | {
+      kind: "ou_decisive";
+      side: "over" | "under";
+      projectedTotal: number;
+      listedLine: number;
+      totalGap: number;
+    }
+  | { kind: "fall_through" };
+
+function pickLeadSignal(output: AutoModelOutput, ctx: BreakdownContext): LeadSignal {
+  const ss = output.sport_specific;
+
+  // 1. Fully-held — single source of truth for held framing.
+  if (ss.held === true) return { kind: "held" };
+
+  // 2. ML decisive when projected score gap clears the threshold.
+  const home = output.predicted_home_score;
+  const away = output.predicted_away_score;
+  const winner = output.predicted_ml_winner;
+  if (home !== null && away !== null && winner !== null) {
+    const runGap = Math.abs(home - away);
+    if (runGap >= ML_RUN_GAP_THRESHOLD) {
+      const favored = winner === "home" ? ctx.home_pitcher_name : ctx.away_pitcher_name;
+      const underdog = winner === "home" ? ctx.away_pitcher_name : ctx.home_pitcher_name;
+      return {
+        kind: "ml_decisive",
+        runGap,
+        winner,
+        favoredPitcher: favored,
+        underdogPitcher: underdog,
+      };
+    }
+  }
+
+  // 3. O/U decisive when projected total clearly diverges from market
+  //    line. Skip when listed_line is missing — undefined !== null,
+  //    so check both explicitly.
+  const projTotal = output.predicted_total;
+  const listed =
+    ss.listed_line !== null && ss.listed_line !== undefined ? ss.listed_line : null;
+  const ouSide = output.predicted_ou_side;
+  if (projTotal !== null && listed !== null && ouSide !== null) {
+    const totalGap = Math.abs(projTotal - listed);
+    if (totalGap >= OU_TOTAL_GAP_THRESHOLD) {
+      return {
+        kind: "ou_decisive",
+        side: ouSide,
+        projectedTotal: projTotal,
+        listedLine: listed,
+        totalGap,
+      };
+    }
+  }
+
+  // 4. Anything else: let the legacy NRFI-based path handle it.
+  //    Preserves held / decisive NRFI / toss-up / thin-signal copy
+  //    exactly as it was pre-R-12, so the existing fixture tests
+  //    continue to pass without modification.
+  return { kind: "fall_through" };
+}
+
+/** Format a runs-gap value to one decimal for member copy. */
+function fmtGap(n: number): string {
+  return (Math.round(n * 10) / 10).toFixed(1);
+}
+
+/**
+ * R-12: build the lead sentence for an ML-decisive signal. Varies
+ * phrasing by gap magnitude so multiple ML-decisive games on the
+ * same slate don't all read identically.
+ */
+function buildMlDecisiveLead(
+  signal: Extract<LeadSignal, { kind: "ml_decisive" }>
+): string {
+  const favored = signal.favoredPitcher ?? "The favored starter";
+  const underdog = signal.underdogPitcher ?? "the opposing starter";
+  const gapStr = fmtGap(signal.runGap);
+  if (signal.runGap >= 3.0) {
+    return `${favored} projects a sizable run-prevention edge over ${underdog} tonight (~${gapStr}-run projected gap).`;
+  }
+  if (signal.runGap >= 2.0) {
+    return `${favored} projects to outpitch ${underdog} by roughly ${gapStr} runs tonight.`;
+  }
+  return `${favored} projects a small starter edge over ${underdog} (~${gapStr}-run gap).`;
+}
+
+/** R-12: build the lead sentence for an O/U-decisive signal. */
+function buildOuDecisiveLead(
+  signal: Extract<LeadSignal, { kind: "ou_decisive" }>
+): string {
+  const projStr = fmtGap(signal.projectedTotal);
+  const lineStr = fmtGap(signal.listedLine);
+  if (signal.side === "over") {
+    return `Model projects ~${projStr} total runs, above the listed ${lineStr}.`;
+  }
+  return `Model projects ~${projStr} total runs, under the listed ${lineStr}.`;
+}
+
+/**
+ * R-12: optional secondary clause appended to the ML-decisive lead.
+ * Adds a "why" when the underdog has an extreme season ERA, or
+ * surfaces a parallel O/U lean when the same game has a big total
+ * gap. Stays inside the 180-char cap.
+ */
+function buildMlSecondaryClause(
+  signal: Extract<LeadSignal, { kind: "ml_decisive" }>,
+  output: AutoModelOutput,
+  ctx: BreakdownContext
+): string | null {
+  const ss = output.sport_specific;
+
+  // (a) Extreme ERA on the underdog side — adds the WHY without
+  //     restating the projected gap.
+  const underdogEra =
+    signal.winner === "home" ? ctx.away_season_era : ctx.home_season_era;
+  const underdogName =
+    signal.winner === "home" ? ctx.away_pitcher_name : ctx.home_pitcher_name;
+  if (underdogEra !== null && underdogName !== null && underdogEra >= 6.0) {
+    return `${underdogName} is at ${underdogEra.toFixed(2)} ERA this year.`;
+  }
+
+  // (b) Big parallel O/U lean — separate market, separate lean.
+  const listed =
+    ss.listed_line !== null && ss.listed_line !== undefined ? ss.listed_line : null;
+  const projTotal = output.predicted_total;
+  const ouSide = output.predicted_ou_side;
+  if (
+    listed !== null &&
+    projTotal !== null &&
+    ouSide !== null &&
+    Math.abs(projTotal - listed) >= OU_TOTAL_GAP_THRESHOLD
+  ) {
+    return `Projected total ~${fmtGap(projTotal)} runs vs listed ${fmtGap(listed)}.`;
+  }
+
+  return null;
+}
+
 function buildModelBreakdown(
   output: AutoModelOutput,
   ctx: BreakdownContext
 ): string {
   const ss = output.sport_specific;
+
+  // Held — top priority, never overridden by R-12 paths.
+  if (ss.held === true) {
+    const text = buildHeldLead(output, ctx);
+    assertNoForbiddenPhrases(text);
+    return capModelBreakdown(text);
+  }
+
+  // R-12: when ML or O/U has a decisive full-game edge, override the
+  // legacy NRFI-based lead. This is the case that caught PIT @ HOU at
+  // 9.4–3.5 still saying "Early-inning edge is thin…" — the new path
+  // surfaces the ML projection instead.
+  const signal = pickLeadSignal(output, ctx);
+  if (signal.kind === "ml_decisive") {
+    let text = buildMlDecisiveLead(signal);
+    const secondary = buildMlSecondaryClause(signal, output, ctx);
+    if (secondary !== null && text.length + 1 + secondary.length <= MODEL_BREAKDOWN_CAP) {
+      text = `${text} ${secondary}`;
+    }
+    assertNoForbiddenPhrases(text);
+    return capModelBreakdown(text);
+  }
+  if (signal.kind === "ou_decisive") {
+    const text = buildOuDecisiveLead(signal);
+    assertNoForbiddenPhrases(text);
+    return capModelBreakdown(text);
+  }
+
+  // Fall-through: original NRFI-based dispatch. Preserves all pre-R-12
+  // held / decisive-NRFI / toss-up / thin-signal copy and its tests.
   let text = "";
   if (ss.nrfi_decision_kind === "held") {
     text = buildHeldLead(output, ctx);
