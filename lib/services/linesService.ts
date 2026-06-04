@@ -22,8 +22,20 @@ export const linesService = {
    * Refresh game lines (ML / Total / NRFI etc.) for the slate.
    * DELETE existing rows for tonight's games then INSERT fresh.
    * Also writes an append-only row to line_history per line.
+   *
+   * `opts.dryRun` (default false) — Phase 4.2.C.1.R-3 operator-script
+   * affordance mirroring `refreshSharpSignals`. When true the provider
+   * fetch + payload build still run normally so the operator can report
+   * exactly what would land, but the DELETE / INSERT against `lines`
+   * and `line_history` is skipped. Behavior for existing callers
+   * (crons, tests, services) is unchanged when opts is omitted.
    */
-  async refreshGameLines(sport: Sport, date: string): Promise<CronHandlerResult> {
+  async refreshGameLines(
+    sport: Sport,
+    date: string,
+    opts?: { dryRun?: boolean }
+  ): Promise<CronHandlerResult> {
+    const dryRun = opts?.dryRun === true;
     const odds = getOddsProvider();
     const gameIdByExternal = await loadGameIdMap(sport, date);
     const gameIds = [...gameIdByExternal.values()];
@@ -74,30 +86,32 @@ export const linesService = {
       });
     }
 
-    // DELETE existing rows for tonight's games scoped to game lines only
-    // (player_id IS NULL → game-level rows). Player props are handled by
-    // refreshPlayerProps so we don't accidentally nuke them here.
-    const { error: delErr } = await supabase
-      .from("lines")
-      .delete()
-      .in("game_id", gameIds)
-      .is("player_id", null);
-    if (delErr) {
-      throw new Error(`linesService.refreshGameLines delete failed: ${delErr.message}`);
-    }
-
-    if (linesPayload.length > 0) {
-      const { error } = await supabase.from("lines").insert(linesPayload);
-      if (error) {
-        throw new Error(`linesService.refreshGameLines insert failed: ${error.message}`);
+    if (!dryRun) {
+      // DELETE existing rows for tonight's games scoped to game lines only
+      // (player_id IS NULL → game-level rows). Player props are handled by
+      // refreshPlayerProps so we don't accidentally nuke them here.
+      const { error: delErr } = await supabase
+        .from("lines")
+        .delete()
+        .in("game_id", gameIds)
+        .is("player_id", null);
+      if (delErr) {
+        throw new Error(`linesService.refreshGameLines delete failed: ${delErr.message}`);
       }
-    }
-    if (historyPayload.length > 0) {
-      const { error: histErr } = await supabase
-        .from("line_history")
-        .insert(historyPayload);
-      if (histErr) {
-        throw new Error(`linesService.refreshGameLines history insert failed: ${histErr.message}`);
+
+      if (linesPayload.length > 0) {
+        const { error } = await supabase.from("lines").insert(linesPayload);
+        if (error) {
+          throw new Error(`linesService.refreshGameLines insert failed: ${error.message}`);
+        }
+      }
+      if (historyPayload.length > 0) {
+        const { error: histErr } = await supabase
+          .from("line_history")
+          .insert(historyPayload);
+        if (histErr) {
+          throw new Error(`linesService.refreshGameLines history insert failed: ${histErr.message}`);
+        }
       }
     }
 
