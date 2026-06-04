@@ -54,8 +54,13 @@ import {
   readBoolFlag,
 } from "./_cliCommon";
 import { linesService } from "../../lib/services/linesService";
+import type {
+  V2RefreshDetails,
+  V2PerGameDecision,
+} from "../../lib/services/linesService";
 import { supabase } from "../../lib/db/supabase";
 import { loadGameIdMap } from "../../lib/services/_idMaps";
+import { assessMarketCoverage } from "../../lib/services/marketCoverageGate";
 import type { Sport } from "../../lib/types/domain/Sport";
 
 // ─── provider gate ────────────────────────────────────────────────────
@@ -238,6 +243,230 @@ function countGamesWithMarket(rows: Row[], market: string): number {
 
 // ─── main ─────────────────────────────────────────────────────────────
 
+type Strategy = "v1" | "v2";
+
+function resolveStrategy(argv: readonly string[]): Strategy {
+  const raw = readStringFlag(argv, "--strategy");
+  if (raw === undefined) return "v1";
+  if (raw === "v1" || raw === "v2") return raw;
+  console.error(
+    `✗ Invalid --strategy "${raw}". Expected "v1" or "v2". Default is v1.`
+  );
+  process.exit(1);
+}
+
+// ─── V2 reporting + apply flow ────────────────────────────────────────
+
+function decisionLabel(d: V2PerGameDecision["decision"]): string {
+  if (d === "replaced") return "REPLACED (all markets)";
+  if (d === "partial") return "PARTIAL (some markets)";
+  if (d === "preserved_no_data") return "PRESERVED (no data)";
+  if (d === "preserved_unresolved_event") return "PRESERVED (no event)";
+  if (d === "preserved_call_cap_skip") return "PRESERVED (call cap)";
+  return d;
+}
+
+function marketDecisionsBadge(md: V2PerGameDecision["market_decisions"]): string {
+  const m = md.moneyline === "refreshed" ? "ML✓" : "ML—";
+  const t = md.total === "refreshed" ? "OU✓" : "OU—";
+  const s = md.spread === "refreshed" ? "RL✓" : "RL—";
+  return `${m} ${t} ${s}`;
+}
+
+async function confirmApplyV2(
+  sport: Sport,
+  date: string,
+  replaceCount: number,
+  preserveCount: number
+): Promise<boolean> {
+  const rl = readline.createInterface({ input, output });
+  try {
+    const ans = await rl.question(
+      `About to apply V2 per-game refresh for sport=${sport} date=${date}.\n` +
+        `  Games where lines will be REPLACED:  ${replaceCount}\n` +
+        `  Games where lines will be PRESERVED: ${preserveCount} (provider returned no data or game unmatched)\n` +
+        `  Scope: per-game DELETE-then-INSERT only on replaced games (player_id IS NULL).\n` +
+        `  Other games keep their existing rows untouched.\n` +
+        `  No predictions, no publish — just lines + line_history.\n` +
+        `  Continue? [y/N]: `
+    );
+    return /^y(es)?$/i.test(ans.trim());
+  } finally {
+    rl.close();
+  }
+}
+
+async function runV2Flow(args: {
+  sport: Sport;
+  date: string;
+  verbose: boolean;
+  writeMode: boolean;
+  preCount: number;
+  gameIds: number[];
+}): Promise<void> {
+  const { sport, date, verbose, writeMode, preCount, gameIds } = args;
+
+  console.log();
+  console.log("━━━ V2: /splits-anchored discovery + per-game upsert (dry-run preview) ━━━");
+  const dry = await linesService.refreshGameLinesV2(sport, date, { dryRun: true });
+  const details = dry.details as V2RefreshDetails;
+
+  console.log(`  Provider API calls made:              ${dry.api_calls_made}`);
+  console.log(`  Events discovered (/splits):          ${details.discovery.eventsDiscovered}`);
+  console.log(`  Events resolved to DB game:           ${details.discovery.eventsResolvedToGame}`);
+  console.log(`  Events with suffixed event_id (/EV):  ${details.discovery.eventsWithSuffixedId}`);
+  console.log(`  Events using /splits id only:         ${details.discovery.eventsWithSplitsIdOnly}`);
+  if (details.discovery.opportunitiesUnavailable) {
+    console.log(
+      "  ⚠ /opportunities/ev unavailable — all events will use /splits stripped event_id."
+    );
+  }
+
+  const ss = details.discovery.splitsStats;
+  console.log();
+  console.log("━━━ /splits filter breakdown ━━━");
+  console.log(`  total rows:               ${ss.totalRows}`);
+  console.log(`  kept:                     ${ss.keptRows}`);
+  console.log(`  skipped non-mlb:          ${ss.skippedNonMlb}`);
+  console.log(`  skipped missing event_id: ${ss.skippedMissingEventId}`);
+  console.log(`  skipped date-unparseable: ${ss.skippedDateUnparseable}`);
+  console.log(`  skipped wrong-date:       ${ss.skippedWrongDate}`);
+  console.log(`  skipped team-unresolved:  ${ss.skippedTeamUnresolved}`);
+
+  console.log();
+  console.log("━━━ Per-game decisions (would-write) ━━━");
+  console.log(
+    "  game_id  ext_id      home/away      ml/tot/spr  per-market    books  decision"
+  );
+  for (const d of details.per_game_decisions) {
+    const ext = String(d.external_id).padStart(8);
+    const pg = details.discovery.perGame.find(
+      (g) => g.gameExternalId === d.external_id
+    );
+    const teams = pg !== undefined ? `${pg.away}@${pg.home}` : "—@—";
+    const counts = `${d.ml_rows}/${d.total_rows}/${d.spread_rows}`;
+    console.log(
+      `  ${String(d.game_id).padStart(7)}  ${ext}  ${teams.padEnd(14)} ${counts.padEnd(10)} ${marketDecisionsBadge(
+        d.market_decisions
+      ).padEnd(13)} ${String(d.books_count).padStart(5)}  ${decisionLabel(d.decision)}`
+    );
+  }
+
+  console.log();
+  console.log("━━━ Coverage (lines table, game-level only) ━━━");
+  const cb = details.coverage_before;
+  const ca = details.coverage_after;
+  const slate = gameIds.length;
+  console.log(
+    `  before:  games_with_any=${cb.games_with_any_line}/${slate}  ml=${cb.games_with_ml}/${slate}  total=${cb.games_with_total}/${slate}  spread=${cb.games_with_spread}/${slate}  rows=${cb.total_game_rows}`
+  );
+  console.log(
+    `  after  : games_with_any=${ca.games_with_any_line}/${slate}  ml=${ca.games_with_ml}/${slate}  total=${ca.games_with_total}/${slate}  spread=${ca.games_with_spread}/${slate}  rows≈${ca.total_game_rows}`
+  );
+
+  console.log();
+  console.log("━━━ Decision counts ━━━");
+  console.log(`  games fully replaced:        ${details.games_fully_replaced}`);
+  console.log(`  games partially refreshed:   ${details.games_partially_refreshed}`);
+  console.log(`  (game,market) DELETE-INSERT: ${details.replace_targets_count}`);
+  console.log(`  preserved (no data):         ${details.preserved_no_data_count}`);
+  console.log(`  preserved (no event):        ${details.preserved_unresolved_count}`);
+  console.log(`  preserved (call cap):        ${details.preserved_call_cap_count}`);
+  if (details.skipped_game_external_ids.length > 0) {
+    console.log(
+      `  skipped (no slate match):    ${details.skipped_game_external_ids.length}`
+    );
+    if (verbose) {
+      console.log(`    external_ids: ${details.skipped_game_external_ids.join(", ")}`);
+    }
+  }
+
+  console.log();
+  console.log("━━━ Market coverage gate assessment (post-V2, read-only) ━━━");
+  // Run the gate against the CURRENT DB state. In dry-run this is the
+  // pre-state (unchanged); in apply mode it would be the post-state.
+  // The gate is purely informational here — never blocks the run.
+  const gate = await assessMarketCoverage(sport, date);
+  console.log(`  overall:                ${gate.overall.toUpperCase()}`);
+  console.log(`  games_with_ml_lines:    ${gate.aggregate.games_with_ml_lines}/${gate.aggregate.total_games} (${gate.aggregate.ml_coverage_pct}%)`);
+  console.log(`  games_with_total_lines: ${gate.aggregate.games_with_total_lines}/${gate.aggregate.total_games} (${gate.aggregate.total_coverage_pct}%)`);
+  console.log(`  games_with_signals:     ${gate.aggregate.games_with_signals}/${gate.aggregate.total_games}`);
+  console.log(`  signals but no lines:   ${gate.aggregate.games_with_signals_no_lines}`);
+  console.log(`  stale lines:            ${gate.aggregate.games_with_stale_lines}`);
+  for (const r of gate.reasons) console.log(`  · ${r}`);
+
+  console.log();
+  console.log("━━━ Tables that would be written ━━━");
+  console.log(`  lines        (per-game DELETE then INSERT on replaced games): ${dry.records_updated} row(s)`);
+  console.log(`  line_history (APPEND-only audit):                             ${dry.records_updated} row(s)`);
+  console.log(`  Other tables: none. No predictions, no publish, no signals, no props.`);
+
+  if (!writeMode) {
+    console.log();
+    console.log("━━━ Verdict ━━━");
+    const refreshedGames =
+      details.games_fully_replaced + details.games_partially_refreshed;
+    if (refreshedGames === 0) {
+      console.log("  🟡 V2 dry-run produced 0 refreshed games. Possibilities:");
+      console.log("     - /splits returned empty for this date");
+      console.log("     - /odds returned empty for all matched events");
+      console.log("     - Slate team-pair resolution failed for all events");
+    } else {
+      const preservedGames =
+        details.preserved_no_data_count +
+        details.preserved_unresolved_count +
+        details.preserved_call_cap_count;
+      console.log(
+        `  🟢 V2 would refresh ${refreshedGames}/${gameIds.length} games ` +
+          `(${details.games_fully_replaced} full + ${details.games_partially_refreshed} partial). ` +
+          `${preservedGames} game(s) preserve existing rows (no silent slate-wide DELETE).`
+      );
+    }
+    console.log();
+    console.log("  DRY RUN — NO DB WRITES PERFORMED.");
+    return;
+  }
+
+  // APPLY V2.
+  const preserveCount =
+    details.preserved_no_data_count +
+    details.preserved_unresolved_count +
+    details.preserved_call_cap_count;
+  const refreshedGames =
+    details.games_fully_replaced + details.games_partially_refreshed;
+  const confirmed = await confirmApplyV2(
+    sport,
+    date,
+    refreshedGames,
+    preserveCount
+  );
+  if (!confirmed) {
+    console.log("Cancelled by operator. No writes performed.");
+    return;
+  }
+
+  console.log();
+  console.log("Writing via linesService.refreshGameLinesV2 (per-(game,market) DELETE then INSERT)…");
+  const result = await linesService.refreshGameLinesV2(sport, date);
+  const resultDetails = result.details as V2RefreshDetails;
+  console.log(`  records_updated:             ${result.records_updated}`);
+  console.log(`  api_calls_made:              ${result.api_calls_made}`);
+  console.log(`  games fully replaced:        ${resultDetails.games_fully_replaced}`);
+  console.log(`  games partially refreshed:   ${resultDetails.games_partially_refreshed}`);
+  console.log(`  (game,market) DELETE-INSERT: ${resultDetails.replace_targets_count}`);
+  console.log(`  preserved:                   ${preserveCount}`);
+
+  const postCount = await countExistingGameLines(gameIds);
+  console.log();
+  console.log("━━━ Post-state ━━━");
+  console.log(`  Game-level lines rows for ${sport}/${date}: ${postCount}`);
+  console.log(`  (was ${preCount} before)`);
+
+  console.log();
+  console.log("APPLY complete. Re-run the coverage gate to verify:");
+  console.log("  Or proceed to refresh-sharp-signals + automodel.");
+}
+
 async function main() {
   const argv = process.argv;
   const common = parseCommonCliOptions(argv);
@@ -256,16 +485,28 @@ async function main() {
   const applyGate = resolveApplyGate(argv);
   refuseApplyMisconfig(applyGate.applyRequested, applyGate.envEnabled);
   const writeMode = applyGate.canApply;
+  const strategy = resolveStrategy(argv);
 
   console.log(
     `[refresh-lines] mode=${
       writeMode ? "APPLY" : "DRY-RUN"
-    } provider=real_api(source:${
+    } strategy=${strategy} provider=real_api(source:${
       providerResolution.source === "neither" ? "?" : providerResolution.source
     }) sport=${common.sport} date=${common.date} verbose=${common.verbose}`
   );
   if (!writeMode) {
     console.log("           DRY RUN — NO DB WRITES");
+  }
+  if (strategy === "v2") {
+    console.log(
+      "           V2 strategy: /splits-anchored discovery + per-game upsert."
+    );
+    console.log(
+      "           V2 preserves existing rows for games where the provider"
+    );
+    console.log(
+      "           returned no data (no silent slate-wide DELETE)."
+    );
   }
 
   // Pre-state: how many game-level rows exist in `lines` for this slate?
@@ -282,6 +523,18 @@ async function main() {
   }
   const preCount = await countExistingGameLines(gameIds);
   console.log(`  Existing game-level lines rows:       ${preCount}`);
+
+  if (strategy === "v2") {
+    await runV2Flow({
+      sport: common.sport,
+      date: common.date,
+      verbose: common.verbose,
+      writeMode,
+      preCount,
+      gameIds,
+    });
+    return;
+  }
 
   // Dry-run the service: fetches from provider, builds payload, but
   // skips DELETE/INSERT.

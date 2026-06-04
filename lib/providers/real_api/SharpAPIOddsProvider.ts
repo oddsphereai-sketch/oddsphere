@@ -43,6 +43,10 @@ import {
   normalizeMlbTeamName,
   type MlbTeamAbbrev,
 } from "./_teamNameNormalizer";
+import {
+  discoverEventsFromSplits,
+  type DiscoveryStats,
+} from "./_splitsDiscovery";
 
 /**
  * Resolver injected at construction time. Maps a SharpAPI event's natural
@@ -193,8 +197,16 @@ export class SharpAPIOddsProvider implements IOddsProvider {
   private readonly client: SharpApiClient;
   private readonly resolveGame: SharpApiGameResolver;
 
-  constructor(apiKey: string, resolveGame: SharpApiGameResolver) {
-    this.client = new SharpApiClient(apiKey);
+  constructor(
+    apiKey: string,
+    resolveGame: SharpApiGameResolver,
+    opts?: { client?: SharpApiClient }
+  ) {
+    // Test affordance (R-16D): allow injecting a pre-built / stubbed client
+    // so unit tests can exercise the V2 discovery + odds-fetch flow without
+    // a real SHARPAPI_KEY. Production always passes the apiKey string and
+    // gets a freshly-built client.
+    this.client = opts?.client ?? new SharpApiClient(apiKey);
     this.resolveGame = resolveGame;
   }
 
@@ -360,4 +372,308 @@ export class SharpAPIOddsProvider implements IOddsProvider {
     void _sport;
     return [];
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // Phase 4.2.C.1.R-16D — V2: full-slate line refresh
+  // ─────────────────────────────────────────────────────────────
+  //
+  // V1 (getGameLines, above) uses `/opportunities/ev` for BOTH event
+  // discovery and odds payload, which silently shrinks coverage when
+  // the +EV-opportunity event set is smaller than the actual slate.
+  //
+  // V2 keeps the per-event `/odds?event_id=` payload step but moves
+  // event discovery to `/splits?sport=mlb`, which returns one row per
+  // slate game regardless of opportunity status. Additionally V2
+  // harvests the suffixed event_ids that `/opportunities/ev` exposes
+  // (e.g. `mlb_athletics_cubs_2026-06-04_b3`) so `/odds` calls use the
+  // exact event_id form SharpAPI's odds endpoint accepts — falling
+  // back to the stripped `/splits` event_id (no `_b\d+` suffix) when
+  // `/opportunities/ev` returned no row for that game.
+  //
+  // The output is rich enough for the line-refresh service to do
+  // per-game upserts (preserving existing rows for games where the
+  // provider returned nothing) and for the operator script to print
+  // a per-game coverage report.
+  //
+  // Pure provider — does NO DB work. The service decides write vs
+  // preserve based on this discovery report.
+
+  /**
+   * V2 result — `records` is identical-shape to the V1 LineRecord[],
+   * `discovery` is the per-game breakdown the line-refresh service and
+   * operator script consume for coverage reporting + safe per-game
+   * upsert.
+   */
+  async getGameLinesV2(
+    date: string,
+    sport?: Sport
+  ): Promise<{ records: LineRecord[]; discovery: V2DiscoveryReport }> {
+    const sportKey = sport ?? "mlb";
+    if (sportKey !== "mlb") {
+      return {
+        records: [],
+        discovery: emptyDiscoveryReport(),
+      };
+    }
+
+    const fetchedAt = new Date().toISOString();
+    let callsUsed = 0;
+
+    // Step 1: /splits-anchored event discovery.
+    const splitsResult = await discoverEventsFromSplits(this.client, sportKey, date);
+    callsUsed += 1;
+
+    // Step 2: harvest suffixed event_ids from /opportunities/ev. Keyed by
+    // team-pair so we can prefer the suffixed id when SharpAPI's /odds
+    // returns more data for the suffixed form.
+    const suffixedEventIdByPair = new Map<string, string>();
+    let opportunitiesUnavailable = false;
+    try {
+      callsUsed += 1;
+      const opportunities = await this.client.fetchAll<RawOpportunity>({
+        path: "/opportunities/ev",
+        query: { sport: "mlb" },
+        maxPages: 5,
+      });
+      for (const opp of opportunities) {
+        if (opp.is_player_prop === true) continue;
+        if (opp.is_alternate_line === true) continue;
+        const league = asStringOrNull(opp.league)?.toLowerCase();
+        if (league !== null && league !== undefined && league !== "mlb") continue;
+        const evId = asStringOrNull(opp.event_id);
+        if (evId === null) continue;
+        const home = normalizeMlbTeamName(opp.home_team);
+        const away = normalizeMlbTeamName(opp.away_team);
+        if (home === null || away === null) continue;
+        const pairKey = `${home}|${away}`;
+        if (!suffixedEventIdByPair.has(pairKey)) {
+          suffixedEventIdByPair.set(pairKey, evId);
+        }
+      }
+    } catch (e) {
+      if (e instanceof SharpApiNotFoundError) {
+        opportunitiesUnavailable = true;
+      } else {
+        throw e;
+      }
+    }
+
+    // Step 3: resolve each discovered event to a BDL game external_id +
+    // pick the event_id form to use for /odds. Anything that fails to
+    // resolve is captured for the discovery report — not silently dropped.
+    type ResolvedV2Event = {
+      home: MlbTeamAbbrev;
+      away: MlbTeamAbbrev;
+      gameExternalId: number;
+      splitsEventId: string;
+      effectiveEventId: string;
+      eventIdSource: "opportunities_suffixed" | "splits_stripped";
+    };
+
+    const resolved: ResolvedV2Event[] = [];
+    const unresolvedTeamPairs: Array<{ home: MlbTeamAbbrev; away: MlbTeamAbbrev }> = [];
+
+    for (const ev of splitsResult.events) {
+      const gameExtId = await this.resolveGame(sportKey, date, ev.home, ev.away);
+      if (gameExtId === null) {
+        unresolvedTeamPairs.push({ home: ev.home, away: ev.away });
+        continue;
+      }
+      const pairKey = `${ev.home}|${ev.away}`;
+      const suffixed = suffixedEventIdByPair.get(pairKey);
+      const effective = suffixed ?? ev.splitsEventId;
+      resolved.push({
+        home: ev.home,
+        away: ev.away,
+        gameExternalId: gameExtId,
+        splitsEventId: ev.splitsEventId,
+        effectiveEventId: effective,
+        eventIdSource:
+          suffixed !== undefined ? "opportunities_suffixed" : "splits_stripped",
+      });
+    }
+
+    // Step 4: per-event /odds. Per-game coverage detail captured so the
+    // service can decide preserve-vs-replace per game.
+    const records: LineRecord[] = [];
+    const perGame: V2DiscoveryPerGame[] = [];
+
+    for (const ev of resolved) {
+      if (callsUsed >= MAX_CALLS_PER_INVOCATION) {
+        perGame.push({
+          gameExternalId: ev.gameExternalId,
+          home: ev.home,
+          away: ev.away,
+          splitsEventId: ev.splitsEventId,
+          effectiveEventId: ev.effectiveEventId,
+          eventIdSource: ev.eventIdSource,
+          oddsCallStatus: "skipped_call_cap",
+          mlRows: 0,
+          totalRows: 0,
+          spreadRows: 0,
+          otherRows: 0,
+          books: [],
+        });
+        continue;
+      }
+      callsUsed++;
+      let oddsRows: RawOddsRow[];
+      let status: V2OddsCallStatus;
+      try {
+        oddsRows = await this.client.fetchAll<RawOddsRow>({
+          path: "/odds",
+          query: { event_id: ev.effectiveEventId },
+          maxPages: 3,
+        });
+        status = oddsRows.length === 0 ? "empty" : "ok";
+      } catch (e) {
+        if (e instanceof SharpApiNotFoundError) {
+          oddsRows = [];
+          status = "not_found";
+        } else {
+          throw e;
+        }
+      }
+
+      let ml = 0,
+        tot = 0,
+        spr = 0,
+        other = 0;
+      const books = new Set<string>();
+      for (const row of oddsRows) {
+        const rowLeague = asStringOrNull(row.league)?.toLowerCase();
+        if (rowLeague !== null && rowLeague !== undefined && rowLeague !== "mlb") {
+          continue;
+        }
+        if (row.is_alternate_line === true) continue;
+
+        const marketType = mapMarketType(asStringOrNull(row.market_type));
+        if (marketType === null) continue;
+        const sportsbook = mapSportsbook(asStringOrNull(row.sportsbook));
+        if (sportsbook === null) continue;
+        const side = mapSide(row.selection_type);
+        if (side === null) continue;
+
+        if (marketType === "moneyline") ml++;
+        else if (marketType === "total") tot++;
+        else if (marketType === "spread") spr++;
+        else other++;
+        books.add(sportsbook);
+
+        records.push({
+          game_external_id: ev.gameExternalId,
+          market_type: marketType,
+          player_external_id: null,
+          sportsbook,
+          side,
+          line_value: asNumberOrNull(row.line),
+          odds_american: asNumberOrNull(row.odds_american),
+          odds_decimal: asNumberOrNull(row.odds_decimal),
+          implied_probability: asNumberOrNull(row.odds_probability),
+          ev_percent: null,
+          fair_odds: null,
+          is_ev_positive: null,
+          fetched_at:
+            asStringOrNull(row.last_seen_at) ??
+            asStringOrNull(row.wire_received_at) ??
+            fetchedAt,
+        });
+      }
+
+      perGame.push({
+        gameExternalId: ev.gameExternalId,
+        home: ev.home,
+        away: ev.away,
+        splitsEventId: ev.splitsEventId,
+        effectiveEventId: ev.effectiveEventId,
+        eventIdSource: ev.eventIdSource,
+        oddsCallStatus: status,
+        mlRows: ml,
+        totalRows: tot,
+        spreadRows: spr,
+        otherRows: other,
+        books: [...books].sort(),
+      });
+    }
+
+    const discovery: V2DiscoveryReport = {
+      discoverySource: "splits",
+      splitsStats: splitsResult.stats,
+      eventsDiscovered: splitsResult.events.length,
+      eventsResolvedToGame: resolved.length,
+      eventsUnresolvedTeamPair: unresolvedTeamPairs,
+      eventsWithSuffixedId: resolved.filter(
+        (r) => r.eventIdSource === "opportunities_suffixed"
+      ).length,
+      eventsWithSplitsIdOnly: resolved.filter(
+        (r) => r.eventIdSource === "splits_stripped"
+      ).length,
+      opportunitiesUnavailable,
+      apiCallsMade: callsUsed,
+      perGame,
+    };
+
+    return { records, discovery };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// V2 discovery report types
+// ─────────────────────────────────────────────────────────────
+
+export type V2OddsCallStatus =
+  | "ok"
+  | "empty"
+  | "not_found"
+  | "skipped_call_cap";
+
+export type V2DiscoveryPerGame = {
+  gameExternalId: number;
+  home: MlbTeamAbbrev;
+  away: MlbTeamAbbrev;
+  splitsEventId: string;
+  effectiveEventId: string;
+  eventIdSource: "opportunities_suffixed" | "splits_stripped";
+  oddsCallStatus: V2OddsCallStatus;
+  mlRows: number;
+  totalRows: number;
+  spreadRows: number;
+  otherRows: number;
+  books: string[];
+};
+
+export type V2DiscoveryReport = {
+  discoverySource: "splits";
+  splitsStats: DiscoveryStats;
+  eventsDiscovered: number;
+  eventsResolvedToGame: number;
+  eventsUnresolvedTeamPair: Array<{ home: MlbTeamAbbrev; away: MlbTeamAbbrev }>;
+  eventsWithSuffixedId: number;
+  eventsWithSplitsIdOnly: number;
+  opportunitiesUnavailable: boolean;
+  apiCallsMade: number;
+  perGame: V2DiscoveryPerGame[];
+};
+
+function emptyDiscoveryReport(): V2DiscoveryReport {
+  return {
+    discoverySource: "splits",
+    splitsStats: {
+      totalRows: 0,
+      keptRows: 0,
+      skippedNonMlb: 0,
+      skippedMissingEventId: 0,
+      skippedDateUnparseable: 0,
+      skippedWrongDate: 0,
+      skippedTeamUnresolved: 0,
+    },
+    eventsDiscovered: 0,
+    eventsResolvedToGame: 0,
+    eventsUnresolvedTeamPair: [],
+    eventsWithSuffixedId: 0,
+    eventsWithSplitsIdOnly: 0,
+    opportunitiesUnavailable: false,
+    apiCallsMade: 0,
+    perGame: [],
+  };
 }
