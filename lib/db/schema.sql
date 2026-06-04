@@ -66,7 +66,7 @@ CREATE INDEX idx_teams_abbreviation  ON teams (sport, abbreviation);
 -- ── 1.2 players ────────────────────────────────────────────────────────────
 CREATE TABLE players (
   id            BIGSERIAL PRIMARY KEY,
-  external_id   INT  NOT NULL,                        -- BALLDONTLIE player id
+  external_id   INT,                                  -- BALLDONTLIE player id (NULL = MLB-Stats-only player; Phase 4.2.C.1.H-0)
   mlb_person_id INT,                                  -- MLB AM Person ID (Phase 3.x first-inning enrichment); nullable, resolved via name+DOB match
   sport         TEXT NOT NULL,
   team_id       BIGINT REFERENCES teams(id),
