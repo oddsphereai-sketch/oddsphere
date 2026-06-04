@@ -464,6 +464,8 @@ async function main() {
       updatedAt: null,
       generatedAt: null,
       holdReason: null,
+      homeStarter: null,
+      awayStarter: null,
       predictions: {
         ml: tile(ml),
         total: { ...tile(total), line: 9 },

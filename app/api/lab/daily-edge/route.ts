@@ -414,8 +414,35 @@ type GameRow = {
   // and team FKs are to-one. Cast as single-object | null.
   home_team: { abbreviation: string; logo_url: string | null } | null;
   away_team: { abbreviation: string; logo_url: string | null } | null;
+  /**
+   * Phase 4.2.C.1.R-10 — joined starter rows. Null when
+   * `games.{home,away}_pitcher_id` is null (probable starter not
+   * posted yet). The relation alias forces Supabase to expand the
+   * FK rather than returning the id.
+   */
+  home_pitcher: { first_name: string | null; last_name: string | null; throws: string | null } | null;
+  away_pitcher: { first_name: string | null; last_name: string | null; throws: string | null } | null;
   game_predictions: PredictionRow | null;
 };
+
+/**
+ * Phase R-10 — project a joined `players` FK expansion into the DTO
+ * starter shape. Returns null when the FK was null (no probable
+ * starter posted) or when the row is too sparse to render (no name
+ * at all). Normalizes `throws` to the "L" | "R" | null contract.
+ */
+function buildStarterDto(
+  raw: { first_name: string | null; last_name: string | null; throws: string | null } | null
+): { name: string; throws: "L" | "R" | null } | null {
+  if (raw === null) return null;
+  const first = raw.first_name?.trim() ?? "";
+  const last = raw.last_name?.trim() ?? "";
+  const name = `${first} ${last}`.trim();
+  if (name.length === 0) return null;
+  const throws: "L" | "R" | null =
+    raw.throws === "L" ? "L" : raw.throws === "R" ? "R" : null;
+  return { name, throws };
+}
 
 function buildGameDto(
   row: GameRow,
@@ -718,6 +745,12 @@ function buildGameDto(
         : "open";
   const scheduledLockAt = computeLocksAt(row.game_date) ?? row.game_date;
 
+  // Phase R-10 — surface starter info per side. Joined from `players`
+  // via games.home_pitcher_id / away_pitcher_id. Null when the probable
+  // starter isn't posted yet. Handedness limited to "L" / "R" / null.
+  const homeStarter = buildStarterDto(row.home_pitcher);
+  const awayStarter = buildStarterDto(row.away_pitcher);
+
   return {
     id: `${row.sport}-${row.external_id}`,
     sport: row.sport as Sport,
@@ -736,6 +769,8 @@ function buildGameDto(
     generatedAt,
     updatedAt: pred.computed_at,
     holdReason,
+    homeStarter,
+    awayStarter,
     markets: { moneyline: ml, total, first_inning: firstInning },
     decisionLine,
     status,
@@ -1393,6 +1428,8 @@ export async function GET(request: Request) {
       `id, external_id, sport, game_date, slate_date,
        home_team:home_team_id (abbreviation, logo_url),
        away_team:away_team_id (abbreviation, logo_url),
+       home_pitcher:home_pitcher_id (first_name, last_name, throws),
+       away_pitcher:away_pitcher_id (first_name, last_name, throws),
        game_predictions (
          source_type,
          predicted_home_score, predicted_away_score, predicted_total,

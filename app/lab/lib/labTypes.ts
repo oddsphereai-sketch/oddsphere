@@ -341,6 +341,20 @@ export type DailyEdgeGameDto = {
    *   • Other values map to a generic "Held" fallback in the UI
    */
   holdReason: string | null;
+  /**
+   * Phase 4.2.C.1.R-10 — starter info per side. Joined from
+   * `players` via `games.{home,away}_pitcher_id` at API time. Null when
+   * the probable starter isn't posted yet (e.g., TOR @ ATL on 2026-06-04
+   * before TOR announced) — UI renders a "starter TBD" placeholder
+   * rather than implying a system failure.
+   *
+   * `throws` is "L" / "R" / null and surfaces handedness next to the
+   * name so members can see L/R matchup context at a glance. The
+   * model already uses handedness for top-of-order OPS computation;
+   * this just exposes it.
+   */
+  homeStarter: { name: string; throws: "L" | "R" | null } | null;
+  awayStarter: { name: string; throws: "L" | "R" | null } | null;
   predictions: {
     ml: DailyEdgePredictionDto;
     total: DailyEdgeTotalPredictionDto;

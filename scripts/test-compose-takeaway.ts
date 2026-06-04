@@ -131,6 +131,8 @@ function mkGame(overrides: GameOverrides = {}): DailyEdgeGameDto {
     updatedAt: null,
     generatedAt: null,
     holdReason: null,
+    homeStarter: null,
+    awayStarter: null,
     markets: {
       moneyline: stubMarketEdge(overrides.mlPick ?? "NYY"),
       total: stubMarketEdge(overrides.ouPick ?? "Over"),
