@@ -441,6 +441,7 @@ async function main() {
       pinnacleEvPct: null,
       moneyPct: null,
       betsPct: null,
+      publicSplits: [],
       priceAmerican: null,
       lineOpenAmerican: null,
       modelTotal: null,

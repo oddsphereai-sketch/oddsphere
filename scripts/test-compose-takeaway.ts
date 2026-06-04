@@ -69,6 +69,7 @@ function stubMarketEdge(pick: string | null = "X") {
     pinnacleEvPct: null,
     moneyPct: null,
     betsPct: null,
+    publicSplits: [],
     priceAmerican: null,
     lineOpenAmerican: null,
     modelTotal: null,

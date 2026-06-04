@@ -1126,6 +1126,22 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // KeyStats.
   const keyStats = formatKeyStats(input.autoFactors, input.market);
 
+  // Phase R-13C — two-sided publicSplits. The pre-R-13C scalars
+  // (moneyPct / betsPct above) carry only the picked side's data, so
+  // the reader's MarketPulse panel was pick-centered. Build an array
+  // covering both sides for this (game, market) from the same
+  // signal rows the picker uses. FI returns [] because /splits
+  // doesn't cover first_inning_total — UI keeps the provider-
+  // limitation copy already in place.
+  const publicSplits = buildPublicSplits({
+    market: input.market,
+    dbMarket,
+    signals: input.signals,
+    homeAbbr: input.homeAbbr,
+    awayAbbr: input.awayAbbr,
+    totalsLine: input.totalsExtras?.sportsbookLine ?? null,
+  });
+
   return {
     pick: input.pick,
     confidence: input.confidence,
@@ -1144,6 +1160,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     pinnacleEvPct,
     moneyPct,
     betsPct,
+    publicSplits,
     priceAmerican,
     lineOpenAmerican: openAmerican,
     modelTotal: input.totalsExtras?.modelTotal ?? null,
@@ -1151,6 +1168,67 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     line: input.totalsExtras?.sportsbookLine ?? null,
     keyStats,
   };
+}
+
+/**
+ * Phase R-13C — assemble the two-sided publicSplits array for one
+ * (game, market). Returns the picked-side row first when the model
+ * has a side, then the opposing side, so the reader can render in a
+ * stable order (pick on the left).
+ *
+ * Side label conventions:
+ *   moneyline / spread → home/away abbreviation (PHI / SD)
+ *   total              → "Over" / "Under"
+ *   first_inning       → [] (provider doesn't offer; UI shows the
+ *                            existing limitation copy)
+ */
+function buildPublicSplits(args: {
+  market: "moneyline" | "total" | "first_inning";
+  dbMarket: "moneyline" | "total" | "first_inning_total";
+  signals: SignalRow[];
+  homeAbbr: string;
+  awayAbbr: string;
+  totalsLine: number | null;
+}): MarketEdgeDto["publicSplits"] {
+  if (args.market === "first_inning") return [];
+
+  const rows = args.signals.filter((s) => s.market_type === args.dbMarket);
+  if (rows.length === 0) return [];
+
+  const labelFor = (side: string): { side: "home" | "away" | "over" | "under"; label: string } | null => {
+    if (args.market === "moneyline") {
+      if (side === "home") return { side: "home", label: args.homeAbbr };
+      if (side === "away") return { side: "away", label: args.awayAbbr };
+      return null;
+    }
+    if (args.market === "total") {
+      if (side === "over") return { side: "over", label: "Over" };
+      if (side === "under") return { side: "under", label: "Under" };
+      return null;
+    }
+    return null;
+  };
+
+  // Build the side rows in canonical order so the UI render order is
+  // deterministic regardless of provider row ordering.
+  const canonicalOrder: ReadonlyArray<"home" | "away" | "over" | "under"> =
+    args.market === "moneyline" ? ["home", "away"] : ["over", "under"];
+
+  const out: MarketEdgeDto["publicSplits"] = [];
+  for (const side of canonicalOrder) {
+    const sig = rows.find((r) => r.side === side);
+    const meta = labelFor(side);
+    if (meta === null) continue;
+    out.push({
+      side: meta.side,
+      label: meta.label,
+      moneyPct: sig?.public_money_pct ?? null,
+      betsPct: sig?.public_betting_pct ?? null,
+    });
+  }
+  // Drop rows where BOTH money and bets are null AND no row existed —
+  // i.e. the side wasn't reported at all. Keep partial-coverage rows.
+  return out.filter((r) => r.moneyPct !== null || r.betsPct !== null || rows.find((sig) => sig.side === r.side) !== undefined);
 }
 
 /**

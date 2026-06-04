@@ -232,6 +232,28 @@ export type MarketEdgeDto = {
   pinnacleEvPct: number | null;
   moneyPct: number | null;
   betsPct: number | null;
+  /**
+   * Phase 4.2.C.1.R-13C — both sides' public splits for this market.
+   * Pre-R-13C the DTO only carried the model-picked side's
+   * `moneyPct` / `betsPct`, hiding the opposing side's public bet
+   * even when SharpAPI returned it. This array carries up to 2 rows
+   * keyed by side ("home"/"away" for ML/spread, "over"/"under" for
+   * total). Each row's moneyPct or betsPct is null when the
+   * provider didn't report that field — the UI shows "not reported"
+   * for those instead of dropping the side. Empty array when no
+   * sharp_signals rows exist for this (game, market), or for the
+   * first-inning market (provider doesn't offer FI splits).
+   *
+   * `moneyPct` / `betsPct` above (picked-side scalars) are
+   * preserved for back-compat with existing MarketPulse callers.
+   */
+  publicSplits: Array<{
+    side: "home" | "away" | "over" | "under";
+    /** Member-facing side label ("PHI", "SD", "Over", "Under"). */
+    label: string;
+    moneyPct: number | null;
+    betsPct: number | null;
+  }>;
   priceAmerican: number | null;
   lineOpenAmerican: number | null;
 

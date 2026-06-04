@@ -1206,13 +1206,8 @@ function EdgeStack({ market, marketData }: { market: MarketKey; marketData: Mark
 }
 
 function MarketPulse({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
-  const hasMoney = marketData.moneyPct !== null;
-  const hasBets = marketData.betsPct !== null;
-  const hasAnySplit = hasMoney || hasBets;
-
   // First-inning never uses split copy — V1 SharpAPI tier does not cover
-  // first-inning public splits (documented limitation). Phrase as a
-  // provider-coverage statement, not a system failure.
+  // first-inning public splits. Phrase as provider-coverage, not failure.
   if (market === "first_inning") {
     return (
       <div className="space-y-1.5">
@@ -1224,10 +1219,12 @@ function MarketPulse({ market, marketData }: { market: MarketKey; marketData: Ma
     );
   }
 
-  // No splits at all for this game/market — distinct phrasing from the
-  // first-inning case so the user can tell it apart from the provider-
-  // coverage gap above.
-  if (!hasAnySplit) {
+  // R-13C — two-sided render path. Use the new publicSplits array when
+  // present (covers both ML/spread teams or Over/Under), falling back
+  // to the legacy single-side scalars if it isn't populated (e.g.,
+  // older cached DTOs).
+  const splits = marketData.publicSplits;
+  if (splits.length === 0) {
     return (
       <div className="space-y-1.5">
         <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse</p>
@@ -1238,31 +1235,53 @@ function MarketPulse({ market, marketData }: { market: MarketKey; marketData: Ma
     );
   }
 
-  // Partial coverage — one of (money %, bets %) returned, the other null.
-  // Show what we have rather than dropping the section entirely.
   return (
-    <div className="space-y-1.5">
-      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse</p>
-      <div className="space-y-1">
-        {hasMoney ? (
-          <SplitBar label="Money" pct={marketData.moneyPct ?? 0} />
-        ) : (
-          <div className="grid grid-cols-[40px_1fr_36px] items-center gap-2">
-            <span className="text-[9.5px] uppercase tracking-[0.14em] text-gray-500 font-bold">Money</span>
-            <span className="text-[10px] text-gray-600 italic">not reported</span>
-            <span />
-          </div>
-        )}
-        {hasBets ? (
-          <SplitBar label="Bets" pct={marketData.betsPct ?? 0} />
-        ) : (
-          <div className="grid grid-cols-[40px_1fr_36px] items-center gap-2">
-            <span className="text-[9.5px] uppercase tracking-[0.14em] text-gray-500 font-bold">Bets</span>
-            <span className="text-[10px] text-gray-600 italic">not reported</span>
-            <span />
-          </div>
-        )}
+    <div className="space-y-2">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse · Public Splits</p>
+      <div className="space-y-2.5">
+        {splits.map((s) => (
+          <SideSplitsBlock key={s.side} label={s.label} moneyPct={s.moneyPct} betsPct={s.betsPct} />
+        ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * R-13C — one side's money + bets bars stacked with a side label.
+ * Handles partial-null cases by labeling missing fields "not reported"
+ * rather than dropping the row.
+ */
+function SideSplitsBlock({
+  label,
+  moneyPct,
+  betsPct,
+}: {
+  label: string;
+  moneyPct: number | null;
+  betsPct: number | null;
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[10.5px] uppercase tracking-[0.14em] font-bold text-gray-300">{label}</p>
+      {moneyPct !== null ? (
+        <SplitBar label="Money" pct={moneyPct} />
+      ) : (
+        <div className="grid grid-cols-[40px_1fr_36px] items-center gap-2">
+          <span className="text-[9.5px] uppercase tracking-[0.14em] text-gray-500 font-bold">Money</span>
+          <span className="text-[10px] text-gray-600 italic">not reported</span>
+          <span />
+        </div>
+      )}
+      {betsPct !== null ? (
+        <SplitBar label="Bets" pct={betsPct} />
+      ) : (
+        <div className="grid grid-cols-[40px_1fr_36px] items-center gap-2">
+          <span className="text-[9.5px] uppercase tracking-[0.14em] text-gray-500 font-bold">Bets</span>
+          <span className="text-[10px] text-gray-600 italic">not reported</span>
+          <span />
+        </div>
+      )}
     </div>
   );
 }
