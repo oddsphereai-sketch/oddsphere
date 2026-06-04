@@ -38,6 +38,7 @@ import {
   type SharpSignalProjection,
 } from "@/lib/services/sharpReadSelector";
 import type { Side } from "@/lib/types/domain/Lines";
+import { computeMarketImplied } from "@/app/lab/lib/marketImplied";
 import type { Sport } from "@/lib/types/domain/Sport";
 import type {
   Grade,
@@ -1042,122 +1043,18 @@ type BuildMarketEdgeInput = {
 };
 
 // ─────────────────────────────────────────────────────────────
-// Phase 4.2.C.1.R-14C1 — Model / Market / Take strip helpers
+// Phase 4.2.C.1.R-14C1 / R-16E / R-16F-D — Model / Market / Take strip
 // ─────────────────────────────────────────────────────────────
-
-/**
- * Phase 4.2.C.1.R-14C1 / R-16E — No-vig book search order.
- *
- * Lookup is first-match-wins, so order = priority. Real sportsbooks are
- * preferred; `splits_consensus` (R-16E) sits at the END so it ONLY fires
- * when no real book has both sides for the market. When it does fire,
- * the route flags the result as `marketDataQuality: "splits_consensus"`
- * rather than `"two_sided_consensus"` so the reader can label the read
- * honestly.
- */
-const NO_VIG_BOOK_PRIORITY = [
-  "pinnacle",
-  "draftkings",
-  "bet365 us",
-  "bookmaker",
-  "ballybet",
-  "kalshi",
-  "fliff",
-  "onexbet",
-  "saba",
-  "splits_consensus",
-];
-
-const SPLITS_CONSENSUS_BOOK_NAME = "splits_consensus";
-
-function americanToImpliedLocal(american: number): number {
-  if (american > 0) return 100 / (american + 100);
-  return -american / (-american + 100);
-}
-
-/**
- * Compute no-vig market-implied probability for the model's picked
- * side. Walks the book priority list; first book that has BOTH sides
- * wins. Falls back to `pinnacle_fair_probability` from sharp_signals
- * (pre-de-vigged by SharpAPI) when no two-sided book is available.
- *
- * Returns:
- *   • { pickPct, source, quality: "two_sided_consensus" } when both
- *     sides exist at a real book
- *   • { pickPct, source: null, quality: "pinnacle_only" } when only
- *     the sharp-signal Pinnacle fair is available
- *   • { pickPct: null, ..., quality: "single_book" | "unavailable" }
- *     otherwise — the strip renders "Market: unavailable"
- */
-function computeMarketImplied(
-  market: "moneyline" | "total" | "first_inning",
-  dbMarket: "moneyline" | "total" | "first_inning_total",
-  linesCurrent: LineRow[],
-  modelSide: Side | null,
-  signalPinnacleFairForPick: number | null
-): {
-  pickPct: number | null;
-  source: string | null;
-  quality:
-    | "two_sided_consensus"
-    | "splits_consensus"
-    | "single_book"
-    | "pinnacle_only"
-    | "unavailable";
-} {
-  if (market === "first_inning" || modelSide === null) {
-    return { pickPct: null, source: null, quality: "unavailable" };
-  }
-  const lines = linesCurrent.filter((l) => l.market_type === dbMarket);
-  if (lines.length === 0) {
-    return signalPinnacleFairForPick !== null
-      ? { pickPct: signalPinnacleFairForPick * 100, source: null, quality: "pinnacle_only" }
-      : { pickPct: null, source: null, quality: "unavailable" };
-  }
-  // Two-sided book search. R-16E: priority list now ends with
-  // "splits_consensus" — when that book wins, return the
-  // `splits_consensus` quality flag so the reader can honestly label
-  // the read as splits-derived rather than a real-book pair.
-  for (const book of NO_VIG_BOOK_PRIORITY) {
-    const home = lines.find(
-      (l) =>
-        l.sportsbook === book &&
-        (l.side === "home" || l.side === "over") &&
-        l.odds_american !== null
-    );
-    const away = lines.find(
-      (l) =>
-        l.sportsbook === book &&
-        (l.side === "away" || l.side === "under") &&
-        l.odds_american !== null
-    );
-    if (home && away && home.odds_american !== null && away.odds_american !== null) {
-      const hImp = americanToImpliedLocal(home.odds_american);
-      const aImp = americanToImpliedLocal(away.odds_american);
-      const sum = hImp + aImp;
-      const homeNoVig = hImp / sum;
-      const awayNoVig = aImp / sum;
-      const pickSide = modelSide as string;
-      // Map side names: ML "home"/"away" match directly; total "over"/"under"
-      const pickNoVig =
-        (pickSide === "home" || pickSide === "over")
-          ? homeNoVig
-          : awayNoVig;
-      const isSplits = book === SPLITS_CONSENSUS_BOOK_NAME;
-      return {
-        pickPct: pickNoVig * 100,
-        source: book,
-        quality: isSplits ? "splits_consensus" : "two_sided_consensus",
-      };
-    }
-  }
-  // Pinnacle fair fallback when no two-sided book exists
-  if (signalPinnacleFairForPick !== null) {
-    return { pickPct: signalPinnacleFairForPick * 100, source: null, quality: "pinnacle_only" };
-  }
-  // We have at least one side but no two-sided pair
-  return { pickPct: null, source: null, quality: "single_book" };
-}
+// R-16F-D — no-vig math + book priority extracted to
+// `app/lab/lib/marketImplied.ts` so it can be unit-tested without
+// setting up the full DTO build path. The route still owns invocation
+// + DTO wiring; the helper module owns the math.
+//
+// The extracted version also dropped the `market === "first_inning"`
+// short-circuit so the same no-vig path runs for FI markets whenever
+// two-sided FI odds exist in `lines` (R-16F-C captured these rows).
+// The `modelSide === null` guard remains — held / toss-up picks still
+// honestly return "unavailable".
 
 /**
  * Extract review flags + per-market action from `sport_specific.review_v1`.
