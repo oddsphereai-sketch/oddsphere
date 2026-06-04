@@ -1,13 +1,31 @@
 /**
- * Phase 4.2.C.1.G-2 — DRY-RUN starter refresh operator.
+ * Phase 4.2.C.1.G-2 / G-3 — starter refresh operator.
  *
  * USAGE:
- *   npx tsx --env-file=.env.local \
- *     scripts/operator/refresh-starters.ts --date 2026-06-03
+ *   Dry-run (default):
+ *     npx tsx --env-file=.env.local \
+ *       scripts/operator/refresh-starters.ts --date 2026-06-03
  *
- * READ-ONLY by design. Phase G-3 will add the two-key `--apply` /
- * `STARTER_DB_WRITES_ENABLED=true` write path; until then, `--write` is
- * rejected at the CLI surface.
+ *   Apply (two-key gate + interactive y/N + required --limit):
+ *     STARTER_DB_WRITES_ENABLED=true \
+ *       npx tsx --env-file=.env.local \
+ *       scripts/operator/refresh-starters.ts \
+ *       --date 2026-06-03 --limit 1 --apply
+ *
+ * WRITE GATING (G-3, mirrors ingest-missing-pitchers):
+ *   1. `--apply` flag AND `STARTER_DB_WRITES_ENABLED=true` env must BOTH
+ *      be present. Without both, the script runs dry-run.
+ *   2. `--limit N` is REQUIRED in apply mode (N counts GAMES, not sides;
+ *      a 1-game smoke writes both home + away sides for that one game
+ *      when both have `decision.kind === "write"`).
+ *   3. Interactive y/N confirmation listing the exact per-side updates.
+ *   4. Per-game UPDATE loop — only columns whose side decided to write
+ *      are touched; `updated_at` is set to now. Never null-overwrites
+ *      (mergeStarter would have returned no_change instead).
+ *
+ * Scratch detection from `mergeStarter` is preserved — when fired, the
+ * apply prints a [SCRATCH] tag on the confirmation row so the operator
+ * can abort if a swap is unexpected.
  *
  * FLOW:
  *   1. Load DB games for the slate date + their teams.
@@ -41,6 +59,9 @@
  *   `/lineups` fetch to detect confirmed-tier signals when needed.
  */
 
+import * as readline from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
+
 import { supabase } from "../../lib/db/supabase";
 import { BallDontLieSlateProvider } from "../../lib/providers/real_api/BallDontLieSlateProvider";
 import { fetchMlbStatsScheduleRaw } from "../../lib/providers/real_api/_mlbStatsApiClient";
@@ -56,7 +77,12 @@ import {
   parseMlbStatsSchedule,
   pickPrimaryCandidate,
 } from "../../lib/services/starterResolver";
-import { readStringFlag, rejectWriteFlag, todayUTC } from "./_cliCommon";
+import {
+  readBoolFlag,
+  readNumberFlag,
+  readStringFlag,
+  todayUTC,
+} from "./_cliCommon";
 
 // ─── DB row shapes ────────────────────────────────────────────────────
 
@@ -144,10 +170,109 @@ function fmtSide(s: SideDecision): string {
   );
 }
 
+// ─── Apply gate ───────────────────────────────────────────────────────
+
+function resolveApplyGate(argv: readonly string[]): {
+  applyRequested: boolean;
+  envEnabled: boolean;
+  canApply: boolean;
+} {
+  const applyRequested = readBoolFlag(argv, "--apply");
+  const envEnabled = process.env.STARTER_DB_WRITES_ENABLED === "true";
+  return {
+    applyRequested,
+    envEnabled,
+    canApply: applyRequested && envEnabled,
+  };
+}
+
+function refuseApplyMisconfig(
+  applyRequested: boolean,
+  envEnabled: boolean
+): void {
+  if (!applyRequested) return;
+  if (envEnabled) return;
+  console.error(
+    [
+      "✗ --apply requires STARTER_DB_WRITES_ENABLED=true in the environment.",
+      "  Two-key gate: both must be present before any games UPDATE.",
+      "  To opt in for this command:",
+      "",
+      "    STARTER_DB_WRITES_ENABLED=true \\",
+      "      npx tsx --env-file=.env.local \\",
+      "      scripts/operator/refresh-starters.ts \\",
+      "      --date YYYY-MM-DD --limit N --apply",
+    ].join("\n")
+  );
+  process.exit(1);
+}
+
+interface PlannedGameWrite {
+  dbGameId: number;
+  externalId: number;
+  homeTeamAbbr: string | null;
+  awayTeamAbbr: string | null;
+  home: SideDecision | null; // null when this side decided no_change
+  away: SideDecision | null;
+}
+
+async function confirmApply(plans: PlannedGameWrite[]): Promise<boolean> {
+  const rl = readline.createInterface({ input, output });
+  try {
+    const totalSides = plans.reduce(
+      (n, p) => n + (p.home !== null ? 1 : 0) + (p.away !== null ? 1 : 0),
+      0
+    );
+    console.log();
+    console.log(
+      `About to UPDATE ${plans.length} game(s) — ${totalSides} starter side(s) total:`
+    );
+    for (const p of plans) {
+      const teams = `${p.awayTeamAbbr ?? "?"} @ ${p.homeTeamAbbr ?? "?"}`;
+      console.log(
+        `  game id=${p.dbGameId} ext=${p.externalId}  ${teams}`
+      );
+      const sides: Array<{ label: string; s: SideDecision }> = [];
+      if (p.home !== null) sides.push({ label: "home", s: p.home });
+      if (p.away !== null) sides.push({ label: "away", s: p.away });
+      for (const { label, s } of sides) {
+        if (s.decision.kind !== "write") continue; // safety — should never happen
+        const d = s.decision;
+        const prev = d.previousPlayerId === null ? "null" : String(d.previousPlayerId);
+        const next = d.value.playerId;
+        const src = d.value.source;
+        const scratch = d.scratchDetected ? " [SCRATCH]" : "";
+        console.log(
+          `    ${label.padEnd(4)} current=${prev.padEnd(8)} → proposed=${String(next).padEnd(8)} ` +
+            `source=${src.padEnd(28)} reason=${d.reason}${scratch}`
+        );
+      }
+    }
+    console.log();
+    const ans = await rl.question(
+      `Continue with ${totalSides} starter UPDATE(s) across ${plans.length} game(s)? [y/N]: `
+    );
+    return /^y(es)?$/i.test(ans.trim());
+  } finally {
+    rl.close();
+  }
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────
 
 async function main() {
-  rejectWriteFlag(process.argv);
+  // --write is the wrong flag for this operator; clear error rather than
+  // silently dry-running.
+  if (process.argv.includes("--write")) {
+    console.error(
+      "✗ --write is not supported by this script. Use --apply (with STARTER_DB_WRITES_ENABLED=true)."
+    );
+    process.exit(1);
+  }
+
+  const gate = resolveApplyGate(process.argv);
+  refuseApplyMisconfig(gate.applyRequested, gate.envEnabled);
+  const writeMode = gate.canApply;
 
   const date = readStringFlag(process.argv, "--date") ?? todayUTC();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -155,10 +280,28 @@ async function main() {
     process.exit(1);
   }
 
+  // --limit is REQUIRED in apply mode to bound blast radius. Limit counts
+  // GAMES (each game has up to 2 sides to write). Dry-run accepts an
+  // optional --limit for parity / preview.
+  const limit = readNumberFlag(process.argv, "--limit");
+  if (writeMode) {
+    if (limit === undefined) {
+      console.error(
+        "✗ --limit is required when --apply is set. Pass --limit 1 for a single-game smoke."
+      );
+      process.exit(1);
+    }
+    if (limit <= 0) {
+      console.error(`✗ --limit must be >= 1 in apply mode (got ${limit}).`);
+      process.exit(1);
+    }
+  }
+
   console.log(
-    `[refresh-starters] mode=DRY-RUN sport=mlb date=${date}`
+    `[refresh-starters] mode=${writeMode ? "APPLY" : "DRY-RUN"} sport=mlb date=${date}` +
+      (limit !== undefined ? ` limit=${limit}` : "")
   );
-  console.log(`             DRY RUN — NO DB WRITES`);
+  if (!writeMode) console.log(`             DRY RUN — NO DB WRITES`);
   console.log();
 
   // 1. Load DB games for the slate
@@ -519,7 +662,99 @@ async function main() {
     }
   }
   console.log();
-  console.log("  DRY RUN — NO DB WRITES PERFORMED.");
+
+  // 13. Build planned-game-writes list. A game appears here when at least
+  // one side decided to write. Sides whose decision is no_change are
+  // captured as `null` on the PlannedGameWrite (won't be UPDATEd).
+  const allPlannedGames: PlannedGameWrite[] = rows
+    .filter((r) => r.home.decision.kind === "write" || r.away.decision.kind === "write")
+    .map((r) => ({
+      dbGameId: r.dbGame.id,
+      externalId: r.dbGame.external_id,
+      homeTeamAbbr: r.homeTeamAbbr,
+      awayTeamAbbr: r.awayTeamAbbr,
+      home: r.home.decision.kind === "write" ? r.home : null,
+      away: r.away.decision.kind === "write" ? r.away : null,
+    }))
+    .sort((a, b) => a.dbGameId - b.dbGameId);
+  const plannedGames =
+    limit === undefined
+      ? allPlannedGames
+      : allPlannedGames.slice(0, Math.max(0, limit));
+  const heldByLimit = allPlannedGames.length - plannedGames.length;
+  if (heldByLimit > 0) {
+    console.log(
+      `  Games held by --limit ${limit}: ${heldByLimit} of ${allPlannedGames.length}`
+    );
+    console.log();
+  }
+
+  // 14. Dry-run exit OR apply path.
+  if (!writeMode) {
+    console.log("  DRY RUN — NO DB WRITES PERFORMED.");
+    return;
+  }
+
+  if (plannedGames.length === 0) {
+    console.log("  Nothing to write (post-limit). Exiting without changes.");
+    return;
+  }
+
+  const confirmed = await confirmApply(plannedGames);
+  if (!confirmed) {
+    console.log("Cancelled by operator. No writes performed.");
+    return;
+  }
+
+  console.log();
+  console.log("Writing UPDATE(s)…");
+  let gamesWrote = 0;
+  let gamesErrored = 0;
+  let sidesWrote = 0;
+  for (const p of plannedGames) {
+    // Build payload covering only the sides that decided to write.
+    const payload: Record<string, number | string> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (p.home !== null && p.home.decision.kind === "write") {
+      payload.home_pitcher_id = p.home.decision.value.playerId;
+    }
+    if (p.away !== null && p.away.decision.kind === "write") {
+      payload.away_pitcher_id = p.away.decision.value.playerId;
+    }
+    const { error } = await supabase
+      .from("games")
+      .update(payload)
+      .eq("id", p.dbGameId);
+    const sideCount =
+      (p.home !== null ? 1 : 0) + (p.away !== null ? 1 : 0);
+    if (error !== null) {
+      gamesErrored++;
+      console.error(
+        `  ✗ UPDATE failed for game id=${p.dbGameId} ext=${p.externalId}: ${error.message}`
+      );
+      continue;
+    }
+    gamesWrote++;
+    sidesWrote += sideCount;
+    const homePart =
+      p.home !== null && p.home.decision.kind === "write"
+        ? ` home→pid${p.home.decision.value.playerId}`
+        : "";
+    const awayPart =
+      p.away !== null && p.away.decision.kind === "write"
+        ? ` away→pid${p.away.decision.value.playerId}`
+        : "";
+    console.log(
+      `  ✓ UPDATEd game id=${p.dbGameId} ext=${p.externalId}${homePart}${awayPart}`
+    );
+  }
+
+  console.log();
+  console.log("━━━ Apply complete ━━━");
+  console.log(`  Games updated:  ${gamesWrote}`);
+  console.log(`  Sides written:  ${sidesWrote}`);
+  console.log(`  Games errored:  ${gamesErrored}`);
 }
 
 main().catch((err) => {
