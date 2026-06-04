@@ -79,7 +79,29 @@ function formatText(report: MorningCardReport, verbose: boolean) {
   };
   console.log(bandLine("ML  ", cb.ml, report.pick_null_counts.ml));
   console.log(bandLine("O/U ", cb.ou, report.pick_null_counts.ou));
-  console.log(bandLine("NRFI", cb.nrfi, report.pick_null_counts.nrfi));
+
+  // Phase 4.2.C.1.H-6.2 — split the First Inning null bucket into
+  // Toss-Up (`predicted_nrfi === null && nrfi_confidence !== null`,
+  // confidence is the constant NRFI_CONFIDENCE_TOSS_UP = 52) vs true
+  // Held (both null). Toss-Up applies ONLY to the First Inning market;
+  // ML/OU keep their "held" terminology.
+  let nrfiTossUp = 0;
+  let nrfiTrueHeld = 0;
+  for (const p of report.predictions) {
+    if (p.predicted_nrfi === null) {
+      if (p.nrfi_confidence !== null) nrfiTossUp++;
+      else nrfiTrueHeld++;
+    }
+  }
+  const nrfiNullSuffix =
+    nrfiTossUp > 0
+      ? `${nrfiTossUp} toss-up, ${nrfiTrueHeld} held`
+      : `${nrfiTrueHeld} held`;
+  const nrfiRange =
+    cb.nrfi.min !== null && cb.nrfi.max !== null && cb.nrfi.mean !== null
+      ? `conf range ${cb.nrfi.min.toFixed(1)}–${cb.nrfi.max.toFixed(1)} (mean ${cb.nrfi.mean.toFixed(1)})`
+      : `no confidence values`;
+  console.log(`  NRFI set: ${cb.nrfi.count} (${nrfiNullSuffix})   ${nrfiRange}`);
 
   console.log(`\nData gaps:`);
   console.log(`  missing starter (any side): ${report.missing_starter_count}`);
@@ -120,10 +142,18 @@ function formatText(report: MorningCardReport, verbose: boolean) {
         p.predicted_ou_side !== null
           ? `${p.predicted_ou_side} (${(p.ou_confidence ?? 0).toFixed(1)}%)`
           : "HELD";
-      const nrfi =
-        p.predicted_nrfi !== null
-          ? `${p.predicted_nrfi ? "YES" : "NO"} (${(p.nrfi_confidence ?? 0).toFixed(1)}%)`
-          : "HELD";
+      // Phase 4.2.C.1.H-6.2 — Toss-Up is signalled by
+      // `predicted_nrfi === null` AND `nrfi_confidence !== null` (the
+      // model returns NRFI_CONFIDENCE_TOSS_UP = 52 for Toss-Up). Truly
+      // Held is both null.
+      let nrfi: string;
+      if (p.predicted_nrfi !== null) {
+        nrfi = `${p.predicted_nrfi ? "YES" : "NO"} (${(p.nrfi_confidence ?? 0).toFixed(1)}%)`;
+      } else if (p.nrfi_confidence !== null) {
+        nrfi = `TOSS-UP (${p.nrfi_confidence.toFixed(1)}%)`;
+      } else {
+        nrfi = "HELD";
+      }
       const stale = p.stale_report?.is_stale
         ? `STALE: ${p.stale_report.reasons.join("; ")}`
         : p.stale_report

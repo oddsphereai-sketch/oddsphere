@@ -999,6 +999,10 @@ async function main() {
     //   fallback cap (60) − 5 lineup − 5 starter = 50
     //   effective_confidence = min(55, 50) = 50 < 51 floor
     //   → downgrade to Toss-Up via below_floor zone
+    //
+    // Phase 4.2.C.1.H-6.2 — the -5/-5 unconfirmed penalty is now
+    // stage-aware: skipped at `morning_draft`, applied at `t60_locked`.
+    // Run this regression test at the stage where the penalty fires.
     const snap: GameSnapshot = {
       ...nrfiSnap({
         homeFI: 5.5,
@@ -1008,13 +1012,13 @@ async function main() {
         topOps: 0.73,
       }),
       data_quality: {
-        starter_confirmed: false, // -5
-        lineup_confirmed: false,  // -5
+        starter_confirmed: false, // -5 at t60_locked
+        lineup_confirmed: false,  // -5 at t60_locked
         weather_available: false,
         season_stats_present: true,
       },
     };
-    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const out = runMlbAutoModelV1(snap, "t60_locked");
     check(
       "[Phase 4D.1] data-quality downgrade: predicted_nrfi=null when caps drop below floor",
       out.predicted_nrfi === null
@@ -3162,6 +3166,291 @@ async function main() {
     check(
       "[H-6.1-6] mixed sides: nrfi_expected_runs populated",
       out.sport_specific.auto_factors.nrfi_expected_runs !== null
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  section("H-6.2 — Path B Toss-Up downgrade + stage-aware penalties");
+  // ═══════════════════════════════════════════════════════════════
+  //
+  // Pre-H-6.2 the model produced 15/15 NRFI Held for the 2026-06-03
+  // slate because:
+  //   • Path B hard-held whenever any starter used fallback/low-sample
+  //     ERA AND no top-of-order OPS data was available (typical of
+  //     `morning_draft` before BDL pushes lineups).
+  //   • Path C stacked two -5 penalties for `lineup_unconfirmed` +
+  //     `starter_unconfirmed`, which were guaranteed-false at
+  //     `morning_draft` and pushed confidence below the 51 floor.
+  //
+  // H-6.2 changes:
+  //   • Path B → Toss-Up downgrade (not Held) when both FI ERA values
+  //     are populated.
+  //   • Path C penalty is stage-aware: applied at `t60_locked` only.
+  //     `morning_draft` keeps the reason codes but skips the penalty.
+  //
+  // Toss-Up terminology is FIRST INNING ONLY. ML/OU continue to use
+  // winner/HELD language.
+
+  // --- [H-6.2-1] Path B → Toss-Up when both starters have FI but
+  // one is low_sample and no top-of-order data exists.
+  {
+    const snap = baseSnapshot({
+      home_starter: starter({
+        player_external_id: 7001,
+        player_name: "Real FI Home",
+        throws: "R",
+        season_era: 3.5,                 // BDL-backed, so "real" source
+        season_whip: 1.20,
+        first_inning_era: 2.5,
+        first_inning_starts: 20,         // ≥ FIRST_INNING_SAMPLE_GATE
+        first_inning_whip: 1.00,
+      }),
+      away_starter: starter({
+        player_external_id: 7002,
+        player_name: "Thin FI MLB-Only Away",
+        throws: "L",
+        season_era: null,                // MLB-only — no BDL season
+        season_whip: null,
+        first_inning_era: 4.5,
+        first_inning_starts: 2,          // < gate → low_sample (via H-6.1)
+        first_inning_whip: 1.35,
+      }),
+      // Force "no top-of-order data" by stubbing both lineups to empty
+      home_lineup_top8: [],
+      away_lineup_top8: [],
+      // Match the morning_draft data-quality reality of today's slate
+      data_quality: {
+        starter_confirmed: false,
+        lineup_confirmed: false,
+        weather_available: false,
+        season_stats_present: false,
+      },
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+
+    check(
+      "[H-6.2-1] Path B with both-populated FI → Toss-Up, NOT held",
+      out.sport_specific.nrfi_decision_kind === "toss_up"
+    );
+    check(
+      "[H-6.2-1] Path B Toss-Up → predicted_nrfi is null (no commitment)",
+      out.predicted_nrfi === null
+    );
+    check(
+      "[H-6.2-1] Path B Toss-Up → nrfi_confidence is populated (Toss-Up signal for display)",
+      out.nrfi_confidence !== null
+    );
+    check(
+      "[H-6.2-1] Path B Toss-Up emits new 'thin_top_order_downgraded' reason code",
+      codes.includes("thin_top_order_downgraded")
+    );
+    check(
+      "[H-6.2-1] Path B Toss-Up does NOT emit the legacy 'thin_top_order' code (hold-only)",
+      !codes.includes("thin_top_order")
+    );
+    check(
+      "[H-6.2-1] Path B Toss-Up: hold_reason is null (not a hold)",
+      out.sport_specific.nrfi_hold_reason === null
+    );
+  }
+
+  // --- [H-6.2-2] Path A unchanged: true missing FI on either side
+  // still hard-holds.
+  {
+    const snap = baseSnapshot({
+      home_starter: starter({
+        player_external_id: 7011,
+        season_era: null,
+        season_whip: null,
+        first_inning_era: null,         // ← truly missing
+        first_inning_starts: null,
+        first_inning_whip: null,
+      }),
+      away_starter: starter({
+        player_external_id: 7012,
+        season_era: 3.5,
+        season_whip: 1.20,
+        first_inning_era: 2.5,
+        first_inning_starts: 20,
+        first_inning_whip: 1.00,
+      }),
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    check(
+      "[H-6.2-2] true missing FI on one side → still HELD (Path A unchanged)",
+      out.sport_specific.nrfi_decision_kind === "held"
+    );
+    check(
+      "[H-6.2-2] true missing FI → hold_reason is 'missing_starter_era_nrfi'",
+      out.sport_specific.nrfi_hold_reason === "missing_starter_era_nrfi"
+    );
+  }
+
+  // --- [H-6.2-3] morning_draft stage: unconfirmed lineup/starter
+  // reason codes emit BUT no confidence penalty applied. Strong FI on
+  // both sides should fire NRFI/YRFI cleanly.
+  {
+    const snap = baseSnapshot({
+      home_starter: starter({
+        player_external_id: 7021,
+        first_inning_era: 1.5,
+        first_inning_starts: 25,
+        first_inning_whip: 0.90,
+      }),
+      away_starter: starter({
+        player_external_id: 7022,
+        first_inning_era: 1.5,
+        first_inning_starts: 25,
+        first_inning_whip: 0.90,
+      }),
+      data_quality: {
+        starter_confirmed: false,        // not yet confirmed at morning
+        lineup_confirmed: false,
+        weather_available: false,
+        season_stats_present: true,
+      },
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+
+    check(
+      "[H-6.2-3] morning_draft + unconfirmed → reason codes still emit lineup_unconfirmed",
+      codes.includes("lineup_unconfirmed")
+    );
+    check(
+      "[H-6.2-3] morning_draft + unconfirmed → reason codes still emit starter_unconfirmed",
+      codes.includes("starter_unconfirmed")
+    );
+    check(
+      "[H-6.2-3] morning_draft + unconfirmed + strong FI → fires NRFI (not Toss-Up, not held)",
+      out.sport_specific.nrfi_decision_kind === "nrfi"
+    );
+    check(
+      "[H-6.2-3] morning_draft + unconfirmed → predicted_nrfi is true (NRFI commit)",
+      out.predicted_nrfi === true
+    );
+  }
+
+  // --- [H-6.2-4] t60_locked stage: same snapshot still applies the
+  // confidence penalty (because confirmed data is expected by T-60).
+  {
+    const snap = baseSnapshot({
+      home_starter: starter({
+        player_external_id: 7031,
+        first_inning_era: 1.5,
+        first_inning_starts: 25,
+        first_inning_whip: 0.90,
+      }),
+      away_starter: starter({
+        player_external_id: 7032,
+        first_inning_era: 1.5,
+        first_inning_starts: 25,
+        first_inning_whip: 0.90,
+      }),
+      data_quality: {
+        starter_confirmed: false,        // suspect at t60
+        lineup_confirmed: false,
+        weather_available: false,
+        season_stats_present: true,
+      },
+    });
+    const morningOut = runMlbAutoModelV1(snap, "morning_draft");
+    const t60Out = runMlbAutoModelV1(snap, "t60_locked");
+    // At t60, the -5 -5 = -10 penalty pushes natural ~strong-NRFI conf
+    // below the t60 floor + caps. The downgrade-to-Toss-Up path (lines
+    // 956-968 of mlbAutoModelV1) fires.
+    check(
+      "[H-6.2-4] t60_locked + unconfirmed → confidence is lower than morning_draft for same snapshot",
+      morningOut.nrfi_confidence !== null &&
+        (t60Out.nrfi_confidence === null ||
+          t60Out.nrfi_confidence <= (morningOut.nrfi_confidence ?? 100))
+    );
+    const t60Codes = t60Out.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      "[H-6.2-4] t60_locked + unconfirmed → still emits lineup_unconfirmed reason code",
+      t60Codes.includes("lineup_unconfirmed")
+    );
+  }
+
+  // --- [H-6.2-5] Strong FI + CONFIRMED lineup → clean NRFI pick at
+  // both stages, unchanged from prior behavior.
+  {
+    const snap = baseSnapshot({
+      home_starter: starter({
+        player_external_id: 7041,
+        first_inning_era: 1.5,
+        first_inning_starts: 25,
+        first_inning_whip: 0.90,
+      }),
+      away_starter: starter({
+        player_external_id: 7042,
+        first_inning_era: 1.5,
+        first_inning_starts: 25,
+        first_inning_whip: 0.90,
+      }),
+      data_quality: {
+        starter_confirmed: true,
+        lineup_confirmed: true,
+        weather_available: false,
+        season_stats_present: true,
+      },
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    check(
+      "[H-6.2-5] strong FI + confirmed lineup → NRFI fires (regression on prior behavior)",
+      out.sport_specific.nrfi_decision_kind === "nrfi"
+    );
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      "[H-6.2-5] confirmed lineup → no lineup_unconfirmed reason code",
+      !codes.includes("lineup_unconfirmed")
+    );
+  }
+
+  // --- [H-6.2-6] ML/O/U do NOT gain Toss-Up terminology. The
+  // AutoModelOutput contract has no decision_kind on ML/OU — these
+  // markets use `predicted_ml_winner` / `predicted_ou_side` (set or
+  // null). Verify the contract: a held ML/OU snapshot returns null
+  // pick, NOT some Toss-Up signalling.
+  {
+    const snap = baseSnapshot({
+      // Build a snapshot where ML confidence likely lands below floor.
+      home_team: {
+        team_external_id: 7050,
+        abbreviation: "AAA",
+        bullpen_era_proxy: 4.0,
+        season_runs_per_game: 4.5,
+      },
+      away_team: {
+        team_external_id: 7051,
+        abbreviation: "BBB",
+        bullpen_era_proxy: 4.0,
+        season_runs_per_game: 4.5,
+      },
+      // No market line → ML/OU should hold
+      market: {
+        listed_total: null,
+        home_ml_odds_american: null,
+        away_ml_odds_american: null,
+        has_pinnacle_total: false,
+      },
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    check(
+      "[H-6.2-6] ML/OU markets: 'predicted_ml_winner' uses winner-or-null contract (no Toss-Up shape)",
+      out.predicted_ml_winner === null || out.predicted_ml_winner === "home" || out.predicted_ml_winner === "away"
+    );
+    check(
+      "[H-6.2-6] ML/OU markets: 'predicted_ou_side' uses over/under-or-null contract (no Toss-Up shape)",
+      out.predicted_ou_side === null || out.predicted_ou_side === "over" || out.predicted_ou_side === "under"
+    );
+    // The AutoModelOutput shape itself has no `ml_decision_kind` field
+    // — if it ever appears, this assertion fails and we'd review the
+    // product rule.
+    check(
+      "[H-6.2-6] AutoModelOutput has no ML/OU decision_kind field (Toss-Up is First Inning only)",
+      !("ml_decision_kind" in out) && !("ou_decision_kind" in out)
     );
   }
 

@@ -614,7 +614,7 @@ function zoneToDecision(zone: NrfiThresholdZone): boolean | null {
   }
 }
 
-function computeNrfi(snapshot: GameSnapshot): NrfiResult {
+function computeNrfi(snapshot: GameSnapshot, stage: ModelStage): NrfiResult {
   const home_starter = snapshot.home_starter;
   const away_starter = snapshot.away_starter;
   const reason_codes: string[] = [];
@@ -731,19 +731,39 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
   if (homeTopOps === null) reason_codes.push("top_order_missing_home");
   if (awayTopOps === null) reason_codes.push("top_order_missing_away");
 
-  // Hold: BOTH starters use fallback ERA AND no top-of-order data → too
-  // thin. (Preserves pre-4D.1 "thin_nrfi_data" hold semantic.)
+  // Phase 4.2.C.1.H-6.2 — thin top-order Toss-Up downgrade.
+  //
+  // Pre-H-6.2 this was a HARD HOLD ("thin_nrfi_data") when ANY starter
+  // used fallback/low-sample ERA AND no top-of-order OPS data existed.
+  // For slates dominated by MLB-only-ingested starters (no BDL season
+  // stats, lineups not yet pushed by BDL at morning_draft), this fired
+  // for nearly every game and produced 15/15 held.
+  //
+  // Both starters have populated FI ERA values by this point (Path A
+  // already returned hold when either was null), so we have legitimate
+  // first-inning signal — just not enough lineup data to drive a
+  // confident NRFI/YRFI call. The honest expression is a Toss-Up, not
+  // a Held.
+  //
+  // Toss-Up is reserved for the First Inning market only; ML/OU paths
+  // continue to use winner/held language elsewhere in the model.
   if (used_fallback && !used_top_of_order_data) {
+    // Basic ERA-only expected runs as a transparency signal on the
+    // Toss-Up payload. The full modifier chain (park/weather/market/
+    // pitch quality/offense factor/FI WHIP) runs further down and isn't
+    // available at this branch — that's fine, the displayed Toss-Up
+    // value is a flat constant anyway.
+    const tossUpExpectedRuns = (homeFirstInning + awayFirstInning) / 9;
     return {
-      decision_kind: "held",
+      decision_kind: "toss_up",
       threshold_zone: "below_floor",
       decision: null,
-      confidence: null,
-      expected_runs: null,
+      confidence: NRFI_CONFIDENCE_TOSS_UP,
+      expected_runs: tossUpExpectedRuns,
       used_fallback_era: true,
       used_top_of_order_data: false,
-      hold_reason: "thin_nrfi_data",
-      reason_codes: [...reason_codes, "thin_top_order"],
+      hold_reason: null,
+      reason_codes: [...reason_codes, "thin_top_order_downgraded"],
     };
   }
 
@@ -941,12 +961,25 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
   if (used_fallback) {
     cap = Math.min(cap, NRFI_FALLBACK_CONFIDENCE_CAP);
   }
+  // Phase 4.2.C.1.H-6.2 — stage-aware data-quality penalties.
+  // At `morning_draft`, lineups and starters are EXPECTED to be
+  // unconfirmed (BDL pushes the confirmed flags 2–4 hours before first
+  // pitch, well after the 8 AM ET morning ingest). Applying the
+  // -5 penalty per absent flag at this stage is double-punitive on top
+  // of the already-conservative STAGE_CONFIDENCE_CAPS["morning_draft"]
+  // = 60. At `t60_locked`, confirmed lineups and starters are expected
+  // and the absence of either is a real signal worth penalizing.
+  //
+  // The `lineup_unconfirmed` / `starter_unconfirmed` reason codes are
+  // emitted regardless of stage so the data-quality state remains
+  // visible to operators and the breakdown UI.
+  const applyUnconfirmedPenalty = stage === "t60_locked";
   if (snapshot.data_quality.lineup_confirmed === false) {
-    cap -= NRFI_UNCONFIRMED_CONFIDENCE_PENALTY;
+    if (applyUnconfirmedPenalty) cap -= NRFI_UNCONFIRMED_CONFIDENCE_PENALTY;
     reason_codes.push("lineup_unconfirmed");
   }
   if (snapshot.data_quality.starter_confirmed === false) {
-    cap -= NRFI_UNCONFIRMED_CONFIDENCE_PENALTY;
+    if (applyUnconfirmedPenalty) cap -= NRFI_UNCONFIRMED_CONFIDENCE_PENALTY;
     reason_codes.push("starter_unconfirmed");
   }
 
@@ -1166,7 +1199,7 @@ export function runMlbAutoModelV1(
   }
 
   // ── NRFI ────────────────────────────────────────────────────────
-  const nrfi = computeNrfi(snapshot);
+  const nrfi = computeNrfi(snapshot, stage);
   const predicted_nrfi = nrfi.decision;
   const nrfi_confidence = nrfi.confidence !== null ? round1(nrfi.confidence) : null;
 
