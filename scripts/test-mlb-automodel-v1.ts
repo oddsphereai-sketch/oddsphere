@@ -2883,6 +2883,289 @@ async function main() {
   }
 
   // ═══════════════════════════════════════════════════════════════
+  section("H-6.1 — FI-only pitcher (real FI, season_era null) is not discarded");
+  // ═══════════════════════════════════════════════════════════════
+  //
+  // Regression context: before H-6.1, `effectiveFirstInningEra`
+  // returned { value: null, source: "missing" } when a pitcher had real
+  // first_inning_era but the FI sample was below FIRST_INNING_SAMPLE_GATE
+  // AND season_era was null. The whole NRFI decision then hard-held with
+  // hold_reason="missing_starter_era_nrfi". For slates dominated by
+  // MLB-Stats-only-ingested pitchers (no BDL season stats yet), this
+  // forced 0/15 NRFI on 2026-06-03.
+  //
+  // H-6.1 fix: in that case, use the observed FI ERA directly with
+  // source="low_sample" (and the existing low_first_inning_sample
+  // reason code). Real data > dropped data.
+  //
+  // We can't import the internal `effectiveFirstInningEra` helper
+  // directly — it's scoped inside computeNrfi. So these tests exercise
+  // the end-to-end model via runMlbAutoModelV1 and assert on
+  // observable outputs: nrfi_decision_kind, hold_reason, and the FI
+  // reason codes surfaced via sport_specific.auto_factors.
+
+  // --- Helper: build a snapshot where one or both starters are
+  // MLB-only-style (season_era null, FI populated). Defaults to a
+  // benign league-average market line so we observe NRFI behavior
+  // without ML/OU noise.
+  function fiOnlyStarter(args: {
+    fiEra: number | null;
+    fiStarts: number | null;
+    fiWhip: number | null;
+    seasonEra: number | null;
+    name?: string;
+    id?: number;
+    throws?: "L" | "R";
+  }): StarterSnapshot {
+    return starter({
+      player_external_id: args.id ?? 1001,
+      player_name: args.name ?? "FI-Only Starter",
+      throws: args.throws ?? "R",
+      season_era: args.seasonEra,
+      season_whip: args.seasonEra === null ? null : 1.20,
+      season_k_per_9: args.seasonEra === null ? null : 9.0,
+      first_inning_era: args.fiEra,
+      first_inning_starts: args.fiStarts,
+      first_inning_whip: args.fiWhip,
+    });
+  }
+
+  // --- [H-6.1-1] FI real + strong sample + season_era null → uses FI as "real"
+  {
+    const snap = baseSnapshot({
+      home_starter: fiOnlyStarter({
+        fiEra: 2.0,
+        fiStarts: 10, // ≥ FIRST_INNING_SAMPLE_GATE (3)
+        fiWhip: 0.95,
+        seasonEra: null,
+        name: "Strong FI MLB-Only",
+        id: 9001,
+      }),
+      away_starter: fiOnlyStarter({
+        fiEra: 2.0,
+        fiStarts: 10,
+        fiWhip: 0.95,
+        seasonEra: null,
+        name: "Strong FI MLB-Only",
+        id: 9002,
+        throws: "L",
+      }),
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      "[H-6.1-1] strong FI + season_era null → NRFI is NOT held (was 'missing_starter_era_nrfi')",
+      out.sport_specific.nrfi_hold_reason !== "missing_starter_era_nrfi"
+    );
+    check(
+      "[H-6.1-1] reason codes include 'first_inning_data_used' (source=real)",
+      codes.includes("first_inning_data_used")
+    );
+    check(
+      "[H-6.1-1] reason codes do NOT include 'low_first_inning_sample' (sample ≥ gate)",
+      !codes.includes("low_first_inning_sample")
+    );
+  }
+
+  // --- [H-6.1-2] FI real + THIN sample + season_era null → uses FI as "low_sample"
+  // This is THE bug case. Pre-fix: hard-held with "missing_starter_era_nrfi".
+  {
+    const snap = baseSnapshot({
+      home_starter: fiOnlyStarter({
+        fiEra: 4.5,
+        fiStarts: 2, // < FIRST_INNING_SAMPLE_GATE (3)
+        fiWhip: 1.35,
+        seasonEra: null,
+        name: "Thin FI MLB-Only",
+        id: 9011,
+      }),
+      away_starter: fiOnlyStarter({
+        fiEra: 4.5,
+        fiStarts: 2,
+        fiWhip: 1.35,
+        seasonEra: null,
+        name: "Thin FI MLB-Only",
+        id: 9012,
+        throws: "L",
+      }),
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      "[H-6.1-2] thin FI + season_era null → NRFI hold_reason is NOT 'missing_starter_era_nrfi' (regression on the bug)",
+      out.sport_specific.nrfi_hold_reason !== "missing_starter_era_nrfi"
+    );
+    check(
+      "[H-6.1-2] thin FI + season_era null → nrfi_expected_runs is populated (not null)",
+      out.sport_specific.auto_factors.nrfi_expected_runs !== null
+    );
+    check(
+      "[H-6.1-2] reason codes include 'low_first_inning_sample' (sample below gate)",
+      codes.includes("low_first_inning_sample")
+    );
+    check(
+      "[H-6.1-2] reason codes do NOT include 'first_inning_data_used' (source was 'low_sample', not 'real')",
+      !codes.includes("first_inning_data_used")
+    );
+  }
+
+  // --- [H-6.1-3] FI null + season_era null → still legitimately missing/held
+  {
+    const snap = baseSnapshot({
+      home_starter: fiOnlyStarter({
+        fiEra: null,
+        fiStarts: null,
+        fiWhip: null,
+        seasonEra: null,
+        name: "Truly Empty",
+        id: 9021,
+      }),
+      away_starter: fiOnlyStarter({
+        fiEra: null,
+        fiStarts: null,
+        fiWhip: null,
+        seasonEra: null,
+        name: "Truly Empty",
+        id: 9022,
+        throws: "L",
+      }),
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    check(
+      "[H-6.1-3] FI null + season_era null → NRFI is held (no real data)",
+      out.sport_specific.nrfi_decision_kind === "held"
+    );
+    check(
+      "[H-6.1-3] FI null + season_era null → hold_reason is 'missing_starter_era_nrfi' (legitimate hold)",
+      out.sport_specific.nrfi_hold_reason === "missing_starter_era_nrfi"
+    );
+  }
+
+  // --- [H-6.1-4] BDL-backed pitcher with full season stats + FI → unchanged
+  // Real season ERA + real FI ≥ gate should produce "real" source for the
+  // FI branch and a non-held NRFI (same as pre-fix behavior).
+  {
+    const snap = baseSnapshot({
+      home_starter: starter({
+        player_external_id: 9031,
+        player_name: "Full-Stats Starter",
+        throws: "R",
+        season_era: 3.5,
+        season_whip: 1.20,
+        season_k_per_9: 9.5,
+        first_inning_era: 2.5,
+        first_inning_starts: 20,
+        first_inning_whip: 1.00,
+      }),
+      away_starter: starter({
+        player_external_id: 9032,
+        player_name: "Full-Stats Starter",
+        throws: "L",
+        season_era: 3.5,
+        season_whip: 1.20,
+        season_k_per_9: 9.5,
+        first_inning_era: 2.5,
+        first_inning_starts: 20,
+        first_inning_whip: 1.00,
+      }),
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      "[H-6.1-4] BDL-backed pitcher: NRFI hold_reason is NOT 'missing_starter_era_nrfi'",
+      out.sport_specific.nrfi_hold_reason !== "missing_starter_era_nrfi"
+    );
+    check(
+      "[H-6.1-4] BDL-backed pitcher: reason codes include 'first_inning_data_used' (source=real)",
+      codes.includes("first_inning_data_used")
+    );
+    check(
+      "[H-6.1-4] BDL-backed pitcher: no 'low_first_inning_sample' (sample ≥ gate)",
+      !codes.includes("low_first_inning_sample")
+    );
+    check(
+      "[H-6.1-4] BDL-backed pitcher: no 'fallback_first_inning_era' (real FI used)",
+      !codes.includes("fallback_first_inning_era")
+    );
+  }
+
+  // --- [H-6.1-5] End-to-end FI-only — should not hard-hold solely
+  // because season_era is null. Mimics today's MIA @ WSH game where
+  // Alvarez (FI 0.00 / 5 / 0.40) faced Meyer (FI 3.00 / 12 / 0.83).
+  {
+    const snap = baseSnapshot({
+      home_starter: fiOnlyStarter({
+        fiEra: 0.0,
+        fiStarts: 5,
+        fiWhip: 0.40,
+        seasonEra: null,
+        name: "Andrew Alvarez (synthetic)",
+        id: 9041,
+      }),
+      away_starter: fiOnlyStarter({
+        fiEra: 3.0,
+        fiStarts: 12,
+        fiWhip: 0.83,
+        seasonEra: null,
+        name: "Max Meyer (synthetic)",
+        id: 9042,
+        throws: "R",
+      }),
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    check(
+      "[H-6.1-5] end-to-end FI-only → NRFI hold_reason is NOT 'missing_starter_era_nrfi'",
+      out.sport_specific.nrfi_hold_reason !== "missing_starter_era_nrfi"
+    );
+    check(
+      "[H-6.1-5] end-to-end FI-only → nrfi_expected_runs is populated",
+      out.sport_specific.auto_factors.nrfi_expected_runs !== null
+    );
+    // Asymmetric FI ERAs (0.00 vs 3.00) should produce a real
+    // expected_runs computation, not null. We don't assert the exact
+    // decision (could be NRFI / Toss-Up / Held-for-data-quality
+    // downgrades depending on stage), just that the FI signal flowed
+    // through and the hold (if any) is not the "missing FI ERA" hard
+    // hold path that this fix is targeting.
+  }
+
+  // --- [H-6.1-6] Mixed sides: one FI-only (no season_era), one BDL-backed
+  // The FI-only side should resolve via low_sample (thin) or real
+  // (sufficient). The mixed pair should not hit the "missing" hold path.
+  {
+    const snap = baseSnapshot({
+      home_starter: fiOnlyStarter({
+        fiEra: 5.0,
+        fiStarts: 2, // thin
+        fiWhip: 1.50,
+        seasonEra: null,
+        name: "Thin FI MLB-Only",
+        id: 9051,
+      }),
+      away_starter: starter({
+        player_external_id: 9052,
+        player_name: "Full-Stats Starter",
+        throws: "L",
+        season_era: 3.5,
+        season_whip: 1.20,
+        season_k_per_9: 9.5,
+        first_inning_era: 2.5,
+        first_inning_starts: 20,
+        first_inning_whip: 1.00,
+      }),
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    check(
+      "[H-6.1-6] mixed sides: NRFI hold_reason is NOT 'missing_starter_era_nrfi'",
+      out.sport_specific.nrfi_hold_reason !== "missing_starter_era_nrfi"
+    );
+    check(
+      "[H-6.1-6] mixed sides: nrfi_expected_runs populated",
+      out.sport_specific.auto_factors.nrfi_expected_runs !== null
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   console.log(`\n${"━".repeat(70)}`);
   console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
   if (fail > 0) {

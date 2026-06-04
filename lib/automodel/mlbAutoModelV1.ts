@@ -651,8 +651,16 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
   // Phase 3.x.1 sources (in priority order):
   //   "real"       — real FI ERA from MLB Stats API, starts ≥ gate
   //   "low_sample" — real FI ERA present but starts < gate; falls back
-  //                  to season-ERA × 0.7 and flags low_first_inning_sample
-  //   "proxy"      — no FI ERA; falls back to season-ERA × 0.7 and flags
+  //                  to season-ERA × FIRST_INNING_PROXY_MULTIPLIER and
+  //                  flags low_first_inning_sample. Phase 4.2.C.1.H-6.1
+  //                  generalized this to also cover MLB-only pitchers
+  //                  (real FI exists, sample < gate, season_era is null):
+  //                  use the real FI ERA directly rather than dropping
+  //                  real data — discarding observed FI when no season
+  //                  anchor exists was the bug that held every NRFI on
+  //                  slates dominated by MLB-only-ingested starters.
+  //   "proxy"      — no FI ERA; falls back to season-ERA ×
+  //                  FIRST_INNING_PROXY_MULTIPLIER and flags
   //                  fallback_first_inning_era (the pre-3.x.1 behavior)
   //   "missing"    — no FI ERA and no season ERA; existing hold path
   type FirstInningSource = "real" | "low_sample" | "proxy" | "missing";
@@ -669,7 +677,12 @@ function computeNrfi(snapshot: GameSnapshot): NrfiResult {
       if (s.season_era !== null) {
         return { value: s.season_era * FIRST_INNING_PROXY_MULTIPLIER, source: "low_sample" };
       }
-      return { value: null, source: "missing" };
+      // Phase 4.2.C.1.H-6.1: real FI ERA exists but sample is thin AND
+      // no season-ERA anchor (typical of MLB-Stats-only-ingested pitchers
+      // who don't have BDL season stats yet). Use the observed FI ERA
+      // directly — real data with a low_sample reason code is strictly
+      // better than dropping the value and forcing a hold.
+      return { value: era, source: "low_sample" };
     }
     if (s.season_era !== null) {
       return { value: s.season_era * FIRST_INNING_PROXY_MULTIPLIER, source: "proxy" };
