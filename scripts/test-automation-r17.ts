@@ -398,6 +398,7 @@ function testOrchestratorPerStepGates() {
     "SLATE_DB_WRITES_ENABLED",
     "STARTER_DB_WRITES_ENABLED",
     "PLAYER_INGEST_DB_WRITES_ENABLED",
+    "SEASON_PITCHING_DB_WRITES_ENABLED", // Step 2A.5
     "LINES_DB_WRITES_ENABLED",
     "SHARP_SIGNALS_DB_WRITES_ENABLED",
     "AUTOMODEL_DB_WRITES_ENABLED",
@@ -433,25 +434,45 @@ function testOrchestratorImportsStepRunners() {
     content.includes("runMissingPitcherCycle") &&
       content.includes("from \"../ingest-missing-pitchers\"")
   );
+  check(
+    "imports runSeasonPitchingCycle for S5 (Step 2A.5)",
+    content.includes("runSeasonPitchingCycle") &&
+      content.includes("from \"../backfill-season-pitching-stats\"")
+  );
 }
 
 function testOrchestratorDeferredSteps() {
-  section("orchestrator (Step 2): S2 / S5 / S6 marked not_invoked_step2_v1");
+  section("orchestrator (Step 2A.5): S2 / S6 still deferred; S5 now invoked");
   const content = readOrchestratorSource();
-  check("not_invoked_step2_v1 mode exists", content.includes("not_invoked_step2_v1"));
+  check("not_invoked_step2_v1 mode still exists", content.includes("not_invoked_step2_v1"));
   check(
     "S2 teams refresh deferred",
     content.includes("S2. Teams refresh") &&
       content.includes("not_invoked_step2_v1")
   );
   check(
-    "S5 season pitching deferred",
-    content.includes("S5. Season-pitching stats") &&
-      content.includes("Step 2A.5")
-  );
-  check(
     "S6 bullpen deferred",
     content.includes("S6. Bullpen") && content.includes("Step 2B")
+  );
+  // S5 is no longer deferred. Check two structural signals: the OLD
+  // Step-2-first-commit deferral reason no longer appears, AND the
+  // wired runner is present.
+  check(
+    "S5's old 'deferred to Step 2A.5' reason text is gone",
+    !content.includes(
+      "deferred to Step 2A.5 — operator mixes per-player + slate-wide modes"
+    )
+  );
+  check(
+    "S5 step uses runSeasonPitchingCycle operator_path",
+    content.includes(
+      "scripts/operator/backfill-season-pitching-stats.runSeasonPitchingCycle"
+    )
+  );
+  check(
+    "S5 has provider-blocked fallback branch",
+    content.includes("S5. Season-pitching stats") &&
+      content.includes("blocked by provider rollover")
   );
 }
 
@@ -535,6 +556,96 @@ function testMissingPitcherHelperExportSurface() {
   );
 }
 
+function testSeasonPitchingHelperExportSurface() {
+  section("season-pitching helper: exports runSeasonPitchingCycle + result types (Step 2A.5)");
+  const fs = require("fs") as typeof import("fs");
+  const path =
+    "/Users/danielmengel/Projects/oddsphere/scripts/operator/backfill-season-pitching-stats.ts";
+  const content = fs.readFileSync(path, "utf8");
+  check(
+    "exports runSeasonPitchingCycle",
+    content.includes("export async function runSeasonPitchingCycle")
+  );
+  check(
+    "exports RunSeasonPitchingArgs type",
+    content.includes("export type RunSeasonPitchingArgs")
+  );
+  check(
+    "exports RunSeasonPitchingResult type",
+    content.includes("export type RunSeasonPitchingResult")
+  );
+  check(
+    "helper does not call process.exit (caller decides)",
+    !/runSeasonPitchingCycle[\s\S]*?process\.exit/.test(
+      content
+        .split("export async function runSeasonPitchingCycle")[1]
+        ?.split("// ─── Main")[0] ?? ""
+    )
+  );
+  check(
+    "helper accepts confirm callback (auto-yes default in slate-date mode)",
+    content.includes("confirm?: (")
+  );
+  check("helper accepts log callback", content.includes("log?: (msg: string)"));
+  check(
+    "main() guarded by require.main === module",
+    content.includes("if (require.main === module)")
+  );
+}
+
+function testS5DryRunGatingByDefault() {
+  section("orchestrator S5 (Step 2A.5): dry-run by default unless gates satisfied");
+  const content = readOrchestratorSource();
+  // seasonWrite must AND effectiveApply, confirmed, and perStep.season.
+  check(
+    "seasonWrite is gated on effectiveApply && confirmed && perStep.season",
+    content.includes(
+      "const seasonWrite = effectiveApply && confirmed && perStep.season"
+    )
+  );
+  check(
+    "S5 emits explicit 'env missing → would be dry-run anyway' hint",
+    content.includes(PER_STEP_ENV_VAR("season")) ||
+      content.includes("PER_STEP_ENV_VARS.season")
+  );
+  check(
+    "S5 helper invocation uses slate-starter scope (slateDate, not playerIds)",
+    /runSeasonPitchingCycle\(\{[\s\S]*?slateDate: date/.test(content)
+  );
+}
+
+// tiny helper for the gate-name assertion above — keeps the test text
+// readable without inlining the literal everywhere.
+function PER_STEP_ENV_VAR(_key: string): string {
+  return "SEASON_PITCHING_DB_WRITES_ENABLED";
+}
+
+function testS5PerPitcherFailuresIsolated() {
+  section("season-pitching helper (Step 2A.5): per-pitcher failures isolated");
+  const fs = require("fs") as typeof import("fs");
+  const path =
+    "/Users/danielmengel/Projects/oddsphere/scripts/operator/backfill-season-pitching-stats.ts";
+  const content = fs.readFileSync(path, "utf8");
+  // The helper wraps each per-pitcher MLB / writer call in try/catch and
+  // increments countErrors, then `continue`s the loop instead of throwing.
+  check(
+    "per-pitcher loop wraps searchPersonByNameDob in try/catch",
+    /try\s*\{[\s\S]*?searchPersonByNameDob[\s\S]*?\}\s*catch/.test(content)
+  );
+  check(
+    "per-pitcher loop wraps getPitcherSeasonStats in try/catch",
+    /try\s*\{[\s\S]*?getPitcherSeasonStats[\s\S]*?\}\s*catch/.test(content)
+  );
+  check(
+    "per-pitcher loop wraps persistSeasonPitchingStats in try/catch",
+    /try\s*\{[\s\S]*?persistSeasonPitchingStats[\s\S]*?\}\s*catch/.test(content)
+  );
+  check(
+    "RunSeasonPitchingResult includes errors counter",
+    content.includes("errors: countErrors") || /errors:\s*number/.test(content)
+  );
+}
+
 // ─── Runner ──────────────────────────────────────────────────────────
 
 async function main() {
@@ -562,6 +673,9 @@ async function main() {
   testOrchestratorVerboseStatuses();
   testStarterHelperExportSurface();
   testMissingPitcherHelperExportSurface();
+  testSeasonPitchingHelperExportSurface();
+  testS5DryRunGatingByDefault();
+  testS5PerPitcherFailuresIsolated();
 
   console.log();
   console.log("━━━ Summary ━━━");

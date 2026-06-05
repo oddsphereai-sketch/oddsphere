@@ -12,6 +12,7 @@
  *       SLATE_DB_WRITES_ENABLED=true \
  *       STARTER_DB_WRITES_ENABLED=true \
  *       PLAYER_INGEST_DB_WRITES_ENABLED=true \
+ *       SEASON_PITCHING_DB_WRITES_ENABLED=true \
  *       LINES_DB_WRITES_ENABLED=true \
  *       SHARP_SIGNALS_DB_WRITES_ENABLED=true \
  *       AUTOMODEL_DB_WRITES_ENABLED=true \
@@ -42,10 +43,14 @@
  *
  * NOT INVOKED (deferred — marked `not_invoked_step2_v1` in the report):
  *   • S2 teams refresh — deferred to Step 2B
- *   • S5 season-pitching stats — operator currently mixes per-player +
- *     slate-wide modes with an interactive prompt; helper extraction
- *     deferred to Step 2A.5
  *   • S6 bullpen / team-stats refresh — deferred to Step 2B
+ *
+ * INVOKED IN STEP 2A.5 (new since Step 2 first commit):
+ *   • S5 season-pitching stats — runSeasonPitchingCycle, slate-starter
+ *     scope only (helper resolves player IDs from games table). Bounded
+ *     to the slate's probable starters; never a broad unbounded refresh.
+ *     Per-pitcher failures isolated (counted, not crash-fatal); if stats
+ *     remain missing, the post-refresh gate (G1) holds affected markets.
  *
  * NEVER:
  *   • auto-publish
@@ -75,6 +80,7 @@ import { linesService } from "../../../lib/services/linesService";
 import { generatePredictionsForSlate } from "../../../lib/services/automodelService";
 import { runStarterRefreshCycle } from "../refresh-starters";
 import { runMissingPitcherCycle } from "../ingest-missing-pitchers";
+import { runSeasonPitchingCycle } from "../backfill-season-pitching-stats";
 import type { Sport } from "../../../lib/types/domain/Sport";
 
 // ─── Step status ─────────────────────────────────────────────────────
@@ -117,6 +123,7 @@ const PER_STEP_ENV_VARS = {
   slate: "SLATE_DB_WRITES_ENABLED",
   starter: "STARTER_DB_WRITES_ENABLED",
   pitcher: "PLAYER_INGEST_DB_WRITES_ENABLED",
+  season: "SEASON_PITCHING_DB_WRITES_ENABLED",
   lines: "LINES_DB_WRITES_ENABLED",
   signals: "SHARP_SIGNALS_DB_WRITES_ENABLED",
   automodel: "AUTOMODEL_DB_WRITES_ENABLED",
@@ -269,6 +276,91 @@ async function runStarterPass(
       order,
       name: stepName,
       operator_path: "scripts/operator/refresh-starters.runStarterRefreshCycle",
+      mode: "failed",
+      reason: `failed: ${msg}`,
+    };
+  }
+}
+
+async function runSeasonPitching(
+  sport: Sport,
+  date: string,
+  writeMode: boolean,
+  perStepEnabled: boolean,
+  order: number
+): Promise<StepResult> {
+  try {
+    const res = await runSeasonPitchingCycle({
+      sport,
+      slateDate: date,
+      writeMode,
+      log: () => {
+        /* swallow per-pitcher verbose chatter */
+      },
+    });
+    let mode: StepMode;
+    let reason: string;
+    switch (res.status) {
+      case "wrote":
+        mode = "wrote";
+        reason =
+          `inserted/updated ${res.rows_written} season row(s); ` +
+          `errors=${res.errors}; skipped_empty=${res.skipped_empty}, ` +
+          `skipped_nulled=${res.skipped_nulled}, missing_dob=${res.skipped_missing_dob}`;
+        break;
+      case "dry_run":
+        mode = "dry_run";
+        reason =
+          `dry-run; would write ${res.rows_dry_run} row(s) ` +
+          `(planned: ${res.planned_inserts} INSERT + ${res.planned_updates} UPDATE)` +
+          (perStepEnabled
+            ? ""
+            : ` (per-step gate ${PER_STEP_ENV_VARS.season} missing — would be dry-run anyway)`);
+        break;
+      case "no_changes":
+        mode = writeMode ? "wrote" : "dry_run";
+        reason = "every slate starter already has a fresh season row";
+        break;
+      case "cancelled":
+        mode = "skipped";
+        reason = "cancelled (confirm returned false)";
+        break;
+      case "empty_slate":
+        mode = "skipped";
+        reason = "no slate starters resolved (empty slate or starters unset)";
+        break;
+      case "failed":
+        mode = "failed";
+        reason = `failed: ${res.message ?? "unknown"}`;
+        break;
+    }
+    return {
+      order,
+      name: "S5. Season-pitching stats",
+      operator_path:
+        "scripts/operator/backfill-season-pitching-stats.runSeasonPitchingCycle",
+      mode,
+      reason,
+      details: {
+        planned_inserts: res.planned_inserts,
+        planned_updates: res.planned_updates,
+        skipped_no_overwrite: res.skipped_no_overwrite,
+        skipped_nulled: res.skipped_nulled,
+        rows_written: res.rows_written,
+        rows_dry_run: res.rows_dry_run,
+        skipped_empty: res.skipped_empty,
+        skipped_missing_dob: res.skipped_missing_dob,
+        errors: res.errors,
+        mlb_api_calls: res.mlb_api_calls,
+      },
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      order,
+      name: "S5. Season-pitching stats",
+      operator_path:
+        "scripts/operator/backfill-season-pitching-stats.runSeasonPitchingCycle",
       mode: "failed",
       reason: `failed: ${msg}`,
     };
@@ -607,19 +699,19 @@ async function main() {
   if (effectiveApply) {
     const summary = [
       `  Steps that WILL WRITE under current env (per-step gates check):`,
-      `    S1 slate:      ${perStep.slate ? "WRITE" : "dry-run (env missing)"}`,
-      `    S3 starter#1:  ${perStep.starter ? "WRITE" : "dry-run (env missing)"}`,
-      `    S4 pitchers:   ${perStep.pitcher ? "WRITE" : "dry-run (env missing)"}`,
-      `    S7 lines V2:   ${perStep.lines ? "WRITE" : "dry-run (env missing)"}`,
-      `    S8 signals:    ${perStep.signals ? "WRITE" : "dry-run (env missing)"}`,
-      `    M1 starter#2:  ${perStep.starter ? "WRITE" : "dry-run (env missing)"}`,
-      `    M2 automodel:  ${perStep.automodel ? "WRITE" : "dry-run (env missing)"}` +
+      `    S1 slate:        ${perStep.slate ? "WRITE" : "dry-run (env missing)"}`,
+      `    S3 starter#1:    ${perStep.starter ? "WRITE" : "dry-run (env missing)"}`,
+      `    S4 pitchers:     ${perStep.pitcher ? "WRITE" : "dry-run (env missing)"}`,
+      `    S5 season pitch: ${perStep.season ? "WRITE" : "dry-run (env missing)"}`,
+      `    S7 lines V2:     ${perStep.lines ? "WRITE" : "dry-run (env missing)"}`,
+      `    S8 signals:      ${perStep.signals ? "WRITE" : "dry-run (env missing)"}`,
+      `    M1 starter#2:    ${perStep.starter ? "WRITE" : "dry-run (env missing)"}`,
+      `    M2 automodel:    ${perStep.automodel ? "WRITE" : "dry-run (env missing)"}` +
         (preGate.overall === "fail_closed" ? " — but gate is fail_closed; will be blocked" : ""),
       ``,
-      `  Deferred (not invoked in Step 2 first commit):`,
-      `    S2 teams        → not_invoked_step2_v1`,
-      `    S5 season pitch → not_invoked_step2_v1 (extraction in Step 2A.5)`,
-      `    S6 bullpen      → not_invoked_step2_v1`,
+      `  Deferred (not invoked yet):`,
+      `    S2 teams      → not_invoked_step2_v1 (Step 2B)`,
+      `    S6 bullpen    → not_invoked_step2_v1 (Step 2B)`,
     ].join("\n");
     confirmed = await confirmApply(summary);
     if (!confirmed) {
@@ -721,15 +813,32 @@ async function main() {
     );
   }
 
-  // S5 — Season-pitching stats: deferred to Step 2A.5.
-  steps.push({
-    order: nextOrder++,
-    name: "S5. Season-pitching stats",
-    operator_path: "scripts/operator/backfill-season-pitching-stats.ts",
-    mode: "not_invoked_step2_v1",
-    reason:
-      "deferred to Step 2A.5 — operator mixes per-player + slate-wide modes with interactive prompt; needs careful helper extraction",
-  });
+  // S5 — Season-pitching stats. Slate-starter-only scope (the helper
+  // resolves player IDs via games.{home,away}_pitcher_id). Per-pitcher
+  // failures are isolated by the helper — counted but not crash-fatal.
+  // If stats remain missing, the post-refresh gate (G1) holds the
+  // affected game/markets.
+  const seasonWrite = effectiveApply && confirmed && perStep.season;
+  if (providerBlocked) {
+    steps.push({
+      order: nextOrder++,
+      name: "S5. Season-pitching stats",
+      operator_path:
+        "scripts/operator/backfill-season-pitching-stats.runSeasonPitchingCycle",
+      mode: "blocked",
+      reason: "blocked by provider rollover",
+    });
+  } else {
+    steps.push(
+      await runSeasonPitching(
+        common.sport,
+        common.date,
+        seasonWrite,
+        perStep.season,
+        nextOrder++
+      )
+    );
+  }
 
   // S6 — Bullpen refresh: deferred to Step 2B.
   steps.push({
