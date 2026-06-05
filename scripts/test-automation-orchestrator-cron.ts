@@ -18,6 +18,7 @@ import {
   computeEffectiveWriteMode,
   buildOrchestratorBlockedReport,
   isIntradayMode,
+  shouldDemoteAlignmentForGate,
   PER_STEP_ENV_VARS,
   ORCHESTRATOR_GATE_ENV,
   SLATE_CYCLE_INTRADAY_MODE_ENV,
@@ -258,6 +259,109 @@ async function main() {
         perStepGate: true,
         upstreamBlocked: false,
       }) === true);
+  }
+
+  // ── [J] R-19 Phase 5e — shouldDemoteAlignmentForGate ────────────────
+  section("R-19 P5e — shouldDemoteAlignmentForGate (intraday alignment soften)");
+  {
+    // Morning mode (intradayMode=false) — NEVER demote, regardless of
+    // alignment status. fail_closed must cascade to the R-17 G1 gate so
+    // a late-fired morning cron blocks correctly.
+    check(
+      "morning + alignment ok → no demote",
+      shouldDemoteAlignmentForGate({ intradayMode: false, alignmentStatus: "ok" }) === false
+    );
+    check(
+      "morning + alignment warn → no demote",
+      shouldDemoteAlignmentForGate({ intradayMode: false, alignmentStatus: "warn" }) === false
+    );
+    check(
+      "morning + alignment fail_closed → NO demote (morning cascade preserved)",
+      shouldDemoteAlignmentForGate({ intradayMode: false, alignmentStatus: "fail_closed" }) === false
+    );
+    check(
+      "morning + alignment skipped → no demote",
+      shouldDemoteAlignmentForGate({ intradayMode: false, alignmentStatus: "skipped" }) === false
+    );
+    check(
+      "morning + alignment null → no demote",
+      shouldDemoteAlignmentForGate({ intradayMode: false, alignmentStatus: null }) === false
+    );
+
+    // Intraday mode (intradayMode=true) — ONLY demote when alignment is
+    // actually fail_closed. ok/warn/skipped/null are pass-through.
+    check(
+      "intraday + alignment ok → no demote",
+      shouldDemoteAlignmentForGate({ intradayMode: true, alignmentStatus: "ok" }) === false
+    );
+    check(
+      "intraday + alignment warn → no demote",
+      shouldDemoteAlignmentForGate({ intradayMode: true, alignmentStatus: "warn" }) === false
+    );
+    check(
+      "intraday + alignment fail_closed → DEMOTE (the only demote case)",
+      shouldDemoteAlignmentForGate({ intradayMode: true, alignmentStatus: "fail_closed" }) === true
+    );
+    check(
+      "intraday + alignment skipped → no demote",
+      shouldDemoteAlignmentForGate({ intradayMode: true, alignmentStatus: "skipped" }) === false
+    );
+    check(
+      "intraday + alignment null → no demote",
+      shouldDemoteAlignmentForGate({ intradayMode: true, alignmentStatus: null }) === false
+    );
+
+    // Strict equality on intradayMode — non-true truthy values must not
+    // enable the demotion path. (TS already prevents string here, but the
+    // runtime guard pins behavior in case of future callers.)
+    check(
+      "intradayMode strict true required — undefined alignment + true intraday → false",
+      shouldDemoteAlignmentForGate({ intradayMode: true, alignmentStatus: undefined }) === false
+    );
+  }
+
+  // ── [K] R-19 P5e critical regression — morning unchanged when fail_closed ──
+  section("R-19 P5e — morning-mode alignment cascade unchanged");
+  {
+    // The orchestrator's cascade chain depends on
+    // shouldDemoteAlignmentForGate returning FALSE in morning mode so
+    // that the alignment passed to the R-17 G1 gate retains its
+    // fail_closed status, which makes gate.overall = fail_closed,
+    // which pushes to blockingReasons, which sets gateBlocking=true,
+    // which forces M2 blocked. This test pins that the helper itself
+    // never demotes in morning, no matter the alignment shape.
+    const alignmentShapes: Array<"ok" | "warn" | "fail_closed" | "skipped" | null> = [
+      "ok",
+      "warn",
+      "fail_closed",
+      "skipped",
+      null,
+    ];
+    let anyDemotedInMorning = false;
+    for (const s of alignmentShapes) {
+      if (shouldDemoteAlignmentForGate({ intradayMode: false, alignmentStatus: s })) {
+        anyDemotedInMorning = true;
+      }
+    }
+    check(
+      "morning mode: helper returns false for every possible alignment shape",
+      anyDemotedInMorning === false
+    );
+
+    // Intraday + fail_closed is the ONLY truthy combination — single
+    // gate. Confirming the helper isn't accidentally broad.
+    let truthyCases = 0;
+    for (const im of [false, true] as const) {
+      for (const s of alignmentShapes) {
+        if (shouldDemoteAlignmentForGate({ intradayMode: im, alignmentStatus: s })) {
+          truthyCases++;
+        }
+      }
+    }
+    check(
+      "exactly one (intradayMode, alignmentStatus) combination demotes (intraday + fail_closed)",
+      truthyCases === 1
+    );
   }
 
   // ── Summary ──────────────────────────────────────────────────────────

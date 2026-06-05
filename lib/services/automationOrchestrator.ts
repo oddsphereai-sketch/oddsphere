@@ -94,6 +94,7 @@ export {
   readPerStepGates,
   computeEffectiveWriteMode,
   buildOrchestratorBlockedReport,
+  shouldDemoteAlignmentForGate,
 } from "./automationOrchestratorGates";
 export type { AutomationEnv, PerStepKey } from "./automationOrchestratorGates";
 
@@ -102,6 +103,7 @@ import {
   isOrchestratorGateEnabled,
   readPerStepGates,
   computeEffectiveWriteMode,
+  shouldDemoteAlignmentForGate,
   type AutomationEnv,
   type PerStepKey,
 } from "./automationOrchestratorGates";
@@ -184,6 +186,19 @@ export type AutomationRunReport = {
     matched: number | null;
     wrong_date: number | null;
   };
+  /**
+   * R-19 Phase 5e — true when intraday mode was on AND provider date
+   * alignment was fail_closed. In that case, the orchestrator demotes
+   * the alignment status to "warn" before passing it to the R-17 G1
+   * gate (so /opportunities/ev natural shrinkage doesn't block M2
+   * slate-wide). This flag stays true on the top-level report so the
+   * publish gate keeps auto-publish held even though G1 no longer
+   * cascades to fail_closed. The original alignment status is preserved
+   * on `provider_date_alignment.status` above. Always false in morning
+   * mode regardless of alignment status — there, fail_closed cascades
+   * to G1 fail_closed → blockingReasons → publish skipped_blocked.
+   */
+  intraday_alignment_degraded: boolean;
   /**
    * R-19 Phase 4a — slate-safety gate verdicts. Each is null when the
    * gate didn't run (e.g. P2.5 errored before BDL data was available
@@ -661,11 +676,39 @@ export async function runSlateCycleAutomated(opts: {
   }));
 
   // ── G1. Automation gate (post-refresh) ────────────────────────────────
+  // R-19 Phase 5e — Intraday-aware alignment cascade. In intraday mode,
+  // SharpAPI /opportunities/ev shrinks naturally as games complete and as
+  // markets tighten — the alignment canary at the slate level fires
+  // false-positively. Demote fail_closed → "warn" before passing to the
+  // R-17 G1 gate so a single slate-level signal doesn't block M2 for
+  // every eligible future game. The underlying alignment status still
+  // surfaces on the top-level `provider_date_alignment` field of the
+  // report, AND `intraday_alignment_degraded` is set so the publish gate
+  // can keep auto-publish held. P2.5 reconciliation, R-17 G1 per-game
+  // stale-line / coverage checks, and Phase 5c/5d per-game exclusions
+  // all remain strict.
+  const intradayAlignmentDegraded = shouldDemoteAlignmentForGate({
+    intradayMode,
+    alignmentStatus: alignment?.status ?? null,
+  });
+  const alignmentForGate: ProviderDateAlignmentReport | null =
+    intradayAlignmentDegraded && alignment !== null
+      ? { ...alignment, status: "warn" }
+      : alignment;
+  if (intradayAlignmentDegraded) {
+    warnings.push(
+      `R-19 Phase 5e intraday alignment soften: alignment.status=fail_closed ` +
+        `(matched=${alignment?.matched}, threshold=${alignment?.threshold}, ` +
+        `slate_size=${alignment?.slate_size}) demoted to "warn" before R-17 G1; ` +
+        `publish stays held; per-game checks remain strict`
+    );
+  }
+
   const t0g = Date.now();
   let g1Report: AutomationGateReport | null = null;
   try {
     g1Report = await assessAutomationGate(opts.sport, opts.date, {
-      providerAlignment: alignment,
+      providerAlignment: alignmentForGate,
     });
     steps.push({
       name: "g1_automation_gate",
@@ -675,6 +718,7 @@ export async function runSlateCycleAutomated(opts: {
       details: {
         overall: g1Report.overall,
         reasons: g1Report.reasons,
+        intraday_alignment_demoted: intradayAlignmentDegraded,
       },
     });
     if (g1Report.overall === "fail_closed") {
@@ -1004,6 +1048,11 @@ export async function runSlateCycleAutomated(opts: {
       (g2Result !== null && g2Result.status === "fail_closed")
     : anyGateFailedClosed(g1Result, g2Result, g3Result);
   const g3IntradayBlocking = intradayMode && g3IntradayExclusions.length > 0;
+  // R-19 Phase 5e — intraday alignment degradation also holds publish.
+  // Even though the cascade is softened for the R-17 G1 gate's overall
+  // status, the original alignment.status=fail_closed signals partial
+  // provider coverage that operators should review before publishing.
+  // `intradayAlignmentDegraded` was computed in the G1 section above.
   let publishDecision: AutomationRunReport["publish_decision"];
   let publishMode: StepMode;
   let publishReason: string;
@@ -1012,19 +1061,26 @@ export async function runSlateCycleAutomated(opts: {
     gateBlocking ||
     slateSafetyBlocking ||
     lockMissBlocking ||
-    g3IntradayBlocking
+    g3IntradayBlocking ||
+    intradayAlignmentDegraded
   ) {
     publishDecision = "skipped_blocked";
     publishMode = "blocked";
     if (
-      (lockMissBlocking || g3IntradayBlocking) &&
+      (lockMissBlocking || g3IntradayBlocking || intradayAlignmentDegraded) &&
       !(dataLayerBlocked || gateBlocking || slateSafetyBlocking)
     ) {
       const totalSkipped = combinedM2Exclusions.length;
+      const parts: string[] = [];
+      if (lockMissExclusions.length > 0)
+        parts.push(`lock_miss=${lockMissExclusions.length}`);
+      if (g3IntradayExclusions.length > 0)
+        parts.push(`g3_intraday=${g3IntradayExclusions.length}`);
+      if (intradayAlignmentDegraded)
+        parts.push(`intraday_alignment_degraded=true`);
       publishReason =
         `publish skipped — ${totalSkipped} game(s) excluded from M2 ` +
-        `(lock_miss=${lockMissExclusions.length}, g3_intraday=${g3IntradayExclusions.length}); ` +
-        `auto-publish held until next clean cycle`;
+        `(${parts.join(", ")}); auto-publish held until next clean cycle`;
     } else if (slateSafetyBlocking) {
       publishReason = "publish skipped — slate-safety gate (G1/G2/G3) blocked the cycle";
     } else {
@@ -1130,6 +1186,7 @@ export async function runSlateCycleAutomated(opts: {
       matched: alignment?.matched ?? null,
       wrong_date: alignment?.wrong_date ?? null,
     },
+    intraday_alignment_degraded: intradayAlignmentDegraded,
     slate_safety_gates: {
       g1_minimum_game_count: g1Result,
       g2_starter_coverage: g2Result,

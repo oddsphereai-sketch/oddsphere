@@ -129,3 +129,42 @@ export function isIntradayMode(
   }
   return env[SLATE_CYCLE_INTRADAY_MODE_ENV] === "true";
 }
+
+// ─── R-19 Phase 5e — Intraday-aware alignment cascade ─────────────────
+
+/**
+ * Decide whether the orchestrator should demote a fail_closed provider
+ * date alignment to "warn" before passing it into the R-17 G1 automation
+ * gate.
+ *
+ * In intraday mode, SharpAPI's `/opportunities/ev` feed shrinks naturally
+ * as games complete and as markets tighten — both are normal mid-day
+ * behavior, not provider failure. The slate-level alignment canary
+ * therefore fires false-positively, and its cascade into the R-17 G1
+ * gate (status → "fail_closed") blocks M2 slate-wide. We soften only the
+ * cascade input; the original alignment status still surfaces on the
+ * top-level `provider_date_alignment` field of the report.
+ *
+ * Layered defenses that remain strict in intraday:
+ *   • P2.5 slate reconciliation (BDL vs SharpAPI overlap) — catches
+ *     "provider rolled forward / fully empty" scenarios
+ *   • R-17 G1 per-game stale-line / missing ML / missing total /
+ *     missing starter checks — real intraday quality canaries
+ *   • Phase 5c lock_miss + Phase 5d G3-intraday — per-game exclusions
+ *
+ * Pure helper: returns true iff intradayMode is true AND alignment is
+ * fail_closed. Caller composes the demoted object themselves to keep
+ * the underlying ProviderDateAlignmentReport type out of this module.
+ */
+export function shouldDemoteAlignmentForGate(opts: {
+  intradayMode: boolean;
+  alignmentStatus:
+    | "ok"
+    | "warn"
+    | "fail_closed"
+    | "skipped"
+    | null
+    | undefined;
+}): boolean {
+  return opts.intradayMode === true && opts.alignmentStatus === "fail_closed";
+}
