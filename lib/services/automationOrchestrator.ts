@@ -70,6 +70,13 @@ import {
   type StarterCoverageResult,
   type InProgressGamesResult,
 } from "./automationSlateSafetyGates";
+import {
+  assessSlateLockSnapshot,
+  deriveLockWarnings,
+  anyLockWarningBlocks,
+  type SlateLockSnapshotResult,
+  type LockWarning,
+} from "./automationSlateLockSnapshot";
 import type { Sport } from "../types/domain/Sport";
 
 // ─── Pure gate helpers — re-exported from automationOrchestratorGates ───
@@ -178,6 +185,26 @@ export type AutomationRunReport = {
     g2_starter_coverage: StarterCoverageResult | null;
     g3_in_progress_ingest: InProgressGamesResult | null;
   };
+  /**
+   * R-19 Phase 4b — per-game lock-state snapshot for the slate. Null
+   * when the snapshot couldn't be built (slate not yet in DB or query
+   * error). Informational: the slate-cycle orchestrator does NOT set
+   * locked_at itself — `/api/cron/pregame-sweep` owns that transition.
+   * M2 already respects locks via `respectLocks: true` (automodelService
+   * default), so the snapshot tells operators WHAT was skipped and WHY
+   * without changing behavior.
+   */
+  slate_lock_snapshot: SlateLockSnapshotResult | null;
+  /**
+   * R-19 Phase 4b (revised) — structured lock warnings derived from
+   * the snapshot + env state. Each carries a code, severity, and
+   * affected_count. A `lock_miss` (severity:block) is the launch-safety
+   * critical case: games whose game_date is in the past with
+   * locked_at = null. Pregame-sweep didn't fire; M2 must not run on
+   * them. `lock_miss` warnings also push to `blocking_reasons` and
+   * force m2 blocked. Warn-severity entries push to `warnings[]` only.
+   */
+  slate_lock_warnings: LockWarning[];
   steps: AutomationStepReport[];
   publish_decision:
     | "auto_publish_enabled"
@@ -645,19 +672,40 @@ export async function runSlateCycleAutomated(opts: {
   // dry-run with an empty slate, the helper returns "deferred" — the
   // gate doesn't fail and doesn't pass, it just notes that there's
   // no DB state to evaluate yet.
+  //
+  // R-19 Phase 4b — the same query is reused to build the lock-state
+  // snapshot. Pull external_id + game_date + the joined
+  // game_predictions.locked_at so we can run BOTH the G2 helper and
+  // assessSlateLockSnapshot on one query result.
   const t0g2 = Date.now();
+  type SlateRow = {
+    external_id: number;
+    game_date: string | null;
+    home_pitcher_id: number | null;
+    away_pitcher_id: number | null;
+    home_team: { abbreviation: string } | null;
+    away_team: { abbreviation: string } | null;
+    game_predictions: { locked_at: string | null }[] | null;
+  };
+  let slateRows: SlateRow[] = [];
   try {
-    const { data: slateGames } = await supabase
+    const { data } = await supabase
       .from("games")
-      .select("home_pitcher_id, away_pitcher_id")
+      .select(
+        "external_id, game_date, home_pitcher_id, away_pitcher_id, " +
+        "home_team:home_team_id ( abbreviation ), " +
+        "away_team:away_team_id ( abbreviation ), " +
+        "game_predictions ( locked_at )"
+      )
       .eq("sport", opts.sport)
       .eq("slate_date", opts.date);
+    slateRows = (data ?? []) as unknown as SlateRow[];
     g2Result = assessStarterCoverage({
       sport: opts.sport,
-      games: (slateGames ?? []) as Array<{
-        home_pitcher_id: number | null;
-        away_pitcher_id: number | null;
-      }>,
+      games: slateRows.map((r) => ({
+        home_pitcher_id: r.home_pitcher_id,
+        away_pitcher_id: r.away_pitcher_id,
+      })),
     });
     let g2Mode: StepMode;
     if (g2Result.status === "fail_closed") g2Mode = "blocked";
@@ -698,12 +746,88 @@ export async function runSlateCycleAutomated(opts: {
   }
   const g2Blocking = g2Result !== null && g2Result.status === "fail_closed";
 
+  // ── R-19 Phase 4b — Slate lock snapshot ──────────────────────────────
+  // Build the lock-state snapshot from the same `slateRows` payload G2
+  // just used. INFORMATIONAL ONLY — the snapshot does NOT block any
+  // step. The actual lock guarantees flow through:
+  //   • automodelService(respectLocks=true) → Layer 2 filter excludes
+  //     locked games from snapshot/model
+  //   • ingestScoresModel Layer 1 guard → rejects writes to locked rows
+  //   • /api/cron/pregame-sweep → owns the entering_lock → locked
+  //     transition (sets locked_at = NOW())
+  //
+  // The orchestrator never sets locked_at itself; this separation
+  // keeps slate-cycle and pregame-sweep single-purpose.
+  let lockSnapshot: SlateLockSnapshotResult | null = null;
+  if (slateRows.length > 0) {
+    lockSnapshot = assessSlateLockSnapshot({
+      sport: opts.sport,
+      now: startedAt,
+      games: slateRows.map((r) => {
+        const lockedAt = r.game_predictions?.[0]?.locked_at ?? null;
+        const home = r.home_team?.abbreviation ?? "";
+        const away = r.away_team?.abbreviation ?? "";
+        const matchup =
+          home !== "" && away !== "" ? `${away}@${home}` : null;
+        return {
+          game_external_id: r.external_id,
+          game_date: r.game_date,
+          locked_at: lockedAt,
+          matchup,
+        };
+      }),
+    });
+  }
+
+  // ── R-19 Phase 4b (revised) — Lock warning derivation ────────────────
+  // The snapshot answers "what's the lock state?". This step answers
+  // "is the lock state safe for unattended automation?". Three codes:
+  //
+  //   • lock_miss — already_started > 0 AND already_locked === 0. Games
+  //     started without ever being locked → pregame-sweep didn't fire.
+  //     Severity: BLOCK. M2 must not run; the cron is operating on a
+  //     stale slate.
+  //   • entering_lock_no_transition — games inside T-60 but slate-cycle
+  //     doesn't flip locked_at. Severity: WARN. Operators need to know
+  //     pregame-sweep is the only path that performs the transition.
+  //   • pregame_sweep_not_active — PREGAME_SWEEP_CRON_ACTIVE env flag is
+  //     not "true". Until the operator schedules pregame-sweep AND
+  //     flips this flag, no game's locked_at ever transitions from
+  //     null → set. Severity: WARN.
+  const lockWarnings = deriveLockWarnings({
+    snapshot: lockSnapshot,
+    env: env as { PREGAME_SWEEP_CRON_ACTIVE?: string | undefined },
+  });
+  // Push warn-severity messages to the existing warnings[] surface.
+  // Block-severity messages also land in blocking_reasons[] (next).
+  for (const w of lockWarnings) {
+    if (w.severity === "warn") warnings.push(w.message);
+  }
+  // Lock-miss is the launch-critical block: orchestrator refuses to
+  // run M2 against a slate where games started without locks.
+  const lockMissBlocking = anyLockWarningBlocks(lockWarnings);
+  if (lockMissBlocking) {
+    for (const w of lockWarnings) {
+      if (w.severity === "block") {
+        blockingReasons.push(`R-19 Phase 4b lock_miss: ${w.message}`);
+      }
+    }
+  }
+
   // ── M2. Automodel + reviewer + breakdown ──────────────────────────────
   // m2Blocked now includes G2 fail_closed (starter coverage too low
   // for safe model run). dataLayerBlocked covers G1/G3 + provider
   // mode + reconciliation. gateBlocking covers the R-17 G1 automation
-  // gate (line freshness etc.).
-  const m2Blocked = gateBlocking || dataLayerBlocked || g2Blocking;
+  // gate (line freshness etc.). lockMissBlocking covers the "started
+  // without lock" pattern even when G3 doesn't fire (e.g. DB knows
+  // games started but BDL still reports STATUS_SCHEDULED).
+  //
+  // Lock awareness: generatePredictionsForSlate uses respectLocks=true
+  // by default (Phase 4.2.B). Locked games are pre-filtered out of
+  // the snapshot build — `res.game_count` reflects the UNLOCKED count.
+  // The lock snapshot above provides the broader picture for the
+  // report (unlocked + entering_lock + already_locked + already_started).
+  const m2Blocked = gateBlocking || dataLayerBlocked || g2Blocking || lockMissBlocking;
   steps.push(await runStep(
     "m2_automodel",
     !m2Blocked && effectiveWriteMode.automodel,
@@ -712,20 +836,38 @@ export async function runSlateCycleAutomated(opts: {
       const res = await generatePredictionsForSlate(opts.sport, opts.date, "morning_draft", {
         writeToDb: writeMode,
       });
+      // Phase 4b — report lock-skipped counts alongside model output.
+      // `lock_skipped_by_layer_2` = games excluded by automodelService's
+      // respectLocks filter; equals already_locked_games when slate row
+      // count > 0 (Layer 2 filter is by locked_at). The other lock
+      // categories (entering_lock, already_started) are still seen by
+      // the model but Layer 1 would reject writes for entering_lock if
+      // any UPDATE went through them — which doesn't happen because
+      // pregame-sweep is the only path that mutates locked_at.
+      const lockSkippedByLayer2 = lockSnapshot?.already_locked_games ?? 0;
       return {
         details: {
           game_count: res.game_count,
           held_count: res.held_count,
           pick_null_counts: res.pick_null_counts,
           errors: res.errors.length,
+          lock_snapshot: lockSnapshot !== null ? {
+            total_games: lockSnapshot.total_games,
+            unlocked_games: lockSnapshot.unlocked_games,
+            would_lock_games: lockSnapshot.would_lock_games,
+            already_locked_games: lockSnapshot.already_locked_games,
+            already_started_games: lockSnapshot.already_started_games,
+            effectively_locked_count: lockSnapshot.effectively_locked_count,
+            lock_skipped_by_layer_2: lockSkippedByLayer2,
+          } : null,
         },
         reason: writeMode
-          ? `wrote ${res.predictions.length} prediction(s); held=${res.held_count}`
-          : `dry-run; would write ${res.predictions.length} prediction(s); held=${res.held_count}`,
+          ? `wrote ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped=${lockSkippedByLayer2}`
+          : `dry-run; would write ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped=${lockSkippedByLayer2}`,
       };
     },
     m2Blocked
-      ? "blocked by upstream gate (provider/reconciliation/R-17 G1/R-19 G1-G2-G3)"
+      ? "blocked by upstream gate (provider/reconciliation/R-17 G1/R-19 G1-G2-G3/R-19 P4b lock_miss)"
       : undefined
   ));
 
@@ -855,6 +997,8 @@ export async function runSlateCycleAutomated(opts: {
       g2_starter_coverage: g2Result,
       g3_in_progress_ingest: g3Result,
     },
+    slate_lock_snapshot: lockSnapshot,
+    slate_lock_warnings: lockWarnings,
     steps,
     publish_decision: publishDecision,
     publish_decision_label: publishDecisionLabel(
