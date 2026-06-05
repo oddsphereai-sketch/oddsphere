@@ -101,6 +101,11 @@ import {
   NRFI_PROJECTED_LINEUP_PENALTY,
   NRFI_TEAM_PROXY_PENALTY,
   NRFI_LEAGUE_AVG_PENALTY,
+  // R-16J Step 1.7 — narrowed FI pick thresholds + narrow-edge tag
+  NRFI_PROBABILITY_THRESHOLD,
+  YRFI_PROBABILITY_THRESHOLD,
+  NRFI_NARROW_EDGE_BAND_UPPER,
+  YRFI_NARROW_EDGE_BAND_LOWER,
 } from "./types";
 import { applyDeterministicGuards } from "./aiSanityBoundary";
 
@@ -1221,18 +1226,25 @@ function computeNrfi(snapshot: GameSnapshot, stage: ModelStage): NrfiResult {
   // FI evidence on either side, so a confident NRFI/YRFI would be noise.
   const hasAnyRealFI = fiSources.includes("real");
 
-  // ── R-16J Step 1 — pick decision via probability thresholds ─────
-  // NRFI when P(NRFI) ≥ 0.55, YRFI when P(NRFI) ≤ 0.45, Toss-Up
-  // between (10pp band around 50/50). With the empirical calibration,
-  // these thresholds land where they SHOULD relative to true MLB rates.
+  // ── R-16J Step 1.7 — pick decision via probability thresholds ───
+  // NRFI when P(NRFI) ≥ NRFI_PROBABILITY_THRESHOLD (0.53),
+  // YRFI when P(NRFI) ≤ YRFI_PROBABILITY_THRESHOLD (0.47),
+  // Toss-Up in between (6pp band around 50/50).
+  //
+  // Step 1.6 fixed data-locked Toss-Ups (projected lineup / team-OPS
+  // proxy rescues). Step 1 shipped at 0.55/0.45 (10pp band); Step 1.7
+  // narrows to 0.53/0.47 because the remaining Toss-Up volume was
+  // driven by genuine model probability picks landing in the band,
+  // not by data quality. The narrow band keeps true 50/50 games as
+  // Toss-Up while letting modest directional reads surface.
   type Decision = "nrfi" | "yrfi" | "toss_up";
   let decisionKind: Decision;
   if (!hasAnyRealFI) {
     decisionKind = "toss_up";
     reason_codes.push("both_starters_fallback_capped_to_toss_up");
-  } else if (p_nrfi >= 0.55) {
+  } else if (p_nrfi >= NRFI_PROBABILITY_THRESHOLD) {
     decisionKind = "nrfi";
-  } else if (p_nrfi <= 0.45) {
+  } else if (p_nrfi <= YRFI_PROBABILITY_THRESHOLD) {
     decisionKind = "yrfi";
   } else {
     decisionKind = "toss_up";
@@ -1243,6 +1255,26 @@ function computeNrfi(snapshot: GameSnapshot, stage: ModelStage): NrfiResult {
     reason_codes.push(
       `expected_first_inning_runs_${expected_first_inning_runs.toFixed(2)}`
     );
+  }
+
+  // R-16J Step 1.7 — narrow-edge tag. Fires for directional picks in
+  // the [0.53, 0.55) NRFI band or (0.45, 0.47] YRFI band — picks that
+  // would have been Toss-Ups under the Step 1 thresholds. Consumers
+  // (breakdown copy, UI) can flag these as narrow-margin without
+  // rejecting the pick. The display layer (Watchlist verdict tier)
+  // already enforces a low-confidence presentation; this code makes
+  // the prose / audit trail honest about why.
+  if (
+    decisionKind === "nrfi" &&
+    p_nrfi < NRFI_NARROW_EDGE_BAND_UPPER
+  ) {
+    reason_codes.push("narrow_fi_probability_edge");
+  }
+  if (
+    decisionKind === "yrfi" &&
+    p_nrfi > YRFI_NARROW_EDGE_BAND_LOWER
+  ) {
+    reason_codes.push("narrow_fi_probability_edge");
   }
 
   // ── Toss-Up branch (no caps applied) ─────────────────────────────

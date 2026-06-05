@@ -800,6 +800,33 @@ export const LEAGUE_BASELINE_FI_ERA = 4.0;
 export const FI_BASELINE_CALIBRATION = 0.66;
 
 /**
+ * R-16J Step 1.7 — FI pick decision thresholds (Poisson NRFI probability).
+ *
+ *   P(NRFI) ≥ NRFI_PROBABILITY_THRESHOLD          → NRFI
+ *   P(NRFI) ≤ YRFI_PROBABILITY_THRESHOLD          → YRFI
+ *   YRFI_THRESHOLD < P(NRFI) < NRFI_THRESHOLD     → Toss-Up
+ *
+ * Step 1 shipped 0.55 / 0.45. Step 1.7 narrows to 0.53 / 0.47 after
+ * Step 1.6 fixed the data-locked Toss-Up problem and the remaining
+ * Toss-Up volume was driven by genuine probability picks landing in
+ * the 0.45–0.55 band. Narrowing surfaces modest but real directional
+ * FI edges (e.g. P=0.536) without forcing balance — true 50/50 games
+ * (0.47 < P < 0.53) still land Toss-Up.
+ *
+ * The thresholds are deliberately NOT symmetric tighter than 0.47/0.53
+ * — 0.50 is the only true neutral, and a ±0.03 band around it captures
+ * genuine model uncertainty without publishing 51/49 reads as picks.
+ *
+ * The narrow-edge codes below tag directional picks in the [0.53, 0.55)
+ * or (0.45, 0.47] bands so the breakdown copy / UI can flag them as
+ * narrow-margin without rejecting the pick.
+ */
+export const NRFI_PROBABILITY_THRESHOLD = 0.53;
+export const YRFI_PROBABILITY_THRESHOLD = 0.47;
+export const NRFI_NARROW_EDGE_BAND_UPPER = 0.55;
+export const YRFI_NARROW_EDGE_BAND_LOWER = 0.45;
+
+/**
  * R-16J Step 1.6 — team-OPS aggregate shrinkage k.
  *
  * Used when the FI offense fallback chain reaches Tier 3 (team-level

@@ -31,6 +31,10 @@ import {
   NRFI_TEAM_PROXY_PENALTY,
   NRFI_LEAGUE_AVG_PENALTY,
   NRFI_FALLBACK_CONFIDENCE_CAP,
+  NRFI_PROBABILITY_THRESHOLD,
+  YRFI_PROBABILITY_THRESHOLD,
+  NRFI_NARROW_EDGE_BAND_UPPER,
+  YRFI_NARROW_EDGE_BAND_LOWER,
 } from "../lib/automodel/types";
 
 // ─────────────────────────────────────────────────────────────
@@ -1165,9 +1169,12 @@ async function main() {
 
   // ─── Toss-Up vs Held distinctness ────────────────────────────────
   {
-    // Toss-Up case: data adequate (real FI), expected lands in toss_up zone
+    // Toss-Up case: data adequate (real FI), expected lands in toss_up
+    // zone. R-16J Step 1.7 narrowed (0.45, 0.55) → (0.47, 0.53), so
+    // FI 5.0 each (P(NRFI) ≈ 0.517) is now the cleanest true-toss-up
+    // fixture (FI 4.5 each, P ≈ 0.536, would now classify as NRFI).
     const tossOut = runMlbAutoModelV1(
-      nrfiSnap({ homeFI: 4.5, awayFI: 4.5, topOps: 0.73 }),
+      nrfiSnap({ homeFI: 5.0, awayFI: 5.0, topOps: 0.73 }),
       "morning_draft"
     );
     // Held case: missing starter
@@ -1341,22 +1348,25 @@ async function main() {
   // ═══════════════════════════════════════════════════════════════
 
   // Helper: assemble a snapshot tuned to land in the Toss-Up zone for
-  // baseline (expected ~1.0, the center of the Phase 3.x.3 toss-up band
-  // 0.85-1.15), so modifier shifts move it across zones.
+  // baseline. R-16J Step 1.7 narrowed the toss-up band from
+  // (0.45, 0.55) → (0.47, 0.53), so we use FI 5.0 each (shrunken FI
+  // ≈ 4.5, λ_raw ≈ 1.0, λ_cal ≈ 0.66, P(NRFI) ≈ 0.517) — squarely
+  // inside the new toss-up band so the dependent modifier-shift tests
+  // can still observe baseline=toss_up before perturbing inputs.
   function tossupSnap(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
     return baseSnapshot({
       home_starter: starter({
         player_external_id: 7100,
-        season_era: 4.5,
-        first_inning_era: 4.5,
+        season_era: 5.0,
+        first_inning_era: 5.0,
         first_inning_starts: 10,
         // pitch_quality_score deliberately at exactly 1.0 (neutral)
         pitch_quality_score: 1.0,
       }),
       away_starter: starter({
         player_external_id: 7101,
-        season_era: 4.5,
-        first_inning_era: 4.5,
+        season_era: 5.0,
+        first_inning_era: 5.0,
         first_inning_starts: 10,
         pitch_quality_score: 1.0,
         throws: "L",
@@ -1368,12 +1378,17 @@ async function main() {
   // ─── Pitch quality direction ─────────────────────────────────────
   {
     const neutral = runMlbAutoModelV1(tossupSnap(), "morning_draft");
+    // R-16J Step 1.7 — match tossupSnap baseline FI 5.0 so the only
+    // varying input is pitch_quality_score. Pre-Step-1.7 these used
+    // FI 4.5 which matched the old baseline; with baseline now FI 5.0
+    // the mismatch would dirty the comparison (overrides simultaneously
+    // changed ERA and pitch quality).
     const whiffy = runMlbAutoModelV1(
       tossupSnap({
         home_starter: starter({
           player_external_id: 7100,
-          season_era: 4.5,
-          first_inning_era: 4.5,
+          season_era: 5.0,
+          first_inning_era: 5.0,
           first_inning_starts: 10,
           pitch_quality_score: 0.92, // whiffiest → biggest suppression
         }),
@@ -1384,8 +1399,8 @@ async function main() {
       tossupSnap({
         home_starter: starter({
           player_external_id: 7100,
-          season_era: 4.5,
-          first_inning_era: 4.5,
+          season_era: 5.0,
+          first_inning_era: 5.0,
           first_inning_starts: 10,
           pitch_quality_score: 1.08, // contact-friendly → biggest boost
         }),
@@ -2666,21 +2681,55 @@ async function main() {
       );
     }
 
-    // [3] R-16J: league-avg FI (4.5 each). Shrunken ≈ (15*4 + 10*4.5)/25
-    //     = 4.20. λ_raw ≈ 0.93, calibrated ≈ 0.62 → P(NRFI) ≈ 0.54 →
-    //     just under the NRFI threshold → toss_up.
+    // [3] R-16J Step 1.7: light-load FI (4.5 each). Shrunken ≈
+    //     (10*4 + 10*4.5)/20 = 4.25. λ_raw ≈ 0.94, calibrated ≈ 0.62
+    //     → P(NRFI) ≈ 0.536 → JUST INSIDE the 0.53 NRFI threshold
+    //     under Step 1.7 (was toss_up under Step 1's 0.55 threshold).
+    //     Emits narrow_fi_probability_edge because 0.53 ≤ P < 0.55.
     {
       const out = runMlbAutoModelV1(
         fiSnap(realStarter(4.5), realStarter(4.5)),
         "morning_draft"
       );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
       check(
-        "[3x3.3a] R-16J: FI 4.5 each → toss_up (P ≈ 0.54, just under 0.55 NRFI threshold)",
+        "[3x3.3a] R-16J Step 1.7: FI 4.5 each → lean_nrfi (P ≈ 0.536, ≥ 0.53)",
+        out.sport_specific.nrfi_threshold_zone === "lean_nrfi"
+      );
+      check(
+        "[3x3.3b] FI 4.5 each → narrow_fi_probability_edge fires (0.53 ≤ P < 0.55)",
+        codes.includes("narrow_fi_probability_edge")
+      );
+      check(
+        "[3x3.3c] FI 4.5 each → confidence ≈ 53–54 (narrow, low-margin)",
+        out.nrfi_confidence !== null &&
+          out.nrfi_confidence >= 53 &&
+          out.nrfi_confidence < 55
+      );
+    }
+
+    // [3'] R-16J Step 1.7: light-load FI (5.0 each). Shrunken ≈
+    //      (10*4 + 10*5)/20 = 4.5. λ_raw ≈ 1.00, calibrated ≈ 0.66
+    //      → P(NRFI) ≈ 0.517 → truly inside the (0.47, 0.53)
+    //      toss-up band under Step 1.7. The pure-50/50 sanity check
+    //      that confirms narrowing didn't eliminate Toss-Up entirely.
+    {
+      const out = runMlbAutoModelV1(
+        fiSnap(realStarter(5.0), realStarter(5.0)),
+        "morning_draft"
+      );
+      const codes = out.sport_specific.nrfi_reason_codes ?? [];
+      check(
+        "[3x3.3'a] R-16J Step 1.7: FI 5.0 each → toss_up (P ≈ 0.517)",
         out.sport_specific.nrfi_threshold_zone === "toss_up"
       );
       check(
-        "[3x3.3b] toss_up confidence === NRFI_CONFIDENCE_TOSS_UP (52)",
+        "[3x3.3'b] FI 5.0 each toss_up confidence === NRFI_CONFIDENCE_TOSS_UP (52)",
         out.nrfi_confidence === 52
+      );
+      check(
+        "[3x3.3'c] FI 5.0 each toss_up does NOT emit narrow_fi_probability_edge",
+        !codes.includes("narrow_fi_probability_edge")
       );
     }
 
@@ -4763,6 +4812,261 @@ async function main() {
   // Silence unused warning when only some constants are referenced
   // inside conditional branches above.
   void NRFI_FALLBACK_CONFIDENCE_CAP;
+
+  // ═══════════════════════════════════════════════════════════════
+  section("R-16J Step 1.7 — narrow FI pick thresholds (47/53) + narrow-edge tag");
+  // ═══════════════════════════════════════════════════════════════
+  //
+  // Verifies the 0.53/0.47 thresholds, the narrow_fi_probability_edge
+  // reason code, and that true 50/50 games still land Toss-Up. The
+  // helper builds a snapshot whose P(NRFI) is close to a target value
+  // by sweeping `first_inning_era` across each side; tests then assert
+  // on the model's actual `auto_factors.nrfi_probability` to guard
+  // against drift in the calibration pipeline.
+
+  /** Build a fiSnap with a chosen FI ERA (same on both sides), starts=10
+   *  (above gate, below k), league-avg lineup, no other adjustments. */
+  function pAtFiEra(fi: number): GameSnapshot {
+    return baseSnapshot({
+      home_starter: starter({
+        player_external_id: 8200,
+        season_era: fi,
+        first_inning_era: fi,
+        first_inning_starts: 10,
+        pitch_quality_score: 1.0,
+      }),
+      away_starter: starter({
+        player_external_id: 8201,
+        season_era: fi,
+        first_inning_era: fi,
+        first_inning_starts: 10,
+        pitch_quality_score: 1.0,
+        throws: "L",
+      }),
+    });
+  }
+
+  // ── [1.7-A] Constants pinned ────────────────────────────────────
+  check(
+    "[1.7-A] NRFI_PROBABILITY_THRESHOLD === 0.53",
+    NRFI_PROBABILITY_THRESHOLD === 0.53
+  );
+  check(
+    "[1.7-A] YRFI_PROBABILITY_THRESHOLD === 0.47",
+    YRFI_PROBABILITY_THRESHOLD === 0.47
+  );
+  check(
+    "[1.7-A] NRFI_NARROW_EDGE_BAND_UPPER === 0.55",
+    NRFI_NARROW_EDGE_BAND_UPPER === 0.55
+  );
+  check(
+    "[1.7-A] YRFI_NARROW_EDGE_BAND_LOWER === 0.45",
+    YRFI_NARROW_EDGE_BAND_LOWER === 0.45
+  );
+
+  // ── [1.7-B] Boundary: FI 4.5 each → P ≈ 0.536 → NRFI (inside) ──
+  {
+    const out = runMlbAutoModelV1(pAtFiEra(4.5), "morning_draft");
+    const p = out.sport_specific.auto_factors.nrfi_probability ?? null;
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      `[1.7-B] FI 4.5 each: P(NRFI) ≈ 0.536 → measured ${p?.toFixed(3) ?? "n/a"}`,
+      p !== null && p >= 0.530 && p < 0.545
+    );
+    check(
+      "[1.7-B] FI 4.5 each → NRFI (P ≥ 0.53)",
+      out.sport_specific.nrfi_decision_kind === "nrfi"
+    );
+    check(
+      "[1.7-B] FI 4.5 each → narrow_fi_probability_edge fires (0.53 ≤ P < 0.55)",
+      codes.includes("narrow_fi_probability_edge")
+    );
+  }
+
+  // ── [1.7-C] Boundary: FI 5.0 each → P ≈ 0.517 → Toss-Up (inside) ─
+  {
+    const out = runMlbAutoModelV1(pAtFiEra(5.0), "morning_draft");
+    const p = out.sport_specific.auto_factors.nrfi_probability ?? null;
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      `[1.7-C] FI 5.0 each: P(NRFI) ≈ 0.517 → measured ${p?.toFixed(3) ?? "n/a"}`,
+      p !== null && p >= 0.510 && p < 0.525
+    );
+    check(
+      "[1.7-C] FI 5.0 each → Toss-Up (0.47 < P < 0.53)",
+      out.sport_specific.nrfi_decision_kind === "toss_up"
+    );
+    check(
+      "[1.7-C] FI 5.0 each Toss-Up → does NOT emit narrow_fi_probability_edge",
+      !codes.includes("narrow_fi_probability_edge")
+    );
+    check(
+      "[1.7-C] FI 5.0 each Toss-Up → nrfi_confidence === 52 (sentinel)",
+      out.nrfi_confidence === 52
+    );
+  }
+
+  // ── [1.7-D] True 50/50: FI 5.5 each → P ≈ 0.498 → Toss-Up ───────
+  {
+    const out = runMlbAutoModelV1(pAtFiEra(5.5), "morning_draft");
+    const p = out.sport_specific.auto_factors.nrfi_probability ?? null;
+    check(
+      `[1.7-D] FI 5.5 each: P(NRFI) ≈ 0.498 → measured ${p?.toFixed(3) ?? "n/a"}`,
+      p !== null && p >= 0.490 && p < 0.510
+    );
+    check(
+      "[1.7-D] FI 5.5 each (true 50/50) → Toss-Up preserved (narrow band doesn't kill toss-ups)",
+      out.sport_specific.nrfi_decision_kind === "toss_up"
+    );
+  }
+
+  // ── [1.7-E] Boundary YRFI side: FI 6.4 each → P ≈ 0.466 → YRFI ──
+  {
+    const out = runMlbAutoModelV1(pAtFiEra(6.4), "morning_draft");
+    const p = out.sport_specific.auto_factors.nrfi_probability ?? null;
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      `[1.7-E] FI 6.4 each: P(NRFI) ≈ 0.466 → measured ${p?.toFixed(3) ?? "n/a"}`,
+      p !== null && p >= 0.460 && p < 0.475
+    );
+    check(
+      "[1.7-E] FI 6.4 each → YRFI (P ≤ 0.47)",
+      out.sport_specific.nrfi_decision_kind === "yrfi"
+    );
+    check(
+      "[1.7-E] FI 6.4 each → narrow_fi_probability_edge fires (0.45 < P ≤ 0.47)",
+      codes.includes("narrow_fi_probability_edge")
+    );
+  }
+
+  // ── [1.7-F] Just outside YRFI narrow band: FI 6.0 → P ≈ 0.480 ───
+  // P ≈ 0.480 is BETWEEN YRFI_NARROW_EDGE_BAND_LOWER (0.45) and
+  // YRFI_PROBABILITY_THRESHOLD (0.47), so it's still in the Toss-Up
+  // band — Toss-Up wins, no narrow edge code.
+  {
+    const out = runMlbAutoModelV1(pAtFiEra(6.0), "morning_draft");
+    const p = out.sport_specific.auto_factors.nrfi_probability ?? null;
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      `[1.7-F] FI 6.0 each: P(NRFI) ≈ 0.480 → measured ${p?.toFixed(3) ?? "n/a"}`,
+      p !== null && p >= 0.475 && p < 0.490
+    );
+    check(
+      "[1.7-F] FI 6.0 each → Toss-Up (P in (0.47, 0.53))",
+      out.sport_specific.nrfi_decision_kind === "toss_up"
+    );
+    check(
+      "[1.7-F] FI 6.0 each Toss-Up → narrow_fi_probability_edge does NOT fire",
+      !codes.includes("narrow_fi_probability_edge")
+    );
+  }
+
+  // ── [1.7-G] Strong NRFI (well past narrow band) → no narrow code ─
+  {
+    const out = runMlbAutoModelV1(pAtFiEra(3.0), "morning_draft");
+    const p = out.sport_specific.auto_factors.nrfi_probability ?? null;
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      `[1.7-G] FI 3.0 each: P(NRFI) ≥ 0.55 → measured ${p?.toFixed(3) ?? "n/a"}`,
+      p !== null && p >= 0.55
+    );
+    check(
+      "[1.7-G] FI 3.0 each → NRFI (clearly past narrow band)",
+      out.sport_specific.nrfi_decision_kind === "nrfi"
+    );
+    check(
+      "[1.7-G] FI 3.0 each strong NRFI → narrow_fi_probability_edge does NOT fire",
+      !codes.includes("narrow_fi_probability_edge")
+    );
+  }
+
+  // ── [1.7-H] Strong YRFI (well past narrow band) → no narrow code ─
+  {
+    const out = runMlbAutoModelV1(pAtFiEra(7.5), "morning_draft");
+    const p = out.sport_specific.auto_factors.nrfi_probability ?? null;
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      `[1.7-H] FI 7.5 each: P(NRFI) ≤ 0.45 → measured ${p?.toFixed(3) ?? "n/a"}`,
+      p !== null && p <= 0.45
+    );
+    check(
+      "[1.7-H] FI 7.5 each → YRFI (clearly past narrow band)",
+      out.sport_specific.nrfi_decision_kind === "yrfi"
+    );
+    check(
+      "[1.7-H] FI 7.5 each strong YRFI → narrow_fi_probability_edge does NOT fire",
+      !codes.includes("narrow_fi_probability_edge")
+    );
+  }
+
+  // ── [1.7-I] Confidence sanity: a narrow-edge pick produces a
+  //           53-54 confidence number, NOT the 52 Toss-Up sentinel.
+  {
+    const out = runMlbAutoModelV1(pAtFiEra(4.5), "morning_draft");
+    check(
+      "[1.7-I] FI 4.5 each narrow NRFI: nrfi_confidence in [53, 55) (not 52 sentinel)",
+      out.nrfi_confidence !== null &&
+        out.nrfi_confidence >= 53 &&
+        out.nrfi_confidence < 55
+    );
+    check(
+      "[1.7-I] FI 4.5 each narrow NRFI: nrfi_confidence !== 52",
+      out.nrfi_confidence !== 52
+    );
+  }
+
+  // ── [1.7-J] Cap interaction: narrow NRFI under team-proxy cap
+  //           (NRFI_CONFIDENCE_CAP − 3) stays directional AND keeps
+  //           its low-confidence natural value (~53–54) — never
+  //           downgraded below HARD_CONFIDENCE_FLOOR (51).
+  {
+    const snap: GameSnapshot = {
+      ...pAtFiEra(4.5),
+      home_team: {
+        team_external_id: 21,
+        abbreviation: "NYM",
+        bullpen_era_proxy: 4.0,
+        season_runs_per_game: 4.5,
+        team_avg_batter_ops: 0.730,
+        team_avg_batter_ops_sample: 2000,
+      },
+      away_team: {
+        team_external_id: 28,
+        abbreviation: "MIA",
+        bullpen_era_proxy: 4.0,
+        season_runs_per_game: 4.5,
+        team_avg_batter_ops: 0.730,
+        team_avg_batter_ops_sample: 2000,
+      },
+      home_lineup_top8: [],
+      away_lineup_top8: [],
+    };
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+    check(
+      "[1.7-J] narrow NRFI + team_proxy: still NRFI (directional preserved)",
+      out.sport_specific.nrfi_decision_kind === "nrfi"
+    );
+    check(
+      "[1.7-J] narrow NRFI + team_proxy: narrow_fi_probability_edge fires",
+      codes.includes("narrow_fi_probability_edge")
+    );
+    check(
+      "[1.7-J] narrow NRFI + team_proxy: top_order_team_proxy_used fires",
+      codes.includes("top_order_team_proxy_used")
+    );
+    check(
+      "[1.7-J] narrow NRFI + team_proxy: nrfi_confidence ≥ HARD_CONFIDENCE_FLOOR",
+      out.nrfi_confidence !== null &&
+        out.nrfi_confidence >= HARD_CONFIDENCE_FLOOR
+    );
+    check(
+      "[1.7-J] narrow NRFI + team_proxy: nrfi_confidence still in narrow band [53, 55)",
+      out.nrfi_confidence !== null &&
+        out.nrfi_confidence >= 53 &&
+        out.nrfi_confidence < 55
+    );
+  }
 
   // ═══════════════════════════════════════════════════════════════
   console.log(`\n${"━".repeat(70)}`);
