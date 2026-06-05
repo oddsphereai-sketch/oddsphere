@@ -1,0 +1,298 @@
+/**
+ * Phase 4.2.C.1.R-19 Phase 4a — slate-safety gates G1 + G2 + G3.
+ *
+ * The R-18 / R-19 slate-history audit found three failure modes that
+ * could let a degraded slate slip past unattended cron and reach
+ * members:
+ *
+ *   G1 — unexpectedly small slate (BDL returned too few games)
+ *   G2 — too many games missing probable starters after refresh
+ *   G3 — slate ingested AFTER games already in progress (late-night
+ *        ingest of a partially-played day)
+ *
+ * 2026-06-01 stuck-draft (G3 example): operator ran ingest at 8:57 PM
+ * ET on June 1; 6 of 9 games were already STATUS_IN_PROGRESS; all
+ * starter ids resolved as null; operator (correctly) didn't publish.
+ *
+ * 2026-06-03 hidden-after-publish (G2 example): operator published 15
+ * games at 14:48; 45 minutes later hid the slate with reason "BDL
+ * returned 0 probable starters; investiga…" — auto-publish would have
+ * sent the bad slate to members.
+ *
+ * These three gates plug into the cron-safe orchestrator and:
+ *
+ *   • report a structured verdict on the AutomationRunReport
+ *   • push to `blocking_reasons` on fail_closed (forces overall_status
+ *     = "blocked")
+ *   • cascade into `effective_write_mode = false` for downstream steps
+ *     when an upstream gate fail_closes
+ *   • make auto-publish IMPOSSIBLE when ANY gate fails — even if
+ *     MORNING_SLATE_AUTO_PUBLISH=true and the orchestrator gate is
+ *     enabled
+ *
+ * Pure module — no DB imports, no provider clients, no env reads. Each
+ * helper takes the data it needs as inputs and returns a verdict.
+ * Easy to unit-test in isolation and embed in the orchestrator without
+ * a DB roundtrip.
+ *
+ * Operator path (`scripts/operator/automation/run-slate-cycle.ts`) is
+ * INTENTIONALLY not coupled to these gates — operators can still
+ * hand-run small/test/incomplete slates via the interactive CLI. The
+ * gates only fire on the automation path.
+ */
+
+import type { Sport } from "../types/domain/Sport";
+
+// ─── G1 — Minimum game count ─────────────────────────────────────────────
+
+/**
+ * MLB regular-season slate floor. The R-18 / R-19 audit observed:
+ *   - Real MLB days: 9–15 games (2026-06-01 = 9; 2026-06-04 = 9; 2026-06-05 = 15)
+ *   - Mock-fixture days: 5 games (all 23:10Z, fictitious IDs)
+ *   - 2026-06-01 stuck-draft had 9 games (above floor) → G1 wouldn't
+ *     have caught it, but G3 would have
+ *
+ * 8 is the conservative floor: catches the May 5-game fixture pattern
+ * without flagging legitimate light Monday slates (~9 games minimum on
+ * full schedule). Operators with legitimate small slates can override
+ * by passing minGameCount explicitly.
+ */
+export const DEFAULT_MIN_MLB_GAMES = 8;
+
+export interface MinimumGameCountInput {
+  sport: Sport;
+  bdlGameCount: number;
+  /** Optional override — defaults to DEFAULT_MIN_MLB_GAMES for MLB. */
+  minGameCount?: number;
+}
+
+export interface MinimumGameCountResult {
+  status: "ok" | "fail_closed";
+  threshold: number;
+  observed: number;
+  reason: string;
+}
+
+export function assessMinimumGameCount(
+  opts: MinimumGameCountInput
+): MinimumGameCountResult {
+  const threshold =
+    opts.minGameCount ??
+    (opts.sport === "mlb" ? DEFAULT_MIN_MLB_GAMES : 1);
+  const observed = opts.bdlGameCount;
+  if (observed >= threshold) {
+    return {
+      status: "ok",
+      threshold,
+      observed,
+      reason: `BDL returned ${observed} game(s); ≥ threshold ${threshold}`,
+    };
+  }
+  return {
+    status: "fail_closed",
+    threshold,
+    observed,
+    reason:
+      `BDL returned only ${observed} game(s) — below ${opts.sport.toUpperCase()} ` +
+      `floor of ${threshold}. Slate likely incomplete or mock-fixture; ` +
+      `blocking unattended writes and publish.`,
+  };
+}
+
+// ─── G2 — Starter coverage ───────────────────────────────────────────────
+
+/**
+ * Starter-coverage threshold. Default is intentionally strict — the
+ * 2026-06-03 hide cited "BDL returned 0 probable starters" as the
+ * trigger. A slate with <90% of games having BOTH starters resolved
+ * is unsafe to auto-publish because:
+ *   - The model's pitcher-quality factor falls back to neutral (1.0)
+ *     when season_era is null, biasing every prediction toward league
+ *     average without operator awareness
+ *   - The aiSanityBoundary Guard 5 only fires at t60_locked stage on
+ *     scratched starters; null starter at morning_draft is allowed
+ *     through with a "morning_unconfirmed" penalty, not a hold
+ *
+ * 90% means at most 1 of 9, or 1 of 10, or 2 of 15 games can be
+ * starter-incomplete before the gate fires.
+ */
+export const DEFAULT_MIN_STARTER_COVERAGE_PCT = 90;
+
+export interface StarterCoverageInput {
+  sport: Sport;
+  /**
+   * Game rows from the games table for the slate. When this array is
+   * empty (e.g. pure dry-run before S1 has written anything), the
+   * gate returns `status: "deferred"` — neither pass nor fail —
+   * because there's no DB state to evaluate yet.
+   */
+  games: ReadonlyArray<{
+    home_pitcher_id: number | null;
+    away_pitcher_id: number | null;
+  }>;
+  /** Optional override — defaults to DEFAULT_MIN_STARTER_COVERAGE_PCT. */
+  minCoveragePct?: number;
+}
+
+export interface StarterCoverageResult {
+  status: "ok" | "warn" | "fail_closed" | "deferred";
+  totalGames: number;
+  gamesWithBothStarters: number;
+  gamesMissingOne: number;
+  gamesMissingBoth: number;
+  coveragePct: number;
+  threshold: number;
+  reason: string;
+}
+
+export function assessStarterCoverage(
+  opts: StarterCoverageInput
+): StarterCoverageResult {
+  const threshold = opts.minCoveragePct ?? DEFAULT_MIN_STARTER_COVERAGE_PCT;
+  const total = opts.games.length;
+  if (total === 0) {
+    return {
+      status: "deferred",
+      totalGames: 0,
+      gamesWithBothStarters: 0,
+      gamesMissingOne: 0,
+      gamesMissingBoth: 0,
+      coveragePct: 0,
+      threshold,
+      reason:
+        "No games in DB for this slate yet — gate deferred until slate has been ingested",
+    };
+  }
+  let both = 0;
+  let missingOne = 0;
+  let missingBoth = 0;
+  for (const g of opts.games) {
+    const h = g.home_pitcher_id !== null && g.home_pitcher_id !== undefined;
+    const a = g.away_pitcher_id !== null && g.away_pitcher_id !== undefined;
+    if (h && a) both++;
+    else if (!h && !a) missingBoth++;
+    else missingOne++;
+  }
+  const coveragePct = Math.round((both / total) * 1000) / 10;
+  if (coveragePct >= threshold) {
+    return {
+      status: "ok",
+      totalGames: total,
+      gamesWithBothStarters: both,
+      gamesMissingOne: missingOne,
+      gamesMissingBoth: missingBoth,
+      coveragePct,
+      threshold,
+      reason: `${both}/${total} game(s) have both starters (${coveragePct}% ≥ ${threshold}% threshold)`,
+    };
+  }
+  return {
+    status: "fail_closed",
+    totalGames: total,
+    gamesWithBothStarters: both,
+    gamesMissingOne: missingOne,
+    gamesMissingBoth: missingBoth,
+    coveragePct,
+    threshold,
+    reason:
+      `Starter coverage ${coveragePct}% (${both}/${total} games with both starters) ` +
+      `is below ${threshold}% threshold. ${missingOne} game(s) missing one starter, ` +
+      `${missingBoth} game(s) missing both. Blocking auto-publish to prevent the ` +
+      `2026-06-03 failure pattern (publish with starter gaps then hide).`,
+  };
+}
+
+// ─── G3 — In-progress ingest ─────────────────────────────────────────────
+
+/**
+ * BDL game-status values that indicate the game has already started
+ * (or is over). If ANY of these appear on a slate at the moment of
+ * automated ingest, that's the 2026-06-01 pattern — operator ran
+ * ingest at 8:57 PM ET; 6 of 9 games were already STATUS_IN_PROGRESS;
+ * starter resolution failed silently because BDL /lineups doesn't
+ * reliably serve mid-game probable-pitcher info.
+ *
+ * For unattended automation, ANY game already in progress means the
+ * cron is firing too late in the day. Hard block.
+ *
+ * Note: STATUS_POSTPONED is NOT in this set — postponements are
+ * legitimately handled downstream (they get ingested with status set,
+ * but the rest of the slate is fine).
+ */
+export const IN_PROGRESS_BDL_STATUSES = new Set<string>([
+  "STATUS_IN_PROGRESS",
+  "STATUS_FINAL",
+  "STATUS_END_OF_GAME",
+]);
+
+export interface InProgressGamesInput {
+  sport: Sport;
+  /**
+   * Game rows from BDL provider. The gate reads `status` and the
+   * external id (for the affected-games list in the report).
+   */
+  bdlGames: ReadonlyArray<{
+    status?: string | null;
+    external_id?: number | null;
+  }>;
+}
+
+export interface InProgressGamesResult {
+  status: "ok" | "fail_closed";
+  totalGames: number;
+  inProgressCount: number;
+  affectedExternalIds: number[];
+  reason: string;
+}
+
+export function assessInProgressGames(
+  opts: InProgressGamesInput
+): InProgressGamesResult {
+  const total = opts.bdlGames.length;
+  const affected: number[] = [];
+  for (const g of opts.bdlGames) {
+    const s = typeof g.status === "string" ? g.status : "";
+    if (IN_PROGRESS_BDL_STATUSES.has(s)) {
+      const ext = typeof g.external_id === "number" ? g.external_id : null;
+      if (ext !== null) affected.push(ext);
+    }
+  }
+  if (affected.length === 0) {
+    return {
+      status: "ok",
+      totalGames: total,
+      inProgressCount: 0,
+      affectedExternalIds: [],
+      reason: `No games already in progress (0/${total})`,
+    };
+  }
+  affected.sort((a, b) => a - b);
+  return {
+    status: "fail_closed",
+    totalGames: total,
+    inProgressCount: affected.length,
+    affectedExternalIds: affected,
+    reason:
+      `${affected.length}/${total} game(s) already in progress at ingest time. ` +
+      `Cron firing too late — BDL probable-starter resolution unreliable for ` +
+      `mid-game and final games. Blocking unattended writes and publish.`,
+  };
+}
+
+// ─── Compound check ─────────────────────────────────────────────────────
+
+/**
+ * True iff any of the three gates is in `fail_closed` state. Useful
+ * for the publish-gate step that must refuse auto-publish when any
+ * safety gate failed.
+ */
+export function anyGateFailedClosed(
+  g1: MinimumGameCountResult | null,
+  g2: StarterCoverageResult | null,
+  g3: InProgressGamesResult | null
+): boolean {
+  if (g1 !== null && g1.status === "fail_closed") return true;
+  if (g2 !== null && g2.status === "fail_closed") return true;
+  if (g3 !== null && g3.status === "fail_closed") return true;
+  return false;
+}

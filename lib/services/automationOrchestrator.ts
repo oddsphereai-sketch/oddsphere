@@ -61,6 +61,15 @@ import { runStarterRefreshCycle } from "../../scripts/operator/refresh-starters"
 import { runMissingPitcherCycle } from "../../scripts/operator/ingest-missing-pitchers";
 import { runSeasonPitchingCycle } from "../../scripts/operator/backfill-season-pitching-stats";
 import { loadGameIdMap } from "./_idMaps";
+import {
+  assessMinimumGameCount,
+  assessStarterCoverage,
+  assessInProgressGames,
+  anyGateFailedClosed,
+  type MinimumGameCountResult,
+  type StarterCoverageResult,
+  type InProgressGamesResult,
+} from "./automationSlateSafetyGates";
 import type { Sport } from "../types/domain/Sport";
 
 // ─── Pure gate helpers — re-exported from automationOrchestratorGates ───
@@ -95,14 +104,19 @@ export type AutomationStepName =
   | "p0_provider_mode_audit"
   | "p2_provider_date_alignment"
   | "p2_5_slate_reconciliation"
+  // R-19 Phase 4a — slate-safety gates G1/G3 (fire early once BDL data
+  // is in hand). G2 (g2_starter_coverage) fires late, after M1.
+  | "g1_minimum_game_count"
+  | "g3_in_progress_ingest"
   | "s1_slate_ingest"
   | "s3_starter_refresh_first"
   | "s4_missing_pitcher_ingest"
   | "s5_season_pitching"
   | "s7_lines_v2_refresh"
   | "s8_sharp_signals_refresh"
-  | "g1_automation_gate"
+  | "g1_automation_gate"  // R-17 G1 — distinct from R-19 G1; legacy name kept
   | "m1_starter_refresh_final"
+  | "g2_starter_coverage"
   | "m2_automodel"
   | "s11_publish_gate";
 
@@ -152,6 +166,17 @@ export type AutomationRunReport = {
     status: "ok" | "warn" | "fail_closed" | "skipped" | null;
     matched: number | null;
     wrong_date: number | null;
+  };
+  /**
+   * R-19 Phase 4a — slate-safety gate verdicts. Each is null when the
+   * gate didn't run (e.g. P2.5 errored before BDL data was available
+   * for G1/G3; G2 fires only after M1). When non-null, the verdict's
+   * `status` drives blocking_reasons and the publish gate.
+   */
+  slate_safety_gates: {
+    g1_minimum_game_count: MinimumGameCountResult | null;
+    g2_starter_coverage: StarterCoverageResult | null;
+    g3_in_progress_ingest: InProgressGamesResult | null;
   };
   steps: AutomationStepReport[];
   publish_decision:
@@ -277,6 +302,17 @@ export async function runSlateCycleAutomated(opts: {
   let reconciliation: SlateReconciliationReport | null = null;
   let bdlGameCount: number | null = null;
   let sharpEvCount: number | null = null;
+  // R-19 Phase 4a — slate-safety gate verdicts. G1/G3 evaluate
+  // immediately after P2.5 (BDL data in hand); G2 runs late, after M1.
+  let g1Result: MinimumGameCountResult | null = null;
+  let g2Result: StarterCoverageResult | null = null;
+  let g3Result: InProgressGamesResult | null = null;
+  // Holder for the raw BDL game payload — hoisted so G1/G3 can read
+  // status + external_id after the reconciliation try block.
+  let bdlGamesForGates: Array<{
+    status?: string | null;
+    external_id?: number | null;
+  }> = [];
   const t0r = Date.now();
   if (!sharpKey) {
     steps.push({
@@ -290,6 +326,13 @@ export async function runSlateCycleAutomated(opts: {
       const slateProvider = getSlateProvider();
       const bdlGames = await slateProvider.getGames(opts.date, opts.sport);
       bdlGameCount = bdlGames.length;
+      // Capture the raw payload for G1/G3 evaluation after the
+      // reconciliation push below. Includes `status` field per BDL
+      // contract; SlateGameRecord exposes external_id and status.
+      bdlGamesForGates = bdlGames.map((g) => ({
+        status: (g as { status?: string | null }).status ?? null,
+        external_id: (g as { external_id?: number | null }).external_id ?? null,
+      }));
 
       // Resolve BDL external team_ids → abbreviations.
       const teamExtIds = new Set<number>();
@@ -355,7 +398,79 @@ export async function runSlateCycleAutomated(opts: {
 
   const reconciliationBlocking =
     reconciliation !== null && reconciliation.status === "fail_closed";
-  const dataLayerBlocked = providerModeBlocking || reconciliationBlocking;
+
+  // ── R-19 Phase 4a — G1. Minimum game count ───────────────────────────
+  // Fires once BDL data is available. fail_closed → blocks all downstream
+  // writes (cascades into dataLayerBlocked) AND auto-publish.
+  const t0g1 = Date.now();
+  if (bdlGameCount !== null) {
+    g1Result = assessMinimumGameCount({
+      sport: opts.sport,
+      bdlGameCount,
+    });
+    steps.push({
+      name: "g1_minimum_game_count",
+      mode: g1Result.status === "fail_closed" ? "blocked" : "dry_run",
+      duration_ms: Date.now() - t0g1,
+      reason: g1Result.reason,
+      details: {
+        status: g1Result.status,
+        threshold: g1Result.threshold,
+        observed: g1Result.observed,
+      },
+    });
+    if (g1Result.status === "fail_closed") {
+      blockingReasons.push(`G1 minimum game count fail_closed: ${g1Result.reason}`);
+    }
+  } else {
+    steps.push({
+      name: "g1_minimum_game_count",
+      mode: "skipped",
+      duration_ms: Date.now() - t0g1,
+      reason: "BDL game count unavailable (P2.5 errored or SHARPAPI_KEY missing)",
+    });
+  }
+
+  // ── R-19 Phase 4a — G3. In-progress ingest ───────────────────────────
+  // Fires once BDL data is available. fail_closed → blocks all downstream
+  // writes (cascades into dataLayerBlocked) AND auto-publish. STATUS_
+  // POSTPONED games are deliberately NOT counted as in-progress.
+  const t0g3 = Date.now();
+  if (bdlGamesForGates.length > 0) {
+    g3Result = assessInProgressGames({
+      sport: opts.sport,
+      bdlGames: bdlGamesForGates,
+    });
+    steps.push({
+      name: "g3_in_progress_ingest",
+      mode: g3Result.status === "fail_closed" ? "blocked" : "dry_run",
+      duration_ms: Date.now() - t0g3,
+      reason: g3Result.reason,
+      details: {
+        status: g3Result.status,
+        total_games: g3Result.totalGames,
+        in_progress_count: g3Result.inProgressCount,
+        affected_external_ids: g3Result.affectedExternalIds,
+      },
+    });
+    if (g3Result.status === "fail_closed") {
+      blockingReasons.push(`G3 in-progress ingest fail_closed: ${g3Result.reason}`);
+    }
+  } else {
+    steps.push({
+      name: "g3_in_progress_ingest",
+      mode: "skipped",
+      duration_ms: Date.now() - t0g3,
+      reason: "BDL game payload unavailable (P2.5 errored or SHARPAPI_KEY missing)",
+    });
+  }
+
+  // dataLayerBlocked now cascades from G1/G3 too — they fire BEFORE any
+  // step that would write, so their fail_closed must propagate.
+  const g1Blocking = g1Result !== null && g1Result.status === "fail_closed";
+  const g3Blocking = g3Result !== null && g3Result.status === "fail_closed";
+  const dataLayerBlocked =
+    providerModeBlocking || reconciliationBlocking || g1Blocking || g3Blocking;
 
   // ── Helper: per-step effective write mode ─────────────────────────────
   const effectiveWriteMode = {} as Record<PerStepKey, boolean>;
@@ -524,8 +639,71 @@ export async function runSlateCycleAutomated(opts: {
     };
   }));
 
+  // ── R-19 Phase 4a — G2. Starter coverage (post-M1) ───────────────────
+  // Now that S3 + M1 have run (in write or dry-run mode), query the
+  // games table for the slate and check starter coverage. In pure
+  // dry-run with an empty slate, the helper returns "deferred" — the
+  // gate doesn't fail and doesn't pass, it just notes that there's
+  // no DB state to evaluate yet.
+  const t0g2 = Date.now();
+  try {
+    const { data: slateGames } = await supabase
+      .from("games")
+      .select("home_pitcher_id, away_pitcher_id")
+      .eq("sport", opts.sport)
+      .eq("slate_date", opts.date);
+    g2Result = assessStarterCoverage({
+      sport: opts.sport,
+      games: (slateGames ?? []) as Array<{
+        home_pitcher_id: number | null;
+        away_pitcher_id: number | null;
+      }>,
+    });
+    let g2Mode: StepMode;
+    if (g2Result.status === "fail_closed") g2Mode = "blocked";
+    else if (g2Result.status === "deferred") g2Mode = "skipped";
+    else g2Mode = "dry_run";
+    steps.push({
+      name: "g2_starter_coverage",
+      mode: g2Mode,
+      duration_ms: Date.now() - t0g2,
+      reason: g2Result.reason,
+      details: {
+        status: g2Result.status,
+        total_games: g2Result.totalGames,
+        games_with_both_starters: g2Result.gamesWithBothStarters,
+        games_missing_one: g2Result.gamesMissingOne,
+        games_missing_both: g2Result.gamesMissingBoth,
+        coverage_pct: g2Result.coveragePct,
+        threshold: g2Result.threshold,
+      },
+    });
+    if (g2Result.status === "fail_closed") {
+      blockingReasons.push(`G2 starter coverage fail_closed: ${g2Result.reason}`);
+    } else if (g2Result.status === "deferred") {
+      warnings.push(
+        `G2 starter coverage deferred — slate not yet in DB; gate will re-evaluate on next run after S1 has written`
+      );
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    warnings.push(`G2 starter coverage query failed: ${msg}`);
+    steps.push({
+      name: "g2_starter_coverage",
+      mode: "failed",
+      duration_ms: Date.now() - t0g2,
+      reason: msg,
+      error_message: msg,
+    });
+  }
+  const g2Blocking = g2Result !== null && g2Result.status === "fail_closed";
+
   // ── M2. Automodel + reviewer + breakdown ──────────────────────────────
-  const m2Blocked = gateBlocking || dataLayerBlocked;
+  // m2Blocked now includes G2 fail_closed (starter coverage too low
+  // for safe model run). dataLayerBlocked covers G1/G3 + provider
+  // mode + reconciliation. gateBlocking covers the R-17 G1 automation
+  // gate (line freshness etc.).
+  const m2Blocked = gateBlocking || dataLayerBlocked || g2Blocking;
   steps.push(await runStep(
     "m2_automodel",
     !m2Blocked && effectiveWriteMode.automodel,
@@ -546,22 +724,33 @@ export async function runSlateCycleAutomated(opts: {
           : `dry-run; would write ${res.predictions.length} prediction(s); held=${res.held_count}`,
       };
     },
-    m2Blocked ? "blocked by upstream gate (provider/reconciliation/G1)" : undefined
+    m2Blocked
+      ? "blocked by upstream gate (provider/reconciliation/R-17 G1/R-19 G1-G2-G3)"
+      : undefined
   ));
 
   // ── S11. Publish gate ────────────────────────────────────────────────
   // R-19 Phase 1 (C4) — HOLD-as-draft default. Auto-publish only when
   // MORNING_SLATE_AUTO_PUBLISH=true is explicitly set. Even if set, an
   // upstream block still skips publish.
+  // R-19 Phase 4a — `anyGateFailedClosed(G1, G2, G3)` is the explicit
+  // safety check that prevents auto-publish from firing on a slate
+  // with too few games, missing starters, or already-in-progress
+  // games. Belt-and-braces: dataLayerBlocked already cascades G1/G3,
+  // gateBlocking covers R-17 G1, and we add G2 here so a late-firing
+  // starter-coverage failure also blocks publish.
   const t0pub = Date.now();
   const autoPublish = shouldAutoPublishMorningSlate(env);
+  const slateSafetyBlocking = anyGateFailedClosed(g1Result, g2Result, g3Result);
   let publishDecision: AutomationRunReport["publish_decision"];
   let publishMode: StepMode;
   let publishReason: string;
-  if (dataLayerBlocked || gateBlocking) {
+  if (dataLayerBlocked || gateBlocking || slateSafetyBlocking) {
     publishDecision = "skipped_blocked";
     publishMode = "blocked";
-    publishReason = "publish skipped — upstream gate blocked the cycle";
+    publishReason = slateSafetyBlocking
+      ? "publish skipped — slate-safety gate (G1/G2/G3) blocked the cycle"
+      : "publish skipped — upstream gate blocked the cycle";
   } else if (autoPublish && orchestratorGate) {
     // Auto-publish is on AND orchestrator gate is enabled. Run publishSlate.
     publishDecision = "auto_publish_enabled";
@@ -660,6 +849,11 @@ export async function runSlateCycleAutomated(opts: {
       status: alignment?.status ?? (sharpKey ? null : "skipped"),
       matched: alignment?.matched ?? null,
       wrong_date: alignment?.wrong_date ?? null,
+    },
+    slate_safety_gates: {
+      g1_minimum_game_count: g1Result,
+      g2_starter_coverage: g2Result,
+      g3_in_progress_ingest: g3Result,
     },
     steps,
     publish_decision: publishDecision,
