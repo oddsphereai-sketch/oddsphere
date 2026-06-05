@@ -60,7 +60,12 @@ import type {
   SharpSignalDto,
   SharpStatus,
 } from "@/app/lab/lib/labTypes";
-import { marketVerdictFor, type SharpDirection, type MarketVerdict } from "@/lib/services/marketVerdictDerivation";
+import {
+  marketVerdictFor,
+  type SharpDirection,
+  type MarketVerdict,
+  type ReviewerSignals,
+} from "@/lib/services/marketVerdictDerivation";
 import { generatePerMarketCopy } from "@/lib/services/perMarketCopyGenerator";
 import { formatKeyStats } from "@/lib/services/keyStatsFormatter";
 import { assertNoBannedTerms } from "@/lib/services/bannedTermsLinter";
@@ -1167,6 +1172,57 @@ function extractReviewMeta(
   return { flags, action };
 }
 
+/**
+ * R-16I Phase 1 — translate the reviewer's flag array into per-market
+ * `ReviewerSignals` consumed by `marketVerdictFor`. The reviewer's flag
+ * array is global (not per-market) so each market consumes only the
+ * flags that apply to it.
+ *
+ * Mapping today:
+ *   total      → sharpConflict ← "ou_sharp_conflict"
+ *   moneyline  → publicSmokeAligned ← "public_smoke_aligned_with_pick"
+ *                hasFragilityFlag  ← any of the 4 strong fragility flags
+ *   first_inning → all false (V1 has no FI-side reviewer surface)
+ *
+ * Note: `review_recommends_caution` is the reviewer's POST-cap label
+ * (synthesized when STRONG_INTERVENTION_CAP fires). It's intentionally
+ * NOT counted here — the cap already takes ML confidence to 52% which
+ * routes to no_play via the existing confidence floor, so re-flagging
+ * the same condition would double-downgrade.
+ */
+const STRONG_FRAGILITY_ML_FLAGS = new Set<string>([
+  "extreme_run_diff_with_coinflip_market",
+  "small_sample_starter_driver",
+  "raw_conf_extreme_fragile",
+  "huge_model_market_gap",
+]);
+
+function deriveReviewerSignals(
+  flags: string[],
+  market: "moneyline" | "total" | "first_inning"
+): ReviewerSignals {
+  if (market === "total") {
+    return {
+      sharpConflict: flags.includes("ou_sharp_conflict"),
+      publicSmokeAligned: false,
+      hasFragilityFlag: false,
+    };
+  }
+  if (market === "moneyline") {
+    return {
+      sharpConflict: false,
+      publicSmokeAligned: flags.includes("public_smoke_aligned_with_pick"),
+      hasFragilityFlag: flags.some((f) => STRONG_FRAGILITY_ML_FLAGS.has(f)),
+    };
+  }
+  // first_inning — no reviewer-derived warnings in V1.
+  return {
+    sharpConflict: false,
+    publicSmokeAligned: false,
+    hasFragilityFlag: false,
+  };
+}
+
 function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // DB key — the JSONB uses "first_inning_total" for the FI market.
   const dbMarket: "moneyline" | "total" | "first_inning_total" =
@@ -1223,6 +1279,11 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
         betsPct === null &&
         openAmerican === null;
 
+  // Reviewer trail from sport_specific.review_v1 (R-16 wiring). Hoisted
+  // above the verdict call so R-16I Phase 1 can route reviewer signals
+  // into marketVerdictFor.
+  const reviewMeta = extractReviewMeta(input.sportSpecific, input.market);
+
   // Per-market verdict.
   //
   // Phase 4.2.C.2 — held markets route to "no_play" directly. The
@@ -1231,6 +1292,17 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // route a 0-confidence call to no_play. The short-circuit here is
   // explicit and avoids passing misleading 0 values through the verdict
   // engine for held markets.
+  //
+  // R-16I Phase 1 — derive reviewer-authority signals from the flag
+  // array we already extracted via extractReviewMeta. The reviewer's
+  // intelligence (ou_sharp_conflict, public_smoke_aligned_with_pick,
+  // single-flag fragility) flows into the verdict layer here so the
+  // final user-facing verdict reflects what the reviewer actually saw,
+  // not just what the grade column happens to hold.
+  const reviewerSignals = deriveReviewerSignals(
+    reviewMeta.flags,
+    input.market
+  );
   const verdict: { key: MarketVerdict; label: string } =
     input.held || input.confidence === null
       ? { key: "no_play", label: "No Play" }
@@ -1240,6 +1312,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           grade: input.grade ?? ("market_watch" as Grade),
           sharpDirection,
           marketDataLimited,
+          reviewerSignals,
         });
 
   // Server-generated copy (banned-terms-linted at output time).
@@ -1300,8 +1373,6 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     modelTrustPct !== null && marketImpliedPct !== null
       ? +(modelTrustPct - marketImpliedPct).toFixed(1)
       : null;
-  // Reviewer trail from sport_specific.review_v1 (R-16 wiring).
-  const reviewMeta = extractReviewMeta(input.sportSpecific, input.market);
 
   return {
     pick: input.pick,
