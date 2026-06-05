@@ -57,6 +57,96 @@ import type { Sport } from "@/lib/types/domain/Sport";
 export const maxDuration = 60;
 
 // ─────────────────────────────────────────────────────────────
+// R-19 Phase 5a — Launch-safety controls
+//
+// Two additions to the Phase 4.2.B pregame-sweep route:
+//
+//   1. Dry-run mode (`?dryRun=true` OR PREGAME_SWEEP_DRY_RUN=true env)
+//      — full classification + partition + structured report, NO writes.
+//      Always allowed regardless of master gate.
+//
+//   2. Master gate (PREGAME_SWEEP_CRON_ACTIVE=true env) — required for
+//      non-dry-run (write) mode. Missing → structured blocked report.
+//      Aligns with slate-cycle's ORCHESTRATOR_SKIP_CONFIRMATION pattern
+//      so unattended cron only writes when the operator has explicitly
+//      declared the cron schedule active.
+//
+// Existing protections preserved end-to-end:
+//   • CRON_SECRET auth (cronHandlerPerSport)
+//   • per-(data_source, sport) lock (5-min default)
+//   • Layer 1 ingester guard (rejects writes to already-locked rows)
+//   • Layer 2 automodelService respectLocks pre-filter (default true;
+//     respectLocks: false used here for entering_lock games because
+//     they haven't crossed the lock threshold yet)
+//   • Audit-failure non-fatal (lock UPDATE succeeded; audit-insert
+//     failure pushes to errors[] and continues)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Env var operator sets when pregame-sweep is scheduled in vercel.json
+ * and intended to perform writes. Strict equality with "true" — same
+ * pattern as ORCHESTRATOR_SKIP_CONFIRMATION + MORNING_SLATE_AUTO_PUBLISH.
+ */
+export const PREGAME_SWEEP_CRON_ACTIVE_ENV = "PREGAME_SWEEP_CRON_ACTIVE";
+
+/**
+ * Env var for dry-run mode (alternative to ?dryRun=true query param).
+ * Either trigger flips the route into read-only / report-only mode.
+ */
+export const PREGAME_SWEEP_DRY_RUN_ENV = "PREGAME_SWEEP_DRY_RUN";
+
+/**
+ * True when the caller explicitly opted into read-only via either
+ * `?dryRun=true` on the request URL or `PREGAME_SWEEP_DRY_RUN=true` in
+ * the env. Strict equality on both — typos / casing do not satisfy.
+ */
+export function isPregameSweepDryRun(
+  request: Request,
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  try {
+    const url = new URL(request.url);
+    if (url.searchParams.get("dryRun") === "true") return true;
+  } catch {
+    // Malformed URL — fall through to env check
+  }
+  return env[PREGAME_SWEEP_DRY_RUN_ENV] === "true";
+}
+
+/**
+ * True when the operator has declared pregame-sweep cron active via env.
+ * Strict equality with "true". Does NOT examine vercel.json — the flag is
+ * the operator's explicit signal that the cron schedule has been wired.
+ */
+export function isPregameSweepGateActive(
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  return env[PREGAME_SWEEP_CRON_ACTIVE_ENV] === "true";
+}
+
+/**
+ * Build the structured blocked response when the master gate is missing
+ * in non-dry-run mode. Returned via the cron-handler shape so the
+ * refresh_log row + JSON body both surface the block clearly.
+ */
+export function buildPregameSweepBlockedDetails(opts: {
+  sport: Sport;
+  date: string;
+}): Record<string, unknown> {
+  return {
+    blocked: true,
+    reason:
+      `${PREGAME_SWEEP_CRON_ACTIVE_ENV} env var must be 'true' for non-dry-run ` +
+      `cron execution. Pass ?dryRun=true to invoke in read-only mode.`,
+    env_flag_required: PREGAME_SWEEP_CRON_ACTIVE_ENV,
+    dry_run: false,
+    pregame_sweep_active: false,
+    sport: opts.sport,
+    date: opts.date,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
 // Slate read + lock-state partition
 // ─────────────────────────────────────────────────────────────
 
@@ -167,11 +257,30 @@ async function applyLocks(
 
 export async function GET(request: Request) {
   const date = parseDateFromUrl(request);
+  // R-19 Phase 5a — resolve safety controls BEFORE entering the
+  // per-sport handler. Both flags are process-wide, not per-sport,
+  // and should produce identical behavior across MLB / future sports.
+  const dryRun = isPregameSweepDryRun(request);
+  const gateActive = isPregameSweepGateActive();
+
   return cronHandlerPerSport(
     request,
     "pregame_sweep",
     sportsInSeasonToday(),
     async ({ sport }) => {
+      // ── Master gate (write-mode only) ───────────────────────────────
+      // Dry-run mode is always allowed. Write mode requires the
+      // PREGAME_SWEEP_CRON_ACTIVE env flag. Missing → structured
+      // blocked report without any DB I/O.
+      if (!dryRun && !gateActive) {
+        return {
+          records_updated: 0,
+          api_calls_made: 0,
+          partial: true,
+          details: buildPregameSweepBlockedDetails({ sport, date }),
+        };
+      }
+
       let records = 0;
       let apiCalls = 0;
 
@@ -179,6 +288,48 @@ export async function GET(request: Request) {
       const candidates = await loadSlateCandidates(sport, date);
       const now = new Date();
       const partition = partitionByLockState(candidates, now);
+
+      // ── R-19 Phase 5a — Dry-run early return ────────────────────────
+      // Read-only path: full classification + report, ZERO writes.
+      // Skipped steps: entering_lock t60 model pass, applyLocks
+      // UPDATE, audit-row INSERT, lines refresh, sharp signals
+      // refresh, market-signal derivation, grade derivation.
+      if (dryRun) {
+        return {
+          records_updated: 0,
+          api_calls_made: 0,
+          partial: false,
+          details: {
+            dry_run: true,
+            pregame_sweep_active: gateActive,
+            sport,
+            date,
+            candidates_count: candidates.length,
+            partition: {
+              locked: partition.locked.length,
+              entering_lock: partition.entering_lock.length,
+              still_unlocked: partition.still_unlocked.length,
+              already_started: partition.already_started.length,
+            },
+            would_lock_count: partition.entering_lock.length,
+            would_lock_games: partition.entering_lock.map((g) => ({
+              game_id: g.game_id,
+              external_id: g.external_id,
+              game_date: g.game_date,
+            })),
+            lock_writes_skipped: partition.entering_lock.length,
+            steps_skipped: [
+              "entering_lock_t60_model_pass",
+              "lock_updates",
+              "audit_inserts",
+              "lines_refresh",
+              "sharp_signals_refresh",
+              "market_signals_derivation",
+              "grade_derivation",
+            ],
+          },
+        };
+      }
 
       // ── 2. Final pre-lock auto-model pass for ENTERING_LOCK games ───
       // We use respectLocks=false because these games aren't locked YET
@@ -257,10 +408,22 @@ export async function GET(request: Request) {
         grades.gamePredictionsUpdated + grades.propPredictionsUpdated;
       records += gradeTouched;
 
+      // R-19 Phase 5a — partial flag fires when any per-game lock errored
+      // OR any t60 model pass errored. The cron-handler wrapper consults
+      // this to mark the refresh_log row as 'partial' instead of 'success'.
+      const anyErrors =
+        lockResult.errors.length > 0 ||
+        enteringLockModelResult.errors.length > 0;
+
       return {
         records_updated: records,
         api_calls_made: apiCalls,
+        partial: anyErrors,
         details: {
+          dry_run: false,
+          pregame_sweep_active: true,
+          sport,
+          date,
           partition: {
             locked: partition.locked.length,
             entering_lock: partition.entering_lock.length,
@@ -271,6 +434,8 @@ export async function GET(request: Request) {
           locks_applied: lockResult.locked,
           audit_rows_written: lockResult.audit_written,
           lock_errors: lockResult.errors,
+          errors_count:
+            lockResult.errors.length + enteringLockModelResult.errors.length,
           game_lines: gameLines.records_updated,
           sharp_signals: signals.records_updated,
           market_signals: marketTouched,

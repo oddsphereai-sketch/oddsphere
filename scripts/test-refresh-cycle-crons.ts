@@ -135,8 +135,20 @@ async function main() {
   // ─── pregame-sweep ───────────────────────────────────────────────────────
   section("/api/cron/pregame-sweep");
   check("pregame-sweep: bad auth → 401", (await pregameSweep(unauthed())).status === 401);
-  // lines (360) + signals (4) = 364
-  await runAuthedFor(pregameSweep, "pregame-sweep", 350, ["game_lines", "sharp_signals"]);
+  // R-19 Phase 5a — the existing test exercises the WRITE path. After
+  // Phase 5a, that path requires PREGAME_SWEEP_CRON_ACTIVE=true. Opt in
+  // here so the legacy test keeps verifying writes; restore env after
+  // so the dedicated safety-gate test in scripts/test-pregame-sweep-
+  // safety.ts can see the gate-missing block-path cleanly.
+  const origGate = process.env.PREGAME_SWEEP_CRON_ACTIVE;
+  process.env.PREGAME_SWEEP_CRON_ACTIVE = "true";
+  try {
+    // lines (360) + signals (4) = 364
+    await runAuthedFor(pregameSweep, "pregame-sweep", 350, ["game_lines", "sharp_signals"]);
+  } finally {
+    if (origGate === undefined) delete process.env.PREGAME_SWEEP_CRON_ACTIVE;
+    else process.env.PREGAME_SWEEP_CRON_ACTIVE = origGate;
+  }
 
   // Cleanup
   for (const ds of ["midday_refresh", "afternoon_refresh", "evening_refresh", "lineup_watch", "pregame_sweep"]) {
