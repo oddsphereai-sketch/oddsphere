@@ -75,6 +75,12 @@ import {
   assessAutomationGate,
   type AutomationGateReport,
 } from "../../../lib/services/automationGate";
+import {
+  reconcileBdlVsSharpEv,
+  type SlateReconciliationReport,
+} from "../../../lib/services/slateReconciliation";
+import { discoverEventsFromOpportunities } from "../../../lib/providers/real_api/_opportunitiesDiscovery";
+import { getSlateProvider } from "../../../lib/providers/factory";
 import { slateService } from "../../../lib/services/slateService";
 import { linesService } from "../../../lib/services/linesService";
 import { generatePredictionsForSlate } from "../../../lib/services/automodelService";
@@ -651,7 +657,7 @@ async function main() {
   console.log(`  sharp_signals:       ${sigsCount ?? 0}`);
 
   console.log();
-  console.log(`━━━ P2. Provider date alignment ━━━`);
+  console.log(`━━━ P2. Provider date alignment (/opportunities/ev) ━━━`);
   let alignment: ProviderDateAlignmentReport | null = null;
   const key = process.env.SHARPAPI_KEY;
   if (!key) {
@@ -665,14 +671,105 @@ async function main() {
         common.date,
         { slate_size: gameIds.length > 0 ? gameIds.length : 9 }
       );
-      console.log(`  matched:              ${alignment.matched}/${alignment.slate_size}`);
-      console.log(`  wrong_date:           ${alignment.wrong_date}`);
-      console.log(`  threshold:            ${alignment.threshold}`);
-      console.log(`  STATUS:               ${alignment.status.toUpperCase()}`);
-      console.log(`  reason:               ${alignment.reason}`);
+      // R-17 Step 2B — banner restructured. Pre-2B printed
+      // "matched: 15/9" which read as a ratio but the denominator
+      // (slate_size) was a fallback constant when the DB was empty,
+      // not a ceiling on what's possible. Under EV-based discovery
+      // `matched` can exceed `slate_size`, so the new banner separates:
+      //   • EV events kept on the expected date (the matched count)
+      //   • EV events on a wrong date
+      //   • the threshold and the slate-size basis it was derived from
+      // Raw + deduped EV row counts are not surfaced here — they live
+      // in the report's discovery stats for diagnostic dumps.
+      console.log(`  EV events on ${alignment.expected_date}:    ${alignment.matched}`);
+      console.log(`  EV events on wrong date:    ${alignment.wrong_date}`);
+      console.log(
+        `  threshold (≥ ${Math.round(alignment.threshold_ratio * 100)}% of slate-size ${alignment.slate_size}): ${alignment.threshold}`
+      );
+      console.log(`  STATUS:                     ${alignment.status.toUpperCase()}`);
+      console.log(`  reason:                     ${alignment.reason}`);
     } catch (e) {
       console.log(
         `  ✗ preflight failed: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+  }
+
+  // ── P2.5: BDL ↔ SharpAPI /opportunities/ev reconciliation ──────────
+  // R-17 Step 2B — cross-provider matchup overlap check. P2 only
+  // validates that SharpAPI events carry the expected date suffix; it
+  // does NOT validate that the matchups themselves match what BDL says
+  // is tonight's slate. The 2026-06-05 audit found SharpAPI /splits
+  // serving yesterday's matchups with today's date suffix — P2 passed
+  // but the slate was effectively wrong. P2.5 closes that gap by
+  // comparing canonical matchup sets and hard-blocking on fail_closed.
+  console.log();
+  console.log(`━━━ P2.5. Slate reconciliation (BDL ↔ SharpAPI /opportunities/ev) ━━━`);
+  let reconciliation: SlateReconciliationReport | null = null;
+  if (!key) {
+    console.log(`  ⚠ SHARPAPI_KEY missing — skipping reconciliation`);
+  } else {
+    try {
+      // BDL canonical slate (the authoritative game listing). Always
+      // hit fresh from the provider — DB state can lag the actual slate.
+      const slateProvider = getSlateProvider();
+      const bdlGames = await slateProvider.getGames(common.date, common.sport);
+
+      // Resolve BDL team external_ids → abbreviations via teams table.
+      const teamExtIds = new Set<number>();
+      for (const g of bdlGames) {
+        if (g.home_team_external_id !== null) teamExtIds.add(g.home_team_external_id);
+        if (g.away_team_external_id !== null) teamExtIds.add(g.away_team_external_id);
+      }
+      const abbrByExt = new Map<number, string>();
+      if (teamExtIds.size > 0) {
+        const { data: teamRows } = await supabase
+          .from("teams")
+          .select("external_id, abbreviation")
+          .in("external_id", [...teamExtIds]);
+        for (const row of (teamRows ?? []) as Array<{
+          external_id: number;
+          abbreviation: string;
+        }>) {
+          abbrByExt.set(row.external_id, row.abbreviation);
+        }
+      }
+      const bdlPairs = bdlGames
+        .map((g) => ({
+          away_abbr: abbrByExt.get(g.away_team_external_id ?? -1) ?? "",
+          home_abbr: abbrByExt.get(g.home_team_external_id ?? -1) ?? "",
+        }))
+        .filter((p) => p.away_abbr !== "" && p.home_abbr !== "");
+
+      // SharpAPI canonical events via /opportunities/ev.
+      const client = new SharpApiClient(key);
+      const ev = await discoverEventsFromOpportunities(
+        client,
+        common.sport,
+        common.date
+      );
+      const sharpPairs = ev.events.map((e) => ({
+        home: e.home,
+        away: e.away,
+      }));
+
+      reconciliation = reconcileBdlVsSharpEv(bdlPairs, sharpPairs);
+      console.log(`  BDL slate count:           ${reconciliation.bdlCount}`);
+      console.log(`  SharpAPI EV count:         ${reconciliation.sharpEvCount}`);
+      console.log(`  matched:                   ${reconciliation.matchedCount}`);
+      console.log(`  overlap:                   ${reconciliation.overlapPct}%`);
+      console.log(`  /splits role:              enrichment only (not used for discovery)`);
+      if (reconciliation.bdlOnlyMatchups.length > 0) {
+        console.log(`  BDL-only matchups:         ${reconciliation.bdlOnlyMatchups.join(", ")}`);
+      }
+      if (reconciliation.sharpOnlyMatchups.length > 0) {
+        console.log(`  SharpAPI-only matchups:    ${reconciliation.sharpOnlyMatchups.join(", ")}`);
+      }
+      console.log(`  STATUS:                    ${reconciliation.status.toUpperCase()}`);
+      console.log(`  reason:                    ${reconciliation.reason}`);
+    } catch (e) {
+      console.log(
+        `  ✗ reconciliation failed: ${e instanceof Error ? e.message : String(e)}`
       );
     }
   }
@@ -689,7 +786,16 @@ async function main() {
   );
 
   // ── Resolve effective write mode ────────────────────────────────────
-  const providerBlocked = alignment !== null && alignment.status === "fail_closed";
+  // R-17 Step 2B — reconciliation fail_closed is ALSO a hard-block.
+  // Either alignment OR reconciliation failing closed aborts all
+  // write-eligible steps. There is intentionally no override flag
+  // in this commit (safety-first; revisit only after observing
+  // reconciliation behavior across multiple slates).
+  const alignmentBlocked =
+    alignment !== null && alignment.status === "fail_closed";
+  const reconciliationBlocked =
+    reconciliation !== null && reconciliation.status === "fail_closed";
+  const providerBlocked = alignmentBlocked || reconciliationBlocked;
   const effectiveApply = applyRequested && topLevelGateOk && !providerBlocked;
   // Note: per-step writeMode = effectiveApply && perStep[k]. Each runner
   // builds it locally so the report can explain WHY a step stayed dry-run.
@@ -720,8 +826,11 @@ async function main() {
     }
   } else if (applyRequested && providerBlocked) {
     console.log();
+    const blockReasons: string[] = [];
+    if (alignmentBlocked) blockReasons.push("alignment fail_closed");
+    if (reconciliationBlocked) blockReasons.push("reconciliation fail_closed");
     console.log(
-      `  ⚠ Provider alignment fail_closed → write phase aborted before any step ran.`
+      `  ⚠ Provider gate blocked (${blockReasons.join(", ")}) → write phase aborted before any step ran.`
     );
   }
 
@@ -743,6 +852,35 @@ async function main() {
     operator_path: "lib/services/providerDateAlignment.assessProviderDateAlignment",
     mode: alignment === null ? "skipped" : alignment.status === "fail_closed" ? "blocked" : "dry_run",
     reason: alignment === null ? "SHARPAPI_KEY missing" : alignment.reason,
+  });
+
+  // R-17 Step 2B — P2.5 slate reconciliation entry in the verbose report.
+  steps.push({
+    order: nextOrder++,
+    name: "P2.5. Slate reconciliation (BDL ↔ SharpAPI /opportunities/ev)",
+    operator_path:
+      "lib/services/slateReconciliation.reconcileBdlVsSharpEv",
+    mode:
+      reconciliation === null
+        ? "skipped"
+        : reconciliation.status === "fail_closed"
+          ? "blocked"
+          : "dry_run",
+    reason:
+      reconciliation === null
+        ? "SHARPAPI_KEY missing"
+        : reconciliation.reason,
+    details:
+      reconciliation === null
+        ? undefined
+        : {
+            bdl_count: reconciliation.bdlCount,
+            sharp_ev_count: reconciliation.sharpEvCount,
+            matched: reconciliation.matchedCount,
+            overlap_pct: reconciliation.overlapPct,
+            bdl_only: reconciliation.bdlOnlyMatchups,
+            sharp_only: reconciliation.sharpOnlyMatchups,
+          },
   });
 
   // S1 — Slate ingest. Run even when gameIds.length > 0 so the slate

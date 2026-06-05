@@ -307,31 +307,37 @@ async function runV2Flow(args: {
   const { sport, date, verbose, writeMode, preCount, gameIds } = args;
 
   console.log();
-  console.log("━━━ V2: /splits-anchored discovery + per-game upsert (dry-run preview) ━━━");
+  // R-17 Step 2B — discovery source switched to /opportunities/ev. The
+  // report shape changed (splitsStats → discoveryStats with extra
+  // counters). /splits is still fetched separately for the R-16E
+  // per-market fallback but no longer drives event discovery.
+  console.log("━━━ V2: /opportunities/ev discovery + per-game upsert (dry-run preview) ━━━");
   const dry = await linesService.refreshGameLinesV2(sport, date, { dryRun: true });
   const details = dry.details as V2RefreshDetails;
 
   console.log(`  Provider API calls made:              ${dry.api_calls_made}`);
-  console.log(`  Events discovered (/splits):          ${details.discovery.eventsDiscovered}`);
+  console.log(`  Events discovered (/opportunities/ev):${details.discovery.eventsDiscovered}`);
   console.log(`  Events resolved to DB game:           ${details.discovery.eventsResolvedToGame}`);
-  console.log(`  Events with suffixed event_id (/EV):  ${details.discovery.eventsWithSuffixedId}`);
-  console.log(`  Events using /splits id only:         ${details.discovery.eventsWithSplitsIdOnly}`);
+  console.log(`  Events with suffixed event_id:        ${details.discovery.eventsWithSuffixedId}`);
   if (details.discovery.opportunitiesUnavailable) {
     console.log(
-      "  ⚠ /opportunities/ev unavailable — all events will use /splits stripped event_id."
+      "  ⚠ /opportunities/ev returned zero events — no canonical slate to refresh."
     );
   }
 
-  const ss = details.discovery.splitsStats;
+  const ds = details.discovery.discoveryStats;
   console.log();
-  console.log("━━━ /splits filter breakdown ━━━");
-  console.log(`  total rows:               ${ss.totalRows}`);
-  console.log(`  kept:                     ${ss.keptRows}`);
-  console.log(`  skipped non-mlb:          ${ss.skippedNonMlb}`);
-  console.log(`  skipped missing event_id: ${ss.skippedMissingEventId}`);
-  console.log(`  skipped date-unparseable: ${ss.skippedDateUnparseable}`);
-  console.log(`  skipped wrong-date:       ${ss.skippedWrongDate}`);
-  console.log(`  skipped team-unresolved:  ${ss.skippedTeamUnresolved}`);
+  console.log("━━━ /opportunities/ev filter breakdown ━━━");
+  console.log(`  total rows:               ${ds.totalRows}`);
+  console.log(`  kept events:              ${ds.keptEvents}`);
+  console.log(`  deduped rows:             ${ds.dedupedRows}`);
+  console.log(`  skipped non-mlb:          ${ds.skippedNonMlb}`);
+  console.log(`  skipped missing event_id: ${ds.skippedMissingEventId}`);
+  console.log(`  skipped player-prop:      ${ds.skippedPlayerProp}`);
+  console.log(`  skipped alternate-line:   ${ds.skippedAlternateLine}`);
+  console.log(`  skipped date-unparseable: ${ds.skippedDateUnparseable}`);
+  console.log(`  skipped wrong-date:       ${ds.skippedWrongDate}`);
+  console.log(`  skipped team-unresolved:  ${ds.skippedTeamUnresolved}`);
 
   console.log();
   console.log("━━━ Per-game decisions (would-write) ━━━");

@@ -1,15 +1,20 @@
 /**
  * Phase 4.2.C.1.R-17 Step 1 — Provider date alignment preflight.
+ * Phase 4.2.C.1.R-17 Step 2B — switched underlying discovery from
+ * `/splits` to `/opportunities/ev`.
  *
- * Read-only helper that confirms SharpAPI's /splits endpoint is still
- * serving the requested slate date BEFORE any write step runs. If
- * SharpAPI has rolled forward to the next day's slate (observed
- * 2026-06-04 evening — only 1 of 10 /splits rows still carried the
- * target date), running a V2 lines refresh would either preserve
- * stale data (with the R-16D per-game guard) or — without that guard
- * — silently wipe good data and replace with the wrong slate's. The
- * orchestrator uses this check to ABORT a cycle when the provider
- * has clearly moved on.
+ * Read-only helper that confirms SharpAPI's canonical event endpoint is
+ * still serving the requested slate date BEFORE any write step runs.
+ *
+ * Step 2B rationale: the 2026-06-05 SharpAPI audit found `/splits` is
+ * a consensus-splits aggregator, not a slate listing — it returned 9
+ * events tagged with today's date but matching yesterday's slate. The
+ * preflight using `/splits` reported "OK 9/9" on stale matchups (false
+ * positive). `/opportunities/ev` is the correct canonical event source
+ * — it returned all 15 of today's actual matchups, perfectly matching
+ * BDL. This module now uses the EV-based discovery via
+ * `_opportunitiesDiscovery.ts`; `_splitsDiscovery.ts` is retained for
+ * splits enrichment merging in SharpAPISignalProvider only.
  *
  * Pure, no DB writes, no module-level side effects. Takes an injected
  * SharpApiClient for testability.
@@ -17,7 +22,7 @@
 
 import type { Sport } from "../types/domain/Sport";
 import { SharpApiClient } from "../providers/real_api/_sharpApiClient";
-import { discoverEventsFromSplits } from "../providers/real_api/_splitsDiscovery";
+import { discoverEventsFromOpportunities } from "../providers/real_api/_opportunitiesDiscovery";
 
 export type ProviderDateAlignmentStatus = "ok" | "warn" | "fail_closed";
 
@@ -95,11 +100,17 @@ export async function assessProviderDateAlignment(
     };
   }
 
-  // Reuse the R-16D /splits discovery helper. It already parses event_id
-  // dates and applies the same date-guard logic. We just need the stats.
-  const splitsResult = await discoverEventsFromSplits(client, sport, expectedDate);
-  const stats = splitsResult.stats;
-  const matched = stats.keptRows;
+  // R-17 Step 2B — use `/opportunities/ev`-based canonical discovery.
+  // The helper parses event_id dates with the same semantics as the
+  // pre-Step-2B `/splits` helper, but reads from SharpAPI's canonical
+  // slate listing endpoint instead of the consensus-splits aggregator.
+  const evResult = await discoverEventsFromOpportunities(
+    client,
+    sport,
+    expectedDate
+  );
+  const stats = evResult.stats;
+  const matched = stats.keptEvents;
   const wrongDate = stats.skippedWrongDate;
   const dateUnparseable = stats.skippedDateUnparseable;
   const nonMlb = stats.skippedNonMlb;
@@ -116,20 +127,27 @@ export async function assessProviderDateAlignment(
   let status: ProviderDateAlignmentStatus;
   let reason: string;
 
+  // R-17 Step 2B — reason strings no longer use the `matched/slate_size`
+  // form. Under EV-based discovery, `matched` is the count of canonical
+  // events on the expected date (which can EXCEED `slate_size` when the
+  // slate_size parameter is a DB-derived fallback). Writing "15/9"
+  // misleads operators into reading it as a ratio. The new strings
+  // surface the kept count, the threshold, and the slate-size basis
+  // separately so the numbers are unambiguous.
   if (matched >= threshold) {
     if (wrongDate === 0) {
       status = "ok";
-      reason = `Provider aligned: ${matched}/${slateSize} events on ${expectedDate} (threshold ${threshold}).`;
+      reason = `Provider aligned: ${matched} EV event(s) on ${expectedDate} (≥ threshold ${threshold}; slate-size basis ${slateSize}).`;
     } else {
       status = "warn";
-      reason = `Provider partially aligned: ${matched}/${slateSize} events on ${expectedDate} (threshold ${threshold}). ${wrongDate} event(s) on a different date — provider may be transitioning.`;
+      reason = `Provider partially aligned: ${matched} EV event(s) on ${expectedDate} (≥ threshold ${threshold}; slate-size basis ${slateSize}). ${wrongDate} event(s) on a different date — provider may be transitioning.`;
     }
   } else if (wrongDate > matched) {
     status = "fail_closed";
     reason = `Provider rolled forward: ${wrongDate} event(s) on the wrong date vs ${matched} on ${expectedDate} (need ${threshold}). SharpAPI has moved on; do not run writes against the stale slate.`;
   } else {
     status = "fail_closed";
-    reason = `Provider date alignment below threshold: only ${matched}/${slateSize} events on ${expectedDate} (need ${threshold}). Mixed reasons: ${wrongDate} wrong-date, ${dateUnparseable} date-unparseable, ${teamUnresolved} team-unresolved, ${nonMlb} non-mlb.`;
+    reason = `Provider date alignment below threshold: only ${matched} EV event(s) on ${expectedDate} (need ${threshold}; slate-size basis ${slateSize}). Mixed reasons: ${wrongDate} wrong-date, ${dateUnparseable} date-unparseable, ${teamUnresolved} team-unresolved, ${nonMlb} non-mlb.`;
   }
 
   return {

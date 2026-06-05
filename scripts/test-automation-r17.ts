@@ -45,20 +45,28 @@ function section(label: string) {
   console.log(`\n━━━ ${label} ━━━`);
 }
 
-// ─── stub client returning specified /splits payloads ────────────────
+// ─── stub client returning specified provider-discovery payloads ──────
+//
+// R-17 Step 2B — the alignment helper switched from /splits to
+// /opportunities/ev. The stub now serves the same fixture rows on
+// BOTH paths so the historical test fixtures (which still build via
+// `splitsRow()`) still exercise the alignment logic. The row shape
+// is identical for both endpoints in the fields the discovery helpers
+// consume (event_id, league, home_team, away_team).
 
 class StubAlignmentClient extends SharpApiClient {
-  private readonly splits: Array<Record<string, unknown>>;
-  constructor(splits: Array<Record<string, unknown>>) {
+  private readonly rows: Array<Record<string, unknown>>;
+  constructor(rows: Array<Record<string, unknown>>) {
     super("stub-key");
-    this.splits = splits;
+    this.rows = rows;
   }
   override async fetchAll<T>(opts: {
     path: string;
     query?: Record<string, unknown>;
     maxPages?: number;
   }): Promise<T[]> {
-    if (opts.path === "/splits") return this.splits as unknown as T[];
+    if (opts.path === "/splits") return this.rows as unknown as T[];
+    if (opts.path === "/opportunities/ev") return this.rows as unknown as T[];
     return [] as T[];
   }
 }
@@ -75,6 +83,8 @@ function splitsRow(opts: {
     league: opts.league ?? "mlb",
     home_team: opts.home,
     away_team: opts.away,
+    is_player_prop: false,
+    is_alternate_line: false,
   };
 }
 
@@ -646,6 +656,179 @@ function testS5PerPitcherFailuresIsolated() {
   );
 }
 
+// ─── R-17 Step 2B: reconciliation guard tests ───────────────────────
+//
+// These tests exercise the pure helpers wired by the orchestrator's
+// P2.5 reconciliation step. The orchestrator-level integration (BDL
+// slate fetch + supabase team-abbr lookup + status print) needs DB to
+// validate end-to-end, which is covered by the live dry-run probe
+// separately. Here we pin the contract surface the orchestrator relies
+// on so a refactor or threshold-tuning change can't silently change
+// the gate behavior.
+
+async function testReconciliationPerfectMatch() {
+  section("R-17 Step 2B — reconciliation: 15/15 perfect → ok");
+  const { reconcileBdlVsSharpEv } = await import(
+    "../lib/services/slateReconciliation"
+  );
+  const bdlPairs = [
+    { away_abbr: "SF", home_abbr: "CHC" },
+    { away_abbr: "CHW", home_abbr: "PHI" },
+    { away_abbr: "SEA", home_abbr: "DET" },
+    { away_abbr: "BOS", home_abbr: "NYY" },
+    { away_abbr: "BAL", home_abbr: "TOR" },
+    { away_abbr: "TB", home_abbr: "MIA" },
+    { away_abbr: "PIT", home_abbr: "ATL" },
+    { away_abbr: "OAK", home_abbr: "HOU" },
+    { away_abbr: "CLE", home_abbr: "TEX" },
+    { away_abbr: "KC", home_abbr: "MIN" },
+    { away_abbr: "CIN", home_abbr: "STL" },
+    { away_abbr: "MIL", home_abbr: "COL" },
+    { away_abbr: "NYM", home_abbr: "SD" },
+    { away_abbr: "WSH", home_abbr: "ARI" },
+    { away_abbr: "LAA", home_abbr: "LAD" },
+  ];
+  const evPairs = bdlPairs.map((p) => ({
+    away: p.away_abbr,
+    home: p.home_abbr,
+  }));
+  const r = reconcileBdlVsSharpEv(bdlPairs, evPairs);
+  check("reconciliation: status = ok", r.status === "ok");
+  check("reconciliation: matched = 15", r.matchedCount === 15);
+  check("reconciliation: overlap = 100%", r.overlapPct === 100);
+}
+
+async function testReconciliationStaleSplitsCaseBlocks() {
+  section("R-17 Step 2B — reconciliation: 2026-06-05 stale case → fail_closed");
+  const { reconcileBdlVsSharpEv } = await import(
+    "../lib/services/slateReconciliation"
+  );
+  // Today's actual mismatch — BDL has 15 tonight games, /opportunities/ev
+  // would have 15 too in the healthy case but our pre-2B preflight was
+  // fed /splits which had 9 yesterday matchups. Simulate the pathological
+  // case: BDL = real 15, EV = stale 9 from yesterday.
+  const bdlPairs = [
+    { away_abbr: "SF", home_abbr: "CHC" },
+    { away_abbr: "CHW", home_abbr: "PHI" },
+    { away_abbr: "SEA", home_abbr: "DET" },
+    { away_abbr: "BOS", home_abbr: "NYY" },
+    { away_abbr: "BAL", home_abbr: "TOR" },
+    { away_abbr: "TB", home_abbr: "MIA" },
+    { away_abbr: "PIT", home_abbr: "ATL" },
+    { away_abbr: "OAK", home_abbr: "HOU" },
+    { away_abbr: "CLE", home_abbr: "TEX" },
+    { away_abbr: "KC", home_abbr: "MIN" },
+    { away_abbr: "CIN", home_abbr: "STL" },
+    { away_abbr: "MIL", home_abbr: "COL" },
+    { away_abbr: "NYM", home_abbr: "SD" },
+    { away_abbr: "WSH", home_abbr: "ARI" },
+    { away_abbr: "LAA", home_abbr: "LAD" },
+  ];
+  const stalePairs = [
+    { away: "ATH", home: "CHC" },
+    { away: "BAL", home: "BOS" },
+    { away: "CLE", home: "NYY" },
+    { away: "KC", home: "MIN" },
+    { away: "LAD", home: "ARI" },
+    { away: "PIT", home: "HOU" },
+    { away: "SD", home: "PHI" },
+    { away: "SF", home: "MIL" },
+    { away: "TOR", home: "ATL" },
+  ];
+  const r = reconcileBdlVsSharpEv(bdlPairs, stalePairs);
+  check(
+    "stale-case: status = fail_closed (overlap = 1/15 ≈ 6.7%)",
+    r.status === "fail_closed"
+  );
+  check("stale-case: matched = 1 (KC@MIN)", r.matchedCount === 1);
+  check(
+    "stale-case: bdlOnly reports 14 missing matchups",
+    r.bdlOnlyMatchups.length === 14
+  );
+  check(
+    "stale-case: sharpOnly reports 8 stale matchups",
+    r.sharpOnlyMatchups.length === 8
+  );
+}
+
+async function testReconciliationEmptySharpEvFailsClosed() {
+  section("R-17 Step 2B — reconciliation: empty SharpEV → fail_closed");
+  const { reconcileBdlVsSharpEv } = await import(
+    "../lib/services/slateReconciliation"
+  );
+  const r = reconcileBdlVsSharpEv(
+    [{ away_abbr: "KC", home_abbr: "MIN" }],
+    []
+  );
+  check("empty-ev: status = fail_closed", r.status === "fail_closed");
+  check("empty-ev: matched = 0", r.matchedCount === 0);
+}
+
+async function testReconciliationPartialOverlapWarns() {
+  section("R-17 Step 2B — reconciliation: 60% overlap → warn (apply still eligible)");
+  const { reconcileBdlVsSharpEv } = await import(
+    "../lib/services/slateReconciliation"
+  );
+  const bdlPairs = [
+    { away_abbr: "A", home_abbr: "B" },
+    { away_abbr: "C", home_abbr: "D" },
+    { away_abbr: "E", home_abbr: "F" },
+    { away_abbr: "G", home_abbr: "H" },
+    { away_abbr: "I", home_abbr: "J" },
+    { away_abbr: "K", home_abbr: "L" },
+    { away_abbr: "M", home_abbr: "N" },
+    { away_abbr: "O", home_abbr: "P" },
+    { away_abbr: "Q", home_abbr: "R" },
+    { away_abbr: "S", home_abbr: "T" },
+  ];
+  const evPairs = [
+    { away: "A", home: "B" },
+    { away: "C", home: "D" },
+    { away: "E", home: "F" },
+    { away: "G", home: "H" },
+    { away: "I", home: "J" },
+    { away: "K", home: "L" },
+    { away: "X1", home: "Y1" },
+    { away: "X2", home: "Y2" },
+    { away: "X3", home: "Y3" },
+    { away: "X4", home: "Y4" },
+  ];
+  const r = reconcileBdlVsSharpEv(bdlPairs, evPairs);
+  check("60%-overlap: status = warn", r.status === "warn");
+  check("60%-overlap: matched = 6", r.matchedCount === 6);
+  check("60%-overlap: overlapPct = 60", r.overlapPct === 60);
+}
+
+async function testOrchestratorImportsReconciliation() {
+  section("R-17 Step 2B — orchestrator wires reconciliation helper");
+  const fs = await import("node:fs/promises");
+  const src = await fs.readFile(
+    "scripts/operator/automation/run-slate-cycle.ts",
+    "utf-8"
+  );
+  check(
+    "orchestrator imports reconcileBdlVsSharpEv",
+    src.includes("reconcileBdlVsSharpEv")
+  );
+  check(
+    "orchestrator imports discoverEventsFromOpportunities",
+    src.includes("discoverEventsFromOpportunities")
+  );
+  check(
+    "orchestrator prints P2.5 banner",
+    src.includes("P2.5") &&
+      src.includes("Slate reconciliation (BDL ↔ SharpAPI /opportunities/ev)")
+  );
+  check(
+    "orchestrator hard-blocks on reconciliation fail_closed",
+    src.includes("reconciliationBlocked")
+  );
+  check(
+    "orchestrator notes no override flag (Step 2B safety)",
+    src.toLowerCase().includes("intentionally no override")
+  );
+}
+
 // ─── Runner ──────────────────────────────────────────────────────────
 
 async function main() {
@@ -676,6 +859,11 @@ async function main() {
   testSeasonPitchingHelperExportSurface();
   testS5DryRunGatingByDefault();
   testS5PerPitcherFailuresIsolated();
+  await testReconciliationPerfectMatch();
+  await testReconciliationStaleSplitsCaseBlocks();
+  await testReconciliationEmptySharpEvFailsClosed();
+  await testReconciliationPartialOverlapWarns();
+  await testOrchestratorImportsReconciliation();
 
   console.log();
   console.log("━━━ Summary ━━━");

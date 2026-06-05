@@ -249,7 +249,11 @@ export async function assessAutomationGate(
     // Provider alignment fail propagates as additional hold reasons, but
     // doesn't double-hold a market that's already held for another reason.
     if (providerAlignment && providerAlignment.status === "fail_closed") {
-      const provReason = `Provider rolled forward (${providerAlignment.matched}/${providerAlignment.slate_size} on date)`;
+      // R-17 Step 2B — drop the "matched/slate_size" form for the reason
+      // string; under EV-based discovery `matched` can exceed `slate_size`
+      // (which is a fallback constant when the DB is empty), so the ratio
+      // form is misleading. Show kept + wrong-date counts directly.
+      const provReason = `Provider rolled forward (${providerAlignment.matched} on date, ${providerAlignment.wrong_date} on wrong date)`;
       if (ml.decision === "play") ml = { decision: "hold", reason: provReason };
       if (ou.decision === "play") ou = { decision: "hold", reason: provReason };
       if (nrfi.decision === "play") nrfi = { decision: "hold", reason: provReason };
@@ -287,7 +291,11 @@ export async function assessAutomationGate(
       overall = "degraded";
       reasons.push(providerAlignment.reason);
     } else {
-      reasons.push(`provider date alignment: ${providerAlignment.status} (${providerAlignment.matched}/${providerAlignment.slate_size})`);
+      // R-17 Step 2B — drop the "matched/slate_size" form (see provReason
+      // comment above). Show kept count + threshold + slate-size basis.
+      reasons.push(
+        `provider date alignment: ${providerAlignment.status} (${providerAlignment.matched} EV event(s) on date; threshold ${providerAlignment.threshold}, slate-size basis ${providerAlignment.slate_size})`
+      );
     }
   } else {
     overall = overall === "ok" ? "degraded" : overall;

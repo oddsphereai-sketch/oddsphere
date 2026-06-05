@@ -1,6 +1,28 @@
 /**
  * Phase 4.2.C.1.R-16D — shared /splits-anchored event discovery.
  *
+ * ⚠ R-17 Step 2B (2026-06-05) — SCOPE NARROWED TO ENRICHMENT ONLY.
+ *
+ *   Live probing confirmed `/splits` is a consensus-splits aggregator,
+ *   NOT a slate listing. On 2026-06-05 it returned 9 events with
+ *   `_2026-06-05` event_id suffixes whose matchups were yesterday's
+ *   slate, while BDL and SharpAPI `/opportunities/ev` both returned
+ *   tonight's 15 actual games. Using `/splits` for slate-event
+ *   discovery silently shrunk coverage to a stale subset AND produced
+ *   false-positive preflight "OK" results.
+ *
+ *   Canonical event discovery is now `_opportunitiesDiscovery.ts` (via
+ *   `discoverEventsFromOpportunities`). This module remains in use for
+ *   ONE purpose only: per-(home,away) lookup of /splits enrichment
+ *   data feeding the R-16E per-market fallback in
+ *   `SharpAPIOddsProvider.getGameLinesV2`, and the splits-merge step
+ *   in `SharpAPISignalProvider.getSharpSignals` (public bets/money %).
+ *
+ *   DO NOT add new callers that use this helper for slate discovery
+ *   or for provider date alignment / preflight.
+ *
+ * (Original header below for historical context.)
+ *
  * Both the V2 line-refresh strategy (SharpAPIOddsProvider.getGameLinesV2)
  * and any future component that needs all-slate event discovery use this
  * helper. The V1 line refresh used `/opportunities/ev` for both discovery

@@ -44,8 +44,12 @@ import {
   type MlbTeamAbbrev,
 } from "./_teamNameNormalizer";
 import {
+  discoverEventsFromOpportunities,
+  type DiscoveryStats as EvDiscoveryStats,
+} from "./_opportunitiesDiscovery";
+import {
   discoverEventsFromSplits,
-  type DiscoveryStats,
+  type DiscoveryStats as SplitsDiscoveryStats,
   type RawSplitsRow,
 } from "./_splitsDiscovery";
 
@@ -506,43 +510,59 @@ export class SharpAPIOddsProvider implements IOddsProvider {
     const fetchedAt = new Date().toISOString();
     let callsUsed = 0;
 
-    // Step 1: /splits-anchored event discovery.
-    const splitsResult = await discoverEventsFromSplits(this.client, sportKey, date);
+    // R-17 Step 2B — canonical event discovery via /opportunities/ev.
+    //
+    // Pre-Step-2B this step used `discoverEventsFromSplits` and then a
+    // second pass to harvest suffixed event_ids from /opportunities/ev.
+    // The 2026-06-05 SharpAPI audit confirmed /splits is a consensus-
+    // splits aggregator (not a slate listing) and was missing 6 of 15
+    // tonight games. /opportunities/ev returns all canonical slate
+    // events AND already carries suffixed event_ids — so discovery and
+    // suffixed-id harvest collapse into one step.
+    const evResult = await discoverEventsFromOpportunities(
+      this.client,
+      sportKey,
+      date
+    );
     callsUsed += 1;
 
-    // Step 2: harvest suffixed event_ids from /opportunities/ev. Keyed by
-    // team-pair so we can prefer the suffixed id when SharpAPI's /odds
-    // returns more data for the suffixed form.
-    const suffixedEventIdByPair = new Map<string, string>();
-    let opportunitiesUnavailable = false;
+    // Pre-Step-2B variable name kept for downstream readability — the
+    // shape is the same {events[], rows[]} contract.
+    const opportunitiesUnavailable = evResult.events.length === 0;
+
+    // Step 1.5 — /splits ENRICHMENT fetch (R-16E fallback only).
+    //
+    // /splits is still needed for the per-market splits-consensus
+    // fallback that fires when /odds returns zero rows for a game's
+    // moneyline / total / spread. NOT used for discovery anymore —
+    // event identity comes from /opportunities/ev above. Lookup keyed
+    // by `${home}|${away}` so it matches the canonical events. Failures
+    // here are tolerated: R-16E simply won't fire; odds-only coverage
+    // proceeds for whichever games /odds returns data for.
+    type SplitsLookupEvent = {
+      home: MlbTeamAbbrev;
+      away: MlbTeamAbbrev;
+      rawRow: RawSplitsRow;
+    };
+    let splitsLookupEvents: SplitsLookupEvent[] = [];
     try {
+      const splitsResult = await discoverEventsFromSplits(
+        this.client,
+        sportKey,
+        date
+      );
       callsUsed += 1;
-      const opportunities = await this.client.fetchAll<RawOpportunity>({
-        path: "/opportunities/ev",
-        query: { sport: "mlb" },
-        maxPages: 5,
-      });
-      for (const opp of opportunities) {
-        if (opp.is_player_prop === true) continue;
-        if (opp.is_alternate_line === true) continue;
-        const league = asStringOrNull(opp.league)?.toLowerCase();
-        if (league !== null && league !== undefined && league !== "mlb") continue;
-        const evId = asStringOrNull(opp.event_id);
-        if (evId === null) continue;
-        const home = normalizeMlbTeamName(opp.home_team);
-        const away = normalizeMlbTeamName(opp.away_team);
-        if (home === null || away === null) continue;
-        const pairKey = `${home}|${away}`;
-        if (!suffixedEventIdByPair.has(pairKey)) {
-          suffixedEventIdByPair.set(pairKey, evId);
-        }
-      }
+      splitsLookupEvents = splitsResult.events.map((e) => ({
+        home: e.home,
+        away: e.away,
+        rawRow: e.rawRow,
+      }));
     } catch (e) {
-      if (e instanceof SharpApiNotFoundError) {
-        opportunitiesUnavailable = true;
-      } else {
-        throw e;
-      }
+      console.warn(
+        `[SharpAPIOddsProvider V2] /splits enrichment unavailable; R-16E fallback disabled this run: ${
+          e instanceof Error ? e.message : String(e)
+        }`
+      );
     }
 
     // Step 3: resolve each discovered event to a BDL game external_id +
@@ -560,32 +580,34 @@ export class SharpAPIOddsProvider implements IOddsProvider {
     const resolved: ResolvedV2Event[] = [];
     const unresolvedTeamPairs: Array<{ home: MlbTeamAbbrev; away: MlbTeamAbbrev }> = [];
 
-    for (const ev of splitsResult.events) {
+    // R-17 Step 2B — iterate canonical events from /opportunities/ev
+    // (was splitsResult.events pre-2B). The suffixed event_id is
+    // returned by the discovery helper directly, so the separate
+    // suffixedEventIdByPair lookup is no longer needed.
+    for (const ev of evResult.events) {
       const gameExtId = await this.resolveGame(sportKey, date, ev.home, ev.away);
       if (gameExtId === null) {
         unresolvedTeamPairs.push({ home: ev.home, away: ev.away });
         continue;
       }
-      const pairKey = `${ev.home}|${ev.away}`;
-      const suffixed = suffixedEventIdByPair.get(pairKey);
-      const effective = suffixed ?? ev.splitsEventId;
       resolved.push({
         home: ev.home,
         away: ev.away,
         gameExternalId: gameExtId,
-        splitsEventId: ev.splitsEventId,
-        effectiveEventId: effective,
-        eventIdSource:
-          suffixed !== undefined ? "opportunities_suffixed" : "splits_stripped",
+        splitsEventId: ev.sharpEventId, // stripped form, kept name for back-compat
+        effectiveEventId: ev.suffixedEventId,
+        eventIdSource: "opportunities_suffixed",
       });
     }
 
     // Build a quick lookup from (home, away) → /splits raw row so
     // Step 4's per-event loop can synthesize fallback rows for markets
-    // where /odds returned nothing (R-16E).
+    // where /odds returned nothing (R-16E). When /splits is unavailable
+    // or has no row for a given pair, the fallback simply doesn't fire
+    // for that game.
     const splitsRowByPair = new Map<string, RawSplitsRow>();
-    for (const evt of splitsResult.events) {
-      splitsRowByPair.set(`${evt.home}|${evt.away}`, evt.rawRow);
+    for (const sev of splitsLookupEvents) {
+      splitsRowByPair.set(`${sev.home}|${sev.away}`, sev.rawRow);
     }
 
     // Step 4: per-event /odds + R-16E /splits fallback. Per-game coverage
@@ -856,9 +878,15 @@ export class SharpAPIOddsProvider implements IOddsProvider {
     }
 
     const discovery: V2DiscoveryReport = {
-      discoverySource: "splits",
-      splitsStats: splitsResult.stats,
-      eventsDiscovered: splitsResult.events.length,
+      // R-17 Step 2B — discovery source switched to /opportunities/ev.
+      discoverySource: "opportunities_ev",
+      // R-17 Step 2B — `discoveryStats` now sourced from the EV
+      // discovery (was splits stats pre-2B). The {With,WithSplitsId}*
+      // counters stay in the report shape for back-compat: all
+      // canonical events are suffixed in the new scheme, so
+      // eventsWithSplitsIdOnly is always 0.
+      discoveryStats: evResult.stats,
+      eventsDiscovered: evResult.events.length,
       eventsResolvedToGame: resolved.length,
       eventsUnresolvedTeamPair: unresolvedTeamPairs,
       eventsWithSuffixedId: resolved.filter(
@@ -912,12 +940,19 @@ export type V2DiscoveryPerGame = {
 };
 
 export type V2DiscoveryReport = {
-  discoverySource: "splits";
-  splitsStats: DiscoveryStats;
+  // R-17 Step 2B — discovery source string is "opportunities_ev" going
+  // forward. `splitsStats` was renamed to `discoveryStats` and now
+  // carries the /opportunities/ev discovery stats (which include extra
+  // counters like skippedPlayerProp / skippedAlternateLine / dedupedRows
+  // / keptEvents that the pre-2B splits stats didn't have).
+  discoverySource: "opportunities_ev";
+  discoveryStats: EvDiscoveryStats;
   eventsDiscovered: number;
   eventsResolvedToGame: number;
   eventsUnresolvedTeamPair: Array<{ home: MlbTeamAbbrev; away: MlbTeamAbbrev }>;
   eventsWithSuffixedId: number;
+  /** Kept in report shape for back-compat. Always 0 under R-17 Step 2B
+   *  because all canonical events come from /opportunities/ev suffixed. */
   eventsWithSplitsIdOnly: number;
   opportunitiesUnavailable: boolean;
   apiCallsMade: number;
@@ -926,15 +961,18 @@ export type V2DiscoveryReport = {
 
 function emptyDiscoveryReport(): V2DiscoveryReport {
   return {
-    discoverySource: "splits",
-    splitsStats: {
+    discoverySource: "opportunities_ev",
+    discoveryStats: {
       totalRows: 0,
-      keptRows: 0,
+      keptEvents: 0,
       skippedNonMlb: 0,
       skippedMissingEventId: 0,
+      skippedPlayerProp: 0,
+      skippedAlternateLine: 0,
       skippedDateUnparseable: 0,
       skippedWrongDate: 0,
       skippedTeamUnresolved: 0,
+      dedupedRows: 0,
     },
     eventsDiscovered: 0,
     eventsResolvedToGame: 0,
