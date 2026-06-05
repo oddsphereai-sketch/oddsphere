@@ -829,6 +829,105 @@ async function testOrchestratorImportsReconciliation() {
   );
 }
 
+// ─── R-17 Step 2C: provider mode safety guard tests ─────────────────
+//
+// Verifies the orchestrator imports and uses the audit helper, that
+// the P0 banner is wired, and that the `providerBlocked` gate
+// incorporates the mode check. The pure helper has its own dedicated
+// test file; this block focuses on the orchestrator integration
+// contract surface.
+
+async function testProviderModeAuditHelperImports() {
+  section("R-17 Step 2C — providerModeAudit helper export surface");
+  const mod = await import("../lib/services/providerModeAudit");
+  check(
+    "assessProviderModes is exported",
+    typeof mod.assessProviderModes === "function"
+  );
+  check(
+    "classifyProviderMode is exported",
+    typeof mod.classifyProviderMode === "function"
+  );
+  check(
+    "providersEligibleForApply is exported",
+    typeof mod.providersEligibleForApply === "function"
+  );
+  check(
+    "REQUIRED_PROVIDER_KEYS exported with 4 entries",
+    Array.isArray(mod.REQUIRED_PROVIDER_KEYS) &&
+      mod.REQUIRED_PROVIDER_KEYS.length === 4
+  );
+}
+
+async function testOrchestratorWiresModeGuard() {
+  section("R-17 Step 2C — orchestrator wires provider mode guard");
+  const fs = await import("node:fs/promises");
+  const src = await fs.readFile(
+    "scripts/operator/automation/run-slate-cycle.ts",
+    "utf-8"
+  );
+  check(
+    "orchestrator imports assessProviderModes",
+    src.includes("assessProviderModes")
+  );
+  check(
+    "orchestrator imports ProviderModeReport type",
+    src.includes("ProviderModeReport")
+  );
+  check(
+    "orchestrator prints P0 banner",
+    src.includes("P0. Provider mode preflight")
+  );
+  check(
+    "orchestrator extends providerBlocked with mode gate",
+    src.includes("providerModeBlocked") &&
+      src.includes("|| providerModeBlocked")
+  );
+  check(
+    "orchestrator notes Step 2C is safety-first (no override)",
+    src.includes("R-17 Step 2C") &&
+      src.toLowerCase().includes("safety-first")
+  );
+  check(
+    "orchestrator surfaces P0 in verbose step report",
+    src.includes('name: "P0. Provider mode preflight"')
+  );
+}
+
+async function testCronGuardRecommendation() {
+  section("R-17 Step 2C — providersEligibleForApply works as a cron gate");
+  const { providersEligibleForApply } = await import(
+    "../lib/services/providerModeAudit"
+  );
+  // Simulates the call any future cron entry point would make BEFORE
+  // doing anything. With no env vars set, the gate must be closed.
+  check(
+    "cron gate closed when env empty",
+    providersEligibleForApply({}) === false
+  );
+  // Simulates a properly-configured cron environment.
+  check(
+    "cron gate open when all 4 set to real_api",
+    providersEligibleForApply({
+      SLATE_PROVIDER: "real_api",
+      ODDS_PROVIDER: "real_api",
+      SHARP_SIGNAL_PROVIDER: "real_api",
+      PLAYER_STATS_PROVIDER: "real_api",
+    }) === true
+  );
+  // A single missing provider keeps the cron gate closed — no partial
+  // run, no silent mock fallback.
+  check(
+    "cron gate closed when ANY provider unset",
+    providersEligibleForApply({
+      SLATE_PROVIDER: "real_api",
+      ODDS_PROVIDER: "real_api",
+      SHARP_SIGNAL_PROVIDER: "real_api",
+      // PLAYER_STATS_PROVIDER missing
+    }) === false
+  );
+}
+
 // ─── Runner ──────────────────────────────────────────────────────────
 
 async function main() {
@@ -864,6 +963,9 @@ async function main() {
   await testReconciliationEmptySharpEvFailsClosed();
   await testReconciliationPartialOverlapWarns();
   await testOrchestratorImportsReconciliation();
+  await testProviderModeAuditHelperImports();
+  await testOrchestratorWiresModeGuard();
+  await testCronGuardRecommendation();
 
   console.log();
   console.log("━━━ Summary ━━━");

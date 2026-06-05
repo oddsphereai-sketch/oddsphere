@@ -79,6 +79,10 @@ import {
   reconcileBdlVsSharpEv,
   type SlateReconciliationReport,
 } from "../../../lib/services/slateReconciliation";
+import {
+  assessProviderModes,
+  type ProviderModeReport,
+} from "../../../lib/services/providerModeAudit";
 import { discoverEventsFromOpportunities } from "../../../lib/providers/real_api/_opportunitiesDiscovery";
 import { getSlateProvider } from "../../../lib/providers/factory";
 import { slateService } from "../../../lib/services/slateService";
@@ -633,6 +637,27 @@ async function main() {
   }
   console.log();
 
+  // ── P0. Provider mode preflight (R-17 Step 2C) ──────────────────────
+  // The factory at `lib/providers/factory.ts:readMode` silently defaults
+  // to "mock" when a provider mode env var is unset or carries a typo.
+  // That default is fine for local dev (prevents accidental paid-API
+  // hits), but it would silently succeed an apply run with mock data
+  // if the operator forgot to set the env vars. Audit + hard-block.
+  // No override flag in Step 2C — safety-first.
+  console.log(`━━━ P0. Provider mode preflight (R-17 Step 2C) ━━━`);
+  const providerModeReport: ProviderModeReport = assessProviderModes();
+  for (const m of providerModeReport.modes) {
+    const tag = m.status === "real_api" ? "✓ real_api" : `✗ ${m.status}`;
+    console.log(`  ${m.name.padEnd(14)} (${m.envKey.padEnd(22)}) ${tag}`);
+  }
+  console.log(
+    `  STATUS:                                      ${providerModeReport.eligibleForApply ? "OK (all real_api)" : "NOT APPLY-ELIGIBLE"}`
+  );
+  if (!providerModeReport.eligibleForApply) {
+    console.log(`  reason:                                      ${providerModeReport.reason}`);
+  }
+  console.log();
+
   // ── Pre-flight: slate state + provider alignment ────────────────────
   console.log(`━━━ P3. Current DB state ━━━`);
   const gameIdByExternal = await loadGameIdMap(common.sport, common.date);
@@ -786,16 +811,22 @@ async function main() {
   );
 
   // ── Resolve effective write mode ────────────────────────────────────
-  // R-17 Step 2B — reconciliation fail_closed is ALSO a hard-block.
-  // Either alignment OR reconciliation failing closed aborts all
-  // write-eligible steps. There is intentionally no override flag
-  // in this commit (safety-first; revisit only after observing
-  // reconciliation behavior across multiple slates).
+  // R-17 Step 2B/2C — hard-block when any of:
+  //   • Provider date alignment fail_closed (Step 1)
+  //   • Slate reconciliation fail_closed (Step 2B)
+  //   • Any required provider mode != real_api (Step 2C)
+  // There is intentionally no override flag in any of these commits —
+  // each existing dev/test mechanism (no --apply, missing
+  // AUTOMATION_ORCHESTRATOR_ENABLED, missing per-step write gates)
+  // already gates writes; the mode guard adds a non-bypassable check
+  // that the providers themselves are real_api before any write path.
   const alignmentBlocked =
     alignment !== null && alignment.status === "fail_closed";
   const reconciliationBlocked =
     reconciliation !== null && reconciliation.status === "fail_closed";
-  const providerBlocked = alignmentBlocked || reconciliationBlocked;
+  const providerModeBlocked = !providerModeReport.eligibleForApply;
+  const providerBlocked =
+    alignmentBlocked || reconciliationBlocked || providerModeBlocked;
   const effectiveApply = applyRequested && topLevelGateOk && !providerBlocked;
   // Note: per-step writeMode = effectiveApply && perStep[k]. Each runner
   // builds it locally so the report can explain WHY a step stayed dry-run.
@@ -827,11 +858,15 @@ async function main() {
   } else if (applyRequested && providerBlocked) {
     console.log();
     const blockReasons: string[] = [];
+    if (providerModeBlocked) blockReasons.push("provider mode not real_api");
     if (alignmentBlocked) blockReasons.push("alignment fail_closed");
     if (reconciliationBlocked) blockReasons.push("reconciliation fail_closed");
     console.log(
       `  ⚠ Provider gate blocked (${blockReasons.join(", ")}) → write phase aborted before any step ran.`
     );
+    if (providerModeBlocked) {
+      console.log(`     ${providerModeReport.reason}`);
+    }
   }
 
   // ── Step execution ──────────────────────────────────────────────────
@@ -844,6 +879,19 @@ async function main() {
     operator_path: "(inline)",
     mode: "dry_run",
     reason: `slate=${common.date} sport=${common.sport}`,
+  });
+
+  // R-17 Step 2C — provider mode preflight entry in the verbose report.
+  steps.push({
+    order: nextOrder++,
+    name: "P0. Provider mode preflight",
+    operator_path: "lib/services/providerModeAudit.assessProviderModes",
+    mode: providerModeReport.eligibleForApply ? "dry_run" : "blocked",
+    reason: providerModeReport.reason,
+    details: {
+      modes: providerModeReport.modes,
+      blocking: providerModeReport.blockingProviders,
+    },
   });
 
   steps.push({
