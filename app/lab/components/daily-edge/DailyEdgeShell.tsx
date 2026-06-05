@@ -1665,11 +1665,17 @@ function interpretKeyStat(
         ? (pick.toUpperCase().startsWith("YRFI") ? "YRFI" : pick.toUpperCase().startsWith("NRFI") ? "NRFI" : null)
         : null;
     if (fiPickLabel === null) {
-      // No clean NRFI/YRFI pick (e.g. pick === "Toss-Up"). Show the
-      // projection's natural direction without pick-relative framing.
+      // R-19 Phase 5i Fix B — pick is null (held FI) OR pick is Toss-Up.
+      // Pre-5i this branch emitted "Leans NRFI" / "Leans YRFI" based on
+      // the projection direction, which made every held FI game look like
+      // a directional NRFI play even though the model deliberately
+      // declined to pick. Suppress the directional chip so the row
+      // surfaces only the projection value; the user sees the number
+      // without a contradictory "Leans NRFI" overlay when the pick was
+      // held.
       return {
-        edgeLine: favorsYrfi ? "Leans YRFI" : "Leans NRFI",
-        tone: favorsYrfi ? "amber" : "emerald",
+        edgeLine: null,
+        tone: "gray",
         winner: null,
         twoSided: false,
       };

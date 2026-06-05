@@ -202,11 +202,20 @@ export function buildEdgeStackRows(
     });
   }
 
-  // ── Money vs Bets — unchanged ───────────────────────────────────
+  // ── Money vs Bets ───────────────────────────────────────────────
   if (marketData.moneyPct === null || marketData.betsPct === null) {
+    // R-19 Phase 5i Fix C — FI distinction. SharpAPI's /splits endpoint
+    // doesn't return first_inning_total data (documented in Phase
+    // 4.1.9.C-1c.ix), so FI's null moneyPct/betsPct is an upstream
+    // provider limitation — not a transient outage. Generic "unavailable"
+    // reads as "we couldn't fetch it"; FI gets a clearer label so members
+    // understand the data isn't offered for this market.
     rows.push({
       label: "Money vs Bets",
-      evidence: "Public split",
+      evidence:
+        market === "first_inning"
+          ? "Public split — not offered for FI"
+          : "Public split",
       delta: "unavailable",
       tone: "gray",
     });

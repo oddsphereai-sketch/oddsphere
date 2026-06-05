@@ -648,7 +648,10 @@ function buildGameDto(
     modelSide: pred.predicted_ml_winner as Side | null,
     signals,
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::moneyline`) ?? [],
-    lineOpen: openLinesByGameMarket.get(`${row.id}::moneyline`) ?? null,
+    lineOpen:
+      openLinesByGameMarket.get(
+        `${row.id}::moneyline::${pred.predicted_ml_winner ?? "null"}`
+      ) ?? null,
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
@@ -666,7 +669,10 @@ function buildGameDto(
     modelSide: pred.predicted_ou_side as Side | null,
     signals,
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::total`) ?? [],
-    lineOpen: openLinesByGameMarket.get(`${row.id}::total`) ?? null,
+    lineOpen:
+      openLinesByGameMarket.get(
+        `${row.id}::total::${pred.predicted_ou_side ?? "null"}`
+      ) ?? null,
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
@@ -689,7 +695,10 @@ function buildGameDto(
     modelSide: nrfiSide as Side,
     signals,
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::first_inning_total`) ?? [],
-    lineOpen: openLinesByGameMarket.get(`${row.id}::first_inning_total`) ?? null,
+    lineOpen:
+      openLinesByGameMarket.get(
+        `${row.id}::first_inning_total::${nrfiSide}`
+      ) ?? null,
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
@@ -1226,14 +1235,17 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const priceRow = pickPriceRow(input.linesCurrent, input.modelSide);
   const priceAmerican = priceRow?.odds_american ?? null;
 
-  // First-seen line for the same side.
-  const openAmerican: number | null = (() => {
-    if (input.lineOpen === null) return null;
-    if (input.modelSide !== null && input.lineOpen.side !== input.modelSide) {
-      return null;
-    }
-    return input.lineOpen.odds_american;
-  })();
+  // First-seen line for the picked side.
+  //
+  // R-19 Phase 5i Fix A — the lineOpen row is now looked up by
+  // (game_id, market_type, modelSide) in buildGameDto, so the row that
+  // arrives here ALREADY matches the model's pick side when a matching
+  // line_history row exists. No defensive side-filter needed; just emit
+  // the odds. Pre-5i the lookup was side-agnostic and the filter below
+  // would null the open price whenever the first-recorded row happened
+  // to be the opposite side from the model's pick.
+  const openAmerican: number | null =
+    input.lineOpen?.odds_american ?? null;
 
   // Per-market signal-derived quantitative fields. Pick the +EV signal on
   // the model's side (preferred), falling back to ANY signal for this
@@ -1926,8 +1938,18 @@ export async function GET(request: Request) {
       return Response.json({ error: histErr.message }, { status: 500 });
     }
     for (const row of (histData ?? []) as LineHistoryRow[]) {
-      // First seen wins (ASC order, first insert sticks).
-      const key = `${row.game_id}::${row.market_type}`;
+      // R-19 Phase 5i Fix A — key by (game_id, market_type, side). Pre-5i
+      // the key omitted side, so when line_history had rows for BOTH sides
+      // of a market (which is normal — every two-sided market does), only
+      // the first-recorded row survived in the map. If the model's pick
+      // was on the opposite side, the downstream side-filter nulled
+      // `lineOpenAmerican` even when the picked side's open price did
+      // exist in line_history. Including side in the key lets the lookup
+      // be side-correct, eliminating the side-filter need below.
+      // line_history.side can be null defensively; bucket those under
+      // a "null" key to preserve the prior first-seen-wins behavior for
+      // sideless markets (none today, but defensive).
+      const key = `${row.game_id}::${row.market_type}::${row.side ?? "null"}`;
       if (!openLinesByGameMarket.has(key)) {
         openLinesByGameMarket.set(key, row);
       }
