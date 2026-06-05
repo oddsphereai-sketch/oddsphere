@@ -151,6 +151,15 @@ export type AutomationRunReport = {
   finished_at: string;
   duration_ms: number;
   orchestrator_gate_enabled: boolean;
+  /**
+   * R-19 Phase 5d — true when the cron caller opted into intraday
+   * mode via `?intraday=true` or `SLATE_CYCLE_INTRADAY_MODE=true` env.
+   * When true: G3 (in-progress ingest) is a per-game exclusion, not
+   * a slate-wide block; affected external_ids feed M2's exclusion
+   * list. When false (morning default): G3 fail_closed aborts the
+   * whole run (correct for late-fired morning cron).
+   */
+  intraday_mode: boolean;
   per_step_gates: Record<PerStepKey, boolean>;
   effective_write_mode: Record<PerStepKey, boolean>;
   provider_modes: {
@@ -236,10 +245,25 @@ export async function runSlateCycleAutomated(opts: {
   sport: Sport;
   date: string;
   env?: AutomationEnv;
+  /**
+   * R-19 Phase 5d — when true, G3 (in-progress ingest) is downgraded
+   * from slate-wide block to per-game exclusion. The affected
+   * external_ids are union'd with lock_miss exclusions and fed to
+   * M2's `excludeGameExternalIds` filter. Auto-publish still blocks
+   * (so user-facing slate stays held), but the rest of the slate
+   * keeps refreshing/predicting for future games. Default `false`
+   * preserves the morning-run safety: G3 catches "cron fired too
+   * late" and aborts the whole run.
+   *
+   * The route resolves this from `?intraday=true` query OR
+   * `SLATE_CYCLE_INTRADAY_MODE=true` env via `isIntradayMode()`.
+   */
+  intradayMode?: boolean;
 }): Promise<AutomationRunReport> {
   const env = opts.env ?? process.env;
   const orchestratorGate = isOrchestratorGateEnabled(env);
   const perStepGates = readPerStepGates(env);
+  const intradayMode = opts.intradayMode === true;
   const startedAt = new Date();
   const steps: AutomationStepReport[] = [];
   const blockingReasons: string[] = [];
@@ -469,9 +493,19 @@ export async function runSlateCycleAutomated(opts: {
       sport: opts.sport,
       bdlGames: bdlGamesForGates,
     });
+    // R-19 Phase 5d — In intraday mode, a fail_closed G3 result is
+    // a per-game exclusion rather than a slate-wide block. The step
+    // is shown as "dry_run" instead of "blocked" so operators see
+    // that data continued to flow; the affected_external_ids feed
+    // the per-game exclusion list, and the structured warning still
+    // surfaces in the report.
+    const g3StepMode: StepMode =
+      g3Result.status === "fail_closed"
+        ? (intradayMode ? "dry_run" : "blocked")
+        : "dry_run";
     steps.push({
       name: "g3_in_progress_ingest",
-      mode: g3Result.status === "fail_closed" ? "blocked" : "dry_run",
+      mode: g3StepMode,
       duration_ms: Date.now() - t0g3,
       reason: g3Result.reason,
       details: {
@@ -479,10 +513,21 @@ export async function runSlateCycleAutomated(opts: {
         total_games: g3Result.totalGames,
         in_progress_count: g3Result.inProgressCount,
         affected_external_ids: g3Result.affectedExternalIds,
+        intraday_mode: intradayMode,
       },
     });
     if (g3Result.status === "fail_closed") {
-      blockingReasons.push(`G3 in-progress ingest fail_closed: ${g3Result.reason}`);
+      if (intradayMode) {
+        // Intraday: degrade to warning. Auto-publish still gates on
+        // g3Blocking below (same pattern as lock_miss in Phase 5c).
+        warnings.push(
+          `R-19 Phase 5d intraday G3 exclusion: ${g3Result.inProgressCount} game(s) ` +
+          `in progress per BDL; excluding from M2; future/unlocked games continue.`
+        );
+      } else {
+        // Morning: slate-wide block (existing safety for late-fired cron).
+        blockingReasons.push(`G3 in-progress ingest fail_closed: ${g3Result.reason}`);
+      }
     }
   } else {
     steps.push({
@@ -493,12 +538,14 @@ export async function runSlateCycleAutomated(opts: {
     });
   }
 
-  // dataLayerBlocked now cascades from G1/G3 too — they fire BEFORE any
-  // step that would write, so their fail_closed must propagate.
+  // dataLayerBlocked: G1 (minimum game count) ALWAYS cascades because
+  // it's a structural problem with the slate. G3 (in-progress ingest)
+  // cascades ONLY in morning mode — in intraday it becomes per-game.
   const g1Blocking = g1Result !== null && g1Result.status === "fail_closed";
   const g3Blocking = g3Result !== null && g3Result.status === "fail_closed";
+  const g3SlateWideBlocking = g3Blocking && !intradayMode;
   const dataLayerBlocked =
-    providerModeBlocking || reconciliationBlocking || g1Blocking || g3Blocking;
+    providerModeBlocking || reconciliationBlocking || g1Blocking || g3SlateWideBlocking;
 
   // ── Helper: per-step effective write mode ─────────────────────────────
   const effectiveWriteMode = {} as Record<PerStepKey, boolean>;
@@ -828,6 +875,23 @@ export async function runSlateCycleAutomated(opts: {
   // Empty when snapshot is null (slate not in DB) or no already_started
   // games exist (the healthy state).
   const lockMissExclusions = extractLockMissExclusions(lockSnapshot);
+  // R-19 Phase 5d — intraday G3 exclusions. In morning mode this is
+  // always empty (G3 fail_closed cascades into dataLayerBlocked
+  // instead). In intraday mode, G3.affectedExternalIds becomes a
+  // per-game exclusion that's union'd with lock_miss below.
+  const g3IntradayExclusions: number[] =
+    intradayMode && g3Result !== null && g3Result.status === "fail_closed"
+      ? [...g3Result.affectedExternalIds]
+      : [];
+  // Combined per-game exclusion set passed to M2. Union of:
+  //   • lock_miss (snapshot.already_started + null locked_at)
+  //   • intraday G3 (BDL says STATUS_IN_PROGRESS / STATUS_FINAL)
+  // Sorted ascending for deterministic operator-log output.
+  const m2ExclusionSet = new Set<number>([
+    ...lockMissExclusions,
+    ...g3IntradayExclusions,
+  ]);
+  const combinedM2Exclusions = [...m2ExclusionSet].sort((a, b) => a - b);
 
   // ── M2. Automodel + reviewer + breakdown ──────────────────────────────
   // m2Blocked covers structural problems that affect the WHOLE slate:
@@ -859,15 +923,19 @@ export async function runSlateCycleAutomated(opts: {
     async (writeMode) => {
       const res = await generatePredictionsForSlate(opts.sport, opts.date, "morning_draft", {
         writeToDb: writeMode,
-        excludeGameExternalIds: lockMissExclusions,
+        excludeGameExternalIds: combinedM2Exclusions,
       });
       // R-19 Phase 4b — report lock-skipped counts alongside model output.
       // `lock_skipped_by_layer_2` = games excluded by automodelService's
       // respectLocks filter (i.e. already_locked games).
       // R-19 Phase 5c — `excluded_for_lock_miss` is the per-game
       // lock_miss exclusion list applied this run.
+      // R-19 Phase 5d — `excluded_for_g3_intraday` is the per-game
+      // in-progress exclusion (intraday mode only).
       const lockSkippedByLayer2 = lockSnapshot?.already_locked_games ?? 0;
       const excludedForLockMissCount = lockMissExclusions.length;
+      const excludedForG3IntradayCount = g3IntradayExclusions.length;
+      const totalExclusions = combinedM2Exclusions.length;
       return {
         details: {
           game_count: res.game_count,
@@ -876,6 +944,11 @@ export async function runSlateCycleAutomated(opts: {
           errors: res.errors.length,
           excluded_for_lock_miss: excludedForLockMissCount,
           excluded_for_lock_miss_external_ids: lockMissExclusions,
+          excluded_for_g3_intraday: excludedForG3IntradayCount,
+          excluded_for_g3_intraday_external_ids: g3IntradayExclusions,
+          total_per_game_exclusions: totalExclusions,
+          combined_exclusion_external_ids: combinedM2Exclusions,
+          intraday_mode: intradayMode,
           lock_snapshot: lockSnapshot !== null ? {
             total_games: lockSnapshot.total_games,
             unlocked_games: lockSnapshot.unlocked_games,
@@ -887,8 +960,8 @@ export async function runSlateCycleAutomated(opts: {
           } : null,
         },
         reason: writeMode
-          ? `wrote ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped_layer2=${lockSkippedByLayer2}; excluded_for_lock_miss=${excludedForLockMissCount}`
-          : `dry-run; would write ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped_layer2=${lockSkippedByLayer2}; excluded_for_lock_miss=${excludedForLockMissCount}`,
+          ? `wrote ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped_layer2=${lockSkippedByLayer2}; excluded_for_lock_miss=${excludedForLockMissCount}; excluded_for_g3_intraday=${excludedForG3IntradayCount}`
+          : `dry-run; would write ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped_layer2=${lockSkippedByLayer2}; excluded_for_lock_miss=${excludedForLockMissCount}; excluded_for_g3_intraday=${excludedForG3IntradayCount}`,
       };
     },
     m2Blocked
@@ -911,19 +984,47 @@ export async function runSlateCycleAutomated(opts: {
   // lock_miss means at least one row on the slate didn't get a fresh
   // prediction this run, so auto-publish must stay held. The operator
   // can still publish manually via publish-slate.ts after reviewing.
+  // R-19 Phase 5d — G3 intraday exclusions ALSO block auto-publish.
+  // In intraday mode, G3 fail_closed no longer cascades to
+  // slateSafetyBlocking via anyGateFailedClosed (which still checks
+  // g3Result.status === "fail_closed"). To preserve the safety
+  // property "publish stays held when any game was excluded", we
+  // also check g3IntradayBlocking here. The publish gate considers
+  // BOTH per-game block sources, regardless of their cascade status
+  // in dataLayerBlocked.
   const t0pub = Date.now();
   const autoPublish = shouldAutoPublishMorningSlate(env);
-  const slateSafetyBlocking = anyGateFailedClosed(g1Result, g2Result, g3Result);
+  // R-19 Phase 5d — slate-safety block excludes G3 in intraday mode
+  // (G3 there is a per-game exclusion, not a slate-wide block). G1
+  // (min game count) and G2 (starter coverage) continue to count.
+  // The compound check `anyGateFailedClosed` is preserved for other
+  // callers that want the strict three-gate behavior.
+  const slateSafetyBlocking = intradayMode
+    ? (g1Result !== null && g1Result.status === "fail_closed") ||
+      (g2Result !== null && g2Result.status === "fail_closed")
+    : anyGateFailedClosed(g1Result, g2Result, g3Result);
+  const g3IntradayBlocking = intradayMode && g3IntradayExclusions.length > 0;
   let publishDecision: AutomationRunReport["publish_decision"];
   let publishMode: StepMode;
   let publishReason: string;
-  if (dataLayerBlocked || gateBlocking || slateSafetyBlocking || lockMissBlocking) {
+  if (
+    dataLayerBlocked ||
+    gateBlocking ||
+    slateSafetyBlocking ||
+    lockMissBlocking ||
+    g3IntradayBlocking
+  ) {
     publishDecision = "skipped_blocked";
     publishMode = "blocked";
-    if (lockMissBlocking && !(dataLayerBlocked || gateBlocking || slateSafetyBlocking)) {
+    if (
+      (lockMissBlocking || g3IntradayBlocking) &&
+      !(dataLayerBlocked || gateBlocking || slateSafetyBlocking)
+    ) {
+      const totalSkipped = combinedM2Exclusions.length;
       publishReason =
-        `publish skipped — lock_miss exclusion applied (${lockMissExclusions.length} ` +
-        `game(s) skipped); auto-publish held until cleanest morning slate`;
+        `publish skipped — ${totalSkipped} game(s) excluded from M2 ` +
+        `(lock_miss=${lockMissExclusions.length}, g3_intraday=${g3IntradayExclusions.length}); ` +
+        `auto-publish held until next clean cycle`;
     } else if (slateSafetyBlocking) {
       publishReason = "publish skipped — slate-safety gate (G1/G2/G3) blocked the cycle";
     } else {
@@ -1004,6 +1105,7 @@ export async function runSlateCycleAutomated(opts: {
     finished_at: finishedAt.toISOString(),
     duration_ms: finishedAt.getTime() - startedAt.getTime(),
     orchestrator_gate_enabled: orchestratorGate,
+    intraday_mode: intradayMode,
     per_step_gates: perStepGates,
     effective_write_mode: effectiveWriteMode,
     provider_modes: {

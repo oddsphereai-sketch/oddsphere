@@ -17,8 +17,10 @@ import {
   readPerStepGates,
   computeEffectiveWriteMode,
   buildOrchestratorBlockedReport,
+  isIntradayMode,
   PER_STEP_ENV_VARS,
   ORCHESTRATOR_GATE_ENV,
+  SLATE_CYCLE_INTRADAY_MODE_ENV,
 } from "../lib/services/automationOrchestratorGates";
 
 let pass = 0;
@@ -190,6 +192,72 @@ async function main() {
         perStepGate: perStep.slate,
         upstreamBlocked: false,
       }) === false);
+  }
+
+  // ── [H] R-19 Phase 5d — isIntradayMode ──────────────────────────────
+  section("R-19 P5d — isIntradayMode (intraday mode resolver)");
+  {
+    const baseReq = new Request("http://x/api/cron/slate-cycle?date=2026-06-05");
+    check("no param, no env → false", isIntradayMode(baseReq, {}) === false);
+  }
+  {
+    const reqYes = new Request("http://x/api/cron/slate-cycle?intraday=true");
+    check("query param 'true' + no env → true", isIntradayMode(reqYes, {}) === true);
+  }
+  {
+    const reqWrong = new Request("http://x/api/cron/slate-cycle?intraday=yes");
+    check("query param 'yes' (not 'true') → false", isIntradayMode(reqWrong, {}) === false);
+  }
+  {
+    const reqWrong2 = new Request("http://x/api/cron/slate-cycle?intraday=TRUE");
+    check("query param 'TRUE' → false (strict equality)", isIntradayMode(reqWrong2, {}) === false);
+  }
+  {
+    const req = new Request("http://x/api/cron/slate-cycle");
+    check("env 'true' + no query → true", isIntradayMode(req, { SLATE_CYCLE_INTRADAY_MODE: "true" }) === true);
+    check("env 'TRUE' → false (strict)", isIntradayMode(req, { SLATE_CYCLE_INTRADAY_MODE: "TRUE" }) === false);
+    check("env '1' → false", isIntradayMode(req, { SLATE_CYCLE_INTRADAY_MODE: "1" }) === false);
+    check("env '' → false", isIntradayMode(req, { SLATE_CYCLE_INTRADAY_MODE: "" }) === false);
+  }
+  {
+    // Query wins over env (when query is set; env irrelevant either way)
+    const req = new Request("http://x/api/cron/slate-cycle?intraday=true");
+    check("query 'true' + env undefined → true", isIntradayMode(req, {}) === true);
+    check("query 'true' + env 'true' → true (both align)",
+      isIntradayMode(req, { SLATE_CYCLE_INTRADAY_MODE: "true" }) === true);
+  }
+  {
+    check("SLATE_CYCLE_INTRADAY_MODE_ENV = 'SLATE_CYCLE_INTRADAY_MODE'",
+      SLATE_CYCLE_INTRADAY_MODE_ENV === "SLATE_CYCLE_INTRADAY_MODE");
+  }
+
+  // ── [I] R-19 P5d critical regression — write-flag mode after 1 game in progress ──
+  // Conceptual coverage: ensure the gate logic doesn't accidentally
+  // re-enable writes during morning-mode G3 fail_closed. The
+  // computeEffectiveWriteMode pure helper still respects
+  // upstreamBlocked=true regardless of any new intraday flag.
+  section("R-19 P5d — write-flag mode unchanged when upstreamBlocked=true");
+  {
+    // upstreamBlocked=true is the orchestrator's morning-mode cascade
+    // (G3 fail_closed → dataLayerBlocked=true). Confirm helper still
+    // forces write_mode=false.
+    check("morning mode + G3 fired (upstreamBlocked=true) → effective write OFF",
+      computeEffectiveWriteMode({
+        orchestratorGate: true,
+        perStepGate: true,
+        upstreamBlocked: true,
+      }) === false);
+    // Intraday-mode equivalent: orchestrator computes upstreamBlocked
+    // WITHOUT G3 cascade. So when the only block is G3 (and intraday
+    // is true), upstreamBlocked → false, and effective_write_mode is
+    // TRUE for steps whose per-step env is set. The helper itself
+    // doesn't know about intraday; the orchestrator does.
+    check("intraday mode + G3 fired but upstreamBlocked=false → effective write ON",
+      computeEffectiveWriteMode({
+        orchestratorGate: true,
+        perStepGate: true,
+        upstreamBlocked: false,
+      }) === true);
   }
 
   // ── Summary ──────────────────────────────────────────────────────────

@@ -37,12 +37,18 @@ import {
   isOrchestratorGateEnabled,
   buildOrchestratorBlockedReport,
 } from "@/lib/services/automationOrchestrator";
+import { isIntradayMode } from "@/lib/services/automationOrchestratorGates";
 import type { Sport } from "@/lib/types/domain/Sport";
 
 export const maxDuration = 300; // Vercel Pro — full slate cycle can take ~3-5 min
 
 export async function GET(request: Request) {
   const date = parseDateFromUrl(request);
+  // R-19 Phase 5d — resolve intraday-mode flag from query OR env.
+  // Morning cron entries omit ?intraday; afternoon/evening entries
+  // pass ?intraday=true so G3 (in-progress games) becomes per-game
+  // exclusion instead of slate-wide block.
+  const intradayMode = isIntradayMode(request);
 
   // Sports — V1 launch scope is MLB only. Hardcoded here rather than
   // sportsInSeasonToday() because the orchestrator's per-step services
@@ -68,7 +74,7 @@ export async function GET(request: Request) {
         };
       }
 
-      const report = await runSlateCycleAutomated({ sport, date });
+      const report = await runSlateCycleAutomated({ sport, date, intradayMode });
 
       // Aggregate write counts from per-step details for the
       // cron-handler return shape. `records_updated` is the sum across

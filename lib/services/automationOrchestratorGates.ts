@@ -85,3 +85,47 @@ export function buildOrchestratorBlockedReport(opts: {
     env_flag_required: ORCHESTRATOR_GATE_ENV,
   };
 }
+
+// ─── R-19 Phase 5d — Intraday mode ────────────────────────────────────
+
+/**
+ * Env-flag alternative to the `?intraday=true` query param. Either
+ * trigger switches G3 (in-progress ingest) from slate-wide block to
+ * per-game exclusion of already-started games. Strict equality with
+ * "true" — same pattern as the other R-19 env flags.
+ */
+export const SLATE_CYCLE_INTRADAY_MODE_ENV = "SLATE_CYCLE_INTRADAY_MODE";
+
+/**
+ * Resolve intraday mode from request URL or env. Pure helper. Used
+ * by the cron route to switch G3 cascade semantics:
+ *
+ *   morning mode (default):  G3 fail_closed → push to blocking_reasons
+ *                            + cascade to dataLayerBlocked → all
+ *                            effective_write_mode = false. Correct
+ *                            when cron fired too late for the first
+ *                            morning run.
+ *
+ *   intraday mode:           G3 fail_closed → push to warnings
+ *                            + affectedExternalIds become per-game
+ *                            exclusions, union'd with lock_miss
+ *                            exclusions. M2 runs for the remaining
+ *                            future/unlocked games. Publish stays
+ *                            held when any exclusion fires.
+ *
+ * Operator schedules vercel.json crons accordingly — early-morning
+ * uses morning mode (no ?intraday param); midday/afternoon/evening
+ * use ?intraday=true.
+ */
+export function isIntradayMode(
+  request: Request,
+  env: AutomationEnv = process.env
+): boolean {
+  try {
+    const url = new URL(request.url);
+    if (url.searchParams.get("intraday") === "true") return true;
+  } catch {
+    // Malformed URL — fall through to env check
+  }
+  return env[SLATE_CYCLE_INTRADAY_MODE_ENV] === "true";
+}
