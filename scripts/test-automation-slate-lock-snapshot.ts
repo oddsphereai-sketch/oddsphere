@@ -14,6 +14,7 @@ import {
   assessSlateLockSnapshot,
   deriveLockWarnings,
   anyLockWarningBlocks,
+  extractLockMissExclusions,
   PREGAME_SWEEP_CRON_ACTIVE_ENV,
   type SlateLockGameInput,
 } from "../lib/services/automationSlateLockSnapshot";
@@ -455,6 +456,136 @@ async function main() {
     check("lock_miss severity = block", lockMiss?.severity === "block");
     check("lock_miss affected_count = 9", lockMiss?.affected_count === 9);
     check("anyLockWarningBlocks → true", anyLockWarningBlocks(ws) === true);
+  }
+
+  // ── [V] R-19 Phase 5c — extractLockMissExclusions ─────────────────
+  // The pure exclusion-list extractor that converts the snapshot into
+  // the external_ids the orchestrator feeds to generatePredictionsForSlate.
+  section("R-19 P5c — extractLockMissExclusions (the per-game exclusion list)");
+  {
+    check("null snapshot → empty exclusion list", extractLockMissExclusions(null).length === 0);
+  }
+  {
+    // All games unlocked, far from start → no exclusions
+    const snap = assessSlateLockSnapshot({
+      sport: "mlb",
+      games: Array.from({ length: 15 }, (_, i) => game({ ext: 5000 + i, minutesFromNow: 180 + i })),
+      now: NOW,
+    });
+    check("15 unlocked games → empty exclusion list", extractLockMissExclusions(snap).length === 0);
+  }
+  {
+    // The user's actual scenario today: 1 already_started + 14 unlocked
+    const snap = assessSlateLockSnapshot({
+      sport: "mlb",
+      games: [
+        game({ ext: 5058709, minutesFromNow: -30 }), // SF@CHC pattern
+        ...Array.from({ length: 14 }, (_, i) => game({ ext: 5058710 + i, minutesFromNow: 120 + i * 10 })),
+      ],
+      now: NOW,
+    });
+    const ex = extractLockMissExclusions(snap);
+    check("1 already_started + 14 unlocked → exclusion list = [1 game]", ex.length === 1);
+    check("exclusion = [5058709] (the SF@CHC-style game)", ex[0] === 5058709);
+    check("14 unlocked games NOT in exclusion list",
+      ex.every((id) => id < 5058710));
+  }
+  {
+    // Already_started AND already_locked → NOT a lock_miss (pregame-sweep DID fire)
+    const games: SlateLockGameInput[] = [
+      { game_external_id: 100, game_date: "2026-06-05T20:00:00Z", locked_at: "2026-06-05T19:00:00Z" },
+      ...Array.from({ length: 5 }, (_, i) => game({ ext: 200 + i, minutesFromNow: 60 + i * 10 })),
+    ];
+    // Note: locked_at takes precedence over time math — `locked` not `already_started`
+    const snap = assessSlateLockSnapshot({ sport: "mlb", games, now: NOW });
+    const ex = extractLockMissExclusions(snap);
+    check("locked game is NOT in lock_miss exclusions (it's locked, not lock-missed)", ex.length === 0);
+  }
+  {
+    // Multiple already_started games with null locked_at → all excluded, sorted
+    const snap = assessSlateLockSnapshot({
+      sport: "mlb",
+      games: [
+        game({ ext: 9003, minutesFromNow: -50 }),
+        game({ ext: 9001, minutesFromNow: -20 }),
+        game({ ext: 9002, minutesFromNow: -10 }),
+        game({ ext: 9004, minutesFromNow: 120 }), // unlocked
+      ],
+      now: NOW,
+    });
+    const ex = extractLockMissExclusions(snap);
+    check("3 already_started + 1 unlocked → exclusion list length 3", ex.length === 3);
+    check("exclusion list sorted ascending",
+      JSON.stringify(ex) === JSON.stringify([9001, 9002, 9003]));
+  }
+  {
+    // All games started without lock → exclusion list = full slate
+    const snap = assessSlateLockSnapshot({
+      sport: "mlb",
+      games: Array.from({ length: 9 }, (_, i) => game({ ext: 7000 + i, minutesFromNow: -10 - i })),
+      now: NOW,
+    });
+    const ex = extractLockMissExclusions(snap);
+    check("9/9 already_started → exclusion list length 9 (M2 will write 0)", ex.length === 9);
+  }
+  {
+    // Mixed locked + already_started + unlocked
+    const snap = assessSlateLockSnapshot({
+      sport: "mlb",
+      games: [
+        game({ ext: 100, minutesFromNow: 90, locked: true }),    // locked (Layer 2 catches this)
+        game({ ext: 200, minutesFromNow: -10 }),                  // already_started (lock_miss)
+        game({ ext: 300, minutesFromNow: 180 }),                  // unlocked (M2 runs)
+      ],
+      now: NOW,
+    });
+    const ex = extractLockMissExclusions(snap);
+    check("locked game NOT in lock_miss exclusions", !ex.includes(100));
+    check("already_started game IS in lock_miss exclusions", ex.includes(200));
+    check("unlocked game NOT in lock_miss exclusions", !ex.includes(300));
+    check("exclusion list length exactly 1", ex.length === 1);
+  }
+
+  // ── [W] CRITICAL REGRESSION — user's launch scenario ───────────────
+  // The exact case from today's rollout: 15 BDL games, SF@CHC already
+  // started without lock, 14 pregame. Convert the lock_miss block from
+  // slate-wide to per-game.
+  section("R-19 P5c critical regression — today's launch scenario");
+  {
+    // Build the snapshot
+    const snap = assessSlateLockSnapshot({
+      sport: "mlb",
+      games: [
+        // SF@CHC: already started, no lock (the launch-day exception)
+        { game_external_id: 5058709, game_date: "2026-06-05T15:35:00Z", locked_at: null, matchup: "SF@CHC" },
+        // 14 other games, all pregame
+        ...Array.from({ length: 14 }, (_, i) => ({
+          game_external_id: 5058710 + i,
+          game_date: new Date(NOW.getTime() + (180 + i * 15) * 60_000).toISOString(),
+          locked_at: null,
+          matchup: `GAME${i}`,
+        })),
+      ],
+      now: NOW,
+    });
+    const warns = deriveLockWarnings({
+      snapshot: snap,
+      env: { PREGAME_SWEEP_CRON_ACTIVE: "true" }, // suppress unrelated warning
+    });
+    const exclusions = extractLockMissExclusions(snap);
+
+    check("snapshot total_games = 15", snap.total_games === 15);
+    check("snapshot already_started = 1", snap.already_started_games === 1);
+    check("snapshot already_locked = 0", snap.already_locked_games === 0);
+    check("snapshot unlocked = 14", snap.unlocked_games === 14);
+    check("lock_miss warning fires (severity: block)",
+      warns.some((w) => w.code === "lock_miss" && w.severity === "block"));
+    check("anyLockWarningBlocks → true (publish gate uses this)", anyLockWarningBlocks(warns) === true);
+    check("exclusion list = [SF@CHC] only", exclusions.length === 1 && exclusions[0] === 5058709);
+    check("14 valid games NOT in exclusion list — M2 can write for them",
+      exclusions.every((id) => id !== 5058710 && id !== 5058711 /* etc */));
+    // Confirm that the launch-day exception scope is exactly 1
+    check("exactly 1 game excluded (SF@CHC); other 14 eligible", exclusions.length === 1);
   }
 
   // ── Summary ──────────────────────────────────────────────────────

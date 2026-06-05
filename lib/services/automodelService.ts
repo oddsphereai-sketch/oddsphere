@@ -111,6 +111,24 @@ export type AutoModelRunOpts = {
    */
   enrichmentHook?: EnrichmentHook;
   /**
+   * Phase 4.2.C.1.R-19 Phase 5c — operator-supplied per-game exclusion
+   * list. Games whose `external_id` appears here are union'd with the
+   * Layer 2 lock-filter set and never enter the snapshot build / model
+   * run.
+   *
+   * Used by the cron-safe slate-cycle orchestrator to skip
+   * already-started games (lock_miss pattern) on a per-game basis,
+   * replacing the prior slate-wide lock_miss block. Each excluded game
+   * is surfaced on the AutomationRunReport as
+   * `slate_lock_snapshot.per_game[i].lock_state = "already_started"`
+   * and listed in M2 step details.
+   *
+   * `undefined` → no exclusions (Phase 4.2.B behavior unchanged)
+   * `[]` → empty list, same as undefined
+   * `[id, id, …]` → exclude these external_ids
+   */
+  excludeGameExternalIds?: number[];
+  /**
    * Phase 4.2.B — Layer 2 lock guard.
    *
    * When `true` (default), the service pre-filters out games whose
@@ -423,22 +441,35 @@ export async function generatePredictionsForSlate(
   // Default: respectLocks=true. Operator escape hatch passes false to
   // run the full pipeline even on locked games (Layer 1 still catches
   // any actual write).
+  //
+  // R-19 Phase 5c — caller-supplied `excludeGameExternalIds` union'd
+  // with the locked set. Used by the cron-safe slate-cycle orchestrator
+  // to skip games that fall into the lock_miss pattern (already_started
+  // with locked_at=null) without blocking the model run for the
+  // remaining eligible games.
   const respectLocks = opts.respectLocks !== false;
+  const callerExclusions = new Set<number>(opts.excludeGameExternalIds ?? []);
   let effectiveFilter: number[] | undefined = opts.gameExternalIdsFilter;
-  if (respectLocks) {
-    const lockedExternalIds = await fetchLockedExternalIds(sport, slate_date);
-    if (lockedExternalIds.size > 0) {
+  if (respectLocks || callerExclusions.size > 0) {
+    const lockedExternalIds = respectLocks
+      ? await fetchLockedExternalIds(sport, slate_date)
+      : new Set<number>();
+    // Combined exclusion set: Layer 2 (locked rows) ∪ caller-supplied
+    // (lock_miss / already_started). Same filtering pipeline either way.
+    const combinedExclusions = new Set<number>([
+      ...lockedExternalIds,
+      ...callerExclusions,
+    ]);
+    if (combinedExclusions.size > 0) {
       if (effectiveFilter === undefined) {
-        // No prior filter — build one that excludes locked games.
-        // We need the full slate's external ids to subtract from, so a
-        // bare "exclude locked" needs the slate's external_id list first.
+        // No prior filter — build one that excludes locked + caller games.
         const allExternalIds = await fetchSlateExternalIds(sport, slate_date);
         effectiveFilter = allExternalIds.filter(
-          (id) => !lockedExternalIds.has(id)
+          (id) => !combinedExclusions.has(id)
         );
       } else {
         effectiveFilter = effectiveFilter.filter(
-          (id) => !lockedExternalIds.has(id)
+          (id) => !combinedExclusions.has(id)
         );
       }
     }

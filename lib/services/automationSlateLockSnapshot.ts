@@ -289,9 +289,48 @@ export function deriveLockWarnings(
 
 /**
  * Predicate — does the warning set contain any blocker-severity entry?
- * Used by the orchestrator to decide whether to force m2 blocked +
- * push to blocking_reasons.
+ * Used by the orchestrator to (a) gate auto-publish and (b) decide
+ * whether to surface the lock_miss exclusion plus warning in the
+ * report. After R-19 Phase 5c this NO LONGER forces M2 slate-wide
+ * blocked — see extractLockMissExclusions below.
  */
 export function anyLockWarningBlocks(warnings: ReadonlyArray<LockWarning>): boolean {
   return warnings.some((w) => w.severity === "block");
+}
+
+/**
+ * R-19 Phase 5c — extract the per-game exclusion list from the lock
+ * snapshot. Pure function. Returns external_ids of games whose
+ * lock_state is "already_started" AND locked_at is null — i.e. the
+ * lock_miss pattern (game start time has passed but pregame-sweep
+ * never set locked_at).
+ *
+ * The cron-safe slate-cycle orchestrator feeds these external_ids to
+ * `generatePredictionsForSlate({ excludeGameExternalIds })`, which
+ * union's them with the existing Layer 2 lock filter. M2 runs for
+ * the remaining eligible games; affected games are surfaced on the
+ * AutomationRunReport.
+ *
+ * Important: this is the PER-GAME version of the lock_miss safety.
+ * The slate-wide warning (`lock_miss`, severity: block) still appears
+ * in `slate_lock_warnings` and still blocks auto-publish — but it no
+ * longer forces M2 to skip every game on the slate.
+ *
+ * Returns an empty array when:
+ *   • snapshot is null (slate not yet ingested), OR
+ *   • already_started_games === 0, OR
+ *   • every already_started game already has locked_at set (no miss)
+ */
+export function extractLockMissExclusions(
+  snapshot: SlateLockSnapshotResult | null
+): number[] {
+  if (snapshot === null) return [];
+  const out: number[] = [];
+  for (const g of snapshot.per_game) {
+    if (g.lock_state === "already_started" && (g.locked_at === null || g.locked_at === undefined)) {
+      out.push(g.game_external_id);
+    }
+  }
+  out.sort((a, b) => a - b);
+  return out;
 }

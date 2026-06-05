@@ -74,6 +74,7 @@ import {
   assessSlateLockSnapshot,
   deriveLockWarnings,
   anyLockWarningBlocks,
+  extractLockMissExclusions,
   type SlateLockSnapshotResult,
   type LockWarning,
 } from "./automationSlateLockSnapshot";
@@ -799,35 +800,58 @@ export async function runSlateCycleAutomated(opts: {
     env: env as { PREGAME_SWEEP_CRON_ACTIVE?: string | undefined },
   });
   // Push warn-severity messages to the existing warnings[] surface.
-  // Block-severity messages also land in blocking_reasons[] (next).
   for (const w of lockWarnings) {
     if (w.severity === "warn") warnings.push(w.message);
   }
-  // Lock-miss is the launch-critical block: orchestrator refuses to
-  // run M2 against a slate where games started without locks.
+  // R-19 Phase 5c — lock_miss is now a PER-GAME exclusion rather
+  // than a slate-wide M2 block. The block-severity warning still
+  // fires (it's the safety signal an operator needs to see), but the
+  // orchestrator handles it by:
+  //   (1) pulling the affected games out of M2's input via
+  //       excludeGameExternalIds (computed below).
+  //   (2) gating the publish step on lockMissBlocking — auto-publish
+  //       stays held when any game was excluded, even if the rest of
+  //       the slate processed cleanly.
+  //   (3) surfacing the block-severity warning message as a degraded
+  //       warning so operators see it, but NOT pushing it into
+  //       blocking_reasons (which would cascade and shut M2 down
+  //       entirely).
   const lockMissBlocking = anyLockWarningBlocks(lockWarnings);
   if (lockMissBlocking) {
     for (const w of lockWarnings) {
       if (w.severity === "block") {
-        blockingReasons.push(`R-19 Phase 4b lock_miss: ${w.message}`);
+        warnings.push(`R-19 Phase 5c lock_miss exclusion: ${w.message}`);
       }
     }
   }
+  // Per-game exclusion list — fed to M2's generatePredictionsForSlate.
+  // Empty when snapshot is null (slate not in DB) or no already_started
+  // games exist (the healthy state).
+  const lockMissExclusions = extractLockMissExclusions(lockSnapshot);
 
   // ── M2. Automodel + reviewer + breakdown ──────────────────────────────
-  // m2Blocked now includes G2 fail_closed (starter coverage too low
-  // for safe model run). dataLayerBlocked covers G1/G3 + provider
-  // mode + reconciliation. gateBlocking covers the R-17 G1 automation
-  // gate (line freshness etc.). lockMissBlocking covers the "started
-  // without lock" pattern even when G3 doesn't fire (e.g. DB knows
-  // games started but BDL still reports STATUS_SCHEDULED).
+  // m2Blocked covers structural problems that affect the WHOLE slate:
+  //   • gateBlocking — R-17 G1 automation gate (lines stale, FI coverage)
+  //   • dataLayerBlocked — provider mode, reconciliation, R-19 G1 (min
+  //     game count), R-19 G3 (in-progress ingest)
+  //   • g2Blocking — R-19 G2 starter coverage too low
+  //
+  // R-19 Phase 5c — lock_miss is NO LONGER a slate-wide M2 block. It
+  // becomes a PER-GAME exclusion: the affected external_ids flow into
+  // generatePredictionsForSlate as `excludeGameExternalIds`. M2 runs
+  // for the remaining eligible games. Auto-publish stays held (handled
+  // separately in S11).
+  //
+  // If lockMissExclusions covers EVERY game on the slate (no eligible
+  // games remain), M2 still runs but writes 0 predictions; the report
+  // makes the situation visible via `excluded_for_lock_miss` count
+  // matching `lock_snapshot.total_games`.
   //
   // Lock awareness: generatePredictionsForSlate uses respectLocks=true
-  // by default (Phase 4.2.B). Locked games are pre-filtered out of
-  // the snapshot build — `res.game_count` reflects the UNLOCKED count.
-  // The lock snapshot above provides the broader picture for the
-  // report (unlocked + entering_lock + already_locked + already_started).
-  const m2Blocked = gateBlocking || dataLayerBlocked || g2Blocking || lockMissBlocking;
+  // (Phase 4.2.B) — locked games excluded via DB query. Union'd with
+  // the caller-supplied `excludeGameExternalIds` set so both flavors
+  // of exclusion flow through the same filter pipeline.
+  const m2Blocked = gateBlocking || dataLayerBlocked || g2Blocking;
   steps.push(await runStep(
     "m2_automodel",
     !m2Blocked && effectiveWriteMode.automodel,
@@ -835,22 +859,23 @@ export async function runSlateCycleAutomated(opts: {
     async (writeMode) => {
       const res = await generatePredictionsForSlate(opts.sport, opts.date, "morning_draft", {
         writeToDb: writeMode,
+        excludeGameExternalIds: lockMissExclusions,
       });
-      // Phase 4b — report lock-skipped counts alongside model output.
+      // R-19 Phase 4b — report lock-skipped counts alongside model output.
       // `lock_skipped_by_layer_2` = games excluded by automodelService's
-      // respectLocks filter; equals already_locked_games when slate row
-      // count > 0 (Layer 2 filter is by locked_at). The other lock
-      // categories (entering_lock, already_started) are still seen by
-      // the model but Layer 1 would reject writes for entering_lock if
-      // any UPDATE went through them — which doesn't happen because
-      // pregame-sweep is the only path that mutates locked_at.
+      // respectLocks filter (i.e. already_locked games).
+      // R-19 Phase 5c — `excluded_for_lock_miss` is the per-game
+      // lock_miss exclusion list applied this run.
       const lockSkippedByLayer2 = lockSnapshot?.already_locked_games ?? 0;
+      const excludedForLockMissCount = lockMissExclusions.length;
       return {
         details: {
           game_count: res.game_count,
           held_count: res.held_count,
           pick_null_counts: res.pick_null_counts,
           errors: res.errors.length,
+          excluded_for_lock_miss: excludedForLockMissCount,
+          excluded_for_lock_miss_external_ids: lockMissExclusions,
           lock_snapshot: lockSnapshot !== null ? {
             total_games: lockSnapshot.total_games,
             unlocked_games: lockSnapshot.unlocked_games,
@@ -862,12 +887,12 @@ export async function runSlateCycleAutomated(opts: {
           } : null,
         },
         reason: writeMode
-          ? `wrote ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped=${lockSkippedByLayer2}`
-          : `dry-run; would write ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped=${lockSkippedByLayer2}`,
+          ? `wrote ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped_layer2=${lockSkippedByLayer2}; excluded_for_lock_miss=${excludedForLockMissCount}`
+          : `dry-run; would write ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped_layer2=${lockSkippedByLayer2}; excluded_for_lock_miss=${excludedForLockMissCount}`,
       };
     },
     m2Blocked
-      ? "blocked by upstream gate (provider/reconciliation/R-17 G1/R-19 G1-G2-G3/R-19 P4b lock_miss)"
+      ? "blocked by upstream gate (provider/reconciliation/R-17 G1/R-19 G1-G2-G3)"
       : undefined
   ));
 
@@ -881,18 +906,29 @@ export async function runSlateCycleAutomated(opts: {
   // games. Belt-and-braces: dataLayerBlocked already cascades G1/G3,
   // gateBlocking covers R-17 G1, and we add G2 here so a late-firing
   // starter-coverage failure also blocks publish.
+  // R-19 Phase 5c — lockMissBlocking ALSO blocks auto-publish even
+  // though it's no longer in blocking_reasons. ANY game excluded via
+  // lock_miss means at least one row on the slate didn't get a fresh
+  // prediction this run, so auto-publish must stay held. The operator
+  // can still publish manually via publish-slate.ts after reviewing.
   const t0pub = Date.now();
   const autoPublish = shouldAutoPublishMorningSlate(env);
   const slateSafetyBlocking = anyGateFailedClosed(g1Result, g2Result, g3Result);
   let publishDecision: AutomationRunReport["publish_decision"];
   let publishMode: StepMode;
   let publishReason: string;
-  if (dataLayerBlocked || gateBlocking || slateSafetyBlocking) {
+  if (dataLayerBlocked || gateBlocking || slateSafetyBlocking || lockMissBlocking) {
     publishDecision = "skipped_blocked";
     publishMode = "blocked";
-    publishReason = slateSafetyBlocking
-      ? "publish skipped — slate-safety gate (G1/G2/G3) blocked the cycle"
-      : "publish skipped — upstream gate blocked the cycle";
+    if (lockMissBlocking && !(dataLayerBlocked || gateBlocking || slateSafetyBlocking)) {
+      publishReason =
+        `publish skipped — lock_miss exclusion applied (${lockMissExclusions.length} ` +
+        `game(s) skipped); auto-publish held until cleanest morning slate`;
+    } else if (slateSafetyBlocking) {
+      publishReason = "publish skipped — slate-safety gate (G1/G2/G3) blocked the cycle";
+    } else {
+      publishReason = "publish skipped — upstream gate blocked the cycle";
+    }
   } else if (autoPublish && orchestratorGate) {
     // Auto-publish is on AND orchestrator gate is enabled. Run publishSlate.
     publishDecision = "auto_publish_enabled";
