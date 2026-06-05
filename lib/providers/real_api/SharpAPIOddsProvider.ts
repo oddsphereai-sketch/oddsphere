@@ -973,6 +973,7 @@ function emptyDiscoveryReport(): V2DiscoveryReport {
       skippedWrongDate: 0,
       skippedTeamUnresolved: 0,
       dedupedRows: 0,
+      multiBucketEvents: [],
     },
     eventsDiscovered: 0,
     eventsResolvedToGame: 0,
@@ -984,3 +985,17 @@ function emptyDiscoveryReport(): V2DiscoveryReport {
     perGame: [],
   };
 }
+
+// ─────────────────────────────────────────────────────────────
+// Test-only exports — exposed for the R-17 Step 2D mapping regression
+// suite (and any future provider tests that want to exercise the
+// mapping helpers without spinning up a SharpApiClient). Production
+// code never imports from `__TEST__`.
+// ─────────────────────────────────────────────────────────────
+
+export const __TEST__ = {
+  mapMarketType,
+  mapSportsbook,
+  mapSide,
+};
+

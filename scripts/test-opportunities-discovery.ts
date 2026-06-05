@@ -323,6 +323,118 @@ function main() {
     check("totalRows = 0", res.stats.totalRows === 0);
     check("keptEvents = 0", res.stats.keptEvents === 0);
     check("events empty", res.events.length === 0);
+    check(
+      "multiBucketEvents empty for empty input",
+      res.stats.multiBucketEvents.length === 0
+    );
+  }
+
+  section("Multi-bucket detector (R-17 Step 2D) — steady state");
+  {
+    // Single-bucket events (today's normal slate shape) should produce
+    // an EMPTY multiBucketEvents array. The detector only fires when
+    // SharpAPI starts publishing >1 _b\d+ per stripped event_id.
+    const res = buildDiscoveryFromOpportunitiesRows(
+      [
+        row({ event_id: "mlb_royals_twins_2026-06-05_b0" }),
+        row({ event_id: "mlb_royals_twins_2026-06-05_b0" }), // dedupe — same suffix
+        row({ event_id: "mlb_redsox_yankees_2026-06-05_b3" }),
+      ],
+      DATE
+    );
+    check(
+      "steady state — multiBucketEvents is empty",
+      res.stats.multiBucketEvents.length === 0
+    );
+    check("dedupedRows counts the duplicate same-suffix row", res.stats.dedupedRows === 1);
+  }
+
+  section("Multi-bucket detector (R-17 Step 2D) — drift detected");
+  {
+    // Two distinct suffixes for the SAME stripped event_id → drift.
+    const res = buildDiscoveryFromOpportunitiesRows(
+      [
+        row({ event_id: "mlb_royals_twins_2026-06-05_b0" }),
+        row({ event_id: "mlb_royals_twins_2026-06-05_b3" }),
+      ],
+      DATE
+    );
+    check("drift — multiBucketEvents has 1 entry", res.stats.multiBucketEvents.length === 1);
+    const entry = res.stats.multiBucketEvents[0];
+    check(
+      "drift — entry.sharpEventId is the stripped id",
+      entry?.sharpEventId === "mlb_royals_twins_2026-06-05"
+    );
+    check(
+      "drift — entry.suffixes sorted, contains both _b0 and _b3",
+      entry?.suffixes.join(",") === "_b0,_b3"
+    );
+    check(
+      "drift — keptEvents = 1 (single-suffix harvest behavior preserved)",
+      res.stats.keptEvents === 1
+    );
+    check(
+      "drift — dedupedRows = 1 (second suffix deduped under first)",
+      res.stats.dedupedRows === 1
+    );
+  }
+
+  section("Multi-bucket detector — multiple events, mixed drift");
+  {
+    // Three events: KC@MIN has 2 suffixes (drift), BOS@NYY has 1
+    // (steady), SD@PHI has 3 suffixes (heavy drift).
+    const res = buildDiscoveryFromOpportunitiesRows(
+      [
+        row({ event_id: "mlb_royals_twins_2026-06-05_b0" }),
+        row({ event_id: "mlb_royals_twins_2026-06-05_b3" }),
+        row({ event_id: "mlb_redsox_yankees_2026-06-05_b3" }),
+        row({ event_id: "mlb_padres_phillies_2026-06-05_b0" }),
+        row({ event_id: "mlb_padres_phillies_2026-06-05_b1" }),
+        row({ event_id: "mlb_padres_phillies_2026-06-05_b3" }),
+      ],
+      DATE
+    );
+    check(
+      "mixed drift — multiBucketEvents has 2 entries",
+      res.stats.multiBucketEvents.length === 2
+    );
+    check(
+      "mixed drift — sorted alphabetically by sharpEventId",
+      res.stats.multiBucketEvents[0]?.sharpEventId === "mlb_padres_phillies_2026-06-05" &&
+        res.stats.multiBucketEvents[1]?.sharpEventId === "mlb_royals_twins_2026-06-05"
+    );
+    check(
+      "mixed drift — heavy drift entry lists all 3 suffixes",
+      res.stats.multiBucketEvents[0]?.suffixes.join(",") === "_b0,_b1,_b3"
+    );
+    check(
+      "mixed drift — single-bucket BOS@NYY NOT in multiBucketEvents",
+      !res.stats.multiBucketEvents.some(
+        (e) => e.sharpEventId === "mlb_redsox_yankees_2026-06-05"
+      )
+    );
+  }
+
+  section("Multi-bucket detector — wrong-date rows do NOT trigger");
+  {
+    // _b0 today + _b3 yesterday should NOT count as drift — the
+    // yesterday row was dropped by the date filter before suffix
+    // tracking. Defensive against false positives across slates.
+    const res = buildDiscoveryFromOpportunitiesRows(
+      [
+        row({ event_id: "mlb_royals_twins_2026-06-05_b0" }),
+        row({ event_id: "mlb_royals_twins_2026-06-04_b3" }),
+      ],
+      DATE
+    );
+    check(
+      "cross-slate — multiBucketEvents stays empty",
+      res.stats.multiBucketEvents.length === 0
+    );
+    check(
+      "cross-slate — wrong-date row counted in skippedWrongDate",
+      res.stats.skippedWrongDate === 1
+    );
   }
 
   // ── Summary ──────────────────────────────────────────────────────

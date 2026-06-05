@@ -792,6 +792,32 @@ async function main() {
       }
       console.log(`  STATUS:                    ${reconciliation.status.toUpperCase()}`);
       console.log(`  reason:                    ${reconciliation.reason}`);
+
+      // R-17 Step 2D — multi-bucket drift warning. Today's audit found
+      // every event publishes exactly one `_b\d+` suffix, but if
+      // SharpAPI ever starts splitting markets across buckets for the
+      // same event, single-suffix harvest (used by V2 lines) will
+      // start dropping markets. Warning only — no behavior change.
+      if (ev.stats.multiBucketEvents.length > 0) {
+        console.log();
+        console.log(
+          `  ⚠ MULTI-BUCKET DRIFT DETECTED — ${ev.stats.multiBucketEvents.length} event(s) publish more than one _b# suffix.`
+        );
+        console.log(
+          `     V2 lines harvest currently picks the FIRST suffix per event;`
+        );
+        console.log(
+          `     other buckets' markets will be silently skipped until an`
+        );
+        console.log(
+          `     all-buckets harvest follow-up (Step 2E) ships.`
+        );
+        for (const mb of ev.stats.multiBucketEvents) {
+          console.log(
+            `       • ${mb.sharpEventId} → suffixes: ${mb.suffixes.join(", ")}`
+          );
+        }
+      }
     } catch (e) {
       console.log(
         `  ✗ reconciliation failed: ${e instanceof Error ? e.message : String(e)}`

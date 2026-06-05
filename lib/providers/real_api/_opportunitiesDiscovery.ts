@@ -88,6 +88,21 @@ export type DiscoveryStats = {
   /** Rows that resolved to an already-discovered event (dedupe). NOT a
    *  drop reason — just bookkeeping for the dedupe step. */
   dedupedRows: number;
+  /**
+   * R-17 Step 2D — multi-bucket drift detector. Empty in the steady-state
+   * (every stripped event_id should map to exactly one `_b\d+` suffix on
+   * `/opportunities/ev`). If SharpAPI ever starts publishing multiple
+   * buckets per event for MLB on the slate date, this array will list
+   * the offending events along with their observed suffixes so callers
+   * (orchestrator banner, V2 lines preview) can surface a loud warning
+   * — single-suffix harvest may start missing markets the moment this
+   * fires, and an "all buckets" harvest follow-up becomes required.
+   *
+   * Detection is WARNING-ONLY in Step 2D — no behavior change. The
+   * helper still returns one CanonicalEvent per stripped event_id
+   * (first suffix wins) so existing downstream code is unaffected.
+   */
+  multiBucketEvents: Array<{ sharpEventId: string; suffixes: string[] }>;
 };
 
 const OPPORTUNITIES_PATH = "/opportunities/ev";
@@ -144,6 +159,13 @@ export function buildDiscoveryFromOpportunitiesRows(
 ): { events: CanonicalEvent[]; stats: DiscoveryStats } {
   const events: CanonicalEvent[] = [];
   const byStrippedId = new Map<string, CanonicalEvent>();
+  // R-17 Step 2D — track every observed suffix per stripped event_id so
+  // we can detect multi-bucket drift after the build loop completes.
+  // Populated for ALL rows that pass the league + non-prop + non-alt
+  // filters, even if a row is otherwise deduped. The detector cares
+  // about "did SharpAPI publish multiple buckets for this game", not
+  // "did our dedupe drop a row" (those overlap but are not identical).
+  const suffixesByStrippedId = new Map<string, Set<string>>();
   const stats: DiscoveryStats = {
     totalRows: rows.length,
     keptEvents: 0,
@@ -155,6 +177,7 @@ export function buildDiscoveryFromOpportunitiesRows(
     skippedWrongDate: 0,
     skippedTeamUnresolved: 0,
     dedupedRows: 0,
+    multiBucketEvents: [],
   };
 
   for (const row of rows) {
@@ -186,6 +209,17 @@ export function buildDiscoveryFromOpportunitiesRows(
       stats.skippedWrongDate++;
       continue;
     }
+    // R-17 Step 2D — record this row's suffix against its stripped id
+    // BEFORE the dedupe-skip so the multi-bucket detector sees every
+    // observed bucket variant, not just the first one that won dedupe.
+    const suffixMatch = rawEventId.match(/_b\d+$/);
+    const suffix = suffixMatch ? suffixMatch[0] : "";
+    let suffixSet = suffixesByStrippedId.get(strippedId);
+    if (!suffixSet) {
+      suffixSet = new Set<string>();
+      suffixesByStrippedId.set(strippedId, suffixSet);
+    }
+    suffixSet.add(suffix);
     // Dedupe: if we've already seen this event_id, count it but skip.
     if (byStrippedId.has(strippedId)) {
       stats.dedupedRows++;
@@ -209,6 +243,27 @@ export function buildDiscoveryFromOpportunitiesRows(
     events.push(ev);
     stats.keptEvents++;
   }
+
+  // R-17 Step 2D — post-loop multi-bucket detection. Any stripped
+  // event_id whose suffix set has more than one entry means SharpAPI
+  // is publishing the event across multiple `_b\d+` buckets. Single-
+  // suffix harvest currently picks the first one and skips the rest;
+  // this detector surfaces the condition for the orchestrator banner
+  // to warn loudly so we can react if SharpAPI ever starts splitting
+  // markets across buckets. Sorted for stable test output.
+  const multiBucketIds: Array<{ sharpEventId: string; suffixes: string[] }> = [];
+  for (const [strippedId, suffixes] of suffixesByStrippedId) {
+    if (suffixes.size > 1) {
+      multiBucketIds.push({
+        sharpEventId: strippedId,
+        suffixes: [...suffixes].sort(),
+      });
+    }
+  }
+  multiBucketIds.sort((a, b) =>
+    a.sharpEventId.localeCompare(b.sharpEventId)
+  );
+  stats.multiBucketEvents = multiBucketIds;
 
   return { events, stats };
 }
@@ -242,6 +297,7 @@ export async function discoverEventsFromOpportunities(
         skippedWrongDate: 0,
         skippedTeamUnresolved: 0,
         dedupedRows: 0,
+        multiBucketEvents: [],
       },
       rows: [],
     };
