@@ -83,7 +83,12 @@ export type SharpApiGameResolver = (
 ) => Promise<number | null>;
 
 /** Hard cap on SharpAPI calls per getGameLines invocation (safety net). */
-const MAX_CALLS_PER_INVOCATION = 30;
+// R-17 Step 2E.1 — raised 30 → 50 to handle multi-bucket /odds harvest.
+// A 15-game slate with both `_b0` and `_b3` published per event consumes
+// ~30 /odds calls; +2 (opportunities/ev + splits) puts us at the edge
+// of the old 30 cap. 50 provides ~70% headroom for larger slates while
+// still being deeply conservative against the 1000-call quota window.
+const MAX_CALLS_PER_INVOCATION = 50;
 
 // ─────────────────────────────────────────────────────────────
 // Raw shapes
@@ -566,24 +571,26 @@ export class SharpAPIOddsProvider implements IOddsProvider {
     }
 
     // Step 3: resolve each discovered event to a BDL game external_id +
-    // pick the event_id form to use for /odds. Anything that fails to
-    // resolve is captured for the discovery report — not silently dropped.
+    // pick the event_id form(s) to use for /odds. Anything that fails
+    // to resolve is captured for the discovery report — not silently
+    // dropped.
+    //
+    // R-17 Step 2E.1 — `effectiveEventIds` carries ALL observed buckets
+    // for the event (was a single string pre-2E.1). The Step 4 harvest
+    // loops over every entry and merges results with a cross-bucket
+    // dedupe set.
     type ResolvedV2Event = {
       home: MlbTeamAbbrev;
       away: MlbTeamAbbrev;
       gameExternalId: number;
       splitsEventId: string;
-      effectiveEventId: string;
+      effectiveEventIds: string[];
       eventIdSource: "opportunities_suffixed" | "splits_stripped";
     };
 
     const resolved: ResolvedV2Event[] = [];
     const unresolvedTeamPairs: Array<{ home: MlbTeamAbbrev; away: MlbTeamAbbrev }> = [];
 
-    // R-17 Step 2B — iterate canonical events from /opportunities/ev
-    // (was splitsResult.events pre-2B). The suffixed event_id is
-    // returned by the discovery helper directly, so the separate
-    // suffixedEventIdByPair lookup is no longer needed.
     for (const ev of evResult.events) {
       const gameExtId = await this.resolveGame(sportKey, date, ev.home, ev.away);
       if (gameExtId === null) {
@@ -595,7 +602,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         away: ev.away,
         gameExternalId: gameExtId,
         splitsEventId: ev.sharpEventId, // stripped form, kept name for back-compat
-        effectiveEventId: ev.suffixedEventId,
+        effectiveEventIds: ev.suffixedEventIds,
         eventIdSource: "opportunities_suffixed",
       });
     }
@@ -618,127 +625,154 @@ export class SharpAPIOddsProvider implements IOddsProvider {
     const perGame: V2DiscoveryPerGame[] = [];
 
     for (const ev of resolved) {
-      if (callsUsed >= MAX_CALLS_PER_INVOCATION) {
-        perGame.push({
-          gameExternalId: ev.gameExternalId,
-          home: ev.home,
-          away: ev.away,
-          splitsEventId: ev.splitsEventId,
-          effectiveEventId: ev.effectiveEventId,
-          eventIdSource: ev.eventIdSource,
-          oddsCallStatus: "skipped_call_cap",
-          mlRows: 0,
-          totalRows: 0,
-          spreadRows: 0,
-          otherRows: 0,
-          books: [],
-          mlRowsFromOdds: 0,
-          totalRowsFromOdds: 0,
-          spreadRowsFromOdds: 0,
-          mlRowsFromSplits: 0,
-          totalRowsFromSplits: 0,
-          spreadRowsFromSplits: 0,
-        });
-        continue;
-      }
-      callsUsed++;
-      let oddsRows: RawOddsRow[];
-      let status: V2OddsCallStatus;
-      try {
-        oddsRows = await this.client.fetchAll<RawOddsRow>({
-          path: "/odds",
-          query: { event_id: ev.effectiveEventId },
-          maxPages: 3,
-        });
-        status = oddsRows.length === 0 ? "empty" : "ok";
-      } catch (e) {
-        if (e instanceof SharpApiNotFoundError) {
-          oddsRows = [];
-          status = "not_found";
-        } else {
-          throw e;
-        }
-      }
-
+      // R-17 Step 2E.1 — per-game accumulators are aggregated across
+      // every observed bucket. The dedupe set guarantees that an
+      // identical (book, market, side, line) row appearing in two
+      // buckets only writes once. Distinct books from different
+      // buckets are kept naturally.
+      const seenKeys = new Set<string>();
       let mlFromOdds = 0,
         totFromOdds = 0,
         sprFromOdds = 0,
         other = 0;
       let rejectedHomeAwayMismatch = 0;
+      let dedupedAcrossBuckets = 0;
       const books = new Set<string>();
-      for (const row of oddsRows) {
-        const rowLeague = asStringOrNull(row.league)?.toLowerCase();
-        if (rowLeague !== null && rowLeague !== undefined && rowLeague !== "mlb") {
+      const bucketsObserved = [...ev.effectiveEventIds];
+      const bucketsFetched: string[] = [];
+      const bucketsCallCapped: string[] = [];
+      const bucketStatuses: V2OddsCallStatus[] = [];
+
+      // Inner loop: call /odds for EVERY observed `_b\d+` suffix.
+      // Single-bucket events behave exactly as before (one call,
+      // one merge). Multi-bucket events recover the books that
+      // were silently dropped pre-2E.1.
+      for (const effectiveEventId of ev.effectiveEventIds) {
+        if (callsUsed >= MAX_CALLS_PER_INVOCATION) {
+          bucketsCallCapped.push(effectiveEventId);
+          bucketStatuses.push("skipped_call_cap");
           continue;
         }
-        if (row.is_alternate_line === true) continue;
+        callsUsed++;
+        bucketsFetched.push(effectiveEventId);
 
-        const marketType = mapMarketType(asStringOrNull(row.market_type));
-        if (marketType === null) continue;
-        const sportsbook = mapSportsbook(asStringOrNull(row.sportsbook));
-        if (sportsbook === null) continue;
-        const side = mapSide(row.selection_type);
-        if (side === null) continue;
-
-        // R-16G-A — provider-side home/away sanity guard.
-        //
-        // Some books (kalshi observed 2026-06-04 across TOR@ATL,
-        // LAD@ARI, PIT@HOU) emit /odds rows whose own `home_team` and
-        // `away_team` strings are INVERTED relative to the actual
-        // event. The row is internally consistent (selection_type
-        // matches the row's own home_team) but the row's home_team is
-        // the wrong team. Downstream, every consumer treats
-        // selection_type=home as "the event's home" — which results
-        // in the away team's price being labeled as the home team's
-        // price. Trust-critical bug.
-        //
-        // Defensive guard: if the row carries home_team/away_team
-        // strings and either normalizes to a different abbreviation
-        // than the event's resolved (home, away), REJECT the row. The
-        // guard is general — it catches any future provider-side
-        // home/away flip, not just kalshi-specific. Side markets
-        // (over/under) don't reference team identity so they pass the
-        // guard naturally.
-        if (side === "home" || side === "away") {
-          const rowHomeAbbr = normalizeMlbTeamName(asStringOrNull(row.home_team));
-          const rowAwayAbbr = normalizeMlbTeamName(asStringOrNull(row.away_team));
-          if (
-            rowHomeAbbr !== null &&
-            rowAwayAbbr !== null &&
-            (rowHomeAbbr !== ev.home || rowAwayAbbr !== ev.away)
-          ) {
-            rejectedHomeAwayMismatch++;
-            console.warn(
-              `[SharpAPIOddsProvider] R-16G-A reject: ${sportsbook} row has home="${row.home_team}"/away="${row.away_team}" but event ${ev.away}@${ev.home}. Likely provider side-flip; dropping to prevent wrong-side price.`
-            );
-            continue;
+        let oddsRows: RawOddsRow[];
+        let bucketStatus: V2OddsCallStatus;
+        try {
+          oddsRows = await this.client.fetchAll<RawOddsRow>({
+            path: "/odds",
+            query: { event_id: effectiveEventId },
+            maxPages: 3,
+          });
+          bucketStatus = oddsRows.length === 0 ? "empty" : "ok";
+        } catch (e) {
+          if (e instanceof SharpApiNotFoundError) {
+            oddsRows = [];
+            bucketStatus = "not_found";
+          } else {
+            throw e;
           }
         }
+        bucketStatuses.push(bucketStatus);
 
-        if (marketType === "moneyline") mlFromOdds++;
-        else if (marketType === "total") totFromOdds++;
-        else if (marketType === "spread") sprFromOdds++;
-        else other++;
-        books.add(sportsbook);
+        for (const row of oddsRows) {
+          const rowLeague = asStringOrNull(row.league)?.toLowerCase();
+          if (rowLeague !== null && rowLeague !== undefined && rowLeague !== "mlb") {
+            continue;
+          }
+          if (row.is_alternate_line === true) continue;
 
-        records.push({
-          game_external_id: ev.gameExternalId,
-          market_type: marketType,
-          player_external_id: null,
-          sportsbook,
-          side,
-          line_value: asNumberOrNull(row.line),
-          odds_american: asNumberOrNull(row.odds_american),
-          odds_decimal: asNumberOrNull(row.odds_decimal),
-          implied_probability: asNumberOrNull(row.odds_probability),
-          ev_percent: null,
-          fair_odds: null,
-          is_ev_positive: null,
-          fetched_at:
-            asStringOrNull(row.last_seen_at) ??
-            asStringOrNull(row.wire_received_at) ??
-            fetchedAt,
-        });
+          const marketType = mapMarketType(asStringOrNull(row.market_type));
+          if (marketType === null) continue;
+          const sportsbook = mapSportsbook(asStringOrNull(row.sportsbook));
+          if (sportsbook === null) continue;
+          const side = mapSide(row.selection_type);
+          if (side === null) continue;
+
+          // R-16G-A — provider-side home/away sanity guard. Preserved
+          // intact under Step 2E.1; runs per row regardless of which
+          // bucket the row came from.
+          //
+          // Some books (kalshi observed 2026-06-04 across TOR@ATL,
+          // LAD@ARI, PIT@HOU) emit /odds rows whose own `home_team`
+          // and `away_team` strings are INVERTED relative to the
+          // actual event. Defensive guard: REJECT mismatched rows.
+          if (side === "home" || side === "away") {
+            const rowHomeAbbr = normalizeMlbTeamName(asStringOrNull(row.home_team));
+            const rowAwayAbbr = normalizeMlbTeamName(asStringOrNull(row.away_team));
+            if (
+              rowHomeAbbr !== null &&
+              rowAwayAbbr !== null &&
+              (rowHomeAbbr !== ev.home || rowAwayAbbr !== ev.away)
+            ) {
+              rejectedHomeAwayMismatch++;
+              console.warn(
+                `[SharpAPIOddsProvider] R-16G-A reject: ${sportsbook} row has home="${row.home_team}"/away="${row.away_team}" but event ${ev.away}@${ev.home}. Likely provider side-flip; dropping to prevent wrong-side price.`
+              );
+              continue;
+            }
+          }
+
+          // R-17 Step 2E.1 — cross-bucket dedupe key. Same (book,
+          // market, side, line_value) appearing in two buckets is
+          // counted once. Odds value is deliberately NOT in the
+          // key — if `_b0` says caesars ML home -120 and `_b3` says
+          // caesars ML home -118 a beat later, we keep the FIRST
+          // observation (the one we wrote on the first bucket call).
+          // The downstream `lines` upsert is keyed on (game, market,
+          // sportsbook, side) anyway, so writing both would just
+          // overwrite. Cleanest behavior: first wins, audit counter
+          // shows how many duplicates we saw.
+          const lineValue = asNumberOrNull(row.line);
+          const dedupeKey = `${ev.gameExternalId}|${marketType}|${sportsbook}|${side}|${lineValue ?? "null"}`;
+          if (seenKeys.has(dedupeKey)) {
+            dedupedAcrossBuckets++;
+            continue;
+          }
+          seenKeys.add(dedupeKey);
+
+          if (marketType === "moneyline") mlFromOdds++;
+          else if (marketType === "total") totFromOdds++;
+          else if (marketType === "spread") sprFromOdds++;
+          else other++;
+          books.add(sportsbook);
+
+          records.push({
+            game_external_id: ev.gameExternalId,
+            market_type: marketType,
+            player_external_id: null,
+            sportsbook,
+            side,
+            line_value: lineValue,
+            odds_american: asNumberOrNull(row.odds_american),
+            odds_decimal: asNumberOrNull(row.odds_decimal),
+            implied_probability: asNumberOrNull(row.odds_probability),
+            ev_percent: null,
+            fair_odds: null,
+            is_ev_positive: null,
+            fetched_at:
+              asStringOrNull(row.last_seen_at) ??
+              asStringOrNull(row.wire_received_at) ??
+              fetchedAt,
+          });
+        }
+      }
+
+      // Aggregate per-game oddsCallStatus from per-bucket statuses.
+      // - "ok" if any bucket returned rows
+      // - "empty" if all calls succeeded but returned zero rows
+      // - "not_found" if all calls were 404
+      // - "skipped_call_cap" if NO bucket was fetched (cap hit before
+      //                       this event was reached)
+      let status: V2OddsCallStatus;
+      if (bucketsFetched.length === 0) {
+        status = "skipped_call_cap";
+      } else if (bucketStatuses.some((s) => s === "ok")) {
+        status = "ok";
+      } else if (bucketStatuses.every((s) => s === "not_found")) {
+        status = "not_found";
+      } else {
+        status = "empty";
       }
 
       // R-16E — per-market /splits fallback.
@@ -860,7 +894,15 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         home: ev.home,
         away: ev.away,
         splitsEventId: ev.splitsEventId,
-        effectiveEventId: ev.effectiveEventId,
+        // R-17 Step 2E.1 — `effectiveEventId` retained as first-of-list
+        // for refresh-lines.ts back-compat; new `effectiveEventIds` /
+        // `bucketsFetched` carry the full multi-bucket truth.
+        effectiveEventId: ev.effectiveEventIds[0] ?? "",
+        effectiveEventIds: ev.effectiveEventIds,
+        bucketsObserved,
+        bucketsFetched,
+        bucketsCallCapped,
+        dedupedAcrossBuckets,
         eventIdSource: ev.eventIdSource,
         oddsCallStatus: status,
         mlRows: mlFromOdds + mlFromSplits,
@@ -919,7 +961,26 @@ export type V2DiscoveryPerGame = {
   home: MlbTeamAbbrev;
   away: MlbTeamAbbrev;
   splitsEventId: string;
+  /** First observed suffixed event_id. Retained for refresh-lines.ts
+   *  back-compat; new consumers should prefer `effectiveEventIds`. */
   effectiveEventId: string;
+  /** R-17 Step 2E.1 — every bucket suffix observed for this game in
+   *  `/opportunities/ev`. The harvest loop hits one /odds call per
+   *  entry and merges with a cross-bucket dedupe key. */
+  effectiveEventIds: string[];
+  /** R-17 Step 2E.1 — every bucket suffix observed (alias of
+   *  effectiveEventIds, semantically clearer in operator banners). */
+  bucketsObserved: string[];
+  /** Buckets we actually called /odds for (subset of bucketsObserved
+   *  unless the call cap intervened). */
+  bucketsFetched: string[];
+  /** Buckets we couldn't fetch because the per-invocation call cap
+   *  was already hit. Empty in steady state. */
+  bucketsCallCapped: string[];
+  /** Rows skipped because (book, market, side, line) already present
+   *  from an earlier bucket. Diagnostic — bigger numbers mean the
+   *  buckets carried overlapping content, not a code defect. */
+  dedupedAcrossBuckets: number;
   eventIdSource: "opportunities_suffixed" | "splits_stripped";
   oddsCallStatus: V2OddsCallStatus;
   /** Combined row counts (real /odds + R-16E /splits fallback). */

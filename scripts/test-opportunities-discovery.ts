@@ -101,8 +101,9 @@ function main() {
       res.events[0]?.sharpEventId === "mlb_royals_twins_2026-06-05"
     );
     check(
-      "suffixedEventId preserves bucket",
-      res.events[0]?.suffixedEventId === "mlb_royals_twins_2026-06-05_b0"
+      "suffixedEventIds preserves bucket (single-bucket case)",
+      res.events[0]?.suffixedEventIds.length === 1 &&
+        res.events[0]?.suffixedEventIds[0] === "mlb_royals_twins_2026-06-05_b0"
     );
     check("home normalizes to MIN", res.events[0]?.home === "MIN");
     check("away normalizes to KC", res.events[0]?.away === "KC");
@@ -127,8 +128,10 @@ function main() {
     check("keptEvents = 1 (deduped)", res.stats.keptEvents === 1);
     check("dedupedRows = 3", res.stats.dedupedRows === 3);
     check(
-      "suffixedEventId = first seen (_b0)",
-      res.events[0]?.suffixedEventId === "mlb_royals_twins_2026-06-05_b0"
+      "[2E.1] suffixedEventIds collects ALL 4 buckets, sorted",
+      res.events[0]?.suffixedEventIds.length === 4 &&
+        res.events[0]?.suffixedEventIds.join(",") ===
+          "mlb_royals_twins_2026-06-05_b0,mlb_royals_twins_2026-06-05_b1,mlb_royals_twins_2026-06-05_b2,mlb_royals_twins_2026-06-05_b3"
     );
   }
 
@@ -434,6 +437,113 @@ function main() {
     check(
       "cross-slate — wrong-date row counted in skippedWrongDate",
       res.stats.skippedWrongDate === 1
+    );
+  }
+
+  section("R-17 Step 2E.0 — detector sees suffix from player-prop rows");
+  {
+    // Today's audit found SharpAPI publishes most /opportunities/ev
+    // rows as is_player_prop=true / is_alternate_line=true. The old
+    // detector ran AFTER those filters, so multi-bucket events with
+    // an alt-line _b0 + main-line _b3 (or vice versa) appeared as
+    // single-bucket. Step 2E.0 reordered the filters so suffix
+    // tracking now runs BEFORE the prop / alt filters.
+    const res = buildDiscoveryFromOpportunitiesRows(
+      [
+        // _b0 is purely player props — the OLD code would have skipped
+        // this and never recorded the _b0 suffix.
+        row({
+          event_id: "mlb_royals_twins_2026-06-05_b0",
+          is_player_prop: true,
+        }),
+        // _b3 carries the main-line ML row that drives event ingest.
+        row({ event_id: "mlb_royals_twins_2026-06-05_b3" }),
+      ],
+      DATE
+    );
+    check(
+      "[2E.0] suffix from player-prop row registers — multi-bucket drift detected",
+      res.stats.multiBucketEvents.length === 1 &&
+        res.stats.multiBucketEvents[0]?.suffixes.join(",") === "_b0,_b3"
+    );
+    check(
+      "[2E.0] player-prop row still drops from harvested events",
+      res.events.length === 1 &&
+        res.stats.skippedPlayerProp === 1
+    );
+  }
+
+  section("R-17 Step 2E.0 — detector sees suffix from alternate-line rows");
+  {
+    const res = buildDiscoveryFromOpportunitiesRows(
+      [
+        // _b0 has only alt-lines — OLD code would have skipped → no suffix recorded.
+        row({
+          event_id: "mlb_redsox_yankees_2026-06-05_b0",
+          is_alternate_line: true,
+        }),
+        // _b3 carries the harvestable main line.
+        row({ event_id: "mlb_redsox_yankees_2026-06-05_b3" }),
+      ],
+      DATE
+    );
+    check(
+      "[2E.0] suffix from alt-line row registers — multi-bucket drift detected",
+      res.stats.multiBucketEvents.length === 1 &&
+        res.stats.multiBucketEvents[0]?.suffixes.join(",") === "_b0,_b3"
+    );
+    check(
+      "[2E.0] alt-line row still drops from harvested events",
+      res.events.length === 1 &&
+        res.stats.skippedAlternateLine === 1
+    );
+  }
+
+  section("R-17 Step 2E.0 — mixed scenario mirroring today's audit");
+  {
+    // Realistic shape: each event has many rows (most are props/alts),
+    // both buckets present, only some rows survive harvest filters.
+    const res = buildDiscoveryFromOpportunitiesRows(
+      [
+        // KC@MIN: _b0 all player-props, _b3 has 1 main line
+        row({ event_id: "mlb_royals_twins_2026-06-05_b0", is_player_prop: true }),
+        row({ event_id: "mlb_royals_twins_2026-06-05_b0", is_player_prop: true }),
+        row({ event_id: "mlb_royals_twins_2026-06-05_b3" }),
+        // BAL@TOR: _b0 main line, _b3 all alt-lines
+        row({ event_id: "mlb_bluejays_orioles_2026-06-05_b0" }),
+        row({ event_id: "mlb_bluejays_orioles_2026-06-05_b3", is_alternate_line: true }),
+        // SF@CHC: single-bucket _b3 only — should NOT appear in drift list
+        row({ event_id: "mlb_cubs_sanfranciscogiants_2026-06-05_b3" }),
+      ],
+      DATE
+    );
+    check(
+      "[2E.0] mixed — 2 drift events (KC@MIN + BAL@TOR)",
+      res.stats.multiBucketEvents.length === 2
+    );
+    check(
+      "[2E.0] mixed — single-bucket SF@CHC NOT in drift list",
+      !res.stats.multiBucketEvents.some(
+        (e) => e.sharpEventId === "mlb_cubs_sanfranciscogiants_2026-06-05"
+      )
+    );
+    check(
+      "[2E.0] mixed — KC@MIN drift entry shows both buckets",
+      res.stats.multiBucketEvents
+        .find((e) => e.sharpEventId === "mlb_royals_twins_2026-06-05")
+        ?.suffixes.join(",") === "_b0,_b3"
+    );
+    check(
+      "[2E.0] mixed — keptEvents = 3 (one per stripped id)",
+      res.stats.keptEvents === 3
+    );
+    check(
+      "[2E.0] mixed — skippedPlayerProp = 2",
+      res.stats.skippedPlayerProp === 2
+    );
+    check(
+      "[2E.0] mixed — skippedAlternateLine = 1",
+      res.stats.skippedAlternateLine === 1
     );
   }
 

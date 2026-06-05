@@ -339,6 +339,36 @@ async function runV2Flow(args: {
   console.log(`  skipped wrong-date:       ${ds.skippedWrongDate}`);
   console.log(`  skipped team-unresolved:  ${ds.skippedTeamUnresolved}`);
 
+  // R-17 Step 2E.1 — multi-bucket harvest diagnostics. Surfaces which
+  // buckets each game was queried against and how many cross-bucket
+  // duplicate rows were deduped. Empty `bucketsCallCapped` is the
+  // healthy state.
+  const multiBucketGames = details.discovery.perGame.filter(
+    (g) => g.bucketsObserved.length > 1
+  );
+  if (multiBucketGames.length > 0) {
+    console.log();
+    console.log(`━━━ Multi-bucket harvest (Step 2E.1) ━━━`);
+    console.log(
+      `  games with >1 bucket: ${multiBucketGames.length}/${details.discovery.perGame.length}`
+    );
+    let totalDeduped = 0;
+    let totalCapped = 0;
+    for (const g of multiBucketGames) {
+      totalDeduped += g.dedupedAcrossBuckets;
+      totalCapped += g.bucketsCallCapped.length;
+      const sfxList = g.bucketsObserved
+        .map((id) => id.match(/_b\d+$/)?.[0] ?? "?")
+        .join(",");
+      console.log(
+        `    ${g.away}@${g.home}  buckets=[${sfxList}]  fetched=${g.bucketsFetched.length}  call-capped=${g.bucketsCallCapped.length}  deduped_across_buckets=${g.dedupedAcrossBuckets}`
+      );
+    }
+    console.log(
+      `  totals: deduped_across_buckets=${totalDeduped}  call_capped_buckets=${totalCapped}`
+    );
+  }
+
   console.log();
   console.log("━━━ Per-game decisions (would-write) ━━━");
   console.log(

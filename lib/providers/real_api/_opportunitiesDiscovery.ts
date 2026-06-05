@@ -65,9 +65,20 @@ export type RawOpportunityRow = {
 export type CanonicalEvent = {
   /** Stripped event_id (no `_b\d+` suffix). Stable key per slate game. */
   sharpEventId: string;
-  /** One observed suffixed event_id (the form `/odds?event_id=` accepts).
-   *  First seen during dedupe. Step 2D will extend to multi-bucket. */
-  suffixedEventId: string;
+  /**
+   * R-17 Step 2E.1 — ALL observed `_b\d+` suffixed event_ids for this
+   * game, sorted alphabetically. Today's audit (2026-06-05) found
+   * SharpAPI publishes 13 of 15 MLB events across BOTH `_b0` AND `_b3`,
+   * each carrying a different subset of books in `/odds`. Multi-bucket
+   * harvest in `SharpAPIOddsProvider.getGameLinesV2` calls /odds for
+   * EVERY entry in this list and merges with a stable dedupe key so
+   * book coverage isn't dependent on which single bucket the dedupe
+   * step picked.
+   *
+   * Pre-2E.1 this field was `suffixedEventId: string` (singular). The
+   * rename is breaking on purpose — multi-suffix is the new contract.
+   */
+  suffixedEventIds: string[];
   /** Date suffix parsed from sharpEventId (YYYY-MM-DD). */
   dateSuffix: string;
   home: MlbTeamAbbrev;
@@ -181,17 +192,22 @@ export function buildDiscoveryFromOpportunitiesRows(
   };
 
   for (const row of rows) {
+    // ── Stage 1: filters that must pass before suffix tracking ──
+    // The suffix tracker (multi-bucket detector) needs league + event_id
+    // + slate-date filtering to apply BEFORE it touches the row, so
+    // cross-sport / cross-slate rows can't poison the detector with
+    // unrelated buckets. R-17 Step 2E.0 (2026-06-05) — moved suffix
+    // tracking to BEFORE the player-prop / alt-line filters because
+    // those flags are row-level annotations, not bucket identifiers:
+    // SharpAPI publishes both `_b0` AND `_b3` for many events, but most
+    // of their /opportunities/ev rows carry is_player_prop=true or
+    // is_alternate_line=true. The old order tracked suffix only on
+    // surviving rows → detector falsely reported zero drift on slates
+    // that DID have multiple buckets. The new order tracks the bucket
+    // identity from any prop/alt row too so drift surfaces correctly.
     const leagueTag = asStringOrNull(row.league)?.toLowerCase();
     if (leagueTag !== null && leagueTag !== undefined && leagueTag !== "mlb") {
       stats.skippedNonMlb++;
-      continue;
-    }
-    if (row.is_player_prop === true) {
-      stats.skippedPlayerProp++;
-      continue;
-    }
-    if (row.is_alternate_line === true) {
-      stats.skippedAlternateLine++;
       continue;
     }
     const rawEventId = asStringOrNull(row.event_id);
@@ -209,9 +225,14 @@ export function buildDiscoveryFromOpportunitiesRows(
       stats.skippedWrongDate++;
       continue;
     }
-    // R-17 Step 2D — record this row's suffix against its stripped id
-    // BEFORE the dedupe-skip so the multi-bucket detector sees every
-    // observed bucket variant, not just the first one that won dedupe.
+
+    // ── Stage 2: suffix tracking for the multi-bucket detector ──
+    // Runs on every row that belongs to the right league + slate, even
+    // alt-line / player-prop rows. The detector's job is to see which
+    // buckets SharpAPI publishes per event — orthogonal to which rows
+    // we'd actually harvest. Step 2E.1 (multi-bucket /odds harvest)
+    // consumes the same `suffixesByStrippedId` map to populate the
+    // canonical event's full suffix list.
     const suffixMatch = rawEventId.match(/_b\d+$/);
     const suffix = suffixMatch ? suffixMatch[0] : "";
     let suffixSet = suffixesByStrippedId.get(strippedId);
@@ -220,6 +241,20 @@ export function buildDiscoveryFromOpportunitiesRows(
       suffixesByStrippedId.set(strippedId, suffixSet);
     }
     suffixSet.add(suffix);
+
+    // ── Stage 3: row-level harvest filters ──
+    // These flags don't change the event's bucket identity — they just
+    // mark this PARTICULAR row as not-for-V2-harvest. Drop the row but
+    // keep its bucket in the suffix set above.
+    if (row.is_player_prop === true) {
+      stats.skippedPlayerProp++;
+      continue;
+    }
+    if (row.is_alternate_line === true) {
+      stats.skippedAlternateLine++;
+      continue;
+    }
+
     // Dedupe: if we've already seen this event_id, count it but skip.
     if (byStrippedId.has(strippedId)) {
       stats.dedupedRows++;
@@ -233,7 +268,10 @@ export function buildDiscoveryFromOpportunitiesRows(
     }
     const ev: CanonicalEvent = {
       sharpEventId: strippedId,
-      suffixedEventId: rawEventId,
+      // Initialized with this row's suffix; the post-loop pass below
+      // supplements this list with EVERY other observed suffix (from
+      // suffixesByStrippedId) so multi-bucket /odds harvest sees them.
+      suffixedEventIds: [rawEventId],
       dateSuffix: rowDate,
       home,
       away,
@@ -242,6 +280,35 @@ export function buildDiscoveryFromOpportunitiesRows(
     byStrippedId.set(strippedId, ev);
     events.push(ev);
     stats.keptEvents++;
+  }
+
+  // ── R-17 Step 2E.1 — post-loop suffix expansion ──
+  //
+  // The build loop only assigned one `suffixedEventIds` entry per
+  // canonical event (the row that won dedupe). Multi-bucket harvest
+  // needs the FULL list, including suffixes that only appeared on rows
+  // we dropped earlier (player-prop / alt-line / later-dedupe rows).
+  // `suffixesByStrippedId` already carries that data — Step 2E.0
+  // ensured suffix tracking runs before the prop/alt filters. Walk the
+  // map here and merge each event's complete suffix set into its
+  // CanonicalEvent.suffixedEventIds, then sort for deterministic
+  // downstream behavior + test stability.
+  for (const ev of events) {
+    const suffixSet = suffixesByStrippedId.get(ev.sharpEventId);
+    if (!suffixSet) continue;
+    const seen = new Set(ev.suffixedEventIds);
+    for (const sfx of suffixSet) {
+      // Skip empty suffixes — /odds requires `_b\d+`. An empty suffix
+      // would land on the stripped id, which the SharpAPI audit
+      // confirmed returns 0 rows.
+      if (sfx === "") continue;
+      const fullId = ev.sharpEventId + sfx;
+      if (!seen.has(fullId)) {
+        ev.suffixedEventIds.push(fullId);
+        seen.add(fullId);
+      }
+    }
+    ev.suffixedEventIds.sort();
   }
 
   // R-17 Step 2D — post-loop multi-bucket detection. Any stripped
