@@ -78,37 +78,36 @@ const VERDICT_GLYPH: Record<VerdictKey, string> = {
 };
 
 /**
- * Verdict color system — v3 palette (2026-06-02 — indigo Lean).
+ * Verdict color system — v4 palette (R-16H — Lean/Watchlist swap).
  *
- * Each tier on its own hue. Lean shifted to indigo so it carries a real
- * "moderate actionable" identity without conflating with Best Angle's
- * emerald (peak actionable) or Watchlist's sky (observational):
+ * Each tier on its own hue. Per R-16H, Lean and Watchlist colors were
+ * swapped so Lean carries the more eye-catching sky tone (Lean is the
+ * common verdict users actually act on) and Watchlist carries the
+ * quieter indigo (informational, not actionable):
  *
  *   No Play     → dim gray              (off / skip)
  *   Caution     → amber + subtle glow   (warning)
- *   Watchlist   → sky                   (cool informational)
- *   Lean        → indigo (periwinkle)   (moderate actionable, common)
+ *   Watchlist   → indigo (periwinkle)   (informational, secondary)
+ *   Lean        → sky                   (moderate actionable, common, eye-catching)
  *   Best Angle  → emerald + strong glow (peak actionable, rare)
  *
  * Violet stays reserved exclusively for "selected/active" UI state and
  * never appears as a verdict tone. Indigo-300 is bluer/distinct from
- * violet-400, and Lean's indigo is applied to inline text/tints while
- * selected uses violet on the CARD CHROME (border + ring + glow) — so
- * the two visual languages live on different surfaces and don't
+ * violet-400 so the selected-state and Watchlist visual languages don't
  * compete.
  */
 const VERDICT_TEXT_COLOR: Record<VerdictKey, string> = {
   best_angle: "text-emerald-300",
-  lean: "text-indigo-300",
-  watchlist: "text-sky-300",
+  lean: "text-sky-300",
+  watchlist: "text-indigo-300",
   caution: "text-amber-300",
   no_play: "text-gray-500",
 };
 
 const VERDICT_BAND_TINT: Record<VerdictKey, string> = {
   best_angle: "from-emerald-500/[0.12] via-emerald-500/[0.04] to-transparent border-emerald-500/30",
-  lean: "from-white/[0.04] via-white/[0.015] to-transparent border-white/[0.08]",
-  watchlist: "from-sky-500/[0.10] via-sky-500/[0.03] to-transparent border-sky-500/25",
+  lean: "from-sky-500/[0.10] via-sky-500/[0.03] to-transparent border-sky-500/25",
+  watchlist: "from-white/[0.04] via-white/[0.015] to-transparent border-white/[0.08]",
   caution: "from-amber-500/[0.12] via-amber-500/[0.04] to-transparent border-amber-500/30",
   no_play: "from-gray-800/40 via-gray-800/15 to-transparent border-gray-700/40",
 };
@@ -139,11 +138,14 @@ const VERDICT_GLOW: Record<VerdictKey, string> = {
  */
 const VERDICT_PILL_TINT: Record<VerdictKey, string> = {
   best_angle: "bg-emerald-500/[0.12] border-emerald-500/35 hover:bg-emerald-500/[0.18] hover:border-emerald-400/50",
-  // Lean is its own indigo identity — clearly distinct from Best Angle's
-  // emerald AND from Watchlist's sky. Sized at a moderate saturation so
-  // it reads "actionable but not peak."
-  lean: "bg-indigo-500/[0.08] border-indigo-500/25 hover:bg-indigo-500/[0.14] hover:border-indigo-400/45",
-  watchlist: "bg-sky-500/[0.09] border-sky-500/25 hover:bg-sky-500/[0.16] hover:border-sky-400/45",
+  // R-16H: Lean wears sky (swapped from Watchlist) — the more
+  // eye-catching tone for the common "actionable" verdict. Saturation
+  // sits between Best Angle (emerald, rare/peak) and Watchlist (indigo,
+  // informational) so it reads "actionable but not peak."
+  lean: "bg-sky-500/[0.09] border-sky-500/25 hover:bg-sky-500/[0.16] hover:border-sky-400/45",
+  // R-16H: Watchlist wears indigo (swapped from Lean) — quieter,
+  // periwinkle, signals "informational, secondary attention."
+  watchlist: "bg-indigo-500/[0.08] border-indigo-500/25 hover:bg-indigo-500/[0.14] hover:border-indigo-400/45",
   caution: "bg-amber-500/[0.10] border-amber-500/30 hover:bg-amber-500/[0.16] hover:border-amber-400/45",
   no_play: "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.05] hover:border-white/[0.10]",
 };
@@ -341,6 +343,23 @@ function headlineMarketFor(game: DailyEdgeGameDto): MarketKey {
 
 // ─── Parts ─────────────────────────────────────────────────────────────
 
+/**
+ * R-16H: per-team CSS filter overrides for logos that read too dark or
+ * low-contrast against the dark UI background.
+ *
+ * SD (Padres) — ESPN's primary mark is brown-on-brown (#2F241D Padres
+ * Brown on a similar dark backdrop). The R-9 backing container helped
+ * but the asset itself is the contrast issue. `brightness(1.45)` lifts
+ * the brown toward a readable warm tone; `saturate(0.95)` keeps it
+ * looking like Padres brown rather than skewing orange.
+ *
+ * Only add teams here if their primary ESPN logo is genuinely hard to
+ * see on the dark UI. Most teams render fine and need no override.
+ */
+const LOGO_FILTER: Record<string, string> = {
+  SD: "brightness(1.45) saturate(0.95)",
+};
+
 function TeamBadge({ abbr, logo, size }: { abbr: string; logo: string | null; size: number }) {
   // The DB's `teams.logo_url` column is unreliable today (broken
   // mlbstatic.com URLs across all 30 teams). Bypass it and use ESPN as
@@ -350,6 +369,7 @@ function TeamBadge({ abbr, logo, size }: { abbr: string; logo: string | null; si
   void logo;
   const [errored, setErrored] = useState(false);
   const src = espnLogoUrl(abbr);
+  const filter = LOGO_FILTER[abbr];
 
   if (errored) {
     // Brighter, intentional-looking disc so it doesn't read as a broken
@@ -382,7 +402,13 @@ function TeamBadge({ abbr, logo, size }: { abbr: string; logo: string | null; si
         width={Math.max(1, size - 4)}
         height={Math.max(1, size - 4)}
         className="rounded-full"
-        style={{ width: Math.max(1, size - 4), height: Math.max(1, size - 4), objectFit: "contain" }}
+        style={{
+          width: Math.max(1, size - 4),
+          height: Math.max(1, size - 4),
+          objectFit: "contain",
+          // R-16H: per-team CSS filter for dark/low-contrast assets.
+          ...(filter !== undefined ? { filter } : {}),
+        }}
         onError={() => setErrored(true)}
       />
     </span>
@@ -603,11 +629,11 @@ const PLAY_GRADE_EXPLANATION: Record<VerdictKey, string> = {
 const PLAY_GRADE_TINT: Record<VerdictKey, string> = {
   no_play: "bg-gray-600/80",
   caution: "bg-amber-400/85",
-  watchlist: "bg-sky-400/85",
-  // Lean cell is indigo so the bar's highlighted position visibly
-  // belongs to a different hue than Best Angle's emerald — even though
-  // they're adjacent tiers on the ladder.
-  lean: "bg-indigo-400/80",
+  // R-16H: Watchlist now wears indigo (swapped from Lean).
+  watchlist: "bg-indigo-400/80",
+  // R-16H: Lean now wears sky (swapped from Watchlist) — the more
+  // eye-catching tone for the common "actionable" tier on the meter.
+  lean: "bg-sky-400/85",
   best_angle: "bg-emerald-400/95",
 };
 
@@ -934,8 +960,8 @@ function HowThisWorks() {
           <p className="mt-3 font-bold text-gray-100 mb-1">Signals</p>
           <ul className="space-y-0.5 list-disc list-inside text-[11.5px]">
             <li><span className="text-emerald-300 drop-shadow-[0_0_4px_rgba(110,231,183,0.45)]">★ Best Angle</span> — strongest read</li>
-            <li><span className="text-indigo-300">↗ Lean</span> — moderate read</li>
-            <li><span className="text-sky-300">◐ Watchlist</span> — interesting, not clean</li>
+            <li><span className="text-sky-300">↗ Lean</span> — moderate read</li>
+            <li><span className="text-indigo-300">◐ Watchlist</span> — interesting, not clean</li>
             <li><span className="text-amber-300">⚠ Caution</span> — signals conflict</li>
             <li><span className="text-gray-500">○ No Play</span> — skip</li>
           </ul>
@@ -1751,7 +1777,19 @@ function MarketNotes({
                       />
                     </div>
                   ) : (
-                    <p className="text-[11.5px] tabular-nums text-gray-300">
+                    // R-16H: "Projected 1st-inning runs" is the model's
+                    // headline NRFI/YRFI driver — render with prominence
+                    // (bigger, bolder, higher contrast) so it doesn't
+                    // disappear among the smaller key-stat values. All
+                    // other single-value key stats keep their quieter
+                    // baseline treatment.
+                    <p
+                      className={
+                        s.label === "Projected 1st-inning runs"
+                          ? "text-[15px] tabular-nums font-extrabold text-gray-100 leading-tight"
+                          : "text-[11.5px] tabular-nums text-gray-300"
+                      }
+                    >
                       {s.homeValue ?? s.awayValue ?? "—"}
                     </p>
                   )}
@@ -1813,24 +1851,24 @@ const CARD_TREATMENT: Record<VerdictKey, {
     ring: "border-emerald-500/25 hover:border-emerald-400/45",
     headlineMarketBg: "bg-emerald-500/[0.07] border-emerald-500/25",
   },
-  // Lean → INDIGO (v3 palette). Own hue identity, distinct from
-  // emerald (Best Angle) AND violet (selected). Subtle saturation —
-  // Best Angle outshines via glow + brighter pill tint + ★ glyph.
+  // R-16H: Lean → SKY (swapped from Watchlist). The more eye-catching
+  // tone for the common "actionable" verdict, distinct from emerald
+  // (Best Angle) and violet (selected). Best Angle still outshines via
+  // glow + brighter pill tint + ★ glyph.
   // NOTE: the top-edge accent isn't applied to cards anymore
   // (team-color gradient replaced it), so topAccent here is dead —
   // kept for type completeness.
   lean: {
-    topAccent: "bg-indigo-400/40",
-    ring: "border-indigo-500/15 hover:border-indigo-400/35",
-    headlineMarketBg: "bg-indigo-500/[0.05] border-indigo-500/20",
-  },
-  // Watchlist → SKY (repurposed from Lean). Cool blue informational tone
-  // applied only to the smaller subset of games that actually have a
-  // Watchlist somewhere.
-  watchlist: {
     topAccent: "bg-sky-400/65",
     ring: "border-sky-500/20 hover:border-sky-400/40",
     headlineMarketBg: "bg-sky-500/[0.06] border-sky-500/25",
+  },
+  // R-16H: Watchlist → INDIGO (swapped from Lean). Quieter periwinkle
+  // tone for the informational/secondary subset of games.
+  watchlist: {
+    topAccent: "bg-indigo-400/40",
+    ring: "border-indigo-500/15 hover:border-indigo-400/35",
+    headlineMarketBg: "bg-indigo-500/[0.05] border-indigo-500/20",
   },
   caution: {
     topAccent: "bg-amber-400/70",
@@ -1926,8 +1964,17 @@ function SlateCard({
 
       <div className="p-5">
         {/* Team row + verdict + time. Cleaner: logos and abbrs only, no
-            Away/Home micro-labels. The order conveys it. */}
-        <div className="flex items-center justify-between gap-3 mb-3.5">
+            Away/Home micro-labels. The order conveys it.
+
+            R-16H: previously the row could visually crowd on narrow
+            viewports — fixed-size TeamBadges + abbreviation spans on
+            the left + VerdictChip / time / lock on the right couldn't
+            shrink past their minimums and ended up touching or
+            overlapping. `flex-wrap` lets the right group drop to its
+            own line when horizontal room runs out; `gap-y-2` gives
+            vertical breathing room when wrapping happens. Desktop
+            layout is unchanged when there's room to fit on one line. */}
+        <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-2 mb-3.5">
           <div className="flex items-center gap-2.5 min-w-0">
             <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={36} />
             <span className="text-[16px] font-bold text-gray-100 tabular-nums" style={{ letterSpacing: "-0.01em" }}>

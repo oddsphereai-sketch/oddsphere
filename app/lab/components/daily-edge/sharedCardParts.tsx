@@ -180,8 +180,11 @@ const VERDICT_GLYPH: Record<Verdict, string> = {
 
 const VERDICT_EYEBROW_COLOR: Record<Verdict, string> = {
   best_angle: "text-emerald-300",
+  // R-16H: Lean keeps sky here (already matched the shell palette);
+  // Watchlist moved from gray-500 → indigo-300 so the card eyebrows
+  // stay consistent with the shell's swapped palette.
   lean: "text-sky-300",
-  watchlist: "text-gray-500",
+  watchlist: "text-indigo-300",
   caution: "text-amber-300",
   no_play: "text-gray-500",
 };
@@ -272,6 +275,17 @@ export function FeaturedMatchupHeader({
   );
 }
 
+/**
+ * R-16H: per-team CSS filter overrides for logos that read too dark or
+ * low-contrast against the dark UI background. Mirrors the same map in
+ * DailyEdgeShell.tsx — keep both in sync if teams are added/removed.
+ * SD (Padres) — primary mark is brown-on-brown; brightness lift +
+ * slight desaturation makes it legible without skewing orange.
+ */
+const LOGO_FILTER: Record<string, string> = {
+  SD: "brightness(1.45) saturate(0.95)",
+};
+
 function FeaturedTeamSide({
   team,
   logo,
@@ -285,6 +299,7 @@ function FeaturedTeamSide({
 }) {
   const alignClass =
     align === "left" ? "items-start text-left" : "items-end text-right";
+  const filter = LOGO_FILTER[team];
   return (
     <div className={`flex-1 flex flex-col ${alignClass} gap-1 min-w-0`}>
       <div
@@ -300,6 +315,7 @@ function FeaturedTeamSide({
             aria-hidden="true"
             loading="lazy"
             className="w-12 h-12 rounded-sm object-contain shrink-0"
+            style={filter !== undefined ? { filter } : undefined}
             onError={(e) => {
               (e.currentTarget as HTMLImageElement).style.display = "none";
             }}
@@ -357,6 +373,7 @@ function CompactTeamBadge({
       </span>
     );
   }
+  const filter = LOGO_FILTER[abbreviation];
   return (
     <span className="inline-flex items-center gap-1.5">
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -366,6 +383,7 @@ function CompactTeamBadge({
         aria-hidden="true"
         loading="lazy"
         className="w-7 h-7 rounded-sm object-contain"
+        style={filter !== undefined ? { filter } : undefined}
         onError={(e) => {
           (e.currentTarget as HTMLImageElement).style.display = "none";
         }}
@@ -412,15 +430,24 @@ function getTileBorder(status: SharpStatus): string {
 // Phase 4.2.C.2 — accept null pick for held FI markets. Held returns the
 // neutral gray treatment; PredictionTile's isNoPick check overrides the
 // pick display to "—" anyway, but the prop type must allow null.
+//
+// R-16H: explicit "Toss-Up" case so a model-emitted Toss-Up pick reads
+// visually distinct from a held/null pick (both used to share the same
+// gray treatment, making toss-ups look like "no data"). Toss-Up gets
+// a slightly brighter neutral with no glow — clearly "the model called
+// it neutral" rather than "no call was made."
 function getNrfiPickColor(pick: string | null): string {
   if (pick === "NRFI") return "text-emerald-400";
   if (pick === "YRFI") return "text-violet-400";
+  if (pick === "Toss-Up") return "text-slate-300";
   return "text-gray-200";
 }
 
 function getNrfiPickGlow(pick: string | null): string {
   if (pick === "NRFI") return "drop-shadow-[0_0_8px_rgba(52,211,153,0.45)]";
   if (pick === "YRFI") return "drop-shadow-[0_0_8px_rgba(167,139,250,0.45)]";
+  // Toss-Up intentionally has no glow — it's a "neutral call", not a
+  // confident one. Glow is reserved for directional picks.
   return "";
 }
 
