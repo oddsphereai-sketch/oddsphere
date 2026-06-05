@@ -65,6 +65,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { supabase } from "../../lib/db/supabase";
 import { BallDontLieSlateProvider } from "../../lib/providers/real_api/BallDontLieSlateProvider";
 import { fetchMlbStatsScheduleRaw } from "../../lib/providers/real_api/_mlbStatsApiClient";
+import type { Sport } from "../../lib/types/domain/Sport";
 import {
   type CandidateDbGame,
   type ExistingStarter,
@@ -258,51 +259,73 @@ async function confirmApply(plans: PlannedGameWrite[]): Promise<boolean> {
   }
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────
+// ─── Extracted cycle helper (R-17 Step 2) ───────────────────────────
+//
+// `runStarterRefreshCycle` lifts the body of main() so the automation
+// orchestrator can invoke it in-process. Behaviour for the CLI path is
+// unchanged — main() just builds args from argv, supplies the
+// interactive `confirmApply`, then calls this helper.
+//
+// The helper never calls process.exit; it returns a structured
+// `RunStarterRefreshResult` so the orchestrator can aggregate per-step
+// status. Argv validation (--write rejection, --limit-required-in-apply,
+// gate misconfig) stays in main() — by the time the helper runs, the
+// caller has committed to a (writeMode, limit) decision.
 
-async function main() {
-  // --write is the wrong flag for this operator; clear error rather than
-  // silently dry-running.
-  if (process.argv.includes("--write")) {
-    console.error(
-      "✗ --write is not supported by this script. Use --apply (with STARTER_DB_WRITES_ENABLED=true)."
-    );
-    process.exit(1);
-  }
+export type RunStarterRefreshArgs = {
+  sport: Sport;
+  date: string;
+  writeMode: boolean;
+  /**
+   * Counts GAMES (each game has up to 2 sides). Required in writeMode
+   * (caller enforces). For the orchestrator path, the caller passes the
+   * slate size so the full slate's starters can refresh.
+   */
+  limit?: number;
+  /**
+   * Called before any UPDATE. Return false to abort writes. When omitted
+   * AND writeMode=true, the helper auto-confirms — the caller is expected
+   * to have already obtained operator confirmation (e.g. orchestrator's
+   * top-level y/N).
+   */
+  confirm?: (plans: PlannedGameWrite[]) => Promise<boolean>;
+  /** Logger; defaults to console.log. */
+  log?: (msg: string) => void;
+};
 
-  const gate = resolveApplyGate(process.argv);
-  refuseApplyMisconfig(gate.applyRequested, gate.envEnabled);
-  const writeMode = gate.canApply;
+export type RunStarterRefreshStatus =
+  | "dry_run"
+  | "wrote"
+  | "no_changes"
+  | "cancelled"
+  | "failed"
+  | "empty_slate";
 
-  const date = readStringFlag(process.argv, "--date") ?? todayUTC();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    console.error(`✗ invalid --date "${date}". Expected YYYY-MM-DD.`);
-    process.exit(1);
-  }
+export type RunStarterRefreshResult = {
+  status: RunStarterRefreshStatus;
+  games_in_slate: number;
+  planned_writes: number;
+  games_updated: number;
+  sides_written: number;
+  errors: number;
+  unresolved: number;
+  unmatched_mlb_games: number;
+  message?: string;
+};
 
-  // --limit is REQUIRED in apply mode to bound blast radius. Limit counts
-  // GAMES (each game has up to 2 sides to write). Dry-run accepts an
-  // optional --limit for parity / preview.
-  const limit = readNumberFlag(process.argv, "--limit");
-  if (writeMode) {
-    if (limit === undefined) {
-      console.error(
-        "✗ --limit is required when --apply is set. Pass --limit 1 for a single-game smoke."
-      );
-      process.exit(1);
-    }
-    if (limit <= 0) {
-      console.error(`✗ --limit must be >= 1 in apply mode (got ${limit}).`);
-      process.exit(1);
-    }
-  }
+export async function runStarterRefreshCycle(
+  args: RunStarterRefreshArgs
+): Promise<RunStarterRefreshResult> {
+  const { sport, date, writeMode } = args;
+  const limit = args.limit;
+  const log = args.log ?? ((m: string) => console.log(m));
 
-  console.log(
-    `[refresh-starters] mode=${writeMode ? "APPLY" : "DRY-RUN"} sport=mlb date=${date}` +
+  log(
+    `[refresh-starters] mode=${writeMode ? "APPLY" : "DRY-RUN"} sport=${sport} date=${date}` +
       (limit !== undefined ? ` limit=${limit}` : "")
   );
-  if (!writeMode) console.log(`             DRY RUN — NO DB WRITES`);
-  console.log();
+  if (!writeMode) log(`             DRY RUN — NO DB WRITES`);
+  log("");
 
   // 1. Load DB games for the slate
   const { data: dbGamesRaw, error: gErr } = await supabase
@@ -310,18 +333,36 @@ async function main() {
     .select(
       "id, external_id, game_date, home_team_id, away_team_id, home_pitcher_id, away_pitcher_id"
     )
-    .eq("sport", "mlb")
+    .eq("sport", sport)
     .eq("slate_date", date)
     .order("game_date");
   if (gErr !== null) {
-    console.error(`✗ games load failed: ${gErr.message}`);
-    process.exit(1);
+    return {
+      status: "failed",
+      games_in_slate: 0,
+      planned_writes: 0,
+      games_updated: 0,
+      sides_written: 0,
+      errors: 1,
+      unresolved: 0,
+      unmatched_mlb_games: 0,
+      message: `games load failed: ${gErr.message}`,
+    };
   }
   const dbGames = (dbGamesRaw ?? []) as DbGame[];
-  console.log(`Loaded ${dbGames.length} DB game(s) for ${date}.`);
+  log(`Loaded ${dbGames.length} DB game(s) for ${date}.`);
   if (dbGames.length === 0) {
-    console.log("Nothing to do — slate is empty. Exiting.");
-    return;
+    log("Nothing to do — slate is empty.");
+    return {
+      status: "empty_slate",
+      games_in_slate: 0,
+      planned_writes: 0,
+      games_updated: 0,
+      sides_written: 0,
+      errors: 0,
+      unresolved: 0,
+      unmatched_mlb_games: 0,
+    };
   }
 
   // 2. Load involved teams (for abbreviation matching)
@@ -339,36 +380,34 @@ async function main() {
   for (const t of dbTeams) abbrByDbId.set(t.id, t.abbreviation);
 
   // 3. MLB Stats /schedule
-  console.log(`Fetching MLB Stats /schedule…`);
+  log(`Fetching MLB Stats /schedule…`);
   const rawSchedule = await fetchMlbStatsScheduleRaw(date);
   if (rawSchedule === null) {
-    console.log(
+    log(
       "  WARNING: MLB Stats /schedule fetch returned null. Proceeding with BDL-only fallback."
     );
   }
   const scheduleGames = parseMlbStatsSchedule(rawSchedule);
-  console.log(`  parsed ${scheduleGames.length} schedule game(s).`);
+  log(`  parsed ${scheduleGames.length} schedule game(s).`);
 
   // 4. BDL slate (uses existing provider — /games + /lineups fallback baked in)
   const bdlApiKey = process.env.BALLDONTLIE_API_KEY ?? "";
   let bdlSlate: BdlSlateRecord[] = [];
   if (bdlApiKey === "") {
-    console.log(
-      "  WARNING: BALLDONTLIE_API_KEY not set — skipping BDL fallback."
-    );
+    log("  WARNING: BALLDONTLIE_API_KEY not set — skipping BDL fallback.");
   } else {
     try {
       const provider = new BallDontLieSlateProvider(bdlApiKey);
-      const raw = await provider.getGames(date, "mlb");
+      const raw = await provider.getGames(date, sport);
       bdlSlate = raw.map((r) => ({
         external_id: r.external_id,
         home_pitcher_external_id: r.home_pitcher_external_id,
         away_pitcher_external_id: r.away_pitcher_external_id,
       }));
-      console.log(`  BDL slate fetched: ${bdlSlate.length} game(s).`);
+      log(`  BDL slate fetched: ${bdlSlate.length} game(s).`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.log(`  WARNING: BDL slate fetch failed: ${msg}`);
+      log(`  WARNING: BDL slate fetch failed: ${msg}`);
     }
   }
   const bdlByExternalId = new Map<number, BdlSlateRecord>();
@@ -590,16 +629,16 @@ async function main() {
   }
 
   // 11. Per-game plan output
-  console.log();
-  console.log("━━━ Per-game plan ━━━");
+  log("");
+  log("━━━ Per-game plan ━━━");
   for (const r of rows) {
     const teams = `${r.awayTeamAbbr ?? "?"} @ ${r.homeTeamAbbr ?? "?"}`;
-    console.log(
+    log(
       `game id=${r.dbGame.id} ext=${r.dbGame.external_id}  ${teams.padEnd(15)}  ` +
         `match: mlb=${r.mlbMatched ? "Y" : "N"} bdl=${r.bdlMatched ? "Y" : "N"}`
     );
-    console.log(`  ${fmtSide(r.home)}`);
-    console.log(`  ${fmtSide(r.away)}`);
+    log(`  ${fmtSide(r.home)}`);
+    log(`  ${fmtSide(r.away)}`);
   }
 
   // 12. Summary
@@ -633,35 +672,35 @@ async function main() {
     if (r.away.resolution === "unresolved") unresolved++;
   }
 
-  console.log();
-  console.log("━━━ Summary ━━━");
-  console.log(`  Total games:                                ${rows.length}`);
-  console.log(`  Games with BOTH starters set BEFORE:        ${bothBefore}`);
-  console.log(`  Games with BOTH starters set AFTER (plan):  ${bothAfter}`);
-  console.log(`  Proposed home writes:                       ${proposedHome}`);
-  console.log(`  Proposed away writes:                       ${proposedAway}`);
-  console.log(`  Unresolved candidates:                      ${unresolved}`);
-  console.log(`  Scratch detections:                         ${scratches}`);
-  console.log();
-  console.log("  Source breakdown (proposed writes):");
+  log("");
+  log("━━━ Summary ━━━");
+  log(`  Total games:                                ${rows.length}`);
+  log(`  Games with BOTH starters set BEFORE:        ${bothBefore}`);
+  log(`  Games with BOTH starters set AFTER (plan):  ${bothAfter}`);
+  log(`  Proposed home writes:                       ${proposedHome}`);
+  log(`  Proposed away writes:                       ${proposedAway}`);
+  log(`  Unresolved candidates:                      ${unresolved}`);
+  log(`  Scratch detections:                         ${scratches}`);
+  log("");
+  log("  Source breakdown (proposed writes):");
   const entries = Object.entries(sourceBreakdown).sort((a, b) => b[1] - a[1]);
   if (entries.length === 0) {
-    console.log("    (no writes proposed)");
+    log("    (no writes proposed)");
   } else {
     for (const [src, n] of entries) {
-      console.log(`    ${src.padEnd(30)} ${n}`);
+      log(`    ${src.padEnd(30)} ${n}`);
     }
   }
   if (mlbUnmatched.length > 0) {
-    console.log();
-    console.log(`  MLB Stats games not matched to a DB game: ${mlbUnmatched.length}`);
+    log("");
+    log(`  MLB Stats games not matched to a DB game: ${mlbUnmatched.length}`);
     for (const u of mlbUnmatched) {
-      console.log(
+      log(
         `    gamePk=${u.gamePk}  ${u.away ?? "?"} @ ${u.home ?? "?"}  status=${u.status}`
       );
     }
   }
-  console.log();
+  log("");
 
   // 13. Build planned-game-writes list. A game appears here when at least
   // one side decided to write. Sides whose decision is no_change are
@@ -683,31 +722,60 @@ async function main() {
       : allPlannedGames.slice(0, Math.max(0, limit));
   const heldByLimit = allPlannedGames.length - plannedGames.length;
   if (heldByLimit > 0) {
-    console.log(
+    log(
       `  Games held by --limit ${limit}: ${heldByLimit} of ${allPlannedGames.length}`
     );
-    console.log();
+    log("");
   }
 
   // 14. Dry-run exit OR apply path.
   if (!writeMode) {
-    console.log("  DRY RUN — NO DB WRITES PERFORMED.");
-    return;
+    log("  DRY RUN — NO DB WRITES PERFORMED.");
+    return {
+      status: "dry_run",
+      games_in_slate: rows.length,
+      planned_writes: allPlannedGames.length,
+      games_updated: 0,
+      sides_written: 0,
+      errors: 0,
+      unresolved,
+      unmatched_mlb_games: mlbUnmatched.length,
+    };
   }
 
   if (plannedGames.length === 0) {
-    console.log("  Nothing to write (post-limit). Exiting without changes.");
-    return;
+    log("  Nothing to write (post-limit). Exiting without changes.");
+    return {
+      status: "no_changes",
+      games_in_slate: rows.length,
+      planned_writes: 0,
+      games_updated: 0,
+      sides_written: 0,
+      errors: 0,
+      unresolved,
+      unmatched_mlb_games: mlbUnmatched.length,
+    };
   }
 
-  const confirmed = await confirmApply(plannedGames);
+  const confirmed = args.confirm
+    ? await args.confirm(plannedGames)
+    : true;
   if (!confirmed) {
-    console.log("Cancelled by operator. No writes performed.");
-    return;
+    log("Cancelled by operator. No writes performed.");
+    return {
+      status: "cancelled",
+      games_in_slate: rows.length,
+      planned_writes: plannedGames.length,
+      games_updated: 0,
+      sides_written: 0,
+      errors: 0,
+      unresolved,
+      unmatched_mlb_games: mlbUnmatched.length,
+    };
   }
 
-  console.log();
-  console.log("Writing UPDATE(s)…");
+  log("");
+  log("Writing UPDATE(s)…");
   let gamesWrote = 0;
   let gamesErrored = 0;
   let sidesWrote = 0;
@@ -730,7 +798,7 @@ async function main() {
       (p.home !== null ? 1 : 0) + (p.away !== null ? 1 : 0);
     if (error !== null) {
       gamesErrored++;
-      console.error(
+      log(
         `  ✗ UPDATE failed for game id=${p.dbGameId} ext=${p.externalId}: ${error.message}`
       );
       continue;
@@ -745,19 +813,89 @@ async function main() {
       p.away !== null && p.away.decision.kind === "write"
         ? ` away→pid${p.away.decision.value.playerId}`
         : "";
-    console.log(
+    log(
       `  ✓ UPDATEd game id=${p.dbGameId} ext=${p.externalId}${homePart}${awayPart}`
     );
   }
 
-  console.log();
-  console.log("━━━ Apply complete ━━━");
-  console.log(`  Games updated:  ${gamesWrote}`);
-  console.log(`  Sides written:  ${sidesWrote}`);
-  console.log(`  Games errored:  ${gamesErrored}`);
+  log("");
+  log("━━━ Apply complete ━━━");
+  log(`  Games updated:  ${gamesWrote}`);
+  log(`  Sides written:  ${sidesWrote}`);
+  log(`  Games errored:  ${gamesErrored}`);
+
+  return {
+    status: gamesErrored > 0 && gamesWrote === 0 ? "failed" : "wrote",
+    games_in_slate: rows.length,
+    planned_writes: plannedGames.length,
+    games_updated: gamesWrote,
+    sides_written: sidesWrote,
+    errors: gamesErrored,
+    unresolved,
+    unmatched_mlb_games: mlbUnmatched.length,
+  };
 }
 
-main().catch((err) => {
-  console.error("Fatal:", err);
-  process.exit(1);
-});
+// ─── Main (CLI shim) ─────────────────────────────────────────────────
+
+async function main() {
+  // --write is the wrong flag for this operator; clear error rather than
+  // silently dry-running.
+  if (process.argv.includes("--write")) {
+    console.error(
+      "✗ --write is not supported by this script. Use --apply (with STARTER_DB_WRITES_ENABLED=true)."
+    );
+    process.exit(1);
+  }
+
+  const gate = resolveApplyGate(process.argv);
+  refuseApplyMisconfig(gate.applyRequested, gate.envEnabled);
+  const writeMode = gate.canApply;
+
+  const date = readStringFlag(process.argv, "--date") ?? todayUTC();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    console.error(`✗ invalid --date "${date}". Expected YYYY-MM-DD.`);
+    process.exit(1);
+  }
+
+  // --limit is REQUIRED in apply mode to bound blast radius. Limit counts
+  // GAMES (each game has up to 2 sides to write). Dry-run accepts an
+  // optional --limit for parity / preview.
+  const limit = readNumberFlag(process.argv, "--limit");
+  if (writeMode) {
+    if (limit === undefined) {
+      console.error(
+        "✗ --limit is required when --apply is set. Pass --limit 1 for a single-game smoke."
+      );
+      process.exit(1);
+    }
+    if (limit <= 0) {
+      console.error(`✗ --limit must be >= 1 in apply mode (got ${limit}).`);
+      process.exit(1);
+    }
+  }
+
+  const result = await runStarterRefreshCycle({
+    sport: "mlb",
+    date,
+    writeMode,
+    limit,
+    confirm: confirmApply,
+  });
+
+  if (result.status === "failed") {
+    if (result.message) console.error(`✗ ${result.message}`);
+    process.exit(1);
+  }
+}
+
+// Only invoke main() when this file is run directly (not when the
+// orchestrator imports `runStarterRefreshCycle`). tsx + the project's
+// CJS compile mode lets us use `require.main === module` here even
+// though the source uses ESM `import` syntax.
+if (require.main === module) {
+  main().catch((err) => {
+    console.error("Fatal:", err);
+    process.exit(1);
+  });
+}

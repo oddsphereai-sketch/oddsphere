@@ -75,6 +75,7 @@ import {
   readStringFlag,
   todayUTC,
 } from "./_cliCommon";
+import type { Sport } from "../../lib/types/domain/Sport";
 
 // ─── Internal shapes ─────────────────────────────────────────────────
 
@@ -152,62 +153,82 @@ async function confirmApply(rows: PlannedPlayerInsert[]): Promise<boolean> {
   }
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────
+// ─── Extracted cycle helper (R-17 Step 2) ───────────────────────────
+//
+// `runMissingPitcherCycle` lifts the body of main() so the automation
+// orchestrator can invoke it in-process. CLI behaviour is unchanged —
+// main() parses argv, supplies the interactive `confirmApply`, then
+// calls this helper.
+//
+// The helper never calls process.exit; it returns a structured
+// `RunMissingPitcherResult`. Argv validation stays in main().
 
-async function main() {
-  // --write is the wrong flag for this operator; clear error rather than
-  // silently dry-running.
-  if (process.argv.includes("--write")) {
-    console.error(
-      "✗ --write is not supported by this script. Use --apply (with PLAYER_INGEST_DB_WRITES_ENABLED=true)."
-    );
-    process.exit(1);
-  }
+export type RunMissingPitcherArgs = {
+  sport: Sport;
+  date: string;
+  writeMode: boolean;
+  /** Required in writeMode (caller enforces). Caps INSERTs. */
+  limit?: number;
+  /**
+   * Called before INSERTs. Return false to abort. When omitted AND
+   * writeMode=true, the helper auto-confirms.
+   */
+  confirm?: (rows: PlannedPlayerInsert[]) => Promise<boolean>;
+  /** Logger; defaults to console.log. */
+  log?: (msg: string) => void;
+};
 
-  const gate = resolveApplyGate(process.argv);
-  refuseApplyMisconfig(gate.applyRequested, gate.envEnabled);
-  const writeMode = gate.canApply;
+export type RunMissingPitcherStatus =
+  | "dry_run"
+  | "wrote"
+  | "no_changes"
+  | "cancelled"
+  | "failed";
 
-  const date = readStringFlag(process.argv, "--date") ?? todayUTC();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    console.error(`✗ invalid --date "${date}". Expected YYYY-MM-DD.`);
-    process.exit(1);
-  }
+export type RunMissingPitcherResult = {
+  status: RunMissingPitcherStatus;
+  unique_candidates: number;
+  planned_inserts_total: number;
+  planned_inserts_after_limit: number;
+  skipped_existing: number;
+  skipped_missing_fields: number;
+  rows_inserted: number;
+  errors: number;
+  message?: string;
+};
 
-  // --limit is REQUIRED in apply mode to prevent accidental large
-  // inserts. Dry-run accepts an optional --limit for parity / preview.
-  const limit = readNumberFlag(process.argv, "--limit");
-  if (writeMode) {
-    if (limit === undefined) {
-      console.error(
-        "✗ --limit is required when --apply is set. Pass --limit 1 for a single-row smoke."
-      );
-      process.exit(1);
-    }
-    if (limit <= 0) {
-      console.error(`✗ --limit must be >= 1 in apply mode (got ${limit}).`);
-      process.exit(1);
-    }
-  }
+export async function runMissingPitcherCycle(
+  args: RunMissingPitcherArgs
+): Promise<RunMissingPitcherResult> {
+  const { sport, date, writeMode } = args;
+  const limit = args.limit;
+  const log = args.log ?? ((m: string) => console.log(m));
 
-  console.log(
-    `[ingest-missing-pitchers] mode=${writeMode ? "APPLY" : "DRY-RUN"} sport=mlb date=${date}` +
+  log(
+    `[ingest-missing-pitchers] mode=${writeMode ? "APPLY" : "DRY-RUN"} sport=${sport} date=${date}` +
       (limit !== undefined ? ` limit=${limit}` : "")
   );
-  if (!writeMode) console.log(`             DRY RUN — NO DB WRITES`);
-  console.log();
+  if (!writeMode) log(`             DRY RUN — NO DB WRITES`);
+  log("");
 
   // 1. Fetch + parse MLB Stats /schedule
-  console.log(`Fetching MLB Stats /schedule…`);
+  log(`Fetching MLB Stats /schedule…`);
   const raw = await fetchMlbStatsScheduleRaw(date);
   if (raw === null) {
-    console.error(
-      `✗ MLB Stats /schedule fetch returned null for ${date}. Aborting — without the schedule we have no candidates.`
-    );
-    process.exit(1);
+    return {
+      status: "failed",
+      unique_candidates: 0,
+      planned_inserts_total: 0,
+      planned_inserts_after_limit: 0,
+      skipped_existing: 0,
+      skipped_missing_fields: 0,
+      rows_inserted: 0,
+      errors: 1,
+      message: `MLB Stats /schedule fetch returned null for ${date}.`,
+    };
   }
   const schedule: ParsedScheduleGame[] = parseMlbStatsSchedule(raw);
-  console.log(`  parsed ${schedule.length} schedule game(s).`);
+  log(`  parsed ${schedule.length} schedule game(s).`);
 
   // 2. Collect unique candidates. Dedupe by mlb_person_id; keep the
   // first-seen (game, side) so we have a stable team-id context.
@@ -229,7 +250,7 @@ async function main() {
     }
   }
   const allCandidates = Array.from(candidatesById.values());
-  console.log(`Unique probable-starter MLB person IDs: ${allCandidates.length}`);
+  log(`Unique probable-starter MLB person IDs: ${allCandidates.length}`);
 
   // 3. Partition: which mlb_person_ids are already in players?
   const allIds = allCandidates.map((c) => c.mlbPersonId);
@@ -240,8 +261,17 @@ async function main() {
       .select("id, mlb_person_id")
       .in("mlb_person_id", allIds);
     if (error !== null) {
-      console.error(`✗ players (by mlb_person_id) lookup failed: ${error.message}`);
-      process.exit(1);
+      return {
+        status: "failed",
+        unique_candidates: allCandidates.length,
+        planned_inserts_total: 0,
+        planned_inserts_after_limit: 0,
+        skipped_existing: 0,
+        skipped_missing_fields: 0,
+        rows_inserted: 0,
+        errors: 1,
+        message: `players (by mlb_person_id) lookup failed: ${error.message}`,
+      };
     }
     for (const r of (data ?? []) as Array<{ mlb_person_id: number }>) {
       existingByMlbPersonId.add(r.mlb_person_id);
@@ -260,8 +290,17 @@ async function main() {
       .eq("provider_ids->mlb_stats->>id", String(id))
       .limit(1);
     if (error !== null) {
-      console.error(`✗ players (provider_ids fallback) for id=${id} failed: ${error.message}`);
-      process.exit(1);
+      return {
+        status: "failed",
+        unique_candidates: allCandidates.length,
+        planned_inserts_total: 0,
+        planned_inserts_after_limit: 0,
+        skipped_existing: 0,
+        skipped_missing_fields: 0,
+        rows_inserted: 0,
+        errors: 1,
+        message: `players (provider_ids fallback) for id=${id} failed: ${error.message}`,
+      };
     }
     if ((data ?? []).length > 0) existingByProviderIds.add(id);
   }
@@ -280,7 +319,7 @@ async function main() {
     const { data } = await supabase
       .from("teams")
       .select("id, abbreviation")
-      .eq("sport", "mlb")
+      .eq("sport", sport)
       .in("abbreviation", abbrsNeeded);
     for (const t of (data ?? []) as Array<{ id: number; abbreviation: string }>) {
       dbTeamIdByAbbr.set(t.abbreviation, t.id);
@@ -353,8 +392,8 @@ async function main() {
   const skippedMissing = rows.filter((r) => r.outcome.kind === "skip_missing_fields");
   const plannedHeldByLimit = allPlanned.length - plannedAfterLimit.length;
 
-  console.log();
-  console.log(
+  log("");
+  log(
     `━━━ Planned inserts (${plannedAfterLimit.length}` +
       (plannedHeldByLimit > 0
         ? ` — of ${allPlanned.length} total, ${plannedHeldByLimit} held by --limit ${limit}`
@@ -362,38 +401,38 @@ async function main() {
       `) ━━━`
   );
   if (plannedAfterLimit.length === 0 && allPlanned.length === 0) {
-    console.log("  (none — every probable starter is already in players)");
+    log("  (none — every probable starter is already in players)");
   }
   for (const r of plannedAfterLimit) {
     const i = r.outcome.insert;
-    console.log(
+    log(
       `  pid=${r.cand.mlbPersonId}  ${i.full_name.padEnd(22)} ` +
         `dob=${i.dob ?? "—"} pos=${i.position_abbr ?? "—"} ` +
         `throws=${i.throws ?? "—"} bats=${i.bats ?? "—"} ` +
         `team_id=${i.team_id ?? "null"} active=${i.active}`
     );
-    console.log(
+    log(
       `     external_id=NULL  provider_ids.mlb_stats={ id:${i.provider_ids.mlb_stats.id}, ` +
         `source:"${i.provider_ids.mlb_stats.source}", ingested_at:"${i.provider_ids.mlb_stats.ingested_at}" }`
     );
   }
 
-  console.log();
-  console.log(`━━━ Skipped — already in players (${skippedExisting.length}) ━━━`);
+  log("");
+  log(`━━━ Skipped — already in players (${skippedExisting.length}) ━━━`);
   for (const r of skippedExisting) {
     if (r.outcome.kind !== "skip_existing") continue;
-    console.log(
+    log(
       `  pid=${r.cand.mlbPersonId}  (${r.outcome.reason})` +
         `  ${r.cand.fullNameFromSchedule ?? ""}`
     );
   }
 
   if (skippedMissing.length > 0) {
-    console.log();
-    console.log(`━━━ Skipped — missing required fields (${skippedMissing.length}) ━━━`);
+    log("");
+    log(`━━━ Skipped — missing required fields (${skippedMissing.length}) ━━━`);
     for (const r of skippedMissing) {
       if (r.outcome.kind !== "skip_missing_fields") continue;
-      console.log(
+      log(
         `  pid=${r.cand.mlbPersonId}  reason=${r.outcome.reason}` +
           `  ${r.cand.fullNameFromSchedule ?? ""}`
       );
@@ -405,47 +444,73 @@ async function main() {
     (r) => r.outcome.insert.team_id !== null
   ).length;
 
-  console.log();
-  console.log("━━━ Summary ━━━");
-  console.log(`  Unique probable-starter MLB person IDs:   ${allCandidates.length}`);
-  console.log(`  Planned inserts (total, pre-limit):        ${allPlanned.length}`);
+  log("");
+  log("━━━ Summary ━━━");
+  log(`  Unique probable-starter MLB person IDs:   ${allCandidates.length}`);
+  log(`  Planned inserts (total, pre-limit):        ${allPlanned.length}`);
   if (limit !== undefined) {
-    console.log(`  Planned inserts (after --limit ${limit}):       ${plannedAfterLimit.length}`);
+    log(`  Planned inserts (after --limit ${limit}):       ${plannedAfterLimit.length}`);
   }
-  console.log(`  Skipped (already in players):              ${skippedExisting.length}`);
-  console.log(`  Skipped (missing required fields):         ${skippedMissing.length}`);
+  log(`  Skipped (already in players):              ${skippedExisting.length}`);
+  log(`  Skipped (missing required fields):         ${skippedMissing.length}`);
   if (plannedAfterLimit.length > 0) {
-    console.log(`  team_id assigned: ${teamIdAssigned} of ${plannedAfterLimit.length}`);
+    log(`  team_id assigned: ${teamIdAssigned} of ${plannedAfterLimit.length}`);
   }
-  console.log(`  MLB Stats API calls used: ` +
-    `1 (/schedule) + ${allPlanned.length + skippedMissing.length} (/people)`);
-  console.log();
+  log(
+    `  MLB Stats API calls used: ` +
+      `1 (/schedule) + ${allPlanned.length + skippedMissing.length} (/people)`
+  );
+  log("");
 
   // 9. Dry-run exit OR apply path.
   if (!writeMode) {
-    console.log("  DRY RUN — NO DB WRITES PERFORMED.");
-    if (gate.applyRequested && !gate.envEnabled) {
-      // unreachable — refuseApplyMisconfig already exited — but keeps
-      // the intent explicit if a future refactor reorders the gates.
-      console.log("  (--apply was set but env gate missing; would have refused.)");
-    }
-    return;
+    log("  DRY RUN — NO DB WRITES PERFORMED.");
+    return {
+      status: "dry_run",
+      unique_candidates: allCandidates.length,
+      planned_inserts_total: allPlanned.length,
+      planned_inserts_after_limit: plannedAfterLimit.length,
+      skipped_existing: skippedExisting.length,
+      skipped_missing_fields: skippedMissing.length,
+      rows_inserted: 0,
+      errors: 0,
+    };
   }
 
   if (plannedAfterLimit.length === 0) {
-    console.log("  Nothing to insert (post-limit). Exiting without writes.");
-    return;
+    log("  Nothing to insert (post-limit). Exiting without writes.");
+    return {
+      status: "no_changes",
+      unique_candidates: allCandidates.length,
+      planned_inserts_total: allPlanned.length,
+      planned_inserts_after_limit: 0,
+      skipped_existing: skippedExisting.length,
+      skipped_missing_fields: skippedMissing.length,
+      rows_inserted: 0,
+      errors: 0,
+    };
   }
 
   // ── APPLY: confirm + per-row INSERT ──────────────────────────────────
-  const confirmed = await confirmApply(plannedAfterLimit.map((r) => r.outcome.insert));
+  const confirmed = args.confirm
+    ? await args.confirm(plannedAfterLimit.map((r) => r.outcome.insert))
+    : true;
   if (!confirmed) {
-    console.log("Cancelled by operator. No writes performed.");
-    return;
+    log("Cancelled by operator. No writes performed.");
+    return {
+      status: "cancelled",
+      unique_candidates: allCandidates.length,
+      planned_inserts_total: allPlanned.length,
+      planned_inserts_after_limit: plannedAfterLimit.length,
+      skipped_existing: skippedExisting.length,
+      skipped_missing_fields: skippedMissing.length,
+      rows_inserted: 0,
+      errors: 0,
+    };
   }
 
-  console.log();
-  console.log("Writing INSERT(s)…");
+  log("");
+  log("Writing INSERT(s)…");
   let wrote = 0;
   let errored = 0;
   for (const r of plannedAfterLimit) {
@@ -453,22 +518,90 @@ async function main() {
     const { error } = await supabase.from("players").insert(ins);
     if (error !== null) {
       errored++;
-      console.error(
+      log(
         `  ✗ INSERT failed for pid=${ins.mlb_person_id} (${ins.full_name}): ${error.message}`
       );
       continue;
     }
     wrote++;
-    console.log(`  ✓ INSERTed pid=${ins.mlb_person_id}  ${ins.full_name}`);
+    log(`  ✓ INSERTed pid=${ins.mlb_person_id}  ${ins.full_name}`);
   }
 
-  console.log();
-  console.log(`━━━ Apply complete ━━━`);
-  console.log(`  Rows inserted: ${wrote}`);
-  console.log(`  Rows errored:  ${errored}`);
+  log("");
+  log(`━━━ Apply complete ━━━`);
+  log(`  Rows inserted: ${wrote}`);
+  log(`  Rows errored:  ${errored}`);
+
+  return {
+    status: errored > 0 && wrote === 0 ? "failed" : "wrote",
+    unique_candidates: allCandidates.length,
+    planned_inserts_total: allPlanned.length,
+    planned_inserts_after_limit: plannedAfterLimit.length,
+    skipped_existing: skippedExisting.length,
+    skipped_missing_fields: skippedMissing.length,
+    rows_inserted: wrote,
+    errors: errored,
+  };
 }
 
-main().catch((err) => {
-  console.error("Fatal:", err);
-  process.exit(1);
-});
+// ─── Main (CLI shim) ─────────────────────────────────────────────────
+
+async function main() {
+  // --write is the wrong flag for this operator; clear error rather than
+  // silently dry-running.
+  if (process.argv.includes("--write")) {
+    console.error(
+      "✗ --write is not supported by this script. Use --apply (with PLAYER_INGEST_DB_WRITES_ENABLED=true)."
+    );
+    process.exit(1);
+  }
+
+  const gate = resolveApplyGate(process.argv);
+  refuseApplyMisconfig(gate.applyRequested, gate.envEnabled);
+  const writeMode = gate.canApply;
+
+  const date = readStringFlag(process.argv, "--date") ?? todayUTC();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    console.error(`✗ invalid --date "${date}". Expected YYYY-MM-DD.`);
+    process.exit(1);
+  }
+
+  // --limit is REQUIRED in apply mode to prevent accidental large
+  // inserts. Dry-run accepts an optional --limit for parity / preview.
+  const limit = readNumberFlag(process.argv, "--limit");
+  if (writeMode) {
+    if (limit === undefined) {
+      console.error(
+        "✗ --limit is required when --apply is set. Pass --limit 1 for a single-row smoke."
+      );
+      process.exit(1);
+    }
+    if (limit <= 0) {
+      console.error(`✗ --limit must be >= 1 in apply mode (got ${limit}).`);
+      process.exit(1);
+    }
+  }
+
+  const result = await runMissingPitcherCycle({
+    sport: "mlb",
+    date,
+    writeMode,
+    limit,
+    confirm: confirmApply,
+  });
+
+  if (result.status === "failed") {
+    if (result.message) console.error(`✗ ${result.message}`);
+    process.exit(1);
+  }
+}
+
+// Only invoke main() when this file is run directly (not when the
+// orchestrator imports `runMissingPitcherCycle`). tsx + the project's
+// CJS compile mode lets us use `require.main === module` here.
+if (require.main === module) {
+  main().catch((err) => {
+    console.error("Fatal:", err);
+    process.exit(1);
+  });
+}

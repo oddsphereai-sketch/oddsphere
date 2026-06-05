@@ -322,55 +322,216 @@ function testGateProviderOkPreservesPlay() {
   check("nrfi = play", d.nrfi === "play");
 }
 
-// ─── Dry-run orchestrator: no-writes verification ────────────────────
-// The orchestrator is a script; we don't invoke it as a child process
-// here. Instead we verify the structural contract: no operator import
-// inside the orchestrator's planSteps path performs a write. (Step 2
-// will add invocation; Step 1 just plans + reports.)
+// ─── Step 2 orchestrator structural tests ────────────────────────────
+//
+// Step 2 turns the orchestrator into a controlled-apply runner. We
+// can't run it end-to-end without a live DB, but we can lock in the
+// structural contract that protects writes: four-key gate, per-step
+// env vars enumerated, deferred steps marked, fail_closed plumbing.
 
-function testOrchestratorIsObservationOnly() {
-  section("orchestrator (Step 1): observation-only by contract");
-  // Verify the orchestrator script file exists at the expected path
-  // and that it imports the read-only helpers.
+function readOrchestratorSource(): string {
   const fs = require("fs") as typeof import("fs");
-  const path = "/Users/danielmengel/Projects/oddsphere/scripts/operator/automation/run-slate-cycle.ts";
-  const content = fs.readFileSync(path, "utf8");
+  const path =
+    "/Users/danielmengel/Projects/oddsphere/scripts/operator/automation/run-slate-cycle.ts";
+  return fs.readFileSync(path, "utf8");
+}
 
-  check(
-    "orchestrator exists at expected path",
-    content.length > 0
-  );
+function testOrchestratorImportsReadOnlyHelpers() {
+  section("orchestrator (Step 2): read-only helpers wired");
+  const content = readOrchestratorSource();
+  check("orchestrator exists at expected path", content.length > 0);
   check(
     "orchestrator imports providerDateAlignment helper",
-    content.includes("from \"../../../lib/services/providerDateAlignment\"") ||
+    content.includes('from "../../../lib/services/providerDateAlignment"') ||
       content.includes("from '../../../lib/services/providerDateAlignment'")
   );
   check(
     "orchestrator imports automationGate helper",
-    content.includes("from \"../../../lib/services/automationGate\"") ||
+    content.includes('from "../../../lib/services/automationGate"') ||
       content.includes("from '../../../lib/services/automationGate'")
   );
+}
+
+function testOrchestratorTopLevelGate() {
+  section("orchestrator (Step 2): top-level AUTOMATION_ORCHESTRATOR_ENABLED gate");
+  const content = readOrchestratorSource();
   check(
-    "orchestrator does NOT import any write service",
-    !content.includes("import { linesService }") &&
-      !content.includes("import { reviewerService }") &&
-      !content.includes("LINES_DB_WRITES_ENABLED") &&
-      !content.includes("STARTER_DB_WRITES_ENABLED") &&
-      !content.includes("AUTOMODEL_DB_WRITES_ENABLED")
+    "references AUTOMATION_ORCHESTRATOR_ENABLED env var",
+    content.includes("AUTOMATION_ORCHESTRATOR_ENABLED")
   );
   check(
-    "orchestrator prints DRY RUN banner",
-    content.includes("DRY-RUN") || content.includes("DRY RUN")
+    "reads --apply flag",
+    content.includes('readBoolFlag(argv, "--apply")') ||
+      content.includes("readBoolFlag(argv, '--apply')")
   );
   check(
-    "orchestrator does NOT parse --apply as an active flag",
-    // The script may *mention* --apply in operator_path strings or
-    // future-Step-2 comments. What matters is that NO branching reads
-    // the --apply flag to enable writes in Step 1.
-    !content.includes('readBoolFlag(argv, "--apply")') &&
-      !content.includes("readBoolFlag(process.argv, \"--apply\")") &&
-      !content.includes("applyRequested") &&
-      !content.includes("writeMode")
+    "computes effectiveApply combining --apply AND top-level gate",
+    content.includes("effectiveApply") && content.includes("topLevelGateOk")
+  );
+  check(
+    "warns when --apply set without top-level gate",
+    content.includes("missing →") || content.includes("dry-run forced")
+  );
+}
+
+function testOrchestratorInteractiveConfirm() {
+  section("orchestrator (Step 2): interactive confirmation before any write");
+  const content = readOrchestratorSource();
+  check(
+    "imports readline/promises for confirm",
+    content.includes('from "node:readline/promises"')
+  );
+  check(
+    "has confirmApply helper",
+    content.includes("confirmApply") || content.includes("WRITE CONFIRMATION")
+  );
+  check(
+    "asks the y/N question before writes",
+    content.toLowerCase().includes("[y/n]")
+  );
+}
+
+function testOrchestratorPerStepGates() {
+  section("orchestrator (Step 2): per-step env vars enumerated");
+  const content = readOrchestratorSource();
+  const required = [
+    "SLATE_DB_WRITES_ENABLED",
+    "STARTER_DB_WRITES_ENABLED",
+    "PLAYER_INGEST_DB_WRITES_ENABLED",
+    "LINES_DB_WRITES_ENABLED",
+    "SHARP_SIGNALS_DB_WRITES_ENABLED",
+    "AUTOMODEL_DB_WRITES_ENABLED",
+  ];
+  for (const v of required) {
+    check(`references per-step env var ${v}`, content.includes(v));
+  }
+}
+
+function testOrchestratorImportsStepRunners() {
+  section("orchestrator (Step 2): step runners wired");
+  const content = readOrchestratorSource();
+  check(
+    "imports slateService for S1",
+    content.includes("from \"../../../lib/services/slateService\"")
+  );
+  check(
+    "imports linesService for S7 + S8",
+    content.includes("from \"../../../lib/services/linesService\"")
+  );
+  check(
+    "imports automodelService entry for M2",
+    content.includes("generatePredictionsForSlate") &&
+      content.includes("from \"../../../lib/services/automodelService\"")
+  );
+  check(
+    "imports runStarterRefreshCycle for S3 / M1",
+    content.includes("runStarterRefreshCycle") &&
+      content.includes("from \"../refresh-starters\"")
+  );
+  check(
+    "imports runMissingPitcherCycle for S4",
+    content.includes("runMissingPitcherCycle") &&
+      content.includes("from \"../ingest-missing-pitchers\"")
+  );
+}
+
+function testOrchestratorDeferredSteps() {
+  section("orchestrator (Step 2): S2 / S5 / S6 marked not_invoked_step2_v1");
+  const content = readOrchestratorSource();
+  check("not_invoked_step2_v1 mode exists", content.includes("not_invoked_step2_v1"));
+  check(
+    "S2 teams refresh deferred",
+    content.includes("S2. Teams refresh") &&
+      content.includes("not_invoked_step2_v1")
+  );
+  check(
+    "S5 season pitching deferred",
+    content.includes("S5. Season-pitching stats") &&
+      content.includes("Step 2A.5")
+  );
+  check(
+    "S6 bullpen deferred",
+    content.includes("S6. Bullpen") && content.includes("Step 2B")
+  );
+}
+
+function testOrchestratorProviderBlockAbortsWrites() {
+  section("orchestrator (Step 2): provider fail_closed aborts before writes");
+  const content = readOrchestratorSource();
+  check(
+    "providerBlocked guard derived from alignment status",
+    content.includes("providerBlocked")
+  );
+  check(
+    "S1/S3/S4/S7/S8/M1 blocked branch present",
+    content.includes('mode: "blocked"') &&
+      content.includes("blocked by provider rollover")
+  );
+  check(
+    "effectiveApply false when providerBlocked",
+    content.includes("!providerBlocked")
+  );
+}
+
+function testOrchestratorFailClosedSkipsAutomodel() {
+  section("orchestrator (Step 2): gate fail_closed skips automodel/reviewer");
+  const content = readOrchestratorSource();
+  check(
+    "automodel blocked path present",
+    content.includes("modelBlocked")
+  );
+  check(
+    "blocked reason mentions gate fail_closed",
+    content.includes("fail_closed")
+  );
+}
+
+function testOrchestratorVerboseStatuses() {
+  section("orchestrator (Step 2): verbose per-step status modes");
+  const content = readOrchestratorSource();
+  const modes = ["wrote", "dry_run", "skipped", "blocked", "failed", "not_invoked_step2_v1"];
+  for (const m of modes) {
+    check(`StepMode literal '${m}' present`, content.includes(`"${m}"`));
+  }
+}
+
+function testStarterHelperExportSurface() {
+  section("starter helper: exports runStarterRefreshCycle + result types");
+  const fs = require("fs") as typeof import("fs");
+  const path = "/Users/danielmengel/Projects/oddsphere/scripts/operator/refresh-starters.ts";
+  const content = fs.readFileSync(path, "utf8");
+  check("exports runStarterRefreshCycle", content.includes("export async function runStarterRefreshCycle"));
+  check("exports RunStarterRefreshArgs type", content.includes("export type RunStarterRefreshArgs"));
+  check("exports RunStarterRefreshResult type", content.includes("export type RunStarterRefreshResult"));
+  check(
+    "helper does not call process.exit (caller decides)",
+    !/runStarterRefreshCycle[\s\S]*?process\.exit/.test(
+      content.split("export async function runStarterRefreshCycle")[1]?.split("// ─── Main")[0] ?? ""
+    )
+  );
+  check(
+    "helper accepts confirm callback (auto-yes default)",
+    content.includes("confirm?: (plans:")
+  );
+  check(
+    "helper accepts log callback",
+    content.includes("log?: (msg: string)")
+  );
+}
+
+function testMissingPitcherHelperExportSurface() {
+  section("missing-pitcher helper: exports runMissingPitcherCycle + result types");
+  const fs = require("fs") as typeof import("fs");
+  const path = "/Users/danielmengel/Projects/oddsphere/scripts/operator/ingest-missing-pitchers.ts";
+  const content = fs.readFileSync(path, "utf8");
+  check("exports runMissingPitcherCycle", content.includes("export async function runMissingPitcherCycle"));
+  check("exports RunMissingPitcherArgs type", content.includes("export type RunMissingPitcherArgs"));
+  check("exports RunMissingPitcherResult type", content.includes("export type RunMissingPitcherResult"));
+  check(
+    "helper does not call process.exit (caller decides)",
+    !/runMissingPitcherCycle[\s\S]*?process\.exit/.test(
+      content.split("export async function runMissingPitcherCycle")[1]?.split("// ─── Main")[0] ?? ""
+    )
   );
 }
 
@@ -390,7 +551,17 @@ async function main() {
   testGateMissingFiHoldsOnlyNrfi();
   testGateProviderFailHoldsEverything();
   testGateProviderOkPreservesPlay();
-  testOrchestratorIsObservationOnly();
+  testOrchestratorImportsReadOnlyHelpers();
+  testOrchestratorTopLevelGate();
+  testOrchestratorInteractiveConfirm();
+  testOrchestratorPerStepGates();
+  testOrchestratorImportsStepRunners();
+  testOrchestratorDeferredSteps();
+  testOrchestratorProviderBlockAbortsWrites();
+  testOrchestratorFailClosedSkipsAutomodel();
+  testOrchestratorVerboseStatuses();
+  testStarterHelperExportSurface();
+  testMissingPitcherHelperExportSurface();
 
   console.log();
   console.log("━━━ Summary ━━━");
