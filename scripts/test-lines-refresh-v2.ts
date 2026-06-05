@@ -939,6 +939,180 @@ async function testR16FCFirstInningTotalMapping() {
   );
 }
 
+async function testR16GAKalshiFlipRejection() {
+  section("R-16G-A — provider guard rejects rows with flipped home/away strings");
+
+  // TOR@ATL-style fixture. /odds payload includes:
+  //   - ballybet: correct home_team/away_team strings → accepted
+  //   - kalshi: INVERTED home_team/away_team strings → must be rejected
+  //   - onexbet: correct strings → accepted
+  // After the guard, only ballybet + onexbet should appear in records.
+  const splits = [splitsRow({ home: "Atlanta Braves", away: "Toronto Blue Jays" })];
+  const ballybetHome = {
+    sportsbook: "ballybet", sport: "baseball", league: "mlb",
+    market_type: "moneyline", selection_type: "home",
+    home_team: "Atlanta Braves", away_team: "Toronto Blue Jays",
+    is_main_line: true, is_alternate_line: false,
+    odds_american: -265, line: null,
+  };
+  const ballybetAway = {
+    ...ballybetHome, selection_type: "away", odds_american: 210,
+  };
+  // Kalshi flipped — home_team/away_team are SWAPPED relative to event
+  const kalshiHomeFlipped = {
+    sportsbook: "kalshi", sport: "baseball", league: "mlb",
+    market_type: "moneyline", selection_type: "home",
+    home_team: "Toronto Blue Jays", away_team: "Atlanta Braves",  // ← flipped
+    is_main_line: true, is_alternate_line: false,
+    odds_american: 228, line: null,
+  };
+  const kalshiAwayFlipped = {
+    ...kalshiHomeFlipped, selection_type: "away", odds_american: -239,
+  };
+  const onexbetHome = {
+    sportsbook: "onexbet", sport: "baseball", league: "mlb",
+    market_type: "moneyline", selection_type: "home",
+    home_team: "Atlanta Braves", away_team: "Toronto Blue Jays",
+    is_main_line: true, is_alternate_line: false,
+    odds_american: -243, line: null,
+  };
+  const onexbetAway = {
+    ...onexbetHome, selection_type: "away", odds_american: 220,
+  };
+
+  const stubClient = new StubSharpApiClient({
+    splits,
+    opportunitiesEv: [],
+    oddsByEventId: {
+      "mlb_atlantabraves_torontobluejays_2026-06-04": [
+        ballybetHome, ballybetAway,
+        kalshiHomeFlipped, kalshiAwayFlipped,
+        onexbetHome, onexbetAway,
+      ],
+    },
+  });
+  const provider = new SharpAPIOddsProvider(
+    "ignored-key",
+    makeResolverFromMap({ "ATL|TOR": 1001 }),
+    { client: stubClient }
+  );
+  const out = await provider.getGameLinesV2(DATE, "mlb");
+
+  // Should have 4 ML records (2 ballybet + 2 onexbet), NOT 6 (kalshi dropped)
+  const mlRows = out.records.filter((r) => r.market_type === "moneyline");
+  check(
+    "R-16G-A: kalshi-flipped rows are rejected (4 ML rows, not 6)",
+    mlRows.length === 4,
+    `got ${mlRows.length} rows from sportsbooks=[${mlRows.map((r) => r.sportsbook).join(",")}]`
+  );
+
+  // Should NOT contain any kalshi rows
+  check(
+    "R-16G-A: zero kalshi rows in records",
+    mlRows.filter((r) => r.sportsbook === "kalshi").length === 0
+  );
+
+  // Should preserve ballybet and onexbet with correct home/away semantics
+  const ballybetHomeOut = mlRows.find((r) => r.sportsbook === "ballybet" && r.side === "home");
+  const onexbetAwayOut = mlRows.find((r) => r.sportsbook === "onexbet" && r.side === "away");
+  check(
+    "R-16G-A: ballybet home (ATL fav) preserved at -265",
+    ballybetHomeOut?.odds_american === -265
+  );
+  check(
+    "R-16G-A: onexbet away (TOR dog) preserved at +220",
+    onexbetAwayOut?.odds_american === 220
+  );
+}
+
+async function testR16GACorrectRowsNotRejected() {
+  section("R-16G-A — rows with matching home/away strings pass the guard");
+
+  // Fixture where every book has correct home/away strings
+  const splits = [splitsRow({ home: "Chicago Cubs", away: "Athletics" })];
+  const goodRow = (book: string, sel: "home" | "away", odds: number) => ({
+    sportsbook: book, sport: "baseball", league: "mlb",
+    market_type: "moneyline", selection_type: sel,
+    home_team: "Chicago Cubs", away_team: "Athletics",
+    is_main_line: true, is_alternate_line: false,
+    odds_american: odds, line: null,
+  });
+  const stubClient = new StubSharpApiClient({
+    splits,
+    opportunitiesEv: [],
+    oddsByEventId: {
+      "mlb_chicagocubs_athletics_2026-06-04": [
+        goodRow("ballybet", "home", -148),
+        goodRow("ballybet", "away", 123),
+        goodRow("fliff", "home", -150),
+        goodRow("fliff", "away", 120),
+      ],
+    },
+  });
+  const provider = new SharpAPIOddsProvider(
+    "ignored-key",
+    makeResolverFromMap({ "CHC|ATH": 1001 }),
+    { client: stubClient }
+  );
+  const out = await provider.getGameLinesV2(DATE, "mlb");
+  check(
+    "R-16G-A: all 4 good rows pass the guard",
+    out.records.filter((r) => r.market_type === "moneyline").length === 4
+  );
+}
+
+async function testR16GARowsWithoutTeamStringsPass() {
+  section("R-16G-A — rows missing home_team/away_team strings still pass (defensive)");
+
+  // Some books may not emit home_team/away_team strings. Guard should
+  // not reject those — only reject when BOTH fields are present AND
+  // they normalize to a different abbrev than the event's.
+  const splits = [splitsRow({ home: "Chicago Cubs", away: "Athletics" })];
+  const noTeamStringsRow = {
+    sportsbook: "ballybet", sport: "baseball", league: "mlb",
+    market_type: "moneyline", selection_type: "home",
+    // no home_team / away_team
+    is_main_line: true, is_alternate_line: false,
+    odds_american: -148, line: null,
+  };
+  const stubClient = new StubSharpApiClient({
+    splits, opportunitiesEv: [],
+    oddsByEventId: { "mlb_chicagocubs_athletics_2026-06-04": [noTeamStringsRow] },
+  });
+  const provider = new SharpAPIOddsProvider("ignored-key", makeResolverFromMap({ "CHC|ATH": 1001 }), { client: stubClient });
+  const out = await provider.getGameLinesV2(DATE, "mlb");
+  check(
+    "R-16G-A: row without home/away strings still accepted",
+    out.records.filter((r) => r.market_type === "moneyline").length === 1
+  );
+}
+
+async function testR16GAOverUnderSidesUnaffected() {
+  section("R-16G-A — over/under sides pass the guard (no team identity)");
+
+  // Over/under markets don't reference home/away — guard should ignore.
+  const splits = [splitsRow({ home: "Chicago Cubs", away: "Athletics" })];
+  // A row with FLIPPED home_team/away_team but selection_type=over
+  // should be accepted (because the guard only checks home/away sides).
+  const overRow = {
+    sportsbook: "ballybet", sport: "baseball", league: "mlb",
+    market_type: "total", selection_type: "over",
+    home_team: "Toronto Blue Jays", away_team: "Atlanta Braves",  // wrong (intentionally) — but over/under doesn't reference team
+    is_main_line: true, is_alternate_line: false,
+    odds_american: -110, line: 8.5,
+  };
+  const stubClient = new StubSharpApiClient({
+    splits, opportunitiesEv: [],
+    oddsByEventId: { "mlb_chicagocubs_athletics_2026-06-04": [overRow] },
+  });
+  const provider = new SharpAPIOddsProvider("ignored-key", makeResolverFromMap({ "CHC|ATH": 1001 }), { client: stubClient });
+  const out = await provider.getGameLinesV2(DATE, "mlb");
+  check(
+    "R-16G-A: over/under row not affected by team-name guard",
+    out.records.filter((r) => r.market_type === "total").length === 1
+  );
+}
+
 async function testMarketCoverageGate() {
   section("marketCoverageGate — read-only assessment");
 
@@ -974,6 +1148,10 @@ async function main() {
   await testR16EPerMarketGranularity();
   await testR16ENoSynthWhenSplitsLacksFields();
   await testR16FCFirstInningTotalMapping();
+  await testR16GAKalshiFlipRejection();
+  await testR16GACorrectRowsNotRejected();
+  await testR16GARowsWithoutTeamStringsPass();
+  await testR16GAOverUnderSidesUnaffected();
   await testMarketCoverageGate();
 
   console.log();

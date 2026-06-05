@@ -845,9 +845,64 @@ function buildGameDto(
 // 4.1.10 — per-market enrichment helpers
 // ─────────────────────────────────────────────────────────────────────
 
-const BOOK_PRIORITY = ["pinnacle", "draftkings", "fanduel", "betmgm", "caesars"] as const;
+/**
+ * R-16G-A — display-price book priority.
+ *
+ * Pre-R-16G-A this list was only the legacy US-tier-1 books
+ * (`pinnacle/draftkings/fanduel/betmgm/caesars`), NONE of which exist
+ * in our actual `lines` table at our current SharpAPI tier. The
+ * function fell through to `pool.find((r) => r.odds_american !== null)`
+ * — i.e. the first row in DB-return order — which could surface a
+ * kalshi row (whose home/away semantics are inverted at our provider,
+ * see SharpAPIOddsProvider). That is how a wrong-side price could
+ * reach the reader.
+ *
+ * The new list:
+ *   • keeps the tier-1 books at the top so future tier upgrades take
+ *     priority automatically,
+ *   • adds the real books actually returned at our current tier in
+ *     trusted order,
+ *   • excludes `kalshi` (audit found side flips; safer to omit until
+ *     SharpAPI's normalization is fixed or we add a per-book sanity
+ *     check),
+ *   • ends with `splits_consensus` (R-16E synthetic — last resort).
+ *
+ * Together with `pickPriceRow`'s tightened fallback (returns null
+ * instead of an arbitrary row when the priority list misses), this
+ * removes the wrong-side-price path entirely.
+ */
+const BOOK_PRIORITY = [
+  "pinnacle",
+  "draftkings",
+  "fanduel",
+  "betmgm",
+  "caesars",
+  "bet365 us",
+  "bookmaker",
+  "ballybet",
+  "onexbet",
+  "saba",
+  "fliff",
+  // kalshi — intentionally excluded (R-16G-A side-flip safety)
+  "splits_consensus",
+] as const;
 
 /** Pick the best (by book priority + matching side) row from a candidate set. */
+/**
+ * R-16G-A — pick a deterministic price row from BOOK_PRIORITY.
+ *
+ * Returns the first row matching `preferredSide` from the highest-
+ * priority trusted book in `BOOK_PRIORITY` that has a non-null
+ * `odds_american`. If NO trusted book has a price for the picked
+ * side, returns `null` — better to show no price than a wrong-side
+ * one. This is the "fail-closed" hardening from R-16G-A audit; the
+ * pre-fix code fell back to `pool.find(...)` (first row in
+ * DB-return order) which could surface a kalshi flipped row.
+ *
+ * When `preferredSide` is null (model held), we still walk the
+ * priority list across all sides and return the first trusted row.
+ * Caller is expected to gate display on the model side existing.
+ */
 function pickPriceRow<T extends { sportsbook: string; side: string | null; odds_american: number | null }>(
   rows: T[],
   preferredSide: Side | null
@@ -859,7 +914,9 @@ function pickPriceRow<T extends { sportsbook: string; side: string | null; odds_
     const hit = pool.find((r) => r.sportsbook === book && r.odds_american !== null);
     if (hit) return hit;
   }
-  return pool.find((r) => r.odds_american !== null) ?? null;
+  // No trusted book had a price for this side. Return null rather
+  // than an arbitrary row — better honest empty than wrong odds.
+  return null;
 }
 
 function extractAutoFactors(
@@ -1715,16 +1772,16 @@ export async function GET(request: Request) {
         totalsByGame.set(row.game_id, tot);
       }
     }
-    const BOOK_PRIORITY = ["pinnacle", "draftkings", "fanduel", "betmgm", "caesars"];
+    // R-16G-A — totals-line selection now uses the same hardened
+    // BOOK_PRIORITY as `pickPriceRow`. The pre-fix fallback to "any row
+    // with a line_value" was untrusted; the new behavior returns null
+    // when no trusted book has the line (rather than an arbitrary
+    // book's value).
     for (const [gameId, rows] of totalsByGame.entries()) {
       let chosen: number | null = null;
       for (const book of BOOK_PRIORITY) {
         const hit = rows.find((r) => r.sportsbook === book && r.line_value !== null);
         if (hit) { chosen = hit.line_value!; break; }
-      }
-      if (chosen === null) {
-        const any = rows.find((r) => r.line_value !== null);
-        if (any) chosen = any.line_value!;
       }
       if (chosen !== null) totalLineByGame.set(gameId, chosen);
     }

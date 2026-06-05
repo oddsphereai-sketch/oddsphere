@@ -19,17 +19,32 @@
  * fire, the route flags `marketDataQuality: "splits_consensus"` rather
  * than `"two_sided_consensus"` so the reader can label the read
  * honestly.
+ *
+ * R-16G-A — `kalshi` is intentionally EXCLUDED here as a safety guard.
+ * Audit on 2026-06-04 found kalshi rows have home/away inverted on at
+ * least 3 of 4 games where kalshi was present (TOR@ATL, LAD@ARI,
+ * PIT@HOU). Likely cause: SharpAPI's normalization of kalshi's
+ * prediction-market YES/NO format into traditional home/away semantics
+ * is mis-mapping sides. Until SharpAPI fixes the upstream or we add a
+ * per-book sanity check that proves kalshi is safe, we do not use
+ * kalshi for no-vig market context. The provider also rejects kalshi
+ * ML/spread rows at ingest (see SharpAPIOddsProvider.ts) so they
+ * normally won't reach the lines table either — this exclusion is
+ * belt-and-suspenders for any historical kalshi row that lingers.
  */
 export const NO_VIG_BOOK_PRIORITY = [
   "pinnacle",
   "draftkings",
+  "fanduel",
+  "betmgm",
+  "caesars",
   "bet365 us",
   "bookmaker",
   "ballybet",
-  "kalshi",
-  "fliff",
   "onexbet",
   "saba",
+  "fliff",
+  // kalshi — intentionally excluded (R-16G-A side-flip safety)
   "splits_consensus",
 ];
 

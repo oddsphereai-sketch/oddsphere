@@ -392,6 +392,51 @@ function testBookPriorityOrdering() {
   );
 }
 
+// ─── R-16G-A: kalshi exclusion ────────────────────────────────────────
+
+function testR16GAKalshiExclusion() {
+  section("R-16G-A — kalshi is NOT in no-vig priority");
+
+  check(
+    "kalshi is NOT in NO_VIG_BOOK_PRIORITY (side-flip safety)",
+    !NO_VIG_BOOK_PRIORITY.includes("kalshi")
+  );
+
+  // Functional test: if a fixture has kalshi pair AND ballybet pair,
+  // ballybet must win. If only kalshi has a pair, no-vig must NOT use
+  // kalshi — should fall through to "single_book" or "unavailable".
+  const ballybetAndKalshi = [
+    line("moneyline", "ballybet", "home", -250),
+    line("moneyline", "ballybet", "away", 200),
+    line("moneyline", "kalshi", "home", 228),  // flipped — TOR's price
+    line("moneyline", "kalshi", "away", -239), // flipped — ATL's price
+  ];
+  const ml1 = computeMarketImplied("moneyline", "moneyline", ballybetAndKalshi, "home", null);
+  check(
+    "R-16G-A: ballybet wins over kalshi when both present",
+    ml1.source === "ballybet" && ml1.quality === "two_sided_consensus"
+  );
+
+  // Only kalshi present → must NOT compute no-vig from kalshi
+  const onlyKalshi = [
+    line("moneyline", "kalshi", "home", 228),
+    line("moneyline", "kalshi", "away", -239),
+  ];
+  const ml2 = computeMarketImplied("moneyline", "moneyline", onlyKalshi, "home", null);
+  check(
+    "R-16G-A: kalshi-only pair does NOT produce no-vig result",
+    ml2.source !== "kalshi"
+  );
+  check(
+    "R-16G-A: kalshi-only falls through to single_book (one side counted) or unavailable",
+    ml2.quality === "single_book" || ml2.quality === "unavailable"
+  );
+  check(
+    "R-16G-A: kalshi-only pickPct is null (no fake no-vig)",
+    ml2.pickPct === null
+  );
+}
+
 // ─── Runner ──────────────────────────────────────────────────────────
 
 async function main() {
@@ -407,6 +452,7 @@ async function main() {
   testMlAndTotalUnchanged();
   testFiDoesNotPickUpOtherInningMarkets();
   testBookPriorityOrdering();
+  testR16GAKalshiExclusion();
 
   console.log();
   console.log("━━━ Summary ━━━");

@@ -124,6 +124,13 @@ type RawOddsRow = {
   odds_probability?: number | string | null;
   last_seen_at?: string | null;
   wire_received_at?: string | null;
+  // R-16G-A — provider-side defensive guard reads these to verify the
+  // row's internal home/away labels match the event's resolved home/
+  // away. Some books (kalshi observed 2026-06-04) emit rows where
+  // `home_team` and `away_team` are inverted relative to the actual
+  // game, leading to silent wrong-side prices downstream.
+  home_team?: string | null;
+  away_team?: string | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -396,6 +403,25 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         const side = mapSide(row.selection_type);
         if (side === null) continue;
 
+        // R-16G-A — V1 mirror of the V2 home/away sanity guard. Same
+        // rationale: some books emit rows whose own home_team/away_team
+        // strings are inverted relative to the actual event. Reject
+        // those before they reach `lines` to prevent wrong-side prices.
+        if (side === "home" || side === "away") {
+          const rowHomeAbbr = normalizeMlbTeamName(asStringOrNull(row.home_team));
+          const rowAwayAbbr = normalizeMlbTeamName(asStringOrNull(row.away_team));
+          if (
+            rowHomeAbbr !== null &&
+            rowAwayAbbr !== null &&
+            (rowHomeAbbr !== ev.homeAbbrev || rowAwayAbbr !== ev.awayAbbrev)
+          ) {
+            console.warn(
+              `[SharpAPIOddsProvider V1] R-16G-A reject: ${sportsbook} row has home="${row.home_team}"/away="${row.away_team}" but event ${ev.awayAbbrev}@${ev.homeAbbrev}.`
+            );
+            continue;
+          }
+        }
+
         out.push({
           game_external_id: ev.gameExternalId,
           market_type: marketType,
@@ -616,6 +642,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         totFromOdds = 0,
         sprFromOdds = 0,
         other = 0;
+      let rejectedHomeAwayMismatch = 0;
       const books = new Set<string>();
       for (const row of oddsRows) {
         const rowLeague = asStringOrNull(row.league)?.toLowerCase();
@@ -630,6 +657,41 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         if (sportsbook === null) continue;
         const side = mapSide(row.selection_type);
         if (side === null) continue;
+
+        // R-16G-A — provider-side home/away sanity guard.
+        //
+        // Some books (kalshi observed 2026-06-04 across TOR@ATL,
+        // LAD@ARI, PIT@HOU) emit /odds rows whose own `home_team` and
+        // `away_team` strings are INVERTED relative to the actual
+        // event. The row is internally consistent (selection_type
+        // matches the row's own home_team) but the row's home_team is
+        // the wrong team. Downstream, every consumer treats
+        // selection_type=home as "the event's home" — which results
+        // in the away team's price being labeled as the home team's
+        // price. Trust-critical bug.
+        //
+        // Defensive guard: if the row carries home_team/away_team
+        // strings and either normalizes to a different abbreviation
+        // than the event's resolved (home, away), REJECT the row. The
+        // guard is general — it catches any future provider-side
+        // home/away flip, not just kalshi-specific. Side markets
+        // (over/under) don't reference team identity so they pass the
+        // guard naturally.
+        if (side === "home" || side === "away") {
+          const rowHomeAbbr = normalizeMlbTeamName(asStringOrNull(row.home_team));
+          const rowAwayAbbr = normalizeMlbTeamName(asStringOrNull(row.away_team));
+          if (
+            rowHomeAbbr !== null &&
+            rowAwayAbbr !== null &&
+            (rowHomeAbbr !== ev.home || rowAwayAbbr !== ev.away)
+          ) {
+            rejectedHomeAwayMismatch++;
+            console.warn(
+              `[SharpAPIOddsProvider] R-16G-A reject: ${sportsbook} row has home="${row.home_team}"/away="${row.away_team}" but event ${ev.away}@${ev.home}. Likely provider side-flip; dropping to prevent wrong-side price.`
+            );
+            continue;
+          }
+        }
 
         if (marketType === "moneyline") mlFromOdds++;
         else if (marketType === "total") totFromOdds++;
