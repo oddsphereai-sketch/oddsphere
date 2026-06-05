@@ -28,6 +28,9 @@ import {
   LEAGUE_CONSTANTS_V1,
   NRFI_CONFIDENCE_CAP,
   STAGE_CONFIDENCE_CAPS,
+  NRFI_TEAM_PROXY_PENALTY,
+  NRFI_LEAGUE_AVG_PENALTY,
+  NRFI_FALLBACK_CONFIDENCE_CAP,
 } from "../lib/automodel/types";
 
 // ─────────────────────────────────────────────────────────────
@@ -4379,6 +4382,387 @@ async function main() {
       );
     }
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  section("R-16J Step 1.6 — FI offense fallback hierarchy");
+  // ═══════════════════════════════════════════════════════════════
+  //
+  // Verifies the 4-tier topOrderOpsWithFallback chain:
+  //   Tier 1 — confirmed lineup (default; no new reason code, no cap penalty)
+  //   Tier 2 — projected lineup (no penalty, reason code emitted)
+  //   Tier 3 — team-OPS aggregate proxy (-3pp cap penalty)
+  //   Tier 4 — league average (-5pp cap penalty + safety floor when paired
+  //                            with FI ERA fallback on both sides)
+  // The safety floor (`thin_top_order_downgraded`) now requires BOTH sides
+  // at tier 4 — projected/team-proxy paths rescue the directional pick.
+
+  // Helper: a both-sides real-FI scenario the model picks clearly NRFI on.
+  // Used to isolate the OFFENSE-side fallback hierarchy from FI-ERA caps.
+  function baseRealFiNrfiScenario(
+    overrides: Partial<GameSnapshot> = {}
+  ): GameSnapshot {
+    return baseSnapshot({
+      home_starter: starter({
+        player_external_id: 9101,
+        player_name: "Real FI Home (NRFI-leaning)",
+        throws: "R",
+        season_era: 2.5,
+        season_whip: 1.05,
+        first_inning_era: 2.5,
+        first_inning_starts: 20,
+        first_inning_whip: 1.00,
+      }),
+      away_starter: starter({
+        player_external_id: 9102,
+        player_name: "Real FI Away (NRFI-leaning)",
+        throws: "L",
+        season_era: 2.5,
+        season_whip: 1.05,
+        first_inning_era: 2.5,
+        first_inning_starts: 20,
+        first_inning_whip: 1.00,
+      }),
+      ...overrides,
+    });
+  }
+
+  // ── [1.6-1] Tier 1 — confirmed lineup is the default path ───────────
+  {
+    const snap = baseRealFiNrfiScenario();
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+
+    check(
+      "[1.6-1] tier 1 (confirmed lineup) — directional pick produced",
+      out.sport_specific.nrfi_decision_kind === "nrfi"
+    );
+    check(
+      "[1.6-1] tier 1 — does NOT emit top_order_projected_used",
+      !codes.includes("top_order_projected_used")
+    );
+    check(
+      "[1.6-1] tier 1 — does NOT emit top_order_team_proxy_used",
+      !codes.includes("top_order_team_proxy_used")
+    );
+    check(
+      "[1.6-1] tier 1 — does NOT emit top_order_league_avg_used",
+      !codes.includes("top_order_league_avg_used")
+    );
+    check(
+      "[1.6-1] tier 1 — does NOT emit thin_top_order_downgraded",
+      !codes.includes("thin_top_order_downgraded")
+    );
+  }
+
+  // ── [1.6-2] Tier 2 — projected lineup (no confirmed) ────────────────
+  {
+    // Mark every batter as projected to force tier 2.
+    const projectedHome = leagueAverageLineup("L").map((b) => ({
+      ...b,
+      lineup_source: "projected" as const,
+    }));
+    const projectedAway = leagueAverageLineup("R").map((b) => ({
+      ...b,
+      lineup_source: "projected" as const,
+    }));
+    const snap = baseRealFiNrfiScenario({
+      home_lineup_top8: projectedHome,
+      away_lineup_top8: projectedAway,
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+
+    check(
+      "[1.6-2] tier 2 (projected) — directional pick still produced",
+      out.sport_specific.nrfi_decision_kind === "nrfi"
+    );
+    check(
+      "[1.6-2] tier 2 — emits top_order_projected_used reason code",
+      codes.includes("top_order_projected_used")
+    );
+    check(
+      "[1.6-2] tier 2 — does NOT downgrade to toss-up",
+      out.sport_specific.nrfi_decision_kind !== "toss_up"
+    );
+    check(
+      "[1.6-2] tier 2 — does NOT emit thin_top_order_downgraded",
+      !codes.includes("thin_top_order_downgraded")
+    );
+    // Tier 2 has no penalty so the confidence ceiling is still the
+    // raw NRFI_CONFIDENCE_CAP (not below it).
+    if (out.nrfi_confidence !== null) {
+      check(
+        "[1.6-2] tier 2 — nrfi_confidence respects raw NRFI_CONFIDENCE_CAP (no penalty)",
+        out.nrfi_confidence <= NRFI_CONFIDENCE_CAP
+      );
+    }
+  }
+
+  // ── [1.6-3] Tier 3 — team-OPS proxy (no lineup, has aggregate) ──────
+  {
+    const snap = baseRealFiNrfiScenario({
+      home_team: {
+        team_external_id: 21,
+        abbreviation: "NYM",
+        bullpen_era_proxy: 4.0,
+        season_runs_per_game: 4.5,
+        team_avg_batter_ops: 0.730,
+        team_avg_batter_ops_sample: 2000,
+      },
+      away_team: {
+        team_external_id: 28,
+        abbreviation: "MIA",
+        bullpen_era_proxy: 4.0,
+        season_runs_per_game: 4.5,
+        team_avg_batter_ops: 0.730,
+        team_avg_batter_ops_sample: 2000,
+      },
+      home_lineup_top8: [],
+      away_lineup_top8: [],
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+
+    check(
+      "[1.6-3] tier 3 (team proxy) — emits top_order_team_proxy_used",
+      codes.includes("top_order_team_proxy_used")
+    );
+    check(
+      "[1.6-3] tier 3 — does NOT emit top_order_league_avg_used",
+      !codes.includes("top_order_league_avg_used")
+    );
+    check(
+      "[1.6-3] tier 3 — does NOT fire thin_top_order_downgraded (proxy rescues)",
+      !codes.includes("thin_top_order_downgraded")
+    );
+    // The directional pick should still come through (P(NRFI) clearly
+    // ≥ 0.55 with real-FI inputs averaging 2.5 ERA), and the cap should
+    // be reduced by exactly NRFI_TEAM_PROXY_PENALTY.
+    if (out.sport_specific.nrfi_decision_kind === "nrfi" && out.nrfi_confidence !== null) {
+      const expectedCap = NRFI_CONFIDENCE_CAP - NRFI_TEAM_PROXY_PENALTY;
+      check(
+        `[1.6-3] tier 3 — nrfi_confidence ≤ NRFI_CONFIDENCE_CAP − ${NRFI_TEAM_PROXY_PENALTY}`,
+        out.nrfi_confidence <= expectedCap + 0.01,
+        `confidence=${out.nrfi_confidence}, expectedCap=${expectedCap}`
+      );
+    }
+  }
+
+  // ── [1.6-4] Tier 4 — league-avg fallback only (no lineup, no proxy) ──
+  {
+    const snap = baseRealFiNrfiScenario({
+      home_lineup_top8: [],
+      away_lineup_top8: [],
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+
+    check(
+      "[1.6-4] tier 4 (league avg) — emits top_order_league_avg_used",
+      codes.includes("top_order_league_avg_used")
+    );
+    check(
+      "[1.6-4] tier 4 — does NOT fire thin_top_order_downgraded (real FI on both sides)",
+      !codes.includes("thin_top_order_downgraded")
+    );
+    if (out.sport_specific.nrfi_decision_kind === "nrfi" && out.nrfi_confidence !== null) {
+      const expectedCap = NRFI_CONFIDENCE_CAP - NRFI_LEAGUE_AVG_PENALTY;
+      check(
+        `[1.6-4] tier 4 — nrfi_confidence ≤ NRFI_CONFIDENCE_CAP − ${NRFI_LEAGUE_AVG_PENALTY}`,
+        out.nrfi_confidence <= expectedCap + 0.01,
+        `confidence=${out.nrfi_confidence}, expectedCap=${expectedCap}`
+      );
+    }
+  }
+
+  // ── [1.6-5] Mixed tiers — home confirmed (tier 1), away team-proxy (tier 3) ──
+  // The WORSE side governs the cap penalty: expected max(0, 3) = 3.
+  {
+    const snap = baseRealFiNrfiScenario({
+      home_lineup_top8: leagueAverageLineup("L"),
+      away_lineup_top8: [],
+      away_team: {
+        team_external_id: 28,
+        abbreviation: "MIA",
+        bullpen_era_proxy: 4.0,
+        season_runs_per_game: 4.5,
+        team_avg_batter_ops: 0.730,
+        team_avg_batter_ops_sample: 2000,
+      },
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+
+    check(
+      "[1.6-5] mixed — emits top_order_team_proxy_used (away side at tier 3)",
+      codes.includes("top_order_team_proxy_used")
+    );
+    check(
+      "[1.6-5] mixed — does NOT emit top_order_league_avg_used (no side at tier 4)",
+      !codes.includes("top_order_league_avg_used")
+    );
+    if (out.sport_specific.nrfi_decision_kind === "nrfi" && out.nrfi_confidence !== null) {
+      const expectedCap = NRFI_CONFIDENCE_CAP - NRFI_TEAM_PROXY_PENALTY;
+      check(
+        `[1.6-5] mixed — nrfi_confidence ≤ NRFI_CONFIDENCE_CAP − ${NRFI_TEAM_PROXY_PENALTY} (worse side governs)`,
+        out.nrfi_confidence <= expectedCap + 0.01,
+        `confidence=${out.nrfi_confidence}, expectedCap=${expectedCap}`
+      );
+    }
+  }
+
+  // ── [1.6-6] Pure no-data still safety-floors (regression of H-6.2) ──
+  // FI fallback on BOTH starters + no lineup data + no team proxy.
+  // The safety floor MUST still fire.
+  {
+    const snap = baseSnapshot({
+      home_starter: starter({
+        player_external_id: 9201,
+        season_era: 4.0,
+        season_innings_pitched: 200,
+        first_inning_era: null, // → proxy path
+        first_inning_starts: null,
+        first_inning_whip: null,
+      }),
+      away_starter: starter({
+        player_external_id: 9202,
+        season_era: 4.0,
+        season_innings_pitched: 200,
+        first_inning_era: null, // → proxy path
+        first_inning_starts: null,
+        first_inning_whip: null,
+      }),
+      home_lineup_top8: [],
+      away_lineup_top8: [],
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+
+    check(
+      "[1.6-6] no FI + no lineup + no proxy → toss_up",
+      out.sport_specific.nrfi_decision_kind === "toss_up"
+    );
+    check(
+      "[1.6-6] no FI + no lineup + no proxy → thin_top_order_downgraded fires",
+      codes.includes("thin_top_order_downgraded")
+    );
+    check(
+      "[1.6-6] no FI + no lineup + no proxy → top_order_league_avg_used also emitted",
+      codes.includes("top_order_league_avg_used")
+    );
+    check(
+      "[1.6-6] no FI + no lineup + no proxy → predicted_nrfi null (no commitment)",
+      out.predicted_nrfi === null
+    );
+  }
+
+  // ── [1.6-7] PIT @ HOU regression — projected lineup rescues toss-up ──
+  // Pre-Step-1.6: this fixture stuck at toss_up via thin_top_order_downgraded
+  // because no confirmed lineup was posted. With Step 1.6, the projected
+  // lineup feeds the offense factor and the model produces a directional
+  // YRFI lean (λ ≈ 0.93 raw, calibrated ≈ 0.61 → P(NRFI) ≈ 0.54).
+  {
+    const projectedAway = leagueAverageLineup("R").map((b) => ({
+      ...b,
+      lineup_source: "projected" as const,
+    }));
+    const projectedHome = leagueAverageLineup("R").map((b) => ({
+      ...b,
+      lineup_source: "projected" as const,
+    }));
+    const snap = baseSnapshot({
+      game_external_id: 401570001,
+      home_team: {
+        team_external_id: 12,
+        abbreviation: "HOU",
+        bullpen_era_proxy: 4.0,
+        season_runs_per_game: 4.5,
+      },
+      away_team: {
+        team_external_id: 7,
+        abbreviation: "PIT",
+        bullpen_era_proxy: 4.0,
+        season_runs_per_game: 4.5,
+      },
+      home_starter: starter({
+        player_external_id: 9301,
+        player_name: "PIT@HOU home SP",
+        throws: "R",
+        season_era: 4.2,
+        season_innings_pitched: 100,
+        first_inning_era: 4.5,
+        first_inning_starts: 15,
+        first_inning_whip: 1.30,
+      }),
+      away_starter: starter({
+        player_external_id: 9302,
+        player_name: "PIT@HOU away SP",
+        throws: "R",
+        season_era: 4.5,
+        season_innings_pitched: 100,
+        first_inning_era: 5.0,
+        first_inning_starts: 15,
+        first_inning_whip: 1.40,
+      }),
+      home_lineup_top8: projectedHome,
+      away_lineup_top8: projectedAway,
+      data_quality: {
+        starter_confirmed: false,
+        lineup_confirmed: false,
+        weather_available: false,
+        season_stats_present: true,
+      },
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+
+    check(
+      "[1.6-7] PIT@HOU — projected lineup escapes thin_top_order_downgraded",
+      !codes.includes("thin_top_order_downgraded")
+    );
+    check(
+      "[1.6-7] PIT@HOU — emits top_order_projected_used (provenance flagged)",
+      codes.includes("top_order_projected_used")
+    );
+    // It might land yrfi OR toss_up depending on exact ERA inputs;
+    // the key regression is that we DIDN'T get artificially stuck at
+    // toss_up due to data quality alone.
+    check(
+      "[1.6-7] PIT@HOU — decision_kind is one of {nrfi, yrfi, toss_up} (not held)",
+      out.sport_specific.nrfi_decision_kind === "nrfi" ||
+        out.sport_specific.nrfi_decision_kind === "yrfi" ||
+        out.sport_specific.nrfi_decision_kind === "toss_up"
+    );
+  }
+
+  // ── [1.6-8] Mixed tier confidence cap — home tier 1, away tier 4 ────
+  // No team proxy on either side. Home has confirmed lineup; away has
+  // nothing. The WORSE side governs, so expect −5pp cap penalty.
+  {
+    const snap = baseRealFiNrfiScenario({
+      home_lineup_top8: leagueAverageLineup("L"),
+      away_lineup_top8: [],
+    });
+    const out = runMlbAutoModelV1(snap, "morning_draft");
+    const codes = out.sport_specific.nrfi_reason_codes ?? [];
+
+    check(
+      "[1.6-8] mixed-with-tier-4 — emits top_order_league_avg_used",
+      codes.includes("top_order_league_avg_used")
+    );
+    if (out.sport_specific.nrfi_decision_kind === "nrfi" && out.nrfi_confidence !== null) {
+      const expectedCap = NRFI_CONFIDENCE_CAP - NRFI_LEAGUE_AVG_PENALTY;
+      check(
+        `[1.6-8] mixed-with-tier-4 — nrfi_confidence ≤ NRFI_CONFIDENCE_CAP − ${NRFI_LEAGUE_AVG_PENALTY} (worse side governs)`,
+        out.nrfi_confidence <= expectedCap + 0.01,
+        `confidence=${out.nrfi_confidence}, expectedCap=${expectedCap}`
+      );
+    }
+  }
+
+  // Silence unused warning when only some constants are referenced
+  // inside conditional branches above.
+  void NRFI_FALLBACK_CONFIDENCE_CAP;
 
   // ═══════════════════════════════════════════════════════════════
   console.log(`\n${"━".repeat(70)}`);

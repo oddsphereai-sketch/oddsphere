@@ -96,6 +96,11 @@ import {
   LEAGUE_BASELINE_WHIP,
   LEAGUE_BASELINE_FI_ERA,
   FI_BASELINE_CALIBRATION,
+  // R-16J Step 1.6 — FI offense fallback hierarchy
+  SHRINKAGE_K_TEAM_OPS,
+  NRFI_PROJECTED_LINEUP_PENALTY,
+  NRFI_TEAM_PROXY_PENALTY,
+  NRFI_LEAGUE_AVG_PENALTY,
 } from "./types";
 import { applyDeterministicGuards } from "./aiSanityBoundary";
 
@@ -477,6 +482,127 @@ function handednessAwareTopOps(
     usedHandedness: usedAnyHandedness,
     count: collected.length,
   };
+}
+
+// ─── R-16J Step 1.6 — FI offense fallback hierarchy ─────────────────
+//
+// The classification chain consumed by computeNrfi:
+//   Tier 1 — confirmed top-of-order OPS via handednessAwareTopOps
+//   Tier 2 — projected top-of-order OPS via the same helper
+//   Tier 3 — team-OPS aggregate proxy shrunken by SHRINKAGE_K_TEAM_OPS
+//   Tier 4 — league average OPS (always available, last-resort)
+//
+// Every call returns a non-null `value` (tier 4 is the floor), which
+// shifts the historical "homeTopOps === null" signal into the explicit
+// `tier === "league_avg"` check. Callers use the tier to (a) emit per-
+// tier reason codes, (b) apply confidence-cap penalties, and (c) gate
+// the `thin_top_order_downgraded` safety floor (only fires when BOTH
+// sides land at tier 4 AND the FI ERA path is also on fallback).
+
+export type OffenseFallbackTier =
+  | "confirmed"
+  | "projected"
+  | "team_proxy"
+  | "league_avg";
+
+type TopOrderOpsFallback = {
+  value: number;
+  tier: OffenseFallbackTier;
+  /** True iff handednessAwareTopOps actually used a vs_*_ops value
+   *  (only meaningful at tiers 1 + 2). */
+  usedHandedness: boolean;
+  /** Number of batters contributing to the top-3 average (tiers 1 + 2). */
+  count: number;
+};
+
+function topOrderOpsWithFallback(
+  lineup: BatterSnapshot[],
+  opposingThrows: "L" | "R" | null,
+  team: TeamSnapshot
+): TopOrderOpsFallback {
+  // Tier 1 — confirmed batters. Pre-R-16J fixtures omit `lineup_source`;
+  // treat undefined as "confirmed" so existing tests retain their
+  // historical tier 1 behavior (the field is new in Step 1.6).
+  const confirmedBatters = lineup.filter(
+    (b) => b.lineup_source !== "projected"
+  );
+  if (confirmedBatters.length > 0) {
+    const r = handednessAwareTopOps(confirmedBatters, opposingThrows);
+    if (r.value !== null) {
+      return {
+        value: r.value,
+        tier: "confirmed",
+        usedHandedness: r.usedHandedness,
+        count: r.count,
+      };
+    }
+  }
+
+  // Tier 2 — projected batters. Same helper, different rows. BDL
+  // projections are trusted enough for a directional read so no cap
+  // penalty is applied — a flag-only reason code surfaces the source.
+  const projectedBatters = lineup.filter(
+    (b) => b.lineup_source === "projected"
+  );
+  if (projectedBatters.length > 0) {
+    const r = handednessAwareTopOps(projectedBatters, opposingThrows);
+    if (r.value !== null) {
+      return {
+        value: r.value,
+        tier: "projected",
+        usedHandedness: r.usedHandedness,
+        count: r.count,
+      };
+    }
+  }
+
+  // Tier 3 — team-level OPS aggregate, shrunken toward league mean by
+  // the team's qualifying-batter PA sample. Conservative-by-design:
+  // light shrinkage (k=300) is large enough to keep thin-roster
+  // aggregates honest. Carries a −3pp confidence cap penalty at the
+  // call site.
+  if (
+    team.team_avg_batter_ops !== null &&
+    team.team_avg_batter_ops !== undefined
+  ) {
+    const sample = team.team_avg_batter_ops_sample ?? null;
+    const { effective } = shrinkRate(
+      team.team_avg_batter_ops,
+      sample,
+      SHRINKAGE_K_TEAM_OPS,
+      LEAGUE_CONSTANTS_V1.AVG_OPS
+    );
+    return {
+      value: effective,
+      tier: "team_proxy",
+      usedHandedness: false,
+      count: 0,
+    };
+  }
+
+  // Tier 4 — league average. Always available; carries a −5pp cap
+  // penalty + flags the `thin_top_order_downgraded` safety floor when
+  // both sides land here AND FI ERA is also on fallback.
+  return {
+    value: LEAGUE_CONSTANTS_V1.AVG_OPS,
+    tier: "league_avg",
+    usedHandedness: false,
+    count: 0,
+  };
+}
+
+/** Confidence-cap penalty (in points) per FI offense fallback tier. */
+function offenseTierPenalty(tier: OffenseFallbackTier): number {
+  switch (tier) {
+    case "confirmed":
+      return 0;
+    case "projected":
+      return NRFI_PROJECTED_LINEUP_PENALTY;
+    case "team_proxy":
+      return NRFI_TEAM_PROXY_PENALTY;
+    case "league_avg":
+      return NRFI_LEAGUE_AVG_PENALTY;
+  }
 }
 
 /**
@@ -865,40 +991,57 @@ function computeNrfi(snapshot: GameSnapshot, stage: ModelStage): NrfiResult {
   if (fiSources.includes("low_sample")) reason_codes.push("low_first_inning_sample");
   if (fiSources.includes("proxy")) reason_codes.push("fallback_first_inning_era");
 
-  // Top-of-order OPS strength per side — Phase 4D.2 handedness-aware.
-  // Home batters face the AWAY starter (and vice versa), so we pass the
-  // opposing starter's `throws` for matchup-aware OPS lookup.
-  const homeTopOpsResult = handednessAwareTopOps(
+  // Top-of-order OPS strength per side — Phase 4D.2 handedness-aware,
+  // extended with R-16J Step 1.6's 4-tier fallback so projected-lineup
+  // and team-OPS-aggregate paths fill in when the confirmed top-of-
+  // order isn't posted yet. Home batters face the AWAY starter (and
+  // vice versa), so we pass the opposing starter's `throws` for
+  // matchup-aware OPS lookup.
+  const homeTopOpsFallback = topOrderOpsWithFallback(
     snapshot.home_lineup_top8,
-    away_starter.throws
+    away_starter.throws,
+    snapshot.home_team
   );
-  const awayTopOpsResult = handednessAwareTopOps(
+  const awayTopOpsFallback = topOrderOpsWithFallback(
     snapshot.away_lineup_top8,
-    home_starter.throws
+    home_starter.throws,
+    snapshot.away_team
   );
-  const homeTopOps = homeTopOpsResult.value;
-  const awayTopOps = awayTopOpsResult.value;
-  const used_top_of_order_data = homeTopOps !== null || awayTopOps !== null;
-  if (homeTopOps === null) reason_codes.push("top_order_missing_home");
-  if (awayTopOps === null) reason_codes.push("top_order_missing_away");
+  const homeTopOps = homeTopOpsFallback.value;
+  const awayTopOps = awayTopOpsFallback.value;
+  // `used_top_of_order_data` now means "at least one side has actual
+  // lineup or team-proxy data" (NOT just league mean). The audit field
+  // downstream (`auto_factors.nrfi_used_top_of_order_data`) keeps this
+  // meaning so consumers reading older rows stay coherent.
+  const bothSidesAtLeagueAvg =
+    homeTopOpsFallback.tier === "league_avg" &&
+    awayTopOpsFallback.tier === "league_avg";
+  const used_top_of_order_data = !bothSidesAtLeagueAvg;
+
+  // R-16J Step 1.6 — per-tier reason codes. Fire once per tier when
+  // either side used it. Tier 1 ("confirmed") emits no code (it's the
+  // default path).
+  const tiersUsed = new Set<OffenseFallbackTier>([
+    homeTopOpsFallback.tier,
+    awayTopOpsFallback.tier,
+  ]);
+  if (tiersUsed.has("projected")) reason_codes.push("top_order_projected_used");
+  if (tiersUsed.has("team_proxy")) reason_codes.push("top_order_team_proxy_used");
+  if (tiersUsed.has("league_avg")) reason_codes.push("top_order_league_avg_used");
 
   // Phase 4.2.C.1.H-6.2 — thin top-order Toss-Up downgrade.
   //
-  // Pre-H-6.2 this was a HARD HOLD ("thin_nrfi_data") when ANY starter
-  // used fallback/low-sample ERA AND no top-of-order OPS data existed.
-  // For slates dominated by MLB-only-ingested starters (no BDL season
-  // stats, lineups not yet pushed by BDL at morning_draft), this fired
-  // for nearly every game and produced 15/15 held.
-  //
-  // Both starters have populated FI ERA values by this point (Path A
-  // already returned hold when either was null), so we have legitimate
-  // first-inning signal — just not enough lineup data to drive a
-  // confident NRFI/YRFI call. The honest expression is a Toss-Up, not
-  // a Held.
+  // Pre-R-16J Step 1.6 this fired when ANY starter used fallback FI
+  // ERA AND there was no top-of-order data on either side. Step 1.6
+  // narrows the condition: it now only fires when BOTH sides land at
+  // tier 4 (league average) — i.e. we truly have no offense data on
+  // either team. Games with projected lineups or team-OPS aggregates
+  // are no longer routed here; the model can pick directionally and
+  // accept the per-tier cap penalty instead.
   //
   // Toss-Up is reserved for the First Inning market only; ML/OU paths
   // continue to use winner/held language elsewhere in the model.
-  if (used_fallback && !used_top_of_order_data) {
+  if (used_fallback && bothSidesAtLeagueAvg) {
     // Basic ERA-only expected runs as a transparency signal on the
     // Toss-Up payload. The full modifier chain (park/weather/market/
     // pitch quality/offense factor/FI WHIP) runs further down and isn't
@@ -922,8 +1065,9 @@ function computeNrfi(snapshot: GameSnapshot, stage: ModelStage): NrfiResult {
   // Compare handedness-aware top-OPS against the season-only equivalent.
   // If the handedness-aware value materially exceeds the season-only
   // value, the home/away side has a top-order platoon edge worth
-  // surfacing as a reason code.
-  if (homeTopOpsResult.usedHandedness && homeTopOps !== null) {
+  // surfacing as a reason code. Only meaningful at tiers 1 + 2, where
+  // an actual lineup feeds handednessAwareTopOps.
+  if (homeTopOpsFallback.usedHandedness && homeTopOps !== null) {
     const seasonOnly = handednessAwareTopOps(snapshot.home_lineup_top8, null);
     if (
       seasonOnly.value !== null &&
@@ -932,7 +1076,7 @@ function computeNrfi(snapshot: GameSnapshot, stage: ModelStage): NrfiResult {
       reason_codes.push("platoon_advantage_home");
     }
   }
-  if (awayTopOpsResult.usedHandedness && awayTopOps !== null) {
+  if (awayTopOpsFallback.usedHandedness && awayTopOps !== null) {
     const seasonOnly = handednessAwareTopOps(snapshot.away_lineup_top8, null);
     if (
       seasonOnly.value !== null &&
@@ -984,14 +1128,20 @@ function computeNrfi(snapshot: GameSnapshot, stage: ModelStage): NrfiResult {
   }
 
   // Offense factor — clamp [0.80, 1.20] per Phase 4D.2 §3.
-  const homeOffenseFactor =
-    homeTopOps !== null
-      ? clamp(homeTopOps / LEAGUE_CONSTANTS_V1.AVG_OPS, 0.8, 1.2)
-      : 1.0;
-  const awayOffenseFactor =
-    awayTopOps !== null
-      ? clamp(awayTopOps / LEAGUE_CONSTANTS_V1.AVG_OPS, 0.8, 1.2)
-      : 1.0;
+  // R-16J Step 1.6: `topOrderOpsWithFallback` always returns a non-null
+  // value (tier 4 falls back to league mean), so the null-guard from
+  // pre-1.6 is no longer needed. League-mean inputs at tier 4 produce
+  // factor 1.0 naturally — the original null→1.0 semantics are preserved.
+  const homeOffenseFactor = clamp(
+    homeTopOps / LEAGUE_CONSTANTS_V1.AVG_OPS,
+    0.8,
+    1.2
+  );
+  const awayOffenseFactor = clamp(
+    awayTopOps / LEAGUE_CONSTANTS_V1.AVG_OPS,
+    0.8,
+    1.2
+  );
 
   // FI WHIP secondary modifier (2026-06-02). Per-starter, conservative,
   // tightly clamped. See nrfiWhipFactor() for the formula. Each side's
@@ -1130,6 +1280,17 @@ function computeNrfi(snapshot: GameSnapshot, stage: ModelStage): NrfiResult {
   let cap = NRFI_CONFIDENCE_CAP;
   if (used_fallback) {
     cap = Math.min(cap, NRFI_FALLBACK_CONFIDENCE_CAP);
+  }
+  // R-16J Step 1.6 — offense-tier cap penalty. Acknowledges fallback-
+  // hierarchy data quality without forcing a pick: the WORSE of the
+  // two sides' tiers governs (max penalty). Tier 1 and tier 2 contribute
+  // 0 — only tier 3 / tier 4 actually pull the cap down.
+  const offensePenalty = Math.max(
+    offenseTierPenalty(homeTopOpsFallback.tier),
+    offenseTierPenalty(awayTopOpsFallback.tier)
+  );
+  if (offensePenalty > 0) {
+    cap -= offensePenalty;
   }
   const applyUnconfirmedPenalty = stage === "t60_locked";
   if (snapshot.data_quality.lineup_confirmed === false) {

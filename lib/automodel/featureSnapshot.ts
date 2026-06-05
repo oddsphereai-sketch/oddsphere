@@ -310,7 +310,8 @@ function indexBy<T, K extends string | number>(
 
 function buildTeamSnapshot(
   team: TeamRow,
-  bullpenEraProxy: number | null
+  bullpenEraProxy: number | null,
+  teamAvgOps: { mean: number | null; sample: number | null }
 ): TeamSnapshot {
   return {
     team_external_id: team.external_id,
@@ -319,6 +320,10 @@ function buildTeamSnapshot(
     // No team_season_stats table in V1 — model doesn't consume this
     // field. Reporting honest null.
     season_runs_per_game: null,
+    // R-16J Step 1.6 — Tier 3 of the FI offense fallback hierarchy.
+    // Null when the team has no rostered batters with batting_pa ≥ 100.
+    team_avg_batter_ops: teamAvgOps.mean,
+    team_avg_batter_ops_sample: teamAvgOps.sample,
   };
 }
 
@@ -366,7 +371,8 @@ function buildBatterSnapshot(
   player: PlayerRow,
   lineupRow: LineupRow,
   seasonStats: SeasonStatsRow | undefined,
-  splits: SplitRow[]
+  splits: SplitRow[],
+  lineupSource: "confirmed" | "projected"
 ): BatterSnapshot {
   const vsLhp = splits.find((s) => s.split_type === "vs_lhp")?.ops ?? null;
   const vsRhp = splits.find((s) => s.split_type === "vs_rhp")?.ops ?? null;
@@ -381,6 +387,8 @@ function buildBatterSnapshot(
     season_pa: seasonStats?.batting_pa ?? null,
     vs_lhp_ops: vsLhp,
     vs_rhp_ops: vsRhp,
+    // R-16J Step 1.6 — provenance flag for the FI offense fallback chain.
+    lineup_source: lineupSource,
   };
 }
 
@@ -639,11 +647,38 @@ export async function buildFeatureSnapshots(
   const rpIds = new Set<number>();
   for (const r of rpRows) rpIds.add(r.id);
 
-  // ── Query 5: full player rows (starters + lineup batters + RPs) ─
+  // ── Query 4b (R-16J Step 1.6): rostered batters per team for the
+  //          team-level OPS aggregate (Tier 3 of the FI offense
+  //          fallback hierarchy). Active, non-pitcher players. We only
+  //          need id + team_id here; their season stats land in the
+  //          existing season-stats batch via allPlayerIds. ──────────
+  const { data: teamBattersRaw, error: tbErr } = await supabase
+    .from("players")
+    .select("id, team_id, is_pitcher, active")
+    .in("team_id", Array.from(teamIds))
+    .eq("is_pitcher", false)
+    .eq("active", true);
+  if (tbErr) {
+    throw new Error(
+      `featureSnapshot: team-batters query failed: ${tbErr.message}`
+    );
+  }
+  const teamBatterRows = (teamBattersRaw ?? []) as Array<{
+    id: number;
+    team_id: number | null;
+    is_pitcher: boolean | null;
+    active: boolean | null;
+  }>;
+  const teamBatterIds = new Set<number>();
+  for (const r of teamBatterRows) teamBatterIds.add(r.id);
+
+  // ── Query 5: full player rows (starters + lineup batters + RPs +
+  //          rostered team batters) ─────────────────────────────────
   const allPlayerIds = new Set<number>([
     ...starterIds,
     ...batterAndLineupPitcherIds,
     ...rpIds,
+    ...teamBatterIds,
   ]);
   const { data: playersRaw, error: playersErr } = await supabase
     .from("players")
@@ -830,6 +865,51 @@ export async function buildFeatureSnapshots(
     }
   }
 
+  // ── R-16J Step 1.6 — per-team batter-OPS aggregate proxy ───────
+  // PA-weighted mean batting_ops across rostered batters with batting_pa
+  // ≥ TEAM_OPS_MIN_PA. PA-weighted (not simple mean) so a 600-PA regular
+  // dominates over a 110-PA platoon player; the consumer further shrinks
+  // the result by SHRINKAGE_K_TEAM_OPS toward league mean. Sample
+  // reported as total PA so the shrinkage step sees an honest n.
+  // Falls back to { mean: null, sample: null } when no qualifying
+  // batters — the model's tier 4 (league_avg) path picks up the slack.
+  const TEAM_OPS_MIN_PA = 100;
+  const teamBattersByTeam = groupBy(teamBatterRows, (r) => r.team_id);
+  const teamAvgOpsByTeamId = new Map<
+    number,
+    { mean: number | null; sample: number | null }
+  >();
+  for (const [teamId, batters] of teamBattersByTeam.entries()) {
+    let weightedOpsSum = 0;
+    let paSum = 0;
+    for (const b of batters) {
+      const ss = seasonStatsByPlayer.get(b.id);
+      const ops = ss?.batting_ops;
+      const pa = ss?.batting_pa;
+      if (
+        ops === null ||
+        ops === undefined ||
+        pa === null ||
+        pa === undefined ||
+        pa < TEAM_OPS_MIN_PA ||
+        !Number.isFinite(ops) ||
+        !Number.isFinite(pa)
+      ) {
+        continue;
+      }
+      weightedOpsSum += ops * pa;
+      paSum += pa;
+    }
+    if (paSum === 0) {
+      teamAvgOpsByTeamId.set(teamId, { mean: null, sample: null });
+    } else {
+      teamAvgOpsByTeamId.set(teamId, {
+        mean: weightedOpsSum / paSum,
+        sample: paSum,
+      });
+    }
+  }
+
   // ── Assemble per-game snapshots ────────────────────────────────
   const snapshots: GameSnapshot[] = [];
   for (const g of games) {
@@ -844,11 +924,13 @@ export async function buildFeatureSnapshots(
 
     const home_team = buildTeamSnapshot(
       homeTeamRow,
-      bullpenEraByTeamId.get(homeTeamRow.id) ?? null
+      bullpenEraByTeamId.get(homeTeamRow.id) ?? null,
+      teamAvgOpsByTeamId.get(homeTeamRow.id) ?? { mean: null, sample: null }
     );
     const away_team = buildTeamSnapshot(
       awayTeamRow,
-      bullpenEraByTeamId.get(awayTeamRow.id) ?? null
+      bullpenEraByTeamId.get(awayTeamRow.id) ?? null,
+      teamAvgOpsByTeamId.get(awayTeamRow.id) ?? { mean: null, sample: null }
     );
 
     const gameLineups = lineups.filter((l) => l.game_id === g.id);
@@ -870,17 +952,33 @@ export async function buildFeatureSnapshots(
     const home_starter = buildStarter(g.home_pitcher_id);
     const away_starter = buildStarter(g.away_pitcher_id);
 
-    // Build top-8 lineup per team, ordered by batting_position asc
+    // Build top-8 lineup per team, ordered by batting_position asc.
+    //
+    // R-16J Step 1.6 — prefer confirmed lineup rows when present;
+    // otherwise fall back to projected rows so the downstream FI
+    // offense fallback hierarchy can use them (tier 2). When BOTH
+    // confirmed and projected rows exist for a team (e.g. BDL pushed
+    // both a projected lineup and a partial confirmed one), confirmed
+    // wins exclusively — mixing the two would produce inconsistent
+    // provenance per batter. All emitted BatterSnapshots carry the
+    // same `lineup_source` for the same team in a given game.
     function buildLineup(team_id: number): BatterSnapshot[] {
-      const batterLineups = gameLineups
-        .filter(
-          (l) =>
-            l.team_id === team_id &&
-            l.player_id !== null &&
-            l.starting_position !== "P" &&
-            l.starting_position !== "SP" &&
-            l.starting_position !== "RP"
-        )
+      const teamBatterLineups = gameLineups.filter(
+        (l) =>
+          l.team_id === team_id &&
+          l.player_id !== null &&
+          l.starting_position !== "P" &&
+          l.starting_position !== "SP" &&
+          l.starting_position !== "RP"
+      );
+      const confirmedRows = teamBatterLineups.filter(
+        (l) => l.is_confirmed === true
+      );
+      const useConfirmed = confirmedRows.length > 0;
+      const source: "confirmed" | "projected" = useConfirmed
+        ? "confirmed"
+        : "projected";
+      const candidates = (useConfirmed ? confirmedRows : teamBatterLineups)
         .sort((a, b) => {
           // Nulls last; otherwise asc by batting_position
           const aPos = a.batting_position ?? 999;
@@ -890,7 +988,7 @@ export async function buildFeatureSnapshots(
         .slice(0, 8);
 
       const out: BatterSnapshot[] = [];
-      for (const lr of batterLineups) {
+      for (const lr of candidates) {
         if (lr.player_id === null) continue;
         const player = playersById.get(lr.player_id);
         if (player === undefined) continue;
@@ -899,7 +997,8 @@ export async function buildFeatureSnapshots(
             player,
             lr,
             seasonStatsByPlayer.get(player.id),
-            splitsByPlayer.get(player.id) ?? []
+            splitsByPlayer.get(player.id) ?? [],
+            source
           )
         );
       }
@@ -977,7 +1076,20 @@ export async function buildFeatureSnapshots(
       away_starter !== null &&
       home_starter.is_confirmed === true &&
       away_starter.is_confirmed === true;
-    const lineup_confirmed = home_lineup_top8.length >= 8 && away_lineup_top8.length >= 8;
+    // R-16J Step 1.6 — `lineup_confirmed` must require ALL batters carry
+    // lineup_source==="confirmed". With the projected-lineup fallback,
+    // home_lineup_top8 may now be entirely projected (length 8 from BDL
+    // projection rows). Reporting `lineup_confirmed=true` for that case
+    // would suppress unconfirmed-data confidence penalties downstream
+    // that depend on the flag — staying honest about provenance keeps
+    // the existing data-quality machinery accurate.
+    const homeLineupAllConfirmed =
+      home_lineup_top8.length >= 8 &&
+      home_lineup_top8.every((b) => b.lineup_source === "confirmed");
+    const awayLineupAllConfirmed =
+      away_lineup_top8.length >= 8 &&
+      away_lineup_top8.every((b) => b.lineup_source === "confirmed");
+    const lineup_confirmed = homeLineupAllConfirmed && awayLineupAllConfirmed;
     const weather_available = weather !== null;
     const season_stats_present =
       home_starter?.season_era !== null &&

@@ -107,6 +107,14 @@ export type BatterSnapshot = {
    * type so pre-R-16J fixtures that omit it continue to type-check.
    */
   season_pa?: number | null;
+  /**
+   * R-16J Step 1.6 — lineup-source provenance. When loaded from a
+   * `lineups.is_confirmed = true` row → "confirmed". From a
+   * `lineups.is_confirmed = false` row → "projected". For pre-R-16J
+   * fixtures the field is omitted and defaults to "confirmed" semantics
+   * (treated as authoritative).
+   */
+  lineup_source?: "confirmed" | "projected";
 };
 
 export type TeamSnapshot = {
@@ -115,6 +123,26 @@ export type TeamSnapshot = {
   /** Weighted average of RP season ERAs. Null when no RP stats. */
   bullpen_era_proxy: number | null;
   season_runs_per_game: number | null;
+  /**
+   * R-16J Step 1.6 — team-level offense proxy. Mean season `batting_ops`
+   * across rostered batters with `batting_pa ≥ 100`. Used as Tier 3 in
+   * the FI fallback hierarchy when neither side has a usable top-of-
+   * order lineup OPS. Null when no qualifying batters in the team's
+   * roster.
+   *
+   * Computed once per slate in `featureSnapshot.computeTeamAvgBatterOps`;
+   * not consumed by the full-game score formula (only by NRFI offense
+   * fallback). The aggregate is shrunken at consumption time via
+   * `SHRINKAGE_K_TEAM_OPS` so a tiny-roster sample can't dominate.
+   */
+  team_avg_batter_ops?: number | null;
+  /**
+   * R-16J Step 1.6 — total PA used to compute `team_avg_batter_ops`.
+   * Becomes the sample-size input for `shrinkRate` so the proxy
+   * regresses toward league mean when the team's qualifying-batter pool
+   * is thin (early season callup-heavy roster, etc.).
+   */
+  team_avg_batter_ops_sample?: number | null;
 };
 
 export type ParkSnapshot = {
@@ -770,6 +798,38 @@ export const LEAGUE_BASELINE_FI_ERA = 4.0;
  * corrects a clear 2× bias.
  */
 export const FI_BASELINE_CALIBRATION = 0.66;
+
+/**
+ * R-16J Step 1.6 — team-OPS aggregate shrinkage k.
+ *
+ * Used when the FI offense fallback chain reaches Tier 3 (team-level
+ * average batter OPS, computed across rostered batters with PA ≥ 100).
+ * Larger than the per-batter k because the underlying sample is the
+ * sum of multiple players' PA — a 5-batter team aggregate easily
+ * crosses 1500 PA in mid-season, so a meaningful k that still tames
+ * thin-roster cases lands around 300.
+ */
+export const SHRINKAGE_K_TEAM_OPS = 300;
+
+/**
+ * R-16J Step 1.6 — NRFI confidence cap penalties per FI offense
+ * fallback tier. Applied to the NRFI/YRFI confidence ceiling (NOT to
+ * the probability itself). Penalties are in confidence points and use
+ * the WORSE of the two sides (max of home + away tiers).
+ *
+ *   Tier 1: confirmed lineup top-order OPS         (no penalty)
+ *   Tier 2: projected lineup top-order OPS         (no penalty — BDL
+ *                                                   projections trusted)
+ *   Tier 3: team-OPS aggregate proxy               (−3pp)
+ *   Tier 4: league average                         (−5pp)
+ *
+ * The cap reduction acknowledges data quality without forcing a
+ * specific decision — a model that lands clearly NRFI/YRFI at tier 3
+ * can still surface the pick, just capped at a lower ceiling.
+ */
+export const NRFI_PROJECTED_LINEUP_PENALTY = 0;
+export const NRFI_TEAM_PROXY_PENALTY = 3;
+export const NRFI_LEAGUE_AVG_PENALTY = 5;
 
 /**
  * Phase R-14 — per-stage confidence cap configuration.
