@@ -369,6 +369,52 @@ async function runV2Flow(args: {
     );
   }
 
+  // R-17 Step 2F.1 — speculative bucket probe diagnostics. The probe
+  // fires per-event when /opportunities/ev advertised only one of
+  // `_b0` / `_b3`. Recovery counts non-zero means SharpAPI was hiding
+  // books on the un-advertised bucket — usually prophetx per the
+  // Step 2F audit. Recovery counts zero means the probe ran but
+  // SharpAPI had nothing on the opposite bucket today (still cheap).
+  const speculativeGames = details.discovery.perGame.filter(
+    (g) => g.speculativeBucketsAttempted.length > 0
+  );
+  if (speculativeGames.length > 0) {
+    console.log();
+    console.log(`━━━ Speculative bucket probe (Step 2F.1) ━━━`);
+    let attemptedTotal = 0;
+    let withRowsTotal = 0;
+    let cappedTotal = 0;
+    let rowsRecoveredTotal = 0;
+    const booksRecoveredSlate = new Set<string>();
+    for (const g of speculativeGames) {
+      attemptedTotal += g.speculativeBucketsAttempted.length;
+      withRowsTotal += g.speculativeBucketsWithRows.length;
+      cappedTotal += g.speculativeBucketsCallCapped.length;
+      rowsRecoveredTotal += g.speculativeRowsRecovered;
+      for (const b of g.speculativeBooksRecovered) booksRecoveredSlate.add(b);
+      if (g.speculativeRowsRecovered > 0 || g.speculativeBucketsCallCapped.length > 0) {
+        const sfxList = g.speculativeBucketsAttempted
+          .map((id) => id.match(/_b\d+$/)?.[0] ?? "?")
+          .join(",");
+        const recovered =
+          g.speculativeBooksRecovered.length > 0
+            ? `books=[${g.speculativeBooksRecovered.join(",")}]`
+            : "books=[]";
+        console.log(
+          `    ${g.away}@${g.home}  probed=[${sfxList}]  with_rows=${g.speculativeBucketsWithRows.length}  call_capped=${g.speculativeBucketsCallCapped.length}  rows_recovered=${g.speculativeRowsRecovered}  ${recovered}`
+        );
+      }
+    }
+    console.log(
+      `  totals: attempted=${attemptedTotal}  with_rows=${withRowsTotal}  call_capped=${cappedTotal}  rows_recovered=${rowsRecoveredTotal}`
+    );
+    if (booksRecoveredSlate.size > 0) {
+      console.log(
+        `  slate-wide books recovered: ${[...booksRecoveredSlate].sort().join(", ")}`
+      );
+    }
+  }
+
   console.log();
   console.log("━━━ Per-game decisions (would-write) ━━━");
   console.log(

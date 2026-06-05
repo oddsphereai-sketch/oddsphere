@@ -151,19 +151,38 @@ async function main() {
     const result = await provider.getGameLinesV2(SLATE, "mlb");
 
     const oddsCalls = stub.calls.filter((c) => c.path === "/odds");
-    check("single-bucket — exactly 1 /odds call", oddsCalls.length === 1);
+    // R-17 Step 2F.1 — single advertised bucket also triggers a
+    // speculative probe of the opposite common bucket (`_b3` advertised
+    // here, so `_b0` is probed). Stub returns [] for `_b0` so the
+    // speculative call is harmless. Test now asserts both calls fire
+    // AND the speculative one contributes zero records.
+    check("single-bucket — 2 /odds calls (1 advertised + 1 speculative)", oddsCalls.length === 2);
     check(
-      "single-bucket — call hit the canonical suffix",
-      oddsCalls[0]?.query.event_id === "mlb_royals_twins_2026-06-05_b3"
+      "single-bucket — advertised call hit the canonical suffix",
+      oddsCalls.some((c) => c.query.event_id === "mlb_royals_twins_2026-06-05_b3")
     );
-    check("single-bucket — 3 records harvested", result.records.length === 3);
     check(
-      "single-bucket — perGame bucketsObserved length 1",
+      "single-bucket — speculative call hit `_b0`",
+      oddsCalls.some((c) => c.query.event_id === "mlb_royals_twins_2026-06-05_b0")
+    );
+    check("single-bucket — 3 records harvested (only advertised contributes)", result.records.length === 3);
+    check(
+      "single-bucket — perGame bucketsObserved length 1 (advertised count only)",
       result.discovery.perGame[0]?.bucketsObserved.length === 1
     );
     check(
       "single-bucket — dedupedAcrossBuckets = 0",
       result.discovery.perGame[0]?.dedupedAcrossBuckets === 0
+    );
+    // Step 2F.1 expectation: speculative probe ran, found nothing,
+    // recorded nothing.
+    check(
+      "single-bucket — speculativeBucketsAttempted = 1 (probe ran)",
+      result.discovery.perGame[0]?.speculativeBucketsAttempted.length === 1
+    );
+    check(
+      "single-bucket — speculativeRowsRecovered = 0 (probe returned nothing)",
+      result.discovery.perGame[0]?.speculativeRowsRecovered === 0
     );
   }
 

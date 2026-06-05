@@ -88,7 +88,20 @@ export type SharpApiGameResolver = (
 // ~30 /odds calls; +2 (opportunities/ev + splits) puts us at the edge
 // of the old 30 cap. 50 provides ~70% headroom for larger slates while
 // still being deeply conservative against the 1000-call quota window.
+//
+// R-17 Step 2F.1 — speculative bucket probe adds at most 1 extra /odds
+// call per event (the "opposite" common bucket — `_b3` when only `_b0`
+// is advertised, vice versa). Today's 15-game slate worst case:
+// 1 ev + 1 splits + 15 advertised + 15 speculative = 32 calls. Still
+// well inside 50.
 const MAX_CALLS_PER_INVOCATION = 50;
+
+// R-17 Step 2F.1 — suffixes the targeted speculative probe is allowed to
+// fetch when /opportunities/ev advertised only one of `_b0` / `_b3`.
+// The 2026-06-05 audit (Step 2F) observed `_b1` and `_b2` returned zero
+// rows on every event tested; they're deliberately excluded so the
+// probe stays cheap and yield-positive.
+const SPECULATIVE_PROBE_SUFFIXES = ["_b0", "_b3"] as const;
 
 // ─────────────────────────────────────────────────────────────
 // Raw shapes
@@ -764,6 +777,10 @@ export class SharpAPIOddsProvider implements IOddsProvider {
       // - "not_found" if all calls were 404
       // - "skipped_call_cap" if NO bucket was fetched (cap hit before
       //                       this event was reached)
+      //
+      // Reflects the ADVERTISED buckets only. Speculative recovery
+      // (Step 2F.1, below) lives on its own diagnostic fields so the
+      // advertised-vs-speculative split stays legible to operators.
       let status: V2OddsCallStatus;
       if (bucketsFetched.length === 0) {
         status = "skipped_call_cap";
@@ -774,6 +791,149 @@ export class SharpAPIOddsProvider implements IOddsProvider {
       } else {
         status = "empty";
       }
+
+      // ─── R-17 Step 2F.1 — targeted speculative bucket probe ──────
+      //
+      // The 2026-06-05 audit found SharpAPI silently publishes a
+      // small payload on `_b3` for events advertised at `_b0`
+      // (prophetx-only on 3 of 14 events tested). The opposite case
+      // (`_b0` for events advertised at `_b3`) returned zero rows
+      // on every event tested today but is symmetric and cheap, so
+      // we probe it too. `_b1` / `_b2` always returned zero rows
+      // and are deliberately not in SPECULATIVE_PROBE_SUFFIXES.
+      //
+      // Speculative rows share the SAME seenKeys dedupe set as the
+      // advertised loop above. If a (book, market, side, line) tuple
+      // appears in both an advertised bucket AND a speculative one,
+      // the advertised row wins (already in seenKeys) and the
+      // speculative copy is counted in dedupedAcrossBuckets. The
+      // recovery counters below capture only TRUE additions.
+      const observedSuffixSet = new Set<string>(
+        ev.effectiveEventIds
+          .map((id) => id.match(/_b\d+$/)?.[0] ?? "")
+          .filter((s): s is string => s.length > 0)
+      );
+      const speculativeProbeIds: Array<{ suffix: string; fullId: string }> = [];
+      for (const sfx of SPECULATIVE_PROBE_SUFFIXES) {
+        if (observedSuffixSet.has(sfx)) continue;
+        speculativeProbeIds.push({
+          suffix: sfx,
+          fullId: `${ev.splitsEventId}${sfx}`,
+        });
+      }
+
+      const speculativeBucketsAttempted: string[] = [];
+      const speculativeBucketsWithRows: string[] = [];
+      const speculativeBucketsCallCapped: string[] = [];
+      let speculativeRowsRecovered = 0;
+      const booksBeforeSpeculative = new Set(books);
+
+      for (const probe of speculativeProbeIds) {
+        if (callsUsed >= MAX_CALLS_PER_INVOCATION) {
+          speculativeBucketsCallCapped.push(probe.fullId);
+          continue;
+        }
+        callsUsed++;
+        speculativeBucketsAttempted.push(probe.fullId);
+
+        let probeRows: RawOddsRow[];
+        try {
+          probeRows = await this.client.fetchAll<RawOddsRow>({
+            path: "/odds",
+            query: { event_id: probe.fullId },
+            maxPages: 3,
+          });
+        } catch (e) {
+          if (e instanceof SharpApiNotFoundError) {
+            probeRows = [];
+          } else {
+            throw e;
+          }
+        }
+
+        let mergedFromThisBucket = 0;
+        for (const row of probeRows) {
+          // Same row-filter discipline as the advertised loop.
+          const rowLeague = asStringOrNull(row.league)?.toLowerCase();
+          if (rowLeague !== null && rowLeague !== undefined && rowLeague !== "mlb") {
+            continue;
+          }
+          if (row.is_alternate_line === true) continue;
+
+          const marketType = mapMarketType(asStringOrNull(row.market_type));
+          if (marketType === null) continue;
+          const sportsbook = mapSportsbook(asStringOrNull(row.sportsbook));
+          if (sportsbook === null) continue;
+          const side = mapSide(row.selection_type);
+          if (side === null) continue;
+
+          // R-16G-A — preserved on the speculative path. Same rationale:
+          // some books emit rows with inverted home/away strings; reject
+          // those before they reach `lines`.
+          if (side === "home" || side === "away") {
+            const rowHomeAbbr = normalizeMlbTeamName(asStringOrNull(row.home_team));
+            const rowAwayAbbr = normalizeMlbTeamName(asStringOrNull(row.away_team));
+            if (
+              rowHomeAbbr !== null &&
+              rowAwayAbbr !== null &&
+              (rowHomeAbbr !== ev.home || rowAwayAbbr !== ev.away)
+            ) {
+              rejectedHomeAwayMismatch++;
+              console.warn(
+                `[SharpAPIOddsProvider speculative] R-16G-A reject: ${sportsbook} row has home="${row.home_team}"/away="${row.away_team}" but event ${ev.away}@${ev.home}.`
+              );
+              continue;
+            }
+          }
+
+          const lineValue = asNumberOrNull(row.line);
+          const dedupeKey = `${ev.gameExternalId}|${marketType}|${sportsbook}|${side}|${lineValue ?? "null"}`;
+          if (seenKeys.has(dedupeKey)) {
+            dedupedAcrossBuckets++;
+            continue;
+          }
+          seenKeys.add(dedupeKey);
+
+          if (marketType === "moneyline") mlFromOdds++;
+          else if (marketType === "total") totFromOdds++;
+          else if (marketType === "spread") sprFromOdds++;
+          else other++;
+          books.add(sportsbook);
+
+          records.push({
+            game_external_id: ev.gameExternalId,
+            market_type: marketType,
+            player_external_id: null,
+            sportsbook,
+            side,
+            line_value: lineValue,
+            odds_american: asNumberOrNull(row.odds_american),
+            odds_decimal: asNumberOrNull(row.odds_decimal),
+            implied_probability: asNumberOrNull(row.odds_probability),
+            ev_percent: null,
+            fair_odds: null,
+            is_ev_positive: null,
+            fetched_at:
+              asStringOrNull(row.last_seen_at) ??
+              asStringOrNull(row.wire_received_at) ??
+              fetchedAt,
+          });
+          mergedFromThisBucket++;
+        }
+
+        if (mergedFromThisBucket > 0) {
+          speculativeBucketsWithRows.push(probe.fullId);
+          speculativeRowsRecovered += mergedFromThisBucket;
+        }
+      }
+
+      // Books that appeared ONLY via speculative buckets (i.e. weren't
+      // already in `books` when the speculative phase started).
+      const speculativeBooksRecovered: string[] = [];
+      for (const b of books) {
+        if (!booksBeforeSpeculative.has(b)) speculativeBooksRecovered.push(b);
+      }
+      speculativeBooksRecovered.sort();
 
       // R-16E — per-market /splits fallback.
       // For each game-level market where /odds returned ZERO rows, look
@@ -903,6 +1063,12 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         bucketsFetched,
         bucketsCallCapped,
         dedupedAcrossBuckets,
+        // R-17 Step 2F.1 — speculative bucket probe diagnostics.
+        speculativeBucketsAttempted,
+        speculativeBucketsWithRows,
+        speculativeBucketsCallCapped,
+        speculativeBooksRecovered,
+        speculativeRowsRecovered,
         eventIdSource: ev.eventIdSource,
         oddsCallStatus: status,
         mlRows: mlFromOdds + mlFromSplits,
@@ -979,8 +1145,36 @@ export type V2DiscoveryPerGame = {
   bucketsCallCapped: string[];
   /** Rows skipped because (book, market, side, line) already present
    *  from an earlier bucket. Diagnostic — bigger numbers mean the
-   *  buckets carried overlapping content, not a code defect. */
+   *  buckets carried overlapping content, not a code defect.
+   *  Step 2F.1: this counter also increments for speculative-bucket
+   *  rows that collide with an advertised-bucket row. */
   dedupedAcrossBuckets: number;
+  /** R-17 Step 2F.1 — speculative bucket probe diagnostics. The probe
+   *  fires when /opportunities/ev advertised only one of `_b0` / `_b3`
+   *  for this event; it queries the opposite suffix to recover books
+   *  that SharpAPI doesn't advertise (e.g. prophetx on the 2026-06-05
+   *  slate). `_b1` / `_b2` are NEVER probed — the Step 2F audit found
+   *  zero yield on those. Speculative rows feed the same dedupe set
+   *  + records array as the advertised loop; these fields capture only
+   *  the additive recovery. */
+  speculativeBucketsAttempted: string[];
+  /** Subset of speculativeBucketsAttempted whose /odds response
+   *  contributed at least one merged record (after dedupe + filters
+   *  + R-16G-A team guard). */
+  speculativeBucketsWithRows: string[];
+  /** Speculative probes blocked by MAX_CALLS_PER_INVOCATION. Empty in
+   *  steady state — today's 15-game slate worst case is well inside
+   *  the 50-call budget. */
+  speculativeBucketsCallCapped: string[];
+  /** Sportsbooks (alphabetical) that appeared ONLY in speculative
+   *  buckets — i.e. weren't in `books` after the advertised loop.
+   *  This is the recovery signal: non-empty means /opportunities/ev
+   *  was silently hiding those books. */
+  speculativeBooksRecovered: string[];
+  /** Count of records pushed during the speculative phase (after
+   *  dedupe + filters). 0 when probes fired but every row collided
+   *  with an advertised bucket. */
+  speculativeRowsRecovered: number;
   eventIdSource: "opportunities_suffixed" | "splits_stripped";
   oddsCallStatus: V2OddsCallStatus;
   /** Combined row counts (real /odds + R-16E /splits fallback). */
