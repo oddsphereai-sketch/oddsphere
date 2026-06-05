@@ -515,18 +515,57 @@ export type DailyEdgeGameDto = {
   // post-6.3.5e — V14 cleanup migration drops them in a future commit.
 };
 
+/**
+ * R-19 Phase 1 (C7) — explicit slate-resolution state. Surfaces WHY a
+ * given response has (or doesn't have) games, so the UI can render
+ * honest empty-state copy instead of a misleading stale slate.
+ *
+ * See lib/services/dailyEdgeSlateResolution.ts for the state machine.
+ */
+export type SlateState =
+  | "today_published"
+  | "today_draft_only"
+  | "today_hidden_only"
+  | "today_pending_ingest"
+  | "stale_fallback"
+  | "no_data";
+
 export type DailyEdgeResponse = {
   as_of: string;
   sport: Sport;
   /**
    * The slate_date the response is for — equals `requested_date` when games
-   * exist on it, otherwise the most recent slate_date with games (fallback).
+   * exist on it, otherwise the most recent slate_date with games (fallback
+   * — only when caller opted in via `?allowStale=true`).
    */
   date: string;
   /** What the caller asked for (URL ?date= or auto-today). */
   requested_date: string;
-  /** True when `date !== requested_date` (server fell back to most recent slate). */
+  /**
+   * True when `date !== requested_date` — i.e. when the server fell back
+   * to a past slate. R-19 Phase 1: fallback is now OPT-IN via
+   * `?allowStale=true`. By default `fallback_used` is always false; the
+   * pending/empty state is surfaced via `slateState` instead.
+   */
   fallback_used: boolean;
+  /**
+   * R-19 Phase 1 — explicit slate-resolution state. UI uses this to
+   * decide which empty-state copy to render when `games` is empty,
+   * and to label `stale_fallback` clearly.
+   */
+  slateState: SlateState;
+  /**
+   * R-19 Phase 1 — the dominant slate_status of the games being
+   * displayed. Null when no rows exist on the requested date at all.
+   * For stale_fallback this reports the fallback slate's status.
+   */
+  slate_status: string | null;
+  /**
+   * R-19 Phase 1 — most recent `games.updated_at` across the displayed
+   * slate. Null when no games are displayed. Useful for an explicit
+   * "as of HH:MM" label in the UI separate from response `as_of`.
+   */
+  last_slate_update_at: string | null;
   games: DailyEdgeGameDto[];
 };
 

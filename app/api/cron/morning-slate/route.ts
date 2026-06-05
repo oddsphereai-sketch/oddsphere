@@ -42,6 +42,10 @@ import { updateMarketSignalsForSlate } from "@/lib/services/marketSignalDerivati
 import { updateGradesForSlate } from "@/lib/services/gradeDerivationService";
 import { publishSlate } from "@/lib/services/slatePublishService";
 import { loadGameIdMap } from "@/lib/services/_idMaps";
+import {
+  shouldAutoPublishMorningSlate,
+  publishDecisionLabel,
+} from "@/lib/services/morningSlatePublishPolicy";
 
 export const maxDuration = 300; // Vercel Pro — morning-slate can be heavy
 
@@ -142,12 +146,22 @@ export async function GET(request: Request) {
       stepDetails.best_signal_picks = grades.monitor.bestSignalPicks;
       stepDetails.total_derived_picks = grades.monitor.totalDerivedPicks;
 
-      // 11. Auto-publish the slate. V1 has no admin review UI — successful
-      // morning-slate cron IS the admin promotion. Phase 7.5 swaps this for
-      // a manual review gate. Idempotent on already-published slates.
-      const publish = await publishSlate(sport, date);
-      records += publish.promoted;
-      stepDetails.slate_published = publish.promoted;
+      // 11. Publish gate — R-19 Phase 1 (C4). HOLD-as-draft is the new
+      // default. Auto-publish is opt-in via MORNING_SLATE_AUTO_PUBLISH=true
+      // until Phase 7.5's manual review UI lands. When the gate is closed
+      // the slate stays at draft and an operator runs publish-slate.ts to
+      // promote. When the gate is open (env="true"), behaviour matches the
+      // pre-R-19 auto-publish path. Idempotent either way.
+      const autoPublish = shouldAutoPublishMorningSlate(process.env);
+      if (autoPublish) {
+        const publish = await publishSlate(sport, date);
+        records += publish.promoted;
+        stepDetails.slate_published = publish.promoted;
+        stepDetails.slate_publish_decision = publishDecisionLabel(true);
+      } else {
+        stepDetails.slate_published = 0;
+        stepDetails.slate_publish_decision = publishDecisionLabel(false);
+      }
 
       return {
         records_updated: records,

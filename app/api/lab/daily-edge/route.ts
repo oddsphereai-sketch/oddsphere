@@ -46,6 +46,7 @@ import type {
   SignalType,
 } from "@/lib/types/domain/Grade";
 import { currentSlateDate, isSlateDate } from "@/lib/dates/slateDate";
+import { determineSlateState } from "@/lib/services/dailyEdgeSlateResolution";
 import {
   classifyLockState,
   computeLocksAt,
@@ -82,37 +83,20 @@ const LIVE_SPORTS: Sport[] = ["mlb"];
 const VISIBLE_SLATE_STATUSES = ["published", "final"] as const;
 
 /**
- * Resolve the slate_date to query. If `requested` has visible games for this
- * sport, use it. Otherwise return the most recent visible slate_date for the
- * sport — so the page never goes blank when a member loads it during the
- * morning before tonight's slate is up, or on an off-day.
+ * R-19 Phase 1 (C7) — slate-resolution moved to a pure state machine
+ * (`lib/services/dailyEdgeSlateResolution.ts`). The route now:
+ *   1. Probes the requested date for all `slate_status` rows.
+ *   2. If `?allowStale=true` is set, probes for the most recent visible
+ *      slate to use as fallback. Default = no fallback query.
+ *   3. Hands the rows to `determineSlateState` and renders the response
+ *      according to the returned state machine result.
  *
- * Visibility is gated by VISIBLE_SLATE_STATUSES — draft / hidden slates are
- * invisible to the resolver too, so a draft slate doesn't trigger a stale
- * fallback to an older published one. If only drafts exist, fallback finds
- * the latest published slate from history.
+ * Pre-R-19 the route silently fell back to the most recent visible slate
+ * — surfacing yesterday's picks under today's date. That regression mode
+ * is now gated behind the explicit `?allowStale=true` query opt-in, and
+ * even there the response carries `slateState="stale_fallback"` +
+ * `fallback_used=true` for the UI to render an unambiguous label.
  */
-async function resolveSlateDate(sport: Sport, requested: string): Promise<string> {
-  const { data: probe } = await supabase
-    .from("games")
-    .select("slate_date")
-    .eq("sport", sport)
-    .eq("slate_date", requested)
-    .in("slate_status", [...VISIBLE_SLATE_STATUSES])
-    .limit(1);
-  if ((probe ?? []).length > 0) return requested;
-
-  // Fallback: most recent visible slate_date for the sport.
-  const { data: latest } = await supabase
-    .from("games")
-    .select("slate_date")
-    .eq("sport", sport)
-    .in("slate_status", [...VISIBLE_SLATE_STATUSES])
-    .order("slate_date", { ascending: false })
-    .limit(1);
-  const fallback = (latest ?? [])[0]?.slate_date;
-  return fallback ?? requested;
-}
 
 // ───────────────────────────────────────────────────────────────────────────
 // Time helpers (ET display)
@@ -415,6 +399,9 @@ type GameRow = {
   external_id: number;
   sport: string;
   game_date: string;
+  /** R-19 Phase 1 — `games.updated_at`; route uses it to compute
+   *  `last_slate_update_at` for the slate displayed in the response. */
+  updated_at: string | null;
   // To-one FK expansions: Supabase typegen renders these as arrays but the
   // runtime returns a single object. game_predictions has UNIQUE(game_id)
   // and team FKs are to-one. Cast as single-object | null.
@@ -1706,6 +1693,12 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const sportParam = url.searchParams.get("sport");
   const dateParam = url.searchParams.get("date");
+  // R-19 Phase 1 (C7) — explicit opt-in for stale-slate fallback. Default
+  // (no param, or any value other than "true") = no fallback; route
+  // surfaces an explicit pending/empty state via `slateState`. Callers
+  // that genuinely want "show me whatever's most recent" pass
+  // `?allowStale=true` and accept the labeled stale response.
+  const allowStale = url.searchParams.get("allowStale") === "true";
 
   const sport: Sport =
     sportParam && (VALID_SPORTS as string[]).includes(sportParam)
@@ -1724,6 +1717,9 @@ export async function GET(request: Request) {
       date: requestedDate,
       requested_date: requestedDate,
       fallback_used: false,
+      slateState: "no_data",
+      slate_status: null,
+      last_slate_update_at: null,
       games: [],
     };
     return Response.json(body, {
@@ -1731,10 +1727,69 @@ export async function GET(request: Request) {
     });
   }
 
-  // Resolve the slate_date actually used: prefer the requested date; if empty,
-  // fall back to the most recent slate_date that has games for this sport.
-  // The UI can detect the fallback by comparing response.date to the URL param.
-  const effectiveDate = await resolveSlateDate(sport, requestedDate);
+  // ─── R-19 Phase 1 (C7) — slate-state resolution ──────────────────────
+  //
+  // Step 1: probe the requested date for every `slate_status` row. The
+  // determineSlateState helper classifies into one of six states based
+  // on what (if anything) lives on the requested date.
+  const { data: probeRows } = await supabase
+    .from("games")
+    .select("slate_status")
+    .eq("sport", sport)
+    .eq("slate_date", requestedDate);
+
+  // Step 2: only query for the fallback when the caller opted in. The
+  // helper handles all branches; when allowStale=false we pass null so
+  // there is no silent fallback path.
+  let mostRecentVisibleFallback:
+    | { slate_date: string; slate_status: string }
+    | null = null;
+  if (allowStale) {
+    const { data: latest } = await supabase
+      .from("games")
+      .select("slate_date, slate_status")
+      .eq("sport", sport)
+      .neq("slate_date", requestedDate)
+      .in("slate_status", [...VISIBLE_SLATE_STATUSES])
+      .order("slate_date", { ascending: false })
+      .limit(1);
+    const row = (latest ?? [])[0];
+    if (row) {
+      mostRecentVisibleFallback = {
+        slate_date: row.slate_date,
+        slate_status: row.slate_status,
+      };
+    }
+  }
+
+  const slateResult = determineSlateState({
+    requestedDate,
+    rowsForRequestedDate: (probeRows ?? []) as Array<{ slate_status: string }>,
+    mostRecentVisibleFallback,
+    allowStale,
+  });
+  const effectiveDate = slateResult.effectiveDate;
+
+  // Step 3: when no games to render (pending / draft-only / hidden-only /
+  // no_data), short-circuit with an explicit empty response. The UI
+  // reads `slateState` to render honest copy. Avoids the heavy join
+  // queries when there's nothing to display.
+  if (!slateResult.shouldFetchGames) {
+    const body: DailyEdgeResponse = {
+      as_of: new Date().toISOString(),
+      sport,
+      date: effectiveDate,
+      requested_date: requestedDate,
+      fallback_used: false,
+      slateState: slateResult.slateState,
+      slate_status: slateResult.slate_status,
+      last_slate_update_at: null,
+      games: [],
+    };
+    return Response.json(body, {
+      headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120" },
+    });
+  }
 
   // ─── Games + teams + predictions (one round-trip) ────────────────────────
   // VISIBLE_SLATE_STATUSES gates draft / hidden slates out of member view per
@@ -1743,7 +1798,7 @@ export async function GET(request: Request) {
   const { data: gameData, error: gamesErr } = await supabase
     .from("games")
     .select(
-      `id, external_id, sport, game_date, slate_date,
+      `id, external_id, sport, game_date, slate_date, updated_at,
        home_team:home_team_id (abbreviation, logo_url),
        away_team:away_team_id (abbreviation, logo_url),
        home_pitcher:home_pitcher_id (first_name, last_name, throws),
@@ -1892,12 +1947,25 @@ export async function GET(request: Request) {
     if (dto) dtos.push(dto);
   }
 
+  // R-19 Phase 1 — last_slate_update_at = max(games.updated_at) across
+  // the displayed slate. Null when no rows carry an updated_at.
+  let lastSlateUpdateAt: string | null = null;
+  for (const g of games) {
+    if (g.updated_at === null || g.updated_at === undefined) continue;
+    if (lastSlateUpdateAt === null || g.updated_at > lastSlateUpdateAt) {
+      lastSlateUpdateAt = g.updated_at;
+    }
+  }
+
   const body: DailyEdgeResponse = {
     as_of: new Date().toISOString(),
     sport,
     date: effectiveDate,
     requested_date: requestedDate,
     fallback_used: effectiveDate !== requestedDate,
+    slateState: slateResult.slateState,
+    slate_status: slateResult.slate_status,
+    last_slate_update_at: lastSlateUpdateAt,
     games: dtos,
   };
   return Response.json(body, {
