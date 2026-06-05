@@ -200,6 +200,8 @@ type SeasonStatsRow = {
   batting_obp: number | null;
   batting_slg: number | null;
   batting_ops: number | null;
+  /** R-16J Step 1 — plate appearances; used as sample size for lineup-OPS shrinkage. */
+  batting_pa: number | null;
   first_inning_era: number | null;
   first_inning_starts: number | null;
   first_inning_whip: number | null;
@@ -376,6 +378,7 @@ function buildBatterSnapshot(
     season_obp: seasonStats?.batting_obp ?? null,
     season_slg: seasonStats?.batting_slg ?? null,
     season_ops: seasonStats?.batting_ops ?? null,
+    season_pa: seasonStats?.batting_pa ?? null,
     vs_lhp_ops: vsLhp,
     vs_rhp_ops: vsRhp,
   };
@@ -663,7 +666,7 @@ export async function buildFeatureSnapshots(
     .from("player_season_stats")
     .select(
       "player_id, season, season_type, pitching_era, pitching_whip, pitching_k_per_9, " +
-        "batting_obp, batting_slg, batting_ops, " +
+        "batting_obp, batting_slg, batting_ops, batting_pa, " +
         "first_inning_era, first_inning_starts, first_inning_whip, " +
         "pitching_gs, pitching_gp, pitching_ip"
     )

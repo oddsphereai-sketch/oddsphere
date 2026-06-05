@@ -99,6 +99,14 @@ export type BatterSnapshot = {
   season_ops: number | null;
   vs_lhp_ops: number | null;
   vs_rhp_ops: number | null;
+  /**
+   * R-16J Step 1 — season plate appearances. Used as the sample-size
+   * input for lineup-OPS shrinkage (so a hot 50-PA debut doesn't get
+   * full weight). Null when no season row exists; the model's shrinkage
+   * helper treats null as `n = 0` → full league prior. Optional on the
+   * type so pre-R-16J fixtures that omit it continue to type-check.
+   */
+  season_pa?: number | null;
 };
 
 export type TeamSnapshot = {
@@ -277,6 +285,25 @@ export type AutoFactors = {
   ou_raw_confidence?: number | null;
   ou_dampening_penalty?: number;
   ou_dampening_reasons?: string[];
+  // ─────────────────────────────────────────────────────────────
+  // R-16J Step 1 — input shrinkage + FI probability transparency
+  // ─────────────────────────────────────────────────────────────
+  // The reviewer + breakdown UI can surface raw vs effective vs
+  // shrinkage-weight so the user can see HOW MUCH the model trusted
+  // each input. All optional for backward compat.
+  /** Shrinkage weight on each starter's raw season ERA (0..1). */
+  home_starter_era_shrinkage_weight?: number;
+  away_starter_era_shrinkage_weight?: number;
+  /** R-16J — raw (pre-calibration) expected FI runs, before
+   *  FI_BASELINE_CALIBRATION is applied. nrfi_expected_runs is the
+   *  CALIBRATED value the model uses for picks. */
+  nrfi_lambda_raw?: number | null;
+  /** Calibration constant value used for this prediction. */
+  nrfi_baseline_calibration?: number;
+  /** Calibrated NRFI probability from Poisson conversion `e^(-λ)`. */
+  nrfi_probability?: number | null;
+  /** Calibrated YRFI probability = 1 - nrfi_probability. */
+  yrfi_probability?: number | null;
 };
 
 /**
@@ -668,6 +695,81 @@ export const LEAGUE_CONSTANTS_V1 = {
   AVG_ERA: 4.0,
   AVG_OPS: 0.73,
 } as const;
+
+/**
+ * R-16J Step 1 — input shrinkage strengths (pseudo-counts for
+ * empirical-Bayes / James-Stein regression toward league mean).
+ *
+ *   effective_value  = (k * prior + n * raw_value) / (k + n)
+ *   shrinkage_weight = n / (k + n)
+ *
+ * Where `k` is the pseudo-count of "prior observations" — higher k =
+ * more skepticism toward the raw value. Values approved in R-16J Step 1
+ * planning (Daniel, 2026-06-04). Tunable in this single file.
+ *
+ * The pseudo-count scale uses the same sample-size unit as `n` in the
+ * formula (innings for pitchers, plate appearances for hitters).
+ *
+ * Rationale per input:
+ *   STARTER_ERA  90 IP  — sabermetric convention for SP-ERA stabilization.
+ *                         A starter with 45 IP gets ~33% weight; with
+ *                         180 IP gets ~67%; with 360 IP gets 80%.
+ *   STARTER_WHIP 75 IP  — WHIP stabilizes slightly faster than ERA.
+ *   FI_ERA       10 FIS — First-inning samples are tiny but the
+ *                         k=15 sensitivity test produced 8/9 toss-ups
+ *                         on the 2026-06-04 slate; k=10 gives the
+ *                         model more directional surface area without
+ *                         forcing picks. A 10-start pitcher gets 50%
+ *                         raw weight; a 1-start pitcher still gets
+ *                         only ~9%. (Was 15 in pre-Variant-B planning.)
+ *   FI_WHIP      10 FIS — symmetric to FI ERA.
+ *   BULLPEN_ERA  150 IP — reserved for Step 1.5 (no `bullpen_ip` plumbing
+ *                         yet; bullpen factor remains un-shrunk in Step 1).
+ *   LINEUP_OPS   150 PA — protects against hot-streak debuts. A 100-PA
+ *                         debut gets ~40% weight; a 400-PA regular gets
+ *                         ~73%.
+ */
+export const SHRINKAGE_K_STARTER_ERA = 90;
+export const SHRINKAGE_K_STARTER_WHIP = 75;
+// R-16J Step 1 (Variant B, 2026-06-05): FI ERA + FI WHIP k lowered
+// 15 → 10 after sensitivity sweep. With k=15 the 2026-06-04 slate
+// produced 8/9 toss-ups; with k=10 the same slate produces 6 toss-ups
+// + 2 YRFI + 1 NRFI — more directional surface area without forcing
+// picks via threshold manipulation. A pitcher with 10 FI starts now
+// gets ~50% raw weight (vs 40% at k=15); a 1-start pitcher still gets
+// only ~9% raw weight. Variant B preserves the 0.55/0.45 thresholds
+// so picks earn their slot through model probability, not threshold
+// narrowing.
+export const SHRINKAGE_K_FI_ERA = 10;
+export const SHRINKAGE_K_FI_WHIP = 10;
+export const SHRINKAGE_K_BULLPEN_ERA = 150;
+export const SHRINKAGE_K_LINEUP_OPS = 150;
+
+/** League baseline WHIP — prior for starter WHIP shrinkage. */
+export const LEAGUE_BASELINE_WHIP = 1.30;
+
+/** League baseline FI ERA — alias to AVG_ERA today (per-9-IP convention). */
+export const LEAGUE_BASELINE_FI_ERA = 4.0;
+
+/**
+ * R-16J Step 1 — empirical anchor for the first-inning runs formula.
+ *
+ * The model's `(FI_ERA / 9)` conversion produces ~0.88 combined runs
+ * at all-league-average inputs, but empirical MLB FI combined runs
+ * average ~0.55 (NRFI rate ≈ 55-58%). Without this multiplier, the
+ * model is structurally biased ~2× too high on FI λ — producing
+ * P(NRFI) ≈ 33% when reality is ≈ 56%.
+ *
+ * The constant is applied as the final multiplier on `expected_first_
+ * inning_runs` so league-average inputs land at λ ≈ 0.58 → P(NRFI) ≈
+ * 0.56, matching empirical baseline.
+ *
+ * 0.66 is an empirical estimate based on published MLB NRFI rates.
+ * Step 1.5 will populate `games.first_inning_runs` and refit this
+ * constant from our own DB. Until then it's a temporary anchor that
+ * corrects a clear 2× bias.
+ */
+export const FI_BASELINE_CALIBRATION = 0.66;
 
 /**
  * Phase R-14 — per-stage confidence cap configuration.

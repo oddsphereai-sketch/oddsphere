@@ -87,6 +87,15 @@ import {
   type DampeningFlags,
   TOP3_HITTER_INJURY_REDUCTION_CAP,
   TOP3_HITTER_INJURY_REDUCTION_PER,
+  // R-16J Step 1 — input shrinkage + FI baseline calibration
+  SHRINKAGE_K_STARTER_ERA,
+  SHRINKAGE_K_STARTER_WHIP,
+  SHRINKAGE_K_FI_ERA,
+  SHRINKAGE_K_FI_WHIP,
+  SHRINKAGE_K_LINEUP_OPS,
+  LEAGUE_BASELINE_WHIP,
+  LEAGUE_BASELINE_FI_ERA,
+  FI_BASELINE_CALIBRATION,
 } from "./types";
 import { applyDeterministicGuards } from "./aiSanityBoundary";
 
@@ -116,6 +125,36 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+/**
+ * R-16J Step 1 — empirical-Bayes shrinkage toward a prior.
+ *
+ *   effective = (k * prior + n * raw) / (k + n)
+ *   weight    = n / (k + n)         // 0 = full prior, 1 = full raw
+ *
+ * Used to regress noisy small-sample inputs (starter ERA, FI ERA, FI
+ * WHIP, lineup OPS) toward league means. Pure; depends only on its
+ * arguments. Null/zero-sample raw values return the prior with weight 0.
+ *
+ * Safe edge cases:
+ *   • raw === null      → effective = prior, weight = 0
+ *   • n === null         → effective = prior, weight = 0
+ *   • n <= 0             → effective = prior, weight = 0
+ *   • k === 0            → effective = raw,   weight = 1 (no shrinkage)
+ */
+function shrinkRate(
+  raw: number | null,
+  n: number | null,
+  k: number,
+  prior: number
+): { effective: number; weight: number } {
+  if (raw === null || n === null || n <= 0) {
+    return { effective: prior, weight: 0 };
+  }
+  const weight = n / (k + n);
+  const effective = (k * prior + n * raw) / (k + n);
+  return { effective, weight };
+}
+
 // ─────────────────────────────────────────────────────────────
 // Layer 1 — Pitcher suppression
 // ─────────────────────────────────────────────────────────────
@@ -128,18 +167,50 @@ type PitcherFactorResult = {
   effective_era: number | null;
   /** True when the model fell back to a 1.0 factor due to missing data. */
   used_fallback: boolean;
+  /**
+   * R-16J Step 1 — raw season ERA (pre-shrinkage) for transparency.
+   * Null when starter has no season ERA.
+   */
+  raw_era: number | null;
+  /**
+   * R-16J Step 1 — shrinkage weight on the raw season ERA (0..1).
+   * 0 = full league prior; 1 = full raw value. Lets the breakdown UI
+   * + reviewer surface how much the model trusted this pitcher's
+   * actual sample.
+   */
+  shrinkage_weight: number;
 };
 
 function pitcherEraFactor(starter: StarterSnapshot | null): PitcherFactorResult {
   if (starter === null || starter.season_era === null) {
-    return { factor: 1.0, effective_era: null, used_fallback: true };
+    return {
+      factor: 1.0,
+      effective_era: null,
+      used_fallback: true,
+      raw_era: null,
+      shrinkage_weight: 0,
+    };
   }
-  // Weighted blend of season ERA and last-30-day ERA. Last-30 is the
-  // recency signal; season is the structural one.
+  // R-16J Step 1 — shrink season ERA toward league prior before any
+  // downstream blending. Small samples (Jared Jones 1-start scenarios)
+  // collapse toward league mean; established starters retain ~75% raw
+  // weight at 270 IP. Single-line change at the input boundary; the
+  // rest of the formula is unchanged.
+  const seasonIp = starter.season_innings_pitched ?? null;
+  const { effective: shrunk_season_era, weight: shrinkage_weight } = shrinkRate(
+    starter.season_era,
+    seasonIp,
+    SHRINKAGE_K_STARTER_ERA,
+    LEAGUE_CONSTANTS_V1.AVG_ERA
+  );
+  // Weighted blend of (shrunken) season ERA and last-30-day ERA.
+  // last30 stays UN-shrunk on purpose — it's a recency signal designed
+  // to react fast; shrinking it would erase its job. The 0.7/0.3 blend
+  // already gives it bounded weight.
   const blended_era =
     starter.last30_era !== null
-      ? 0.7 * starter.season_era + 0.3 * starter.last30_era
-      : starter.season_era;
+      ? 0.7 * shrunk_season_era + 0.3 * starter.last30_era
+      : shrunk_season_era;
   // Pitch-quality adjustment is multiplicative and tightly bounded so
   // a bad estimate can't dominate the factor.
   const pitch_adj =
@@ -147,7 +218,13 @@ function pitcherEraFactor(starter: StarterSnapshot | null): PitcherFactorResult 
       ? clamp(starter.pitch_quality_score, 0.92, 1.08)
       : 1.0;
   const factor = (blended_era / LEAGUE_CONSTANTS_V1.AVG_ERA) * pitch_adj;
-  return { factor, effective_era: blended_era, used_fallback: false };
+  return {
+    factor,
+    effective_era: blended_era,
+    used_fallback: false,
+    raw_era: starter.season_era,
+    shrinkage_weight,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -188,8 +265,22 @@ function lineupOpsFactor(
     else if (b.season_ops !== null) ops = b.season_ops;
 
     if (ops !== null) {
+      // R-16J Step 1 — per-batter OPS shrinkage by season PA. Protects
+      // against hot-streak debut hitters dominating the lineup factor
+      // (a 50-PA debutant with .950 OPS shrinks ~25% toward league
+      // baseline before being position-weighted). season_pa is optional
+      // on the snapshot for pre-R-16J fixture back-compat; missing PA
+      // is treated as `n = 0` → effective_ops = league baseline (the
+      // honest answer when we don't know how much to trust the OPS).
+      const pa = b.season_pa ?? null;
+      const { effective: effective_ops } = shrinkRate(
+        ops,
+        pa,
+        SHRINKAGE_K_LINEUP_OPS,
+        LEAGUE_CONSTANTS_V1.AVG_OPS
+      );
       const weight = positionWeight(b.batting_position);
-      totalWeightedOps += ops * weight;
+      totalWeightedOps += effective_ops * weight;
       totalWeight += weight;
     }
   }
@@ -305,7 +396,9 @@ type NrfiResult = {
   /** Display confidence. Toss-Up: 52. Lean: 53-56. Strong: 57-62.
    *  Null only when decision_kind="held". */
   confidence: number | null;
-  /** Expected first-inning runs (both teams summed). */
+  /** Expected first-inning runs (both teams summed). R-16J Step 1:
+   *  this is the CALIBRATED λ (after FI_BASELINE_CALIBRATION).
+   *  See `lambda_raw` for the pre-calibration value. */
   expected_runs: number | null;
   /** Whether the starter ERA fallback (`season_era × 0.7`) was used. */
   used_fallback_era: boolean;
@@ -315,6 +408,13 @@ type NrfiResult = {
   hold_reason: string | null;
   /** Audit tags. Minimal in 4D.1; expands in 4D.3. */
   reason_codes: string[];
+  /** R-16J Step 1 — raw λ BEFORE empirical calibration. Used by
+   *  buildAutoFactors to surface lambda_raw alongside the calibrated value. */
+  lambda_raw?: number | null;
+  /** R-16J Step 1 — Poisson NRFI probability from the calibrated λ. */
+  p_nrfi?: number | null;
+  /** R-16J Step 1 — Poisson YRFI probability = 1 - p_nrfi. */
+  p_yrfi?: number | null;
 };
 
 // ─── Phase 4D.2 — top-order helpers (handedness-aware) ──────────────
@@ -501,10 +601,26 @@ function nrfiWhipFactor(starter: StarterSnapshot): FiWhipModifier {
     return { mult: 1.0, kind: "unavailable" };
   }
   const starts = starter.first_inning_starts ?? 0;
+  // R-16J Step 1 — preserve the FIRST_INNING_SAMPLE_GATE (3) for the
+  // "low_sample" classification, but apply shrinkage to the value
+  // when it IS trusted. A pitcher with 3 FI starts gets the shrunken
+  // WHIP (~17% raw weight under k=15); 30 starts gets ~67%.
   if (starts < FIRST_INNING_SAMPLE_GATE) {
     return { mult: 1.0, kind: "low_sample" };
   }
-  const deviation = (starter.first_inning_whip - FI_WHIP_BASELINE) / FI_WHIP_BASELINE;
+  // R-16J Step 1 — FI WHIP shrinkage uses FI_WHIP_BASELINE (1.225) as
+  // the prior, NOT the general LEAGUE_BASELINE_WHIP. The two priors
+  // serve different baselines: full-game WHIP averages ~1.30, while
+  // first-inning WHIP centers at FI_WHIP_BASELINE (1.225) per the
+  // existing deviation formula below. Mismatched priors would inject
+  // a tiny systematic bias on a stat designed to be neutral at 1.225.
+  const { effective: shrunk_whip } = shrinkRate(
+    starter.first_inning_whip,
+    starts,
+    SHRINKAGE_K_FI_WHIP,
+    FI_WHIP_BASELINE
+  );
+  const deviation = (shrunk_whip - FI_WHIP_BASELINE) / FI_WHIP_BASELINE;
   const natural = 1 + deviation * FI_WHIP_MODIFIER_SCALE;
   const mult = clamp(natural, FI_WHIP_MODIFIER_CLAMP_MIN, FI_WHIP_MODIFIER_CLAMP_MAX);
   // Threshold for emitting a directional reason code — must be a
@@ -671,27 +787,58 @@ function computeNrfi(snapshot: GameSnapshot, stage: ModelStage): NrfiResult {
   function effectiveFirstInningEra(s: StarterSnapshot): {
     value: number | null;
     source: FirstInningSource;
+    raw: number | null;
+    shrinkage_weight: number;
   } {
     const era = s.first_inning_era;
     const starts = s.first_inning_starts ?? 0;
+    // R-16J Step 1 — apply shrinkage to FI ERA toward league baseline.
+    // The "real" vs "low_sample" classification preserves the original
+    // FIRST_INNING_SAMPLE_GATE (3) gate so the downstream
+    // `hasAnyRealFI` cap fires identically to pre-R-16J behavior.
+    // Shrinkage is layered ON TOP: even "real" FI ERAs are regressed
+    // toward league mean by FI start count.
     if (era !== null && starts >= FIRST_INNING_SAMPLE_GATE) {
-      return { value: era, source: "real" };
+      const { effective, weight } = shrinkRate(
+        era,
+        starts,
+        SHRINKAGE_K_FI_ERA,
+        LEAGUE_BASELINE_FI_ERA
+      );
+      return { value: effective, source: "real", raw: era, shrinkage_weight: weight };
     }
     if (era !== null) {
-      if (s.season_era !== null) {
-        return { value: s.season_era * FIRST_INNING_PROXY_MULTIPLIER, source: "low_sample" };
-      }
-      // Phase 4.2.C.1.H-6.1: real FI ERA exists but sample is thin AND
-      // no season-ERA anchor (typical of MLB-Stats-only-ingested pitchers
-      // who don't have BDL season stats yet). Use the observed FI ERA
-      // directly — real data with a low_sample reason code is strictly
-      // better than dropping the value and forcing a hold.
-      return { value: era, source: "low_sample" };
+      // Thin FI sample (1-2 starts). Treat as low_sample like pre-R-16J,
+      // but use the SHRUNKEN value rather than dropping to season ERA.
+      // The shrunken FI ERA with 1 start is ~93% league baseline; this
+      // is the honest representation of "we have a tiny signal."
+      const { effective, weight } = shrinkRate(
+        era,
+        starts,
+        SHRINKAGE_K_FI_ERA,
+        LEAGUE_BASELINE_FI_ERA
+      );
+      return { value: effective, source: "low_sample", raw: era, shrinkage_weight: weight };
     }
     if (s.season_era !== null) {
-      return { value: s.season_era * FIRST_INNING_PROXY_MULTIPLIER, source: "proxy" };
+      // No FI ERA data at all. Fall back to shrunken season ERA ×
+      // proxy multiplier. Pre-R-16J this used raw season ERA; R-16J
+      // applies STARTER_ERA shrinkage so a tiny-sample season ERA
+      // doesn't drive a fake FI projection.
+      const { effective: shrunk_season, weight } = shrinkRate(
+        s.season_era,
+        s.season_innings_pitched ?? null,
+        SHRINKAGE_K_STARTER_ERA,
+        LEAGUE_CONSTANTS_V1.AVG_ERA
+      );
+      return {
+        value: shrunk_season * FIRST_INNING_PROXY_MULTIPLIER,
+        source: "proxy",
+        raw: null,
+        shrinkage_weight: weight,
+      };
     }
-    return { value: null, source: "missing" };
+    return { value: null, source: "missing", raw: null, shrinkage_weight: 0 };
   }
   const homeFirst = effectiveFirstInningEra(home_starter);
   const awayFirst = effectiveFirstInningEra(away_starter);
@@ -903,44 +1050,53 @@ function computeNrfi(snapshot: GameSnapshot, stage: ModelStage): NrfiResult {
       reason_codes.push("market_total_low");
   }
 
-  const expected_first_inning_runs =
-    per_side_subtotal * parkMod * weatherMult * marketMod;
+  // ── R-16J Step 1 — raw λ + empirical baseline calibration ───────
+  // The `(FI_ERA / 9)` conversion above produces ~0.88 combined runs at
+  // all-league-average inputs, but empirical MLB combined first-inning
+  // runs average ~0.55 (NRFI rate 55-58%). FI_BASELINE_CALIBRATION
+  // anchors the model's output to empirical reality. See its docstring
+  // in types.ts for the derivation.
+  const lambda_raw = per_side_subtotal * parkMod * weatherMult * marketMod;
+  const expected_first_inning_runs = lambda_raw * FI_BASELINE_CALIBRATION;
 
-  // ── Classify zone ────────────────────────────────────────────────
-  const naturalZone = classifyZone(expected_first_inning_runs);
+  // ── R-16J Step 1 — Poisson conversion to NRFI/YRFI probabilities ─
+  //   P(NRFI) = e^(-λ) — probability of 0 runs given expected λ
+  //   P(YRFI) = 1 - P(NRFI)
+  const p_nrfi = Math.exp(-expected_first_inning_runs);
+  const p_yrfi = 1 - p_nrfi;
 
-  // Phase 3.x.3 — both-sides-fallback guardrail. When NEITHER starter
-  // has real first-inning data (both source ∈ {proxy, low_sample}), cap
-  // the decision to toss_up so the model doesn't surface confident
-  // NRFI/YRFI picks on games where it has no real FI evidence. The
-  // expected_runs value still flows through for transparency.
+  // Both-sides-fallback guardrail (preserved from Phase 3.x.3). When
+  // NEITHER starter has real first-inning data (weight < 0.5 on both),
+  // cap to toss_up regardless of probability — the model has no real
+  // FI evidence on either side, so a confident NRFI/YRFI would be noise.
   const hasAnyRealFI = fiSources.includes("real");
-  let effectiveZone = naturalZone;
-  if (
-    !hasAnyRealFI &&
-    (naturalZone === "strong_nrfi" ||
-      naturalZone === "lean_nrfi" ||
-      naturalZone === "lean_yrfi" ||
-      naturalZone === "strong_yrfi")
-  ) {
-    effectiveZone = "toss_up";
+
+  // ── R-16J Step 1 — pick decision via probability thresholds ─────
+  // NRFI when P(NRFI) ≥ 0.55, YRFI when P(NRFI) ≤ 0.45, Toss-Up
+  // between (10pp band around 50/50). With the empirical calibration,
+  // these thresholds land where they SHOULD relative to true MLB rates.
+  type Decision = "nrfi" | "yrfi" | "toss_up";
+  let decisionKind: Decision;
+  if (!hasAnyRealFI) {
+    decisionKind = "toss_up";
     reason_codes.push("both_starters_fallback_capped_to_toss_up");
+  } else if (p_nrfi >= 0.55) {
+    decisionKind = "nrfi";
+  } else if (p_nrfi <= 0.45) {
+    decisionKind = "yrfi";
+  } else {
+    decisionKind = "toss_up";
   }
 
-  // Reason codes for picks (lightweight, 4D.1-minimal).
-  if (effectiveZone === "strong_nrfi" || effectiveZone === "lean_nrfi") {
-    reason_codes.push(
-      `expected_first_inning_runs_${expected_first_inning_runs.toFixed(2)}`
-    );
-  }
-  if (effectiveZone === "strong_yrfi" || effectiveZone === "lean_yrfi") {
+  // Reason code for picks (audit transparency).
+  if (decisionKind !== "toss_up") {
     reason_codes.push(
       `expected_first_inning_runs_${expected_first_inning_runs.toFixed(2)}`
     );
   }
 
   // ── Toss-Up branch (no caps applied) ─────────────────────────────
-  if (effectiveZone === "toss_up") {
+  if (decisionKind === "toss_up") {
     return {
       decision_kind: "toss_up",
       threshold_zone: "toss_up",
@@ -951,32 +1107,30 @@ function computeNrfi(snapshot: GameSnapshot, stage: ModelStage): NrfiResult {
       used_top_of_order_data,
       hold_reason: null,
       reason_codes,
+      lambda_raw,
+      p_nrfi,
+      p_yrfi,
     };
   }
 
-  // ── NRFI / YRFI branch — natural confidence + data-quality caps ─
-  let natural_confidence = naturalConfidenceForZone(
-    effectiveZone,
-    expected_first_inning_runs
+  // ── NRFI / YRFI branch — confidence from probability extremity ─
+  // Confidence = 50 + |P - 0.5| × 100, clamped to NRFI_CONFIDENCE_CAP.
+  //   P = 0.55 → 55%   (just over the pick threshold)
+  //   P = 0.65 → 65%   (close to cap)
+  //   P = 0.80 → 80% → clamped to NRFI_CONFIDENCE_CAP (typically 65)
+  const distance_from_neutral = Math.abs(p_nrfi - 0.5);
+  let natural_confidence = Math.min(
+    NRFI_CONFIDENCE_CAP,
+    50 + distance_from_neutral * 100
   );
 
-  // Build the confidence cap from data-quality signals.
-  let cap = NRFI_CONFIDENCE_CAP; // hard ceiling (65) — rarely reached
+  // Build the confidence cap from data-quality signals (existing logic
+  // preserved). Fallback-driven picks already had a tighter ceiling;
+  // unconfirmed-lineup/starter penalties still apply at t60_locked.
+  let cap = NRFI_CONFIDENCE_CAP;
   if (used_fallback) {
     cap = Math.min(cap, NRFI_FALLBACK_CONFIDENCE_CAP);
   }
-  // Phase 4.2.C.1.H-6.2 — stage-aware data-quality penalties.
-  // At `morning_draft`, lineups and starters are EXPECTED to be
-  // unconfirmed (BDL pushes the confirmed flags 2–4 hours before first
-  // pitch, well after the 8 AM ET morning ingest). Applying the
-  // -5 penalty per absent flag at this stage is double-punitive on top
-  // of the already-conservative STAGE_CONFIDENCE_CAPS["morning_draft"]
-  // = 60. At `t60_locked`, confirmed lineups and starters are expected
-  // and the absence of either is a real signal worth penalizing.
-  //
-  // The `lineup_unconfirmed` / `starter_unconfirmed` reason codes are
-  // emitted regardless of stage so the data-quality state remains
-  // visible to operators and the breakdown UI.
   const applyUnconfirmedPenalty = stage === "t60_locked";
   if (snapshot.data_quality.lineup_confirmed === false) {
     if (applyUnconfirmedPenalty) cap -= NRFI_UNCONFIRMED_CONFIDENCE_PENALTY;
@@ -1001,24 +1155,42 @@ function computeNrfi(snapshot: GameSnapshot, stage: ModelStage): NrfiResult {
       used_top_of_order_data,
       hold_reason: null,
       reason_codes: [...reason_codes, "data_quality_downgrade"],
+      lambda_raw,
+      p_nrfi,
+      p_yrfi,
     };
   }
 
   // Round confidence to 1 decimal for downstream display consistency.
   const rounded_confidence = Math.round(effective_confidence * 10) / 10;
 
+  // R-16J Step 1 — back-compat: derive a threshold_zone label so
+  // pre-R-16J consumers of `NrfiResult.threshold_zone` continue to
+  // read a sensible value. Maps probability extremity to the old
+  // strong/lean zone labels (strong = high confidence, lean = lower).
+  const tz: NrfiThresholdZone =
+    decisionKind === "nrfi"
+      ? p_nrfi >= 0.65
+        ? "strong_nrfi"
+        : "lean_nrfi"
+      : p_nrfi <= 0.35
+        ? "strong_yrfi"
+        : "lean_yrfi";
+  const decisionBool = decisionKind === "nrfi" ? true : false;
+
   return {
-    decision_kind: effectiveZone.startsWith("strong_nrfi") || effectiveZone === "lean_nrfi"
-      ? "nrfi"
-      : "yrfi",
-    threshold_zone: effectiveZone,
-    decision: zoneToDecision(effectiveZone),
+    decision_kind: decisionKind,
+    threshold_zone: tz,
+    decision: decisionBool,
     confidence: rounded_confidence,
     expected_runs: expected_first_inning_runs,
     used_fallback_era: used_fallback,
     used_top_of_order_data,
     hold_reason: null,
     reason_codes,
+    lambda_raw,
+    p_nrfi,
+    p_yrfi,
   };
 }
 
@@ -1477,6 +1649,24 @@ export function runMlbAutoModelV1(
     ou_raw_confidence,
     ou_dampening_penalty,
     ou_dampening_reasons,
+    // ── R-16J Step 1 — input shrinkage + FI calibration ─────────
+    home_starter_era_shrinkage_weight:
+      Math.round(homeStarterFactor.shrinkage_weight * 1000) / 1000,
+    away_starter_era_shrinkage_weight:
+      Math.round(awayStarterFactor.shrinkage_weight * 1000) / 1000,
+    nrfi_lambda_raw:
+      nrfi.lambda_raw !== null && nrfi.lambda_raw !== undefined
+        ? round1(nrfi.lambda_raw * 100) / 100
+        : null,
+    nrfi_baseline_calibration: FI_BASELINE_CALIBRATION,
+    nrfi_probability:
+      nrfi.p_nrfi !== null && nrfi.p_nrfi !== undefined
+        ? Math.round(nrfi.p_nrfi * 1000) / 1000
+        : null,
+    yrfi_probability:
+      nrfi.p_yrfi !== null && nrfi.p_yrfi !== undefined
+        ? Math.round(nrfi.p_yrfi * 1000) / 1000
+        : null,
   };
 
   // ── Assemble sport_specific output ──────────────────────────────
