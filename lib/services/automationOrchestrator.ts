@@ -51,6 +51,8 @@ import {
 } from "./automationGate";
 import { slateService } from "./slateService";
 import { linesService } from "./linesService";
+import { auditMarketCoverage } from "./marketCoverageAudit";
+import { supabase as supabaseClient } from "../db/supabase";
 import { generatePredictionsForSlate } from "./automodelService";
 import { publishSlate } from "./slatePublishService";
 import {
@@ -123,6 +125,11 @@ export type AutomationStepName =
   | "s4_missing_pitcher_ingest"
   | "s5_season_pitching"
   | "s7_lines_v2_refresh"
+  // Push 2 — slate-driven coverage audit + recovery. Runs after S7
+  // to fill gaps where /opportunities/ev discovery missed an
+  // expected game but /odds has it (e.g., SF@CHC + TB@MIA on
+  // 2026-06-06). NEVER touches predictions.
+  | "s7b_market_coverage_audit"
   | "s8_sharp_signals_refresh"
   | "g1_automation_gate"  // R-17 G1 — distinct from R-19 G1; legacy name kept
   | "m1_starter_refresh_final"
@@ -660,6 +667,79 @@ export async function runSlateCycleAutomated(opts: {
         ? `wrote ${res.records_updated} line row(s); api_calls=${res.api_calls_made}`
         : `dry-run; would write ${res.records_updated} line row(s)`,
     };
+  }));
+
+  // ── S7B. Push 2 — Slate-driven market coverage audit + recovery ──────
+  //
+  // Runs immediately after the primary V2 lines refresh. For every
+  // expected game that ended the S7 step with a missing market (ML or
+  // Total), this step constructs candidate SharpAPI event_ids and
+  // probes /odds directly. Recovered rows pass the same row-level
+  // filters (mapMarketType, mapSportsbook, mapSide, alternate-line
+  // drop, R-16G-A wrong-game guard) and are dedupe-inserted into the
+  // `lines` table. NEVER touches predictions, slate_status, or
+  // locked_at.
+  //
+  // Read-only when effectiveWriteMode.lines === false. Per-step env
+  // override (SHARP_LINES_RECOVERY_DB_WRITES_ENABLED) is NOT consulted
+  // here because we want recovery to follow the same write-mode as the
+  // primary lines step — turning on lines writes implies turning on
+  // gap-filling. Operator can disable recovery in a deploy emergency
+  // by reverting this commit; lines V2 still runs.
+  steps.push(await runStep("s7b_market_coverage_audit", effectiveWriteMode.lines, "lines", async (writeMode) => {
+    try {
+      const audit = await auditMarketCoverage({
+        sport: opts.sport,
+        date: opts.date,
+        apply: writeMode,
+        supabase: supabaseClient,
+      });
+      const a = audit.aggregate;
+      const reason = writeMode
+        ? `recovered=${a.recoveredCount} games; inserted=${a.rowsInserted} rows; ml_after=${a.mlAfterRecoveryCoverage}/${a.expectedGames}; total_after=${a.totalAfterRecoveryCoverage}/${a.expectedGames}; provider_true_missing=${a.providerTrueMissing}`
+        : `dry-run; would recover ${a.recoveredCount} games; would insert ${a.rowsInserted} rows; ml_after=${a.mlAfterRecoveryCoverage}/${a.expectedGames}; total_after=${a.totalAfterRecoveryCoverage}/${a.expectedGames}`;
+      if (a.providerHasDataDbMissing > 0) {
+        warnings.push(
+          `S7B: ${a.providerHasDataDbMissing} markets had provider data but DB was missing — recovery ${writeMode ? "wrote" : "would write"} ${a.rowsInserted} rows`,
+        );
+      }
+      if (a.rejectedWrongGameCount > 0) {
+        warnings.push(
+          `S7B: wrong-game guard rejected ${a.rejectedWrongGameCount} candidate row(s) — no cross-game contamination`,
+        );
+      }
+      return {
+        details: {
+          expected_games: a.expectedGames,
+          ml_db_coverage: a.mlDbCoverage,
+          ml_after_recovery: a.mlAfterRecoveryCoverage,
+          total_db_coverage: a.totalDbCoverage,
+          total_after_recovery: a.totalAfterRecoveryCoverage,
+          spread_db_coverage: a.spreadDbCoverage,
+          fi_db_coverage: a.fiDbCoverage,
+          provider_has_data_db_missing: a.providerHasDataDbMissing,
+          provider_true_missing: a.providerTrueMissing,
+          recovered_count: a.recoveredCount,
+          wrong_game_rejected: a.rejectedWrongGameCount,
+          parser_drop: a.parserDropCount,
+          provider_error: a.providerErrorCount,
+          rate_limited: a.rateLimitCount,
+          rows_inserted: a.rowsInserted,
+          rows_skipped_duplicate: a.rowsSkippedDuplicate,
+        },
+        reason,
+      };
+    } catch (e) {
+      // Audit failure should never block the slate-cycle — log the
+      // warning and continue. The primary lines refresh at S7 already
+      // succeeded; predictions can still run.
+      const msg = e instanceof Error ? e.message : String(e);
+      warnings.push(`S7B audit failed (non-fatal): ${msg}`);
+      return {
+        details: { error: msg },
+        reason: `audit failed (non-fatal): ${msg}`,
+      };
+    }
   }));
 
   // ── S8. Sharp signals refresh ─────────────────────────────────────────

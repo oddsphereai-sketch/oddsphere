@@ -159,13 +159,18 @@ type RawOddsRow = {
 // Helpers
 // ─────────────────────────────────────────────────────────────
 
-function asNumberOrNull(v: unknown): number | null {
+// Push 2: these helpers are exported so the slate-driven coverage
+// recovery utility (sharpApiMarketCoverage.ts) can apply the exact
+// same row-level filtering as the primary /opportunities/ev → /odds
+// path. Keeping a single source of truth prevents drift between the
+// primary ingest and the fallback ingest.
+export function asNumberOrNull(v: unknown): number | null {
   if (v === null || v === undefined) return null;
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : null;
 }
 
-function asStringOrNull(v: unknown): string | null {
+export function asStringOrNull(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   const s = String(v).trim();
   return s.length === 0 ? null : s;
@@ -187,7 +192,7 @@ function asStringOrNull(v: unknown): string | null {
  *   - team_total, player props, alternate lines, futures, championships →
  *     return null; caller drops the row.
  */
-function mapMarketType(raw: string | null): MarketType | null {
+export function mapMarketType(raw: string | null): MarketType | null {
   if (raw === null) return null;
   const v = raw.toLowerCase().trim();
   if (v === "h2h" || v === "moneyline" || v === "ml") return "moneyline";
@@ -218,7 +223,7 @@ function mapMarketType(raw: string | null): MarketType | null {
   return null;
 }
 
-function mapSportsbook(raw: string | null): Sportsbook | null {
+export function mapSportsbook(raw: string | null): Sportsbook | null {
   const s = asStringOrNull(raw);
   if (s === null) return null;
   return s.toLowerCase() as Sportsbook;
@@ -262,7 +267,7 @@ function makeSplitsLineRecord(opts: {
   };
 }
 
-function mapSide(rawSelectionType: unknown): Side | null {
+export function mapSide(rawSelectionType: unknown): Side | null {
   const s = asStringOrNull(rawSelectionType);
   if (s === null) return null;
   const v = s.toLowerCase();

@@ -289,3 +289,67 @@ export function normalizeMlbTeamName(input: unknown): MlbTeamAbbrev | null {
   if (key.length === 0) return null;
   return TEAM_VARIANTS[key] ?? null;
 }
+
+/**
+ * Push 2 — provider-format mascot names used in SharpAPI event_ids.
+ *
+ * SharpAPI event_ids follow the pattern:
+ *   `mlb_<homeMascot>_<awayMascot>_<YYYY-MM-DD>_b{0|3}`
+ *
+ * Each abbrev maps to one or more provider strings. Most teams are
+ * single-word lowercase plurals (cubs / giants / rays). Three teams
+ * have observed two-word mascots and SharpAPI's exact form across
+ * variants isn't 100% stable; for those we list both an underscore
+ * variant and a concatenated variant so candidate generation covers
+ * both shapes.
+ *
+ * Source of truth for the underscore form is the live `/opportunities/
+ * ev` payload (verified during Push 2 dry-run on 2026-06-06: SF@CHC
+ * surfaced as `mlb_cubs_giants_2026-06-06_b3`; TB@MIA surfaced as
+ * `mlb_marlins_rays_2026-06-06_b3`).
+ *
+ * Used by sharpApiEventIdCandidates.ts. Not used by normalizeMlbTeamName.
+ */
+export const MLB_PROVIDER_MASCOTS: Record<MlbTeamAbbrev, ReadonlyArray<string>> = {
+  ARI: ["diamondbacks"],
+  ATH: ["athletics"],
+  ATL: ["braves"],
+  BAL: ["orioles"],
+  BOS: ["red_sox", "redsox"],
+  CHC: ["cubs"],
+  CWS: ["white_sox", "whitesox"],
+  CIN: ["reds"],
+  CLE: ["guardians"],
+  COL: ["rockies"],
+  DET: ["tigers"],
+  HOU: ["astros"],
+  KC: ["royals"],
+  LAA: ["angels"],
+  LAD: ["dodgers"],
+  MIA: ["marlins"],
+  MIL: ["brewers"],
+  MIN: ["twins"],
+  NYM: ["mets"],
+  NYY: ["yankees"],
+  OAK: ["athletics"],
+  PHI: ["phillies"],
+  PIT: ["pirates"],
+  SD: ["padres"],
+  SEA: ["mariners"],
+  SF: ["giants"],
+  STL: ["cardinals"],
+  TB: ["rays"],
+  TEX: ["rangers"],
+  TOR: ["blue_jays", "bluejays"],
+  WSH: ["nationals"],
+};
+
+/**
+ * Look up the provider mascot variants for a canonical abbreviation.
+ * Returns at least one string for every MlbTeamAbbrev — never empty.
+ */
+export function providerMascotsForAbbrev(
+  abbrev: MlbTeamAbbrev,
+): ReadonlyArray<string> {
+  return MLB_PROVIDER_MASCOTS[abbrev];
+}
