@@ -94,23 +94,27 @@ async function main() {
     return;
   }
 
-  // Load games for those records (one query)
+  // Load games for those records (one query). Push 4b: also load
+  // first_inning_runs so the grader can auto-grade FI records when
+  // linescore ingest has populated the column.
   const gameIds = Array.from(new Set(records.map((r) => r.game_id)));
   const { data: gameRows } = await supabase
     .from("games")
-    .select("id, status, home_score, away_score, home_team_id, away_team_id")
+    .select("id, status, home_score, away_score, first_inning_runs, home_team_id, away_team_id")
     .in("id", gameIds);
   const gameById = new Map<number, {
     id: number;
     status: string | null;
     home_score: number | null;
     away_score: number | null;
+    first_inning_runs: number | null;
   }>(
     ((gameRows ?? []) as Array<{
       id: number;
       status: string | null;
       home_score: number | null;
       away_score: number | null;
+      first_inning_runs: number | null;
     }>).map((g) => [g.id, g]),
   );
 
@@ -141,7 +145,12 @@ async function main() {
         status: game.status ?? "unknown",
         home_score: game.home_score,
         away_score: game.away_score,
-        first_inning_runs: null, // not populated by auto ingest in V1
+        // Push 4b: FI grading reads games.first_inning_runs populated
+        // by mlbLinescoreIngestService. Null when ingest hasn't been
+        // run yet OR the first inning hasn't completed — grader
+        // returns 'pending' in that case (never inferred from full
+        // game total).
+        first_inning_runs: game.first_inning_runs,
       },
       source: opts.source,
     });
