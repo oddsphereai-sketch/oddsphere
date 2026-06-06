@@ -69,12 +69,10 @@ export type FeaturePresence = "present" | "proxy" | "missing";
 
 export type V22FeatureAudit = {
   team_ops: { home: FeaturePresence; away: FeaturePresence };
-  team_runs_per_game: { home: FeaturePresence; away: FeaturePresence };
   bullpen_era: { home: FeaturePresence; away: FeaturePresence };
   starter_era: { home: FeaturePresence; away: FeaturePresence };
   starter_pitch_quality: { home: FeaturePresence; away: FeaturePresence };
   starter_handedness: { home: FeaturePresence; away: FeaturePresence };
-  platoon_split: { home: FeaturePresence; away: FeaturePresence };
   park_factor: FeaturePresence;
   weather: FeaturePresence;
   confirmed_lineup: { home: FeaturePresence; away: FeaturePresence };
@@ -88,6 +86,27 @@ function present(v: unknown): FeaturePresence {
   return v !== null && v !== undefined ? "present" : "missing";
 }
 
+/** Per-side confirmed-lineup check. The joint `data_quality.lineup_confirmed`
+ *  collapses both teams; we evaluate each side independently so one team
+ *  with a projected lineup doesn't penalize the other side's audit. */
+function lineupConfirmedSide(lineup: GameSnapshot["home_lineup_top8"]): FeaturePresence {
+  if (lineup.length < 8) return "missing";
+  return lineup.every((b) => b.lineup_source === "confirmed") ? "present" : "missing";
+}
+
+/** Weather presence: "present" when row exists with a notable signal, "proxy"
+ *  when row exists with at least temperature or wind data, "missing" when
+ *  no row at all. The model only nudges on `is_notable`, so a row with
+ *  temp/wind that isn't notable is honestly a "we have data, model didn't
+ *  act on it" → proxy. */
+function weatherPresence(snap: GameSnapshot): FeaturePresence {
+  if (snap.weather === null) return "missing";
+  if (snap.weather.is_notable === true) return "present";
+  const hasTemp = typeof snap.weather.temperature_f === "number";
+  const hasWind = typeof snap.weather.wind_speed_mph === "number";
+  return hasTemp || hasWind ? "proxy" : "missing";
+}
+
 function auditFeatures(snap: GameSnapshot): V22FeatureAudit {
   const homeTeam = snap.home_team;
   const awayTeam = snap.away_team;
@@ -97,10 +116,6 @@ function auditFeatures(snap: GameSnapshot): V22FeatureAudit {
     team_ops: {
       home: present(homeTeam.team_avg_batter_ops),
       away: present(awayTeam.team_avg_batter_ops),
-    },
-    team_runs_per_game: {
-      home: present(homeTeam.season_runs_per_game),
-      away: present(awayTeam.season_runs_per_game),
     },
     bullpen_era: {
       home: present(homeTeam.bullpen_era_proxy),
@@ -118,15 +133,11 @@ function auditFeatures(snap: GameSnapshot): V22FeatureAudit {
       home: present(homeStarter?.throws),
       away: present(awayStarter?.throws),
     },
-    platoon_split: {
-      home: "missing", // V2.2 reads at projection time; flagged below
-      away: "missing",
-    },
     park_factor: present(snap.ballpark?.park_factor_runs),
-    weather: snap.data_quality.weather_available ? "present" : "missing",
+    weather: weatherPresence(snap),
     confirmed_lineup: {
-      home: snap.data_quality.lineup_confirmed ? "present" : "missing",
-      away: snap.data_quality.lineup_confirmed ? "present" : "missing",
+      home: lineupConfirmedSide(snap.home_lineup_top8),
+      away: lineupConfirmedSide(snap.away_lineup_top8),
     },
     present_count: 0,
     missing_count: 0,
@@ -139,10 +150,13 @@ function auditFeatures(snap: GameSnapshot): V22FeatureAudit {
   if (audit.starter_era.home === "present") audit.starter_era.home = "proxy";
   if (audit.starter_era.away === "present") audit.starter_era.away = "proxy";
 
-  // Count
+  // Count over the 14 real audit positions. team_runs_per_game and
+  // platoon_split were previously counted but neither has a data source
+  // wired AND V2.2 doesn't materially use them — dropping them removes
+  // 4 phantom-missing slots that were forcing every game into the
+  // "provisional / sparse" branch even with strong feature coverage.
   const sides = [
     audit.team_ops.home, audit.team_ops.away,
-    audit.team_runs_per_game.home, audit.team_runs_per_game.away,
     audit.bullpen_era.home, audit.bullpen_era.away,
     audit.starter_era.home, audit.starter_era.away,
     audit.starter_pitch_quality.home, audit.starter_pitch_quality.away,
@@ -298,19 +312,18 @@ export type V22IndependentProjection = {
 };
 
 function deriveQualityTier(audit: V22FeatureAudit): "high" | "medium" | "low" | "fallback" {
-  // Threshold-based, matches V2.1 conventions but rebuilt from feature
-  // count (not the V1 derived flag).
-  // Must have starter stats on both sides + team OPS on both sides to
-  // qualify as anything above fallback.
+  // Threshold-based, scaled to the 14-position audit. Must have starter
+  // stats on both sides + team OPS on both sides to qualify above fallback.
   const haveStartersBoth =
     audit.starter_era.home !== "missing" && audit.starter_era.away !== "missing";
   if (!haveStartersBoth) return "fallback";
   const haveOpsBoth =
     audit.team_ops.home !== "missing" && audit.team_ops.away !== "missing";
   if (!haveOpsBoth) return "low";
-  // Now graded by count of present features
-  if (audit.present_count >= 12) return "high";
-  if (audit.present_count >= 9) return "medium";
+  // 14 audit slots total. Tier cutoffs preserve the original ~75% / ~56%
+  // proportions but rescaled (high ≥10/14 = 71%, medium ≥7/14 = 50%).
+  if (audit.present_count >= 10) return "high";
+  if (audit.present_count >= 7) return "medium";
   return "low";
 }
 

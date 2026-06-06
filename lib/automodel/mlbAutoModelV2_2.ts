@@ -139,7 +139,7 @@ export function runMlbAutoModelV2_2(
 
   // Layer 2 — independent projection
   const indep = projectIndependent(snap);
-  if (indep.feature_audit.missing_count >= 8) {
+  if (indep.feature_audit.missing_count >= 7) {
     integrityNotes.push(
       `Sparse features (${indep.feature_audit.missing_count} missing); model treated as provisional.`,
     );
@@ -208,7 +208,7 @@ export function runMlbAutoModelV2_2(
   // Provisional — when market is missing or features sparse
   const provisional =
     !marketValid ||
-    indep.feature_audit.missing_count >= 8 ||
+    indep.feature_audit.missing_count >= 7 ||
     indep.data_quality_tier === "fallback";
 
   // Layer 5 — Play Grade

@@ -97,7 +97,7 @@ export function selectTrustIndependent(args: {
   if (!args.hasMarket) return V22_TRUST_INDEPENDENT_FALLBACK_NO_MARKET;
   // Severe missingness override — never trust independent more than
   // a token amount when 12+ features are missing.
-  if (args.missingCount >= 12) return V22_TRUST_INDEPENDENT_SEVERE_MISSING;
+  if (args.missingCount >= 10) return V22_TRUST_INDEPENDENT_SEVERE_MISSING;
   switch (args.tier) {
     case "high": return V22_TRUST_INDEPENDENT_HIGH;
     case "medium": return V22_TRUST_INDEPENDENT_MEDIUM;

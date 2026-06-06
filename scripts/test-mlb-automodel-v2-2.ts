@@ -271,9 +271,15 @@ async function main() {
     check("total = away + home", near(proj.total_expected_runs, proj.away_expected_runs + proj.home_expected_runs));
     check("home_run_diff = home - away", near(proj.home_run_diff, proj.home_expected_runs - proj.away_expected_runs));
     check("data_quality_tier high when all features present", proj.data_quality_tier === "high");
-    check("feature_audit.missing_count is small when all present",
-      proj.feature_audit.missing_count <= 2, // platoon_split is intentionally missing
+    // After the audit patch: 14 audit slots. The test fixture has empty
+    // lineup_top8 arrays → confirmed_lineup is "missing" on both sides
+    // (the 2 expected missing). Everything else should be present/proxy.
+    check("feature_audit.missing_count == 2 (lineup-only) with default fixture",
+      proj.feature_audit.missing_count === 2,
       `actual missing=${proj.feature_audit.missing_count}`);
+    check("feature_audit.present_count == 12 with default fixture",
+      proj.feature_audit.present_count === 12,
+      `actual present=${proj.feature_audit.present_count}`);
   }
   {
     // Strong offense — should push home runs >> 4.45
