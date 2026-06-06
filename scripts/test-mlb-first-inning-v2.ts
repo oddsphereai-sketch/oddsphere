@@ -442,11 +442,46 @@ async function main() {
     }
   }
   {
-    // Constants sanity
+    // Constants sanity + Push 3B-3 calibration thresholds
     check("FI_NRFI_THRESHOLD > FI_YRFI_THRESHOLD",
       FI_TEST.FI_NRFI_THRESHOLD > FI_TEST.FI_YRFI_THRESHOLD);
     check("Best Angle min edge sane (≥ 2%)", FI_TEST.FI_BEST_ANGLE_MIN_EDGE_PCT >= 2);
     check("Posterior cap ≤ 15 pts", FI_TEST.FI_POSTERIOR_NRFI_CAP <= 0.15);
+    check("Push 3B-3: NRFI threshold = 0.52 (narrowed from 0.55)",
+      FI_TEST.FI_NRFI_THRESHOLD === 0.52);
+    check("Push 3B-3: YRFI threshold = 0.48 (narrowed from 0.45)",
+      FI_TEST.FI_YRFI_THRESHOLD === 0.48);
+    check("Push 3B-3: Toss-Up band is symmetric ±2 around 0.50",
+      Math.abs((FI_TEST.FI_NRFI_THRESHOLD - 0.50) - (0.50 - FI_TEST.FI_YRFI_THRESHOLD)) < 0.001);
+  }
+  {
+    // Push 3B-3 — posterior just above 0.52 must classify as NRFI (not Toss-Up)
+    const snap = buildSnapshot({
+      homeStarter: { season_era: 3.50 },
+      awayStarter: { season_era: 3.50 },
+    });
+    const out = runMlbFirstInningModelV2(snap, buildFiLines(110, -130));
+    // Probe: this combination historically lands near 0.52-0.53 posterior
+    if (out.fiV2Audit.posterior_p_nrfi >= 0.52) {
+      check("posterior ≥ 0.52 → fi_pick=NRFI under calibrated band",
+        out.fiV2Audit.fi_pick === "NRFI",
+        `posterior=${out.fiV2Audit.posterior_p_nrfi} pick=${out.fiV2Audit.fi_pick}`);
+    }
+  }
+  {
+    // Push 3B-3 — posterior just below 0.48 must classify as YRFI (not Toss-Up)
+    // Force YRFI side via strong top-of-order + average SPs.
+    const eliteOps = FI_LEAGUE_AVG_TOP3_OPS + 0.12;
+    const snap = buildSnapshot({
+      homeLineup: buildLineup([eliteOps, eliteOps, eliteOps, 0.720, 0.700, 0.680, 0.640, 0.620]),
+      awayLineup: buildLineup([eliteOps, eliteOps, eliteOps, 0.720, 0.700, 0.680, 0.640, 0.620]),
+    });
+    const out = runMlbFirstInningModelV2(snap, buildFiLines(110, -130));
+    if (out.fiV2Audit.posterior_p_nrfi <= 0.48) {
+      check("posterior ≤ 0.48 → fi_pick=YRFI under calibrated band",
+        out.fiV2Audit.fi_pick === "YRFI",
+        `posterior=${out.fiV2Audit.posterior_p_nrfi} pick=${out.fiV2Audit.fi_pick}`);
+    }
   }
   {
     // selectTrustIndependent direct

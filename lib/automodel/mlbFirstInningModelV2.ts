@@ -50,9 +50,24 @@ const FI_CONFIDENCE_CEILING = {
 } as const;
 const FI_CONFIDENCE_FLOOR = 50;
 
-// Classification cutoffs on posterior P(NRFI).
-const FI_NRFI_THRESHOLD = 0.55;
-const FI_YRFI_THRESHOLD = 0.45;
+// Classification cutoffs on posterior P(NRFI). Push 3B-3 calibration:
+//
+// Original band [0.45, 0.55] collapsed 67% of games to Toss-Up across a
+// 3-slate calibration sweep (39 games), because most game posteriors
+// cluster near 50% by design — the model's adaptive blend pulls
+// independent toward market, and league-average matchups land close
+// to baseline 55% NRFI ≈ 50% on either side.
+//
+// Narrowed to [0.48, 0.52] = ±2 points around 50%:
+//   • Toss-Up rate drops from ~67% → ~36% (target 2-5 per 15-game slate)
+//   • YRFI emerges (was 0 on 2026-06-06; now 3-4 per slate)
+//   • Best Angle gates unchanged (edge ≥ 4% + tier high + market data)
+//   • Held still earned only by fallback tier / severe missing
+//
+// True coin-flip games (49-51%) still receive Toss-Up. Directional
+// signals at 52% NRFI / 48% NRFI become Lean picks, not Toss-Up.
+const FI_NRFI_THRESHOLD = 0.52;
+const FI_YRFI_THRESHOLD = 0.48;
 const FI_TOSS_UP_MIN = FI_YRFI_THRESHOLD;
 const FI_TOSS_UP_MAX = FI_NRFI_THRESHOLD;
 
