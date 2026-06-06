@@ -24,11 +24,11 @@
  * deploys are visible without throwing.
  */
 
-export type AutomodelVersion = "v1" | "v2" | "v2_1" | "shadow";
+export type AutomodelVersion = "v1" | "v2" | "v2_1" | "v2_2" | "shadow";
 
 export const AUTOMODEL_VERSION_ENV = "AUTOMODEL_VERSION";
 
-const VALID_VERSIONS: ReadonlySet<AutomodelVersion> = new Set(["v1", "v2", "v2_1", "shadow"]);
+const VALID_VERSIONS: ReadonlySet<AutomodelVersion> = new Set(["v1", "v2", "v2_1", "v2_2", "shadow"]);
 
 /**
  * Read AUTOMODEL_VERSION from the supplied env record (or process.env
@@ -47,7 +47,7 @@ export function resolveAutomodelVersion(
   }
   // eslint-disable-next-line no-console
   console.warn(
-    `[automodelVersion] AUTOMODEL_VERSION="${raw}" is invalid; defaulting to "v1". Valid values: v1, v2, v2_1, shadow.`,
+    `[automodelVersion] AUTOMODEL_VERSION="${raw}" is invalid; defaulting to "v1". Valid values: v1, v2, v2_1, v2_2, shadow.`,
   );
   return "v1";
 }

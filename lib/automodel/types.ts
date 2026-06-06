@@ -484,7 +484,7 @@ export type AutoModelSportSpecific = {
    * Optional + undefined-tolerant for backwards compat with rows
    * written before Phase 6B.1.
    */
-  model_used?: "v1" | "v2" | "v2_1" | "shadow_v1" | "v2_fallback_v1" | "v2_1_fallback_v1";
+  model_used?: "v1" | "v2" | "v2_1" | "v2_2" | "shadow_v1" | "v2_fallback_v1" | "v2_1_fallback_v1" | "v2_2_fallback_v1";
   /**
    * Compact summary of the V2 data-quality assessment. Top-level
    * boolean/string fields here so admin UIs can filter without
@@ -518,6 +518,7 @@ export type AutoModelSportSpecific = {
   ou_market_aligned?: boolean;
   model_integrity_notes?: string[];
   v2_1_audit?: unknown | null;
+  v2_2_audit?: unknown | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1219,3 +1220,4 @@ export const MODEL_VERSION_V2 = "auto_v2.0_mlb_market_prior";
 
 /** Phase 6B V2.1 — layered prediction-integrity model version tag. */
 export const MODEL_VERSION_V2_1 = "auto_v2.1_mlb_prediction_integrity";
+export const MODEL_VERSION_V2_2 = "auto_v2.2_mlb_full_game_projection";

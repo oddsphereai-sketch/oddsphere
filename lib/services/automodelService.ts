@@ -46,6 +46,7 @@ import { buildFeatureSnapshots } from "../automodel/featureSnapshot";
 import { runMlbAutoModelV1 } from "../automodel/mlbAutoModelV1";
 import { runMlbAutoModelV2 } from "../automodel/mlbAutoModelV2";
 import { runMlbAutoModelV2_1 } from "../automodel/mlbAutoModelV2_1";
+import { runMlbAutoModelV2_2 } from "../automodel/mlbAutoModelV2_2";
 import { reviewAutoModelOutput } from "../automodel/aiSanityBoundary";
 import {
   resolveEffectiveVersion,
@@ -54,6 +55,7 @@ import {
 import {
   MODEL_VERSION_V2,
   MODEL_VERSION_V2_1,
+  MODEL_VERSION_V2_2,
 } from "../automodel/types";
 import type {
   AutoModelOutput,
@@ -977,6 +979,73 @@ function applyV2IfSelected(args: {
         v2_best_angle_eligible: a.best_angle_eligible_ml || a.best_angle_eligible_ou,
         v2_1_audit: a,
         model_integrity_notes: a.model_integrity_notes,
+      },
+    };
+  }
+
+  // ── V2.2 path (Push 3A — clean independent baseball projection) ──
+  if (effectiveVersion === "v2_2") {
+    let v22;
+    try {
+      v22 = runMlbAutoModelV2_2(snap, v1Output, stage);
+    } catch (e) {
+      console.warn(
+        `[automodelService] runMlbAutoModelV2_2 threw for game_external_id=` +
+          `${snap.game_external_id}: ${e instanceof Error ? e.message : String(e)}. ` +
+          `Falling back to V1.`
+      );
+      return {
+        ...v1Output,
+        sport_specific: {
+          ...v1Output.sport_specific,
+          model_used: "v2_2_fallback_v1",
+        },
+      };
+    }
+    const a22 = v22.v22Audit;
+    const holdPicks22 = computeHoldPicks(v1Output.sport_specific.hold_picks, {
+      ml: v22.predicted_ml_winner,
+      ou: v22.predicted_ou_side,
+      nrfi: v22.predicted_nrfi,
+    });
+    return {
+      ...v1Output,
+      predicted_home_score: v22.predicted_home_score,
+      predicted_away_score: v22.predicted_away_score,
+      predicted_total: v22.predicted_total,
+      predicted_ml_winner: v22.predicted_ml_winner,
+      ml_confidence: v22.ml_confidence,
+      predicted_ou_side: v22.predicted_ou_side,
+      ou_confidence: v22.ou_confidence,
+      predicted_nrfi: v22.predicted_nrfi,
+      nrfi_confidence: v22.nrfi_confidence,
+      sport_specific: {
+        ...v1Output.sport_specific,
+        model_version: MODEL_VERSION_V2_2,
+        model_used: "v2_2",
+        hold_picks: holdPicks22,
+        held: holdPicks22.length === 3,
+        hold_reason:
+          holdPicks22.length === 3
+            ? (v1Output.sport_specific.hold_reason ?? "all_markets_held")
+            : null,
+        ml_play_grade: a22.ml_play_grade,
+        ou_play_grade: a22.ou_play_grade,
+        ml_prediction_type: a22.ml_prediction_type,
+        ou_prediction_type: a22.ou_prediction_type,
+        ml_best_angle_eligible: a22.ml_best_angle_eligible,
+        ou_best_angle_eligible: a22.ou_best_angle_eligible,
+        ml_best_angle_reason: a22.ml_best_angle_reason,
+        ou_best_angle_reason: a22.ou_best_angle_reason,
+        ml_no_bet_reason: a22.ml_no_bet_reason,
+        ou_no_bet_reason: a22.ou_no_bet_reason,
+        ml_market_aligned: a22.ml_market_aligned,
+        ou_market_aligned: a22.ou_market_aligned,
+        v2_provisional: a22.provisional,
+        v2_data_quality_tier: a22.data_quality_tier,
+        v2_best_angle_eligible: a22.ml_best_angle_eligible || a22.ou_best_angle_eligible,
+        v2_2_audit: a22,
+        model_integrity_notes: a22.model_integrity_notes,
       },
     };
   }

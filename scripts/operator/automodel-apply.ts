@@ -56,13 +56,13 @@ function parseArgs(argv: string[]): Args {
     if (a === "--sport" && argv[i + 1]) { sport = argv[++i] as Sport; continue; }
     if (a === "--model" && argv[i + 1]) {
       const v = argv[++i]!.trim().toLowerCase();
-      if (v === "v1" || v === "v2" || v === "v2_1" || v === "shadow") model = v;
+      if (v === "v1" || v === "v2" || v === "v2_1" || v === "v2_2" || v === "shadow") model = v;
       continue;
     }
     if (a === "--apply") { apply = true; continue; }
   }
   if (!date) {
-    console.error("Usage: automodel-apply.ts --date YYYY-MM-DD [--sport mlb] [--model v1|v2|shadow] [--apply]");
+    console.error("Usage: automodel-apply.ts --date YYYY-MM-DD [--sport mlb] [--model v1|v2|v2_1|v2_2|shadow] [--apply]");
     process.exit(1);
   }
   // Resolve the effective version once with the same precedence the
