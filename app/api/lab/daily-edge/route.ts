@@ -1483,10 +1483,43 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const marketImpliedPct = implied.pickPct;
   const marketSource = implied.source;
   const marketDataQuality = implied.quality;
-  const modelMarketGapPct =
+  let modelMarketGapPct =
     modelTrustPct !== null && marketImpliedPct !== null
       ? +(modelTrustPct - marketImpliedPct).toFixed(1)
       : null;
+
+  // Phase 6B.1.6L — for the first_inning market, source model/market
+  // probability + edge directly from sport_specific.fi_v2_audit when
+  // present. computeMarketImplied is built for ML/Total odds shapes
+  // and doesn't synthesise an FI no-vig pair; fi_v2_audit already has
+  // posterior_p_nrfi + market_nrfi_no_vig + fi_edge_pct that we can
+  // pipe straight through.
+  let modelTrustPctOverride: number | null = null;
+  let marketImpliedPctOverride: number | null = null;
+  if (input.market === "first_inning") {
+    const fi = readFiV2Audit(input.sportSpecific ?? null);
+    if (fi && input.pick !== null && input.pick !== "Held") {
+      // Pick-side probabilities (posterior + market) for the actual pick.
+      const pickIsNrfi = input.pick === "NRFI" || input.pick === "Toss-Up";
+      const post =
+        pickIsNrfi
+          ? fi.posterior_p_nrfi
+          : (fi.posterior_p_nrfi !== null ? 1 - fi.posterior_p_nrfi : null);
+      const mkt =
+        pickIsNrfi
+          ? fi.market_nrfi_no_vig
+          : (fi.market_nrfi_no_vig !== null ? 1 - fi.market_nrfi_no_vig : null);
+      if (post !== null) modelTrustPctOverride = +(post * 100).toFixed(1);
+      if (mkt !== null) marketImpliedPctOverride = +(mkt * 100).toFixed(1);
+      if (modelTrustPctOverride !== null && marketImpliedPctOverride !== null) {
+        // For Toss-Up, force gap to zero — the model is explicitly NOT
+        // claiming an edge here. (fi_edge_pct is null for Toss-Up.)
+        modelMarketGapPct = input.pick === "Toss-Up"
+          ? 0
+          : +(modelTrustPctOverride - marketImpliedPctOverride).toFixed(1);
+      }
+    }
+  }
 
   return {
     pick: input.pick,
@@ -1514,8 +1547,8 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     line: input.totalsExtras?.sportsbookLine ?? null,
     keyStats,
     // R-14C1 additions
-    modelTrustPct,
-    marketImpliedPct,
+    modelTrustPct: modelTrustPctOverride ?? modelTrustPct,
+    marketImpliedPct: marketImpliedPctOverride ?? marketImpliedPct,
     modelMarketGapPct,
     marketSource,
     marketDataQuality,

@@ -1094,11 +1094,39 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
             {marketData.pick ?? "—"}
           </h2>
           <div className="mt-1.5 flex items-baseline gap-1.5 flex-wrap">
+            {/* Phase 6B.1.6L — pivot from a single "confidence" number to
+                "Win Prob NN%" + a separate Edge readout. Win Prob is
+                the model's probability for the picked side. Edge is
+                model_prob − market_no_vig in percentage points and is
+                rendered separately so members don't read win prob as a
+                betting edge. */}
+            <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">
+              {market === "moneyline" ? "Win Prob" : market === "total" ? "Model Prob" : "Model Prob"}
+            </span>
             <span className="text-[12.5px] tabular-nums font-bold text-gray-300">
               {marketData.confidence === null
                 ? "—"
                 : `${Math.round(marketData.confidence * 100)}%`}
             </span>
+            {marketData.modelMarketGapPct !== null && marketData.confidence !== null && (
+              <>
+                <span className="text-gray-700">·</span>
+                <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Edge</span>
+                <span
+                  className={`text-[12.5px] tabular-nums font-bold ${
+                    marketData.modelMarketGapPct >= 2
+                      ? "text-emerald-300"
+                      : marketData.modelMarketGapPct <= -1
+                        ? "text-amber-300"
+                        : "text-gray-400"
+                  }`}
+                >
+                  {Math.abs(marketData.modelMarketGapPct) < 0.5
+                    ? "No edge"
+                    : `${marketData.modelMarketGapPct > 0 ? "+" : ""}${marketData.modelMarketGapPct.toFixed(1)}%`}
+                </span>
+              </>
+            )}
             {marketData.priceAmerican !== null ? (
               <>
                 <span className="text-gray-700">·</span>
@@ -1194,10 +1222,12 @@ function ModelMarketTakeStrip({
   market: MarketKey;
   marketData: MarketEdgeDto;
 }) {
-  // FI has no market data — show nothing.
-  if (market === "first_inning") return null;
-  // Held market — show nothing (verdict pill already communicates this).
+  // Phase 6B.1.6L — FI now populates modelTrustPct / marketImpliedPct /
+  // modelMarketGapPct from sport_specific.fi_v2_audit when the post-
+  // cutover FI V2 data is present. Render the strip when those fields
+  // are available; otherwise honest-empty.
   if (marketData.held) return null;
+  if (market === "first_inning" && marketData.modelTrustPct === null) return null;
 
   const modelPct = marketData.modelTrustPct;
   const marketPct = marketData.marketImpliedPct;
@@ -1292,11 +1322,13 @@ function ModelMarketTakeStrip({
 
         {showGap && (
           <>
-            <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Gap</span>
+            <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Edge</span>
             <span className={`text-[12.5px] tabular-nums font-bold ${gapColor}`}>
-              {gap! > 0 ? "+" : ""}{gap!.toFixed(1)} pt
+              {Math.abs(gap!) < 0.5
+                ? "No edge"
+                : `${gap! > 0 ? "+" : ""}${gap!.toFixed(1)} pt`}
               <span className="ml-2 text-[9.5px] font-normal text-gray-500 normal-case tracking-normal">
-                model vs market context
+                model vs no-vig market
               </span>
             </span>
           </>
