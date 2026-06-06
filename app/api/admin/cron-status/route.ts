@@ -29,6 +29,14 @@ type CronCfg = {
 };
 
 const CRON_CONFIGS: CronCfg[] = [
+  // R-19 Phase 5g.2 — Slate-cycle automation is the cron data_source label
+  // written by /api/cron/slate-cycle (cronHandlerPerSport's data_source
+  // argument). Added so the dashboard surfaces the Phase 5g schedule's
+  // last_started_at / last_status / records_updated for monitoring.
+  // Cadence 120 min reflects the 2-hour interval between scheduled fires
+  // (3 morning + 6 intraday entries). Schedule string echoes the vercel.json
+  // entries so the operator can verify what's actually scheduled.
+  { data_source: "slate_cycle_automation", per_sport: true,  cadence_minutes: 120,   display_name: "Slate-cycle automation", schedule: "Every 2hrs · 4 AM–8 PM ET · morning + intraday split" },
   { data_source: "morning_slate",       per_sport: true,  cadence_minutes: 1440,  display_name: "Morning slate refresh",  schedule: "8am ET daily" },
   { data_source: "daily_refresh",       per_sport: true,  cadence_minutes: 1440,  display_name: "Daily refresh",          schedule: "4am ET daily" },
   { data_source: "midday_refresh",      per_sport: true,  cadence_minutes: 1440,  display_name: "Midday refresh",         schedule: "12pm ET daily" },
