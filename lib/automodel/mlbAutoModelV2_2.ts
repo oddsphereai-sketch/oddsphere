@@ -64,6 +64,12 @@ export type V22Audit = {
   data_quality_tier: "high" | "medium" | "low" | "fallback";
   feature_present_count: number;
   feature_missing_count: number;
+  // Push 3A-2 — source/reason hierarchy roll-up
+  feature_preferred_count: number;
+  feature_fallback_real_count: number;
+  feature_proxy_count: number;
+  feature_neutral_fallback_count: number;
+  feature_reason_codes: string[];
   // Layer 3
   posterior_away_runs: number;
   posterior_home_runs: number;
@@ -211,6 +217,23 @@ export function runMlbAutoModelV2_2(
     indep.feature_audit.missing_count >= 7 ||
     indep.data_quality_tier === "fallback";
 
+  // Push 3A-2 — block Best Angle when any key feature group is on
+  // neutral fallback or missing for BOTH sides. The model can still
+  // emit a lean/market_aligned grade but Best Angle requires real data.
+  const fa = indep.feature_audit;
+  const bothStarterMissing =
+    (fa.starter_era.home.source === "missing" || fa.starter_era.home.source === "neutral_fallback") &&
+    (fa.starter_era.away.source === "missing" || fa.starter_era.away.source === "neutral_fallback");
+  const bothOffenseMissing =
+    (fa.team_ops.home.source === "missing" || fa.team_ops.home.source === "neutral_fallback") &&
+    (fa.team_ops.away.source === "missing" || fa.team_ops.away.source === "neutral_fallback");
+  const neutralFallbackBlocksBA = bothStarterMissing || bothOffenseMissing;
+  if (neutralFallbackBlocksBA) {
+    integrityNotes.push(
+      "Key feature group on neutral fallback / missing for both sides; Best Angle blocked.",
+    );
+  }
+
   // Layer 5 — Play Grade
   // PlayGradeInput shape: modelProb + marketProb + americanOdds.
   // EV/edge computed inside the grader from those inputs.
@@ -255,6 +278,11 @@ export function runMlbAutoModelV2_2(
     data_quality_tier: indep.data_quality_tier,
     feature_present_count: indep.feature_audit.present_count,
     feature_missing_count: indep.feature_audit.missing_count,
+    feature_preferred_count: indep.feature_audit.preferred_count,
+    feature_fallback_real_count: indep.feature_audit.fallback_real_count,
+    feature_proxy_count: indep.feature_audit.proxy_count,
+    feature_neutral_fallback_count: indep.feature_audit.neutral_fallback_count,
+    feature_reason_codes: indep.feature_audit.reason_codes,
     posterior_away_runs: posterior.away_expected_runs,
     posterior_home_runs: posterior.home_expected_runs,
     posterior_total: posterior.total_expected_runs,
@@ -273,8 +301,8 @@ export function runMlbAutoModelV2_2(
     ou_play_grade: ouPlayGrade.grade,
     ml_prediction_type: mlPlayGrade.predictionType,
     ou_prediction_type: ouPlayGrade.predictionType,
-    ml_best_angle_eligible: mlPlayGrade.grade === "best_angle",
-    ou_best_angle_eligible: ouPlayGrade.grade === "best_angle",
+    ml_best_angle_eligible: mlPlayGrade.grade === "best_angle" && !neutralFallbackBlocksBA,
+    ou_best_angle_eligible: ouPlayGrade.grade === "best_angle" && !neutralFallbackBlocksBA,
     ml_no_bet_reason: mlPlayGrade.noBetReason,
     ou_no_bet_reason: ouPlayGrade.noBetReason,
     ml_market_aligned: mlPlayGrade.marketAligned,

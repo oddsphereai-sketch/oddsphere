@@ -17,6 +17,7 @@
 
 import {
   projectIndependent,
+  pitchQualityProxy,
   V22_LEAGUE_AVG_RUNS_PER_GAME,
   V22_LEAGUE_AVG_OPS,
   V22_LEAGUE_AVG_STARTER_ERA,
@@ -90,8 +91,8 @@ function buildStarter(opts: Partial<StarterSnapshot> = {}): StarterSnapshot {
     player_name: opts.player_name ?? "Test Pitcher",
     throws: "throws" in opts ? opts.throws! : "R",
     season_era: "season_era" in opts ? opts.season_era! : 4.10,
-    season_whip: 1.30,
-    season_k_per_9: 8.5,
+    season_whip: "season_whip" in opts ? opts.season_whip! : 1.30,
+    season_k_per_9: "season_k_per_9" in opts ? opts.season_k_per_9! : 8.5,
     last30_era: "last30_era" in opts ? opts.last30_era! : null,
     pitch_quality_score: "pitch_quality_score" in opts ? opts.pitch_quality_score! : 1.00,
     is_confirmed: true,
@@ -271,15 +272,30 @@ async function main() {
     check("total = away + home", near(proj.total_expected_runs, proj.away_expected_runs + proj.home_expected_runs));
     check("home_run_diff = home - away", near(proj.home_run_diff, proj.home_expected_runs - proj.away_expected_runs));
     check("data_quality_tier high when all features present", proj.data_quality_tier === "high");
-    // After the audit patch: 14 audit slots. The test fixture has empty
+    // After Push 3A-2: 14 audit slots. The test fixture has empty
     // lineup_top8 arrays → confirmed_lineup is "missing" on both sides
-    // (the 2 expected missing). Everything else should be present/proxy.
+    // (the 2 expected missing). Everything else should be preferred/proxy.
     check("feature_audit.missing_count == 2 (lineup-only) with default fixture",
       proj.feature_audit.missing_count === 2,
       `actual missing=${proj.feature_audit.missing_count}`);
     check("feature_audit.present_count == 12 with default fixture",
       proj.feature_audit.present_count === 12,
       `actual present=${proj.feature_audit.present_count}`);
+    check("feature_audit lineup_missing reason emitted",
+      proj.feature_audit.reason_codes.includes("lineup_missing"),
+      `codes=${JSON.stringify(proj.feature_audit.reason_codes)}`);
+    check("feature_audit.starter_era status = proxy on default fixture",
+      proj.feature_audit.starter_era.home.source === "proxy" && proj.feature_audit.starter_era.away.source === "proxy");
+    check("feature_audit.team_ops status = proxy on default fixture",
+      proj.feature_audit.team_ops.home.source === "proxy" && proj.feature_audit.team_ops.away.source === "proxy");
+    check("feature_audit.starter_pitch_quality status = preferred on default fixture",
+      proj.feature_audit.starter_pitch_quality.home.source === "preferred",
+      `actual=${proj.feature_audit.starter_pitch_quality.home.source}`);
+    check("feature_audit.park_factor status = preferred",
+      proj.feature_audit.park_factor.source === "preferred");
+    check("feature_audit.weather status = proxy (row exists, not notable)",
+      proj.feature_audit.weather.source === "proxy",
+      `actual=${proj.feature_audit.weather.source}`);
   }
   {
     // Strong offense — should push home runs >> 4.45
@@ -301,12 +317,23 @@ async function main() {
     check("missing both starters → fallback tier", proj.data_quality_tier === "fallback");
   }
   {
-    // Missing OPS on one side, starters present
+    // Missing OPS AND runs/g on one side (no offense data at all) → low tier
+    const snap = buildSnapshot({
+      homeTeam: { team_avg_batter_ops: null, season_runs_per_game: null },
+    });
+    const proj = projectIndependent(snap);
+    check("missing one team's offense entirely → low tier", proj.data_quality_tier === "low",
+      `actual=${proj.data_quality_tier}`);
+  }
+  {
+    // OPS null but runs/g present → fallback_real, not low tier (offense IS available)
     const snap = buildSnapshot({
       homeTeam: { team_avg_batter_ops: null },
     });
     const proj = projectIndependent(snap);
-    check("missing one team's OPS → low tier", proj.data_quality_tier === "low");
+    check("OPS null but runs/g present → fallback_real source",
+      proj.feature_audit.team_ops.home.source === "fallback_real",
+      `actual=${proj.feature_audit.team_ops.home.source}`);
   }
 
   // ──────────────────────────────────────────────────────────────────
@@ -452,6 +479,106 @@ async function main() {
     const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
     check("near-equal teams → ml model prob between 0.4 and 0.6",
       out.v22Audit.ml_model_prob >= 0.4 && out.v22Audit.ml_model_prob <= 0.6);
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  section("Push 3A-2 — pitch quality proxy + fallback hierarchy");
+  {
+    // Pitch quality proxy from ERA+WHIP+K/9
+    const goodStarter = buildStarter({ pitch_quality_score: null, season_era: 2.8, season_whip: 1.05, season_k_per_9: 10.5 });
+    const badStarter = buildStarter({ pitch_quality_score: null, season_era: 5.5, season_whip: 1.55, season_k_per_9: 6.5 });
+    const pqGood = pitchQualityProxy(goodStarter);
+    const pqBad = pitchQualityProxy(badStarter);
+    check("pitchQualityProxy good pitcher → < 1.0 (suppresses runs)", pqGood !== null && pqGood < 1.0, `actual=${pqGood}`);
+    check("pitchQualityProxy bad pitcher → > 1.0 (boosts runs)", pqBad !== null && pqBad > 1.0, `actual=${pqBad}`);
+    check("pitchQualityProxy in [0.92, 1.08]", pqGood !== null && pqBad !== null && pqGood >= 0.92 && pqGood <= 1.08 && pqBad >= 0.92 && pqBad <= 1.08);
+    check("pitchQualityProxy null when no stats", pitchQualityProxy(buildStarter({ pitch_quality_score: null, season_era: null, season_whip: null, season_k_per_9: null })) === null);
+  }
+  {
+    // pitcherFactor uses proxy when raw missing — same direction as raw
+    const noPq = buildStarter({ pitch_quality_score: null, season_era: 3.0, season_whip: 1.05, season_k_per_9: 10.5 });
+    const realPq = buildStarter({ pitch_quality_score: 0.95, season_era: 3.0, season_whip: 1.05, season_k_per_9: 10.5 });
+    const fNoPq = INDEP_TEST.pitcherFactor(noPq);
+    const fRealPq = INDEP_TEST.pitcherFactor(realPq);
+    check("pitcherFactor uses proxy when raw pq missing (factor < no-pq baseline)", fNoPq < 3.0 / V22_LEAGUE_AVG_STARTER_ERA, `f=${fNoPq}`);
+    check("pitcherFactor with raw pq matches similar direction", Math.abs(fNoPq - fRealPq) < 0.10);
+  }
+  {
+    // Audit reflects pitch_quality proxy when raw missing
+    const snap = buildSnapshot({
+      homeStarter: { pitch_quality_score: null, season_era: 3.5, season_whip: 1.15, season_k_per_9: 9.5 },
+      awayStarter: { pitch_quality_score: null, season_era: 3.5, season_whip: 1.15, season_k_per_9: 9.5 },
+    });
+    const proj = projectIndependent(snap);
+    check("starter_pitch_quality status = proxy when raw absent + ERA/WHIP/K9 present",
+      proj.feature_audit.starter_pitch_quality.home.source === "proxy" &&
+      proj.feature_audit.starter_pitch_quality.away.source === "proxy",
+      `home=${proj.feature_audit.starter_pitch_quality.home.source} away=${proj.feature_audit.starter_pitch_quality.away.source}`);
+    check("starter_pitch_quality reason = pitch_quality_proxy_era_whip_k9",
+      proj.feature_audit.starter_pitch_quality.home.reason === "pitch_quality_proxy_era_whip_k9");
+    check("audit.proxy_count includes the pitch_quality proxy (≥2)",
+      proj.feature_audit.proxy_count >= 2);
+  }
+  {
+    // Audit reflects missing pitch_quality when ALL stats absent
+    const snap = buildSnapshot({
+      homeStarter: { pitch_quality_score: null, season_era: null, season_whip: null, season_k_per_9: null },
+      awayStarter: { season_era: 4.0, pitch_quality_score: null },
+    });
+    const proj = projectIndependent(snap);
+    check("starter_pitch_quality missing when no proxy inputs",
+      proj.feature_audit.starter_pitch_quality.home.source === "missing");
+  }
+  {
+    // Weather reason codes
+    const snap1 = buildSnapshot({ weather: null });
+    const proj1 = projectIndependent(snap1);
+    check("weather status missing when row absent",
+      proj1.feature_audit.weather.source === "missing" && proj1.feature_audit.weather.reason === "weather_missing");
+    const snap2 = buildSnapshot({
+      weather: { temperature_f: 72, humidity_pct: 50, wind_speed_mph: 5, wind_direction_degrees: 90, is_notable: false, notable_reason: null },
+    });
+    const proj2 = projectIndependent(snap2);
+    check("weather status proxy when row present but not notable",
+      proj2.feature_audit.weather.source === "proxy" && proj2.feature_audit.weather.reason === "weather_proxy_quiet_row");
+    const snap3 = buildSnapshot({
+      weather: { temperature_f: 90, humidity_pct: 50, wind_speed_mph: 18, wind_direction_degrees: 90, is_notable: true, notable_reason: "wind out 18 mph" },
+    });
+    const proj3 = projectIndependent(snap3);
+    check("weather status preferred when notable",
+      proj3.feature_audit.weather.source === "preferred" && proj3.feature_audit.weather.reason === "weather_ok");
+  }
+  {
+    // Lineup status reasons
+    const snap = buildSnapshot();
+    const proj = projectIndependent(snap);
+    check("lineup status missing when length < 8",
+      proj.feature_audit.confirmed_lineup.home.source === "missing" && proj.feature_audit.confirmed_lineup.home.reason === "lineup_missing");
+  }
+  {
+    // V2.2 main model rolls up the source counts into audit
+    const snap = buildSnapshot();
+    const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
+    check("V22Audit carries feature_preferred_count",
+      typeof out.v22Audit.feature_preferred_count === "number" && out.v22Audit.feature_preferred_count >= 1,
+      `actual=${out.v22Audit.feature_preferred_count}`);
+    check("V22Audit carries feature_proxy_count",
+      typeof out.v22Audit.feature_proxy_count === "number" && out.v22Audit.feature_proxy_count >= 2,
+      `actual=${out.v22Audit.feature_proxy_count}`);
+    check("V22Audit carries feature_reason_codes array",
+      Array.isArray(out.v22Audit.feature_reason_codes) && out.v22Audit.feature_reason_codes.length >= 4);
+  }
+  {
+    // Best Angle BLOCKED when both sides starter missing (tier=fallback already covered;
+    // here we verify the explicit Best Angle cap rather than the tier path)
+    const snap = buildSnapshot({ homeStarter: null, awayStarter: null });
+    const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
+    check("Best Angle blocked when both starters missing",
+      !out.v22Audit.ml_best_angle_eligible && !out.v22Audit.ou_best_angle_eligible);
+    check("model_integrity_notes mentions BA block on neutral fallback",
+      out.v22Audit.model_integrity_notes.some((n) => /Best Angle blocked/i.test(n)) ||
+        out.v22Audit.model_integrity_notes.some((n) => /Insufficient starter/i.test(n)),
+      `notes=${JSON.stringify(out.v22Audit.model_integrity_notes)}`);
   }
 
   // ──────────────────────────────────────────────────────────────────

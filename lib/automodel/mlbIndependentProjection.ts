@@ -63,99 +63,211 @@ const FACTOR_CLAMP_MAX = 1.35;
 // Home-field advantage (small, well-documented in MLB: ~0.03-0.05 r/g)
 const HOME_FIELD_RUNS_BONUS = 0.10;
 
-// ─── feature audit ────────────────────────────────────────────────
+// ─── feature audit — Push 3A-2 source/reason taxonomy ─────────────
+//
+// Source tiers, strongest to weakest:
+//
+//   preferred         best configured source for this feature (e.g.
+//                     raw pitch_quality from Statcast pitch_type stats)
+//   fallback_real     another real source covering the same concept
+//                     (e.g. season_runs_per_game backing team_ops when
+//                     OPS missing — both are real but OPS is preferred)
+//   proxy             derived from available stats (e.g. pitch_quality
+//                     derived from ERA+WHIP+K/9; OPS as proxy for wRC+)
+//   neutral_fallback  league-average / 1.0-multiplier last resort —
+//                     marked explicitly so confidence + Best Angle are
+//                     downgraded
+//   missing           no usable input — factor defaults to 1.0 but the
+//                     audit honestly says missing; Best Angle gated
 
+export type V22FeatureSource =
+  | "preferred"
+  | "fallback_real"
+  | "proxy"
+  | "neutral_fallback"
+  | "missing";
+
+export type V22FeatureStatus = {
+  source: V22FeatureSource;
+  reason: string;
+};
+
+/** Backwards-compatible alias. Old callers expected "present"/"proxy"/"missing".
+ *  Kept as a re-export so consumers that haven't migrated yet still compile. */
 export type FeaturePresence = "present" | "proxy" | "missing";
 
 export type V22FeatureAudit = {
-  team_ops: { home: FeaturePresence; away: FeaturePresence };
-  bullpen_era: { home: FeaturePresence; away: FeaturePresence };
-  starter_era: { home: FeaturePresence; away: FeaturePresence };
-  starter_pitch_quality: { home: FeaturePresence; away: FeaturePresence };
-  starter_handedness: { home: FeaturePresence; away: FeaturePresence };
-  park_factor: FeaturePresence;
-  weather: FeaturePresence;
-  confirmed_lineup: { home: FeaturePresence; away: FeaturePresence };
-  /** Count of features present (out of all checked positions). */
-  present_count: number;
-  /** Count of features missing entirely. */
+  team_ops: { home: V22FeatureStatus; away: V22FeatureStatus };
+  bullpen_era: { home: V22FeatureStatus; away: V22FeatureStatus };
+  starter_era: { home: V22FeatureStatus; away: V22FeatureStatus };
+  starter_pitch_quality: { home: V22FeatureStatus; away: V22FeatureStatus };
+  starter_handedness: { home: V22FeatureStatus; away: V22FeatureStatus };
+  park_factor: V22FeatureStatus;
+  weather: V22FeatureStatus;
+  confirmed_lineup: { home: V22FeatureStatus; away: V22FeatureStatus };
+  // ─── derived counts (14 audit slots) ─────────────────────────────
+  preferred_count: number;
+  fallback_real_count: number;
+  proxy_count: number;
+  neutral_fallback_count: number;
   missing_count: number;
+  /** Sum of preferred + fallback_real + proxy + neutral_fallback. */
+  present_count: number;
+  /** Reason codes that drove the audit (deduped). Surfaced in shadow + coverage operator. */
+  reason_codes: string[];
 };
 
-function present(v: unknown): FeaturePresence {
-  return v !== null && v !== undefined ? "present" : "missing";
+const STATUS_MISSING: V22FeatureStatus = { source: "missing", reason: "missing" };
+
+function statusFromRaw(
+  raw: unknown,
+  preferredReason: string,
+  proxyOverride?: { isProxy: true; reason: string },
+): V22FeatureStatus {
+  if (raw === null || raw === undefined) return STATUS_MISSING;
+  if (proxyOverride?.isProxy) return { source: "proxy", reason: proxyOverride.reason };
+  return { source: "preferred", reason: preferredReason };
 }
 
 /** Per-side confirmed-lineup check. The joint `data_quality.lineup_confirmed`
  *  collapses both teams; we evaluate each side independently so one team
  *  with a projected lineup doesn't penalize the other side's audit. */
-function lineupConfirmedSide(lineup: GameSnapshot["home_lineup_top8"]): FeaturePresence {
-  if (lineup.length < 8) return "missing";
-  return lineup.every((b) => b.lineup_source === "confirmed") ? "present" : "missing";
+function lineupConfirmedSide(lineup: GameSnapshot["home_lineup_top8"]): V22FeatureStatus {
+  if (lineup.length < 8) return { source: "missing", reason: "lineup_missing" };
+  if (lineup.every((b) => b.lineup_source === "confirmed")) {
+    return { source: "preferred", reason: "lineup_confirmed" };
+  }
+  // At least 8 batters but at least one projected → real fallback, lower tier.
+  return { source: "fallback_real", reason: "lineup_projected" };
 }
 
-/** Weather presence: "present" when row exists with a notable signal, "proxy"
- *  when row exists with at least temperature or wind data, "missing" when
- *  no row at all. The model only nudges on `is_notable`, so a row with
- *  temp/wind that isn't notable is honestly a "we have data, model didn't
- *  act on it" → proxy. */
-function weatherPresence(snap: GameSnapshot): FeaturePresence {
-  if (snap.weather === null) return "missing";
-  if (snap.weather.is_notable === true) return "present";
+/** Weather status: preferred when row exists with notable signal, proxy when
+ *  row exists with temp/wind, missing when no row at all. V2.2 only nudges
+ *  on is_notable, so a row with temp/wind that isn't notable is honestly
+ *  "we have data, model didn't act on it" → proxy. */
+function weatherStatus(snap: GameSnapshot): V22FeatureStatus {
+  if (snap.weather === null) return { source: "missing", reason: "weather_missing" };
+  if (snap.weather.is_notable === true) {
+    return { source: "preferred", reason: "weather_ok" };
+  }
   const hasTemp = typeof snap.weather.temperature_f === "number";
   const hasWind = typeof snap.weather.wind_speed_mph === "number";
-  return hasTemp || hasWind ? "proxy" : "missing";
+  if (hasTemp || hasWind) return { source: "proxy", reason: "weather_proxy_quiet_row" };
+  return { source: "missing", reason: "weather_missing" };
+}
+
+/** Park status — park_factor_runs is sourced from `ballparks` and is real
+ *  data, but it's a 3-year rolling factor rather than a current-season
+ *  measurement, so we mark it `preferred` (best available). */
+function parkStatus(snap: GameSnapshot): V22FeatureStatus {
+  if (snap.ballpark?.park_factor_runs == null) {
+    return { source: "missing", reason: "park_missing" };
+  }
+  return { source: "preferred", reason: "park_ok" };
+}
+
+/** Starter status group — primary read is season ERA. If ERA absent but
+ *  WHIP or K/9 exists, mark fallback_real (we have a real signal of
+ *  pitcher quality, just not the preferred metric). */
+function starterEraStatus(starter: StarterSnapshot | null): V22FeatureStatus {
+  if (starter === null) return { source: "missing", reason: "starter_missing" };
+  if (starter.season_era != null) {
+    return { source: "proxy", reason: "starter_proxy_era_whip_k9" };
+  }
+  if (starter.season_whip != null || starter.season_k_per_9 != null) {
+    return { source: "fallback_real", reason: "starter_whip_or_k9_only" };
+  }
+  return { source: "missing", reason: "starter_missing" };
+}
+
+/** Pitch quality status — preferred is the Statcast-derived
+ *  `pitch_quality_score`. When absent, V2.2 derives a proxy from
+ *  ERA+WHIP+K/9 in `pitcherFactor` and labels this position `proxy`. */
+function pitchQualityStatus(starter: StarterSnapshot | null): V22FeatureStatus {
+  if (starter === null) return { source: "missing", reason: "starter_missing" };
+  if (starter.pitch_quality_score != null) {
+    return { source: "preferred", reason: "pq_ok" };
+  }
+  const eraReal = starter.season_era != null;
+  const whipReal = starter.season_whip != null;
+  const k9Real = starter.season_k_per_9 != null;
+  // Need at least 2 of 3 stats to derive a usable proxy.
+  const score = [eraReal, whipReal, k9Real].filter(Boolean).length;
+  if (score >= 2) {
+    return { source: "proxy", reason: "pitch_quality_proxy_era_whip_k9" };
+  }
+  return { source: "missing", reason: "pitch_quality_missing" };
+}
+
+function starterHandednessStatus(starter: StarterSnapshot | null): V22FeatureStatus {
+  if (starter === null) return { source: "missing", reason: "starter_missing" };
+  if (starter.throws != null) {
+    return { source: "preferred", reason: "handedness_ok" };
+  }
+  return { source: "missing", reason: "handedness_missing" };
+}
+
+/** Team OPS status — preferred is `team_avg_batter_ops`. When missing, we
+ *  could try a runs-per-game fallback (currently always null in
+ *  featureSnapshot) — flagged here for future wiring. */
+function teamOpsStatus(team: TeamSnapshot): V22FeatureStatus {
+  if (team.team_avg_batter_ops != null) {
+    return { source: "proxy", reason: "offense_team_proxy_ops" };
+  }
+  if (typeof team.season_runs_per_game === "number" && team.season_runs_per_game > 0) {
+    return { source: "fallback_real", reason: "offense_runs_per_game_fallback" };
+  }
+  return { source: "missing", reason: "offense_missing" };
+}
+
+function bullpenStatus(team: TeamSnapshot): V22FeatureStatus {
+  if (team.bullpen_era_proxy != null) {
+    return { source: "proxy", reason: "bullpen_proxy_era" };
+  }
+  return { source: "missing", reason: "bullpen_missing" };
 }
 
 function auditFeatures(snap: GameSnapshot): V22FeatureAudit {
-  const homeTeam = snap.home_team;
-  const awayTeam = snap.away_team;
-  const homeStarter = snap.home_starter;
-  const awayStarter = snap.away_starter;
   const audit: V22FeatureAudit = {
     team_ops: {
-      home: present(homeTeam.team_avg_batter_ops),
-      away: present(awayTeam.team_avg_batter_ops),
+      home: teamOpsStatus(snap.home_team),
+      away: teamOpsStatus(snap.away_team),
     },
     bullpen_era: {
-      home: present(homeTeam.bullpen_era_proxy),
-      away: present(awayTeam.bullpen_era_proxy),
+      home: bullpenStatus(snap.home_team),
+      away: bullpenStatus(snap.away_team),
     },
     starter_era: {
-      home: present(homeStarter?.season_era),
-      away: present(awayStarter?.season_era),
+      home: starterEraStatus(snap.home_starter),
+      away: starterEraStatus(snap.away_starter),
     },
     starter_pitch_quality: {
-      home: present(homeStarter?.pitch_quality_score),
-      away: present(awayStarter?.pitch_quality_score),
+      home: pitchQualityStatus(snap.home_starter),
+      away: pitchQualityStatus(snap.away_starter),
     },
     starter_handedness: {
-      home: present(homeStarter?.throws),
-      away: present(awayStarter?.throws),
+      home: starterHandednessStatus(snap.home_starter),
+      away: starterHandednessStatus(snap.away_starter),
     },
-    park_factor: present(snap.ballpark?.park_factor_runs),
-    weather: weatherPresence(snap),
+    park_factor: parkStatus(snap),
+    weather: weatherStatus(snap),
     confirmed_lineup: {
       home: lineupConfirmedSide(snap.home_lineup_top8),
       away: lineupConfirmedSide(snap.away_lineup_top8),
     },
-    present_count: 0,
+    preferred_count: 0,
+    fallback_real_count: 0,
+    proxy_count: 0,
+    neutral_fallback_count: 0,
     missing_count: 0,
+    present_count: 0,
+    reason_codes: [],
   };
-  // Mark team OPS as "proxy" — we'd prefer wRC+ but OPS is what's
-  // ingested today.
-  if (audit.team_ops.home === "present") audit.team_ops.home = "proxy";
-  if (audit.team_ops.away === "present") audit.team_ops.away = "proxy";
-  // Same for starter ERA (we'd prefer FIP/xFIP)
-  if (audit.starter_era.home === "present") audit.starter_era.home = "proxy";
-  if (audit.starter_era.away === "present") audit.starter_era.away = "proxy";
 
-  // Count over the 14 real audit positions. team_runs_per_game and
-  // platoon_split were previously counted but neither has a data source
-  // wired AND V2.2 doesn't materially use them — dropping them removes
-  // 4 phantom-missing slots that were forcing every game into the
-  // "provisional / sparse" branch even with strong feature coverage.
-  const sides = [
+  void statusFromRaw; // exported helper, may be used by future feature types
+
+  // 14 audit slots — same set as Push 3A-1.
+  const slots: V22FeatureStatus[] = [
     audit.team_ops.home, audit.team_ops.away,
     audit.bullpen_era.home, audit.bullpen_era.away,
     audit.starter_era.home, audit.starter_era.away,
@@ -165,8 +277,23 @@ function auditFeatures(snap: GameSnapshot): V22FeatureAudit {
     audit.park_factor,
     audit.weather,
   ];
-  audit.present_count = sides.filter((s) => s !== "missing").length;
-  audit.missing_count = sides.filter((s) => s === "missing").length;
+  const reasonSet = new Set<string>();
+  for (const s of slots) {
+    reasonSet.add(s.reason);
+    switch (s.source) {
+      case "preferred": audit.preferred_count++; break;
+      case "fallback_real": audit.fallback_real_count++; break;
+      case "proxy": audit.proxy_count++; break;
+      case "neutral_fallback": audit.neutral_fallback_count++; break;
+      case "missing": audit.missing_count++; break;
+    }
+  }
+  audit.present_count =
+    audit.preferred_count +
+    audit.fallback_real_count +
+    audit.proxy_count +
+    audit.neutral_fallback_count;
+  audit.reason_codes = Array.from(reasonSet).sort();
   return audit;
 }
 
@@ -190,6 +317,23 @@ function offenseFactor(team: TeamSnapshot): number {
   return 1.0;
 }
 
+/** Derive a pitch_quality_score proxy from ERA+WHIP+K/9 when the raw
+ *  Statcast-derived score is unavailable. Mirrors the real score's
+ *  [0.92, 1.08] range and direction (lower = better pitcher = suppresses
+ *  runs). League anchors: K/9 ≈ 8.5, WHIP ≈ 1.30. The coefficients are
+ *  small so this proxy nudges within the same range the real score does.
+ *  Returns null when too few inputs to compute. */
+export function pitchQualityProxy(starter: StarterSnapshot): number | null {
+  const k9Real = starter.season_k_per_9;
+  const whipReal = starter.season_whip;
+  if (k9Real == null && whipReal == null) return null;
+  const k9 = k9Real ?? 8.5;
+  const whip = whipReal ?? 1.30;
+  // K/9 above league anchor → suppress factor; WHIP above anchor → raise factor.
+  const raw = 1.0 - (k9 - 8.5) * 0.005 + (whip - 1.30) * 0.05;
+  return Math.max(0.92, Math.min(1.08, raw));
+}
+
 function pitcherFactor(starter: StarterSnapshot | null): number {
   if (starter === null) return 1.0;
   let era = starter.season_era;
@@ -207,12 +351,15 @@ function pitcherFactor(starter: StarterSnapshot | null): number {
   // pitcher (low era) → factor below 1.0.
   const eraFactor = era / V22_LEAGUE_AVG_STARTER_ERA;
   let factor = eraFactor;
-  // Pitch quality nudges further (positive value indicates better stuff)
+  // Pitch quality nudge — prefer the raw Statcast-derived score; fall
+  // back to the ERA+WHIP+K/9 proxy when raw absent.
+  let pq: number | null = null;
   if (typeof starter.pitch_quality_score === "number") {
-    // pitch_quality_score is centered around 1.0 in V1 conventions
-    // (0.92 to 1.08 typical). Multiplying preserves direction.
-    factor *= starter.pitch_quality_score;
+    pq = starter.pitch_quality_score;
+  } else {
+    pq = pitchQualityProxy(starter);
   }
+  if (pq !== null) factor *= pq;
   return clampFactor(factor);
 }
 
@@ -315,10 +462,10 @@ function deriveQualityTier(audit: V22FeatureAudit): "high" | "medium" | "low" | 
   // Threshold-based, scaled to the 14-position audit. Must have starter
   // stats on both sides + team OPS on both sides to qualify above fallback.
   const haveStartersBoth =
-    audit.starter_era.home !== "missing" && audit.starter_era.away !== "missing";
+    audit.starter_era.home.source !== "missing" && audit.starter_era.away.source !== "missing";
   if (!haveStartersBoth) return "fallback";
   const haveOpsBoth =
-    audit.team_ops.home !== "missing" && audit.team_ops.away !== "missing";
+    audit.team_ops.home.source !== "missing" && audit.team_ops.away.source !== "missing";
   if (!haveOpsBoth) return "low";
   // 14 audit slots total. Tier cutoffs preserve the original ~75% / ~56%
   // proportions but rescaled (high ≥10/14 = 71%, medium ≥7/14 = 50%).
@@ -414,4 +561,5 @@ export const __TEST__ = {
   clampFactor,
   auditFeatures,
   deriveQualityTier,
+  pitchQualityProxy,
 };

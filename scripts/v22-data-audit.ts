@@ -147,8 +147,8 @@ async function main() {
     const sh = s.sharp ? "Y" : "N";
     const matchup = `${s.away_team.abbreviation}@${s.home_team.abbreviation}`;
     console.log(
-      `${matchup.padEnd(8)} | ${opsH}/${opsA} | ${rH}/${rA} | ${bpH}/${bpA} | ${seH}/${seA} | ${pqH}/${pqA} | ${thH}/${thA} | ${pf} | ${wx} | ${lh}/${lh} | ${mt} | ${mlH}/${mlA} | ${sh} | ${a.team_ops.home === "missing" ? "—" : ""}` +
-      `tier=${proj.data_quality_tier} miss=${a.missing_count}/16 pres=${a.present_count}`,
+      `${matchup.padEnd(8)} | ${opsH}/${opsA} | ${rH}/${rA} | ${bpH}/${bpA} | ${seH}/${seA} | ${pqH}/${pqA} | ${thH}/${thA} | ${pf} | ${wx} | ${lh}/${lh} | ${mt} | ${mlH}/${mlA} | ${sh} | ` +
+      `tier=${proj.data_quality_tier} miss=${a.missing_count}/14 pres=${a.present_count}`,
     );
     totalMiss += a.missing_count;
     totalPres += a.present_count;
