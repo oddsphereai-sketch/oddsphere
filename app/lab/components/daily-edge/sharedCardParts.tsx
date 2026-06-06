@@ -524,12 +524,20 @@ function PredictionTile({
   pickGlow: string;
 }) {
   // Phase 4.2.C.2 — isNoPick treats either null pick OR null grade as
-  // "held / no displayable pick". Either condition fires the "—" treatment.
-  // Pre-4.2.C.2 only checked grade === null; held games still rendered fake
-  // pick strings because the route defaulted them to "Under" / "NRFI" etc.
+  // "held / no displayable pick". Either condition fires the held
+  // treatment. Pre-4.2.C.2 only checked grade === null; held games
+  // still rendered fake pick strings because the route defaulted them
+  // to "Under" / "NRFI" etc.
+  //
+  // R-19 Phase 5j Fix 2 — display "Held" instead of "—" when the model
+  // held this market. Pre-5j three held markets surfaced as "— — —"
+  // across the card, which read as a broken/missing-data state. "Held"
+  // is honest about the model's decision and matches the breakdown
+  // verdict pill semantics. Confidence stays "—" because there's no
+  // numeric to display.
   const isNoPick = grade === null || pick === null || confidence === null;
   const borderClass = getTileBorder(sharpStatus);
-  const displayPick = isNoPick ? "—" : pick;
+  const displayPick = isNoPick ? "Held" : pick;
   const displayConfidence =
     isNoPick || confidence === null ? "—" : `${Math.round(confidence * 100)}%`;
   return (

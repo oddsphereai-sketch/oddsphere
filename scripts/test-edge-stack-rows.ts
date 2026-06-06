@@ -137,7 +137,11 @@ function testSplitsConsensusEdgeStack() {
   });
   const rows = buildEdgeStackRows("moneyline", sdphi);
   const modelEdge = rows.find((r) => r.label === "Model Edge");
-  const marketValue = rows.find((r) => r.label === "Market Value");
+  // R-19 Phase 5j Fix 3 — when only marketImpliedPct is available
+  // (no Pinnacle EV), the row is now labeled "Market Source" instead
+  // of "Market Value" so the row communicates attribution, not a
+  // quantified edge.
+  const marketValue = rows.find((r) => r.label === "Market Source");
 
   check(
     `Model Edge: evidence does NOT contain "market unavailable"`,
@@ -167,22 +171,22 @@ function testSplitsConsensusEdgeStack() {
   );
 
   check(
-    `Market Value: evidence is NOT the legacy "Sharper price check"`,
+    `Market Source: evidence is NOT the legacy "Sharper price check"`,
     !(marketValue?.evidence ?? "").includes("Sharper"),
     `got: "${marketValue?.evidence}"`
   );
   check(
-    `Market Value: evidence uses "Market price" + splits source`,
-    marketValue?.evidence === "Market price · splits consensus",
+    `Market Source: evidence uses "Reference price from" + splits source`,
+    marketValue?.evidence === "Reference price from splits consensus",
     `got: "${marketValue?.evidence}"`
   );
   check(
-    `Market Value: delta is "—" (no fake EV for splits_consensus)`,
+    `Market Source: delta is "—" (no fake EV for splits_consensus)`,
     marketValue?.delta === "—",
     `got: "${marketValue?.delta}"`
   );
   check(
-    `Market Value: delta is NOT "unavailable" anymore`,
+    `Market Source: delta is NOT "unavailable" anymore`,
     marketValue?.delta !== "unavailable",
     `got: "${marketValue?.delta}"`
   );
@@ -206,7 +210,7 @@ function testRealBookPair() {
   });
   const rows = buildEdgeStackRows("moneyline", kcmin);
   const modelEdge = rows.find((r) => r.label === "Model Edge");
-  const marketValue = rows.find((r) => r.label === "Market Value");
+  const marketValue = rows.find((r) => r.label === "Market Source");
 
   check(
     `Model Edge: evidence includes book name "ballybet"`,
@@ -219,8 +223,8 @@ function testRealBookPair() {
     `got: "${modelEdge?.evidence}"`
   );
   check(
-    `Market Value: shows "Market price · ballybet" (no EV)`,
-    marketValue?.evidence === "Market price · ballybet",
+    `Market Source: shows "Reference price from ballybet" (no EV)`,
+    marketValue?.evidence === "Reference price from ballybet",
     `got: "${marketValue?.evidence}"`
   );
 }
@@ -241,20 +245,23 @@ function testPinnacleEvPreserved() {
     pinnacleEvPct: 2.5,
   });
   const rows = buildEdgeStackRows("moneyline", withEv);
-  const marketValue = rows.find((r) => r.label === "Market Value");
+  // R-19 Phase 5j Fix 3 — when pinnacleEvPct is present, label is now
+  // "Pinnacle EV" (renamed from "Market Value") so members understand
+  // the quantified delta is Pinnacle's EV percentage.
+  const marketValue = rows.find((r) => r.label === "Pinnacle EV");
 
   check(
-    `Market Value: shows EV when pinnacleEvPct is set`,
+    `Pinnacle EV: shows EV when pinnacleEvPct is set`,
     marketValue?.delta === "+2.5%",
     `got: "${marketValue?.delta}"`
   );
   check(
-    `Market Value: evidence is "Market price check" (renamed from "Sharper")`,
-    marketValue?.evidence === "Market price check",
+    `Pinnacle EV: evidence is "Pinnacle vs market price"`,
+    marketValue?.evidence === "Pinnacle vs market price",
     `got: "${marketValue?.evidence}"`
   );
   check(
-    `Market Value: tone is emerald (positive EV)`,
+    `Pinnacle EV: tone is emerald (positive EV)`,
     marketValue?.tone === "emerald"
   );
 }
@@ -273,19 +280,22 @@ function testTrulyUnavailable() {
   });
   const rows = buildEdgeStackRows("moneyline", empty);
   const modelEdge = rows.find((r) => r.label === "Model Edge");
-  const marketValue = rows.find((r) => r.label === "Market Value");
+  // R-19 Phase 5j Fix 3 — when nothing is available, label stays
+  // "Pinnacle EV" so the unavailable indicator is honest about what
+  // is missing (the Pinnacle EV check, not just any "market value").
+  const marketValue = rows.find((r) => r.label === "Pinnacle EV");
 
   check(
     `Model Edge: shows "market unavailable" fallback`,
     (modelEdge?.evidence ?? "").includes("market unavailable")
   );
   check(
-    `Market Value: shows "Market price check" + "unavailable"`,
-    marketValue?.evidence === "Market price check" &&
+    `Pinnacle EV: shows "Pinnacle vs market price" + "unavailable"`,
+    marketValue?.evidence === "Pinnacle vs market price" &&
       marketValue?.delta === "unavailable"
   );
   check(
-    `Market Value: tone is gray for unavailable`,
+    `Pinnacle EV: tone is gray for unavailable`,
     marketValue?.tone === "gray"
   );
 }
@@ -371,7 +381,8 @@ function testSplitsConsensusTotalNoFakeNoVig() {
   });
   const rows = buildEdgeStackRows("total", totalSplits);
   const modelEdge = rows.find((r) => r.label === "Model Edge");
-  const marketValue = rows.find((r) => r.label === "Market Value");
+  // R-19 Phase 5j Fix 3 — label is "Pinnacle EV" in the no-data branch.
+  const marketValue = rows.find((r) => r.label === "Pinnacle EV");
 
   // Total line is still displayed via the totals path
   check(
@@ -379,10 +390,10 @@ function testSplitsConsensusTotalNoFakeNoVig() {
     (modelEdge?.evidence ?? "").includes("Model 9.2") &&
       (modelEdge?.evidence ?? "").includes("market 8.5")
   );
-  // Market Value should be honest about no price-check data
+  // Market value should be honest about no price-check data
   check(
-    `Market Value: shows "unavailable" when no marketImpliedPct + no EV`,
-    marketValue?.evidence === "Market price check" &&
+    `Pinnacle EV: shows "unavailable" when no marketImpliedPct + no EV`,
+    marketValue?.evidence === "Pinnacle vs market price" &&
       marketValue?.delta === "unavailable"
   );
 }

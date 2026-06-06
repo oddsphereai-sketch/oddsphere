@@ -909,7 +909,15 @@ function pickPriceRow<T extends { sportsbook: string; side: string | null; odds_
   preferredSide: Side | null
 ): T | null {
   if (rows.length === 0) return null;
-  const sideMatch = preferredSide === null ? rows : rows.filter((r) => r.side === preferredSide);
+  // R-19 Phase 5j Fix 4 — held/no-pick markets must not surface a
+  // side-specific price. Pre-5j, when preferredSide was null the
+  // function fell through to picking ANY row from BOOK_PRIORITY order,
+  // which returned an arbitrary side (home or away depending on DB row
+  // order). The UI then displayed that price next to a null pick,
+  // implying the model leaned that side when it actually held. Return
+  // null so the caller renders "—" instead.
+  if (preferredSide === null) return null;
+  const sideMatch = rows.filter((r) => r.side === preferredSide);
   const pool = sideMatch.length > 0 ? sideMatch : rows;
   for (const book of BOOK_PRIORITY) {
     const hit = pool.find((r) => r.sportsbook === book && r.odds_american !== null);

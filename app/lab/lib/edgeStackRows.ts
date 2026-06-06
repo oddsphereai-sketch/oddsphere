@@ -169,11 +169,22 @@ export function buildEdgeStackRows(
   }
 
   // ── Market Value ────────────────────────────────────────────────
+  // R-19 Phase 5j Fix 3 — honest label per branch. Pre-5j, the row was
+  // always labeled "Market Value", which read as a quantified edge even
+  // in the common branch where only marketImpliedPct is available (no
+  // Pinnacle EV %). Members on cards across the slate saw the same
+  // "Market Value · Market price · ballybet · —" line and concluded the
+  // row was broken. Now:
+  //   • Pinnacle EV present → label stays "Pinnacle EV"; delta is the
+  //     real EV percentage; tone reflects the magnitude
+  //   • Only market-implied price exists → label becomes "Market Source"
+  //     so the reader understands the row carries attribution, not edge
+  //   • Nothing available → label "Pinnacle EV · unavailable"
   if (marketData.pinnacleEvPct !== null) {
     const ev = marketData.pinnacleEvPct;
     rows.push({
-      label: "Market Value",
-      evidence: "Market price check",
+      label: "Pinnacle EV",
+      evidence: "Pinnacle vs market price",
       delta: `${ev >= 0 ? "+" : ""}${ev.toFixed(1)}%`,
       tone: ev >= 0.3 ? "emerald" : ev <= -1 ? "amber" : "gray",
     });
@@ -186,30 +197,62 @@ export function buildEdgeStackRows(
       marketData.marketSource
     );
     rows.push({
-      label: "Market Value",
+      label: "Market Source",
       evidence: sourceLabel
-        ? `Market price · ${sourceLabel}`
-        : "Market price · available",
+        ? `Reference price from ${sourceLabel}`
+        : "Reference price available",
       delta: "—",
       tone: "gray",
     });
   } else {
     rows.push({
-      label: "Market Value",
-      evidence: "Market price check",
+      label: "Pinnacle EV",
+      evidence: "Pinnacle vs market price",
       delta: "unavailable",
       tone: "gray",
     });
   }
 
   // ── Money vs Bets ───────────────────────────────────────────────
-  if (marketData.moneyPct === null || marketData.betsPct === null) {
-    // R-19 Phase 5i Fix C — FI distinction. SharpAPI's /splits endpoint
-    // doesn't return first_inning_total data (documented in Phase
-    // 4.1.9.C-1c.ix), so FI's null moneyPct/betsPct is an upstream
-    // provider limitation — not a transient outage. Generic "unavailable"
-    // reads as "we couldn't fetch it"; FI gets a clearer label so members
-    // understand the data isn't offered for this market.
+  // R-19 Phase 5j Fix 5 — partial-data handling. SharpAPI's /splits
+  // endpoint sometimes returns bets% but not money% (or vice-versa)
+  // for an individual game — game-dependent, not a uniform outage.
+  // Pre-5j the row required BOTH fields and threw away partial data,
+  // rendering "unavailable" even when one side was present. Now we
+  // surface whatever the provider gave us and label the missing field
+  // honestly, so members don't lose visibility on real data.
+  //
+  // Phase 5i Fix C is preserved: when BOTH fields are missing AND
+  // market === "first_inning", the row still says "not offered for FI"
+  // because FI's full miss is an upstream limit, not a partial gap.
+  const haveMoney = marketData.moneyPct !== null;
+  const haveBets = marketData.betsPct !== null;
+  if (haveMoney && haveBets) {
+    const gap = marketData.moneyPct! - marketData.betsPct!;
+    rows.push({
+      label: "Money vs Bets",
+      evidence: `Money ${marketData.moneyPct}% / Bets ${marketData.betsPct}%`,
+      delta: `${gap >= 0 ? "+" : ""}${gap}`,
+      tone: gap >= 3 ? "emerald" : gap <= -3 ? "amber" : "gray",
+    });
+  } else if (haveMoney) {
+    // Money present, bets missing — show the half we have honestly.
+    rows.push({
+      label: "Money vs Bets",
+      evidence: `Money ${marketData.moneyPct}% · bets split unavailable`,
+      delta: "—",
+      tone: "gray",
+    });
+  } else if (haveBets) {
+    // Bets present, money missing — same treatment.
+    rows.push({
+      label: "Money vs Bets",
+      evidence: `Bets ${marketData.betsPct}% · money split unavailable`,
+      delta: "—",
+      tone: "gray",
+    });
+  } else {
+    // Both missing → genuinely unavailable. Phase 5i FI copy preserved.
     rows.push({
       label: "Money vs Bets",
       evidence:
@@ -218,14 +261,6 @@ export function buildEdgeStackRows(
           : "Public split",
       delta: "unavailable",
       tone: "gray",
-    });
-  } else {
-    const gap = marketData.moneyPct - marketData.betsPct;
-    rows.push({
-      label: "Money vs Bets",
-      evidence: `Money ${marketData.moneyPct}% / Bets ${marketData.betsPct}%`,
-      delta: `${gap >= 0 ? "+" : ""}${gap}`,
-      tone: gap >= 3 ? "emerald" : gap <= -3 ? "amber" : "gray",
     });
   }
 
