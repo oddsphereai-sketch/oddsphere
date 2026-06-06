@@ -288,9 +288,9 @@ function firstInningRows(af: AutoFactors): KeyStatRow[] {
   // around showing thin FI data still produce the row above with a
   // "(thin sample)" footnote, so this fallback fires strictly on the
   // "no FI data at all" path.
+  const aSe = num(af.away_starter_era);
+  const hSe = num(af.home_starter_era);
   if (aFiEra === null && hFiEra === null) {
-    const aSe = num(af.away_starter_era);
-    const hSe = num(af.home_starter_era);
     if (aSe !== null || hSe !== null) {
       rows.push({
         label: "Starter ERA (season)",
@@ -299,6 +299,30 @@ function firstInningRows(af: AutoFactors): KeyStatRow[] {
         source: "feature_snapshot",
       });
     }
+  }
+
+  // Push 3B-7 follow-up (Phase 6B.1.6i): partial-data placeholder.
+  //
+  // MIL@COL surfaced a UI bug where one starter (Misiorowski) had no
+  // season ERA AND no FI ERA, so the row showed "1.65 / —" for the
+  // other side and nothing at all for him. Worse, when all starter
+  // values were null, the FI panel disappeared entirely under the
+  // "fewer than 2 rows" threshold.
+  //
+  // When pitcher data is partially or fully missing, surface an
+  // explicit unavailable marker (per side) instead of going silent.
+  // The format honors the row's awayValue/homeValue contract so the
+  // existing team-column rendering in DailyEdgeShell renders it
+  // correctly with team abbreviations as column headers.
+  const aHasAnyPitcherStat = aFiEra !== null || aFiWhip !== null || aSe !== null;
+  const hHasAnyPitcherStat = hFiEra !== null || hFiWhip !== null || hSe !== null;
+  if (!aHasAnyPitcherStat || !hHasAnyPitcherStat) {
+    rows.push({
+      label: "Starter data status",
+      awayValue: aHasAnyPitcherStat ? "available" : "unavailable",
+      homeValue: hHasAnyPitcherStat ? "available" : "unavailable",
+      source: "feature_snapshot",
+    });
   }
 
   return rows;
@@ -322,8 +346,13 @@ export function formatKeyStats(
   // Drop rows where BOTH away and home values are null (no data at all)
   rows = rows.filter((r) => r.awayValue !== null || r.homeValue !== null);
 
-  // UI rule: hide the KeyStats panel if fewer than 2 rows survive
-  if (rows.length < 2) return [];
+  // UI rule: hide the KeyStats panel if fewer than 2 rows survive —
+  // EXCEPT for first_inning, where surfacing even a single row (e.g.,
+  // the projected-runs row alongside the new "Starter data status"
+  // placeholder) is preferable to hiding the panel entirely on
+  // partial-data games like MIL@COL.
+  if (rows.length < 2 && market !== "first_inning") return [];
+  if (rows.length === 0) return [];
 
   // Defense in depth: lint each label (factual stat labels, but a future
   // edit could accidentally introduce a banned term)

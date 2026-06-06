@@ -106,7 +106,11 @@ for (const k of allowedKeys) {
   check(`T6 update payload includes allowed key '${k}'`, updatePayload.includes(k));
 }
 for (const k of forbiddenInUpdate) {
-  check(`T6 update payload excludes forbidden key '${k}'`, !updatePayload.includes(k));
+  // Match `<key>:` only — comments that mention the key by name (e.g.
+  // "computed_at is left untouched") are allowed; an actual assignment
+  // (`computed_at: ...`) is not.
+  const keyAssignmentRe = new RegExp(`(^|\\s|,)\\s*${k.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\s*:`);
+  check(`T6 update payload excludes forbidden key '${k}'`, !keyAssignmentRe.test(updatePayload));
 }
 
 // 7. prev_fi_v1_snapshot audit trail

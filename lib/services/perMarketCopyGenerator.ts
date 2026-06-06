@@ -169,6 +169,15 @@ function buildGuidedWatchOut(input: CopyInput): string {
 }
 
 function buildWhyLine(input: CopyInput): string {
+  // Push 3B-7 follow-up (Phase 6B.1.6i): Toss-Up needs neutral copy
+  // regardless of any modelDriver value sneaking through from V1
+  // auto_factors. Held also handled here for symmetry.
+  if (input.market === "first_inning" && input.pick === "Toss-Up") {
+    return `Driver: FI V2 posterior sits near the coin-flip range — market and model are close.`;
+  }
+  if (input.market === "first_inning" && input.pick === null) {
+    return `Driver: FI model is held — not enough confirmed pitcher/lineup data to commit to a side.`;
+  }
   if (input.modelDriver !== null) {
     return `Primary driver: ${input.modelDriver}.`;
   }

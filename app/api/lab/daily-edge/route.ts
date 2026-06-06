@@ -987,9 +987,56 @@ function deriveSharpDirection(
  * in whyLine. Picked greedily from auto_factors based on which factor
  * is most extreme. Returns null when no factor is dominant enough.
  */
+/**
+ * Push 3B-7 follow-up (Phase 6B.1.6i) — pick-aware FI driver copy.
+ *
+ * For first_inning, the previous version returned "low projected 1st-inning
+ * runs" whenever FI runs were low, regardless of whether the pick was NRFI
+ * or YRFI. That surfaced as "Primary driver: low projected 1st-inning runs"
+ * on YRFI cards, which contradicts the pick. We now:
+ *   1. Prefer fi_v2_audit values when present (the post-cutover source of
+ *      truth on game_predictions.sport_specific.fi_v2_audit).
+ *   2. Choose a driver/risk phrase whose direction MATCHES the displayed
+ *      pick. A "low projected runs" signal becomes a SUPPORT line for NRFI
+ *      and a RISK line for YRFI — never the inverse.
+ *   3. Return null for Toss-Up so the copy layer falls through to neutral
+ *      Toss-Up text.
+ */
+function readFiV2Audit(sp: Record<string, unknown> | null): {
+  fi_pick: string | null;
+  posterior_p_nrfi: number | null;
+  posterior_p_yrfi: number | null;
+  market_nrfi_no_vig: number | null;
+  fi_edge_pct: number | null;
+  data_quality_tier: string | null;
+  reason_codes: string[];
+} | null {
+  if (!sp || typeof sp !== "object") return null;
+  const a = (sp as Record<string, unknown>).fi_v2_audit;
+  if (!a || typeof a !== "object") return null;
+  const audit = a as Record<string, unknown>;
+  const fa = (audit.feature_audit as Record<string, unknown> | undefined) ?? {};
+  const num = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+  const codes = Array.isArray(fa.reason_codes)
+    ? (fa.reason_codes as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
+  return {
+    fi_pick: typeof audit.fi_pick === "string" ? audit.fi_pick : null,
+    posterior_p_nrfi: num(audit.posterior_p_nrfi),
+    posterior_p_yrfi: num(audit.posterior_p_yrfi),
+    market_nrfi_no_vig: num(audit.market_nrfi_no_vig),
+    fi_edge_pct: num(audit.fi_edge_pct),
+    data_quality_tier: typeof audit.data_quality_tier === "string" ? audit.data_quality_tier : null,
+    reason_codes: codes,
+  };
+}
+
 function pickModelDriver(
   af: Record<string, unknown> | null,
-  market: "moneyline" | "total" | "first_inning"
+  market: "moneyline" | "total" | "first_inning",
+  pick: string | null,
+  sportSpecific: Record<string, unknown> | null,
 ): string | null {
   if (!af) return null;
   const n = (k: string): number | null => {
@@ -1020,21 +1067,49 @@ function pickModelDriver(
     }
     return null;
   }
-  // first_inning
+  // first_inning — pick-aware. Toss-Up and Held both fall through to null
+  // so the copy layer emits its neutral/held-specific text instead.
+  if (pick === "Toss-Up" || pick === null) return null;
+  const fi = readFiV2Audit(sportSpecific);
   const fiRuns = n("nrfi_expected_runs");
-  if (fiRuns !== null && (fiRuns < 0.7 || fiRuns > 1.1)) {
-    return fiRuns < 0.7
-      ? "low projected 1st-inning runs"
-      : "elevated projected 1st-inning runs";
-  }
+  const lowRuns = fiRuns !== null && fiRuns < 0.7;
+  const highRuns = fiRuns !== null && fiRuns > 1.1;
   const top = af.nrfi_used_top_of_order_data;
-  if (top === true) return "confirmed top-of-order matchup";
+  // FI V2 path — use posterior + market edge when present.
+  if (fi) {
+    const edgeAbs = fi.fi_edge_pct !== null ? Math.abs(fi.fi_edge_pct) : 0;
+    if (pick === "NRFI") {
+      if (lowRuns) return "low projected 1st-inning runs";
+      if (edgeAbs >= 2) return "posterior favors NRFI vs the market line";
+      if (top === true) return "stronger starter / top-of-order suppression";
+      return null;
+    }
+    if (pick === "YRFI") {
+      if (highRuns) return "elevated projected 1st-inning runs";
+      if (edgeAbs >= 2) return "posterior favors YRFI vs the market line";
+      if (top === true) return "stronger top-of-order matchup";
+      return null;
+    }
+  }
+  // V1 fallback — still direction-aware.
+  if (pick === "NRFI") {
+    if (lowRuns) return "low projected 1st-inning runs";
+    if (top === true) return "confirmed top-of-order matchup favors NRFI";
+    return null;
+  }
+  if (pick === "YRFI") {
+    if (highRuns) return "elevated projected 1st-inning runs";
+    if (top === true) return "confirmed top-of-order matchup favors YRFI";
+    return null;
+  }
   return null;
 }
 
 function pickRiskDriver(
   af: Record<string, unknown> | null,
-  market: "moneyline" | "total" | "first_inning"
+  market: "moneyline" | "total" | "first_inning",
+  pick: string | null,
+  sportSpecific: Record<string, unknown> | null,
 ): string | null {
   if (!af) return null;
   const n = (k: string): number | null => {
@@ -1044,8 +1119,6 @@ function pickRiskDriver(
   if (market === "moneyline") {
     const hb = n("home_bullpen_factor");
     const ab = n("away_bullpen_factor");
-    // "Risk" = the WORSE bullpen for the side we'd be backing. Without knowing
-    // which side, just flag any clearly bad bullpen as a risk.
     if (hb !== null && hb > 1.1) return "home bullpen below league average";
     if (ab !== null && ab > 1.1) return "away bullpen below league average";
     return null;
@@ -1057,10 +1130,44 @@ function pickRiskDriver(
     }
     return null;
   }
-  // first_inning
+  // first_inning — pick-aware.
+  const fi = readFiV2Audit(sportSpecific);
+  const fiRuns = n("nrfi_expected_runs");
   const top = af.nrfi_used_top_of_order_data;
-  if (top === false || top === null || top === undefined) {
-    return "top-of-order data not yet confirmed";
+  if (pick === "Toss-Up") {
+    // Neutral risk language for Toss-Up.
+    if (fi && (fi.data_quality_tier === "low" || fi.data_quality_tier === "fallback")) {
+      return "lineup or market uncertainty";
+    }
+    return "no clear NRFI/YRFI edge";
+  }
+  // FI V2 data-quality risks — apply regardless of side when present.
+  if (fi) {
+    if (fi.reason_codes.includes("fi_lineup_missing")) {
+      return "lineup not yet confirmed — model used projected order";
+    }
+    if (fi.data_quality_tier === "low" || fi.data_quality_tier === "fallback") {
+      return "model is operating on partial pitcher/lineup data";
+    }
+  }
+  // Direction-aware risks: cite the factor that pushes AGAINST the pick.
+  if (pick === "NRFI") {
+    if (fiRuns !== null && fiRuns > 1.1) {
+      return "elevated projected 1st-inning runs cut against NRFI";
+    }
+    if (top === false || top === null || top === undefined) {
+      return "top-of-order data not yet confirmed";
+    }
+    return null;
+  }
+  if (pick === "YRFI") {
+    if (fiRuns !== null && fiRuns < 0.7) {
+      return "low projected 1st-inning runs cut against YRFI";
+    }
+    if (top === false || top === null || top === undefined) {
+      return "top-of-order data not yet confirmed";
+    }
+    return null;
   }
   return null;
 }
@@ -1323,8 +1430,8 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
         });
 
   // Server-generated copy (banned-terms-linted at output time).
-  const modelDriver = pickModelDriver(input.autoFactors, input.market);
-  const riskDriver = pickRiskDriver(input.autoFactors, input.market);
+  const modelDriver = pickModelDriver(input.autoFactors, input.market, input.pick, input.sportSpecific ?? null);
+  const riskDriver = pickRiskDriver(input.autoFactors, input.market, input.pick, input.sportSpecific ?? null);
   // Phase 4.2.C.2 — held markets pass 0 confidence to the copy generator.
   // generatePerMarketCopy takes a numeric confidence; held markets always
   // route to verdict="no_play" (short-circuit above) so the no_play
