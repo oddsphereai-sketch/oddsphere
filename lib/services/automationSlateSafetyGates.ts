@@ -102,46 +102,105 @@ export function assessMinimumGameCount(
 // ─── G2 — Starter coverage ───────────────────────────────────────────────
 
 /**
- * Starter-coverage threshold. Default is intentionally strict — the
- * 2026-06-03 hide cited "BDL returned 0 probable starters" as the
- * trigger. A slate with <90% of games having BOTH starters resolved
- * is unsafe to auto-publish because:
- *   - The model's pitcher-quality factor falls back to neutral (1.0)
- *     when season_era is null, biasing every prediction toward league
- *     average without operator awareness
- *   - The aiSanityBoundary Guard 5 only fires at t60_locked stage on
- *     scratched starters; null starter at morning_draft is allowed
- *     through with a "morning_unconfirmed" penalty, not a hold
+ * Starter-coverage thresholds. R-19 Phase 5g.4 reshaped G2 from a
+ * slate-wide hammer into a per-game / per-slate gate with three tiers:
  *
- * 90% means at most 1 of 9, or 1 of 10, or 2 of 15 games can be
- * starter-incomplete before the gate fires.
+ *   1. coveragePct ≥ DEFAULT_MIN_STARTER_COVERAGE_PCT → status "ok"
+ *      Games missing a starter are STILL added to `excluded_external_ids`
+ *      so M2 holds them; the slate as a whole runs cleanly.
+ *
+ *   2. coveragePct below threshold but NOT catastrophic →
+ *      status "partial_ok". Per-game exclusion populated. M2 writes
+ *      predictions for complete games; missing-starter games held.
+ *      No slate-wide block.
+ *
+ *   3. Catastrophic (coveragePct < CATASTROPHIC_PCT OR
+ *      gamesMissingBoth ≥ CATASTROPHIC_MISSING_BOTH) → status
+ *      "fail_closed". Slate-wide block. Indicates wrong-day data or
+ *      systemic provider failure, not normal provider latency.
+ *
+ * Background: the 2026-06-03 incident — "BDL returned 0 probable
+ * starters; investigated" — was a catastrophic case (0% coverage). The
+ * 2026-06-06 incident — 2 of 15 games missing home starters (86.7%) —
+ * is normal morning latency that should NOT zero out the slate.
+ *
+ * 90%-threshold means at most 1 of 9, or 1 of 10, or 2 of 15 games can
+ * be starter-incomplete before status drops to "partial_ok". Catastrophic
+ * threshold is 50% OR ≥ 3 games with BOTH sides missing (the "both
+ * missing" signal is much more indicative of wrong-day provider data
+ * than "one side missing").
  */
 export const DEFAULT_MIN_STARTER_COVERAGE_PCT = 90;
+
+/**
+ * Below this coverage, the slate is considered catastrophically
+ * incomplete and gets a slate-wide block. Distinct from the 90%
+ * threshold above — between 50% and 90% is the per-game-exclusion
+ * window where M2 still runs for complete games.
+ */
+export const DEFAULT_MIN_STARTER_COVERAGE_CATASTROPHIC_PCT = 50;
+
+/**
+ * If this many (or more) games on the slate have BOTH sides missing,
+ * treat as catastrophic regardless of overall coverage %. Three games
+ * with both pitchers missing is a strong signature of provider
+ * serving wrong-day data or experiencing systemic outage — a per-game
+ * exclusion under that condition would silently degrade the slate.
+ */
+export const DEFAULT_MAX_MISSING_BOTH_FOR_CATASTROPHIC = 3;
 
 export interface StarterCoverageInput {
   sport: Sport;
   /**
-   * Game rows from the games table for the slate. When this array is
-   * empty (e.g. pure dry-run before S1 has written anything), the
-   * gate returns `status: "deferred"` — neither pass nor fail —
-   * because there's no DB state to evaluate yet.
+   * Game rows from the games table for the slate. Each row must carry
+   * `external_id` so the gate can build a per-game exclusion list and
+   * a held-reasons map. When this array is empty (e.g. pure dry-run
+   * before S1 has written anything), the gate returns
+   * `status: "deferred"` — neither pass nor fail.
    */
   games: ReadonlyArray<{
+    external_id: number;
     home_pitcher_id: number | null;
     away_pitcher_id: number | null;
   }>;
   /** Optional override — defaults to DEFAULT_MIN_STARTER_COVERAGE_PCT. */
   minCoveragePct?: number;
+  /** Optional override — defaults to DEFAULT_MIN_STARTER_COVERAGE_CATASTROPHIC_PCT. */
+  catastrophicMinPct?: number;
+  /** Optional override — defaults to DEFAULT_MAX_MISSING_BOTH_FOR_CATASTROPHIC. */
+  catastrophicMaxMissingBoth?: number;
 }
 
+/**
+ * Per-game held reason — surfaced in the orchestrator report and in
+ * `/admin/auto-predictions` so operators see "G2 starter missing —
+ * no home probable" instead of "cause unknown."
+ */
+export type StarterHeldReason = "missing_home" | "missing_away" | "missing_both";
+
 export interface StarterCoverageResult {
-  status: "ok" | "warn" | "fail_closed" | "deferred";
+  status: "ok" | "partial_ok" | "warn" | "fail_closed" | "deferred";
   totalGames: number;
   gamesWithBothStarters: number;
   gamesMissingOne: number;
   gamesMissingBoth: number;
   coveragePct: number;
   threshold: number;
+  catastrophicThreshold: number;
+  catastrophicMissingBothThreshold: number;
+  /**
+   * external_ids of games with ≥1 missing starter. Populated whenever
+   * the gate sees missing starters (ok, partial_ok, or fail_closed) so
+   * downstream callers always have a per-game exclusion list. Empty
+   * when total === 0 (deferred).
+   */
+  excluded_external_ids: number[];
+  /**
+   * Map from external_id → which side(s) are missing. Same key set as
+   * `excluded_external_ids`. Used by the admin display to surface the
+   * specific reason ("missing home probable" vs "missing both").
+   */
+  held_reasons: Record<number, StarterHeldReason>;
   reason: string;
 }
 
@@ -149,6 +208,10 @@ export function assessStarterCoverage(
   opts: StarterCoverageInput
 ): StarterCoverageResult {
   const threshold = opts.minCoveragePct ?? DEFAULT_MIN_STARTER_COVERAGE_PCT;
+  const catastrophicPct =
+    opts.catastrophicMinPct ?? DEFAULT_MIN_STARTER_COVERAGE_CATASTROPHIC_PCT;
+  const catastrophicMissingBoth =
+    opts.catastrophicMaxMissingBoth ?? DEFAULT_MAX_MISSING_BOTH_FOR_CATASTROPHIC;
   const total = opts.games.length;
   if (total === 0) {
     return {
@@ -159,6 +222,10 @@ export function assessStarterCoverage(
       gamesMissingBoth: 0,
       coveragePct: 0,
       threshold,
+      catastrophicThreshold: catastrophicPct,
+      catastrophicMissingBothThreshold: catastrophicMissingBoth,
+      excluded_external_ids: [],
+      held_reasons: {},
       reason:
         "No games in DB for this slate yet — gate deferred until slate has been ingested",
     };
@@ -166,39 +233,78 @@ export function assessStarterCoverage(
   let both = 0;
   let missingOne = 0;
   let missingBoth = 0;
+  const excluded: number[] = [];
+  const heldReasons: Record<number, StarterHeldReason> = {};
   for (const g of opts.games) {
     const h = g.home_pitcher_id !== null && g.home_pitcher_id !== undefined;
     const a = g.away_pitcher_id !== null && g.away_pitcher_id !== undefined;
-    if (h && a) both++;
-    else if (!h && !a) missingBoth++;
-    else missingOne++;
+    if (h && a) {
+      both++;
+      continue;
+    }
+    // Game has at least one missing starter — add to per-game exclusion
+    // list and tag the held reason.
+    excluded.push(g.external_id);
+    if (!h && !a) {
+      missingBoth++;
+      heldReasons[g.external_id] = "missing_both";
+    } else if (!h) {
+      missingOne++;
+      heldReasons[g.external_id] = "missing_home";
+    } else {
+      missingOne++;
+      heldReasons[g.external_id] = "missing_away";
+    }
   }
+  excluded.sort((a, b) => a - b);
   const coveragePct = Math.round((both / total) * 1000) / 10;
-  if (coveragePct >= threshold) {
-    return {
-      status: "ok",
-      totalGames: total,
-      gamesWithBothStarters: both,
-      gamesMissingOne: missingOne,
-      gamesMissingBoth: missingBoth,
-      coveragePct,
-      threshold,
-      reason: `${both}/${total} game(s) have both starters (${coveragePct}% ≥ ${threshold}% threshold)`,
-    };
-  }
-  return {
-    status: "fail_closed",
+  const isCatastrophic =
+    coveragePct < catastrophicPct || missingBoth >= catastrophicMissingBoth;
+  const base = {
     totalGames: total,
     gamesWithBothStarters: both,
     gamesMissingOne: missingOne,
     gamesMissingBoth: missingBoth,
     coveragePct,
     threshold,
+    catastrophicThreshold: catastrophicPct,
+    catastrophicMissingBothThreshold: catastrophicMissingBoth,
+    excluded_external_ids: excluded,
+    held_reasons: heldReasons,
+  };
+  if (isCatastrophic) {
+    return {
+      ...base,
+      status: "fail_closed",
+      reason:
+        `Catastrophic starter coverage: ${coveragePct}% (${both}/${total} games ` +
+        `with both starters); ${missingBoth} game(s) missing BOTH. ` +
+        `Catastrophic threshold = ${catastrophicPct}% coverage OR ` +
+        `≥${catastrophicMissingBoth} games missing both. Likely wrong-day ` +
+        `provider data or systemic outage; blocking slate-wide to prevent ` +
+        `the 2026-06-03 failure pattern.`,
+    };
+  }
+  if (coveragePct >= threshold) {
+    return {
+      ...base,
+      status: "ok",
+      reason:
+        excluded.length === 0
+          ? `${both}/${total} game(s) have both starters (${coveragePct}% ≥ ${threshold}% threshold)`
+          : `${both}/${total} game(s) have both starters (${coveragePct}% ≥ ${threshold}% threshold); ` +
+            `${excluded.length} game(s) excluded per-game for missing starter`,
+    };
+  }
+  return {
+    ...base,
+    status: "partial_ok",
     reason:
-      `Starter coverage ${coveragePct}% (${both}/${total} games with both starters) ` +
-      `is below ${threshold}% threshold. ${missingOne} game(s) missing one starter, ` +
-      `${missingBoth} game(s) missing both. Blocking auto-publish to prevent the ` +
-      `2026-06-03 failure pattern (publish with starter gaps then hide).`,
+      `Partial-OK starter coverage: ${coveragePct}% (${both}/${total} games ` +
+      `with both starters) is below ${threshold}% threshold but above catastrophic ` +
+      `${catastrophicPct}%. Per-game exclusion applied: ${excluded.length} game(s) ` +
+      `excluded. M2 writes predictions for the ${both} game(s) with full starter data; ` +
+      `missing-starter games held until the next refresh provides probables.`,
   };
 }
 

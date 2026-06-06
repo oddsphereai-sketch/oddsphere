@@ -795,10 +795,18 @@ export async function runSlateCycleAutomated(opts: {
     g2Result = assessStarterCoverage({
       sport: opts.sport,
       games: slateRows.map((r) => ({
+        external_id: r.external_id,
         home_pitcher_id: r.home_pitcher_id,
         away_pitcher_id: r.away_pitcher_id,
       })),
     });
+    // R-19 Phase 5g.4 — G2 step mode reflects the new tri-state
+    // semantics. "fail_closed" is now reserved for catastrophic coverage
+    // (below 50% OR ≥3 games missing both starters). "partial_ok" is
+    // the new per-game-exclusion path — gate did its job by tagging the
+    // missing-starter games but the slate as a whole still ran. Both
+    // "ok" and "partial_ok" report as "dry_run" (the gate doesn't write
+    // anything — informational only).
     let g2Mode: StepMode;
     if (g2Result.status === "fail_closed") g2Mode = "blocked";
     else if (g2Result.status === "deferred") g2Mode = "skipped";
@@ -816,10 +824,23 @@ export async function runSlateCycleAutomated(opts: {
         games_missing_both: g2Result.gamesMissingBoth,
         coverage_pct: g2Result.coveragePct,
         threshold: g2Result.threshold,
+        catastrophic_threshold_pct: g2Result.catastrophicThreshold,
+        catastrophic_missing_both_threshold: g2Result.catastrophicMissingBothThreshold,
+        excluded_external_ids: g2Result.excluded_external_ids,
+        held_reasons: g2Result.held_reasons,
       },
     });
     if (g2Result.status === "fail_closed") {
-      blockingReasons.push(`G2 starter coverage fail_closed: ${g2Result.reason}`);
+      blockingReasons.push(`G2 starter coverage fail_closed (catastrophic): ${g2Result.reason}`);
+    } else if (g2Result.status === "partial_ok") {
+      // Per-game exclusion path — the gate tagged the missing-starter
+      // games but the slate as a whole is still usable. Surface a
+      // warning so operators see what was held, but DO NOT push to
+      // blocking_reasons (which would cascade to overall_status=blocked).
+      warnings.push(
+        `G2 starter coverage partial_ok: ${g2Result.excluded_external_ids.length} game(s) ` +
+        `held for missing starters — ${g2Result.reason}`
+      );
     } else if (g2Result.status === "deferred") {
       warnings.push(
         `G2 starter coverage deferred — slate not yet in DB; gate will re-evaluate on next run after S1 has written`
@@ -927,13 +948,30 @@ export async function runSlateCycleAutomated(opts: {
     intradayMode && g3Result !== null && g3Result.status === "fail_closed"
       ? [...g3Result.affectedExternalIds]
       : [];
+  // R-19 Phase 5g.4 — G2 per-game exclusions. Populated whenever G2
+  // sees any game with at least one missing starter, regardless of
+  // overall status:
+  //   • status="ok" with 1 missing starter (e.g. 14/15) → 1 exclusion,
+  //     slate still passes; M2 writes 14 predictions.
+  //   • status="partial_ok" (today's 13/15 case) → 2 exclusions, slate
+  //     not blocked; M2 writes 13 predictions.
+  //   • status="fail_closed" (catastrophic) → exclusions populated but
+  //     m2Blocked cascade still hard-blocks M2 anyway.
+  //   • status="deferred" → empty (no games in DB yet).
+  // Empty list when G2 errored.
+  const g2Exclusions: number[] =
+    g2Result !== null && g2Result.status !== "deferred"
+      ? [...g2Result.excluded_external_ids]
+      : [];
   // Combined per-game exclusion set passed to M2. Union of:
   //   • lock_miss (snapshot.already_started + null locked_at)
   //   • intraday G3 (BDL says STATUS_IN_PROGRESS / STATUS_FINAL)
+  //   • G2 starter coverage (any game missing ≥1 starter)
   // Sorted ascending for deterministic operator-log output.
   const m2ExclusionSet = new Set<number>([
     ...lockMissExclusions,
     ...g3IntradayExclusions,
+    ...g2Exclusions,
   ]);
   const combinedM2Exclusions = [...m2ExclusionSet].sort((a, b) => a - b);
 
@@ -979,6 +1017,7 @@ export async function runSlateCycleAutomated(opts: {
       const lockSkippedByLayer2 = lockSnapshot?.already_locked_games ?? 0;
       const excludedForLockMissCount = lockMissExclusions.length;
       const excludedForG3IntradayCount = g3IntradayExclusions.length;
+      const excludedForG2Count = g2Exclusions.length;
       const totalExclusions = combinedM2Exclusions.length;
       return {
         details: {
@@ -990,6 +1029,9 @@ export async function runSlateCycleAutomated(opts: {
           excluded_for_lock_miss_external_ids: lockMissExclusions,
           excluded_for_g3_intraday: excludedForG3IntradayCount,
           excluded_for_g3_intraday_external_ids: g3IntradayExclusions,
+          excluded_for_g2_starter_coverage: excludedForG2Count,
+          excluded_for_g2_starter_coverage_external_ids: g2Exclusions,
+          g2_held_reasons: g2Result?.held_reasons ?? {},
           total_per_game_exclusions: totalExclusions,
           combined_exclusion_external_ids: combinedM2Exclusions,
           intraday_mode: intradayMode,
@@ -1004,8 +1046,8 @@ export async function runSlateCycleAutomated(opts: {
           } : null,
         },
         reason: writeMode
-          ? `wrote ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped_layer2=${lockSkippedByLayer2}; excluded_for_lock_miss=${excludedForLockMissCount}; excluded_for_g3_intraday=${excludedForG3IntradayCount}`
-          : `dry-run; would write ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped_layer2=${lockSkippedByLayer2}; excluded_for_lock_miss=${excludedForLockMissCount}; excluded_for_g3_intraday=${excludedForG3IntradayCount}`,
+          ? `wrote ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped_layer2=${lockSkippedByLayer2}; excluded_for_lock_miss=${excludedForLockMissCount}; excluded_for_g3_intraday=${excludedForG3IntradayCount}; excluded_for_g2=${excludedForG2Count}`
+          : `dry-run; would write ${res.predictions.length} prediction(s); held=${res.held_count}; lock_skipped_layer2=${lockSkippedByLayer2}; excluded_for_lock_miss=${excludedForLockMissCount}; excluded_for_g3_intraday=${excludedForG3IntradayCount}; excluded_for_g2=${excludedForG2Count}`,
       };
     },
     m2Blocked

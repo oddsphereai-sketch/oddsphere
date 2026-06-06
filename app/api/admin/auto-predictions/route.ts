@@ -25,6 +25,13 @@ type RawGameRow = {
   game_date: string;
   status: string | null;
   slate_status: string | null;
+  // R-19 Phase 5g.4 — surface starter coverage in the DTO so the admin
+  // page can show "G2 starter missing — no home/away probable" for held
+  // games instead of "cause unknown." Read directly from the games row
+  // so we don't have to thread the orchestrator's exclusion list through
+  // a separate query.
+  home_pitcher_id: number | null;
+  away_pitcher_id: number | null;
   home_team: { abbreviation: string; display_name: string } | null;
   away_team: { abbreviation: string; display_name: string } | null;
   // Supabase returns this as a single object when the FK relation is
@@ -152,15 +159,21 @@ function buildMarket(
 function inferExcludedReason(g: RawGameRow): string | null {
   // No prediction row but game is on the slate. We can't know with 100%
   // certainty which gate excluded it — orchestrator doesn't persist a
-  // per-game "excluded by" field. Best-effort interpretation from
-  // observable signals:
+  // per-game "excluded by" field — but we can pin almost every case
+  // from observable signals. Priority order matters: the most specific
+  // / earliest-cascading reason wins.
   //
-  //   • games.status indicates "in_progress" / "final" / etc. → likely
-  //     Phase 5d G3 in-progress exclusion
-  //   • game_date in the past with games.status still "scheduled" →
-  //     likely Phase 5c lock_miss exclusion (cron fired too late)
-  //   • otherwise → "no prediction written (cause unknown; check
-  //     automation report)"
+  //   • games.status indicates "in_progress" / "final" → G3 in-progress
+  //     (overrides everything else; once the game has started, that's
+  //     the load-bearing reason regardless of starter state).
+  //   • game_date in the past with status=scheduled → Phase 5c lock_miss
+  //     (cron fired too late).
+  //   • Phase 5g.4 — home_pitcher_id OR away_pitcher_id is null AND game
+  //     hasn't started yet → G2 starter coverage held the game per-game.
+  //     This is the most common reason today; explicit copy means the
+  //     operator sees "missing TOR home probable" instead of "cause
+  //     unknown" so they can target the right provider.
+  //   • Otherwise → "cause unknown" (consult automation report).
   const status = (g.status ?? "").toLowerCase();
   if (
     status.includes("progress") ||
@@ -173,6 +186,17 @@ function inferExcludedReason(g: RawGameRow): string | null {
   const startMs = Date.parse(g.game_date);
   if (!Number.isNaN(startMs) && startMs < Date.now()) {
     return "lock_miss exclusion (game_date in the past, status=scheduled)";
+  }
+  const homeMissing = g.home_pitcher_id == null;
+  const awayMissing = g.away_pitcher_id == null;
+  if (homeMissing && awayMissing) {
+    return "G2 starter missing — no probable pitchers from any source";
+  }
+  if (homeMissing) {
+    return "G2 starter missing — no home probable from any source";
+  }
+  if (awayMissing) {
+    return "G2 starter missing — no away probable from any source";
   }
   return "no prediction written (cause unknown; consult automation report)";
 }
@@ -299,6 +323,7 @@ export async function GET(request: Request) {
     .from("games")
     .select(
       "id, external_id, game_date, status, slate_status, " +
+        "home_pitcher_id, away_pitcher_id, " +
         "home_team:home_team_id (abbreviation, display_name), " +
         "away_team:away_team_id (abbreviation, display_name), " +
         "game_predictions (" +
