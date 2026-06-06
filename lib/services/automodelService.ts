@@ -44,7 +44,15 @@
 import type { Sport } from "../types/domain/Sport";
 import { buildFeatureSnapshots } from "../automodel/featureSnapshot";
 import { runMlbAutoModelV1 } from "../automodel/mlbAutoModelV1";
+import { runMlbAutoModelV2 } from "../automodel/mlbAutoModelV2";
 import { reviewAutoModelOutput } from "../automodel/aiSanityBoundary";
+import {
+  resolveEffectiveVersion,
+  type AutomodelVersion,
+} from "../automodel/modelVersion";
+import {
+  MODEL_VERSION_V2,
+} from "../automodel/types";
 import type {
   AutoModelOutput,
   AutoModelSportSpecific,
@@ -144,6 +152,17 @@ export type AutoModelRunOpts = {
    * actually writing.
    */
   respectLocks?: boolean;
+  /**
+   * Phase 6B.1 — explicit auto-model version override.
+   *   "v1"     — V1 writes predictions (default).
+   *   "v2"     — V2 market-prior writes predictions.
+   *              V1 still runs first to produce the residual signal.
+   *              V2 errors → fall back to V1 with a logged warning.
+   *   "shadow" — V1 writes predictions; V2 also runs and its audit is
+   *              attached to sport_specific.v2_audit for comparison.
+   * When undefined, reads AUTOMODEL_VERSION env (default "v1").
+   */
+  modelVersion?: AutomodelVersion;
 };
 
 /**
@@ -393,6 +412,9 @@ export async function generatePredictionsForSlate(
   const t0 = Date.now();
   const wantWrite = opts.writeToDb === true;
   const envEnabled = process.env.AUTOMODEL_DB_WRITES_ENABLED === "true";
+
+  // Phase 6B.1 — resolve effective auto-model version (override > env > v1).
+  const effectiveVersion = resolveEffectiveVersion(opts.modelVersion);
 
   // Two-key gate (Phase 3C): EITHER missing while caller asked for a
   // write → throw immediately, BEFORE any DB read or model work. This is
@@ -650,10 +672,22 @@ export async function generatePredictionsForSlate(
         }
       }
 
-      const finalPrediction: AutoModelOutput = {
+      const finalPredictionV1: AutoModelOutput = {
         ...reviewedPrediction,
         sport_specific: withBreakdown,
       };
+
+      // 2d.5 — Phase 6B.1: branch on effective model version.
+      // For "v1" mode → pass-through, behavior unchanged from prior phases.
+      // For "v2" or "shadow" → run V2 with try/catch; on error, fall back
+      // to V1 with a logged warning. "v2" writes V2's prediction values;
+      // "shadow" keeps V1's values and only attaches v2_audit.
+      const finalPrediction: AutoModelOutput = applyV2IfSelected({
+        snap,
+        v1Output: finalPredictionV1,
+        stage,
+        effectiveVersion,
+      });
 
       // 2e — tally
       predictions.push(finalPrediction);
@@ -816,5 +850,103 @@ async function runDbWrites(
     ingest,
     market_signals,
     grades,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Phase 6B.1 — V2 selection / shadow / fallback helper
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Phase 6B.1 — apply V2 prediction to the per-game pipeline if the
+ * effective version requests it.
+ *
+ *   effectiveVersion="v1"     → pass-through V1 output unchanged.
+ *   effectiveVersion="v2"     → run V2; on success, use V2's prediction
+ *                               values; on error, fall back to V1 with a
+ *                               logged warning and tag model_used=v2_fallback_v1.
+ *   effectiveVersion="shadow" → run V2; keep V1 prediction values; attach
+ *                               v2_audit to sport_specific for comparison.
+ *
+ * V2 errors NEVER abort the per-game pipeline. The function is wrapped in
+ * try/catch so a buggy V2 run produces a fallback to V1, not a per-game
+ * exception. This guarantees no game loses its prediction because of a
+ * model-version selection problem.
+ */
+function applyV2IfSelected(args: {
+  snap: GameSnapshot;
+  v1Output: AutoModelOutput;
+  stage: ModelStage;
+  effectiveVersion: AutomodelVersion;
+}): AutoModelOutput {
+  const { snap, v1Output, stage, effectiveVersion } = args;
+  if (effectiveVersion === "v1") {
+    // Default — V1 writes; tag model_used="v1" for observability.
+    return {
+      ...v1Output,
+      sport_specific: {
+        ...v1Output.sport_specific,
+        model_used: "v1",
+      },
+    };
+  }
+  let v2;
+  try {
+    v2 = runMlbAutoModelV2(snap, v1Output, stage);
+  } catch (e) {
+    console.warn(
+      `[automodelService] runMlbAutoModelV2 threw for game_external_id=` +
+        `${snap.game_external_id}: ${e instanceof Error ? e.message : String(e)}. ` +
+        `Falling back to V1.`
+    );
+    return {
+      ...v1Output,
+      sport_specific: {
+        ...v1Output.sport_specific,
+        model_used: "v2_fallback_v1",
+      },
+    };
+  }
+
+  if (effectiveVersion === "shadow") {
+    // Production keeps V1 prediction; V2 audit attached for comparison.
+    return {
+      ...v1Output,
+      sport_specific: {
+        ...v1Output.sport_specific,
+        model_used: "shadow_v1",
+        v2_audit: v2.v2Audit,
+        v2_provisional: v2.v2Audit.provisional,
+        v2_data_quality_tier: v2.v2Audit.dataQuality.tier,
+        v2_best_angle_eligible: v2.v2Audit.bestAngleEligibility.eligible,
+      },
+    };
+  }
+
+  // effectiveVersion === "v2": V2 writes its prediction values.
+  // Preserves V1's sport_specific.auto_factors, ai_sanity, review_v1, and
+  // breakdown_v2 — those carry diagnostics the framework still depends on
+  // regardless of which model produced the top-level picks.
+  return {
+    ...v1Output,
+    predicted_home_score: v2.predicted_home_score,
+    predicted_away_score: v2.predicted_away_score,
+    predicted_total: v2.predicted_total,
+    predicted_ml_winner: v2.predicted_ml_winner,
+    ml_confidence: v2.ml_confidence,
+    predicted_ou_side: v2.predicted_ou_side,
+    ou_confidence: v2.ou_confidence,
+    // NRFI/YRFI stays V1 in 6B.0; V2 documents FI extension requirements.
+    predicted_nrfi: v2.predicted_nrfi,
+    nrfi_confidence: v2.nrfi_confidence,
+    sport_specific: {
+      ...v1Output.sport_specific,
+      model_version: MODEL_VERSION_V2,
+      model_used: "v2",
+      v2_audit: v2.v2Audit,
+      v2_provisional: v2.v2Audit.provisional,
+      v2_data_quality_tier: v2.v2Audit.dataQuality.tier,
+      v2_best_angle_eligible: v2.v2Audit.bestAngleEligibility.eligible,
+    },
   };
 }

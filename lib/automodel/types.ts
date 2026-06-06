@@ -471,6 +471,36 @@ export type AutoModelSportSpecific = {
    * cast to the concrete type via that module.
    */
   review_v1?: unknown | null;
+  // ─────────────────────────────────────────────────────────────
+  // Phase 6B.1 — V2 market-prior model fields (additive)
+  // ─────────────────────────────────────────────────────────────
+  /**
+   * Which model produced the prediction values on this row:
+   *   "v1"        — V1 ran and wrote (default).
+   *   "v2"        — V2 ran and wrote (market-prior).
+   *   "shadow_v1" — V1 wrote; V2 also ran and stashed audit only.
+   *   "v2_fallback_v1" — V2 errored; V1 took over and wrote. Logged.
+   *
+   * Optional + undefined-tolerant for backwards compat with rows
+   * written before Phase 6B.1.
+   */
+  model_used?: "v1" | "v2" | "shadow_v1" | "v2_fallback_v1";
+  /**
+   * Compact summary of the V2 data-quality assessment. Top-level
+   * boolean/string fields here so admin UIs can filter without
+   * descending into v2_audit JSON. Optional for back-compat.
+   */
+  v2_provisional?: boolean;
+  v2_data_quality_tier?: "high" | "medium" | "low" | "fallback";
+  v2_best_angle_eligible?: boolean;
+  /**
+   * Full V2 audit payload — mirrors V2Output.v2Audit. `unknown` here to
+   * avoid a dependency cycle (concrete shape lives in
+   * `lib/automodel/mlbAutoModelV2.ts`). Readers cast via that module.
+   * Carries: marketBaseline, residuals, capActive flags, edgePct,
+   * dataQuality, bestAngleEligibility, provisional, notes, fallback.
+   */
+  v2_audit?: unknown | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1166,3 +1196,6 @@ export const AI_SCORE_DELTA_BOUND = 0.3;
 
 /** Auto-model version tag stored in sport_specific.model_version. */
 export const MODEL_VERSION = "auto_v1.0_mlb_rules";
+
+/** Phase 6B.1 — V2 market-prior model version tag. */
+export const MODEL_VERSION_V2 = "auto_v2.0_mlb_market_prior";
