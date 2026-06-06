@@ -291,6 +291,23 @@ export type MarketEdgeDto = {
    */
   modelMarketGapPct: number | null;
   /**
+   * Push 3C-2 (Phase 6B.1.6m) — Recommendation Confidence (0..100).
+   *
+   * Separate from `confidence` / `modelTrustPct`:
+   *   • confidence / modelTrustPct = direction confidence (raw model)
+   *   • recommendationConfidence    = HOW ACTIONABLE the pick is
+   *                                   relative to the book price.
+   *
+   * Null when:
+   *   • play_grade is Toss-Up or Held
+   *   • no pick exists
+   *
+   * Capped by data-quality tier (high=80 / medium=65 / low=50 /
+   * fallback=35) so low-quality data can never look like a strong
+   * actionable play even when the projected edge looks big.
+   */
+  recommendationConfidence?: number | null;
+  /**
    * Sportsbook that produced the no-vig pair. Diagnostic display so
    * members can see "Market 50% · ballybet" or "Market 50% · pinnacle".
    * Null when no book had both sides.

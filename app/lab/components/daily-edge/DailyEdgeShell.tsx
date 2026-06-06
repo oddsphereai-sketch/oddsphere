@@ -1127,6 +1127,27 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
                 </span>
               </>
             )}
+            {/* Phase 6B.1.6m — Recommendation Confidence: how actionable
+                the pick is relative to the book. Distinct from Model
+                Prob (direction) and Edge (raw pp). Suppressed for
+                Toss-Up / Held / null-pick (helper returns null). */}
+            {marketData.recommendationConfidence !== null && marketData.recommendationConfidence !== undefined && (
+              <>
+                <span className="text-gray-700">·</span>
+                <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Rec</span>
+                <span
+                  className={`text-[12.5px] tabular-nums font-bold ${
+                    marketData.recommendationConfidence >= 65
+                      ? "text-emerald-300"
+                      : marketData.recommendationConfidence >= 45
+                        ? "text-gray-300"
+                        : "text-amber-300"
+                  }`}
+                >
+                  {Math.round(marketData.recommendationConfidence)}
+                </span>
+              </>
+            )}
             {marketData.priceAmerican !== null ? (
               <>
                 <span className="text-gray-700">·</span>

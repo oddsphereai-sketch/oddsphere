@@ -68,6 +68,11 @@ import {
   type ReviewerSignals,
 } from "@/lib/services/marketVerdictDerivation";
 import { generatePerMarketCopy } from "@/lib/services/perMarketCopyGenerator";
+import {
+  computeRecommendationConfidence,
+  type RecommendationPlayGrade,
+  type RecommendationTier,
+} from "@/lib/services/recommendationConfidence";
 import { formatKeyStats } from "@/lib/services/keyStatsFormatter";
 import { assertNoBannedTerms } from "@/lib/services/bannedTermsLinter";
 
@@ -1002,6 +1007,45 @@ function deriveSharpDirection(
  *   3. Return null for Toss-Up so the copy layer falls through to neutral
  *      Toss-Up text.
  */
+function extractDataQualityTier(
+  sp: Record<string, unknown> | null,
+  market: "moneyline" | "total" | "first_inning",
+): RecommendationTier | null {
+  if (!sp) return null;
+  if (market === "first_inning") {
+    const fi = (sp.fi_v2_audit as Record<string, unknown> | undefined) ?? null;
+    const tier = fi ? (fi.data_quality_tier as string | undefined) : undefined;
+    if (tier === "high" || tier === "medium" || tier === "low" || tier === "fallback") return tier;
+    return null;
+  }
+  const v22 = (sp.v2_2_audit as Record<string, unknown> | undefined) ?? null;
+  const tier = v22 ? (v22.data_quality_tier as string | undefined) : undefined;
+  if (tier === "high" || tier === "medium" || tier === "low" || tier === "fallback") return tier;
+  return null;
+}
+
+function extractPlayGrade(
+  sp: Record<string, unknown> | null,
+  market: "moneyline" | "total" | "first_inning",
+  pick: string | null,
+  held: boolean,
+): RecommendationPlayGrade | null {
+  if (held) return "held";
+  if (pick === "Toss-Up") return "toss_up";
+  if (!sp) return null;
+  if (market === "first_inning") {
+    const fi = (sp.fi_v2_audit as Record<string, unknown> | undefined) ?? null;
+    const pg = fi ? (fi.fi_play_grade as string | undefined) : undefined;
+    if (pg === "best_angle" || pg === "lean" || pg === "no_bet" || pg === "toss_up" || pg === "held") return pg;
+    return null;
+  }
+  const v22 = (sp.v2_2_audit as Record<string, unknown> | undefined) ?? null;
+  const key = market === "moneyline" ? "ml_play_grade" : "ou_play_grade";
+  const pg = v22 ? (v22[key] as string | undefined) : undefined;
+  if (pg === "best_angle" || pg === "lean" || pg === "no_bet" || pg === "market_aligned" || pg === "held") return pg;
+  return null;
+}
+
 function readFiV2Audit(sp: Record<string, unknown> | null): {
   fi_pick: string | null;
   posterior_p_nrfi: number | null;
@@ -1554,6 +1598,20 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     marketDataQuality,
     reviewFlags: reviewMeta.flags,
     reviewActionSummary: reviewMeta.action,
+    // Phase 6B.1.6m — recommendation confidence (0..100). Edge-aware,
+    // tier-capped. Separate from raw model probability.
+    recommendationConfidence: computeRecommendationConfidence({
+      edgePctPp: input.market === "total" ? null : modelMarketGapPct,
+      edgeUnits: (() => {
+        if (input.market !== "total") return null;
+        const mt = input.totalsExtras?.modelTotal ?? null;
+        const ln = input.totalsExtras?.sportsbookLine ?? null;
+        return mt !== null && ln !== null ? mt - ln : null;
+      })(),
+      tier: extractDataQualityTier(input.sportSpecific ?? null, input.market),
+      playGrade: extractPlayGrade(input.sportSpecific ?? null, input.market, input.pick, input.held),
+      hasPick: input.pick !== null && !input.held,
+    }),
   };
 }
 
