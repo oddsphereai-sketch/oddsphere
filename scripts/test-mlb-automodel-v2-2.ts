@@ -482,6 +482,93 @@ async function main() {
   }
 
   // ──────────────────────────────────────────────────────────────────
+  section("Push 3A-6 — ML direction regression (Poisson arg order)");
+  {
+    // home strongly favored — must produce home ML.
+    const snap = buildSnapshot({
+      homeTeam: { team_avg_batter_ops: 0.860 },
+      awayTeam: { team_avg_batter_ops: 0.700 },
+      homeStarter: { season_era: 2.50, season_whip: 1.00, season_k_per_9: 10.5 },
+      awayStarter: { season_era: 5.50, season_whip: 1.55, season_k_per_9: 6.5 },
+      market: { listed_total: 8.5, home_ml_odds_american: -300, away_ml_odds_american: 270 },
+    });
+    const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
+    check("home strongly favored → ML pick = home",
+      out.predicted_ml_winner === "home",
+      `got=${out.predicted_ml_winner}, home_score=${out.predicted_home_score.toFixed(2)} away_score=${out.predicted_away_score.toFixed(2)}`);
+    check("home strongly favored → predicted_home > predicted_away",
+      out.predicted_home_score > out.predicted_away_score);
+    check("home strongly favored → ml model prob > 0.5",
+      out.v22Audit.ml_model_prob > 0.5,
+      `got=${out.v22Audit.ml_model_prob}`);
+  }
+  {
+    // away strongly favored — must produce away ML.
+    const snap = buildSnapshot({
+      homeTeam: { team_avg_batter_ops: 0.700 },
+      awayTeam: { team_avg_batter_ops: 0.860 },
+      homeStarter: { season_era: 5.50, season_whip: 1.55, season_k_per_9: 6.5 },
+      awayStarter: { season_era: 2.50, season_whip: 1.00, season_k_per_9: 10.5 },
+      market: { listed_total: 8.5, home_ml_odds_american: 270, away_ml_odds_american: -300 },
+    });
+    const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
+    check("away strongly favored → ML pick = away",
+      out.predicted_ml_winner === "away",
+      `got=${out.predicted_ml_winner}, home_score=${out.predicted_home_score.toFixed(2)} away_score=${out.predicted_away_score.toFixed(2)}`);
+    check("away strongly favored → predicted_away > predicted_home",
+      out.predicted_away_score > out.predicted_home_score);
+    check("away strongly favored → ml model prob > 0.5",
+      out.v22Audit.ml_model_prob > 0.5);
+  }
+  {
+    // LAA@LAD-style scenario — home (LAD): elite starter + strong offense.
+    // away (LAA): bad starter + weak offense. Confidence must attach to home.
+    const snap = buildSnapshot({
+      homeTeam: { team_avg_batter_ops: 0.926, bullpen_era_proxy: 2.32 },
+      awayTeam: { team_avg_batter_ops: 0.718, bullpen_era_proxy: null },
+      homeStarter: { season_era: 2.86, season_whip: 1.00, season_k_per_9: 8.96, pitch_quality_score: null },
+      awayStarter: { season_era: 5.23, season_whip: 1.48, season_k_per_9: 6.50, pitch_quality_score: null },
+      market: { listed_total: 8.5, home_ml_odds_american: -337, away_ml_odds_american: 301 },
+    });
+    const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
+    check("LAA@LAD style: ML pick = home (LAD)",
+      out.predicted_ml_winner === "home",
+      `got=${out.predicted_ml_winner}, home_score=${out.predicted_home_score.toFixed(2)} away_score=${out.predicted_away_score.toFixed(2)}`);
+    check("LAA@LAD style: confidence attached to home",
+      out.v22Audit.ml_model_prob > 0.5);
+    check("LAA@LAD style: predicted_home runs > predicted_away runs",
+      out.predicted_home_score > out.predicted_away_score);
+    // The Poisson edge agrees with market direction here (both pick home).
+    check("LAA@LAD style: market home prob also > 0.5 (sanity vs market direction)",
+      out.v22Audit.ml_market_prob !== null && out.v22Audit.ml_market_prob > 0.5);
+    check("LAA@LAD style: ML edge magnitude reasonable (< 50%, not 66%+ inversion)",
+      Math.abs(out.v22Audit.ml_edge_pct) < 50,
+      `got edge=${out.v22Audit.ml_edge_pct.toFixed(2)}%`);
+  }
+  {
+    // OU remains unchanged by ML direction fix — symmetric in home/away
+    const snap = buildSnapshot({
+      homeTeam: { team_avg_batter_ops: 0.860 },
+      awayTeam: { team_avg_batter_ops: 0.700 },
+      market: { listed_total: 6.5, home_ml_odds_american: -150, away_ml_odds_american: 130 },
+    });
+    const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
+    check("OU side consistent with projected_total vs listed_total",
+      (out.predicted_ou_side === "over" && out.predicted_total > 6.5) ||
+        (out.predicted_ou_side === "under" && out.predicted_total < 6.5),
+      `total=${out.predicted_total.toFixed(2)} listed=6.5 side=${out.predicted_ou_side}`);
+  }
+  {
+    // Fallback/provisional Best Angle gating unchanged
+    const snap = buildSnapshot({ homeStarter: null });
+    const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
+    check("fallback tier: ML Best Angle blocked",
+      !out.v22Audit.ml_best_angle_eligible);
+    check("fallback tier: OU Best Angle blocked",
+      !out.v22Audit.ou_best_angle_eligible);
+  }
+
+  // ──────────────────────────────────────────────────────────────────
   section("Push 3A-2 — pitch quality proxy + fallback hierarchy");
   {
     // Pitch quality proxy from ERA+WHIP+K/9

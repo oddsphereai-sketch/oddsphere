@@ -170,10 +170,14 @@ export function runMlbAutoModelV2_2(
     integrityNotes.push("Posterior run differential capped vs market.");
   }
 
-  // Layer 4 — probabilities from Poisson on unrounded posterior
+  // Layer 4 — probabilities from Poisson on unrounded posterior.
+  // homeWinProbabilityPoisson signature is (lambdaHome, lambdaAway).
+  // Pre-Push 3A-6 hotfix: V2.2 had these arguments swapped, which
+  // returned P(away wins) and inverted every ML pick. Test added in
+  // scripts/test-mlb-automodel-v2-2.ts ("skewed lambdas — ML direction").
   const mlHomeProb = homeWinProbabilityPoisson(
-    posterior.away_expected_runs,
     posterior.home_expected_runs,
+    posterior.away_expected_runs,
   );
   const mlAwayProb = 1 - mlHomeProb;
   const mlPickIsHome = mlHomeProb >= 0.5;
