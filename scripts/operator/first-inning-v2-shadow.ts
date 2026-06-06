@@ -67,7 +67,7 @@ async function main() {
 
   const { data: lineRows } = await supabase
     .from("lines")
-    .select("game_id, market_type, sportsbook, side, line_value, odds_american, updated_at")
+    .select("game_id, market_type, sportsbook, side, line_value, odds_american, fetched_at")
     .in("game_id", dbGameIds)
     .eq("market_type", "first_inning_total");
   const linesByGameId = new Map<number, FiLineRow[]>();
@@ -80,7 +80,7 @@ async function main() {
       side: (r.side as string | null) ?? null,
       line_value: (r.line_value as number | null) ?? null,
       odds_american: (r.odds_american as number | null) ?? null,
-      updated_at: (r.updated_at as string | null) ?? null,
+      fetched_at: (r.fetched_at as string | null) ?? null,
     });
     linesByGameId.set(id, arr);
   }

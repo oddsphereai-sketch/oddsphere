@@ -41,7 +41,7 @@ export type FiLineRow = {
   side: string | null;        // "over" | "under"
   line_value: number | null;  // typically 0.5
   odds_american: number | null;
-  updated_at?: string | null;
+  fetched_at?: string | null;
 };
 
 const FI_BOOK_PRIORITY = ["pinnacle", "fanduel", "draftkings", "betmgm", "caesars"];
@@ -93,7 +93,7 @@ export function computeFiMarketBaseline(linesForGame: FiLineRow[]): FiMarketBase
   const yrfiNoVig = pair.home;
   const nrfiNoVig = pair.away;
 
-  const freshness = overRow.updated_at ?? underRow.updated_at ?? null;
+  const freshness = overRow.fetched_at ?? underRow.fetched_at ?? null;
   void americanToImpliedProb; // marker that helper module is wired
 
   return {

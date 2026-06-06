@@ -272,6 +272,71 @@ async function main() {
   }
 
   // ──────────────────────────────────────────────────────────────────
+  section("Push 3B-2 — FiLineRow shape contract (fetched_at, not updated_at)");
+  {
+    // Regression for the Push 3B bug: my shadow operator + market
+    // baseline used `updated_at` which doesn't exist on the `lines`
+    // table. The schema field is `fetched_at`. If anyone reverts the
+    // type, this test asserts the contract.
+    const probe: FiLineRow = {
+      market_type: "first_inning_total",
+      sportsbook: "betmgm",
+      side: "over",
+      line_value: 0.5,
+      odds_american: -105,
+      fetched_at: "2026-06-06T18:00:00Z",
+    };
+    check("FiLineRow accepts fetched_at field",
+      typeof probe.fetched_at === "string");
+    // TypeScript-level guard: this would fail tsc if the field renamed.
+    const baseline = computeFiMarketBaseline([
+      probe,
+      { ...probe, side: "under", odds_american: 105 },
+    ]);
+    check("baseline.freshness reads from fetched_at",
+      baseline.freshness === "2026-06-06T18:00:00Z");
+  }
+
+  section("Push 3B-2 — non-priority books still work (fall-through)");
+  {
+    // Today's slate has betmgm, betrivers, betway, hardrock, ballybet.
+    // Only betmgm is in FI_BOOK_PRIORITY explicitly — others must fall
+    // through and be accepted.
+    const fallthroughBooks: FiLineRow[] = [
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "over", line_value: 0.5, odds_american: 110, fetched_at: null },
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "under", line_value: 0.5, odds_american: -130, fetched_at: null },
+    ];
+    const r = computeFiMarketBaseline(fallthroughBooks);
+    check("ballybet (not in priority chain) accepted via fall-through",
+      r.data_quality === "ok");
+    check("reason indicates the chosen book",
+      r.reason.startsWith("fi_market_ok"));
+  }
+
+  section("Push 3B-2 — Over=YRFI / Under=NRFI side mapping");
+  {
+    // YRFI heavy line: over -150 / under +130
+    const yrfiHeavy = computeFiMarketBaseline([
+      { market_type: "first_inning_total", sportsbook: "pinnacle", side: "over", line_value: 0.5, odds_american: -150, fetched_at: null },
+      { market_type: "first_inning_total", sportsbook: "pinnacle", side: "under", line_value: 0.5, odds_american: 130, fetched_at: null },
+    ]);
+    check("over -150 → YRFI no-vig > 0.55",
+      yrfiHeavy.yrfi_no_vig_prob !== null && yrfiHeavy.yrfi_no_vig_prob > 0.55,
+      `yrfi=${yrfiHeavy.yrfi_no_vig_prob}`);
+    check("NRFI no-vig = 1 - YRFI no-vig",
+      yrfiHeavy.nrfi_no_vig_prob !== null && yrfiHeavy.yrfi_no_vig_prob !== null &&
+      near(yrfiHeavy.nrfi_no_vig_prob + yrfiHeavy.yrfi_no_vig_prob, 1.0, 0.001));
+    // NRFI heavy line: over +130 / under -150
+    const nrfiHeavy = computeFiMarketBaseline([
+      { market_type: "first_inning_total", sportsbook: "pinnacle", side: "over", line_value: 0.5, odds_american: 130, fetched_at: null },
+      { market_type: "first_inning_total", sportsbook: "pinnacle", side: "under", line_value: 0.5, odds_american: -150, fetched_at: null },
+    ]);
+    check("under -150 → NRFI no-vig > 0.55",
+      nrfiHeavy.nrfi_no_vig_prob !== null && nrfiHeavy.nrfi_no_vig_prob > 0.55,
+      `nrfi=${nrfiHeavy.nrfi_no_vig_prob}`);
+  }
+
+  // ──────────────────────────────────────────────────────────────────
   section("Layer 2 — market baseline");
   {
     const balanced = computeFiMarketBaseline(buildFiLines(110, -130));
