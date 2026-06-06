@@ -233,11 +233,17 @@ type RawHitterPitch = {
 
 type RawLineup = {
   game_id: number;
-  team_id: number;
-  player_id: number;
+  // BDL nests team/player as objects with .id. Older code expected flat
+  // team_id/player_id — kept as fallback so any older fixtures or future
+  // shape change doesn't crash.
+  team?: { id?: number } | null;
+  player?: { id?: number } | null;
+  team_id?: number | null;
+  player_id?: number | null;
   batting_order?: number | null;
   position?: string | null;
   is_confirmed?: boolean | null;
+  is_probable_pitcher?: boolean | null;
   is_dh?: boolean | null;
 };
 
@@ -864,10 +870,15 @@ function mapLineup(raw: RawLineup): StatsLineupRecord {
   const positionRaw = asStringOrNull(raw.position);
   const startingPosition =
     shortPositionAbbr(positionRaw) ?? positionRaw;
+  // BDL response wraps team/player as nested objects with `.id`. Read
+  // nested first; fall back to flat fields for backwards compatibility
+  // (e.g. older fixtures, future API shape changes).
+  const teamId = raw.team?.id ?? raw.team_id ?? null;
+  const playerId = raw.player?.id ?? raw.player_id ?? null;
   return {
     game_external_id: raw.game_id,
-    team_external_id: raw.team_id,
-    player_external_id: raw.player_id,
+    team_external_id: teamId as number,
+    player_external_id: playerId as number,
     batting_position: asNumberOrNull(raw.batting_order),
     starting_position: startingPosition,
     is_confirmed: asBoolOrFalse(raw.is_confirmed),
