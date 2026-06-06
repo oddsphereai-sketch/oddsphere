@@ -30,11 +30,17 @@ async function main() {
   console.log(`\n━━━ feature-coverage-refresh cron-route tests ━━━\n`);
   const src = readFileSync(ROUTE_PATH, "utf8");
 
-  // T1 — BDL backfill imported.
+  // T1 — BDL backfill imported FROM SERVICE (not operator script).
   if (!src.includes('runBdlPlayerBackfillCycle')) {
     fail("T1 BDL backfill imported", "runBdlPlayerBackfillCycle not imported");
   }
-  ok("T1 BDL backfill imported");
+  if (src.includes('scripts/operator/backfill-bdl-players')) {
+    fail("T1 BDL backfill imported", "route must NOT import from scripts/operator/* (CLI top-level main() kills Next build worker)");
+  }
+  if (!src.includes('@/lib/services/bdlPlayerBackfillService')) {
+    fail("T1 BDL backfill imported", "route must import from @/lib/services/bdlPlayerBackfillService");
+  }
+  ok("T1 BDL backfill imported from service (not operator script)");
 
   // T2 — BDL call happens BEFORE weatherService.refreshForecasts call.
   const bdlIdx = src.indexOf("runBdlPlayerBackfillCycle(");

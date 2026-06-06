@@ -42,7 +42,7 @@ import { cronHandlerPerSport } from "@/lib/cron/runCron";
 import { parseDateFromUrl } from "@/lib/cron/dates";
 import { weatherService } from "@/lib/services/weatherService";
 import { lineupService } from "@/lib/services/lineupService";
-import { runBdlPlayerBackfillCycle } from "@/scripts/operator/backfill-bdl-players";
+import { runBdlPlayerBackfillCycle } from "@/lib/services/bdlPlayerBackfillService";
 import type { Sport } from "@/lib/types/domain/Sport";
 
 export const maxDuration = 120;
