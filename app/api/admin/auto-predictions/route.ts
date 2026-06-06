@@ -86,6 +86,8 @@ type AdminGameRow = {
     fully_held: boolean;
     held_count: number;
     model_breakdown: string | null;
+    model_used: string | null;
+    model_version: string | null;
     ml: MarketDto;
     ou: MarketDto;
     nrfi: MarketDto;
@@ -103,6 +105,15 @@ export type AdminAutoPredictionsResponse = {
     fully_held_count: number;
     partial_held_count: number;
     no_hold_count: number;
+    // Per-market readiness — distinguishes the slate from looking
+    // "partially broken" when only NRFI is held but ML/OU are populated.
+    ml_ready_count: number;
+    ou_ready_count: number;
+    full_game_ready_count: number;
+    full_game_blocked_count: number;
+    fi_ready_count: number;
+    fi_held_count: number;
+    partial_nrfi_only_count: number;
   };
   slate_status_summary: {
     draft: number;
@@ -291,6 +302,14 @@ function buildRow(g: RawGameRow): AdminGameRow {
       fully_held: fullyHeld,
       held_count: heldCount,
       model_breakdown: extractModelBreakdown(pred.sport_specific),
+      model_used:
+        typeof pred.sport_specific?.model_used === "string"
+          ? pred.sport_specific.model_used
+          : null,
+      model_version:
+        typeof pred.sport_specific?.model_version === "string"
+          ? pred.sport_specific.model_version
+          : null,
       ml,
       ou,
       nrfi,
@@ -365,6 +384,13 @@ export async function GET(request: Request) {
   let excluded_count = 0;
   let fully_held_count = 0;
   let no_hold_count = 0;
+  let ml_ready_count = 0;
+  let ou_ready_count = 0;
+  let full_game_ready_count = 0;
+  let full_game_blocked_count = 0;
+  let fi_ready_count = 0;
+  let fi_held_count = 0;
+  let partial_nrfi_only_count = 0;
   for (const g of games) {
     if (g.prediction === null) {
       excluded_count++;
@@ -372,6 +398,17 @@ export async function GET(request: Request) {
       predictions_count++;
       if (g.prediction.fully_held) fully_held_count++;
       else if (g.prediction.held_count === 0) no_hold_count++;
+      if (!g.prediction.ml.held) ml_ready_count++;
+      if (!g.prediction.ou.held) ou_ready_count++;
+      if (!g.prediction.ml.held && !g.prediction.ou.held) full_game_ready_count++;
+      if (g.prediction.ml.held || g.prediction.ou.held) full_game_blocked_count++;
+      if (!g.prediction.nrfi.held) fi_ready_count++;
+      else fi_held_count++;
+      if (
+        !g.prediction.ml.held &&
+        !g.prediction.ou.held &&
+        g.prediction.nrfi.held
+      ) partial_nrfi_only_count++;
     }
   }
   const partial_held_count =
@@ -388,6 +425,13 @@ export async function GET(request: Request) {
       fully_held_count,
       partial_held_count,
       no_hold_count,
+      ml_ready_count,
+      ou_ready_count,
+      full_game_ready_count,
+      full_game_blocked_count,
+      fi_ready_count,
+      fi_held_count,
+      partial_nrfi_only_count,
     },
     slate_status_summary,
     games,

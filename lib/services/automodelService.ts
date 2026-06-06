@@ -45,6 +45,7 @@ import type { Sport } from "../types/domain/Sport";
 import { buildFeatureSnapshots } from "../automodel/featureSnapshot";
 import { runMlbAutoModelV1 } from "../automodel/mlbAutoModelV1";
 import { runMlbAutoModelV2 } from "../automodel/mlbAutoModelV2";
+import { runMlbAutoModelV2_1 } from "../automodel/mlbAutoModelV2_1";
 import { reviewAutoModelOutput } from "../automodel/aiSanityBoundary";
 import {
   resolveEffectiveVersion,
@@ -52,6 +53,7 @@ import {
 } from "../automodel/modelVersion";
 import {
   MODEL_VERSION_V2,
+  MODEL_VERSION_V2_1,
 } from "../automodel/types";
 import type {
   AutoModelOutput,
@@ -873,6 +875,24 @@ async function runDbWrites(
  * exception. This guarantees no game loses its prediction because of a
  * model-version selection problem.
  */
+/**
+ * Compute the hold_picks list for the ingester validator. hold_picks
+ * reflects the CURRENT model's truth — does not inherit V1's stale
+ * holds when the current model produced a pick. This matches the user's
+ * V2.1 principle: holds only for truly missing/unsafe markets, not
+ * "no value" or inherited-from-V1 markets.
+ */
+function computeHoldPicks(
+  _v1HoldPicks: Array<"ml" | "ou" | "nrfi"> | undefined,
+  picks: { ml: unknown; ou: unknown; nrfi: unknown },
+): Array<"ml" | "ou" | "nrfi"> {
+  const holdPicks: Array<"ml" | "ou" | "nrfi"> = [];
+  if (picks.ml === null) holdPicks.push("ml");
+  if (picks.ou === null) holdPicks.push("ou");
+  if (picks.nrfi === null) holdPicks.push("nrfi");
+  return holdPicks;
+}
+
 function applyV2IfSelected(args: {
   snap: GameSnapshot;
   v1Output: AutoModelOutput;
@@ -881,7 +901,6 @@ function applyV2IfSelected(args: {
 }): AutoModelOutput {
   const { snap, v1Output, stage, effectiveVersion } = args;
   if (effectiveVersion === "v1") {
-    // Default — V1 writes; tag model_used="v1" for observability.
     return {
       ...v1Output,
       sport_specific: {
@@ -890,6 +909,79 @@ function applyV2IfSelected(args: {
       },
     };
   }
+
+  // ── V2.1 path (Phase 6B V2.1 — layered prediction-integrity model) ──
+  if (effectiveVersion === "v2_1") {
+    let v21;
+    try {
+      v21 = runMlbAutoModelV2_1(snap, v1Output, stage);
+    } catch (e) {
+      console.warn(
+        `[automodelService] runMlbAutoModelV2_1 threw for game_external_id=` +
+          `${snap.game_external_id}: ${e instanceof Error ? e.message : String(e)}. ` +
+          `Falling back to V1.`
+      );
+      return {
+        ...v1Output,
+        sport_specific: {
+          ...v1Output.sport_specific,
+          model_used: "v2_1_fallback_v1",
+        },
+      };
+    }
+    const a = v21.v21Audit;
+    const holdPicks = computeHoldPicks(v1Output.sport_specific.hold_picks, {
+      ml: v21.predicted_ml_winner,
+      ou: v21.predicted_ou_side,
+      nrfi: v21.predicted_nrfi,
+    });
+    return {
+      ...v1Output,
+      predicted_home_score: v21.predicted_home_score,
+      predicted_away_score: v21.predicted_away_score,
+      predicted_total: v21.predicted_total,
+      predicted_ml_winner: v21.predicted_ml_winner,
+      ml_confidence: v21.ml_confidence,
+      predicted_ou_side: v21.predicted_ou_side,
+      ou_confidence: v21.ou_confidence,
+      predicted_nrfi: v21.predicted_nrfi,
+      nrfi_confidence: v21.nrfi_confidence,
+      sport_specific: {
+        ...v1Output.sport_specific,
+        model_version: MODEL_VERSION_V2_1,
+        model_used: "v2_1",
+        hold_picks: holdPicks,
+        // V2.1 owns held + hold_reason — derive from V2.1's hold_picks
+        // truth so stale V1 flags (e.g., "missing_or_scratched_starter"
+        // when V2.1 has real picks) cannot override the current model.
+        held: holdPicks.length === 3,
+        hold_reason:
+          holdPicks.length === 3
+            ? (v1Output.sport_specific.hold_reason ?? "all_markets_held")
+            : null,
+        // V2.1-specific summary fields requested by Daniel.
+        ml_play_grade: a.ml_play_grade,
+        ou_play_grade: a.ou_play_grade,
+        ml_prediction_type: a.ml_prediction_type,
+        ou_prediction_type: a.ou_prediction_type,
+        ml_best_angle_eligible: a.best_angle_eligible_ml,
+        ou_best_angle_eligible: a.best_angle_eligible_ou,
+        ml_best_angle_reason: a.ml_best_angle_reason,
+        ou_best_angle_reason: a.ou_best_angle_reason,
+        ml_no_bet_reason: a.ml_no_bet_reason,
+        ou_no_bet_reason: a.ou_no_bet_reason,
+        ml_market_aligned: a.ml_market_aligned,
+        ou_market_aligned: a.ou_market_aligned,
+        v2_provisional: a.provisional,
+        v2_data_quality_tier: a.data_quality_tier,
+        v2_best_angle_eligible: a.best_angle_eligible_ml || a.best_angle_eligible_ou,
+        v2_1_audit: a,
+        model_integrity_notes: a.model_integrity_notes,
+      },
+    };
+  }
+
+  // ── V2 / shadow path ────────────────────────────────────────────────
   let v2;
   try {
     v2 = runMlbAutoModelV2(snap, v1Output, stage);
@@ -909,7 +1001,6 @@ function applyV2IfSelected(args: {
   }
 
   if (effectiveVersion === "shadow") {
-    // Production keeps V1 prediction; V2 audit attached for comparison.
     return {
       ...v1Output,
       sport_specific: {
@@ -923,10 +1014,14 @@ function applyV2IfSelected(args: {
     };
   }
 
-  // effectiveVersion === "v2": V2 writes its prediction values.
-  // Preserves V1's sport_specific.auto_factors, ai_sanity, review_v1, and
-  // breakdown_v2 — those carry diagnostics the framework still depends on
-  // regardless of which model produced the top-level picks.
+  // V2 writes its prediction values. Phase 6B.1.1 hold_picks fix
+  // re-applied here so V2 writes also pass ingest validation when V2
+  // produces null picks for "no value" markets.
+  const v2HoldPicks = computeHoldPicks(v1Output.sport_specific.hold_picks, {
+    ml: v2.predicted_ml_winner,
+    ou: v2.predicted_ou_side,
+    nrfi: v2.predicted_nrfi,
+  });
   return {
     ...v1Output,
     predicted_home_score: v2.predicted_home_score,
@@ -936,13 +1031,20 @@ function applyV2IfSelected(args: {
     ml_confidence: v2.ml_confidence,
     predicted_ou_side: v2.predicted_ou_side,
     ou_confidence: v2.ou_confidence,
-    // NRFI/YRFI stays V1 in 6B.0; V2 documents FI extension requirements.
     predicted_nrfi: v2.predicted_nrfi,
     nrfi_confidence: v2.nrfi_confidence,
     sport_specific: {
       ...v1Output.sport_specific,
       model_version: MODEL_VERSION_V2,
       model_used: "v2",
+      hold_picks: v2HoldPicks,
+      // V2 owns held + hold_reason — derive from V2's hold_picks truth so
+      // stale V1 flags cannot override the current model.
+      held: v2HoldPicks.length === 3,
+      hold_reason:
+        v2HoldPicks.length === 3
+          ? (v1Output.sport_specific.hold_reason ?? "all_markets_held")
+          : null,
       v2_audit: v2.v2Audit,
       v2_provisional: v2.v2Audit.provisional,
       v2_data_quality_tier: v2.v2Audit.dataQuality.tier,

@@ -56,7 +56,7 @@ function parseArgs(argv: string[]): Args {
     if (a === "--sport" && argv[i + 1]) { sport = argv[++i] as Sport; continue; }
     if (a === "--model" && argv[i + 1]) {
       const v = argv[++i]!.trim().toLowerCase();
-      if (v === "v1" || v === "v2" || v === "shadow") model = v;
+      if (v === "v1" || v === "v2" || v === "v2_1" || v === "shadow") model = v;
       continue;
     }
     if (a === "--apply") { apply = true; continue; }
@@ -157,6 +157,12 @@ async function main() {
     console.log("━━━ DB write outcome ━━━");
     console.log(`  ingest.inserted:   ${result.db_writes.ingest.inserted}`);
     console.log(`  ingest.updated:    ${result.db_writes.ingest.updated}`);
+    if (result.db_writes.ingest.failed > 0 && result.db_writes.ingest.errors.length > 0) {
+      console.log(`  ingest errors (${result.db_writes.ingest.errors.length}):`);
+      for (const e of result.db_writes.ingest.errors) {
+        console.log(`    game_ext=${e.game_external_id}: ${e.errors.join("; ")}`);
+      }
+    }
     console.log(`  ingest.failed:     ${result.db_writes.ingest.failed}`);
     if (result.db_writes.market_signals && "error" in result.db_writes.market_signals && result.db_writes.market_signals.error) {
       console.log(`  market_signals.error: ${result.db_writes.market_signals.error}`);

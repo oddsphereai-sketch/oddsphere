@@ -48,6 +48,8 @@ type AdminGameRow = {
     fully_held: boolean;
     held_count: number;
     model_breakdown: string | null;
+    model_used: string | null;
+    model_version: string | null;
     ml: MarketDto;
     ou: MarketDto;
     nrfi: MarketDto;
@@ -65,6 +67,13 @@ type ApiResponse = {
     fully_held_count: number;
     partial_held_count: number;
     no_hold_count: number;
+    ml_ready_count: number;
+    ou_ready_count: number;
+    full_game_ready_count: number;
+    full_game_blocked_count: number;
+    fi_ready_count: number;
+    fi_held_count: number;
+    partial_nrfi_only_count: number;
   };
   slate_status_summary: {
     draft: number;
@@ -455,10 +464,31 @@ function SummaryStrip({ data }: { data: ApiResponse }) {
         >
           Predictions
         </div>
-        <div style={{ fontSize: 14 }}>
-          {t.predictions_count} / {t.games_count} games · excluded=
-          {t.excluded_count} · fully held={t.fully_held_count} · partial=
-          {t.partial_held_count} · no-hold={t.no_hold_count}
+        <div style={{ fontSize: 14, lineHeight: 1.5 }}>
+          <div>
+            <strong>Full-game ready:</strong> {t.full_game_ready_count}/
+            {t.games_count}
+            {t.full_game_blocked_count > 0
+              ? ` · blocked=${t.full_game_blocked_count}`
+              : ""}
+          </div>
+          <div style={{ color: "#cbd5e1", marginTop: 2 }}>
+            ML ready: {t.ml_ready_count}/{t.games_count} · O/U ready:{" "}
+            {t.ou_ready_count}/{t.games_count}
+          </div>
+          <div style={{ color: "#cbd5e1", marginTop: 2 }}>
+            FI/NRFI ready: {t.fi_ready_count}/{t.games_count} · FI/NRFI held:{" "}
+            {t.fi_held_count}/{t.games_count}
+          </div>
+          <div style={{ color: "#94a3b8", marginTop: 4, fontSize: 12 }}>
+            {t.predictions_count}/{t.games_count} predictions · excluded=
+            {t.excluded_count} · fully held={t.fully_held_count} · partial=
+            {t.partial_held_count}
+            {t.partial_nrfi_only_count > 0
+              ? ` (${t.partial_nrfi_only_count} NRFI only — full-game OK)`
+              : ""}{" "}
+            · no-hold={t.no_hold_count}
+          </div>
         </div>
       </div>
     </div>
@@ -712,6 +742,26 @@ function GameRow({
       {expanded && (
         <tr style={{ background: "#fafafa" }}>
           <Td colSpan={9}>
+            <div style={{ fontSize: 12, color: "#475569", marginBottom: 6 }}>
+              <strong>model_used:</strong>{" "}
+              <span
+                style={{
+                  padding: "1px 6px",
+                  background:
+                    p.model_used === "v2_1" ? "#dcfce7" : "#fef3c7",
+                  color:
+                    p.model_used === "v2_1" ? "#15803d" : "#92400e",
+                  borderRadius: 4,
+                  fontWeight: 600,
+                  fontSize: 11,
+                }}
+              >
+                {p.model_used ?? "—"}
+              </span>
+              {" · "}
+              <strong>model_version:</strong>{" "}
+              <code style={{ fontSize: 11 }}>{p.model_version ?? "—"}</code>
+            </div>
             <div style={{ fontSize: 12, color: "#475569", marginBottom: 6 }}>
               <strong>computed_at:</strong> {p.computed_at ?? "—"}
               {" · "}

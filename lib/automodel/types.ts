@@ -484,7 +484,7 @@ export type AutoModelSportSpecific = {
    * Optional + undefined-tolerant for backwards compat with rows
    * written before Phase 6B.1.
    */
-  model_used?: "v1" | "v2" | "shadow_v1" | "v2_fallback_v1";
+  model_used?: "v1" | "v2" | "v2_1" | "shadow_v1" | "v2_fallback_v1" | "v2_1_fallback_v1";
   /**
    * Compact summary of the V2 data-quality assessment. Top-level
    * boolean/string fields here so admin UIs can filter without
@@ -501,6 +501,23 @@ export type AutoModelSportSpecific = {
    * dataQuality, bestAngleEligibility, provisional, notes, fallback.
    */
   v2_audit?: unknown | null;
+  // ─────────────────────────────────────────────────────────────
+  // Phase 6B V2.1 — layered prediction-integrity model fields
+  // ─────────────────────────────────────────────────────────────
+  ml_play_grade?: string;
+  ou_play_grade?: string;
+  ml_prediction_type?: string | null;
+  ou_prediction_type?: string | null;
+  ml_best_angle_eligible?: boolean;
+  ou_best_angle_eligible?: boolean;
+  ml_best_angle_reason?: string | null;
+  ou_best_angle_reason?: string | null;
+  ml_no_bet_reason?: string | null;
+  ou_no_bet_reason?: string | null;
+  ml_market_aligned?: boolean;
+  ou_market_aligned?: boolean;
+  model_integrity_notes?: string[];
+  v2_1_audit?: unknown | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1199,3 +1216,6 @@ export const MODEL_VERSION = "auto_v1.0_mlb_rules";
 
 /** Phase 6B.1 — V2 market-prior model version tag. */
 export const MODEL_VERSION_V2 = "auto_v2.0_mlb_market_prior";
+
+/** Phase 6B V2.1 — layered prediction-integrity model version tag. */
+export const MODEL_VERSION_V2_1 = "auto_v2.1_mlb_prediction_integrity";

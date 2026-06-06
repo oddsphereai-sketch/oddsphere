@@ -12,6 +12,9 @@
  *   "v2"     — V2 writes predictions to game_predictions. V1 still
  *              executes first to produce the residual signal V2 anchors
  *              on; V2 errors fall back to V1 with a logged warning.
+ *   "v2_1"   — V2.1 layered model writes predictions. V1 still runs as
+ *              the independent baseline (Layer 2 bridge); V2.1 errors
+ *              fall back to V1 with a logged warning.
  *   "shadow" — V1 writes predictions to game_predictions (production
  *              unchanged); V2 also runs and its audit is attached under
  *              sport_specific.v2_audit for side-by-side comparison
@@ -21,11 +24,11 @@
  * deploys are visible without throwing.
  */
 
-export type AutomodelVersion = "v1" | "v2" | "shadow";
+export type AutomodelVersion = "v1" | "v2" | "v2_1" | "shadow";
 
 export const AUTOMODEL_VERSION_ENV = "AUTOMODEL_VERSION";
 
-const VALID_VERSIONS: ReadonlySet<AutomodelVersion> = new Set(["v1", "v2", "shadow"]);
+const VALID_VERSIONS: ReadonlySet<AutomodelVersion> = new Set(["v1", "v2", "v2_1", "shadow"]);
 
 /**
  * Read AUTOMODEL_VERSION from the supplied env record (or process.env
@@ -44,7 +47,7 @@ export function resolveAutomodelVersion(
   }
   // eslint-disable-next-line no-console
   console.warn(
-    `[automodelVersion] AUTOMODEL_VERSION="${raw}" is invalid; defaulting to "v1". Valid values: v1, v2, shadow.`,
+    `[automodelVersion] AUTOMODEL_VERSION="${raw}" is invalid; defaulting to "v1". Valid values: v1, v2, v2_1, shadow.`,
   );
   return "v1";
 }

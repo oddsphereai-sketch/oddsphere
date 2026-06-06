@@ -1339,7 +1339,20 @@ function ModelMarketTakeStrip({
 function MarketPulse({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
   // First-inning never uses split copy — V1 SharpAPI tier does not cover
   // first-inning public splits. Phrase as provider-coverage, not failure.
+  // When the FI market is held (V1 NRFI threshold not met), surface a
+  // subdued "angle unavailable" line instead of the generic splits note —
+  // makes it clear the full-game pick is unaffected.
   if (market === "first_inning") {
+    if (marketData.held) {
+      return (
+        <div className="space-y-1.5">
+          <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">First Inning</p>
+          <p className="text-[11.5px] text-gray-500 leading-snug">
+            First-inning angle unavailable for this game — full-game ML and Total picks above are unaffected.
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="space-y-1.5">
         <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse</p>
