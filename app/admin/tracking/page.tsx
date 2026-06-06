@@ -1,21 +1,21 @@
 /**
  * Push 4 — admin tracking dashboard.
  *
- * Renders the full computeTrackingAggregate output:
- *   - Top-line cards (overall, Best Angles, baselines)
- *   - Historical CSV baselines table
- *   - Daily Edge fresh tracking (empty until tomorrow's graded slate)
- *   - Per-dimension breakdowns: sport, market, model_version, play_grade
- *   - Confidence bucket calibration with Brier / log-loss
- *   - Provisional + data-quality slices
+ * Auth: mirrors /admin/auto-predictions exactly — reads
+ * `admin_credentials` from localStorage on mount, prompts for email +
+ * admin token when missing, persists on success, clears on sign-out.
+ * Same credentials work across /admin/* pages.
  *
- * Same admin auth pattern as /admin/auto-predictions. Client component
- * because we fetch via the admin REST route.
+ * Renders the full computeTrackingAggregate output:
+ *   - Top-line cards (overall, Best Angles, Leans, provisional)
+ *   - Historical CSV baselines table
+ *   - Per-dimension breakdowns: sport, market, model_version,
+ *     play_grade, confidence_bucket, data_quality_tier
  */
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type AggregateMetrics = {
   picks: number;
@@ -69,7 +69,6 @@ type TrackingResponse = {
 function pct(v: number | null): string {
   return v === null ? "—" : `${v.toFixed(1)}%`;
 }
-
 function num(v: number | null, digits = 2): string {
   return v === null ? "—" : v.toFixed(digits);
 }
@@ -128,52 +127,132 @@ function MetricsTable({ title, rows }: { title: string; rows: DimensionRow[] }) 
   );
 }
 
+// ─── Top-level — same auth gate pattern as /admin/auto-predictions ──
 export default function AdminTrackingPage() {
-  const [data, setData] = useState<TrackingResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authed, setAuthed] = useState(false);
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!submitted) return;
-    setLoading(true);
-    fetch("/api/admin/tracking", {
-      headers: {
-        "x-admin-email": email,
-        "x-admin-token": token,
-      },
-    })
-      .then(async (r) => {
-        if (!r.ok) {
-          throw new Error(`HTTP ${r.status}: ${await r.text()}`);
-        }
-        return r.json();
-      })
-      .then((j) => { setData(j); setError(null); })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoading(false));
-  }, [submitted, email, token]);
+    try {
+      const saved = localStorage.getItem("admin_credentials");
+      if (saved) {
+        const parsed = JSON.parse(saved) as { email: string; token: string };
+        setEmail(parsed.email);
+        setToken(parsed.token);
+        setAuthed(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
-  if (!submitted) {
+  async function handleAuth() {
+    setAuthError(null);
+    const res = await fetch("/api/admin/tracking", {
+      headers: { "x-admin-email": email, "x-admin-token": token },
+    });
+    if (res.ok) {
+      localStorage.setItem(
+        "admin_credentials",
+        JSON.stringify({ email, token }),
+      );
+      setAuthed(true);
+    } else {
+      const body = await res.text();
+      setAuthError(`Auth failed (${res.status}): ${body}`);
+    }
+  }
+
+  if (!authed) {
     return (
-      <div style={{ background: "#020617", minHeight: "100vh", padding: 24, color: "#e2e8f0" }}>
-        <h1 style={{ fontSize: 18 }}>Admin Tracking — auth</h1>
-        <form
-          onSubmit={(e) => { e.preventDefault(); setSubmitted(true); }}
-          style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8, maxWidth: 360 }}
+      <main style={{ maxWidth: 480, margin: "80px auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
+        <h1 style={{ fontSize: 24, marginBottom: 16 }}>Admin · Tracking</h1>
+        <p style={{ color: "#666", marginBottom: 24 }}>
+          Email + admin token (set in env). Same credentials as other admin pages.
+        </p>
+        <label style={{ display: "block", marginBottom: 12 }}>
+          Email
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{ width: "100%", padding: 8, marginTop: 4, border: "1px solid #ccc", borderRadius: 4 }}
+          />
+        </label>
+        <label style={{ display: "block", marginBottom: 16 }}>
+          Admin token
+          <input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            style={{ width: "100%", padding: 8, marginTop: 4, border: "1px solid #ccc", borderRadius: 4 }}
+          />
+        </label>
+        <button
+          onClick={handleAuth}
+          style={{ padding: "8px 16px", background: "#000", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
         >
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email" style={{ padding: 8 }} />
-          <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="admin token" type="password" style={{ padding: 8 }} />
-          <button type="submit" style={{ padding: 8, background: "#22c55e", color: "#0f172a", borderRadius: 4 }}>Load tracking</button>
-        </form>
-      </div>
+          Continue
+        </button>
+        {authError && (
+          <p style={{ color: "#b00", marginTop: 16, fontSize: 14 }}>{authError}</p>
+        )}
+      </main>
     );
   }
 
+  return (
+    <TrackingView
+      email={email}
+      token={token}
+      onSignOut={() => {
+        localStorage.removeItem("admin_credentials");
+        setAuthed(false);
+        setEmail("");
+        setToken("");
+      }}
+    />
+  );
+}
+
+function TrackingView({ email, token, onSignOut }: { email: string; token: string; onSignOut: () => void }) {
+  const [data, setData] = useState<TrackingResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const reload = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/tracking", {
+        headers: { "x-admin-email": email, "x-admin-token": token },
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        throw new Error(`Fetch failed (${res.status}): ${await res.text()}`);
+      }
+      const body = (await res.json()) as TrackingResponse;
+      setData(body);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [email, token]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
   if (loading) return <div style={{ padding: 24, color: "#94a3b8", background: "#020617", minHeight: "100vh" }}>Loading…</div>;
-  if (error) return <div style={{ padding: 24, color: "#fca5a5", background: "#020617", minHeight: "100vh" }}>Error: {error}</div>;
+  if (error) return (
+    <div style={{ padding: 24, color: "#fca5a5", background: "#020617", minHeight: "100vh" }}>
+      Error: {error}
+      <button onClick={onSignOut} style={{ marginLeft: 12, padding: "4px 10px", background: "#1e293b", color: "#cbd5e1", border: "1px solid #334155", borderRadius: 4, cursor: "pointer" }}>Sign out</button>
+    </div>
+  );
   if (!data) return null;
 
   if (!data.tablesInitialized) {
@@ -189,12 +268,14 @@ export default function AdminTrackingPage() {
 
   return (
     <div style={{ background: "#020617", minHeight: "100vh", padding: 24, color: "#e2e8f0", fontFamily: "system-ui, -apple-system, sans-serif" }}>
-      <h1 style={{ fontSize: 22, marginBottom: 4 }}>Tracking</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+        <h1 style={{ fontSize: 22 }}>Tracking</h1>
+        <button onClick={onSignOut} style={{ padding: "4px 10px", background: "#1e293b", color: "#cbd5e1", border: "1px solid #334155", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>Sign out</button>
+      </div>
       <div style={{ color: "#64748b", fontSize: 12, marginBottom: 16 }}>
         {data.rowsCounted}/{data.rowsConsidered} rows counted (launch-day rows excluded from fresh counts)
       </div>
 
-      {/* Top cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
         <Card label="Overall — Daily Edge fresh" value={`${data.overall.wins}-${data.overall.losses}`} sub={`Win % ${pct(data.overall.win_pct)} · ${data.overall.picks} picks`} />
         <Card label="Best Angles" value={`${data.bestAngles.wins}-${data.bestAngles.losses}`} sub={`Win % ${pct(data.bestAngles.win_pct)} · ${data.bestAngles.picks} picks`} />
@@ -202,7 +283,6 @@ export default function AdminTrackingPage() {
         <Card label="Provisional (low data quality)" value={`${data.provisionalOnly.wins}-${data.provisionalOnly.losses}`} sub={`Win % ${pct(data.provisionalOnly.win_pct)} · ${data.provisionalOnly.picks} picks`} />
       </div>
 
-      {/* Empty state for fresh */}
       {data.overall.picks === 0 && (
         <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12, padding: 24, marginBottom: 24 }}>
           <div style={{ fontSize: 14, color: "#cbd5e1" }}>
@@ -211,7 +291,6 @@ export default function AdminTrackingPage() {
         </div>
       )}
 
-      {/* Baselines */}
       <h2 style={{ fontSize: 16, marginTop: 24, marginBottom: 8 }}>Historical Baselines</h2>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, color: "#cbd5e1", marginBottom: 24 }}>
         <thead>
