@@ -1545,6 +1545,41 @@ function interpretKeyStat(
   market: MarketKey,
   pick: string | null
 ): KeyStatInterpretation {
+  // Phase 6B.1.6j — first-inning starter rows render as TWO-SIDED so
+  // each value is paired with its team abbreviation in the breakdown.
+  // When only one starter has FI data, the formatter writes a "no FI
+  // sample" / "no season ERA" / "no OPS sample" sentinel on the
+  // missing side so the user can still see WHICH side is missing.
+  if (
+    (label === "Starter 1st-inning ERA" ||
+      label === "Starter 1st-inning WHIP" ||
+      label === "Top-of-order OPS" ||
+      label === "Starter ERA (season)") &&
+    (awayValue !== null || homeValue !== null)
+  ) {
+    const a = parseFloat(awayValue ?? "");
+    const h = parseFloat(homeValue ?? "");
+    if (Number.isFinite(a) && Number.isFinite(h)) {
+      // For ERA / WHIP, LOWER is better (favors NRFI); for OPS, HIGHER
+      // is better (favors YRFI). edgeLine label uses the same orientation
+      // as the ML "Starter ERA" path above.
+      const negativeIsBetter = label !== "Top-of-order OPS";
+      const minDelta = label === "Top-of-order OPS" ? 0.030 : 0.20;
+      const bigDelta = label === "Top-of-order OPS" ? 0.075 : 0.50;
+      const cmp = compareEdge(
+        a - h,
+        minDelta,
+        bigDelta,
+        negativeIsBetter ? "negative" : "positive",
+        awayAbbr,
+        homeAbbr,
+      );
+      return { edgeLine: cmp.line, tone: cmp.tone, winner: cmp.winner, twoSided: true };
+    }
+    // One side missing or non-numeric — still render two-sided (team
+    // labels visible). No edge chip when we can't compute one.
+    return { edgeLine: null, tone: "gray", winner: null, twoSided: true };
+  }
   // Two-sided ML stats ────────────────────────────────────────────────
   if (label === "Starter ERA" && awayValue !== null && homeValue !== null) {
     const a = parseFloat(awayValue);

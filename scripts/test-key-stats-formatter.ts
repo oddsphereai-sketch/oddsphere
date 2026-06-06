@@ -94,7 +94,8 @@ console.log("━━━ First-inning: full fixture (FI stats present, all above s
   // ERA fallback is NOT shown because real FI ERA is present.
   check("returns exactly 4 rows", rows.length === 4);
   check("row 1 = 'Projected 1st-inning runs'", rows[0]?.label === "Projected 1st-inning runs");
-  check("row 1 home = '0.85'", rows[0]?.homeValue === "0.85");
+  // Phase 6B.1.6j — Projected runs now labels as "<value> combined".
+  check("row 1 home = '0.85 combined'", rows[0]?.homeValue === "0.85 combined");
   check("row 2 = 'Starter 1st-inning ERA'", rows[1]?.label === "Starter 1st-inning ERA");
   check("row 2 home shows value + starts footnote", rows[1]?.homeValue === "2.85 (10 starts)");
   check("row 2 away shows value + starts footnote", rows[1]?.awayValue === "3.91 (12 starts)");
@@ -176,12 +177,15 @@ console.log("━━━ First-inning: one starter has FI data, other does not ━
   const whipRow = rows.find((r) => r.label === "Starter 1st-inning WHIP");
   check("ERA row still shown when only one side has data",
     eraRow !== undefined);
-  check("ERA home value shown, away null (formatter renders dash)",
-    eraRow?.homeValue === "2.85 (10 starts)" && eraRow?.awayValue === null);
+  // Phase 6B.1.6j — missing side carries an explicit "no FI sample"
+  // sentinel so the renderer shows the team abbreviation alongside it
+  // instead of dropping the team label entirely.
+  check("ERA home value shown, away gets explicit 'no FI sample' sentinel",
+    eraRow?.homeValue === "2.85 (10 starts)" && eraRow?.awayValue === "no FI sample");
   check("WHIP row still shown when only one side has data",
     whipRow !== undefined);
-  check("WHIP home value shown, away null",
-    whipRow?.homeValue === "1.05 (10 starts)" && whipRow?.awayValue === null);
+  check("WHIP home value shown, away gets 'no FI sample' sentinel",
+    whipRow?.homeValue === "1.05 (10 starts)" && whipRow?.awayValue === "no FI sample");
   // Season ERA fallback should NOT fire — at least one side has FI ERA
   check("no season-ERA fallback when one side has FI data",
     !rows.some((r) => r.label === "Starter ERA (season)"));

@@ -213,13 +213,16 @@ function fmtFiStarterValue(
 function firstInningRows(af: AutoFactors): KeyStatRow[] {
   const rows: KeyStatRow[] = [];
 
-  // Row 1 — Projected first-inning runs (model output, unchanged)
+  // Row 1 — Projected first-inning runs (model output, unchanged).
+  // Phase 6B.1.6j: append "combined" suffix to clarify this is the
+  // single combined first-inning expected-runs estimate (NOT a per-
+  // team value).
   const nrfiRuns = num(af.nrfi_expected_runs);
   if (nrfiRuns !== null) {
     rows.push({
       label: "Projected 1st-inning runs",
       awayValue: null,
-      homeValue: fmtRaw(nrfiRuns, 2),
+      homeValue: `${fmtRaw(nrfiRuns, 2)} combined`,
       source: "feature_snapshot",
     });
   }
@@ -229,6 +232,13 @@ function firstInningRows(af: AutoFactors): KeyStatRow[] {
   // (added 2026-06-02). Only shown when at least one starter has FI
   // data; falls back gracefully when both are missing (Row 5 below
   // catches that case with full-season ERA).
+  //
+  // Phase 6B.1.6j: when only one starter has FI data, the missing
+  // side gets an explicit "no FI sample" sentinel instead of null so
+  // the UI's two-sided team-labeled renderer fires and shows
+  //   CLE  5.25 (12 starts)
+  //   TEX  no FI sample
+  // instead of a bare "5.25 (12 starts)" with no team attribution.
   const aFiEra = num(af.away_first_inning_era);
   const hFiEra = num(af.home_first_inning_era);
   const aFiStarts = num(af.away_first_inning_starts);
@@ -236,8 +246,8 @@ function firstInningRows(af: AutoFactors): KeyStatRow[] {
   if (aFiEra !== null || hFiEra !== null) {
     rows.push({
       label: "Starter 1st-inning ERA",
-      awayValue: fmtFiStarterValue(aFiEra, aFiStarts, 2),
-      homeValue: fmtFiStarterValue(hFiEra, hFiStarts, 2),
+      awayValue: fmtFiStarterValue(aFiEra, aFiStarts, 2) ?? "no FI sample",
+      homeValue: fmtFiStarterValue(hFiEra, hFiStarts, 2) ?? "no FI sample",
       source: "feature_snapshot",
     });
   }
@@ -249,8 +259,8 @@ function firstInningRows(af: AutoFactors): KeyStatRow[] {
   if (aFiWhip !== null || hFiWhip !== null) {
     rows.push({
       label: "Starter 1st-inning WHIP",
-      awayValue: fmtFiStarterValue(aFiWhip, aFiStarts, 2),
-      homeValue: fmtFiStarterValue(hFiWhip, hFiStarts, 2),
+      awayValue: fmtFiStarterValue(aFiWhip, aFiStarts, 2) ?? "no FI sample",
+      homeValue: fmtFiStarterValue(hFiWhip, hFiStarts, 2) ?? "no FI sample",
       source: "feature_snapshot",
     });
   }
@@ -275,8 +285,10 @@ function firstInningRows(af: AutoFactors): KeyStatRow[] {
       homeThrows === "L" ? " vs LHP" : homeThrows === "R" ? " vs RHP" : "";
     rows.push({
       label: "Top-of-order OPS",
-      awayValue: aTopOps !== null ? `${aTopOps.toFixed(3)}${awayContext}` : null,
-      homeValue: hTopOps !== null ? `${hTopOps.toFixed(3)}${homeContext}` : null,
+      // Phase 6B.1.6j: explicit per-side sentinel so renderer shows
+      // both team labels even when one side has no top-order data.
+      awayValue: aTopOps !== null ? `${aTopOps.toFixed(3)}${awayContext}` : "no OPS sample",
+      homeValue: hTopOps !== null ? `${hTopOps.toFixed(3)}${homeContext}` : "no OPS sample",
       source: "feature_snapshot",
     });
   }
@@ -294,8 +306,10 @@ function firstInningRows(af: AutoFactors): KeyStatRow[] {
     if (aSe !== null || hSe !== null) {
       rows.push({
         label: "Starter ERA (season)",
-        awayValue: fmtRaw(aSe, 2),
-        homeValue: fmtRaw(hSe, 2),
+        // Phase 6B.1.6j: explicit per-side fallback so missing-side
+        // gets a team-labeled "—" row instead of disappearing.
+        awayValue: fmtRaw(aSe, 2) ?? "no season ERA",
+        homeValue: fmtRaw(hSe, 2) ?? "no season ERA",
         source: "feature_snapshot",
       });
     }

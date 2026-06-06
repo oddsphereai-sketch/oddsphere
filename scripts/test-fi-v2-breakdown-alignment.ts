@@ -79,6 +79,44 @@ check(
 
 // ─── KeyStats partial-data scenarios ───────────────────────────────
 
+// ─── Phase 6B.1.6j team-labeled FI starter rows ────────────────────
+
+// T11 — CLE@TEX-style: one starter has FI data, the other doesn't.
+const cleTexRows = formatKeyStats(
+  {
+    nrfi_expected_runs: 0.67,
+    away_first_inning_era: 5.25,    // Bibee (CLE)
+    home_first_inning_era: null,    // Leiter (TEX) — no FI sample
+    away_first_inning_whip: 1.25,
+    home_first_inning_whip: null,
+    away_first_inning_starts: 12,
+    home_first_inning_starts: null,
+    away_starter_era: 4.57,
+    home_starter_era: 4.34,
+  },
+  "first_inning",
+);
+const fiEra = cleTexRows.find((r) => r.label === "Starter 1st-inning ERA");
+check("T11 FI ERA row exists", fiEra !== undefined);
+check(
+  "T11 FI ERA away side carries Bibee's value",
+  fiEra?.awayValue?.includes("5.25") === true,
+);
+check(
+  "T11 FI ERA home side carries explicit 'no FI sample' sentinel (not null)",
+  fiEra?.homeValue === "no FI sample",
+);
+const fiWhip = cleTexRows.find((r) => r.label === "Starter 1st-inning WHIP");
+check(
+  "T11 FI WHIP home side carries explicit 'no FI sample' sentinel",
+  fiWhip?.homeValue === "no FI sample",
+);
+const projRow = cleTexRows.find((r) => r.label === "Projected 1st-inning runs");
+check(
+  "T11 Projected runs label clarifies 'combined'",
+  projRow?.homeValue?.includes("combined") === true,
+);
+
 // T7 — MIL@COL-style: nrfi_expected_runs + one season ERA, no FI/WHIP/OPS.
 const milColRows = formatKeyStats(
   {
@@ -117,6 +155,10 @@ check(
 check(
   "T7 fallback Season ERA row still shows for away (Agnos 1.65)",
   milColRows.some((r) => r.label === "Starter ERA (season)" && r.awayValue?.includes("1.65")),
+);
+check(
+  "T7 fallback Season ERA row carries 'no season ERA' sentinel on missing home side",
+  milColRows.find((r) => r.label === "Starter ERA (season)")?.homeValue === "no season ERA",
 );
 
 // T8 — full FI data: status row is NOT added when both sides have FI ERA
