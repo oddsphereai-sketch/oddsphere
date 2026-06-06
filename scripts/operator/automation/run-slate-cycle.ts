@@ -134,6 +134,8 @@ const PER_STEP_ENV_VARS = {
   starter: "STARTER_DB_WRITES_ENABLED",
   pitcher: "PLAYER_INGEST_DB_WRITES_ENABLED",
   season: "SEASON_PITCHING_DB_WRITES_ENABLED",
+  // Push 3B-6 — see lib/services/automationOrchestratorGates.ts.
+  readiness: "MLB_MODEL_READINESS_REPAIR_DB_WRITES_ENABLED",
   lines: "LINES_DB_WRITES_ENABLED",
   signals: "SHARP_SIGNALS_DB_WRITES_ENABLED",
   automodel: "AUTOMODEL_DB_WRITES_ENABLED",

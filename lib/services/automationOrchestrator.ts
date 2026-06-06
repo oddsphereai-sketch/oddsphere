@@ -62,6 +62,8 @@ import {
 import { runStarterRefreshCycle } from "../../scripts/operator/refresh-starters";
 import { runMissingPitcherCycle } from "../../scripts/operator/ingest-missing-pitchers";
 import { runSeasonPitchingCycle } from "../../scripts/operator/backfill-season-pitching-stats";
+// Push 3B-6 — model readiness audit + repair (in-cycle guardrail).
+import { auditMlbModelReadiness, repairMlbModelReadiness } from "./modelReadinessService";
 import { loadGameIdMap } from "./_idMaps";
 import {
   assessMinimumGameCount,
@@ -124,6 +126,15 @@ export type AutomationStepName =
   | "s3_starter_refresh_first"
   | "s4_missing_pitcher_ingest"
   | "s5_season_pitching"
+  // Push 3B-6 — readiness guardrail steps. Audit + repair + re-audit
+  // run AFTER S5 (so pitcher stats are present) and BEFORE S7 (so
+  // lines refresh sees the repaired starters/lineups/weather). Repair
+  // delegates to existing safe helpers (BDL backfill, season-pitching,
+  // lineup refresh, weather refresh) — NEVER writes predictions,
+  // slate_status, locked_at, tracking, or model_version.
+  | "s5_5_readiness_audit"
+  | "s5_6_readiness_repair"
+  | "s5_7_readiness_reaudit"
   | "s7_lines_v2_refresh"
   // Push 2 — slate-driven coverage audit + recovery. Runs after S7
   // to fill gaps where /opportunities/ev discovery missed an
@@ -655,6 +666,99 @@ export async function runSlateCycleAutomated(opts: {
       reason: seasonReasonFromStatus(res.status, res, writeMode),
     };
   }));
+
+  // ── S5.5 — Model readiness audit (read-only) ─────────────────────────
+  //
+  // Push 3B-6 — pre-model-generation guardrail. Inspects whether every
+  // expected MLB game has the data needed for full-game V2.2 and FI V2
+  // (starter assignment, season stats, lineups, FI/full-game market,
+  // weather, park factor). NEVER writes. Surfaces per-game blockers
+  // for the orchestrator report and feeds S5.6.
+  let readinessAuditPre = await auditMlbModelReadiness({
+    sport: opts.sport,
+    date: opts.date,
+  });
+  steps.push(await runStep("s5_5_readiness_audit", false, "readiness", async () => {
+    return {
+      details: {
+        games_total: readinessAuditPre.games_total,
+        v22_ready: readinessAuditPre.v22_ready_count,
+        fi_v2_ready: readinessAuditPre.fi_v2_ready_count,
+        blocker_counts: readinessAuditPre.blocker_counts,
+        pitchers_needing_stats_count: readinessAuditPre.pitchers_needing_stats.length,
+      },
+      reason: readinessAuditPre.games_total === 0
+        ? "no slate"
+        : `${readinessAuditPre.v22_ready_count}/${readinessAuditPre.games_total} V2.2-ready, ${readinessAuditPre.fi_v2_ready_count}/${readinessAuditPre.games_total} FI-V2-ready (read-only audit)`,
+    };
+  }));
+
+  // ── S5.6 — Model readiness repair ───────────────────────────────────
+  //
+  // Push 3B-6 — gated by readiness per-step env + automodel env. Calls
+  // existing safe helpers (BDL backfill, season-pitching, lineup,
+  // weather) in order to fill the gaps identified in S5.5. NEVER
+  // writes predictions, slate_status, locks, tracking, or model
+  // version fields.
+  steps.push(await runStep("s5_6_readiness_repair", effectiveWriteMode.readiness && effectiveWriteMode.automodel, "readiness", async (writeMode) => {
+    const playerStatsProviderReal = process.env.PLAYER_STATS_PROVIDER === "real_api";
+    const weatherProviderReal = process.env.WEATHER_PROVIDER === "real_api";
+    const bdlWritesEnabled = process.env.BDL_PLAYER_BACKFILL_DB_WRITES_ENABLED === "true";
+    const r = await repairMlbModelReadiness({
+      sport: opts.sport,
+      date: opts.date,
+      writeMode,
+      providerGuards: { playerStatsProviderReal, weatherProviderReal, bdlWritesEnabled },
+      audit: readinessAuditPre,
+    });
+    return {
+      details: {
+        write_mode: r.write_mode,
+        reasons: r.reasons,
+        bdl_linked: r.steps.bdl_players.linked ?? 0,
+        bdl_created: r.steps.bdl_players.created ?? 0,
+        pitcher_rows_written: r.steps.season_pitching.rows_written ?? 0,
+        lineup_records_updated: r.steps.lineup.records_updated ?? 0,
+        weather_records_updated: r.steps.weather.records_updated ?? 0,
+      },
+      reason: writeMode
+        ? `repaired (${r.reasons.join(", ")})`
+        : `dry-run; would attempt ${r.reasons.join(", ")}`,
+    };
+  }));
+
+  // ── S5.7 — Model readiness re-audit (read-only) ─────────────────────
+  //
+  // Confirms the repair closed the gaps. If the residual blockers
+  // exist they're surfaced here so the operator/G1 gate can hold the
+  // affected game/market without blocking the whole slate.
+  const readinessAuditPost = await auditMlbModelReadiness({
+    sport: opts.sport,
+    date: opts.date,
+  });
+  steps.push(await runStep("s5_7_readiness_reaudit", false, "readiness", async () => {
+    const v22Delta = readinessAuditPost.v22_ready_count - readinessAuditPre.v22_ready_count;
+    const fiDelta = readinessAuditPost.fi_v2_ready_count - readinessAuditPre.fi_v2_ready_count;
+    return {
+      details: {
+        games_total: readinessAuditPost.games_total,
+        v22_ready: readinessAuditPost.v22_ready_count,
+        fi_v2_ready: readinessAuditPost.fi_v2_ready_count,
+        v22_ready_delta: v22Delta,
+        fi_v2_ready_delta: fiDelta,
+        blocker_counts: readinessAuditPost.blocker_counts,
+        residual_blocked_games: readinessAuditPost.per_game
+          .filter((p) => !p.v22_ready)
+          .map((p) => ({ matchup: p.matchup, external_id: p.external_id, blockers: p.blockers })),
+      },
+      reason: readinessAuditPost.games_total === 0
+        ? "no slate"
+        : `${readinessAuditPost.v22_ready_count}/${readinessAuditPost.games_total} V2.2-ready (Δ${v22Delta >= 0 ? "+" : ""}${v22Delta}), ${readinessAuditPost.fi_v2_ready_count}/${readinessAuditPost.games_total} FI-V2-ready (Δ${fiDelta >= 0 ? "+" : ""}${fiDelta})`,
+    };
+  }));
+  // Update the closure ref so subsequent S7+ steps can see the
+  // post-repair state if they need it.
+  readinessAuditPre = readinessAuditPost;
 
   // ── S7. Lines V2 refresh ──────────────────────────────────────────────
   steps.push(await runStep("s7_lines_v2_refresh", effectiveWriteMode.lines, "lines", async (writeMode) => {

@@ -20,6 +20,12 @@ export const PER_STEP_ENV_VARS = {
   starter: "STARTER_DB_WRITES_ENABLED",
   pitcher: "PLAYER_INGEST_DB_WRITES_ENABLED",
   season: "SEASON_PITCHING_DB_WRITES_ENABLED",
+  // Push 3B-6 — S5.6 readiness repair: BDL player backfill + retry
+  // weather/lineup/season-pitching for games still short of feature
+  // coverage after the upstream steps. Per-step gate joins the
+  // existing AUTOMODEL_DB_WRITES_ENABLED gate (required for any
+  // model-readiness repair to apply).
+  readiness: "MLB_MODEL_READINESS_REPAIR_DB_WRITES_ENABLED",
   lines: "LINES_DB_WRITES_ENABLED",
   signals: "SHARP_SIGNALS_DB_WRITES_ENABLED",
   automodel: "AUTOMODEL_DB_WRITES_ENABLED",
