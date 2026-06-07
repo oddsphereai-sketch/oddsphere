@@ -40,15 +40,32 @@ const ERROR_COPY: Record<string, string> = {
   unavailable:              "Lab access is temporarily unavailable. Please contact support if this persists.",
   whop_disabled:            "Whop sign-in is not currently configured. Use the beta access form below if you have a code.",
   whop_denied:              "Sign-in was cancelled on the Whop consent screen. Try again, or contact support if you expected access.",
+
+  // Specific callback-stage failures (Phase 6B.3a.5). The diagnostic
+  // line below the message shows "Whop responded: <wd>" so the cause
+  // is identifiable without exposing secrets.
+  whop_config_missing:      "Whop sign-in isn't fully configured on the server right now. Please use the beta access form below or try again shortly.",
+  whop_missing_code:        "Whop didn't return a sign-in code. Please try again.",
+  whop_state_mismatch:      "Your sign-in session expired or was started in another tab. Please try again from this page.",
+  whop_token_exchange_failed: "We couldn't complete the Whop sign-in handshake. The diagnostic below names the exact Whop error.",
+  whop_missing_access_token: "Whop accepted the sign-in but returned no access token. Please try again — contact support if it persists.",
+  whop_nonce_mismatch:      "Your sign-in session didn't match — likely a stale tab or cookies were cleared mid-flow. Please try again.",
+  whop_missing_user:        "We couldn't read your Whop profile. Please try again — contact support if it persists.",
+  whop_access_check_failed: "We couldn't verify your Whop membership right now. Please try again in a moment.",
+  whop_no_resource_access:  "Your Whop account doesn't have an active OddSphere AI Premium membership. Get access below to continue.",
+  whop_session_write_failed: "We couldn't start your session. Please try again.",
+  whop_unexpected_callback_error: "Something unexpected happened during sign-in. Please try again — the diagnostic below has details for support.",
+
+  // Backwards-compat (older callbacks / cached redirects may still
+  // arrive at /login with these codes).
   whop_state:               "Your sign-in session expired. Please try again.",
   whop_token:               "We couldn't complete your Whop sign-in. Please try again.",
   whop_userinfo:            "We couldn't read your Whop profile. Please try again.",
   whop_access_error:        "Membership check failed. Please try again in a moment.",
   whop_session_error:       "We couldn't start your session. Please try again.",
   whop_nonce:               "Your sign-in session didn't match — likely a stale tab or cookies were cleared mid-flow. Please try again.",
-  // Specific Whop OAuth error codes mapped from the callback's `error`
-  // query param. These point at known Whop dashboard / app-config
-  // causes so an operator can fix them without guessing.
+
+  // Authorize-stage Whop OAuth error codes (Phase 6B.3a.3).
   whop_oauth_request:       "Whop rejected the sign-in request. The Whop OAuth app may need its redirect URI updated.",
   whop_oauth_unauthorized:  "The Whop OAuth app is not authorized to sign members in. Check that OAuth is enabled, the app is published, and the redirect URI is approved in the Whop dashboard.",
   whop_oauth_unsupported:   "Whop rejected the sign-in flow. Contact support — this likely needs a code fix.",

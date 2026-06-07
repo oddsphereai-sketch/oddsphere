@@ -130,12 +130,49 @@ export type WhopTokenResponse = {
   scope?: string;
 };
 
+/**
+ * Result of POST /oauth/token. Tagged so the callback can pick a
+ * specific OddSphere error code per failure mode. On http_error we
+ * also surface the OAuth error+description from Whop's body — those
+ * are standard non-secret fields (`invalid_grant`, `invalid_client`,
+ * `invalid_redirect_uri`, etc.) that point at the exact dashboard
+ * setting to fix. The request body contains our client_secret but
+ * the RESPONSE body never echoes it back.
+ */
+export type TokenExchangeResult =
+  | { ok: true; tokens: WhopTokenResponse }
+  | { ok: false; reason: "config_missing" }
+  | { ok: false; reason: "http_error"; status: number; whopError: string | null; whopDescription: string | null }
+  | { ok: false; reason: "missing_access_token" }
+  | { ok: false; reason: "network_error"; message: string };
+
+/**
+ * Parse a non-2xx body for OAuth `error` + `error_description` fields
+ * only. Anything else in the body is dropped so we never accidentally
+ * forward a sensitive value to /login. Truncates both fields to keep
+ * the URL bounded.
+ */
+async function extractWhopOAuthError(res: Response): Promise<{ whopError: string | null; whopDescription: string | null }> {
+  try {
+    const body = await res.json() as unknown;
+    if (typeof body === "object" && body !== null) {
+      const obj = body as Record<string, unknown>;
+      const err = typeof obj["error"] === "string" ? (obj["error"] as string).slice(0, 64) : null;
+      const desc = typeof obj["error_description"] === "string" ? (obj["error_description"] as string).slice(0, 200) : null;
+      return { whopError: err, whopDescription: desc };
+    }
+  } catch {
+    // body wasn't JSON — drop it. Status alone is enough signal.
+  }
+  return { whopError: null, whopDescription: null };
+}
+
 export async function exchangeCodeForToken(opts: {
   code: string;
   codeVerifier: string;
-}): Promise<WhopTokenResponse | null> {
+}): Promise<TokenExchangeResult> {
   const cfg = readWhopConfig();
-  if (cfg === null) return null;
+  if (cfg === null) return { ok: false, reason: "config_missing" };
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code: opts.code,
@@ -144,15 +181,30 @@ export async function exchangeCodeForToken(opts: {
     client_secret: cfg.clientSecret,
     code_verifier: opts.codeVerifier,
   });
-  const res = await fetch(WHOP_ENDPOINTS.token, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
-  });
-  if (!res.ok) return null;
-  const json = (await res.json()) as WhopTokenResponse;
-  if (typeof json.access_token !== "string" || json.access_token.length === 0) return null;
-  return json;
+  let res: Response;
+  try {
+    res = await fetch(WHOP_ENDPOINTS.token, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+  } catch (e) {
+    return { ok: false, reason: "network_error", message: (e as Error).message.slice(0, 200) };
+  }
+  if (!res.ok) {
+    const { whopError, whopDescription } = await extractWhopOAuthError(res);
+    return { ok: false, reason: "http_error", status: res.status, whopError, whopDescription };
+  }
+  let json: WhopTokenResponse;
+  try {
+    json = (await res.json()) as WhopTokenResponse;
+  } catch (e) {
+    return { ok: false, reason: "network_error", message: `Bad token JSON: ${(e as Error).message.slice(0, 120)}` };
+  }
+  if (typeof json.access_token !== "string" || json.access_token.length === 0) {
+    return { ok: false, reason: "missing_access_token" };
+  }
+  return { ok: true, tokens: json };
 }
 
 // ─── User info ─────────────────────────────────────────────────────────
@@ -165,18 +217,37 @@ export type WhopUserInfo = {
   username?: string;
 };
 
-export async function fetchWhopUserInfo(accessToken: string): Promise<WhopUserInfo | null> {
-  const res = await fetch(WHOP_ENDPOINTS.userinfo, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) return null;
-  const json = (await res.json()) as Record<string, unknown>;
+export type UserInfoResult =
+  | { ok: true; userInfo: WhopUserInfo }
+  | { ok: false; reason: "http_error"; status: number }
+  | { ok: false; reason: "missing_sub" }
+  | { ok: false; reason: "network_error"; message: string };
+
+export async function fetchWhopUserInfo(accessToken: string): Promise<UserInfoResult> {
+  let res: Response;
+  try {
+    res = await fetch(WHOP_ENDPOINTS.userinfo, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  } catch (e) {
+    return { ok: false, reason: "network_error", message: (e as Error).message.slice(0, 200) };
+  }
+  if (!res.ok) return { ok: false, reason: "http_error", status: res.status };
+  let json: Record<string, unknown>;
+  try {
+    json = (await res.json()) as Record<string, unknown>;
+  } catch (e) {
+    return { ok: false, reason: "network_error", message: `Bad userinfo JSON: ${(e as Error).message.slice(0, 120)}` };
+  }
   const sub = typeof json["sub"] === "string" ? (json["sub"] as string) : null;
-  if (sub === null || sub.length === 0) return null;
+  if (sub === null || sub.length === 0) return { ok: false, reason: "missing_sub" };
   return {
-    sub,
-    email: typeof json["email"] === "string" ? (json["email"] as string) : undefined,
-    name: typeof json["name"] === "string" ? (json["name"] as string) : undefined,
-    username: typeof json["username"] === "string" ? (json["username"] as string) : undefined,
+    ok: true,
+    userInfo: {
+      sub,
+      email: typeof json["email"] === "string" ? (json["email"] as string) : undefined,
+      name: typeof json["name"] === "string" ? (json["name"] as string) : undefined,
+      username: typeof json["username"] === "string" ? (json["username"] as string) : undefined,
+    },
   };
 }

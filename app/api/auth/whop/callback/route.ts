@@ -116,8 +116,22 @@ function redirectWithError(
 }
 
 export async function GET(request: Request) {
+  // Safety net: any uncaught throw inside the flow becomes
+  // whop_unexpected_callback_error rather than a blank Vercel 500
+  // (which would leave the user with no actionable info).
+  try {
+    return await handleCallback(request);
+  } catch (e) {
+    return redirectWithError(request, "whop_unexpected_callback_error", {
+      code: "exception",
+      description: (e as Error).message.slice(0, 200),
+    });
+  }
+}
+
+async function handleCallback(request: Request): Promise<Response> {
   if (!isWhopAccessEnabled()) {
-    return redirectWithError(request, "whop_disabled");
+    return redirectWithError(request, "whop_config_missing");
   }
 
   const url = new URL(request.url);
@@ -132,8 +146,11 @@ export async function GET(request: Request) {
       description: whopErrorDescription,
     });
   }
-  if (code === null || stateParam === null) {
-    return redirectWithError(request, "whop_state");
+  if (code === null) {
+    return redirectWithError(request, "whop_missing_code");
+  }
+  if (stateParam === null) {
+    return redirectWithError(request, "whop_state_mismatch", { code: "missing_state_param" });
   }
 
   const cookieHeader = request.headers.get("cookie");
@@ -146,16 +163,36 @@ export async function GET(request: Request) {
   );
 
   if (stateCookie === null || verifierCookie === null) {
-    return redirectWithError(request, "whop_state");
+    return redirectWithError(request, "whop_state_mismatch", { code: "missing_state_cookie" });
   }
   if (stateCookie !== stateParam) {
-    return redirectWithError(request, "whop_state");
+    return redirectWithError(request, "whop_state_mismatch", { code: "state_cookie_param_diff" });
   }
 
-  const tokenResp = await exchangeCodeForToken({ code, codeVerifier: verifierCookie });
-  if (tokenResp === null) {
-    return redirectWithError(request, "whop_token");
+  const tokenResult = await exchangeCodeForToken({ code, codeVerifier: verifierCookie });
+  if (!tokenResult.ok) {
+    if (tokenResult.reason === "config_missing") {
+      return redirectWithError(request, "whop_config_missing");
+    }
+    if (tokenResult.reason === "missing_access_token") {
+      return redirectWithError(request, "whop_missing_access_token");
+    }
+    if (tokenResult.reason === "network_error") {
+      return redirectWithError(request, "whop_token_exchange_failed", {
+        code: "network_error",
+        description: tokenResult.message,
+      });
+    }
+    // http_error — forward Whop's own OAuth error code & description.
+    // These are non-secret standard fields: invalid_grant /
+    // invalid_client / invalid_redirect_uri / etc.
+    return redirectWithError(request, "whop_token_exchange_failed", {
+      code: tokenResult.whopError ?? `http_${tokenResult.status}`,
+      description: tokenResult.whopDescription
+        ?? `Whop /oauth/token returned HTTP ${tokenResult.status}`,
+    });
   }
+  const tokens = tokenResult.tokens;
 
   // OIDC nonce verification — best-effort. We sent `nonce` in the
   // authorize URL because Whop requires it for the openid scope.
@@ -166,32 +203,56 @@ export async function GET(request: Request) {
   // when only access_token is needed for /userinfo), we proceed
   // without OIDC verification — the access_token path is still
   // authenticated by the TLS POST to /oauth/token.
-  if (tokenResp.id_token !== undefined && tokenResp.id_token.length > 0) {
-    const claims = decodeIdTokenPayload(tokenResp.id_token);
+  if (tokens.id_token !== undefined && tokens.id_token.length > 0) {
+    const claims = decodeIdTokenPayload(tokens.id_token);
     const idTokenNonce = claims !== null && typeof claims["nonce"] === "string"
       ? (claims["nonce"] as string)
       : null;
     if (nonceCookie === null || idTokenNonce === null || idTokenNonce !== nonceCookie) {
-      return redirectWithError(request, "whop_nonce", {
+      return redirectWithError(request, "whop_nonce_mismatch", {
         code: "nonce_mismatch",
         description: "ID token nonce did not match the value bound to this sign-in.",
       });
     }
   }
 
-  const userInfo = await fetchWhopUserInfo(tokenResp.access_token);
-  if (userInfo === null) {
-    return redirectWithError(request, "whop_userinfo");
+  const userInfoResult = await fetchWhopUserInfo(tokens.access_token);
+  if (!userInfoResult.ok) {
+    if (userInfoResult.reason === "missing_sub") {
+      return redirectWithError(request, "whop_missing_user", {
+        code: "userinfo_missing_sub",
+        description: "Whop /oauth/userinfo did not return a `sub` claim.",
+      });
+    }
+    if (userInfoResult.reason === "network_error") {
+      return redirectWithError(request, "whop_missing_user", {
+        code: "userinfo_network_error",
+        description: userInfoResult.message,
+      });
+    }
+    return redirectWithError(request, "whop_missing_user", {
+      code: `userinfo_http_${userInfoResult.status}`,
+      description: `Whop /oauth/userinfo returned HTTP ${userInfoResult.status}`,
+    });
   }
+  const userInfo = userInfoResult.userInfo;
 
   const access = await checkWhopAccess({ userId: userInfo.sub });
   if (!access.has_access) {
     if (access.reason === "denied") {
-      // Member-facing: send to the checkout URL if configured, else
-      // /pricing. The latter explains "Get Access" without faking a
-      // checkout button.
+      // User signed in but doesn't hold the configured product. Send
+      // them to checkout. Also stamp /login (the eventual landing
+      // surface after Whop's own redirect chain) with a diagnostic
+      // so support can confirm "yes, the access check ran and they
+      // were not a member" rather than silently routing.
       const checkout = getCheckoutUrl();
-      const target = checkout !== null ? checkout : new URL("/pricing", request.url).toString();
+      const target = checkout !== null ? checkout : (() => {
+        const u = new URL("/pricing", request.url);
+        u.searchParams.set("error", "whop_no_resource_access");
+        u.searchParams.set("wd", "no_membership");
+        u.searchParams.set("wdd", "Whop user has no active access to the configured WHOP_RESOURCE_ID.");
+        return u.toString();
+      })();
       const headers = new Headers({ Location: target });
       headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_STATE_COOKIE));
       headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_VERIFIER_COOKIE));
@@ -199,7 +260,13 @@ export async function GET(request: Request) {
       headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_NEXT_COOKIE));
       return new Response(null, { status: 302, headers });
     }
-    return redirectWithError(request, "whop_access_error");
+    if (access.reason === "config_missing") {
+      return redirectWithError(request, "whop_config_missing");
+    }
+    return redirectWithError(request, "whop_access_check_failed", {
+      code: "access_api_error",
+      description: "Whop /users/{id}/access/{resource_id} returned a non-2xx or malformed body.",
+    });
   }
 
   // Mint our lab session.
@@ -213,7 +280,7 @@ export async function GET(request: Request) {
   };
   const cookieValue = await signWhopSession(payload);
   if (cookieValue === null) {
-    return redirectWithError(request, "whop_session_error");
+    return redirectWithError(request, "whop_session_write_failed");
   }
 
   const target = new URL(nextPath, request.url);

@@ -254,7 +254,7 @@ check("Logout route clears Whop session cookie",
 check("Start route fails closed when Whop disabled",
   /isWhopAccessEnabled\(\)[\s\S]{0,200}whop_disabled/.test(START_ROUTE));
 check("Callback route fails closed when Whop disabled",
-  /isWhopAccessEnabled\(\)[\s\S]{0,200}whop_disabled/.test(CALLBACK_ROUTE));
+  /isWhopAccessEnabled\(\)[\s\S]{0,200}whop_config_missing/.test(CALLBACK_ROUTE));
 check("Callback verifies state cookie matches state param",
   /stateCookie !== stateParam[\s\S]{0,200}whop_state/.test(CALLBACK_ROUTE));
 check("Callback uses PKCE code_verifier from cookie",
@@ -438,9 +438,9 @@ check("Callback reads nonce cookie before verification",
   /const nonceCookie = readCookieValue\(cookieHeader,\s*WHOP_OAUTH_NONCE_COOKIE\)/.test(CALLBACK_ROUTE_AGAIN));
 check("Callback verifies id_token nonce claim equals stored nonce",
   /idTokenNonce !== nonceCookie/.test(CALLBACK_ROUTE_AGAIN) &&
-  /"whop_nonce"/.test(CALLBACK_ROUTE_AGAIN));
+  /"whop_nonce_mismatch"/.test(CALLBACK_ROUTE_AGAIN));
 check("Callback only nonce-checks when id_token is present (graceful fallback)",
-  /tokenResp\.id_token !== undefined[\s\S]{0,100}id_token\.length > 0/.test(CALLBACK_ROUTE_AGAIN));
+  /tokens\.id_token !== undefined[\s\S]{0,100}id_token\.length > 0/.test(CALLBACK_ROUTE_AGAIN));
 
 // Nonce cookie cleared on every exit path
 const callbackNonceClears = (CALLBACK_ROUTE_AGAIN.match(/clearTempCookie\(WHOP_OAUTH_NONCE_COOKIE\)/g) ?? []).length;
@@ -500,6 +500,86 @@ check("Login page truncates wd / wdd lengths defensively",
 check("Login copy distinguishes user-cancel from misconfig",
   /Sign-in was cancelled on the Whop consent screen/.test(LOGIN_PAGE) &&
   /Whop OAuth app is not authorized/.test(LOGIN_PAGE));
+
+// ── Callback-stage diagnostics (6B.3a.5) ──────────────────────────────
+
+check("Library exports TokenExchangeResult typed result",
+  WHOP_OAUTH_LIB.includes("export type TokenExchangeResult"));
+check("Library exports UserInfoResult typed result",
+  WHOP_OAUTH_LIB.includes("export type UserInfoResult"));
+check("Token exchange forwards Whop OAuth error fields safely",
+  /extractWhopOAuthError[\s\S]{0,800}whopError[\s\S]{0,200}whopDescription/.test(WHOP_OAUTH_LIB));
+check("Token exchange truncates whopError to 64 chars",
+  /\.slice\(0,\s*64\)/.test(WHOP_OAUTH_LIB));
+check("Token exchange truncates whopDescription to 200 chars",
+  /\.slice\(0,\s*200\)/.test(WHOP_OAUTH_LIB));
+check("Token exchange catches network errors with safe message",
+  /reason:\s*"network_error"/.test(WHOP_OAUTH_LIB));
+check("extractWhopOAuthError only forwards `error` and `error_description` fields",
+  // Defensive: confirm we don't blindly dump the whole body
+  /obj\["error"\][\s\S]{0,200}obj\["error_description"\]/.test(WHOP_OAUTH_LIB));
+
+const CALLBACK_NEW = readFileSync("app/api/auth/whop/callback/route.ts", "utf8");
+
+check("Callback wraps handler in try/catch safety net",
+  /try \{[\s\S]{0,400}await handleCallback\(request\)[\s\S]{0,400}whop_unexpected_callback_error/.test(CALLBACK_NEW));
+
+// Each specific failure path emits its mapped code
+for (const code of [
+  "whop_config_missing",
+  "whop_missing_code",
+  "whop_state_mismatch",
+  "whop_token_exchange_failed",
+  "whop_missing_access_token",
+  "whop_nonce_mismatch",
+  "whop_missing_user",
+  "whop_access_check_failed",
+  "whop_no_resource_access",
+  "whop_session_write_failed",
+  "whop_unexpected_callback_error",
+]) {
+  check(`Callback emits '${code}' on its failure path`, CALLBACK_NEW.includes(`"${code}"`));
+}
+
+// Login page has copy for every new code
+for (const code of [
+  "whop_config_missing",
+  "whop_missing_code",
+  "whop_state_mismatch",
+  "whop_token_exchange_failed",
+  "whop_missing_access_token",
+  "whop_nonce_mismatch",
+  "whop_missing_user",
+  "whop_access_check_failed",
+  "whop_no_resource_access",
+  "whop_session_write_failed",
+  "whop_unexpected_callback_error",
+]) {
+  check(`Login page has ERROR_COPY for '${code}'`, LOGIN_PAGE.includes(`${code}:`));
+}
+
+// Old codes still mapped (backwards compat for any in-flight redirects)
+for (const code of ["whop_state", "whop_token", "whop_userinfo", "whop_nonce"]) {
+  check(`Backwards-compat: '${code}' still has copy`, LOGIN_PAGE.includes(`${code}:`));
+}
+
+// No-resource-access path stamps /pricing with the diagnostic too
+check("No-resource-access path forwards diagnostic to /pricing",
+  /\/pricing[\s\S]{0,400}whop_no_resource_access[\s\S]{0,200}no_membership/.test(CALLBACK_NEW));
+
+// Token exchange http_error path forwards Whop's standard fields
+check("Token-exchange http_error forwards whopError / whopDescription as wd / wdd",
+  /tokenResult\.whopError[\s\S]{0,200}tokenResult\.whopDescription/.test(CALLBACK_NEW));
+
+// Defensive: token-exchange never forwards the access_token itself.
+// The only places we touch `tokens.access_token` are the legitimate
+// fetchWhopUserInfo() call and nowhere else; check that no diagnostic
+// param (`wd` / `wdd` / `code` / `description`) is set from it.
+check("Callback never forwards access_token to /login URL",
+  !/searchParams\.set\(\s*"wd"\s*,\s*tokens\.access_token/.test(CALLBACK_NEW) &&
+  !/searchParams\.set\(\s*"wdd"\s*,\s*tokens\.access_token/.test(CALLBACK_NEW) &&
+  !/code:\s*tokens\.access_token/.test(CALLBACK_NEW) &&
+  !/description:\s*tokens\.access_token/.test(CALLBACK_NEW));
 
 // ── Whop membership does NOT grant admin ─────────────────────────────
 
