@@ -642,11 +642,23 @@ function buildGameDto(
       : Math.max(0, Math.min(1, pred.nrfi_confidence / 100));
 
   const autoFactors = extractAutoFactors(pred.sport_specific);
+
+  // Phase 6B.9 — apply the V2.2 best_angle override at per-market
+  // verdict computation time so the per-market verdict pill matches
+  // the game-level verdict. Same routing as in deriveVerdictForRow:
+  // when v2_2_audit.{ml,ou}_best_angle_eligible=true, upgrade an
+  // upgradable grade (market_watch / model_only / market_led /
+  // public_smoke) to best_signal. NEVER touches sharp_conflict or
+  // already-top grades; never touches NRFI (FI uses its own path).
+  const baOverride = readV22BestAngleOverride(pred.sport_specific);
+  const mlGradeForMarket = applyV22BestAngleOverride(pred.ml_grade, baOverride.ml);
+  const ouGradeForMarket = applyV22BestAngleOverride(pred.ou_grade, baOverride.ou);
+
   const ml = buildMarketEdge({
     market: "moneyline",
     pick: mlPick,
     confidence: mlConfidence,
-    grade: pred.ml_grade,
+    grade: mlGradeForMarket,
     signalType: pred.ml_signal_type,
     marketSignal: pred.ml_market_signal,
     sharpStatus: mlStatus,
@@ -667,7 +679,7 @@ function buildGameDto(
     market: "total",
     pick: totalPick,
     confidence: ouConfidence,
-    grade: pred.ou_grade,
+    grade: ouGradeForMarket,
     signalType: pred.ou_signal_type,
     marketSignal: pred.ou_market_signal,
     sharpStatus: totalStatus,
@@ -795,7 +807,14 @@ function buildGameDto(
         confidence: mlConfidence,
         sharpStatus: mlStatus,
         // V13 per-pick triplet for ML — sourced from ml_* DB columns.
-        grade: pred.ml_grade,
+        // Phase 6B.9 — apply V2.2 best_angle override (see deriveVerdictForRow
+        // above for full rationale). headlinePrimaryMarket + findBestOfMarket
+        // rank by this grade, so without the override the briefing's
+        // 3-up "Best Moneyline / Total / 1st Inning" row would always
+        // surface ML on every game (precedence-tiebreak on tied
+        // market_watch grades). The override aligns this with the
+        // game-level verdict.
+        grade: mlGradeForMarket,
         signalType: pred.ml_signal_type,
         marketSignal: pred.ml_market_signal,
       },
@@ -806,7 +825,8 @@ function buildGameDto(
         line: totalLine,
         // V13 per-pick triplet for the total — sourced from ou_* DB columns
         // (note DB ou_* ↔ DTO predictions.total name asymmetry).
-        grade: pred.ou_grade,
+        // Phase 6B.9 — same override as predictions.ml above.
+        grade: ouGradeForMarket,
         signalType: pred.ou_signal_type,
         marketSignal: pred.ou_market_signal,
       },
@@ -1899,21 +1919,90 @@ const GRADE_RANK: Record<Grade, number> = {
   market_watch: 10,
 };
 
+/**
+ * Phase 6B.9 — read the V2.2 model's own best_angle eligibility flags
+ * out of the audit JSON. V2.2 already enforces strict gates internally
+ * (edge ≥ 3pp ML / 3.5pp OU, conf ≥ 56%, high data quality, no key
+ * feature on neutral fallback) — the resulting ml_best_angle_eligible
+ * / ou_best_angle_eligible booleans ARE the model's authoritative
+ * Best Angle decision.
+ *
+ * Background: the downstream gradeDerivationService writes the per-
+ * pick grade columns (ml_grade / ou_grade / nrfi_grade) using a
+ * stricter sharp-confirmation rule. On nights when sharp signals are
+ * "neutral" (no confirming or conflicting action), it downgrades
+ * even a clear model best_angle to "market_watch". The Daily Edge
+ * verdict pipeline only saw the downgraded grade, so 0 Best Angles
+ * surfaced even when the model had identified several.
+ *
+ * This helper exposes V2.2's eligibility flags so the verdict layer
+ * can upgrade a market_watch / model_only / market_led / public_smoke
+ * candidate to "best_signal" when the model itself says so. We
+ * INTENTIONALLY do NOT override sharp_conflict (a real conflict
+ * warning must surface) or best_signal / sharp_confirmed (already
+ * top). Null grades (model didn't pick the market) are unaffected.
+ *
+ * This is a display-layer routing fix only — model math, the grader
+ * pipeline, and DB writes are untouched.
+ */
+function readV22BestAngleOverride(
+  sportSpecific: Record<string, unknown> | null | undefined,
+): { ml: boolean; ou: boolean } {
+  const empty = { ml: false, ou: false };
+  if (!sportSpecific || typeof sportSpecific !== "object") return empty;
+  const a = (sportSpecific as Record<string, unknown>).v2_2_audit;
+  if (!a || typeof a !== "object") return empty;
+  const audit = a as Record<string, unknown>;
+  return {
+    ml: audit.ml_best_angle_eligible === true,
+    ou: audit.ou_best_angle_eligible === true,
+  };
+}
+
+/**
+ * Grades that the V2.2 best_angle override is allowed to upgrade.
+ * NEVER upgrade sharp_conflict (loses the warning) or already-top
+ * grades (no-op).
+ */
+const UPGRADABLE_GRADES = new Set<Grade>([
+  "market_watch",
+  "model_only",
+  "market_led",
+  "public_smoke",
+] as Grade[]);
+
+function applyV22BestAngleOverride(
+  grade: Grade | null,
+  marketEligible: boolean,
+): Grade | null {
+  if (grade === null) return null;
+  if (!marketEligible) return grade;
+  if (!UPGRADABLE_GRADES.has(grade)) return grade;
+  return "best_signal" as Grade;
+}
+
 function deriveVerdictForRow(pred: PredictionRow): {
   headlineGrade: Grade | null;
   headlineMarket: SharpReadMarket | null;
   verdict: Verdict;
 } {
+  // Phase 6B.9 — promote per-pick grade when V2.2's audit says the
+  // market is best_angle eligible. ML and OU only; NRFI uses its own
+  // FI audit path elsewhere.
+  const override = readV22BestAngleOverride(pred.sport_specific);
+  const mlGradeEffective = applyV22BestAngleOverride(pred.ml_grade, override.ml);
+  const ouGradeEffective = applyV22BestAngleOverride(pred.ou_grade, override.ou);
+
   const candidates: Array<{
     grade: Grade;
     market: SharpReadMarket;
     precedence: number;
   }> = [];
-  if (pred.ml_grade !== null) {
-    candidates.push({ grade: pred.ml_grade, market: "ml", precedence: 0 });
+  if (mlGradeEffective !== null) {
+    candidates.push({ grade: mlGradeEffective, market: "ml", precedence: 0 });
   }
-  if (pred.ou_grade !== null) {
-    candidates.push({ grade: pred.ou_grade, market: "total", precedence: 1 });
+  if (ouGradeEffective !== null) {
+    candidates.push({ grade: ouGradeEffective, market: "total", precedence: 1 });
   }
   if (pred.nrfi_grade !== null) {
     candidates.push({ grade: pred.nrfi_grade, market: "nrfi", precedence: 2 });
