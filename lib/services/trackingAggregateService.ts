@@ -65,6 +65,45 @@ export type DimensionRow<K extends string = string> = {
   metrics: AggregateMetrics;
 };
 
+/**
+ * Sport+market joint split with the Best Angle / Lean cuts most members
+ * want to see ("how is MLB NRFI doing? how are its Best Angles?").
+ */
+export type SportMarketBucket = {
+  sport: TrackedSport;
+  market: TrackedMarketV17;
+  metrics: AggregateMetrics;
+  bestAngles: AggregateMetrics;
+  leans: AggregateMetrics;
+};
+
+/** Daily slice for trend charts. One bucket per slate_date. */
+export type DailyBucket = {
+  date: string;
+  metrics: AggregateMetrics;
+};
+
+/**
+ * Member-safe recent pick. Carries enough for a stacked card list —
+ * never raw audit fields (no model_probability / model audit / raw
+ * snapshot_json).
+ */
+export type RecentPickRow = {
+  slate_date: string;
+  sport: TrackedSport;
+  market: TrackedMarketV17;
+  matchup: string;
+  pick: string | null;
+  play_grade: string | null;
+  model_version: string | null;
+  result: "win" | "loss" | "push" | "void" | "pending";
+  actual_home_score: number | null;
+  actual_away_score: number | null;
+  actual_first_inning_runs: number | null;
+  best_angle: boolean;
+  held: boolean;
+};
+
 export type TrackingAggregateResult = {
   rowsConsidered: number;
   /** Excludes launch_day=true unless includeLaunchDay flag is set. */
@@ -72,6 +111,7 @@ export type TrackingAggregateResult = {
   overall: AggregateMetrics;
   bySport: DimensionRow<TrackedSport>[];
   byMarket: DimensionRow<TrackedMarketV17>[];
+  bySportMarket: SportMarketBucket[];
   byModelVersion: DimensionRow[];
   byPlayGrade: DimensionRow[];
   byConfidenceBucket: DimensionRow<ConfidenceBucket>[];
@@ -79,6 +119,14 @@ export type TrackingAggregateResult = {
   bestAngles: AggregateMetrics;
   leans: AggregateMetrics;
   provisionalOnly: AggregateMetrics;
+  /** Yesterday's slate (slate_date = effective "yesterday" relative to `to`). */
+  yesterday: { date: string | null; overall: AggregateMetrics; bySportMarket: SportMarketBucket[] };
+  /** Trailing 7-day window ending on `to` (or today). */
+  thisWeek: { from: string; to: string; overall: AggregateMetrics; bySportMarket: SportMarketBucket[]; daily: DailyBucket[] };
+  /** Trailing 14-day daily trend for charts. */
+  dailyTrend: DailyBucket[];
+  /** Last N graded/pending picks (member-safe shape). */
+  recentPicks: RecentPickRow[];
   baselines: TrackingBaselineRow[];
   tablesInitialized: boolean;
 };
@@ -188,6 +236,7 @@ export async function computeTrackingAggregate(opts: {
     overall: emptyMetrics(),
     bySport: [],
     byMarket: [],
+    bySportMarket: [],
     byModelVersion: [],
     byPlayGrade: [],
     byConfidenceBucket: [],
@@ -195,6 +244,10 @@ export async function computeTrackingAggregate(opts: {
     bestAngles: emptyMetrics(),
     leans: emptyMetrics(),
     provisionalOnly: emptyMetrics(),
+    yesterday: { date: null, overall: emptyMetrics(), bySportMarket: [] },
+    thisWeek: { from: "", to: "", overall: emptyMetrics(), bySportMarket: [], daily: [] },
+    dailyTrend: [],
+    recentPicks: [],
     baselines: [],
     tablesInitialized: true,
   };
@@ -300,5 +353,140 @@ export async function computeTrackingAggregate(opts: {
   for (const row of provRows) accumulate(result.provisionalOnly, row);
   finalize(result.provisionalOnly, provRows);
 
+  // ── Phase 6B.2d additions ───────────────────────────────────────────
+  // Joint sport+market buckets with Best Angle / Lean sub-cuts. Drives
+  // the redesigned member page (MLB ML / MLB O-U / MLB NRFI / MLB YRFI
+  // as first-class cards, with each card carrying its own BA/Lean
+  // record).
+  function buildSportMarketBuckets(scopeRows: ReadonlyArray<Row>): SportMarketBucket[] {
+    const groups = new Map<string, Row[]>();
+    for (const r of scopeRows) {
+      const key = `${r.record.sport}::${r.record.market}`;
+      let arr = groups.get(key);
+      if (arr === undefined) {
+        arr = [];
+        groups.set(key, arr);
+      }
+      arr.push(r);
+    }
+    const out: SportMarketBucket[] = [];
+    for (const [key, rs] of groups) {
+      const [sport, market] = key.split("::") as [TrackedSport, TrackedMarketV17];
+      const m = emptyMetrics();
+      for (const r of rs) accumulate(m, r);
+      finalize(m, rs);
+      const ba = emptyMetrics();
+      const bestRs = rs.filter((r) => r.record.best_angle === true);
+      for (const r of bestRs) accumulate(ba, r);
+      finalize(ba, bestRs);
+      const le = emptyMetrics();
+      const leanRs = rs.filter((r) => r.record.play_grade === "lean");
+      for (const r of leanRs) accumulate(le, r);
+      finalize(le, leanRs);
+      out.push({ sport, market, metrics: m, bestAngles: ba, leans: le });
+    }
+    out.sort((a, b) => {
+      if (a.sport !== b.sport) return a.sport.localeCompare(b.sport);
+      return a.market.localeCompare(b.market);
+    });
+    return out;
+  }
+  result.bySportMarket = buildSportMarketBuckets(rows);
+
+  // Effective "today" for relative windows. Caller-supplied `to`
+  // wins (operator queries, historic audits). Otherwise default to
+  // the real ET calendar day — slate_date is ET-anchored so we must
+  // match its timezone or the page would show "yesterday" as the day
+  // after the latest pick at certain hours of the night.
+  const today = opts.to ?? new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const yesterdayDate = shiftDate(today, -1);
+  const weekFrom = shiftDate(today, -6);
+
+  // Yesterday slice
+  const yesterdayRows = rows.filter((r) => r.record.slate_date === yesterdayDate);
+  if (yesterdayRows.length > 0) {
+    result.yesterday.date = yesterdayDate;
+    for (const r of yesterdayRows) accumulate(result.yesterday.overall, r);
+    finalize(result.yesterday.overall, yesterdayRows);
+    result.yesterday.bySportMarket = buildSportMarketBuckets(yesterdayRows);
+  }
+
+  // This-week slice (trailing 7 days ending on `today`)
+  const weekRows = rows.filter((r) => r.record.slate_date >= weekFrom && r.record.slate_date <= today);
+  result.thisWeek.from = weekFrom;
+  result.thisWeek.to = today;
+  if (weekRows.length > 0) {
+    for (const r of weekRows) accumulate(result.thisWeek.overall, r);
+    finalize(result.thisWeek.overall, weekRows);
+    result.thisWeek.bySportMarket = buildSportMarketBuckets(weekRows);
+    result.thisWeek.daily = buildDailyTrend(weekRows, weekFrom, today);
+  }
+
+  // 14-day trailing trend for the chart
+  const trendFrom = shiftDate(today, -13);
+  const trendRows = rows.filter((r) => r.record.slate_date >= trendFrom && r.record.slate_date <= today);
+  result.dailyTrend = buildDailyTrend(trendRows, trendFrom, today);
+
+  // Recent picks — most recent 20 by slate_date desc, member-safe shape.
+  // Excludes launch-day rows (already filtered above).
+  result.recentPicks = [...rows]
+    .sort((a, b) => {
+      if (a.record.slate_date !== b.record.slate_date) {
+        return a.record.slate_date < b.record.slate_date ? 1 : -1;
+      }
+      const aId = a.record.id ?? 0;
+      const bId = b.record.id ?? 0;
+      return bId - aId;
+    })
+    .slice(0, 20)
+    .map((r) => ({
+      slate_date: r.record.slate_date,
+      sport: r.record.sport,
+      market: r.record.market,
+      matchup: r.record.matchup,
+      pick: r.record.pick,
+      play_grade: r.record.play_grade,
+      model_version: r.record.model_version,
+      result:
+        r.grade === null
+          ? "pending"
+          : (r.grade.result as "win" | "loss" | "push" | "void" | "pending"),
+      actual_home_score: r.grade?.actual_home_score ?? null,
+      actual_away_score: r.grade?.actual_away_score ?? null,
+      actual_first_inning_runs: r.grade?.actual_first_inning_runs ?? null,
+      best_angle: r.record.best_angle === true,
+      held: r.record.held === true,
+    }));
+
   return result;
+}
+
+function shiftDate(yyyyMmDd: string, deltaDays: number): string {
+  const [y, m, d] = yyyyMmDd.split("-").map((s) => parseInt(s, 10));
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + deltaDays);
+  return dt.toISOString().slice(0, 10);
+}
+
+function buildDailyTrend(scopeRows: ReadonlyArray<Row>, from: string, to: string): DailyBucket[] {
+  // Pre-fill every date in [from, to] so chart x-axis has no gaps.
+  const buckets = new Map<string, Row[]>();
+  let cursor = from;
+  while (cursor <= to) {
+    buckets.set(cursor, []);
+    cursor = shiftDate(cursor, 1);
+  }
+  for (const r of scopeRows) {
+    const arr = buckets.get(r.record.slate_date);
+    if (arr !== undefined) arr.push(r);
+  }
+  const out: DailyBucket[] = [];
+  for (const [date, rs] of buckets) {
+    const m = emptyMetrics();
+    for (const r of rs) accumulate(m, r);
+    finalize(m, rs);
+    out.push({ date, metrics: m });
+  }
+  out.sort((a, b) => a.date.localeCompare(b.date));
+  return out;
 }

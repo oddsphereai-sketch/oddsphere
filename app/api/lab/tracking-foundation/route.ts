@@ -55,14 +55,20 @@ export async function GET(request: Request) {
     current_season_pct: b.current_season_pct,
   }));
 
-  // Phase 6B.2b — member tracking expansion. Surfaces additional safe
-  // aggregations the page needs to render the new card layout:
-  //   • byPlayGrade — Best Angle / Lean / No Bet / Toss-Up / Held splits
-  //   • byModelVersion — V2.2 / FI V2 / legacy splits
-  //   • leans — head-to-head Best Angle vs Lean
-  // None of these expose raw model audit fields. Toss-Up and Held are
-  // returned as state counts (picks/pending/voids); the page suppresses
-  // them from the main win-rate display.
+  // Phase 6B.2d — member tracking expansion. Surfaces additional safe
+  // aggregations the redesigned page needs:
+  //   • bySportMarket — joint MLB-ML / MLB-O-U / MLB-NRFI / MLB-YRFI
+  //     buckets with their own Best Angle + Lean cuts. Drives the
+  //     "core" sport/category section instead of one blended total.
+  //   • yesterday / thisWeek — date-bucketed slices for hero metrics
+  //     and weekly module. Honest empty when no slate has graded yet.
+  //   • dailyTrend — trailing 14-day buckets for the line chart.
+  //   • recentPicks — 20 most recent member-safe picks for the
+  //     stacked-card recent-results list. No raw audit fields.
+  // Toss-Up / Held remain as state counts only. No raw model audit
+  // leaks to the member API — admin-only fields are stripped before
+  // they reach this layer (the service already returns member-shaped
+  // recent picks).
   return Response.json(
     {
       sport: sport ?? "all",
@@ -70,10 +76,15 @@ export async function GET(request: Request) {
       overall: result.overall,
       bySport: result.bySport,
       byMarket: result.byMarket,
+      bySportMarket: result.bySportMarket,
       byPlayGrade: result.byPlayGrade,
       byModelVersion: result.byModelVersion,
       bestAngles: result.bestAngles,
       leans: result.leans,
+      yesterday: result.yesterday,
+      thisWeek: result.thisWeek,
+      dailyTrend: result.dailyTrend,
+      recentPicks: result.recentPicks,
       tablesInitialized: result.tablesInitialized,
       freshTrackingStarted: result.overall.picks > 0,
     },
