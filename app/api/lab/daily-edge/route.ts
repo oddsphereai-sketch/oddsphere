@@ -643,16 +643,19 @@ function buildGameDto(
 
   const autoFactors = extractAutoFactors(pred.sport_specific);
 
-  // Phase 6B.9 — apply the V2.2 best_angle override at per-market
-  // verdict computation time so the per-market verdict pill matches
-  // the game-level verdict. Same routing as in deriveVerdictForRow:
-  // when v2_2_audit.{ml,ou}_best_angle_eligible=true, upgrade an
-  // upgradable grade (market_watch / model_only / market_led /
-  // public_smoke) to best_signal. NEVER touches sharp_conflict or
-  // already-top grades; never touches NRFI (FI uses its own path).
+  // Phase 6B.9 + 6B.10 — three-way grade routing (same logic as
+  // deriveVerdictForRow). Keeps the per-market verdict pill in sync
+  // with the game-level verdict + propagates the sharp-confirmation
+  // bump to per-market display.
   const baOverride = readV22BestAngleOverride(pred.sport_specific);
-  const mlGradeForMarket = applyV22BestAngleOverride(pred.ml_grade, baOverride.ml);
-  const ouGradeForMarket = applyV22BestAngleOverride(pred.ou_grade, baOverride.ou);
+  const mlMoneyConflict = hasOpposingPublicMoneyConflict(signals, "moneyline", pred.predicted_ml_winner);
+  const ouMoneyConflict = hasOpposingPublicMoneyConflict(signals, "total", pred.predicted_ou_side);
+  const mlMoneySupport = hasSupportingPublicMoneyConfirmation(signals, "moneyline", pred.predicted_ml_winner);
+  const ouMoneySupport = hasSupportingPublicMoneyConfirmation(signals, "total", pred.predicted_ou_side);
+  const mlMarketEdge = readV22EdgePp(pred.sport_specific, "moneyline");
+  const ouMarketEdge = readV22EdgePp(pred.sport_specific, "total");
+  const mlGradeForMarket = applyV22BestAngleOverride(pred.ml_grade, baOverride.ml, mlMoneyConflict, mlMoneySupport, mlMarketEdge);
+  const ouGradeForMarket = applyV22BestAngleOverride(pred.ou_grade, baOverride.ou, ouMoneyConflict, ouMoneySupport, ouMarketEdge);
 
   const ml = buildMarketEdge({
     market: "moneyline",
@@ -1971,27 +1974,171 @@ const UPGRADABLE_GRADES = new Set<Grade>([
   "public_smoke",
 ] as Grade[]);
 
+/**
+ * Phase 6B.10 — public-money conflict guard for the V2.2 best_angle
+ * promotion. Even when V2.2's own gates say a pick is best_angle
+ * eligible, refuse to promote when sharp_signals show the OPPOSITE
+ * side carrying a clear sharp-money signature (high money %, low
+ * tickets % — the classic "few large bets vs many small bets" fade).
+ *
+ * Rule (both conditions required to suppress):
+ *   • opposite_side.public_money_pct >= 60
+ *   • (opposite_money - opposite_bets) >= 15pp
+ *
+ * Rationale: V2.2's "sharp neutral" classification is the model's
+ * INTERNAL read of the sharp layer. On nights when its sharp-direction
+ * heuristic misses an obvious money-vs-bets divergence (e.g. BAL@TOR
+ * 2026-06-07: BAL away money 78% / bets 27% against a TOR home pick),
+ * we should NOT promote to Best Angle just because the model agreed
+ * with itself. Members reading "Best Angle: TOR" while the card's
+ * own Market Pulse panel says "78% money on BAL" would lose trust.
+ *
+ * The pick stays as Watchlist (or whatever the underlying grade was)
+ * with all its public-split context. The card still surfaces the
+ * model edge and the conflicting market money side-by-side; the
+ * verdict label is the conservative one.
+ *
+ * Threshold sourced from the observed 2026-06-07 slate where three
+ * games (BAL@TOR, BOS@NYY, KC@MIN if pick=KC) showed clear sharp-
+ * fade patterns against the model's pick. Conservative bounds:
+ * opposite_money>=60 keeps single-side runaway from triggering on
+ * marginal 55/45 splits; 15pp divergence isolates real money-vs-bets
+ * separation from cases where everyone agrees.
+ */
+function oppositeOf(
+  marketType: "moneyline" | "total",
+  pickSide: string | null,
+): string | null {
+  if (pickSide === null) return null;
+  if (marketType === "moneyline") {
+    if (pickSide === "home") return "away";
+    if (pickSide === "away") return "home";
+    return null;
+  }
+  if (pickSide === "over") return "under";
+  if (pickSide === "under") return "over";
+  return null;
+}
+
+/**
+ * Threshold for a "sharp-leaning" public split on either side. money% >= 60
+ * AND money−bets divergence ≥ 15pp = few-large-bets pattern (sharps).
+ */
+function isSharpLeaningSide(row: SignalRow | undefined): boolean {
+  if (!row) return false;
+  const money = row.public_money_pct;
+  const bets = row.public_betting_pct;
+  if (money === null || bets === null) return false;
+  if (money < 60) return false;
+  if (money - bets < 15) return false;
+  return true;
+}
+
+function findSignal(
+  signals: SignalRow[],
+  marketType: "moneyline" | "total",
+  side: string,
+): SignalRow | undefined {
+  return signals.find((s) => s.market_type === marketType && s.side === side);
+}
+
+function hasOpposingPublicMoneyConflict(
+  signals: SignalRow[],
+  marketType: "moneyline" | "total",
+  pickSide: string | null,
+): boolean {
+  const opp = oppositeOf(marketType, pickSide);
+  if (opp === null) return false;
+  return isSharpLeaningSide(findSignal(signals, marketType, opp));
+}
+
+function hasSupportingPublicMoneyConfirmation(
+  signals: SignalRow[],
+  marketType: "moneyline" | "total",
+  pickSide: string | null,
+): boolean {
+  if (pickSide === null) return false;
+  return isSharpLeaningSide(findSignal(signals, marketType, pickSide));
+}
+
+/**
+ * Read V2.2 audit edge for the picked market. Used as the
+ * "model has at least some agreement" condition for the sharp-
+ * confirmation bump (Phase 6B.10).
+ */
+function readV22EdgePp(
+  sportSpecific: Record<string, unknown> | null | undefined,
+  market: "moneyline" | "total",
+): number | null {
+  if (!sportSpecific || typeof sportSpecific !== "object") return null;
+  const a = (sportSpecific as Record<string, unknown>).v2_2_audit;
+  if (!a || typeof a !== "object") return null;
+  const audit = a as Record<string, unknown>;
+  const v = market === "moneyline" ? audit.ml_edge_pct : audit.ou_edge_pct;
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+/**
+ * Phase 6B.10 — three-way grade routing. Combines the V2.2 BA override
+ * (Phase 6B.9), the opposing-money suppression (Phase 6B.10 conflict),
+ * and the same-side money confirmation bump (Phase 6B.10 support).
+ *
+ * Behavior table (input grade → effective grade):
+ *
+ *   sharp_conflict       → unchanged (real warning, never promote/demote)
+ *   best_signal / sharp_confirmed → unchanged (already top)
+ *   null                 → null
+ *
+ *   For upgradable grades (market_watch / model_only / market_led /
+ *   public_smoke):
+ *     1. BA-eligible AND opposing-money-conflict   → unchanged
+ *     2. BA-eligible AND not conflict              → best_signal (Best Angle)
+ *     3. NOT BA-eligible AND same-side sharp money AND edge >= 1pp → market_led (Lean)
+ *     4. Otherwise                                  → unchanged
+ *
+ * The edge>=1pp guard on the confirmation bump prevents promoting a
+ * pure sharp-money pile when the model has no positive read on the
+ * same side (would be promoting noise). 1pp is intentionally minimal:
+ * any positive model agreement + sharp money on the same side earns
+ * the Lean label.
+ */
 function applyV22BestAngleOverride(
   grade: Grade | null,
   marketEligible: boolean,
+  opposingMoneyConflict: boolean = false,
+  sameSideConfirmation: boolean = false,
+  edgePp: number | null = null,
 ): Grade | null {
   if (grade === null) return null;
-  if (!marketEligible) return grade;
   if (!UPGRADABLE_GRADES.has(grade)) return grade;
-  return "best_signal" as Grade;
+  if (marketEligible) {
+    if (opposingMoneyConflict) return grade;
+    return "best_signal" as Grade;
+  }
+  // Same-side sharp money confirmation + positive edge → Lean bump.
+  if (sameSideConfirmation && edgePp !== null && edgePp >= 1) {
+    return "market_led" as Grade;
+  }
+  return grade;
 }
 
-function deriveVerdictForRow(pred: PredictionRow): {
+function deriveVerdictForRow(pred: PredictionRow, signals: SignalRow[] = []): {
   headlineGrade: Grade | null;
   headlineMarket: SharpReadMarket | null;
   verdict: Verdict;
 } {
-  // Phase 6B.9 — promote per-pick grade when V2.2's audit says the
-  // market is best_angle eligible. ML and OU only; NRFI uses its own
-  // FI audit path elsewhere.
+  // Phase 6B.9 + 6B.10 — three-way grade routing combining V2.2 BA
+  // override, opposing-money suppression, and same-side sharp-money
+  // confirmation bump. See applyV22BestAngleOverride for the rules.
   const override = readV22BestAngleOverride(pred.sport_specific);
-  const mlGradeEffective = applyV22BestAngleOverride(pred.ml_grade, override.ml);
-  const ouGradeEffective = applyV22BestAngleOverride(pred.ou_grade, override.ou);
+  const mlConflict = hasOpposingPublicMoneyConflict(signals, "moneyline", pred.predicted_ml_winner);
+  const ouConflict = hasOpposingPublicMoneyConflict(signals, "total", pred.predicted_ou_side);
+  const mlSupport = hasSupportingPublicMoneyConfirmation(signals, "moneyline", pred.predicted_ml_winner);
+  const ouSupport = hasSupportingPublicMoneyConfirmation(signals, "total", pred.predicted_ou_side);
+  const mlEdge = readV22EdgePp(pred.sport_specific, "moneyline");
+  const ouEdge = readV22EdgePp(pred.sport_specific, "total");
+  const mlGradeEffective = applyV22BestAngleOverride(pred.ml_grade, override.ml, mlConflict, mlSupport, mlEdge);
+  const ouGradeEffective = applyV22BestAngleOverride(pred.ou_grade, override.ou, ouConflict, ouSupport, ouEdge);
 
   const candidates: Array<{
     grade: Grade;
@@ -2066,7 +2213,7 @@ function buildBreakdownDto(
   pred: PredictionRow,
   signals: SignalRow[]
 ): DailyEdgeGameDto["breakdown"] {
-  const { headlineGrade, headlineMarket, verdict } = deriveVerdictForRow(pred);
+  const { headlineGrade, headlineMarket, verdict } = deriveVerdictForRow(pred, signals);
 
   const sharpProjection = projectSharpSignalsForRead(signals, pred);
   const sharpReadKey = selectSharpReadKey({
