@@ -852,7 +852,10 @@ async function main() {
   // ═══════════════════════════════════════════════════════════════════════════
   {
     type ExtractFn = (s: unknown) => string | null;
-    type DeriveVerdictFn = (pred: Record<string, unknown>) => {
+    type DeriveVerdictFn = (
+      pred: Record<string, unknown>,
+      signals?: Array<Record<string, unknown>>,
+    ) => {
       headlineGrade: string | null;
       headlineMarket: string | null;
       verdict: string;
@@ -1070,6 +1073,67 @@ async function main() {
         "[4.1.8.B.16] GRADE_RANK ordering: best_signal > sharp_confirmed > sharp_conflict",
         GRADE_RANK.best_signal > GRADE_RANK.sharp_confirmed &&
           GRADE_RANK.sharp_confirmed > GRADE_RANK.sharp_conflict
+      );
+    }
+
+    // ─── Phase 6B.25 — locked-game verdict freeze ────────────────────
+    section("Phase 6B.25 — locked-game verdict freeze");
+    {
+      // Locked game with a live opposing-money signal that would normally
+      // be evaluated. The 6B.25 freeze passes empty signals to the
+      // conflict / support helpers for locked games, so the frozen
+      // sport_specific override propagates and live drift cannot flip
+      // the displayed verdict away from what was locked.
+      const opposingMoneyConflictSignal = [
+        { market_type: "moneyline", side: "away", public_money_pct: 78, public_betting_pct: 50 },
+      ];
+      const lockedPred = predRow({
+        ml_grade: "best_signal",
+        ml_confidence: 60,
+        predicted_ml_winner: "home",
+        sport_specific: { ml_best_angle_eligible: true },
+        locked_at: "2026-06-07T19:15:05Z",
+      });
+      const locked = deriveVerdictForRow(lockedPred, opposingMoneyConflictSignal as any);
+      check(
+        "[6B.25.1] LOCKED game ignores live opposing-money signal — frozen best_angle preserved",
+        locked.verdict === "best_angle",
+      );
+    }
+    {
+      // Locked-grade sharp_conflict (frozen in pred.ml_grade itself) is
+      // NOT a live signal — locked snapshot already includes that decision.
+      // The 6B.25 freeze must NOT change locked-grade-driven verdicts.
+      const locked = deriveVerdictForRow(
+        predRow({
+          ml_grade: "sharp_conflict",
+          ml_confidence: 60,
+          predicted_ml_winner: "home",
+          locked_at: "2026-06-07T19:15:05Z",
+        }),
+        [],
+      );
+      check(
+        "[6B.25.2] locked game with locked sharp_conflict GRADE still routes to caution",
+        locked.verdict === "caution",
+      );
+    }
+    {
+      // Unlocked games still respect live signals — 6B.25 only freezes
+      // when locked_at !== null. Anti-regression for pre-lock UX.
+      const unlocked = deriveVerdictForRow(
+        predRow({
+          ml_grade: "best_signal",
+          ml_confidence: 60,
+          predicted_ml_winner: "home",
+          sport_specific: { ml_best_angle_eligible: true },
+          locked_at: null,
+        }),
+        [],
+      );
+      check(
+        "[6B.25.3] unlocked game + no signals still resolves to best_angle (no regression)",
+        unlocked.verdict === "best_angle",
       );
     }
 

@@ -2135,11 +2135,22 @@ function deriveVerdictForRow(pred: PredictionRow, signals: SignalRow[] = []): {
   // Phase 6B.9 + 6B.10 — three-way grade routing combining V2.2 BA
   // override, opposing-money suppression, and same-side sharp-money
   // confirmation bump. See applyV22BestAngleOverride for the rules.
+  //
+  // Phase 6B.25 — Locked games freeze the verdict at lock time. Live
+  // sharp signals MUST NOT override the locked best_angle eligibility,
+  // because the locked snapshot (Phase 6B.18) already captured the
+  // conflict/support call at lock and stored the resulting BA flag in
+  // sport_specific. Pre-6B.25, live post-lock signal drift could flip
+  // a locked Best Angle to Caution in the displayed verdict while
+  // tracking continued to count the locked Best Angle — a member-
+  // visible inconsistency. Fix: for locked games, pass empty signals
+  // so conflict/support are false and the frozen override propagates.
   const override = readV22BestAngleOverride(pred.sport_specific);
-  const mlConflict = hasOpposingPublicMoneyConflict(signals, "moneyline", pred.predicted_ml_winner);
-  const ouConflict = hasOpposingPublicMoneyConflict(signals, "total", pred.predicted_ou_side);
-  const mlSupport = hasSupportingPublicMoneyConfirmation(signals, "moneyline", pred.predicted_ml_winner);
-  const ouSupport = hasSupportingPublicMoneyConfirmation(signals, "total", pred.predicted_ou_side);
+  const useSignals: SignalRow[] = pred.locked_at !== null ? [] : signals;
+  const mlConflict = hasOpposingPublicMoneyConflict(useSignals, "moneyline", pred.predicted_ml_winner);
+  const ouConflict = hasOpposingPublicMoneyConflict(useSignals, "total", pred.predicted_ou_side);
+  const mlSupport = hasSupportingPublicMoneyConfirmation(useSignals, "moneyline", pred.predicted_ml_winner);
+  const ouSupport = hasSupportingPublicMoneyConfirmation(useSignals, "total", pred.predicted_ou_side);
   const mlEdge = readV22EdgePp(pred.sport_specific, "moneyline");
   const ouEdge = readV22EdgePp(pred.sport_specific, "total");
   const mlGradeEffective = applyV22BestAngleOverride(pred.ml_grade, override.ml, mlConflict, mlSupport, mlEdge);
