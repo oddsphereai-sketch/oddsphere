@@ -575,6 +575,12 @@ export class SharpAPIOddsProvider implements IOddsProvider {
       home: MlbTeamAbbrev;
       away: MlbTeamAbbrev;
       rawRow: RawSplitsRow;
+      // Phase 6B.16 — keep splitsEventId so we can use it as a
+      // discovery-fallback event_id when /opportunities/ev missed the
+      // game entirely. /splits returns the stripped form (no _b\d+);
+      // the bucket-fallback loop probes _b0..._b3 to recover real
+      // book rows that /opportunities/ev didn't surface for this game.
+      splitsEventId: string;
     };
     let splitsLookupEvents: SplitsLookupEvent[] = [];
     try {
@@ -588,6 +594,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         home: e.home,
         away: e.away,
         rawRow: e.rawRow,
+        splitsEventId: e.splitsEventId,
       }));
     } catch (e) {
       console.warn(
@@ -612,7 +619,10 @@ export class SharpAPIOddsProvider implements IOddsProvider {
       gameExternalId: number;
       splitsEventId: string;
       effectiveEventIds: string[];
-      eventIdSource: "opportunities_suffixed" | "splits_stripped";
+      eventIdSource:
+        | "opportunities_suffixed"
+        | "splits_stripped"
+        | "splits_discovery_fallback";
     };
 
     const resolved: ResolvedV2Event[] = [];
@@ -631,6 +641,49 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         splitsEventId: ev.sharpEventId, // stripped form, kept name for back-compat
         effectiveEventIds: ev.suffixedEventIds,
         eventIdSource: "opportunities_suffixed",
+      });
+    }
+
+    // Phase 6B.16 — splits-based discovery fallback.
+    //
+    // /opportunities/ev doesn't surface games with zero +EV
+    // opportunities at this exact poll, so 3-4 games per slate get
+    // dropped from V2 entirely. /splits returns the canonical event
+    // ID for the game even when /opportunities/ev is silent. Probe
+    // /odds for ALL 4 bucket suffixes (_b0/_b1/_b2/_b3) so we recover
+    // real book rows (Kalshi, onexbet, ballybet, saba) that we'd
+    // otherwise miss.
+    //
+    // 2026-06-07 17:35 UTC raw probe proved this is the bug, not
+    // provider inventory: BAL@TOR, TB@MIA, KC@MIN, CLE@TEX all
+    // returned 50-row /odds payloads at the _b2 suffix from real
+    // books, even though /opportunities/ev returned 0 matches for
+    // each one.
+    const resolvedPairs = new Set(
+      resolved.map((r) => `${r.home}|${r.away}`),
+    );
+    const SPLITS_FALLBACK_SUFFIXES = ["_b0", "_b1", "_b2", "_b3"];
+    for (const sev of splitsLookupEvents) {
+      if (resolvedPairs.has(`${sev.home}|${sev.away}`)) continue;
+      const gameExtId = await this.resolveGame(
+        sportKey,
+        date,
+        sev.home,
+        sev.away,
+      );
+      if (gameExtId === null) {
+        unresolvedTeamPairs.push({ home: sev.home, away: sev.away });
+        continue;
+      }
+      resolved.push({
+        home: sev.home,
+        away: sev.away,
+        gameExternalId: gameExtId,
+        splitsEventId: sev.splitsEventId,
+        effectiveEventIds: SPLITS_FALLBACK_SUFFIXES.map(
+          (s) => `${sev.splitsEventId}${s}`,
+        ),
+        eventIdSource: "splits_discovery_fallback",
       });
     }
 
@@ -1189,7 +1242,10 @@ export type V2DiscoveryPerGame = {
    *  dedupe + filters). 0 when probes fired but every row collided
    *  with an advertised bucket. */
   speculativeRowsRecovered: number;
-  eventIdSource: "opportunities_suffixed" | "splits_stripped";
+  eventIdSource:
+    | "opportunities_suffixed"
+    | "splits_stripped"
+    | "splits_discovery_fallback";
   oddsCallStatus: V2OddsCallStatus;
   /** Combined row counts (real /odds + R-16E /splits fallback). */
   mlRows: number;
