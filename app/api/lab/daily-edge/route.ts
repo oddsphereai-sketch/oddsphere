@@ -2470,6 +2470,33 @@ export async function GET(request: Request) {
       if (chosen !== null) totalLineByGame.set(gameId, chosen);
     }
 
+    // Phase 6B.17 — locked-snapshot override for the total line.
+    // For games that have a locked prediction_records.total row with
+    // a populated line_value, use the locked pregame line — NEVER the
+    // live mid-game `lines` table value. Symptom this fixes:
+    // CWS@PHI pregame total was 9.5; mid-game the `lines` refresh kept
+    // updating to 11.5/12.5 (live SharpAPI rows). Daily Edge then
+    // rendered 12.5 to members while Tracking graded against 9.5. Now
+    // both surfaces read the same locked snapshot.
+    //
+    // Reading: prediction_records for THIS slate, total market, with
+    // locked_at != null AND line_value != null. Override overrides
+    // live for those games only — unlocked/in-flight games keep their
+    // live `lines` value as before.
+    const { data: lockedTotalRows } = await supabase
+      .from("prediction_records")
+      .select("game_id, line_value, locked_at")
+      .eq("sport", "mlb")
+      .eq("slate_date", requestedDate)
+      .eq("market", "total")
+      .not("locked_at", "is", null)
+      .not("line_value", "is", null);
+    for (const r of ((lockedTotalRows ?? []) as Array<{ game_id: number; line_value: number | null }>)) {
+      if (r.line_value !== null) {
+        totalLineByGame.set(r.game_id, r.line_value);
+      }
+    }
+
     // 4.1.10 — per-game-market first-seen line price for `lineOpenAmerican`.
     // Per Daniel's direction (4.1.9.B section 10): use MIN(recorded_at) as
     // the "first seen" since linesService hardcodes is_opener=false.

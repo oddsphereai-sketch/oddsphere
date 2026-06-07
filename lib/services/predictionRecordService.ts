@@ -229,6 +229,20 @@ function buildOuRecord(
   const held = holdPicks.includes("ou") || pred.predicted_ou_side === null;
   if (held) return null;
   const v21 = (sp.v2_1_audit ?? {}) as Record<string, unknown>;
+  const v22 = (sp.v2_2_audit ?? {}) as Record<string, unknown>;
+  // Phase 6B.17 — read line_value from V2.2 audit FIRST (the active
+  // model writes here), fall back to V2.1 audit for legacy snapshots.
+  // Pre-6B.17 the locked total snapshot stored line_value=null because
+  // V2.2 writes market_total under sp.v2_2_audit, not sp.v2_1_audit.
+  // Daily Edge then had no locked total line to render and fell back
+  // to the live `lines` table — which kept moving mid-game (CWS@PHI
+  // pregame 9.5 → mid-game 12.5 was the symptom).
+  const lockedTotalLine =
+    typeof v22.market_total === "number"
+      ? (v22.market_total as number)
+      : typeof v21.market_total === "number"
+        ? (v21.market_total as number)
+        : null;
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -240,8 +254,7 @@ function buildOuRecord(
     market: "total",
     pick: pred.predicted_ou_side,
     side: pred.predicted_ou_side,
-    line_value:
-      typeof v21.market_total === "number" ? (v21.market_total as number) : null,
+    line_value: lockedTotalLine,
     odds_american: null,
     odds_decimal: null,
     model_used: readStringOrNull(sp.model_used),
