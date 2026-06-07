@@ -126,3 +126,87 @@ app/pricing/page.tsx                 CTA → Whop checkout when configured
 
 All of these fail closed if `WHOP_OAUTH_ENABLED` is anything other than
 `"true"` AND every required env var is set.
+
+## 7. Troubleshooting
+
+### `{"error":"invalid_request","error_description":"redirect_uri is invalid"}`
+
+This is Whop telling you the `redirect_uri` we sent doesn't match any of
+the URIs registered in your Whop Developer App. Diagnose:
+
+```
+curl -s https://oddsphereai.com/api/auth/whop/status | jq .redirect_uri
+```
+
+The response carries the **exact** URI we hand to Whop:
+
+```json
+{
+  "full": "https://oddsphereai.com/api/auth/whop/callback",
+  "host": "oddsphereai.com",
+  "path": "/api/auth/whop/callback",
+  "protocol": "https",
+  "has_trailing_slash": false,
+  "parsed": true
+}
+```
+
+In the Whop dashboard → Developer → your OAuth app → Redirect URIs, you
+must have a row that **character-for-character matches `full`**.
+Common mismatches:
+
+| Field | Typical correct value | Common mistake |
+| --- | --- | --- |
+| `host` | `oddsphereai.com` | `www.oddsphereai.com` or `oddsphere.ai` |
+| `protocol` | `https` | `http` (Whop rejects http on production hosts) |
+| `path` | `/api/auth/whop/callback` | `/auth/whop/callback` (missing `/api`) or typo |
+| `has_trailing_slash` | `false` | `true` (extra `/` at end) |
+
+Two fixes either of which clears the error:
+
+1. **Update Whop** — open the Developer App config, edit the registered
+   redirect URI to match the `full` value above. Save.
+2. **Update Vercel** — change the `WHOP_REDIRECT_URI` env var to match
+   what's already registered in Whop, then redeploy.
+
+If `parsed` is `false`, `WHOP_REDIRECT_URI` is unset or malformed —
+re-check the Vercel env var, redeploy, then `curl /api/auth/whop/status`
+again.
+
+### "Sign in with Whop" button doesn't appear
+
+```
+curl -s https://oddsphereai.com/api/auth/whop/status | jq
+```
+
+Look at `whop_enabled` and `missing_whop_envs`:
+
+- `whop_enabled: true` + empty `missing_whop_envs` → config is good; the
+  button should appear. Force-reload the login page.
+- `whop_enabled: false` + non-empty `missing_whop_envs` → those exact
+  env names are missing or empty in Vercel. Set them, redeploy.
+- `whop_enabled: false` + `whop_oauth_enabled_flag: false` → set
+  `WHOP_OAUTH_ENABLED=true` in Vercel, redeploy.
+
+### Sign-in succeeds but `whop_access_error` shows on `/login`
+
+The OAuth round-trip worked but the access-check API returned an error.
+Most often the `WHOP_API_KEY` lacks `access_pass:basic:read` scope or
+the `WHOP_RESOURCE_ID` doesn't exist under your company. Verify with:
+
+```
+npx tsx --env-file=.env.local scripts/operator/discover-whop-resources.ts \
+  --company-id biz_NS0QQRENKrAf96
+```
+
+Confirm the `prod_xxx` matches what's in Vercel.
+
+### Sign-in succeeds but a paying member is sent to `/pricing`
+
+The API key + resource id are reachable, but the access check returned
+`has_access: false` for that user. Two paths:
+
+1. They actually don't hold an active membership (check Whop dashboard
+   → Members).
+2. The `WHOP_RESOURCE_ID` is pinned to the wrong product. Re-run the
+   discovery script; verify the highlighted row.

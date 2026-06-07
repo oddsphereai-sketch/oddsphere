@@ -119,3 +119,98 @@ export function getCheckoutUrl(): string | null {
   const cfg = readWhopConfig();
   return cfg?.checkoutUrl ?? null;
 }
+
+// ─── Diagnostics for /api/auth/whop/status ────────────────────────────
+/**
+ * The list of env vars Whop OAuth requires. Order matches the
+ * isWhopAccessEnabled() readiness check. WHOP_OAUTH_ENABLED is
+ * separate (it gates the whole feature, not "missing config").
+ */
+export const WHOP_REQUIRED_ENV_NAMES = [
+  "WHOP_CLIENT_ID",
+  "WHOP_CLIENT_SECRET",
+  "WHOP_REDIRECT_URI",
+  "WHOP_API_KEY",
+  "WHOP_RESOURCE_ID",
+  "WHOP_SESSION_SECRET",
+] as const;
+
+/**
+ * Names of required env vars that are unset / empty / too-short
+ * (WHOP_SESSION_SECRET needs ≥ 32 chars). Returns only NAMES, never
+ * values — safe to expose publicly. WHOP_OAUTH_ENABLED is reported
+ * separately so callers can distinguish "feature flag off" from
+ * "feature flag on but missing keys".
+ */
+export function getMissingWhopEnvs(): {
+  enabled_flag_set: boolean;
+  missing: string[];
+} {
+  const enabled_flag_set = process.env.WHOP_OAUTH_ENABLED === "true";
+  const missing: string[] = [];
+  for (const name of WHOP_REQUIRED_ENV_NAMES) {
+    const v = process.env[name];
+    if (v === undefined || v.length === 0) {
+      missing.push(name);
+      continue;
+    }
+    if (name === "WHOP_SESSION_SECRET" && v.length < 32) {
+      missing.push(`${name} (need ≥32 chars, have ${v.length})`);
+    }
+  }
+  return { enabled_flag_set, missing };
+}
+
+/**
+ * Safe shape exposing the redirect_uri the OAuth start route will
+ * actually send to Whop. The full URI is already visible in the
+ * 302 Location header during the OAuth handoff (and in browser dev
+ * tools), so exposing it via /status is no additional disclosure —
+ * but it lets operators diff against what's registered in Whop
+ * without triggering a real OAuth round-trip.
+ */
+export type RedirectUriDiagnostic = {
+  full: string;
+  host: string;
+  path: string;
+  protocol: string;
+  has_trailing_slash: boolean;
+  parsed: true;
+} | {
+  full: string | null;
+  parsed: false;
+  reason: string;
+};
+
+export function describeRedirectUri(): RedirectUriDiagnostic {
+  const raw = process.env.WHOP_REDIRECT_URI;
+  if (raw === undefined || raw.length === 0) {
+    return { full: null, parsed: false, reason: "WHOP_REDIRECT_URI not set" };
+  }
+  try {
+    const u = new URL(raw);
+    return {
+      full: raw,
+      host: u.host,
+      path: u.pathname,
+      protocol: u.protocol.replace(":", ""),
+      has_trailing_slash: u.pathname.endsWith("/"),
+      parsed: true,
+    };
+  } catch {
+    return { full: raw, parsed: false, reason: "Could not parse as URL" };
+  }
+}
+
+/**
+ * First 8 chars of the OAuth client id, e.g. "app_abcd…". The full
+ * client_id is sent to the browser in the OAuth redirect anyway — so
+ * exposing a prefix here is not a new disclosure, just an aid for
+ * operators verifying they're looking at the right Whop app.
+ */
+export function getClientIdPreview(): string | null {
+  const raw = process.env.WHOP_CLIENT_ID;
+  if (raw === undefined || raw.length === 0) return null;
+  if (raw.length <= 8) return raw;
+  return `${raw.slice(0, 8)}…`;
+}

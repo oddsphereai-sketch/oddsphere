@@ -33,6 +33,7 @@ const PRICING_PAGE = readFileSync("app/pricing/page.tsx", "utf8");
 const START_ROUTE = readFileSync("app/api/auth/whop/start/route.ts", "utf8");
 const CALLBACK_ROUTE = readFileSync("app/api/auth/whop/callback/route.ts", "utf8");
 const LOGOUT_ROUTE = readFileSync("app/api/auth/logout/route.ts", "utf8");
+const STATUS_ROUTE = readFileSync("app/api/auth/whop/status/route.ts", "utf8");
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean, msg?: string) {
@@ -308,6 +309,100 @@ check(".env.example uses blank placeholders for Whop secrets",
   /WHOP_SESSION_SECRET=\s*$/m.test(ENV_EXAMPLE));
 check(".env.example defaults WHOP_OAUTH_ENABLED to false",
   /WHOP_OAUTH_ENABLED=false/.test(ENV_EXAMPLE));
+
+// ── Status diagnostics (6B.3a.2) ─────────────────────────────────────
+
+check("Status exposes redirect_uri diagnostic",
+  STATUS_ROUTE.includes("describeRedirectUri") && STATUS_ROUTE.includes("redirect_uri:"));
+check("Status exposes missing_whop_envs list",
+  STATUS_ROUTE.includes("missing_whop_envs"));
+check("Status exposes client_id preview (not full)",
+  STATUS_ROUTE.includes("client_id_preview"));
+check("Status exposes whop_oauth_enabled_flag",
+  STATUS_ROUTE.includes("whop_oauth_enabled_flag"));
+check("Status does NOT expose client_secret",
+  !STATUS_ROUTE.includes("client_secret") && !STATUS_ROUTE.includes("clientSecret"));
+check("Status does NOT expose api_key",
+  !/api_key|apiKey/.test(STATUS_ROUTE));
+check("Status does NOT expose session_secret",
+  !/session_secret|sessionSecret/.test(STATUS_ROUTE));
+
+await asyncCheck("getMissingWhopEnvs lists ALL required vars when none set", async () => {
+  const m = await import("../lib/auth/whopConfig");
+  return await withEnv({
+    WHOP_OAUTH_ENABLED: "true",
+    WHOP_CLIENT_ID: undefined,
+    WHOP_CLIENT_SECRET: undefined,
+    WHOP_REDIRECT_URI: undefined,
+    WHOP_API_KEY: undefined,
+    WHOP_RESOURCE_ID: undefined,
+    WHOP_SESSION_SECRET: undefined,
+  }, () => {
+    const r = m.getMissingWhopEnvs();
+    return r.enabled_flag_set === true && r.missing.length === 6;
+  });
+});
+
+await asyncCheck("getMissingWhopEnvs flags too-short session secret", async () => {
+  const m = await import("../lib/auth/whopConfig");
+  return await withEnv({
+    WHOP_OAUTH_ENABLED: "true",
+    WHOP_CLIENT_ID: "app_test",
+    WHOP_CLIENT_SECRET: "secret",
+    WHOP_REDIRECT_URI: "https://oddsphereai.com/api/auth/whop/callback",
+    WHOP_API_KEY: "key",
+    WHOP_RESOURCE_ID: "prod_test",
+    WHOP_SESSION_SECRET: "short",
+  }, () => {
+    const r = m.getMissingWhopEnvs();
+    return r.missing.some((s) => s.startsWith("WHOP_SESSION_SECRET"));
+  });
+});
+
+await asyncCheck("describeRedirectUri parses host + path + protocol + trailing slash", async () => {
+  const m = await import("../lib/auth/whopConfig");
+  return await withEnv({
+    WHOP_REDIRECT_URI: "https://oddsphereai.com/api/auth/whop/callback",
+  }, () => {
+    const r = m.describeRedirectUri();
+    return r.parsed === true && r.host === "oddsphereai.com" &&
+      r.path === "/api/auth/whop/callback" && r.protocol === "https" &&
+      r.has_trailing_slash === false;
+  });
+});
+
+await asyncCheck("describeRedirectUri flags trailing slash mismatch", async () => {
+  const m = await import("../lib/auth/whopConfig");
+  return await withEnv({
+    WHOP_REDIRECT_URI: "https://oddsphereai.com/api/auth/whop/callback/",
+  }, () => {
+    const r = m.describeRedirectUri();
+    return r.parsed === true && r.has_trailing_slash === true;
+  });
+});
+
+await asyncCheck("describeRedirectUri reports unset state safely", async () => {
+  const m = await import("../lib/auth/whopConfig");
+  return await withEnv({ WHOP_REDIRECT_URI: undefined }, () => {
+    const r = m.describeRedirectUri();
+    return r.parsed === false && r.full === null;
+  });
+});
+
+await asyncCheck("getClientIdPreview masks after 8 chars", async () => {
+  const m = await import("../lib/auth/whopConfig");
+  return await withEnv({ WHOP_CLIENT_ID: "app_abcdefghij" }, () => {
+    const p = m.getClientIdPreview();
+    return p === "app_abcd…";
+  });
+});
+
+await asyncCheck("getClientIdPreview returns null when unset", async () => {
+  const m = await import("../lib/auth/whopConfig");
+  return await withEnv({ WHOP_CLIENT_ID: undefined }, () => {
+    return m.getClientIdPreview() === null;
+  });
+});
 
 // ── Whop membership does NOT grant admin ─────────────────────────────
 
