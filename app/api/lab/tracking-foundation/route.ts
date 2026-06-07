@@ -55,6 +55,14 @@ export async function GET(request: Request) {
     current_season_pct: b.current_season_pct,
   }));
 
+  // Phase 6B.2b — member tracking expansion. Surfaces additional safe
+  // aggregations the page needs to render the new card layout:
+  //   • byPlayGrade — Best Angle / Lean / No Bet / Toss-Up / Held splits
+  //   • byModelVersion — V2.2 / FI V2 / legacy splits
+  //   • leans — head-to-head Best Angle vs Lean
+  // None of these expose raw model audit fields. Toss-Up and Held are
+  // returned as state counts (picks/pending/voids); the page suppresses
+  // them from the main win-rate display.
   return Response.json(
     {
       sport: sport ?? "all",
@@ -62,7 +70,10 @@ export async function GET(request: Request) {
       overall: result.overall,
       bySport: result.bySport,
       byMarket: result.byMarket,
+      byPlayGrade: result.byPlayGrade,
+      byModelVersion: result.byModelVersion,
       bestAngles: result.bestAngles,
+      leans: result.leans,
       tablesInitialized: result.tablesInitialized,
       freshTrackingStarted: result.overall.picks > 0,
     },
