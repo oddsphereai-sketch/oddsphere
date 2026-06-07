@@ -17,6 +17,7 @@ import { sanitizeNext } from "@/lib/auth/betaSession";
 import { isWhopAccessEnabled } from "@/lib/auth/whopConfig";
 import {
   WHOP_OAUTH_NEXT_COOKIE,
+  WHOP_OAUTH_NONCE_COOKIE,
   WHOP_OAUTH_STATE_COOKIE,
   WHOP_OAUTH_TEMP_COOKIE_MAX_AGE_SECONDS,
   WHOP_OAUTH_VERIFIER_COOKIE,
@@ -51,8 +52,12 @@ export async function GET(request: Request) {
 
   const state = randomToken(32);
   const verifier = randomToken(48);
+  // OIDC nonce — required by Whop because we request the `openid`
+  // scope. Stored HttpOnly so the callback can match it against the
+  // `nonce` claim of the returned id_token.
+  const nonce = randomToken(32);
   const challenge = await pkceChallengeFromVerifier(verifier);
-  const authorizeUrl = buildAuthorizationUrl({ state, codeChallenge: challenge });
+  const authorizeUrl = buildAuthorizationUrl({ state, codeChallenge: challenge, nonce });
   if (authorizeUrl === null) {
     const errUrl = new URL("/login", request.url);
     errUrl.searchParams.set("error", "whop_disabled");
@@ -62,6 +67,7 @@ export async function GET(request: Request) {
   const headers = new Headers();
   headers.append("Set-Cookie", tempCookie(WHOP_OAUTH_STATE_COOKIE, state));
   headers.append("Set-Cookie", tempCookie(WHOP_OAUTH_VERIFIER_COOKIE, verifier));
+  headers.append("Set-Cookie", tempCookie(WHOP_OAUTH_NONCE_COOKIE, nonce));
   headers.append("Set-Cookie", tempCookie(WHOP_OAUTH_NEXT_COOKIE, encodeURIComponent(nextPath)));
   headers.set("Location", authorizeUrl);
   return new Response(null, { status: 302, headers });

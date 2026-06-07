@@ -32,8 +32,10 @@ import {
 import { checkWhopAccess } from "@/lib/auth/whopAccess";
 import {
   WHOP_OAUTH_NEXT_COOKIE,
+  WHOP_OAUTH_NONCE_COOKIE,
   WHOP_OAUTH_STATE_COOKIE,
   WHOP_OAUTH_VERIFIER_COOKIE,
+  decodeIdTokenPayload,
   exchangeCodeForToken,
   fetchWhopUserInfo,
 } from "@/lib/auth/whopOAuth";
@@ -108,6 +110,7 @@ function redirectWithError(
   const headers = new Headers({ Location: url.toString() });
   headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_STATE_COOKIE));
   headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_VERIFIER_COOKIE));
+  headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_NONCE_COOKIE));
   headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_NEXT_COOKIE));
   return new Response(null, { status, headers });
 }
@@ -136,6 +139,7 @@ export async function GET(request: Request) {
   const cookieHeader = request.headers.get("cookie");
   const stateCookie = readCookieValue(cookieHeader, WHOP_OAUTH_STATE_COOKIE);
   const verifierCookie = readCookieValue(cookieHeader, WHOP_OAUTH_VERIFIER_COOKIE);
+  const nonceCookie = readCookieValue(cookieHeader, WHOP_OAUTH_NONCE_COOKIE);
   const nextCookieRaw = readCookieValue(cookieHeader, WHOP_OAUTH_NEXT_COOKIE);
   const nextPath = sanitizeNext(
     nextCookieRaw !== null ? decodeURIComponent(nextCookieRaw) : undefined,
@@ -151,6 +155,28 @@ export async function GET(request: Request) {
   const tokenResp = await exchangeCodeForToken({ code, codeVerifier: verifierCookie });
   if (tokenResp === null) {
     return redirectWithError(request, "whop_token");
+  }
+
+  // OIDC nonce verification — best-effort. We sent `nonce` in the
+  // authorize URL because Whop requires it for the openid scope.
+  // If Whop returns an id_token, its `nonce` claim MUST match the
+  // value we stored on /start. Mismatch indicates either a replay
+  // attempt or a cookie mix-up across browser sessions — fail
+  // closed. If Whop didn't return an id_token (unusual but legal
+  // when only access_token is needed for /userinfo), we proceed
+  // without OIDC verification — the access_token path is still
+  // authenticated by the TLS POST to /oauth/token.
+  if (tokenResp.id_token !== undefined && tokenResp.id_token.length > 0) {
+    const claims = decodeIdTokenPayload(tokenResp.id_token);
+    const idTokenNonce = claims !== null && typeof claims["nonce"] === "string"
+      ? (claims["nonce"] as string)
+      : null;
+    if (nonceCookie === null || idTokenNonce === null || idTokenNonce !== nonceCookie) {
+      return redirectWithError(request, "whop_nonce", {
+        code: "nonce_mismatch",
+        description: "ID token nonce did not match the value bound to this sign-in.",
+      });
+    }
   }
 
   const userInfo = await fetchWhopUserInfo(tokenResp.access_token);
@@ -169,6 +195,7 @@ export async function GET(request: Request) {
       const headers = new Headers({ Location: target });
       headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_STATE_COOKIE));
       headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_VERIFIER_COOKIE));
+      headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_NONCE_COOKIE));
       headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_NEXT_COOKIE));
       return new Response(null, { status: 302, headers });
     }
@@ -194,6 +221,7 @@ export async function GET(request: Request) {
   headers.append("Set-Cookie", buildWhopSessionSetCookie(cookieValue));
   headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_STATE_COOKIE));
   headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_VERIFIER_COOKIE));
+  headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_NONCE_COOKIE));
   headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_NEXT_COOKIE));
   return new Response(null, { status: 302, headers });
 }

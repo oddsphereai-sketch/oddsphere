@@ -45,6 +45,7 @@ const ERROR_COPY: Record<string, string> = {
   whop_userinfo:            "We couldn't read your Whop profile. Please try again.",
   whop_access_error:        "Membership check failed. Please try again in a moment.",
   whop_session_error:       "We couldn't start your session. Please try again.",
+  whop_nonce:               "Your sign-in session didn't match — likely a stale tab or cookies were cleared mid-flow. Please try again.",
   // Specific Whop OAuth error codes mapped from the callback's `error`
   // query param. These point at known Whop dashboard / app-config
   // causes so an operator can fix them without guessing.

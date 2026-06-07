@@ -404,6 +404,52 @@ await asyncCheck("getClientIdPreview returns null when unset", async () => {
   });
 });
 
+// ── OIDC nonce (6B.3a.4) ─────────────────────────────────────────────
+
+const WHOP_OAUTH_LIB = readFileSync("lib/auth/whopOAuth.ts", "utf8");
+const START_ROUTE_AGAIN = readFileSync("app/api/auth/whop/start/route.ts", "utf8");
+const CALLBACK_ROUTE_AGAIN = readFileSync("app/api/auth/whop/callback/route.ts", "utf8");
+
+check("Library exports WHOP_OAUTH_NONCE_COOKIE constant",
+  WHOP_OAUTH_LIB.includes('WHOP_OAUTH_NONCE_COOKIE = "oddsphere_whop_oauth_nonce"'));
+check("buildAuthorizationUrl accepts a nonce argument",
+  /buildAuthorizationUrl[\s\S]{0,400}nonce:\s*string/.test(WHOP_OAUTH_LIB));
+check("Authorize URL includes nonce= param",
+  /URLSearchParams[\s\S]{0,500}nonce:\s*opts\.nonce/.test(WHOP_OAUTH_LIB));
+check("decodeIdTokenPayload helper exists and returns payload claims",
+  /export function decodeIdTokenPayload[\s\S]{0,800}return parsed as Record/.test(WHOP_OAUTH_LIB));
+check("decodeIdTokenPayload rejects malformed JWTs",
+  /parts\.length !== 3/.test(WHOP_OAUTH_LIB) && /return null/.test(WHOP_OAUTH_LIB));
+
+check("Start route imports WHOP_OAUTH_NONCE_COOKIE",
+  START_ROUTE_AGAIN.includes("WHOP_OAUTH_NONCE_COOKIE"));
+check("Start route generates a nonce via randomToken",
+  /const nonce = randomToken\(/.test(START_ROUTE_AGAIN));
+check("Start route sets the nonce cookie via tempCookie helper",
+  /tempCookie\(WHOP_OAUTH_NONCE_COOKIE,\s*nonce\)/.test(START_ROUTE_AGAIN));
+check("Start route passes nonce to buildAuthorizationUrl",
+  /buildAuthorizationUrl\(\{[\s\S]{0,200}nonce[\s\S]{0,40}\}\)/.test(START_ROUTE_AGAIN));
+
+check("Callback imports WHOP_OAUTH_NONCE_COOKIE",
+  CALLBACK_ROUTE_AGAIN.includes("WHOP_OAUTH_NONCE_COOKIE"));
+check("Callback imports decodeIdTokenPayload",
+  CALLBACK_ROUTE_AGAIN.includes("decodeIdTokenPayload"));
+check("Callback reads nonce cookie before verification",
+  /const nonceCookie = readCookieValue\(cookieHeader,\s*WHOP_OAUTH_NONCE_COOKIE\)/.test(CALLBACK_ROUTE_AGAIN));
+check("Callback verifies id_token nonce claim equals stored nonce",
+  /idTokenNonce !== nonceCookie/.test(CALLBACK_ROUTE_AGAIN) &&
+  /"whop_nonce"/.test(CALLBACK_ROUTE_AGAIN));
+check("Callback only nonce-checks when id_token is present (graceful fallback)",
+  /tokenResp\.id_token !== undefined[\s\S]{0,100}id_token\.length > 0/.test(CALLBACK_ROUTE_AGAIN));
+
+// Nonce cookie cleared on every exit path
+const callbackNonceClears = (CALLBACK_ROUTE_AGAIN.match(/clearTempCookie\(WHOP_OAUTH_NONCE_COOKIE\)/g) ?? []).length;
+check("Nonce cookie cleared on at least 3 exit paths (error helper + checkout + success)",
+  callbackNonceClears >= 3);
+
+check("Login page has copy for whop_nonce",
+  LOGIN_PAGE.includes("whop_nonce:"));
+
 // ── Granular Whop OAuth error mapping (6B.3a.3) ──────────────────────
 
 check("Callback maps Whop access_denied to whop_denied",
