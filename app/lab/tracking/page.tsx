@@ -200,30 +200,38 @@ function visibleBuckets(buckets: SportMarketBucket[]): SportMarketBucket[] {
 // ─── Lifetime record merge ─────────────────────────────────────────────
 /**
  * Single source-of-truth shape for the Lifetime Tracking section.
- * "Automated" — live, recomputed each request from prediction_records
- * + prediction_grades. "Maintained" — stored lifetime record (today
- * the imported tracking_baselines table); manually updated until the
- * sport's automated tracking comes online.
  *
- * Both shapes render as Lifetime Tracking on the page. The source_type
- * field is kept for code/test clarity but is NOT shown as ugly "legacy"
- * UI — at most surfaced as a small "Auto-updating" hint when any row
- * in a sport has decided live picks.
+ * Phase 6B.24 fix — when both a stored baseline AND live tracked picks
+ * exist for the same category, MERGE them. Previously the page picked
+ * one or the other, which silently discarded the live record under the
+ * baseline (NRFI/YRFI showed only history) or discarded the baseline
+ * under the live record (ML/OU showed only today's picks despite years
+ * of historical baseline). Source type values:
+ *
+ *   "lifetime_merged"   — baseline + live decided picks combined.
+ *   "lifetime_baseline" — only the imported historical baseline so far
+ *                         (no live decided picks yet today).
+ *   "since_launch"      — only live tracked picks (no baseline exists
+ *                         for this category yet); label makes this
+ *                         clear so members don't mistake "5-2 (71%)"
+ *                         for an all-time lifetime number.
  */
 type LifetimeRecord = {
   sport: string;
   market: string;
-  source_type: "automated" | "maintained";
-  /** Display text for the record column. e.g. "1705/3027" or "1-0". */
+  source_type: "lifetime_merged" | "lifetime_baseline" | "since_launch";
+  /** Display text for the record column. e.g. "1719/3043" or "5-2". */
   display_record: string;
-  /** Display text for the win-rate column. e.g. "56.3%" or null. */
+  /** Display text for the win-rate column. e.g. "56.5%" or null. */
   display_pct: string | null;
   /** Total sample size for sort + footer rendering. */
   display_total: number;
-  /** Only populated for automated rows. */
+  /** Only populated when live contributes. */
   pending: number;
   pushes: number;
   voids: number;
+  /** How many of the live wins / losses are merged in (0 when none). */
+  live_decided_contribution: number;
   bestAngles?: Metrics;
   leans?: Metrics;
 };
@@ -244,41 +252,71 @@ function buildLifetimeRecords(
     const base = baseIdx.get(key);
     const live = liveIdx.get(key);
     const liveDecided = (live?.metrics.wins ?? 0) + (live?.metrics.losses ?? 0);
+    const liveWins = live?.metrics.wins ?? 0;
+    const livePending = live?.metrics.pending ?? 0;
 
-    if (live !== undefined && liveDecided > 0) {
+    if (base !== undefined && liveDecided > 0) {
+      // MERGED — baseline + live decided picks combined.
+      const mergedWins = base.lifetime_wins + liveWins;
+      const mergedTotal = base.lifetime_total + liveDecided;
+      const mergedPct = mergedTotal > 0 ? (mergedWins / mergedTotal) * 100 : 0;
       records.push({
         sport, market,
-        source_type: "automated",
-        display_record: fmtRecord(live.metrics),
-        display_pct: fmtPct(live.metrics),
-        display_total: live.metrics.picks,
-        pending: live.metrics.pending,
-        pushes: live.metrics.pushes,
-        voids: live.metrics.voids,
-        bestAngles: live.bestAngles,
-        leans: live.leans,
+        source_type: "lifetime_merged",
+        display_record: `${mergedWins.toLocaleString()}/${mergedTotal.toLocaleString()}`,
+        display_pct: `${mergedPct.toFixed(1)}%`,
+        display_total: mergedTotal,
+        pending: livePending,
+        pushes: live?.metrics.pushes ?? 0,
+        voids: live?.metrics.voids ?? 0,
+        live_decided_contribution: liveDecided,
+        bestAngles: live?.bestAngles,
+        leans: live?.leans,
       });
     } else if (base !== undefined) {
+      // Baseline only — live has no decided picks yet for this category.
       records.push({
         sport, market,
-        source_type: "maintained",
+        source_type: "lifetime_baseline",
         display_record: `${base.lifetime_wins.toLocaleString()}/${base.lifetime_total.toLocaleString()}`,
         display_pct: `${base.lifetime_pct.toFixed(1)}%`,
         display_total: base.lifetime_total,
-        pending: 0,
+        pending: livePending,
         pushes: 0,
         voids: 0,
+        live_decided_contribution: 0,
+        bestAngles: live?.bestAngles,
+        leans: live?.leans,
       });
-    } else if (live !== undefined && live.metrics.pending > 0) {
+    } else if (live !== undefined && liveDecided > 0) {
+      // No baseline — live-only "since launch" record. Label clearly so
+      // members don't read this as all-time history.
       records.push({
         sport, market,
-        source_type: "automated",
+        source_type: "since_launch",
+        display_record: fmtRecord(live.metrics),
+        display_pct: fmtPct(live.metrics),
+        display_total: live.metrics.picks,
+        pending: livePending,
+        pushes: live.metrics.pushes,
+        voids: live.metrics.voids,
+        live_decided_contribution: liveDecided,
+        bestAngles: live.bestAngles,
+        leans: live.leans,
+      });
+    } else if (live !== undefined && live.metrics.pending > 0) {
+      // Nothing decided yet for this category — surface the pending count
+      // so members know the slate's live but nothing has settled.
+      records.push({
+        sport, market,
+        source_type: "since_launch",
         display_record: `${live.metrics.pending} pending`,
         display_pct: null,
         display_total: live.metrics.pending,
         pending: live.metrics.pending,
         pushes: 0,
         voids: 0,
+        live_decided_contribution: 0,
         bestAngles: live.bestAngles,
         leans: live.leans,
       });
@@ -569,7 +607,7 @@ function LifetimeTrackingBoard({ records }: { records: LifetimeRecord[] }) {
 }
 
 function SportGroup({ sport, rows }: { sport: string; rows: LifetimeRecord[] }) {
-  const hasAuto = rows.some((r) => r.source_type === "automated");
+  const hasAuto = rows.some((r) => r.source_type === "lifetime_merged" || r.source_type === "since_launch");
   return (
     <div>
       <div className="flex items-center gap-2.5 mb-2.5">
@@ -596,11 +634,28 @@ function SportGroup({ sport, rows }: { sport: string; rows: LifetimeRecord[] }) 
 }
 
 function LifetimeRow({ record }: { record: LifetimeRecord }) {
+  /**
+   * Phase 6B.24 — source label makes the rollup honest:
+   *   "Lifetime"           → baseline only, nothing live decided yet today
+   *   "Lifetime · live +N" → baseline + live decided picks merged
+   *   "Since launch"       → no baseline; live-only record (member should
+   *                          not read this as all-time history)
+   */
+  const sourceLabel =
+    record.source_type === "lifetime_merged"
+      ? `Lifetime · live +${record.live_decided_contribution}`
+      : record.source_type === "since_launch"
+        ? "Since launch"
+        : "Lifetime";
+  const showDetailRow =
+    (record.source_type === "lifetime_merged" || record.source_type === "since_launch") &&
+    (record.pending > 0 || (record.bestAngles?.picks ?? 0) > 0 || (record.leans?.picks ?? 0) > 0);
   return (
     <div>
       <div className="flex items-baseline gap-3 flex-wrap">
         <span className="text-[14px] sm:text-[14.5px] font-semibold text-gray-100">{prettyMarket(record.market)}</span>
         <CategoryBadge market={record.market} />
+        <span className="text-[10px] uppercase tracking-[0.14em] font-bold text-gray-500">{sourceLabel}</span>
         <div className="ml-auto flex items-baseline gap-3 sm:gap-4 tabular-nums">
           <span className="text-[17px] sm:text-[18px] font-extrabold text-gray-50 leading-none">{record.display_record}</span>
           {record.display_pct !== null && (
@@ -608,7 +663,7 @@ function LifetimeRow({ record }: { record: LifetimeRecord }) {
           )}
         </div>
       </div>
-      {record.source_type === "automated" && (record.pending > 0 || (record.bestAngles?.picks ?? 0) > 0 || (record.leans?.picks ?? 0) > 0) && (
+      {showDetailRow && (
         <div className="mt-1.5 flex items-center gap-x-4 gap-y-1 flex-wrap text-[11px] tabular-nums">
           {record.bestAngles !== undefined && record.bestAngles.picks > 0 && (
             <SubChip label="Best Angle" m={record.bestAngles} color="rgb(110 231 183)" />

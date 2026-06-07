@@ -423,6 +423,31 @@ export async function computeTrackingAggregate(opts: {
       }
       arr.push(r);
     }
+
+    // Phase 6B.24 — Virtual NRFI / YRFI buckets sourced from MLB
+    // first_inning records, split by pick. Public Tracking categorises
+    // NRFI and YRFI separately (and the tracking_baselines table stores
+    // them as separate keys), but the underlying records all live in
+    // market="first_inning". Without these virtual buckets, today's
+    // NRFI / YRFI grades silently fail to merge with baselines and the
+    // page shows the historical baseline frozen in time.
+    //
+    // Toss-Up / no_bet rows are already excluded upstream
+    // (records.filter((r) => r.no_bet !== true) at line ~297). NRFI/YRFI
+    // buckets here only see actionable picks.
+    const mlbFiKey = "mlb::first_inning";
+    const mlbFiRows = groups.get(mlbFiKey) ?? [];
+    if (mlbFiRows.length > 0) {
+      const nrfiRows = mlbFiRows.filter(
+        (r) => String(r.record.pick ?? "").toUpperCase() === "NRFI",
+      );
+      const yrfiRows = mlbFiRows.filter(
+        (r) => String(r.record.pick ?? "").toUpperCase() === "YRFI",
+      );
+      if (nrfiRows.length > 0) groups.set("mlb::nrfi", nrfiRows);
+      if (yrfiRows.length > 0) groups.set("mlb::yrfi", yrfiRows);
+    }
+
     const out: SportMarketBucket[] = [];
     for (const [key, rs] of groups) {
       const [sport, market] = key.split("::") as [TrackedSport, TrackedMarketV17];

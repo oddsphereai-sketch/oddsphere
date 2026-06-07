@@ -140,13 +140,36 @@ check(
   "Lifetime Tracking uses merged buildLifetimeRecords helper",
   /lifetimeRecords\s*=\s*useMemo[\s\S]{0,300}buildLifetimeRecords/.test(PAGE),
 );
+// Phase 6B.24 — Lifetime merge: baseline + live MUST combine when both
+// exist (no longer silently picks one or the other). Three source types
+// reflect the new honest categorisation.
 check(
-  "Merge prefers live automated row when decided > 0",
-  /buildLifetimeRecords[\s\S]{0,2000}liveDecided > 0[\s\S]{0,200}source_type:\s*"automated"/.test(PAGE),
+  "Lifetime merge combines baseline + live when both exist (lifetime_merged)",
+  /buildLifetimeRecords[\s\S]{0,3000}source_type:\s*"lifetime_merged"/.test(PAGE),
 );
 check(
-  "Merge falls back to baseline as Lifetime Tracking (not legacy)",
-  /buildLifetimeRecords[\s\S]{0,2400}source_type:\s*"maintained"/.test(PAGE),
+  "Lifetime merge falls back to baseline-only when live has no decided picks (lifetime_baseline)",
+  /buildLifetimeRecords[\s\S]{0,3000}source_type:\s*"lifetime_baseline"/.test(PAGE),
+);
+check(
+  "Lifetime merge labels live-only categories 'since_launch' so members don't read them as all-time",
+  /buildLifetimeRecords[\s\S]{0,3000}source_type:\s*"since_launch"/.test(PAGE),
+);
+check(
+  "Merge math: mergedWins = baseline.lifetime_wins + liveWins",
+  /mergedWins\s*=\s*base\.lifetime_wins\s*\+\s*liveWins/.test(PAGE),
+);
+check(
+  "Merge math: mergedTotal = baseline.lifetime_total + liveDecided",
+  /mergedTotal\s*=\s*base\.lifetime_total\s*\+\s*liveDecided/.test(PAGE),
+);
+check(
+  "Lifetime row shows source label so merged vs baseline-only is visible",
+  /sourceLabel[\s\S]{0,400}Lifetime · live \+/.test(PAGE),
+);
+check(
+  "Lifetime row shows 'Since launch' for live-only categories",
+  /sourceLabel[\s\S]{0,400}"Since launch"/.test(PAGE),
 );
 check(
   "Lifetime Tracking explains MLB auto-update + maintained other sports",
@@ -284,6 +307,22 @@ check("Header drops big metric grid",            !/grid-cols-2 lg:grid-cols-4/.t
 check("Service exposes SportMarketBucket",        SERVICE.includes("export type SportMarketBucket"));
 check("Service exposes RecentPickRow",            SERVICE.includes("export type RecentPickRow"));
 check("Service computes bySportMarket",           /bySportMarket:\s*SportMarketBucket\[\]/.test(SERVICE));
+// Phase 6B.24 — first_inning records must split into virtual NRFI / YRFI
+// buckets so the public Tracking page's NRFI / YRFI categories see
+// today's grades alongside the historical baselines.
+check(
+  "Service emits virtual mlb::nrfi bucket from first_inning + pick=NRFI",
+  /groups\.set\("mlb::nrfi", nrfiRows\)/.test(SERVICE),
+);
+check(
+  "Service emits virtual mlb::yrfi bucket from first_inning + pick=YRFI",
+  /groups\.set\("mlb::yrfi", yrfiRows\)/.test(SERVICE),
+);
+check(
+  "Service splits NRFI / YRFI by uppercased pick (case-safe)",
+  /String\(r\.record\.pick \?\? ""\)\.toUpperCase\(\)\s*===\s*"NRFI"/.test(SERVICE) &&
+    /String\(r\.record\.pick \?\? ""\)\.toUpperCase\(\)\s*===\s*"YRFI"/.test(SERVICE),
+);
 check("API surfaces bySportMarket",               API.includes("bySportMarket: result.bySportMarket"));
 check("API surfaces yesterday",                   API.includes("yesterday: result.yesterday"));
 check("API surfaces thisWeek",                    API.includes("thisWeek: result.thisWeek"));
