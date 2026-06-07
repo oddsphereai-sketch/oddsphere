@@ -53,19 +53,22 @@ type CronCfg = {
 //
 // Current truth (vercel.json):
 //   • /api/cron/slate-cycle          → writes data_source=slate_cycle_automation
-//                                       schedule: 9 runs/day (08–00 UTC)
+//                                       schedule: cold runs 08/10/12 UTC,
+//                                       hourly intraday 13–02 UTC
 //   • /api/cron/tracking-refresh     → writes data_source=tracking_refresh
-//                                       schedule: every 2h
+//                                       schedule: hourly (0 * * * *)
 //   • /api/cron/pregame-sweep        → writes data_source=pregame_sweep
 //                                       schedule: every 15 min
 //   • /api/cron/feature-coverage-refresh → writes data_source=feature_coverage_refresh
 //                                       schedule: 11:30 + 21:30 UTC (12h cadence)
 //
 // Cadence rationale:
-//   • slate_cycle_automation = 240 min. Actual cadence is 2h with an
-//     8-hour overnight gap (00→08 UTC). 240 min × 2 = 8h tolerance
-//     covers that gap without tripping `stale` overnight.
-//   • tracking_refresh       = 120 min. Even 2h around the clock.
+//   • slate_cycle_automation = 120 min. Hourly intraday (~13–02 UTC).
+//     The overnight gap (02→08 UTC) WILL trip stale — that's the
+//     correct member-visible signal (no slate-cycle activity, no
+//     games starting in that window).
+//   • tracking_refresh       = 120 min. Hourly cadence; tolerance
+//     covers one missed firing.
 //   • pregame_sweep          = 30 min. Runs every 15 min; tolerance
 //     allows a single missed firing without going stale.
 //   • feature_coverage_refresh = 720 min. Twice-daily; informational
@@ -76,7 +79,7 @@ type CronCfg = {
 // midday operator skip doesn't mislead members. pregame_sweep also
 // stays out — it's an automation/health source, not member-facing.
 const CRON_CONFIGS: CronCfg[] = [
-  { data_source: "slate_cycle_automation",   per_sport: true, cadence_minutes: 240, frontline: true  },
+  { data_source: "slate_cycle_automation",   per_sport: true, cadence_minutes: 120, frontline: true  },
   { data_source: "tracking_refresh",         per_sport: true, cadence_minutes: 120, frontline: true  },
   { data_source: "pregame_sweep",            per_sport: true, cadence_minutes: 30,  frontline: false },
   { data_source: "feature_coverage_refresh", per_sport: true, cadence_minutes: 720, frontline: false },

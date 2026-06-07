@@ -15,7 +15,15 @@
     },
     {
       "path": "/api/cron/slate-cycle?intraday=true",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/slate-cycle?intraday=true",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/slate-cycle?intraday=true",
+      "schedule": "0 15 * * *"
     },
     {
       "path": "/api/cron/slate-cycle?intraday=true",
@@ -23,7 +31,15 @@
     },
     {
       "path": "/api/cron/slate-cycle?intraday=true",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/slate-cycle?intraday=true",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/slate-cycle?intraday=true",
+      "schedule": "0 19 * * *"
     },
     {
       "path": "/api/cron/slate-cycle?intraday=true",
@@ -31,15 +47,31 @@
     },
     {
       "path": "/api/cron/slate-cycle?intraday=true",
+      "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/cron/slate-cycle?intraday=true",
       "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/cron/slate-cycle?intraday=true",
+      "schedule": "0 23 * * *"
     },
     {
       "path": "/api/cron/slate-cycle?intraday=true",
       "schedule": "0 0 * * *"
     },
     {
+      "path": "/api/cron/slate-cycle?intraday=true",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/slate-cycle?intraday=true",
+      "schedule": "0 2 * * *"
+    },
+    {
       "path": "/api/cron/tracking-refresh",
-      "schedule": "0 */2 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/pregame-sweep",
