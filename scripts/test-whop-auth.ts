@@ -531,10 +531,13 @@ check("Token exchange body includes grant_type / code / redirect_uri / client_id
   /redirect_uri:\s*cfg\.redirectUri/.test(WHOP_OAUTH_LIB) &&
   /client_id:\s*cfg\.clientId/.test(WHOP_OAUTH_LIB) &&
   /code_verifier:\s*opts\.codeVerifier/.test(WHOP_OAUTH_LIB));
-check("Token exchange body does NOT include client_secret (PKCE-only per Whop docs)",
-  // Allow mention in comments but not as a body field
-  !/client_secret:\s*cfg\.clientSecret/.test(WHOP_OAUTH_LIB) &&
-  !/client_secret:\s*opts\.clientSecret/.test(WHOP_OAUTH_LIB));
+check("Token exchange body includes client_secret (Confidential-mode Whop app)",
+  // Whop's Confidential client mode requires client_secret in the
+  // /oauth/token body alongside the PKCE code_verifier. The earlier
+  // PKCE-only attempt (matching Whop's docs example) returned
+  // "invalid_client — client_secret is required" on this production
+  // app, confirming Confidential mode. Hybrid: JSON + PKCE + secret.
+  /client_secret:\s*cfg\.clientSecret/.test(WHOP_OAUTH_LIB));
 check("extractWhopOAuthError only forwards `error` and `error_description` fields",
   // Defensive: confirm we don't blindly dump the whole body
   /obj\["error"\][\s\S]{0,200}obj\["error_description"\]/.test(WHOP_OAUTH_LIB));

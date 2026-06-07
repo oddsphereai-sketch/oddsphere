@@ -174,23 +174,27 @@ export async function exchangeCodeForToken(opts: {
   const cfg = readWhopConfig();
   if (cfg === null) return { ok: false, reason: "config_missing" };
 
-  // Match Whop's documented OAuth 2.1 + PKCE request exactly:
-  //   https://docs.whop.com/developer/guides/oauth
+  // Whop /oauth/token request shape (Phase 6B.3a.7 — hybrid):
+  //   JSON content type · PKCE code_verifier · client_secret in body
   //
-  // Whop's canonical /oauth/token request is JSON-bodied and PKCE-
-  // authenticated — no client_secret in the body. Sending the secret
-  // anyway triggers Whop's permission system on the secret
-  // ("client_secret lacks oauth:token_exchange permission") even
-  // though we have a valid PKCE proof. PKCE alone is the auth here.
+  // History of this request format:
+  //   6B.3a   — form-urlencoded + client_secret in body
+  //             → "client_secret lacks oauth:token_exchange permission"
+  //   6B.3a.6 — JSON-only PKCE per Whop's docs example (no secret)
+  //             → "invalid_client — client_secret is required"
+  //   6B.3a.7 — JSON + PKCE + client_secret (this hybrid)
   //
-  // WHOP_CLIENT_SECRET stays as a server env so it's available if a
-  // future Whop endpoint (revoke, webhook signing) needs it, but it
-  // is NOT used to authenticate token exchange.
+  // Our OAuth app is set to "Confidential" mode in the Whop Developer
+  // Dashboard, so Whop requires the client_secret to authenticate the
+  // exchange. PKCE alone (the docs example) is for Public-mode apps.
+  // The earlier "lacks oauth:token_exchange permission" error was the
+  // form-urlencoded content type, not the presence of client_secret.
   const body = {
     grant_type: "authorization_code",
     code: opts.code,
     redirect_uri: cfg.redirectUri,
     client_id: cfg.clientId,
+    client_secret: cfg.clientSecret,
     code_verifier: opts.codeVerifier,
   };
   let res: Response;
