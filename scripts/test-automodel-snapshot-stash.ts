@@ -89,7 +89,7 @@ function makeSnapshot(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
       listed_total: 8.5,
       home_ml_odds_american: -130,
       away_ml_odds_american: +110,
-      has_pinnacle_total: true,
+      over_odds_american: null, under_odds_american: null, has_pinnacle_total: true,
     },
     sharp: {
       pinnacle_ml_fair_prob_home: 55.0,

@@ -153,7 +153,7 @@ async function main() {
     console.log(`   capped_by_total=${a.capped_by_total} capped_by_diff=${a.capped_by_diff} provisional=${a.provisional}`);
     console.log(`   tier=${a.data_quality_tier}  reason_codes=${a.feature_reason_codes.join(", ")}`);
     console.log(`   ml model prob=${pct(a.ml_model_prob)}  ml market prob=${pct(a.ml_market_prob)}  ml edge=${a.ml_edge_pct.toFixed(2)}%`);
-    console.log(`   ou model prob=${pct(a.ou_model_prob)}  ou market prob=${pct(a.ou_market_prob)}  ou edge=${a.ou_edge_pct.toFixed(2)}%`);
+    console.log(`   ou model prob=${pct(a.ou_model_prob)}  ou market prob=${a.ou_market_prob === null ? "—" : pct(a.ou_market_prob)}  ou edge=${a.ou_edge_pct === null ? "—" : a.ou_edge_pct.toFixed(2) + "%"}`);
     console.log(`   ml play grade=${a.ml_play_grade} BA eligible=${a.ml_best_angle_eligible}`);
     console.log(`   ou play grade=${a.ou_play_grade} BA eligible=${a.ou_best_angle_eligible}`);
     console.log(`   integrity notes: ${a.model_integrity_notes.join(" | ")}`);

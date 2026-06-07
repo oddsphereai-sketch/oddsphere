@@ -164,7 +164,7 @@ function baseSnapshot(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
       listed_total: 8.5,
       home_ml_odds_american: -130,
       away_ml_odds_american: +110,
-      has_pinnacle_total: true,
+      over_odds_american: null, under_odds_american: null, has_pinnacle_total: true,
     },
     sharp: null,
     active_injuries: {
@@ -374,7 +374,7 @@ async function main() {
         listed_total: null,
         home_ml_odds_american: null,
         away_ml_odds_american: null,
-        has_pinnacle_total: false,
+        over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
       },
     });
     const out = runMlbAutoModelV1(snap, "morning_draft");
@@ -514,7 +514,7 @@ async function main() {
         listed_total: null,
         home_ml_odds_american: null,
         away_ml_odds_american: null,
-        has_pinnacle_total: false,
+        over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
       },
     });
     const out = runMlbAutoModelV1(snap, "morning_draft");
@@ -680,7 +680,7 @@ async function main() {
         listed_total: 7.0, // line low vs predicted ~9
         home_ml_odds_american: null,
         away_ml_odds_american: null,
-        has_pinnacle_total: false,
+        over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
       },
     });
     const out = runMlbAutoModelV1(snap, "morning_draft");
@@ -701,7 +701,7 @@ async function main() {
         listed_total: 12.5, // line high vs predicted ~9
         home_ml_odds_american: null,
         away_ml_odds_american: null,
-        has_pinnacle_total: false,
+        over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
       },
     });
     const out = runMlbAutoModelV1(snap, "morning_draft");
@@ -725,7 +725,7 @@ async function main() {
         listed_total: 9.0, // matches expected ~9
         home_ml_odds_american: null,
         away_ml_odds_american: null,
-        has_pinnacle_total: false,
+        over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
       },
     });
     const out = runMlbAutoModelV1(snap, "morning_draft");
@@ -1895,7 +1895,7 @@ async function main() {
         listed_total: null,
         home_ml_odds_american: null,
         away_ml_odds_american: null,
-        has_pinnacle_total: false,
+        over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
       },
     });
     const out = runMlbAutoModelV1(snap, "morning_draft");
@@ -1959,7 +1959,7 @@ async function main() {
             listed_total: null,
             home_ml_odds_american: null,
             away_ml_odds_american: null,
-            has_pinnacle_total: false,
+            over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
           },
         }),
         stage: "morning_draft",
@@ -2122,7 +2122,7 @@ async function main() {
         listed_total: null,
         home_ml_odds_american: null,
         away_ml_odds_american: null,
-        has_pinnacle_total: false,
+        over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
       },
     });
     const out = runMlbAutoModelV1(snap, "morning_draft");
@@ -3747,7 +3747,7 @@ async function main() {
         listed_total: null,
         home_ml_odds_american: null,
         away_ml_odds_american: null,
-        has_pinnacle_total: false,
+        over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
       },
     });
     const out = runMlbAutoModelV1(snap, "morning_draft");
@@ -3910,7 +3910,7 @@ async function main() {
         listed_total: 6.0, // implies a big over edge given the default ~9.0 projection
         home_ml_odds_american: null,
         away_ml_odds_american: null,
-        has_pinnacle_total: false,
+        over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
       },
     });
     const snapMidTotal = baseSnapshot({
@@ -3918,7 +3918,7 @@ async function main() {
         listed_total: 8.0,
         home_ml_odds_american: null,
         away_ml_odds_american: null,
-        has_pinnacle_total: false,
+        over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
       },
     });
     const highOut = runMlbAutoModelV1(snapHighTotal, "morning_draft");
@@ -4213,7 +4213,7 @@ async function main() {
           listed_total: 6.0, // model projects ~9.0 → over with large diff
           home_ml_odds_american: null,
           away_ml_odds_american: null,
-          has_pinnacle_total: false,
+          over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
         },
         sharp: {
           pinnacle_ml_fair_prob_home: null,
@@ -4233,7 +4233,7 @@ async function main() {
           listed_total: 6.0,
           home_ml_odds_american: null,
           away_ml_odds_american: null,
-          has_pinnacle_total: false,
+          over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
         },
         sharp: {
           pinnacle_ml_fair_prob_home: null,

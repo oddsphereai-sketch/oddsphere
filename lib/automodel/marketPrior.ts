@@ -119,6 +119,18 @@ export interface MarketBaseline {
   source: "pinnacle_fair" | "american_devig" | "fallback_default" | null;
   dataQuality: "ok" | "degraded" | "missing";
   reason: string;
+  /**
+   * Phase 6B.8 — no-vig O/U side probabilities, computed from real
+   * over/under American odds in MarketSnapshot. Pair-de-vig: each
+   * side's raw implied prob / (sum of both raw implieds). Null when
+   * either side's price is missing — V2.2 must surface ou_market_prob
+   * as null in that case (NOT a 0.5 placeholder). Independent from
+   * homeNoVigProb / awayNoVigProb which use ML odds.
+   */
+  overNoVigProb: number | null;
+  underNoVigProb: number | null;
+  /** Source label for the O/U pair, separate from the ML source above. */
+  ouSource: "american_devig" | null;
 }
 
 /**
@@ -143,6 +155,20 @@ export function computeMarketBaseline(
   sharp: SharpSnapshot | null,
 ): MarketBaseline {
   const listedTotal = market.listed_total;
+
+  // Phase 6B.8 — resolve the no-vig O/U pair once. Used in every return
+  // path below. Null when either side's price is missing or the pair
+  // fails sanity checks. The OU baseline is INDEPENDENT of the ML
+  // baseline: a game can have valid ML odds + missing OU odds (common
+  // when only splits_consensus rows were ingested for totals), or vice
+  // versa. Each baseline field is populated separately.
+  const ouPair = computeOuNoVigPair(
+    market.over_odds_american,
+    market.under_odds_american,
+  );
+  const overNoVigProb = ouPair?.over ?? null;
+  const underNoVigProb = ouPair?.under ?? null;
+  const ouSource: "american_devig" | null = ouPair !== null ? "american_devig" : null;
 
   // 1. Try Pinnacle fair probabilities first (most-accurate source).
   if (
@@ -169,6 +195,9 @@ export function computeMarketBaseline(
           dataQuality: "degraded",
           reason:
             "Pinnacle fair probs present but listed_total is null; baseline cannot anchor team totals.",
+          overNoVigProb,
+          underNoVigProb,
+          ouSource,
         };
       }
       return {
@@ -181,6 +210,9 @@ export function computeMarketBaseline(
         source: "pinnacle_fair",
         dataQuality: "ok",
         reason: `Pinnacle fair probs (home=${homeProb.toFixed(3)}); run share=${share.toFixed(3)}; total=${listedTotal}.`,
+        overNoVigProb,
+        underNoVigProb,
+        ouSource,
       };
     }
   }
@@ -211,6 +243,9 @@ export function computeMarketBaseline(
           dataQuality: "degraded",
           reason:
             "American de-vig produced fair probs but listed_total is null; team totals cannot anchor.",
+          overNoVigProb,
+          underNoVigProb,
+          ouSource,
         };
       }
       return {
@@ -223,6 +258,9 @@ export function computeMarketBaseline(
         source: "american_devig",
         dataQuality: "ok",
         reason: `American de-vig (home=${pair.home.toFixed(3)}); run share=${share.toFixed(3)}; total=${listedTotal}.`,
+        overNoVigProb,
+        underNoVigProb,
+        ouSource,
       };
     } catch (e) {
       // Fall through; produce a missing/degraded baseline below.
@@ -245,6 +283,9 @@ export function computeMarketBaseline(
       dataQuality: "degraded",
       reason:
         "No ML odds in any source; using default 0.51 home edge with listed_total. Baseline is weak; V2 should reduce confidence.",
+      overNoVigProb,
+      underNoVigProb,
+      ouSource,
     };
   }
 
@@ -259,9 +300,48 @@ export function computeMarketBaseline(
     dataQuality: "missing",
     reason:
       "No market data available (no listed_total, no ML odds, no Pinnacle fair probs). V2 must fall back to V1.",
+    overNoVigProb,
+    underNoVigProb,
+    ouSource,
   };
 }
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
+}
+
+/**
+ * Phase 6B.8 — pair-de-vig for O/U side prices.
+ *
+ * Wraps the existing noVigPair (used for the ML pair) with null-safety
+ * and sanity guards appropriate for OU markets. Returns null when:
+ *   • either side's price is missing,
+ *   • inputs throw via americanToImpliedProb (zero/non-finite),
+ *   • the overhead is implausible (outside 0.99..1.40),
+ *   • the resulting pair lands outside [0.02, 0.98].
+ *
+ * Method: raw implied probs / sum-of-raw — same as ML noVigPair, just
+ * relabeled to over/under. Reuses americanToImpliedProb directly so
+ * any future precision changes propagate uniformly.
+ */
+export function computeOuNoVigPair(
+  overOdds: number | null,
+  underOdds: number | null,
+): { over: number; under: number } | null {
+  if (overOdds === null || underOdds === null) return null;
+  let overRaw: number;
+  let underRaw: number;
+  try {
+    overRaw = americanToImpliedProb(overOdds);
+    underRaw = americanToImpliedProb(underOdds);
+  } catch {
+    return null;
+  }
+  const overhead = overRaw + underRaw;
+  if (!Number.isFinite(overhead) || overhead < 0.99 || overhead > 1.4) return null;
+  const overNoVig = overRaw / overhead;
+  const underNoVig = underRaw / overhead;
+  if (overNoVig < 0.02 || overNoVig > 0.98) return null;
+  if (underNoVig < 0.02 || underNoVig > 0.98) return null;
+  return { over: overNoVig, under: underNoVig };
 }

@@ -179,7 +179,7 @@ function snap(overrides?: Partial<GameSnapshot>): GameSnapshot {
       listed_total: 9.0,
       home_ml_odds_american: -130,
       away_ml_odds_american: +110,
-      has_pinnacle_total: true,
+      over_odds_american: null, under_odds_american: null, has_pinnacle_total: true,
     },
     sharp: null,
     active_injuries: {
@@ -247,7 +247,7 @@ async function main(): Promise<void> {
           listed_total: 8.5,
           home_ml_odds_american: -110,
           away_ml_odds_american: -112,
-          has_pinnacle_total: false,
+          over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
         },
         away_starter: {
           ...(snap().away_starter ?? {} as any),
@@ -383,7 +383,7 @@ async function main(): Promise<void> {
             listed_total: null,
             home_ml_odds_american: null,
             away_ml_odds_american: null,
-            has_pinnacle_total: false,
+            over_odds_american: null, under_odds_american: null, has_pinnacle_total: false,
           },
         }),
         raw,

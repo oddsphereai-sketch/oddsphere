@@ -462,6 +462,46 @@ function pickMlOdds(
   return any?.odds_american ?? null;
 }
 
+/**
+ * Phase 6B.8 — pick the freshest real-book O/U price for the given side.
+ *
+ * Pre-6B.8 the model didn't extract per-side O/U prices at all; the
+ * market snapshot only carried the listed line. Now V2.2 needs them
+ * to compute a real no-vig OU market probability instead of the
+ * legacy 0.5 placeholder.
+ *
+ * Selection rules (mirror pickMlOdds with one critical guard):
+ *   1. Filter to (market_type='total', side=side, odds_american NOT NULL).
+ *      This drops `splits_consensus` rows which carry the line value
+ *      but never a real price.
+ *   2. Walk the sharpbook priority chain (Pinnacle → DK → FD → MGM → CZR).
+ *   3. Fall back to ANY non-null real-book row.
+ *   4. Return null when nothing qualifies — the V2.2 model treats null
+ *      as "no real OU market", which propagates to ou_market_prob=null
+ *      in the audit (NOT 0.5).
+ */
+function pickOuOdds(
+  linesForGame: LineRow[],
+  side: "over" | "under"
+): number | null {
+  const candidates = linesForGame.filter(
+    (l) =>
+      l.market_type === "total" &&
+      l.side === side &&
+      l.odds_american !== null,
+  );
+  for (const book of TOTAL_BOOK_PRIORITY) {
+    const match = candidates.find(
+      (l) => l.sportsbook.toLowerCase() === book && l.odds_american !== null,
+    );
+    if (match !== undefined && match.odds_american !== null) {
+      return match.odds_american;
+    }
+  }
+  const any = candidates.find((l) => l.odds_american !== null);
+  return any?.odds_american ?? null;
+}
+
 function fallbackListedLineFromPrediction(
   pred: GamePredictionRow | undefined
 ): number | null {
@@ -1027,6 +1067,12 @@ export async function buildFeatureSnapshots(
       listed_total: finalListedTotal,
       home_ml_odds_american: pickMlOdds(linesForGame, "home"),
       away_ml_odds_american: pickMlOdds(linesForGame, "away"),
+      // Phase 6B.8 — real per-side O/U prices for the no-vig market
+      // probability path in V2.2. Null when no real-book O/U price
+      // exists (which is common when only splits_consensus rows are
+      // ingested for a game). V2.2 must NOT default null to 0.5.
+      over_odds_american: pickOuOdds(linesForGame, "over"),
+      under_odds_american: pickOuOdds(linesForGame, "under"),
       has_pinnacle_total: linesTotal.has_pinnacle_total,
     };
 

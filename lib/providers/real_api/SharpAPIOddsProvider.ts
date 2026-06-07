@@ -84,24 +84,33 @@ export type SharpApiGameResolver = (
 
 /** Hard cap on SharpAPI calls per getGameLines invocation (safety net). */
 // R-17 Step 2E.1 — raised 30 → 50 to handle multi-bucket /odds harvest.
-// A 15-game slate with both `_b0` and `_b3` published per event consumes
-// ~30 /odds calls; +2 (opportunities/ev + splits) puts us at the edge
-// of the old 30 cap. 50 provides ~70% headroom for larger slates while
-// still being deeply conservative against the 1000-call quota window.
-//
-// R-17 Step 2F.1 — speculative bucket probe adds at most 1 extra /odds
-// call per event (the "opposite" common bucket — `_b3` when only `_b0`
-// is advertised, vice versa). Today's 15-game slate worst case:
-// 1 ev + 1 splits + 15 advertised + 15 speculative = 32 calls. Still
-// well inside 50.
-const MAX_CALLS_PER_INVOCATION = 50;
+// Phase 6B.8 — raised 50 → 100 to absorb the broader speculative probe
+// (_b0, _b1, _b2, _b3) added below. A 15-game slate now spends up to
+// ~60 /odds calls in the worst case (advertised + every speculative
+// bucket for every event); 100 keeps ~40% headroom against the
+// 1000-call SharpAPI quota window.
+const MAX_CALLS_PER_INVOCATION = 100;
 
 // R-17 Step 2F.1 — suffixes the targeted speculative probe is allowed to
-// fetch when /opportunities/ev advertised only one of `_b0` / `_b3`.
-// The 2026-06-05 audit (Step 2F) observed `_b1` and `_b2` returned zero
-// rows on every event tested; they're deliberately excluded so the
-// probe stays cheap and yield-positive.
-const SPECULATIVE_PROBE_SUFFIXES = ["_b0", "_b3"] as const;
+// fetch when /opportunities/ev advertised only some buckets.
+//
+// Phase 6B.8 — broadened from `["_b0", "_b3"]` to all four common
+// buckets. The 2026-06-05 audit (R-17 Step 2F) reported _b1/_b2 as
+// "zero rows on every event tested", but in production today only
+// 6/15 games carried real-book over/under prices — splits_consensus
+// dominated. To eliminate placeholder OU edge end-to-end (the launch-
+// blocking issue audited in Phase 6B.8), the harvest now attempts
+// every common bucket. Buckets that genuinely have zero rows are
+// cheap (one /odds call returning [] each); buckets that DO have
+// extra OU rows on a different snapshot recover real prices that
+// would otherwise fall through to the /splits fallback (which
+// carries the line value but no juice → no real market prob in V2.2).
+//
+// Worst-case call count remains bounded by MAX_CALLS_PER_INVOCATION
+// above. The cross-bucket dedupe key in the merge loop guarantees
+// that the same (game, market, sportsbook, side, line) row written
+// from one bucket is NOT re-written from another.
+const SPECULATIVE_PROBE_SUFFIXES = ["_b0", "_b1", "_b2", "_b3"] as const;
 
 // ─────────────────────────────────────────────────────────────
 // Raw shapes

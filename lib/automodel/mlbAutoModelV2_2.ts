@@ -84,8 +84,23 @@ export type V22Audit = {
   ml_market_prob: number | null;
   ml_edge_pct: number;
   ou_model_prob: number;
-  ou_market_prob: number;
-  ou_edge_pct: number;
+  /**
+   * Phase 6B.8 — real no-vig OU market probability for the picked
+   * side. Null when no real-book O/U prices were ingested for the
+   * game. Pre-6B.8 this was the constant 0.5 placeholder; new
+   * downstream code MUST treat null as "no real edge" and never
+   * substitute 0.5.
+   */
+  ou_market_prob: number | null;
+  /** Null when ou_market_prob is null. */
+  ou_edge_pct: number | null;
+  /**
+   * Phase 6B.8 — per-side OU prices the model resolved. Null when
+   * featureSnapshot couldn't find a real-book row for that side.
+   * Recorded for debugging + post-hoc review.
+   */
+  over_odds_american: number | null;
+  under_odds_american: number | null;
   // Layer 5
   ml_play_grade: string;
   ou_play_grade: string;
@@ -197,9 +212,21 @@ export function runMlbAutoModelV2_2(
   );
   const ouPickIsOver = ouOverProb >= 0.5;
   const ouModelProb = ouPickIsOver ? ouOverProb : (1 - ouOverProb);
-  // Market O/U is 50/50 when no odds — for now use 0.5 as fair line
-  const ouMarketProb = 0.5;
-  const ouEdgePct = (ouModelProb - ouMarketProb) * 100;
+
+  // Phase 6B.8 — real no-vig O/U market probability for the picked
+  // side. Pre-6B.8 this was hard-coded to 0.5, which made every OU
+  // "edge" the model's distance from a 50/50 prior — not a real edge
+  // vs the book. Now we read market.overNoVigProb / underNoVigProb
+  // (computed in marketPrior from real over_odds_american /
+  // under_odds_american). When prices are missing for the game,
+  // ouMarketProb is null and ouEdgePct is null — surfaced honestly
+  // downstream so the UI displays model projection only and Top
+  // Available Angles cannot rank totals on placeholder edge.
+  const ouMarketProb: number | null = ouPickIsOver
+    ? market.overNoVigProb
+    : market.underNoVigProb;
+  const ouEdgePct: number | null =
+    ouMarketProb !== null ? (ouModelProb - ouMarketProb) * 100 : null;
 
   // Confidence
   const mlConfidence = computeConfidence({
@@ -254,10 +281,18 @@ export function runMlbAutoModelV2_2(
     minBestAngleEdgePct: V22_BEST_ANGLE_MIN_EDGE_PCT_ML,
     minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT,
   });
+  // Phase 6B.8 — pass the picked side's real American OU odds to the
+  // grader so EV computation reflects book pricing instead of being
+  // skipped entirely. When the picked-side price is missing the
+  // grader handles null gracefully (returns "provisional"). marketProb
+  // may also be null (already handled by computePlayGrade).
+  const ouMarketAmerican = ouPickIsOver
+    ? snap.market.over_odds_american
+    : snap.market.under_odds_american;
   const ouPlayGrade = computePlayGrade({
     modelProb: ouModelProb,
     marketProb: ouMarketProb,
-    americanOdds: null, // OU odds not always ingested; grader handles null
+    americanOdds: ouMarketAmerican,
     dataQualityTier: indep.data_quality_tier,
     provisional,
     isHeld: false,
@@ -301,6 +336,8 @@ export function runMlbAutoModelV2_2(
     ou_model_prob: ouModelProb,
     ou_market_prob: ouMarketProb,
     ou_edge_pct: ouEdgePct,
+    over_odds_american: snap.market.over_odds_american,
+    under_odds_american: snap.market.under_odds_american,
     ml_play_grade: mlPlayGrade.grade,
     ou_play_grade: ouPlayGrade.grade,
     ml_prediction_type: mlPlayGrade.predictionType,

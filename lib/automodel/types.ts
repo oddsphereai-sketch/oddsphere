@@ -168,6 +168,16 @@ export type MarketSnapshot = {
   listed_total: number | null;
   home_ml_odds_american: number | null;
   away_ml_odds_american: number | null;
+  /**
+   * Phase 6B.8 — per-side O/U American odds for the picked side.
+   * Lines table stores one row per (sportsbook, side) for totals; we
+   * resolve the freshest real-book pair so V2.2 can compute a no-vig
+   * OU market probability instead of the legacy 0.5 placeholder. Null
+   * when no real-book O/U odds exist for that side — the model writes
+   * ou_market_prob = null in that case (NOT 0.5).
+   */
+  over_odds_american: number | null;
+  under_odds_american: number | null;
   /** True when Pinnacle specifically is the source of listed_total. */
   has_pinnacle_total: boolean;
 };

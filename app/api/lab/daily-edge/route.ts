@@ -1120,7 +1120,14 @@ function readV22AuditForPick(
     if (m === null && k === null && e === null) return null;
     return { modelProb: m, marketProb: k, edgePctPp: e };
   }
-  // total
+  // total — Phase 6B.8 wired V2.2 to compute real no-vig OU market
+  // probability from per-side over/under American odds (see
+  // featureSnapshot.pickOuOdds and marketPrior.computeOuNoVigPair).
+  // The audit now carries:
+  //   ou_market_prob: number (real no-vig) | null (no real OU prices)
+  //   ou_edge_pct:    number               | null
+  // Both paths are honest — no 0.5 placeholder masquerading as edge.
+  // We trust the audit values directly here, just like the ML path.
   void pickIsOver;
   const m = num(audit.ou_model_prob);
   const k = num(audit.ou_market_prob);

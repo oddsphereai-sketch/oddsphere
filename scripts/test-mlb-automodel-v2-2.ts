@@ -111,7 +111,7 @@ function buildMarket(opts: Partial<MarketSnapshot> = {}): MarketSnapshot {
     listed_total: "listed_total" in opts ? opts.listed_total! : 8.5,
     home_ml_odds_american: "home_ml_odds_american" in opts ? opts.home_ml_odds_american! : -120,
     away_ml_odds_american: "away_ml_odds_american" in opts ? opts.away_ml_odds_american! : 110,
-    has_pinnacle_total: opts.has_pinnacle_total ?? true,
+    over_odds_american: null, under_odds_american: null, has_pinnacle_total: opts.has_pinnacle_total ?? true,
   };
 }
 
