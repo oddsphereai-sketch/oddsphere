@@ -515,6 +515,26 @@ check("Token exchange truncates whopDescription to 200 chars",
   /\.slice\(0,\s*200\)/.test(WHOP_OAUTH_LIB));
 check("Token exchange catches network errors with safe message",
   /reason:\s*"network_error"/.test(WHOP_OAUTH_LIB));
+
+// ── Whop OAuth 2.1 + PKCE request shape (6B.3a.6) ─────────────────────
+// Match Whop's documented snippet exactly: JSON body, NO client_secret,
+// PKCE code_verifier carries the auth.
+check("Token exchange uses Content-Type: application/json (not form-urlencoded)",
+  /"Content-Type":\s*"application\/json"/.test(WHOP_OAUTH_LIB));
+check("Token exchange does NOT send Content-Type form-urlencoded",
+  !/"Content-Type":\s*"application\/x-www-form-urlencoded"/.test(WHOP_OAUTH_LIB));
+check("Token exchange body is JSON-stringified (not URLSearchParams)",
+  /JSON\.stringify\(body\)/.test(WHOP_OAUTH_LIB));
+check("Token exchange body includes grant_type / code / redirect_uri / client_id / code_verifier",
+  /grant_type:\s*"authorization_code"/.test(WHOP_OAUTH_LIB) &&
+  /code:\s*opts\.code/.test(WHOP_OAUTH_LIB) &&
+  /redirect_uri:\s*cfg\.redirectUri/.test(WHOP_OAUTH_LIB) &&
+  /client_id:\s*cfg\.clientId/.test(WHOP_OAUTH_LIB) &&
+  /code_verifier:\s*opts\.codeVerifier/.test(WHOP_OAUTH_LIB));
+check("Token exchange body does NOT include client_secret (PKCE-only per Whop docs)",
+  // Allow mention in comments but not as a body field
+  !/client_secret:\s*cfg\.clientSecret/.test(WHOP_OAUTH_LIB) &&
+  !/client_secret:\s*opts\.clientSecret/.test(WHOP_OAUTH_LIB));
 check("extractWhopOAuthError only forwards `error` and `error_description` fields",
   // Defensive: confirm we don't blindly dump the whole body
   /obj\["error"\][\s\S]{0,200}obj\["error_description"\]/.test(WHOP_OAUTH_LIB));
