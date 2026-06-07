@@ -32,6 +32,16 @@ import {
   type CalibrationMetrics,
 } from "./calibrationMath";
 import { classifySampleSize, type SampleSizeClass } from "./sampleSize";
+import {
+  CONTEXT_FLAG_DEFINITIONS,
+  MISSING_DIMENSIONS,
+  type ContextFlagState,
+  type ContextFlagScope,
+} from "./contextFlags";
+import {
+  buildShadowMarketReport,
+  type ShadowMarketReport,
+} from "./shadowCalibration";
 
 /** Dimension columns carried alongside each (probability, won) pair. */
 export type CalibrationDimensionRow = {
@@ -41,9 +51,42 @@ export type CalibrationDimensionRow = {
   confidence_bucket: string;
   model_version: string | null;
   best_angle: boolean;
+  /**
+   * Per-flag tri-state (yes / no / unknown). Stage 2 — added so the report
+   * can split rows by each context flag and compute calibration on each
+   * branch independently. "unknown" rows are excluded from that flag's
+   * branches but still count in market / overall buckets.
+   */
+  context_flags: Record<string, ContextFlagState>;
 };
 
 export type CalibrationInputRow = CalibrationDimensionRow & CalibrationSample;
+
+/**
+ * Stage 2 — per-context-flag analysis. Splits the sample into "flag=yes"
+ * and "flag=no" branches and computes calibration metrics for each. The
+ * "unknown" count is surfaced separately as data-availability signal.
+ */
+export type ContextFlagAnalysis = {
+  id: string;
+  label: string;
+  scope: ContextFlagScope;
+  description: string;
+  n_yes: number;
+  n_no: number;
+  n_unknown: number;
+  data_availability_pct: number;
+  yes_finding: CalibrationFinding;
+  no_finding: CalibrationFinding;
+  /**
+   * Plain-English summary highlighting whether the flag appears informative
+   * (when both branches have enough sample for a meaningful comparison).
+   */
+  summary: string;
+};
+
+/** Stage 2 — explicit list of dimensions the user asked for that the snapshot doesn't yet expose. */
+export type MissingDimension = { id: string; label: string; reason: string };
 
 export type CalibrationFinding = {
   label: string;
@@ -68,6 +111,26 @@ export type CalibrationReport = {
   byModelVersion: CalibrationFinding[];
   bestAngles: CalibrationFinding;
   leans: CalibrationFinding;
+  /**
+   * Stage 2 — per-context-flag analysis (yes/no/unknown breakdown +
+   * calibration on each branch). One entry per known flag whose scope
+   * matches at least one sample. Flags with scope="all" are always
+   * included; market-scoped flags only when relevant rows exist.
+   */
+  byContextFlag: ContextFlagAnalysis[];
+  /**
+   * Stage 2 — per-market shadow recommendations. No DB writes, no
+   * thresholds changed. Each market shows what a calibrated remap
+   * would have done on its historical sample.
+   */
+  shadowByMarket: ShadowMarketReport[];
+  /**
+   * Stage 2 — dimensions the user requested that aren't captured in
+   * snapshot_json yet. The report calls them out so we know what to
+   * extend the lock-time snapshot with before those dimensions can
+   * inform calibration.
+   */
+  missingDimensions: MissingDimension[];
 };
 
 function buildFinding(
@@ -193,6 +256,9 @@ export function buildCalibrationReport(
       "default",
       rows.filter((r) => r.play_grade === "lean"),
     ),
+    byContextFlag: [],
+    shadowByMarket: [],
+    missingDimensions: MISSING_DIMENSIONS,
   };
 
   const bySport = groupBy(rows, (r) => r.sport);
@@ -222,5 +288,92 @@ export function buildCalibrationReport(
   for (const [k, rs] of byVersion) report.byModelVersion.push(buildFinding(k, "default", rs));
   report.byModelVersion.sort((a, b) => a.label.localeCompare(b.label));
 
+  // ── Stage 2: per-context-flag analysis ────────────────────────────
+  for (const def of CONTEXT_FLAG_DEFINITIONS) {
+    const inScope = (r: CalibrationInputRow): boolean => {
+      if (def.scope === "all") return true;
+      return r.market === def.scope;
+    };
+    const scoped = rows.filter(inScope);
+    if (scoped.length === 0) continue;
+    const yesRows = scoped.filter((r) => r.context_flags[def.id] === "yes");
+    const noRows = scoped.filter((r) => r.context_flags[def.id] === "no");
+    const unknownN = scoped.filter((r) => r.context_flags[def.id] === "unknown").length;
+    const known = yesRows.length + noRows.length;
+    const dataAvailabilityPct = scoped.length > 0 ? (known / scoped.length) * 100 : 0;
+
+    const yesFinding = buildFinding(`${def.label} = YES`, "default", yesRows);
+    const noFinding = buildFinding(`${def.label} = NO`, "default", noRows);
+
+    const summary = summarizeFlag(def.label, yesFinding, noFinding, unknownN, scoped.length);
+
+    report.byContextFlag.push({
+      id: def.id,
+      label: def.label,
+      scope: def.scope,
+      description: def.description,
+      n_yes: yesRows.length,
+      n_no: noRows.length,
+      n_unknown: unknownN,
+      data_availability_pct: dataAvailabilityPct,
+      yes_finding: yesFinding,
+      no_finding: noFinding,
+      summary,
+    });
+  }
+  report.byContextFlag.sort((a, b) => a.label.localeCompare(b.label));
+
+  // ── Stage 2: per-market shadow proposals ──────────────────────────
+  const byMarketForShadow = groupBy(rows, (r) => r.market);
+  for (const [marketName, rs] of byMarketForShadow) {
+    const samples: CalibrationSample[] = rs.map((r) => ({
+      probability: r.probability,
+      won: r.won,
+    }));
+    report.shadowByMarket.push(buildShadowMarketReport(samples, marketName));
+  }
+  report.shadowByMarket.sort((a, b) => a.market.localeCompare(b.market));
+
   return report;
+}
+
+function summarizeFlag(
+  flagLabel: string,
+  yes: CalibrationFinding,
+  no: CalibrationFinding,
+  unknownN: number,
+  totalScoped: number,
+): string {
+  // Data availability gate
+  if (yes.metrics.n + no.metrics.n === 0) {
+    return `No samples have a confirmed value for "${flagLabel}". All ${unknownN}/${totalScoped} scoped rows are unknown.`;
+  }
+  // Both branches sufficient?
+  if (yes.sample_class === "insufficient" && no.sample_class === "insufficient") {
+    return `Both branches insufficient (yes=${yes.metrics.n}, no=${no.metrics.n}, unknown=${unknownN}). Monitor only.`;
+  }
+  if (yes.metrics.n === 0) {
+    return `Flag never observed YES (no=${no.metrics.n}, unknown=${unknownN}). Cannot evaluate impact.`;
+  }
+  if (no.metrics.n === 0) {
+    return `Flag never observed NO (yes=${yes.metrics.n}, unknown=${unknownN}). Cannot evaluate impact.`;
+  }
+  // Both have some sample — describe the delta if both have observed frequencies.
+  if (yes.metrics.observed_freq !== null && no.metrics.observed_freq !== null) {
+    const yesPct = (yes.metrics.observed_freq * 100).toFixed(1);
+    const noPct = (no.metrics.observed_freq * 100).toFixed(1);
+    const delta = (yes.metrics.observed_freq - no.metrics.observed_freq) * 100;
+    const yesBrier = yes.metrics.brier !== null ? yes.metrics.brier.toFixed(4) : "—";
+    const noBrier = no.metrics.brier !== null ? no.metrics.brier.toFixed(4) : "—";
+    let actionability: string;
+    if (yes.sample_class === "confident" && no.sample_class === "confident") {
+      actionability = Math.abs(delta) >= 5
+        ? "INFORMATIVE — large win-rate gap with confident samples on both sides."
+        : "Both samples confident but gap is small — likely not predictive.";
+    } else {
+      actionability = "At least one branch is below confident threshold. Monitor only.";
+    }
+    return `yes n=${yes.metrics.n} obs=${yesPct}% Brier=${yesBrier} | no n=${no.metrics.n} obs=${noPct}% Brier=${noBrier} | gap=${delta >= 0 ? "+" : ""}${delta.toFixed(1)}pp | unknown=${unknownN}/${totalScoped} | ${actionability}`;
+  }
+  return `yes n=${yes.metrics.n}, no n=${no.metrics.n}, unknown=${unknownN}/${totalScoped} — monitor only.`;
 }

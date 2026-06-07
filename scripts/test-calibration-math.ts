@@ -20,6 +20,13 @@ import {
   buildCalibrationReport,
   type CalibrationInputRow,
 } from "../lib/calibration/calibrationReport";
+import { extractContextFlags, CONTEXT_FLAG_DEFINITIONS, MISSING_DIMENSIONS } from "../lib/calibration/contextFlags";
+import {
+  buildShadowMarketReport,
+  MATERIAL_BRIER_DELTA,
+  MATERIAL_GAP,
+} from "../lib/calibration/shadowCalibration";
+import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 
 let pass = 0;
 let fail = 0;
@@ -248,6 +255,7 @@ console.log("\n━━━ buildCalibrationReport small mixed ━━━");
       confidence_bucket: "53_55",
       model_version: "v2_2",
       best_angle: true,
+      context_flags: {},
       probability: 0.55,
       won: true,
     },
@@ -258,6 +266,7 @@ console.log("\n━━━ buildCalibrationReport small mixed ━━━");
       confidence_bucket: "53_55",
       model_version: "v2_2",
       best_angle: true,
+      context_flags: {},
       probability: 0.55,
       won: false,
     },
@@ -268,6 +277,7 @@ console.log("\n━━━ buildCalibrationReport small mixed ━━━");
       confidence_bucket: "50_52",
       model_version: "fi_v2",
       best_angle: false,
+      context_flags: {},
       probability: 0.52,
       won: true,
     },
@@ -301,6 +311,7 @@ console.log("\n━━━ Perfect calibration smoke ━━━");
       confidence_bucket: "50_52",
       model_version: "v2_2",
       best_angle: false,
+      context_flags: {},
       probability: 0.5,
       won: true,
     });
@@ -313,6 +324,7 @@ console.log("\n━━━ Perfect calibration smoke ━━━");
       confidence_bucket: "50_52",
       model_version: "v2_2",
       best_angle: false,
+      context_flags: {},
       probability: 0.5,
       won: false,
     });
@@ -340,6 +352,7 @@ console.log("\n━━━ Overconfident → notes call it out ━━━");
       confidence_bucket: "59_62",
       model_version: "v2_2",
       best_angle: true,
+      context_flags: {},
       probability: 0.8,
       won: true,
     });
@@ -352,6 +365,7 @@ console.log("\n━━━ Overconfident → notes call it out ━━━");
       confidence_bucket: "59_62",
       model_version: "v2_2",
       best_angle: true,
+      context_flags: {},
       probability: 0.8,
       won: false,
     });
@@ -379,6 +393,7 @@ console.log("\n━━━ Underconfident → notes call it out ━━━");
       confidence_bucket: "50_52",
       model_version: "v2_2",
       best_angle: false,
+      context_flags: {},
       probability: 0.3,
       won: i < 8, // 8/10 win, model said 30% → underconfident
     });
@@ -387,6 +402,227 @@ console.log("\n━━━ Underconfident → notes call it out ━━━");
   check(
     "underconfident language in notes",
     report.overall.notes.some((n) => /underconfident/i.test(n)),
+  );
+}
+
+// ── Stage 2: contextFlags extractor ───────────────────────────────────
+console.log("\n━━━ Stage 2 — contextFlags ━━━");
+
+function fakeRecord(snapshot: Record<string, unknown>, overrides: Partial<PredictionRecordRow> = {}): PredictionRecordRow {
+  return {
+    game_prediction_id: 0,
+    game_id: 0,
+    external_id: 0,
+    sport: "mlb",
+    slate_date: "2026-06-07",
+    game_date: null,
+    matchup: "X@Y",
+    market: "moneyline",
+    pick: "home",
+    side: null,
+    line_value: null,
+    odds_american: null,
+    odds_decimal: null,
+    model_used: null,
+    model_version: null,
+    prediction_source: null,
+    confidence: 55,
+    model_probability: 0.55,
+    market_probability: null,
+    edge: null,
+    expected_value: null,
+    play_grade: null,
+    prediction_type: null,
+    best_angle: false,
+    no_bet: false,
+    no_bet_reason: null,
+    market_aligned: false,
+    data_quality_tier: null,
+    source_quality: null,
+    provisional: false,
+    held: false,
+    hold_reason: null,
+    launch_day: false,
+    manual_outcome_expected: false,
+    locked_at: null,
+    published_at: null,
+    snapshot_json: snapshot,
+    ...overrides,
+  } as PredictionRecordRow;
+}
+
+{
+  // Empty snapshot → every snapshot-derived flag is "unknown".
+  // provisional_pick is the one exception because PredictionRecordRow.provisional
+  // is a non-null boolean column (not snapshot-derived), so the extractor
+  // always resolves it from the top-level value.
+  const flags = extractContextFlags(fakeRecord({}));
+  const snapshotOnlyFlags = CONTEXT_FLAG_DEFINITIONS.filter((d) => d.id !== "provisional_pick");
+  const allUnknown = snapshotOnlyFlags.every((d) => flags[d.id] === "unknown");
+  check("empty snapshot → every snapshot-derived flag = unknown", allUnknown);
+  check("provisional_pick resolved from top-level column (always known)", flags["provisional_pick"] !== "unknown");
+}
+{
+  // starter_confirmed=true → starter_unconfirmed=no
+  const flags = extractContextFlags(fakeRecord({ starter_confirmed: true }));
+  check("starter_confirmed=true → starter_unconfirmed=no", flags["starter_unconfirmed"] === "no");
+}
+{
+  const flags = extractContextFlags(fakeRecord({ starter_confirmed: false }));
+  check("starter_confirmed=false → starter_unconfirmed=yes", flags["starter_unconfirmed"] === "yes");
+}
+{
+  // Provisional: top-level provisional column wins over snapshot v2_provisional.
+  const flags = extractContextFlags(fakeRecord({ v2_provisional: true }, { provisional: false }));
+  check("top-level provisional=false beats snapshot v2_provisional=true", flags["provisional_pick"] === "no");
+}
+{
+  const flags = extractContextFlags(fakeRecord({ v2_provisional: true }, { provisional: null as unknown as boolean }));
+  check("top-level provisional=null → fall back to v2_provisional=true → yes", flags["provisional_pick"] === "yes");
+}
+{
+  // data_quality_low / high mutual exclusion via separate paths
+  const flagsLow = extractContextFlags(fakeRecord({ v2_data_quality_tier: "low" }));
+  check("v2_data_quality_tier=low → data_quality_low=yes", flagsLow["data_quality_low"] === "yes");
+  check("v2_data_quality_tier=low → data_quality_high=no", flagsLow["data_quality_high"] === "no");
+}
+{
+  // ML dampening present
+  const flags = extractContextFlags(fakeRecord({ auto_factors: { ml_dampening_penalty: 5 } }));
+  check("auto_factors.ml_dampening_penalty > 0 → ml_dampening_applied=yes", flags["ml_dampening_applied"] === "yes");
+}
+{
+  const flags = extractContextFlags(fakeRecord({ auto_factors: { ml_dampening_penalty: 0 } }));
+  check("auto_factors.ml_dampening_penalty = 0 → ml_dampening_applied=no", flags["ml_dampening_applied"] === "no");
+}
+{
+  // FI-specific flag
+  const flags = extractContextFlags(fakeRecord({ auto_factors: { nrfi_used_fallback_era: true } }));
+  check("auto_factors.nrfi_used_fallback_era=true → yes", flags["nrfi_used_fallback_era"] === "yes");
+}
+{
+  // trust_independent — fi_v2_audit takes precedence only if v2_2_audit absent
+  const flags = extractContextFlags(fakeRecord({ v2_2_audit: { trust_independent: true } }));
+  check("v2_2_audit.trust_independent=true → yes", flags["trust_independent"] === "yes");
+}
+{
+  const flags = extractContextFlags(fakeRecord({ fi_v2_audit: { trust_independent: false } }));
+  check("fi_v2_audit.trust_independent=false (no v2_2_audit) → no", flags["trust_independent"] === "no");
+}
+check(
+  "MISSING_DIMENSIONS includes public_money_pct",
+  MISSING_DIMENSIONS.some((m) => m.id === "public_money_pct"),
+);
+check(
+  "MISSING_DIMENSIONS includes line_movement_direction",
+  MISSING_DIMENSIONS.some((m) => m.id === "line_movement_direction"),
+);
+check(
+  "MISSING_DIMENSIONS includes bullpen_fallback",
+  MISSING_DIMENSIONS.some((m) => m.id === "bullpen_fallback"),
+);
+
+// ── Stage 2: shadow calibration ───────────────────────────────────────
+console.log("\n━━━ Stage 2 — shadowCalibration ━━━");
+{
+  // Empty samples
+  const sm = buildShadowMarketReport([], "moneyline");
+  check("empty market → n=0", sm.n === 0);
+  check("empty market → no material proposal", sm.has_material_proposal === false);
+  check("empty market → all metrics null", sm.live_brier === null && sm.shadow_brier === null);
+  check("empty market → recommendation mentions no samples", /no samples/i.test(sm.overall_recommendation));
+}
+{
+  // Tiny sample (insufficient) — should NOT propose anything
+  const samples = [
+    { probability: 0.55, won: true },
+    { probability: 0.55, won: false },
+    { probability: 0.55, won: true },
+  ];
+  const sm = buildShadowMarketReport(samples, "moneyline");
+  check("tiny ML sample → sample_class=insufficient", sm.sample_class === "insufficient");
+  check("tiny sample → no material proposal", sm.has_material_proposal === false);
+  check("tiny sample → all buckets recommend monitor-only", sm.buckets.every((b) => b.proposed_probability === null));
+  check("tiny sample → overall recommendation mentions monitor", /monitor only/i.test(sm.overall_recommendation));
+}
+{
+  // Confident-sized sample with calibrated probabilities → no material gap → no proposal
+  const samples: { probability: number; won: boolean }[] = [];
+  // bin 5 (0.5-0.6): 500 samples at p=0.55, half win → mean=0.55, observed=0.5, gap=0.05 = MATERIAL_GAP
+  for (let i = 0; i < 250; i++) samples.push({ probability: 0.55, won: true });
+  for (let i = 0; i < 250; i++) samples.push({ probability: 0.55, won: false });
+  const sm = buildShadowMarketReport(samples, "moneyline");
+  check("confident ML sample → sample_class=confident", sm.sample_class === "confident");
+  // gap = 0.05 which is exactly MATERIAL_GAP (>= threshold), so proposal should fire
+  check("confident sample with gap >= material → has material proposal", sm.has_material_proposal === true);
+  const b5 = sm.buckets[5];
+  check("bucket 5 has proposed probability ≈ 0.5", b5.proposed_probability !== null && Math.abs(b5.proposed_probability - 0.5) < 1e-6);
+}
+{
+  // Confident sample, gap < MATERIAL_GAP (0.02) → no proposal
+  // 500 at p=0.55, exactly 275 wins → observed 0.55, gap = 0.0
+  const samples: { probability: number; won: boolean }[] = [];
+  for (let i = 0; i < 275; i++) samples.push({ probability: 0.55, won: true });
+  for (let i = 0; i < 225; i++) samples.push({ probability: 0.55, won: false });
+  const sm = buildShadowMarketReport(samples, "moneyline");
+  check("confident sample, gap < material → no proposal", sm.has_material_proposal === false);
+  check("confident sample, gap < material → recommendation mentions no change", /material threshold|No calibration change|no bucket shows a material gap/i.test(sm.overall_recommendation));
+}
+{
+  // Confident sample, well-separated buckets, shadow improves Brier
+  const samples: { probability: number; won: boolean }[] = [];
+  // bin 5 (0.5-0.6) all p=0.55, 70% win → observed 0.7, gap = 0.15
+  for (let i = 0; i < 350; i++) samples.push({ probability: 0.55, won: true });
+  for (let i = 0; i < 150; i++) samples.push({ probability: 0.55, won: false });
+  const sm = buildShadowMarketReport(samples, "moneyline");
+  check("shadow_brier <= live_brier when remap fits observed", sm.shadow_brier !== null && sm.live_brier !== null && sm.shadow_brier <= sm.live_brier);
+  check("brier_delta >= 0 (positive = shadow improves)", sm.brier_delta !== null && sm.brier_delta >= 0);
+  check("recommendation calls out Stage 3 eligibility when delta material", sm.brier_delta! >= MATERIAL_BRIER_DELTA && /Stage 3/i.test(sm.overall_recommendation));
+}
+{
+  // Sanity: MATERIAL_GAP and MATERIAL_BRIER_DELTA are exported
+  check("MATERIAL_GAP exported", typeof MATERIAL_GAP === "number" && MATERIAL_GAP === 0.02);
+  check("MATERIAL_BRIER_DELTA exported", typeof MATERIAL_BRIER_DELTA === "number" && MATERIAL_BRIER_DELTA === 0.001);
+}
+
+// ── Stage 2: report integration ───────────────────────────────────────
+console.log("\n━━━ Stage 2 — buildCalibrationReport integration ━━━");
+{
+  const rows: CalibrationInputRow[] = [
+    {
+      sport: "mlb",
+      market: "moneyline",
+      play_grade: null,
+      confidence_bucket: "53_55",
+      model_version: "v2_2",
+      best_angle: true,
+      context_flags: { starter_unconfirmed: "yes", data_quality_low: "no" },
+      probability: 0.55,
+      won: true,
+    },
+    {
+      sport: "mlb",
+      market: "moneyline",
+      play_grade: null,
+      confidence_bucket: "53_55",
+      model_version: "v2_2",
+      best_angle: true,
+      context_flags: { starter_unconfirmed: "no", data_quality_low: "yes" },
+      probability: 0.55,
+      won: false,
+    },
+  ];
+  const report = buildCalibrationReport(rows);
+  check("byContextFlag populated for in-scope flags", report.byContextFlag.length > 0);
+  const starter = report.byContextFlag.find((f) => f.id === "starter_unconfirmed");
+  check("byContextFlag has starter_unconfirmed entry", starter !== undefined);
+  check("starter_unconfirmed n_yes=1 n_no=1", starter !== undefined && starter.n_yes === 1 && starter.n_no === 1);
+  check("byContextFlag handles unknown count too", starter !== undefined && starter.data_availability_pct === 100);
+  check("shadowByMarket has moneyline entry", report.shadowByMarket.some((sm) => sm.market === "moneyline"));
+  check("missingDimensions is non-empty", report.missingDimensions.length >= 3);
+  check(
+    "missingDimensions explains why (mentions snapshot)",
+    report.missingDimensions.every((m) => /snapshot|captured|carries/i.test(m.reason)),
   );
 }
 

@@ -38,7 +38,11 @@ import {
   buildCalibrationReport,
   type CalibrationFinding,
   type CalibrationInputRow,
+  type ContextFlagAnalysis,
 } from "../../lib/calibration/calibrationReport";
+import { extractContextFlags } from "../../lib/calibration/contextFlags";
+import type { ShadowMarketReport } from "../../lib/calibration/shadowCalibration";
+import type { PredictionRecordRow } from "../../lib/types/domain/Tracking";
 
 const APPLY_REQUESTED = process.argv.includes("--apply");
 const JSON_OUT = process.argv.includes("--json");
@@ -56,10 +60,13 @@ async function main() {
   );
 
   // ── 1. Load MLB prediction_records that are not no_bet / launch_day. ──
+  // Stage 2 also pulls provisional + snapshot_json so the context-flag
+  // extractor has the raw lock-time data it needs. snapshot_json is opaque
+  // JSONB; the extractor is defensive about missing paths.
   const { data: recRows, error: recErr } = await sb
     .from("prediction_records")
     .select(
-      "id, sport, market, play_grade, confidence, model_probability, model_version, best_angle, no_bet, launch_day",
+      "id, game_prediction_id, game_id, external_id, sport, slate_date, game_date, matchup, market, pick, side, line_value, odds_american, odds_decimal, model_used, model_version, prediction_source, confidence, model_probability, market_probability, edge, expected_value, play_grade, prediction_type, best_angle, no_bet, no_bet_reason, market_aligned, data_quality_tier, source_quality, provisional, held, hold_reason, launch_day, manual_outcome_expected, locked_at, published_at, snapshot_json",
     )
     .eq("sport", "mlb")
     .eq("no_bet", false)
@@ -68,21 +75,10 @@ async function main() {
     console.error("FATAL records fetch:", recErr.message);
     process.exit(1);
   }
-  const records = (recRows ?? []) as Array<{
-    id: number;
-    sport: string;
-    market: string;
-    play_grade: string | null;
-    confidence: number | null;
-    model_probability: number | null;
-    model_version: string | null;
-    best_angle: boolean;
-    no_bet: boolean;
-    launch_day: boolean;
-  }>;
+  const records = (recRows ?? []) as PredictionRecordRow[];
 
   // ── 2. Join grades — chunk to keep .in() under URL limits. ──
-  const recIds = records.map((r) => r.id);
+  const recIds = records.map((r) => r.id).filter((x): x is number => typeof x === "number");
   const grades = new Map<number, { result: string; win: boolean; loss: boolean }>();
   for (let i = 0; i < recIds.length; i += 500) {
     const chunk = recIds.slice(i, i + 500);
@@ -110,6 +106,10 @@ async function main() {
   let skippedNotBinary = 0;
   let skippedBadProb = 0;
   for (const r of records) {
+    if (r.id === undefined) {
+      skippedNoGrade++;
+      continue;
+    }
     const g = grades.get(r.id);
     if (g === undefined) {
       skippedNoGrade++;
@@ -131,6 +131,7 @@ async function main() {
       confidence_bucket: bucketForConfidence(r.confidence),
       model_version: r.model_version,
       best_angle: r.best_angle === true,
+      context_flags: extractContextFlags(r),
       probability: p,
       won: g.win === true,
     });
@@ -183,10 +184,68 @@ async function main() {
   printFinding("BEST ANGLES (best_angle=true)", report.bestAngles);
   printFinding("LEANS (play_grade=lean)", report.leans);
 
+  // ── Stage 2: Context Flag Analysis ────────────────────────────────
+  console.log("\n\n═══ Stage 2 — Context Flags (per-flag yes/no calibration split) ═══");
+  if (report.byContextFlag.length === 0) {
+    console.log("  (no in-scope rows to analyze)");
+  } else {
+    for (const flag of report.byContextFlag) printContextFlag(flag);
+  }
+
+  // ── Stage 2: Shadow Calibration per Market ────────────────────────
+  console.log("\n\n═══ Stage 2 — Shadow Calibration Proposals (per market, no writes) ═══");
+  if (report.shadowByMarket.length === 0) {
+    console.log("  (no settled rows in any market)");
+  } else {
+    for (const sm of report.shadowByMarket) printShadowMarket(sm);
+  }
+
+  // ── Stage 2: Missing Dimensions ───────────────────────────────────
+  console.log("\n\n═══ Stage 2 — Missing Dimensions (snapshot_json gaps) ═══");
+  for (const md of report.missingDimensions) {
+    console.log(`\n  ◯ ${md.label}  [${md.id}]`);
+    console.log(`    ${md.reason}`);
+  }
+
   console.log("\n─── Reminders ─────────────────────────────────────────────");
   console.log("  • This report is informational only.");
   console.log("  • No DB writes, no threshold changes, no model behavior changes.");
-  console.log("  • Phase 7A Stages 2-4 will add shadow / operator-applied / guarded auto-apply.");
+  console.log("  • Shadow proposals are evaluated against historical tracked data only.");
+  console.log("  • Phase 7A Stages 3-4 will add operator-applied / guarded auto-apply.");
+}
+
+function printContextFlag(flag: ContextFlagAnalysis): void {
+  console.log(`\n── ${flag.label}  [${flag.id}, scope=${flag.scope}] ──`);
+  console.log(`  ${flag.description}`);
+  console.log(
+    `  yes=${flag.n_yes}  no=${flag.n_no}  unknown=${flag.n_unknown}  data_availability=${flag.data_availability_pct.toFixed(1)}%`,
+  );
+  console.log(`  ${flag.summary}`);
+}
+
+function printShadowMarket(sm: ShadowMarketReport): void {
+  console.log(`\n── Market: ${sm.market} ── n=${sm.n} class=${sm.sample_class}`);
+  console.log(`  ${sm.overall_recommendation}`);
+  if (sm.n > 0) {
+    const lbf = (v: number | null) => (v === null ? "—" : v.toFixed(4));
+    const dl = (v: number | null) => (v === null ? "—" : (v >= 0 ? `+${v.toFixed(4)}` : v.toFixed(4)));
+    console.log(`  Live  : Brier ${lbf(sm.live_brier)}  LogLoss ${lbf(sm.live_log_loss)}  ECE ${lbf(sm.live_ece)}`);
+    console.log(`  Shadow: Brier ${lbf(sm.shadow_brier)}  LogLoss ${lbf(sm.shadow_log_loss)}  ECE ${lbf(sm.shadow_ece)}`);
+    console.log(`  Delta : Brier ${dl(sm.brier_delta)}  LogLoss ${dl(sm.log_loss_delta)}  ECE ${dl(sm.ece_delta)}     (positive = shadow improves)`);
+    const occupied = sm.buckets.filter((b) => b.n > 0);
+    if (occupied.length > 0) {
+      console.log("  per-bucket:");
+      for (const b of occupied) {
+        const lo = (b.bin_low * 100).toFixed(0).padStart(3);
+        const hi = (b.bin_high * 100).toFixed(0).padStart(3);
+        const proposed = b.proposed_probability === null ? "—" : `${(b.proposed_probability * 100).toFixed(1)}%`;
+        const mp = ((b.mean_predicted ?? 0) * 100).toFixed(1).padStart(5);
+        const of = ((b.observed_freq ?? 0) * 100).toFixed(1).padStart(5);
+        console.log(`    [${lo}-${hi}%] n=${String(b.n).padStart(4)}  pred=${mp}%  obs=${of}%  class=${b.sample_class.padEnd(12)}  proposed=${proposed}`);
+        console.log(`        ${b.recommendation}`);
+      }
+    }
+  }
 }
 
 function printFinding(label: string, f: CalibrationFinding): void {
