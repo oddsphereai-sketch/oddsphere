@@ -284,9 +284,17 @@ export async function computeTrackingAggregate(opts: {
   result.rowsConsidered = recordsRaw.length;
 
   // Filter launch-day if requested
-  const records = opts.includeLaunchDay === true
+  const launchFiltered = opts.includeLaunchDay === true
     ? recordsRaw
     : recordsRaw.filter((r) => !r.launch_day);
+
+  // Phase 6B.20 — exclude no_bet=true rows from the public W/L tally.
+  // Covers Toss-Up FI rows whose member-facing pill was "Toss-Up", and
+  // any future ML/OU no_bet flagging. These rows still exist in
+  // prediction_records (with prediction_type='toss_up' or similar) and
+  // can be inspected separately; they just don't count toward member-
+  // facing wins / losses on /lab/tracking.
+  const records = launchFiltered.filter((r) => r.no_bet !== true);
   result.rowsCounted = records.length;
   if (records.length === 0) return result;
 

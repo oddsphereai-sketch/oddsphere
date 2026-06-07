@@ -427,7 +427,53 @@ function buildFiRecord(
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
   const held = holdPicks.includes("nrfi") || pred.predicted_nrfi === null;
   if (held) return null;
-  const pickLabel = pred.predicted_nrfi === true ? "NRFI" : "YRFI";
+
+  // Phase 6B.20 — preserve the member-facing FI pill. Daily Edge
+  // (`app/api/lab/daily-edge/route.ts:584-597`) displays "Toss-Up"
+  // when sport_specific.nrfi_decision_kind === "toss_up", regardless
+  // of the internal NRFI/YRFI lean. Tracking must use the same
+  // member-facing pill — never the hidden lean — or the public W/L
+  // tally will count picks members never saw as actionable.
+  //
+  // Detection mirrors the route's logic exactly:
+  //   1. nrfi_decision_kind === "toss_up" (canonical post-4D.1 field)
+  //   2. heuristic fallback for pre-4D.1 rows: nrfi_confidence rounds
+  //      to 52 AND nrfi_expected_runs in [0.85, 1.15)
+  //
+  // Internal lean (sp.predicted_nrfi) is preserved in snapshot_json
+  // for calibration analysis. Only the displayed-pill columns flip.
+  const nrfiDecisionKind =
+    typeof sp.nrfi_decision_kind === "string"
+      ? (sp.nrfi_decision_kind as string)
+      : null;
+  const autoFactors =
+    sp.auto_factors && typeof sp.auto_factors === "object"
+      ? (sp.auto_factors as Record<string, unknown>)
+      : null;
+  const nrfiExpectedRuns =
+    autoFactors && typeof autoFactors.nrfi_expected_runs === "number"
+      ? (autoFactors.nrfi_expected_runs as number)
+      : null;
+  const isTossUp =
+    nrfiDecisionKind === "toss_up" ||
+    (nrfiDecisionKind === null &&
+      typeof pred.nrfi_confidence === "number" &&
+      Math.round(pred.nrfi_confidence) === 52 &&
+      nrfiExpectedRuns !== null &&
+      nrfiExpectedRuns >= 0.85 &&
+      nrfiExpectedRuns < 1.15);
+
+  const internalSide: "under" | "over" =
+    pred.predicted_nrfi === true ? "under" : "over";
+  const actionablePick = pred.predicted_nrfi === true ? "NRFI" : "YRFI";
+
+  const pickLabel = isTossUp ? "Toss-Up" : actionablePick;
+  const sideValue = isTossUp ? null : internalSide;
+  const predictionTypeValue = isTossUp ? "toss_up" : null;
+  const noBetValue = isTossUp;
+  const noBetReasonValue = isTossUp
+    ? "non-actionable: locked pill was Toss-Up"
+    : null;
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -438,7 +484,7 @@ function buildFiRecord(
     matchup: `${awayAbbrev}@${homeAbbrev}`,
     market: "first_inning",
     pick: pickLabel,
-    side: pred.predicted_nrfi === true ? "under" : "over",
+    side: sideValue,
     line_value: 0.5,
     odds_american: null,
     odds_decimal: null,
@@ -452,10 +498,10 @@ function buildFiRecord(
     edge: null,
     expected_value: null,
     play_grade: null,
-    prediction_type: null,
+    prediction_type: predictionTypeValue,
     best_angle: false,
-    no_bet: false,
-    no_bet_reason: null,
+    no_bet: noBetValue,
+    no_bet_reason: noBetReasonValue,
     market_aligned: false,
     data_quality_tier: readStringOrNull(sp.v2_data_quality_tier),
     source_quality: null,

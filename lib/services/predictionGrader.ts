@@ -207,6 +207,20 @@ export function gradePrediction(inputs: GradeInputs): PredictionGradeRow {
     return emptyGrade(record, "void", source, `game status=${game.status}`);
   }
 
+  // Phase 6B.20 — non-actionable rows (no_bet=true) never count as
+  // win/loss. Returns void with a clear note so the row is auditable
+  // but excluded from public W/L tallies. Covers Toss-Up FI rows
+  // (locked pill was "Toss-Up", not NRFI/YRFI) and any future ML/OU
+  // no_bet flagging.
+  if (record.no_bet === true) {
+    return emptyGrade(
+      record,
+      "void",
+      source,
+      record.no_bet_reason ?? "non-actionable: no_bet=true",
+    );
+  }
+
   // Phase 6B.19 — FI markets grade as soon as first_inning_runs is
   // available (mid-game), not at full final. The linescore ingester
   // populates `games.first_inning_runs` once inning 1 closes; FI

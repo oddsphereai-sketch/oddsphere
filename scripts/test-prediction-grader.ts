@@ -220,6 +220,31 @@ console.log("\n━━━ Pending ━━━");
   check("in_progress → pending (don't grade live)", g.result === "pending");
 }
 
+// ── Phase 6B.20 — no_bet=true rows grade as void (excluded) ──
+console.log("\n━━━ Phase 6B.20 — no_bet=true → void (excluded from public tally) ━━━");
+{
+  // Toss-Up FI row with no_bet=true should NOT be graded as W/L even
+  // when first_inning_runs is populated.
+  const r = makeRecord({ market: "first_inning", pick: "Toss-Up", no_bet: true, no_bet_reason: "non-actionable: locked pill was Toss-Up" } as any);
+  const g = gradePrediction({
+    record: r,
+    game: { status: "STATUS_IN_PROGRESS", home_score: 1, away_score: 0, first_inning_runs: 0 },
+    source: "auto_score_ingest",
+  });
+  check("no_bet=true FI → void, not win", g.result === "void");
+  check("void carries the no_bet_reason in grade_notes", typeof g.grade_notes === "string" && /non-actionable/i.test(g.grade_notes!));
+}
+{
+  // Same for a final game — even at status=final, no_bet=true stays void.
+  const r = makeRecord({ market: "moneyline", pick: "home", no_bet: true, no_bet_reason: "test" } as any);
+  const g = gradePrediction({
+    record: r,
+    game: { status: "final", home_score: 5, away_score: 3, first_inning_runs: null },
+    source: "auto_score_ingest",
+  });
+  check("no_bet=true ML at status=final → void (excluded)", g.result === "void");
+}
+
 // ── Phase 6B.19 — FI markets grade mid-game once inning 1 complete ──
 console.log("\n━━━ Phase 6B.19 — FI grades mid-game (no need to wait for final) ━━━");
 {

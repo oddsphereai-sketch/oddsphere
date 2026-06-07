@@ -177,6 +177,90 @@ console.log("\n━━━ NRFI populated → 3 records ━━━");
   check("FI line_value=0.5", fi?.line_value === 0.5);
 }
 
+// ── Phase 6B.20 — Toss-Up FI rows captured as non-actionable ─────
+console.log("\n━━━ Phase 6B.20 — Toss-Up FI rows ━━━");
+{
+  // nrfi_decision_kind=toss_up should produce pick="Toss-Up", no_bet=true
+  const tossUpPred = {
+    ...basePrediction,
+    predicted_nrfi: true, // internal lean (preserved in snapshot_json)
+    nrfi_confidence: 52,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "toss_up",
+      auto_factors: { nrfi_expected_runs: 1.0 },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, tossUpPred]]),
+    abbrevByTeamId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  check("Toss-Up FI: pick='Toss-Up'", fi.pick === "Toss-Up");
+  check("Toss-Up FI: side=null", fi.side === null);
+  check("Toss-Up FI: no_bet=true", fi.no_bet === true);
+  check("Toss-Up FI: prediction_type='toss_up'", fi.prediction_type === "toss_up");
+  check("Toss-Up FI: no_bet_reason explains non-actionable", typeof fi.no_bet_reason === "string" && /non-actionable/i.test(fi.no_bet_reason!));
+  check("Toss-Up FI: snapshot_json preserves internal lean for calibration", (fi.snapshot_json as any)?.nrfi_decision_kind === "toss_up");
+}
+{
+  // Actionable NRFI: nrfi_decision_kind='nrfi' → unchanged path
+  const actionablePred = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 56,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "nrfi",
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, actionablePred]]),
+    abbrevByTeamId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  check("Actionable NRFI: pick='NRFI'", fi.pick === "NRFI");
+  check("Actionable NRFI: side='under'", fi.side === "under");
+  check("Actionable NRFI: no_bet=false", fi.no_bet === false);
+  check("Actionable NRFI: prediction_type=null", fi.prediction_type === null);
+}
+{
+  // Heuristic fallback: pre-4D.1 row without nrfi_decision_kind but
+  // nrfi_confidence=52 + nrfi_expected_runs in [0.85, 1.15) → Toss-Up
+  const heuristicPred = {
+    ...basePrediction,
+    predicted_nrfi: false,
+    nrfi_confidence: 52,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      // no nrfi_decision_kind
+      auto_factors: { nrfi_expected_runs: 0.95 },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, heuristicPred]]),
+    abbrevByTeamId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  check("Heuristic Toss-Up: pick='Toss-Up' via conf=52 + runs band", fi.pick === "Toss-Up");
+  check("Heuristic Toss-Up: no_bet=true", fi.no_bet === true);
+}
+
 // ── Unique key (game_id, market, model_version, slate_date) ─────
 console.log("\n━━━ Idempotency key uniqueness ━━━");
 {
