@@ -43,6 +43,9 @@
 
 import type { Sport } from "../types/domain/Sport";
 import { buildFeatureSnapshots } from "../automodel/featureSnapshot";
+import { resolveFirstInningModelVersion } from "../automodel/firstInningModelVersion";
+import { applyFiV2WriterOverride } from "./fiV2Writer";
+import type { FiLineRow } from "../automodel/mlbFirstInningMarketBaseline";
 import { runMlbAutoModelV1 } from "../automodel/mlbAutoModelV1";
 import { runMlbAutoModelV2 } from "../automodel/mlbAutoModelV2";
 import { runMlbAutoModelV2_1 } from "../automodel/mlbAutoModelV2_1";
@@ -419,6 +422,11 @@ export async function generatePredictionsForSlate(
 
   // Phase 6B.1 — resolve effective auto-model version (override > env > v1).
   const effectiveVersion = resolveEffectiveVersion(opts.modelVersion);
+  // Phase 6B.1.7 — independent FI model version resolver. Controls
+  // whether FI V2 overrides the legacy V1 NRFI passthrough on the
+  // member-facing first-inning surface. Defaults to "legacy" so
+  // FI V2 is opt-in via env until tracking justifies default-on.
+  const firstInningVersion = resolveFirstInningModelVersion();
 
   // Two-key gate (Phase 3C): EITHER missing while caller asked for a
   // write → throw immediately, BEFORE any DB read or model work. This is
@@ -517,6 +525,59 @@ export async function generatePredictionsForSlate(
           e instanceof Error ? e.message : String(e)
         }`
     );
+  }
+
+  // Phase 6B.1.7 — load FI line rows once per slate so the FI V2 writer
+  // doesn't re-query per game. Only loaded when FI V2 is enabled — when
+  // legacy mode is active there's nothing to compute and we skip the
+  // round-trip entirely.
+  const fiLinesByExternalId = new Map<number, FiLineRow[]>();
+  if (firstInningVersion === "fi_v2" && snapshots.length > 0) {
+    try {
+      const extIds = snapshots.map((s) => s.game_external_id);
+      const { data: games } = await supabase
+        .from("games")
+        .select("id, external_id")
+        .in("external_id", extIds);
+      const idByExt = new Map((games ?? []).map((g) => [g.external_id as number, g.id as number]));
+      const gameIds = (games ?? []).map((g) => g.id as number);
+      if (gameIds.length > 0) {
+        const { data: rows } = await supabase
+          .from("lines")
+          .select("game_id, sportsbook, side, line_value, odds_american, fetched_at")
+          .in("game_id", gameIds)
+          .eq("market_type", "first_inning_total");
+        const byGame = new Map<number, FiLineRow[]>();
+        for (const r of rows ?? []) {
+          const list = byGame.get(r.game_id as number) ?? [];
+          list.push({
+            market_type: "first_inning_total",
+            sportsbook: r.sportsbook as string,
+            side: (r.side as string | null) ?? null,
+            line_value: (r.line_value as number | null) ?? null,
+            odds_american: (r.odds_american as number | null) ?? null,
+            fetched_at: (r.fetched_at as string | null) ?? null,
+          });
+          byGame.set(r.game_id as number, list);
+        }
+        for (const [ext, gid] of idByExt) {
+          const list = byGame.get(gid);
+          if (list) fiLinesByExternalId.set(ext, list);
+        }
+      }
+      console.log(
+        `[automodelService] fi_writer_mode_resolved=fi_v2 ` +
+        `fi_lines_loaded=${fiLinesByExternalId.size}/${snapshots.length}`,
+      );
+    } catch (e) {
+      console.warn(
+        `[automodelService] FI lines query failed: ${e instanceof Error ? e.message : String(e)}. ` +
+        `FI V2 will operate without market for any affected games.`,
+      );
+    }
+  } else {
+    console.log(`[automodelService] fi_writer_mode_resolved=legacy ` +
+      `(FIRST_INNING_MODEL_VERSION=${process.env.FIRST_INNING_MODEL_VERSION ?? "unset"})`);
   }
 
   // R-16 — fetch slate-scoped market context once per slate (no-vig ML
@@ -686,12 +747,47 @@ export async function generatePredictionsForSlate(
       // For "v2" or "shadow" → run V2 with try/catch; on error, fall back
       // to V1 with a logged warning. "v2" writes V2's prediction values;
       // "shadow" keeps V1's values and only attaches v2_audit.
-      const finalPrediction: AutoModelOutput = applyV2IfSelected({
+      const baseFinalPrediction: AutoModelOutput = applyV2IfSelected({
         snap,
         v1Output: finalPredictionV1,
         stage,
         effectiveVersion,
       });
+
+      // 2d.6 — Phase 6B.1.7 — FI V2 writer overlay.
+      // When FIRST_INNING_MODEL_VERSION=fi_v2 the FI V2 model runs over
+      // this snapshot and the resulting FI fields (predicted_nrfi,
+      // nrfi_confidence, sport_specific.{fi_model_used, fi_v2_audit,
+      // nrfi_decision_kind, hold_picks}) override the legacy V1 NRFI
+      // passthrough. Failure is non-fatal — on error we keep the
+      // legacy fields and log so the rest of the prediction still
+      // writes. ML/OU/score fields are NEVER touched by this overlay.
+      let finalPrediction: AutoModelOutput = baseFinalPrediction;
+      if (firstInningVersion === "fi_v2") {
+        try {
+          const fiLines = fiLinesByExternalId.get(snap.game_external_id) ?? [];
+          const overlay = applyFiV2WriterOverride(
+            snap,
+            fiLines,
+            baseFinalPrediction.sport_specific as unknown as Record<string, unknown>,
+          );
+          finalPrediction = {
+            ...baseFinalPrediction,
+            predicted_nrfi: overlay.predicted_nrfi,
+            nrfi_confidence: overlay.nrfi_confidence,
+            sport_specific: {
+              ...baseFinalPrediction.sport_specific,
+              ...overlay.sport_specific_overrides,
+            } as AutoModelOutput["sport_specific"],
+          };
+        } catch (fiErr) {
+          console.warn(
+            `[automodelService] FI V2 overlay threw for game_external_id=` +
+              `${snap.game_external_id}: ${fiErr instanceof Error ? fiErr.message : String(fiErr)}. ` +
+              `Preserving legacy FI fields.`,
+          );
+        }
+      }
 
       // 2e — tally
       predictions.push(finalPrediction);
