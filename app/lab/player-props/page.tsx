@@ -3,15 +3,21 @@
 /**
  * /lab/player-props — Player Props module page (Phase 6.2a).
  *
- * Lifted out of the old LabApp section dispatcher. Owns the props-specific
- * URL state: sport, mode (best / search), prop (sub-market). Slate date
- * still flows through SlateDatePicker → ?date= URL param (5E.1 pattern).
+ * Phase 6B.4 launch override: Player Props ship as Coming Soon for V1.
+ * The model isn't ready for member exposure. The full scaffolding
+ * (search, drill-down, mode toggle) stays in the file so the post-launch
+ * unlock is a single boolean flip — see `PROPS_COMING_SOON` below.
  *
- * Mounts PlayerDrillDown as a modal overlay when a player is selected.
- * Drill-down state is local (useState) — not URL-routed for V1 since the
- * drill-down doesn't need to be deep-linkable yet (Phase 9+ when My Bets
- * + share-link features land).
+ * Original spec:
+ *   Lifted out of the old LabApp section dispatcher. Owns the props-
+ *   specific URL state: sport, mode (best / search), prop (sub-market).
+ *   Slate date still flows through SlateDatePicker → ?date= URL param
+ *   (5E.1 pattern). Mounts PlayerDrillDown as a modal overlay when a
+ *   player is selected.
  */
+
+// Phase 6B.4 launch gate. Flip to false when the props model is ready.
+const PROPS_COMING_SOON = true;
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
@@ -31,7 +37,57 @@ function defaultPropTypeForSport(sport: Sport): string {
   return Object.keys(PROP_TYPE_META[sport])[0] ?? "";
 }
 
+function PlayerPropsComingSoon() {
+  return (
+    <div className="max-w-2xl mx-auto py-12 sm:py-20">
+      <div className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-2xl p-8 sm:p-12">
+        <p className="inline-block text-[10px] font-bold uppercase tracking-wider text-gray-300 bg-gray-800/60 border border-gray-700 rounded-full px-3 py-1 mb-4">
+          Coming soon
+        </p>
+        <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-3">
+          Player Props
+        </h1>
+        <p className="text-base text-gray-200 leading-relaxed mb-6">
+          Player-level projections and prop angles are being built into the
+          Lab. Full player prop coverage will be added after launch.
+        </p>
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-violet-300 mb-3">
+          What lands first
+        </p>
+        <ul className="space-y-2 text-sm text-gray-300">
+          <li className="flex items-start gap-2">
+            <span aria-hidden="true" className="text-violet-400 mt-1">·</span>
+            <span>MLB pitcher strikeouts, hits-allowed, and innings projections</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span aria-hidden="true" className="text-violet-400 mt-1">·</span>
+            <span>Batter hits, total bases, and HR angles tied to lineup + matchup</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span aria-hidden="true" className="text-violet-400 mt-1">·</span>
+            <span>Best-of-book pricing and edge-vs-market on every prop</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span aria-hidden="true" className="text-violet-400 mt-1">·</span>
+            <span>Search + filter across every player on tonight&rsquo;s slate</span>
+          </li>
+        </ul>
+        <p className="text-[11px] text-gray-500 italic mt-6 pt-4 border-t border-gray-800/60">
+          Premium members get this at no extra charge when it ships.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function PlayerPropsPage() {
+  if (PROPS_COMING_SOON) {
+    return <PlayerPropsComingSoon />;
+  }
+  return <PlayerPropsLive />;
+}
+
+function PlayerPropsLive() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
