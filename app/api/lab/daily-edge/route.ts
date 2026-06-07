@@ -901,6 +901,11 @@ function buildGameDto(
  * removes the wrong-side-price path entirely.
  */
 const BOOK_PRIORITY = [
+  // Phase 6B.18 — locked snapshot wins over every live book for
+  // locked games. Injected by the route's locked-snapshot override
+  // (see "Phase 6B.18 — FULL locked-snapshot override" comment).
+  // For unlocked games this entry simply has no matching rows.
+  "locked_snapshot",
   "pinnacle",
   "draftkings",
   "fanduel",
@@ -2470,31 +2475,125 @@ export async function GET(request: Request) {
       if (chosen !== null) totalLineByGame.set(gameId, chosen);
     }
 
-    // Phase 6B.17 — locked-snapshot override for the total line.
-    // For games that have a locked prediction_records.total row with
-    // a populated line_value, use the locked pregame line — NEVER the
-    // live mid-game `lines` table value. Symptom this fixes:
-    // CWS@PHI pregame total was 9.5; mid-game the `lines` refresh kept
-    // updating to 11.5/12.5 (live SharpAPI rows). Daily Edge then
-    // rendered 12.5 to members while Tracking graded against 9.5. Now
-    // both surfaces read the same locked snapshot.
+    // Phase 6B.18 — FULL locked-snapshot override.
     //
-    // Reading: prediction_records for THIS slate, total market, with
-    // locked_at != null AND line_value != null. Override overrides
-    // live for those games only — unlocked/in-flight games keep their
-    // live `lines` value as before.
-    const { data: lockedTotalRows } = await supabase
+    // For games whose prediction_records is locked (locked_at !=
+    // null), Daily Edge MUST render the pregame snapshot, not the
+    // live game_predictions + lines + sharp_signals which keep
+    // moving mid-game. We achieve this in two places:
+    //   (a) totalLineByGame override (preserves the 6B.17 fix)
+    //   (b) MUTATE the in-memory game.game_predictions to swap pick,
+    //       confidence, sport_specific to the locked snapshot. This
+    //       single swap propagates the lock through every downstream
+    //       extractor: pick/side, confidence, ml_play_grade, ou_play_grade,
+    //       best_angle_eligible, model_prob, market_prob, edge_pct,
+    //       reviewer flags, all sharp/verdict derivation, etc.
+    //   (c) Add synthesized rows to currentLinesByGameMarket for ML +
+    //       OU using locked odds_american, so priceAmerican on the
+    //       DTO uses the locked snapshot's price too.
+    //
+    // Reads prediction_records for THIS slate's ML + total markets
+    // where locked_at != null. Per-game-per-market override.
+    const { data: lockedRecRows } = await supabase
       .from("prediction_records")
-      .select("game_id, line_value, locked_at")
+      .select(
+        "game_id, market, pick, side, line_value, odds_american, confidence, model_probability, market_probability, edge, play_grade, best_angle, locked_at, snapshot_json",
+      )
       .eq("sport", "mlb")
       .eq("slate_date", requestedDate)
-      .eq("market", "total")
-      .not("locked_at", "is", null)
-      .not("line_value", "is", null);
-    for (const r of ((lockedTotalRows ?? []) as Array<{ game_id: number; line_value: number | null }>)) {
-      if (r.line_value !== null) {
+      .in("market", ["moneyline", "total"])
+      .not("locked_at", "is", null);
+    type LockedRec = {
+      game_id: number;
+      market: string;
+      pick: string | null;
+      side: string | null;
+      line_value: number | null;
+      odds_american: number | null;
+      confidence: number | null;
+      model_probability: number | null;
+      market_probability: number | null;
+      edge: number | null;
+      play_grade: string | null;
+      best_angle: boolean | null;
+      locked_at: string | null;
+      snapshot_json: Record<string, unknown> | null;
+    };
+    const lockedByGameMarket = new Map<string, LockedRec>();
+    for (const r of (lockedRecRows ?? []) as LockedRec[]) {
+      lockedByGameMarket.set(`${r.game_id}::${r.market}`, r);
+    }
+    // (a) totalLineByGame override (6B.17 behavior preserved)
+    for (const r of lockedByGameMarket.values()) {
+      if (r.market === "total" && r.line_value !== null) {
         totalLineByGame.set(r.game_id, r.line_value);
       }
+    }
+    // (b) In-place swap of game_predictions for locked games — pick,
+    //     confidence, sport_specific (the audit). The locked
+    //     snapshot_json carries the full sport_specific that was
+    //     captured at lock time, so downstream extractors that read
+    //     sport_specific.v2_2_audit.* get the frozen values.
+    for (const g of games) {
+      const lockedMl = lockedByGameMarket.get(`${g.id}::moneyline`);
+      const lockedOu = lockedByGameMarket.get(`${g.id}::total`);
+      if (!lockedMl && !lockedOu) continue;
+      if (!g.game_predictions) continue;
+      const pred = g.game_predictions;
+      // Prefer the most-complete snapshot (ML and OU share the same
+      // game_predictions.sport_specific at lock time, so either is fine
+      // — fall back if one is missing).
+      const lockedSp = (lockedMl?.snapshot_json ?? lockedOu?.snapshot_json) as
+        | Record<string, unknown>
+        | null;
+      if (lockedSp !== null && lockedSp !== undefined) {
+        // Cast: PredictionRow is typed but we mutate live to swap audit
+        // data. Downstream code reads sport_specific generically.
+        (pred as unknown as { sport_specific: Record<string, unknown> }).sport_specific = lockedSp;
+      }
+      if (lockedMl) {
+        (pred as unknown as { predicted_ml_winner: string | null }).predicted_ml_winner =
+          lockedMl.pick;
+        (pred as unknown as { ml_confidence: number | null }).ml_confidence =
+          lockedMl.confidence;
+      }
+      if (lockedOu) {
+        (pred as unknown as { predicted_ou_side: string | null }).predicted_ou_side =
+          lockedOu.pick;
+        (pred as unknown as { ou_confidence: number | null }).ou_confidence =
+          lockedOu.confidence;
+      }
+      // Make sure locked_at is present so downstream lock-aware UI
+      // bits (LockBadge etc.) render the lock state correctly even
+      // when game_predictions.locked_at was cleared.
+      if ((lockedMl?.locked_at ?? lockedOu?.locked_at) !== undefined) {
+        (pred as unknown as { locked_at: string | null }).locked_at =
+          (lockedMl?.locked_at ?? lockedOu?.locked_at) ?? null;
+      }
+    }
+    // (c) Inject locked ML/OU odds into currentLinesByGameMarket so
+    //     priceAmerican on the DTO uses the locked snapshot price.
+    //     Only injects when locked odds_american is non-null. The
+    //     synthetic row uses sportsbook="locked_snapshot" so it sorts
+    //     in via BOOK_PRIORITY (added below) and wins for the picked
+    //     side; live rows for other books are still present but the
+    //     route's pickPriceRow selects via BOOK_PRIORITY which now
+    //     places "locked_snapshot" first.
+    for (const r of lockedByGameMarket.values()) {
+      if (r.odds_american === null || r.side === null) continue;
+      const lockedRow: LineRow = {
+        game_id: r.game_id,
+        market_type: r.market,
+        sportsbook: "locked_snapshot",
+        side: r.side,
+        line_value: r.line_value,
+        odds_american: r.odds_american,
+        fetched_at: r.locked_at,
+      };
+      const key = `${r.game_id}::${r.market}`;
+      const arr = currentLinesByGameMarket.get(key) ?? [];
+      arr.unshift(lockedRow); // unshift so it's first if BOOK_PRIORITY doesn't include it
+      currentLinesByGameMarket.set(key, arr);
     }
 
     // 4.1.10 — per-game-market first-seen line price for `lineOpenAmerican`.

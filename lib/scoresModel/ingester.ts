@@ -580,9 +580,27 @@ export async function ingestScoresModel(
   }
 
   // Build payload and upsert (only the rows that passed the lock guard).
-  const payload = writable.map(({ row, gameId }) =>
-    buildPayload(sport, row, gameId, source)
-  );
+  //
+  // Phase 6B.18 — DEFENSIVE LOCK PRESERVATION. Pre-6B.18 we relied on
+  // Supabase/PostgREST's documented "only SET columns present in the
+  // payload" behavior. In practice the prod 2026-06-07 evidence shows
+  // game_predictions.locked_at being cleared between cron firings
+  // somewhere in this pipeline (multiple re-lock entries per game in
+  // admin_audit_log). Explicit defense-in-depth: read the existing
+  // row's locked_at + is_override before upsert and include them
+  // verbatim in the payload, so EXCLUDED.locked_at and
+  // EXCLUDED.is_override re-set the same value on conflict instead of
+  // relying on column omission to preserve them. Has no effect on
+  // unlocked rows (existing locked_at IS null → set null → preserved).
+  const payload = writable.map(({ row, gameId }) => {
+    const base = buildPayload(sport, row, gameId, source);
+    const ex = existingByGameId.get(gameId);
+    if (ex !== undefined) {
+      base.locked_at = ex.locked_at;
+      base.is_override = ex.is_override;
+    }
+    return base;
+  });
   const { error } = await client
     .from("game_predictions")
     .upsert(payload, { onConflict: "game_id" });

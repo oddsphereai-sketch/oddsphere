@@ -98,6 +98,87 @@ type PublicSplitsRow = {
 };
 
 /**
+ * Phase 6B.18 — picked-side pregame odds captured at lock time so the
+ * locked snapshot carries enough data for Daily Edge to render the
+ * frozen pregame price after lock without falling back to the live
+ * `lines` table (which keeps moving mid-game).
+ */
+type GameOddsSnapshot = {
+  mlHomeOdds: number | null;
+  mlAwayOdds: number | null;
+  ouOverOdds: number | null;
+  ouUnderOdds: number | null;
+};
+
+/**
+ * Phase 6B.18 — same priority list Daily Edge uses for line/odds
+ * selection (BOOK_PRIORITY in app/api/lab/daily-edge/route.ts:903).
+ * Duplicated here intentionally — predictionRecordService is a
+ * server-only service and shouldn't import a route module. Keep in
+ * sync if the daily-edge list changes.
+ */
+const BOOK_PRIORITY: readonly string[] = [
+  "pinnacle",
+  "draftkings",
+  "fanduel",
+  "betmgm",
+  "caesars",
+  "bet365 us",
+  "bookmaker",
+  "ballybet",
+  "onexbet",
+  "saba",
+  "fliff",
+  "splits_consensus",
+] as const;
+
+type LineRowForOdds = {
+  game_id: number;
+  market_type: string;
+  side: string | null;
+  sportsbook: string;
+  odds_american: number | null;
+};
+
+/**
+ * For one (game, market, side), return the picked-side odds_american
+ * from the highest-priority book that has a non-null value. Returns
+ * null when nothing matches.
+ */
+function pickPriorityOdds(
+  rows: ReadonlyArray<LineRowForOdds>,
+  marketType: "moneyline" | "total",
+  side: string,
+): number | null {
+  const candidates = rows.filter(
+    (r) =>
+      r.market_type === marketType &&
+      r.side === side &&
+      r.odds_american !== null,
+  );
+  for (const book of BOOK_PRIORITY) {
+    const hit = candidates.find((r) => r.sportsbook === book);
+    if (hit) return hit.odds_american;
+  }
+  return null;
+}
+
+/**
+ * Build the per-game odds snapshot from the lines table. Reads the
+ * first BOOK_PRIORITY-matching odds per (game, market, side).
+ */
+export function buildGameOddsSnapshot(
+  lines: ReadonlyArray<LineRowForOdds>,
+): GameOddsSnapshot {
+  return {
+    mlHomeOdds: pickPriorityOdds(lines, "moneyline", "home"),
+    mlAwayOdds: pickPriorityOdds(lines, "moneyline", "away"),
+    ouOverOdds: pickPriorityOdds(lines, "total", "over"),
+    ouUnderOdds: pickPriorityOdds(lines, "total", "under"),
+  };
+}
+
+/**
  * Phase 6B.11 — applies the same public-money guard the Daily Edge
  * verdict layer uses (Phase 6B.10), so prediction_records.best_angle
  * matches what members actually see on the slate.
@@ -153,11 +234,45 @@ function buildMlRecord(
   slateDate: string,
   launchDay: boolean,
   signalsForGame: PublicSplitsRow[],
+  oddsForGame: GameOddsSnapshot | null,
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
   const held = holdPicks.includes("ml") || pred.predicted_ml_winner === null;
   if (held) return null;
+  const v22 = (sp.v2_2_audit ?? {}) as Record<string, unknown>;
+  const v21 = (sp.v2_1_audit ?? {}) as Record<string, unknown>;
+  // Phase 6B.18 — capture the pregame price + audit math for the
+  // picked side so Daily Edge can render the locked snapshot
+  // verbatim after lock instead of falling back to live `lines` and
+  // live game_predictions.sport_specific. Pre-6B.18 these were all
+  // null on locked snapshots and the UI had to fall back to live.
+  const mlOddsAmerican =
+    pred.predicted_ml_winner === "home"
+      ? oddsForGame?.mlHomeOdds ?? null
+      : pred.predicted_ml_winner === "away"
+        ? oddsForGame?.mlAwayOdds ?? null
+        : null;
+  const mlModelProb =
+    typeof v22.ml_model_prob === "number"
+      ? (v22.ml_model_prob as number)
+      : pred.ml_confidence !== null
+        ? pred.ml_confidence / 100
+        : null;
+  const mlMarketProb =
+    typeof v22.ml_market_prob === "number"
+      ? (v22.ml_market_prob as number)
+      : pred.predicted_ml_winner === "home" && typeof v21.market_home_win_prob === "number"
+        ? (v21.market_home_win_prob as number)
+        : pred.predicted_ml_winner === "away" && typeof v21.market_away_win_prob === "number"
+          ? (v21.market_away_win_prob as number)
+          : null;
+  const mlEdgePp =
+    typeof v22.ml_edge_pct === "number"
+      ? (v22.ml_edge_pct as number)
+      : mlModelProb !== null && mlMarketProb !== null
+        ? (mlModelProb - mlMarketProb) * 100
+        : null;
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -170,26 +285,15 @@ function buildMlRecord(
     pick: pred.predicted_ml_winner,
     side: pred.predicted_ml_winner,
     line_value: null,
-    odds_american: null,
+    odds_american: mlOddsAmerican,
     odds_decimal: null,
     model_used: readStringOrNull(sp.model_used),
     model_version: readStringOrNull(sp.model_version),
     prediction_source: pred.prediction_source,
     confidence: pred.ml_confidence,
-    model_probability:
-      pred.ml_confidence !== null ? pred.ml_confidence / 100 : null,
-    market_probability:
-      typeof sp.v2_1_audit === "object" && sp.v2_1_audit !== null
-        ? (sp.v2_1_audit as Record<string, unknown>).market_home_win_prob !==
-            undefined && pred.predicted_ml_winner === "home"
-          ? (((sp.v2_1_audit as Record<string, unknown>).market_home_win_prob as number) ?? null)
-          : pred.predicted_ml_winner === "away" &&
-            (sp.v2_1_audit as Record<string, unknown>).market_away_win_prob !==
-              undefined
-          ? (((sp.v2_1_audit as Record<string, unknown>).market_away_win_prob as number) ?? null)
-          : null
-        : null,
-    edge: null,
+    model_probability: mlModelProb,
+    market_probability: mlMarketProb,
+    edge: mlEdgePp,
     expected_value: null,
     play_grade: readStringOrNull(sp.ml_play_grade),
     prediction_type: readStringOrNull(sp.ml_prediction_type),
@@ -223,6 +327,7 @@ function buildOuRecord(
   slateDate: string,
   launchDay: boolean,
   signalsForGame: PublicSplitsRow[],
+  oddsForGame: GameOddsSnapshot | null,
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
@@ -243,6 +348,29 @@ function buildOuRecord(
       : typeof v21.market_total === "number"
         ? (v21.market_total as number)
         : null;
+  // Phase 6B.18 — capture pregame picked-side OU price + audit math.
+  const ouOddsAmerican =
+    pred.predicted_ou_side === "over"
+      ? oddsForGame?.ouOverOdds ?? null
+      : pred.predicted_ou_side === "under"
+        ? oddsForGame?.ouUnderOdds ?? null
+        : null;
+  const ouModelProb =
+    typeof v22.ou_model_prob === "number"
+      ? (v22.ou_model_prob as number)
+      : pred.ou_confidence !== null
+        ? pred.ou_confidence / 100
+        : null;
+  const ouMarketProb =
+    typeof v22.ou_market_prob === "number"
+      ? (v22.ou_market_prob as number)
+      : null;
+  const ouEdgePp =
+    typeof v22.ou_edge_pct === "number"
+      ? (v22.ou_edge_pct as number)
+      : ouModelProb !== null && ouMarketProb !== null
+        ? (ouModelProb - ouMarketProb) * 100
+        : null;
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -255,16 +383,15 @@ function buildOuRecord(
     pick: pred.predicted_ou_side,
     side: pred.predicted_ou_side,
     line_value: lockedTotalLine,
-    odds_american: null,
+    odds_american: ouOddsAmerican,
     odds_decimal: null,
     model_used: readStringOrNull(sp.model_used),
     model_version: readStringOrNull(sp.model_version),
     prediction_source: pred.prediction_source,
     confidence: pred.ou_confidence,
-    model_probability:
-      pred.ou_confidence !== null ? pred.ou_confidence / 100 : null,
-    market_probability: null,
-    edge: null,
+    model_probability: ouModelProb,
+    market_probability: ouMarketProb,
+    edge: ouEdgePp,
     expected_value: null,
     play_grade: readStringOrNull(sp.ou_play_grade),
     prediction_type: readStringOrNull(sp.ou_prediction_type),
@@ -361,6 +488,14 @@ export function buildPredictionRecordsFromSlate(args: {
    * key = no guard fires (defaults to V2.2 audit's raw eligibility).
    */
   signalsByGameId?: ReadonlyMap<number, ReadonlyArray<PublicSplitsRow>>;
+  /**
+   * Phase 6B.18 — per-game pregame odds snapshot. Threaded through
+   * buildMl/OuRecord so the locked snapshot carries the picked-side
+   * price. Empty map / missing key = odds captured as null (Daily
+   * Edge will fall back to live `lines` for unlocked games as before,
+   * and "price unavailable" for locked games — no fake values).
+   */
+  oddsByGameId?: ReadonlyMap<number, GameOddsSnapshot>;
 }): PredictionRecordRow[] {
   const proposed: PredictionRecordRow[] = [];
   for (const g of args.games) {
@@ -369,8 +504,9 @@ export function buildPredictionRecordsFromSlate(args: {
     const home = args.abbrevByTeamId.get(g.home_team_id) ?? "?";
     const away = args.abbrevByTeamId.get(g.away_team_id) ?? "?";
     const sigs = (args.signalsByGameId?.get(g.id) ?? []) as PublicSplitsRow[];
-    const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs);
-    const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs);
+    const odds = args.oddsByGameId?.get(g.id) ?? null;
+    const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds);
+    const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds);
     const fi = buildFiRecord(pred, g, home, away, args.slateDate, args.launchDay);
     if (ml) proposed.push(ml);
     if (ou) proposed.push(ou);
@@ -454,6 +590,27 @@ export async function createPredictionRecords(
     signalsByGameId.set(s.game_id, list);
   }
 
+  // Phase 6B.18 — load picked-side odds for ML + OU markets so the
+  // snapshot captures the pregame price. Daily Edge can then render
+  // the locked snapshot's odds_american directly after lock instead
+  // of falling back to the live `lines` table.
+  const { data: lineRowsForOdds } = await supabase
+    .from("lines")
+    .select("game_id, market_type, side, sportsbook, odds_american")
+    .in("game_id", gameIds)
+    .in("market_type", ["moneyline", "total"])
+    .is("player_id", null);
+  const oddsByGameId = new Map<number, GameOddsSnapshot>();
+  const linesByGame = new Map<number, LineRowForOdds[]>();
+  for (const l of ((lineRowsForOdds ?? []) as LineRowForOdds[])) {
+    const arr = linesByGame.get(l.game_id) ?? [];
+    arr.push(l);
+    linesByGame.set(l.game_id, arr);
+  }
+  for (const [gameId, lines] of linesByGame) {
+    oddsByGameId.set(gameId, buildGameOddsSnapshot(lines));
+  }
+
   const proposed = buildPredictionRecordsFromSlate({
     sport,
     slateDate,
@@ -462,6 +619,7 @@ export async function createPredictionRecords(
     predictionByGameId,
     abbrevByTeamId,
     signalsByGameId,
+    oddsByGameId,
   });
   result.proposed = proposed;
   result.skippedHeld =

@@ -211,11 +211,22 @@ async function applyLocks(
   // count of transitioning games per invocation is typically 0-2 so a
   // small loop is fine here; pregame-sweep runs every 15 min so we're
   // not batching dozens of writes.
+  //
+  // Phase 6B.18 — IDEMPOTENCY. Only UPDATE locked_at when it is
+  // currently NULL. The pre-6B.18 unconditional UPDATE advanced
+  // locked_at on every cron firing for games that were classified
+  // as entering_lock multiple times (root-cause symptom: another
+  // path was clearing locked_at between firings, but even after
+  // that's fixed the lock semantic should treat the FIRST lock as
+  // canonical, not the latest re-lock). The .is("locked_at", null)
+  // predicate guarantees the row stays untouched when already
+  // locked, regardless of partition mis-classification.
   for (const g of games) {
     const { error: updErr } = await supabase
       .from("game_predictions")
       .update({ locked_at: lockedAt })
-      .eq("game_id", g.game_id);
+      .eq("game_id", g.game_id)
+      .is("locked_at", null);
     if (updErr) {
       errors.push(`game_id=${g.game_id}: locked_at UPDATE failed: ${updErr.message}`);
       continue;
