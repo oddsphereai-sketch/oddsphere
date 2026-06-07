@@ -189,13 +189,23 @@ export async function runTrackingRefresh(
       }
       summary.datesProcessed++;
 
-      // 1. Prediction records — only when none exist OR all existing are
-      //    NOT launch_day. We never flip launch_day=true rows.
+      // 1. Prediction records — always upsert so pending unlocked
+      //    rows track the latest game_predictions. Phase 6B.12: the
+      //    pre-launch behavior skipped this entirely when records
+      //    already existed, which left every intraday cron pass with
+      //    stale model_probability / confidence / best_angle / pick.
+      //    The upsert in createPredictionRecords is locked-row-aware:
+      //    it refuses to overwrite any row with locked_at != null
+      //    (pregame-sweep owns the lock transition), so this stays
+      //    safe even when some games are locked and others aren't.
+      //
+      //    The one preserved guard: launch_day=true rows. Those are
+      //    pre-launch manual baselines we never want cron-overwritten.
       const existing = await loadExistingRecordCounts(opts.supabase, date);
       perDate.records_existed_before = existing.total;
       if (existing.launchDay > 0) {
         perDate.records_skipped_due_to_launch_day_preservation = true;
-      } else if (existing.total === 0) {
+      } else {
         const createRes = await createPredictionRecords({
           sport: "mlb",
           slateDate: date,
@@ -208,8 +218,6 @@ export async function runTrackingRefresh(
           perDate.errors.push(`records: game_id=${e.game_id} ${e.market} ${e.reason}`);
         }
       }
-      // else existing.total > 0 but launchDay === 0 → already created
-      // by a prior cron run; idempotent skip.
 
       // 2. MLB linescores
       try {

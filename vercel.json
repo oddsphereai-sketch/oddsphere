@@ -42,6 +42,10 @@
       "schedule": "0 */2 * * *"
     },
     {
+      "path": "/api/cron/pregame-sweep",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/feature-coverage-refresh",
       "schedule": "30 11 * * *"
     },

@@ -468,8 +468,42 @@ export async function createPredictionRecords(
     return result;
   }
 
-  // Upsert per (game_id, market, model_version, slate_date)
+  // Phase 6B.12 — locked-row-aware upsert. We must update existing
+  // unlocked rows so tracking stays in sync with intraday game_predictions
+  // refreshes, but we must NEVER overwrite a row that already has
+  // locked_at != null (pregame-sweep / lock-on-write owns that
+  // transition; pick + line + confidence must freeze at lock). Load
+  // existing lock state per (game_id, market, model_version, slate_date)
+  // first, then skip the upsert for any locked match.
+  const { data: existingLocks } = await supabase
+    .from("prediction_records")
+    .select("game_id, market, model_version, slate_date, locked_at")
+    .in("game_id", proposed.map((r) => r.game_id))
+    .eq("slate_date", slateDate);
+  const lockedKeys = new Set<string>();
+  for (const r of (existingLocks ?? []) as Array<{
+    game_id: number;
+    market: string;
+    model_version: string | null;
+    slate_date: string;
+    locked_at: string | null;
+  }>) {
+    if (r.locked_at !== null) {
+      lockedKeys.add(
+        `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`,
+      );
+    }
+  }
+
+  // Upsert per (game_id, market, model_version, slate_date). Locked
+  // rows are skipped entirely (counted as skippedExisting so the
+  // operator/cron summary surfaces them).
   for (const rec of proposed) {
+    const key = `${rec.game_id}::${rec.market}::${rec.model_version ?? ""}::${rec.slate_date}`;
+    if (lockedKeys.has(key)) {
+      result.skippedExisting++;
+      continue;
+    }
     const { error: upErr } = await supabase
       .from("prediction_records")
       .upsert(rec, {

@@ -194,6 +194,121 @@ console.log("\n━━━ Idempotency key uniqueness ━━━");
   check("each record has a unique idempotency key", uniqueKeys.size === keys.length);
 }
 
+// ── Phase 6B.12 — public-money guard at record-build layer ────────
+console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━━");
+{
+  // BAL@TOR moneyline scenario from 2026-06-07: V2.2 says ml BA eligible,
+  // model picked home. Opposite side (away) has 78% money / 27% bets =
+  // 51pp divergence. Guard should SUPPRESS best_angle.
+  const baTorPred = {
+    ...basePrediction,
+    sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
+  };
+  const signalsConflict = new Map([
+    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 78, public_betting_pct: 27 }]],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-07",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, baTorPred]]),
+    abbrevByTeamId,
+    signalsByGameId: signalsConflict,
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  check("ML best_angle SUPPRESSED when opposing money ≥60 + divergence ≥15", ml.best_angle === false);
+}
+{
+  // BAL@TOR moneyline with no signals → guard goes neutral, BA passes through.
+  const baTorPred = {
+    ...basePrediction,
+    sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-07",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, baTorPred]]),
+    abbrevByTeamId,
+    // no signalsByGameId — guard must default to V2.2 raw eligibility
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  check("ML best_angle PRESERVED when signals map is absent", ml.best_angle === true);
+}
+{
+  // Phase 6B.12 — explicit null public_money_pct must be treated as
+  // NEUTRAL (no suppression). This is the regression that re-Best-Angled
+  // NYY ML / TOR ML this morning.
+  const baTorPred = {
+    ...basePrediction,
+    sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
+  };
+  const signalsNullMoney = new Map([
+    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: null, public_betting_pct: 33 }]],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-07",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, baTorPred]]),
+    abbrevByTeamId,
+    signalsByGameId: signalsNullMoney,
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  check(
+    "ML best_angle PRESERVED when opp.public_money_pct is null (missing ≠ confirmation)",
+    ml.best_angle === true,
+  );
+}
+{
+  // Below-threshold opposing money (e.g. 57/33) → guard does NOT fire.
+  const baTorPred = {
+    ...basePrediction,
+    sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
+  };
+  const signalsBelowThreshold = new Map([
+    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 57, public_betting_pct: 33 }]],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-07",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, baTorPred]]),
+    abbrevByTeamId,
+    signalsByGameId: signalsBelowThreshold,
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  check("ML best_angle PRESERVED when opp money <60", ml.best_angle === true);
+}
+{
+  // OU side: pick=over, opposite=under has 88% money / 50% bets = 38pp →
+  // suppress (KC@MIN OU scenario from today's surgical resync).
+  const kcMinPred = {
+    ...basePrediction,
+    predicted_ou_side: "over",
+    ou_confidence: 65,
+    sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: false, ou_best_angle_eligible: true },
+  };
+  const signalsOuConflict = new Map([
+    [14771, [{ market_type: "total", side: "under", public_money_pct: 88, public_betting_pct: 50 }]],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-07",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, kcMinPred]]),
+    abbrevByTeamId,
+    signalsByGameId: signalsOuConflict,
+  });
+  const ou = recs.find((r) => r.market === "total")!;
+  check("OU best_angle SUPPRESSED when opposite under has 88% money", ou.best_angle === false);
+}
+
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
 if (fail > 0) {

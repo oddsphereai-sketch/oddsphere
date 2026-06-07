@@ -524,8 +524,20 @@ export const linesService = {
 
   /**
    * Refresh sharp signals for the slate. DELETE-then-INSERT scoped to
-   * tonight's games. (Signals can disappear when markets normalize — we
-   * want the DB to reflect *current* signals only.)
+   * tonight's games, with a public-money carry-forward merge: if the
+   * new payload row has a null public_money_pct or public_betting_pct
+   * and the prior row (same game+market+side) had non-null values,
+   * carry the non-null values forward. All other fields (EV, steam,
+   * RLM, computed_at) take the new values; if the new payload has no
+   * row for a (game, market, side) the row is dropped (signals can
+   * disappear).
+   *
+   * Why: Phase 6B.12 — SharpAPI /splits can return thinner rows on
+   * subsequent refreshes (some buckets miss money/bets fields). Pre-
+   * 6B.12 the DELETE-then-INSERT clobbered last cycle's rich
+   * public_money_pct + public_betting_pct with nulls, which made the
+   * Daily Edge public-money conflict guard go neutral and silently
+   * un-suppressed Best Angles that should have stayed Watchlist.
    *
    * `opts.dryRun` (default false) is a Phase 4.1.9.C operator-script
    * affordance: when true, the provider fetch + mapping still run normally,
@@ -550,13 +562,66 @@ export const linesService = {
     const apiCalls = 1;
     const skipped: number[] = [];
 
+    // Phase 6B.12 — load the prior public-money/bets values BEFORE the
+    // DELETE so we can carry them forward when the new payload has nulls.
+    const priorPublicSplits = new Map<
+      string,
+      { public_money_pct: number | null; public_betting_pct: number | null }
+    >();
+    {
+      const { data: priorRows, error: priorErr } = await supabase
+        .from("sharp_signals")
+        .select("game_id, market_type, side, public_money_pct, public_betting_pct")
+        .in("game_id", gameIds);
+      if (priorErr) {
+        throw new Error(
+          `linesService.refreshSharpSignals prior-row read failed: ${priorErr.message}`,
+        );
+      }
+      for (const r of (priorRows ?? []) as Array<{
+        game_id: number;
+        market_type: string;
+        side: string;
+        public_money_pct: number | null;
+        public_betting_pct: number | null;
+      }>) {
+        priorPublicSplits.set(`${r.game_id}::${r.market_type}::${r.side}`, {
+          public_money_pct: r.public_money_pct,
+          public_betting_pct: r.public_betting_pct,
+        });
+      }
+    }
+
     const payload: Array<Record<string, unknown>> = [];
+    let publicSplitsCarriedForward = 0;
     for (const s of signals) {
       const gameId = gameIdByExternal.get(s.game_external_id);
       if (gameId === undefined) {
         skipped.push(s.game_external_id);
         continue;
       }
+
+      // Carry forward last-known-good public money/bets when the new
+      // row has nulls but the prior row had values. Honest source label
+      // is preserved via computed_at (new) — we are not claiming the
+      // money% is fresh, only that it represents the latest known
+      // value for that side.
+      let publicMoney = s.public_money_pct;
+      let publicBetting = s.public_betting_pct;
+      const prior = priorPublicSplits.get(`${gameId}::${s.market_type}::${s.side}`);
+      if (prior !== undefined) {
+        let carried = false;
+        if (publicMoney === null && prior.public_money_pct !== null) {
+          publicMoney = prior.public_money_pct;
+          carried = true;
+        }
+        if (publicBetting === null && prior.public_betting_pct !== null) {
+          publicBetting = prior.public_betting_pct;
+          carried = true;
+        }
+        if (carried) publicSplitsCarriedForward++;
+      }
+
       payload.push({
         game_id: gameId,
         market_type: s.market_type,
@@ -569,8 +634,8 @@ export const linesService = {
         steam_books_count: s.steam_books_count,
         has_reverse_line_movement: s.has_reverse_line_movement,
         rlm_direction: s.rlm_direction,
-        public_betting_pct: s.public_betting_pct,
-        public_money_pct: s.public_money_pct,
+        public_betting_pct: publicBetting,
+        public_money_pct: publicMoney,
         // Fix 4.1 (Gap-18+19, Flag E1): signal_strength + signal_summary
         // no longer written. DB columns orphaned post-Fix-4.1; V15 future
         // migration drops them. Member-facing text now derives at API
@@ -596,10 +661,15 @@ export const linesService = {
       }
     }
 
+    const details: Record<string, unknown> = {};
+    if (skipped.length > 0) details.skipped_game_external_ids = skipped;
+    if (publicSplitsCarriedForward > 0) {
+      details.public_splits_carried_forward = publicSplitsCarriedForward;
+    }
     return {
       records_updated: payload.length,
       api_calls_made: apiCalls,
-      details: skipped.length > 0 ? { skipped_game_external_ids: skipped } : undefined,
+      details: Object.keys(details).length > 0 ? details : undefined,
     };
   },
 };
