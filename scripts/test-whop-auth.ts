@@ -339,8 +339,22 @@ await asyncCheck("getMissingWhopEnvs lists ALL required vars when none set", asy
     WHOP_SESSION_SECRET: undefined,
   }, () => {
     const r = m.getMissingWhopEnvs();
-    return r.enabled_flag_set === true && r.missing.length === 6;
+    // 5 required vars now: WHOP_CLIENT_SECRET is optional (Public mode).
+    return r.enabled_flag_set === true && r.missing.length === 5;
   });
+});
+
+await asyncCheck("isWhopAccessEnabled() returns TRUE even when WHOP_CLIENT_SECRET is unset (Public mode)", async () => {
+  const m = await import("../lib/auth/whopConfig");
+  return await withEnv({
+    WHOP_OAUTH_ENABLED: "true",
+    WHOP_CLIENT_ID: "app_test",
+    WHOP_CLIENT_SECRET: undefined,
+    WHOP_REDIRECT_URI: "https://oddsphereai.com/api/auth/whop/callback",
+    WHOP_API_KEY: "key",
+    WHOP_RESOURCE_ID: "prod_test",
+    WHOP_SESSION_SECRET: "x".repeat(32),
+  }, () => m.isWhopAccessEnabled());
 });
 
 await asyncCheck("getMissingWhopEnvs flags too-short session secret", async () => {
@@ -531,13 +545,15 @@ check("Token exchange body includes grant_type / code / redirect_uri / client_id
   /redirect_uri:\s*cfg\.redirectUri/.test(WHOP_OAUTH_LIB) &&
   /client_id:\s*cfg\.clientId/.test(WHOP_OAUTH_LIB) &&
   /code_verifier:\s*opts\.codeVerifier/.test(WHOP_OAUTH_LIB));
-check("Token exchange body includes client_secret (Confidential-mode Whop app)",
-  // Whop's Confidential client mode requires client_secret in the
-  // /oauth/token body alongside the PKCE code_verifier. The earlier
-  // PKCE-only attempt (matching Whop's docs example) returned
-  // "invalid_client — client_secret is required" on this production
-  // app, confirming Confidential mode. Hybrid: JSON + PKCE + secret.
-  /client_secret:\s*cfg\.clientSecret/.test(WHOP_OAUTH_LIB));
+check("Token exchange body does NOT include client_secret (Public mode + PKCE)",
+  // Phase 6B.3a.8 — Whop OAuth app is in Public mode. The token
+  // exchange is PKCE-only per Whop's docs. The previous Confidential
+  // attempt failed because Whop never exposes oauth:token_exchange
+  // as a selectable scope, so no Confidential secret can satisfy it.
+  // Comments may still reference the env name; the BODY field must
+  // not be present.
+  !/client_secret:\s*cfg\.clientSecret/.test(WHOP_OAUTH_LIB) &&
+  !/client_secret:\s*opts\.clientSecret/.test(WHOP_OAUTH_LIB));
 check("extractWhopOAuthError only forwards `error` and `error_description` fields",
   // Defensive: confirm we don't blindly dump the whole body
   /obj\["error"\][\s\S]{0,200}obj\["error_description"\]/.test(WHOP_OAUTH_LIB));

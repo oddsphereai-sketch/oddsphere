@@ -46,7 +46,13 @@ export const WHOP_ENDPOINTS = {
 export type WhopAccessConfig = {
   enabled: true;
   clientId: string;
-  clientSecret: string;
+  /**
+   * Public-mode OAuth apps have no client_secret — the PKCE
+   * code_verifier carries the auth. We still read it if set (some
+   * Whop endpoints, e.g. token revoke, may use it later) but the
+   * token-exchange path does NOT send it.
+   */
+  clientSecret: string | null;
   redirectUri: string;
   apiKey: string;
   resourceId: string;
@@ -63,15 +69,17 @@ export function readWhopConfig(): WhopAccessConfig | null {
   if (process.env.WHOP_OAUTH_ENABLED !== "true") return null;
 
   const clientId      = process.env.WHOP_CLIENT_ID;
-  const clientSecret  = process.env.WHOP_CLIENT_SECRET;
+  const clientSecretEnv = process.env.WHOP_CLIENT_SECRET;
   const redirectUri   = process.env.WHOP_REDIRECT_URI;
   const apiKey        = process.env.WHOP_API_KEY;
   const resourceId    = process.env.WHOP_RESOURCE_ID;
   const sessionSecret = process.env.WHOP_SESSION_SECRET;
 
+  // WHOP_CLIENT_SECRET is intentionally optional: Public-mode OAuth
+  // apps (PKCE-only token exchange) don't have one. The remaining
+  // five vars + session secret are still strictly required.
   if (
     !clientId      || clientId.length      === 0 ||
-    !clientSecret  || clientSecret.length  === 0 ||
     !redirectUri   || redirectUri.length   === 0 ||
     !apiKey        || apiKey.length        === 0 ||
     !resourceId    || resourceId.length    === 0 ||
@@ -80,6 +88,7 @@ export function readWhopConfig(): WhopAccessConfig | null {
     return null;
   }
 
+  const clientSecret = clientSecretEnv !== undefined && clientSecretEnv.length > 0 ? clientSecretEnv : null;
   const checkoutUrl = process.env.WHOP_CHECKOUT_URL ?? null;
   return {
     enabled: true,
@@ -122,13 +131,15 @@ export function getCheckoutUrl(): string | null {
 
 // ─── Diagnostics for /api/auth/whop/status ────────────────────────────
 /**
- * The list of env vars Whop OAuth requires. Order matches the
+ * The list of env vars Whop OAuth REQUIRES. Order matches the
  * isWhopAccessEnabled() readiness check. WHOP_OAUTH_ENABLED is
  * separate (it gates the whole feature, not "missing config").
+ *
+ * Phase 6B.3a.8 — WHOP_CLIENT_SECRET removed from this list because
+ * the OAuth app is in Public mode (PKCE-only token exchange).
  */
 export const WHOP_REQUIRED_ENV_NAMES = [
   "WHOP_CLIENT_ID",
-  "WHOP_CLIENT_SECRET",
   "WHOP_REDIRECT_URI",
   "WHOP_API_KEY",
   "WHOP_RESOURCE_ID",

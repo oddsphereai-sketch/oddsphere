@@ -174,27 +174,30 @@ export async function exchangeCodeForToken(opts: {
   const cfg = readWhopConfig();
   if (cfg === null) return { ok: false, reason: "config_missing" };
 
-  // Whop /oauth/token request shape (Phase 6B.3a.7 — hybrid):
-  //   JSON content type · PKCE code_verifier · client_secret in body
+  // Whop /oauth/token request shape (Phase 6B.3a.8 — Public mode):
+  //   JSON content type · PKCE code_verifier · NO client_secret
   //
-  // History of this request format:
+  // Full history of attempts:
   //   6B.3a   — form-urlencoded + client_secret in body
   //             → "client_secret lacks oauth:token_exchange permission"
-  //   6B.3a.6 — JSON-only PKCE per Whop's docs example (no secret)
-  //             → "invalid_client — client_secret is required"
-  //   6B.3a.7 — JSON + PKCE + client_secret (this hybrid)
+  //   6B.3a.6 — JSON + PKCE-only, no secret (matches Whop docs example)
+  //             → "client_secret is required" (Confidential mode app)
+  //   6B.3a.7 — JSON + PKCE + client_secret (hybrid for Confidential)
+  //             → "client_secret lacks oauth:token_exchange permission"
+  //             again — Whop never exposes oauth:token_exchange as a
+  //             selectable scope in the dashboard, so no Confidential
+  //             secret can ever satisfy it on this account.
+  //   6B.3a.8 — Switched the Whop OAuth app to PUBLIC mode (PKCE-only)
+  //             — this body now matches Whop's docs example exactly.
   //
-  // Our OAuth app is set to "Confidential" mode in the Whop Developer
-  // Dashboard, so Whop requires the client_secret to authenticate the
-  // exchange. PKCE alone (the docs example) is for Public-mode apps.
-  // The earlier "lacks oauth:token_exchange permission" error was the
-  // form-urlencoded content type, not the presence of client_secret.
+  // WHOP_CLIENT_SECRET is no longer required by readWhopConfig() and
+  // is not sent to /oauth/token. The env var may stay defined or be
+  // removed entirely; either is safe.
   const body = {
     grant_type: "authorization_code",
     code: opts.code,
     redirect_uri: cfg.redirectUri,
     client_id: cfg.clientId,
-    client_secret: cfg.clientSecret,
     code_verifier: opts.codeVerifier,
   };
   let res: Response;
