@@ -11,6 +11,8 @@
 
 import Link from "next/link";
 
+import { getCheckoutUrl } from "@/lib/auth/whopConfig";
+
 export const metadata = {
   title: "Pricing — OddSphere Premium",
   description:
@@ -70,12 +72,12 @@ export default function PricingPage() {
           ))}
         </ul>
 
-        <Link
-          href="/login"
-          className="block w-full text-center bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-lg px-6 py-4 text-base transition-all duration-200 shadow-lg shadow-violet-900/40 hover:shadow-[0_0_25px_rgba(167,139,250,0.5)] hover:scale-[1.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
-        >
-          Join through Whop →
-        </Link>
+        {/*
+          Phase 6B.3a: CTA routes to the configured WHOP_CHECKOUT_URL
+          when Whop is wired. Falls back to /login as a placeholder
+          when the env var is missing — never fakes a Whop link.
+        */}
+        <PricingCta />
         <p className="text-xs text-gray-500 text-center mt-3 italic">
           Whop handles checkout and Discord access. Cancel anytime through
           your Whop account.
@@ -91,5 +93,26 @@ export default function PricingPage() {
         .
       </p>
     </main>
+  );
+}
+
+function PricingCta() {
+  const checkoutUrl = getCheckoutUrl();
+  const cls =
+    "block w-full text-center bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-lg px-6 py-4 text-base transition-all duration-200 shadow-lg shadow-violet-900/40 hover:shadow-[0_0_25px_rgba(167,139,250,0.5)] hover:scale-[1.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950";
+  if (checkoutUrl !== null) {
+    return (
+      <a href={checkoutUrl} className={cls} rel="noopener noreferrer" target="_blank">
+        Join through Whop →
+      </a>
+    );
+  }
+  // No checkout URL configured — route to /login, which itself
+  // surfaces either the Whop button or beta access. Never fabricates
+  // a Whop URL.
+  return (
+    <Link href="/login" className={cls}>
+      Continue to Sign In →
+    </Link>
   );
 }

@@ -34,6 +34,10 @@ import {
   BETA_SESSION_COOKIE_NAME,
   isValidBetaSession,
 } from "@/lib/auth/betaSession";
+import {
+  WHOP_SESSION_COOKIE_NAME,
+  verifyWhopSession,
+} from "@/lib/auth/whopSession";
 
 /**
  * Page-route prefixes that require the beta session cookie. On miss,
@@ -67,10 +71,15 @@ export async function middleware(request: NextRequest) {
   const isApi = isProtectedApiPath(pathname);
   if (!isPage && !isApi) return NextResponse.next();
 
-  // Read the session cookie and validate it.
-  const cookieValue = request.cookies.get(BETA_SESSION_COOKIE_NAME)?.value;
-  const authenticated = await isValidBetaSession(cookieValue);
-  if (authenticated) return NextResponse.next();
+  // Either session cookie unlocks the Lab. We check Whop first because
+  // a Whop user is the launch-target case; beta is the fallback.
+  const whopCookie = request.cookies.get(WHOP_SESSION_COOKIE_NAME)?.value;
+  const whopPayload = await verifyWhopSession(whopCookie);
+  if (whopPayload !== null) return NextResponse.next();
+
+  const betaCookie = request.cookies.get(BETA_SESSION_COOKIE_NAME)?.value;
+  const betaAuthenticated = await isValidBetaSession(betaCookie);
+  if (betaAuthenticated) return NextResponse.next();
 
   // Unauthenticated. Branch on path style — page → redirect, API → JSON 401.
   if (isApi) {

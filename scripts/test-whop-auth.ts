@@ -1,0 +1,329 @@
+/**
+ * Phase 6B.3a — Whop access integration tests.
+ *
+ * Two layers:
+ *   (a) Pure assertions on whopConfig / whopSession logic — runs in any
+ *       env, mutates process.env to simulate configured / unconfigured
+ *       posture.
+ *   (b) Grep-based structural checks on the route handlers + login page
+ *       to lock the fail-closed contract (no broken Whop button when
+ *       disabled, endpoints match Whop docs, middleware accepts either
+ *       session).
+ *
+ * Hard-restriction asserts:
+ *   • No raw secrets in committed files (env values are templates only).
+ *   • Whop session cookie is HttpOnly + SameSite=Lax.
+ *   • Login page never renders an enabled Whop button without flag.
+ *   • Middleware verifies Whop cookie before accepting.
+ *   • Whop session does NOT grant admin role (acl flows through but
+ *     /admin/* keeps its own validateAdminAuth).
+ *   • Endpoints match the documented Whop URLs verbatim.
+ */
+
+import { readFileSync } from "node:fs";
+
+const ENV_EXAMPLE = readFileSync(".env.example", "utf8");
+const CONFIG = readFileSync("lib/auth/whopConfig.ts", "utf8");
+const SESSION = readFileSync("lib/auth/whopSession.ts", "utf8");
+const OAUTH = readFileSync("lib/auth/whopOAuth.ts", "utf8");
+const ACCESS = readFileSync("lib/auth/whopAccess.ts", "utf8");
+const MIDDLEWARE = readFileSync("middleware.ts", "utf8");
+const LOGIN_PAGE = readFileSync("app/login/page.tsx", "utf8");
+const PRICING_PAGE = readFileSync("app/pricing/page.tsx", "utf8");
+const START_ROUTE = readFileSync("app/api/auth/whop/start/route.ts", "utf8");
+const CALLBACK_ROUTE = readFileSync("app/api/auth/whop/callback/route.ts", "utf8");
+const LOGOUT_ROUTE = readFileSync("app/api/auth/logout/route.ts", "utf8");
+
+let pass = 0, fail = 0;
+function check(name: string, cond: boolean, msg?: string) {
+  if (cond) { console.log(`  ✓ ${name}`); pass++; }
+  else { console.log(`  ✗ ${name}${msg ? `\n     ${msg}` : ""}`); fail++; }
+}
+
+async function asyncCheck(name: string, fn: () => Promise<boolean>, msg?: string) {
+  try {
+    const ok = await fn();
+    if (ok) { console.log(`  ✓ ${name}`); pass++; }
+    else { console.log(`  ✗ ${name}${msg ? `\n     ${msg}` : ""}`); fail++; }
+  } catch (e) {
+    console.log(`  ✗ ${name}\n     ${(e as Error).message}`);
+    fail++;
+  }
+}
+
+async function main() {
+console.log(`\n━━━ Whop access integration tests ━━━\n`);
+
+// ── Endpoint constants verified against Whop docs ─────────────────────
+
+check("Authorize URL points to api.whop.com/oauth/authorize",
+  CONFIG.includes('authorize: "https://api.whop.com/oauth/authorize"'));
+check("Token URL points to api.whop.com/oauth/token",
+  CONFIG.includes('token:     "https://api.whop.com/oauth/token"'));
+check("Userinfo URL points to api.whop.com/oauth/userinfo",
+  CONFIG.includes('userinfo:  "https://api.whop.com/oauth/userinfo"'));
+check("Access-check URL pattern matches docs",
+  CONFIG.includes('"https://api.whop.com/api/v1/users/{userId}/access/{resourceId}"'));
+
+// ── Fail-closed predicates ────────────────────────────────────────────
+
+async function withEnv<T>(env: Record<string, string | undefined>, fn: () => Promise<T> | T): Promise<T> {
+  const prev: Record<string, string | undefined> = {};
+  for (const k of Object.keys(env)) {
+    prev[k] = process.env[k];
+    if (env[k] === undefined) delete process.env[k];
+    else process.env[k] = env[k]!;
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const k of Object.keys(prev)) {
+      if (prev[k] === undefined) delete process.env[k];
+      else process.env[k] = prev[k]!;
+    }
+  }
+}
+
+await asyncCheck("isWhopAccessEnabled() is FALSE when WHOP_OAUTH_ENABLED is not 'true'", async () => {
+  const m = await import("../lib/auth/whopConfig");
+  return await withEnv({ WHOP_OAUTH_ENABLED: undefined }, () => !m.isWhopAccessEnabled());
+});
+
+await asyncCheck("isWhopAccessEnabled() is FALSE when any required env is missing", async () => {
+  const m = await import("../lib/auth/whopConfig");
+  return await withEnv({
+    WHOP_OAUTH_ENABLED: "true",
+    WHOP_CLIENT_ID: "app_test",
+    WHOP_CLIENT_SECRET: "secret",
+    WHOP_REDIRECT_URI: "https://oddsphereai.com/api/auth/whop/callback",
+    WHOP_API_KEY: "key",
+    WHOP_RESOURCE_ID: "prod_test",
+    WHOP_SESSION_SECRET: undefined,
+  }, () => !m.isWhopAccessEnabled());
+});
+
+await asyncCheck("isWhopAccessEnabled() requires WHOP_SESSION_SECRET min 32 chars", async () => {
+  const m = await import("../lib/auth/whopConfig");
+  return await withEnv({
+    WHOP_OAUTH_ENABLED: "true",
+    WHOP_CLIENT_ID: "app_test",
+    WHOP_CLIENT_SECRET: "secret",
+    WHOP_REDIRECT_URI: "https://oddsphereai.com/api/auth/whop/callback",
+    WHOP_API_KEY: "key",
+    WHOP_RESOURCE_ID: "prod_test",
+    WHOP_SESSION_SECRET: "short",
+  }, () => !m.isWhopAccessEnabled());
+});
+
+await asyncCheck("isWhopAccessEnabled() returns TRUE only when full config present", async () => {
+  const m = await import("../lib/auth/whopConfig");
+  return await withEnv({
+    WHOP_OAUTH_ENABLED: "true",
+    WHOP_CLIENT_ID: "app_test",
+    WHOP_CLIENT_SECRET: "secret",
+    WHOP_REDIRECT_URI: "https://oddsphereai.com/api/auth/whop/callback",
+    WHOP_API_KEY: "key",
+    WHOP_RESOURCE_ID: "prod_test",
+    WHOP_SESSION_SECRET: "x".repeat(32),
+  }, () => m.isWhopAccessEnabled());
+});
+
+// ── Whop session round-trip ───────────────────────────────────────────
+
+await asyncCheck("signWhopSession + verifyWhopSession round-trip succeeds", async () => {
+  const sess = await import("../lib/auth/whopSession");
+  return await withEnv({
+    WHOP_OAUTH_ENABLED: "true",
+    WHOP_CLIENT_ID: "app_test",
+    WHOP_CLIENT_SECRET: "secret",
+    WHOP_REDIRECT_URI: "https://oddsphereai.com/api/auth/whop/callback",
+    WHOP_API_KEY: "key",
+    WHOP_RESOURCE_ID: "prod_test",
+    WHOP_SESSION_SECRET: "x".repeat(32),
+  }, async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const cookie = await sess.signWhopSession({
+      v: 1, uid: "user_abc", acl: "customer", iat: now, exp: now + 60,
+    });
+    if (cookie === null) return false;
+    const verified = await sess.verifyWhopSession(cookie);
+    return verified !== null && verified.uid === "user_abc" && verified.acl === "customer";
+  });
+});
+
+await asyncCheck("verifyWhopSession REJECTS tampered cookie", async () => {
+  const sess = await import("../lib/auth/whopSession");
+  return await withEnv({
+    WHOP_OAUTH_ENABLED: "true",
+    WHOP_CLIENT_ID: "app_test",
+    WHOP_CLIENT_SECRET: "secret",
+    WHOP_REDIRECT_URI: "https://oddsphereai.com/api/auth/whop/callback",
+    WHOP_API_KEY: "key",
+    WHOP_RESOURCE_ID: "prod_test",
+    WHOP_SESSION_SECRET: "x".repeat(32),
+  }, async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const cookie = await sess.signWhopSession({
+      v: 1, uid: "user_abc", acl: "customer", iat: now, exp: now + 60,
+    });
+    if (cookie === null) return false;
+    const tampered = cookie.replace(/.$/, (c) => (c === "A" ? "B" : "A"));
+    const verified = await sess.verifyWhopSession(tampered);
+    return verified === null;
+  });
+});
+
+await asyncCheck("verifyWhopSession REJECTS when config missing (fail closed)", async () => {
+  const sess = await import("../lib/auth/whopSession");
+  // Build a cookie under full config, then verify under no config.
+  const cookie = await withEnv({
+    WHOP_OAUTH_ENABLED: "true",
+    WHOP_CLIENT_ID: "app_test",
+    WHOP_CLIENT_SECRET: "secret",
+    WHOP_REDIRECT_URI: "https://oddsphereai.com/api/auth/whop/callback",
+    WHOP_API_KEY: "key",
+    WHOP_RESOURCE_ID: "prod_test",
+    WHOP_SESSION_SECRET: "x".repeat(32),
+  }, async () => {
+    const now = Math.floor(Date.now() / 1000);
+    return await sess.signWhopSession({
+      v: 1, uid: "user_abc", acl: "customer", iat: now, exp: now + 60,
+    });
+  });
+  if (cookie === null) return false;
+  return await withEnv({ WHOP_OAUTH_ENABLED: undefined }, async () => {
+    return (await sess.verifyWhopSession(cookie)) === null;
+  });
+});
+
+await asyncCheck("verifyWhopSession REJECTS expired cookie", async () => {
+  const sess = await import("../lib/auth/whopSession");
+  return await withEnv({
+    WHOP_OAUTH_ENABLED: "true",
+    WHOP_CLIENT_ID: "app_test",
+    WHOP_CLIENT_SECRET: "secret",
+    WHOP_REDIRECT_URI: "https://oddsphereai.com/api/auth/whop/callback",
+    WHOP_API_KEY: "key",
+    WHOP_RESOURCE_ID: "prod_test",
+    WHOP_SESSION_SECRET: "x".repeat(32),
+  }, async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const cookie = await sess.signWhopSession({
+      v: 1, uid: "user_abc", acl: "customer", iat: now - 200, exp: now - 100,
+    });
+    if (cookie === null) return false;
+    return (await sess.verifyWhopSession(cookie)) === null;
+  });
+});
+
+// ── Access check fail-closed behavior ────────────────────────────────
+
+await asyncCheck("checkWhopAccess returns config_missing when env not set", async () => {
+  const a = await import("../lib/auth/whopAccess");
+  return await withEnv({ WHOP_OAUTH_ENABLED: undefined }, async () => {
+    const res = await a.checkWhopAccess({ userId: "user_x" });
+    return !res.has_access && res.reason === "config_missing";
+  });
+});
+
+await asyncCheck("checkWhopAccess returns denied for empty user id", async () => {
+  const a = await import("../lib/auth/whopAccess");
+  return await withEnv({
+    WHOP_OAUTH_ENABLED: "true",
+    WHOP_CLIENT_ID: "app_test",
+    WHOP_CLIENT_SECRET: "secret",
+    WHOP_REDIRECT_URI: "https://oddsphereai.com/api/auth/whop/callback",
+    WHOP_API_KEY: "key",
+    WHOP_RESOURCE_ID: "prod_test",
+    WHOP_SESSION_SECRET: "x".repeat(32),
+  }, async () => {
+    const res = await a.checkWhopAccess({ userId: "" });
+    return !res.has_access && res.reason === "denied";
+  });
+});
+
+// ── Route shape + safety asserts ──────────────────────────────────────
+
+check("Middleware verifies the Whop session BEFORE beta session",
+  /verifyWhopSession[\s\S]{0,400}isValidBetaSession/.test(MIDDLEWARE));
+check("Logout route clears beta session cookie",
+  LOGOUT_ROUTE.includes(`${"oddsphere_beta_session"}=`) || LOGOUT_ROUTE.includes("BETA_SESSION_COOKIE_NAME"));
+check("Logout route clears Whop session cookie",
+  LOGOUT_ROUTE.includes("buildWhopSessionClearCookie"));
+check("Start route fails closed when Whop disabled",
+  /isWhopAccessEnabled\(\)[\s\S]{0,200}whop_disabled/.test(START_ROUTE));
+check("Callback route fails closed when Whop disabled",
+  /isWhopAccessEnabled\(\)[\s\S]{0,200}whop_disabled/.test(CALLBACK_ROUTE));
+check("Callback verifies state cookie matches state param",
+  /stateCookie !== stateParam[\s\S]{0,200}whop_state/.test(CALLBACK_ROUTE));
+check("Callback uses PKCE code_verifier from cookie",
+  /codeVerifier:\s*verifierCookie/.test(CALLBACK_ROUTE));
+check("Callback discards Whop access_token after access check",
+  // We never store the raw access_token in our session payload —
+  // verify our payload only carries uid + acl + iat + exp.
+  /signWhopSession\(payload\)/.test(CALLBACK_ROUTE) &&
+  !/access_token:\s*tokenResp\.access_token/.test(CALLBACK_ROUTE),
+);
+
+// ── Login page UX gating ─────────────────────────────────────────────
+
+check("Login page reads whop/beta flags from server config",
+  LOGIN_PAGE.includes("isWhopAccessEnabled") && LOGIN_PAGE.includes("isBetaFallbackEnabled"));
+check("Login page only renders Whop button when whopEnabled",
+  /whopEnabled\s*&&\s*\(\s*<a[\s\S]{0,400}href=\{whopStartHref\}/.test(LOGIN_PAGE) &&
+  LOGIN_PAGE.includes("/api/auth/whop/start"));
+check("Login page Whop button is NOT disabled when enabled",
+  !/Continue with Whop[\s\S]{0,400}disabled/.test(LOGIN_PAGE));
+check("Login page surfaces beta form only when beta enabled",
+  /betaEnabled\s*&&\s*\(\s*<form[\s\S]{0,200}\/api\/auth\/login/.test(LOGIN_PAGE));
+check("Login page shows neither-enabled fallback copy",
+  /!whopEnabled[\s\S]{0,200}!betaEnabled[\s\S]{0,200}temporarily unavailable/.test(LOGIN_PAGE));
+
+// ── Pricing CTA wires checkout URL when configured ───────────────────
+
+check("Pricing imports getCheckoutUrl",
+  PRICING_PAGE.includes("getCheckoutUrl"));
+check("Pricing CTA opens Whop checkout in new tab when configured",
+  /checkoutUrl[\s\S]{0,300}target="_blank"[\s\S]{0,300}Join through Whop/.test(PRICING_PAGE));
+check("Pricing CTA falls back to /login (never fakes a Whop URL)",
+  /checkoutUrl === null[\s\S]{0,400}href="\/login"/.test(PRICING_PAGE) ||
+  /href="\/login"[\s\S]{0,400}Continue to Sign In/.test(PRICING_PAGE));
+
+// ── Cookie attribute safety ──────────────────────────────────────────
+
+check("Whop session cookie is HttpOnly",
+  SESSION.includes("HttpOnly"));
+check("Whop session cookie uses SameSite=Lax",
+  SESSION.includes("SameSite=Lax"));
+check("Whop session uses HMAC-SHA-256",
+  /HMAC[\s\S]{0,40}SHA-256/.test(SESSION));
+check("OAuth start sets state, verifier, and next cookies HttpOnly",
+  /HttpOnly[\s\S]{0,800}SameSite=Lax/.test(START_ROUTE));
+
+// ── No raw secrets committed ─────────────────────────────────────────
+
+check(".env.example uses blank placeholders for Whop secrets",
+  /WHOP_CLIENT_SECRET=\s*$/m.test(ENV_EXAMPLE) &&
+  /WHOP_API_KEY=\s*$/m.test(ENV_EXAMPLE) &&
+  /WHOP_SESSION_SECRET=\s*$/m.test(ENV_EXAMPLE));
+check(".env.example defaults WHOP_OAUTH_ENABLED to false",
+  /WHOP_OAUTH_ENABLED=false/.test(ENV_EXAMPLE));
+
+// ── Whop membership does NOT grant admin ─────────────────────────────
+
+check("Middleware does not branch on Whop acl for /admin",
+  // Middleware reuses the same auth as before for /admin; access_level
+  // from Whop is recorded on the session but never used for routing.
+  !/payload\.acl[\s\S]{0,200}admin[\s\S]{0,200}admin/.test(MIDDLEWARE));
+check("Whop access response 'admin' level does NOT trigger admin route bypass",
+  // /api/admin/* is excluded from middleware entirely and uses
+  // validateAdminAuth at the handler — confirm middleware excludes it
+  // by virtue of the PROTECTED_API_PREFIXES list (no /api/admin).
+  !/\/api\/admin/.test(MIDDLEWARE) ||
+  MIDDLEWARE.includes("PROTECTED_API_PREFIXES = [\"/api/lab\"]"));
+
+console.log(`\n  result: ${pass}/${pass + fail} pass`);
+if (fail > 0) process.exit(1);
+}
+
+main().catch((e) => { console.error(e); process.exit(1); });
