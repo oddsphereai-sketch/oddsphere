@@ -195,6 +195,9 @@ type OurGameRow = {
   away_team_id: number;
   first_inning_runs: number | null;
   inning_scores: unknown;
+  /** Phase 6B.23 — final-score columns; null until a writer fills them in. */
+  home_score: number | null;
+  away_score: number | null;
 };
 
 /**
@@ -294,8 +297,21 @@ export function classifyLinescoreAction(args: {
     };
   }
 
-  // FI total available — decide write
-  if (ours.first_inning_runs === fi.total) {
+  // Phase 6B.23 — even if FI total matches what's already in DB, we
+  // still want to write when the game has just finalized and the DB
+  // hasn't yet picked up status=STATUS_FINAL + home/away scores from
+  // BDL. MLB Stats is authoritative for MLB finals; this unblocks
+  // ML / OU grading when BDL is slow.
+  const fiNeedsWrite = ours.first_inning_runs !== fi.total;
+  const isFinal = normalized_status === "final";
+  const finalNeedsWrite =
+    isFinal &&
+    typeof mlb.teams?.home?.score === "number" &&
+    typeof mlb.teams?.away?.score === "number" &&
+    (ours.status !== "STATUS_FINAL" ||
+      ours.home_score !== mlb.teams.home.score ||
+      ours.away_score !== mlb.teams.away.score);
+  if (!fiNeedsWrite && !finalNeedsWrite) {
     return { fi, normalized_status, action: "noop" };
   }
   return { fi, normalized_status, action: "would_update" };
@@ -338,7 +354,7 @@ export async function ingestMlbLinescores(
   const { data: ourRows, error: ourErr } = await supabase
     .from("games")
     .select(
-      "id, external_id, status, home_team_id, away_team_id, first_inning_runs, inning_scores",
+      "id, external_id, status, home_team_id, away_team_id, first_inning_runs, inning_scores, home_score, away_score",
     )
     .eq("sport", "mlb")
     .eq("slate_date", date);
@@ -438,12 +454,30 @@ export async function ingestMlbLinescores(
       }
 
       const inningScores = buildInningScoresJson(mlb);
+      // Phase 6B.23 — when MLB Stats reports the game Final and has
+      // both team scores, also write status + home_score + away_score.
+      // MLB Stats is the authoritative source for MLB game finals; this
+      // unblocks ML / OU grading when the BDL slate provider is slow or
+      // unreliable to surface scores (the 2026-06-07 launch incident:
+      // BDL flipped status to STATUS_FINAL but never populated the box
+      // score, leaving all ML / OU picks pending after the games ended).
+      const payload: Record<string, unknown> = {
+        first_inning_runs: cls.fi.total,
+        inning_scores: inningScores,
+      };
+      if (cls.normalized_status === "final") {
+        const homeScore = typeof mlb.teams?.home?.score === "number" ? mlb.teams.home.score : null;
+        const awayScore = typeof mlb.teams?.away?.score === "number" ? mlb.teams.away.score : null;
+        if (homeScore !== null && awayScore !== null) {
+          payload.status = "STATUS_FINAL";
+          payload.home_score = homeScore;
+          payload.away_score = awayScore;
+          payload.total_runs = homeScore + awayScore;
+        }
+      }
       const { error: upErr } = await supabase
         .from("games")
-        .update({
-          first_inning_runs: cls.fi.total,
-          inning_scores: inningScores,
-        })
+        .update(payload)
         .eq("id", ourRow!.id);
       if (upErr) {
         result.errors.push({ reason: `update id=${ourRow!.id}: ${upErr.message}` });

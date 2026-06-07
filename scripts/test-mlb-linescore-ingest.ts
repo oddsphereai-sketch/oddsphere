@@ -120,11 +120,13 @@ console.log("\n━━━ classifyLinescoreAction ━━━");
 const baseOurs = {
   id: 14771,
   external_id: 5058728,
-  status: null,
+  status: null as string | null,
   home_team_id: 771,
   away_team_id: 780,
   first_inning_runs: null as number | null,
   inning_scores: null,
+  home_score: null as number | null,
+  away_score: null as number | null,
 };
 {
   const cls = classifyLinescoreAction({
@@ -136,13 +138,18 @@ const baseOurs = {
   check("complete FI + matching teams → would_update", cls.action === "would_update");
 }
 {
+  // Pre-6B.23: FI matched → noop regardless. Post-6B.23: if game is
+  // Final and DB doesn't yet have status=STATUS_FINAL + scores, the
+  // would_update path fires so MLB Stats fills in the missing ML / OU
+  // grading inputs. Setting status + scores to match makes this a
+  // genuine noop.
   const cls = classifyLinescoreAction({
     mlb: makeRaw(),
-    ours: { ...baseOurs, first_inning_runs: 0 },
+    ours: { ...baseOurs, first_inning_runs: 0, status: "STATUS_FINAL", home_score: 5, away_score: 3 },
     expectedHomeAbbrev: "CHC",
     expectedAwayAbbrev: "SF",
   });
-  check("identical FI total in DB → noop (idempotent)", cls.action === "noop");
+  check("identical FI + status + scores in DB → noop (idempotent)", cls.action === "noop");
 }
 {
   const cls = classifyLinescoreAction({
@@ -228,6 +235,77 @@ const todayPairs: Array<[string, string]> = [
 for (const [name, want] of todayPairs) {
   const got = normalizeMlbTeamName(name);
   check(`"${name}" → ${want}`, got === want);
+}
+
+// ── Phase 6B.23 — final-score writer trigger ────────────────────────
+console.log("\n━━━ Phase 6B.23 — MLB Stats writes final scores when game is Final ━━━");
+{
+  // Game is Final, MLB Stats has team scores, DB has FI saved but no
+  // status/scores → should classify as would_update.
+  const cls = classifyLinescoreAction({
+    mlb: makeRaw({
+      status: { detailedState: "Final" },
+      teams: {
+        home: { team: { id: 771, name: "Chicago Cubs" }, score: 5 },
+        away: { team: { id: 780, name: "San Francisco Giants" }, score: 3 },
+      },
+    }),
+    ours: { ...baseOurs, first_inning_runs: 0, status: "STATUS_IN_PROGRESS", home_score: null, away_score: null },
+    expectedHomeAbbrev: "CHC",
+    expectedAwayAbbrev: "SF",
+  });
+  check("Final + FI noop but scores missing → would_update", cls.action === "would_update");
+}
+{
+  // Game is Final, MLB Stats team scores already in DB, FI matches →
+  // pure noop.
+  const cls = classifyLinescoreAction({
+    mlb: makeRaw({
+      status: { detailedState: "Final" },
+      teams: {
+        home: { team: { id: 771, name: "Chicago Cubs" }, score: 5 },
+        away: { team: { id: 780, name: "San Francisco Giants" }, score: 3 },
+      },
+    }),
+    ours: { ...baseOurs, first_inning_runs: 0, status: "STATUS_FINAL", home_score: 5, away_score: 3 },
+    expectedHomeAbbrev: "CHC",
+    expectedAwayAbbrev: "SF",
+  });
+  check("Final + DB already complete → noop (idempotent)", cls.action === "noop");
+}
+{
+  // Game is Final but MLB Stats has no team scores (defensive — should
+  // NOT trigger an update on the basis of final-status alone).
+  const cls = classifyLinescoreAction({
+    mlb: makeRaw({
+      status: { detailedState: "Final" },
+      teams: {
+        home: { team: { id: 771, name: "Chicago Cubs" } },
+        away: { team: { id: 780, name: "San Francisco Giants" } },
+      },
+    }),
+    ours: { ...baseOurs, first_inning_runs: 0, status: "STATUS_IN_PROGRESS", home_score: null, away_score: null },
+    expectedHomeAbbrev: "CHC",
+    expectedAwayAbbrev: "SF",
+  });
+  check("Final + MLB scores missing → noop (won't fake scores)", cls.action === "noop");
+}
+{
+  // Game is In Progress — never write status/scores from this path
+  // (BDL owns in-progress updates).
+  const cls = classifyLinescoreAction({
+    mlb: makeRaw({
+      status: { detailedState: "In Progress" },
+      teams: {
+        home: { team: { id: 771, name: "Chicago Cubs" }, score: 3 },
+        away: { team: { id: 780, name: "San Francisco Giants" }, score: 2 },
+      },
+    }),
+    ours: { ...baseOurs, first_inning_runs: 0, status: "STATUS_IN_PROGRESS", home_score: null, away_score: null },
+    expectedHomeAbbrev: "CHC",
+    expectedAwayAbbrev: "SF",
+  });
+  check("In Progress + FI matches → noop (no mid-game score writes from MLB Stats)", cls.action === "noop");
 }
 
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
