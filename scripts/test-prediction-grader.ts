@@ -220,6 +220,52 @@ console.log("\n━━━ Pending ━━━");
   check("in_progress → pending (don't grade live)", g.result === "pending");
 }
 
+// ── Phase 6B.19 — FI markets grade mid-game once inning 1 complete ──
+console.log("\n━━━ Phase 6B.19 — FI grades mid-game (no need to wait for final) ━━━");
+{
+  // NRFI + game still in progress, but 1st inning has closed scoreless.
+  // Pre-6B.19 returned pending until full final. Post-6B.19 should grade win.
+  const r = makeRecord({ market: "first_inning", pick: "NRFI" });
+  const g = gradePrediction({
+    record: r,
+    game: { status: "STATUS_IN_PROGRESS", home_score: 3, away_score: 2, first_inning_runs: 0 },
+    source: "auto_score_ingest",
+  });
+  check("NRFI + in_progress + first_inning_runs=0 → win", g.result === "win" && g.win === true);
+  check("FI win records actual_first_inning_runs", g.actual_first_inning_runs === 0);
+}
+{
+  // YRFI + in_progress + first inning had 1 run → win
+  const r = makeRecord({ market: "first_inning", pick: "YRFI" });
+  const g = gradePrediction({
+    record: r,
+    game: { status: "STATUS_IN_PROGRESS", home_score: 4, away_score: 5, first_inning_runs: 1 },
+    source: "auto_score_ingest",
+  });
+  check("YRFI + in_progress + first_inning_runs=1 → win", g.result === "win");
+}
+{
+  // FI in_progress but first_inning_runs not yet populated → pending
+  // (linescore ingester hasn't processed inning 1 close yet)
+  const r = makeRecord({ market: "first_inning", pick: "NRFI" });
+  const g = gradePrediction({
+    record: r,
+    game: { status: "STATUS_IN_PROGRESS", home_score: 0, away_score: 0, first_inning_runs: null },
+    source: "auto_score_ingest",
+  });
+  check("FI + in_progress + first_inning_runs=null → pending", g.result === "pending");
+}
+{
+  // FI + postponed → void (precedes the in-progress short-circuit)
+  const r = makeRecord({ market: "first_inning", pick: "NRFI" });
+  const g = gradePrediction({
+    record: r,
+    game: { status: "postponed", home_score: null, away_score: null, first_inning_runs: null },
+    source: "auto_score_ingest",
+  });
+  check("FI + postponed → void (void check still wins)", g.result === "void");
+}
+
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
 if (fail > 0) {

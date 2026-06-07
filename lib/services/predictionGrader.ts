@@ -206,7 +206,21 @@ export function gradePrediction(inputs: GradeInputs): PredictionGradeRow {
   if (isVoidStatus(game.status)) {
     return emptyGrade(record, "void", source, `game status=${game.status}`);
   }
-  // Pending game — return pending without inferring.
+
+  // Phase 6B.19 — FI markets grade as soon as first_inning_runs is
+  // available (mid-game), not at full final. The linescore ingester
+  // populates `games.first_inning_runs` once inning 1 closes; FI
+  // grading should not have to wait for the full game to finalize.
+  // ML / OU still gate on status=final below.
+  const m: TrackedMarketV17 = record.market;
+  if (m === "first_inning" || m === "nrfi" || m === "yrfi") {
+    // gradeFirstInning's own guard returns pending when
+    // first_inning_runs is null, so we can route here regardless of
+    // status and the function will do the right thing.
+    return gradeFirstInning(inputs);
+  }
+
+  // Pending game — return pending without inferring (ML/OU only).
   if (!isFinalStatus(game.status)) {
     if (isPendingStatus(game.status)) {
       return emptyGrade(record, "pending", source, `game status=${game.status}`);
@@ -216,12 +230,8 @@ export function gradePrediction(inputs: GradeInputs): PredictionGradeRow {
   }
 
   // Final game — grade per market.
-  const m: TrackedMarketV17 = record.market;
   if (m === "moneyline") return gradeMoneyline(inputs);
   if (m === "total") return gradeTotal(inputs);
-  if (m === "first_inning" || m === "nrfi" || m === "yrfi") {
-    return gradeFirstInning(inputs);
-  }
   // Markets we don't yet grade (spread, double_chance, prop). Return pending
   // so they're visible but not falsely counted.
   return emptyGrade(record, "pending", source, `unsupported market for V1 grader: ${m}`);
