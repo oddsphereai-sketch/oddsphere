@@ -40,18 +40,40 @@ type CronCfg = {
   frontline: boolean;
 };
 
+// Phase 6B.6 — aligned with what vercel.json actually schedules.
+// Pre-launch this list carried legacy data_source names (morning_slate,
+// daily_refresh, midday/afternoon/evening_refresh, lineup_watch, etc.)
+// whose routes still exist but are NOT in vercel.json's cron list. They
+// always read as `stale` or `unknown`, which dominated the worst-case
+// state escalation in deriveOverall() AND polluted deriveOverall's
+// freshest-timestamp picker. The result: the "Last updated" pill
+// reported the freshest *legacy* timestamp (typically 1–4 days old)
+// even when the live cron (slate_cycle_automation) had finished
+// minutes earlier.
+//
+// Current truth (vercel.json):
+//   • /api/cron/slate-cycle          → writes data_source=slate_cycle_automation
+//                                       schedule: 9 runs/day (08–00 UTC)
+//   • /api/cron/tracking-refresh     → writes data_source=tracking_refresh
+//                                       schedule: every 2h
+//   • /api/cron/feature-coverage-refresh → writes data_source=feature_coverage_refresh
+//                                       schedule: 11:30 + 21:30 UTC (12h cadence)
+//
+// Cadence rationale:
+//   • slate_cycle_automation = 240 min. Actual cadence is 2h with an
+//     8-hour overnight gap (00→08 UTC). 240 min × 2 = 8h tolerance
+//     covers that gap without tripping `stale` overnight.
+//   • tracking_refresh       = 120 min. Even 2h around the clock.
+//   • feature_coverage_refresh = 720 min. Twice-daily; informational
+//     for model readiness, not member-facing freshness.
+//
+// frontline=true means the source counts toward the member-visible
+// "Last updated" pill. feature_coverage_refresh stays out so a
+// midday operator skip doesn't mislead members.
 const CRON_CONFIGS: CronCfg[] = [
-  { data_source: "daniel_scores_model", per_sport: true,  cadence_minutes: 1440,  frontline: true  },
-  { data_source: "morning_slate",       per_sport: true,  cadence_minutes: 1440,  frontline: true  },
-  { data_source: "daily_refresh",       per_sport: true,  cadence_minutes: 1440,  frontline: true  },
-  { data_source: "midday_refresh",      per_sport: true,  cadence_minutes: 1440,  frontline: true  },
-  { data_source: "afternoon_refresh",   per_sport: true,  cadence_minutes: 1440,  frontline: true  },
-  { data_source: "evening_refresh",     per_sport: true,  cadence_minutes: 1440,  frontline: true  },
-  { data_source: "lineup_watch",        per_sport: true,  cadence_minutes: 30,    frontline: true  },
-  { data_source: "pregame_sweep",       per_sport: true,  cadence_minutes: 15,    frontline: true  },
-  { data_source: "post_game_results",   per_sport: false, cadence_minutes: 1440,  frontline: false },
-  { data_source: "weekly_park_factors", per_sport: false, cadence_minutes: 10080, frontline: false },
-  { data_source: "weekly_calibration",  per_sport: false, cadence_minutes: 10080, frontline: false },
+  { data_source: "slate_cycle_automation",   per_sport: true, cadence_minutes: 240, frontline: true  },
+  { data_source: "tracking_refresh",         per_sport: true, cadence_minutes: 120, frontline: true  },
+  { data_source: "feature_coverage_refresh", per_sport: true, cadence_minutes: 720, frontline: false },
 ];
 
 /** Window during which an in_progress row counts as "actively updating". */
