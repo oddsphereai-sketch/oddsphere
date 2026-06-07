@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       let records = 0;
       let apiCalls = 0;
 
-      const gameLines = await linesService.refreshGameLines(sport, date);
+      const gameLines = await linesService.refreshGameLinesV2(sport, date);
       records += gameLines.records_updated ?? 0;
       apiCalls += gameLines.api_calls_made ?? 0;
 

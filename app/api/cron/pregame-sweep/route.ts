@@ -380,12 +380,16 @@ export async function GET(request: Request) {
       records += lockResult.locked;
 
       // ── 4. Refresh lines + sharp signals for the slate ──────────────
-      // V1 limitation: linesService is slate-scoped, so it refreshes
-      // lines/signals for all games including already-locked ones. The
-      // refresh is cheap and the locked games' prediction values are
-      // frozen at Layer 1 anyway. Phase 4.2.B follow-up will scope these
-      // to unlocked games only.
-      const gameLines = await linesService.refreshGameLines(sport, date);
+      // Phase 6B.15 — switched from refreshGameLines (V1, slate-wide
+      // DELETE-then-INSERT) to refreshGameLinesV2 (per-(game, market)
+      // DELETE-then-INSERT with preserve-on-empty). V1 was wiping
+      // already-priced games every 15 min whenever SharpAPI returned
+      // nothing for that game in the current poll — including locked
+      // games whose snapshot members had already read. V2 only
+      // touches (game, market) pairs where the provider returned at
+      // least one row; markets the provider didn't return for stay
+      // preserved with their prior data + computed_at intact.
+      const gameLines = await linesService.refreshGameLinesV2(sport, date);
       records += gameLines.records_updated ?? 0;
       apiCalls += gameLines.api_calls_made ?? 0;
 

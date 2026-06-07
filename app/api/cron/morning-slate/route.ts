@@ -69,7 +69,7 @@ export async function GET(request: Request) {
       stepDetails.games = games.records_updated;
 
       // 2-4. Lines + props + sharp signals
-      const gameLines = await linesService.refreshGameLines(sport, date);
+      const gameLines = await linesService.refreshGameLinesV2(sport, date);
       records += gameLines.records_updated ?? 0;
       apiCalls += gameLines.api_calls_made ?? 0;
       stepDetails.game_lines = gameLines.records_updated;
