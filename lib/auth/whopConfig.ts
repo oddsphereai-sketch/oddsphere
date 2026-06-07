@@ -111,12 +111,36 @@ export function isWhopAccessEnabled(): boolean {
 }
 
 /**
- * Public-safe predicate: is the beta-password fallback configured?
- * The login page surfaces beta access only when this is true.
+ * Public-safe predicate: is the beta-password fallback configured at
+ * the SERVER level? Used by middleware to decide whether to honor a
+ * beta cookie and by the login route's POST handler to accept beta
+ * submissions. The session-validation path is unchanged — this
+ * controls whether the credential is operational at all.
  */
 export function isBetaFallbackEnabled(): boolean {
   const pwd = process.env.LAB_BETA_PASSWORD;
   return pwd !== undefined && pwd.length > 0;
+}
+
+/**
+ * Phase 6B.4 — public visibility of the beta password form on the
+ * /login page. The beta SESSION code path stays operational
+ * (middleware still honors a valid cookie) but the public-facing
+ * form is hidden by default in production now that Whop OAuth is
+ * live.
+ *
+ * Set LAB_BETA_LOGIN_VISIBLE=true to expose the form (admin /
+ * emergency recovery). Default = hidden. Whop sign-in becomes the
+ * sole visible CTA when both flags are present, or when only Whop
+ * is configured.
+ *
+ * Returned boolean intersects with isBetaFallbackEnabled() —
+ * publicly visible only when BOTH server-configured AND admin
+ * has opted-in to expose it.
+ */
+export function isBetaLoginPubliclyVisible(): boolean {
+  if (!isBetaFallbackEnabled()) return false;
+  return process.env.LAB_BETA_LOGIN_VISIBLE === "true";
 }
 
 /**

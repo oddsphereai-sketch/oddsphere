@@ -32,6 +32,7 @@ import {
   getClientIdPreview,
   getMissingWhopEnvs,
   isBetaFallbackEnabled,
+  isBetaLoginPubliclyVisible,
   isWhopAccessEnabled,
 } from "@/lib/auth/whopConfig";
 
@@ -44,6 +45,10 @@ export async function GET() {
     {
       whop_enabled: isWhopAccessEnabled(),
       beta_fallback_enabled: isBetaFallbackEnabled(),
+      // Phase 6B.4 — exposes whether the beta password form is
+      // publicly visible on /login. Server-only env flag controls
+      // this; UI gating is in app/login/page.tsx.
+      beta_login_publicly_visible: isBetaLoginPubliclyVisible(),
       checkout_url_configured: getCheckoutUrl() !== null,
       // Diagnostics for the "redirect_uri is invalid" error:
       whop_oauth_enabled_flag: missing.enabled_flag_set,

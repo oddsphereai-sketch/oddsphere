@@ -7,13 +7,12 @@
  * same pathname check Navbar uses — the premium app shell + admin chrome own
  * their own bottom-of-page treatment (or none at all).
  *
- * Link destinations are placeholders for V1:
- *   • Terms / Privacy / Contact → "#" — dedicated pages land post-launch
- *     (lawyer-reviewed copy, see Phase 7.5/8). Hover states still work so the
- *     footer reads as interactive.
- *   • Responsible Gambling → tel: link to 1-800-GAMBLER (national help line).
- *
- * Copy is verbatim from V2.1 Part 13.
+ * Phase 6B.4 — wired the utility links to real V1 launch pages under
+ * /legal/* (terms / privacy / responsible-gambling). Contact remains a
+ * mailto: link to support@oddsphereai.com. The Responsible Gambling
+ * utility link now routes to the dedicated page rather than tel:, but
+ * the help-line at the bottom of the footer still dials 1-800-GAMBLER
+ * directly.
  */
 
 import { usePathname } from "next/navigation";
@@ -38,33 +37,32 @@ export default function Footer() {
           className="flex flex-wrap justify-center items-center gap-x-3 gap-y-2 text-xs sm:text-sm font-medium text-gray-300 mb-6"
         >
           <Link
-            href="#"
+            href="/legal/terms"
             className="hover:text-white transition-colors focus-visible:outline-none focus-visible:text-white"
           >
             Terms
           </Link>
           <span aria-hidden="true" className="text-gray-700">·</span>
           <Link
-            href="#"
+            href="/legal/privacy"
             className="hover:text-white transition-colors focus-visible:outline-none focus-visible:text-white"
           >
             Privacy
           </Link>
           <span aria-hidden="true" className="text-gray-700">·</span>
-          <a
-            href={PHONE_TEL}
+          <Link
+            href="/legal/responsible-gambling"
             className="hover:text-white transition-colors focus-visible:outline-none focus-visible:text-white"
-            aria-label="Responsible gambling — call 1-800-GAMBLER"
           >
             Responsible Gambling
-          </a>
+          </Link>
           <span aria-hidden="true" className="text-gray-700">·</span>
-          <Link
-            href="#"
+          <a
+            href="mailto:support@oddsphereai.com"
             className="hover:text-white transition-colors focus-visible:outline-none focus-visible:text-white"
           >
             Contact
-          </Link>
+          </a>
         </nav>
 
         {/* Disclaimer — verbatim from V2.1 spec Part 13. */}

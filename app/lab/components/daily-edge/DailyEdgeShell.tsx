@@ -2677,6 +2677,28 @@ function LoadingState() {
   return <EmptyState message="Loading tonight's slate…" />;
 }
 
+/**
+ * Phase 6B.4 — translate the API's slateState into a member-friendly
+ * empty-state message. Honest about pending/draft slates so a quiet
+ * morning before publication doesn't look like a broken product.
+ */
+function emptyStateMessageFor(slateState: string | null | undefined): string {
+  switch (slateState) {
+    case "today_draft_only":
+      return "Tonight's slate is being finalized. Picks will appear here once the model run finishes.";
+    case "today_pending_ingest":
+      return "Tonight's slate is being ingested. Picks will appear here in a few minutes.";
+    case "today_hidden_only":
+      return "Tonight's slate isn't visible yet.";
+    case "stale_fallback":
+      return "Live slate isn't published yet. Showing the most recent available slate.";
+    case "no_data":
+      return "No games on tonight's slate.";
+    default:
+      return "No games on tonight's slate.";
+  }
+}
+
 function ErrorState({ error }: { error: string }) {
   return (
     <div className="max-w-7xl mx-auto px-6 py-20 text-center">
@@ -2877,7 +2899,12 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState error={error.message} />;
   if (!data || games.length === 0) {
-    return <EmptyState message="No games on tonight's slate." />;
+    // Phase 6B.4 — honest empty state by slateState. The API tells us
+    // WHY there are no games (draft / hidden / pending / stale fallback
+    // failed). Lying with "No games on tonight's slate." when the slate
+    // is actually being finalized looks like a broken product.
+    const message = emptyStateMessageFor(data?.slateState);
+    return <EmptyState message={message} />;
   }
 
   const selectedGame = selectedGameId

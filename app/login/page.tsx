@@ -30,6 +30,7 @@ import { sanitizeNext } from "@/lib/auth/betaSession";
 import {
   getCheckoutUrl,
   isBetaFallbackEnabled,
+  isBetaLoginPubliclyVisible,
   isWhopAccessEnabled,
 } from "@/lib/auth/whopConfig";
 
@@ -91,7 +92,15 @@ export default async function LoginPage({
   const whopDescription = typeof params.wdd === "string" ? params.wdd.slice(0, 200) : null;
 
   const whopEnabled = isWhopAccessEnabled();
-  const betaEnabled = isBetaFallbackEnabled();
+  const betaEnabledServerSide = isBetaFallbackEnabled();
+  // Phase 6B.4 — surface the beta password form only when:
+  //   • Whop OAuth is NOT yet configured (fallback path during cutover), OR
+  //   • LAB_BETA_LOGIN_VISIBLE=true is explicitly set (admin recovery).
+  // The beta session code path stays available either way — middleware
+  // still honors a valid cookie if one is presented.
+  const betaEnabled = whopEnabled
+    ? isBetaLoginPubliclyVisible()
+    : betaEnabledServerSide;
   const checkoutUrl = getCheckoutUrl();
 
   const whopStartHref = `/api/auth/whop/start?next=${encodeURIComponent(nextValue)}`;

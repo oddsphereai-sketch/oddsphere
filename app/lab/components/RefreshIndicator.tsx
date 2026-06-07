@@ -58,47 +58,55 @@ type StateStyle = {
   pulse: boolean;
 };
 
+// Phase 6B.4 launch reframe — the pill is now framed as a "Last
+// updated" timestamp rather than an alarm. The state still informs
+// the dot color (subtly), but the loud "Stale" / "Refresh failed"
+// red labeling is replaced with a neutral "Last updated <time>"
+// message. Members shouldn't see operational red flags during a
+// normal cron lull.
 const STATE_STYLES: Record<RefreshState, StateStyle> = {
   live: {
-    label: "Live",
+    label: "Last updated",
     dot: "bg-emerald-400",
-    dotShadow: "shadow-[0_0_8px_rgba(52,211,153,0.7)]",
+    dotShadow: "shadow-[0_0_8px_rgba(52,211,153,0.55)]",
     text: "text-emerald-300",
-    pillBorder: "border-emerald-700/40",
-    pillBg: "bg-emerald-950/30",
+    pillBorder: "border-emerald-700/30",
+    pillBg: "bg-emerald-950/20",
     pulse: true,
   },
   updating: {
     label: "Updating",
     dot: "bg-amber-400",
-    dotShadow: "shadow-[0_0_8px_rgba(251,191,36,0.7)]",
+    dotShadow: "shadow-[0_0_8px_rgba(251,191,36,0.55)]",
     text: "text-amber-300",
-    pillBorder: "border-amber-700/40",
-    pillBg: "bg-amber-950/30",
+    pillBorder: "border-amber-700/30",
+    pillBg: "bg-amber-950/20",
     pulse: true,
   },
   stale: {
-    label: "Stale",
-    dot: "bg-rose-400",
-    dotShadow: "shadow-[0_0_8px_rgba(251,113,133,0.7)]",
-    text: "text-rose-300",
-    pillBorder: "border-rose-700/40",
-    pillBg: "bg-rose-950/30",
+    // Reframed: not a member-facing alarm. Show a neutral gray "Last
+    // updated <time>" so a quiet day or off-peak hour doesn't look
+    // like a broken product. The detail line carries the exact age.
+    label: "Last updated",
+    dot: "bg-gray-400",
+    dotShadow: "",
+    text: "text-gray-300",
+    pillBorder: "border-gray-700/40",
+    pillBg: "bg-gray-900/40",
     pulse: false,
   },
   error: {
-    label: "Refresh failed",
-    dot: "bg-rose-500",
-    dotShadow: "shadow-[0_0_8px_rgba(251,113,133,0.7)]",
-    text: "text-rose-300",
-    pillBorder: "border-rose-700/40",
-    pillBg: "bg-rose-950/30",
+    // Same reframing rationale — cron retry windows shouldn't paint
+    // the entire UI red.
+    label: "Last updated",
+    dot: "bg-gray-400",
+    dotShadow: "",
+    text: "text-gray-300",
+    pillBorder: "border-gray-700/40",
+    pillBg: "bg-gray-900/40",
     pulse: false,
   },
   unknown: {
-    // 6.4c: "No activity" read as "no betting activity" to reviewers; this
-    // pill is the pipeline-status indicator (means "no cron status reported
-    // yet"). Renamed to remove the My Bets-style ambiguity.
     label: "No status yet",
     dot: "bg-gray-500",
     dotShadow: "",
@@ -148,17 +156,18 @@ export default function RefreshIndicator() {
   const ageStr = formatAgo(data?.overall.age_seconds ?? null);
   const untilStr = formatUntil(data?.overall.next_scheduled_at ?? null);
 
-  // Detail text varies per state — keeps the pill informative across all 5
-  // states without the layout shifting.
+  // Detail text. Phase 6B.4 — uniform "<ageStr>" format across live /
+  // stale / error so the pill always reads as a "Last updated" time,
+  // not as a loud operational alarm.
   let detail = "";
   if (state === "live") {
-    detail = `Updated ${ageStr}${untilStr ? ` · Next in ${untilStr}` : ""}`;
+    detail = `${ageStr}${untilStr ? ` · Next in ${untilStr}` : ""}`;
   } else if (state === "updating") {
     detail = "Refresh in progress";
   } else if (state === "stale") {
-    detail = `Last update ${ageStr}`;
+    detail = ageStr;
   } else if (state === "error") {
-    detail = `Last successful ${ageStr}`;
+    detail = ageStr;
   } else {
     detail = isLoading ? "Loading…" : "No status reported yet";
   }
