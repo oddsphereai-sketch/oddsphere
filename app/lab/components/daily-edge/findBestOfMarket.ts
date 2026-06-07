@@ -55,26 +55,12 @@ function perMarketConfidence(
   return game.predictions.nrfi.confidence ?? 0;
 }
 
-/**
- * Find the strongest game whose verdict is best_angle/lean AND whose
- * headline market matches `market`. Ties broken by per-market grade
- * strength → per-market confidence DESC → earliest game time.
- */
-export function findBestOfMarket(
-  games: DailyEdgeGameDto[],
+function sortAndPickStrongest(
+  candidates: DailyEdgeGameDto[],
   market: EligibleMarket
 ): DailyEdgeGameDto | null {
-  const candidates = games
-    .filter(
-      (g) =>
-        g.breakdown.verdict.key === "best_angle" ||
-        g.breakdown.verdict.key === "lean"
-    )
-    .filter((g) => headlinePrimaryMarket(g) === market);
-
   if (candidates.length === 0) return null;
-
-  candidates.sort((a, b) => {
+  const sorted = [...candidates].sort((a, b) => {
     const aGrade = perMarketGrade(a, market);
     const bGrade = perMarketGrade(b, market);
     const aRank = aGrade !== null ? GRADE_RANK[aGrade] : 0;
@@ -85,8 +71,41 @@ export function findBestOfMarket(
     if (bConf !== aConf) return bConf - aConf;
     return a.gameStartMinutes - b.gameStartMinutes;
   });
+  return sorted[0] ?? null;
+}
 
-  return candidates[0] ?? null;
+/**
+ * Find the strongest game whose verdict is best_angle/lean AND whose
+ * headline market matches `market`. Ties broken by per-market grade
+ * strength → per-market confidence DESC → earliest game time.
+ *
+ * Phase 6B.7 — when strict best_angle/lean produces no candidate,
+ * an optional `fallbackPool` may be passed. The fallback is consumed
+ * with the SAME ranking, so the cell still surfaces a genuinely
+ * strong pick when the strict bar is empty for the whole slate.
+ * Callers are responsible for building the fallback pool with
+ * selectTopAvailableAngles() so the UI labels match the bar that
+ * actually qualified each candidate.
+ */
+export function findBestOfMarket(
+  games: DailyEdgeGameDto[],
+  market: EligibleMarket,
+  options?: { fallbackPool?: DailyEdgeGameDto[] }
+): DailyEdgeGameDto | null {
+  const strict = games
+    .filter(
+      (g) =>
+        g.breakdown.verdict.key === "best_angle" ||
+        g.breakdown.verdict.key === "lean"
+    )
+    .filter((g) => headlinePrimaryMarket(g) === market);
+
+  const strictPick = sortAndPickStrongest(strict, market);
+  if (strictPick !== null) return strictPick;
+
+  const fallbackPool = options?.fallbackPool ?? [];
+  const fallback = fallbackPool.filter((g) => headlinePrimaryMarket(g) === market);
+  return sortAndPickStrongest(fallback, market);
 }
 
 /**

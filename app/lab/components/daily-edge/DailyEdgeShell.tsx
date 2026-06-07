@@ -187,6 +187,21 @@ function formatAmerican(price: number | null): string {
 }
 
 /**
+ * Phase 6B.7 — convert American odds for the picked side into an
+ * implied probability (0..1). Used to make the price-move EdgeRow
+ * tone pick-relative: if the implied prob on the model's pick side
+ * went UP from open → current, the market is moving TOWARD our pick
+ * (supportive); if it went DOWN, market is moving AWAY (caution).
+ * Returns null for invalid inputs so the caller can fall back to a
+ * neutral tone rather than guess.
+ */
+function americanToImpliedProb(american: number | null): number | null {
+  if (american === null || !Number.isFinite(american) || american === 0) return null;
+  if (american > 0) return 100 / (american + 100);
+  return Math.abs(american) / (Math.abs(american) + 100);
+}
+
+/**
  * Defensive: return null if the game's markets block is missing or the
  * requested market slot is empty. This protects against stale SWR cache
  * entries returned before the 4.1.10 DTO additives shipped — without it
@@ -281,15 +296,35 @@ function buildEdgeRow(market: MarketKey, m: MarketEdgeDto): EdgeRow | null {
   }
 
   // 4. Line move — only when we have both endpoints.
+  //
+  // Phase 6B.7 — pick-relative tone. lineOpenAmerican / priceAmerican
+  // on the DTO ALWAYS correspond to the model's picked side (see
+  // buildMarketEdge in app/api/lab/daily-edge/route.ts and the R-19
+  // Phase 5i lookup that joins line_history by modelSide). So a price
+  // shift implies whether the book now considers our side more or
+  // less likely. Pre-6B.7 every move rendered "sky" regardless of
+  // direction, which read like every movement was a positive signal
+  // — even when the market was visibly fading our pick. We now
+  // compare implied probability deltas: a 1pp+ shift toward our side
+  // is emerald (supportive), away is amber (caution), smaller deltas
+  // stay sky-neutral (could be normal vig adjustment).
   if (m.lineOpenAmerican !== null && m.priceAmerican !== null) {
     const open = m.lineOpenAmerican;
     const cur = m.priceAmerican;
     const moved = Math.abs(cur - open) >= 5;
     if (moved) {
+      const openProb = americanToImpliedProb(open);
+      const curProb = americanToImpliedProb(cur);
+      let tone: EdgeRow["tone"] = "sky";
+      if (openProb !== null && curProb !== null) {
+        const delta = curProb - openProb;
+        if (delta >= 0.01) tone = "emerald";
+        else if (delta <= -0.01) tone = "amber";
+      }
       return {
         label: "Price move",
         value: `${formatAmerican(open)} → ${formatAmerican(cur)}`,
-        tone: "sky",
+        tone,
       };
     }
   }

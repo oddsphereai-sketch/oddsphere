@@ -15,6 +15,7 @@ import ComingSoonState from "./ComingSoonState";
 import SimpleDailyEdgeCard from "./SimpleDailyEdgeCard";
 import { NoPlayStrip } from "./daily-edge/sharedCardParts";
 import TonightsMlbEdge from "./daily-edge/TonightsMlbEdge";
+import { selectTopAvailableAngles } from "./daily-edge/selectTopAvailableAngles";
 import { composeTakeaway } from "../lib/composeTakeaway";
 import type { DailyEdgeGameDto } from "../lib/labTypes";
 import DailyEdgeLegend from "./DailyEdgeLegend";
@@ -329,28 +330,47 @@ function groupGamesByVerdict(games: DailyEdgeGameDto[]): GroupedGames {
 function GroupedSlate({ games }: { games: DailyEdgeGameDto[] }) {
   const grouped = groupGamesByVerdict(games);
   const topAngles = [...grouped.best_angle, ...grouped.lean];
-  const restCount =
-    grouped.caution.length + grouped.watchlist.length + grouped.no_play.length;
 
-  // Choose a hero grid breakpoint based on the top-angle count. Avoid
-  // empty cells: 1 → centered single-col; 2 → 2-col on md+; 3+ → 3-col
-  // on lg+, 2-col on md.
+  // Phase 6B.7 — when the strict best_angle/lean section is empty,
+  // surface a Top Available Angles fallback (top 1–3 ranked by
+  // model_market_gap_pct → recommendation_confidence → modelProb).
+  // selectTopAvailableAngles enforces actionability bars and excludes
+  // no_play / caution / held, so this never promotes risky picks —
+  // it just keeps the page from looking broken on days when sharp-
+  // signal confirmation is sparse.
+  const fallback = selectTopAvailableAngles(games, 3);
+  const isFallbackMode = topAngles.length === 0 && fallback.games.length > 0;
+  const heroGames = topAngles.length > 0 ? topAngles : fallback.games;
+
+  // Subtract fallback hero games from the "rest" buckets so they don't
+  // render twice on the page (they came from watchlist / caution).
+  const fallbackIds = new Set(heroGames.map((g) => g.id));
+  const restCaution = grouped.caution.filter((g) => !fallbackIds.has(g.id));
+  const restWatchlist = grouped.watchlist.filter((g) => !fallbackIds.has(g.id));
+  const restNoPlay = grouped.no_play.filter((g) => !fallbackIds.has(g.id));
+  const restCount = restCaution.length + restWatchlist.length + restNoPlay.length;
+
+  // Choose a hero grid breakpoint based on the count. Avoid empty cells.
   const heroGridClass =
-    topAngles.length === 1
+    heroGames.length === 1
       ? "grid grid-cols-1 gap-4"
-      : topAngles.length === 2
+      : heroGames.length === 2
       ? "grid grid-cols-1 md:grid-cols-2 gap-4"
       : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4";
 
-  const restHeading = topAngles.length > 0 ? "Rest of the Slate" : "Tonight's Slate";
+  const restHeading = heroGames.length > 0 ? "Rest of the Slate" : "Tonight's Slate";
+  const heroTitle = isFallbackMode ? "Top Available Angles" : "Tonight's Top Angles";
+  const heroSubtitle = isFallbackMode
+    ? "No sharp-confirmed Best Angles yet. These are the strongest model-backed picks on the slate."
+    : null;
 
   return (
     <>
-      {topAngles.length > 0 && (
+      {heroGames.length > 0 && (
         <section className="mb-10">
-          <SectionHeading title="Tonight's Top Angles" count={topAngles.length} />
+          <SectionHeading title={heroTitle} count={heroGames.length} subtitle={heroSubtitle} />
           <div className={heroGridClass}>
-            {topAngles.map((game) => (
+            {heroGames.map((game) => (
               <div key={game.id} id={`game-${game.external_id}`}>
                 <SimpleDailyEdgeCard game={game} />
               </div>
@@ -364,9 +384,9 @@ function GroupedSlate({ games }: { games: DailyEdgeGameDto[] }) {
           <SectionHeading title={restHeading} count={restCount} />
 
           {/* Caution: full-width, stacked. */}
-          {grouped.caution.length > 0 && (
+          {restCaution.length > 0 && (
             <div className="space-y-3 mb-4">
-              {grouped.caution.map((game) => (
+              {restCaution.map((game) => (
                 <div key={game.id} id={`game-${game.external_id}`}>
                   <SimpleDailyEdgeCard game={game} />
                 </div>
@@ -375,9 +395,9 @@ function GroupedSlate({ games }: { games: DailyEdgeGameDto[] }) {
           )}
 
           {/* Watchlist: 2-col on md+, 1-col on mobile. */}
-          {grouped.watchlist.length > 0 && (
+          {restWatchlist.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-              {grouped.watchlist.map((game) => (
+              {restWatchlist.map((game) => (
                 <div key={game.id} id={`game-${game.external_id}`}>
                   <SimpleDailyEdgeCard game={game} />
                 </div>
@@ -386,9 +406,9 @@ function GroupedSlate({ games }: { games: DailyEdgeGameDto[] }) {
           )}
 
           {/* No Play: ultra-compact stacked strips. */}
-          {grouped.no_play.length > 0 && (
+          {restNoPlay.length > 0 && (
             <div className="space-y-1.5">
-              {grouped.no_play.map((game) => (
+              {restNoPlay.map((game) => (
                 <div key={game.id} id={`game-${game.external_id}`}>
                   <NoPlayStrip game={game} takeaway={composeTakeaway(game)} />
                 </div>
@@ -401,15 +421,30 @@ function GroupedSlate({ games }: { games: DailyEdgeGameDto[] }) {
   );
 }
 
-function SectionHeading({ title, count }: { title: string; count: number }) {
+function SectionHeading({
+  title,
+  count,
+  subtitle,
+}: {
+  title: string;
+  count: number;
+  subtitle?: string | null;
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-3 mb-4 pb-2 border-b border-gray-800/40">
-      <h2 className="text-[12px] sm:text-[13px] uppercase tracking-[0.16em] font-semibold text-gray-300">
-        {title}
-      </h2>
-      <span className="text-[11px] tabular-nums text-gray-500 font-medium">
-        {count}
-      </span>
+    <div className="mb-4 pb-2 border-b border-gray-800/40">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-[12px] sm:text-[13px] uppercase tracking-[0.16em] font-semibold text-gray-300">
+          {title}
+        </h2>
+        <span className="text-[11px] tabular-nums text-gray-500 font-medium">
+          {count}
+        </span>
+      </div>
+      {subtitle ? (
+        <p className="mt-1.5 text-[12px] text-gray-400 leading-snug max-w-2xl">
+          {subtitle}
+        </p>
+      ) : null}
     </div>
   );
 }

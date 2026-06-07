@@ -27,6 +27,7 @@ import {
   bestOfHeroLabel,
   bestOfConfidence,
 } from "./findBestOfMarket";
+import { selectTopAvailableAngles } from "./selectTopAvailableAngles";
 
 type Props = {
   games: DailyEdgeGameDto[];
@@ -72,15 +73,27 @@ export default function TonightsMlbEdge({ games, slateDate }: Props) {
   const grouped = groupForBriefing(games);
   const { topAngles, watchlist, caution } = grouped;
 
-  const bestML = findBestOfMarket(games, "moneyline");
-  const bestTotal = findBestOfMarket(games, "total");
-  const bestNrfi = findBestOfMarket(games, "first_inning_total");
+  // Phase 6B.7 — when strict Best Angle + Lean is empty for the whole
+  // slate, compute a Top Available Angles fallback so the briefing
+  // doesn't collapse to "0 top angles" on days when the sharp-signal
+  // layer is sparse. selectTopAvailableAngles returns isFallback=false
+  // when strict picks exist (we still use those), so this is purely
+  // additive — never lowers the strict bar.
+  const fallback = selectTopAvailableAngles(games, 3);
+  const effectiveTopAngles = topAngles.length > 0 ? topAngles : fallback.games;
+  const isFallback = topAngles.length === 0 && fallback.games.length > 0;
+
+  const bestML = findBestOfMarket(games, "moneyline", { fallbackPool: fallback.games });
+  const bestTotal = findBestOfMarket(games, "total", { fallbackPool: fallback.games });
+  const bestNrfi = findBestOfMarket(games, "first_inning_total", { fallbackPool: fallback.games });
 
   const lede = composeBriefingLede(grouped);
   const formattedDate = formatSlateDate(slateDate);
 
-  const topAngleCount = topAngles.length;
-  const topAnglesWord = topAngleCount === 1 ? "top angle" : "top angles";
+  const topAngleCount = effectiveTopAngles.length;
+  const topAnglesWord = isFallback
+    ? topAngleCount === 1 ? "available angle" : "available angles"
+    : topAngleCount === 1 ? "top angle" : "top angles";
   const watchlistWord = watchlist.length === 1 ? "watchlist spot" : "watchlist spots";
 
   return (

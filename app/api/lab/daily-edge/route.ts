@@ -1076,6 +1076,59 @@ function readFiV2Audit(sp: Record<string, unknown> | null): {
   };
 }
 
+/**
+ * Phase 6B.7 — read true model + market probabilities for the picked side
+ * out of v2_2_audit. Mirrors the existing readFiV2Audit/FI-override path so
+ * ML and Total markets surface honest model probability instead of the
+ * blended pick-strength score that ml_confidence / ou_confidence carry.
+ *
+ * Background: ml_confidence in V2.2 is `avg(|2p_ml-1|, |2p_ou-1|)*100 +
+ * run-diff bump`, capped by tier ceiling. It blends ML AND OU strength,
+ * so a 0.03-run game with a strong OU lean shows ~62% under the "ML"
+ * label even though the true ML model probability is ~51%. The audit
+ * carries the unblended `ml_model_prob` / `ml_market_prob` / `ml_edge_pct`
+ * separately — this helper exposes them so MarketEdgeDto.modelProb /
+ * modelTrustPct / marketImpliedPct / modelMarketGapPct become honest.
+ *
+ * Returns null when the audit is missing OR the picked-side prob can't be
+ * resolved (e.g., FI market routes through readFiV2Audit instead).
+ */
+function readV22AuditForPick(
+  sp: Record<string, unknown> | null,
+  market: "moneyline" | "total",
+  pickIsHome: boolean | null,
+  pickIsOver: boolean | null,
+): {
+  modelProb: number | null;
+  marketProb: number | null;
+  edgePctPp: number | null;
+} | null {
+  if (!sp || typeof sp !== "object") return null;
+  const a = (sp as Record<string, unknown>).v2_2_audit;
+  if (!a || typeof a !== "object") return null;
+  const audit = a as Record<string, unknown>;
+  const num = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+  if (market === "moneyline") {
+    // ml_model_prob / ml_market_prob in the audit are written for the
+    // model's picked side (V22 emits them post-pick selection). The
+    // audit's perspective IS the pick perspective, so no home/away flip.
+    void pickIsHome;
+    const m = num(audit.ml_model_prob);
+    const k = num(audit.ml_market_prob);
+    const e = num(audit.ml_edge_pct);
+    if (m === null && k === null && e === null) return null;
+    return { modelProb: m, marketProb: k, edgePctPp: e };
+  }
+  // total
+  void pickIsOver;
+  const m = num(audit.ou_model_prob);
+  const k = num(audit.ou_market_prob);
+  const e = num(audit.ou_edge_pct);
+  if (m === null && k === null && e === null) return null;
+  return { modelProb: m, marketProb: k, edgePctPp: e };
+}
+
 function pickModelDriver(
   af: Record<string, unknown> | null,
   market: "moneyline" | "total" | "first_inning",
@@ -1538,8 +1591,47 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // and doesn't synthesise an FI no-vig pair; fi_v2_audit already has
   // posterior_p_nrfi + market_nrfi_no_vig + fi_edge_pct that we can
   // pipe straight through.
+  //
+  // Phase 6B.7 — extend the same pattern to ML and Total markets via
+  // v2_2_audit. The pre-6B.7 `modelProb` field on MarketEdgeDto was
+  // hard-wired to `input.confidence` (the blended pick-strength score),
+  // which mislabels it: a 0.03-run game with a strong OU lean showed
+  // ~62% under "ML model prob" even though the unblended ml_model_prob
+  // was ~51%. This block resolves the true picked-side probability,
+  // market no-vig probability, and edge in percentage points so the
+  // member-facing edge stack stops conflating "pick strength" with
+  // "model probability".
   let modelTrustPctOverride: number | null = null;
   let marketImpliedPctOverride: number | null = null;
+  let modelProbOverride: number | null = null;
+  if (input.market === "moneyline" || input.market === "total") {
+    const v22 = readV22AuditForPick(
+      input.sportSpecific ?? null,
+      input.market,
+      input.market === "moneyline" ? input.modelSide === "home" : null,
+      input.market === "total" ? input.modelSide === "over" : null,
+    );
+    if (v22 !== null) {
+      if (v22.modelProb !== null) {
+        modelProbOverride = v22.modelProb;
+        modelTrustPctOverride = +(v22.modelProb * 100).toFixed(1);
+      }
+      if (v22.marketProb !== null) {
+        marketImpliedPctOverride = +(v22.marketProb * 100).toFixed(1);
+      }
+      // edgePctPp in the audit is signed (model − market) in percentage
+      // points. Prefer it over the computed gap when both inputs were
+      // present in the audit, since the audit value reflects the exact
+      // model output rather than the displayed-rounded difference.
+      if (
+        v22.edgePctPp !== null &&
+        modelTrustPctOverride !== null &&
+        marketImpliedPctOverride !== null
+      ) {
+        modelMarketGapPct = +v22.edgePctPp.toFixed(1);
+      }
+    }
+  }
   if (input.market === "first_inning") {
     const fi = readFiV2Audit(input.sportSpecific ?? null);
     if (fi && input.pick !== null && input.pick !== "Held") {
@@ -1578,7 +1670,12 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     guidedWatchOut: copy.guidedWatchOut,
     whyLine: copy.whyLine,
     riskLine: copy.riskLine,
-    modelProb: input.confidence,        // already 0-1 by the caller; null for held
+    // Phase 6B.7 — prefer the true V2.2 posterior model probability for
+    // the picked side over the blended `input.confidence` whenever the
+    // audit provides one. Pre-6B.7 this field carried `input.confidence`
+    // (ml_confidence / 100 = blended pick strength), which mislabeled the
+    // value as a probability. FI already had its own override path below.
+    modelProb: modelProbOverride ?? input.confidence,
     marketFairProb,
     pinnacleEvPct,
     moneyPct,
