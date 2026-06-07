@@ -54,13 +54,57 @@ function readCookieValue(cookieHeader: string | null, name: string): string | nu
   return null;
 }
 
+/**
+ * Whop's authorize endpoint can return any RFC-6749 OAuth error.
+ * Mapping to OddSphere-side codes so the login UI can surface a
+ * specific cause instead of bucketing everything as "cancelled".
+ *
+ *   access_denied             — user clicked Deny on the consent
+ *                                screen (or Whop blocked the user)
+ *   invalid_request           — our authorize URL params are wrong
+ *   unauthorized_client       — the Whop OAuth app is not allowed to
+ *                                use this flow (most often: OAuth
+ *                                not enabled, app is in draft, or
+ *                                redirect_uri not approved)
+ *   unsupported_response_type — we asked for something other than `code`
+ *   invalid_scope             — at least one scope we requested
+ *                                ("openid profile email") is not
+ *                                enabled in the developer-app config
+ *   server_error              — Whop-side 5xx (transient)
+ *   temporarily_unavailable   — Whop-side maintenance (transient)
+ *
+ * Anything we don't recognise lands as `whop_oauth_err` and the raw
+ * code is still forwarded so the operator can diagnose.
+ */
+const WHOP_ERR_TO_KEY: Record<string, string> = {
+  access_denied: "whop_denied",
+  invalid_request: "whop_oauth_request",
+  unauthorized_client: "whop_oauth_unauthorized",
+  unsupported_response_type: "whop_oauth_unsupported",
+  invalid_scope: "whop_oauth_scope",
+  server_error: "whop_oauth_server",
+  temporarily_unavailable: "whop_oauth_unavailable",
+};
+
 function redirectWithError(
   request: Request,
   error: string,
+  detail?: { code?: string | null; description?: string | null },
   status = 302,
 ): Response {
   const url = new URL("/login", request.url);
   url.searchParams.set("error", error);
+  // Pass the raw Whop error code through as `wd` so the login page
+  // can show "Whop responded: <code>". The error code is not a
+  // secret — Whop already put it in the URL it redirected the user
+  // through. Cap length so a hostile/very long description can't
+  // bloat the URL or our DOM.
+  if (detail?.code !== null && detail?.code !== undefined && detail.code.length > 0) {
+    url.searchParams.set("wd", detail.code.slice(0, 64));
+  }
+  if (detail?.description !== null && detail?.description !== undefined && detail.description.length > 0) {
+    url.searchParams.set("wdd", detail.description.slice(0, 200));
+  }
   const headers = new Headers({ Location: url.toString() });
   headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_STATE_COOKIE));
   headers.append("Set-Cookie", clearTempCookie(WHOP_OAUTH_VERIFIER_COOKIE));
@@ -76,11 +120,14 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const stateParam = url.searchParams.get("state");
-  // Whop returns ?error=... on user-side denial (deny consent). We
-  // surface a friendly login redirect — no need to leak the raw value.
   const whopError = url.searchParams.get("error");
+  const whopErrorDescription = url.searchParams.get("error_description");
   if (whopError !== null) {
-    return redirectWithError(request, "whop_denied");
+    const mapped = WHOP_ERR_TO_KEY[whopError] ?? "whop_oauth_err";
+    return redirectWithError(request, mapped, {
+      code: whopError,
+      description: whopErrorDescription,
+    });
   }
   if (code === null || stateParam === null) {
     return redirectWithError(request, "whop_state");

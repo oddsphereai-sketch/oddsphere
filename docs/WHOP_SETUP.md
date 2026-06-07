@@ -201,6 +201,26 @@ npx tsx --env-file=.env.local scripts/operator/discover-whop-resources.ts \
 
 Confirm the `prod_xxx` matches what's in Vercel.
 
+### "Sign-in was cancelled" appears immediately after clicking Sign in with Whop
+
+The callback now shows the exact Whop error code on the login page
+(`Whop responded: <code>`). Match that code below:
+
+| Whop code | OddSphere shows | What it usually means |
+| --- | --- | --- |
+| `access_denied` | `whop_denied` | The user clicked **Deny** on the consent screen, OR the Whop OAuth app's scopes (`openid profile email`) aren't all approved for this user. |
+| `unauthorized_client` | `whop_oauth_unauthorized` | The Whop OAuth app is **not authorized to run the OAuth flow**. Common causes:<br>• OAuth not enabled on the Developer App.<br>• App is still in draft / not published.<br>• Redirect URI not listed in the app's allowed URIs (different from the previous "redirect_uri is invalid" — this means the app itself is blocked even before URI check). |
+| `invalid_scope` | `whop_oauth_scope` | One of the requested scopes (`openid`, `profile`, `email`) isn't enabled on the OAuth app. Edit the app config → Scopes → tick all three. |
+| `invalid_request` | `whop_oauth_request` | Our authorize URL params are malformed. If you see this with our scaffold, file an issue — usually means a Whop API change. |
+| `server_error` / `temporarily_unavailable` | `whop_oauth_server` / `whop_oauth_unavailable` | Whop-side outage. Try again in a minute. |
+
+The most common cause for an `access_denied` you can't explain is
+that the Whop Developer App needs **OAuth approval / publication**.
+Open the app in Whop dashboard → check for a "Publish", "Enable OAuth",
+or "Submit for review" toggle. Also confirm all three scopes
+(`openid`, `profile`, `email`) are listed as **enabled**, not just
+requested.
+
 ### Sign-in succeeds but a paying member is sent to `/pricing`
 
 The API key + resource id are reachable, but the access check returned

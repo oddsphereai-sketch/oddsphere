@@ -33,18 +33,28 @@ import {
   isWhopAccessEnabled,
 } from "@/lib/auth/whopConfig";
 
-type SearchParams = { next?: string; error?: string };
+type SearchParams = { next?: string; error?: string; wd?: string; wdd?: string };
 
 const ERROR_COPY: Record<string, string> = {
-  invalid:            "Incorrect password. Try again.",
-  unavailable:        "Lab access is temporarily unavailable. Please contact support if this persists.",
-  whop_disabled:      "Whop sign-in is not currently configured. Use the beta access form below if you have a code.",
-  whop_denied:        "Sign-in was cancelled. Try again, or contact support if you expected access.",
-  whop_state:         "Your sign-in session expired. Please try again.",
-  whop_token:         "We couldn't complete your Whop sign-in. Please try again.",
-  whop_userinfo:      "We couldn't read your Whop profile. Please try again.",
-  whop_access_error:  "Membership check failed. Please try again in a moment.",
-  whop_session_error: "We couldn't start your session. Please try again.",
+  invalid:                  "Incorrect password. Try again.",
+  unavailable:              "Lab access is temporarily unavailable. Please contact support if this persists.",
+  whop_disabled:            "Whop sign-in is not currently configured. Use the beta access form below if you have a code.",
+  whop_denied:              "Sign-in was cancelled on the Whop consent screen. Try again, or contact support if you expected access.",
+  whop_state:               "Your sign-in session expired. Please try again.",
+  whop_token:               "We couldn't complete your Whop sign-in. Please try again.",
+  whop_userinfo:            "We couldn't read your Whop profile. Please try again.",
+  whop_access_error:        "Membership check failed. Please try again in a moment.",
+  whop_session_error:       "We couldn't start your session. Please try again.",
+  // Specific Whop OAuth error codes mapped from the callback's `error`
+  // query param. These point at known Whop dashboard / app-config
+  // causes so an operator can fix them without guessing.
+  whop_oauth_request:       "Whop rejected the sign-in request. The Whop OAuth app may need its redirect URI updated.",
+  whop_oauth_unauthorized:  "The Whop OAuth app is not authorized to sign members in. Check that OAuth is enabled, the app is published, and the redirect URI is approved in the Whop dashboard.",
+  whop_oauth_unsupported:   "Whop rejected the sign-in flow. Contact support — this likely needs a code fix.",
+  whop_oauth_scope:         "Whop blocked the sign-in because one of the requested scopes (openid, profile, email) is not enabled on the Whop OAuth app.",
+  whop_oauth_server:        "Whop is having a server-side issue. Please try again in a minute.",
+  whop_oauth_unavailable:   "Whop is temporarily unavailable. Please try again in a minute.",
+  whop_oauth_err:           "Whop returned an unexpected sign-in error. Please try again.",
 };
 
 export default async function LoginPage({
@@ -56,6 +66,11 @@ export default async function LoginPage({
   const nextValue = typeof params.next === "string" ? sanitizeNext(params.next) : "/lab/daily-edge";
   const errorKey = typeof params.error === "string" ? params.error : "";
   const errorMessage = ERROR_COPY[errorKey] ?? null;
+  // Whop diagnostic forwarding (wd = error code, wdd = description).
+  // Already public via the redirect URL Whop sent here — not a secret.
+  // Cap to safe lengths defensively.
+  const whopDetail = typeof params.wd === "string" ? params.wd.slice(0, 64) : null;
+  const whopDescription = typeof params.wdd === "string" ? params.wdd.slice(0, 200) : null;
 
   const whopEnabled = isWhopAccessEnabled();
   const betaEnabled = isBetaFallbackEnabled();
@@ -83,9 +98,17 @@ export default async function LoginPage({
         {errorMessage !== null && (
           <div
             role="alert"
-            className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2"
+            className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 space-y-1.5"
           >
-            {errorMessage}
+            <div>{errorMessage}</div>
+            {whopDetail !== null && (
+              <div className="text-[11px] text-amber-200/80 font-mono break-all">
+                Whop responded: <span className="font-semibold">{whopDetail}</span>
+                {whopDescription !== null && (
+                  <span className="text-amber-200/60"> — {whopDescription}</span>
+                )}
+              </div>
+            )}
           </div>
         )}
 

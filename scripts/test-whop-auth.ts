@@ -404,6 +404,57 @@ await asyncCheck("getClientIdPreview returns null when unset", async () => {
   });
 });
 
+// ── Granular Whop OAuth error mapping (6B.3a.3) ──────────────────────
+
+check("Callback maps Whop access_denied to whop_denied",
+  /access_denied:\s*"whop_denied"/.test(CALLBACK_ROUTE));
+check("Callback maps Whop unauthorized_client to whop_oauth_unauthorized",
+  /unauthorized_client:\s*"whop_oauth_unauthorized"/.test(CALLBACK_ROUTE));
+check("Callback maps Whop invalid_scope to whop_oauth_scope",
+  /invalid_scope:\s*"whop_oauth_scope"/.test(CALLBACK_ROUTE));
+check("Callback maps Whop invalid_request to whop_oauth_request",
+  /invalid_request:\s*"whop_oauth_request"/.test(CALLBACK_ROUTE));
+check("Callback maps Whop server_error to whop_oauth_server",
+  /server_error:\s*"whop_oauth_server"/.test(CALLBACK_ROUTE));
+check("Callback maps Whop temporarily_unavailable to whop_oauth_unavailable",
+  /temporarily_unavailable:\s*"whop_oauth_unavailable"/.test(CALLBACK_ROUTE));
+check("Callback falls back to whop_oauth_err for unknown Whop error codes",
+  /WHOP_ERR_TO_KEY\[whopError\]\s*\?\?\s*"whop_oauth_err"/.test(CALLBACK_ROUTE));
+check("Callback forwards raw error code as wd param",
+  /url\.searchParams\.set\("wd"/.test(CALLBACK_ROUTE));
+check("Callback forwards error_description as wdd param",
+  /url\.searchParams\.set\("wdd"/.test(CALLBACK_ROUTE));
+check("Callback truncates Whop error code to <= 64 chars",
+  /\.slice\(0,\s*64\)/.test(CALLBACK_ROUTE));
+check("Callback truncates Whop error_description to <= 200 chars",
+  /\.slice\(0,\s*200\)/.test(CALLBACK_ROUTE));
+
+// Login page surfaces the granular codes
+for (const key of [
+  "whop_oauth_request",
+  "whop_oauth_unauthorized",
+  "whop_oauth_scope",
+  "whop_oauth_server",
+  "whop_oauth_unavailable",
+  "whop_oauth_err",
+]) {
+  check(`Login page has copy for '${key}'`, LOGIN_PAGE.includes(`${key}:`));
+}
+
+check("Login page reads `wd` diagnostic param",
+  /params\.wd/.test(LOGIN_PAGE) || /searchParams.*wd/.test(LOGIN_PAGE));
+check("Login page reads `wdd` description param",
+  /params\.wdd/.test(LOGIN_PAGE) || /searchParams.*wdd/.test(LOGIN_PAGE));
+check("Login page renders 'Whop responded:' diagnostic line",
+  /Whop responded:/.test(LOGIN_PAGE));
+check("Login page truncates wd / wdd lengths defensively",
+  /\.slice\(0,\s*64\)/.test(LOGIN_PAGE) && /\.slice\(0,\s*200\)/.test(LOGIN_PAGE));
+
+// Distinguishes user-cancellation from app-config failure
+check("Login copy distinguishes user-cancel from misconfig",
+  /Sign-in was cancelled on the Whop consent screen/.test(LOGIN_PAGE) &&
+  /Whop OAuth app is not authorized/.test(LOGIN_PAGE));
+
 // ── Whop membership does NOT grant admin ─────────────────────────────
 
 check("Middleware does not branch on Whop acl for /admin",
