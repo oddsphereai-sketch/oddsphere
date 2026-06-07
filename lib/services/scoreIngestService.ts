@@ -166,10 +166,24 @@ export async function ingestFinalScores(args: {
     else if (cls === "scheduled") result.scheduledCount++;
     else if (cls === "void") result.voidCount++;
 
+    // Phase 6B.26 — Preserve non-null DB scores when BDL returns null.
+    // 6B.23 made MLB Stats authoritative for final scores; without this
+    // guard, the next BDL ingest pass overwrites those scores back to
+    // null whenever BDL doesn't yet have the box score. The result was
+    // an oscillation: MLB Stats fills scores → BDL clears them → ML/OU
+    // grades flip back to pending. Rule: NEVER let a non-null DB value
+    // get clobbered by a null provider value. We accept provider values
+    // that are non-null OR introduce new data (DB was null before).
+    const nextHomeScore = provider.home_score !== null ? provider.home_score : g.home_score;
+    const nextAwayScore = provider.away_score !== null ? provider.away_score : g.away_score;
+    // Status stays provider-driven (BDL is fine for status; MLB Stats
+    // also writes "STATUS_FINAL" via the 6B.23 path, so values agree).
+    const nextStatus = provider.status;
+
     const changed =
-      g.status !== provider.status ||
-      g.home_score !== provider.home_score ||
-      g.away_score !== provider.away_score;
+      g.status !== nextStatus ||
+      g.home_score !== nextHomeScore ||
+      g.away_score !== nextAwayScore;
     if (!changed) {
       result.perGame.push({
         external_id: g.external_id,
@@ -187,9 +201,9 @@ export async function ingestFinalScores(args: {
         external_id: g.external_id,
         matchup,
         before_status: g.status,
-        after_status: provider.status,
-        home_score: provider.home_score,
-        away_score: provider.away_score,
+        after_status: nextStatus,
+        home_score: nextHomeScore,
+        away_score: nextAwayScore,
         action: "updated",
         reason: "dry-run (would update)",
       });
@@ -198,9 +212,9 @@ export async function ingestFinalScores(args: {
     const { error: upErr } = await supabase
       .from("games")
       .update({
-        status: provider.status,
-        home_score: provider.home_score,
-        away_score: provider.away_score,
+        status: nextStatus,
+        home_score: nextHomeScore,
+        away_score: nextAwayScore,
       })
       .eq("id", g.id);
     if (upErr) {
@@ -222,9 +236,9 @@ export async function ingestFinalScores(args: {
       external_id: g.external_id,
       matchup,
       before_status: g.status,
-      after_status: provider.status,
-      home_score: provider.home_score,
-      away_score: provider.away_score,
+      after_status: nextStatus,
+      home_score: nextHomeScore,
+      away_score: nextAwayScore,
       action: "updated",
     });
   }
