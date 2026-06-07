@@ -21,6 +21,11 @@
  */
 
 import type { MarketEdgeDto } from "./labTypes";
+import {
+  classifyPickRelativeLineMove,
+  lineMoveTone,
+  lineMoveArrow,
+} from "./lineMoveTone";
 
 export type EdgeStackRowTone = "emerald" | "amber" | "gray";
 
@@ -51,16 +56,6 @@ export function marketSourceLabel(
   if (quality === "splits_consensus") return "splits consensus";
   if (quality === "pinnacle_only") return "Pinnacle fair";
   return source;
-}
-
-function moveDirection(
-  open: number,
-  current: number
-): "toward" | "against" | "flat" {
-  if (open === current) return "flat";
-  // Higher American odds = better for backer of that side; we just need
-  // the direction here, not whether it favors the pick.
-  return current > open ? "toward" : "against";
 }
 
 function formatAmerican(n: number): string {
@@ -264,7 +259,14 @@ export function buildEdgeStackRows(
     });
   }
 
-  // ── Line Move — unchanged ───────────────────────────────────────
+  // ── Line Move ───────────────────────────────────────────────────
+  // Phase 6B.13 — both the compact reader and the expanded Edge Stack
+  // now share the same pick-relative tone helper. Pre-6B.13 the expanded
+  // row used raw arrow direction (current > open → emerald) while the
+  // compact reader correctly used implied-prob delta — so favorite
+  // moves like -170 → -157 displayed amber compact / emerald expanded.
+  // Both surfaces now consume classifyPickRelativeLineMove + lineMoveTone
+  // so a future cron regenerating game_predictions cannot drift them apart.
   if (
     marketData.lineOpenAmerican === null ||
     marketData.priceAmerican === null
@@ -276,16 +278,15 @@ export function buildEdgeStackRows(
       tone: "gray",
     });
   } else {
-    const dir = moveDirection(
+    const dir = classifyPickRelativeLineMove(
       marketData.lineOpenAmerican,
       marketData.priceAmerican
     );
-    const arrow = dir === "toward" ? "↗" : dir === "against" ? "↘" : "→";
     rows.push({
       label: "Line Move",
       evidence: `${formatAmerican(marketData.lineOpenAmerican)} → ${formatAmerican(marketData.priceAmerican)}`,
-      delta: arrow,
-      tone: dir === "toward" ? "emerald" : dir === "against" ? "amber" : "gray",
+      delta: lineMoveArrow(dir),
+      tone: lineMoveTone(dir),
     });
   }
 

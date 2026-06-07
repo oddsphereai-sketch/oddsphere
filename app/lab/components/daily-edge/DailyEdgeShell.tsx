@@ -31,6 +31,7 @@ import {
   buildEdgeStackRows,
   marketSourceLabel,
 } from "../../lib/edgeStackRows";
+import { classifyPickRelativeLineMove } from "../../lib/lineMoveTone";
 import type {
   DailyEdgeGameDto,
   MarketEdgeDto,
@@ -187,21 +188,6 @@ function formatAmerican(price: number | null): string {
 }
 
 /**
- * Phase 6B.7 — convert American odds for the picked side into an
- * implied probability (0..1). Used to make the price-move EdgeRow
- * tone pick-relative: if the implied prob on the model's pick side
- * went UP from open → current, the market is moving TOWARD our pick
- * (supportive); if it went DOWN, market is moving AWAY (caution).
- * Returns null for invalid inputs so the caller can fall back to a
- * neutral tone rather than guess.
- */
-function americanToImpliedProb(american: number | null): number | null {
-  if (american === null || !Number.isFinite(american) || american === 0) return null;
-  if (american > 0) return 100 / (american + 100);
-  return Math.abs(american) / (Math.abs(american) + 100);
-}
-
-/**
  * Defensive: return null if the game's markets block is missing or the
  * requested market slot is empty. This protects against stale SWR cache
  * entries returned before the 4.1.10 DTO additives shipped — without it
@@ -226,16 +212,6 @@ function asVerdictKey(s: string): VerdictKey {
     return s;
   }
   return "no_play";
-}
-
-function moveDirection(open: number, current: number): "toward" | "against" | "flat" {
-  // For underdogs (positive American), price moving DOWN (toward 0) = market moving toward this side.
-  // For favorites (negative American), price moving MORE negative = market moving toward this side.
-  // We use simple sign comparison vs the open.
-  const diff = current - open;
-  if (Math.abs(diff) < 5) return "flat";
-  // Heuristic for V1 — a more sophisticated rule lives in V1.1.
-  return diff < 0 ? "toward" : "against";
 }
 
 /**
@@ -297,33 +273,19 @@ function buildEdgeRow(market: MarketKey, m: MarketEdgeDto): EdgeRow | null {
 
   // 4. Line move — only when we have both endpoints.
   //
-  // Phase 6B.7 — pick-relative tone. lineOpenAmerican / priceAmerican
-  // on the DTO ALWAYS correspond to the model's picked side (see
-  // buildMarketEdge in app/api/lab/daily-edge/route.ts and the R-19
-  // Phase 5i lookup that joins line_history by modelSide). So a price
-  // shift implies whether the book now considers our side more or
-  // less likely. Pre-6B.7 every move rendered "sky" regardless of
-  // direction, which read like every movement was a positive signal
-  // — even when the market was visibly fading our pick. We now
-  // compare implied probability deltas: a 1pp+ shift toward our side
-  // is emerald (supportive), away is amber (caution), smaller deltas
-  // stay sky-neutral (could be normal vig adjustment).
+  // Phase 6B.13 — shared pick-relative tone helper. Both this compact
+  // reader and the expanded Edge Stack now route through
+  // classifyPickRelativeLineMove so they cannot disagree. A 1pp+
+  // implied-prob shift toward the picked side is emerald (supportive),
+  // away is amber (caution), smaller deltas stay neutral (normal vig).
   if (m.lineOpenAmerican !== null && m.priceAmerican !== null) {
-    const open = m.lineOpenAmerican;
-    const cur = m.priceAmerican;
-    const moved = Math.abs(cur - open) >= 5;
-    if (moved) {
-      const openProb = americanToImpliedProb(open);
-      const curProb = americanToImpliedProb(cur);
-      let tone: EdgeRow["tone"] = "sky";
-      if (openProb !== null && curProb !== null) {
-        const delta = curProb - openProb;
-        if (delta >= 0.01) tone = "emerald";
-        else if (delta <= -0.01) tone = "amber";
-      }
+    const dir = classifyPickRelativeLineMove(m.lineOpenAmerican, m.priceAmerican);
+    if (dir !== "flat") {
+      const tone: EdgeRow["tone"] =
+        dir === "toward" ? "emerald" : "amber";
       return {
         label: "Price move",
-        value: `${formatAmerican(open)} → ${formatAmerican(cur)}`,
+        value: `${formatAmerican(m.lineOpenAmerican)} → ${formatAmerican(m.priceAmerican)}`,
         tone,
       };
     }
@@ -1252,50 +1214,66 @@ function EdgeStack({ market, marketData }: { market: MarketKey; marketData: Mark
 }
 
 /**
- * Phase 4.2.C.1.R-14C1 — Model / Market / Take strip.
+ * Phase 6B.13 — Confidence vs Market strip.
  *
  * Reader-only component (does NOT appear on slate cards per the
- * "do not clutter the card" guidance). Shows:
- *   • Model — reviewed model trust % (NEVER raw model %)
+ * "do not clutter the card" guidance). Shows the FINAL CALIBRATED
+ * play confidence next to the no-vig market-implied probability so
+ * members can read "how confident are we, and how does that compare to
+ * what the market is pricing" — without conflating raw model output
+ * with the final actionable play.
+ *
+ *   • Confidence — recommendationConfidence (Push 3C-2 / 6B.1.6m).
+ *     Capped by data-quality tier; null when no actionable play exists
+ *     (Toss-Up / Held / no-pick) → strip hides entirely.
  *   • Market — no-vig market-implied % when a two-sided book exists;
- *              "Market: unavailable" honest-empty otherwise
- *   • Gap — Model − Market in percentage points; rendered with sign;
- *           suppressed when Market is unavailable (no fake gap)
+ *              "Market: unavailable" honest-empty otherwise.
+ *   • Edge — Confidence − Market in percentage points; rendered with
+ *            sign; suppressed when Market is unavailable (no fake gap).
  *   • Reviewer caution badge + flag list when reviewActionSummary ≠ "keep"
  *
- * Wording is intentionally cautious — "Gap" not "Edge", "Model vs Market"
- * not "true model edge". Until the model probability is calibrated
- * against historical hit rates, the gap is read-only context, not a
- * calibrated betting edge.
+ * Why this changed from "Model vs Market":
+ *   The prior block displayed `modelTrustPct` (which is sometimes the
+ *   raw model probability from sport_specific.v2_2_audit.ml_model_prob
+ *   when the override fires) and called it "Model 70% reviewed trust".
+ *   Members read that as the headline play confidence and were
+ *   confused when the same game's "Rec" pill showed 55. The two
+ *   numbers are distinct concepts and should not share a "Model"
+ *   label. Now the comparison block uses the same final
+ *   recommendationConfidence the play grade and Rec pill use.
  *
- * FI markets: this strip does not render. SharpAPI doesn't provide FI
- * lines/odds; the FI section already has its own zone-based block.
+ * Raw model probability stays available on the pick line ("Win Prob
+ * NN%" / "Model Prob NN%") for audit/intuition — it's just not the
+ * primary user-facing comparison.
+ *
+ * FI markets: render when the FI V2 audit populates modelTrustPct
+ * AND recommendationConfidence is non-null; otherwise honest-empty.
  */
-function ModelMarketTakeStrip({
+function ConfidenceVsMarketStrip({
   market,
   marketData,
 }: {
   market: MarketKey;
   marketData: MarketEdgeDto;
 }) {
-  // Phase 6B.1.6L — FI now populates modelTrustPct / marketImpliedPct /
-  // modelMarketGapPct from sport_specific.fi_v2_audit when the post-
-  // cutover FI V2 data is present. Render the strip when those fields
-  // are available; otherwise honest-empty.
   if (marketData.held) return null;
-  if (market === "first_inning" && marketData.modelTrustPct === null) return null;
 
-  const modelPct = marketData.modelTrustPct;
+  // Use final calibrated recommendation confidence as the user-facing
+  // number. Toss-Up / Held / no-pick → null → strip hides (intentional;
+  // those states have no actionable confidence to compare against the
+  // market).
+  const confidencePct =
+    marketData.recommendationConfidence ?? null;
+  if (confidencePct === null) return null;
+
   const marketPct = marketData.marketImpliedPct;
-  const gap = marketData.modelMarketGapPct;
   const source = marketData.marketSource;
   const quality = marketData.marketDataQuality;
   const flags = marketData.reviewFlags;
   const action = marketData.reviewActionSummary;
   const cautionFiring = action !== "keep" || flags.includes("review_recommends_caution");
 
-  // Honest-empty when we have no model number at all.
-  if (modelPct === null) return null;
+  if (market === "first_inning" && marketPct === null) return null;
 
   const marketLabel =
     marketPct !== null
@@ -1305,13 +1283,19 @@ function ModelMarketTakeStrip({
   // Shares the marketSourceLabel helper with EdgeStack so both
   // sections always render the same human-facing source string.
   const sourceLabel = marketSourceLabel(quality, source);
-  const showGap = gap !== null;
+
+  // Edge is now Confidence − Market (NOT modelTrustPct − Market). When
+  // market is unavailable we hide the Edge row entirely; we never
+  // invent a gap from one number.
+  const edge =
+    marketPct !== null ? confidencePct - marketPct : null;
+  const showGap = edge !== null;
   const gapTone: "neutral" | "positive" | "negative" =
-    gap === null
+    edge === null
       ? "neutral"
-      : gap >= 5
+      : edge >= 5
         ? "positive"
-        : gap <= -5
+        : edge <= -5
           ? "negative"
           : "neutral";
   const gapColor =
@@ -1355,14 +1339,14 @@ function ModelMarketTakeStrip({
   return (
     <div className="space-y-1.5">
       <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">
-        Model vs Market
+        Confidence vs Market
       </p>
-      <div className="grid grid-cols-[68px_1fr] gap-y-1 gap-x-2 items-baseline">
-        <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Model</span>
+      <div className="grid grid-cols-[88px_1fr] gap-y-1 gap-x-2 items-baseline">
+        <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Confidence</span>
         <span className="text-[12.5px] tabular-nums text-gray-200 font-bold">
-          {Math.round(modelPct)}%
+          {Math.round(confidencePct)}
           <span className="ml-2 text-[9.5px] font-normal text-gray-500 normal-case tracking-normal">
-            reviewed trust
+            play confidence
           </span>
         </span>
 
@@ -1380,11 +1364,11 @@ function ModelMarketTakeStrip({
           <>
             <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Edge</span>
             <span className={`text-[12.5px] tabular-nums font-bold ${gapColor}`}>
-              {Math.abs(gap!) < 0.5
+              {Math.abs(edge!) < 0.5
                 ? "No edge"
-                : `${gap! > 0 ? "+" : ""}${gap!.toFixed(1)} pt`}
+                : `${edge! > 0 ? "+" : ""}${edge!.toFixed(1)} pt`}
               <span className="ml-2 text-[9.5px] font-normal text-gray-500 normal-case tracking-normal">
-                model vs no-vig market
+                confidence vs no-vig market
               </span>
             </span>
           </>
@@ -2523,7 +2507,7 @@ function SelectedEdgeReader({
                 <div className="space-y-2.5">
                   <EdgeStack market={market} marketData={marketData} />
                   <div className="border-t border-white/[0.04]" />
-                  <ModelMarketTakeStrip market={market} marketData={marketData} />
+                  <ConfidenceVsMarketStrip market={market} marketData={marketData} />
                   <div className="border-t border-white/[0.04]" />
                   <MarketPulse market={market} marketData={marketData} />
                 </div>
@@ -2678,7 +2662,7 @@ function MobileDetailSheet({
             <>
               <QuickRead game={game} market={selectedMarket} marketData={marketData} />
               <EdgeStack market={selectedMarket} marketData={marketData} />
-              <ModelMarketTakeStrip market={selectedMarket} marketData={marketData} />
+              <ConfidenceVsMarketStrip market={selectedMarket} marketData={marketData} />
               <MarketPulse market={selectedMarket} marketData={marketData} />
               <MarketNotes
                 marketData={marketData}
