@@ -210,6 +210,7 @@ async function main() {
     "/lab/daily-edge",
     "/lab/player-props",
     "/lab/track-record",
+    "/lab/tracking",
     "/lab/account",
     "/admin",
     "/admin/scores-model",

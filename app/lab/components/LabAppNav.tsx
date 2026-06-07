@@ -8,9 +8,12 @@
  *
  *   /lab/daily-edge    → Daily Edge
  *   /lab/player-props  → Player Props
- *   /lab/track-record  → Track Record (analytical)
+ *   /lab/tracking      → Model Tracking (member-facing, Phase 6B.2b)
  *   /lab/my-bets       → My Bets (stub, V1)
  *   /lab/account       → Account (stub, V1)
+ *
+ * /lab/track-record permanently redirects to /lab/tracking so legacy
+ * links keep working.
  *
  * Right side carries the RefreshIndicator (5E) + an Account placeholder.
  * The real auth/account dropdown lands in Phase 7 (Whop OAuth + Magic Link);
@@ -33,7 +36,7 @@ type Tab = {
 const TABS: Tab[] = [
   { href: "/lab/daily-edge",   label: "Daily Edge",   icon: "🎯" },
   { href: "/lab/player-props", label: "Player Props", icon: "🎮" },
-  { href: "/lab/track-record", label: "Track Record", icon: "📈" },
+  { href: "/lab/tracking",     label: "Tracking",     icon: "📈" },
   { href: "/lab/my-bets",      label: "My Bets",      icon: "📊" },
 ];
 
@@ -156,7 +159,7 @@ function abbreviateLabel(label: string): string {
   switch (label) {
     case "Daily Edge":   return "Edge";
     case "Player Props": return "Props";
-    case "Track Record": return "Tracking";
+    case "Tracking":     return "Tracking";
     case "My Bets":      return "Bets";
     default:             return label;
   }

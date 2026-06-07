@@ -1,18 +1,14 @@
-"use client";
-
 /**
- * /lab/track-record — analytical Track Record module page (Phase 6.2a).
+ * /lab/track-record → /lab/tracking (308 permanent).
  *
- * Lifted out of the LabApp section dispatcher. Renders TrackingView, which
- * fetches via useTracking. No sport URL state required — Tracking is
- * always cross-sport per V2.1 spec.
- *
- * Note: this is the PREMIUM analytical view. The PUBLIC marketing version
- * lives at /track-record and uses the "Performance Snapshot" framing (6.2b).
+ * The polished member-facing tracking page is now canonical at
+ * /lab/tracking (Phase 6B.2b). This route remains so old links keep
+ * working but issues a permanent redirect — there is no duplicate
+ * tracking page code behind it.
  */
 
-import TrackingView from "../components/TrackingView";
+import { permanentRedirect } from "next/navigation";
 
-export default function LabTrackRecordPage() {
-  return <TrackingView />;
+export default function LabTrackRecordRedirect(): never {
+  permanentRedirect("/lab/tracking");
 }

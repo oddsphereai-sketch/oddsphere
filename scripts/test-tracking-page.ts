@@ -10,10 +10,12 @@
  * project (see scripts/test-tracking-foundation.ts).
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const PAGE = readFileSync("app/lab/tracking/page.tsx", "utf8");
 const API = readFileSync("app/api/lab/tracking-foundation/route.ts", "utf8");
+const TRACK_RECORD = readFileSync("app/lab/track-record/page.tsx", "utf8");
+const LAB_NAV = readFileSync("app/lab/components/LabAppNav.tsx", "utf8");
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean, msg?: string) {
@@ -127,6 +129,34 @@ check(
   // computes win_pct on decided picks only. Toss-Up + Held are NEVER
   // re-added on the page.
   !/toss_up[\s\S]{0,80}\+=\s*wins/.test(PAGE),
+);
+
+// Phase 6B.2c — canonical route ────────────────────────────────────
+
+check(
+  "/lab/track-record permanently redirects to /lab/tracking",
+  TRACK_RECORD.includes('permanentRedirect("/lab/tracking")') &&
+    TRACK_RECORD.includes('from "next/navigation"'),
+);
+check(
+  "/lab/track-record has no duplicate tracking page body",
+  !/TrackingView|useTracking|TrackingResponse|computeTrackingAggregate/.test(TRACK_RECORD),
+);
+check(
+  "Lab nav points the Tracking tab to /lab/tracking",
+  /href:\s*"\/lab\/tracking"[\s\S]{0,40}label:\s*"Tracking"/.test(LAB_NAV),
+);
+check(
+  "Lab nav no longer routes the Tracking tab to /lab/track-record",
+  !/href:\s*"\/lab\/track-record"/.test(LAB_NAV),
+);
+check(
+  "Stale TrackingView component is removed",
+  !existsSync("app/lab/components/TrackingView.tsx"),
+);
+check(
+  "Stale useTracking hook is removed",
+  !existsSync("app/lab/hooks/useTracking.ts"),
 );
 
 console.log(`\n  result: ${pass}/${pass + fail} pass`);
