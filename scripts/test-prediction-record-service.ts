@@ -6,7 +6,13 @@
  * into ML/total/FI prediction_records. Pure / fixture-only — no DB.
  */
 
-import { buildPredictionRecordsFromSlate } from "../lib/services/predictionRecordService";
+import {
+  buildPredictionRecordsFromSlate,
+  americanToImpliedProb,
+  buildPublicSplitsSnapshot,
+  buildLineMovementSnapshot,
+  buildDataIntegritySnapshot,
+} from "../lib/services/predictionRecordService";
 
 let pass = 0;
 let fail = 0;
@@ -289,7 +295,7 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
   };
   const signalsConflict = new Map([
-    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 78, public_betting_pct: 27 }]],
+    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 78, public_betting_pct: 27, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null }]],
   ]);
   const recs = buildPredictionRecordsFromSlate({
     sport: "mlb",
@@ -330,7 +336,7 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
   };
   const signalsNullMoney = new Map([
-    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: null, public_betting_pct: 33 }]],
+    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: null, public_betting_pct: 33, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null }]],
   ]);
   const recs = buildPredictionRecordsFromSlate({
     sport: "mlb",
@@ -354,7 +360,7 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
   };
   const signalsBelowThreshold = new Map([
-    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 57, public_betting_pct: 33 }]],
+    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 57, public_betting_pct: 33, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null }]],
   ]);
   const recs = buildPredictionRecordsFromSlate({
     sport: "mlb",
@@ -378,7 +384,7 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: false, ou_best_angle_eligible: true },
   };
   const signalsOuConflict = new Map([
-    [14771, [{ market_type: "total", side: "under", public_money_pct: 88, public_betting_pct: 50 }]],
+    [14771, [{ market_type: "total", side: "under", public_money_pct: 88, public_betting_pct: 50, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null }]],
   ]);
   const recs = buildPredictionRecordsFromSlate({
     sport: "mlb",
@@ -391,6 +397,143 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   });
   const ou = recs.find((r) => r.market === "total")!;
   check("OU best_angle SUPPRESSED when opposite under has 88% money", ou.best_angle === false);
+}
+
+// ── Phase 6B.22 — pure helpers for snapshot context ──────────────────
+console.log("\n━━━ Phase 6B.22 — context snapshot helpers ━━━");
+
+// americanToImpliedProb
+check("impliedProb(null) = null", americanToImpliedProb(null) === null);
+check("impliedProb(0) = null", americanToImpliedProb(0) === null);
+check(
+  "impliedProb(-120) ≈ 0.5454",
+  Math.abs((americanToImpliedProb(-120) ?? 0) - 120 / 220) < 1e-6,
+);
+check(
+  "impliedProb(+120) ≈ 0.4545",
+  Math.abs((americanToImpliedProb(120) ?? 0) - 100 / 220) < 1e-6,
+);
+check("impliedProb(+100) = 0.5", americanToImpliedProb(100) === 0.5);
+
+// buildPublicSplitsSnapshot
+{
+  const snap = buildPublicSplitsSnapshot([], "moneyline", null);
+  check("public_splits: null picked side → null snapshot", snap === null);
+}
+{
+  // No signals at all → null
+  const snap = buildPublicSplitsSnapshot([], "moneyline", "home");
+  check("public_splits: no signals → null snapshot", snap === null);
+}
+{
+  // Both sides present, conflict & support computable
+  const sigs = [
+    { market_type: "moneyline", side: "home", public_money_pct: 30, public_betting_pct: 40, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: "2026-06-07T11:00:00Z" },
+    { market_type: "moneyline", side: "away", public_money_pct: 70, public_betting_pct: 40, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: "2026-06-07T11:00:00Z" },
+  ] as any;
+  const snap = buildPublicSplitsSnapshot(sigs, "moneyline", "home") as any;
+  check("public_splits: picked_side present", snap.picked_side === "home");
+  check("public_splits: picked_money_pct = 30", snap.picked_money_pct === 30);
+  check("public_splits: opp_side = away", snap.opp_side === "away");
+  check("public_splits: opp_money_pct = 70", snap.opp_money_pct === 70);
+  // Opposite has 70% money, 40% bets → gap = 30 ≥ 15, money ≥ 60 → CONFLICT = true
+  check("public_splits: conflict = true (opp money 70, bets 40)", snap.conflict === true);
+  check("public_splits: support = false (picked money 30 < 60)", snap.support === false);
+  check("public_splits: source = 'sharp_signals'", snap.source === "sharp_signals");
+  check("public_splits: fetched_at carried through", snap.fetched_at === "2026-06-07T11:00:00Z");
+}
+{
+  // Picked-side data only — opp missing → conflict null, support computable
+  const sigs = [
+    { market_type: "moneyline", side: "home", public_money_pct: 80, public_betting_pct: 40, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null },
+  ] as any;
+  const snap = buildPublicSplitsSnapshot(sigs, "moneyline", "home") as any;
+  check("public_splits: opp missing → conflict null (tri-state)", snap.conflict === null);
+  check("public_splits: picked support computable", snap.support === true);
+}
+
+// buildLineMovementSnapshot
+{
+  const snap = buildLineMovementSnapshot([], [], [], "moneyline", null);
+  check("line_movement: null picked side → null snapshot", snap === null);
+}
+{
+  // No openers, no current → direction=unknown
+  const snap = buildLineMovementSnapshot([], [], [], "moneyline", "home") as any;
+  check("line_movement: no openers/current → direction=unknown", snap.direction === "unknown");
+  check("line_movement: open_odds null when no openers", snap.open_odds_american === null);
+}
+{
+  // Opener -120, current -130 (picked-side implied prob went UP) → toward_pick
+  const openers = [
+    { game_id: 1, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -120, line_value: null, recorded_at: "2026-06-07T08:00:00Z" },
+  ];
+  const current = [
+    { game_id: 1, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -130, line_value: null },
+  ];
+  const snap = buildLineMovementSnapshot(openers, current, [], "moneyline", "home") as any;
+  check("line_movement: opener -120 → current -130 → toward_pick", snap.direction === "toward_pick");
+  check("line_movement: magnitude_pp > 0 when direction not unknown", typeof snap.magnitude_pp === "number" && snap.magnitude_pp > 0);
+}
+{
+  // Opener -130, current -120 → against_pick (implied prob went down)
+  const openers = [
+    { game_id: 1, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -130, line_value: null, recorded_at: "2026-06-07T08:00:00Z" },
+  ];
+  const current = [
+    { game_id: 1, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -120, line_value: null },
+  ];
+  const snap = buildLineMovementSnapshot(openers, current, [], "moneyline", "home") as any;
+  check("line_movement: opener -130 → current -120 → against_pick", snap.direction === "against_pick");
+}
+{
+  // Steam + RLM on picked side
+  const sigs = [
+    { market_type: "moneyline", side: "home", public_money_pct: null, public_betting_pct: null, has_steam_move: true, has_reverse_line_movement: true, rlm_direction: "home_to_away", signal_strength: "strong", computed_at: null },
+  ] as any;
+  const snap = buildLineMovementSnapshot([], [], sigs, "moneyline", "home") as any;
+  check("line_movement: has_steam_move propagated", snap.has_steam_move === true);
+  check("line_movement: has_reverse_line_movement propagated", snap.has_reverse_line_movement === true);
+  check("line_movement: rlm_direction propagated", snap.rlm_direction === "home_to_away");
+}
+{
+  // Total drift: 8.5 → 9.0
+  const openers = [
+    { game_id: 1, market_type: "total", side: "over", sportsbook: "pinnacle", odds_american: -110, line_value: 8.5, recorded_at: null },
+  ];
+  const current = [
+    { game_id: 1, market_type: "total", side: "over", sportsbook: "pinnacle", odds_american: -110, line_value: 9.0 },
+  ];
+  const snap = buildLineMovementSnapshot(openers, current, [], "total", "over") as any;
+  check("line_movement: total drift open=8.5", snap.total_open === 8.5);
+  check("line_movement: total drift current=9.0", snap.total_current === 9.0);
+}
+
+// buildDataIntegritySnapshot
+{
+  const di = buildDataIntegritySnapshot({}, null, "moneyline") as any;
+  check("data_integrity: starter_confirmed=unknown on empty snapshot", di.starter_confirmed === "unknown");
+  check("data_integrity: market_two_sided_available=unknown without odds", di.market_two_sided_available === "unknown");
+  check("data_integrity: bullpen_fallback=unknown (TODO upstream)", di.bullpen_fallback === "unknown");
+}
+{
+  const di = buildDataIntegritySnapshot(
+    { starter_confirmed: true, lineup_confirmed: false, market_line_available: true, stale: false, v2_2_audit: { market_baseline_valid: true, market_source_quality: "real_api" } },
+    { mlHomeOdds: -120, mlAwayOdds: 110, ouOverOdds: null, ouUnderOdds: null },
+    "moneyline",
+  ) as any;
+  check("data_integrity: starter_confirmed=yes from true", di.starter_confirmed === "yes");
+  check("data_integrity: lineup_confirmed=no from false", di.lineup_confirmed === "no");
+  check("data_integrity: market_two_sided_available=yes when both ML sides present", di.market_two_sided_available === "yes");
+  check("data_integrity: odds_source_quality propagated", di.odds_source_quality === "real_api");
+}
+{
+  const di = buildDataIntegritySnapshot(
+    {},
+    { mlHomeOdds: -120, mlAwayOdds: null, ouOverOdds: null, ouUnderOdds: null },
+    "moneyline",
+  ) as any;
+  check("data_integrity: market_two_sided_available=no when away null", di.market_two_sided_available === "no");
 }
 
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);

@@ -509,17 +509,39 @@ function fakeRecord(snapshot: Record<string, unknown>, overrides: Partial<Predic
   const flags = extractContextFlags(fakeRecord({ fi_v2_audit: { trust_independent: false } }));
   check("fi_v2_audit.trust_independent=false (no v2_2_audit) → no", flags["trust_independent"] === "no");
 }
+// Phase 6B.22 — these dimensions have moved from MISSING_DIMENSIONS to
+// CONTEXT_FLAG_DEFINITIONS now that snapshot_json carries them.
 check(
-  "MISSING_DIMENSIONS includes public_money_pct",
-  MISSING_DIMENSIONS.some((m) => m.id === "public_money_pct"),
+  "public_money_pct no longer in MISSING_DIMENSIONS (moved to flags)",
+  !MISSING_DIMENSIONS.some((m) => m.id === "public_money_pct"),
 );
 check(
-  "MISSING_DIMENSIONS includes line_movement_direction",
-  MISSING_DIMENSIONS.some((m) => m.id === "line_movement_direction"),
+  "line_movement_direction no longer in MISSING_DIMENSIONS (moved to flags)",
+  !MISSING_DIMENSIONS.some((m) => m.id === "line_movement_direction"),
 );
 check(
-  "MISSING_DIMENSIONS includes bullpen_fallback",
-  MISSING_DIMENSIONS.some((m) => m.id === "bullpen_fallback"),
+  "public_money_conflict is now a context flag",
+  CONTEXT_FLAG_DEFINITIONS.some((d) => d.id === "public_money_conflict"),
+);
+check(
+  "public_money_support is now a context flag",
+  CONTEXT_FLAG_DEFINITIONS.some((d) => d.id === "public_money_support"),
+);
+check(
+  "line_moved_toward_pick is now a context flag",
+  CONTEXT_FLAG_DEFINITIONS.some((d) => d.id === "line_moved_toward_pick"),
+);
+check(
+  "line_moved_against_pick is now a context flag",
+  CONTEXT_FLAG_DEFINITIONS.some((d) => d.id === "line_moved_against_pick"),
+);
+check(
+  "bullpen_fallback_used is now a context flag",
+  CONTEXT_FLAG_DEFINITIONS.some((d) => d.id === "bullpen_fallback_used"),
+);
+check(
+  "MISSING_DIMENSIONS surfaces bullpen real-boolean follow-up",
+  MISSING_DIMENSIONS.some((m) => m.id === "bullpen_fallback_real_boolean"),
 );
 
 // ── Stage 2: shadow calibration ───────────────────────────────────────

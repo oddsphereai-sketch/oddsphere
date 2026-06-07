@@ -95,6 +95,27 @@ type PublicSplitsRow = {
   side: string;
   public_money_pct: number | null;
   public_betting_pct: number | null;
+  /* Phase 6B.22 — additional sharp_signals fields snapshotted at lock time. */
+  has_steam_move: boolean | null;
+  has_reverse_line_movement: boolean | null;
+  rlm_direction: string | null;
+  signal_strength: string | null;
+  computed_at: string | null;
+};
+
+/**
+ * Phase 6B.22 — opener row from `line_history` (is_opener=true). One per
+ * (game, market, side, book). Combined with the lock-time price in `lines`,
+ * lets us derive line-movement direction relative to the picked side.
+ */
+type LineHistoryOpenerRow = {
+  game_id: number;
+  market_type: string;
+  side: string | null;
+  sportsbook: string;
+  odds_american: number | null;
+  line_value: number | null;
+  recorded_at: string | null;
 };
 
 /**
@@ -138,6 +159,8 @@ type LineRowForOdds = {
   side: string | null;
   sportsbook: string;
   odds_american: number | null;
+  /** Phase 6B.22 — null for ML; populated for totals (e.g. 8.5). */
+  line_value?: number | null;
 };
 
 /**
@@ -175,6 +198,244 @@ export function buildGameOddsSnapshot(
     mlAwayOdds: pickPriorityOdds(lines, "moneyline", "away"),
     ouOverOdds: pickPriorityOdds(lines, "total", "over"),
     ouUnderOdds: pickPriorityOdds(lines, "total", "under"),
+  };
+}
+
+/* ─── Phase 6B.22 — context snapshots for calibration ────────────────────
+ *
+ * Three helpers that produce the additive `public_splits`, `line_movement`,
+ * and `data_integrity` namespaces injected into snapshot_json at lock
+ * time. Every helper is pure (no DB, no I/O) and defensive: when source
+ * data is missing, returns explicit `null` / `"unknown"` rather than
+ * inventing values.
+ *
+ * Why namespaced sub-objects: keeps existing snapshot_json keys
+ * untouched (Daily Edge, Stage 1 / Stage 2 reports continue to read
+ * what they always read), while letting the calibration contextFlags
+ * extractor read the new paths without coupling to model internals.
+ */
+
+/** Pure — American odds → implied probability of winning. null when input is null/0. */
+export function americanToImpliedProb(american: number | null | undefined): number | null {
+  if (american === null || american === undefined) return null;
+  if (american === 0) return null;
+  return american < 0 ? -american / (-american + 100) : 100 / (american + 100);
+}
+
+const OPPOSITE_SIDE: Record<string, string> = {
+  home: "away",
+  away: "home",
+  over: "under",
+  under: "over",
+};
+
+/**
+ * Phase 6B.22 — picked-side / opposite-side public money + bets snapshot.
+ * Mirrors the existing best_angle public-money guard but exposes the full
+ * pair so calibration can analyze "public-money conflict" vs "support" as
+ * separate cuts.
+ *
+ * conflict and support are tri-state (true | false | null). null when the
+ * source data needed to determine them is missing on either side.
+ */
+export function buildPublicSplitsSnapshot(
+  signals: ReadonlyArray<PublicSplitsRow>,
+  market: "moneyline" | "total",
+  pickedSide: string | null,
+): Record<string, unknown> | null {
+  if (pickedSide === null) return null;
+  const opp = OPPOSITE_SIDE[pickedSide] ?? null;
+  if (opp === null) return null;
+  const picked = signals.find((s) => s.market_type === market && s.side === pickedSide);
+  const opposite = signals.find((s) => s.market_type === market && s.side === opp);
+  if (picked === undefined && opposite === undefined) return null;
+  // Conflict / support — derive only when BOTH halves of the comparison have
+  // values. Return null otherwise so the calibration extractor reports
+  // "unknown" rather than a default-false that would skew analysis.
+  const oppMoney = opposite?.public_money_pct ?? null;
+  const oppBets = opposite?.public_betting_pct ?? null;
+  const conflict =
+    oppMoney !== null && oppBets !== null
+      ? oppMoney >= 60 && oppMoney - oppBets >= 15
+      : null;
+  const pickedMoney = picked?.public_money_pct ?? null;
+  const pickedBets = picked?.public_betting_pct ?? null;
+  const support =
+    pickedMoney !== null && pickedBets !== null
+      ? pickedMoney >= 60 && pickedMoney - pickedBets >= 15
+      : null;
+  return {
+    market,
+    picked_side: pickedSide,
+    picked_money_pct: pickedMoney,
+    picked_bets_pct: pickedBets,
+    opp_side: opp,
+    opp_money_pct: oppMoney,
+    opp_bets_pct: oppBets,
+    conflict,
+    support,
+    source: "sharp_signals",
+    fetched_at: picked?.computed_at ?? opposite?.computed_at ?? null,
+  };
+}
+
+/**
+ * Phase 6B.22 — opener vs current price for the picked side, plus steam /
+ * RLM flags from sharp_signals. Direction is computed in implied-probability
+ * space so it generalises across ML / OU price moves.
+ *
+ *   direction = "toward_pick"  → picked-side implied prob went UP (line
+ *                                moved in our favor)
+ *   direction = "against_pick" → picked-side implied prob went DOWN
+ *   direction = "neutral"      → change is within ±0.5pp
+ *   direction = "unknown"      → opener or current price missing
+ *
+ * For totals, also surfaces total line drift (e.g., 8.5 → 9.0).
+ */
+function pickPriorityOpener(
+  openers: ReadonlyArray<LineHistoryOpenerRow>,
+  market: "moneyline" | "total",
+  side: string,
+): LineHistoryOpenerRow | null {
+  const candidates = openers.filter(
+    (r) => r.market_type === market && r.side === side && r.odds_american !== null,
+  );
+  for (const book of BOOK_PRIORITY) {
+    const hit = candidates.find((r) => r.sportsbook === book);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+export function buildLineMovementSnapshot(
+  openers: ReadonlyArray<LineHistoryOpenerRow>,
+  currentLines: ReadonlyArray<LineRowForOdds>,
+  signals: ReadonlyArray<PublicSplitsRow>,
+  market: "moneyline" | "total",
+  pickedSide: string | null,
+): Record<string, unknown> | null {
+  if (pickedSide === null) return null;
+  const opener = pickPriorityOpener(openers, market, pickedSide);
+  const currentOdds = pickPriorityOdds(currentLines, market, pickedSide);
+  const openImplied = americanToImpliedProb(opener?.odds_american ?? null);
+  const currentImplied = americanToImpliedProb(currentOdds);
+
+  let direction: "toward_pick" | "against_pick" | "neutral" | "unknown" = "unknown";
+  let magnitudePp: number | null = null;
+  if (openImplied !== null && currentImplied !== null) {
+    const deltaPp = (currentImplied - openImplied) * 100;
+    magnitudePp = Math.abs(deltaPp);
+    if (magnitudePp < 0.5) direction = "neutral";
+    else if (deltaPp > 0) direction = "toward_pick";
+    else direction = "against_pick";
+  }
+
+  // Total-line drift (line_value), for totals only.
+  let totalOpen: number | null = null;
+  let totalCurrent: number | null = null;
+  if (market === "total" && opener !== null) {
+    totalOpen = opener.line_value ?? null;
+    const cur = currentLines.find(
+      (r) => r.market_type === "total" && r.side === pickedSide,
+    );
+    totalCurrent = (cur as { line_value?: number | null } | undefined)?.line_value ?? null;
+  }
+
+  // Steam / RLM signals from sharp_signals (per-side, picked side).
+  const pickedSignal = signals.find((s) => s.market_type === market && s.side === pickedSide);
+  const steam = pickedSignal?.has_steam_move ?? null;
+  const rlm = pickedSignal?.has_reverse_line_movement ?? null;
+  const rlmDirection = pickedSignal?.rlm_direction ?? null;
+
+  return {
+    market,
+    picked_side: pickedSide,
+    open_odds_american: opener?.odds_american ?? null,
+    current_odds_american: currentOdds,
+    open_implied_prob: openImplied,
+    current_implied_prob: currentImplied,
+    direction,
+    magnitude_pp: magnitudePp,
+    total_open: totalOpen,
+    total_current: totalCurrent,
+    has_steam_move: steam,
+    has_reverse_line_movement: rlm,
+    rlm_direction: rlmDirection,
+    source: "line_history+lines+sharp_signals",
+    opener_recorded_at: opener?.recorded_at ?? null,
+  };
+}
+
+/**
+ * Phase 6B.22 — data-integrity context flags pulled from the locked sport_specific
+ * (auto_factors + v2_2_audit + fi_v2_audit + top-level snapshot keys) plus odds
+ * availability. Every field is tri-state ("yes" | "no" | "unknown") so the
+ * calibration extractor can faithfully report what was known at lock time.
+ */
+export function buildDataIntegritySnapshot(
+  sp: Record<string, unknown>,
+  oddsForGame: GameOddsSnapshot | null,
+  market: "moneyline" | "total" | "first_inning",
+): Record<string, unknown> {
+  const af = (sp.auto_factors ?? null) as Record<string, unknown> | null;
+  const v22 = (sp.v2_2_audit ?? null) as Record<string, unknown> | null;
+  const fiAudit = (sp.fi_v2_audit ?? null) as Record<string, unknown> | null;
+
+  function triBool(v: unknown): "yes" | "no" | "unknown" {
+    if (v === true) return "yes";
+    if (v === false) return "no";
+    return "unknown";
+  }
+  function triString(v: unknown): string | null {
+    return typeof v === "string" ? v : null;
+  }
+
+  // Bullpen fallback — no explicit boolean in sport_specific today.
+  // The factor values exist (auto_factors.{home,away}_bullpen_factor) but
+  // there's no signal whether they came from real data or league fallback.
+  // Mark "unknown" so calibration treats it honestly. Future push can wire
+  // bullpenService to set this explicitly.
+  const bullpenFallback: "yes" | "no" | "unknown" = "unknown";
+
+  // Weather adjust — auto_factors.weather_total_adjust carries the value.
+  // 0 could mean "no data" or "no adjust needed"; without an explicit
+  // fallback flag we report "unknown".
+  const weatherFallback: "yes" | "no" | "unknown" = "unknown";
+
+  // Odds source quality — pulled from the audit object that owns the market.
+  const oddsSourceQuality =
+    triString(v22?.market_source_quality) ?? triString(fiAudit?.market_data_quality);
+
+  // Two-sided price availability for ML / OU. For FI we don't load both
+  // sides into GameOddsSnapshot, so report "unknown".
+  let marketTwoSidedAvailable: "yes" | "no" | "unknown" = "unknown";
+  if (market === "moneyline" && oddsForGame !== null) {
+    marketTwoSidedAvailable =
+      oddsForGame.mlHomeOdds !== null && oddsForGame.mlAwayOdds !== null ? "yes" : "no";
+  } else if (market === "total" && oddsForGame !== null) {
+    marketTwoSidedAvailable =
+      oddsForGame.ouOverOdds !== null && oddsForGame.ouUnderOdds !== null ? "yes" : "no";
+  }
+
+  return {
+    market,
+    bullpen_fallback: bullpenFallback,
+    weather_fallback: weatherFallback,
+    starter_confirmed: triBool(sp.starter_confirmed),
+    lineup_confirmed: triBool(sp.lineup_confirmed),
+    market_line_available: triBool(sp.market_line_available),
+    stale: triBool(sp.stale),
+    odds_source_quality: oddsSourceQuality,
+    market_two_sided_available: marketTwoSidedAvailable,
+    market_baseline_valid: triBool(v22?.market_baseline_valid),
+    nrfi_used_fallback_era: triBool(af?.nrfi_used_fallback_era),
+    posterior_capped:
+      market === "first_inning"
+        ? triBool(fiAudit?.posterior_capped)
+        : triBool((v22?.capped_by_total === true || v22?.capped_by_diff === true) ? true : v22 === null ? undefined : false),
+    review_logic_audit_passed: triBool(
+      (sp.review_v1 as Record<string, unknown> | null)?.logic_audit_passed,
+    ),
   };
 }
 
@@ -235,6 +496,8 @@ function buildMlRecord(
   launchDay: boolean,
   signalsForGame: PublicSplitsRow[],
   oddsForGame: GameOddsSnapshot | null,
+  openersForGame: LineHistoryOpenerRow[],
+  currentLinesForGame: LineRowForOdds[],
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
@@ -315,7 +578,14 @@ function buildMlRecord(
     manual_outcome_expected: launchDay,
     locked_at: pred.locked_at,
     published_at: game.slate_status === "published" ? pred.computed_at : null,
-    snapshot_json: sp,
+    /* Phase 6B.22 — additive context for calibration. Never overwrites
+       existing sp keys. */
+    snapshot_json: {
+      ...sp,
+      public_splits: buildPublicSplitsSnapshot(signalsForGame, "moneyline", pred.predicted_ml_winner),
+      line_movement: buildLineMovementSnapshot(openersForGame, currentLinesForGame, signalsForGame, "moneyline", pred.predicted_ml_winner),
+      data_integrity: buildDataIntegritySnapshot(sp, oddsForGame, "moneyline"),
+    },
   };
 }
 
@@ -328,6 +598,8 @@ function buildOuRecord(
   launchDay: boolean,
   signalsForGame: PublicSplitsRow[],
   oddsForGame: GameOddsSnapshot | null,
+  openersForGame: LineHistoryOpenerRow[],
+  currentLinesForGame: LineRowForOdds[],
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
@@ -411,7 +683,13 @@ function buildOuRecord(
     manual_outcome_expected: launchDay,
     locked_at: pred.locked_at,
     published_at: game.slate_status === "published" ? pred.computed_at : null,
-    snapshot_json: sp,
+    /* Phase 6B.22 — additive context for calibration. */
+    snapshot_json: {
+      ...sp,
+      public_splits: buildPublicSplitsSnapshot(signalsForGame, "total", pred.predicted_ou_side),
+      line_movement: buildLineMovementSnapshot(openersForGame, currentLinesForGame, signalsForGame, "total", pred.predicted_ou_side),
+      data_integrity: buildDataIntegritySnapshot(sp, oddsForGame, "total"),
+    },
   };
 }
 
@@ -512,7 +790,18 @@ function buildFiRecord(
     manual_outcome_expected: launchDay,
     locked_at: pred.locked_at,
     published_at: game.slate_status === "published" ? pred.computed_at : null,
-    snapshot_json: sp,
+    /* Phase 6B.22 — additive context. Public splits + line movement
+       aren't captured for FI markets today (sharp_signals scopes to
+       ML/OU/spread; first_inning_total lines exist but aren't loaded
+       in this build). data_integrity is still meaningful. Surface null
+       for the unavailable ones so the calibration extractor reports
+       "unknown" rather than absent. */
+    snapshot_json: {
+      ...sp,
+      public_splits: null,
+      line_movement: null,
+      data_integrity: buildDataIntegritySnapshot(sp, null, "first_inning"),
+    },
   };
 }
 
@@ -542,6 +831,19 @@ export function buildPredictionRecordsFromSlate(args: {
    * and "price unavailable" for locked games — no fake values).
    */
   oddsByGameId?: ReadonlyMap<number, GameOddsSnapshot>;
+  /**
+   * Phase 6B.22 — per-game opener prices from line_history (is_opener=true).
+   * Used to compute snapshot_json.line_movement. Empty map = no movement
+   * captured; the snapshot just records open as null with
+   * direction="unknown".
+   */
+  openersByGameId?: ReadonlyMap<number, ReadonlyArray<LineHistoryOpenerRow>>;
+  /**
+   * Phase 6B.22 — per-game lock-time line rows (same shape we already
+   * use for buildGameOddsSnapshot). Threaded through so the line-movement
+   * helper can read total line drift + per-side current odds.
+   */
+  currentLinesByGameId?: ReadonlyMap<number, ReadonlyArray<LineRowForOdds>>;
 }): PredictionRecordRow[] {
   const proposed: PredictionRecordRow[] = [];
   for (const g of args.games) {
@@ -551,8 +853,10 @@ export function buildPredictionRecordsFromSlate(args: {
     const away = args.abbrevByTeamId.get(g.away_team_id) ?? "?";
     const sigs = (args.signalsByGameId?.get(g.id) ?? []) as PublicSplitsRow[];
     const odds = args.oddsByGameId?.get(g.id) ?? null;
-    const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds);
-    const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds);
+    const openers = (args.openersByGameId?.get(g.id) ?? []) as LineHistoryOpenerRow[];
+    const currentLines = (args.currentLinesByGameId?.get(g.id) ?? []) as LineRowForOdds[];
+    const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines);
+    const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines);
     const fi = buildFiRecord(pred, g, home, away, args.slateDate, args.launchDay);
     if (ml) proposed.push(ml);
     if (ou) proposed.push(ou);
@@ -616,13 +920,17 @@ export async function createPredictionRecords(
     ((teamRows ?? []) as Array<{ id: number; abbreviation: string }>).map((t) => [t.id, t.abbreviation]),
   );
 
-  // Phase 6B.11 — load per-game sharp_signals (minimal columns) so
-  // the buildXxxRecord helpers can apply the public-money conflict
-  // guard on best_angle. Missing signals = guard stays off (safe
-  // default; no false negatives).
+  // Phase 6B.11 / 6B.22 — load per-game sharp_signals. Pre-6B.22 we read
+  // only the public-money columns used by the best_angle conflict guard;
+  // 6B.22 also pulls the steam / RLM / strength / fetched-at fields so
+  // snapshot_json.line_movement can carry sharp-money signals at lock
+  // time for calibration. Missing signals = guard stays off and the
+  // additive snapshot fields are null (no false defaults).
   const { data: signalRows } = await supabase
     .from("sharp_signals")
-    .select("game_id, market_type, side, public_money_pct, public_betting_pct")
+    .select(
+      "game_id, market_type, side, public_money_pct, public_betting_pct, has_steam_move, has_reverse_line_movement, rlm_direction, signal_strength, computed_at",
+    )
     .in("game_id", gameIds);
   const signalsByGameId = new Map<number, PublicSplitsRow[]>();
   for (const s of (signalRows ?? []) as Array<{ game_id: number } & PublicSplitsRow>) {
@@ -632,6 +940,11 @@ export async function createPredictionRecords(
       side: s.side,
       public_money_pct: s.public_money_pct,
       public_betting_pct: s.public_betting_pct,
+      has_steam_move: s.has_steam_move,
+      has_reverse_line_movement: s.has_reverse_line_movement,
+      rlm_direction: s.rlm_direction,
+      signal_strength: s.signal_strength,
+      computed_at: s.computed_at,
     });
     signalsByGameId.set(s.game_id, list);
   }
@@ -640,9 +953,11 @@ export async function createPredictionRecords(
   // snapshot captures the pregame price. Daily Edge can then render
   // the locked snapshot's odds_american directly after lock instead
   // of falling back to the live `lines` table.
+  // Phase 6B.22 — also load `line_value` so the line-movement helper
+  // can surface total-line drift (e.g., 8.5 → 9.0).
   const { data: lineRowsForOdds } = await supabase
     .from("lines")
-    .select("game_id, market_type, side, sportsbook, odds_american")
+    .select("game_id, market_type, side, sportsbook, odds_american, line_value")
     .in("game_id", gameIds)
     .in("market_type", ["moneyline", "total"])
     .is("player_id", null);
@@ -657,6 +972,23 @@ export async function createPredictionRecords(
     oddsByGameId.set(gameId, buildGameOddsSnapshot(lines));
   }
 
+  // Phase 6B.22 — load opener prices from line_history (is_opener=true)
+  // so the line-movement helper can compute direction vs the picked side.
+  // Missing openers = direction reported as "unknown".
+  const { data: openerRows } = await supabase
+    .from("line_history")
+    .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
+    .eq("is_opener", true)
+    .in("game_id", gameIds)
+    .in("market_type", ["moneyline", "total"])
+    .is("player_id", null);
+  const openersByGameId = new Map<number, LineHistoryOpenerRow[]>();
+  for (const o of ((openerRows ?? []) as LineHistoryOpenerRow[])) {
+    const arr = openersByGameId.get(o.game_id) ?? [];
+    arr.push(o);
+    openersByGameId.set(o.game_id, arr);
+  }
+
   const proposed = buildPredictionRecordsFromSlate({
     sport,
     slateDate,
@@ -666,6 +998,8 @@ export async function createPredictionRecords(
     abbrevByTeamId,
     signalsByGameId,
     oddsByGameId,
+    openersByGameId,
+    currentLinesByGameId: linesByGame,
   });
   result.proposed = proposed;
   result.skippedHeld =

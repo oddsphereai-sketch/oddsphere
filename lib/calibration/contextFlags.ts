@@ -82,6 +82,59 @@ function stringEquals(v: unknown, target: string): ContextFlagState {
 
 /* ── Flag definitions ─────────────────────────────────────────────── */
 
+/**
+ * Phase 6B.22 — picked-side vs opposite-side public money / bets are
+ * captured in snapshot_json.public_splits. Sources:
+ *   snapshot_json.public_splits.conflict       (true | false | null)
+ *   snapshot_json.public_splits.support        (true | false | null)
+ * null means data not available on this row (sharp_signals had no
+ * pair for the picked side at lock time).
+ */
+function publicSplitsField(
+  r: PredictionRecordRow,
+  field: "conflict" | "support",
+): ContextFlagState {
+  const ps = getPath(r.snapshot_json, "public_splits");
+  if (!asObject(ps)) return "unknown";
+  const v = (ps as Record<string, unknown>)[field];
+  if (v === true) return "yes";
+  if (v === false) return "no";
+  return "unknown";
+}
+
+/**
+ * Phase 6B.22 — line-movement direction relative to picked side from
+ * snapshot_json.line_movement.direction ∈ {toward_pick, against_pick,
+ * neutral, unknown}.
+ */
+function lineMovementDirection(
+  r: PredictionRecordRow,
+  target: "toward_pick" | "against_pick",
+): ContextFlagState {
+  const lm = getPath(r.snapshot_json, "line_movement");
+  if (!asObject(lm)) return "unknown";
+  const dir = (lm as Record<string, unknown>).direction;
+  if (typeof dir !== "string") return "unknown";
+  if (dir === "unknown") return "unknown";
+  if (dir === target) return "yes";
+  return "no";
+}
+
+/**
+ * Phase 6B.22 — data-integrity tri-state flags from snapshot_json.data_integrity.
+ */
+function dataIntegrityField(
+  r: PredictionRecordRow,
+  field: string,
+): ContextFlagState {
+  const di = getPath(r.snapshot_json, "data_integrity");
+  if (!asObject(di)) return "unknown";
+  const v = (di as Record<string, unknown>)[field];
+  if (v === "yes") return "yes";
+  if (v === "no") return "no";
+  return "unknown";
+}
+
 export const CONTEXT_FLAG_DEFINITIONS: ContextFlagDefinition[] = [
   // Top-level snapshot booleans
   {
@@ -249,6 +302,108 @@ export const CONTEXT_FLAG_DEFINITIONS: ContextFlagDefinition[] = [
     description: "review_v1.logic_audit_passed=false — the reviewer detected a logic inconsistency.",
     extract: (r) => boolState(getPath(r.snapshot_json, "review_v1", "logic_audit_passed"), false),
   },
+
+  // ── Phase 6B.22 — public splits + line movement + data integrity ────
+  {
+    id: "public_money_conflict",
+    label: "Public-money conflict (opposite side has high money / low bets)",
+    scope: "moneyline",
+    description:
+      "snapshot_json.public_splits.conflict — the opposite side has ≥60% public money but materially lower bet share (≥15pp gap), the classic sharp-fade pattern.",
+    extract: (r) => publicSplitsField(r, "conflict"),
+  },
+  {
+    id: "public_money_support",
+    label: "Public-money support (picked side has high money / low bets)",
+    scope: "moneyline",
+    description:
+      "snapshot_json.public_splits.support — picked side has ≥60% public money but materially lower bet share, the classic sharp-money signal in our favor.",
+    extract: (r) => publicSplitsField(r, "support"),
+  },
+  {
+    id: "public_money_conflict_total",
+    label: "Public-money conflict (total — opposite side)",
+    scope: "total",
+    description: "Same as public_money_conflict but scoped to the over/under market.",
+    extract: (r) => publicSplitsField(r, "conflict"),
+  },
+  {
+    id: "public_money_support_total",
+    label: "Public-money support (total — picked side)",
+    scope: "total",
+    description: "Same as public_money_support but scoped to the over/under market.",
+    extract: (r) => publicSplitsField(r, "support"),
+  },
+  {
+    id: "line_moved_toward_pick",
+    label: "Line moved toward the picked side",
+    scope: "all",
+    description:
+      "snapshot_json.line_movement.direction === 'toward_pick'. Picked-side implied probability rose between opener and lock.",
+    extract: (r) => lineMovementDirection(r, "toward_pick"),
+  },
+  {
+    id: "line_moved_against_pick",
+    label: "Line moved against the picked side",
+    scope: "all",
+    description:
+      "snapshot_json.line_movement.direction === 'against_pick'. Picked-side implied probability fell between opener and lock.",
+    extract: (r) => lineMovementDirection(r, "against_pick"),
+  },
+  {
+    id: "steam_on_picked_side",
+    label: "Steam move on picked side",
+    scope: "all",
+    description: "snapshot_json.line_movement.has_steam_move === true for the picked side.",
+    extract: (r) => {
+      const lm = getPath(r.snapshot_json, "line_movement");
+      if (!asObject(lm)) return "unknown";
+      const v = (lm as Record<string, unknown>).has_steam_move;
+      return boolState(v, true);
+    },
+  },
+  {
+    id: "rlm_on_picked_side",
+    label: "Reverse line movement on picked side",
+    scope: "all",
+    description: "snapshot_json.line_movement.has_reverse_line_movement === true for the picked side.",
+    extract: (r) => {
+      const lm = getPath(r.snapshot_json, "line_movement");
+      if (!asObject(lm)) return "unknown";
+      const v = (lm as Record<string, unknown>).has_reverse_line_movement;
+      return boolState(v, true);
+    },
+  },
+  {
+    id: "bullpen_fallback_used",
+    label: "Bullpen fallback used",
+    scope: "all",
+    description:
+      "snapshot_json.data_integrity.bullpen_fallback === 'yes'. NOTE: until bullpenService surfaces an explicit boolean, this will read 'unknown' for all rows — the framework will pick it up automatically once available.",
+    extract: (r) => dataIntegrityField(r, "bullpen_fallback"),
+  },
+  {
+    id: "weather_fallback_used",
+    label: "Weather fallback used",
+    scope: "all",
+    description:
+      "snapshot_json.data_integrity.weather_fallback === 'yes'. NOTE: until weatherService surfaces an explicit boolean, this will read 'unknown' for all rows.",
+    extract: (r) => dataIntegrityField(r, "weather_fallback"),
+  },
+  {
+    id: "market_two_sided_unavailable",
+    label: "Market two-sided price unavailable",
+    scope: "all",
+    description:
+      "snapshot_json.data_integrity.market_two_sided_available === 'no'. Lock-time odds had only one side populated.",
+    extract: (r) => {
+      const v = dataIntegrityField(r, "market_two_sided_available");
+      // Invert: flag fires when "no"
+      if (v === "yes") return "no";
+      if (v === "no") return "yes";
+      return "unknown";
+    },
+  },
 ];
 
 /**
@@ -257,24 +412,32 @@ export const CONTEXT_FLAG_DEFINITIONS: ContextFlagDefinition[] = [
  * add to the lock-time snapshot before those dimensions can become
  * actionable calibration inputs.
  */
+/**
+ * Phase 6B.22 — three formerly-missing dimensions are now captured in
+ * snapshot_json (public_splits, line_movement) or surfaced as
+ * tri-state placeholders with a clear upstream TODO
+ * (data_integrity.bullpen_fallback / weather_fallback). They've moved
+ * out of this list and into CONTEXT_FLAG_DEFINITIONS. Remaining gaps
+ * surfaced below.
+ */
 export const MISSING_DIMENSIONS: Array<{ id: string; label: string; reason: string }> = [
   {
-    id: "public_money_pct",
-    label: "Public money % (picked side)",
+    id: "bullpen_fallback_real_boolean",
+    label: "Bullpen fallback (real boolean from bullpenService)",
     reason:
-      "Not captured in snapshot_json. Available in sharp_signals at lock time but not currently snapshotted onto prediction_records. Required to analyze 'public-money conflict' vs 'public-money support' calibration cuts.",
+      "snapshot_json.data_integrity.bullpen_fallback is plumbed but currently always 'unknown'. bullpenService doesn't yet emit an explicit boolean indicating whether the bullpen-factor value came from real stats vs league fallback. A small follow-up (set di.bullpen_fallback = 'yes' | 'no' in the service when computing the factor) will populate the flag with real values.",
   },
   {
-    id: "line_movement_direction",
-    label: "Line movement toward/against pick",
+    id: "weather_fallback_real_boolean",
+    label: "Weather fallback (real boolean from weatherService)",
     reason:
-      "Not captured in snapshot_json as a discrete signal. v2_2_audit.posterior_moved_runs_from_market captures the model's shift from market, not the line's drift over time. Required to analyze 'sharp-money confirmation' calibration cuts.",
+      "snapshot_json.data_integrity.weather_fallback is plumbed but currently always 'unknown'. weatherService doesn't yet emit an explicit boolean indicating whether weather_total_adjust was derived from real forecast data vs a neutral default.",
   },
   {
-    id: "bullpen_fallback",
-    label: "Bullpen fallback used",
+    id: "fi_market_line_history",
+    label: "First-inning market line + history",
     reason:
-      "No explicit boolean. auto_factors.{home,away}_bullpen_factor carries the value but doesn't surface whether the value came from a real bullpen stat row vs a league-average fallback.",
+      "FI rows snapshot public_splits=null and line_movement=null today. sharp_signals is scoped to ML / OU / spread (no FI splits), and the lines / line_history queries currently filter to market_type IN ('moneyline','total'). Add first_inning_total to those queries + a small first-inning splits provider to unlock FI calibration dimensions.",
   },
 ];
 
