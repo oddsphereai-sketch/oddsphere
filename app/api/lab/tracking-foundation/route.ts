@@ -65,6 +65,11 @@ export async function GET(request: Request) {
   //   • dailyTrend — trailing 14-day buckets for the line chart.
   //   • recentPicks — 20 most recent member-safe picks for the
   //     stacked-card recent-results list. No raw audit fields.
+  //   • recentlySettled — 6B.21 — 20 most recently settled picks
+  //     ordered by prediction_grades.graded_at DESC. Pending and
+  //     no_bet=true are excluded upstream. FI rows enter as soon as
+  //     inning 1 closes; ML/OU enter at status=final. Slate_date is
+  //     preserved so the daily/weekly/lifetime rollups stay correct.
   // Toss-Up / Held remain as state counts only. No raw model audit
   // leaks to the member API — admin-only fields are stripped before
   // they reach this layer (the service already returns member-shaped
@@ -85,6 +90,7 @@ export async function GET(request: Request) {
       thisWeek: result.thisWeek,
       dailyTrend: result.dailyTrend,
       recentPicks: result.recentPicks,
+      recentlySettled: result.recentlySettled,
       tablesInitialized: result.tablesInitialized,
       freshTrackingStarted: result.overall.picks > 0,
     },

@@ -214,6 +214,14 @@ export type PredictionRecordRow = {
   published_at: string | null;
   created_at?: string;
   snapshot_json: Record<string, unknown> | null;
+  /**
+   * Phase 6B.21 / 7A prep — tag for the calibration version active at
+   * lock time. NULL through V1 launch and 7A shadow stages. Populated
+   * by Phase 7A Stage 4 once guarded auto-apply is enabled. Never
+   * backfilled. Optional in the type because the schema-v18 column is
+   * added as nullable and may not yet be present in stale environments.
+   */
+  calibration_version?: string | null;
 };
 
 /** Mirrors `prediction_grades` row in schema-migration-v17.sql. */

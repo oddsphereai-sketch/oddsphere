@@ -154,8 +154,9 @@ export async function gradePredictionsForSlate(args: {
     else if (grade.void) result.computed.voids++;
     else result.computed.pending++;
 
+    const existingResult = existingByRecordId.get(rec.id);
     const shouldWrite = shouldUpsertGrade({
-      existingResult: existingByRecordId.get(rec.id),
+      existingResult,
       newResult: grade.result,
     });
     if (!shouldWrite) {
@@ -167,9 +168,26 @@ export async function gradePredictionsForSlate(args: {
       result.upsertedCount++;
       continue;
     }
+
+    // Phase 6B.21 — stamp graded_at = NOW when a row transitions from
+    // pending (or first insert) to a settled result. Postgres UPDATE
+    // doesn't bump the DB DEFAULT now() on conflict, so without this
+    // explicit stamp a row that was first INSERTed as pending then
+    // UPSERTed to win/loss keeps the original pending-time timestamp —
+    // which would mis-order the "Latest Results" feed. We do NOT bump
+    // graded_at on settled→settled idempotent re-upserts (would cause
+    // historical rows to perpetually float to the top of the feed).
+    const isFirstSettle =
+      grade.result !== "pending" &&
+      (existingResult === undefined ||
+        existingResult === null ||
+        existingResult === "pending");
+    const payload = isFirstSettle
+      ? { ...grade, graded_at: new Date().toISOString() }
+      : grade;
     const { error: upErr } = await supabase
       .from("prediction_grades")
-      .upsert(grade, { onConflict: "prediction_record_id" });
+      .upsert(payload, { onConflict: "prediction_record_id" });
     if (upErr) {
       result.errors.push({ prediction_record_id: rec.id, reason: upErr.message });
       continue;

@@ -61,6 +61,31 @@ type RecentPickRow = {
   held: boolean;
 };
 
+type RecentlySettledRow = {
+  slate_date: string;
+  sport: string;
+  market: string;
+  matchup: string;
+  pick: string | null;
+  side: string | null;
+  line_value: number | null;
+  odds_american: number | null;
+  confidence: number | null;
+  play_grade: string | null;
+  best_angle: boolean;
+  model_version: string | null;
+  result: "win" | "loss" | "push" | "void";
+  win: boolean;
+  loss: boolean;
+  push: boolean;
+  void: boolean;
+  actual_home_score: number | null;
+  actual_away_score: number | null;
+  actual_first_inning_runs: number | null;
+  graded_at: string | null;
+  grade_notes: string | null;
+};
+
 type BaselineRow = {
   sport: string;
   market: string;
@@ -82,6 +107,7 @@ type TrackingResponse = {
   yesterday?: { date: string | null; overall: Metrics; bySportMarket: SportMarketBucket[] };
   thisWeek?: { from: string; to: string; overall: Metrics; bySportMarket: SportMarketBucket[] };
   recentPicks?: RecentPickRow[];
+  recentlySettled?: RecentlySettledRow[];
   tablesInitialized: boolean;
   freshTrackingStarted: boolean;
 };
@@ -335,6 +361,7 @@ export default function LabTrackingPage() {
   const yest = data.yesterday;
   const week = data.thisWeek;
   const recent = (data.recentPicks ?? []).slice(0, 12);
+  const settled = (data.recentlySettled ?? []).slice(0, 12);
 
   return (
     <Shell>
@@ -381,7 +408,23 @@ export default function LabTrackingPage() {
         <BestAnglesBoard rows={bestAngleRows} />
       </Section>
 
-      {/* ── 5. RECENT PREDICTIONS ────────────────────────────────────── */}
+      {/* ── 5. LATEST RESULTS (settled feed, ordered by graded_at) ───── */}
+      <Section
+        eyebrow="As they grade"
+        title="Latest Results"
+      >
+        {settled.length === 0 ? (
+          <Card>
+            <Empty body="Latest Results populate as picks grade — FI rows after the first inning, ML / O/U at final." />
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {settled.map((p, i) => <RecentlySettledCard key={`set-${p.graded_at ?? p.slate_date}-${i}-${p.matchup}`} pick={p} />)}
+          </div>
+        )}
+      </Section>
+
+      {/* ── 6. RECENT PREDICTIONS ────────────────────────────────────── */}
       <Section
         eyebrow="Latest activity"
         title="Recent Predictions"
@@ -848,6 +891,97 @@ function RecentPickCard({ pick }: { pick: RecentPickRow }) {
       {(playGradeLabel !== null || pick.model_version !== null) && (
         <div className="mt-1 text-[10.5px] uppercase tracking-[0.14em] font-bold text-gray-500 flex items-center gap-2 flex-wrap">
           {playGradeLabel !== null && !showBestAngle && !showLean && <span>{playGradeLabel}</span>}
+          {pick.model_version !== null && <span className="text-gray-600">· {prettyModelVersion(pick.model_version)}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Recently settled — stacked cards (6B.21) ────────────────────────
+
+function fmtOdds(o: number | null): string {
+  if (o === null) return "";
+  return o > 0 ? `+${o}` : `${o}`;
+}
+
+function fmtClock(iso: string | null): string {
+  if (iso === null) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const now = Date.now();
+  const ageMs = now - d.getTime();
+  if (ageMs < 60_000) return "just now";
+  const ageMin = Math.round(ageMs / 60_000);
+  if (ageMin < 60) return `${ageMin}m ago`;
+  const ageHr = Math.round(ageMin / 60);
+  if (ageHr < 24) return `${ageHr}h ago`;
+  const days = Math.round(ageHr / 24);
+  return `${days}d ago`;
+}
+
+function RecentlySettledCard({ pick }: { pick: RecentlySettledRow }) {
+  const resultStyles: Record<string, { label: string; bg: string; fg: string; border: string }> = {
+    win:  { label: "Win",  bg: "rgba(52,211,153,0.10)",  fg: "rgb(110 231 183)", border: "rgba(52,211,153,0.32)" },
+    loss: { label: "Loss", bg: "rgba(244,114,182,0.08)", fg: "rgb(244 114 182)", border: "rgba(244,114,182,0.28)" },
+    push: { label: "Push", bg: "rgba(148,163,184,0.08)", fg: "rgb(203 213 225)", border: "rgba(148,163,184,0.22)" },
+    void: { label: "Void", bg: "rgba(148,163,184,0.08)", fg: "rgb(203 213 225)", border: "rgba(148,163,184,0.22)" },
+  };
+  const rs = resultStyles[pick.result];
+
+  let scoreLine = "";
+  if (pick.market === "moneyline" || pick.market === "total" || pick.market === "spread") {
+    if (pick.actual_away_score !== null && pick.actual_home_score !== null) {
+      scoreLine = `${pick.actual_away_score}–${pick.actual_home_score}`;
+    }
+  } else if (pick.market === "nrfi" || pick.market === "yrfi" || pick.market === "first_inning") {
+    if (pick.actual_first_inning_runs !== null) {
+      scoreLine = `${pick.actual_first_inning_runs} 1st-inning ${pick.actual_first_inning_runs === 1 ? "run" : "runs"}`;
+    }
+  }
+
+  const showBestAngle = pick.best_angle === true;
+  const showLean = pick.play_grade === "lean" && !showBestAngle;
+  const odds = fmtOdds(pick.odds_american);
+  const line = pick.line_value !== null ? pick.line_value.toString() : null;
+  const conf = pick.confidence !== null ? `${Math.round(pick.confidence)}%` : null;
+  const ago = fmtClock(pick.graded_at);
+
+  return (
+    <div
+      className="rounded-xl p-3.5 sm:p-4 border border-white/[0.05]"
+      style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.022), rgba(255,255,255,0.010))" }}
+    >
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] uppercase tracking-[0.16em] font-bold text-emerald-300/70 tabular-nums">{ago}</span>
+        <span className="text-gray-700 text-[10px]">·</span>
+        <span className="text-[10px] uppercase tracking-[0.16em] font-bold text-gray-500 tabular-nums">{fmtShortDate(pick.slate_date)}</span>
+        <span className="text-gray-700 text-[10px]">·</span>
+        <SportPill sport={pick.sport} />
+        <CategoryBadge market={pick.market} />
+        {showBestAngle && <span className="text-[10px] uppercase tracking-[0.14em] font-bold px-1.5 py-0.5 rounded bg-emerald-500/[0.10] border border-emerald-500/25 text-emerald-300">Best Angle</span>}
+        {showLean && <span className="text-[10px] uppercase tracking-[0.14em] font-bold px-1.5 py-0.5 rounded bg-indigo-500/[0.10] border border-indigo-500/25 text-indigo-300">Lean</span>}
+        <span
+          className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] uppercase tracking-[0.16em] font-bold"
+          style={{ background: rs.bg, color: rs.fg, border: `1px solid ${rs.border}` }}
+        >
+          {rs.label}
+        </span>
+      </div>
+      <div className="mt-1.5 flex items-baseline justify-between gap-3 flex-wrap">
+        <div className="text-[13.5px] sm:text-[14.5px] font-semibold text-gray-100 truncate max-w-full">
+          {pick.matchup}
+          {pick.pick !== null && (
+            <span className="text-gray-400 font-normal"> · <span className="text-gray-200 font-semibold">{pick.pick}</span></span>
+          )}
+        </div>
+        {scoreLine !== "" && <span className="text-[11.5px] tabular-nums text-gray-400 font-semibold">{scoreLine}</span>}
+      </div>
+      {(line !== null || odds !== "" || conf !== null) && (
+        <div className="mt-1 text-[10.5px] uppercase tracking-[0.14em] font-bold text-gray-500 flex items-center gap-2 flex-wrap">
+          {line !== null && <span>Line {line}</span>}
+          {odds !== "" && <span className="text-gray-600">· {odds}</span>}
+          {conf !== null && <span className="text-gray-600">· Conf {conf}</span>}
           {pick.model_version !== null && <span className="text-gray-600">· {prettyModelVersion(pick.model_version)}</span>}
         </div>
       )}

@@ -104,6 +104,43 @@ export type RecentPickRow = {
   held: boolean;
 };
 
+/**
+ * 6B.21 — "Latest Results" feed. Ordered by prediction_grades.graded_at
+ * DESC, settled-only (no pending), no_bet=true already filtered upstream.
+ * Carries the extra calibration / pricing context the UI shows on the
+ * recent-settled card without leaking model-audit internals.
+ *
+ * FI rows enter this feed as soon as inning 1 closes (6B.19 mid-game
+ * grading). ML / OU enter once status=final. Slate_date is always the
+ * original locked slate — late games stay tied to their slate.
+ */
+export type RecentlySettledPickRow = {
+  slate_date: string;
+  sport: TrackedSport;
+  market: TrackedMarketV17;
+  matchup: string;
+  pick: string | null;
+  side: string | null;
+  line_value: number | null;
+  odds_american: number | null;
+  confidence: number | null;
+  play_grade: string | null;
+  best_angle: boolean;
+  model_version: string | null;
+  /** Settled result — never "pending" (filtered upstream). */
+  result: "win" | "loss" | "push" | "void";
+  win: boolean;
+  loss: boolean;
+  push: boolean;
+  void: boolean;
+  actual_home_score: number | null;
+  actual_away_score: number | null;
+  actual_first_inning_runs: number | null;
+  /** ISO timestamp. The ordering key for the feed. */
+  graded_at: string | null;
+  grade_notes: string | null;
+};
+
 export type TrackingAggregateResult = {
   rowsConsidered: number;
   /** Excludes launch_day=true unless includeLaunchDay flag is set. */
@@ -127,6 +164,14 @@ export type TrackingAggregateResult = {
   dailyTrend: DailyBucket[];
   /** Last N graded/pending picks (member-safe shape). */
   recentPicks: RecentPickRow[];
+  /**
+   * 6B.21 — Last N actually-settled picks ordered by graded_at DESC.
+   * Excludes pending and no_bet=true. Surfaces FI mid-game settles
+   * the moment inning 1 grades, plus ML/OU at final. Additive surface
+   * — does not replace recentPicks; daily/weekly/lifetime rollups
+   * remain slate_date-bucketed and are unchanged.
+   */
+  recentlySettled: RecentlySettledPickRow[];
   baselines: TrackingBaselineRow[];
   tablesInitialized: boolean;
 };
@@ -248,6 +293,7 @@ export async function computeTrackingAggregate(opts: {
     thisWeek: { from: "", to: "", overall: emptyMetrics(), bySportMarket: [], daily: [] },
     dailyTrend: [],
     recentPicks: [],
+    recentlySettled: [],
     baselines: [],
     tablesInitialized: true,
   };
@@ -465,6 +511,58 @@ export async function computeTrackingAggregate(opts: {
       best_angle: r.record.best_angle === true,
       held: r.record.held === true,
     }));
+
+  // 6B.21 — Recently settled feed. Settled-only (no pending), ordered
+  // by prediction_grades.graded_at DESC, limit 20. no_bet=true rows
+  // were already filtered out of `rows` at the top of this function;
+  // launch_day rows are also already excluded. Slate_date is preserved
+  // so the per-day rollups in dailyTrend/yesterday/thisWeek stay in
+  // sync — this is a parallel feed, not a substitute.
+  const settledRows = rows.filter(
+    (r) =>
+      r.grade !== null &&
+      r.grade.result !== "pending" &&
+      typeof r.grade.graded_at === "string" &&
+      r.grade.graded_at.length > 0,
+  );
+  result.recentlySettled = settledRows
+    .sort((a, b) => {
+      const aAt = a.grade!.graded_at ?? "";
+      const bAt = b.grade!.graded_at ?? "";
+      if (aAt !== bAt) return aAt < bAt ? 1 : -1;
+      const aId = a.record.id ?? 0;
+      const bId = b.record.id ?? 0;
+      return bId - aId;
+    })
+    .slice(0, 20)
+    .map((r) => {
+      const g = r.grade!;
+      const res = g.result as "win" | "loss" | "push" | "void";
+      return {
+        slate_date: r.record.slate_date,
+        sport: r.record.sport,
+        market: r.record.market,
+        matchup: r.record.matchup,
+        pick: r.record.pick,
+        side: r.record.side,
+        line_value: r.record.line_value,
+        odds_american: r.record.odds_american,
+        confidence: r.record.confidence,
+        play_grade: r.record.play_grade,
+        best_angle: r.record.best_angle === true,
+        model_version: r.record.model_version,
+        result: res,
+        win: res === "win",
+        loss: res === "loss",
+        push: res === "push",
+        void: res === "void",
+        actual_home_score: g.actual_home_score,
+        actual_away_score: g.actual_away_score,
+        actual_first_inning_runs: g.actual_first_inning_runs,
+        graded_at: g.graded_at ?? null,
+        grade_notes: g.grade_notes,
+      };
+    });
 
   return result;
 }

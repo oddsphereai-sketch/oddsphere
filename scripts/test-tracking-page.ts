@@ -288,9 +288,46 @@ check("API surfaces bySportMarket",               API.includes("bySportMarket: r
 check("API surfaces yesterday",                   API.includes("yesterday: result.yesterday"));
 check("API surfaces thisWeek",                    API.includes("thisWeek: result.thisWeek"));
 check("API surfaces recentPicks",                 API.includes("recentPicks: result.recentPicks"));
+check("API surfaces recentlySettled (6B.21)",     API.includes("recentlySettled: result.recentlySettled"));
 check("API does not expose raw audit fields",     !/sport_specific|fi_v2_audit|v2_2_audit|snapshot_json/.test(API));
 check("API excludes launch-day picks",            API.includes("includeLaunchDay: false"));
 check("API marks no-store",                       API.includes('"Cache-Control": "no-store"'));
+
+// ── 6B.21 — Recently Settled feed ─────────────────────────────────
+check(
+  "Service exposes RecentlySettledPickRow",
+  SERVICE.includes("export type RecentlySettledPickRow"),
+);
+check(
+  "Service populates result.recentlySettled",
+  SERVICE.includes("result.recentlySettled ="),
+);
+check(
+  "Service sorts recentlySettled by graded_at DESC",
+  /sort\([^)]*\)[\s\S]{0,400}graded_at[\s\S]{0,200}slice\(0, 20\)/.test(SERVICE) ||
+    /settledRows[\s\S]{0,400}graded_at[\s\S]{0,200}slice\(0, 20\)/.test(SERVICE),
+);
+check(
+  "Service filters out pending from recentlySettled",
+  /settledRows\s*=\s*rows\.filter[\s\S]{0,200}result !== "pending"/.test(SERVICE),
+);
+check(
+  "Page declares RecentlySettledRow type",
+  PAGE.includes("type RecentlySettledRow"),
+);
+check(
+  "Page renders Latest Results section",
+  /title="Latest Results"/.test(PAGE),
+);
+check(
+  "Page caps Latest Results at ~12",
+  /recentlySettled[\s\S]{0,300}\.slice\(0, 12\)/.test(PAGE),
+);
+check(
+  "Page RecentlySettledCard handles win/loss/push/void only (no pending)",
+  /RecentlySettledCard[\s\S]{0,1200}resultStyles[\s\S]{0,400}win:[\s\S]{0,400}loss:[\s\S]{0,400}push:[\s\S]{0,400}void:/.test(PAGE) &&
+    !/RecentlySettledCard[\s\S]{0,1500}pending:\s*\{/.test(PAGE),
+);
 
 // ── Canonical route (from 6B.2c) ────────────────────────────────────
 
