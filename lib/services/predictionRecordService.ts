@@ -85,6 +85,66 @@ function readStringOrNull(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
+/**
+ * Phase 6B.11 — minimal sharp_signals row shape used for the
+ * best_angle public-money guard. Mirrors the fields the daily-edge
+ * route reads in its own copy of this guard (Phase 6B.10).
+ */
+type PublicSplitsRow = {
+  market_type: string;
+  side: string;
+  public_money_pct: number | null;
+  public_betting_pct: number | null;
+};
+
+/**
+ * Phase 6B.11 — applies the same public-money guard the Daily Edge
+ * verdict layer uses (Phase 6B.10), so prediction_records.best_angle
+ * matches what members actually see on the slate.
+ *
+ * Pre-6B.11 prediction_records snapshot best_angle directly from
+ * v2_2_audit.{ml,ou}_best_angle_eligible. Daily Edge then suppresses
+ * the BA promotion when the OPPOSITE side carries a clear sharp-fade
+ * pattern (money >= 60 AND money - bets >= 15). Tracking pending BA
+ * counts diverged from the live page — most painfully visible on
+ * BAL@TOR ML where Daily Edge correctly showed Watchlist but
+ * tracking counted it as a pending Best Angle.
+ *
+ * Same conservative rule as Phase 6B.10:
+ *   • Only suppresses; never invents a Best Angle.
+ *   • Only fires when the opposite side has both high money AND
+ *     low ticket count (the few-large-bets sharp pattern).
+ *   • NEVER touches the underlying pick, picks side, line, or grade
+ *     columns on game_predictions. Only the boolean best_angle flag
+ *     on prediction_records changes.
+ */
+function hasOpposingPublicMoneyConflict(
+  signals: PublicSplitsRow[],
+  market: "moneyline" | "total",
+  pickSide: string | null,
+): boolean {
+  if (pickSide === null) return false;
+  let oppositeSide: string | null = null;
+  if (market === "moneyline") {
+    if (pickSide === "home") oppositeSide = "away";
+    else if (pickSide === "away") oppositeSide = "home";
+  } else {
+    if (pickSide === "over") oppositeSide = "under";
+    else if (pickSide === "under") oppositeSide = "over";
+  }
+  if (oppositeSide === null) return false;
+  const opp = signals.find(
+    (s) => s.market_type === market && s.side === oppositeSide,
+  );
+  if (opp === undefined) return false;
+  const money = opp.public_money_pct;
+  const bets = opp.public_betting_pct;
+  if (money === null || bets === null) return false;
+  if (money < 60) return false;
+  if (money - bets < 15) return false;
+  return true;
+}
+
 function buildMlRecord(
   pred: PredictionRow,
   game: GameRow,
@@ -92,6 +152,7 @@ function buildMlRecord(
   awayAbbrev: string,
   slateDate: string,
   launchDay: boolean,
+  signalsForGame: PublicSplitsRow[],
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
@@ -132,7 +193,12 @@ function buildMlRecord(
     expected_value: null,
     play_grade: readStringOrNull(sp.ml_play_grade),
     prediction_type: readStringOrNull(sp.ml_prediction_type),
-    best_angle: readBoolish(sp.ml_best_angle_eligible),
+    // Phase 6B.11 — apply the same public-money conflict guard the
+    // Daily Edge verdict layer uses (Phase 6B.10). Tracking pending
+    // BA count now matches what members see on the live slate.
+    best_angle:
+      readBoolish(sp.ml_best_angle_eligible) &&
+      !hasOpposingPublicMoneyConflict(signalsForGame, "moneyline", pred.predicted_ml_winner),
     no_bet: false,
     no_bet_reason: readStringOrNull(sp.ml_no_bet_reason),
     market_aligned: readBoolish(sp.ml_market_aligned),
@@ -156,6 +222,7 @@ function buildOuRecord(
   awayAbbrev: string,
   slateDate: string,
   launchDay: boolean,
+  signalsForGame: PublicSplitsRow[],
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
@@ -188,7 +255,10 @@ function buildOuRecord(
     expected_value: null,
     play_grade: readStringOrNull(sp.ou_play_grade),
     prediction_type: readStringOrNull(sp.ou_prediction_type),
-    best_angle: readBoolish(sp.ou_best_angle_eligible),
+    // Phase 6B.11 — same guard as ML above; see hasOpposingPublicMoneyConflict.
+    best_angle:
+      readBoolish(sp.ou_best_angle_eligible) &&
+      !hasOpposingPublicMoneyConflict(signalsForGame, "total", pred.predicted_ou_side),
     no_bet: false,
     no_bet_reason: readStringOrNull(sp.ou_no_bet_reason),
     market_aligned: readBoolish(sp.ou_market_aligned),
@@ -272,6 +342,12 @@ export function buildPredictionRecordsFromSlate(args: {
   games: ReadonlyArray<GameRow>;
   predictionByGameId: ReadonlyMap<number, PredictionRow>;
   abbrevByTeamId: ReadonlyMap<number, string>;
+  /**
+   * Phase 6B.11 — per-game sharp_signals subset, used to apply the
+   * public-money conflict guard on best_angle. Empty map / missing
+   * key = no guard fires (defaults to V2.2 audit's raw eligibility).
+   */
+  signalsByGameId?: ReadonlyMap<number, ReadonlyArray<PublicSplitsRow>>;
 }): PredictionRecordRow[] {
   const proposed: PredictionRecordRow[] = [];
   for (const g of args.games) {
@@ -279,8 +355,9 @@ export function buildPredictionRecordsFromSlate(args: {
     if (!pred) continue;
     const home = args.abbrevByTeamId.get(g.home_team_id) ?? "?";
     const away = args.abbrevByTeamId.get(g.away_team_id) ?? "?";
-    const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay);
-    const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay);
+    const sigs = (args.signalsByGameId?.get(g.id) ?? []) as PublicSplitsRow[];
+    const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs);
+    const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs);
     const fi = buildFiRecord(pred, g, home, away, args.slateDate, args.launchDay);
     if (ml) proposed.push(ml);
     if (ou) proposed.push(ou);
@@ -344,6 +421,26 @@ export async function createPredictionRecords(
     ((teamRows ?? []) as Array<{ id: number; abbreviation: string }>).map((t) => [t.id, t.abbreviation]),
   );
 
+  // Phase 6B.11 — load per-game sharp_signals (minimal columns) so
+  // the buildXxxRecord helpers can apply the public-money conflict
+  // guard on best_angle. Missing signals = guard stays off (safe
+  // default; no false negatives).
+  const { data: signalRows } = await supabase
+    .from("sharp_signals")
+    .select("game_id, market_type, side, public_money_pct, public_betting_pct")
+    .in("game_id", gameIds);
+  const signalsByGameId = new Map<number, PublicSplitsRow[]>();
+  for (const s of (signalRows ?? []) as Array<{ game_id: number } & PublicSplitsRow>) {
+    const list = signalsByGameId.get(s.game_id) ?? [];
+    list.push({
+      market_type: s.market_type,
+      side: s.side,
+      public_money_pct: s.public_money_pct,
+      public_betting_pct: s.public_betting_pct,
+    });
+    signalsByGameId.set(s.game_id, list);
+  }
+
   const proposed = buildPredictionRecordsFromSlate({
     sport,
     slateDate,
@@ -351,6 +448,7 @@ export async function createPredictionRecords(
     games,
     predictionByGameId,
     abbrevByTeamId,
+    signalsByGameId,
   });
   result.proposed = proposed;
   result.skippedHeld =
