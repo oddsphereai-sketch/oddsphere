@@ -10,7 +10,9 @@
 import {
   marketVerdictFor,
   normalizeMarketKey,
+  deriveMarketContextEffect,
 } from "../lib/services/marketVerdictDerivation";
+import type { Grade } from "../lib/types/domain/Grade";
 
 let pass = 0;
 let fail = 0;
@@ -538,6 +540,370 @@ check(
     sharpDirection: "none",
     marketDataLimited: false,
   }).key === "best_angle"
+);
+
+// ─────────────────────────────────────────────────────────────────────
+// Phase 6B.30E — market-context policy (money + line + edge)
+// ─────────────────────────────────────────────────────────────────────
+console.log();
+console.log("━━━ Phase 6B.30E — deriveMarketContextEffect (pure rule chain) ━━━");
+
+{
+  // Rule 0 — no context → no-op
+  check(
+    "Rule 0 — null context → no warning, no cap, no caution",
+    JSON.stringify(deriveMarketContextEffect(null)) ===
+      JSON.stringify({ warningCode: null, capAtWatchlist: false, forceCaution: false })
+  );
+
+  // Rule 0 — no conflict → no-op
+  check(
+    "Rule 0 — no moneyConflict → no warning, no cap, no caution",
+    deriveMarketContextEffect({
+      moneyConflict: false,
+      lineMovementVsPick: "confirms_market",
+      edgeStrength: "thin",
+      sourceCount: 1,
+      rlmAgainstPick: false,
+    }).warningCode === null
+  );
+
+  // Rule 9 — RLM against pick fires even without moneyConflict
+  check(
+    "Rule 9 — rlmAgainstPick → forceCaution",
+    deriveMarketContextEffect({
+      moneyConflict: false,
+      lineMovementVsPick: "flat",
+      edgeStrength: "normal",
+      sourceCount: 1,
+      rlmAgainstPick: true,
+    }).forceCaution === true
+  );
+  check(
+    "Rule 9 — rlmAgainstPick → warningCode = rlm_against_pick",
+    deriveMarketContextEffect({
+      moneyConflict: false,
+      lineMovementVsPick: "flat",
+      edgeStrength: "normal",
+      sourceCount: 1,
+      rlmAgainstPick: true,
+    }).warningCode === "rlm_against_pick"
+  );
+
+  // Rule 8 — multi-source (inert today, wired)
+  check(
+    "Rule 8 — multi-source conflict → cap at watchlist",
+    deriveMarketContextEffect({
+      moneyConflict: true,
+      lineMovementVsPick: "flat",
+      edgeStrength: "strong",
+      sourceCount: 2,
+      rlmAgainstPick: false,
+    }).capAtWatchlist === true
+  );
+
+  // Rule 2 — confirms_pick → never downgrade
+  check(
+    "Rule 2 — confirms_pick → no cap, supportive warning code",
+    deriveMarketContextEffect({
+      moneyConflict: true,
+      lineMovementVsPick: "confirms_pick",
+      edgeStrength: "thin",
+      sourceCount: 1,
+      rlmAgainstPick: false,
+    }).capAtWatchlist === false
+  );
+  check(
+    "Rule 2 — warningCode = money_conflict_line_confirms_pick",
+    deriveMarketContextEffect({
+      moneyConflict: true,
+      lineMovementVsPick: "confirms_pick",
+      edgeStrength: "thin",
+      sourceCount: 1,
+      rlmAgainstPick: false,
+    }).warningCode === "money_conflict_line_confirms_pick"
+  );
+
+  // Rule 1 — confirms_market + thin/normal/unknown → cap
+  check(
+    "Rule 1 — confirms_market + thin edge → cap",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "confirms_market", edgeStrength: "thin",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === true
+  );
+  check(
+    "Rule 1 — confirms_market + normal edge → cap",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "confirms_market", edgeStrength: "normal",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === true
+  );
+  check(
+    "Rule 1 — confirms_market + unknown edge → cap",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "confirms_market", edgeStrength: "unknown",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === true
+  );
+
+  // Rule 1b — confirms_market + strong edge → NO cap, warning only
+  check(
+    "Rule 1b — confirms_market + STRONG edge → NO cap (strong survives)",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "confirms_market", edgeStrength: "strong",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === false
+  );
+  check(
+    "Rule 1b — warningCode = money_conflict_strong_edge_survives",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "confirms_market", edgeStrength: "strong",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).warningCode === "money_conflict_strong_edge_survives"
+  );
+
+  // Rule 1c — confirms_market + negative edge → caution
+  check(
+    "Rule 1c — confirms_market + negative edge → forceCaution",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "confirms_market", edgeStrength: "negative",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).forceCaution === true
+  );
+
+  // Rule 3 — flat + thin/negative/unknown → cap
+  check(
+    "Rule 3 — flat line + thin edge → cap",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "thin",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === true
+  );
+  check(
+    "Rule 3 — flat line + unknown edge → cap",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "unknown",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === true
+  );
+  check(
+    "Rule 3 — flat line + negative edge → cap",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "negative",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === true
+  );
+
+  // Rule 4 — flat + normal/strong → stay, warning only
+  check(
+    "Rule 4 — flat line + normal edge → NO cap",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "normal",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === false
+  );
+  check(
+    "Rule 4 — flat line + strong edge → NO cap",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "strong",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === false
+  );
+
+  // Rule 5 — unknown line + negative edge → caution
+  check(
+    "Rule 5 — unknown line + negative edge → forceCaution",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "unknown", edgeStrength: "negative",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).forceCaution === true
+  );
+
+  // Rule 6 — unknown line + thin edge → cap
+  check(
+    "Rule 6 — unknown line + thin edge → cap",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "unknown", edgeStrength: "thin",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === true
+  );
+
+  // Rule 7 — one-source carve-out: unknown line + normal/strong/unknown → STAY
+  check(
+    "Rule 7 — unknown line + normal edge → NO cap (one-source carve-out)",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "unknown", edgeStrength: "normal",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === false
+  );
+  check(
+    "Rule 7 — unknown line + strong edge → NO cap",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "unknown", edgeStrength: "strong",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === false
+  );
+  check(
+    "Rule 7 — unknown line + unknown edge → NO cap (one-source carve-out, no signals)",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "unknown", edgeStrength: "unknown",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === false
+  );
+  check(
+    "Rule 7 — warningCode = money_conflict_one_source_only",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "unknown", edgeStrength: "strong",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).warningCode === "money_conflict_one_source_only"
+  );
+}
+
+console.log();
+console.log("━━━ Phase 6B.30E — full-pipeline scenarios (4 user-named cases) ━━━");
+
+// Scenario 1 — MIL@ATH-style: strong edge + confirming line + existing
+// public_smoke cap. Verdict stays Watchlist (cap holds) + warning rides.
+check(
+  "MIL@ATH-style — strong edge + confirms_market + public_smoke → Watchlist + strong-edge-survives warning",
+  (() => {
+    const v = marketVerdictFor({
+      market: "total",
+      confidence: 0.58,
+      grade: "public_smoke" as Grade,
+      sharpDirection: "none",
+      marketDataLimited: false,
+      reviewerSignals: { sharpConflict: false, publicSmokeAligned: true, hasFragilityFlag: false },
+      marketContext: {
+        moneyConflict: true, lineMovementVsPick: "confirms_market", edgeStrength: "strong",
+        sourceCount: 1, rlmAgainstPick: false,
+      },
+    });
+    return v.key === "watchlist" && v.warning === "money_conflict_strong_edge_survives";
+  })()
+);
+
+// Scenario 2 — WSH@SF-style: confirms_pick → chip unchanged, supportive copy
+check(
+  "WSH@SF-style — confirms_pick → no downgrade, supportive warning code",
+  (() => {
+    const v = marketVerdictFor({
+      market: "total",
+      confidence: 0.55,
+      grade: "market_watch" as Grade,
+      sharpDirection: "none",
+      marketDataLimited: false,
+      marketContext: {
+        moneyConflict: true, lineMovementVsPick: "confirms_pick", edgeStrength: "unknown",
+        sourceCount: 1, rlmAgainstPick: false,
+      },
+    });
+    return v.key === "watchlist" && v.warning === "money_conflict_line_confirms_pick";
+  })()
+);
+
+// Scenario 3 — HOU@LAA-style: flat line + unknown edge → Rule 3 cap
+check(
+  "HOU@LAA-style — flat line + unknown edge → cap at Watchlist + warning",
+  (() => {
+    const v = marketVerdictFor({
+      market: "total",
+      confidence: 0.60,
+      grade: "market_watch" as Grade,
+      sharpDirection: "none",
+      marketDataLimited: false,
+      marketContext: {
+        moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "unknown",
+        sourceCount: 1, rlmAgainstPick: false,
+      },
+    });
+    return v.key === "watchlist" && v.warning === "money_conflict_flat_line_thin_edge";
+  })()
+);
+
+// Scenario 4 — CIN@SD-style: strong-edge ML + flat line + conflict → Rule 4
+// (verdict module alone resolves to Lean; the route's existing 6B.10
+// BA-block keeps it at Watchlist via a separate path.)
+check(
+  "CIN@SD-style — flat line + strong edge + conflict → Lean + warning (route's BA-block runs separately)",
+  (() => {
+    const v = marketVerdictFor({
+      market: "moneyline",
+      confidence: 0.633,
+      grade: "market_watch" as Grade,
+      sharpDirection: "none",
+      marketDataLimited: false,
+      marketContext: {
+        moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "strong",
+        sourceCount: 1, rlmAgainstPick: false,
+      },
+    });
+    return v.key === "lean" && v.warning === "money_conflict_flat_line_strong_edge";
+  })()
+);
+
+console.log();
+console.log("━━━ Phase 6B.30E — anti-regression: clean Leans / Best Angle / FI stay clean ━━━");
+
+check(
+  "Clean Lean — no marketContext → lean, no warning",
+  (() => {
+    const v = marketVerdictFor({
+      market: "moneyline", confidence: 0.60, grade: "market_watch" as Grade,
+      sharpDirection: "none", marketDataLimited: false,
+    });
+    return v.key === "lean" && v.warning === null;
+  })()
+);
+
+check(
+  "Clean Best Angle — no marketContext → best_angle, no warning",
+  (() => {
+    const v = marketVerdictFor({
+      market: "moneyline", confidence: 0.65, grade: "best_signal" as Grade,
+      sharpDirection: "none", marketDataLimited: false,
+    });
+    return v.key === "best_angle" && v.warning === null;
+  })()
+);
+
+check(
+  "Clean Best Angle WITH marketContext but no conflict → best_angle, no warning",
+  (() => {
+    const v = marketVerdictFor({
+      market: "moneyline", confidence: 0.65, grade: "best_signal" as Grade,
+      sharpDirection: "none", marketDataLimited: false,
+      marketContext: {
+        moneyConflict: false, lineMovementVsPick: "flat", edgeStrength: "strong",
+        sourceCount: 1, rlmAgainstPick: false,
+      },
+    });
+    return v.key === "best_angle" && v.warning === null;
+  })()
+);
+
+check(
+  "FI — marketContext ignored, verdict unchanged",
+  (() => {
+    const v = marketVerdictFor({
+      market: "first_inning", confidence: 0.60, grade: "market_watch" as Grade,
+      sharpDirection: "none", marketDataLimited: false,
+      marketContext: {
+        moneyConflict: true, lineMovementVsPick: "confirms_market", edgeStrength: "thin",
+        sourceCount: 1, rlmAgainstPick: false,
+      },
+    });
+    return v.key === "lean" && v.warning === null;
+  })()
+);
+
+check(
+  "Anti-regression — sharp_conflict grade still → caution (warning may attach)",
+  marketVerdictFor({
+    market: "moneyline", confidence: 0.65, grade: "sharp_conflict" as Grade,
+    sharpDirection: "none", marketDataLimited: false,
+  }).key === "caution"
 );
 
 console.log();

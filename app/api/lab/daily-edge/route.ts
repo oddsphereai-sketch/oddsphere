@@ -66,6 +66,9 @@ import {
   type SharpDirection,
   type MarketVerdict,
   type ReviewerSignals,
+  type MarketContextSignals,
+  type LineMovementVsPick,
+  type EdgeStrengthBucket,
 } from "@/lib/services/marketVerdictDerivation";
 import { generatePerMarketCopy } from "@/lib/services/perMarketCopyGenerator";
 import {
@@ -197,6 +200,14 @@ type LineHistoryRow = {
   sportsbook: string;
   side: string | null;
   odds_american: number | null;
+  /**
+   * Phase 6B.30E — totals open line_value, needed for deriving
+   * line-movement direction (10.5 → 11 confirms Over, etc.).
+   * `line_history` already stores this column; the SELECT below was
+   * widened to read it. Null for moneyline rows (no line value) and
+   * for any pre-historic row that lacked the column.
+   */
+  line_value: number | null;
   recorded_at: string;
 };
 
@@ -1597,9 +1608,21 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     reviewMeta.flags,
     input.market
   );
-  const verdict: { key: MarketVerdict; label: string } =
+  // Phase 6B.30E — derive the market-context signals for the
+  // money-conflict / line-movement / edge-strength policy. Returns
+  // undefined for first_inning or when there's no pick, in which case
+  // the verdict ladder runs with pre-6B.30E behavior.
+  const marketContext = deriveMarketContext(
+    input.market,
+    input.modelSide,
+    input.signals,
+    input.linesCurrent,
+    input.lineOpen,
+    input.sportSpecific,
+  );
+  const verdict =
     input.held || input.confidence === null
-      ? { key: "no_play", label: "No Play" }
+      ? { key: "no_play" as MarketVerdict, label: "No Play", warning: null }
       : marketVerdictFor({
           market: input.market,
           confidence: input.confidence,
@@ -1607,6 +1630,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           sharpDirection,
           marketDataLimited,
           reviewerSignals,
+          marketContext,
         });
 
   // Server-generated copy (banned-terms-linted at output time).
@@ -2103,6 +2127,142 @@ function hasOpposingPublicMoneyConflict(
   const opp = oppositeOf(marketType, pickSide);
   if (opp === null) return false;
   return isSharpLeaningSide(findSignal(signals, marketType, opp));
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Phase 6B.30E — market-context signal derivation
+// ─────────────────────────────────────────────────────────────────────
+//
+// Pure helpers that turn the row's existing data into the typed inputs
+// `marketVerdictFor` expects. NO DB writes, NO model math changes —
+// only display-layer classification.
+//
+// Thresholds are deliberately conservative so flat lines stay "flat"
+// and only meaningful moves register as confirming. These constants
+// live here rather than in marketVerdictDerivation.constants.ts because
+// they belong to the route's input shaping, not to the verdict rules
+// themselves.
+const LINE_MOVE_TOTAL_THRESHOLD_RUNS = 0.5;        // total moved at least half a run
+const LINE_MOVE_ML_THRESHOLD_AMERICAN = 5;         // moneyline shifted at least 5 cents
+const EDGE_STRONG_PP_THRESHOLD = 5.0;              // edge_pct ≥ +5 → strong
+const EDGE_NORMAL_PP_THRESHOLD = 2.0;              // edge_pct ≥ +2 → normal
+const EDGE_THIN_FLOOR_PP = 0;                       // 0 ≤ edge_pct < 2 → thin
+
+function deriveLineMovementVsPick(
+  market: "moneyline" | "total" | "first_inning",
+  pickSide: string | null,
+  linesCurrent: LineRow[],
+  lineOpen: LineHistoryRow | null,
+): LineMovementVsPick {
+  if (market === "first_inning") return "unknown"; // FI ignores market context
+  if (pickSide === null) return "unknown";
+  if (lineOpen === null) return "unknown";
+  if (linesCurrent.length === 0) return "unknown";
+
+  // Pick the matching current row for the pick side (preserves Phase
+  // R-19 Phase 5i Fix A's pick-side-based selection).
+  const current = pickPriceRow(linesCurrent, pickSide as Side);
+  if (!current) return "unknown";
+
+  if (market === "total") {
+    // Total: compare line_value. Under wants the line to come DOWN
+    // (e.g. 10.5 → 10 confirms Under). Over wants the line to go UP.
+    const openLine = lineOpen.line_value;
+    const currLine = current.line_value;
+    if (openLine === null || currLine === null) return "unknown";
+    const delta = currLine - openLine;
+    if (Math.abs(delta) < LINE_MOVE_TOTAL_THRESHOLD_RUNS) return "flat";
+    // Under wants negative delta (line dropped); Over wants positive.
+    if (pickSide === "Under") {
+      return delta < 0 ? "confirms_pick" : "confirms_market";
+    }
+    if (pickSide === "Over") {
+      return delta > 0 ? "confirms_pick" : "confirms_market";
+    }
+    return "unknown";
+  }
+
+  // Moneyline: compare odds_american. A "shortening" odds price (less
+  // negative for favorites, less positive for dogs) confirms the pick.
+  // Threshold is 5 American cents — generous enough that small spread-
+  // micro-move doesn't trigger.
+  const openOdds = lineOpen.odds_american;
+  const currOdds = current.odds_american;
+  if (openOdds === null || currOdds === null) return "unknown";
+  const delta = currOdds - openOdds;
+  if (Math.abs(delta) < LINE_MOVE_ML_THRESHOLD_AMERICAN) return "flat";
+  // For favorites (negative odds): odds becoming MORE negative = price
+  // shortened (the favorite got heavier favored) → confirms_pick.
+  // For dogs (positive odds): odds becoming SMALLER = price shortened
+  // (the dog became less of a dog) → confirms_pick.
+  if (openOdds < 0 || currOdds < 0) {
+    // Favorite — odds got more negative means absolute value grew.
+    return delta < 0 ? "confirms_pick" : "confirms_market";
+  }
+  // Both positive (dog) — odds shrinking toward 0 confirms the pick.
+  return delta < 0 ? "confirms_pick" : "confirms_market";
+}
+
+function deriveEdgeStrengthBucket(
+  sportSpecific: Record<string, unknown> | null | undefined,
+  market: "moneyline" | "total" | "first_inning",
+): EdgeStrengthBucket {
+  if (market === "first_inning") return "unknown";
+  const edge = readV22EdgePp(sportSpecific, market);
+  if (edge === null) return "unknown";
+  if (edge < EDGE_THIN_FLOOR_PP) return "negative";
+  if (edge < EDGE_NORMAL_PP_THRESHOLD) return "thin";
+  if (edge < EDGE_STRONG_PP_THRESHOLD) return "normal";
+  return "strong";
+}
+
+/**
+ * Phase 6B.31a future: when a second splits provider lands, count
+ * distinct providers reporting on this (game, market). Today the
+ * sharp_signals rows all carry the same provider so this returns 1.
+ *
+ * `findSignal` already returns one row per (market, side); we count
+ * distinct sources across both sides for the same market. When the
+ * column shape grows a discriminator (e.g. `provider`), this swaps to
+ * unique-count without changing call sites.
+ */
+function deriveSplitSourceCount(
+  signals: SignalRow[],
+  market: "moneyline" | "total",
+  pickSide: string | null,
+): number {
+  if (pickSide === null) return 0;
+  // Today's data model: any non-empty (pick or opposite) signal row
+  // counts as one source. When a second provider is added, count
+  // distinct `provider`/`source_name` values across those rows.
+  const opp = oppositeOf(market, pickSide);
+  const haveAny = signals.some(
+    (s) => s.market_type === market && (s.side === pickSide || (opp !== null && s.side === opp)),
+  );
+  return haveAny ? 1 : 0;
+}
+
+function deriveMarketContext(
+  market: "moneyline" | "total" | "first_inning",
+  pickSide: string | null,
+  signals: SignalRow[],
+  linesCurrent: LineRow[],
+  lineOpen: LineHistoryRow | null,
+  sportSpecific: Record<string, unknown> | null | undefined,
+): MarketContextSignals | undefined {
+  if (market === "first_inning") return undefined; // FI verdicts skip the policy
+  if (pickSide === null) return undefined;
+  const marketType = market === "moneyline" ? "moneyline" : "total";
+  return {
+    moneyConflict: hasOpposingPublicMoneyConflict(signals, marketType, pickSide),
+    lineMovementVsPick: deriveLineMovementVsPick(market, pickSide, linesCurrent, lineOpen),
+    edgeStrength: deriveEdgeStrengthBucket(sportSpecific, market),
+    sourceCount: deriveSplitSourceCount(signals, marketType, pickSide),
+    // RLM signal not yet plumbed into our DB — wired but defaults false.
+    // Phase 6B.31b will surface this from signal_rows_at_lock /
+    // sharp_signals.has_reverse_line_movement.
+    rlmAgainstPick: false,
+  };
 }
 
 function hasSupportingPublicMoneyConfirmation(
@@ -2757,7 +2917,7 @@ export async function GET(request: Request) {
     // the "first seen" since linesService hardcodes is_opener=false.
     const { data: histData, error: histErr } = await supabase
       .from("line_history")
-      .select("game_id, market_type, sportsbook, side, odds_american, recorded_at")
+      .select("game_id, market_type, sportsbook, side, line_value, odds_american, recorded_at")
       .in("game_id", gameIds)
       .in("market_type", ["moneyline", "total", "first_inning_total"])
       .is("player_id", null)
