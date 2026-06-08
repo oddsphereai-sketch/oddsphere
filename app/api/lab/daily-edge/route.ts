@@ -453,8 +453,56 @@ function buildGameDto(
   const away = row.away_team?.abbreviation ?? "—";
   const homeLogo = row.home_team?.logo_url ?? null;
   const awayLogo = row.away_team?.logo_url ?? null;
-  const pred = row.game_predictions;
-  if (!pred) return null; // Skip games without a model prediction.
+  // Phase 6B.30A — never silently drop an official scheduled game.
+  // Pre-6B.30A this site returned null for any game without a
+  // game_predictions row, causing the official slate count to silently
+  // diverge from MLB Stats (today: 7 cards rendered for 8 scheduled
+  // games, SEA@BAL was missing because Baltimore's home starter
+  // wasn't yet published by any integrated source). Replace the
+  // silent drop with a synthetic "prediction pending" placeholder
+  // that flows through the existing held-card render path (Phase
+  // 4.2.C.2). The placeholder:
+  //   • has all three markets held (null pick / null confidence /
+  //     null grade) so downstream extractors treat it as a held game
+  //   • carries hold_reason="prediction_pending" so the UI renders
+  //     customer-safe copy ("Prediction pending" / "Waiting on
+  //     confirmed starter data") instead of a default 0% pick
+  //   • carries no locked_at, no actionable fields
+  //   • triggers ZERO writes to prediction_records (the record
+  //     writer's held filter, which has long existed, drops it)
+  //   • is excluded from Tracking by the existing no_bet=true /
+  //     held=true gates
+  // When the normal pipeline later assigns a starter and the
+  // automodel writes a real game_predictions row, the next request
+  // sees the real row and the card auto-promotes to a normal pick.
+  // No manual intervention required.
+  const pred: PredictionRow = row.game_predictions ?? {
+    source_type: null,
+    predicted_home_score: null,
+    predicted_away_score: null,
+    predicted_total: null,
+    predicted_ml_winner: null,
+    ml_confidence: null,
+    predicted_ou_side: null,
+    ou_confidence: null,
+    predicted_nrfi: null,
+    nrfi_confidence: null,
+    ml_grade: null,
+    ml_signal_type: null,
+    ml_market_signal: null,
+    ou_grade: null,
+    ou_signal_type: null,
+    ou_market_signal: null,
+    nrfi_grade: null,
+    nrfi_signal_type: null,
+    nrfi_market_signal: null,
+    sport_specific: {
+      hold_reason: "prediction_pending",
+      hold_picks: ["ml", "ou", "nrfi"],
+    },
+    computed_at: null,
+    locked_at: null,
+  };
 
   // Phase 4.2.C.2 — held extraction. The auto-model marks a market as
   // held when it refuses to make a pick (e.g., missing starter, scratched

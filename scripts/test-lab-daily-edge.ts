@@ -1506,6 +1506,82 @@ async function main() {
     }
   }
 
+  // ─── Phase 6B.30A — Daily Edge never silently drops scheduled games ────
+  section("Phase 6B.30A — no silent drop of scheduled games");
+  {
+    // Get today's official scheduled game count from `games` table for
+    // any slate_date that has games. Compare to Daily Edge card count.
+    // Pre-6B.30A: route returned null for games without game_predictions
+    // → card count < game count when a starter was unresolved.
+    // Post-6B.30A: every scheduled game emits a card, with a pending
+    // hold_reason when no prediction row exists yet.
+    const ET_TODAY = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    const { data: dbGames } = await supabase
+      .from("games")
+      .select("id, external_id, game_predictions(id)")
+      .eq("sport", "mlb")
+      .eq("slate_date", ET_TODAY)
+      .in("slate_status", ["published", "preview_only"]);
+    const dbGameCount = (dbGames ?? []).length;
+    const dbGamesWithPred = (dbGames ?? []).filter(
+      (g: any) => g.game_predictions && (Array.isArray(g.game_predictions) ? g.game_predictions.length > 0 : !!g.game_predictions)
+    ).length;
+
+    // Fetch Daily Edge response for today
+    const req6B30 = new Request(`http://localhost/api/lab/daily-edge?sport=mlb&date=${ET_TODAY}`);
+    const res6B30 = await dailyEdge(req6B30);
+    if (res6B30.status === 200) {
+      const body6B30 = (await res6B30.json()) as DailyEdgeResponse;
+      check(
+        `[6B.30A] Daily Edge card count (${body6B30.games.length}) equals official games table count (${dbGameCount}), not games-with-predictions count (${dbGamesWithPred})`,
+        body6B30.games.length === dbGameCount,
+        `If they don't match, the silent-drop bug has regressed.`
+      );
+      // For each game in body, every game must be present — the prior bug was that games
+      // without predictions returned null and were filtered out.
+      const dbExternalIds = new Set((dbGames ?? []).map((g: any) => g.external_id));
+      const apiExternalIds = new Set(body6B30.games.map((g) => g.external_id));
+      const missingFromApi = Array.from(dbExternalIds).filter((id) => !apiExternalIds.has(id as number));
+      check(
+        `[6B.30A] zero scheduled games are missing from Daily Edge response`,
+        missingFromApi.length === 0,
+        missingFromApi.length > 0 ? `missing external_ids: ${missingFromApi.join(", ")}` : undefined
+      );
+      // For any card whose game has NO game_predictions row in DB, assert
+      // it renders as a held/pending card (no actionable picks).
+      const dbGamesNoPred = (dbGames ?? []).filter(
+        (g: any) => !(g.game_predictions && (Array.isArray(g.game_predictions) ? g.game_predictions.length > 0 : !!g.game_predictions))
+      );
+      let pendingCardsWithBadShape = 0;
+      let pendingCardsCount = 0;
+      for (const dbg of dbGamesNoPred as any[]) {
+        const card = body6B30.games.find((g) => g.external_id === dbg.external_id);
+        if (!card) continue;
+        pendingCardsCount++;
+        // Pending card: all market picks must be null AND holdReason must be set
+        const allPicksNull =
+          card.predictions.ml.pick === null &&
+          card.predictions.total.pick === null &&
+          card.predictions.nrfi.pick === null;
+        const allConfidencesNull =
+          card.predictions.ml.confidence === null &&
+          card.predictions.total.confidence === null &&
+          card.predictions.nrfi.confidence === null;
+        const reasonPresent = card.holdReason !== null;
+        if (!allPicksNull || !allConfidencesNull || !reasonPresent) {
+          pendingCardsWithBadShape++;
+          console.log(`     pending card ${dbg.external_id}: allPicksNull=${allPicksNull} allConfidencesNull=${allConfidencesNull} reasonPresent=${reasonPresent}`);
+        }
+      }
+      check(
+        `[6B.30A] all pending cards (${pendingCardsCount}) carry null picks + null confidence + holdReason`,
+        pendingCardsWithBadShape === 0
+      );
+    } else {
+      check(`[6B.30A] Daily Edge route returns 200 for today`, false, `got status ${res6B30.status}`);
+    }
+  }
+
   // ─── Summary ──────────────────────────────────────────────────────────────
   console.log(`\n${"━".repeat(70)}`);
   console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
