@@ -14,7 +14,11 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const SITE_URL = "https://oddsphere-ruby.vercel.app";
+// Canonical production URL — keeps preview links pointing at the live
+// www.oddsphereai.com domain. The Vercel project alias
+// `oddsphere-ruby.vercel.app` resolves to the same deployment but is
+// not customer-facing.
+const SITE_URL = "https://www.oddsphereai.com";
 const SITE_TITLE = "Oddsphere AI — AI-Powered Sports Predictions";
 const SITE_DESCRIPTION =
   "Publicly-tracked AI sports predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL. Where data meets winning. For entertainment and informational purposes only.";
@@ -31,10 +35,8 @@ export const metadata: Metadata = {
     url: "/",
     images: [
       {
-        url: "/logo-transparent.png",
-        width: 3125,
-        height: 1875,
-        alt: "Oddsphere AI",
+        url: "/og-image.png",
+        alt: "Oddsphere AI — AI-Powered Sports Predictions",
       },
     ],
   },
@@ -43,7 +45,7 @@ export const metadata: Metadata = {
     site: "@OddSphereAI",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
-    images: ["/logo-transparent.png"],
+    images: ["/og-image.png"],
   },
 };
 
