@@ -531,13 +531,20 @@ function PredictionTile({
   //
   // R-19 Phase 5j Fix 2 — display "Held" instead of "—" when the model
   // held this market. Pre-5j three held markets surfaced as "— — —"
-  // across the card, which read as a broken/missing-data state. "Held"
-  // is honest about the model's decision and matches the breakdown
-  // verdict pill semantics. Confidence stays "—" because there's no
-  // numeric to display.
+  // across the card, which read as a broken/missing-data state.
+  //
+  // Phase 6B.30C++ — for the 1st Inning tile specifically, render the
+  // held / null state as "Toss-Up" instead of "Held". Toss-Up is a
+  // first-class model-emitted FI pick (R-16H Fix 2 + R-16J 47-53%
+  // threshold) with its own neutral visual treatment, and grading
+  // treats both null and Toss-Up as no_bet. ML and OU have no
+  // model-defined neutral middle state, so they keep "Held". DB
+  // truth is unchanged — predicted_nrfi=null + hold_picks=["nrfi"]
+  // still grade as no_bet; only the display string changes.
   const isNoPick = grade === null || pick === null || confidence === null;
   const borderClass = getTileBorder(sharpStatus);
-  const displayPick = isNoPick ? "Held" : pick;
+  const heldDisplay = label === "1st Inning" ? "Toss-Up" : "Held";
+  const displayPick = isNoPick ? heldDisplay : pick;
   const displayConfidence =
     isNoPick || confidence === null ? "—" : `${Math.round(confidence * 100)}%`;
   return (

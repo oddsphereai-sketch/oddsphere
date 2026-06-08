@@ -479,7 +479,7 @@ function MarketPill({
       <span className={`text-[10px] uppercase tracking-[0.14em] font-bold shrink-0 ${selected ? "text-violet-100" : "text-gray-500"}`}>
         {MARKET_SHORT_LABEL[market]}
       </span>
-      <span className={`text-[12px] font-bold tabular-nums shrink-0 ${pick === null ? "text-gray-500" : ""}`}>{pick ?? "Held"}</span>
+      <span className={`text-[12px] font-bold tabular-nums shrink-0 ${pick === null ? "text-gray-500" : ""}`}>{pick ?? (market === "first_inning" ? "Toss-Up" : "Held")}</span>
       <span className={`text-[10.5px] tabular-nums shrink-0 ${selected ? "text-gray-300" : "text-gray-500"}`}>
         {confidence === null ? "—" : `${Math.round(confidence * 100)}%`}
       </span>
@@ -498,18 +498,25 @@ function MarketPill({
  * the totals line stitched on when applicable.
  *   moneyline   → "PHI" or "Held"
  *   total       → "Over 8.5" / "Under 8.5" / "Over" / "Held"
- *   first_inning→ "NRFI" / "YRFI" / "Held"
+ *   first_inning→ "NRFI" / "YRFI" / "Toss-Up"
  *
- * Phase 6B.30C+ FI pill fix: when V2.2 holds a market (e.g. FI/NRFI on
- * a real-data fallback prediction with starter missing), the bare em-dash
- * placeholder leaked through the per-market verdict pills and the reader
- * market selector. PredictionTile (sharedCardParts.tsx:540) had already
- * switched to "Held" in R-19 Phase 5j; this brings the pill and reader
- * segment in line with that semantics so the customer sees an honest
- * "Held" state instead of a `—` that reads as broken/missing data.
+ * Phase 6B.30C++ — FI null is operationally a Toss-Up / no-edge state;
+ * "Toss-Up" is already a first-class model-emitted FI pick (R-16H Fix 2,
+ * R-16J 47-53% threshold) with its own neutral visual treatment. ML and
+ * OU have no equivalent neutral middle band, so they stay as "Held"
+ * for the genuinely held / unsafe cases. DB / tracking truth is
+ * unchanged — `predicted_nrfi=null` + `hold_picks=["nrfi"]` still grade
+ * as no_bet exactly like a real Toss-Up call would. Only the
+ * customer-facing string changes.
+ *
+ * Phase 6B.30C+ (prior commit b8f7a7d) replaced em-dashes with "Held"
+ * everywhere; this commit specializes FI to "Toss-Up" while keeping the
+ * regression guard that bare em-dashes never leak through.
  */
 export function formatPickWithLine(market: MarketKey, pick: string | null, line: number | null): string {
-  if (pick === null) return "Held";
+  if (pick === null) {
+    return market === "first_inning" ? "Toss-Up" : "Held";
+  }
   if (market === "total" && line !== null) return `${pick} ${line}`;
   return pick;
 }
