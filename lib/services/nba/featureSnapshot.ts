@@ -1,19 +1,24 @@
 /**
- * Phase 7A — NBA Finals v0a — DB feature-snapshot builder.
+ * Phase 7A/7B — NBA Finals v0 — DB feature-snapshot builder.
  *
- * Reads existing `games`, `teams`, `lines` (all sport='nba') and produces
- * NbaGameSnapshot[] suitable for the pure orchestrator.
+ * Reads existing `games`, `teams`, `lines`, `nba_team_ratings`
+ * (all sport='nba') and produces NbaGameSnapshot[] suitable for the
+ * pure orchestrator.
  *
  * Hard rules:
  *   • Read-only. No INSERT / UPDATE / DELETE / UPSERT anywhere.
- *   • NO schema migrations. Team ratings would live in a new
- *     `nba_team_ratings` table — that table doesn't exist yet, so v0
- *     graceful-fills every rating with null. data_quality.ratings_present
- *     ends up false → orchestrator emits fallback tier.
+ *   • Phase 7B: `nba_team_ratings` exists (migration v19). When a
+ *     team has a row, ORtg/DRtg/NetRtg/Pace are hydrated; absent → still
+ *     null, model degrades to fallback tier via existing data_quality.
  *   • No MLB tables touched. No imports from MLB modules.
  *   • Honest nullability — never invents fake stats.
  *   • Best-effort series context: queries finished prior NBA games
  *     between the same team pair to derive game_number / series score.
+ *
+ * Ratings selection: prefer `season_type='playoffs'` row when present
+ * (small-sample but most relevant for Finals), else fall back to
+ * `season_type='regular'`. Both are stored separately in the table; the
+ * builder reads both and picks the better one per team.
  */
 
 import { supabase } from "../../db/supabase";
@@ -54,6 +59,58 @@ type LineRow = {
   side: string | null;
   line_value: number | null;
   odds_american: number | null;
+};
+
+// Phase 7B — nba_team_ratings row shape (subset of columns we read).
+type NbaTeamRatingsRow = {
+  team_id: number;
+  season: number;
+  season_type: "regular" | "playoffs";
+  off_rating: number | null;
+  def_rating: number | null;
+  net_rating: number | null;
+  pace: number | null;
+  source: string;
+  source_url: string;
+  fetched_at: string;
+};
+
+/**
+ * Per-team rating provenance attached to the snapshot for admin
+ * display. NOT part of the model contract; the model itself reads
+ * `off_rating`/`def_rating`/etc. from NbaTeamSnapshot. This is a side
+ * channel for the admin UI's source-badge rendering.
+ */
+export type NbaTeamRatingsProvenance = {
+  team_id: number;
+  season: number | null;
+  season_type: "regular" | "playoffs" | null;
+  source: string | null;
+  source_url: string | null;
+  fetched_at: string | null;
+  /** True when the row was actually found and populated (vs null-fallback). */
+  populated: boolean;
+};
+
+/**
+ * Per-game snapshot provenance map. Returned alongside snapshots from
+ * `buildNbaFeatureSnapshotsWithProvenance` for the admin route to
+ * render source badges per row.
+ */
+export type NbaSnapshotProvenance = {
+  game_external_id: number;
+  schedule_source: "espn_scoreboard";
+  /** True if the prior-games window included at least one G1/G2 with finalized scores. */
+  series_priors_found: boolean;
+  prior_games_window_days: number;
+  market_source: "sharpapi" | "none";
+  market_book_priority: readonly string[];
+  home_ratings: NbaTeamRatingsProvenance;
+  away_ratings: NbaTeamRatingsProvenance;
+  /** ESPN injuries fetched (true) vs unknown (false) per team. */
+  injuries_source: "espn" | "none";
+  injuries_known_home: boolean;
+  injuries_known_away: boolean;
 };
 
 // Sharpbook priority for picking the freshest single value per (market,side).
@@ -98,14 +155,70 @@ export type BuildNbaSnapshotOptions = {
 
 // ─── main builder ────────────────────────────────────────────────
 
-export async function buildNbaFeatureSnapshots(
+/**
+ * Phase 7B — provenance-augmented snapshot builder. Returns BOTH the
+ * model-ready snapshots AND a per-game provenance map. The admin route
+ * uses both halves; the model orchestrator only consumes the snapshots.
+ *
+ * The original `buildNbaFeatureSnapshots` (declared further below)
+ * delegates to this helper and discards the provenance side channel
+ * so existing callers (v0a operator script, tests) remain unchanged.
+ */
+export async function buildNbaFeatureSnapshotsWithProvenance(
   date: string,
   opts: BuildNbaSnapshotOptions = {},
-): Promise<NbaGameSnapshot[]> {
-  // Date window: ET-aware slate boundaries are an MLB convention; for
-  // NBA v0 we use a simple UTC-day window which is good enough for an
-  // internal preview (NBA games rarely cross midnight UTC vs midnight ET
-  // within a single calendar slate).
+): Promise<{
+  snapshots: NbaGameSnapshot[];
+  provenance: NbaSnapshotProvenance[];
+}> {
+  return runBuild(date, opts);
+}
+
+const PRIOR_WINDOW_DAYS = 30;
+
+function pickBestRatingsRow(
+  rows: NbaTeamRatingsRow[],
+): NbaTeamRatingsRow | null {
+  if (rows.length === 0) return null;
+  const playoffRow = rows.find((r) => r.season_type === "playoffs");
+  if (playoffRow !== undefined) return playoffRow;
+  const regularRow = rows.find((r) => r.season_type === "regular");
+  return regularRow ?? rows[0];
+}
+
+function provenanceFromRow(
+  teamId: number,
+  row: NbaTeamRatingsRow | null,
+): NbaTeamRatingsProvenance {
+  if (row === null) {
+    return {
+      team_id: teamId,
+      season: null,
+      season_type: null,
+      source: null,
+      source_url: null,
+      fetched_at: null,
+      populated: false,
+    };
+  }
+  return {
+    team_id: teamId,
+    season: row.season,
+    season_type: row.season_type,
+    source: row.source,
+    source_url: row.source_url,
+    fetched_at: row.fetched_at,
+    populated: true,
+  };
+}
+
+async function runBuild(
+  date: string,
+  opts: BuildNbaSnapshotOptions,
+): Promise<{
+  snapshots: NbaGameSnapshot[];
+  provenance: NbaSnapshotProvenance[];
+}> {
   const startISO = `${date}T00:00:00.000Z`;
   const endISO = `${date}T23:59:59.999Z`;
 
@@ -122,7 +235,7 @@ export async function buildNbaFeatureSnapshots(
     throw new Error(`buildNbaFeatureSnapshots: games query failed: ${gamesErr.message}`);
   }
   const games: GameRow[] = (gameRows ?? []) as GameRow[];
-  if (games.length === 0) return [];
+  if (games.length === 0) return { snapshots: [], provenance: [] };
 
   // 2) teams referenced by these games
   const teamIds = new Set<number>();
@@ -184,30 +297,68 @@ export async function buildNbaFeatureSnapshots(
   }
   const priorGames: GameRow[] = (priorRows ?? []) as GameRow[];
 
+  // 4b) NBA team ratings (Phase 7B — migration v19 added the table).
+  // Pulls both regular + playoffs rows for the slate teams' season;
+  // pickBestRatingsRow selects playoffs over regular when both present.
+  const slateSeason = Number.parseInt(date.slice(0, 4), 10);
+  const ratingsByTeam = new Map<number, NbaTeamRatingsRow>();
+  if (teamIds.size > 0 && Number.isFinite(slateSeason)) {
+    const { data: ratingsRows, error: ratingsErr } = await supabase
+      .from("nba_team_ratings")
+      .select(
+        "team_id, season, season_type, off_rating, def_rating, net_rating, pace, source, source_url, fetched_at",
+      )
+      .in("team_id", Array.from(teamIds))
+      .eq("season", slateSeason);
+    if (ratingsErr !== null) {
+      // Non-fatal: missing/erroring ratings → null fields, fallback tier.
+      // Log but continue.
+      console.warn(
+        `buildNbaFeatureSnapshots: nba_team_ratings query failed (continuing with null ratings): ${ratingsErr.message}`,
+      );
+    }
+    const rowsByTeam = new Map<number, NbaTeamRatingsRow[]>();
+    for (const r of (ratingsRows ?? []) as NbaTeamRatingsRow[]) {
+      const arr = rowsByTeam.get(r.team_id) ?? [];
+      arr.push(r);
+      rowsByTeam.set(r.team_id, arr);
+    }
+    for (const [teamId, rows] of rowsByTeam) {
+      const best = pickBestRatingsRow(rows);
+      if (best !== null) ratingsByTeam.set(teamId, best);
+    }
+  }
+
   // 5) Build per-game snapshots
   const snapshots: NbaGameSnapshot[] = [];
+  const provenance: NbaSnapshotProvenance[] = [];
   for (const g of games) {
     const homeTeam = g.home_team_id !== null ? teamById.get(g.home_team_id) : undefined;
     const awayTeam = g.away_team_id !== null ? teamById.get(g.away_team_id) : undefined;
     if (homeTeam === undefined || awayTeam === undefined) continue;
 
-    // Team snapshots — v0 has no nba_team_ratings table; all ratings null.
+    // Team snapshots — Phase 7B reads `nba_team_ratings`. When a row
+    // exists, ORtg/DRtg/NetRtg/Pace are populated; when absent the
+    // fields stay null and dataQuality.ratings_present ends up false →
+    // model degrades to fallback tier.
+    const homeRatingsRow = ratingsByTeam.get(homeTeam.id) ?? null;
+    const awayRatingsRow = ratingsByTeam.get(awayTeam.id) ?? null;
     const homeTeamSnap: NbaTeamSnapshot = {
       team_external_id: homeTeam.external_id,
       abbreviation: homeTeam.abbreviation,
-      off_rating: null,
-      def_rating: null,
-      net_rating: null,
-      pace: null,
-      recent_form_10g_net_rating: null,
+      off_rating: homeRatingsRow?.off_rating ?? null,
+      def_rating: homeRatingsRow?.def_rating ?? null,
+      net_rating: homeRatingsRow?.net_rating ?? null,
+      pace: homeRatingsRow?.pace ?? null,
+      recent_form_10g_net_rating: null, // not exposed in v0b
     };
     const awayTeamSnap: NbaTeamSnapshot = {
       team_external_id: awayTeam.external_id,
       abbreviation: awayTeam.abbreviation,
-      off_rating: null,
-      def_rating: null,
-      net_rating: null,
-      pace: null,
+      off_rating: awayRatingsRow?.off_rating ?? null,
+      def_rating: awayRatingsRow?.def_rating ?? null,
+      net_rating: awayRatingsRow?.net_rating ?? null,
+      pace: awayRatingsRow?.pace ?? null,
       recent_form_10g_net_rating: null,
     };
 
@@ -296,8 +447,40 @@ export async function buildNbaFeatureSnapshots(
       market,
       data_quality: dataQuality,
     });
+
+    // Phase 7B — provenance side channel for admin UI badges.
+    provenance.push({
+      game_external_id: g.external_id,
+      schedule_source: "espn_scoreboard",
+      series_priors_found: priorGames.some(
+        (p) =>
+          (p.home_team_id === homeTeam.id && p.away_team_id === awayTeam.id) ||
+          (p.home_team_id === awayTeam.id && p.away_team_id === homeTeam.id),
+      ),
+      prior_games_window_days: PRIOR_WINDOW_DAYS,
+      market_source: marketPresent ? "sharpapi" : "none",
+      market_book_priority: BOOK_PRIORITY,
+      home_ratings: provenanceFromRow(homeTeam.id, homeRatingsRow),
+      away_ratings: provenanceFromRow(awayTeam.id, awayRatingsRow),
+      injuries_source: opts.injuryResolver !== undefined ? "espn" : "none",
+      injuries_known_home: homeInjuriesKnown,
+      injuries_known_away: awayInjuriesKnown,
+    });
   }
-  return snapshots;
+  return { snapshots, provenance };
+}
+
+/**
+ * Back-compat wrapper for v0a callers (operator script, tests) that
+ * only want NbaGameSnapshot[]. Delegates to the with-provenance helper
+ * and discards the provenance side channel.
+ */
+export async function buildNbaFeatureSnapshots(
+  date: string,
+  opts: BuildNbaSnapshotOptions = {},
+): Promise<NbaGameSnapshot[]> {
+  const result = await runBuild(date, opts);
+  return result.snapshots;
 }
 
 function buildMarketFromLines(lines: LineRow[]): NbaMarketSnapshot {
