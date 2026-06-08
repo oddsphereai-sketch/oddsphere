@@ -543,9 +543,14 @@ function MarketPill({
  * everywhere; this commit specializes FI to "Toss-Up" while keeping the
  * regression guard that bare em-dashes never leak through.
  */
-export function formatPickWithLine(market: MarketKey, pick: string | null, line: number | null): string {
+export function formatPickWithLine(
+  market: MarketKey,
+  pick: string | null,
+  line: number | null,
+  sport: Sport = "mlb",
+): string {
   if (pick === null) {
-    return market === "first_inning" ? "Toss-Up" : "Held";
+    return pickFallbackFor(market, sport);
   }
   if (market === "total" && line !== null) return `${pick} ${line}`;
   return pick;
@@ -576,7 +581,8 @@ function ReaderMarketSegment({
   selected: boolean;
   onClick: () => void;
 }) {
-  const pickText = formatPickWithLine(market, pick, line);
+  const shellSport = useShellSport();
+  const pickText = formatPickWithLine(market, pick, line, shellSport);
   return (
     <button
       type="button"
@@ -594,7 +600,7 @@ function ReaderMarketSegment({
             selected ? "text-violet-200" : "text-gray-500"
           }`}
         >
-          {MARKET_LONG_LABEL[market]}
+          {marketLongLabelFor(market, shellSport)}
         </span>
         <span
           aria-hidden="true"
@@ -1106,6 +1112,7 @@ function ModelTake({ game }: { game: DailyEdgeGameDto }) {
 
 function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; market: MarketKey; marketData: MarketEdgeDto }) {
   const verdict = asVerdictKey(marketData.verdict.key);
+  const shellSport = useShellSport();
   return (
     <div className="bg-white/[0.015] border border-white/[0.04] rounded-xl px-3.5 py-2.5 space-y-2 min-w-0">
       <div className="flex items-center gap-2 pb-1 border-b border-white/[0.06]">
@@ -1221,7 +1228,7 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
             )}
             <span className="text-gray-700">·</span>
             <span className="text-[10px] uppercase tracking-[0.14em] text-gray-500 font-bold">
-              {MARKET_LONG_LABEL[market]}
+              {marketLongLabelFor(market, shellSport)}
             </span>
           </div>
         </div>
@@ -1245,6 +1252,7 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
 }
 
 function EdgeStack({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
+  const shellSport = useShellSport();
   // R-16F-B — row construction lives in app/lab/lib/edgeStackRows.ts so
   // the data shape can be unit-tested without a React renderer. This
   // component only handles JSX layout + tone coloring.
@@ -1253,7 +1261,7 @@ function EdgeStack({ market, marketData }: { market: MarketKey; marketData: Mark
   return (
     <div className="min-w-0">
       <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80 mb-1.5">
-        Edge Stack · {MARKET_LONG_LABEL[market]}
+        Edge Stack · {marketLongLabelFor(market, shellSport)}
       </p>
       <div className="space-y-1.5">
         {rows.map((r) => (
@@ -2140,6 +2148,7 @@ function SlateCard({
   const headlineMarketData = game.markets[headlineMarket];
   const headlineVerdict = asVerdictKey(headlineMarketData.verdict.key);
   const t = CARD_TREATMENT[headlineVerdict];
+  const shellSport = useShellSport();
 
   return (
     <article
@@ -2236,7 +2245,7 @@ function SlateCard({
             {headlineMarketData.pick ?? "—"}
           </span>
           <span className="text-[11px] uppercase tracking-[0.14em] text-gray-500 font-bold">
-            {MARKET_SHORT_LABEL[headlineMarket]}
+            {marketShortLabelFor(headlineMarket, shellSport)}
           </span>
           <span className="text-[13px] tabular-nums font-bold text-gray-300">
             {headlineMarketData.confidence === null
@@ -2302,7 +2311,7 @@ function SlateCard({
             return (
               <span key={m} className="inline-flex items-center gap-1 min-w-0">
                 {i > 0 && <span aria-hidden="true" className="text-gray-700 mr-1">·</span>}
-                <span className="text-gray-500">{MARKET_SHORT_LABEL[m]}</span>
+                <span className="text-gray-500">{marketShortLabelFor(m, shellSport)}</span>
                 <span className={VERDICT_TEXT_COLOR[v]}>
                   <span aria-hidden="true" className="mr-0.5">{VERDICT_GLYPH[v]}</span>
                   <span>{VERDICT_LABEL[v]}</span>
@@ -2344,10 +2353,10 @@ function SlateCard({
                     isActiveMarket ? "text-violet-200/85" : VERDICT_TEXT_COLOR[mv]
                   }`}
                 >
-                  {MARKET_SHORT_LABEL[m]}
+                  {marketShortLabelFor(m, shellSport)}
                 </span>
                 <span className="block text-[12.5px] font-bold tabular-nums text-gray-100 truncate">
-                  {formatPickWithLine(m, md.pick, md.line)}
+                  {formatPickWithLine(m, md.pick, md.line, shellSport)}
                 </span>
               </button>
             );
@@ -2401,6 +2410,7 @@ function SelectedEdgeReader({
   onCollapse: () => void;
 }) {
   const verdict = asVerdictKey(marketData.verdict.key);
+  const shellSport = useShellSport();
 
   return (
     <section
@@ -2506,7 +2516,7 @@ function SelectedEdgeReader({
                   </span>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span className="text-[9.5px] uppercase tracking-[0.14em] text-violet-200/75 font-bold">
-                      {MARKET_SHORT_LABEL[market]}
+                      {marketShortLabelFor(market, shellSport)}
                     </span>
                     <span aria-hidden="true" className="text-gray-700 text-[10px]">·</span>
                     <span className="text-[11px] tabular-nums font-bold text-gray-200">
