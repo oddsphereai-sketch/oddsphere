@@ -60,6 +60,21 @@ export type UseDailyEdgeResult = {
   refresh: () => Promise<DailyEdgeResponse | undefined>;
 };
 
+// Today's date in ET as YYYY-MM-DD. The NBA admin adapter route
+// requires ?date= (no server-side auto-default) because the ET-slate
+// helper needs an explicit input; the hook supplies today_ET when
+// the caller doesn't pass one. MLB's /api/lab/daily-edge auto-defaults
+// to today UTC server-side and is unaffected.
+function todayEtYyyyMmDd(): string {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return fmt.format(new Date());
+}
+
 export function useDailyEdge(options: UseDailyEdgeOptions): UseDailyEdgeResult {
   const { sport, date, refreshIntervalMs = 300_000 } = options;
   // Phase 7F (Path A): NBA routes through the admin-gated adapter route
@@ -67,8 +82,10 @@ export function useDailyEdge(options: UseDailyEdgeOptions): UseDailyEdgeResult {
   // unchanged. Same DailyEdgeResponse shape from both — the shell
   // doesn't care which source it came from.
   const isNba = sport === "nba";
+  // NBA needs an explicit date — default to today (ET) when not passed.
+  const effectiveDate = isNba ? (date ?? todayEtYyyyMmDd()) : date;
   const key = isNba
-    ? buildLabUrl("/api/admin/nba-as-daily-edge", { date: date ?? null })
+    ? buildLabUrl("/api/admin/nba-as-daily-edge", { date: effectiveDate ?? null })
     : buildLabUrl("/api/lab/daily-edge", { sport, date });
   const fetcher = isNba ? nbaAdminFetcher : labFetcher;
 

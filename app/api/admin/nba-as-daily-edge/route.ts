@@ -72,11 +72,23 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const url = new URL(request.url);
-  const date = url.searchParams.get("date");
-  if (date === null || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  // Phase 7F follow-up: when the caller doesn't supply ?date=, default
+  // to today's ET slate date. The shared useDailyEdge hook does this
+  // client-side too; this server-side default makes the route forgiving
+  // when poked directly (e.g. a manual curl with no params).
+  const rawDate = url.searchParams.get("date");
+  const date = rawDate !== null && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+    ? rawDate
+    : new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/New_York",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+  if (rawDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
     return new Response(
       JSON.stringify({
-        error: "Missing or invalid `date` (expected YYYY-MM-DD, interpreted as ET slate date).",
+        error: "Invalid `date` format (expected YYYY-MM-DD, interpreted as ET slate date).",
       }),
       { status: 400, headers: { "content-type": "application/json" } },
     );
