@@ -224,6 +224,18 @@ type LineUpsertPayload = {
   fair_odds: number | null;
 };
 
+type LineHistoryPayload = {
+  game_id: number;
+  market_type: string;
+  player_id: null;
+  sportsbook: string;
+  side: string;
+  line_value: number | null;
+  odds_american: number | null;
+  is_opener: false;
+  recorded_at: string;
+};
+
 function buildLinePayload(
   row: SharpOddsRow,
   gameId: number,
@@ -394,8 +406,38 @@ async function main(): Promise<void> {
     written += group.length;
   }
 
+  // ── line_history bootstrap (Phase v0c-DE) ─────────────────────────
+  // Append-only intraday snapshots so we can show first-observed → current
+  // movement on subsequent refreshes. is_opener=false always — SharpAPI
+  // does not provide a true opener and we never fake one.
+  const nowIso = new Date().toISOString();
+  const historyRows: LineHistoryPayload[] = payloads.map((p) => ({
+    game_id: p.game_id,
+    market_type: p.market_type,
+    player_id: null,
+    sportsbook: p.sportsbook,
+    side: p.side,
+    line_value: p.line_value,
+    odds_american: p.odds_american,
+    is_opener: false,
+    recorded_at: nowIso,
+  }));
+  let historyWritten = 0;
+  if (historyRows.length > 0) {
+    const { error: histErr } = await supabase.from("line_history").insert(historyRows);
+    if (histErr) {
+      console.log(`  ✗ line_history insert: ${histErr.message}`);
+      errors += historyRows.length;
+    } else {
+      historyWritten = historyRows.length;
+    }
+  }
+
   console.log(`\n─${"─".repeat(70)}`);
-  console.log(`${write ? "WRITE" : "DRY-RUN"} complete: ${written} written, ${errors} errors.`);
+  console.log(
+    `${write ? "WRITE" : "DRY-RUN"} complete: ${written} lines written, ` +
+      `${historyWritten} line_history snapshots appended, ${errors} errors.`,
+  );
 }
 
 main().catch((e) => {
