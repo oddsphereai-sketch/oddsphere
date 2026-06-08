@@ -36,6 +36,7 @@ export type StarterSource =
   | "bdl_games"
   | "bdl_lineups_probable"
   | "bdl_lineups_confirmed"
+  | "espn_scoreboard"
   | "manual";
 
 /**
@@ -65,8 +66,18 @@ export type ParsedGameStatus =
 export interface ParsedStarter {
   source: StarterSource;
   confidence: StarterConfidence;
+  /**
+   * For "mlb_person_id" / "bdl_player_id" kinds: source-native id that the
+   * caller resolves to players.id via batched lookups.
+   *
+   * For "espn_resolved" kind (Phase 6B.31a): the value is ALREADY a
+   * players.id. ESPN's athlete id (e.g. 33148) is not stored in our
+   * players table, so the strict name + team + active + is_pitcher
+   * mapping happens upstream in espnProbablePitcherService; the
+   * caller's resolver step is a passthrough for this kind.
+   */
   externalId: number;
-  externalIdKind: "mlb_person_id" | "bdl_player_id";
+  externalIdKind: "mlb_person_id" | "bdl_player_id" | "espn_resolved";
   fullName: string | null;
 }
 

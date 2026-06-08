@@ -79,6 +79,14 @@ import {
   pickPrimaryCandidate,
 } from "../../lib/services/starterResolver";
 import {
+  buildGameKey,
+  fetchEspnProbablePitchers,
+  isEspnSecondarySourceEnabled,
+  mapEspnPitcherToPlayer,
+  type EspnMappingStatus,
+  type EspnProbablesForGame,
+} from "../../lib/services/espnProbablePitcherService";
+import {
   readBoolFlag,
   readNumberFlag,
   readStringFlag,
@@ -117,6 +125,9 @@ type ResolutionKind =
   | "provider_ids_mlb_stats"
   | "mlb_person_id"
   | "bdl_external_id"
+  | "espn_resolved"
+  | "espn_ambiguous"
+  | "espn_not_found"
   | "unresolved"
   | "no_candidate";
 
@@ -124,6 +135,10 @@ interface SideDecision {
   side: "home" | "away";
   mlbCandidate: ParsedStarter | null;
   bdlCandidate: ParsedStarter | null;
+  /** Phase 6B.31a — ESPN secondary candidate (pre-resolved to players.id). */
+  espnCandidate: ParsedStarter | null;
+  /** Phase 6B.31a — populated when ESPN was consulted but mapping failed. */
+  espnSkipReason: { name: string; teamId: number | null; status: Exclude<EspnMappingStatus, "matched"> } | null;
   chosenCandidate: ParsedStarter | null;
   resolvedPlayerId: number | null;
   resolution: ResolutionKind;
@@ -301,6 +316,30 @@ export type RunStarterRefreshStatus =
   | "failed"
   | "empty_slate";
 
+/**
+ * Phase 6B.31a — per-assignment audit record. One entry per
+ * planned-write side (home or away) including the source that won
+ * priority and any ESPN skip reasons for operator visibility. The
+ * orchestrator persists this in `step.details` JSONB so historical
+ * starter provenance is queryable without a schema migration.
+ */
+export type StarterAssignmentRecord = {
+  external_id: number;
+  side: "home" | "away";
+  /** What the cycle ended up doing for this side. */
+  action:
+    | "wrote"            // planned a write — used the source listed below
+    | "no_change"        // kept existing assignment (mergeStarter no-op)
+    | "preserved_existing" // existing kept because chosen candidate was unresolved
+    | "no_candidate";    // no source had a probable for this side
+  /** Source that won priority — null when action=no_candidate. */
+  source: "mlb_stats_probable" | "bdl_games" | "espn_scoreboard" | null;
+  /** Resolved players.id at decision time — null when no resolution. */
+  player_id: number | null;
+  /** ESPN-specific skip reason — null unless ESPN was consulted and skipped. */
+  espn_skip: "ambiguous" | "not_found" | null;
+};
+
 export type RunStarterRefreshResult = {
   status: RunStarterRefreshStatus;
   games_in_slate: number;
@@ -310,6 +349,8 @@ export type RunStarterRefreshResult = {
   errors: number;
   unresolved: number;
   unmatched_mlb_games: number;
+  /** Phase 6B.31a — per-side audit trail. */
+  starter_assignments: StarterAssignmentRecord[];
   message?: string;
 };
 
@@ -346,6 +387,7 @@ export async function runStarterRefreshCycle(
       errors: 1,
       unresolved: 0,
       unmatched_mlb_games: 0,
+      starter_assignments: [],
       message: `games load failed: ${gErr.message}`,
     };
   }
@@ -362,6 +404,7 @@ export async function runStarterRefreshCycle(
       errors: 0,
       unresolved: 0,
       unmatched_mlb_games: 0,
+      starter_assignments: [],
     };
   }
 
@@ -412,6 +455,20 @@ export async function runStarterRefreshCycle(
   }
   const bdlByExternalId = new Map<number, BdlSlateRecord>();
   for (const b of bdlSlate) bdlByExternalId.set(b.external_id, b);
+
+  // 4.5. Phase 6B.31a — ESPN scoreboard as TERTIARY probable-pitcher
+  // source. Only consulted later (in step 10) when both MLB Stats AND
+  // BDL returned null for a side. ESPN never overwrites higher-priority
+  // sources. Fetch failure (network, malformed JSON) yields an empty
+  // map per the espn service contract.
+  const espnEnabled = isEspnSecondarySourceEnabled();
+  let espnByGameKey: Map<string, EspnProbablesForGame> = new Map();
+  if (espnEnabled) {
+    log(`Fetching ESPN scoreboard (Phase 6B.31a secondary source)…`);
+    espnByGameKey = await fetchEspnProbablePitchers(date, { log });
+  } else {
+    log("  ESPN secondary source disabled via ESPN_SECONDARY_PROBABLE_PITCHER=false; skipping fetch.");
+  }
 
   // 5. Build CandidateDbGame list for matchScheduleGameToDbGame
   const candidates: CandidateDbGame[] = dbGames.map((g) => ({
@@ -509,6 +566,66 @@ export async function runStarterRefreshCycle(
     }
   }
 
+  // 9.5. Phase 6B.31a — Resolve ESPN candidates to players.id via
+  // strict name + team + active + is_pitcher mapping. ESPN's athlete id
+  // is NOT in our players table, so resolution goes through name match
+  // scoped to the team. Only consulted for game sides where MLB Stats
+  // AND BDL would both be null (we determine that in step 10 inside
+  // processSide). Pre-resolving here keeps the per-side decision pure.
+  type EspnSideCandidate = {
+    candidate: ParsedStarter | null;
+    skipReason: { name: string; teamId: number | null; status: Exclude<EspnMappingStatus, "matched"> } | null;
+  };
+  const espnByDbGameSide = new Map<string, { home: EspnSideCandidate; away: EspnSideCandidate }>();
+  if (espnEnabled && espnByGameKey.size > 0) {
+    for (const c of candidates) {
+      const key = c.homeAbbr !== null && c.awayAbbr !== null
+        ? buildGameKey(c.awayAbbr, c.homeAbbr)
+        : null;
+      const espnEntry = key !== null ? espnByGameKey.get(key) ?? null : null;
+      const dbGame = dbGames.find((g) => g.id === c.id)!;
+      const homeTeamId = dbGame.home_team_id;
+      const awayTeamId = dbGame.away_team_id;
+
+      async function resolveSide(
+        espnProbable: { fullName: string; espnAthleteId: number } | null,
+        teamId: number | null,
+      ): Promise<EspnSideCandidate> {
+        if (espnProbable === null || teamId === null) {
+          return { candidate: null, skipReason: null };
+        }
+        const result = await mapEspnPitcherToPlayer(supabase, espnProbable.fullName, teamId);
+        if (result.status !== "matched" || result.playerId === null) {
+          // result.status is "ambiguous" or "not_found" here; the wider
+          // `result.playerId === null` branch can also fire spuriously if
+          // status is "matched" with null playerId (impossible per the
+          // service contract, but TS doesn't see that). Default to
+          // "not_found" in that defensive case.
+          const skipStatus: Exclude<EspnMappingStatus, "matched"> =
+            result.status === "matched" ? "not_found" : result.status;
+          return {
+            candidate: null,
+            skipReason: { name: espnProbable.fullName, teamId, status: skipStatus },
+          };
+        }
+        return {
+          candidate: {
+            source: "espn_scoreboard",
+            confidence: "probable",
+            externalId: result.playerId,
+            externalIdKind: "espn_resolved",
+            fullName: espnProbable.fullName,
+          },
+          skipReason: null,
+        };
+      }
+
+      const home = await resolveSide(espnEntry?.home ?? null, homeTeamId);
+      const away = await resolveSide(espnEntry?.away ?? null, awayTeamId);
+      espnByDbGameSide.set(String(c.id), { home, away });
+    }
+  }
+
   // 10. Build per-game decisions
   const rows: PerGameRow[] = [];
   for (const c of candidates) {
@@ -548,9 +665,13 @@ export async function runStarterRefreshCycle(
       side: "home" | "away",
       existingPid: number | null,
       mlbCand: ParsedStarter | null,
-      bdlCand: ParsedStarter | null
+      bdlCand: ParsedStarter | null,
+      espnSide: EspnSideCandidate
     ): SideDecision {
-      const chosen = pickPrimaryCandidate(mlbCand, bdlCand);
+      // Phase 6B.31a — pickPrimaryCandidate is variadic and picks the
+      // first non-null in order. MLB Stats > BDL > ESPN. ESPN is only
+      // selected when both MLB Stats and BDL produced null candidates.
+      const chosen = pickPrimaryCandidate(mlbCand, bdlCand, espnSide.candidate);
       const existing: ExistingStarter = {
         playerId: existingPid,
         source: null,
@@ -561,9 +682,13 @@ export async function runStarterRefreshCycle(
           side,
           mlbCandidate: mlbCand,
           bdlCandidate: bdlCand,
+          espnCandidate: null,
+          espnSkipReason: espnSide.skipReason,
           chosenCandidate: null,
           resolvedPlayerId: null,
-          resolution: "no_candidate",
+          resolution: espnSide.skipReason !== null
+            ? (espnSide.skipReason.status === "ambiguous" ? "espn_ambiguous" : "espn_not_found")
+            : "no_candidate",
           existing,
           decision: mergeStarter(existing, null),
         };
@@ -577,12 +702,18 @@ export async function runStarterRefreshCycle(
           resolvedPid = pid;
           resolution = playerMlbResolution.get(chosen.externalId) ?? "mlb_person_id";
         }
-      } else {
+      } else if (chosen.externalIdKind === "bdl_player_id") {
         const pid = playerByBdlId.get(chosen.externalId);
         if (pid !== undefined) {
           resolvedPid = pid;
           resolution = "bdl_external_id";
         }
+      } else if (chosen.externalIdKind === "espn_resolved") {
+        // ESPN candidates are pre-resolved by espnProbablePitcherService —
+        // the externalId IS the players.id (strict name + team + active +
+        // pitcher match returned exactly 1 row upstream).
+        resolvedPid = chosen.externalId;
+        resolution = "espn_resolved";
       }
       if (resolvedPid === null) {
         // Cannot merge without an internal id — record as unresolved.
@@ -593,6 +724,8 @@ export async function runStarterRefreshCycle(
           side,
           mlbCandidate: mlbCand,
           bdlCandidate: bdlCand,
+          espnCandidate: espnSide.candidate,
+          espnSkipReason: espnSide.skipReason,
           chosenCandidate: chosen,
           resolvedPlayerId: null,
           resolution,
@@ -609,6 +742,8 @@ export async function runStarterRefreshCycle(
         side,
         mlbCandidate: mlbCand,
         bdlCandidate: bdlCand,
+        espnCandidate: espnSide.candidate,
+        espnSkipReason: espnSide.skipReason,
         chosenCandidate: chosen,
         resolvedPlayerId: resolvedPid,
         resolution,
@@ -617,14 +752,16 @@ export async function runStarterRefreshCycle(
       };
     }
 
+    const espnForGame = espnByDbGameSide.get(String(c.id))
+      ?? { home: { candidate: null, skipReason: null }, away: { candidate: null, skipReason: null } };
     rows.push({
       dbGame,
       homeTeamAbbr: c.homeAbbr,
       awayTeamAbbr: c.awayAbbr,
       mlbMatched: mlbMatch !== undefined,
       bdlMatched: bdlMatch !== null,
-      home: processSide("home", dbGame.home_pitcher_id, mlbHome, bdlHome),
-      away: processSide("away", dbGame.away_pitcher_id, mlbAway, bdlAway),
+      home: processSide("home", dbGame.home_pitcher_id, mlbHome, bdlHome, espnForGame.home),
+      away: processSide("away", dbGame.away_pitcher_id, mlbAway, bdlAway, espnForGame.away),
     });
   }
 
@@ -700,7 +837,60 @@ export async function runStarterRefreshCycle(
       );
     }
   }
+
+  // Phase 6B.31a — log ESPN skip reasons (operator visibility for the
+  // secondary-source coverage gap class).
+  const espnSkips: Array<{ ext: number; side: "home" | "away"; name: string; status: string }> = [];
+  for (const r of rows) {
+    if (r.home.espnSkipReason !== null) espnSkips.push({ ext: r.dbGame.external_id, side: "home", name: r.home.espnSkipReason.name, status: r.home.espnSkipReason.status });
+    if (r.away.espnSkipReason !== null) espnSkips.push({ ext: r.dbGame.external_id, side: "away", name: r.away.espnSkipReason.name, status: r.away.espnSkipReason.status });
+  }
+  if (espnSkips.length > 0) {
+    log("");
+    log(`  ESPN secondary-source skips (mapping failed): ${espnSkips.length}`);
+    for (const s of espnSkips) {
+      log(`    ext=${s.ext} side=${s.side} espn_name="${s.name}" status=${s.status}`);
+    }
+  }
   log("");
+
+  // 12.5. Phase 6B.31a — Build the structured starter_assignments[]
+  // audit trail. One entry per side, per game. Includes the source that
+  // won priority (or null for no_candidate) and any ESPN skip reasons.
+  // The orchestrator persists this in step.details JSONB.
+  function buildAssignment(
+    side: "home" | "away",
+    dec: SideDecision,
+    extId: number,
+  ): StarterAssignmentRecord {
+    let action: StarterAssignmentRecord["action"];
+    if (dec.decision.kind === "write") action = "wrote";
+    else if (dec.decision.kind === "no_change") action = "no_change";
+    else if (dec.chosenCandidate !== null && dec.resolvedPlayerId === null) action = "preserved_existing";
+    else action = "no_candidate";
+    let source: StarterAssignmentRecord["source"] = null;
+    if (dec.chosenCandidate !== null) {
+      const s = dec.chosenCandidate.source;
+      source = s === "mlb_stats_probable" || s === "bdl_games" || s === "espn_scoreboard" ? s : null;
+    }
+    const espnSkip: StarterAssignmentRecord["espn_skip"] =
+      dec.espnSkipReason !== null ? dec.espnSkipReason.status : null;
+    return {
+      external_id: extId,
+      side,
+      action,
+      source,
+      player_id:
+        dec.decision.kind === "write"
+          ? dec.decision.value.playerId
+          : dec.resolvedPlayerId,
+      espn_skip: espnSkip,
+    };
+  }
+  const starterAssignments: StarterAssignmentRecord[] = rows.flatMap((r) => [
+    buildAssignment("home", r.home, r.dbGame.external_id),
+    buildAssignment("away", r.away, r.dbGame.external_id),
+  ]);
 
   // 13. Build planned-game-writes list. A game appears here when at least
   // one side decided to write. Sides whose decision is no_change are
@@ -740,6 +930,7 @@ export async function runStarterRefreshCycle(
       errors: 0,
       unresolved,
       unmatched_mlb_games: mlbUnmatched.length,
+      starter_assignments: starterAssignments,
     };
   }
 
@@ -754,6 +945,7 @@ export async function runStarterRefreshCycle(
       errors: 0,
       unresolved,
       unmatched_mlb_games: mlbUnmatched.length,
+      starter_assignments: starterAssignments,
     };
   }
 
@@ -771,6 +963,7 @@ export async function runStarterRefreshCycle(
       errors: 0,
       unresolved,
       unmatched_mlb_games: mlbUnmatched.length,
+      starter_assignments: starterAssignments,
     };
   }
 
@@ -833,6 +1026,7 @@ export async function runStarterRefreshCycle(
     errors: gamesErrored,
     unresolved,
     unmatched_mlb_games: mlbUnmatched.length,
+    starter_assignments: starterAssignments,
   };
 }
 

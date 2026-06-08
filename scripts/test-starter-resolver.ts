@@ -595,6 +595,35 @@ async function testPick_VariadicOrder() {
   check("third non-null wins, not the fourth", r === stubBdl);
 }
 
+// Phase 6B.31a — ESPN as third-priority source.
+const stubEspn = {
+  source: "espn_scoreboard" as const,
+  confidence: "probable" as const,
+  externalId: 13773, // ESPN candidate is pre-resolved to players.id
+  externalIdKind: "espn_resolved" as const,
+  fullName: "Chris Bassitt",
+};
+
+async function testPick_EspnTertiary() {
+  section("pickPrimaryCandidate — Phase 6B.31a: ESPN is tertiary (MLB > BDL > ESPN)");
+  check(
+    "MLB present, BDL+ESPN both available → MLB wins",
+    pickPrimaryCandidate(stubMlb, stubBdl, stubEspn) === stubMlb
+  );
+  check(
+    "MLB null, BDL present, ESPN present → BDL wins (ESPN stays tertiary)",
+    pickPrimaryCandidate(null, stubBdl, stubEspn) === stubBdl
+  );
+  check(
+    "MLB null, BDL null, ESPN present → ESPN selected (the SEA@BAL case)",
+    pickPrimaryCandidate(null, null, stubEspn) === stubEspn
+  );
+  check(
+    "All four sources null → null returned",
+    pickPrimaryCandidate(null, null, null, null) === null
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // mlbStatsTeamIdToAbbr + MLB_STATS_TEAM_ID_TO_ABBR
 // ─────────────────────────────────────────────────────────────────────
@@ -694,6 +723,7 @@ async function main() {
   await testPick_FallsBack();
   await testPick_AllNullYieldsNull();
   await testPick_VariadicOrder();
+  await testPick_EspnTertiary();
 
   await testMlbTeamIdToAbbr();
 
