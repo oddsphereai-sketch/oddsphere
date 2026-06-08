@@ -20,6 +20,12 @@ export const PER_STEP_ENV_VARS = {
   starter: "STARTER_DB_WRITES_ENABLED",
   pitcher: "PLAYER_INGEST_DB_WRITES_ENABLED",
   season: "SEASON_PITCHING_DB_WRITES_ENABLED",
+  // Phase 6B.31b — S6 first-inning splits refresh. Reuses the existing
+  // operator env flag (same flag the manual backfill script consumes),
+  // so flipping FIRST_INNING_DB_WRITES_ENABLED in one place gates both
+  // the standalone CLI and the slate-cycle step. Writer scope is
+  // limited to the six first_inning_* columns + updated_at.
+  first_inning: "FIRST_INNING_DB_WRITES_ENABLED",
   // Push 3B-6 — S5.6 readiness repair: BDL player backfill + retry
   // weather/lineup/season-pitching for games still short of feature
   // coverage after the upstream steps. Per-step gate joins the

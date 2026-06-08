@@ -62,6 +62,7 @@ import {
 import { runStarterRefreshCycle } from "../../scripts/operator/refresh-starters";
 import { runMissingPitcherCycle } from "../../scripts/operator/ingest-missing-pitchers";
 import { runSeasonPitchingCycle } from "../../scripts/operator/backfill-season-pitching-stats";
+import { runFirstInningCycle } from "../../scripts/operator/backfill-first-inning-stats";
 // Push 3B-6 — model readiness audit + repair (in-cycle guardrail).
 import { auditMlbModelReadiness, repairMlbModelReadiness } from "./modelReadinessService";
 import { loadGameIdMap } from "./_idMaps";
@@ -126,6 +127,14 @@ export type AutomationStepName =
   | "s3_starter_refresh_first"
   | "s4_missing_pitcher_ingest"
   | "s5_season_pitching"
+  // Phase 6B.31b — first-inning splits refresh for slate probable
+  // starters. Reuses the same operator helper as the standalone
+  // backfill CLI. Writer is scoped to first_inning_* columns only
+  // (defense-in-depth in the writer + payload). Runs AFTER S5 (paired
+  // with season-pitching since both write to player_season_stats with
+  // disjoint column sets) and BEFORE S5.5 readiness audit (so the
+  // audit sees the freshest first-inning state).
+  | "s6_first_inning_refresh"
   // Push 3B-6 — readiness guardrail steps. Audit + repair + re-audit
   // run AFTER S5 (so pitcher stats are present) and BEFORE S7 (so
   // lines refresh sees the repaired starters/lineups/weather). Repair
@@ -664,6 +673,38 @@ export async function runSlateCycleAutomated(opts: {
         errors: res.errors,
       },
       reason: seasonReasonFromStatus(res.status, res, writeMode),
+    };
+  }));
+
+  // ── S6. First-inning splits refresh (Phase 6B.31b) ───────────────────
+  //
+  // Refreshes player_season_stats.first_inning_* for every slate
+  // probable starter via MLB Stats API `statSplits&sitCodes=i01`.
+  // Writer is scoped to first_inning_* columns only — pitching_* and
+  // batting_* are NEVER included in the payload (defense-in-depth in
+  // firstInningStatsWriter + nulled-cleanup guard). Per-pitcher
+  // failures are isolated in the helper and counted; the step
+  // surfaces aggregate counts but never throws (the runStep catch
+  // is a defensive backstop).
+  steps.push(await runStep("s6_first_inning_refresh", effectiveWriteMode.first_inning, "first_inning", async (writeMode) => {
+    const res = await runFirstInningCycle({
+      sport: opts.sport,
+      slateDate: opts.date,
+      writeMode,
+      log: () => undefined,
+    });
+    return {
+      details: {
+        status: res.status,
+        planned_writes: res.planned_writes,
+        rows_written: res.rows_written,
+        rows_dry_run: res.rows_dry_run,
+        skipped_nulled: res.skipped_nulled,
+        skipped_missing_dob: res.skipped_missing_dob,
+        errors: res.errors,
+        mlb_api_calls: res.mlb_api_calls,
+      },
+      reason: firstInningReasonFromStatus(res.status, res, writeMode),
     };
   }));
 
@@ -1544,6 +1585,24 @@ function seasonReasonFromStatus(
     return `dry-run; would write ${res.rows_dry_run ?? 0} row(s) (${res.planned_inserts ?? 0} INSERT + ${res.planned_updates ?? 0} UPDATE)`;
   }
   if (status === "no_changes") return "every slate starter already has a fresh season row";
+  if (status === "empty_slate") return "no slate starters resolved";
+  if (status === "cancelled") return "cancelled (confirm returned false)";
+  if (status === "failed") return `failed: ${res.message ?? "unknown"}`;
+  return status;
+}
+
+function firstInningReasonFromStatus(
+  status: string,
+  res: { planned_writes?: number; rows_written?: number; rows_dry_run?: number; errors?: number; skipped_nulled?: number; skipped_missing_dob?: number; mlb_api_calls?: number; message?: string },
+  _writeMode: boolean
+): string {
+  if (status === "wrote") {
+    return `refreshed ${res.rows_written ?? 0} first-inning row(s); errors=${res.errors ?? 0}; api_calls=${res.mlb_api_calls ?? 0}`;
+  }
+  if (status === "dry_run") {
+    return `dry-run; would refresh ${res.rows_dry_run ?? 0} first-inning row(s); api_calls=${res.mlb_api_calls ?? 0}`;
+  }
+  if (status === "no_changes") return "no slate starters with usable FI data";
   if (status === "empty_slate") return "no slate starters resolved";
   if (status === "cancelled") return "cancelled (confirm returned false)";
   if (status === "failed") return `failed: ${res.message ?? "unknown"}`;

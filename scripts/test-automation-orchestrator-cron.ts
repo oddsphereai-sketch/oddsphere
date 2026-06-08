@@ -68,6 +68,8 @@ async function main() {
       STARTER_DB_WRITES_ENABLED: "true",
       PLAYER_INGEST_DB_WRITES_ENABLED: "true",
       SEASON_PITCHING_DB_WRITES_ENABLED: "true",
+      FIRST_INNING_DB_WRITES_ENABLED: "true",
+      MLB_MODEL_READINESS_REPAIR_DB_WRITES_ENABLED: "true",
       LINES_DB_WRITES_ENABLED: "true",
       SHARP_SIGNALS_DB_WRITES_ENABLED: "true",
       AUTOMODEL_DB_WRITES_ENABLED: "true",
@@ -138,9 +140,19 @@ async function main() {
       PER_STEP_ENV_VARS.lines === "LINES_DB_WRITES_ENABLED");
     check("PER_STEP_ENV_VARS.automodel = AUTOMODEL_DB_WRITES_ENABLED",
       PER_STEP_ENV_VARS.automodel === "AUTOMODEL_DB_WRITES_ENABLED");
-    // 7 per-step gates expected
+    // 9 per-step gates expected: slate, starter, pitcher, season,
+    // first_inning (Phase 6B.31b), readiness (Push 3B-6), lines,
+    // signals, automodel.
     const keys = Object.keys(PER_STEP_ENV_VARS);
-    check("7 per-step env vars defined", keys.length === 7);
+    check("9 per-step env vars defined", keys.length === 9);
+    check(
+      "PER_STEP_ENV_VARS.first_inning = FIRST_INNING_DB_WRITES_ENABLED",
+      PER_STEP_ENV_VARS.first_inning === "FIRST_INNING_DB_WRITES_ENABLED"
+    );
+    check(
+      "PER_STEP_ENV_VARS.readiness = MLB_MODEL_READINESS_REPAIR_DB_WRITES_ENABLED",
+      PER_STEP_ENV_VARS.readiness === "MLB_MODEL_READINESS_REPAIR_DB_WRITES_ENABLED"
+    );
     check("expected keys present",
       ["slate", "starter", "pitcher", "season", "lines", "signals", "automodel"]
         .every((k) => keys.includes(k))
