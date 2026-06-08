@@ -1258,12 +1258,28 @@ function ConfidenceVsMarketStrip({
 }) {
   if (marketData.held) return null;
 
-  // Use final calibrated recommendation confidence as the user-facing
-  // number. Toss-Up / Held / no-pick → null → strip hides (intentional;
-  // those states have no actionable confidence to compare against the
-  // market).
+  // Phase 6B.29 — use model probability (matches Quick Read "Model Prob
+  // NN%") as the user-facing number. Pre-6B.29 this read
+  // recommendationConfidence, which is a 0-75 actionability INDEX
+  // (capped by data tier + play grade), not a probability. For OU
+  // markets that index is derived from run-delta — small deltas
+  // produced rec_conf=25 even when the model genuinely liked the
+  // pick (e.g. CIN@SD Under: model prob 56%, no-vig 50%, but the
+  // strip displayed "25 play confidence" vs "50% market" and Edge
+  // "-25.0pp" — meaningless because the operands were on different
+  // scales). modelTrustPct (= model_prob × 100) is a probability,
+  // directly comparable to the no-vig marketImpliedPct.
+  //
+  // recommendationConfidence still drives the separate "Rec" pill
+  // and the Top Available Angles sort — unchanged. This is a
+  // display-only correction to the Confidence vs Market comparison
+  // panel. No tracking / model / calibration / grading impact.
+  //
+  // When modelTrustPct is null (rare: model probability not surfaced
+  // for the market) the strip hides entirely rather than fall back
+  // to recommendationConfidence — keeps the comparison honest.
   const confidencePct =
-    marketData.recommendationConfidence ?? null;
+    marketData.modelTrustPct ?? null;
   if (confidencePct === null) return null;
 
   const marketPct = marketData.marketImpliedPct;
@@ -1344,9 +1360,9 @@ function ConfidenceVsMarketStrip({
       <div className="grid grid-cols-[88px_1fr] gap-y-1 gap-x-2 items-baseline">
         <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Confidence</span>
         <span className="text-[12.5px] tabular-nums text-gray-200 font-bold">
-          {Math.round(confidencePct)}
+          {Math.round(confidencePct)}%
           <span className="ml-2 text-[9.5px] font-normal text-gray-500 normal-case tracking-normal">
-            play confidence
+            model prob
           </span>
         </span>
 
@@ -1366,9 +1382,9 @@ function ConfidenceVsMarketStrip({
             <span className={`text-[12.5px] tabular-nums font-bold ${gapColor}`}>
               {Math.abs(edge!) < 0.5
                 ? "No edge"
-                : `${edge! > 0 ? "+" : ""}${edge!.toFixed(1)} pt`}
+                : `${edge! > 0 ? "+" : ""}${edge!.toFixed(1)} pp`}
               <span className="ml-2 text-[9.5px] font-normal text-gray-500 normal-case tracking-normal">
-                confidence vs no-vig market
+                model prob vs no-vig market
               </span>
             </span>
           </>
