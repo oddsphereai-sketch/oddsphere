@@ -62,6 +62,13 @@ export function readPerStepGates(env: AutomationEnv): Record<PerStepKey, boolean
  * Resolve the effective write mode for a single step. Three conditions
  * MUST all hold for a write to fire: master gate enabled, per-step gate
  * enabled, no blocking upstream condition.
+ *
+ * @deprecated Phase 6B.31c — superseded by computeEffectiveWriteModeV2,
+ * which consults a per-step provider dependency list instead of a single
+ * coarse `upstreamBlocked` boolean. Old callers still work, but the
+ * orchestrator now uses V2 so SharpAPI EV scarcity doesn't falsely block
+ * MLB-Stats-only steps (S5 season-pitching, S6 first-inning). Kept here
+ * for back-compat tests + any external operator scripts that import it.
  */
 export function computeEffectiveWriteMode(opts: {
   orchestratorGate: boolean;
@@ -71,6 +78,163 @@ export function computeEffectiveWriteMode(opts: {
   if (opts.upstreamBlocked) return false;
   if (!opts.orchestratorGate) return false;
   if (!opts.perStepGate) return false;
+  return true;
+}
+
+// ─── Phase 6B.31c — Per-step provider-dependency gates ──────────────────
+//
+// Previously the orchestrator computed ONE `upstreamBlocked` boolean from
+// a coarse OR of providerMode / reconciliation / G1 / G3 gates and
+// cascaded it to every step. This conflated unrelated provider failures
+// (e.g. `/opportunities/ev` shrinking when EV opportunities close) with
+// "the whole slate is unsafe to write", which incorrectly blocked steps
+// that don't read from SharpAPI EV at all (S5 season pitching, S6 first
+// inning — both source from MLB Stats only).
+//
+// V2 splits the cascade by data source:
+//   • Each gate signals a specific provider's health
+//   • Each step declares which providers it actually depends on
+//   • A step is blocked only when one of its required providers is unhealthy
+//
+// This preserves fail-closed safety where it belongs (S7 lines truly need
+// SharpAPI odds; M2 needs lines + readiness) but lets MLB-Stats-only
+// steps run normally when only SharpAPI EV scarcity has fired upstream.
+
+/**
+ * Provider data sources that orchestrator gates can signal about. New
+ * providers can be added without changing the V2 helper signature —
+ * callers just extend their per-step deps list.
+ */
+export type ProviderKind =
+  /** BDL `/games` slate for the day. Signaled by G1 (min game count), G3 (in-progress). */
+  | "bdl_slate"
+  /**
+   * SharpAPI `/opportunities/ev` — POSITIVE-EV opportunity list. Naturally
+   * sparse outside morning windows; sparse ≠ unhealthy slate. Signaled
+   * by providerDateAlignment + slateReconciliation gates (which both use
+   * this endpoint as their SharpAPI-side input).
+   */
+  | "sharpapi_ev_opportunities"
+  /**
+   * SharpAPI `/odds` — full odds/lines coverage per book per market.
+   * Distinct from EV opportunities. Currently signaled implicitly via
+   * `lines` step itself running; no separate pre-flight gate today.
+   * Reserved for future when we add an odds-coverage canary.
+   */
+  | "sharpapi_odds_lines"
+  /**
+   * SharpAPI `/events` — raw slate events feed (includes player props,
+   * incomplete rows). Not used as primary canonical source today; reserved
+   * if we ever build a filtered events canary.
+   */
+  | "sharpapi_events"
+  /**
+   * MLB Stats API (public). Used by season-pitching + first-inning + AI
+   * starter-stats backfill. No pre-flight gate today; treated as `ok`
+   * unless a step's own run reports an error (per-step counters).
+   */
+  | "mlb_stats"
+  /**
+   * ESPN public scoreboard / probable-pitcher tertiary source.
+   * No pre-flight gate today.
+   */
+  | "espn_secondary";
+
+/**
+ * Health status of a single provider. `ok` = use it. `warn` = noisy but
+ * usable. `fail_closed` = a step that requires this provider must NOT
+ * write.
+ */
+export type ProviderHealthStatus = "ok" | "warn" | "fail_closed";
+
+export type ProviderHealth = Record<ProviderKind, ProviderHealthStatus>;
+
+/** Default healthy state — every provider `ok`. Callers override per gate. */
+export function defaultProviderHealth(): ProviderHealth {
+  return {
+    bdl_slate: "ok",
+    sharpapi_ev_opportunities: "ok",
+    sharpapi_odds_lines: "ok",
+    sharpapi_events: "ok",
+    mlb_stats: "ok",
+    espn_secondary: "ok",
+  };
+}
+
+/**
+ * Per-step provider dependency map. A step is blocked when ANY provider
+ * in its `requires` list reports `fail_closed`. Each entry documents WHY
+ * the dependency is what it is — important for safe maintenance, since
+ * the wrong dependency list re-introduces the cascade bug or breaks
+ * fail-closed safety.
+ *
+ * Conservative defaults:
+ *   • If a step writes to a DB table fed by Provider X, X is required.
+ *   • SharpAPI EV opportunities is ONLY required when the step actually
+ *     consumes EV-derived data (sharp signals). Pure odds consumers list
+ *     `sharpapi_odds_lines` instead.
+ *   • Steps that only read MLB Stats list `mlb_stats` and nothing else.
+ *   • Steps that only need the BDL slate to find players to act on list
+ *     `bdl_slate` — but in practice they read DB-resident games, not the
+ *     live BDL feed, so they can succeed even if BDL is currently down.
+ *     We list `bdl_slate` anyway because a sustained BDL outage is the
+ *     scenario where the slate IS structurally broken.
+ */
+export const STEP_PROVIDER_DEPS: Record<PerStepKey, readonly ProviderKind[]> = {
+  // S1 — BDL slate ingest writes to `games` table from BDL.
+  slate: ["bdl_slate"],
+  // S3 / M1 — Starter refresh consults BDL slate + ESPN secondary fallback.
+  starter: ["bdl_slate", "espn_secondary"],
+  // S4 — Missing-pitcher ingest creates `players` rows from BDL + MLB Stats lookups.
+  pitcher: ["bdl_slate", "mlb_stats"],
+  // S5 — Season pitching stats from MLB Stats API. Does NOT depend on SharpAPI EV.
+  season: ["mlb_stats"],
+  // S6 — First-inning splits from MLB Stats API. Does NOT depend on SharpAPI EV.
+  first_inning: ["mlb_stats"],
+  // S5.6 — Readiness repair delegates to BDL backfill + season-pitching + lineup + weather.
+  // Does NOT depend on SharpAPI.
+  readiness: ["bdl_slate", "mlb_stats", "espn_secondary"],
+  // S7 — Lines refresh reads SharpAPI ODDS feed (not /opportunities/ev).
+  // Does NOT depend on `sharpapi_ev_opportunities`. This is the key fix:
+  // sparse EV opportunities should not block real odds coverage.
+  lines: ["sharpapi_odds_lines"],
+  // S8 — Sharp signals are EV-derived. Sparse EV → signals legitimately sparse;
+  // step still runs (writes 0) rather than fail. Listed here for transparency.
+  signals: ["sharpapi_ev_opportunities"],
+  // M2 — Automodel consumes lines + MLB Stats + slate. Doesn't directly read
+  // SharpAPI EV (signals are optional inputs). Listed deps reflect the
+  // hard requirements.
+  automodel: ["sharpapi_odds_lines", "mlb_stats", "bdl_slate"],
+};
+
+/**
+ * V2: resolve effective write mode using per-step provider dependencies.
+ *
+ *   • orchestratorGate off  → false (master kill-switch, e.g. running locally)
+ *   • perStepGate off       → false (env flag not set)
+ *   • masterProviderBlock   → false (e.g. providerMode audit failed:
+ *                                    provider is in mock mode, no real data)
+ *   • Any required provider is `fail_closed` → false
+ *   • Otherwise              → true
+ *
+ * `masterProviderBlock` is reserved for cross-cutting concerns that
+ * should kill writes regardless of which provider the step needs — e.g.
+ * provider-mode audit failure (none of the providers are wired up real_api),
+ * or a master-kill flag. Per-provider health goes in `providerHealth`.
+ */
+export function computeEffectiveWriteModeV2(opts: {
+  orchestratorGate: boolean;
+  perStepGate: boolean;
+  masterProviderBlock: boolean;
+  stepDependencies: readonly ProviderKind[];
+  providerHealth: ProviderHealth;
+}): boolean {
+  if (!opts.orchestratorGate) return false;
+  if (!opts.perStepGate) return false;
+  if (opts.masterProviderBlock) return false;
+  for (const dep of opts.stepDependencies) {
+    if (opts.providerHealth[dep] === "fail_closed") return false;
+  }
   return true;
 }
 

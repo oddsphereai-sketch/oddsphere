@@ -95,22 +95,35 @@ import type { Sport } from "../types/domain/Sport";
 export {
   ORCHESTRATOR_GATE_ENV,
   PER_STEP_ENV_VARS,
+  STEP_PROVIDER_DEPS,
   isOrchestratorGateEnabled,
   readPerStepGates,
   computeEffectiveWriteMode,
+  computeEffectiveWriteModeV2,
+  defaultProviderHealth,
   buildOrchestratorBlockedReport,
   shouldDemoteAlignmentForGate,
 } from "./automationOrchestratorGates";
-export type { AutomationEnv, PerStepKey } from "./automationOrchestratorGates";
+export type {
+  AutomationEnv,
+  PerStepKey,
+  ProviderKind,
+  ProviderHealth,
+  ProviderHealthStatus,
+} from "./automationOrchestratorGates";
 
 import {
   PER_STEP_ENV_VARS,
+  STEP_PROVIDER_DEPS,
   isOrchestratorGateEnabled,
   readPerStepGates,
   computeEffectiveWriteMode,
+  computeEffectiveWriteModeV2,
+  defaultProviderHealth,
   shouldDemoteAlignmentForGate,
   type AutomationEnv,
   type PerStepKey,
+  type ProviderHealth,
 } from "./automationOrchestratorGates";
 
 // ─── Step + report types ─────────────────────────────────────────────────
@@ -586,16 +599,53 @@ export async function runSlateCycleAutomated(opts: {
   const g1Blocking = g1Result !== null && g1Result.status === "fail_closed";
   const g3Blocking = g3Result !== null && g3Result.status === "fail_closed";
   const g3SlateWideBlocking = g3Blocking && !intradayMode;
+  // Retained for the top-level report shape (back-compat with the cron
+  // route's response envelope) and for the m2Blocked composite below.
+  // The per-step `effectiveWriteMode` map is now computed via V2 from
+  // `providerHealth`, NOT from this single boolean — see Phase 6B.31c.
   const dataLayerBlocked =
     providerModeBlocking || reconciliationBlocking || g1Blocking || g3SlateWideBlocking;
 
-  // ── Helper: per-step effective write mode ─────────────────────────────
+  // ── Phase 6B.31c — Per-step provider-dependency gates ───────────────
+  //
+  // Each upstream gate signals a SPECIFIC provider's health. Steps then
+  // consult only the providers they actually depend on. This stops
+  // SharpAPI EV scarcity (a natural pattern outside morning windows)
+  // from falsely blocking MLB-Stats-only steps like S5 season-pitching
+  // and S6 first-inning refresh.
+  //
+  // Mapping rationale (each line = one gate → one provider signal):
+  //   • reconciliationBlocking — `/opportunities/ev`-based gate; signals
+  //     `sharpapi_ev_opportunities` only. Affects S8 sharp-signals
+  //     (which actually consume EV data) but NOT S5/S6/S7.
+  //   • g1Blocking / g3SlateWideBlocking — BDL-based gates; signal
+  //     `bdl_slate`. Affects S1/S3/S4/M2 etc., but NOT S5/S6 (which
+  //     consume MLB Stats only). If BDL truly has no games today, S5/S6
+  //     will trivially find 0 starters to act on — no false write.
+  //   • providerModeBlocking — master cross-cutting concern: if any
+  //     required provider is in mock mode, NO write step should fire.
+  //     Passed as `masterProviderBlock` to V2 (kills all writes).
+  //
+  // NOTE: there is no pre-flight gate for `sharpapi_odds_lines` today.
+  // S7 lines refresh "self-canaries" — if /odds returns empty, it
+  // writes 0 rows. A future canary can populate that field; for now
+  // it stays `ok` and the step's own error counter is the signal.
+  const providerHealth: ProviderHealth = defaultProviderHealth();
+  if (reconciliationBlocking) {
+    providerHealth.sharpapi_ev_opportunities = "fail_closed";
+  }
+  if (g1Blocking || g3SlateWideBlocking) {
+    providerHealth.bdl_slate = "fail_closed";
+  }
+
   const effectiveWriteMode = {} as Record<PerStepKey, boolean>;
   for (const k of Object.keys(PER_STEP_ENV_VARS) as PerStepKey[]) {
-    effectiveWriteMode[k] = computeEffectiveWriteMode({
+    effectiveWriteMode[k] = computeEffectiveWriteModeV2({
       orchestratorGate,
       perStepGate: perStepGates[k],
-      upstreamBlocked: dataLayerBlocked,
+      masterProviderBlock: providerModeBlocking,
+      stepDependencies: STEP_PROVIDER_DEPS[k],
+      providerHealth,
     });
   }
 
@@ -1226,7 +1276,17 @@ export async function runSlateCycleAutomated(opts: {
   // (Phase 4.2.B) — locked games excluded via DB query. Union'd with
   // the caller-supplied `excludeGameExternalIds` set so both flavors
   // of exclusion flow through the same filter pipeline.
-  const m2Blocked = gateBlocking || dataLayerBlocked || g2Blocking;
+  // Phase 6B.31c — narrower m2Blocked composite. The provider-dependency
+  // checks (sharpapi_odds_lines, mlb_stats, bdl_slate, providerMode) are
+  // already enforced via effectiveWriteMode.automodel (V2 path). What's
+  // left here are MODEL-SPECIFIC gates that V2 doesn't know about:
+  //   • gateBlocking  — R-17 automation gate (per-game stale lines,
+  //                     missing ML/total/starter coverage)
+  //   • g2Blocking    — R-19 G2 (starter coverage too low to model)
+  // Notably NOT included: reconciliationBlocking (EV-based, doesn't
+  // affect model). Provider-mode / G1 / G3 are inherited from V2 via
+  // effectiveWriteMode.automodel, no double-counting needed.
+  const m2Blocked = gateBlocking || g2Blocking;
   steps.push(await runStep(
     "m2_automodel",
     !m2Blocked && effectiveWriteMode.automodel,
