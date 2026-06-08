@@ -91,7 +91,8 @@ async function main() {
     check("total = 0", r.totalGames === 0);
     check("coverage_pct = 0", r.coveragePct === 0);
     check("reason explains deferral", r.reason.includes("deferred"));
-    check("deferred → excluded_external_ids = []", r.excluded_external_ids.length === 0);
+    check("deferred → starter_warning_external_ids = []", r.starter_warning_external_ids.length === 0);
+    check("deferred → m2_excluded_external_ids = []", r.m2_excluded_external_ids.length === 0);
     check("deferred → held_reasons = {}", Object.keys(r.held_reasons).length === 0);
   }
   {
@@ -107,12 +108,15 @@ async function main() {
     check("gamesWithBothStarters = 3", r.gamesWithBothStarters === 3);
     check("coveragePct = 100", r.coveragePct === 100);
     check("threshold = 90 (DEFAULT_MIN_STARTER_COVERAGE_PCT)", r.threshold === 90);
-    check("3/3 → excluded_external_ids = []", r.excluded_external_ids.length === 0);
+    check("3/3 → starter_warning_external_ids = []", r.starter_warning_external_ids.length === 0);
+    check("3/3 → m2_excluded_external_ids = []", r.m2_excluded_external_ids.length === 0);
     check("3/3 → held_reasons = {}", Object.keys(r.held_reasons).length === 0);
   }
   {
-    // R-19 Phase 5g.4 — Mixed at-threshold case. 9 of 10 complete = 90%
-    // = pass overall; the 1 missing-both game is STILL excluded per-game.
+    // Phase 6B.30C — missing_both case at "ok" status. 9 of 10 complete
+    // = 90%. The 1 missing-BOTH game is in BOTH lists: warning (for
+    // operator visibility) AND m2_excluded (V2.2 has no fallback for
+    // zero starter info).
     const games = Array.from({ length: 10 }, (_, i) => ({
       external_id: 100 + i,
       home_pitcher_id: i === 9 ? null : i,
@@ -122,17 +126,17 @@ async function main() {
     check("9/10 games complete (90%) → ok (above threshold)", r.status === "ok");
     check("coveragePct = 90", r.coveragePct === 90);
     check("gamesMissingBoth = 1", r.gamesMissingBoth === 1);
-    // Phase 5g.4 — the 1 missing game STILL gets excluded per-game even
-    // at "ok" status (unconditional per-game hold).
-    check("9/10 ok → excluded_external_ids contains the 1 missing game", r.excluded_external_ids.length === 1);
-    check("excluded id = 109 (the 10th game, missing both)", r.excluded_external_ids[0] === 109);
+    check("9/10 ok + missing_both → starter_warning_external_ids has 1 game", r.starter_warning_external_ids.length === 1);
+    check("9/10 ok + missing_both → m2_excluded_external_ids has 1 game", r.m2_excluded_external_ids.length === 1);
+    check("warning id = 109", r.starter_warning_external_ids[0] === 109);
+    check("m2_excluded id = 109", r.m2_excluded_external_ids[0] === 109);
     check("held_reasons[109] = missing_both", r.held_reasons[109] === "missing_both");
   }
   {
-    // R-19 Phase 5g.4 — Today's 2026-06-06 pattern. 13/15 = 86.7% is
-    // BELOW the 90% threshold but ABOVE the 50% catastrophic threshold
-    // AND missingBoth=0. Result: partial_ok (per-game exclusion, slate
-    // still runs). This was the trigger incident for the patch.
+    // Phase 6B.30C — the SEA@BAL pattern (2026-06-08 trigger incident).
+    // 13/15 = 86.7%; below 90% threshold so partial_ok. All 2 missing
+    // are missing-ONE-side (missing_home). Warning list has 2 games;
+    // m2_excluded list has 0 — V2.2 emits real-data fallback for them.
     const games = Array.from({ length: 15 }, (_, i) => ({
       external_id: 5058725 + i,
       home_pitcher_id: i < 2 ? null : i,
@@ -144,16 +148,18 @@ async function main() {
     check("gamesWithBothStarters = 13", r.gamesWithBothStarters === 13);
     check("gamesMissingOne = 2", r.gamesMissingOne === 2);
     check("gamesMissingBoth = 0", r.gamesMissingBoth === 0);
-    check("partial_ok → excluded_external_ids has 2 games", r.excluded_external_ids.length === 2);
-    check("excluded ids sorted ascending", r.excluded_external_ids[0] < r.excluded_external_ids[1]);
-    check("held_reasons[first excluded] = missing_home", r.held_reasons[r.excluded_external_ids[0]] === "missing_home");
+    check("partial_ok + 2 missing_home → starter_warning has 2 games", r.starter_warning_external_ids.length === 2);
+    check("partial_ok + 0 missing_both → m2_excluded is EMPTY (Phase 6B.30C policy)", r.m2_excluded_external_ids.length === 0);
+    check("warning ids sorted ascending", r.starter_warning_external_ids[0] < r.starter_warning_external_ids[1]);
+    check("held_reasons[first warned] = missing_home", r.held_reasons[r.starter_warning_external_ids[0]] === "missing_home");
     check("reason mentions 'Partial-OK'", r.reason.includes("Partial-OK"));
-    check("reason mentions per-game exclusion", r.reason.includes("Per-game exclusion"));
+    check("reason mentions Starter warning", r.reason.includes("Starter warning"));
+    check("reason mentions M2 exclusion: 0", r.reason.includes("M2 exclusion: 0"));
   }
   {
-    // R-19 Phase 5g.4 — Just below threshold, only 1 missing-one game.
-    // 14/15 = 93.3% (above 90% so still ok) — but ALSO covers the
-    // 2026-06-05 pattern where 1 game had a missing starter.
+    // Phase 6B.30C — single missing_away at "ok" status. 14/15 = 93.3%.
+    // 1 game has missing_away. Warning list has 1; m2_excluded is
+    // EMPTY (V2.2 emits real-data fallback for single-side-missing).
     const games = Array.from({ length: 15 }, (_, i) => ({
       external_id: 200 + i,
       home_pitcher_id: i,
@@ -161,13 +167,16 @@ async function main() {
     }));
     const r = assessStarterCoverage({ sport: "mlb", games });
     check("14/15 (93.3%, 1 missing away) → ok", r.status === "ok");
-    check("ok → still excluded the 1 missing game", r.excluded_external_ids.length === 1);
-    check("excluded id = 200 (game 0)", r.excluded_external_ids[0] === 200);
+    check("ok + 1 missing_away → starter_warning has 1 game", r.starter_warning_external_ids.length === 1);
+    check("ok + 0 missing_both → m2_excluded is EMPTY (Phase 6B.30C policy)", r.m2_excluded_external_ids.length === 0);
+    check("warning id = 200 (game 0)", r.starter_warning_external_ids[0] === 200);
     check("held_reasons[200] = missing_away", r.held_reasons[200] === "missing_away");
+    check("reason notes allowed-through count", r.reason.includes("allowed through"));
   }
   {
-    // Phase 5g.4 — Catastrophic by % (below 50%).
-    // 4/10 games complete = 40% coverage → fail_closed.
+    // Phase 5g.4 / Phase 6B.30C — Catastrophic by % (below 50%).
+    // 4/10 games complete = 40% coverage → fail_closed. ALL warned
+    // games go into m2_excluded as defense-in-depth.
     const games = Array.from({ length: 10 }, (_, i) => ({
       external_id: 300 + i,
       home_pitcher_id: i < 4 ? i : null,
@@ -176,13 +185,15 @@ async function main() {
     const r = assessStarterCoverage({ sport: "mlb", games });
     check("4/10 (40% < 50% catastrophic) → fail_closed", r.status === "fail_closed");
     check("reason mentions catastrophic", r.reason.toLowerCase().includes("catastrophic"));
-    check("catastrophic → excluded_external_ids populated", r.excluded_external_ids.length === 6);
+    check("catastrophic → starter_warning populated", r.starter_warning_external_ids.length === 6);
+    check("catastrophic → m2_excluded populated (defense in depth)", r.m2_excluded_external_ids.length === 6);
+    check("catastrophic → warning equals m2_excluded", JSON.stringify(r.starter_warning_external_ids) === JSON.stringify(r.m2_excluded_external_ids));
   }
   {
-    // Phase 5g.4 — Catastrophic by gamesMissingBoth ≥ 3 even when
-    // coverage % is above 50%. Slate of 15 with 4 missing both, 1
-    // missing one, 10 complete = 66.7% coverage but 4 missing-both
-    // triggers catastrophic regardless.
+    // Phase 5g.4 / Phase 6B.30C — Catastrophic by gamesMissingBoth ≥ 3.
+    // 10/15 = 66.7% coverage; 4 missing-both triggers catastrophic.
+    // Warning list = 5 (4 missing_both + 1 missing_one); m2_excluded
+    // = 5 (defense in depth in fail_closed).
     const games = Array.from({ length: 15 }, (_, i) => {
       if (i < 4) return { external_id: 400 + i, home_pitcher_id: null, away_pitcher_id: null };
       if (i < 5) return { external_id: 400 + i, home_pitcher_id: i, away_pitcher_id: null };
@@ -192,11 +203,13 @@ async function main() {
     check("10/15 (66.7%) but 4 missing-both → fail_closed (catastrophic)", r.status === "fail_closed");
     check("coveragePct > catastrophic_pct (66.7 > 50)", r.coveragePct > 50);
     check("gamesMissingBoth >= 3", r.gamesMissingBoth >= 3);
+    check("fail_closed by missing_both → warning has 5", r.starter_warning_external_ids.length === 5);
+    check("fail_closed by missing_both → m2_excluded has 5 (defense in depth)", r.m2_excluded_external_ids.length === 5);
     check("reason mentions missing BOTH", r.reason.includes("BOTH"));
   }
   {
     // The 2026-06-01 pattern — all 9 games missing both starters.
-    // Both catastrophic conditions trigger.
+    // Both catastrophic conditions trigger. Warning = m2_excluded = 9.
     const games = Array.from({ length: 9 }, (_, i) => ({
       external_id: 500 + i,
       home_pitcher_id: null,
@@ -207,10 +220,15 @@ async function main() {
     check("gamesMissingBoth = 9", r.gamesMissingBoth === 9);
     check("gamesWithBothStarters = 0", r.gamesWithBothStarters === 0);
     check("coveragePct = 0", r.coveragePct === 0);
-    check("9 excluded external_ids", r.excluded_external_ids.length === 9);
+    check("9 starter warnings", r.starter_warning_external_ids.length === 9);
+    check("9 m2_excluded (catastrophic defense in depth)", r.m2_excluded_external_ids.length === 9);
   }
   {
-    // Missing-one distribution case (Phase 5g.4 — held reason variety).
+    // Phase 6B.30C — Missing-one distribution case. Two missing_one
+    // games + 1 complete = 1/3 = 33% → fail_closed (catastrophic). In
+    // catastrophic mode the m2_excluded list mirrors warning (defense
+    // in depth) — but the policy distinction would only matter in
+    // ok/partial_ok mode.
     const games = [
       { external_id: 700, home_pitcher_id: 1, away_pitcher_id: null },
       { external_id: 701, home_pitcher_id: null, away_pitcher_id: 2 },
@@ -220,16 +238,15 @@ async function main() {
     check("2 missing-one + 1 complete → fail_closed (1/3 < 50%)", r.status === "fail_closed");
     check("gamesMissingOne = 2", r.gamesMissingOne === 2);
     check("gamesMissingBoth = 0", r.gamesMissingBoth === 0);
-    check("excluded_external_ids = [700, 701] sorted", r.excluded_external_ids.length === 2 && r.excluded_external_ids[0] === 700 && r.excluded_external_ids[1] === 701);
+    check("starter_warning_external_ids = [700, 701] sorted", r.starter_warning_external_ids.length === 2 && r.starter_warning_external_ids[0] === 700 && r.starter_warning_external_ids[1] === 701);
+    check("fail_closed → m2_excluded = warning (defense in depth)", JSON.stringify(r.m2_excluded_external_ids) === JSON.stringify(r.starter_warning_external_ids));
     check("held_reasons[700] = missing_away", r.held_reasons[700] === "missing_away");
     check("held_reasons[701] = missing_home", r.held_reasons[701] === "missing_home");
   }
   {
-    // Operator override — relax coverage to 0%. Phase 5g.4: when the
-    // operator wants a true bypass (e.g. unit-test of a synthetic
-    // slate), they must override BOTH the coverage threshold AND
-    // catastrophicMinPct, since catastrophic now triggers on coverage
-    // < 50% by default. This documents the explicit two-key bypass.
+    // Phase 6B.30C — Operator override pushing 2 missing_one games into
+    // "ok" status. Under the new policy, m2_excluded is EMPTY (no
+    // missing_both); the games flow through to M2 for V2.2 fallback.
     const games = [
       { external_id: 800, home_pitcher_id: 1, away_pitcher_id: null },
       { external_id: 801, home_pitcher_id: null, away_pitcher_id: 2 },
@@ -240,12 +257,16 @@ async function main() {
       minCoveragePct: 0,
       catastrophicMinPct: 0,
     });
-    check("override coverage=0% AND catastrophicMinPct=0 → ok even with no starters set", r.status === "ok");
-    check("override + missing → exclusions still populated", r.excluded_external_ids.length === 2);
+    check("override coverage=0% AND catastrophicMinPct=0 → ok", r.status === "ok");
+    check("override + 2 missing_one → starter_warning has 2 games", r.starter_warning_external_ids.length === 2);
+    check("override + 0 missing_both → m2_excluded is EMPTY", r.m2_excluded_external_ids.length === 0);
   }
   {
-    // Operator override on catastrophic — raise the catastrophic
-    // missing-both threshold to allow a slate with many missing-both.
+    // Phase 6B.30C — Operator override on catastrophic-missing-both
+    // threshold. 5 missing_both games pushed into partial_ok status.
+    // Under the new policy, m2_excluded contains all 5 missing_both
+    // (V2.2 has no fallback for them); warning equals m2_excluded
+    // since there are no missing_one games here.
     const games = Array.from({ length: 10 }, (_, i) => ({
       external_id: 900 + i,
       home_pitcher_id: i < 5 ? null : i,
@@ -258,7 +279,42 @@ async function main() {
       catastrophicMinPct: 0,
     });
     check("override catastrophic thresholds → partial_ok (5 missing-both)", r.status === "partial_ok");
-    check("excluded_external_ids = 5", r.excluded_external_ids.length === 5);
+    check("override + 5 missing_both → starter_warning has 5", r.starter_warning_external_ids.length === 5);
+    check("override + 5 missing_both → m2_excluded has 5", r.m2_excluded_external_ids.length === 5);
+  }
+  {
+    // Phase 6B.30C — Mixed case: 5 missing_home + 2 missing_both + 8
+    // complete = 53.3% coverage (above 50% catastrophic). With override
+    // on catastrophicMaxMissingBoth to keep us in partial_ok, the
+    // policy split is exercised cleanly:
+    //   warning = 7 (all missing-anything games)
+    //   m2_excluded = 2 (only missing_both)
+    const games = [
+      ...Array.from({ length: 5 }, (_, i) => ({ external_id: 1000 + i, home_pitcher_id: null, away_pitcher_id: i + 100 })),
+      ...Array.from({ length: 2 }, (_, i) => ({ external_id: 1010 + i, home_pitcher_id: null, away_pitcher_id: null })),
+      ...Array.from({ length: 8 }, (_, i) => ({ external_id: 1020 + i, home_pitcher_id: i, away_pitcher_id: i + 100 })),
+    ];
+    const r = assessStarterCoverage({
+      sport: "mlb",
+      games,
+      catastrophicMaxMissingBoth: 99,
+    });
+    check("Phase 6B.30C mixed case → partial_ok", r.status === "partial_ok");
+    check("Phase 6B.30C mixed case → gamesMissingOne = 5", r.gamesMissingOne === 5);
+    check("Phase 6B.30C mixed case → gamesMissingBoth = 2", r.gamesMissingBoth === 2);
+    check("Phase 6B.30C mixed case → starter_warning = 7", r.starter_warning_external_ids.length === 7);
+    check("Phase 6B.30C mixed case → m2_excluded = 2", r.m2_excluded_external_ids.length === 2);
+    check("Phase 6B.30C mixed case → m2_excluded are the missing_both ids only",
+      r.m2_excluded_external_ids.every((id) => r.held_reasons[id] === "missing_both")
+    );
+    check("Phase 6B.30C mixed case → warning ⊇ m2_excluded",
+      r.m2_excluded_external_ids.every((id) => r.starter_warning_external_ids.includes(id))
+    );
+    // Sanity: the 5 missing_home games should be in warning but NOT in m2_excluded
+    for (let i = 0; i < 5; i++) {
+      check(`missing_home id ${1000 + i} is in warning`, r.starter_warning_external_ids.includes(1000 + i));
+      check(`missing_home id ${1000 + i} is NOT in m2_excluded`, !r.m2_excluded_external_ids.includes(1000 + i));
+    }
   }
   {
     check("DEFAULT_MIN_STARTER_COVERAGE_PCT = 90", DEFAULT_MIN_STARTER_COVERAGE_PCT === 90);
@@ -360,7 +416,7 @@ async function main() {
       status: "ok", threshold: 8, observed: 10, reason: "ok",
     };
     const g2Ok: ReturnType<typeof assessStarterCoverage> = {
-      status: "ok", totalGames: 10, gamesWithBothStarters: 10, gamesMissingOne: 0, gamesMissingBoth: 0, coveragePct: 100, threshold: 90, catastrophicThreshold: 50, catastrophicMissingBothThreshold: 3, excluded_external_ids: [], held_reasons: {}, reason: "ok",
+      status: "ok", totalGames: 10, gamesWithBothStarters: 10, gamesMissingOne: 0, gamesMissingBoth: 0, coveragePct: 100, threshold: 90, catastrophicThreshold: 50, catastrophicMissingBothThreshold: 3, starter_warning_external_ids: [], m2_excluded_external_ids: [], held_reasons: {}, reason: "ok",
     };
     const g3Ok: ReturnType<typeof assessInProgressGames> = {
       status: "ok", totalGames: 10, inProgressCount: 0, affectedExternalIds: [], reason: "ok",

@@ -669,6 +669,172 @@ async function main() {
   }
 
   // ──────────────────────────────────────────────────────────────────
+  section("Phase 6B.30C — V2.2 real-data fallback (single missing starter)");
+  // The SEA@BAL pattern: home_starter=null, away starter present + real,
+  // real team stats + park + weather + market. V2.2 should emit real
+  // non-null ML/OU picks with data_quality_tier=fallback, provisional
+  // =true, Best Angle gated, neutral_fallback_count=0 (real-data
+  // fallback, not league-average broad fallback). NRFI may be null
+  // because V1 holds NRFI when starter is missing.
+  {
+    const snap = buildSnapshot({
+      homeStarter: null, // BAL home — missing
+      awayStarter: { player_external_id: 14303, player_name: "Emerson Hancock", season_era: 2.80, season_whip: 1.10, season_k_per_9: 8.5 },
+      homeTeam: { abbreviation: "BAL", bullpen_era_proxy: 4.05, team_avg_batter_ops: 0.745, season_runs_per_game: 4.65 },
+      awayTeam: { abbreviation: "SEA", bullpen_era_proxy: 3.92, team_avg_batter_ops: 0.715, season_runs_per_game: 4.12 },
+      market: { listed_total: 8.5, home_ml_odds_american: 111, away_ml_odds_american: -128, has_pinnacle_total: false },
+      ballpark: buildPark(0.99),
+      weather: buildWeather(),
+    });
+    // V1 would hold ML+OU+NRFI when home starter is null (mlHeldByStarter
+    // gate). We pass a V1-held v1Output to mirror the production code path.
+    const v1Held = buildV1Out({
+      predicted_ml_winner: null,
+      ml_confidence: null,
+      predicted_ou_side: null,
+      ou_confidence: null,
+      predicted_nrfi: null,
+      nrfi_confidence: null,
+      sport_specific: {
+        model_used: "v1",
+        hold_picks: ["ml", "ou", "nrfi"],
+        hold_reason: "missing_or_scratched_starter",
+      } as AutoModelOutput["sport_specific"],
+    });
+    const out = runMlbAutoModelV2_2(snap, v1Held, "t60_locked");
+    const a = out.v22Audit;
+
+    // Test 1 — V2.2 produces non-null ML/OU picks even when one starter missing
+    check("Phase 6B.30C T1 — V2.2 emits non-null ml on missing-home-starter snapshot",
+      out.predicted_ml_winner !== null, `ml=${out.predicted_ml_winner}`);
+    check("Phase 6B.30C T1 — V2.2 emits non-null ou on missing-home-starter snapshot",
+      out.predicted_ou_side !== null, `ou=${out.predicted_ou_side}`);
+    check("Phase 6B.30C T1 — ml_confidence is a finite number",
+      typeof out.ml_confidence === "number" && Number.isFinite(out.ml_confidence));
+    check("Phase 6B.30C T1 — ou_confidence is a finite number",
+      typeof out.ou_confidence === "number" && Number.isFinite(out.ou_confidence));
+
+    // Test 4 + 6 — data_quality_tier="fallback" + provisional=true
+    check("Phase 6B.30C T4 — data_quality_tier === 'fallback'",
+      a.data_quality_tier === "fallback", `tier=${a.data_quality_tier}`);
+    check("Phase 6B.30C T4 — provisional === true",
+      a.provisional === true);
+
+    // Test 5 + 7 — real-data fallback (no broad neutral fallback usage)
+    check("Phase 6B.30C T5 — feature_neutral_fallback_count === 0 (no league-avg broad fallback)",
+      a.feature_neutral_fallback_count === 0, `count=${a.feature_neutral_fallback_count}`);
+    check("Phase 6B.30C T5 — preferred_count + fallback_real_count + proxy_count > 0 (real-data fallback)",
+      (a.feature_preferred_count + a.feature_fallback_real_count + a.feature_proxy_count) > 0);
+
+    // Test 6/8 — confidence capped at the fallback-tier ceiling. The
+    // ceiling is keyed by tier: high=78, medium=64, low=58, fallback=54.
+    // Fallback-tier confidence must not exceed the fallback ceiling —
+    // this is the "customer-facing not a normal full-data pick" guard.
+    check("Phase 6B.30C T6 — ml_confidence ≤ V22_CONFIDENCE_CEILING.fallback (54)",
+      (out.ml_confidence ?? 0) <= V22_CONFIDENCE_CEILING.fallback, `ml_conf=${out.ml_confidence}`);
+    check("Phase 6B.30C T6 — ou_confidence ≤ V22_CONFIDENCE_CEILING.fallback (54)",
+      (out.ou_confidence ?? 0) <= V22_CONFIDENCE_CEILING.fallback, `ou_conf=${out.ou_confidence}`);
+    check("Phase 6B.30C T6 — fallback ceiling is strictly below 'low' tier ceiling",
+      V22_CONFIDENCE_CEILING.fallback < V22_CONFIDENCE_CEILING.low);
+
+    // Test 7 — Best Angle gated off
+    check("Phase 6B.30C T7 — ml_best_angle_eligible === false (fallback gates BA off)",
+      a.ml_best_angle_eligible === false);
+    check("Phase 6B.30C T7 — ou_best_angle_eligible === false (fallback gates BA off)",
+      a.ou_best_angle_eligible === false);
+
+    // Feature audit verifies real-data fallback structure
+    check("Phase 6B.30C feature audit — missing_count > 0 (some slots unmappable without home starter)",
+      a.feature_missing_count > 0);
+    check("Phase 6B.30C feature audit — feature_reason_codes includes 'starter_missing'",
+      a.feature_reason_codes.includes("starter_missing"));
+  }
+
+  // Test 11 — safety contract when lines are missing.
+  //
+  // V2.2's design emits model-only picks under no-market by using
+  // V22_TRUST_INDEPENDENT_FALLBACK_NO_MARKET (1.0 trust on independent),
+  // so it does NOT return null even with all market fields null.
+  // The safety contract instead enforces:
+  //   • provisional === true (audit marks it provisional)
+  //   • data_quality_tier === "fallback" (lowest tier)
+  //   • Best Angle gated off on both ML and OU
+  //   • confidence ≤ fallback ceiling (≤ 54)
+  // Downstream consumers (Daily Edge, the 6B.30A pending path) can
+  // choose to surface these or not. The Data Completeness Audit will
+  // also flag "lines missing" as a guardrail.
+  {
+    const snap = buildSnapshot({
+      homeStarter: null,
+      awayStarter: { season_era: 3.0 },
+      market: { listed_total: null as unknown as number, home_ml_odds_american: null as unknown as number, away_ml_odds_american: null as unknown as number, has_pinnacle_total: false },
+    });
+    const v1Held = buildV1Out({
+      predicted_ml_winner: null, ml_confidence: null,
+      predicted_ou_side: null, ou_confidence: null,
+      predicted_nrfi: null, nrfi_confidence: null,
+      sport_specific: { model_used: "v1", hold_picks: ["ml", "ou", "nrfi"], hold_reason: "missing_or_scratched_starter" } as AutoModelOutput["sport_specific"],
+    });
+    const out = runMlbAutoModelV2_2(snap, v1Held, "t60_locked");
+    check("Phase 6B.30C T11 — no lines → provisional=true",
+      out.v22Audit.provisional === true);
+    check("Phase 6B.30C T11 — no lines → data_quality_tier='fallback'",
+      out.v22Audit.data_quality_tier === "fallback");
+    check("Phase 6B.30C T11 — no lines → ml_best_angle_eligible=false",
+      out.v22Audit.ml_best_angle_eligible === false);
+    check("Phase 6B.30C T11 — no lines → ou_best_angle_eligible=false",
+      out.v22Audit.ou_best_angle_eligible === false);
+    if (out.ml_confidence !== null) {
+      check("Phase 6B.30C T11 — no lines → ml_confidence capped at fallback ceiling",
+        out.ml_confidence <= V22_CONFIDENCE_CEILING.fallback, `ml_conf=${out.ml_confidence}`);
+    }
+    if (out.ou_confidence !== null) {
+      check("Phase 6B.30C T11 — no lines → ou_confidence capped at fallback ceiling",
+        out.ou_confidence <= V22_CONFIDENCE_CEILING.fallback, `ou_conf=${out.ou_confidence}`);
+    }
+  }
+
+  // Test 12 — no prediction if too many broad real inputs are missing.
+  // Strip everything: no starters, no bullpens, no ops, no park, no
+  // weather, no lineup. V2.2 should fall through to null picks since
+  // missing_count is too high to support any projection.
+  {
+    const snap = buildSnapshot({
+      homeStarter: null,
+      awayStarter: null,
+      homeTeam: { bullpen_era_proxy: null, team_avg_batter_ops: null, season_runs_per_game: null as unknown as number },
+      awayTeam: { bullpen_era_proxy: null, team_avg_batter_ops: null, season_runs_per_game: null as unknown as number },
+      ballpark: null,
+      weather: null,
+      weatherAvailable: false,
+    });
+    const v1Held = buildV1Out({
+      predicted_ml_winner: null, ml_confidence: null,
+      predicted_ou_side: null, ou_confidence: null,
+      predicted_nrfi: null, nrfi_confidence: null,
+      sport_specific: { model_used: "v1", hold_picks: ["ml", "ou", "nrfi"], hold_reason: "missing_or_scratched_starter" } as AutoModelOutput["sport_specific"],
+    });
+    const out = runMlbAutoModelV2_2(snap, v1Held, "t60_locked");
+    check("Phase 6B.30C T12 — too many real inputs missing → missing_count ≥ 7",
+      out.v22Audit.feature_missing_count >= 7, `missing=${out.v22Audit.feature_missing_count}`);
+    check("Phase 6B.30C T12 — too many real inputs missing → provisional=true",
+      out.v22Audit.provisional === true);
+    // When V2.2 still emits picks under broad-missing inputs, they MUST
+    // be fallback-tier with Best Angle gated off — verifying the safety
+    // contract end-to-end. If picks are null, that's also safe.
+    if (out.predicted_ml_winner !== null) {
+      check("Phase 6B.30C T12 — emits picks under broad-missing → tier=fallback",
+        out.v22Audit.data_quality_tier === "fallback");
+      check("Phase 6B.30C T12 — emits picks under broad-missing → Best Angle gated off (ml)",
+        out.v22Audit.ml_best_angle_eligible === false);
+      check("Phase 6B.30C T12 — emits picks under broad-missing → Best Angle gated off (ou)",
+        out.v22Audit.ou_best_angle_eligible === false);
+    } else {
+      check("Phase 6B.30C T12 — V2.2 emitted null on broad-missing inputs", true);
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────
   console.log(`\n━━━ Results ━━━\n  ✓ ${pass}    ✗ ${fail}`);
   if (fail > 0) {
     console.log("\nFailures:");

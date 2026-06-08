@@ -102,33 +102,50 @@ export function assessMinimumGameCount(
 // ─── G2 — Starter coverage ───────────────────────────────────────────────
 
 /**
- * Starter-coverage thresholds. R-19 Phase 5g.4 reshaped G2 from a
- * slate-wide hammer into a per-game / per-slate gate with three tiers:
+ * Starter-coverage thresholds. R-19 Phase 5g.4 introduced per-game
+ * exclusion. Phase 6B.30C split the per-game list into two explicit
+ * concepts to remove the ambiguity that previously merged "operator
+ * visibility" with "M2 must not generate":
  *
+ *   `starter_warning_external_ids` — every game with ≥1 missing
+ *   starter. Visibility-only: surfaced to operator reports + admin
+ *   display + the Data Completeness Audit so source gaps are
+ *   auditable. NEVER fed to M2 as an exclusion filter.
+ *
+ *   `m2_excluded_external_ids` — the subset of warned games that M2
+ *   should not generate a prediction for. Phase 6B.30C policy:
+ *   - missing_both → excluded (V2.2 has no fallback for zero starter info)
+ *   - missing_home / missing_away → NOT excluded (V2.2 emits real-data
+ *     fallback predictions with data_quality_tier="fallback" and
+ *     provisional=true for single-side-missing games)
+ *   - status === "fail_closed" → all warned games excluded (catastrophic;
+ *     g2Blocking also slate-wide blocks M2 separately at the orchestrator)
+ *
+ * Three tiers (unchanged from Phase 5g.4):
  *   1. coveragePct ≥ DEFAULT_MIN_STARTER_COVERAGE_PCT → status "ok"
- *      Games missing a starter are STILL added to `excluded_external_ids`
- *      so M2 holds them; the slate as a whole runs cleanly.
+ *      Warning list still populates for missing-starter games.
  *
  *   2. coveragePct below threshold but NOT catastrophic →
- *      status "partial_ok". Per-game exclusion populated. M2 writes
- *      predictions for complete games; missing-starter games held.
- *      No slate-wide block.
+ *      status "partial_ok". Warning list populated; M2 still runs for
+ *      complete games + single-side-missing games (real-data fallback).
  *
  *   3. Catastrophic (coveragePct < CATASTROPHIC_PCT OR
  *      gamesMissingBoth ≥ CATASTROPHIC_MISSING_BOTH) → status
- *      "fail_closed". Slate-wide block. Indicates wrong-day data or
- *      systemic provider failure, not normal provider latency.
+ *      "fail_closed". Slate-wide block via g2Blocking. m2_excluded
+ *      list = all warned games for defense-in-depth.
  *
  * Background: the 2026-06-03 incident — "BDL returned 0 probable
- * starters; investigated" — was a catastrophic case (0% coverage). The
- * 2026-06-06 incident — 2 of 15 games missing home starters (86.7%) —
- * is normal morning latency that should NOT zero out the slate.
+ * starters" — was a catastrophic case (0% coverage). The 2026-06-08
+ * incident — SEA@BAL missing home probable (87.5%) silently dropping
+ * from Daily Edge — was the Phase 6B.30C trigger. The previous Phase
+ * 5g.4 design correctly flagged the game but incorrectly pre-excluded
+ * it from M2; V2.2's per-feature fallback can safely produce a
+ * provisional prediction with the away starter + real team/park/market
+ * data and only neutralize the missing-side-specific fields.
  *
  * 90%-threshold means at most 1 of 9, or 1 of 10, or 2 of 15 games can
  * be starter-incomplete before status drops to "partial_ok". Catastrophic
- * threshold is 50% OR ≥ 3 games with BOTH sides missing (the "both
- * missing" signal is much more indicative of wrong-day provider data
- * than "one side missing").
+ * threshold is 50% OR ≥ 3 games with BOTH sides missing.
  */
 export const DEFAULT_MIN_STARTER_COVERAGE_PCT = 90;
 
@@ -189,16 +206,34 @@ export interface StarterCoverageResult {
   catastrophicThreshold: number;
   catastrophicMissingBothThreshold: number;
   /**
-   * external_ids of games with ≥1 missing starter. Populated whenever
-   * the gate sees missing starters (ok, partial_ok, or fail_closed) so
-   * downstream callers always have a per-game exclusion list. Empty
-   * when total === 0 (deferred).
+   * Phase 6B.30C — visibility list. external_ids of every game with ≥1
+   * missing starter. Populated whenever the gate sees missing starters
+   * (ok, partial_ok, or fail_closed). Surfaced in operator reports,
+   * admin display, and the Data Completeness Audit so source gaps are
+   * auditable. NOT used by the orchestrator to filter M2's input — see
+   * `m2_excluded_external_ids` for that.
    */
-  excluded_external_ids: number[];
+  starter_warning_external_ids: number[];
+  /**
+   * Phase 6B.30C — M2 exclusion list. Strict subset of
+   * `starter_warning_external_ids`. Currently:
+   *   - games where `held_reasons[id] === "missing_both"` (V2.2 has no
+   *     fallback for zero starter info)
+   *   - when status === "fail_closed", all warned games (defense in
+   *     depth; the slate-wide g2Blocking also blocks M2 separately)
+   *
+   * Single-side-missing games (missing_home / missing_away) are
+   * intentionally NOT here — V2.2 produces real-data fallback
+   * (data_quality_tier="fallback", provisional=true, Best Angle gated)
+   * for them. The orchestrator passes this list to M2 as
+   * `excludeGameExternalIds`.
+   */
+  m2_excluded_external_ids: number[];
   /**
    * Map from external_id → which side(s) are missing. Same key set as
-   * `excluded_external_ids`. Used by the admin display to surface the
-   * specific reason ("missing home probable" vs "missing both").
+   * `starter_warning_external_ids`. Used by the admin display to
+   * surface the specific reason ("missing home probable" vs
+   * "missing both").
    */
   held_reasons: Record<number, StarterHeldReason>;
   reason: string;
@@ -224,7 +259,8 @@ export function assessStarterCoverage(
       threshold,
       catastrophicThreshold: catastrophicPct,
       catastrophicMissingBothThreshold: catastrophicMissingBoth,
-      excluded_external_ids: [],
+      starter_warning_external_ids: [],
+      m2_excluded_external_ids: [],
       held_reasons: {},
       reason:
         "No games in DB for this slate yet — gate deferred until slate has been ingested",
@@ -233,7 +269,7 @@ export function assessStarterCoverage(
   let both = 0;
   let missingOne = 0;
   let missingBoth = 0;
-  const excluded: number[] = [];
+  const warningIds: number[] = [];
   const heldReasons: Record<number, StarterHeldReason> = {};
   for (const g of opts.games) {
     const h = g.home_pitcher_id !== null && g.home_pitcher_id !== undefined;
@@ -242,9 +278,7 @@ export function assessStarterCoverage(
       both++;
       continue;
     }
-    // Game has at least one missing starter — add to per-game exclusion
-    // list and tag the held reason.
-    excluded.push(g.external_id);
+    warningIds.push(g.external_id);
     if (!h && !a) {
       missingBoth++;
       heldReasons[g.external_id] = "missing_both";
@@ -256,7 +290,10 @@ export function assessStarterCoverage(
       heldReasons[g.external_id] = "missing_away";
     }
   }
-  excluded.sort((a, b) => a - b);
+  warningIds.sort((a, b) => a - b);
+  const m2ExcludedFromMissingBoth = warningIds
+    .filter((id) => heldReasons[id] === "missing_both")
+    .sort((a, b) => a - b);
   const coveragePct = Math.round((both / total) * 1000) / 10;
   const isCatastrophic =
     coveragePct < catastrophicPct || missingBoth >= catastrophicMissingBoth;
@@ -269,12 +306,18 @@ export function assessStarterCoverage(
     threshold,
     catastrophicThreshold: catastrophicPct,
     catastrophicMissingBothThreshold: catastrophicMissingBoth,
-    excluded_external_ids: excluded,
+    starter_warning_external_ids: warningIds,
     held_reasons: heldReasons,
   };
   if (isCatastrophic) {
     return {
       ...base,
+      // Defense in depth: in fail_closed, exclude every warned game from
+      // M2. The slate-wide g2Blocking cascade in the orchestrator also
+      // blocks M2 entirely, so this list is informational, but keeping
+      // it complete avoids any chance of half-processing a catastrophic
+      // slate if the slate-wide block is ever bypassed.
+      m2_excluded_external_ids: [...warningIds],
       status: "fail_closed",
       reason:
         `Catastrophic starter coverage: ${coveragePct}% (${both}/${total} games ` +
@@ -288,23 +331,29 @@ export function assessStarterCoverage(
   if (coveragePct >= threshold) {
     return {
       ...base,
+      m2_excluded_external_ids: m2ExcludedFromMissingBoth,
       status: "ok",
       reason:
-        excluded.length === 0
+        warningIds.length === 0
           ? `${both}/${total} game(s) have both starters (${coveragePct}% ≥ ${threshold}% threshold)`
           : `${both}/${total} game(s) have both starters (${coveragePct}% ≥ ${threshold}% threshold); ` +
-            `${excluded.length} game(s) excluded per-game for missing starter`,
+            `${warningIds.length} game(s) flagged as starter warning (` +
+            `${m2ExcludedFromMissingBoth.length} excluded from M2 for missing-both, ` +
+            `${warningIds.length - m2ExcludedFromMissingBoth.length} allowed through ` +
+            `for real-data fallback prediction)`,
     };
   }
   return {
     ...base,
+    m2_excluded_external_ids: m2ExcludedFromMissingBoth,
     status: "partial_ok",
     reason:
       `Partial-OK starter coverage: ${coveragePct}% (${both}/${total} games ` +
       `with both starters) is below ${threshold}% threshold but above catastrophic ` +
-      `${catastrophicPct}%. Per-game exclusion applied: ${excluded.length} game(s) ` +
-      `excluded. M2 writes predictions for the ${both} game(s) with full starter data; ` +
-      `missing-starter games held until the next refresh provides probables.`,
+      `${catastrophicPct}%. Starter warning: ${warningIds.length} game(s); ` +
+      `M2 exclusion: ${m2ExcludedFromMissingBoth.length} game(s) (missing both). ` +
+      `M2 writes predictions for the ${both} game(s) with full starter data + ` +
+      `single-side-missing games via V2.2 real-data fallback.`,
   };
 }
 

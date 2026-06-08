@@ -1010,20 +1010,22 @@ export async function runSlateCycleAutomated(opts: {
         threshold: g2Result.threshold,
         catastrophic_threshold_pct: g2Result.catastrophicThreshold,
         catastrophic_missing_both_threshold: g2Result.catastrophicMissingBothThreshold,
-        excluded_external_ids: g2Result.excluded_external_ids,
+        starter_warning_external_ids: g2Result.starter_warning_external_ids,
+        m2_excluded_external_ids: g2Result.m2_excluded_external_ids,
         held_reasons: g2Result.held_reasons,
       },
     });
     if (g2Result.status === "fail_closed") {
       blockingReasons.push(`G2 starter coverage fail_closed (catastrophic): ${g2Result.reason}`);
     } else if (g2Result.status === "partial_ok") {
-      // Per-game exclusion path — the gate tagged the missing-starter
-      // games but the slate as a whole is still usable. Surface a
-      // warning so operators see what was held, but DO NOT push to
-      // blocking_reasons (which would cascade to overall_status=blocked).
+      // Phase 6B.30C — per-game policy split. Warning list flags every
+      // missing-starter game for operator visibility; M2 exclusion only
+      // applies to missing-both games. Surface both counts so operators
+      // see what was warned vs what was actually excluded from M2.
       warnings.push(
-        `G2 starter coverage partial_ok: ${g2Result.excluded_external_ids.length} game(s) ` +
-        `held for missing starters — ${g2Result.reason}`
+        `G2 starter coverage partial_ok: ${g2Result.starter_warning_external_ids.length} ` +
+        `warning(s), ${g2Result.m2_excluded_external_ids.length} M2 exclusion(s) — ` +
+        `${g2Result.reason}`
       );
     } else if (g2Result.status === "deferred") {
       warnings.push(
@@ -1132,20 +1134,22 @@ export async function runSlateCycleAutomated(opts: {
     intradayMode && g3Result !== null && g3Result.status === "fail_closed"
       ? [...g3Result.affectedExternalIds]
       : [];
-  // R-19 Phase 5g.4 — G2 per-game exclusions. Populated whenever G2
-  // sees any game with at least one missing starter, regardless of
-  // overall status:
-  //   • status="ok" with 1 missing starter (e.g. 14/15) → 1 exclusion,
-  //     slate still passes; M2 writes 14 predictions.
-  //   • status="partial_ok" (today's 13/15 case) → 2 exclusions, slate
-  //     not blocked; M2 writes 13 predictions.
-  //   • status="fail_closed" (catastrophic) → exclusions populated but
-  //     m2Blocked cascade still hard-blocks M2 anyway.
+  // Phase 6B.30C — G2 M2 exclusions use the policy-split
+  // `m2_excluded_external_ids` (NOT the warning list). Policy:
+  //   • status="ok" with single-side-missing starter → warning only;
+  //     V2.2 emits real-data fallback prediction (data_quality_tier="
+  //     fallback", provisional=true, Best Angle gated).
+  //   • status="ok"/"partial_ok" with missing_both → excluded; V2.2
+  //     has no fallback for zero starter info; 6B.30A surfaces a
+  //     pending card customer-side.
+  //   • status="fail_closed" (catastrophic) → all warned games
+  //     excluded as defense-in-depth; m2Blocked cascade also hard-blocks
+  //     M2 entirely at the orchestrator step.
   //   • status="deferred" → empty (no games in DB yet).
   // Empty list when G2 errored.
   const g2Exclusions: number[] =
     g2Result !== null && g2Result.status !== "deferred"
-      ? [...g2Result.excluded_external_ids]
+      ? [...g2Result.m2_excluded_external_ids]
       : [];
   // Combined per-game exclusion set passed to M2. Union of:
   //   • lock_miss (snapshot.already_started + null locked_at)
@@ -1215,6 +1219,15 @@ export async function runSlateCycleAutomated(opts: {
           excluded_for_g3_intraday_external_ids: g3IntradayExclusions,
           excluded_for_g2_starter_coverage: excludedForG2Count,
           excluded_for_g2_starter_coverage_external_ids: g2Exclusions,
+          // Phase 6B.30C — policy-split visibility. Warning list is the
+          // full set of games flagged for missing starters (all sides);
+          // m2-excluded is the subset actually filtered out from M2 (only
+          // missing_both under non-catastrophic status). Operators
+          // reading this see exactly what was flagged vs what was held.
+          g2_starter_warning_count:
+            g2Result?.starter_warning_external_ids.length ?? 0,
+          g2_starter_warning_external_ids:
+            g2Result?.starter_warning_external_ids ?? [],
           g2_held_reasons: g2Result?.held_reasons ?? {},
           total_per_game_exclusions: totalExclusions,
           combined_exclusion_external_ids: combinedM2Exclusions,
