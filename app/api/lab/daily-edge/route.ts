@@ -1649,6 +1649,11 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     modelDriver,
     riskDriver,
     marketDataLimited,
+    // Phase 6B.30E — route the verdict layer's market-context warning
+    // code into the copy generator so the "watch out" line names the
+    // conflict explicitly. `verdict.warning` is null when no rule
+    // fired or for held/null-confidence rows (short-circuit above).
+    marketContextWarning: "warning" in verdict ? verdict.warning : null,
   });
 
   // KeyStats.

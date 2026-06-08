@@ -19,6 +19,7 @@
 
 import { assertNoBannedTerms } from "./bannedTermsLinter";
 import type { Verdict } from "./verdictDerivation";
+import type { MarketContextWarning } from "./marketVerdictDerivation";
 
 export type CopyMarket = "moneyline" | "total" | "first_inning";
 export type CopySharpDirection = "support" | "push_against" | "none";
@@ -39,6 +40,14 @@ export type CopyInput = {
    * first_inning this is always treated as false — see marketVerdictDerivation rule 9.
    */
   marketDataLimited: boolean;
+  /**
+   * Phase 6B.30E — market-context warning code emitted by
+   * marketVerdictFor when a money-conflict / line-movement / edge
+   * combination fired. Maps to a short customer-facing sentence in
+   * `guidedWatchOut`. Null when no rule fired (Rule 0) or when
+   * marketContext was not supplied.
+   */
+  marketContextWarning?: MarketContextWarning;
 };
 
 export type CopyOutput = {
@@ -136,10 +145,71 @@ function buildGuidedGuide(input: CopyInput): string {
   return `${framing.open}: the model has a clean ${conf}% case for ${input.pick} on the ${noun}.`;
 }
 
+/**
+ * Phase 6B.30E — short, non-alarmist customer-facing sentence per
+ * warning code. Mapped here so the verdict layer can stay code-only.
+ * Banned-terms-linter runs over the full guidedWatchOut output, so
+ * these strings must avoid "EV", "Pinnacle", etc.
+ *
+ * Returns null when the warning code is null/undefined (no rule fired)
+ * or when the market is first_inning (FI ignores marketContext).
+ */
+function describeMarketContextWarning(
+  market: CopyMarket,
+  warning: MarketContextWarning | undefined,
+): string | null {
+  if (market === "first_inning") return null;
+  if (!warning) return null;
+  switch (warning) {
+    case "money_conflict_strong_edge_survives":
+      return "Market money leans the other way, but the model edge remains strong.";
+    case "money_conflict_line_confirms_market":
+      return "Market money and line movement both warn against the model side.";
+    case "money_conflict_line_confirms_pick":
+      return "Split money leans the other way, but line movement supports the model side.";
+    case "money_conflict_flat_line_thin_edge":
+      return "Money pressure is on the other side and the edge is thin or uncertain.";
+    case "money_conflict_flat_line_strong_edge":
+      return "Money pressure is on the other side, but the line has not moved.";
+    case "money_conflict_unknown_line_negative":
+      return "Money pressure is on the other side and the model has no measurable edge.";
+    case "money_conflict_unknown_line_thin":
+      return "Money pressure is on the other side and the edge is thin.";
+    case "money_conflict_one_source_only":
+      return "One split source shows money pressure against the pick.";
+    case "money_conflict_multi_source":
+      return "Multiple sources show money pressure against the pick.";
+    case "rlm_against_pick":
+      // Phase 6B.30E note: the banned-terms linter forbids "RLM" and
+      // "reverse line movement" by name (the project's approved phrasing
+      // is the descriptive form below).
+      return "The line moved against the public side that backed the pick.";
+    default:
+      // Exhaustiveness guard: a future warning code that ships before
+      // its copy mapping returns null so the card falls back to the
+      // standard riskDriver / "less clean" copy rather than crashing.
+      return null;
+  }
+}
+
 function buildGuidedWatchOut(input: CopyInput): string {
   const noun = MARKET_NOUN[input.market];
 
+  // Phase 6B.30E — if a market-context warning fired, prepend it to the
+  // watch-out line so the customer sees the conflict reason explicitly.
+  // Falls through to the existing copy when no warning is present.
+  const ctxWarning = describeMarketContextWarning(input.market, input.marketContextWarning);
+
   if (input.verdict === "no_play" || input.verdict === "caution") {
+    if (ctxWarning !== null) {
+      // Caution / no_play with explicit market context — lead with the
+      // honest market-context reason, optionally extend with the model's
+      // own riskDriver if it adds detail. Pattern intentionally avoids
+      // the "Main concern:" prefix to keep the cause clear up front.
+      return input.riskDriver !== null
+        ? `${ctxWarning} Main concern: ${input.riskDriver}.`
+        : ctxWarning;
+    }
     if (input.riskDriver !== null) {
       return `Main concern: ${input.riskDriver}.`;
     }
@@ -152,6 +222,16 @@ function buildGuidedWatchOut(input: CopyInput): string {
     return input.riskDriver !== null
       ? `Where it gets less clean: ${input.riskDriver}. First-inning markets also swing fast on lineup or starter changes.`
       : `Where it gets less clean: first-inning markets swing fast on lineup or starter changes — confirm pregame.`;
+  }
+  // Phase 6B.30E — market-context warning takes precedence over the
+  // generic "market is leaning against the pick" / "limited market
+  // signal" wording when it's available. The market-context copy is
+  // more specific (it knows whether the line moved, what the edge
+  // bucket is, etc.) and is the right primary surface.
+  if (ctxWarning !== null) {
+    return input.riskDriver !== null
+      ? `${ctxWarning} ${input.riskDriver ? `Also watch: ${input.riskDriver}.` : ""}`.trim()
+      : ctxWarning;
   }
   if (input.sharpDirection === "push_against") {
     return input.riskDriver !== null

@@ -413,10 +413,23 @@ export function deriveMarketContextEffect(
     return { warningCode: "money_conflict_line_confirms_market", capAtWatchlist: true, forceCaution: false };
   }
   if (context.lineMovementVsPick === "flat") {
-    // Rule 3 — flat line + thin/negative/unknown edge = cap.
+    // Rule 3a (Phase 6B.30F) — flat line + NEGATIVE edge + conflict
+    // is at least as severe as unknown-line + negative-edge + conflict
+    // (Rule 5). When we KNOW the line is flat AND the model is worse
+    // than the market AND money is against us, that's three independent
+    // agreeing signals against the pick. Force Caution, parity with
+    // Rule 5. Pre-6B.30F this incorrectly capped at Watchlist while
+    // Rule 5 (less information) forced Caution.
+    if (context.edgeStrength === "negative") {
+      return {
+        warningCode: "money_conflict_line_confirms_market",
+        capAtWatchlist: false,
+        forceCaution: true,
+      };
+    }
+    // Rule 3 — flat line + thin/unknown edge = cap.
     if (
       context.edgeStrength === "thin" ||
-      context.edgeStrength === "negative" ||
       context.edgeStrength === "unknown"
     ) {
       return { warningCode: "money_conflict_flat_line_thin_edge", capAtWatchlist: true, forceCaution: false };

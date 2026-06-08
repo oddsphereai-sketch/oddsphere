@@ -17,11 +17,13 @@ import {
   generatePerMarketCopy,
   type CopyMarket,
   type CopySharpDirection,
+  type CopyOutput,
 } from "../lib/services/perMarketCopyGenerator";
 import {
   findFirstBannedTerm,
 } from "../lib/services/bannedTermsLinter";
 import type { Verdict } from "../lib/services/verdictDerivation";
+import type { MarketContextWarning } from "../lib/services/marketVerdictDerivation";
 
 let pass = 0;
 let fail = 0;
@@ -202,6 +204,150 @@ console.log(`    guidedGuide:    "${limitedFI.guidedGuide}"`);
 console.log(`    guidedWatchOut: "${limitedFI.guidedWatchOut}"`);
 console.log(`    whyLine:        "${limitedFI.whyLine}"`);
 console.log(`    riskLine:       "${limitedFI.riskLine}"`);
+
+// ─────────────────────────────────────────────────────────────────────
+// Phase 6B.30E + 6B.30F — market-context warning copy
+// ─────────────────────────────────────────────────────────────────────
+console.log();
+console.log("━━━ Phase 6B.30E — market-context warning copy on guidedWatchOut ━━━");
+
+function withCtx(warning: MarketContextWarning): CopyOutput {
+  return generatePerMarketCopy({
+    market: "moneyline",
+    verdict: "lean",
+    pick: "PHI",
+    confidence: 0.60,
+    sharpDirection: "none",
+    modelDriver: "starter ERA edge",
+    riskDriver: "weak top-of-order",
+    marketDataLimited: false,
+    marketContextWarning: warning,
+  });
+}
+
+// One assertion per warning code — copy maps cleanly.
+check(
+  "copy: money_conflict_strong_edge_survives mentions strong edge surviving",
+  withCtx("money_conflict_strong_edge_survives").guidedWatchOut.toLowerCase().includes("model edge remains strong")
+);
+check(
+  "copy: money_conflict_line_confirms_market warns about money + line",
+  withCtx("money_conflict_line_confirms_market").guidedWatchOut.toLowerCase().includes("market money and line movement both warn")
+);
+check(
+  "copy: money_conflict_line_confirms_pick frames line as support for the model",
+  withCtx("money_conflict_line_confirms_pick").guidedWatchOut.toLowerCase().includes("line movement supports the model")
+);
+check(
+  "copy: money_conflict_flat_line_thin_edge mentions thin/uncertain edge",
+  withCtx("money_conflict_flat_line_thin_edge").guidedWatchOut.toLowerCase().includes("thin or uncertain")
+);
+check(
+  "copy: money_conflict_flat_line_strong_edge mentions line not moved",
+  withCtx("money_conflict_flat_line_strong_edge").guidedWatchOut.toLowerCase().includes("line has not moved")
+);
+check(
+  "copy: money_conflict_unknown_line_negative mentions no measurable edge",
+  withCtx("money_conflict_unknown_line_negative").guidedWatchOut.toLowerCase().includes("no measurable edge")
+);
+check(
+  "copy: money_conflict_unknown_line_thin mentions thin edge",
+  withCtx("money_conflict_unknown_line_thin").guidedWatchOut.toLowerCase().includes("edge is thin")
+);
+check(
+  "copy: money_conflict_one_source_only labels as one-source caution",
+  withCtx("money_conflict_one_source_only").guidedWatchOut.toLowerCase().includes("one split source")
+);
+check(
+  "copy: money_conflict_multi_source mentions multiple sources",
+  withCtx("money_conflict_multi_source").guidedWatchOut.toLowerCase().includes("multiple sources")
+);
+check(
+  "copy: rlm_against_pick uses linter-approved phrasing (line moved against the public)",
+  withCtx("rlm_against_pick").guidedWatchOut.toLowerCase().includes("line moved against the public")
+);
+
+// Anti-regression — null/undefined warning falls back to standard copy
+{
+  const noWarn = withCtx(null);
+  check(
+    "copy: null warning falls back to standard 'less clean' copy (no warning text)",
+    !noWarn.guidedWatchOut.toLowerCase().includes("market money") &&
+      !noWarn.guidedWatchOut.toLowerCase().includes("line moved against the public") &&
+      !noWarn.guidedWatchOut.toLowerCase().includes("one split source")
+  );
+  check(
+    "copy: undefined warning (omitted prop) falls back to standard copy",
+    !generatePerMarketCopy({
+      market: "moneyline", verdict: "lean", pick: "PHI", confidence: 0.60,
+      sharpDirection: "none", modelDriver: null, riskDriver: null,
+      marketDataLimited: false,
+    }).guidedWatchOut.toLowerCase().includes("market money")
+  );
+}
+
+// Clean Best Angle with no warning → no warning text leaks in.
+check(
+  "copy: clean best_angle + null warning → no market-context text in watchOut",
+  (() => {
+    const v = generatePerMarketCopy({
+      market: "moneyline", verdict: "best_angle", pick: "TB", confidence: 0.72,
+      sharpDirection: "none", modelDriver: "starter ERA edge", riskDriver: null,
+      marketDataLimited: false,
+      marketContextWarning: null,
+    });
+    return !v.guidedWatchOut.toLowerCase().includes("money pressure") &&
+           !v.guidedWatchOut.toLowerCase().includes("model edge remains strong");
+  })()
+);
+
+// FI ignores the warning code entirely (parity with verdict layer).
+check(
+  "copy: FI verdict ignores marketContextWarning (no money-conflict text leaks)",
+  !generatePerMarketCopy({
+    market: "first_inning", verdict: "lean", pick: "NRFI", confidence: 0.55,
+    sharpDirection: "none", modelDriver: null, riskDriver: null,
+    marketDataLimited: false,
+    marketContextWarning: "money_conflict_strong_edge_survives",
+  }).guidedWatchOut.toLowerCase().includes("model edge remains strong")
+);
+
+// Caution + explicit warning fires the warning copy (not the generic
+// "Main concern" fallback). Mirrors the MIL@ATH/WSH@SF cases.
+check(
+  "copy: caution + warning emits the explicit warning sentence",
+  generatePerMarketCopy({
+    market: "total", verdict: "caution", pick: "Under 8.5", confidence: 0.55,
+    sharpDirection: "none", modelDriver: null, riskDriver: "weak top-of-order",
+    marketDataLimited: false,
+    marketContextWarning: "money_conflict_line_confirms_market",
+  }).guidedWatchOut.toLowerCase().includes("market money and line movement both warn")
+);
+
+// Banned-terms linter still passes on every warning-mapped output.
+{
+  const codes: MarketContextWarning[] = [
+    "money_conflict_strong_edge_survives",
+    "money_conflict_line_confirms_market",
+    "money_conflict_line_confirms_pick",
+    "money_conflict_flat_line_thin_edge",
+    "money_conflict_flat_line_strong_edge",
+    "money_conflict_unknown_line_negative",
+    "money_conflict_unknown_line_thin",
+    "money_conflict_one_source_only",
+    "money_conflict_multi_source",
+    "rlm_against_pick",
+  ];
+  for (const w of codes) {
+    const out = withCtx(w);
+    const banned =
+      findFirstBannedTerm(out.guidedGuide) ||
+      findFirstBannedTerm(out.guidedWatchOut) ||
+      findFirstBannedTerm(out.whyLine) ||
+      findFirstBannedTerm(out.riskLine);
+    check(`copy: warning="${w}" passes banned-terms linter`, banned === null, banned ?? "");
+  }
+}
 
 console.log();
 console.log("━━━ Test summary ━━━");

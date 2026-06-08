@@ -687,12 +687,15 @@ console.log("━━━ Phase 6B.30E — deriveMarketContextEffect (pure rule cha
       sourceCount: 1, rlmAgainstPick: false,
     }).capAtWatchlist === true
   );
+  // Phase 6B.30F note: flat line + negative edge moved from Rule 3
+  // (capAtWatchlist) to Rule 3a (forceCaution). Asserting the NEW
+  // behavior here; explicit Rule 3a parity tests live below.
   check(
-    "Rule 3 — flat line + negative edge → cap",
+    "Rule 3 → 3a (6B.30F) — flat line + negative edge → forceCaution (was capAtWatchlist)",
     deriveMarketContextEffect({
       moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "negative",
       sourceCount: 1, rlmAgainstPick: false,
-    }).capAtWatchlist === true
+    }).forceCaution === true
   );
 
   // Rule 4 — flat + normal/strong → stay, warning only
@@ -718,6 +721,62 @@ console.log("━━━ Phase 6B.30E — deriveMarketContextEffect (pure rule cha
       moneyConflict: true, lineMovementVsPick: "unknown", edgeStrength: "negative",
       sourceCount: 1, rlmAgainstPick: false,
     }).forceCaution === true
+  );
+
+  // Rule 3a (Phase 6B.30F) — flat line + negative edge + conflict =
+  // forceCaution. Pre-6B.30F this was capAtWatchlist, which was
+  // inconsistent with Rule 5 (unknown line + negative edge → caution).
+  // Flat + negative + conflict carries MORE evidence than unknown +
+  // negative + conflict, so it cannot be less severe.
+  check(
+    "Rule 3a (6B.30F) — flat line + negative edge + conflict → forceCaution (parity with Rule 5)",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "negative",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).forceCaution === true
+  );
+  check(
+    "Rule 3a (6B.30F) — flat line + negative edge: capAtWatchlist=false (forceCaution supersedes)",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "negative",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === false
+  );
+  check(
+    "Rule 3a (6B.30F) — warningCode = money_conflict_line_confirms_market (multi-signal warning)",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "negative",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).warningCode === "money_conflict_line_confirms_market"
+  );
+  // Parity check: Rule 3a and Rule 5 produce IDENTICAL forceCaution
+  // for the same edge bucket and moneyConflict — only the line state
+  // differs (flat vs unknown).
+  check(
+    "Rule 3a/5 parity — flat + negative vs unknown + negative both forceCaution",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "negative",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).forceCaution ===
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "unknown", edgeStrength: "negative",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).forceCaution
+  );
+
+  // Anti-regression — flat line + THIN edge stays at capAtWatchlist
+  // (Rule 3, unchanged). Only the negative-edge case escalates to
+  // Caution; thin/unknown still cap at Watchlist.
+  check(
+    "Rule 3 anti-regression — flat line + thin edge stays at capAtWatchlist",
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "thin",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).capAtWatchlist === true &&
+    deriveMarketContextEffect({
+      moneyConflict: true, lineMovementVsPick: "flat", edgeStrength: "thin",
+      sourceCount: 1, rlmAgainstPick: false,
+    }).forceCaution === false
   );
 
   // Rule 6 — unknown line + thin edge → cap
