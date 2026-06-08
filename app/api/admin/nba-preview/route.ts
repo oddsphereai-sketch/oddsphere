@@ -22,7 +22,14 @@ import {
   isInjuryIngestEnabled,
 } from "@/lib/services/nba/espnNbaInjuries";
 import { runNbaAutoModelV1 } from "@/lib/automodel/nba/nbaAutoModelV1";
-import { runNbaAutoModelV2 } from "@/lib/automodel/nba/nbaAutoModelV2";
+// Phase 7C — v1 research model exists in the tree but is NOT active.
+// Daniel reverted the active selection on 2026-06-08 after the v0/v1
+// audit showed v1's recency blend pushed Game 3 total to ~230 vs the
+// market line of 215.5 — too aggressive for an uncalibrated preview.
+// v1 files remain for ongoing research + the compare-nba-v0-v1 audit
+// script. To re-activate v1 in the future, swap the runNbaAutoModelV1
+// call below for runNbaAutoModelV2 (and pass { bookCount, isPlayoffs }).
+// import { runNbaAutoModelV2 } from "@/lib/automodel/nba/nbaAutoModelV2";
 import { etSlateDateToUtcWindow } from "@/lib/services/nba/etSlateDate";
 import {
   buildNbaDailyEdgeGameDto,
@@ -208,14 +215,13 @@ export async function GET(request: Request): Promise<Response> {
       const prov = provenanceByGame.get(s.game_external_id);
       if (prov === undefined) return [];
       const lines = linesByExtId.get(s.game_external_id) ?? [];
-      // Phase 7C — v1 (research-prior, calibration-pending) is the
-      // ACTIVE preview model. v0 is automatically computed inside v2
-      // as the v0_comparison field for the audit script. The route
-      // forwards the v1 prediction shape (which is a superset of v0's
-      // NbaAutoModelOutput) to the DTO builder. ADMIN-ONLY language;
-      // member-facing UI must not surface "v1"/"v0".
-      const bookCount = new Set(lines.map((l) => l.sportsbook)).size;
-      const v1 = runNbaAutoModelV2(s, "t60_locked", { isPlayoffs: true, bookCount });
+      // Active preview model = v0 (NbaAutoModelV1). The v1 research
+      // model lives in lib/automodel/nba/nbaAutoModelV2.ts and is
+      // exercised only by scripts/audit/nba/compare-nba-v0-v1.ts.
+      // When v0 is used, buildAdminModelBadge returns null (the
+      // admin pill in the reader is therefore hidden), and the UI
+      // renders exactly as it did pre-v1.
+      const pred = runNbaAutoModelV1(s, "t60_locked");
       const splitsRow = matchSplitsRow(
         splits,
         s.home_team.abbreviation,
@@ -229,7 +235,7 @@ export async function GET(request: Request): Promise<Response> {
       return [
         buildNbaDailyEdgeGameDto({
           snapshot: s,
-          prediction: v1,
+          prediction: pred,
           provenance: prov,
           lines,
           splitsRow,
@@ -237,7 +243,6 @@ export async function GET(request: Request): Promise<Response> {
         }),
       ];
     });
-    void runNbaAutoModelV1;
 
     const body: NbaDailyEdgeDto = {
       as_of: new Date().toISOString(),
