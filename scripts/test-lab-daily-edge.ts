@@ -1582,6 +1582,30 @@ async function main() {
     }
   }
 
+  // ─── Phase 6B.30C+ FI pill fix — pure-function test ──────────────────────
+  // Verifies that `formatPickWithLine` (DailyEdgeShell.tsx) returns
+  // "Held" for null picks instead of the bare em-dash placeholder.
+  // Matches the existing PredictionTile "Held" pattern from R-19 Phase 5j.
+  section("Phase 6B.30C+ — formatPickWithLine renders 'Held' for null picks");
+  {
+    // Imported at runtime to avoid changing the file's import block at top.
+    const mod = await import("../app/lab/components/daily-edge/DailyEdgeShell");
+    // Test the exposed util if exported; otherwise import the file and
+    // re-derive the behavior at the component boundary.
+    const fn = (mod as { formatPickWithLine?: (m: "moneyline" | "total" | "first_inning", p: string | null, l: number | null) => string }).formatPickWithLine;
+    if (typeof fn === "function") {
+      check(`[6B.30C+] formatPickWithLine(moneyline, null, null) → "Held"`, fn("moneyline", null, null) === "Held");
+      check(`[6B.30C+] formatPickWithLine(total, null, 8.5) → "Held"`, fn("total", null, 8.5) === "Held");
+      check(`[6B.30C+] formatPickWithLine(first_inning, null, null) → "Held"`, fn("first_inning", null, null) === "Held");
+      check(`[6B.30C+] formatPickWithLine(moneyline, "PHI", null) → "PHI" (real pick unaffected)`, fn("moneyline", "PHI", null) === "PHI");
+      check(`[6B.30C+] formatPickWithLine(total, "Over", 8.5) → "Over 8.5" (real pick + line unaffected)`, fn("total", "Over", 8.5) === "Over 8.5");
+      check(`[6B.30C+] formatPickWithLine(first_inning, "NRFI", null) → "NRFI" (real pick unaffected)`, fn("first_inning", "NRFI", null) === "NRFI");
+      check(`[6B.30C+] formatPickWithLine never returns "—" for null pick`, fn("moneyline", null, null) !== "—" && fn("total", null, null) !== "—" && fn("first_inning", null, null) !== "—");
+    } else {
+      check(`[6B.30C+] formatPickWithLine is not exported — fix can't be verified at unit level`, false, "expose formatPickWithLine for testing");
+    }
+  }
+
   // ─── Summary ──────────────────────────────────────────────────────────────
   console.log(`\n${"━".repeat(70)}`);
   console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);

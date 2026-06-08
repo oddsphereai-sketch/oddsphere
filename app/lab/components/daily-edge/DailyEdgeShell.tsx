@@ -479,7 +479,7 @@ function MarketPill({
       <span className={`text-[10px] uppercase tracking-[0.14em] font-bold shrink-0 ${selected ? "text-violet-100" : "text-gray-500"}`}>
         {MARKET_SHORT_LABEL[market]}
       </span>
-      <span className="text-[12px] font-bold tabular-nums shrink-0">{pick ?? "—"}</span>
+      <span className={`text-[12px] font-bold tabular-nums shrink-0 ${pick === null ? "text-gray-500" : ""}`}>{pick ?? "Held"}</span>
       <span className={`text-[10.5px] tabular-nums shrink-0 ${selected ? "text-gray-300" : "text-gray-500"}`}>
         {confidence === null ? "—" : `${Math.round(confidence * 100)}%`}
       </span>
@@ -496,12 +496,20 @@ function MarketPill({
 /**
  * Render the headline pick line for the reader's market selector, with
  * the totals line stitched on when applicable.
- *   moneyline   → "PHI" or "—"
- *   total       → "Over 8.5" / "Under 8.5" / "Over" / "—"
- *   first_inning→ "NRFI" / "YRFI" / "—"
+ *   moneyline   → "PHI" or "Held"
+ *   total       → "Over 8.5" / "Under 8.5" / "Over" / "Held"
+ *   first_inning→ "NRFI" / "YRFI" / "Held"
+ *
+ * Phase 6B.30C+ FI pill fix: when V2.2 holds a market (e.g. FI/NRFI on
+ * a real-data fallback prediction with starter missing), the bare em-dash
+ * placeholder leaked through the per-market verdict pills and the reader
+ * market selector. PredictionTile (sharedCardParts.tsx:540) had already
+ * switched to "Held" in R-19 Phase 5j; this brings the pill and reader
+ * segment in line with that semantics so the customer sees an honest
+ * "Held" state instead of a `—` that reads as broken/missing data.
  */
-function formatPickWithLine(market: MarketKey, pick: string | null, line: number | null): string {
-  if (pick === null) return "—";
+export function formatPickWithLine(market: MarketKey, pick: string | null, line: number | null): string {
+  if (pick === null) return "Held";
   if (market === "total" && line !== null) return `${pick} ${line}`;
   return pick;
 }
