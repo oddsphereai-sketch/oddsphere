@@ -15,12 +15,15 @@
  */
 
 import { validateAdminAuth } from "@/lib/auth/admin";
-import { buildNbaFeatureSnapshots } from "@/lib/services/nba/featureSnapshot";
+import { buildNbaFeatureSnapshotsWithProvenance } from "@/lib/services/nba/featureSnapshot";
 import {
   fetchEspnNbaInjuries,
   isInjuryIngestEnabled,
 } from "@/lib/services/nba/espnNbaInjuries";
 import { runNbaAutoModelV1 } from "@/lib/automodel/nba/nbaAutoModelV1";
+import { buildGameReview, type GameReview } from "@/lib/services/nba/buildMarketReviewRows";
+import { etSlateDateToUtcWindow } from "@/lib/services/nba/etSlateDate";
+import { supabase } from "@/lib/db/supabase";
 import type {
   NbaAutoModelOutput,
   NbaGameSnapshot,
@@ -41,7 +44,8 @@ type AdminGameEntry = {
 type AdminNbaPreviewResponse = {
   as_of: string;
   sport: "nba";
-  slate_date: string;
+  slate_date_et: string;          // Phase 7B v0c — ET-interpreted date
+  utc_window: { startISO: string; endISO: string };
   provisional: true;
   notice: string;
   injury_ingest_enabled: boolean;
@@ -53,6 +57,20 @@ type AdminNbaPreviewResponse = {
     tier_fallback: number;
   };
   games: AdminGameEntry[];
+  /** Phase 7B v0c — per-game market review with line/odds/no-vig/edge/conflict/grade. */
+  game_reviews: GameReview[];
+  /** Phase 7B v0c — per-market raw lines pulled for each game (book-by-book). */
+  raw_lines_by_game: Record<
+    number,
+    Array<{
+      market_type: string;
+      sportsbook: string;
+      side: string | null;
+      line_value: number | null;
+      odds_american: number | null;
+      updated_at: string | null;
+    }>
+  >;
 };
 
 // ─── TEMPORARY PREVIEW-BRANCH AUTH BYPASS ─────────────────────────────
@@ -102,6 +120,23 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
+    // Phase 7B v0c — interpret `date` param as ET slate date and search
+    // games within the ET-day UTC window. So `date=2026-06-08` finds
+    // tonight's Game 3 even though its UTC game_date is 2026-06-09.
+    const etWindow = etSlateDateToUtcWindow(date);
+    // The featureSnapshot builder still queries by UTC day internally; we
+    // need to pass it a date that spans the ET window. We use the UTC
+    // date of the window's MIDPOINT to get a single-day query that covers
+    // the bulk of the ET evening; for full safety, the builder caller
+    // would ideally accept a UTC window. v0c minimum: pass the UTC date
+    // that corresponds to the ET evening (start + 12 hours so tonight's
+    // late game is centered).
+    const midpointMs =
+      (new Date(etWindow.startISO).getTime() +
+        new Date(etWindow.endISO).getTime()) /
+      2;
+    const queryDateUtc = new Date(midpointMs).toISOString().slice(0, 10);
+
     const injuryResolver = async (opts: {
       teamAbbreviation: string;
       teamExternalId: number;
@@ -109,7 +144,14 @@ export async function GET(request: Request): Promise<Response> {
       const result = await fetchEspnNbaInjuries(opts.teamAbbreviation);
       return result === null ? null : result.players;
     };
-    const snapshots = await buildNbaFeatureSnapshots(date, { injuryResolver });
+    const { snapshots, provenance } =
+      await buildNbaFeatureSnapshotsWithProvenance(queryDateUtc, {
+        injuryResolver,
+      });
+    const provenanceByGame = new Map(
+      provenance.map((p) => [p.game_external_id, p]),
+    );
+
     const entries: AdminGameEntry[] = snapshots.map((s) => {
       const pred = runNbaAutoModelV1(s, "t60_locked");
       return {
@@ -122,6 +164,66 @@ export async function GET(request: Request): Promise<Response> {
         prediction: pred,
       };
     });
+
+    // Phase 7B v0c — per-game review with full market context.
+    const reviews: GameReview[] = entries
+      .map((e) => {
+        const prov = provenanceByGame.get(e.game_external_id);
+        if (prov === undefined) return null;
+        return buildGameReview(e.snapshot, e.prediction, prov);
+      })
+      .filter((r): r is GameReview => r !== null);
+
+    // Phase 7B v0c — fetch raw per-book lines so the operator can audit
+    // exactly which sportsbook supplied which price. Keyed by game_external_id
+    // so the UI can render a per-game lines table.
+    const rawLinesByGame: AdminNbaPreviewResponse["raw_lines_by_game"] = {};
+    const gameExternalIds = entries.map((e) => e.game_external_id);
+    if (gameExternalIds.length > 0) {
+      // Resolve external_id → games.id first
+      const { data: gameRows } = await supabase
+        .from("games")
+        .select("id, external_id")
+        .eq("sport", "nba")
+        .in("external_id", gameExternalIds);
+      const idToExt = new Map<number, number>(
+        (gameRows ?? []).map(
+          (g: { id: number; external_id: number }) => [g.id, g.external_id],
+        ),
+      );
+      const dbGameIds = (gameRows ?? []).map((g: { id: number }) => g.id);
+      if (dbGameIds.length > 0) {
+        const { data: lineRows } = await supabase
+          .from("lines")
+          .select(
+            "game_id, market_type, sportsbook, side, line_value, odds_american, updated_at",
+          )
+          .in("game_id", dbGameIds)
+          .in("market_type", ["moneyline", "spread", "total"]);
+        for (const l of (lineRows ?? []) as {
+          game_id: number;
+          market_type: string;
+          sportsbook: string;
+          side: string | null;
+          line_value: number | null;
+          odds_american: number | null;
+          updated_at: string | null;
+        }[]) {
+          const ext = idToExt.get(l.game_id);
+          if (ext === undefined) continue;
+          const arr = rawLinesByGame[ext] ?? [];
+          arr.push({
+            market_type: l.market_type,
+            sportsbook: l.sportsbook,
+            side: l.side,
+            line_value: l.line_value,
+            odds_american: l.odds_american,
+            updated_at: l.updated_at,
+          });
+          rawLinesByGame[ext] = arr;
+        }
+      }
+    }
 
     const totals = {
       games_count: entries.length,
@@ -141,13 +243,16 @@ export async function GET(request: Request): Promise<Response> {
     const body: AdminNbaPreviewResponse = {
       as_of: new Date().toISOString(),
       sport: "nba",
-      slate_date: date,
+      slate_date_et: date,
+      utc_window: etWindow,
       provisional: true,
       notice:
-        "INTERNAL PREVIEW — NBA v0 — PROVISIONAL, NOT MEMBER-FACING. Confidence ceilings + thresholds are v0 placeholders.",
+        "INTERNAL PREVIEW — NBA v0b — PROVISIONAL, NOT MEMBER-FACING. Thresholds are v0 placeholders.",
       injury_ingest_enabled: isInjuryIngestEnabled(),
       totals,
       games: entries,
+      game_reviews: reviews,
+      raw_lines_by_game: rawLinesByGame,
     };
     return new Response(JSON.stringify(body), {
       status: 200,
