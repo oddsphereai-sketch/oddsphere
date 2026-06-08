@@ -27,6 +27,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useDailyEdge } from "../../hooks/useDailyEdge";
+import { useSportSelection } from "../../hooks/useSportSelection";
 import {
   buildEdgeStackRows,
   marketSourceLabel,
@@ -805,33 +806,45 @@ function SportIcon({ sport, size = 18, active }: { sport: Sport; size?: number; 
  * <Month>" placeholders. League glyphs are inline SVGs (no licensing
  * concerns + no remote asset fetches).
  */
-function SportRail({ sport }: { sport: Sport }) {
-  // V1 — MLB only is live. Status copy stays neutral to avoid implying a
-  // hard launch date for unfinished sports ("Coming Soon" is the safe
-  // default until each league's model is closer to ship).
+export function SportRail({ sport }: { sport: Sport }) {
+  // V1 — MLB live. NBA is clickable in preview/internal mode on the
+  // nba-v0a branch (NBA preview lands at /lab/daily-edge?sport=nba and
+  // is gated by the existing admin auth + middleware bypass for
+  // /admin/nba-* and /api/admin/nba-* — NBA still requires admin auth
+  // on production main).
   const ROW: Array<{ key: Sport; label: string; live: boolean }> = [
     { key: "mlb", label: "MLB", live: true },
-    { key: "nba", label: "NBA", live: false },
+    { key: "nba", label: "NBA", live: true },
     { key: "nhl", label: "NHL", live: false },
     { key: "nfl", label: "NFL", live: false },
     { key: "cfb", label: "CFB", live: false },
     { key: "cbb", label: "CBB", live: false },
   ];
+  // Clickable nav: use useSportSelection so live tabs swap the URL's
+  // ?sport= param and the parent page re-renders with the new sport.
+  const { setSport } = useSportSelection();
   return (
     <div className="border-b border-white/[0.05] bg-gradient-to-b from-white/[0.015] to-transparent">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5">
         <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto -mx-1 px-1">
           {ROW.map((s) => {
             const isActive = s.key === sport && s.live;
+            const isClickable = s.live;
+            const Tag = isClickable ? "button" : "div";
+            const clickHandler = isClickable && !isActive ? () => setSport(s.key) : undefined;
             return (
-              <div
+              <Tag
                 key={s.key}
+                onClick={clickHandler}
+                type={isClickable ? "button" : undefined}
                 className={`group flex-1 min-w-[120px] sm:min-w-0 inline-flex items-center gap-2.5 px-3 py-2 rounded-lg border whitespace-nowrap transition-colors ${
                   isActive
                     ? "border-violet-400/55 bg-violet-500/[0.14] text-violet-50 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.10),0_0_18px_-8px_rgba(139,92,246,0.45)]"
-                    : "border-white/[0.06] bg-white/[0.02] text-gray-400"
+                    : isClickable
+                      ? "border-white/[0.06] bg-white/[0.02] text-gray-400 hover:border-violet-400/30 hover:bg-violet-500/[0.06] cursor-pointer"
+                      : "border-white/[0.06] bg-white/[0.02] text-gray-400"
                 }`}
-                aria-label={`${s.label} — ${isActive ? "active model" : "coming soon"}`}
+                aria-label={`${s.label} — ${isActive ? "active model" : isClickable ? "switch to this sport" : "coming soon"}`}
               >
                 {/* Circular icon container — tinted violet for active,
                     neutral for inactive. The container itself, not just
@@ -868,7 +881,7 @@ function SportRail({ sport }: { sport: Sport }) {
                     )}
                   </span>
                 </div>
-              </div>
+              </Tag>
             );
           })}
         </div>
