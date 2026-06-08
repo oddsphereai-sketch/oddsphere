@@ -244,6 +244,15 @@ export async function GET(request: Request): Promise<Response> {
       ];
     });
 
+    // Surface SharpAPI access posture explicitly so the UI can render
+    // an env-aware "public market data unavailable" panel on the
+    // deployed Vercel preview (which intentionally does NOT have
+    // SHARPAPI_KEY set) instead of looking like the data is broken.
+    const marketSignalsCapability =
+      sharpKey !== undefined && sharpKey !== ""
+        ? ("available" as const)
+        : ("unavailable_no_api_key" as const);
+
     const body: NbaDailyEdgeDto = {
       as_of: new Date().toISOString(),
       slate_date_et: date,
@@ -253,6 +262,7 @@ export async function GET(request: Request): Promise<Response> {
         "INTERNAL PREVIEW — NBA v0c — PROVISIONAL, NOT MEMBER-FACING. " +
         "Thresholds are v0 placeholders. No opener/RLM/steam (SharpAPI does not provide).",
       injury_ingest_enabled: isInjuryIngestEnabled(),
+      market_signals_capability: marketSignalsCapability,
       games,
     };
     // ensure extToDbId silently helps the linter without an unused binding:

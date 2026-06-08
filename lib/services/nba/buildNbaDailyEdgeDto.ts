@@ -191,6 +191,22 @@ export type NbaDailyEdgeGameDto = {
   admin_model_badge: NbaAdminModelBadge | null;
 };
 
+/**
+ * Discriminator for whether the route was able to fetch SharpAPI
+ * splits/opportunities/EV in the current environment. Set by the
+ * route at request time based on whether SHARPAPI_KEY is present.
+ *
+ *   • "available"             — key present; per-game has_splits /
+ *                               has_opportunities reflect real data
+ *                               availability for the matchup.
+ *   • "unavailable_no_api_key" — env has no SHARPAPI_KEY; the UI
+ *                               should render a "this environment
+ *                               does not have public-market access"
+ *                               empty state instead of "no splits for
+ *                               this matchup" (which would be misleading).
+ */
+export type NbaMarketSignalsCapability = "available" | "unavailable_no_api_key";
+
 export type NbaDailyEdgeDto = {
   as_of: string;
   slate_date_et: string;
@@ -198,6 +214,13 @@ export type NbaDailyEdgeDto = {
   provisional: true;
   notice: string;
   injury_ingest_enabled: boolean;
+  /**
+   * Honest signal about whether the deployment environment has access
+   * to SharpAPI splits/EV/opportunities. Decoupled from per-game
+   * `has_splits` flags so the UI can show env-aware copy without
+   * lying about per-matchup data availability.
+   */
+  market_signals_capability: NbaMarketSignalsCapability;
   games: NbaDailyEdgeGameDto[];
 };
 
