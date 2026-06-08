@@ -79,8 +79,52 @@ export const MLB_TEAM_COLORS: Record<string, TeamColorEntry> = {
   SF:  { primary: "#FD5A1E" }, // Giants Orange
 };
 
-/** Lookup helper with fallback. Pure, deterministic. */
-export function teamPrimaryColor(abbreviation: string | null | undefined): string {
+/**
+ * Phase 7F — NBA team primary colors. Same shape + lookup discipline
+ * as MLB above. Keyed by ESPN abbreviation (e.g. "NY" for Knicks,
+ * "SA" for Spurs). Sport-aware lookup below routes NBA games to this
+ * map. MLB callers pass no sport (or sport="mlb") and hit MLB_TEAM_COLORS
+ * unchanged — zero MLB regression.
+ *
+ * Why a separate map vs merging: MLB and NBA share some abbreviations
+ * (e.g. "BOS" is Red Sox red in MLB but Celtics green in NBA). A
+ * single-map approach would collide. Two maps + sport discriminator
+ * keeps each league's brand colors intact.
+ */
+export const NBA_TEAM_COLORS: Record<string, TeamColorEntry> = {
+  ATL: { primary: "#E03A3E" }, BOS: { primary: "#007A33" },
+  BKN: { primary: "#000000" }, CHA: { primary: "#1D1160" },
+  CHI: { primary: "#CE1141" }, CLE: { primary: "#860038" },
+  DAL: { primary: "#00538C" }, DEN: { primary: "#0E2240" },
+  DET: { primary: "#C8102E" }, GSW: { primary: "#1D428A" },
+  HOU: { primary: "#CE1141" }, IND: { primary: "#002D62" },
+  LAC: { primary: "#C8102E" }, LAL: { primary: "#552583" },
+  MEM: { primary: "#5D76A9" }, MIA: { primary: "#98002E" },
+  MIL: { primary: "#00471B" }, MIN: { primary: "#0C2340" },
+  NOP: { primary: "#0C2340" }, NY:  { primary: "#006BB6" },
+  NYK: { primary: "#006BB6" }, OKC: { primary: "#007AC1" },
+  ORL: { primary: "#0077C0" }, PHI: { primary: "#006BB6" },
+  PHX: { primary: "#1D1160" }, POR: { primary: "#E03A3E" },
+  SAC: { primary: "#5A2D81" }, SA:  { primary: "#C4CED4" },
+  SAS: { primary: "#C4CED4" }, TOR: { primary: "#CE1141" },
+  UTA: { primary: "#002B5C" }, WAS: { primary: "#002B5C" },
+};
+
+/**
+ * Lookup helper with fallback. Pure, deterministic.
+ *
+ * Phase 7F: optional `sport` discriminator. Default "mlb" keeps the
+ * existing MLB call-sites byte-identical (no signature change needed
+ * at any MLB caller). NBA callers pass `sport="nba"` to hit the NBA
+ * brand map.
+ */
+export function teamPrimaryColor(
+  abbreviation: string | null | undefined,
+  sport: "mlb" | "nba" | "nfl" | "nhl" | "cbb" | "cfb" | "ucl" = "mlb",
+): string {
   if (!abbreviation) return FALLBACK_TEAM_COLOR;
+  if (sport === "nba") {
+    return NBA_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
+  }
   return MLB_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
 }

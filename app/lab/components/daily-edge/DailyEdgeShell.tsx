@@ -206,7 +206,19 @@ const ESPN_LOGO_SLUG: Record<string, string> = {
   ATH: "oak",
 };
 
-function espnLogoUrl(abbr: string): string {
+// ESPN slug overrides for NBA abbreviations that ESPN spells differently.
+// (Most NBA abbrevs already match ESPN's URL slug; this map just covers
+// the rare cases where ours and ESPN's diverge.)
+const ESPN_NBA_SLUG: Record<string, string> = {
+  // Most NBA teams use lowercased abbrev as-is — no overrides needed today.
+  // Add here if a logo 404s: e.g. NYK: "ny", SAS: "sa".
+};
+
+function espnLogoUrl(abbr: string, sport: Sport = "mlb"): string {
+  if (sport === "nba") {
+    const slug = ESPN_NBA_SLUG[abbr] ?? abbr.toLowerCase();
+    return `https://a.espncdn.com/i/teamlogos/nba/500/${slug}.png`;
+  }
   const slug = ESPN_LOGO_SLUG[abbr] ?? abbr.toLowerCase();
   return `https://a.espncdn.com/i/teamlogos/mlb/500/${slug}.png`;
 }
@@ -393,8 +405,9 @@ function TeamBadge({ abbr, logo, size }: { abbr: string; logo: string | null; si
   // intentionally don't read it. When ESPN slugs are missing (unknown
   // team) or the request 404s, the abbr-disc fallback engages.
   void logo;
+  const shellSport = useShellSport();
   const [errored, setErrored] = useState(false);
-  const src = espnLogoUrl(abbr);
+  const src = espnLogoUrl(abbr, shellSport);
   const filter = LOGO_FILTER[abbr];
 
   if (errored) {
@@ -2175,7 +2188,7 @@ function SlateCard({
         className="h-[3px] w-full"
         aria-hidden="true"
         style={{
-          background: `linear-gradient(to right, ${teamPrimaryColor(game.awayTeam)} 0%, ${teamPrimaryColor(game.awayTeam)} 28%, rgba(255,255,255,0.06) 50%, ${teamPrimaryColor(game.homeTeam)} 72%, ${teamPrimaryColor(game.homeTeam)} 100%)`,
+          background: `linear-gradient(to right, ${teamPrimaryColor(game.awayTeam, shellSport)} 0%, ${teamPrimaryColor(game.awayTeam, shellSport)} 28%, rgba(255,255,255,0.06) 50%, ${teamPrimaryColor(game.homeTeam, shellSport)} 72%, ${teamPrimaryColor(game.homeTeam, shellSport)} 100%)`,
         }}
       />
 
