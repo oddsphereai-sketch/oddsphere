@@ -86,6 +86,38 @@ function readStringOrNull(v: unknown): string | null {
 }
 
 /**
+ * Phase 6B.27 — V2.2 audit grade → public play_grade translator.
+ *
+ * `prediction_records.play_grade` is the public-facing category column
+ * (rendered on /lab/tracking via PLAY_GRADE_LABEL; grouped by
+ * calibrationReport). V2.2's `mlPlayGrade.grade` / `ouPlayGrade.grade`
+ * emit a wider taxonomy that includes internal diagnostic labels —
+ * "no_bet" (edge < -1%, "pick shown but do not bet"), "held" (market
+ * data unsafe), and "toss_up" — which are NOT public categories.
+ *
+ * Pre-6B.27 those internal labels leaked verbatim into the public
+ * column. Today's CLE@TEX ML (rec=120) and LAA@LAD ML (rec=129) were
+ * stored as play_grade="no_bet" even though the customer-facing slate
+ * pill still showed an actionable pick (V2.1 framework grade
+ * `market_watch` → "Market Watch" pill, pick + confidence non-null).
+ *
+ * Public taxonomy (matches PLAY_GRADE_LABEL):
+ *   best_angle | lean | market_aligned | provisional | null
+ *
+ * Internal-only labels collapse to null. The full V2.2 diagnostic
+ * (incl. ml_no_bet_reason / ml_play_grade / ml_market_aligned / etc.)
+ * is preserved as-is in snapshot_json.v2_2_audit for calibration and
+ * post-hoc audit. Counting/grading are unaffected — W/L gates on
+ * no_bet boolean, never on play_grade.
+ */
+const PUBLIC_PLAY_GRADES = new Set(["best_angle", "lean", "market_aligned", "provisional"]);
+function readPublicPlayGrade(v: unknown): string | null {
+  const raw = readStringOrNull(v);
+  if (raw === null) return null;
+  return PUBLIC_PLAY_GRADES.has(raw) ? raw : null;
+}
+
+/**
  * Phase 6B.11 — minimal sharp_signals row shape used for the
  * best_angle public-money guard. Mirrors the fields the daily-edge
  * route reads in its own copy of this guard (Phase 6B.10).
@@ -558,7 +590,9 @@ function buildMlRecord(
     market_probability: mlMarketProb,
     edge: mlEdgePp,
     expected_value: null,
-    play_grade: readStringOrNull(sp.ml_play_grade),
+    // Phase 6B.27 — strip internal V2.2 diagnostic labels (no_bet/held/
+    // toss_up) from the public column; raw stays in snapshot.v2_2_audit.
+    play_grade: readPublicPlayGrade(sp.ml_play_grade),
     prediction_type: readStringOrNull(sp.ml_prediction_type),
     // Phase 6B.11 — apply the same public-money conflict guard the
     // Daily Edge verdict layer uses (Phase 6B.10). Tracking pending
@@ -665,7 +699,8 @@ function buildOuRecord(
     market_probability: ouMarketProb,
     edge: ouEdgePp,
     expected_value: null,
-    play_grade: readStringOrNull(sp.ou_play_grade),
+    // Phase 6B.27 — same translator as ML; see readPublicPlayGrade.
+    play_grade: readPublicPlayGrade(sp.ou_play_grade),
     prediction_type: readStringOrNull(sp.ou_prediction_type),
     // Phase 6B.11 — same guard as ML above; see hasOpposingPublicMoneyConflict.
     best_angle:

@@ -536,6 +536,118 @@ check("impliedProb(+100) = 0.5", americanToImpliedProb(100) === 0.5);
   check("data_integrity: market_two_sided_available=no when away null", di.market_two_sided_available === "no");
 }
 
+// ── Phase 6B.27 — V2.2 internal labels must not leak into public play_grade ──
+console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━");
+{
+  // V2.2 emitted "no_bet" (edge < -1%) but pill still actionable. Public
+  // column must be null; snapshot.v2_2_audit must keep raw "no_bet".
+  const noBetSp = {
+    ...v21SportSpecific,
+    ml_play_grade: "no_bet",
+    ml_no_bet_reason: "Negative model edge (-5.0%). Pick shown but do not bet.",
+    ou_play_grade: "best_angle",
+    v2_2_audit: {
+      ml_play_grade: "no_bet",
+      ou_play_grade: "best_angle",
+      ml_no_bet_reason: "Negative model edge (-5.0%). Pick shown but do not bet.",
+    },
+  };
+  const noBetPred = { ...basePrediction, sport_specific: noBetSp };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb", slateDate: "2026-06-06", launchDay: false, games: [baseGame],
+    predictionByGameId: new Map([[14771, noBetPred]]), abbrevByTeamId,
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  const ou = recs.find((r) => r.market === "total")!;
+  check("ML record.play_grade=null when V2.2 emits 'no_bet'", ml.play_grade === null);
+  check("ML record.no_bet=false (exclusion gate untouched)", ml.no_bet === false);
+  check("ML record.pick still present (customer-facing pick unchanged)", ml.pick === "home");
+  check("ML record.confidence still present", ml.confidence === 54.0);
+  check("ML snapshot_json.v2_2_audit.ml_play_grade='no_bet' (raw preserved)",
+        (ml.snapshot_json as any)?.v2_2_audit?.ml_play_grade === "no_bet");
+  check("ML snapshot_json.v2_2_audit.ml_no_bet_reason preserved",
+        typeof (ml.snapshot_json as any)?.v2_2_audit?.ml_no_bet_reason === "string");
+  check("OU record.play_grade='best_angle' (actionable label pass-through unchanged)",
+        ou.play_grade === "best_angle");
+}
+{
+  // V2.2 'held' on ML — same translator behavior.
+  const heldSp = {
+    ...v21SportSpecific,
+    ml_play_grade: "held",
+    ou_play_grade: "lean",
+    v2_2_audit: { ml_play_grade: "held", ou_play_grade: "lean" },
+  };
+  const heldPred = { ...basePrediction, sport_specific: heldSp };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb", slateDate: "2026-06-06", launchDay: false, games: [baseGame],
+    predictionByGameId: new Map([[14771, heldPred]]), abbrevByTeamId,
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  const ou = recs.find((r) => r.market === "total")!;
+  check("ML record.play_grade=null when V2.2 emits 'held'", ml.play_grade === null);
+  check("ML snapshot raw 'held' preserved", (ml.snapshot_json as any)?.v2_2_audit?.ml_play_grade === "held");
+  check("OU record.play_grade='lean' (actionable pass-through)", ou.play_grade === "lean");
+}
+{
+  // V2.2 'toss_up' on OU side.
+  const tuSp = {
+    ...v21SportSpecific,
+    ml_play_grade: "market_aligned",
+    ou_play_grade: "toss_up",
+    v2_2_audit: { ml_play_grade: "market_aligned", ou_play_grade: "toss_up" },
+  };
+  const tuPred = { ...basePrediction, sport_specific: tuSp };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb", slateDate: "2026-06-06", launchDay: false, games: [baseGame],
+    predictionByGameId: new Map([[14771, tuPred]]), abbrevByTeamId,
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  const ou = recs.find((r) => r.market === "total")!;
+  check("OU record.play_grade=null when V2.2 emits 'toss_up'", ou.play_grade === null);
+  check("OU snapshot raw 'toss_up' preserved", (ou.snapshot_json as any)?.v2_2_audit?.ou_play_grade === "toss_up");
+  check("ML record.play_grade='market_aligned' (actionable pass-through)", ml.play_grade === "market_aligned");
+}
+{
+  // All four public labels pass through unchanged.
+  for (const grade of ["best_angle", "lean", "market_aligned", "provisional"]) {
+    const sp = {
+      ...v21SportSpecific,
+      ml_play_grade: grade,
+      ou_play_grade: grade,
+      v2_2_audit: { ml_play_grade: grade, ou_play_grade: grade },
+    };
+    const pred = { ...basePrediction, sport_specific: sp };
+    const recs = buildPredictionRecordsFromSlate({
+      sport: "mlb", slateDate: "2026-06-06", launchDay: false, games: [baseGame],
+      predictionByGameId: new Map([[14771, pred]]), abbrevByTeamId,
+    });
+    const ml = recs.find((r) => r.market === "moneyline")!;
+    const ou = recs.find((r) => r.market === "total")!;
+    check(`ML record.play_grade='${grade}' (pass-through)`, ml.play_grade === grade);
+    check(`OU record.play_grade='${grade}' (pass-through)`, ou.play_grade === grade);
+  }
+}
+{
+  // Defensive: unknown / future label maps to null (don't trust strings we
+  // don't know are publicly safe).
+  const unknownSp = {
+    ...v21SportSpecific,
+    ml_play_grade: "future_internal_signal",
+    ou_play_grade: "best_angle",
+    v2_2_audit: { ml_play_grade: "future_internal_signal", ou_play_grade: "best_angle" },
+  };
+  const pred = { ...basePrediction, sport_specific: unknownSp };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb", slateDate: "2026-06-06", launchDay: false, games: [baseGame],
+    predictionByGameId: new Map([[14771, pred]]), abbrevByTeamId,
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  check("ML record.play_grade=null for unknown label", ml.play_grade === null);
+  check("ML snapshot preserves raw unknown label",
+        (ml.snapshot_json as any)?.v2_2_audit?.ml_play_grade === "future_internal_signal");
+}
+
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
 if (fail > 0) {
