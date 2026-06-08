@@ -55,9 +55,42 @@ type AdminNbaPreviewResponse = {
   games: AdminGameEntry[];
 };
 
+// ─── TEMPORARY PREVIEW-BRANCH AUTH BYPASS ─────────────────────────────
+//
+// !!!  MUST BE REMOVED BEFORE MERGING nba-v0a -> main  !!!
+//
+// Phase 7B follow-up: for the operator to review the Game 3 internal
+// admin preview without locating their admin token, we bypass
+// `validateAdminAuth` ONLY when ALL of these hold:
+//
+//   1. Running on Vercel (VERCEL=1 set by the platform — guards against
+//      a local server accidentally bypassing).
+//   2. Vercel environment is "preview" (NOT "production", NOT "development").
+//   3. The git branch being previewed is exactly "nba-v0a".
+//   4. The request path is the NBA admin preview (this route handler).
+//
+// Production deployments (main branch) have VERCEL_ENV="production" and
+// VERCEL_GIT_COMMIT_REF="main" — neither match. All other preview
+// branches (e.g. a hypothetical "fix/something" branch) have a
+// different ref — they keep full auth. The bypass is therefore scoped
+// to this one branch and this one route.
+//
+// To remove: delete this block + the page-side bypass in
+// app/admin/nba-preview/page.tsx, then verify the route returns 401
+// without credentials.
+function isPreviewBranchAuthBypassEnabled(): boolean {
+  return (
+    process.env.VERCEL === "1" &&
+    process.env.VERCEL_ENV === "preview" &&
+    process.env.VERCEL_GIT_COMMIT_REF === "nba-v0a"
+  );
+}
+
 export async function GET(request: Request): Promise<Response> {
-  const auth = validateAdminAuth(request);
-  if (!auth.ok) return auth.response;
+  if (!isPreviewBranchAuthBypassEnabled()) {
+    const auth = validateAdminAuth(request);
+    if (!auth.ok) return auth.response;
+  }
 
   const url = new URL(request.url);
   const date = url.searchParams.get("date");

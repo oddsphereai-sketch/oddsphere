@@ -184,9 +184,33 @@ export default function AdminNbaPreviewPage() {
         setEmail(parsed.email);
         setToken(parsed.token);
         setAuthed(true);
+        return;
       }
     } catch {
       // ignore
+    }
+    // ─── TEMPORARY PREVIEW-BRANCH AUTH BYPASS ─────────────────────
+    //
+    // !!!  MUST BE REMOVED BEFORE MERGING nba-v0a -> main  !!!
+    //
+    // Mirrors the server-side bypass in
+    // app/api/admin/nba-preview/route.ts. When the page is being
+    // viewed on the Vercel preview deployment of the `nba-v0a`
+    // branch, skip the login form so the operator can review Game 3
+    // without locating their admin token. The API request still
+    // succeeds because the server-side bypass returns data without
+    // headers when VERCEL_GIT_COMMIT_REF === "nba-v0a".
+    //
+    // Production hostnames (oddsphereai.com, www.oddsphereai.com)
+    // never match this pattern.
+    if (
+      typeof window !== "undefined" &&
+      window.location.hostname.includes("git-nba-v0a")
+    ) {
+      setAuthed(true);
+      // Empty credentials are fine — the server-side bypass on this
+      // preview branch returns data without checking headers.
+      return;
     }
   }, []);
 
