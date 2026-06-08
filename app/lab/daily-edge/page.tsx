@@ -1,25 +1,25 @@
 "use client";
 
 /**
- * /lab/daily-edge — Daily Edge product surface.
+ * /lab/daily-edge — Daily Edge product surface (single shell, both sports).
  *
- * MLB renders via DailyEdgeShell + the existing /api/lab/daily-edge route.
+ * Phase 7F (Path A): NBA renders through the SAME DailyEdgeShell as
+ * MLB via the NBA-as-DailyEdge adapter (lib/services/nba/
+ * adaptNbaToDailyEdgeResponse + /api/admin/nba-as-daily-edge). The
+ * shell carries sport guards so baseball-only renderers (StartersLine,
+ * MarketPulse first-inning splits-not-offered branch, etc.) skip for
+ * NBA. MLB output is byte-identical to before — verified via diff and
+ * MLB regression tests.
  *
- * NBA renders via NbaSlateInShell — admin/preview-only, fetches the
- * /api/admin/nba-preview endpoint (admin-gated). The NBA tab is clickable
- * inside the MLB SportRail; clicking it swaps ?sport=nba which triggers
- * this page to swap shells. Member-facing exposure stays gated by admin
- * auth at the API layer + the existing middleware bypass scope.
+ * v0 active (nbaAutoModelV1). v1 stays parked as research only.
  *
- * v1 research model is NOT active — NBA uses v0 (nbaAutoModelV1) for
- * tonight's preview. See lib/automodel/nba/nbaAutoModelV2.ts for the
- * parked v1 research code.
+ * NBA preview is admin-gated at /api/admin/nba-as-daily-edge with the
+ * nba-v0a Vercel preview-branch bypass for review. NOT member-facing.
  */
 
 import { useSportSelection } from "../hooks/useSportSelection";
 import { useRefreshStatus } from "../hooks/useRefreshStatus";
 import DailyEdgeShell from "../components/daily-edge/DailyEdgeShell";
-import NbaSlateInShell from "../components/daily-edge/NbaSlateInShell";
 
 export default function DailyEdgePage() {
   const { sport } = useSportSelection();
@@ -27,10 +27,6 @@ export default function DailyEdgePage() {
   // Prime the refresh-status SWR cache for the navbar pill.
   useRefreshStatus({ sport });
 
-  // NBA branches to its own shell so the MLB DailyEdgeShell stays 100%
-  // untouched in the hot path. Both shells render the same SportRail
-  // chrome so switching sports feels seamless.
-  if (sport === "nba") return <NbaSlateInShell />;
-
+  // Both sports render through the same shell.
   return <DailyEdgeShell sport={sport} />;
 }

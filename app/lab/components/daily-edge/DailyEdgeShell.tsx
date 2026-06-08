@@ -25,7 +25,7 @@
  * Visual review with Daniel after this lands, then iterate on detail.
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useDailyEdge } from "../../hooks/useDailyEdge";
 import { useSportSelection } from "../../hooks/useSportSelection";
 import {
@@ -62,6 +62,34 @@ const MARKET_LONG_LABEL: Record<MarketKey, string> = {
   total: "Total",
   first_inning: "1st Inning",
 };
+
+// Phase 7F (Path A) — sport-aware market labels. NBA reuses the
+// `first_inning` slot for Spread; rendering should say "Spread" /
+// "Sprd" instead of "1st Inning" / "1st". MLB is unaffected.
+function marketShortLabelFor(market: MarketKey, sport: Sport): string {
+  if (sport === "nba" && market === "first_inning") return "Sprd";
+  return MARKET_SHORT_LABEL[market];
+}
+function marketLongLabelFor(market: MarketKey, sport: Sport): string {
+  if (sport === "nba" && market === "first_inning") return "Spread";
+  return MARKET_LONG_LABEL[market];
+}
+// Sport-aware pick fallback when the market has no pick label. MLB
+// shows "Toss-Up" on first_inning (the [0.85, 1.15) FI band); NBA
+// (which never has a held FI concept) shows "Held".
+function pickFallbackFor(market: MarketKey, sport: Sport): string {
+  if (sport === "nba") return "Held";
+  return market === "first_inning" ? "Toss-Up" : "Held";
+}
+
+// Phase 7F (Path A) — Sport context so deeply-nested inline components
+// can read the current sport without prop-drilling. Default "mlb" so
+// any consumer that renders outside the provider falls back to MLB
+// behavior (zero MLB-side regression).
+const ShellSportContext = createContext<Sport>("mlb");
+function useShellSport(): Sport {
+  return useContext(ShellSportContext);
+}
 
 const VERDICT_LABEL: Record<VerdictKey, string> = {
   best_angle: "Best Angle",
@@ -467,6 +495,7 @@ function MarketPill({
   selected: boolean;
   onClick: () => void;
 }) {
+  const shellSport = useShellSport();
   return (
     <button
       type="button"
@@ -478,9 +507,9 @@ function MarketPill({
       }`}
     >
       <span className={`text-[10px] uppercase tracking-[0.14em] font-bold shrink-0 ${selected ? "text-violet-100" : "text-gray-500"}`}>
-        {MARKET_SHORT_LABEL[market]}
+        {marketShortLabelFor(market, shellSport)}
       </span>
-      <span className={`text-[12px] font-bold tabular-nums shrink-0 ${pick === null ? "text-gray-500" : ""}`}>{pick ?? (market === "first_inning" ? "Toss-Up" : "Held")}</span>
+      <span className={`text-[12px] font-bold tabular-nums shrink-0 ${pick === null ? "text-gray-500" : ""}`}>{pick ?? pickFallbackFor(market, shellSport)}</span>
       <span className={`text-[10.5px] tabular-nums shrink-0 ${selected ? "text-gray-300" : "text-gray-500"}`}>
         {confidence === null ? "—" : `${Math.round(confidence * 100)}%`}
       </span>
@@ -1015,6 +1044,10 @@ function HowThisWorks() {
  * provider-pending state rather than a system glitch.
  */
 function StartersLine({ game }: { game: DailyEdgeGameDto }) {
+  // Phase 7F (Path A) — NBA has no probable pitchers; the adapter
+  // sets both starters to null. Early return for any non-MLB sport so
+  // the row never even attempts to render (MLB behavior unchanged).
+  if (game.sport !== "mlb") return null;
   // Skip entirely when BOTH sides are null — no useful info to show
   // and we don't want an empty "TBD · TBD" row screaming "missing data."
   if (game.homeStarter === null && game.awayStarter === null) return null;
@@ -1453,12 +1486,17 @@ function ConfidenceVsMarketStrip({
 }
 
 function MarketPulse({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
+  // Phase 7F (Path A) — NBA uses the `first_inning` slot for Spread,
+  // which DOES have public splits from SharpAPI. Skip the MLB-specific
+  // "first-inning splits aren't offered" branch when sport is NBA so
+  // the normal two-sided splits renderer below runs.
+  const shellSport = useShellSport();
   // First-inning never uses split copy — V1 SharpAPI tier does not cover
   // first-inning public splits. Phrase as provider-coverage, not failure.
   // When the FI market is held (V1 NRFI threshold not met), surface a
   // subdued "angle unavailable" line instead of the generic splits note —
   // makes it clear the full-game pick is unaffected.
-  if (market === "first_inning") {
+  if (market === "first_inning" && shellSport !== "nba") {
     if (marketData.held) {
       return (
         <div className="space-y-1.5">
@@ -3024,6 +3062,7 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   }
 
   return (
+    <ShellSportContext.Provider value={sport}>
     <div className="bg-[#0A0A0F] text-gray-200 min-h-screen">
       <SportRail sport={sport} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-1 flex items-center justify-between gap-3">
@@ -3128,10 +3167,11 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
 
       <footer className="text-center pb-10">
         <p className="text-[11px] uppercase tracking-[0.16em] text-gray-600 font-medium">
-          OddSphere · Daily Edge · MLB
+          OddSphere · Daily Edge · {sport.toUpperCase()}
         </p>
       </footer>
     </div>
+    </ShellSportContext.Provider>
   );
 }
 

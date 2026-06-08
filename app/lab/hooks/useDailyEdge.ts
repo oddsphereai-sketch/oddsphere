@@ -15,9 +15,35 @@
  */
 
 import useSWR from "swr";
-import { buildLabUrl, labFetcher } from "../lib/labClient";
+import { buildLabUrl, labFetcher, LabApiError } from "../lib/labClient";
 import type { DailyEdgeResponse } from "../lib/labTypes";
 import type { Sport } from "@/lib/types/domain/Sport";
+
+// Phase 7F (Path A) — NBA admin headers from localStorage so the
+// useDailyEdge hook can forward them when fetching the admin-gated
+// NBA-as-DailyEdge route. Stored once via the page-level entry form
+// (one-time on localhost); on Vercel preview the route's nba-v0a
+// bypass means these aren't needed.
+const NBA_ADMIN_EMAIL_KEY = "oddsphere.nba.adminEmail";
+const NBA_ADMIN_TOKEN_KEY = "oddsphere.nba.adminToken";
+
+async function nbaAdminFetcher<T>(url: string): Promise<T> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (typeof window !== "undefined") {
+    const email = window.localStorage.getItem(NBA_ADMIN_EMAIL_KEY);
+    const token = window.localStorage.getItem(NBA_ADMIN_TOKEN_KEY);
+    if (email !== null && email !== "" && token !== null && token !== "") {
+      headers["x-admin-email"] = email;
+      headers["x-admin-token"] = token;
+    }
+  }
+  const res = await fetch(url, { headers, cache: "no-store" });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new LabApiError(res.status, body, url);
+  }
+  return res.json() as Promise<T>;
+}
 
 export type UseDailyEdgeOptions = {
   sport: Sport;
@@ -36,11 +62,19 @@ export type UseDailyEdgeResult = {
 
 export function useDailyEdge(options: UseDailyEdgeOptions): UseDailyEdgeResult {
   const { sport, date, refreshIntervalMs = 300_000 } = options;
-  const key = buildLabUrl("/api/lab/daily-edge", { sport, date });
+  // Phase 7F (Path A): NBA routes through the admin-gated adapter route
+  // (/api/admin/nba-as-daily-edge). MLB keeps the existing /api/lab path
+  // unchanged. Same DailyEdgeResponse shape from both — the shell
+  // doesn't care which source it came from.
+  const isNba = sport === "nba";
+  const key = isNba
+    ? buildLabUrl("/api/admin/nba-as-daily-edge", { date: date ?? null })
+    : buildLabUrl("/api/lab/daily-edge", { sport, date });
+  const fetcher = isNba ? nbaAdminFetcher : labFetcher;
 
   const { data, error, isLoading, mutate } = useSWR<DailyEdgeResponse>(
     key,
-    labFetcher,
+    fetcher,
     {
       refreshInterval: refreshIntervalMs,
       revalidateOnFocus: true,
