@@ -76,6 +76,20 @@ type PredictionRow = {
   locked_at: string | null;
   computed_at: string | null;
   sport_specific: Record<string, unknown> | null;
+  /** Phase 6B.28 — captured at lock for projected.home/away DTO field. */
+  predicted_home_score: number | null;
+  predicted_away_score: number | null;
+  /** Phase 6B.28 — captured at lock for per-market `predictions.*.grade`,
+   *  `signalType`, `marketSignal` DTO fields (V2.1 framework grades). */
+  ml_grade: string | null;
+  ou_grade: string | null;
+  nrfi_grade: string | null;
+  ml_signal_type: string | null;
+  ou_signal_type: string | null;
+  nrfi_signal_type: string | null;
+  ml_market_signal: string | null;
+  ou_market_signal: string | null;
+  nrfi_market_signal: string | null;
 };
 
 function readBoolish(v: unknown): boolean {
@@ -133,6 +147,14 @@ type PublicSplitsRow = {
   rlm_direction: string | null;
   signal_strength: string | null;
   computed_at: string | null;
+  /* Phase 6B.28 — additional fields the Daily Edge route consumes for
+   * the rich-and-frozen post-lock render. Captured at lock so route's
+   * SignalRow shape can be rehydrated 1:1 from snapshot. */
+  pinnacle_fair_probability: number | null;
+  is_plus_ev: boolean | null;
+  ev_pct: number | null;
+  steam_detected_at: string | null;
+  steam_books_count: number | null;
 };
 
 /**
@@ -193,6 +215,8 @@ type LineRowForOdds = {
   odds_american: number | null;
   /** Phase 6B.22 — null for ML; populated for totals (e.g. 8.5). */
   line_value?: number | null;
+  /** Phase 6B.28 — captured at lock so route's LineRow shape rehydrates 1:1. */
+  fetched_at?: string | null;
 };
 
 /**
@@ -472,6 +496,78 @@ export function buildDataIntegritySnapshot(
 }
 
 /**
+ * Phase 6B.28 — Daily Edge "rich-and-frozen" lock substrate.
+ *
+ * Captures the live inputs the Daily Edge route reads at lock instant:
+ *   • signal_rows_at_lock — every sharp_signals row for this game
+ *     (every market_type × side combination the route consumes)
+ *   • lines_at_lock — every `lines` row (ML + OU per book per side)
+ *   • predicted_scores_at_lock — V2.2 predicted home/away score
+ *   • framework_grades_at_lock — V2.1 per-market grade / signal_type
+ *     / market_signal triplets
+ *
+ * After lock the route swaps these in for the live tables, so a
+ * locked game's Daily Edge card renders identically to the pregame
+ * card at the moment of lock — same publicSplits, same sharpSignals
+ * array, same lineCurrent, same modelMarketGap, same QuickRead text,
+ * same MarketNotes — never drifting because live providers nulled
+ * out or moved post-start.
+ *
+ * Backwards-compatible: 6B.18 + 6B.22 fields untouched. Pre-6B.28
+ * snapshots have these new fields absent → route falls back to
+ * empty/null for those locked rows (today's 28 old locks). Reader
+ * hides panels quietly when locked-but-empty.
+ */
+function buildDailyEdgeLockSubstrate(args: {
+  signalsForGame: ReadonlyArray<PublicSplitsRow>;
+  currentLinesForGame: ReadonlyArray<LineRowForOdds>;
+  pred: PredictionRow;
+}): Record<string, unknown> {
+  return {
+    signal_rows_at_lock: args.signalsForGame.map((s) => ({
+      market_type: s.market_type,
+      side: s.side,
+      public_money_pct: s.public_money_pct,
+      public_betting_pct: s.public_betting_pct,
+      has_steam_move: s.has_steam_move,
+      has_reverse_line_movement: s.has_reverse_line_movement,
+      rlm_direction: s.rlm_direction,
+      signal_strength: s.signal_strength,
+      computed_at: s.computed_at,
+      pinnacle_fair_probability: s.pinnacle_fair_probability,
+      is_plus_ev: s.is_plus_ev,
+      ev_pct: s.ev_pct,
+      steam_detected_at: s.steam_detected_at,
+      steam_books_count: s.steam_books_count,
+    })),
+    lines_at_lock: args.currentLinesForGame.map((l) => ({
+      game_id: l.game_id,
+      market_type: l.market_type,
+      side: l.side,
+      sportsbook: l.sportsbook,
+      odds_american: l.odds_american,
+      line_value: l.line_value ?? null,
+      fetched_at: l.fetched_at ?? null,
+    })),
+    predicted_scores_at_lock: {
+      home: args.pred.predicted_home_score,
+      away: args.pred.predicted_away_score,
+    },
+    framework_grades_at_lock: {
+      ml_grade: args.pred.ml_grade,
+      ml_signal_type: args.pred.ml_signal_type,
+      ml_market_signal: args.pred.ml_market_signal,
+      ou_grade: args.pred.ou_grade,
+      ou_signal_type: args.pred.ou_signal_type,
+      ou_market_signal: args.pred.ou_market_signal,
+      nrfi_grade: args.pred.nrfi_grade,
+      nrfi_signal_type: args.pred.nrfi_signal_type,
+      nrfi_market_signal: args.pred.nrfi_market_signal,
+    },
+  };
+}
+
+/**
  * Phase 6B.11 — applies the same public-money guard the Daily Edge
  * verdict layer uses (Phase 6B.10), so prediction_records.best_angle
  * matches what members actually see on the slate.
@@ -619,6 +715,8 @@ function buildMlRecord(
       public_splits: buildPublicSplitsSnapshot(signalsForGame, "moneyline", pred.predicted_ml_winner),
       line_movement: buildLineMovementSnapshot(openersForGame, currentLinesForGame, signalsForGame, "moneyline", pred.predicted_ml_winner),
       data_integrity: buildDataIntegritySnapshot(sp, oddsForGame, "moneyline"),
+      // Phase 6B.28 — rich-and-frozen Daily Edge substrate at lock.
+      ...buildDailyEdgeLockSubstrate({ signalsForGame, currentLinesForGame, pred }),
     },
   };
 }
@@ -724,6 +822,8 @@ function buildOuRecord(
       public_splits: buildPublicSplitsSnapshot(signalsForGame, "total", pred.predicted_ou_side),
       line_movement: buildLineMovementSnapshot(openersForGame, currentLinesForGame, signalsForGame, "total", pred.predicted_ou_side),
       data_integrity: buildDataIntegritySnapshot(sp, oddsForGame, "total"),
+      // Phase 6B.28 — same rich-and-frozen substrate as ML.
+      ...buildDailyEdgeLockSubstrate({ signalsForGame, currentLinesForGame, pred }),
     },
   };
 }
@@ -836,6 +936,11 @@ function buildFiRecord(
       public_splits: null,
       line_movement: null,
       data_integrity: buildDataIntegritySnapshot(sp, null, "first_inning"),
+      // Phase 6B.28 — substrate. signal_rows_at_lock + lines_at_lock are
+      // empty for FI (sharp_signals/lines for first_inning_total not
+      // loaded in this build). predicted_scores + framework_grades for
+      // NRFI/YRFI are still captured.
+      ...buildDailyEdgeLockSubstrate({ signalsForGame: [], currentLinesForGame: [], pred }),
     },
   };
 }
@@ -934,9 +1039,12 @@ export async function createPredictionRecords(
   const gameIds = games.map((g) => g.id);
 
   // Load predictions
+  // Phase 6B.28 — also pull predicted_*_score + V2.1 framework grades so the
+  // lock substrate can carry them. Frozen at lock, surfaced by the route
+  // for post-start cards.
   const { data: predRows } = await supabase
     .from("game_predictions")
-    .select("id, game_id, predicted_ml_winner, ml_confidence, predicted_ou_side, ou_confidence, predicted_nrfi, nrfi_confidence, prediction_source, is_override, locked_at, computed_at, sport_specific")
+    .select("id, game_id, predicted_ml_winner, ml_confidence, predicted_ou_side, ou_confidence, predicted_nrfi, nrfi_confidence, prediction_source, is_override, locked_at, computed_at, sport_specific, predicted_home_score, predicted_away_score, ml_grade, ou_grade, nrfi_grade, ml_signal_type, ou_signal_type, nrfi_signal_type, ml_market_signal, ou_market_signal, nrfi_market_signal")
     .in("game_id", gameIds);
   const preds = ((predRows ?? []) as PredictionRow[]);
   const predictionByGameId = new Map<number, PredictionRow>(
@@ -961,10 +1069,13 @@ export async function createPredictionRecords(
   // snapshot_json.line_movement can carry sharp-money signals at lock
   // time for calibration. Missing signals = guard stays off and the
   // additive snapshot fields are null (no false defaults).
+  // Phase 6B.28 — also pull the Daily Edge route's full SignalRow
+  // shape (pinnacle_fair_probability, is_plus_ev, ev_pct, steam_detected_at,
+  // steam_books_count) so the lock substrate can rehydrate it 1:1.
   const { data: signalRows } = await supabase
     .from("sharp_signals")
     .select(
-      "game_id, market_type, side, public_money_pct, public_betting_pct, has_steam_move, has_reverse_line_movement, rlm_direction, signal_strength, computed_at",
+      "game_id, market_type, side, public_money_pct, public_betting_pct, has_steam_move, has_reverse_line_movement, rlm_direction, signal_strength, computed_at, pinnacle_fair_probability, is_plus_ev, ev_pct, steam_detected_at, steam_books_count",
     )
     .in("game_id", gameIds);
   const signalsByGameId = new Map<number, PublicSplitsRow[]>();
@@ -980,6 +1091,11 @@ export async function createPredictionRecords(
       rlm_direction: s.rlm_direction,
       signal_strength: s.signal_strength,
       computed_at: s.computed_at,
+      pinnacle_fair_probability: s.pinnacle_fair_probability,
+      is_plus_ev: s.is_plus_ev,
+      ev_pct: s.ev_pct,
+      steam_detected_at: s.steam_detected_at,
+      steam_books_count: s.steam_books_count,
     });
     signalsByGameId.set(s.game_id, list);
   }
@@ -990,9 +1106,11 @@ export async function createPredictionRecords(
   // of falling back to the live `lines` table.
   // Phase 6B.22 — also load `line_value` so the line-movement helper
   // can surface total-line drift (e.g., 8.5 → 9.0).
+  // Phase 6B.28 — pull fetched_at so the lock substrate's LineRow shape
+  // matches the Daily Edge route's LineRow shape exactly.
   const { data: lineRowsForOdds } = await supabase
     .from("lines")
-    .select("game_id, market_type, side, sportsbook, odds_american, line_value")
+    .select("game_id, market_type, side, sportsbook, odds_american, line_value, fetched_at")
     .in("game_id", gameIds)
     .in("market_type", ["moneyline", "total"])
     .is("player_id", null);

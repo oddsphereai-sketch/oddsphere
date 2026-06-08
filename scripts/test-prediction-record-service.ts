@@ -61,6 +61,19 @@ const basePrediction = {
   locked_at: "2026-06-06T16:16:11.491Z",
   computed_at: "2026-06-06T16:09:00.000Z",
   sport_specific: v21SportSpecific,
+  // Phase 6B.28 — fixtures for the lock substrate. Tests below override
+  // these per-case when asserting the captured shape.
+  predicted_home_score: 4.2,
+  predicted_away_score: 3.8,
+  ml_grade: "market_watch",
+  ou_grade: "market_watch",
+  nrfi_grade: null,
+  ml_signal_type: null,
+  ou_signal_type: null,
+  nrfi_signal_type: null,
+  ml_market_signal: null,
+  ou_market_signal: null,
+  nrfi_market_signal: null,
 };
 
 const abbrevByTeamId = new Map<number, string>([[771, "CHC"], [780, "SF"]]);
@@ -295,7 +308,7 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
   };
   const signalsConflict = new Map([
-    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 78, public_betting_pct: 27, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null }]],
+    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 78, public_betting_pct: 27, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null }]],
   ]);
   const recs = buildPredictionRecordsFromSlate({
     sport: "mlb",
@@ -336,7 +349,7 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
   };
   const signalsNullMoney = new Map([
-    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: null, public_betting_pct: 33, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null }]],
+    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: null, public_betting_pct: 33, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null }]],
   ]);
   const recs = buildPredictionRecordsFromSlate({
     sport: "mlb",
@@ -360,7 +373,7 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
   };
   const signalsBelowThreshold = new Map([
-    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 57, public_betting_pct: 33, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null }]],
+    [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 57, public_betting_pct: 33, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null }]],
   ]);
   const recs = buildPredictionRecordsFromSlate({
     sport: "mlb",
@@ -384,7 +397,7 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: false, ou_best_angle_eligible: true },
   };
   const signalsOuConflict = new Map([
-    [14771, [{ market_type: "total", side: "under", public_money_pct: 88, public_betting_pct: 50, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null }]],
+    [14771, [{ market_type: "total", side: "under", public_money_pct: 88, public_betting_pct: 50, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null }]],
   ]);
   const recs = buildPredictionRecordsFromSlate({
     sport: "mlb",
@@ -428,8 +441,8 @@ check("impliedProb(+100) = 0.5", americanToImpliedProb(100) === 0.5);
 {
   // Both sides present, conflict & support computable
   const sigs = [
-    { market_type: "moneyline", side: "home", public_money_pct: 30, public_betting_pct: 40, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: "2026-06-07T11:00:00Z" },
-    { market_type: "moneyline", side: "away", public_money_pct: 70, public_betting_pct: 40, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: "2026-06-07T11:00:00Z" },
+    { market_type: "moneyline", side: "home", public_money_pct: 30, public_betting_pct: 40, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: "2026-06-07T11:00:00Z", pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+    { market_type: "moneyline", side: "away", public_money_pct: 70, public_betting_pct: 40, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: "2026-06-07T11:00:00Z", pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
   ] as any;
   const snap = buildPublicSplitsSnapshot(sigs, "moneyline", "home") as any;
   check("public_splits: picked_side present", snap.picked_side === "home");
@@ -445,7 +458,7 @@ check("impliedProb(+100) = 0.5", americanToImpliedProb(100) === 0.5);
 {
   // Picked-side data only — opp missing → conflict null, support computable
   const sigs = [
-    { market_type: "moneyline", side: "home", public_money_pct: 80, public_betting_pct: 40, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null },
+    { market_type: "moneyline", side: "home", public_money_pct: 80, public_betting_pct: 40, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
   ] as any;
   const snap = buildPublicSplitsSnapshot(sigs, "moneyline", "home") as any;
   check("public_splits: opp missing → conflict null (tri-state)", snap.conflict === null);
@@ -646,6 +659,86 @@ console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━"
   check("ML record.play_grade=null for unknown label", ml.play_grade === null);
   check("ML snapshot preserves raw unknown label",
         (ml.snapshot_json as any)?.v2_2_audit?.ml_play_grade === "future_internal_signal");
+}
+
+// ── Phase 6B.28 — Daily Edge lock substrate captured at lock ──
+console.log("\n━━━ Phase 6B.28 — Daily Edge lock substrate ━━━");
+{
+  const sig = {
+    market_type: "moneyline", side: "home", public_money_pct: 64, public_betting_pct: 52,
+    has_steam_move: false, has_reverse_line_movement: false, rlm_direction: null,
+    signal_strength: "moderate", computed_at: "2026-06-06T16:10:00Z",
+    pinnacle_fair_probability: 0.547, is_plus_ev: true, ev_pct: 2.3,
+    steam_detected_at: null, steam_books_count: 0,
+  };
+  const line = { game_id: 14771, market_type: "moneyline" as const, side: "home", sportsbook: "pinnacle", odds_american: -130, line_value: null, fetched_at: "2026-06-06T16:15:00Z" };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb", slateDate: "2026-06-06", launchDay: false, games: [baseGame],
+    predictionByGameId, abbrevByTeamId,
+    signalsByGameId: new Map([[14771, [sig]]]),
+    currentLinesByGameId: new Map([[14771, [line]]]),
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  const sp = ml.snapshot_json as Record<string, unknown>;
+  check("snapshot.signal_rows_at_lock is array", Array.isArray(sp.signal_rows_at_lock));
+  check("signal_rows_at_lock captures signal",
+        Array.isArray(sp.signal_rows_at_lock) && (sp.signal_rows_at_lock as any[]).length === 1);
+  check("signal_rows_at_lock preserves public_money_pct",
+        (sp.signal_rows_at_lock as any[])?.[0]?.public_money_pct === 64);
+  check("signal_rows_at_lock preserves pinnacle_fair_probability (6B.28 field)",
+        (sp.signal_rows_at_lock as any[])?.[0]?.pinnacle_fair_probability === 0.547);
+  check("signal_rows_at_lock preserves ev_pct",
+        (sp.signal_rows_at_lock as any[])?.[0]?.ev_pct === 2.3);
+  check("snapshot.lines_at_lock is array",
+        Array.isArray(sp.lines_at_lock) && (sp.lines_at_lock as any[]).length === 1);
+  check("lines_at_lock preserves sportsbook + odds + fetched_at",
+        (sp.lines_at_lock as any[])?.[0]?.sportsbook === "pinnacle" &&
+        (sp.lines_at_lock as any[])?.[0]?.odds_american === -130 &&
+        (sp.lines_at_lock as any[])?.[0]?.fetched_at === "2026-06-06T16:15:00Z");
+  check("snapshot.predicted_scores_at_lock captures home/away",
+        (sp.predicted_scores_at_lock as any)?.home === 4.2 &&
+        (sp.predicted_scores_at_lock as any)?.away === 3.8);
+  check("snapshot.framework_grades_at_lock captures ml/ou_grade",
+        (sp.framework_grades_at_lock as any)?.ml_grade === "market_watch" &&
+        (sp.framework_grades_at_lock as any)?.ou_grade === "market_watch");
+}
+{
+  // Empty signals/lines → arrays still present but empty (honest "not
+  // captured at lock"). Pre-6B.28 snapshots would have the keys absent;
+  // post-6B.28 they're always present (empty if no live data).
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb", slateDate: "2026-06-06", launchDay: false, games: [baseGame],
+    predictionByGameId, abbrevByTeamId,
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  const sp = ml.snapshot_json as Record<string, unknown>;
+  check("empty signals → empty signal_rows_at_lock array",
+        Array.isArray(sp.signal_rows_at_lock) && (sp.signal_rows_at_lock as any[]).length === 0);
+  check("empty lines → empty lines_at_lock array",
+        Array.isArray(sp.lines_at_lock) && (sp.lines_at_lock as any[]).length === 0);
+  check("predicted_scores_at_lock still captured when signals/lines absent",
+        (sp.predicted_scores_at_lock as any)?.home === 4.2);
+  check("framework_grades_at_lock still captured when signals/lines absent",
+        (sp.framework_grades_at_lock as any)?.ml_grade === "market_watch");
+}
+{
+  // FI snapshot also carries substrate (signals/lines empty by design;
+  // predicted_scores + framework_grades captured for NRFI/YRFI).
+  const fullPred = {
+    ...basePrediction, predicted_nrfi: true, nrfi_confidence: 55,
+    sport_specific: { ...v21SportSpecific, hold_picks: [] },
+    nrfi_grade: "market_watch",
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb", slateDate: "2026-06-06", launchDay: false, games: [baseGame],
+    predictionByGameId: new Map([[14771, fullPred]]), abbrevByTeamId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  const sp = fi.snapshot_json as Record<string, unknown>;
+  check("FI snapshot has framework_grades_at_lock with nrfi_grade",
+        (sp.framework_grades_at_lock as any)?.nrfi_grade === "market_watch");
+  check("FI snapshot has predicted_scores_at_lock",
+        (sp.predicted_scores_at_lock as any)?.home === 4.2);
 }
 
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);

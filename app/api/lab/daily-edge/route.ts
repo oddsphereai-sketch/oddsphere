@@ -2581,6 +2581,103 @@ export async function GET(request: Request) {
         (pred as unknown as { locked_at: string | null }).locked_at =
           (lockedMl?.locked_at ?? lockedOu?.locked_at) ?? null;
       }
+      // Phase 6B.28 — swap predicted_*_score and V2.1 framework grades
+      // (ml_grade/ou_grade/nrfi_grade + signal_type + market_signal) from
+      // the lock substrate, so predictions[market].grade / signalType /
+      // marketSignal and projected.home/away are frozen at lock too.
+      // Missing fields (pre-6B.28 snapshots) leave pred's live values in
+      // place, which preserves prior 6B.18 behavior for old locks.
+      const ps = (lockedSp?.predicted_scores_at_lock ?? null) as
+        | { home: number | null; away: number | null }
+        | null;
+      if (ps !== null) {
+        (pred as unknown as { predicted_home_score: number | null }).predicted_home_score = ps.home;
+        (pred as unknown as { predicted_away_score: number | null }).predicted_away_score = ps.away;
+      }
+      const fg = (lockedSp?.framework_grades_at_lock ?? null) as Record<string, string | null> | null;
+      if (fg !== null) {
+        for (const k of [
+          "ml_grade", "ml_signal_type", "ml_market_signal",
+          "ou_grade", "ou_signal_type", "ou_market_signal",
+          "nrfi_grade", "nrfi_signal_type", "nrfi_market_signal",
+        ] as const) {
+          if (k in fg) {
+            (pred as unknown as Record<string, string | null>)[k] = fg[k] ?? null;
+          }
+        }
+      }
+    }
+    // Phase 6B.28 — rehydrate sharp_signals + lines from the lock
+    // substrate for locked games. The pre-6B.28 route fed LIVE
+    // sharp_signals and live `lines` rows into the DTO build for
+    // every game, regardless of lock state. After lock, publicSplits
+    // / sharpSignals / breakdown.sharpRead / marketEdge.publicMoney*
+    // / lineCurrentAmerican kept moving as the live sources drifted
+    // (or returned nulls post-start). 6B.18 froze the headline
+    // (pick, confidence, sport_specific, line, odds) by swapping pred
+    // in-place; this block freezes the signal + line substrate too.
+    //
+    // For locked games:
+    //   • If snapshot has signal_rows_at_lock + lines_at_lock (locks
+    //     after Phase 6B.28 ships) → replace the live arrays with
+    //     rehydrated snapshot arrays. DTO renders identically to
+    //     pregame at the lock instant.
+    //   • If snapshot lacks these fields (pre-6B.28 locks, including
+    //     today's 28 ML/OU rows from before this deploy) → replace
+    //     with empty arrays. UI hides those panels quietly per the
+    //     "not available at lock" honest rule — never live drift.
+    //
+    // For unlocked games: untouched. Pregame live behavior preserved.
+    for (const g of games) {
+      const lockedMl = lockedByGameMarket.get(`${g.id}::moneyline`);
+      const lockedOu = lockedByGameMarket.get(`${g.id}::total`);
+      if (!lockedMl && !lockedOu) continue;
+      const lockedSp = (lockedMl?.snapshot_json ?? lockedOu?.snapshot_json) as
+        | Record<string, unknown>
+        | null;
+      const sigsAtLock = (lockedSp?.signal_rows_at_lock ?? null) as
+        | SignalRow[]
+        | null;
+      const linesAtLock = (lockedSp?.lines_at_lock ?? null) as
+        | LineRow[]
+        | null;
+      // Always overwrite for locked games. Empty array = panel hidden
+      // (honest "not available at lock"). Rehydrated array = frozen
+      // pregame substrate.
+      const frozenSignals = Array.isArray(sigsAtLock)
+        ? sigsAtLock.map((s) => ({ ...s, game_id: g.id })) // ensure game_id present
+        : [];
+      signalsByGame.set(g.id, frozenSignals);
+      if (Array.isArray(linesAtLock)) {
+        // Wipe live lines for this game's ML/OU markets, then load
+        // rehydrated rows. First_inning_total lines (when added later)
+        // pass through; FI lines aren't captured by the writer today.
+        for (const market of ["moneyline", "total"]) {
+          currentLinesByGameMarket.delete(`${g.id}::${market}`);
+        }
+        for (const lr of linesAtLock) {
+          const key = `${lr.game_id}::${lr.market_type}`;
+          const arr = currentLinesByGameMarket.get(key) ?? [];
+          arr.push({
+            game_id: lr.game_id,
+            market_type: lr.market_type,
+            sportsbook: lr.sportsbook,
+            side: lr.side,
+            line_value: lr.line_value,
+            odds_american: lr.odds_american,
+            fetched_at: lr.fetched_at,
+          });
+          currentLinesByGameMarket.set(key, arr);
+        }
+      } else {
+        // No captured lines (pre-6B.28 lock). Wipe live ML/OU entries
+        // so the route doesn't render live values; (c) below still
+        // injects the locked picked-side price from prediction_records,
+        // so priceAmerican stays correct even with no captured lines.
+        for (const market of ["moneyline", "total"]) {
+          currentLinesByGameMarket.delete(`${g.id}::${market}`);
+        }
+      }
     }
     // (c) Inject locked ML/OU odds into currentLinesByGameMarket so
     //     priceAmerican on the DTO uses the locked snapshot price.
