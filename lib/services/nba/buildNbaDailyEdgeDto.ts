@@ -12,6 +12,7 @@ import type {
   NbaAutoModelOutput,
   NbaGameSnapshot,
 } from "../../automodel/nba/types";
+import type { NbaModelV1Output } from "../../automodel/nba/nbaAutoModelV2";
 import type { NbaSnapshotProvenance } from "./featureSnapshot";
 import {
   buildNbaGameIntelligence,
@@ -141,6 +142,25 @@ function composeQuickRead(intel: NbaGameIntelligence, snapshot: NbaGameSnapshot)
 
 // ─── Public DTO shapes ──────────────────────────────────────────────
 
+/**
+ * ADMIN/AUDIT-ONLY v1 metadata exposed to the admin preview only.
+ * Customer-facing rendering must NEVER surface these tokens.
+ */
+export type NbaAdminModelBadge = {
+  /** Always "v1 · research-prior · calibration pending" for this build. */
+  label: string;
+  /** Flagged audit deltas (e.g. spread Δ > 2pt vs v0). Empty when none. */
+  audit_flags: string[];
+  /** Net rating-blend playoff weight for each team (small admin signal). */
+  home_playoff_weight: number | null;
+  away_playoff_weight: number | null;
+  /** Capped Four Factors modifier per team (pp100). */
+  home_ff_modifier_pp100: number | null;
+  away_ff_modifier_pp100: number | null;
+  /** Confidence caps applied (label + value). */
+  applied_caps: Array<{ source: string; cap: number }>;
+};
+
 export type NbaDailyEdgeGameDto = {
   game_external_id: number;
   matchup: string;
@@ -167,6 +187,8 @@ export type NbaDailyEdgeGameDto = {
   quick_read: string;
   sources: SourceBadges;
   provenance: NbaSnapshotProvenance;
+  /** ADMIN-ONLY v1 model metadata. Member-facing UI must not render. */
+  admin_model_badge: NbaAdminModelBadge | null;
 };
 
 export type NbaDailyEdgeDto = {
@@ -183,7 +205,12 @@ export type NbaDailyEdgeDto = {
 
 export function buildNbaDailyEdgeGameDto(opts: {
   snapshot: NbaGameSnapshot;
-  prediction: NbaAutoModelOutput;
+  /**
+   * Prediction may be either v0 (NbaAutoModelOutput) or v1 (NbaModelV1Output,
+   * which is a superset). When v1 fields are present we emit the
+   * admin_model_badge. When v0 only, badge stays null.
+   */
+  prediction: NbaAutoModelOutput | NbaModelV1Output;
   provenance: NbaSnapshotProvenance;
   lines: NbaLineRow[];
   splitsRow: NbaSplitsRow | null;
@@ -224,6 +251,29 @@ export function buildNbaDailyEdgeGameDto(opts: {
     quick_read: composeQuickRead(intel, opts.snapshot),
     sources: intel.sources,
     provenance: opts.provenance,
+    admin_model_badge: buildAdminModelBadge(opts.prediction),
+  };
+}
+
+/**
+ * ADMIN/AUDIT-ONLY helper. Extracts v1-specific metadata when present.
+ * Returns null when the prediction is a plain v0 output.
+ *
+ * Member-facing UI MUST NOT consume this field.
+ */
+function buildAdminModelBadge(
+  prediction: NbaAutoModelOutput | NbaModelV1Output,
+): NbaAdminModelBadge | null {
+  if (!("model_version_v1" in prediction)) return null;
+  const v1 = prediction;
+  return {
+    label: "v1 · research-prior · calibration pending",
+    audit_flags: v1.v0_v1_delta.flagged,
+    home_playoff_weight: v1.v1_breakdown.home_recency.playoff_weight,
+    away_playoff_weight: v1.v1_breakdown.away_recency.playoff_weight,
+    home_ff_modifier_pp100: v1.v1_breakdown.home_ff.capped_modifier_pp100,
+    away_ff_modifier_pp100: v1.v1_breakdown.away_ff.capped_modifier_pp100,
+    applied_caps: v1.v1_breakdown.applied_caps,
   };
 }
 

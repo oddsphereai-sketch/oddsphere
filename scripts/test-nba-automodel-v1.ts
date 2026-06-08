@@ -71,6 +71,11 @@ function buildTeam(opts: Partial<NbaTeamSnapshot> = {}): NbaTeamSnapshot {
     net_rating: "net_rating" in opts ? opts.net_rating! : 0.0,
     pace: "pace" in opts ? opts.pace! : 99.0,
     recent_form_10g_net_rating: opts.recent_form_10g_net_rating ?? null,
+    // Phase 7C — v1 rating packs default to null (v0 tests don't use them).
+    regular_season_ratings:
+      "regular_season_ratings" in opts ? opts.regular_season_ratings! : null,
+    playoff_ratings:
+      "playoff_ratings" in opts ? opts.playoff_ratings! : null,
   };
 }
 

@@ -22,6 +22,7 @@ import {
   isInjuryIngestEnabled,
 } from "@/lib/services/nba/espnNbaInjuries";
 import { runNbaAutoModelV1 } from "@/lib/automodel/nba/nbaAutoModelV1";
+import { runNbaAutoModelV2 } from "@/lib/automodel/nba/nbaAutoModelV2";
 import { etSlateDateToUtcWindow } from "@/lib/services/nba/etSlateDate";
 import {
   buildNbaDailyEdgeGameDto,
@@ -206,8 +207,15 @@ export async function GET(request: Request): Promise<Response> {
     const games: NbaDailyEdgeGameDto[] = snapshots.flatMap((s) => {
       const prov = provenanceByGame.get(s.game_external_id);
       if (prov === undefined) return [];
-      const pred = runNbaAutoModelV1(s, "t60_locked");
       const lines = linesByExtId.get(s.game_external_id) ?? [];
+      // Phase 7C — v1 (research-prior, calibration-pending) is the
+      // ACTIVE preview model. v0 is automatically computed inside v2
+      // as the v0_comparison field for the audit script. The route
+      // forwards the v1 prediction shape (which is a superset of v0's
+      // NbaAutoModelOutput) to the DTO builder. ADMIN-ONLY language;
+      // member-facing UI must not surface "v1"/"v0".
+      const bookCount = new Set(lines.map((l) => l.sportsbook)).size;
+      const v1 = runNbaAutoModelV2(s, "t60_locked", { isPlayoffs: true, bookCount });
       const splitsRow = matchSplitsRow(
         splits,
         s.home_team.abbreviation,
@@ -221,7 +229,7 @@ export async function GET(request: Request): Promise<Response> {
       return [
         buildNbaDailyEdgeGameDto({
           snapshot: s,
-          prediction: pred,
+          prediction: v1,
           provenance: prov,
           lines,
           splitsRow,
@@ -229,6 +237,7 @@ export async function GET(request: Request): Promise<Response> {
         }),
       ];
     });
+    void runNbaAutoModelV1;
 
     const body: NbaDailyEdgeDto = {
       as_of: new Date().toISOString(),

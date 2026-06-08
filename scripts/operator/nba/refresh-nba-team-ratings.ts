@@ -53,6 +53,15 @@ type UpsertPayload = {
   def_rating: number | null;
   net_rating: number | null;
   pace: number | null;
+  // Phase 7C — Four Factors (8 nullable columns added in schema v20).
+  off_efg_pct: number | null;
+  off_tov_pct: number | null;
+  off_orb_pct: number | null;
+  off_ft_rate: number | null;
+  def_efg_pct: number | null;
+  def_tov_pct: number | null;
+  def_drb_pct: number | null;
+  def_ft_rate_allowed: number | null;
   source: string;
   source_url: string;
   fetched_at: string;
@@ -94,6 +103,14 @@ function buildPayload(
     def_rating: row.def_rating,
     net_rating: row.net_rating,
     pace: row.pace,
+    off_efg_pct: row.off_efg_pct,
+    off_tov_pct: row.off_tov_pct,
+    off_orb_pct: row.off_orb_pct,
+    off_ft_rate: row.off_ft_rate,
+    def_efg_pct: row.def_efg_pct,
+    def_tov_pct: row.def_tov_pct,
+    def_drb_pct: row.def_drb_pct,
+    def_ft_rate_allowed: row.def_ft_rate_allowed,
     source: "basketball-reference",
     source_url: row.source_url,
     fetched_at: row.fetched_at,
@@ -110,7 +127,9 @@ async function upsertRatings(
       console.log(
         `    team_id=${r.team_id} ${r.season_type}-${r.season}  ` +
           `ORtg=${r.off_rating}  DRtg=${r.def_rating}  ` +
-          `Net=${r.net_rating}  Pace=${r.pace}  source_url=${r.source_url}`,
+          `Net=${r.net_rating}  Pace=${r.pace}  ` +
+          `eFG=${r.off_efg_pct}/${r.def_efg_pct}  TOV=${r.off_tov_pct}/${r.def_tov_pct}  ` +
+          `ORB=${r.off_orb_pct}  DRB=${r.def_drb_pct}  FTr=${r.off_ft_rate}/${r.def_ft_rate_allowed}`,
       );
     }
     return { written: 0, errors: 0 };

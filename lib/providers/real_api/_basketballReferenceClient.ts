@@ -76,6 +76,24 @@ export type BbrTeamRatings = {
   net_rating: number | null;
   /** Pace: possessions per 48 minutes. League avg ~99. */
   pace: number | null;
+  // ─── Phase 7C — Four Factors (Dean Oliver). Same `advanced-team` source. ─
+  // All decimals (e.g. 0.553 = 55.3%).
+  /** Offensive effective field-goal %. BBR data-stat `efg_pct`. */
+  off_efg_pct: number | null;
+  /** Offensive turnover % (turnovers per possession). BBR `tov_pct`. */
+  off_tov_pct: number | null;
+  /** Offensive rebound %. BBR `orb_pct`. */
+  off_orb_pct: number | null;
+  /** Offensive free-throw rate (FT/FGA). BBR `ft_rate`. */
+  off_ft_rate: number | null;
+  /** Opponent effective FG%. BBR `opp_efg_pct`. */
+  def_efg_pct: number | null;
+  /** Opponent turnover %. BBR `opp_tov_pct`. */
+  def_tov_pct: number | null;
+  /** Defensive rebound % (this team's). BBR `drb_pct`. Opponent ORB% = 1 - this. */
+  def_drb_pct: number | null;
+  /** Opponent FT rate allowed. BBR `opp_ft_rate`. */
+  def_ft_rate_allowed: number | null;
   /** Source URL the row was scraped from (for provenance). */
   source_url: string;
   /** ISO timestamp of when the scrape ran. */
@@ -283,6 +301,27 @@ export function parseAdvancedTable(
       toNumberOrNull(r["net_rtg"] ?? r["n_rtg"]) ??
       (off !== null && def !== null ? Math.round((off - def) * 10) / 10 : null);
     const pace = toNumberOrNull(r["pace"]);
+    // Phase 7C — Four Factors (offense + defense).
+    // BBR uses INCONSISTENT formats on the `advanced-team` table:
+    //   • efg_pct, opp_efg_pct, ft_rate, opp_ft_rate → already decimals
+    //     (e.g. 0.553, 0.224)
+    //   • tov_pct, opp_tov_pct, orb_pct, drb_pct    → percentages
+    //     (e.g. 12.2, 27.6, 78.9) — must be divided by 100.
+    // We normalize everything to decimals here so downstream model code
+    // can treat all four offensive + four defensive values uniformly.
+    const decimalOrNull = (s: string | undefined): number | null => toNumberOrNull(s);
+    const pctToDecimalOrNull = (s: string | undefined): number | null => {
+      const n = toNumberOrNull(s);
+      return n === null ? null : n / 100;
+    };
+    const offEfg = decimalOrNull(r["efg_pct"]);
+    const offTov = pctToDecimalOrNull(r["tov_pct"]);
+    const offOrb = pctToDecimalOrNull(r["orb_pct"]);
+    const offFtRate = decimalOrNull(r["ft_rate"]);
+    const defEfg = decimalOrNull(r["opp_efg_pct"]);
+    const defTov = pctToDecimalOrNull(r["opp_tov_pct"]);
+    const defDrb = pctToDecimalOrNull(r["drb_pct"]);
+    const defFtRate = decimalOrNull(r["opp_ft_rate"]);
     out.push({
       team_name: teamName,
       abbreviation: abbr,
@@ -290,6 +329,14 @@ export function parseAdvancedTable(
       def_rating: def,
       net_rating: net,
       pace,
+      off_efg_pct: offEfg,
+      off_tov_pct: offTov,
+      off_orb_pct: offOrb,
+      off_ft_rate: offFtRate,
+      def_efg_pct: defEfg,
+      def_tov_pct: defTov,
+      def_drb_pct: defDrb,
+      def_ft_rate_allowed: defFtRate,
       source_url: sourceUrl,
       fetched_at: fetchedAt,
     });

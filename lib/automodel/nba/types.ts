@@ -31,9 +31,61 @@ export type NbaModelStage = "morning_draft" | "t60_locked";
 // is null-safe and downgrades to fallback tier when these are absent.
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Phase 7C — Dean Oliver's Four Factors per team. All decimals
+ * (e.g. 0.553 = 55.3%). Source: BBR `advanced-team` table.
+ */
+export type NbaFourFactors = {
+  /** Offensive effective FG%. BBR `efg_pct`. */
+  off_efg_pct: number | null;
+  /** Offensive turnover %. BBR `tov_pct`. */
+  off_tov_pct: number | null;
+  /** Offensive rebound %. BBR `orb_pct`. */
+  off_orb_pct: number | null;
+  /** Offensive free-throw rate (FT/FGA). BBR `ft_rate`. */
+  off_ft_rate: number | null;
+  /** Opponent eFG%. BBR `opp_efg_pct`. */
+  def_efg_pct: number | null;
+  /** Opponent TOV%. BBR `opp_tov_pct`. */
+  def_tov_pct: number | null;
+  /** This team's defensive rebound %. BBR `drb_pct`. */
+  def_drb_pct: number | null;
+  /** Opponent FT rate allowed. BBR `opp_ft_rate`. */
+  def_ft_rate_allowed: number | null;
+};
+
+/**
+ * Phase 7C — full per-season-type rating pack: traditional ratings +
+ * Four Factors + sample-size hint, with provenance. Used by v1 to
+ * blend regular-season vs playoff aggregates with proper shrinkage.
+ *
+ * All fields nullable so missing data shrinks the model toward
+ * league average / smaller modifier rather than failing hard.
+ */
+export type NbaTeamRatingPack = {
+  off_rating: number | null;
+  def_rating: number | null;
+  net_rating: number | null;
+  pace: number | null;
+  four_factors: NbaFourFactors | null;
+  /**
+   * Number of games this aggregate covers. Used by v1 for Bayesian
+   * shrinkage of small playoff samples toward season baseline. Null
+   * when unknown (the model treats null as "trust source").
+   */
+  sample_games: number | null;
+  /** BBR / source name. */
+  source: string | null;
+  source_url: string | null;
+  fetched_at: string | null;
+};
+
 export type NbaTeamSnapshot = {
   team_external_id: number;
   abbreviation: string;
+  // ─── Legacy v0 single-rating block (kept for back-compat with
+  // projectIndependent and nbaAutoModelV1). v0 reads these directly;
+  // featureSnapshot continues to populate them via pickBestRatingsRow.
   /** Offensive rating: points scored per 100 possessions. League avg ~115. */
   off_rating: number | null;
   /** Defensive rating: points allowed per 100 possessions. League avg ~115. */
@@ -44,6 +96,10 @@ export type NbaTeamSnapshot = {
   pace: number | null;
   /** Recent-form net rating over last 10 games. Optional. */
   recent_form_10g_net_rating: number | null;
+  // ─── Phase 7C — separate regular + playoff rating packs for v1 blend.
+  // Nullable so absent BBR data degrades the model gracefully.
+  regular_season_ratings: NbaTeamRatingPack | null;
+  playoff_ratings: NbaTeamRatingPack | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -273,5 +329,19 @@ export const NBA_CONFIDENCE_FLOOR = 50;
  */
 export const NBA_BEST_ANGLE_MIN_CONFIDENCE = 62;
 
-/** Model version tag. */
+/** v0 model version tag (legacy projection, kept callable for comparison). */
 export const NBA_MODEL_VERSION = "auto_v0a_nba_internal_preview";
+
+/**
+ * Phase 7C — v1 active preview model version tag.
+ *
+ * ⚠ ADMIN/AUDIT-ONLY language. Tokens "v1", "research-prior",
+ * "calibration pending", "Oliver priors", "v0 vs v1" are NEVER to be
+ * surfaced in the member-facing Daily Edge. The customer-facing
+ * rendering (when it ships) must use polished language only:
+ * grade, confidence, model edge, market support/conflict,
+ * injury/data-quality cautions.
+ */
+export const NBA_MODEL_VERSION_V1 = "auto_v1_research_prior";
+
+export type NbaModelVersion = "v0" | "v1";

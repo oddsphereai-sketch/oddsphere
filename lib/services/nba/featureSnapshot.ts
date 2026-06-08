@@ -61,7 +61,7 @@ type LineRow = {
   odds_american: number | null;
 };
 
-// Phase 7B — nba_team_ratings row shape (subset of columns we read).
+// Phase 7B / 7C — nba_team_ratings row shape. v20 added Four Factors columns.
 type NbaTeamRatingsRow = {
   team_id: number;
   season: number;
@@ -70,6 +70,14 @@ type NbaTeamRatingsRow = {
   def_rating: number | null;
   net_rating: number | null;
   pace: number | null;
+  off_efg_pct: number | null;
+  off_tov_pct: number | null;
+  off_orb_pct: number | null;
+  off_ft_rate: number | null;
+  def_efg_pct: number | null;
+  def_tov_pct: number | null;
+  def_drb_pct: number | null;
+  def_ft_rate_allowed: number | null;
   source: string;
   source_url: string;
   fetched_at: string;
@@ -297,22 +305,28 @@ async function runBuild(
   }
   const priorGames: GameRow[] = (priorRows ?? []) as GameRow[];
 
-  // 4b) NBA team ratings (Phase 7B — migration v19 added the table).
-  // Pulls both regular + playoffs rows for the slate teams' season;
-  // pickBestRatingsRow selects playoffs over regular when both present.
+  // 4b) NBA team ratings (Phase 7B v19 / Phase 7C v20 — Four Factors).
+  // Pulls both regular + playoffs rows for the slate teams' season.
+  // v0 uses pickBestRatingsRow (playoff preferred) as before; v1 uses
+  // the regularByTeam + playoffByTeam packs separately for shrinkage.
   const slateSeason = Number.parseInt(date.slice(0, 4), 10);
   const ratingsByTeam = new Map<number, NbaTeamRatingsRow>();
+  const regularByTeam = new Map<number, NbaTeamRatingsRow>();
+  const playoffByTeam = new Map<number, NbaTeamRatingsRow>();
   if (teamIds.size > 0 && Number.isFinite(slateSeason)) {
     const { data: ratingsRows, error: ratingsErr } = await supabase
       .from("nba_team_ratings")
       .select(
-        "team_id, season, season_type, off_rating, def_rating, net_rating, pace, source, source_url, fetched_at",
+        "team_id, season, season_type, off_rating, def_rating, net_rating, pace, off_efg_pct, off_tov_pct, off_orb_pct, off_ft_rate, def_efg_pct, def_tov_pct, def_drb_pct, def_ft_rate_allowed, source, source_url, fetched_at",
       )
       .in("team_id", Array.from(teamIds))
       .eq("season", slateSeason);
     if (ratingsErr !== null) {
       // Non-fatal: missing/erroring ratings → null fields, fallback tier.
-      // Log but continue.
+      // Log but continue. (Includes the case where v20 migration hasn't
+      // been applied yet — the older SELECT shape would fail; the new
+      // one degrades gracefully because Postgres returns null for
+      // missing columns when present.)
       console.warn(
         `buildNbaFeatureSnapshots: nba_team_ratings query failed (continuing with null ratings): ${ratingsErr.message}`,
       );
@@ -322,12 +336,55 @@ async function runBuild(
       const arr = rowsByTeam.get(r.team_id) ?? [];
       arr.push(r);
       rowsByTeam.set(r.team_id, arr);
+      if (r.season_type === "regular") regularByTeam.set(r.team_id, r);
+      else if (r.season_type === "playoffs") playoffByTeam.set(r.team_id, r);
     }
     for (const [teamId, rows] of rowsByTeam) {
       const best = pickBestRatingsRow(rows);
       if (best !== null) ratingsByTeam.set(teamId, best);
     }
   }
+
+  // Phase 7C — helper: build a TeamRatingPack from a DB row (or null).
+  // Sample-game count is left null when unknown; the v1 model treats null
+  // as "trust source" and applies no shrinkage in that case.
+  const packFromRow = (
+    r: NbaTeamRatingsRow | undefined,
+    samplePlayoffGames?: number | null,
+  ): import("../../automodel/nba/types").NbaTeamRatingPack | null => {
+    if (r === undefined) return null;
+    const ff =
+      r.off_efg_pct === null &&
+      r.off_tov_pct === null &&
+      r.off_orb_pct === null &&
+      r.off_ft_rate === null &&
+      r.def_efg_pct === null &&
+      r.def_tov_pct === null &&
+      r.def_drb_pct === null &&
+      r.def_ft_rate_allowed === null
+        ? null
+        : {
+            off_efg_pct: r.off_efg_pct,
+            off_tov_pct: r.off_tov_pct,
+            off_orb_pct: r.off_orb_pct,
+            off_ft_rate: r.off_ft_rate,
+            def_efg_pct: r.def_efg_pct,
+            def_tov_pct: r.def_tov_pct,
+            def_drb_pct: r.def_drb_pct,
+            def_ft_rate_allowed: r.def_ft_rate_allowed,
+          };
+    return {
+      off_rating: r.off_rating,
+      def_rating: r.def_rating,
+      net_rating: r.net_rating,
+      pace: r.pace,
+      four_factors: ff,
+      sample_games: samplePlayoffGames ?? null,
+      source: r.source,
+      source_url: r.source_url,
+      fetched_at: r.fetched_at,
+    };
+  };
 
   // 5) Build per-game snapshots
   const snapshots: NbaGameSnapshot[] = [];
@@ -341,8 +398,33 @@ async function runBuild(
     // exists, ORtg/DRtg/NetRtg/Pace are populated; when absent the
     // fields stay null and dataQuality.ratings_present ends up false →
     // model degrades to fallback tier.
+    //
+    // Phase 7C: ALSO hydrate the separate regular-season and playoff
+    // rating packs (with Four Factors). v0 keeps reading the single
+    // `off_rating` etc. fields (back-compat). v1 reads the dual packs.
     const homeRatingsRow = ratingsByTeam.get(homeTeam.id) ?? null;
     const awayRatingsRow = ratingsByTeam.get(awayTeam.id) ?? null;
+
+    // Compute per-team playoff sample size from prior NBA games involving
+    // each team (finished, with scores) — used by v1 shrinkage.
+    const countPlayoffGames = (teamExternalId: number): number =>
+      priorGames.filter((p) => {
+        const homeExt =
+          p.home_team_id !== null
+            ? teamById.get(p.home_team_id)?.external_id ?? -1
+            : -1;
+        const awayExt =
+          p.away_team_id !== null
+            ? teamById.get(p.away_team_id)?.external_id ?? -1
+            : -1;
+        return homeExt === teamExternalId || awayExt === teamExternalId;
+      }).length;
+    const homePlayoffSample = countPlayoffGames(homeTeam.external_id);
+    const awayPlayoffSample = countPlayoffGames(awayTeam.external_id);
+    // Regular season sample: BBR season pages publish end-of-season
+    // aggregates → assume the regular row covers ~82 games when present.
+    const REGULAR_SEASON_GAMES_ASSUMED = 82;
+
     const homeTeamSnap: NbaTeamSnapshot = {
       team_external_id: homeTeam.external_id,
       abbreviation: homeTeam.abbreviation,
@@ -350,7 +432,15 @@ async function runBuild(
       def_rating: homeRatingsRow?.def_rating ?? null,
       net_rating: homeRatingsRow?.net_rating ?? null,
       pace: homeRatingsRow?.pace ?? null,
-      recent_form_10g_net_rating: null, // not exposed in v0b
+      recent_form_10g_net_rating: null,
+      regular_season_ratings: packFromRow(
+        regularByTeam.get(homeTeam.id),
+        REGULAR_SEASON_GAMES_ASSUMED,
+      ),
+      playoff_ratings: packFromRow(
+        playoffByTeam.get(homeTeam.id),
+        homePlayoffSample > 0 ? homePlayoffSample : null,
+      ),
     };
     const awayTeamSnap: NbaTeamSnapshot = {
       team_external_id: awayTeam.external_id,
@@ -360,6 +450,14 @@ async function runBuild(
       net_rating: awayRatingsRow?.net_rating ?? null,
       pace: awayRatingsRow?.pace ?? null,
       recent_form_10g_net_rating: null,
+      regular_season_ratings: packFromRow(
+        regularByTeam.get(awayTeam.id),
+        REGULAR_SEASON_GAMES_ASSUMED,
+      ),
+      playoff_ratings: packFromRow(
+        playoffByTeam.get(awayTeam.id),
+        awayPlayoffSample > 0 ? awayPlayoffSample : null,
+      ),
     };
 
     // Injuries via optional resolver

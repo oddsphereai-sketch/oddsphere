@@ -75,6 +75,25 @@ export function NbaReader({
               {GRADE_GLYPH[topGrade]} {GRADE_LABEL[topGrade]}
             </div>
             <div className="text-[10px] text-gray-500 uppercase">top read</div>
+            {/* ADMIN-ONLY v1 model badge. Must not surface in member-facing UI. */}
+            {game.admin_model_badge !== null && (
+              <div className="flex items-center justify-end gap-1.5 mt-1">
+                <span
+                  className="px-1.5 py-0.5 rounded border border-violet-500/30 bg-violet-500/10 text-[10px] uppercase tracking-wider text-violet-200"
+                  title="Active preview model — admin/audit-only label"
+                >
+                  {game.admin_model_badge.label}
+                </span>
+                {game.admin_model_badge.audit_flags.length > 0 && (
+                  <span
+                    className="px-1.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-[10px] uppercase tracking-wider text-amber-200"
+                    title={game.admin_model_badge.audit_flags.join("; ")}
+                  >
+                    ⚠ {game.admin_model_badge.audit_flags.length} v0/v1 flag{game.admin_model_badge.audit_flags.length === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
