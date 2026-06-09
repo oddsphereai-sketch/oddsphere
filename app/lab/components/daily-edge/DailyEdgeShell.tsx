@@ -1565,7 +1565,14 @@ function MarketPulse({ market, marketData }: { market: MarketKey; marketData: Ma
       <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse · Public Splits</p>
       <div className="space-y-2.5">
         {splits.map((s) => (
-          <SideSplitsBlock key={s.side} label={s.label} moneyPct={s.moneyPct} betsPct={s.betsPct} />
+          <SideSplitsBlock
+            key={s.side}
+            label={s.label}
+            moneyPct={s.moneyPct}
+            betsPct={s.betsPct}
+            observedAt={s.observedAt ?? null}
+            isStale={s.isStale ?? false}
+          />
         ))}
       </div>
     </div>
@@ -1577,15 +1584,44 @@ function MarketPulse({ market, marketData }: { market: MarketKey; marketData: Ma
  * Handles partial-null cases by labeling missing fields "not reported"
  * rather than dropping the row.
  */
+/**
+ * Phase 7I — render a subtle "Last updated H:MM PM" line under stale-
+ * but-valid values. Only shown when isStale=true AND there's an observed
+ * timestamp — i.e. the value was hydrated from history because the
+ * latest provider refresh dropped it. Fresh data has no annotation.
+ */
+function formatStaleStamp(observedAt: string | null): string | null {
+  if (observedAt === null) return null;
+  try {
+    const d = new Date(observedAt);
+    if (!Number.isFinite(d.getTime())) return null;
+    const t = d.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "America/New_York",
+    });
+    return `Last updated ${t}`;
+  } catch {
+    return null;
+  }
+}
+
 function SideSplitsBlock({
   label,
   moneyPct,
   betsPct,
+  observedAt,
+  isStale,
 }: {
   label: string;
   moneyPct: number | null;
   betsPct: number | null;
+  /** Phase 7I — ISO timestamp when the split was last observed. */
+  observedAt?: string | null;
+  /** Phase 7I — true when observedAt is older than 15 min. */
+  isStale?: boolean;
 }) {
+  const stamp = isStale === true ? formatStaleStamp(observedAt ?? null) : null;
   return (
     <div className="space-y-1">
       <p className="text-[10.5px] uppercase tracking-[0.14em] font-bold text-gray-300">{label}</p>
@@ -1606,6 +1642,11 @@ function SideSplitsBlock({
           <span className="text-[10px] text-gray-600 italic">not reported</span>
           <span />
         </div>
+      )}
+      {stamp !== null && (
+        <p className="text-[9px] tracking-[0.06em] text-gray-500/85 italic pl-[42px]">
+          {stamp}
+        </p>
       )}
     </div>
   );

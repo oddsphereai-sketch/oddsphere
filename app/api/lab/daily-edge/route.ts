@@ -79,6 +79,11 @@ import {
 import { formatKeyStats } from "@/lib/services/keyStatsFormatter";
 import { assertNoBannedTerms } from "@/lib/services/bannedTermsLinter";
 import { buildNbaDailyEdgeAdapted } from "@/lib/services/nba/buildNbaDailyEdgeAdapted";
+import {
+  loadSplitsHistoryForSlate,
+  loadLinesHistoryForSlate,
+  isStale as isObservationStale,
+} from "@/lib/services/lastKnownGoodReader";
 
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl"];
 // Phase 7G — NBA goes live in the member-facing Daily Edge via the
@@ -176,6 +181,16 @@ type SignalRow = {
   public_betting_pct: number | null;
   public_money_pct: number | null;
   computed_at: string | null;
+  /**
+   * Phase 7I (Last Known Good) — when public_money_pct or
+   * public_betting_pct was hydrated from sharp_signals_history rather
+   * than the live sharp_signals row, the original observed_at is
+   * stamped here per-field. buildMarketEdge propagates the stamps onto
+   * MarketEdgeDto so the UI can render subtle "Last updated …" copy.
+   * null/undefined → value came from the live current row (fresh).
+   */
+  public_money_pct_observed_at?: string | null;
+  public_betting_pct_observed_at?: string | null;
 };
 
 /**
@@ -190,6 +205,14 @@ type LineRow = {
   line_value: number | null;
   odds_american: number | null;
   fetched_at: string | null;
+  /**
+   * Phase 7I (Last Known Good) — when odds_american or line_value was
+   * hydrated from line_history rather than the live lines row, the
+   * original recorded_at is stamped per-field. buildMarketEdge propagates
+   * onto MarketEdgeDto for "Last updated …" UI copy.
+   */
+  odds_american_observed_at?: string | null;
+  line_value_observed_at?: string | null;
 };
 
 /**
@@ -1543,6 +1566,13 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // Pricing — best available American odds for the picked side.
   const priceRow = pickPriceRow(input.linesCurrent, input.modelSide);
   const priceAmerican = priceRow?.odds_american ?? null;
+  // Phase 7I — stamp the observation timestamp when the value came from
+  // line_history via LKG hydration. undefined → value came from the live
+  // lines row; UI renders normally.
+  const priceObservedAt: string | null =
+    priceRow?.odds_american_observed_at ?? null;
+  const priceIsStale =
+    priceObservedAt !== null ? isObservationStale(priceObservedAt) : false;
 
   // First-seen line for the picked side.
   //
@@ -1555,6 +1585,15 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // to be the opposite side from the model's pick.
   const openAmerican: number | null =
     input.lineOpen?.odds_american ?? null;
+  // Phase 7I — openAmerican already comes from line_history (always-LKG
+  // semantics). Stamp its recorded_at if we have it so the UI can render
+  // the age. lineOpen.recorded_at is the source's natural timestamp.
+  const lineOpenObservedAt: string | null =
+    input.lineOpen?.recorded_at ?? null;
+  const lineOpenIsStale =
+    lineOpenObservedAt !== null && openAmerican !== null
+      ? isObservationStale(lineOpenObservedAt)
+      : false;
 
   // Per-market signal-derived quantitative fields. Pick the +EV signal on
   // the model's side (preferred), falling back to ANY signal for this
@@ -1570,6 +1609,21 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const pinnacleEvPct = sigForSide?.ev_pct ?? null;
   const moneyPct = sigForSide?.public_money_pct ?? null;
   const betsPct = sigForSide?.public_betting_pct ?? null;
+  // Phase 7I — per-field LKG stamps for the picked-side scalars. The
+  // route's LKG hydration step writes *_observed_at when the value came
+  // from sharp_signals_history instead of the live sharp_signals row.
+  const moneyPctObservedAt: string | null =
+    sigForSide?.public_money_pct_observed_at ?? null;
+  const moneyPctIsStale =
+    moneyPctObservedAt !== null && moneyPct !== null
+      ? isObservationStale(moneyPctObservedAt)
+      : false;
+  const betsPctObservedAt: string | null =
+    sigForSide?.public_betting_pct_observed_at ?? null;
+  const betsPctIsStale =
+    betsPctObservedAt !== null && betsPct !== null
+      ? isObservationStale(betsPctObservedAt)
+      : false;
 
   // marketDataLimited rule diverges per Daniel's adjustment #3:
   //   ML/Total:     true when EVERY quant field is null (no quantitative data)
@@ -1798,6 +1852,18 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     publicSplits,
     priceAmerican,
     lineOpenAmerican: openAmerican,
+    // Phase 7I — LKG age stamps. Optional fields; absent/null means
+    // "fresh, render normally". Present means the value came from
+    // history fallback and the UI may render "Last updated …" copy
+    // when isStale=true.
+    priceObservedAt,
+    priceIsStale,
+    lineOpenObservedAt,
+    lineOpenIsStale,
+    moneyPctObservedAt,
+    moneyPctIsStale,
+    betsPctObservedAt,
+    betsPctIsStale,
     modelTotal: input.totalsExtras?.modelTotal ?? null,
     marketTotal: input.totalsExtras?.marketTotal ?? null,
     line: input.totalsExtras?.sportsbookLine ?? null,
@@ -1876,11 +1942,23 @@ function buildPublicSplits(args: {
     const sig = rows.find((r) => r.side === side);
     const meta = labelFor(side);
     if (meta === null) continue;
+    // Phase 7I — pick the most recent stamp across the two fields so the
+    // UI shows a single "Last updated …" timestamp per side. When both
+    // fields came from the live current row (no LKG hydration), the
+    // stamp stays undefined and the UI renders normally.
+    const moneyAt = sig?.public_money_pct_observed_at ?? null;
+    const betsAt = sig?.public_betting_pct_observed_at ?? null;
+    const observedAt =
+      moneyAt !== null && betsAt !== null
+        ? (moneyAt > betsAt ? moneyAt : betsAt)
+        : (moneyAt ?? betsAt);
     out.push({
       side: meta.side,
       label: meta.label,
       moneyPct: sig?.public_money_pct ?? null,
       betsPct: sig?.public_betting_pct ?? null,
+      observedAt,
+      isStale: observedAt !== null ? isObservationStale(observedAt) : false,
     });
   }
   // Drop rows where BOTH money and bets are null AND no row existed —
@@ -2721,6 +2799,148 @@ export async function GET(request: Request) {
         tot.push({ sportsbook: row.sportsbook, line_value: row.line_value });
         totalsByGame.set(row.game_id, tot);
       }
+    }
+
+    // ─── Phase 7I (Last Known Good) hydration ───────────────────────
+    //
+    // Product rule: "Latest valid data persists until newer valid data
+    // replaces it. Unavailable only means we truly never had valid data."
+    //
+    // For each (game, market, side, field) where the current sharp_signals
+    // / lines row has a NULL value but history has a non-null one, hydrate
+    // the in-memory row with the historical value and stamp the original
+    // observed_at on a per-field metadata key. buildMarketEdge reads the
+    // stamps and propagates them onto MarketEdgeDto so the UI can render
+    // subtle "Last updated …" copy on stale-but-valid values.
+    //
+    // Defensive: if the history tables are missing or empty, the helpers
+    // return [] and this block is a no-op. Zero impact on existing rows
+    // where current is already non-null.
+    //
+    // Locked-game behavior unchanged — the snapshot override below runs
+    // AFTER this hydration and replaces signals/lines for locked games
+    // with the frozen snapshot substrate, so LKG augmentation never
+    // leaks into a locked-game render.
+    try {
+      const [splitsHistory, linesHistory] = await Promise.all([
+        loadSplitsHistoryForSlate(supabase, gameIds),
+        loadLinesHistoryForSlate(supabase, gameIds),
+      ]);
+
+      // ── Splits hydration ──
+      // Index history by (game_id, market_type, side) so we can patch
+      // in O(1) per signal-row.
+      const splitsHistByKey = new Map<string, typeof splitsHistory[number]>();
+      for (const h of splitsHistory) {
+        splitsHistByKey.set(`${h.game_id}::${h.market_type}::${h.side}`, h);
+      }
+
+      // First, augment existing signal rows where a field is null.
+      for (const [gameId, rows] of signalsByGame.entries()) {
+        for (const r of rows) {
+          if (r.public_money_pct !== null && r.public_betting_pct !== null) {
+            continue;
+          }
+          const h = splitsHistByKey.get(`${gameId}::${r.market_type}::${r.side}`);
+          if (h === undefined) continue;
+          if (r.public_money_pct === null && h.public_money_pct !== null) {
+            r.public_money_pct = h.public_money_pct;
+            r.public_money_pct_observed_at = h.public_money_pct_observed_at;
+          }
+          if (r.public_betting_pct === null && h.public_betting_pct !== null) {
+            r.public_betting_pct = h.public_betting_pct;
+            r.public_betting_pct_observed_at = h.public_betting_pct_observed_at;
+          }
+        }
+      }
+      // Second, synthesize signal rows for (game, market, side) tuples
+      // that have NO current row at all but DO have history. Without
+      // this, sides whose row was wiped between cron passes stay blank
+      // forever even when history would recover them.
+      for (const h of splitsHistory) {
+        const rows = signalsByGame.get(h.game_id) ?? [];
+        const exists = rows.some(
+          (r) => r.market_type === h.market_type && r.side === h.side,
+        );
+        if (exists) continue;
+        const synthesized: SignalRow = {
+          game_id: h.game_id,
+          market_type: h.market_type,
+          side: h.side,
+          pinnacle_fair_probability: null,
+          is_plus_ev: null,
+          ev_pct: null,
+          has_steam_move: null,
+          steam_detected_at: null,
+          steam_books_count: null,
+          has_reverse_line_movement: null,
+          rlm_direction: null,
+          public_betting_pct: h.public_betting_pct,
+          public_money_pct: h.public_money_pct,
+          computed_at: null,
+          public_money_pct_observed_at: h.public_money_pct_observed_at,
+          public_betting_pct_observed_at: h.public_betting_pct_observed_at,
+        };
+        rows.push(synthesized);
+        signalsByGame.set(h.game_id, rows);
+      }
+
+      // ── Lines hydration ──
+      // Index history by (game_id, market_type, sportsbook, side).
+      const linesHistByKey = new Map<string, typeof linesHistory[number]>();
+      for (const h of linesHistory) {
+        linesHistByKey.set(
+          `${h.game_id}::${h.market_type}::${h.sportsbook}::${h.side}`,
+          h,
+        );
+      }
+      // Patch existing line rows where odds_american or line_value is null.
+      for (const [, rows] of currentLinesByGameMarket.entries()) {
+        for (const r of rows) {
+          if (r.side === null) continue;
+          if (r.odds_american !== null && r.line_value !== null) continue;
+          const h = linesHistByKey.get(
+            `${r.game_id}::${r.market_type}::${r.sportsbook}::${r.side}`,
+          );
+          if (h === undefined) continue;
+          if (r.odds_american === null && h.odds_american !== null) {
+            r.odds_american = h.odds_american;
+            r.odds_american_observed_at = h.odds_american_observed_at;
+          }
+          if (r.line_value === null && h.line_value !== null) {
+            r.line_value = h.line_value;
+            r.line_value_observed_at = h.line_value_observed_at;
+          }
+        }
+      }
+      // Synthesize rows for missing (game, market, sportsbook, side).
+      for (const h of linesHistory) {
+        const key = `${h.game_id}::${h.market_type}`;
+        const rows = currentLinesByGameMarket.get(key) ?? [];
+        const exists = rows.some(
+          (r) =>
+            r.sportsbook === h.sportsbook && r.side === h.side,
+        );
+        if (exists) continue;
+        const synthesized: LineRow = {
+          game_id: h.game_id,
+          market_type: h.market_type,
+          sportsbook: h.sportsbook,
+          side: h.side,
+          line_value: h.line_value,
+          odds_american: h.odds_american,
+          fetched_at: null,
+          odds_american_observed_at: h.odds_american_observed_at,
+          line_value_observed_at: h.line_value_observed_at,
+        };
+        rows.push(synthesized);
+        currentLinesByGameMarket.set(key, rows);
+      }
+    } catch (lkgErr) {
+      // LKG hydration is a value-add overlay. Never break the slate
+      // assembly on a hydration error — log and continue with the
+      // pre-LKG behavior (current-row-only).
+      console.warn(`LKG hydration skipped: ${(lkgErr as Error).message}`);
     }
     // R-16G-A — totals-line selection now uses the same hardened
     // BOOK_PRIORITY as `pickPriceRow`. The pre-fix fallback to "any row
