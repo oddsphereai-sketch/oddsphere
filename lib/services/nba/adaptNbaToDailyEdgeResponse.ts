@@ -469,7 +469,12 @@ export function adaptNbaToDailyEdgeResponse(
     date: nbaDto.slate_date_et,
     requested_date: nbaDto.slate_date_et,
     fallback_used: false,
-    slateState: nbaDto.games.length > 0 ? "today_published" : "today_pending_ingest",
+    // Phase 7J — emit "no_data" (not "today_pending_ingest") when NBA
+    // has zero games today. The "pending_ingest" copy implied ingestion
+    // was actively in progress and replaced the entire page; on most
+    // calendar days NBA simply has no games scheduled, which is the
+    // honest answer.
+    slateState: nbaDto.games.length > 0 ? "today_published" : "no_data",
     slate_status: nbaDto.games.length > 0 ? "published" : null,
     last_slate_update_at: nbaDto.as_of,
     games: nbaDto.games.map((g) => {

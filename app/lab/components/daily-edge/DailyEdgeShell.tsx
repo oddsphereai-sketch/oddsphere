@@ -2836,9 +2836,16 @@ function MobileDetailSheet({
 
 // ─── Empty / loading / error states ────────────────────────────────────
 
+/**
+ * Phase 7J — in-shell EmptyState. Previously this component was the
+ * full-page output (replaced the SportRail header + nav), which made
+ * clicking a sport with no games look like the page broke. Now the
+ * caller wraps this inside the shell so SportRail stays mounted and
+ * the user can still navigate between sports.
+ */
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="max-w-7xl mx-auto px-6 py-20 text-center">
+    <div className="max-w-7xl mx-auto px-6 py-16 text-center">
       <p className="text-[14px] text-gray-400">{message}</p>
     </div>
   );
@@ -2852,8 +2859,15 @@ function LoadingState() {
  * Phase 6B.4 — translate the API's slateState into a member-friendly
  * empty-state message. Honest about pending/draft slates so a quiet
  * morning before publication doesn't look like a broken product.
+ *
+ * Phase 7J — sport-aware: NBA "no_data" is the common case (most
+ * calendar days have no NBA games), so the copy avoids implying
+ * ingestion is in progress when the system simply has nothing to ingest.
  */
-function emptyStateMessageFor(slateState: string | null | undefined): string {
+function emptyStateMessageFor(
+  slateState: string | null | undefined,
+  sport: Sport,
+): string {
   switch (slateState) {
     case "today_draft_only":
       return "Tonight's slate is being finalized. Picks will appear here once the model run finishes.";
@@ -2864,18 +2878,39 @@ function emptyStateMessageFor(slateState: string | null | undefined): string {
     case "stale_fallback":
       return "Live slate isn't published yet. Showing the most recent available slate.";
     case "no_data":
+      // Sport-specific copy. NBA's offseason / non-game days are common;
+      // the honest line is "no games today", not "being ingested".
+      if (sport === "nba") return "No NBA games scheduled today.";
+      if (sport === "nhl") return "No NHL games scheduled today.";
       return "No games on tonight's slate.";
     default:
+      if (sport === "nba") return "No NBA games scheduled today.";
       return "No games on tonight's slate.";
   }
 }
 
 function ErrorState({ error }: { error: string }) {
   return (
-    <div className="max-w-7xl mx-auto px-6 py-20 text-center">
+    <div className="max-w-7xl mx-auto px-6 py-16 text-center">
       <p className="text-[14px] text-amber-200">Something went wrong loading the slate.</p>
       <p className="text-[12px] text-gray-500 mt-2">{error}</p>
     </div>
+  );
+}
+
+/**
+ * Phase 7J — minimal shell chrome wrapper. Renders just the SportRail
+ * (tabs) + dark page background so Loading / Error / Empty states keep
+ * navigation visible. Used by the early-return paths in DailyEdgeShell.
+ */
+function ShellChrome({ sport, children }: { sport: Sport; children: ReactNode }) {
+  return (
+    <ShellSportContext.Provider value={sport}>
+      <div className="bg-[#0A0A0F] text-gray-200 min-h-screen">
+        <SportRail sport={sport} />
+        {children}
+      </div>
+    </ShellSportContext.Provider>
   );
 }
 
@@ -3067,15 +3102,24 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
     return () => document.removeEventListener("keydown", onKey);
   }, [readerMode, mobileSheetOpen]);
 
-  if (isLoading) return <LoadingState />;
-  if (error) return <ErrorState error={error.message} />;
+  // Phase 7J — wrap Loading / Error / Empty states in ShellChrome so
+  // SportRail (tabs) + page background stay mounted. Pre-7J, hitting an
+  // empty NBA slate replaced the whole page including navigation; users
+  // couldn't tab back to MLB without using the URL bar.
+  if (isLoading) {
+    return <ShellChrome sport={sport}><LoadingState /></ShellChrome>;
+  }
+  if (error) {
+    return <ShellChrome sport={sport}><ErrorState error={error.message} /></ShellChrome>;
+  }
   if (!data || games.length === 0) {
     // Phase 6B.4 — honest empty state by slateState. The API tells us
     // WHY there are no games (draft / hidden / pending / stale fallback
-    // failed). Lying with "No games on tonight's slate." when the slate
-    // is actually being finalized looks like a broken product.
-    const message = emptyStateMessageFor(data?.slateState);
-    return <EmptyState message={message} />;
+    // failed / no_data). Phase 7J adds sport-aware copy so NBA's
+    // common "no games today" case doesn't imply ingestion is in
+    // progress.
+    const message = emptyStateMessageFor(data?.slateState, sport);
+    return <ShellChrome sport={sport}><EmptyState message={message} /></ShellChrome>;
   }
 
   const selectedGame = selectedGameId
