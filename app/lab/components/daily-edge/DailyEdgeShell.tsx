@@ -565,7 +565,14 @@ export function formatPickWithLine(
   if (pick === null) {
     return pickFallbackFor(market, sport);
   }
-  if (market === "total" && line !== null) return `${pick} ${line}`;
+  if (market === "total" && line !== null) {
+    // NBA pick_label already encodes the line (e.g. "OVER 215.5"). MLB
+    // pick is bare ("Over" / "Under") and needs the line appended.
+    // Append only when the line isn't already part of the pick string —
+    // sport-agnostic so neither league shows the line twice.
+    if (pick.includes(String(line))) return pick;
+    return `${pick} ${line}`;
+  }
   return pick;
 }
 
@@ -855,11 +862,8 @@ function SportIcon({ sport, size = 18, active }: { sport: Sport; size?: number; 
  * concerns + no remote asset fetches).
  */
 export function SportRail({ sport }: { sport: Sport }) {
-  // V1 — MLB live. NBA is clickable in preview/internal mode on the
-  // nba-v0a branch (NBA preview lands at /lab/daily-edge?sport=nba and
-  // is gated by the existing admin auth + middleware bypass for
-  // /admin/nba-* and /api/admin/nba-* — NBA still requires admin auth
-  // on production main).
+  // Member-facing live sports: MLB + NBA. The other leagues stay as
+  // "Coming Soon" placeholders until each model ships.
   const ROW: Array<{ key: Sport; label: string; live: boolean }> = [
     { key: "mlb", label: "MLB", live: true },
     { key: "nba", label: "NBA", live: true },
@@ -924,6 +928,8 @@ export function SportRail({ sport }: { sport: Sport }) {
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(110,231,183,0.6)]" />
                         Active
                       </span>
+                    ) : s.live ? (
+                      "Live"
                     ) : (
                       "Coming Soon"
                     )}
