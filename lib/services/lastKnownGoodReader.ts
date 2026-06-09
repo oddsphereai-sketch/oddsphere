@@ -214,6 +214,153 @@ export async function getCurrentOrLastKnownSplit(opts: LkgSplitOpts): Promise<Lk
   return NULL_RESULT;
 }
 
+// ─── Batched slate-level hydration ─────────────────────────────────────
+//
+// Single-query helpers that fetch newest non-null values across a whole
+// slate. Used by the Daily Edge route to avoid N+1 queries: one pull from
+// each history table for every game on the slate.
+
+export type SplitsHistoryHit = {
+  game_id: number;
+  market_type: "moneyline" | "total" | "spread";
+  side: "home" | "away" | "over" | "under";
+  public_money_pct: number | null;
+  public_money_pct_observed_at: string | null;
+  public_betting_pct: number | null;
+  public_betting_pct_observed_at: string | null;
+};
+
+/**
+ * For every (game_id, market_type, side) in the slate, return the newest
+ * non-null public_money_pct + public_betting_pct from sharp_signals_history.
+ * Each field's observed_at is independent (a history row might be the
+ * newest for one but not the other). Result is intended to be merged
+ * into the live `sharp_signals` rows at slate-fetch time.
+ *
+ * Defensive: missing-table error → returns empty array, caller proceeds
+ * with no LKG augmentation (no crash, no regression).
+ */
+export async function loadSplitsHistoryForSlate(
+  supabase: SupabaseClient,
+  gameIds: number[],
+): Promise<SplitsHistoryHit[]> {
+  if (gameIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("sharp_signals_history")
+    .select("game_id, market_type, side, public_money_pct, public_betting_pct, recorded_at")
+    .in("game_id", gameIds)
+    .order("recorded_at", { ascending: false });
+  if (error || data === null) return [];
+
+  type Row = {
+    game_id: number;
+    market_type: string;
+    side: string | null;
+    public_money_pct: number | null;
+    public_betting_pct: number | null;
+    recorded_at: string | null;
+  };
+
+  // Group by (game_id, market_type, side); pick newest non-null per field.
+  const out = new Map<string, SplitsHistoryHit>();
+  for (const r of data as Row[]) {
+    if (r.side === null) continue;
+    const sideToken = r.side as "home" | "away" | "over" | "under";
+    if (sideToken !== "home" && sideToken !== "away" && sideToken !== "over" && sideToken !== "under") continue;
+    const mkt = r.market_type as "moneyline" | "total" | "spread";
+    if (mkt !== "moneyline" && mkt !== "total" && mkt !== "spread") continue;
+    const key = `${r.game_id}::${mkt}::${sideToken}`;
+    const existing = out.get(key) ?? {
+      game_id: r.game_id,
+      market_type: mkt,
+      side: sideToken,
+      public_money_pct: null,
+      public_money_pct_observed_at: null,
+      public_betting_pct: null,
+      public_betting_pct_observed_at: null,
+    };
+    if (existing.public_money_pct === null && r.public_money_pct !== null) {
+      existing.public_money_pct = r.public_money_pct;
+      existing.public_money_pct_observed_at = r.recorded_at;
+    }
+    if (existing.public_betting_pct === null && r.public_betting_pct !== null) {
+      existing.public_betting_pct = r.public_betting_pct;
+      existing.public_betting_pct_observed_at = r.recorded_at;
+    }
+    out.set(key, existing);
+  }
+  return Array.from(out.values());
+}
+
+export type LinesHistoryHit = {
+  game_id: number;
+  market_type: string;
+  side: "home" | "away" | "over" | "under";
+  sportsbook: string;
+  odds_american: number | null;
+  odds_american_observed_at: string | null;
+  line_value: number | null;
+  line_value_observed_at: string | null;
+};
+
+/**
+ * Same shape for line_history. One row per (game_id, market_type,
+ * sportsbook, side) carrying the newest non-null odds + line_value.
+ * Used to hydrate the lines.current snapshot.
+ */
+export async function loadLinesHistoryForSlate(
+  supabase: SupabaseClient,
+  gameIds: number[],
+): Promise<LinesHistoryHit[]> {
+  if (gameIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("line_history")
+    .select("game_id, market_type, sportsbook, side, line_value, odds_american, recorded_at")
+    .in("game_id", gameIds)
+    .in("market_type", ["moneyline", "total", "first_inning_total"])
+    .is("player_id", null)
+    .order("recorded_at", { ascending: false });
+  if (error || data === null) return [];
+
+  type Row = {
+    game_id: number;
+    market_type: string;
+    sportsbook: string;
+    side: string | null;
+    line_value: number | null;
+    odds_american: number | null;
+    recorded_at: string | null;
+  };
+
+  const out = new Map<string, LinesHistoryHit>();
+  for (const r of data as Row[]) {
+    if (r.side === null) continue;
+    const sideToken = r.side as "home" | "away" | "over" | "under";
+    if (sideToken !== "home" && sideToken !== "away" && sideToken !== "over" && sideToken !== "under") continue;
+    const key = `${r.game_id}::${r.market_type}::${r.sportsbook}::${sideToken}`;
+    const existing = out.get(key) ?? {
+      game_id: r.game_id,
+      market_type: r.market_type,
+      side: sideToken,
+      sportsbook: r.sportsbook,
+      odds_american: null,
+      odds_american_observed_at: null,
+      line_value: null,
+      line_value_observed_at: null,
+    };
+    if (existing.odds_american === null && r.odds_american !== null) {
+      existing.odds_american = r.odds_american;
+      existing.odds_american_observed_at = r.recorded_at;
+    }
+    if (existing.line_value === null && r.line_value !== null) {
+      existing.line_value = r.line_value;
+      existing.line_value_observed_at = r.recorded_at;
+    }
+    out.set(key, existing);
+  }
+  return Array.from(out.values());
+}
+
 // ─── Internal: pick newest non-null value across a set of rows ─────────
 
 function newestNonNull<T extends Record<string, unknown>>(

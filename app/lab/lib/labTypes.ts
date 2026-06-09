@@ -253,9 +253,33 @@ export type MarketEdgeDto = {
     label: string;
     moneyPct: number | null;
     betsPct: number | null;
+    /**
+     * Phase 7I (Last Known Good) — ISO timestamp of when this split was
+     * last observed. Optional; populated only when the value came from
+     * `sharp_signals_history` fallback (current row was null). Used by
+     * the UI to render "Last updated …" copy on stale-but-valid values.
+     */
+    observedAt?: string | null;
+    /** Phase 7I — true when observedAt is older than the stale threshold. */
+    isStale?: boolean;
   }>;
   priceAmerican: number | null;
   lineOpenAmerican: number | null;
+  /**
+   * Phase 7I (Last Known Good) — observation timestamps for the price
+   * fields. Optional; populated when the value came from `line_history`
+   * fallback (current `lines` row was null/missing). Null/undefined
+   * means the value is fresh from the current `lines` row.
+   */
+  priceObservedAt?: string | null;
+  priceIsStale?: boolean;
+  lineOpenObservedAt?: string | null;
+  lineOpenIsStale?: boolean;
+  /** Picked-side scalar splits stamps — mirror publicSplits per-item stamps. */
+  moneyPctObservedAt?: string | null;
+  moneyPctIsStale?: boolean;
+  betsPctObservedAt?: string | null;
+  betsPctIsStale?: boolean;
 
   // ── totals-only (null for moneyline / first_inning) ──
   modelTotal: number | null;
