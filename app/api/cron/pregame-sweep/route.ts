@@ -233,6 +233,41 @@ async function applyLocks(
     }
     lockedCount++;
 
+    // Atomic propagation to prediction_records (Phase 7L hotfix).
+    //
+    // Before this fix there was a timing window between this UPDATE and
+    // the next hourly tracking-refresh run during which:
+    //   • game_predictions.locked_at IS NOT NULL (this row)
+    //   • prediction_records.locked_at IS NULL  (stale until refresh)
+    // The Daily Edge route's 6B.18 locked-snapshot override gates on
+    // prediction_records.locked_at, so users loading the page inside
+    // that window saw live-recomputed verdicts drift away from the
+    // pregame snapshot (Best Angle → Watchlist etc.). Propagating
+    // the lock here closes the window — the override fires immediately.
+    //
+    // Sport-scoped + locked_at-null filter mean we never touch:
+    //   • other sports' prediction_records
+    //   • already-locked prediction_records (preserves their original
+    //     lock timestamps, never overwrites)
+    // The hourly tracking-refresh writer remains the canonical fill
+    // path; this is a secondary write that aligns the timestamps
+    // before the cron catches up. If this propagation fails for any
+    // reason we log and continue — the game_predictions lock itself
+    // already succeeded, and the next tracking-refresh will eventually
+    // sync prediction_records.
+    const { error: prErr } = await supabase
+      .from("prediction_records")
+      .update({ locked_at: lockedAt })
+      .eq("game_id", g.game_id)
+      .eq("sport", sport)
+      .is("locked_at", null);
+    if (prErr) {
+      errors.push(
+        `game_id=${g.game_id}: prediction_records lock-propagation failed: ${prErr.message} (game_predictions already locked; tracking-refresh will retry)`,
+      );
+      // Non-fatal — game_predictions lock holds.
+    }
+
     const { error: auditErr } = await supabase.from("admin_audit_log").insert({
       action_type: "game_prediction.lock",
       target_table: "game_predictions",
