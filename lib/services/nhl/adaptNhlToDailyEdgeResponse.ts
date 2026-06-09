@@ -361,14 +361,20 @@ function buildMarketEdge(opts: {
     // ML carries no line; Total + Puck Line use the `line` slot.
     line: slot === "ml" ? null : marketLine,
     keyStats,
-    modelTrustPct: held ? null : market.confidence,
+    // modelTrustPct and recommendationConfidence are PERCENT (0-100)
+    // per the shell contract: the Confidence vs Market strip does
+    // `Math.round(modelTrustPct)%` directly, and the Rec pill compares
+    // recommendationConfidence to 45/65 thresholds. NHL model output
+    // ships `market.confidence` as a 0-1 decimal — scale to percent
+    // here. MLB and NBA both already pass these in percent units.
+    modelTrustPct: held ? null : market.confidence * 100,
     marketImpliedPct: marketImpliedDecimal !== null ? marketImpliedDecimal * 100 : null,
     modelMarketGapPct: isTotal
       ? null
       : market.model_market_gap_pct !== null
         ? market.model_market_gap_pct * 100
         : null,
-    recommendationConfidence: held ? null : market.confidence,
+    recommendationConfidence: held ? null : market.confidence * 100,
     marketSource: bundle.sportsbook,
     marketDataQuality: bundle.priceAmerican !== null ? "single_book" : "unavailable",
     reviewFlags: [],

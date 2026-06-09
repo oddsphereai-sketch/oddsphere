@@ -286,7 +286,7 @@ function asVerdictKey(s: string): VerdictKey {
  */
 type EdgeRow = { label: string; value: string; tone: "emerald" | "amber" | "sky" | "gray" };
 
-function buildEdgeRow(market: MarketKey, m: MarketEdgeDto): EdgeRow | null {
+function buildEdgeRow(market: MarketKey, m: MarketEdgeDto, sport: Sport = "mlb"): EdgeRow | null {
   // 1. Value gap — strongest signal when present and material.
   if (m.pinnacleEvPct !== null && Math.abs(m.pinnacleEvPct) >= 0.3) {
     const sign = m.pinnacleEvPct >= 0 ? "+" : "";
@@ -306,12 +306,15 @@ function buildEdgeRow(market: MarketKey, m: MarketEdgeDto): EdgeRow | null {
     const marketPct = Math.round(m.marketFairProb * 100);
     const gap = modelPct - marketPct;
     if (market === "total" && m.modelTotal !== null && m.marketTotal !== null) {
-      // For totals, the gap on probability is less intuitive than runs.
+      // For totals, the absolute unit-difference is more intuitive than a
+      // probability gap. Unit name is sport-aware: MLB → runs, NHL → goals,
+      // NBA → points.
       const diff = m.modelTotal - m.marketTotal;
       const sign = diff >= 0 ? "+" : "";
+      const unit = sport === "nhl" ? "goals" : sport === "nba" ? "points" : "runs";
       return {
         label: "Model read",
-        value: `${m.modelTotal.toFixed(1)} runs vs market ${m.marketTotal.toFixed(1)} (${sign}${diff.toFixed(1)})`,
+        value: `${m.modelTotal.toFixed(1)} ${unit} vs market ${m.marketTotal.toFixed(1)} (${sign}${diff.toFixed(1)})`,
         tone: Math.abs(diff) >= 0.2 ? "sky" : "gray",
       };
     }
@@ -2619,7 +2622,7 @@ function SelectedEdgeReader({
             {/* ── Middle: Edge block ──────────────────────────────────── */}
             <div className="py-2 sm:py-0 sm:px-3 min-w-0">
               {(() => {
-                const edge = buildEdgeRow(market, marketData);
+                const edge = buildEdgeRow(market, marketData, shellSport);
                 if (edge === null) {
                   return (
                     <>
