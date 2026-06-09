@@ -3106,7 +3106,17 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   // SportRail (tabs) + page background stay mounted. Pre-7J, hitting an
   // empty NBA slate replaced the whole page including navigation; users
   // couldn't tab back to MLB without using the URL bar.
-  if (isLoading) {
+  //
+  // Phase 7J.1 — stale-sport guard. useDailyEdge uses SWR's
+  // keepPreviousData=true, so on sport switch `data` briefly holds the
+  // PREVIOUS sport's response (e.g. NBA's empty no_data) before the new
+  // fetch resolves. Without the guard we'd render the previous sport's
+  // empty state under the new sport's tab, making it look like the
+  // click failed (e.g. clicking MLB on the empty NBA page would keep
+  // showing an empty state). When data.sport ≠ requested sport, treat
+  // it as still loading.
+  const dataMatchesSport = !data || data.sport === sport;
+  if (isLoading || !dataMatchesSport) {
     return <ShellChrome sport={sport}><LoadingState /></ShellChrome>;
   }
   if (error) {
