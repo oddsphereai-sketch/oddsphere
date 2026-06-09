@@ -44,7 +44,10 @@ import {
   type NbaOpportunity,
 } from "./nbaOpportunitiesClient";
 import type { NbaLineRow } from "./nbaMarketIntelligence";
-import { adaptNbaToDailyEdgeResponse } from "./adaptNbaToDailyEdgeResponse";
+import {
+  adaptNbaToDailyEdgeResponse,
+  type NbaPickSideOpenPrices,
+} from "./adaptNbaToDailyEdgeResponse";
 import { supabase } from "../../db/supabase";
 import type { DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
 
@@ -163,6 +166,34 @@ export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     }
   }
 
+  // Earliest-recorded price per (game, market, side) → "line open" lookup.
+  // Mirrors the MLB extractor in /api/lab/daily-edge so the Reader's line
+  // move row renders for NBA the same way.
+  const openByGameMarketSide = new Map<string, number | null>();
+  if ((gameRows ?? []).length > 0) {
+    const dbIds = (gameRows ?? []).map((g) => g.id);
+    const { data: histRows } = await supabase
+      .from("line_history")
+      .select("game_id, market_type, side, odds_american, recorded_at")
+      .in("game_id", dbIds)
+      .in("market_type", ["moneyline", "spread", "total"])
+      .order("recorded_at", { ascending: true });
+    for (const r of (histRows ?? []) as Array<{
+      game_id: number;
+      market_type: string;
+      side: string | null;
+      odds_american: number | null;
+      recorded_at: string | null;
+    }>) {
+      const ext = dbIdToExt.get(r.game_id);
+      if (ext === undefined) continue;
+      const key = `${ext}::${r.market_type}::${r.side ?? "null"}`;
+      if (!openByGameMarketSide.has(key)) {
+        openByGameMarketSide.set(key, r.odds_american);
+      }
+    }
+  }
+
   const games: NbaDailyEdgeGameDto[] = snapshots.flatMap((s) => {
     const prov = provenanceByGame.get(s.game_external_id);
     if (prov === undefined) return [];
@@ -210,5 +241,23 @@ export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     games,
   };
 
-  return adaptNbaToDailyEdgeResponse(nbaDto);
+  // Build per-game open-price map keyed on each market's *picked* side.
+  // Adapter then surfaces these as `lineOpenAmerican` so the line move
+  // renderer can compare them to `priceAmerican`.
+  const openPricesByGame = new Map<number, NbaPickSideOpenPrices>();
+  for (const g of games) {
+    const ext = g.game_external_id;
+    const intel = g.intelligence;
+    const lookup = (market: "moneyline" | "spread" | "total", pickSide: string | null): number | null => {
+      if (pickSide === null) return null;
+      return openByGameMarketSide.get(`${ext}::${market}::${pickSide}`) ?? null;
+    };
+    openPricesByGame.set(ext, {
+      ml: lookup("moneyline", intel.ml.pick_side),
+      total: lookup("total", intel.total.pick_side),
+      spread: lookup("spread", intel.spread.pick_side),
+    });
+  }
+
+  return adaptNbaToDailyEdgeResponse(nbaDto, { openPricesByGame });
 }

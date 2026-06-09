@@ -161,14 +161,28 @@ function buildSharpStatusFromGrade(grade: RecommendationGrade): "confirm" | "mix
   return "mixed";
 }
 
+/**
+ * SharpAPI returns split percentages on the 0..1 scale; the shared MLB
+ * shell renders them as whole-number percentages (70 = 70%). Normalize
+ * to 0..100 once at the boundary so the UI components don't need to
+ * branch on sport.
+ */
+function pctTo100(v: number | null | undefined): number | null {
+  if (v === null || v === undefined) return null;
+  // Defensive: already 0..100 values are passed through unchanged.
+  return v <= 1 ? v * 100 : v;
+}
+
 function buildMarketEdgeDto(opts: {
   intel: MarketIntelligence;
   homeAbbr: string;
   awayAbbr: string;
   sportSlot: "ml" | "total" | "spread";
   capability: NbaMarketSignalsCapability;
+  /** First-seen line price on the picked side, derived from NBA line_history. */
+  openPriceAmerican: number | null;
 }): MarketEdgeDto {
-  const { intel, homeAbbr, awayAbbr, sportSlot, capability } = opts;
+  const { intel, homeAbbr, awayAbbr, sportSlot, capability, openPriceAmerican } = opts;
   const held = intel.pick_side === null;
   const verdict: { key: Verdict; label: string } = {
     key: gradeToVerdict(intel.grade),
@@ -187,28 +201,28 @@ function buildMarketEdgeDto(opts: {
       publicSplits.push({
         side: pickIsOver ? "over" : "under",
         label: pickIsOver ? "Over" : "Under",
-        moneyPct: intel.splits.pick_side.handle_pct,
-        betsPct: intel.splits.pick_side.bets_pct,
+        moneyPct: pctTo100(intel.splits.pick_side.handle_pct),
+        betsPct: pctTo100(intel.splits.pick_side.bets_pct),
       });
       publicSplits.push({
         side: pickIsOver ? "under" : "over",
         label: pickIsOver ? "Under" : "Over",
-        moneyPct: intel.splits.other_side.handle_pct,
-        betsPct: intel.splits.other_side.bets_pct,
+        moneyPct: pctTo100(intel.splits.other_side.handle_pct),
+        betsPct: pctTo100(intel.splits.other_side.bets_pct),
       });
     } else {
       const pickIsHome = intel.pick_side === "home";
       publicSplits.push({
         side: pickIsHome ? "home" : "away",
         label: pickIsHome ? homeAbbr : awayAbbr,
-        moneyPct: intel.splits.pick_side.handle_pct,
-        betsPct: intel.splits.pick_side.bets_pct,
+        moneyPct: pctTo100(intel.splits.pick_side.handle_pct),
+        betsPct: pctTo100(intel.splits.pick_side.bets_pct),
       });
       publicSplits.push({
         side: pickIsHome ? "away" : "home",
         label: pickIsHome ? awayAbbr : homeAbbr,
-        moneyPct: intel.splits.other_side.handle_pct,
-        betsPct: intel.splits.other_side.bets_pct,
+        moneyPct: pctTo100(intel.splits.other_side.handle_pct),
+        betsPct: pctTo100(intel.splits.other_side.bets_pct),
       });
     }
   }
@@ -246,11 +260,11 @@ function buildMarketEdgeDto(opts: {
     modelProb,
     marketFairProb: noVigImplied,
     pinnacleEvPct: intel.opp_ev_percentage_pick,
-    moneyPct: intel.splits.pick_side?.handle_pct ?? null,
-    betsPct: intel.splits.pick_side?.bets_pct ?? null,
+    moneyPct: pctTo100(intel.splits.pick_side?.handle_pct ?? null),
+    betsPct: pctTo100(intel.splits.pick_side?.bets_pct ?? null),
     publicSplits,
     priceAmerican: intel.current_price.odds_american,
-    lineOpenAmerican: null,
+    lineOpenAmerican: openPriceAmerican,
     modelTotal: sportSlot === "total" && !held ? (intel.consensus_line ?? null) : null,
     marketTotal: sportSlot === "total" ? intel.consensus_line : null,
     line: sportSlot === "ml" ? null : intel.consensus_line,
@@ -337,10 +351,22 @@ function buildSharpReadFromQuickRead(quickRead: string): { key: SharpReadKey; se
   return { key: "wait_no_edge_clean" as SharpReadKey, sentence: quickRead };
 }
 
+/**
+ * Per-game first-seen prices on the picked side of each market, derived
+ * from NBA line_history. Mirrors how MLB feeds `lineOpenAmerican` to the
+ * shell so the line-move row renders for NBA too.
+ */
+export type NbaPickSideOpenPrices = {
+  ml: number | null;
+  total: number | null;
+  spread: number | null;
+};
+
 function adaptGame(
   game: NbaDailyEdgeGameDto,
   capability: NbaMarketSignalsCapability,
   asOf: string,
+  openPrices: NbaPickSideOpenPrices,
 ): DailyEdgeGameDto {
   const intel = game.intelligence;
   const ml = buildMarketEdgeDto({
@@ -349,6 +375,7 @@ function adaptGame(
     awayAbbr: game.away_abbr,
     sportSlot: "ml",
     capability,
+    openPriceAmerican: openPrices.ml,
   });
   const total = buildMarketEdgeDto({
     intel: intel.total,
@@ -356,6 +383,7 @@ function adaptGame(
     awayAbbr: game.away_abbr,
     sportSlot: "total",
     capability,
+    openPriceAmerican: openPrices.total,
   });
   const spreadAsFi = buildMarketEdgeDto({
     intel: intel.spread,
@@ -363,6 +391,7 @@ function adaptGame(
     awayAbbr: game.away_abbr,
     sportSlot: "spread",
     capability,
+    openPriceAmerican: openPrices.spread,
   });
 
   const topGrade = intel.top_grade;
@@ -432,6 +461,7 @@ function adaptGame(
 
 export function adaptNbaToDailyEdgeResponse(
   nbaDto: NbaDailyEdgeDto,
+  opts?: { openPricesByGame?: Map<number, NbaPickSideOpenPrices> },
 ): DailyEdgeResponse {
   return {
     as_of: nbaDto.as_of,
@@ -442,6 +472,13 @@ export function adaptNbaToDailyEdgeResponse(
     slateState: nbaDto.games.length > 0 ? "today_published" : "today_pending_ingest",
     slate_status: nbaDto.games.length > 0 ? "published" : null,
     last_slate_update_at: nbaDto.as_of,
-    games: nbaDto.games.map((g) => adaptGame(g, nbaDto.market_signals_capability, nbaDto.as_of)),
+    games: nbaDto.games.map((g) => {
+      const openPrices: NbaPickSideOpenPrices = opts?.openPricesByGame?.get(g.game_external_id) ?? {
+        ml: null,
+        total: null,
+        spread: null,
+      };
+      return adaptGame(g, nbaDto.market_signals_capability, nbaDto.as_of, openPrices);
+    }),
   };
 }
