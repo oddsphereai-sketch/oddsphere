@@ -318,12 +318,19 @@ function buildMarketEdge(opts: {
   const { market, slot, modelTotal, marketLine, bundle, publicSplits, keyStats } = opts;
   const verdict = verdictKeyMap(market.verdict);
   const held = market.verdict === "pass";
+  // For Total, the model's `model_market_gap_pct` is in GOAL units
+  // (model_total - market_line), not probability units. Mixing the
+  // two would produce nonsense pp values and a wrong fairProb fallback.
+  // Display fields that are probability-unit-only get nulled for Total;
+  // Total's gap is already surfaced as a goal projection in keyStats.
+  const isTotal = slot === "total";
   // SharpAPI's fair_probability already encodes the no-vig prob for
-  // the picked side. Prefer it over the model-derived gap fallback.
+  // the picked side. Prefer it over the model-derived fallback. Total
+  // gets no model-derived fallback because the gap isn't a probability.
   const fairProb =
     bundle.fairProbability !== null
       ? bundle.fairProbability
-      : market.model_market_gap_pct !== null
+      : !isTotal && market.model_market_gap_pct !== null
         ? market.probability - market.model_market_gap_pct
         : null;
   const marketImpliedDecimal =
@@ -356,9 +363,11 @@ function buildMarketEdge(opts: {
     keyStats,
     modelTrustPct: held ? null : market.confidence,
     marketImpliedPct: marketImpliedDecimal !== null ? marketImpliedDecimal * 100 : null,
-    modelMarketGapPct: market.model_market_gap_pct !== null
-      ? market.model_market_gap_pct * 100
-      : null,
+    modelMarketGapPct: isTotal
+      ? null
+      : market.model_market_gap_pct !== null
+        ? market.model_market_gap_pct * 100
+        : null,
     recommendationConfidence: held ? null : market.confidence,
     marketSource: bundle.sportsbook,
     marketDataQuality: bundle.priceAmerican !== null ? "single_book" : "unavailable",

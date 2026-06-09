@@ -104,11 +104,19 @@ function reduceSplitsByMatchup(
       byKey.set(key, ev);
       continue;
     }
-    // Prefer the event row with more populated split fields.
+    // Prefer the event row with more populated split fields. SharpAPI
+    // typically returns BOTH per-book events (bets_pct only) and a
+    // "consensus" event (bets_pct + handle_pct). Score both kinds of
+    // splits so the consensus event with handle data wins; an explicit
+    // "consensus" sportsbook tag also breaks ties in its favor.
     const score = (e: SharpNhlSplitsEvent) =>
       Number(e.moneyline?.bets_pct?.home !== undefined) +
+      Number(e.moneyline?.handle_pct?.home !== undefined) +
       Number(e.total?.bets_pct?.over !== undefined) +
-      Number(e.spread?.bets_pct?.home !== undefined);
+      Number(e.total?.handle_pct?.over !== undefined) +
+      Number(e.spread?.bets_pct?.home !== undefined) +
+      Number(e.spread?.handle_pct?.home !== undefined) +
+      (e.sportsbook === "consensus" ? 1 : 0);
     if (score(ev) > score(existing)) byKey.set(key, ev);
   }
   return byKey;
