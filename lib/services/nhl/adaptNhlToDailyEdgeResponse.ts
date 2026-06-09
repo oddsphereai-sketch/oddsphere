@@ -132,26 +132,16 @@ function buildTotalDto(
   };
 }
 
-function noPlayPrediction(): DailyEdgePredictionDto {
-  return {
-    pick: "No Play",
-    confidence: 0,
-    sharpStatus: "mixed",
-    grade: null,
-    signalType: null,
-    marketSignal: null,
-  };
-}
-
 function buildMarketEdge(
   market: NhlModelOutput["moneyline"],
-  slot: "ml" | "total",
+  slot: "ml" | "total" | "puckline",
   modelTotal: number,
   marketLine: number | null,
   priceAmerican: number | null,
 ): MarketEdgeDto {
   const verdict = verdictKeyMap(market.verdict);
   const held = market.verdict === "pass";
+  const isPuckLine = slot === "puckline";
   return {
     pick: market.pick,
     confidence: market.confidence,
@@ -164,7 +154,9 @@ function buildMarketEdge(
     guidedGuide: held ? "Model is not picking this market tonight." : `Model lean: ${market.pick}`,
     guidedWatchOut: market.notes[0] ?? "",
     whyLine: market.notes.slice(1).join(" ") || (market.notes[0] ?? ""),
-    riskLine: "v0 calibration phase — verdict capped at Lean.",
+    riskLine: isPuckLine
+      ? "v0 puck-line read is display-only — not tracked or graded yet."
+      : "v0 calibration phase — verdict capped at Lean.",
     modelProb: market.probability,
     marketFairProb: market.model_market_gap_pct !== null
       ? market.probability - market.model_market_gap_pct
@@ -177,6 +169,7 @@ function buildMarketEdge(
     lineOpenAmerican: null,
     modelTotal: slot === "total" && !held ? modelTotal : null,
     marketTotal: slot === "total" ? marketLine : null,
+    // ML carries no line; Total + Puck Line use the `line` slot.
     line: slot === "ml" ? null : marketLine,
     keyStats: [],
     modelTrustPct: held ? null : market.confidence,
@@ -187,43 +180,6 @@ function buildMarketEdge(
     recommendationConfidence: held ? null : market.confidence,
     marketSource: null,
     marketDataQuality: priceAmerican !== null ? "single_book" : "unavailable",
-    reviewFlags: [],
-    reviewActionSummary: "keep",
-  };
-}
-
-function noPlayMarketEdge(): MarketEdgeDto {
-  return {
-    pick: "No Play",
-    confidence: 0,
-    grade: null,
-    signalType: null,
-    marketSignal: null,
-    sharpStatus: "mixed",
-    held: false,
-    verdict: { key: "no_play", label: "No Play" },
-    guidedGuide: "",
-    guidedWatchOut: "",
-    whyLine: "",
-    riskLine: "",
-    modelProb: null,
-    marketFairProb: null,
-    pinnacleEvPct: null,
-    moneyPct: null,
-    betsPct: null,
-    publicSplits: [],
-    priceAmerican: null,
-    lineOpenAmerican: null,
-    modelTotal: null,
-    marketTotal: null,
-    line: null,
-    keyStats: [],
-    modelTrustPct: null,
-    marketImpliedPct: null,
-    modelMarketGapPct: null,
-    recommendationConfidence: null,
-    marketSource: null,
-    marketDataQuality: "unavailable",
     reviewFlags: [],
     reviewActionSummary: "keep",
   };
@@ -253,6 +209,17 @@ export type NhlAdapterGameInput = {
   totalPriceAmerican: number | null;
   /** Market total line (median from lines). */
   marketTotalLine: number | null;
+  /**
+   * Best puck-line price for the picked side (favored side at -1.5 or
+   * underdog side at +1.5); null when no puck-line book data is
+   * available. Display-only — not persisted.
+   */
+  puckLinePriceAmerican: number | null;
+  /**
+   * Puck-line market line — typically ±1.5 in NHL. Display-only; the
+   * model always reads at the canonical 1.5 boundary regardless.
+   */
+  puckLineMarketLine: number | null;
   /** locked_at from prediction_records, if any. Null when not yet written. */
   lockedAt: string | null;
 };
@@ -294,12 +261,23 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
     predictions: {
       ml: buildPredictionDto(model.moneyline),
       total: buildTotalDto(model.total, model.expected_total_goals),
-      nrfi: noPlayPrediction(),
+      // Puck-line read piggybacks the `nrfi` prediction slot the same
+      // way NBA's spread does. v0: display-only, NOT persisted to
+      // prediction_records and NOT graded.
+      nrfi: buildPredictionDto(model.puck_line),
     },
     markets: {
       moneyline: buildMarketEdge(model.moneyline, "ml", model.expected_total_goals, null, input.mlPriceAmerican),
       total: buildMarketEdge(model.total, "total", model.expected_total_goals, input.marketTotalLine, input.totalPriceAmerican),
-      first_inning: noPlayMarketEdge(),
+      // first_inning slot carries the puck-line read for NHL (display-
+      // only; never written to prediction_records by the v0 writer).
+      first_inning: buildMarketEdge(
+        model.puck_line,
+        "puckline",
+        model.expected_total_goals,
+        input.puckLineMarketLine ?? model.puck_line.puck_line_value,
+        input.puckLinePriceAmerican,
+      ),
     },
     decisionLine: `Tonight's read: ${model.moneyline.pick} · ${verdictLabelFromKey(verdict)}`,
     projected: {
@@ -335,6 +313,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
         `Expected total goals: ${model.expected_total_goals.toFixed(2)}.`,
         `Moneyline: ${model.moneyline.pick} at ${(model.moneyline.probability * 100).toFixed(1)}% (verdict ${model.moneyline.verdict}).`,
         `Total: ${model.total.pick} (verdict ${model.total.verdict}).`,
+        `Puck Line: ${model.puck_line.pick} at ${(model.puck_line.probability * 100).toFixed(1)}% cover (verdict ${model.puck_line.verdict}; display-only in v0).`,
       ].join(" "),
     },
   };

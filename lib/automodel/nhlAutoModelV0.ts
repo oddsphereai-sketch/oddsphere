@@ -114,6 +114,20 @@ export type NhlModelOutput = {
   expected_total_goals: number;
   moneyline: NhlModelMarketOutput;
   total: NhlModelMarketOutput;
+  /**
+   * Puck-line read (display + adapter consumption only — NOT tracked in
+   * prediction_records and NOT graded in v0). Derived from the same
+   * expected_goal_diff + expected_total_goals as ML/Total; no new
+   * inputs. Pick is whichever side has the higher cover probability at
+   * the canonical ±1.5 line. Probability reflects the picked side's
+   * cover chance under a normal approximation to the Skellam
+   * distribution with variance = expected_total_goals. Verdict obeys
+   * the same calibration ceiling (Lean max) as ML/Total.
+   */
+  puck_line: NhlModelMarketOutput & {
+    /** The puck line we model — universally ±1.5 in NHL. */
+    puck_line_value: number;
+  };
 };
 
 const NHL_MODEL_VERSION = "nhl_v0_2026_finals";
@@ -201,6 +215,40 @@ function verdictForMoneyline(
   }
   if (edge < 0.05) return "watchlist";
   if (edge < 0.07) return "lean";
+  return "best_angle";
+}
+
+/**
+ * Standard-normal CDF (Abramowitz & Stegun 7.1.26 approximation,
+ * error < 7.5e-8). Used by the puck-line read to approximate the
+ * Skellam tail P(score_diff ≥ k) via Normal(μ=expected_goal_diff,
+ * σ²=expected_total_goals). Pure; no I/O.
+ */
+function normalCdf(x: number): number {
+  const a1 =  0.254829592;
+  const a2 = -0.284496736;
+  const a3 =  1.421413741;
+  const a4 = -1.453152027;
+  const a5 =  1.061405429;
+  const p  =  0.3275911;
+  const sign = x < 0 ? -1 : 1;
+  const ax = Math.abs(x) / Math.sqrt(2);
+  const t  = 1 / (1 + p * ax);
+  const y  = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-ax * ax);
+  return 0.5 * (1 + sign * y);
+}
+
+/**
+ * Puck-line verdict — magnitude-based on the picked side's cover
+ * probability, mirroring the ML edge thresholds for v0 consistency.
+ * Daniel's call: reuse the ML threshold for v0; tune to a hockey-
+ * specific value once we have graded puck-line outcomes.
+ */
+function verdictForPuckLine(pickProb: number): NhlVerdictKey {
+  const edge = Math.abs(pickProb - 0.5);
+  if (edge < 0.025) return "pass";
+  if (edge < 0.05)  return "watchlist";
+  if (edge < 0.07)  return "lean";
   return "best_angle";
 }
 
@@ -332,6 +380,45 @@ export function nhlAutoModelV0(snap: NhlFeatureSnapshot): NhlModelOutput {
   // cap already enforced inside probabilityFromGoalDiff.
   const mlConfidence = Math.min(CONFIDENCE_CAP, pickProb);
 
+  // ─── Puck-line (display-only; not tracked / not graded in v0) ────
+  // NHL puck line is universally ±1.5. The market offers FAVORITE -1.5
+  // vs UNDERDOG +1.5 as opposite sides of one line — exactly one wins,
+  // their cover probs sum to 1.0 (no pushes possible at half-goals).
+  // Approximate Skellam(home_λ, away_λ) tails with a normal of the
+  // same mean (expected_goal_diff) and variance (expected_total_goals).
+  // Continuity correction at 1.5 — the boundary between "wins by 1"
+  // and "wins by 2+".
+  const puckLineValue = 1.5;
+  const variance = Math.max(expected_total_goals, 1);
+  const sigma = Math.sqrt(variance);
+  const homeIsFavored = expected_goal_diff >= 0;
+  const favoriteCoverAtMinus15 = homeIsFavored
+    ? 1 - normalCdf((puckLineValue - expected_goal_diff) / sigma) // P(home wins by 2+)
+    : normalCdf((-puckLineValue - expected_goal_diff) / sigma);   // P(away wins by 2+)
+  const underdogCoverAtPlus15 = 1 - favoriteCoverAtMinus15;
+  const pickFavorite = favoriteCoverAtMinus15 >= underdogCoverAtPlus15;
+  const plPickProbRaw = pickFavorite ? favoriteCoverAtMinus15 : underdogCoverAtPlus15;
+  // Cap displayed prob/confidence at CONFIDENCE_CAP for visual
+  // consistency with ML/Total ceilings. The raw cover prob can run
+  // higher (close games push underdog +1.5 well past 0.58); we
+  // intentionally compress to 0.58 max so the v0 surface never
+  // overclaims while the verdict ceiling (Lean) carries the
+  // actionability signal.
+  const plPickProb = Math.min(CONFIDENCE_CAP, plPickProbRaw);
+  const plPickAbbrName = pickFavorite
+    ? (homeIsFavored ? snap.home.abbreviation : snap.away.abbreviation)
+    : (homeIsFavored ? snap.away.abbreviation : snap.home.abbreviation);
+  const plPickStr = `${plPickAbbrName} ${pickFavorite ? "-" : "+"}${puckLineValue.toFixed(1)}`;
+  const plVerdictRaw = verdictForPuckLine(plPickProbRaw);
+  const plVerdict    = applyCeiling(plVerdictRaw);
+  const plNotes: string[] = [];
+  if (plVerdictRaw !== plVerdict) {
+    plNotes.push("v0 calibration phase — verdict capped at Lean");
+  }
+  plNotes.push(`Model projects ${expected_goal_diff >= 0 ? "+" : ""}${expected_goal_diff.toFixed(2)} goal diff (home - away) on ${expected_total_goals.toFixed(2)} expected goals.`);
+  plNotes.push(`Raw cover probability ${(plPickProbRaw * 100).toFixed(1)}% (display capped at ${(CONFIDENCE_CAP * 100).toFixed(0)}% per v0 ceiling).`);
+  plNotes.push("Puck-line read is display-only in v0 (not tracked, not graded).");
+
   return {
     model_version: NHL_MODEL_VERSION,
     inputs_summary: {
@@ -367,6 +454,15 @@ export function nhlAutoModelV0(snap: NhlFeatureSnapshot): NhlModelOutput {
       verdict: totalRes.verdict,
       model_market_gap_pct: totalRes.gap,
       notes: totalNotes,
+    },
+    puck_line: {
+      pick: plPickStr,
+      probability: plPickProb,
+      confidence: plPickProb,
+      verdict: plVerdict,
+      model_market_gap_pct: null,
+      notes: plNotes,
+      puck_line_value: puckLineValue,
     },
   };
 }

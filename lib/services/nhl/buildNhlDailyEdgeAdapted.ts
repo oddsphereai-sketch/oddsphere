@@ -82,13 +82,16 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       const { snapshot } = await buildNhlFeatureSnapshot({ gameId: g.id, season });
       const model = nhlAutoModelV0(snapshot);
 
-      // Pull lines once for ML + Total best price on the picked side.
+      // Pull lines once for ML + Total + puck_line best price on the
+      // picked side. puck_line is display-only here — the writer still
+      // ignores it; we fetch only to surface a real market line/price
+      // alongside the model's puck-line read.
       const { data: linesData } = await supabase
         .from("lines")
         .select("market_type, sportsbook, side, line_value, odds_american")
         .eq("game_id", g.id)
         .is("player_id", null)
-        .in("market_type", ["moneyline", "total"]);
+        .in("market_type", ["moneyline", "total", "puck_line"]);
       const lines = ((linesData ?? []) as Array<{
         market_type: string; sportsbook: string; side: string;
         line_value: number | null; odds_american: number | null;
@@ -112,6 +115,19 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         : null;
       const marketTotalLine = totalLineEntries.find((l) => l.line_value !== null)?.line_value ?? null;
 
+      // Puck-line: derive side from the model's pick string. Pick is
+      // "{ABBR} -1.5" if the picked side covers as the favorite, else
+      // "{ABBR} +1.5". Match against the home abbr; the SharpAPI side
+      // labels for puck_line follow the same home/away convention.
+      const plPickIsHome = model.puck_line.pick.startsWith(homeAbbr);
+      const plSide = plPickIsHome ? "home" : "away";
+      const plLineEntries = lines.filter((l) => l.market_type === "puck_line" && l.side === plSide);
+      const plPrices = plLineEntries.map((l) => l.odds_american).filter((x): x is number => x !== null);
+      const puckLinePriceAmerican = plPrices.length > 0
+        ? plPrices.reduce((best, p) => p > best ? p : best, -Infinity)
+        : null;
+      const puckLineMarketLine = plLineEntries.find((l) => l.line_value !== null)?.line_value ?? null;
+
       const input: NhlAdapterGameInput = {
         gameId: g.id,
         externalId: g.external_id,
@@ -126,6 +142,8 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         mlPriceAmerican,
         totalPriceAmerican,
         marketTotalLine,
+        puckLinePriceAmerican,
+        puckLineMarketLine,
         lockedAt: lockedByGame.get(g.id) ?? null,
       };
       dtos.push(adaptNhlGameToDto(input));

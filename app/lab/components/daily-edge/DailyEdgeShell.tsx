@@ -64,18 +64,20 @@ const MARKET_LONG_LABEL: Record<MarketKey, string> = {
 };
 
 // Phase 7F (Path A) — sport-aware market labels. NBA reuses the
-// `first_inning` slot for Spread; rendering should say "Spread" /
-// "Sprd" instead of "1st Inning" / "1st". MLB is unaffected.
+// `first_inning` slot for Spread; NHL reuses it for Puck Line. MLB
+// uses it for 1st-Inning (NRFI/YRFI). One DTO slot, three labels.
 function marketShortLabelFor(market: MarketKey, sport: Sport): string {
-  // NBA reuses first_inning slot for Spread. NHL v0 leaves the slot
-  // empty (puck_line deferred to v0.5); we label as "Sprd" so the
-  // chip honestly reads as a spread-style market with no pick yet
-  // rather than a misleading "1st Inning".
-  if ((sport === "nba" || sport === "nhl") && market === "first_inning") return "Sprd";
+  if (market === "first_inning") {
+    if (sport === "nhl") return "PL";
+    if (sport === "nba") return "Sprd";
+  }
   return MARKET_SHORT_LABEL[market];
 }
 function marketLongLabelFor(market: MarketKey, sport: Sport): string {
-  if ((sport === "nba" || sport === "nhl") && market === "first_inning") return "Spread";
+  if (market === "first_inning") {
+    if (sport === "nhl") return "Puck Line";
+    if (sport === "nba") return "Spread";
+  }
   return MARKET_LONG_LABEL[market];
 }
 // Sport-aware pick fallback when the market has no pick label. MLB
@@ -84,6 +86,16 @@ function marketLongLabelFor(market: MarketKey, sport: Sport): string {
 function pickFallbackFor(market: MarketKey, sport: Sport): string {
   if (sport === "nba" || sport === "nhl") return "Held";
   return market === "first_inning" ? "Toss-Up" : "Held";
+}
+
+/**
+ * Sport-aware list of markets to RENDER as chips/columns on the slate
+ * card + reader. All three sports show all three markets — the
+ * first_inning slot is repurposed per sport (MLB: NRFI/YRFI, NBA:
+ * Spread, NHL: Puck Line) by the sport-aware labels above.
+ */
+function marketKeysFor(_sport: Sport): MarketKey[] {
+  return ["moneyline", "total", "first_inning"];
 }
 
 // Phase 7F (Path A) — Sport context so deeply-nested inline components
@@ -874,7 +886,7 @@ export function SportRail({ sport }: { sport: Sport }) {
   const ROW: Array<{ key: Sport; label: string; live: boolean }> = [
     { key: "mlb", label: "MLB", live: true },
     { key: "nba", label: "NBA", live: true },
-    { key: "nhl", label: "NHL", live: false },
+    { key: "nhl", label: "NHL", live: true },
     { key: "nfl", label: "NFL", live: false },
     { key: "cfb", label: "CFB", live: false },
     { key: "cbb", label: "CBB", live: false },
@@ -1520,17 +1532,17 @@ function ConfidenceVsMarketStrip({
 }
 
 function MarketPulse({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
-  // Phase 7F (Path A) — NBA uses the `first_inning` slot for Spread,
-  // which DOES have public splits from SharpAPI. Skip the MLB-specific
-  // "first-inning splits aren't offered" branch when sport is NBA so
-  // the normal two-sided splits renderer below runs.
+  // NBA reuses the `first_inning` slot for Spread; NHL reuses it for
+  // Puck Line. Both DO have meaningful split / market data flow and
+  // should take the normal renderer below. The MLB-specific
+  // "first-inning splits aren't offered" branch only fires for MLB.
   const shellSport = useShellSport();
   // First-inning never uses split copy — V1 SharpAPI tier does not cover
   // first-inning public splits. Phrase as provider-coverage, not failure.
   // When the FI market is held (V1 NRFI threshold not met), surface a
   // subdued "angle unavailable" line instead of the generic splits note —
   // makes it clear the full-game pick is unaffected.
-  if (market === "first_inning" && shellSport !== "nba") {
+  if (market === "first_inning" && shellSport !== "nba" && shellSport !== "nhl") {
     if (marketData.held) {
       return (
         <div className="space-y-1.5">
@@ -2373,7 +2385,7 @@ function SlateCard({
             muted; the verdict glyph + label carries the tone. Subtle
             saturation keeps three different tones from feeling busy. */}
         <div className="flex items-center justify-between gap-1 mb-3 px-0.5 text-[10px] uppercase tracking-[0.10em] font-bold whitespace-nowrap overflow-hidden">
-          {(["moneyline", "total", "first_inning"] as MarketKey[]).map((m, i) => {
+          {marketKeysFor(shellSport).map((m, i) => {
             const v = asVerdictKey(game.markets[m].verdict.key);
             return (
               <span key={m} className="inline-flex items-center gap-1 min-w-0">
@@ -2397,7 +2409,7 @@ function SlateCard({
             Active state (violet) overrides the verdict tint when the
             reader is showing this market. Total pill includes the line. */}
         <div className="grid grid-cols-3 gap-1.5 mb-3.5">
-          {(["moneyline", "total", "first_inning"] as MarketKey[]).map((m) => {
+          {marketKeysFor(shellSport).map((m) => {
             const md = game.markets[m];
             const mv = asVerdictKey(md.verdict.key);
             const isActiveMarket = active && activeMarket === m;
@@ -2545,7 +2557,7 @@ function SelectedEdgeReader({
         {/* Market selector — segmented buttons. One per market with pick +
             confidence + verdict glyph. Replaces the older tiny-chip row. */}
         <div className="mt-3 grid grid-cols-3 gap-2">
-          {(["moneyline", "total", "first_inning"] as MarketKey[]).map((m) => (
+          {marketKeysFor(shellSport).map((m) => (
             <ReaderMarketSegment
               key={m}
               market={m}
@@ -2801,7 +2813,7 @@ function MobileDetailSheet({
         </div>
         {/* Market tabs */}
         <div className="px-4 py-2 border-b border-white/[0.06] flex items-center gap-1.5 overflow-x-auto">
-          {(["moneyline", "total", "first_inning"] as MarketKey[]).map((m) => (
+          {marketKeysFor(game.sport).map((m) => (
             <MarketPill
               key={m}
               market={m}

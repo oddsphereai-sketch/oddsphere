@@ -91,6 +91,31 @@ export const MLB_TEAM_COLORS: Record<string, TeamColorEntry> = {
  * single-map approach would collide. Two maps + sport discriminator
  * keeps each league's brand colors intact.
  */
+/**
+ * NHL primary brand colors — Phase 7L. All 32 franchises keyed by the
+ * canonical 3-letter abbreviation we store in `teams.abbreviation` for
+ * sport='nhl' (matches the SharpAPI / NHL API / MoneyPuck normalized
+ * form). Values are documented primary jersey/logo colors.
+ */
+export const NHL_TEAM_COLORS: Record<string, TeamColorEntry> = {
+  ANA: { primary: "#F47A38" }, BOS: { primary: "#FFB81C" },
+  BUF: { primary: "#002654" }, CGY: { primary: "#C8102E" },
+  CAR: { primary: "#CC0000" }, CHI: { primary: "#CF0A2C" },
+  COL: { primary: "#6F263D" }, CBJ: { primary: "#002654" },
+  DAL: { primary: "#006847" }, DET: { primary: "#CE1126" },
+  EDM: { primary: "#041E42" }, FLA: { primary: "#041E42" },
+  LAK: { primary: "#111111" }, MIN: { primary: "#154734" },
+  MTL: { primary: "#AF1E2D" }, NSH: { primary: "#FFB81C" },
+  NJD: { primary: "#CE1126" }, NYI: { primary: "#00539B" },
+  NYR: { primary: "#0038A8" }, OTT: { primary: "#C52032" },
+  PHI: { primary: "#F74902" }, PIT: { primary: "#FCB514" },
+  SJS: { primary: "#006D75" }, SEA: { primary: "#001628" },
+  STL: { primary: "#002F87" }, TBL: { primary: "#002868" },
+  TOR: { primary: "#00205B" }, UTA: { primary: "#71AFE5" },
+  VAN: { primary: "#00205B" }, VGK: { primary: "#B4975A" },
+  WSH: { primary: "#C8102E" }, WPG: { primary: "#041E42" },
+};
+
 export const NBA_TEAM_COLORS: Record<string, TeamColorEntry> = {
   ATL: { primary: "#E03A3E" }, BOS: { primary: "#007A33" },
   BKN: { primary: "#000000" }, CHA: { primary: "#1D1160" },
@@ -125,6 +150,9 @@ export function teamPrimaryColor(
   if (!abbreviation) return FALLBACK_TEAM_COLOR;
   if (sport === "nba") {
     return NBA_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
+  }
+  if (sport === "nhl") {
+    return NHL_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
   }
   return MLB_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
 }
