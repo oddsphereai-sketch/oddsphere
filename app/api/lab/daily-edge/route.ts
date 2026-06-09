@@ -2611,6 +2611,39 @@ export async function GET(request: Request) {
     }
   }
 
+  // Phase 7L Phase 3 — NHL branch. Admin-safe: SportRail keeps NHL
+  // as live=false so members can't reach this via the tab, but a
+  // direct URL (?sport=nhl) returns the NHL pipeline output for
+  // operator review. Read-only — DB writes happen only via the
+  // operator scripts (write-nhl-prediction-records, grade-nhl-games).
+  if (sport === "nhl") {
+    try {
+      const { buildNhlDailyEdgeAdapted } = await import(
+        "@/lib/services/nhl/buildNhlDailyEdgeAdapted"
+      );
+      const adapted = await buildNhlDailyEdgeAdapted(requestedDate);
+      return Response.json(adapted, {
+        headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120" },
+      });
+    } catch (e) {
+      const body: DailyEdgeResponse = {
+        as_of: new Date().toISOString(),
+        sport,
+        date: requestedDate,
+        requested_date: requestedDate,
+        fallback_used: false,
+        slateState: "no_data",
+        slate_status: null,
+        last_slate_update_at: null,
+        games: [],
+      };
+      console.warn(`nhl daily-edge: pipeline error: ${(e as Error).message}`);
+      return Response.json(body, {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+  }
+
   // Non-live sports return empty — UI's ComingSoonState handles the message.
   if (!LIVE_SPORTS.includes(sport)) {
     const body: DailyEdgeResponse = {
