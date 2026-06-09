@@ -255,9 +255,22 @@ export async function writeNhlPredictionRecords(
         lineValue: number | null;
       }> = [];
 
-      if (model.moneyline.verdict !== "pass") {
-        // Use the model's pick side's price from lines (best available).
-        const pickSide = model.moneyline.pick.startsWith(homeAbbr) ? "home" : "away";
+      // Phase 7L Step 7 — persist every market including Pass/No-Play
+      // so backend calibration can later answer "would the Pass picks
+      // have hit?" Without this, NHL Pass markets are invisible to
+      // post-hoc calibration analysis. Pass rows still set no_bet=true
+      // + no_bet_reason="below_edge_threshold" so they're auditable
+      // distinct from active picks.
+      {
+        // Moneyline — always write a row. For Pass, pick side defaults
+        // to the model's nominal lean (home if expected_goal_diff >= 0)
+        // even though no_bet=true, so the row still has a directional
+        // record for retrospective analysis.
+        const mlIsPass = model.moneyline.verdict === "pass";
+        const pickIsHome = mlIsPass
+          ? model.expected_goal_diff >= 0
+          : model.moneyline.pick.startsWith(homeAbbr);
+        const pickSide = pickIsHome ? "home" : "away";
         const mlLines = lines.filter((l) => l.market_type === "moneyline" && l.side === pickSide);
         const bestPrice = mlLines.length > 0
           ? mlLines.map((l) => l.odds_american).filter((x): x is number => x !== null).reduce((max, p) => p > max ? p : max, -99999)
@@ -268,11 +281,18 @@ export async function writeNhlPredictionRecords(
           priceAmerican: bestPrice === -99999 ? null : bestPrice,
           lineValue: null,
         });
-      } else {
-        recordsSkippedPass += 1;
+        if (mlIsPass) recordsSkippedPass += 1; // counter still tracks pass frequency
       }
-      if (model.total.verdict !== "pass") {
-        const totalSide = model.total.pick.startsWith("OVER") ? "over" : "under";
+      {
+        // Total — same persist-on-pass policy. For Pass, default the
+        // side to over if model_total > market_line, else under.
+        const totalIsPass = model.total.verdict === "pass";
+        const totalLineCandidates = lines.filter((l) => l.market_type === "total");
+        const marketLine = totalLineCandidates.find((l) => l.line_value !== null)?.line_value ?? null;
+        const pickIsOver = totalIsPass
+          ? marketLine === null || model.expected_total_goals > marketLine
+          : model.total.pick.startsWith("OVER");
+        const totalSide = pickIsOver ? "over" : "under";
         const totalLines = lines.filter((l) => l.market_type === "total" && l.side === totalSide);
         const bestPrice = totalLines.length > 0
           ? totalLines.map((l) => l.odds_american).filter((x): x is number => x !== null).reduce((max, p) => p > max ? p : max, -99999)
@@ -284,8 +304,7 @@ export async function writeNhlPredictionRecords(
           priceAmerican: bestPrice === -99999 ? null : bestPrice,
           lineValue,
         });
-      } else {
-        recordsSkippedPass += 1;
+        if (totalIsPass) recordsSkippedPass += 1;
       }
 
       const snapshotJson = buildSnapshotJson({
