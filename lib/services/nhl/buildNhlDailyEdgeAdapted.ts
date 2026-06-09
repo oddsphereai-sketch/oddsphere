@@ -247,11 +247,21 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
        * `side=home` from different books and must be filtered apart
        * by line_value sign.
        *
+       * Boost / promotional-price filter: some books (e.g. fliff) ingest
+       * with both their main line and a heavily-boosted promotional
+       * line tagged identically. When 3+ candidates are available,
+       * compute the median and drop anything more than
+       * BOOST_OUTLIER_THRESHOLD American points away — that catches
+       * boosts (often 100+ pp off) while leaving normal book-to-book
+       * variance (typically < 20 pp) intact. With 1-2 candidates we
+       * have no robust median, so we take what's available.
+       *
        * For ML: line_value is always null → no sign filter.
        * For Total: line_value is the O/U number (5.5) → no sign filter.
        * For Spread: line_value carries the signed spread; pickLineSign
        *   ("+"|"-") selects the right side.
        */
+      const BOOST_OUTLIER_THRESHOLD = 50; // American points
       function bestPriceFor(
         market: string,
         side: string,
@@ -259,16 +269,30 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       ): { price: number | null; book: string | null } {
         const candidates = lines.filter((l) => {
           if (l.market_type !== market || l.side !== side) return false;
+          if (l.odds_american === null) return false;
           if (market !== "spread") return true;
           if (l.line_value === null) return false;
           return pickLineSign === "+" ? l.line_value > 0 : l.line_value < 0;
         });
+        if (candidates.length === 0) return { price: null, book: null };
+
+        let filtered = candidates;
+        if (candidates.length >= 3) {
+          const sorted = [...candidates].sort((a, b) => a.odds_american! - b.odds_american!);
+          const median = sorted[Math.floor(sorted.length / 2)]!.odds_american!;
+          filtered = candidates.filter(
+            (c) => Math.abs(c.odds_american! - median) <= BOOST_OUTLIER_THRESHOLD,
+          );
+          // Defensive: if the filter somehow drops everything (shouldn't
+          // happen since the median itself passes), fall back to raw.
+          if (filtered.length === 0) filtered = candidates;
+        }
+
         let bestPrice: number | null = null;
         let bestBook: string | null = null;
-        for (const c of candidates) {
-          if (c.odds_american === null) continue;
-          if (bestPrice === null || c.odds_american > bestPrice) {
-            bestPrice = c.odds_american;
+        for (const c of filtered) {
+          if (bestPrice === null || c.odds_american! > bestPrice) {
+            bestPrice = c.odds_american!;
             bestBook = c.sportsbook;
           }
         }
