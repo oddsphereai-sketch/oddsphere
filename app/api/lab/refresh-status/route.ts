@@ -79,7 +79,14 @@ type CronCfg = {
 // midday operator skip doesn't mislead members. pregame_sweep also
 // stays out — it's an automation/health source, not member-facing.
 const CRON_CONFIGS: CronCfg[] = [
-  { data_source: "slate_cycle_automation",   per_sport: true, cadence_minutes: 120, frontline: true  },
+  // slate_cycle_automation runs every 2 hours in the morning pre-game
+  // window (8 / 10 / 12 UTC) and then HOURLY during the intraday
+  // window (13 → 23 UTC). vercel.json is the source of truth. The
+  // member-facing countdown is dominated by the intraday cadence
+  // because that's when members are watching the page; the AM gaps
+  // are operator-facing. Reporting 60 keeps the pill honest during
+  // game-day hours (was 120, which over-promised the wait).
+  { data_source: "slate_cycle_automation",   per_sport: true, cadence_minutes: 60,  frontline: true  },
   { data_source: "tracking_refresh",         per_sport: true, cadence_minutes: 120, frontline: true  },
   { data_source: "pregame_sweep",            per_sport: true, cadence_minutes: 30,  frontline: false },
   { data_source: "feature_coverage_refresh", per_sport: true, cadence_minutes: 720, frontline: false },
