@@ -51,7 +51,13 @@ import {
 
 export const maxDuration = 180;
 
-const DEFAULT_SPORTS: Sport[] = ["mlb", "nba"];
+// Phase 7L Step 6 — NHL added alongside MLB/NBA. The trackingRefreshService
+// has had an NHL branch since Step 5; this flip turns on automated hourly
+// refreshes so NHL prediction_records update pre-lock, freeze at T-60, and
+// grade after final — same operational contract as MLB/NBA. NHL is still
+// hidden from members: SportRail keeps live=false, so this is admin/data
+// pipeline activation only, not a public-facing launch.
+const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl"];
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
