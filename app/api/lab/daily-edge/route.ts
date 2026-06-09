@@ -3011,7 +3011,7 @@ export async function GET(request: Request) {
     const { data: lockedRecRows } = await supabase
       .from("prediction_records")
       .select(
-        "game_id, market, pick, side, line_value, odds_american, confidence, model_probability, market_probability, edge, play_grade, best_angle, locked_at, snapshot_json",
+        "game_id, market, pick, side, line_value, odds_american, confidence, model_probability, market_probability, edge, play_grade, best_angle, no_bet, locked_at, snapshot_json",
       )
       .eq("sport", "mlb")
       .eq("slate_date", requestedDate)
@@ -3030,6 +3030,7 @@ export async function GET(request: Request) {
       edge: number | null;
       play_grade: string | null;
       best_angle: boolean | null;
+      no_bet: boolean | null;
       locked_at: string | null;
       snapshot_json: Record<string, unknown> | null;
     };
@@ -3250,6 +3251,80 @@ export async function GET(request: Request) {
       openLinesByGameMarket
     );
     if (dto) dtos.push(dto);
+  }
+
+  // Lock contract: when a market has a locked prediction_record, the
+  // public verdict MUST equal the locked play_grade — exactly, no
+  // post-lock recomputation, no defensive downgrades, no upgrades.
+  //
+  // Pre-lock the route's deriveVerdictForRow / marketVerdictFor /
+  // public-smoke and conflict guards run normally (and shape what
+  // ultimately gets frozen at T-60). Once `prediction_records.locked_at`
+  // is set the snapshot's play_grade IS the official recommendation;
+  // every downstream surface (Daily Edge card, tracking, history,
+  // grading) reads the same value.
+  //
+  // Mapping:
+  //   play_grade=best_angle  → verdict="Best Angle"
+  //   play_grade=lean        → verdict="Lean"
+  //   play_grade=market_watch→ verdict="Watchlist"
+  //   play_grade=model_only  → verdict="Watchlist"
+  //   no_bet=true            → verdict="No Play"
+  //   play_grade=null + no_bet=false → leave dto's existing verdict
+  //     (first_inning Toss-Up / held cases use NRFI/YRFI/Held copy
+  //     not driven by play_grade; do not stomp those)
+  //
+  // Scope: MLB only (this whole block is in the MLB branch). NHL + NBA
+  // adapters compute verdict from frozen model output directly and
+  // don't need this overlay. First_inning is intentionally skipped
+  // because its display tier uses NRFI/YRFI/Toss-Up labels driven by
+  // a separate code path, not the play_grade tier system.
+  const playGradeToVerdict = (pg: string | null): { key: "best_angle" | "lean" | "watchlist" | "no_play" | null; label: string | null } => {
+    if (pg === null) return { key: null, label: null };
+    if (pg === "best_angle") return { key: "best_angle", label: "Best Angle" };
+    if (pg === "lean")       return { key: "lean", label: "Lean" };
+    if (pg === "market_watch" || pg === "model_only") return { key: "watchlist", label: "Watchlist" };
+    return { key: null, label: null };
+  };
+  // Self-contained lookup — the 6B.18 lockedByGameMarket map is inside
+  // a narrower scope, so re-query here. Tiny query (per-slate, ML+Total
+  // only, locked rows only).
+  if (dtos.length > 0) {
+    const { data: lockedForVerdict } = await supabase
+      .from("prediction_records")
+      .select("game_id, market, play_grade, no_bet")
+      .eq("sport", sport)
+      .eq("slate_date", requestedDate)
+      .in("market", ["moneyline", "total"])
+      .not("locked_at", "is", null);
+    type LockedVerdictRow = {
+      game_id: number;
+      market: string;
+      play_grade: string | null;
+      no_bet: boolean | null;
+    };
+    const lockedVerdictMap = new Map<string, LockedVerdictRow>();
+    for (const r of (lockedForVerdict ?? []) as LockedVerdictRow[]) {
+      lockedVerdictMap.set(`${r.game_id}::${r.market}`, r);
+    }
+    for (const dto of dtos) {
+      const game = games.find((g) => g.external_id === dto.external_id);
+      if (!game) continue;
+      for (const market of ["moneyline", "total"] as const) {
+        const locked = lockedVerdictMap.get(`${game.id}::${market}`);
+        if (!locked) continue;
+        const dtoMarket = market === "moneyline" ? dto.markets.moneyline : dto.markets.total;
+        // no_bet=true (Pass markets persisted for calibration) always
+        // displays as No Play regardless of play_grade.
+        if (locked.no_bet === true) {
+          dtoMarket.verdict = { key: "no_play", label: "No Play" };
+          continue;
+        }
+        const mapped = playGradeToVerdict(locked.play_grade);
+        if (mapped.key === null) continue; // null play_grade — leave dto's existing verdict
+        dtoMarket.verdict = { key: mapped.key, label: mapped.label! };
+      }
+    }
   }
 
   // R-19 Phase 1 — last_slate_update_at = max(games.updated_at) across
