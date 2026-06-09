@@ -645,6 +645,37 @@ export const linesService = {
     }
 
     if (!dryRun) {
+      // Phase 7I — append every observation to sharp_signals_history
+      // BEFORE the DELETE on sharp_signals. The history table is the
+      // backbone of the Last Known Good reader: when a future refresh
+      // overwrites a non-null value with null and the carry-forward
+      // guard misses (rare), the reader can still recover the prior
+      // valid value from history. Defensive write — if the table
+      // doesn't exist (pre-v22 env), the catch keeps the cron alive.
+      if (payload.length > 0) {
+        const historyPayload = payload.map((p) => ({
+          game_id: p.game_id,
+          market_type: p.market_type,
+          side: p.side,
+          public_money_pct: p.public_money_pct,
+          public_betting_pct: p.public_betting_pct,
+          rlm_detected: p.has_reverse_line_movement,
+          steam_detected: p.has_steam_move,
+          reverse_line_movement: p.has_reverse_line_movement,
+          recorded_at: p.computed_at,
+          source: "sharpapi_splits",
+        }));
+        const { error: histErr } = await supabase
+          .from("sharp_signals_history")
+          .insert(historyPayload);
+        if (histErr) {
+          // Never block the live refresh on history-table issues. Log
+          // and continue — current sharp_signals still gets the update,
+          // so member UI is unaffected.
+          console.warn(`sharp_signals_history insert failed (continuing): ${histErr.message}`);
+        }
+      }
+
       const { error: delErr } = await supabase
         .from("sharp_signals")
         .delete()
