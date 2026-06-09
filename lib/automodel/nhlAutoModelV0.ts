@@ -350,9 +350,6 @@ export function nhlAutoModelV0(snap: NhlFeatureSnapshot): NhlModelOutput {
   const mlVerdictRaw = verdictForMoneyline(homeProb, modelMarketGapPct);
   const mlVerdict = applyCeiling(mlVerdictRaw);
   const mlNotes: string[] = [];
-  if (mlVerdictRaw !== mlVerdict) {
-    mlNotes.push("v0 calibration phase — verdict capped at Lean");
-  }
   if (modelMarketGapPct !== null) {
     if (Math.abs(modelMarketGapPct) <= 0.03) mlNotes.push("Model and market agree");
     else if (Math.abs(modelMarketGapPct) > 0.10) mlNotes.push("Model fades market — volatility flag");
@@ -367,9 +364,6 @@ export function nhlAutoModelV0(snap: NhlFeatureSnapshot): NhlModelOutput {
   const totalVerdict = applyCeiling(totalResRaw.verdict);
   const totalRes = { ...totalResRaw, verdict: totalVerdict };
   const totalNotes: string[] = [];
-  if (totalResRaw.verdict !== totalVerdict) {
-    totalNotes.push("v0 calibration phase — verdict capped at Lean");
-  }
   if (totalRes.gap !== null) {
     totalNotes.push(`Model projects ${expected_total_goals.toFixed(2)} vs market ${snap.market.market_total_line?.toFixed(1)} (${totalRes.gap > 0 ? "+" : ""}${totalRes.gap.toFixed(2)})`);
   } else {
@@ -412,12 +406,8 @@ export function nhlAutoModelV0(snap: NhlFeatureSnapshot): NhlModelOutput {
   const plVerdictRaw = verdictForPuckLine(plPickProbRaw);
   const plVerdict    = applyCeiling(plVerdictRaw);
   const plNotes: string[] = [];
-  if (plVerdictRaw !== plVerdict) {
-    plNotes.push("v0 calibration phase — verdict capped at Lean");
-  }
   plNotes.push(`Model projects ${expected_goal_diff >= 0 ? "+" : ""}${expected_goal_diff.toFixed(2)} goal diff (home - away) on ${expected_total_goals.toFixed(2)} expected goals.`);
-  plNotes.push(`Raw cover probability ${(plPickProbRaw * 100).toFixed(1)}% (display capped at ${(CONFIDENCE_CAP * 100).toFixed(0)}% per v0 ceiling).`);
-  plNotes.push("Puck-line read is display-only in v0 (not tracked, not graded).");
+  plNotes.push(`Cover probability for ${plPickStr}: ${(plPickProbRaw * 100).toFixed(1)}%.`);
 
   return {
     model_version: NHL_MODEL_VERSION,

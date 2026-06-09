@@ -17,10 +17,60 @@ import {
   type NhlAdapterGameInput,
 } from "./adaptNhlToDailyEdgeResponse";
 import { moneyPuckSeasonStartYear } from "../../providers/nhl/_moneyPuckClient";
+import {
+  fetchSharpNhlSplits,
+  type SharpNhlSplitsEvent,
+} from "../../providers/nhl/_sharpApiNhlClient";
+import { normalizeNhlTeamName } from "../../providers/nhl/_teamNameNormalizer";
 import type { DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
+
+/**
+ * Reduce a slate of SharpAPI NHL splits events down to one per (home,away)
+ * matchup. SharpAPI returns one row per book per event; we collapse to the
+ * single most-recent event row whose home/away teams normalize to our DB
+ * abbreviations. Returns a map keyed by `"AWAY@HOME"`.
+ */
+function reduceSplitsByMatchup(
+  events: SharpNhlSplitsEvent[],
+): Map<string, SharpNhlSplitsEvent> {
+  const byKey = new Map<string, SharpNhlSplitsEvent>();
+  for (const ev of events) {
+    if (!ev.home_team || !ev.away_team) continue;
+    const home = normalizeNhlTeamName(ev.home_team);
+    const away = normalizeNhlTeamName(ev.away_team);
+    if (!home || !away) continue;
+    const key = `${away}@${home}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, ev);
+      continue;
+    }
+    // Prefer the event row with more populated split fields.
+    const score = (e: SharpNhlSplitsEvent) =>
+      Number(e.moneyline?.bets_pct?.home !== undefined) +
+      Number(e.total?.bets_pct?.over !== undefined) +
+      Number(e.spread?.bets_pct?.home !== undefined);
+    if (score(ev) > score(existing)) byKey.set(key, ev);
+  }
+  return byKey;
+}
 
 export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeResponse> {
   const season = moneyPuckSeasonStartYear(new Date());
+
+  // Fetch SharpAPI public splits for the slate once. Best-effort: a
+  // missing key or upstream error doesn't break the pipeline — splits
+  // just come through as empty.
+  let splitsByMatchup = new Map<string, SharpNhlSplitsEvent>();
+  const sharpKey = process.env.SHARPAPI_KEY;
+  if (sharpKey) {
+    try {
+      const events = await fetchSharpNhlSplits(date, sharpKey);
+      splitsByMatchup = reduceSplitsByMatchup(events);
+    } catch (e) {
+      console.warn(`nhl daily-edge: splits fetch failed: ${(e as Error).message}`);
+    }
+  }
 
   // Load games on this slate.
   const { data: gamesData, error: gamesErr } = await supabase
@@ -82,16 +132,17 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       const { snapshot } = await buildNhlFeatureSnapshot({ gameId: g.id, season });
       const model = nhlAutoModelV0(snapshot);
 
-      // Pull lines once for ML + Total + puck_line best price on the
-      // picked side. puck_line is display-only here — the writer still
-      // ignores it; we fetch only to surface a real market line/price
-      // alongside the model's puck-line read.
+      // Pull lines once for ML + Total + Spread (NHL puck-line is
+      // stored under market_type="spread" in our lines table, same
+      // convention as NBA). Puck-line is display-only here — the
+      // writer still ignores it; we fetch only to surface the real
+      // market line/price alongside the model's puck-line read.
       const { data: linesData } = await supabase
         .from("lines")
         .select("market_type, sportsbook, side, line_value, odds_american")
         .eq("game_id", g.id)
         .is("player_id", null)
-        .in("market_type", ["moneyline", "total", "puck_line"]);
+        .in("market_type", ["moneyline", "total", "spread"]);
       const lines = ((linesData ?? []) as Array<{
         market_type: string; sportsbook: string; side: string;
         line_value: number | null; odds_american: number | null;
@@ -115,18 +166,19 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         : null;
       const marketTotalLine = totalLineEntries.find((l) => l.line_value !== null)?.line_value ?? null;
 
-      // Puck-line: derive side from the model's pick string. Pick is
-      // "{ABBR} -1.5" if the picked side covers as the favorite, else
-      // "{ABBR} +1.5". Match against the home abbr; the SharpAPI side
-      // labels for puck_line follow the same home/away convention.
+      // Puck-line: stored under market_type="spread". Pick string is
+      // "{ABBR} -1.5" or "{ABBR} +1.5"; the home/away side label in
+      // the lines table matches the team's home/away role in the game.
       const plPickIsHome = model.puck_line.pick.startsWith(homeAbbr);
       const plSide = plPickIsHome ? "home" : "away";
-      const plLineEntries = lines.filter((l) => l.market_type === "puck_line" && l.side === plSide);
+      const plLineEntries = lines.filter((l) => l.market_type === "spread" && l.side === plSide);
       const plPrices = plLineEntries.map((l) => l.odds_american).filter((x): x is number => x !== null);
       const puckLinePriceAmerican = plPrices.length > 0
         ? plPrices.reduce((best, p) => p > best ? p : best, -Infinity)
         : null;
       const puckLineMarketLine = plLineEntries.find((l) => l.line_value !== null)?.line_value ?? null;
+
+      const splitsEvent = splitsByMatchup.get(`${awayAbbr}@${homeAbbr}`) ?? null;
 
       const input: NhlAdapterGameInput = {
         gameId: g.id,
@@ -144,6 +196,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         marketTotalLine,
         puckLinePriceAmerican,
         puckLineMarketLine,
+        splits: splitsEvent,
         lockedAt: lockedByGame.get(g.id) ?? null,
       };
       dtos.push(adaptNhlGameToDto(input));
