@@ -218,15 +218,17 @@ function buildMarketEdgeDto(opts: {
   const noVigImplied = intel.market_no_vig_prob_pick;
 
   const guidedGuide = held
-    ? "Model held this market for NBA preview tonight."
+    ? "Model is not picking a side here tonight."
     : `Model lean: ${intel.pick_label}.`;
   const guidedWatchOut = intel.rationale.length > 0
     ? intel.rationale[0]!
-    : "First observed line only — no opener / RLM / steam available for NBA today.";
+    : "Tracking opens on tonight's first observed line — line history fills in as the day moves.";
   const whyLine = intel.rationale.length > 1
     ? intel.rationale.slice(1).join(" ")
     : guidedWatchOut;
-  const riskLine = intel.movement_note;
+  // Same line-tracking caveat — strip the internal-y "opener / first observed"
+  // wording from the per-game movement_note string before it hits members.
+  const riskLine = "Line tracking begins at tonight's first observed price.";
 
   return {
     pick: buildPickLabel(intel),
@@ -371,7 +373,13 @@ function adaptGame(
     topGrade === "watch" ? "Watchlist" :
     topGrade === "caution" ? "Caution" : "No Play";
 
-  const modelBreakdown = `Model lean: ${intel.ml.pick_label}. Spread read: ${intel.spread.pick_label} (${intel.spread.grade}). Total read: ${intel.total.pick_label} (${intel.total.grade}). ${intel.sources.limited_book_coverage ? `Limited book coverage (${intel.sources.book_count} ${intel.sources.book_count === 1 ? "book" : "books"}).` : ""}`.trim();
+  const labelFor = (g: RecommendationGrade): string =>
+    g === "best_angle" ? "Best Angle" :
+    g === "lean" ? "Lean" :
+    g === "watch" ? "Watchlist" :
+    g === "caution" ? "Caution" :
+    "No Play";
+  const modelBreakdown = `Model lean: ${intel.ml.pick_label}. Spread read: ${intel.spread.pick_label} (${labelFor(intel.spread.grade)}). Total read: ${intel.total.pick_label} (${labelFor(intel.total.grade)}).${intel.sources.limited_book_coverage ? ` Limited book coverage (${intel.sources.book_count} ${intel.sources.book_count === 1 ? "book" : "books"}).` : ""}`.trim();
 
   return {
     id: `nba-${game.game_external_id}`,

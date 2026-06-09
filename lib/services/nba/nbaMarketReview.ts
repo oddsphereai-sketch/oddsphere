@@ -206,13 +206,32 @@ export type GradeOutput = {
   rationale: string[];
 };
 
+// Member-facing band phrasing. Keeps the underlying band token (used by
+// admin/debug paths) free to evolve while shipping clean Daily Edge copy.
+function memberBandPhrase(band: MarketConflictBand): string {
+  switch (band) {
+    case "support":             return "market support";
+    case "neutral":             return "a quiet market";
+    case "mild_conflict":       return "mild market pushback";
+    case "strong_conflict":     return "heavy market pushback";
+    case "market_unavailable":  return "no market read yet";
+  }
+}
+
 export function gradeNbaMarket(input: GradeInput): GradeOutput {
   const rationale: string[] = [];
   if (input.pick === null) {
-    return { grade: "held", effectiveConfidence: 0, bestAngleEligible: false, rationale: ["Model emitted no pick (held)."] };
+    return {
+      grade: "held",
+      effectiveConfidence: 0,
+      bestAngleEligible: false,
+      rationale: ["Model isn't picking a side here tonight."],
+    };
   }
   if (input.band === "market_unavailable") {
-    rationale.push("Market unavailable — model output stands but no edge can be computed.");
+    rationale.push(
+      "Market data isn't available for this read yet — the model has a lean, but there's nothing to confirm against.",
+    );
     return {
       grade: "no_market",
       effectiveConfidence: Math.min(input.confidence, 55),
@@ -223,12 +242,14 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
   if (input.band === "strong_conflict") {
     const capped = Math.min(input.confidence, 55);
     rationale.push(
-      `Market strongly disagrees with model pick (gap > ${(NBA_ML_PROB_GAP_STRONG_MIN * 100).toFixed(0)}pp or > ${NBA_SPREAD_GAP_STRONG_MIN}pt). Confidence capped at ${capped} and Best Angle blocked.`,
+      "Market is pushing the other way hard — this stays a cautious read, not a play.",
     );
     return { grade: "caution", effectiveConfidence: capped, bestAngleEligible: false, rationale };
   }
   if (input.dataQualityTier === "fallback" || input.dataQualityTier === "low") {
-    rationale.push(`Data quality tier "${input.dataQualityTier}" — pick informational only.`);
+    rationale.push(
+      "Limited data on this market tonight — treat as informational, not a top play.",
+    );
     return {
       grade: "watch",
       effectiveConfidence: Math.min(input.confidence, 52),
@@ -237,11 +258,11 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
     };
   }
   if (input.confidence < 55) {
-    rationale.push(`Model confidence ${input.confidence.toFixed(1)} below 55 threshold — thin lean.`);
+    rationale.push("Thin model edge — worth monitoring, not a top play.");
     return { grade: "watch", effectiveConfidence: input.confidence, bestAngleEligible: false, rationale };
   }
   if (input.band === "mild_conflict") {
-    rationale.push("Market mildly disagrees with model pick. Lean held back to watch.");
+    rationale.push("Market is hedging against the model lean — keeping this on the watchlist.");
     return { grade: "watch", effectiveConfidence: input.confidence, bestAngleEligible: false, rationale };
   }
   // band is neutral or support, confidence >= 55, tier >= medium
@@ -252,17 +273,27 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
     input.injuriesKnown &&
     input.dataQualityTier === "high"
   ) {
-    rationale.push(
-      `Confidence ${input.confidence.toFixed(1)} >= ${NBA_BEST_ANGLE_MIN_CONFIDENCE}, edge ${(input.edge * 100).toFixed(1)}pp >= ${(NBA_BEST_ANGLE_MIN_EDGE_PROB * 100).toFixed(0)}pp, tier=high, injuries known, market ${input.band}.`,
-    );
+    rationale.push("Strong model read with market support — a clean edge worth playing.");
     return { grade: "best_angle", effectiveConfidence: input.confidence, bestAngleEligible: true, rationale };
   }
-  // Lean — confident enough but doesn't clear Best Angle bar
-  const blockers: string[] = [];
-  if (input.confidence < NBA_BEST_ANGLE_MIN_CONFIDENCE) blockers.push(`confidence ${input.confidence.toFixed(1)} < ${NBA_BEST_ANGLE_MIN_CONFIDENCE}`);
-  if (!edgeOk) blockers.push(`edge ${(input.edge * 100).toFixed(1)}pp < ${(NBA_BEST_ANGLE_MIN_EDGE_PROB * 100).toFixed(0)}pp`);
-  if (!input.injuriesKnown) blockers.push("injuries unknown");
-  if (input.dataQualityTier !== "high") blockers.push(`tier ${input.dataQualityTier} (need high)`);
-  rationale.push(`Lean: market ${input.band}. Best Angle blocked: ${blockers.join("; ")}.`);
+  // Lean — model is confident enough but doesn't clear the Best Angle bar.
+  // Build a member-safe reason in plain language: surface which dimension is
+  // holding it back, never which exact threshold or number.
+  const reasons: string[] = [];
+  if (input.confidence < NBA_BEST_ANGLE_MIN_CONFIDENCE) reasons.push("conviction isn't strong enough");
+  if (!edgeOk) reasons.push("edge over the market isn't wide enough");
+  if (!input.injuriesKnown) reasons.push("the injury picture is still developing");
+  if (input.dataQualityTier !== "high") reasons.push("limited book coverage keeps confidence conservative");
+
+  const reasonClause =
+    reasons.length === 0
+      ? "the read doesn't quite clear Best Angle strength"
+      : reasons.length === 1
+        ? reasons[0]!
+        : `${reasons.slice(0, -1).join(", ")}, and ${reasons[reasons.length - 1]}`;
+
+  rationale.push(
+    `Model lean with ${memberBandPhrase(input.band)}, but ${reasonClause} — held below Best Angle.`,
+  );
   return { grade: "lean", effectiveConfidence: input.confidence, bestAngleEligible: false, rationale };
 }

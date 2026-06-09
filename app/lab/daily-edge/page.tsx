@@ -3,18 +3,16 @@
 /**
  * /lab/daily-edge — Daily Edge product surface (single shell, both sports).
  *
- * Phase 7F (Path A): NBA renders through the SAME DailyEdgeShell as
- * MLB via the NBA-as-DailyEdge adapter (lib/services/nba/
- * adaptNbaToDailyEdgeResponse + /api/admin/nba-as-daily-edge). The
- * shell carries sport guards so baseball-only renderers (StartersLine,
- * MarketPulse first-inning splits-not-offered branch, etc.) skip for
- * NBA. MLB output is byte-identical to before — verified via diff and
- * MLB regression tests.
+ * Both MLB and NBA render through the same DailyEdgeShell. NBA flows
+ * through the adapter (lib/services/nba/adaptNbaToDailyEdgeResponse)
+ * via /api/lab/daily-edge?sport=nba. The shell carries sport guards so
+ * baseball-only renderers (StartersLine, MarketPulse first-inning
+ * splits-not-offered branch, etc.) skip for NBA. MLB output is
+ * byte-identical to before — verified via diff and MLB regression
+ * tests.
  *
- * v0 active (nbaAutoModelV1). v1 stays parked as research only.
- *
- * NBA preview is admin-gated at /api/admin/nba-as-daily-edge with the
- * nba-v0a Vercel preview-branch bypass for review. NOT member-facing.
+ * NBA model active: nbaAutoModelV1 (rule-seeded). NBA pipeline is
+ * read-only: no DB writes, no prediction_records, no cron.
  */
 
 import { useSportSelection } from "../hooks/useSportSelection";
