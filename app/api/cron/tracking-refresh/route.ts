@@ -1,25 +1,34 @@
 /**
- * /api/cron/tracking-refresh — Push 4c
+ * /api/cron/tracking-refresh — Push 4c (MLB) · Phase 7H (NBA)
  *
- * Automated tracking lifecycle:
- *   1. Create prediction records for published slates (idempotent;
- *      skips dates where launch_day=true records already exist)
- *   2. Ingest MLB first-inning linescores from MLB Stats API
- *   3. Ingest final scores from BDL slate provider
- *   4. Grade prediction records into prediction_grades
+ * Automated tracking lifecycle, per-sport. Each sport gets its own
+ * cron_runs row + advisory lock via `cronHandlerPerSport`, so a
+ * failure in one sport doesn't block the other.
  *
- * Auth: CRON_SECRET via cronHandler wrapper (same pattern as
- * /api/cron/post-game-results and /api/cron/weekly-park-factors).
+ * MLB sequence (unchanged from Push 4c):
+ *   1. createPredictionRecords({sport:"mlb"})
+ *   2. ingestMlbLinescores                       (MLB-only step)
+ *   3. ingestFinalScores({sport:"mlb"})          (BDL slate provider)
+ *   4. gradePredictionsForSlate({sport:"mlb"})
+ *
+ * NBA sequence (Phase 7H — added):
+ *   1. createNbaPredictionRecords({date})        (NBA pipeline writer)
+ *   2. ingestNbaFinalScores({date})              (ESPN scoreboard)
+ *   3. gradePredictionsForSlate({sport:"nba"})   (shared sport-generic)
+ *
+ * NBA writes ONLY moneyline + total prediction_records. Spread is
+ * intentionally deferred. There are NO FI/NRFI rows for NBA.
+ *
+ * Auth: CRON_SECRET via cronHandlerPerSport wrapper.
  *
  * SAFETY:
- *   - NEVER writes game_predictions
+ *   - NEVER writes game_predictions (either sport)
  *   - NEVER writes slate_status
- *   - NEVER writes locked_at
- *   - All sub-services already enforce their own safety rules
+ *   - NEVER writes locked_at MLB rows (NBA writer sets lock_at only
+ *     on insert for tip-soon games; locked rows are never updated)
+ *   - All sub-services enforce their own safety rules
  *
- * Idempotent — running multiple times per hour is safe. Records
- * upsert on stable keys; grades skip when an existing non-pending
- * grade would be downgraded to pending.
+ * Idempotent — re-running is safe.
  *
  * Schedule (UTC, vercel.json):
  *   `0 *\/2 * * *` — every 2 hours
@@ -27,24 +36,35 @@
  * Manual trigger:
  *   curl -H "Authorization: Bearer $CRON_SECRET" \
  *     https://<your-domain>/api/cron/tracking-refresh
+ *
+ * Per-sport override:
+ *   ?sport=mlb or ?sport=nba — runs only that sport (handy for ops).
  */
 
-import { cronHandler } from "@/lib/cron/runCron";
+import { cronHandlerPerSport } from "@/lib/cron/runCron";
 import { supabase } from "@/lib/db/supabase";
+import type { Sport } from "@/lib/types/domain/Sport";
 import {
   runTrackingRefresh,
   computeRefreshDates,
 } from "@/lib/services/trackingRefreshService";
 
-export const maxDuration = 120;
+export const maxDuration = 180;
+
+const DEFAULT_SPORTS: Sport[] = ["mlb", "nba"];
 
 export async function GET(request: Request) {
-  return cronHandler(
+  const url = new URL(request.url);
+  const overrideSport = url.searchParams.get("sport") as Sport | null;
+  const sports: readonly Sport[] = overrideSport
+    ? [overrideSport]
+    : DEFAULT_SPORTS;
+
+  return cronHandlerPerSport(
     request,
     "tracking_refresh",
-    async () => {
-      // Allow override via ?date=YYYY-MM-DD for ops testing.
-      const url = new URL(request.url);
+    sports,
+    async ({ sport }) => {
       const overrideDate = url.searchParams.get("date");
       const dates = overrideDate
         ? [overrideDate]
@@ -52,6 +72,7 @@ export async function GET(request: Request) {
       const apply = url.searchParams.get("dry_run") !== "true";
 
       const summary = await runTrackingRefresh({
+        sport,
         dates,
         apply,
         supabase,
@@ -63,9 +84,10 @@ export async function GET(request: Request) {
           summary.totals.linescores_updated +
           summary.totals.final_scores_updated +
           summary.totals.grades_upserted,
-        api_calls_made: summary.datesProcessed, // one MLB Stats API call per processed date
+        api_calls_made: summary.datesProcessed,
         partial: summary.totals.errors > 0,
         details: {
+          sport,
           apply,
           dates,
           datesProcessed: summary.datesProcessed,
@@ -77,7 +99,6 @@ export async function GET(request: Request) {
         },
       };
     },
-    { sport: "mlb" },
   );
 }
 

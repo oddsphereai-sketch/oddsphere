@@ -173,10 +173,16 @@ export type TrackingBaselineRow = {
   notes?: Record<string, unknown> | null;
 };
 
-/** Mirrors `prediction_records` row in schema-migration-v17.sql. */
+/** Mirrors `prediction_records` row in schema-migration-v17.sql.
+ *
+ * v18 (Phase 7H): `game_prediction_id` is now nullable — NBA writes
+ * tracking rows directly from the NBA pipeline without a corresponding
+ * `game_predictions` row. MLB rows continue to populate the column.
+ * See `lib/db/schema-migration-v18.sql`.
+ */
 export type PredictionRecordRow = {
   id?: number;
-  game_prediction_id: number;
+  game_prediction_id: number | null;
   game_id: number;
   external_id: number;
   sport: TrackedSport;

@@ -51,7 +51,30 @@ import {
 import { supabase } from "../../db/supabase";
 import type { DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
 
-export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeResponse> {
+/**
+ * Phase 7H — internal NBA pipeline result. Returned by
+ * `buildNbaDailyEdgePipeline` so callers that need the raw NbaDailyEdgeDto
+ * (the NBA tracking writer, regression tests) can read it without
+ * re-running the pipeline. The adapter consumes `nbaDto` + the
+ * `openPricesByGame` map; tracking just needs `nbaDto` (for picks +
+ * markets) plus a lookup of NBA external_id → DB game id (for the
+ * prediction_records FK).
+ */
+export type NbaDailyEdgePipelineResult = {
+  nbaDto: NbaDailyEdgeDto;
+  openPricesByGame: Map<number, NbaPickSideOpenPrices>;
+  /** Map of NBA game external_id → games.id (DB primary key). */
+  dbIdByExternalId: Map<number, number>;
+};
+
+/**
+ * Phase 7H — extracted pipeline (no adaptation step). The adapter
+ * wrapper below stays the canonical entry point for the daily-edge
+ * route; tracking + tests use this directly when they need the raw DTO.
+ *
+ * Pure read-only — no DB writes anywhere in the pipeline.
+ */
+export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyEdgePipelineResult> {
   const etWindow = etSlateDateToUtcWindow(date);
   const startUtcDate = etWindow.startISO.slice(0, 10);
   const endUtcDate = etWindow.endISO.slice(0, 10);
@@ -259,5 +282,18 @@ export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     });
   }
 
+  const externalToDbId = new Map<number, number>();
+  for (const [dbId, ext] of dbIdToExt.entries()) externalToDbId.set(ext, dbId);
+
+  return { nbaDto, openPricesByGame, dbIdByExternalId: externalToDbId };
+}
+
+/**
+ * Adapter wrapper — runs the pipeline and adapts the result to the
+ * MLB-shaped DailyEdgeResponse the shared shell consumes. This is the
+ * canonical entry point for `/api/lab/daily-edge?sport=nba`.
+ */
+export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeResponse> {
+  const { nbaDto, openPricesByGame } = await buildNbaDailyEdgePipeline(date);
   return adaptNbaToDailyEdgeResponse(nbaDto, { openPricesByGame });
 }

@@ -37,6 +37,8 @@ import { createPredictionRecords } from "./predictionRecordService";
 import { ingestMlbLinescores } from "./mlbLinescoreIngestService";
 import { ingestFinalScores } from "./scoreIngestService";
 import { gradePredictionsForSlate } from "./predictionGradingService";
+import { createNbaPredictionRecords } from "./nba/buildNbaPredictionRecords";
+import { ingestNbaFinalScores } from "./nba/nbaScoreIngestService";
 
 export type TrackingRefreshOptions = {
   /**
@@ -47,6 +49,13 @@ export type TrackingRefreshOptions = {
   /** When false → dry-run; no DB writes. */
   apply: boolean;
   supabase: SupabaseClient;
+  /**
+   * Sport to refresh. Defaults to "mlb" to preserve historical
+   * single-sport callers byte-for-byte. The cron route iterates
+   * sports via cronHandlerPerSport so each sport gets its own
+   * lock + log row; this function still runs one sport per call.
+   */
+  sport?: Sport;
 };
 
 export type TrackingRefreshPerDate = {
@@ -82,8 +91,6 @@ export type TrackingRefreshSummary = {
   globalErrors: string[];
 };
 
-const SPORT: Sport = "mlb"; // V1 cron only refreshes MLB
-
 /**
  * Pure helper used by the cron route AND tests. Given a "now" Date,
  * produce the date strings the cron should refresh. Defaults to
@@ -108,41 +115,71 @@ export function computeRefreshDates(
 
 async function loadPublishedGameCount(
   supabase: SupabaseClient,
+  sport: Sport,
   date: string,
 ): Promise<number> {
+  // MLB uses slate_status="published"; NBA today has no slate_status
+  // gate (the existing seed/ingest scripts insert without setting
+  // slate_status). Treat the absence as "always check provider" for
+  // non-MLB sports — the per-sport refresh helpers (e.g.,
+  // ingestNbaFinalScores) are no-ops when the games table is empty.
+  if (sport === "mlb") {
+    const { count } = await supabase
+      .from("games")
+      .select("*", { count: "exact", head: true })
+      .eq("sport", sport)
+      .eq("slate_date", date)
+      .eq("slate_status", "published");
+    return count ?? 0;
+  }
   const { count } = await supabase
     .from("games")
     .select("*", { count: "exact", head: true })
-    .eq("sport", SPORT)
-    .eq("slate_date", date)
-    .eq("slate_status", "published");
+    .eq("sport", sport)
+    .eq("slate_date", date);
   return count ?? 0;
 }
 
 async function loadExistingRecordCounts(
   supabase: SupabaseClient,
+  sport: Sport,
   date: string,
 ): Promise<{ total: number; launchDay: number }> {
   const { count: total } = await supabase
     .from("prediction_records")
     .select("*", { count: "exact", head: true })
-    .eq("sport", SPORT)
+    .eq("sport", sport)
     .eq("slate_date", date);
   const { count: launchDay } = await supabase
     .from("prediction_records")
     .select("*", { count: "exact", head: true })
-    .eq("sport", SPORT)
+    .eq("sport", sport)
     .eq("slate_date", date)
     .eq("launch_day", true);
   return { total: total ?? 0, launchDay: launchDay ?? 0 };
 }
 
 /**
- * Orchestrate one refresh pass across the supplied dates.
+ * Orchestrate one refresh pass across the supplied dates for ONE sport.
+ *
+ * The MLB branch (sport === "mlb", which is the historical default)
+ * runs the identical sequence it did before:
+ *   1. createPredictionRecords({sport:"mlb"})
+ *   2. ingestMlbLinescores({date})            ← MLB-only step
+ *   3. ingestFinalScores({sport:"mlb"})       ← BDL provider
+ *   4. gradePredictionsForSlate({sport:"mlb"})
+ *
+ * The NBA branch (sport === "nba") runs a sport-appropriate sequence:
+ *   1. createNbaPredictionRecords({date})     ← NBA pipeline writer
+ *   2. ingestNbaFinalScores({date})           ← ESPN scoreboard provider
+ *   3. gradePredictionsForSlate({sport:"nba"})← shared sport-generic
+ *
+ * No MLB code path changes when sport === "nba".
  */
 export async function runTrackingRefresh(
   opts: TrackingRefreshOptions,
 ): Promise<TrackingRefreshSummary> {
+  const sport: Sport = opts.sport ?? "mlb";
   const startedAtIso = new Date().toISOString();
   const t0 = Date.now();
   const summary: TrackingRefreshSummary = {
@@ -181,7 +218,7 @@ export async function runTrackingRefresh(
 
     try {
       // Skip whole date if no published slate
-      const publishedCount = await loadPublishedGameCount(opts.supabase, date);
+      const publishedCount = await loadPublishedGameCount(opts.supabase, sport, date);
       if (publishedCount === 0) {
         perDate.errors.push("no published games — skipping date entirely");
         summary.perDate.push(perDate);
@@ -189,74 +226,121 @@ export async function runTrackingRefresh(
       }
       summary.datesProcessed++;
 
-      // 1. Prediction records — always upsert so pending unlocked
-      //    rows track the latest game_predictions. Phase 6B.12: the
-      //    pre-launch behavior skipped this entirely when records
-      //    already existed, which left every intraday cron pass with
-      //    stale model_probability / confidence / best_angle / pick.
-      //    The upsert in createPredictionRecords is locked-row-aware:
-      //    it refuses to overwrite any row with locked_at != null
-      //    (pregame-sweep owns the lock transition), so this stays
-      //    safe even when some games are locked and others aren't.
-      //
-      //    The one preserved guard: launch_day=true rows. Those are
-      //    pre-launch manual baselines we never want cron-overwritten.
-      const existing = await loadExistingRecordCounts(opts.supabase, date);
-      perDate.records_existed_before = existing.total;
-      if (existing.launchDay > 0) {
-        perDate.records_skipped_due_to_launch_day_preservation = true;
-      } else {
-        const createRes = await createPredictionRecords({
-          sport: "mlb",
-          slateDate: date,
-          launchDay: false, // cron-created records are always fresh-tracking
-          apply: opts.apply,
-          supabase: opts.supabase,
-        });
-        perDate.records_created = createRes.insertedCount;
-        for (const e of createRes.errors) {
-          perDate.errors.push(`records: game_id=${e.game_id} ${e.market} ${e.reason}`);
+      if (sport === "mlb") {
+        // 1. Prediction records — always upsert so pending unlocked
+        //    rows track the latest game_predictions. Phase 6B.12: the
+        //    pre-launch behavior skipped this entirely when records
+        //    already existed, which left every intraday cron pass with
+        //    stale model_probability / confidence / best_angle / pick.
+        //    The upsert in createPredictionRecords is locked-row-aware:
+        //    it refuses to overwrite any row with locked_at != null
+        //    (pregame-sweep owns the lock transition), so this stays
+        //    safe even when some games are locked and others aren't.
+        //
+        //    The one preserved guard: launch_day=true rows. Those are
+        //    pre-launch manual baselines we never want cron-overwritten.
+        const existing = await loadExistingRecordCounts(opts.supabase, sport, date);
+        perDate.records_existed_before = existing.total;
+        if (existing.launchDay > 0) {
+          perDate.records_skipped_due_to_launch_day_preservation = true;
+        } else {
+          const createRes = await createPredictionRecords({
+            sport: "mlb",
+            slateDate: date,
+            launchDay: false, // cron-created records are always fresh-tracking
+            apply: opts.apply,
+            supabase: opts.supabase,
+          });
+          perDate.records_created = createRes.insertedCount;
+          for (const e of createRes.errors) {
+            perDate.errors.push(`records: game_id=${e.game_id} ${e.market} ${e.reason}`);
+          }
+        }
+
+        // 2. MLB linescores
+        try {
+          const lsRes = await ingestMlbLinescores({
+            date,
+            apply: opts.apply,
+            supabase: opts.supabase,
+          });
+          perDate.linescores_updated = lsRes.updatedCount;
+          perDate.linescores_pending = lsRes.pendingCount;
+          for (const e of lsRes.errors) {
+            perDate.errors.push(`linescore: ${e.reason}`);
+          }
+        } catch (e) {
+          perDate.errors.push(`linescore exception: ${e instanceof Error ? e.message : String(e)}`);
+        }
+
+        // 3. Final scores
+        try {
+          const fsRes = await ingestFinalScores({
+            sport: "mlb",
+            slateDate: date,
+            apply: opts.apply,
+            supabase: opts.supabase,
+          });
+          perDate.final_scores_updated = fsRes.updatedCount;
+          perDate.final_scores_in_progress = fsRes.inProgressCount;
+          perDate.final_scores_scheduled = fsRes.scheduledCount;
+          for (const e of fsRes.errors) {
+            perDate.errors.push(`final-scores: ${e.reason}`);
+          }
+        } catch (e) {
+          perDate.errors.push(`final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      } else if (sport === "nba") {
+        // NBA branch — Phase 7H. No linescore step (NBA has no FI/NRFI).
+        // Existing records are checked the same way as MLB to honor
+        // launch_day preservation, but NBA has no launch_day baselines
+        // today, so this is just defensive.
+        const existing = await loadExistingRecordCounts(opts.supabase, sport, date);
+        perDate.records_existed_before = existing.total;
+        if (existing.launchDay > 0) {
+          perDate.records_skipped_due_to_launch_day_preservation = true;
+        } else {
+          try {
+            const createRes = await createNbaPredictionRecords({
+              slateDate: date,
+              launchDay: false,
+              apply: opts.apply,
+              supabase: opts.supabase,
+            });
+            perDate.records_created = createRes.insertedCount;
+            for (const e of createRes.errors) {
+              perDate.errors.push(`nba-records: game_id=${e.game_id ?? "?"} ${e.market} ${e.reason}`);
+            }
+          } catch (e) {
+            perDate.errors.push(`nba-records exception: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+
+        // No linescore step for NBA — there is no FI market to grade
+        // and the full-game score is captured by ingestNbaFinalScores.
+
+        // Final scores — ESPN scoreboard.
+        try {
+          const fsRes = await ingestNbaFinalScores({
+            slateDate: date,
+            apply: opts.apply,
+            supabase: opts.supabase,
+          });
+          perDate.final_scores_updated = fsRes.updatedCount;
+          perDate.final_scores_in_progress = fsRes.inProgressCount;
+          perDate.final_scores_scheduled = fsRes.scheduledCount;
+          for (const e of fsRes.errors) {
+            perDate.errors.push(`nba-final-scores: ${e.reason}`);
+          }
+        } catch (e) {
+          perDate.errors.push(`nba-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
 
-      // 2. MLB linescores
-      try {
-        const lsRes = await ingestMlbLinescores({
-          date,
-          apply: opts.apply,
-          supabase: opts.supabase,
-        });
-        perDate.linescores_updated = lsRes.updatedCount;
-        perDate.linescores_pending = lsRes.pendingCount;
-        for (const e of lsRes.errors) {
-          perDate.errors.push(`linescore: ${e.reason}`);
-        }
-      } catch (e) {
-        perDate.errors.push(`linescore exception: ${e instanceof Error ? e.message : String(e)}`);
-      }
-
-      // 3. Final scores
-      try {
-        const fsRes = await ingestFinalScores({
-          sport: "mlb",
-          slateDate: date,
-          apply: opts.apply,
-          supabase: opts.supabase,
-        });
-        perDate.final_scores_updated = fsRes.updatedCount;
-        perDate.final_scores_in_progress = fsRes.inProgressCount;
-        perDate.final_scores_scheduled = fsRes.scheduledCount;
-        for (const e of fsRes.errors) {
-          perDate.errors.push(`final-scores: ${e.reason}`);
-        }
-      } catch (e) {
-        perDate.errors.push(`final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
-      }
-
-      // 4. Grade predictions
+      // 4. Grade predictions (shared sport-generic grader)
       try {
         const gradeRes = await gradePredictionsForSlate({
-          sport: "mlb",
+          sport,
           slateDate: date,
           apply: opts.apply,
           supabase: opts.supabase,
