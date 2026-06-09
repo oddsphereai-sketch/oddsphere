@@ -34,8 +34,15 @@ import { supabase } from "../../db/supabase";
 const SHARP_API_BASE = "https://api.sharpapi.io/api/v1";
 
 export type RefreshNbaLinesOptions = {
-  /** Slate date in YYYY-MM-DD. */
-  date: string;
+  /**
+   * ET sports-day in YYYY-MM-DD. Filters games.slate_date directly.
+   * Late ET tips land in UTC the next day, so filtering by UTC
+   * game_date misses them — slate_date is the product-correct join key.
+   * SharpAPI's date convention is UTC, so the service derives the
+   * SharpAPI query date(s) from the matched games' game_date column
+   * internally — callers never have to think about it.
+   */
+  slateDate: string;
   /**
    * SharpAPI bearer token. Passed in by caller; service does not read
    * SHARPAPI_KEY from process.env. NEVER logged.
@@ -204,17 +211,27 @@ async function fetchNbaOddsPaginated(
   return all;
 }
 
-async function loadNbaGamesForDate(date: string): Promise<GameRow[]> {
-  const start = `${date}T00:00:00Z`;
-  const end = `${date}T23:59:59Z`;
+async function loadNbaGamesForSlateDate(slateDate: string): Promise<GameRow[]> {
   const { data, error } = await supabase
     .from("games")
     .select("id, external_id, home_team_id, away_team_id, game_date")
     .eq("sport", "nba")
-    .gte("game_date", start)
-    .lte("game_date", end);
+    .eq("slate_date", slateDate);
   if (error !== null) throw new Error(`load NBA games failed: ${error.message}`);
   return ((data as unknown) ?? []) as GameRow[];
+}
+
+/**
+ * Derive the set of UTC dates (YYYY-MM-DD) that SharpAPI should be
+ * queried for, given the matched games. SharpAPI's /odds endpoint
+ * filters by UTC date, so a single ET slate with a late tip lives
+ * under the NEXT UTC date. NBA evenings typically have one UTC date;
+ * a mixed matinee + late-tip slate would have two.
+ */
+function sharpApiDatesForGames(games: GameRow[]): string[] {
+  const set = new Set<string>();
+  for (const g of games) set.add(g.game_date.slice(0, 10));
+  return [...set].sort();
 }
 
 async function loadNbaTeams(): Promise<TeamRow[]> {
@@ -294,11 +311,13 @@ export async function refreshNbaLines(
   const log = opts.logger ?? (() => {});
   const errors: string[] = [];
 
-  // 1. Load NBA games for the date.
-  const games = await loadNbaGamesForDate(opts.date);
-  log(`NBA games on ${opts.date}: ${games.length}`);
+  // 1. Load NBA games for the ET slate-date.
+  const games = await loadNbaGamesForSlateDate(opts.slateDate);
+  log(`NBA games on slate ${opts.slateDate}: ${games.length}`);
   if (games.length === 0) {
-    log("(no NBA games in DB for this date; run seed-nba-finals.ts first)");
+    log(
+      `(no NBA games in DB for slate_date ${opts.slateDate}; run seed-nba-finals.ts first)`,
+    );
     return {
       mode: "no-games",
       gamesInDb: 0,
@@ -316,8 +335,17 @@ export async function refreshNbaLines(
   const teams = await loadNbaTeams();
   const teamById = new Map<number, TeamRow>(teams.map((t) => [t.id, t]));
 
-  // 3. Fetch SharpAPI odds (limit-paginated).
-  const oddsRows = await fetchNbaOddsPaginated(opts.date, opts.sharpApiKey, log);
+  // 3. Fetch SharpAPI odds for each distinct UTC date in the slate.
+  // NBA evenings typically yield one UTC date; mixed matinee + late-tip
+  // slates can span two. Distinct UTC dates are derived from the matched
+  // games' game_date column.
+  const sharpApiDates = sharpApiDatesForGames(games);
+  log(`SharpAPI fetch dates (UTC): ${sharpApiDates.join(", ")}`);
+  const oddsRows: SharpOddsRow[] = [];
+  for (const sharpDate of sharpApiDates) {
+    const batch = await fetchNbaOddsPaginated(sharpDate, opts.sharpApiKey, log);
+    oddsRows.push(...batch);
+  }
   log(`SharpAPI /odds rows fetched: ${oddsRows.length}`);
 
   // 4. Match + normalize + build payloads.

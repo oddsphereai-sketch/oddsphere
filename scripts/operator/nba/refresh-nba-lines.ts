@@ -70,8 +70,12 @@ async function main(): Promise<void> {
 
   let result: RefreshNbaLinesResult;
   try {
+    // CLI surface stays --date YYYY-MM-DD. The service treats the value
+    // as ET slate_date (Phase 7K Fix 1): DB filter by games.slate_date,
+    // SharpAPI date(s) derived internally from matched games' UTC
+    // game_date column.
     result = await refreshNbaLines({
-      date,
+      slateDate: date,
       sharpApiKey: sharpKey,
       dryRun: !write,
       logger: (msg) => console.log(msg),

@@ -179,9 +179,13 @@ export async function GET(request: Request): Promise<Response> {
       if (ratingsResult.errors.length > 0) partial = true;
 
       // ─── Step 3: refreshNbaLines ──────────────────────────────────
-      console.log(`[nba-daily-refresh] step=lines  date=${etDateDashed}`);
+      // Passes the ET slate-date. Service filters by games.slate_date
+      // and derives the SharpAPI UTC date(s) from the matched games'
+      // game_date column. Late ET tips that live in UTC the next day
+      // are still found.
+      console.log(`[nba-daily-refresh] step=lines  slateDate=${etDateDashed}`);
       const linesResult = await refreshNbaLines({
-        date: etDateDashed,
+        slateDate: etDateDashed,
         sharpApiKey,
         dryRun: false,
         logger: stepLog("lines"),
