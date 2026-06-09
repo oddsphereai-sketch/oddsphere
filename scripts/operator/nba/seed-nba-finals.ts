@@ -38,6 +38,7 @@ import {
   type CanonicalNbaEvent,
   type NbaEventTeam,
 } from "../../../lib/providers/real_api/_espnNbaScoreboardClient";
+import { computeSlateDate } from "../../../lib/dates/slateDate";
 import { readBoolFlag, readStringFlag } from "../_cliCommon";
 
 const NBA_DB_WRITES_ENV = "NBA_DB_WRITES_ENABLED";
@@ -125,10 +126,14 @@ function gameRowPayloadFromEspn(
     away_pitcher_id: null,
     ballpark_id: null,
     game_date: event.start_time,
-    // slate_date (DATE) was added in schema-migration-v15+; required NOT NULL.
-    // For NBA we use the UTC-day of the game start (good enough for the
-    // Finals — internal-only).
-    slate_date: event.start_time.slice(0, 10),
+    // Phase 7H — use ET sports-day for slate_date, matching the rest of
+    // the NBA pipeline (buildNbaDailyEdgePipeline, prediction_records,
+    // tracking-refresh cron). A late tip like 8:30 PM ET is 00:30 UTC
+    // the NEXT day; UTC-date slicing would file it under the wrong
+    // slate and the cron would never grade the matching prediction
+    // records. computeSlateDate is the single source of truth used by
+    // MLB ingest too — sport-aware via the SPORT_TIMEZONE map.
+    slate_date: computeSlateDate("nba", event.start_time),
     season,
     season_type: postseason ? "postseason" : "regular",
     postseason,

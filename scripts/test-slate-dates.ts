@@ -86,6 +86,38 @@ async function main() {
     computeSlateDate("mlb", "2026-05-23T13:00:00.000Z") === "2026-05-23"
   );
 
+  // ─── (1b) computeSlateDate: ET anchor (NBA) — Phase 7H regression ─────────
+  // Locks the late-tip seam where the previous seed-nba-finals.ts used
+  // UTC-date slicing and filed games under the wrong slate. The cron
+  // iterates ET-anchored slate_dates; any drift means prediction_records
+  // and the corresponding games row land under different keys and the
+  // grading step silently skips.
+  section("computeSlateDate: ET anchor (NBA) — late-tip seam");
+
+  // SA @ NY tip 2026-06-08 8:30 PM ET = 2026-06-09 00:30Z. Belongs to
+  // the 2026-06-08 ET slate — NOT 2026-06-09 (which is what raw UTC
+  // slicing would produce).
+  check(
+    `NBA 2026-06-09T00:30:00.000Z (8:30 PM ET 06-08) → slate 2026-06-08`,
+    computeSlateDate("nba", "2026-06-09T00:30:00.000Z") === "2026-06-08"
+  );
+  // A West-Coast 10:30 PM ET tip = 02:30Z next UTC day — still 06-08 ET.
+  check(
+    `NBA 2026-06-09T02:30:00.000Z (10:30 PM ET 06-08) → slate 2026-06-08`,
+    computeSlateDate("nba", "2026-06-09T02:30:00.000Z") === "2026-06-08"
+  );
+  // 04:00Z = midnight ET — the new ET slate day starts here.
+  check(
+    `NBA 2026-06-09T04:00:00.000Z (midnight ET) → slate 2026-06-09`,
+    computeSlateDate("nba", "2026-06-09T04:00:00.000Z") === "2026-06-09"
+  );
+  // A daytime ET tip on 06-09 (rare for NBA but possible for Finals
+  // matinées) should stay on its own day.
+  check(
+    `NBA 2026-06-09T17:00:00.000Z (1 PM ET 06-09) → slate 2026-06-09`,
+    computeSlateDate("nba", "2026-06-09T17:00:00.000Z") === "2026-06-09"
+  );
+
   // ─── (2) DST transitions (spring-forward + fall-back) ─────────────────────
   section("computeSlateDate: DST transitions");
 
