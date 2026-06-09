@@ -67,18 +67,22 @@ const MARKET_LONG_LABEL: Record<MarketKey, string> = {
 // `first_inning` slot for Spread; rendering should say "Spread" /
 // "Sprd" instead of "1st Inning" / "1st". MLB is unaffected.
 function marketShortLabelFor(market: MarketKey, sport: Sport): string {
-  if (sport === "nba" && market === "first_inning") return "Sprd";
+  // NBA reuses first_inning slot for Spread. NHL v0 leaves the slot
+  // empty (puck_line deferred to v0.5); we label as "Sprd" so the
+  // chip honestly reads as a spread-style market with no pick yet
+  // rather than a misleading "1st Inning".
+  if ((sport === "nba" || sport === "nhl") && market === "first_inning") return "Sprd";
   return MARKET_SHORT_LABEL[market];
 }
 function marketLongLabelFor(market: MarketKey, sport: Sport): string {
-  if (sport === "nba" && market === "first_inning") return "Spread";
+  if ((sport === "nba" || sport === "nhl") && market === "first_inning") return "Spread";
   return MARKET_LONG_LABEL[market];
 }
 // Sport-aware pick fallback when the market has no pick label. MLB
 // shows "Toss-Up" on first_inning (the [0.85, 1.15) FI band); NBA
-// (which never has a held FI concept) shows "Held".
+// and NHL (which never have a held FI concept) show "Held".
 function pickFallbackFor(market: MarketKey, sport: Sport): string {
-  if (sport === "nba") return "Held";
+  if (sport === "nba" || sport === "nhl") return "Held";
   return market === "first_inning" ? "Toss-Up" : "Held";
 }
 
@@ -218,6 +222,9 @@ function espnLogoUrl(abbr: string, sport: Sport = "mlb"): string {
   if (sport === "nba") {
     const slug = ESPN_NBA_SLUG[abbr] ?? abbr.toLowerCase();
     return `https://a.espncdn.com/i/teamlogos/nba/500/${slug}.png`;
+  }
+  if (sport === "nhl") {
+    return `https://a.espncdn.com/i/teamlogos/nhl/500/${abbr.toLowerCase()}.png`;
   }
   const slug = ESPN_LOGO_SLUG[abbr] ?? abbr.toLowerCase();
   return `https://a.espncdn.com/i/teamlogos/mlb/500/${slug}.png`;

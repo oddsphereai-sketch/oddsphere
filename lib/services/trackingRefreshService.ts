@@ -39,6 +39,13 @@ import { ingestFinalScores } from "./scoreIngestService";
 import { gradePredictionsForSlate } from "./predictionGradingService";
 import { createNbaPredictionRecords } from "./nba/buildNbaPredictionRecords";
 import { ingestNbaFinalScores } from "./nba/nbaScoreIngestService";
+// Phase 7L Step 5 — NHL sport loop branch. Only fires when caller
+// explicitly passes sport="nhl"; the cron route's
+// cronHandlerPerSport(["mlb", "nba"]) keeps NHL out of automated
+// firing. Member-facing NHL launch is gated separately via SportRail.
+import { writeNhlPredictionRecords } from "./nhl/buildNhlPredictionRecords";
+import { ingestNhlFinalScores } from "./nhl/nhlScoreIngestService";
+import { moneyPuckSeasonStartYear } from "../providers/nhl/_moneyPuckClient";
 
 export type TrackingRefreshOptions = {
   /**
@@ -334,6 +341,58 @@ export async function runTrackingRefresh(
           }
         } catch (e) {
           perDate.errors.push(`nba-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      } else if (sport === "nhl") {
+        // Phase 7L Step 5 — NHL sport branch. Mirrors NBA's shape:
+        // write prediction_records + ingest final scores. The shared
+        // grader (gradePredictionsForSlate) handles grading via the
+        // extended predictionGrader.isFinalStatus that recognizes
+        // NHL's "FINAL"/"OFF" terminal statuses.
+        //
+        // Lock semantics: writeNhlPredictionRecords skips rows where
+        // locked_at IS NOT NULL, so re-runs during the day mutate
+        // pre-lock rows but freeze post-lock ones (matching MLB/NBA
+        // contract).
+        const existing = await loadExistingRecordCounts(opts.supabase, sport, date);
+        perDate.records_existed_before = existing.total;
+        if (existing.launchDay > 0) {
+          perDate.records_skipped_due_to_launch_day_preservation = true;
+        } else {
+          try {
+            const season = moneyPuckSeasonStartYear(new Date());
+            const createRes = await writeNhlPredictionRecords({
+              slateDate: date,
+              season,
+              apply: opts.apply,
+            });
+            perDate.records_created = createRes.recordsCreated;
+            for (const e of createRes.errors) {
+              perDate.errors.push(`nhl-records: ${e}`);
+            }
+          } catch (e) {
+            perDate.errors.push(`nhl-records exception: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+
+        // No linescore step for NHL — there is no FI/period market to
+        // grade and the full-game score is captured by ingestNhlFinalScores.
+
+        // Final scores — NHL public API.
+        try {
+          const fsRes = await ingestNhlFinalScores({
+            slateDate: date,
+            apply: opts.apply,
+          });
+          perDate.final_scores_updated = fsRes.updated;
+          // NHL service exposes a single counter; in_progress/scheduled
+          // are derived from API events not yet final. Map cleanly:
+          perDate.final_scores_in_progress = 0;
+          perDate.final_scores_scheduled = Math.max(0, fsRes.apiEventsFetched - fsRes.finalizedCount);
+          for (const e of fsRes.errors) {
+            perDate.errors.push(`nhl-final-scores: ${e}`);
+          }
+        } catch (e) {
+          perDate.errors.push(`nhl-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
 

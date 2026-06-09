@@ -65,10 +65,21 @@ export type GradeInputs = {
 };
 
 const VOID_STATUSES = new Set(["postponed", "canceled", "cancelled"]);
-const IN_PROGRESS_STATUSES = new Set(["scheduled", "STATUS_SCHEDULED", "in_progress", "live", "suspended"]);
+// Phase 7L Step 5 — extend in-progress/pending recognition so NHL
+// pre-puck ("FUT"/"PRE") and live mid-game ("LIVE"/"CRIT") don't fall
+// through to the "unknown status" branch. Additive only; MLB
+// ("scheduled"/"in_progress") and NBA ("STATUS_*") behavior unchanged.
+const IN_PROGRESS_STATUSES = new Set([
+  "scheduled", "STATUS_SCHEDULED", "in_progress", "live", "suspended",
+  "FUT", "PRE", "LIVE", "CRIT",
+]);
 
+// Phase 7L Step 5 — recognize NHL terminal states "FINAL" and "OFF"
+// (per api-web.nhle.com /v1/score) so the shared grader can grade
+// NHL prediction_records via the existing rules. MLB ("final") and
+// NBA ("STATUS_FINAL") are unchanged.
 function isFinalStatus(s: string): boolean {
-  return s === "final" || s === "STATUS_FINAL";
+  return s === "final" || s === "STATUS_FINAL" || s === "FINAL" || s === "OFF";
 }
 
 function isVoidStatus(s: string): boolean {
