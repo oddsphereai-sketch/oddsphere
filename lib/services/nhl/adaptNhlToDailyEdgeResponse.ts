@@ -44,6 +44,25 @@ import type {
   NhlVerdictKey,
 } from "../../automodel/nhlAutoModelV0";
 import type { SharpNhlSplitsEvent } from "../../providers/nhl/_sharpApiNhlClient";
+import { americanToImplied } from "../../utils/odds";
+
+/**
+ * Per-market best-of-book bundle the pipeline assembles and the adapter
+ * consumes. Each bundle covers one slot (ML / Total / Puck Line) and
+ * carries every "live market context" field we surface for that market.
+ */
+export type NhlPerMarketBest = {
+  /** Best (highest American) price on the picked side; null when none. */
+  priceAmerican: number | null;
+  /** Sportsbook quoting the best price; null when none. */
+  sportsbook: string | null;
+  /** First-observed price for this (market, picked side) from line_history. */
+  openAmerican: number | null;
+  /** Pinnacle / cross-book EV % from SharpAPI opportunities; null when none. */
+  pinnacleEvPct: number | null;
+  /** No-vig fair probability from SharpAPI opportunities; null when none. */
+  fairProbability: number | null;
+};
 
 /** Multiply a fractional pct (0..1) by 100 for display; null-safe. */
 function pctTo100(v: number | null | undefined): number | null {
@@ -292,13 +311,23 @@ function buildMarketEdge(opts: {
   slot: "ml" | "total" | "puckline";
   modelTotal: number;
   marketLine: number | null;
-  priceAmerican: number | null;
+  bundle: NhlPerMarketBest;
   publicSplits: MarketEdgeDto["publicSplits"];
   keyStats: KeyStatRow[];
 }): MarketEdgeDto {
-  const { market, slot, modelTotal, marketLine, priceAmerican, publicSplits, keyStats } = opts;
+  const { market, slot, modelTotal, marketLine, bundle, publicSplits, keyStats } = opts;
   const verdict = verdictKeyMap(market.verdict);
   const held = market.verdict === "pass";
+  // SharpAPI's fair_probability already encodes the no-vig prob for
+  // the picked side. Prefer it over the model-derived gap fallback.
+  const fairProb =
+    bundle.fairProbability !== null
+      ? bundle.fairProbability
+      : market.model_market_gap_pct !== null
+        ? market.probability - market.model_market_gap_pct
+        : null;
+  const marketImpliedDecimal =
+    bundle.priceAmerican !== null ? americanToImplied(bundle.priceAmerican) : null;
   return {
     pick: market.pick,
     confidence: market.confidence,
@@ -313,28 +342,26 @@ function buildMarketEdge(opts: {
     whyLine: market.notes.slice(1).join(" ") || (market.notes[0] ?? ""),
     riskLine: "",
     modelProb: market.probability,
-    marketFairProb: market.model_market_gap_pct !== null
-      ? market.probability - market.model_market_gap_pct
-      : null,
-    pinnacleEvPct: null,
+    marketFairProb: fairProb,
+    pinnacleEvPct: bundle.pinnacleEvPct,
     moneyPct: publicSplits[0]?.moneyPct ?? null,
     betsPct: publicSplits[0]?.betsPct ?? null,
     publicSplits,
-    priceAmerican,
-    lineOpenAmerican: null,
+    priceAmerican: bundle.priceAmerican,
+    lineOpenAmerican: bundle.openAmerican,
     modelTotal: slot === "total" && !held ? modelTotal : null,
     marketTotal: slot === "total" ? marketLine : null,
     // ML carries no line; Total + Puck Line use the `line` slot.
     line: slot === "ml" ? null : marketLine,
     keyStats,
     modelTrustPct: held ? null : market.confidence,
-    marketImpliedPct: null,
+    marketImpliedPct: marketImpliedDecimal !== null ? marketImpliedDecimal * 100 : null,
     modelMarketGapPct: market.model_market_gap_pct !== null
       ? market.model_market_gap_pct * 100
       : null,
     recommendationConfidence: held ? null : market.confidence,
-    marketSource: null,
-    marketDataQuality: priceAmerican !== null ? "single_book" : "unavailable",
+    marketSource: bundle.sportsbook,
+    marketDataQuality: bundle.priceAmerican !== null ? "single_book" : "unavailable",
     reviewFlags: [],
     reviewActionSummary: "keep",
   };
@@ -358,18 +385,14 @@ export type NhlAdapterGameInput = {
   model: NhlModelOutput;
   /** From featureSnapshot. */
   snapshot: NhlFeatureSnapshot;
-  /** Best ML price for the picked side; null when unavailable. */
-  mlPriceAmerican: number | null;
-  /** Best Total price for the picked side; null when unavailable. */
-  totalPriceAmerican: number | null;
+  /** Best-of-book bundle for the moneyline picked side. */
+  mlBundle: NhlPerMarketBest;
+  /** Best-of-book bundle for the total picked side (over or under). */
+  totalBundle: NhlPerMarketBest;
+  /** Best-of-book bundle for the puck-line picked side. */
+  puckLineBundle: NhlPerMarketBest;
   /** Market total line (median from lines). */
   marketTotalLine: number | null;
-  /**
-   * Best puck-line price for the picked side (favored side at -1.5 or
-   * underdog side at +1.5); null when no puck-line book data is
-   * available. Display-only — not persisted.
-   */
-  puckLinePriceAmerican: number | null;
   /**
    * Puck-line market line — typically ±1.5 in NHL. Display-only; the
    * model always reads at the canonical 1.5 boundary regardless.
@@ -439,7 +462,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
           slot: "ml",
           modelTotal: model.expected_total_goals,
           marketLine: null,
-          priceAmerican: input.mlPriceAmerican,
+          bundle: input.mlBundle,
           publicSplits: buildPublicSplits("ml", mlPickIsHome, false, input.splits, input.homeAbbr, input.awayAbbr),
           keyStats: buildKeyStats("ml", input.snapshot, model),
         }),
@@ -448,7 +471,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
           slot: "total",
           modelTotal: model.expected_total_goals,
           marketLine: input.marketTotalLine,
-          priceAmerican: input.totalPriceAmerican,
+          bundle: input.totalBundle,
           publicSplits: buildPublicSplits("total", false, totalPickIsOver, input.splits, input.homeAbbr, input.awayAbbr),
           keyStats: buildKeyStats("total", input.snapshot, model),
         }),
@@ -460,7 +483,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
           slot: "puckline",
           modelTotal: model.expected_total_goals,
           marketLine: input.puckLineMarketLine ?? model.puck_line.puck_line_value,
-          priceAmerican: input.puckLinePriceAmerican,
+          bundle: input.puckLineBundle,
           publicSplits: buildPublicSplits("puckline", plPickIsHome, false, input.splits, input.homeAbbr, input.awayAbbr),
           keyStats: buildKeyStats("puckline", input.snapshot, model),
         }),
