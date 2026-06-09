@@ -12,6 +12,12 @@
  * previous sport's data through SWR's stale-while-revalidate.
  *
  * Returns SWR's standard { data, error, isLoading } plus a manual `refresh`.
+ *
+ * Phase 7G (launch): both MLB and NBA route through /api/lab/daily-edge.
+ * The route's NBA branch hands off to the shared NBA adapter service and
+ * returns the same MLB-shaped DailyEdgeResponse, so the hook is sport-
+ * agnostic at the URL level. The previous NBA admin-headers path was
+ * removed when NBA went member-facing.
  */
 
 import useSWR from "swr";
@@ -21,7 +27,7 @@ import type { Sport } from "@/lib/types/domain/Sport";
 
 export type UseDailyEdgeOptions = {
   sport: Sport;
-  /** Optional YYYY-MM-DD override; defaults to server's "today UTC". */
+  /** Optional YYYY-MM-DD override; defaults to server's "today". */
   date?: string;
   /** Poll interval in ms. Default 300_000 (5 min). Set to 0 to disable polling. */
   refreshIntervalMs?: number;

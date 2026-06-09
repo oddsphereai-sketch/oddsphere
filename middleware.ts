@@ -63,8 +63,48 @@ function isProtectedApiPath(pathname: string): boolean {
   );
 }
 
+// ─── TEMPORARY: nba-v0a preview-branch bypass ─────────────────────────
+//
+// !!!  REMOVE BEFORE MERGING nba-v0a -> main  !!!
+//
+// Scoped to ALL of:
+//   • Running on Vercel (VERCEL=1, platform-set)
+//   • Vercel env is exactly "preview" (NOT production, NOT development)
+//   • The git branch is exactly "nba-v0a"
+//   • Path is exactly one of the NBA admin preview routes (page or API)
+//
+// On production deployments VERCEL_ENV="production" and
+// VERCEL_GIT_COMMIT_REF="main" — neither matches, so the bypass is
+// inert there. All other preview branches also have a different ref → inert.
+//
+// Does NOT broadly bypass /admin/*. Does NOT bypass any MLB admin route.
+// Does NOT touch member-facing paths. The /api/admin/nba-preview API
+// already re-validates auth at its handler with the same triple-gate.
+const NBA_PREVIEW_BYPASS_PATHS = [
+  "/admin/nba-preview",
+  "/admin/nba-daily-edge-preview",
+  "/api/admin/nba-preview",
+];
+function isNbaPreviewBranchBypass(pathname: string): boolean {
+  if (
+    process.env.VERCEL !== "1" ||
+    process.env.VERCEL_ENV !== "preview" ||
+    process.env.VERCEL_GIT_COMMIT_REF !== "nba-v0a"
+  ) {
+    return false;
+  }
+  return NBA_PREVIEW_BYPASS_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // TEMPORARY nba-v0a preview-branch bypass — REMOVE BEFORE MERGING TO MAIN.
+  if (isNbaPreviewBranchBypass(pathname)) {
+    return NextResponse.next();
+  }
 
   // Fast path: not a protected route → no work.
   const isPage = isProtectedPagePath(pathname);

@@ -25,8 +25,9 @@
  * Visual review with Daniel after this lands, then iterate on detail.
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useDailyEdge } from "../../hooks/useDailyEdge";
+import { useSportSelection } from "../../hooks/useSportSelection";
 import {
   buildEdgeStackRows,
   marketSourceLabel,
@@ -61,6 +62,34 @@ const MARKET_LONG_LABEL: Record<MarketKey, string> = {
   total: "Total",
   first_inning: "1st Inning",
 };
+
+// Phase 7F (Path A) — sport-aware market labels. NBA reuses the
+// `first_inning` slot for Spread; rendering should say "Spread" /
+// "Sprd" instead of "1st Inning" / "1st". MLB is unaffected.
+function marketShortLabelFor(market: MarketKey, sport: Sport): string {
+  if (sport === "nba" && market === "first_inning") return "Sprd";
+  return MARKET_SHORT_LABEL[market];
+}
+function marketLongLabelFor(market: MarketKey, sport: Sport): string {
+  if (sport === "nba" && market === "first_inning") return "Spread";
+  return MARKET_LONG_LABEL[market];
+}
+// Sport-aware pick fallback when the market has no pick label. MLB
+// shows "Toss-Up" on first_inning (the [0.85, 1.15) FI band); NBA
+// (which never has a held FI concept) shows "Held".
+function pickFallbackFor(market: MarketKey, sport: Sport): string {
+  if (sport === "nba") return "Held";
+  return market === "first_inning" ? "Toss-Up" : "Held";
+}
+
+// Phase 7F (Path A) — Sport context so deeply-nested inline components
+// can read the current sport without prop-drilling. Default "mlb" so
+// any consumer that renders outside the provider falls back to MLB
+// behavior (zero MLB-side regression).
+const ShellSportContext = createContext<Sport>("mlb");
+function useShellSport(): Sport {
+  return useContext(ShellSportContext);
+}
 
 const VERDICT_LABEL: Record<VerdictKey, string> = {
   best_angle: "Best Angle",
@@ -177,7 +206,19 @@ const ESPN_LOGO_SLUG: Record<string, string> = {
   ATH: "oak",
 };
 
-function espnLogoUrl(abbr: string): string {
+// ESPN slug overrides for NBA abbreviations that ESPN spells differently.
+// (Most NBA abbrevs already match ESPN's URL slug; this map just covers
+// the rare cases where ours and ESPN's diverge.)
+const ESPN_NBA_SLUG: Record<string, string> = {
+  // Most NBA teams use lowercased abbrev as-is — no overrides needed today.
+  // Add here if a logo 404s: e.g. NYK: "ny", SAS: "sa".
+};
+
+function espnLogoUrl(abbr: string, sport: Sport = "mlb"): string {
+  if (sport === "nba") {
+    const slug = ESPN_NBA_SLUG[abbr] ?? abbr.toLowerCase();
+    return `https://a.espncdn.com/i/teamlogos/nba/500/${slug}.png`;
+  }
   const slug = ESPN_LOGO_SLUG[abbr] ?? abbr.toLowerCase();
   return `https://a.espncdn.com/i/teamlogos/mlb/500/${slug}.png`;
 }
@@ -364,8 +405,9 @@ function TeamBadge({ abbr, logo, size }: { abbr: string; logo: string | null; si
   // intentionally don't read it. When ESPN slugs are missing (unknown
   // team) or the request 404s, the abbr-disc fallback engages.
   void logo;
+  const shellSport = useShellSport();
   const [errored, setErrored] = useState(false);
-  const src = espnLogoUrl(abbr);
+  const src = espnLogoUrl(abbr, shellSport);
   const filter = LOGO_FILTER[abbr];
 
   if (errored) {
@@ -466,6 +508,7 @@ function MarketPill({
   selected: boolean;
   onClick: () => void;
 }) {
+  const shellSport = useShellSport();
   return (
     <button
       type="button"
@@ -477,9 +520,9 @@ function MarketPill({
       }`}
     >
       <span className={`text-[10px] uppercase tracking-[0.14em] font-bold shrink-0 ${selected ? "text-violet-100" : "text-gray-500"}`}>
-        {MARKET_SHORT_LABEL[market]}
+        {marketShortLabelFor(market, shellSport)}
       </span>
-      <span className={`text-[12px] font-bold tabular-nums shrink-0 ${pick === null ? "text-gray-500" : ""}`}>{pick ?? (market === "first_inning" ? "Toss-Up" : "Held")}</span>
+      <span className={`text-[12px] font-bold tabular-nums shrink-0 ${pick === null ? "text-gray-500" : ""}`}>{pick ?? pickFallbackFor(market, shellSport)}</span>
       <span className={`text-[10.5px] tabular-nums shrink-0 ${selected ? "text-gray-300" : "text-gray-500"}`}>
         {confidence === null ? "—" : `${Math.round(confidence * 100)}%`}
       </span>
@@ -513,11 +556,23 @@ function MarketPill({
  * everywhere; this commit specializes FI to "Toss-Up" while keeping the
  * regression guard that bare em-dashes never leak through.
  */
-export function formatPickWithLine(market: MarketKey, pick: string | null, line: number | null): string {
+export function formatPickWithLine(
+  market: MarketKey,
+  pick: string | null,
+  line: number | null,
+  sport: Sport = "mlb",
+): string {
   if (pick === null) {
-    return market === "first_inning" ? "Toss-Up" : "Held";
+    return pickFallbackFor(market, sport);
   }
-  if (market === "total" && line !== null) return `${pick} ${line}`;
+  if (market === "total" && line !== null) {
+    // NBA pick_label already encodes the line (e.g. "OVER 215.5"). MLB
+    // pick is bare ("Over" / "Under") and needs the line appended.
+    // Append only when the line isn't already part of the pick string —
+    // sport-agnostic so neither league shows the line twice.
+    if (pick.includes(String(line))) return pick;
+    return `${pick} ${line}`;
+  }
   return pick;
 }
 
@@ -546,7 +601,8 @@ function ReaderMarketSegment({
   selected: boolean;
   onClick: () => void;
 }) {
-  const pickText = formatPickWithLine(market, pick, line);
+  const shellSport = useShellSport();
+  const pickText = formatPickWithLine(market, pick, line, shellSport);
   return (
     <button
       type="button"
@@ -564,7 +620,7 @@ function ReaderMarketSegment({
             selected ? "text-violet-200" : "text-gray-500"
           }`}
         >
-          {MARKET_LONG_LABEL[market]}
+          {marketLongLabelFor(market, shellSport)}
         </span>
         <span
           aria-hidden="true"
@@ -805,33 +861,42 @@ function SportIcon({ sport, size = 18, active }: { sport: Sport; size?: number; 
  * <Month>" placeholders. League glyphs are inline SVGs (no licensing
  * concerns + no remote asset fetches).
  */
-function SportRail({ sport }: { sport: Sport }) {
-  // V1 — MLB only is live. Status copy stays neutral to avoid implying a
-  // hard launch date for unfinished sports ("Coming Soon" is the safe
-  // default until each league's model is closer to ship).
+export function SportRail({ sport }: { sport: Sport }) {
+  // Member-facing live sports: MLB + NBA. The other leagues stay as
+  // "Coming Soon" placeholders until each model ships.
   const ROW: Array<{ key: Sport; label: string; live: boolean }> = [
     { key: "mlb", label: "MLB", live: true },
-    { key: "nba", label: "NBA", live: false },
+    { key: "nba", label: "NBA", live: true },
     { key: "nhl", label: "NHL", live: false },
     { key: "nfl", label: "NFL", live: false },
     { key: "cfb", label: "CFB", live: false },
     { key: "cbb", label: "CBB", live: false },
   ];
+  // Clickable nav: use useSportSelection so live tabs swap the URL's
+  // ?sport= param and the parent page re-renders with the new sport.
+  const { setSport } = useSportSelection();
   return (
     <div className="border-b border-white/[0.05] bg-gradient-to-b from-white/[0.015] to-transparent">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5">
         <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto -mx-1 px-1">
           {ROW.map((s) => {
             const isActive = s.key === sport && s.live;
+            const isClickable = s.live;
+            const Tag = isClickable ? "button" : "div";
+            const clickHandler = isClickable && !isActive ? () => setSport(s.key) : undefined;
             return (
-              <div
+              <Tag
                 key={s.key}
+                onClick={clickHandler}
+                type={isClickable ? "button" : undefined}
                 className={`group flex-1 min-w-[120px] sm:min-w-0 inline-flex items-center gap-2.5 px-3 py-2 rounded-lg border whitespace-nowrap transition-colors ${
                   isActive
                     ? "border-violet-400/55 bg-violet-500/[0.14] text-violet-50 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.10),0_0_18px_-8px_rgba(139,92,246,0.45)]"
-                    : "border-white/[0.06] bg-white/[0.02] text-gray-400"
+                    : isClickable
+                      ? "border-white/[0.06] bg-white/[0.02] text-gray-400 hover:border-violet-400/30 hover:bg-violet-500/[0.06] cursor-pointer"
+                      : "border-white/[0.06] bg-white/[0.02] text-gray-400"
                 }`}
-                aria-label={`${s.label} — ${isActive ? "active model" : "coming soon"}`}
+                aria-label={`${s.label} — ${isActive ? "active model" : isClickable ? "switch to this sport" : "coming soon"}`}
               >
                 {/* Circular icon container — tinted violet for active,
                     neutral for inactive. The container itself, not just
@@ -863,12 +928,14 @@ function SportRail({ sport }: { sport: Sport }) {
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(110,231,183,0.6)]" />
                         Active
                       </span>
+                    ) : s.live ? (
+                      "Live"
                     ) : (
                       "Coming Soon"
                     )}
                   </span>
                 </div>
-              </div>
+              </Tag>
             );
           })}
         </div>
@@ -1002,6 +1069,10 @@ function HowThisWorks() {
  * provider-pending state rather than a system glitch.
  */
 function StartersLine({ game }: { game: DailyEdgeGameDto }) {
+  // Phase 7F (Path A) — NBA has no probable pitchers; the adapter
+  // sets both starters to null. Early return for any non-MLB sport so
+  // the row never even attempts to render (MLB behavior unchanged).
+  if (game.sport !== "mlb") return null;
   // Skip entirely when BOTH sides are null — no useful info to show
   // and we don't want an empty "TBD · TBD" row screaming "missing data."
   if (game.homeStarter === null && game.awayStarter === null) return null;
@@ -1060,6 +1131,7 @@ function ModelTake({ game }: { game: DailyEdgeGameDto }) {
 
 function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; market: MarketKey; marketData: MarketEdgeDto }) {
   const verdict = asVerdictKey(marketData.verdict.key);
+  const shellSport = useShellSport();
   return (
     <div className="bg-white/[0.015] border border-white/[0.04] rounded-xl px-3.5 py-2.5 space-y-2 min-w-0">
       <div className="flex items-center gap-2 pb-1 border-b border-white/[0.06]">
@@ -1175,7 +1247,7 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
             )}
             <span className="text-gray-700">·</span>
             <span className="text-[10px] uppercase tracking-[0.14em] text-gray-500 font-bold">
-              {MARKET_LONG_LABEL[market]}
+              {marketLongLabelFor(market, shellSport)}
             </span>
           </div>
         </div>
@@ -1199,6 +1271,7 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
 }
 
 function EdgeStack({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
+  const shellSport = useShellSport();
   // R-16F-B — row construction lives in app/lab/lib/edgeStackRows.ts so
   // the data shape can be unit-tested without a React renderer. This
   // component only handles JSX layout + tone coloring.
@@ -1207,7 +1280,7 @@ function EdgeStack({ market, marketData }: { market: MarketKey; marketData: Mark
   return (
     <div className="min-w-0">
       <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80 mb-1.5">
-        Edge Stack · {MARKET_LONG_LABEL[market]}
+        Edge Stack · {marketLongLabelFor(market, shellSport)}
       </p>
       <div className="space-y-1.5">
         {rows.map((r) => (
@@ -1440,12 +1513,17 @@ function ConfidenceVsMarketStrip({
 }
 
 function MarketPulse({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
+  // Phase 7F (Path A) — NBA uses the `first_inning` slot for Spread,
+  // which DOES have public splits from SharpAPI. Skip the MLB-specific
+  // "first-inning splits aren't offered" branch when sport is NBA so
+  // the normal two-sided splits renderer below runs.
+  const shellSport = useShellSport();
   // First-inning never uses split copy — V1 SharpAPI tier does not cover
   // first-inning public splits. Phrase as provider-coverage, not failure.
   // When the FI market is held (V1 NRFI threshold not met), surface a
   // subdued "angle unavailable" line instead of the generic splits note —
   // makes it clear the full-game pick is unaffected.
-  if (market === "first_inning") {
+  if (market === "first_inning" && shellSport !== "nba") {
     if (marketData.held) {
       return (
         <div className="space-y-1.5">
@@ -2089,6 +2167,7 @@ function SlateCard({
   const headlineMarketData = game.markets[headlineMarket];
   const headlineVerdict = asVerdictKey(headlineMarketData.verdict.key);
   const t = CARD_TREATMENT[headlineVerdict];
+  const shellSport = useShellSport();
 
   return (
     <article
@@ -2115,7 +2194,7 @@ function SlateCard({
         className="h-[3px] w-full"
         aria-hidden="true"
         style={{
-          background: `linear-gradient(to right, ${teamPrimaryColor(game.awayTeam)} 0%, ${teamPrimaryColor(game.awayTeam)} 28%, rgba(255,255,255,0.06) 50%, ${teamPrimaryColor(game.homeTeam)} 72%, ${teamPrimaryColor(game.homeTeam)} 100%)`,
+          background: `linear-gradient(to right, ${teamPrimaryColor(game.awayTeam, shellSport)} 0%, ${teamPrimaryColor(game.awayTeam, shellSport)} 28%, rgba(255,255,255,0.06) 50%, ${teamPrimaryColor(game.homeTeam, shellSport)} 72%, ${teamPrimaryColor(game.homeTeam, shellSport)} 100%)`,
         }}
       />
 
@@ -2185,7 +2264,7 @@ function SlateCard({
             {headlineMarketData.pick ?? "—"}
           </span>
           <span className="text-[11px] uppercase tracking-[0.14em] text-gray-500 font-bold">
-            {MARKET_SHORT_LABEL[headlineMarket]}
+            {marketShortLabelFor(headlineMarket, shellSport)}
           </span>
           <span className="text-[13px] tabular-nums font-bold text-gray-300">
             {headlineMarketData.confidence === null
@@ -2251,7 +2330,7 @@ function SlateCard({
             return (
               <span key={m} className="inline-flex items-center gap-1 min-w-0">
                 {i > 0 && <span aria-hidden="true" className="text-gray-700 mr-1">·</span>}
-                <span className="text-gray-500">{MARKET_SHORT_LABEL[m]}</span>
+                <span className="text-gray-500">{marketShortLabelFor(m, shellSport)}</span>
                 <span className={VERDICT_TEXT_COLOR[v]}>
                   <span aria-hidden="true" className="mr-0.5">{VERDICT_GLYPH[v]}</span>
                   <span>{VERDICT_LABEL[v]}</span>
@@ -2293,10 +2372,10 @@ function SlateCard({
                     isActiveMarket ? "text-violet-200/85" : VERDICT_TEXT_COLOR[mv]
                   }`}
                 >
-                  {MARKET_SHORT_LABEL[m]}
+                  {marketShortLabelFor(m, shellSport)}
                 </span>
                 <span className="block text-[12.5px] font-bold tabular-nums text-gray-100 truncate">
-                  {formatPickWithLine(m, md.pick, md.line)}
+                  {formatPickWithLine(m, md.pick, md.line, shellSport)}
                 </span>
               </button>
             );
@@ -2350,6 +2429,7 @@ function SelectedEdgeReader({
   onCollapse: () => void;
 }) {
   const verdict = asVerdictKey(marketData.verdict.key);
+  const shellSport = useShellSport();
 
   return (
     <section
@@ -2455,7 +2535,7 @@ function SelectedEdgeReader({
                   </span>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span className="text-[9.5px] uppercase tracking-[0.14em] text-violet-200/75 font-bold">
-                      {MARKET_SHORT_LABEL[market]}
+                      {marketShortLabelFor(market, shellSport)}
                     </span>
                     <span aria-hidden="true" className="text-gray-700 text-[10px]">·</span>
                     <span className="text-[11px] tabular-nums font-bold text-gray-200">
@@ -3011,6 +3091,7 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   }
 
   return (
+    <ShellSportContext.Provider value={sport}>
     <div className="bg-[#0A0A0F] text-gray-200 min-h-screen">
       <SportRail sport={sport} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-1 flex items-center justify-between gap-3">
@@ -3115,10 +3196,11 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
 
       <footer className="text-center pb-10">
         <p className="text-[11px] uppercase tracking-[0.16em] text-gray-600 font-medium">
-          OddSphere · Daily Edge · MLB
+          OddSphere · Daily Edge · {sport.toUpperCase()}
         </p>
       </footer>
     </div>
+    </ShellSportContext.Provider>
   );
 }
 

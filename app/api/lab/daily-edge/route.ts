@@ -78,9 +78,12 @@ import {
 } from "@/lib/services/recommendationConfidence";
 import { formatKeyStats } from "@/lib/services/keyStatsFormatter";
 import { assertNoBannedTerms } from "@/lib/services/bannedTermsLinter";
+import { buildNbaDailyEdgeAdapted } from "@/lib/services/nba/buildNbaDailyEdgeAdapted";
 
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl"];
-const LIVE_SPORTS: Sport[] = ["mlb"];
+// Phase 7G — NBA goes live in the member-facing Daily Edge via the
+// shared adapter below. MLB pipeline below is unchanged.
+const LIVE_SPORTS: Sport[] = ["mlb", "nba"];
 
 /**
  * V2.1 Part 9 — only `published` and `final` slates are visible to members.
@@ -2495,6 +2498,40 @@ export async function GET(request: Request) {
   // Resolve the requested slate_date. Explicit ?date= wins; otherwise today's
   // slate in the sport's anchor timezone (ET for North American, London for UCL).
   const requestedDate = isSlateDate(dateParam) ? dateParam : currentSlateDate(sport);
+
+  // Phase 7G — NBA branch. Member-safe path that hands off to the
+  // shared NBA adapter service. Returns the MLB-shaped DailyEdgeResponse
+  // so the DailyEdgeShell renders NBA games through the same components
+  // it uses for MLB (sport guards inside the shell handle baseball-only
+  // copy). No admin auth, no preview-only bypass. NBA pipeline is
+  // read-only — no DB writes, no prediction_records, no cron.
+  //
+  // MLB code path below is unchanged: this branch returns early when
+  // sport === "nba" and never falls through to the MLB orchestration.
+  if (sport === "nba") {
+    try {
+      const adapted = await buildNbaDailyEdgeAdapted(requestedDate);
+      return Response.json(adapted, {
+        headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120" },
+      });
+    } catch (e) {
+      const body: DailyEdgeResponse = {
+        as_of: new Date().toISOString(),
+        sport,
+        date: requestedDate,
+        requested_date: requestedDate,
+        fallback_used: false,
+        slateState: "no_data",
+        slate_status: null,
+        last_slate_update_at: null,
+        games: [],
+      };
+      console.warn(`nba daily-edge: pipeline error: ${(e as Error).message}`);
+      return Response.json(body, {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+  }
 
   // Non-live sports return empty — UI's ComingSoonState handles the message.
   if (!LIVE_SPORTS.includes(sport)) {

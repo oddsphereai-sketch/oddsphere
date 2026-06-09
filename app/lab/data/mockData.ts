@@ -54,7 +54,7 @@ export const SPORT_META: Record<
   }
 > = {
   mlb: { label: "MLB", icon: "⚾", isLive: true },
-  nba: { label: "NBA", icon: "🏀", isLive: false, comingSoonLabel: "Coming soon" },
+  nba: { label: "NBA", icon: "🏀", isLive: true },
   nfl: { label: "NFL", icon: "🏈", isLive: false, comingSoonLabel: "Coming this season" },
   cbb: { label: "CBB", icon: "🏀", isLive: false, comingSoonLabel: "Coming soon" },
   cfb: { label: "CFB", icon: "🏈", isLive: false, comingSoonLabel: "Coming this season" },

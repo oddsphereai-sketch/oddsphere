@@ -1,17 +1,18 @@
 "use client";
 
 /**
- * /lab/daily-edge — Phase 4.1.11 production UI port.
+ * /lab/daily-edge — Daily Edge product surface (single shell, both sports).
  *
- * The legacy DailyEdgeView (Hero/Watchlist/Caution card grouping) is
- * superseded by DailyEdgeShell, which renders the v13.1 locked-reader
- * + scrollable Edge Board architecture against the new
- * `games[].markets.{moneyline, total, first_inning}` DTO shape.
+ * Both MLB and NBA render through the same DailyEdgeShell. NBA flows
+ * through the adapter (lib/services/nba/adaptNbaToDailyEdgeResponse)
+ * via /api/lab/daily-edge?sport=nba. The shell carries sport guards so
+ * baseball-only renderers (StartersLine, MarketPulse first-inning
+ * splits-not-offered branch, etc.) skip for NBA. MLB output is
+ * byte-identical to before — verified via diff and MLB regression
+ * tests.
  *
- * The old `predictions` block stays in the DTO during 4.1.11 as a
- * backwards-compatibility safety net — see app/lab/lib/labTypes.ts —
- * and the old components remain in the tree until the new UI is
- * visually approved.
+ * NBA model active: nbaAutoModelV1 (rule-seeded). NBA pipeline is
+ * read-only: no DB writes, no prediction_records, no cron.
  */
 
 import { useSportSelection } from "../hooks/useSportSelection";
@@ -21,9 +22,9 @@ import DailyEdgeShell from "../components/daily-edge/DailyEdgeShell";
 export default function DailyEdgePage() {
   const { sport } = useSportSelection();
 
-  // Prime the refresh-status SWR cache so the navbar pill renders without
-  // a fetch round-trip on first paint (same intent as the old LabApp).
+  // Prime the refresh-status SWR cache for the navbar pill.
   useRefreshStatus({ sport });
 
+  // Both sports render through the same shell.
   return <DailyEdgeShell sport={sport} />;
 }
