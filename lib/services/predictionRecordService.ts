@@ -177,12 +177,38 @@ type LineHistoryOpenerRow = {
  * locked snapshot carries enough data for Daily Edge to render the
  * frozen pregame price after lock without falling back to the live
  * `lines` table (which keeps moving mid-game).
+ *
+ * Forward Fix A (2026-06-09 lock-contract fix) — adds per-side source
+ * metadata so the writer can persist how each price was chosen:
+ *   • "lines"                 → current real-book row in `lines`
+ *   • "line_history_fallback" → most-recent pre-write real-book row
+ *                                in `line_history`
+ *   • "unavailable"           → no usable real-book row anywhere
+ *
+ * `splits_consensus` is excluded — it does not carry odds_american,
+ * only a no-vig line value, so it can never serve as a "real-book"
+ * price source even when present.
  */
+export type OddsSource = "lines" | "line_history_fallback" | "unavailable";
+export type OddsSourceDetail = {
+  source: OddsSource;
+  /** Sportsbook name when source is "lines" or "line_history_fallback"; null when "unavailable". */
+  book: string | null;
+  /** Selected odds_american when known; null when "unavailable". */
+  odds: number | null;
+  /** Selected line_value (totals only); null otherwise. */
+  line: number | null;
+  /** ISO timestamp of the source row; null when "unavailable". */
+  observedAt: string | null;
+};
 type GameOddsSnapshot = {
   mlHomeOdds: number | null;
   mlAwayOdds: number | null;
   ouOverOdds: number | null;
   ouUnderOdds: number | null;
+  /** Forward Fix A — per-(market, side) source metadata for snapshot_json. */
+  oddsSourceMl: { home: OddsSourceDetail; away: OddsSourceDetail };
+  oddsSourceOu: { over: OddsSourceDetail; under: OddsSourceDetail };
 };
 
 /**
@@ -220,9 +246,26 @@ type LineRowForOdds = {
 };
 
 /**
+ * Forward Fix A (2026-06-09) — `line_history` row shape consumed by
+ * the lock-time fallback selector. Same minimal columns as
+ * `LineRowForOdds` plus `recorded_at` so the most-recent valid row
+ * can be chosen when the current `lines` table is thin.
+ */
+type LineHistoryRowForOdds = {
+  game_id: number;
+  market_type: string;
+  side: string | null;
+  sportsbook: string;
+  odds_american: number | null;
+  line_value: number | null;
+  recorded_at: string;
+};
+
+/**
  * For one (game, market, side), return the picked-side odds_american
- * from the highest-priority book that has a non-null value. Returns
- * null when nothing matches.
+ * from the highest-priority book that has a non-null value. Excludes
+ * `splits_consensus` since it carries only a no-vig line, never odds.
+ * Returns null when nothing matches.
  */
 function pickPriorityOdds(
   rows: ReadonlyArray<LineRowForOdds>,
@@ -243,17 +286,125 @@ function pickPriorityOdds(
 }
 
 /**
+ * Forward Fix A (2026-06-09) — lock-time fallback selector.
+ *
+ * Priority:
+ *   1. Current `lines` real-book row (sportsbook != splits_consensus,
+ *      odds_american != null). Selected by BOOK_PRIORITY.
+ *   2. Freshest `line_history` real-book row with the same constraints.
+ *      Selected by recorded_at DESC, then BOOK_PRIORITY within the
+ *      most-recent timestamp's batch (same minute, same source).
+ *   3. "unavailable" — no real-book row exists in either source.
+ *
+ * The writer captures the source's actual book / odds / line /
+ * recorded_at so snapshot_json carries the audit trail. Never selects
+ * `splits_consensus`. Never selects a `line_history` row newer than
+ * `now()` (the caller's current write moment), which keeps the lock
+ * snapshot honest — post-lock prices cannot leak in via fallback
+ * because this function runs BEFORE `locked_at` is stamped.
+ *
+ * `historyByGame` is keyed by `${gameId}::${market_type}::${side}` so
+ * the caller can prune by relevance before passing in.
+ */
+function pickOddsWithFallback(
+  lines: ReadonlyArray<LineRowForOdds>,
+  historyByKey: ReadonlyMap<string, ReadonlyArray<LineHistoryRowForOdds>>,
+  gameId: number,
+  marketType: "moneyline" | "total",
+  side: string,
+): OddsSourceDetail {
+  // Tier 1 — current `lines` real-book.
+  const liveCandidates = lines.filter(
+    (r) =>
+      r.market_type === marketType &&
+      r.side === side &&
+      r.odds_american !== null &&
+      r.sportsbook !== "splits_consensus",
+  );
+  for (const book of BOOK_PRIORITY) {
+    if (book === "splits_consensus") continue;
+    const hit = liveCandidates.find((r) => r.sportsbook === book);
+    if (hit) {
+      return {
+        source: "lines",
+        book: hit.sportsbook,
+        odds: hit.odds_american,
+        line: hit.line_value ?? null,
+        observedAt: hit.fetched_at ?? null,
+      };
+    }
+  }
+  // Tier 2 — `line_history` fallback. The history map is pre-filtered to
+  // real-book non-null rows by the caller; we just pick the most-recent
+  // batch and apply BOOK_PRIORITY within it.
+  const historyKey = `${gameId}::${marketType}::${side}`;
+  const history = historyByKey.get(historyKey) ?? [];
+  if (history.length > 0) {
+    // History is pre-sorted by recorded_at DESC. Pick the most-recent
+    // minute, then resolve ties by BOOK_PRIORITY.
+    const newestMinute = history[0].recorded_at.slice(0, 16);
+    const sameMinute = history.filter((r) => r.recorded_at.slice(0, 16) === newestMinute);
+    for (const book of BOOK_PRIORITY) {
+      if (book === "splits_consensus") continue;
+      const hit = sameMinute.find((r) => r.sportsbook === book);
+      if (hit) {
+        return {
+          source: "line_history_fallback",
+          book: hit.sportsbook,
+          odds: hit.odds_american,
+          line: hit.line_value,
+          observedAt: hit.recorded_at,
+        };
+      }
+    }
+    // No BOOK_PRIORITY match in the most-recent minute — accept whatever
+    // real book is first in the most-recent batch.
+    const fallback = sameMinute[0];
+    return {
+      source: "line_history_fallback",
+      book: fallback.sportsbook,
+      odds: fallback.odds_american,
+      line: fallback.line_value,
+      observedAt: fallback.recorded_at,
+    };
+  }
+  // Tier 3 — no real-book row anywhere.
+  return { source: "unavailable", book: null, odds: null, line: null, observedAt: null };
+}
+
+/**
  * Build the per-game odds snapshot from the lines table. Reads the
  * first BOOK_PRIORITY-matching odds per (game, market, side).
+ *
+ * Forward Fix A (2026-06-09) — accepts an optional `historyByKey` map.
+ * When supplied, each (market, side) slot uses `pickOddsWithFallback`
+ * so a missing live real-book price is recovered from the freshest
+ * pre-write `line_history` row. The per-side `OddsSourceDetail` is
+ * always populated so callers can persist `odds_source_at_lock` in
+ * snapshot_json. Callers that don't supply a history map (e.g., unit
+ * tests) get a snapshot where every fallback resolves to "unavailable"
+ * if `lines` is empty — same shape, just no recovery.
  */
 export function buildGameOddsSnapshot(
   lines: ReadonlyArray<LineRowForOdds>,
+  opts?: {
+    historyByKey?: ReadonlyMap<string, ReadonlyArray<LineHistoryRowForOdds>>;
+    gameId?: number;
+  },
 ): GameOddsSnapshot {
+  const history = opts?.historyByKey ?? new Map<string, ReadonlyArray<LineHistoryRowForOdds>>();
+  const gameId = opts?.gameId ?? -1;
+  const mlHome = pickOddsWithFallback(lines, history, gameId, "moneyline", "home");
+  const mlAway = pickOddsWithFallback(lines, history, gameId, "moneyline", "away");
+  const ouOver = pickOddsWithFallback(lines, history, gameId, "total", "over");
+  const ouUnder = pickOddsWithFallback(lines, history, gameId, "total", "under");
   return {
-    mlHomeOdds: pickPriorityOdds(lines, "moneyline", "home"),
-    mlAwayOdds: pickPriorityOdds(lines, "moneyline", "away"),
-    ouOverOdds: pickPriorityOdds(lines, "total", "over"),
-    ouUnderOdds: pickPriorityOdds(lines, "total", "under"),
+    mlHomeOdds: mlHome.odds,
+    mlAwayOdds: mlAway.odds,
+    ouOverOdds: ouOver.odds,
+    ouUnderOdds: ouUnder.odds,
+    oddsSourceMl: { home: mlHome, away: mlAway },
+    oddsSourceOu: { over: ouOver, under: ouUnder },
   };
 }
 
@@ -717,6 +868,15 @@ function buildMlRecord(
       data_integrity: buildDataIntegritySnapshot(sp, oddsForGame, "moneyline"),
       // Phase 6B.28 — rich-and-frozen Daily Edge substrate at lock.
       ...buildDailyEdgeLockSubstrate({ signalsForGame, currentLinesForGame, pred }),
+      // Forward Fix A (2026-06-09) — audit trail for the writer's odds
+      // source per (market, side). Lets operators verify the lock used
+      // a real-book price (lines vs line_history_fallback) and detect
+      // "unavailable" rows that need investigation. Always populated;
+      // when `lines` was thin AND `line_history` had no usable row,
+      // the source is "unavailable" with null book/odds/timestamp.
+      odds_source_at_lock_ml: oddsForGame
+        ? { home: oddsForGame.oddsSourceMl.home, away: oddsForGame.oddsSourceMl.away }
+        : null,
     },
   };
 }
@@ -824,6 +984,12 @@ function buildOuRecord(
       data_integrity: buildDataIntegritySnapshot(sp, oddsForGame, "total"),
       // Phase 6B.28 — same rich-and-frozen substrate as ML.
       ...buildDailyEdgeLockSubstrate({ signalsForGame, currentLinesForGame, pred }),
+      // Forward Fix A (2026-06-09) — audit trail for the writer's odds
+      // source per (market, side). Same shape as the ML record's ML
+      // variant; lets operators verify the lock used a real-book price.
+      odds_source_at_lock_ou: oddsForGame
+        ? { over: oddsForGame.oddsSourceOu.over, under: oddsForGame.oddsSourceOu.under }
+        : null,
     },
   };
 }
@@ -1114,15 +1280,51 @@ export async function createPredictionRecords(
     .in("game_id", gameIds)
     .in("market_type", ["moneyline", "total"])
     .is("player_id", null);
-  const oddsByGameId = new Map<number, GameOddsSnapshot>();
   const linesByGame = new Map<number, LineRowForOdds[]>();
   for (const l of ((lineRowsForOdds ?? []) as LineRowForOdds[])) {
     const arr = linesByGame.get(l.game_id) ?? [];
     arr.push(l);
     linesByGame.set(l.game_id, arr);
   }
-  for (const [gameId, lines] of linesByGame) {
-    oddsByGameId.set(gameId, buildGameOddsSnapshot(lines));
+
+  // Forward Fix A (2026-06-09 lock-contract fix) — load `line_history`
+  // real-book rows for these games so `buildGameOddsSnapshot` can fall
+  // back when the current `lines` table is thin. Restricted to the last
+  // 24 hours by `recorded_at >= now() - 24h` to keep the query small;
+  // older history is irrelevant for tonight's slate. `splits_consensus`
+  // is excluded at the helper level (not here) so we keep the option
+  // to expose those rows if we ever need them for diagnostics.
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: lineHistoryRows } = await supabase
+    .from("line_history")
+    .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
+    .in("game_id", gameIds)
+    .in("market_type", ["moneyline", "total"])
+    .is("player_id", null)
+    .neq("sportsbook", "splits_consensus")
+    .not("odds_american", "is", null)
+    .gte("recorded_at", oneDayAgo)
+    .order("recorded_at", { ascending: false });
+  // Pre-bucket by (game_id, market_type, side). Each bucket is already
+  // sorted by recorded_at DESC because of the query order above —
+  // `pickOddsWithFallback` reads `history[0]` for the most-recent batch.
+  const historyByKey = new Map<string, LineHistoryRowForOdds[]>();
+  for (const r of ((lineHistoryRows ?? []) as LineHistoryRowForOdds[])) {
+    const key = `${r.game_id}::${r.market_type}::${r.side ?? "null"}`;
+    const arr = historyByKey.get(key) ?? [];
+    arr.push(r);
+    historyByKey.set(key, arr);
+  }
+
+  const oddsByGameId = new Map<number, GameOddsSnapshot>();
+  // Build a snapshot for every game in the slate, even when `lines` is
+  // empty for that game — the history fallback may still recover a price.
+  for (const gameId of gameIds) {
+    const lines = linesByGame.get(gameId) ?? [];
+    oddsByGameId.set(
+      gameId,
+      buildGameOddsSnapshot(lines, { historyByKey, gameId }),
+    );
   }
 
   // Phase 6B.22 — load opener prices from line_history (is_opener=true)

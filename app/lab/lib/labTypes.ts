@@ -266,6 +266,17 @@ export type MarketEdgeDto = {
   priceAmerican: number | null;
   lineOpenAmerican: number | null;
   /**
+   * Lock-snapshot honesty flag (2026-06-09 lock-contract fix).
+   * True only when the market is locked AND no usable real-book price
+   * was captured in the lock snapshot AND no pre-lock real-book row
+   * is available from `line_history`. Used by the UI to render an
+   * explicit "No price recorded at lock" label instead of a blank
+   * price chip. This is a last-resort fallback — with Forward Fix A
+   * (writer `line_history` fallback) in place, this should rarely
+   * surface. Never true for unlocked markets.
+   */
+  priceUnavailableAtLock?: boolean;
+  /**
    * Phase 7I (Last Known Good) — observation timestamps for the price
    * fields. Optional; populated when the value came from `line_history`
    * fallback (current `lines` row was null/missing). Null/undefined

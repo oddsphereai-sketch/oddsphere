@@ -1261,6 +1261,13 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
                   {formatAmerican(marketData.priceAmerican)}
                 </span>
               </>
+            ) : marketData.priceUnavailableAtLock ? (
+              <>
+                <span className="text-gray-700">·</span>
+                <span className="text-[10.5px] uppercase tracking-[0.14em] font-bold text-gray-500">
+                  no price recorded at lock
+                </span>
+              </>
             ) : (
               <>
                 <span className="text-gray-700">·</span>
@@ -2334,11 +2341,15 @@ function SlateCard({
               ? "—"
               : `${Math.round(headlineMarketData.confidence * 100)}%`}
           </span>
-          {headlineMarketData.priceAmerican !== null && (
+          {headlineMarketData.priceAmerican !== null ? (
             <span className="text-[12px] tabular-nums font-medium text-gray-500 ml-1">
               {formatAmerican(headlineMarketData.priceAmerican)}
             </span>
-          )}
+          ) : headlineMarketData.priceUnavailableAtLock ? (
+            <span className="text-[10px] uppercase tracking-[0.14em] font-bold text-gray-500 ml-1">
+              no price at lock
+            </span>
+          ) : null}
           {(() => {
             const chip = buildCardEdgeChip(headlineMarketData);
             if (chip === null) return null;
@@ -2606,14 +2617,21 @@ function SelectedEdgeReader({
                         ? "—"
                         : `${Math.round(marketData.confidence * 100)}%`}
                     </span>
-                    {marketData.priceAmerican !== null && (
+                    {marketData.priceAmerican !== null ? (
                       <>
                         <span aria-hidden="true" className="text-gray-700 text-[10px]">·</span>
                         <span className="text-[11px] tabular-nums font-medium text-gray-400">
                           {formatAmerican(marketData.priceAmerican)}
                         </span>
                       </>
-                    )}
+                    ) : marketData.priceUnavailableAtLock ? (
+                      <>
+                        <span aria-hidden="true" className="text-gray-700 text-[10px]">·</span>
+                        <span className="text-[9px] uppercase tracking-[0.14em] font-bold text-gray-500">
+                          no price at lock
+                        </span>
+                      </>
+                    ) : null}
                   </div>
                 </div>
               </div>

@@ -529,10 +529,16 @@ check("impliedProb(+100) = 0.5", americanToImpliedProb(100) === 0.5);
   check("data_integrity: market_two_sided_available=unknown without odds", di.market_two_sided_available === "unknown");
   check("data_integrity: bullpen_fallback=unknown (TODO upstream)", di.bullpen_fallback === "unknown");
 }
+// Forward Fix A (2026-06-09) — fixture GameOddsSnapshot now also
+// carries per-side source metadata. These tests don't exercise it; use
+// a constant "unavailable" filler so the type checker is satisfied.
+const FILLER_SRC = { source: "unavailable" as const, book: null, odds: null, line: null, observedAt: null };
+const FILLER_OU_SRC = { over: FILLER_SRC, under: FILLER_SRC };
+const FILLER_ML_SRC = { home: FILLER_SRC, away: FILLER_SRC };
 {
   const di = buildDataIntegritySnapshot(
     { starter_confirmed: true, lineup_confirmed: false, market_line_available: true, stale: false, v2_2_audit: { market_baseline_valid: true, market_source_quality: "real_api" } },
-    { mlHomeOdds: -120, mlAwayOdds: 110, ouOverOdds: null, ouUnderOdds: null },
+    { mlHomeOdds: -120, mlAwayOdds: 110, ouOverOdds: null, ouUnderOdds: null, oddsSourceMl: FILLER_ML_SRC, oddsSourceOu: FILLER_OU_SRC },
     "moneyline",
   ) as any;
   check("data_integrity: starter_confirmed=yes from true", di.starter_confirmed === "yes");
@@ -543,7 +549,7 @@ check("impliedProb(+100) = 0.5", americanToImpliedProb(100) === 0.5);
 {
   const di = buildDataIntegritySnapshot(
     {},
-    { mlHomeOdds: -120, mlAwayOdds: null, ouOverOdds: null, ouUnderOdds: null },
+    { mlHomeOdds: -120, mlAwayOdds: null, ouOverOdds: null, ouUnderOdds: null, oddsSourceMl: FILLER_ML_SRC, oddsSourceOu: FILLER_OU_SRC },
     "moneyline",
   ) as any;
   check("data_integrity: market_two_sided_available=no when away null", di.market_two_sided_available === "no");

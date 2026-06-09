@@ -115,6 +115,41 @@ const VISIBLE_SLATE_STATUSES = ["published", "final"] as const;
  */
 
 // ───────────────────────────────────────────────────────────────────────────
+// Lock-snapshot single-source-of-truth helpers
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Contract: once a market has a locked prediction_record, every customer-
+// facing field on the card (pill, body copy, caution text) MUST agree with
+// the locked decision. This helper translates the locked play_grade (and
+// no_bet flag) into the verdict tier used by both the headline pill and
+// the breakdown copy template, so the body template branch matches the pill.
+//
+// Mapping (per Daniel, 2026-06-09):
+//   play_grade=best_angle                     → verdict="Best Angle"
+//   play_grade=lean                           → verdict="Lean"
+//   play_grade=market_watch|model_only|provisional
+//                                             → verdict="Watchlist"
+//   no_bet=true                               → verdict="No Play"
+//   play_grade=null + no_bet=false            → null (leave live-derived verdict)
+//
+// Pre-lock: null is returned so the live verdict ladder runs normally.
+type LockedVerdictOverride = { key: "best_angle" | "lean" | "watchlist" | "no_play"; label: string };
+function resolveLockedVerdict(
+  lockedPlayGrade: string | null | undefined,
+  lockedNoBet: boolean | null | undefined,
+): LockedVerdictOverride | null {
+  if (lockedNoBet === true) return { key: "no_play", label: "No Play" };
+  switch (lockedPlayGrade) {
+    case "best_angle": return { key: "best_angle", label: "Best Angle" };
+    case "lean":       return { key: "lean", label: "Lean" };
+    case "market_watch":
+    case "model_only":
+    case "provisional": return { key: "watchlist", label: "Watchlist" };
+    default: return null;
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Time helpers (ET display)
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -484,7 +519,8 @@ function buildGameDto(
   signals: SignalRow[],
   sportsbookTotalLine: number | null,
   currentLinesByGameMarket: Map<string, LineRow[]>,
-  openLinesByGameMarket: Map<string, LineHistoryRow>
+  openLinesByGameMarket: Map<string, LineHistoryRow>,
+  lockedPlayGradeByGameMarket: Map<string, { playGrade: string | null; noBet: boolean | null }>
 ): DailyEdgeGameDto | null {
   const home = row.home_team?.abbreviation ?? "—";
   const away = row.away_team?.abbreviation ?? "—";
@@ -742,6 +778,8 @@ function buildGameDto(
   const mlGradeForMarket = applyV22BestAngleOverride(pred.ml_grade, baOverride.ml, mlMoneyConflict, mlMoneySupport, mlMarketEdge);
   const ouGradeForMarket = applyV22BestAngleOverride(pred.ou_grade, baOverride.ou, ouMoneyConflict, ouMoneySupport, ouMarketEdge);
 
+  const lockedMl = lockedPlayGradeByGameMarket.get(`${row.id}::moneyline`);
+  const lockedOu = lockedPlayGradeByGameMarket.get(`${row.id}::total`);
   const ml = buildMarketEdge({
     market: "moneyline",
     pick: mlPick,
@@ -762,6 +800,9 @@ function buildGameDto(
     awayAbbr: away,
     held: isMlHeld,
     sportSpecific: pred.sport_specific,
+    lockedPlayGrade: lockedMl?.playGrade ?? null,
+    lockedNoBet: lockedMl?.noBet ?? null,
+    isLockedRow: lockedMl !== undefined,
   });
   const total = buildMarketEdge({
     market: "total",
@@ -788,6 +829,9 @@ function buildGameDto(
       marketTotal: totalLine,
       sportsbookLine: totalLine,
     },
+    lockedPlayGrade: lockedOu?.playGrade ?? null,
+    lockedNoBet: lockedOu?.noBet ?? null,
+    isLockedRow: lockedOu !== undefined,
   });
   const firstInning = buildMarketEdge({
     market: "first_inning",
@@ -1430,6 +1474,24 @@ type BuildMarketEdgeInput = {
    * extracted via the typed helper.
    */
   sportSpecific?: Record<string, unknown> | null;
+  /**
+   * Lock-snapshot single source of truth (2026-06-09 lock-contract fix).
+   * When this market has a locked prediction_record, callers pass the
+   * locked play_grade + no_bet flag here so the verdict tier overrides
+   * BEFORE generatePerMarketCopy runs — keeping the headline pill and
+   * the body copy template branch in lockstep. null/undefined when the
+   * market is not locked or sport is not MLB.
+   */
+  lockedPlayGrade?: string | null;
+  lockedNoBet?: boolean | null;
+  /**
+   * Lock-snapshot honesty (2026-06-09 lock-contract fix). True when the
+   * row carries a non-null `prediction_records.locked_at`, regardless of
+   * whether play_grade or odds were captured. Used to set
+   * priceUnavailableAtLock on the DTO when the locked snapshot has
+   * no usable real-book price.
+   */
+  isLockedRow?: boolean;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1677,7 +1739,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     input.lineOpen,
     input.sportSpecific,
   );
-  const verdict =
+  const liveVerdict =
     input.held || input.confidence === null
       ? { key: "no_play" as MarketVerdict, label: "No Play", warning: null }
       : marketVerdictFor({
@@ -1689,6 +1751,16 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           reviewerSignals,
           marketContext,
         });
+  // Lock-snapshot single-source-of-truth override (2026-06-09 lock-contract
+  // fix). When this market is locked, the locked play_grade IS the verdict —
+  // no live re-derivation, no defensive downgrade. Override happens BEFORE
+  // generatePerMarketCopy so the body template branch matches the headline
+  // pill. The MarketContextWarning is preserved from the live verdict so
+  // the watch-out line still names the conflict reason if one fired.
+  const lockedOverride = resolveLockedVerdict(input.lockedPlayGrade, input.lockedNoBet);
+  const verdict = lockedOverride !== null
+    ? { key: lockedOverride.key as MarketVerdict, label: lockedOverride.label, warning: liveVerdict.warning }
+    : liveVerdict;
 
   // Server-generated copy (banned-terms-linted at output time).
   const modelDriver = pickModelDriver(input.autoFactors, input.market, input.pick, input.sportSpecific ?? null);
@@ -1851,6 +1923,13 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     betsPct,
     publicSplits,
     priceAmerican,
+    // Lock-snapshot honesty (2026-06-09 lock-contract fix). Only ever true
+    // on locked rows when no usable real-book price exists. With Forward
+    // Fix A in place (writer line_history fallback), this flag should
+    // rarely surface; today's 4 damaged rows are the visible exception
+    // and the UI renders "No price recorded at lock" instead of a blank
+    // chip. Never true for unlocked markets.
+    priceUnavailableAtLock: input.isLockedRow === true && priceAmerican === null,
     lineOpenAmerican: openAmerican,
     // Phase 7I — LKG age stamps. Optional fields; absent/null means
     // "fresh, render normally". Present means the value came from
@@ -2784,6 +2863,15 @@ export async function GET(request: Request) {
   // 4.1.10 — per-market price + open price for the v13.1 Edge Stack.
   const currentLinesByGameMarket = new Map<string, LineRow[]>();
   const openLinesByGameMarket = new Map<string, LineHistoryRow>();
+  // Lock-snapshot single source of truth (2026-06-09 lock-contract fix).
+  // Hoisted out of the data-fetch block so the post-fetch DTO build loop
+  // can read per-(game,market) locked play_grade + no_bet and pass them
+  // into buildMarketEdge → resolveLockedVerdict. Empty when no games
+  // are locked; populated below from the same Phase 6B.18 query.
+  const lockedPlayGradeByGameMarket = new Map<
+    string,
+    { playGrade: string | null; noBet: boolean | null }
+  >();
   if (gameIds.length > 0) {
     const { data: signalData, error: sigErr } = await supabase
       .from("sharp_signals")
@@ -3037,6 +3125,14 @@ export async function GET(request: Request) {
     const lockedByGameMarket = new Map<string, LockedRec>();
     for (const r of (lockedRecRows ?? []) as LockedRec[]) {
       lockedByGameMarket.set(`${r.game_id}::${r.market}`, r);
+      // Lock-snapshot single source of truth (2026-06-09): per-(game,market)
+      // play_grade + no_bet for the downstream DTO build loop. Same data
+      // as lockedByGameMarket, separate map so buildGameDto doesn't need
+      // the full snapshot row.
+      lockedPlayGradeByGameMarket.set(`${r.game_id}::${r.market}`, {
+        playGrade: r.play_grade,
+        noBet: r.no_bet,
+      });
     }
     // (a) totalLineByGame override (6B.17 behavior preserved)
     for (const r of lockedByGameMarket.values()) {
@@ -3248,84 +3344,23 @@ export async function GET(request: Request) {
       signalsByGame.get(g.id) ?? [],
       totalLineByGame.get(g.id) ?? null,
       currentLinesByGameMarket,
-      openLinesByGameMarket
+      openLinesByGameMarket,
+      lockedPlayGradeByGameMarket
     );
     if (dto) dtos.push(dto);
   }
 
-  // Lock contract: when a market has a locked prediction_record, the
-  // public verdict MUST equal the locked play_grade — exactly, no
-  // post-lock recomputation, no defensive downgrades, no upgrades.
+  // Lock-snapshot single-source-of-truth handling moved upstream
+  // (2026-06-09 lock-contract fix). The post-DTO verdict overlay that
+  // previously lived here only changed the headline pill — the body
+  // copy template was already rendered from the live-derived verdict
+  // and would contradict the locked pill on Caution-classified rows.
   //
-  // Pre-lock the route's deriveVerdictForRow / marketVerdictFor /
-  // public-smoke and conflict guards run normally (and shape what
-  // ultimately gets frozen at T-60). Once `prediction_records.locked_at`
-  // is set the snapshot's play_grade IS the official recommendation;
-  // every downstream surface (Daily Edge card, tracking, history,
-  // grading) reads the same value.
-  //
-  // Mapping:
-  //   play_grade=best_angle  → verdict="Best Angle"
-  //   play_grade=lean        → verdict="Lean"
-  //   play_grade=market_watch→ verdict="Watchlist"
-  //   play_grade=model_only  → verdict="Watchlist"
-  //   no_bet=true            → verdict="No Play"
-  //   play_grade=null + no_bet=false → leave dto's existing verdict
-  //     (first_inning Toss-Up / held cases use NRFI/YRFI/Held copy
-  //     not driven by play_grade; do not stomp those)
-  //
-  // Scope: MLB only (this whole block is in the MLB branch). NHL + NBA
-  // adapters compute verdict from frozen model output directly and
-  // don't need this overlay. First_inning is intentionally skipped
-  // because its display tier uses NRFI/YRFI/Toss-Up labels driven by
-  // a separate code path, not the play_grade tier system.
-  const playGradeToVerdict = (pg: string | null): { key: "best_angle" | "lean" | "watchlist" | "no_play" | null; label: string | null } => {
-    if (pg === null) return { key: null, label: null };
-    if (pg === "best_angle") return { key: "best_angle", label: "Best Angle" };
-    if (pg === "lean")       return { key: "lean", label: "Lean" };
-    if (pg === "market_watch" || pg === "model_only") return { key: "watchlist", label: "Watchlist" };
-    return { key: null, label: null };
-  };
-  // Self-contained lookup — the 6B.18 lockedByGameMarket map is inside
-  // a narrower scope, so re-query here. Tiny query (per-slate, ML+Total
-  // only, locked rows only).
-  if (dtos.length > 0) {
-    const { data: lockedForVerdict } = await supabase
-      .from("prediction_records")
-      .select("game_id, market, play_grade, no_bet")
-      .eq("sport", sport)
-      .eq("slate_date", requestedDate)
-      .in("market", ["moneyline", "total"])
-      .not("locked_at", "is", null);
-    type LockedVerdictRow = {
-      game_id: number;
-      market: string;
-      play_grade: string | null;
-      no_bet: boolean | null;
-    };
-    const lockedVerdictMap = new Map<string, LockedVerdictRow>();
-    for (const r of (lockedForVerdict ?? []) as LockedVerdictRow[]) {
-      lockedVerdictMap.set(`${r.game_id}::${r.market}`, r);
-    }
-    for (const dto of dtos) {
-      const game = games.find((g) => g.external_id === dto.external_id);
-      if (!game) continue;
-      for (const market of ["moneyline", "total"] as const) {
-        const locked = lockedVerdictMap.get(`${game.id}::${market}`);
-        if (!locked) continue;
-        const dtoMarket = market === "moneyline" ? dto.markets.moneyline : dto.markets.total;
-        // no_bet=true (Pass markets persisted for calibration) always
-        // displays as No Play regardless of play_grade.
-        if (locked.no_bet === true) {
-          dtoMarket.verdict = { key: "no_play", label: "No Play" };
-          continue;
-        }
-        const mapped = playGradeToVerdict(locked.play_grade);
-        if (mapped.key === null) continue; // null play_grade — leave dto's existing verdict
-        dtoMarket.verdict = { key: mapped.key, label: mapped.label! };
-      }
-    }
-  }
+  // The fix lifts the override into `buildMarketEdge` via the
+  // `lockedPlayGrade` / `lockedNoBet` inputs and `resolveLockedVerdict`
+  // helper. With that in place, `generatePerMarketCopy` receives the
+  // locked verdict and produces a body template branch that agrees
+  // with the headline pill. See `lockedPlayGradeByGameMarket` map.
 
   // R-19 Phase 1 — last_slate_update_at = max(games.updated_at) across
   // the displayed slate. Null when no rows carry an updated_at.
