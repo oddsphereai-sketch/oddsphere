@@ -629,6 +629,8 @@ V2.2 Total: 18W / 20L (n=38) = **47.4%**. This is a binary market — a coin fli
 
 ## N. Phase-6 carry-forward from this Phase-3 audit
 
+**Framing note (added 2026-06-10 clarification):** the items below use language that, where it says "persist as `prediction_record`" or "add to tracking," refers to **officially-tracked markets only**. Per the public-tracking-vs-internal-audit rule (see `project_phase_6_immediate_roadmap.md` "Universal platform rules" + Phase 4 §A.4), public tracking is intentionally scope-limited — only markets we have historically launched (MLB ML+Total+FI) belong in `prediction_records` substrate. For MLB this distinction is largely academic because all three MLB markets ARE officially tracked, but the contract module (item #1 below) must encode the rule so NBA/NHL extensions cannot accidentally pollute public tracking.
+
 The following items are added to the Phase 6 immediate roadmap (`project_phase_6_immediate_roadmap.md`) as binding follow-ups produced by this audit:
 
 1. **Shared `lockSnapshotContract.ts`** — extract the implicit contract into a single module enforced across MLB / NBA / NHL. NBA today writes flat `predicted_*` keys; MLB writes `predicted_scores_at_lock: {home, away}`. Reconcile before either becomes "the standard."

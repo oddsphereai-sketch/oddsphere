@@ -349,3 +349,29 @@ NBA currently has 1 graded ML record. Cannot calibrate.
 - Today's NBA fixes: `c87b20d` (stale-skip + lines parser), `e53bba2` (spread sign convention), `c831489` (NHL cron)
 - NBA sharp coverage memo: `memory/project_sharpapi_nba_coverage_gap.md`
 - NBA model audit memo (from 2026-06-10): `memory/project_nba_model_audit_2026_06_10.md`
+
+---
+
+## Clarification appended 2026-06-10 (post-commit)
+
+This phase report uses language like *"persist NBA spread as a `prediction_record`"* and *"Either persist spread as a `prediction_record` (preferred — gives tracking + auditor coverage) OR mark card explicitly 'derived, not tracked.'"* (see §I.5 "active HIGH issues" and §J.1 verdict table).
+
+**Per Daniel's clarification 2026-06-10** (codified at `memory/feedback_public_tracking_vs_internal_audit.md` and Phase 4 §A.4), that framing conflates two independent concepts:
+
+1. **Public tracking** — intentional scope, only markets we have historically + deliberately launched. Today: MLB ML+Total+FI, NBA ML+Total, NHL ML+Total. Adding a `prediction_records.market="spread"` row implicitly extends public tracking — which we have NOT historically tracked for NBA — and would pollute the accuracy history.
+2. **Internal audit / lock provenance** — universal. Every displayed model output must be captured at lock for auditor verification.
+
+**Corrected framing for the NBA-spread recommendation in this phase:**
+
+The current state (`cba9ea5`: spread hidden from `marketKeysFor("nba")`) is **CONSERVATIVE-COMPATIBLE** with the rule. Hiding = no display = no internal capture needed = no public tracking risk. Valid Option B.
+
+If we ever want to display spread again as model context (Option A), the requirement is:
+- Internal lock-time capture in a `displayed_market_snapshot` or `snapshot_json.displayed_context_markets.spread` substrate that does NOT join into public tracking.
+- UI label clearly marking it as "Model context · Not part of official tracking", visually distinct from ML/Total.
+- This does NOT mean a `prediction_records.market="spread"` row.
+
+Adding spread to PUBLIC tracking (Option C) is a separate, intentional product launch decision — sample-size baseline, calibration disclosure, deliberate copy. Not an engineering default and not what the original Phase 2 language was asking for.
+
+**The Phase 2 audit findings themselves stand** — the gaps identified (no persistence, no audit trail, no calibration substrate, misleading data_quality_tier) are real. Only the proposed remedy needs re-framing per the public-tracking-vs-internal-audit rule.
+
+See also: Phase 3 §N "framing note", Phase 4 §A.4 full rule statement, `project_phase_6_immediate_roadmap.md` "Universal platform rules".

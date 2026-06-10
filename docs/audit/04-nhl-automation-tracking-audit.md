@@ -22,7 +22,7 @@ What works:
 What does not work or is missing:
 - **NHL sharp_signals: 0 rows** for the one NHL game in the system. The writer is wired sport-agnostically in `automationOrchestrator.ts:941-951`, but no signal data actually landed for `game.id=15204`. **Could be a vendor coverage gap (SharpAPI NHL Finals splits sparse), a provider-client bug, or an orchestrator-step skip.** Phase-6 must investigate.
 - **NHL locked snapshot is THIN.** 7 top-level keys vs MLB's 47. No `predicted_home_score` / `predicted_away_score` / `predicted_total`, no `signal_rows_at_lock`, no `lines_at_lock`, no `data_integrity`, no `framework_grades_at_lock`, no `public_splits`, no `line_movement`. NHL uses its own `market_at_lock.lines_snapshot` shape — incompatible with MLB.
-- **NHL puck-line is generated but NOT persisted, NOT tracked, NOT graded.** Per `lib/services/nhl/buildNhlPredictionRecords.ts:7-11`. UI renders it in the `first_inning` market slot as if it were a tracked recommendation. This is the same NBA-spread honesty pattern (now fixed for NBA via `marketKeysFor`) — NHL has the same gap, opposite direction (NHL shows puck-line, NBA hides spread).
+- **NHL puck-line is generated AND displayed but NOT internally captured at lock AND NOT labeled as context-only.** Per `lib/services/nhl/buildNhlPredictionRecords.ts:7-11`. Per the public-tracking-vs-internal-audit rule (see §A.4 below), the correct framing is **not** that puck-line "must be added to prediction_records" — that would auto-include it in public tracking, which we have not historically tracked. The correct framing is: **if displayed, puck-line must be (a) captured in an internal lock-time snapshot for auditability AND (b) UI-labeled as context-only / not part of official tracking AND visually distinct from ML/Total.** NBA spread was handled via Option-B (hide entirely via `marketKeysFor("nba")` in `cba9ea5`); NHL puck-line currently does neither.
 - **NHL goalie selection is heuristic.** `snapshot_json.goalie_assumption.source = "default_most_playoff_gp"` — picks the goalie with the most playoff GP, NOT confirmed starters. Reader-facing copy that implies "our model considered the starting goalie" is technically misleading.
 - **NHL DTO has hardcoded honesty gaps:** `sharpSignals: []` (always empty), `sharpRead: "wait_no_edge_clean"` (always this key), `result.markets.pickResult: null` (always null even on graded games), `result.markets.gradeUnits: null` (same).
 - **NHL auditor coverage: NONE.** `scripts/operator/audit-daily-edge-integrity.ts:32-38` is hardcoded MLB-only. Cross-sport auditor (task #453) is the prerequisite for trusted NHL.
@@ -58,7 +58,26 @@ Label-style picks identical to MLB convention:
 
 - ML: `"CAR ML"` (`pr.id=946`, side=`"away"`, odds=155 → home=3 away=5 → CAR=away won).
 - Total: `"OVER 5.5"` (`pr.id=947`, side=`"over"`, odds=-125 → total 8 > 5.5 → won).
-- Puck-line (generated, not persisted): `"VGK +1.5"` (from `model_output.puck_line.pick`).
+- Puck-line (generated, displayed, not officially-tracked): `"VGK +1.5"` (from `model_output.puck_line.pick`).
+
+### A.4 Public-tracking-vs-internal-audit rule (applies to puck-line + any future context market)
+
+Daniel codified this rule 2026-06-10: "tracked" has two meanings that must not be conflated.
+
+| Concept | Scope | Today's markets |
+|---------|-------|-----------------|
+| **Public tracking** (member-facing accuracy section) | INTENTIONAL — only markets we have historically + deliberately launched | MLB ML+Total+FI, NBA ML+Total, NHL ML+Total |
+| **Internal audit / lock provenance** | UNIVERSAL — every displayed output must be captured at lock | All of the above + every context-only market shown |
+
+**Durable platform rule:** Every displayed model output must be internally auditable. Only intentionally launched markets should be included in public tracking.
+
+**Implication for this audit:** earlier phases (and earlier framing of §F.3.d below) said "puck-line must be persisted as a prediction_record OR hidden." That framing conflates the two concepts because `prediction_records` is the substrate for the public tracking section — adding a row there implicitly extends public tracking. The corrected framing has three valid options:
+
+- **Option A (recommended for puck-line going forward):** add an internal `displayed_market_snapshot` (or `snapshot_json.displayed_context_markets.puck_line` subfield) capturing pick/line/edge/projection/grade/source at lock time — this is auditable but does NOT join into public tracking — AND label the UI chip clearly as "Model context · Not part of official tracking", visually distinct from ML/Total.
+- **Option B (current state for NBA spread, via `cba9ea5`):** hide entirely from `marketKeysFor(sport)`. No display means no audit needed and no public-tracking inclusion. Conservative but loses the analytical value to readers.
+- **Option C (separate product decision):** officially launch puck-line as a publicly tracked market, with sample-size baseline + calibration disclosure. This is a deliberate launch, not an engineering default.
+
+Today NHL puck-line is doing **none of the three.** It is displayed without internal capture and without UI labeling. That is the actual problem — not "needs to be in prediction_records."
 
 ---
 
@@ -290,11 +309,13 @@ This is the most user-visible NHL honesty gap. Both predictions WON; the DTO doe
 
 `adaptNhlToDailyEdgeResponse.ts:531-533` — hardcoded. Narrative defaults to "Market and model snapshot reviewed; no decisive sharp signal" regardless of whether sharp data is absent or present (currently absent). **Today this matches reality but cannot adapt when data arrives.**
 
-#### Gap F.3.d — Puck-line displayed in `first_inning` slot but NOT persisted/graded
+#### Gap F.3.d — Puck-line displayed in `first_inning` slot without internal capture or context-only labeling
 
-`marketKeysFor("nhl")` returns `["moneyline", "total", "first_inning"]`. The `first_inning` slot is repurposed for puck-line display. But `lib/services/nhl/buildNhlPredictionRecords.ts:7-11` confirms puck-line is NOT persisted to `prediction_records`.
+`marketKeysFor("nhl")` returns `["moneyline", "total", "first_inning"]`. The `first_inning` slot is repurposed for puck-line display. The puck-line pick/line/grade are shown in the reader card with the same visual styling as ML/Total.
 
-**Impact:** users see a puck-line recommendation that has no audit trail, no grade, no historical accuracy data, and no hold-reason. They cannot tell from the UI that the puck-line is "display-only analysis." This is the same anti-pattern that we fixed for NBA spread (via `cba9ea5` — hidden until persisted). NHL puck-line should follow the same playbook OR be persisted+tracked+graded.
+`lib/services/nhl/buildNhlPredictionRecords.ts:7-11` confirms puck-line is NOT written to `prediction_records`. **Per the public-tracking-vs-internal-audit rule (§A.4), this is correct for public tracking** — we have not historically tracked puck-line and adding rows would pollute the tracking history. **What is missing** is the internal capture (Option A in §A.4): a `displayed_market_snapshot` or `snapshot_json.displayed_context_markets.puck_line` substrate so the auditor can verify what was displayed.
+
+**Impact:** users see a puck-line recommendation in the reader card with the same visual treatment as ML/Total. They cannot tell from the UI that puck-line is **not officially tracked** — they reasonably assume the same audit/grade/accuracy trail applies. The auditor cannot verify what puck-line was shown at lock because nothing is captured. Three valid paths forward (Option A / B / C in §A.4); doing nothing is not one of them.
 
 #### Gap F.3.e — Goalie assumption not surfaced
 
@@ -392,7 +413,7 @@ Phase 3 §K.6 showed `calibration_buckets` has MLB-only rows. NHL has zero entri
 |-----------|---------|----------|
 | **NHL ML pick generation** | WORKS (n=1, NOT VALIDATED) | `nhlAutoModelV0.ts` produces deterministic ML picks; verified WIN on CAR@VGK 2026-06-09 |
 | **NHL Total pick generation** | WORKS (n=1, NOT VALIDATED) | Same as above; OVER 5.5 verified WIN |
-| **NHL Puck-line / Spread** | NOT PRODUCT-READY | Generated by model but NOT persisted to prediction_records (buildNhlPredictionRecords.ts:7-11), NOT graded, NOT tracked. UI displays it in `first_inning` slot which implies it's tracked — honesty gap (see F.3.d) |
+| **NHL Puck-line / Spread** | DISPLAYED WITHOUT INTERNAL CAPTURE OR CONTEXT-ONLY LABELING | Generated by model and displayed in `first_inning` slot with same visual treatment as ML/Total, but NOT in any internal lock-time snapshot and NOT UI-labeled as not-officially-tracked. Per §A.4 rule, this requires Option A (internal capture + UI label), Option B (hide), or Option C (intentional public launch). NOT adding to `prediction_records` directly — that pollutes public tracking. See §F.3.d |
 | **NHL predicted score** | NOT IN SNAPSHOT | No `predicted_home_score`/`away_score`/`predicted_total` at top-level. Model has `expected_goal_diff` + `expected_total_goals` but not split into per-team scores. UI computes projected per-team scores from these in the adapter (`adaptNhlToDailyEdgeResponse.ts:430-434`) but the result is not persisted |
 | **NHL market/sharp signal usage** | GAP — 0 rows for the one NHL game | `refreshSharpSignals` wired sport-agnostically (`automationOrchestrator.ts:941-951`); 0 actual rows for game.id=15204. Phase-6 must investigate vendor coverage vs pipeline bug |
 | **NHL tracking/grading** | WORKS (verified) | CAR ML WIN + OVER 5.5 WIN both correctly graded. Label-style picks parse correctly (`gradeNhlPredictions.ts`) |
@@ -413,7 +434,7 @@ In the spirit of Phase 3 §M, the following items are **explicitly not yet true*
 2. **Market movement (open→current) is NOT a model input for NHL.** Same as MLB and NBA.
 3. **Sharp/public signals are NOT consumed by the NHL v0 model.** The pipeline path exists but 0 rows landed for the one verified game; the v0 model also does not consume sharp signals as inputs.
 4. **NHL grade tier (best_angle / lean / watchlist / caution) is NOT signal-driven.** With 0 sharp_signals, every NHL pick defaults to `model_only` (verified on `pr.id=946`). The 7-category MLB grade taxonomy does not meaningfully apply to NHL today.
-5. **NHL puck-line picks shown in the UI are NOT persisted, tracked, or graded.** Display-only.
+5. **NHL puck-line picks shown in the UI are NOT internally captured at lock AND NOT UI-labeled as context-only.** Adding them to `prediction_records` would auto-imply public tracking, which is a separate intentional product decision (Option C in §A.4). The correct fix is Option A (internal `displayed_market_snapshot` + UI label) or Option B (hide).
 6. **NHL predicted per-team scores are NOT in the persisted snapshot.** They are computed live in the DTO adapter from `expected_goal_diff` + `expected_total_goals`.
 7. **NHL confirmed-goalie data is NOT used.** Heuristic only (`default_most_playoff_gp`).
 8. **NHL accuracy claims based on n=2 graded predictions are NOT statistically supported.** Two wins prove nothing.
@@ -425,7 +446,10 @@ In the spirit of Phase 3 §M, the following items are **explicitly not yet true*
 ## L. Phase-6 carry-forward from this Phase-4 audit
 
 1. **Investigate NHL sharp_signals coverage gap.** Determine whether 0 rows for game.id=15204 is a vendor gap, a provider-client bug, or a pipeline skip. If vendor gap, document it (analogous to [[project-sharpapi-nba-coverage-gap]]).
-2. **Persist NHL puck-line OR hide it from UI.** Mirror the NBA spread fix (`cba9ea5`). Either add puck-line to `prediction_records` + grading + tracking + auditor, OR remove it from `marketKeysFor("nhl")`.
+2. **NHL puck-line: Option A or Option B (per §A.4 rule).** Do NOT just add to `prediction_records` — that pollutes public tracking. Pick one:
+   - Option A: add an internal `displayed_market_snapshot` (or `snapshot_json.displayed_context_markets.puck_line`) capturing the puck-line pick/line/edge/grade/source at lock time + UI label as "Model context · Not part of official tracking" with visually distinct chip.
+   - Option B: hide from `marketKeysFor("nhl")` mirroring the NBA spread move in `cba9ea5`.
+   - Option C (separate decision): officially launch puck-line as a publicly tracked market with baseline disclosure. Product call, not engineering default.
 3. **Surface graded results in NHL DTO.** Replace `result.markets.{pickResult, gradeUnits}: null` with real values when `prediction_grades` row exists.
 4. **Replace hardcoded `sharpSignals: []` with real fetch.** Even if it returns empty 100% of the time during the SharpAPI gap, the code path must be honest — not hardcoded to an empty array.
 5. **Replace hardcoded `sharpRead: "wait_no_edge_clean"` with derived value.** When sharp data is absent, use a key like `"no_sharp_data_available"` so the narrative honestly reflects the absence of data vs the presence of no edge.
