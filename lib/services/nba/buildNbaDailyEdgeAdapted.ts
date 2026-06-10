@@ -228,6 +228,29 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
       s.home_team.abbreviation,
       s.away_team.abbreviation,
     );
+    // 2026-06-10 UI honesty fix: demote tier when public splits absent.
+    // The model's deriveTier (nbaAutoModelV1.ts:77-86) computes tier from
+    // ratings + market + injuries — splits are NOT in the calc. Without
+    // this override, a card with `has_splits=false` still gets tier="high"
+    // which (a) lets gradeNbaMarket return raw confidence + best_angle
+    // eligibility, and (b) makes the persisted snapshot claim "high data
+    // quality" while a key data source is missing.
+    //
+    // When splits are missing, downgrade tier from "high" → "medium" so:
+    //   • gradeNbaMarket applies confidence cap (52)
+    //   • best_angle eligibility blocked (requires tier="high")
+    //   • snapshot.data_integrity.data_quality_tier reads "medium" honestly
+    //
+    // Pick direction is unchanged — only confidence/grade label downgrade.
+    // "low"/"fallback"/"medium" tiers stay as-is (downgrade-only, never
+    // promote).
+    if (splitsRow === null && pred.audit.data_quality_tier === "high") {
+      pred.audit.data_quality_tier = "medium";
+      pred.audit.model_integrity_notes = [
+        ...pred.audit.model_integrity_notes,
+        "data_quality_tier downgraded high → medium: public splits unavailable for this matchup.",
+      ];
+    }
     const gameOpps = matchOpportunitiesForGame(
       opportunities,
       s.home_team.abbreviation,

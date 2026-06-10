@@ -142,10 +142,29 @@ function buildSnapshot(opts: {
     limited_book_coverage: boolean;
     book_count: number;
   };
+  // 2026-06-10: persist the model's projected scores so they survive
+  // the lock and can be audited/calibrated after the game completes.
+  // Pre-fix, these existed only in the live DTO and were lost at lock.
+  projection: {
+    home_score: number;
+    away_score: number;
+    total: number;
+    spread_home: number;
+  };
 }): Record<string, unknown> {
   // Compact snapshot — enough context for post-grade audits but no
   // payload bloat. Mirrors MLB writer's namespaced shape so the
   // calibrationReport extractor can read NBA paths consistently.
+  //
+  // Field naming honesty (2026-06-10):
+  //   • `current_price` (formerly `line_movement`) — stores the current
+  //     book's odds + sportsbook. Pre-fix this was labeled "line_movement"
+  //     even though no movement/delta data was tracked. The NBA pipeline
+  //     does not yet ingest open-to-current deltas; do not imply it does.
+  //   • `splits_state` — explicit categorical: "available" / "unavailable".
+  //     Pre-fix `public_splits` was the only signal; consumers reading
+  //     `data_integrity.has_splits` could infer state but card UI did not
+  //     surface it explicitly.
   return {
     sport: "nba",
     model_version: NBA_MODEL_VERSION,
@@ -154,6 +173,13 @@ function buildSnapshot(opts: {
     market: opts.market,
     pick_label: opts.intel.pick_label,
     rationale: opts.intel.rationale,
+    // Predicted scores persisted for audit + calibration. These come
+    // from the NBA model's posterior blend (nbaAutoModelV1 →
+    // blendPosterior). Tracking + auditor can reconcile against actual.
+    predicted_home_score: opts.projection.home_score,
+    predicted_away_score: opts.projection.away_score,
+    predicted_total: opts.projection.total,
+    predicted_spread_home: opts.projection.spread_home,
     public_splits: opts.intel.splits.pick_side !== null && opts.intel.splits.other_side !== null
       ? {
           picked_side: opts.intel.pick_side,
@@ -163,9 +189,11 @@ function buildSnapshot(opts: {
           opp_bets_pct: opts.intel.splits.other_side.bets_pct,
         }
       : null,
-    line_movement: {
-      current_price_american: opts.intel.current_price.odds_american,
-      current_book: opts.intel.current_price.sportsbook,
+    splits_state: opts.sources.has_splits ? "available" : "unavailable",
+    current_price: {
+      odds_american: opts.intel.current_price.odds_american,
+      sportsbook: opts.intel.current_price.sportsbook,
+      note: "Current price only — open-to-current line movement is not tracked in the NBA pipeline.",
     },
     data_integrity: {
       data_quality_tier: opts.dataQualityTier,
@@ -351,6 +379,7 @@ export async function createNbaPredictionRecords(
           intel,
           dataQualityTier,
           sources: perGameSources,
+          projection: g.projection,
         }),
       };
 

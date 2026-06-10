@@ -90,11 +90,20 @@ function pickFallbackFor(market: MarketKey, sport: Sport): string {
 
 /**
  * Sport-aware list of markets to RENDER as chips/columns on the slate
- * card + reader. All three sports show all three markets — the
- * first_inning slot is repurposed per sport (MLB: NRFI/YRFI, NBA:
- * Spread, NHL: Puck Line) by the sport-aware labels above.
+ * card + reader. The first_inning slot is repurposed per sport
+ * (MLB: NRFI/YRFI, NBA: Spread, NHL: Puck Line).
+ *
+ * 2026-06-10 honesty fix: NBA hides the spread/first_inning slot until
+ * the pipeline persists a real prediction_record for spread. Pre-fix
+ * the card rendered "Sprd · NY -2 · Lean" as if it were a tracked
+ * recommendation, but `buildNbaPredictionRecords` only persists
+ * moneyline + total — the spread label had no audit/grade/tracking
+ * trail. Hiding it prevents users from interpreting it as a tracked
+ * pick. Durable fix: persist NBA spread as a prediction_record (Phase 6
+ * roadmap). Until then, NBA shows 2 markets only.
  */
-function marketKeysFor(_sport: Sport): MarketKey[] {
+function marketKeysFor(sport: Sport): MarketKey[] {
+  if (sport === "nba") return ["moneyline", "total"];
   return ["moneyline", "total", "first_inning"];
 }
 
@@ -2422,7 +2431,10 @@ function SlateCard({
             so the user can scan ML / Total / 1st verdicts at a glance.
             Active state (violet) overrides the verdict tint when the
             reader is showing this market. Total pill includes the line. */}
-        <div className="grid grid-cols-3 gap-1.5 mb-3.5">
+        <div
+          className="grid gap-1.5 mb-3.5"
+          style={{ gridTemplateColumns: `repeat(${marketKeysFor(shellSport).length}, minmax(0, 1fr))` }}
+        >
           {marketKeysFor(shellSport).map((m) => {
             const md = game.markets[m];
             const mv = asVerdictKey(md.verdict.key);
@@ -2570,7 +2582,10 @@ function SelectedEdgeReader({
 
         {/* Market selector — segmented buttons. One per market with pick +
             confidence + verdict glyph. Replaces the older tiny-chip row. */}
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div
+          className="mt-3 grid gap-2"
+          style={{ gridTemplateColumns: `repeat(${marketKeysFor(shellSport).length}, minmax(0, 1fr))` }}
+        >
           {marketKeysFor(shellSport).map((m) => (
             <ReaderMarketSegment
               key={m}
