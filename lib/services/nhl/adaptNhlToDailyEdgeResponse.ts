@@ -37,7 +37,7 @@ import type {
 } from "../../../app/lab/lib/labTypes";
 import type { Grade } from "../../types/domain/Grade";
 import type { Verdict } from "../verdictDerivation";
-import type { SharpReadKey } from "../sharpReadSelector";
+import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import type {
   NhlFeatureSnapshot,
   NhlModelOutput,
@@ -509,6 +509,13 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
       away: Math.round(projectedAway * 10) / 10,
       home: Math.round(projectedHome * 10) / 10,
     },
+    // P0-4 2026-06-10: empty array is currently honest because the NHL
+    // pipeline does not yet populate sharp_signals rows for NHL games
+    // (per Phase 4 §D: SharpAPI NHL coverage gap during Finals — 0 rows
+    // observed for verified game.id=15204). Wiring an upstream fetch
+    // through buildNhlDailyEdgeAdapted is a P1 follow-up so that if
+    // signal data ever lands, the UI surfaces it instead of silently
+    // ignoring it. For now, [] reflects reality.
     sharpSignals: [],
     status: {
       lineupConfirmed: null,
@@ -528,9 +535,18 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
       : null,
     breakdown: {
       verdict: { key: verdict, label: verdictLabelFromKey(verdict) },
+      // P0-4 2026-06-10: previously hardcoded key="wait_no_edge_clean"
+      // (which is NOT a valid SharpReadKey — SHARP_READ_SENTENCES has no
+      // such entry; the cast was a phantom) and the sentence pulled from
+      // model.moneyline.notes[0] which implied a sharp read had been
+      // computed. Reality: NHL pipeline does not yet ingest sharp_signals
+      // (Phase 4 §D). The honest key when no signal data exists is
+      // "no_data" with the canonical sentence. When the upstream fetch
+      // lands (P1 follow-up), this should be replaced with a derived
+      // selectSharpReadKey(...) call using real signals.
       sharpRead: {
-        key: "wait_no_edge_clean" as SharpReadKey,
-        sentence: model.moneyline.notes[0] ?? "Market and model snapshot reviewed; no decisive sharp signal.",
+        key: "no_data" as SharpReadKey,
+        sentence: SHARP_READ_SENTENCES.no_data,
       },
       modelBreakdown: [
         `${input.awayAbbr} @ ${input.homeAbbr} ${model.inputs_summary.series ? `(${model.inputs_summary.series})` : ""}.`,
