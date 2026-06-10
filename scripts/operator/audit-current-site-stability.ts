@@ -44,6 +44,11 @@
 
 import { supabase } from "@/lib/db/supabase";
 import { computeTrackingAggregate } from "@/lib/services/trackingAggregateService";
+import {
+  getOfficialTrackingMarkets,
+  getContextOnlyDisplayMarkets,
+  isOfficiallyTrackedMarket,
+} from "@/lib/config/officialTrackingMarkets";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -84,16 +89,20 @@ interface CurrentSiteReport {
 
 const ACTIVE_SPORTS: ActiveSport[] = ["mlb", "nba", "nhl"];
 
-const OFFICIAL_TRACKING: Record<ActiveSport, string[]> = {
-  mlb: ["moneyline", "total", "first_inning"],
-  nba: ["moneyline", "total"],
-  nhl: ["moneyline", "total"],
+// Per-sport markets come from the official tracking registry — single
+// source of truth. Auditor used to hardcode this; v1.x onward, both
+// the auditor and the DailyEdge UI read from
+// lib/config/officialTrackingMarkets.ts.
+const OFFICIAL_TRACKING: Record<ActiveSport, ReadonlyArray<string>> = {
+  mlb: getOfficialTrackingMarkets("mlb"),
+  nba: getOfficialTrackingMarkets("nba"),
+  nhl: getOfficialTrackingMarkets("nhl"),
 };
 
-const CONTEXT_ONLY_DISPLAYED: Record<ActiveSport, string[]> = {
-  mlb: [],
-  nba: ["spread"],
-  nhl: ["spread"], // puck-line is stored as market_type="spread"
+const CONTEXT_ONLY_DISPLAYED: Record<ActiveSport, ReadonlyArray<string>> = {
+  mlb: getContextOnlyDisplayMarkets("mlb"),
+  nba: getContextOnlyDisplayMarkets("nba"),
+  nhl: getContextOnlyDisplayMarkets("nhl"),
 };
 
 // MLB substrate (signal_rows_at_lock + lines_at_lock + framework_grades_at_lock +
@@ -197,7 +206,7 @@ async function check1RegistryIntegrity(): Promise<Issue[]> {
       code: "REGISTRY_CONFIRMED",
       severity: "INFO",
       sport,
-      affected: { details: `markets in prediction_records=[${distinct.sort().join(", ")}], expected=[${allowed.sort().join(", ")}]` },
+      affected: { details: `markets in prediction_records=[${[...distinct].sort().join(", ")}], expected=[${[...allowed].sort().join(", ")}]` },
       user_facing_impact: "None — confirmation only",
       recommended_fix: "n/a",
       auto_fixable: false,

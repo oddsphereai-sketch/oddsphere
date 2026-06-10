@@ -38,6 +38,7 @@ import type {
   MarketEdgeDto,
 } from "../../lib/labTypes";
 import type { Sport } from "@/lib/types/domain/Sport";
+import { isContextOnlyDisplayMarket } from "@/lib/config/officialTrackingMarkets";
 import { teamPrimaryColor } from "./teamColors";
 import { LockBadge } from "./LockBadge";
 
@@ -64,19 +65,29 @@ const MARKET_LONG_LABEL: Record<MarketKey, string> = {
 };
 
 // Phase 7F (Path A) — sport-aware market labels. NBA reuses the
-// `first_inning` slot for Spread; NHL reuses it for Puck Line. MLB
+// `first_inning` DTO slot for Spread; NHL reuses it for Puck Line. MLB
 // uses it for 1st-Inning (NRFI/YRFI). One DTO slot, three labels.
 //
 // 2026-06-10 corrected product direction: NBA Spread and NHL Puck Line
 // are CONTEXT-ONLY markets — visible as model context / reader
-// guidance, but NOT part of official public tracking (see registry in
-// the public tracking section below). Their short labels carry a "*"
-// indicator that maps to the footnote "* Model context · Not part of
-// official tracking" rendered below the market chips. MLB ML / Total /
-// 1st are officially tracked and carry no asterisk.
+// guidance, but NOT part of official public tracking. Their short
+// labels carry a "*" indicator mapping to the footnote
+// "* Model context · Not part of official tracking" rendered below the
+// market chips. MLB ML / Total / 1st are officially tracked.
+//
+// 2026-06-10 P1-1: registry-driven. The shell delegates the
+// (sport, market) classification to the central registry at
+// lib/config/officialTrackingMarkets.ts so the UI, the auditor, and
+// any future writer guards share one source of truth. The
+// `first_inning` DTO slot is the UI delivery channel; the registry's
+// `CONTEXT_ONLY_DISPLAY_MARKETS` records "spread" for NBA / NHL
+// because that is the underlying market_type those slots represent
+// (NHL puck-line is stored under market_type="spread" in `lines`).
 function isContextOnlyMarket(market: MarketKey, sport: Sport): boolean {
   if (market !== "first_inning") return false;
-  return sport === "nba" || sport === "nhl";
+  // The first_inning DTO slot is a context-only display IF the
+  // underlying market for this sport is registered as context-only.
+  return isContextOnlyDisplayMarket(sport, "spread");
 }
 function marketShortLabelFor(market: MarketKey, sport: Sport): string {
   if (market === "first_inning") {
