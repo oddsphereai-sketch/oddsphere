@@ -44,8 +44,13 @@ import type { NbaDailyEdgeDto } from "./buildNbaDailyEdgeDto";
 import type {
   MarketIntelligence,
 } from "./buildNbaDailyEdgeDto";
+import type { NbaGameIntelligence } from "./nbaMarketIntelligence";
 import type { PredictionRecordRow, TrackedMarketV17 } from "../../types/domain/Tracking";
 import type { RecommendationGrade } from "./nbaMarketReview";
+import {
+  CONTEXT_SNAPSHOT_NOTE,
+  type NbaSpreadDisplayedContext,
+} from "../../types/domain/DisplayedContextMarket";
 
 /** Within this many minutes of tip-off, the lock seals the snapshot. */
 const LOCK_MINUTES_BEFORE_TIP = 60;
@@ -129,11 +134,74 @@ function shouldBeLocked(tipIsoUtc: string | null, now: Date): boolean {
   return now.getTime() >= lockBoundaryMs;
 }
 
+/**
+ * P1-2 Commit A — build the displayed_context_markets.spread substrate
+ * for NBA. Sport-side mirror of what the slate card / reader renders
+ * as the `Sprd*` chip. The substrate is internal-only — it does NOT
+ * create a prediction_record row and does NOT join into public
+ * tracking. See lib/types/domain/DisplayedContextMarket.ts.
+ */
+function buildNbaSpreadDisplayedContext(opts: {
+  spreadIntel: MarketIntelligence;
+  predictedSpreadHome: number;
+  bookCount: number;
+  hasLines: boolean;
+  capturedAt: string;
+}): NbaSpreadDisplayedContext {
+  const s = opts.spreadIntel;
+  const lineSourceQuality: NbaSpreadDisplayedContext["source_evidence"]["line_source_quality"] =
+    s.current_price.odds_american !== null && s.current_price.sportsbook !== null
+      ? "real_book"
+      : opts.hasLines
+        ? "consensus_fallback"
+        : "unavailable";
+  const edgePct =
+    s.model_prob_on_pick !== null && s.market_no_vig_prob_pick !== null
+      ? (s.model_prob_on_pick - s.market_no_vig_prob_pick) * 100
+      : s.edge_prob_pp;
+  const verdict =
+    s.pick_side === null
+      ? "held"
+      : (s.grade as NbaSpreadDisplayedContext["verdict"]);
+
+  return {
+    market: "spread",
+    display_label: "Sprd*",
+    official_tracked: false,
+    context_only: true,
+    displayed_at_lock: s.pick_side !== null,
+    pick: s.pick_side !== null ? s.pick_label : null,
+    side:
+      s.pick_side === "home" || s.pick_side === "away" ? s.pick_side : null,
+    line: s.consensus_line,
+    odds_american: s.current_price.odds_american,
+    sportsbook: s.current_price.sportsbook,
+    verdict,
+    confidence_displayed: s.pick_side !== null ? s.effective_confidence : null,
+    edge_pct: edgePct,
+    rationale_one_liner: s.rationale[0] ?? null,
+    source_evidence: {
+      line_source_quality: lineSourceQuality,
+      lines_observed_count: opts.bookCount,
+      open_to_current_movement: null,
+    },
+    model_projection: {
+      predicted_spread_home: opts.predictedSpreadHome,
+    },
+    snapshot_note: CONTEXT_SNAPSHOT_NOTE,
+    captured_at: opts.capturedAt,
+  };
+}
+
 function buildSnapshot(opts: {
   dto: NbaDailyEdgeDto;
   matchup: string;
   market: "moneyline" | "total";
   intel: MarketIntelligence;
+  // P1-2 Commit A — full game intel so the spread context substrate
+  // can be written onto both ML and Total rows (per-row replication so
+  // the auditor can lookup by (game_id, market) on either tracked row).
+  gameIntelligence: NbaGameIntelligence;
   dataQualityTier: string | null;
   sources: {
     has_lines: boolean;
@@ -151,6 +219,8 @@ function buildSnapshot(opts: {
     total: number;
     spread_home: number;
   };
+  // P1-2 Commit A — timestamp for the displayed_context_markets capture.
+  capturedAt: string;
 }): Record<string, unknown> {
   // Compact snapshot — enough context for post-grade audits but no
   // payload bloat. Mirrors MLB writer's namespaced shape so the
@@ -202,6 +272,19 @@ function buildSnapshot(opts: {
       has_lines: opts.sources.has_lines,
       has_splits: opts.sources.has_splits,
       has_opportunities: opts.sources.has_opportunities,
+    },
+    // P1-2 Commit A — internal-only substrate for the displayed
+    // context-only `Sprd*` chip. Same block written on ML + Total rows
+    // for join robustness. Does NOT create a public tracking row for
+    // spread; see lib/types/domain/DisplayedContextMarket.ts.
+    displayed_context_markets: {
+      spread: buildNbaSpreadDisplayedContext({
+        spreadIntel: opts.gameIntelligence.spread,
+        predictedSpreadHome: opts.projection.spread_home,
+        bookCount: opts.sources.book_count,
+        hasLines: opts.sources.has_lines,
+        capturedAt: opts.capturedAt,
+      }),
     },
   };
 }
@@ -377,9 +460,11 @@ export async function createNbaPredictionRecords(
           matchup,
           market,
           intel,
+          gameIntelligence: g.intelligence,
           dataQualityTier,
           sources: perGameSources,
           projection: g.projection,
+          capturedAt: nowIso,
         }),
       };
 

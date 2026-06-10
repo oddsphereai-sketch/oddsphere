@@ -49,6 +49,10 @@ import {
   type NhlModelOutput,
 } from "../../automodel/nhlAutoModelV0";
 import type { PredictionRecordRow, TrackedMarketV17 } from "../../types/domain/Tracking";
+import {
+  CONTEXT_SNAPSHOT_NOTE,
+  type NhlPuckLineDisplayedContext,
+} from "../../types/domain/DisplayedContextMarket";
 
 const LOCK_MINUTES_BEFORE_PUCK_DROP = 60;
 
@@ -113,6 +117,103 @@ function gradeFromVerdict(verdict: string): string {
 }
 
 /**
+ * P1-2 Commit A — build the displayed_context_markets.spread substrate
+ * for NHL (puck-line). The PL* chip on the slate card is rendered from
+ * `model.puck_line`; this substrate captures what was shown so the
+ * auditor can verify display-vs-snapshot truth without polluting
+ * public tracking. See lib/types/domain/DisplayedContextMarket.ts.
+ */
+function buildNhlPuckLineDisplayedContext(opts: {
+  model: NhlModelOutput;
+  spreadLines: Array<{
+    market_type: string;
+    sportsbook: string;
+    side: string;
+    line_value: number | null;
+    odds_american: number | null;
+  }>;
+  homeAbbr: string;
+  capturedAt: string;
+}): NhlPuckLineDisplayedContext {
+  const pl = opts.model.puck_line;
+  const pickIsPass = pl.verdict === "pass";
+  // pl.pick like "VGK +1.5" — first token is team abbr
+  const pickTeam = pl.pick.split(" ")[0] ?? "";
+  const pickIsHome = pickTeam === opts.homeAbbr;
+  const side: NhlPuckLineDisplayedContext["side"] = pickIsPass
+    ? null
+    : pickIsHome
+      ? "home"
+      : "away";
+  const pickSideForLineLookup = pickIsHome ? "home" : "away";
+
+  // Extract the expected puck-line value from the pick label so we match
+  // the right side of the puck-line. Without this, `home +1.5` and
+  // `home -1.5` (which can both appear when sportsbooks list either
+  // direction on the home side) would be conflated.
+  const pickLineMatch = pl.pick.match(/[+-]?\d+(?:\.\d+)?/);
+  const expectedLine = pickLineMatch !== null ? parseFloat(pickLineMatch[0]) : null;
+
+  // Get the best price for the picked side + expected line on spread market.
+  const sideLines = opts.spreadLines.filter((l) => {
+    if (l.side !== pickSideForLineLookup) return false;
+    if (expectedLine === null) return true;
+    if (l.line_value === null) return false;
+    return Math.abs(l.line_value - expectedLine) < 0.05;
+  });
+  const bestOdds = sideLines.length > 0
+    ? sideLines
+        .map((l) => l.odds_american)
+        .filter((x): x is number => x !== null)
+        .reduce((max, p) => (p > max ? p : max), -Infinity)
+    : null;
+  const lineValue =
+    sideLines.find((l) => l.line_value !== null)?.line_value ?? expectedLine;
+  const sportsbook =
+    sideLines.find((l) => l.odds_american === bestOdds && bestOdds !== null)
+      ?.sportsbook ?? null;
+
+  const lineSourceQuality: NhlPuckLineDisplayedContext["source_evidence"]["line_source_quality"] =
+    bestOdds !== null && bestOdds !== -Infinity
+      ? "real_book"
+      : opts.spreadLines.length > 0
+        ? "consensus_fallback"
+        : "unavailable";
+
+  const verdict: NhlPuckLineDisplayedContext["verdict"] = pickIsPass
+    ? "no_play"
+    : (pl.verdict as NhlPuckLineDisplayedContext["verdict"]);
+
+  return {
+    market: "spread",
+    display_label: "PL*",
+    official_tracked: false,
+    context_only: true,
+    displayed_at_lock: !pickIsPass,
+    pick: pickIsPass ? null : pl.pick,
+    side,
+    line: lineValue,
+    odds_american: bestOdds !== null && bestOdds !== -Infinity ? bestOdds : null,
+    sportsbook,
+    verdict,
+    confidence_displayed: pickIsPass ? null : pl.confidence * 100,
+    edge_pct: pl.model_market_gap_pct !== null ? pl.model_market_gap_pct * 100 : null,
+    rationale_one_liner: pl.notes[0] ?? null,
+    source_evidence: {
+      line_source_quality: lineSourceQuality,
+      lines_observed_count: opts.spreadLines.length,
+      open_to_current_movement: null,
+    },
+    model_projection: {
+      predicted_goal_diff_home: opts.model.expected_goal_diff,
+      predicted_total_goals: opts.model.expected_total_goals,
+    },
+    snapshot_note: CONTEXT_SNAPSHOT_NOTE,
+    captured_at: opts.capturedAt,
+  };
+}
+
+/**
  * Build the snapshot_json payload — a stable, ops-readable record of
  * everything that fed the prediction at lock time. Caller passes the
  * goalie meta directly so we don't re-fetch.
@@ -133,7 +234,11 @@ function buildSnapshotJson(opts: {
   featureInputs: unknown;
   lockedAtIso: string | null;
   lockSource: "live" | "locked";
+  // P1-2 Commit A — needed to build the PL* substrate.
+  homeAbbr: string;
+  capturedAt: string;
 }): Record<string, unknown> {
+  const spreadLines = opts.marketLines.filter((l) => l.market_type === "spread");
   return {
     model_version: NHL_MODEL_VERSION_CONST,
     model_output: opts.model,
@@ -153,6 +258,18 @@ function buildSnapshotJson(opts: {
     goalie_assumption: opts.goalieAssumption,
     locked_at_iso: opts.lockedAtIso,
     lock_source: opts.lockSource,
+    // P1-2 Commit A — internal-only substrate for the displayed
+    // context-only `PL*` chip. Same block written on ML + Total rows
+    // for join robustness. Does NOT create a public tracking row for
+    // puck-line; see lib/types/domain/DisplayedContextMarket.ts.
+    displayed_context_markets: {
+      spread: buildNhlPuckLineDisplayedContext({
+        model: opts.model,
+        spreadLines,
+        homeAbbr: opts.homeAbbr,
+        capturedAt: opts.capturedAt,
+      }),
+    },
   };
 }
 
@@ -209,13 +326,18 @@ export async function writeNhlPredictionRecords(
       });
       const model = nhlAutoModelV0(snapshot);
 
-      // Fetch lines snapshot for the snapshot_json.
+      // Fetch lines snapshot for the snapshot_json. P1-2 Commit A —
+      // additionally fetch "spread" lines (NHL puck-line is stored as
+      // market_type="spread" in `lines`). These don't generate a
+      // public tracking row — they only populate the internal
+      // displayed_context_markets.spread substrate so the auditor
+      // can verify what the PL* chip showed at lock.
       const { data: linesData } = await supabase
         .from("lines")
         .select("market_type, sportsbook, side, line_value, odds_american")
         .eq("game_id", g.id)
         .is("player_id", null)
-        .in("market_type", ["moneyline", "total"]);
+        .in("market_type", ["moneyline", "total", "spread"]);
       const lines = (linesData as Array<{
         market_type: string; sportsbook: string; side: string;
         line_value: number | null; odds_american: number | null;
@@ -314,6 +436,8 @@ export async function writeNhlPredictionRecords(
         featureInputs: snapshot,
         lockedAtIso,
         lockSource,
+        homeAbbr,
+        capturedAt: now.toISOString(),
       });
 
       for (const m of marketsToWrite) {
