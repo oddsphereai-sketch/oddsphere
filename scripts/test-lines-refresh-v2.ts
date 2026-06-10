@@ -21,7 +21,7 @@ import {
   type SharpApiGameResolver,
 } from "../lib/providers/real_api/SharpAPIOddsProvider";
 import { SharpApiClient } from "../lib/providers/real_api/_sharpApiClient";
-import { derivePerBookDeleteKeys } from "../lib/services/linesService";
+import { derivePerBookDeleteKeys, derivePerSignalDeleteKeys } from "../lib/services/linesService";
 import {
   buildDiscoveryFromSplitsRows,
   extractSlateDateFromEventId,
@@ -1252,6 +1252,84 @@ function testPerBookDeleteKeys_multiSidedMultiLinedBookCollapsesToOneKey() {
   );
 }
 
+// ─── 2026-06-10 sharp-signals preservation fix tests ───────────────────
+// Pure-function tests for derivePerSignalDeleteKeys. `sharp_signals` has
+// no sportsbook column — preservation identity is (game, market, side).
+
+const signal = (
+  game_id: number,
+  market_type: string,
+  side: string,
+  public_money_pct: number | null = 55,
+): Record<string, unknown> => ({
+  game_id, market_type, side, public_money_pct,
+  public_betting_pct: 50, has_steam_move: false,
+  has_reverse_line_movement: false, signal_strength: "moderate",
+  computed_at: "2026-06-10T00:00:00Z",
+});
+
+function testPerSignalDeleteKeys_partialPollPreservesPriorSignals() {
+  section("sharp-signals — partial poll preserves prior identities");
+  // Scenario: morning poll wrote signal rows for (15098, moneyline, home)
+  // and (15098, total, over). Evening payload contains ONLY
+  // (15098, total, over). Derived delete keys must target only
+  // (15098, total, over) — the (15098, moneyline, home) signal is preserved.
+  const eveningPayload = [signal(15098, "total", "over", 62)];
+  const keys = derivePerSignalDeleteKeys(eveningPayload);
+  check(
+    "partial poll: only 1 delete key (15098, total, over) — prior moneyline signal preserved",
+    keys.length === 1 &&
+      keys[0].game_id === 15098 &&
+      keys[0].market_type === "total" &&
+      keys[0].side === "over",
+  );
+}
+
+function testPerSignalDeleteKeys_sameIdentityReplacement() {
+  section("sharp-signals — same identity replacement");
+  // Same (game, market, side) with newer money_pct value — collapses
+  // to exactly one delete key for the replacement.
+  const newer = [signal(15098, "moneyline", "home", 65)];
+  const keys = derivePerSignalDeleteKeys(newer);
+  check(
+    "same identity in payload: 1 key (replaces prior atomically)",
+    keys.length === 1 &&
+      keys[0].game_id === 15098 &&
+      keys[0].market_type === "moneyline" &&
+      keys[0].side === "home",
+  );
+}
+
+function testPerSignalDeleteKeys_emptyPayloadProducesEmptyKeys() {
+  section("sharp-signals — empty payload preserves all existing signals");
+  // SharpAPI /splits returned nothing this poll — empty payload → empty
+  // delete-key set → no DELETE fires → every prior signal preserved.
+  const empty: Record<string, unknown>[] = [];
+  const keys = derivePerSignalDeleteKeys(empty);
+  check("empty payload: 0 delete keys", keys.length === 0);
+}
+
+function testPerSignalDeleteKeys_multiGameMultiMarketCollapses() {
+  section("sharp-signals — multi-game × multi-market dedupes correctly");
+  // Defense-in-depth: 3 games × 2 markets × 2 sides = 12 unique identities,
+  // all distinct delete keys. Plus a duplicate row to confirm dedupe.
+  const payload = [
+    signal(15098, "moneyline", "home"), signal(15098, "moneyline", "away"),
+    signal(15098, "total", "over"),     signal(15098, "total", "under"),
+    signal(15099, "moneyline", "home"), signal(15099, "moneyline", "away"),
+    signal(15099, "total", "over"),     signal(15099, "total", "under"),
+    signal(15100, "moneyline", "home"), signal(15100, "moneyline", "away"),
+    signal(15100, "total", "over"),     signal(15100, "total", "under"),
+    // Duplicate — should not produce a second delete key
+    signal(15098, "moneyline", "home", 70),
+  ];
+  const keys = derivePerSignalDeleteKeys(payload);
+  check(
+    "multi-game multi-market: 12 unique keys (duplicate (15098,ml,home) deduped)",
+    keys.length === 12,
+  );
+}
+
 // ─── runner ───────────────────────────────────────────────────────────
 
 async function main() {
@@ -1281,6 +1359,12 @@ async function main() {
   testPerBookDeleteKeys_kalshiOnlyDoesNotWipePriorRealBooks();
   testPerBookDeleteKeys_emptyPayloadProducesEmptyKeys();
   testPerBookDeleteKeys_multiSidedMultiLinedBookCollapsesToOneKey();
+
+  // 2026-06-10 sharp-signals preservation fix — per-(game, market, side) DELETE scope
+  testPerSignalDeleteKeys_partialPollPreservesPriorSignals();
+  testPerSignalDeleteKeys_sameIdentityReplacement();
+  testPerSignalDeleteKeys_emptyPayloadProducesEmptyKeys();
+  testPerSignalDeleteKeys_multiGameMultiMarketCollapses();
 
   console.log();
   console.log("━━━ Summary ━━━");

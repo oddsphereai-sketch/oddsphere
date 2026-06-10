@@ -58,6 +58,41 @@ export function derivePerBookDeleteKeys(
 }
 
 /**
+ * 2026-06-10 sharp-signals preservation fix — sibling of
+ * `derivePerBookDeleteKeys`. `sharp_signals` has no sportsbook column
+ * (signals are aggregated/consensus per game/market/side), so the
+ * preservation identity is (game_id, market_type, side).
+ *
+ * Pure helper, exported so unit tests can assert behavior without a DB.
+ *
+ * Product rule: "Public splits should not disappear just because a
+ * later poll is thin. A signal for (game, market, side) absent from
+ * this poll persists; a signal present has its prior row replaced
+ * atomically."
+ */
+export type PerSignalDeleteKey = { game_id: number; market_type: string; side: string };
+
+export function derivePerSignalDeleteKeys(
+  rows: ReadonlyArray<Record<string, unknown>>,
+): PerSignalDeleteKey[] {
+  const seen = new Set<string>();
+  const out: PerSignalDeleteKey[] = [];
+  for (const r of rows) {
+    const gameId = r.game_id;
+    const marketType = r.market_type;
+    const side = r.side;
+    if (typeof gameId !== "number") continue;
+    if (typeof marketType !== "string") continue;
+    if (typeof side !== "string") continue;
+    const k = `${gameId}::${marketType}::${side}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push({ game_id: gameId, market_type: marketType, side });
+  }
+  return out;
+}
+
+/**
  * 2026-06-10 phantom-thinning fix — execute per-(game, market, sportsbook)
  * DELETEs against `lines`. Skips the loop entirely when rows is empty
  * (no book got an update → preserve everything as-is).
@@ -733,12 +768,29 @@ export const linesService = {
         }
       }
 
-      const { error: delErr } = await supabase
-        .from("sharp_signals")
-        .delete()
-        .in("game_id", gameIds);
-      if (delErr) {
-        throw new Error(`linesService.refreshSharpSignals delete failed: ${delErr.message}`);
+      // 2026-06-10 sharp-signals preservation fix — per-(game, market_type,
+      // side) DELETE derived from the actual payload. A signal row for
+      // (game, market, side) absent from this poll is PRESERVED in
+      // sharp_signals so the public-splits snapshot taken at lock time
+      // still has it. Previously this DELETE wiped every signal for the
+      // slate's games on every refresh, so any later thin SharpAPI
+      // /splits response would erase morning data (and downstream
+      // buildPublicSplitsSnapshot would see null where it should have
+      // found a value). Mirrors today's per-(game, market, sportsbook)
+      // fix on the `lines` table.
+      const signalDeleteKeys = derivePerSignalDeleteKeys(payload);
+      for (const k of signalDeleteKeys) {
+        const { error: delErr } = await supabase
+          .from("sharp_signals")
+          .delete()
+          .eq("game_id", k.game_id)
+          .eq("market_type", k.market_type)
+          .eq("side", k.side);
+        if (delErr) {
+          throw new Error(
+            `linesService.refreshSharpSignals per-(game,market,side) delete failed for game_id=${k.game_id} market=${k.market_type} side=${k.side}: ${delErr.message}`,
+          );
+        }
       }
 
       if (payload.length > 0) {

@@ -3103,7 +3103,11 @@ export async function GET(request: Request) {
       )
       .eq("sport", "mlb")
       .eq("slate_date", requestedDate)
-      .in("market", ["moneyline", "total"])
+      // 2026-06-10 FI lock-contract fix — extend to first_inning so the
+      // FI Daily Edge card stops drifting post-lock when the model
+      // re-runs and flips its pick. ML/Total already follow this
+      // contract (Phase 6B.18 + commit 05ae36e); FI was the scope gap.
+      .in("market", ["moneyline", "total", "first_inning"])
       .not("locked_at", "is", null);
     type LockedRec = {
       game_id: number;
@@ -3148,13 +3152,16 @@ export async function GET(request: Request) {
     for (const g of games) {
       const lockedMl = lockedByGameMarket.get(`${g.id}::moneyline`);
       const lockedOu = lockedByGameMarket.get(`${g.id}::total`);
-      if (!lockedMl && !lockedOu) continue;
+      // 2026-06-10 FI lock-contract fix — pull the locked FI row too so
+      // the FI card stops reading live `pred.predicted_nrfi` after lock.
+      const lockedFi = lockedByGameMarket.get(`${g.id}::first_inning`);
+      if (!lockedMl && !lockedOu && !lockedFi) continue;
       if (!g.game_predictions) continue;
       const pred = g.game_predictions;
-      // Prefer the most-complete snapshot (ML and OU share the same
-      // game_predictions.sport_specific at lock time, so either is fine
-      // — fall back if one is missing).
-      const lockedSp = (lockedMl?.snapshot_json ?? lockedOu?.snapshot_json) as
+      // Prefer the most-complete snapshot (ML, OU, and FI share the same
+      // game_predictions.sport_specific at lock time, so any is fine —
+      // fall back through them if some are missing).
+      const lockedSp = (lockedMl?.snapshot_json ?? lockedOu?.snapshot_json ?? lockedFi?.snapshot_json) as
         | Record<string, unknown>
         | null;
       if (lockedSp !== null && lockedSp !== undefined) {
@@ -3174,12 +3181,33 @@ export async function GET(request: Request) {
         (pred as unknown as { ou_confidence: number | null }).ou_confidence =
           lockedOu.confidence;
       }
+      if (lockedFi) {
+        // 2026-06-10 FI lock-contract fix — convert the locked FI pick
+        // string back to the boolean shape that the downstream FI
+        // builder reads. Mapping:
+        //   "NRFI"    → predicted_nrfi=true
+        //   "YRFI"    → predicted_nrfi=false
+        //   "Toss-Up" → predicted_nrfi=true (Toss-Up is communicated to
+        //                the card via sport_specific.fi_v2_audit fields
+        //                which were already swapped above; this boolean
+        //                just preserves the NRFI-side identity that
+        //                Phase 4D.1 uses for the Toss-Up zone)
+        //   null      → predicted_nrfi=null (held / no pick)
+        (pred as unknown as { predicted_nrfi: boolean | null }).predicted_nrfi =
+          lockedFi.pick === null
+            ? null
+            : lockedFi.pick === "YRFI"
+              ? false
+              : true;
+        (pred as unknown as { nrfi_confidence: number | null }).nrfi_confidence =
+          lockedFi.confidence;
+      }
       // Make sure locked_at is present so downstream lock-aware UI
       // bits (LockBadge etc.) render the lock state correctly even
       // when game_predictions.locked_at was cleared.
-      if ((lockedMl?.locked_at ?? lockedOu?.locked_at) !== undefined) {
-        (pred as unknown as { locked_at: string | null }).locked_at =
-          (lockedMl?.locked_at ?? lockedOu?.locked_at) ?? null;
+      const anyLockedAt = lockedMl?.locked_at ?? lockedOu?.locked_at ?? lockedFi?.locked_at;
+      if (anyLockedAt !== undefined) {
+        (pred as unknown as { locked_at: string | null }).locked_at = anyLockedAt ?? null;
       }
       // Phase 6B.28 — swap predicted_*_score and V2.1 framework grades
       // (ml_grade/ou_grade/nrfi_grade + signal_type + market_signal) from
