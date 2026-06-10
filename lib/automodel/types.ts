@@ -163,8 +163,10 @@ export type WeatherSnapshot = {
 };
 
 export type MarketSnapshot = {
-  /** Priority chain: Pinnacle total → other books → operator-entered
-   *  sport_specific.listed_line → null. Null means O/U pick is held. */
+  /** Priority chain: corroboration-aware resolver (≥2 real-book
+   *  agreement OR 1 real-book + splits_consensus) → splits_consensus
+   *  fallback → operator-entered sport_specific.listed_line → null.
+   *  Null means O/U pick must be held. */
   listed_total: number | null;
   home_ml_odds_american: number | null;
   away_ml_odds_american: number | null;
@@ -180,6 +182,18 @@ export type MarketSnapshot = {
   under_odds_american: number | null;
   /** True when Pinnacle specifically is the source of listed_total. */
   has_pinnacle_total: boolean;
+  /**
+   * 2026-06-09 phantom-alt-line fix — audit trail for the locked total
+   * line so snapshot_json.total_line_source_at_lock /
+   * total_line_book / total_line_agreement_count /
+   * total_line_consensus_at_same_line can be persisted by the writer.
+   * Optional for back-compat with legacy snapshots; populated by
+   * featureSnapshot.pickListedTotal for every new run.
+   */
+  total_line_source?: "real_book" | "consensus_fallback" | "unavailable";
+  total_line_book?: string | null;
+  total_line_agreement_count?: number;
+  total_line_consensus_at_same_line?: boolean;
 };
 
 export type SharpSnapshot = {

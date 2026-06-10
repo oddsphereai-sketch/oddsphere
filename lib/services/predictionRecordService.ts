@@ -990,6 +990,30 @@ function buildOuRecord(
       odds_source_at_lock_ou: oddsForGame
         ? { over: oddsForGame.oddsSourceOu.over, under: oddsForGame.oddsSourceOu.under }
         : null,
+      // 2026-06-09 phantom-alt-line fix — audit trail for the locked
+      // total LINE. Values come from
+      // featureSnapshot.pickListedTotal via the model's
+      // sp.v2_2_audit.market_total path. When absent on the model
+      // snapshot (legacy v2_1 row, or unavailable), defaults below
+      // surface honestly so operators can spot rows that locked
+      // without verified corroboration.
+      total_line_source_at_lock:
+        typeof (v22 as Record<string, unknown>).total_line_source === "string"
+          ? ((v22 as Record<string, unknown>).total_line_source as string)
+          : "unknown",
+      total_line_book_at_lock:
+        typeof (v22 as Record<string, unknown>).total_line_book === "string" ||
+        (v22 as Record<string, unknown>).total_line_book === null
+          ? ((v22 as Record<string, unknown>).total_line_book as string | null)
+          : null,
+      total_line_agreement_count_at_lock:
+        typeof (v22 as Record<string, unknown>).total_line_agreement_count === "number"
+          ? ((v22 as Record<string, unknown>).total_line_agreement_count as number)
+          : null,
+      total_line_consensus_at_same_line_at_lock:
+        typeof (v22 as Record<string, unknown>).total_line_consensus_at_same_line === "boolean"
+          ? ((v22 as Record<string, unknown>).total_line_consensus_at_same_line as boolean)
+          : null,
     },
   };
 }

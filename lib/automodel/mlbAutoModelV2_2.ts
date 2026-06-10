@@ -56,6 +56,18 @@ export type V22Audit = {
   market_away_win_prob: number | null;
   market_baseline_valid: boolean;
   market_source_quality: string;
+  /**
+   * 2026-06-09 phantom-alt-line fix — audit trail for how the locked
+   * total LINE was chosen by featureSnapshot.pickListedTotal. Surfaced
+   * downstream into prediction_records.snapshot_json so operators can
+   * verify a real-book main line drove the lock, not alt-line noise or
+   * a stale consensus row. Optional for back-compat with legacy
+   * snapshots; new model runs always populate.
+   */
+  total_line_source?: "real_book" | "consensus_fallback" | "unavailable";
+  total_line_book?: string | null;
+  total_line_agreement_count?: number;
+  total_line_consensus_at_same_line?: boolean;
   // Layer 2
   independent_away_runs: number;
   independent_home_runs: number;
@@ -310,6 +322,14 @@ export function runMlbAutoModelV2_2(
     market_away_win_prob: market.awayNoVigProb,
     market_baseline_valid: marketValid,
     market_source_quality: market.dataQuality,
+    // 2026-06-09 phantom-alt-line fix — propagate the resolver's audit
+    // trail through V2.2 → snapshot_json. Reads off snap.market because
+    // computeMarketBaseline doesn't carry these fields through (they
+    // are about HOW the line was chosen, not the no-vig math).
+    total_line_source: snap.market.total_line_source,
+    total_line_book: snap.market.total_line_book,
+    total_line_agreement_count: snap.market.total_line_agreement_count,
+    total_line_consensus_at_same_line: snap.market.total_line_consensus_at_same_line,
     independent_away_runs: indep.away_expected_runs,
     independent_home_runs: indep.home_expected_runs,
     independent_total: indep.total_expected_runs,

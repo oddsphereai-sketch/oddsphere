@@ -68,6 +68,67 @@ const TOTAL_BOOK_PRIORITY: readonly string[] = [
 
 const ML_BOOK_PRIORITY: readonly string[] = TOTAL_BOOK_PRIORITY;
 
+/**
+ * Lock-line guard (2026-06-09 phantom-alt-line fix).
+ *
+ * Wider real-book priority list used by the main-line corroboration
+ * resolver (`pickMainTotalLine` below). Mirrors the writer's
+ * `BOOK_PRIORITY` post-`05ae36e` (predictionRecordService.ts) and
+ * intentionally EXCLUDES `splits_consensus` — consensus is a no-vig
+ * synthetic and never a real-book main market price.
+ *
+ * Books listed AFTER `caesars` were missing from the original
+ * `TOTAL_BOOK_PRIORITY` and that gap let the writer's fallback pick
+ * the FIRST `lines` row when none of the 5 priority books were
+ * present — which on a SharpAPI-only feed routinely meant a Kalshi
+ * binary-contract alt line (every 0.5 from 2.5..12.5) or a
+ * splits_consensus row. Two tonight's locked totals (SEA@BAL, STL@NYM)
+ * locked at phantom alt lines because of that. This list is the
+ * "real-book priority" used by the resolver and is never
+ * splits_consensus.
+ */
+const REAL_BOOK_TOTAL_PRIORITY: readonly string[] = [
+  "pinnacle",
+  "draftkings",
+  "fanduel",
+  "betmgm",
+  "caesars",
+  "bet365 us",
+  "bookmaker",
+  "ballybet",
+  "betrivers",
+  "bovada",
+  "circa",
+  "kalshi",
+  "onexbet",
+  "saba",
+  "fliff",
+] as const;
+const REAL_BOOK_SET: ReadonlySet<string> = new Set(REAL_BOOK_TOTAL_PRIORITY);
+
+/**
+ * Audit kind for the total-line source recorded in snapshot_json.
+ *   real_book          → corroborated real-book main line picked
+ *   consensus_fallback → no corroborated real-book main; splits_consensus used
+ *   unavailable        → no usable source; downstream should hold the market
+ */
+export type TotalLineSourceKind = "real_book" | "consensus_fallback" | "unavailable";
+
+export type TotalLineResolution = {
+  /** The line value to use, or null when unavailable. */
+  listed_total: number | null;
+  /** Pinnacle convenience flag (used by V2.2 market-source tier logic). */
+  has_pinnacle_total: boolean;
+  /** Audit kind for snapshot_json.total_line_source_at_lock. */
+  source: TotalLineSourceKind;
+  /** Sportsbook that supplied the line (null for consensus/unavailable). */
+  book: string | null;
+  /** Number of real-books corroborating the chosen line as their MAIN. */
+  agreement_count: number;
+  /** True when splits_consensus had a row at the same line. */
+  consensus_at_same_line: boolean;
+};
+
 // ─────────────────────────────────────────────────────────────
 // Top-level helpers
 // ─────────────────────────────────────────────────────────────
@@ -415,32 +476,138 @@ function buildWeatherSnapshot(
 }
 
 /**
- * Pick `lines.line_value` for market_type='total' following the
- * priority chain (Pinnacle → other named books → any sportsbook).
- * Returns null when no total line is present.
+ * Pick `lines.line_value` for market_type='total' — corroboration-aware.
+ *
+ * 2026-06-09 phantom-alt-line fix: the previous resolver iterated only
+ * 5 priority books then fell back to `totals.find(line_value !== null)`,
+ * which on a SharpAPI-only feed (no pinnacle/dk/fd/betmgm/caesars rows)
+ * routinely picked a Kalshi binary-contract alt line (every 0.5 from
+ * 2.5..12.5) or a `splits_consensus` row as the "listed total". Two of
+ * tonight's locked totals (SEA@BAL → 9.5, STL@NYM → 8.5) locked at
+ * phantom alt lines because of that and would have graded against the
+ * wrong line.
+ *
+ * New rules:
+ *   1. Real-book set = sportsbook != splits_consensus AND in REAL_BOOK_TOTAL_PRIORITY.
+ *   2. A (book, line) is a "main-line candidate" only when that book
+ *      has BOTH over+under at that line (filters out alt-line rows
+ *      where only one side is listed at a given price).
+ *   3. A line is "corroborated" when ≥2 real-books have it as their
+ *      main line, OR ≥1 real-book + splits_consensus has the same line.
+ *   4. If no line is corroborated:
+ *        a. fall back to splits_consensus.line_value (consensus_fallback)
+ *        b. else return null (unavailable; caller MUST hold this market)
+ *   5. Among corroborated lines, prefer the one with the most
+ *      corroborators (real-books + consensus); tie-break by
+ *      REAL_BOOK_TOTAL_PRIORITY winner.
+ *
+ * Returns the resolution with audit metadata for snapshot_json.
  */
-function pickListedTotal(linesForGame: LineRow[]): {
-  listed_total: number | null;
-  has_pinnacle_total: boolean;
-} {
+function pickListedTotal(linesForGame: LineRow[]): TotalLineResolution {
   const totals = linesForGame.filter((l) => l.market_type === "total");
-  for (const book of TOTAL_BOOK_PRIORITY) {
-    const match = totals.find(
-      (l) => l.sportsbook.toLowerCase() === book && l.line_value !== null
-    );
-    if (match !== undefined && match.line_value !== null) {
-      return {
-        listed_total: match.line_value,
-        has_pinnacle_total: book === "pinnacle",
-      };
+
+  // Consensus line(s) — splits_consensus has at most one main line per
+  // game. Captured separately so we can use it as a corroborator AND as
+  // the final fallback when no real-book main line is corroborated.
+  const consensusRow = totals.find(
+    (l) => l.sportsbook === "splits_consensus" && l.line_value !== null,
+  );
+  const consensusLine = consensusRow?.line_value ?? null;
+
+  // Real-book set with both-side requirement → "main-line candidates".
+  const realBook = totals.filter(
+    (l) =>
+      l.sportsbook !== "splits_consensus" &&
+      REAL_BOOK_SET.has(l.sportsbook.toLowerCase()) &&
+      l.line_value !== null &&
+      (l.side === "over" || l.side === "under"),
+  );
+  const bookLineSides = new Map<string, Set<string>>(); // "book::line" → {over, under}
+  for (const r of realBook) {
+    const key = `${r.sportsbook.toLowerCase()}::${r.line_value}`;
+    const set = bookLineSides.get(key) ?? new Set<string>();
+    set.add(r.side as string);
+    bookLineSides.set(key, set);
+  }
+  // Corroboration count per line: number of distinct real-books with
+  // a both-sided main at that line (alt-line single-side rows excluded
+  // implicitly by step 2). Plus 1 if splits_consensus has the same line.
+  const lineCorroborators = new Map<number, Set<string>>();
+  for (const [key, sides] of bookLineSides) {
+    if (!sides.has("over") || !sides.has("under")) continue;
+    const [book, lineStr] = key.split("::");
+    const line = Number(lineStr);
+    const arr = lineCorroborators.get(line) ?? new Set<string>();
+    arr.add(book);
+    lineCorroborators.set(line, arr);
+  }
+
+  // Candidates that meet the corroboration bar.
+  const candidates: Array<{ line: number; books: Set<string>; consensusMatch: boolean }> = [];
+  for (const [line, books] of lineCorroborators) {
+    const consensusMatch = consensusLine !== null && line === consensusLine;
+    if (books.size >= 2 || (books.size >= 1 && consensusMatch)) {
+      candidates.push({ line, books, consensusMatch });
     }
   }
-  // Fall through to ANY sportsbook with a total
-  const anyTotal = totals.find((l) => l.line_value !== null);
-  if (anyTotal !== undefined && anyTotal.line_value !== null) {
-    return { listed_total: anyTotal.line_value, has_pinnacle_total: false };
+
+  if (candidates.length > 0) {
+    // Sort: max (books+consensus) desc; tie → REAL_BOOK_TOTAL_PRIORITY
+    // winner desc (lowest priority index wins).
+    candidates.sort((a, b) => {
+      const ca = a.books.size + (a.consensusMatch ? 1 : 0);
+      const cb = b.books.size + (b.consensusMatch ? 1 : 0);
+      if (ca !== cb) return cb - ca;
+      const pa = Math.min(...[...a.books].map((bk) => {
+        const i = REAL_BOOK_TOTAL_PRIORITY.indexOf(bk);
+        return i === -1 ? 999 : i;
+      }));
+      const pb = Math.min(...[...b.books].map((bk) => {
+        const i = REAL_BOOK_TOTAL_PRIORITY.indexOf(bk);
+        return i === -1 ? 999 : i;
+      }));
+      return pa - pb;
+    });
+    const chosen = candidates[0];
+    const winningBook = [...chosen.books].sort((a, b) => {
+      const ia = REAL_BOOK_TOTAL_PRIORITY.indexOf(a);
+      const ib = REAL_BOOK_TOTAL_PRIORITY.indexOf(b);
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    })[0];
+    return {
+      listed_total: chosen.line,
+      has_pinnacle_total: chosen.books.has("pinnacle"),
+      source: "real_book",
+      book: winningBook,
+      agreement_count: chosen.books.size,
+      consensus_at_same_line: chosen.consensusMatch,
+    };
   }
-  return { listed_total: null, has_pinnacle_total: false };
+
+  // No corroborated real-book main line. Fall back to splits_consensus
+  // when available — it's a no-vig synthetic but at least it's a
+  // canonical pick, not alt-line noise.
+  if (consensusLine !== null) {
+    return {
+      listed_total: consensusLine,
+      has_pinnacle_total: false,
+      source: "consensus_fallback",
+      book: "splits_consensus",
+      agreement_count: 0,
+      consensus_at_same_line: true,
+    };
+  }
+
+  // Truly nothing usable. Caller must treat the total as unavailable
+  // and hold the market — never lock or grade against an unknown line.
+  return {
+    listed_total: null,
+    has_pinnacle_total: false,
+    source: "unavailable",
+    book: null,
+    agreement_count: 0,
+    consensus_at_same_line: false,
+  };
 }
 
 function pickMlOdds(
@@ -1053,7 +1220,11 @@ export async function buildFeatureSnapshots(
         : null;
     const weather = buildWeatherSnapshot(weatherByGame.get(g.id));
 
-    // Market — listed_total priority chain + fallback to sport_specific
+    // Market — listed_total via corroboration-aware resolver. The
+    // fallback to sport_specific.listed_line is preserved for
+    // back-compat with games where lines were never ingested at all
+    // (provider outage); when resolver returns "unavailable" AND no
+    // sport_specific fallback exists, downstream must hold the market.
     const linesForGame = linesByGame.get(g.id) ?? [];
     const linesTotal = pickListedTotal(linesForGame);
     const sportSpecificListedLine = fallbackListedLineFromPrediction(
@@ -1074,6 +1245,15 @@ export async function buildFeatureSnapshots(
       over_odds_american: pickOuOdds(linesForGame, "over"),
       under_odds_american: pickOuOdds(linesForGame, "under"),
       has_pinnacle_total: linesTotal.has_pinnacle_total,
+      // 2026-06-09 phantom-alt-line fix — audit trail for the locked
+      // total line so snapshot_json.total_line_source_at_lock /
+      // total_line_book / total_line_agreement_count /
+      // total_line_consensus_at_same_line can be persisted by the
+      // writer. Captures HOW the line was chosen for this snapshot.
+      total_line_source: linesTotal.source,
+      total_line_book: linesTotal.book,
+      total_line_agreement_count: linesTotal.agreement_count,
+      total_line_consensus_at_same_line: linesTotal.consensus_at_same_line,
     };
 
     const sharp = buildSharpSnapshot(signalsByGame.get(g.id) ?? []);

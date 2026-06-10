@@ -134,44 +134,128 @@ async function main() {
       ])! >= 0.92
   );
 
-  // pickListedTotal
+  // ── pickListedTotal — 2026-06-09 phantom-alt-line corroboration rules ──
+  // Helper: build a both-sided real-book row pair.
+  const ou = (book: string, line: number, gameId = 1) => [
+    { game_id: gameId, market_type: "total", sportsbook: book, side: "over",  line_value: line, odds_american: -110 },
+    { game_id: gameId, market_type: "total", sportsbook: book, side: "under", line_value: line, odds_american: -110 },
+  ];
   {
-    const lines = [
-      { game_id: 1, market_type: "total", sportsbook: "pinnacle", side: null, line_value: 8.5, odds_american: null },
-      { game_id: 1, market_type: "total", sportsbook: "draftkings", side: null, line_value: 9.0, odds_american: null },
-    ];
-    const result = fs.pickListedTotal(lines);
+    // 2-real-book main-line: pinnacle + draftkings both at 8.5 → real_book
+    const lines = [...ou("pinnacle", 8.5), ...ou("draftkings", 8.5)];
+    const r = fs.pickListedTotal(lines);
     check(
-      "pickListedTotal: Pinnacle preferred over DraftKings",
-      result.listed_total === 8.5 && result.has_pinnacle_total === true
+      "pickListedTotal: 2 priority real-books at 8.5 → real_book, pinnacle preferred",
+      r.listed_total === 8.5 && r.has_pinnacle_total === true && r.source === "real_book" && r.agreement_count === 2 && r.book === "pinnacle"
     );
   }
   {
+    // 1 real-book + splits_consensus at same line → real_book
     const lines = [
-      { game_id: 1, market_type: "total", sportsbook: "draftkings", side: null, line_value: 9.0, odds_american: null },
-      { game_id: 1, market_type: "total", sportsbook: "fanduel", side: null, line_value: 9.5, odds_american: null },
+      ...ou("ballybet", 8.5),
+      { game_id: 1, market_type: "total", sportsbook: "splits_consensus", side: "over",  line_value: 8.5, odds_american: null },
+      { game_id: 1, market_type: "total", sportsbook: "splits_consensus", side: "under", line_value: 8.5, odds_american: null },
     ];
-    const result = fs.pickListedTotal(lines);
+    const r = fs.pickListedTotal(lines);
     check(
-      "pickListedTotal: DraftKings preferred over FanDuel (book priority chain)",
-      result.listed_total === 9.0 && result.has_pinnacle_total === false
+      "pickListedTotal: 1 real-book + consensus at same line → real_book",
+      r.listed_total === 8.5 && r.source === "real_book" && r.agreement_count === 1 && r.consensus_at_same_line === true && r.book === "ballybet"
     );
   }
   {
-    const lines = [
-      { game_id: 1, market_type: "total", sportsbook: "novig", side: null, line_value: 9.5, odds_american: null },
-    ];
-    const result = fs.pickListedTotal(lines);
+    // ALT-LINE NOISE: Kalshi binary contracts at every 0.5 line, no
+    // other real-book → must NOT be selected; falls to consensus or unavailable.
+    const lines = [];
+    for (const ln of [2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5, 11.5, 12.5]) {
+      lines.push(...ou("kalshi", ln));
+    }
+    const r = fs.pickListedTotal(lines as any);
     check(
-      "pickListedTotal: unknown sportsbook still returns value (fallthrough)",
-      result.listed_total === 9.5 && result.has_pinnacle_total === false
+      "pickListedTotal: Kalshi alt-line noise solo → real_book ONLY if a single Kalshi both-sided line passes the ≥2 corroborator bar (it shouldn't here without other books)",
+      // Every Kalshi line shows both over+under in our fixture, so each line has agreement=1.
+      // No second real-book corroborates and no consensus given → all candidates fail the ≥2 bar
+      // → fall through to "unavailable".
+      r.source === "unavailable" && r.listed_total === null && r.book === null
     );
   }
   {
-    const result = fs.pickListedTotal([]);
+    // consensus_fallback: only splits_consensus exists → consensus_fallback
+    const lines = [
+      { game_id: 1, market_type: "total", sportsbook: "splits_consensus", side: "over",  line_value: 9, odds_american: null },
+      { game_id: 1, market_type: "total", sportsbook: "splits_consensus", side: "under", line_value: 9, odds_american: null },
+    ];
+    const r = fs.pickListedTotal(lines);
     check(
-      "pickListedTotal: empty lines → null total",
-      result.listed_total === null && result.has_pinnacle_total === false
+      "pickListedTotal: only splits_consensus → consensus_fallback",
+      r.source === "consensus_fallback" && r.listed_total === 9 && r.book === "splits_consensus" && r.agreement_count === 0
+    );
+  }
+  {
+    // Mixed real-book disagreement: ballybet at 8.5 (both sides),
+    // betmgm at 9 (both sides) → no line has ≥2 corroborators →
+    // falls to consensus (if any) → here no consensus → unavailable.
+    const lines = [...ou("ballybet", 8.5), ...ou("betmgm", 9)];
+    const r = fs.pickListedTotal(lines);
+    check(
+      "pickListedTotal: mixed disagreement, no consensus → unavailable",
+      r.source === "unavailable" && r.listed_total === null
+    );
+  }
+  {
+    // Same disagreement BUT splits_consensus at 9 → consensus tips betmgm 9 over ballybet 8.5
+    const lines = [
+      ...ou("ballybet", 8.5),
+      ...ou("betmgm", 9),
+      { game_id: 1, market_type: "total", sportsbook: "splits_consensus", side: "over",  line_value: 9, odds_american: null },
+      { game_id: 1, market_type: "total", sportsbook: "splits_consensus", side: "under", line_value: 9, odds_american: null },
+    ];
+    const r = fs.pickListedTotal(lines);
+    check(
+      "pickListedTotal: mixed disagreement + consensus at 9 → real_book 9 (consensus tips)",
+      r.source === "real_book" && r.listed_total === 9 && r.book === "betmgm" && r.consensus_at_same_line === true
+    );
+  }
+  {
+    // Kalshi alt-line corroborated by another real-book at same line → accepted as real_book.
+    // Kalshi posts alt-lines at 7.5, 8.5, 9.5; betmgm has main at 8.5.
+    const lines = [
+      ...ou("kalshi", 7.5),
+      ...ou("kalshi", 8.5),
+      ...ou("kalshi", 9.5),
+      ...ou("betmgm", 8.5),
+    ];
+    const r = fs.pickListedTotal(lines);
+    check(
+      "pickListedTotal: Kalshi alt-line corroborated by another real-book at 8.5 → real_book",
+      r.source === "real_book" && r.listed_total === 8.5 && r.agreement_count === 2
+    );
+  }
+  {
+    // splits_consensus is NEVER counted as a real-book corroborator on its own.
+    const lines = [
+      { game_id: 1, market_type: "total", sportsbook: "splits_consensus", side: "over",  line_value: 8.5, odds_american: null },
+      { game_id: 1, market_type: "total", sportsbook: "splits_consensus", side: "under", line_value: 8.5, odds_american: null },
+    ];
+    const r = fs.pickListedTotal(lines);
+    check(
+      "pickListedTotal: splits_consensus excluded from real-book set → consensus_fallback",
+      r.source === "consensus_fallback" && r.book === "splits_consensus"
+    );
+  }
+  {
+    // Single real-book both-sided line WITHOUT consensus support → fails ≥2 bar → unavailable
+    const lines = [...ou("betmgm", 8.5)];
+    const r = fs.pickListedTotal(lines);
+    check(
+      "pickListedTotal: single real-book without consensus → unavailable (no corroboration)",
+      r.source === "unavailable" && r.listed_total === null
+    );
+  }
+  {
+    const r = fs.pickListedTotal([]);
+    check(
+      "pickListedTotal: empty lines → unavailable",
+      r.listed_total === null && r.source === "unavailable" && r.has_pinnacle_total === false
     );
   }
 
