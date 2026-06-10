@@ -11,6 +11,7 @@
     "test:distributions": "tsx scripts/test-distributions.ts",
     "test:props-math": "tsx scripts/test-props-math.ts",
     "predict": "tsx --env-file=.env.local scripts/predict-tonight.ts",
+    "audit:daily-edge": "tsx --env-file=.env.local scripts/operator/audit-daily-edge-integrity.ts",
     "test:tracking": "tsx scripts/test-tracking.ts",
     "test:scores-model": "tsx scripts/test-scores-model.ts",
     "test:cron-infra": "tsx --env-file=.env.local scripts/test-cron-infra.ts",
