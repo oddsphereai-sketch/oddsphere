@@ -21,6 +21,7 @@ import {
   type SharpApiGameResolver,
 } from "../lib/providers/real_api/SharpAPIOddsProvider";
 import { SharpApiClient } from "../lib/providers/real_api/_sharpApiClient";
+import { derivePerBookDeleteKeys } from "../lib/services/linesService";
 import {
   buildDiscoveryFromSplitsRows,
   extractSlateDateFromEventId,
@@ -1132,6 +1133,125 @@ async function testMarketCoverageGate() {
   );
 }
 
+// ─── 2026-06-10 phantom-thinning fix tests ──────────────────────────────
+// Pure-function tests for derivePerBookDeleteKeys. These prove the new
+// scope semantics without touching the DB: given a hypothetical payload,
+// the derived delete keys MUST scope per (game, market, sportsbook) so
+// books absent from this poll are preserved.
+
+const row = (
+  game_id: number,
+  market_type: string,
+  sportsbook: string,
+  side: string,
+  line_value: number | null = null,
+  odds_american: number = -110,
+): Record<string, unknown> => ({
+  game_id, market_type, sportsbook, side, line_value, odds_american,
+  player_id: null, fetched_at: "2026-06-10T00:00:00Z",
+});
+
+function testPerBookDeleteKeys_partialPollPreservesPriorBooks() {
+  section("phantom-thinning — partial poll preserves prior books");
+  // Scenario: morning poll wrote ballybet+betmgm+betrivers Total rows.
+  // Now the evening payload contains ONLY ballybet (the others didn't
+  // come back from SharpAPI). The derived delete keys MUST target only
+  // ballybet — leaving betmgm + betrivers in `lines` untouched.
+  const eveningPayload = [
+    row(15098, "total", "ballybet", "over", 8.5),
+    row(15098, "total", "ballybet", "under", 8.5),
+  ];
+  const keys = derivePerBookDeleteKeys(eveningPayload);
+  check(
+    "partial poll: only 1 delete key (ballybet) — prior betmgm/betrivers preserved",
+    keys.length === 1 &&
+      keys[0].sportsbook === "ballybet" &&
+      keys[0].game_id === 15098 &&
+      keys[0].market_type === "total",
+  );
+}
+
+function testPerBookDeleteKeys_sameSportsbookReplacement() {
+  section("phantom-thinning — same sportsbook updates replace cleanly");
+  // ballybet price moved from -120 to -125 for the same line. Same
+  // sportsbook → one delete key, replacement happens atomically.
+  const newerBallybetRows = [
+    row(15098, "total", "ballybet", "over", 8.5, -125),
+    row(15098, "total", "ballybet", "under", 8.5, -120),
+  ];
+  const keys = derivePerBookDeleteKeys(newerBallybetRows);
+  check(
+    "same book in payload: 1 key, deduped across both sides",
+    keys.length === 1 && keys[0].sportsbook === "ballybet",
+  );
+}
+
+function testPerBookDeleteKeys_splitsAugmentDoesNotWipeRealBooks() {
+  section("phantom-thinning — /splits fallback augments instead of replaces");
+  // /splits fallback fired because /odds returned 0 main-Total rows.
+  // The payload contains ONLY splits_consensus rows. The derived keys
+  // target ONLY splits_consensus — prior real-book rows remain.
+  const splitsOnlyPayload = [
+    row(15098, "total", "splits_consensus", "over", 8.5),
+    row(15098, "total", "splits_consensus", "under", 8.5),
+  ];
+  const keys = derivePerBookDeleteKeys(splitsOnlyPayload);
+  check(
+    "splits-only payload: delete key targets ONLY splits_consensus",
+    keys.length === 1 && keys[0].sportsbook === "splits_consensus",
+  );
+}
+
+function testPerBookDeleteKeys_kalshiOnlyDoesNotWipePriorRealBooks() {
+  section("phantom-thinning — Kalshi-only response preserves prior real books");
+  // Kalshi posts 11 alt-line binaries (2.5..12.5 × over+under = 22 rows).
+  // Even with this many rows, the derived delete keys collapse to ONE
+  // key for (game_id, total, kalshi). Prior real-book rows (ballybet,
+  // betmgm, etc.) are not touched.
+  const kalshiOnlyPayload: Record<string, unknown>[] = [];
+  for (const line of [2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5, 11.5, 12.5]) {
+    kalshiOnlyPayload.push(row(15098, "total", "kalshi", "over", line));
+    kalshiOnlyPayload.push(row(15098, "total", "kalshi", "under", line));
+  }
+  const keys = derivePerBookDeleteKeys(kalshiOnlyPayload);
+  check(
+    "Kalshi-only payload of 22 rows: collapses to 1 delete key (kalshi only)",
+    keys.length === 1 && keys[0].sportsbook === "kalshi",
+  );
+}
+
+function testPerBookDeleteKeys_emptyPayloadProducesEmptyKeys() {
+  section("phantom-thinning — empty payload preserves all existing rows");
+  // Provider returned nothing for any market. Empty payload → empty
+  // delete-key set → no DELETE executes → all prior rows preserved.
+  const empty: Record<string, unknown>[] = [];
+  const keys = derivePerBookDeleteKeys(empty);
+  check("empty payload: 0 delete keys", keys.length === 0);
+}
+
+function testPerBookDeleteKeys_multiSidedMultiLinedBookCollapsesToOneKey() {
+  section("phantom-thinning — one book × multiple sides × multiple lines = 1 key");
+  // Defense-in-depth: even when a single book sends over+under at the
+  // same line, the dedupe produces exactly one delete target so the
+  // DELETE-then-INSERT is atomic for that book's market.
+  const payload = [
+    row(15098, "total", "betmgm", "over", 8.5),
+    row(15098, "total", "betmgm", "under", 8.5),
+    row(15098, "moneyline", "betmgm", "home"),
+    row(15098, "moneyline", "betmgm", "away"),
+    row(15099, "total", "betmgm", "over", 9.0),
+    row(15099, "total", "betmgm", "under", 9.0),
+  ];
+  const keys = derivePerBookDeleteKeys(payload);
+  // Expect 3 keys: (15098,total,betmgm), (15098,moneyline,betmgm), (15099,total,betmgm)
+  check(
+    "multi-side multi-line: 3 keys (one per game+market for betmgm)",
+    keys.length === 3 &&
+      keys.every((k) => k.sportsbook === "betmgm") &&
+      new Set(keys.map((k) => `${k.game_id}::${k.market_type}`)).size === 3,
+  );
+}
+
 // ─── runner ───────────────────────────────────────────────────────────
 
 async function main() {
@@ -1153,6 +1273,14 @@ async function main() {
   await testR16GARowsWithoutTeamStringsPass();
   await testR16GAOverUnderSidesUnaffected();
   await testMarketCoverageGate();
+
+  // 2026-06-10 phantom-thinning fix — per-(game, market, sportsbook) DELETE scope
+  testPerBookDeleteKeys_partialPollPreservesPriorBooks();
+  testPerBookDeleteKeys_sameSportsbookReplacement();
+  testPerBookDeleteKeys_splitsAugmentDoesNotWipeRealBooks();
+  testPerBookDeleteKeys_kalshiOnlyDoesNotWipePriorRealBooks();
+  testPerBookDeleteKeys_emptyPayloadProducesEmptyKeys();
+  testPerBookDeleteKeys_multiSidedMultiLinedBookCollapsesToOneKey();
 
   console.log();
   console.log("━━━ Summary ━━━");

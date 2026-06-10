@@ -2,8 +2,12 @@
  * linesService — pull game lines, player props, and sharp signals from the
  * betting provider and write them to lines / line_history / sharp_signals.
  *
- * `lines` has no UNIQUE constraint — strategy is DELETE-then-INSERT scoped
- * to tonight's game IDs so the table always reflects the latest snapshot.
+ * `lines` has no UNIQUE constraint — strategy is per-(game, market_type,
+ * sportsbook) DELETE-then-INSERT (2026-06-10 phantom-thinning fix). A book
+ * absent from the latest poll is PRESERVED in `lines` rather than wiped;
+ * a book present in the latest poll has its prior rows for that
+ * (game, market) replaced atomically.
+ *
  * `line_history` is append-only (the change-log archive). `sharp_signals`
  * also gets DELETE-then-INSERT scoped to tonight to handle stale signals
  * being removed when the underlying market normalizes.
@@ -18,6 +22,66 @@ import type { CronHandlerResult } from "../cron/runCron";
 import { loadGameIdMap, loadPlayerIdMap } from "./_idMaps";
 import { SharpAPIOddsProvider } from "../providers/real_api/SharpAPIOddsProvider";
 import type { V2DiscoveryReport } from "../providers/real_api/SharpAPIOddsProvider";
+
+/**
+ * 2026-06-10 phantom-thinning fix — per-(game, market_type, sportsbook)
+ * delete-key derivation. Given the rows we're ABOUT TO INSERT, build the
+ * minimal set of (game, market, book) tuples we must clear first so the
+ * insert is idempotent.
+ *
+ * Pure helper, exported so unit tests can assert behavior without a DB.
+ *
+ * Product rule: "lines should not become thinner just because a later
+ * poll is partial. A book absent from this poll persists; a book present
+ * has its prior rows for that (game, market) replaced atomically."
+ */
+export type PerBookDeleteKey = { game_id: number; market_type: string; sportsbook: string };
+
+export function derivePerBookDeleteKeys(
+  rows: ReadonlyArray<Record<string, unknown>>,
+): PerBookDeleteKey[] {
+  const seen = new Set<string>();
+  const out: PerBookDeleteKey[] = [];
+  for (const r of rows) {
+    const gameId = r.game_id;
+    const marketType = r.market_type;
+    const sportsbook = r.sportsbook;
+    if (typeof gameId !== "number") continue;
+    if (typeof marketType !== "string") continue;
+    if (typeof sportsbook !== "string") continue;
+    const k = `${gameId}::${marketType}::${sportsbook}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push({ game_id: gameId, market_type: marketType, sportsbook });
+  }
+  return out;
+}
+
+/**
+ * 2026-06-10 phantom-thinning fix — execute per-(game, market, sportsbook)
+ * DELETEs against `lines`. Skips the loop entirely when rows is empty
+ * (no book got an update → preserve everything as-is).
+ */
+async function deletePerSportsbook(
+  rows: ReadonlyArray<Record<string, unknown>>,
+  context: string,
+): Promise<void> {
+  const keys = derivePerBookDeleteKeys(rows);
+  for (const k of keys) {
+    const { error } = await supabase
+      .from("lines")
+      .delete()
+      .eq("game_id", k.game_id)
+      .eq("market_type", k.market_type)
+      .eq("sportsbook", k.sportsbook)
+      .is("player_id", null);
+    if (error) {
+      throw new Error(
+        `${context} per-(game,market,sportsbook) delete failed for game_id=${k.game_id} market=${k.market_type} sportsbook=${k.sportsbook}: ${error.message}`,
+      );
+    }
+  }
+}
 
 export const linesService = {
   /**
@@ -89,17 +153,12 @@ export const linesService = {
     }
 
     if (!dryRun) {
-      // DELETE existing rows for tonight's games scoped to game lines only
-      // (player_id IS NULL → game-level rows). Player props are handled by
-      // refreshPlayerProps so we don't accidentally nuke them here.
-      const { error: delErr } = await supabase
-        .from("lines")
-        .delete()
-        .in("game_id", gameIds)
-        .is("player_id", null);
-      if (delErr) {
-        throw new Error(`linesService.refreshGameLines delete failed: ${delErr.message}`);
-      }
+      // 2026-06-10 phantom-thinning fix — per-(game, market_type, sportsbook)
+      // DELETE scope. A book present in this payload gets its prior rows
+      // for that (game, market) replaced atomically; a book absent from
+      // this payload is preserved. Replaces the prior full-slate wipe
+      // that turned every partial poll into a thinning event.
+      await deletePerSportsbook(linesPayload, "linesService.refreshGameLines");
 
       if (linesPayload.length > 0) {
         const { error } = await supabase.from("lines").insert(linesPayload);
@@ -364,41 +423,39 @@ export const linesService = {
       void anyCount;
     }
 
-    if (!dryRun && replaceTargets.length > 0) {
-      // Per-(game, market) DELETE: scope is tight. A market a game had
-      // before that the provider did NOT return this run is preserved
-      // intact (no DELETE, no INSERT). Per R-16D spec: don't drop a
-      // market unless the provider gave us replacement rows for it.
-      for (const t of replaceTargets) {
-        const { error: delErr } = await supabase
-          .from("lines")
-          .delete()
-          .eq("game_id", t.gameId)
-          .eq("market_type", t.marketType)
-          .is("player_id", null);
-        if (delErr) {
-          throw new Error(
-            `linesService.refreshGameLinesV2 per-(game,market) delete failed for game_id=${t.gameId} market=${t.marketType}: ${delErr.message}`
-          );
-        }
-      }
+    // Build the payload first (independent of dry-run + delete-scope decisions).
+    // Market-level `replaceTargets` is preserved for the per-game coverage
+    // report (decisions.market_decisions = "refreshed" | "preserved"), but the
+    // actual DELETE scope is per-(game, market, sportsbook) below.
+    const linesPayload: Array<Record<string, unknown>> = [];
+    const historyPayload: Array<Record<string, unknown>> = [];
+    for (const t of replaceTargets) {
+      const g = groups.get(groupKey(t.gameId, t.marketType));
+      if (g === undefined) continue;
+      linesPayload.push(...g.lineRows);
+      historyPayload.push(...g.historyRows);
+    }
 
-      const linesPayload: Array<Record<string, unknown>> = [];
-      const historyPayload: Array<Record<string, unknown>> = [];
-      for (const t of replaceTargets) {
-        const g = groups.get(groupKey(t.gameId, t.marketType));
-        if (g === undefined) continue;
-        linesPayload.push(...g.lineRows);
-        historyPayload.push(...g.historyRows);
-      }
+    if (!dryRun && linesPayload.length > 0) {
+      // 2026-06-10 phantom-thinning fix — per-(game, market_type, sportsbook)
+      // DELETE scope, derived from the actual rows being inserted. A book
+      // present in this payload gets its prior rows for that (game, market)
+      // atomically replaced; a book absent from this payload (because
+      // SharpAPI's later poll was thinner) is PRESERVED. Replaces the
+      // R-16D per-(game, market) wipe that turned every partial poll into
+      // a thinning event by deleting all books for a market when only one
+      // book reported.
+      //
+      // splits_consensus is a sportsbook like any other under this scope:
+      // it can only delete prior splits_consensus rows, never real books.
+      // The R-16E /splits fallback therefore augments instead of replaces.
+      await deletePerSportsbook(linesPayload, "linesService.refreshGameLinesV2");
 
-      if (linesPayload.length > 0) {
-        const { error } = await supabase.from("lines").insert(linesPayload);
-        if (error) {
-          throw new Error(
-            `linesService.refreshGameLinesV2 insert failed: ${error.message}`
-          );
-        }
+      const { error } = await supabase.from("lines").insert(linesPayload);
+      if (error) {
+        throw new Error(
+          `linesService.refreshGameLinesV2 insert failed: ${error.message}`
+        );
       }
       if (historyPayload.length > 0) {
         const { error: histErr } = await supabase
