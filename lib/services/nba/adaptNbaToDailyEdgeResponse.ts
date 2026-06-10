@@ -46,7 +46,7 @@ import type {
   SignalType,
 } from "../../../lib/types/domain/Grade";
 import type { Verdict } from "../verdictDerivation";
-import type { SharpReadKey } from "../sharpReadSelector";
+import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import type {
   MarketIntelligence,
   NbaDailyEdgeDto,
@@ -347,8 +347,20 @@ function buildSharpSignals(game: NbaDailyEdgeGameDto, capability: NbaMarketSigna
   return out;
 }
 
-function buildSharpReadFromQuickRead(quickRead: string): { key: SharpReadKey; sentence: string } {
-  return { key: "wait_no_edge_clean" as SharpReadKey, sentence: quickRead };
+// P0-4b 2026-06-10 (mirror of NHL fix in commit 52d0a47):
+// Previously cast a PHANTOM `"wait_no_edge_clean"` SharpReadKey (no such
+// entry exists in SHARP_READ_SENTENCES) and reused the model-derived
+// `quick_read` sentence as the "sharp read" — which falsely implied
+// sharp analysis had been performed. NBA does not yet ingest
+// sharp_signals reliably (see Phase 2 audit §H + SharpAPI NBA Finals
+// coverage gap memo), so the honest default is `"no_data"` with the
+// canonical sentence. When the NBA sharp-signals pipeline lands
+// (P1 follow-up), this should be replaced with a derived
+// selectSharpReadKey(...) call. The `quick_read` model summary still
+// surfaces via the DTO's `decisionLine` field (line 441) — it just no
+// longer masquerades as a sharp read here.
+function buildSharpReadFromQuickRead(_quickRead: string): { key: SharpReadKey; sentence: string } {
+  return { key: "no_data" as SharpReadKey, sentence: SHARP_READ_SENTENCES.no_data };
 }
 
 /**
