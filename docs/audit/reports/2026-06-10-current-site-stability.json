@@ -1,0 +1,312 @@
+{
+  "generated_at": "2026-06-10T17:05:50.850Z",
+  "slate_date": "2026-06-10",
+  "sport_status": {
+    "mlb": "PARTIAL",
+    "nba": "PARTIAL",
+    "nhl": "PARTIAL"
+  },
+  "cross_sport_issues": [
+    {
+      "code": "REGISTRY_CONTEXT_ONLY_NOTE",
+      "severity": "INFO",
+      "sport": null,
+      "affected": {
+        "details": "NBA spread + NHL puck-line are context-only displayed markets, not public tracked markets"
+      },
+      "user_facing_impact": "None — confirmation that context-only is the intended product direction",
+      "recommended_fix": "n/a — see commit 29dc76e + memory feedback-public-tracking-vs-internal-audit",
+      "auto_fixable": false,
+      "operator_approval_required": false
+    },
+    {
+      "code": "CONTEXT_SNAPSHOT_DEFERRED",
+      "severity": "WARN",
+      "sport": null,
+      "affected": {
+        "details": "snapshot_json.displayed_context_markets.{spread,puck_line} NOT YET implemented"
+      },
+      "user_facing_impact": "Auditor cannot verify exactly what spread/puck-line label/line/grade was shown at lock; falls back to live UI inspection",
+      "recommended_fix": "P1: add buildSnapshot extension for NBA + NHL writing displayed_context_markets.{spread,puck_line} per Phase 6 §D. Defer until lock-write path can be safely modified",
+      "auto_fixable": false,
+      "operator_approval_required": false
+    },
+    {
+      "code": "COPY_LINTER_CONFIRMED",
+      "severity": "INFO",
+      "sport": null,
+      "affected": {
+        "details": "bannedTermsLinter active for: CLV, closing line value, RLM, reverse line movement, consensus, no-vig"
+      },
+      "user_facing_impact": "None — confirmation",
+      "recommended_fix": "n/a",
+      "auto_fixable": false,
+      "operator_approval_required": false
+    },
+    {
+      "code": "GRADING_DTO_RESULT_DORMANT",
+      "severity": "INFO",
+      "sport": null,
+      "affected": {
+        "details": "DailyEdge DTO result.markets.pickResult is dormant/null across MLB+NBA+NHL — not an NHL-specific bug"
+      },
+      "user_facing_impact": "Per-card win/loss is not surfaced in the DTO; tracking page is the surface that shows graded results",
+      "recommended_fix": "P2 — decide cross-sport whether to populate per-card result.markets.{pickResult, gradeUnits}",
+      "auto_fixable": false,
+      "operator_approval_required": false
+    },
+    {
+      "code": "CRON_ENV_GATE_NOTE",
+      "severity": "INFO",
+      "sport": null,
+      "affected": {
+        "details": "Sport-specific env gates (NHL_CRON_ENABLED, NBA_CRON_ENABLED) are checked at runtime in route handlers. Auditor cannot inspect production env — confirm via Vercel dashboard."
+      },
+      "user_facing_impact": "None — confirmation",
+      "recommended_fix": "n/a",
+      "auto_fixable": false,
+      "operator_approval_required": false
+    }
+  ],
+  "per_sport_issues": {
+    "mlb": [
+      {
+        "code": "REGISTRY_CONFIRMED",
+        "severity": "INFO",
+        "sport": "mlb",
+        "affected": {
+          "details": "markets in prediction_records=[first_inning, moneyline, total], expected=[first_inning, moneyline, total]"
+        },
+        "user_facing_impact": "None — confirmation only",
+        "recommended_fix": "n/a",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "SNAPSHOT_EXPECTED_NULL",
+        "severity": "INFO",
+        "sport": "mlb",
+        "affected": {
+          "prediction_record_id": 1308,
+          "market": "first_inning",
+          "details": "pr.id=1308 first_inning/NRFI: play_grade=null is expected for FI markets — substrate present: nrfi_decision_kind=nrfi nrfi_threshold_zone=lean_nrfi fi_v2_audit=present; odds_american=null is expected for FI markets (NRFI/YRFI/Toss-Up are not priced at the top level)"
+        },
+        "user_facing_impact": "None — these nulls are expected for this market/state",
+        "recommended_fix": "n/a",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "SNAPSHOT_EXPECTED_NULL",
+        "severity": "INFO",
+        "sport": "mlb",
+        "affected": {
+          "prediction_record_id": 1234,
+          "market": "first_inning",
+          "details": "pr.id=1234 first_inning/NRFI: play_grade=null is expected for FI markets — substrate present: nrfi_decision_kind=nrfi nrfi_threshold_zone=lean_nrfi fi_v2_audit=present; odds_american=null is expected for FI markets (NRFI/YRFI/Toss-Up are not priced at the top level)"
+        },
+        "user_facing_impact": "None — these nulls are expected for this market/state",
+        "recommended_fix": "n/a",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "SNAPSHOT_EXPECTED_NULL",
+        "severity": "INFO",
+        "sport": "mlb",
+        "affected": {
+          "prediction_record_id": 561,
+          "market": "first_inning",
+          "details": "pr.id=561 first_inning/NRFI: play_grade=null is expected for FI markets — substrate present: nrfi_decision_kind=nrfi nrfi_threshold_zone=lean_nrfi fi_v2_audit=present; odds_american=null is expected for FI markets (NRFI/YRFI/Toss-Up are not priced at the top level)"
+        },
+        "user_facing_impact": "None — these nulls are expected for this market/state",
+        "recommended_fix": "n/a",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "SNAPSHOT_EXPECTED_NULL",
+        "severity": "INFO",
+        "sport": "mlb",
+        "affected": {
+          "prediction_record_id": 558,
+          "market": "first_inning",
+          "details": "pr.id=558 first_inning/Toss-Up: play_grade=null is expected for FI markets — substrate present: nrfi_decision_kind=toss_up nrfi_threshold_zone=lean_yrfi fi_v2_audit=present; odds_american=null is expected for FI markets (NRFI/YRFI/Toss-Up are not priced at the top level)"
+        },
+        "user_facing_impact": "None — these nulls are expected for this market/state",
+        "recommended_fix": "n/a",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "SNAPSHOT_EXPECTED_NULL",
+        "severity": "INFO",
+        "sport": "mlb",
+        "affected": {
+          "prediction_record_id": 552,
+          "market": "first_inning",
+          "details": "pr.id=552 first_inning/NRFI: play_grade=null is expected for FI markets — substrate present: nrfi_decision_kind=nrfi nrfi_threshold_zone=lean_nrfi fi_v2_audit=present; odds_american=null is expected for FI markets (NRFI/YRFI/Toss-Up are not priced at the top level)"
+        },
+        "user_facing_impact": "None — these nulls are expected for this market/state",
+        "recommended_fix": "n/a",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "SNAPSHOT_EXPECTED_NULL",
+        "severity": "INFO",
+        "sport": "mlb",
+        "affected": {
+          "prediction_record_id": 555,
+          "market": "first_inning",
+          "details": "pr.id=555 first_inning/NRFI: play_grade=null is expected for FI markets — substrate present: nrfi_decision_kind=nrfi nrfi_threshold_zone=lean_nrfi fi_v2_audit=present; odds_american=null is expected for FI markets (NRFI/YRFI/Toss-Up are not priced at the top level)"
+        },
+        "user_facing_impact": "None — these nulls are expected for this market/state",
+        "recommended_fix": "n/a",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "SNAPSHOT_EXPECTED_NULL",
+        "severity": "INFO",
+        "sport": "mlb",
+        "affected": {
+          "prediction_record_id": 553,
+          "market": "moneyline",
+          "details": "pr.id=553 moneyline/away: play_grade=null is expected for ML held record (ml_play_grade=no_bet)"
+        },
+        "user_facing_impact": "None — these nulls are expected for this market/state",
+        "recommended_fix": "n/a",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      }
+    ],
+    "nba": [
+      {
+        "code": "REGISTRY_CONFIRMED",
+        "severity": "INFO",
+        "sport": "nba",
+        "affected": {
+          "details": "markets in prediction_records=[moneyline, total], expected=[moneyline, total]"
+        },
+        "user_facing_impact": "None — confirmation only",
+        "recommended_fix": "n/a",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "SNAPSHOT_NBA_PRE_ROLLOUT",
+        "severity": "INFO",
+        "sport": "nba",
+        "affected": {
+          "prediction_record_id": 528,
+          "market": "moneyline",
+          "details": "Pre-rollout NBA record (locked_at=2026-06-09T00:57:12.471+00:00 < cba9ea5 rollout 2026-06-10T14:29:05Z); missing post-cba9ea5 substrate expected: [predicted_home_score, predicted_away_score, predicted_total, predicted_spread_home, splits_state, current_price]"
+        },
+        "user_facing_impact": "None — these records pre-date the cba9ea5 NBA substrate rollout",
+        "recommended_fix": "Optional: backfill these older records via a one-time operator script, or accept them as a documented historical gap",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "SNAPSHOT_NBA_LINE_MOVEMENT_REGRESSED",
+        "severity": "INFO",
+        "sport": "nba",
+        "affected": {
+          "prediction_record_id": 528,
+          "market": "moneyline",
+          "details": "NBA snapshot has line_movement block (pre-rollout — expected, old field name)"
+        },
+        "user_facing_impact": "None — pre-rollout records used the old field name",
+        "recommended_fix": "n/a — pre-rollout state",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "SNAPSHOT_NBA_PRE_ROLLOUT",
+        "severity": "INFO",
+        "sport": "nba",
+        "affected": {
+          "prediction_record_id": 529,
+          "market": "total",
+          "details": "Pre-rollout NBA record (locked_at=2026-06-09T00:57:12.471+00:00 < cba9ea5 rollout 2026-06-10T14:29:05Z); missing post-cba9ea5 substrate expected: [predicted_home_score, predicted_away_score, predicted_total, predicted_spread_home, splits_state, current_price]"
+        },
+        "user_facing_impact": "None — these records pre-date the cba9ea5 NBA substrate rollout",
+        "recommended_fix": "Optional: backfill these older records via a one-time operator script, or accept them as a documented historical gap",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "SNAPSHOT_NBA_LINE_MOVEMENT_REGRESSED",
+        "severity": "INFO",
+        "sport": "nba",
+        "affected": {
+          "prediction_record_id": 529,
+          "market": "total",
+          "details": "NBA snapshot has line_movement block (pre-rollout — expected, old field name)"
+        },
+        "user_facing_impact": "None — pre-rollout records used the old field name",
+        "recommended_fix": "n/a — pre-rollout state",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      }
+    ],
+    "nhl": [
+      {
+        "code": "REGISTRY_CONFIRMED",
+        "severity": "INFO",
+        "sport": "nhl",
+        "affected": {
+          "details": "markets in prediction_records=[moneyline, total], expected=[moneyline, total]"
+        },
+        "user_facing_impact": "None — confirmation only",
+        "recommended_fix": "n/a",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "COPY_NHL_SHARPREAD_FIXED",
+        "severity": "INFO",
+        "sport": "nhl",
+        "affected": {
+          "details": "NHL adapter uses valid \"no_data\" SharpReadKey"
+        },
+        "user_facing_impact": "None — confirmation that P0-4 fix is in place",
+        "recommended_fix": "n/a",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "GRADING_NHL_HISTORICAL_CONFIRMED",
+        "severity": "INFO",
+        "sport": "nhl",
+        "affected": {
+          "details": "pr.id=946 (CAR ML) + pr.id=947 (OVER 5.5) remain WIN"
+        },
+        "user_facing_impact": "None — confirmation",
+        "recommended_fix": "n/a",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      },
+      {
+        "code": "GRADING_TRACKING_AGGREGATE_CONFIRMED",
+        "severity": "INFO",
+        "sport": "nhl",
+        "affected": {
+          "details": "Tracking aggregate shows 2 NHL wins across 2 sport-market buckets"
+        },
+        "user_facing_impact": "None — confirmation",
+        "recommended_fix": "n/a",
+        "auto_fixable": false,
+        "operator_approval_required": false
+      }
+    ]
+  },
+  "summary": {
+    "high": 0,
+    "warn": 1,
+    "info": 21
+  },
+  "safe_repairs_available": [],
+  "blocked_repairs_needing_approval": []
+}
