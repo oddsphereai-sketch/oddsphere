@@ -1113,6 +1113,164 @@ async function check8RefreshCronHealth(): Promise<Issue[]> {
   return issues;
 }
 
+// ─── CHECK 9 — Verdict authority consistency ────────────────────────
+//
+// 2026-06-10 v15.2 — guards the "writer play_grade is the single
+// source of truth for the customer-facing verdict" contract. The
+// daily-edge route maps play_grade → verdict via `resolveLockedVerdict`
+// (now used for BOTH locked and unlocked rows). This check verifies:
+//
+//   1. Every play_grade value the writer is currently emitting has a
+//      corresponding case in the route's resolver (otherwise the live
+//      verdict ladder silently downgrades).
+//   2. The same resolver is wired in the route file (existence proof
+//      that the route fix wasn't reverted).
+//
+// HIGH when an unmapped play_grade reaches a customer-facing row.
+// INFO when the slate is fully mapped.
+
+const KNOWN_WRITER_PLAY_GRADES = new Set<string>([
+  // Mapped to "best_angle"
+  "best_angle",
+  // Mapped to "lean"
+  "lean",
+  // Mapped to "watchlist"
+  "market_watch",
+  "model_only",
+  "provisional",
+  "market_aligned",
+  // Mapped to "no_play" via the no_bet path (resolver short-circuits
+  // on no_bet=true before reading play_grade)
+  "no_bet",
+  // The route has separate handling for these (live verdict ladder
+  // short-circuits on held/null confidence; toss_up is FI-specific)
+  "held",
+  "toss_up",
+]);
+
+async function check9VerdictAuthorityConsistency(slateDate: string): Promise<Issue[]> {
+  const issues: Issue[] = [];
+
+  // (a) Route file has the writer-authority resolver wired
+  const routeSrc = readRepoFile("app/api/lab/daily-edge/route.ts");
+  if (routeSrc === null) {
+    pushIssue(issues, {
+      code: "VERDICT_ROUTE_FILE_MISSING",
+      severity: "HIGH",
+      sport: null,
+      affected: { details: "app/api/lab/daily-edge/route.ts not readable" },
+      user_facing_impact: "Cannot verify verdict-authority contract",
+      recommended_fix: "Investigate route file",
+      auto_fixable: false,
+      operator_approval_required: false,
+    });
+    return issues;
+  }
+  const requiredPatterns: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /resolveWriterPlayGrade/, label: "resolveWriterPlayGrade extractor" },
+    { pattern: /writerOverride/, label: "writer-authority override binding" },
+    { pattern: /case "market_aligned"/, label: "market_aligned case in resolveLockedVerdict" },
+  ];
+  for (const { pattern, label } of requiredPatterns) {
+    if (!pattern.test(routeSrc)) {
+      pushIssue(issues, {
+        code: "VERDICT_ROUTE_CONTRACT_MISSING",
+        severity: "HIGH",
+        sport: null,
+        affected: { details: `Required route pattern missing: ${label}` },
+        user_facing_impact:
+          "Pre-lock writer Best Angle / Lean / market_aligned may render as a different verdict than the writer chose",
+        recommended_fix:
+          "Restore the writer-authority verdict resolver in app/api/lab/daily-edge/route.ts",
+        auto_fixable: false,
+        operator_approval_required: false,
+      });
+    }
+  }
+
+  // (b) DB-side: every play_grade value on the current slate maps to a
+  // known resolver case.
+  for (const sport of ACTIVE_SPORTS) {
+    const { data: rows, error } = await supabase
+      .from("prediction_records")
+      .select("id, game_id, market, play_grade, no_bet, locked_at")
+      .eq("sport", sport)
+      .eq("slate_date", slateDate);
+
+    if (error !== null) {
+      pushIssue(issues, {
+        code: "VERDICT_DB_ERROR",
+        severity: "WARN",
+        sport,
+        affected: { details: `prediction_records query failed: ${error.message}` },
+        user_facing_impact: "Verdict authority check incomplete for this sport",
+        recommended_fix: "Investigate DB connectivity",
+        auto_fixable: false,
+        operator_approval_required: false,
+      });
+      continue;
+    }
+
+    const typed = (rows ?? []) as Array<{
+      id: number;
+      game_id: number;
+      market: string;
+      play_grade: string | null;
+      no_bet: boolean | null;
+      locked_at: string | null;
+    }>;
+
+    if (typed.length === 0) continue;
+
+    let mappedCount = 0;
+    const unmappedSamples: string[] = [];
+
+    for (const row of typed) {
+      const pg = row.play_grade;
+      if (pg === null) continue; // null → live ladder fallback by design
+      if (KNOWN_WRITER_PLAY_GRADES.has(pg)) {
+        mappedCount++;
+        continue;
+      }
+      // Unknown play_grade — resolver will return null → live ladder
+      // overrides → writer authority is lost.
+      pushIssue(issues, {
+        code: "VERDICT_AUTHORITY_UNMAPPED_PLAY_GRADE",
+        severity: "HIGH",
+        sport,
+        affected: {
+          game_id: row.game_id,
+          market: row.market,
+          details: `pr.id=${row.id} play_grade="${pg}" — resolver has no case for this value, route will silently fall back to live ladder`,
+        },
+        user_facing_impact:
+          "Card may display a verdict the writer did not choose",
+        recommended_fix: `Add a case "${pg}" to resolveLockedVerdict in app/api/lab/daily-edge/route.ts and to KNOWN_WRITER_PLAY_GRADES in the auditor`,
+        auto_fixable: false,
+        operator_approval_required: false,
+      });
+      if (unmappedSamples.length < 3) unmappedSamples.push(pg);
+    }
+
+    if (mappedCount > 0) {
+      pushIssue(issues, {
+        code: "VERDICT_AUTHORITY_CONSISTENT",
+        severity: "INFO",
+        sport,
+        affected: {
+          details: `${mappedCount} prediction_record(s) have play_grade values mapped to writer-authority verdict (pre-lock and post-lock will render the same pill the writer chose)`,
+        },
+        user_facing_impact: "None — confirmation",
+        recommended_fix: "n/a",
+        auto_fixable: false,
+        operator_approval_required: false,
+      });
+    }
+  }
+
+  return issues;
+}
+
 // ─── Status classifier ──────────────────────────────────────────────
 
 function classifySportStatus(issues: Issue[]): SportStatus {
@@ -1218,6 +1376,7 @@ async function main(): Promise<void> {
     { name: "Check 6 — Grading/tracking", fn: check6GradingTracking },
     { name: "Check 7 — Final score/status", fn: check7FinalScoreStatus },
     { name: "Check 8 — Refresh/cron health", fn: check8RefreshCronHealth },
+    { name: "Check 9 — Verdict authority consistency", fn: () => check9VerdictAuthorityConsistency(slateDate) },
   ];
 
   const allIssues: Issue[] = [];

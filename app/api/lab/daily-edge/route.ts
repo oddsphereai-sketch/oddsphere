@@ -124,15 +124,28 @@ const VISIBLE_SLATE_STATUSES = ["published", "final"] as const;
 // no_bet flag) into the verdict tier used by both the headline pill and
 // the breakdown copy template, so the body template branch matches the pill.
 //
-// Mapping (per Daniel, 2026-06-09):
+// Mapping (per Daniel, 2026-06-09 + 2026-06-10 extension):
 //   play_grade=best_angle                     → verdict="Best Angle"
 //   play_grade=lean                           → verdict="Lean"
-//   play_grade=market_watch|model_only|provisional
+//   play_grade=market_watch|model_only|provisional|market_aligned
 //                                             → verdict="Watchlist"
 //   no_bet=true                               → verdict="No Play"
 //   play_grade=null + no_bet=false            → null (leave live-derived verdict)
 //
-// Pre-lock: null is returned so the live verdict ladder runs normally.
+// 2026-06-10 v15.2 — Single source of truth extended pre-lock. This
+// resolver is now used for BOTH locked rows AND unlocked rows whose
+// writer has produced a play_grade. Pre-lock, the writer play_grade
+// is read from `sport_specific.v2_2_audit.{ml,ou}_play_grade` /
+// `sport_specific.fi_v2_audit.fi_play_grade` via
+// `resolveWriterPlayGrade()`. Same resolution rules apply — the
+// model's verdict authority survives all the way to the pill, so a
+// writer Best Angle never displays as Watchlist behind the model's
+// back. Live verdict ladder remains the fallback when the writer
+// hasn't produced a play_grade (true null).
+//
+// `market_aligned` was added 2026-06-10 — it's the v2.2 model's
+// "edge inside ±1%, no meaningful value over market" verdict and
+// should render as Watchlist (display-it-but-don't-bet semantics).
 type LockedVerdictOverride = { key: "best_angle" | "lean" | "watchlist" | "no_play"; label: string };
 function resolveLockedVerdict(
   lockedPlayGrade: string | null | undefined,
@@ -140,13 +153,54 @@ function resolveLockedVerdict(
 ): LockedVerdictOverride | null {
   if (lockedNoBet === true) return { key: "no_play", label: "No Play" };
   switch (lockedPlayGrade) {
-    case "best_angle": return { key: "best_angle", label: "Best Angle" };
-    case "lean":       return { key: "lean", label: "Lean" };
+    case "best_angle":     return { key: "best_angle", label: "Best Angle" };
+    case "lean":           return { key: "lean", label: "Lean" };
     case "market_watch":
     case "model_only":
-    case "provisional": return { key: "watchlist", label: "Watchlist" };
+    case "provisional":
+    case "market_aligned": return { key: "watchlist", label: "Watchlist" };
     default: return null;
   }
+}
+
+/**
+ * 2026-06-10 v15.2 — Reads the live writer play_grade for an unlocked
+ * row from `sport_specific.v2_2_audit.{ml,ou}_play_grade` or
+ * `sport_specific.fi_v2_audit.fi_play_grade`. This is the same field
+ * the lock writer copies into `prediction_records.play_grade` at T-60,
+ * so resolving from it pre-lock keeps the pre-lock and post-lock
+ * verdicts in lockstep — no T-60 "verdict flip" because the read-side
+ * ladder no longer overrides the writer's decision.
+ *
+ * Returns the raw writer play_grade string (e.g. "best_angle", "lean",
+ * "market_aligned", "provisional") or null when the writer has not
+ * produced a grade for this market (in which case the caller falls
+ * back to the live verdict ladder).
+ *
+ * NEVER returns an enum-narrowed value — the consumer is
+ * `resolveLockedVerdict()` which already has the canonical mapping.
+ * Keeping the string raw means new writer play_grades automatically
+ * flow through once their case is added to the resolver, without
+ * needing to widen the extractor's union too.
+ */
+function resolveWriterPlayGrade(
+  sportSpecific: Record<string, unknown> | null | undefined,
+  market: "moneyline" | "total" | "first_inning",
+): string | null {
+  if (!sportSpecific) return null;
+  if (market === "first_inning") {
+    const fi =
+      (sportSpecific.fi_v2_audit as Record<string, unknown> | undefined) ?? null;
+    if (!fi) return null;
+    const pg = fi.fi_play_grade;
+    return typeof pg === "string" ? pg : null;
+  }
+  const v22 =
+    (sportSpecific.v2_2_audit as Record<string, unknown> | undefined) ?? null;
+  if (!v22) return null;
+  const key = market === "moneyline" ? "ml_play_grade" : "ou_play_grade";
+  const pg = v22[key];
+  return typeof pg === "string" ? pg : null;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1751,15 +1805,36 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           reviewerSignals,
           marketContext,
         });
-  // Lock-snapshot single-source-of-truth override (2026-06-09 lock-contract
-  // fix). When this market is locked, the locked play_grade IS the verdict —
-  // no live re-derivation, no defensive downgrade. Override happens BEFORE
-  // generatePerMarketCopy so the body template branch matches the headline
-  // pill. The MarketContextWarning is preserved from the live verdict so
-  // the watch-out line still names the conflict reason if one fired.
-  const lockedOverride = resolveLockedVerdict(input.lockedPlayGrade, input.lockedNoBet);
-  const verdict = lockedOverride !== null
-    ? { key: lockedOverride.key as MarketVerdict, label: lockedOverride.label, warning: liveVerdict.warning }
+  // Writer-authority verdict (2026-06-10 v15.2) — extended from
+  // lock-snapshot-only to ALL rows. The writer's play_grade is the
+  // single source of truth for the customer-facing verdict whenever
+  // the writer has produced one. Resolution order:
+  //   1. Locked play_grade (frozen at T-60 — strongest)
+  //   2. Current writer play_grade (live, from sport_specific.v2_2_audit
+  //      or sport_specific.fi_v2_audit)
+  //   3. Live verdict ladder (fallback only when writer has no grade)
+  //
+  // Why the change: pre-2026-06-10 the live verdict ladder ran on
+  // every unlocked row and could silently DOWNGRADE the writer's
+  // Best Angle to Watchlist via reviewer caps (public_smoke_aligned,
+  // hasFragilityFlag) — caps the v2.2 writer already considered when
+  // greenlighting Best Angle. That created two divergent verdict
+  // systems and produced visible pre-lock vs post-lock mismatches.
+  // (e.g. CIN/SD ML 2026-06-10: writer best_angle, live ladder
+  // capped to Watchlist via reviewer's public_smoke_aligned flag.)
+  //
+  // The MarketContextWarning from the live ladder is preserved on
+  // the result so the body's "watch out" copy still surfaces the
+  // warning text — but it never silently overrides the headline.
+  const writerPlayGrade =
+    input.lockedPlayGrade ??
+    resolveWriterPlayGrade(input.sportSpecific ?? null, input.market);
+  const writerOverride = resolveLockedVerdict(
+    writerPlayGrade,
+    input.lockedNoBet ?? null,
+  );
+  const verdict = writerOverride !== null
+    ? { key: writerOverride.key as MarketVerdict, label: writerOverride.label, warning: liveVerdict.warning }
     : liveVerdict;
 
   // Server-generated copy (banned-terms-linted at output time).
