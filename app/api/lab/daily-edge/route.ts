@@ -124,33 +124,65 @@ const VISIBLE_SLATE_STATUSES = ["published", "final"] as const;
 // no_bet flag) into the verdict tier used by both the headline pill and
 // the breakdown copy template, so the body template branch matches the pill.
 //
-// Mapping (per Daniel, 2026-06-09 + 2026-06-10 extension):
-//   play_grade=best_angle                     → verdict="Best Angle"
-//   play_grade=lean                           → verdict="Lean"
-//   play_grade=market_watch|model_only|provisional|market_aligned
-//                                             → verdict="Watchlist"
-//   no_bet=true                               → verdict="No Play"
-//   play_grade=null + no_bet=false            → null (leave live-derived verdict)
+// Mapping (per Daniel, 2026-06-09 + 2026-06-10 v15.2 + 2026-06-10 v15.3 FI):
+//
+//   ML / Total (v2.2 writer):
+//     play_grade=best_angle                          → "Best Angle"
+//     play_grade=lean                                → "Lean"
+//     play_grade=market_watch|model_only|provisional|market_aligned
+//                                                    → "Watchlist"
+//
+//   First Inning (FI v2 writer — different enum, same contract):
+//     play_grade=best_angle                          → "Best Angle"
+//     play_grade=lean                                → "Lean"
+//     play_grade=toss_up                             → "Watchlist"
+//        (Toss-Up is a non-actionable "watching" state — model probability
+//         in the neutral band [0.85, 1.15]. Toss-Up FI rows also carry
+//         no_bet=true on prediction_records, so tracking excludes them
+//         from W/L; the chip stays visible so members see the model's
+//         neutral read.)
+//     play_grade=held                                → "No Play"
+//        (Held rows fail the held=true short-circuit in buildMarketEdge
+//         independently; this case is the explicit lock-snapshot path so
+//         the contract is auditable even when the live held flag is
+//         absent.)
+//     play_grade=no_bet                              → "No Play"
+//        (FI writer's "Edge too thin; no bet" verdict. Pre-v15.3 these
+//         fell through to the live ladder and rendered as Watchlist or
+//         even Lean when confidence cleared the floors — silently
+//         overriding the writer's "do not bet" decision. v15.3 honors
+//         the writer.)
+//
+//   Cross-market:
+//     no_bet=true (any market)                       → "No Play"
+//     play_grade=null + no_bet=false                 → null (live ladder)
 //
 // 2026-06-10 v15.2 — Single source of truth extended pre-lock. This
 // resolver is now used for BOTH locked rows AND unlocked rows whose
 // writer has produced a play_grade. Pre-lock, the writer play_grade
 // is read from `sport_specific.v2_2_audit.{ml,ou}_play_grade` /
 // `sport_specific.fi_v2_audit.fi_play_grade` via
-// `resolveWriterPlayGrade()`. Same resolution rules apply — the
-// model's verdict authority survives all the way to the pill, so a
-// writer Best Angle never displays as Watchlist behind the model's
-// back. Live verdict ladder remains the fallback when the writer
-// hasn't produced a play_grade (true null).
+// `resolveWriterPlayGrade()`.
 //
-// `market_aligned` was added 2026-06-10 — it's the v2.2 model's
-// "edge inside ±1%, no meaningful value over market" verdict and
-// should render as Watchlist (display-it-but-don't-bet semantics).
+// 2026-06-10 v15.3 — FI-specific play_grade values (toss_up / held /
+// no_bet) added so FI's writer authority is honored the same way as
+// ML/Total. Pre-v15.3 these fell through to default→null→live ladder
+// and the FI display verdict could disagree with the FI writer.
 type LockedVerdictOverride = { key: "best_angle" | "lean" | "watchlist" | "no_play"; label: string };
 function resolveLockedVerdict(
   lockedPlayGrade: string | null | undefined,
   lockedNoBet: boolean | null | undefined,
 ): LockedVerdictOverride | null {
+  // 2026-06-10 v15.3 FI ordering — Toss-Up is checked BEFORE the
+  // no_bet short-circuit. FI writes `no_bet=true` alongside
+  // `fi_play_grade=toss_up` so the row is voided in tracking
+  // (predictionGrader.ts treats no_bet=true rows as void), but the
+  // CHIP must stay visible as Watchlist per product contract:
+  // "Toss-Up remains visible on the card as a non-actionable
+  // Watchlist-style state and remains excluded from W/L tracking."
+  // Without this precedence the no_bet flag would flip Toss-Up to
+  // No Play and hide the model's neutral read from the member.
+  if (lockedPlayGrade === "toss_up") return { key: "watchlist", label: "Watchlist" };
   if (lockedNoBet === true) return { key: "no_play", label: "No Play" };
   switch (lockedPlayGrade) {
     case "best_angle":     return { key: "best_angle", label: "Best Angle" };
@@ -159,6 +191,8 @@ function resolveLockedVerdict(
     case "model_only":
     case "provisional":
     case "market_aligned": return { key: "watchlist", label: "Watchlist" };
+    case "held":
+    case "no_bet":         return { key: "no_play", label: "No Play" };
     default: return null;
   }
 }
@@ -834,6 +868,13 @@ function buildGameDto(
 
   const lockedMl = lockedPlayGradeByGameMarket.get(`${row.id}::moneyline`);
   const lockedOu = lockedPlayGradeByGameMarket.get(`${row.id}::total`);
+  // 2026-06-10 v15.3 FI integrity — FI's lock map is read symmetric
+  // with ML/Total. Pre-v15.3 the FI buildMarketEdge call omitted
+  // lockedPlayGrade / lockedNoBet, so the locked FI snapshot was
+  // never the single source of truth for FI verdict — the live
+  // ladder ran instead, and writer "no_bet" / "toss_up" could
+  // silently downgrade to actionable Watchlist or Lean.
+  const lockedFi = lockedPlayGradeByGameMarket.get(`${row.id}::first_inning`);
   const ml = buildMarketEdge({
     market: "moneyline",
     pick: mlPick,
@@ -907,6 +948,18 @@ function buildGameDto(
     awayAbbr: away,
     held: isNrfiHeld,
     sportSpecific: pred.sport_specific,
+    // 2026-06-10 v15.3 FI integrity — FI now receives locked
+    // play_grade / no_bet symmetric with ML/Total. Combined with the
+    // new FI cases in resolveLockedVerdict (toss_up → Watchlist,
+    // no_bet / held → No Play), this closes the FI display contract:
+    // the writer's verdict survives to the pill the same way it does
+    // for ML/Total. lockedPlayGrade comes from prediction_records
+    // (the top-level FI column is null today — that's fine, the
+    // writer-authority resolver falls back to resolveWriterPlayGrade
+    // which reads sport_specific.fi_v2_audit.fi_play_grade).
+    lockedPlayGrade: lockedFi?.playGrade ?? null,
+    lockedNoBet: lockedFi?.noBet ?? null,
+    isLockedRow: lockedFi !== undefined,
   });
 
   // 4.1.10 — per-game status flags.

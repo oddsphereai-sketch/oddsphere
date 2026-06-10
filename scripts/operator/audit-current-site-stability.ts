@@ -1271,6 +1271,337 @@ async function check9VerdictAuthorityConsistency(slateDate: string): Promise<Iss
   return issues;
 }
 
+// ─── CHECK 10 — First Inning integrity ─────────────────────────────
+//
+// 2026-06-10 v15.3 — FI is an official tracked MLB market and needs
+// the same writer-authority / display-vs-tracking contract as ML/Total.
+// FI has its own enum (`fi_play_grade`) and its own contract; this
+// check enforces it explicitly so it can never drift again.
+//
+// FI display contract (matches resolveLockedVerdict's FI cases):
+//   fi_play_grade=best_angle               → "Best Angle"
+//   fi_play_grade=lean                     → "Lean"
+//   fi_play_grade=toss_up                  → "Watchlist"
+//     (non-actionable; no_bet=true also fires for tracking-void; chip
+//      stays visible per product contract)
+//   fi_play_grade=no_bet                   → "No Play"
+//   fi_play_grade=held                     → "No Play"
+//
+// What this check flags (HIGH unless noted):
+//   A. KNOWN_FI_PLAY_GRADES drift          — writer emits a value the
+//                                            resolver doesn't map.
+//   B. Route file pattern                  — confirms route code still
+//                                            wires the FI cases and the
+//                                            FI lockedFi passthrough.
+//   C. Writer-vs-tracking state divergence — for UNLOCKED rows, the
+//                                            live writer state in
+//                                            game_predictions disagrees
+//                                            with prediction_records
+//                                            (the tracked record).
+//   D. Untracked FI display                — game_predictions shows an
+//                                            actionable FI verdict but
+//                                            no prediction_records FI
+//                                            row exists for tracking.
+//   E. Locked snapshot completeness        — locked FI rows missing the
+//                                            fi_v2_audit block.
+//   F. FI grading gap                      — games with first_inning_runs
+//                                            != null but no FI
+//                                            prediction_grades row.
+
+const KNOWN_FI_PLAY_GRADES = new Set<string>([
+  "best_angle",  // → Best Angle
+  "lean",        // → Lean
+  "toss_up",     // → Watchlist (non-actionable, chip visible, void in tracking)
+  "no_bet",      // → No Play
+  "held",        // → No Play
+]);
+
+async function check10FirstInningIntegrity(slateDate: string): Promise<Issue[]> {
+  const issues: Issue[] = [];
+
+  // (B) Route file pattern check
+  const routeSrc = readRepoFile("app/api/lab/daily-edge/route.ts");
+  if (routeSrc === null) {
+    pushIssue(issues, {
+      code: "FI_ROUTE_FILE_MISSING",
+      severity: "HIGH",
+      sport: "mlb",
+      affected: { details: "app/api/lab/daily-edge/route.ts not readable" },
+      user_facing_impact: "Cannot verify FI display contract",
+      recommended_fix: "Investigate route file",
+      auto_fixable: false,
+      operator_approval_required: false,
+    });
+    return issues;
+  }
+  const fiRoutePatterns: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /lockedPlayGrade === "toss_up"/, label: "Toss-Up precedence in resolveLockedVerdict" },
+    { pattern: /case "toss_up"|=== "toss_up"/, label: "toss_up case in resolveLockedVerdict" },
+    { pattern: /case "no_bet":\s+return \{ key: "no_play"|case "held":/, label: "held / no_bet → No Play cases" },
+    { pattern: /lockedFi\?\.playGrade/, label: "lockedFi passed to FI buildMarketEdge" },
+  ];
+  for (const { pattern, label } of fiRoutePatterns) {
+    if (!pattern.test(routeSrc)) {
+      pushIssue(issues, {
+        code: "FI_ROUTE_CONTRACT_MISSING",
+        severity: "HIGH",
+        sport: "mlb",
+        affected: { details: `Required FI route pattern missing: ${label}` },
+        user_facing_impact: "FI display contract broken — writer verdict may not survive to card",
+        recommended_fix: "Restore the FI writer-authority wiring in app/api/lab/daily-edge/route.ts",
+        auto_fixable: false,
+        operator_approval_required: false,
+      });
+    }
+  }
+
+  // Pull all FI prediction_records for this slate
+  const { data: prRows, error: prErr } = await supabase
+    .from("prediction_records")
+    .select("id, game_id, pick, confidence, play_grade, no_bet, locked_at, snapshot_json")
+    .eq("sport", "mlb")
+    .eq("slate_date", slateDate)
+    .eq("market", "first_inning");
+  if (prErr !== null) {
+    pushIssue(issues, {
+      code: "FI_DB_ERROR",
+      severity: "WARN",
+      sport: "mlb",
+      affected: { details: `prediction_records query failed: ${prErr.message}` },
+      user_facing_impact: "FI integrity check incomplete",
+      recommended_fix: "Investigate DB connectivity",
+      auto_fixable: false,
+      operator_approval_required: false,
+    });
+    return issues;
+  }
+  type PrRow = {
+    id: number;
+    game_id: number;
+    pick: string | null;
+    confidence: number | null;
+    play_grade: string | null;
+    no_bet: boolean | null;
+    locked_at: string | null;
+    snapshot_json: Record<string, unknown> | null;
+  };
+  const prByGame = new Map<number, PrRow>();
+  for (const r of (prRows ?? []) as PrRow[]) prByGame.set(r.game_id, r);
+
+  // Pull live game_predictions for the same slate (the source of truth
+  // for the displayed FI verdict on unlocked rows).
+  const { data: games, error: gErr } = await supabase
+    .from("games")
+    .select("id, slate_date, status, first_inning_runs, game_predictions(predicted_nrfi, nrfi_confidence, sport_specific, locked_at)")
+    .eq("sport", "mlb")
+    .eq("slate_date", slateDate);
+  if (gErr !== null) {
+    pushIssue(issues, {
+      code: "FI_DB_ERROR",
+      severity: "WARN",
+      sport: "mlb",
+      affected: { details: `games query failed: ${gErr.message}` },
+      user_facing_impact: "FI integrity check incomplete",
+      recommended_fix: "Investigate DB connectivity",
+      auto_fixable: false,
+      operator_approval_required: false,
+    });
+    return issues;
+  }
+  // Supabase typegen renders one-to-one FK expansions as arrays at the
+  // type level, but the runtime returns a single object for to-one
+  // relations. Mirror what the route does (`as unknown` step).
+  type GameRow = {
+    id: number;
+    slate_date: string;
+    status: string | null;
+    first_inning_runs: number | null;
+    game_predictions: {
+      predicted_nrfi: boolean | null;
+      nrfi_confidence: number | null;
+      sport_specific: Record<string, unknown> | null;
+      locked_at: string | null;
+    } | null;
+  };
+
+  // Pull prediction_grades for every FI prediction_record id. The
+  // column is `result` (not `outcome`) — selecting the wrong column
+  // makes Supabase silently return rows with the missing field as
+  // undefined, which produces false-positive "grade missing" flags.
+  const prIds = (prRows ?? []).map((r) => (r as PrRow).id);
+  let gradeByPrId = new Map<number, { result: string | null; actual_first_inning_runs: number | null }>();
+  if (prIds.length > 0) {
+    const { data: gradeRows } = await supabase
+      .from("prediction_grades")
+      .select("prediction_record_id, result, actual_first_inning_runs")
+      .in("prediction_record_id", prIds);
+    gradeByPrId = new Map(
+      (gradeRows ?? []).map((g: { prediction_record_id: number; result: string | null; actual_first_inning_runs: number | null }) => [g.prediction_record_id, g])
+    );
+  }
+
+  let mappedCount = 0;
+  let displayedFiCount = 0;
+
+  for (const game of (games ?? []) as unknown as GameRow[]) {
+    const gp = game.game_predictions;
+    if (gp === null || gp === undefined) continue;
+    const sp = gp.sport_specific ?? null;
+    const fiAudit = sp ? ((sp.fi_v2_audit as Record<string, unknown> | undefined) ?? null) : null;
+    const liveFiPg = fiAudit ? (fiAudit.fi_play_grade as string | undefined) ?? null : null;
+    const pr = prByGame.get(game.id) ?? null;
+
+    // (A) Known-grade check on live writer state
+    if (liveFiPg !== null && !KNOWN_FI_PLAY_GRADES.has(liveFiPg)) {
+      pushIssue(issues, {
+        code: "FI_UNMAPPED_PLAY_GRADE",
+        severity: "HIGH",
+        sport: "mlb",
+        affected: {
+          game_id: game.id,
+          details: `game_predictions.fi_v2_audit.fi_play_grade="${liveFiPg}" — no case in resolveLockedVerdict; route will fall back to live ladder`,
+        },
+        user_facing_impact: "Card may display a verdict the FI writer did not choose",
+        recommended_fix: `Add case "${liveFiPg}" to resolveLockedVerdict in app/api/lab/daily-edge/route.ts and to KNOWN_FI_PLAY_GRADES in the auditor`,
+        auto_fixable: false,
+        operator_approval_required: false,
+      });
+    }
+
+    // (D) Untracked FI display — game_predictions shows actionable FI
+    //     verdict (best_angle / lean) but no prediction_records FI row
+    //     means tracking can never grade this displayed pick. As of
+    //     2026-06-10 v15.3 this is auto-fixable: every model write
+    //     now chains a createPredictionRecords sync, so this only
+    //     fires in the short window between a fresh model write and
+    //     the sync completion, OR if the sync silently errored. Fix
+    //     path is the same operation tracking-refresh + the new
+    //     atomic sync both call.
+    const actionable = liveFiPg === "best_angle" || liveFiPg === "lean";
+    if (actionable && pr === null) {
+      pushIssue(issues, {
+        code: "FI_UNTRACKED_DISPLAY",
+        severity: "HIGH",
+        sport: "mlb",
+        affected: {
+          game_id: game.id,
+          details: `game_predictions has fi_play_grade="${liveFiPg}" (actionable) but no prediction_records row for first_inning — display vs tracking diverge`,
+        },
+        user_facing_impact: "Card shows actionable FI pick that will never be graded",
+        recommended_fix:
+          "Call createPredictionRecords({sport:'mlb', slateDate, apply:true}). " +
+          "The post-write atomic sync added 2026-06-10 v15.3 normally prevents this; " +
+          "if it persists, investigate why automodelService's sync errored " +
+          "and ensure tracking-refresh ran for this slate.",
+        auto_fixable: true,
+        operator_approval_required: false,
+      });
+    }
+
+    // (C) Writer state divergence — UNLOCKED rows where prediction_records
+    //     and game_predictions disagree about fi_play_grade. As of
+    //     2026-06-10 v15.3 this is auto-fixable for the same reason
+    //     as (D): the atomic sync now re-upserts unlocked rows on every
+    //     model write. Persistent divergence indicates a sync error.
+    if (pr !== null && pr.locked_at === null) {
+      const prSnap = pr.snapshot_json ?? null;
+      const prFi = prSnap ? (prSnap.fi_v2_audit as Record<string, unknown> | undefined) ?? null : null;
+      const prFiPg = prFi ? (prFi.fi_play_grade as string | undefined) ?? null : null;
+      if (prFiPg !== null && liveFiPg !== null && prFiPg !== liveFiPg) {
+        pushIssue(issues, {
+          code: "FI_STATE_DIVERGENCE",
+          severity: "HIGH",
+          sport: "mlb",
+          affected: {
+            game_id: game.id,
+            details: `pr.id=${pr.id} prediction_records.fi_play_grade="${prFiPg}" but game_predictions.fi_play_grade="${liveFiPg}" — unlocked rows must agree`,
+          },
+          user_facing_impact: "Card displays one verdict (live), tracking expects another (recorded). At lock time the recorded one may not match what the member saw.",
+          recommended_fix:
+            "Call createPredictionRecords({sport:'mlb', slateDate, apply:true}). " +
+            "The post-write atomic sync added 2026-06-10 v15.3 normally prevents this; " +
+            "if it persists, investigate why automodelService's sync errored " +
+            "and check tracking-refresh-cron health.",
+          auto_fixable: true,
+          operator_approval_required: false,
+        });
+      }
+    }
+
+    // (E) Locked snapshot completeness — locked FI rows must carry
+    //     fi_v2_audit block in snapshot_json
+    if (pr !== null && pr.locked_at !== null) {
+      const prSnap = pr.snapshot_json ?? null;
+      const prFi = prSnap ? (prSnap.fi_v2_audit as Record<string, unknown> | undefined) ?? null : null;
+      if (prFi === null) {
+        pushIssue(issues, {
+          code: "FI_LOCK_SNAPSHOT_INCOMPLETE",
+          severity: "HIGH",
+          sport: "mlb",
+          affected: {
+            game_id: game.id,
+            details: `pr.id=${pr.id} is locked (${pr.locked_at}) but snapshot_json.fi_v2_audit is missing — cannot resolve verdict from locked snapshot`,
+          },
+          user_facing_impact: "Locked FI card may render incorrectly because fi_v2_audit data isn't frozen",
+          recommended_fix: "Lock writer must include fi_v2_audit in locked snapshot_json for FI rows",
+          auto_fixable: false,
+          operator_approval_required: false,
+        });
+      }
+    }
+
+    if (liveFiPg !== null && KNOWN_FI_PLAY_GRADES.has(liveFiPg)) {
+      mappedCount++;
+      if (liveFiPg === "best_angle" || liveFiPg === "lean" || liveFiPg === "toss_up") displayedFiCount++;
+    }
+
+    // (F) FI grading gap — first_inning_runs populated but no settled
+    // grade row. Toss-Up / Held / no_bet rows are voided (still settled);
+    // NRFI/YRFI rows are win/loss. Any still-pending row when
+    // first_inning_runs is set means the grader didn't run or didn't
+    // upsert. (The column is `result`, not `outcome` — earlier draft
+    // selected the wrong column and got silent false-positive
+    // "grade missing" flags on rows that were actually graded.)
+    if (pr !== null && game.first_inning_runs !== null && game.first_inning_runs !== undefined) {
+      const g = gradeByPrId.get(pr.id);
+      const settled = g !== undefined && g.result !== null && g.result !== "pending";
+      if (!settled) {
+        pushIssue(issues, {
+          code: "FI_GRADING_GAP",
+          severity: "HIGH",
+          sport: "mlb",
+          affected: {
+            game_id: game.id,
+            details: `pr.id=${pr.id} pick="${pr.pick}" games.first_inning_runs=${game.first_inning_runs} but prediction_grades.result=${g?.result ?? "missing"} — FI should grade as soon as first_inning_runs is set`,
+          },
+          user_facing_impact: "Tracking page will not reflect FI outcome for this game",
+          recommended_fix: "Investigate tracking-refresh / predictionGrader.gradeFirstInning() invocation for FI rows",
+          auto_fixable: false,
+          operator_approval_required: false,
+        });
+      }
+    }
+  }
+
+  // Summary INFO row when no HIGH issues fired for FI rows
+  if (mappedCount > 0) {
+    pushIssue(issues, {
+      code: "FI_CONTRACT_CONSISTENT",
+      severity: "INFO",
+      sport: "mlb",
+      affected: {
+        details: `${mappedCount} game(s) have FI writer play_grade in the known set, ${displayedFiCount} actionable. Writer authority will survive to the card (Best Angle / Lean / Watchlist for Toss-Up / No Play for held+no_bet).`,
+      },
+      user_facing_impact: "None — confirmation",
+      recommended_fix: "n/a",
+      auto_fixable: false,
+      operator_approval_required: false,
+    });
+  }
+
+  return issues;
+}
+
 // ─── Status classifier ──────────────────────────────────────────────
 
 function classifySportStatus(issues: Issue[]): SportStatus {
@@ -1377,6 +1708,7 @@ async function main(): Promise<void> {
     { name: "Check 7 — Final score/status", fn: check7FinalScoreStatus },
     { name: "Check 8 — Refresh/cron health", fn: check8RefreshCronHealth },
     { name: "Check 9 — Verdict authority consistency", fn: () => check9VerdictAuthorityConsistency(slateDate) },
+    { name: "Check 10 — First Inning integrity", fn: () => check10FirstInningIntegrity(slateDate) },
   ];
 
   const allIssues: Issue[] = [];

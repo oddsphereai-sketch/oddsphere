@@ -82,6 +82,7 @@ import {
   fetchReviewerSlateContext,
   type ReviewerSlateContext,
 } from "./aiReviewerWiring";
+import { createPredictionRecords } from "./predictionRecordService";
 
 // ─────────────────────────────────────────────────────────────
 // Public types
@@ -809,6 +810,55 @@ export async function generatePredictionsForSlate(
   let db_writes: AutoModelDbWriteOutcome | null = null;
   if (wantWrite) {
     db_writes = await runDbWrites(sport, slate_date, predictions);
+  }
+
+  // ─── Step 3.5 — Atomic prediction_records sync (2026-06-10 v15.3) ──
+  //
+  // FI integrity contract: every actionable game_predictions write
+  // must be paired with a matching prediction_records row so the card
+  // never displays an FI pick that has no tracking row, and so unlocked
+  // prediction_records never lag behind game_predictions.
+  //
+  // Before this sync existed, prediction_records could only catch up
+  // on the next /api/cron/tracking-refresh tick (hourly), so any
+  // intraday model refresh (slate-cycle intraday or readiness-driven
+  // refresh) produced a window where:
+  //   - game_predictions had fresh FI play_grade=best_angle / lean
+  //   - prediction_records still had the previous (or no) FI row
+  //   - card showed the new pick; tracking pointed at the old one
+  //
+  // This call closes that window by chaining the same locked-row-aware
+  // upsert that tracking-refresh uses, but immediately after the model
+  // write. createPredictionRecords:
+  //   - skips locked rows (pregame-sweep owns the lock transition)
+  //   - upserts unlocked rows in place (pick/conf/snapshot stay fresh)
+  //   - is idempotent; safe to chain after every write
+  //
+  // Failure here MUST NOT fail the model write — log and continue so
+  // the hourly tracking-refresh still catches up if this sync hits a
+  // transient error.
+  if (wantWrite && sport === "mlb") {
+    try {
+      const syncRes = await createPredictionRecords({
+        sport: "mlb",
+        slateDate: slate_date,
+        launchDay: false, // cron/automodel-created records are always fresh-tracking
+        apply: true,
+        supabase,
+      });
+      if (syncRes.errors.length > 0) {
+        console.warn(
+          `[automodelService] prediction_records sync had ${syncRes.errors.length} error(s) ` +
+            `after model write for ${slate_date}: ${JSON.stringify(syncRes.errors).slice(0, 500)}`,
+        );
+      }
+    } catch (syncErr) {
+      console.warn(
+        `[automodelService] prediction_records sync threw after model write ` +
+          `for ${slate_date}: ${syncErr instanceof Error ? syncErr.message : String(syncErr)}. ` +
+          `Hourly tracking-refresh will catch up on the next tick.`,
+      );
+    }
   }
 
   return {
