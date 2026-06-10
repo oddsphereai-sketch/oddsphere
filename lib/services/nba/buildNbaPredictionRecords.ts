@@ -91,6 +91,7 @@ export type CreateNbaRecordsResult = {
   scanned: number;
   proposed: ProposedNbaRecord[];
   insertedCount: number;
+  updatedCount: number;
   skippedExisting: number;
   skippedHeld: number;
   skippedLocked: number;
@@ -186,6 +187,7 @@ export async function createNbaPredictionRecords(
     scanned: 0,
     proposed: [],
     insertedCount: 0,
+    updatedCount: 0,
     skippedExisting: 0,
     skippedHeld: 0,
     skippedLocked: 0,
@@ -238,6 +240,7 @@ export async function createNbaPredictionRecords(
   const now = new Date();
   const nowIso = now.toISOString();
   const toInsert: PredictionRecordRow[] = [];
+  const toUpdate: Array<{ id: number; payload: Partial<PredictionRecordRow> }> = [];
 
   for (const g of nbaDto.games) {
     const game_id = dbIdByExternalId.get(g.game_external_id);
@@ -297,39 +300,9 @@ export async function createNbaPredictionRecords(
         });
         continue;
       }
-      if (existing !== undefined) {
-        // Row exists, not locked. Mark as "would update" — but our v1
-        // policy is INSERT-only. Pre-lock updates are deferred until
-        // we have a proven need for them (otherwise we'd churn
-        // confidence/prob fields on every cron tick).
-        result.skippedExisting++;
-        result.proposed.push({
-          game_id,
-          external_id: g.game_external_id,
-          matchup,
-          market,
-          pick: sideToken,
-          side: sideToken,
-          line_value: market === "total" ? intel.consensus_line : null,
-          odds_american: intel.current_price.odds_american,
-          confidence: intel.effective_confidence,
-          model_probability: intel.model_prob_on_pick,
-          market_probability: intel.market_no_vig_prob_pick,
-          edge: intel.model_prob_on_pick !== null && intel.market_no_vig_prob_pick !== null
-            ? intel.model_prob_on_pick - intel.market_no_vig_prob_pick
-            : null,
-          play_grade: gradeToPlayGrade(intel.grade),
-          best_angle: intel.grade === "best_angle",
-          game_date: g.tip_iso_utc,
-          locked_at: lockNow ? nowIso : null,
-          reason_if_skipped: lockNow
-            ? "row exists; lock policy deferred to v1 (no pre-lock update)"
-            : "row exists; insert-only on first pass",
-          wouldInsert: false,
-        });
-        continue;
-      }
-
+      // Build the row payload from current pipeline intel. Used for
+      // BOTH the insert path (new row) and the update path (pre-lock
+      // refresh — keeps cards from going stale through the day).
       const row: PredictionRecordRow = {
         game_prediction_id: null,
         game_id,
@@ -380,8 +353,73 @@ export async function createNbaPredictionRecords(
           sources: perGameSources,
         }),
       };
-      toInsert.push(row);
 
+      if (existing !== undefined) {
+        // Pre-lock refresh: row exists and is NOT yet locked. Update
+        // with current pipeline output so the card never goes stale
+        // between morning ingest and T-60 lock. Frozen-at-insert
+        // columns (game_id, sport, market, model_version, etc.) are
+        // omitted from the update payload — they identify the row,
+        // not the prediction. When lockNow=true, this update IS the
+        // lock event (locked_at flips to nowIso).
+        const snapshotWithProvenance = {
+          ...(row.snapshot_json as Record<string, unknown>),
+          refreshed_from_pipeline_at: nowIso,
+          refreshed_from_pipeline_pipeline_as_of: nbaDto.as_of,
+          refreshed_from_pipeline_reason: "pre_lock_intel_refresh",
+        };
+        const updatePayload: Partial<PredictionRecordRow> = {
+          pick: row.pick,
+          side: row.side,
+          line_value: row.line_value,
+          odds_american: row.odds_american,
+          confidence: row.confidence,
+          model_probability: row.model_probability,
+          market_probability: row.market_probability,
+          edge: row.edge,
+          expected_value: row.expected_value,
+          play_grade: row.play_grade,
+          best_angle: row.best_angle,
+          market_aligned: row.market_aligned,
+          data_quality_tier: row.data_quality_tier,
+          source_quality: row.source_quality,
+          provisional: row.provisional,
+          held: row.held,
+          hold_reason: row.hold_reason,
+          no_bet: row.no_bet,
+          no_bet_reason: row.no_bet_reason,
+          game_date: row.game_date,
+          locked_at: row.locked_at,
+          published_at: row.published_at,
+          snapshot_json: snapshotWithProvenance,
+        };
+        toUpdate.push({ id: existing.id, payload: updatePayload });
+        result.proposed.push({
+          game_id,
+          external_id: g.game_external_id,
+          matchup,
+          market,
+          pick: sideToken,
+          side: sideToken,
+          line_value: row.line_value,
+          odds_american: row.odds_american,
+          confidence: row.confidence ?? 0,
+          model_probability: row.model_probability,
+          market_probability: row.market_probability,
+          edge: row.edge,
+          play_grade: row.play_grade ?? "lean",
+          best_angle: row.best_angle,
+          game_date: row.game_date,
+          locked_at: row.locked_at,
+          reason_if_skipped: lockNow
+            ? "row exists; pre-lock refresh + lock event"
+            : "row exists; pre-lock refresh",
+          wouldInsert: false,
+        });
+        continue;
+      }
+
+      toInsert.push(row);
       result.proposed.push({
         game_id,
         external_id: g.game_external_id,
@@ -404,24 +442,44 @@ export async function createNbaPredictionRecords(
     }
   }
 
-  if (!opts.apply || toInsert.length === 0) {
+  if (!opts.apply || (toInsert.length === 0 && toUpdate.length === 0)) {
     return result;
   }
 
-  // Insert in one batch — small slate size (NBA Finals = 1 game; reg
-  // season peaks ~15 games × 2 markets = 30 rows max). The unique
-  // constraint catches concurrent races defensively.
-  const { error: insErr, count } = await opts.supabase
-    .from("prediction_records")
-    .insert(toInsert, { count: "exact" });
-  if (insErr) {
-    result.errors.push({
-      game_id: null,
-      market: "insert",
-      reason: insErr.message,
-    });
-    return result;
+  // Apply INSERTs as a single batch. Small slate size (NBA Finals = 1
+  // game; reg season peaks ~15 games × 2 markets = 30 rows max).
+  if (toInsert.length > 0) {
+    const { error: insErr, count } = await opts.supabase
+      .from("prediction_records")
+      .insert(toInsert, { count: "exact" });
+    if (insErr) {
+      result.errors.push({
+        game_id: null,
+        market: "insert",
+        reason: insErr.message,
+      });
+    } else {
+      result.insertedCount = count ?? toInsert.length;
+    }
   }
-  result.insertedCount = count ?? toInsert.length;
+
+  // Apply UPDATEs row-by-row keyed on id. Each row is a different game
+  // so per-row failures don't taint the batch.
+  for (const u of toUpdate) {
+    const { error: upErr } = await opts.supabase
+      .from("prediction_records")
+      .update(u.payload)
+      .eq("id", u.id);
+    if (upErr) {
+      result.errors.push({
+        game_id: null,
+        market: "update",
+        reason: `pr.id=${u.id}: ${upErr.message}`,
+      });
+    } else {
+      result.updatedCount++;
+    }
+  }
+
   return result;
 }

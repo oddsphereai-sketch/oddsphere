@@ -291,6 +291,57 @@ console.log("\n━━━ Phase 6B.19 — FI grades mid-game (no need to wait for
   check("FI + postponed → void (void check still wins)", g.result === "void");
 }
 
+// ── NHL label-style picks (regression: 2026-06-10 grader bug) ─────────
+console.log("\n━━━ NHL label-style picks (pick=label, side=canonical) ━━━");
+{
+  // CAR ML: pick="CAR ML", side="away". CAR (away) won 5-3 → WIN.
+  const r = makeRecord({
+    sport: "nhl", market: "moneyline", pick: "CAR ML", side: "away",
+  });
+  const g = gradePrediction({
+    record: r,
+    game: { status: "OFF", home_score: 3, away_score: 5, first_inning_runs: null },
+    source: "auto_score_ingest",
+  });
+  check("NHL ML: pick='CAR ML' side='away' + away won → win", g.result === "win" && g.win === true);
+}
+{
+  // VGK ML: pick="VGK ML", side="home". VGK (home) lost 3-5 → LOSS.
+  const r = makeRecord({
+    sport: "nhl", market: "moneyline", pick: "VGK ML", side: "home",
+  });
+  const g = gradePrediction({
+    record: r,
+    game: { status: "OFF", home_score: 3, away_score: 5, first_inning_runs: null },
+    source: "auto_score_ingest",
+  });
+  check("NHL ML: pick='VGK ML' side='home' + home lost → loss", g.result === "loss" && g.loss === true);
+}
+{
+  // OVER 5.5: pick="OVER 5.5", side="over". Total=8 > 5.5 → WIN.
+  const r = makeRecord({
+    sport: "nhl", market: "total", pick: "OVER 5.5", side: "over", line_value: 5.5,
+  });
+  const g = gradePrediction({
+    record: r,
+    game: { status: "OFF", home_score: 3, away_score: 5, first_inning_runs: null },
+    source: "auto_score_ingest",
+  });
+  check("NHL Total: pick='OVER 5.5' side='over' + total=8 → win", g.result === "win" && g.win === true);
+}
+{
+  // UNDER 5.5: pick="UNDER 5.5", side="under". Total=8 > 5.5 → LOSS.
+  const r = makeRecord({
+    sport: "nhl", market: "total", pick: "UNDER 5.5", side: "under", line_value: 5.5,
+  });
+  const g = gradePrediction({
+    record: r,
+    game: { status: "OFF", home_score: 3, away_score: 5, first_inning_runs: null },
+    source: "auto_score_ingest",
+  });
+  check("NHL Total: pick='UNDER 5.5' side='under' + total=8 → loss", g.result === "loss" && g.loss === true);
+}
+
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
 if (fail > 0) {

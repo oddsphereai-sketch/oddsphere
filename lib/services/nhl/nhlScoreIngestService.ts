@@ -76,16 +76,23 @@ export async function ingestNhlFinalScores(
     };
   }
 
-  // Derive UTC date(s) to fetch from NHL API.
-  const utcDates = new Set<string>();
-  for (const g of games) utcDates.add(g.game_date.slice(0, 10));
-  log(`NHL API fetch dates (UTC): ${[...utcDates].sort().join(", ")}`);
+  // Derive ET fetch date(s). NHL's /v1/score/{date} endpoint indexes by
+  // ET (local) game date, NOT UTC. Late-evening tips file under the ET
+  // date even when their game_date is UTC-midnight-next-day.
+  //
+  // Always include the slate_date (which is already ET). Also include the
+  // UTC-derived game_date.slice(0,10) for matinee fallbacks, so a single
+  // call covers both indexing schemes if NHL changes which one they ship.
+  const fetchDates = new Set<string>();
+  fetchDates.add(opts.slateDate);
+  for (const g of games) fetchDates.add(g.game_date.slice(0, 10));
+  log(`NHL API fetch dates: ${[...fetchDates].sort().join(", ")}`);
 
   let apiEvents = 0;
   const apiByExtId = new Map<string, {
     score_home: number | null; score_away: number | null; game_state: string;
   }>();
-  for (const d of [...utcDates].sort()) {
+  for (const d of [...fetchDates].sort()) {
     const events = await fetchNhlScoreForDate(d);
     apiEvents += events.length;
     for (const e of events) {

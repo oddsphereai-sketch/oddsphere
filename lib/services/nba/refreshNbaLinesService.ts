@@ -368,7 +368,13 @@ export async function refreshNbaLines(
     }
     matched++;
     if (r.is_alternate_line === true) continue;
-    if (r.is_main_line === false) continue;
+    // Note: NOT dropping rows with is_main_line === false. Some books (notably
+    // onexbet) ship every line point with is_main_line=false and don't flag
+    // any single row as "main". Dropping those silently loses real coverage —
+    // the per-(market,side,sportsbook) dedupe pass below infers the listed
+    // line by picking the row whose American odds are closest to -110 (the
+    // central juice value), which mirrors how a human handicapper would
+    // identify the main line in an un-flagged feed.
     const market = normalizeMarket(r.market ?? r.market_type);
     const side = normalizeSide(
       r.side ?? r.selection_type ?? r.outcome,
@@ -381,23 +387,69 @@ export async function refreshNbaLines(
     if (market === "total" && side !== "over" && side !== "under") continue;
     const payload = buildLinePayload(r, g.id, market, side);
     if (payload === null) continue;
+    // Track is_main_line flagging via a lightweight provenance tag so the
+    // downstream dedupe can prefer flagged-main rows when the book DOES set
+    // the flag (e.g. fliff), and fall back to odds-closest-to-110 only when
+    // no row in the group is flagged.
+    (payload as LineUpsertPayload & { _is_main_flag?: boolean | null })._is_main_flag =
+      r.is_main_line === true ? true : r.is_main_line === false ? false : null;
     parsed++;
     payloads.push(payload);
   }
+
+  // Dedupe per (game_id, market_type, side, sportsbook): SharpAPI ships
+  // multiple line points per book for spread + total (no single "main"
+  // designation when is_main_line is unset). Pick the row most likely to
+  // represent the listed/main line:
+  //   1. If any row in the group has is_main_line=true → take that.
+  //   2. Otherwise → take the row with American odds closest to -110.
+  //
+  // This is intentionally lossy for line_history (we still archive all
+  // observations via the line_history append below — that uses the same
+  // `payloads` array). The dedupe applies only to the `lines` upsert path
+  // where (game,market,side,sportsbook) needs a single canonical row.
+  type Tagged = LineUpsertPayload & { _is_main_flag?: boolean | null };
+  const dedupeByGroup = new Map<string, Tagged>();
+  for (const p of payloads as Tagged[]) {
+    const k = `${p.game_id}|${p.market_type}|${p.side}|${p.sportsbook}`;
+    const existing = dedupeByGroup.get(k);
+    if (existing === undefined) {
+      dedupeByGroup.set(k, p);
+      continue;
+    }
+    // Prefer flagged-main over anything else.
+    if (existing._is_main_flag === true) continue;
+    if (p._is_main_flag === true) { dedupeByGroup.set(k, p); continue; }
+    // Tiebreak: row whose American odds are closest to -110.
+    const dExisting = Math.abs((existing.odds_american ?? -110) + 110);
+    const dNew = Math.abs((p.odds_american ?? -110) + 110);
+    if (dNew < dExisting) dedupeByGroup.set(k, p);
+  }
+  const dedupedPayloads: LineUpsertPayload[] = [...dedupeByGroup.values()].map(
+    (p) => {
+      // Strip the tracking tag before write — schema doesn't have it.
+      const { _is_main_flag: _unused, ...rest } = p as Tagged;
+      return rest as LineUpsertPayload;
+    },
+  );
 
   log(
     `\nProcessed: matched=${matched} unmatched=${unmatched} parsed=${parsed}`,
   );
 
+  log(
+    `Dedupe per (game,market,side,sportsbook): kept ${dedupedPayloads.length} of ${payloads.length} parsed rows`,
+  );
+
   // 5. Dry-run path: log a sample and exit.
   if (opts.dryRun) {
-    log(`\n[dry-run] would upsert ${payloads.length} lines row(s)`);
-    for (const p of payloads.slice(0, 6)) {
+    log(`\n[dry-run] would upsert ${dedupedPayloads.length} lines row(s)`);
+    for (const p of dedupedPayloads.slice(0, 6)) {
       log(
         `    game_id=${p.game_id} ${p.market_type}/${p.side} book=${p.sportsbook} line=${p.line_value} odds=${p.odds_american}`,
       );
     }
-    if (payloads.length > 6) log(`    … and ${payloads.length - 6} more`);
+    if (dedupedPayloads.length > 6) log(`    … and ${dedupedPayloads.length - 6} more`);
     return {
       mode: "dry-run",
       gamesInDb: games.length,
@@ -412,9 +464,9 @@ export async function refreshNbaLines(
   }
 
   // 6. Write path: delete then insert per (game_id, market_type, sportsbook).
-  log(`\nApplying ${payloads.length} rows…`);
+  log(`\nApplying ${dedupedPayloads.length} rows…`);
   const groups = new Map<string, LineUpsertPayload[]>();
-  for (const p of payloads) {
+  for (const p of dedupedPayloads) {
     const k = `${p.game_id}|${p.market_type}|${p.sportsbook}`;
     const arr = groups.get(k) ?? [];
     arr.push(p);

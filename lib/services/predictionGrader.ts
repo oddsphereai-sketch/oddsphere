@@ -90,6 +90,33 @@ function isPendingStatus(s: string): boolean {
   return IN_PROGRESS_STATUSES.has(s) || IN_PROGRESS_STATUSES.has(s.toLowerCase());
 }
 
+/**
+ * Canonical side tokens used by grading logic. Markets only resolve when
+ * the comparison value is one of these strings.
+ */
+const VALID_TOTAL_TOKENS = new Set(["over", "under"]);
+const VALID_ML_TOKENS = new Set(["home", "away"]);
+
+/**
+ * Resolve a comparable side token from a prediction_records row. Prefers
+ * `pick` when it is already a canonical token (MLB/NBA store canonical
+ * tokens in pick); falls back to `side` when `pick` is a display label
+ * (NHL stores team-label picks like "CAR ML" / "OVER 5.5" while side
+ * carries the canonical token).
+ */
+function resolveSideToken(
+  record: PredictionRecordRow,
+  validTokens: Set<string>,
+): string {
+  const rawPick = (record.pick ?? "").toString().trim().toLowerCase();
+  if (validTokens.has(rawPick)) return rawPick;
+  const rawSide = (record.side ?? "").toString().trim().toLowerCase();
+  if (validTokens.has(rawSide)) return rawSide;
+  // Return the (lowercased) pick string even if non-canonical so the
+  // comparison falls through to "loss" rather than crashing.
+  return rawPick;
+}
+
 function emptyGrade(
   record: PredictionRecordRow,
   result: GradeResult,
@@ -128,13 +155,13 @@ function gradeMoneyline(inputs: GradeInputs): PredictionGradeRow {
       : game.away_score > game.home_score
       ? "away"
       : null;
-  const pick = (record.pick ?? "").toLowerCase();
+  const pickToken = resolveSideToken(record, VALID_ML_TOKENS);
   let result: GradeResult;
   if (winningTeam === null) {
     // Tie — only possible in canceled/no-contest scenarios for MLB.
     // Mark void; caller can re-grade if rule changes.
     result = "void";
-  } else if (pick === winningTeam) {
+  } else if (pickToken === winningTeam) {
     result = "win";
   } else {
     result = "loss";
@@ -157,12 +184,12 @@ function gradeTotal(inputs: GradeInputs): PredictionGradeRow {
     return emptyGrade(record, "pending", source, "missing line_value");
   }
   const total = game.home_score + game.away_score;
-  const pick = (record.pick ?? record.side ?? "").toLowerCase();
+  const pickToken = resolveSideToken(record, VALID_TOTAL_TOKENS);
   let result: GradeResult;
   if (total > record.line_value) {
-    result = pick === "over" ? "win" : "loss";
+    result = pickToken === "over" ? "win" : "loss";
   } else if (total < record.line_value) {
-    result = pick === "under" ? "win" : "loss";
+    result = pickToken === "under" ? "win" : "loss";
   } else {
     // Exact push (total === line_value)
     result = "push";

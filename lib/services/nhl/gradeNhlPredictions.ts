@@ -98,17 +98,25 @@ export async function gradeNhlPredictions(opts: GradeNhlOptions): Promise<GradeN
   if (pendingErr) throw new Error(`load pending NHL records: ${pendingErr.message}`);
   const allRecords = (pendingData as PendingRecord[] | null) ?? [];
 
-  // 2. Filter out already-graded.
+  // 2. Filter out already-graded. Existing rows with result="pending" are
+  //    NOT considered graded — they're placeholders written at locked-
+  //    snapshot creation time, and need to be UPDATED once the game goes
+  //    FINAL. Only rows with result in {win,loss,push,void} are skipped.
   const recordIds = allRecords.map((r) => r.id);
-  let alreadyGraded = new Set<number>();
+  const existingGradeByRecordId = new Map<number, { id: number; result: string }>();
   if (recordIds.length > 0) {
     const { data: gradesData } = await supabase
       .from("prediction_grades")
-      .select("prediction_record_id")
+      .select("id, prediction_record_id, result")
       .in("prediction_record_id", recordIds);
-    alreadyGraded = new Set((gradesData ?? []).map((g: { prediction_record_id: number }) => g.prediction_record_id));
+    for (const g of (gradesData ?? []) as Array<{ id: number; prediction_record_id: number; result: string }>) {
+      existingGradeByRecordId.set(g.prediction_record_id, { id: g.id, result: g.result });
+    }
   }
-  const ungraded = allRecords.filter((r) => !alreadyGraded.has(r.id));
+  const ungraded = allRecords.filter((r) => {
+    const existing = existingGradeByRecordId.get(r.id);
+    return existing === undefined || existing.result === "pending";
+  });
   log(`Ungraded NHL records: ${ungraded.length} / ${allRecords.length}`);
   if (ungraded.length === 0) {
     return { mode: opts.apply ? "write" : "dry-run", pending: 0, finalGamesAvailable: 0, graded: 0, errors };
@@ -161,6 +169,31 @@ export async function gradeNhlPredictions(opts: GradeNhlOptions): Promise<GradeN
       graded += 1;
       continue;
     }
+    const existing = existingGradeByRecordId.get(r.id);
+    if (existing !== undefined) {
+      // UPDATE the placeholder pending row in place. Idempotent — same
+      // grade row id, new result/booleans.
+      const { error: upErr } = await supabase
+        .from("prediction_grades")
+        .update({
+          result: gradeRow.result,
+          push: gradeRow.push,
+          win: gradeRow.win,
+          loss: gradeRow.loss,
+          void: gradeRow.void,
+          pending: gradeRow.pending,
+        })
+        .eq("id", existing.id);
+      if (upErr) {
+        const msg = `  ✗ update grade for record=${r.id} (grade.id=${existing.id}): ${upErr.message}`;
+        log(msg);
+        errors.push(msg);
+      } else {
+        log(`  ✓ updated record=${r.id} ${r.market}/${r.side} pending → ${result}`);
+        graded += 1;
+      }
+      continue;
+    }
     const { error: insErr } = await supabase
       .from("prediction_grades")
       .insert(gradeRow);
@@ -169,7 +202,7 @@ export async function gradeNhlPredictions(opts: GradeNhlOptions): Promise<GradeN
       log(msg);
       errors.push(msg);
     } else {
-      log(`  ✓ record=${r.id} ${r.market}/${r.side} → ${result}`);
+      log(`  ✓ inserted record=${r.id} ${r.market}/${r.side} → ${result}`);
       graded += 1;
     }
   }
