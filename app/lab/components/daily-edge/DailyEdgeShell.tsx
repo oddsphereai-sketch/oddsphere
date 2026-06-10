@@ -66,10 +66,22 @@ const MARKET_LONG_LABEL: Record<MarketKey, string> = {
 // Phase 7F (Path A) — sport-aware market labels. NBA reuses the
 // `first_inning` slot for Spread; NHL reuses it for Puck Line. MLB
 // uses it for 1st-Inning (NRFI/YRFI). One DTO slot, three labels.
+//
+// 2026-06-10 corrected product direction: NBA Spread and NHL Puck Line
+// are CONTEXT-ONLY markets — visible as model context / reader
+// guidance, but NOT part of official public tracking (see registry in
+// the public tracking section below). Their short labels carry a "*"
+// indicator that maps to the footnote "* Model context · Not part of
+// official tracking" rendered below the market chips. MLB ML / Total /
+// 1st are officially tracked and carry no asterisk.
+function isContextOnlyMarket(market: MarketKey, sport: Sport): boolean {
+  if (market !== "first_inning") return false;
+  return sport === "nba" || sport === "nhl";
+}
 function marketShortLabelFor(market: MarketKey, sport: Sport): string {
   if (market === "first_inning") {
-    if (sport === "nhl") return "PL";
-    if (sport === "nba") return "Sprd";
+    if (sport === "nhl") return "PL*";
+    if (sport === "nba") return "Sprd*";
   }
   return MARKET_SHORT_LABEL[market];
 }
@@ -80,6 +92,11 @@ function marketLongLabelFor(market: MarketKey, sport: Sport): string {
   }
   return MARKET_LONG_LABEL[market];
 }
+
+/** Footnote shown beneath the per-card market strip whenever any market
+ *  on the card is a context-only market (NBA Spread, NHL Puck Line).
+ *  The "*" appended to those labels by marketShortLabelFor maps here. */
+const CONTEXT_ONLY_FOOTNOTE = "* Model context · Not part of official tracking";
 // Sport-aware pick fallback when the market has no pick label. MLB
 // shows "Toss-Up" on first_inning (the [0.85, 1.15) FI band); NBA
 // and NHL (which never have a held FI concept) show "Held".
@@ -93,17 +110,27 @@ function pickFallbackFor(market: MarketKey, sport: Sport): string {
  * card + reader. The first_inning slot is repurposed per sport
  * (MLB: NRFI/YRFI, NBA: Spread, NHL: Puck Line).
  *
- * 2026-06-10 honesty fix: NBA hides the spread/first_inning slot until
- * the pipeline persists a real prediction_record for spread. Pre-fix
- * the card rendered "Sprd · NY -2 · Lean" as if it were a tracked
- * recommendation, but `buildNbaPredictionRecords` only persists
- * moneyline + total — the spread label had no audit/grade/tracking
- * trail. Hiding it prevents users from interpreting it as a tracked
- * pick. Durable fix: persist NBA spread as a prediction_record (Phase 6
- * roadmap). Until then, NBA shows 2 markets only.
+ * 2026-06-10 corrected product direction:
+ * All three slots render. NBA Spread and NHL Puck Line render as
+ * CONTEXT-ONLY markets — visible as model context / reader guidance,
+ * NOT part of official public tracking. They carry a "*" indicator
+ * (marketShortLabelFor) that maps to the footnote rendered below the
+ * market chips. They are NOT written to `prediction_records` and do
+ * NOT appear in the public tracking page.
+ *
+ * History:
+ * - cba9ea5 (2026-06-10) hid NBA spread because the audit framed it as
+ *   "must be persisted OR hidden." That framing conflated public
+ *   tracking with internal audit (see
+ *   feedback-public-tracking-vs-internal-audit memory + Phase 4 §A.4).
+ * - Local commit 859ae3c (dropped before push, 2026-06-10) extended
+ *   the same hide to NHL puck-line — also wrong per the corrected
+ *   direction.
+ * - This commit restores both as context-only. Internal
+ *   `displayed_market_snapshot` substrate is a P1 follow-up
+ *   (see docs/audit/07-current-site-stabilization-plan.md).
  */
 function marketKeysFor(sport: Sport): MarketKey[] {
-  if (sport === "nba") return ["moneyline", "total"];
   return ["moneyline", "total", "first_inning"];
 }
 
@@ -540,6 +567,7 @@ function MarketPill({
   onClick: () => void;
 }) {
   const shellSport = useShellSport();
+  const isContext = isContextOnlyMarket(market, shellSport);
   return (
     <button
       type="button"
@@ -548,7 +576,7 @@ function MarketPill({
         selected
           ? "bg-violet-500/[0.18] text-white border border-violet-400/45"
           : "bg-white/[0.03] text-gray-300 border border-transparent hover:bg-white/[0.06]"
-      }`}
+      } ${isContext && !selected ? "opacity-80" : ""}`}
     >
       <span className={`text-[10px] uppercase tracking-[0.14em] font-bold shrink-0 ${selected ? "text-violet-100" : "text-gray-500"}`}>
         {marketShortLabelFor(market, shellSport)}
@@ -2410,8 +2438,14 @@ function SlateCard({
         <div className="flex items-center justify-between gap-1 mb-3 px-0.5 text-[10px] uppercase tracking-[0.10em] font-bold whitespace-nowrap overflow-hidden">
           {marketKeysFor(shellSport).map((m, i) => {
             const v = asVerdictKey(game.markets[m].verdict.key);
+            const isContext = isContextOnlyMarket(m, shellSport);
             return (
-              <span key={m} className="inline-flex items-center gap-1 min-w-0">
+              <span
+                key={m}
+                className={`inline-flex items-center gap-1 min-w-0 ${
+                  isContext ? "opacity-80" : ""
+                }`}
+              >
                 {i > 0 && <span aria-hidden="true" className="text-gray-700 mr-1">·</span>}
                 <span className="text-gray-500">{marketShortLabelFor(m, shellSport)}</span>
                 <span className={VERDICT_TEXT_COLOR[v]}>
@@ -2439,6 +2473,7 @@ function SlateCard({
             const md = game.markets[m];
             const mv = asVerdictKey(md.verdict.key);
             const isActiveMarket = active && activeMarket === m;
+            const isContext = isContextOnlyMarket(m, shellSport);
             return (
               <button
                 key={m}
@@ -2451,7 +2486,7 @@ function SlateCard({
                   isActiveMarket
                     ? "bg-violet-500/[0.16] border-violet-400/50"
                     : VERDICT_PILL_TINT[mv]
-                }`}
+                } ${isContext && !isActiveMarket ? "opacity-80" : ""}`}
               >
                 <span
                   className={`block text-[9.5px] uppercase tracking-[0.14em] font-bold mb-0.5 ${
@@ -2467,6 +2502,17 @@ function SlateCard({
             );
           })}
         </div>
+
+        {/* Context-only footnote — appears only when the card has at
+            least one context-only market (NBA Spread or NHL Puck Line)
+            in the strip above. The "*" appended to those market labels
+            maps here. Officially tracked markets (ML / Total / 1st) do
+            NOT carry the asterisk. */}
+        {marketKeysFor(shellSport).some((m) => isContextOnlyMarket(m, shellSport)) && (
+          <p className="text-[9.5px] text-gray-500 italic mb-2 leading-tight">
+            {CONTEXT_ONLY_FOOTNOTE}
+          </p>
+        )}
 
         {/* Action affordance — slimmer, link-style. The whole card is a
             click target anyway; this is just the eye-cue. */}
@@ -2861,6 +2907,11 @@ function MobileDetailSheet({
             />
           ))}
         </div>
+        {marketKeysFor(game.sport).some((m) => isContextOnlyMarket(m, game.sport)) && (
+          <p className="px-4 py-1 text-[10px] text-gray-500 italic border-b border-white/[0.04] leading-tight">
+            {CONTEXT_ONLY_FOOTNOTE}
+          </p>
+        )}
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
           {marketData === null ? (
