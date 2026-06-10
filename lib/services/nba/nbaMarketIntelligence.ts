@@ -404,7 +404,19 @@ function buildSpread(
 
   const modelConf = prediction.spread_confidence;
   const lineHomeFromMarket = pickSide === "home" ? pickLine : pickLine === null ? null : -pickLine;
-  const modelHomeSpread = prediction.predicted_spread_home;
+  // CONVENTION BOUNDARY (2026-06-10 bug fix):
+  // `blendPosterior` produces `posterior_spread = home_score - away_score`
+  // so its `predicted_spread_home` is POSITIVE when home wins (model convention).
+  // `classifySpreadConflict` expects the BETTING convention where NEGATIVE means
+  // home favored (matches the line "NYK -2" = NYK favored by 2). Negate here.
+  //
+  // Pre-fix bug surfaced when model predicted NYK +5.6 (home wins by ~6) but the
+  // classifier interpreted +5.6 as "NYK is a 5.6-pt underdog", producing a
+  // strong_conflict / caution grade despite the model agreeing with the line
+  // direction. ML pick remained correctly "home" because that path uses
+  // probability, not the spread sign — the spread market was the only one
+  // affected. Confirmed via projection={home:111.2, away:105.6, spread_home:+5.6}.
+  const modelHomeSpread = -prediction.predicted_spread_home;
 
   let band: MarketConflictBand;
   let edgePoints: number | null;
