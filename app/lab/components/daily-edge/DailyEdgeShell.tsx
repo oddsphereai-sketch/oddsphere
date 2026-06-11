@@ -1050,16 +1050,36 @@ export function SportRail({ sport }: { sport: Sport }) {
   );
 }
 
+/**
+ * Member-facing label for the slate strip ("MLB slate", "NBA slate",
+ * "World Cup slate", …). Uppercased in the chip; this helper returns
+ * the case-preserving display text so screen readers don't shout
+ * (the CSS handles uppercasing visually).
+ */
+function slateLabelForSport(sport: Sport): string {
+  if (sport === "mlb") return "MLB";
+  if (sport === "nba") return "NBA";
+  if (sport === "nhl") return "NHL";
+  if (sport === "nfl") return "NFL";
+  if (sport === "cbb") return "CBB";
+  if (sport === "cfb") return "CFB";
+  if (sport === "ucl") return "UCL";
+  if (sport === "soccer") return "World Cup";
+  return sport;
+}
+
 function SlateControlStrip({
   date,
   gameCount,
   updatedAt,
   fallbackUsed,
+  sport,
 }: {
   date: string;
   gameCount: number;
   updatedAt: string;
   fallbackUsed: boolean;
+  sport: Sport;
 }) {
   // Locale-dependent time format produces different output on server vs
   // client which trips React's hydration check. Defer formatting until
@@ -1095,7 +1115,7 @@ function SlateControlStrip({
           gray-700 to recede behind the gray-400/500 text. */}
       <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap text-[11px] text-gray-500">
         <span className="inline-flex items-center gap-2">
-          <span className="uppercase tracking-[0.14em] font-bold text-gray-400">MLB slate</span>
+          <span className="uppercase tracking-[0.14em] font-bold text-gray-400">{slateLabelForSport(sport)} slate</span>
           <span aria-hidden="true" className="text-gray-700">·</span>
           <span className="tabular-nums text-gray-400">{gameCount} games</span>
           <span aria-hidden="true" className="text-gray-700">·</span>
@@ -2667,7 +2687,7 @@ function SelectedEdgeReader({
             below + the compact "Pick" block. */}
         <div className="mt-2 flex items-center gap-2 flex-wrap">
           <span className="text-[16px] font-bold text-gray-100 whitespace-nowrap" style={{ letterSpacing: "-0.01em" }}>
-            {game.awayTeam} <span className="text-gray-700 font-normal mx-0.5">@</span> {game.homeTeam}
+            {game.awayTeam} <span className="text-gray-700 font-normal mx-0.5">{game.sport === "soccer" ? "vs" : "@"}</span> {game.homeTeam}
           </span>
           <VerdictChip verdict={verdict} showActionPrefix />
           <span className="text-[11px] text-gray-500 tabular-nums">{game.gameTime}</span>
@@ -3350,6 +3370,7 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
           gameCount={games.length}
           updatedAt={data.as_of}
           fallbackUsed={data.fallback_used === true}
+          sport={sport}
         />
         <div className="hidden sm:block">
           <HowThisWorks />

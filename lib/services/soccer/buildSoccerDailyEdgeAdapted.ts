@@ -41,7 +41,49 @@ import type {
 } from "../../../app/lab/lib/labTypes";
 import type { Verdict } from "../verdictDerivation";
 import type { SharpReadKey } from "../sharpReadSelector";
-import { flagCdnUrl } from "./_countryFlags";
+import { flagEmoji } from "./_countryFlags";
+
+/**
+ * Translate a WC-3 model pick token (`home` / `away` / `draw` /
+ * `home_or_away` / `home_or_draw` / `away_or_draw` / `yes` / `no` /
+ * `over` / `under`) into a readable member-facing label for the named
+ * market. Falls back to the raw token in title case if we can't resolve
+ * the team names (defensive — the adapter always knows the teams when
+ * it has prediction_records).
+ */
+function readablePickForSoccer(args: {
+  rawPick: string | null;
+  market: string;
+  homeDisplay: string;
+  awayDisplay: string;
+}): string | null {
+  const { rawPick, market, homeDisplay, awayDisplay } = args;
+  if (rawPick === null) return null;
+  const p = rawPick.toLowerCase();
+  if (market === "match_result") {
+    if (p === "home") return homeDisplay;
+    if (p === "away") return awayDisplay;
+    if (p === "draw") return "Draw";
+  }
+  if (market === "double_chance") {
+    if (p === "home_or_away") return `${homeDisplay} or ${awayDisplay} (no draw)`;
+    if (p === "home_or_draw") return `${homeDisplay} or Draw`;
+    if (p === "away_or_draw") return `${awayDisplay} or Draw`;
+  }
+  if (market === "btts") {
+    if (p === "yes") return "BTTS Yes";
+    if (p === "no") return "BTTS No";
+  }
+  if (market === "total") {
+    if (p === "over") return "Over";
+    if (p === "under") return "Under";
+  }
+  // Fallback: title-case the raw token so we never leak `home_or_draw` style.
+  return rawPick
+    .split("_")
+    .map((w) => (w.length === 0 ? "" : w[0].toUpperCase() + w.slice(1).toLowerCase()))
+    .join(" ");
+}
 
 const SOCCER_MODEL_VERSION = "soccer_dixon_coles_v1";
 const LOCK_WINDOW_MINUTES = 60;
@@ -134,7 +176,10 @@ function gradeToVerdict(playGrade: string | null, held: boolean): { key: Verdict
   return { key: "no_play", label: "No Play" };
 }
 
-function buildPredictionDto(r: PredictionRecordSlim | null): DailyEdgePredictionDto {
+function buildPredictionDto(
+  r: PredictionRecordSlim | null,
+  ctx?: { homeDisplay: string; awayDisplay: string },
+): DailyEdgePredictionDto {
   if (r === null) {
     return {
       pick: null,
@@ -145,9 +190,21 @@ function buildPredictionDto(r: PredictionRecordSlim | null): DailyEdgePrediction
       marketSignal: null,
     };
   }
+  const readable = ctx === undefined
+    ? r.pick
+    : readablePickForSoccer({
+        rawPick: r.pick,
+        market: r.market,
+        homeDisplay: ctx.homeDisplay,
+        awayDisplay: ctx.awayDisplay,
+      });
   return {
-    pick: r.held ? null : r.pick,
-    confidence: r.held || r.confidence === null ? null : r.confidence / 100,
+    // Soccer surfaces the readable pick even when held so the Quick
+    // Read headline reads "Held — South Korea" instead of "Held — —".
+    // The verdict pill carries the "do not bet" framing; nulling the
+    // pick at this layer just made the card look broken.
+    pick: readable,
+    confidence: r.confidence === null ? null : r.confidence / 100,
     sharpStatus: "caution",
     grade: null,
     signalType: null,
@@ -155,14 +212,20 @@ function buildPredictionDto(r: PredictionRecordSlim | null): DailyEdgePrediction
   };
 }
 
-function buildTotalPredictionDto(r: PredictionRecordSlim | null): DailyEdgeTotalPredictionDto {
+function buildTotalPredictionDto(
+  r: PredictionRecordSlim | null,
+  ctx?: { homeDisplay: string; awayDisplay: string },
+): DailyEdgeTotalPredictionDto {
   return {
-    ...buildPredictionDto(r),
+    ...buildPredictionDto(r, ctx),
     line: r?.line_value ?? null,
   };
 }
 
-function buildMarketEdgeDto(r: PredictionRecordSlim | null): MarketEdgeDto {
+function buildMarketEdgeDto(
+  r: PredictionRecordSlim | null,
+  ctx?: { homeDisplay: string; awayDisplay: string },
+): MarketEdgeDto {
   if (r === null) {
     return {
       pick: null,
@@ -219,8 +282,19 @@ function buildMarketEdgeDto(r: PredictionRecordSlim | null): MarketEdgeDto {
   // whyLine carry the "don't bet this" framing.
   const showPick = !r.held || (r.pick !== null && r.pick !== "");
   const heldHelp = buildHeldHelpLine(r);
+  // Convert internal pick tokens ("home", "away", "home_or_draw",
+  // "yes", "no", "over", "under") into readable text using the actual
+  // country / market names. Members never see raw `home_or_draw`.
+  const readablePick = ctx === undefined
+    ? r.pick
+    : readablePickForSoccer({
+        rawPick: r.pick,
+        market: String(r.market ?? ""),
+        homeDisplay: ctx.homeDisplay,
+        awayDisplay: ctx.awayDisplay,
+      });
   return {
-    pick: showPick ? r.pick : null,
+    pick: showPick ? readablePick : null,
     confidence: r.confidence === null ? null : r.confidence / 100,
     grade: null,
     signalType: null,
@@ -247,7 +321,9 @@ function buildMarketEdgeDto(r: PredictionRecordSlim | null): MarketEdgeDto {
     modelTrustPct,
     marketImpliedPct,
     modelMarketGapPct: gap,
-    marketSource: "bdl_fifa + sharpapi (prematch)",
+    // Member-facing copy. Internal source ids ("bdl_fifa", "sharpapi")
+    // belong in operator/debug logs, not the card.
+    marketSource: "Prematch market reference",
     // WC-2 contract: SharpAPI /splits is empty_as_of_probe for FIFA WC,
     // so calling this "two_sided_consensus" would imply public-split
     // depth we don't have. The DTO's enum is a closed union; the
@@ -317,6 +393,7 @@ function buildSharpRead(perMarket: Map<string, PredictionRecordSlim>): {
 function buildModelBreakdown(
   matchup: string,
   perMarket: Map<string, PredictionRecordSlim>,
+  ctx?: { homeDisplay: string; awayDisplay: string },
 ): string | null {
   const mr = perMarket.get("match_result");
   const total = perMarket.get("total");
@@ -335,7 +412,15 @@ function buildModelBreakdown(
     if (r === undefined) return "";
     const tag = r.held ? `Held (${r.hold_reason ?? "no reason"})` : (r.play_grade ?? "graded");
     const conf = r.confidence === null ? "" : ` conf=${r.confidence.toFixed(0)}%`;
-    return `${label}: ${r.pick}${r.line_value !== null ? ` @ ${r.line_value}` : ""} — ${tag}${conf}.`;
+    const readable = ctx === undefined
+      ? r.pick
+      : readablePickForSoccer({
+          rawPick: r.pick,
+          market: r.market,
+          homeDisplay: ctx.homeDisplay,
+          awayDisplay: ctx.awayDisplay,
+        });
+    return `${label}: ${readable}${r.line_value !== null ? ` @ ${r.line_value}` : ""} — ${tag}${conf}.`;
   };
 
   const lines = [
@@ -521,7 +606,22 @@ export async function buildSoccerDailyEdgeAdapted(
     const awayTeam = g.away_team_id !== null ? teamById.get(g.away_team_id) : undefined;
     const homeAbbr = homeTeam?.abbreviation ?? "?";
     const awayAbbr = awayTeam?.abbreviation ?? "?";
-    const matchup = `${awayAbbr} @ ${homeAbbr}`;
+    // Country flag emoji prefix — reliable, no asset fetch, no broken
+    // images. flagcdn.com URLs were not in next.config.ts allow-list so
+    // every WC card was rendering broken image icons. Emoji renders
+    // everywhere we render text and survives the SSR pipeline.
+    const homeFlag = flagEmoji(homeTeam?.location);
+    const awayFlag = flagEmoji(awayTeam?.location);
+    // Full country names from teams.display_name when available — these
+    // drive the readable pick labels ("South Korea" instead of "home")
+    // and the matchup line. Fall back to abbreviation to stay safe.
+    const homeName = homeTeam?.display_name ?? homeAbbr;
+    const awayName = awayTeam?.display_name ?? awayAbbr;
+    // Render the team chip as "🇰🇷 KOR" — emoji first so the card has
+    // an immediate visual id, abbreviation behind it for tabular layouts.
+    const homeChip = homeFlag.length > 0 ? `${homeFlag} ${homeAbbr}` : homeAbbr;
+    const awayChip = awayFlag.length > 0 ? `${awayFlag} ${awayAbbr}` : awayAbbr;
+    const matchup = `${awayName} vs ${homeName}`;
 
     const perMarket = byGameMarket.get(g.id) ?? new Map<string, PredictionRecordSlim>();
     const rows = Array.from(perMarket.values());
@@ -536,12 +636,10 @@ export async function buildSoccerDailyEdgeAdapted(
     const holdReason = deriveGameHoldReason(perMarket);
     const decisionLine = buildDecisionLine(matchup, perMarket);
     const sharpRead = buildSharpRead(perMarket);
-    const modelBreakdown = buildModelBreakdown(matchup, perMarket);
-
-    // Country flags from BDL alpha-3 code (teams.location). UI falls
-    // back to abbreviation when the flag URL is null.
-    const homeFlagUrl = flagCdnUrl(homeTeam?.location);
-    const awayFlagUrl = flagCdnUrl(awayTeam?.location);
+    const modelBreakdown = buildModelBreakdown(matchup, perMarket, {
+      homeDisplay: homeName,
+      awayDisplay: awayName,
+    });
 
     // Expected goals (Dixon-Coles λ) come from the WC-3 snapshot. Same
     // model output is stamped on every market's snapshot for the game,
@@ -549,14 +647,19 @@ export async function buildSoccerDailyEdgeAdapted(
     // "Projection" display so it no longer reads 0–0.
     const lambdas = extractFixtureLambdas(rows);
 
+    const labelCtx = { homeDisplay: homeName, awayDisplay: awayName };
+
     return {
       id: `soccer-${g.external_id}`,
       sport: "soccer",
       external_id: g.external_id,
-      awayTeam: awayAbbr,
-      awayTeamLogo: awayFlagUrl,
-      homeTeam: homeAbbr,
-      homeTeamLogo: homeFlagUrl,
+      // Emoji-prefixed abbreviation gives every render context a flag.
+      awayTeam: awayChip,
+      // Null logo — UI falls back cleanly to the abbreviation text.
+      // flagcdn.com URLs were 404-ing through Next/Image on prod.
+      awayTeamLogo: null,
+      homeTeam: homeChip,
+      homeTeamLogo: null,
       gameTime,
       gameStartMinutes,
       scheduledLockAt: computeLocksAtIso(g.game_date),
@@ -568,14 +671,14 @@ export async function buildSoccerDailyEdgeAdapted(
       homeStarter: null,
       awayStarter: null,
       predictions: {
-        ml: buildPredictionDto(mr),
-        total: buildTotalPredictionDto(total),
-        nrfi: buildPredictionDto(btts),
+        ml: buildPredictionDto(mr, labelCtx),
+        total: buildTotalPredictionDto(total, labelCtx),
+        nrfi: buildPredictionDto(btts, labelCtx),
       },
       markets: {
-        moneyline: buildMarketEdgeDto(mr),
-        total: buildMarketEdgeDto(total),
-        first_inning: buildMarketEdgeDto(btts),
+        moneyline: buildMarketEdgeDto(mr, labelCtx),
+        total: buildMarketEdgeDto(total, labelCtx),
+        first_inning: buildMarketEdgeDto(btts, labelCtx),
       },
       decisionLine,
       projected: {
