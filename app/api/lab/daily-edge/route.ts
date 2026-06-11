@@ -172,6 +172,19 @@ type LockedVerdictOverride = { key: "best_angle" | "lean" | "watchlist" | "no_pl
 function resolveLockedVerdict(
   lockedPlayGrade: string | null | undefined,
   lockedNoBet: boolean | null | undefined,
+  /**
+   * Truthfulness guard (2026-06-11 P7-B1). When the writer text says
+   * "best_angle" but `prediction_records.best_angle` is explicitly
+   * false (the writer's public-money conflict guard demoted it), we
+   * MUST display Lean — not Best Angle. Same row, same writer, the
+   * boolean is the authoritative final state.
+   *
+   * Null is treated as "unknown" and does NOT trigger the demote — that
+   * preserves pre-existing behavior for code paths that don't yet
+   * thread the boolean in (e.g. FI today). Only an explicit `false`
+   * downgrades.
+   */
+  lockedBestAngleBool?: boolean | null,
 ): LockedVerdictOverride | null {
   // 2026-06-10 v15.3 FI ordering — Toss-Up is checked BEFORE the
   // no_bet short-circuit. FI writes `no_bet=true` alongside
@@ -185,7 +198,19 @@ function resolveLockedVerdict(
   if (lockedPlayGrade === "toss_up") return { key: "watchlist", label: "Watchlist" };
   if (lockedNoBet === true) return { key: "no_play", label: "No Play" };
   switch (lockedPlayGrade) {
-    case "best_angle":     return { key: "best_angle", label: "Best Angle" };
+    case "best_angle":
+      // P7-B1 truthfulness guard (2026-06-11). The writer's
+      // predictionRecordService applies a public-money conflict guard
+      // when it sets the `best_angle` boolean column (see
+      // hasOpposingPublicMoneyConflict). If the boolean is explicitly
+      // false, the writer's final decision is "not a Best Angle" — so
+      // we demote the displayed pill to Lean. `null` (unknown) preserves
+      // the prior behavior so paths that don't thread the boolean keep
+      // working untouched.
+      if (lockedBestAngleBool === false) {
+        return { key: "lean", label: "Lean" };
+      }
+      return { key: "best_angle", label: "Best Angle" };
     case "lean":           return { key: "lean", label: "Lean" };
     case "market_watch":
     case "model_only":
@@ -607,8 +632,8 @@ function buildGameDto(
   signals: SignalRow[],
   sportsbookTotalLine: number | null,
   currentLinesByGameMarket: Map<string, LineRow[]>,
-  openLinesByGameMarket: Map<string, LineHistoryRow>,
-  lockedPlayGradeByGameMarket: Map<string, { playGrade: string | null; noBet: boolean | null }>
+  openLinesByGameMarket: Map<string, LineHistoryRow[]>,
+  lockedPlayGradeByGameMarket: Map<string, { playGrade: string | null; noBet: boolean | null; bestAngle: boolean | null }>
 ): DailyEdgeGameDto | null {
   const home = row.home_team?.abbreviation ?? "—";
   const away = row.away_team?.abbreviation ?? "—";
@@ -886,10 +911,10 @@ function buildGameDto(
     modelSide: pred.predicted_ml_winner as Side | null,
     signals,
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::moneyline`) ?? [],
-    lineOpen:
+    lineOpenCandidates:
       openLinesByGameMarket.get(
         `${row.id}::moneyline::${pred.predicted_ml_winner ?? "null"}`
-      ) ?? null,
+      ) ?? [],
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
@@ -897,6 +922,7 @@ function buildGameDto(
     sportSpecific: pred.sport_specific,
     lockedPlayGrade: lockedMl?.playGrade ?? null,
     lockedNoBet: lockedMl?.noBet ?? null,
+    lockedBestAngle: lockedMl?.bestAngle ?? null,
     isLockedRow: lockedMl !== undefined,
   });
   const total = buildMarketEdge({
@@ -910,10 +936,10 @@ function buildGameDto(
     modelSide: pred.predicted_ou_side as Side | null,
     signals,
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::total`) ?? [],
-    lineOpen:
+    lineOpenCandidates:
       openLinesByGameMarket.get(
         `${row.id}::total::${pred.predicted_ou_side ?? "null"}`
-      ) ?? null,
+      ) ?? [],
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
@@ -926,6 +952,7 @@ function buildGameDto(
     },
     lockedPlayGrade: lockedOu?.playGrade ?? null,
     lockedNoBet: lockedOu?.noBet ?? null,
+    lockedBestAngle: lockedOu?.bestAngle ?? null,
     isLockedRow: lockedOu !== undefined,
   });
   const firstInning = buildMarketEdge({
@@ -939,10 +966,10 @@ function buildGameDto(
     modelSide: nrfiSide as Side,
     signals,
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::first_inning_total`) ?? [],
-    lineOpen:
+    lineOpenCandidates:
       openLinesByGameMarket.get(
         `${row.id}::first_inning_total::${nrfiSide}`
-      ) ?? null,
+      ) ?? [],
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
@@ -959,6 +986,7 @@ function buildGameDto(
     // which reads sport_specific.fi_v2_audit.fi_play_grade).
     lockedPlayGrade: lockedFi?.playGrade ?? null,
     lockedNoBet: lockedFi?.noBet ?? null,
+    lockedBestAngle: lockedFi?.bestAngle ?? null,
     isLockedRow: lockedFi !== undefined,
   });
 
@@ -1557,7 +1585,16 @@ type BuildMarketEdgeInput = {
   modelSide: Side | null;
   signals: SignalRow[];
   linesCurrent: LineRow[];
-  lineOpen: LineHistoryRow | null;
+  /**
+   * P7-B3 (2026-06-11) — ALL line_history rows for this (game, market, side),
+   * sorted by recorded_at ASC. buildMarketEdge resolves the picked-side
+   * "open" by finding the OLDEST candidate whose `sportsbook` matches the
+   * current `priceRow.sportsbook`. Same-sportsbook is required so the
+   * `-140 → -145` display reflects a real move at one book, not a cross-book
+   * delta. When no candidate matches the current sportsbook, the open is
+   * null and the line-move chip is suppressed (no fabrication).
+   */
+  lineOpenCandidates: LineHistoryRow[];
   autoFactors: Record<string, unknown> | null;
   homeAbbr: string;
   awayAbbr: string;
@@ -1591,6 +1628,14 @@ type BuildMarketEdgeInput = {
    */
   lockedPlayGrade?: string | null;
   lockedNoBet?: boolean | null;
+  /**
+   * P7-B1 (2026-06-11) — final `prediction_records.best_angle` boolean
+   * for this (game, market). Passed through to resolveLockedVerdict to
+   * honor the writer's public-money conflict guard when the text label
+   * says "best_angle". null = unknown (preserve prior behavior); false
+   * = demote display to Lean; true = display "Best Angle".
+   */
+  lockedBestAngle?: boolean | null;
   /**
    * Lock-snapshot honesty (2026-06-09 lock-contract fix). True when the
    * row carries a non-null `prediction_records.locked_at`, regardless of
@@ -1745,20 +1790,36 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
 
   // First-seen line for the picked side.
   //
-  // R-19 Phase 5i Fix A — the lineOpen row is now looked up by
-  // (game_id, market_type, modelSide) in buildGameDto, so the row that
-  // arrives here ALREADY matches the model's pick side when a matching
-  // line_history row exists. No defensive side-filter needed; just emit
-  // the odds. Pre-5i the lookup was side-agnostic and the filter below
-  // would null the open price whenever the first-recorded row happened
-  // to be the opposite side from the model's pick.
-  const openAmerican: number | null =
-    input.lineOpen?.odds_american ?? null;
+  // R-19 Phase 5i Fix A — candidates are keyed by (game_id, market_type,
+  // modelSide) so every row already matches the picked side.
+  //
+  // P7-B3 (2026-06-11) — pick the OLDEST candidate row whose sportsbook
+  // matches the current priceRow's sportsbook. This guarantees the
+  // displayed `-140 → -145` chain is a real move at the same book, not
+  // a cross-book delta. When priceRow is null (held / no trusted book
+  // has a price) or no candidate from the same book exists in
+  // line_history, `lineOpen` is null and the UI suppresses the chip.
+  // Candidates are already sorted ASC by recorded_at, so .find() returns
+  // the oldest matching row → that's the "true opener" when present,
+  // and the "oldest known stored line at this book" as the natural
+  // fallback. No fabrication path.
+  //
+  // Post-lock note: priceRow.sportsbook becomes "locked_snapshot" which
+  // doesn't exist in line_history, so locked markets correctly fall to
+  // null here. Carrying the lock's underlying sportsbook to re-enable
+  // post-lock line-move display is a separate writer change, not B3.
+  const lineOpen: LineHistoryRow | null =
+    priceRow !== null
+      ? (input.lineOpenCandidates.find(
+          (c) => c.sportsbook === priceRow.sportsbook,
+        ) ?? null)
+      : null;
+  const openAmerican: number | null = lineOpen?.odds_american ?? null;
   // Phase 7I — openAmerican already comes from line_history (always-LKG
   // semantics). Stamp its recorded_at if we have it so the UI can render
   // the age. lineOpen.recorded_at is the source's natural timestamp.
   const lineOpenObservedAt: string | null =
-    input.lineOpen?.recorded_at ?? null;
+    lineOpen?.recorded_at ?? null;
   const lineOpenIsStale =
     lineOpenObservedAt !== null && openAmerican !== null
       ? isObservationStale(lineOpenObservedAt)
@@ -1843,7 +1904,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     input.modelSide,
     input.signals,
     input.linesCurrent,
-    input.lineOpen,
+    lineOpen,
     input.sportSpecific,
   );
   const liveVerdict =
@@ -1885,6 +1946,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const writerOverride = resolveLockedVerdict(
     writerPlayGrade,
     input.lockedNoBet ?? null,
+    input.lockedBestAngle ?? null,
   );
   const verdict = writerOverride !== null
     ? { key: writerOverride.key as MarketVerdict, label: writerOverride.label, warning: liveVerdict.warning }
@@ -2990,15 +3052,25 @@ export async function GET(request: Request) {
   const totalLineByGame = new Map<number, number>();
   // 4.1.10 — per-market price + open price for the v13.1 Edge Stack.
   const currentLinesByGameMarket = new Map<string, LineRow[]>();
-  const openLinesByGameMarket = new Map<string, LineHistoryRow>();
+  // P7-B3 (2026-06-11) — value is the full array of line_history rows for
+  // each (game, market, side), sorted by recorded_at ASC. buildMarketEdge
+  // walks this list to pick the OLDEST entry whose sportsbook matches the
+  // chosen `priceRow.sportsbook`, so the displayed line move is bound to a
+  // single book. Pre-B3 the map stored only the first-seen row across all
+  // books, which could pair an open from book A with a current from book B.
+  const openLinesByGameMarket = new Map<string, LineHistoryRow[]>();
   // Lock-snapshot single source of truth (2026-06-09 lock-contract fix).
   // Hoisted out of the data-fetch block so the post-fetch DTO build loop
   // can read per-(game,market) locked play_grade + no_bet and pass them
   // into buildMarketEdge → resolveLockedVerdict. Empty when no games
   // are locked; populated below from the same Phase 6B.18 query.
+  // P7-B1 (2026-06-11) — `bestAngle` now carried alongside playGrade +
+  // noBet so resolveLockedVerdict can honor the writer's final boolean
+  // decision. Null is treated as "unknown" so unlocked rows / FI rows
+  // that don't write a meaningful boolean keep prior behavior.
   const lockedPlayGradeByGameMarket = new Map<
     string,
-    { playGrade: string | null; noBet: boolean | null }
+    { playGrade: string | null; noBet: boolean | null; bestAngle: boolean | null }
   >();
   if (gameIds.length > 0) {
     const { data: signalData, error: sigErr } = await supabase
@@ -3264,6 +3336,42 @@ export async function GET(request: Request) {
       lockedPlayGradeByGameMarket.set(`${r.game_id}::${r.market}`, {
         playGrade: r.play_grade,
         noBet: r.no_bet,
+        bestAngle: r.best_angle,
+      });
+    }
+
+    // P7-B1 (2026-06-11) — pre-lock best_angle boolean lookup.
+    //
+    // The locked query above filters to `locked_at != null`. The pre-lock
+    // verdict path (resolveWriterPlayGrade → resolveLockedVerdict) needs
+    // to see the writer's final boolean too — that's what the
+    // predictionRecordService.hasOpposingPublicMoneyConflict guard sets.
+    // Without this lookup, an unlocked row whose text=play_grade="best_angle"
+    // but boolean=false (because the conflict guard fired at write time)
+    // still rendered "Best Angle" pre-lock. The boolean below feeds the
+    // resolveLockedVerdict third argument so the demote rule fires
+    // identically pre- and post-lock.
+    //
+    // Important: this query DOES NOT mutate game_predictions like the
+    // locked path above. It only populates the per-(game,market) boolean
+    // for the verdict-honor guard.
+    const { data: unlockedBaRows } = await supabase
+      .from("prediction_records")
+      .select("game_id, market, play_grade, no_bet, best_angle")
+      .eq("sport", "mlb")
+      .eq("slate_date", requestedDate)
+      .in("market", ["moneyline", "total", "first_inning"])
+      .is("locked_at", null);
+    for (const r of (unlockedBaRows ?? []) as Array<{ game_id: number; market: string; play_grade: string | null; no_bet: boolean | null; best_angle: boolean | null }>) {
+      const key = `${r.game_id}::${r.market}`;
+      // Locked rows already populated above — don't overwrite their
+      // authoritative locked state with the pre-lock writer's current
+      // state.
+      if (lockedPlayGradeByGameMarket.has(key)) continue;
+      lockedPlayGradeByGameMarket.set(key, {
+        playGrade: r.play_grade,
+        noBet: r.no_bet,
+        bestAngle: r.best_angle,
       });
     }
     // (a) totalLineByGame override (6B.17 behavior preserved)
@@ -3481,14 +3589,19 @@ export async function GET(request: Request) {
       // was on the opposite side, the downstream side-filter nulled
       // `lineOpenAmerican` even when the picked side's open price did
       // exist in line_history. Including side in the key lets the lookup
-      // be side-correct, eliminating the side-filter need below.
+      // be side-correct.
       // line_history.side can be null defensively; bucket those under
-      // a "null" key to preserve the prior first-seen-wins behavior for
-      // sideless markets (none today, but defensive).
+      // a "null" key.
+      //
+      // P7-B3 (2026-06-11) — append all rows per side (not first-seen-wins).
+      // The query is `.order("recorded_at", { ascending: true })` so each
+      // array stays sorted oldest → newest, and buildMarketEdge can call
+      // `.find(c => c.sportsbook === priceRow.sportsbook)` to get the
+      // oldest entry at the chosen book.
       const key = `${row.game_id}::${row.market_type}::${row.side ?? "null"}`;
-      if (!openLinesByGameMarket.has(key)) {
-        openLinesByGameMarket.set(key, row);
-      }
+      const arr = openLinesByGameMarket.get(key) ?? [];
+      arr.push(row);
+      openLinesByGameMarket.set(key, arr);
     }
   }
 

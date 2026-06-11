@@ -104,20 +104,27 @@ function buildGuidedGuide(input: CopyInput): string {
   // every "the model leans X" / "the model likes X" template reads
   // awkwardly because the pick is exactly the "no clean side" state.
   // Use Toss-Up-specific copy that names the zone honestly.
+  //
+  // P7-B2 (2026-06-11) — every `${conf}%` in this generator is the
+  // recommendation confidence (0–1), NOT the model win probability.
+  // Pre-B2 phrasing like "at ${conf}%" / "a clean ${conf}% case" read
+  // as a probability claim and could disagree with the actual
+  // model_probability on the card. We now anchor every percent to
+  // "confidence" so the number is honestly labeled wherever it appears.
   if (input.market === "first_inning" && input.pick === "Toss-Up") {
     if (input.verdict === "watchlist") {
-      return `Worth tracking: the first-inning model lands in the toss-up zone at ${conf}% — too close to call cleanly.`;
+      return `Worth tracking: the first-inning model lands in the toss-up zone at ${conf}% confidence — too close to call cleanly.`;
     }
     if (input.verdict === "caution") {
-      return `The first-inning model lands in the toss-up zone at ${conf}%, and other signals conflict. Pass.`;
+      return `The first-inning model lands in the toss-up zone at ${conf}% confidence, and other signals conflict. Pass.`;
     }
     if (input.verdict === "no_play") {
-      return `On the first inning, the model lands in the toss-up zone (${conf}%). Skip unless something changes pre-game.`;
+      return `On the first inning, the model lands in the toss-up zone (${conf}% confidence). Skip unless something changes pre-game.`;
     }
     // lean / best_angle shouldn't actually happen for Toss-Up zone rows
     // (Toss-Up confidence is always 52, well below the lean floor), but
     // be defensive with copy in case verdict logic ever changes.
-    return `The first-inning model lands in the toss-up zone at ${conf}% — too close to call cleanly.`;
+    return `The first-inning model lands in the toss-up zone at ${conf}% confidence — too close to call cleanly.`;
   }
 
   if (input.verdict === "no_play") {
@@ -125,24 +132,24 @@ function buildGuidedGuide(input: CopyInput): string {
   }
   if (input.verdict === "caution") {
     if (input.sharpDirection === "push_against") {
-      return `The model likes ${input.pick} on the ${noun} at ${conf}%, but market action is pushing the other way. Treat as caution, not a play.`;
+      return `The model likes ${input.pick} on the ${noun} at ${conf}% confidence, but market action is pushing the other way. Treat as caution, not a play.`;
     }
-    return `The model likes ${input.pick} on the ${noun} at ${conf}%, but our signals conflict. Treat as caution, not a play.`;
+    return `The model likes ${input.pick} on the ${noun} at ${conf}% confidence, but our signals conflict. Treat as caution, not a play.`;
   }
   if (input.verdict === "watchlist") {
-    return `${framing.open}: the model leans ${input.pick} on the ${noun} at ${conf}%, ${framing.tone}.`;
+    return `${framing.open}: the model leans ${input.pick} on the ${noun} at ${conf}% confidence, ${framing.tone}.`;
   }
   if (input.verdict === "lean") {
     if (input.sharpDirection === "support" && input.market !== "first_inning") {
-      return `${framing.open} toward ${input.pick} on the ${noun} (${conf}%) — and market support is consistent with the pick.`;
+      return `${framing.open} toward ${input.pick} on the ${noun} (${conf}% confidence) — and market support is consistent with the pick.`;
     }
-    return `${framing.open} toward ${input.pick} on the ${noun} at ${conf}%. ${capitalize(framing.tone)}.`;
+    return `${framing.open} toward ${input.pick} on the ${noun} at ${conf}% confidence. ${capitalize(framing.tone)}.`;
   }
   // best_angle
   if (input.sharpDirection === "support" && input.market !== "first_inning") {
-    return `${framing.open}: the model likes ${input.pick} on the ${noun} at ${conf}%, and market support is on the same side.`;
+    return `${framing.open}: the model likes ${input.pick} on the ${noun} at ${conf}% confidence, and market support is on the same side.`;
   }
-  return `${framing.open}: the model has a clean ${conf}% case for ${input.pick} on the ${noun}.`;
+  return `${framing.open}: the model leans ${input.pick} on the ${noun} at ${conf}% confidence — a clean read.`;
 }
 
 /**
