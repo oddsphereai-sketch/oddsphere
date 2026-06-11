@@ -93,6 +93,10 @@ function marketShortLabelFor(market: MarketKey, sport: Sport): string {
   if (market === "first_inning") {
     if (sport === "nhl") return "PL*";
     if (sport === "nba") return "Sprd*";
+    if (sport === "soccer") return "BTTS";
+  }
+  if (sport === "soccer") {
+    if (market === "moneyline") return "Match";
   }
   return MARKET_SHORT_LABEL[market];
 }
@@ -100,6 +104,10 @@ function marketLongLabelFor(market: MarketKey, sport: Sport): string {
   if (market === "first_inning") {
     if (sport === "nhl") return "Puck Line";
     if (sport === "nba") return "Spread";
+    if (sport === "soccer") return "Both Teams To Score";
+  }
+  if (sport === "soccer") {
+    if (market === "moneyline") return "Match Result";
   }
   return MARKET_LONG_LABEL[market];
 }
@@ -112,7 +120,7 @@ const CONTEXT_ONLY_FOOTNOTE = "* Model context · Not part of official tracking"
 // shows "Toss-Up" on first_inning (the [0.85, 1.15) FI band); NBA
 // and NHL (which never have a held FI concept) show "Held".
 function pickFallbackFor(market: MarketKey, sport: Sport): string {
-  if (sport === "nba" || sport === "nhl") return "Held";
+  if (sport === "nba" || sport === "nhl" || sport === "soccer") return "Held";
   return market === "first_inning" ? "Toss-Up" : "Held";
 }
 
@@ -285,6 +293,12 @@ function espnLogoUrl(abbr: string, sport: Sport = "mlb"): string {
   if (sport === "nhl") {
     return `https://a.espncdn.com/i/teamlogos/nhl/500/${abbr.toLowerCase()}.png`;
   }
+  if (sport === "soccer") {
+    // No CDN logos sourced for WC teams yet. UI renders abbreviation
+    // as fallback when the <img> 404s; empty URL produces the same
+    // visual outcome without firing a 404 request.
+    return "";
+  }
   const slug = ESPN_LOGO_SLUG[abbr] ?? abbr.toLowerCase();
   return `https://a.espncdn.com/i/teamlogos/mlb/500/${slug}.png`;
 }
@@ -358,7 +372,7 @@ function buildEdgeRow(market: MarketKey, m: MarketEdgeDto, sport: Sport = "mlb")
       // NBA → points.
       const diff = m.modelTotal - m.marketTotal;
       const sign = diff >= 0 ? "+" : "";
-      const unit = sport === "nhl" ? "goals" : sport === "nba" ? "points" : "runs";
+      const unit = sport === "nhl" || sport === "soccer" ? "goals" : sport === "nba" ? "points" : "runs";
       return {
         label: "Model read",
         value: `${m.modelTotal.toFixed(1)} ${unit} vs market ${m.marketTotal.toFixed(1)} (${sign}${diff.toFixed(1)})`,
@@ -913,6 +927,23 @@ function SportIcon({ sport, size = 18, active }: { sport: Sport; size?: number; 
         </defs>
         <ellipse cx="10" cy="11.5" rx="8" ry="3.2" fill="url(#nhl-side)" />
         <ellipse cx="10" cy="8.5" rx="8" ry="3.2" fill="#1e293b" stroke="#475569" strokeWidth="0.4" />
+      </svg>
+    );
+  }
+  if (sport === "soccer") {
+    // Soccer ball — white disc with a simple black pentagonal accent so
+    // the WC tab reads as soccer at a glance without a licensed mark.
+    return (
+      <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" className="shrink-0" style={{ opacity: wrapperOpacity }}>
+        <defs>
+          <radialGradient id="soccer-disc" cx="38%" cy="35%" r="70%">
+            <stop offset="0%" stopColor="#fafaf9" />
+            <stop offset="100%" stopColor="#d4d4d8" />
+          </radialGradient>
+        </defs>
+        <circle cx="10" cy="10" r="8.5" fill="url(#soccer-disc)" />
+        <circle cx="10" cy="10" r="8.5" fill="none" stroke="rgba(0,0,0,0.22)" strokeWidth="0.4" />
+        <polygon points="10,5.5 13,7.7 11.9,11.2 8.1,11.2 7,7.7" fill="#111827" />
       </svg>
     );
   }
@@ -1600,7 +1631,7 @@ function MarketPulse({ market, marketData }: { market: MarketKey; marketData: Ma
   // When the FI market is held (V1 NRFI threshold not met), surface a
   // subdued "angle unavailable" line instead of the generic splits note —
   // makes it clear the full-game pick is unaffected.
-  if (market === "first_inning" && shellSport !== "nba" && shellSport !== "nhl") {
+  if (market === "first_inning" && shellSport !== "nba" && shellSport !== "nhl" && shellSport !== "soccer") {
     if (marketData.held) {
       return (
         <div className="space-y-1.5">

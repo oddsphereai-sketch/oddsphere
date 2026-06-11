@@ -168,8 +168,21 @@ function buildMarketEdgeDto(r: PredictionRecordSlim | null): MarketEdgeDto {
       marketTotal: null,
       line: null,
       keyStats: [],
+      modelTrustPct: null,
+      marketImpliedPct: null,
+      modelMarketGapPct: null,
+      marketSource: null,
+      marketDataQuality: "unavailable",
+      reviewFlags: [],
+      reviewActionSummary: "keep",
     };
   }
+  const modelTrustPct = r.held || r.confidence === null ? null : r.confidence;
+  const marketImpliedPct = r.market_probability;
+  const gap =
+    modelTrustPct === null || marketImpliedPct === null
+      ? null
+      : modelTrustPct - marketImpliedPct;
   return {
     pick: r.held ? null : r.pick,
     confidence: r.held || r.confidence === null ? null : r.confidence / 100,
@@ -195,6 +208,13 @@ function buildMarketEdgeDto(r: PredictionRecordSlim | null): MarketEdgeDto {
     marketTotal: null,
     line: r.line_value,
     keyStats: [],
+    modelTrustPct,
+    marketImpliedPct,
+    modelMarketGapPct: gap,
+    marketSource: null,
+    marketDataQuality: marketImpliedPct !== null ? "two_sided_consensus" : "unavailable",
+    reviewFlags: [],
+    reviewActionSummary: "keep",
   };
 }
 
@@ -228,13 +248,13 @@ function buildSharpRead(perMarket: Map<string, PredictionRecordSlim>): {
   const anyHeld = Array.from(perMarket.values()).some((r) => r.held);
   if (anyHeld) {
     return {
-      key: "no_signal",
+      key: "no_data",
       sentence:
         "Pre-tournament: model and market disagree by too much without in-tournament calibration evidence yet.",
     };
   }
   return {
-    key: "no_signal",
+    key: "no_data",
     sentence: "No sharp-signal data available for FIFA World Cup fixtures at this stage.",
   };
 }
