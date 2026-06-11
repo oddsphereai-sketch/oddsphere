@@ -17,8 +17,35 @@
 
 import { SOCCER_CONFIDENCE_CAPS } from "./soccerGrading";
 import { EXTERNAL_PRIORS_V1 } from "./_externalPriorsV1";
+import type { SoftCap } from "./soccerHoldLogic";
 
 export type SoccerGradeVerdict = "Caution" | "Watchlist" | "Lean" | "Best Angle";
+
+const GRADE_RANK: Record<SoccerGradeVerdict, number> = {
+  "Caution": 0,
+  "Watchlist": 1,
+  "Lean": 2,
+  "Best Angle": 3,
+};
+
+/**
+ * Apply soft caps from hold-logic: clamp the grade so it never exceeds
+ * the strictest cap. Never elevates. If the ladder said Watchlist and
+ * the cap says Lean, output stays Watchlist.
+ */
+function applySoftCaps(grade: SoccerGradeVerdict, softCaps: ReadonlyArray<SoftCap>): SoccerGradeVerdict {
+  if (softCaps.length === 0) return grade;
+  let allowedRank = GRADE_RANK[grade];
+  for (const cap of softCaps) {
+    const capRank = GRADE_RANK[cap.cap_at];
+    if (capRank < allowedRank) allowedRank = capRank;
+  }
+  if (allowedRank >= GRADE_RANK[grade]) return grade;
+  for (const [k, v] of Object.entries(GRADE_RANK)) {
+    if (v === allowedRank) return k as SoccerGradeVerdict;
+  }
+  return grade;
+}
 
 export type ConfidenceReduction = {
   /** Code identifying the reduction trigger. */
@@ -49,6 +76,8 @@ export type SoccerGradeDecision = {
   /** Audit fields. */
   edge_pp: number | null;
   model_market_agreement: boolean;
+  /** Soft caps from hold-logic that influenced (or didn't influence) the final grade. */
+  soft_caps_applied: ReadonlyArray<SoftCap>;
 };
 
 export type GradeInputContext = {
@@ -95,6 +124,11 @@ export function deriveSoccerGrade(opts: {
   edge_pp: number | null;
   model_market_agreement: boolean;
   ctx: GradeInputContext;
+  /**
+   * Soft caps from hold-logic. Clamp the final grade so it never
+   * exceeds the strictest cap. NEVER elevates. Default = no caps.
+   */
+  soft_caps?: ReadonlyArray<SoftCap>;
 }): SoccerGradeDecision {
   const cap_default = capDefaultFor(opts.market, opts.selection);
   const model_p_pct = toPct(opts.model_p);
@@ -187,7 +221,12 @@ export function deriveSoccerGrade(opts: {
 
   // If we'd have emitted Best Angle but the calibration lock blocks it,
   // grade down to Lean. This is the hard structural lock.
-  const finalGrade: SoccerGradeVerdict = grade === "Best Angle" && !best_angle ? "Lean" : grade;
+  const postBaLockGrade: SoccerGradeVerdict = grade === "Best Angle" && !best_angle ? "Lean" : grade;
+
+  // Apply soft caps from hold-logic (Pass 2). Can only LOWER the grade,
+  // never raise it. Best Angle stays locked regardless.
+  const softCaps = opts.soft_caps ?? [];
+  const finalGrade = applySoftCaps(postBaLockGrade, softCaps);
 
   return {
     market: opts.market,
@@ -201,6 +240,7 @@ export function deriveSoccerGrade(opts: {
     best_angle,
     edge_pp: opts.edge_pp,
     model_market_agreement: opts.model_market_agreement,
+    soft_caps_applied: softCaps,
   };
 }
 

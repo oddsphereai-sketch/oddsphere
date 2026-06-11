@@ -5,14 +5,26 @@
  *
  * Returns a decision per market (match_result / double_chance / total /
  * btts) for one fixture. The decision is either:
- *   • { hold: false }                       → publish a pick
+ *   • { hold: false, soft_caps?: [...] }    → publish a pick (with optional
+ *                                             soft caps that clamp the
+ *                                             grade ladder downstream)
  *   • { hold: true,  reason: "<code>" }     → held with a code/reason
  *
  * Codes are stable strings so the auditor + UI can index on them.
  *
  * Per project-wc-model-standard §7, EVERY hold reason must be a concrete
- * data-state condition — not a hand-wave. "Awaiting calibration" is also
- * a valid pre-launch hold reason for match_result + DC at WC-3c launch.
+ * data-state condition — not a hand-wave.
+ *
+ * Pass 2 (2026-06-11): two early-tournament guardrails that previously
+ * hard-held are now SOFT CAPS — they let the market into the grade
+ * ladder but clamp the maximum displayed grade. This avoids
+ * all-No-Play card outcomes during external_priors_only calibration
+ * while preserving every true blocker and the Best Angle structural lock.
+ *   • FAR_FROM_MARKET_NO_CALIBRATION → soft cap at "Lean"
+ *   • AWAITING_IN_TOURNAMENT_CALIBRATION whitelist → removed entirely
+ *     (the Best Angle structural lock in soccerConfidenceGrade already
+ *     prevents over-confident outputs pre-calibration; rule 10 was
+ *     redundant overkill that produced all-hold cards).
  */
 
 import { EXTERNAL_PRIORS_V1 } from "./_externalPriorsV1";
@@ -20,8 +32,24 @@ import type { ScoreDistribution } from "./dixonColes";
 import type { ReconciliationKind } from "@/lib/providers/real_api/_soccerReconciler";
 import type { SoccerSplitsStatus } from "@/lib/providers/real_api/SharpApiSoccerOddsProvider";
 
+/**
+ * Soft cap signaled from hold-logic to the grade ladder.
+ *
+ * Tells `deriveSoccerGrade` "this market may publish, but the final
+ * grade must not exceed `cap_at`". A cap NEVER elevates a grade — it
+ * only clamps from above.
+ */
+export type SoftCap = {
+  /** Stable code; surfaced to the auditor + card metadata. */
+  code: string;
+  /** Maximum grade allowed after applying this cap. */
+  cap_at: "Watchlist" | "Lean";
+  /** Human-readable reason. */
+  reason: string;
+};
+
 export type HoldDecision =
-  | { hold: false }
+  | { hold: false; soft_caps?: ReadonlyArray<SoftCap> }
   | { hold: true; code: string; reason: string };
 
 export type HoldInputContext = {
@@ -95,12 +123,9 @@ export function deriveHold(ctx: HoldInputContext): HoldDecision {
     return { hold: true, code: "MODEL_WRONG_SIDE_OF_MARKET", reason: `Model on wrong side by ${(-(ctx.edge_pp ?? 0)).toFixed(1)} pp (below ${EXTERNAL_PRIORS_V1.edge_thresholds.hold_negative_floor} pp floor)` };
   }
 
-  // 8. Far-from-market AND no calibration upgrade → hard hold.
-  if (ctx.is_far_from_market_hard && ctx.calibration_evidence_level === "external_priors_only") {
-    return { hold: true, code: "FAR_FROM_MARKET_NO_CALIBRATION", reason: `|edge_pp| > ${EXTERNAL_PRIORS_V1.edge_thresholds.far_from_market_hard_hold} pp with only external priors — hold until in-tournament calibration` };
-  }
-
   // 9. Total push-risk: |predicted_total − line| < push_risk_band.
+  //    (Numbered "9" historically; kept here above the soft caps so
+  //    push risk on totals still hard-holds.)
   if (ctx.market === "total" && ctx.listed_total_line !== null) {
     const gap = Math.abs(ctx.predicted_total - ctx.listed_total_line);
     if (gap < EXTERNAL_PRIORS_V1.hold_thresholds.total_push_risk_band) {
@@ -108,17 +133,27 @@ export function deriveHold(ctx: HoldInputContext): HoldDecision {
     }
   }
 
-  // 10. Pre-calibration publish whitelist: at WC-3c launch, only the
-  //     whitelisted markets are eligible for public publish; others are
-  //     held with a calibration reason. Once operator upgrades
-  //     calibration_evidence_level, the whitelist becomes ignored.
-  if (
-    ctx.calibration_evidence_level === "external_priors_only" &&
-    ctx.pre_calibration_publish_whitelist.length > 0 &&
-    !ctx.pre_calibration_publish_whitelist.includes(ctx.market)
-  ) {
-    return { hold: true, code: "AWAITING_IN_TOURNAMENT_CALIBRATION", reason: `${ctx.market} is held at launch under external_priors_only; awaiting in-tournament calibration` };
+  // No true blockers above — collect any SOFT CAPS that should clamp
+  // the grade ladder downstream. The market still publishes.
+
+  const softCaps: SoftCap[] = [];
+
+  // 8 (formerly hard hold). Far-from-market AND no calibration upgrade
+  //    → soft cap at "Lean". Confidence reduction is still applied
+  //    independently in soccerConfidenceGrade.
+  if (ctx.is_far_from_market_hard && ctx.calibration_evidence_level === "external_priors_only") {
+    softCaps.push({
+      code: "model_far_from_market_uncalibrated",
+      cap_at: "Lean",
+      reason: `|edge_pp| > ${EXTERNAL_PRIORS_V1.edge_thresholds.far_from_market_hard_hold} pp with only external priors — grade capped at Lean until in-tournament calibration`,
+    });
   }
 
-  return { hold: false };
+  // 10 (REMOVED). The pre_calibration_publish_whitelist field is kept
+  //    on HoldInputContext to avoid breaking the type contract upstream,
+  //    but is no longer consulted. The Best Angle structural lock in
+  //    soccerConfidenceGrade.ts already prevents over-confident outputs
+  //    pre-calibration. See file header for rationale.
+
+  return softCaps.length > 0 ? { hold: false, soft_caps: softCaps } : { hold: false };
 }

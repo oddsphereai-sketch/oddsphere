@@ -234,6 +234,9 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
       pre_calibration_publish_whitelist: preCalibrationWhitelist,
     } as const;
     const hold = deriveHold(holdCtx);
+    // Pass 2: soft caps from hold-logic clamp the grade ladder. They
+    // only fire on the non-hold branch and never elevate a grade.
+    const softCapsFromHold = hold.hold === false ? hold.soft_caps ?? [] : [];
 
     const lambdaMin = Math.min(lambdaHome, lambdaAway);
     const grade = deriveSoccerGrade({
@@ -256,6 +259,7 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
         is_btts_yes_pick: market === "btts" && best.selection === "yes",
         lambda_min: lambdaMin,
       },
+      soft_caps: softCapsFromHold,
     });
 
     const snapshot = buildSoccerSnapshot({
