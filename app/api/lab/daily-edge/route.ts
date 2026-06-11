@@ -85,7 +85,7 @@ import {
   isStale as isObservationStale,
 } from "@/lib/services/lastKnownGoodReader";
 
-const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl"];
+const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer"];
 // Phase 7G — NBA goes live in the member-facing Daily Edge via the
 // shared adapter below. MLB pipeline below is unchanged.
 const LIVE_SPORTS: Sport[] = ["mlb", "nba"];
