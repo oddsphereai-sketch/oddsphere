@@ -41,6 +41,7 @@ import type {
 } from "../../../app/lab/lib/labTypes";
 import type { Verdict } from "../verdictDerivation";
 import type { SharpReadKey } from "../sharpReadSelector";
+import { flagCdnUrl } from "./_countryFlags";
 
 const SOCCER_MODEL_VERSION = "soccer_dixon_coles_v1";
 const LOCK_WINDOW_MINUTES = 60;
@@ -69,7 +70,13 @@ type DbGame = {
   status: string | null;
 };
 
-type TeamRow = { id: number; abbreviation: string; display_name: string | null };
+type TeamRow = {
+  id: number;
+  abbreviation: string;
+  display_name: string | null;
+  /** ISO 3166-1 alpha-3 country code from BDL ("MEX", "RSA", …). */
+  location: string | null;
+};
 
 type PredictionRecordSlim = {
   id: number;
@@ -195,24 +202,35 @@ function buildMarketEdgeDto(r: PredictionRecordSlim | null): MarketEdgeDto {
   // also 0..100. prediction_records.market_probability is stored 0..1;
   // marketImpliedPct is 0..100 — convert here. modelMarketGapPct is in
   // percentage points (both inputs in percent).
-  const modelTrustPct = r.held || r.confidence === null ? null : r.confidence;
+  //
+  // CHANGE 2026-06-11: For soccer/WC we ALWAYS surface modelTrustPct and
+  // marketImpliedPct even when held. The pre-calibration WC contract
+  // means almost everything is held; if we null these out, the card
+  // reads as broken instead of "held with honest model vs market read".
+  // Members need to see the numbers + the hold reason together.
+  const modelTrustPct = r.confidence;
   const marketImpliedPct = r.market_probability === null ? null : r.market_probability * 100;
   const gap =
     modelTrustPct === null || marketImpliedPct === null
       ? null
       : modelTrustPct - marketImpliedPct;
+  // For held rows: pick/confidence are still shown so the card is honest
+  // about the model's read. The verdict pill ("Held / No Play") + the
+  // whyLine carry the "don't bet this" framing.
+  const showPick = !r.held || (r.pick !== null && r.pick !== "");
+  const heldHelp = buildHeldHelpLine(r);
   return {
-    pick: r.held ? null : r.pick,
-    confidence: r.held || r.confidence === null ? null : r.confidence / 100,
+    pick: showPick ? r.pick : null,
+    confidence: r.confidence === null ? null : r.confidence / 100,
     grade: null,
     signalType: null,
     marketSignal: null,
     sharpStatus: "caution",
     held: r.held,
     verdict: gradeToVerdict(r.play_grade, r.held),
-    guidedGuide: "",
-    guidedWatchOut: "",
-    whyLine: "",
+    guidedGuide: r.held && r.hold_reason !== null ? `Held: ${r.hold_reason}` : "",
+    guidedWatchOut: r.held && r.no_bet_reason !== null ? `Reason code: ${r.no_bet_reason}` : "",
+    whyLine: heldHelp,
     riskLine: "",
     modelProb: r.model_probability,
     marketFairProb: r.market_probability,
@@ -229,11 +247,30 @@ function buildMarketEdgeDto(r: PredictionRecordSlim | null): MarketEdgeDto {
     modelTrustPct,
     marketImpliedPct,
     modelMarketGapPct: gap,
-    marketSource: null,
-    marketDataQuality: marketImpliedPct !== null ? "two_sided_consensus" : "unavailable",
+    marketSource: "bdl_fifa + sharpapi (prematch)",
+    // WC-2 contract: SharpAPI /splits is empty_as_of_probe for FIFA WC,
+    // so calling this "two_sided_consensus" would imply public-split
+    // depth we don't have. The DTO's enum is a closed union; the
+    // closest honest value is "single_book" — limited market depth,
+    // treat with care. The card maps this to a "Limited" badge instead
+    // of the "Consensus" badge MLB shows.
+    marketDataQuality: r.market_probability === null ? "unavailable" : "single_book",
     reviewFlags: [],
     reviewActionSummary: "keep",
   };
+}
+
+/**
+ * Compose the single sentence shown under each held market on the card.
+ * Honest about why the model is holding without leaking internal jargon.
+ * Returns "" for unheld rows — the card already shows the verdict pill.
+ */
+function buildHeldHelpLine(r: PredictionRecordSlim): string {
+  if (!r.held) return "";
+  if (r.hold_reason !== null && r.hold_reason.length > 0) {
+    return r.hold_reason;
+  }
+  return "Held pre-tournament; waiting on in-tournament calibration evidence before publishing a play.";
 }
 
 function buildDecisionLine(matchup: string, perMarket: Map<string, PredictionRecordSlim>): string {
@@ -339,6 +376,36 @@ function deriveLockState(lockedAt: string | null, gameDateIso: string): "open" |
   return "open";
 }
 
+/**
+ * Pull the Dixon-Coles expected-goals (λ_home, λ_away) from any one
+ * prediction_records row's snapshot_json.model block. Same value is
+ * stamped on every row of the same fixture, so the first row that has
+ * it wins. Falls back to {home:null, away:null} when no row carries
+ * the snapshot — the caller renders the `projected` field as 0–0 in
+ * that case so the card never displays NaN.
+ *
+ * Why this matters: pre-2026-06-11 the adapter hardcoded projected to
+ * {away:0, home:0}, producing the "model is showing 0.0" reading on
+ * the WC card. The model HAS the right number — the adapter was just
+ * dropping it.
+ */
+function extractFixtureLambdas(rows: PredictionRecordSlim[]): {
+  home: number | null;
+  away: number | null;
+} {
+  for (const r of rows) {
+    const sj = r.snapshot_json;
+    if (sj === null || typeof sj !== "object") continue;
+    const model = (sj as { model?: unknown }).model;
+    if (model === null || typeof model !== "object") continue;
+    const m = model as { lambda_home?: unknown; lambda_away?: unknown };
+    const home = typeof m.lambda_home === "number" ? m.lambda_home : null;
+    const away = typeof m.lambda_away === "number" ? m.lambda_away : null;
+    if (home !== null || away !== null) return { home, away };
+  }
+  return { home: null, away: null };
+}
+
 function pickFreshestLockedAt(rows: PredictionRecordSlim[]): string | null {
   const stamps = rows.map((r) => r.locked_at).filter((s): s is string => s !== null);
   if (stamps.length === 0) return null;
@@ -381,7 +448,7 @@ export async function buildSoccerDailyEdgeAdapted(
   }
   const { data: teamsData } = await supabase
     .from("teams")
-    .select("id, abbreviation, display_name")
+    .select("id, abbreviation, display_name, location")
     .in("id", [...teamIds]);
   const teamById = new Map<number, TeamRow>(
     ((teamsData as TeamRow[] | null) ?? []).map((t) => [t.id, t]),
@@ -471,14 +538,25 @@ export async function buildSoccerDailyEdgeAdapted(
     const sharpRead = buildSharpRead(perMarket);
     const modelBreakdown = buildModelBreakdown(matchup, perMarket);
 
+    // Country flags from BDL alpha-3 code (teams.location). UI falls
+    // back to abbreviation when the flag URL is null.
+    const homeFlagUrl = flagCdnUrl(homeTeam?.location);
+    const awayFlagUrl = flagCdnUrl(awayTeam?.location);
+
+    // Expected goals (Dixon-Coles λ) come from the WC-3 snapshot. Same
+    // model output is stamped on every market's snapshot for the game,
+    // so we read whichever market we have. These drive the per-card
+    // "Projection" display so it no longer reads 0–0.
+    const lambdas = extractFixtureLambdas(rows);
+
     return {
       id: `soccer-${g.external_id}`,
       sport: "soccer",
       external_id: g.external_id,
       awayTeam: awayAbbr,
-      awayTeamLogo: null,
+      awayTeamLogo: awayFlagUrl,
       homeTeam: homeAbbr,
-      homeTeamLogo: null,
+      homeTeamLogo: homeFlagUrl,
       gameTime,
       gameStartMinutes,
       scheduledLockAt: computeLocksAtIso(g.game_date),
@@ -500,11 +578,17 @@ export async function buildSoccerDailyEdgeAdapted(
         first_inning: buildMarketEdgeDto(btts),
       },
       decisionLine,
-      projected: { away: 0, home: 0 },
+      projected: {
+        away: lambdas.away ?? 0,
+        home: lambdas.home ?? 0,
+      },
       sharpSignals: [],
       status: {
         lineupConfirmed: null,
         linesLocked: false,
+        // Honest signal: prematch only; sharp/public data not surfaced
+        // for FIFA WC at this stage. Card components key off these to
+        // render "—" instead of an empty stat slot.
         sharpSignalPending: true,
         marketDataLimited: true,
       },
