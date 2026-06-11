@@ -21,7 +21,7 @@ import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Sport } from "@/lib/types/domain/Sport";
 
-const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl"];
+const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer"];
 const PROPS_SPORTS: Sport[] = ["mlb", "nba", "nfl", "nhl"];
 const DEFAULT_SPORT: Sport = "mlb";
 

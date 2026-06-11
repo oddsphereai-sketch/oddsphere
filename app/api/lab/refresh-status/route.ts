@@ -23,7 +23,7 @@ import type {
   RefreshStatusResponse,
 } from "@/app/lab/lib/labTypes";
 
-const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl"];
+const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer"];
 
 type CronCfg = {
   data_source: string;
