@@ -49,6 +49,21 @@ import { buildSoccerPredictionRows } from "./soccerPredictionWriter";
 const SOCCER_MODEL_VERSION = "soccer_dixon_coles_v1";
 
 /**
+ * Competition discriminator stamped into snapshot_json on every soccer
+ * prediction_records write. Internal `sport='soccer'` is shared with
+ * future UCL / league play, but the COMPETITION distinguishes them at
+ * the row level so the WC Daily Edge tab never accidentally surfaces a
+ * UCL row (or vice versa). Member-facing label is "World Cup"; this
+ * field is what makes that label honest.
+ *
+ * The Daily Edge adapter (buildSoccerDailyEdgeAdapted) filters
+ * prediction_records on this exact value before loading games, so the
+ * WC tab is competition-scoped end to end without touching the shared
+ * `games` schema.
+ */
+const SOCCER_COMPETITION_FIFA_WORLD_CUP = "fifa_world_cup";
+
+/**
  * Pre-calibration publish whitelist. Per the WC-3 contract, we hold
  * everything pre-calibration; this whitelist is the set of markets
  * we'd consider publishing once edge_pp is reasonable. Match result
@@ -316,7 +331,21 @@ export async function writeSoccerPredictionRecords(
           external_id: g.external_id,
           game_date: g.game_date,
           slate_date: g.slate_date,
-          locked_at: lockedAtIso ?? row.locked_at,
+          // T-60 lock semantic only — never inherit the snapshot's
+          // capture-time stamp (which is also called `locked_at` in the
+          // WC-3 snapshot builder but means "snapshot taken at"). Pre-T-60
+          // rows must stay null so the route's deriveLockState can keep
+          // the card refreshable.
+          locked_at: lockedAtIso,
+          // Competition discriminator at the row level — stamped into
+          // snapshot_json so the Daily Edge route can filter
+          // sport='soccer' rows by competition (WC vs future UCL vs
+          // future leagues). Without this stamp every soccer row would
+          // collide on the same Daily Edge tab.
+          snapshot_json: {
+            ...(row.snapshot_json as Record<string, unknown> | null ?? {}),
+            competition: SOCCER_COMPETITION_FIFA_WORLD_CUP,
+          },
         };
 
         if (!opts.apply) {

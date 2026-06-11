@@ -86,11 +86,18 @@ export function buildSoccerPredictionRows(opts: SoccerWriterOptions): Prediction
       model_version: "soccer_dixon_coles_v1",
       prediction_source: "auto_model",
       confidence: m.grade.confidence,
-      model_probability: m.grade.model_p_pct,
+      // prediction_records.model_probability and market_probability are
+      // stored as 0..1 fractions (NHL convention). The WC-3 model emits
+      // percent (0..100), so divide here. Edge stays in percentage
+      // points but is clamped to [-99.99, +99.99] to fit the
+      // NUMERIC(5,2)-ish column width — soccer pre-calibration can hit
+      // |edge_pp| > 45 on a single market (double_chance) which would
+      // otherwise overflow.
+      model_probability: m.grade.model_p_pct / 100,
       market_probability: (m.snapshot.market.devigged_probabilities[`${m.market}|${m.pick}${m.market === "total" && m.line !== null ? `|${m.line}` : ""}`] ?? null) !== null
-        ? (m.snapshot.market.devigged_probabilities[`${m.market}|${m.pick}${m.market === "total" && m.line !== null ? `|${m.line}` : ""}`] as number) * 100
+        ? (m.snapshot.market.devigged_probabilities[`${m.market}|${m.pick}${m.market === "total" && m.line !== null ? `|${m.line}` : ""}`] as number)
         : null,
-      edge: m.grade.edge_pp,
+      edge: m.grade.edge_pp === null ? null : Math.max(-99.99, Math.min(99.99, m.grade.edge_pp)),
       expected_value: null,
       play_grade: m.grade.grade,
       prediction_type: m.market,

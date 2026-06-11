@@ -45,6 +45,20 @@ import type { SharpReadKey } from "../sharpReadSelector";
 const SOCCER_MODEL_VERSION = "soccer_dixon_coles_v1";
 const LOCK_WINDOW_MINUTES = 60;
 
+/**
+ * Competition discriminator. WC-4 launches with `sport='soccer'`
+ * as the umbrella sport key; future UCL / league play will use the
+ * same sport key but carry a different competition value in
+ * `snapshot_json.competition`. This adapter filters prediction_records
+ * to the WC competition only, so the World Cup Daily Edge tab can
+ * never accidentally surface a UCL row (or vice versa).
+ *
+ * Future UCL launches a sibling adapter with `WC_COMPETITION_UCL`,
+ * keyed off `competition='uefa_champions_league'`, exposed on its
+ * own member-facing Daily Edge tab.
+ */
+const WC_COMPETITION_FIFA_WORLD_CUP = "fifa_world_cup";
+
 type DbGame = {
   id: number;
   external_id: number;
@@ -177,8 +191,12 @@ function buildMarketEdgeDto(r: PredictionRecordSlim | null): MarketEdgeDto {
       reviewActionSummary: "keep",
     };
   }
+  // prediction_records.confidence is stored 0..100; modelTrustPct is
+  // also 0..100. prediction_records.market_probability is stored 0..1;
+  // marketImpliedPct is 0..100 — convert here. modelMarketGapPct is in
+  // percentage points (both inputs in percent).
   const modelTrustPct = r.held || r.confidence === null ? null : r.confidence;
-  const marketImpliedPct = r.market_probability;
+  const marketImpliedPct = r.market_probability === null ? null : r.market_probability * 100;
   const gap =
     modelTrustPct === null || marketImpliedPct === null
       ? null
@@ -266,7 +284,15 @@ function buildModelBreakdown(
   const mr = perMarket.get("match_result");
   const total = perMarket.get("total");
   const btts = perMarket.get("btts");
-  if (mr === undefined && total === undefined && btts === undefined) return null;
+  const doubleChance = perMarket.get("double_chance");
+  if (
+    mr === undefined &&
+    total === undefined &&
+    btts === undefined &&
+    doubleChance === undefined
+  ) {
+    return null;
+  }
 
   const fmtRow = (r: PredictionRecordSlim | undefined, label: string): string => {
     if (r === undefined) return "";
@@ -277,6 +303,7 @@ function buildModelBreakdown(
 
   const lines = [
     fmtRow(mr, "Match result"),
+    fmtRow(doubleChance, "Double chance"),
     fmtRow(total, "Total"),
     fmtRow(btts, "BTTS"),
   ].filter((l) => l.length > 0);
@@ -361,6 +388,10 @@ export async function buildSoccerDailyEdgeAdapted(
   );
 
   // 3. Load prediction_records for this slate.
+  //
+  // The DB filter is sport+model_version+slate_date; the competition
+  // discriminator lives in snapshot_json (no top-level column on
+  // prediction_records), so we filter that in-memory below.
   const { data: predsData } = await supabase
     .from("prediction_records")
     .select(
@@ -371,7 +402,18 @@ export async function buildSoccerDailyEdgeAdapted(
     .eq("sport", "soccer")
     .eq("model_version", SOCCER_MODEL_VERSION)
     .eq("slate_date", requestedDate);
-  const allPreds = (predsData as PredictionRecordSlim[] | null) ?? [];
+  const rawPreds = (predsData as PredictionRecordSlim[] | null) ?? [];
+
+  // Competition filter — World Cup only. Rows without a competition
+  // field stamped in snapshot_json fall through to the WC bucket too
+  // (legacy rows from before the discriminator was wired). Once UCL
+  // launches, those legacy rows must be backfilled, but for tonight
+  // it preserves the existing in-DB rows that don't yet carry the
+  // stamp.
+  const allPreds = rawPreds.filter((p) => {
+    const comp = (p.snapshot_json as { competition?: string } | null)?.competition;
+    return comp === undefined || comp === WC_COMPETITION_FIFA_WORLD_CUP;
+  });
 
   // 4. Bucket predictions by game_id × market.
   const byGameMarket = new Map<number, Map<string, PredictionRecordSlim>>();
@@ -380,8 +422,14 @@ export async function buildSoccerDailyEdgeAdapted(
     byGameMarket.get(p.game_id)!.set(p.market, p);
   }
 
+  // Narrow the games list to only games that have a WC prediction row.
+  // Prevents stray soccer games (e.g., future UCL fixtures seeded later)
+  // from appearing on the WC tab even if they share slate_date.
+  const wcGameIds = new Set(allPreds.map((p) => p.game_id));
+  const wcGames = games.filter((g) => wcGameIds.size === 0 ? true : wcGameIds.has(g.id));
+
   // 5. Build DTO per game.
-  const dtos: DailyEdgeGameDto[] = games.map((g) => {
+  const dtos: DailyEdgeGameDto[] = wcGames.map((g) => {
     const homeTeam = g.home_team_id !== null ? teamById.get(g.home_team_id) : undefined;
     const awayTeam = g.away_team_id !== null ? teamById.get(g.away_team_id) : undefined;
     const homeAbbr = homeTeam?.abbreviation ?? "?";
