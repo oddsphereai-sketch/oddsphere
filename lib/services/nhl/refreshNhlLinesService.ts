@@ -21,6 +21,7 @@
 import { supabase } from "../../db/supabase";
 import { fetchSharpNhlOdds, type SharpNhlOddsRow } from "../../providers/nhl/_sharpApiNhlClient";
 import { normalizeNhlTeamName, type NhlTeamAbbrev } from "../../providers/nhl/_teamNameNormalizer";
+import { flagOpenersInHistoryPayload } from "../_lineHistoryOpenerHelper";
 
 export type RefreshNhlLinesOptions = {
   /** ET sports-day in YYYY-MM-DD. Filters games.slate_date directly. */
@@ -347,13 +348,14 @@ export async function refreshNhlLines(
   }));
   let lineHistoryWritten = 0;
   if (historyRows.length > 0) {
-    const { error: histErr } = await supabase.from("line_history").insert(historyRows);
+    const flagged = await flagOpenersInHistoryPayload(historyRows);
+    const { error: histErr } = await supabase.from("line_history").insert(flagged);
     if (histErr) {
       const msg = `  ✗ line_history insert: ${histErr.message}`;
       log(msg);
-      for (let i = 0; i < historyRows.length; i++) errors.push(msg);
+      for (let i = 0; i < flagged.length; i++) errors.push(msg);
     } else {
-      lineHistoryWritten = historyRows.length;
+      lineHistoryWritten = flagged.length;
     }
   }
 

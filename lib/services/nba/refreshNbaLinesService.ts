@@ -30,6 +30,7 @@
  */
 
 import { supabase } from "../../db/supabase";
+import { flagOpenersInHistoryPayload } from "../_lineHistoryOpenerHelper";
 
 const SHARP_API_BASE = "https://api.sharpapi.io/api/v1";
 
@@ -516,13 +517,14 @@ export async function refreshNbaLines(
   }));
   let lineHistoryWritten = 0;
   if (historyRows.length > 0) {
-    const { error: histErr } = await supabase.from("line_history").insert(historyRows);
+    const flagged = await flagOpenersInHistoryPayload(historyRows);
+    const { error: histErr } = await supabase.from("line_history").insert(flagged);
     if (histErr) {
       const msg = `  ✗ line_history insert: ${histErr.message}`;
       log(msg);
-      for (let i = 0; i < historyRows.length; i++) errors.push(msg);
+      for (let i = 0; i < flagged.length; i++) errors.push(msg);
     } else {
-      lineHistoryWritten = historyRows.length;
+      lineHistoryWritten = flagged.length;
     }
   }
 

@@ -1389,15 +1389,50 @@ export async function createPredictionRecords(
   // Phase 6B.22 — load opener prices from line_history (is_opener=true)
   // so the line-movement helper can compute direction vs the picked side.
   // Missing openers = direction reported as "unknown".
-  const { data: openerRows } = await supabase
+  //
+  // Phase 6B.32 (2026-06-11) — Fallback path. The lines-refresh writers
+  // hardcode `is_opener: false` on every history insert (see
+  // linesService.ts / refreshNbaLinesService.ts / refreshNhlLinesService.ts),
+  // so the is_opener=true query returns 0 rows in production. To restore
+  // the line-movement section on cards without waiting on Phase B, treat
+  // the OLDEST line_history row per (game_id, market_type, side,
+  // sportsbook) as the de-facto opener when no flagged row exists. The
+  // is_opener=true path stays primary so the future fix doesn't change
+  // behavior on backfilled openers.
+  const { data: flaggedOpenerRows } = await supabase
     .from("line_history")
     .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
     .eq("is_opener", true)
     .in("game_id", gameIds)
     .in("market_type", ["moneyline", "total"])
     .is("player_id", null);
+  const flagged = (flaggedOpenerRows ?? []) as LineHistoryOpenerRow[];
+
+  // Build the (game, market, side, book) keys that already have a flagged
+  // opener; anything else needs a fallback.
+  const flaggedKeys = new Set<string>();
+  for (const o of flagged) {
+    flaggedKeys.add(`${o.game_id}|${o.market_type}|${o.side}|${o.sportsbook}`);
+  }
+
+  const { data: allHistory } = await supabase
+    .from("line_history")
+    .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
+    .in("game_id", gameIds)
+    .in("market_type", ["moneyline", "total"])
+    .is("player_id", null)
+    .order("recorded_at", { ascending: true });
+  const fallbackByKey = new Map<string, LineHistoryOpenerRow>();
+  for (const r of (allHistory ?? []) as LineHistoryOpenerRow[]) {
+    const k = `${r.game_id}|${r.market_type}|${r.side}|${r.sportsbook}`;
+    if (flaggedKeys.has(k)) continue;
+    if (!fallbackByKey.has(k)) fallbackByKey.set(k, r); // ASC order → first seen IS oldest
+  }
+
+  const openerRows: LineHistoryOpenerRow[] = [...flagged, ...fallbackByKey.values()];
+
   const openersByGameId = new Map<number, LineHistoryOpenerRow[]>();
-  for (const o of ((openerRows ?? []) as LineHistoryOpenerRow[])) {
+  for (const o of openerRows) {
     const arr = openersByGameId.get(o.game_id) ?? [];
     arr.push(o);
     openersByGameId.set(o.game_id, arr);

@@ -22,6 +22,7 @@ import type { CronHandlerResult } from "../cron/runCron";
 import { loadGameIdMap, loadPlayerIdMap } from "./_idMaps";
 import { SharpAPIOddsProvider } from "../providers/real_api/SharpAPIOddsProvider";
 import type { V2DiscoveryReport } from "../providers/real_api/SharpAPIOddsProvider";
+import { flagOpenersInHistoryPayload } from "./_lineHistoryOpenerHelper";
 
 /**
  * 2026-06-10 phantom-thinning fix — per-(game, market_type, sportsbook)
@@ -202,9 +203,12 @@ export const linesService = {
         }
       }
       if (historyPayload.length > 0) {
+        const flagged = await flagOpenersInHistoryPayload(
+          historyPayload as unknown as Parameters<typeof flagOpenersInHistoryPayload>[0],
+        );
         const { error: histErr } = await supabase
           .from("line_history")
-          .insert(historyPayload);
+          .insert(flagged);
         if (histErr) {
           throw new Error(`linesService.refreshGameLines history insert failed: ${histErr.message}`);
         }
@@ -493,9 +497,12 @@ export const linesService = {
         );
       }
       if (historyPayload.length > 0) {
+        const flagged = await flagOpenersInHistoryPayload(
+          historyPayload as unknown as Parameters<typeof flagOpenersInHistoryPayload>[0],
+        );
         const { error: histErr } = await supabase
           .from("line_history")
-          .insert(historyPayload);
+          .insert(flagged);
         if (histErr) {
           throw new Error(
             `linesService.refreshGameLinesV2 history insert failed: ${histErr.message}`
