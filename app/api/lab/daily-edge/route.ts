@@ -633,7 +633,13 @@ function buildGameDto(
   sportsbookTotalLine: number | null,
   currentLinesByGameMarket: Map<string, LineRow[]>,
   openLinesByGameMarket: Map<string, LineHistoryRow[]>,
-  lockedPlayGradeByGameMarket: Map<string, { playGrade: string | null; noBet: boolean | null; bestAngle: boolean | null }>
+  lockedPlayGradeByGameMarket: Map<string, {
+    playGrade: string | null;
+    noBet: boolean | null;
+    bestAngle: boolean | null;
+    lockedOpenOddsAmerican: number | null;
+    lockedOpenerRecordedAt: string | null;
+  }>
 ): DailyEdgeGameDto | null {
   const home = row.home_team?.abbreviation ?? "—";
   const away = row.away_team?.abbreviation ?? "—";
@@ -924,6 +930,8 @@ function buildGameDto(
     lockedNoBet: lockedMl?.noBet ?? null,
     lockedBestAngle: lockedMl?.bestAngle ?? null,
     isLockedRow: lockedMl !== undefined,
+    lockedOpenOddsAmerican: lockedMl?.lockedOpenOddsAmerican ?? null,
+    lockedOpenerRecordedAt: lockedMl?.lockedOpenerRecordedAt ?? null,
   });
   const total = buildMarketEdge({
     market: "total",
@@ -954,6 +962,8 @@ function buildGameDto(
     lockedNoBet: lockedOu?.noBet ?? null,
     lockedBestAngle: lockedOu?.bestAngle ?? null,
     isLockedRow: lockedOu !== undefined,
+    lockedOpenOddsAmerican: lockedOu?.lockedOpenOddsAmerican ?? null,
+    lockedOpenerRecordedAt: lockedOu?.lockedOpenerRecordedAt ?? null,
   });
   const firstInning = buildMarketEdge({
     market: "first_inning",
@@ -988,6 +998,8 @@ function buildGameDto(
     lockedNoBet: lockedFi?.noBet ?? null,
     lockedBestAngle: lockedFi?.bestAngle ?? null,
     isLockedRow: lockedFi !== undefined,
+    lockedOpenOddsAmerican: lockedFi?.lockedOpenOddsAmerican ?? null,
+    lockedOpenerRecordedAt: lockedFi?.lockedOpenerRecordedAt ?? null,
   });
 
   // 4.1.10 — per-game status flags.
@@ -1644,6 +1656,17 @@ type BuildMarketEdgeInput = {
    * no usable real-book price.
    */
   isLockedRow?: boolean;
+  /**
+   * 2026-06-11 P7-Commit-E — frozen opener from the locked snapshot's
+   * `line_movement.open_odds_american` field. Used as the post-lock
+   * `lineOpenAmerican` fallback when the live line_history lookup
+   * returns null (because priceRow.sportsbook is the placeholder
+   * "locked_snapshot" that doesn't match anything in line_history).
+   *
+   * Null pre-lock or when the writer didn't capture a usable opener.
+   */
+  lockedOpenOddsAmerican?: number | null;
+  lockedOpenerRecordedAt?: string | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1814,12 +1837,24 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           (c) => c.sportsbook === priceRow.sportsbook,
         ) ?? null)
       : null;
-  const openAmerican: number | null = lineOpen?.odds_american ?? null;
+  const liveOpenAmerican: number | null = lineOpen?.odds_american ?? null;
+  // 2026-06-11 P7-Commit-E — locked-row opener fallback. The live
+  // lookup above filters by priceRow.sportsbook, which on a locked row
+  // is the placeholder "locked_snapshot" that doesn't exist in
+  // line_history → lookup returns null and the card's line-move section
+  // disappears, even though the writer captured a real opener in
+  // snapshot_json.line_movement.open_odds_american at lock time. Use
+  // the carried-through frozen opener here. Pre-lock the override stays
+  // null, so unlocked rows still take the live live-history value.
+  const openAmerican: number | null =
+    liveOpenAmerican ??
+    (input.isLockedRow === true ? input.lockedOpenOddsAmerican ?? null : null);
   // Phase 7I — openAmerican already comes from line_history (always-LKG
   // semantics). Stamp its recorded_at if we have it so the UI can render
   // the age. lineOpen.recorded_at is the source's natural timestamp.
   const lineOpenObservedAt: string | null =
-    lineOpen?.recorded_at ?? null;
+    lineOpen?.recorded_at ??
+    (input.isLockedRow === true ? input.lockedOpenerRecordedAt ?? null : null);
   const lineOpenIsStale =
     lineOpenObservedAt !== null && openAmerican !== null
       ? isObservationStale(lineOpenObservedAt)
@@ -3070,7 +3105,21 @@ export async function GET(request: Request) {
   // that don't write a meaningful boolean keep prior behavior.
   const lockedPlayGradeByGameMarket = new Map<
     string,
-    { playGrade: string | null; noBet: boolean | null; bestAngle: boolean | null }
+    {
+      playGrade: string | null;
+      noBet: boolean | null;
+      bestAngle: boolean | null;
+      // 2026-06-11 P7-Commit-E — locked snapshot's line_movement opener
+      // fields. The route's request-time lineOpenAmerican lookup filters
+      // line_history by the CURRENT priceRow.sportsbook, which on locked
+      // rows is the placeholder "locked_snapshot" — so the live lookup
+      // returns null even though the writer froze a real opener in
+      // snapshot_json.line_movement.open_odds_american at lock time.
+      // Carry the frozen opener here so buildMarketEdge can fall back to
+      // it when the live lookup whiffs on a locked row.
+      lockedOpenOddsAmerican: number | null;
+      lockedOpenerRecordedAt: string | null;
+    }
   >();
   if (gameIds.length > 0) {
     const { data: signalData, error: sigErr } = await supabase
@@ -3333,10 +3382,17 @@ export async function GET(request: Request) {
       // play_grade + no_bet for the downstream DTO build loop. Same data
       // as lockedByGameMarket, separate map so buildGameDto doesn't need
       // the full snapshot row.
+      // Extract frozen opener fields from the locked snapshot's
+      // line_movement subfield (populated by buildLineMovementSnapshot
+      // at write time). Used by buildMarketEdge below when the live
+      // sportsbook-keyed lookup returns null on a locked row.
+      const lm = (r.snapshot_json as { line_movement?: { open_odds_american?: number | null; opener_recorded_at?: string | null } } | null)?.line_movement;
       lockedPlayGradeByGameMarket.set(`${r.game_id}::${r.market}`, {
         playGrade: r.play_grade,
         noBet: r.no_bet,
         bestAngle: r.best_angle,
+        lockedOpenOddsAmerican: lm?.open_odds_american ?? null,
+        lockedOpenerRecordedAt: lm?.opener_recorded_at ?? null,
       });
     }
 
@@ -3389,6 +3445,10 @@ export async function GET(request: Request) {
         playGrade: r.play_grade,
         noBet: r.no_bet,
         bestAngle: r.best_angle,
+        // Unlocked rows don't have a true T-60 opener yet — set null
+        // so the live live opener lookup stays primary for pre-lock cards.
+        lockedOpenOddsAmerican: null,
+        lockedOpenerRecordedAt: null,
       });
     }
     // (a) totalLineByGame override (6B.17 behavior preserved)
