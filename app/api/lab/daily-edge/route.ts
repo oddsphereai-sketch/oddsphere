@@ -3355,15 +3355,32 @@ export async function GET(request: Request) {
     // Important: this query DOES NOT mutate game_predictions like the
     // locked path above. It only populates the per-(game,market) boolean
     // for the verdict-honor guard.
+    //
+    // P7-Commit-B Phase 1 (2026-06-11) — also pull snapshot_json so the
+    // pre-lock substrate swap below can wire Market Pulse / lines from
+    // the same input moment the writer used to compute play_grade +
+    // best_angle. Without this the card mixes live sharp_signals with
+    // an older writer snapshot; with this every component on the card
+    // reflects one coherent recommendation moment.
     const { data: unlockedBaRows } = await supabase
       .from("prediction_records")
-      .select("game_id, market, play_grade, no_bet, best_angle")
+      .select("game_id, market, play_grade, no_bet, best_angle, snapshot_json")
       .eq("sport", "mlb")
       .eq("slate_date", requestedDate)
       .in("market", ["moneyline", "total", "first_inning"])
       .is("locked_at", null);
-    for (const r of (unlockedBaRows ?? []) as Array<{ game_id: number; market: string; play_grade: string | null; no_bet: boolean | null; best_angle: boolean | null }>) {
+    type UnlockedRec = {
+      game_id: number;
+      market: string;
+      play_grade: string | null;
+      no_bet: boolean | null;
+      best_angle: boolean | null;
+      snapshot_json: Record<string, unknown> | null;
+    };
+    const unlockedByGameMarket = new Map<string, UnlockedRec>();
+    for (const r of (unlockedBaRows ?? []) as UnlockedRec[]) {
       const key = `${r.game_id}::${r.market}`;
+      unlockedByGameMarket.set(key, r);
       // Locked rows already populated above — don't overwrite their
       // authoritative locked state with the pre-lock writer's current
       // state.
@@ -3491,31 +3508,62 @@ export async function GET(request: Request) {
     //     with empty arrays. UI hides those panels quietly per the
     //     "not available at lock" honest rule — never live drift.
     //
-    // For unlocked games: untouched. Pregame live behavior preserved.
+    // P7-Commit-B Phase 1 (2026-06-11) — coherent pre-lock snapshot.
+    //
+    // The writer captures `signal_rows_at_lock` + `lines_at_lock` into
+    // snapshot_json on EVERY refresh (Phase 6B.28's "at_lock" name is
+    // misleading — the substrate is rebuilt each cron tick, not just at
+    // T-60). Reading from it pre-lock — not just post-lock — means
+    // Market Pulse, Quick Read, play_grade, best_angle, edge, copy,
+    // and line move all derive from the same input moment. Live data
+    // continues to flow into sharp_signals and lines tables, but the
+    // route renders the snapshot until the writer's next refresh.
+    //
+    // Behavior by lock state:
+    //   • Locked rows: existing semantics — swap to substrate if
+    //     present, wipe to empty if not (honest "not captured at lock").
+    //   • Unlocked rows WITH substrate: swap to substrate. Card is
+    //     coherent against the writer's last refresh.
+    //   • Unlocked rows WITHOUT substrate (e.g. very new row, very old
+    //     writer): leave live arrays in place — same as pre-Phase-1
+    //     behavior. Fall-through, no regression for legacy rows.
     for (const g of games) {
       const lockedMl = lockedByGameMarket.get(`${g.id}::moneyline`);
       const lockedOu = lockedByGameMarket.get(`${g.id}::total`);
-      if (!lockedMl && !lockedOu) continue;
-      const lockedSp = (lockedMl?.snapshot_json ?? lockedOu?.snapshot_json) as
-        | Record<string, unknown>
-        | null;
-      const sigsAtLock = (lockedSp?.signal_rows_at_lock ?? null) as
+      const unlockedMl = unlockedByGameMarket.get(`${g.id}::moneyline`);
+      const unlockedOu = unlockedByGameMarket.get(`${g.id}::total`);
+      const unlockedFi = unlockedByGameMarket.get(`${g.id}::first_inning`);
+      const isLocked = lockedMl !== undefined || lockedOu !== undefined;
+      const snapshot =
+        (lockedMl?.snapshot_json ??
+          lockedOu?.snapshot_json ??
+          unlockedMl?.snapshot_json ??
+          unlockedOu?.snapshot_json ??
+          unlockedFi?.snapshot_json ??
+          null) as Record<string, unknown> | null;
+      if (!isLocked && !snapshot) continue;
+      const sigsAtLock = (snapshot?.signal_rows_at_lock ?? null) as
         | SignalRow[]
         | null;
-      const linesAtLock = (lockedSp?.lines_at_lock ?? null) as
+      const linesAtLock = (snapshot?.lines_at_lock ?? null) as
         | LineRow[]
         | null;
-      // Always overwrite for locked games. Empty array = panel hidden
-      // (honest "not available at lock"). Rehydrated array = frozen
-      // pregame substrate.
-      const frozenSignals = Array.isArray(sigsAtLock)
-        ? sigsAtLock.map((s) => ({ ...s, game_id: g.id })) // ensure game_id present
-        : [];
-      signalsByGame.set(g.id, frozenSignals);
+
+      // Signals swap — same rule for locked + unlocked:
+      // present array → frozen substrate, missing → empty for locked
+      // (honest hide), preserve live for unlocked (no regression).
+      if (Array.isArray(sigsAtLock)) {
+        signalsByGame.set(
+          g.id,
+          sigsAtLock.map((s) => ({ ...s, game_id: g.id })),
+        );
+      } else if (isLocked) {
+        signalsByGame.set(g.id, []);
+      }
+      // else (unlocked + no substrate): leave the live signals array in place.
+
+      // Lines swap — same rule structure.
       if (Array.isArray(linesAtLock)) {
-        // Wipe live lines for this game's ML/OU markets, then load
-        // rehydrated rows. First_inning_total lines (when added later)
-        // pass through; FI lines aren't captured by the writer today.
         for (const market of ["moneyline", "total"]) {
           currentLinesByGameMarket.delete(`${g.id}::${market}`);
         }
@@ -3533,15 +3581,12 @@ export async function GET(request: Request) {
           });
           currentLinesByGameMarket.set(key, arr);
         }
-      } else {
-        // No captured lines (pre-6B.28 lock). Wipe live ML/OU entries
-        // so the route doesn't render live values; (c) below still
-        // injects the locked picked-side price from prediction_records,
-        // so priceAmerican stays correct even with no captured lines.
+      } else if (isLocked) {
         for (const market of ["moneyline", "total"]) {
           currentLinesByGameMarket.delete(`${g.id}::${market}`);
         }
       }
+      // else (unlocked + no substrate): leave live lines arrays in place.
     }
     // (c) Inject locked ML/OU odds into currentLinesByGameMarket so
     //     priceAmerican on the DTO uses the locked snapshot price.
