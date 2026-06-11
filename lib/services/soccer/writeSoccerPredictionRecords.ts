@@ -226,6 +226,16 @@ export async function writeSoccerPredictionRecords(
     const awayAbbr = g.away_team_id !== null ? teamById.get(g.away_team_id)?.abbreviation ?? "?" : "?";
     const matchup = `${awayAbbr}@${homeAbbr}`;
 
+    // Never rewrite a fixture once kickoff has passed. Re-running the
+    // writer post-kickoff would refresh model probabilities + reset
+    // locked_at, destroying the pre-game snapshot members would have
+    // seen. Adapter hides post-kickoff games from the slate anyway,
+    // but defense in depth: skip them here too.
+    if (new Date(g.game_date).getTime() <= now.getTime()) {
+      log(`  ⏭ ${matchup} game_id=${g.id}: kickoff passed (${g.game_date}) — preserving existing rows`);
+      continue;
+    }
+
     try {
       const match = bdlByMatchId.get(g.external_id);
       if (match === undefined) {

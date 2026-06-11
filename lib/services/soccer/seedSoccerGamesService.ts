@@ -58,13 +58,26 @@ export type SeedSoccerGamesResult = {
 type TeamRow = { id: number; external_id: number; sport: string; abbreviation: string };
 
 /**
- * BDL FIFA returns UTC datetimes. For our slate-date filter we keep things
- * simple: filter on the UTC date prefix. (ET windowing isn't critical for
- * the WC slate because each fixture is global; the operator can pass an
- * explicit slateDate when needed.)
+ * BDL FIFA returns UTC datetimes. We file each fixture under the ET
+ * sports-day that contains its kickoff (America/New_York). This honors
+ * the header-doc convention: matches kicking off 00:00–05:59 UTC the
+ * NEXT calendar day belong to the previous evening's ET sports-day
+ * (a 02:00 UTC kickoff = 10 PM ET the prior evening). Intl handles DST
+ * correctly.
+ *
+ * Prior implementation compared the UTC date prefix, which silently
+ * dropped late-night ET fixtures (e.g., the 2026 FIFA WC matchday-1
+ * 10 PM ET game CZE@KOR was filed under the next UTC day and missed
+ * from today's slate). That bug is fixed here.
  */
 function matchOnSlateDate(m: NormalizedBdlMatch, slateDate: string): boolean {
-  return String(m.datetime).startsWith(slateDate);
+  const etYmd = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(m.datetime));
+  return etYmd === slateDate;
 }
 
 function teamRowPayload(team: {

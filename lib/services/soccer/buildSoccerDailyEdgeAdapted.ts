@@ -426,7 +426,27 @@ export async function buildSoccerDailyEdgeAdapted(
   // Prevents stray soccer games (e.g., future UCL fixtures seeded later)
   // from appearing on the WC tab even if they share slate_date.
   const wcGameIds = new Set(allPreds.map((p) => p.game_id));
-  const wcGames = games.filter((g) => wcGameIds.size === 0 ? true : wcGameIds.has(g.id));
+  const wcGamesWithPreds = games.filter((g) =>
+    wcGameIds.size === 0 ? true : wcGameIds.has(g.id),
+  );
+
+  // Hide kicked-off fixtures from the slate. The WC charter does not
+  // distinguish between "missed pre-kickoff" and "currently live" for
+  // launch purposes — either way, surfacing a started fixture as a
+  // selectable Daily Edge card is misleading (the model already locked
+  // its read, or never locked because it wasn't seeded in time). The
+  // underlying prediction_records stay in the DB so post-match grading
+  // still works; we just don't render them. Sorted by kickoff ascending
+  // so the next-upcoming fixture is the natural hero.
+  const nowMs = Date.now();
+  const wcGames = wcGamesWithPreds
+    .filter((g) => {
+      const startedStatus =
+        g.status !== null && g.status !== "scheduled" && g.status !== "pre_match";
+      const kickedOff = new Date(g.game_date).getTime() <= nowMs;
+      return !(startedStatus || kickedOff);
+    })
+    .sort((a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime());
 
   // 5. Build DTO per game.
   const dtos: DailyEdgeGameDto[] = wcGames.map((g) => {
