@@ -7,7 +7,13 @@
 // types live in /app/lab/lib/labTypes.ts. Everything that remains here is
 // pure presentation: icons, labels, signal-tag explanations.
 
-export type Sport = "mlb" | "nba" | "nfl" | "cbb" | "cfb" | "nhl" | "ucl";
+// 2026-06-11 — WC-1: added "soccer" mirroring the canonical Sport union
+// in lib/types/domain/Sport.ts. Per the broader audit-doc decision, soccer
+// is the umbrella key and per-competition (FIFA WC, UCL, leagues) is
+// distinguished by a `games.competition` field at the DB layer. Here in
+// the lab UI mock-data layer, soccer just needs SPORT_META + PROP_TYPE_META
+// entries so the sport selector renders without crashing.
+export type Sport = "mlb" | "nba" | "nfl" | "cbb" | "cfb" | "nhl" | "ucl" | "soccer";
 
 // Per-sport prop type unions. Note that "assists" and "points" intentionally
 // collide between NBA and NHL — they're disambiguated at runtime by the
@@ -60,6 +66,10 @@ export const SPORT_META: Record<
   cfb: { label: "CFB", icon: "🏈", isLive: false, comingSoonLabel: "Coming this season" },
   nhl: { label: "NHL", icon: "🏒", isLive: false, comingSoonLabel: "Coming soon" },
   ucl: { label: "UCL", icon: "⚽", isLive: false, comingSoonLabel: "Coming soon" },
+  // WC-1 — soccer entry stubbed; the live FIFA WC sport-tab lands in WC-4.
+  // Until then, mark not-live so the existing sport-rail logic keeps it
+  // labeled as "coming soon" rather than rendering an empty live tab.
+  soccer: { label: "Soccer", icon: "⚽", isLive: false, comingSoonLabel: "World Cup launching" },
 };
 
 type PropTypeMeta = {
@@ -100,12 +110,14 @@ export const PROP_TYPE_META: Record<Sport, Record<string, PropTypeMeta>> = {
     saves:    { label: "Saves",   icon: "🛡️", unit: "SV", isPitcher: false },
     points:   { label: "Points",  icon: "🔥", unit: "P",  isPitcher: false },
   },
-  // CBB / CFB / UCL: no player-props surface area in V1. Stubs exist so
-  // PROP_TYPE_META[sport] lookups don't crash when these sports appear in
-  // the Daily Edge sport selector.
+  // CBB / CFB / UCL / soccer: no player-props surface area in V1. Stubs
+  // exist so PROP_TYPE_META[sport] lookups don't crash when these sports
+  // appear in the Daily Edge sport selector. WC build adds Daily Edge
+  // markets (match_result/total/btts) but no player props at launch.
   cbb: {},
   cfb: {},
   ucl: {},
+  soccer: {},
 };
 
 export function getPropTypeMeta(sport: Sport, propType: string): PropTypeMeta {

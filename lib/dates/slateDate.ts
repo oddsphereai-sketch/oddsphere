@@ -36,6 +36,13 @@ const SPORT_TIMEZONE: Record<Sport, string> = {
   cfb: "America/New_York",
   nhl: "America/New_York",
   ucl: "Europe/London",
+  // WC-1 — soccer slate anchors to America/New_York to match the
+  // ET-anchored daily slate model used elsewhere in the product. FIFA
+  // WC 2026 is hosted in US/Mexico/Canada, so ET produces a sensible
+  // single-day grouping for member-facing reads. If we later launch
+  // a non-WC soccer competition with a different audience anchor,
+  // this becomes a per-competition decision (not per-sport).
+  soccer: "America/New_York",
 };
 
 /** Returns the IANA timezone used to anchor a sport's slate date. */

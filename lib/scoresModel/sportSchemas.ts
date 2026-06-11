@@ -173,6 +173,28 @@ export const UCL_SCHEMA: SportSchema = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────
+// SOCCER (WC-1) — Soccer is 3-way (home/draw/away) plus first-class
+// total goals and BTTS markets. Mirrors UCL_SCHEMA but BTTS makes the
+// difference because BTTS is officially tracked at WC launch.
+// "predicted_ml_winner" stays the conventional key for the match-result
+// pick to keep the manual entry surface symmetric with UCL.
+// ─────────────────────────────────────────────────────────────────────────
+export const SOCCER_SCHEMA: SportSchema = {
+  sport: "soccer",
+  displayName: "Soccer ⚽",
+  fields: [
+    { key: "predicted_home_score", label: "Expected Goals (Home)", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+    { key: "predicted_away_score", label: "Expected Goals (Away)", type: "number", required: true, min: 0, scope: "top_level", decimal: true },
+    { key: "predicted_total", label: "Predicted Total Goals", type: "number", required: true, min: 0, scope: "top_level", computeFrom: "predicted_home_score + predicted_away_score" },
+    { key: "predicted_ml_winner", label: "Match Result Pick", type: "enum", required: true, options: ["home", "away", "draw"], scope: "top_level" },
+    { key: "home_win_pct", label: "Home Win %", type: "percent", required: true, min: 0, max: 100, scope: "sport_specific" },
+    { key: "draw_pct", label: "Draw %", type: "percent", required: true, min: 0, max: 100, scope: "sport_specific" },
+    { key: "away_win_pct", label: "Away Win %", type: "percent", required: true, min: 0, max: 100, scope: "sport_specific" },
+    { key: "btts_yes_pct", label: "BTTS Yes %", type: "percent", required: false, min: 0, max: 100, scope: "sport_specific", helpText: "Model probability both teams score" },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────────────────────
 // NCAAB — V1 starts NBA-like (Daniel TBD). Auto-model in Phase 11.
 // ─────────────────────────────────────────────────────────────────────────
 export const NCAAB_SCHEMA: SportSchema = {
@@ -197,6 +219,7 @@ export const SPORT_SCHEMAS: Record<Sport, SportSchema> = {
   ucl:  UCL_SCHEMA,
   cfb:  NCAAF_SCHEMA,
   cbb:  NCAAB_SCHEMA,
+  soccer: SOCCER_SCHEMA,
 };
 
 export function getSportSchema(sport: Sport): SportSchema {

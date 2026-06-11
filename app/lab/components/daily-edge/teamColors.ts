@@ -145,7 +145,7 @@ export const NBA_TEAM_COLORS: Record<string, TeamColorEntry> = {
  */
 export function teamPrimaryColor(
   abbreviation: string | null | undefined,
-  sport: "mlb" | "nba" | "nfl" | "nhl" | "cbb" | "cfb" | "ucl" = "mlb",
+  sport: "mlb" | "nba" | "nfl" | "nhl" | "cbb" | "cfb" | "ucl" | "soccer" = "mlb",
 ): string {
   if (!abbreviation) return FALLBACK_TEAM_COLOR;
   if (sport === "nba") {
@@ -154,5 +154,7 @@ export function teamPrimaryColor(
   if (sport === "nhl") {
     return NHL_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
   }
+  // WC-1 — soccer team colors not yet seeded (added in WC-4 with the soccer card).
+  // For now fall through to the fallback so MLB/NBA/NHL behavior is unchanged.
   return MLB_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
 }

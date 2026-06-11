@@ -72,6 +72,13 @@ export const OFFICIAL_TRACKING_MARKETS: Readonly<
   cbb: [],
   cfb: [],
   ucl: [],
+  // 2026-06-11 — WC-1: soccer launches with 3-way result, total goals
+  // (canonical 2.5), BTTS, and double_chance. "moneyline" deliberately
+  // absent — soccer is 3-way and using "moneyline" here would erase the
+  // draw outcome. Double Chance is included as an official tracked
+  // launch market because the tracking page already carries a
+  // "Double Chance" column (also used by UCL).
+  soccer: ["match_result", "total", "btts", "double_chance"],
 } as const;
 
 /**
@@ -98,6 +105,7 @@ export const CONTEXT_ONLY_DISPLAY_MARKETS: Readonly<
   cbb: [],
   cfb: [],
   ucl: [],
+  soccer: [], // no context-only markets at WC launch
 } as const;
 
 /** Returns true if the given (sport, market) tuple is officially tracked publicly. */

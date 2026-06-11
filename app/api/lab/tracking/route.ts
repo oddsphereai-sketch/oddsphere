@@ -46,7 +46,7 @@ import type {
 } from "@/app/lab/lib/labTypes";
 
 // ─── Display ordering ────────────────────────────────────────────────────
-const SPORT_DISPLAY_ORDER: Sport[] = ["mlb", "nba", "cbb", "nfl", "cfb", "nhl", "ucl"];
+const SPORT_DISPLAY_ORDER: Sport[] = ["mlb", "nba", "cbb", "nfl", "cfb", "nhl", "ucl", "soccer"];
 
 // ─── Sport × Market matrix definition ────────────────────────────────────
 // What we WANT to surface in the UI per sport, regardless of whether the
@@ -59,6 +59,14 @@ const SPORT_MARKETS: Record<Sport, string[]> = {
   cfb: ["ML", "O/U"],
   nhl: ["ML", "O/U"],
   ucl: ["ML", "Double Chance"],
+  // WC-1 — soccer launch markets per OFFICIAL_TRACKING_MARKETS:
+  //   3-way result, double chance, total goals (canonical 2.5), BTTS.
+  //
+  // Soccer "Double Chance" is its OWN column under the soccer sport-row
+  // — independent of the UCL "Double Chance" column above. The tracking
+  // page groups by (sport, market) tuple, so soccer/double_chance and
+  // ucl/double_chance roll up to separate columns by design.
+  soccer: ["Match Result", "Double Chance", "O/U", "BTTS"],
 };
 
 // DB market column → UI label. prop_* markets aren't surfaced individually

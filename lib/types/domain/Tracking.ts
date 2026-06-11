@@ -102,8 +102,31 @@ export type TrackedSport =
   | "cfb"
   | "cbb"
   | "nhl"
-  | "ucl";
+  | "ucl"
+  | "soccer";
 
+/**
+ * Tracked markets enum (v17). Additive — new entries widen the union
+ * without affecting existing callers.
+ *
+ * 2026-06-11 — WC-1 additions for soccer launch markets:
+ *   - "match_result"  — 3-way result (Home / Draw / Away), graded by
+ *     90-minute regulation / full-time score only. Knockouts MUST NOT
+ *     resolve "match_result" via extra time or penalties.
+ *   - "btts"          — Both Teams To Score (Yes / No), graded by
+ *     90-minute regulation / full-time score only.
+ *   - "double_chance" — Two-of-three outcomes (1X / X2 / 12), graded by
+ *     90-minute regulation / full-time score only. Pre-existed in this
+ *     union for UCL substrate; WC-1 promotes it to a soccer official
+ *     tracked market because the tracking page already carries a
+ *     "Double Chance" column.
+ *
+ * "total" is reused for soccer total goals (canonical line 2.5).
+ *
+ * Soccer DOES NOT use "moneyline" because soccer is 3-way (draw is a
+ * first-class outcome). Forcing soccer into the 2-way "moneyline" enum
+ * would erase the draw and is explicitly out of contract.
+ */
 export type TrackedMarketV17 =
   | "moneyline"
   | "total"
@@ -111,7 +134,9 @@ export type TrackedMarketV17 =
   | "nrfi"
   | "yrfi"
   | "double_chance"
-  | "spread";
+  | "spread"
+  | "match_result"
+  | "btts";
 
 export type GradeResult = "win" | "loss" | "push" | "void" | "pending";
 

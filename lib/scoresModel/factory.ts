@@ -29,6 +29,11 @@ const SPORT_TO_ENV_SUFFIX: Record<Sport, string> = {
   ucl:  "UCL",
   cfb:  "NCAAF",
   cbb:  "NCAAB",
+  // WC-1 — soccer env suffix added so the sport-keyed lookup compiles.
+  // No AutoSoccerScoresModelSource exists yet (WC-4 introduces the
+  // BDL-WC backed source); enabling USE_AUTO_SCORES_MODEL_SOCCER while
+  // the class is missing will still throw the documented helpful error.
+  soccer: "SOCCER",
 };
 
 function useAutoFor(sport: Sport): boolean {
