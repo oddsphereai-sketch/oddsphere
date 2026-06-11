@@ -27,12 +27,31 @@ export function americanToImpliedProbability(american: number | null): number | 
   return -american / (-american + 100);
 }
 
-/** De-vig two- or three-way market by normalizing implied probabilities. */
-export function devigImplied(implied: ReadonlyArray<number | null>): number[] {
+/**
+ * De-vig a market group by normalizing implied probabilities to a
+ * target sum. Each market has its own true target:
+ *
+ *   • match_result (3 mutually exclusive outcomes)  → sum = 1.0
+ *   • total        (over/under)                     → sum = 1.0
+ *   • btts         (yes/no)                         → sum = 1.0
+ *   • double_chance (3 outcomes each covering 2 of  → sum = 2.0
+ *                    3 mutually exclusive match results)
+ *
+ * Default is 1.0 — pass 2.0 explicitly for the double_chance group.
+ *
+ * Bug fix 2026-06-11: previously this always normalized to 1.0,
+ * which silently halved every double_chance probability and inflated
+ * DC edges by ~2x (e.g. tonight's CZE@KOR DC edges showed +29-36pp
+ * when the honest math gives +0.9 to +1.7pp).
+ */
+export function devigImplied(
+  implied: ReadonlyArray<number | null>,
+  targetSum: number = 1.0,
+): number[] {
   const cleaned = implied.map((p) => (p === null || !Number.isFinite(p) ? 0 : p));
   const total = cleaned.reduce((s, v) => s + v, 0);
   if (total <= 0) return cleaned.map(() => 0);
-  return cleaned.map((p) => p / total);
+  return cleaned.map((p) => (p / total) * targetSum);
 }
 
 /**
@@ -106,9 +125,13 @@ export function buildMarketProbabilityBundle(
   const totalKeys = [`total|over|${totalLine}`, `total|under|${totalLine}`];
   const bttsKeys = ["btts|yes", "btts|no"];
 
-  function devigGroup(keys: ReadonlyArray<string>, outPrefix: string): void {
+  function devigGroup(
+    keys: ReadonlyArray<string>,
+    outPrefix: string,
+    targetSum: number = 1.0,
+  ): void {
     const groupImplied = keys.map((k) => medians.get(k) ?? null);
-    const groupDevig = devigImplied(groupImplied);
+    const groupDevig = devigImplied(groupImplied, targetSum);
     for (let i = 0; i < keys.length; i++) {
       const k = keys[i];
       const selectionSuffix = k.split("|").slice(1).join("|");
@@ -117,10 +140,10 @@ export function buildMarketProbabilityBundle(
       devig[outKey] = groupDevig[i];
     }
   }
-  devigGroup(matchResultKeys, "match_result");
-  devigGroup(doubleChanceKeys, "double_chance");
-  devigGroup(totalKeys, "total");
-  devigGroup(bttsKeys, "btts");
+  devigGroup(matchResultKeys, "match_result");           // sum → 1.0
+  devigGroup(doubleChanceKeys, "double_chance", 2.0);    // sum → 2.0  (bug fix)
+  devigGroup(totalKeys, "total");                        // sum → 1.0
+  devigGroup(bttsKeys, "btts");                          // sum → 1.0
 
   // Per-market book counts.
   function bookCountFor(prefix: string): number {
