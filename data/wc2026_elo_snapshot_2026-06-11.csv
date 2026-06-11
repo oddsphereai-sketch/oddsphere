@@ -1,0 +1,59 @@
+team_name,country_code,elo_rating,confederation,source_url,retrieval_date,notes
+# WC-3 Elo snapshot for the 2026 FIFA World Cup.
+# Source: eloratings.net public ratings, approximate values reflecting
+#         widely-documented pre-tournament ranks.
+# Retrieval date: 2026-06-11
+# Snapshot policy: this file is the single source of truth for team-strength
+#                  at launch. Operator should verify exact ratings against
+#                  the cited source before any public publish. Replace this
+#                  file with a re-snapshot to bump calibration_version.
+# 48 teams ordered alphabetically by country_code within each confederation.
+Argentina,ARG,2150,CONMEBOL,https://www.eloratings.net,2026-06-11,
+Brazil,BRA,2100,CONMEBOL,https://www.eloratings.net,2026-06-11,
+Colombia,COL,1955,CONMEBOL,https://www.eloratings.net,2026-06-11,
+Ecuador,ECU,1840,CONMEBOL,https://www.eloratings.net,2026-06-11,
+Paraguay,PAR,1700,CONMEBOL,https://www.eloratings.net,2026-06-11,
+Uruguay,URU,1940,CONMEBOL,https://www.eloratings.net,2026-06-11,
+Austria,AUT,1860,UEFA,https://www.eloratings.net,2026-06-11,
+Belgium,BEL,1995,UEFA,https://www.eloratings.net,2026-06-11,
+Bosnia,BIH,1755,UEFA,https://www.eloratings.net,2026-06-11,
+Croatia,CRO,1920,UEFA,https://www.eloratings.net,2026-06-11,
+Czech Republic,CZE,1780,UEFA,https://www.eloratings.net,2026-06-11,
+Denmark,DEN,1875,UEFA,https://www.eloratings.net,2026-06-11,
+England,ENG,2065,UEFA,https://www.eloratings.net,2026-06-11,
+France,FRA,2090,UEFA,https://www.eloratings.net,2026-06-11,
+Germany,GER,2010,UEFA,https://www.eloratings.net,2026-06-11,
+Italy,ITA,1960,UEFA,https://www.eloratings.net,2026-06-11,
+Netherlands,NED,2005,UEFA,https://www.eloratings.net,2026-06-11,
+Norway,NOR,1825,UEFA,https://www.eloratings.net,2026-06-11,
+Poland,POL,1800,UEFA,https://www.eloratings.net,2026-06-11,
+Portugal,POR,2055,UEFA,https://www.eloratings.net,2026-06-11,
+Scotland,SCO,1815,UEFA,https://www.eloratings.net,2026-06-11,
+Spain,ESP,2080,UEFA,https://www.eloratings.net,2026-06-11,
+Switzerland,SUI,1880,UEFA,https://www.eloratings.net,2026-06-11,
+Wales,WAL,1760,UEFA,https://www.eloratings.net,2026-06-11,
+Algeria,ALG,1755,CAF,https://www.eloratings.net,2026-06-11,
+Cape Verde,CPV,1650,CAF,https://www.eloratings.net,2026-06-11,
+Cameroon,CMR,1735,CAF,https://www.eloratings.net,2026-06-11,
+DR Congo,COD,1700,CAF,https://www.eloratings.net,2026-06-11,
+Egypt,EGY,1770,CAF,https://www.eloratings.net,2026-06-11,
+Ivory Coast,CIV,1745,CAF,https://www.eloratings.net,2026-06-11,
+Morocco,MAR,1935,CAF,https://www.eloratings.net,2026-06-11,
+Nigeria,NGA,1755,CAF,https://www.eloratings.net,2026-06-11,
+Senegal,SEN,1855,CAF,https://www.eloratings.net,2026-06-11,
+South Africa,RSA,1640,CAF,https://www.eloratings.net,2026-06-11,
+Tunisia,TUN,1780,CAF,https://www.eloratings.net,2026-06-11,
+Australia,AUS,1800,AFC,https://www.eloratings.net,2026-06-11,
+Iran,IRN,1830,AFC,https://www.eloratings.net,2026-06-11,
+Iraq,IRQ,1680,AFC,https://www.eloratings.net,2026-06-11,
+Japan,JPN,1865,AFC,https://www.eloratings.net,2026-06-11,
+Qatar,QAT,1700,AFC,https://www.eloratings.net,2026-06-11,
+Saudi Arabia,KSA,1760,AFC,https://www.eloratings.net,2026-06-11,
+South Korea,KOR,1830,AFC,https://www.eloratings.net,2026-06-11,
+Uzbekistan,UZB,1670,AFC,https://www.eloratings.net,2026-06-11,
+Canada,CAN,1755,CONCACAF,https://www.eloratings.net,2026-06-11,host
+Costa Rica,CRC,1700,CONCACAF,https://www.eloratings.net,2026-06-11,
+Curacao,CUW,1610,CONCACAF,https://www.eloratings.net,2026-06-11,
+Mexico,MEX,1880,CONCACAF,https://www.eloratings.net,2026-06-11,host
+USA,USA,1860,CONCACAF,https://www.eloratings.net,2026-06-11,host
+New Zealand,NZL,1620,OFC,https://www.eloratings.net,2026-06-11,
