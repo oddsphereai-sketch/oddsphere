@@ -48,6 +48,7 @@ import { linesService } from "@/lib/services/linesService";
 import { generatePredictionsForSlate } from "@/lib/services/automodelService";
 import { updateMarketSignalsForSlate } from "@/lib/services/marketSignalDerivationService";
 import { updateGradesForSlate } from "@/lib/services/gradeDerivationService";
+import { detectSnapshotStaleness } from "@/lib/services/snapshotStalenessDetector";
 import {
   partitionByLockState,
   type LockCandidate,
@@ -443,6 +444,154 @@ export async function GET(request: Request) {
       records += signals.records_updated ?? 0;
       apiCalls += signals.api_calls_made ?? 0;
 
+      // ── 4.5. P7-Commit-B Phase 2 — stale-snapshot trigger ─────────────
+      //
+      // For still_unlocked games (pre-T-60, MLB-only in V1) compare each
+      // prediction_records snapshot against the freshly refreshed
+      // sharp_signals. When the snapshot is materially stale —
+      // public-money conflict gate flipped, money/bets pct delta >=
+      // MATERIAL_PCT_DELTA, steam/RLM flipped, signal availability
+      // changed — queue the game for an automodel re-run. The re-run
+      // produces a new coherent snapshot (signal_rows_at_lock +
+      // lines_at_lock + play_grade + best_angle + confidence + copy)
+      // so the Daily Edge route renders one consistent recommendation
+      // moment.
+      //
+      // Locked rows are skipped by construction: this only iterates
+      // partition.still_unlocked. The automodel respectLocks default
+      // adds belt-and-suspenders protection.
+      //
+      // Sport scope: MLB only in V1, matching the entering_lock pass
+      // above. NBA / NHL gain this when their automodel pipelines
+      // come online with the same lifecycle.
+      let staleTrigger: {
+        considered: number;
+        stale: number;
+        refreshed: number;
+        errors: string[];
+      } = { considered: 0, stale: 0, refreshed: 0, errors: [] };
+      if (sport === "mlb" && partition.still_unlocked.length > 0) {
+        const stillUnlockedExternalIds = partition.still_unlocked.map(
+          (g) => g.external_id,
+        );
+        // Lookup game_id by external_id.
+        const { data: gameLookup } = await supabase
+          .from("games")
+          .select("id, external_id")
+          .eq("sport", "mlb")
+          .in("external_id", stillUnlockedExternalIds);
+        const extToGameId = new Map<number, number>();
+        for (const g of (gameLookup ?? []) as Array<{ id: number; external_id: number }>) {
+          extToGameId.set(g.external_id, g.id);
+        }
+        const stillUnlockedGameIds = Array.from(extToGameId.values());
+
+        if (stillUnlockedGameIds.length > 0) {
+          // Pull prediction_records (snapshot_json) + game_predictions
+          // (picked sides). Both keyed by game_id.
+          const { data: predRecs } = await supabase
+            .from("prediction_records")
+            .select("game_id, market, snapshot_json")
+            .eq("sport", "mlb")
+            .eq("slate_date", date)
+            .in("game_id", stillUnlockedGameIds)
+            .in("market", ["moneyline", "total"])
+            .is("locked_at", null);
+          const snapshotByGame = new Map<number, Record<string, unknown>>();
+          for (const r of (predRecs ?? []) as Array<{ game_id: number; market: string; snapshot_json: Record<string, unknown> | null }>) {
+            if (r.snapshot_json && !snapshotByGame.has(r.game_id)) {
+              snapshotByGame.set(r.game_id, r.snapshot_json);
+            }
+          }
+
+          const { data: gpRows } = await supabase
+            .from("game_predictions")
+            .select("game_id, predicted_ml_winner, predicted_ou_side")
+            .in("game_id", stillUnlockedGameIds);
+          const picksByGame = new Map<number, { ml: string | null; total: string | null }>();
+          for (const r of (gpRows ?? []) as Array<{ game_id: number; predicted_ml_winner: string | null; predicted_ou_side: string | null }>) {
+            picksByGame.set(r.game_id, {
+              ml: r.predicted_ml_winner,
+              total: r.predicted_ou_side,
+            });
+          }
+
+          const { data: liveSigs } = await supabase
+            .from("sharp_signals")
+            .select("game_id, market_type, side, public_money_pct, public_betting_pct, has_steam_move, has_reverse_line_movement")
+            .in("game_id", stillUnlockedGameIds)
+            .in("market_type", ["moneyline", "total"]);
+          const liveByGame = new Map<number, Array<{ market_type: string; side: string | null; public_money_pct: number | null; public_betting_pct: number | null; has_steam_move: boolean | null; has_reverse_line_movement: boolean | null }>>();
+          for (const r of (liveSigs ?? []) as Array<{ game_id: number; market_type: string; side: string | null; public_money_pct: number | null; public_betting_pct: number | null; has_steam_move: boolean | null; has_reverse_line_movement: boolean | null }>) {
+            const arr = liveByGame.get(r.game_id) ?? [];
+            arr.push({
+              market_type: r.market_type,
+              side: r.side,
+              public_money_pct: r.public_money_pct,
+              public_betting_pct: r.public_betting_pct,
+              has_steam_move: r.has_steam_move,
+              has_reverse_line_movement: r.has_reverse_line_movement,
+            });
+            liveByGame.set(r.game_id, arr);
+          }
+
+          const staleExternalIds: number[] = [];
+          for (const [extId, gameId] of extToGameId) {
+            staleTrigger.considered++;
+            const snap = snapshotByGame.get(gameId);
+            const live = liveByGame.get(gameId) ?? [];
+            const picks = picksByGame.get(gameId);
+            if (!snap || !picks) continue;
+            const snapshotSignals = Array.isArray(
+              (snap as { signal_rows_at_lock?: unknown }).signal_rows_at_lock,
+            )
+              ? ((snap as { signal_rows_at_lock?: unknown[] }).signal_rows_at_lock as Array<{
+                  market_type: string;
+                  side: string | null;
+                  public_money_pct: number | null;
+                  public_betting_pct: number | null;
+                  has_steam_move: boolean | null;
+                  has_reverse_line_movement: boolean | null;
+                }>)
+              : [];
+            const result = detectSnapshotStaleness({
+              snapshotSignals,
+              liveSignals: live,
+              pickedMl: picks.ml,
+              pickedTotal: picks.total,
+            });
+            if (result.stale) {
+              staleTrigger.stale++;
+              staleExternalIds.push(extId);
+            }
+          }
+
+          if (staleExternalIds.length > 0) {
+            try {
+              const refreshResult = await generatePredictionsForSlate(
+                sport,
+                date,
+                "morning_draft",
+                {
+                  writeToDb: true,
+                  gameExternalIdsFilter: staleExternalIds,
+                  respectLocks: true,
+                },
+              );
+              staleTrigger.refreshed =
+                (refreshResult.db_writes?.ingest.inserted ?? 0) +
+                (refreshResult.db_writes?.ingest.updated ?? 0);
+              records += staleTrigger.refreshed;
+              for (const e of refreshResult.errors) {
+                staleTrigger.errors.push(`ext=${e.game_external_id}: ${e.error}`);
+              }
+            } catch (e) {
+              staleTrigger.errors.push(e instanceof Error ? e.message : String(e));
+            }
+          }
+        }
+      }
+
       // ── 5. V2.1 Layer 3 — market signal + grade derivation ──────────
       // Same slate-wide scope concern as step 4. Acceptable drift for V1
       // because the locked PREDICTION values don't change; only the
@@ -463,7 +612,8 @@ export async function GET(request: Request) {
       // this to mark the refresh_log row as 'partial' instead of 'success'.
       const anyErrors =
         lockResult.errors.length > 0 ||
-        enteringLockModelResult.errors.length > 0;
+        enteringLockModelResult.errors.length > 0 ||
+        staleTrigger.errors.length > 0;
 
       return {
         records_updated: records,
@@ -488,6 +638,7 @@ export async function GET(request: Request) {
             lockResult.errors.length + enteringLockModelResult.errors.length,
           game_lines: gameLines.records_updated,
           sharp_signals: signals.records_updated,
+          stale_snapshot_trigger: staleTrigger,
           market_signals: marketTouched,
           market_signals_perMarket: marketSignals.perMarket,
           grades: gradeTouched,
