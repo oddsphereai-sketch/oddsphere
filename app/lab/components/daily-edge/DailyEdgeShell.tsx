@@ -2999,9 +2999,11 @@ function emptyStateMessageFor(
       // the honest line is "no games today", not "being ingested".
       if (sport === "nba") return "No NBA games scheduled today.";
       if (sport === "nhl") return "No NHL games scheduled today.";
+      if (sport === "soccer") return "No World Cup matches scheduled today.";
       return "No games on tonight's slate.";
     default:
       if (sport === "nba") return "No NBA games scheduled today.";
+      if (sport === "soccer") return "No World Cup matches scheduled today.";
       return "No games on tonight's slate.";
   }
 }

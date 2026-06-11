@@ -66,10 +66,11 @@ export const SPORT_META: Record<
   cfb: { label: "CFB", icon: "🏈", isLive: false, comingSoonLabel: "Coming this season" },
   nhl: { label: "NHL", icon: "🏒", isLive: false, comingSoonLabel: "Coming soon" },
   ucl: { label: "UCL", icon: "⚽", isLive: false, comingSoonLabel: "Coming soon" },
-  // WC-1 — soccer entry stubbed; the live FIFA WC sport-tab lands in WC-4.
-  // Until then, mark not-live so the existing sport-rail logic keeps it
-  // labeled as "coming soon" rather than rendering an empty live tab.
-  soccer: { label: "Soccer", icon: "⚽", isLive: false, comingSoonLabel: "World Cup launching" },
+  // WC-4 — soccer tab goes live as "World Cup". Internal sport key stays
+  // `soccer` (matches the WC-3 TrackedSport contract). All member-facing
+  // copy reads "World Cup". Empty-state messaging is sport-specific so the
+  // tab renders honestly when no fixtures or no published rows exist yet.
+  soccer: { label: "World Cup", icon: "⚽", isLive: true },
 };
 
 type PropTypeMeta = {

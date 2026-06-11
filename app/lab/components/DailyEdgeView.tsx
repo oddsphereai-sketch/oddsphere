@@ -28,10 +28,11 @@ import DailyEdgeSort from "./DailyEdgeSort";
 const DAILY_EDGE_SPORTS: Sport[] = [
   "mlb",
   "nba",
+  "nhl",
+  "soccer",
   "nfl",
   "cbb",
   "cfb",
-  "nhl",
   "ucl",
 ];
 
