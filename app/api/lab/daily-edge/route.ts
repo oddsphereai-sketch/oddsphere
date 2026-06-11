@@ -639,6 +639,7 @@ function buildGameDto(
     bestAngle: boolean | null;
     lockedOpenOddsAmerican: number | null;
     lockedOpenerRecordedAt: string | null;
+    lockedSignalRowsAtLock: SignalRow[] | null;
   }>
 ): DailyEdgeGameDto | null {
   const home = row.home_team?.abbreviation ?? "—";
@@ -932,6 +933,7 @@ function buildGameDto(
     isLockedRow: lockedMl !== undefined,
     lockedOpenOddsAmerican: lockedMl?.lockedOpenOddsAmerican ?? null,
     lockedOpenerRecordedAt: lockedMl?.lockedOpenerRecordedAt ?? null,
+    lockedFrozenSignals: lockedMl?.lockedSignalRowsAtLock ?? null,
   });
   const total = buildMarketEdge({
     market: "total",
@@ -964,6 +966,7 @@ function buildGameDto(
     isLockedRow: lockedOu !== undefined,
     lockedOpenOddsAmerican: lockedOu?.lockedOpenOddsAmerican ?? null,
     lockedOpenerRecordedAt: lockedOu?.lockedOpenerRecordedAt ?? null,
+    lockedFrozenSignals: lockedOu?.lockedSignalRowsAtLock ?? null,
   });
   const firstInning = buildMarketEdge({
     market: "first_inning",
@@ -1000,6 +1003,7 @@ function buildGameDto(
     isLockedRow: lockedFi !== undefined,
     lockedOpenOddsAmerican: lockedFi?.lockedOpenOddsAmerican ?? null,
     lockedOpenerRecordedAt: lockedFi?.lockedOpenerRecordedAt ?? null,
+    lockedFrozenSignals: lockedFi?.lockedSignalRowsAtLock ?? null,
   });
 
   // 4.1.10 — per-game status flags.
@@ -1667,6 +1671,17 @@ type BuildMarketEdgeInput = {
    */
   lockedOpenOddsAmerican?: number | null;
   lockedOpenerRecordedAt?: string | null;
+  /**
+   * 2026-06-11 P7-Commit-F — frozen sharp_signals array captured at
+   * lock time. Pulled from `snapshot_json.signal_rows_at_lock` (writer
+   * captures all sides). When the row is locked, buildMarketEdge swaps
+   * this in for `input.signals` so publicSplits, sharp direction,
+   * marketFairProb, and steam/RLM all reflect the moment-of-lock
+   * state — not whatever sharp_signals now reports. Null pre-lock or
+   * when the snapshot didn't carry the array; the live `input.signals`
+   * stays primary.
+   */
+  lockedFrozenSignals?: SignalRow[] | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1793,12 +1808,25 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const dbMarket: "moneyline" | "total" | "first_inning_total" =
     input.market === "first_inning" ? "first_inning_total" : input.market;
 
+  // 2026-06-11 P7-Commit-F — locked-row signals freeze. The freeze
+  // contract says "locked = frozen": any sharp-signal-derived display
+  // (publicSplits, sharp direction, marketFairProb, steam/RLM) must
+  // reflect what we saw at lock time, not what the live sharp_signals
+  // table says now. Snapshot `signal_rows_at_lock` was already
+  // populated by the writer; this swap is the read side. The shape is
+  // identical (same columns) so callers can treat it as `SignalRow[]`.
+  // Pre-lock rows fall through to `input.signals` (live) unchanged.
+  const effectiveSignals: SignalRow[] =
+    input.isLockedRow === true && Array.isArray(input.lockedFrozenSignals)
+      ? (input.lockedFrozenSignals as SignalRow[])
+      : input.signals;
+
   // Sharp direction (per-market, forced "none" for first_inning by the
   // verdict helper but useful here too for copy phrasing).
   const sharpDirection: SharpDirection =
     input.market === "first_inning"
       ? "none"
-      : deriveSharpDirection(input.signals, dbMarket, input.modelSide);
+      : deriveSharpDirection(effectiveSignals, dbMarket, input.modelSide);
 
   // Pricing — best available American odds for the picked side.
   const priceRow = pickPriceRow(input.linesCurrent, input.modelSide);
@@ -1865,10 +1893,10 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // market-side. nulls allowed when no signal row exists.
   const sigForSide =
     input.modelSide !== null
-      ? input.signals.find(
+      ? effectiveSignals.find(
           (s) => s.market_type === dbMarket && s.side === input.modelSide
         ) ?? null
-      : input.signals.find((s) => s.market_type === dbMarket) ?? null;
+      : effectiveSignals.find((s) => s.market_type === dbMarket) ?? null;
 
   const marketFairProb = sigForSide?.pinnacle_fair_probability ?? null;
   const pinnacleEvPct = sigForSide?.ev_pct ?? null;
@@ -1937,7 +1965,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const marketContext = deriveMarketContext(
     input.market,
     input.modelSide,
-    input.signals,
+    effectiveSignals,
     input.linesCurrent,
     lineOpen,
     input.sportSpecific,
@@ -2023,7 +2051,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const publicSplits = buildPublicSplits({
     market: input.market,
     dbMarket,
-    signals: input.signals,
+    signals: effectiveSignals,
     homeAbbr: input.homeAbbr,
     awayAbbr: input.awayAbbr,
     totalsLine: input.totalsExtras?.sportsbookLine ?? null,
@@ -3119,6 +3147,12 @@ export async function GET(request: Request) {
       // it when the live lookup whiffs on a locked row.
       lockedOpenOddsAmerican: number | null;
       lockedOpenerRecordedAt: string | null;
+      // 2026-06-11 P7-Commit-F — frozen sharp_signals array from the
+      // locked snapshot. signal_rows_at_lock is per-game (same array
+      // copied into every market's snapshot), so any locked row's
+      // value works. Null pre-lock or when the snapshot didn't carry
+      // an array — live `input.signals` then stays primary.
+      lockedSignalRowsAtLock: SignalRow[] | null;
     }
   >();
   if (gameIds.length > 0) {
@@ -3387,12 +3421,14 @@ export async function GET(request: Request) {
       // at write time). Used by buildMarketEdge below when the live
       // sportsbook-keyed lookup returns null on a locked row.
       const lm = (r.snapshot_json as { line_movement?: { open_odds_american?: number | null; opener_recorded_at?: string | null } } | null)?.line_movement;
+      const sigsAtLock = (r.snapshot_json as { signal_rows_at_lock?: unknown[] } | null)?.signal_rows_at_lock;
       lockedPlayGradeByGameMarket.set(`${r.game_id}::${r.market}`, {
         playGrade: r.play_grade,
         noBet: r.no_bet,
         bestAngle: r.best_angle,
         lockedOpenOddsAmerican: lm?.open_odds_american ?? null,
         lockedOpenerRecordedAt: lm?.opener_recorded_at ?? null,
+        lockedSignalRowsAtLock: Array.isArray(sigsAtLock) ? (sigsAtLock as SignalRow[]) : null,
       });
     }
 
@@ -3449,6 +3485,7 @@ export async function GET(request: Request) {
         // so the live live opener lookup stays primary for pre-lock cards.
         lockedOpenOddsAmerican: null,
         lockedOpenerRecordedAt: null,
+        lockedSignalRowsAtLock: null,
       });
     }
     // (a) totalLineByGame override (6B.17 behavior preserved)
