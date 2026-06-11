@@ -1077,6 +1077,41 @@ function buildFiRecord(
   const noBetReasonValue = isTossUp
     ? "non-actionable: locked pill was Toss-Up"
     : null;
+
+  // P7-Commit-B (2026-06-11) — FI play_grade persistence going forward.
+  //
+  // Before this change FI rows always wrote play_grade=null, so the Daily
+  // Edge card could render a "Lean" pill (via marketVerdictFor Rule 5)
+  // that was never captured in prediction_records. Tracking's Lean bucket
+  // silently dropped those FI Leans because its filter is
+  // `play_grade === "lean"`.
+  //
+  // Fix: mirror the card's Rule 5 in the writer. Rule 5 says
+  // `confidence >= LEAN_CONFIDENCE_FLOOR (0.58)` → "lean". For FI, the
+  // route divides nrfi_confidence by 100 before calling marketVerdictFor,
+  // so 58 on the 0–100 scale = 0.58 in marketVerdictFor's space. Match it
+  // exactly so the writer never disagrees with the displayed pill.
+  //
+  // Scope (explicit per operator directive):
+  //   • Toss-Up / no_bet → keep play_grade=null (already handled above
+  //     via isTossUp + noBetValue; never reach the lean check)
+  //   • held → returns earlier (line 1032); no record written
+  //   • best_angle stays false unless / until a separate FI Best Angle
+  //     policy is approved (none today)
+  //   • Watchlist / No Play continue to write play_grade=null — only
+  //     "lean" gains explicit persistence in this change
+  //
+  // No tracking UI is changed. No historical FI rows are backfilled. The
+  // Best Angles section still reads `best_angle === true` and remains
+  // empty for FI by design.
+  const FI_LEAN_CONFIDENCE_FLOOR_PCT = 58;
+  const fiPlayGrade: string | null =
+    !isTossUp &&
+    typeof pred.nrfi_confidence === "number" &&
+    pred.nrfi_confidence >= FI_LEAN_CONFIDENCE_FLOOR_PCT
+      ? "lean"
+      : null;
+
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -1100,7 +1135,7 @@ function buildFiRecord(
     market_probability: null,
     edge: null,
     expected_value: null,
-    play_grade: null,
+    play_grade: fiPlayGrade,
     prediction_type: predictionTypeValue,
     best_angle: false,
     no_bet: noBetValue,

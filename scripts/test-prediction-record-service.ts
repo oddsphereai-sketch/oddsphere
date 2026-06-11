@@ -747,6 +747,154 @@ console.log("\n━━━ Phase 6B.28 — Daily Edge lock substrate ━━━");
         (sp.predicted_scores_at_lock as any)?.home === 4.2);
 }
 
+// ── P7-Commit-B — FI play_grade persistence going forward ──────────
+console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━━");
+{
+  // Actionable FI with confidence ≥ 58 must persist play_grade='lean',
+  // matching what marketVerdictFor Rule 5 would render on the card.
+  const fiLean = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 58,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "nrfi",
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fiLean]]),
+    abbrevByTeamId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  check("FI conf=58 → play_grade='lean'", fi.play_grade === "lean");
+  check("FI conf=58 → best_angle stays false (no FI BA policy)", fi.best_angle === false);
+  check("FI conf=58 → no_bet stays false", fi.no_bet === false);
+}
+{
+  // Confidence just below threshold (57) must NOT persist lean.
+  const fiBelow = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 57,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "nrfi",
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fiBelow]]),
+    abbrevByTeamId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  check("FI conf=57 (below floor) → play_grade=null", fi.play_grade === null);
+}
+{
+  // High-confidence FI well above the floor.
+  const fiHigh = {
+    ...basePrediction,
+    predicted_nrfi: false,
+    nrfi_confidence: 65,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "yrfi",
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fiHigh]]),
+    abbrevByTeamId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  check("FI conf=65 (YRFI) → play_grade='lean'", fi.play_grade === "lean");
+  check("FI conf=65 → best_angle still false (FI BA policy not approved)", fi.best_angle === false);
+}
+{
+  // Toss-Up FI (canonical) must NOT persist lean even if confidence
+  // somehow clears the floor — Toss-Up always wins.
+  const fiTossUp = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 60, // above floor, but Toss-Up overrides
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "toss_up",
+      auto_factors: { nrfi_expected_runs: 1.0 },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fiTossUp]]),
+    abbrevByTeamId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  check("Toss-Up FI → play_grade=null even at conf=60", fi.play_grade === null);
+  check("Toss-Up FI → no_bet=true preserved", fi.no_bet === true);
+  check("Toss-Up FI → prediction_type='toss_up' preserved", fi.prediction_type === "toss_up");
+}
+{
+  // FI held (nrfi in hold_picks) returns no record — already covered by
+  // the early held-return branch. Sanity check that a held FI never
+  // emits any row at all, so play_grade can't appear via this path.
+  const fiHeld = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 60,
+    sport_specific: { ...v21SportSpecific, hold_picks: ["nrfi"] },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fiHeld]]),
+    abbrevByTeamId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning");
+  check("FI held → no record emitted (so no spurious play_grade)", fi === undefined);
+}
+{
+  // ML / Total unchanged — make sure adding FI persistence didn't
+  // ripple into the other markets' play_grade derivation.
+  const baseFiLean = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 58,
+    sport_specific: { ...v21SportSpecific, hold_picks: [] },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, baseFiLean]]),
+    abbrevByTeamId,
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  const ou = recs.find((r) => r.market === "total")!;
+  check("ML play_grade unchanged by FI persistence change",
+        ml.play_grade === "lean" /* from v21 fixture: ml_play_grade='lean' */);
+  check("Total play_grade unchanged by FI persistence change",
+        ou.play_grade === "best_angle" /* from v21 fixture: ou_play_grade='best_angle' */);
+}
+
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
 if (fail > 0) {
