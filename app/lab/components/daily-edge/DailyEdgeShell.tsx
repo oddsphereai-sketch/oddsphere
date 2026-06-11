@@ -963,15 +963,20 @@ function SportIcon({ sport, size = 18, active }: { sport: Sport; size?: number; 
  * concerns + no remote asset fetches).
  */
 export function SportRail({ sport }: { sport: Sport }) {
-  // Member-facing live sports: MLB + NBA. The other leagues stay as
-  // "Coming Soon" placeholders until each model ships.
+  // WC-4 — soccer renders here as "World Cup" (live). UCL is a separate
+  // sport entry, intentionally distinct so future UCL rows never collide
+  // with WC on the same tab. Internal sport key for soccer stays
+  // `soccer` (matches the WC-3 TrackedSport contract); the
+  // member-facing label is "World Cup".
   const ROW: Array<{ key: Sport; label: string; live: boolean }> = [
     { key: "mlb", label: "MLB", live: true },
     { key: "nba", label: "NBA", live: true },
     { key: "nhl", label: "NHL", live: true },
+    { key: "soccer", label: "World Cup", live: true },
     { key: "nfl", label: "NFL", live: false },
     { key: "cfb", label: "CFB", live: false },
     { key: "cbb", label: "CBB", live: false },
+    { key: "ucl", label: "UCL", live: false },
   ];
   // Clickable nav: use useSportSelection so live tabs swap the URL's
   // ?sport= param and the parent page re-renders with the new sport.
