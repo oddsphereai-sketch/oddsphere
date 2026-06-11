@@ -2976,6 +2976,39 @@ export async function GET(request: Request) {
     }
   }
 
+  // WC-4 Phase D — soccer (FIFA World Cup) branch. Reads soccer
+  // prediction_records + games and shapes them into the MLB-style
+  // DailyEdgeResponse. Read-only — DB writes happen via the
+  // operator/cron writer (writeSoccerPredictionRecords). Member-facing
+  // label is "World Cup"; internal sport key stays `soccer`.
+  if (sport === "soccer") {
+    try {
+      const { buildSoccerDailyEdgeAdapted } = await import(
+        "@/lib/services/soccer/buildSoccerDailyEdgeAdapted"
+      );
+      const adapted = await buildSoccerDailyEdgeAdapted(requestedDate);
+      return Response.json(adapted, {
+        headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120" },
+      });
+    } catch (e) {
+      const body: DailyEdgeResponse = {
+        as_of: new Date().toISOString(),
+        sport,
+        date: requestedDate,
+        requested_date: requestedDate,
+        fallback_used: false,
+        slateState: "no_data",
+        slate_status: null,
+        last_slate_update_at: null,
+        games: [],
+      };
+      console.warn(`soccer daily-edge: pipeline error: ${(e as Error).message}`);
+      return Response.json(body, {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+  }
+
   // Non-live sports return empty — UI's ComingSoonState handles the message.
   if (!LIVE_SPORTS.includes(sport)) {
     const body: DailyEdgeResponse = {
