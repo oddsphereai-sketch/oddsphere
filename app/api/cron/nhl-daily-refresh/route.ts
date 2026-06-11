@@ -40,8 +40,24 @@ import { cronHandler } from "@/lib/cron/runCron";
 import { currentSlateDate } from "@/lib/dates/slateDate";
 import { seedNhlGames } from "@/lib/services/nhl/seedNhlGamesService";
 import { refreshNhlLines } from "@/lib/services/nhl/refreshNhlLinesService";
+import { writeNhlPredictionRecords } from "@/lib/services/nhl/buildNhlPredictionRecords";
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
+const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
+
+/**
+ * Returns the MoneyPuck-style season start-year for a given UTC date.
+ * NHL season runs roughly October–June. October onward → that year.
+ * January–September → previous calendar year.
+ *
+ * For 2026-06-11 → 2025 (the 2025-26 season). Matches the value the
+ * operator scripts pass via --season.
+ */
+function nhlSeasonStartYearFromDate(date: Date = new Date()): number {
+  const m = date.getUTCMonth(); // 0-11
+  const y = date.getUTCFullYear();
+  return m >= 9 ? y : y - 1;
+}
 
 export async function GET(request: Request): Promise<Response> {
   return cronHandler(
@@ -115,11 +131,80 @@ export async function GET(request: Request): Promise<Response> {
       };
       if (linesResult.errors.length > 0) partial = true;
 
+      // Step 3 — write prediction_records for tonight's NHL slate.
+      //
+      // Two-key gate: NHL_PREDICTIONS_DB_WRITES_ENABLED=true must be set
+      // in env, same gate as the operator script. When unset, this step
+      // is a no-op so the existing seed+lines behavior is unchanged.
+      //
+      // Goalie selection: default to "default_most_playoff_gp" (most
+      // postseason GP per team). Operator-script manual overrides
+      // (--home-goalie / --away-goalie) are not exposed via cron; the
+      // operator script remains for one-off corrections.
+      //
+      // Season derivation: NHL season is start-year (e.g. 2025 for the
+      // 2025-26 season). Oct-Dec maps to current year, Jan-Sep to prior.
+      let predictionsResult:
+        | {
+            mode: "dry-run" | "write" | "no-games" | "disabled";
+            gamesProcessed: number;
+            recordsCreated: number;
+            recordsSkippedLocked: number;
+            recordsSkippedPass: number;
+            errors: string[];
+          }
+        | undefined;
+      if (process.env[NHL_PREDS_ENV] !== "true") {
+        predictionsResult = {
+          mode: "disabled",
+          gamesProcessed: 0,
+          recordsCreated: 0,
+          recordsSkippedLocked: 0,
+          recordsSkippedPass: 0,
+          errors: [],
+        };
+      } else {
+        console.log(`[nhl-daily-refresh] step=predictions  slateDate=${slateDate}`);
+        try {
+          const season = nhlSeasonStartYearFromDate(new Date());
+          const wp = await writeNhlPredictionRecords({
+            slateDate,
+            season,
+            apply: true,
+            goalieSource: "default_most_playoff_gp",
+            logger: stepLog("predictions"),
+          });
+          predictionsResult = {
+            mode: wp.mode,
+            gamesProcessed: wp.gamesProcessed,
+            recordsCreated: wp.recordsCreated,
+            recordsSkippedLocked: wp.recordsSkippedLocked,
+            recordsSkippedPass: wp.recordsSkippedPass,
+            errors: wp.errors,
+          };
+          if (wp.errors.length > 0) partial = true;
+        } catch (e) {
+          // Never let the prediction-write step take down the daily
+          // refresh. seed + lines already succeeded; surface as partial.
+          partial = true;
+          predictionsResult = {
+            mode: "write",
+            gamesProcessed: 0,
+            recordsCreated: 0,
+            recordsSkippedLocked: 0,
+            recordsSkippedPass: 0,
+            errors: [e instanceof Error ? e.message : String(e)],
+          };
+        }
+      }
+      stepDetails.predictions = predictionsResult;
+
       const recordsUpdated =
         seedResult.teamsUpserted +
         seedResult.gamesUpserted +
         linesResult.linesWritten +
-        linesResult.lineHistoryWritten;
+        linesResult.lineHistoryWritten +
+        (predictionsResult.recordsCreated ?? 0);
 
       return {
         records_updated: recordsUpdated,
