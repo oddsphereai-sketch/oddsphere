@@ -1859,11 +1859,21 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // doesn't exist in line_history, so locked markets correctly fall to
   // null here. Carrying the lock's underlying sportsbook to re-enable
   // post-lock line-move display is a separate writer change, not B3.
+  // Prefer the opener at the SAME book as the current price (cleanest
+  // open→current comparison). 2026-06-12 line-move hardening: if that book
+  // has no stored opener on this side, fall back to the oldest opener on
+  // the SAME side at any book rather than showing "unavailable" — the
+  // candidates are pre-filtered to this (game, market, side) and sorted
+  // oldest→newest, so [0] is the earliest available opener. A genuine
+  // opener that merely lives at a different book is better than no line
+  // move at all.
   const lineOpen: LineHistoryRow | null =
     priceRow !== null
       ? (input.lineOpenCandidates.find(
           (c) => c.sportsbook === priceRow.sportsbook,
-        ) ?? null)
+        ) ??
+        input.lineOpenCandidates[0] ??
+        null)
       : null;
   const liveOpenAmerican: number | null = lineOpen?.odds_american ?? null;
   // 2026-06-11 P7-Commit-E — locked-row opener fallback. The live
@@ -3746,17 +3756,43 @@ export async function GET(request: Request) {
     // 4.1.10 — per-game-market first-seen line price for `lineOpenAmerican`.
     // Per Daniel's direction (4.1.9.B section 10): use MIN(recorded_at) as
     // the "first seen" since linesService hardcodes is_opener=false.
-    const { data: histData, error: histErr } = await supabase
-      .from("line_history")
-      .select("game_id, market_type, sportsbook, side, line_value, odds_american, recorded_at")
-      .in("game_id", gameIds)
-      .in("market_type", ["moneyline", "total", "first_inning_total"])
-      .is("player_id", null)
-      .order("recorded_at", { ascending: true });
-    if (histErr) {
-      return Response.json({ error: histErr.message }, { status: 500 });
+    //
+    // 2026-06-12 line-move fix — paginate to defeat PostgREST's 1000-row
+    // cap. A busy slate's line_history exceeds 1000 rows (books × markets ×
+    // timestamps); a single capped fetch ordered ascending silently kept
+    // only the 1000 OLDEST rows and starved openers for whichever (game,
+    // market) recorded later — non-deterministically nulling
+    // lineOpenAmerican and showing "Line Move unavailable" on cards whose
+    // opener really exists. Page through (recorded_at, id) ascending so the
+    // per-key map below still sees the true oldest row for every key.
+    const HIST_PAGE = 1000;
+    const histData: LineHistoryRow[] = [];
+    for (let from = 0; ; from += HIST_PAGE) {
+      const { data: page, error: histErr } = await supabase
+        .from("line_history")
+        .select("game_id, market_type, sportsbook, side, line_value, odds_american, recorded_at")
+        .in("game_id", gameIds)
+        .in("market_type", ["moneyline", "total", "first_inning_total"])
+        .is("player_id", null)
+        .order("recorded_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, from + HIST_PAGE - 1);
+      if (histErr) {
+        return Response.json({ error: histErr.message }, { status: 500 });
+      }
+      const rows = (page ?? []) as LineHistoryRow[];
+      histData.push(...rows);
+      if (rows.length < HIST_PAGE) break;
+      // Safety bound (no silent cap): line_history for a single slate
+      // should never approach 100k rows. Log and stop if it does.
+      if (from / HIST_PAGE >= 100) {
+        console.warn(
+          `daily-edge line_history pagination hit 100-page bound (${histData.length} rows); openers may be incomplete`,
+        );
+        break;
+      }
     }
-    for (const row of (histData ?? []) as LineHistoryRow[]) {
+    for (const row of histData) {
       // R-19 Phase 5i Fix A — key by (game_id, market_type, side). Pre-5i
       // the key omitted side, so when line_history had rows for BOTH sides
       // of a market (which is normal — every two-sided market does), only
