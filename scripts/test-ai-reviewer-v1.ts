@@ -334,6 +334,111 @@ async function main() {
     );
   }
 
+  section("Starter stats fallback — usable proxy, ML NOT held (P1A 2026-06-12)");
+  {
+    // MIA/PIT-style case: home starter player-row link missing
+    // (starter_id null) but the model has usable starter ERA via a
+    // fallback/proxy (e.g., team-season aggregate). The reviewer should
+    // NOT emit `missing_starter` and should NOT null the ML pick;
+    // instead it emits the non-blocking `starter_stats_fallback` marker.
+    const out = reviewGamePrediction(
+      baseline({
+        starters: {
+          home_starter_id: 100,
+          home_starter_era: 4.0,
+          home_starter_gs: 12,
+          home_starter_ip: 75,
+          away_starter_id: null,
+          away_starter_era: 3.28, // fallback / proxy populated
+          away_starter_gs: null,
+          away_starter_ip: null,
+        },
+      })
+    );
+    check(
+      "[P1A] starter_stats_fallback flag fires",
+      out.review_flags.includes("starter_stats_fallback")
+    );
+    check(
+      "[P1A] missing_starter flag does NOT fire when fallback stats available",
+      !out.review_flags.includes("missing_starter")
+    );
+    check(
+      "[P1A] ml_action stays keep (no hold)",
+      out.ml_action !== "hold"
+    );
+    check(
+      "[P1A] predicted_ml_winner preserved (NOT nulled)",
+      out.predicted_ml_winner !== null
+    );
+    check(
+      "[P1A] ml_confidence preserved (NOT nulled)",
+      out.ml_confidence !== null
+    );
+  }
+
+  section("Both sides starter stats fallback — single flag, ML still proceeds");
+  {
+    const out = reviewGamePrediction(
+      baseline({
+        starters: {
+          home_starter_id: null,
+          home_starter_era: 3.5,
+          home_starter_gs: null,
+          home_starter_ip: null,
+          away_starter_id: null,
+          away_starter_era: 4.1,
+          away_starter_gs: null,
+          away_starter_ip: null,
+        },
+      })
+    );
+    check(
+      "[P1A] starter_stats_fallback fires when both sides use proxy",
+      out.review_flags.includes("starter_stats_fallback")
+    );
+    check(
+      "[P1A] no missing_starter even with both sides id-null",
+      !out.review_flags.includes("missing_starter")
+    );
+    check(
+      "[P1A] both-sides fallback does not hold ML",
+      out.ml_action !== "hold" && out.predicted_ml_winner !== null
+    );
+  }
+
+  section("Truly missing starter — both id AND era null → still holds ML");
+  {
+    // Confirm the original missing_starter behavior is unchanged when
+    // there is no usable signal at all (no id-link AND no fallback ERA).
+    const out = reviewGamePrediction(
+      baseline({
+        starters: {
+          home_starter_id: 100,
+          home_starter_era: 4.0,
+          home_starter_gs: 12,
+          home_starter_ip: 75,
+          away_starter_id: null,
+          away_starter_era: null,
+          away_starter_gs: null,
+          away_starter_ip: null,
+        },
+      })
+    );
+    check(
+      "[P1A] missing_starter still fires when neither id nor era available",
+      out.review_flags.includes("missing_starter")
+    );
+    check(
+      "[P1A] starter_stats_fallback NOT emitted in truly-missing case",
+      !out.review_flags.includes("starter_stats_fallback")
+    );
+    check(
+      "[P1A] truly-missing case still holds ML",
+      out.ml_action === "hold" && out.predicted_ml_winner === null
+    );
+  }
+
   section("Missing market line — OU held");
   {
     const out = reviewGamePrediction(

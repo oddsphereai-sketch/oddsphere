@@ -1618,6 +1618,12 @@ function ConfidenceVsMarketStrip({
         return "bullpen data fallback";
       case "missing_starter":
         return "missing starter";
+      case "starter_stats_fallback":
+        // P1A 2026-06-12 — non-blocking marker for "starter player-row link
+        // absent but stats usable via fallback/proxy". The model produced
+        // a valid prediction; no scary card badge needed. Internal audit
+        // trail still carries the flag.
+        return null;
       case "missing_market_line":
         return "missing market line";
       case "review_recommends_caution":

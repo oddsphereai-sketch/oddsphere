@@ -17,6 +17,7 @@
 
 import { supabase } from "../db/supabase";
 import { getOddsProvider, getSharpSignalProvider } from "../providers/factory";
+import { mergePublicSplitsCarryForward } from "./publicSplitsCarryForward";
 import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
 import { loadGameIdMap, loadPlayerIdMap } from "./_idMaps";
@@ -705,21 +706,24 @@ export const linesService = {
       // is preserved via computed_at (new) — we are not claiming the
       // money% is fresh, only that it represents the latest known
       // value for that side.
-      let publicMoney = s.public_money_pct;
-      let publicBetting = s.public_betting_pct;
-      const prior = priorPublicSplits.get(`${gameId}::${s.market_type}::${s.side}`);
-      if (prior !== undefined) {
-        let carried = false;
-        if (publicMoney === null && prior.public_money_pct !== null) {
-          publicMoney = prior.public_money_pct;
-          carried = true;
-        }
-        if (publicBetting === null && prior.public_betting_pct !== null) {
-          publicBetting = prior.public_betting_pct;
-          carried = true;
-        }
-        if (carried) publicSplitsCarriedForward++;
-      }
+      //
+      // P1B 2026-06-12 — extracted to pure helper `mergePublicSplitsCarryForward`
+      // so the carry-forward + independence contract has unit-test
+      // coverage. The helper is the single source of truth for:
+      //   • bet% and money% are MERGED INDEPENDENTLY (one being null
+      //     never wipes the other);
+      //   • a non-null new value overrides prior;
+      //   • a null new value falls back to prior when prior had value;
+      //   • neither side is FABRICATED — when both new and prior are
+      //     null, the persisted column stays null.
+      const merged = mergePublicSplitsCarryForward(
+        s.public_betting_pct,
+        s.public_money_pct,
+        priorPublicSplits.get(`${gameId}::${s.market_type}::${s.side}`),
+      );
+      const publicBetting = merged.betting;
+      const publicMoney = merged.money;
+      if (merged.carried) publicSplitsCarriedForward++;
 
       payload.push({
         game_id: gameId,

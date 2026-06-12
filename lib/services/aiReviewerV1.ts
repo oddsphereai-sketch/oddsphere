@@ -124,6 +124,7 @@ export type ReviewFlag =
   | "huge_model_market_gap"
   | "ou_sharp_conflict"
   | "missing_starter"
+  | "starter_stats_fallback"
   | "missing_market_line"
   | "bullpen_fallback"
   | "public_smoke_aligned_with_pick"
@@ -318,17 +319,76 @@ export function reviewGamePrediction(input: ReviewerInput): ReviewedOutput {
   }
 
   // ── ML decision: hold then cap ─────────────────────────────────
-  const missingHomeStarter = input.starters.home_starter_id === null;
-  const missingAwayStarter = input.starters.away_starter_id === null;
-  if (missingHomeStarter || missingAwayStarter) {
+  //
+  // 2026-06-12 P1A: starter status is a TWO-DIMENSIONAL check. Both
+  // sides need to be USABLE by the model, not necessarily LINKED to a
+  // players-row identifier. The two dimensions:
+  //
+  //   (a) id-link:  starter_id !== null → the snapshot resolved the
+  //                 starter to an internal players row (or sentinel
+  //                 `1` for an external_id-only row per the wiring).
+  //   (b) usable:   starter_era !== null → either the real starter's
+  //                 season ERA is available, OR a fallback/proxy (team-
+  //                 season aggregate, league average) populated it. In
+  //                 either case the model has a usable starter signal.
+  //
+  // Three outcomes:
+  //
+  //   • TRULY MISSING (id null AND era null) — the model literally
+  //     has no starter signal, even via proxy. Hold ML hard. This is
+  //     the original missing_starter behavior and remains a real
+  //     caution.
+  //
+  //   • STATS-FALLBACK (id null BUT era populated) — at write time the
+  //     snapshot didn't have a player-row, but a fallback proxy gave
+  //     the model usable ERA + handedness. The prediction is still
+  //     trustworthy at the starter-feature level. Emit
+  //     `starter_stats_fallback` as an internal data-quality marker
+  //     and let ML proceed. This is the most common case for newly-
+  //     announced or unlinked starters.
+  //
+  //   • FULLY LINKED (id present) — no flag, ML proceeds.
+  //
+  // The card-side friendly-flag map (DailyEdgeShell.tsx) returns null
+  // for `starter_stats_fallback`, so users do not see a scary "missing
+  // starter" badge when the model successfully predicted via proxy.
+  // True missing_starter still surfaces and still holds ML.
+  const homeHasId = input.starters.home_starter_id !== null;
+  const awayHasId = input.starters.away_starter_id !== null;
+  const homeHasStats = input.starters.home_starter_era !== null;
+  const awayHasStats = input.starters.away_starter_era !== null;
+  const homeUsable = homeHasId || homeHasStats;
+  const awayUsable = awayHasId || awayHasStats;
+  if (!homeUsable || !awayUsable) {
+    // Truly missing — no id-link AND no fallback stats available.
     flags.push("missing_starter");
+    const missingSide =
+      !homeUsable && !awayUsable
+        ? "home and away"
+        : !homeUsable
+          ? "home"
+          : "away";
     reasons.push(
-      `Missing starter (${missingHomeStarter ? "home" : ""}${missingHomeStarter && missingAwayStarter ? " and " : ""}${missingAwayStarter ? "away" : ""}) — hold the ML market.`
+      `Missing starter (${missingSide}) — no usable starter signal, hold the ML market.`
     );
     mlWinner = null;
     mlConfidence = null;
     mlAction = "hold";
-  } else {
+  } else if (!homeHasId || !awayHasId) {
+    // Usable via proxy/fallback stats but the player-row link is absent.
+    // Non-blocking data-quality marker; do NOT null ML.
+    flags.push("starter_stats_fallback");
+    const fallbackSide =
+      !homeHasId && !awayHasId
+        ? "home and away"
+        : !homeHasId
+          ? "home"
+          : "away";
+    reasons.push(
+      `Starter player-link unavailable (${fallbackSide}) — model used fallback/proxy stats. Prediction proceeds; flag is informational.`
+    );
+  }
+  if (homeUsable && awayUsable) {
     // Count strong fragility flags
     const strongFlagsHit = flags.filter((f) => STRONG_FRAGILITY_FLAGS.has(f)).length;
     if (
