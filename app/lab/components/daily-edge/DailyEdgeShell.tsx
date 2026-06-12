@@ -1720,34 +1720,213 @@ function SoccerWdlBars({
   probs,
   awayAbbr,
   homeAbbr,
+  market,
+  edge,
+  note,
 }: {
   probs: { home: number; draw: number; away: number };
   awayAbbr: string;
   homeAbbr: string;
+  /** No-vig market three-way prices when available — adds a market row. */
+  market?: { home: number; draw: number; away: number } | null;
+  /** Edge per side in pp when market data is present. */
+  edge?: { home: number; draw: number; away: number } | null;
+  /** Honest 1-line note replacing the generic "splits aren't reported" copy. */
+  note?: string | null;
 }) {
   const fmt = (p: number): string => `${Math.round(p * 100)}%`;
+  const fmtEdge = (e: number): string => `${e >= 0 ? "+" : ""}${e.toFixed(1)}`;
+  const edgeColor = (e: number): string =>
+    e >= 1.5 ? "text-emerald-300" : e <= -1.5 ? "text-rose-300" : "text-gray-400";
   return (
     <div className="space-y-1.5">
       <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">
-        Match Result · Model Probability
+        Match Result · Model vs. Market
       </p>
       <div className="grid grid-cols-3 gap-1.5 text-[10.5px] tabular-nums">
         <div className="flex flex-col items-center gap-0.5 rounded-md bg-white/[0.03] border border-white/5 px-2 py-1.5">
           <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 font-bold">{awayAbbr}</span>
           <span className="text-gray-200 font-semibold">{fmt(probs.away)}</span>
+          {market !== undefined && market !== null ? (
+            <span className="text-[9px] text-gray-500">mkt {fmt(market.away)}</span>
+          ) : null}
+          {edge !== undefined && edge !== null ? (
+            <span className={`text-[9px] font-semibold ${edgeColor(edge.away)}`}>{fmtEdge(edge.away)}pp</span>
+          ) : null}
         </div>
         <div className="flex flex-col items-center gap-0.5 rounded-md bg-white/[0.03] border border-white/5 px-2 py-1.5">
           <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 font-bold">Draw</span>
           <span className="text-gray-200 font-semibold">{fmt(probs.draw)}</span>
+          {market !== undefined && market !== null ? (
+            <span className="text-[9px] text-gray-500">mkt {fmt(market.draw)}</span>
+          ) : null}
+          {edge !== undefined && edge !== null ? (
+            <span className={`text-[9px] font-semibold ${edgeColor(edge.draw)}`}>{fmtEdge(edge.draw)}pp</span>
+          ) : null}
         </div>
         <div className="flex flex-col items-center gap-0.5 rounded-md bg-white/[0.03] border border-white/5 px-2 py-1.5">
           <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 font-bold">{homeAbbr}</span>
           <span className="text-gray-200 font-semibold">{fmt(probs.home)}</span>
+          {market !== undefined && market !== null ? (
+            <span className="text-[9px] text-gray-500">mkt {fmt(market.home)}</span>
+          ) : null}
+          {edge !== undefined && edge !== null ? (
+            <span className={`text-[9px] font-semibold ${edgeColor(edge.home)}`}>{fmtEdge(edge.home)}pp</span>
+          ) : null}
         </div>
       </div>
       <p className="text-[10px] text-gray-500 leading-snug">
-        Public splits aren&rsquo;t reported for World Cup at this stage — model probabilities shown.
+        {note ?? "Public splits aren't reported for World Cup at this stage — model probabilities shown."}
       </p>
+    </div>
+  );
+}
+
+/**
+ * WC reader full-completion pass (2026-06-12) — BTTS reader block.
+ * Lives on the moneyline slot in the soccer card (no dedicated BTTS
+ * tab in the shell). Shows displayed-side, model vs. market when
+ * available, edge, and an honest scoring-context line derived from λ.
+ */
+function SoccerBttsContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerBttsContext"]> }) {
+  const fmtPct = (p: number): string => `${(p * 100).toFixed(0)}%`;
+  const fmtEdge = (e: number): string => `${e >= 0 ? "+" : ""}${e.toFixed(1)}pp`;
+  const sideLabel = ctx.displayed_side === "yes" ? "BTTS Yes" : "BTTS No";
+  const modelPct = ctx.displayed_side === "yes" ? ctx.yes_p : ctx.no_p;
+  const marketPct =
+    ctx.market_yes === null
+      ? null
+      : ctx.displayed_side === "yes"
+        ? ctx.market_yes
+        : 1 - ctx.market_yes;
+  return (
+    <div className="mt-2 space-y-1.5 border-t border-white/5 pt-2">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">
+        BTTS · Both Teams To Score
+      </p>
+      <div className="flex items-baseline justify-between text-[10.5px] tabular-nums">
+        <span className="text-gray-400">{sideLabel}</span>
+        <span className="text-gray-200 font-semibold">{fmtPct(modelPct)}</span>
+      </div>
+      {marketPct !== null ? (
+        <div className="flex items-baseline justify-between text-[10px] tabular-nums">
+          <span className="text-gray-500">Market</span>
+          <span className="text-gray-400">{fmtPct(marketPct)}</span>
+        </div>
+      ) : null}
+      {ctx.edge_pp !== null ? (
+        <div className="flex items-baseline justify-between text-[10px] tabular-nums">
+          <span className="text-gray-500">Edge</span>
+          <span className="text-gray-300 font-semibold">{fmtEdge(ctx.edge_pp)}</span>
+        </div>
+      ) : null}
+      <p className="text-[10px] text-gray-500 leading-snug">{ctx.scoring_context}</p>
+      <p className="text-[10px] text-gray-400 leading-snug">{ctx.note}</p>
+    </div>
+  );
+}
+
+/**
+ * WC reader full-completion pass (2026-06-12) — Total reader block.
+ * Shows projected goals (λ_H + λ_A) vs. line, model over/under
+ * probabilities, edge for the displayed side, and an honest
+ * reconciliation note. When TOTAL_LINES_DIVERGE is firing the note
+ * surfaces it instead of inventing a directional read.
+ */
+function SoccerTotalContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerTotalContext"]> }) {
+  const fmtPct = (p: number): string => `${(p * 100).toFixed(0)}%`;
+  const fmtEdge = (e: number): string => `${e >= 0 ? "+" : ""}${e.toFixed(1)}pp`;
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">
+        Total · Projection vs. Line
+      </p>
+      <div className="grid grid-cols-2 gap-1.5 text-[10.5px] tabular-nums">
+        <div className="flex flex-col items-center gap-0.5 rounded-md bg-white/[0.03] border border-white/5 px-2 py-1.5">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 font-bold">Projected</span>
+          <span className="text-gray-200 font-semibold">{ctx.projected_total.toFixed(2)}</span>
+        </div>
+        <div className="flex flex-col items-center gap-0.5 rounded-md bg-white/[0.03] border border-white/5 px-2 py-1.5">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 font-bold">Line</span>
+          <span className="text-gray-200 font-semibold">{ctx.line.toFixed(2)}</span>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5 text-[10px] tabular-nums">
+        <div className="flex justify-between rounded-md border border-white/5 bg-white/[0.02] px-2 py-1">
+          <span className="text-gray-500">Over</span>
+          <span className="text-gray-300">{fmtPct(ctx.over_p)}</span>
+        </div>
+        <div className="flex justify-between rounded-md border border-white/5 bg-white/[0.02] px-2 py-1">
+          <span className="text-gray-500">Under</span>
+          <span className="text-gray-300">{fmtPct(ctx.under_p)}</span>
+        </div>
+      </div>
+      {ctx.edge_pp !== null ? (
+        <div className="flex items-baseline justify-between text-[10px] tabular-nums">
+          <span className="text-gray-500">Edge ({ctx.displayed_side.toUpperCase()})</span>
+          <span className="text-gray-300 font-semibold">{fmtEdge(ctx.edge_pp)}</span>
+        </div>
+      ) : null}
+      {ctx.provider_divergence ? (
+        <p className="text-[10px] text-amber-300/80 leading-snug">
+          Books disagree on the main total — total held for divergence.
+        </p>
+      ) : null}
+      <p className="text-[10px] text-gray-400 leading-snug">{ctx.note}</p>
+    </div>
+  );
+}
+
+/**
+ * WC reader full-completion pass (2026-06-12) — Double Chance reader
+ * block. Displays which two outcomes the DC side covers, model
+ * coverage probability, market coverage when available, edge, and a
+ * compact preview of the other two DC sides.
+ */
+function SoccerDcContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerDoubleChanceContext"]> }) {
+  const fmtPct = (p: number): string => `${(p * 100).toFixed(0)}%`;
+  const fmtEdge = (e: number): string => `${e >= 0 ? "+" : ""}${e.toFixed(1)}pp`;
+  const dcLabel = (s: string): string =>
+    s === "home_or_draw" ? "Home or Draw" : s === "away_or_draw" ? "Away or Draw" : "Home or Away";
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">
+        Double Chance · {dcLabel(ctx.displayed_side)}
+      </p>
+      <p className="text-[10.5px] text-gray-300 leading-snug">{ctx.side_explanation}</p>
+      <div className="grid grid-cols-2 gap-1.5 text-[10.5px] tabular-nums">
+        <div className="flex flex-col items-center gap-0.5 rounded-md bg-white/[0.03] border border-white/5 px-2 py-1.5">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 font-bold">Model</span>
+          <span className="text-gray-200 font-semibold">{fmtPct(ctx.model_coverage)}</span>
+        </div>
+        <div className="flex flex-col items-center gap-0.5 rounded-md bg-white/[0.03] border border-white/5 px-2 py-1.5">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 font-bold">Market</span>
+          <span className="text-gray-200 font-semibold">
+            {ctx.market_coverage !== null ? fmtPct(ctx.market_coverage) : "—"}
+          </span>
+        </div>
+      </div>
+      {ctx.edge_pp !== null ? (
+        <div className="flex items-baseline justify-between text-[10px] tabular-nums">
+          <span className="text-gray-500">Edge</span>
+          <span className="text-gray-300 font-semibold">{fmtEdge(ctx.edge_pp)}</span>
+        </div>
+      ) : null}
+      {ctx.other_sides.length > 0 ? (
+        <div className="space-y-0.5 pt-1">
+          <p className="text-[9px] uppercase tracking-[0.14em] text-gray-500/70 font-bold">Other DC Sides</p>
+          {ctx.other_sides.map((o) => (
+            <div key={o.side} className="flex justify-between text-[10px] tabular-nums text-gray-500">
+              <span>{dcLabel(o.side)}</span>
+              <span>
+                {fmtPct(o.model)}
+                {o.market !== null ? ` · mkt ${fmtPct(o.market)}` : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <p className="text-[10px] text-gray-400 leading-snug">{ctx.note}</p>
     </div>
   );
 }
@@ -1772,6 +1951,8 @@ function MarketPulse({
   // probabilities. This replaces the sparse "splits unavailable"
   // placeholder for soccer ML rows.
   const wdlProbs = marketData.matchResultThreeWayProbs ?? null;
+  const mrCtx = marketData.soccerMatchResultContext ?? null;
+  const bttsCtx = marketData.soccerBttsContext ?? null;
   if (
     (shellSport === "soccer" || shellSport === "ucl") &&
     market === "moneyline" &&
@@ -1779,12 +1960,38 @@ function MarketPulse({
     game !== undefined
   ) {
     return (
-      <SoccerWdlBars
-        probs={wdlProbs}
-        awayAbbr={game.awayTeam}
-        homeAbbr={game.homeTeam}
-      />
+      <div className="space-y-2">
+        <SoccerWdlBars
+          probs={wdlProbs}
+          awayAbbr={game.awayTeam}
+          homeAbbr={game.homeTeam}
+          market={mrCtx?.market ?? null}
+          edge={mrCtx?.edge_pp ?? null}
+          note={mrCtx?.note ?? null}
+        />
+        {bttsCtx !== null ? <SoccerBttsContext ctx={bttsCtx} /> : null}
+      </div>
     );
+  }
+  // WC reader full-completion pass (2026-06-12) — soccer Total reader.
+  const totalCtx = marketData.soccerTotalContext ?? null;
+  if (
+    (shellSport === "soccer" || shellSport === "ucl") &&
+    market === "total" &&
+    totalCtx !== null
+  ) {
+    return <SoccerTotalContext ctx={totalCtx} />;
+  }
+  // WC reader full-completion pass (2026-06-12) — soccer Double Chance
+  // reader. Lives on the first_inning slot per the soccer adapter
+  // mapping.
+  const dcCtx = marketData.soccerDoubleChanceContext ?? null;
+  if (
+    (shellSport === "soccer" || shellSport === "ucl") &&
+    market === "first_inning" &&
+    dcCtx !== null
+  ) {
+    return <SoccerDcContext ctx={dcCtx} />;
   }
   // First-inning never uses split copy — V1 SharpAPI tier does not cover
   // first-inning public splits. Phrase as provider-coverage, not failure.

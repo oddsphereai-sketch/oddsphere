@@ -29,6 +29,10 @@ import { buildMarketProbabilityBundle, computeEdges, selectBestValueSidePerMarke
 import { deriveSoccerGrade, type SoccerGradeDecision } from "./soccerConfidenceGrade";
 import { deriveHold, type HoldDecision } from "./soccerHoldLogic";
 import { buildSoccerSnapshot, type SoccerPredictionSnapshot } from "./soccerSnapshotBuilder";
+import {
+  reconcileSoccerTotal,
+  type SoccerTotalReconciliation,
+} from "./soccerTotalProjectionReconciliation";
 import type { EloPriorTable } from "./eloPrior";
 import type { NormalizedSoccerOddsRecord } from "@/lib/providers/real_api/_soccerMarketNormalizer";
 import type { NormalizedBdlMatch } from "@/lib/providers/real_api/BallDontLieFifaProvider";
@@ -296,13 +300,90 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
     // only fire on the non-hold branch and never elevate a grade.
     const softCapsFromHold = hold.hold === false ? hold.soft_caps ?? [] : [];
 
+    // ─── WC totals: projection / side reconciliation ─────────────────
+    //
+    // 2026-06-12 — direct port of the MLB v1 contract (see
+    // lib/services/soccer/soccerTotalProjectionReconciliation.ts).
+    // Holistic weighted vote across mean / probability / value /
+    // market-pressure decides the customer-facing side. V1 market
+    // pressure is null because WC sharp_signals are empty_as_of_probe.
+    // When the holistic vote disagrees with mean direction the side
+    // reverts to mean direction and the grade caps to no_play (the
+    // coherence guard).
+    //
+    // For totals where reconciled side differs from best.selection
+    // (the model's argmax-prob pick), we substitute the reconciled
+    // side into the snapshot pick + look up its edge row so the
+    // grade derivation sees the reconciled side's probability and
+    // edge, not the original argmax side's.
+    let totalReconciliation: SoccerTotalReconciliation | null = null;
+    let bestForGrading = best;
+    let edgePpForGrading = edge_pp;
+    let softCapsCombined = softCapsFromHold;
+    if (market === "total") {
+      const overRow = edges.find((e) => e.market === "total" && e.selection === "over");
+      const underRow = edges.find((e) => e.market === "total" && e.selection === "under");
+      // Dixon-Coles raw P(over) at canonical line — pulled from the
+      // marketProbs (model layer), NOT the edge row's model_p which is
+      // already side-specific.
+      const rawProbabilityOver = marketProbs.total.over;
+      // No-vig market P(over). The edge bundle's devig has these per
+      // selection key; we read off the canonical line.
+      const marketImpliedOver = bundle.devig[`total|over|${totalLine}`] ?? null;
+      totalReconciliation = reconcileSoccerTotal({
+        rawProjectedAwayGoals: lambdaAway,
+        rawProjectedHomeGoals: lambdaHome,
+        rawProjectedTotal: expectedTotal,
+        marketTotal: totalLine,
+        rawProbabilityOver,
+        marketImpliedOver,
+        // V1: market_pressure is null — WC sharp_signals are
+        // empty_as_of_probe per project-wc-launch-contract.
+        marketPressureSide: null,
+        // Lock state — same convention as MLB. The snapshot writer
+        // exposes locked_at; in V1 we treat the row as unlocked at
+        // model-run time because the orchestrator runs pre-lock.
+        // The pregame-sweep lock invariant is enforced at persistence
+        // time by the writer (it skips locked side/total fields).
+        isLocked: false,
+        lockedReconciliation: null,
+      });
+      // Substitute the reconciled side's edge row so the grade
+      // derivation operates on the displayed side's statistics.
+      const reconciledRow = totalReconciliation.reconciled_total_side === "over" ? overRow : underRow;
+      if (reconciledRow !== undefined) {
+        bestForGrading = reconciledRow;
+        edgePpForGrading = reconciledRow.edge_pp;
+      }
+      // Translate reconciliation grade_cap into a soft cap so the
+      // grade ladder is correctly clamped. The reconciler's "no_play"
+      // is the strongest soft cap available in the WC grade ladder
+      // (we map no_play → Caution; the verdict layer + confidence
+      // floor surface the No Play state when conviction is below the
+      // playable floor).
+      if (hold.hold === false && totalReconciliation.grade_cap !== null) {
+        const cap_at = totalReconciliation.grade_cap === "watchlist" ? "Watchlist" : "Caution";
+        softCapsCombined = [
+          ...softCapsFromHold,
+          {
+            code: `total_projection_reconciliation_${totalReconciliation.grade_cap}`,
+            cap_at,
+            reason:
+              `Totals reconciliation cap: ${totalReconciliation.side_selection_reason}. ` +
+              `displayed_side=${totalReconciliation.displayed_total_side}; ` +
+              `reconciled_confidence=${totalReconciliation.reconciled_confidence_pct}%.`,
+          },
+        ];
+      }
+    }
+
     const lambdaMin = Math.min(lambdaHome, lambdaAway);
     const grade = deriveSoccerGrade({
       market,
-      selection: best.selection,
-      model_p: best.model_p,
-      edge_pp,
-      model_market_agreement: best.model_market_agreement,
+      selection: bestForGrading.selection,
+      model_p: bestForGrading.model_p,
+      edge_pp: edgePpForGrading,
+      model_market_agreement: bestForGrading.model_market_agreement,
       ctx: {
         calibration_evidence_level: EXTERNAL_PRIORS_V1.calibration_evidence_level,
         market_supports_pick: false, // EV substrate not consulted at launch
@@ -356,11 +437,14 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
       modelSide,
       valueSide: valueSide ?? null,
       meanDirectionSide,
+      totalReconciliation,
     });
 
+    // For totals: the customer-facing pick is the reconciled side.
+    // For all other markets: bestForGrading === best (unchanged).
     perMarket.push({
       market,
-      pick: best.selection,
+      pick: bestForGrading.selection,
       line: market === "total" ? totalLine : null,
       grade,
       hold,

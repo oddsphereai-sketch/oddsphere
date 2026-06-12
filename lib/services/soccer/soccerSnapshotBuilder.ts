@@ -15,6 +15,7 @@ import type {
 } from "./soccerMarketProbabilities";
 import type { SoccerGradeDecision, ConfidenceReduction } from "./soccerConfidenceGrade";
 import type { HoldDecision } from "./soccerHoldLogic";
+import type { SoccerTotalReconciliation } from "./soccerTotalProjectionReconciliation";
 import type { ReconciliationKind } from "@/lib/providers/real_api/_soccerReconciler";
 import type { SoccerSplitsStatus } from "@/lib/providers/real_api/SharpApiSoccerOddsProvider";
 import type { NormalizedSoccerOddsRecord } from "@/lib/providers/real_api/_soccerMarketNormalizer";
@@ -115,6 +116,15 @@ export type SoccerPredictionSnapshot = {
     side_selection_reason: "agreement" | "model_only" | "disagree_keep_model";
     mean_direction_side: "over" | "under" | null;
     side_disagree_flags: ReadonlyArray<string>;
+    /**
+     * 2026-06-12 — WC totals projection / side reconciliation blob.
+     * Present ONLY on the `total` market row. NULL on Match Result /
+     * Double Chance / BTTS rows (those markets don't have a
+     * projection-vs-line coherence invariant). Same shape as the MLB
+     * blob — see
+     * lib/services/soccer/soccerTotalProjectionReconciliation.ts.
+     */
+    total_projection_reconciliation: SoccerTotalReconciliation | null;
   };
 };
 
@@ -173,6 +183,13 @@ export type BuildSnapshotInput = {
   modelSide: string;
   valueSide: string | null;
   meanDirectionSide: "over" | "under" | null;
+  /**
+   * 2026-06-12 — totals reconciliation blob from the orchestrator
+   * (null for Match Result / DC / BTTS rows). When present on a
+   * totals row, drives the `displayed_side` and is persisted into
+   * the decision substructure.
+   */
+  totalReconciliation: SoccerTotalReconciliation | null;
 };
 
 export function buildSoccerSnapshot(input: BuildSnapshotInput): SoccerPredictionSnapshot {
@@ -209,6 +226,7 @@ export function buildSoccerSnapshot(input: BuildSnapshotInput): SoccerPrediction
     modelSide,
     valueSide,
     meanDirectionSide,
+    totalReconciliation,
   } = input;
 
   const bdlCount = oddsRows.filter((r) => r.provider === "bdl").length;
@@ -298,10 +316,13 @@ export function buildSoccerSnapshot(input: BuildSnapshotInput): SoccerPrediction
       uses_split_derived_claim: false,
       model_side: modelSide,
       value_side: valueSide,
-      displayed_side: displayedSide,
+      displayed_side: totalReconciliation !== null
+        ? totalReconciliation.displayed_total_side
+        : displayedSide,
       side_selection_reason: sideSelectionReason,
       mean_direction_side: meanDirectionSide,
       side_disagree_flags: sideDisagreeFlags,
+      total_projection_reconciliation: totalReconciliation,
     },
   };
 }
