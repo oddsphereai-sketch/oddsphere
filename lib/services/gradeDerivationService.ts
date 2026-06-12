@@ -197,11 +197,32 @@ const GRADE_RANK_FOR_CAP: Record<Grade, number> = {
 };
 
 /**
- * Translate a side-reconciliation cap into the maximum-allowed framework
- * grade. The clamp is one-directional: it cannot ELEVATE a grade. A row
- * already at sharp_conflict stays at sharp_conflict even when the cap is
- * "watchlist" (because sharp_conflict is the stronger user-facing signal,
- * per GRADE_RANK_FOR_CAP).
+ * Translate a side-reconciliation cap into the framework grade the row
+ * MUST display when the cap is set.
+ *
+ * 2026-06-12 — corrected behavior. Previous version implemented a
+ * "downgrade-only" clamp keyed on GRADE_RANK_FOR_CAP, which silently
+ * left low-rank framework grades alone. That produced the MIA@PIT
+ * defect: reconciliation set `grade_cap = "caution"` but the framework
+ * had already produced `market_watch`, so the row stayed on
+ * market_watch → Watchlist verdict instead of surfacing as Caution.
+ *
+ * Corrected behavior:
+ *   • `cap = "no_play"` → grade = `sharp_conflict` (per-market card
+ *     displays Caution; verdict-level no_play depends on the global
+ *     confidence-floor path in verdictDerivation).
+ *   • `cap = "caution"` → grade = `sharp_conflict` (Caution).
+ *   • `cap = "watchlist"` → grade = `market_watch` (Watchlist), UNLESS
+ *     the framework already produced `sharp_conflict` (Caution). A
+ *     "watchlist" cap is a CEILING that should never SOFTEN a stronger
+ *     warning state; if the framework signals Caution, that stronger
+ *     warning persists.
+ *   • `cap = null/undefined` → unchanged.
+ *
+ * The cap was set by the side-reconciliation module based on signal-
+ * disagreement evidence — it is a deliberate display decision, not a
+ * passive upper bound. Surface the warning; don't get clever about
+ * "already low enough."
  */
 function clampGradeWithCap(out: GradeOutput, cap: GradeInput["totalGradeCap"]): GradeOutput {
   if (cap === null || cap === undefined) return out;
@@ -215,9 +236,15 @@ function clampGradeWithCap(out: GradeOutput, cap: GradeInput["totalGradeCap"]): 
       capGrade = "market_watch";
       break;
   }
-  // One-way clamp: only downgrade. sharp_conflict (rank 1) stays above
-  // market_watch (rank 0).
-  if (GRADE_RANK_FOR_CAP[out.grade] <= GRADE_RANK_FOR_CAP[capGrade]) return out;
+  // Never soften an existing stronger warning. The only "soften" case
+  // is cap="watchlist" against an existing sharp_conflict — Caution is
+  // a stronger user warning than Watchlist; keep Caution.
+  if (out.grade === "sharp_conflict" && capGrade === "market_watch") return out;
+  // Otherwise the cap drives the displayed grade. The framework grade
+  // is overridden in both directions: a strong-positive framework
+  // grade gets downgraded to the cap; a weak framework grade
+  // (market_watch / public_smoke) gets ESCALATED to the cap's warning
+  // state when the cap is "caution" / "no_play".
   return { grade: capGrade, signal_type: out.signal_type };
 }
 
