@@ -242,3 +242,30 @@ export function selectBestModelPicksPerMarket(edges: ReadonlyArray<EdgeRow>): Ed
   }
   return out;
 }
+
+/**
+ * WC-MODEL-2 (2026-06-12) — value-side selector. Returns one row per
+ * market with the highest edge_pp among that market's selections. Used
+ * alongside `selectBestModelPicksPerMarket` so the orchestrator can
+ * detect (model_side, value_side) disagreement and downgrade the grade
+ * without changing the customer-facing pick.
+ *
+ * Rows with edge_pp === null (no market data for that selection) are
+ * skipped. If no row in the market has a non-null edge, that market
+ * is absent from the output.
+ */
+export function selectBestValueSidePerMarket(edges: ReadonlyArray<EdgeRow>): EdgeRow[] {
+  const byMarket = new Map<string, EdgeRow[]>();
+  for (const e of edges) {
+    if (e.edge_pp === null) continue;
+    const arr = byMarket.get(e.market) ?? [];
+    arr.push(e);
+    byMarket.set(e.market, arr);
+  }
+  const out: EdgeRow[] = [];
+  for (const arr of byMarket.values()) {
+    arr.sort((x, y) => (y.edge_pp ?? Number.NEGATIVE_INFINITY) - (x.edge_pp ?? Number.NEGATIVE_INFINITY));
+    out.push(arr[0]);
+  }
+  return out;
+}

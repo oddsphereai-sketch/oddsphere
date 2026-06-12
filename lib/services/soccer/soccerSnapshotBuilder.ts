@@ -86,6 +86,35 @@ export type SoccerPredictionSnapshot = {
     market_data_changed_pick: boolean;
     market_data_was_display_only: boolean;
     uses_split_derived_claim: boolean;
+    /**
+     * WC-MODEL-2/3 (2026-06-12) — side-policy provenance.
+     *
+     *   model_side:    argmax(model_probability) within the market.
+     *                  Equals `pick` in production today (the customer
+     *                  pick is the model side per the approved policy).
+     *   value_side:    argmax(edge_pp) within the market. null when no
+     *                  selection in the market has a non-null edge.
+     *   displayed_side: the side actually rendered in the card. Equals
+     *                  model_side under the Option-1 policy ("do not
+     *                  publish disagreement as an actionable pick" —
+     *                  disagreement clamps the grade, never the pick).
+     *   side_selection_reason: short stable code describing why the
+     *                  displayed_side equals model_side; "agreement"
+     *                  when model_side == value_side, "model_only"
+     *                  when value_side is null, and
+     *                  "disagree_keep_model" when they differ.
+     *   mean_direction_side: for totals only — the direction implied by
+     *                  E[total]=λ_H+λ_A vs. the listed line. null for
+     *                  non-totals and for totals when E[total] == line.
+     *   side_disagree_flags: stable codes carried alongside the soft
+     *                  caps for auditor + UI reads.
+     */
+    model_side: string;
+    value_side: string | null;
+    displayed_side: string;
+    side_selection_reason: "agreement" | "model_only" | "disagree_keep_model";
+    mean_direction_side: "over" | "under" | null;
+    side_disagree_flags: ReadonlyArray<string>;
   };
 };
 
@@ -134,6 +163,16 @@ export type BuildSnapshotInput = {
   lockedAt: string;
   /** Total line used. */
   totalLine: number;
+  /**
+   * WC-MODEL-2/3 (2026-06-12) — side-policy provenance carried from
+   * the orchestrator. See the SoccerPredictionSnapshot.decision doc
+   * comment for definitions. modelSide always set. valueSide null
+   * when no row in the market has a non-null edge. meanDirectionSide
+   * null for non-totals and for totals when E[total] equals the line.
+   */
+  modelSide: string;
+  valueSide: string | null;
+  meanDirectionSide: "over" | "under" | null;
 };
 
 export function buildSoccerSnapshot(input: BuildSnapshotInput): SoccerPredictionSnapshot {
@@ -167,6 +206,9 @@ export function buildSoccerSnapshot(input: BuildSnapshotInput): SoccerPrediction
     modelVersion,
     lockedAt,
     totalLine,
+    modelSide,
+    valueSide,
+    meanDirectionSide,
   } = input;
 
   const bdlCount = oddsRows.filter((r) => r.provider === "bdl").length;
@@ -175,6 +217,32 @@ export function buildSoccerSnapshot(input: BuildSnapshotInput): SoccerPrediction
 
   const noBet = holdDecision.hold;
   const noBetReason = holdDecision.hold ? `${holdDecision.code}: ${holdDecision.reason}` : null;
+
+  // WC-MODEL-2 (2026-06-12) — derive side-selection reason.
+  //   • value_side === null   → "model_only" (no edge data for any selection)
+  //   • model_side == value_side → "agreement"
+  //   • otherwise             → "disagree_keep_model"  (Option-1 policy)
+  // The displayed_side ALWAYS equals model_side under the Option-1
+  // contract: disagreement is reflected in the grade ladder (soft cap
+  // to Watchlist) rather than by swapping the pick.
+  const sideSelectionReason: "agreement" | "model_only" | "disagree_keep_model" =
+    valueSide === null ? "model_only" : valueSide === modelSide ? "agreement" : "disagree_keep_model";
+  const displayedSide = modelSide;
+  const sideDisagreeFlags: string[] = [];
+  if (holdDecision.hold === false && holdDecision.soft_caps !== undefined) {
+    for (const cap of holdDecision.soft_caps) {
+      if (
+        cap.code === "model_value_side_disagree" ||
+        cap.code === "model_side_negative_edge" ||
+        cap.code === "total_mean_probability_split"
+      ) {
+        sideDisagreeFlags.push(cap.code);
+      }
+    }
+  }
+  if (holdDecision.hold === true && holdDecision.code === "TOTAL_DIRECTION_CONFLICT") {
+    sideDisagreeFlags.push("total_direction_conflict_hold");
+  }
 
   return {
     model_version: modelVersion,
@@ -228,6 +296,12 @@ export function buildSoccerSnapshot(input: BuildSnapshotInput): SoccerPrediction
       market_data_changed_pick: false,
       market_data_was_display_only: !gradeDecision.model_market_agreement,
       uses_split_derived_claim: false,
+      model_side: modelSide,
+      value_side: valueSide,
+      displayed_side: displayedSide,
+      side_selection_reason: sideSelectionReason,
+      mean_direction_side: meanDirectionSide,
+      side_disagree_flags: sideDisagreeFlags,
     },
   };
 }

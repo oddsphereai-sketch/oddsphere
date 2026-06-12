@@ -42,8 +42,17 @@ import type { SoccerSplitsStatus } from "@/lib/providers/real_api/SharpApiSoccer
 export type SoftCap = {
   /** Stable code; surfaced to the auditor + card metadata. */
   code: string;
-  /** Maximum grade allowed after applying this cap. */
-  cap_at: "Watchlist" | "Lean";
+  /**
+   * Maximum grade allowed after applying this cap. NEVER elevates.
+   *
+   * WC-MODEL-2 (2026-06-12): "Caution" was added to support the
+   * "model probability and value-edge disagree on side" downgrade.
+   * When the selector picks the model_side but the market says
+   * value is on the OTHER side, we still publish (so users see
+   * the model's read), but the grade clamps to Caution / Watchlist
+   * so it never looks like an actionable Lean.
+   */
+  cap_at: "Caution" | "Watchlist" | "Lean";
   /** Human-readable reason. */
   reason: string;
 };
@@ -85,6 +94,27 @@ export type HoldInputContext = {
   calibration_evidence_level: typeof EXTERNAL_PRIORS_V1.calibration_evidence_level | string;
   /** Operator-set gate: WC-3c initial publish allows total + BTTS only. */
   pre_calibration_publish_whitelist: ReadonlyArray<HoldInputContext["market"]>;
+  /**
+   * WC-MODEL-2/3 (2026-06-12) — side policy inputs.
+   *
+   * The selector writes the model_side (highest model probability). The
+   * value_side is the side with the highest +edge vs the market. When
+   * those differ, the row should NOT publish as an actionable Lean even
+   * if the edge passes the ladder threshold.
+   *
+   * For totals, the mean_direction_side is the direction implied by
+   * `expected_total = λ_home + λ_away` relative to the listed line.
+   * For low-λ Dixon-Coles fits, the mean and the probability median can
+   * diverge — this is mathematically correct, not a bug, but it produces
+   * a confusing "Projected 2.6, Pick Under" optical contradiction. The
+   * direction guard catches it and surfaces TOTAL_MEAN_PROBABILITY_SPLIT.
+   *
+   * All three fields are optional for backward compatibility — old call
+   * sites that don't pass them retain the pre-WC-MODEL-2/3 behavior.
+   */
+  model_side?: string;
+  value_side?: string;
+  mean_direction_side?: "over" | "under" | null;
 };
 
 export function deriveHold(ctx: HoldInputContext): HoldDecision {
@@ -133,10 +163,100 @@ export function deriveHold(ctx: HoldInputContext): HoldDecision {
     }
   }
 
+  // 11 (WC-MODEL-3 2026-06-12). TOTAL_DIRECTION_CONFLICT — hard hold.
+  //
+  // When the totals selected side (model_side, P>0.5 side) disagrees with
+  // BOTH the value side AND the mean direction implied by expected_total,
+  // and the edge is small, the row is too directionally noisy to publish
+  // as an actionable pick. Hold rather than ship contradictory signals.
+  //
+  // Threshold derivation: 2.0 pp of |edge_pp| is small enough that the
+  // value layer's signal is statistically inseparable from the de-vig
+  // noise band. Above that, we still surface the row but clamp the
+  // grade ladder via the soft caps below.
+  if (
+    ctx.market === "total" &&
+    ctx.model_side !== undefined &&
+    ctx.value_side !== undefined &&
+    ctx.mean_direction_side !== undefined &&
+    ctx.mean_direction_side !== null
+  ) {
+    const meanVsModel = ctx.mean_direction_side !== ctx.model_side;
+    const modelVsValue = ctx.value_side !== ctx.model_side;
+    const smallEdge = ctx.edge_pp !== null && Math.abs(ctx.edge_pp) < 2.0;
+    if (meanVsModel && modelVsValue && smallEdge) {
+      return {
+        hold: true,
+        code: "TOTAL_DIRECTION_CONFLICT",
+        reason:
+          `Selected ${ctx.model_side} but mean direction is ${ctx.mean_direction_side} ` +
+          `and value side is ${ctx.value_side} with small edge (${ctx.edge_pp?.toFixed(2)} pp) — directional conflict hold`,
+      };
+    }
+  }
+
   // No true blockers above — collect any SOFT CAPS that should clamp
   // the grade ladder downstream. The market still publishes.
 
   const softCaps: SoftCap[] = [];
+
+  // 12 (WC-MODEL-2 2026-06-12). MODEL_VALUE_SIDE_DISAGREE — soft cap
+  //    at Watchlist. The model picks side A (highest probability) but the
+  //    market-edge layer says side B has better value. We still publish
+  //    the model's read so users see the model's opinion, but it must
+  //    not display as an actionable Lean/Best Angle. The disagreement
+  //    is informational and is preserved in audit metadata.
+  if (
+    ctx.model_side !== undefined &&
+    ctx.value_side !== undefined &&
+    ctx.model_side !== ctx.value_side
+  ) {
+    softCaps.push({
+      code: "model_value_side_disagree",
+      cap_at: "Watchlist",
+      reason:
+        `Model probability favors ${ctx.model_side} but value side is ${ctx.value_side} — ` +
+        `directionally mixed signal, grade capped at Watchlist`,
+    });
+  }
+
+  // 13 (WC-MODEL-2 2026-06-12). MODEL_SIDE_NEGATIVE_EDGE — soft cap at
+  //    Caution. When the model's selected side has any negative edge vs.
+  //    the de-vigged market (i.e., the market thinks the model is on the
+  //    "wrong" side, even by a small margin), the row is not actionable
+  //    even though the existing MODEL_WRONG_SIDE_OF_MARKET hold (floor at
+  //    -5 pp) didn't fire.
+  if (ctx.edge_pp !== null && ctx.edge_pp < 0) {
+    softCaps.push({
+      code: "model_side_negative_edge",
+      cap_at: "Caution",
+      reason:
+        `Selected side has negative edge ${ctx.edge_pp.toFixed(2)} pp vs market — ` +
+        `not actionable as a recommendation`,
+    });
+  }
+
+  // 14 (WC-MODEL-3 2026-06-12). TOTAL_MEAN_PROBABILITY_SPLIT — soft cap
+  //    at Watchlist. The Dixon-Coles joint at low λ is right-skewed, so
+  //    E[total] can sit above the line while P(Under) > P(Over). This
+  //    is mathematically correct, not a bug, but it produces an "expected
+  //    2.6, pick Under" optical contradiction. Mark it so the audit
+  //    trail and the card display can speak to it.
+  if (
+    ctx.market === "total" &&
+    ctx.model_side !== undefined &&
+    ctx.mean_direction_side !== undefined &&
+    ctx.mean_direction_side !== null &&
+    ctx.mean_direction_side !== ctx.model_side
+  ) {
+    softCaps.push({
+      code: "total_mean_probability_split",
+      cap_at: "Watchlist",
+      reason:
+        `E[total] direction (${ctx.mean_direction_side}) differs from probability direction ` +
+        `(${ctx.model_side}) — distribution skew, not a bug; grade capped at Watchlist`,
+    });
+  }
 
   // 8 (formerly hard hold). Far-from-market AND no calibration upgrade
   //    → soft cap at "Lean". Confidence reduction is still applied

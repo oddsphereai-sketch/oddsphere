@@ -25,7 +25,7 @@
 import { EXTERNAL_PRIORS_V1 } from "./_externalPriorsV1";
 import { computeLambda, bivariatePoissonScoreDistribution, expectedTotalFromDistribution } from "./dixonColes";
 import { deriveSoccerMarketProbabilities, type SoccerMarketProbabilities } from "./soccerMarketProbabilities";
-import { buildMarketProbabilityBundle, computeEdges, type EdgeRow } from "./soccerMarketComparison";
+import { buildMarketProbabilityBundle, computeEdges, selectBestValueSidePerMarket, type EdgeRow } from "./soccerMarketComparison";
 import { deriveSoccerGrade, type SoccerGradeDecision } from "./soccerConfidenceGrade";
 import { deriveHold, type HoldDecision } from "./soccerHoldLogic";
 import { buildSoccerSnapshot, type SoccerPredictionSnapshot } from "./soccerSnapshotBuilder";
@@ -185,12 +185,36 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
     isStaleByTimestamp(new Date(sharpNewest).toISOString(), lockedAt, bothStaleSecs);
 
   // Diverging total lines between providers.
+  //
+  // WC-MODEL-4 (2026-06-12) — interim fix to the previous comparator.
+  //
+  // The original implementation compared `Math.max(...bdlTotalLines)`
+  // against `Math.max(...sharpTotalLines)`. For books that publish an
+  // alt-totals ladder (e.g. 2.5 / 3.0 / 3.5), the max captures the
+  // alt-ladder tail rather than the main line. A book with only 2.5
+  // and a book with 2.5, 3.0, 3.5 would have looked divergent (3.5
+  // vs 2.5 → diverge=true) even though both books' MAIN total is 2.5.
+  //
+  // Interim fix below: compare the MEDIAN of distinct lines per
+  // provider instead of the max. Median is robust to the alt-ladder
+  // tail because adding lines at either end pulls the median less.
+  //
+  // The full main-line picker (per-book main line, closest to
+  // balanced -110/-110 pricing) is scoped as a follow-up PR — see
+  // expert's WC-MODEL-4 specification: prefer pair closest to
+  // balanced no-vig, prefer most common line across books, compare
+  // median main line per provider.
   const bdlTotalLines = new Set(bdlRows.filter((r) => r.market === "total" && r.line !== null).map((r) => r.line as number));
   const sharpTotalLines = new Set(sharpRows.filter((r) => r.market === "total" && r.line !== null).map((r) => r.line as number));
+  function medianOf(values: ReadonlyArray<number>): number {
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  }
   const totalLinesDiverge = bdlTotalLines.size > 0 && sharpTotalLines.size > 0 && (() => {
-    const bdlMax = Math.max(...bdlTotalLines);
-    const sharpMax = Math.max(...sharpTotalLines);
-    return Math.abs(bdlMax - sharpMax) >= 1.0;
+    const bdlMed = medianOf([...bdlTotalLines]);
+    const sharpMed = medianOf([...sharpTotalLines]);
+    return Math.abs(bdlMed - sharpMed) >= 1.0;
   })();
 
   // ─── 6. Per-market decisions ─────────────────────────────────────
@@ -198,6 +222,17 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
   for (const e of edges) {
     const existing = argmaxPickByMarket.get(e.market);
     if (existing === undefined || e.model_p > existing.model_p) argmaxPickByMarket.set(e.market, e);
+  }
+  // WC-MODEL-2 (2026-06-12) — compute value side per market alongside
+  // the existing model side. The value side is argmax(edge_pp) per
+  // market, skipping rows with null edge. This does NOT change the
+  // displayed pick (which remains the model_side). It is used in the
+  // hold-logic to detect (model_side, value_side) disagreement and
+  // clamp the grade ladder. Customer-facing rule (Daniel, 2026-06-12):
+  // "Do not publish disagreement as an actionable pick."
+  const valueSideByMarket = new Map<string, EdgeRow>();
+  for (const row of selectBestValueSidePerMarket(edges)) {
+    valueSideByMarket.set(row.market, row);
   }
 
   const perMarket: SoccerFixtureModelOutput["perMarket"] = [];
@@ -214,6 +249,26 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
     const dcMarketImpliedP = bundle.implied[dcImpliedKey] ?? null;
     const isShortPriceDc = market === "double_chance" && dcMarketImpliedP !== null && dcMarketImpliedP > 0.82;
 
+    // WC-MODEL-2/3 (2026-06-12) — side policy inputs.
+    //
+    // model_side: argmax(model_probability) within market. Already in
+    //   `best.selection`, but we name it explicitly so the snapshot
+    //   reads cleanly.
+    // value_side: argmax(edge_pp) within market — pulled from the
+    //   precomputed valueSideByMarket map. Will be undefined when no
+    //   row in the market has a non-null edge (e.g. market odds
+    //   missing on every selection).
+    // mean_direction_side: only meaningful for totals. expected_total
+    //   = λ_home + λ_away; compare against the listed total line.
+    //   null when the totals are exactly at the line (vanishingly rare
+    //   in practice).
+    const modelSide = best.selection;
+    const valueSide = valueSideByMarket.get(market)?.selection;
+    const expectedTotal = lambdaHome + lambdaAway;
+    const meanDirectionSide: "over" | "under" | null = market === "total"
+      ? (expectedTotal > totalLine ? "over" : expectedTotal < totalLine ? "under" : null)
+      : null;
+
     const holdCtx = {
       market,
       market_odds_missing: marketOddsMissing,
@@ -225,13 +280,16 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
       splits_status: opts.splitsStatus.status,
       edge_pp,
       is_far_from_market_hard: edge_pp !== null && Math.abs(edge_pp) > EXTERNAL_PRIORS_V1.edge_thresholds.far_from_market_hard_hold,
-      predicted_total: lambdaHome + lambdaAway,
+      predicted_total: expectedTotal,
       listed_total_line: market === "total" ? totalLine : null,
       lambda_home: lambdaHome,
       lambda_away: lambdaAway,
       joint,
       calibration_evidence_level: EXTERNAL_PRIORS_V1.calibration_evidence_level,
       pre_calibration_publish_whitelist: preCalibrationWhitelist,
+      model_side: modelSide,
+      value_side: valueSide,
+      mean_direction_side: meanDirectionSide,
     } as const;
     const hold = deriveHold(holdCtx);
     // Pass 2: soft caps from hold-logic clamp the grade ladder. They
@@ -295,6 +353,9 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
       modelVersion: SOCCER_MODEL_VERSION,
       lockedAt,
       totalLine,
+      modelSide,
+      valueSide: valueSide ?? null,
+      meanDirectionSide,
     });
 
     perMarket.push({
