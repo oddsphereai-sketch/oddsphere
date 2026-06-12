@@ -409,6 +409,85 @@ export type MarketEdgeDto = {
     /** 0..1 probability of the away team winning regulation. */
     away: number;
   } | null;
+
+  /**
+   * 2026-06-12 — WC Daily Edge full completion pass.
+   *
+   * Per-market "Market Context" reader content for soccer/WC. Each
+   * block is populated by `buildSoccerDailyEdgeAdapted` from existing
+   * Dixon-Coles + market-comparison fields in the snapshot. NEVER
+   * fabricated: any unavailable field is null. The reader hides a
+   * row or shows "—" when a field is null.
+   *
+   * Populated ONLY for soccer/ucl sport on the matching market slot:
+   *   • soccerMatchResultContext  → moneyline slot
+   *   • soccerDoubleChanceContext → first_inning slot (DC mapping)
+   *   • soccerTotalContext        → total slot
+   *   • soccerBttsContext         → moneyline slot (BTTS substitute
+   *                                   surfaces alongside Match Result
+   *                                   in the reader)
+   * MLB / NBA / NHL adapters NEVER set these fields.
+   */
+  soccerMatchResultContext?: {
+    /** Model probabilities (raw Dixon-Coles). All three must sum ≈ 1.0. */
+    model: { home: number; draw: number; away: number };
+    /** No-vig market-implied probabilities. null when market data missing. */
+    market: { home: number; draw: number; away: number } | null;
+    /** Edge in percentage points per side. null when market data missing. */
+    edge_pp: { home: number; draw: number; away: number } | null;
+    /** Side the displayed pick refers to ("home" | "draw" | "away"). */
+    displayed_side: "home" | "draw" | "away";
+    /** Honest 1-line agreement / disagreement summary copy. */
+    note: string;
+  } | null;
+
+  soccerDoubleChanceContext?: {
+    displayed_side: "home_or_draw" | "away_or_draw" | "home_or_away";
+    /** Model coverage probability for the displayed DC side. */
+    model_coverage: number;
+    /** No-vig market-implied probability for the displayed DC side. null when missing. */
+    market_coverage: number | null;
+    /** Edge in pp for displayed side. null when market data missing. */
+    edge_pp: number | null;
+    /** Plain-English explanation of what the displayed DC side covers. */
+    side_explanation: string;
+    /** Compact preview of the other two DC sides' model probabilities. */
+    other_sides: Array<{ side: string; model: number; market: number | null }>;
+    note: string;
+  } | null;
+
+  soccerTotalContext?: {
+    /** λ_home + λ_away. */
+    projected_total: number;
+    /** Market line at lock candidate. */
+    line: number;
+    /** Model probability of the over. */
+    over_p: number;
+    /** Model probability of the under. */
+    under_p: number;
+    /** Edge in pp for the displayed side. null when market data missing. */
+    edge_pp: number | null;
+    displayed_side: "over" | "under";
+    /** Honest 1-line note about reconciliation / divergence. */
+    note: string;
+    /** True when TOTAL_LINES_DIVERGE blocker is firing for this fixture. */
+    provider_divergence: boolean;
+  } | null;
+
+  soccerBttsContext?: {
+    /** Model probability of Yes. */
+    yes_p: number;
+    /** Model probability of No. */
+    no_p: number;
+    /** No-vig market-implied probability of Yes. null when missing. */
+    market_yes: number | null;
+    /** Edge in pp for the displayed side. null when market data missing. */
+    edge_pp: number | null;
+    displayed_side: "yes" | "no";
+    /** Scoring context line derived from λ_home / λ_away (e.g., projected goals). */
+    scoring_context: string;
+    note: string;
+  } | null;
 };
 
 /**

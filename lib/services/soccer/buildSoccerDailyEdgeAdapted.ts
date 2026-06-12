@@ -203,6 +203,329 @@ function extractMatchResultThreeWayProbs(
   };
 }
 
+/**
+ * 2026-06-12 — WC Daily Edge full completion pass.
+ *
+ * Read helpers for the four soccer "Market Context" reader blocks.
+ * Each helper pulls ONLY from the persisted snapshot — never invents
+ * numbers, never derives a market field when the source path is
+ * missing. The reader uses null to mean "show '—'" instead of zero.
+ */
+function getModelMatchResult(
+  snapshot: Record<string, unknown> | null,
+): { home: number; draw: number; away: number } | null {
+  return extractMatchResultThreeWayProbs(snapshot);
+}
+
+function getModelDoubleChance(
+  snapshot: Record<string, unknown> | null,
+): { home_or_draw: number; away_or_draw: number; home_or_away: number } | null {
+  if (snapshot === null) return null;
+  const model = (snapshot as { model?: unknown }).model;
+  if (model === null || typeof model !== "object") return null;
+  const raw = (model as { raw_probabilities?: unknown }).raw_probabilities;
+  if (raw === null || typeof raw !== "object") return null;
+  const dc = (raw as { double_chance?: unknown }).double_chance;
+  if (dc === null || typeof dc !== "object") return null;
+  const hd = (dc as { home_or_draw?: unknown }).home_or_draw;
+  const ad = (dc as { away_or_draw?: unknown }).away_or_draw;
+  const ha = (dc as { home_or_away?: unknown }).home_or_away;
+  if (typeof hd !== "number" || typeof ad !== "number" || typeof ha !== "number") return null;
+  return { home_or_draw: hd, away_or_draw: ad, home_or_away: ha };
+}
+
+function getModelTotalAtLine(
+  snapshot: Record<string, unknown> | null,
+): { line: number; over: number; under: number } | null {
+  if (snapshot === null) return null;
+  const model = (snapshot as { model?: unknown }).model;
+  if (model === null || typeof model !== "object") return null;
+  const raw = (model as { raw_probabilities?: unknown }).raw_probabilities;
+  if (raw === null || typeof raw !== "object") return null;
+  const t = (raw as { total_at_canonical?: unknown }).total_at_canonical;
+  if (t === null || typeof t !== "object") return null;
+  const line = (t as { line?: unknown }).line;
+  const over = (t as { over?: unknown }).over;
+  const under = (t as { under?: unknown }).under;
+  if (typeof line !== "number" || typeof over !== "number" || typeof under !== "number") return null;
+  return { line, over, under };
+}
+
+function getModelBtts(
+  snapshot: Record<string, unknown> | null,
+): { yes: number; no: number } | null {
+  if (snapshot === null) return null;
+  const model = (snapshot as { model?: unknown }).model;
+  if (model === null || typeof model !== "object") return null;
+  const raw = (model as { raw_probabilities?: unknown }).raw_probabilities;
+  if (raw === null || typeof raw !== "object") return null;
+  const b = (raw as { btts?: unknown }).btts;
+  if (b === null || typeof b !== "object") return null;
+  const yes = (b as { yes?: unknown }).yes;
+  const no = (b as { no?: unknown }).no;
+  if (typeof yes !== "number" || typeof no !== "number") return null;
+  return { yes, no };
+}
+
+function getModelLambdas(
+  snapshot: Record<string, unknown> | null,
+): { home: number; away: number; total: number } | null {
+  if (snapshot === null) return null;
+  const model = (snapshot as { model?: unknown }).model;
+  if (model === null || typeof model !== "object") return null;
+  const lh = (model as { lambda_home?: unknown }).lambda_home;
+  const la = (model as { lambda_away?: unknown }).lambda_away;
+  const et = (model as { expected_total?: unknown }).expected_total;
+  if (typeof lh !== "number" || typeof la !== "number") return null;
+  const total = typeof et === "number" ? et : lh + la;
+  return { home: lh, away: la, total };
+}
+
+function getMarketDevigByKey(
+  snapshot: Record<string, unknown> | null,
+  key: string,
+): number | null {
+  if (snapshot === null) return null;
+  const market = (snapshot as { market?: unknown }).market;
+  if (market === null || typeof market !== "object") return null;
+  const devig = (market as { devigged_probabilities?: unknown }).devigged_probabilities;
+  if (devig === null || typeof devig !== "object") return null;
+  const v = (devig as Record<string, unknown>)[key];
+  return typeof v === "number" ? v : null;
+}
+
+function getMarketEdgePpByKey(
+  snapshot: Record<string, unknown> | null,
+  key: string,
+): number | null {
+  if (snapshot === null) return null;
+  const market = (snapshot as { market?: unknown }).market;
+  if (market === null || typeof market !== "object") return null;
+  const edge = (market as { edge_pp?: unknown }).edge_pp;
+  if (edge === null || typeof edge !== "object") return null;
+  const v = (edge as Record<string, unknown>)[key];
+  return typeof v === "number" ? v : null;
+}
+
+function getDisplayedSide(snapshot: Record<string, unknown> | null): string | null {
+  if (snapshot === null) return null;
+  const d = (snapshot as { decision?: unknown }).decision;
+  if (d === null || typeof d !== "object") return null;
+  const ds = (d as { displayed_side?: unknown }).displayed_side;
+  return typeof ds === "string" ? ds : null;
+}
+
+function getTotalDivergenceHold(snapshot: Record<string, unknown> | null): boolean {
+  if (snapshot === null) return false;
+  const d = (snapshot as { decision?: unknown }).decision;
+  if (d === null || typeof d !== "object") return false;
+  const reason = (d as { no_bet_reason?: unknown }).no_bet_reason;
+  return typeof reason === "string" && reason.startsWith("TOTAL_LINES_DIVERGE");
+}
+
+function getTotalReconciliationSummary(snapshot: Record<string, unknown> | null): {
+  reason: string | null;
+  flipped: boolean;
+} {
+  if (snapshot === null) return { reason: null, flipped: false };
+  const d = (snapshot as { decision?: unknown }).decision;
+  if (d === null || typeof d !== "object") return { reason: null, flipped: false };
+  const tr = (d as { total_projection_reconciliation?: unknown }).total_projection_reconciliation;
+  if (tr === null || typeof tr !== "object") return { reason: null, flipped: false };
+  const reason = (tr as { side_selection_reason?: unknown }).side_selection_reason;
+  const mean = (tr as { mean_direction_side?: unknown }).mean_direction_side;
+  const reconciled = (tr as { reconciled_total_side?: unknown }).reconciled_total_side;
+  const flipped =
+    typeof mean === "string" && typeof reconciled === "string" && mean === reconciled
+      ? false
+      : typeof mean === "string" && typeof reconciled === "string" && mean !== reconciled
+        ? true
+        : false;
+  // mean_direction_side==reconciled_side → not flipped vs mean
+  // We define "flipped" relative to whichever raw side the holistic vote
+  // disagreed with; surface honestly so the reader copy can phrase it.
+  return {
+    reason: typeof reason === "string" ? reason : null,
+    flipped,
+  };
+}
+
+function roundPct(x: number, digits = 1): string {
+  return (x * 100).toFixed(digits);
+}
+
+function fmtEdgePp(x: number): string {
+  const v = x;
+  const sign = v > 0 ? "+" : "";
+  return `${sign}${v.toFixed(1)}pp`;
+}
+
+function buildSoccerMatchResultContext(
+  r: PredictionRecordSlim | null,
+): NonNullable<MarketEdgeDto["soccerMatchResultContext"]> | null {
+  if (r === null) return null;
+  const snap = r.snapshot_json ?? null;
+  const model = getModelMatchResult(snap);
+  if (model === null) return null;
+  const market = {
+    home: getMarketDevigByKey(snap, "match_result|home"),
+    draw: getMarketDevigByKey(snap, "match_result|draw"),
+    away: getMarketDevigByKey(snap, "match_result|away"),
+  };
+  const haveMarket =
+    market.home !== null && market.draw !== null && market.away !== null;
+  const edge = haveMarket
+    ? {
+        home: (model.home - (market.home as number)) * 100,
+        draw: (model.draw - (market.draw as number)) * 100,
+        away: (model.away - (market.away as number)) * 100,
+      }
+    : null;
+  const displayedSide = ((): "home" | "draw" | "away" => {
+    const ds = getDisplayedSide(snap);
+    if (ds === "home" || ds === "draw" || ds === "away") return ds;
+    const best = Math.max(model.home, model.draw, model.away);
+    if (model.home === best) return "home";
+    if (model.draw === best) return "draw";
+    return "away";
+  })();
+  const note = haveMarket && edge !== null
+    ? `Model ${roundPct(model[displayedSide])}% on ${displayedSide.toUpperCase()} vs. market ${roundPct(market[displayedSide] as number)}% (${fmtEdgePp(edge[displayedSide])} edge).`
+    : `Model ${roundPct(model[displayedSide])}% on ${displayedSide.toUpperCase()}. Market three-way prices unavailable.`;
+  return {
+    model: { home: model.home, draw: model.draw, away: model.away },
+    market: haveMarket ? (market as { home: number; draw: number; away: number }) : null,
+    edge_pp: edge,
+    displayed_side: displayedSide,
+    note,
+  };
+}
+
+function buildSoccerDoubleChanceContext(
+  r: PredictionRecordSlim | null,
+  homeAbbr: string,
+  awayAbbr: string,
+): NonNullable<MarketEdgeDto["soccerDoubleChanceContext"]> | null {
+  if (r === null) return null;
+  const snap = r.snapshot_json ?? null;
+  const model = getModelDoubleChance(snap);
+  if (model === null) return null;
+  const ds = getDisplayedSide(snap);
+  const displayedSide: "home_or_draw" | "away_or_draw" | "home_or_away" =
+    ds === "home_or_draw" || ds === "away_or_draw" || ds === "home_or_away"
+      ? ds
+      : ((): "home_or_draw" | "away_or_draw" | "home_or_away" => {
+          const entries: Array<["home_or_draw" | "away_or_draw" | "home_or_away", number]> = [
+            ["home_or_draw", model.home_or_draw],
+            ["away_or_draw", model.away_or_draw],
+            ["home_or_away", model.home_or_away],
+          ];
+          entries.sort((a, b) => b[1] - a[1]);
+          return entries[0][0];
+        })();
+  const dcKey = `double_chance|${displayedSide}`;
+  const marketCoverage = getMarketDevigByKey(snap, dcKey);
+  const modelCoverage = model[displayedSide];
+  const edgePp = marketCoverage !== null ? (modelCoverage - marketCoverage) * 100 : null;
+  const sideExplanation = ((): string => {
+    if (displayedSide === "home_or_draw") return `Covers ${homeAbbr} win OR draw.`;
+    if (displayedSide === "away_or_draw") return `Covers ${awayAbbr} win OR draw.`;
+    return `Covers ${homeAbbr} win OR ${awayAbbr} win (no draw).`;
+  })();
+  const others: Array<{ side: string; model: number; market: number | null }> = [];
+  for (const s of ["home_or_draw", "away_or_draw", "home_or_away"] as const) {
+    if (s === displayedSide) continue;
+    others.push({
+      side: s,
+      model: model[s],
+      market: getMarketDevigByKey(snap, `double_chance|${s}`),
+    });
+  }
+  const note = marketCoverage !== null && edgePp !== null
+    ? `Model coverage ${roundPct(modelCoverage)}% vs. market ${roundPct(marketCoverage)}% (${fmtEdgePp(edgePp)} edge).`
+    : `Model coverage ${roundPct(modelCoverage)}%. Market double-chance pricing unavailable.`;
+  return {
+    displayed_side: displayedSide,
+    model_coverage: modelCoverage,
+    market_coverage: marketCoverage,
+    edge_pp: edgePp,
+    side_explanation: sideExplanation,
+    other_sides: others,
+    note,
+  };
+}
+
+function buildSoccerTotalContext(
+  r: PredictionRecordSlim | null,
+): NonNullable<MarketEdgeDto["soccerTotalContext"]> | null {
+  if (r === null) return null;
+  const snap = r.snapshot_json ?? null;
+  const lambdas = getModelLambdas(snap);
+  const t = getModelTotalAtLine(snap);
+  if (lambdas === null || t === null) return null;
+  const ds = getDisplayedSide(snap);
+  const displayedSide: "over" | "under" =
+    ds === "over" || ds === "under" ? ds : t.over >= t.under ? "over" : "under";
+  const edgeKey = `total|${displayedSide}|${t.line}`;
+  const edgePp = getMarketEdgePpByKey(snap, edgeKey);
+  const divergence = getTotalDivergenceHold(snap);
+  const reconcile = getTotalReconciliationSummary(snap);
+  const projection = lambdas.total;
+  const note = ((): string => {
+    if (divergence) {
+      return `Projected ${projection.toFixed(2)} goals vs. line ${t.line.toFixed(2)}. Books disagree on the main total — held for divergence.`;
+    }
+    if (reconcile.reason === "holistic_aligned_with_mean") {
+      return `Projected ${projection.toFixed(2)} goals points to ${displayedSide.toUpperCase()} ${t.line.toFixed(2)}.`;
+    }
+    if (reconcile.reason === "mean_revert_low_conviction") {
+      return `Projected ${projection.toFixed(2)} goals vs. line ${t.line.toFixed(2)} — capped for low conviction.`;
+    }
+    return `Projected ${projection.toFixed(2)} goals vs. line ${t.line.toFixed(2)}.`;
+  })();
+  return {
+    projected_total: projection,
+    line: t.line,
+    over_p: t.over,
+    under_p: t.under,
+    edge_pp: edgePp,
+    displayed_side: displayedSide,
+    note,
+    provider_divergence: divergence,
+  };
+}
+
+function buildSoccerBttsContext(
+  r: PredictionRecordSlim | null,
+): NonNullable<MarketEdgeDto["soccerBttsContext"]> | null {
+  if (r === null) return null;
+  const snap = r.snapshot_json ?? null;
+  const m = getModelBtts(snap);
+  const lambdas = getModelLambdas(snap);
+  if (m === null) return null;
+  const ds = getDisplayedSide(snap);
+  const displayedSide: "yes" | "no" = ds === "yes" || ds === "no" ? ds : m.yes >= m.no ? "yes" : "no";
+  const marketYes = getMarketDevigByKey(snap, "btts|yes");
+  const marketDisplayed = displayedSide === "yes" ? marketYes : marketYes !== null ? 1 - marketYes : null;
+  const modelDisplayed = displayedSide === "yes" ? m.yes : m.no;
+  const edgePp = marketDisplayed !== null ? (modelDisplayed - marketDisplayed) * 100 : null;
+  const scoringContext = lambdas !== null
+    ? `Projected goals: home ${lambdas.home.toFixed(2)} / away ${lambdas.away.toFixed(2)}.`
+    : "Projected goals unavailable.";
+  const note = marketDisplayed !== null && edgePp !== null
+    ? `Model ${roundPct(modelDisplayed)}% on ${displayedSide.toUpperCase()} vs. market ${roundPct(marketDisplayed)}% (${fmtEdgePp(edgePp)} edge).`
+    : `Model ${roundPct(modelDisplayed)}% on ${displayedSide.toUpperCase()}. Market BTTS pricing unavailable.`;
+  return {
+    yes_p: m.yes,
+    no_p: m.no,
+    market_yes: marketYes,
+    edge_pp: edgePp,
+    displayed_side: displayedSide,
+    scoring_context: scoringContext,
+    note,
+  };
+}
+
 function buildMarketEdgeDto(
   r: PredictionRecordSlim | null,
   openerLookup: OpenerLookup,
@@ -633,6 +956,12 @@ export async function buildSoccerDailyEdgeAdapted(
     const mr = perMarket.get("match_result") ?? null;
     const total = perMarket.get("total") ?? null;
     const btts = perMarket.get("btts") ?? null;
+    // WC reader full-completion pass (2026-06-12): the Double Chance
+    // prediction_record is the source for the soccerDoubleChanceContext
+    // reader block. The DC market always gets its own row in
+    // prediction_records (writer creates one per market), and is
+    // distinct from the BTTS row that drives the BTTS reader content.
+    const dc = perMarket.get("double_chance") ?? null;
 
     const lockedAt = pickFreshestLockedAt(rows);
     const { time: gameTime, minutes: gameStartMinutes } = et(g.game_date);
@@ -685,9 +1014,27 @@ export async function buildSoccerDailyEdgeAdapted(
         moneyline: {
           ...buildMarketEdgeDto(mr, openerLookup),
           matchResultThreeWayProbs: extractMatchResultThreeWayProbs(mr?.snapshot_json ?? null),
+          // WC reader full-completion pass (2026-06-12):
+          // Soccer-only reader context blocks. The moneyline slot
+          // carries both Match Result and BTTS context — the reader
+          // surfaces BTTS alongside Match Result rather than as its
+          // own card slot, because the soccer card has no nrfi slot.
+          soccerMatchResultContext: buildSoccerMatchResultContext(mr),
+          soccerBttsContext: buildSoccerBttsContext(btts),
         },
-        total: buildMarketEdgeDto(total, openerLookup),
-        first_inning: buildMarketEdgeDto(btts, openerLookup),
+        total: {
+          ...buildMarketEdgeDto(total, openerLookup),
+          soccerTotalContext: buildSoccerTotalContext(total),
+        },
+        first_inning: {
+          ...buildMarketEdgeDto(btts, openerLookup),
+          // The "first_inning" slot is the soccer Double Chance carrier
+          // per the existing soccer adapter mapping — BTTS lives on
+          // the moneyline slot's BTTS context block above. Pulled from
+          // the real double_chance prediction_record so model + market
+          // numbers come from the DC snapshot, not the BTTS snapshot.
+          soccerDoubleChanceContext: buildSoccerDoubleChanceContext(dc, homeAbbr, awayAbbr),
+        },
       },
       decisionLine,
       projected: {
