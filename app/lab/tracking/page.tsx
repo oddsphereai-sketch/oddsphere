@@ -116,6 +116,12 @@ type TrackingResponse = {
 
 const SPORT_LABEL: Record<string, string> = {
   mlb: "MLB", nfl: "NFL", nba: "NBA", nhl: "NHL", cfb: "CFB", cbb: "CBB", ucl: "UCL",
+  // Soccer surfaces in tracking as "World Cup" — UCL keeps its own label
+  // above. When a non-WC competition launches, the competition column on
+  // prediction_records (see project-wc-launch-contract) is the planned
+  // discriminator; today the tracker only filters by sport so soccer is
+  // a 1:1 stand-in for the WC tab.
+  soccer: "World Cup",
 };
 
 const MARKET_LABEL: Record<string, string> = {

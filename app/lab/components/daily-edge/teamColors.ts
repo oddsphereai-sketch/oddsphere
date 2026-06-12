@@ -136,16 +136,23 @@ export const NBA_TEAM_COLORS: Record<string, TeamColorEntry> = {
 };
 
 /**
- * WC-4 Phase G — World Cup country primary colors. Keyed by FIFA / ISO
- * alpha-3 country codes (matches `teams.abbreviation` for sport='soccer').
- * Values are documented primary flag colors (the most prominent hue on
- * each nation's flag — typically the field or the lead band).
+ * WC-4 Phase G — country / national-team primary display colors. Keyed
+ * by FIFA / ISO alpha-3 country codes (matches `teams.abbreviation`
+ * for sport='soccer').
  *
- * Why a static map: country flag colors are public, stable, and small.
- * Pure constant lookup keeps the same pattern as MLB/NBA/NHL — no I/O,
- * no DB seeding, no licensing concerns.
+ * What this map represents: the single hex color we use for the card
+ * top-edge accent. The chosen hue prioritizes safe visual recognition
+ * for the customer — most entries match the national team's home-kit
+ * color or the dominant flag field; a few (notably KOR=red, AUS=green)
+ * intentionally use the kit/identity color over the most-pixels-on-the-
+ * flag color because that's what the customer associates with the
+ * national team. This is NOT a strict "biggest band of the flag" lookup.
  *
- * Coverage: the 32-40 most likely 2026 FIFA World Cup participants plus
+ * Why a static map: country identity colors are public, stable, and
+ * small. Pure constant lookup keeps the same pattern as MLB/NBA/NHL —
+ * no I/O, no DB seeding, no licensing concerns.
+ *
+ * Coverage: 45 of the most likely 2026 FIFA World Cup participants plus
  * the 4 confirmed friendlies we ship tonight (CZE, KOR, MEX, RSA).
  * Unknown codes fall back to FALLBACK_TEAM_COLOR.
  */

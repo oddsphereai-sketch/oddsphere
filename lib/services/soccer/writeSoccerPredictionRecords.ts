@@ -82,6 +82,15 @@ const LOCK_WINDOW_MINUTES = 60;
 export type WriteSoccerRecordsOptions = {
   slateDate: string;
   apply: boolean;
+  /**
+   * Optional internal `games.id` filter. When set, the writer only
+   * processes that single fixture and silently skips everything else
+   * on the slate. Operator use case: surgical rerun of one game (e.g.
+   * a pre-T60 fixture whose model output needs refresh) while every
+   * other fixture on the slate stays untouched — including in_progress
+   * games whose locked_at hasn't been stamped yet.
+   */
+  gameId?: number;
   /** Optional: provide pre-built providers (tests). Default: real clients. */
   providers?: {
     bdl: BallDontLieFifaProvider;
@@ -150,9 +159,19 @@ export async function writeSoccerPredictionRecords(
     .eq("sport", "soccer")
     .eq("slate_date", opts.slateDate);
   if (gamesErr !== null) throw new Error(`load soccer games: ${gamesErr.message}`);
-  const games = (gamesData as DbGame[] | null) ?? [];
+  let games = (gamesData as DbGame[] | null) ?? [];
+
+  // Single-game targeting (operator emergency rerun). Silently filter
+  // every other fixture on the slate so in_progress / locked games stay
+  // untouched even when their locked_at field is null.
+  if (opts.gameId !== undefined) {
+    const before = games.length;
+    games = games.filter((g) => g.id === opts.gameId);
+    log(`game-id filter active: ${opts.gameId} → ${games.length} of ${before} fixtures kept`);
+  }
+
   if (games.length === 0) {
-    log(`(no soccer games on slate ${opts.slateDate})`);
+    log(`(no soccer games on slate ${opts.slateDate}${opts.gameId !== undefined ? ` matching game_id=${opts.gameId}` : ""})`);
     return {
       mode: "no-games",
       gamesProcessed: 0,
