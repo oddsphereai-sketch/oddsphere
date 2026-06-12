@@ -69,6 +69,10 @@ import {
   type SignalTier,
 } from "./signalEvidenceClassifier";
 import type { MarketSignalSource } from "./marketSignalDerivationService";
+import {
+  reconcileTotalSide,
+  type TotalSideReconciliation,
+} from "../automodel/sideReconciliation";
 
 // ─── Public types ─────────────────────────────────────────────────────────
 
@@ -147,12 +151,78 @@ export type GradeInput = {
    * Adjustment A cannot fire. Phase 3/4 may strengthen this check.
    */
   marketLineAvailable?: boolean;
+  /**
+   * MLB totals side-reconciliation cap (2026-06-12). When set, deriveGrade
+   * clamps its computed grade down to the cap so a contradicted total side
+   * never displays as a normal Watchlist / Lean / Best Signal.
+   *
+   *   "no_play"    → grade clamps to "sharp_conflict" (per-market card
+   *                  displays Caution; downstream confidence floor in
+   *                  verdictDerivation handles the verdict-level no_play
+   *                  when this cap is set + confidence stays low).
+   *   "caution"    → grade clamps to "sharp_conflict".
+   *   "watchlist"  → grade clamps to "market_watch" (cannot elevate).
+   *
+   * NULL/undefined leaves the framework grade unchanged. Caller is
+   * expected to populate this only for OU on MLB games where the
+   * side-reconciliation module produced a non-null grade_cap; ML and
+   * NRFI rows never set this field, so their grading paths stay 100%
+   * unchanged.
+   */
+  totalGradeCap?: "no_play" | "caution" | "watchlist" | null;
 };
 
 export type GradeOutput = {
   grade: Grade;
   signal_type: SignalType;
 };
+
+// ─── Side-reconciliation cap (MLB totals only) ────────────────────────
+
+/**
+ * Grade-rank ordering used by `clampGradeWithCap`. Higher rank = stronger
+ * actionable grade. Mirrors the spirit of verdictDerivation: a cap should
+ * never elevate, only clamp.
+ *
+ * The ordering treats `sharp_conflict` as ABOVE `market_watch` because
+ * `sharp_conflict → caution` is a stronger user-facing signal than
+ * `market_watch → watchlist` (Caution is the active warning state; the
+ * cap is meant to surface that signal, not soften it).
+ */
+const GRADE_RANK_FOR_CAP: Record<Grade, number> = {
+  best_signal: 5,
+  sharp_confirmed: 4,
+  market_led: 3,
+  model_only: 3,
+  public_smoke: 2,
+  sharp_conflict: 1,
+  market_watch: 0,
+};
+
+/**
+ * Translate a side-reconciliation cap into the maximum-allowed framework
+ * grade. The clamp is one-directional: it cannot ELEVATE a grade. A row
+ * already at sharp_conflict stays at sharp_conflict even when the cap is
+ * "watchlist" (because sharp_conflict is the stronger user-facing signal,
+ * per GRADE_RANK_FOR_CAP).
+ */
+function clampGradeWithCap(out: GradeOutput, cap: GradeInput["totalGradeCap"]): GradeOutput {
+  if (cap === null || cap === undefined) return out;
+  let capGrade: Grade;
+  switch (cap) {
+    case "no_play":
+    case "caution":
+      capGrade = "sharp_conflict";
+      break;
+    case "watchlist":
+      capGrade = "market_watch";
+      break;
+  }
+  // One-way clamp: only downgrade. sharp_conflict (rank 1) stays above
+  // market_watch (rank 0).
+  if (GRADE_RANK_FOR_CAP[out.grade] <= GRADE_RANK_FOR_CAP[capGrade]) return out;
+  return { grade: capGrade, signal_type: out.signal_type };
+}
 
 // ─── Pure derivation ──────────────────────────────────────────────────────
 
@@ -589,7 +659,18 @@ function meetsSharpConflictBar(evidence: SignalEvidence | null): boolean {
  * Unconfirmed market_resistance (e.g., EV-only opposing) routes to
  * market_watch per framework §"Sharp Conflict" carve-out.
  */
+/**
+ * Public deriveGrade entry point — runs the framework grade switch and
+ * then applies the optional MLB-totals side-reconciliation cap on the
+ * way out. Splitting the body keeps the existing branch logic intact
+ * (every legacy test scenario passes through deriveGradeRaw unchanged);
+ * the cap is a one-way clamp applied at the exit only.
+ */
 export function deriveGrade(input: GradeInput): GradeOutput {
+  return clampGradeWithCap(deriveGradeRaw(input), input.totalGradeCap);
+}
+
+function deriveGradeRaw(input: GradeInput): GradeOutput {
   const { kind, modelEdgePct, marketSignal, evidence } = input;
   const hasModelEdge =
     modelEdgePct !== null && modelEdgePct >= minEdgeThreshold(kind);
@@ -731,6 +812,12 @@ type GamePredRow = {
   // (MLB) listed_line — the best-effort source for `marketLineAvailable`
   // until Phase 4 wires a proper lines-table lookup.
   sport_specific: Record<string, unknown> | null;
+  /**
+   * MLB totals reconciliation (2026-06-12) — locked_at is needed to set
+   * SideReconciliationInput.isLocked. nullable in DB; we treat null as
+   * unlocked.
+   */
+  locked_at: string | null;
 };
 
 type PropPredRow = {
@@ -909,7 +996,7 @@ export async function deriveGradesForSlate(
   const { data: gamePredsRaw } = await supabase
     .from("game_predictions")
     .select(
-      "id, game_id, predicted_ml_winner, predicted_ou_side, predicted_nrfi, ml_market_signal, ou_market_signal, nrfi_market_signal, ml_confidence, ou_confidence, nrfi_confidence, sport_specific"
+      "id, game_id, predicted_ml_winner, predicted_ou_side, predicted_nrfi, ml_market_signal, ou_market_signal, nrfi_market_signal, ml_confidence, ou_confidence, nrfi_confidence, sport_specific, locked_at"
     )
     .in("game_id", gameIds);
   const gamePreds = (gamePredsRaw ?? []) as unknown as GamePredRow[];
@@ -989,6 +1076,70 @@ export async function deriveGradesForSlate(
           : key === "ou"
             ? row.ou_confidence
             : row.nrfi_confidence;
+
+      // ── MLB totals side-reconciliation cap (2026-06-12) ──────────────
+      //
+      // For the OU axis ONLY, derive a grade_cap from the four-signal
+      // reconciliation (model_side / value_side / mean_direction_side /
+      // market_pressure_side). The cap is passed into deriveGrade and
+      // clamped at the exit. ML and NRFI do not set this field — their
+      // grading paths stay 100% unchanged.
+      let totalGradeCap: GradeInput["totalGradeCap"] = null;
+      let totalReconciliation: TotalSideReconciliation | null = null;
+      if (key === "ou" && pick.side !== null) {
+        const v22 = (sportSpecific as { v2_2_audit?: Record<string, unknown> } | null)?.v2_2_audit ?? null;
+        const posteriorTotal = typeof v22?.posterior_total === "number" ? v22.posterior_total : null;
+        const marketTotal = typeof v22?.market_total === "number" ? v22.market_total : null;
+        const ouModelProbPicked = typeof v22?.ou_model_prob === "number" ? v22.ou_model_prob : null;
+        const ouMarketProbPicked = typeof v22?.ou_market_prob === "number" ? v22.ou_market_prob : null;
+        // Reconciler wants OVER-perspective probabilities. v22 stores
+        // the model + market probability for the PICKED side; rebase.
+        const pickedIsOver = pick.side === "over";
+        const ouOverProb = ouModelProbPicked !== null
+          ? (pickedIsOver ? ouModelProbPicked : 1 - ouModelProbPicked)
+          : null;
+        const ouMarketOverProb = ouMarketProbPicked !== null
+          ? (pickedIsOver ? ouMarketProbPicked : 1 - ouMarketProbPicked)
+          : null;
+        // Public money rebased to OVER perspective from the sharp_signals
+        // row's `side` field. V1 takes line movement as null (line_history
+        // integration is a follow-up); market_pressure_side will be null,
+        // which is safe — the reconciler treats null as "no pressure" and
+        // never flips on the missing signal.
+        let publicMoneyOverPct: number | null = null;
+        let publicBetsOverPct: number | null = null;
+        if (sig && sig.public_money_pct !== null) {
+          publicMoneyOverPct = sig.side === "over"
+            ? sig.public_money_pct
+            : 100 - sig.public_money_pct;
+        }
+        if (sig && sig.public_betting_pct !== null) {
+          publicBetsOverPct = sig.side === "over"
+            ? sig.public_betting_pct
+            : 100 - sig.public_betting_pct;
+        }
+        // Only compute reconciliation when we have at least a posterior
+        // + market line (otherwise mean_direction can't be derived and
+        // the cap rules degenerate). modelProb fallback uses confidence
+        // when v22 doesn't carry the raw — defensive for legacy rows.
+        if (posteriorTotal !== null && marketTotal !== null) {
+          const fallbackOverProb = ouOverProb ?? (typeof modelConfidence === "number"
+            ? (pickedIsOver ? modelConfidence / 100 : 1 - modelConfidence / 100)
+            : 0.5);
+          totalReconciliation = reconcileTotalSide({
+            posteriorTotal,
+            marketTotal,
+            ouOverProb: fallbackOverProb,
+            ouMarketOverProb,
+            publicMoneyOverPct,
+            publicBetsOverPct,
+            lineMovementOverPp: null,
+            isLocked: row.locked_at !== null,
+            hasFlipBlocker: ouMarketOverProb === null,
+          });
+          totalGradeCap = totalReconciliation.grade_cap;
+        }
+      }
       result.games[key].set(
         row.id,
         deriveGrade({
@@ -1000,8 +1151,15 @@ export async function deriveGradesForSlate(
           starterConfirmed,
           opposingDeterministicWarning,
           marketLineAvailable,
+          totalGradeCap,
         })
       );
+      // Reconciliation blob persistence (full audit trail with
+      // would_flip_side, side_disagree_flags, etc.) is a follow-up
+      // PR — for the cap to take effect on tonight's MIA/PIT row,
+      // only deriveGrade needs the cap value. The blob itself flows
+      // through prediction_records.snapshot_json in the next pass.
+      void totalReconciliation;
     }
   }
 
