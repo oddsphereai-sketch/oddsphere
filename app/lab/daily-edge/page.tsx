@@ -26,5 +26,12 @@ export default function DailyEdgePage() {
   useRefreshStatus({ sport });
 
   // Both sports render through the same shell.
-  return <DailyEdgeShell sport={sport} />;
+  //
+  // key={sport} (P0 tab-switching fix, 2026-06-12): force a clean remount
+  // on every sport switch. Without it the shell stayed mounted across
+  // switches and could get stuck on the previous sport's SWR data / an
+  // endless LoadingState (the recurring "tab switching stuck on prod"
+  // signature). Remounting resets selected game/market state and guarantees
+  // the new sport's fetch drives a fresh loading→render cycle.
+  return <DailyEdgeShell key={sport} sport={sport} />;
 }

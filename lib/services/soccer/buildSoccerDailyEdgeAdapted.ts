@@ -126,12 +126,33 @@ function computeLocksAtIso(gameDateIso: string): string {
   return new Date(t - LOCK_WINDOW_MINUTES * 60 * 1000).toISOString();
 }
 
-function gradeToVerdict(playGrade: string | null, held: boolean): { key: Verdict; label: string } {
+/**
+ * Normalize a stored `play_grade` to its canonical snake_case key.
+ *
+ * The soccer writer persists Title-Case-with-spaces grades
+ * ("Best Angle", "Lean", "Watchlist", "Caution") via the
+ * SoccerGradeVerdict enum, while earlier/other writers used snake_case.
+ * Pre-stabilization `gradeToVerdict` only matched snake_case, so every
+ * Title-Case row fell through to No Play. Normalizing here makes the
+ * mapping robust to either representation without changing the writer.
+ */
+export function normalizeGradeKey(playGrade: string | null): string | null {
+  if (playGrade === null) return null;
+  const trimmed = playGrade.trim();
+  if (trimmed === "") return null;
+  return trimmed.toLowerCase().replace(/\s+/g, "_");
+}
+
+export function gradeToVerdict(playGrade: string | null, held: boolean): { key: Verdict; label: string } {
+  // True blockers win: a held/no-bet market shows Held regardless of the
+  // underlying grade. This is intentional (see WC integrity contract) and
+  // is NOT the casing bug — the casing fix below only affects non-held rows.
   if (held) return { key: "no_play", label: "Held" };
-  if (playGrade === "best_angle") return { key: "best_angle", label: "Best Angle" };
-  if (playGrade === "lean") return { key: "lean", label: "Lean" };
-  if (playGrade === "watchlist") return { key: "watchlist", label: "Watchlist" };
-  if (playGrade === "caution") return { key: "caution", label: "Caution" };
+  const g = normalizeGradeKey(playGrade);
+  if (g === "best_angle") return { key: "best_angle", label: "Best Angle" };
+  if (g === "lean") return { key: "lean", label: "Lean" };
+  if (g === "watchlist") return { key: "watchlist", label: "Watchlist" };
+  if (g === "caution") return { key: "caution", label: "Caution" };
   return { key: "no_play", label: "No Play" };
 }
 
@@ -649,12 +670,15 @@ function buildDecisionLine(
   // If any market is unheld and graded, lead with that; otherwise honest hold copy.
   const playable = Array.from(perMarket.values()).find((r) => !r.held && r.play_grade !== null);
   if (playable !== undefined) {
+    const gradeKey = normalizeGradeKey(playable.play_grade);
     const label =
-      playable.play_grade === "best_angle"
+      gradeKey === "best_angle"
         ? "Best angle"
-        : playable.play_grade === "lean"
+        : gradeKey === "lean"
           ? "Model lean"
-          : "Watchlist";
+          : gradeKey === "caution"
+            ? "Caution"
+            : "Watchlist";
     const pickLabel =
       soccerPickLabel(playable.market, playable.pick, playable.line_value, awayAbbr, homeAbbr) ??
       playable.pick;
@@ -875,23 +899,19 @@ export async function buildSoccerDailyEdgeAdapted(
     wcGameIds.size === 0 ? true : wcGameIds.has(g.id),
   );
 
-  // Hide kicked-off fixtures from the slate. The WC charter does not
-  // distinguish between "missed pre-kickoff" and "currently live" for
-  // launch purposes — either way, surfacing a started fixture as a
-  // selectable Daily Edge card is misleading (the model already locked
-  // its read, or never locked because it wasn't seeded in time). The
-  // underlying prediction_records stay in the DB so post-match grading
-  // still works; we just don't render them. Sorted by kickoff ascending
-  // so the next-upcoming fixture is the natural hero.
-  const nowMs = Date.now();
-  const wcGames = wcGamesWithPreds
-    .filter((g) => {
-      const startedStatus =
-        g.status !== null && g.status !== "scheduled" && g.status !== "pre_match";
-      const kickedOff = new Date(g.game_date).getTime() <= nowMs;
-      return !(startedStatus || kickedOff);
-    })
-    .sort((a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime());
+  // Universal locked-snapshot contract (P0F fix, 2026-06-12): a fixture
+  // that has locked / started / passed kickoff must STAY VISIBLE, reading
+  // its frozen snapshot — it must not vanish from the slate. The previous
+  // soccer-specific post-kickoff filter dropped cards the instant kickoff
+  // passed (e.g. BIH/CAN disappeared at 19:00 UTC while still locked with
+  // full line data), diverging from MLB/NBA/NHL which keep started games
+  // visible via lockState="locked". deriveLockState() already returns
+  // "locked" for past-kickoff rows, so started/locked cards render with
+  // the correct locked pill and no live recompute. Sorted by kickoff
+  // ascending so the next-upcoming fixture is the natural hero.
+  const wcGames = [...wcGamesWithPreds].sort(
+    (a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime(),
+  );
 
   // 4.5. Load line_history to compute opener per (game, market, side).
   //
@@ -1027,12 +1047,15 @@ export async function buildSoccerDailyEdgeAdapted(
           soccerTotalContext: buildSoccerTotalContext(total),
         },
         first_inning: {
-          ...buildMarketEdgeDto(btts, openerLookup),
-          // The "first_inning" slot is the soccer Double Chance carrier
-          // per the existing soccer adapter mapping — BTTS lives on
-          // the moneyline slot's BTTS context block above. Pulled from
-          // the real double_chance prediction_record so model + market
-          // numbers come from the DC snapshot, not the BTTS snapshot.
+          // The "first_inning" slot is the soccer Double Chance carrier.
+          // P0 slot fix (2026-06-12): the headline pick/price/verdict now
+          // come from the real `double_chance` prediction_record — the
+          // pre-fix code used buildMarketEdgeDto(btts, ...), which made
+          // this slot show the BTTS pick (e.g. "Yes 176") under a Double
+          // Chance reader block, double-rendering BTTS (it already rides
+          // the moneyline slot's BTTS context) and leaving Double Chance
+          // with no headline of its own.
+          ...buildMarketEdgeDto(dc, openerLookup),
           soccerDoubleChanceContext: buildSoccerDoubleChanceContext(dc, homeAbbr, awayAbbr),
         },
       },

@@ -3561,7 +3561,7 @@ function SlateBoardHeader({
 // ─── Shell ──────────────────────────────────────────────────────────────
 
 export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
-  const { data, error, isLoading } = useDailyEdge({ sport });
+  const { data, error, isLoading, refresh } = useDailyEdge({ sport });
 
   // Reader state. Preselected to the first game (game-time-ASC from the
   // route) once data lands. Compact is the resting state.
@@ -3635,6 +3635,21 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   // showing an empty state). When data.sport ≠ requested sport, treat
   // it as still loading.
   const dataMatchesSport = !data || data.sport === sport;
+  // P0 tab-switching watchdog (2026-06-12): with key={sport} remounts +
+  // keepPreviousData off, a wrong-sport mismatch should resolve immediately.
+  // This is a belt-and-suspenders fallback so the loading gate below can
+  // never spin forever — if SWR ever wedges holding the wrong sport's data
+  // while NOT actively loading, force a single revalidation pass after a
+  // short grace window. (Only fires in the pathological stuck state; a
+  // legitimately slow in-flight fetch keeps showing LoadingState.)
+  const stuckOnWrongSport = !isLoading && !!data && data.sport !== sport;
+  useEffect(() => {
+    if (!stuckOnWrongSport) return;
+    const t = setTimeout(() => {
+      void refresh();
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [stuckOnWrongSport, refresh]);
   if (isLoading || !dataMatchesSport) {
     return <ShellChrome sport={sport}><LoadingState /></ShellChrome>;
   }

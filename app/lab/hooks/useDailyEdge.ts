@@ -51,7 +51,13 @@ export function useDailyEdge(options: UseDailyEdgeOptions): UseDailyEdgeResult {
       refreshInterval: refreshIntervalMs,
       revalidateOnFocus: true,
       revalidateOnReconnect: true,
-      keepPreviousData: true,
+      // P0 tab-switching fix (2026-06-12): keepPreviousData=true caused the
+      // shell to render the PREVIOUS sport's response while the new sport's
+      // fetch was in flight, which (combined with the never-remounted shell)
+      // produced the "stuck on previous sport" / "endless loading" failures.
+      // With the page now remounting via key={sport}, previous-sport ghosting
+      // is unnecessary; a clean isLoading state is correct on switch.
+      keepPreviousData: false,
     }
   );
 
