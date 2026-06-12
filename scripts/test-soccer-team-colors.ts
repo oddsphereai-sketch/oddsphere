@@ -63,6 +63,14 @@ test("Hosts (USA, CAN) return real colors", () => {
   }
 });
 
+test("Tomorrow's slate (2026-06-12): BIH, CAN, PAR, USA all return real colors", () => {
+  for (const code of ["BIH", "CAN", "PAR", "USA"]) {
+    const c = teamPrimaryColor(code, "soccer");
+    assert(c !== FALLBACK_TEAM_COLOR, `${code} fell back to gray — tomorrow's fixture would render gray accent`);
+    assert(c.startsWith("#"), `${code} returned non-hex: ${c}`);
+  }
+});
+
 test("Top European countries (BRA, ARG, ENG, FRA, GER, ESP) return real colors", () => {
   for (const code of ["BRA", "ARG", "ENG", "FRA", "GER", "ESP"]) {
     const c = teamPrimaryColor(code, "soccer");

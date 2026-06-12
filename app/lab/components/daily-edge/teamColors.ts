@@ -163,6 +163,9 @@ export const SOCCER_TEAM_COLORS: Record<string, TeamColorEntry> = {
   CZE: { primary: "#D7141A" }, // Czechia — flag red
   KOR: { primary: "#CD2E3A" }, // South Korea — flag red (Taegukgi)
 
+  // ── 2026-06-12 confirmed (tomorrow's slate) ──
+  BIH: { primary: "#002F6C" }, // Bosnia & Herzegovina — flag blue
+
   // ── Hosts ──
   USA: { primary: "#3C3B6E" }, // USA — flag navy
   CAN: { primary: "#FF0000" }, // Canada — flag red

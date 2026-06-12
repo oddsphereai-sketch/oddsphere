@@ -92,6 +92,14 @@
     {
       "path": "/api/cron/nhl-daily-refresh",
       "schedule": "45 13 * * *"
+    },
+    {
+      "path": "/api/cron/soccer-daily-refresh",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/soccer-daily-refresh",
+      "schedule": "0 18 * * *"
     }
   ]
 }
