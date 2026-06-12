@@ -2922,7 +2922,7 @@ export async function GET(request: Request) {
     try {
       const adapted = await buildNbaDailyEdgeAdapted(requestedDate);
       return Response.json(adapted, {
-        headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120" },
+        headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
       });
     } catch (e) {
       const body: DailyEdgeResponse = {
@@ -2955,7 +2955,7 @@ export async function GET(request: Request) {
       );
       const adapted = await buildNhlDailyEdgeAdapted(requestedDate);
       return Response.json(adapted, {
-        headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120" },
+        headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
       });
     } catch (e) {
       const body: DailyEdgeResponse = {
@@ -2988,7 +2988,7 @@ export async function GET(request: Request) {
       );
       const adapted = await buildSoccerDailyEdgeAdapted(requestedDate);
       return Response.json(adapted, {
-        headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120" },
+        headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
       });
     } catch (e) {
       const body: DailyEdgeResponse = {
@@ -3023,7 +3023,7 @@ export async function GET(request: Request) {
       games: [],
     };
     return Response.json(body, {
-      headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120" },
+      headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
     });
   }
 
@@ -3087,7 +3087,7 @@ export async function GET(request: Request) {
       games: [],
     };
     return Response.json(body, {
-      headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120" },
+      headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
     });
   }
 
@@ -3830,7 +3830,7 @@ export async function GET(request: Request) {
   return Response.json(body, {
     headers: {
       // Short edge cache keeps stampedes off Supabase; clients also poll.
-      "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120",
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
     },
   });
 }
