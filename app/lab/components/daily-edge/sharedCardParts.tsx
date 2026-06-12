@@ -150,12 +150,15 @@ export function otherMarketsLabels(game: DailyEdgeGameDto): string[] {
 export function TeamColorAccent({
   awayTeam,
   homeTeam,
+  sport = "mlb",
 }: {
   awayTeam: string;
   homeTeam: string;
+  /** Sport discriminator for the color lookup. Default "mlb" keeps existing MLB call-sites unchanged. */
+  sport?: "mlb" | "nba" | "nfl" | "nhl" | "cbb" | "cfb" | "ucl" | "soccer";
 }) {
-  const awayColor = teamPrimaryColor(awayTeam);
-  const homeColor = teamPrimaryColor(homeTeam);
+  const awayColor = teamPrimaryColor(awayTeam, sport);
+  const homeColor = teamPrimaryColor(homeTeam, sport);
   const gradient = `linear-gradient(to right, ${awayColor} 0%, ${awayColor} 38%, transparent 48%, transparent 52%, ${homeColor} 62%, ${homeColor} 100%)`;
   return (
     <span

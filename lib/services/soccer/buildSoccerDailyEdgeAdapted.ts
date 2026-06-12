@@ -247,7 +247,7 @@ function buildMarketEdgeDto(r: PredictionRecordSlim | null): MarketEdgeDto {
     modelTrustPct,
     marketImpliedPct,
     modelMarketGapPct: gap,
-    marketSource: "bdl_fifa + sharpapi (prematch)",
+    marketSource: "Market odds (prematch)",
     // WC-2 contract: SharpAPI /splits is empty_as_of_probe for FIFA WC,
     // so calling this "two_sided_consensus" would imply public-split
     // depth we don't have. The DTO's enum is a closed union; the
@@ -521,7 +521,10 @@ export async function buildSoccerDailyEdgeAdapted(
     const awayTeam = g.away_team_id !== null ? teamById.get(g.away_team_id) : undefined;
     const homeAbbr = homeTeam?.abbreviation ?? "?";
     const awayAbbr = awayTeam?.abbreviation ?? "?";
-    const matchup = `${awayAbbr} @ ${homeAbbr}`;
+    // Soccer matchup separator: " vs " (not "@") since World Cup fixtures
+    // are neutral-venue and "@" reads as MLB-style home/away that doesn't
+    // map to international football conventions.
+    const matchup = `${awayAbbr} vs ${homeAbbr}`;
 
     const perMarket = byGameMarket.get(g.id) ?? new Map<string, PredictionRecordSlim>();
     const rows = Array.from(perMarket.values());

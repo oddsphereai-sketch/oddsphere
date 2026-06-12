@@ -136,12 +136,92 @@ export const NBA_TEAM_COLORS: Record<string, TeamColorEntry> = {
 };
 
 /**
+ * WC-4 Phase G — World Cup country primary colors. Keyed by FIFA / ISO
+ * alpha-3 country codes (matches `teams.abbreviation` for sport='soccer').
+ * Values are documented primary flag colors (the most prominent hue on
+ * each nation's flag — typically the field or the lead band).
+ *
+ * Why a static map: country flag colors are public, stable, and small.
+ * Pure constant lookup keeps the same pattern as MLB/NBA/NHL — no I/O,
+ * no DB seeding, no licensing concerns.
+ *
+ * Coverage: the 32-40 most likely 2026 FIFA World Cup participants plus
+ * the 4 confirmed friendlies we ship tonight (CZE, KOR, MEX, RSA).
+ * Unknown codes fall back to FALLBACK_TEAM_COLOR.
+ */
+export const SOCCER_TEAM_COLORS: Record<string, TeamColorEntry> = {
+  // ── 2026-06-11 confirmed (tonight's slate) ──
+  MEX: { primary: "#006847" }, // Mexico — flag green
+  RSA: { primary: "#007749" }, // South Africa — flag green
+  CZE: { primary: "#D7141A" }, // Czechia — flag red
+  KOR: { primary: "#CD2E3A" }, // South Korea — flag red (Taegukgi)
+
+  // ── Hosts ──
+  USA: { primary: "#3C3B6E" }, // USA — flag navy
+  CAN: { primary: "#FF0000" }, // Canada — flag red
+
+  // ── Major European participants ──
+  ENG: { primary: "#CE1124" }, // England — St. George's red
+  FRA: { primary: "#0055A4" }, // France — flag blue
+  GER: { primary: "#DD0000" }, // Germany — flag red
+  ESP: { primary: "#C60B1E" }, // Spain — flag red
+  ITA: { primary: "#009246" }, // Italy — flag green
+  POR: { primary: "#FF0000" }, // Portugal — flag red
+  NED: { primary: "#FF9B00" }, // Netherlands — Oranje
+  BEL: { primary: "#EF3340" }, // Belgium — flag red
+  POL: { primary: "#DC143C" }, // Poland — flag red
+  DEN: { primary: "#C8102E" }, // Denmark — flag red
+  SUI: { primary: "#FF0000" }, // Switzerland — flag red
+  CRO: { primary: "#FF0000" }, // Croatia — flag red
+  SRB: { primary: "#C6363C" }, // Serbia — flag red
+  AUT: { primary: "#ED2939" }, // Austria — flag red
+  SWE: { primary: "#005293" }, // Sweden — flag blue
+  NOR: { primary: "#BA0C2F" }, // Norway — flag red
+  HUN: { primary: "#CE2939" }, // Hungary — flag red
+  TUR: { primary: "#E30A17" }, // Turkey — flag red
+  SCO: { primary: "#0065BD" }, // Scotland — flag blue
+  WAL: { primary: "#D30731" }, // Wales — flag red
+  UKR: { primary: "#0057B7" }, // Ukraine — flag blue
+
+  // ── South America ──
+  BRA: { primary: "#009C3B" }, // Brazil — flag green
+  ARG: { primary: "#74ACDF" }, // Argentina — flag light blue
+  URU: { primary: "#0093DD" }, // Uruguay — flag blue
+  COL: { primary: "#FCD116" }, // Colombia — flag yellow
+  ECU: { primary: "#FFD100" }, // Ecuador — flag yellow
+  PER: { primary: "#D91023" }, // Peru — flag red
+  PAR: { primary: "#DC241F" }, // Paraguay — flag red
+  VEN: { primary: "#FFE600" }, // Venezuela — flag yellow
+
+  // ── CONCACAF (other) ──
+  CRC: { primary: "#CE1126" }, // Costa Rica — flag red
+  PAN: { primary: "#DA121A" }, // Panama — flag red
+
+  // ── Africa ──
+  GHA: { primary: "#CE1126" }, // Ghana — flag red
+  SEN: { primary: "#00853F" }, // Senegal — flag green
+  NGA: { primary: "#008751" }, // Nigeria — flag green
+  MAR: { primary: "#C1272D" }, // Morocco — flag red
+  TUN: { primary: "#E70013" }, // Tunisia — flag red
+  EGY: { primary: "#CE1126" }, // Egypt — flag red
+
+  // ── Asia / Oceania / Middle East ──
+  JPN: { primary: "#BC002D" }, // Japan — flag red disc
+  AUS: { primary: "#00843D" }, // Australia — gold/green; using flag-aligned green
+  IRN: { primary: "#239F40" }, // Iran — flag green
+  QAT: { primary: "#8B1A2B" }, // Qatar — flag maroon
+  UAE: { primary: "#00732F" }, // UAE — flag green
+  FIJ: { primary: "#69BCE5" }, // Fiji — sky blue (Pacific qualifier)
+};
+
+/**
  * Lookup helper with fallback. Pure, deterministic.
  *
  * Phase 7F: optional `sport` discriminator. Default "mlb" keeps the
  * existing MLB call-sites byte-identical (no signature change needed
  * at any MLB caller). NBA callers pass `sport="nba"` to hit the NBA
- * brand map.
+ * brand map. WC-4 Phase G: soccer callers pass `sport="soccer"` to
+ * hit the SOCCER_TEAM_COLORS map.
  */
 export function teamPrimaryColor(
   abbreviation: string | null | undefined,
@@ -154,7 +234,8 @@ export function teamPrimaryColor(
   if (sport === "nhl") {
     return NHL_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
   }
-  // WC-1 — soccer team colors not yet seeded (added in WC-4 with the soccer card).
-  // For now fall through to the fallback so MLB/NBA/NHL behavior is unchanged.
+  if (sport === "soccer" || sport === "ucl") {
+    return SOCCER_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
+  }
   return MLB_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
 }

@@ -64,7 +64,7 @@ export default function HeroCard({ game, takeaway }: Props) {
     <article
       className={`relative ${palette.container} rounded-2xl p-6 sm:p-8 transition-all duration-200 overflow-hidden`}
     >
-      <TeamColorAccent awayTeam={game.awayTeam} homeTeam={game.homeTeam} />
+      <TeamColorAccent awayTeam={game.awayTeam} homeTeam={game.homeTeam} sport={game.sport} />
 
       {/* Eyebrow row */}
       <CardEyebrow verdictKey={verdictKey} gameTime={game.gameTime} />

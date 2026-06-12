@@ -96,7 +96,7 @@ export default function CautionCard({ game, takeaway }: Props) {
 
   return (
     <article className="relative bg-gradient-to-br from-gray-900 via-gray-900 to-amber-950/15 border border-amber-700/20 rounded-2xl p-6 sm:p-8 transition-all duration-200 overflow-hidden">
-      <TeamColorAccent awayTeam={game.awayTeam} homeTeam={game.homeTeam} />
+      <TeamColorAccent awayTeam={game.awayTeam} homeTeam={game.homeTeam} sport={game.sport} />
 
       <CardEyebrow verdictKey="caution" gameTime={game.gameTime} />
 
