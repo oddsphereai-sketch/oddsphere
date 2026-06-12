@@ -36,6 +36,7 @@ export type ReadinessBlocker =
   | "lineup_missing_backfillable"
   | "fi_market_missing"
   | "weather_missing_backfillable"
+  | "weather_stale_refreshable"
   | "park_factor_missing";
 
 export type ReadinessPerGame = {
@@ -55,6 +56,10 @@ export type ReadinessPerGame = {
   fi_market_rows: number;
   full_game_market_rows: number;
   weather_present: boolean;
+  /** Present-but-stale: a forecast row exists but is older than the
+   * freshness window AND the game has not started — so it should be
+   * re-fetched to sharpen toward first pitch. */
+  weather_stale: boolean;
   park_present: boolean;
   v22_ready: boolean;
   fi_v2_ready: boolean;
@@ -82,7 +87,7 @@ export async function auditMlbModelReadiness(args: {
   const { sport, date } = args;
   const { data: games } = await supabase
     .from("games")
-    .select("id, external_id, home_team_id, away_team_id, home_pitcher_id, away_pitcher_id, ballpark_id")
+    .select("id, external_id, home_team_id, away_team_id, home_pitcher_id, away_pitcher_id, ballpark_id, game_date")
     .eq("slate_date", date)
     .eq("sport", sport)
     .order("game_date");
@@ -140,11 +145,30 @@ export async function auditMlbModelReadiness(args: {
     }
   }
 
+  // Pull fetched_at so we can detect present-but-stale forecasts (not just
+  // missing ones). Keep the NEWEST fetched_at per game.
   const { data: wxRows } = await supabase
     .from("weather_forecasts")
-    .select("game_id")
+    .select("game_id, fetched_at")
     .in("game_id", gameIds);
   const weatherPresent = new Set((wxRows ?? []).map((w) => w.game_id as number));
+  const weatherFetchedAt = new Map<number, number>();
+  for (const w of wxRows ?? []) {
+    const gid = w.game_id as number;
+    const ts = w.fetched_at ? new Date(w.fetched_at as string).getTime() : NaN;
+    if (!Number.isNaN(ts)) {
+      weatherFetchedAt.set(gid, Math.max(weatherFetchedAt.get(gid) ?? 0, ts));
+    }
+  }
+  // Stale-weather window. A forecast is "stale" once it is older than
+  // WEATHER_STALE_MS AND the game starts within WEATHER_REFRESH_WINDOW_MS
+  // (so we sharpen toward first pitch without re-hitting the API all day
+  // for far-off games). Games already started are left alone — their
+  // prediction snapshots have locked, and refreshing weather then would
+  // not change a frozen snapshot. Tuned for an hourly cron.
+  const WEATHER_STALE_MS = 3 * 60 * 60 * 1000;
+  const WEATHER_REFRESH_WINDOW_MS = 8 * 60 * 60 * 1000;
+  const nowMsReadiness = Date.now();
 
   const parkIds = Array.from(new Set(games.map((g) => g.ballpark_id).filter((x): x is number => x !== null)));
   const { data: parks } = await supabase.from("ballparks").select("id, park_factor_runs").in("id", parkIds);
@@ -164,6 +188,17 @@ export async function auditMlbModelReadiness(args: {
     const fiMktRows = fiCounts.get(g.id as number) ?? 0;
     const fgMktRows = fullGameCounts.get(g.id as number) ?? 0;
     const weather = weatherPresent.has(g.id as number);
+    // Stale = present, older than the freshness window, and the game has
+    // not started yet (and starts within the refresh window).
+    const gameStartMs = g.game_date ? new Date(g.game_date as string).getTime() : NaN;
+    const fetchedMs = weatherFetchedAt.get(g.id as number);
+    const weatherStale =
+      weather &&
+      fetchedMs !== undefined &&
+      !Number.isNaN(gameStartMs) &&
+      gameStartMs > nowMsReadiness &&
+      gameStartMs - nowMsReadiness <= WEATHER_REFRESH_WINDOW_MS &&
+      nowMsReadiness - fetchedMs > WEATHER_STALE_MS;
     const park = g.ballpark_id !== null ? (parkPresent.get(g.ballpark_id as number) === true) : false;
 
     const blockers: ReadinessBlocker[] = [];
@@ -182,6 +217,7 @@ export async function auditMlbModelReadiness(args: {
     if (homeLineupCount < 8 || awayLineupCount < 8) blockers.push("lineup_missing_backfillable");
     if (fiMktRows === 0) blockers.push("fi_market_missing");
     if (!weather) blockers.push("weather_missing_backfillable");
+    else if (weatherStale) blockers.push("weather_stale_refreshable");
     if (!park) blockers.push("park_factor_missing");
 
     const v22Ready =
@@ -206,6 +242,7 @@ export async function auditMlbModelReadiness(args: {
       fi_market_rows: fiMktRows,
       full_game_market_rows: fgMktRows,
       weather_present: weather,
+      weather_stale: weatherStale,
       park_present: park,
       v22_ready: v22Ready,
       fi_v2_ready: fiV2Ready,
@@ -300,7 +337,11 @@ export async function repairMlbModelReadiness(args: {
     .filter((p) => p.mlb_id !== null)
     .map((p) => p.id);
   const lineupGapPresent = audit.per_game.some((p) => p.home_lineup_count < 8 || p.away_lineup_count < 8);
-  const weatherGapPresent = audit.per_game.some((p) => !p.weather_present);
+  // Gap = a game with NO forecast OR a present-but-stale forecast (so the
+  // refresh below sharpens weather toward first pitch instead of only
+  // filling missing rows once in the morning). refreshForecasts is a full
+  // slate re-fetch, so one stale game refreshes the whole slate cleanly.
+  const weatherGapPresent = audit.per_game.some((p) => !p.weather_present || p.weather_stale);
 
   if (
     pitchersNeedingStats.length === 0 &&
