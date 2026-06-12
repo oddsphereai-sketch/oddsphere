@@ -543,6 +543,16 @@ export type AutoModelSportSpecific = {
   model_integrity_notes?: string[];
   v2_1_audit?: unknown | null;
   v2_2_audit?: unknown | null;
+  /**
+   * 2026-06-12 — MLB totals projection/side reconciliation audit blob.
+   * Written by automodelService after runMlbAutoModelV2_2 so the
+   * downstream record writer + grade derivation can read both the raw
+   * model values and the reconciled customer-facing values. Type-erased
+   * here (`unknown`) to keep this types.ts module free of the deeper
+   * reconciliation type — gradeDerivationService casts to the real
+   * shape at read time.
+   */
+  total_projection_reconciliation?: unknown | null;
 };
 
 // ─────────────────────────────────────────────────────────────

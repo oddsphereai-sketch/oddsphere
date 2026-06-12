@@ -69,10 +69,7 @@ import {
   type SignalTier,
 } from "./signalEvidenceClassifier";
 import type { MarketSignalSource } from "./marketSignalDerivationService";
-import {
-  reconcileTotalSide,
-  type TotalSideReconciliation,
-} from "../automodel/sideReconciliation";
+import type { TotalProjectionReconciliation } from "../automodel/totalProjectionReconciliation";
 
 // ─── Public types ─────────────────────────────────────────────────────────
 
@@ -1079,65 +1076,29 @@ export async function deriveGradesForSlate(
 
       // ── MLB totals side-reconciliation cap (2026-06-12) ──────────────
       //
-      // For the OU axis ONLY, derive a grade_cap from the four-signal
-      // reconciliation (model_side / value_side / mean_direction_side /
-      // market_pressure_side). The cap is passed into deriveGrade and
-      // clamped at the exit. ML and NRFI do not set this field — their
-      // grading paths stay 100% unchanged.
+      // The reconciliation now runs inside automodelService at write
+      // time (lib/automodel/totalProjectionReconciliation.ts), and the
+      // resulting blob is persisted under
+      // sport_specific.total_projection_reconciliation. Here we just
+      // READ the cap and pass it into deriveGrade — the cap is a
+      // one-way clamp at the exit. ML and NRFI never set this field,
+      // so their grading paths stay 100% unchanged.
+      //
+      // Reading the cap from the persisted blob (rather than recomputing
+      // here) keeps the source of truth at the model layer and avoids
+      // the rebase + missing-input gymnastics from yesterday's V1
+      // integration. If the blob is missing (legacy rows pre-patch),
+      // the cap is null and grading falls back to legacy behavior.
       let totalGradeCap: GradeInput["totalGradeCap"] = null;
-      let totalReconciliation: TotalSideReconciliation | null = null;
       if (key === "ou" && pick.side !== null) {
-        const v22 = (sportSpecific as { v2_2_audit?: Record<string, unknown> } | null)?.v2_2_audit ?? null;
-        const posteriorTotal = typeof v22?.posterior_total === "number" ? v22.posterior_total : null;
-        const marketTotal = typeof v22?.market_total === "number" ? v22.market_total : null;
-        const ouModelProbPicked = typeof v22?.ou_model_prob === "number" ? v22.ou_model_prob : null;
-        const ouMarketProbPicked = typeof v22?.ou_market_prob === "number" ? v22.ou_market_prob : null;
-        // Reconciler wants OVER-perspective probabilities. v22 stores
-        // the model + market probability for the PICKED side; rebase.
-        const pickedIsOver = pick.side === "over";
-        const ouOverProb = ouModelProbPicked !== null
-          ? (pickedIsOver ? ouModelProbPicked : 1 - ouModelProbPicked)
-          : null;
-        const ouMarketOverProb = ouMarketProbPicked !== null
-          ? (pickedIsOver ? ouMarketProbPicked : 1 - ouMarketProbPicked)
-          : null;
-        // Public money rebased to OVER perspective from the sharp_signals
-        // row's `side` field. V1 takes line movement as null (line_history
-        // integration is a follow-up); market_pressure_side will be null,
-        // which is safe — the reconciler treats null as "no pressure" and
-        // never flips on the missing signal.
-        let publicMoneyOverPct: number | null = null;
-        let publicBetsOverPct: number | null = null;
-        if (sig && sig.public_money_pct !== null) {
-          publicMoneyOverPct = sig.side === "over"
-            ? sig.public_money_pct
-            : 100 - sig.public_money_pct;
-        }
-        if (sig && sig.public_betting_pct !== null) {
-          publicBetsOverPct = sig.side === "over"
-            ? sig.public_betting_pct
-            : 100 - sig.public_betting_pct;
-        }
-        // Only compute reconciliation when we have at least a posterior
-        // + market line (otherwise mean_direction can't be derived and
-        // the cap rules degenerate). modelProb fallback uses confidence
-        // when v22 doesn't carry the raw — defensive for legacy rows.
-        if (posteriorTotal !== null && marketTotal !== null) {
-          const fallbackOverProb = ouOverProb ?? (typeof modelConfidence === "number"
-            ? (pickedIsOver ? modelConfidence / 100 : 1 - modelConfidence / 100)
-            : 0.5);
-          totalReconciliation = reconcileTotalSide({
-            posteriorTotal,
-            marketTotal,
-            ouOverProb: fallbackOverProb,
-            ouMarketOverProb,
-            publicMoneyOverPct,
-            publicBetsOverPct,
-            lineMovementOverPp: null,
-            isLocked: row.locked_at !== null,
-            hasFlipBlocker: ouMarketOverProb === null,
-          });
-          totalGradeCap = totalReconciliation.grade_cap;
+        const blob =
+          (sportSpecific as { total_projection_reconciliation?: TotalProjectionReconciliation } | null)
+            ?.total_projection_reconciliation ?? null;
+        if (blob !== null && typeof blob === "object") {
+          const cap = (blob as TotalProjectionReconciliation).grade_cap;
+          if (cap === "no_play" || cap === "caution" || cap === "watchlist") {
+            totalGradeCap = cap;
+          }
         }
       }
       result.games[key].set(
@@ -1154,12 +1115,6 @@ export async function deriveGradesForSlate(
           totalGradeCap,
         })
       );
-      // Reconciliation blob persistence (full audit trail with
-      // would_flip_side, side_disagree_flags, etc.) is a follow-up
-      // PR — for the cap to take effect on tonight's MIA/PIT row,
-      // only deriveGrade needs the cap value. The blob itself flows
-      // through prediction_records.snapshot_json in the next pass.
-      void totalReconciliation;
     }
   }
 

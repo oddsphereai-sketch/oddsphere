@@ -50,6 +50,10 @@ import { runMlbAutoModelV1 } from "../automodel/mlbAutoModelV1";
 import { runMlbAutoModelV2 } from "../automodel/mlbAutoModelV2";
 import { runMlbAutoModelV2_1 } from "../automodel/mlbAutoModelV2_1";
 import { runMlbAutoModelV2_2 } from "../automodel/mlbAutoModelV2_2";
+import {
+  reconcileTotalProjection,
+  type TotalProjectionReconciliation,
+} from "../automodel/totalProjectionReconciliation";
 import { reviewAutoModelOutput } from "../automodel/aiSanityBoundary";
 import {
   resolveEffectiveVersion,
@@ -1207,20 +1211,78 @@ function applyV2IfSelected(args: {
       };
     }
     const a22 = v22.v22Audit;
+
+    // ─── 2026-06-12 — MLB totals projection / side reconciliation ───
+    //
+    // Daniel's binding contract: the customer-facing card MUST show a
+    // coherent state. The independent model's raw side (argmax Poisson
+    // prob) is preserved internally; the displayed side is reconciled
+    // so that displayed-score-total agrees with displayed-side
+    // relative to the line. See lib/automodel/totalProjectionReconciliation.ts
+    // for the rules. We wrap the v2.2 output here so every consumer
+    // downstream of automodelService (game_predictions write,
+    // predictionRecordService snapshot, gradeDerivationService, the
+    // UI) sees the reconciled values without any further code change.
+    //
+    // V1 inputs: mean_direction_side carries the special importance.
+    // market_pressure_side is null because line_history isn't wired
+    // into automodelService yet (deferred to a follow-up PR). raw
+    // probabilities + edges come straight from the v2.2 audit so the
+    // reconciler operates on the model's own output.
+    //
+    // Locked rows: previous reconciliation snapshot is read off the
+    // existing prediction record by an upstream caller and threaded in
+    // via v1Output.sport_specific (lock-aware writers already protect
+    // predicted_ou_side / predicted_total / predicted_*_score
+    // post-lock; the reconciler honors that by returning the locked
+    // snapshot verbatim when it's provided).
+    const prevReconciliation = (
+      (v1Output.sport_specific as Record<string, unknown>)?.total_projection_reconciliation as
+        | TotalProjectionReconciliation
+        | undefined
+    ) ?? null;
+    const isLockedHere =
+      typeof (v1Output.sport_specific as Record<string, unknown>)?.locked_at === "string";
+    const reconciliation = reconcileTotalProjection({
+      rawProjectedAwayScore: v22.predicted_away_score,
+      rawProjectedHomeScore: v22.predicted_home_score,
+      rawProjectedTotal: v22.predicted_total,
+      marketTotal: a22.market_total ?? null,
+      // v22.v22Audit.ou_model_prob is the probability of the PICKED
+      // side; rebase to OVER-perspective for the reconciler.
+      rawProbabilityOver:
+        v22.predicted_ou_side === "over"
+          ? a22.ou_model_prob
+          : 1 - a22.ou_model_prob,
+      marketImpliedOver:
+        a22.ou_market_prob === null
+          ? null
+          : v22.predicted_ou_side === "over"
+            ? a22.ou_market_prob
+            : 1 - a22.ou_market_prob,
+      // V1 wires market_pressure null; future PR will inject from
+      // sharp_signals + line_history.
+      marketPressureSide: null,
+      isLocked: isLockedHere,
+      lockedReconciliation: prevReconciliation,
+    });
+
+    // computeHoldPicks runs on the RECONCILED ou side. The downstream
+    // hold-picks bookkeeping is now consistent with the displayed side.
     const holdPicks22 = computeHoldPicks(v1Output.sport_specific.hold_picks, {
       ml: v22.predicted_ml_winner,
-      ou: v22.predicted_ou_side,
+      ou: reconciliation.reconciled_total_side,
       nrfi: v22.predicted_nrfi,
     });
     return {
       ...v1Output,
-      predicted_home_score: v22.predicted_home_score,
-      predicted_away_score: v22.predicted_away_score,
-      predicted_total: v22.predicted_total,
+      predicted_home_score: reconciliation.reconciled_home_score,
+      predicted_away_score: reconciliation.reconciled_away_score,
+      predicted_total: reconciliation.reconciled_total,
       predicted_ml_winner: v22.predicted_ml_winner,
       ml_confidence: v22.ml_confidence,
-      predicted_ou_side: v22.predicted_ou_side,
-      ou_confidence: v22.ou_confidence,
+      predicted_ou_side: reconciliation.reconciled_total_side,
+      ou_confidence: reconciliation.reconciled_confidence_pct,
       predicted_nrfi: v22.predicted_nrfi,
       nrfi_confidence: v22.nrfi_confidence,
       sport_specific: {
@@ -1250,6 +1312,12 @@ function applyV2IfSelected(args: {
         v2_best_angle_eligible: a22.ml_best_angle_eligible || a22.ou_best_angle_eligible,
         v2_2_audit: a22,
         model_integrity_notes: a22.model_integrity_notes,
+        // 2026-06-12 — full reconciliation audit blob. Raw model side
+        // / scores / probability stay preserved here so the auditor
+        // can compare against the reconciled (displayed) values, and
+        // so a future flip / score-adjustment path can read the prior
+        // reconciliation.
+        total_projection_reconciliation: reconciliation,
       },
     };
   }
