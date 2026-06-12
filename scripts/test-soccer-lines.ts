@@ -285,6 +285,9 @@ console.log("\n=== toLinesRow / toLineHistoryRow ===");
   check("toLineHistoryRow inherits all lines fields", histRow.market_type === "double_chance" && histRow.side === "home_or_draw");
   check("toLineHistoryRow stamps recorded_at", histRow.recorded_at === "2026-06-11T22:00:00.000Z");
   check("toLineHistoryRow does NOT pre-set is_opener (opener helper handles it)", histRow.is_opener === undefined);
+  // Schema fix: line_history has no `fetched_at` or `odds_decimal` columns.
+  check("toLineHistoryRow does NOT include fetched_at (schema mismatch fix)", !("fetched_at" in histRow));
+  check("toLineHistoryRow does NOT include odds_decimal (schema mismatch fix)", !("odds_decimal" in histRow));
 }
 
 {

@@ -224,7 +224,19 @@ export type LinesRow = {
   fetched_at: string;
 };
 
-export type LineHistoryRow = LinesRow & {
+/**
+ * `line_history` schema differs from `lines` — it uses `recorded_at`
+ * as the timestamp column and does NOT have `fetched_at` or
+ * `odds_decimal`. So we omit both here. Schema (from schema.sql §4.2):
+ *   id, game_id, market_type, player_id, sportsbook, side, line_value,
+ *   odds_american, is_opener, recorded_at, created_at.
+ *
+ * Caught 2026-06-12: tonight's apply wrote 125 `lines` rows successfully
+ * but `line_history` insert failed with "Could not find the 'fetched_at'
+ * column" then "Could not find the 'odds_decimal' column" because the
+ * spread copied non-existent columns into the history payload.
+ */
+export type LineHistoryRow = Omit<LinesRow, "fetched_at" | "odds_decimal"> & {
   recorded_at: string;
   is_opener?: boolean;
 };
@@ -252,8 +264,12 @@ export function toLinesRow(
 }
 
 export function toLineHistoryRow(linesRow: LinesRow, capturedAtIso: string): LineHistoryRow {
+  // Strip `fetched_at` + `odds_decimal` — both are on `lines` only, not on `line_history`.
+  const { fetched_at: _fetched_at, odds_decimal: _odds_decimal, ...rest } = linesRow;
+  void _fetched_at;
+  void _odds_decimal;
   return {
-    ...linesRow,
+    ...rest,
     recorded_at: capturedAtIso,
   };
 }
