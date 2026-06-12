@@ -125,6 +125,58 @@ function pickFallbackFor(market: MarketKey, sport: Sport): string {
 }
 
 /**
+ * Sport-aware matchup separator. International football is neutral-venue
+ * so " vs " is the convention; MLB/NBA/NHL use the home/away "@".
+ */
+function matchupSepFor(sport: Sport): string {
+  return (sport === "soccer" || sport === "ucl") ? "vs" : "@";
+}
+
+/**
+ * Customer-facing pick label transform for soccer raw values. Returns
+ * the original pick string when the sport doesn't need translation,
+ * so MLB/NBA/NHL paths are byte-identical.
+ *
+ * Soccer market_result pick maps to the team abbreviation when teams
+ * are available: pick="home" → homeAbbr, pick="away" → awayAbbr,
+ * pick="draw" → "Draw". DC + BTTS + Total transformations also handled.
+ */
+function soccerPickLabel(
+  market: MarketKey,
+  pick: string | null,
+  line: number | null,
+  awayAbbr: string | null,
+  homeAbbr: string | null,
+): string | null {
+  if (pick === null) return null;
+  // Match result
+  if (market === "moneyline") {
+    if (pick === "home") return homeAbbr ?? "Home";
+    if (pick === "away") return awayAbbr ?? "Away";
+    if (pick === "draw") return "Draw";
+  }
+  // BTTS (lives on the first_inning slot in the soccer DTO)
+  if (market === "first_inning") {
+    if (pick === "yes") return "Yes";
+    if (pick === "no") return "No";
+  }
+  // Total
+  if (market === "total") {
+    const lineStr = line !== null ? ` ${line}` : "";
+    if (pick === "over") return `Over${lineStr}`;
+    if (pick === "under") return `Under${lineStr}`;
+    if (pick.toLowerCase() === "over") return `Over${lineStr}`;
+    if (pick.toLowerCase() === "under") return `Under${lineStr}`;
+  }
+  // Double Chance (not currently surfaced as a market key but kept for
+  // forward compatibility if/when the soccer DTO adds it).
+  if (pick === "home_or_draw") return `${homeAbbr ?? "Home"} or Draw`;
+  if (pick === "away_or_draw") return `${awayAbbr ?? "Away"} or Draw`;
+  if (pick === "home_or_away") return `${awayAbbr ?? "Away"} or ${homeAbbr ?? "Home"}`;
+  return pick;
+}
+
+/**
  * Sport-aware list of markets to RENDER as chips/columns on the slate
  * card + reader. The first_inning slot is repurposed per sport
  * (MLB: NRFI/YRFI, NBA: Spread, NHL: Puck Line).
@@ -482,16 +534,28 @@ const LOGO_FILTER: Record<string, string> = {
 };
 
 function TeamBadge({ abbr, logo, size }: { abbr: string; logo: string | null; size: number }) {
-  // The DB's `teams.logo_url` column is unreliable today (broken
-  // mlbstatic.com URLs across all 30 teams). Bypass it and use ESPN as
-  // the primary CDN source. Kept the `logo` prop for API parity but
-  // intentionally don't read it. When ESPN slugs are missing (unknown
-  // team) or the request 404s, the abbr-disc fallback engages.
-  void logo;
+  // For MLB/NBA/NHL the DB's `teams.logo_url` column is unreliable, so
+  // ESPN is the primary CDN. For soccer/ucl, ESPN has no country logos
+  // — the `logo` prop carries the FlagCDN URL written by the soccer
+  // adapter, so trust it. Both branches share the abbr-disc fallback
+  // on image error so a broken request never leaves an empty circle.
   const shellSport = useShellSport();
   const [errored, setErrored] = useState(false);
-  const src = espnLogoUrl(abbr, shellSport);
+  const isSoccer = shellSport === "soccer" || shellSport === "ucl";
+  const src = isSoccer ? (logo ?? "") : espnLogoUrl(abbr, shellSport);
   const filter = LOGO_FILTER[abbr];
+
+  if (isSoccer && !logo) {
+    return (
+      <div
+        className="inline-flex items-center justify-center rounded-full bg-violet-500/[0.12] border border-violet-400/30 text-violet-100 font-bold tracking-tight shrink-0 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.10)]"
+        style={{ width: size, height: size, fontSize: Math.max(9, Math.floor(size * 0.38)) }}
+        aria-label={abbr}
+      >
+        {abbr}
+      </div>
+    );
+  }
 
   if (errored) {
     // Brighter, intentional-looking disc so it doesn't read as a broken
@@ -606,7 +670,7 @@ function MarketPill({
       <span className={`text-[10px] uppercase tracking-[0.14em] font-bold shrink-0 ${selected ? "text-violet-100" : "text-gray-500"}`}>
         {marketShortLabelFor(market, shellSport)}
       </span>
-      <span className={`text-[12px] font-bold tabular-nums shrink-0 ${pick === null ? "text-gray-500" : ""}`}>{pick ?? pickFallbackFor(market, shellSport)}</span>
+      <span className={`text-[12px] font-bold tabular-nums shrink-0 ${pick === null ? "text-gray-500" : ""}`}>{pick === null ? pickFallbackFor(market, shellSport) : formatPickWithLine(market, pick, null, shellSport)}</span>
       <span className={`text-[10.5px] tabular-nums shrink-0 ${selected ? "text-gray-300" : "text-gray-500"}`}>
         {confidence === null ? "—" : `${Math.round(confidence * 100)}%`}
       </span>
@@ -645,9 +709,17 @@ export function formatPickWithLine(
   pick: string | null,
   line: number | null,
   sport: Sport = "mlb",
+  awayAbbr: string | null = null,
+  homeAbbr: string | null = null,
 ): string {
   if (pick === null) {
     return pickFallbackFor(market, sport);
+  }
+  // Soccer: translate raw model picks (home/away/draw/yes/no/over/under)
+  // to customer-facing strings, using team abbreviations when provided.
+  if (sport === "soccer" || sport === "ucl") {
+    const transformed = soccerPickLabel(market, pick, line, awayAbbr, homeAbbr);
+    if (transformed !== null) return transformed;
   }
   if (market === "total" && line !== null) {
     // NBA pick_label already encodes the line (e.g. "OVER 215.5"). MLB
@@ -675,6 +747,8 @@ function ReaderMarketSegment({
   verdict,
   selected,
   onClick,
+  awayTeam = null,
+  homeTeam = null,
 }: {
   market: MarketKey;
   pick: string | null;
@@ -684,9 +758,12 @@ function ReaderMarketSegment({
   verdict: VerdictKey;
   selected: boolean;
   onClick: () => void;
+  /** Team abbreviations for soccer pick-label translation (home → KOR etc). */
+  awayTeam?: string | null;
+  homeTeam?: string | null;
 }) {
   const shellSport = useShellSport();
-  const pickText = formatPickWithLine(market, pick, line, shellSport);
+  const pickText = formatPickWithLine(market, pick, line, shellSport, awayTeam, homeTeam);
   return (
     <button
       type="button"
@@ -2543,7 +2620,7 @@ function SlateCard({
                   {marketShortLabelFor(m, shellSport)}
                 </span>
                 <span className="block text-[12.5px] font-bold tabular-nums text-gray-100 truncate">
-                  {formatPickWithLine(m, md.pick, md.line, shellSport)}
+                  {formatPickWithLine(m, md.pick, md.line, shellSport, game.awayTeam, game.homeTeam)}
                 </span>
               </button>
             );
@@ -2667,7 +2744,7 @@ function SelectedEdgeReader({
             below + the compact "Pick" block. */}
         <div className="mt-2 flex items-center gap-2 flex-wrap">
           <span className="text-[16px] font-bold text-gray-100 whitespace-nowrap" style={{ letterSpacing: "-0.01em" }}>
-            {game.awayTeam} <span className="text-gray-700 font-normal mx-0.5">@</span> {game.homeTeam}
+            {game.awayTeam} <span className="text-gray-700 font-normal mx-0.5">{matchupSepFor(shellSport)}</span> {game.homeTeam}
           </span>
           <VerdictChip verdict={verdict} showActionPrefix />
           <span className="text-[11px] text-gray-500 tabular-nums">{game.gameTime}</span>
@@ -2689,6 +2766,8 @@ function SelectedEdgeReader({
               verdict={asVerdictKey(game.markets[m].verdict.key)}
               selected={market === m}
               onClick={() => onMarketChange(m)}
+              awayTeam={game.awayTeam}
+              homeTeam={game.homeTeam}
             />
           ))}
         </div>

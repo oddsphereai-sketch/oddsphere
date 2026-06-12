@@ -162,7 +162,20 @@ function buildTotalPredictionDto(r: PredictionRecordSlim | null): DailyEdgeTotal
   };
 }
 
-function buildMarketEdgeDto(r: PredictionRecordSlim | null): MarketEdgeDto {
+/**
+ * Opener lookup keyed by (game_id, market_type, side). Built once from
+ * line_history at the top of the adapter (one batched query) and threaded
+ * through buildMarketEdgeDto so each market can stamp a real
+ * `lineOpenAmerican` instead of null. The earliest recorded_at row per
+ * (game, market, side) wins — that's the closest approximation of the
+ * opener we have when is_opener wasn't flagged at write-time.
+ */
+type OpenerLookup = (gameId: number, market: string, side: string | null) => number | null;
+
+function buildMarketEdgeDto(
+  r: PredictionRecordSlim | null,
+  openerLookup: OpenerLookup,
+): MarketEdgeDto {
   if (r === null) {
     return {
       pick: null,
@@ -239,7 +252,7 @@ function buildMarketEdgeDto(r: PredictionRecordSlim | null): MarketEdgeDto {
     betsPct: null,
     publicSplits: [],
     priceAmerican: r.odds_american,
-    lineOpenAmerican: null,
+    lineOpenAmerican: openerLookup(r.game_id, r.market, r.side),
     modelTotal: null,
     marketTotal: null,
     line: r.line_value,
@@ -515,6 +528,52 @@ export async function buildSoccerDailyEdgeAdapted(
     })
     .sort((a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime());
 
+  // 4.5. Load line_history to compute opener per (game, market, side).
+  //
+  // The earliest recorded_at row per (game_id, market_type, side) is the
+  // opener we surface to the card's "Line move" field. We prefer rows
+  // flagged is_opener=true when available, falling back to the oldest
+  // recorded row when the flag is missing. One batched query keeps this
+  // adapter to its existing 4-query budget (games, teams, preds, lines).
+  const wcGameIdsForOpener = wcGamesWithPreds.map((g) => g.id);
+  const openerMap = new Map<string, number>();
+  if (wcGameIdsForOpener.length > 0) {
+    const { data: histData } = await supabase
+      .from("line_history")
+      .select("game_id, market_type, side, odds_american, is_opener, recorded_at")
+      .in("game_id", wcGameIdsForOpener)
+      .in("market_type", ["match_result", "double_chance", "total", "btts"])
+      .order("recorded_at", { ascending: true });
+    type HistRow = {
+      game_id: number;
+      market_type: string;
+      side: string | null;
+      odds_american: number | null;
+      is_opener: boolean | null;
+      recorded_at: string;
+    };
+    const rows = (histData as HistRow[] | null) ?? [];
+    // First pass: prefer is_opener=true rows.
+    for (const row of rows) {
+      if (row.odds_american === null || row.side === null) continue;
+      if (row.is_opener !== true) continue;
+      const key = `${row.game_id}|${row.market_type}|${row.side}`;
+      if (openerMap.has(key)) continue;
+      openerMap.set(key, row.odds_american);
+    }
+    // Second pass: fill any remaining keys with the oldest known row.
+    for (const row of rows) {
+      if (row.odds_american === null || row.side === null) continue;
+      const key = `${row.game_id}|${row.market_type}|${row.side}`;
+      if (openerMap.has(key)) continue;
+      openerMap.set(key, row.odds_american);
+    }
+  }
+  const openerLookup: OpenerLookup = (gameId, market, side) => {
+    if (side === null) return null;
+    return openerMap.get(`${gameId}|${market}|${side}`) ?? null;
+  };
+
   // 5. Build DTO per game.
   const dtos: DailyEdgeGameDto[] = wcGames.map((g) => {
     const homeTeam = g.home_team_id !== null ? teamById.get(g.home_team_id) : undefined;
@@ -576,9 +635,9 @@ export async function buildSoccerDailyEdgeAdapted(
         nrfi: buildPredictionDto(btts),
       },
       markets: {
-        moneyline: buildMarketEdgeDto(mr),
-        total: buildMarketEdgeDto(total),
-        first_inning: buildMarketEdgeDto(btts),
+        moneyline: buildMarketEdgeDto(mr, openerLookup),
+        total: buildMarketEdgeDto(total, openerLookup),
+        first_inning: buildMarketEdgeDto(btts, openerLookup),
       },
       decisionLine,
       projected: {

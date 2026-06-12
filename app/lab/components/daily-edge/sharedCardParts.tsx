@@ -840,7 +840,7 @@ export function NoPlayStrip({
       </span>
       <span className="text-gray-500">·</span>
       <span className="text-gray-400 font-medium tracking-tight">
-        {game.awayTeam} @ {game.homeTeam}
+        {game.awayTeam} {(game.sport === "soccer" || game.sport === "ucl") ? "vs" : "@"} {game.homeTeam}
       </span>
       <span className="text-gray-500">·</span>
       <span className="text-gray-400 flex-1 min-w-0 truncate">
