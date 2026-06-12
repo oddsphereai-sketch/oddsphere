@@ -33,11 +33,11 @@ function section(t: string) {
 }
 
 async function main() {
-  // ── Default behavior: env var unset → HOLD ───────────────────────────
-  section("Env var unset → default HOLD");
+  // ── Default behavior (2026-06-12 flip): env var unset → AUTO-PUBLISH ─
+  section("Env var unset → default AUTO-PUBLISH");
   {
     const r = shouldAutoPublishMorningSlate({});
-    check("unset → false (default HOLD-as-draft)", r === false);
+    check("unset → true (default auto-publish)", r === true);
   }
 
   // [B] Explicit "true" → publish enabled
@@ -47,19 +47,19 @@ async function main() {
     check("'true' → true", r === true);
   }
 
-  // [C] Other truthy-looking values stay HOLD (strict equality)
-  section("Non-strict truthy values → HOLD (strict 'true' only)");
+  // [C] Any non-"false" value → auto-publish (case-sensitive opt-out)
+  section("Non-'false' values → AUTO-PUBLISH");
   {
-    check("'TRUE' → false (case-sensitive)", shouldAutoPublishMorningSlate({ MORNING_SLATE_AUTO_PUBLISH: "TRUE" }) === false);
-    check("'1' → false", shouldAutoPublishMorningSlate({ MORNING_SLATE_AUTO_PUBLISH: "1" }) === false);
-    check("'yes' → false", shouldAutoPublishMorningSlate({ MORNING_SLATE_AUTO_PUBLISH: "yes" }) === false);
-    check("'on' → false", shouldAutoPublishMorningSlate({ MORNING_SLATE_AUTO_PUBLISH: "on" }) === false);
-    check("'' → false", shouldAutoPublishMorningSlate({ MORNING_SLATE_AUTO_PUBLISH: "" }) === false);
-    check("undefined → false", shouldAutoPublishMorningSlate({ MORNING_SLATE_AUTO_PUBLISH: undefined }) === false);
+    check("'TRUE' → true", shouldAutoPublishMorningSlate({ MORNING_SLATE_AUTO_PUBLISH: "TRUE" }) === true);
+    check("'1' → true", shouldAutoPublishMorningSlate({ MORNING_SLATE_AUTO_PUBLISH: "1" }) === true);
+    check("'yes' → true", shouldAutoPublishMorningSlate({ MORNING_SLATE_AUTO_PUBLISH: "yes" }) === true);
+    check("'on' → true", shouldAutoPublishMorningSlate({ MORNING_SLATE_AUTO_PUBLISH: "on" }) === true);
+    check("'' → true", shouldAutoPublishMorningSlate({ MORNING_SLATE_AUTO_PUBLISH: "" }) === true);
+    check("undefined → true", shouldAutoPublishMorningSlate({ MORNING_SLATE_AUTO_PUBLISH: undefined }) === true);
   }
 
-  // [D] Explicit "false" → HOLD
-  section("'false' → explicit HOLD");
+  // [D] Explicit "false" → HOLD (operator opt-out path)
+  section("'false' → explicit HOLD (operator opt-out)");
   {
     const r = shouldAutoPublishMorningSlate({ MORNING_SLATE_AUTO_PUBLISH: "false" });
     check("'false' → false", r === false);
@@ -71,24 +71,9 @@ async function main() {
     const onLabel = publishDecisionLabel(true);
     const offLabel = publishDecisionLabel(false);
     check("autoPublish=true label mentions 'auto-publish enabled'", onLabel.includes("auto-publish enabled"));
-    check("autoPublish=true label mentions env var name", onLabel.includes("MORNING_SLATE_AUTO_PUBLISH"));
     check("autoPublish=false label starts with 'skipped'", offLabel.startsWith("skipped"));
-    check("autoPublish=false label mentions 'hold-as-draft'", offLabel.includes("hold-as-draft"));
-  }
-
-  // [F] Cron-handler integration shape — the cron writes
-  // stepDetails.slate_published using this decision. Confirm both code
-  // paths produce inspectable outputs.
-  section("Integration shape — cron step-details consumers grep on labels");
-  {
-    // Off-by-default: step details should contain hold-as-draft so
-    // operators can confirm the safe default is in effect.
-    const off = publishDecisionLabel(false);
-    check("off label is grep-friendly for 'hold-as-draft'", off.includes("hold-as-draft"));
-    // On (when flipped): step details should mention the env var so
-    // operators auditing the cron run can find the trigger.
-    const on = publishDecisionLabel(true);
-    check("on label is grep-friendly for 'MORNING_SLATE_AUTO_PUBLISH'", on.includes("MORNING_SLATE_AUTO_PUBLISH"));
+    check("autoPublish=false label mentions 'operator hold-as-draft'", offLabel.includes("hold-as-draft"));
+    check("autoPublish=false label mentions env var name", offLabel.includes("MORNING_SLATE_AUTO_PUBLISH"));
   }
 
   // ── Summary ──────────────────────────────────────────────────────────

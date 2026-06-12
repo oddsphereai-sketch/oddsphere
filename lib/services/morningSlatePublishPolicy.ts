@@ -21,18 +21,31 @@
  */
 
 /**
- * Resolve the auto-publish decision from process env. Returns true ONLY
- * when the env var is the literal string "true" (case-sensitive, no
- * other truthy values accepted). Any other input — including unset,
- * empty string, "TRUE", "1", "yes" — returns false so the safe default
- * holds.
+ * Resolve the auto-publish decision from process env. Returns true when
+ * the env var is NOT explicitly the literal string "false" — so the
+ * default behavior is AUTO-PUBLISH unless an operator has explicitly
+ * disabled it.
+ *
+ * Rationale (2026-06-12): the original R-19 Phase 1 default was HOLD,
+ * intended as a safety opt-in for unattended cron launch. In practice it
+ * meant healthy daily slates stayed invisible to members every morning
+ * until a human ran the manual publish operator. The slate-safety gates
+ * upstream of this decision (G1 game count, G2 starter coverage, G3
+ * in-progress, data-layer health, intraday alignment, lock-miss) already
+ * block publish on unhealthy slates — those ARE the safety net. The
+ * publish-policy gate was a second redundant veto with no benefit and a
+ * recurring visibility cost.
+ *
+ * Set MORNING_SLATE_AUTO_PUBLISH=false on the Vercel environment to
+ * restore the pre-2026-06-12 hold-as-draft behavior (any sport, any
+ * date).
  */
 export type MorningSlatePublishEnv = Record<string, string | undefined>;
 
 export function shouldAutoPublishMorningSlate(
   env: MorningSlatePublishEnv = process.env
 ): boolean {
-  return env.MORNING_SLATE_AUTO_PUBLISH === "true";
+  return env.MORNING_SLATE_AUTO_PUBLISH !== "false";
 }
 
 /**
@@ -42,6 +55,6 @@ export function shouldAutoPublishMorningSlate(
  */
 export function publishDecisionLabel(autoPublish: boolean): string {
   return autoPublish
-    ? "auto-publish enabled (MORNING_SLATE_AUTO_PUBLISH=true)"
-    : "skipped — MORNING_SLATE_AUTO_PUBLISH not enabled (hold-as-draft)";
+    ? "auto-publish enabled (default; safety gates upstream)"
+    : "skipped — MORNING_SLATE_AUTO_PUBLISH=false (operator hold-as-draft)";
 }

@@ -838,6 +838,22 @@ export async function generatePredictionsForSlate(
   // the hourly tracking-refresh still catches up if this sync hits a
   // transient error.
   if (wantWrite && sport === "mlb") {
+    // Phase 6B.36 (P0 visibility fix) — when this sync errors, the
+    // operator MUST be able to see it from the DB. Before this commit
+    // failures only landed in Vercel function logs (console.warn), which
+    // means an MLB pipeline that wrote `game_predictions` but failed to
+    // mirror into `prediction_records` looked like "success" from the
+    // `data_refresh_log` view — the exact silent failure mode that
+    // produced the 2026-06-12 morning MLB-empty-slate incident.
+    //
+    // We now write one row per failure event to `data_refresh_log` with
+    // data_source="prediction_records_sync_failure", carrying the error
+    // text in `error_message`. The throw branch and the per-row errors
+    // branch both log so the operator surfaces both classes.
+    //
+    // We still NEVER throw out — the silent-catch intent (model write
+    // must not be lost) is preserved; only the visibility changes.
+    let syncFailureMessage: string | null = null;
     try {
       const syncRes = await createPredictionRecords({
         sport: "mlb",
@@ -847,17 +863,59 @@ export async function generatePredictionsForSlate(
         supabase,
       });
       if (syncRes.errors.length > 0) {
+        const summary = `${syncRes.errors.length} error(s): ${JSON.stringify(syncRes.errors).slice(0, 500)}`;
         console.warn(
-          `[automodelService] prediction_records sync had ${syncRes.errors.length} error(s) ` +
-            `after model write for ${slate_date}: ${JSON.stringify(syncRes.errors).slice(0, 500)}`,
+          `[automodelService] prediction_records sync had ${summary} ` +
+            `after model write for ${slate_date}`,
         );
+        syncFailureMessage = `prediction_records sync per-row errors: ${summary}`;
+      } else if (syncRes.insertedCount === 0 && syncRes.proposed.length > 0) {
+        // Proposed rows but inserted 0 (and no per-row errors). All proposed
+        // rows were either skipped-locked or skipped-existing without
+        // generating an error — but if the slate had unlocked games and
+        // we wrote nothing, something is wrong. Surface it for inspection.
+        if (syncRes.skippedExisting + syncRes.skippedHeld < syncRes.proposed.length) {
+          syncFailureMessage =
+            `prediction_records sync proposed=${syncRes.proposed.length} ` +
+            `inserted=0 skippedExisting=${syncRes.skippedExisting} ` +
+            `skippedHeld=${syncRes.skippedHeld} — silent zero-write`;
+        }
       }
     } catch (syncErr) {
+      const errMsg = syncErr instanceof Error ? syncErr.message : String(syncErr);
       console.warn(
         `[automodelService] prediction_records sync threw after model write ` +
-          `for ${slate_date}: ${syncErr instanceof Error ? syncErr.message : String(syncErr)}. ` +
-          `Hourly tracking-refresh will catch up on the next tick.`,
+          `for ${slate_date}: ${errMsg}. Hourly tracking-refresh will catch up on the next tick.`,
       );
+      syncFailureMessage = `prediction_records sync threw: ${errMsg}`;
+    }
+    if (syncFailureMessage !== null) {
+      // Best-effort durable signal. If this insert itself errors we log
+      // but absolutely do not throw — the original model write must stay.
+      try {
+        const nowIso = new Date().toISOString();
+        const { error: logErr } = await supabase
+          .from("data_refresh_log")
+          .insert({
+            data_source: "prediction_records_sync_failure",
+            sport: "mlb",
+            refresh_started_at: nowIso,
+            refresh_completed_at: nowIso,
+            refresh_status: "failed",
+            records_updated: 0,
+            error_message: syncFailureMessage.slice(0, 1000),
+          });
+        if (logErr) {
+          console.warn(
+            `[automodelService] data_refresh_log visibility row insert failed: ${logErr.message}`,
+          );
+        }
+      } catch (logCatchErr) {
+        console.warn(
+          `[automodelService] data_refresh_log visibility row insert threw: ` +
+            (logCatchErr instanceof Error ? logCatchErr.message : String(logCatchErr)),
+        );
+      }
     }
   }
 
