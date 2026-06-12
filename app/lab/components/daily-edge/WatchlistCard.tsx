@@ -50,6 +50,7 @@ export default function WatchlistCard({ game, takeaway }: Props) {
           awayTeamLogo={game.awayTeamLogo}
           homeTeam={game.homeTeam}
           homeTeamLogo={game.homeTeamLogo}
+          sport={game.sport}
         />
       </div>
 

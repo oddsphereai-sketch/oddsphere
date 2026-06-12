@@ -389,6 +389,26 @@ export type MarketEdgeDto = {
     | "flip_side"
     | "dampen_confidence"
     | "downgrade_grade";
+  /**
+   * WC reader follow-up (2026-06-12) — Match Result three-way model
+   * probabilities for soccer, pulled from the Dixon-Coles snapshot at
+   * `model.raw_probabilities.match_result.{home, draw, away}`.
+   *
+   * Populated ONLY for soccer Match Result rows (sport === "soccer" and
+   * market_key === "moneyline" in the DTO slot mapping). Null for any
+   * other sport/market combination — the reader hides the section when
+   * the field is null. Adapter-side; NEVER persisted to the DB.
+   *
+   * Sum should be ≈ 1.0 ± Dixon-Coles rounding. Display is read-only.
+   */
+  matchResultThreeWayProbs?: {
+    /** 0..1 probability of the home team winning regulation. */
+    home: number;
+    /** 0..1 probability of a draw. */
+    draw: number;
+    /** 0..1 probability of the away team winning regulation. */
+    away: number;
+  } | null;
 };
 
 /**

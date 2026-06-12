@@ -347,16 +347,24 @@ export function CompactMatchupHeader({
   awayTeamLogo,
   homeTeam,
   homeTeamLogo,
+  sport,
 }: {
   awayTeam: string;
   awayTeamLogo: string | null;
   homeTeam: string;
   homeTeamLogo: string | null;
+  /**
+   * WC follow-up (2026-06-12) — sport-aware matchup separator. Defaults
+   * to "@" (MLB/NBA/NHL). For soccer/ucl the convention is " vs " since
+   * World Cup fixtures are played at neutral venues.
+   */
+  sport?: string;
 }) {
+  const sep = sport === "soccer" || sport === "ucl" ? "vs" : "@";
   return (
     <h3 className="inline-flex items-center gap-2">
       <CompactTeamBadge logo={awayTeamLogo} abbreviation={awayTeam} />
-      <span className="text-gray-500 text-sm">@</span>
+      <span className="text-gray-500 text-sm">{sep}</span>
       <CompactTeamBadge logo={homeTeamLogo} abbreviation={homeTeam} />
     </h3>
   );

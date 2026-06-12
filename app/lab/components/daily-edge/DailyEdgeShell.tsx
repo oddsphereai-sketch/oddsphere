@@ -1708,12 +1708,84 @@ function ConfidenceVsMarketStrip({
   );
 }
 
-function MarketPulse({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
+/**
+ * WC reader follow-up (2026-06-12) — Match Result three-way model
+ * probability band for soccer/ucl. Public splits are unavailable for
+ * FIFA WC at our provider tier (WC-2 empty_as_of_probe contract), so
+ * we show the model's home / draw / away breakdown in the reader's
+ * Match Result section instead of a sparse "Public split unavailable"
+ * placeholder. Pure presentational — hides when probs is null.
+ */
+function SoccerWdlBars({
+  probs,
+  awayAbbr,
+  homeAbbr,
+}: {
+  probs: { home: number; draw: number; away: number };
+  awayAbbr: string;
+  homeAbbr: string;
+}) {
+  const fmt = (p: number): string => `${Math.round(p * 100)}%`;
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">
+        Match Result · Model Probability
+      </p>
+      <div className="grid grid-cols-3 gap-1.5 text-[10.5px] tabular-nums">
+        <div className="flex flex-col items-center gap-0.5 rounded-md bg-white/[0.03] border border-white/5 px-2 py-1.5">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 font-bold">{awayAbbr}</span>
+          <span className="text-gray-200 font-semibold">{fmt(probs.away)}</span>
+        </div>
+        <div className="flex flex-col items-center gap-0.5 rounded-md bg-white/[0.03] border border-white/5 px-2 py-1.5">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 font-bold">Draw</span>
+          <span className="text-gray-200 font-semibold">{fmt(probs.draw)}</span>
+        </div>
+        <div className="flex flex-col items-center gap-0.5 rounded-md bg-white/[0.03] border border-white/5 px-2 py-1.5">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 font-bold">{homeAbbr}</span>
+          <span className="text-gray-200 font-semibold">{fmt(probs.home)}</span>
+        </div>
+      </div>
+      <p className="text-[10px] text-gray-500 leading-snug">
+        Public splits aren&rsquo;t reported for World Cup at this stage — model probabilities shown.
+      </p>
+    </div>
+  );
+}
+
+function MarketPulse({
+  market,
+  marketData,
+  game,
+}: {
+  market: MarketKey;
+  marketData: MarketEdgeDto;
+  game?: DailyEdgeGameDto;
+}) {
   // NBA reuses the `first_inning` slot for Spread; NHL reuses it for
   // Puck Line. Both DO have meaningful split / market data flow and
   // should take the normal renderer below. The MLB-specific
   // "first-inning splits aren't offered" branch only fires for MLB.
   const shellSport = useShellSport();
+
+  // WC reader follow-up (2026-06-12) — soccer/ucl Match Result reader
+  // gets the W/D/L band when the snapshot carried the three-way model
+  // probabilities. This replaces the sparse "splits unavailable"
+  // placeholder for soccer ML rows.
+  const wdlProbs = marketData.matchResultThreeWayProbs ?? null;
+  if (
+    (shellSport === "soccer" || shellSport === "ucl") &&
+    market === "moneyline" &&
+    wdlProbs !== null &&
+    game !== undefined
+  ) {
+    return (
+      <SoccerWdlBars
+        probs={wdlProbs}
+        awayAbbr={game.awayTeam}
+        homeAbbr={game.homeTeam}
+      />
+    );
+  }
   // First-inning never uses split copy — V1 SharpAPI tier does not cover
   // first-inning public splits. Phrase as provider-coverage, not failure.
   // When the FI market is held (V1 NRFI threshold not met), surface a
@@ -2894,7 +2966,7 @@ function SelectedEdgeReader({
                   <div className="border-t border-white/[0.04]" />
                   <ConfidenceVsMarketStrip market={market} marketData={marketData} />
                   <div className="border-t border-white/[0.04]" />
-                  <MarketPulse market={market} marketData={marketData} />
+                  <MarketPulse market={market} marketData={marketData} game={game} />
                 </div>
                 <MarketNotes
                   marketData={marketData}
@@ -3053,7 +3125,7 @@ function MobileDetailSheet({
               <QuickRead game={game} market={selectedMarket} marketData={marketData} />
               <EdgeStack market={selectedMarket} marketData={marketData} />
               <ConfidenceVsMarketStrip market={selectedMarket} marketData={marketData} />
-              <MarketPulse market={selectedMarket} marketData={marketData} />
+              <MarketPulse market={selectedMarket} marketData={marketData} game={game} />
               <MarketNotes
                 marketData={marketData}
                 awayAbbr={game.awayTeam}

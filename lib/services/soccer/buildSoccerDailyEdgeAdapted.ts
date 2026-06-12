@@ -42,6 +42,7 @@ import type {
 import type { Verdict } from "../verdictDerivation";
 import type { SharpReadKey } from "../sharpReadSelector";
 import { flagCdnUrl } from "./_countryFlags";
+import { soccerPickLabel } from "./soccerPickLabel";
 
 const SOCCER_MODEL_VERSION = "soccer_dixon_coles_v1";
 const LOCK_WINDOW_MINUTES = 60;
@@ -172,6 +173,36 @@ function buildTotalPredictionDto(r: PredictionRecordSlim | null): DailyEdgeTotal
  */
 type OpenerLookup = (gameId: number, market: string, side: string | null) => number | null;
 
+/**
+ * Extract Match Result three-way probabilities (home / draw / away)
+ * from the Dixon-Coles snapshot. Returns null when the snapshot is
+ * missing the path or any of the three required keys, so the reader
+ * hides the section instead of inventing zeros.
+ *
+ * Source path: `snapshot_json.model.raw_probabilities.match_result`.
+ */
+function extractMatchResultThreeWayProbs(
+  snapshot: Record<string, unknown> | null,
+): { home: number; draw: number; away: number } | null {
+  if (snapshot === null) return null;
+  const model = (snapshot as { model?: unknown }).model;
+  if (model === null || typeof model !== "object") return null;
+  const raw = (model as { raw_probabilities?: unknown }).raw_probabilities;
+  if (raw === null || typeof raw !== "object") return null;
+  const mr = (raw as { match_result?: unknown }).match_result;
+  if (mr === null || typeof mr !== "object") return null;
+  const home = (mr as { home?: unknown }).home;
+  const draw = (mr as { draw?: unknown }).draw;
+  const away = (mr as { away?: unknown }).away;
+  if (typeof home !== "number" || typeof draw !== "number" || typeof away !== "number") return null;
+  // Clamp into [0,1] defensively — snapshot might persist outside range via rounding.
+  return {
+    home: Math.max(0, Math.min(1, home)),
+    draw: Math.max(0, Math.min(1, draw)),
+    away: Math.max(0, Math.min(1, away)),
+  };
+}
+
 function buildMarketEdgeDto(
   r: PredictionRecordSlim | null,
   openerLookup: OpenerLookup,
@@ -286,7 +317,12 @@ function buildHeldHelpLine(r: PredictionRecordSlim): string {
   return "Held pre-tournament; waiting on in-tournament calibration evidence before publishing a play.";
 }
 
-function buildDecisionLine(matchup: string, perMarket: Map<string, PredictionRecordSlim>): string {
+function buildDecisionLine(
+  matchup: string,
+  perMarket: Map<string, PredictionRecordSlim>,
+  awayAbbr: string | null = null,
+  homeAbbr: string | null = null,
+): string {
   // If any market is unheld and graded, lead with that; otherwise honest hold copy.
   const playable = Array.from(perMarket.values()).find((r) => !r.held && r.play_grade !== null);
   if (playable !== undefined) {
@@ -296,7 +332,10 @@ function buildDecisionLine(matchup: string, perMarket: Map<string, PredictionRec
         : playable.play_grade === "lean"
           ? "Model lean"
           : "Watchlist";
-    return `${label} tonight: ${matchup} ${marketDisplayName(playable.market)} ${playable.pick}.`;
+    const pickLabel =
+      soccerPickLabel(playable.market, playable.pick, playable.line_value, awayAbbr, homeAbbr) ??
+      playable.pick;
+    return `${label} tonight: ${matchup} ${marketDisplayName(playable.market)} ${pickLabel}.`;
   }
   return `${matchup} — model holding all markets pending in-tournament calibration.`;
 }
@@ -330,6 +369,8 @@ function buildSharpRead(perMarket: Map<string, PredictionRecordSlim>): {
 function buildModelBreakdown(
   matchup: string,
   perMarket: Map<string, PredictionRecordSlim>,
+  awayAbbr: string | null = null,
+  homeAbbr: string | null = null,
 ): string | null {
   const mr = perMarket.get("match_result");
   const total = perMarket.get("total");
@@ -348,7 +389,8 @@ function buildModelBreakdown(
     if (r === undefined) return "";
     const tag = r.held ? `Held (${r.hold_reason ?? "no reason"})` : (r.play_grade ?? "graded");
     const conf = r.confidence === null ? "" : ` conf=${r.confidence.toFixed(0)}%`;
-    return `${label}: ${r.pick}${r.line_value !== null ? ` @ ${r.line_value}` : ""} — ${tag}${conf}.`;
+    const pickLabel = soccerPickLabel(r.market, r.pick, r.line_value, awayAbbr, homeAbbr) ?? r.pick;
+    return `${label}: ${pickLabel} — ${tag}${conf}.`;
   };
 
   const lines = [
@@ -596,9 +638,9 @@ export async function buildSoccerDailyEdgeAdapted(
     const { time: gameTime, minutes: gameStartMinutes } = et(g.game_date);
     const lockState = deriveLockState(lockedAt, g.game_date);
     const holdReason = deriveGameHoldReason(perMarket);
-    const decisionLine = buildDecisionLine(matchup, perMarket);
+    const decisionLine = buildDecisionLine(matchup, perMarket, awayAbbr, homeAbbr);
     const sharpRead = buildSharpRead(perMarket);
-    const modelBreakdown = buildModelBreakdown(matchup, perMarket);
+    const modelBreakdown = buildModelBreakdown(matchup, perMarket, awayAbbr, homeAbbr);
 
     // Country flags from BDL alpha-3 code (teams.location). UI falls
     // back to abbreviation when the flag URL is null.
@@ -635,7 +677,15 @@ export async function buildSoccerDailyEdgeAdapted(
         nrfi: buildPredictionDto(btts),
       },
       markets: {
-        moneyline: buildMarketEdgeDto(mr, openerLookup),
+        // WC reader follow-up (2026-06-12): attach the Match Result
+        // three-way model probabilities to the moneyline slot. Pulled
+        // from the Dixon-Coles snapshot via extractMatchResultThreeWayProbs.
+        // The reader hides the W/D/L band when this field is null, so
+        // soccer rows without an mr snapshot stay clean.
+        moneyline: {
+          ...buildMarketEdgeDto(mr, openerLookup),
+          matchResultThreeWayProbs: extractMatchResultThreeWayProbs(mr?.snapshot_json ?? null),
+        },
         total: buildMarketEdgeDto(total, openerLookup),
         first_inning: buildMarketEdgeDto(btts, openerLookup),
       },
