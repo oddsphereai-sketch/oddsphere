@@ -1806,6 +1806,21 @@ export function runMlbAutoModelV1(
     away_lineup_ops_factor_adjusted: round1(awayLineupAdjusted * 100) / 100,
     home_bullpen_factor: round1(homeBullpenFactor.factor * 100) / 100,
     away_bullpen_factor: round1(awayBullpenFactor.factor * 100) / 100,
+    // Bullpen audit metadata (WC/MLB stabilization 2026-06-12). The factor
+    // above is derived from the IP-weighted James-Stein SHRUNK proxy; we
+    // preserve the raw (un-shrunk) factor + total bullpen IP so the source
+    // and the shrinkage effect are auditable, and tag the display source.
+    home_bullpen_factor_raw:
+      snapshot.home_team.bullpen_era_proxy_raw != null
+        ? round1((snapshot.home_team.bullpen_era_proxy_raw / LEAGUE_CONSTANTS_V1.AVG_ERA) * 100) / 100
+        : null,
+    away_bullpen_factor_raw:
+      snapshot.away_team.bullpen_era_proxy_raw != null
+        ? round1((snapshot.away_team.bullpen_era_proxy_raw / LEAGUE_CONSTANTS_V1.AVG_ERA) * 100) / 100
+        : null,
+    home_bullpen_ip: snapshot.home_team.bullpen_ip ?? null,
+    away_bullpen_ip: snapshot.away_team.bullpen_ip ?? null,
+    bullpen_factor_source: "rp_season_era_shrunk_v1",
     park_factor_runs: snapshot.ballpark?.park_factor_runs ?? null,
     weather_total_adjust: weatherDeltaTotal,
     league_avg_runs_used: LEAGUE_CONSTANTS_V1.AVG_RUNS_PER_GAME,

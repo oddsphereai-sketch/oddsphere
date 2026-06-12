@@ -50,6 +50,7 @@ import type {
   TeamSnapshot,
   WeatherSnapshot,
 } from "./types";
+import { shrinkBullpenEra } from "./types";
 
 /**
  * Fallback when slate_date can't yield a season number cleanly.
@@ -372,12 +373,16 @@ function indexBy<T, K extends string | number>(
 function buildTeamSnapshot(
   team: TeamRow,
   bullpenEraProxy: number | null,
-  teamAvgOps: { mean: number | null; sample: number | null }
+  teamAvgOps: { mean: number | null; sample: number | null },
+  bullpenEraProxyRaw: number | null = null,
+  bullpenIp: number | null = null
 ): TeamSnapshot {
   return {
     team_external_id: team.external_id,
     abbreviation: team.abbreviation,
     bullpen_era_proxy: bullpenEraProxy,
+    bullpen_era_proxy_raw: bullpenEraProxyRaw,
+    bullpen_ip: bullpenIp,
     // No team_season_stats table in V1 — model doesn't consume this
     // field. Reporting honest null.
     season_runs_per_game: null,
@@ -1054,21 +1059,38 @@ export async function buildFeatureSnapshots(
   // Group RP season ERAs by team and average. Falls back to null when
   // a team has no RP season-stats data.
   const rpsByTeam = groupBy(rpRows, (r) => r.team_id);
+  // `bullpenEraByTeamId` is the SHRUNK proxy (consumed by the bullpen
+  // factor). Raw proxy + total bullpen IP are preserved for audit.
   const bullpenEraByTeamId = new Map<number, number | null>();
+  const bullpenEraRawByTeamId = new Map<number, number | null>();
+  const bullpenIpByTeamId = new Map<number, number | null>();
   for (const [teamId, rps] of rpsByTeam.entries()) {
     const eras: number[] = [];
+    let ipTotal = 0;
     for (const rp of rps) {
       const ss = seasonStatsByPlayer.get(rp.id);
       const era = ss?.pitching_era;
       if (era !== null && era !== undefined && Number.isFinite(era)) {
         eras.push(era);
+        const ip = ss?.pitching_ip;
+        if (ip !== null && ip !== undefined && Number.isFinite(ip)) ipTotal += ip;
       }
     }
     if (eras.length === 0) {
       bullpenEraByTeamId.set(teamId, null);
+      bullpenEraRawByTeamId.set(teamId, null);
+      bullpenIpByTeamId.set(teamId, null);
     } else {
-      const avg = eras.reduce((s, e) => s + e, 0) / eras.length;
-      bullpenEraByTeamId.set(teamId, avg);
+      const rawAvg = eras.reduce((s, e) => s + e, 0) / eras.length;
+      bullpenEraRawByTeamId.set(teamId, rawAvg);
+      bullpenIpByTeamId.set(teamId, ipTotal);
+      // James-Stein shrinkage toward the league-average ERA, weighted by
+      // total bullpen IP. June reliever ERAs sit well below the full-season
+      // 4.0 constant (especially elite, small-sample pens), which drove the
+      // raw proxy below the trusted [0.5, 2.0] factor band (e.g. ATL/NYM ≈
+      // 0.47). Shrinking stabilizes the factor for both the model and the
+      // Key Stats display without inventing data — raw value preserved above.
+      bullpenEraByTeamId.set(teamId, shrinkBullpenEra(rawAvg, ipTotal));
     }
   }
 
@@ -1132,12 +1154,16 @@ export async function buildFeatureSnapshots(
     const home_team = buildTeamSnapshot(
       homeTeamRow,
       bullpenEraByTeamId.get(homeTeamRow.id) ?? null,
-      teamAvgOpsByTeamId.get(homeTeamRow.id) ?? { mean: null, sample: null }
+      teamAvgOpsByTeamId.get(homeTeamRow.id) ?? { mean: null, sample: null },
+      bullpenEraRawByTeamId.get(homeTeamRow.id) ?? null,
+      bullpenIpByTeamId.get(homeTeamRow.id) ?? null
     );
     const away_team = buildTeamSnapshot(
       awayTeamRow,
       bullpenEraByTeamId.get(awayTeamRow.id) ?? null,
-      teamAvgOpsByTeamId.get(awayTeamRow.id) ?? { mean: null, sample: null }
+      teamAvgOpsByTeamId.get(awayTeamRow.id) ?? { mean: null, sample: null },
+      bullpenEraRawByTeamId.get(awayTeamRow.id) ?? null,
+      bullpenIpByTeamId.get(awayTeamRow.id) ?? null
     );
 
     const gameLineups = lineups.filter((l) => l.game_id === g.id);

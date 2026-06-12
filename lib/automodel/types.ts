@@ -120,8 +120,14 @@ export type BatterSnapshot = {
 export type TeamSnapshot = {
   team_external_id: number;
   abbreviation: string;
-  /** Weighted average of RP season ERAs. Null when no RP stats. */
+  /** Bullpen ERA proxy SHRUNK toward league average (James-Stein, k =
+   * SHRINKAGE_K_BULLPEN_ERA, weighted by total bullpen IP). This is what
+   * the bullpen factor consumes. Null when no RP stats. */
   bullpen_era_proxy: number | null;
+  /** Raw (un-shrunk) mean of RP season ERAs, preserved for audit. */
+  bullpen_era_proxy_raw?: number | null;
+  /** Total bullpen IP used as the shrinkage weight, preserved for audit. */
+  bullpen_ip?: number | null;
   season_runs_per_game: number | null;
   /**
    * R-16J Step 1.6 — team-level offense proxy. Mean season `batting_ops`
@@ -284,6 +290,13 @@ export type AutoFactors = {
   away_lineup_ops_factor_adjusted: number;
   home_bullpen_factor: number;
   away_bullpen_factor: number;
+  /** Bullpen audit metadata — raw (un-shrunk) factor, total bullpen IP,
+   * and display source tag. The factors above use the shrunk proxy. */
+  home_bullpen_factor_raw?: number | null;
+  away_bullpen_factor_raw?: number | null;
+  home_bullpen_ip?: number | null;
+  away_bullpen_ip?: number | null;
+  bullpen_factor_source?: string;
   park_factor_runs: number | null;
   weather_total_adjust: number;
   league_avg_runs_used: number;
@@ -854,6 +867,20 @@ export const SHRINKAGE_K_FI_ERA = 10;
 export const SHRINKAGE_K_FI_WHIP = 10;
 export const SHRINKAGE_K_BULLPEN_ERA = 150;
 export const SHRINKAGE_K_LINEUP_OPS = 150;
+
+/**
+ * James-Stein shrinkage of a raw bullpen ERA proxy toward the league
+ * average (AVG_ERA), weighted by total bullpen IP with k =
+ * SHRINKAGE_K_BULLPEN_ERA. Low-IP (uncertain) and extreme early-season
+ * pens are pulled toward 4.0 so the derived factor stays in a trustworthy
+ * range. A full-season-volume pen barely moves; a thin or extreme pen
+ * moves a lot. Pure — exported for unit testing.
+ */
+export function shrinkBullpenEra(rawEra: number, bullpenIp: number): number {
+  const k = SHRINKAGE_K_BULLPEN_ERA;
+  const ip = Number.isFinite(bullpenIp) && bullpenIp > 0 ? bullpenIp : 0;
+  return (ip * rawEra + k * LEAGUE_CONSTANTS_V1.AVG_ERA) / (ip + k);
+}
 
 /** League baseline WHIP — prior for starter WHIP shrinkage. */
 export const LEAGUE_BASELINE_WHIP = 1.30;
