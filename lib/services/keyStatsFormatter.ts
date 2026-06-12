@@ -27,6 +27,42 @@ export type KeyStatRow = {
 export type AutoFactors = Record<string, unknown>;
 export type KeyStatsMarket = "moneyline" | "total" | "first_inning";
 
+/**
+ * Labels that are inherently two-sided (one value per team). The Key Stats
+ * UI must render BOTH team rows whenever at least one side has a value, so
+ * a missing/unavailable side shows "TEAM —" rather than collapsing to a
+ * single dangling unlabeled number (the ATL@NYM 2026-06-12 bug). Shared
+ * with DailyEdgeShell's interpretKeyStat so the renderer and formatter
+ * agree on what "two-sided" means.
+ */
+export const TWO_SIDED_KEY_STAT_LABELS: ReadonlySet<string> = new Set([
+  "Starter ERA",
+  "Lineup OPS (weighted)",
+  "Bullpen quality",
+  "Lineup vs starter",
+  "Starter 1st-inning ERA",
+  "Starter 1st-inning WHIP",
+  "Top-of-order OPS",
+  "Starter ERA (season)",
+]);
+
+/**
+ * True when a Key Stats row should render as two team-labeled rows.
+ * Two-sided labels render two-sided as long as ONE side has a value
+ * (missing side → "—"); all other labels are two-sided only when both
+ * sides are present.
+ */
+export function keyStatIsTwoSided(
+  label: string,
+  awayValue: string | null,
+  homeValue: string | null
+): boolean {
+  if (TWO_SIDED_KEY_STAT_LABELS.has(label)) {
+    return awayValue !== null || homeValue !== null;
+  }
+  return awayValue !== null && homeValue !== null;
+}
+
 // ───────────────────────────────────────────────────────────────────
 // Value helpers
 // ───────────────────────────────────────────────────────────────────
@@ -124,13 +160,21 @@ function moneylineRows(af: AutoFactors): KeyStatRow[] {
   }
 
   // Row 3 — Bullpen factor (beginner-friendly)
+  //
+  // When a raw factor is PRESENT but out of the trusted [0.5, 2.0] range
+  // (fmtFactor → null, e.g. ATL/NYM's 0.47/0.468 on 2026-06-12), surface
+  // an honest "—" for that side instead of letting both-null collapse drop
+  // the entire row. This keeps the Bullpen Quality slot structurally
+  // consistent across games rather than silently vanishing on anomalous
+  // data — without inventing a misleading "% better than league" figure.
+  // A genuinely absent side (raw null) stays null and renders as "—" too.
   const aBp = num(af.away_bullpen_factor);
   const hBp = num(af.home_bullpen_factor);
   if (aBp !== null || hBp !== null) {
     rows.push({
       label: "Bullpen quality",
-      awayValue: fmtFactor(aBp, "worse_pitching"),
-      homeValue: fmtFactor(hBp, "worse_pitching"),
+      awayValue: aBp !== null ? (fmtFactor(aBp, "worse_pitching") ?? "—") : null,
+      homeValue: hBp !== null ? (fmtFactor(hBp, "worse_pitching") ?? "—") : null,
       source: "computed",
     });
   }

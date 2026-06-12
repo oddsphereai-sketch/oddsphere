@@ -39,6 +39,7 @@ import type {
 } from "../../lib/labTypes";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { isContextOnlyDisplayMarket } from "@/lib/config/officialTrackingMarkets";
+import { TWO_SIDED_KEY_STAT_LABELS, keyStatIsTwoSided } from "@/lib/services/keyStatsFormatter";
 import { teamPrimaryColor } from "./teamColors";
 import { LockBadge } from "./LockBadge";
 
@@ -2277,6 +2278,21 @@ function interpretKeyStat(
     // labels visible). No edge chip when we can't compute one.
     return { edgeLine: null, tone: "gray", winner: null, twoSided: true };
   }
+  // Two-sided stats with ONE side missing ─────────────────────────────
+  // ATL@NYM (2026-06-12) bug: a two-sided ML/Total stat (e.g. Lineup OPS)
+  // with one null side fell through to the single-value fallback below,
+  // rendering a dangling unlabeled number with no team attribution. Force
+  // two-sided rendering so the missing side shows "TEAM —". Edge chip is
+  // omitted because it can't be computed from one value. (FI two-sided
+  // labels are already handled by the block above and return earlier.)
+  if (
+    TWO_SIDED_KEY_STAT_LABELS.has(label) &&
+    (awayValue !== null || homeValue !== null) &&
+    (awayValue === null || homeValue === null)
+  ) {
+    return { edgeLine: null, tone: "gray", winner: null, twoSided: true };
+  }
+
   // Two-sided ML stats ────────────────────────────────────────────────
   if (label === "Starter ERA" && awayValue !== null && homeValue !== null) {
     const a = parseFloat(awayValue);
@@ -2435,8 +2451,11 @@ function interpretKeyStat(
     return { edgeLine: null, tone: "gray", winner: null, twoSided: false };
   }
 
-  // Fallback: unknown stat — show as one or two rows depending on what's present.
-  const twoSided = awayValue !== null && homeValue !== null;
+  // Fallback: unknown stat — show as one or two rows depending on what's
+  // present. keyStatIsTwoSided keeps inherently two-sided labels (Starter
+  // ERA / Lineup OPS / Bullpen / etc.) team-labeled even when one side is
+  // missing, so a single value never renders without its team attribution.
+  const twoSided = keyStatIsTwoSided(label, awayValue, homeValue);
   return { edgeLine: null, tone: "gray", winner: null, twoSided };
 }
 
