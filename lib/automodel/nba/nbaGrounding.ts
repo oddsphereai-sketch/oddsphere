@@ -36,6 +36,18 @@ export interface NbaGroundingInput {
   injuryHomePts: number;
   injuryAwayPts: number;
   injuriesKnown: boolean;
+  /**
+   * Consensus moneyline splits by side (fractions 0–1), for the smart-money
+   * guard. The pick side is decided inside this fn, so we take both sides and
+   * derive "sharp money fading the pick" here. Null/missing ⇒ unobserved ⇒ not
+   * against (the SharpAPI Finals coverage gap must not manufacture a signal).
+   */
+  splitsMl?: {
+    betsHome: number | null;
+    handleHome: number | null;
+    betsAway: number | null;
+    handleAway: number | null;
+  } | null;
   marginSd?: number;
   totalSd?: number;
 }
@@ -70,7 +82,7 @@ export interface NbaGroundingResult {
   totalPickProb: number;
   // grade
   confidence: number;
-  playGrade: "lean" | "watch" | "caution" | "market_aligned" | "hold";
+  playGrade: "best_angle" | "lean" | "watch" | "caution" | "market_aligned" | "hold";
   gradeRationale: string;
   notes: string[];
 }
@@ -85,6 +97,12 @@ const ML_REG_MAX_DIST_PP = 10.0;
 const CONF_CEILING: Record<NbaTier, number> = { high: 70, medium: 62, low: 56, fallback: 53 };
 const LEAN_MIN_EDGE_PP = 2.0;
 const MARKET_ALIGNED_EDGE_PP = 1.0;
+// Qualified Best Angle (no empirical-calibration lock; gated on confirmation):
+//   positive edge in [BA_MIN, BA_MAX] + high tier + injuries known + multi-book
+//   consensus + market confirms the pick side + sharp money NOT fading it.
+// BA_MAX guards an implausibly large edge from masquerading as a "best" bet.
+const BA_MIN_EDGE_PP = 3.5;
+const BA_MAX_EDGE_PP = 8.0;
 
 function normCdf(z: number): number {
   const t = 1 / (1 + 0.2316419 * Math.abs(z));
@@ -151,6 +169,14 @@ export function groundNbaPrediction(input: NbaGroundingInput): NbaGroundingResul
     input.consensusHomeMlNoVig === null ? null : mlPick === "home" ? input.consensusHomeMlNoVig : 1 - input.consensusHomeMlNoVig;
   const mlEdgePct = marketPickProb === null ? null : round1((mlPickProb - marketPickProb) * 100);
 
+  // 5b — smart-money guard for the PICK side (now that the pick is known).
+  // Sharp money is "against" when handle under-indexes bets on our pick by ≥5pp.
+  const sm = input.splitsMl ?? null;
+  const pickBets = sm === null ? null : mlPick === "home" ? sm.betsHome : sm.betsAway;
+  const pickHandle = sm === null ? null : mlPick === "home" ? sm.handleHome : sm.handleAway;
+  const splitsObserved = pickBets !== null && pickBets !== undefined && pickHandle !== null && pickHandle !== undefined;
+  const smartMoneyAgainstPick = splitsObserved && (pickHandle! - pickBets!) * 100 <= -5;
+
   // 6 — total pick + prob.
   const totalLineUsed = input.consensusTotal;
   const totalRef = totalLineUsed ?? groundedTotal;
@@ -158,7 +184,7 @@ export function groundNbaPrediction(input: NbaGroundingInput): NbaGroundingResul
   const totalPick: "over" | "under" = groundedTotal >= totalRef ? "over" : "under";
   const totalPickProb = totalPick === "over" ? totalOverProb : 1 - totalOverProb;
 
-  // 7 — confidence + play grade (bounded; NO Best Angle while uncalibrated).
+  // 7 — confidence + play grade (qualified Best Angle; no calibration lock).
   const ceiling = CONF_CEILING[input.tier];
   const limited = input.consensusStrength !== "multi_book"; // 1-book / fallback / insufficient
   let confidence = clamp(mlPickProb * 100, 50, ceiling);
@@ -183,18 +209,43 @@ export function groundNbaPrediction(input: NbaGroundingInput): NbaGroundingResul
   } else if (absEdge < MARKET_ALIGNED_EDGE_PP) {
     playGrade = "market_aligned";
     gradeRationale = `edge ${mlEdgePct}pp within ±${MARKET_ALIGNED_EDGE_PP}pp of market — informational (${consensusLabel})`;
-  } else if (
-    absEdge >= LEAN_MIN_EDGE_PP && input.tier === "high" && input.injuriesKnown &&
-    input.consensusStrength === "multi_book"
-  ) {
-    playGrade = "lean";
-    gradeRationale = `edge ${mlEdgePct}pp, high tier, ${consensusLabel} — Lean (Best Angle locked: model uncalibrated, 0 graded NBA games)`;
   } else {
-    playGrade = "watch";
-    const why = input.consensusStrength !== "multi_book" ? consensusLabel
-      : input.tier !== "high" ? "tier=" + input.tier
-      : !input.injuriesKnown ? "injuries unknown" : "below lean bar";
-    gradeRationale = `edge ${mlEdgePct}pp but ${why} — Watch (no Lean/Best Angle)`;
+    // Lean qualifiers: meaningful edge + best data tier + injuries known + true
+    // multi-book consensus (not a single book / spread-implied fallback).
+    const qualifiesLean =
+      absEdge >= LEAN_MIN_EDGE_PP && input.tier === "high" && input.injuriesKnown &&
+      input.consensusStrength === "multi_book";
+    // Best Angle adds: the market itself favors the pick side (no-vig ≥ 50%),
+    // the edge is POSITIVE (model finds value, not the market over-pricing our
+    // side) and within a plausible band, and sharp money is NOT fading it.
+    const signedEdge = mlEdgePct ?? 0;
+    const marketConfirmsPick = marketPickProb !== null && marketPickProb >= 0.5;
+    const smartMoneyAgainst = smartMoneyAgainstPick;
+    const edgeInBaBand = signedEdge >= BA_MIN_EDGE_PP && signedEdge <= BA_MAX_EDGE_PP;
+    const qualifiesBA = qualifiesLean && edgeInBaBand && marketConfirmsPick && !smartMoneyAgainst;
+
+    const smartMoneyNote = splitsObserved
+      ? smartMoneyAgainst ? "sharp money fading pick" : "sharp money not against"
+      : "splits unobserved";
+
+    if (qualifiesBA) {
+      playGrade = "best_angle";
+      gradeRationale = `edge ${mlEdgePct}pp, high tier, ${consensusLabel}, market confirms side, ${smartMoneyNote} — qualified Best Angle`;
+    } else if (qualifiesLean) {
+      playGrade = "lean";
+      const baBlock =
+        !marketConfirmsPick ? "market favors other side"
+        : signedEdge < BA_MIN_EDGE_PP ? `edge below Best Angle bar (${BA_MIN_EDGE_PP}pp)`
+        : signedEdge > BA_MAX_EDGE_PP ? `edge implausibly large (>${BA_MAX_EDGE_PP}pp)`
+        : smartMoneyAgainst ? "sharp money fading pick" : "";
+      gradeRationale = `edge ${mlEdgePct}pp, high tier, ${consensusLabel} — Lean${baBlock ? ` (not Best Angle: ${baBlock})` : ""}`;
+    } else {
+      playGrade = "watch";
+      const why = input.consensusStrength !== "multi_book" ? consensusLabel
+        : input.tier !== "high" ? "tier=" + input.tier
+        : !input.injuriesKnown ? "injuries unknown" : "below lean bar";
+      gradeRationale = `edge ${mlEdgePct}pp but ${why} — Watch (no Lean/Best Angle)`;
+    }
   }
 
   return {

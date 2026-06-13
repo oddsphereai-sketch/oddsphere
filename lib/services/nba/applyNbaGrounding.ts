@@ -21,6 +21,7 @@ import {
 import { groundNbaPrediction } from "../../automodel/nba/nbaGrounding";
 import type { NbaGameSnapshot, NbaModelStage } from "../../automodel/nba/types";
 import type { NbaLineRow } from "./nbaMarketIntelligence";
+import type { NbaSplitsRow } from "./nbaSplitsClient";
 import type { NbaDailyEdgeGameDto } from "./buildNbaDailyEdgeDto";
 
 export interface NbaGroundingAudit {
@@ -47,8 +48,9 @@ export interface NbaGroundingAudit {
 }
 
 /** Map grounding grade → the DTO's internal grade enum (watch renders as market_aligned publicly). */
-function toIntelGrade(g: string): "lean" | "watch" | "caution" | "no_market" | "held" {
+function toIntelGrade(g: string): "best_angle" | "lean" | "watch" | "caution" | "no_market" | "held" {
   switch (g) {
+    case "best_angle": return "best_angle";
     case "lean": return "lean";
     case "caution": return "caution";
     case "hold": return "held";
@@ -87,6 +89,7 @@ export function applyNbaGroundingOverlay(
   snapshot: NbaGameSnapshot,
   lines: ReadonlyArray<NbaLineRow>,
   stage: NbaModelStage,
+  splitsRow: NbaSplitsRow | null = null,
 ): NbaGroundingAudit {
   // 1 — raw V2.
   const v2 = runNbaAutoModelV2(snapshot, stage, { isPlayoffs: true });
@@ -116,6 +119,14 @@ export function applyNbaGroundingOverlay(
     injuryHomePts,
     injuryAwayPts,
     injuriesKnown,
+    splitsMl: splitsRow?.ml
+      ? {
+          betsHome: splitsRow.ml.bets_pct?.home ?? null,
+          handleHome: splitsRow.ml.handle_pct?.home ?? null,
+          betsAway: splitsRow.ml.bets_pct?.away ?? null,
+          handleAway: splitsRow.ml.handle_pct?.away ?? null,
+        }
+      : null,
   });
 
   const held = !cons.clean;
