@@ -162,7 +162,17 @@ export function applyNbaGroundingOverlay(
     ml.effective_confidence = ground.confidence;
     ml.grade = toIntelGrade(ground.playGrade);
     const mlOdds = pickedOdds(lines, "moneyline", ground.mlPick, cons.mlAcceptedBooks);
-    if (mlOdds !== null) ml.current_price = { ...ml.current_price, odds_american: mlOdds };
+    if (mlOdds !== null) {
+      // Attribute the price to the ACCEPTED source, not whatever book the DTO
+      // happened to carry — otherwise a price taken from ballybet gets labeled
+      // "fliff" (the rejected/corrupted book). Single accepted book → its name;
+      // multiple → "consensus".
+      const mlSrc =
+        cons.mlAcceptedBooks.length === 1 ? cons.mlAcceptedBooks[0]!
+        : cons.mlAcceptedBooks.length > 1 ? "consensus"
+        : ml.current_price.sportsbook;
+      ml.current_price = { ...ml.current_price, odds_american: mlOdds, sportsbook: mlSrc };
+    }
 
     // Total intel overlay.
     const tot = game.intelligence.total;
