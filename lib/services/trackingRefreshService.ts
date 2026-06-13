@@ -45,6 +45,7 @@ import { ingestNbaFinalScores } from "./nba/nbaScoreIngestService";
 // firing. Member-facing NHL launch is gated separately via SportRail.
 import { writeNhlPredictionRecords } from "./nhl/buildNhlPredictionRecords";
 import { ingestNhlFinalScores } from "./nhl/nhlScoreIngestService";
+import { ingestSoccerFinalScores } from "./soccer/soccerScoreIngestService";
 import { moneyPuckSeasonStartYear } from "../providers/nhl/_moneyPuckClient";
 
 export type TrackingRefreshOptions = {
@@ -393,6 +394,26 @@ export async function runTrackingRefresh(
           }
         } catch (e) {
           perDate.errors.push(`nhl-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      } else if (sport === "soccer") {
+        // WC tracking integration (2026-06-12). Soccer prediction_records
+        // are written by the soccer-daily-refresh cron, not here; this
+        // branch only finalizes finished WC fixtures so the shared grader
+        // (which now delegates soccer markets to soccerGrading) can resolve
+        // them. No record write, no locked-snapshot mutation.
+        try {
+          const fsRes = await ingestSoccerFinalScores({
+            slateDate: date,
+            apply: opts.apply,
+          });
+          perDate.final_scores_updated = fsRes.updated;
+          perDate.final_scores_in_progress = 0;
+          perDate.final_scores_scheduled = Math.max(0, fsRes.apiEventsFetched - fsRes.finalizedCount);
+          for (const e of fsRes.errors) {
+            perDate.errors.push(`soccer-final-scores: ${e}`);
+          }
+        } catch (e) {
+          perDate.errors.push(`soccer-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
 

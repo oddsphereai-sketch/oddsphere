@@ -31,6 +31,16 @@
  * picks. For V1 launch all picks are model picks, so these rules apply.
  */
 
+import {
+  gradeMatchResult,
+  gradeDoubleChance,
+  gradeBtts,
+  gradeTotalGoals,
+  type MatchResultPick,
+  type DoubleChancePick,
+  type BttsPick,
+  type TotalGoalsPick,
+} from "./soccer/soccerGrading";
 import type {
   PredictionRecordRow,
   PredictionGradeRow,
@@ -281,12 +291,61 @@ export function gradePrediction(inputs: GradeInputs): PredictionGradeRow {
     return emptyGrade(record, "pending", source, `unknown game status=${game.status}`);
   }
 
+  // Soccer markets grade via the soccer-native grader on the 90'
+  // regulation score: 3-way Match Result, Double Chance, Total goals (with
+  // push handling), and BTTS. Routed by sport so the shared `total` market
+  // doesn't fall into the MLB runs-total path.
+  if (record.sport === "soccer" || record.sport === "ucl") {
+    return gradeSoccer(inputs);
+  }
+
   // Final game — grade per market.
   if (m === "moneyline") return gradeMoneyline(inputs);
   if (m === "total") return gradeTotal(inputs);
-  // Markets we don't yet grade (spread, double_chance, prop). Return pending
-  // so they're visible but not falsely counted.
+  // Markets we don't yet grade (spread, prop). Return pending so they're
+  // visible but not falsely counted.
   return emptyGrade(record, "pending", source, `unsupported market for V1 grader: ${m}`);
+}
+
+/**
+ * Grade a soccer prediction_record using the soccer-native grader. Final
+ * 90' regulation score comes from games.home_score/away_score. Picks are
+ * canonical tokens stored per market (match_result→home/draw/away,
+ * double_chance→home_or_draw/..., total→over/under, btts→yes/no).
+ */
+function gradeSoccer(inputs: GradeInputs): PredictionGradeRow {
+  const { record, game, source } = inputs;
+  if (game.home_score === null || game.away_score === null) {
+    return emptyGrade(record, "pending", source, "missing final regulation score");
+  }
+  const ft = { home_goals_ft: game.home_score, away_goals_ft: game.away_score };
+  const token = (record.pick ?? record.side ?? "").toString().trim().toLowerCase();
+  let res;
+  switch (record.market) {
+    case "match_result":
+      res = gradeMatchResult(token as MatchResultPick, ft);
+      break;
+    case "double_chance":
+      res = gradeDoubleChance(token as DoubleChancePick, ft);
+      break;
+    case "btts":
+      res = gradeBtts(token as BttsPick, ft);
+      break;
+    case "total":
+      if (record.line_value === null) {
+        return emptyGrade(record, "pending", source, "missing line_value for soccer total");
+      }
+      res = gradeTotalGoals(token as TotalGoalsPick, record.line_value, ft);
+      break;
+    default:
+      return emptyGrade(record, "pending", source, `unsupported soccer market: ${record.market}`);
+  }
+  return {
+    ...emptyGrade(record, res.result, source, res.notes),
+    actual_home_score: game.home_score,
+    actual_away_score: game.away_score,
+    actual_total: game.home_score + game.away_score,
+  };
 }
 
 // ─── small helpers re-exported for tests ───────────────────────────

@@ -57,7 +57,7 @@ export const maxDuration = 180;
 // grade after final — same operational contract as MLB/NBA. NHL is still
 // hidden from members: SportRail keeps live=false, so this is admin/data
 // pipeline activation only, not a public-facing launch.
-const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl"];
+const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "soccer"];
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

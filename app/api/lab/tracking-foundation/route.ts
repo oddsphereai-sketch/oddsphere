@@ -32,7 +32,8 @@ export async function GET(request: Request) {
     sportRaw === "cfb" ||
     sportRaw === "cbb" ||
     sportRaw === "nhl" ||
-    sportRaw === "ucl"
+    sportRaw === "ucl" ||
+    sportRaw === "soccer"
       ? (sportRaw as TrackedSport)
       : undefined;
 
