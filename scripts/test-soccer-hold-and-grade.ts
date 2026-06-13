@@ -225,9 +225,13 @@ test("9f. TOTAL_PUSH_RISK still HOLDS for total when |predicted_total − line| 
 });
 
 // ─── Test 10 — Total provider divergence unchanged tonight ──────────
-test("10. TOTAL_LINES_DIVERGE still HOLDS at the existing 1.0 threshold (unchanged)", () => {
+test("10. TOTAL_LINES_DIVERGE is a SOFT Caution cap (WC-MODEL-4), not a hard hold", () => {
+  // predicted_total far from line (2.5 vs 1.8 → gap 0.7) so TOTAL_PUSH_RISK
+  // does not fire and we isolate the divergence path.
   const h = deriveHold(holdInput({ market: "total", total_lines_diverge: true, predicted_total: 2.5, listed_total_line: 1.8 }));
-  assert(h.hold === true && h.code === "TOTAL_LINES_DIVERGE", `total divergence must still hold; got ${JSON.stringify(h)}`);
+  assert(h.hold === false, `divergence must no longer hard-hold; got ${JSON.stringify(h)}`);
+  const cap = h.hold === false ? (h.soft_caps ?? []).find((c) => c.code === "total_lines_diverge") : undefined;
+  assert(cap !== undefined && cap.cap_at === "Caution", `divergence must soft-cap at Caution; got ${JSON.stringify(h)}`);
 });
 
 // ─── Anti-regression — old rule 10 whitelist is GONE ─────────────────

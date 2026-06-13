@@ -105,6 +105,63 @@ function isStaleByTimestamp(timestampIso: string, lockedAt: string, staleSeconds
   return Math.abs(lock - ts) / 1000 > staleSeconds;
 }
 
+/**
+ * Per-provider MAIN total line picker (WC-MODEL-4).
+ *
+ * For each book, the "main" total is the line whose over/under prices are
+ * closest to balanced (the line a book centers its market on) — NOT the
+ * max or the median of every alt-ladder rung. The provider's main line is
+ * the most common book main across all its books (mode; ties broken by the
+ * median of the tied lines). Returns null when no book exposes a complete
+ * two-sided total price.
+ *
+ * Exported for unit testing.
+ */
+export function pickProviderMainTotalLine(
+  rows: ReadonlyArray<NormalizedSoccerOddsRecord>,
+): number | null {
+  // Collect decimal over/under prices per (book, line).
+  const byBookLine = new Map<string, { over?: number; under?: number }>();
+  for (const r of rows) {
+    if (r.market !== "total" || r.line === null || r.sportsbook === null) continue;
+    const dec =
+      r.odds_decimal !== null && r.odds_decimal > 1
+        ? r.odds_decimal
+        : r.odds_american !== null
+          ? r.odds_american > 0
+            ? r.odds_american / 100 + 1
+            : 100 / -r.odds_american + 1
+          : null;
+    if (dec === null || dec <= 1) continue;
+    const key = `${r.sportsbook}::${r.line}`;
+    const entry = byBookLine.get(key) ?? {};
+    if (r.selection === "over") entry.over = dec;
+    else if (r.selection === "under") entry.under = dec;
+    byBookLine.set(key, entry);
+  }
+  // Per book, pick the line with the most balanced two-sided implied prices.
+  const mainByBook = new Map<string, { line: number; imbalance: number }>();
+  for (const [key, e] of byBookLine) {
+    if (e.over === undefined || e.under === undefined) continue;
+    const book = key.slice(0, key.lastIndexOf("::"));
+    const line = Number(key.slice(key.lastIndexOf("::") + 2));
+    if (!Number.isFinite(line)) continue;
+    const imbalance = Math.abs(1 / e.over - 1 / e.under);
+    const cur = mainByBook.get(book);
+    if (cur === undefined || imbalance < cur.imbalance) {
+      mainByBook.set(book, { line, imbalance });
+    }
+  }
+  const mains = [...mainByBook.values()].map((m) => m.line);
+  if (mains.length === 0) return null;
+  // Mode of book main lines; ties → median of the tied lines.
+  const counts = new Map<number, number>();
+  for (const l of mains) counts.set(l, (counts.get(l) ?? 0) + 1);
+  const maxCount = Math.max(...counts.values());
+  const tied = [...counts.entries()].filter(([, c]) => c === maxCount).map(([l]) => l).sort((a, b) => a - b);
+  return tied[Math.floor(tied.length / 2)];
+}
+
 export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureModelOutput {
   const totalLine = opts.totalLine ?? 2.5;
   const lockedAt = opts.lockedAt ?? new Date().toISOString();
@@ -199,27 +256,18 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
   // and a book with 2.5, 3.0, 3.5 would have looked divergent (3.5
   // vs 2.5 → diverge=true) even though both books' MAIN total is 2.5.
   //
-  // Interim fix below: compare the MEDIAN of distinct lines per
-  // provider instead of the max. Median is robust to the alt-ladder
-  // tail because adding lines at either end pulls the median less.
-  //
-  // The full main-line picker (per-book main line, closest to
-  // balanced -110/-110 pricing) is scoped as a follow-up PR — see
-  // expert's WC-MODEL-4 specification: prefer pair closest to
-  // balanced no-vig, prefer most common line across books, compare
-  // median main line per provider.
-  const bdlTotalLines = new Set(bdlRows.filter((r) => r.market === "total" && r.line !== null).map((r) => r.line as number));
-  const sharpTotalLines = new Set(sharpRows.filter((r) => r.market === "total" && r.line !== null).map((r) => r.line as number));
-  function medianOf(values: ReadonlyArray<number>): number {
-    const sorted = [...values].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
-  }
-  const totalLinesDiverge = bdlTotalLines.size > 0 && sharpTotalLines.size > 0 && (() => {
-    const bdlMed = medianOf([...bdlTotalLines]);
-    const sharpMed = medianOf([...sharpTotalLines]);
-    return Math.abs(bdlMed - sharpMed) >= 1.0;
-  })();
+  // WC-MODEL-4 (2026-06-12) — real per-book MAIN-LINE picker, replacing the
+  // median-of-distinct-lines interim. The old comparator deduped to distinct
+  // lines and took the median, so a book with a deep alt-ladder (2.5 → 4.5)
+  // looked divergent vs a book carrying a thin slice even when BOTH books'
+  // MAIN total was 2.5. Now: for each book, the main line is the one whose
+  // over/under pricing is closest to balanced (the de-vig-neutral line a
+  // book actually centers on); the provider main line is the most common
+  // book main (mode; ties → median); compare main vs main.
+  const bdlMain = pickProviderMainTotalLine(bdlRows);
+  const sharpMain = pickProviderMainTotalLine(sharpRows);
+  const totalLinesDiverge =
+    bdlMain !== null && sharpMain !== null && Math.abs(bdlMain - sharpMain) >= 1.0;
 
   // ─── 6. Per-market decisions ─────────────────────────────────────
   const argmaxPickByMarket = new Map<string, EdgeRow>();

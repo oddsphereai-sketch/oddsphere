@@ -252,7 +252,8 @@ export function buildSoccerSnapshot(input: BuildSnapshotInput): SoccerPrediction
       if (
         cap.code === "model_value_side_disagree" ||
         cap.code === "model_side_negative_edge" ||
-        cap.code === "total_mean_probability_split"
+        cap.code === "total_mean_probability_split" ||
+        cap.code === "total_lines_diverge"
       ) {
         sideDisagreeFlags.push(cap.code);
       }

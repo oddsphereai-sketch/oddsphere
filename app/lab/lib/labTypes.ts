@@ -472,6 +472,12 @@ export type MarketEdgeDto = {
     /** Edge in pp for the displayed side. null when market data missing. */
     edge_pp: number | null;
     displayed_side: "over" | "under";
+    /** Side implied by expected goals vs the line (mean direction). Can
+     * differ from displayed_side — the reader explains why when it does. */
+    mean_direction_side: "over" | "under";
+    /** True when expected-goals direction disagrees with the displayed
+     * side (probability/value chose the other side). */
+    mean_vs_probability_disagree: boolean;
     /** Honest 1-line note about reconciliation / divergence. */
     note: string;
     /** True when TOTAL_LINES_DIVERGE blocker is firing for this fixture. */

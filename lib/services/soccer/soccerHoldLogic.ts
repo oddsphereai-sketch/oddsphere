@@ -139,9 +139,13 @@ export function deriveHold(ctx: HoldInputContext): HoldDecision {
   }
 
   // 5. Total lines diverge ≥ 1.0 between providers.
-  if (ctx.market === "total" && ctx.total_lines_diverge) {
-    return { hold: true, code: "TOTAL_LINES_DIVERGE", reason: "BDL + SharpAPI main total lines disagree by ≥ 1.0 — hold total only" };
-  }
+  //    WC-MODEL-4 (2026-06-12) — DEGRADED from hard hold to a soft Caution
+  //    cap (see softCaps section below). The comparator now compares each
+  //    provider's MAIN total line (most balanced book line), so this only
+  //    fires on genuine main-vs-main disagreement, not alt-ladder noise.
+  //    When it does fire, the selected/canonical line is still known and
+  //    gradeable, so we publish at Caution with a provider-divergence note
+  //    rather than blanking the market to No Play.
 
   // 6. Splits falsely claimed (defensive — should be impossible by design).
   if (ctx.splits_falsely_claimed && ctx.splits_status !== "present") {
@@ -255,6 +259,19 @@ export function deriveHold(ctx: HoldInputContext): HoldDecision {
       reason:
         `E[total] direction (${ctx.mean_direction_side}) differs from probability direction ` +
         `(${ctx.model_side}) — distribution skew, not a bug; grade capped at Watchlist`,
+    });
+  }
+
+  // 5 (WC-MODEL-4, formerly hard hold). TOTAL_LINES_DIVERGE — soft cap at
+  //    Caution. Providers' MAIN total lines disagree by ≥ 1.0; the selected
+  //    line is still known, so publish at Caution with a divergence note
+  //    instead of a full No Play.
+  if (ctx.market === "total" && ctx.total_lines_diverge) {
+    softCaps.push({
+      code: "total_lines_diverge",
+      cap_at: "Caution",
+      reason:
+        "BDL + SharpAPI main total lines disagree by ≥ 1.0 — providers differ on the total; grade capped at Caution",
     });
   }
 

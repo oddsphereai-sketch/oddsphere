@@ -340,6 +340,11 @@ function getTotalDivergenceHold(snapshot: Record<string, unknown> | null): boole
   if (snapshot === null) return false;
   const d = (snapshot as { decision?: unknown }).decision;
   if (d === null || typeof d !== "object") return false;
+  // Pre-WC-MODEL-4 this was a hard hold (no_bet_reason). It is now a soft
+  // Caution cap, recorded in decision.side_disagree_flags. Detect either
+  // representation so locked-pre-fix rows still surface the divergence note.
+  const flags = (d as { side_disagree_flags?: unknown }).side_disagree_flags;
+  if (Array.isArray(flags) && flags.includes("total_lines_diverge")) return true;
   const reason = (d as { no_bet_reason?: unknown }).no_bet_reason;
   return typeof reason === "string" && reason.startsWith("TOTAL_LINES_DIVERGE");
 }
@@ -492,19 +497,30 @@ function buildSoccerTotalContext(
   const edgeKey = `total|${displayedSide}|${t.line}`;
   const edgePp = getMarketEdgePpByKey(snap, edgeKey);
   const divergence = getTotalDivergenceHold(snap);
-  const reconcile = getTotalReconciliationSummary(snap);
   const projection = lambdas.total;
+  // Mean direction = side implied by expected goals vs the line. For
+  // soccer this can legitimately disagree with the probability/value side
+  // the model displays: a low-λ score distribution can put more mass on
+  // Under even when E[goals] sits slightly above the line (0-0/1-0/1-1/2-0
+  // carry real weight). We surface BOTH and explain the disagreement
+  // rather than showing a bare "Projected 2.6 / Under 2.5" contradiction.
+  const meanSide: "over" | "under" = projection > t.line ? "over" : "under";
+  const meanVsProbDisagree = meanSide !== displayedSide;
   const note = ((): string => {
-    if (divergence) {
-      return `Projected ${projection.toFixed(2)} goals vs. line ${t.line.toFixed(2)}. Books disagree on the main total — held for divergence.`;
+    const base = `Projected ${projection.toFixed(2)} goals vs. line ${t.line.toFixed(2)}.`;
+    const dispPct = Math.round((displayedSide === "over" ? t.over : t.under) * 100);
+    // Provider divergence is now a soft Caution cap (not a hold): the market
+    // still publishes, just graded with caution.
+    const heldTail = divergence ? " Providers differ on the total line — graded with caution." : "";
+    if (meanVsProbDisagree) {
+      return (
+        `${base} Expected goals lean ${meanSide.toUpperCase()}, but the discrete score ` +
+        `distribution gives ${displayedSide.toUpperCase()} the higher hit probability ` +
+        `(${dispPct}%). Soccer totals behave this way near ${t.line.toFixed(1)} — low-scoring ` +
+        `results (0-0, 1-0, 1-1, 2-0) carry meaningful mass.${heldTail}`
+      );
     }
-    if (reconcile.reason === "holistic_aligned_with_mean") {
-      return `Projected ${projection.toFixed(2)} goals points to ${displayedSide.toUpperCase()} ${t.line.toFixed(2)}.`;
-    }
-    if (reconcile.reason === "mean_revert_low_conviction") {
-      return `Projected ${projection.toFixed(2)} goals vs. line ${t.line.toFixed(2)} — capped for low conviction.`;
-    }
-    return `Projected ${projection.toFixed(2)} goals vs. line ${t.line.toFixed(2)}.`;
+    return `${base} Expected goals and probability both lean ${displayedSide.toUpperCase()} (${dispPct}%).${heldTail}`;
   })();
   return {
     projected_total: projection,
@@ -513,6 +529,8 @@ function buildSoccerTotalContext(
     under_p: t.under,
     edge_pp: edgePp,
     displayed_side: displayedSide,
+    mean_direction_side: meanSide,
+    mean_vs_probability_disagree: meanVsProbDisagree,
     note,
     provider_divergence: divergence,
   };
