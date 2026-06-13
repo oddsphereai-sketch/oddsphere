@@ -50,7 +50,7 @@ function grade(market: any, edge: number, o: { fav?: boolean; agreement?: boolea
 // 1 — Match Result FAVORITE (watchlist 2.0, lean 3.0)
 ok("MR favorite +2.5pp → Watchlist", grade("match_result", 2.5, { fav: true }).grade === "Watchlist");
 ok("MR favorite +3.0pp → Lean", grade("match_result", 3.0, { fav: true }).grade === "Lean");
-ok("MR favorite +1.5pp → Caution (below watchlist)", grade("match_result", 1.5, { fav: true }).grade === "Caution");
+ok("MR favorite +1.5pp → Market-Aligned (below watchlist, model agrees w/ market)", grade("match_result", 1.5, { fav: true }).grade === "Market-Aligned");
 
 // 2 — Match Result DRAW/LONGSHOT (watchlist 3.0, lean 5.0) — higher bar
 ok("MR longshot +3.0pp → Watchlist", grade("match_result", 3.0, { fav: false }).grade === "Watchlist");
@@ -60,17 +60,17 @@ ok("MR longshot +5.0pp → Lean", grade("match_result", 5.0, { fav: false }).gra
 // 3 — Total (watchlist 2.5, lean 4.0)
 ok("Total +2.5pp → Watchlist", grade("total", 2.5).grade === "Watchlist");
 ok("Total +4.0pp → Lean", grade("total", 4.0).grade === "Lean");
-ok("Total +2.0pp → Caution", grade("total", 2.0).grade === "Caution");
+ok("Total +2.0pp → Market-Aligned (below watchlist)", grade("total", 2.0).grade === "Market-Aligned");
 
 // 4 — BTTS (watchlist 3.0, lean 5.0)
 ok("BTTS +3.0pp → Watchlist", grade("btts", 3.0).grade === "Watchlist");
 ok("BTTS +5.0pp → Lean", grade("btts", 5.0).grade === "Lean");
-ok("BTTS +2.5pp → Caution", grade("btts", 2.5).grade === "Caution");
+ok("BTTS +2.5pp → Market-Aligned (below watchlist)", grade("btts", 2.5).grade === "Market-Aligned");
 
 // 5 — Double Chance (watchlist 4.0, lean 6.0) — strictest
 ok("DC +4.0pp → Watchlist", grade("double_chance", 4.0).grade === "Watchlist");
 ok("DC +6.0pp → Lean", grade("double_chance", 6.0).grade === "Lean");
-ok("DC +3.5pp → Caution", grade("double_chance", 3.5).grade === "Caution");
+ok("DC +3.5pp → Market-Aligned (below DC watchlist 4.0)", grade("double_chance", 3.5).grade === "Market-Aligned");
 
 // 6 — Double Chance can NEVER be Best Angle (excluded, null floor)
 const dcHigh = grade("double_chance", 8.0);

@@ -19,13 +19,19 @@ import { SOCCER_CONFIDENCE_CAPS } from "./soccerGrading";
 import { EXTERNAL_PRIORS_V1 } from "./_externalPriorsV1";
 import type { SoftCap } from "./soccerHoldLogic";
 
-export type SoccerGradeVerdict = "Caution" | "Watchlist" | "Lean" | "Best Angle";
+// "Market-Aligned" is the NEUTRAL/informational tier: the model has a read but
+// it agrees with the sharp market (no actionable edge). It is NOT a warning —
+// "Caution" is reserved for when the model is meaningfully on the WRONG side of
+// the market (negative edge) or a miscalibration flag fires. This split stops a
+// correctly market-grounded model from looking like a wall of scary Cautions.
+export type SoccerGradeVerdict = "Caution" | "Market-Aligned" | "Watchlist" | "Lean" | "Best Angle";
 
 const GRADE_RANK: Record<SoccerGradeVerdict, number> = {
   "Caution": 0,
-  "Watchlist": 1,
-  "Lean": 2,
-  "Best Angle": 3,
+  "Market-Aligned": 1,
+  "Watchlist": 2,
+  "Lean": 3,
+  "Best Angle": 4,
 };
 
 /**
@@ -292,6 +298,11 @@ function ladderFor(
  *      non-null best_angle floor — Double Chance is excluded).
  *   3. Below the market's Watchlist floor → Caution.
  */
+// Edge floor (pp) separating "Market-Aligned" (model agrees with / is at the
+// market — informative, not a warning) from genuine "Caution" (model is
+// meaningfully on the WRONG side, beyond the ~2pp de-vig noise band).
+const MARKET_ALIGNED_FLOOR_PP = -2.0;
+
 function deriveGradeLadder(opts: {
   market: SoccerGradeDecision["market"];
   is_match_favorite: boolean;
@@ -318,6 +329,13 @@ function deriveGradeLadder(opts: {
   if (edge >= lad.watchlist) {
     return { grade: "Watchlist", miscalibration: false };
   }
-  // 5. Below the market's actionable floor → Caution.
+  // 5. Below the actionable floor. If the model is at/agrees with the market
+  //    (edge not meaningfully negative), this is MARKET-ALIGNED — an honest,
+  //    informative "our read agrees with the sharp market" state, NOT a
+  //    warning. Only a meaningfully negative edge (model worse than the
+  //    market by > the de-vig noise band) is genuine Caution.
+  if (edge >= MARKET_ALIGNED_FLOOR_PP) {
+    return { grade: "Market-Aligned", miscalibration: false };
+  }
   return { grade: "Caution", miscalibration: false };
 }

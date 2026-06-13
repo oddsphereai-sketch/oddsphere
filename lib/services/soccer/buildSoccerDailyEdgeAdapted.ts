@@ -140,7 +140,8 @@ export function normalizeGradeKey(playGrade: string | null): string | null {
   if (playGrade === null) return null;
   const trimmed = playGrade.trim();
   if (trimmed === "") return null;
-  return trimmed.toLowerCase().replace(/\s+/g, "_");
+  // Hyphens + spaces → "_" so "Market-Aligned" → "market_aligned".
+  return trimmed.toLowerCase().replace(/[\s-]+/g, "_");
 }
 
 export function gradeToVerdict(playGrade: string | null, held: boolean): { key: Verdict; label: string } {
@@ -152,6 +153,10 @@ export function gradeToVerdict(playGrade: string | null, held: boolean): { key: 
   if (g === "best_angle") return { key: "best_angle", label: "Best Angle" };
   if (g === "lean") return { key: "lean", label: "Lean" };
   if (g === "watchlist") return { key: "watchlist", label: "Watchlist" };
+  // Neutral/informational: model agrees with the sharp market (no actionable
+  // edge). Uses the neutral Watchlist pill styling but its own honest label —
+  // NOT "Caution" (which is reserved for the model being on the wrong side).
+  if (g === "market_aligned") return { key: "watchlist", label: "Market-Aligned" };
   if (g === "caution") return { key: "caution", label: "Caution" };
   return { key: "no_play", label: "No Play" };
 }

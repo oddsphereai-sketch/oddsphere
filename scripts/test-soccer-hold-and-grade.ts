@@ -111,9 +111,11 @@ test("2. DC with valid data, +4pp edge, external_priors_only → not held", () =
   assert(h.hold === false, `DC +4pp should not be held; got ${JSON.stringify(h)}`);
 });
 
-test("2b. WC-MODEL-5: DC is stricter — 3.5pp → Caution (below DC watchlist 4.0), 6.5pp → Lean", () => {
+test("2b. WC-MODEL-5: DC is stricter — 3.5pp → Market-Aligned (below DC watchlist 4.0), 6.5pp → Lean", () => {
   // DC carries stacked margin + short price → highest edge bar. 3.5pp is
-  // below even DC's Watchlist floor (4.0) → Caution, not Lean.
+  // below even DC's Watchlist floor (4.0); since it's a small POSITIVE edge
+  // (model agrees with market, not on the wrong side) it is Market-Aligned,
+  // not Caution.
   const low = deriveSoccerGrade({
     market: "double_chance",
     selection: "home_or_draw",
@@ -122,7 +124,7 @@ test("2b. WC-MODEL-5: DC is stricter — 3.5pp → Caution (below DC watchlist 4
     model_market_agreement: true,
     ctx: gradeInput({}),
   });
-  assert(low.grade === "Caution", `DC 3.5pp expected Caution, got ${low.grade}`);
+  assert(low.grade === "Market-Aligned", `DC 3.5pp expected Market-Aligned, got ${low.grade}`);
 
   // DC reaches Lean only at its higher floor (6.0).
   const high = deriveSoccerGrade({
