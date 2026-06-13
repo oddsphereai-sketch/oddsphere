@@ -202,19 +202,37 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
       .in("game_id", dbIds)
       .in("market_type", ["moneyline", "spread", "total"])
       .order("recorded_at", { ascending: true });
-    for (const r of (histRows ?? []) as Array<{
+    const rows = (histRows ?? []) as Array<{
       game_id: number;
       market_type: string;
       side: string | null;
       odds_american: number | null;
       recorded_at: string | null;
-    }>) {
+    }>;
+    const toImplied = (a: number | null): number | null =>
+      a === null ? null : a > 0 ? 100 / (a + 100) : -a / (-a + 100);
+    // Current (latest) price per (game,market,side) — last row wins (ascending).
+    const currentByKey = new Map<string, number | null>();
+    for (const r of rows) {
+      const ext = dbIdToExt.get(r.game_id);
+      if (ext === undefined) continue;
+      currentByKey.set(`${ext}::${r.market_type}::${r.side ?? "null"}`, r.odds_american);
+    }
+    // 2026-06-13 — opener outlier guard. The opener is the EARLIEST observed
+    // price per side, but a rejected/corrupted book (e.g. fliff listing a -210
+    // favorite at +385 — teams flipped) can be that earliest row, faking a huge
+    // line move. Skip any opener candidate whose implied probability is grossly
+    // off (> 0.30) from the current price; the first sane earliest line wins.
+    const OPENER_OUTLIER = 0.30;
+    for (const r of rows) {
       const ext = dbIdToExt.get(r.game_id);
       if (ext === undefined) continue;
       const key = `${ext}::${r.market_type}::${r.side ?? "null"}`;
-      if (!openByGameMarketSide.has(key)) {
-        openByGameMarketSide.set(key, r.odds_american);
-      }
+      if (openByGameMarketSide.has(key)) continue;
+      const cur = toImplied(currentByKey.get(key) ?? null);
+      const op = toImplied(r.odds_american);
+      if (cur !== null && op !== null && Math.abs(op - cur) > OPENER_OUTLIER) continue;
+      openByGameMarketSide.set(key, r.odds_american);
     }
   }
 

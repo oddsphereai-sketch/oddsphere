@@ -257,28 +257,21 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
       : null;
   const devigKeyFor = (mkt: string, sel: string): string =>
     mkt === "total" ? `total|${sel}|${totalLine}` : `${mkt}|${sel}`;
-  // WC-MODEL-8 (2026-06-13). The bivariate Poisson structurally OVER-predicts
-  // BTTS=yes (the joint P(home>=1 & away>=1) tail runs hot even after the
-  // market-lambda blend) — e.g. SUI@QAT model 0.52 vs market 0.38 → a phantom
-  // +14pp edge. BTTS is a clean 2-way market, so its de-vigged price is
-  // reliable; blend the model OUTPUT 60% toward the market (mirroring the 60/40
-  // market-lambda grounding) to damp the over-prediction. When the market does
-  // not price BTTS, pass the raw model through — the missing-odds guard holds it
-  // rather than letting it score against a fallback.
-  const mktBttsYes = bundle.devig["btts|yes"];
-  const mktBttsNo = bundle.devig["btts|no"];
-  const bttsForEdges =
-    mktBttsYes !== undefined && mktBttsNo !== undefined
-      ? {
-          yes: 0.4 * marketProbs.btts.yes + 0.6 * mktBttsYes,
-          no: 0.4 * marketProbs.btts.no + 0.6 * mktBttsNo,
-        }
-      : marketProbs.btts;
+  // WC-MODEL-9 (2026-06-13). BTTS is derived from the SAME score distribution as
+  // match-result and total — coherent with the projection. Earlier it carried an
+  // extra 60%-market blend to damp a Poisson BTTS over-prediction, but that was a
+  // symptom of the un-scaled model (att/def 0.12); with the calibrated 0.28 scale
+  // the joint BTTS is sensible (e.g. SCO@HAI Haiti 0.76 xG → ~53% to score →
+  // BTTS-No ~53%, which is correct). Double-grounding it to the market (once via
+  // the λ blend, again here) made BTTS inconsistent with the other markets. Now
+  // it's the raw projection BTTS; computeEdges grades it vs the de-vigged market
+  // like every other market, and the ladder's ceiling catches any genuine
+  // over-prediction.
   const edges = computeEdges({
     modelMatchResult: marketProbs.match_result,
     modelDoubleChance: marketProbs.double_chance,
     modelTotal: marketProbs.total,
-    modelBtts: bttsForEdges,
+    modelBtts: marketProbs.btts,
     marketBundle: bundle,
   });
 
