@@ -101,6 +101,9 @@ export type GradeInputContext = {
    * FAVORITE side (highest de-vigged implied prob, not draw). Selects the
    * lower (favorite) edge ladder; false uses the higher draw/longshot bar. */
   is_match_favorite: boolean;
+  /** WC-MODEL-7: the market has moved steadily AGAINST the pick since open
+   * (its de-vigged prob fell ≥ threshold). Applies a confidence haircut. */
+  market_moving_against_pick: boolean;
 };
 
 function capDefaultFor(market: SoccerGradeDecision["market"], selection: string): number {
@@ -185,6 +188,13 @@ export function deriveSoccerGrade(opts: {
       code: "splits_provider_error",
       pp: EXTERNAL_PRIORS_V1.reductions_pp.splits_provider_error,
       reason: "SharpAPI splits provider error — transient flag",
+    });
+  }
+  if (opts.ctx.market_moving_against_pick) {
+    reductions.push({
+      code: "market_moving_against",
+      pp: EXTERNAL_PRIORS_V1.reductions_pp.market_moving_against,
+      reason: "Market has moved steadily against this pick since open — confidence trimmed",
     });
   }
   if (opts.market === "match_result" && opts.ctx.is_draw_pick && opts.ctx.lambda_total > EXTERNAL_PRIORS_V1.hold_thresholds.high_scoring_threshold) {

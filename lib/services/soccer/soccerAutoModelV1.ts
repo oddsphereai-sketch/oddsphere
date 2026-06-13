@@ -67,6 +67,10 @@ export type RunAutoModelOptions = {
   eloTable: EloPriorTable;
   match: NormalizedBdlMatch;
   oddsRows: ReadonlyArray<NormalizedSoccerOddsRecord>;
+  /** WC-MODEL-7: opener odds (earliest line per book) for line-movement
+   * awareness. Optional/backward-compatible — when absent, movement is not
+   * evaluated and grading is unchanged. */
+  openerOddsRows?: ReadonlyArray<NormalizedSoccerOddsRecord>;
   splitsStatus: SoccerSplitsStatus;
   reconciliation: ReconciliationKind;
   /** Total line we'll grade on. WC-1 canonical: 2.5. */
@@ -220,6 +224,15 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
 
   // ─── 5. Market comparison (de-vig + edge) ────────────────────────
   const bundle = buildMarketProbabilityBundle(opts.oddsRows, totalLine);
+  // WC-MODEL-7: opener consensus for line-movement awareness. When provided,
+  // we compare each pick's de-vigged market probability NOW vs at open; a
+  // pick the market has steadily moved against gets a confidence haircut.
+  const openerBundle =
+    opts.openerOddsRows !== undefined && opts.openerOddsRows.length > 0
+      ? buildMarketProbabilityBundle(opts.openerOddsRows, totalLine)
+      : null;
+  const devigKeyFor = (mkt: string, sel: string): string =>
+    mkt === "total" ? `total|${sel}|${totalLine}` : `${mkt}|${sel}`;
   const edges = computeEdges({
     modelMatchResult: marketProbs.match_result,
     modelDoubleChance: marketProbs.double_chance,
@@ -442,6 +455,15 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
         .filter((x): x is number => x !== null);
       return sides.every((o) => picked >= o);
     })();
+    // WC-MODEL-7: did the market move AGAINST this pick since open? Compare
+    // the pick's de-vigged market prob now vs at open. A drop ≥ threshold
+    // means the market has steadily soured on our side → confidence haircut.
+    const movePickKey = devigKeyFor(market, bestForGrading.selection);
+    const curDevig = bundle.devig[movePickKey] ?? null;
+    const openDevig = openerBundle?.devig[movePickKey] ?? null;
+    const lineMovePp = curDevig !== null && openDevig !== null ? (curDevig - openDevig) * 100 : null;
+    const marketMovingAgainst =
+      lineMovePp !== null && lineMovePp <= -EXTERNAL_PRIORS_V1.hold_thresholds.line_move_against_pp;
     const grade = deriveSoccerGrade({
       market,
       selection: bestForGrading.selection,
@@ -462,6 +484,7 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
         is_btts_yes_pick: market === "btts" && best.selection === "yes",
         lambda_min: lambdaMin,
         is_match_favorite: isMatchFavorite,
+        market_moving_against_pick: marketMovingAgainst,
       },
       soft_caps: softCapsFromHold,
     });

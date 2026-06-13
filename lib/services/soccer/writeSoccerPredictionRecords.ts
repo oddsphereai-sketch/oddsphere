@@ -43,6 +43,7 @@ import {
   type ReconciliationKind,
 } from "../../providers/real_api/_soccerReconciler";
 import { loadDefaultEloPrior } from "./eloPrior";
+import type { NormalizedSoccerOddsRecord } from "../../providers/real_api/_soccerMarketNormalizer";
 import { runSoccerAutoModelV1 } from "./soccerAutoModelV1";
 import { buildSoccerPredictionRows } from "./soccerPredictionWriter";
 
@@ -304,10 +305,48 @@ export async function writeSoccerPredictionRecords(
       const venueAltitudeMeters =
         match.stadium_country === "MEX" && match.stadium_name === "Estadio Azteca" ? 2240 : null;
 
+      // WC-MODEL-7: opener odds (earliest line per book/selection) from
+      // line_history, for line-movement awareness. Best-effort — on any
+      // error we pass none and grading is unchanged.
+      let openerOddsRows: NormalizedSoccerOddsRecord[] = [];
+      try {
+        const { data: lh } = await supabase
+          .from("line_history")
+          .select("market_type, side, line_value, odds_american, sportsbook, recorded_at")
+          .eq("game_id", g.id)
+          .in("market_type", ["match_result", "double_chance", "total", "btts"])
+          .order("recorded_at", { ascending: true });
+        const earliest = new Map<string, NormalizedSoccerOddsRecord>();
+        for (const r of (lh ?? []) as Array<{
+          market_type: string; side: string | null; line_value: number | null;
+          odds_american: number | null; sportsbook: string | null; recorded_at: string;
+        }>) {
+          if (r.side === null || r.odds_american === null) continue;
+          const key = `${r.market_type}|${r.side}|${r.line_value ?? ""}|${r.sportsbook ?? ""}`;
+          if (earliest.has(key)) continue; // ascending → first seen per key is the opener
+          earliest.set(key, {
+            market: r.market_type as NormalizedSoccerOddsRecord["market"],
+            selection: r.side as NormalizedSoccerOddsRecord["selection"],
+            line: r.line_value,
+            odds_american: r.odds_american,
+            odds_decimal: null,
+            sportsbook: r.sportsbook,
+            provider: "bdl",
+            provider_endpoint: "line_history_opener",
+            fetched_at: r.recorded_at,
+            provider_event_id: null,
+          });
+        }
+        openerOddsRows = [...earliest.values()];
+      } catch {
+        openerOddsRows = [];
+      }
+
       const modelOutput = runSoccerAutoModelV1({
         eloTable,
         match,
         oddsRows: allOdds,
+        openerOddsRows,
         splitsStatus: splitsResult.status,
         reconciliation: reconKind,
         totalLine: 2.5,

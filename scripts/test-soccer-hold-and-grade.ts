@@ -69,6 +69,7 @@ function gradeInput(over: Partial<GradeInputContext>): GradeInputContext {
     is_btts_yes_pick: false,
     lambda_min: 1.2,
     is_match_favorite: false,
+    market_moving_against_pick: false,
     ...over,
   };
 }

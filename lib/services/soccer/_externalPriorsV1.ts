@@ -94,6 +94,8 @@ export const EXTERNAL_PRIORS_V1 = {
     short_price_dc_buffer: 10,
     draw_pick_high_lambda: 3,
     btts_low_lambda_pick_yes: 3,
+    /** WC-MODEL-7: market has moved steadily AGAINST the pick since open. */
+    market_moving_against: 5,
   },
 
   // ─── Edge thresholds (percentage points) ──────────────────────────
@@ -148,6 +150,10 @@ export const EXTERNAL_PRIORS_V1 = {
     both_providers_stale_seconds: 60 * 60,
     /** Total pick held if |predicted_total − line| < this. */
     total_push_risk_band: 0.4,
+    /** WC-MODEL-7: market has moved ≥ this many pp AGAINST the pick (the
+     * pick's de-vigged market prob fell from open to now) → confidence
+     * haircut. Adjust-but-don't-anchor: a contradiction signal, not a hold. */
+    line_move_against_pp: 2.0,
     /** BTTS Yes pick held if min(λ_H, λ_A) < this. */
     btts_yes_low_lambda_min: 0.7,
     /** Draw pick confidence reduction if λ_H + λ_A > this. */

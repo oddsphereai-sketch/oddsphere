@@ -31,6 +31,7 @@ function ctx(over: Partial<GradeInputContext> = {}): GradeInputContext {
     is_btts_yes_pick: false,
     lambda_min: 1.2,
     is_match_favorite: false,
+    market_moving_against_pick: false,
     ...over,
   };
 }
@@ -86,6 +87,19 @@ ok("Below ceiling does NOT flag", grade("match_result", 6.0, { fav: true }).misc
 const ba = grade("match_result", 6.0, { fav: true }); // ≥ favorite BA floor 5.0, agreement, !far
 ok("MR favorite +6pp would-be Best Angle is locked → Lean", ba.grade === "Lean");
 ok("best_angle flag stays false under external_priors_only", ba.best_angle === false);
+
+// WC-MODEL-7 — line-movement haircut: a pick the market has moved against
+// since open gets a confidence reduction (adjust-but-don't-anchor).
+const baseline = deriveSoccerGrade({
+  market: "match_result", selection: "home", model_p: 0.55, edge_pp: 3.0,
+  model_market_agreement: true, ctx: ctx({ is_match_favorite: true }),
+});
+const moved = deriveSoccerGrade({
+  market: "match_result", selection: "home", model_p: 0.55, edge_pp: 3.0,
+  model_market_agreement: true, ctx: ctx({ is_match_favorite: true, market_moving_against_pick: true }),
+});
+ok("market-moving-against applies a confidence reduction", moved.confidence_reductions.some((r) => r.code === "market_moving_against"));
+ok("market-moving-against lowers confidence vs baseline", moved.confidence <= baseline.confidence);
 
 // 9-10 — Reader wiring (static source checks): the shell renders the
 // grade-honesty block with calibration level + model/market/edge + reason,
