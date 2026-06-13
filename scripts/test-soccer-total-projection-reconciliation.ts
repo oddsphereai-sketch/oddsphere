@@ -42,7 +42,7 @@ test("1. Near-line total resolves to the probability side (E>line but P(over)<0.
     lockedReconciliation: null,
   });
   assert(out.mean_direction_side === null, `near-line → mean null, got ${out.mean_direction_side}`);
-  assert(out.displayed_total_side === "under", `expected displayed Under (probability side), got ${out.displayed_total_side}`);
+  assert(out.displayed_total_side === "over", `expected Over — side follows the projection (2.629 > 2.5), got ${out.displayed_total_side}`);
   assert(out.reconciled_total === 2.629, `expected projected preserved, got ${out.reconciled_total}`);
 });
 
@@ -84,24 +84,22 @@ test("3. Strong under: every signal points under → under wins", () => {
 });
 
 // ─── 4 ──────────────────────────────────────────────────────────────
-test("4. Near-line total with strong under probability → displayed Under, neutral cap, no hold", () => {
-  // E=2.62 is within a quarter-goal of the line (coin-flip zone). The model
-  // strongly favors under (P(over)=0.20) → displayed Under (probability side),
-  // capped at Watchlist as a neutral read — NOT forced to "over" by mean-vs-line,
-  // and never a hard hold.
+test("4. Near-line total UNDER the line → displayed Under (side follows projection), neutral cap, no hold", () => {
+  // E=2.40 is within a quarter-goal of the line but BELOW it, so the side follows
+  // the projection → Under, capped at Watchlist as a neutral read, never a hold.
   const out = reconcileSoccerTotal({
-    rawProjectedAwayGoals: 1.3,
-    rawProjectedHomeGoals: 1.32,
-    rawProjectedTotal: 2.62,
+    rawProjectedAwayGoals: 1.1,
+    rawProjectedHomeGoals: 1.30,
+    rawProjectedTotal: 2.40,
     marketTotal: 2.5,
-    rawProbabilityOver: 0.20,
-    marketImpliedOver: 0.55,
+    rawProbabilityOver: 0.45,
+    marketImpliedOver: 0.50,
     marketPressureSide: null,
     isLocked: false,
     lockedReconciliation: null,
   });
   assert(out.mean_direction_side === null, `near-line → mean null, got ${out.mean_direction_side}`);
-  assert(out.displayed_total_side === "under", `expected Under (probability side), got ${out.displayed_total_side}`);
+  assert(out.displayed_total_side === "under", `expected Under — projection 2.40 < 2.5, got ${out.displayed_total_side}`);
   assert(out.hold === false, "near-line is a read, never a hard hold");
   assert(out.grade_cap === "watchlist", `expected Watchlist cap, got ${out.grade_cap}`);
 });
@@ -207,11 +205,11 @@ test("8. Honest confidence: raw P(over) ≈ 48.9% preserved (no inflation)", () 
     isLocked: false,
     lockedReconciliation: null,
   });
-  // Near-line → displayed Under (probability side); confidence is the displayed
-  // side's honest probability = (1 − 0.489) × 100 ≈ 51.1%.
-  assert(out.displayed_total_side === "under", `expected Under, got ${out.displayed_total_side}`);
-  assert(Math.abs(out.reconciled_confidence_pct - 51.1) < 0.5,
-    `expected ≈51.1, got ${out.reconciled_confidence_pct}`);
+  // Near-line → side follows the PROJECTION (E=2.629 > 2.5 → Over); confidence is
+  // the displayed (Over) side's honest probability = 0.489 × 100 ≈ 48.9%.
+  assert(out.displayed_total_side === "over", `expected Over (projection side), got ${out.displayed_total_side}`);
+  assert(Math.abs(out.reconciled_confidence_pct - 48.9) < 0.5,
+    `expected ≈48.9, got ${out.reconciled_confidence_pct}`);
 });
 
 // ─── 9 ──────────────────────────────────────────────────────────────
@@ -227,7 +225,7 @@ test("9. Tiny edge band: small negative edge does not auto-force no_play", () =>
     isLocked: false,
     lockedReconciliation: null,
   });
-  assert(out.displayed_total_side === "under", "near-line publishes the probability side (Under)");
+  assert(out.displayed_total_side === "over", "near-line follows the projection (2.629 > 2.5 → Over)");
   assert(out.hold === false, "small band must not hold");
 });
 

@@ -300,10 +300,21 @@ export function reconcileSoccerTotal(
   let hold = false;
 
   if (mean_direction_side === null) {
-    // Projection on the line: show the model's more-likely (probability) side as
-    // a NEUTRAL read — never a hard hold (2026-06-13, Daniel: "Held should never
-    // be a pick for the WC model"). The grade cap below clamps it to Watchlist.
-    reconciled_total_side = raw_probability_side;
+    // Projection within a hair of the line. 2026-06-13 (Daniel): the over/under
+    // pick must AGREE with the projected total — if we project 2.59 we should say
+    // Over 2.5, never Under. So the side follows the projection's sign vs the
+    // line (not the right-skew probability, which can disagree near the line).
+    // Only a projection EXACTLY on the line falls back to the probability side.
+    // It's a neutral read (Watchlist cap below), never a hard hold.
+    const mt = input.marketTotal;
+    reconciled_total_side =
+      mt === null
+        ? raw_probability_side
+        : input.rawProjectedTotal > mt
+          ? "over"
+          : input.rawProjectedTotal < mt
+            ? "under"
+            : raw_probability_side;
     side_selection_reason = "push_risk_default_to_probability";
     hold = false;
   } else if (holistic_side === mean_direction_side) {

@@ -211,27 +211,37 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     }>;
     const toImplied = (a: number | null): number | null =>
       a === null ? null : a > 0 ? 100 / (a + 100) : -a / (-a + 100);
-    // Current (latest) price per (game,market,side) — last row wins (ascending).
-    const currentByKey = new Map<string, number | null>();
+    // 2026-06-13 — opener outlier guard. The opener is the EARLIEST observed
+    // price per side, but a rejected/corrupted book can be that earliest row and
+    // fake a huge line move (e.g. fliff lists tonight's -205 Spurs favorite at
+    // +385 — teams flipped — AND quotes a normal -205, so comparing opener vs
+    // "current" fails). Compare each candidate to the MEDIAN implied probability
+    // across ALL observed lines for that side instead — corrupted outliers can't
+    // move the median — and skip candidates > 0.30 off it. The first sane
+    // earliest line wins.
+    const impliedByKey = new Map<string, number[]>();
     for (const r of rows) {
       const ext = dbIdToExt.get(r.game_id);
       if (ext === undefined) continue;
-      currentByKey.set(`${ext}::${r.market_type}::${r.side ?? "null"}`, r.odds_american);
+      const imp = toImplied(r.odds_american);
+      if (imp === null) continue;
+      const key = `${ext}::${r.market_type}::${r.side ?? "null"}`;
+      (impliedByKey.get(key) ?? impliedByKey.set(key, []).get(key)!).push(imp);
     }
-    // 2026-06-13 — opener outlier guard. The opener is the EARLIEST observed
-    // price per side, but a rejected/corrupted book (e.g. fliff listing a -210
-    // favorite at +385 — teams flipped) can be that earliest row, faking a huge
-    // line move. Skip any opener candidate whose implied probability is grossly
-    // off (> 0.30) from the current price; the first sane earliest line wins.
+    const medianImpliedByKey = new Map<string, number>();
+    for (const [key, arr] of impliedByKey) {
+      const s = [...arr].sort((a, b) => a - b);
+      medianImpliedByKey.set(key, s.length % 2 ? s[(s.length - 1) / 2]! : (s[s.length / 2 - 1]! + s[s.length / 2]!) / 2);
+    }
     const OPENER_OUTLIER = 0.30;
     for (const r of rows) {
       const ext = dbIdToExt.get(r.game_id);
       if (ext === undefined) continue;
       const key = `${ext}::${r.market_type}::${r.side ?? "null"}`;
       if (openByGameMarketSide.has(key)) continue;
-      const cur = toImplied(currentByKey.get(key) ?? null);
+      const med = medianImpliedByKey.get(key);
       const op = toImplied(r.odds_american);
-      if (cur !== null && op !== null && Math.abs(op - cur) > OPENER_OUTLIER) continue;
+      if (med !== undefined && op !== null && Math.abs(op - med) > OPENER_OUTLIER) continue;
       openByGameMarketSide.set(key, r.odds_american);
     }
   }

@@ -204,7 +204,11 @@ export function buildNbaMarketConsensus(lines: ReadonlyArray<NbaBookLine>): NbaM
       else totalAccepted.push(book);
     }
     const acceptedVals = [...totalByBook].filter(([b]) => totalAccepted.includes(b)).map(([, v]) => v);
-    totalLine = acceptedVals.length ? median(acceptedVals) : med;
+    const rawTotal = acceptedVals.length ? median(acceptedVals) : med;
+    // Snap to the nearest 0.5 — books quote half/whole-point totals, so a median
+    // across split books (e.g. 216.5 & 217) can land on a non-bettable 216.75.
+    // Display + grade against a real line.
+    totalLine = Math.round(rawTotal * 2) / 2;
   }
 
   // ── Honest strength + spread confirmation ────────────────────────────
