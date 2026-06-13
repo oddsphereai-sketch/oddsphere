@@ -271,10 +271,13 @@ function buildMarketEdgeDto(opts: {
     keyStats: [],
     modelTrustPct: held ? null : intel.effective_confidence,
     marketImpliedPct: marketImplied !== null ? marketImplied * 100 : null,
+    // NBA-P0 — gap is the HONEST no-vig edge (model − fair market), not the
+    // vig-included price implied. Using the vig-included number overstates the
+    // edge and reads as a "fake edge" on market-aligned games.
     modelMarketGapPct:
-      held || modelProb === null || marketImplied === null
+      held || modelProb === null || noVigImplied === null
         ? null
-        : (modelProb - marketImplied) * 100,
+        : (modelProb - noVigImplied) * 100,
     recommendationConfidence: held ? null : intel.effective_confidence,
     marketSource: intel.current_price.sportsbook,
     marketDataQuality:

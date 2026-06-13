@@ -428,7 +428,7 @@ export async function createNbaPredictionRecords(
         line_value: market === "total" ? intel.consensus_line : null,
         odds_american: intel.current_price.odds_american,
         odds_decimal: null,
-        model_used: "nbaAutoModelV1",
+        model_used: "nbaAutoModelV2_grounded",
         model_version: NBA_MODEL_VERSION,
         prediction_source: "nba_daily_edge",
         confidence: intel.effective_confidence,
@@ -455,17 +455,22 @@ export async function createNbaPredictionRecords(
         manual_outcome_expected: false,
         locked_at: lockNow ? nowIso : null,
         published_at: nbaDto.as_of,
-        snapshot_json: buildSnapshot({
-          dto: nbaDto,
-          matchup,
-          market,
-          intel,
-          gameIntelligence: g.intelligence,
-          dataQualityTier,
-          sources: perGameSources,
-          projection: g.projection,
-          capturedAt: nowIso,
-        }),
+        snapshot_json: {
+          ...buildSnapshot({
+            dto: nbaDto,
+            matchup,
+            market,
+            intel,
+            gameIntelligence: g.intelligence,
+            dataQualityTier,
+            sources: perGameSources,
+            projection: g.projection,
+            capturedAt: nowIso,
+          }),
+          // NBA-P0 — operator-only grounding audit (raw V2 → clean baseline →
+          // grounded → regularized + accepted/rejected books + rationale).
+          nba_grounding_audit: g.grounding_audit ?? null,
+        },
       };
 
       if (existing !== undefined) {

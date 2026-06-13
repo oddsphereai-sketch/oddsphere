@@ -189,6 +189,13 @@ export type NbaDailyEdgeGameDto = {
   provenance: NbaSnapshotProvenance;
   /** ADMIN-ONLY v1 model metadata. Member-facing UI must not render. */
   admin_model_badge: NbaAdminModelBadge | null;
+  /**
+   * NBA-P0 — operator-only audit substrate from the V2 + consensus + grounding
+   * overlay (raw V2 → clean baseline → grounded → regularized). Typed loosely
+   * here to avoid a circular import with applyNbaGrounding; populated by
+   * applyNbaGroundingOverlay. Member UI must not render this.
+   */
+  grounding_audit?: Record<string, unknown> | null;
 };
 
 /**

@@ -27,6 +27,7 @@
 import { buildNbaFeatureSnapshotsWithProvenance } from "./featureSnapshot";
 import { fetchEspnNbaInjuries } from "./espnNbaInjuries";
 import { runNbaAutoModelV1 } from "../../automodel/nba/nbaAutoModelV1";
+import { applyNbaGroundingOverlay } from "./applyNbaGrounding";
 import { etSlateDateToUtcWindow } from "./etSlateDate";
 import {
   buildNbaDailyEdgeGameDto,
@@ -256,16 +257,20 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
       s.home_team.abbreviation,
       s.away_team.abbreviation,
     );
-    return [
-      buildNbaDailyEdgeGameDto({
-        snapshot: s,
-        prediction: pred,
-        provenance: prov,
-        lines,
-        splitsRow,
-        opportunities: gameOpps,
-      }),
-    ];
+    const dto = buildNbaDailyEdgeGameDto({
+      snapshot: s,
+      prediction: pred,
+      provenance: prov,
+      lines,
+      splitsRow,
+      opportunities: gameOpps,
+    });
+    // NBA-P0 — overlay V2 + multi-book consensus + grounding onto the DTO
+    // (projection + ML/total intel) and attach the audit substrate. This is
+    // what makes the card grounded-but-autonomous instead of single-book V1.
+    const groundingAudit = applyNbaGroundingOverlay(dto, s, lines, "t60_locked");
+    dto.grounding_audit = groundingAudit as unknown as Record<string, unknown>;
+    return [dto];
   });
 
   const marketSignalsCapability =
