@@ -87,19 +87,15 @@
     },
     {
       "path": "/api/cron/nba-daily-refresh",
-      "schedule": "30 13 * * *"
+      "schedule": "30 * * * *"
     },
     {
       "path": "/api/cron/nhl-daily-refresh",
-      "schedule": "45 13 * * *"
+      "schedule": "45 * * * *"
     },
     {
       "path": "/api/cron/soccer-daily-refresh",
-      "schedule": "0 14 * * *"
-    },
-    {
-      "path": "/api/cron/soccer-daily-refresh",
-      "schedule": "0 18 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/weekly-calibration",

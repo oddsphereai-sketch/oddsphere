@@ -381,15 +381,30 @@ export async function writeSoccerPredictionRecords(
         // Locked-row check first.
         const { data: existing } = await supabase
           .from("prediction_records")
-          .select("id, locked_at")
+          .select("id, locked_at, held")
           .eq("game_id", g.id)
           .eq("market", market)
           .eq("model_version", SOCCER_MODEL_VERSION)
           .eq("slate_date", g.slate_date)
           .maybeSingle();
-        if (existing !== null && (existing as { locked_at: string | null }).locked_at !== null) {
+        const existingRow = existing as { id: number; locked_at: string | null; held: boolean | null } | null;
+        if (existingRow !== null && existingRow.locked_at !== null) {
           recordsSkippedLocked += 1;
           log(`  ⏭ ${market} (${row.pick}): locked row preserved`);
+          continue;
+        }
+
+        // Freshest-available-over-unavailable (2026-06-13). If THIS pass could
+        // not price the market (held with no market comparison ⇒ edge is null,
+        // i.e. no fresh odds reached the model), do NOT overwrite a prior row
+        // that already carries a real, priced read. On an hourly refresh a
+        // transient provider gap must never downgrade a good card to
+        // "unavailable" — we keep the latest available read until fresh odds
+        // return. A held row with a real edge (model decision: wrong-side /
+        // push-risk) is a fresh decision and still writes normally.
+        const newRowUnavailable = row.held === true && (row.edge === null || row.edge === undefined);
+        if (newRowUnavailable && existingRow !== null && existingRow.held === false) {
+          log(`  ⏭ ${market} (${row.pick}): no fresh odds this pass — preserving last available read`);
           continue;
         }
 
