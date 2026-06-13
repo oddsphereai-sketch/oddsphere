@@ -74,6 +74,12 @@ const FI_TOSS_UP_MAX = FI_NRFI_THRESHOLD;
 // Best Angle gates (post-classification).
 const FI_BEST_ANGLE_MIN_EDGE_PCT = 4.0;
 const FI_BEST_ANGLE_MIN_CONFIDENCE = 56;
+// MLB-P0 post-shrink large-edge backstop (abs edge %). FI is not
+// probability-regularized in P0 (its market prob is null on ~100% of
+// rows), but where a market line DOES exist an implausibly large
+// posterior-vs-market gap is far more likely model-market disagreement
+// than value → cap to lean + flag, never Best Angle.
+const FI_BEST_ANGLE_MISCAL_CEILING_PCT = 10.0;
 
 export type FiPick = "NRFI" | "YRFI" | "Toss-Up" | "Held";
 export type FiPlayGrade = "best_angle" | "lean" | "toss_up" | "no_bet" | "held";
@@ -112,6 +118,8 @@ export type FiV2Audit = {
   fi_play_grade: FiPlayGrade;
   fi_play_grade_reason: string;
   fi_best_angle_eligible: boolean;
+  /** MLB-P0: FI edge exceeded the post-shrink ceiling (capped to lean). */
+  fi_miscalibration_flag: boolean;
   fi_no_bet_reason: string | null;
   // Misc
   provisional: boolean;
@@ -258,6 +266,7 @@ export function runMlbFirstInningModelV2(
   let fi_play_grade_reason: string;
   let fi_no_bet_reason: string | null = null;
   let fi_best_angle_eligible = false;
+  let fi_miscalibration_flag = false;
   const keyFeatureMissing =
     indep.feature_audit.away_starter_fi.source === "missing" ||
     indep.feature_audit.home_starter_fi.source === "missing";
@@ -277,6 +286,16 @@ export function runMlbFirstInningModelV2(
     fi_play_grade = "lean";
     fi_play_grade_reason = "fi_best_angle_blocked_fallback";
     fi_no_bet_reason = "Provisional / key feature missing; lean only.";
+  } else if (
+    fi_edge_pct !== null &&
+    Math.abs(fi_edge_pct) > FI_BEST_ANGLE_MISCAL_CEILING_PCT
+  ) {
+    // MLB-P0: implausibly large FI edge → possible model-market
+    // disagreement, not a top play. Cap to lean + flag.
+    fi_play_grade = "lean";
+    fi_play_grade_reason = "fi_best_angle_blocked_miscalibration";
+    fi_no_bet_reason = `Large FI model-market gap (edge ${fi_edge_pct.toFixed(1)}%); possible calibration disagreement — lean only.`;
+    fi_miscalibration_flag = true;
   } else if (
     fi_edge_pct !== null &&
     Math.abs(fi_edge_pct) >= FI_BEST_ANGLE_MIN_EDGE_PCT &&
@@ -330,6 +349,7 @@ export function runMlbFirstInningModelV2(
     fi_play_grade,
     fi_play_grade_reason,
     fi_best_angle_eligible,
+    fi_miscalibration_flag,
     fi_no_bet_reason,
     provisional,
     integrity_notes: integrityNotes,

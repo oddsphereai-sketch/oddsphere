@@ -766,6 +766,58 @@ function hasOpposingPublicMoneyConflict(
   return true;
 }
 
+/** Read the line-movement direction off a buildLineMovementSnapshot result. */
+function readLineDirection(
+  snap: Record<string, unknown> | null,
+): "toward_pick" | "against_pick" | "neutral" | "unknown" | null {
+  if (!snap) return null;
+  const d = snap.direction;
+  if (d === "toward_pick" || d === "against_pick" || d === "neutral" || d === "unknown") {
+    return d;
+  }
+  return null;
+}
+
+/**
+ * MLB-P0 — final Best Angle resolution at write time.
+ *
+ * The pure model marks a pick `*_best_angle_eligible` (regularized-edge
+ * gates + totals tightening + fallback block) and, separately,
+ * `*_requires_market_confirmation` when regularization had to cap an
+ * implausibly large RAW edge. This resolver applies the market-confirmation
+ * layer the pure model can't see (line movement + public money):
+ *
+ *   • opposing public money (existing narrow guard)      → demote
+ *   • line movement AGAINST the pick                      → demote
+ *   • requires-confirmation pick with NO confirming move  → demote
+ *       (confirmation = line movement TOWARD the pick; "neutral"/"unknown"
+ *        is NOT confirmation — an unavailable signal can't confirm)
+ *   • line movement toward the pick CONFIRMS a capped edge but never
+ *     upgrades a non-eligible pick — the baseEligible gate is checked
+ *     first, so confirmation can only rescue, never promote.
+ *
+ * Only ever suppresses; never invents a Best Angle. Never touches the
+ * pick, side, line, or grade columns — only the boolean best_angle flag.
+ */
+export function resolveMlbBestAngle(args: {
+  baseEligible: boolean;
+  requiresConfirmation: boolean;
+  lineDirection: "toward_pick" | "against_pick" | "neutral" | "unknown" | null;
+  opposingPublicMoney: boolean;
+}): { bestAngle: boolean; demoteReason: string | null } {
+  if (!args.baseEligible) return { bestAngle: false, demoteReason: null };
+  if (args.opposingPublicMoney) {
+    return { bestAngle: false, demoteReason: "opposing_public_money" };
+  }
+  if (args.lineDirection === "against_pick") {
+    return { bestAngle: false, demoteReason: "line_movement_against_pick" };
+  }
+  if (args.requiresConfirmation && args.lineDirection !== "toward_pick") {
+    return { bestAngle: false, demoteReason: "large_unconfirmed_regularized_edge" };
+  }
+  return { bestAngle: true, demoteReason: null };
+}
+
 function buildMlRecord(
   pred: PredictionRow,
   game: GameRow,
@@ -815,6 +867,18 @@ function buildMlRecord(
       : mlModelProb !== null && mlMarketProb !== null
         ? (mlModelProb - mlMarketProb) * 100
         : null;
+  // MLB-P0 — resolve Best Angle with the market-confirmation layer the pure
+  // model can't see (line movement + public money). Computed once here so
+  // the same line_movement snapshot is reused below.
+  const mlLineMovement = buildLineMovementSnapshot(
+    openersForGame, currentLinesForGame, signalsForGame, "moneyline", pred.predicted_ml_winner,
+  );
+  const mlBest = resolveMlbBestAngle({
+    baseEligible: readBoolish(sp.ml_best_angle_eligible),
+    requiresConfirmation: readBoolish(v22.ml_requires_market_confirmation),
+    lineDirection: readLineDirection(mlLineMovement),
+    opposingPublicMoney: hasOpposingPublicMoneyConflict(signalsForGame, "moneyline", pred.predicted_ml_winner),
+  });
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -841,12 +905,10 @@ function buildMlRecord(
     // toss_up) from the public column; raw stays in snapshot.v2_2_audit.
     play_grade: readPublicPlayGrade(sp.ml_play_grade),
     prediction_type: readStringOrNull(sp.ml_prediction_type),
-    // Phase 6B.11 — apply the same public-money conflict guard the
-    // Daily Edge verdict layer uses (Phase 6B.10). Tracking pending
-    // BA count now matches what members see on the live slate.
-    best_angle:
-      readBoolish(sp.ml_best_angle_eligible) &&
-      !hasOpposingPublicMoneyConflict(signalsForGame, "moneyline", pred.predicted_ml_winner),
+    // Phase 6B.11 + MLB-P0 — public-money guard PLUS line-movement /
+    // large-edge confirmation (see resolveMlbBestAngle). Tracking pending
+    // BA count matches what members see on the live slate.
+    best_angle: mlBest.bestAngle,
     no_bet: false,
     no_bet_reason: readStringOrNull(sp.ml_no_bet_reason),
     market_aligned: readBoolish(sp.ml_market_aligned),
@@ -864,7 +926,15 @@ function buildMlRecord(
     snapshot_json: {
       ...sp,
       public_splits: buildPublicSplitsSnapshot(signalsForGame, "moneyline", pred.predicted_ml_winner),
-      line_movement: buildLineMovementSnapshot(openersForGame, currentLinesForGame, signalsForGame, "moneyline", pred.predicted_ml_winner),
+      line_movement: mlLineMovement,
+      // MLB-P0 — audit trail for the Best Angle confirmation resolution.
+      best_angle_resolution: {
+        base_eligible: readBoolish(sp.ml_best_angle_eligible),
+        requires_confirmation: readBoolish(v22.ml_requires_market_confirmation),
+        line_direction: readLineDirection(mlLineMovement),
+        demote_reason: mlBest.demoteReason,
+        final_best_angle: mlBest.bestAngle,
+      },
       data_integrity: buildDataIntegritySnapshot(sp, oddsForGame, "moneyline"),
       // Phase 6B.28 — rich-and-frozen Daily Edge substrate at lock.
       ...buildDailyEdgeLockSubstrate({ signalsForGame, currentLinesForGame, pred }),
@@ -935,6 +1005,16 @@ function buildOuRecord(
       : ouModelProb !== null && ouMarketProb !== null
         ? (ouModelProb - ouMarketProb) * 100
         : null;
+  // MLB-P0 — same Best Angle confirmation resolution as ML.
+  const ouLineMovement = buildLineMovementSnapshot(
+    openersForGame, currentLinesForGame, signalsForGame, "total", pred.predicted_ou_side,
+  );
+  const ouBest = resolveMlbBestAngle({
+    baseEligible: readBoolish(sp.ou_best_angle_eligible),
+    requiresConfirmation: readBoolish(v22.ou_requires_market_confirmation),
+    lineDirection: readLineDirection(ouLineMovement),
+    opposingPublicMoney: hasOpposingPublicMoneyConflict(signalsForGame, "total", pred.predicted_ou_side),
+  });
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -960,10 +1040,8 @@ function buildOuRecord(
     // Phase 6B.27 — same translator as ML; see readPublicPlayGrade.
     play_grade: readPublicPlayGrade(sp.ou_play_grade),
     prediction_type: readStringOrNull(sp.ou_prediction_type),
-    // Phase 6B.11 — same guard as ML above; see hasOpposingPublicMoneyConflict.
-    best_angle:
-      readBoolish(sp.ou_best_angle_eligible) &&
-      !hasOpposingPublicMoneyConflict(signalsForGame, "total", pred.predicted_ou_side),
+    // Phase 6B.11 + MLB-P0 — same resolution as ML; see resolveMlbBestAngle.
+    best_angle: ouBest.bestAngle,
     no_bet: false,
     no_bet_reason: readStringOrNull(sp.ou_no_bet_reason),
     market_aligned: readBoolish(sp.ou_market_aligned),
@@ -980,7 +1058,15 @@ function buildOuRecord(
     snapshot_json: {
       ...sp,
       public_splits: buildPublicSplitsSnapshot(signalsForGame, "total", pred.predicted_ou_side),
-      line_movement: buildLineMovementSnapshot(openersForGame, currentLinesForGame, signalsForGame, "total", pred.predicted_ou_side),
+      line_movement: ouLineMovement,
+      // MLB-P0 — audit trail for the Best Angle confirmation resolution.
+      best_angle_resolution: {
+        base_eligible: readBoolish(sp.ou_best_angle_eligible),
+        requires_confirmation: readBoolish(v22.ou_requires_market_confirmation),
+        line_direction: readLineDirection(ouLineMovement),
+        demote_reason: ouBest.demoteReason,
+        final_best_angle: ouBest.bestAngle,
+      },
       data_integrity: buildDataIntegritySnapshot(sp, oddsForGame, "total"),
       // Phase 6B.28 — same rich-and-frozen substrate as ML.
       ...buildDailyEdgeLockSubstrate({ signalsForGame, currentLinesForGame, pred }),

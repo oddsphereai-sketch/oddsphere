@@ -149,6 +149,22 @@ export type V22Audit = {
   ou_market_aligned: boolean;
   ml_best_angle_reason: string | null;
   ou_best_angle_reason: string | null;
+  // MLB-P0 Best Angle market-sanity audit.
+  // miscalibration_flag = the regularizer's distance cap fired (raw edge
+  // exceeded cap/k) — a strong model-market disagreement.
+  ml_miscalibration_flag: boolean;
+  ou_miscalibration_flag: boolean;
+  ml_market_prob_was_fallback: boolean;
+  ou_market_prob_was_fallback: boolean;
+  ml_best_angle_blocked: boolean;
+  ou_best_angle_blocked: boolean;
+  ml_best_angle_block_reason: string | null;
+  ou_best_angle_block_reason: string | null;
+  // requires_market_confirmation = a would-be Best Angle whose edge was
+  // capped; remains Best Angle only if line movement confirms (resolved in
+  // the writer). Picks below Best Angle are always false.
+  ml_requires_market_confirmation: boolean;
+  ou_requires_market_confirmation: boolean;
   model_integrity_notes: string[];
   provisional: boolean;
 };
@@ -342,6 +358,10 @@ export function runMlbAutoModelV2_2(
   const mlMarketAmerican = mlPickIsHome
     ? snap.market.home_ml_odds_american
     : snap.market.away_ml_odds_american;
+  // MLB-P0: ML market prob is a fallback when the de-vig source is the
+  // 0.51 fallback_default (or the no-vig prob is missing) — never Best Angle.
+  const mlMarketProbIsFallback =
+    market.source === "fallback_default" || market.homeNoVigProb === null;
   const mlPlayGrade = computePlayGrade({
     modelProb: mlModelProb,
     marketProb: mlMarketProb,
@@ -351,6 +371,10 @@ export function runMlbAutoModelV2_2(
     isHeld: false,
     minBestAngleEdgePct: V22_BEST_ANGLE_MIN_EDGE_PCT_ML,
     minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT,
+    marketProbIsFallback: mlMarketProbIsFallback,
+    bestAngleHardBlockReason: neutralFallbackBlocksBA
+      ? "key feature group on neutral fallback / missing for both sides"
+      : null,
   });
   // Phase 6B.8 — pass the picked side's real American OU odds to the
   // grader so EV computation reflects book pricing instead of being
@@ -360,6 +384,12 @@ export function runMlbAutoModelV2_2(
   const ouMarketAmerican = ouPickIsOver
     ? snap.market.over_odds_american
     : snap.market.under_odds_american;
+  // MLB-P0 totals tightening: a total can be Best Angle ONLY with real
+  // O/U odds on the picked side (no 0.5/null fallback). When the picked
+  // side's price is missing, hard-block Best Angle (it can still grade
+  // lean). Totals are the worst-calibrated market in the audit, so they
+  // get the strictest market-presence gate.
+  const ouOddsMissing = ouMarketAmerican === null || ouMarketProb === null;
   const ouPlayGrade = computePlayGrade({
     modelProb: ouModelProb,
     marketProb: ouMarketProb,
@@ -369,7 +399,26 @@ export function runMlbAutoModelV2_2(
     isHeld: false,
     minBestAngleEdgePct: V22_BEST_ANGLE_MIN_EDGE_PCT_OU,
     minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT,
+    marketProbIsFallback: ouOddsMissing,
+    bestAngleHardBlockReason: ouOddsMissing
+      ? "total requires real O/U odds (no fallback) for Best Angle"
+      : neutralFallbackBlocksBA
+        ? "key feature group on neutral fallback / missing for both sides"
+        : null,
   });
+  // MLB-P0 post-shrink large-edge backstop: a pick whose RAW edge was so
+  // large that regularization pinned it to the distance cap (capApplied)
+  // is a strong model-market disagreement. It can REMAIN a Best Angle only
+  // if the market later confirms it (line movement toward the pick) — that
+  // resolution happens in the writer (predictionRecordService), which has
+  // the line-movement snapshot. Here we just flag that confirmation is
+  // required. Picks that don't reach Best Angle never require confirmation.
+  const mlBaseBestAngle =
+    mlPlayGrade.grade === "best_angle" && !neutralFallbackBlocksBA;
+  const ouBaseBestAngle =
+    ouPlayGrade.grade === "best_angle" && !neutralFallbackBlocksBA;
+  const mlRequiresMarketConfirmation = mlBaseBestAngle && mlReg.capApplied;
+  const ouRequiresMarketConfirmation = ouBaseBestAngle && ouReg.capApplied;
   // probabilityToAmericanOdds / expectedValuePerDollar are no longer
   // called directly here — the grader handles EV computation.
   void probabilityToAmericanOdds;
@@ -445,6 +494,16 @@ export function runMlbAutoModelV2_2(
     ou_market_aligned: ouPlayGrade.marketAligned,
     ml_best_angle_reason: mlPlayGrade.bestAngleReason,
     ou_best_angle_reason: ouPlayGrade.bestAngleReason,
+    ml_miscalibration_flag: mlReg.capApplied,
+    ou_miscalibration_flag: ouReg.capApplied,
+    ml_market_prob_was_fallback: mlPlayGrade.marketProbWasFallback,
+    ou_market_prob_was_fallback: ouPlayGrade.marketProbWasFallback,
+    ml_best_angle_blocked: mlPlayGrade.bestAngleBlocked,
+    ou_best_angle_blocked: ouPlayGrade.bestAngleBlocked,
+    ml_best_angle_block_reason: mlPlayGrade.bestAngleBlockReason,
+    ou_best_angle_block_reason: ouPlayGrade.bestAngleBlockReason,
+    ml_requires_market_confirmation: mlRequiresMarketConfirmation,
+    ou_requires_market_confirmation: ouRequiresMarketConfirmation,
     model_integrity_notes: integrityNotes,
     provisional,
   };

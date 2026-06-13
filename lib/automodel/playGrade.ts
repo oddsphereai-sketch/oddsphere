@@ -78,6 +78,20 @@ export interface PlayGradeInput {
    *   "neutral" — no signal or signal ambiguous
    */
   sharpAgreement?: "agrees" | "opposes" | "neutral";
+  /**
+   * MLB-P0 market-sanity: true when the market probability used is a
+   * fallback / default (no real de-vigged odds — e.g. the 0.51
+   * fallback_default ML source, or a total with no real O/U price). A
+   * fallback market prob can manufacture a fake edge, so it can never
+   * produce a Best Angle (the pick still grades lean/market_aligned).
+   */
+  marketProbIsFallback?: boolean;
+  /**
+   * MLB-P0 market-sanity: caller-supplied hard block on Best Angle (e.g.
+   * total requires real O/U odds, key-feature neutral fallback). When set,
+   * the pick can still grade lean/market_aligned but never Best Angle.
+   */
+  bestAngleHardBlockReason?: string | null;
 }
 
 export interface PlayGradeResult {
@@ -93,6 +107,12 @@ export interface PlayGradeResult {
   noBetReason: string | null;
   /** True when model and market agree at low conviction. */
   marketAligned: boolean;
+  /** MLB-P0: the market probability used was a fallback/default. */
+  marketProbWasFallback: boolean;
+  /** MLB-P0: Best Angle was hard-blocked (fallback / caller contradiction). */
+  bestAngleBlocked: boolean;
+  /** MLB-P0: human-readable reason(s) Best Angle was blocked. */
+  bestAngleBlockReason: string | null;
 }
 
 /**
@@ -107,6 +127,12 @@ export interface PlayGradeResult {
  *   6. Edge < -0.5% (model worse than market) → "no_bet".
  */
 export function computePlayGrade(opts: PlayGradeInput): PlayGradeResult {
+  const marketProbWasFallback = opts.marketProbIsFallback === true;
+  const auditDefaults = {
+    marketProbWasFallback,
+    bestAngleBlocked: false,
+    bestAngleBlockReason: null as string | null,
+  };
   if (opts.isHeld) {
     return {
       grade: "hold",
@@ -117,6 +143,7 @@ export function computePlayGrade(opts: PlayGradeInput): PlayGradeResult {
       bestAngleReason: null,
       noBetReason: "Market data unavailable.",
       marketAligned: false,
+      ...auditDefaults,
     };
   }
 
@@ -130,6 +157,7 @@ export function computePlayGrade(opts: PlayGradeInput): PlayGradeResult {
       bestAngleReason: null,
       noBetReason: "Insufficient data for full edge calculation.",
       marketAligned: false,
+      ...auditDefaults,
     };
   }
 
@@ -151,11 +179,32 @@ export function computePlayGrade(opts: PlayGradeInput): PlayGradeResult {
       bestAngleReason: null,
       noBetReason: `Data quality tier=${opts.dataQualityTier}${opts.provisional ? " and provisional" : ""}; not a betting recommendation.`,
       marketAligned,
+      ...auditDefaults,
     };
   }
 
-  // Best Angle gates — strict: edge AND EV AND confidence AND data quality AND no sharp opposition.
-  const failedGates: string[] = [];
+  // MLB-P0 market-sanity blocks — a fallback/default market probability or
+  // a caller-supplied contradiction can never become a Best Angle. They
+  // cap below it (fall through to lean/market_aligned) and carry a reason
+  // for audit. Regularization already bounds edge size upstream, so there
+  // is no separate edge ceiling here.
+  const blockReasons: string[] = [];
+  if (marketProbWasFallback) {
+    blockReasons.push("market probability is a fallback/default (no real de-vigged odds)");
+  }
+  if (opts.bestAngleHardBlockReason !== undefined && opts.bestAngleHardBlockReason !== null) {
+    blockReasons.push(opts.bestAngleHardBlockReason);
+  }
+  const bestAngleBlocked = blockReasons.length > 0;
+  const blockAudit = {
+    marketProbWasFallback,
+    bestAngleBlocked,
+    bestAngleBlockReason: bestAngleBlocked ? blockReasons.join("; ") : null,
+  };
+
+  // Best Angle gates — strict: edge AND EV AND confidence AND data quality
+  // AND no sharp opposition AND none of the P0 market-sanity blocks.
+  const failedGates: string[] = [...blockReasons];
   if (edgePct < opts.minBestAngleEdgePct) failedGates.push(`edge ${edgePct.toFixed(1)}% < ${opts.minBestAngleEdgePct}%`);
   if (evPct !== null && evPct < BEST_ANGLE_MIN_EV_PCT) failedGates.push(`EV ${evPct.toFixed(1)}% < 0%`);
   if (confidencePct < opts.minBestAngleConfidencePct) failedGates.push(`confidence ${confidencePct.toFixed(1)}% < ${opts.minBestAngleConfidencePct}%`);
@@ -172,6 +221,7 @@ export function computePlayGrade(opts: PlayGradeInput): PlayGradeResult {
       bestAngleReason: `Edge ${edgePct.toFixed(1)}% over no-vig market; EV ${evPct === null ? "n/a" : evPct.toFixed(1) + "%"}; conf ${confidencePct.toFixed(1)}%; high data quality; sharp ${opts.sharpAgreement ?? "neutral"}.`,
       noBetReason: null,
       marketAligned: false,
+      ...blockAudit,
     };
   }
 
@@ -186,6 +236,7 @@ export function computePlayGrade(opts: PlayGradeInput): PlayGradeResult {
       bestAngleReason: null,
       noBetReason: `Lean only — fails Best Angle gates: ${failedGates.join(", ")}.`,
       marketAligned: false,
+      ...blockAudit,
     };
   }
 
@@ -200,6 +251,7 @@ export function computePlayGrade(opts: PlayGradeInput): PlayGradeResult {
       bestAngleReason: null,
       noBetReason: `Edge ${edgePct.toFixed(1)}% inside ±${LEAN_MIN_EDGE_PCT}% — no meaningful value over the market.`,
       marketAligned: true,
+      ...blockAudit,
     };
   }
 
@@ -213,6 +265,7 @@ export function computePlayGrade(opts: PlayGradeInput): PlayGradeResult {
     bestAngleReason: null,
     noBetReason: `Negative model edge (${edgePct.toFixed(1)}%); market sees this side as worse than model thinks. Pick shown but do not bet.`,
     marketAligned: false,
+    ...blockAudit,
   };
 }
 
