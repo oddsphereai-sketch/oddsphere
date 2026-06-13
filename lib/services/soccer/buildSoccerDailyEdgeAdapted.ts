@@ -620,7 +620,17 @@ function buildSoccerGradeContext(
 
   const reason = ((): string => {
     if (r.held) {
-      return `Held — ${r.hold_reason ?? r.no_bet_reason ?? "true blocker"}. Edge ${edgeStr} vs market.`;
+      // Customer-facing: never expose the raw internal hold code/threshold
+      // jargon ("model on wrong side by X pp below floor"). Translate to a
+      // plain, confident "why we're passing" sentence.
+      const hr = `${r.hold_reason ?? ""} ${r.no_bet_reason ?? ""}`.toLowerCase();
+      if (hr.includes("push") || hr.includes("within") || hr.includes("on the line"))
+        return `Our projection lands right on this line — too close to call, so we're passing.`;
+      if (hr.includes("odds") || hr.includes("stale") || hr.includes("provider") || hr.includes("missing") || hr.includes("data"))
+        return `Live market data for this market is still settling — holding off until it's clean.`;
+      if (hr.includes("wrong side") || hr.includes("disagree") || hr.includes("conflict") || hr.includes("ceiling") || hr.includes("exceeds"))
+        return `Our read differs enough from the market here that we'd rather pass than force a play.`;
+      return `No clean edge on this market — we're passing.`;
     }
     if (miscal) {
       return `Edge ${edgeStr} is implausibly large versus an efficient soccer market — flagged as possible model/market disagreement and held at Caution rather than upgraded.`;
@@ -707,19 +717,22 @@ function buildMarketEdgeDto(
   // For held rows: pick/confidence are still shown so the card is honest
   // about the model's read. The verdict pill ("Held / No Play") + the
   // whyLine carry the "don't bet this" framing.
-  const showPick = !r.held || (r.pick !== null && r.pick !== "");
+  // Held markets: suppress the per-market PICK label. Showing "Over 2.5" next to
+  // a "No Play" verdict reads as contradictory (Daniel, 2026-06-13). The model's
+  // numeric read still lives in the projection block; the verdict pill + the
+  // clean held sentence carry the "we're passing" message.
   const heldHelp = buildHeldHelpLine(r);
   return {
-    pick: showPick ? r.pick : null,
-    confidence: r.confidence === null ? null : r.confidence / 100,
+    pick: r.held ? null : r.pick,
+    confidence: r.held || r.confidence === null ? null : r.confidence / 100,
     grade: null,
     signalType: null,
     marketSignal: null,
     sharpStatus: "caution",
     held: r.held,
     verdict: gradeToVerdict(r.play_grade, r.held),
-    guidedGuide: r.held && r.hold_reason !== null ? `Held: ${r.hold_reason}` : "",
-    guidedWatchOut: r.held && r.no_bet_reason !== null ? `Reason code: ${r.no_bet_reason}` : "",
+    guidedGuide: heldHelp,
+    guidedWatchOut: "",
     whyLine: heldHelp,
     riskLine: "",
     modelProb: r.model_probability,
@@ -757,10 +770,23 @@ function buildMarketEdgeDto(
  */
 function buildHeldHelpLine(r: PredictionRecordSlim): string {
   if (!r.held) return "";
-  if (r.hold_reason !== null && r.hold_reason.length > 0) {
-    return r.hold_reason;
-  }
-  return "Held pre-tournament; waiting on in-tournament calibration evidence before publishing a play.";
+  return cleanHoldSentence(r.hold_reason, r.no_bet_reason);
+}
+
+/**
+ * Translate the internal hold code/threshold string into a plain, confident
+ * customer sentence. NEVER expose raw jargon ("model on wrong side by X pp
+ * below floor", "Reason code: ...", "exceeds ceiling", snake_case codes).
+ */
+function cleanHoldSentence(holdReason: string | null, noBetReason: string | null): string {
+  const hr = `${holdReason ?? ""} ${noBetReason ?? ""}`.toLowerCase();
+  if (hr.includes("push") || hr.includes("within") || hr.includes("on the line"))
+    return "Our projection lands right on this line — too close to call, so we're passing.";
+  if (hr.includes("odds") || hr.includes("stale") || hr.includes("provider") || hr.includes("missing") || hr.includes("data"))
+    return "Live market data for this market is still settling — holding off until it's clean.";
+  if (hr.includes("wrong side") || hr.includes("disagree") || hr.includes("conflict") || hr.includes("ceiling") || hr.includes("exceeds"))
+    return "Our read differs enough from the market here that we'd rather pass than force a play.";
+  return "No clean edge on this market — we're passing.";
 }
 
 function buildDecisionLine(
@@ -860,15 +886,17 @@ function deriveGameHoldReason(perMarket: Map<string, PredictionRecordSlim>): str
   const rows = Array.from(perMarket.values());
   if (rows.length === 0) return null;
   if (!rows.every((r) => r.held)) return null;
-  // Prefer the fixture-level reason from any row's snapshot_json.
+  // Customer-facing: a clean sentence, never the raw fixture/hold code.
   for (const r of rows) {
     const snapJson = r.snapshot_json;
     if (snapJson !== null && typeof snapJson === "object") {
       const fixtureHold = (snapJson as { fixture_hold_reason?: unknown }).fixture_hold_reason;
-      if (typeof fixtureHold === "string" && fixtureHold.length > 0) return fixtureHold;
+      if (typeof fixtureHold === "string" && fixtureHold.length > 0) {
+        return cleanHoldSentence(fixtureHold, null);
+      }
     }
   }
-  return rows[0].hold_reason ?? "all_markets_held";
+  return cleanHoldSentence(rows[0].hold_reason, rows[0].no_bet_reason);
 }
 
 function deriveLockState(lockedAt: string | null, gameDateIso: string): "open" | "locking" | "locked" {
