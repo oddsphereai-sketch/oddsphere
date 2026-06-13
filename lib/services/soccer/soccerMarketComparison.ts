@@ -191,6 +191,24 @@ export function buildMarketProbabilityBundle(
     }
   }
 
+  // WC-MODEL-8 (2026-06-13). Derive double_chance from the de-vigged 1X2 rather
+  // than the standalone DC-group de-vig. DC books are thin and frequently quote
+  // only part of the 3-way group, so the standalone de-vig produces garbage on
+  // some fixtures (e.g. SCO@HAI: home_or_draw de-vigged to 0.38 for a heavy
+  // favorite → a phantom +40pp model edge). The 1X2 market is the most liquid
+  // and (near-)always present, and double-chance is *definitionally* the sum of
+  // two mutually-exclusive 1X2 outcomes — so this is both more robust AND
+  // exactly correct. We override only when the full 1X2 de-vig is available;
+  // otherwise the standalone DC de-vig stands as the fallback.
+  const mrH = devig["match_result|home"];
+  const mrD = devig["match_result|draw"];
+  const mrA = devig["match_result|away"];
+  if (mrH !== undefined && mrD !== undefined && mrA !== undefined) {
+    devig["double_chance|home_or_draw"] = mrH + mrD;
+    devig["double_chance|away_or_draw"] = mrA + mrD;
+    devig["double_chance|home_or_away"] = mrH + mrA;
+  }
+
   return { implied, devig, book_counts };
 }
 

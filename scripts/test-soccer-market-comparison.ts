@@ -226,17 +226,18 @@ test("Change A — bundle keeps btts devig at sum=1.0 (no regression)", () => {
   assert(close(sum, 1.0, 1e-6), `btts sum = ${sum}, expected 1.0`);
 });
 
-test("Change A — CZE@KOR DC edge collapses from ~+36pp (bug) to ~+1.7pp (correct)", () => {
-  // Tonight's CZE@KOR snapshot:
-  //   model_p(home_or_away) = 0.7076
-  //   market implied (sum=2.131): home_or_draw=0.722, away_or_draw=0.672, home_or_away=0.737
-  //   Correct devig (target 2.0): home_or_away ≈ 0.737 × 2/2.131 ≈ 0.692
-  //   Correct edge_pp = (0.7076 − 0.692) × 100 ≈ +1.6pp
+test("Change A/WC-MODEL-8 — DC market prob is the 1X2-derived sum (no phantom edge)", () => {
+  // WC-MODEL-8 (2026-06-13): double_chance is now derived from the de-vigged
+  // 1X2 (the most-liquid, always-present market) rather than the thin, often-
+  // inconsistent DC-group quotes. DC home_or_away == 1X2 home + 1X2 away by
+  // definition. This fixture's DC quotes are internally inconsistent with its
+  // 1X2 (a 7pp book-internal gap) — exactly the real-world condition (SCO@HAI)
+  // where the standalone DC de-vig produced garbage (+40pp phantom). The 1X2
+  // derivation is robust to that.
   const rows: NormalizedSoccerOddsRecord[] = [
     mkRow({ market: "double_chance", selection: "home_or_draw", odds_american: -260, sportsbook: "fanduel" }),
     mkRow({ market: "double_chance", selection: "away_or_draw", odds_american: -205, sportsbook: "fanduel" }),
     mkRow({ market: "double_chance", selection: "home_or_away", odds_american: -280, sportsbook: "fanduel" }),
-    // Minimal coverage for other markets so computeEdges doesn't get spooked.
     mkRow({ market: "match_result", selection: "home", odds_american: -110, sportsbook: "fanduel" }),
     mkRow({ market: "match_result", selection: "draw", odds_american: 300, sportsbook: "fanduel" }),
     mkRow({ market: "match_result", selection: "away", odds_american: 250, sportsbook: "fanduel" }),
@@ -246,6 +247,10 @@ test("Change A — CZE@KOR DC edge collapses from ~+36pp (bug) to ~+1.7pp (corre
     mkRow({ market: "btts", selection: "no", odds_american: -130, sportsbook: "fanduel" }),
   ];
   const bundle = buildMarketProbabilityBundle(rows, 2.5);
+  // The DC market prob must now equal the 1X2-derived sum exactly.
+  const expectedHA = bundle.devig["match_result|home"] + bundle.devig["match_result|away"];
+  assert(close(bundle.devig["double_chance|home_or_away"], expectedHA),
+    `DC home_or_away devig ${bundle.devig["double_chance|home_or_away"]} should equal 1X2 home+away ${expectedHA}`);
   const edges = computeEdges({
     modelMatchResult: { home: 0.394, draw: 0.292, away: 0.314 },
     modelDoubleChance: { home_or_draw: 0.686, away_or_draw: 0.606, home_or_away: 0.7076 },
@@ -255,9 +260,11 @@ test("Change A — CZE@KOR DC edge collapses from ~+36pp (bug) to ~+1.7pp (corre
   });
   const ha = edges.find((e) => e.market === "double_chance" && e.selection === "home_or_away")!;
   assert(ha.edge_pp !== null, "home_or_away edge_pp should be defined");
-  // The bug would have produced edge_pp ≈ +35 pp; the fix collapses to ≈ +1.6 pp.
-  assert(Math.abs(ha.edge_pp!) < 5, `DC home_or_away edge_pp = ${ha.edge_pp}, expected |edge| < 5pp post-fix (was ~+35pp pre-fix)`);
-  assert(ha.edge_pp! > 0, `DC home_or_away should still be slightly positive (model > market), got ${ha.edge_pp}`);
+  // The sum=1.0 de-vig bug produced ≈ +35pp; the 1X2 derivation collapses it to
+  // the honest model-vs-1X2 edge (here ≈ -5.6pp: the model sees more draws than
+  // the 1X2 market). Far from the phantom, and definitionally grounded.
+  assert(Math.abs(ha.edge_pp!) < 10, `DC home_or_away edge_pp = ${ha.edge_pp}, expected far from the +35pp phantom`);
+  assert(close(ha.market_devig_p!, expectedHA), "DC edge must compare against the 1X2-derived market prob");
 });
 
 console.log(`\n  ${pass} pass · ${fail} fail · ${pass + fail} total`);
