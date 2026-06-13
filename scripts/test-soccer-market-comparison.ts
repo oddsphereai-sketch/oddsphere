@@ -85,18 +85,39 @@ function mkRow(overrides: Partial<NormalizedSoccerOddsRecord>): NormalizedSoccer
   };
 }
 
-test("buildMarketProbabilityBundle dedups across sportsbooks via median", () => {
+test("buildMarketProbabilityBundle dedups across sportsbooks via per-book median", () => {
+  // Both books quote ALL THREE selections → both are de-viggable and count.
+  // (WC-MODEL-6: only books quoting the full group inform the consensus.)
   const rows: NormalizedSoccerOddsRecord[] = [
     mkRow({ market: "match_result", selection: "home", odds_american: 200, sportsbook: "fanduel" }),
     mkRow({ market: "match_result", selection: "home", odds_american: 220, sportsbook: "bovada" }),
     mkRow({ market: "match_result", selection: "draw", odds_american: 250, sportsbook: "fanduel" }),
+    mkRow({ market: "match_result", selection: "draw", odds_american: 240, sportsbook: "bovada" }),
     mkRow({ market: "match_result", selection: "away", odds_american: 140, sportsbook: "fanduel" }),
     mkRow({ market: "match_result", selection: "away", odds_american: 145, sportsbook: "bovada" }),
   ];
   const b = buildMarketProbabilityBundle(rows, 2.5);
   const sum = b.devig["match_result|home"] + b.devig["match_result|draw"] + b.devig["match_result|away"];
   assert(close(sum, 1), `match_result devig sum = ${sum}`);
-  assert(b.book_counts["match_result"] === 2, "2 distinct books counted");
+  assert(b.book_counts["match_result"] === 2, "2 complete books counted");
+});
+
+test("WC-MODEL-6: a single skewed book does NOT drag the de-vig consensus (outlier-resistant)", () => {
+  // BTTS: bovada/fanduel ≈ +100 (≈48-50% yes); draftkings is a +200 outlier
+  // (≈33% yes). Per-book de-vig + median ignores the outlier.
+  const rows: NormalizedSoccerOddsRecord[] = [
+    mkRow({ market: "btts", selection: "yes", odds_american: 100, sportsbook: "fanduel" }),
+    mkRow({ market: "btts", selection: "no", odds_american: -128, sportsbook: "fanduel" }),
+    mkRow({ market: "btts", selection: "yes", odds_american: 108, sportsbook: "bovada" }),
+    mkRow({ market: "btts", selection: "no", odds_american: -140, sportsbook: "bovada" }),
+    mkRow({ market: "btts", selection: "yes", odds_american: 200, sportsbook: "draftkings" }), // outlier
+    mkRow({ market: "btts", selection: "no", odds_american: -275, sportsbook: "draftkings" }),  // outlier
+  ];
+  const b = buildMarketProbabilityBundle(rows, 2.5);
+  // Consensus yes should sit near the bovada/fanduel level (~0.45-0.47), NOT
+  // dragged toward the draftkings outlier (~0.31).
+  assert(b.devig["btts|yes"] > 0.43 && b.devig["btts|yes"] < 0.49, `btts yes devig = ${b.devig["btts|yes"]} (expected ~0.45)`);
+  assert(b.book_counts["btts"] === 3, "3 complete BTTS books");
 });
 
 test("buildMarketProbabilityBundle handles total with the requested line only", () => {

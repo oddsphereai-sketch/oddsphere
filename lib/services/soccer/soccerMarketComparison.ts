@@ -54,31 +54,79 @@ export function devigImplied(
   return cleaned.map((p) => (p / total) * targetSum);
 }
 
+function medianOf(values: ReadonlyArray<number>): number {
+  const s = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];
+}
+
 /**
- * Aggregate odds records per (market, selection) into a single
- * representative implied probability. Strategy: take median across
- * sportsbooks to dampen single-book outliers.
+ * Robust per-book consensus de-vig for one market group (WC-MODEL-6).
+ *
+ * Each BOOK that quotes EVERY selection in the group is de-vigged on its
+ * OWN prices (selection implied / group implied sum × targetSum); we then
+ * take the MEDIAN of the per-book de-vigged probabilities per selection.
+ *
+ * Why per-book (vs the old de-vig-of-separate-medians): it is
+ *   • outlier-resistant — a single skewed book (e.g. a DraftKings BTTS
+ *     price of +200 when Bovada/FanDuel are +100) is just one value the
+ *     median steps over, instead of dragging the consensus; and
+ *   • book-consistent — "yes" and "no" come from the SAME book, never a
+ *     mix of two independently-computed medians (which can distort the vig
+ *     and manufacture a fake edge, as on the 2026-06-12 BTTS slate).
+ * Books quoting only part of the group can't be de-vigged and are excluded
+ * from bookCount, so a thin/partial feed reports honest low coverage.
  */
-function medianImpliedBySelection(rows: ReadonlyArray<NormalizedSoccerOddsRecord>): Map<string, number> {
-  const byKey = new Map<string, number[]>();
-  for (const row of rows) {
-    const key = row.market === "total"
-      ? `${row.market}|${row.selection}|${row.line ?? "?"}`
-      : `${row.market}|${row.selection}`;
-    const implied = americanToImpliedProbability(row.odds_american);
-    if (implied === null) continue;
-    const arr = byKey.get(key) ?? [];
-    arr.push(implied);
-    byKey.set(key, arr);
+function consensusDevigForGroup(
+  rows: ReadonlyArray<NormalizedSoccerOddsRecord>,
+  market: string,
+  selections: ReadonlyArray<string>,
+  totalLine: number | null,
+  targetSum: number,
+): { devig: Map<string, number>; impliedMedian: Map<string, number>; bookCount: number } {
+  const perBook = new Map<string, Map<string, number[]>>();
+  for (const r of rows) {
+    if (r.market !== market) continue;
+    if (market === "total" && r.line !== totalLine) continue;
+    if (r.sportsbook === null) continue;
+    const sel = String(r.selection);
+    if (!selections.includes(sel)) continue;
+    const impl = americanToImpliedProbability(r.odds_american);
+    if (impl === null) continue;
+    let m = perBook.get(r.sportsbook);
+    if (m === undefined) { m = new Map(); perBook.set(r.sportsbook, m); }
+    const arr = m.get(sel) ?? [];
+    arr.push(impl);
+    m.set(sel, arr);
   }
-  const out = new Map<string, number>();
-  for (const [k, arr] of byKey.entries()) {
-    arr.sort((a, b) => a - b);
-    const mid = Math.floor(arr.length / 2);
-    const median = arr.length % 2 === 0 ? (arr[mid - 1] + arr[mid]) / 2 : arr[mid];
-    out.set(k, median);
+  const perBookDevig: Array<Map<string, number>> = [];
+  const perBookImplied: Array<Map<string, number>> = [];
+  for (const selMap of perBook.values()) {
+    const impl: Record<string, number> = {};
+    let complete = true;
+    for (const sel of selections) {
+      const a = selMap.get(sel);
+      if (a === undefined || a.length === 0) { complete = false; break; }
+      impl[sel] = medianOf(a); // collapse duplicate timestamps per (book, selection)
+    }
+    if (!complete) continue;
+    const sum = selections.reduce((s, sel) => s + impl[sel], 0);
+    if (sum <= 0) continue;
+    const dv = new Map<string, number>();
+    const im = new Map<string, number>();
+    for (const sel of selections) { dv.set(sel, (impl[sel] / sum) * targetSum); im.set(sel, impl[sel]); }
+    perBookDevig.push(dv);
+    perBookImplied.push(im);
   }
-  return out;
+  const devig = new Map<string, number>();
+  const impliedMedian = new Map<string, number>();
+  for (const sel of selections) {
+    const dvs = perBookDevig.map((m) => m.get(sel)).filter((x): x is number => x !== undefined);
+    const ims = perBookImplied.map((m) => m.get(sel)).filter((x): x is number => x !== undefined);
+    if (dvs.length > 0) devig.set(sel, medianOf(dvs));
+    if (ims.length > 0) impliedMedian.set(sel, medianOf(ims));
+  }
+  return { devig, impliedMedian, bookCount: perBookDevig.length };
 }
 
 export type MarketProbabilityBundle = {
@@ -108,56 +156,40 @@ export function buildMarketProbabilityBundle(
   rows: ReadonlyArray<NormalizedSoccerOddsRecord>,
   totalLine: number,
 ): MarketProbabilityBundle {
-  const filtered = rows.filter((r) => r.market !== "total" || r.line === totalLine);
-  const medians = medianImpliedBySelection(filtered);
-
   const implied: Record<string, number> = {};
   const devig: Record<string, number> = {};
   const book_counts: Record<string, number> = {};
 
-  // Group keys.
-  const matchResultKeys = ["match_result|home", "match_result|draw", "match_result|away"];
-  const doubleChanceKeys = [
-    "double_chance|home_or_draw",
-    "double_chance|away_or_draw",
-    "double_chance|home_or_away",
+  const groups: ReadonlyArray<{
+    market: string;
+    selections: ReadonlyArray<string>;
+    targetSum: number;
+    lineSuffix: boolean;
+  }> = [
+    { market: "match_result", selections: ["home", "draw", "away"], targetSum: 1.0, lineSuffix: false },
+    // double_chance de-vigs to 2.0 (each DC covers 2 of 3 outcomes).
+    { market: "double_chance", selections: ["home_or_draw", "away_or_draw", "home_or_away"], targetSum: 2.0, lineSuffix: false },
+    { market: "total", selections: ["over", "under"], targetSum: 1.0, lineSuffix: true },
+    { market: "btts", selections: ["yes", "no"], targetSum: 1.0, lineSuffix: false },
   ];
-  const totalKeys = [`total|over|${totalLine}`, `total|under|${totalLine}`];
-  const bttsKeys = ["btts|yes", "btts|no"];
 
-  function devigGroup(
-    keys: ReadonlyArray<string>,
-    outPrefix: string,
-    targetSum: number = 1.0,
-  ): void {
-    const groupImplied = keys.map((k) => medians.get(k) ?? null);
-    const groupDevig = devigImplied(groupImplied, targetSum);
-    for (let i = 0; i < keys.length; i++) {
-      const k = keys[i];
-      const selectionSuffix = k.split("|").slice(1).join("|");
-      const outKey = `${outPrefix}|${selectionSuffix}`;
-      if (medians.has(k)) implied[outKey] = medians.get(k) as number;
-      devig[outKey] = groupDevig[i];
+  for (const g of groups) {
+    const res = consensusDevigForGroup(
+      rows,
+      g.market,
+      g.selections,
+      g.market === "total" ? totalLine : null,
+      g.targetSum,
+    );
+    book_counts[g.market] = res.bookCount;
+    for (const sel of g.selections) {
+      const outKey = g.lineSuffix ? `${g.market}|${sel}|${totalLine}` : `${g.market}|${sel}`;
+      const im = res.impliedMedian.get(sel);
+      const dv = res.devig.get(sel);
+      if (im !== undefined) implied[outKey] = im;
+      if (dv !== undefined) devig[outKey] = dv;
     }
   }
-  devigGroup(matchResultKeys, "match_result");           // sum → 1.0
-  devigGroup(doubleChanceKeys, "double_chance", 2.0);    // sum → 2.0  (bug fix)
-  devigGroup(totalKeys, "total");                        // sum → 1.0
-  devigGroup(bttsKeys, "btts");                          // sum → 1.0
-
-  // Per-market book counts.
-  function bookCountFor(prefix: string): number {
-    const books = new Set<string>();
-    for (const r of filtered) {
-      if (r.market !== (prefix as never)) continue;
-      if (r.sportsbook !== null) books.add(r.sportsbook);
-    }
-    return books.size;
-  }
-  book_counts["match_result"] = bookCountFor("match_result");
-  book_counts["double_chance"] = bookCountFor("double_chance");
-  book_counts["total"] = bookCountFor("total");
-  book_counts["btts"] = bookCountFor("btts");
 
   return { implied, devig, book_counts };
 }
