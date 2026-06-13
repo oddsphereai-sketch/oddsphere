@@ -61,18 +61,27 @@ async function main() {
     const markets = g.markets ?? {};
     console.log(`--- ${matchup}  lockState=${g.lockState}`);
 
-    // Slot fix: first_inning headline must be a Double Chance side.
+    // 2026-06-13 swap: first_inning headline is now BTTS; Double Chance
+    // moved to the Match Result (moneyline) slot's reader context.
     const fi = markets.first_inning;
     if (fi) {
       assert(
-        `[${matchup}] first_inning headline is a Double Chance side (not BTTS)`,
-        fi.pick == null || DC_SIDES.has(String(fi.pick)) || !BTTS_SIDES.has(String(fi.pick)),
+        `[${matchup}] first_inning headline is a BTTS side (not Double Chance)`,
+        fi.pick == null || BTTS_SIDES.has(String(fi.pick)) || !DC_SIDES.has(String(fi.pick)),
         `pick='${fi.pick}'`,
       );
       assert(
-        `[${matchup}] first_inning carries soccerDoubleChanceContext`,
-        fi.soccerDoubleChanceContext != null || fi.held === true,
-        "missing DC context",
+        `[${matchup}] first_inning carries soccerBttsContext`,
+        fi.soccerBttsContext != null || fi.held === true,
+        "missing BTTS context",
+      );
+    }
+    const ml = markets.moneyline;
+    if (ml) {
+      assert(
+        `[${matchup}] moneyline reader carries soccerDoubleChanceContext`,
+        ml.soccerDoubleChanceContext != null || ml.held === true,
+        "missing DC context on MR slot",
       );
     }
 

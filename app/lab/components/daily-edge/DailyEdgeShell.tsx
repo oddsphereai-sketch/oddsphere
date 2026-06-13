@@ -94,7 +94,10 @@ function marketShortLabelFor(market: MarketKey, sport: Sport): string {
   if (market === "first_inning") {
     if (sport === "nhl") return "PL*";
     if (sport === "nba") return "Sprd*";
-    if (sport === "soccer") return "DC";
+    // The soccer first_inning slot carries the BTTS market (the btts
+    // prediction record) as its pill/headline. Double Chance is surfaced
+    // as a reader context block on the Match Result slot, not here.
+    if (sport === "soccer") return "BTTS";
   }
   if (sport === "soccer") {
     if (market === "moneyline") return "Match";
@@ -105,7 +108,7 @@ function marketLongLabelFor(market: MarketKey, sport: Sport): string {
   if (market === "first_inning") {
     if (sport === "nhl") return "Puck Line";
     if (sport === "nba") return "Spread";
-    if (sport === "soccer") return "Double Chance";
+    if (sport === "soccer") return "Both Teams To Score";
   }
   if (sport === "soccer") {
     if (market === "moneyline") return "Match Result";
@@ -2015,7 +2018,7 @@ function MarketPulse({
           edge={mrCtx?.edge_pp ?? null}
           note={mrCtx?.note ?? null}
         />
-        {bttsCtx !== null ? <SoccerBttsContext ctx={bttsCtx} /> : null}
+        {dcCtx !== null ? <SoccerDcContext ctx={dcCtx} /> : null}
         {gradeCtx !== null ? <SoccerGradeContext ctx={gradeCtx} /> : null}
       </div>
     );
@@ -2034,16 +2037,16 @@ function MarketPulse({
       </div>
     );
   }
-  // WC reader full-completion pass (2026-06-12) — soccer Double Chance
-  // reader. Lives on the first_inning slot per the soccer adapter mapping.
+  // 2026-06-13 swap — the first_inning slot now carries BTTS as its pill +
+  // reader. Double Chance moved to the Match Result slot's reader above.
   if (
     (shellSport === "soccer" || shellSport === "ucl") &&
     market === "first_inning" &&
-    dcCtx !== null
+    bttsCtx !== null
   ) {
     return (
       <div className="space-y-2">
-        <SoccerDcContext ctx={dcCtx} />
+        <SoccerBttsContext ctx={bttsCtx} />
         {gradeCtx !== null ? <SoccerGradeContext ctx={gradeCtx} /> : null}
       </div>
     );

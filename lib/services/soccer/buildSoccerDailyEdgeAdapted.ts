@@ -1137,7 +1137,9 @@ export async function buildSoccerDailyEdgeAdapted(
           // surfaces BTTS alongside Match Result rather than as its
           // own card slot, because the soccer card has no nrfi slot.
           soccerMatchResultContext: buildSoccerMatchResultContext(mr),
-          soccerBttsContext: buildSoccerBttsContext(btts),
+          // 2026-06-13 swap: Double Chance rides the Match Result slot as a
+          // reader context block; BTTS now owns the first_inning pill.
+          soccerDoubleChanceContext: buildSoccerDoubleChanceContext(dc, homeAbbr, awayAbbr),
           // WC-MODEL-5 grade-honesty block for the Match Result headline.
           soccerGradeContext: buildSoccerGradeContext(mr),
         },
@@ -1147,11 +1149,14 @@ export async function buildSoccerDailyEdgeAdapted(
           soccerGradeContext: buildSoccerGradeContext(total),
         },
         first_inning: {
-          // The "first_inning" slot is the soccer Double Chance carrier —
-          // headline pick/price come from the real `double_chance` record.
-          ...buildMarketEdgeDto(dc, openerLookup),
-          soccerDoubleChanceContext: buildSoccerDoubleChanceContext(dc, homeAbbr, awayAbbr),
-          soccerGradeContext: buildSoccerGradeContext(dc),
+          // The "first_inning" slot is the soccer BTTS carrier (pill +
+          // headline). 2026-06-13 swap: BTTS moved here from the Match
+          // Result context block, and Double Chance moved to the Match
+          // Result slot's reader context. Headline pick/price come from the
+          // real `btts` prediction_record.
+          ...buildMarketEdgeDto(btts, openerLookup),
+          soccerBttsContext: buildSoccerBttsContext(btts),
+          soccerGradeContext: buildSoccerGradeContext(btts),
         },
       },
       decisionLine,
