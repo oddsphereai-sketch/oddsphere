@@ -16,15 +16,15 @@ const ALPHA3_TO_ALPHA2: Record<string, string> = {
   // code is missing, so we'll still get something on day 0.
   ARG: "ar", AUS: "au", AUT: "at", BEL: "be", BIH: "ba",
   BRA: "br", CAN: "ca", COL: "co", CRC: "cr", CRO: "hr",
-  CZE: "cz", DEN: "dk", ECU: "ec", EGY: "eg", ENG: "gb",
+  CZE: "cz", DEN: "dk", ECU: "ec", EGY: "eg", ENG: "gb-eng",
   ESP: "es", FIJ: "fj", FRA: "fr", GER: "de", GHA: "gh",
-  HUN: "hu", IRN: "ir", ITA: "it", JPN: "jp", KOR: "kr",
+  HTI: "ht", HUN: "hu", IRN: "ir", ITA: "it", JPN: "jp", KOR: "kr",
   MAR: "ma", MEX: "mx", NED: "nl", NGA: "ng", NOR: "no",
   PAN: "pa", PAR: "py", PER: "pe", POL: "pl", POR: "pt",
-  QAT: "qa", RSA: "za", SCO: "gb", SEN: "sn", SRB: "rs",
+  QAT: "qa", RSA: "za", SCO: "gb-sct", SEN: "sn", SRB: "rs",
   SUI: "ch", SVK: "sk", SVN: "si", SWE: "se", TUN: "tn",
   TUR: "tr", UAE: "ae", UKR: "ua", URU: "uy", USA: "us",
-  WAL: "gb", VEN: "ve",
+  WAL: "gb-wls", VEN: "ve",
 };
 
 /**
