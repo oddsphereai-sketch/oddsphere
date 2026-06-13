@@ -889,14 +889,22 @@ function buildGameDto(
   // with the game-level verdict + propagates the sharp-confirmation
   // bump to per-market display.
   const baOverride = readV22BestAngleOverride(pred.sport_specific);
+  // MLB-P0 (2026-06-13) — pre-lock confirmation gate (see
+  // readV22RequiresConfirmation): a confirmation-required would-be Best Angle
+  // has no line-direction signal pre-lock, so it cannot surface as Best Angle
+  // until lock confirms it. Locked rows are driven by their frozen flag.
+  const baRequiresConf = readV22RequiresConfirmation(pred.sport_specific);
+  const preLockBA = pred.locked_at === null;
+  const mlBaEligible = baOverride.ml && !(preLockBA && baRequiresConf.ml);
+  const ouBaEligible = baOverride.ou && !(preLockBA && baRequiresConf.ou);
   const mlMoneyConflict = hasOpposingPublicMoneyConflict(signals, "moneyline", pred.predicted_ml_winner);
   const ouMoneyConflict = hasOpposingPublicMoneyConflict(signals, "total", pred.predicted_ou_side);
   const mlMoneySupport = hasSupportingPublicMoneyConfirmation(signals, "moneyline", pred.predicted_ml_winner);
   const ouMoneySupport = hasSupportingPublicMoneyConfirmation(signals, "total", pred.predicted_ou_side);
   const mlMarketEdge = readV22EdgePp(pred.sport_specific, "moneyline");
   const ouMarketEdge = readV22EdgePp(pred.sport_specific, "total");
-  const mlGradeForMarket = applyV22BestAngleOverride(pred.ml_grade, baOverride.ml, mlMoneyConflict, mlMoneySupport, mlMarketEdge);
-  const ouGradeForMarket = applyV22BestAngleOverride(pred.ou_grade, baOverride.ou, ouMoneyConflict, ouMoneySupport, ouMarketEdge);
+  const mlGradeForMarket = applyV22BestAngleOverride(pred.ml_grade, mlBaEligible, mlMoneyConflict, mlMoneySupport, mlMarketEdge);
+  const ouGradeForMarket = applyV22BestAngleOverride(pred.ou_grade, ouBaEligible, ouMoneyConflict, ouMoneySupport, ouMarketEdge);
 
   const lockedMl = lockedPlayGradeByGameMarket.get(`${row.id}::moneyline`);
   const lockedOu = lockedPlayGradeByGameMarket.get(`${row.id}::total`);
@@ -2474,6 +2482,34 @@ function readV22BestAngleOverride(
 }
 
 /**
+ * MLB-P0 (2026-06-13) — read the V2.2 "requires market confirmation" flags.
+ * Set when the regularizer had to CAP an implausibly large RAW edge: the pure
+ * model itself says "this would-be Best Angle is only valid if the market
+ * confirms it." The write/lock path (resolveMlbBestAngle) keeps such a pick a
+ * Best Angle ONLY when line movement is toward_pick — "neutral"/"unknown" is
+ * NOT confirmation, because an unavailable signal can't confirm.
+ *
+ * The PRE-LOCK verdict path has no line-direction signal, so a confirmation-
+ * required pick must NOT surface as a Best Angle pre-lock — otherwise it shows
+ * as a fully-qualified Best Angle now and silently softens to Lean at lock (the
+ * exact unqualified-Best-Angle the product contract forbids). Locked rows are
+ * unaffected: their frozen resolved flag drives resolveLockedVerdict.
+ */
+function readV22RequiresConfirmation(
+  sportSpecific: Record<string, unknown> | null | undefined,
+): { ml: boolean; ou: boolean } {
+  const empty = { ml: false, ou: false };
+  if (!sportSpecific || typeof sportSpecific !== "object") return empty;
+  const a = (sportSpecific as Record<string, unknown>).v2_2_audit;
+  if (!a || typeof a !== "object") return empty;
+  const audit = a as Record<string, unknown>;
+  return {
+    ml: audit.ml_requires_market_confirmation === true,
+    ou: audit.ou_requires_market_confirmation === true,
+  };
+}
+
+/**
  * Grades that the V2.2 best_angle override is allowed to upgrade.
  * NEVER upgrade sharp_conflict (loses the warning) or already-top
  * grades (no-op).
@@ -2788,6 +2824,14 @@ function deriveVerdictForRow(pred: PredictionRow, signals: SignalRow[] = []): {
   // visible inconsistency. Fix: for locked games, pass empty signals
   // so conflict/support are false and the frozen override propagates.
   const override = readV22BestAngleOverride(pred.sport_specific);
+  // MLB-P0 (2026-06-13) — pre-lock confirmation gate (see
+  // readV22RequiresConfirmation). Keeps the breakdown verdict in sync with the
+  // per-market pill and with the write/lock path: an unconfirmed,
+  // confirmation-required would-be Best Angle is held to Lean pre-lock.
+  const requiresConf = readV22RequiresConfirmation(pred.sport_specific);
+  const preLock = pred.locked_at === null;
+  const mlEligible = override.ml && !(preLock && requiresConf.ml);
+  const ouEligible = override.ou && !(preLock && requiresConf.ou);
   const useSignals: SignalRow[] = pred.locked_at !== null ? [] : signals;
   const mlConflict = hasOpposingPublicMoneyConflict(useSignals, "moneyline", pred.predicted_ml_winner);
   const ouConflict = hasOpposingPublicMoneyConflict(useSignals, "total", pred.predicted_ou_side);
@@ -2795,8 +2839,8 @@ function deriveVerdictForRow(pred: PredictionRow, signals: SignalRow[] = []): {
   const ouSupport = hasSupportingPublicMoneyConfirmation(useSignals, "total", pred.predicted_ou_side);
   const mlEdge = readV22EdgePp(pred.sport_specific, "moneyline");
   const ouEdge = readV22EdgePp(pred.sport_specific, "total");
-  const mlGradeEffective = applyV22BestAngleOverride(pred.ml_grade, override.ml, mlConflict, mlSupport, mlEdge);
-  const ouGradeEffective = applyV22BestAngleOverride(pred.ou_grade, override.ou, ouConflict, ouSupport, ouEdge);
+  const mlGradeEffective = applyV22BestAngleOverride(pred.ml_grade, mlEligible, mlConflict, mlSupport, mlEdge);
+  const ouGradeEffective = applyV22BestAngleOverride(pred.ou_grade, ouEligible, ouConflict, ouSupport, ouEdge);
 
   const candidates: Array<{
     grade: Grade;

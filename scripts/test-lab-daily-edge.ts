@@ -1137,6 +1137,66 @@ async function main() {
       );
     }
 
+    // ─── MLB-P0 (2026-06-13) — pre-lock requires-confirmation gate ────────
+    // A would-be Best Angle whose RAW edge was capped (requires_market_
+    // confirmation) must NOT surface as Best Angle PRE-LOCK: the verdict path
+    // has no line-direction signal, and an unavailable signal can't confirm.
+    // It silently softening to Lean at lock is the unqualified-BA the contract
+    // forbids. These exercise a DOWNGRADED grade the override re-promotes.
+    section("MLB-P0 — pre-lock requires-confirmation gate");
+    {
+      // Pre-lock + eligible + requires-confirmation → re-promotion suppressed.
+      const r = deriveVerdictForRow(
+        predRow({
+          ml_grade: "market_watch",
+          ml_confidence: 60,
+          predicted_ml_winner: "home",
+          sport_specific: { v2_2_audit: { ml_best_angle_eligible: true, ml_requires_market_confirmation: true, ml_edge_pct: 4 } },
+          locked_at: null,
+        }),
+        [],
+      );
+      check(
+        "[MLB-P0.1] pre-lock + requires_confirmation → NOT best_angle (held)",
+        r.verdict !== "best_angle",
+      );
+    }
+    {
+      // Pre-lock + eligible + NOT requiring confirmation → promotes normally.
+      const r = deriveVerdictForRow(
+        predRow({
+          ml_grade: "market_watch",
+          ml_confidence: 60,
+          predicted_ml_winner: "home",
+          sport_specific: { v2_2_audit: { ml_best_angle_eligible: true, ml_requires_market_confirmation: false, ml_edge_pct: 4 } },
+          locked_at: null,
+        }),
+        [],
+      );
+      check(
+        "[MLB-P0.2] pre-lock + no confirmation needed → best_angle (no over-suppression)",
+        r.verdict === "best_angle",
+      );
+    }
+    {
+      // LOCKED + requires-confirmation → pre-lock gate does NOT apply; the
+      // frozen eligibility propagates (locked snapshot already resolved it).
+      const r = deriveVerdictForRow(
+        predRow({
+          ml_grade: "market_watch",
+          ml_confidence: 60,
+          predicted_ml_winner: "home",
+          sport_specific: { v2_2_audit: { ml_best_angle_eligible: true, ml_requires_market_confirmation: true, ml_edge_pct: 4 } },
+          locked_at: "2026-06-13T19:15:05Z",
+        }),
+        [],
+      );
+      check(
+        "[MLB-P0.3] LOCKED + requires_confirmation → gate scoped to pre-lock (frozen flag propagates)",
+        r.verdict === "best_angle",
+      );
+    }
+
     // ─── projectSharpSignalsForRead: market normalization + direction ─────
     section("Phase 4.1.8.B — projectSharpSignalsForRead");
     {
