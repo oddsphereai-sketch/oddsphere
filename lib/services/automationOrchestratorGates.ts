@@ -344,3 +344,50 @@ export function shouldDemoteAlignmentForGate(opts: {
 }): boolean {
   return opts.intradayMode === true && opts.alignmentStatus === "fail_closed";
 }
+
+// ─── MLB-P0 (morning publish fix) — EV-opportunity feed must not slate-block ──
+//
+// Root cause of the recurring empty-morning-slate: SharpAPI's
+// `/opportunities/ev` feed (the POSITIVE-EV opportunity list) is naturally
+// sparse in the early morning and fills out during the day. TWO slate-level
+// gates reconcile against that feed and HARD-block the whole slate when it's
+// sparse:
+//   • R-17 G1 provider-date-alignment (needs ~85% of games to have an EV event)
+//   • P2.5 reconciliation (BDL↔EV overlap ≥ 50%, denominator = max side)
+// But the model + card read `/odds` (lines) + MLB Stats + the BDL slate — NOT
+// the EV-opportunity list. With full odds coverage (15/15) and confirmed
+// starters, a sparse EV feed is not a reason to withhold the entire slate.
+// These helpers stop the EV feed from being a slate-wide veto while keeping
+// every genuine guard (empty-BDL, R-19 G1 min count, R-17 G1 PER-GAME
+// stale-line / missing-ML / missing-total / missing-starter, G2) strict.
+
+/**
+ * Soften a fail_closed provider-date-alignment to "warn" for the R-17 G1
+ * MODEL gate in BOTH morning and intraday modes. The alignment canary keys on
+ * `/opportunities/ev`, which the model does not consume; genuine slate
+ * problems are caught by the per-game R-17 checks + P2.5 (empty BDL) + R-19 G1.
+ *
+ * Publish-HOLD is governed separately by `shouldDemoteAlignmentForGate`
+ * (intraday holds publish; a clean morning slate publishes).
+ */
+export function shouldSoftenAlignmentForModelGate(opts: {
+  alignmentStatus: "ok" | "warn" | "fail_closed" | "skipped" | null | undefined;
+}): boolean {
+  return opts.alignmentStatus === "fail_closed";
+}
+
+/**
+ * P2.5 BDL↔SharpAPI-EV reconciliation HARD-blocks the data layer (and thus
+ * publish) ONLY when there is no canonical BDL slate to act on (bdlCount === 0).
+ * A non-empty BDL slate with low EV overlap means the EV-opportunity feed is
+ * sparse/partial (normal in the morning) — not that the slate is unsafe to
+ * model + publish, provided odds coverage is adequate (enforced per-game by
+ * R-17 G1 + the market-coverage audit). Empty-BDL stays a hard block,
+ * redundantly with R-19 G1 (minimum game count).
+ */
+export function isReconciliationHardBlock(opts: {
+  status: "ok" | "warn" | "fail_closed";
+  bdlCount: number;
+}): boolean {
+  return opts.status === "fail_closed" && opts.bdlCount === 0;
+}

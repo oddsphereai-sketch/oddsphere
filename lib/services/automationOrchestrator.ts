@@ -103,6 +103,8 @@ export {
   defaultProviderHealth,
   buildOrchestratorBlockedReport,
   shouldDemoteAlignmentForGate,
+  shouldSoftenAlignmentForModelGate,
+  isReconciliationHardBlock,
 } from "./automationOrchestratorGates";
 export type {
   AutomationEnv,
@@ -121,6 +123,8 @@ import {
   computeEffectiveWriteModeV2,
   defaultProviderHealth,
   shouldDemoteAlignmentForGate,
+  shouldSoftenAlignmentForModelGate,
+  isReconciliationHardBlock,
   type AutomationEnv,
   type PerStepKey,
   type ProviderHealth,
@@ -486,9 +490,22 @@ export async function runSlateCycleAutomated(opts: {
         },
       });
       if (reconciliation.status === "fail_closed") {
-        blockingReasons.push(
-          `slate reconciliation fail_closed: ${reconciliation.reason}`
-        );
+        // MLB-P0: empty BDL is a true hard block; a non-empty BDL slate with
+        // low EV-opportunity overlap is just a sparse morning EV feed — soften
+        // to a warning so it doesn't slate-wide-block model + publish. Odds
+        // coverage is enforced per-game downstream (R-17 G1 + market audit).
+        if (reconciliation.bdlCount === 0) {
+          blockingReasons.push(
+            `slate reconciliation fail_closed: ${reconciliation.reason}`
+          );
+        } else {
+          warnings.push(
+            `slate reconciliation fail_closed softened — sparse SharpAPI EV ` +
+              `opportunities (BDL=${reconciliation.bdlCount} present, ` +
+              `EV=${reconciliation.sharpEvCount}); ${reconciliation.reason} ` +
+              `Model + publish proceed on odds coverage + per-game checks.`
+          );
+        }
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -503,8 +520,15 @@ export async function runSlateCycleAutomated(opts: {
     }
   }
 
+  // MLB-P0 — reconciliation hard-blocks the data layer (and publish) ONLY when
+  // BDL itself is empty. Sparse EV-opportunity overlap on a non-empty BDL slate
+  // is a warning, not a slate-wide veto (see isReconciliationHardBlock).
   const reconciliationBlocking =
-    reconciliation !== null && reconciliation.status === "fail_closed";
+    reconciliation !== null &&
+    isReconciliationHardBlock({
+      status: reconciliation.status,
+      bdlCount: reconciliation.bdlCount,
+    });
 
   // ── R-19 Phase 4a — G1. Minimum game count ───────────────────────────
   // Fires once BDL data is available. fail_closed → blocks all downstream
@@ -962,20 +986,29 @@ export async function runSlateCycleAutomated(opts: {
   // can keep auto-publish held. P2.5 reconciliation, R-17 G1 per-game
   // stale-line / coverage checks, and Phase 5c/5d per-game exclusions
   // all remain strict.
+  // Publish-HOLD signal — intraday only (a clean morning slate publishes).
   const intradayAlignmentDegraded = shouldDemoteAlignmentForGate({
     intradayMode,
     alignmentStatus: alignment?.status ?? null,
   });
+  // MLB-P0 — soften a fail_closed alignment to "warn" for the R-17 G1 MODEL
+  // gate in BOTH modes (the model doesn't read /opportunities/ev). This is
+  // what lets a sparse-EV MORNING compute + publish; per-game R-17 checks,
+  // P2.5 (empty BDL), R-19 G1 (min count) and G2 stay strict.
+  const alignmentSoftenedForGate = shouldSoftenAlignmentForModelGate({
+    alignmentStatus: alignment?.status ?? null,
+  });
   const alignmentForGate: ProviderDateAlignmentReport | null =
-    intradayAlignmentDegraded && alignment !== null
+    alignmentSoftenedForGate && alignment !== null
       ? { ...alignment, status: "warn" }
       : alignment;
-  if (intradayAlignmentDegraded) {
+  if (alignmentSoftenedForGate) {
     warnings.push(
-      `R-19 Phase 5e intraday alignment soften: alignment.status=fail_closed ` +
+      `alignment soften: alignment.status=fail_closed ` +
         `(matched=${alignment?.matched}, threshold=${alignment?.threshold}, ` +
-        `slate_size=${alignment?.slate_size}) demoted to "warn" before R-17 G1; ` +
-        `publish stays held; per-game checks remain strict`
+        `slate_size=${alignment?.slate_size}) demoted to "warn" before R-17 G1 ` +
+        `(${intradayMode ? "intraday — publish stays held" : "morning — publish proceeds if odds+starters OK"}); ` +
+        `per-game checks remain strict`
     );
   }
 
@@ -993,6 +1026,7 @@ export async function runSlateCycleAutomated(opts: {
       details: {
         overall: g1Report.overall,
         reasons: g1Report.reasons,
+        alignment_softened_for_gate: alignmentSoftenedForGate,
         intraday_alignment_demoted: intradayAlignmentDegraded,
       },
     });
