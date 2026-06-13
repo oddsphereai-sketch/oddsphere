@@ -278,7 +278,14 @@ export async function writeSoccerPredictionRecords(
         match_id: match.provider_match_id,
         per_page: 25,
       });
-      const bdlNormalized = bdlRawOdds.flatMap((r) =>
+      // 2026-06-13 P0 fix (same as writeSoccerLines): the BDL odds endpoint
+      // returns the FULL WC odds pool (ignores match_id) and normalizeOdds
+      // blindly normalizes every row, so every other match's odds were getting
+      // relabeled with THIS fixture's teams and graded against — corrupting the
+      // market baseline (e.g. SCO@HAI graded Scotland at 25% when its real line
+      // is ~62%). Scope raw rows to this match before normalizing.
+      const bdlForMatch = bdlRawOdds.filter((r) => r.match_id === match.provider_match_id);
+      const bdlNormalized = bdlForMatch.flatMap((r) =>
         providers.bdl.normalizeOdds(r, {
           home_team: match.home_team_name,
           away_team: match.away_team_name,
