@@ -28,15 +28,15 @@ function section(t: string) {
 
 async function main() {
   section("match_result");
-  check(`home → homeAbbr ("KOR")`, soccerPickLabel("match_result", "home", null, "CZE", "KOR") === "KOR");
-  check(`away → awayAbbr ("CZE")`, soccerPickLabel("match_result", "away", null, "CZE", "KOR") === "CZE");
+  check(`home → "{Team} Win" ("KOR Win")`, soccerPickLabel("match_result", "home", null, "CZE", "KOR") === "KOR Win");
+  check(`away → "{Team} Win" ("CZE Win")`, soccerPickLabel("match_result", "away", null, "CZE", "KOR") === "CZE Win");
   check(`draw → "Draw"`, soccerPickLabel("match_result", "draw", null, "CZE", "KOR") === "Draw");
   check(`home with no abbr → "Home"`, soccerPickLabel("match_result", "home", null) === "Home");
   check(`away with no abbr → "Away"`, soccerPickLabel("match_result", "away", null) === "Away");
 
   section("moneyline alias");
-  check(`home → homeAbbr`, soccerPickLabel("moneyline", "home", null, "USA", "PAR") === "PAR");
-  check(`away → awayAbbr`, soccerPickLabel("moneyline", "away", null, "USA", "PAR") === "USA");
+  check(`home → "{Team} Win" ("PAR Win")`, soccerPickLabel("moneyline", "home", null, "USA", "PAR") === "PAR Win");
+  check(`away → "{Team} Win" ("USA Win")`, soccerPickLabel("moneyline", "away", null, "USA", "PAR") === "USA Win");
   check(`draw → "Draw"`, soccerPickLabel("moneyline", "draw", null, "USA", "PAR") === "Draw");
 
   section("btts / first_inning");
@@ -61,7 +61,7 @@ async function main() {
   check(`unknown pick → null (caller keeps original)`, soccerPickLabel("match_result", "weird_value", null) === null);
 
   section("case-insensitive raw pick");
-  check(`HOME → homeAbbr`, soccerPickLabel("match_result", "HOME", null, "CZE", "KOR") === "KOR");
+  check(`HOME → "{Team} Win" ("KOR Win")`, soccerPickLabel("match_result", "HOME", null, "CZE", "KOR") === "KOR Win");
   check(`Draw → "Draw"`, soccerPickLabel("match_result", "Draw", null) === "Draw");
 
   // Summary

@@ -443,6 +443,10 @@ export type MarketEdgeDto = {
 
   soccerDoubleChanceContext?: {
     displayed_side: "home_or_draw" | "away_or_draw" | "home_or_away";
+    /** Team abbreviations so the reader renders "{Team} or Draw" labels
+     * instead of generic "Home or Draw". */
+    home_abbr: string;
+    away_abbr: string;
     /** Model coverage probability for the displayed DC side. */
     model_coverage: number;
     /** No-vig market-implied probability for the displayed DC side. null when missing. */

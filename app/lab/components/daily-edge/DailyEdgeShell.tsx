@@ -94,7 +94,10 @@ function marketShortLabelFor(market: MarketKey, sport: Sport): string {
   if (market === "first_inning") {
     if (sport === "nhl") return "PL*";
     if (sport === "nba") return "Sprd*";
-    if (sport === "soccer") return "BTTS";
+    // The soccer first_inning slot carries the Double Chance market (the
+    // double_chance prediction record). BTTS is surfaced as a context
+    // block inside the Match Result slot, not here.
+    if (sport === "soccer") return "DC";
   }
   if (sport === "soccer") {
     if (market === "moneyline") return "Match";
@@ -105,7 +108,7 @@ function marketLongLabelFor(market: MarketKey, sport: Sport): string {
   if (market === "first_inning") {
     if (sport === "nhl") return "Puck Line";
     if (sport === "nba") return "Spread";
-    if (sport === "soccer") return "Both Teams To Score";
+    if (sport === "soccer") return "Double Chance";
   }
   if (sport === "soccer") {
     if (market === "moneyline") return "Match Result";
@@ -150,10 +153,10 @@ function soccerPickLabel(
   homeAbbr: string | null,
 ): string | null {
   if (pick === null) return null;
-  // Match result
+  // Match result — customer-facing "{Team} Win" / "Draw" / "{Team} Win".
   if (market === "moneyline") {
-    if (pick === "home") return homeAbbr ?? "Home";
-    if (pick === "away") return awayAbbr ?? "Away";
+    if (pick === "home") return homeAbbr !== null ? `${homeAbbr} Win` : "Home";
+    if (pick === "away") return awayAbbr !== null ? `${awayAbbr} Win` : "Away";
     if (pick === "draw") return "Draw";
   }
   // BTTS (lives on the first_inning slot in the soccer DTO)
@@ -643,18 +646,26 @@ function VerdictChip({
 function MarketPill({
   market,
   pick,
+  line = null,
   confidence,
   verdict,
   selected,
   onClick,
+  awayTeam = null,
+  homeTeam = null,
 }: {
   market: MarketKey;
   pick: string | null;
+  /** Total line, so soccer "Over"/"Under" render with the number. */
+  line?: number | null;
   /** Phase 4.2.C.2 — nullable; held markets render "—". */
   confidence: number | null;
   verdict: VerdictKey;
   selected: boolean;
   onClick: () => void;
+  /** Team abbreviations for soccer pick-label translation. */
+  awayTeam?: string | null;
+  homeTeam?: string | null;
 }) {
   const shellSport = useShellSport();
   const isContext = isContextOnlyMarket(market, shellSport);
@@ -671,7 +682,7 @@ function MarketPill({
       <span className={`text-[10px] uppercase tracking-[0.14em] font-bold shrink-0 ${selected ? "text-violet-100" : "text-gray-500"}`}>
         {marketShortLabelFor(market, shellSport)}
       </span>
-      <span className={`text-[12px] font-bold tabular-nums shrink-0 ${pick === null ? "text-gray-500" : ""}`}>{pick === null ? pickFallbackFor(market, shellSport) : formatPickWithLine(market, pick, null, shellSport)}</span>
+      <span className={`text-[12px] font-bold tabular-nums shrink-0 ${pick === null ? "text-gray-500" : ""}`}>{pick === null ? pickFallbackFor(market, shellSport) : formatPickWithLine(market, pick, line, shellSport, awayTeam, homeTeam)}</span>
       <span className={`text-[10.5px] tabular-nums shrink-0 ${selected ? "text-gray-300" : "text-gray-500"}`}>
         {confidence === null ? "—" : `${Math.round(confidence * 100)}%`}
       </span>
@@ -1328,7 +1339,7 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
         <div className="flex items-center gap-2 min-w-0">
           <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={32} />
           <span className="text-[14px] font-bold text-gray-100" style={{ letterSpacing: "-0.02em" }}>{game.awayTeam}</span>
-          <span className="text-gray-700 text-[12px]">@</span>
+          <span className="text-gray-700 text-[12px]">{matchupSepFor(shellSport)}</span>
           <span className="text-[14px] font-bold text-gray-100" style={{ letterSpacing: "-0.02em" }}>{game.homeTeam}</span>
           <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={32} />
         </div>
@@ -1359,7 +1370,7 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
       <div className="grid grid-cols-[1fr_auto] items-center gap-3">
         <div className="min-w-0">
           <h2 className="text-[24px] font-black tabular-nums text-white leading-none" style={{ letterSpacing: "-0.04em" }}>
-            {marketData.pick ?? "—"}
+            {formatPickWithLine(market, marketData.pick, marketData.line, shellSport, game.awayTeam, game.homeTeam)}
           </h2>
           <div className="mt-1.5 flex items-baseline gap-1.5 flex-wrap">
             {/* Phase 6B.1.6L — pivot from a single "confidence" number to
@@ -1887,8 +1898,17 @@ function SoccerTotalContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerTot
 function SoccerDcContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerDoubleChanceContext"]> }) {
   const fmtPct = (p: number): string => `${(p * 100).toFixed(0)}%`;
   const fmtEdge = (e: number): string => `${e >= 0 ? "+" : ""}${e.toFixed(1)}pp`;
+  // Customer-facing DC labels use team abbreviations ("CAN or Draw"),
+  // never generic "Home or Draw". Falls back to generic only if abbrs
+  // are somehow absent.
+  const home = ctx.home_abbr || "Home";
+  const away = ctx.away_abbr || "Away";
   const dcLabel = (s: string): string =>
-    s === "home_or_draw" ? "Home or Draw" : s === "away_or_draw" ? "Away or Draw" : "Home or Away";
+    s === "home_or_draw"
+      ? `${home} or Draw`
+      : s === "away_or_draw"
+        ? `${away} or Draw`
+        : `${away} or ${home}`;
   return (
     <div className="space-y-1.5">
       <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">
@@ -2796,7 +2816,7 @@ function SlateCard({
             className="text-[28px] font-black tabular-nums leading-none text-white"
             style={{ letterSpacing: "-0.03em" }}
           >
-            {headlineMarketData.pick ?? "—"}
+            {formatPickWithLine(headlineMarket, headlineMarketData.pick, headlineMarketData.line, shellSport, game.awayTeam, game.homeTeam)}
           </span>
           <span className="text-[11px] uppercase tracking-[0.14em] text-gray-500 font-bold">
             {marketShortLabelFor(headlineMarket, shellSport)}
@@ -3096,7 +3116,7 @@ function SelectedEdgeReader({
                 </div>
                 <div className="flex flex-col min-w-0 leading-tight">
                   <span className="text-[18px] font-black tabular-nums text-white truncate" style={{ letterSpacing: "-0.02em" }}>
-                    {marketData.pick ?? "—"}
+                    {formatPickWithLine(market, marketData.pick, marketData.line, shellSport, game.awayTeam, game.homeTeam)}
                   </span>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span className="text-[9.5px] uppercase tracking-[0.14em] text-violet-200/75 font-bold">
@@ -3330,10 +3350,13 @@ function MobileDetailSheet({
               key={m}
               market={m}
               pick={game.markets[m].pick}
+              line={game.markets[m].line}
               confidence={game.markets[m].confidence}
               verdict={asVerdictKey(game.markets[m].verdict.key)}
               selected={selectedMarket === m}
               onClick={() => onMarketChange(m)}
+              awayTeam={game.awayTeam}
+              homeTeam={game.homeTeam}
             />
           ))}
         </div>

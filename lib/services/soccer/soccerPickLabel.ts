@@ -48,10 +48,13 @@ export function soccerPickLabel(
   if (pick === null) return null;
   const lower = pick.toLowerCase();
 
-  // Match Result / moneyline single-side
+  // Match Result / moneyline single-side. Customer-facing spec is
+  // "{Team} Win" / "Draw" / "{Team} Win"; fall back to bare "Home"/"Away"
+  // only when team abbreviations aren't available (defensive — the adapter
+  // always passes them).
   if (market === "match_result" || market === "moneyline") {
-    if (lower === "home") return homeAbbr ?? "Home";
-    if (lower === "away") return awayAbbr ?? "Away";
+    if (lower === "home") return homeAbbr !== null ? `${homeAbbr} Win` : "Home";
+    if (lower === "away") return awayAbbr !== null ? `${awayAbbr} Win` : "Away";
     if (lower === "draw") return "Draw";
   }
 

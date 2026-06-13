@@ -467,6 +467,8 @@ function buildSoccerDoubleChanceContext(
     : `Model coverage ${roundPct(modelCoverage)}%. Market double-chance pricing unavailable.`;
   return {
     displayed_side: displayedSide,
+    home_abbr: homeAbbr,
+    away_abbr: awayAbbr,
     model_coverage: modelCoverage,
     market_coverage: marketCoverage,
     edge_pp: edgePp,
