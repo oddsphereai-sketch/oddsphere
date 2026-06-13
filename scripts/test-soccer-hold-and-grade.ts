@@ -141,8 +141,16 @@ test("2b. WC-MODEL-5: DC is stricter — 3.5pp → Market-Aligned (below DC watc
 });
 
 // ─── Test 3 — Negative-edge ML still holds ──────────────────────────
-test("3. ML with edge=-7pp still HOLDS (MODEL_WRONG_SIDE preserved)", () => {
+test("3. ML edge=-7pp does NOT hold (agrees on favorite, less confident than sharp → read)", () => {
+  // 2026-06-13: floor widened -5 → -10. A market-led model that picks the same
+  // favorite as the sharp line, a few pp less confident, is a Market-Aligned
+  // READ — "Held" must not show on customer cards for it.
   const h = deriveHold(holdInput({ market: "match_result", edge_pp: -7 }));
+  assert(h.hold === false, "should NOT hold at -7pp");
+});
+
+test("3b. ML edge=-11pp HOLDS (genuine large disagreement past the -10pp floor)", () => {
+  const h = deriveHold(holdInput({ market: "match_result", edge_pp: -11 }));
   assert(h.hold === true, "should hold");
   if (h.hold === true) assert(h.code === "MODEL_WRONG_SIDE_OF_MARKET", `got code ${h.code}`);
 });

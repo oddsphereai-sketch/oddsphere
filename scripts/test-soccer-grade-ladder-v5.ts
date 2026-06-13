@@ -128,7 +128,8 @@ ok("MR favorite -3.5pp → Market-Aligned (within 5pp under market, not Caution)
 ok("Total -4.0pp → Market-Aligned (agrees on direction, slightly less extreme)", grade("total", -4.0).grade === "Market-Aligned");
 ok("BTTS -3.9pp → Market-Aligned (was Caution under old -2pp floor)", grade("btts", -3.9).grade === "Market-Aligned");
 ok("MR favorite -0.0pp → Market-Aligned (at market)", grade("match_result", -0.001, { fav: true }).grade === "Market-Aligned");
-ok("MR favorite -6.0pp → Caution (past the -5pp hold floor)", grade("match_result", -6.0, { fav: true }).grade === "Caution");
+ok("MR favorite -8.0pp → Market-Aligned (agrees on favorite, less confident than sharp)", grade("match_result", -8.0, { fav: true }).grade === "Market-Aligned");
+ok("MR favorite -11.0pp → Caution (past the -10pp hold floor)", grade("match_result", -11.0, { fav: true }).grade === "Caution");
 
 import { readFileSync } from "node:fs";
 const shellSrc = readFileSync("app/lab/components/daily-edge/DailyEdgeShell.tsx", "utf8");

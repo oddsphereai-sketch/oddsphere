@@ -74,19 +74,25 @@ export const EXTERNAL_PRIORS_V1 = {
    * WC Tier-0 — market-implied λ blend weights (Egidi/Pauli/Torelli 2018
    * convex combination).
    *
-   * 2026-06-13 (Daniel, explicit): the market is a BASELINE to work off of, NOT
-   * an anchor. 60% market made the projected scores hug the line and the model
-   * "look anchored". Flipped to MODEL-PRIMARY (0.65 Elo / 0.35 market): the
-   * research-grounded strength model leads the projection; the de-vigged market
-   * is a 0.35 grounding baseline that keeps it from running reckless. The
-   * earlier over-confidence risk that motivated the heavy anchor is now handled
-   * structurally elsewhere — DC is derived from the de-vigged 1X2, BTTS is
-   * blended to the 2-way market, and the grade ladder's per-market
-   * miscalibration ceiling + holds catch any extreme edge. As live calibration
-   * proves the model, the market weight can drop further. Tune after data.
+   * 2026-06-13 journey (Daniel):
+   *   1. Started 0.60 market — looked "anchored".
+   *   2. Flipped to 0.65 Elo / 0.35 market to de-anchor.
+   *   3. THEN found the real problem: the market data was CROSS-CONTAMINATED
+   *      (one game's odds on every fixture). With the clean odds, the de-vigged
+   *      SHARP market is accurate (Switzerland 80%, Scotland 62%, Brazil 57%),
+   *      and the model-led blend UNDER-rated favorites (Switzerland 55%), which
+   *      read as conservative / produced wall-of-holds.
+   *   4. Decision (Daniel, "trust sharp data more"): now that the odds are
+   *      clean, the sharp closing-ish line is the best per-fixture signal we
+   *      have pre-calibration, so it LEADS again — 0.65 market / 0.35 Elo. The
+   *      Elo still supplies an independent voice for value (and the strength
+   *      separation), but the model tracks the accurate sharp number instead of
+   *      fighting it. This both lifts favorites to realistic levels AND collapses
+   *      the model-on-wrong-side holds. As live calibration accrues, the Elo
+   *      weight can rise again on the markets it proves out.
    */
-  market_lambda_blend_weight: 0.35,
-  elo_lambda_blend_weight: 0.65,
+  market_lambda_blend_weight: 0.65,
+  elo_lambda_blend_weight: 0.35,
 
   /** Dixon-Coles low-score adjustment (negative inflates draws). */
   tau: -0.12,
@@ -141,8 +147,17 @@ export const EXTERNAL_PRIORS_V1 = {
     best_angle_floor: 6.0,
     /** |Edge| < this collapses to Watchlist (signal too close to noise). */
     edge_noise_band: 2.0,
-    /** Edge < this triggers hard hold (model on wrong side of market). */
-    hold_negative_floor: -5.0,
+    /**
+     * Edge < this triggers hard hold (model on wrong side of market).
+     * 2026-06-13: widened -5 → -10. With the market-led blend the model picks
+     * the SAME favorite as the sharp line; a modestly-negative edge just means
+     * the model is a bit less confident than the (accurate) sharp number — that
+     * is a Market-Aligned READ, not "wrong side", and "Held" must not show on
+     * customer cards for it. Only a genuine large disagreement (>10pp under)
+     * hard-holds. Kept aligned with MARKET_ALIGNED_FLOOR_PP in
+     * soccerConfidenceGrade.
+     */
+    hold_negative_floor: -10.0,
     /** |Edge| > this AND external_priors_only → hold (model too far without calibration). */
     far_from_market_hard_hold: 15.0,
   },

@@ -317,7 +317,7 @@ function ladderFor(
 // the time the ladder runs, anything that publishes is at-worst Market-Aligned.
 // "Caution" is then reserved for genuine miscalibration (edge > the per-market
 // ceiling) — an honest "this edge is too large to trust", not "no edge here".
-const MARKET_ALIGNED_FLOOR_PP = -5.0;
+const MARKET_ALIGNED_FLOOR_PP = -10.0;
 
 function deriveGradeLadder(opts: {
   market: SoccerGradeDecision["market"];
