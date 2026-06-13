@@ -40,6 +40,7 @@
  * change. No shell UI change. Soccer-only file.
  */
 import { supabase } from "../../db/supabase";
+import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import { flagOpenersInHistoryPayload } from "../_lineHistoryOpenerHelper";
 import { BallDontLieFifaProvider } from "../../providers/real_api/BallDontLieFifaProvider";
 import { BdlFifaClient } from "../../providers/real_api/_bdlFifaClient";
@@ -427,7 +428,9 @@ export async function writeSoccerLines(
     const sharpNorm = providers.sharp.normalizeOdds(sharpForGame);
 
     // Merge providers (SharpAPI wins ties), filter per Option A.
-    const merged = mergeProviderRows(bdlNorm, sharpNorm);
+    const merged = mergeProviderRows(bdlNorm, sharpNorm).filter(
+      (r) => !isBlockedSportsbook(r.sportsbook),
+    );
     const filtered = filterToPersistableRows(merged);
 
     log(

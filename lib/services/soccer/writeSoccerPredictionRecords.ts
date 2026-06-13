@@ -30,6 +30,7 @@
  */
 
 import { supabase } from "../../db/supabase";
+import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import {
   BallDontLieFifaProvider,
   type NormalizedBdlMatch,
@@ -296,7 +297,9 @@ export async function writeSoccerPredictionRecords(
           ? sharpOddsRaw.filter((r) => r.event_id === sharpEventId)
           : [],
       );
-      const allOdds = [...bdlNormalized, ...sharpNormalized];
+      const allOdds = [...bdlNormalized, ...sharpNormalized].filter(
+        (r) => !isBlockedSportsbook(r.sportsbook),
+      );
       log(
         `\n${matchup} (game_id=${g.id}, kickoff=${match.datetime}, recon=${reconKind})`,
       );

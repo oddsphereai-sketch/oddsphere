@@ -24,6 +24,7 @@
  * the calling routes and are unaffected by this helper.
  */
 
+import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import { buildNbaFeatureSnapshotsWithProvenance } from "./featureSnapshot";
 import { fetchEspnNbaInjuries } from "./espnNbaInjuries";
 import { runNbaAutoModelV1 } from "../../automodel/nba/nbaAutoModelV1";
@@ -159,6 +160,7 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     }>) {
       const ext = dbIdToExt.get(l.game_id);
       if (ext === undefined) continue;
+      if (isBlockedSportsbook(l.sportsbook)) continue; // never use blocked books (e.g. fliff)
       const arr = linesByExtId.get(ext) ?? [];
       arr.push({
         market_type: l.market_type,
@@ -198,17 +200,18 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     const dbIds = (gameRows ?? []).map((g) => g.id);
     const { data: histRows } = await supabase
       .from("line_history")
-      .select("game_id, market_type, side, odds_american, recorded_at")
+      .select("game_id, market_type, side, odds_american, recorded_at, sportsbook")
       .in("game_id", dbIds)
       .in("market_type", ["moneyline", "spread", "total"])
       .order("recorded_at", { ascending: true });
-    const rows = (histRows ?? []) as Array<{
+    const rows = ((histRows ?? []) as Array<{
       game_id: number;
       market_type: string;
       side: string | null;
       odds_american: number | null;
       recorded_at: string | null;
-    }>;
+      sportsbook: string | null;
+    }>).filter((r) => !isBlockedSportsbook(r.sportsbook)); // never open off a blocked book
     const toImplied = (a: number | null): number | null =>
       a === null ? null : a > 0 ? 100 / (a + 100) : -a / (-a + 100);
     // 2026-06-13 — opener outlier guard. The opener is the EARLIEST observed
