@@ -43,7 +43,7 @@ import { supabase } from "../../db/supabase";
 import { flagOpenersInHistoryPayload } from "../_lineHistoryOpenerHelper";
 import { BallDontLieFifaProvider } from "../../providers/real_api/BallDontLieFifaProvider";
 import { BdlFifaClient } from "../../providers/real_api/_bdlFifaClient";
-import { SharpApiSoccerOddsProvider } from "../../providers/real_api/SharpApiSoccerOddsProvider";
+import { SharpApiSoccerOddsProvider, type SharpApiOddsRow } from "../../providers/real_api/SharpApiSoccerOddsProvider";
 import { SharpApiClient } from "../../providers/real_api/_sharpApiClient";
 import type { NormalizedSoccerOddsRecord } from "../../providers/real_api/_soccerMarketNormalizer";
 
@@ -376,30 +376,54 @@ export async function writeSoccerLines(
       match_id: bdlMatch.provider_match_id,
       per_page: 25,
     });
-    const bdlNorm = bdlRaw.flatMap((r) =>
+    // 2026-06-13 P0 fix: the BDL odds endpoint returns the FULL WC odds pool
+    // (it does not honor the match_id query param), and normalizeOdds blindly
+    // normalizes every row it's given. Without this scope every other match's
+    // odds were relabeled with THIS game's teams and written to it — the source
+    // of the cross-contamination (6/7 books byte-identical across fixtures).
+    // Each BDL odds row carries its own match_id; keep only this match's rows.
+    const bdlForGame = bdlRaw.filter((r) => r.match_id === bdlMatch.provider_match_id);
+    const bdlNorm = bdlForGame.flatMap((r) =>
       providers.bdl.normalizeOdds(r, { home_team: bdlMatch.home_team_name, away_team: bdlMatch.away_team_name }),
     );
 
-    // SharpAPI — two-step filter for cross-fixture safety:
-    //   1. Walk raw rows once to collect this game's event_ids by
-    //      requiring BOTH team names to appear in the row's JSON.
-    //   2. Keep only rows whose event_id is in that set.
-    // The "both names" predicate prevents bleed when one team name
-    // (e.g. "Korea") substring-matches an unrelated row.
-    const homeNeedle = homeName.toLowerCase();
-    const awayNeedle = awayName.toLowerCase();
+    // SharpAPI — match each raw row to THIS game by its OWN per-event team
+    // fields (home_team / away_team), then include every row sharing a matched
+    // event_id.
+    //
+    // 2026-06-13 P0 fix: the previous predicate scanned `JSON.stringify(r)` —
+    // the WHOLE row — for both team names. Whenever a SharpAPI row carried more
+    // than its own event's data, that substring test matched MULTIPLE fixtures,
+    // stamping one event's odds onto several games (observed: 6/7 books showed
+    // byte-identical match_result lines across MAR@BRA / SCO@HAI / SUI@QAT —
+    // SCO@HAI even read "Haiti favored", backwards). Comparing the row's short
+    // home_team/away_team fields instead cannot bleed across fixtures. A
+    // neutral-site WC has no real home/away, so accept either orientation;
+    // names are normalized (accent/punctuation-insensitive) with exact-or-
+    // containment matching on the team field only — never the full row.
+    const norm = (s: string): string =>
+      s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
+    const nameMatch = (a: string, b: string): boolean => {
+      const na = norm(a);
+      const nb = norm(b);
+      if (na.length === 0 || nb.length === 0) return false;
+      return na === nb || na.includes(nb) || nb.includes(na);
+    };
+    const rowMatchesGame = (r: SharpApiOddsRow): boolean => {
+      const rh = r.home_team ?? "";
+      const ra = r.away_team ?? "";
+      return (
+        (nameMatch(rh, homeName) && nameMatch(ra, awayName)) ||
+        (nameMatch(rh, awayName) && nameMatch(ra, homeName))
+      );
+    };
     const eventIds = new Set<string>();
     for (const r of allSharpRaw) {
-      const txt = JSON.stringify(r).toLowerCase();
-      if (txt.includes(homeNeedle) && txt.includes(awayNeedle)) {
-        const eid = (r as Record<string, unknown>).event_id;
-        if (typeof eid === "string") eventIds.add(eid);
-      }
+      if (rowMatchesGame(r) && typeof r.event_id === "string") eventIds.add(r.event_id);
     }
-    const sharpForGame = allSharpRaw.filter((r) => {
-      const eid = (r as Record<string, unknown>).event_id;
-      return typeof eid === "string" && eventIds.has(eid);
-    });
+    const sharpForGame = allSharpRaw.filter(
+      (r) => typeof r.event_id === "string" && eventIds.has(r.event_id),
+    );
     const sharpNorm = providers.sharp.normalizeOdds(sharpForGame);
 
     // Merge providers (SharpAPI wins ties), filter per Option A.
