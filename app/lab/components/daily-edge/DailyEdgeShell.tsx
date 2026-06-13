@@ -1478,7 +1478,9 @@ function EdgeStack({ market, marketData }: { market: MarketKey; marketData: Mark
   // the data shape can be unit-tested without a React renderer. This
   // component only handles JSX layout + tone coloring.
   const edgeMarket: "moneyline" | "total" | "first_inning" = market;
-  const rows = buildEdgeStackRows(edgeMarket, marketData);
+  const totalUnit =
+    shellSport === "nhl" || shellSport === "soccer" ? "goals" : shellSport === "nba" ? "points" : "runs";
+  const rows = buildEdgeStackRows(edgeMarket, marketData, totalUnit);
   return (
     <div className="min-w-0">
       <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80 mb-1.5">

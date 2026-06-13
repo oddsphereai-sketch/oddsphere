@@ -169,14 +169,20 @@ export function applyNbaGroundingOverlay(
     tot.pick_side = ground.totalPick;
     tot.pick_label = ground.totalPick === "over" ? `Over ${cons.totalLine ?? ""}`.trim() : `Under ${cons.totalLine ?? ""}`.trim();
     tot.consensus_line = cons.totalLine;
-    tot.model_prob_on_pick = ground.totalPickProb;
     // Total no-vig ≈ 0.5 at the main line (priced ~-108/-109); edge = model - 0.5.
     tot.market_no_vig_prob_pick = 0.5;
-    tot.edge_prob_pp = round1((ground.totalPickProb - 0.5) * 100);
-    // Total confidence/grade: bounded, never above ML ceiling; uncalibrated → cap at Watch.
-    const totEdge = Math.abs(ground.totalPickProb - 0.5) * 100;
-    tot.effective_confidence = Math.min(ground.confidence, round1(50 + totEdge));
-    tot.grade = totEdge < 2 ? "watch" : "watch"; // informational only while uncalibrated (no lean/BA)
+    // Coherence (2026-06-13): NBA totals are uncalibrated, so confidence is
+    // capped to the limited-consensus ceiling. The DISPLAYED probability + edge
+    // MUST track that capped confidence — never the raw bivariate over-prob —
+    // or the card shows "Model Prob 58%" next to "Edge +16.6%" (the raw
+    // 66.6% over-prob), which reads as broken. The model's POINT projection
+    // (game.projection.total) still carries the full raw lean for the Model
+    // Edge "points" row; the probability/edge are our confidence-capped claim.
+    const rawTotEdge = Math.abs(ground.totalPickProb - 0.5) * 100;
+    tot.effective_confidence = Math.min(ground.confidence, round1(50 + rawTotEdge));
+    tot.model_prob_on_pick = round1(tot.effective_confidence) / 100;
+    tot.edge_prob_pp = round1(tot.effective_confidence - tot.market_no_vig_prob_pick * 100);
+    tot.grade = "watch"; // informational only while uncalibrated (no lean/BA)
     const totOdds = pickedOdds(lines, "total", ground.totalPick, cons.totalAcceptedBooks);
     if (totOdds !== null) tot.current_price = { ...tot.current_price, odds_american: totOdds };
   }

@@ -181,8 +181,11 @@ function buildMarketEdgeDto(opts: {
   capability: NbaMarketSignalsCapability;
   /** First-seen line price on the picked side, derived from NBA line_history. */
   openPriceAmerican: number | null;
+  /** Grounded model projected total (game.projection.total) — the model's
+   *  actual total, NOT the market line, for the Model Edge "points" row. */
+  projectedTotal: number | null;
 }): MarketEdgeDto {
-  const { intel, homeAbbr, awayAbbr, sportSlot, capability, openPriceAmerican } = opts;
+  const { intel, homeAbbr, awayAbbr, sportSlot, capability, openPriceAmerican, projectedTotal } = opts;
   const held = intel.pick_side === null;
   const verdict: { key: Verdict; label: string } = {
     key: gradeToVerdict(intel.grade),
@@ -265,7 +268,7 @@ function buildMarketEdgeDto(opts: {
     publicSplits,
     priceAmerican: intel.current_price.odds_american,
     lineOpenAmerican: openPriceAmerican,
-    modelTotal: sportSlot === "total" && !held ? (intel.consensus_line ?? null) : null,
+    modelTotal: sportSlot === "total" && !held ? (projectedTotal ?? intel.consensus_line ?? null) : null,
     marketTotal: sportSlot === "total" ? intel.consensus_line : null,
     line: sportSlot === "ml" ? null : intel.consensus_line,
     keyStats: [],
@@ -391,6 +394,7 @@ function adaptGame(
     sportSlot: "ml",
     capability,
     openPriceAmerican: openPrices.ml,
+    projectedTotal: null,
   });
   const total = buildMarketEdgeDto({
     intel: intel.total,
@@ -399,6 +403,7 @@ function adaptGame(
     sportSlot: "total",
     capability,
     openPriceAmerican: openPrices.total,
+    projectedTotal: game.projection?.total ?? null,
   });
   const spreadAsFi = buildMarketEdgeDto({
     intel: intel.spread,
@@ -407,6 +412,7 @@ function adaptGame(
     sportSlot: "spread",
     capability,
     openPriceAmerican: openPrices.spread,
+    projectedTotal: null,
   });
 
   const topGrade = intel.top_grade;

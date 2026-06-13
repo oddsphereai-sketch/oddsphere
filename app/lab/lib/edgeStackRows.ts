@@ -88,7 +88,10 @@ function formatAmerican(n: number): string {
  */
 export function buildEdgeStackRows(
   market: EdgeStackMarket,
-  marketData: MarketEdgeDto
+  marketData: MarketEdgeDto,
+  // Sport-aware total unit: MLB "runs", NBA "points", NHL/soccer "goals".
+  // Defaults to "runs" for back-compat with existing MLB-only call sites.
+  totalUnit: string = "runs"
 ): EdgeStackRow[] {
   const rows: EdgeStackRow[] = [];
 
@@ -107,7 +110,7 @@ export function buildEdgeStackRows(
     rows.push({
       label: "Model Edge",
       evidence: `Model ${marketData.modelTotal.toFixed(1)} vs market ${marketData.marketTotal.toFixed(1)}`,
-      delta: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} runs`,
+      delta: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} ${totalUnit}`,
       tone,
     });
   } else if (marketData.marketImpliedPct !== null) {
