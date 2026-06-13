@@ -72,12 +72,21 @@ export const EXTERNAL_PRIORS_V1 = {
 
   /**
    * WC Tier-0 — market-implied λ blend weights (Egidi/Pauli/Torelli 2018
-   * convex combination). The de-vigged market is the only CALIBRATED
-   * per-fixture scoring source, so it leads; Elo grounds it. Grounded but
-   * autonomous — not market-copying. Pre-calibration prior; tune after data.
+   * convex combination).
+   *
+   * 2026-06-13 (Daniel, explicit): the market is a BASELINE to work off of, NOT
+   * an anchor. 60% market made the projected scores hug the line and the model
+   * "look anchored". Flipped to MODEL-PRIMARY (0.65 Elo / 0.35 market): the
+   * research-grounded strength model leads the projection; the de-vigged market
+   * is a 0.35 grounding baseline that keeps it from running reckless. The
+   * earlier over-confidence risk that motivated the heavy anchor is now handled
+   * structurally elsewhere — DC is derived from the de-vigged 1X2, BTTS is
+   * blended to the 2-way market, and the grade ladder's per-market
+   * miscalibration ceiling + holds catch any extreme edge. As live calibration
+   * proves the model, the market weight can drop further. Tune after data.
    */
-  market_lambda_blend_weight: 0.6,
-  elo_lambda_blend_weight: 0.4,
+  market_lambda_blend_weight: 0.35,
+  elo_lambda_blend_weight: 0.65,
 
   /** Dixon-Coles low-score adjustment (negative inflates draws). */
   tau: -0.12,
