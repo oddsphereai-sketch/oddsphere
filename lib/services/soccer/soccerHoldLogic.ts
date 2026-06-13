@@ -152,10 +152,12 @@ export function deriveHold(ctx: HoldInputContext): HoldDecision {
     return { hold: true, code: "SPLITS_FALSE_CLAIM", reason: "Code path would claim splits support without source rows — held until pipeline fixed" };
   }
 
-  // 7. Hard hold on negative edge below the floor.
-  if (ctx.edge_pp !== null && ctx.edge_pp < EXTERNAL_PRIORS_V1.edge_thresholds.hold_negative_floor) {
-    return { hold: true, code: "MODEL_WRONG_SIDE_OF_MARKET", reason: `Model on wrong side by ${(-(ctx.edge_pp ?? 0)).toFixed(1)} pp (below ${EXTERNAL_PRIORS_V1.edge_thresholds.hold_negative_floor} pp floor)` };
-  }
+  // 7. (2026-06-13, Daniel: "Held should never be a pick for the WC model.")
+  //    A large negative edge means the model is more than ~10pp under the market
+  //    on its pick — it still HAS a read (it agrees on direction, just less
+  //    confident than the sharp line). No longer a hard hold: the grade ladder
+  //    grades it (edge below the floor → Caution), so the card shows the read,
+  //    never "No Play".
 
   // 7b. WC Tier-0 — UNCALIBRATED LARGE-EDGE HOLD. On external_priors_only, an
   // edge beyond the per-market miscalibration ceiling is far more likely model
@@ -164,29 +166,17 @@ export function deriveHold(ctx: HoldInputContext): HoldDecision {
   // closes are efficient, so a large gap on an uncalibrated model is a red flag
   // on US, not value. HOLD it with an exact reason instead of shipping an
   // overconfident Caution pick. Sane sub-ceiling edges still publish.
-  if (ctx.calibration_evidence_level === "external_priors_only" && ctx.edge_pp !== null) {
-    const CEILING_BY_MARKET: Record<string, number> = {
-      match_result: 10, total: 9, btts: 10, double_chance: 9,
-    };
-    const ceil = CEILING_BY_MARKET[ctx.market] ?? 10;
-    if (Math.abs(ctx.edge_pp) > ceil) {
-      return {
-        hold: true,
-        code: "UNCALIBRATED_EDGE_EXCEEDS_CEILING",
-        reason: `|edge| ${Math.abs(ctx.edge_pp).toFixed(1)}pp exceeds the ${ctx.market} miscalibration ceiling (${ceil}pp) on an uncalibrated (external-priors-only) model — held until WC calibration data exists`,
-      };
-    }
-  }
+  // 7b. (2026-06-13) An edge beyond the per-market ceiling is the model
+  //     disagreeing strongly with the sharp line. No longer a hard hold: the
+  //     grade ladder lands it at Caution + the miscalibration flag, so the card
+  //     shows the read (flagged), never "No Play". (Sane sub-ceiling edges grade
+  //     normally.)
 
-  // 9. Total push-risk: |predicted_total − line| < push_risk_band.
-  //    (Numbered "9" historically; kept here above the soft caps so
-  //    push risk on totals still hard-holds.)
-  if (ctx.market === "total" && ctx.listed_total_line !== null) {
-    const gap = Math.abs(ctx.predicted_total - ctx.listed_total_line);
-    if (gap < EXTERNAL_PRIORS_V1.hold_thresholds.total_push_risk_band) {
-      return { hold: true, code: "TOTAL_PUSH_RISK", reason: `Predicted total ${ctx.predicted_total.toFixed(2)} within ${EXTERNAL_PRIORS_V1.hold_thresholds.total_push_risk_band} of line ${ctx.listed_total_line}` };
-    }
-  }
+  // 9. (2026-06-13) Total push-risk (projection on the line) is no longer a
+  //    hard hold. The reconciler already resolves a near-the-line total to the
+  //    model's more-likely (probability) side, and the small resulting edge
+  //    grades as Market-Aligned — an honest "we lean Under, but it's basically
+  //    on the line" read. The card shows the read, never "No Play".
 
   // 11 (WC-MODEL-3 2026-06-12). TOTAL_DIRECTION_CONFLICT — hard hold.
   //
@@ -199,26 +189,11 @@ export function deriveHold(ctx: HoldInputContext): HoldDecision {
   // value layer's signal is statistically inseparable from the de-vig
   // noise band. Above that, we still surface the row but clamp the
   // grade ladder via the soft caps below.
-  if (
-    ctx.market === "total" &&
-    ctx.model_side !== undefined &&
-    ctx.value_side !== undefined &&
-    ctx.mean_direction_side !== undefined &&
-    ctx.mean_direction_side !== null
-  ) {
-    const meanVsModel = ctx.mean_direction_side !== ctx.model_side;
-    const modelVsValue = ctx.value_side !== ctx.model_side;
-    const smallEdge = ctx.edge_pp !== null && Math.abs(ctx.edge_pp) < 2.0;
-    if (meanVsModel && modelVsValue && smallEdge) {
-      return {
-        hold: true,
-        code: "TOTAL_DIRECTION_CONFLICT",
-        reason:
-          `Selected ${ctx.model_side} but mean direction is ${ctx.mean_direction_side} ` +
-          `and value side is ${ctx.value_side} with small edge (${ctx.edge_pp?.toFixed(2)} pp) — directional conflict hold`,
-      };
-    }
-  }
+  // 11. (2026-06-13) TOTAL_DIRECTION_CONFLICT no longer hard-holds. With the
+  //     reconciler now picking the probability side, the displayed side and the
+  //     model's more-likely outcome agree by construction, so a small-edge
+  //     directional disagreement just grades as a Market-Aligned read rather
+  //     than blanking the market to No Play.
 
   // No true blockers above — collect any SOFT CAPS that should clamp
   // the grade ladder downstream. The market still publishes.

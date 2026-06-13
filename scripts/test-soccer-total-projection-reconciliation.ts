@@ -25,7 +25,11 @@ console.log("\nscripts/test-soccer-total-projection-reconciliation.ts — WC tot
 console.log("─".repeat(70));
 
 // ─── 1 ──────────────────────────────────────────────────────────────
-test("1. BIH@CAN scenario: mean over, raw split → displayed Over with cap", () => {
+// 2026-06-13: projection within a quarter-goal of the line is a coin flip, so
+// the displayed side follows the model's MORE-LIKELY (probability) side, not
+// "mean barely over the line". Here E=2.629 but P(over)=0.489 < 0.5 → UNDER is
+// more likely → displayed Under (coherent, not the old contradictory Over).
+test("1. Near-line total resolves to the probability side (E>line but P(over)<0.5 → Under)", () => {
   const out: SoccerTotalReconciliation = reconcileSoccerTotal({
     rawProjectedAwayGoals: 1.31,
     rawProjectedHomeGoals: 1.32,
@@ -37,9 +41,8 @@ test("1. BIH@CAN scenario: mean over, raw split → displayed Over with cap", ()
     isLocked: false,
     lockedReconciliation: null,
   });
-  assert(out.mean_direction_side === "over", `mean dir over, got ${out.mean_direction_side}`);
-  assert(out.displayed_total_side === "over", `expected displayed over, got ${out.displayed_total_side}`);
-  assert(out.invariant_side_matches_total === true, "invariant must hold");
+  assert(out.mean_direction_side === null, `near-line → mean null, got ${out.mean_direction_side}`);
+  assert(out.displayed_total_side === "under", `expected displayed Under (probability side), got ${out.displayed_total_side}`);
   assert(out.reconciled_total === 2.629, `expected projected preserved, got ${out.reconciled_total}`);
 });
 
@@ -81,11 +84,11 @@ test("3. Strong under: every signal points under → under wins", () => {
 });
 
 // ─── 4 ──────────────────────────────────────────────────────────────
-test("4. V1 coherence guard: holistic disagrees with mean → revert to mean + no_play cap", () => {
-  // Construct a scenario where prob and value strongly push under but
-  // mean direction is over. The holistic vote should swing under, but
-  // the V1 guard reverts displayed_side back to mean direction with
-  // grade_cap "no_play".
+test("4. Near-line total with strong under probability → displayed Under, neutral cap, no hold", () => {
+  // E=2.62 is within a quarter-goal of the line (coin-flip zone). The model
+  // strongly favors under (P(over)=0.20) → displayed Under (probability side),
+  // capped at Watchlist as a neutral read — NOT forced to "over" by mean-vs-line,
+  // and never a hard hold.
   const out = reconcileSoccerTotal({
     rawProjectedAwayGoals: 1.3,
     rawProjectedHomeGoals: 1.32,
@@ -97,12 +100,10 @@ test("4. V1 coherence guard: holistic disagrees with mean → revert to mean + n
     isLocked: false,
     lockedReconciliation: null,
   });
-  // mean over; holistic should be under given the inputs; guard should
-  // force displayed_side back to mean direction.
-  assert(out.mean_direction_side === "over", "mean over");
-  assert(out.displayed_total_side === "over", "displayed forced to mean direction");
-  assert(out.grade_cap === "no_play" || out.grade_cap === "caution" || out.grade_cap === "watchlist",
-    `expected a cap when guard fires, got ${out.grade_cap}`);
+  assert(out.mean_direction_side === null, `near-line → mean null, got ${out.mean_direction_side}`);
+  assert(out.displayed_total_side === "under", `expected Under (probability side), got ${out.displayed_total_side}`);
+  assert(out.hold === false, "near-line is a read, never a hard hold");
+  assert(out.grade_cap === "watchlist", `expected Watchlist cap, got ${out.grade_cap}`);
 });
 
 // ─── 5 ──────────────────────────────────────────────────────────────
@@ -206,9 +207,11 @@ test("8. Honest confidence: raw P(over) ≈ 48.9% preserved (no inflation)", () 
     isLocked: false,
     lockedReconciliation: null,
   });
-  // displayed side is over, displayed confidence stays the raw P(over)*100
-  assert(Math.abs(out.reconciled_confidence_pct - 48.9) < 0.5,
-    `expected ≈48.9, got ${out.reconciled_confidence_pct}`);
+  // Near-line → displayed Under (probability side); confidence is the displayed
+  // side's honest probability = (1 − 0.489) × 100 ≈ 51.1%.
+  assert(out.displayed_total_side === "under", `expected Under, got ${out.displayed_total_side}`);
+  assert(Math.abs(out.reconciled_confidence_pct - 51.1) < 0.5,
+    `expected ≈51.1, got ${out.reconciled_confidence_pct}`);
 });
 
 // ─── 9 ──────────────────────────────────────────────────────────────
@@ -224,7 +227,7 @@ test("9. Tiny edge band: small negative edge does not auto-force no_play", () =>
     isLocked: false,
     lockedReconciliation: null,
   });
-  assert(out.displayed_total_side === "over", "still publishes over (mean aligned)");
+  assert(out.displayed_total_side === "under", "near-line publishes the probability side (Under)");
   assert(out.hold === false, "small band must not hold");
 });
 

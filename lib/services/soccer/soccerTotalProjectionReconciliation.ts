@@ -74,7 +74,14 @@ export const LOW_CONVICTION_CONFIDENCE_PCT = 50;
 export const SMALL_EDGE_BAND_PP = 2.0;
 export const NEGATIVE_EDGE_NO_PLAY_PP = 1.0;
 
-const MEAN_DIRECTION_NULL_EPSILON = 1e-9;
+// 2026-06-13: widened from 1e-9 to a real push band. The mean (E[total]) can sit
+// a hair over the line while the right-skewed score distribution makes P(under) >
+// P(over) — so picking the side by "mean vs line" showed "Over 2.5" for a 0.9–1.6
+// low-scoring projection that the model actually thinks goes UNDER. When the
+// projection is within a quarter-goal of the line it's a coin flip: resolve to
+// the model's more-likely (probability) side and hold it as a no-play, so the
+// displayed side never contradicts the projection.
+const MEAN_DIRECTION_NULL_EPSILON = 0.25;
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -293,9 +300,12 @@ export function reconcileSoccerTotal(
   let hold = false;
 
   if (mean_direction_side === null) {
+    // Projection on the line: show the model's more-likely (probability) side as
+    // a NEUTRAL read — never a hard hold (2026-06-13, Daniel: "Held should never
+    // be a pick for the WC model"). The grade cap below clamps it to Watchlist.
     reconciled_total_side = raw_probability_side;
     side_selection_reason = "push_risk_default_to_probability";
-    hold = true;
+    hold = false;
   } else if (holistic_side === mean_direction_side) {
     reconciled_total_side = holistic_side;
     const allAgree =
@@ -348,8 +358,10 @@ export function reconcileSoccerTotal(
 
   // ─── Grade cap ────────────────────────────────────────────────────
   let grade_cap: GradeCap = null;
-  if (hold) {
-    grade_cap = "no_play";
+  if (side_selection_reason === "push_risk_default_to_probability") {
+    // Projection on the line → a neutral read, capped at Watchlist (never No
+    // Play, never an actionable Lean on a coin-flip total).
+    grade_cap = "watchlist";
   } else if (side_selection_reason === "holistic_overruled_by_mean_coherence") {
     grade_cap = "no_play";
   } else if (reconciled_edge_pp !== null && reconciled_edge_pp < -NEGATIVE_EDGE_NO_PLAY_PP) {

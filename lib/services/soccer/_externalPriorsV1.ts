@@ -67,8 +67,18 @@ export const EXTERNAL_PRIORS_V1 = {
    * the market-implied λ supplies the separated per-team scoring, and the
    * blend de-weights the symmetric-Elo double-count that inflated BTTS/Over.
    */
-  att_scale: 0.12,
-  def_scale: 0.12,
+  // 2026-06-13 (Daniel: "make it a good model that predicts near-exact scores").
+  // Raised 0.12 → 0.28. At 0.12 the strength model was far too timid — every
+  // favorite came out ~50% and every total projected onto the line, so the card
+  // was nothing but coin flips. Calibrated against the sharp market (our best
+  // pre-results truth): at 0.28 the model's favorite win-probs land in line with
+  // the market on good-data fixtures (Scotland ~68% vs mkt 62, Brazil ~56% vs 57)
+  // while projecting scores with real separation (Scotland 2.1–0.7, total 2.9 →
+  // a clear Over, not a push). That conviction is what turns coin flips into
+  // solid reads. The market blend (below) still grounds fixtures where a team's
+  // Elo is off.
+  att_scale: 0.28,
+  def_scale: 0.28,
 
   /**
    * WC Tier-0 — market-implied λ blend weights (Egidi/Pauli/Torelli 2018
@@ -91,8 +101,15 @@ export const EXTERNAL_PRIORS_V1 = {
    *      the model-on-wrong-side holds. As live calibration accrues, the Elo
    *      weight can rise again on the markets it proves out.
    */
-  market_lambda_blend_weight: 0.65,
-  elo_lambda_blend_weight: 0.35,
+  // MODEL-LED (0.65 model / 0.35 market). With the strength scale now calibrated
+  // (att/def 0.28), the model makes its OWN confident score projection and leads;
+  // the de-vigged sharp market is a 0.35 grounding baseline that corrects
+  // fixtures where a team's Elo is stale/wrong (e.g. Qatar rated too high) and
+  // keeps the model from running reckless. This is what produces solid reads +
+  // genuine value Leans (model meaningfully more confident than the market on a
+  // side) instead of market-tracking coin flips.
+  market_lambda_blend_weight: 0.35,
+  elo_lambda_blend_weight: 0.65,
 
   /** Dixon-Coles low-score adjustment (negative inflates draws). */
   tau: -0.12,

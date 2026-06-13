@@ -149,37 +149,32 @@ test("3. ML edge=-7pp does NOT hold (agrees on favorite, less confident than sha
   assert(h.hold === false, "should NOT hold at -7pp");
 });
 
-test("3b. ML edge=-11pp HOLDS (genuine large disagreement past the -10pp floor)", () => {
+// 2026-06-13 (Daniel: "Held should never be a pick for the WC model"). The
+// model-DECISION holds (wrong-side, uncalibrated-large-edge, push-risk,
+// direction-conflict) no longer hard-hold — the model has a read in every one,
+// so we publish the pick and let the grade ladder grade it (large/contrary edge
+// → Caution + miscalibration flag). Only DATA/INTEGRITY blockers still hold.
+test("3b. ML edge=-11pp does NOT hold (it's a read; ladder grades it Caution)", () => {
   const h = deriveHold(holdInput({ market: "match_result", edge_pp: -11 }));
-  assert(h.hold === true, "should hold");
-  if (h.hold === true) assert(h.code === "MODEL_WRONG_SIDE_OF_MARKET", `got code ${h.code}`);
+  assert(h.hold === false, `should NOT hold (read, not No Play); got ${JSON.stringify(h)}`);
 });
 
-// ─── Test 4 — WC Tier-0: large uncalibrated edge is now HELD ─────────
-// (Reverses the prior softened soft-cap. A BTTS edge beyond the 10pp
-// miscalibration ceiling on an external_priors_only model is far more
-// likely model error than value — hold it, don't ship a Caution pick.)
-test("4. Far-from-market (+20pp BTTS) under external_priors_only → HELD", () => {
+test("4. Far-from-market (+20pp BTTS) under external_priors_only → NOT held (a read)", () => {
   const h = deriveHold(holdInput({
     market: "btts",
     edge_pp: 20,
     is_far_from_market_hard: true,
   }));
-  assert(h.hold === true, `expected HELD, got ${JSON.stringify(h)}`);
+  assert(h.hold === false, `expected a published read, got ${JSON.stringify(h)}`);
 });
 
-// ─── Test 5 — the hold carries the exact uncalibrated-edge reason ────
-test("5. Large uncalibrated edge hold carries UNCALIBRATED_EDGE_EXCEEDS_CEILING", () => {
+test("5. A large uncalibrated edge is a soft cap, never a hard hold", () => {
   const h = deriveHold(holdInput({
     market: "btts",
     edge_pp: 20,
     is_far_from_market_hard: true,
   }));
-  assert(h.hold === true, "must be a hold variant");
-  if (h.hold === true) {
-    assert(h.code === "UNCALIBRATED_EDGE_EXCEEDS_CEILING", `code should be UNCALIBRATED_EDGE_EXCEEDS_CEILING, got ${h.code}`);
-    assert(h.reason.length > 0 && /ceiling/i.test(h.reason), "reason must cite the ceiling");
-  }
+  assert(h.hold === false, "must NOT be a hold variant");
 });
 
 // ─── Test 5b — a SUB-ceiling edge still publishes (sane picks survive) ─
@@ -266,9 +261,12 @@ test("9e. SPLITS_FALSE_CLAIM still HOLDS", () => {
   const h = deriveHold(holdInput({ splits_falsely_claimed: true, splits_status: "empty_as_of_probe" }));
   assert(h.hold === true && h.code === "SPLITS_FALSE_CLAIM");
 });
-test("9f. TOTAL_PUSH_RISK still HOLDS for total when |predicted_total − line| < 0.4", () => {
+test("9f. Total on the line does NOT hold — it's a neutral read (push-risk hold removed)", () => {
+  // 2026-06-13: a projection on the line is a coin flip, but "Held" should never
+  // show on a WC card. The reconciler resolves it to the probability side and the
+  // grade caps it to a neutral Watchlist read; deriveHold no longer hard-holds.
   const h = deriveHold(holdInput({ market: "total", predicted_total: 2.5, listed_total_line: 2.5, edge_pp: 0 }));
-  assert(h.hold === true && h.code === "TOTAL_PUSH_RISK", `got ${JSON.stringify(h)}`);
+  assert(h.hold === false, `push-on-the-line must be a read, not No Play; got ${JSON.stringify(h)}`);
 });
 
 // ─── Test 10 — Total provider divergence unchanged tonight ──────────
