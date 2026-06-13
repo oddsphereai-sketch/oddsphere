@@ -94,9 +94,6 @@ function marketShortLabelFor(market: MarketKey, sport: Sport): string {
   if (market === "first_inning") {
     if (sport === "nhl") return "PL*";
     if (sport === "nba") return "Sprd*";
-    // The soccer first_inning slot carries the Double Chance market (the
-    // double_chance prediction record). BTTS is surfaced as a context
-    // block inside the Match Result slot, not here.
     if (sport === "soccer") return "DC";
   }
   if (sport === "soccer") {
@@ -1845,6 +1842,32 @@ function SoccerBttsContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerBtts
  * reconciliation note. When TOTAL_LINES_DIVERGE is firing the note
  * surfaces it instead of inventing a directional read.
  */
+/**
+ * WC-MODEL-5 grade-honesty block. Shows model vs market probability, edge,
+ * a plain-English reason for the grade + the upgrade path, and the
+ * calibration level — so a Caution/Watchlist is informative, not dead.
+ */
+function SoccerGradeContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerGradeContext"]> }) {
+  return (
+    <div className="rounded-lg border border-white/[0.05] bg-white/[0.015] px-2.5 py-2 space-y-1">
+      <div className="flex items-center gap-1.5 flex-wrap text-[10px] tabular-nums">
+        {ctx.model_pct !== null && (
+          <span className="text-gray-300">Model <span className="text-gray-100 font-semibold">{ctx.model_pct.toFixed(1)}%</span></span>
+        )}
+        {ctx.market_pct !== null && <span className="text-gray-500">· Market {ctx.market_pct.toFixed(1)}%</span>}
+        {ctx.edge_pp !== null && (
+          <span className={ctx.edge_pp >= 0 ? "text-emerald-300" : "text-amber-300"}>
+            · Edge {ctx.edge_pp >= 0 ? "+" : ""}{ctx.edge_pp.toFixed(1)}pp
+          </span>
+        )}
+        {ctx.miscalibration_flag && <span className="text-amber-300 font-semibold">· ⚠ flagged</span>}
+      </div>
+      <p className="text-[10px] text-gray-400 leading-snug">{ctx.grade_reason}</p>
+      <p className="text-[9px] text-gray-500/80 italic leading-snug">{ctx.calibration_label}</p>
+    </div>
+  );
+}
+
 function SoccerTotalContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerTotalContext"]> }) {
   const fmtPct = (p: number): string => `${(p * 100).toFixed(0)}%`;
   const fmtEdge = (e: number): string => `${e >= 0 ? "+" : ""}${e.toFixed(1)}pp`;
@@ -1974,6 +1997,8 @@ function MarketPulse({
   const wdlProbs = marketData.matchResultThreeWayProbs ?? null;
   const mrCtx = marketData.soccerMatchResultContext ?? null;
   const bttsCtx = marketData.soccerBttsContext ?? null;
+  const dcCtx = marketData.soccerDoubleChanceContext ?? null;
+  const gradeCtx = marketData.soccerGradeContext ?? null;
   if (
     (shellSport === "soccer" || shellSport === "ucl") &&
     market === "moneyline" &&
@@ -1991,6 +2016,7 @@ function MarketPulse({
           note={mrCtx?.note ?? null}
         />
         {bttsCtx !== null ? <SoccerBttsContext ctx={bttsCtx} /> : null}
+        {gradeCtx !== null ? <SoccerGradeContext ctx={gradeCtx} /> : null}
       </div>
     );
   }
@@ -2001,18 +2027,26 @@ function MarketPulse({
     market === "total" &&
     totalCtx !== null
   ) {
-    return <SoccerTotalContext ctx={totalCtx} />;
+    return (
+      <div className="space-y-2">
+        <SoccerTotalContext ctx={totalCtx} />
+        {gradeCtx !== null ? <SoccerGradeContext ctx={gradeCtx} /> : null}
+      </div>
+    );
   }
   // WC reader full-completion pass (2026-06-12) — soccer Double Chance
-  // reader. Lives on the first_inning slot per the soccer adapter
-  // mapping.
-  const dcCtx = marketData.soccerDoubleChanceContext ?? null;
+  // reader. Lives on the first_inning slot per the soccer adapter mapping.
   if (
     (shellSport === "soccer" || shellSport === "ucl") &&
     market === "first_inning" &&
     dcCtx !== null
   ) {
-    return <SoccerDcContext ctx={dcCtx} />;
+    return (
+      <div className="space-y-2">
+        <SoccerDcContext ctx={dcCtx} />
+        {gradeCtx !== null ? <SoccerGradeContext ctx={gradeCtx} /> : null}
+      </div>
+    );
   }
   // First-inning never uses split copy — V1 SharpAPI tier does not cover
   // first-inning public splits. Phrase as provider-coverage, not failure.

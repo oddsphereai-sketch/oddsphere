@@ -567,6 +567,83 @@ function buildSoccerBttsContext(
   };
 }
 
+function getMiscalibrationFlag(snapshot: Record<string, unknown> | null): boolean {
+  if (snapshot === null) return false;
+  const d = (snapshot as { decision?: unknown }).decision;
+  if (d === null || typeof d !== "object") return false;
+  return (d as { miscalibration_flag?: unknown }).miscalibration_flag === true;
+}
+
+function getCalibrationLevel(snapshot: Record<string, unknown> | null): string {
+  const lvl =
+    snapshot !== null
+      ? (snapshot as { calibration_evidence_level?: unknown }).calibration_evidence_level
+      : null;
+  return typeof lvl === "string" ? lvl : "external_priors_only";
+}
+
+const SOCCER_MARKET_LABEL: Record<string, string> = {
+  match_result: "Match Result",
+  double_chance: "Double Chance",
+  total: "Total",
+  btts: "BTTS",
+};
+
+/**
+ * WC-MODEL-5 grade-honesty block. Explains the grade with model/market
+ * probabilities + edge, the research-calibrated reason it's not higher, and
+ * the upgrade path — so a Caution/Watchlist is informative, not dead. No
+ * fabricated data: every field is derived from the stored decision.
+ */
+function buildSoccerGradeContext(
+  r: PredictionRecordSlim | null,
+): NonNullable<MarketEdgeDto["soccerGradeContext"]> | null {
+  if (r === null) return null;
+  const snap = r.snapshot_json ?? null;
+  const gradeKey = normalizeGradeKey(r.play_grade);
+  const miscal = getMiscalibrationFlag(snap);
+  const level = getCalibrationLevel(snap);
+  const calibrationLabel =
+    level === "external_priors_only"
+      ? "Research-calibrated model — live OddSphere tuning still building, so grades are conservative."
+      : "Calibrated on historical results.";
+  const modelPct = r.model_probability !== null ? Math.round(r.model_probability * 1000) / 10 : null;
+  const marketPct = r.market_probability !== null ? Math.round(r.market_probability * 1000) / 10 : null;
+  const edgePp = r.edge;
+  const label = SOCCER_MARKET_LABEL[r.market] ?? r.market;
+  const edgeStr = edgePp !== null ? `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(1)}pp` : "n/a";
+
+  const reason = ((): string => {
+    if (r.held) {
+      return `Held — ${r.hold_reason ?? r.no_bet_reason ?? "true blocker"}. Edge ${edgeStr} vs market.`;
+    }
+    if (miscal) {
+      return `Edge ${edgeStr} is implausibly large versus an efficient soccer market — flagged as possible model/market disagreement and held at Caution rather than upgraded.`;
+    }
+    const dcNote =
+      r.market === "double_chance"
+        ? " Double Chance needs a larger edge because it is short-priced and margin-heavy."
+        : "";
+    if (gradeKey === "lean" || gradeKey === "best_angle") {
+      return `Edge ${edgeStr} clears the Lean bar for ${label}. Best Angle stays locked until the model is calibrated on live results.`;
+    }
+    if (gradeKey === "watchlist") {
+      return `Edge ${edgeStr} is in the Watchlist band for ${label} — noted, not yet an actionable Lean.${dcNote} A larger edge with market agreement would upgrade it.`;
+    }
+    // caution / no-play
+    return `Edge ${edgeStr} is below the actionable threshold for ${label}. Soccer closing lines are efficient, so small edges aren't played.${dcNote} A larger calibrated edge with market agreement would upgrade it.`;
+  })();
+
+  return {
+    calibration_label: calibrationLabel,
+    model_pct: modelPct,
+    market_pct: marketPct,
+    edge_pp: edgePp,
+    grade_reason: reason,
+    miscalibration_flag: miscal,
+  };
+}
+
 function buildMarketEdgeDto(
   r: PredictionRecordSlim | null,
   openerLookup: OpenerLookup,
@@ -1061,22 +1138,20 @@ export async function buildSoccerDailyEdgeAdapted(
           // own card slot, because the soccer card has no nrfi slot.
           soccerMatchResultContext: buildSoccerMatchResultContext(mr),
           soccerBttsContext: buildSoccerBttsContext(btts),
+          // WC-MODEL-5 grade-honesty block for the Match Result headline.
+          soccerGradeContext: buildSoccerGradeContext(mr),
         },
         total: {
           ...buildMarketEdgeDto(total, openerLookup),
           soccerTotalContext: buildSoccerTotalContext(total),
+          soccerGradeContext: buildSoccerGradeContext(total),
         },
         first_inning: {
-          // The "first_inning" slot is the soccer Double Chance carrier.
-          // P0 slot fix (2026-06-12): the headline pick/price/verdict now
-          // come from the real `double_chance` prediction_record — the
-          // pre-fix code used buildMarketEdgeDto(btts, ...), which made
-          // this slot show the BTTS pick (e.g. "Yes 176") under a Double
-          // Chance reader block, double-rendering BTTS (it already rides
-          // the moneyline slot's BTTS context) and leaving Double Chance
-          // with no headline of its own.
+          // The "first_inning" slot is the soccer Double Chance carrier —
+          // headline pick/price come from the real `double_chance` record.
           ...buildMarketEdgeDto(dc, openerLookup),
           soccerDoubleChanceContext: buildSoccerDoubleChanceContext(dc, homeAbbr, awayAbbr),
+          soccerGradeContext: buildSoccerGradeContext(dc),
         },
       },
       decisionLine,

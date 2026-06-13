@@ -498,6 +498,24 @@ export type MarketEdgeDto = {
     scoring_context: string;
     note: string;
   } | null;
+
+  /** WC-MODEL-5 grade-honesty block (soccer only). Explains the grade with
+   * model/market probabilities, edge, the research-calibrated reason it is
+   * not higher, the calibration level, and the upgrade path. */
+  soccerGradeContext?: {
+    /** Customer-facing calibration level, e.g. "Research-calibrated (live tuning in progress)". */
+    calibration_label: string;
+    /** Model probability of the pick (0..100), null when unavailable. */
+    model_pct: number | null;
+    /** De-vigged market-implied probability of the pick (0..100), null when missing. */
+    market_pct: number | null;
+    /** Edge in pp (model − market). null when market data missing. */
+    edge_pp: number | null;
+    /** Plain-English reason for the grade + what would upgrade it. */
+    grade_reason: string;
+    /** True when the edge was flagged as possible model/market disagreement. */
+    miscalibration_flag: boolean;
+  } | null;
 };
 
 /**

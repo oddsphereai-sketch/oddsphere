@@ -115,6 +115,30 @@ export const EXTERNAL_PRIORS_V1 = {
     far_from_market_hard_hold: 15.0,
   },
 
+  // ─── Per-market grade ladder (WC-MODEL-5, research-calibrated) ─────
+  //
+  // Soccer betting markets are efficient at the close; realistic edges are
+  // small (low single-digit pp). Thresholds are therefore conservative and
+  // MARKET- + SIDE-specific (research basis: market efficiency, favorite-
+  // longshot bias, derivative-market margins):
+  //   • Match Result FAVORITE edges fight no known bias → lowest bar.
+  //   • Match Result DRAW/LONGSHOT edges are the noisiest → higher bar.
+  //   • Total / BTTS carry wider book margins than 1X2 → a buffer above MR.
+  //   • Double Chance is margin-heavy + short-priced → highest bar, and is
+  //     EXCLUDED from Best Angle (best_angle = null).
+  //   • miscalibration_ceiling: an edge larger than this vs the de-vigged
+  //     market is far more likely model miscalibration than real value, so
+  //     it is NOT upgraded — it drops to Caution with a flag.
+  // best_angle floors are listed for the post-calibration future but stay
+  // structurally locked under external_priors_only.
+  grade_ladder: {
+    match_result_favorite: { watchlist: 2.0, lean: 3.0, best_angle: 5.0, miscalibration_ceiling: 10.0 },
+    match_result_other: { watchlist: 3.0, lean: 5.0, best_angle: 7.0, miscalibration_ceiling: 10.0 },
+    total: { watchlist: 2.5, lean: 4.0, best_angle: 6.0, miscalibration_ceiling: 9.0 },
+    btts: { watchlist: 3.0, lean: 5.0, best_angle: 7.0, miscalibration_ceiling: 10.0 },
+    double_chance: { watchlist: 4.0, lean: 6.0, best_angle: null as number | null, miscalibration_ceiling: 9.0 },
+  },
+
   // ─── Hold-logic thresholds ────────────────────────────────────────
 
   hold_thresholds: {

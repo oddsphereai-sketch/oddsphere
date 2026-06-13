@@ -68,6 +68,7 @@ function gradeInput(over: Partial<GradeInputContext>): GradeInputContext {
     lambda_total: 2.6,
     is_btts_yes_pick: false,
     lambda_min: 1.2,
+    is_match_favorite: false,
     ...over,
   };
 }
@@ -78,19 +79,29 @@ test("1. ML with valid data, +4pp aligned edge, external_priors_only → not hel
   assert(h.hold === false, `ML +4pp should not be held; got ${JSON.stringify(h)}`);
 });
 
-test("1b. ML with valid data, +4pp aligned edge, agreement → Lean from ladder", () => {
-  // agreement requires |edge_pp| < 4, so use 3.9 to keep agreement = true.
-  const g = deriveSoccerGrade({
+test("1b. WC-MODEL-5: MR FAVORITE +3.9pp + agreement → Lean (favorite ladder lean 3.0)", () => {
+  const fav = deriveSoccerGrade({
     market: "match_result",
     selection: "home",
     model_p: 0.50,
     edge_pp: 3.9,
     model_market_agreement: true,
-    ctx: gradeInput({}),
+    ctx: gradeInput({ is_match_favorite: true }),
   });
-  // edge 3.9 ≥ lean_floor 3.0 and agreement and !far_from_market → Lean.
-  assert(g.grade === "Lean", `expected Lean, got ${g.grade}`);
-  assert(g.best_angle === false, "Best Angle must stay locked");
+  assert(fav.grade === "Lean", `favorite 3.9pp expected Lean, got ${fav.grade}`);
+  assert(fav.best_angle === false, "Best Angle must stay locked");
+
+  // Same edge on a NON-favorite (draw/longshot) side uses the higher bar
+  // (lean 5.0) → only Watchlist. Research: longshot/draw edges are noisier.
+  const other = deriveSoccerGrade({
+    market: "match_result",
+    selection: "away",
+    model_p: 0.30,
+    edge_pp: 3.9,
+    model_market_agreement: true,
+    ctx: gradeInput({ is_match_favorite: false }),
+  });
+  assert(other.grade === "Watchlist", `non-favorite 3.9pp expected Watchlist, got ${other.grade}`);
 });
 
 // ─── Test 2 — DC with +4pp edge under external_priors_only is NOT held ──
@@ -99,8 +110,10 @@ test("2. DC with valid data, +4pp edge, external_priors_only → not held", () =
   assert(h.hold === false, `DC +4pp should not be held; got ${JSON.stringify(h)}`);
 });
 
-test("2b. DC with edge=3.5pp + agreement reaches Lean from ladder", () => {
-  const g = deriveSoccerGrade({
+test("2b. WC-MODEL-5: DC is stricter — 3.5pp → Caution (below DC watchlist 4.0), 6.5pp → Lean", () => {
+  // DC carries stacked margin + short price → highest edge bar. 3.5pp is
+  // below even DC's Watchlist floor (4.0) → Caution, not Lean.
+  const low = deriveSoccerGrade({
     market: "double_chance",
     selection: "home_or_draw",
     model_p: 0.70,
@@ -108,8 +121,20 @@ test("2b. DC with edge=3.5pp + agreement reaches Lean from ladder", () => {
     model_market_agreement: true,
     ctx: gradeInput({}),
   });
-  assert(g.grade === "Lean", `expected Lean for DC, got ${g.grade}`);
-  assert(g.best_angle === false, "Best Angle must stay locked");
+  assert(low.grade === "Caution", `DC 3.5pp expected Caution, got ${low.grade}`);
+
+  // DC reaches Lean only at its higher floor (6.0).
+  const high = deriveSoccerGrade({
+    market: "double_chance",
+    selection: "home_or_draw",
+    model_p: 0.70,
+    edge_pp: 6.5,
+    model_market_agreement: true,
+    ctx: gradeInput({}),
+  });
+  assert(high.grade === "Lean", `DC 6.5pp expected Lean, got ${high.grade}`);
+  // DC can NEVER be Best Angle (excluded) even if calibration were upgraded.
+  assert(high.grade !== "Best Angle" && high.best_angle === false, "DC must never be Best Angle");
 });
 
 // ─── Test 3 — Negative-edge ML still holds ──────────────────────────
@@ -147,13 +172,13 @@ test("5. Far-from-market under external_priors_only emits soft cap with caution 
 
 // ─── Test 6 — Far-from-market soft cap does NOT elevate ─────────────
 test("6. Far-from-market soft cap does NOT elevate Watchlist to Lean", () => {
-  // edge of 2.0 + no agreement → grade ladder returns Watchlist.
+  // BTTS edge 3.5 (≥ BTTS watchlist 3.0, < lean 5.0) + no agreement → Watchlist.
   // Apply soft cap of Lean — should STAY at Watchlist (cap can only lower).
   const g = deriveSoccerGrade({
     market: "btts",
     selection: "yes",
     model_p: 0.55,
-    edge_pp: 2.0,
+    edge_pp: 3.5,
     model_market_agreement: false,
     ctx: gradeInput({ is_far_from_market: false }),
     soft_caps: [{ code: "model_far_from_market_uncalibrated", cap_at: "Lean", reason: "test" }],

@@ -81,6 +81,8 @@ export type SoccerPredictionSnapshot = {
     confidence_reductions: ConfidenceReduction[];
     grade: SoccerGradeDecision["grade"];
     best_angle: boolean;
+    /** WC-MODEL-5: edge exceeded the market miscalibration ceiling. */
+    miscalibration_flag: boolean;
     no_bet: boolean;
     no_bet_reason: string | null;
     market_data_changed_grade_or_confidence: boolean;
@@ -309,6 +311,7 @@ export function buildSoccerSnapshot(input: BuildSnapshotInput): SoccerPrediction
       confidence_reductions: gradeDecision.confidence_reductions,
       grade: gradeDecision.grade,
       best_angle: gradeDecision.best_angle,
+      miscalibration_flag: gradeDecision.miscalibration_flag,
       no_bet: noBet,
       no_bet_reason: noBetReason,
       market_data_changed_grade_or_confidence: gradeDecision.confidence_reductions.length > 0 || gradeDecision.model_market_agreement,

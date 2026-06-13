@@ -76,6 +76,10 @@ export type SoccerGradeDecision = {
   /** Audit fields. */
   edge_pp: number | null;
   model_market_agreement: boolean;
+  /** WC-MODEL-5: true when |edge| exceeded the market's miscalibration
+   * ceiling — the grade was held at Caution and flagged as a possible
+   * model/market disagreement rather than upgraded. */
+  miscalibration_flag: boolean;
   /** Soft caps from hold-logic that influenced (or didn't influence) the final grade. */
   soft_caps_applied: ReadonlyArray<SoftCap>;
 };
@@ -93,6 +97,10 @@ export type GradeInputContext = {
   lambda_total: number;
   is_btts_yes_pick: boolean;
   lambda_min: number;
+  /** WC-MODEL-5: true when this is a match_result pick on the MARKET
+   * FAVORITE side (highest de-vigged implied prob, not draw). Selects the
+   * lower (favorite) edge ladder; false uses the higher draw/longshot bar. */
+  is_match_favorite: boolean;
 };
 
 function capDefaultFor(market: SoccerGradeDecision["market"], selection: string): number {
@@ -198,24 +206,28 @@ export function deriveSoccerGrade(opts: {
   const cap_effective = Math.max(40, cap_default - totalReductionPp);
   const confidence = Math.min(model_p_pct, cap_effective);
 
-  const grade = deriveGradeLadder({
+  const ladderResult = deriveGradeLadder({
+    market: opts.market,
+    is_match_favorite: opts.ctx.is_match_favorite,
     edge_pp: opts.edge_pp,
     agreement: opts.model_market_agreement,
-    confidence,
-    cap_effective,
     far_from_market: opts.ctx.is_far_from_market,
   });
+  const grade = ladderResult.grade;
+  const miscalibration_flag = ladderResult.miscalibration;
 
   // Best Angle is structurally locked off at launch:
   //   1. edge_pp > best_angle_floor
   //   2. model_market_agreement
   //   3. market_supports_pick
   //   4. calibration_evidence_level >  "external_priors_only"
+  // grade === "Best Angle" already means the per-market best_angle floor was
+  // met AND agreement held AND not far-from-market (and the market is not
+  // Double Chance, which has a null floor). The remaining gates are the
+  // structural calibration lock.
   const calibrationUpgraded = opts.ctx.calibration_evidence_level !== "external_priors_only";
   const best_angle =
     grade === "Best Angle" &&
-    (opts.edge_pp ?? 0) > EXTERNAL_PRIORS_V1.edge_thresholds.best_angle_floor &&
-    opts.model_market_agreement &&
     opts.ctx.market_supports_pick &&
     calibrationUpgraded;
 
@@ -240,25 +252,62 @@ export function deriveSoccerGrade(opts: {
     best_angle,
     edge_pp: opts.edge_pp,
     model_market_agreement: opts.model_market_agreement,
+    miscalibration_flag,
     soft_caps_applied: softCaps,
   };
 }
 
+/**
+ * Select the per-market (and per-side for Match Result) edge ladder.
+ * Match Result splits favorite vs draw/longshot; the other markets use
+ * their own floors. Double Chance has best_angle = null (excluded).
+ */
+function ladderFor(
+  market: SoccerGradeDecision["market"],
+  isMatchFavorite: boolean,
+): { watchlist: number; lean: number; best_angle: number | null; miscalibration_ceiling: number } {
+  const L = EXTERNAL_PRIORS_V1.grade_ladder;
+  if (market === "match_result") return isMatchFavorite ? L.match_result_favorite : L.match_result_other;
+  if (market === "total") return L.total;
+  if (market === "btts") return L.btts;
+  return L.double_chance;
+}
+
+/**
+ * Research-calibrated grade ladder (WC-MODEL-5). Conservative, market- and
+ * side-specific. Order matters:
+ *   1. Miscalibration ceiling — an implausibly large edge vs the de-vigged
+ *      market is held at Caution + flagged, never upgraded.
+ *   2. Best Angle / Lean require agreement AND not-far-from-market (and a
+ *      non-null best_angle floor — Double Chance is excluded).
+ *   3. Below the market's Watchlist floor → Caution.
+ */
 function deriveGradeLadder(opts: {
+  market: SoccerGradeDecision["market"];
+  is_match_favorite: boolean;
   edge_pp: number | null;
   agreement: boolean;
-  confidence: number;
-  cap_effective: number;
   far_from_market: boolean;
-}): SoccerGradeVerdict {
+}): { grade: SoccerGradeVerdict; miscalibration: boolean } {
   const edge = opts.edge_pp ?? 0;
-  const T = EXTERNAL_PRIORS_V1.edge_thresholds;
+  const lad = ladderFor(opts.market, opts.is_match_favorite);
 
-  // Edge-noise band collapses to Watchlist regardless of confidence.
-  if (Math.abs(edge) < T.edge_noise_band && edge >= 0) return "Watchlist";
-
-  if (edge >= T.best_angle_floor && opts.agreement && !opts.far_from_market) return "Best Angle";
-  if (edge >= T.lean_floor && opts.agreement && !opts.far_from_market) return "Lean";
-  if (edge >= T.watchlist_floor) return "Watchlist";
-  return "Caution";
+  // 1. Miscalibration ceiling: too-large edge is suspect, not stronger.
+  if (edge > lad.miscalibration_ceiling) {
+    return { grade: "Caution", miscalibration: true };
+  }
+  // 2. Best Angle (still structurally locked downstream; null floor = excluded).
+  if (lad.best_angle !== null && edge >= lad.best_angle && opts.agreement && !opts.far_from_market) {
+    return { grade: "Best Angle", miscalibration: false };
+  }
+  // 3. Lean.
+  if (edge >= lad.lean && opts.agreement && !opts.far_from_market) {
+    return { grade: "Lean", miscalibration: false };
+  }
+  // 4. Watchlist.
+  if (edge >= lad.watchlist) {
+    return { grade: "Watchlist", miscalibration: false };
+  }
+  // 5. Below the market's actionable floor → Caution.
+  return { grade: "Caution", miscalibration: false };
 }

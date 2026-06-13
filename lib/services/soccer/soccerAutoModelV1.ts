@@ -426,6 +426,22 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
     }
 
     const lambdaMin = Math.min(lambdaHome, lambdaAway);
+    // WC-MODEL-5: is the Match Result pick the MARKET FAVORITE? (highest
+    // de-vigged implied prob among home/draw/away, excluding the draw).
+    // Selects the lower favorite edge ladder; everything else (draw,
+    // longshot, non-MR) uses the higher bar. Defaults false when market
+    // data is absent (conservative).
+    const isMatchFavorite = ((): boolean => {
+      if (market !== "match_result") return false;
+      const sel = bestForGrading.selection;
+      if (sel === "draw") return false;
+      const picked = bundle.devig[`match_result|${sel}`] ?? null;
+      if (picked === null) return false;
+      const sides = ["home", "draw", "away"]
+        .map((s) => bundle.devig[`match_result|${s}`] ?? null)
+        .filter((x): x is number => x !== null);
+      return sides.every((o) => picked >= o);
+    })();
     const grade = deriveSoccerGrade({
       market,
       selection: bestForGrading.selection,
@@ -445,6 +461,7 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
         lambda_total: lambdaHome + lambdaAway,
         is_btts_yes_pick: market === "btts" && best.selection === "yes",
         lambda_min: lambdaMin,
+        is_match_favorite: isMatchFavorite,
       },
       soft_caps: softCapsFromHold,
     });
