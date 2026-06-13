@@ -83,10 +83,25 @@ ok("MR +11pp sets miscalibration_flag", mc.miscalibration_flag === true);
 ok("Total +9.5pp → Caution + flag (ceiling 9)", grade("total", 9.5).grade === "Caution" && grade("total", 9.5).miscalibration_flag === true);
 ok("Below ceiling does NOT flag", grade("match_result", 6.0, { fav: true }).miscalibration_flag === false);
 
-// 8 — Best Angle stays locked under external_priors_only (downgrades to Lean)
-const ba = grade("match_result", 6.0, { fav: true }); // ≥ favorite BA floor 5.0, agreement, !far
-ok("MR favorite +6pp would-be Best Angle is locked → Lean", ba.grade === "Lean");
-ok("best_angle flag stays false under external_priors_only", ba.best_angle === false);
+// 8 — QUALIFIED Best Angle: fires only with market confirmation + smart-money
+// not-against + sane edge + current data. No empirical-calibration lock.
+// 8a — without market confirmation (helper ctx has market_supports_pick=false) → Lean.
+const notQualified = grade("match_result", 6.0, { fav: true });
+ok("MR favorite +6pp WITHOUT market confirmation → Lean (not qualified)", notQualified.grade === "Lean" && notQualified.best_angle === false);
+// 8b — fully qualified (market confirms, smart money not against, current data) → Best Angle.
+const qualified = deriveSoccerGrade({
+  market: "match_result", selection: "home", model_p: 0.60, edge_pp: 6.0,
+  model_market_agreement: true,
+  ctx: ctx({ is_match_favorite: true, market_supports_pick: true, market_moving_against_pick: false, is_stale_market: false, splits_provider_error: false }),
+});
+ok("MR favorite +6pp WITH market confirmation + smart-money not-against → Best Angle", qualified.grade === "Best Angle" && qualified.best_angle === true);
+// 8c — market moving AGAINST the pick → demoted to Lean (smart-money guard).
+const movingAgainst = deriveSoccerGrade({
+  market: "match_result", selection: "home", model_p: 0.60, edge_pp: 6.0,
+  model_market_agreement: true,
+  ctx: ctx({ is_match_favorite: true, market_supports_pick: true, market_moving_against_pick: true }),
+});
+ok("MR favorite +6pp but market MOVING AGAINST → Lean (not a qualified BA)", movingAgainst.grade === "Lean" && movingAgainst.best_angle === false);
 
 // WC-MODEL-7 — line-movement haircut: a pick the market has moved against
 // since open gets a confidence reduction (adjust-but-don't-anchor).

@@ -232,23 +232,32 @@ export function deriveSoccerGrade(opts: {
   const grade = ladderResult.grade;
   const miscalibration_flag = ladderResult.miscalibration;
 
-  // Best Angle is structurally locked off at launch:
-  //   1. edge_pp > best_angle_floor
-  //   2. model_market_agreement
-  //   3. market_supports_pick
-  //   4. calibration_evidence_level >  "external_priors_only"
-  // grade === "Best Angle" already means the per-market best_angle floor was
-  // met AND agreement held AND not far-from-market (and the market is not
-  // Double Chance, which has a null floor). The remaining gates are the
-  // structural calibration lock.
-  const calibrationUpgraded = opts.ctx.calibration_evidence_level !== "external_priors_only";
+  // QUALIFIED Best Angle (no empirical-calibration lock — a one-month World
+  // Cup / a live NBA Finals can't accumulate a calibration sample in time, so
+  // "lock until calibrated" would mean never showing a Best Angle the entire
+  // event). Instead a Best Angle must be a solid, MARKET-CONFIRMED edge:
+  //   1. grade === "Best Angle" — edge in the sane band [floor, ceiling],
+  //      model↔market agreement, and not far-from-market (all from the ladder;
+  //      Double Chance has a null floor → excluded).
+  //   2. market_supports_pick — the de-vigged market confirms our side.
+  //   3. NOT market_moving_against_pick — smart-money / line movement is not
+  //      moving against the pick (CLV-positive direction).
+  //   4. NOT miscalibration_flag — the edge is plausible, not a model-error
+  //      outlier (an implausibly large edge is held/flagged upstream).
+  //   5. Current, trustworthy market data — not stale, no splits provider
+  //      error (a Best Angle needs a solid projection off real inputs).
+  // Qualification = solid projection + market confirmation + smart-money
+  // agreement + edge sanity, NOT a graded-outcome calibration gate.
   const best_angle =
     grade === "Best Angle" &&
     opts.ctx.market_supports_pick &&
-    calibrationUpgraded;
+    !opts.ctx.market_moving_against_pick &&
+    !miscalibration_flag &&
+    !opts.ctx.is_stale_market &&
+    !opts.ctx.splits_provider_error;
 
-  // If we'd have emitted Best Angle but the calibration lock blocks it,
-  // grade down to Lean. This is the hard structural lock.
+  // If the qualification gate is not fully met, grade down to Lean (still
+  // shown as the model's read) rather than emitting an unqualified Best Angle.
   const postBaLockGrade: SoccerGradeVerdict = grade === "Best Angle" && !best_angle ? "Lean" : grade;
 
   // Apply soft caps from hold-logic (Pass 2). Can only LOWER the grade,
