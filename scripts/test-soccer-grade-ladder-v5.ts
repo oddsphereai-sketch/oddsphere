@@ -119,6 +119,17 @@ ok("market-moving-against lowers confidence vs baseline", moved.confidence <= ba
 // 9-10 — Reader wiring (static source checks): the shell renders the
 // grade-honesty block with calibration level + model/market/edge + reason,
 // and the adapter builds it. (Source-text checks — no React import.)
+// 11 — Negative-edge Market-Aligned floor (2026-06-13). A market-grounded
+// model that lands within 5pp UNDER the market on its pick AGREES on direction
+// and must read NEUTRAL ("Market-Aligned"), not scary "Caution". Below -5pp it
+// is hard-held (No Play) upstream; the ladder's residual Caution only triggers
+// past the hold floor.
+ok("MR favorite -3.5pp → Market-Aligned (within 5pp under market, not Caution)", grade("match_result", -3.5, { fav: true }).grade === "Market-Aligned");
+ok("Total -4.0pp → Market-Aligned (agrees on direction, slightly less extreme)", grade("total", -4.0).grade === "Market-Aligned");
+ok("BTTS -3.9pp → Market-Aligned (was Caution under old -2pp floor)", grade("btts", -3.9).grade === "Market-Aligned");
+ok("MR favorite -0.0pp → Market-Aligned (at market)", grade("match_result", -0.001, { fav: true }).grade === "Market-Aligned");
+ok("MR favorite -6.0pp → Caution (past the -5pp hold floor)", grade("match_result", -6.0, { fav: true }).grade === "Caution");
+
 import { readFileSync } from "node:fs";
 const shellSrc = readFileSync("app/lab/components/daily-edge/DailyEdgeShell.tsx", "utf8");
 ok("shell defines SoccerGradeContext component", shellSrc.includes("function SoccerGradeContext("));

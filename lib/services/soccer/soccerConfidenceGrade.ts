@@ -307,10 +307,17 @@ function ladderFor(
  *      non-null best_angle floor — Double Chance is excluded).
  *   3. Below the market's Watchlist floor → Caution.
  */
-// Edge floor (pp) separating "Market-Aligned" (model agrees with / is at the
-// market — informative, not a warning) from genuine "Caution" (model is
-// meaningfully on the WRONG side, beyond the ~2pp de-vig noise band).
-const MARKET_ALIGNED_FLOOR_PP = -2.0;
+// Edge floor (pp) separating "Market-Aligned" from "Caution". A market-grounded
+// model (60% market-blended λ) that lands a few pp under the market on its own
+// pick is NOT wrong — it AGREES on direction and is only slightly less extreme,
+// which is the normal, honest state. Stamping that "Caution" made the whole WC
+// card read as a wall of scary warnings (the model "looked dumb"). We align the
+// floor with hold_negative_floor (-5.0): a pick the model is MORE than 5pp under
+// the market on is already HARD-HELD as No Play by soccerHoldLogic rule 7, so by
+// the time the ladder runs, anything that publishes is at-worst Market-Aligned.
+// "Caution" is then reserved for genuine miscalibration (edge > the per-market
+// ceiling) — an honest "this edge is too large to trust", not "no edge here".
+const MARKET_ALIGNED_FLOOR_PP = -5.0;
 
 function deriveGradeLadder(opts: {
   market: SoccerGradeDecision["market"];

@@ -245,22 +245,16 @@ export function deriveHold(ctx: HoldInputContext): HoldDecision {
     });
   }
 
-  // 13 (WC-MODEL-2; revised). MODEL_SIDE_NEGATIVE_EDGE — soft cap at Caution
-  //    when the model's selected side is MEANINGFULLY on the wrong side of the
-  //    de-vigged market (worse than the ~2pp de-vig noise band). A fractionally
-  //    negative edge inside the noise band is effectively market-aligned, not a
-  //    warning — it falls through to the grade ladder's "Market-Aligned" tier
-  //    instead of being stamped scary "Caution". Threshold matches
-  //    MARKET_ALIGNED_FLOOR_PP (-2.0) in soccerConfidenceGrade.
-  if (ctx.edge_pp !== null && ctx.edge_pp < -2.0) {
-    softCaps.push({
-      code: "model_side_negative_edge",
-      cap_at: "Caution",
-      reason:
-        `Selected side is on the wrong side of the market by ${(-ctx.edge_pp).toFixed(2)} pp ` +
-        `(beyond the ~2pp noise band) — not actionable as a recommendation`,
-    });
-  }
+  // 13 (WC-MODEL-2; revised 2026-06-13). MODEL_SIDE_NEGATIVE_EDGE — REMOVED as a
+  //    Caution soft-cap. A pick the model is MORE than 5pp under the market on is
+  //    already hard-held (No Play) by rule 7 (MODEL_WRONG_SIDE_OF_MARKET). A pick
+  //    within 5pp under the market AGREES with the market on direction and is
+  //    just slightly less extreme — that is the grade ladder's honest
+  //    "Market-Aligned" tier, NOT a scary "Caution". Capping it at Caution here
+  //    overrode the ladder and turned the whole WC card into a wall of warnings.
+  //    No soft cap: the ladder (MARKET_ALIGNED_FLOOR_PP = -5.0, aligned with the
+  //    rule-7 hold floor) grades it Market-Aligned. Caution is reserved for
+  //    genuine miscalibration (edge beyond the per-market ceiling).
 
   // 14 (WC-MODEL-3 2026-06-12). TOTAL_MEAN_PROBABILITY_SPLIT — soft cap
   //    at Watchlist. The Dixon-Coles joint at low λ is right-skewed, so
