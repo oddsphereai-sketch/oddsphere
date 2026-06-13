@@ -245,19 +245,20 @@ export function deriveHold(ctx: HoldInputContext): HoldDecision {
     });
   }
 
-  // 13 (WC-MODEL-2 2026-06-12). MODEL_SIDE_NEGATIVE_EDGE — soft cap at
-  //    Caution. When the model's selected side has any negative edge vs.
-  //    the de-vigged market (i.e., the market thinks the model is on the
-  //    "wrong" side, even by a small margin), the row is not actionable
-  //    even though the existing MODEL_WRONG_SIDE_OF_MARKET hold (floor at
-  //    -5 pp) didn't fire.
-  if (ctx.edge_pp !== null && ctx.edge_pp < 0) {
+  // 13 (WC-MODEL-2; revised). MODEL_SIDE_NEGATIVE_EDGE — soft cap at Caution
+  //    when the model's selected side is MEANINGFULLY on the wrong side of the
+  //    de-vigged market (worse than the ~2pp de-vig noise band). A fractionally
+  //    negative edge inside the noise band is effectively market-aligned, not a
+  //    warning — it falls through to the grade ladder's "Market-Aligned" tier
+  //    instead of being stamped scary "Caution". Threshold matches
+  //    MARKET_ALIGNED_FLOOR_PP (-2.0) in soccerConfidenceGrade.
+  if (ctx.edge_pp !== null && ctx.edge_pp < -2.0) {
     softCaps.push({
       code: "model_side_negative_edge",
       cap_at: "Caution",
       reason:
-        `Selected side has negative edge ${ctx.edge_pp.toFixed(2)} pp vs market — ` +
-        `not actionable as a recommendation`,
+        `Selected side is on the wrong side of the market by ${(-ctx.edge_pp).toFixed(2)} pp ` +
+        `(beyond the ~2pp noise band) — not actionable as a recommendation`,
     });
   }
 
