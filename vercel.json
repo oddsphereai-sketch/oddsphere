@@ -100,6 +100,10 @@
     {
       "path": "/api/cron/soccer-daily-refresh",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-calibration",
+      "schedule": "0 8 * * 0"
     }
   ]
 }
