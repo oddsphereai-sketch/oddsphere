@@ -157,6 +157,27 @@ export function deriveHold(ctx: HoldInputContext): HoldDecision {
     return { hold: true, code: "MODEL_WRONG_SIDE_OF_MARKET", reason: `Model on wrong side by ${(-(ctx.edge_pp ?? 0)).toFixed(1)} pp (below ${EXTERNAL_PRIORS_V1.edge_thresholds.hold_negative_floor} pp floor)` };
   }
 
+  // 7b. WC Tier-0 — UNCALIBRATED LARGE-EDGE HOLD. On external_priors_only, an
+  // edge beyond the per-market miscalibration ceiling is far more likely model
+  // error than real value (esp. BTTS / double_chance, which the bivariate
+  // Poisson structurally over-predicts even after the market-λ blend). Soccer
+  // closes are efficient, so a large gap on an uncalibrated model is a red flag
+  // on US, not value. HOLD it with an exact reason instead of shipping an
+  // overconfident Caution pick. Sane sub-ceiling edges still publish.
+  if (ctx.calibration_evidence_level === "external_priors_only" && ctx.edge_pp !== null) {
+    const CEILING_BY_MARKET: Record<string, number> = {
+      match_result: 10, total: 9, btts: 10, double_chance: 9,
+    };
+    const ceil = CEILING_BY_MARKET[ctx.market] ?? 10;
+    if (Math.abs(ctx.edge_pp) > ceil) {
+      return {
+        hold: true,
+        code: "UNCALIBRATED_EDGE_EXCEEDS_CEILING",
+        reason: `|edge| ${Math.abs(ctx.edge_pp).toFixed(1)}pp exceeds the ${ctx.market} miscalibration ceiling (${ceil}pp) on an uncalibrated (external-priors-only) model — held until WC calibration data exists`,
+      };
+    }
+  }
+
   // 9. Total push-risk: |predicted_total − line| < push_risk_band.
   //    (Numbered "9" historically; kept here above the soft caps so
   //    push risk on totals still hard-holds.)

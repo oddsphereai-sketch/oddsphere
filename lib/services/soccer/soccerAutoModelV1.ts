@@ -26,6 +26,7 @@ import { EXTERNAL_PRIORS_V1 } from "./_externalPriorsV1";
 import { computeLambda, bivariatePoissonScoreDistribution, expectedTotalFromDistribution } from "./dixonColes";
 import { deriveSoccerMarketProbabilities, type SoccerMarketProbabilities } from "./soccerMarketProbabilities";
 import { buildMarketProbabilityBundle, computeEdges, selectBestValueSidePerMarket, type EdgeRow } from "./soccerMarketComparison";
+import { deriveMarketImpliedLambdas } from "./marketImpliedLambda";
 import { deriveSoccerGrade, type SoccerGradeDecision } from "./soccerConfidenceGrade";
 import { deriveHold, type HoldDecision } from "./soccerHoldLogic";
 import { buildSoccerSnapshot, type SoccerPredictionSnapshot } from "./soccerSnapshotBuilder";
@@ -177,19 +178,26 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
       : 0;
   const preCalibrationWhitelist = opts.preCalibrationPublishWhitelist ?? [];
 
-  // ─── 1. Team strength lookup ─────────────────────────────────────
+  // ─── 1. Team strength (Elo prior) — may be absent for some teams ──
   const homeStrength = lookupStrength(opts.eloTable, opts.match.home_team_country_code, opts.match.home_team_name);
   const awayStrength = lookupStrength(opts.eloTable, opts.match.away_team_country_code, opts.match.away_team_name);
+  const eloPresent = homeStrength !== null && awayStrength !== null;
 
-  if (homeStrength === null || awayStrength === null) {
-    // Hold every market on this fixture — no source-backed prior.
-    const reason = `Team strength missing from Elo snapshot: home=${homeStrength === null ? opts.match.home_team_name : "ok"} away=${awayStrength === null ? opts.match.away_team_name : "ok"}`;
-    return buildHeldFixtureOutput(opts, totalLine, lockedAt, reason);
-  }
+  // ─── 1b. De-vig market bundle + market-implied λ (calibrated prior) ─
+  // WC Tier-0: the de-vigged market is the only per-fixture CALIBRATED
+  // scoring source — invert it to per-team λ (separate attack/defense),
+  // blend it ahead of the (conservative, symmetric) Elo λ, and use it as
+  // the fallback when a team is missing from the Elo snapshot so a fixture
+  // with odds NEVER silently vanishes.
+  const bundle = buildMarketProbabilityBundle(opts.oddsRows, totalLine);
+  const marketLambdas = deriveMarketImpliedLambdas({
+    pHome: bundle.devig["match_result|home"] ?? null,
+    pAway: bundle.devig["match_result|away"] ?? null,
+    totalLine,
+    tau: EXTERNAL_PRIORS_V1.tau,
+  });
 
-  // ─── 2. Host / venue adjustments ─────────────────────────────────
-  // We only apply host_goal_adjustment when the team is a host AND the
-  // venue country matches their country.
+  // ─── 2. Host / venue adjustments (apply to the Elo-λ only) ────────
   const stadiumCountry = opts.match.stadium_country ?? "";
   const hostAdjHome = isHostTeam(opts.match.home_team_country_code) && stadiumCountry === opts.match.home_team_country_code
     ? EXTERNAL_PRIORS_V1.host_goal_adjustment
@@ -197,33 +205,49 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
   const hostAdjAway = isHostTeam(opts.match.away_team_country_code) && stadiumCountry === opts.match.away_team_country_code
     ? EXTERNAL_PRIORS_V1.host_goal_adjustment
     : 0;
-  // Altitude bonus only applies when Mexico is the home team at Azteca.
+  // Neutral-venue safety: host bump only applies to the actual host at home;
+  // every other (neutral) WC game gets 0 home advantage above.
   const venueAdjHome = venueAdj > 0 && opts.match.home_team_country_code.toUpperCase() === "MEX" ? venueAdj : 0;
 
-  // ─── 3. Lambdas + score distribution ─────────────────────────────
-  const lambdaHome = computeLambda({
-    att: homeStrength.att,
-    def: awayStrength.def,
-    alpha: EXTERNAL_PRIORS_V1.alpha,
-    ownHostAdj: hostAdjHome,
-    opposingHostAdj: hostAdjAway,
-    venueAdj: venueAdjHome,
-  });
-  const lambdaAway = computeLambda({
-    att: awayStrength.att,
-    def: homeStrength.def,
-    alpha: EXTERNAL_PRIORS_V1.alpha,
-    ownHostAdj: hostAdjAway,
-    opposingHostAdj: hostAdjHome,
-    venueAdj: 0,
-  });
+  // ─── 3. Elo-model λ (only when BOTH teams have an Elo rating) ──────
+  let eloLambdaHome: number | null = null;
+  let eloLambdaAway: number | null = null;
+  if (eloPresent) {
+    eloLambdaHome = computeLambda({ att: homeStrength!.att, def: awayStrength!.def, alpha: EXTERNAL_PRIORS_V1.alpha, ownHostAdj: hostAdjHome, opposingHostAdj: hostAdjAway, venueAdj: venueAdjHome });
+    eloLambdaAway = computeLambda({ att: awayStrength!.att, def: homeStrength!.def, alpha: EXTERNAL_PRIORS_V1.alpha, ownHostAdj: hostAdjAway, opposingHostAdj: hostAdjHome, venueAdj: 0 });
+  }
+
+  // ─── 4. Blend market + Elo (grounded but autonomous) / fallback / hold ─
+  const wm = EXTERNAL_PRIORS_V1.market_lambda_blend_weight;
+  const we = EXTERNAL_PRIORS_V1.elo_lambda_blend_weight;
+  let lambdaHome: number;
+  let lambdaAway: number;
+  let ratingSource: "elo_market_blend" | "market_implied_fallback" | "elo_only";
+  if (marketLambdas.ok && eloPresent) {
+    lambdaHome = wm * marketLambdas.lambdaHome! + we * eloLambdaHome!;
+    lambdaAway = wm * marketLambdas.lambdaAway! + we * eloLambdaAway!;
+    ratingSource = "elo_market_blend";
+  } else if (marketLambdas.ok) {
+    // Missing-Elo (e.g. Haiti) → pure market-implied λ. Flagged + capped.
+    lambdaHome = marketLambdas.lambdaHome!;
+    lambdaAway = marketLambdas.lambdaAway!;
+    ratingSource = "market_implied_fallback";
+  } else if (eloPresent) {
+    lambdaHome = eloLambdaHome!;
+    lambdaAway = eloLambdaAway!;
+    ratingSource = "elo_only";
+  } else {
+    // Neither Elo nor market — genuine hold WITH a reason (auditor-visible).
+    const reason = `No usable strength source: Elo missing (home=${homeStrength === null ? opts.match.home_team_name : "ok"}, away=${awayStrength === null ? opts.match.away_team_name : "ok"}) AND no market-implied λ (${marketLambdas.reason}).`;
+    return buildHeldFixtureOutput(opts, totalLine, lockedAt, reason);
+  }
+  const isMarketFallback = ratingSource === "market_implied_fallback";
   const joint = bivariatePoissonScoreDistribution(lambdaHome, lambdaAway, EXTERNAL_PRIORS_V1.tau);
 
-  // ─── 4. Market probabilities (model-only, no market input) ───────
+  // ─── 5. Market probabilities (model-only, no market input) ───────
   const marketProbs = deriveSoccerMarketProbabilities({ joint, totalLine });
 
-  // ─── 5. Market comparison (de-vig + edge) ────────────────────────
-  const bundle = buildMarketProbabilityBundle(opts.oddsRows, totalLine);
+  // ─── 6. Market comparison (de-vig + edge) — bundle built above ────
   // WC-MODEL-7: opener consensus for line-movement awareness. When provided,
   // we compare each pick's de-vigged market probability NOW vs at open; a
   // pick the market has steadily moved against gets a confidence haircut.
@@ -501,6 +525,7 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
       eloMeta: opts.eloTable.meta,
       homeTeamStrength: homeStrength,
       awayTeamStrength: awayStrength,
+      ratingSource,
       hostAdjHome,
       hostAdjAway,
       venueAdj: venueAdjHome,

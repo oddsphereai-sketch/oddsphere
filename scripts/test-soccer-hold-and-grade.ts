@@ -145,30 +145,41 @@ test("3. ML with edge=-7pp still HOLDS (MODEL_WRONG_SIDE preserved)", () => {
   if (h.hold === true) assert(h.code === "MODEL_WRONG_SIDE_OF_MARKET", `got code ${h.code}`);
 });
 
-// ─── Test 4 — Far-from-market under external_priors_only is NOT held ──
-test("4. Far-from-market (+20pp) under external_priors_only → not hard-held", () => {
+// ─── Test 4 — WC Tier-0: large uncalibrated edge is now HELD ─────────
+// (Reverses the prior softened soft-cap. A BTTS edge beyond the 10pp
+// miscalibration ceiling on an external_priors_only model is far more
+// likely model error than value — hold it, don't ship a Caution pick.)
+test("4. Far-from-market (+20pp BTTS) under external_priors_only → HELD", () => {
   const h = deriveHold(holdInput({
     market: "btts",
     edge_pp: 20,
     is_far_from_market_hard: true,
   }));
-  assert(h.hold === false, `expected not held, got ${JSON.stringify(h)}`);
+  assert(h.hold === true, `expected HELD, got ${JSON.stringify(h)}`);
 });
 
-// ─── Test 5 — Far-from-market emits a soft cap with metadata ────────
-test("5. Far-from-market under external_priors_only emits soft cap with caution metadata", () => {
+// ─── Test 5 — the hold carries the exact uncalibrated-edge reason ────
+test("5. Large uncalibrated edge hold carries UNCALIBRATED_EDGE_EXCEEDS_CEILING", () => {
   const h = deriveHold(holdInput({
     market: "btts",
     edge_pp: 20,
     is_far_from_market_hard: true,
   }));
-  assert(h.hold === false, "must be non-hold variant");
-  if (h.hold === false) {
-    assert(h.soft_caps !== undefined && h.soft_caps.length === 1, `expected 1 soft cap, got ${h.soft_caps?.length ?? 0}`);
-    assert(h.soft_caps![0].cap_at === "Lean", `cap_at should be Lean, got ${h.soft_caps![0].cap_at}`);
-    assert(h.soft_caps![0].code === "model_far_from_market_uncalibrated", `code should be model_far_from_market_uncalibrated, got ${h.soft_caps![0].code}`);
-    assert(h.soft_caps![0].reason.length > 0, "soft cap reason must be non-empty");
+  assert(h.hold === true, "must be a hold variant");
+  if (h.hold === true) {
+    assert(h.code === "UNCALIBRATED_EDGE_EXCEEDS_CEILING", `code should be UNCALIBRATED_EDGE_EXCEEDS_CEILING, got ${h.code}`);
+    assert(h.reason.length > 0 && /ceiling/i.test(h.reason), "reason must cite the ceiling");
   }
+});
+
+// ─── Test 5b — a SUB-ceiling edge still publishes (sane picks survive) ─
+test("5b. Sub-ceiling BTTS edge (+6pp) under external_priors_only → NOT held", () => {
+  const h = deriveHold(holdInput({
+    market: "btts",
+    edge_pp: 6, // < 10pp BTTS ceiling
+    is_far_from_market_hard: false,
+  }));
+  assert(h.hold === false, `expected publishable (sub-ceiling), got ${JSON.stringify(h)}`);
 });
 
 // ─── Test 6 — Far-from-market soft cap does NOT elevate ─────────────

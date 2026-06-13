@@ -52,11 +52,32 @@ export const EXTERNAL_PRIORS_V1 = {
    * NOTE: prior design draft suggested α = 0.46 but that yields mean
    * λ ≈ 1.58 per team (3.16 goals/match) — too high. Corrected here.
    */
-  alpha: Math.log(2.6 / 2),
+  // WC Tier-0 (research-grounded): anchor per-team baseline λ ≈ 1.25
+  // (total ≈ 2.5 = the international/WC base rate; Ley et al. 2019,
+  // footballhistory WC stats). Was 2.6 → nudged down to curb Over/BTTS
+  // over-prediction.
+  alpha: Math.log(2.5 / 2),
 
-  /** Scale factors mapping z-scored Elo strength to attack/defense. */
-  att_scale: 0.18,
-  def_scale: 0.18,
+  /**
+   * Scale factors mapping z-scored Elo strength to attack/defense.
+   * WC Tier-0: lowered 0.18 → 0.12 (research range 0.10–0.14). The Elo
+   * strength is now only the MINORITY input — blended 40% behind the
+   * 60% market-implied λ — so its spread is intentionally conservative.
+   * NOTE: with only Elo we cannot truly separate attack from defense;
+   * the market-implied λ supplies the separated per-team scoring, and the
+   * blend de-weights the symmetric-Elo double-count that inflated BTTS/Over.
+   */
+  att_scale: 0.12,
+  def_scale: 0.12,
+
+  /**
+   * WC Tier-0 — market-implied λ blend weights (Egidi/Pauli/Torelli 2018
+   * convex combination). The de-vigged market is the only CALIBRATED
+   * per-fixture scoring source, so it leads; Elo grounds it. Grounded but
+   * autonomous — not market-copying. Pre-calibration prior; tune after data.
+   */
+  market_lambda_blend_weight: 0.6,
+  elo_lambda_blend_weight: 0.4,
 
   /** Dixon-Coles low-score adjustment (negative inflates draws). */
   tau: -0.12,

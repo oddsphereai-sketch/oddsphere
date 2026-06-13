@@ -34,9 +34,11 @@ export type SoccerPredictionSnapshot = {
   model: {
     elo_snapshot: EloSnapshotMeta;
     team_strength: {
-      home: { elo: number; z: number; att: number; def: number };
-      away: { elo: number; z: number; att: number; def: number };
+      home: { elo: number; z: number; att: number; def: number } | null;
+      away: { elo: number; z: number; att: number; def: number } | null;
     };
+    /** WC Tier-0 — strength source that drove λ. */
+    rating_source?: "elo_market_blend" | "market_implied_fallback" | "elo_only";
     host_adjustment: { home: number; away: number };
     venue_adjustment: number;
     lambda_home: number;
@@ -147,9 +149,12 @@ export type BuildSnapshotInput = {
   holdDecision: HoldDecision;
   /** Elo snapshot metadata. */
   eloMeta: EloSnapshotMeta;
-  /** Team-strength inputs. */
-  homeTeamStrength: { elo: number; z: number; att: number; def: number };
-  awayTeamStrength: { elo: number; z: number; att: number; def: number };
+  /** Team-strength inputs. Null when the team is absent from the Elo
+   *  snapshot and the fixture is running on the market-implied λ fallback. */
+  homeTeamStrength: { elo: number; z: number; att: number; def: number } | null;
+  awayTeamStrength: { elo: number; z: number; att: number; def: number } | null;
+  /** WC Tier-0 — which strength source drove λ (audit/operator detail). */
+  ratingSource?: "elo_market_blend" | "market_implied_fallback" | "elo_only";
   /** Adjustments. */
   hostAdjHome: number;
   hostAdjAway: number;
@@ -275,6 +280,7 @@ export function buildSoccerSnapshot(input: BuildSnapshotInput): SoccerPrediction
     model: {
       elo_snapshot: eloMeta,
       team_strength: { home: homeTeamStrength, away: awayTeamStrength },
+      rating_source: input.ratingSource ?? "elo_market_blend",
       host_adjustment: { home: hostAdjHome, away: hostAdjAway },
       venue_adjustment: venueAdj,
       lambda_home: lambdaHome,

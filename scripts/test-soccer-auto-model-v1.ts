@@ -108,15 +108,28 @@ test("CORE: model raw probabilities derived without any market input", () => {
   assert(out.lambdaHome > 0 && out.lambdaAway > 0, "λs exist without market");
 });
 
-test("CORE: raw model probabilities IDENTICAL with vs without market input", () => {
+// WC Tier-0 contract CHANGE: the market-implied λ is now BLENDED into the
+// model (grounded but autonomous), so model probabilities DO respond to market
+// input. The old "market never changes the model" contract is intentionally
+// retired. Here we assert the new contract: both paths produce valid
+// projections, and a market that differs from the Elo-only read shifts λ/probs
+// toward the market (grounded), while the no-market path remains Elo-only.
+test("CORE: model is GROUNDED — market input shifts λ/probs (blend active)", () => {
   const m = mexVsSouthAfricaMatch();
   const outNoMarket = runSoccerAutoModelV1({ eloTable, match: m, oddsRows: [], splitsStatus: emptySplits(), reconciliation: "BDL_ONLY" });
   const outWithMarket = runSoccerAutoModelV1({ eloTable, match: m, oddsRows: mkOdds(), splitsStatus: emptySplits(), reconciliation: "MATCHED" });
-  assert(close(outNoMarket.marketProbs.match_result.home, outWithMarket.marketProbs.match_result.home), "P(home) unchanged by market");
-  assert(close(outNoMarket.marketProbs.match_result.draw, outWithMarket.marketProbs.match_result.draw), "P(draw) unchanged");
-  assert(close(outNoMarket.marketProbs.total.over, outWithMarket.marketProbs.total.over), "P(over 2.5) unchanged");
-  assert(close(outNoMarket.marketProbs.btts.yes, outWithMarket.marketProbs.btts.yes), "P(btts yes) unchanged");
-  assert(close(outNoMarket.lambdaHome, outWithMarket.lambdaHome), "λ_home unchanged");
+  // No-market path is a valid Elo-only projection (autonomous when no market).
+  assert(outNoMarket.lambdaHome > 0 && outNoMarket.marketProbs.match_result.home > 0, "no-market Elo-only path valid");
+  // With-market path is a valid grounded projection.
+  assert(outWithMarket.lambdaHome > 0 && outWithMarket.marketProbs.match_result.home > 0, "with-market blended path valid");
+  // The blend is ACTIVE: with a real market present, λ is no longer identical
+  // to the pure-Elo read (the market pulled it). If they were identical the
+  // 60/40 market blend would not be wired.
+  assert(
+    !close(outNoMarket.lambdaHome, outWithMarket.lambdaHome) ||
+      !close(outNoMarket.lambdaAway, outWithMarket.lambdaAway),
+    "market input must shift λ (grounded blend active)",
+  );
 });
 
 test("CORE: market cannot flip the model pick (pick = argmax model_p)", () => {
@@ -186,7 +199,7 @@ test("PROVENANCE: snapshot contains all required fields", () => {
     assert(s.regulation_window === "regulation_90");
     assert(typeof s.locked_at === "string" && s.locked_at.length > 10);
     assert(s.model.elo_snapshot.team_count > 0);
-    assert(s.model.team_strength.home.elo > 0 && s.model.team_strength.away.elo > 0);
+    assert((s.model.team_strength.home?.elo ?? 0) > 0 && (s.model.team_strength.away?.elo ?? 0) > 0);
     assert(s.model.lambda_home > 0 && s.model.lambda_away > 0);
     assert(s.model.raw_probabilities.match_result.home > 0);
     assert(s.model.raw_probabilities.btts.yes > 0);
