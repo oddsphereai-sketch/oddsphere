@@ -43,6 +43,7 @@ import {
   probabilityToAmericanOdds,
 } from "./runDistribution";
 import { computePlayGrade } from "./playGrade";
+import { regularizeProbability } from "./mlbProbabilityRegularization";
 import type { AutoModelOutput, GameSnapshot, ModelStage } from "./types";
 import { MODEL_VERSION_V2_2 } from "./types";
 
@@ -113,6 +114,28 @@ export type V22Audit = {
    */
   over_odds_american: number | null;
   under_odds_american: number | null;
+  // MLB-P0 probability-space regularization audit (the E-first fix).
+  // ml_model_prob / ml_edge_pct (and ou_*) ABOVE are now the REGULARIZED
+  // values that drive the card + grade + Best Angle; the fields below
+  // preserve the raw model probability/edge plus the regularizer math so
+  // calibration quality (raw vs regularized vs outcome) can be evaluated
+  // over time. raw_* are audit-only and never gate a play.
+  ml_raw_model_prob: number;
+  ml_raw_edge_pct: number | null;
+  ml_regularized_model_prob: number;
+  ml_regularized_edge_pct: number | null;
+  ml_shrink_factor: number;
+  ml_distance_cap_pp: number;
+  ml_distance_cap_applied: boolean;
+  ou_raw_model_prob: number;
+  ou_raw_edge_pct: number | null;
+  ou_regularized_model_prob: number;
+  ou_regularized_edge_pct: number | null;
+  ou_shrink_factor: number;
+  ou_distance_cap_pp: number;
+  ou_distance_cap_applied: boolean;
+  /** Always "probability_space_regularization" — the reason both edges were shrunk. */
+  regularization_reason: string;
   // Layer 5
   ml_play_grade: string;
   ou_play_grade: string;
@@ -149,6 +172,21 @@ export type V22Output = {
 const V22_BEST_ANGLE_MIN_EDGE_PCT_ML = 3.0;
 const V22_BEST_ANGLE_MIN_EDGE_PCT_OU = 3.5;
 const V22_BEST_ANGLE_MIN_CONFIDENCE_PCT = 56;
+
+// MLB-P0 probability-space regularization (the E-first fix). Applied to
+// the Poisson probability AFTER the run-space posterior blend and BEFORE
+// edge/grade. Shrinks the model probability toward the no-vig market and
+// hard-caps the distance, so an overconfident Poisson output can no longer
+// manufacture a 15-30pp phantom edge. These govern the magnitude used for
+// edge + grade ONLY — the pick/side is decided upstream from the raw prob.
+//   k        — fraction of the raw model's distance-from-market it keeps.
+//   maxDist  — hard ceiling on |regularized − market| in percentage points.
+// O/U is shrunk harder (lower k, tighter cap) because totals are the
+// worst-calibrated market in the audit (observed 49.4% vs predicted 58.6%).
+const V22_SHRINK_K_ML = 0.6;
+const V22_SHRINK_K_OU = 0.5;
+const V22_MAX_DISTANCE_PP_ML = 10.0;
+const V22_MAX_DISTANCE_PP_OU = 9.0;
 
 /**
  * Run V2.2 for a single game. Pure function — no DB, no network.
@@ -207,13 +245,25 @@ export function runMlbAutoModelV2_2(
     posterior.away_expected_runs,
   );
   const mlAwayProb = 1 - mlHomeProb;
+  // Pick direction is decided from the RAW Poisson probability — never
+  // changed by regularization below.
   const mlPickIsHome = mlHomeProb >= 0.5;
   const mlMarketProb = marketValid && market.homeNoVigProb !== null
     ? mlPickIsHome ? market.homeNoVigProb : (1 - market.homeNoVigProb)
     : null;
-  const mlModelProb = mlPickIsHome ? mlHomeProb : mlAwayProb;
-  const mlEdgePct =
-    mlMarketProb !== null ? (mlModelProb - mlMarketProb) * 100 : 0;
+  // RAW model probability for the picked side (preserved in audit).
+  const mlRawModelProb = mlPickIsHome ? mlHomeProb : mlAwayProb;
+  // MLB-P0 — regularize toward the no-vig market in probability space.
+  // The regularized prob/edge drive confidence, grade, Best Angle, and the
+  // card; the raw prob/edge are preserved for calibration evaluation.
+  const mlReg = regularizeProbability({
+    rawProb: mlRawModelProb,
+    marketProb: mlMarketProb,
+    k: V22_SHRINK_K_ML,
+    maxDistancePp: V22_MAX_DISTANCE_PP_ML,
+  });
+  const mlModelProb = mlReg.regularizedProb ?? mlRawModelProb;
+  const mlEdgePct = mlReg.regularizedEdgePct ?? 0;
 
   // OU using market_total (or independent total when market missing)
   const ouLine = market.listedTotal ?? posterior.total_expected_runs;
@@ -223,7 +273,8 @@ export function runMlbAutoModelV2_2(
     ouLine,
   );
   const ouPickIsOver = ouOverProb >= 0.5;
-  const ouModelProb = ouPickIsOver ? ouOverProb : (1 - ouOverProb);
+  // RAW O/U model probability for the picked side (preserved in audit).
+  const ouRawModelProb = ouPickIsOver ? ouOverProb : (1 - ouOverProb);
 
   // Phase 6B.8 — real no-vig O/U market probability for the picked
   // side. Pre-6B.8 this was hard-coded to 0.5, which made every OU
@@ -237,8 +288,16 @@ export function runMlbAutoModelV2_2(
   const ouMarketProb: number | null = ouPickIsOver
     ? market.overNoVigProb
     : market.underNoVigProb;
-  const ouEdgePct: number | null =
-    ouMarketProb !== null ? (ouModelProb - ouMarketProb) * 100 : null;
+  // MLB-P0 — regularize O/U toward the no-vig market (harder shrink than
+  // ML). Regularized prob/edge drive confidence, grade, Best Angle, card.
+  const ouReg = regularizeProbability({
+    rawProb: ouRawModelProb,
+    marketProb: ouMarketProb,
+    k: V22_SHRINK_K_OU,
+    maxDistancePp: V22_MAX_DISTANCE_PP_OU,
+  });
+  const ouModelProb = ouReg.regularizedProb ?? ouRawModelProb;
+  const ouEdgePct: number | null = ouReg.regularizedEdgePct;
 
   // Confidence
   const mlConfidence = computeConfidence({
@@ -358,6 +417,22 @@ export function runMlbAutoModelV2_2(
     ou_edge_pct: ouEdgePct,
     over_odds_american: snap.market.over_odds_american,
     under_odds_american: snap.market.under_odds_american,
+    // MLB-P0 regularization audit — raw preserved, regularizer math exposed.
+    ml_raw_model_prob: mlRawModelProb,
+    ml_raw_edge_pct: mlReg.rawEdgePct,
+    ml_regularized_model_prob: mlModelProb,
+    ml_regularized_edge_pct: mlReg.regularizedEdgePct,
+    ml_shrink_factor: mlReg.shrinkFactor,
+    ml_distance_cap_pp: mlReg.distanceCapPp,
+    ml_distance_cap_applied: mlReg.capApplied,
+    ou_raw_model_prob: ouRawModelProb,
+    ou_raw_edge_pct: ouReg.rawEdgePct,
+    ou_regularized_model_prob: ouModelProb,
+    ou_regularized_edge_pct: ouReg.regularizedEdgePct,
+    ou_shrink_factor: ouReg.shrinkFactor,
+    ou_distance_cap_pp: ouReg.distanceCapPp,
+    ou_distance_cap_applied: ouReg.capApplied,
+    regularization_reason: mlReg.reason,
     ml_play_grade: mlPlayGrade.grade,
     ou_play_grade: ouPlayGrade.grade,
     ml_prediction_type: mlPlayGrade.predictionType,

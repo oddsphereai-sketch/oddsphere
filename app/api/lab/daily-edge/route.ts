@@ -1394,9 +1394,14 @@ function readFiV2Audit(sp: Record<string, unknown> | null): {
  * run-diff bump`, capped by tier ceiling. It blends ML AND OU strength,
  * so a 0.03-run game with a strong OU lean shows ~62% under the "ML"
  * label even though the true ML model probability is ~51%. The audit
- * carries the unblended `ml_model_prob` / `ml_market_prob` / `ml_edge_pct`
+ * carries `ml_model_prob` / `ml_market_prob` / `ml_edge_pct`
  * separately — this helper exposes them so MarketEdgeDto.modelProb /
  * modelTrustPct / marketImpliedPct / modelMarketGapPct become honest.
+ *
+ * MLB-P0: ml_model_prob / ml_edge_pct (and ou_*) are the REGULARIZED
+ * (market-shrunk) values — the card shows the honest, overconfidence-
+ * bounded edge. The raw model probability is preserved separately under
+ * v2_2_audit.{ml,ou}_raw_model_prob for calibration evaluation only.
  *
  * Returns null when the audit is missing OR the picked-side prob can't be
  * resolved (e.g., FI market routes through readFiV2Audit instead).
@@ -1421,6 +1426,7 @@ function readV22AuditForPick(
     // ml_model_prob / ml_market_prob in the audit are written for the
     // model's picked side (V22 emits them post-pick selection). The
     // audit's perspective IS the pick perspective, so no home/away flip.
+    // MLB-P0: ml_model_prob / ml_edge_pct are REGULARIZED (market-shrunk).
     void pickIsHome;
     const m = num(audit.ml_model_prob);
     const k = num(audit.ml_market_prob);
