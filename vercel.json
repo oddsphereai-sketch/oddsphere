@@ -98,6 +98,10 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/cron/slate-health-audit",
+      "schedule": "50 * * * *"
+    },
+    {
       "path": "/api/cron/weekly-calibration",
       "schedule": "0 8 * * 0"
     }
