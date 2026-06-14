@@ -281,11 +281,14 @@ export async function runSlateHealthAudit(opts: AuditOptions): Promise<AuditResu
         const fliff = mlRows.filter((r) => isBlockedSportsbook(r.sportsbook));
         if (fliff.length) {
           findings.push(newFinding({
-            check: "blocked_book_contamination", sport, severity: "warn", game_id: g.id, matchup: mlabel, slate_date: g.slate_date,
-            detail: `${fliff.length} blocked-book (fliff) ML row(s) present in DB.`,
-            reason: "blocked sportsbook rows persisted (ignored at read-time)", autofix: "auto_safe",
-            autofix_action: "ignored at read-time by isBlockedSportsbook; no write needed",
-            fixed: true, // already neutralized by the read-time filter
+            // INFO, not a "fix": these rows are persisted but neutralized at
+            // every read by isBlockedSportsbook — nothing is mutated, so this
+            // must NOT inflate the `fixed`/records_updated count (which should
+            // reflect only real repairs the operator should notice).
+            check: "blocked_book_contamination", sport, severity: "info", game_id: g.id, matchup: mlabel, slate_date: g.slate_date,
+            detail: `${fliff.length} blocked-book (fliff) ML row(s) present in DB — neutralized at read-time, no action needed.`,
+            reason: "blocked sportsbook rows persisted but ignored at every consume point", autofix: "manual",
+            autofix_action: "no write needed; filtered at read-time by isBlockedSportsbook",
           }));
         }
         // Both-positive ML pair on a single clean book (impossible 2-way).
