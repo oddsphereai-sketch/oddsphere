@@ -81,6 +81,13 @@ const PRE_CALIBRATION_WHITELIST: Array<"match_result" | "double_chance" | "total
 /** Lock window: 60 minutes before kickoff, mirroring T-60 convention. */
 const LOCK_WINDOW_MINUTES = 60;
 
+/**
+ * Official WC public-tracking start (ET slate). Records on slates strictly
+ * before this are stamped launch_day=true so the public tracker excludes them
+ * (Daniel, 2026-06-14: "today onwards is what matters"). 6/14+ count.
+ */
+const SOCCER_OFFICIAL_TRACKING_START = "2026-06-14";
+
 export type WriteSoccerRecordsOptions = {
   slateDate: string;
   apply: boolean;
@@ -424,6 +431,14 @@ export async function writeSoccerPredictionRecords(
           external_id: g.external_id,
           game_date: g.game_date,
           slate_date: g.slate_date,
+          // Official WC tracking starts 2026-06-14 (Daniel: "today onwards is
+          // what matters; I don't care about WC tracking before today"). The
+          // builder defaults launch_day=true (which the public tracker
+          // excludes); stamp it from the FINAL ET-bucketed slate so 6/13 and
+          // earlier stay excluded and 6/14+ count. Uses g.slate_date (not the
+          // kickoff date) so a midnight-ET game like SCO@HAI is classified by
+          // its matchday, not its UTC kickoff.
+          launch_day: g.slate_date < SOCCER_OFFICIAL_TRACKING_START,
           // T-60 lock semantic only — never inherit the snapshot's
           // capture-time stamp (which is also called `locked_at` in the
           // WC-3 snapshot builder but means "snapshot taken at"). Pre-T-60
