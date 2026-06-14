@@ -60,19 +60,52 @@ test("2. GROUP home favored (gap 0.4), value agrees → HOME, no cap (Lean allow
   assert(out.grade_cap === null, `expected no cap (41% conf is real 3-way conviction), got ${out.grade_cap}`);
 });
 
-// ─── 3 ── Group stage, favorite but value leans elsewhere → caution ─────
-test("3. GROUP home favored but best value is away → HOME pick, caution cap", () => {
+// ─── 3 ── Favorite the model+market agree on, longshot value → Market-Aligned ─
+test("3. GROUP home favored = market favorite, longshot value on away → Market-Aligned (not caution)", () => {
   const out = reconcileSoccerMatchResult({
     ...base,
     lambdaHome: 1.3, lambdaAway: 0.9,
     modelHome: 0.413, modelDraw: 0.327, modelAway: 0.260,
-    marketHome: 0.50, marketDraw: 0.31, marketAway: 0.19, // home overpriced, away value
+    marketHome: 0.50, marketDraw: 0.31, marketAway: 0.19, // market favorite = home; away has marginal value
     drawPickable: true,
   });
   assert(out.displayed_outcome === "home", `pick follows projection, got ${out.displayed_outcome}`);
-  assert(out.value_outcome === "away", `value should be away, got ${out.value_outcome}`);
+  assert(out.value_outcome === "away", `value should be the longshot away, got ${out.value_outcome}`);
+  assert(out.selection_reason === "team_projection_market_aligned", out.selection_reason);
+  assert(out.grade_cap === null, `model+market agree on home → Market-Aligned, got ${out.grade_cap}`);
+});
+
+// ─── 3b ── Heavy favorite the model+market agree on → Market-Aligned ────
+test("3b. Market favorite the model also backs (neg edge, longshot draw has value) → Market-Aligned, NOT caution", () => {
+  // Germany vs Curaçao: model home 84% / draw 13% / away 3%; market home 92%.
+  // Home edge -8.6 (no value), but the draw carries +7.6pp → value_outcome=draw.
+  const out = reconcileSoccerMatchResult({
+    ...base,
+    lambdaHome: 2.62, lambdaAway: 0.42,
+    modelHome: 0.837, modelDraw: 0.130, modelAway: 0.034,
+    marketHome: 0.923, marketDraw: 0.054, marketAway: 0.023,
+    drawPickable: true,
+  });
+  assert(out.displayed_outcome === "home", `expected home, got ${out.displayed_outcome}`);
+  assert(out.value_outcome === "draw", `value should be the longshot draw, got ${out.value_outcome}`);
+  assert(out.selection_reason === "team_projection_market_aligned", out.selection_reason);
+  assert(out.grade_cap === null, `must NOT caution a favorite the model+market agree on; got ${out.grade_cap}`);
+});
+
+// ─── 3c ── Model projects a winner that's neither market-favorite nor value → caution ─
+test("3c. Projection ≠ market favorite AND value on a third side → caution (real divergence)", () => {
+  const out = reconcileSoccerMatchResult({
+    ...base,
+    lambdaHome: 1.3, lambdaAway: 0.9, // model projects home (margin 0.4)
+    modelHome: 0.35, modelDraw: 0.35, modelAway: 0.30,
+    marketHome: 0.30, marketDraw: 0.25, marketAway: 0.45, // market favorite = away
+    drawPickable: true,
+  });
+  // home edge +5, draw edge +10 (value), away edge -15 → value=draw; projection=home; market fav=away.
+  assert(out.displayed_outcome === "home", `pick follows projection, got ${out.displayed_outcome}`);
+  assert(out.value_outcome === "draw", `value should be draw, got ${out.value_outcome}`);
   assert(out.selection_reason === "team_projection_value_disagrees", out.selection_reason);
-  assert(out.grade_cap === "caution", `expected caution, got ${out.grade_cap}`);
+  assert(out.grade_cap === "caution", `projection is neither market-favorite nor value → caution, got ${out.grade_cap}`);
 });
 
 // ─── 4 ── Knockout, even projection → favorite, NEVER draw ──────────────

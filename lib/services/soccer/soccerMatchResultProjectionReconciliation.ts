@@ -97,6 +97,7 @@ export type GradeCap = "no_play" | "caution" | "watchlist" | null;
 
 export type MatchResultSelectionReason =
   | "team_projection_value_agrees"
+  | "team_projection_market_aligned"
   | "team_projection_value_disagrees"
   | "team_projection_no_market"
   | "draw_projection_even"
@@ -236,6 +237,12 @@ function valueOutcome(input: SoccerMatchResultReconciliationInput): {
   return { side, homeEdge, drawEdge, awayEdge };
 }
 
+/** The market's favorite outcome (highest no-vig market prob), or null. */
+function marketFavorite(input: SoccerMatchResultReconciliationInput): MatchOutcome | null {
+  if (input.marketHome === null || input.marketDraw === null || input.marketAway === null) return null;
+  return argmaxOutcome(input.marketHome, input.marketDraw, input.marketAway);
+}
+
 function round1(x: number): number {
   return Math.round(x * 10) / 10;
 }
@@ -307,9 +314,20 @@ export function reconcileSoccerMatchResult(
     // coherent value. Let the grade ladder decide (can reach Lean).
     selection_reason = "team_projection_value_agrees";
     grade_cap = null;
+  } else if (projection_outcome === marketFavorite(input)) {
+    // Model projects the MARKET FAVORITE (e.g. Germany vs Curaçao). Model and
+    // market AGREE on the winner; the projected side just has no +EV (the
+    // marginal "value" sits on a longshot draw/dog). This is NOT a conflict
+    // and must NOT read as "Caution" — back the clear favorite at
+    // Market-Aligned. We leave grade_cap null so the grade ladder lands it:
+    // small negative edge → Market-Aligned; only a genuinely large
+    // miscalibration (edge past the ladder's -10pp floor) falls to Caution.
+    selection_reason = "team_projection_market_aligned";
+    grade_cap = null;
   } else {
-    // We project a team but the value/market leans away (or the projected
-    // side is negative-edge): low conviction.
+    // Model projects a NON-market-favorite winner — a genuine contrarian
+    // call (the model disagrees with the market about who wins). Low
+    // conviction pre-calibration.
     selection_reason = "team_projection_value_disagrees";
     grade_cap = "caution";
   }
