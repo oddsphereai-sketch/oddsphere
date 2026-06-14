@@ -80,6 +80,120 @@ function currentSoccerSlateDate(): string {
   }).format(new Date());
 }
 
+/** Add `n` calendar days to a YYYY-MM-DD slate label. */
+function addSlateDays(yyyyMmDd: string, n: number): string {
+  const [y, m, d] = yyyyMmDd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
+ * Process one ET slate: seed → predictions → lines. Returns the per-slate
+ * step details plus rollup counters. Never throws — step failures set
+ * `partial` and are captured in `details`.
+ *
+ * 2026-06-14 (Daniel: "we completely missed the Australia game. That cannot
+ * happen again."): TUR@AUS kicked off at 04:00 UTC = 00:00 ET, the exact ET
+ * slate-rollover instant. It was seeded 48s AFTER kickoff and the prediction
+ * run hit the kickoff-passed guard. The GET handler now runs this for BOTH
+ * today and tomorrow's ET slate, so a midnight-ET kickoff is seeded and
+ * predicted the EVENING BEFORE — hours ahead of kickoff — instead of at the
+ * rollover instant. See [[project_tracking_architecture_gap]] sibling note.
+ */
+async function processSoccerSlate(slateDate: string): Promise<{
+  details: Record<string, unknown>;
+  partial: boolean;
+  recordsUpdated: number;
+}> {
+  const stepLog =
+    (label: string) =>
+    (msg: string): void => {
+      console.log(`[soccer-daily-refresh:${label}:${slateDate}] ${msg}`);
+    };
+
+  let partial = false;
+  const details: Record<string, unknown> = { slate_date_et: slateDate };
+
+  // ── Step 1: seed soccer games + teams for the ET slate. ──
+  console.log(`[soccer-daily-refresh] step=seed  date=${slateDate}`);
+  const seedDryRun = process.env[SEED_ENV] !== "true";
+  const seedResult = await seedSoccerGames({ dryRun: seedDryRun, slateDate, logger: stepLog("seed") });
+  details.seed = {
+    mode: seedResult.mode,
+    eventsFound: seedResult.eventsFound,
+    teamsAttempted: seedResult.teamsAttempted,
+    teamsUpserted: seedResult.teamsUpserted,
+    gamesAttempted: seedResult.gamesAttempted,
+    gamesUpserted: seedResult.gamesUpserted,
+    gamesSkippedMissingTeam: seedResult.gamesSkippedMissingTeam,
+    errorCount: seedResult.errors.length,
+    gate: seedDryRun ? `dry-run: ${SEED_ENV}!=true` : "writes enabled",
+  };
+  if (seedResult.mode === "no-events") {
+    details.outcome = "no_soccer_today";
+    return { details, partial, recordsUpdated: 0 };
+  }
+  if (seedResult.errors.length > 0) partial = true;
+
+  // ── Step 2: write prediction_records for the slate. ──
+  console.log(`[soccer-daily-refresh] step=predictions  date=${slateDate}`);
+  const predsApply = process.env[PREDS_ENV] === "true";
+  let predsResult;
+  try {
+    const wp = await writeSoccerPredictionRecords({ slateDate, apply: predsApply, logger: stepLog("predictions") });
+    predsResult = {
+      mode: wp.mode,
+      gamesProcessed: wp.gamesProcessed,
+      fixturesMatched: wp.fixturesMatched,
+      fixturesUnmatched: wp.fixturesUnmatched,
+      recordsCreated: wp.recordsCreated,
+      recordsSkippedLocked: wp.recordsSkippedLocked,
+      errors: wp.errors,
+    };
+    if (wp.errors.length > 0) partial = true;
+  } catch (e) {
+    partial = true;
+    predsResult = {
+      mode: "write", gamesProcessed: 0, fixturesMatched: 0, fixturesUnmatched: 0,
+      recordsCreated: 0, recordsSkippedLocked: 0, errors: [e instanceof Error ? e.message : String(e)],
+    };
+  }
+  details.predictions = { ...predsResult, gate: predsApply ? "writes enabled" : `dry-run: ${PREDS_ENV}!=true` };
+
+  // ── Step 3 (optional): persist lines + line_history (Option A). ──
+  console.log(`[soccer-daily-refresh] step=lines  date=${slateDate}`);
+  const linesApply = process.env[LINES_ENV] === "true";
+  let linesResult;
+  try {
+    const wl = await writeSoccerLines({ slateDate, apply: linesApply, logger: stepLog("lines") });
+    linesResult = {
+      mode: wl.mode,
+      linesProposed: wl.linesProposed,
+      linesWritten: wl.linesWritten,
+      historyProposed: wl.historyProposed,
+      historyWritten: wl.historyWritten,
+      openersFlagged: wl.openersFlagged,
+      errors: wl.errors,
+    };
+    if (wl.errors.length > 0) partial = true;
+  } catch (e) {
+    partial = true;
+    linesResult = {
+      mode: "write", linesProposed: 0, linesWritten: 0, historyProposed: 0,
+      historyWritten: 0, openersFlagged: 0, errors: [e instanceof Error ? e.message : String(e)],
+    };
+  }
+  details.lines = { ...linesResult, gate: linesApply ? "writes enabled" : `dry-run: ${LINES_ENV}!=true` };
+
+  const recordsUpdated =
+    (predsApply ? predsResult.recordsCreated : 0) +
+    (linesApply ? linesResult.linesWritten + linesResult.historyWritten : 0) +
+    (process.env[SEED_ENV] === "true" ? seedResult.teamsUpserted + seedResult.gamesUpserted : 0);
+
+  return { details, partial, recordsUpdated };
+}
+
 export const maxDuration = 300;
 
 export async function GET(request: Request): Promise<Response> {
@@ -94,143 +208,27 @@ export async function GET(request: Request): Promise<Response> {
         };
       }
 
-      const slateDate = currentSoccerSlateDate();
-      const stepLog =
-        (label: string) =>
-        (msg: string): void => {
-          console.log(`[soccer-daily-refresh:${label}] ${msg}`);
-        };
+      // Process TODAY and TOMORROW's ET slate every run. Tomorrow's
+      // coverage is what prevents the Australia-game miss: a game kicking
+      // off at 00:00 ET (the slate-rollover instant) is seeded + predicted
+      // hours ahead during today's runs instead of at its own kickoff.
+      const today = currentSoccerSlateDate();
+      const tomorrow = addSlateDays(today, 1);
 
       let partial = false;
-      const stepDetails: Record<string, unknown> = { slate_date_et: slateDate };
-
-      // ── Step 1: seed soccer games + teams for the ET slate. ──
-      console.log(`[soccer-daily-refresh] step=seed  date=${slateDate}`);
-      const seedDryRun = process.env[SEED_ENV] !== "true";
-      const seedResult = await seedSoccerGames({
-        dryRun: seedDryRun,
-        slateDate,
-        logger: stepLog("seed"),
-      });
-      stepDetails.seed = {
-        mode: seedResult.mode,
-        eventsFound: seedResult.eventsFound,
-        teamsAttempted: seedResult.teamsAttempted,
-        teamsUpserted: seedResult.teamsUpserted,
-        gamesAttempted: seedResult.gamesAttempted,
-        gamesUpserted: seedResult.gamesUpserted,
-        gamesSkippedMissingTeam: seedResult.gamesSkippedMissingTeam,
-        errorCount: seedResult.errors.length,
-        gate: seedDryRun ? `dry-run: ${SEED_ENV}!=true` : "writes enabled",
-      };
-
-      if (seedResult.mode === "no-events") {
-        return {
-          records_updated: 0,
-          details: { ...stepDetails, outcome: "no_soccer_today" },
-        };
+      const perSlate: Record<string, unknown> = {};
+      let totalRecordsUpdated = 0;
+      for (const slateDate of [today, tomorrow]) {
+        const res = await processSoccerSlate(slateDate);
+        perSlate[slateDate] = res.details;
+        if (res.partial) partial = true;
+        totalRecordsUpdated += res.recordsUpdated;
       }
-      if (seedResult.errors.length > 0) partial = true;
-
-      // ── Step 2: write prediction_records for the slate. ──
-      console.log(`[soccer-daily-refresh] step=predictions  date=${slateDate}`);
-      const predsApply = process.env[PREDS_ENV] === "true";
-      let predsResult: {
-        mode: "dry-run" | "write" | "no-games" | "disabled";
-        gamesProcessed: number;
-        fixturesMatched: number;
-        fixturesUnmatched: number;
-        recordsCreated: number;
-        recordsSkippedLocked: number;
-        errors: string[];
-      };
-      try {
-        const wp = await writeSoccerPredictionRecords({
-          slateDate,
-          apply: predsApply,
-          logger: stepLog("predictions"),
-        });
-        predsResult = {
-          mode: wp.mode,
-          gamesProcessed: wp.gamesProcessed,
-          fixturesMatched: wp.fixturesMatched,
-          fixturesUnmatched: wp.fixturesUnmatched,
-          recordsCreated: wp.recordsCreated,
-          recordsSkippedLocked: wp.recordsSkippedLocked,
-          errors: wp.errors,
-        };
-        if (wp.errors.length > 0) partial = true;
-      } catch (e) {
-        partial = true;
-        predsResult = {
-          mode: "write",
-          gamesProcessed: 0,
-          fixturesMatched: 0,
-          fixturesUnmatched: 0,
-          recordsCreated: 0,
-          recordsSkippedLocked: 0,
-          errors: [e instanceof Error ? e.message : String(e)],
-        };
-      }
-      stepDetails.predictions = {
-        ...predsResult,
-        gate: predsApply ? "writes enabled" : `dry-run: ${PREDS_ENV}!=true`,
-      };
-
-      // ── Step 3 (optional): persist lines + line_history (Option A). ──
-      console.log(`[soccer-daily-refresh] step=lines  date=${slateDate}`);
-      const linesApply = process.env[LINES_ENV] === "true";
-      let linesResult: {
-        mode: "dry-run" | "write" | "no-games";
-        linesProposed: number;
-        linesWritten: number;
-        historyProposed: number;
-        historyWritten: number;
-        openersFlagged: number;
-        errors: string[];
-      };
-      try {
-        const wl = await writeSoccerLines({
-          slateDate,
-          apply: linesApply,
-          logger: stepLog("lines"),
-        });
-        linesResult = {
-          mode: wl.mode,
-          linesProposed: wl.linesProposed,
-          linesWritten: wl.linesWritten,
-          historyProposed: wl.historyProposed,
-          historyWritten: wl.historyWritten,
-          openersFlagged: wl.openersFlagged,
-          errors: wl.errors,
-        };
-        if (wl.errors.length > 0) partial = true;
-      } catch (e) {
-        partial = true;
-        linesResult = {
-          mode: "write",
-          linesProposed: 0,
-          linesWritten: 0,
-          historyProposed: 0,
-          historyWritten: 0,
-          openersFlagged: 0,
-          errors: [e instanceof Error ? e.message : String(e)],
-        };
-      }
-      stepDetails.lines = {
-        ...linesResult,
-        gate: linesApply ? "writes enabled" : `dry-run: ${LINES_ENV}!=true`,
-      };
-
-      const recordsUpdated =
-        (predsApply ? predsResult.recordsCreated : 0) +
-        (linesApply ? linesResult.linesWritten + linesResult.historyWritten : 0) +
-        (process.env[SEED_ENV] === "true" ? seedResult.teamsUpserted + seedResult.gamesUpserted : 0);
 
       return {
-        records_updated: recordsUpdated,
+        records_updated: totalRecordsUpdated,
         partial,
-        details: stepDetails,
+        details: { slates: [today, tomorrow], per_slate: perSlate },
       };
     },
     { sport: "soccer" },
