@@ -77,8 +77,23 @@ const MARKET_DB_TO_UI: Record<string, string> = {
   total: "O/U",
   nrfi: "NRFI",
   yrfi: "YRFI",
+  // Soccer (World Cup) markets — surfaced from prediction_grades, see
+  // loadSoccerGradeRows below.
+  match_result: "Match Result",
   double_chance: "Double Chance",
+  btts: "BTTS",
 };
+
+/**
+ * World Cup official-tracking start date (Daniel, 2026-06-14): "I do not
+ * want yesterday's matches officially graded. Only today's." Group-stage
+ * fixtures on slates BEFORE this date ran on the pre-rebuild model and are
+ * excluded from the public WC tracking record. Soccer grades are still
+ * written internally for every slate (internal-tracking-completeness); this
+ * is a read-time floor only. Filtered on slate_date (matchday), so a late
+ * kickoff like SCO@HAI (6/13 slate, 6/14 00:01 UTC) is correctly excluded.
+ */
+const SOCCER_OFFICIAL_TRACKING_START = "2026-06-14";
 
 // ─── Date helpers ────────────────────────────────────────────────────────
 
@@ -433,6 +448,58 @@ function determineSportOrder(rows: ResultRow[]): Sport[] {
 // Route
 // ───────────────────────────────────────────────────────────────────────────
 
+/**
+ * Soccer (World Cup) results for the public tracker.
+ *
+ * Soccer is graded on the MODERN path (prediction_records → prediction_grades),
+ * not the legacy prediction_results table the MLB tracker reads. This bridges
+ * those grades into the same ResultRow shape the aggregators consume:
+ *   • outcome from prediction_grades.result, keeping only settled win/loss/push
+ *     (void = held/no-bet picks and pending = unplayed are excluded);
+ *   • game_date set to the SLATE date (matchday) so windows group by matchday;
+ *   • slate_date floored at SOCCER_OFFICIAL_TRACKING_START so pre-rebuild
+ *     fixtures don't count (Daniel: "only today's").
+ * Markets map via MARKET_DB_TO_UI (match_result/double_chance/total/btts).
+ */
+async function loadSoccerGradeRows(): Promise<ResultRow[]> {
+  const { data: records, error: recErr } = await supabase
+    .from("prediction_records")
+    .select("id, market, slate_date")
+    .eq("sport", "soccer")
+    .gte("slate_date", SOCCER_OFFICIAL_TRACKING_START);
+  if (recErr || !records || records.length === 0) return [];
+
+  const byId = new Map<string, { market: string; slate_date: string }>();
+  for (const r of records as Array<{ id: string; market: string; slate_date: string }>) {
+    byId.set(String(r.id), { market: r.market, slate_date: String(r.slate_date).slice(0, 10) });
+  }
+
+  const ids = [...byId.keys()];
+  const rows: ResultRow[] = [];
+  const CHUNK = 500;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const slice = ids.slice(i, i + CHUNK);
+    const { data: grades, error: gErr } = await supabase
+      .from("prediction_grades")
+      .select("prediction_record_id, result")
+      .in("prediction_record_id", slice)
+      .in("result", ["win", "loss", "push"]);
+    if (gErr || !grades) continue;
+    for (const g of grades as Array<{ prediction_record_id: string; result: string }>) {
+      const rec = byId.get(String(g.prediction_record_id));
+      if (rec === undefined) continue;
+      rows.push({
+        sport: "soccer",
+        market: rec.market,
+        outcome: g.result,
+        game_date: rec.slate_date,
+        prediction_type: "game",
+      });
+    }
+  }
+  return rows;
+}
+
 export async function GET(_request: Request) {
   // Pull all rows. Paginate when this crosses ~50k.
   const PAGE = 1000;
@@ -455,6 +522,15 @@ export async function GET(_request: Request) {
     allRows.push(...rows);
     if (rows.length < PAGE) break;
     from += PAGE;
+  }
+
+  // Bridge soccer (World Cup) grades from the modern prediction_grades path
+  // into the same aggregation set. Failures here must not break the MLB
+  // tracker, so loadSoccerGradeRows swallows its own errors and returns [].
+  try {
+    allRows.push(...(await loadSoccerGradeRows()));
+  } catch {
+    // non-fatal: WC rows simply won't appear this request.
   }
 
   const body: TrackingResponse = {

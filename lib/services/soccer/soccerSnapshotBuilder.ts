@@ -16,6 +16,7 @@ import type {
 import type { SoccerGradeDecision, ConfidenceReduction } from "./soccerConfidenceGrade";
 import type { HoldDecision } from "./soccerHoldLogic";
 import type { SoccerTotalReconciliation } from "./soccerTotalProjectionReconciliation";
+import type { SoccerMatchResultReconciliation } from "./soccerMatchResultProjectionReconciliation";
 import type { ReconciliationKind } from "@/lib/providers/real_api/_soccerReconciler";
 import type { SoccerSplitsStatus } from "@/lib/providers/real_api/SharpApiSoccerOddsProvider";
 import type { NormalizedSoccerOddsRecord } from "@/lib/providers/real_api/_soccerMarketNormalizer";
@@ -129,6 +130,14 @@ export type SoccerPredictionSnapshot = {
      * lib/services/soccer/soccerTotalProjectionReconciliation.ts.
      */
     total_projection_reconciliation: SoccerTotalReconciliation | null;
+    /**
+     * 2026-06-14 — WC match_result projection / pick reconciliation blob.
+     * Present ONLY on the `match_result` market row. NULL on the other
+     * markets. Records why the displayed 3-way pick follows the projected
+     * scoreline (incl. group-stage draw calls). See
+     * lib/services/soccer/soccerMatchResultProjectionReconciliation.ts.
+     */
+    match_result_projection_reconciliation: SoccerMatchResultReconciliation | null;
   };
 };
 
@@ -197,6 +206,7 @@ export type BuildSnapshotInput = {
    * the decision substructure.
    */
   totalReconciliation: SoccerTotalReconciliation | null;
+  matchResultReconciliation: SoccerMatchResultReconciliation | null;
 };
 
 export function buildSoccerSnapshot(input: BuildSnapshotInput): SoccerPredictionSnapshot {
@@ -234,6 +244,7 @@ export function buildSoccerSnapshot(input: BuildSnapshotInput): SoccerPrediction
     valueSide,
     meanDirectionSide,
     totalReconciliation,
+    matchResultReconciliation,
   } = input;
 
   const bdlCount = oddsRows.filter((r) => r.provider === "bdl").length;
@@ -328,11 +339,14 @@ export function buildSoccerSnapshot(input: BuildSnapshotInput): SoccerPrediction
       value_side: valueSide,
       displayed_side: totalReconciliation !== null
         ? totalReconciliation.displayed_total_side
-        : displayedSide,
+        : matchResultReconciliation !== null
+          ? matchResultReconciliation.displayed_outcome
+          : displayedSide,
       side_selection_reason: sideSelectionReason,
       mean_direction_side: meanDirectionSide,
       side_disagree_flags: sideDisagreeFlags,
       total_projection_reconciliation: totalReconciliation,
+      match_result_projection_reconciliation: matchResultReconciliation,
     },
   };
 }

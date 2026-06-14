@@ -34,6 +34,10 @@ import {
   reconcileSoccerTotal,
   type SoccerTotalReconciliation,
 } from "./soccerTotalProjectionReconciliation";
+import {
+  reconcileSoccerMatchResult,
+  type SoccerMatchResultReconciliation,
+} from "./soccerMatchResultProjectionReconciliation";
 import type { EloPriorTable } from "./eloPrior";
 import type { NormalizedSoccerOddsRecord } from "@/lib/providers/real_api/_soccerMarketNormalizer";
 import type { NormalizedBdlMatch } from "@/lib/providers/real_api/BallDontLieFifaProvider";
@@ -459,7 +463,7 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
       if (hold.hold === false && totalReconciliation.grade_cap !== null) {
         const cap_at = totalReconciliation.grade_cap === "watchlist" ? "Watchlist" : "Caution";
         softCapsCombined = [
-          ...softCapsFromHold,
+          ...softCapsCombined,
           {
             code: `total_projection_reconciliation_${totalReconciliation.grade_cap}`,
             cap_at,
@@ -467,6 +471,61 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
               `Totals reconciliation cap: ${totalReconciliation.side_selection_reason}. ` +
               `displayed_side=${totalReconciliation.displayed_total_side}; ` +
               `reconciled_confidence=${totalReconciliation.reconciled_confidence_pct}%.`,
+          },
+        ];
+      }
+    }
+
+    // ─── WC match_result: projection / pick reconciliation ───────────
+    //
+    // 2026-06-14 (Daniel) — sibling of the totals reconciliation above,
+    // applying the SAME score↔pick coherence invariant to the 3-way
+    // market. The displayed match_result pick follows the projected
+    // scoreline (margin draw-band → DRAW in the group stage; the
+    // projected favorite in knockout), never an argmax-prob flip that
+    // contradicts the projected score. See
+    // soccerMatchResultProjectionReconciliation.ts. This is what finally
+    // lets the model "call a draw" on an even group-stage projection.
+    let matchResultReconciliation: SoccerMatchResultReconciliation | null = null;
+    if (market === "match_result") {
+      // drawPickable = group stage. Mirror the seeder's stage mapping
+      // (deriveSeasonType): null or "group…" → group → draws callable;
+      // any knockout stage name → no bare draw pick.
+      const stageName = opts.match.stage_name;
+      const drawPickable = stageName === null || stageName.toLowerCase().includes("group");
+      matchResultReconciliation = reconcileSoccerMatchResult({
+        lambdaHome,
+        lambdaAway,
+        modelHome: marketProbs.match_result.home,
+        modelDraw: marketProbs.match_result.draw,
+        modelAway: marketProbs.match_result.away,
+        marketHome: bundle.devig["match_result|home"] ?? null,
+        marketDraw: bundle.devig["match_result|draw"] ?? null,
+        marketAway: bundle.devig["match_result|away"] ?? null,
+        drawPickable,
+        // Locked rows are preserved by the writer (skips locked pick
+        // fields), same convention as totals — run unlocked here.
+        isLocked: false,
+        lockedReconciliation: null,
+      });
+      const reconciledRow = edges.find(
+        (e) => e.market === "match_result" && e.selection === matchResultReconciliation!.reconciled_outcome,
+      );
+      if (reconciledRow !== undefined) {
+        bestForGrading = reconciledRow;
+        edgePpForGrading = reconciledRow.edge_pp;
+      }
+      if (hold.hold === false && matchResultReconciliation.grade_cap !== null) {
+        const cap_at = matchResultReconciliation.grade_cap === "watchlist" ? "Watchlist" : "Caution";
+        softCapsCombined = [
+          ...softCapsCombined,
+          {
+            code: `match_result_projection_reconciliation_${matchResultReconciliation.grade_cap}`,
+            cap_at,
+            reason:
+              `Match-result reconciliation cap: ${matchResultReconciliation.selection_reason}. ` +
+              `displayed=${matchResultReconciliation.displayed_outcome}; ` +
+              `confidence=${matchResultReconciliation.reconciled_confidence_pct}%.`,
           },
         ];
       }
@@ -513,14 +572,14 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
         is_short_price_dc: isShortPriceDc,
         short_price_dc_market_implied_p: dcMarketImpliedP,
         splits_provider_error: opts.splitsStatus.status === "error",
-        is_draw_pick: market === "match_result" && best.selection === "draw",
+        is_draw_pick: market === "match_result" && bestForGrading.selection === "draw",
         lambda_total: lambdaHome + lambdaAway,
         is_btts_yes_pick: market === "btts" && best.selection === "yes",
         lambda_min: lambdaMin,
         is_match_favorite: isMatchFavorite,
         market_moving_against_pick: marketMovingAgainst,
       },
-      soft_caps: softCapsFromHold,
+      soft_caps: softCapsCombined,
     });
 
     const snapshot = buildSoccerSnapshot({
@@ -561,6 +620,7 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
       valueSide: valueSide ?? null,
       meanDirectionSide,
       totalReconciliation,
+      matchResultReconciliation,
     });
 
     // For totals: the customer-facing pick is the reconciled side.
