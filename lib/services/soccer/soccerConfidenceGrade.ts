@@ -228,6 +228,7 @@ export function deriveSoccerGrade(opts: {
     edge_pp: opts.edge_pp,
     agreement: opts.model_market_agreement,
     far_from_market: opts.ctx.is_far_from_market,
+    model_p: opts.model_p,
   });
   const grade = ladderResult.grade;
   const miscalibration_flag = ladderResult.miscalibration;
@@ -325,6 +326,7 @@ function deriveGradeLadder(opts: {
   edge_pp: number | null;
   agreement: boolean;
   far_from_market: boolean;
+  model_p: number;
 }): { grade: SoccerGradeVerdict; miscalibration: boolean } {
   const edge = opts.edge_pp ?? 0;
   const lad = ladderFor(opts.market, opts.is_match_favorite);
@@ -348,9 +350,21 @@ function deriveGradeLadder(opts: {
   // 5. Below the actionable floor. If the model is at/agrees with the market
   //    (edge not meaningfully negative), this is MARKET-ALIGNED — an honest,
   //    informative "our read agrees with the sharp market" state, NOT a
-  //    warning. Only a meaningfully negative edge (model worse than the
-  //    market by > the de-vig noise band) is genuine Caution.
+  //    warning.
   if (edge >= MARKET_ALIGNED_FLOOR_PP) {
+    return { grade: "Market-Aligned", miscalibration: false };
+  }
+  // 6. Edge below the floor. SIDE-AWARE (2026-06-14, Daniel: "Germany ml is a
+  //    caution lol"): a large negative edge where the MODEL STILL FAVORS THE
+  //    PICK (model_p ≥ 0.5) means model and market agree on the SIDE — the
+  //    model is just less confident, so there's no betting value. That is
+  //    Market-Aligned ("we agree, no edge"), NOT a warning. Caution is
+  //    reserved for when the model does NOT favor the displayed pick
+  //    (model_p < 0.5) — a genuinely wrong-side / low-conviction read — or a
+  //    too-large POSITIVE edge (the miscalibration ceiling above). This stops
+  //    heavy favorites (Germany ML, blowout Overs) the model agrees with from
+  //    reading as a wall of scary Cautions.
+  if (opts.model_p >= 0.5) {
     return { grade: "Market-Aligned", miscalibration: false };
   }
   return { grade: "Caution", miscalibration: false };

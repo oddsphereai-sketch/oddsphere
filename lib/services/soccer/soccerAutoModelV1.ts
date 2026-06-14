@@ -246,6 +246,24 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
     return buildHeldFixtureOutput(opts, totalLine, lockedAt, reason);
   }
   const isMarketFallback = ratingSource === "market_implied_fallback";
+
+  // Dominant-favorite goal compounding (see EXTERNAL_PRIORS_V1.mismatch_boost_*).
+  // The linear blend under-predicts the total in extreme mismatches; add a
+  // convex boost to the favorite's λ once the projected gap is large. Normal
+  // games (gap below threshold) are untouched; skipped for the market-implied
+  // fallback (the market already prices the total there).
+  if (!isMarketFallback) {
+    const lamGap = Math.abs(lambdaHome - lambdaAway);
+    if (lamGap > EXTERNAL_PRIORS_V1.mismatch_boost_gap_threshold) {
+      const boost = Math.min(
+        EXTERNAL_PRIORS_V1.mismatch_boost_max,
+        EXTERNAL_PRIORS_V1.mismatch_boost_k * (lamGap - EXTERNAL_PRIORS_V1.mismatch_boost_gap_threshold),
+      );
+      if (lambdaHome >= lambdaAway) lambdaHome += boost;
+      else lambdaAway += boost;
+    }
+  }
+
   const joint = bivariatePoissonScoreDistribution(lambdaHome, lambdaAway, EXTERNAL_PRIORS_V1.tau);
 
   // ─── 5. Market probabilities (model-only, no market input) ───────

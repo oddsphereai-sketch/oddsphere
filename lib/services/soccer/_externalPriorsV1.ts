@@ -111,6 +111,24 @@ export const EXTERNAL_PRIORS_V1 = {
   market_lambda_blend_weight: 0.35,
   elo_lambda_blend_weight: 0.65,
 
+  // ─── Dominant-favorite goal compounding (mismatch boost) ──────────
+  //
+  // 2026-06-14: the linear elo→λ blend is well-calibrated to the market on
+  // normal games but UNDER-predicts the total in EXTREME mismatches (e.g.
+  // Germany-Curaçao: model 3.04 vs market ~3.7; Spain-Cape Verde similar).
+  // Real soccer is convex at the top — a dominant side carves open a parked
+  // bus and goals compound, so a weak defense concedes more than the linear
+  // projection. We add a convex boost to the FAVORITE's λ once the projected
+  // λ gap exceeds the threshold. Normal games (gap below threshold) are
+  // UNTOUCHED, so this only sharpens the blowout tail. Not applied to the
+  // market-implied fallback (the market already prices the total there).
+  /** No boost until |λ_home − λ_away| exceeds this (goals). */
+  mismatch_boost_gap_threshold: 1.0,
+  /** Boost = k × (gap − threshold), added to the favorite's λ. */
+  mismatch_boost_k: 0.35,
+  /** Hard cap on the boost (goals) so it can't run away on a freak gap. */
+  mismatch_boost_max: 0.6,
+
   /** Dixon-Coles low-score adjustment (negative inflates draws). */
   tau: -0.12,
 

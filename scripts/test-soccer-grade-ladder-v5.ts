@@ -129,7 +129,12 @@ ok("Total -4.0pp → Market-Aligned (agrees on direction, slightly less extreme)
 ok("BTTS -3.9pp → Market-Aligned (was Caution under old -2pp floor)", grade("btts", -3.9).grade === "Market-Aligned");
 ok("MR favorite -0.0pp → Market-Aligned (at market)", grade("match_result", -0.001, { fav: true }).grade === "Market-Aligned");
 ok("MR favorite -8.0pp → Market-Aligned (agrees on favorite, less confident than sharp)", grade("match_result", -8.0, { fav: true }).grade === "Market-Aligned");
-ok("MR favorite -11.0pp → Caution (past the -10pp hold floor)", grade("match_result", -11.0, { fav: true }).grade === "Caution");
+// 2026-06-14 (Daniel: "Germany ml is a caution lol"): a favorite the model
+// STILL FAVORS (model_p >= 0.5) reads Market-Aligned even past the -10pp floor
+// — model + market agree on the side, there's just no betting value. Caution
+// is reserved for when the model does NOT favor the pick (model_p < 0.5).
+ok("MR favorite -11.0pp, model_p 0.55 → Market-Aligned (model agrees on the side, no value)", grade("match_result", -11.0, { fav: true, model_p: 0.55 }).grade === "Market-Aligned");
+ok("MR -11.0pp, model_p 0.45 (model does NOT favor pick) → Caution", grade("match_result", -11.0, { model_p: 0.45 }).grade === "Caution");
 
 import { readFileSync } from "node:fs";
 const shellSrc = readFileSync("app/lab/components/daily-edge/DailyEdgeShell.tsx", "utf8");

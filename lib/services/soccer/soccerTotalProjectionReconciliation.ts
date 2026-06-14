@@ -367,6 +367,19 @@ export function reconcileSoccerTotal(
   }
   if (hold) flags.push("push_risk_hold");
 
+  // Side agreement: do the MODEL and the MARKET both favor the displayed
+  // side? (2026-06-14, Daniel: "Germany ml is a caution lol" — the same
+  // principle for totals.) When the model favors the displayed side
+  // (P(displayed) ≥ 50%) AND the market favors the same side, a negative edge
+  // is just "no betting value", NOT a wrong-side warning → Market-Aligned. The
+  // mechanical fact that the OPPOSITE side then carries the positive "value"
+  // must not trip a caution (e.g. CUW@GER Over: model 66% / market 81% — both
+  // Over, no value → Market-Aligned, not Caution).
+  const marketSide: TotalSide | null =
+    input.marketImpliedOver === null ? null : input.marketImpliedOver >= 0.5 ? "over" : "under";
+  const modelFavorsDisplayedSide = reconciled_confidence_pct >= LOW_CONVICTION_CONFIDENCE_PCT;
+  const bothAgreeSide = marketSide !== null && marketSide === reconciled_total_side && modelFavorsDisplayedSide;
+
   // ─── Grade cap ────────────────────────────────────────────────────
   let grade_cap: GradeCap = null;
   if (side_selection_reason === "push_risk_default_to_probability") {
@@ -375,6 +388,11 @@ export function reconcileSoccerTotal(
     grade_cap = "watchlist";
   } else if (side_selection_reason === "holistic_overruled_by_mean_coherence") {
     grade_cap = "no_play";
+  } else if (bothAgreeSide) {
+    // Model + market agree on the side → no caution. Let the grade ladder
+    // land it (Market-Aligned for a negative/no edge; Watchlist/Lean for a
+    // positive edge on the displayed side).
+    grade_cap = null;
   } else if (reconciled_edge_pp !== null && reconciled_edge_pp < -NEGATIVE_EDGE_NO_PLAY_PP) {
     grade_cap = "no_play";
   } else if (reconciled_confidence_pct < LOW_CONVICTION_CONFIDENCE_PCT) {
