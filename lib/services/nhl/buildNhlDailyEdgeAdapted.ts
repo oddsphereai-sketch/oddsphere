@@ -330,9 +330,15 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
 
       const totalPickIsOver = model.total.pick.startsWith("OVER");
       const totalSide = totalPickIsOver ? "over" : "under";
-      const totalLineEntries = lines.filter((l) => l.market_type === "total" && l.side === totalSide);
       const totalBest = bestPriceFor("total", totalSide, null);
-      const marketTotalLine = totalLineEntries.find((l) => l.line_value !== null)?.line_value ?? null;
+      // 2026-06-14: the displayed market line MUST be the exact value the
+      // model's pick label was built from. nhlAutoModelV0 builds
+      // "OVER {snap.market.market_total_line}" — so read the same field here
+      // (single source of truth) instead of re-deriving from a separate lines
+      // query. snapshot.market.market_total_line = selectMainNhlTotalLine
+      // (consensus, blocked-book filtered). Old code took an arbitrary book's
+      // first non-null row → card line disagreed with the pick label.
+      const marketTotalLine = snapshot.market.market_total_line;
 
       // Puck-line: stored under market_type="spread". The lines table
       // can carry BOTH the natural puck-line side and an alt-line

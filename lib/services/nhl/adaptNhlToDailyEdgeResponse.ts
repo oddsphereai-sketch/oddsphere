@@ -298,11 +298,16 @@ function buildPredictionDto(
 
 function buildTotalDto(
   market: NhlModelOutput["total"],
-  modelTotal: number,
+  marketLine: number | null,
 ): DailyEdgeTotalPredictionDto {
   return {
     ...buildPredictionDto(market),
-    line: modelTotal,
+    // 2026-06-14: the displayed line is the MARKET consensus line — the same
+    // value the pick label "OVER {marketLine}" is built from. It used to be
+    // set to the model's expected_total_goals (a 5.879-style projection),
+    // which disagreed with the pick label and read as a malformed total. The
+    // model projection is surfaced separately as markets.total.modelTotal.
+    line: marketLine,
   };
 }
 
@@ -461,7 +466,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
     awayStarter: null,
     predictions: {
       ml: buildPredictionDto(model.moneyline),
-      total: buildTotalDto(model.total, model.expected_total_goals),
+      total: buildTotalDto(model.total, input.marketTotalLine),
       // Puck-line read piggybacks the `nrfi` prediction slot the same
       // way NBA's spread does. v0: display-only, NOT persisted to
       // prediction_records and NOT graded.

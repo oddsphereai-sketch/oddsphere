@@ -19,6 +19,7 @@
  */
 
 import { supabase } from "../../db/supabase";
+import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import type { NhlFeatureSnapshot, NhlModelTeam } from "../../automodel/nhlAutoModelV0";
 import { fetchNhlScheduleForDate } from "../../providers/nhl/_nhlApiClient";
 
@@ -174,14 +175,47 @@ function pickMlImpliedProbHome(lines: DbLineRow[]): { prob: number | null; bookC
   return { prob: avg, bookCount: devigged.length };
 }
 
-function pickTotalLine(lines: DbLineRow[]): number | null {
-  const totals = lines.filter((l) => l.market_type === "total" && l.line_value !== null);
-  if (totals.length === 0) return null;
-  // Median to be robust to outliers (alternate lines should have been
-  // filtered upstream, but defensive).
-  const sorted = [...totals].map((l) => l.line_value!).sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
+/**
+ * Select the MAIN consensus total line for an NHL game. EXPORTED + shared by
+ * both the model feature snapshot AND the daily-edge adapter so the pick
+ * label, card market line, model edge row, line-movement, and the locked
+ * record all reference the SAME line — never one value in one place and a
+ * different value in another.
+ *
+ * 2026-06-14 (Daniel: NHL card showed "Over 4.5" while the stored record said
+ * "Over 5.5" and the card line read another value): the old picker took a
+ * naive MEDIAN across ALL total rows — including alternate lines and blocked
+ * books — so a cross-book 4.5 / 5.5 / 6.5 spread mashed into a wrong "4.5".
+ * Now: (1) drop blocked/corrupted books (fliff etc.); (2) pick the modal line
+ * by distinct-BOOK count (the consensus main line), NOT a median across an
+ * alt-line ladder; (3) on a tie, take the modal value closest to the median
+ * (avoids a fringe alt-line winning a tie).
+ */
+export function selectMainNhlTotalLine(
+  // Minimal structural shape — accepts DbLineRow AND the adapter's line rows.
+  lines: ReadonlyArray<{ market_type: string; sportsbook: string; line_value: number | null }>,
+): number | null {
+  const clean = lines.filter(
+    (l) => l.market_type === "total" && l.line_value !== null && !isBlockedSportsbook(l.sportsbook),
+  );
+  if (clean.length === 0) return null;
+  // Distinct books per line value (a book quoting both over+under = one book).
+  const booksByLine = new Map<number, Set<string>>();
+  for (const l of clean) {
+    const v = l.line_value!;
+    if (!booksByLine.has(v)) booksByLine.set(v, new Set());
+    booksByLine.get(v)!.add(l.sportsbook);
+  }
+  const distinct = [...booksByLine.keys()].sort((a, b) => a - b);
+  const maxBooks = Math.max(...[...booksByLine.values()].map((s) => s.size));
+  const modes = distinct.filter((v) => booksByLine.get(v)!.size === maxBooks);
+  if (modes.length === 1) return modes[0]!;
+  // Tie-break: modal value closest to the median of the distinct lines.
+  const median = distinct[Math.floor(distinct.length / 2)]!;
+  return modes.reduce(
+    (best, v) => (Math.abs(v - median) < Math.abs(best - median) ? v : best),
+    modes[0]!,
+  );
 }
 
 /**
@@ -264,7 +298,7 @@ export async function buildNhlFeatureSnapshot(
     .in("market_type", ["moneyline", "total"]);
   const lines = (linesData as DbLineRow[] | null) ?? [];
   const { prob: marketHomeProb, bookCount } = pickMlImpliedProbHome(lines);
-  const marketTotalLine = pickTotalLine(lines);
+  const marketTotalLine = selectMainNhlTotalLine(lines);
   log(`  market: ML home prob=${marketHomeProb?.toFixed(3) ?? "n/a"} (${bookCount} books), total line=${marketTotalLine?.toFixed(1) ?? "n/a"}`);
 
   // 6. Series context — fetch fresh from NHL API at prediction time.
