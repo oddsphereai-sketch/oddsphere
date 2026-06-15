@@ -310,11 +310,57 @@ export async function writeSoccerPredictionRecords(
       log(
         `\n${matchup} (game_id=${g.id}, kickoff=${match.datetime}, recon=${reconKind})`,
       );
+      // Held-market heal (2026-06-15): the LIVE provider read can transiently
+      // miss a market the persisted `lines` table already has (e.g. ECU/CIV
+      // double_chance — FanDuel rows in `lines` but absent from the lock-moment
+      // read → market held "No normalized odds at lock"). Supplement allOdds
+      // with the LATEST persisted `lines` odds for any (market, selection, book)
+      // the live read didn't capture, so a market that HAS odds is never held
+      // as no-odds. fliff-filtered; deduped against the live read (never
+      // double-counts a book the live read already has).
+      let linesHeal: NormalizedSoccerOddsRecord[] = [];
+      try {
+        const haveLive = new Set(allOdds.map((r) => `${r.market}|${r.selection}|${r.sportsbook ?? ""}`));
+        const { data: cur } = await supabase
+          .from("lines")
+          .select("market_type, side, line_value, odds_american, sportsbook, fetched_at")
+          .eq("game_id", g.id)
+          .in("market_type", ["match_result", "double_chance", "total", "btts"])
+          .order("fetched_at", { ascending: false });
+        const latest = new Map<string, NormalizedSoccerOddsRecord>();
+        for (const r of (cur ?? []) as Array<{
+          market_type: string; side: string | null; line_value: number | null;
+          odds_american: number | null; sportsbook: string | null; fetched_at: string | null;
+        }>) {
+          if (r.side === null || r.odds_american === null || r.fetched_at === null) continue;
+          if (isBlockedSportsbook(r.sportsbook)) continue;
+          const fullKey = `${r.market_type}|${r.side}|${r.line_value ?? ""}|${r.sportsbook ?? ""}`;
+          if (latest.has(fullKey)) continue; // descending → first seen per key is the freshest
+          if (haveLive.has(`${r.market_type}|${r.side}|${r.sportsbook ?? ""}`)) continue; // live read already has this book
+          latest.set(fullKey, {
+            market: r.market_type as NormalizedSoccerOddsRecord["market"],
+            selection: r.side as NormalizedSoccerOddsRecord["selection"],
+            line: r.line_value,
+            odds_american: r.odds_american,
+            odds_decimal: null,
+            sportsbook: r.sportsbook,
+            provider: "bdl",
+            provider_endpoint: "lines_table_heal",
+            fetched_at: r.fetched_at,
+            provider_event_id: null,
+          });
+        }
+        linesHeal = [...latest.values()];
+      } catch {
+        linesHeal = [];
+      }
+      const mergedOdds = [...allOdds, ...linesHeal];
       log(
-        `  normalized odds rows: BDL=${bdlNormalized.length}  SharpAPI=${sharpNormalized.length}  total=${allOdds.length}`,
+        `  normalized odds rows: BDL=${bdlNormalized.length}  SharpAPI=${sharpNormalized.length}  ` +
+          `lines-heal=${linesHeal.length}  total=${mergedOdds.length}`,
       );
 
-      if (allOdds.length === 0) {
+      if (mergedOdds.length === 0) {
         log(`  ⏭ no odds — skipping model + writer for this fixture`);
         continue;
       }
@@ -362,7 +408,7 @@ export async function writeSoccerPredictionRecords(
       const modelOutput = runSoccerAutoModelV1({
         eloTable,
         match,
-        oddsRows: allOdds,
+        oddsRows: mergedOdds,
         openerOddsRows,
         splitsStatus: splitsResult.status,
         reconciliation: reconKind,
