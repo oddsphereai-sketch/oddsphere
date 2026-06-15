@@ -1,25 +1,18 @@
 /**
- * Pure tests for MLB totals projection / side reconciliation —
- * holistic weighted-vote edition.
+ * MLB totals reconciliation — 2026-06-15 probability-driven model-coherence rule.
  *
- * Covers Daniel's 2026-06-12 revised contract: final side comes from
- * a weighted vote across probability / value / mean / market_pressure.
- * Mean direction is HEAVILY weighted (coherence guard) but does NOT
- * automatically win. When holistic disagrees with mean (V1 has no
- * documented adjustment input), the side reverts to mean and the cap
- * goes to no_play.
+ * The displayed O/U side ALWAYS follows the model's more-likely side
+ * (P(over) vs P(under)), NOT the mean (projected total) vs the line. The mean
+ * stays descriptive. Near-line right-skew (mean > median) is surfaced via
+ * `mean_probability_divergence` and capped at Watchlist, never a public
+ * Lean/Best Angle. Push-risk (projected total exactly on the line) holds.
+ * Empirically MLB diverges far less than soccer (~1/117) — this is mostly a
+ * structural guarantee the published side is never the less-likely one.
  */
 
 import {
   reconcileTotalProjection,
-  MEAN_WEIGHT,
-  PROBABILITY_WEIGHT,
-  VALUE_WEIGHT,
-  PRESSURE_WEIGHT,
-  MEAN_STRENGTH_NORM_RUNS,
-  VALUE_STRENGTH_NORM_PP,
-  LOW_CONVICTION_CONFIDENCE_PCT,
-  NEGATIVE_EDGE_NO_PLAY_PP,
+  TOTALS_PUBLIC_CONFIDENCE_FLOOR,
   type TotalProjectionReconciliation,
   type TotalProjectionReconciliationInput,
 } from "../lib/automodel/totalProjectionReconciliation";
@@ -47,158 +40,140 @@ function baseInput(over: Partial<TotalProjectionReconciliationInput> = {}): Tota
   };
 }
 
-function checkInvariant(r: TotalProjectionReconciliation, line: number | null): void {
-  if (r.mean_direction_side === null) return;
-  if (line === null) return;
-  if (r.displayed_total_side === "over") assert(r.reconciled_total > line, `over but total ${r.reconciled_total} <= ${line}`);
-  else assert(r.reconciled_total < line, `under but total ${r.reconciled_total} >= ${line}`);
-  assert(r.invariant_side_matches_total === true, "invariant flag must be true");
-}
-
-console.log("\nscripts/test-mlb-total-projection-reconciliation.ts");
+console.log("\nscripts/test-mlb-total-projection-reconciliation.ts — probability-driven totals");
 console.log("─".repeat(70));
 
-// ─── 1. MIA/PIT skew-split exact pattern ────────────────────────────
-test("1. MIA/PIT — holistic vote favors Over (mean + value outvote weak probability)", () => {
-  const r = reconcileTotalProjection(baseInput({
-    rawProjectedAwayScore: 3.8,
-    rawProjectedHomeScore: 4.8,
-    rawProjectedTotal: 8.6,
-    marketTotal: 8.5,
-    rawProbabilityOver: 0.4924,
-    marketImpliedOver: 0.4826,
-  }));
-  // Raw signals
-  assert(r.raw_probability_side === "under", `raw prob = under (P(Over)=0.4924); got ${r.raw_probability_side}`);
-  assert(r.mean_direction_side === "over", `mean = over (8.6>8.5); got ${r.mean_direction_side}`);
-  assert(r.raw_value_side === "over", `value = over (over edge +0.98); got ${r.raw_value_side}`);
-  // Vote breakdown
-  // mean strength ≈ 0.1 × MEAN_WEIGHT(1.5) = 0.15 for Over
-  // value strength ≈ 0.196 × VALUE_WEIGHT(1.0) = 0.196 for Over
-  // prob strength ≈ 0.0152 × PROB_WEIGHT(1.0) = 0.0152 for Under
-  assert(r.over_vote_total > r.under_vote_total, `over should win vote; got over=${r.over_vote_total} under=${r.under_vote_total}`);
-  assert(r.holistic_side === "over", "holistic vote = over");
-  // Final
-  assert(r.reconciled_total_side === "over", `displayed = over; got ${r.reconciled_total_side}`);
-  assert(r.displayed_total_side === "over");
-  assert(r.reconciled_total === 8.6, "scores preserved at raw 8.6");
-  assert(r.reconciled_away_score === 3.8 && r.reconciled_home_score === 4.8);
-  assert(Math.abs(r.reconciled_confidence_pct - 49.2) < 0.5, `honest confidence ~49% (got ${r.reconciled_confidence_pct})`);
-  assert(r.reconciled_confidence_pct < 50, "confidence below 50 — honest");
-  assert(r.side_selection_reason === "holistic_aligned_with_mean",
-    `expected holistic_aligned_with_mean; got ${r.side_selection_reason}`);
-  assert(r.grade_cap === "caution", `expected caution; got ${r.grade_cap}`);
-  assert(r.side_disagree_flags.includes("probability_side_disagrees_with_reconciled"));
-  assert(r.side_disagree_flags.includes("reconciled_confidence_below_conviction"));
-  checkInvariant(r, 8.5);
-});
-
-// ─── 2. Confidence not inflated ─────────────────────────────────────
-test("2. Confidence stays honest even with market pressure on reconciled side", () => {
-  const r = reconcileTotalProjection(baseInput({
-    rawProjectedTotal: 8.6,
-    marketTotal: 8.5,
-    rawProbabilityOver: 0.4924,
-    marketImpliedOver: 0.4826,
-    marketPressureSide: "over",
-  }));
-  assert(Math.abs(r.reconciled_confidence_pct - 49.2) < 0.5);
-  assert(r.grade_cap === "caution", "low-conviction cap still fires");
-});
-
-// ─── 3. Raw values preserved ────────────────────────────────────────
-test("3. Raw audit fields preserved", () => {
+// ─── 1 — the core fix ───────────────────────────────────────────────
+test("1. mean > line but P(over) < 50% → probability-driven UNDER (not Over)", () => {
   const r = reconcileTotalProjection(baseInput({
     rawProjectedAwayScore: 3.8, rawProjectedHomeScore: 4.8, rawProjectedTotal: 8.6,
     marketTotal: 8.5,
     rawProbabilityOver: 0.4924, marketImpliedOver: 0.4826,
   }));
-  assert(r.raw_projected_away_score === 3.8);
-  assert(r.raw_projected_home_score === 4.8);
-  assert(r.raw_projected_total === 8.6);
-  assert(r.raw_probability_side === "under");
-  assert(r.raw_value_side === "over");
-  assert(r.raw_over_edge_pp !== null && Math.abs(r.raw_over_edge_pp - 0.98) < 0.1);
-  // Signal audit captures the holistic reasoning
-  assert(r.signal_audit.mean.side === "over");
-  assert(r.signal_audit.value.side === "over");
-  assert(r.signal_audit.probability.side === "under");
+  assert(r.raw_probability_side === "under", "raw prob under");
+  assert(r.mean_direction_side === "over", "mean over (8.6>8.5)");
+  assert(r.reconciled_total_side === "under", `displayed Under (more likely); got ${r.reconciled_total_side}`);
+  assert(r.mean_probability_divergence === true, "mean(over) vs prob(under) → divergence");
+  assert(Math.abs(r.reconciled_confidence_pct - 50.8) < 0.5, `confidence = P(under) ≈ 50.8; got ${r.reconciled_confidence_pct}`);
+  assert(r.grade_cap === "watchlist", `divergence capped at Watchlist; got ${r.grade_cap}`);
+  assert(r.reconciled_total === 8.6, "mean preserved as descriptive");
 });
 
-// ─── 4. Coherence invariant ─────────────────────────────────────────
-test("4. Final displayed side and final projected total always agree", () => {
-  const overCase = reconcileTotalProjection(baseInput({
-    rawProjectedTotal: 9.2, marketTotal: 8.5, rawProbabilityOver: 0.55,
-  }));
-  assert(overCase.displayed_total_side === "over");
-  assert(overCase.reconciled_total > 8.5);
-
-  const underCase = reconcileTotalProjection(baseInput({
-    rawProjectedAwayScore: 3.5, rawProjectedHomeScore: 4.2, rawProjectedTotal: 7.7,
-    marketTotal: 8.5, rawProbabilityOver: 0.45,
-  }));
-  assert(underCase.displayed_total_side === "under");
-  assert(underCase.reconciled_total < 8.5);
-});
-
-// ─── 5. Raw scores preserved (no fabrication) ───────────────────────
-test("5. Raw scores never scaled in V1 even when probability disagrees", () => {
+// ─── 2 — symmetric ─────────────────────────────────────────────────
+test("2. mean < line but P(over) > 50% → probability-driven OVER (not Under)", () => {
   const r = reconcileTotalProjection(baseInput({
-    rawProjectedAwayScore: 3.8, rawProjectedHomeScore: 4.8, rawProjectedTotal: 8.6,
+    rawProjectedAwayScore: 4.0, rawProjectedHomeScore: 4.2, rawProjectedTotal: 8.2,
     marketTotal: 8.5,
-    rawProbabilityOver: 0.4924, marketImpliedOver: 0.4826,
+    rawProbabilityOver: 0.55, marketImpliedOver: 0.5,
   }));
-  assert(r.reconciled_away_score === r.raw_projected_away_score);
-  assert(r.reconciled_home_score === r.raw_projected_home_score);
-  assert(r.reconciled_total === r.raw_projected_total);
-  assert(r.projection_reconciliation_reason === "raw_aligned");
+  assert(r.reconciled_total_side === "over", `displayed Over (more likely); got ${r.reconciled_total_side}`);
+  assert(r.mean_probability_divergence === true, "mean(under) vs prob(over) → divergence");
 });
 
-// ─── 6. All-agree path is clean ─────────────────────────────────────
-test("6. All signals agree → no cap, side_selection_reason=all_agree", () => {
+// ─── 3 — coherent strong Over unchanged ─────────────────────────────
+test("3. Coherent strong Over (P 62%, mean over) → Over, no divergence, no cap", () => {
   const r = reconcileTotalProjection(baseInput({
     rawProjectedTotal: 9.5, marketTotal: 8.5,
     rawProbabilityOver: 0.62, marketImpliedOver: 0.52,
-    marketPressureSide: "over",
   }));
   assert(r.reconciled_total_side === "over");
-  assert(r.side_selection_reason === "all_agree", `got ${r.side_selection_reason}`);
-  assert(r.grade_cap === null);
-  assert(r.side_disagree_flags.length === 0);
+  assert(r.mean_probability_divergence === false, "no divergence");
+  assert(r.grade_cap === null, `clear play → no reconciler cap; got ${r.grade_cap}`);
 });
 
-// ─── 7. Mean weight is heavier but not automatic — vote arithmetic ──
-test("7. Heavy mean weight wins over single weak opposing signal (vote-based)", () => {
+// ─── 4 — coherent strong Under unchanged ────────────────────────────
+test("4. Coherent strong Under (P(over) 30%, mean under) → Under, no divergence", () => {
   const r = reconcileTotalProjection(baseInput({
-    rawProjectedTotal: 9.0, marketTotal: 8.5,
-    rawProbabilityOver: 0.55, marketImpliedOver: 0.58,
-    // over edge -3, under edge +3 → value = under (strength 0.6)
+    rawProjectedAwayScore: 3.5, rawProjectedHomeScore: 4.0, rawProjectedTotal: 7.5,
+    marketTotal: 8.5, rawProbabilityOver: 0.30, marketImpliedOver: 0.45,
   }));
-  // mean str 0.5 × 1.5 = 0.75 (over); value 0.6 × 1.0 = 0.6 (under); prob 0.10 × 1.0 = 0.10 (over)
-  // over total 0.85, under total 0.6 → over wins
-  assert(r.holistic_side === "over");
-  assert(r.reconciled_total_side === "over");
-  assert(r.raw_value_side === "under");
-  // Negative edge on reconciled over + value disagree → cap caution at least
-  assert(r.grade_cap === "caution" || r.grade_cap === "no_play",
-    `expected caution/no_play; got ${r.grade_cap}`);
+  assert(r.reconciled_total_side === "under");
+  assert(r.mean_probability_divergence === false, "no divergence");
+  assert(r.reconciled_confidence_pct >= TOTALS_PUBLIC_CONFIDENCE_FLOOR, "conviction above public floor");
 });
 
-// ─── 8. Market pressure alone cannot flip side ──────────────────────
-test("8. Market pressure alone never moves displayed side away from holistic majority", () => {
+// ─── 5 — coin-flip surfaced but NOT capped for MLB (deferred to #48) ─
+test("5. Coin-flip (confidence < public floor) → surfaced via flag, NOT capped (MLB defers to #48)", () => {
   const r = reconcileTotalProjection(baseInput({
-    rawProjectedTotal: 9.0, marketTotal: 8.5,
-    rawProbabilityOver: 0.55, marketImpliedOver: 0.5,
-    marketPressureSide: "under",
+    rawProjectedTotal: 8.7, marketTotal: 8.5,
+    rawProbabilityOver: 0.515, marketImpliedOver: 0.5,
   }));
-  // mean 0.5×1.5=0.75 over, prob 0.10 over, value 1.0×1.0=1.0 over, pressure 0.5×0.5=0.25 under
-  // over=1.85, under=0.25 → over wins decisively
   assert(r.reconciled_total_side === "over");
-  assert(r.side_disagree_flags.includes("market_pressure_disagrees_with_reconciled"));
+  assert(r.reconciled_confidence_pct < TOTALS_PUBLIC_CONFIDENCE_FLOOR, "below public floor");
+  assert(r.side_disagree_flags.includes("below_public_confidence_floor"), "coin-flip surfaced as a flag");
+  // No blind confidence floor for MLB — the evidence (poorly-calibrated confidence)
+  // says defer the threshold to the #48 calibration diagnostic.
+  assert(r.grade_cap === null, `MLB coin flip NOT capped (deferred to #48); got ${r.grade_cap}`);
 });
 
-// ─── 9. Locked snapshot ─────────────────────────────────────────────
-test("9. Locked snapshot returned verbatim — no mutation post-lock", () => {
+// ─── 6 — public play needs probability support AND market value ─────
+test("6. Probability support + market value → no reconciler cap (ladder can reach Lean/BA)", () => {
+  const r = reconcileTotalProjection(baseInput({
+    rawProjectedTotal: 9.8, marketTotal: 8.5,
+    rawProbabilityOver: 0.62, marketImpliedOver: 0.54, // +8pp value on Over
+  }));
+  assert(r.reconciled_total_side === "over");
+  assert(r.reconciled_confidence_pct >= TOTALS_PUBLIC_CONFIDENCE_FLOOR, "probability support");
+  assert(r.reconciled_edge_pp !== null && r.reconciled_edge_pp > 0, "positive value");
+  assert(r.grade_cap === null, `leave to ladder; got ${r.grade_cap}`);
+});
+
+// ─── 7 — both agree, no value → ladder gives Market-Aligned (no Caution cap) ─
+test("7. Both agree on side, no value → no reconciler cap (ladder → Market-Aligned)", () => {
+  const r = reconcileTotalProjection(baseInput({
+    rawProjectedTotal: 9.5, marketTotal: 8.5,
+    rawProbabilityOver: 0.62, marketImpliedOver: 0.78, // Over edge -16pp (no value)
+  }));
+  assert(r.reconciled_total_side === "over", "over (model's more-likely side)");
+  assert(r.reconciled_edge_pp !== null && r.reconciled_edge_pp < 0, "negative value vs market");
+  assert(r.grade_cap === null, `no Caution cap — ladder grades Market-Aligned; got ${r.grade_cap}`);
+});
+
+// ─── 8 — confidence = P(displayed side) ─────────────────────────────
+test("8. Confidence is the displayed (probability) side's honest probability", () => {
+  const r = reconcileTotalProjection(baseInput({
+    rawProjectedAwayScore: 3.8, rawProjectedHomeScore: 4.8, rawProjectedTotal: 8.6,
+    marketTotal: 8.5, rawProbabilityOver: 0.4924, marketImpliedOver: 0.51,
+  }));
+  assert(r.reconciled_total_side === "under", "Under more likely (P(over) 49.2%)");
+  assert(Math.abs(r.reconciled_confidence_pct - 50.8) < 0.5, `confidence = P(under) ≈ 50.8; got ${r.reconciled_confidence_pct}`);
+});
+
+// ─── 9 — push-risk hold (projected exactly on the line) ─────────────
+test("9. Projected total exactly on the line → push-risk hold + no_play", () => {
+  const r = reconcileTotalProjection(baseInput({
+    rawProjectedAwayScore: 4.25, rawProjectedHomeScore: 4.25, rawProjectedTotal: 8.5,
+    marketTotal: 8.5, rawProbabilityOver: 0.49,
+  }));
+  assert(r.mean_direction_side === null, "mean null at the line");
+  assert(r.hold === true, "push-risk hold");
+  assert(r.grade_cap === "no_play", `expected no_play; got ${r.grade_cap}`);
+});
+
+// ─── 10 — natural recompute flip ────────────────────────────────────
+test("10. Pre-lock recompute: probability flips Under → Over naturally", () => {
+  const r1 = reconcileTotalProjection(baseInput({ rawProjectedTotal: 8.2, marketTotal: 8.5, rawProbabilityOver: 0.42, marketImpliedOver: 0.5 }));
+  assert(r1.reconciled_total_side === "under", "P(over) 42% → under");
+  const r2 = reconcileTotalProjection(baseInput({ rawProjectedTotal: 8.9, marketTotal: 8.5, rawProbabilityOver: 0.56, marketImpliedOver: 0.5 }));
+  assert(r2.reconciled_total_side === "over", "P(over) 56% → over");
+});
+
+// ─── 11 — coherence invariant: side IS the more-likely side ─────────
+test("11. invariant_side_matches_total = side equals the higher-probability side (incl. divergent)", () => {
+  for (const rawTotal of [7.5, 8.0, 8.4, 8.6, 9.0, 9.5]) {
+    for (const rawProb of [0.30, 0.45, 0.49, 0.51, 0.55, 0.70]) {
+      const r = reconcileTotalProjection(baseInput({
+        rawProjectedAwayScore: rawTotal / 2, rawProjectedHomeScore: rawTotal / 2, rawProjectedTotal: rawTotal,
+        marketTotal: 8.5, rawProbabilityOver: rawProb, marketImpliedOver: 0.5,
+      }));
+      assert(r.invariant_side_matches_total === true, `invariant broken at total=${rawTotal} prob=${rawProb}`);
+      assert(r.raw_probability_side === r.displayed_total_side, `displayed must equal prob side at total=${rawTotal} prob=${rawProb}`);
+    }
+  }
+});
+
+// ─── 12 — locked snapshot returned verbatim ─────────────────────────
+test("12. Locked snapshot returned verbatim — no mutation post-lock", () => {
   const locked: TotalProjectionReconciliation = {
     raw_projected_away_score: 3.8,
     raw_projected_home_score: 4.8,
@@ -210,7 +185,7 @@ test("9. Locked snapshot returned verbatim — no mutation post-lock", () => {
     raw_under_edge_pp: -0.98,
     mean_direction_side: "over",
     market_pressure_side: null,
-    holistic_side: "over",
+    holistic_side: "under",
     signal_audit: {
       probability: { side: "under", strength: 0.015, weighted_vote: 0.015 },
       value: { side: "over", strength: 0.196, weighted_vote: 0.196 },
@@ -219,127 +194,41 @@ test("9. Locked snapshot returned verbatim — no mutation post-lock", () => {
     },
     over_vote_total: 0.346,
     under_vote_total: 0.015,
-    reconciled_total_side: "over",
+    reconciled_total_side: "under",
     reconciled_total: 8.6,
     reconciled_away_score: 3.8,
     reconciled_home_score: 4.8,
-    reconciled_confidence_pct: 49.2,
-    reconciled_edge_pp: 0.98,
-    displayed_total_side: "over",
-    side_selection_reason: "holistic_aligned_with_mean",
+    reconciled_confidence_pct: 50.8,
+    reconciled_edge_pp: -0.98,
+    displayed_total_side: "under",
+    mean_probability_divergence: true,
+    side_selection_reason: "probability_over_mean",
     projection_reconciliation_reason: "raw_aligned",
-    side_disagree_flags: ["probability_side_disagrees_with_reconciled"],
-    grade_cap: "caution",
+    side_disagree_flags: ["mean_probability_divergence"],
+    grade_cap: "watchlist",
     hold: false,
     invariant_side_matches_total: true,
     used_locked_snapshot: false,
   };
   const r = reconcileTotalProjection(baseInput({
-    rawProjectedTotal: 9.5, marketTotal: 8.5,
-    rawProbabilityOver: 0.7,
-    isLocked: true,
-    lockedReconciliation: locked,
+    rawProjectedTotal: 9.5, marketTotal: 8.5, rawProbabilityOver: 0.7,
+    isLocked: true, lockedReconciliation: locked,
   }));
-  assert(r.used_locked_snapshot === true);
-  assert(r.reconciled_total_side === "over");
-  assert(r.reconciled_total === 8.6);
-  assert(r.reconciled_confidence_pct === 49.2);
-  assert(r.grade_cap === "caution");
+  assert(r.used_locked_snapshot === true, "must flag locked");
+  assert(r.reconciled_total_side === "under", "locked side preserved");
+  assert(r.reconciled_total === 8.6, "locked total preserved");
 });
 
-// ─── 10. Normal pre-lock model recompute flip ───────────────────────
-test("10. Pre-lock recompute: lambdas change → side flips naturally Under → Over", () => {
-  const r1 = reconcileTotalProjection(baseInput({
-    rawProjectedTotal: 8.2, marketTotal: 8.5,
-    rawProbabilityOver: 0.42, marketImpliedOver: 0.5,
-  }));
-  assert(r1.reconciled_total_side === "under");
-  const r2 = reconcileTotalProjection(baseInput({
-    rawProjectedTotal: 8.9, marketTotal: 8.5,
-    rawProbabilityOver: 0.56, marketImpliedOver: 0.5,
-  }));
-  assert(r2.reconciled_total_side === "over", "natural recompute flip preserved");
-});
-
-// ─── 11. Push-risk hold ─────────────────────────────────────────────
-test("11. Posterior exactly on line → push-risk hold + no_play", () => {
-  const r = reconcileTotalProjection(baseInput({
-    rawProjectedAwayScore: 4.25, rawProjectedHomeScore: 4.25, rawProjectedTotal: 8.5,
-    marketTotal: 8.5, rawProbabilityOver: 0.49,
-  }));
-  assert(r.mean_direction_side === null);
-  assert(r.hold === true);
-  assert(r.grade_cap === "no_play");
-  assert(r.side_selection_reason === "push_risk_default_to_probability");
-});
-
-// ─── 12. NEW — holistic vote disagrees with mean → side reverts ────
-test("12. Holistic Under outvotes mean Over → V1 reverts to mean, cap no_play", () => {
-  // Construct: tiny mean Over (8.55 vs 8.5) but strong probability + value + market on Under
-  const r = reconcileTotalProjection(baseInput({
-    rawProjectedAwayScore: 4.25, rawProjectedHomeScore: 4.30, rawProjectedTotal: 8.55,
-    marketTotal: 8.5,
-    rawProbabilityOver: 0.20,           // strong Under conviction
-    marketImpliedOver: 0.50,            // over edge -30, under edge +30 → value = under (strong)
-    marketPressureSide: "under",
-  }));
-  assert(r.mean_direction_side === "over");
-  assert(r.raw_probability_side === "under");
-  assert(r.raw_value_side === "under");
-  assert(r.market_pressure_side === "under");
-  // mean str 0.05 × 1.5 = 0.075 over
-  // prob str 0.6 × 1.0 = 0.6 under
-  // value str 1.0 × 1.0 = 1.0 under
-  // pressure str 0.5 × 0.5 = 0.25 under
-  // over=0.075, under=1.85 → holistic = under
-  assert(r.holistic_side === "under", `holistic should be under given strong signals; got ${r.holistic_side}`);
-  // Coherence check: holistic Under disagrees with mean Over → revert to mean
-  assert(r.reconciled_total_side === "over", `coherence revert → over; got ${r.reconciled_total_side}`);
-  assert(r.side_selection_reason === "holistic_overruled_by_mean_coherence");
-  // Hard cap because holistic disagreed with mean
-  assert(r.grade_cap === "no_play", `expected no_play; got ${r.grade_cap}`);
-  assert(r.side_disagree_flags.includes("holistic_vote_overruled_by_coherence"));
-});
-
-// ─── 13. Holistic agrees with mean → side_selection_reason ─────────
-test("13. Probability disagrees but value+mean agree → side_selection_reason=holistic_aligned_with_mean (not all_agree)", () => {
-  const r = reconcileTotalProjection(baseInput({
-    rawProjectedTotal: 9.0, marketTotal: 8.5,
-    rawProbabilityOver: 0.48,            // raw prob barely Under
-    marketImpliedOver: 0.45,             // over edge +3, under edge -3 → value = over
-  }));
-  assert(r.raw_probability_side === "under");
-  assert(r.mean_direction_side === "over");
-  assert(r.raw_value_side === "over");
-  assert(r.holistic_side === "over");
-  assert(r.reconciled_total_side === "over");
-  assert(r.side_selection_reason === "holistic_aligned_with_mean");
-});
-
-// ─── 14. Invariant sweep ───────────────────────────────────────────
-test("14. Reconciled invariant holds across a parameter sweep", () => {
-  for (const rawTotal of [7.5, 7.9, 8.0, 8.4, 8.6, 9.0, 9.5, 10.0]) {
-    for (const rawProb of [0.30, 0.45, 0.49, 0.51, 0.55, 0.70]) {
-      const away = rawTotal / 2;
-      const home = rawTotal / 2;
-      const r = reconcileTotalProjection(baseInput({
-        rawProjectedAwayScore: away, rawProjectedHomeScore: home, rawProjectedTotal: rawTotal,
-        marketTotal: 8.5,
-        rawProbabilityOver: rawProb, marketImpliedOver: 0.5,
-      }));
-      assert(r.invariant_side_matches_total === true,
-        `invariant broken at rawTotal=${rawTotal}, rawProb=${rawProb}, displayed=${r.displayed_total_side}, reconciled=${r.reconciled_total}`);
-      checkInvariant(r, 8.5);
-    }
-  }
+// ─── 13 — signal_audit retained for the operator trail ──────────────
+test("13. signal_audit retains four named weights", () => {
+  const r = reconcileTotalProjection(baseInput({ rawProjectedTotal: 9.5, marketTotal: 8.5, rawProbabilityOver: 0.62, marketImpliedOver: 0.52 }));
+  assert(typeof r.signal_audit.mean.weighted_vote === "number", "mean vote number");
+  assert(typeof r.signal_audit.probability.weighted_vote === "number", "prob vote number");
+  assert(typeof r.signal_audit.value.weighted_vote === "number", "value vote number");
+  assert(typeof r.signal_audit.market_pressure.weighted_vote === "number", "pressure vote number");
 });
 
 console.log("─".repeat(70));
 console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
-console.log(`  weights: mean=${MEAN_WEIGHT} prob=${PROBABILITY_WEIGHT} value=${VALUE_WEIGHT} pressure=${PRESSURE_WEIGHT}`);
-console.log(`  norms: mean=${MEAN_STRENGTH_NORM_RUNS}runs value=${VALUE_STRENGTH_NORM_PP}pp · low_conv=${LOW_CONVICTION_CONFIDENCE_PCT}% · neg_nopl=${NEGATIVE_EDGE_NO_PLAY_PP}pp`);
-if (fail > 0) {
-  console.log("\n✗ reconciliation tests failed");
-  process.exit(1);
-}
+if (fail > 0) { console.log("\n✗ reconciliation tests failed"); process.exit(1); }
 console.log("\n✅ All MLB total projection / side reconciliation tests passed.");
