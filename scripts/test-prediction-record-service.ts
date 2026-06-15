@@ -12,7 +12,19 @@ import {
   buildPublicSplitsSnapshot,
   buildLineMovementSnapshot,
   buildDataIntegritySnapshot,
+  applyPlayGradeGate,
 } from "../lib/services/predictionRecordService";
+
+// Self-consistent expected-grade helper: apply the production gate to a record's
+// own fields (fixtures don't set posterior_home_diff → run-gap null, so the
+// ML-conviction branch is inert here; EV + low-total-line branches still apply).
+function expectGate(raw: string | null, rec: { model_probability: number | null; odds_american: number | null; market: string; line_value: number | null }): string | null {
+  return applyPlayGradeGate(raw, {
+    modelProb: rec.model_probability, americanOdds: rec.odds_american,
+    market: rec.market as "moneyline" | "total" | "first_inning",
+    runGapAbs: null, totalLine: rec.market === "total" ? rec.line_value : null,
+  });
+}
 
 let pass = 0;
 let fail = 0;
@@ -126,7 +138,9 @@ console.log("\n━━━ V2.1 metadata propagation ━━━");
   check("ML pick=home", ml.pick === "home");
   check("ML confidence=54.0", ml.confidence === 54.0);
   check("ML model_probability=0.54", ml.model_probability === 0.54);
-  check("ML play_grade=lean", ml.play_grade === "lean");
+  // Conviction/value gate (2026-06-15): ml_play_grade='lean' is demoted only by
+  // EV<0 / low-conviction-fav / low-total-line — self-consistent with the gate.
+  check("ML play_grade=lean@0.54 matches gate", ml.play_grade === expectGate("lean", ml));
   check("ML best_angle=false", ml.best_angle === false);
   check("OU best_angle=true", ou.best_angle === true);
   check("OU play_grade=best_angle", ou.play_grade === "best_angle");
@@ -606,7 +620,7 @@ console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━"
   const ou = recs.find((r) => r.market === "total")!;
   check("ML record.play_grade=null when V2.2 emits 'held'", ml.play_grade === null);
   check("ML snapshot raw 'held' preserved", (ml.snapshot_json as any)?.v2_2_audit?.ml_play_grade === "held");
-  check("OU record.play_grade='lean' (actionable pass-through)", ou.play_grade === "lean");
+  check("OU record.play_grade='lean' → gate", ou.play_grade === expectGate("lean", ou));
 }
 {
   // V2.2 'toss_up' on OU side.
@@ -643,8 +657,10 @@ console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━"
     });
     const ml = recs.find((r) => r.market === "moneyline")!;
     const ou = recs.find((r) => r.market === "total")!;
-    check(`ML record.play_grade='${grade}' (pass-through)`, ml.play_grade === grade);
-    check(`OU record.play_grade='${grade}' (pass-through)`, ou.play_grade === grade);
+    // Conviction/value gate: a "lean" demotes to market_aligned only when it
+    // fails EV / conviction / low-total-line; every other grade passes through.
+    check(`ML record.play_grade='${grade}' (translator + gate)`, ml.play_grade === expectGate(grade, ml));
+    check(`OU record.play_grade='${grade}' (translator + gate)`, ou.play_grade === expectGate(grade, ou));
   }
 }
 {
@@ -890,7 +906,7 @@ console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━
   const ml = recs.find((r) => r.market === "moneyline")!;
   const ou = recs.find((r) => r.market === "total")!;
   check("ML play_grade unchanged by FI persistence change",
-        ml.play_grade === "lean" /* from v21 fixture: ml_play_grade='lean' */);
+        ml.play_grade === expectGate("lean", ml) /* FI persistence change must not alter the ML gate result */);
   check("Total play_grade unchanged by FI persistence change",
         ou.play_grade === "best_angle" /* from v21 fixture: ou_play_grade='best_angle' */);
 }

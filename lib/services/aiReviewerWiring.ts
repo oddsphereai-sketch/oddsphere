@@ -48,6 +48,7 @@ import {
   type Side,
   type OuSide,
 } from "./aiReviewerV1";
+import { isBlockedSportsbook } from "../config/blockedSportsbooks";
 
 // ─── Slate context shape ─────────────────────────────────────────────
 
@@ -68,17 +69,20 @@ export type ReviewerSlateContext = {
   >;
 };
 
-const NO_VIG_BOOK_PRIORITY = [
+// #39 fix (2026-06-15): fliff + kalshi REMOVED — they are blocklisted
+// platform-wide (corrupted/flipped lines) but were leaking into the AI
+// reviewer's no-vig calculation, which can cap confidence / hold / adjust
+// scores on production picks. The isBlockedSportsbook guard in the selection
+// loop is defense-in-depth so any future blocked book inherits exclusion.
+export const NO_VIG_BOOK_PRIORITY = [
   "pinnacle",
   "draftkings",
   "bet365 us",
   "bookmaker",
   "ballybet",
-  "kalshi",
-  "fliff",
   "onexbet",
   "saba",
-];
+].filter((b) => !isBlockedSportsbook(b));
 
 /**
  * One-time slate-level lines fetch for no-vig calculation. Single query.
@@ -137,6 +141,7 @@ export async function fetchReviewerSlateContext(
   for (const [gameId, externalId] of externalByGameId) {
     let chosen: { home: LineRow; away: LineRow; book: string } | null = null;
     for (const book of NO_VIG_BOOK_PRIORITY) {
+      if (isBlockedSportsbook(book)) continue; // defense-in-depth — never source no-vig off a blocked book
       const h = byGameBookSide.get(`${gameId}|${book}|home`);
       const a = byGameBookSide.get(`${gameId}|${book}|away`);
       if (h && a) {

@@ -124,7 +124,48 @@ export type FiV2Audit = {
   // Misc
   provisional: boolean;
   integrity_notes: string[];
+  /**
+   * Forward-only RAW FI FEATURE CAPTURE (additive, 2026-06-15). Persists the
+   * FI model's actual inputs (starter FI stats, top-order OPS, park, weather,
+   * lambdas + per-team factors) for future attribution. Diagnostic only — does
+   * NOT affect FI predictions/grades. Optional for back-compat.
+   */
+  feature_capture?: FiFeatureCapture | null;
 };
+
+export type FiFeatureCapture = {
+  schema_version: string;
+  data_quality_tier: string;
+  starter: { home: FiStarterCapture | null; away: FiStarterCapture | null };
+  top3_ops: { home: number | null; away: number | null };
+  park: { park_factor_runs: number | null; is_dome: boolean } | null;
+  weather: { temperature_f: number | null; wind_speed_mph: number | null; wind_direction_degrees: number | null; is_notable: boolean } | null;
+  lambdas: { home: number; away: number };
+  /** indep.per_team_factors — FI lambda component multipliers. */
+  factors: unknown;
+};
+type FiStarterCapture = { player_id: number; throws: "L" | "R" | null; confirmed: boolean; first_inning_era: number | null; first_inning_starts: number | null; first_inning_whip: number | null; season_era: number | null };
+
+function captureFiStarter(s: GameSnapshot["home_starter"]): FiStarterCapture | null {
+  if (!s) return null;
+  return { player_id: s.player_external_id, throws: s.throws, confirmed: s.is_confirmed, first_inning_era: s.first_inning_era, first_inning_starts: s.first_inning_starts, first_inning_whip: s.first_inning_whip, season_era: s.season_era };
+}
+function top3Ops(lineup: GameSnapshot["home_lineup_top8"]): number | null {
+  const ops = lineup.slice(0, 3).map((b) => b.season_ops).filter((v): v is number => typeof v === "number");
+  return ops.length ? ops.reduce((a, b) => a + b, 0) / ops.length : null;
+}
+function buildFiFeatureCapture(snap: GameSnapshot, factors: unknown, tier: string, homeLambda: number, awayLambda: number): FiFeatureCapture {
+  return {
+    schema_version: "fi_fc_v1",
+    data_quality_tier: tier,
+    starter: { home: captureFiStarter(snap.home_starter), away: captureFiStarter(snap.away_starter) },
+    top3_ops: { home: top3Ops(snap.home_lineup_top8), away: top3Ops(snap.away_lineup_top8) },
+    park: snap.ballpark ? { park_factor_runs: snap.ballpark.park_factor_runs, is_dome: snap.ballpark.is_dome } : null,
+    weather: snap.weather ? { temperature_f: snap.weather.temperature_f, wind_speed_mph: snap.weather.wind_speed_mph, wind_direction_degrees: snap.weather.wind_direction_degrees, is_notable: snap.weather.is_notable } : null,
+    lambdas: { home: homeLambda, away: awayLambda },
+    factors: factors ?? null,
+  };
+}
 
 export type FiV2Output = {
   /** Legacy back-compat boolean for the existing predicted_nrfi column.
@@ -353,6 +394,13 @@ export function runMlbFirstInningModelV2(
     fi_no_bet_reason,
     provisional,
     integrity_notes: integrityNotes,
+    feature_capture: buildFiFeatureCapture(
+      snap,
+      (indep as { per_team_factors?: unknown }).per_team_factors ?? null,
+      indep.data_quality_tier,
+      indep.home_lambda,
+      indep.away_lambda,
+    ),
   };
 
   return {

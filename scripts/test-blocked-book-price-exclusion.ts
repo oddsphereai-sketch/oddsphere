@@ -5,6 +5,7 @@
  */
 import { buildGameOddsSnapshot } from "../lib/services/predictionRecordService";
 import { isBlockedSportsbook, BLOCKED_SPORTSBOOKS } from "../lib/config/blockedSportsbooks";
+import { NO_VIG_BOOK_PRIORITY } from "../lib/services/aiReviewerWiring";
 
 let pass = 0;
 let fail = 0;
@@ -44,6 +45,16 @@ check("isBlockedSportsbook case-insensitive", isBlockedSportsbook("Fliff") && is
 {
   const snap = buildGameOddsSnapshot([ml("away", "kalshi", 999), ml("away", "fanduel", 120)]);
   check("kalshi-first + fanduel → fanduel price", snap.mlAwayOdds === 120);
+}
+
+// 6. #39 fix — AI reviewer no-vig book priority must NOT contain blocked books.
+//    (Previously NO_VIG_BOOK_PRIORITY listed kalshi + fliff, leaking corrupted
+//    no-vig into reviewer confidence caps / holds / score adjustments.)
+{
+  const leaked = NO_VIG_BOOK_PRIORITY.filter((b) => isBlockedSportsbook(b));
+  check("aiReviewer NO_VIG_BOOK_PRIORITY excludes all blocked books", leaked.length === 0);
+  check("aiReviewer NO_VIG list has no 'fliff'", !NO_VIG_BOOK_PRIORITY.includes("fliff"));
+  check("aiReviewer NO_VIG list has no 'kalshi'", !NO_VIG_BOOK_PRIORITY.includes("kalshi"));
 }
 
 console.log(`\n${pass} passed · ${fail} failed · ${pass + fail} total`);

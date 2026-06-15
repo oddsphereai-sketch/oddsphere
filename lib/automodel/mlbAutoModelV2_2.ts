@@ -44,7 +44,7 @@ import {
 } from "./runDistribution";
 import { computePlayGrade } from "./playGrade";
 import { regularizeProbability } from "./mlbProbabilityRegularization";
-import type { AutoModelOutput, GameSnapshot, ModelStage } from "./types";
+import type { AutoModelOutput, GameSnapshot, ModelStage, StarterSnapshot, TeamSnapshot, BatterSnapshot } from "./types";
 import { MODEL_VERSION_V2_2 } from "./types";
 
 /**
@@ -167,7 +167,64 @@ export type V22Audit = {
   ou_requires_market_confirmation: boolean;
   model_integrity_notes: string[];
   provisional: boolean;
+  /**
+   * Forward-only RAW FEATURE CAPTURE (additive, 2026-06-15). Persists the
+   * model's actual feature INPUTS (starter/bullpen/offense/park/weather +
+   * computed per-team factors) so future calibration/attribution can test
+   * stat-feature weighting. Purely diagnostic — does NOT affect predictions,
+   * grades, or display. Optional for back-compat with pre-capture snapshots.
+   */
+  feature_capture?: V22FeatureCapture | null;
 };
+
+/** Shape of the forward-only feature-capture diagnostic block. */
+export type V22FeatureCapture = {
+  schema_version: string;
+  data_quality_tier: string;
+  starter: { home: ReturnType<typeof captureStarter>; away: ReturnType<typeof captureStarter> };
+  team: { home: ReturnType<typeof captureTeam>; away: ReturnType<typeof captureTeam> };
+  park: { park_factor_runs: number | null; is_dome: boolean } | null;
+  weather: WeatherCapture | null;
+  lineup: { home: ReturnType<typeof lineupCounts>; away: ReturnType<typeof lineupCounts> };
+  /** indep.audit_per_team — the computed multipliers (offense/pitcher/bullpen/park/weather). */
+  factors: unknown;
+};
+type WeatherCapture = { temperature_f: number | null; humidity_pct: number | null; wind_speed_mph: number | null; wind_direction_degrees: number | null; is_notable: boolean; notable_reason: string | null };
+
+function captureStarter(s: StarterSnapshot | null) {
+  if (!s) return null;
+  return {
+    player_id: s.player_external_id, name: s.player_name, throws: s.throws,
+    confirmed: s.is_confirmed, scratched: s.is_scratched,
+    season_era: s.season_era, season_whip: s.season_whip, season_k_per_9: s.season_k_per_9,
+    last30_era: s.last30_era, pitch_quality_score: s.pitch_quality_score,
+    first_inning_era: s.first_inning_era, first_inning_starts: s.first_inning_starts, first_inning_whip: s.first_inning_whip,
+    season_games_started: s.season_games_started ?? null, season_innings_pitched: s.season_innings_pitched ?? null,
+  };
+}
+function captureTeam(t: TeamSnapshot) {
+  return {
+    team_id: t.team_external_id, abbr: t.abbreviation,
+    bullpen_era_proxy: t.bullpen_era_proxy, bullpen_era_proxy_raw: t.bullpen_era_proxy_raw ?? null, bullpen_ip: t.bullpen_ip ?? null,
+    season_runs_per_game: t.season_runs_per_game, team_avg_batter_ops: t.team_avg_batter_ops ?? null,
+  };
+}
+function lineupCounts(b: BatterSnapshot[]) {
+  return { size: b.length, confirmed_count: b.filter((x) => x.lineup_source !== "projected").length };
+}
+/** Pure, additive. Reads only `snap` (model inputs) + `indep.audit_per_team`. */
+function buildV22FeatureCapture(snap: GameSnapshot, factors: unknown, tier: string): V22FeatureCapture {
+  return {
+    schema_version: "fc_v1",
+    data_quality_tier: tier,
+    starter: { home: captureStarter(snap.home_starter), away: captureStarter(snap.away_starter) },
+    team: { home: captureTeam(snap.home_team), away: captureTeam(snap.away_team) },
+    park: snap.ballpark ? { park_factor_runs: snap.ballpark.park_factor_runs, is_dome: snap.ballpark.is_dome } : null,
+    weather: snap.weather ? { temperature_f: snap.weather.temperature_f, humidity_pct: snap.weather.humidity_pct, wind_speed_mph: snap.weather.wind_speed_mph, wind_direction_degrees: snap.weather.wind_direction_degrees, is_notable: snap.weather.is_notable, notable_reason: snap.weather.notable_reason } : null,
+    lineup: { home: lineupCounts(snap.home_lineup_top8), away: lineupCounts(snap.away_lineup_top8) },
+    factors: factors ?? null,
+  };
+}
 
 export type V22Output = {
   predicted_home_score: number;
@@ -506,6 +563,11 @@ export function runMlbAutoModelV2_2(
     ou_requires_market_confirmation: ouRequiresMarketConfirmation,
     model_integrity_notes: integrityNotes,
     provisional,
+    feature_capture: buildV22FeatureCapture(
+      snap,
+      (indep as { audit_per_team?: unknown }).audit_per_team ?? null,
+      indep.data_quality_tier,
+    ),
   };
 
   return {

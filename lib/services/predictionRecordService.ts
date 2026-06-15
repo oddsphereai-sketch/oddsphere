@@ -133,6 +133,73 @@ function readPublicPlayGrade(v: unknown): string | null {
 }
 
 /**
+ * Conviction/Value play-grade gate (2026-06-15) — demotes a public **Lean** to
+ * `market_aligned` (off the public board, operator-only) when it fails an
+ * EVIDENCE-GATED, ENVIRONMENT-INDEPENDENT quality test. Two conditions, both
+ * validated on locked tracking (since 6/7) with leave-one-day-out + a clear
+ * model reason (NOT a high-scoring-week artifact):
+ *
+ *   1. NEGATIVE EXPECTED VALUE (coherence). A Lean whose own model probability,
+ *      priced at the locked American odds, has EV < 0 loses long-run by the
+ *      model's OWN numbers. Favorite Leans with EV<0 went 1-5 (17%, −68% ROI).
+ *      Arithmetic, not pattern-fit → environment-independent.
+ *   2. LOW-CONVICTION FAVORITE (ML only). A money-line FAVORITE the model
+ *      barely separates (|projected run gap| < 0.5) went 27% / −48% (robust
+ *      excl-6/14, LODO never positive); favorites WITH conviction (gap ≥1)
+ *      went 73% / +24%. Conviction, not environment.
+ *
+ * Replaces the earlier R1 confidence-floor (which emptied the board). Only
+ * touches the "lean" tier; Best Angle / others unchanged. Future-picks + display
+ * only — never mutates locked/historical/tracking rows. Reversible (constants).
+ *
+ * Public-trap (bets≫money) is intentionally EXCLUDED: it only predicts losses
+ * on O/U (trap O/U = nearly all Unders = the one high-scoring week; trap×ML is
+ * fine), i.e. environment-confounded. It is shadow-logged in the research
+ * report, not gated, until a low-scoring week validates it out-of-sample.
+ */
+export const GATE_EV_FLOOR = 0;
+export const GATE_LOW_CONVICTION_RUNGAP = 0.5;
+export const GATE_LOW_TOTAL_LINE = 8;
+export interface PlayGradeGateInputs {
+  modelProb: number | null;
+  americanOdds: number | null;
+  market: "moneyline" | "total" | "first_inning";
+  /** |posterior_home_diff| — model run-gap conviction (ML favorites only). */
+  runGapAbs: number | null;
+  /** total line at lock (totals only) — model has no edge on line<8 duels. */
+  totalLine: number | null;
+}
+function gateEvNegative(p: number | null, odds: number | null): boolean {
+  if (p === null || odds === null) return false;
+  const dec = odds > 0 ? odds / 100 : 100 / -odds;
+  return p * dec - (1 - p) < GATE_EV_FLOOR;
+}
+export function applyPlayGradeGate(grade: string | null, x: PlayGradeGateInputs): string | null {
+  if (grade !== "lean") return grade; // gate only demotes the Lean tier
+  // 1. negative-EV coherence demotion (any market) — arithmetic, env-independent
+  if (gateEvNegative(x.modelProb, x.americanOdds)) return "market_aligned";
+  // 2. low-conviction favorite (money-line only) — run-gap conviction, env-independent
+  if (
+    x.market === "moneyline" &&
+    x.americanOdds !== null && x.americanOdds < 0 &&
+    x.runGapAbs !== null && x.runGapAbs < GATE_LOW_CONVICTION_RUNGAP
+  ) {
+    return "market_aligned";
+  }
+  // 3. extreme-low total line (totals only) — pitcher's-duel games where the
+  //    model has no demonstrated edge (board 33% / −35%, both sides, robust
+  //    excl-6/14 + LODO; structural: compressed run distribution). Pre-game
+  //    knowable. Smallest-sample of the three — reversible via constant.
+  if (
+    x.market === "total" &&
+    x.totalLine !== null && x.totalLine < GATE_LOW_TOTAL_LINE
+  ) {
+    return "market_aligned";
+  }
+  return grade;
+}
+
+/**
  * Phase 6B.11 — minimal sharp_signals row shape used for the
  * best_angle public-money guard. Mirrors the fields the daily-edge
  * route reads in its own copy of this guard (Phase 6B.10).
@@ -914,7 +981,11 @@ function buildMlRecord(
     expected_value: null,
     // Phase 6B.27 — strip internal V2.2 diagnostic labels (no_bet/held/
     // toss_up) from the public column; raw stays in snapshot.v2_2_audit.
-    play_grade: readPublicPlayGrade(sp.ml_play_grade),
+    play_grade: applyPlayGradeGate(readPublicPlayGrade(sp.ml_play_grade), {
+      modelProb: mlModelProb, americanOdds: mlOddsAmerican, market: "moneyline",
+      runGapAbs: typeof v22.posterior_home_diff === "number" ? Math.abs(v22.posterior_home_diff as number) : null,
+      totalLine: null,
+    }),
     prediction_type: readStringOrNull(sp.ml_prediction_type),
     // Phase 6B.11 + MLB-P0 — public-money guard PLUS line-movement /
     // large-edge confirmation (see resolveMlbBestAngle). Tracking pending
@@ -1049,7 +1120,10 @@ function buildOuRecord(
     edge: ouEdgePp,
     expected_value: null,
     // Phase 6B.27 — same translator as ML; see readPublicPlayGrade.
-    play_grade: readPublicPlayGrade(sp.ou_play_grade),
+    play_grade: applyPlayGradeGate(readPublicPlayGrade(sp.ou_play_grade), {
+      modelProb: ouModelProb, americanOdds: ouOddsAmerican, market: "total",
+      runGapAbs: null, totalLine: lockedTotalLine,
+    }),
     prediction_type: readStringOrNull(sp.ou_prediction_type),
     // Phase 6B.11 + MLB-P0 — same resolution as ML; see resolveMlbBestAngle.
     best_angle: ouBest.bestAngle,
@@ -1255,7 +1329,10 @@ function buildFiRecord(
     market_probability: fiMarketProb,
     edge: fiEdge,
     expected_value: null,
-    play_grade: fiPlayGrade,
+    play_grade: applyPlayGradeGate(fiPlayGrade, {
+      modelProb: fiModelProb, americanOdds: fiOddsAmerican, market: "first_inning",
+      runGapAbs: null, totalLine: null,
+    }),
     prediction_type: predictionTypeValue,
     best_angle: false,
     no_bet: noBetValue,
