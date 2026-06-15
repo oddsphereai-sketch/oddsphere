@@ -42,6 +42,7 @@
  */
 
 import { supabase } from "../../db/supabase";
+import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import { buildNhlFeatureSnapshot } from "./featureSnapshot";
 import {
   nhlAutoModelV0,
@@ -338,10 +339,14 @@ export async function writeNhlPredictionRecords(
         .eq("game_id", g.id)
         .is("player_id", null)
         .in("market_type", ["moneyline", "total", "spread"]);
-      const lines = (linesData as Array<{
+      // #39 — drop blocked books (fliff, kalshi) at the load point so the
+      // "best odds" (max) selections below for ML / total / puck-line can
+      // never pick a corrupted blocked-book price (e.g. fliff's flipped
+      // +385 on a -205 favorite would otherwise win the max).
+      const lines = ((linesData as Array<{
         market_type: string; sportsbook: string; side: string;
         line_value: number | null; odds_american: number | null;
-      }> | null) ?? [];
+      }> | null) ?? []).filter((l) => !isBlockedSportsbook(l.sportsbook));
 
       const homeAbbr = g.home_team_id !== null ? teamById.get(g.home_team_id)?.abbreviation ?? "?" : "?";
       const awayAbbr = g.away_team_id !== null ? teamById.get(g.away_team_id)?.abbreviation ?? "?" : "?";

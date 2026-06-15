@@ -22,6 +22,7 @@
  */
 
 import { supabase } from "@/lib/db/supabase";
+import { isBlockedSportsbook } from "@/lib/config/blockedSportsbooks";
 import { filterMockSourceRows } from "@/lib/db/productionFilter";
 import { classifyEvidence } from "@/lib/services/signalEvidenceClassifier";
 import { generateSignalSummary } from "@/lib/services/signalSummaryGenerator";
@@ -1204,8 +1205,9 @@ const BOOK_PRIORITY = [
   "ballybet",
   "onexbet",
   "saba",
-  "fliff",
-  // kalshi — intentionally excluded (R-16G-A side-flip safety)
+  // fliff + kalshi — intentionally excluded (#39). Centralized in
+  // BLOCKED_SPORTSBOOKS; pickPriceRow also filters isBlockedSportsbook
+  // defensively so a blocked row can never surface on a customer card.
   "splits_consensus",
 ] as const;
 
@@ -1238,8 +1240,10 @@ function pickPriceRow<T extends { sportsbook: string; side: string | null; odds_
   // implying the model leaned that side when it actually held. Return
   // null so the caller renders "—" instead.
   if (preferredSide === null) return null;
-  const sideMatch = rows.filter((r) => r.side === preferredSide);
-  const pool = sideMatch.length > 0 ? sideMatch : rows;
+  // #39 — blocked books (fliff, kalshi) are never a valid card price source.
+  const usable = rows.filter((r) => !isBlockedSportsbook(r.sportsbook));
+  const sideMatch = usable.filter((r) => r.side === preferredSide);
+  const pool = sideMatch.length > 0 ? sideMatch : usable;
   for (const book of BOOK_PRIORITY) {
     const hit = pool.find((r) => r.sportsbook === book && r.odds_american !== null);
     if (hit) return hit;

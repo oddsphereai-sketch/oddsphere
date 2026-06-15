@@ -296,7 +296,12 @@ export async function buildNhlFeatureSnapshot(
     .eq("game_id", opts.gameId)
     .is("player_id", null)
     .in("market_type", ["moneyline", "total"]);
-  const lines = (linesData as DbLineRow[] | null) ?? [];
+  // #39 — drop blocked books (fliff, kalshi) at the load point so every
+  // downstream selection (ML implied prob, total line) is clean. Previously
+  // only selectMainNhlTotalLine filtered; the ML implied-prob path did not.
+  const lines = ((linesData as DbLineRow[] | null) ?? []).filter(
+    (l) => !isBlockedSportsbook(l.sportsbook),
+  );
   const { prob: marketHomeProb, bookCount } = pickMlImpliedProbHome(lines);
   const marketTotalLine = selectMainNhlTotalLine(lines);
   log(`  market: ML home prob=${marketHomeProb?.toFixed(3) ?? "n/a"} (${bookCount} books), total line=${marketTotalLine?.toFixed(1) ?? "n/a"}`);

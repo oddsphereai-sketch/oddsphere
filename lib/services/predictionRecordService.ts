@@ -21,6 +21,7 @@ import type {
   TrackedSport,
   TrackedMarketV17,
 } from "../types/domain/Tracking";
+import { isBlockedSportsbook } from "../config/blockedSportsbooks";
 
 export type CreateRecordsOptions = {
   sport: TrackedSport;
@@ -229,7 +230,6 @@ const BOOK_PRIORITY: readonly string[] = [
   "ballybet",
   "onexbet",
   "saba",
-  "fliff",
   "splits_consensus",
 ] as const;
 
@@ -313,13 +313,16 @@ function pickOddsWithFallback(
   marketType: "moneyline" | "total" | "first_inning_total",
   side: string,
 ): OddsSourceDetail {
-  // Tier 1 — current `lines` real-book.
+  // Tier 1 — current `lines` real-book. Blocked books (fliff, kalshi) are
+  // never a valid price source (#39): drop them here so they cannot be the
+  // selected lock price even if a writer persisted them to `lines`.
   const liveCandidates = lines.filter(
     (r) =>
       r.market_type === marketType &&
       r.side === side &&
       r.odds_american !== null &&
-      r.sportsbook !== "splits_consensus",
+      r.sportsbook !== "splits_consensus" &&
+      !isBlockedSportsbook(r.sportsbook),
   );
   for (const book of BOOK_PRIORITY) {
     if (book === "splits_consensus") continue;
@@ -338,7 +341,11 @@ function pickOddsWithFallback(
   // real-book non-null rows by the caller; we just pick the most-recent
   // batch and apply BOOK_PRIORITY within it.
   const historyKey = `${gameId}::${marketType}::${side}`;
-  const history = historyByKey.get(historyKey) ?? [];
+  // Drop blocked books (fliff, kalshi) up front so neither the BOOK_PRIORITY
+  // pass nor the "first real book" fallback below can surface one (#39).
+  const history = (historyByKey.get(historyKey) ?? []).filter(
+    (r) => !isBlockedSportsbook(r.sportsbook),
+  );
   if (history.length > 0) {
     // History is pre-sorted by recorded_at DESC. Pick the most-recent
     // minute, then resolve ties by BOOK_PRIORITY.
@@ -505,7 +512,11 @@ function pickPriorityOpener(
   side: string,
 ): LineHistoryOpenerRow | null {
   const candidates = openers.filter(
-    (r) => r.market_type === market && r.side === side && r.odds_american !== null,
+    (r) =>
+      r.market_type === market &&
+      r.side === side &&
+      r.odds_american !== null &&
+      !isBlockedSportsbook(r.sportsbook), // #39 — never open off a blocked book
   );
   for (const book of BOOK_PRIORITY) {
     const hit = candidates.find((r) => r.sportsbook === book);
