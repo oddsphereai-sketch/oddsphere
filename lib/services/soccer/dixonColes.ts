@@ -159,6 +159,39 @@ export function expectedTotalFromDistribution(joint: ScoreDistribution): number 
   return total;
 }
 
+/**
+ * Per-total-goals mass: index t holds P(home+away = t). Descriptive — used to
+ * show the median / most-likely total alongside the mean, so the right-skew
+ * (mean > median) is explained on the card rather than driving the pick.
+ */
+export function totalGoalsMass(joint: ScoreDistribution): number[] {
+  const maxTotal = (joint.length - 1) + (joint[0]?.length ?? 1) - 1;
+  const mass = new Array<number>(maxTotal + 1).fill(0);
+  for (let h = 0; h < joint.length; h++) {
+    for (let a = 0; a < joint[h].length; a++) mass[h + a] += joint[h][a];
+  }
+  return mass;
+}
+
+/** Median total goals: smallest T with cumulative P(total ≤ T) ≥ 0.5. */
+export function medianTotalFromDistribution(joint: ScoreDistribution): number {
+  const mass = totalGoalsMass(joint);
+  let cum = 0;
+  for (let t = 0; t < mass.length; t++) {
+    cum += mass[t];
+    if (cum >= 0.5) return t;
+  }
+  return mass.length - 1;
+}
+
+/** Most-likely (mode) total goals: argmax_T P(total = T). */
+export function mostLikelyTotalFromDistribution(joint: ScoreDistribution): number {
+  const mass = totalGoalsMass(joint);
+  let best = 0;
+  for (let t = 1; t < mass.length; t++) if (mass[t] > mass[best]) best = t;
+  return best;
+}
+
 /** Convenience: P(h_goals = a_goals) — useful for draw checks. */
 export function probabilityOfDraw(joint: ScoreDistribution): number {
   let p = 0;

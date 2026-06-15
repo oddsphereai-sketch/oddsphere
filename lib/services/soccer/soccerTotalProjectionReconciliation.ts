@@ -74,6 +74,15 @@ export const LOW_CONVICTION_CONFIDENCE_PCT = 50;
 export const SMALL_EDGE_BAND_PP = 2.0;
 export const NEGATIVE_EDGE_NO_PLAY_PP = 1.0;
 
+/**
+ * 2026-06-15 model-coherence rule. Below this displayed-side confidence a
+ * total is a coin flip — capped at Watchlist, never a public Lean/Best
+ * Angle. A public play requires probability support (confidence ≥ this
+ * floor) AND market value (positive edge, enforced by the grade ladder).
+ * Matches the 53% playable floor used in verdict derivation.
+ */
+export const TOTALS_PUBLIC_CONFIDENCE_FLOOR = 53;
+
 // 2026-06-13: widened from 1e-9 to a real push band. The mean (E[total]) can sit
 // a hair over the line while the right-skewed score distribution makes P(under) >
 // P(over) — so picking the side by "mean vs line" showed "Over 2.5" for a 0.9–1.6
@@ -90,6 +99,13 @@ export type TotalSide = "over" | "under";
 export type GradeCap = "no_play" | "caution" | "watchlist" | null;
 
 export type SideSelectionReason =
+  // 2026-06-15 probability-driven rule — the displayed side is always the
+  // model's more-likely (higher-probability) side.
+  | "probability_aligned_with_mean" // probability side == mean direction (clean, coherent)
+  | "probability_over_mean" // divergence: right-skew lifts the mean above the line but P favors the other side
+  | "probability_coin_flip" // displayed-side confidence below the public floor
+  // legacy reasons retained for verbatim-returned LOCKED snapshots persisted
+  // before the rule change.
   | "all_agree"
   | "holistic_aligned_with_mean"
   | "holistic_overruled_by_mean_coherence"
@@ -118,6 +134,16 @@ export type SoccerTotalReconciliationInput = {
   isLocked: boolean;
   /** Locked snapshot to return verbatim when isLocked is true. */
   lockedReconciliation: SoccerTotalReconciliation | null;
+  /**
+   * Descriptive only (2026-06-15) — the median total goals from the same
+   * Dixon-Coles joint distribution. Shown next to the mean so the right-skew
+   * is explained ("avg 2.6 but most games land at 1–2"). Does NOT drive the
+   * side. null when the caller doesn't supply it (e.g. unit tests).
+   */
+  medianTotal?: number | null;
+  /** Descriptive only — the single most-likely total goals (mode of the
+   * total distribution). Shown on the card. null when not supplied. */
+  mostLikelyTotal?: number | null;
 };
 
 export type SignalAuditTrail = {
@@ -158,6 +184,16 @@ export type SoccerTotalReconciliation = {
   reconciled_confidence_pct: number;
   reconciled_edge_pp: number | null;
   displayed_total_side: TotalSide;
+
+  // ─── Descriptive distribution stats (2026-06-15) ──────────────────
+  /** Median total goals from the same joint distribution (null if not supplied). */
+  median_total: number | null;
+  /** Most-likely total goals (mode) from the joint distribution (null if not supplied). */
+  most_likely_total: number | null;
+  /** True when the mean implies one side of the line but the probability favors
+   *  the other (right-skew: mean > median). Descriptive + a low-conviction
+   *  signal for the grade cap. */
+  mean_probability_divergence: boolean;
 
   // ─── Audit ────────────────────────────────────────────────────────
   side_selection_reason: SideSelectionReason;
@@ -294,59 +330,50 @@ export function reconcileSoccerTotal(
     holistic_side = over_vote_total > under_vote_total ? "over" : "under";
   }
 
-  // ─── Side reconciliation + coherence check ───────────────────────
-  let reconciled_total_side: TotalSide;
-  let side_selection_reason: SideSelectionReason;
-  let hold = false;
+  // ─── Side = probability-driven (2026-06-15 model-coherence rule) ──
+  // An Over/Under bet is binary: the correct side is the MORE-LIKELY one —
+  // P(over) vs P(under) — NOT the mean (expected goals) vs the line. For a
+  // right-skewed goal distribution the mean can sit above the line while
+  // P(under) > P(over) (the high-scoring tail lifts the average). Picking the
+  // mean side then publishes the LESS-likely outcome. So the displayed side
+  // ALWAYS follows `raw_probability_side`. The projected total/mean stays a
+  // DESCRIPTIVE statistic (reconciled_total), shown alongside the median /
+  // most-likely total so the skew is explained — never used to pick a side.
+  // The holistic vote above is preserved for the audit trail only.
+  const reconciled_total_side: TotalSide = raw_probability_side;
+  const hold = false;
 
-  if (mean_direction_side === null) {
-    // Projection within a hair of the line. 2026-06-13 (Daniel): the over/under
-    // pick must AGREE with the projected total — if we project 2.59 we should say
-    // Over 2.5, never Under. So the side follows the projection's sign vs the
-    // line (not the right-skew probability, which can disagree near the line).
-    // Only a projection EXACTLY on the line falls back to the probability side.
-    // It's a neutral read (Watchlist cap below), never a hard hold.
-    const mt = input.marketTotal;
-    reconciled_total_side =
-      mt === null
-        ? raw_probability_side
-        : input.rawProjectedTotal > mt
-          ? "over"
-          : input.rawProjectedTotal < mt
-            ? "under"
-            : raw_probability_side;
-    side_selection_reason = "push_risk_default_to_probability";
-    hold = false;
-  } else if (holistic_side === mean_direction_side) {
-    reconciled_total_side = holistic_side;
-    const allAgree =
-      raw_probability_side === mean_direction_side &&
-      (raw_value_side === mean_direction_side || raw_value_side === null) &&
-      (market_pressure_side === mean_direction_side || market_pressure_side === null);
-    side_selection_reason = allAgree ? "all_agree" : "holistic_aligned_with_mean";
-  } else {
-    reconciled_total_side = mean_direction_side;
-    side_selection_reason = "holistic_overruled_by_mean_coherence";
-  }
+  // Divergence: the mean implies one side of the line while the probability
+  // favors the other (mean > median right-skew). Descriptive + a
+  // low-conviction signal for the grade cap.
+  const mean_probability_divergence =
+    input.marketTotal !== null &&
+    (input.rawProjectedTotal > input.marketTotal) !== (input.rawProbabilityOver >= 0.5);
 
-  // ─── Goals stay raw in V1 ────────────────────────────────────────
+  // ─── Goals + projection stay raw (descriptive) ───────────────────
   const reconciled_total = input.rawProjectedTotal;
   const reconciled_away_goals = input.rawProjectedAwayGoals;
   const reconciled_home_goals = input.rawProjectedHomeGoals;
-  const projection_reconciliation_reason: ProjectionReconciliationReason =
-    mean_direction_side !== null ? "raw_aligned" : "push_risk_no_adjustment";
+  const projection_reconciliation_reason: ProjectionReconciliationReason = "raw_aligned";
 
-  // ─── Confidence + edge for reconciled side (honest) ──────────────
+  // ─── Confidence + edge for the displayed (probability) side ──────
   const reconciled_confidence_pct = round1(
     probabilityForSide(input.rawProbabilityOver, reconciled_total_side) * 100,
   );
   const reconciled_edge_pp = edgeForSide(reconciled_total_side, overEdgePp, underEdgePp);
 
+  // ─── Side selection reason (audit) ───────────────────────────────
+  let side_selection_reason: SideSelectionReason;
+  if (mean_probability_divergence) side_selection_reason = "probability_over_mean";
+  else if (reconciled_confidence_pct < TOTALS_PUBLIC_CONFIDENCE_FLOOR) side_selection_reason = "probability_coin_flip";
+  else side_selection_reason = "probability_aligned_with_mean";
+
   // ─── Disagree flags ───────────────────────────────────────────────
   const flags: string[] = [];
-  if (raw_probability_side !== reconciled_total_side) {
-    flags.push("probability_side_disagrees_with_reconciled");
+  if (mean_direction_side !== null && mean_direction_side !== reconciled_total_side) {
+    flags.push("mean_direction_disagrees_with_probability");
   }
+  if (mean_probability_divergence) flags.push("mean_probability_divergence");
   if (raw_value_side !== null && raw_value_side !== reconciled_total_side) {
     flags.push("value_side_disagrees_with_reconciled");
   }
@@ -359,72 +386,36 @@ export function reconcileSoccerTotal(
   if (reconciled_edge_pp !== null && reconciled_edge_pp < -NEGATIVE_EDGE_NO_PLAY_PP) {
     flags.push("reconciled_side_strong_negative_edge");
   }
-  if (reconciled_confidence_pct < LOW_CONVICTION_CONFIDENCE_PCT) {
-    flags.push("reconciled_confidence_below_conviction");
+  if (reconciled_confidence_pct < TOTALS_PUBLIC_CONFIDENCE_FLOOR) {
+    flags.push("below_public_confidence_floor");
   }
-  if (side_selection_reason === "holistic_overruled_by_mean_coherence") {
-    flags.push("holistic_vote_overruled_by_coherence");
-  }
-  if (hold) flags.push("push_risk_hold");
 
-  // Side agreement: do the MODEL and the MARKET both favor the displayed
-  // side? (2026-06-14, Daniel: "Germany ml is a caution lol" — the same
-  // principle for totals.) When the model favors the displayed side
-  // (P(displayed) ≥ 50%) AND the market favors the same side, a negative edge
-  // is just "no betting value", NOT a wrong-side warning → Market-Aligned. The
-  // mechanical fact that the OPPOSITE side then carries the positive "value"
-  // must not trip a caution (e.g. CUW@GER Over: model 66% / market 81% — both
-  // Over, no value → Market-Aligned, not Caution).
-  const marketSide: TotalSide | null =
-    input.marketImpliedOver === null ? null : input.marketImpliedOver >= 0.5 ? "over" : "under";
-  const modelFavorsDisplayedSide = reconciled_confidence_pct >= LOW_CONVICTION_CONFIDENCE_PCT;
-  const bothAgreeSide = marketSide !== null && marketSide === reconciled_total_side && modelFavorsDisplayedSide;
-
-  // ─── Grade cap ────────────────────────────────────────────────────
+  // ─── Grade cap (coherence only — value-grading is the ladder's job) ─
+  // A public Lean/Best Angle requires BOTH probability support (confidence ≥
+  // the public floor) AND market value (positive edge). This reconciler cap
+  // only enforces the PROBABILITY-SUPPORT half: coin-flips and mean/probability
+  // divergence are capped at Watchlist — a read, never a public play. It does
+  // NOT cap on negative value: because the displayed side is now ALWAYS the
+  // model's favored side (P ≥ 0.5), the grade ladder already lands a no-value
+  // pick at Market-Aligned (model+market agree, just no edge — not a Caution,
+  // per the "Germany ML" principle) and reserves Caution for the
+  // miscalibration ceiling. Leaving those to the ladder avoids a wall of
+  // false Cautions on chalky Overs the model agrees with.
   let grade_cap: GradeCap = null;
-  if (side_selection_reason === "push_risk_default_to_probability") {
-    // Projection on the line → a neutral read, capped at Watchlist (never No
-    // Play, never an actionable Lean on a coin-flip total).
-    grade_cap = "watchlist";
-  } else if (side_selection_reason === "holistic_overruled_by_mean_coherence") {
-    grade_cap = "no_play";
-  } else if (bothAgreeSide) {
-    // Model + market agree on the side → no caution. Let the grade ladder
-    // land it (Market-Aligned for a negative/no edge; Watchlist/Lean for a
-    // positive edge on the displayed side).
-    grade_cap = null;
-  } else if (reconciled_edge_pp !== null && reconciled_edge_pp < -NEGATIVE_EDGE_NO_PLAY_PP) {
-    grade_cap = "no_play";
-  } else if (reconciled_confidence_pct < LOW_CONVICTION_CONFIDENCE_PCT) {
-    grade_cap = "caution";
-  } else if (
-    reconciled_edge_pp !== null && reconciled_edge_pp < 0 &&
-    (flags.includes("value_side_disagrees_with_reconciled") ||
-      flags.includes("market_pressure_disagrees_with_reconciled"))
-  ) {
-    grade_cap = "caution";
-  } else if (
-    flags.includes("value_side_disagrees_with_reconciled") &&
-    flags.includes("market_pressure_disagrees_with_reconciled")
-  ) {
-    grade_cap = "caution";
-  } else if (
-    flags.includes("probability_side_disagrees_with_reconciled") ||
-    flags.includes("value_side_disagrees_with_reconciled") ||
-    flags.includes("market_pressure_disagrees_with_reconciled")
-  ) {
-    grade_cap = "watchlist";
+  if (reconciled_confidence_pct < LOW_CONVICTION_CONFIDENCE_PCT) {
+    grade_cap = "caution"; // safety — model barely favors its own side (≈ exact coin flip)
+  } else if (mean_probability_divergence) {
+    grade_cap = "watchlist"; // near-line right-skew → not a public play
+  } else if (reconciled_confidence_pct < TOTALS_PUBLIC_CONFIDENCE_FLOOR) {
+    grade_cap = "watchlist"; // coin flip
   }
 
-  // ─── Coherence invariant assertion ────────────────────────────────
-  let invariant_side_matches_total: boolean;
-  if (mean_direction_side === null) {
-    invariant_side_matches_total = true;
-  } else {
-    invariant_side_matches_total =
-      (reconciled_total_side === "over" && reconciled_total > (input.marketTotal ?? Infinity)) ||
-      (reconciled_total_side === "under" && reconciled_total < (input.marketTotal ?? -Infinity));
-  }
+  // ─── Coherence invariant: displayed side IS the more-likely side ─
+  // The whole point of the 2026-06-15 rule: the published side always equals
+  // the model's higher-probability side. (It may now legitimately disagree
+  // with the mean/projection sign — that disagreement is the right-skew, and
+  // is surfaced via mean_probability_divergence, not treated as an error.)
+  const invariant_side_matches_total = reconciled_total_side === raw_probability_side;
 
   return {
     raw_projected_away_goals: input.rawProjectedAwayGoals,
@@ -471,6 +462,10 @@ export function reconcileSoccerTotal(
     reconciled_confidence_pct,
     reconciled_edge_pp,
     displayed_total_side: reconciled_total_side,
+
+    median_total: input.medianTotal ?? null,
+    most_likely_total: input.mostLikelyTotal ?? null,
+    mean_probability_divergence,
 
     side_selection_reason,
     projection_reconciliation_reason,

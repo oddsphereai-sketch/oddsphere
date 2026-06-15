@@ -23,7 +23,7 @@
  */
 
 import { EXTERNAL_PRIORS_V1 } from "./_externalPriorsV1";
-import { computeLambda, bivariatePoissonScoreDistribution, expectedTotalFromDistribution } from "./dixonColes";
+import { computeLambda, bivariatePoissonScoreDistribution, expectedTotalFromDistribution, medianTotalFromDistribution, mostLikelyTotalFromDistribution } from "./dixonColes";
 import { deriveSoccerMarketProbabilities, type SoccerMarketProbabilities } from "./soccerMarketProbabilities";
 import { buildMarketProbabilityBundle, computeEdges, selectBestValueSidePerMarket, type EdgeRow } from "./soccerMarketComparison";
 import { deriveMarketImpliedLambdas } from "./marketImpliedLambda";
@@ -454,6 +454,11 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
         marketTotal: totalLine,
         rawProbabilityOver,
         marketImpliedOver,
+        // Descriptive distribution stats from the SAME joint — shown next to
+        // the mean so the right-skew is explained on the card. Do not drive
+        // the side (the side follows raw_probability_side).
+        medianTotal: medianTotalFromDistribution(joint),
+        mostLikelyTotal: mostLikelyTotalFromDistribution(joint),
         // V1: market_pressure is null — WC sharp_signals are
         // empty_as_of_probe per project-wc-launch-contract.
         marketPressureSide: null,
