@@ -340,7 +340,16 @@ export async function computeTrackingAggregate(opts: {
   // prediction_records (with prediction_type='toss_up' or similar) and
   // can be inspected separately; they just don't count toward member-
   // facing wins / losses on /lab/tracking.
-  const records = launchFiltered.filter((r) => r.no_bet !== true);
+  //
+  // EXCEPTION (2026-06-15) — soccer DOUBLE_CHANCE held only for missing odds is
+  // ACCURACY-ELIGIBLE: its outcome is fully determined by the 90' score, so it
+  // grades win/loss (see predictionGrader) and must count toward DC W/L. It
+  // stays ROI-INELIGIBLE because odds_american is null (any ROI/units calc skips
+  // null-odds rows). Genuinely-void DC (postponed / model-wrong-side) carries a
+  // `void` grade and so contributes to `voids`, never to wins/losses.
+  const records = launchFiltered.filter(
+    (r) => r.no_bet !== true || (r.sport === "soccer" && r.market === "double_chance"),
+  );
   result.rowsCounted = records.length;
   if (records.length === 0) return result;
 
