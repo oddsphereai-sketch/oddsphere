@@ -12,6 +12,7 @@ import Link from "next/link";
 export const metadata = {
   title: "Terms of Use — OddSphere AI",
   description: "OddSphere AI provides sports research and model projections. Informational only.",
+  alternates: { canonical: "/legal/terms" },
 };
 
 export default function TermsPage() {

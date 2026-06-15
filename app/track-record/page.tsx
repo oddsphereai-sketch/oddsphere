@@ -18,6 +18,7 @@ export const metadata = {
   title: "Track Record — OddSphere AI",
   description:
     "Performance snapshot for OddSphere model picks across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL. Every pick tracked.",
+  alternates: { canonical: "/track-record" },
 };
 
 // Lifetime totals across every tracked market.

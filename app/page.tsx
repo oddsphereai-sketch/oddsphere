@@ -23,6 +23,7 @@ export const metadata = {
   title: "OddSphere AI — AI Sports Picks Built for Clarity",
   description:
     "OddSphere turns model projections, market movement, and betting context into clear daily signals. Daily picks, player props research, sharp signals, and tracked results across 7 leagues.",
+  alternates: { canonical: "/" },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import Link from "next/link";
 export const metadata = {
   title: "Responsible Gambling — OddSphere AI",
   description: "Help and resources for responsible gambling.",
+  alternates: { canonical: "/legal/responsible-gambling" },
 };
 
 export default function ResponsibleGamblingPage() {

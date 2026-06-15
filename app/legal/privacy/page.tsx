@@ -10,6 +10,7 @@
 export const metadata = {
   title: "Privacy Policy — OddSphere AI",
   description: "How OddSphere AI handles your data.",
+  alternates: { canonical: "/legal/privacy" },
 };
 
 export default function PrivacyPage() {

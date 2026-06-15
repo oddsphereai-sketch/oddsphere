@@ -17,6 +17,7 @@ export const metadata = {
   title: "Pricing — OddSphere Premium",
   description:
     "OddSphere Premium · $25/month locked for life. One membership unlocks daily AI picks, player props research, sharp signals, transparent tracking, and Discord.",
+  alternates: { canonical: "/pricing" },
 };
 
 const FEATURES: string[] = [
