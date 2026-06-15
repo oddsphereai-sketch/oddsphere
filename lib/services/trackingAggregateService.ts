@@ -394,12 +394,18 @@ export async function computeTrackingAggregate(opts: {
   result.byConfidenceBucket = groupBy((r) => bucketForConfidence(r.record.confidence));
   result.byDataQualityTier = groupBy((r) => r.record.data_quality_tier ?? "(none)");
 
-  // Best Angle vs Lean cuts
-  const bestRows = rows.filter((r) => r.record.best_angle === true);
+  // Best Angle vs Lean cuts. 2026-06-15: key both off the canonical
+  // play_grade, case-insensitive — ONE source of truth. Previously the Best
+  // Angle cut used the `best_angle` boolean (which desynced from play_grade on
+  // 25 MLB rows → dropped from BA tracking) and the Lean cut was lowercase-only
+  // (so soccer's capital "Lean" was silently dropped). play_grade is what the
+  // card grades on, so it's the authoritative tier.
+  const grade = (r: Row): string => String(r.record.play_grade ?? "").trim().toLowerCase();
+  const bestRows = rows.filter((r) => grade(r) === "best_angle");
   for (const row of bestRows) accumulate(result.bestAngles, row);
   finalize(result.bestAngles, bestRows);
 
-  const leanRows = rows.filter((r) => r.record.play_grade === "lean");
+  const leanRows = rows.filter((r) => grade(r) === "lean");
   for (const row of leanRows) accumulate(result.leans, row);
   finalize(result.leans, leanRows);
 
@@ -455,11 +461,11 @@ export async function computeTrackingAggregate(opts: {
       for (const r of rs) accumulate(m, r);
       finalize(m, rs);
       const ba = emptyMetrics();
-      const bestRs = rs.filter((r) => r.record.best_angle === true);
+      const bestRs = rs.filter((r) => grade(r) === "best_angle");
       for (const r of bestRs) accumulate(ba, r);
       finalize(ba, bestRs);
       const le = emptyMetrics();
-      const leanRs = rs.filter((r) => r.record.play_grade === "lean");
+      const leanRs = rs.filter((r) => grade(r) === "lean");
       for (const r of leanRs) accumulate(le, r);
       finalize(le, leanRs);
       out.push({ sport, market, metrics: m, bestAngles: ba, leans: le });
@@ -533,7 +539,7 @@ export async function computeTrackingAggregate(opts: {
       actual_home_score: r.grade?.actual_home_score ?? null,
       actual_away_score: r.grade?.actual_away_score ?? null,
       actual_first_inning_runs: r.grade?.actual_first_inning_runs ?? null,
-      best_angle: r.record.best_angle === true,
+      best_angle: String(r.record.play_grade ?? "").trim().toLowerCase() === "best_angle",
       held: r.record.held === true,
     }));
 
@@ -574,7 +580,7 @@ export async function computeTrackingAggregate(opts: {
         odds_american: r.record.odds_american,
         confidence: r.record.confidence,
         play_grade: r.record.play_grade,
-        best_angle: r.record.best_angle === true,
+        best_angle: String(r.record.play_grade ?? "").trim().toLowerCase() === "best_angle",
         model_version: r.record.model_version,
         result: res,
         win: res === "win",

@@ -310,7 +310,7 @@ function pickOddsWithFallback(
   lines: ReadonlyArray<LineRowForOdds>,
   historyByKey: ReadonlyMap<string, ReadonlyArray<LineHistoryRowForOdds>>,
   gameId: number,
-  marketType: "moneyline" | "total",
+  marketType: "moneyline" | "total" | "first_inning_total",
   side: string,
 ): OddsSourceDetail {
   // Tier 1 — current `lines` real-book.
@@ -1111,6 +1111,7 @@ function buildFiRecord(
   awayAbbrev: string,
   slateDate: string,
   launchDay: boolean,
+  currentLines: ReadonlyArray<LineRowForOdds>,
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
@@ -1159,6 +1160,29 @@ function buildFiRecord(
   const pickLabel = isTossUp ? "Toss-Up" : actionablePick;
   const sideValue = isTossUp ? null : internalSide;
   const predictionTypeValue = isTossUp ? "toss_up" : null;
+
+  // 2026-06-15: thread the REAL first-inning lock price (was hardcoded null —
+  // the FI/NRFI/YRFI lock-price gap). first_inning_total lines exist in the DB
+  // (NRFI=under 0.5, YRFI=over 0.5); use the same BOOK_PRIORITY picker as
+  // ML/total. No history map (FI openers aren't loaded) → Tier-1 live lines
+  // only, which is where FI odds live. Toss-Ups stay null (no actionable side).
+  const NO_HISTORY = new Map<string, ReadonlyArray<LineHistoryRowForOdds>>();
+  const fiPicked = sideValue === null
+    ? null
+    : pickOddsWithFallback(currentLines, NO_HISTORY, game.id, "first_inning_total", internalSide);
+  const fiOpposite = sideValue === null
+    ? null
+    : pickOddsWithFallback(currentLines, NO_HISTORY, game.id, "first_inning_total", internalSide === "under" ? "over" : "under");
+  const fiOddsAmerican = fiPicked?.odds ?? null;
+  // De-vig market probability for the picked side when both sides priced.
+  const impPicked = americanToImpliedProb(fiPicked?.odds ?? null);
+  const impOpp = americanToImpliedProb(fiOpposite?.odds ?? null);
+  const fiMarketProb =
+    impPicked !== null && impOpp !== null && impPicked + impOpp > 0
+      ? impPicked / (impPicked + impOpp)
+      : null;
+  const fiModelProb = pred.nrfi_confidence !== null ? pred.nrfi_confidence / 100 : null;
+  const fiEdge = fiModelProb !== null && fiMarketProb !== null ? fiModelProb - fiMarketProb : null;
   const noBetValue = isTossUp;
   const noBetReasonValue = isTossUp
     ? "non-actionable: locked pill was Toss-Up"
@@ -1210,16 +1234,15 @@ function buildFiRecord(
     pick: pickLabel,
     side: sideValue,
     line_value: 0.5,
-    odds_american: null,
+    odds_american: fiOddsAmerican,
     odds_decimal: null,
     model_used: readStringOrNull(sp.model_used),
     model_version: readStringOrNull(sp.model_version),
     prediction_source: pred.prediction_source,
     confidence: pred.nrfi_confidence,
-    model_probability:
-      pred.nrfi_confidence !== null ? pred.nrfi_confidence / 100 : null,
-    market_probability: null,
-    edge: null,
+    model_probability: fiModelProb,
+    market_probability: fiMarketProb,
+    edge: fiEdge,
     expected_value: null,
     play_grade: fiPlayGrade,
     prediction_type: predictionTypeValue,
@@ -1308,7 +1331,7 @@ export function buildPredictionRecordsFromSlate(args: {
     const currentLines = (args.currentLinesByGameId?.get(g.id) ?? []) as LineRowForOdds[];
     const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines);
     const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines);
-    const fi = buildFiRecord(pred, g, home, away, args.slateDate, args.launchDay);
+    const fi = buildFiRecord(pred, g, home, away, args.slateDate, args.launchDay, currentLines);
     if (ml) proposed.push(ml);
     if (ou) proposed.push(ou);
     if (fi) proposed.push(fi);
@@ -1423,7 +1446,9 @@ export async function createPredictionRecords(
     .from("lines")
     .select("game_id, market_type, side, sportsbook, odds_american, line_value, fetched_at")
     .in("game_id", gameIds)
-    .in("market_type", ["moneyline", "total"])
+    // 2026-06-15: include first_inning_total so the FI record can thread its
+    // real lock price (was excluded → FI odds_american hardcoded null).
+    .in("market_type", ["moneyline", "total", "first_inning_total"])
     .is("player_id", null);
   const linesByGame = new Map<number, LineRowForOdds[]>();
   for (const l of ((lineRowsForOdds ?? []) as LineRowForOdds[])) {
