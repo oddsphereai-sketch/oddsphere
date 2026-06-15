@@ -72,5 +72,33 @@ ok("total pending when line missing", grade("total", "over", null, 2, 1) === "pe
 // auditable but excluded from public W/L tallies.
 ok("no_bet soccer record → void (no-action)", grade("match_result", "home", null, 2, 1, "final", { no_bet: true }) === "void");
 
+// 31 — DOUBLE_CHANCE missing-odds fix (2026-06-15). A DC pick held SOLELY for
+// MARKET_ODDS_MISSING still resolves win/loss from the final regulation score
+// (outcome is score-determined); missing odds only makes it ROI-ineligible.
+function gradeRow(market: string, pick: string, line: number | null, h: number | null, a: number | null, status = "final", extra: Rec = {}) {
+  return gradePrediction({ record: rec(market, pick, line, extra), game: game(h, a, status), source: "auto_score_ingest" });
+}
+const dcOddsMissing = { no_bet: true, no_bet_reason: "MARKET_ODDS_MISSING", held: true, odds_american: null };
+{
+  // away_or_draw on 0-1 (away win) → WIN, not void; ROI-ineligible note.
+  const g = gradeRow("double_chance", "away_or_draw", null, 0, 1, "final", dcOddsMissing);
+  ok("DC odds-missing graded from score → win (not void)", g.result === "win" && g.void === false && g.win === true);
+  ok("DC odds-missing ROI-ineligible note present", (g.grade_notes ?? "").includes("ROI-ineligible"));
+  ok("DC odds-missing records actual score (accuracy tracked)", g.actual_home_score === 0 && g.actual_away_score === 1);
+  // home_or_draw on 0-1 (away win) → LOSS.
+  ok("DC odds-missing graded from score → loss", gradeRow("double_chance", "home_or_draw", null, 0, 1, "final", dcOddsMissing).result === "loss");
+}
+// 32 — genuine voids stay void
+ok("DC odds-missing but NO final score → void (no score)", gradeRow("double_chance", "home_or_draw", null, null, null, "final", dcOddsMissing).result === "void");
+ok("DC odds-missing but game scheduled → void/pending (not graded win/loss)", ["void", "pending"].includes(gradeRow("double_chance", "home_or_draw", null, null, null, "scheduled", dcOddsMissing).result));
+ok("DC no_bet for MODEL_WRONG_SIDE → still void", grade("double_chance", "home_or_draw", null, 2, 0, "final", { no_bet: true, no_bet_reason: "MODEL_WRONG_SIDE_OF_MARKET", odds_american: -3000 }) === "void");
+ok("DC void game status → void", grade("double_chance", "home_or_draw", null, null, null, "postponed") === "void");
+// 33 — fix is DOUBLE_CHANCE-only: other markets with odds-missing no_bet stay void (behavior unchanged)
+ok("MR odds-missing no_bet → still void (unchanged)", grade("match_result", "home", null, 2, 1, "final", dcOddsMissing) === "void");
+ok("Total odds-missing no_bet → still void (unchanged)", grade("total", "over", 2.5, 2, 1, "final", dcOddsMissing) === "void");
+ok("BTTS odds-missing no_bet → still void (unchanged)", grade("btts", "yes", null, 1, 1, "final", dcOddsMissing) === "void");
+// 34 — non-soccer unaffected: MLB no_bet still void
+ok("MLB FI no_bet → void (non-soccer unaffected)", gradePrediction({ record: { ...rec("first_inning", "under", null, { sport: "mlb", no_bet: true, no_bet_reason: "MARKET_ODDS_MISSING" }) }, game: game(1, 1, "final"), source: "auto_score_ingest" }).result === "void");
+
 if (failures > 0) { console.error(`\n${failures} assertion(s) failed.`); process.exit(1); }
 console.log("\nAll soccer grading-delegation assertions passed.");

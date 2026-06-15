@@ -261,6 +261,25 @@ export function gradePrediction(inputs: GradeInputs): PredictionGradeRow {
   // (locked pill was "Toss-Up", not NRFI/YRFI) and any future ML/OU
   // no_bet flagging.
   if (record.no_bet === true) {
+    // Soccer DOUBLE_CHANCE held SOLELY for missing odds (MARKET_ODDS_MISSING)
+    // still has a fully score-determined outcome — grade win/loss from the
+    // final regulation score so accuracy tracking counts it. Missing odds only
+    // makes it ROI-INELIGIBLE (odds_american is null → downstream ROI/profit
+    // naturally excludes it); it must NOT be voided. Scoped to double_chance to
+    // leave match_result / total / btts / FI behavior unchanged, and only when
+    // a final score exists. Other no_bet reasons (e.g. MODEL_WRONG_SIDE_OF_MARKET,
+    // Toss-Up) stay void.
+    const soccer = record.sport === "soccer" || record.sport === "ucl";
+    const oddsMissingHold = record.no_bet_reason === "MARKET_ODDS_MISSING";
+    const finalScore =
+      isFinalStatus(game.status) && game.home_score !== null && game.away_score !== null;
+    if (soccer && record.market === "double_chance" && oddsMissingHold && finalScore) {
+      const graded = gradeSoccer(inputs);
+      return {
+        ...graded,
+        grade_notes: `${graded.grade_notes ?? ""} | ROI-ineligible: double_chance odds missing at lock (graded from final score)`,
+      };
+    }
     return emptyGrade(
       record,
       "void",
