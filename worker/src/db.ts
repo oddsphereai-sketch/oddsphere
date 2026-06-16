@@ -14,7 +14,7 @@ import type {
   MovementRow,
   HealthPatch,
 } from "./streamTypes";
-import type { ResolverDb } from "./gameResolver";
+import { matchSoccerTeamId, type ResolverDb, type SoccerTeamRow } from "./gameResolver";
 
 /**
  * Build the worker-owned Supabase client options.
@@ -77,31 +77,51 @@ export function makeStreamWriter(supa: SupabaseClient): StreamWriter {
 }
 
 export function makeResolverDb(supa: SupabaseClient): ResolverDb {
+  // Resolve the near-term scheduled/in-progress game for two internal team ids.
+  // Includes the last 6h so a just-started game still resolves for post-lock CLV.
+  async function findGameByTeamIds(internalSport: string, homeId: number, awayId: number) {
+    const since = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
+    const { data: game } = await supa
+      .from("games")
+      .select("id, external_id, game_date")
+      .eq("sport", internalSport)
+      .eq("home_team_id", homeId)
+      .eq("away_team_id", awayId)
+      .gte("game_date", since)
+      .order("game_date", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    return (game as { id: number; external_id: number; game_date: string } | null) ?? null;
+  }
+
   return {
-    async findGame(internalSport, homeAbbrev, awayAbbrev) {
+    async findGame(internalSport, home, away) {
+      // Soccer: events carry full team NAMES (homeRaw/awayRaw), not abbrevs.
+      // Match leniently across every alias a team row carries. The WC team pool
+      // is tiny, so fetching all soccer teams and matching in-memory is cheap.
+      if (internalSport === "soccer") {
+        const { data: teams } = await supa
+          .from("teams")
+          .select("id, name, display_name, short_display_name, location, abbreviation, slug")
+          .eq("sport", "soccer");
+        const pool = (teams ?? []) as SoccerTeamRow[];
+        const homeId = matchSoccerTeamId(pool, home);
+        const awayId = matchSoccerTeamId(pool, away);
+        if (homeId === null || awayId === null) return null;
+        return findGameByTeamIds("soccer", homeId, awayId);
+      }
+
+      // MLB (and other abbrev-normalized sports): resolve by abbreviation.
       const { data: teams } = await supa
         .from("teams")
         .select("id, abbreviation")
         .eq("sport", internalSport)
-        .in("abbreviation", [homeAbbrev, awayAbbrev]);
+        .in("abbreviation", [home, away]);
       if (!teams || teams.length < 2) return null;
-      const home = teams.find((t: { abbreviation: string }) => t.abbreviation === homeAbbrev);
-      const away = teams.find((t: { abbreviation: string }) => t.abbreviation === awayAbbrev);
-      if (home === undefined || away === undefined) return null;
-      // Near-term scheduled/in-progress game for these teams (include the last
-      // 6h so a just-started game still resolves for post-lock CLV capture).
-      const since = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
-      const { data: game } = await supa
-        .from("games")
-        .select("id, external_id, game_date")
-        .eq("sport", internalSport)
-        .eq("home_team_id", home.id)
-        .eq("away_team_id", away.id)
-        .gte("game_date", since)
-        .order("game_date", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      return (game as { id: number; external_id: number; game_date: string } | null) ?? null;
+      const homeTeam = teams.find((t: { abbreviation: string }) => t.abbreviation === home);
+      const awayTeam = teams.find((t: { abbreviation: string }) => t.abbreviation === away);
+      if (homeTeam === undefined || awayTeam === undefined) return null;
+      return findGameByTeamIds(internalSport, homeTeam.id, awayTeam.id);
     },
   };
 }
