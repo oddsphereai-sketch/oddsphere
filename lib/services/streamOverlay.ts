@@ -50,6 +50,70 @@ export function streamKey(gameId: number, marketType: string, side: string): str
   return `${gameId}::${marketType}::${side}`;
 }
 
+export type LastMove = {
+  prevAmerican: number | null;
+  nextAmerican: number | null;
+  movedAtIso: string | null;
+  booksMoved: number | null;
+  totalBooks: number | null;
+};
+
+/**
+ * Defensive batched read of the most-recent picked-side move per
+ * (game, market, side) from line_movements. Returns an EMPTY map on any error
+ * (v24 table absent / RLS) so callers degrade to no last-move. booksMoved =
+ * distinct books that moved in the last 30m; totalBooks = distinct books that
+ * moved in the last 60m (a consensus proxy). Never throws.
+ */
+export async function loadLastMovesForSlate(
+  supabase: SupabaseLike,
+  gameIds: number[],
+  nowMs: number,
+): Promise<Map<string, LastMove>> {
+  const map = new Map<string, LastMove>();
+  if (gameIds.length === 0) return map;
+  type Row = { game_id: number; market_type: string; side: string | null; sportsbook: string; prev_odds_american: number | null; next_odds_american: number | null; moved_at: string };
+  const rowsByKey = new Map<string, Row[]>();
+  try {
+    for (let i = 0; i < gameIds.length; i += 20) {
+      const chunk = gameIds.slice(i, i + 20);
+      let from = 0;
+      for (;;) {
+        const { data, error } = (await supabase
+          .from("line_movements")
+          .select("game_id, market_type, side, sportsbook, prev_odds_american, next_odds_american, moved_at")
+          .in("game_id", chunk)
+          .range(from, from + 999)) as { data: unknown; error: unknown };
+        if (error) return map; // table missing / error → degrade
+        const page = (data ?? []) as Row[];
+        for (const r of page) {
+          if (r.side === null) continue;
+          const key = streamKey(r.game_id, r.market_type, r.side);
+          (rowsByKey.get(key) ?? rowsByKey.set(key, []).get(key)!).push(r);
+        }
+        if (page.length < 1000) break;
+        from += 1000;
+      }
+    }
+  } catch {
+    return map;
+  }
+  for (const [key, rows] of rowsByKey) {
+    rows.sort((a, b) => Date.parse(b.moved_at) - Date.parse(a.moved_at));
+    const latest = rows[0];
+    const booksMoved = new Set(rows.filter((r) => nowMs - Date.parse(r.moved_at) <= 30 * 60000).map((r) => r.sportsbook)).size;
+    const totalBooks = new Set(rows.filter((r) => nowMs - Date.parse(r.moved_at) <= 60 * 60000).map((r) => r.sportsbook)).size;
+    map.set(key, {
+      prevAmerican: latest.prev_odds_american,
+      nextAmerican: latest.next_odds_american,
+      movedAtIso: latest.moved_at,
+      booksMoved: booksMoved > 0 ? booksMoved : null,
+      totalBooks: totalBooks > 0 ? totalBooks : null,
+    });
+  }
+  return map;
+}
+
 /**
  * Minimal structural shape of the Supabase query path we use. Loosely typed
  * (the builder is a thenable, not a Promise) to avoid deep generic

@@ -295,6 +295,7 @@ export function buildEdgeStackRows(
     const tracker = buildLineTrackerEvidence({
       openAmerican: marketData.lineOpenAmerican,
       postedAmerican: marketData.oddspherePostedAmerican ?? null,
+      previousAmerican: marketData.lastMovePrevAmerican ?? null,
       currentAmerican: marketData.priceAmerican,
       lockedAmerican: marketData.lockedLineAmerican ?? null,
     });
@@ -305,6 +306,19 @@ export function buildEdgeStackRows(
         `${formatAmerican(marketData.lineOpenAmerican)} → ${formatAmerican(marketData.priceAmerican)}`,
       delta: lineMoveArrow(dir),
       tone: lineMoveTone(dir),
+    });
+  }
+
+  // ── Market Read (2026-06-16) ────────────────────────────────────
+  // The derived market-intelligence chip (toward/against/reverse/public read).
+  // Display/audit only. Absent (null) until the live streaming tables populate,
+  // so the row simply doesn't render then.
+  if (marketData.marketInterpretation) {
+    rows.push({
+      label: "Market Read",
+      evidence: marketData.marketInterpretation.chipLabel,
+      delta: "",
+      tone: marketData.marketInterpretation.chipTone,
     });
   }
 

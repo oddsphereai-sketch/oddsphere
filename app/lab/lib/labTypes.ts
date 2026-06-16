@@ -311,6 +311,23 @@ export type MarketEdgeDto = {
   lockedLineAmerican?: number | null;
   lockedLineAt?: string | null;
 
+  /**
+   * Live market-intelligence (2026-06-16). Derived (display/audit only — no
+   * pick/grade impact). `marketInterpretation` is the compact chip + expanded
+   * detail from lib/streaming/marketInterpretation. `lastMove*` are the most
+   * recent picked-side price change (the "Previous → Current" timeline stop).
+   * All optional → cards degrade cleanly when streaming tables are empty.
+   */
+  marketInterpretation?: {
+    chipLabel: string;
+    chipTone: "emerald" | "amber" | "gray";
+    flags: string[];
+    detail: string[];
+  } | null;
+  lastMovePrevAmerican?: number | null;
+  lastMoveNextAmerican?: number | null;
+  lastMoveAtIso?: string | null;
+
   // ── totals-only (null for moneyline / first_inning) ──
   modelTotal: number | null;
   marketTotal: number | null;

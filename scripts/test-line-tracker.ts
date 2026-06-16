@@ -21,6 +21,14 @@ eq("full 4-stop chain",
   buildLineTrackerEvidence({ openAmerican: -170, postedAmerican: -165, currentAmerican: -157, lockedAmerican: -160 }),
   { evidence: "Open -170 · First Published -165 · Current -157 · Locked -160", hasExtraStops: true });
 
+// Previous stop (last move) inserted before Current when it differs.
+eq("previous stop present when differs from current",
+  buildLineTrackerEvidence({ openAmerican: -170, postedAmerican: -165, previousAmerican: -150, currentAmerican: -157, lockedAmerican: null }),
+  { evidence: "Open -170 · First Published -165 · Previous -150 · Current -157", hasExtraStops: true });
+eq("previous stop omitted when equal to current (no redundant stop)",
+  buildLineTrackerEvidence({ openAmerican: -170, postedAmerican: null, previousAmerican: -157, currentAmerican: -157, lockedAmerican: null }),
+  { evidence: "Open -170 · Current -157", hasExtraStops: false });
+
 // First Published present, no Locked.
 eq("open+posted+current",
   buildLineTrackerEvidence({ openAmerican: -170, postedAmerican: -165, currentAmerican: -157, lockedAmerican: null }),

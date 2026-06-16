@@ -88,9 +88,12 @@ import {
 import {
   pickFresherCurrent,
   loadStreamCurrentForSlate,
+  loadLastMovesForSlate,
   streamKey,
   type StreamCurrent,
+  type LastMove,
 } from "@/lib/services/streamOverlay";
+import { interpretMarket } from "@/lib/streaming/marketInterpretation";
 
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer"];
 // Phase 7G — NBA goes live in the member-facing Daily Edge via the
@@ -682,6 +685,8 @@ function buildGameDto(
   // 2026-06-16 — live stream prices keyed streamKey(gameId, dbMarket, side).
   // Empty map until the v24 table is populated → overlay is a no-op.
   streamCurrentByGameMarket: Map<string, StreamCurrent> = new Map(),
+  // 2026-06-16 — most-recent moves keyed streamKey(gameId, dbMarket, side).
+  lastMoveByGameMarket: Map<string, LastMove> = new Map(),
 ): DailyEdgeGameDto | null {
   const home = row.home_team?.abbreviation ?? "—";
   const away = row.away_team?.abbreviation ?? "—";
@@ -951,6 +956,8 @@ function buildGameDto(
   const postedLines = readPostedLines(pred.sport_specific);
   const streamFor = (mkt: string, side: string | null): StreamCurrent | null =>
     side === null ? null : (streamCurrentByGameMarket.get(streamKey(row.id, mkt, side)) ?? null);
+  const lastMoveFor = (mkt: string, side: string | null): LastMove | null =>
+    side === null ? null : (lastMoveByGameMarket.get(streamKey(row.id, mkt, side)) ?? null);
 
   const lockedMl = lockedPlayGradeByGameMarket.get(`${row.id}::moneyline`);
   const lockedOu = lockedPlayGradeByGameMarket.get(`${row.id}::total`);
@@ -989,6 +996,7 @@ function buildGameDto(
     lockedOpenerRecordedAt: lockedMl?.lockedOpenerRecordedAt ?? null,
     lockedFrozenSignals: lockedMl?.lockedSignalRowsAtLock ?? null,
     streamCurrent: streamFor("moneyline", pred.predicted_ml_winner),
+    lastMove: lastMoveFor("moneyline", pred.predicted_ml_winner),
     oddspherePostedAmerican: postedLines.moneyline?.american ?? null,
     oddspherePostedAt: postedLines.moneyline?.at ?? null,
     lockedPriceAmerican: lockedMl?.lockedPriceAmerican ?? null,
@@ -1027,6 +1035,7 @@ function buildGameDto(
     lockedOpenerRecordedAt: lockedOu?.lockedOpenerRecordedAt ?? null,
     lockedFrozenSignals: lockedOu?.lockedSignalRowsAtLock ?? null,
     streamCurrent: streamFor("total", pred.predicted_ou_side),
+    lastMove: lastMoveFor("total", pred.predicted_ou_side),
     oddspherePostedAmerican: postedLines.total?.american ?? null,
     oddspherePostedAt: postedLines.total?.at ?? null,
     lockedPriceAmerican: lockedOu?.lockedPriceAmerican ?? null,
@@ -1069,6 +1078,7 @@ function buildGameDto(
     lockedOpenerRecordedAt: lockedFi?.lockedOpenerRecordedAt ?? null,
     lockedFrozenSignals: lockedFi?.lockedSignalRowsAtLock ?? null,
     streamCurrent: streamFor("first_inning_total", nrfiSide),
+    lastMove: lastMoveFor("first_inning_total", nrfiSide),
     oddspherePostedAmerican: postedLines.first_inning?.american ?? null,
     oddspherePostedAt: postedLines.first_inning?.at ?? null,
     lockedPriceAmerican: lockedFi?.lockedPriceAmerican ?? null,
@@ -1775,6 +1785,8 @@ type BuildMarketEdgeInput = {
   oddspherePostedAt?: string | null;
   lockedPriceAmerican?: number | null;
   lockedPriceAt?: string | null;
+  /** Most-recent picked-side move (line_movements) for the market-read chip. */
+  lastMove?: LastMove | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -2031,6 +2043,27 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     betsPctObservedAt !== null && betsPct !== null
       ? isObservationStale(betsPctObservedAt)
       : false;
+
+  // 2026-06-16 — derived market-intelligence chip (display/audit only; no
+  // pick/grade impact). Built from the live movement backbone + cron splits +
+  // the model pick. Degrades to "Market steady" when streaming data is absent.
+  const marketInterpretation = interpretMarket({
+    pickSide: input.modelSide,
+    openAmerican,
+    postedAmerican: input.oddspherePostedAmerican ?? null,
+    currentAmerican: priceAmerican,
+    lastMove: input.lastMove ?? null,
+    splits:
+      moneyPct !== null || betsPct !== null
+        ? {
+            pickMoneyPct: moneyPct,
+            pickBetsPct: betsPct,
+            observedAtIso: moneyPctObservedAt ?? betsPctObservedAt ?? null,
+            isStale: moneyPctIsStale || betsPctIsStale,
+          }
+        : null,
+    nowMs: Date.now(),
+  });
 
   // marketDataLimited rule diverges per Daniel's adjustment #3:
   //   ML/Total:     true when EVERY quant field is null (no quantitative data)
@@ -2315,6 +2348,11 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     oddspherePostedAt: input.oddspherePostedAt ?? null,
     lockedLineAmerican: input.lockedPriceAmerican ?? null,
     lockedLineAt: input.lockedPriceAt ?? null,
+    // 2026-06-16 market-intelligence (derived; display/audit only).
+    marketInterpretation,
+    lastMovePrevAmerican: input.lastMove?.prevAmerican ?? null,
+    lastMoveNextAmerican: input.lastMove?.nextAmerican ?? null,
+    lastMoveAtIso: input.lastMove?.movedAtIso ?? null,
     modelTotal: input.totalsExtras?.modelTotal ?? null,
     marketTotal: input.totalsExtras?.marketTotal ?? null,
     line: input.totalsExtras?.sportsbookLine ?? null,
@@ -3975,6 +4013,7 @@ export async function GET(request: Request) {
   // the v24 `odds_current_stream` table is absent/unpopulated, so the line
   // tracker degrades cleanly to the cron `lines` path.
   const streamCurrentByGameMarket = await loadStreamCurrentForSlate(supabase, gameIds);
+  const lastMoveByGameMarket = await loadLastMovesForSlate(supabase, gameIds, Date.now());
   const dtos: DailyEdgeGameDto[] = [];
   for (const g of games) {
     const dto = buildGameDto(
@@ -3984,7 +4023,8 @@ export async function GET(request: Request) {
       currentLinesByGameMarket,
       openLinesByGameMarket,
       lockedPlayGradeByGameMarket,
-      streamCurrentByGameMarket
+      streamCurrentByGameMarket,
+      lastMoveByGameMarket
     );
     if (dto) dtos.push(dto);
   }

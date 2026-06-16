@@ -17,6 +17,8 @@
 export type LineTrackerInput = {
   openAmerican: number | null;
   postedAmerican: number | null;
+  /** The picked-side price just before the most recent move ("Previous"). */
+  previousAmerican?: number | null;
   currentAmerican: number | null;
   lockedAmerican: number | null;
 };
@@ -36,10 +38,18 @@ export function buildLineTrackerEvidence(input: LineTrackerInput): LineTrackerEv
   const stops: string[] = [];
   if (input.openAmerican !== null) stops.push(`Open ${fmt(input.openAmerican)}`);
   if (input.postedAmerican !== null) stops.push(`First Published ${fmt(input.postedAmerican)}`);
+  // "Previous" only when it differs from current (a real prior price before the
+  // most recent move) — avoids a redundant stop equal to Current.
+  const previousAmerican = input.previousAmerican ?? null;
+  if (previousAmerican !== null && previousAmerican !== input.currentAmerican) {
+    stops.push(`Previous ${fmt(previousAmerican)}`);
+  }
   if (input.currentAmerican !== null) stops.push(`Current ${fmt(input.currentAmerican)}`);
   if (input.lockedAmerican !== null) stops.push(`Locked ${fmt(input.lockedAmerican)}`);
 
-  const hasExtraStops = input.postedAmerican !== null || input.lockedAmerican !== null;
+  const hasExtraStops =
+    input.postedAmerican !== null || input.lockedAmerican !== null ||
+    (previousAmerican !== null && previousAmerican !== input.currentAmerican);
   // Need at least two stops to tell a "move" story; one stop alone is not a tracker.
   if (stops.length < 2) return { evidence: null, hasExtraStops };
   return { evidence: stops.join(" · "), hasExtraStops };
