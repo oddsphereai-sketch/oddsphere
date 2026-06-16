@@ -16,6 +16,13 @@
 
 BEGIN;
 
+-- (0) REQUIRED before re-enabling the fixed worker: v24 was already applied
+-- (the worker wrote to these tables), so odds_events_raw predates the new
+-- is_alternate column. The fixed writer inserts is_alternate on every raw row,
+-- so the column MUST exist or raw writes will fail. Idempotent — safe to re-run.
+ALTER TABLE odds_events_raw
+  ADD COLUMN IF NOT EXISTS is_alternate BOOLEAN NOT NULL DEFAULT FALSE;
+
 -- Wipe the polluted caches (they rebuild from the live stream after re-enable).
 TRUNCATE TABLE line_movements;
 TRUNCATE TABLE odds_current_stream;
