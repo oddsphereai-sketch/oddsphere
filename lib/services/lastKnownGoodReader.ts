@@ -313,15 +313,11 @@ export async function loadLinesHistoryForSlate(
   gameIds: number[],
 ): Promise<LinesHistoryHit[]> {
   if (gameIds.length === 0) return [];
-  const { data, error } = await supabase
-    .from("line_history")
-    .select("game_id, market_type, sportsbook, side, line_value, odds_american, recorded_at")
-    .in("game_id", gameIds)
-    .in("market_type", ["moneyline", "total", "first_inning_total"])
-    .is("player_id", null)
-    .order("recorded_at", { ascending: false });
-  if (error || data === null) return [];
-
+  // 2026-06-16 P0 — PER-GAME parallel. A multi-game `.in(game_id) + ORDER BY`
+  // degenerates on the bloated line_history table (statement timeout), which
+  // contributed to slate-cycle cron overruns + the daily-edge route hang. We
+  // only need the NEWEST rows per key, so a per-game DESC + LIMIT is bounded and
+  // index-friendly. Errored games are skipped (LKG hydration is best-effort).
   type Row = {
     game_id: number;
     market_type: string;
@@ -331,9 +327,23 @@ export async function loadLinesHistoryForSlate(
     odds_american: number | null;
     recorded_at: string | null;
   };
+  const perGame = await Promise.all(
+    gameIds.map((gid) =>
+      supabase
+        .from("line_history")
+        .select("game_id, market_type, sportsbook, side, line_value, odds_american, recorded_at")
+        .eq("game_id", gid)
+        .in("market_type", ["moneyline", "total", "first_inning_total"])
+        .is("player_id", null)
+        .order("recorded_at", { ascending: false })
+        .limit(600)
+        .then((r) => (r.data ?? []) as Row[], () => [] as Row[]),
+    ),
+  );
+  const data = perGame.flat();
 
   const out = new Map<string, LinesHistoryHit>();
-  for (const r of data as Row[]) {
+  for (const r of data) {
     if (r.side === null) continue;
     const sideToken = r.side as "home" | "away" | "over" | "under";
     if (sideToken !== "home" && sideToken !== "away" && sideToken !== "over" && sideToken !== "under") continue;
