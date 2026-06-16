@@ -5,6 +5,7 @@
  * tested with an injected recording mock.
  */
 
+import { createRequire } from "node:module";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type {
   StreamWriter,
@@ -15,10 +16,34 @@ import type {
 } from "./streamTypes";
 import type { ResolverDb } from "./gameResolver";
 
-export function makeSupabase(url: string, serviceRoleKey: string): SupabaseClient {
-  return createClient(url, serviceRoleKey, {
+/**
+ * Build the worker-owned Supabase client options.
+ *
+ * Node < 22 (Render runs Node 20) has NO global WebSocket, but supabase-js v2
+ * constructs a RealtimeClient at createClient() time which requires one — so on
+ * Render the client crashed at boot ("Node.js 20 detected without native
+ * WebSocket support"). We pass the already-installed `ws` package as the
+ * realtime `transport`. We never use realtime subscriptions; this only
+ * satisfies the constructor.
+ *
+ * Pure + exported so a test can assert the transport is always wired (the
+ * regression guard) without constructing a real client.
+ */
+export function buildWorkerSupabaseOptions<T>(transport: T) {
+  return {
     auth: { persistSession: false, autoRefreshToken: false },
-  });
+    realtime: { transport },
+  };
+}
+
+export function makeSupabase(url: string, serviceRoleKey: string): SupabaseClient {
+  // Lazy require (not a top-level import) so db.ts stays importable in
+  // environments where `ws` isn't installed (e.g. local disabled-mode boot).
+  // `ws` IS installed in the Render Docker image; makeSupabase only runs when
+  // the worker is enabled (on Render), so the require always resolves there.
+  const req = createRequire(import.meta.url);
+  const ws = req("ws");
+  return createClient(url, serviceRoleKey, buildWorkerSupabaseOptions(ws));
 }
 
 export function makeStreamWriter(supa: SupabaseClient): StreamWriter {
