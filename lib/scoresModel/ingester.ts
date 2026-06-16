@@ -504,12 +504,15 @@ export async function ingestScoresModel(
   const validatedIds = validated.map((v) => v.gameId);
   const { data: existing } = await client
     .from("game_predictions")
-    .select("game_id, locked_at, is_override")
+    .select("game_id, locked_at, is_override, sport_specific")
     .in("game_id", validatedIds);
   type ExistingRow = {
     game_id: number;
     locked_at: string | null;
     is_override: boolean;
+    // Read so we can PRESERVE additive metadata keys (posted_lines) that the
+    // model write would otherwise wipe by replacing sport_specific wholesale.
+    sport_specific: Record<string, unknown> | null;
   };
   const existingByGameId = new Map<number, ExistingRow>(
     ((existing ?? []) as ExistingRow[]).map((r) => [r.game_id, r])
@@ -598,6 +601,20 @@ export async function ingestScoresModel(
     if (ex !== undefined) {
       base.locked_at = ex.locked_at;
       base.is_override = ex.is_override;
+      // 2026-06-16 — PRESERVE additive `posted_lines` (First Published) across
+      // the overwrite. The model write rebuilds sport_specific from the model
+      // output only, which would otherwise WIPE posted_lines on every
+      // recompute. We carry the existing value verbatim when the incoming
+      // payload doesn't already have one. Only this additive metadata key is
+      // preserved — predictions/scores/grades are untouched. No effect when
+      // the existing row had no posted_lines.
+      const existingPosted = (ex.sport_specific as { posted_lines?: unknown } | null)?.posted_lines;
+      if (existingPosted != null) {
+        const ss = (base.sport_specific as Record<string, unknown> | null) ?? {};
+        if (ss.posted_lines == null) {
+          base.sport_specific = { ...ss, posted_lines: existingPosted };
+        }
+      }
     }
     return base;
   });

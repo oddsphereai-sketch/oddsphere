@@ -931,22 +931,30 @@ export async function generatePredictionsForSlate(
   // Gated OFF by default (POSTED_LINES_WRITE_ENABLED). ADDITIVE metadata only —
   // never touches picks/scores/confidence/grades and never writes locked rows.
   // Failure here MUST NOT fail the model write (best-effort, never throws).
-  if (wantWrite && sport === "mlb" && process.env.POSTED_LINES_WRITE_ENABLED === "true") {
-    try {
-      const pl = await recordFirstPublishedLines({
-        supabase,
-        sport: "mlb",
-        slateDate: slate_date,
-        apply: true,
-      });
-      console.log(
-        `[automodelService] posted_lines: scanned=${pl.scanned} updated=${pl.updated} for ${slate_date}`,
-      );
-    } catch (plErr) {
-      console.warn(
-        `[automodelService] posted_lines write threw for ${slate_date}: ` +
-          (plErr instanceof Error ? plErr.message : String(plErr)),
-      );
+  if (wantWrite && sport === "mlb") {
+    const postedFlag = process.env.POSTED_LINES_WRITE_ENABLED;
+    console.log(
+      `[automodelService] Step 3.6 posted_lines gate: wantWrite=${wantWrite} sport=${sport} ` +
+        `POSTED_LINES_WRITE_ENABLED=${JSON.stringify(postedFlag)} slate=${slate_date}`,
+    );
+    if (postedFlag === "true") {
+      try {
+        const pl = await recordFirstPublishedLines({
+          supabase,
+          sport: "mlb",
+          slateDate: slate_date,
+          apply: true,
+          log: (l) => console.log(`[automodelService] ${l}`),
+        });
+        console.log(
+          `[automodelService] Step 3.6 posted_lines RESULT: scanned=${pl.scanned} updated=${pl.updated} for ${slate_date}`,
+        );
+      } catch (plErr) {
+        console.warn(
+          `[automodelService] Step 3.6 posted_lines write threw for ${slate_date}: ` +
+            (plErr instanceof Error ? plErr.message : String(plErr)),
+        );
+      }
     }
   }
 

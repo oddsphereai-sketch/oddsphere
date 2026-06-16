@@ -94,6 +94,7 @@ class MockSupa {
 
 async function applySmoke() {
   const mock = new MockSupa({
+    games: { data: [{ id: 10 }], error: null },
     game_predictions: { data: [{ id: 1, game_id: 10, locked_at: null, predicted_ml_winner: "home", predicted_ou_side: "over", predicted_nrfi: true, sport_specific: { listed_line: 8.5 } }], error: null },
     lines: { data: cron.map((l) => ({ ...l, game_id: 10 })), error: null },
     odds_current_stream: { data: [], error: null },
@@ -109,6 +110,7 @@ async function applySmoke() {
 
   // Dry-run writes nothing.
   const mock2 = new MockSupa({
+    games: { data: [{ id: 11 }], error: null },
     game_predictions: { data: [{ id: 2, game_id: 11, locked_at: null, predicted_ml_winner: "away", predicted_ou_side: null, predicted_nrfi: null, sport_specific: null }], error: null },
     lines: { data: [{ game_id: 11, market_type: "moneyline", side: "away", sportsbook: "draftkings", odds_american: 120, line_value: null }], error: null },
     odds_current_stream: { data: [], error: null },

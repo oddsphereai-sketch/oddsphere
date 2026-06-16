@@ -162,19 +162,34 @@ export async function recordFirstPublishedLines(
   opts: RecordFirstPublishedOpts,
 ): Promise<{ scanned: number; updated: number; dryRun: boolean }> {
   const nowIso = opts.nowIso ?? new Date().toISOString();
+  const log = opts.log ?? (() => {});
   let scanned = 0;
   let updated = 0;
+  let updateErrors = 0;
   try {
+    // Two-step selection (robust): resolve the slate's game ids from `games`,
+    // then read unlocked game_predictions by game_id. Avoids relying on an
+    // embedded-resource filter and makes the matched set explicit/loggable.
+    const { data: gamesData, error: gErr } = (await opts.supabase
+      .from("games")
+      .select("id")
+      .eq("sport", opts.sport)
+      .eq("slate_date", opts.slateDate)) as { data: unknown; error: unknown };
+    if (gErr) {
+      log(`posted-lines: games read error — skipping (${String((gErr as { message?: string })?.message ?? gErr)})`);
+      return { scanned: 0, updated: 0, dryRun: !opts.apply };
+    }
+    const slateGameIds = ((gamesData ?? []) as Array<{ id: number }>).map((g) => g.id);
+    log(`posted-lines: ${opts.sport} ${opts.slateDate} slate games=${slateGameIds.length}`);
+    if (slateGameIds.length === 0) return { scanned: 0, updated: 0, dryRun: !opts.apply };
+
     const { data: preds, error } = (await opts.supabase
       .from("game_predictions")
-      .select(
-        "id, game_id, locked_at, predicted_ml_winner, predicted_ou_side, predicted_nrfi, sport_specific, games!inner ( sport, slate_date )",
-      )
-      .is("locked_at", null)
-      .eq("games.sport", opts.sport)
-      .eq("games.slate_date", opts.slateDate)) as { data: unknown; error: unknown };
+      .select("id, game_id, predicted_ml_winner, predicted_ou_side, predicted_nrfi, sport_specific")
+      .in("game_id", slateGameIds)
+      .is("locked_at", null)) as { data: unknown; error: unknown };
     if (error) {
-      opts.log?.(`posted-lines: read error — skipping (${String((error as { message?: string })?.message ?? error)})`);
+      log(`posted-lines: predictions read error — skipping (${String((error as { message?: string })?.message ?? error)})`);
       return { scanned: 0, updated: 0, dryRun: !opts.apply };
     }
     const rows = (preds ?? []) as Array<{
@@ -182,6 +197,7 @@ export async function recordFirstPublishedLines(
       predicted_ml_winner: string | null; predicted_ou_side: string | null; predicted_nrfi: boolean | null;
       sport_specific: Record<string, unknown> | null;
     }>;
+    log(`posted-lines: unlocked game_predictions=${rows.length}`);
     if (rows.length === 0) return { scanned: 0, updated: 0, dryRun: !opts.apply };
 
     const gameIds = [...new Set(rows.map((r) => r.game_id))];
@@ -191,25 +207,31 @@ export async function recordFirstPublishedLines(
       .from("lines")
       .select("game_id, market_type, side, sportsbook, odds_american, line_value")
       .in("game_id", gameIds)) as { data: unknown };
+    const lineRows = (linesData ?? []) as Array<LineRowLite & { game_id: number }>;
     const linesByGame = new Map<number, LineRowLite[]>();
-    for (const l of ((linesData ?? []) as Array<LineRowLite & { game_id: number }>)) {
+    for (const l of lineRows) {
       (linesByGame.get(l.game_id) ?? linesByGame.set(l.game_id, []).get(l.game_id)!).push(l);
     }
 
     // Live stream (preferred). Defensive: empty when the table is absent.
     const streamByGame = new Map<number, StreamRowLite[]>();
+    let streamCount = 0;
     try {
       const { data: streamData, error: sErr } = (await opts.supabase
         .from("odds_current_stream")
         .select("game_id, market_type, side, sportsbook, odds_american, line_value, observed_at")
         .in("game_id", gameIds)) as { data: unknown; error: unknown };
       if (!sErr) {
-        for (const s of ((streamData ?? []) as Array<StreamRowLite & { game_id: number }>)) {
+        const sRows = (streamData ?? []) as Array<StreamRowLite & { game_id: number }>;
+        streamCount = sRows.length;
+        for (const s of sRows) {
           (streamByGame.get(s.game_id) ?? streamByGame.set(s.game_id, []).get(s.game_id)!).push(s);
         }
       }
     } catch { /* stream table absent → cron fallback only */ }
+    log(`posted-lines: lines rows=${lineRows.length} stream rows=${streamCount}`);
 
+    let loggedSample = false;
     for (const r of rows) {
       scanned += 1;
       const incoming = buildIncomingPostedLines(
@@ -218,21 +240,30 @@ export async function recordFirstPublishedLines(
         linesByGame.get(r.game_id) ?? [],
         nowIso,
       );
+      if (!loggedSample) {
+        loggedSample = true;
+        log(`posted-lines: sample game_id=${r.game_id} incoming=${JSON.stringify(incoming)}`);
+      }
       const existing = (r.sport_specific?.posted_lines as PostedLines | undefined) ?? null;
       const { posted_lines, changed } = mergePostedLines(existing, incoming);
       if (!changed) continue;
       updated += 1;
       if (opts.apply) {
         const nextSportSpecific = { ...(r.sport_specific ?? {}), posted_lines };
-        await opts.supabase
+        const { error: upErr } = (await opts.supabase
           .from("game_predictions")
           .update({ sport_specific: nextSportSpecific })
           .eq("id", r.id)
-          .is("locked_at", null); // belt-and-suspenders: never write a row that locked meanwhile
+          .is("locked_at", null)) as { error: unknown }; // never write a row that locked meanwhile
+        if (upErr) {
+          updateErrors += 1;
+          log(`posted-lines: UPDATE error id=${r.id}: ${String((upErr as { message?: string })?.message ?? upErr)}`);
+        }
       }
     }
+    log(`posted-lines: scanned=${scanned} updated=${updated} updateErrors=${updateErrors} apply=${opts.apply}`);
   } catch (e) {
-    opts.log?.(`posted-lines: unexpected error — skipping (${String(e)})`);
+    log(`posted-lines: unexpected error — skipping (${String(e)})`);
   }
   return { scanned, updated, dryRun: !opts.apply };
 }
