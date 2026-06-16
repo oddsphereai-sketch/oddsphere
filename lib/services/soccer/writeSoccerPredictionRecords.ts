@@ -46,6 +46,7 @@ import {
 import { loadDefaultEloPrior } from "./eloPrior";
 import type { NormalizedSoccerOddsRecord } from "../../providers/real_api/_soccerMarketNormalizer";
 import { runSoccerAutoModelV1 } from "./soccerAutoModelV1";
+import { bttsDistributionWarning } from "./bttsSide";
 import { buildSoccerPredictionRows } from "./soccerPredictionWriter";
 
 const SOCCER_MODEL_VERSION = "soccer_dixon_coles_v1";
@@ -246,6 +247,9 @@ export async function writeSoccerPredictionRecords(
   // 6. Per-game: run model → build rows → upsert with locked-row guard.
   let recordsCreated = 0;
   let recordsSkippedLocked = 0;
+  // BTTS slate-distribution auditor (2026-06-16): collect each fixture's BTTS
+  // side and WARN (never force) if the slate collapses to all-No / all-Yes.
+  const bttsSides: Array<"yes" | "no"> = [];
   let fixturesMatched = 0;
   let fixturesUnmatched = 0;
 
@@ -423,6 +427,9 @@ export async function writeSoccerPredictionRecords(
           `fixture_hold=${modelOutput.fixtureHoldReason ?? "none"}`,
       );
 
+      const bttsPick = modelOutput.perMarket.find((p) => p.market === "btts")?.pick;
+      if (bttsPick === "yes" || bttsPick === "no") bttsSides.push(bttsPick);
+
       // Build all rows including held ones; the card needs honest held
       // rows to render the fixture with hold reasons (see WC-1 contract).
       const builtRows = buildSoccerPredictionRows({
@@ -536,6 +543,9 @@ export async function writeSoccerPredictionRecords(
       errors.push(msg);
     }
   }
+
+  const bttsWarn = bttsDistributionWarning(bttsSides);
+  if (bttsWarn !== null) log(`  ⚠ ${bttsWarn}`);
 
   return {
     mode: opts.apply ? "write" : "dry-run",

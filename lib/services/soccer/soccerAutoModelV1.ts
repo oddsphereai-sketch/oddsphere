@@ -24,7 +24,8 @@
 
 import { EXTERNAL_PRIORS_V1 } from "./_externalPriorsV1";
 import { computeLambda, bivariatePoissonScoreDistribution, expectedTotalFromDistribution, medianTotalFromDistribution, mostLikelyTotalFromDistribution } from "./dixonColes";
-import { deriveSoccerMarketProbabilities, type SoccerMarketProbabilities } from "./soccerMarketProbabilities";
+import { deriveSoccerMarketProbabilities, bttsFromDistribution, type SoccerMarketProbabilities } from "./soccerMarketProbabilities";
+import { decompressLambdasForBtts } from "./bttsSide";
 import { buildMarketProbabilityBundle, computeEdges, selectBestValueSidePerMarket, type EdgeRow } from "./soccerMarketComparison";
 import { deriveMarketImpliedLambdas } from "./marketImpliedLambda";
 import { deriveSoccerGrade, type SoccerGradeDecision } from "./soccerConfidenceGrade";
@@ -268,6 +269,32 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
 
   // ─── 5. Market probabilities (model-only, no market input) ───────
   const marketProbs = deriveSoccerMarketProbabilities({ joint, totalLine });
+
+  // WC BTTS underdog-λ decompression (2026-06-16). The joint-distribution
+  // BTTS-yes runs low because the weaker side's attacking λ is over-compressed
+  // (the dominant-favorite mismatch boost only lifts the favorite), so
+  // genuinely two-sided matches sat just under 50% and the card showed a
+  // confident "No" on nearly every game. For the BTTS calculation ONLY,
+  // decompress the λ gap toward the mean (lifts the underdog) and recompute
+  // BTTS from that distribution — producing genuine YES for credible two-sided
+  // games while real blowouts stay NO. NO toss-up (Yes/No only). match_result /
+  // total / scores keep the ORIGINAL λ — BTTS-only. The de-vigged market
+  // BTTS-yes (built above, line ~196) prices ~12–15pp BELOW the model for WC
+  // (thin/unreliable), so it anchors the GRADE via computeEdges, NOT the side;
+  // logged here for transparency.
+  {
+    const bttsRawYes = marketProbs.btts.yes;
+    const [lhBtts, laBtts] = decompressLambdasForBtts(lambdaHome, lambdaAway);
+    const bttsJoint = bivariatePoissonScoreDistribution(lhBtts, laBtts, EXTERNAL_PRIORS_V1.tau);
+    const decompressedYes = bttsFromDistribution(bttsJoint).yes;
+    marketProbs.btts = { yes: decompressedYes, no: 1 - decompressedYes };
+    const marketBttsYes = bundle.devig["btts|yes"] ?? null;
+    console.log(
+      `[soccerBTTS] ${opts.match.away_team_name}@${opts.match.home_team_name} ` +
+        `raw=${bttsRawYes.toFixed(3)} market=${marketBttsYes !== null ? marketBttsYes.toFixed(3) : "na"} ` +
+        `decompressed=${decompressedYes.toFixed(3)} side=${decompressedYes >= 0.5 ? "yes" : "no"}`,
+    );
+  }
 
   // ─── 6. Market comparison (de-vig + edge) — bundle built above ────
   // WC-MODEL-7: opener consensus for line-movement awareness. When provided,
