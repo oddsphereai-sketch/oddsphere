@@ -787,6 +787,14 @@ function buildMarketEdgeDto(
     publicSplits: [],
     priceAmerican: r.odds_american,
     lineOpenAmerican: openerLookup(r.game_id, r.market, r.side),
+    // 2026-06-16 line-tracker — soccer Locked stop: the picked-side price
+    // frozen at lock. First Published has no soccer source yet (deferred), and
+    // the live-stream Current overlay is MLB-only for now; both null here, so
+    // the soccer card degrades to Open → Current (+ Locked once locked).
+    lockedLineAmerican: r.locked_at !== null ? r.odds_american : null,
+    lockedLineAt: r.locked_at,
+    oddspherePostedAmerican: null,
+    oddspherePostedAt: null,
     modelTotal: null,
     marketTotal: null,
     line: r.line_value,

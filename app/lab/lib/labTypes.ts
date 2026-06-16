@@ -292,6 +292,25 @@ export type MarketEdgeDto = {
   betsPctObservedAt?: string | null;
   betsPctIsStale?: boolean;
 
+  /**
+   * Line-tracker stops (2026-06-16, WebSocket streaming foundation).
+   * ADDITIVE + optional → cards degrade to today's "Open → Current" when
+   * these are absent (stream tables not yet populated). Member-facing labels
+   * are Open / First Published / Current / Locked.
+   *   • Open    = lineOpenAmerican (existing)
+   *   • Current = priceAmerican (existing; the route overlays the fresher of
+   *               cron `lines` and live `odds_current_stream` into it)
+   *   • First Published = the picked-side price when we FIRST generated a
+   *               prediction for this market (set-if-null upstream). Internal
+   *               storage is `posted_*`; never surfaced as "OddSphere posted".
+   *   • Locked  = the picked-side price frozen at T-60 lock (from the locked
+   *               prediction snapshot, NOT live/current odds).
+   */
+  oddspherePostedAmerican?: number | null;
+  oddspherePostedAt?: string | null;
+  lockedLineAmerican?: number | null;
+  lockedLineAt?: string | null;
+
   // ── totals-only (null for moneyline / first_inning) ──
   modelTotal: number | null;
   marketTotal: number | null;

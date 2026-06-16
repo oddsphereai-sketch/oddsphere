@@ -1,0 +1,10 @@
+{
+  "//": "Standalone typecheck for the worker package. The root tsconfig already compiles worker/**/*.ts (include **/*.ts); this exists for building/checking the worker in isolation (e.g. in CI or the Docker image).",
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "moduleResolution": "bundler",
+    "rootDir": ".."
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "src/**/*.d.ts"]
+}

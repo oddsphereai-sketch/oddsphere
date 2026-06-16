@@ -85,6 +85,12 @@ import {
   loadLinesHistoryForSlate,
   isStale as isObservationStale,
 } from "@/lib/services/lastKnownGoodReader";
+import {
+  pickFresherCurrent,
+  loadStreamCurrentForSlate,
+  streamKey,
+  type StreamCurrent,
+} from "@/lib/services/streamOverlay";
 
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer"];
 // Phase 7G — NBA goes live in the member-facing Daily Edge via the
@@ -628,6 +634,35 @@ function buildStarterDto(
   return { name, throws };
 }
 
+/**
+ * 2026-06-16 — read the per-market "First Published" lines from
+ * game_predictions.sport_specific.posted_lines (set-if-null upstream). Per
+ * market: { american, at }. Defensive: returns empty per-market when the JSONB
+ * path is absent (the state until the posted-line write is wired), so the
+ * card's First Published stop is simply omitted.
+ */
+type PostedLine = { american: number | null; at: string | null };
+function readPostedLines(
+  sportSpecific: Record<string, unknown> | null | undefined,
+): { moneyline?: PostedLine; total?: PostedLine; first_inning?: PostedLine } {
+  const out: { moneyline?: PostedLine; total?: PostedLine; first_inning?: PostedLine } = {};
+  const raw = sportSpecific?.posted_lines;
+  if (raw === null || typeof raw !== "object") return out;
+  const obj = raw as Record<string, unknown>;
+  for (const key of ["moneyline", "total", "first_inning"] as const) {
+    const v = obj[key];
+    if (v !== null && typeof v === "object") {
+      const american = (v as { american?: unknown }).american;
+      const at = (v as { at?: unknown }).at;
+      out[key] = {
+        american: typeof american === "number" ? american : null,
+        at: typeof at === "string" ? at : null,
+      };
+    }
+  }
+  return out;
+}
+
 function buildGameDto(
   row: GameRow,
   signals: SignalRow[],
@@ -641,7 +676,13 @@ function buildGameDto(
     lockedOpenOddsAmerican: number | null;
     lockedOpenerRecordedAt: string | null;
     lockedSignalRowsAtLock: SignalRow[] | null;
-  }>
+    // 2026-06-16 — picked-side price frozen at T-60 lock (Locked stop).
+    lockedPriceAmerican: number | null;
+    lockedPriceAt: string | null;
+  }>,
+  // 2026-06-16 — live stream prices keyed streamKey(gameId, dbMarket, side).
+  // Empty map until the v24 table is populated → overlay is a no-op.
+  streamCurrentByGameMarket: Map<string, StreamCurrent> = new Map(),
 ): DailyEdgeGameDto | null {
   const home = row.home_team?.abbreviation ?? "—";
   const away = row.away_team?.abbreviation ?? "—";
@@ -907,6 +948,11 @@ function buildGameDto(
   const mlGradeForMarket = applyV22BestAngleOverride(pred.ml_grade, mlBaEligible, mlMoneyConflict, mlMoneySupport, mlMarketEdge);
   const ouGradeForMarket = applyV22BestAngleOverride(pred.ou_grade, ouBaEligible, ouMoneyConflict, ouMoneySupport, ouMarketEdge);
 
+  // 2026-06-16 line-tracker sources (defensive; empty/absent today → no-op).
+  const postedLines = readPostedLines(pred.sport_specific);
+  const streamFor = (mkt: string, side: string | null): StreamCurrent | null =>
+    side === null ? null : (streamCurrentByGameMarket.get(streamKey(row.id, mkt, side)) ?? null);
+
   const lockedMl = lockedPlayGradeByGameMarket.get(`${row.id}::moneyline`);
   const lockedOu = lockedPlayGradeByGameMarket.get(`${row.id}::total`);
   // 2026-06-10 v15.3 FI integrity — FI's lock map is read symmetric
@@ -943,6 +989,11 @@ function buildGameDto(
     lockedOpenOddsAmerican: lockedMl?.lockedOpenOddsAmerican ?? null,
     lockedOpenerRecordedAt: lockedMl?.lockedOpenerRecordedAt ?? null,
     lockedFrozenSignals: lockedMl?.lockedSignalRowsAtLock ?? null,
+    streamCurrent: streamFor("moneyline", pred.predicted_ml_winner),
+    oddspherePostedAmerican: postedLines.moneyline?.american ?? null,
+    oddspherePostedAt: postedLines.moneyline?.at ?? null,
+    lockedPriceAmerican: lockedMl?.lockedPriceAmerican ?? null,
+    lockedPriceAt: lockedMl?.lockedPriceAt ?? null,
   });
   const total = buildMarketEdge({
     market: "total",
@@ -976,6 +1027,11 @@ function buildGameDto(
     lockedOpenOddsAmerican: lockedOu?.lockedOpenOddsAmerican ?? null,
     lockedOpenerRecordedAt: lockedOu?.lockedOpenerRecordedAt ?? null,
     lockedFrozenSignals: lockedOu?.lockedSignalRowsAtLock ?? null,
+    streamCurrent: streamFor("total", pred.predicted_ou_side),
+    oddspherePostedAmerican: postedLines.total?.american ?? null,
+    oddspherePostedAt: postedLines.total?.at ?? null,
+    lockedPriceAmerican: lockedOu?.lockedPriceAmerican ?? null,
+    lockedPriceAt: lockedOu?.lockedPriceAt ?? null,
   });
   const firstInning = buildMarketEdge({
     market: "first_inning",
@@ -1013,6 +1069,11 @@ function buildGameDto(
     lockedOpenOddsAmerican: lockedFi?.lockedOpenOddsAmerican ?? null,
     lockedOpenerRecordedAt: lockedFi?.lockedOpenerRecordedAt ?? null,
     lockedFrozenSignals: lockedFi?.lockedSignalRowsAtLock ?? null,
+    streamCurrent: streamFor("first_inning_total", nrfiSide),
+    oddspherePostedAmerican: postedLines.first_inning?.american ?? null,
+    oddspherePostedAt: postedLines.first_inning?.at ?? null,
+    lockedPriceAmerican: lockedFi?.lockedPriceAmerican ?? null,
+    lockedPriceAt: lockedFi?.lockedPriceAt ?? null,
   });
 
   // 4.1.10 — per-game status flags.
@@ -1700,6 +1761,21 @@ type BuildMarketEdgeInput = {
    * stays primary.
    */
   lockedFrozenSignals?: SignalRow[] | null;
+  /**
+   * 2026-06-16 line-tracker (WebSocket streaming foundation). All optional +
+   * additive — absent today (stream tables not yet populated) → the card
+   * degrades to the existing Open → Current behavior.
+   *   • streamCurrent — latest live odds_current_stream value for the picked
+   *     side; overlaid onto priceAmerican ONLY when fresher than the cron row.
+   *   • oddsphere posted — picked-side price when we first published a
+   *     prediction for this market (the member-facing "First Published" stop).
+   *   • locked price — picked-side price frozen at T-60 lock (Locked stop).
+   */
+  streamCurrent?: { american: number | null; line: number | null; observedAt: string | null } | null;
+  oddspherePostedAmerican?: number | null;
+  oddspherePostedAt?: string | null;
+  lockedPriceAmerican?: number | null;
+  lockedPriceAt?: string | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1848,12 +1924,23 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
 
   // Pricing — best available American odds for the picked side.
   const priceRow = pickPriceRow(input.linesCurrent, input.modelSide);
-  const priceAmerican = priceRow?.odds_american ?? null;
+  const cronPriceAmerican = priceRow?.odds_american ?? null;
   // Phase 7I — stamp the observation timestamp when the value came from
   // line_history via LKG hydration. undefined → value came from the live
   // lines row; UI renders normally.
-  const priceObservedAt: string | null =
+  const cronPriceObservedAt: string | null =
     priceRow?.odds_american_observed_at ?? null;
+  // 2026-06-16 — overlay the live odds_current_stream price ONLY when it is
+  // fresher than the cron `lines` value. No-op until the stream tables are
+  // populated (input.streamCurrent is absent today), so existing behavior is
+  // unchanged. This makes the displayed "Current" reflect the freshest source.
+  const overlaidCurrent = pickFresherCurrent(
+    { american: cronPriceAmerican, observedAt: cronPriceObservedAt },
+    input.streamCurrent ?? null,
+    Date.now(),
+  );
+  const priceAmerican = overlaidCurrent.american;
+  const priceObservedAt: string | null = overlaidCurrent.observedAt;
   const priceIsStale =
     priceObservedAt !== null ? isObservationStale(priceObservedAt) : false;
 
@@ -2224,6 +2311,11 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     moneyPctIsStale,
     betsPctObservedAt,
     betsPctIsStale,
+    // 2026-06-16 line-tracker stops (additive; null until streaming live).
+    oddspherePostedAmerican: input.oddspherePostedAmerican ?? null,
+    oddspherePostedAt: input.oddspherePostedAt ?? null,
+    lockedLineAmerican: input.lockedPriceAmerican ?? null,
+    lockedLineAt: input.lockedPriceAt ?? null,
     modelTotal: input.totalsExtras?.modelTotal ?? null,
     marketTotal: input.totalsExtras?.marketTotal ?? null,
     line: input.totalsExtras?.sportsbookLine ?? null,
@@ -3250,6 +3342,9 @@ export async function GET(request: Request) {
       // value works. Null pre-lock or when the snapshot didn't carry
       // an array — live `input.signals` then stays primary.
       lockedSignalRowsAtLock: SignalRow[] | null;
+      // 2026-06-16 — picked-side price frozen at T-60 lock (Locked stop).
+      lockedPriceAmerican: number | null;
+      lockedPriceAt: string | null;
     }
   >();
   if (gameIds.length > 0) {
@@ -3526,6 +3621,9 @@ export async function GET(request: Request) {
         lockedOpenOddsAmerican: lm?.open_odds_american ?? null,
         lockedOpenerRecordedAt: lm?.opener_recorded_at ?? null,
         lockedSignalRowsAtLock: Array.isArray(sigsAtLock) ? (sigsAtLock as SignalRow[]) : null,
+        // 2026-06-16 — Locked stop: the picked-side price frozen at T-60.
+        lockedPriceAmerican: r.odds_american,
+        lockedPriceAt: r.locked_at,
       });
     }
 
@@ -3583,6 +3681,9 @@ export async function GET(request: Request) {
         lockedOpenOddsAmerican: null,
         lockedOpenerRecordedAt: null,
         lockedSignalRowsAtLock: null,
+        // Unlocked rows have no T-60 Locked stop yet.
+        lockedPriceAmerican: null,
+        lockedPriceAt: null,
       });
     }
     // (a) totalLineByGame override (6B.17 behavior preserved)
@@ -3871,6 +3972,10 @@ export async function GET(request: Request) {
   }
 
   // ─── Assemble DTOs ───────────────────────────────────────────────────────
+  // 2026-06-16 — live stream-price overlay map. Defensive: returns empty when
+  // the v24 `odds_current_stream` table is absent/unpopulated, so the line
+  // tracker degrades cleanly to the cron `lines` path.
+  const streamCurrentByGameMarket = await loadStreamCurrentForSlate(supabase, gameIds);
   const dtos: DailyEdgeGameDto[] = [];
   for (const g of games) {
     const dto = buildGameDto(
@@ -3879,7 +3984,8 @@ export async function GET(request: Request) {
       totalLineByGame.get(g.id) ?? null,
       currentLinesByGameMarket,
       openLinesByGameMarket,
-      lockedPlayGradeByGameMarket
+      lockedPlayGradeByGameMarket,
+      streamCurrentByGameMarket
     );
     if (dto) dtos.push(dto);
   }

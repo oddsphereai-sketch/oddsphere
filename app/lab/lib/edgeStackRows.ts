@@ -26,6 +26,7 @@ import {
   lineMoveTone,
   lineMoveArrow,
 } from "./lineMoveTone";
+import { buildLineTrackerEvidence } from "./lineTracker";
 
 export type EdgeStackRowTone = "emerald" | "amber" | "gray";
 
@@ -281,13 +282,27 @@ export function buildEdgeStackRows(
       tone: "gray",
     });
   } else {
+    // Tone + arrow stay pick-relative on Open → Current (unchanged rule).
     const dir = classifyPickRelativeLineMove(
       marketData.lineOpenAmerican,
       marketData.priceAmerican
     );
+    // 2026-06-16 — render the full stop chain (Open / First Published /
+    // Current / Locked) when the streaming-era fields are present; otherwise
+    // degrade to the original "Open → Current" string. Additive: when no
+    // posted/locked stops exist the displayed info is identical to before,
+    // just with explicit labels.
+    const tracker = buildLineTrackerEvidence({
+      openAmerican: marketData.lineOpenAmerican,
+      postedAmerican: marketData.oddspherePostedAmerican ?? null,
+      currentAmerican: marketData.priceAmerican,
+      lockedAmerican: marketData.lockedLineAmerican ?? null,
+    });
     rows.push({
       label: "Line Move",
-      evidence: `${formatAmerican(marketData.lineOpenAmerican)} → ${formatAmerican(marketData.priceAmerican)}`,
+      evidence:
+        tracker.evidence ??
+        `${formatAmerican(marketData.lineOpenAmerican)} → ${formatAmerican(marketData.priceAmerican)}`,
       delta: lineMoveArrow(dir),
       tone: lineMoveTone(dir),
     });

@@ -52,6 +52,23 @@ import {
   type DiscoveryStats as SplitsDiscoveryStats,
   type RawSplitsRow,
 } from "./_splitsDiscovery";
+// Pure value mappers extracted to a worker-safe module (2026-06-16). Imported
+// for internal use AND re-exported below so every existing importer of these
+// symbols from this file keeps working unchanged.
+import {
+  asNumberOrNull,
+  asStringOrNull,
+  mapMarketType,
+  mapSide,
+  mapSportsbook,
+} from "./_oddsMappers";
+export {
+  asNumberOrNull,
+  asStringOrNull,
+  mapMarketType,
+  mapSide,
+  mapSportsbook,
+} from "./_oddsMappers";
 
 /**
  * Phase 4.2.C.1.R-16E — provenance label for game-line rows synthesized
@@ -173,78 +190,9 @@ type RawOddsRow = {
 // same row-level filtering as the primary /opportunities/ev → /odds
 // path. Keeping a single source of truth prevents drift between the
 // primary ingest and the fallback ingest.
-export function asNumberOrNull(v: unknown): number | null {
-  if (v === null || v === undefined) return null;
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : null;
-}
+// asNumberOrNull / asStringOrNull / mapMarketType / mapSportsbook / mapSide
+// now live in ./_oddsMappers (imported + re-exported above).
 
-export function asStringOrNull(v: unknown): string | null {
-  if (v === null || v === undefined) return null;
-  const s = String(v).trim();
-  return s.length === 0 ? null : s;
-}
-
-/**
- * Map SharpAPI market_type strings to our internal MarketType union.
- *
- * Phase 1.5 correction (Task #162): SharpAPI returns specific names
- * observed in the live data:
- *   - "moneyline" / "h2h"          → moneyline
- *   - "total_runs" / "total"       → total
- *   - "run_line" / "runline"       → spread
- *   - "first_inning_total"         → first_inning_total (true 1-inning O/U)
- *
- * Intentionally NOT mapped:
- *   - "1st_5_innings_total_runs" / "f5" — that's the FIRST 5 INNINGS market,
- *     not the first inning. Different market; would mis-grade NRFI picks.
- *   - team_total, player props, alternate lines, futures, championships →
- *     return null; caller drops the row.
- */
-export function mapMarketType(raw: string | null): MarketType | null {
-  if (raw === null) return null;
-  const v = raw.toLowerCase().trim();
-  if (v === "h2h" || v === "moneyline" || v === "ml") return "moneyline";
-  if (v === "total" || v === "totals" || v === "total_runs" || v === "over_under" || v === "ou") {
-    return "total";
-  }
-  if (v === "spread" || v === "spreads" || v === "runline" || v === "run_line") {
-    return "spread";
-  }
-  // R-16F-C — accept SharpAPI's live emission "1st_inning_total_runs"
-  // alongside the previously-recognized short forms. SharpAPI's /odds
-  // endpoint returns the long form per audit; the short forms are kept
-  // for back-compat / defensive coverage.
-  //
-  // Intentionally NOT mapped to first_inning_total:
-  //   - "1st_inning_moneyline_3-way" — a 3-way ML at the END of the 1st
-  //     (home/away/tie). Different market than NRFI/YRFI.
-  //   - "1st_3_innings_total_runs" / "1st_5_innings_total_runs" — F3/F5
-  //     totals; different windows than first-inning. Would mis-grade
-  //     NRFI picks.
-  if (
-    v === "first_inning_total" ||
-    v === "1st_inning_total" ||
-    v === "1st_inning_total_runs"
-  ) {
-    return "first_inning_total";
-  }
-  return null;
-}
-
-export function mapSportsbook(raw: string | null): Sportsbook | null {
-  const s = asStringOrNull(raw);
-  if (s === null) return null;
-  return s.toLowerCase() as Sportsbook;
-}
-
-/**
- * Map SharpAPI's `selection_type` field directly to our Side enum.
- * Phase 1.5 (Task #162): /odds rows include selection_type as a clean
- * enum-like field ("home" / "away" / "over" / "under" / "yes" / "no"),
- * eliminating the need for team-string parsing. Returns null when the
- * value isn't recognized — caller skips the row.
- */
 /**
  * R-16E — build a synthetic LineRecord tagged with the splits-consensus
  * provenance book. Centralized so all three markets share identical
@@ -274,23 +222,6 @@ function makeSplitsLineRecord(opts: {
     is_ev_positive: null,
     fetched_at: opts.fetched_at,
   };
-}
-
-export function mapSide(rawSelectionType: unknown): Side | null {
-  const s = asStringOrNull(rawSelectionType);
-  if (s === null) return null;
-  const v = s.toLowerCase();
-  if (
-    v === "home" ||
-    v === "away" ||
-    v === "over" ||
-    v === "under" ||
-    v === "yes" ||
-    v === "no"
-  ) {
-    return v;
-  }
-  return null;
 }
 
 // ─────────────────────────────────────────────────────────────
