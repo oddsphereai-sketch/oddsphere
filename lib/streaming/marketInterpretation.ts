@@ -22,6 +22,14 @@ export type ChipTone = "emerald" | "amber" | "gray";
 const PUBLIC_HEAVY_PCT = 60;
 /** Money-vs-bets gap (pp) that counts as divergence. */
 const MONEY_PUBLIC_DIVERGENCE_PP = 12;
+/**
+ * Sharp-money read thresholds — kept in lockstep with the grade guard
+ * (hasOpposingPublicMoneyConflict in predictionRecordService): a side carries a
+ * sharp-money signal when the MONEY share crosses 60% AND money−tickets ≥ 15pp.
+ * "Against us" = the OPPOSITE side hits that bar (≡ our money ≤40% with the gap).
+ */
+const SHARP_MONEY_SHARE = 60;
+const SHARP_MONEY_GAP_PP = 15;
 /** Fraction of books moving the same way to call it consensus (vs isolated). */
 const CONSENSUS_BOOK_SHARE = 0.6;
 
@@ -141,18 +149,40 @@ export function interpretMarket(input: MarketInterpretationInput): MarketInterpr
     );
   }
 
-  // Public-heavy but unconfirmed by the line.
-  const publicHeavyUnconfirmed = pubHeavyOnPick && overall !== "toward" && rlm === null;
+  // DERIVED sharp-money read from the splits themselves (money vs tickets) — the
+  // ONE rich sharp signal with full vendor coverage (steam/RLM are 0%-covered on
+  // our tier). "with us" = money piling on our side beyond tickets; "against us"
+  // = money piling on the OPPOSITE side (our money minority + wide gap). Same
+  // bar as the grade guard so the chip and the play grade never contradict.
+  const pm = splits?.pickMoneyPct ?? null;
+  const pb = splits?.pickBetsPct ?? null;
+  let sharpMoney: "with" | "against" | null = null;
+  if (pm != null && pb != null) {
+    if (pm >= SHARP_MONEY_SHARE && pm - pb >= SHARP_MONEY_GAP_PP) sharpMoney = "with";
+    // opposite side: oppMoney = 100-pm, oppGap = (100-pm)-(100-pb) = pb-pm.
+    else if (100 - pm >= SHARP_MONEY_SHARE && pb - pm >= SHARP_MONEY_GAP_PP) sharpMoney = "against";
+  }
+  if (sharpMoney === "with") flags.push("sharp_money_with");
+  if (sharpMoney === "against") flags.push("sharp_money_against");
+
+  // Public-heavy with NO sharp read either way (genuinely unconfirmed — not just
+  // "we didn't look"). Excludes cases where the money split DOES signal.
+  const publicHeavyUnconfirmed =
+    pubHeavyOnPick && overall !== "toward" && rlm === null && sharpMoney === null;
   if (publicHeavyUnconfirmed) flags.push("public_heavy_unconfirmed");
 
   if (overall === "toward") flags.push("moved_toward");
   if (overall === "against") flags.push("moved_against");
 
   // ── Chip (single best signal, priority order) ──
+  // Line-movement sharp signals (RLM) rank first; then the splits-derived
+  // sharp-money read; then raw market drift; then the honest "unconfirmed".
   let chipLabel = "Market steady";
   let chipTone: ChipTone = "gray";
   if (rlm === "favor") { chipLabel = "Sharp reverse move our way"; chipTone = "emerald"; }
   else if (rlm === "against") { chipLabel = "Reverse move against our side"; chipTone = "amber"; }
+  else if (sharpMoney === "against") { chipLabel = "Sharp money against our side"; chipTone = "amber"; }
+  else if (sharpMoney === "with") { chipLabel = "Sharp money on our side"; chipTone = "emerald"; }
   else if (overall === "against") { chipLabel = "Market moved against our side"; chipTone = "amber"; }
   else if (overall === "toward") { chipLabel = "Market moved toward our side"; chipTone = "emerald"; }
   else if (publicHeavyUnconfirmed) { chipLabel = "Public-heavy, sharp unconfirmed"; chipTone = "amber"; }

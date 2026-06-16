@@ -56,6 +56,36 @@ function base(over: Partial<MarketInterpretationInput> = {}): MarketInterpretati
   check("public-heavy unconfirmed → chip", r.chipLabel === "Public-heavy, sharp unconfirmed" && r.chipTone === "amber");
   check("public-heavy unconfirmed → flag", r.flags.includes("public_heavy_unconfirmed"));
 }
+// 5b. Sharp money AGAINST our pick (17192-like: 82% tickets, 38% money on us →
+//     money piled on the OTHER side). Must NOT read as "unconfirmed".
+{
+  const r = interpretMarket(base({
+    openAmerican: -120, currentAmerican: -120,
+    splits: { pickBetsPct: 82, pickMoneyPct: 38, observedAtIso: "2026-06-16T17:55:00Z", isStale: false },
+  }));
+  check("sharp money against → chip", r.chipLabel === "Sharp money against our side" && r.chipTone === "amber");
+  check("sharp money against → flag", r.flags.includes("sharp_money_against"));
+  check("sharp money against → NOT mislabeled unconfirmed", !r.flags.includes("public_heavy_unconfirmed"));
+}
+// 5c. Sharp money WITH our pick (17179-like: money heavier than tickets on us).
+{
+  const r = interpretMarket(base({
+    openAmerican: -120, currentAmerican: -120,
+    splits: { pickBetsPct: 75, pickMoneyPct: 97, observedAtIso: "2026-06-16T17:55:00Z", isStale: false },
+  }));
+  check("sharp money with → chip", r.chipLabel === "Sharp money on our side" && r.chipTone === "emerald");
+  check("sharp money with → flag", r.flags.includes("sharp_money_with"));
+}
+// 5d. Public-heavy but money still MAJORITY on us (17181-like: bets 81, money 65)
+//     → no strong sharp read either way → still honestly "unconfirmed".
+{
+  const r = interpretMarket(base({
+    openAmerican: -120, currentAmerican: -120,
+    splits: { pickBetsPct: 81, pickMoneyPct: 65, observedAtIso: "2026-06-16T17:55:00Z", isStale: false },
+  }));
+  check("public-heavy, money-majority → unconfirmed (not false sharp)", r.chipLabel === "Public-heavy, sharp unconfirmed");
+  check("public-heavy, money-majority → no sharp flags", !r.flags.includes("sharp_money_against") && !r.flags.includes("sharp_money_with"));
+}
 // 6. Splits stale (otherwise quiet).
 {
   const r = interpretMarket(base({
