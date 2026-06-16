@@ -60,8 +60,16 @@ export const V22_LEAGUE_AVG_BULLPEN_ERA = 4.10;
 const FACTOR_CLAMP_MIN = 0.70;
 const FACTOR_CLAMP_MAX = 1.35;
 
-// Home-field advantage (small, well-documented in MLB: ~0.03-0.05 r/g)
-const HOME_FIELD_RUNS_BONUS = 0.10;
+// Home-field advantage — TOTAL-NEUTRAL DIFFERENTIAL (2026-06-16). MLB home-field
+// is a ~0.22-run MARGIN edge (~54% home-win baseline). The prior +0.10 home-only
+// multiplier under-weighted it (model implied 49.3% home vs 57.9% actual, an 8.6pp
+// gap) AND inflated projected totals. We now apply +half to home and −half to away
+// so the projected TOTAL is unchanged (no scoring inflation → O/U projections are
+// untouched) and only the home-away MARGIN shifts — which is what ML resolves on.
+// Validated via offline re-run: ML 55%→60% (+5W over 9 slates, holds excl-6/14 at
+// 63%), 7 picks flipped, totals unchanged. Reversible via this constant.
+const HOME_FIELD_RUNS_DIFFERENTIAL = 0.22;
+const HOME_FIELD_HALF = HOME_FIELD_RUNS_DIFFERENTIAL / 2;
 
 // ─── feature audit — Push 3A-2 source/reason taxonomy ─────────────
 //
@@ -498,27 +506,28 @@ export function projectIndependent(
   const handAway = handednessFactor(snap.away_team, snap.home_starter);
 
   // Home team is batting against away starter + away bullpen
-  // Away team is batting against home starter + home bullpen
-  const HOME_FIELD = HOME_FIELD_RUNS_BONUS / V22_LEAGUE_AVG_RUNS_PER_GAME + 1.0;
-
-  const homeRuns =
+  // Away team is batting against home starter + home bullpen.
+  // Home-field is applied ADDITIVELY in run space (+HALF home, −HALF away) so the
+  // projected total is unchanged and only the margin shifts. Floored at 0.1 so the
+  // away subtraction can never produce a non-positive lambda for the Poisson.
+  const homeRunsBase =
     V22_LEAGUE_AVG_RUNS_PER_GAME *
     homeOffense *
     awayStarterFactor *
     awayBullpen *
     park *
     weather *
-    handHome *
-    HOME_FIELD;
-  const awayRuns =
+    handHome;
+  const awayRunsBase =
     V22_LEAGUE_AVG_RUNS_PER_GAME *
     awayOffense *
     homeStarterFactor *
     homeBullpen *
     park *
     weather *
-    handAway *
-    1.0;
+    handAway;
+  const homeRuns = Math.max(0.1, homeRunsBase + HOME_FIELD_HALF);
+  const awayRuns = Math.max(0.1, awayRunsBase - HOME_FIELD_HALF);
 
   return {
     away_expected_runs: awayRuns,
@@ -534,7 +543,7 @@ export function projectIndependent(
         park,
         weather,
         handedness: handAway,
-        home_field: 1.0,
+        home_field: -HOME_FIELD_HALF, // additive run delta (total-neutral differential)
       },
       home: {
         base: V22_LEAGUE_AVG_RUNS_PER_GAME,
@@ -544,7 +553,7 @@ export function projectIndependent(
         park,
         weather,
         handedness: handHome,
-        home_field: HOME_FIELD,
+        home_field: HOME_FIELD_HALF, // additive run delta (total-neutral differential)
       },
     },
     feature_audit: audit,

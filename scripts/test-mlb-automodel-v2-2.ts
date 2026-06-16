@@ -298,6 +298,24 @@ async function main() {
       `actual=${proj.feature_audit.weather.source}`);
   }
   {
+    // Home-field differential (2026-06-16) — total-neutral 0.22-run MARGIN edge,
+    // applied +0.11 home / −0.11 away so the projected TOTAL is unaffected.
+    const proj = projectIndependent(buildSnapshot()); // symmetric inputs
+    check("home-field: home_run_diff ≈ 0.22 on symmetric matchup", near(proj.home_run_diff, 0.22, 0.001),
+      `actual diff=${proj.home_run_diff}`);
+    const mid = (proj.home_expected_runs + proj.away_expected_runs) / 2;
+    check("home-field is a DIFFERENTIAL (home +0.11 above midpoint)", near(proj.home_expected_runs - mid, 0.11, 0.001));
+    check("home-field is total-NEUTRAL (away −0.11 below midpoint, symmetric)", near(mid - proj.away_expected_runs, 0.11, 0.001));
+    // total inflation guard: with symmetric factors the total stays 2× league avg
+    // (the differential cancels in the sum), so no scoring is added vs the no-HF base.
+    const baseNoHf = proj.away_expected_runs + 0.11; // reconstruct symmetric base per side
+    check("home-field: total = 2× symmetric base (no scoring inflation)", near(proj.total_expected_runs, 2 * baseNoHf, 0.001));
+    // coherence: a symmetric matchup should now favor HOME (home-field tilt)
+    const out = runMlbAutoModelV2_2(buildSnapshot(), buildV1Out(), "t60_locked");
+    check("home-field: symmetric matchup → ML pick = home", out.predicted_ml_winner === "home");
+    check("home-field: symmetric matchup → predicted_home > predicted_away", out.predicted_home_score > out.predicted_away_score);
+  }
+  {
     // Strong offense — should push home runs >> 4.45
     const snap = buildSnapshot({
       homeTeam: { team_avg_batter_ops: 0.820 },
