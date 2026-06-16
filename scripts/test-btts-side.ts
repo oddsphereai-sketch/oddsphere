@@ -35,6 +35,17 @@ function bttsYesFromLambdas(lh: number, la: number, decompress = BTTS_LAMBDA_DEC
   check(`even λ 1.42/1.08 → P(yes)≥0.5 (${y.toFixed(3)})`, y >= 0.5);
 }
 
+// 1b. STATED PROOF CASE — CRO@ENG (live stored λ 1.6661/0.9019): raw ~0.496,
+//     decompressed > 0.50, final side = yes. This is the exact game that was
+//     wrongly "No" in production (stale row from old code).
+{
+  const raw = bttsFromDistribution(bivariatePoissonScoreDistribution(1.6661, 0.9019, tau)).yes;
+  const dec = bttsYesFromLambdas(1.6661, 0.9019);
+  check(`CRO@ENG raw ≈ 0.496 (${raw.toFixed(3)})`, Math.abs(raw - 0.496) < 0.01);
+  check(`CRO@ENG decompressed > 0.50 (${dec.toFixed(3)})`, dec > 0.5);
+  check("CRO@ENG final side = yes", resolveBttsSide(dec, 1 - dec) === "yes");
+}
+
 // 2. Strong favorite vs weak underdog → stays BTTS NO (not force-flipped).
 {
   const y = bttsYesFromLambdas(3.20, 0.40); // CPV@ESP blowout
