@@ -1552,17 +1552,29 @@ export async function createPredictionRecords(
   // older history is irrelevant for tonight's slate. `splits_consensus`
   // is excluded at the helper level (not here) so we keep the option
   // to expose those rows if we ever need them for diagnostics.
+  // 2026-06-16 P0 — PER-GAME parallel reads. A multi-game `.in(game_id) + ORDER
+  // BY` degenerates on the bloated line_history table (322k rows) and blows past
+  // the statement_timeout, which inflated the slate-cycle cron past its 300s
+  // maxDuration → killed → stuck "in_progress" → stale data. Per-game
+  // `.eq(game_id) + ORDER + LIMIT` uses the game_id index and is bounded.
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data: lineHistoryRows } = await supabase
-    .from("line_history")
-    .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
-    .in("game_id", gameIds)
-    .in("market_type", ["moneyline", "total"])
-    .is("player_id", null)
-    .neq("sportsbook", "splits_consensus")
-    .not("odds_american", "is", null)
-    .gte("recorded_at", oneDayAgo)
-    .order("recorded_at", { ascending: false });
+  const lineHistoryResults = await Promise.all(
+    gameIds.map((gid) =>
+      supabase
+        .from("line_history")
+        .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
+        .eq("game_id", gid)
+        .in("market_type", ["moneyline", "total"])
+        .is("player_id", null)
+        .neq("sportsbook", "splits_consensus")
+        .not("odds_american", "is", null)
+        .gte("recorded_at", oneDayAgo)
+        .order("recorded_at", { ascending: false })
+        .limit(800)
+        .then((r) => (r.data ?? []) as LineHistoryRowForOdds[], () => [] as LineHistoryRowForOdds[]),
+    ),
+  );
+  const lineHistoryRows = lineHistoryResults.flat();
   // Pre-bucket by (game_id, market_type, side). Each bucket is already
   // sorted by recorded_at DESC because of the query order above —
   // `pickOddsWithFallback` reads `history[0]` for the most-recent batch.
@@ -1614,13 +1626,22 @@ export async function createPredictionRecords(
     flaggedKeys.add(`${o.game_id}|${o.market_type}|${o.side}|${o.sportsbook}`);
   }
 
-  const { data: allHistory } = await supabase
-    .from("line_history")
-    .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
-    .in("game_id", gameIds)
-    .in("market_type", ["moneyline", "total"])
-    .is("player_id", null)
-    .order("recorded_at", { ascending: true });
+  // 2026-06-16 P0 — PER-GAME parallel (see note above). Only the OLDEST rows are
+  // needed (a fallback opener is the first recorded per key), so LIMIT is safe.
+  const allHistoryResults = await Promise.all(
+    gameIds.map((gid) =>
+      supabase
+        .from("line_history")
+        .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
+        .eq("game_id", gid)
+        .in("market_type", ["moneyline", "total"])
+        .is("player_id", null)
+        .order("recorded_at", { ascending: true })
+        .limit(400)
+        .then((r) => (r.data ?? []) as LineHistoryOpenerRow[], () => [] as LineHistoryOpenerRow[]),
+    ),
+  );
+  const allHistory = allHistoryResults.flat();
   const fallbackByKey = new Map<string, LineHistoryOpenerRow>();
   for (const r of (allHistory ?? []) as LineHistoryOpenerRow[]) {
     const k = `${r.game_id}|${r.market_type}|${r.side}|${r.sportsbook}`;
