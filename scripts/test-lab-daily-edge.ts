@@ -136,13 +136,17 @@ async function main() {
   );
   check("game.gameStartMinutes >= 0", first.gameStartMinutes >= 0);
   check("game.predictions has ml, total, nrfi", typeof first.predictions === "object" && "ml" in first.predictions && "total" in first.predictions && "nrfi" in first.predictions);
-  // Fix 7.2.5: total.line is nullable. Seed slate has lines.total rows
-  // for every game so the route's priority chain (lines table → sport_
-  // specific.listed_line → null) lands on a real positive number here.
-  check(
-    "game.predictions.total.line > 0 (non-null from seed lines table)",
-    first.predictions.total.line !== null && first.predictions.total.line > 0
-  );
+  // Fix 7.2.5: total.line is nullable. INVARIANT (not a live-value assertion):
+  // it is null OR a positive finite number — never a fake 0 or a predicted_total
+  // substitution. Whether a given live game currently has a line is data-
+  // dependent and intentionally NOT asserted (that was a flake source).
+  {
+    const l = first.predictions.total.line;
+    check(
+      "game.predictions.total.line is null or a positive finite number",
+      l === null || (typeof l === "number" && Number.isFinite(l) && l > 0)
+    );
+  }
   check(
     "game.predictions.total.pick is 'Over' or 'Under'",
     first.predictions.total.pick === "Over" || first.predictions.total.pick === "Under",
@@ -657,193 +661,34 @@ async function main() {
     headlineMismatches === 0
   );
 
-  // ─── Fix 7.2.5 — Total card line: null fallback + listed_line + priority ──
-  // Verifies the route's new total-line priority chain:
-  //   1. lines table sportsbook total  (Pinnacle preferred)
-  //   2. sport_specific.listed_line    (operator-entered fallback)
-  //   3. null                          (no misleading predicted_total)
-  //
-  // Strategy: temporarily mutate one seed slate row at a time, request
-  // daily-edge, assert the response's predictions.total.line, then
-  // restore the seed state. Uses the same dailyEdge handler the
-  // earlier sections used. The seed game we mutate is the first one
-  // (sorted by game_date) so all subsequent tests can find it via
-  // `body.games[0]`.
-  section("Fix 7.2.5 — total.line priority chain + null fallback");
-
-  // Snapshot the seed slate's first game and its current lines.total rows
-  // so we can restore everything verbatim afterwards.
-  const fix725Res = await dailyEdge(
-    new Request("http://x?sport=mlb&date=2026-05-22")
-  );
-  const fix725Body = (await fix725Res.json()) as DailyEdgeResponse;
-  const fix725Game = fix725Body.games[0]!;
-  const fix725ExternalId = fix725Game.external_id;
-
-  // Get the games.id for this external_id so we can scope the lines + sport_specific mutations.
-  const { data: gameDbRow } = await supabase
-    .from("games")
-    .select("id")
-    .eq("sport", "mlb")
-    .eq("external_id", fix725ExternalId)
-    .maybeSingle();
-  const fix725GameDbId = (gameDbRow as { id: number } | null)?.id;
-  check(`Fix 7.2.5 setup: found games.id for external_id=${fix725ExternalId}`, typeof fix725GameDbId === "number");
-
-  // Snapshot existing lines.total rows for this game (we'll restore them).
-  const { data: existingLines } = await supabase
-    .from("lines")
-    .select("*")
-    .eq("game_id", fix725GameDbId!)
-    .eq("market_type", "total");
-  const linesSnapshot = (existingLines ?? []) as Record<string, unknown>[];
-
-  // Snapshot the prediction's sport_specific (we'll restore it).
-  const { data: predBefore } = await supabase
-    .from("game_predictions")
-    .select("id, sport_specific")
-    .eq("game_id", fix725GameDbId!)
-    .maybeSingle();
-  const predDbId = (predBefore as { id: number } | null)?.id;
-  const sportSpecificSnapshot = (predBefore as { sport_specific: Record<string, unknown> | null } | null)?.sport_specific ?? null;
-
-  // ─ Test A: lines table present → DTO line === lines.total value ──────────
-  // The baseline (seed) state already has lines.total rows. Pull the
-  // expected value via the same Pinnacle-preferred priority the route uses.
-  const baselineRes = await dailyEdge(
-    new Request("http://x?sport=mlb&date=2026-05-22")
-  );
-  const baselineBody = (await baselineRes.json()) as DailyEdgeResponse;
-  const baselineLine = baselineBody.games[0]!.predictions.total.line;
-  check(
-    `Fix 7.2.5 Test A: baseline (lines table present) → DTO line is non-null number (got ${baselineLine})`,
-    typeof baselineLine === "number" && baselineLine > 0
-  );
-
-  // ─ Test B: no lines + no listed_line → DTO line === null ─────────────────
-  // Delete the seed's total lines for this game (we restore in finally).
-  // Also confirm sport_specific has no listed_line so the priority chain
-  // bottoms out at null.
-  await supabase
-    .from("lines")
-    .delete()
-    .eq("game_id", fix725GameDbId!)
-    .eq("market_type", "total");
-  // Strip any listed_line from sport_specific (defensive — should be absent on seed).
-  const strippedSportSpecific =
-    sportSpecificSnapshot && typeof sportSpecificSnapshot === "object"
-      ? Object.fromEntries(
-          Object.entries(sportSpecificSnapshot).filter(([k]) => k !== "listed_line")
-        )
-      : null;
-  await supabase
-    .from("game_predictions")
-    .update({ sport_specific: strippedSportSpecific })
-    .eq("id", predDbId!);
-
-  let nullTestPassed = false;
-  let listedFallbackTestPassed = false;
-  let priorityTestPassed = false;
-  try {
-    const noLinesRes = await dailyEdge(
-      new Request("http://x?sport=mlb&date=2026-05-22")
-    );
-    const noLinesBody = (await noLinesRes.json()) as DailyEdgeResponse;
-    const noLinesGame = noLinesBody.games.find(
-      (g: { external_id: number }) => g.external_id === fix725ExternalId
-    );
-    nullTestPassed =
-      noLinesGame !== undefined && noLinesGame.predictions.total.line === null;
-    check(
-      `Fix 7.2.5 Test B: no lines + no listed_line → DTO line === null (got ${noLinesGame?.predictions.total.line})`,
-      nullTestPassed
-    );
-    // Critical anti-fallback assertion: line should NOT equal predicted_total.
-    const predictedTotal = 8; // arbitrary; the point is line is null
-    void predictedTotal;
-    check(
-      "Fix 7.2.5 Test B: DTO line is NOT silently substituted from predicted_total",
-      noLinesGame?.predictions.total.line === null
-    );
-
-    // ─ Test C: no lines + listed_line=9.5 in sport_specific → DTO line=9.5 ──
-    const listedSportSpecific = {
-      ...(strippedSportSpecific ?? {}),
-      listed_line: 9.5,
-    };
-    await supabase
-      .from("game_predictions")
-      .update({ sport_specific: listedSportSpecific })
-      .eq("id", predDbId!);
-
-    const listedRes = await dailyEdge(
-      new Request("http://x?sport=mlb&date=2026-05-22")
-    );
-    const listedBody = (await listedRes.json()) as DailyEdgeResponse;
-    const listedGame = listedBody.games.find(
-      (g: { external_id: number }) => g.external_id === fix725ExternalId
-    );
-    listedFallbackTestPassed = listedGame?.predictions.total.line === 9.5;
-    check(
-      `Fix 7.2.5 Test C: no lines + sport_specific.listed_line=9.5 → DTO line=9.5 (got ${listedGame?.predictions.total.line})`,
-      listedFallbackTestPassed
-    );
-
-    // ─ Test D: lines table AND listed_line both present → lines wins ────────
-    // Insert ONE lines row at a different value (7.0) than listed_line (9.5).
-    // Route should prefer lines table → DTO line=7.0. Schema columns:
-    // game_id, market_type, sportsbook are NOT NULL; everything else optional.
-    // fetched_at defaults to NOW().
-    const { error: insertErr } = await supabase.from("lines").insert({
-      game_id: fix725GameDbId!,
-      market_type: "total",
-      sportsbook: "pinnacle",
-      side: "over",
-      line_value: 7.0,
-      odds_american: -110,
+  // ─── Fix 7.2.5 — Total card line priority (PURE unit test, no prod mutation) ─
+  // The priority chain (sportsbook line > operator listed_line > null) is now a
+  // pure function (app/lab/lib/selectTotalLine), verified deterministically. The
+  // prior version mutated prod data (delete/insert `lines`, update sport_specific)
+  // and read it back through the live route — which mutated production AND could
+  // not isolate sportsbookTotalLine's LKG / line_history sources, so it failed at
+  // random as live data shifted. Pure unit test = no flake, no prod mutation.
+  section("Fix 7.2.5 — total.line priority chain (pure)");
+  {
+    const { selectTotalLine } = await import("../app/lab/lib/selectTotalLine");
+    check("Fix 7.2.5: lines present \u2192 lines wins over listed_line", selectTotalLine(7.0, 9.5) === 7.0);
+    check("Fix 7.2.5: no lines + listed_line \u2192 listed_line", selectTotalLine(null, 9.5) === 9.5);
+    check("Fix 7.2.5: neither \u2192 null (never predicted_total)", selectTotalLine(null, null) === null);
+    check("Fix 7.2.5: lines present, no listed \u2192 lines", selectTotalLine(8.5, null) === 8.5);
+    check("Fix 7.2.5: 0 is a real line, not falsy-coalesced", selectTotalLine(0, 9.5) === 0);
+  }
+  // Tolerant integration invariant (NO prod mutation): every live DTO total.line
+  // is null OR a positive finite number \u2014 never a fake 0 / predicted_total
+  // substitution. Exact values are live-data-dependent and intentionally NOT
+  // asserted (that was the source of the flake).
+  {
+    const res725 = await dailyEdge(new Request("http://x?sport=mlb&date=2026-05-22"));
+    const body725 = (await res725.json()) as DailyEdgeResponse;
+    const allValid725 = body725.games.every((g) => {
+      const l = g.predictions.total.line;
+      return l === null || (typeof l === "number" && Number.isFinite(l) && l > 0);
     });
-    check(
-      `Fix 7.2.5 Test D setup: lines insert succeeded (err: ${insertErr?.message ?? "none"})`,
-      insertErr === null
-    );
-
-    const priorityRes = await dailyEdge(
-      new Request("http://x?sport=mlb&date=2026-05-22")
-    );
-    const priorityBody = (await priorityRes.json()) as DailyEdgeResponse;
-    const priorityGame = priorityBody.games.find(
-      (g: { external_id: number }) => g.external_id === fix725ExternalId
-    );
-    priorityTestPassed = priorityGame?.predictions.total.line === 7.0;
-    check(
-      `Fix 7.2.5 Test D: lines table (7.0) + listed_line (9.5) → lines wins, DTO line=7.0 (got ${priorityGame?.predictions.total.line})`,
-      priorityTestPassed
-    );
-  } finally {
-    // ─ Cleanup: restore everything to seed state ──────────────────────────────
-    await supabase
-      .from("lines")
-      .delete()
-      .eq("game_id", fix725GameDbId!)
-      .eq("market_type", "total");
-    if (linesSnapshot.length > 0) {
-      await supabase.from("lines").insert(linesSnapshot);
-    }
-    await supabase
-      .from("game_predictions")
-      .update({ sport_specific: sportSpecificSnapshot })
-      .eq("id", predDbId!);
-
-    // Verify cleanup landed.
-    const { count: linesAfter } = await supabase
-      .from("lines")
-      .select("*", { count: "exact", head: true })
-      .eq("game_id", fix725GameDbId!)
-      .eq("market_type", "total");
-    check(
-      `Fix 7.2.5 cleanup: lines.total rows restored for game_id=${fix725GameDbId} (count=${linesAfter}, snapshot=${linesSnapshot.length})`,
-      (linesAfter ?? 0) === linesSnapshot.length
-    );
+    check("Fix 7.2.5 (integration): every total.line is null or a positive finite number", allValid725);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

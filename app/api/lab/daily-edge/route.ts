@@ -95,6 +95,7 @@ import {
   type LastMove,
 } from "@/lib/services/streamOverlay";
 import { interpretMarket } from "@/lib/streaming/marketInterpretation";
+import { selectTotalLine } from "@/app/lab/lib/selectTotalLine";
 
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer"];
 // Phase 7G — NBA goes live in the member-facing Daily Edge via the
@@ -394,6 +395,8 @@ type LineHistoryRow = {
    */
   line_value: number | null;
   recorded_at: string;
+  /** PK — used for keyset pagination (id ASC ≈ recorded_at ASC, but O(page)). */
+  id: number;
 };
 
 const MARKET_LABEL: Record<string, SharpSignalDto["market"]> = {
@@ -813,8 +816,7 @@ function buildGameDto(
     typeof pred.sport_specific?.listed_line === "number"
       ? pred.sport_specific.listed_line
       : null;
-  const totalLine: number | null =
-    sportsbookTotalLine ?? manualListedLine ?? null;
+  const totalLine: number | null = selectTotalLine(sportsbookTotalLine, manualListedLine);
   const totalStatus = deriveSharpStatus(pred.ou_grade);
   const totalPick: string | null =
     ouSide === null ? null
@@ -3965,35 +3967,44 @@ export async function GET(request: Request) {
     // Per Daniel's direction (4.1.9.B section 10): use MIN(recorded_at) as
     // the "first seen" since linesService hardcodes is_opener=false.
     //
-    // 2026-06-12 line-move fix — paginate to defeat PostgREST's 1000-row
-    // cap. A busy slate's line_history exceeds 1000 rows (books × markets ×
-    // timestamps); a single capped fetch ordered ascending silently kept
-    // only the 1000 OLDEST rows and starved openers for whichever (game,
-    // market) recorded later — non-deterministically nulling
-    // lineOpenAmerican and showing "Line Move unavailable" on cards whose
-    // opener really exists. Page through (recorded_at, id) ascending so the
-    // per-key map below still sees the true oldest row for every key.
+    // 2026-06-16 P0 — KEYSET pagination on the PK (id ASC), NOT range/OFFSET.
+    // A busy slate's line_history now runs ~20k rows; OFFSET pagination
+    // (range(from, …)) made Postgres scan-and-discard `from` rows per page, so
+    // deep pages (OFFSET 19000) blew past the statement_timeout and the whole
+    // route 500'd → "tonight's slate stuck loading". Keyset (id > lastId) is
+    // O(page) on the PK index. id is monotonic with insert/observation order,
+    // so rows still arrive oldest→newest and the per-key array below stays
+    // sorted oldest-first (buildMarketEdge's `.find` returns the opener).
+    //
+    // DEGRADE, never 500: openers are non-critical DISPLAY data. If the read
+    // still errors/times out, log + use whatever we gathered (cards show
+    // "Line Move unavailable" at worst) rather than taking down the slate.
     const HIST_PAGE = 1000;
     const histData: LineHistoryRow[] = [];
-    for (let from = 0; ; from += HIST_PAGE) {
-      const { data: page, error: histErr } = await supabase
+    let lastHistId = 0;
+    for (let page = 0; ; page++) {
+      const { data: pageData, error: histErr } = await supabase
         .from("line_history")
-        .select("game_id, market_type, sportsbook, side, line_value, odds_american, recorded_at")
+        .select("game_id, market_type, sportsbook, side, line_value, odds_american, recorded_at, id")
         .in("game_id", gameIds)
         .in("market_type", ["moneyline", "total", "first_inning_total"])
         .is("player_id", null)
-        .order("recorded_at", { ascending: true })
+        .gt("id", lastHistId)
         .order("id", { ascending: true })
-        .range(from, from + HIST_PAGE - 1);
+        .limit(HIST_PAGE);
       if (histErr) {
-        return Response.json({ error: histErr.message }, { status: 500 });
+        console.warn(
+          `daily-edge line_history read failed (${histErr.message}); openers partial/absent for this slate`,
+        );
+        break;
       }
-      const rows = (page ?? []) as LineHistoryRow[];
+      const rows = (pageData ?? []) as LineHistoryRow[];
       histData.push(...rows);
       if (rows.length < HIST_PAGE) break;
-      // Safety bound (no silent cap): line_history for a single slate
-      // should never approach 100k rows. Log and stop if it does.
-      if (from / HIST_PAGE >= 100) {
+      lastHistId = rows[rows.length - 1].id;
+      // Safety bound (no silent cap): a single slate should never approach
+      // 100k rows. Log and stop if it does.
+      if (page >= 100) {
         console.warn(
           `daily-edge line_history pagination hit 100-page bound (${histData.length} rows); openers may be incomplete`,
         );
