@@ -32,6 +32,14 @@
  */
 
 import { supabase } from "../../db/supabase";
+import {
+  loadStreamCurrentForSlate,
+  loadLastMovesForSlate,
+  streamKey,
+  type StreamCurrent,
+  type LastMove,
+} from "../streamOverlay";
+import { interpretMarket } from "../../streaming/marketInterpretation";
 import { addDaysToSlate } from "../../dates/slateDate";
 import type {
   DailyEdgeResponse,
@@ -703,9 +711,23 @@ function buildSoccerGradeContext(
   };
 }
 
+/**
+ * Live WS stream overlay for the WC card (2026-06-16, step 3). The soccer
+ * market names (match_result / total / btts) match the stream `market_type`
+ * 1:1, so streamKey(game_id, r.market, r.side) addresses the stream rows
+ * directly. DEFENSIVE/optional — when absent the card degrades to the cron
+ * price + opener exactly as before.
+ */
+type SoccerStreamContext = {
+  current: Map<string, StreamCurrent>;
+  lastMove: Map<string, LastMove>;
+  nowMs: number;
+};
+
 function buildMarketEdgeDto(
   r: PredictionRecordSlim | null,
   openerLookup: OpenerLookup,
+  stream?: SoccerStreamContext | null,
 ): MarketEdgeDto {
   if (r === null) {
     return {
@@ -766,6 +788,30 @@ function buildMarketEdgeDto(
   // numeric read still lives in the projection block; the verdict pill + the
   // clean held sentence carry the "we're passing" message.
   const heldHelp = buildHeldHelpLine(r);
+
+  // 2026-06-16 step 3 — live WS stream overlay. Soccer market names match the
+  // stream market_type 1:1, so the key is direct. Current price prefers the live
+  // stream observation over the cron-recorded odds; last-move feeds the line
+  // tracker's "Previous" stop + the derived market-intelligence chip. Splits are
+  // null for WC (SharpAPI /splits is empty for FIFA), so the chip is driven by
+  // movement. All optional → degrades to cron price + opener when absent.
+  const sKey = r.side !== null && stream ? streamKey(r.game_id, r.market, r.side) : null;
+  const streamCurrent = sKey ? stream!.current.get(sKey) ?? null : null;
+  const lastMove = sKey ? stream!.lastMove.get(sKey) ?? null : null;
+  const currentAmerican = streamCurrent?.american ?? r.odds_american;
+  const openAmerican = openerLookup(r.game_id, r.market, r.side);
+  const marketInterpretation = stream
+    ? interpretMarket({
+        pickSide: r.side,
+        openAmerican,
+        postedAmerican: null,
+        currentAmerican,
+        lastMove,
+        splits: null,
+        nowMs: stream.nowMs,
+      })
+    : undefined;
+
   return {
     pick: r.held ? null : r.pick,
     confidence: r.held || r.confidence === null ? null : r.confidence / 100,
@@ -785,12 +831,16 @@ function buildMarketEdgeDto(
     moneyPct: null,
     betsPct: null,
     publicSplits: [],
-    priceAmerican: r.odds_american,
-    lineOpenAmerican: openerLookup(r.game_id, r.market, r.side),
-    // 2026-06-16 line-tracker — soccer Locked stop: the picked-side price
-    // frozen at lock. First Published has no soccer source yet (deferred), and
-    // the live-stream Current overlay is MLB-only for now; both null here, so
-    // the soccer card degrades to Open → Current (+ Locked once locked).
+    priceAmerican: currentAmerican,
+    lineOpenAmerican: openAmerican,
+    // 2026-06-16 line-tracker (step 3): live WS overlay now wired for WC. Open
+    // from line_history opener; Previous from the last WS move; Current from the
+    // live stream (fallback cron); Locked frozen at lock. First Published has no
+    // soccer source yet (deferred).
+    lastMovePrevAmerican: lastMove?.prevAmerican ?? null,
+    lastMoveNextAmerican: lastMove?.nextAmerican ?? null,
+    lastMoveAtIso: lastMove?.movedAtIso ?? null,
+    marketInterpretation,
     lockedLineAmerican: r.locked_at !== null ? r.odds_american : null,
     lockedLineAt: r.locked_at,
     oddspherePostedAmerican: null,
@@ -1159,6 +1209,18 @@ export async function buildSoccerDailyEdgeAdapted(
     return openerMap.get(`${gameId}|${market}|${side}`) ?? null;
   };
 
+  // 2026-06-16 step 3 — live WS stream maps for the WC card (current price +
+  // last move per game/market/side). DEFENSIVE: both loaders return empty maps
+  // on any error (table missing / RLS), so the card degrades cleanly to the
+  // cron price + opener. Keyed by streamKey(game_id, market_type, side); soccer
+  // market names match the stream market_type 1:1.
+  const streamNowMs = Date.now();
+  const soccerStream: SoccerStreamContext = {
+    current: await loadStreamCurrentForSlate(supabase, wcGameIdsForOpener),
+    lastMove: await loadLastMovesForSlate(supabase, wcGameIdsForOpener, streamNowMs),
+    nowMs: streamNowMs,
+  };
+
   // 5. Build DTO per game.
   const dtos: DailyEdgeGameDto[] = wcGames.map((g) => {
     const homeTeam = g.home_team_id !== null ? teamById.get(g.home_team_id) : undefined;
@@ -1232,7 +1294,7 @@ export async function buildSoccerDailyEdgeAdapted(
         // The reader hides the W/D/L band when this field is null, so
         // soccer rows without an mr snapshot stay clean.
         moneyline: {
-          ...buildMarketEdgeDto(mr, openerLookup),
+          ...buildMarketEdgeDto(mr, openerLookup, soccerStream),
           matchResultThreeWayProbs: extractMatchResultThreeWayProbs(mr?.snapshot_json ?? null),
           // WC reader full-completion pass (2026-06-12):
           // Soccer-only reader context blocks. The moneyline slot
@@ -1247,7 +1309,7 @@ export async function buildSoccerDailyEdgeAdapted(
           soccerGradeContext: buildSoccerGradeContext(mr),
         },
         total: {
-          ...buildMarketEdgeDto(total, openerLookup),
+          ...buildMarketEdgeDto(total, openerLookup, soccerStream),
           soccerTotalContext: buildSoccerTotalContext(total),
           soccerGradeContext: buildSoccerGradeContext(total),
         },
@@ -1257,7 +1319,7 @@ export async function buildSoccerDailyEdgeAdapted(
           // Result context block, and Double Chance moved to the Match
           // Result slot's reader context. Headline pick/price come from the
           // real `btts` prediction_record.
-          ...buildMarketEdgeDto(btts, openerLookup),
+          ...buildMarketEdgeDto(btts, openerLookup, soccerStream),
           soccerBttsContext: buildSoccerBttsContext(btts),
           soccerGradeContext: buildSoccerGradeContext(btts),
         },
