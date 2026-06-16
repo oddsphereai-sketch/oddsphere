@@ -104,6 +104,10 @@
     {
       "path": "/api/cron/weekly-calibration",
       "schedule": "0 8 * * 0"
+    },
+    {
+      "path": "/api/cron/cleanup-stream-tables",
+      "schedule": "0 7 * * *"
     }
   ]
 }
