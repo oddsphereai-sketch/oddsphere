@@ -29,6 +29,7 @@ import { generateSignalSummary } from "@/lib/services/signalSummaryGenerator";
 import {
   deriveVerdict,
   VERDICT_LABEL,
+  isStrongOpposingSharpMoney,
   type Verdict,
 } from "@/lib/services/verdictDerivation";
 import {
@@ -2158,9 +2159,24 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     input.lockedNoBet ?? null,
     input.lockedBestAngle ?? null,
   );
-  const verdict = writerOverride !== null
+  const baseVerdict = writerOverride !== null
     ? { key: writerOverride.key as MarketVerdict, label: writerOverride.label, warning: liveVerdict.warning }
     : liveVerdict;
+
+  // 2026-06-16 — Caution on STRONG opposing sharp money (wrong-side risk).
+  // Caution is exactly for "the market/sharp money says our pick may be
+  // wrong-side." When the OPPOSITE side carries a clear sharp-money majority
+  // (≥60% of money AND ≥20pp over tickets) we downgrade a positive pick
+  // (Best Angle / Lean) to Caution. Downgrade-only: never upgrades, never
+  // touches the pick / projection / line / grade columns. moneyPct/betsPct come
+  // from effectiveSignals → frozen-at-lock for locked rows, so this never
+  // re-grades a locked decision on post-lock money. Coherent with the amber
+  // "Sharp money against our side" chip (same direction, stronger bar).
+  const verdict =
+    isStrongOpposingSharpMoney(moneyPct, betsPct) &&
+    (baseVerdict.key === "best_angle" || baseVerdict.key === "lean")
+      ? { key: "caution" as MarketVerdict, label: "Caution", warning: baseVerdict.warning }
+      : baseVerdict;
 
   // Server-generated copy (banned-terms-linted at output time).
   const modelDriver = pickModelDriver(input.autoFactors, input.market, input.pick, input.sportSpecific ?? null);

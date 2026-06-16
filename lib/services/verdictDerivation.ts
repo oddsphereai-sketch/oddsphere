@@ -145,3 +145,30 @@ export function deriveVerdict(input: VerdictInput): Verdict {
       return "watchlist";
   }
 }
+
+/**
+ * Opposing-sharp-money Caution (2026-06-16). Caution is exactly for
+ * "the market/sharp money says our pick may be wrong-side." When the OPPOSITE
+ * side of our pick holds a clear sharp-money majority, a positive verdict
+ * (Best Angle / Lean) is downgraded to Caution.
+ *
+ * Bar (deliberately HIGH so Caution stays rare/meaningful, not flooding the
+ * board): the opposite side holds ≥60% of the money AND ≥20pp more money than
+ * tickets (sharp money piling against us, not just public noise). Tiered above
+ * the chip's ≥15pp "Sharp money against our side" amber warning — a mild lean
+ * shows the chip but only STRONG opposition triggers Caution.
+ *
+ * Inputs are the PICKED side's money/ticket shares (0..100). Pure.
+ */
+export const OPPOSING_SHARP_MONEY_SHARE = 60;
+export const OPPOSING_SHARP_MONEY_CAUTION_GAP_PP = 20;
+
+export function isStrongOpposingSharpMoney(
+  pickMoneyPct: number | null,
+  pickBetsPct: number | null,
+): boolean {
+  if (pickMoneyPct === null || pickBetsPct === null) return false;
+  const oppMoneyShare = 100 - pickMoneyPct;
+  const oppOverTicketsGap = pickBetsPct - pickMoneyPct; // = oppMoney − oppBets
+  return oppMoneyShare >= OPPOSING_SHARP_MONEY_SHARE && oppOverTicketsGap >= OPPOSING_SHARP_MONEY_CAUTION_GAP_PP;
+}
