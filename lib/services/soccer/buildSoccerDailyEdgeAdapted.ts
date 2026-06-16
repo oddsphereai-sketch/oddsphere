@@ -685,7 +685,10 @@ function buildSoccerGradeContext(
       return `No clean edge on this market — we're passing.`;
     }
     if (miscal) {
-      return `Edge ${edgeStr} is implausibly large versus an efficient soccer market — flagged as possible model/market disagreement and held at Caution rather than upgraded.`;
+      // WC-MODEL-8 (2026-06-16): a sanity-ceiling hit now means likely bad
+      // INPUT DATA (not a model-vs-market opinion), parked at Watchlist — no
+      // "implausible edge" scare copy.
+      return `Market inputs for ${label} look unsettled right now — keeping this on the Watchlist until the data is clean.`;
     }
     const dcNote =
       r.market === "double_chance"

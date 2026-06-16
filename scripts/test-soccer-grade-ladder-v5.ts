@@ -1,11 +1,17 @@
 /**
- * WC-MODEL-5 research-calibrated grade-ladder test.
+ * WC-MODEL-8 grade-ladder test (VALUE + CONFIDENCE).
  *
- * Verifies market- + side-specific edge thresholds, the miscalibration
- * ceiling, Double Chance exclusion from Best Angle, and that Best Angle
- * stays structurally locked under external_priors_only.
+ * Verifies: market-/side-specific edge thresholds (value path); the CONFIDENCE
+ * path (high model_p earns a Lean at a modest edge); a large edge is a STRONG
+ * pick, NOT an "implausible" Caution (only an absurd > sanity_ceiling edge parks
+ * at Watchlist); Double Chance exclusion from Best Angle; Best Angle downgraded
+ * to Lean under external_priors_only.
  *
  * Pure logic. Run: npx tsx scripts/test-soccer-grade-ladder-v5.ts
+ *
+ * NOTE: the value-path cases below use a LOW default model_p (0.41, under every
+ * conviction floor) so they isolate the edge ladder; confidence-path cases pass
+ * a high model_p explicitly.
  */
 
 import { deriveSoccerGrade, type GradeInputContext } from "../lib/services/soccer/soccerConfidenceGrade";
@@ -40,7 +46,8 @@ function grade(market: any, edge: number, o: { fav?: boolean; agreement?: boolea
   return deriveSoccerGrade({
     market,
     selection: market === "match_result" ? "home" : market === "total" ? "over" : market === "btts" ? "yes" : "home_or_draw",
-    model_p: o.model_p ?? 0.55,
+    // Low default so value-path tests aren't elevated by the confidence path.
+    model_p: o.model_p ?? 0.41,
     edge_pp: edge,
     model_market_agreement: o.agreement ?? true,
     ctx: ctx({ is_match_favorite: o.fav ?? false, is_far_from_market: o.far ?? false }),
@@ -76,12 +83,24 @@ ok("DC +3.5pp → Market-Aligned (below DC watchlist 4.0)", grade("double_chance
 const dcHigh = grade("double_chance", 8.0);
 ok("DC +8.0pp is NOT Best Angle", dcHigh.grade !== "Best Angle" && dcHigh.best_angle === false);
 
-// 7 — Miscalibration ceiling: implausibly large edge → Caution + flag
-const mc = grade("match_result", 11.0, { fav: true });
-ok("MR +11pp → Caution (above 10pp ceiling)", mc.grade === "Caution");
-ok("MR +11pp sets miscalibration_flag", mc.miscalibration_flag === true);
-ok("Total +9.5pp → Caution + flag (ceiling 9)", grade("total", 9.5).grade === "Caution" && grade("total", 9.5).miscalibration_flag === true);
-ok("Below ceiling does NOT flag", grade("match_result", 6.0, { fav: true }).miscalibration_flag === false);
+// 7 — WC-MODEL-8: a LARGE edge is a STRONG pick, not an "implausible" Caution.
+//     Only an absurd edge (> sanity_ceiling) parks at Watchlist (data error).
+const big = grade("match_result", 11.0, { fav: true });
+ok("MR +11pp → NOT Caution (real edge is a strong pick)", big.grade !== "Caution");
+ok("MR +11pp → Lean (value path, no conviction)", big.grade === "Lean");
+ok("MR +11pp does NOT set miscalibration_flag", big.miscalibration_flag === false);
+ok("Total +9.5pp → Lean, no flag", grade("total", 9.5).grade === "Lean" && grade("total", 9.5).miscalibration_flag === false);
+// Absurd edge (> sanity_ceiling 32 for MR favorite) = likely data error → Watchlist + flag, NOT Caution.
+const absurd = grade("match_result", 40.0, { fav: true });
+ok("MR +40pp (> sanity) → Watchlist (not Caution)", absurd.grade === "Watchlist");
+ok("MR +40pp sets miscalibration_flag (data-error sanity)", absurd.miscalibration_flag === true);
+
+// 7b — CONFIDENCE path: a high-conviction pick earns a Lean at a modest edge.
+ok("MR favorite +2.5pp @ model_p 0.55 → Lean (confidence path, conviction 52)", grade("match_result", 2.5, { fav: true, model_p: 0.55 }).grade === "Lean");
+ok("MR favorite +2.5pp @ model_p 0.41 → Watchlist (no conviction → value path only)", grade("match_result", 2.5, { fav: true, model_p: 0.41 }).grade === "Watchlist");
+ok("Total +3.0pp @ model_p 0.58 → Lean (conviction 56)", grade("total", 3.0, { model_p: 0.58 }).grade === "Lean");
+ok("Total +3.0pp @ model_p 0.50 → Watchlist (below conviction 56)", grade("total", 3.0, { model_p: 0.50 }).grade === "Watchlist");
+ok("Confidence path needs SOME value: high model_p but +1.0pp (< watchlist) → Market-Aligned", grade("match_result", 1.0, { fav: true, model_p: 0.62 }).grade === "Market-Aligned");
 
 // 8 — QUALIFIED Best Angle: fires only with market confirmation + smart-money
 // not-against + sane edge + current data. No empirical-calibration lock.

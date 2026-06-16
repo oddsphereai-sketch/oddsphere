@@ -227,7 +227,6 @@ export function deriveSoccerGrade(opts: {
     is_match_favorite: opts.ctx.is_match_favorite,
     edge_pp: opts.edge_pp,
     agreement: opts.model_market_agreement,
-    far_from_market: opts.ctx.is_far_from_market,
     model_p: opts.model_p,
   });
   const grade = ladderResult.grade;
@@ -291,7 +290,7 @@ export function deriveSoccerGrade(opts: {
 function ladderFor(
   market: SoccerGradeDecision["market"],
   isMatchFavorite: boolean,
-): { watchlist: number; lean: number; best_angle: number | null; miscalibration_ceiling: number } {
+): { watchlist: number; lean: number; best_angle: number | null; conviction_pct: number; sanity_ceiling: number } {
   const L = EXTERNAL_PRIORS_V1.grade_ladder;
   if (market === "match_result") return isMatchFavorite ? L.match_result_favorite : L.match_result_other;
   if (market === "total") return L.total;
@@ -300,24 +299,25 @@ function ladderFor(
 }
 
 /**
- * Research-calibrated grade ladder (WC-MODEL-5). Conservative, market- and
- * side-specific. Order matters:
- *   1. Miscalibration ceiling — an implausibly large edge vs the de-vigged
- *      market is held at Caution + flagged, never upgraded.
- *   2. Best Angle / Lean require agreement AND not-far-from-market (and a
- *      non-null best_angle floor — Double Chance is excluded).
- *   3. Below the market's Watchlist floor → Caution.
+ * WC-MODEL-8 grade ladder (2026-06-16) — VALUE (edge) + CONFIDENCE (model_p).
+ *
+ * The prior ladder was value-only and treated a large edge as an ERROR: edge >
+ * a ~10pp ceiling → Caution ("implausible"), and far-from-market (>15pp) blocked
+ * Lean/Best Angle entirely. With the 0.65 market-blend compressing most picks to
+ * ~0 edge, the board collapsed to "Market-Aligned" (tiny edge) or "Caution" (big
+ * edge) with NO Lean band. This rebuild:
+ *   • A genuinely large edge is a STRONG pick, not a Caution. Only an absurd
+ *     edge (> sanity_ceiling, ~30pp = data error) parks at Watchlist — no scary
+ *     Caution/copy.
+ *   • Adds the CONFIDENCE axis: a high-conviction pick (model_p ≥ conviction_pct)
+ *     with at least a mild positive edge earns a Lean, even when the edge alone
+ *     is small (a confident pick the market roughly agrees with).
+ *   • Caution is reserved for genuine WRONG-SIDE: the model is well below the
+ *     market on its own pick AND does not favor it (model_p < 0.5).
  */
 // Edge floor (pp) separating "Market-Aligned" from "Caution". A market-grounded
-// model (60% market-blended λ) that lands a few pp under the market on its own
-// pick is NOT wrong — it AGREES on direction and is only slightly less extreme,
-// which is the normal, honest state. Stamping that "Caution" made the whole WC
-// card read as a wall of scary warnings (the model "looked dumb"). We align the
-// floor with hold_negative_floor (-5.0): a pick the model is MORE than 5pp under
-// the market on is already HARD-HELD as No Play by soccerHoldLogic rule 7, so by
-// the time the ladder runs, anything that publishes is at-worst Market-Aligned.
-// "Caution" is then reserved for genuine miscalibration (edge > the per-market
-// ceiling) — an honest "this edge is too large to trust", not "no edge here".
+// model that lands a few pp under the market on its own pick AGREES on direction
+// and is only slightly less extreme — the normal, honest state, not a warning.
 const MARKET_ALIGNED_FLOOR_PP = -10.0;
 
 function deriveGradeLadder(opts: {
@@ -325,45 +325,41 @@ function deriveGradeLadder(opts: {
   is_match_favorite: boolean;
   edge_pp: number | null;
   agreement: boolean;
-  far_from_market: boolean;
   model_p: number;
 }): { grade: SoccerGradeVerdict; miscalibration: boolean } {
   const edge = opts.edge_pp ?? 0;
+  const confPct = toPct(opts.model_p); // 0..100
   const lad = ladderFor(opts.market, opts.is_match_favorite);
+  const highConviction = confPct >= lad.conviction_pct;
 
-  // 1. Miscalibration ceiling: too-large edge is suspect, not stronger.
-  if (edge > lad.miscalibration_ceiling) {
-    return { grade: "Caution", miscalibration: true };
+  // 1. Data-error sanity bound: an edge THIS large means bad inputs, not value.
+  //    Park at Watchlist (visible, non-actionable) — NOT a scary Caution.
+  if (edge > lad.sanity_ceiling) {
+    return { grade: "Watchlist", miscalibration: true };
   }
-  // 2. Best Angle (still structurally locked downstream; null floor = excluded).
-  if (lad.best_angle !== null && edge >= lad.best_angle && opts.agreement && !opts.far_from_market) {
+  // 2. Best Angle: strong value + market agreement + high conviction. (Still
+  //    downgraded to Lean by the qualification gate under external_priors_only.)
+  if (lad.best_angle !== null && edge >= lad.best_angle && opts.agreement && highConviction) {
     return { grade: "Best Angle", miscalibration: false };
   }
-  // 3. Lean.
-  if (edge >= lad.lean && opts.agreement && !opts.far_from_market) {
+  // 3. Lean — VALUE path (real edge + agreement) OR CONFIDENCE path (high
+  //    conviction + at least a mild positive edge). The mix the value-only
+  //    ladder lacked: a confident pick the market roughly agrees with now earns
+  //    a Lean instead of collapsing to Market-Aligned.
+  if ((edge >= lad.lean && opts.agreement) || (highConviction && edge >= lad.watchlist)) {
     return { grade: "Lean", miscalibration: false };
   }
-  // 4. Watchlist.
+  // 4. Watchlist: some value, below the Lean bar.
   if (edge >= lad.watchlist) {
     return { grade: "Watchlist", miscalibration: false };
   }
-  // 5. Below the actionable floor. If the model is at/agrees with the market
-  //    (edge not meaningfully negative), this is MARKET-ALIGNED — an honest,
-  //    informative "our read agrees with the sharp market" state, NOT a
-  //    warning.
+  // 5. Market-Aligned: model agrees with the market, no actionable edge.
   if (edge >= MARKET_ALIGNED_FLOOR_PP) {
     return { grade: "Market-Aligned", miscalibration: false };
   }
-  // 6. Edge below the floor. SIDE-AWARE (2026-06-14, Daniel: "Germany ml is a
-  //    caution lol"): a large negative edge where the MODEL STILL FAVORS THE
-  //    PICK (model_p ≥ 0.5) means model and market agree on the SIDE — the
-  //    model is just less confident, so there's no betting value. That is
-  //    Market-Aligned ("we agree, no edge"), NOT a warning. Caution is
-  //    reserved for when the model does NOT favor the displayed pick
-  //    (model_p < 0.5) — a genuinely wrong-side / low-conviction read — or a
-  //    too-large POSITIVE edge (the miscalibration ceiling above). This stops
-  //    heavy favorites (Germany ML, blowout Overs) the model agrees with from
-  //    reading as a wall of scary Cautions.
+  // 6. Edge well below the floor. model_p ≥ 0.5 → agrees on the SIDE, just less
+  //    confident → Market-Aligned. Otherwise the model doesn't favor the
+  //    displayed pick → genuine wrong-side → Caution.
   if (opts.model_p >= 0.5) {
     return { grade: "Market-Aligned", miscalibration: false };
   }

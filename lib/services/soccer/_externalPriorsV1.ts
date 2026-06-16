@@ -208,17 +208,23 @@ export const EXTERNAL_PRIORS_V1 = {
   //   • Total / BTTS carry wider book margins than 1X2 → a buffer above MR.
   //   • Double Chance is margin-heavy + short-priced → highest bar, and is
   //     EXCLUDED from Best Angle (best_angle = null).
-  //   • miscalibration_ceiling: an edge larger than this vs the de-vigged
-  //     market is far more likely model miscalibration than real value, so
-  //     it is NOT upgraded — it drops to Caution with a flag.
-  // best_angle floors are listed for the post-calibration future but stay
-  // structurally locked under external_priors_only.
+  // WC-MODEL-8 (2026-06-16): grade = VALUE (edge) + CONFIDENCE (model_p).
+  //   • conviction_pct — model_p% at/above which the pick is "high conviction"
+  //     for its market; lets a confident pick earn a Lean at a modest edge
+  //     (the confidence axis the value-only ladder ignored).
+  //   • sanity_ceiling — NOT a "too-good-to-be-true → Caution" gate (that made
+  //     every genuine WC mismatch read as a scary Caution). It is a much higher
+  //     DATA-ERROR bound: an edge above it implies bad inputs, so it is parked
+  //     at Watchlist (no Caution, no "implausible" copy). Real WC mismatch edges
+  //     (a strong side vs a soft line — easily 10–25pp) now grade Lean/Best
+  //     Angle on their merits. best_angle floors stay structurally downgraded to
+  //     Lean under external_priors_only (the qualification gate).
   grade_ladder: {
-    match_result_favorite: { watchlist: 2.0, lean: 3.0, best_angle: 5.0, miscalibration_ceiling: 10.0 },
-    match_result_other: { watchlist: 3.0, lean: 5.0, best_angle: 7.0, miscalibration_ceiling: 10.0 },
-    total: { watchlist: 2.5, lean: 4.0, best_angle: 6.0, miscalibration_ceiling: 9.0 },
-    btts: { watchlist: 3.0, lean: 5.0, best_angle: 7.0, miscalibration_ceiling: 10.0 },
-    double_chance: { watchlist: 4.0, lean: 6.0, best_angle: null as number | null, miscalibration_ceiling: 9.0 },
+    match_result_favorite: { watchlist: 2.0, lean: 3.0, best_angle: 6.0, conviction_pct: 52, sanity_ceiling: 32.0 },
+    match_result_other: { watchlist: 3.0, lean: 5.0, best_angle: 8.0, conviction_pct: 42, sanity_ceiling: 35.0 },
+    total: { watchlist: 2.5, lean: 4.0, best_angle: 6.0, conviction_pct: 56, sanity_ceiling: 30.0 },
+    btts: { watchlist: 3.0, lean: 5.0, best_angle: 7.0, conviction_pct: 55, sanity_ceiling: 30.0 },
+    double_chance: { watchlist: 4.0, lean: 6.0, best_angle: null as number | null, conviction_pct: 72, sanity_ceiling: 30.0 },
   },
 
   // ─── Hold-logic thresholds ────────────────────────────────────────

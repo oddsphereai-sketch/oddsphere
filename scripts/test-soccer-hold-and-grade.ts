@@ -189,12 +189,14 @@ test("5b. Sub-ceiling BTTS edge (+6pp) under external_priors_only → NOT held",
 
 // ─── Test 6 — Far-from-market soft cap does NOT elevate ─────────────
 test("6. Far-from-market soft cap does NOT elevate Watchlist to Lean", () => {
-  // BTTS edge 3.5 (≥ BTTS watchlist 3.0, < lean 5.0) + no agreement → Watchlist.
-  // Apply soft cap of Lean — should STAY at Watchlist (cap can only lower).
+  // BTTS edge 3.5 (≥ watchlist 3.0, < lean 5.0), no agreement, model_p 0.50
+  // (BELOW the BTTS conviction floor 55 so the confidence path does NOT fire) →
+  // Watchlist. Apply soft cap of Lean — should STAY at Watchlist (cap can only
+  // lower, never elevate).
   const g = deriveSoccerGrade({
     market: "btts",
     selection: "yes",
-    model_p: 0.55,
+    model_p: 0.50,
     edge_pp: 3.5,
     model_market_agreement: false,
     ctx: gradeInput({ is_far_from_market: false }),
