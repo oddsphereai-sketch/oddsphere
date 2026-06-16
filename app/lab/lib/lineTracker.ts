@@ -1,23 +1,21 @@
 /**
- * Pure line-tracker evidence builder (2026-06-16). No React, no DB — unit-
- * tested directly. Renders the compact one-line movement story for the Edge
- * Stack "Line Move" row:
+ * Pure line-tracker evidence builder. No React, no DB — unit-tested directly.
+ * Renders the compact one-line movement story for the Edge Stack "Line Move"
+ * row using only meaningful market-reference points:
  *
- *     Open −170 · First Published −165 · Current −157 · Locked −160
+ *     Open −170 · Previous −150 · Current −157 · Locked −160
  *
- * Only non-null stops are shown, in canonical order. When neither a First
- * Published nor a Locked stop exists (the state until the streaming worker +
- * posted-line writes are live), it degrades to "Open −170 · Current −157" —
- * the same information today's card shows, just with explicit labels.
+ * Only non-null stops are shown, in canonical order. Degrades to
+ * "Open −170 · Current −157" when there is no Previous/Locked stop.
  *
- * Member-facing labels are Open / First Published / Current / Locked. The word
- * "OddSphere posted" is never used (internal storage only).
+ * NOTE (2026-06-16): the internal "Model Posted" / first-publish price is NOT a
+ * timeline stop — it's kept for CLV in the expanded interpretation detail only
+ * ("Since our post …"), never as a member-facing tracker label.
  */
 
 export type LineTrackerInput = {
   openAmerican: number | null;
-  postedAmerican: number | null;
-  /** The picked-side price just before the most recent move ("Previous"). */
+  /** Picked-side price just before the most recent move ("Previous"). */
   previousAmerican?: number | null;
   currentAmerican: number | null;
   lockedAmerican: number | null;
@@ -28,29 +26,24 @@ function fmt(n: number): string {
 }
 
 export type LineTrackerEvidence = {
-  /** The compact one-line stop chain, or null when there is nothing to show. */
+  /** Compact one-line stop chain, or null when there is nothing to show. */
   evidence: string | null;
-  /** True when a First Published or Locked stop is present (richer than Open→Current). */
+  /** True when a Previous or Locked stop is present (richer than Open→Current). */
   hasExtraStops: boolean;
 };
 
 export function buildLineTrackerEvidence(input: LineTrackerInput): LineTrackerEvidence {
+  const previousAmerican = input.previousAmerican ?? null;
+  const hasPrevious = previousAmerican !== null && previousAmerican !== input.currentAmerican;
+
   const stops: string[] = [];
   if (input.openAmerican !== null) stops.push(`Open ${fmt(input.openAmerican)}`);
-  if (input.postedAmerican !== null) stops.push(`First Published ${fmt(input.postedAmerican)}`);
-  // "Previous" only when it differs from current (a real prior price before the
-  // most recent move) — avoids a redundant stop equal to Current.
-  const previousAmerican = input.previousAmerican ?? null;
-  if (previousAmerican !== null && previousAmerican !== input.currentAmerican) {
-    stops.push(`Previous ${fmt(previousAmerican)}`);
-  }
+  if (hasPrevious) stops.push(`Previous ${fmt(previousAmerican as number)}`);
   if (input.currentAmerican !== null) stops.push(`Current ${fmt(input.currentAmerican)}`);
   if (input.lockedAmerican !== null) stops.push(`Locked ${fmt(input.lockedAmerican)}`);
 
-  const hasExtraStops =
-    input.postedAmerican !== null || input.lockedAmerican !== null ||
-    (previousAmerican !== null && previousAmerican !== input.currentAmerican);
-  // Need at least two stops to tell a "move" story; one stop alone is not a tracker.
+  const hasExtraStops = input.lockedAmerican !== null || hasPrevious;
+  // Need at least two stops to tell a "move" story.
   if (stops.length < 2) return { evidence: null, hasExtraStops };
   return { evidence: stops.join(" · "), hasExtraStops };
 }

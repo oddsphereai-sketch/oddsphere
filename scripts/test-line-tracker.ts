@@ -1,6 +1,9 @@
 /**
  * Unit tests for app/lab/lib/lineTracker.ts (pure line-tracker evidence).
  * Run: npx tsx scripts/test-line-tracker.ts
+ *
+ * NOTE (2026-06-16): "First Published" / "Model Posted" is no longer a tracker
+ * stop. Stops are only Open · Previous · Current · Locked.
  */
 import { buildLineTrackerEvidence } from "../app/lab/lib/lineTracker";
 
@@ -13,50 +16,50 @@ function eq(name: string, got: unknown, want: unknown): void {
 
 // Degrade: only Open + Current → labeled two-stop (no extra stops).
 eq("open+current only",
-  buildLineTrackerEvidence({ openAmerican: -170, postedAmerican: null, currentAmerican: -157, lockedAmerican: null }),
+  buildLineTrackerEvidence({ openAmerican: -170, currentAmerican: -157, lockedAmerican: null }),
   { evidence: "Open -170 · Current -157", hasExtraStops: false });
 
-// Full chain Open → First Published → Current → Locked.
+// Full chain Open → Previous → Current → Locked.
 eq("full 4-stop chain",
-  buildLineTrackerEvidence({ openAmerican: -170, postedAmerican: -165, currentAmerican: -157, lockedAmerican: -160 }),
-  { evidence: "Open -170 · First Published -165 · Current -157 · Locked -160", hasExtraStops: true });
+  buildLineTrackerEvidence({ openAmerican: -170, previousAmerican: -150, currentAmerican: -157, lockedAmerican: -160 }),
+  { evidence: "Open -170 · Previous -150 · Current -157 · Locked -160", hasExtraStops: true });
 
 // Previous stop (last move) inserted before Current when it differs.
 eq("previous stop present when differs from current",
-  buildLineTrackerEvidence({ openAmerican: -170, postedAmerican: -165, previousAmerican: -150, currentAmerican: -157, lockedAmerican: null }),
-  { evidence: "Open -170 · First Published -165 · Previous -150 · Current -157", hasExtraStops: true });
+  buildLineTrackerEvidence({ openAmerican: -170, previousAmerican: -150, currentAmerican: -157, lockedAmerican: null }),
+  { evidence: "Open -170 · Previous -150 · Current -157", hasExtraStops: true });
 eq("previous stop omitted when equal to current (no redundant stop)",
-  buildLineTrackerEvidence({ openAmerican: -170, postedAmerican: null, previousAmerican: -157, currentAmerican: -157, lockedAmerican: null }),
+  buildLineTrackerEvidence({ openAmerican: -170, previousAmerican: -157, currentAmerican: -157, lockedAmerican: null }),
   { evidence: "Open -170 · Current -157", hasExtraStops: false });
 
-// First Published present, no Locked.
-eq("open+posted+current",
-  buildLineTrackerEvidence({ openAmerican: -170, postedAmerican: -165, currentAmerican: -157, lockedAmerican: null }),
-  { evidence: "Open -170 · First Published -165 · Current -157", hasExtraStops: true });
+// Open + Current, no Previous/Locked.
+eq("open+current (no previous, no locked)",
+  buildLineTrackerEvidence({ openAmerican: -170, currentAmerican: -157, lockedAmerican: null }),
+  { evidence: "Open -170 · Current -157", hasExtraStops: false });
 
 // Locked-only-after-current (e.g. current null at lock): Open + Locked.
 eq("open+locked (current null)",
-  buildLineTrackerEvidence({ openAmerican: -170, postedAmerican: null, currentAmerican: null, lockedAmerican: -160 }),
+  buildLineTrackerEvidence({ openAmerican: -170, currentAmerican: null, lockedAmerican: -160 }),
   { evidence: "Open -170 · Locked -160", hasExtraStops: true });
 
 // Positive odds formatting.
 eq("positive odds plus sign",
-  buildLineTrackerEvidence({ openAmerican: 120, postedAmerican: null, currentAmerican: 135, lockedAmerican: null }),
+  buildLineTrackerEvidence({ openAmerican: 120, currentAmerican: 135, lockedAmerican: null }),
   { evidence: "Open +120 · Current +135", hasExtraStops: false });
 
 // Single stop → no tracker (can't show a move with one point).
 eq("single stop → null evidence",
-  buildLineTrackerEvidence({ openAmerican: -170, postedAmerican: null, currentAmerican: null, lockedAmerican: null }),
+  buildLineTrackerEvidence({ openAmerican: -170, currentAmerican: null, lockedAmerican: null }),
   { evidence: null, hasExtraStops: false });
 
 // No stops at all.
 eq("no stops → null evidence",
-  buildLineTrackerEvidence({ openAmerican: null, postedAmerican: null, currentAmerican: null, lockedAmerican: null }),
+  buildLineTrackerEvidence({ openAmerican: null, currentAmerican: null, lockedAmerican: null }),
   { evidence: null, hasExtraStops: false });
 
-// hasExtraStops true even if chain too short to render (drives caller logic).
-eq("posted only → extra flag true but evidence null",
-  buildLineTrackerEvidence({ openAmerican: null, postedAmerican: -165, currentAmerican: null, lockedAmerican: null }),
+// hasExtraStops true via previous even if chain too short to render.
+eq("previous only → extra flag true but evidence null",
+  buildLineTrackerEvidence({ openAmerican: null, previousAmerican: -165, currentAmerican: null, lockedAmerican: null }),
   { evidence: null, hasExtraStops: true });
 
 console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILED`}`);

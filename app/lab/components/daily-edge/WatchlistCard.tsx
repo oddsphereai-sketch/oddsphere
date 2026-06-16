@@ -24,6 +24,7 @@ import type { ComposedTakeaway } from "../../lib/composeTakeaway";
 import Icon from "../Icon";
 import {
   CardEyebrow,
+  selectHeadlineMarketChip,
   CompactMatchupHeader,
   PickTilesRow,
   FullBreakdownExpandable,
@@ -41,7 +42,7 @@ export default function WatchlistCard({ game, takeaway }: Props) {
   return (
     <article className="bg-gray-900/40 border border-gray-800/60 rounded-xl p-5 sm:p-6 transition-colors duration-200 hover:border-gray-700/80">
       {/* Eyebrow */}
-      <CardEyebrow verdictKey="watchlist" gameTime={game.gameTime} compact />
+      <CardEyebrow verdictKey="watchlist" gameTime={game.gameTime} compact marketChip={selectHeadlineMarketChip(game)} />
 
       {/* Compact matchup with 28px logos */}
       <div className="mb-3">

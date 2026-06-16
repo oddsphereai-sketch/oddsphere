@@ -294,7 +294,6 @@ export function buildEdgeStackRows(
     // just with explicit labels.
     const tracker = buildLineTrackerEvidence({
       openAmerican: marketData.lineOpenAmerican,
-      postedAmerican: marketData.oddspherePostedAmerican ?? null,
       previousAmerican: marketData.lastMovePrevAmerican ?? null,
       currentAmerican: marketData.priceAmerican,
       lockedAmerican: marketData.lockedLineAmerican ?? null,

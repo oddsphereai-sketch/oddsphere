@@ -22,6 +22,7 @@ import type { DailyEdgeGameDto } from "../../lib/labTypes";
 import type { ComposedTakeaway } from "../../lib/composeTakeaway";
 import {
   CardEyebrow,
+  selectHeadlineMarketChip,
   FeaturedMatchupHeader,
   TeamColorAccent,
   FullBreakdownExpandable,
@@ -67,7 +68,7 @@ export default function HeroCard({ game, takeaway }: Props) {
       <TeamColorAccent awayTeam={game.awayTeam} homeTeam={game.homeTeam} sport={game.sport} />
 
       {/* Eyebrow row */}
-      <CardEyebrow verdictKey={verdictKey} gameTime={game.gameTime} />
+      <CardEyebrow verdictKey={verdictKey} gameTime={game.gameTime} marketChip={selectHeadlineMarketChip(game)} />
 
       {/* Matchup identity anchor — 48px logos + team names + projected */}
       <div className="mb-7">

@@ -200,33 +200,74 @@ const VERDICT_EYEBROW_LABEL: Record<Verdict, string> = {
   no_play: "No Play",
 };
 
+/**
+ * 2026-06-16 — the single compact market-intelligence chip for the collapsed
+ * card. Reads the HEADLINE market's derived interpretation. Returns null (chip
+ * hidden) when there's no reliable read: absent interpretation, or a pure
+ * neutral "Market steady" with no flags (avoids clutter). Emerald/amber always
+ * surface; gray surfaces only when it carries a flag (e.g. splits stale).
+ * Pure — the detailed view stays in the expanded Edge Stack "Market Read" row.
+ */
+export function selectHeadlineMarketChip(
+  game: DailyEdgeGameDto,
+): { label: string; tone: "emerald" | "amber" | "gray" } | null {
+  const headline: HeadlineMarket = headlinePrimaryMarket(game);
+  if (headline === null) return null;
+  const key = headline === "first_inning_total" ? "first_inning" : headline;
+  const mi = game.markets[key]?.marketInterpretation;
+  if (!mi) return null;
+  if (mi.chipTone === "gray" && mi.flags.length === 0) return null; // nothing reliable → hide
+  return { label: mi.chipLabel, tone: mi.chipTone };
+}
+
+const MARKET_CHIP_TONE: Record<"emerald" | "amber" | "gray", string> = {
+  emerald: "text-emerald-400/90 border-emerald-500/25 bg-emerald-500/[0.06]",
+  amber: "text-amber-400/90 border-amber-500/25 bg-amber-500/[0.06]",
+  gray: "text-gray-400 border-gray-700/40 bg-gray-700/[0.06]",
+};
+
 export function CardEyebrow({
   verdictKey,
   gameTime,
   compact = false,
+  marketChip = null,
 }: {
   verdictKey: Verdict;
   gameTime: string;
   compact?: boolean;
+  /** One compact market-intelligence chip; null hides it (no clutter). */
+  marketChip?: { label: string; tone: "emerald" | "amber" | "gray" } | null;
 }) {
   const color = VERDICT_EYEBROW_COLOR[verdictKey];
   return (
-    <div
-      className={`flex items-center justify-between gap-2 ${
-        compact ? "mb-2" : "mb-5"
-      }`}
-    >
-      <span
-        className={`inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] font-semibold ${color}`}
+    <>
+      <div
+        className={`flex items-center justify-between gap-2 ${
+          marketChip !== null ? "mb-2" : compact ? "mb-2" : "mb-5"
+        }`}
       >
-        <span aria-hidden="true">{VERDICT_GLYPH[verdictKey]}</span>
-        {VERDICT_EYEBROW_LABEL[verdictKey]}
-      </span>
-      <span className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-medium text-gray-400 tracking-tight whitespace-nowrap tabular-nums">
-        <Icon name="clock" className="w-3 h-3" />
-        {gameTime}
-      </span>
-    </div>
+        <span
+          className={`inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] font-semibold ${color}`}
+        >
+          <span aria-hidden="true">{VERDICT_GLYPH[verdictKey]}</span>
+          {VERDICT_EYEBROW_LABEL[verdictKey]}
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-medium text-gray-400 tracking-tight whitespace-nowrap tabular-nums">
+          <Icon name="clock" className="w-3 h-3" />
+          {gameTime}
+        </span>
+      </div>
+      {marketChip !== null && (
+        <div className={compact ? "mb-2" : "mb-4"}>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-tight ${MARKET_CHIP_TONE[marketChip.tone]}`}
+          >
+            <span aria-hidden="true" className="text-[7px]">●</span>
+            {marketChip.label}
+          </span>
+        </div>
+      )}
+    </>
   );
 }
 
