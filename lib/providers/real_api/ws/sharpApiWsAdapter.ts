@@ -27,6 +27,15 @@ import {
   mapSportsbook,
 } from "../_oddsMappers";
 import { normalizeMlbTeamName } from "../_teamNameNormalizer";
+import {
+  normalizeSharpApiMarketType,
+  normalizeMatchResultSelection,
+  normalizeDoubleChanceSelection,
+  normalizeTotalSelection,
+  normalizeBttsSelection,
+  type OfficialSoccerMarket,
+  type TeamNameCtx,
+} from "../_soccerMarketNormalizer";
 import { isBlockedSportsbook } from "../../../config/blockedSportsbooks";
 
 /** A normalized odds observation extracted from one WS frame. */
@@ -141,21 +150,78 @@ function asBool(v: unknown): boolean {
   return v === true || v === "true" || v === 1 || v === "1";
 }
 
+/** Is this event a soccer / FIFA World Cup event? Sport-vocab + league fallback. */
+function isSoccerCtx(sport: string | null, league: string | null): boolean {
+  const s = (sport ?? "").toLowerCase();
+  const l = (league ?? "").toLowerCase();
+  return s === "soccer" || s === "football" || l.includes("fifa") || l.includes("world_cup");
+}
+
+/**
+ * Soccer side normalization — dispatches to the REST soccer normalizer (single
+ * source of truth) per market. Needs the fixture team names to map
+ * "{team}" → home/away on 1X2 / double_chance. Returns the canonical side
+ * string (home/draw/away · home_or_draw/away_or_draw/home_or_away · over/under ·
+ * yes/no) or null when unparseable.
+ */
+function normalizeSoccerSide(
+  market: OfficialSoccerMarket,
+  rawSelection: string,
+  teams: TeamNameCtx,
+): Side | null {
+  switch (market) {
+    case "match_result":
+      return normalizeMatchResultSelection(rawSelection, teams);
+    case "double_chance":
+      return normalizeDoubleChanceSelection(rawSelection, teams);
+    case "total":
+      return normalizeTotalSelection(rawSelection);
+    case "btts":
+      return normalizeBttsSelection(rawSelection);
+    default:
+      return null;
+  }
+}
+
 function normalizeRow(
   row: Record<string, unknown>,
   ctx: { kind: "update" | "removed"; sport: string | null; league: string | null; globalSeq: number | null },
 ): NormalizedOddsEvent | null {
-  const marketType = mapMarketType(asStringOrNull(pick(row, ["market_type", "market"])));
-  const side = mapSide(pick(row, ["selection_type", "side", "selection"]));
+  const homeRaw = asStringOrNull(pick(row, ["home_team", "home", "home_team_name"]));
+  const awayRaw = asStringOrNull(pick(row, ["away_team", "away", "away_team_name"]));
+  const isBaseball = (ctx.sport ?? "").toLowerCase() === "baseball" || (ctx.league ?? "").toLowerCase() === "mlb";
+  const isSoccer = isSoccerCtx(ctx.sport, ctx.league);
+
+  const rawMarket = asStringOrNull(pick(row, ["market_type", "market"]));
+  const rawSelection = asStringOrNull(pick(row, ["selection_type", "side", "selection"]));
+
+  let marketType: MarketType | null;
+  let side: Side | null;
+  if (isSoccer) {
+    // Soccer/WC: SharpAPI REUSES "moneyline" for the 1X2 match_result market,
+    // so it must NOT go through the MLB mapper (which would emit MLB-moneyline).
+    // Team names are required — both to resolve the game downstream AND to map
+    // "{team}" → home/away safely (empty names would mis-bucket). Reuse the REST
+    // soccer normalizer so WS and REST never drift.
+    if (homeRaw === null || awayRaw === null) return null;
+    const soccerMarket =
+      rawMarket === null ? null : normalizeSharpApiMarketType(rawMarket.toLowerCase().trim());
+    marketType = soccerMarket;
+    side =
+      soccerMarket === null || rawSelection === null
+        ? null
+        : normalizeSoccerSide(soccerMarket, rawSelection, { home_team: homeRaw, away_team: awayRaw });
+  } else {
+    // MLB (and any abbrev-normalized sport) — unchanged path.
+    marketType = mapMarketType(rawMarket);
+    side = mapSide(rawSelection);
+  }
   // Unsupported market or side → drop (mirrors REST: props/alt-lines/unknown).
   if (marketType === null || side === null) return null;
 
   const sportsbookRaw = asStringOrNull(pick(row, ["sportsbook", "book", "bookmaker"]));
   const sportsbook = mapSportsbook(sportsbookRaw);
 
-  const homeRaw = asStringOrNull(pick(row, ["home_team", "home", "home_team_name"]));
-  const awayRaw = asStringOrNull(pick(row, ["away_team", "away", "away_team_name"]));
-  const isBaseball = (ctx.sport ?? "").toLowerCase() === "baseball" || (ctx.league ?? "").toLowerCase() === "mlb";
   const homeAbbrev = isBaseball ? normalizeMlbTeamName(homeRaw) : null;
   const awayAbbrev = isBaseball ? normalizeMlbTeamName(awayRaw) : null;
 
