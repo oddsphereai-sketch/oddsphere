@@ -327,6 +327,10 @@ export type MarketEdgeDto = {
   lastMovePrevAmerican?: number | null;
   lastMoveNextAmerican?: number | null;
   lastMoveAtIso?: string | null;
+  /** Actual LINE/point move on the last move (e.g. total 8.5 → 9). Null for
+   * moneyline or when the line didn't change. Reader-only display. */
+  lastMoveLinePrev?: number | null;
+  lastMoveLineNext?: number | null;
 
   // ── totals-only (null for moneyline / first_inning) ──
   modelTotal: number | null;

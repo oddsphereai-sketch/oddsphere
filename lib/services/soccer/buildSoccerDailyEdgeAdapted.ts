@@ -660,10 +660,10 @@ function buildSoccerGradeContext(
   const gradeKey = normalizeGradeKey(r.play_grade);
   const miscal = getMiscalibrationFlag(snap);
   const level = getCalibrationLevel(snap);
-  const calibrationLabel =
-    level === "external_priors_only"
-      ? "Research-calibrated model — live OddSphere tuning still building, so grades are conservative."
-      : "Calibrated on historical results.";
+  // 2026-06-16: the pre-calibration disclaimer is internal — not public-facing.
+  // Empty under external_priors_only so the reader hides it; only the
+  // post-calibration label shows (when we actually have historical calibration).
+  const calibrationLabel = level === "external_priors_only" ? "" : "Calibrated on historical results.";
   const modelPct = r.model_probability !== null ? Math.round(r.model_probability * 1000) / 10 : null;
   const marketPct = r.market_probability !== null ? Math.round(r.market_probability * 1000) / 10 : null;
   const edgePp = r.edge;
@@ -695,7 +695,7 @@ function buildSoccerGradeContext(
         ? " Double Chance needs a larger edge because it is short-priced and margin-heavy."
         : "";
     if (gradeKey === "lean" || gradeKey === "best_angle") {
-      return `Edge ${edgeStr} clears the Lean bar for ${label}. Best Angle stays locked until the model is calibrated on live results.`;
+      return `Edge ${edgeStr} clears the Lean bar for ${label}.`;
     }
     if (gradeKey === "watchlist") {
       return `Edge ${edgeStr} is in the Watchlist band for ${label} — noted, not yet an actionable Lean.${dcNote} A larger edge with market agreement would upgrade it.`;
@@ -843,6 +843,8 @@ function buildMarketEdgeDto(
     lastMovePrevAmerican: lastMove?.prevAmerican ?? null,
     lastMoveNextAmerican: lastMove?.nextAmerican ?? null,
     lastMoveAtIso: lastMove?.movedAtIso ?? null,
+    lastMoveLinePrev: lastMove?.prevLineValue ?? null,
+    lastMoveLineNext: lastMove?.nextLineValue ?? null,
     marketInterpretation,
     lockedLineAmerican: r.locked_at !== null ? r.odds_american : null,
     lockedLineAt: r.locked_at,

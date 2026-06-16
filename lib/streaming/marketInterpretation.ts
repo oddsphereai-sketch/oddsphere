@@ -39,6 +39,10 @@ export type LastMove = {
   movedAtIso: string | null;
   booksMoved: number | null;
   totalBooks: number | null;
+  /** LINE/point before→after the last move (e.g. total 8.5 → 9). Distinct from
+   * the odds move above; null for moneyline or when the line didn't change. */
+  prevLineValue: number | null;
+  nextLineValue: number | null;
 };
 
 export type SplitsInput = {
@@ -116,6 +120,19 @@ export function interpretMarket(input: MarketInterpretationInput): MarketInterpr
     detail.push(`Last move ${fmt(input.lastMove.prevAmerican)} → ${fmt(input.lastMove.nextAmerican)} (${dirWord(last)}${cents !== null ? `, ${Math.abs(cents)}¢` : ""}${books}) ${relAgo(input.lastMove.movedAtIso, input.nowMs)}.`);
     if (consensus === "consensus") flags.push("consensus_move");
     if (consensus === "isolated") flags.push("isolated_move");
+  }
+
+  // LINE/point move (e.g. total 8.5 → 9) — distinct from the odds move above.
+  // Reader-only detail: the actual number moving is a strong, plain-English
+  // signal members asked for ("show the original line and what it moved to").
+  if (
+    input.lastMove &&
+    input.lastMove.prevLineValue !== null &&
+    input.lastMove.nextLineValue !== null &&
+    input.lastMove.prevLineValue !== input.lastMove.nextLineValue
+  ) {
+    flags.push("line_value_moved");
+    detail.push(`Line moved ${input.lastMove.prevLineValue} → ${input.lastMove.nextLineValue}.`);
   }
 
   // Public splits (cron) + freshness

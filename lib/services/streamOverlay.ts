@@ -56,6 +56,10 @@ export type LastMove = {
   movedAtIso: string | null;
   booksMoved: number | null;
   totalBooks: number | null;
+  /** Picked-side LINE/point before→after the last move (e.g. total 8.5 → 9).
+   * Null for moneyline (no line) or when unchanged. Distinct from the odds move. */
+  prevLineValue: number | null;
+  nextLineValue: number | null;
 };
 
 /**
@@ -72,7 +76,7 @@ export async function loadLastMovesForSlate(
 ): Promise<Map<string, LastMove>> {
   const map = new Map<string, LastMove>();
   if (gameIds.length === 0) return map;
-  type Row = { game_id: number; market_type: string; side: string | null; sportsbook: string; prev_odds_american: number | null; next_odds_american: number | null; moved_at: string };
+  type Row = { game_id: number; market_type: string; side: string | null; sportsbook: string; prev_odds_american: number | null; next_odds_american: number | null; prev_line_value: number | null; next_line_value: number | null; moved_at: string };
   const rowsByKey = new Map<string, Row[]>();
   try {
     for (let i = 0; i < gameIds.length; i += 20) {
@@ -81,7 +85,7 @@ export async function loadLastMovesForSlate(
       for (;;) {
         const { data, error } = (await supabase
           .from("line_movements")
-          .select("game_id, market_type, side, sportsbook, prev_odds_american, next_odds_american, moved_at")
+          .select("game_id, market_type, side, sportsbook, prev_odds_american, next_odds_american, prev_line_value, next_line_value, moved_at")
           .in("game_id", chunk)
           .range(from, from + 999)) as { data: unknown; error: unknown };
         if (error) return map; // table missing / error → degrade
@@ -109,6 +113,8 @@ export async function loadLastMovesForSlate(
       movedAtIso: latest.moved_at,
       booksMoved: booksMoved > 0 ? booksMoved : null,
       totalBooks: totalBooks > 0 ? totalBooks : null,
+      prevLineValue: latest.prev_line_value,
+      nextLineValue: latest.next_line_value,
     });
   }
   return map;

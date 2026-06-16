@@ -108,20 +108,38 @@ function base(over: Partial<MarketInterpretationInput> = {}): MarketInterpretati
 {
   const consensus = interpretMarket(base({
     openAmerican: null, currentAmerican: null,
-    lastMove: { prevAmerican: -150, nextAmerican: -165, movedAtIso: "2026-06-16T17:50:00Z", booksMoved: 8, totalBooks: 10 },
+    lastMove: { prevAmerican: -150, nextAmerican: -165, movedAtIso: "2026-06-16T17:50:00Z", booksMoved: 8, totalBooks: 10 , prevLineValue: null, nextLineValue: null },
   }));
   check("consensus move → flag", consensus.flags.includes("consensus_move"));
   const isolated = interpretMarket(base({
     openAmerican: null, currentAmerican: null,
-    lastMove: { prevAmerican: -150, nextAmerican: -165, movedAtIso: "2026-06-16T17:50:00Z", booksMoved: 1, totalBooks: 10 },
+    lastMove: { prevAmerican: -150, nextAmerican: -165, movedAtIso: "2026-06-16T17:50:00Z", booksMoved: 1, totalBooks: 10 , prevLineValue: null, nextLineValue: null },
   }));
   check("isolated move → flag", isolated.flags.includes("isolated_move"));
+}
+// 8b. LINE/point move (e.g. total 8.5 → 9) → reader detail + flag. Distinct
+//     from the odds move; reader-only (does not change the collapsed chip).
+{
+  const r = interpretMarket(base({
+    openAmerican: -110, currentAmerican: -112,
+    lastMove: { prevAmerican: -110, nextAmerican: -112, movedAtIso: "2026-06-16T17:50:00Z", booksMoved: 5, totalBooks: 8, prevLineValue: 8.5, nextLineValue: 9 },
+  }));
+  check("line move → flag", r.flags.includes("line_value_moved"));
+  check("line move → detail '8.5 → 9'", r.detail.some((d) => d.includes("Line moved 8.5 → 9")));
+}
+// 8c. Line UNCHANGED → no line-move detail (only odds moved).
+{
+  const r = interpretMarket(base({
+    openAmerican: -110, currentAmerican: -120,
+    lastMove: { prevAmerican: -110, nextAmerican: -120, movedAtIso: "2026-06-16T17:50:00Z", booksMoved: 3, totalBooks: 8, prevLineValue: 9, nextLineValue: 9 },
+  }));
+  check("line unchanged → no line_value_moved flag", !r.flags.includes("line_value_moved"));
 }
 // 9. Last-move chip when no overall open→current signal.
 {
   const r = interpretMarket(base({
     openAmerican: null, currentAmerican: null,
-    lastMove: { prevAmerican: -150, nextAmerican: -135, movedAtIso: "2026-06-16T17:50:00Z", booksMoved: null, totalBooks: null },
+    lastMove: { prevAmerican: -150, nextAmerican: -135, movedAtIso: "2026-06-16T17:50:00Z", booksMoved: null, totalBooks: null , prevLineValue: null, nextLineValue: null },
   }));
   check("last move against → chip", r.chipLabel === "Last move against our side");
 }

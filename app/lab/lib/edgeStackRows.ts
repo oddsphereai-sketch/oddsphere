@@ -308,6 +308,24 @@ export function buildEdgeStackRows(
     });
   }
 
+  // ── Line move (2026-06-16) — the actual betting NUMBER, e.g. total 8.5 → 9 ──
+  // Distinct from the "Line Move" row above (which tracks the PRICE/odds). Members
+  // asked to see the line itself move, not just price drift. Reader-only; renders
+  // only when the point actually changed (null for moneyline / no move).
+  if (
+    marketData.lastMoveLinePrev != null &&
+    marketData.lastMoveLineNext != null &&
+    marketData.lastMoveLinePrev !== marketData.lastMoveLineNext
+  ) {
+    const up = marketData.lastMoveLineNext > marketData.lastMoveLinePrev;
+    rows.push({
+      label: "Line",
+      evidence: `${marketData.lastMoveLinePrev} → ${marketData.lastMoveLineNext}`,
+      delta: up ? "▲" : "▼",
+      tone: "gray",
+    });
+  }
+
   // ── Market Read (2026-06-16) ────────────────────────────────────
   // The derived market-intelligence chip (toward/against/reverse/public read).
   // Display/audit only. Absent (null) until the live streaming tables populate,

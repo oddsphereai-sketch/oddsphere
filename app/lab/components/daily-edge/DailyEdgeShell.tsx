@@ -1859,7 +1859,9 @@ function SoccerGradeContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerGra
         {ctx.miscalibration_flag && <span className="text-amber-300 font-semibold">· ⚠ flagged</span>}
       </div>
       <p className="text-[10px] text-gray-400 leading-snug">{ctx.grade_reason}</p>
-      <p className="text-[9px] text-gray-500/80 italic leading-snug">{ctx.calibration_label}</p>
+      {ctx.calibration_label !== "" && (
+        <p className="text-[9px] text-gray-500/80 italic leading-snug">{ctx.calibration_label}</p>
+      )}
     </div>
   );
 }

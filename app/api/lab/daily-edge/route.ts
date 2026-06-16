@@ -2371,6 +2371,8 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     lastMovePrevAmerican: input.lastMove?.prevAmerican ?? null,
     lastMoveNextAmerican: input.lastMove?.nextAmerican ?? null,
     lastMoveAtIso: input.lastMove?.movedAtIso ?? null,
+    lastMoveLinePrev: input.lastMove?.prevLineValue ?? null,
+    lastMoveLineNext: input.lastMove?.nextLineValue ?? null,
     modelTotal: input.totalsExtras?.modelTotal ?? null,
     marketTotal: input.totalsExtras?.marketTotal ?? null,
     line: input.totalsExtras?.sportsbookLine ?? null,
