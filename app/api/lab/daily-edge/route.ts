@@ -3969,49 +3969,44 @@ export async function GET(request: Request) {
     // Per Daniel's direction (4.1.9.B section 10): use MIN(recorded_at) as
     // the "first seen" since linesService hardcodes is_opener=false.
     //
-    // 2026-06-16 P0 — KEYSET pagination on the PK (id ASC), NOT range/OFFSET.
-    // A busy slate's line_history now runs ~20k rows; OFFSET pagination
-    // (range(from, …)) made Postgres scan-and-discard `from` rows per page, so
-    // deep pages (OFFSET 19000) blew past the statement_timeout and the whole
-    // route 500'd → "tonight's slate stuck loading". Keyset (id > lastId) is
-    // O(page) on the PK index. id is monotonic with insert/observation order,
-    // so rows still arrive oldest→newest and the per-key array below stays
-    // sorted oldest-first (buildMarketEdge's `.find` returns the opener).
-    //
-    // DEGRADE, never 500: openers are non-critical DISPLAY data. If the read
-    // still errors/times out, log + use whatever we gathered (cards show
-    // "Line Move unavailable" at worst) rather than taking down the slate.
-    const HIST_PAGE = 1000;
+    // 2026-06-16 P0v2 — PER-GAME PARALLEL opener fetch. The prior multi-game
+    // `.in(game_id) + ORDER BY` (even keyset) DEGENERATES on the bloated
+    // line_history table (322k rows): the planner can't combine the game_id
+    // filter with a global order, so it scans huge swaths and blows past the
+    // statement_timeout (~200s) → the route hangs → "tonight's slate stuck
+    // loading". A PER-GAME `.eq(game_id) + ORDER + LIMIT` uses the game_id index
+    // and is bounded; all games in parallel = ~400ms total, and stays fast as
+    // the table grows (the durable fix). We only need the OLDEST rows (an opener
+    // is the FIRST recorded per key), so LIMIT is safe. DEGRADE per game: an
+    // errored game just loses its openers ("Line Move unavailable"), never 500.
+    const HIST_PER_GAME = 400;
+    const histResults = await Promise.all(
+      gameIds.map((gid) =>
+        supabase
+          .from("line_history")
+          .select("game_id, market_type, sportsbook, side, line_value, odds_american, recorded_at, id")
+          .eq("game_id", gid)
+          .in("market_type", ["moneyline", "total", "first_inning_total"])
+          .is("player_id", null)
+          .order("recorded_at", { ascending: true })
+          .order("id", { ascending: true })
+          .limit(HIST_PER_GAME)
+          .then(
+            (r) => r as { data: LineHistoryRow[] | null; error: { message: string } | null },
+            () => ({ data: null, error: { message: "exception" } }),
+          ),
+      ),
+    );
     const histData: LineHistoryRow[] = [];
-    let lastHistId = 0;
-    for (let page = 0; ; page++) {
-      const { data: pageData, error: histErr } = await supabase
-        .from("line_history")
-        .select("game_id, market_type, sportsbook, side, line_value, odds_american, recorded_at, id")
-        .in("game_id", gameIds)
-        .in("market_type", ["moneyline", "total", "first_inning_total"])
-        .is("player_id", null)
-        .gt("id", lastHistId)
-        .order("id", { ascending: true })
-        .limit(HIST_PAGE);
-      if (histErr) {
-        console.warn(
-          `daily-edge line_history read failed (${histErr.message}); openers partial/absent for this slate`,
-        );
-        break;
-      }
-      const rows = (pageData ?? []) as LineHistoryRow[];
-      histData.push(...rows);
-      if (rows.length < HIST_PAGE) break;
-      lastHistId = rows[rows.length - 1].id;
-      // Safety bound (no silent cap): a single slate should never approach
-      // 100k rows. Log and stop if it does.
-      if (page >= 100) {
-        console.warn(
-          `daily-edge line_history pagination hit 100-page bound (${histData.length} rows); openers may be incomplete`,
-        );
-        break;
-      }
+    let histDegraded = 0;
+    for (const r of histResults) {
+      if (r.error) { histDegraded++; continue; }
+      histData.push(...((r.data ?? []) as LineHistoryRow[]));
+    }
+    if (histDegraded > 0) {
+      console.warn(
+        `daily-edge: ${histDegraded}/${gameIds.length} games' line_history openers unavailable (degraded, slate still served)`,
+      );
     }
     for (const row of histData) {
       // R-19 Phase 5i Fix A — key by (game_id, market_type, side). Pre-5i
