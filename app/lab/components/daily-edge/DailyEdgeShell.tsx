@@ -33,6 +33,7 @@ import {
   marketSourceLabel,
 } from "../../lib/edgeStackRows";
 import { classifyPickRelativeLineMove } from "../../lib/lineMoveTone";
+import { reviewActionLabel } from "../../lib/reviewActionLabel";
 import type {
   DailyEdgeGameDto,
   MarketEdgeDto,
@@ -1693,19 +1694,9 @@ function ConfidenceVsMarketStrip({
         <div className="mt-1.5 p-1.5 rounded border border-amber-500/30 bg-amber-500/[0.06] space-y-0.5">
           <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-amber-400/90">
             ⚠ Reviewer caution
-            {action === "cap_confidence" && (
+            {reviewActionLabel(action) !== null && (
               <span className="ml-1.5 text-[9px] font-normal text-amber-300/70 normal-case tracking-normal">
-                · confidence capped
-              </span>
-            )}
-            {action === "hold" && (
-              <span className="ml-1.5 text-[9px] font-normal text-amber-300/70 normal-case tracking-normal">
-                · market held
-              </span>
-            )}
-            {action === "adjust_score_toward_market" && (
-              <span className="ml-1.5 text-[9px] font-normal text-amber-300/70 normal-case tracking-normal">
-                · projection dampened
+                · {reviewActionLabel(action)}
               </span>
             )}
           </p>
