@@ -636,10 +636,11 @@ function buildStarterDto(
 
 /**
  * 2026-06-16 — read the per-market "First Published" lines from
- * game_predictions.sport_specific.posted_lines (set-if-null upstream). Per
- * market: { american, at }. Defensive: returns empty per-market when the JSONB
- * path is absent (the state until the posted-line write is wired), so the
- * card's First Published stop is simply omitted.
+ * game_predictions.sport_specific.posted_lines (set-if-null upstream). The
+ * stored entry is rich ({ odds_american, line_value, book, observed_at, source,
+ * source_kind, side }); the card only needs price + timestamp. Tolerant of the
+ * earlier minimal shape ({ american, at }). Defensive: returns empty per-market
+ * when the JSONB path is absent, so the First Published stop is simply omitted.
  */
 type PostedLine = { american: number | null; at: string | null };
 function readPostedLines(
@@ -652,12 +653,10 @@ function readPostedLines(
   for (const key of ["moneyline", "total", "first_inning"] as const) {
     const v = obj[key];
     if (v !== null && typeof v === "object") {
-      const american = (v as { american?: unknown }).american;
-      const at = (v as { at?: unknown }).at;
-      out[key] = {
-        american: typeof american === "number" ? american : null,
-        at: typeof at === "string" ? at : null,
-      };
+      const e = v as { odds_american?: unknown; american?: unknown; observed_at?: unknown; at?: unknown };
+      const odds = typeof e.odds_american === "number" ? e.odds_american : typeof e.american === "number" ? e.american : null;
+      const ts = typeof e.observed_at === "string" ? e.observed_at : typeof e.at === "string" ? e.at : null;
+      out[key] = { american: odds, at: ts };
     }
   }
   return out;

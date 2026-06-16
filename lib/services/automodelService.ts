@@ -87,6 +87,7 @@ import {
   type ReviewerSlateContext,
 } from "./aiReviewerWiring";
 import { createPredictionRecords } from "./predictionRecordService";
+import { recordFirstPublishedLines } from "./postedLinesWriter";
 
 // ─────────────────────────────────────────────────────────────
 // Public types
@@ -920,6 +921,32 @@ export async function generatePredictionsForSlate(
             (logCatchErr instanceof Error ? logCatchErr.message : String(logCatchErr)),
         );
       }
+    }
+  }
+
+  // ─── Step 3.6 — First Published lines (2026-06-16) ─────────────────
+  // Set-if-null sport_specific.posted_lines for unlocked MLB rows just written,
+  // capturing the picked-side price (live odds_current_stream preferred, cron
+  // `lines` fallback) as the member-facing "First Published" tracker stop.
+  // Gated OFF by default (POSTED_LINES_WRITE_ENABLED). ADDITIVE metadata only —
+  // never touches picks/scores/confidence/grades and never writes locked rows.
+  // Failure here MUST NOT fail the model write (best-effort, never throws).
+  if (wantWrite && sport === "mlb" && process.env.POSTED_LINES_WRITE_ENABLED === "true") {
+    try {
+      const pl = await recordFirstPublishedLines({
+        supabase,
+        sport: "mlb",
+        slateDate: slate_date,
+        apply: true,
+      });
+      console.log(
+        `[automodelService] posted_lines: scanned=${pl.scanned} updated=${pl.updated} for ${slate_date}`,
+      );
+    } catch (plErr) {
+      console.warn(
+        `[automodelService] posted_lines write threw for ${slate_date}: ` +
+          (plErr instanceof Error ? plErr.message : String(plErr)),
+      );
     }
   }
 

@@ -34,7 +34,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Sport } from "../types/domain/Sport";
 import { createPredictionRecords } from "./predictionRecordService";
-import { recordFirstPublishedLines } from "./postedLinesWriter";
 import { ingestMlbLinescores } from "./mlbLinescoreIngestService";
 import { ingestFinalScores } from "./scoreIngestService";
 import { gradePredictionsForSlate } from "./predictionGradingService";
@@ -263,23 +262,6 @@ export async function runTrackingRefresh(
           perDate.records_created = createRes.insertedCount;
           for (const e of createRes.errors) {
             perDate.errors.push(`records: game_id=${e.game_id} ${e.market} ${e.reason}`);
-          }
-        }
-
-        // 1b. First Published lines — set-if-null sport_specific.posted_lines.
-        // Gated OFF by default (POSTED_LINES_WRITE_ENABLED). Additive metadata
-        // only; unlocked rows only; never touches picks/grades. Defensive
-        // (never throws) so it can never break the tracking pipeline.
-        if (process.env.POSTED_LINES_WRITE_ENABLED === "true") {
-          try {
-            await recordFirstPublishedLines({
-              supabase: opts.supabase,
-              sport: "mlb",
-              slateDate: date,
-              apply: opts.apply,
-            });
-          } catch (e) {
-            perDate.errors.push(`posted_lines exception: ${e instanceof Error ? e.message : String(e)}`);
           }
         }
 
