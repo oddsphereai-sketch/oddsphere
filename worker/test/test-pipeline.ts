@@ -59,6 +59,7 @@ function makePipeline(opts: { recomputeActive: boolean; pickProvider?: PickProvi
   const pipeline = new StreamPipeline({
     resolveGame: resolver, writer, health, debouncer, recompute,
     recomputeActive: opts.recomputeActive, shadow: true,
+    rawAuditEnabled: true, // this suite verifies the odds_events_raw audit rows
     pickProvider: opts.pickProvider,
     now: () => t,
   });

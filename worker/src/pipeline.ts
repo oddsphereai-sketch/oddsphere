@@ -62,6 +62,10 @@ export type StreamPipelineDeps = {
   recompute: RecomputeClient | null;
   recomputeActive: boolean;
   shadow: boolean;
+  /** When false (default), skip per-frame odds_events_raw audit writes for
+   * accepted/alternate ticks (the dominant write load; never read by the app).
+   * Unresolved events are still logged. See config flag rawAuditEnabled. */
+  rawAuditEnabled?: boolean;
   triggerConfig?: TriggerConfig;
   pickProvider?: PickProvider;
   now?: () => number;
@@ -174,8 +178,13 @@ export class StreamPipeline {
       ev.lineValue != null &&
       Math.abs(ev.lineValue - prev.line) > MAX_MAIN_LINE_STEP;
     if (ev.isAlternate || jumpExcluded) {
-      await this.d.writer.writeRawEvents([this.rawRow(ev, gameId, resolved.externalId, "accepted", true)]);
-      this.d.health.onWrite();
+      // Alternate tick — audit-only (never drives current/movement). Skip the
+      // write entirely unless raw audit is explicitly enabled (it's the bulk
+      // write load and the app never reads odds_events_raw).
+      if (this.d.rawAuditEnabled === true) {
+        await this.d.writer.writeRawEvents([this.rawRow(ev, gameId, resolved.externalId, "accepted", true)]);
+        this.d.health.onWrite();
+      }
       return;
     }
 
@@ -184,9 +193,15 @@ export class StreamPipeline {
       return;
     }
 
-    // Record the accepted/removed MAIN-line tick (audit/replay/CLV).
-    await this.d.writer.writeRawEvents([this.rawRow(ev, gameId, resolved.externalId, "accepted", false)]);
-    this.d.health.onWrite();
+    // Record the accepted/removed MAIN-line tick to the odds_events_raw audit
+    // log. This was the DOMINANT write load (one row per tick × books × markets
+    // × MLB+soccer) that saturated the DB; the app never reads odds_events_raw,
+    // so it's gated OFF by default. The app-used writes (odds_current_stream +
+    // line_movements, below) ALWAYS run regardless.
+    if (this.d.rawAuditEnabled === true) {
+      await this.d.writer.writeRawEvents([this.rawRow(ev, gameId, resolved.externalId, "accepted", false)]);
+      this.d.health.onWrite();
+    }
     this.gameMeta.set(resolved.externalId, { sport: resolved.sport, date: resolved.slateDate, gameDate: resolved.gameDate });
 
     // No-vig (two-sided) before/after applying this tick.

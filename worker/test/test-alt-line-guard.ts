@@ -38,6 +38,7 @@ function makePipeline() {
     resolveGame: resolver, writer,
     health: new HealthTracker("sharpapi_ws", "mlb", () => "2026-06-16T18:00:00Z"),
     debouncer: new MovementDebouncer(), recompute: null, recomputeActive: false, shadow: true,
+    rawAuditEnabled: true, // this suite verifies the odds_events_raw audit rows
     now: () => 1_000_000,
   });
   return { writer, pipeline };

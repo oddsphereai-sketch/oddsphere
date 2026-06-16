@@ -61,6 +61,7 @@ async function main(): Promise<void> {
       recompute,
       recomputeActive: cfg.flags.recomputeActive,
       shadow: cfg.flags.shadow,
+      rawAuditEnabled: cfg.flags.rawAuditEnabled,
       log: (l) => log(cfg, l),
     });
 

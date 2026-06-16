@@ -33,6 +33,15 @@ export type WorkerConfig = {
     recomputeActive: boolean;
     /** When true, recompute calls are dry-run (route writes nothing). Defaults true. */
     shadow: boolean;
+    /**
+     * When false (DEFAULT), the worker does NOT write the per-frame
+     * `odds_events_raw` audit log for ACCEPTED/alternate ticks — that table is
+     * never read by the app and was the dominant write load that saturated the
+     * DB (2026-06-16 incident). odds_current_stream + line_movements (what the
+     * app uses) are unaffected. Unresolved events are still logged (low volume,
+     * resolution diagnostic). Flip on only for short debugging windows.
+     */
+    rawAuditEnabled: boolean;
   };
   heartbeatMs: number;
   maxBackoffMs: number;
@@ -53,6 +62,7 @@ export function loadConfig(env: Record<string, string | undefined>): WorkerConfi
   const workerEnabled = bool(env.STREAM_WORKER_ENABLED, false);
   const recomputeActive = bool(env.STREAM_RECOMPUTE_ACTIVE, false);
   const shadow = bool(env.STREAM_RECOMPUTE_SHADOW, true);
+  const rawAuditEnabled = bool(env.STREAM_RAW_AUDIT_ENABLED, false);
 
   const cfg: WorkerConfig = {
     wsUrl: env.SHARPAPI_WS_URL ?? "wss://ws.sharpapi.io",
@@ -63,7 +73,7 @@ export function loadConfig(env: Record<string, string | undefined>): WorkerConfi
     supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY ?? "",
     internalBaseUrl: env.VERCEL_INTERNAL_BASE_URL ?? "",
     cronSecret: env.CRON_SECRET ?? "",
-    flags: { workerEnabled, recomputeActive, shadow },
+    flags: { workerEnabled, recomputeActive, shadow, rawAuditEnabled },
     heartbeatMs: Number(env.STREAM_HEARTBEAT_MS ?? "25000"),
     maxBackoffMs: Number(env.STREAM_MAX_BACKOFF_MS ?? "30000"),
   };
