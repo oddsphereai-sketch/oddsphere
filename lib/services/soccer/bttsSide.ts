@@ -1,82 +1,22 @@
 /**
- * BTTS side fix: underdog-lambda decompression + market anchor + auditor
- * (2026-06-16).
+ * BTTS side helpers + slate auditor (2026-06-16).
  *
- * Audit finding: the WC card showed a confident "No" on nearly every match.
- * The joint-distribution math is correct (P(BTTS yes) = Σ_{h≥1,a≥1} joint[h][a]
- * = 1 − P(h=0) − P(a=0) + P(0,0); standard Dixon-Coles tau). The real bug is
- * MODEL-INTEGRITY: the weaker side's attacking lambda is over-compressed (the
- * dominant-favorite mismatch boost only lifts the FAVORITE), so genuinely
- * two-sided matches sit just under 50% BTTS-yes and the argmax tips them all to
- * "No". Confirmed on the live slate: only 1/12 cleared 0.5 raw.
+ * The live model computes BTTS from the RAW score distribution (same λ as
+ * match_result / total): P(yes) = 1 − P(h=0) − P(a=0) + P(0,0). The side is the
+ * higher-probability outcome (argmax), consistent with how totals / match_result
+ * pick their sides; model-vs-market edge flows to the GRADE, not the side.
  *
- * Fix (BTTS-ONLY, NO toss-up — toss-up is first-inning only; Yes/No stays the
- * BTTS side): for the BTTS calculation ONLY, decompress the λ gap — pull each
- * team's λ a modest fraction toward their mean. This lifts the underdog's
- * scoring chance for two-sided games (→ genuine YES) while leaving real
- * blowouts as NO. λ for match_result / total / scores is UNCHANGED. It does NOT
- * hard-force a YES quota — a game only flips when its decompressed P(yes) ≥ 0.5.
- *
- * Tuning (2026-06-16, 8-game WC slate): the model's total-goals λ is well-
- * calibrated (mean 2.79, WC historical ~2.6–2.8), so scoring LEVEL is fine; the
- * defect is purely the BALANCE — the underdog λ is squeezed to ~0.54–0.74,
- * unrealistically low for WC teams, so the whole BTTS-yes cluster sits ~0.45–0.49
- * (just under the ~50% WC base rate) and argmax tips it to all-No. 0.15 left only
- * 2/8 YES; 0.20 → 5/8 genuine YES (each clears 0.50 on its own decompressed
- * math) — a realistic ~50% mix, not a forced quota. 0.25+ over-forces extreme
- * blowouts (Argentina/Portugal vs minnows) into fake YES. NOTE: the de-vigged WC
- * BTTS market prices yes ~0.36–0.43 (No-leaning), so 0.20 leans the SIDE against
- * a thin/unreliable BTTS market on purpose; the auditor + grade/cap keep it honest.
- *
- * Market role: the de-vigged WC BTTS market prices yes ~12–15pp BELOW the model
- * and below the ~50% base rate (thin/unreliable BTTS pricing), so it is NOT
- * blended into the SIDE (that would re-suppress genuine YES). It anchors the
- * GRADE via the existing model-vs-market edge/cap, and is logged for
- * transparency. `calibrateBttsYes` remains a pure, tested market-anchor helper
- * for when BTTS market data is trustworthy.
+ * HISTORY: an earlier "underdog-λ decompression" attempted to lift two-sided
+ * games to YES by pulling each team's λ toward the mean. It was reverted as
+ * anti-predictive — the pull is GAP-proportional, so it lifted the LOWEST-scoring
+ * underdogs the MOST, perversely pushing the biggest blowouts toward YES while
+ * moderate games stayed NO. The raw model is monotonic (BTTS-yes rises with the
+ * weaker team's λ) and roughly calibrated at the level (slate mean ≈ WC norm); a
+ * proper per-market calibration is sample-blocked (see the WC calibration
+ * roadmap) and must come from data, not a λ hack.
  *
  * Pure: no DB, no Next.
  */
-
-/** Fraction of the home/away λ gap pulled toward the mean, for BTTS only. */
-export const BTTS_LAMBDA_DECOMPRESS = 0.2;
-
-/** Model weight for the (optional) market-anchor blend; rest = market. */
-export const BTTS_MODEL_WEIGHT = 0.7;
-
-/**
- * Decompress the λ gap toward the mean for the BTTS calculation ONLY. Lifts the
- * weaker side and slightly lowers the favorite (whose scoring is already near
- * saturation, so net BTTS-yes rises). Returns [homeλ, awayλ] for BTTS.
- */
-export function decompressLambdasForBtts(
-  lambdaHome: number,
-  lambdaAway: number,
-  decompress: number = BTTS_LAMBDA_DECOMPRESS,
-): [number, number] {
-  const mean = (lambdaHome + lambdaAway) / 2;
-  const k = 1 - Math.max(0, Math.min(1, decompress));
-  return [mean + (lambdaHome - mean) * k, mean + (lambdaAway - mean) * k];
-}
-
-/**
- * Optional market-anchor calibration for BTTS-yes (market-INFORMED, not
- * mirroring; model-dominant weight). Returns the model value unchanged when
- * the market is unpriced. Pure; used where the BTTS market is trustworthy.
- */
-export function calibrateBttsYes(
-  modelYes: number,
-  marketYes: number | null,
-  modelWeight: number = BTTS_MODEL_WEIGHT,
-): number {
-  if (marketYes === null || !Number.isFinite(marketYes)) return clamp01(modelYes);
-  const w = Math.max(0, Math.min(1, modelWeight));
-  return clamp01(w * modelYes + (1 - w) * marketYes);
-}
-
-function clamp01(x: number): number {
-  return Math.max(0, Math.min(1, x));
-}
 
 /** The BTTS side = higher probability (argmax). Yes/No only — never toss-up. */
 export function resolveBttsSide(pYes: number, pNo: number): "yes" | "no" {
@@ -87,7 +27,8 @@ export function resolveBttsSide(pYes: number, pNo: number): "yes" | "no" {
  * Slate-distribution sanity (auditor): is the published BTTS side dangerously
  * skewed across a slate? Returns a warning string or null — it WARNS only and
  * never forces output. Catches a regression where the model collapses to
- * all-No / all-Yes.
+ * all-No / all-Yes. (A genuinely lopsided WC slate can legitimately lean No, so
+ * this is a heads-up to investigate, not an auto-fix.)
  */
 export function bttsDistributionWarning(
   sides: ReadonlyArray<"yes" | "no">,
@@ -99,10 +40,10 @@ export function bttsDistributionWarning(
   const no = sides.filter((s) => s === "no").length;
   const noShare = no / sides.length;
   if (noShare >= skewThreshold) {
-    return `BTTS skew: ${no}/${sides.length} sides NO (${Math.round(noShare * 100)}%) — check underdog λ decompression / BTTS calibration.`;
+    return `BTTS skew: ${no}/${sides.length} sides NO (${Math.round(noShare * 100)}%) — verify it reflects a genuinely lopsided slate, not a model/calibration regression.`;
   }
   if (1 - noShare >= skewThreshold) {
-    return `BTTS skew: ${sides.length - no}/${sides.length} sides YES (${Math.round((1 - noShare) * 100)}%) — possible over-decompression.`;
+    return `BTTS skew: ${sides.length - no}/${sides.length} sides YES (${Math.round((1 - noShare) * 100)}%) — verify the model is not over-predicting both-teams-score.`;
   }
   return null;
 }
