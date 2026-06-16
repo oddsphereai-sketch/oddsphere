@@ -80,6 +80,7 @@ class Builder {
   is() { return this; }
   eq() { return this; }
   in() { return this; }
+  range() { return this; }
   update(p: unknown) { this.isUpdate = true; this.payload = p; return this; }
   then(res: (v: { data: unknown; error: unknown }) => unknown) {
     if (this.isUpdate) { this.supa.updates.push({ table: this.table, payload: this.payload }); return res({ data: null, error: null }); }

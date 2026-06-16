@@ -202,12 +202,33 @@ export async function recordFirstPublishedLines(
 
     const gameIds = [...new Set(rows.map((r) => r.game_id))];
 
-    // Cron lines (always available). game_id excluded from the row shape below.
-    const { data: linesData } = (await opts.supabase
-      .from("lines")
-      .select("game_id, market_type, side, sportsbook, odds_american, line_value")
-      .in("game_id", gameIds)) as { data: unknown };
-    const lineRows = (linesData ?? []) as Array<LineRowLite & { game_id: number }>;
+    // PAGINATE past the Supabase 1000-row .in() cap — a slate's lines /
+    // odds_current_stream run to thousands of rows (markets × sides × books),
+    // so an un-paginated read silently truncates and tail games would wrongly
+    // fall back to cron. Chunk the games + range-paginate.
+    const pageAll = async (table: string, cols: string): Promise<Array<Record<string, unknown>>> => {
+      const out: Array<Record<string, unknown>> = [];
+      for (let i = 0; i < gameIds.length; i += 20) {
+        const chunk = gameIds.slice(i, i + 20);
+        let from = 0;
+        for (;;) {
+          const { data, error } = (await opts.supabase
+            .from(table)
+            .select(cols)
+            .in("game_id", chunk)
+            .range(from, from + 999)) as { data: unknown; error: unknown };
+          if (error) return out; // table missing / error → degrade (stream) or what we have
+          const page = (data ?? []) as Array<Record<string, unknown>>;
+          out.push(...page);
+          if (page.length < 1000) break;
+          from += 1000;
+        }
+      }
+      return out;
+    };
+
+    // Cron lines (always available).
+    const lineRows = (await pageAll("lines", "game_id, market_type, side, sportsbook, odds_american, line_value")) as unknown as Array<LineRowLite & { game_id: number }>;
     const linesByGame = new Map<number, LineRowLite[]>();
     for (const l of lineRows) {
       (linesByGame.get(l.game_id) ?? linesByGame.set(l.game_id, []).get(l.game_id)!).push(l);
@@ -217,16 +238,10 @@ export async function recordFirstPublishedLines(
     const streamByGame = new Map<number, StreamRowLite[]>();
     let streamCount = 0;
     try {
-      const { data: streamData, error: sErr } = (await opts.supabase
-        .from("odds_current_stream")
-        .select("game_id, market_type, side, sportsbook, odds_american, line_value, observed_at")
-        .in("game_id", gameIds)) as { data: unknown; error: unknown };
-      if (!sErr) {
-        const sRows = (streamData ?? []) as Array<StreamRowLite & { game_id: number }>;
-        streamCount = sRows.length;
-        for (const s of sRows) {
-          (streamByGame.get(s.game_id) ?? streamByGame.set(s.game_id, []).get(s.game_id)!).push(s);
-        }
+      const sRows = (await pageAll("odds_current_stream", "game_id, market_type, side, sportsbook, odds_american, line_value, observed_at")) as unknown as Array<StreamRowLite & { game_id: number }>;
+      streamCount = sRows.length;
+      for (const s of sRows) {
+        (streamByGame.get(s.game_id) ?? streamByGame.set(s.game_id, []).get(s.game_id)!).push(s);
       }
     } catch { /* stream table absent → cron fallback only */ }
     log(`posted-lines: lines rows=${lineRows.length} stream rows=${streamCount}`);
