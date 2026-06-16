@@ -3102,6 +3102,13 @@ export const __TEST__ = {
 // Route handler
 // ───────────────────────────────────────────────────────────────────────────
 
+// 2026-06-16 — give the read route headroom. With no maxDuration it caps at
+// Vercel's ~15s default, so any DB slowness 504'd the whole slate ("stuck
+// loading"). 60s headroom + the per-game query fixes + the cleanup cron keep it
+// well under this in steady state; the ceiling just prevents a hard 504 during
+// transient DB load.
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const sportParam = url.searchParams.get("sport");

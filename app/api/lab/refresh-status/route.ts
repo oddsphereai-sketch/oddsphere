@@ -246,6 +246,9 @@ function deriveOverall(
   };
 }
 
+// 2026-06-16 — headroom so transient DB load doesn't 504 the refresh pill.
+export const maxDuration = 30;
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const sportParam = url.searchParams.get("sport");
