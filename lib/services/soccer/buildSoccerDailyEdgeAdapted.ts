@@ -32,6 +32,7 @@
  */
 
 import { supabase } from "../../db/supabase";
+import { addDaysToSlate } from "../../dates/slateDate";
 import type {
   DailyEdgeResponse,
   DailyEdgeGameDto,
@@ -46,6 +47,49 @@ import { soccerPickLabel } from "./soccerPickLabel";
 
 const SOCCER_MODEL_VERSION = "soccer_dixon_coles_v1";
 const LOCK_WINDOW_MINUTES = 60;
+
+/**
+ * Slate-boundary "late tonight" carryover cutoff (2026-06-16).
+ *
+ * A WC fixture can kick off in the small hours of the NEXT ET day
+ * (e.g. AUT vs JOR at 04:00 UTC = 00:00 ET), which the ET-anchored
+ * slate convention assigns to slate_date = D+1 — even though a US
+ * audience experiences it as part of *tonight's* (day D) slate. This
+ * cutoff (minutes-from-ET-midnight) defines which D+1 fixtures are
+ * surfaced on the day-D board: any kicking off before 5:00 AM ET. The
+ * slate_date / locking / tracking / grading of those rows is UNCHANGED
+ * — they still belong to D+1 for every server-side purpose; the read
+ * simply makes them VISIBLE the night they're played. MLB/NBA/NHL never
+ * kick off in this window, so the carryover is soccer-specific.
+ */
+const CARRYOVER_ET_MINUTES_CUTOFF = 5 * 60;
+
+/**
+ * Does `game` belong on the day-`requestedDate` soccer board?
+ *
+ * True when either:
+ *   • the game's slate_date IS the requested day (native), OR
+ *   • the game's slate_date is the NEXT day AND it kicks off before the
+ *     wee-hours ET cutoff (a "late tonight" carryover — see
+ *     CARRYOVER_ET_MINUTES_CUTOFF).
+ *
+ * Pure function — exported for deterministic regression testing of the
+ * 2026-06-16 midnight-ET slate-boundary fix. `etMinutes` is the
+ * minutes-from-ET-midnight of the kickoff (computed via `et()` at the
+ * call site so the timezone math lives in one place).
+ */
+export function qualifiesForSoccerBoard(
+  requestedDate: string,
+  game: { slate_date: string },
+  nextDate: string,
+  etMinutes: number,
+): boolean {
+  if (game.slate_date === requestedDate) return true;
+  if (game.slate_date === nextDate && etMinutes < CARRYOVER_ET_MINUTES_CUTOFF) {
+    return true;
+  }
+  return false;
+}
 
 /**
  * Competition discriminator. WC-4 launches with `sport='soccer'`
@@ -949,14 +993,27 @@ export async function buildSoccerDailyEdgeAdapted(
 ): Promise<DailyEdgeResponse> {
   const asOf = new Date().toISOString();
 
-  // 1. Load soccer games for the slate.
+  // 1. Load soccer games for the slate — PLUS "late tonight" carryover
+  //    (see CARRYOVER_ET_MINUTES_CUTOFF). We pull both the requested
+  //    slate (D) and the next slate (D+1), then keep every D fixture
+  //    plus only those D+1 fixtures that kick off before the wee-hours
+  //    ET cutoff. This is a READ-only widening: slate_date assignment,
+  //    locking, tracking, and grading of the carried-over rows are
+  //    untouched — they still belong to D+1 server-side.
+  const nextDate = addDaysToSlate(requestedDate, 1);
   const { data: gamesData, error: gamesErr } = await supabase
     .from("games")
     .select("id, external_id, home_team_id, away_team_id, game_date, slate_date, status")
     .eq("sport", "soccer")
-    .eq("slate_date", requestedDate);
+    .in("slate_date", [requestedDate, nextDate]);
   if (gamesErr !== null) throw new Error(`load soccer games: ${gamesErr.message}`);
-  const games = (gamesData as DbGame[] | null) ?? [];
+  const allSlateGames = (gamesData as DbGame[] | null) ?? [];
+  const games = allSlateGames.filter((g) =>
+    qualifiesForSoccerBoard(requestedDate, g, nextDate, et(g.game_date).minutes),
+  );
+  // Eligible game ids — used to restrict the next-slate prediction_records
+  // fetch so non-carryover D+1 fixtures never leak onto the day-D board.
+  const eligibleGameIds = new Set(games.map((g) => g.id));
 
   if (games.length === 0) {
     return {
@@ -1000,7 +1057,7 @@ export async function buildSoccerDailyEdgeAdapted(
     )
     .eq("sport", "soccer")
     .eq("model_version", SOCCER_MODEL_VERSION)
-    .eq("slate_date", requestedDate);
+    .in("slate_date", [requestedDate, nextDate]);
   const rawPreds = (predsData as PredictionRecordSlim[] | null) ?? [];
 
   // Competition filter — World Cup only. Rows without a competition
@@ -1009,7 +1066,12 @@ export async function buildSoccerDailyEdgeAdapted(
   // launches, those legacy rows must be backfilled, but for tonight
   // it preserves the existing in-DB rows that don't yet carry the
   // stamp.
+  //
+  // The eligibleGameIds gate drops next-slate (D+1) prediction rows for
+  // fixtures that did NOT clear the wee-hours carryover cutoff, so only
+  // genuine "late tonight" D+1 games join the day-D board.
   const allPreds = rawPreds.filter((p) => {
+    if (!eligibleGameIds.has(p.game_id)) return false;
     const comp = (p.snapshot_json as { competition?: string } | null)?.competition;
     return comp === undefined || comp === WC_COMPETITION_FIFA_WORLD_CUP;
   });
