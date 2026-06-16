@@ -57,7 +57,7 @@ function bttsYesFromLambdas(lh: number, la: number, decompress = BTTS_LAMBDA_DEC
   check(`lopsided λ 1.96/0.54 → P(yes)<0.5 (${y.toFixed(3)})`, y < 0.5);
 }
 
-// Decompression lifts but does NOT over-force: at 0.15 a clear blowout stays No.
+// Decompression lifts but does NOT over-force: at the default a clear blowout stays No.
 {
   const raw = bttsFromDistribution(bivariatePoissonScoreDistribution(3.2, 0.4, tau)).yes;
   const dec = bttsYesFromLambdas(3.2, 0.4);

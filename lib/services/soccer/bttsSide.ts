@@ -14,10 +14,19 @@
  * BTTS side): for the BTTS calculation ONLY, decompress the λ gap — pull each
  * team's λ a modest fraction toward their mean. This lifts the underdog's
  * scoring chance for two-sided games (→ genuine YES) while leaving real
- * blowouts as NO. λ for match_result / total / scores is UNCHANGED. Tuned on
- * the live slate: 0.15 → 3/12 YES (the credible two-sided games), blowouts NO;
- * 0.25 over-forces (lifts blowout underdogs → fake YES). It does NOT hard-force
- * a YES quota — a game only flips when its decompressed P(yes) genuinely ≥ 0.5.
+ * blowouts as NO. λ for match_result / total / scores is UNCHANGED. It does NOT
+ * hard-force a YES quota — a game only flips when its decompressed P(yes) ≥ 0.5.
+ *
+ * Tuning (2026-06-16, 8-game WC slate): the model's total-goals λ is well-
+ * calibrated (mean 2.79, WC historical ~2.6–2.8), so scoring LEVEL is fine; the
+ * defect is purely the BALANCE — the underdog λ is squeezed to ~0.54–0.74,
+ * unrealistically low for WC teams, so the whole BTTS-yes cluster sits ~0.45–0.49
+ * (just under the ~50% WC base rate) and argmax tips it to all-No. 0.15 left only
+ * 2/8 YES; 0.20 → 5/8 genuine YES (each clears 0.50 on its own decompressed
+ * math) — a realistic ~50% mix, not a forced quota. 0.25+ over-forces extreme
+ * blowouts (Argentina/Portugal vs minnows) into fake YES. NOTE: the de-vigged WC
+ * BTTS market prices yes ~0.36–0.43 (No-leaning), so 0.20 leans the SIDE against
+ * a thin/unreliable BTTS market on purpose; the auditor + grade/cap keep it honest.
  *
  * Market role: the de-vigged WC BTTS market prices yes ~12–15pp BELOW the model
  * and below the ~50% base rate (thin/unreliable BTTS pricing), so it is NOT
@@ -30,7 +39,7 @@
  */
 
 /** Fraction of the home/away λ gap pulled toward the mean, for BTTS only. */
-export const BTTS_LAMBDA_DECOMPRESS = 0.15;
+export const BTTS_LAMBDA_DECOMPRESS = 0.2;
 
 /** Model weight for the (optional) market-anchor blend; rest = market. */
 export const BTTS_MODEL_WEIGHT = 0.7;
