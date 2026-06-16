@@ -150,7 +150,7 @@ async function main() {
     homeRaw: "NYY", awayRaw: "BOS", homeAbbrev: "NYY", awayAbbrev: "BOS",
     sportsbook: "draftkings", isBlockedBook: false, marketType: "moneyline", side: "home",
     lineValue: null, oddsAmerican: -110, oddsDecimal: null, impliedProbability: null,
-    providerTs: "t", globalSeq: 1,
+    providerTs: "t", globalSeq: 1, isAlternate: false,
   };
   check("hashEvent deterministic", hashEvent(ev) === hashEvent({ ...ev }));
   check("hashEvent changes with price", hashEvent(ev) !== hashEvent({ ...ev, oddsAmerican: -120 }));

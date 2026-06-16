@@ -61,6 +61,26 @@ check("readGlobalSeq missing → null", readGlobalSeq({ type: "odds:update" }) =
   check("globalSeq propagated", e.globalSeq === 100);
   check("providerEventId carried", e.providerEventId === "mlb_yankees_redsox_2026-06-16_b0");
   check("providerTs from timestamp", e.providerTs === "2026-06-16T18:00:00Z");
+  check("isAlternate defaults false when absent", e.isAlternate === false);
+}
+
+// Alternate flag parsing (is_alternate_line / is_alt / alternate, bool or "true"/1).
+{
+  const alt = adaptSharpWsMessage({
+    type: "odds:update", sport: "baseball", league: "mlb",
+    data: [{ sportsbook: "pinnacle", market_type: "total", selection_type: "under", line: 11.0, odds_american: -110, is_alternate_line: true }],
+  });
+  check("is_alternate_line=true → isAlternate true", alt[0]?.isAlternate === true);
+  const altStr = adaptSharpWsMessage({
+    type: "odds:update", sport: "baseball",
+    data: [{ sportsbook: "pinnacle", market_type: "total", selection_type: "over", line: 12.5, odds_american: -110, alternate: "true" }],
+  });
+  check("alternate='true' → isAlternate true", altStr[0]?.isAlternate === true);
+  const main = adaptSharpWsMessage({
+    type: "odds:update", sport: "baseball",
+    data: [{ sportsbook: "pinnacle", market_type: "total", selection_type: "over", line: 8.5, odds_american: -110 }],
+  });
+  check("no alt flag → isAlternate false", main[0]?.isAlternate === false);
 }
 
 // Blocked book is flagged (not silently dropped — caller decides).

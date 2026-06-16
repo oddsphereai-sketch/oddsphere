@@ -52,6 +52,13 @@ export type NormalizedOddsEvent = {
   impliedProbability: number | null;
   providerTs: string | null;
   globalSeq: number | null;
+  /**
+   * True when SharpAPI marks this as an ALTERNATE total/spread (not the main
+   * line). Alternates are appended to odds_events_raw for audit but MUST NOT
+   * drive odds_current_stream / line_movements / triggers — otherwise an alt
+   * total at 11.0 overwrites the main 9.0 and emits fake "movement".
+   */
+  isAlternate: boolean;
 };
 
 export type WsMessageKind =
@@ -129,6 +136,11 @@ function pick(row: Record<string, unknown>, keys: string[]): unknown {
   return null;
 }
 
+/** Coerce a truthy flag (true / "true" / 1) → boolean; default false. */
+function asBool(v: unknown): boolean {
+  return v === true || v === "true" || v === 1 || v === "1";
+}
+
 function normalizeRow(
   row: Record<string, unknown>,
   ctx: { kind: "update" | "removed"; sport: string | null; league: string | null; globalSeq: number | null },
@@ -166,6 +178,7 @@ function normalizeRow(
     impliedProbability: asNumberOrNull(pick(row, ["odds_probability", "implied_probability", "probability"])),
     providerTs: asStringOrNull(pick(row, ["last_seen_at", "wire_received_at", "timestamp", "ts", "updated_at"])),
     globalSeq: ctx.globalSeq,
+    isAlternate: asBool(pick(row, ["is_alternate_line", "is_alternate", "alternate", "is_alt", "alt"])),
   };
 }
 

@@ -22,6 +22,8 @@ export type RawEventRow = {
   provider_ts: string | null;
   payload_hash: string;
   status: "accepted" | "unresolved" | "blocked_book" | "dropped";
+  /** TRUE = alternate/non-main line — kept in raw, excluded from current/movement. */
+  is_alternate: boolean;
 };
 
 export type CurrentRow = {

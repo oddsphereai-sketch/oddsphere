@@ -43,6 +43,16 @@ export type PickProvider = (gameId: number, market: string) => { pickSide: strin
 
 const DEFAULT_PICK_PROVIDER: PickProvider = () => ({ pickSide: null, activeGrade: null });
 
+/**
+ * Max point step (totals/spreads) that still counts as the SAME main line
+ * moving. A larger jump (e.g. total 9.0 → 11.0) is an alternate line slipping
+ * through unflagged — excluded from current/movement so it can't fake
+ * movement. Legit main-line moves step by 0.5; 1.0 leaves headroom for a
+ * double-step while still catching alternates (the observed bad jumps were
+ * +2.0 / +4.0 / +6.0).
+ */
+const MAX_MAIN_LINE_STEP = 1.0;
+
 export type StreamPipelineDeps = {
   provider?: string; // default 'sharpapi_ws'
   resolveGame: GameResolver;
@@ -134,7 +144,7 @@ export class StreamPipeline {
 
     const resolved = await this.d.resolveGame(ev);
     if (resolved === null) {
-      await this.d.writer.writeRawEvents([this.rawRow(ev, null, null, "unresolved")]);
+      await this.d.writer.writeRawEvents([this.rawRow(ev, null, null, "unresolved", ev.isAlternate)]);
       this.d.health.onWrite();
       return;
     }
@@ -147,13 +157,35 @@ export class StreamPipeline {
     const key = `${gameId}:${market}:${book}:${side}`;
     const prev = this.throttle.get(key);
 
+    // Alternate-line guard (2026-06-16): alternate totals/spreads must NOT
+    // pollute the main line's current snapshot or movement log. Exclude:
+    //   (a) provider-flagged alternates (ev.isAlternate), and
+    //   (b) point markets whose line jumps more than MAX_MAIN_LINE_STEP from
+    //       the tracked main line — catches UNFLAGGED alternates (a main total
+    //       at 9.0 followed by an 11.0 alt would otherwise log a fake +2.0).
+    // Non-main ticks are STILL appended to odds_events_raw (is_alternate=true)
+    // for audit/replay, but never touch current / movement / trigger / throttle.
+    const pointMarket =
+      market === "total" || market === "spread" || market === "first_inning_total";
+    const jumpExcluded =
+      pointMarket &&
+      !removed &&
+      prev?.line != null &&
+      ev.lineValue != null &&
+      Math.abs(ev.lineValue - prev.line) > MAX_MAIN_LINE_STEP;
+    if (ev.isAlternate || jumpExcluded) {
+      await this.d.writer.writeRawEvents([this.rawRow(ev, gameId, resolved.externalId, "accepted", true)]);
+      this.d.health.onWrite();
+      return;
+    }
+
     // Throttle: drop identical consecutive price (no raw, no current, no movement).
     if (!removed && prev !== undefined && prev.odds === ev.oddsAmerican && prev.line === ev.lineValue) {
       return;
     }
 
-    // Always record the accepted/removed tick (audit/replay/CLV).
-    await this.d.writer.writeRawEvents([this.rawRow(ev, gameId, resolved.externalId, "accepted")]);
+    // Record the accepted/removed MAIN-line tick (audit/replay/CLV).
+    await this.d.writer.writeRawEvents([this.rawRow(ev, gameId, resolved.externalId, "accepted", false)]);
     this.d.health.onWrite();
     this.gameMeta.set(resolved.externalId, { sport: resolved.sport, date: resolved.slateDate, gameDate: resolved.gameDate });
 
@@ -282,6 +314,7 @@ export class StreamPipeline {
     gameId: number | null,
     externalId: number | null,
     status: RawEventRow["status"],
+    isAlternate = false,
   ): RawEventRow {
     return {
       provider: this.d.provider,
@@ -300,6 +333,7 @@ export class StreamPipeline {
       provider_ts: ev.providerTs,
       payload_hash: hashEvent(ev),
       status,
+      is_alternate: isAlternate,
     };
   }
 

@@ -72,6 +72,10 @@ CREATE TABLE IF NOT EXISTS odds_events_raw (
   received_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   payload_hash         TEXT NOT NULL,
   status               TEXT NOT NULL DEFAULT 'accepted',
+  -- TRUE = SharpAPI alternate total/spread (or a point-jump-detected non-main
+  -- line). Appended to raw for audit but EXCLUDED from odds_current_stream /
+  -- line_movements so alternates never masquerade as main-line movement.
+  is_alternate         BOOLEAN NOT NULL DEFAULT FALSE,
   CONSTRAINT odds_events_raw_status_chk
     CHECK (status IN ('accepted', 'unresolved', 'blocked_book', 'dropped')),
   CONSTRAINT odds_events_raw_dedup UNIQUE (payload_hash)
