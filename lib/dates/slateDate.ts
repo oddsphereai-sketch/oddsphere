@@ -124,3 +124,31 @@ export function addDaysToSlate(date: string, days: number): string {
 export function isSlateDate(v: string | null | undefined): v is string {
   return !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
 }
+
+/**
+ * Hour (ET) at which the soccer/WC reader BOARD rolls to the next day. The
+ * board day runs SOCCER_BOARD_ROLL_HOUR → SOCCER_BOARD_ROLL_HOUR (2 AM → 2 AM)
+ * instead of midnight, so a midnight-ET match stays on the board through the
+ * night it's played and rolls off in the small hours. Single source of truth:
+ * the soccer board's "today" (currentSoccerBoardDate) AND the midnight-game
+ * carryover cutoff both derive from this. DISPLAY-only — the prediction / lock /
+ * tracking slate stays pure ET-calendar (see computeSlateDate).
+ */
+export const SOCCER_BOARD_ROLL_HOUR = 2; // ET
+
+/**
+ * The soccer/WC board's default "today" — the ET slate date, but not rolled to
+ * the new day until SOCCER_BOARD_ROLL_HOUR (2 AM ET). Before 2 AM ET it returns
+ * the previous day so late-night / midnight matches stay on the board.
+ */
+export function currentSoccerBoardDate(now: Date = new Date()): string {
+  const etHour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).format(now),
+  );
+  const today = computeSlateDate("soccer", now);
+  return etHour < SOCCER_BOARD_ROLL_HOUR ? addDaysToSlate(today, -1) : today;
+}

@@ -56,10 +56,10 @@ async function main() {
   // 2. THE BUG: next-day fixture kicking off at 00:00 ET (AUT vs JOR) is a
   //    "late tonight" carryover — it MUST appear on the day-D board.
   check("D+1 @ 00:00 ET (midnight) → carryover shows", qualifiesForSoccerBoard(D, { slate_date: NEXT }, NEXT, 0), true);
-  check("D+1 @ 04:59 ET → carryover shows", qualifiesForSoccerBoard(D, { slate_date: NEXT }, NEXT, 4 * 60 + 59), true);
+  check("D+1 @ 01:59 ET → carryover shows", qualifiesForSoccerBoard(D, { slate_date: NEXT }, NEXT, 1 * 60 + 59), true);
 
-  // 3. Cutoff boundary: 5:00 AM ET is genuinely "next morning", NOT tonight.
-  check("D+1 @ 05:00 ET → NOT carryover (boundary)", qualifiesForSoccerBoard(D, { slate_date: NEXT }, NEXT, 5 * 60), false);
+  // 3. Cutoff boundary: 2:00 AM ET is the board-roll hour — genuinely "next day".
+  check("D+1 @ 02:00 ET → NOT carryover (boundary)", qualifiesForSoccerBoard(D, { slate_date: NEXT }, NEXT, 2 * 60), false);
   check("D+1 @ 12:00 ET (noon) → NOT carryover", qualifiesForSoccerBoard(D, { slate_date: NEXT }, NEXT, 12 * 60), false);
   check("D+1 @ 21:00 ET (evening) → NOT carryover", qualifiesForSoccerBoard(D, { slate_date: NEXT }, NEXT, 21 * 60), false);
 
@@ -72,6 +72,13 @@ async function main() {
   //    its own calendar day — so viewing D+1, the 00:00-ET AUT vs JOR game is
   //    NOT shown there (it belonged to day D's evening and is now "yesterday").
   check("viewing D+1: midnight game NOT shown on its own day", qualifiesForSoccerBoard(NEXT, { slate_date: NEXT }, "2026-06-18", 0), false);
+
+  // 6. Board "today" rolls at 2 AM ET, not midnight, so a midnight match stays
+  //    on the board overnight. currentSoccerBoardDate takes a fixed `now`.
+  const { currentSoccerBoardDate } = await import("../lib/dates/slateDate");
+  check("01:30 AM ET → board still on previous day", currentSoccerBoardDate(new Date("2026-06-17T05:30:00Z")), "2026-06-16"); // 05:30 UTC = 01:30 ET
+  check("02:30 AM ET → board rolled to current day", currentSoccerBoardDate(new Date("2026-06-17T06:30:00Z")), "2026-06-17"); // 06:30 UTC = 02:30 ET
+  check("8 PM ET → board on current day", currentSoccerBoardDate(new Date("2026-06-18T00:00:00Z")), "2026-06-17"); // 00:00 UTC = 20:00 ET prev
 
   console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);

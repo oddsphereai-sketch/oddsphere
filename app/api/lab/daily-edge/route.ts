@@ -47,7 +47,7 @@ import type {
   MarketSignal,
   SignalType,
 } from "@/lib/types/domain/Grade";
-import { currentSlateDate, isSlateDate } from "@/lib/dates/slateDate";
+import { currentSlateDate, currentSoccerBoardDate, isSlateDate } from "@/lib/dates/slateDate";
 import { BOOK_PRIORITY } from "@/lib/config/bookPriority";
 import { determineSlateState } from "@/lib/services/dailyEdgeSlateResolution";
 import {
@@ -3125,7 +3125,13 @@ export async function GET(request: Request) {
 
   // Resolve the requested slate_date. Explicit ?date= wins; otherwise today's
   // slate in the sport's anchor timezone (ET for North American, London for UCL).
-  const requestedDate = isSlateDate(dateParam) ? dateParam : currentSlateDate(sport);
+  // Soccer/WC board: the default "today" doesn't roll until 2 AM ET
+  // (currentSoccerBoardDate) so midnight matches stay on the board overnight.
+  const requestedDate = isSlateDate(dateParam)
+    ? dateParam
+    : sport === "soccer" || sport === "ucl"
+      ? currentSoccerBoardDate()
+      : currentSlateDate(sport);
 
   // Phase 7G — NBA branch. Member-safe path that hands off to the
   // shared NBA adapter service. Returns the MLB-shaped DailyEdgeResponse

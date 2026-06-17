@@ -40,7 +40,7 @@ import {
   type LastMove,
 } from "../streamOverlay";
 import { interpretMarket } from "../../streaming/marketInterpretation";
-import { addDaysToSlate } from "../../dates/slateDate";
+import { addDaysToSlate, SOCCER_BOARD_ROLL_HOUR } from "../../dates/slateDate";
 import type {
   DailyEdgeResponse,
   DailyEdgeGameDto,
@@ -64,13 +64,15 @@ const LOCK_WINDOW_MINUTES = 60;
  * slate convention assigns to slate_date = D+1 — even though a US
  * audience experiences it as part of *tonight's* (day D) slate. This
  * cutoff (minutes-from-ET-midnight) defines which D+1 fixtures are
- * surfaced on the day-D board: any kicking off before 5:00 AM ET. The
- * slate_date / locking / tracking / grading of those rows is UNCHANGED
+ * surfaced on the day-D board: any kicking off before the board-roll hour
+ * (SOCCER_BOARD_ROLL_HOUR = 2:00 AM ET). Aligned with the board's "today"
+ * rollover so the boundary is consistent — the soccer board day runs 2 AM → 2 AM.
+ * The slate_date / locking / tracking / grading of those rows is UNCHANGED
  * — they still belong to D+1 for every server-side purpose; the read
  * simply makes them VISIBLE the night they're played. MLB/NBA/NHL never
  * kick off in this window, so the carryover is soccer-specific.
  */
-const CARRYOVER_ET_MINUTES_CUTOFF = 5 * 60;
+const CARRYOVER_ET_MINUTES_CUTOFF = SOCCER_BOARD_ROLL_HOUR * 60;
 
 /**
  * Does `game` belong on the day-`requestedDate` soccer board?
