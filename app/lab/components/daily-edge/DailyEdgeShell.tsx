@@ -1474,41 +1474,8 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
   );
 }
 
-function EdgeStack({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
-  const shellSport = useShellSport();
-  // R-16F-B — row construction lives in app/lab/lib/edgeStackRows.ts so
-  // the data shape can be unit-tested without a React renderer. This
-  // component only handles JSX layout + tone coloring.
-  const edgeMarket: "moneyline" | "total" | "first_inning" = market;
-  const totalUnit =
-    shellSport === "nhl" || shellSport === "soccer" ? "goals" : shellSport === "nba" ? "points" : "runs";
-  const rows = buildEdgeStackRows(edgeMarket, marketData, totalUnit);
-  return (
-    <div className="min-w-0">
-      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300 mb-1.5">
-        Edge Stack · {marketLongLabelFor(market, shellSport)}
-      </p>
-      <div className="space-y-1.5">
-        {rows.map((r) => (
-          <div key={r.label} className="grid grid-cols-[88px_1fr_auto] items-baseline gap-3">
-            <span className="text-[10px] uppercase tracking-[0.14em] font-semibold text-gray-500">{r.label}</span>
-            <span className="text-[12px] text-gray-300 tabular-nums leading-snug">{r.evidence}</span>
-            <span
-              className={`text-[12px] font-black tabular-nums leading-snug whitespace-nowrap ${
-                r.tone === "emerald" ? "text-emerald-300" : r.tone === "amber" ? "text-amber-300" : "text-gray-500"
-              }`}
-            >
-              {r.delta}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────────────
-// Clean reader (?reader=clean) — REVIEW-ONLY redesign of the expanded full
+// Clean reader — the redesigned expanded full
 // read. Reuses the REAL renderers (QuickRead / MarketPulse / MarketNotes) and
 // the REAL Edge Stack data (buildEdgeStackRows) — only the Supporting Evidence
 // PRESENTATION is reworked and the body reorganized into 3 clean columns.
@@ -1790,212 +1757,6 @@ function ExpandedReadClean({ game, market, marketData }: { game: DailyEdgeGameDt
   );
 }
 
-/**
- * Phase 6B.13 — Confidence vs Market strip.
- *
- * Reader-only component (does NOT appear on slate cards per the
- * "do not clutter the card" guidance). Shows the FINAL CALIBRATED
- * play confidence next to the no-vig market-implied probability so
- * members can read "how confident are we, and how does that compare to
- * what the market is pricing" — without conflating raw model output
- * with the final actionable play.
- *
- *   • Confidence — recommendationConfidence (Push 3C-2 / 6B.1.6m).
- *     Capped by data-quality tier; null when no actionable play exists
- *     (Toss-Up / Held / no-pick) → strip hides entirely.
- *   • Market — no-vig market-implied % when a two-sided book exists;
- *              "Market: unavailable" honest-empty otherwise.
- *   • Edge — Confidence − Market in percentage points; rendered with
- *            sign; suppressed when Market is unavailable (no fake gap).
- *   • Reviewer caution badge + flag list when reviewActionSummary ≠ "keep"
- *
- * Why this changed from "Model vs Market":
- *   The prior block displayed `modelTrustPct` (which is sometimes the
- *   raw model probability from sport_specific.v2_2_audit.ml_model_prob
- *   when the override fires) and called it "Model 70% reviewed trust".
- *   Members read that as the headline play confidence and were
- *   confused when the same game's "Rec" pill showed 55. The two
- *   numbers are distinct concepts and should not share a "Model"
- *   label. Now the comparison block uses the same final
- *   recommendationConfidence the play grade and Rec pill use.
- *
- * Raw model probability stays available on the pick line ("Win Prob
- * NN%" / "Model Prob NN%") for audit/intuition — it's just not the
- * primary user-facing comparison.
- *
- * FI markets: render when the FI V2 audit populates modelTrustPct
- * AND recommendationConfidence is non-null; otherwise honest-empty.
- */
-function ConfidenceVsMarketStrip({
-  market,
-  marketData,
-}: {
-  market: MarketKey;
-  marketData: MarketEdgeDto;
-}) {
-  if (marketData.held) return null;
-
-  // Phase 6B.29 — use model probability (matches Quick Read "Model Prob
-  // NN%") as the user-facing number. Pre-6B.29 this read
-  // recommendationConfidence, which is a 0-75 actionability INDEX
-  // (capped by data tier + play grade), not a probability. For OU
-  // markets that index is derived from run-delta — small deltas
-  // produced rec_conf=25 even when the model genuinely liked the
-  // pick (e.g. CIN@SD Under: model prob 56%, no-vig 50%, but the
-  // strip displayed "25 play confidence" vs "50% market" and Edge
-  // "-25.0pp" — meaningless because the operands were on different
-  // scales). modelTrustPct (= model_prob × 100) is a probability,
-  // directly comparable to the no-vig marketImpliedPct.
-  //
-  // recommendationConfidence still drives the separate "Rec" pill
-  // and the Top Available Angles sort — unchanged. This is a
-  // display-only correction to the Confidence vs Market comparison
-  // panel. No tracking / model / calibration / grading impact.
-  //
-  // When modelTrustPct is null (rare: model probability not surfaced
-  // for the market) the strip hides entirely rather than fall back
-  // to recommendationConfidence — keeps the comparison honest.
-  const confidencePct =
-    marketData.modelTrustPct ?? null;
-  if (confidencePct === null) return null;
-
-  const marketPct = marketData.marketImpliedPct;
-  const source = marketData.marketSource;
-  const quality = marketData.marketDataQuality;
-  const flags = marketData.reviewFlags;
-  const action = marketData.reviewActionSummary;
-  const cautionFiring = action !== "keep" || flags.includes("review_recommends_caution");
-
-  if (market === "first_inning" && marketPct === null) return null;
-
-  const marketLabel =
-    marketPct !== null
-      ? `${Math.round(marketPct)}%`
-      : "unavailable";
-  // R-16E + R-16F-B — honest labeling for splits-consensus reads.
-  // Shares the marketSourceLabel helper with EdgeStack so both
-  // sections always render the same human-facing source string.
-  const sourceLabel = marketSourceLabel(quality, source);
-
-  // Edge is now Confidence − Market (NOT modelTrustPct − Market). When
-  // market is unavailable we hide the Edge row entirely; we never
-  // invent a gap from one number.
-  const edge =
-    marketPct !== null ? confidencePct - marketPct : null;
-  const showGap = edge !== null;
-  const gapTone: "neutral" | "positive" | "negative" =
-    edge === null
-      ? "neutral"
-      : edge >= 5
-        ? "positive"
-        : edge <= -5
-          ? "negative"
-          : "neutral";
-  const gapColor =
-    gapTone === "positive"
-      ? "text-emerald-300"
-      : gapTone === "negative"
-        ? "text-rose-300"
-        : "text-gray-300";
-
-  // Friendly flag → label map (only the ones members benefit from seeing).
-  const friendlyFlag = (f: string): string | null => {
-    switch (f) {
-      case "small_sample_starter_driver":
-        return "small-sample starter";
-      case "extreme_run_diff_with_coinflip_market":
-        return "extreme run gap vs coinflip market";
-      case "huge_model_market_gap":
-        return "large model vs market gap";
-      case "raw_conf_extreme_fragile":
-        return "fragile model input";
-      case "public_smoke_aligned_with_pick":
-        return "model agrees with heavy public";
-      case "ou_sharp_conflict":
-        return "sharp +EV opposes total side";
-      case "bullpen_fallback":
-        return "bullpen data fallback";
-      case "missing_starter":
-        return "missing starter";
-      case "starter_stats_fallback":
-        // P1A 2026-06-12 — non-blocking marker for "starter player-row link
-        // absent but stats usable via fallback/proxy". The model produced
-        // a valid prediction; no scary card badge needed. Internal audit
-        // trail still carries the flag.
-        return null;
-      case "missing_market_line":
-        return "missing market line";
-      case "review_recommends_caution":
-        return null; // already conveyed by the badge
-      default:
-        return null;
-    }
-  };
-  const memberFlags = flags
-    .map(friendlyFlag)
-    .filter((s): s is string => s !== null);
-
-  return (
-    <div className="space-y-1.5">
-      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">
-        Confidence vs Market
-      </p>
-      <div className="grid grid-cols-[88px_1fr] gap-y-1 gap-x-2 items-baseline">
-        <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Confidence</span>
-        <span className="text-[12.5px] tabular-nums text-gray-200 font-bold">
-          {Math.round(confidencePct)}%
-          <span className="ml-2 text-[9.5px] font-normal text-gray-500 normal-case tracking-normal">
-            model prob
-          </span>
-        </span>
-
-        <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Market</span>
-        <span className={`text-[12.5px] tabular-nums font-bold ${marketPct === null ? "text-gray-500 italic" : "text-gray-200"}`}>
-          {marketLabel}
-          {sourceLabel !== null && marketPct !== null && (
-            <span className="ml-2 text-[9.5px] font-normal text-gray-500 normal-case tracking-normal">
-              {sourceLabel}
-            </span>
-          )}
-        </span>
-
-        {showGap && (
-          <>
-            <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Edge</span>
-            <span className={`text-[12.5px] tabular-nums font-bold ${gapColor}`}>
-              {Math.abs(edge!) < 0.5
-                ? "No edge"
-                : `${edge! > 0 ? "+" : ""}${edge!.toFixed(1)} pp`}
-              <span className="ml-2 text-[9.5px] font-normal text-gray-500 normal-case tracking-normal">
-                model prob vs no-vig market
-              </span>
-            </span>
-          </>
-        )}
-      </div>
-
-      {cautionFiring && (
-        <div className="mt-1.5 p-1.5 rounded border border-amber-500/30 bg-amber-500/[0.06] space-y-0.5">
-          <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-amber-400/90">
-            ⚠ Reviewer caution
-            {reviewActionLabel(action) !== null && (
-              <span className="ml-1.5 text-[9px] font-normal text-amber-300/70 normal-case tracking-normal">
-                · {reviewActionLabel(action)}
-              </span>
-            )}
-          </p>
-          {memberFlags.length > 0 && (
-            <ul className="text-[10.5px] text-amber-200/80 leading-tight pl-2.5 list-disc">
-              {memberFlags.slice(0, 4).map((f, i) => (
-                <li key={i}>{f}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /**
  * WC reader follow-up (2026-06-12) — Match Result three-way model
@@ -3314,7 +3075,6 @@ function SelectedEdgeReader({
   onNext,
   index,
   total,
-  legacyReader,
 }: {
   game: DailyEdgeGameDto;
   market: MarketKey;
@@ -3329,8 +3089,6 @@ function SelectedEdgeReader({
   /** 1-based position + count, for the "3 / 8" indicator. */
   index: number;
   total: number;
-  /** ?reader=legacy — render the OLD expanded body (rollback). Default = clean. */
-  legacyReader: boolean;
 }) {
   const verdict = asVerdictKey(marketData.verdict.key);
   const shellSport = useShellSport();
@@ -3548,37 +3306,9 @@ function SelectedEdgeReader({
             {marketData.guidedGuide}
           </p>
         </div>
-      ) : !legacyReader ? (
-        /* DEFAULT — redesigned clean 3-column expanded read */
-        <ExpandedReadClean game={game} market={market} marketData={marketData} />
       ) : (
-        /* ?reader=legacy — old expanded body (rollback; delete after prod verify) */
-        <div className="px-4 sm:px-5 py-3">
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] gap-5">
-            <QuickRead game={game} market={market} marketData={marketData} />
-            <div className="min-w-0 space-y-2">
-              <div className="flex items-center gap-2 pb-1 border-b border-white/[0.06]">
-                <span aria-hidden="true" className="w-1 h-3.5 rounded-full bg-violet-400/60 shadow-[0_0_6px_rgba(167,139,250,0.22)]" />
-                <p className="text-[10.5px] uppercase tracking-[0.18em] font-bold text-violet-200/75">Supporting Evidence</p>
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)] gap-5">
-                <div className="space-y-2.5">
-                  <EdgeStack market={market} marketData={marketData} />
-                  <div className="border-t border-white/[0.04]" />
-                  <ConfidenceVsMarketStrip market={market} marketData={marketData} />
-                  <div className="border-t border-white/[0.04]" />
-                  <MarketPulse market={market} marketData={marketData} game={game} />
-                </div>
-                <MarketNotes
-                  marketData={marketData}
-                  awayAbbr={game.awayTeam}
-                  homeAbbr={game.homeTeam}
-                  market={market}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+        /* Redesigned clean 3-column expanded read */
+        <ExpandedReadClean game={game} market={market} marketData={marketData} />
       )}
     </section>
   );
@@ -3973,14 +3703,6 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   // Desktop reader element — used to smooth-scroll the reader back into view
   // when the user picks a game from the board below (no more scroll-up loop).
   const readerRef = useRef<HTMLDivElement>(null);
-  // Redesigned clean reader is now the DEFAULT (approved 2026-06-17). The old
-  // expanded body remains available via ?reader=legacy as a one-deploy rollback
-  // safety net; delete it + ConfidenceVsMarketStrip after prod is verified.
-  const [legacyReader, setLegacyReader] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setLegacyReader(new URLSearchParams(window.location.search).get("reader") === "legacy");
-  }, []);
 
   const games = data?.games ?? [];
   const verdictCounts = useMemo(() => computeVerdictCounts(games), [games]);
@@ -4235,7 +3957,6 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
               onNext={canNext ? () => goToAdjacentGame(1) : null}
               index={Math.max(1, idx + 1)}
               total={navList.length}
-              legacyReader={legacyReader}
             />
           );
         })()}
