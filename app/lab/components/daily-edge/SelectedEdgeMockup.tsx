@@ -285,7 +285,7 @@ function ConfidenceGauge({ value }: { value: number }) {
   );
 }
 
-/** Odds Move trail: open → prev → current/lock. Drops redundant prev. */
+/** Odds Move trail: open → prev → current/lock. Spread evenly across the row. */
 function OddsMoveTrail({ open, prev, current, locked }: MarketMock["ev"]["oddsMove"]) {
   const pts: Array<{ v: number; label: string }> = [];
   if (isNum(open)) pts.push({ v: open, label: "OPEN" });
@@ -293,13 +293,13 @@ function OddsMoveTrail({ open, prev, current, locked }: MarketMock["ev"]["oddsMo
   if (isNum(current)) pts.push({ v: current, label: locked ? "LOCK" : "CURRENT" });
   if (pts.length === 0) return null;
   return (
-    <div className="flex items-end gap-1.5">
+    <div className="flex items-stretch">
       {pts.map((p, i) => (
-        <div key={p.label} className="flex items-end gap-1.5">
-          {i > 0 && <span aria-hidden="true" className="text-gray-600 text-[12px] pb-3 leading-none">→</span>}
+        <div key={p.label} className="flex items-center flex-1 first:flex-none">
+          {i > 0 && <span aria-hidden="true" className="flex-1 text-center text-gray-600 text-[15px] leading-none -mt-3">→</span>}
           <div className="flex flex-col items-center">
-            <span className="tabular-nums font-bold text-[13px] text-gray-100 leading-tight">{fmtOdds(p.v)}</span>
-            <span className="text-[7.5px] uppercase tracking-[0.1em] text-gray-500 mt-0.5">{p.label}</span>
+            <span className="tabular-nums font-bold text-[16px] text-gray-100 leading-none">{fmtOdds(p.v)}</span>
+            <span className="text-[8px] uppercase tracking-[0.14em] text-gray-500 mt-1.5">{p.label}</span>
           </div>
         </div>
       ))}
@@ -307,19 +307,27 @@ function OddsMoveTrail({ open, prev, current, locked }: MarketMock["ev"]["oddsMo
   );
 }
 
-function PulseBar({ leftLabel, leftPct, rightLabel, rightPct, caption }: { leftLabel: string; leftPct: number; rightLabel: string; rightPct: number; caption: string }) {
+/** One side of the public splits — its own Money + Bets bars. */
+function SideSplit({ label, money, bets }: { label: string; money: number; bets: number }) {
   return (
-    <div>
-      <div className="flex items-center gap-2">
-        <span className="text-[9.5px] text-gray-400 truncate w-20">{leftLabel}</span>
-        <span className="text-[9.5px] tabular-nums text-gray-300 w-7 text-right">{leftPct}%</span>
-        <div className="flex-1 h-2 rounded-full bg-sky-400/15 overflow-hidden">
-          <div className="h-full bg-violet-400/65" style={{ width: `${leftPct}%` }} />
-        </div>
-        <span className="text-[9.5px] tabular-nums text-gray-300 w-7">{rightPct}%</span>
-        <span className="text-[9.5px] text-gray-400 truncate w-20 text-right">{rightLabel}</span>
+    <div className="rounded-md border border-white/[0.05] bg-white/[0.012] px-2.5 py-2">
+      <p className="text-[11px] font-bold text-gray-200 mb-1.5">{label}</p>
+      <div className="space-y-1.5">
+        {[
+          { tag: "Money", pct: money, color: "bg-violet-400/70" },
+          { tag: "Bets", pct: bets, color: "bg-sky-400/55" },
+        ].map((b) => (
+          <div key={b.tag}>
+            <div className="flex justify-between text-[9px] mb-0.5">
+              <span className="uppercase tracking-[0.1em] text-gray-500">{b.tag}</span>
+              <span className="tabular-nums text-gray-300 font-semibold">{b.pct}%</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
+              <div className={"h-full rounded-full " + b.color} style={{ width: `${b.pct}%` }} />
+            </div>
+          </div>
+        ))}
       </div>
-      <p className="text-center text-[7.5px] uppercase tracking-[0.12em] text-gray-600 mt-0.5">{caption}</p>
     </div>
   );
 }
@@ -381,13 +389,19 @@ function QuickReadCol({ m }: { m: MarketMock }) {
       <p className="text-[10.5px] text-gray-500 mt-1">{GAME.awayPitcher} <span className="text-gray-700">vs</span> {GAME.homePitcher}</p>
 
       {/* Projection */}
-      <div className="mt-2.5 rounded-lg border border-white/[0.06] bg-white/[0.015] px-3 py-2">
-        <p className="text-[8.5px] uppercase tracking-[0.14em] font-bold text-gray-500 mb-1">{q.projLabel}</p>
-        <p className="text-[14px] font-black text-white tabular-nums">
-          <span className="text-[10px] text-gray-500 font-bold mr-1">{GAME.away}</span>{q.projAway}
-          <span className="text-gray-700 mx-2">—</span>
-          {q.projHome}<span className="text-[10px] text-gray-500 font-bold ml-1">{GAME.home}</span>
-        </p>
+      <div className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3.5 py-2.5">
+        <p className="text-[8.5px] uppercase tracking-[0.14em] font-bold text-gray-500 mb-2">{q.projLabel}</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[10px] text-gray-500 font-bold">{GAME.away}</span>
+            <span className="text-[19px] font-black text-white tabular-nums leading-none">{q.projAway}</span>
+          </div>
+          <span className="text-gray-700 text-[13px]">—</span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[19px] font-black text-white tabular-nums leading-none">{q.projHome}</span>
+            <span className="text-[10px] text-gray-500 font-bold">{GAME.home}</span>
+          </div>
+        </div>
       </div>
 
       {/* Big pick + gauge */}
@@ -427,75 +441,102 @@ function QuickReadCol({ m }: { m: MarketMock }) {
   );
 }
 
-// ─── Supporting Evidence row helper ─────────────────────────────────────
+// ─── Supporting Evidence helpers ────────────────────────────────────────
+/** Compact definition row: icon + label LEFT, value RIGHT (clean two-edge). */
 function EvRow({ glyph, label, children, right, rightTone }: { glyph: string; label: string; children: React.ReactNode; right?: string; rightTone?: Delta }) {
   return (
-    <div className="flex items-center gap-3 py-2">
-      <RowGlyph name={glyph} />
-      <span className="text-[8.5px] uppercase tracking-[0.1em] font-bold text-gray-500 w-[72px] shrink-0">{label}</span>
-      <div className="flex-1 min-w-0 text-[11.5px] text-gray-300">{children}</div>
-      {right !== undefined && <span className={"text-[12.5px] font-bold tabular-nums shrink-0 pl-2 " + (rightTone ? deltaClass(rightTone) : "text-gray-400")}>{right}</span>}
+    <div className="flex items-baseline justify-between gap-4 py-2">
+      <span className="flex items-center gap-2 shrink-0">
+        <RowGlyph name={glyph} />
+        <span className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-500">{label}</span>
+      </span>
+      <span className="flex items-baseline gap-2.5 text-[12px] text-gray-300 text-right">
+        <span>{children}</span>
+        {right !== undefined && (
+          <span className={"font-bold tabular-nums shrink-0 " + (rightTone ? deltaClass(rightTone) : "text-gray-400")}>{right}</span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+/** Full-width labeled module — quiet label over its content (for richer rows). */
+function EvModule({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="py-2.5">
+      <p className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-500 mb-2">{label}</p>
+      {children}
     </div>
   );
 }
 
 // ─── Column 2: Supporting Evidence (ONE vertical column) ────────────────
-function SupportingEvidenceCol({ m }: { m: MarketMock }) {
+function SupportingEvidenceCol({ marketKey, m }: { marketKey: MarketKey; m: MarketMock }) {
   const ev = m.ev;
+  const splitsRight = "unavailable" in ev.splits ? "Unavailable" : ev.splits.delta > 0 ? `+${ev.splits.delta}` : `${ev.splits.delta}`;
+  const splitsTone: Delta = "unavailable" in ev.splits ? "neutral" : ev.splits.delta < 0 ? "neg" : "pos";
   return (
     <div className="min-w-0">
-      <div className="flex items-center gap-2 pb-1 border-b border-white/[0.06] mb-1">
+      <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.06]">
         <span aria-hidden="true" className="w-1 h-3.5 rounded-full bg-violet-400/60" />
         <p className="text-[10.5px] uppercase tracking-[0.18em] font-bold text-violet-200/75">Supporting Evidence</p>
+        <span className="ml-auto text-[8.5px] uppercase tracking-[0.14em] text-gray-600">{ev.sub}</span>
       </div>
-      <p className="text-[8.5px] uppercase tracking-[0.16em] font-bold text-gray-500/80 mb-1.5">Edge Stack · {ev.sub}</p>
 
-      <div className="divide-y divide-white/[0.04]">
+      {/* Quantitative rows — label left, value right */}
+      <div className="divide-y divide-white/[0.04] mt-0.5">
         <EvRow glyph="model" label="Model Edge" right={ev.modelEdge.delta} rightTone={ev.modelEdge.deltaTone}>
-          Model <span className="font-bold text-gray-100 tabular-nums">{ev.modelEdge.model}</span>
-          <span className="text-gray-600"> · </span>Market <span className="font-bold text-gray-100 tabular-nums">{ev.modelEdge.market}</span>
-          <span className="text-gray-600"> · </span><span className="text-gray-500">{ev.modelEdge.source}</span>
+          <span className="tabular-nums">Model <b className="font-bold text-gray-100">{ev.modelEdge.model}</b> <span className="text-gray-600">vs</span> Market <b className="font-bold text-gray-100">{ev.modelEdge.market}</b></span>
+          <span className="text-gray-500"> · {ev.modelEdge.source}</span>
         </EvRow>
 
-        <EvRow
-          glyph="splits"
-          label="Splits"
-          right={"unavailable" in ev.splits ? "Unavailable" : (ev.splits.delta > 0 ? `+${ev.splits.delta}` : `${ev.splits.delta}`)}
-          rightTone={"unavailable" in ev.splits ? "neutral" : ev.splits.delta < 0 ? "neg" : "pos"}
-        >
+        <EvRow glyph="splits" label="Splits" right={splitsRight} rightTone={splitsTone}>
           {"unavailable" in ev.splits ? (
             <span className="text-gray-400">{ev.splits.unavailable}</span>
           ) : (
-            <span className="tabular-nums">Money <span className="font-semibold text-gray-200">{ev.splits.money}%</span> <span className="text-gray-600">/</span> Bets <span className="font-semibold text-gray-200">{ev.splits.bets}%</span></span>
+            <span className="tabular-nums">Money <b className="font-semibold text-gray-200">{ev.splits.money}%</b> <span className="text-gray-600">/</span> Bets <b className="font-semibold text-gray-200">{ev.splits.bets}%</b></span>
           )}
         </EvRow>
 
-        <EvRow glyph="odds" label="Odds Move"><OddsMoveTrail {...ev.oddsMove} /></EvRow>
-
-        <EvRow glyph="line" label={ev.line.label}><span className="font-bold text-gray-100 tabular-nums">{ev.line.value}</span></EvRow>
-
-        <EvRow glyph="read" label="Market Read">
-          <span className="flex items-center gap-1.5"><SignalIcon tone={ev.marketRead.tone} /><span>{ev.marketRead.text}</span></span>
-        </EvRow>
+        {/* Line row: Totals only (ML uses the price trail; FI is always 0.5) */}
+        {marketKey === "total" && (
+          <EvRow glyph="line" label="Total Line"><span className="font-bold text-gray-100 tabular-nums">{ev.line.value}</span></EvRow>
+        )}
       </div>
 
-      {/* Market Pulse box (Public Splits — kept as-is) */}
-      <div className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.015] px-3 py-2.5">
-        <p className="text-[8.5px] uppercase tracking-[0.16em] font-bold text-gray-500/85 mb-1.5">Market Pulse · Public Splits</p>
-        {ev.pulse.kind === "bars" ? (
-          <div className="space-y-2">
-            <PulseBar leftLabel={ev.pulse.leftLabel} leftPct={ev.pulse.money[0]} rightLabel={ev.pulse.rightLabel} rightPct={ev.pulse.money[1]} caption="% of Money" />
-            <PulseBar leftLabel={ev.pulse.leftLabel} leftPct={ev.pulse.bets[0]} rightLabel={ev.pulse.rightLabel} rightPct={ev.pulse.bets[1]} caption="% of Bets" />
+      {/* Odds Move — spread trail */}
+      <div className="border-t border-white/[0.04]">
+        <EvModule label="Odds Move"><div className="px-2"><OddsMoveTrail {...ev.oddsMove} /></div></EvModule>
+      </div>
+
+      {/* Market Read — interpretive note */}
+      <div className="border-t border-white/[0.04]">
+        <EvModule label="Market Read">
+          <div className="flex items-center gap-2">
+            <SignalIcon tone={ev.marketRead.tone} />
+            <span className="text-[12px] text-gray-300">{ev.marketRead.text}</span>
           </div>
-        ) : (
-          <div className="flex items-start gap-2">
-            <SignalIcon tone="neutral" />
-            <div>
-              <p className="text-[11px] font-semibold text-gray-300">Not available for first-inning market</p>
-              <p className="text-[10.5px] text-gray-500 leading-snug mt-0.5">{ev.pulse.text}</p>
+        </EvModule>
+      </div>
+
+      {/* Public Splits — BOTH sides, each with its own Money + Bets bars */}
+      <div className="border-t border-white/[0.04]">
+        <EvModule label="Market Pulse · Public Splits">
+          {ev.pulse.kind === "bars" ? (
+            <div className="grid grid-cols-2 gap-2.5">
+              <SideSplit label={ev.pulse.leftLabel} money={ev.pulse.money[0]} bets={ev.pulse.bets[0]} />
+              <SideSplit label={ev.pulse.rightLabel} money={ev.pulse.money[1]} bets={ev.pulse.bets[1]} />
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="flex items-start gap-2 rounded-md border border-white/[0.05] bg-white/[0.012] px-3 py-2">
+              <SignalIcon tone="neutral" />
+              <div>
+                <p className="text-[11px] font-semibold text-gray-300">Not offered for first-inning markets</p>
+                <p className="text-[10.5px] text-gray-500 leading-snug mt-0.5">{ev.pulse.text}</p>
+              </div>
+            </div>
+          )}
+        </EvModule>
       </div>
     </div>
   );
@@ -612,7 +653,7 @@ export default function SelectedEdgeMockup() {
       <div className="px-4 sm:px-5 py-4">
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(230px,280px)_minmax(0,1fr)_minmax(230px,320px)] gap-6 lg:gap-7">
           <QuickReadCol m={m} />
-          <SupportingEvidenceCol m={m} />
+          <SupportingEvidenceCol marketKey={market} m={m} />
           <KeyStatsNotesCol m={m} />
         </div>
       </div>
