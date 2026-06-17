@@ -1629,7 +1629,7 @@ function ModelEdgeBlock({ market, marketData }: { market: MarketKey; marketData:
     topVal = marketData.modelTotal.toFixed(1);
     topNote = "projected total";
     midVal = marketData.marketTotal.toFixed(1);
-    midNote = marketSourceLabel(marketData.marketDataQuality, marketData.marketSource) ?? "market line";
+    midNote = "market line";
     edge = `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} ${totalUnit}`;
     edgeNote = "projection vs line";
   } else {
@@ -1640,7 +1640,7 @@ function ModelEdgeBlock({ market, marketData }: { market: MarketKey; marketData:
       const gap = marketData.modelMarketGapPct ?? modelPct - marketPct;
       tone = gap >= 1 ? "emerald" : gap <= -1 ? "amber" : "gray";
       midVal = `${Math.round(marketPct)}%`;
-      midNote = marketSourceLabel(marketData.marketDataQuality, marketData.marketSource) ?? "market";
+      midNote = "market";
       edge = `${gap >= 0 ? "+" : ""}${gap.toFixed(1)} pp`;
     } else {
       midNote = "unavailable";
@@ -1650,12 +1650,12 @@ function ModelEdgeBlock({ market, marketData }: { market: MarketKey; marketData:
   const Line = ({ k, v, note, last }: { k: string; v: string; note: string; last?: boolean }) => (
     <div className={"flex items-center gap-2 " + (last ? "pt-1.5 mt-1.5 border-t border-white/[0.05]" : "")}>
       <span className="text-[9.5px] uppercase tracking-[0.1em] text-gray-500 w-[78px] shrink-0">{k}</span>
+      <span className="text-[9.5px] text-gray-500 truncate">{note}</span>
       {last && edge ? (
-        <span className={"inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-bold tabular-nums " + cleanChipClass(tone)}>{v}</span>
+        <span className={"ml-auto inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-bold tabular-nums shrink-0 " + cleanChipClass(tone)}>{v}</span>
       ) : (
-        <span className="text-[13px] font-bold text-gray-100 tabular-nums">{v}</span>
+        <span className="ml-auto text-[13px] font-bold text-gray-100 tabular-nums shrink-0">{v}</span>
       )}
-      <span className="text-[9.5px] text-gray-500 ml-auto text-right">{note}</span>
     </div>
   );
 
@@ -1680,7 +1680,9 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const pinnacle = find("Pinnacle EV");
   const splits = find("Money vs Bets");
   const lineMove = find("Line"); // the betting NUMBER move (totals)
+  const oddsMove = find("Line Move"); // the PRICE move — carries the directional arrow + tone
   const marketRead = find("Market Read");
+  const book = marketSourceLabel(marketData.marketDataQuality, marketData.marketSource) ?? marketData.marketSource;
   const hasTrail = marketData.lineOpenAmerican != null || marketData.priceAmerican != null;
   return (
     <div>
@@ -1694,13 +1696,19 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
       <ModelEdgeBlock market={market} marketData={marketData} />
 
       <div className="divide-y divide-white/[0.04] mt-2">
+        {book && <CleanEvRow label="Book">{book}</CleanEvRow>}
         {pinnacle && pinnacle.delta !== "unavailable" && <CleanEvRow label="Pinnacle EV" delta={pinnacle.delta} tone={pinnacle.tone}>{pinnacle.evidence}</CleanEvRow>}
         {splits && <CleanEvRow label="Splits" delta={splits.delta} tone={splits.tone}>{splits.evidence}</CleanEvRow>}
         {lineMove && market === "total" && <CleanEvRow label="Total Line" delta={lineMove.delta} tone={lineMove.tone}>{lineMove.evidence}</CleanEvRow>}
       </div>
       {hasTrail && (
         <div className="border-t border-white/[0.04] py-2.5">
-          <p className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-500 mb-2">Odds Move</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-500">Odds Move</p>
+            {oddsMove && oddsMove.delta && oddsMove.delta !== "—" && (
+              <span className={"text-[14px] font-black leading-none " + cleanDeltaClass(oddsMove.tone)}>{oddsMove.delta}</span>
+            )}
+          </div>
           <CleanOddsTrail
             open={marketData.lineOpenAmerican}
             prev={marketData.lastMovePrevAmerican ?? null}
@@ -1713,8 +1721,8 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
         <div className="border-t border-white/[0.04] py-2.5">
           <p className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-500 mb-1.5">Market Read</p>
           <div className="flex items-center gap-2">
-            <CleanSignal tone={marketRead.tone} />
             <span className="text-[12px] text-gray-300">{marketRead.evidence}</span>
+            <span className="ml-auto"><CleanSignal tone={marketRead.tone} /></span>
           </div>
         </div>
       )}
