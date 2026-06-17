@@ -1699,8 +1699,31 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
         {book && <CleanEvRow label="Book">{book}</CleanEvRow>}
         {pinnacle && pinnacle.delta !== "unavailable" && <CleanEvRow label="Pinnacle EV" delta={pinnacle.delta} tone={pinnacle.tone}>{pinnacle.evidence}</CleanEvRow>}
         {splits && <CleanEvRow label="Splits" delta={splits.delta} tone={splits.tone}>{splits.evidence}</CleanEvRow>}
-        {lineMove && market === "total" && <CleanEvRow label="Total Line" delta={lineMove.delta} tone={lineMove.tone}>{lineMove.evidence}</CleanEvRow>}
       </div>
+
+      {/* Total Line — dedicated section for totals, ALWAYS shown. If the line
+          moved (trusted book) it shows prev → current + direction; otherwise it
+          shows the current line as "no change". */}
+      {market === "total" && (
+        <div className="border-t border-white/[0.04] py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Total Line</p>
+            {lineMove ? (
+              <span className="flex items-center gap-2">
+                <span className="text-[13px] font-bold text-gray-100 tabular-nums">{lineMove.evidence}</span>
+                <span className={"text-[13px] font-black leading-none " + cleanDeltaClass(lineMove.tone)}>{lineMove.delta}</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <span className="text-[13px] font-bold text-gray-100 tabular-nums">
+                  {marketData.marketTotal != null ? marketData.marketTotal.toFixed(1) : marketData.line != null ? String(marketData.line) : "—"}
+                </span>
+                <span className="text-[10px] uppercase tracking-[0.1em] text-gray-500">no change</span>
+              </span>
+            )}
+          </div>
+        </div>
+      )}
       {hasTrail && (
         <div className="border-t border-white/[0.04] py-2.5">
           <div className="flex items-center justify-between mb-2">
