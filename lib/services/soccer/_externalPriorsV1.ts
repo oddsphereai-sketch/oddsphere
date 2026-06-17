@@ -155,6 +155,20 @@ export const EXTERNAL_PRIORS_V1 = {
     over_2_5_rate: 0.55,
   },
 
+  // ─── BTTS calibration (2026-06-17) ────────────────────────────────────
+  // Evidence: 16 settled WC BTTS — the Dixon-Coles model centered P(yes) at
+  // 0.46, ~6pp BELOW the 0.52 base rate (wc_aggregate_rates.btts_yes_rate),
+  // because it under-projects the weaker team's goals (low λ → low P(both
+  // score)). The market was even MORE No-biased (0.39) with a worse Brier
+  // (0.32 vs our 0.26), so we regress toward our OWN base rate, not the
+  // market. Conservative partial shrink: at 0.5 the model center moves
+  // 0.46 → ~0.49 (still below 0.52) and only genuine coin-flips (raw P(yes)
+  // ~0.48–0.50) flip No→Yes. Set yes_shrink to 0 to disable. Revisit with a
+  // proper per-bucket Platt fit once the BTTS sample is large enough (~40+).
+  btts_calibration: {
+    yes_shrink: 0.5,
+  },
+
   // ─── Confidence reductions (in percentage points) ─────────────────
 
   reductions_pp: {

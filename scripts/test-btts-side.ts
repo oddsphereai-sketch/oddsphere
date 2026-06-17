@@ -10,6 +10,7 @@
 import {
   resolveBttsSide,
   bttsDistributionWarning,
+  regressBttsYesTowardBaseRate,
 } from "../lib/services/soccer/bttsSide";
 import { bivariatePoissonScoreDistribution } from "../lib/services/soccer/dixonColes";
 import { bttsFromDistribution } from "../lib/services/soccer/soccerMarketProbabilities";
@@ -68,6 +69,48 @@ function rawBttsYes(lh: number, la: number): number {
   check("healthy mix does not warn", bttsDistributionWarning(["no", "no", "yes", "no", "yes", "no"]) === null);
   check("tiny slate (<5) does not warn", bttsDistributionWarning(["no", "no"]) === null);
   check("all-Yes slate (6) also warns", bttsDistributionWarning(["yes", "yes", "yes", "yes", "yes", "yes"]) !== null);
+}
+
+// 6. Base-rate regression (2026-06-17 BTTS calibration).
+{
+  const base = EXTERNAL_PRIORS_V1.wc_aggregate_rates.btts_yes_rate; // 0.52
+  const shrink = EXTERNAL_PRIORS_V1.btts_calibration.yes_shrink;     // 0.5
+
+  // shrink=0 is a strict no-op (raw model preserved).
+  {
+    const r = regressBttsYesTowardBaseRate({ yes: 0.40, no: 0.60 }, base, 0);
+    check("shrink=0 no-op (yes unchanged)", Math.abs(r.yes - 0.40) < 1e-9);
+    check("shrink=0 no-op (no = 1-yes)", Math.abs(r.no - 0.60) < 1e-9);
+  }
+  // shrink=1 collapses to the base rate.
+  {
+    const r = regressBttsYesTowardBaseRate({ yes: 0.30, no: 0.70 }, base, 1);
+    check("shrink=1 collapses to base rate", Math.abs(r.yes - base) < 1e-9);
+  }
+  // Pair stays a valid distribution.
+  {
+    const r = regressBttsYesTowardBaseRate({ yes: 0.46, no: 0.54 }, base, shrink);
+    check("yes + no === 1", Math.abs(r.yes + r.no - 1) < 1e-9);
+    check("regression LIFTS a below-base-rate model toward base", r.yes > 0.46 && r.yes < base);
+  }
+  // It REGRESSES (pulls down) a model already above the base rate — not one-sided.
+  {
+    const r = regressBttsYesTowardBaseRate({ yes: 0.70, no: 0.30 }, base, shrink);
+    check("regression pulls an above-base-rate model DOWN toward base", r.yes < 0.70 && r.yes > base);
+  }
+  // The flip case that motivated the change: a coin-flip below 0.5 crosses to Yes.
+  {
+    const r = regressBttsYesTowardBaseRate({ yes: 0.49, no: 0.51 }, base, 0.5);
+    check("borderline 0.49 → side flips to YES after regression", resolveBttsSide(r.yes, r.no) === "yes");
+    // A clear No stays No (we don't blanket-flip everything to Yes).
+    const r2 = regressBttsYesTowardBaseRate({ yes: 0.33, no: 0.67 }, base, 0.5);
+    check("clear No (0.33) stays NO after regression", resolveBttsSide(r2.yes, r2.no) === "no");
+  }
+  // Output clamps to [0,1] for degenerate inputs.
+  {
+    const r = regressBttsYesTowardBaseRate({ yes: 0.99, no: 0.01 }, 1.5, 1);
+    check("yes clamped to [0,1]", r.yes <= 1 && r.yes >= 0 && Math.abs(r.yes + r.no - 1) < 1e-9);
+  }
 }
 
 console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILED`}`);

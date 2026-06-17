@@ -25,6 +25,7 @@
 import { EXTERNAL_PRIORS_V1 } from "./_externalPriorsV1";
 import { computeLambda, bivariatePoissonScoreDistribution, expectedTotalFromDistribution, medianTotalFromDistribution, mostLikelyTotalFromDistribution } from "./dixonColes";
 import { deriveSoccerMarketProbabilities, type SoccerMarketProbabilities } from "./soccerMarketProbabilities";
+import { regressBttsYesTowardBaseRate } from "./bttsSide";
 import { buildMarketProbabilityBundle, computeEdges, selectBestValueSidePerMarket, type EdgeRow } from "./soccerMarketComparison";
 import { deriveMarketImpliedLambdas } from "./marketImpliedLambda";
 import { deriveSoccerGrade, type SoccerGradeDecision } from "./soccerConfidenceGrade";
@@ -267,23 +268,26 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
   const joint = bivariatePoissonScoreDistribution(lambdaHome, lambdaAway, EXTERNAL_PRIORS_V1.tau);
 
   // ─── 5. Market probabilities (model-only, no market input) ───────
-  const marketProbs = deriveSoccerMarketProbabilities({ joint, totalLine });
-
-  // WC BTTS underdog-λ decompression (2026-06-16). The joint-distribution
-  // BTTS-yes runs low because the weaker side's attacking λ is over-compressed
-  // (the dominant-favorite mismatch boost only lifts the favorite), so
-  // genuinely two-sided matches sat just under 50% and the card showed a
-  // confident "No" on nearly every game. For the BTTS calculation ONLY,
-  // BTTS uses the RAW score distribution (the same λ as match_result / total) —
-  // P(yes) = 1 − P(h=0) − P(a=0) + P(0,0). This is monotonic and predictive:
-  // BTTS-yes rises with the weaker team's λ, so genuinely two-sided games rank
-  // above lopsided ones. We do NOT decompress the λ gap (an earlier "underdog
-  // lift" hack): decompression is GAP-proportional, so it lifted the LOWEST-
-  // scoring underdogs the MOST, perversely pushing the biggest blowouts toward
-  // YES while moderate games stayed NO — anti-predictive. The model is roughly
-  // calibrated at the level (slate BTTS-yes mean ≈ WC norm); a proper per-market
-  // calibration is sample-blocked (see WC calibration roadmap). The de-vigged
-  // market BTTS-yes anchors the GRADE via computeEdges, not the side.
+  const marketProbsRaw = deriveSoccerMarketProbabilities({ joint, totalLine });
+  // WC BTTS base-rate regression (2026-06-17). The raw joint-distribution
+  // BTTS-yes runs low because the weaker side's attacking λ is over-compressed,
+  // so it centers ~6pp BELOW our own 0.52 base rate (16-game evidence: model
+  // mean P(yes)=0.46, actual 0.75, market 0.39 with a WORSE Brier than ours).
+  // We regress P(yes) toward the base rate — NOT toward the market, which is
+  // even more No-biased. BTTS-only: every other market passes through
+  // unchanged. This replaces the reverted "underdog-λ decompression" hack
+  // (gap-proportional, so it perversely lifted the biggest blowouts toward YES);
+  // the regression is uniform shrinkage toward a known prior, which is
+  // monotonic and does not distort the cross-game ranking. The de-vigged market
+  // BTTS-yes still anchors the GRADE via computeEdges, not the side.
+  const marketProbs: SoccerMarketProbabilities = {
+    ...marketProbsRaw,
+    btts: regressBttsYesTowardBaseRate(
+      marketProbsRaw.btts,
+      EXTERNAL_PRIORS_V1.wc_aggregate_rates.btts_yes_rate,
+      EXTERNAL_PRIORS_V1.btts_calibration.yes_shrink,
+    ),
+  };
   {
     const marketBttsYes = bundle.devig["btts|yes"] ?? null;
     console.log(

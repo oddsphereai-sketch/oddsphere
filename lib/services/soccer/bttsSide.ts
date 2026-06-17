@@ -24,6 +24,33 @@ export function resolveBttsSide(pYes: number, pNo: number): "yes" | "no" {
 }
 
 /**
+ * Regress a raw model BTTS P(yes) toward the competition base rate — the
+ * data-driven calibration the header note anticipated.
+ *
+ * Evidence (2026-06-17, 16 settled WC BTTS): the raw model centered P(yes) at
+ * 0.46 — ~6pp BELOW the 0.52 WC group-stage base rate — because it
+ * under-projects the weaker team's goals (low λ → low P(both score)). The
+ * betting market was even more No-biased (mean 0.39) and scored a WORSE Brier
+ * (0.32 vs the model's 0.26), so leaning to the market would hurt; we regress
+ * toward our OWN established base rate instead.
+ *
+ * Conservative partial shrink toward `baseRate`: yes' = raw + shrink·(baseRate −
+ * raw). shrink=0 is a no-op (raw model); shrink=1 collapses to the base rate.
+ * At shrink=0.5 the model center moves 0.46 → ~0.49 (still below 0.52) and only
+ * genuine coin-flips (raw P(yes) ~0.48–0.50) flip No→Yes. Pure; output clamped
+ * to [0,1] with no = 1 − yes so the pair stays a valid distribution.
+ */
+export function regressBttsYesTowardBaseRate(
+  raw: { yes: number; no: number },
+  baseRate: number,
+  shrink: number,
+): { yes: number; no: number } {
+  const adjusted = raw.yes + shrink * (baseRate - raw.yes);
+  const yes = Math.min(1, Math.max(0, adjusted));
+  return { yes, no: 1 - yes };
+}
+
+/**
  * Slate-distribution sanity (auditor): is the published BTTS side dangerously
  * skewed across a slate? Returns a warning string or null — it WARNS only and
  * never forces output. Catches a regression where the model collapses to
