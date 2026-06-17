@@ -410,11 +410,21 @@ export async function computeTrackingAggregate(opts: {
   // (so soccer's capital "Lean" was silently dropped). play_grade is what the
   // card grades on, so it's the authoritative tier.
   const grade = (r: Row): string => String(r.record.play_grade ?? "").trim().toLowerCase();
-  const bestRows = rows.filter((r) => grade(r) === "best_angle");
+  // 2026-06-17: a `best_angle` play_grade whose best_angle BOOLEAN was demoted
+  // to false (the writer's opposing-sharp-money / line-against / unconfirmed
+  // guard) RENDERS AS A LEAN on the card (resolveLockedVerdict's truthfulness
+  // guard). The BA tally must match what members actually saw, so a demoted BA
+  // counts as a Lean here — NOT a Best Angle. (null boolean = not demoted →
+  // stays Best Angle, preserving the 2026-06-15 play_grade-as-source intent for
+  // the non-demoted rows.)
+  const isDemotedBestAngle = (r: Row): boolean =>
+    grade(r) === "best_angle" && r.record.best_angle === false;
+
+  const bestRows = rows.filter((r) => grade(r) === "best_angle" && !isDemotedBestAngle(r));
   for (const row of bestRows) accumulate(result.bestAngles, row);
   finalize(result.bestAngles, bestRows);
 
-  const leanRows = rows.filter((r) => grade(r) === "lean");
+  const leanRows = rows.filter((r) => grade(r) === "lean" || isDemotedBestAngle(r));
   for (const row of leanRows) accumulate(result.leans, row);
   finalize(result.leans, leanRows);
 
@@ -470,11 +480,14 @@ export async function computeTrackingAggregate(opts: {
       for (const r of rs) accumulate(m, r);
       finalize(m, rs);
       const ba = emptyMetrics();
-      const bestRs = rs.filter((r) => grade(r) === "best_angle");
+      // Demotion-aware (2026-06-17): a 'best_angle' play_grade whose best_angle
+      // boolean was demoted to false renders as a Lean on the card, so it counts
+      // as a Lean here too — not a Best Angle. See isDemotedBestAngle above.
+      const bestRs = rs.filter((r) => grade(r) === "best_angle" && !isDemotedBestAngle(r));
       for (const r of bestRs) accumulate(ba, r);
       finalize(ba, bestRs);
       const le = emptyMetrics();
-      const leanRs = rs.filter((r) => grade(r) === "lean");
+      const leanRs = rs.filter((r) => grade(r) === "lean" || isDemotedBestAngle(r));
       for (const r of leanRs) accumulate(le, r);
       finalize(le, leanRs);
       out.push({ sport, market, metrics: m, bestAngles: ba, leans: le });
@@ -548,7 +561,7 @@ export async function computeTrackingAggregate(opts: {
       actual_home_score: r.grade?.actual_home_score ?? null,
       actual_away_score: r.grade?.actual_away_score ?? null,
       actual_first_inning_runs: r.grade?.actual_first_inning_runs ?? null,
-      best_angle: String(r.record.play_grade ?? "").trim().toLowerCase() === "best_angle",
+      best_angle: String(r.record.play_grade ?? "").trim().toLowerCase() === "best_angle" && r.record.best_angle !== false,
       held: r.record.held === true,
     }));
 
@@ -589,7 +602,7 @@ export async function computeTrackingAggregate(opts: {
         odds_american: r.record.odds_american,
         confidence: r.record.confidence,
         play_grade: r.record.play_grade,
-        best_angle: String(r.record.play_grade ?? "").trim().toLowerCase() === "best_angle",
+        best_angle: String(r.record.play_grade ?? "").trim().toLowerCase() === "best_angle" && r.record.best_angle !== false,
         model_version: r.record.model_version,
         result: res,
         win: res === "win",
