@@ -91,8 +91,8 @@ const MOCK: Record<MarketKey, MarketMock> = {
       rec: "28",
       odds: "-135",
       mkt: "Moneyline",
-      read: "Worth tracking: the model leans WSH on the moneyline at 57% confidence — the read is interesting but not clean enough to act on.",
-      caution: "Where it gets less clean: nothing major, but tighter pricing post-lineup can change the math.",
+      read: "Model leans WSH at 57% — a real read, but not clean enough to bet.",
+      caution: "Tighter pricing post-lineup can shift the math.",
       gradeIndex: 2,
     },
     ev: {
@@ -131,8 +131,8 @@ const MOCK: Record<MarketKey, MarketMock> = {
       rec: "62",
       odds: "-105",
       mkt: "Total",
-      read: "The model likes Over on the total at 57% confidence, but our signals conflict. Treat as caution, not a play.",
-      caution: "One split source shows money pressure against the pick.",
+      read: "Model likes the Over at 57% — but the signals conflict.",
+      caution: "A split source shows money pressure against the pick.",
       gradeIndex: 1,
     },
     ev: {
@@ -172,8 +172,8 @@ const MOCK: Record<MarketKey, MarketMock> = {
       rec: "15",
       odds: "-139",
       mkt: "1st Inning",
-      read: "Soft lean toward YRFI on the first inning at 52% confidence. The model leans this way but it's not a hammer.",
-      caution: "Where it gets less clean: lineup not yet confirmed — model used projected order.",
+      read: "Soft YRFI lean at 52% — the model leans here, but it's no hammer.",
+      caution: "Lineup unconfirmed — model used the projected order.",
       gradeIndex: 3,
     },
     ev: {
@@ -433,11 +433,11 @@ function QuickReadCol({ m }: { m: MarketMock }) {
 // ─── Supporting Evidence row helper ─────────────────────────────────────
 function EvRow({ glyph, label, children, right, rightTone }: { glyph: string; label: string; children: React.ReactNode; right?: string; rightTone?: Delta }) {
   return (
-    <div className="flex items-center gap-2.5 py-1">
+    <div className="flex items-center gap-3 py-2">
       <RowGlyph name={glyph} />
-      <span className="text-[8.5px] uppercase tracking-[0.1em] font-bold text-gray-500 w-[68px] shrink-0">{label}</span>
+      <span className="text-[8.5px] uppercase tracking-[0.1em] font-bold text-gray-500 w-[72px] shrink-0">{label}</span>
       <div className="flex-1 min-w-0 text-[11.5px] text-gray-300">{children}</div>
-      {right !== undefined && <span className={"text-[12px] font-bold tabular-nums shrink-0 " + (rightTone ? deltaClass(rightTone) : "text-gray-400")}>{right}</span>}
+      {right !== undefined && <span className={"text-[12.5px] font-bold tabular-nums shrink-0 pl-2 " + (rightTone ? deltaClass(rightTone) : "text-gray-400")}>{right}</span>}
     </div>
   );
 }
@@ -459,8 +459,6 @@ function SupportingEvidenceCol({ m }: { m: MarketMock }) {
           <span className="text-gray-600"> · </span>Market <span className="font-bold text-gray-100 tabular-nums">{ev.modelEdge.market}</span>
           <span className="text-gray-600"> · </span><span className="text-gray-500">{ev.modelEdge.source}</span>
         </EvRow>
-
-        <EvRow glyph="book" label="Book"><span className="text-gray-400">{ev.book}</span></EvRow>
 
         <EvRow
           glyph="splits"
@@ -484,32 +482,8 @@ function SupportingEvidenceCol({ m }: { m: MarketMock }) {
         </EvRow>
       </div>
 
-      {/* Confidence vs Market box */}
-      <div className="mt-2.5 rounded-lg border border-white/[0.06] bg-white/[0.015] px-3 py-2">
-        <p className="text-[8.5px] uppercase tracking-[0.16em] font-bold text-gray-500/85 mb-1.5">Confidence vs Market</p>
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <span className="text-[9px] uppercase tracking-wide text-gray-500 w-16">Confidence</span>
-            <span className="text-[11px] tabular-nums font-bold text-gray-100 w-8">{ev.conf.confidence}%</span>
-            <div className="flex-1 h-1.5 rounded-full bg-white/[0.05] overflow-hidden"><div className="h-full bg-emerald-400/65" style={{ width: `${ev.conf.confidence}%` }} /></div>
-            <span className="text-[9px] text-gray-600 w-16 text-right">{ev.conf.confNote}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[9px] uppercase tracking-wide text-gray-500 w-16">Market</span>
-            <span className="text-[11px] tabular-nums font-bold text-gray-100 w-8">{ev.conf.market}%</span>
-            <div className="flex-1 h-1.5 rounded-full bg-white/[0.05] overflow-hidden"><div className="h-full bg-gray-400/50" style={{ width: `${ev.conf.market}%` }} /></div>
-            <span className="text-[9px] text-gray-600 w-16 text-right">{ev.conf.mktNote}</span>
-          </div>
-          <div className="flex items-center gap-2 pt-0.5">
-            <span className="text-[9px] uppercase tracking-wide text-gray-500 w-16">Edge</span>
-            <span className={"text-[11px] tabular-nums font-bold " + deltaClass(ev.conf.edgeTone)}>{ev.conf.edge}</span>
-            <span className="text-[9px] text-gray-600 ml-auto">{ev.conf.edgeNote}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Market Pulse box */}
-      <div className="mt-2 rounded-lg border border-white/[0.06] bg-white/[0.015] px-3 py-2">
+      {/* Market Pulse box (Public Splits — kept as-is) */}
+      <div className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.015] px-3 py-2.5">
         <p className="text-[8.5px] uppercase tracking-[0.16em] font-bold text-gray-500/85 mb-1.5">Market Pulse · Public Splits</p>
         {ev.pulse.kind === "bars" ? (
           <div className="space-y-2">
@@ -630,7 +604,7 @@ export default function SelectedEdgeMockup() {
 
       {/* Body — 3 columns */}
       <div className="px-4 sm:px-5 py-4">
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(230px,290px)_minmax(0,1fr)_minmax(230px,320px)] gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(230px,280px)_minmax(0,1fr)_minmax(230px,320px)] gap-6 lg:gap-7">
           <QuickReadCol m={m} />
           <SupportingEvidenceCol m={m} />
           <KeyStatsNotesCol m={m} />
