@@ -159,8 +159,18 @@ function deriveSource(
       ? (now.getTime() - new Date(completed.refresh_completed_at).getTime()) / 60_000
       : null;
 
+  // 2026-06-16 — a cron killed mid-run (Vercel maxDuration, OOM, DB outage)
+  // never calls complete(), so its in_progress row lingers forever and the pill
+  // would show "updating" indefinitely (the 3hr-stuck-pill incident). Treat an
+  // in_progress row older than STALE_IN_PROGRESS_MIN as DEAD, not active.
+  const STALE_IN_PROGRESS_MIN = 10;
+  const activeIsFresh =
+    active?.refresh_started_at != null &&
+    (now.getTime() - new Date(active.refresh_started_at).getTime()) / 60_000 < STALE_IN_PROGRESS_MIN;
+  const liveActive = activeIsFresh ? active : null;
+
   let state: RefreshState;
-  if (active) {
+  if (liveActive) {
     state = "updating";
   } else if (!completed) {
     state = "unknown";
@@ -175,9 +185,9 @@ function deriveSource(
   return {
     data_source: cfg.data_source,
     sport,
-    last_started_at: active?.refresh_started_at ?? completed?.refresh_started_at ?? null,
+    last_started_at: liveActive?.refresh_started_at ?? completed?.refresh_started_at ?? null,
     last_completed_at: completed?.refresh_completed_at ?? null,
-    last_status: active ? "in_progress" : completed?.refresh_status ?? null,
+    last_status: liveActive ? "in_progress" : completed?.refresh_status ?? null,
     records_updated: completed?.records_updated ?? null,
     expected_cadence_minutes: cfg.cadence_minutes,
     age_minutes: ageMinutes,
