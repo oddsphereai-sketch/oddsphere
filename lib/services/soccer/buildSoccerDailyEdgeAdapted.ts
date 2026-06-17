@@ -41,7 +41,6 @@ import {
 } from "../streamOverlay";
 import { interpretMarket } from "../../streaming/marketInterpretation";
 import { addDaysToSlate } from "../../dates/slateDate";
-import { isFinishedGame } from "../../games/gameStatus";
 import type {
   DailyEdgeResponse,
   DailyEdgeGameDto,
@@ -1077,20 +1076,11 @@ export async function buildSoccerDailyEdgeAdapted(
     .in("slate_date", [requestedDate, nextDate]);
   if (gamesErr !== null) throw new Error(`load soccer games: ${gamesErr.message}`);
   const allSlateGames = (gamesData as DbGame[] | null) ?? [];
-  const qualified = allSlateGames.filter((g) =>
+  // Finished games STAY on the board all day (reverted 2026-06-17 per Daniel —
+  // members want to look back on the day's matches until the slate rolls over).
+  const games = allSlateGames.filter((g) =>
     qualifiesForSoccerBoard(requestedDate, g, nextDate, et(g.game_date).minutes),
   );
-  // 2026-06-17 — drop already-FINISHED games from the board (they live in
-  // Tracking). Combined with the wee-hours carryover above, a WC midnight
-  // kickoff shows on the EVENING IT'S PLAYED (the day-before board) and then
-  // disappears once it goes final — instead of lingering on its native
-  // next-day board as a stale "prediction" after the match has been played
-  // (the exact thing members were seeing for the 00:00-ET fixtures).
-  // Suspended/postponed/in-progress games are NOT finished and stay. Guard:
-  // if every qualifying game is final, keep them all rather than render a
-  // blank board — the slate rolls forward at the next boundary.
-  const liveQualified = qualified.filter((g) => !isFinishedGame(g.status));
-  const games = liveQualified.length > 0 ? liveQualified : qualified;
   // Eligible game ids — used to restrict the next-slate prediction_records
   // fetch so non-carryover D+1 fixtures never leak onto the day-D board.
   const eligibleGameIds = new Set(games.map((g) => g.id));
