@@ -3,13 +3,27 @@
  * Proves the overlay uses the stream price ONLY when it is fresher than cron.
  * Run: npx tsx scripts/test-stream-overlay.ts
  */
-import { pickFresherCurrent, streamKey } from "../lib/services/streamOverlay";
+import { pickFresherCurrent, streamKey, loadStreamCurrentForSlate } from "../lib/services/streamOverlay";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown): void {
   const ok = JSON.stringify(got) === JSON.stringify(want);
   if (!ok) { failures++; console.error(`✗ ${name}\n    got:  ${JSON.stringify(got)}\n    want: ${JSON.stringify(want)}`); }
   else console.log(`✓ ${name}`);
+}
+function ok(name: string, cond: boolean): void {
+  if (!cond) { failures++; console.error(`✗ ${name}`); } else console.log(`✓ ${name}`);
+}
+
+/** Minimal Supabase mock: .from(t).select(c).in(col, vals) resolves to {data}. */
+function mockSupabase(rows: unknown[]) {
+  return {
+    from: (_t: string) => ({
+      select: (_c: string) => ({
+        in: (_col: string, _vals: unknown[]) => Promise.resolve({ data: rows, error: null }),
+      }),
+    }),
+  };
 }
 
 const NOW = Date.parse("2026-06-16T18:00:00Z");
@@ -54,5 +68,73 @@ eq("equal timestamps → cron",
 // streamKey shape.
 eq("streamKey", streamKey(777, "moneyline", "home"), "777::moneyline::home");
 
-console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILED`}`);
-process.exit(failures === 0 ? 0 : 1);
+// ─── loadStreamCurrentForSlate: sharpest-trusted-book selection ──────────
+(async () => {
+  const G = 17636, M = "total", S = "over";
+  const key = streamKey(G, M, S);
+  const row = (sportsbook: string, line: number, odds: number, obs: string) =>
+    ({ game_id: G, market_type: M, side: S, sportsbook, line_value: line, odds_american: odds, observed_at: obs });
+
+  // 1. Sharpest book wins even when an outlier book ticked LATER.
+  {
+    const m = await loadStreamCurrentForSlate(
+      mockSupabase([
+        row("bovada", 11.5, 155, "2026-06-17T13:30:00Z"),   // outlier, freshest, NOT in priority
+        row("draftkings", 9.5, 103, "2026-06-17T13:00:00Z"),
+        row("pinnacle", 9.5, 111, "2026-06-17T13:16:00Z"),  // sharpest
+      ]),
+      [G],
+    );
+    eq("picks sharpest (pinnacle) over fresher outlier (bovada)",
+      m.get(key), { american: 111, line: 9.5, observedAt: "2026-06-17T13:16:00Z" });
+  }
+
+  // 2. Untrusted-only key → fail closed (not in map → reader falls back to cron).
+  {
+    const m = await loadStreamCurrentForSlate(
+      mockSupabase([
+        row("bovada", 11.5, 155, "2026-06-17T13:30:00Z"),
+        row("polymarket", 9.5, 120, "2026-06-17T13:20:00Z"),
+      ]),
+      [G],
+    );
+    ok("untrusted-only key is omitted (fail closed)", m.get(key) === undefined);
+  }
+
+  // 3. Blocked book (kalshi) never selected even if it is the only trusted-looking row.
+  {
+    const m = await loadStreamCurrentForSlate(
+      mockSupabase([
+        row("kalshi", 9.5, 120, "2026-06-17T13:30:00Z"),    // blocked (#39)
+        row("fanduel", 9.5, 105, "2026-06-17T13:00:00Z"),
+      ]),
+      [G],
+    );
+    eq("blocked book ignored; falls to fanduel",
+      m.get(key), { american: 105, line: 9.5, observedAt: "2026-06-17T13:00:00Z" });
+  }
+
+  // 4. Null-odds rows skipped.
+  {
+    const m = await loadStreamCurrentForSlate(
+      mockSupabase([
+        { game_id: G, market_type: M, side: S, sportsbook: "pinnacle", line_value: 9.5, odds_american: null, observed_at: "2026-06-17T13:30:00Z" },
+        row("draftkings", 9.5, 103, "2026-06-17T13:00:00Z"),
+      ]),
+      [G],
+    );
+    eq("null-odds pinnacle skipped; draftkings used",
+      m.get(key), { american: 103, line: 9.5, observedAt: "2026-06-17T13:00:00Z" });
+  }
+
+  // 5. Empty input + error degrade to empty map.
+  {
+    const m = await loadStreamCurrentForSlate(mockSupabase([]), [G]);
+    ok("no rows → empty map", m.size === 0);
+    const mErr = await loadStreamCurrentForSlate({ from: () => ({ select: () => ({ in: () => Promise.resolve({ data: null, error: { message: "boom" } }) }) }) }, [G]);
+    ok("query error → empty map (degrade)", mErr.size === 0);
+  }
+})().then(() => {
+  console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILED`}`);
+  process.exit(failures === 0 ? 0 : 1);
+});

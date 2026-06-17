@@ -9,6 +9,9 @@
  * map so every reader degrades cleanly to the cron-only path.
  */
 
+import { bookPriorityRank } from "../config/bookPriority";
+import { isBlockedSportsbook } from "../config/blockedSportsbooks";
+
 export type PriceObservation = {
   american: number | null;
   observedAt: string | null;
@@ -131,9 +134,11 @@ type SupabaseLike = {
 };
 
 /**
- * Defensive batched read of the latest live stream price per
- * (game, market, side). Returns an EMPTY map on any error (e.g. the v24
- * table does not exist yet) so callers degrade to cron-only. Never throws.
+ * Defensive batched read of the live stream price per (game, market, side),
+ * selecting the SHARPEST trusted book (BOOK_PRIORITY) — not whichever book
+ * ticked last — and filtering blocked/untrusted books (fail closed). Returns an
+ * EMPTY map on any error (e.g. the v24 table does not exist yet) so callers
+ * degrade to the cron-only path. Never throws.
  */
 export async function loadStreamCurrentForSlate(
   supabase: SupabaseLike,
@@ -144,18 +149,31 @@ export async function loadStreamCurrentForSlate(
   try {
     const { data, error } = (await supabase
       .from("odds_current_stream")
-      .select("game_id, market_type, side, odds_american, line_value, observed_at")
+      .select("game_id, market_type, side, sportsbook, odds_american, line_value, observed_at")
       .in("game_id", gameIds)) as { data: unknown; error: unknown };
     if (error) return map; // table missing / RLS / any error → degrade cleanly
     const rows = (data ?? []) as Array<{
-      game_id: number; market_type: string; side: string;
+      game_id: number; market_type: string; side: string; sportsbook: string;
       odds_american: number | null; line_value: number | null; observed_at: string | null;
     }>;
+    // 2026-06-17 — per (game, market, side) keep the SHARPEST trusted book,
+    // using the SAME BOOK_PRIORITY ranking the cron line uses — NOT whichever
+    // book happened to tick last. This makes the displayed "current" price
+    // coherent with the displayed (sharp) line and movement. FAIL CLOSED:
+    // blocked books (#39) and any book absent from BOOK_PRIORITY are never
+    // selected, so an off-market outlier (e.g. a wide bovada total) can never
+    // surface as the current price. A key with no trusted stream price is left
+    // unset → the reader falls back to the cron `lines` value.
+    const bestRankByKey = new Map<string, number>();
     for (const r of rows) {
+      if (r.odds_american === null) continue;           // no usable price
+      if (isBlockedSportsbook(r.sportsbook)) continue;  // #39 defense-in-depth
+      const rank = bookPriorityRank(r.sportsbook);
+      if (!Number.isFinite(rank)) continue;             // untrusted book → skip
       const key = streamKey(r.game_id, r.market_type, r.side);
-      const existing = map.get(key);
-      // Keep the freshest per key (defensive — table is unique per key, but be safe).
-      if (existing === undefined || (r.observed_at ?? "") > (existing.observedAt ?? "")) {
+      const prevRank = bestRankByKey.get(key);
+      if (prevRank === undefined || rank < prevRank) {
+        bestRankByKey.set(key, rank);
         map.set(key, { american: r.odds_american, line: r.line_value, observedAt: r.observed_at });
       }
     }

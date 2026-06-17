@@ -49,6 +49,7 @@ import type {
 } from "@/lib/types/domain/Grade";
 import { currentSlateDate, isSlateDate } from "@/lib/dates/slateDate";
 import { isFinishedGame } from "@/lib/games/gameStatus";
+import { BOOK_PRIORITY } from "@/lib/config/bookPriority";
 import { determineSlateState } from "@/lib/services/dailyEdgeSlateResolution";
 import {
   classifyLockState,
@@ -1268,27 +1269,12 @@ function buildGameDto(
  * instead of an arbitrary row when the priority list misses), this
  * removes the wrong-side-price path entirely.
  */
-const BOOK_PRIORITY = [
-  // Phase 6B.18 — locked snapshot wins over every live book for
-  // locked games. Injected by the route's locked-snapshot override
-  // (see "Phase 6B.18 — FULL locked-snapshot override" comment).
-  // For unlocked games this entry simply has no matching rows.
-  "locked_snapshot",
-  "pinnacle",
-  "draftkings",
-  "fanduel",
-  "betmgm",
-  "caesars",
-  "bet365 us",
-  "bookmaker",
-  "ballybet",
-  "onexbet",
-  "saba",
-  // fliff + kalshi — intentionally excluded (#39). Centralized in
-  // BLOCKED_SPORTSBOOKS; pickPriceRow also filters isBlockedSportsbook
-  // defensively so a blocked row can never surface on a customer card.
-  "splits_consensus",
-] as const;
+// BOOK_PRIORITY now lives in lib/config/bookPriority.ts so the cron line
+// selection (pickPriceRow, below) and the live stream overlay
+// (loadStreamCurrentForSlate) share ONE trusted-book ranking — same line, same
+// current price, same movement anchor. locked_snapshot wins over every live
+// book for locked games; fliff + kalshi are intentionally excluded (#39) and
+// pickPriceRow also filters isBlockedSportsbook defensively.
 
 /** Pick the best (by book priority + matching side) row from a candidate set. */
 /**
