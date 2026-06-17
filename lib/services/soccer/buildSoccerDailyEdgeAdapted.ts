@@ -799,7 +799,12 @@ function buildMarketEdgeDto(
   // tracker's "Previous" stop + the derived market-intelligence chip. Splits are
   // null for WC (SharpAPI /splits is empty for FIFA), so the chip is driven by
   // movement. All optional → degrades to cron price + opener when absent.
-  const sKey = r.side !== null && stream ? streamKey(r.game_id, r.market, r.side) : null;
+  // 2026-06-17 — FREEZE AT LOCK. Once the row is locked (locked_at set), the
+  // card must reflect the frozen snapshot, not the still-updating stream tables.
+  // Suppress the live overlays so price/line stop moving post-lock; current
+  // falls back to the locked odds (r.odds_american).
+  const isLockedRow = r.locked_at !== null;
+  const sKey = !isLockedRow && r.side !== null && stream ? streamKey(r.game_id, r.market, r.side) : null;
   const streamCurrent = sKey ? stream!.current.get(sKey) ?? null : null;
   const lastMove = sKey ? stream!.lastMove.get(sKey) ?? null : null;
   const currentAmerican = streamCurrent?.american ?? r.odds_american;

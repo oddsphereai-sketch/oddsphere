@@ -964,10 +964,17 @@ function buildGameDto(
 
   // 2026-06-16 line-tracker sources (defensive; empty/absent today → no-op).
   const postedLines = readPostedLines(pred.sport_specific);
+  // 2026-06-17 — FREEZE AT LOCK. Once the prediction is locked (locked_at set),
+  // the card must reflect the frozen locked snapshot, NOT live stream data. The
+  // live overlays (current price + last move / line move) read continuously-
+  // updating tables (odds_current_stream / line_movements), so without this
+  // guard the Total Line / Odds Move / current price would keep moving AFTER
+  // lock. Suppressing both returns the card to the locked-snapshot values.
+  const isLockedForOverlay = pred.locked_at !== null;
   const streamFor = (mkt: string, side: string | null): StreamCurrent | null =>
-    side === null ? null : (streamCurrentByGameMarket.get(streamKey(row.id, mkt, side)) ?? null);
+    isLockedForOverlay || side === null ? null : (streamCurrentByGameMarket.get(streamKey(row.id, mkt, side)) ?? null);
   const lastMoveFor = (mkt: string, side: string | null): LastMove | null =>
-    side === null ? null : (lastMoveByGameMarket.get(streamKey(row.id, mkt, side)) ?? null);
+    isLockedForOverlay || side === null ? null : (lastMoveByGameMarket.get(streamKey(row.id, mkt, side)) ?? null);
 
   const lockedMl = lockedPlayGradeByGameMarket.get(`${row.id}::moneyline`);
   const lockedOu = lockedPlayGradeByGameMarket.get(`${row.id}::total`);
