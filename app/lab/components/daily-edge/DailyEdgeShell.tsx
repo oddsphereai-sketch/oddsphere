@@ -1622,7 +1622,7 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
           chip so it catches the eye without a loud card. Other rows use a
           plain colored delta. (Switch `chip` off for plain-number emphasis.) */}
       <div className="divide-y divide-white/[0.04]">
-        {modelEdge && <CleanEvRow label="Model Edge" delta={modelEdge.delta} tone={modelEdge.tone} chip>{modelEdge.evidence}</CleanEvRow>}
+        {modelEdge && <CleanEvRow label="Model Edge" delta={modelEdge.delta} tone={modelEdge.tone}>{modelEdge.evidence}</CleanEvRow>}
         {pinnacle && pinnacle.delta !== "unavailable" && <CleanEvRow label="Pinnacle EV" delta={pinnacle.delta} tone={pinnacle.tone}>{pinnacle.evidence}</CleanEvRow>}
         {splits && <CleanEvRow label="Splits" delta={splits.delta} tone={splits.tone}>{splits.evidence}</CleanEvRow>}
         {lineMove && market === "total" && <CleanEvRow label="Total Line" delta={lineMove.delta} tone={lineMove.tone}>{lineMove.evidence}</CleanEvRow>}
