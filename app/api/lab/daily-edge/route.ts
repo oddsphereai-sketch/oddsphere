@@ -48,6 +48,7 @@ import type {
   SignalType,
 } from "@/lib/types/domain/Grade";
 import { currentSlateDate, isSlateDate } from "@/lib/dates/slateDate";
+import { isFinishedGame } from "@/lib/games/gameStatus";
 import { determineSlateState } from "@/lib/services/dailyEdgeSlateResolution";
 import {
   classifyLockState,
@@ -603,6 +604,11 @@ type GameRow = {
   external_id: number;
   sport: string;
   game_date: string;
+  /** Game lifecycle status (vendor-native; varies by sport — e.g. MLB
+   *  "STATUS_SCHEDULED"/"STATUS_FINAL", soccer "scheduled"/"final"). Used
+   *  to drop already-finished games from the Daily Edge (see isFinishedGame).
+   *  Null when the source omits it. */
+  status: string | null;
   /** R-19 Phase 1 — `games.updated_at`; route uses it to compute
    *  `last_slate_update_at` for the slate displayed in the response. */
   updated_at: string | null;
@@ -3318,7 +3324,7 @@ export async function GET(request: Request) {
   const { data: gameData, error: gamesErr } = await supabase
     .from("games")
     .select(
-      `id, external_id, sport, game_date, slate_date, updated_at,
+      `id, external_id, sport, game_date, slate_date, status, updated_at,
        home_team:home_team_id (abbreviation, logo_url),
        away_team:away_team_id (abbreviation, logo_url),
        home_pitcher:home_pitcher_id (first_name, last_name, throws),
@@ -3347,7 +3353,18 @@ export async function GET(request: Request) {
 
   // Supabase typegen renders FK expansions as arrays; runtime returns the
   // single object for to-one relations. Cast accordingly.
-  const rawGames = (gameData ?? []) as unknown as GameRow[];
+  const rawGamesAll = (gameData ?? []) as unknown as GameRow[];
+
+  // 2026-06-17 — drop already-FINISHED games from the Daily Edge. They live in
+  // the Tracking page; a completed game (e.g. a midnight-ET WC kickoff that
+  // ends before the US day begins) otherwise sorts to the TOP of "tonight's
+  // edges" by kickoff time and reads as "stuck on last night." Suspended /
+  // postponed / in-progress games are NOT finished and stay on the card.
+  // Guard: if EVERY game on the slate is final (late-night, whole slate done),
+  // keep them all rather than render an empty card — the slate rolls forward at
+  // the next UTC boundary.
+  const liveGames = rawGamesAll.filter((g) => !isFinishedGame(g.status));
+  const rawGames = liveGames.length > 0 ? liveGames : rawGamesAll;
 
   // ─── Production data-mode filter (Framework §"Signal Source Quality") ──
   // Drops mock-sourced predictions before they reach members. No-op in
