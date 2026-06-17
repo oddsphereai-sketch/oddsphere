@@ -25,7 +25,7 @@
  * Visual review with Daniel after this lands, then iterate on detail.
  */
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useDailyEdge } from "../../hooks/useDailyEdge";
 import { useSportSelection } from "../../hooks/useSportSelection";
 import {
@@ -3031,6 +3031,10 @@ function SelectedEdgeReader({
   onMarketChange,
   onExpand,
   onCollapse,
+  onPrev,
+  onNext,
+  index,
+  total,
 }: {
   game: DailyEdgeGameDto;
   market: MarketKey;
@@ -3039,6 +3043,12 @@ function SelectedEdgeReader({
   onMarketChange: (m: MarketKey) => void;
   onExpand: () => void;
   onCollapse: () => void;
+  /** Step to the prev/next game in the visible slate. null = at an end. */
+  onPrev: (() => void) | null;
+  onNext: (() => void) | null;
+  /** 1-based position + count, for the "3 / 8" indicator. */
+  index: number;
+  total: number;
 }) {
   const verdict = asVerdictKey(marketData.verdict.key);
   const shellSport = useShellSport();
@@ -3069,7 +3079,7 @@ function SelectedEdgeReader({
               Selected Edge
             </h2>
             <span className="hidden sm:inline text-[11px] text-gray-500 ml-2">
-              Click any game below to update this read.
+              Click any game below — or use ← → — to update this read.
             </span>
           </div>
           {mode === "full" ? (
@@ -3104,6 +3114,34 @@ function SelectedEdgeReader({
           </span>
           <VerdictChip verdict={verdict} showActionPrefix />
           <span className="text-[11px] text-gray-500 tabular-nums">{game.gameTime}</span>
+
+          {/* Prev/Next game stepper — walk the slate without leaving the
+              reader (← / → arrow keys do the same). Pushed to the right. */}
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onPrev ?? undefined}
+              disabled={onPrev === null}
+              aria-label="Previous game (left arrow key)"
+              title="Previous game (←)"
+              className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-violet-400/40 bg-violet-500/[0.12] text-violet-100 text-[15px] leading-none hover:bg-violet-500/[0.22] hover:border-violet-300/70 disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-violet-500/[0.12] disabled:hover:border-violet-400/40 transition-colors"
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
+            <span className="text-[10.5px] tabular-nums text-gray-400 px-1 whitespace-nowrap font-medium">
+              {index} <span className="text-gray-600">/</span> {total}
+            </span>
+            <button
+              type="button"
+              onClick={onNext ?? undefined}
+              disabled={onNext === null}
+              aria-label="Next game (right arrow key)"
+              title="Next game (→)"
+              className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-violet-400/40 bg-violet-500/[0.12] text-violet-100 text-[15px] leading-none hover:bg-violet-500/[0.22] hover:border-violet-300/70 disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-violet-500/[0.12] disabled:hover:border-violet-400/40 transition-colors"
+            >
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
         </div>
 
         {/* Market selector — segmented buttons. One per market with pick +
@@ -3648,6 +3686,9 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   // Slate Board filter. Filtering only changes which cards are visible
   // in the grid — never touches the reader, headlines, or model state.
   const [slateFilter, setSlateFilter] = useState<SlateFilter>("all");
+  // Desktop reader element — used to smooth-scroll the reader back into view
+  // when the user picks a game from the board below (no more scroll-up loop).
+  const readerRef = useRef<HTMLDivElement>(null);
 
   const games = data?.games ?? [];
   const verdictCounts = useMemo(() => computeVerdictCounts(games), [games]);
@@ -3694,6 +3735,34 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [readerMode, mobileSheetOpen]);
+
+  // ← / → arrow keys step the reader through the VISIBLE (filtered) slate, the
+  // same nav list the Prev/Next buttons + mobile sheet use. Ignored while the
+  // user is typing in a field or while the mobile sheet is open. ArrowLeft/
+  // Right don't scroll the page, so hijacking them here is safe.
+  useEffect(() => {
+    function onArrow(e: KeyboardEvent) {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (mobileSheetOpen) return;
+      const el = document.activeElement as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      const navList = filteredGames;
+      const idx = navList.findIndex((g) => g.id === selectedGameId);
+      if (idx < 0) return;
+      const nextIdx = idx + (e.key === "ArrowRight" ? 1 : -1);
+      if (nextIdx < 0 || nextIdx >= navList.length) return;
+      e.preventDefault();
+      const next = navList[nextIdx]!;
+      setSelectedGameId(next.id);
+      setSelectedMarket(headlineMarketFor(next));
+      scrollReaderIntoViewDesktop();
+    }
+    document.addEventListener("keydown", onArrow);
+    return () => document.removeEventListener("keydown", onArrow);
+    // scrollReaderIntoViewDesktop closes only over the stable readerRef.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredGames, selectedGameId, mobileSheetOpen]);
 
   // Phase 7J — wrap Loading / Error / Empty states in ShellChrome so
   // SportRail (tabs) + page background stay mounted. Pre-7J, hitting an
@@ -3752,22 +3821,57 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
    * selected. Esc / the Collapse button are the only paths back to
    * compact.
    */
+  // True on phone widths — where a card tap opens the bottom sheet instead
+  // of updating the top reader. Mirrors the sm: Tailwind breakpoint (640px).
+  function isMobileViewport(): boolean {
+    return typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
+  }
+
+  // Desktop: smooth-scroll the top reader back into view after a selection so
+  // the user never has to scroll up. No-op on mobile (the sheet covers it).
+  // rAF so the reader has re-rendered to the new game before we scroll.
+  function scrollReaderIntoViewDesktop() {
+    if (isMobileViewport()) return;
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame(() => {
+      readerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   function handleSelectGame(g: DailyEdgeGameDto) {
     setSelectedGameId(g.id);
     setSelectedMarket(headlineMarketFor(g));
-    // Mobile: also open the sheet so the user sees the read on the small screen.
-    if (typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches) {
-      setMobileSheetOpen(true);
-    }
+    // Mobile: open the sheet so the user sees the read on the small screen.
+    // Desktop: scroll the top reader into view (no scroll-up loop).
+    if (isMobileViewport()) setMobileSheetOpen(true);
+    else scrollReaderIntoViewDesktop();
   }
 
   /** Click a market chip inside a card — select that game + that market. */
   function handleSelectMarket(g: DailyEdgeGameDto, m: MarketKey) {
     setSelectedGameId(g.id);
     setSelectedMarket(m);
-    if (typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches) {
-      setMobileSheetOpen(true);
-    }
+    if (isMobileViewport()) setMobileSheetOpen(true);
+    else scrollReaderIntoViewDesktop();
+  }
+
+  /**
+   * Step the reader to the previous/next game in the VISIBLE (filtered) list —
+   * the same nav list the mobile sheet walks — without touching the board.
+   * Wired to the reader's ‹Prev / Next› buttons and the ← / → arrow keys.
+   * Preserves the headline market of the game we land on. Desktop scrolls the
+   * reader into view; clamps at the ends (no wrap).
+   */
+  function goToAdjacentGame(dir: -1 | 1) {
+    const navList = filteredGames;
+    const idx = navList.findIndex((g) => g.id === selectedGame.id);
+    if (idx < 0) return;
+    const nextIdx = idx + dir;
+    if (nextIdx < 0 || nextIdx >= navList.length) return;
+    const next = navList[nextIdx]!;
+    setSelectedGameId(next.id);
+    setSelectedMarket(headlineMarketFor(next));
+    scrollReaderIntoViewDesktop();
   }
 
   /**
@@ -3791,6 +3895,7 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
     );
     setSelectedGameId(firstGame.id);
     setSelectedMarket(firstMarket ?? headlineMarketFor(firstGame));
+    scrollReaderIntoViewDesktop();
   }
 
   return (
@@ -3812,22 +3917,35 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
       {/* Selected Edge reader — top of page, NOT sticky. Scrolls out of
           view as the user browses the board below. Desktop/tablet only;
           mobile uses the bottom sheet instead. */}
-      <div className="hidden sm:block max-w-7xl mx-auto px-4 sm:px-6 mt-3 mb-9">
+      <div ref={readerRef} className="hidden sm:block max-w-7xl mx-auto px-4 sm:px-6 mt-3 mb-9 scroll-mt-4">
         {selectedMarketData === null ? (
           <div className="bg-[#0D0D14] border border-violet-400/22 rounded-xl p-4 text-[13px] text-gray-400 text-center">
             Loading enriched market data…
           </div>
-        ) : (
-          <SelectedEdgeReader
-            game={selectedGame}
-            market={selectedMarket}
-            marketData={selectedMarketData}
-            mode={readerMode}
-            onMarketChange={setSelectedMarket}
-            onExpand={() => setReaderMode("full")}
-            onCollapse={() => setReaderMode("compact")}
-          />
-        )}
+        ) : (() => {
+          // Prev/Next walk the VISIBLE (filtered) list — same as the mobile
+          // sheet — so reader nav respects the active board filter. Clamped
+          // at the ends (null disables the button).
+          const navList = filteredGames;
+          const idx = navList.findIndex((g) => g.id === selectedGame.id);
+          const canPrev = idx > 0;
+          const canNext = idx >= 0 && idx < navList.length - 1;
+          return (
+            <SelectedEdgeReader
+              game={selectedGame}
+              market={selectedMarket}
+              marketData={selectedMarketData}
+              mode={readerMode}
+              onMarketChange={setSelectedMarket}
+              onExpand={() => setReaderMode("full")}
+              onCollapse={() => setReaderMode("compact")}
+              onPrev={canPrev ? () => goToAdjacentGame(-1) : null}
+              onNext={canNext ? () => goToAdjacentGame(1) : null}
+              index={Math.max(1, idx + 1)}
+              total={navList.length}
+            />
+          );
+        })()}
       </div>
 
       {/* Slate Board header — quiet section break + filter chips. Filter
