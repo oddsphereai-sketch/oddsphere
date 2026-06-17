@@ -31,6 +31,7 @@ import { useSportSelection } from "../../hooks/useSportSelection";
 import {
   buildEdgeStackRows,
   marketSourceLabel,
+  type EdgeStackRowTone,
 } from "../../lib/edgeStackRows";
 import { classifyPickRelativeLineMove } from "../../lib/lineMoveTone";
 import { reviewActionLabel } from "../../lib/reviewActionLabel";
@@ -1501,6 +1502,171 @@ function EdgeStack({ market, marketData }: { market: MarketKey; marketData: Mark
             </span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Clean reader (?reader=clean) — REVIEW-ONLY redesign of the expanded full
+// read. Reuses the REAL renderers (QuickRead / MarketPulse / MarketNotes) and
+// the REAL Edge Stack data (buildEdgeStackRows) — only the Supporting Evidence
+// PRESENTATION is reworked and the body reorganized into 3 clean columns.
+// Drops the Confidence-vs-Market strip + the redundant Book/price-string rows.
+// Gated OFF by default; the default live reader is unchanged until approved.
+// ─────────────────────────────────────────────────────────────────────────
+
+function cleanDeltaClass(tone: EdgeStackRowTone): string {
+  return tone === "emerald" ? "text-emerald-300" : tone === "amber" ? "text-amber-300" : "text-gray-500";
+}
+
+/** Tiny inline signal sign for Market Read — green/yellow/neutral. */
+function CleanSignal({ tone }: { tone: EdgeStackRowTone }) {
+  if (tone === "emerald") {
+    return (
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" className="shrink-0">
+        <circle cx="6" cy="6" r="6" fill="rgba(16,185,129,0.18)" />
+        <path d="M3.4 6.2l1.7 1.7L8.7 4.3" stroke="#34d399" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (tone === "amber") {
+    return (
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" className="shrink-0">
+        <path d="M6 1.2l5 8.6H1z" fill="rgba(245,158,11,0.18)" stroke="#fbbf24" strokeWidth="1" strokeLinejoin="round" />
+        <rect x="5.4" y="4.5" width="1.2" height="2.6" rx="0.6" fill="#fbbf24" />
+        <circle cx="6" cy="8.2" r="0.7" fill="#fbbf24" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" className="shrink-0">
+      <circle cx="6" cy="6" r="5.4" fill="rgba(167,139,250,0.16)" stroke="rgba(167,139,250,0.55)" strokeWidth="1" />
+      <circle cx="6" cy="6" r="1.5" fill="#a78bfa" />
+    </svg>
+  );
+}
+
+function cleanFmtAmerican(n: number): string {
+  return n > 0 ? `+${n}` : `${n}`;
+}
+
+/** Odds Move trail: open → prev → current/lock, spread evenly; drops redundant prev. */
+function CleanOddsTrail({ open, prev, current, locked }: { open: number | null; prev: number | null; current: number | null; locked: boolean }) {
+  const num = (v: number | null): v is number => typeof v === "number" && Number.isFinite(v);
+  const pts: Array<{ v: number; label: string }> = [];
+  if (num(open)) pts.push({ v: open, label: "OPEN" });
+  if (num(prev) && prev !== open && prev !== current) pts.push({ v: prev, label: "PREV" });
+  if (num(current)) pts.push({ v: current, label: locked ? "LOCK" : "CURRENT" });
+  if (pts.length === 0) return null;
+  return (
+    <div className="flex items-stretch px-2">
+      {pts.map((p, i) => (
+        <div key={p.label} className="flex items-center flex-1 first:flex-none">
+          {i > 0 && <span aria-hidden="true" className="flex-1 text-center text-gray-600 text-[15px] leading-none -mt-3">→</span>}
+          <div className="flex flex-col items-center">
+            <span className="tabular-nums font-bold text-[15px] text-gray-100 leading-none">{cleanFmtAmerican(p.v)}</span>
+            <span className="text-[8px] uppercase tracking-[0.14em] text-gray-500 mt-1.5">{p.label}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Clean definition row: label LEFT, evidence + delta RIGHT. */
+function CleanEvRow({ label, children, delta, tone }: { label: string; children: React.ReactNode; delta?: string; tone?: EdgeStackRowTone }) {
+  const showDelta = delta !== undefined && delta !== "" && delta !== "—";
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-2">
+      <span className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-500 shrink-0">{label}</span>
+      <span className="flex items-baseline gap-2.5 text-[12px] text-gray-300 text-right">
+        <span className="tabular-nums">{children}</span>
+        {showDelta && <span className={"font-bold tabular-nums shrink-0 " + cleanDeltaClass(tone ?? "gray")}>{delta}</span>}
+      </span>
+    </div>
+  );
+}
+
+/** Clean Supporting Evidence column — same real data, reworked presentation. */
+function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
+  const shellSport = useShellSport();
+  const totalUnit = shellSport === "nhl" || shellSport === "soccer" ? "goals" : shellSport === "nba" ? "points" : "runs";
+  const rows = buildEdgeStackRows(market, marketData, totalUnit);
+  const find = (l: string) => rows.find((r) => r.label === l);
+  const modelEdge = find("Model Edge");
+  const pinnacle = find("Pinnacle EV");
+  const splits = find("Money vs Bets");
+  const lineMove = find("Line"); // the betting NUMBER move (totals)
+  const marketRead = find("Market Read");
+  const hasTrail = marketData.lineOpenAmerican != null || marketData.priceAmerican != null;
+  return (
+    <div>
+      <p className="text-[9px] uppercase tracking-[0.14em] font-semibold text-gray-500/80 mb-1">
+        Edge Stack · {marketLongLabelFor(market, shellSport)}
+      </p>
+      <div className="divide-y divide-white/[0.04]">
+        {modelEdge && <CleanEvRow label="Model Edge" delta={modelEdge.delta} tone={modelEdge.tone}>{modelEdge.evidence}</CleanEvRow>}
+        {pinnacle && pinnacle.delta !== "unavailable" && <CleanEvRow label="Pinnacle EV" delta={pinnacle.delta} tone={pinnacle.tone}>{pinnacle.evidence}</CleanEvRow>}
+        {splits && <CleanEvRow label="Splits" delta={splits.delta} tone={splits.tone}>{splits.evidence}</CleanEvRow>}
+        {lineMove && market === "total" && <CleanEvRow label="Total Line" delta={lineMove.delta} tone={lineMove.tone}>{lineMove.evidence}</CleanEvRow>}
+      </div>
+      {hasTrail && (
+        <div className="border-t border-white/[0.04] py-2.5">
+          <p className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-500 mb-2">Odds Move</p>
+          <CleanOddsTrail
+            open={marketData.lineOpenAmerican}
+            prev={marketData.lastMovePrevAmerican ?? null}
+            current={marketData.priceAmerican}
+            locked={marketData.lockedLineAmerican != null}
+          />
+        </div>
+      )}
+      {marketRead && (
+        <div className="border-t border-white/[0.04] py-2.5">
+          <p className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-500 mb-1.5">Market Read</p>
+          <div className="flex items-center gap-2">
+            <CleanSignal tone={marketRead.tone} />
+            <span className="text-[12px] text-gray-300">{marketRead.evidence}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Column header shared by the 3 clean columns. */
+function CleanColHead({ tone, label }: { tone: "emerald" | "violet" | "sky"; label: string }) {
+  const bar = tone === "emerald" ? "bg-emerald-400/60" : tone === "sky" ? "bg-sky-400/55" : "bg-violet-400/60";
+  const txt = tone === "emerald" ? "text-emerald-200/75" : tone === "sky" ? "text-sky-200/70" : "text-violet-200/75";
+  return (
+    <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.06] mb-2.5">
+      <span aria-hidden="true" className={"w-1 h-3.5 rounded-full " + bar} />
+      <p className={"text-[10.5px] uppercase tracking-[0.18em] font-bold " + txt}>{label}</p>
+    </div>
+  );
+}
+
+/** The clean 3-column expanded read (gated behind ?reader=clean). */
+function ExpandedReadClean({ game, market, marketData }: { game: DailyEdgeGameDto; market: MarketKey; marketData: MarketEdgeDto }) {
+  return (
+    <div className="px-4 sm:px-5 py-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(240px,300px)_minmax(0,1fr)_minmax(240px,320px)] gap-6 lg:gap-7">
+        <div className="min-w-0">
+          <CleanColHead tone="emerald" label="Quick Read" />
+          <QuickRead game={game} market={market} marketData={marketData} />
+        </div>
+        <div className="min-w-0">
+          <CleanColHead tone="violet" label="Supporting Evidence" />
+          <EdgeStackClean market={market} marketData={marketData} />
+          <div className="mt-3 pt-3 border-t border-white/[0.05]">
+            <MarketPulse market={market} marketData={marketData} game={game} />
+          </div>
+        </div>
+        <div className="min-w-0">
+          <CleanColHead tone="sky" label="Key Stats & Notes" />
+          <MarketNotes marketData={marketData} awayAbbr={game.awayTeam} homeAbbr={game.homeTeam} market={market} />
+        </div>
       </div>
     </div>
   );
@@ -3035,6 +3201,7 @@ function SelectedEdgeReader({
   onNext,
   index,
   total,
+  cleanReader,
 }: {
   game: DailyEdgeGameDto;
   market: MarketKey;
@@ -3049,6 +3216,8 @@ function SelectedEdgeReader({
   /** 1-based position + count, for the "3 / 8" indicator. */
   index: number;
   total: number;
+  /** ?reader=clean — render the review-only redesigned expanded body. */
+  cleanReader: boolean;
 }) {
   const verdict = asVerdictKey(marketData.verdict.key);
   const shellSport = useShellSport();
@@ -3266,6 +3435,9 @@ function SelectedEdgeReader({
             {marketData.guidedGuide}
           </p>
         </div>
+      ) : cleanReader ? (
+        /* ?reader=clean — review-only redesigned 3-column expanded read */
+        <ExpandedReadClean game={game} market={market} marketData={marketData} />
       ) : (
         /* Full body — 3-column expanded read */
         <div className="px-4 sm:px-5 py-3">
@@ -3689,6 +3861,13 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   // Desktop reader element — used to smooth-scroll the reader back into view
   // when the user picks a game from the board below (no more scroll-up loop).
   const readerRef = useRef<HTMLDivElement>(null);
+  // ?reader=clean — review-only redesigned expanded read. Default OFF so the
+  // live reader is unchanged; flip the default once the design is approved.
+  const [cleanReader, setCleanReader] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setCleanReader(new URLSearchParams(window.location.search).get("reader") === "clean");
+  }, []);
 
   const games = data?.games ?? [];
   const verdictCounts = useMemo(() => computeVerdictCounts(games), [games]);
@@ -3943,6 +4122,7 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
               onNext={canNext ? () => goToAdjacentGame(1) : null}
               index={Math.max(1, idx + 1)}
               total={navList.length}
+              cleanReader={cleanReader}
             />
           );
         })()}
