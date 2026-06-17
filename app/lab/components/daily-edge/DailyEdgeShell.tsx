@@ -1589,7 +1589,7 @@ function CleanEvRow({ label, children, delta, tone, chip }: { label: string; chi
   const showDelta = delta !== undefined && delta !== "" && delta !== "—";
   return (
     <div className="flex items-center justify-between gap-4 py-2">
-      <span className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-500 shrink-0">{label}</span>
+      <span className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-300 shrink-0">{label}</span>
       <span className="flex items-center gap-2.5 text-[12px] text-gray-300 text-right">
         <span className="tabular-nums">{children}</span>
         {showDelta && (chip
@@ -1649,7 +1649,7 @@ function ModelEdgeBlock({ market, marketData }: { market: MarketKey; marketData:
 
   const Line = ({ k, v, note, last }: { k: string; v: string; note: string; last?: boolean }) => (
     <div className={"flex items-center gap-2 " + (last ? "pt-1.5 mt-1.5 border-t border-white/[0.05]" : "")}>
-      <span className="text-[9.5px] uppercase tracking-[0.1em] text-gray-500 w-[78px] shrink-0">{k}</span>
+      <span className="text-[9.5px] uppercase tracking-[0.1em] text-gray-300 font-semibold w-[78px] shrink-0">{k}</span>
       <span className="text-[9.5px] text-gray-500 truncate">{note}</span>
       {last && edge ? (
         <span className={"ml-auto inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-bold tabular-nums shrink-0 " + cleanChipClass(tone)}>{v}</span>
@@ -1661,7 +1661,7 @@ function ModelEdgeBlock({ market, marketData }: { market: MarketKey; marketData:
 
   return (
     <div className="rounded-lg border border-white/[0.07] bg-white/[0.015] px-3 py-2.5">
-      <p className="text-[9px] uppercase tracking-[0.14em] font-bold text-gray-400 mb-2">Model Edge</p>
+      <p className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-200 mb-2">Model Edge</p>
       <div className="space-y-1.5">
         <Line k={topLabel} v={topVal} note={topNote} />
         <Line k="Market" v={midVal} note={midNote} />
@@ -1686,7 +1686,7 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const hasTrail = marketData.lineOpenAmerican != null || marketData.priceAmerican != null;
   return (
     <div>
-      <p className="text-[9px] uppercase tracking-[0.14em] font-semibold text-gray-500/80 mb-1.5">
+      <p className="text-[9.5px] uppercase tracking-[0.14em] font-semibold text-gray-300 mb-1.5">
         Edge Stack · {marketLongLabelFor(market, shellSport)}
       </p>
 
@@ -1704,7 +1704,7 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
       {hasTrail && (
         <div className="border-t border-white/[0.04] py-2.5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-500">Odds Move</p>
+            <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Odds Move</p>
             {oddsMove && oddsMove.delta && oddsMove.delta !== "—" && (
               <span className={"text-[14px] font-black leading-none " + cleanDeltaClass(oddsMove.tone)}>{oddsMove.delta}</span>
             )}
@@ -1719,7 +1719,7 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
       )}
       {marketRead && (
         <div className="border-t border-white/[0.04] py-2.5">
-          <p className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-500 mb-1.5">Market Read</p>
+          <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300 mb-1.5">Market Read</p>
           <div className="flex items-center gap-2">
             <span className="text-[12px] text-gray-300">{marketRead.evidence}</span>
             <span className="ml-auto"><CleanSignal tone={marketRead.tone} /></span>
@@ -1733,7 +1733,7 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
 /** Column header shared by the 3 clean columns. */
 function CleanColHead({ tone, label }: { tone: "emerald" | "violet" | "sky"; label: string }) {
   const bar = tone === "emerald" ? "bg-emerald-400/60" : tone === "sky" ? "bg-sky-400/55" : "bg-violet-400/60";
-  const txt = tone === "emerald" ? "text-emerald-200/75" : tone === "sky" ? "text-sky-200/70" : "text-violet-200/75";
+  const txt = tone === "emerald" ? "text-emerald-200" : tone === "sky" ? "text-sky-200" : "text-violet-200";
   return (
     <div className="flex items-center gap-2 pb-1.5 border-b border-white/[0.06] mb-2.5">
       <span aria-hidden="true" className={"w-1 h-3.5 rounded-full " + bar} />
