@@ -1602,11 +1602,36 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const hasTrail = marketData.lineOpenAmerican != null || marketData.priceAmerican != null;
   return (
     <div>
-      <p className="text-[9px] uppercase tracking-[0.14em] font-semibold text-gray-500/80 mb-1">
+      <p className="text-[9px] uppercase tracking-[0.14em] font-semibold text-gray-500/80 mb-1.5">
         Edge Stack · {marketLongLabelFor(market, shellSport)}
       </p>
+
+      {/* Model Edge — featured: the hero evidence row, lifted out of the flat
+          list with the edge as a large tone-colored number so it stops blending
+          in. No bars (those are what felt off before). */}
+      {modelEdge && (
+        <div className={
+          "rounded-lg border px-3 py-2.5 mb-2 " +
+          (modelEdge.tone === "emerald"
+            ? "border-emerald-400/25 bg-emerald-500/[0.06]"
+            : modelEdge.tone === "amber"
+              ? "border-amber-400/25 bg-amber-500/[0.05]"
+              : "border-violet-400/20 bg-violet-500/[0.05]")
+        }>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[9px] uppercase tracking-[0.14em] font-bold text-gray-400 mb-1">Model Edge</p>
+              <p className="text-[12px] text-gray-300 tabular-nums leading-snug">{modelEdge.evidence}</p>
+            </div>
+            <div className="text-right shrink-0 leading-none">
+              <div className={"text-[21px] font-black tabular-nums " + cleanDeltaClass(modelEdge.tone)}>{modelEdge.delta}</div>
+              <p className="text-[8px] uppercase tracking-[0.16em] text-gray-500 mt-1.5">edge</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="divide-y divide-white/[0.04]">
-        {modelEdge && <CleanEvRow label="Model Edge" delta={modelEdge.delta} tone={modelEdge.tone}>{modelEdge.evidence}</CleanEvRow>}
         {pinnacle && pinnacle.delta !== "unavailable" && <CleanEvRow label="Pinnacle EV" delta={pinnacle.delta} tone={pinnacle.tone}>{pinnacle.evidence}</CleanEvRow>}
         {splits && <CleanEvRow label="Splits" delta={splits.delta} tone={splits.tone}>{splits.evidence}</CleanEvRow>}
         {lineMove && market === "total" && <CleanEvRow label="Total Line" delta={lineMove.delta} tone={lineMove.tone}>{lineMove.evidence}</CleanEvRow>}
