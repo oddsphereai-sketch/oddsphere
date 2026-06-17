@@ -1520,6 +1520,15 @@ function cleanDeltaClass(tone: EdgeStackRowTone): string {
   return tone === "emerald" ? "text-emerald-300" : tone === "amber" ? "text-amber-300" : "text-gray-500";
 }
 
+/** Small pill ("chip") around a value — thin border + faint tint by tone. */
+function cleanChipClass(tone: EdgeStackRowTone): string {
+  return tone === "emerald"
+    ? "border-emerald-400/40 bg-emerald-500/[0.12] text-emerald-300"
+    : tone === "amber"
+      ? "border-amber-400/40 bg-amber-500/[0.10] text-amber-300"
+      : "border-white/10 bg-white/[0.04] text-gray-300";
+}
+
 /** Tiny inline signal sign for Market Read — green/yellow/neutral. */
 function CleanSignal({ tone }: { tone: EdgeStackRowTone }) {
   if (tone === "emerald") {
@@ -1574,15 +1583,18 @@ function CleanOddsTrail({ open, prev, current, locked }: { open: number | null; 
   );
 }
 
-/** Clean definition row: label LEFT, evidence + delta RIGHT. */
-function CleanEvRow({ label, children, delta, tone }: { label: string; children: React.ReactNode; delta?: string; tone?: EdgeStackRowTone }) {
+/** Clean definition row: label LEFT, evidence + delta RIGHT. When `chip`, the
+ *  delta renders as a small tone pill instead of a plain colored number. */
+function CleanEvRow({ label, children, delta, tone, chip }: { label: string; children: React.ReactNode; delta?: string; tone?: EdgeStackRowTone; chip?: boolean }) {
   const showDelta = delta !== undefined && delta !== "" && delta !== "—";
   return (
-    <div className="flex items-baseline justify-between gap-4 py-2">
+    <div className="flex items-center justify-between gap-4 py-2">
       <span className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-500 shrink-0">{label}</span>
-      <span className="flex items-baseline gap-2.5 text-[12px] text-gray-300 text-right">
+      <span className="flex items-center gap-2.5 text-[12px] text-gray-300 text-right">
         <span className="tabular-nums">{children}</span>
-        {showDelta && <span className={"font-bold tabular-nums shrink-0 " + cleanDeltaClass(tone ?? "gray")}>{delta}</span>}
+        {showDelta && (chip
+          ? <span className={"inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-bold tabular-nums shrink-0 " + cleanChipClass(tone ?? "gray")}>{delta}</span>
+          : <span className={"font-bold tabular-nums shrink-0 " + cleanDeltaClass(tone ?? "gray")}>{delta}</span>)}
       </span>
     </div>
   );
@@ -1606,32 +1618,11 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
         Edge Stack · {marketLongLabelFor(market, shellSport)}
       </p>
 
-      {/* Model Edge — featured: the hero evidence row, lifted out of the flat
-          list with the edge as a large tone-colored number so it stops blending
-          in. No bars (those are what felt off before). */}
-      {modelEdge && (
-        <div className={
-          "rounded-lg border px-3 py-2.5 mb-2 " +
-          (modelEdge.tone === "emerald"
-            ? "border-emerald-400/25 bg-emerald-500/[0.06]"
-            : modelEdge.tone === "amber"
-              ? "border-amber-400/25 bg-amber-500/[0.05]"
-              : "border-violet-400/20 bg-violet-500/[0.05]")
-        }>
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[9px] uppercase tracking-[0.14em] font-bold text-gray-400 mb-1">Model Edge</p>
-              <p className="text-[12px] text-gray-300 tabular-nums leading-snug">{modelEdge.evidence}</p>
-            </div>
-            <div className="text-right shrink-0 leading-none">
-              <div className={"text-[21px] font-black tabular-nums " + cleanDeltaClass(modelEdge.tone)}>{modelEdge.delta}</div>
-              <p className="text-[8px] uppercase tracking-[0.16em] text-gray-500 mt-1.5">edge</p>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* Model Edge stays a clean row; only its edge value is a small tone
+          chip so it catches the eye without a loud card. Other rows use a
+          plain colored delta. (Switch `chip` off for plain-number emphasis.) */}
       <div className="divide-y divide-white/[0.04]">
+        {modelEdge && <CleanEvRow label="Model Edge" delta={modelEdge.delta} tone={modelEdge.tone} chip>{modelEdge.evidence}</CleanEvRow>}
         {pinnacle && pinnacle.delta !== "unavailable" && <CleanEvRow label="Pinnacle EV" delta={pinnacle.delta} tone={pinnacle.tone}>{pinnacle.evidence}</CleanEvRow>}
         {splits && <CleanEvRow label="Splits" delta={splits.delta} tone={splits.tone}>{splits.evidence}</CleanEvRow>}
         {lineMove && market === "total" && <CleanEvRow label="Total Line" delta={lineMove.delta} tone={lineMove.tone}>{lineMove.evidence}</CleanEvRow>}
