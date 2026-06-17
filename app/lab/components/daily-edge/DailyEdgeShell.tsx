@@ -2128,21 +2128,16 @@ function SoccerBttsContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerBtts
  * calibration level — so a Caution/Watchlist is informative, not dead.
  */
 function SoccerGradeContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerGradeContext"]> }) {
+  // De-duplicated (2026-06-17): the Model/Market/Edge numbers live in the Model
+  // Edge block; this block is now just the grade-honesty note (why this grade +
+  // calibration status), so the same numbers don't appear twice.
   return (
     <div className="rounded-lg border border-white/[0.05] bg-white/[0.015] px-2.5 py-2 space-y-1">
-      <div className="flex items-center gap-1.5 flex-wrap text-[10px] tabular-nums">
-        {ctx.model_pct !== null && (
-          <span className="text-gray-300">Model <span className="text-gray-100 font-semibold">{ctx.model_pct.toFixed(1)}%</span></span>
-        )}
-        {ctx.market_pct !== null && <span className="text-gray-500">· Market {ctx.market_pct.toFixed(1)}%</span>}
-        {ctx.edge_pp !== null && (
-          <span className={ctx.edge_pp >= 0 ? "text-emerald-300" : "text-amber-300"}>
-            · Edge {ctx.edge_pp >= 0 ? "+" : ""}{ctx.edge_pp.toFixed(1)}pp
-          </span>
-        )}
-        {ctx.miscalibration_flag && <span className="text-amber-300 font-semibold">· ⚠ flagged</span>}
-      </div>
-      <p className="text-[10px] text-gray-400 leading-snug">{ctx.grade_reason}</p>
+      <p className="text-[9px] uppercase tracking-[0.12em] font-semibold text-gray-300">Grade Note</p>
+      <p className="text-[10.5px] text-gray-400 leading-snug">
+        {ctx.miscalibration_flag && <span className="text-amber-300 font-semibold mr-1">⚠</span>}
+        {ctx.grade_reason}
+      </p>
       {ctx.calibration_label !== "" && (
         <p className="text-[9px] text-gray-500/80 italic leading-snug">{ctx.calibration_label}</p>
       )}
