@@ -75,16 +75,22 @@ const CARRYOVER_ET_MINUTES_CUTOFF = 5 * 60;
 /**
  * Does `game` belong on the day-`requestedDate` soccer board?
  *
- * True when either:
- *   • the game's slate_date IS the requested day (native), OR
- *   • the game's slate_date is the NEXT day AND it kicks off before the
- *     wee-hours ET cutoff (a "late tonight" carryover — see
- *     CARRYOVER_ET_MINUTES_CUTOFF).
+ * A wee-hours (e.g. 00:00 ET) kickoff belongs to the EVENING BEFORE — a US
+ * audience experiences a midnight-ET match as the late game of the prior day,
+ * not the first game of its own calendar date. So (2026-06-17, per Daniel) a
+ * wee-hours game shows ONLY on the prior day's board (the carryover branch) and
+ * is NOT shown on its own calendar/slate day. Non-wee-hours games show natively.
  *
- * Pure function — exported for deterministic regression testing of the
- * 2026-06-16 midnight-ET slate-boundary fix. `etMinutes` is the
- * minutes-from-ET-midnight of the kickoff (computed via `et()` at the
- * call site so the timezone math lives in one place).
+ * True when either:
+ *   • the game's slate_date IS the requested day AND it's NOT a wee-hours
+ *     kickoff (native), OR
+ *   • the game's slate_date is the NEXT day AND it IS a wee-hours kickoff (the
+ *     "belongs to the evening before" carryover — see CARRYOVER_ET_MINUTES_CUTOFF).
+ *
+ * slate_date / locking / tracking / grading are UNCHANGED — this is display-only.
+ * Pure function — exported for deterministic regression testing. `etMinutes` is
+ * the minutes-from-ET-midnight of the kickoff (computed via `et()` at the call
+ * site so the timezone math lives in one place).
  */
 export function qualifiesForSoccerBoard(
   requestedDate: string,
@@ -92,10 +98,9 @@ export function qualifiesForSoccerBoard(
   nextDate: string,
   etMinutes: number,
 ): boolean {
-  if (game.slate_date === requestedDate) return true;
-  if (game.slate_date === nextDate && etMinutes < CARRYOVER_ET_MINUTES_CUTOFF) {
-    return true;
-  }
+  const isWeeHours = etMinutes < CARRYOVER_ET_MINUTES_CUTOFF;
+  if (game.slate_date === requestedDate && !isWeeHours) return true;
+  if (game.slate_date === nextDate && isWeeHours) return true;
   return false;
 }
 

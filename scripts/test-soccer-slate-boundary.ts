@@ -46,11 +46,12 @@ async function main() {
   const D = "2026-06-16";
   const NEXT = "2026-06-17";
 
-  // 1. Native: a game whose slate_date IS the requested day always shows,
-  //    regardless of kickoff time.
+  // 1. Native: a NON-wee-hours game whose slate_date IS the requested day shows.
   check("native slate, 3pm ET", qualifiesForSoccerBoard(D, { slate_date: D }, NEXT, 15 * 60), true);
   check("native slate, 9pm ET", qualifiesForSoccerBoard(D, { slate_date: D }, NEXT, 21 * 60), true);
-  check("native slate, midnight ET", qualifiesForSoccerBoard(D, { slate_date: D }, NEXT, 0), true);
+  // 1b. A wee-hours kickoff is NOT shown on its own calendar day — it belongs to
+  //     the evening before (2026-06-17 per Daniel; shows via carryover instead).
+  check("native slate, midnight ET → NOT shown (belongs to prior evening)", qualifiesForSoccerBoard(D, { slate_date: D }, NEXT, 0), false);
 
   // 2. THE BUG: next-day fixture kicking off at 00:00 ET (AUT vs JOR) is a
   //    "late tonight" carryover — it MUST appear on the day-D board.
@@ -67,10 +68,10 @@ async function main() {
   //    fails both branches.
   check("D+2 slate → never shows on day D", qualifiesForSoccerBoard(D, { slate_date: "2026-06-18" }, NEXT, 0), false);
 
-  // 5. Symmetry: when *viewing* D+1, the AUT vs JOR game is native there too
-  //    (it appears on both the D carryover board and its own D+1 board — by
-  //    design; they are separate API requests for separate dates).
-  check("viewing D+1: AUT vs JOR native", qualifiesForSoccerBoard(NEXT, { slate_date: NEXT }, "2026-06-18", 0), true);
+  // 5. A wee-hours game shows ONLY on the prior day's board (carryover), NOT on
+  //    its own calendar day — so viewing D+1, the 00:00-ET AUT vs JOR game is
+  //    NOT shown there (it belonged to day D's evening and is now "yesterday").
+  check("viewing D+1: midnight game NOT shown on its own day", qualifiesForSoccerBoard(NEXT, { slate_date: NEXT }, "2026-06-18", 0), false);
 
   console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);
