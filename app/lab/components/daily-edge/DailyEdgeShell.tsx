@@ -1839,39 +1839,16 @@ function SoccerWdlBars({
  * available, edge, and an honest scoring-context line derived from λ.
  */
 function SoccerBttsContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerBttsContext"]> }) {
-  const fmtPct = (p: number): string => `${(p * 100).toFixed(0)}%`;
-  const fmtEdge = (e: number): string => `${e >= 0 ? "+" : ""}${e.toFixed(1)}pp`;
-  const sideLabel = ctx.displayed_side === "yes" ? "BTTS Yes" : "BTTS No";
-  const modelPct = ctx.displayed_side === "yes" ? ctx.yes_p : ctx.no_p;
-  const marketPct =
-    ctx.market_yes === null
-      ? null
-      : ctx.displayed_side === "yes"
-        ? ctx.market_yes
-        : 1 - ctx.market_yes;
+  // De-duplicated (2026-06-17): the BTTS pick's model/market/edge live in the
+  // Model Edge block, so this block keeps only the soccer-specific scoring
+  // context + note — the numbers aren't shown twice.
   return (
     <div className="mt-2 space-y-1.5 border-t border-white/5 pt-2">
       <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">
         BTTS · Both Teams To Score
       </p>
-      <div className="flex items-baseline justify-between text-[10.5px] tabular-nums">
-        <span className="text-gray-400">{sideLabel}</span>
-        <span className="text-gray-200 font-semibold">{fmtPct(modelPct)}</span>
-      </div>
-      {marketPct !== null ? (
-        <div className="flex items-baseline justify-between text-[10px] tabular-nums">
-          <span className="text-gray-500">Market</span>
-          <span className="text-gray-400">{fmtPct(marketPct)}</span>
-        </div>
-      ) : null}
-      {ctx.edge_pp !== null ? (
-        <div className="flex items-baseline justify-between text-[10px] tabular-nums">
-          <span className="text-gray-500">Edge</span>
-          <span className="text-gray-300 font-semibold">{fmtEdge(ctx.edge_pp)}</span>
-        </div>
-      ) : null}
-      <p className="text-[10px] text-gray-500 leading-snug">{ctx.scoring_context}</p>
-      <p className="text-[10px] text-gray-400 leading-snug">{ctx.note}</p>
+      {ctx.scoring_context ? <p className="text-[10px] text-gray-500 leading-snug">{ctx.scoring_context}</p> : null}
+      {ctx.note ? <p className="text-[10px] text-gray-400 leading-snug">{ctx.note}</p> : null}
     </div>
   );
 }
