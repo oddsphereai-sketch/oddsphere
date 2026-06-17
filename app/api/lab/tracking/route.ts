@@ -461,12 +461,16 @@ function determineSportOrder(rows: ResultRow[]): Sport[] {
  *     fixtures don't count (Daniel: "only today's").
  * Markets map via MARKET_DB_TO_UI (match_result/double_chance/total/btts).
  */
-async function loadSoccerGradeRows(): Promise<ResultRow[]> {
+async function loadModernGradeRows(
+  sport: Sport,
+  sinceSlateDate: string,
+  marketMap: Record<string, string>,
+): Promise<ResultRow[]> {
   const { data: records, error: recErr } = await supabase
     .from("prediction_records")
     .select("id, market, slate_date")
-    .eq("sport", "soccer")
-    .gte("slate_date", SOCCER_OFFICIAL_TRACKING_START);
+    .eq("sport", sport)
+    .gte("slate_date", sinceSlateDate);
   if (recErr || !records || records.length === 0) return [];
 
   const byId = new Map<string, { market: string; slate_date: string }>();
@@ -488,9 +492,11 @@ async function loadSoccerGradeRows(): Promise<ResultRow[]> {
     for (const g of grades as Array<{ prediction_record_id: string; result: string }>) {
       const rec = byId.get(String(g.prediction_record_id));
       if (rec === undefined) continue;
+      const uiKey = marketMap[rec.market];
+      if (uiKey === undefined) continue; // market not tracked in this view
       rows.push({
-        sport: "soccer",
-        market: rec.market,
+        sport,
+        market: uiKey,
         outcome: g.result,
         game_date: rec.slate_date,
         prediction_type: "game",
@@ -498,6 +504,35 @@ async function loadSoccerGradeRows(): Promise<ResultRow[]> {
     }
   }
   return rows;
+}
+
+// Soccer markets already match MARKET_DB_TO_UI keys (identity map).
+const SOCCER_MODERN_MARKETS: Record<string, string> = {
+  match_result: "match_result",
+  double_chance: "double_chance",
+  total: "total",
+  btts: "btts",
+};
+function loadSoccerGradeRows(): Promise<ResultRow[]> {
+  return loadModernGradeRows("soccer", SOCCER_OFFICIAL_TRACKING_START, SOCCER_MODERN_MARKETS);
+}
+
+/**
+ * MLB modern-grade bridge (2026-06-16). MLB now grades to prediction_grades
+ * (modern path), but the tracker's main read is the LEGACY prediction_results
+ * table, which froze at 2026-05-22 — so recent MLB results went untracked. This
+ * bridges them in, exactly like soccer. Modern prediction_records.market
+ * (moneyline/total/first_inning) → MARKET_DB_TO_UI keys (ml/total/nrfi). Legacy
+ * ends 5/22 and modern starts 6/06, so there's NO overlap → no double-counting.
+ */
+const MLB_MODERN_MARKETS: Record<string, string> = {
+  moneyline: "ml",
+  total: "total",
+  first_inning: "nrfi",
+};
+const MLB_MODERN_TRACKING_START = "2026-06-01"; // after legacy's 2026-05-22 end
+function loadMlbGradeRows(): Promise<ResultRow[]> {
+  return loadModernGradeRows("mlb", MLB_MODERN_TRACKING_START, MLB_MODERN_MARKETS);
 }
 
 export async function GET(_request: Request) {
@@ -531,6 +566,13 @@ export async function GET(_request: Request) {
     allRows.push(...(await loadSoccerGradeRows()));
   } catch {
     // non-fatal: WC rows simply won't appear this request.
+  }
+  // 2026-06-16 — bridge modern MLB grades (legacy prediction_results froze
+  // 5/22). Non-fatal so a bridge hiccup never breaks the tracker.
+  try {
+    allRows.push(...(await loadMlbGradeRows()));
+  } catch {
+    // non-fatal: modern MLB rows simply won't appear this request.
   }
 
   const body: TrackingResponse = {
