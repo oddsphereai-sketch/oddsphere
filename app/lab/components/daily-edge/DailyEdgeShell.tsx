@@ -1600,13 +1600,83 @@ function CleanEvRow({ label, children, delta, tone, chip }: { label: string; chi
   );
 }
 
+/**
+ * Model Edge — the hero block. Merges the old "Model Edge" row and the
+ * "Confidence vs Market" strip (they showed the SAME numbers) into ONE clear
+ * Confidence / Market / Edge breakdown, edge shown as a tone chip. Reads the
+ * real DTO directly (mirrors buildEdgeStackRows' Model Edge logic). Totals show
+ * projected total vs line in units; ML/FI show model% vs market%.
+ */
+function ModelEdgeBlock({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
+  const shellSport = useShellSport();
+  const totalUnit = shellSport === "nhl" || shellSport === "soccer" ? "goals" : shellSport === "nba" ? "points" : "runs";
+
+  let topLabel = "Confidence";
+  let topVal = "—";
+  let topNote = "model prob";
+  let midVal = "—";
+  let midNote = "market";
+  let edge = "";
+  let edgeNote = "model prob vs no-vig market";
+  let tone: EdgeStackRowTone = "gray";
+
+  if (market === "total" && marketData.modelTotal != null && marketData.marketTotal != null) {
+    const diff = marketData.modelTotal - marketData.marketTotal;
+    const isOver = (marketData.pick ?? "").toUpperCase().startsWith("OVER");
+    const supports = (isOver && diff > 0) || (!isOver && diff < 0);
+    tone = Math.abs(diff) < 0.2 ? "gray" : supports ? "emerald" : "amber";
+    topLabel = "Model";
+    topVal = marketData.modelTotal.toFixed(1);
+    topNote = "projected total";
+    midVal = marketData.marketTotal.toFixed(1);
+    midNote = marketSourceLabel(marketData.marketDataQuality, marketData.marketSource) ?? "market line";
+    edge = `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} ${totalUnit}`;
+    edgeNote = "projection vs line";
+  } else {
+    const modelPct = marketData.modelTrustPct ?? (marketData.modelProb != null ? marketData.modelProb * 100 : null);
+    const marketPct = marketData.marketImpliedPct;
+    if (modelPct != null) topVal = `${Math.round(modelPct)}%`;
+    if (modelPct != null && marketPct != null) {
+      const gap = marketData.modelMarketGapPct ?? modelPct - marketPct;
+      tone = gap >= 1 ? "emerald" : gap <= -1 ? "amber" : "gray";
+      midVal = `${Math.round(marketPct)}%`;
+      midNote = marketSourceLabel(marketData.marketDataQuality, marketData.marketSource) ?? "market";
+      edge = `${gap >= 0 ? "+" : ""}${gap.toFixed(1)} pp`;
+    } else {
+      midNote = "unavailable";
+    }
+  }
+
+  const Line = ({ k, v, note, last }: { k: string; v: string; note: string; last?: boolean }) => (
+    <div className={"flex items-center gap-2 " + (last ? "pt-1.5 mt-1.5 border-t border-white/[0.05]" : "")}>
+      <span className="text-[9.5px] uppercase tracking-[0.1em] text-gray-500 w-[78px] shrink-0">{k}</span>
+      {last && edge ? (
+        <span className={"inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-bold tabular-nums " + cleanChipClass(tone)}>{v}</span>
+      ) : (
+        <span className="text-[13px] font-bold text-gray-100 tabular-nums">{v}</span>
+      )}
+      <span className="text-[9.5px] text-gray-500 ml-auto text-right">{note}</span>
+    </div>
+  );
+
+  return (
+    <div className="rounded-lg border border-white/[0.07] bg-white/[0.015] px-3 py-2.5">
+      <p className="text-[9px] uppercase tracking-[0.14em] font-bold text-gray-400 mb-2">Model Edge</p>
+      <div className="space-y-1.5">
+        <Line k={topLabel} v={topVal} note={topNote} />
+        <Line k="Market" v={midVal} note={midNote} />
+        <Line k="Edge" v={edge || "—"} note={edgeNote} last />
+      </div>
+    </div>
+  );
+}
+
 /** Clean Supporting Evidence column — same real data, reworked presentation. */
 function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
   const shellSport = useShellSport();
   const totalUnit = shellSport === "nhl" || shellSport === "soccer" ? "goals" : shellSport === "nba" ? "points" : "runs";
   const rows = buildEdgeStackRows(market, marketData, totalUnit);
   const find = (l: string) => rows.find((r) => r.label === l);
-  const modelEdge = find("Model Edge");
   const pinnacle = find("Pinnacle EV");
   const splits = find("Money vs Bets");
   const lineMove = find("Line"); // the betting NUMBER move (totals)
@@ -1618,11 +1688,12 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
         Edge Stack · {marketLongLabelFor(market, shellSport)}
       </p>
 
-      {/* Model Edge stays a clean row; only its edge value is a small tone
-          chip so it catches the eye without a loud card. Other rows use a
-          plain colored delta. (Switch `chip` off for plain-number emphasis.) */}
-      <div className="divide-y divide-white/[0.04]">
-        {modelEdge && <CleanEvRow label="Model Edge" delta={modelEdge.delta} tone={modelEdge.tone}>{modelEdge.evidence}</CleanEvRow>}
+      {/* Model Edge = the hero block (Confidence / Market / Edge breakdown with
+          the edge as a tone chip). Merges the old Model Edge row + the
+          Confidence-vs-Market strip — same numbers, no redundancy. */}
+      <ModelEdgeBlock market={market} marketData={marketData} />
+
+      <div className="divide-y divide-white/[0.04] mt-2">
         {pinnacle && pinnacle.delta !== "unavailable" && <CleanEvRow label="Pinnacle EV" delta={pinnacle.delta} tone={pinnacle.tone}>{pinnacle.evidence}</CleanEvRow>}
         {splits && <CleanEvRow label="Splits" delta={splits.delta} tone={splits.tone}>{splits.evidence}</CleanEvRow>}
         {lineMove && market === "total" && <CleanEvRow label="Total Line" delta={lineMove.delta} tone={lineMove.tone}>{lineMove.evidence}</CleanEvRow>}
