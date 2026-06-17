@@ -105,8 +105,25 @@ export async function loadLastMovesForSlate(
   } catch {
     return map;
   }
-  for (const [key, rows] of rowsByKey) {
-    rows.sort((a, b) => Date.parse(b.moved_at) - Date.parse(a.moved_at));
+  for (const [key, rowsAll] of rowsByKey) {
+    // 2026-06-17 — only TRUSTED books drive the displayed move, using the SAME
+    // BOOK_PRIORITY ranking as the line + current-odds overlay. Otherwise an
+    // off-market outlier (e.g. a wide bovada total at 11.5 vs the ~9 consensus)
+    // becomes the "latest move" and the Total Line row diverges hard from the
+    // sharp Market line. Fail closed: if no trusted book moved, emit nothing for
+    // this key (the move row simply doesn't render) rather than show an outlier.
+    const rows = rowsAll.filter(
+      (r) => !isBlockedSportsbook(r.sportsbook) && Number.isFinite(bookPriorityRank(r.sportsbook)),
+    );
+    if (rows.length === 0) continue;
+    // The displayed move = the sharpest trusted book that moved; within that
+    // book, its most recent move.
+    rows.sort((a, b) => {
+      const ra = bookPriorityRank(a.sportsbook);
+      const rb = bookPriorityRank(b.sportsbook);
+      if (ra !== rb) return ra - rb;
+      return Date.parse(b.moved_at) - Date.parse(a.moved_at);
+    });
     const latest = rows[0];
     const booksMoved = new Set(rows.filter((r) => nowMs - Date.parse(r.moved_at) <= 30 * 60000).map((r) => r.sportsbook)).size;
     const totalBooks = new Set(rows.filter((r) => nowMs - Date.parse(r.moved_at) <= 60 * 60000).map((r) => r.sportsbook)).size;

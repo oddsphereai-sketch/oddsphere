@@ -3,7 +3,7 @@
  * Proves the overlay uses the stream price ONLY when it is fresher than cron.
  * Run: npx tsx scripts/test-stream-overlay.ts
  */
-import { pickFresherCurrent, streamKey, loadStreamCurrentForSlate } from "../lib/services/streamOverlay";
+import { pickFresherCurrent, streamKey, loadStreamCurrentForSlate, loadLastMovesForSlate } from "../lib/services/streamOverlay";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown): void {
@@ -135,6 +135,41 @@ eq("streamKey", streamKey(777, "moneyline", "home"), "777::moneyline::home");
     ok("query error → empty map (degrade)", mErr.size === 0);
   }
 })().then(() => {
-  console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILED`}`);
-  process.exit(failures === 0 ? 0 : 1);
+  // ─── loadLastMovesForSlate: trusted-book-only line move ──────────────────
+  const G2 = 17636, key2 = streamKey(G2, "total", "over");
+  const mvRow = (sportsbook: string, prevLine: number, nextLine: number, movedAt: string) =>
+    ({ game_id: G2, market_type: "total", side: "over", sportsbook, prev_odds_american: -110, next_odds_american: -108, prev_line_value: prevLine, next_line_value: nextLine, moved_at: movedAt });
+  const mockLM = (rows: unknown[]) => ({
+    from: () => ({ select: () => ({ in: () => ({ range: () => Promise.resolve({ data: rows, error: null }) }) }) }),
+  });
+  const NOW2 = Date.parse("2026-06-17T17:00:00Z");
+
+  return (async () => {
+    // bovada (untrusted, freshest) must NOT win over a trusted book's move.
+    {
+      const m = await loadLastMovesForSlate(mockLM([
+        mvRow("bovada", 10.5, 11.5, "2026-06-17T16:55:00Z"),
+        mvRow("betmgm", 8.5, 9, "2026-06-17T16:30:00Z"),
+      ]), [G2], NOW2);
+      ok("line move ignores untrusted bovada, uses trusted betmgm", m.get(key2)?.nextLineValue === 9);
+    }
+    // only untrusted books moved → fail closed (no entry, no outlier shown).
+    {
+      const m = await loadLastMovesForSlate(mockLM([
+        mvRow("bovada", 10.5, 11.5, "2026-06-17T16:55:00Z"),
+      ]), [G2], NOW2);
+      ok("untrusted-only line move → omitted (fail closed)", m.get(key2) === undefined);
+    }
+    // among trusted, the SHARPER book wins (pinnacle over draftkings).
+    {
+      const m = await loadLastMovesForSlate(mockLM([
+        mvRow("draftkings", 9, 9.5, "2026-06-17T16:55:00Z"),
+        mvRow("pinnacle", 8.5, 9, "2026-06-17T16:20:00Z"),
+      ]), [G2], NOW2);
+      ok("line move prefers sharper trusted book (pinnacle)", m.get(key2)?.nextLineValue === 9);
+    }
+  })().then(() => {
+    console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILED`}`);
+    process.exit(failures === 0 ? 0 : 1);
+  });
 });
