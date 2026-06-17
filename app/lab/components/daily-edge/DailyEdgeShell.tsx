@@ -1485,7 +1485,7 @@ function EdgeStack({ market, marketData }: { market: MarketKey; marketData: Mark
   const rows = buildEdgeStackRows(edgeMarket, marketData, totalUnit);
   return (
     <div className="min-w-0">
-      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80 mb-1.5">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300 mb-1.5">
         Edge Stack · {marketLongLabelFor(market, shellSport)}
       </p>
       <div className="space-y-1.5">
@@ -1937,7 +1937,7 @@ function ConfidenceVsMarketStrip({
 
   return (
     <div className="space-y-1.5">
-      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">
         Confidence vs Market
       </p>
       <div className="grid grid-cols-[88px_1fr] gap-y-1 gap-x-2 items-baseline">
@@ -2029,7 +2029,7 @@ function SoccerWdlBars({
     e >= 1.5 ? "text-emerald-300" : e <= -1.5 ? "text-rose-300" : "text-gray-400";
   return (
     <div className="space-y-1.5">
-      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">
         Match Result · Model vs. Market
       </p>
       <div className="grid grid-cols-3 gap-1.5 text-[10.5px] tabular-nums">
@@ -2090,7 +2090,7 @@ function SoccerBttsContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerBtts
         : 1 - ctx.market_yes;
   return (
     <div className="mt-2 space-y-1.5 border-t border-white/5 pt-2">
-      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">
         BTTS · Both Teams To Score
       </p>
       <div className="flex items-baseline justify-between text-[10.5px] tabular-nums">
@@ -2155,7 +2155,7 @@ function SoccerTotalContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerTot
   const fmtEdge = (e: number): string => `${e >= 0 ? "+" : ""}${e.toFixed(1)}pp`;
   return (
     <div className="space-y-1.5">
-      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">
         Total · Projection vs. Line
       </p>
       <div className="grid grid-cols-2 gap-1.5 text-[10.5px] tabular-nums">
@@ -2216,7 +2216,7 @@ function SoccerDcContext({ ctx }: { ctx: NonNullable<MarketEdgeDto["soccerDouble
         : `${away} or ${home}`;
   return (
     <div className="space-y-1.5">
-      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">
         Double Chance · {dcLabel(ctx.displayed_side)}
       </p>
       <p className="text-[10.5px] text-gray-300 leading-snug">{ctx.side_explanation}</p>
@@ -2339,7 +2339,7 @@ function MarketPulse({
     if (marketData.held) {
       return (
         <div className="space-y-1.5">
-          <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">First Inning</p>
+          <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">First Inning</p>
           <p className="text-[11.5px] text-gray-500 leading-snug">
             First-inning angle unavailable for this game — full-game ML and Total picks above are unaffected.
           </p>
@@ -2348,7 +2348,7 @@ function MarketPulse({
     }
     return (
       <div className="space-y-1.5">
-        <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse</p>
+        <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Market Pulse</p>
         <p className="text-[11.5px] text-gray-400 leading-snug">
           Public splits aren&rsquo;t offered for first-inning markets — model, price, and matchup factors below.
         </p>
@@ -2364,7 +2364,7 @@ function MarketPulse({
   if (splits.length === 0) {
     return (
       <div className="space-y-1.5">
-        <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse</p>
+        <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Market Pulse</p>
         <p className="text-[11.5px] text-gray-500 leading-snug">
           Public split data unavailable for this game today.
         </p>
@@ -2374,7 +2374,7 @@ function MarketPulse({
 
   return (
     <div className="space-y-2">
-      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/80">Market Pulse · Public Splits</p>
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Market Pulse · Public Splits</p>
       <div className="space-y-2.5">
         {splits.map((s) => (
           <SideSplitsBlock
@@ -2847,7 +2847,7 @@ function MarketNotes({
       {/* Key Stats — team-labeled with plain-English edge interpretation */}
       {marketData.keyStats.length > 0 && (
         <section className="space-y-1.5">
-          <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/70">Key Stats</p>
+          <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Key Stats</p>
           <div className="space-y-2.5">
             {marketData.keyStats.map((s) => {
               const interp = interpretKeyStat(
@@ -2907,7 +2907,7 @@ function MarketNotes({
       )}
       <div className="border-t border-white/[0.04]" />
       <section className="space-y-1">
-        <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-500/70">Market Notes</p>
+        <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Market Notes</p>
         <div className="space-y-1.5">
           <ReadLine label="Why" body={marketData.whyLine} />
           <ReadLine label="Risk" body={marketData.riskLine} tone="amber" />
@@ -3319,7 +3319,7 @@ function SelectedEdgeReader({
   onNext,
   index,
   total,
-  cleanReader,
+  legacyReader,
 }: {
   game: DailyEdgeGameDto;
   market: MarketKey;
@@ -3334,8 +3334,8 @@ function SelectedEdgeReader({
   /** 1-based position + count, for the "3 / 8" indicator. */
   index: number;
   total: number;
-  /** ?reader=clean — render the review-only redesigned expanded body. */
-  cleanReader: boolean;
+  /** ?reader=legacy — render the OLD expanded body (rollback). Default = clean. */
+  legacyReader: boolean;
 }) {
   const verdict = asVerdictKey(marketData.verdict.key);
   const shellSport = useShellSport();
@@ -3553,11 +3553,11 @@ function SelectedEdgeReader({
             {marketData.guidedGuide}
           </p>
         </div>
-      ) : cleanReader ? (
-        /* ?reader=clean — review-only redesigned 3-column expanded read */
+      ) : !legacyReader ? (
+        /* DEFAULT — redesigned clean 3-column expanded read */
         <ExpandedReadClean game={game} market={market} marketData={marketData} />
       ) : (
-        /* Full body — 3-column expanded read */
+        /* ?reader=legacy — old expanded body (rollback; delete after prod verify) */
         <div className="px-4 sm:px-5 py-3">
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] gap-5">
             <QuickRead game={game} market={market} marketData={marketData} />
@@ -3732,8 +3732,7 @@ function MobileDetailSheet({
           ) : (
             <>
               <QuickRead game={game} market={selectedMarket} marketData={marketData} />
-              <EdgeStack market={selectedMarket} marketData={marketData} />
-              <ConfidenceVsMarketStrip market={selectedMarket} marketData={marketData} />
+              <EdgeStackClean market={selectedMarket} marketData={marketData} />
               <MarketPulse market={selectedMarket} marketData={marketData} game={game} />
               <MarketNotes
                 marketData={marketData}
@@ -3979,12 +3978,13 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   // Desktop reader element — used to smooth-scroll the reader back into view
   // when the user picks a game from the board below (no more scroll-up loop).
   const readerRef = useRef<HTMLDivElement>(null);
-  // ?reader=clean — review-only redesigned expanded read. Default OFF so the
-  // live reader is unchanged; flip the default once the design is approved.
-  const [cleanReader, setCleanReader] = useState(false);
+  // Redesigned clean reader is now the DEFAULT (approved 2026-06-17). The old
+  // expanded body remains available via ?reader=legacy as a one-deploy rollback
+  // safety net; delete it + ConfidenceVsMarketStrip after prod is verified.
+  const [legacyReader, setLegacyReader] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setCleanReader(new URLSearchParams(window.location.search).get("reader") === "clean");
+    setLegacyReader(new URLSearchParams(window.location.search).get("reader") === "legacy");
   }, []);
 
   const games = data?.games ?? [];
@@ -4240,7 +4240,7 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
               onNext={canNext ? () => goToAdjacentGame(1) : null}
               index={Math.max(1, idx + 1)}
               total={navList.length}
-              cleanReader={cleanReader}
+              legacyReader={legacyReader}
             />
           );
         })()}
