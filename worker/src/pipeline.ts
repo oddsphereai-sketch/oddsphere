@@ -53,6 +53,10 @@ const DEFAULT_PICK_PROVIDER: PickProvider = () => ({ pickSide: null, activeGrade
  */
 const MAX_MAIN_LINE_STEP = 1.0;
 
+/** 1-in-N sampling for unresolved-event audit rows — keeps the resolution
+ * diagnostic visible while cutting the out-of-slate noise volume ~95%. */
+const UNRESOLVED_SAMPLE_RATE = 20;
+
 export type StreamPipelineDeps = {
   provider?: string; // default 'sharpapi_ws'
   resolveGame: GameResolver;
@@ -108,6 +112,8 @@ export class StreamPipeline {
   private readonly twoSide = new Map<string, Map<string, number>>();
   /** externalId → recompute grouping metadata. */
   private readonly gameMeta = new Map<number, { sport: string; date: string; gameDate: string }>();
+  /** Counter for 1-in-N sampling of unresolved-event audit rows (see processEvent). */
+  private unresolvedSeen = 0;
 
   constructor(deps: StreamPipelineDeps) {
     this.d = {
@@ -148,8 +154,14 @@ export class StreamPipeline {
 
     const resolved = await this.d.resolveGame(ev);
     if (resolved === null) {
-      await this.d.writer.writeRawEvents([this.rawRow(ev, null, null, "unresolved", ev.isAlternate)]);
-      this.d.health.onWrite();
+      // SharpAPI streams the WHOLE league; most unresolved events are simply
+      // games NOT on our slate — pure noise at volume (~hundreds/min). Sample
+      // 1-in-N so genuine resolution/alias gaps still surface (a consistently-
+      // failing real team appears regularly) without flooding odds_events_raw.
+      if (this.unresolvedSeen++ % UNRESOLVED_SAMPLE_RATE === 0) {
+        await this.d.writer.writeRawEvents([this.rawRow(ev, null, null, "unresolved", ev.isAlternate)]);
+        this.d.health.onWrite();
+      }
       return;
     }
 
