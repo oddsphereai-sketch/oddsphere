@@ -107,13 +107,12 @@ const MOCK: Record<MarketKey, MarketMock> = {
       pulse: { kind: "bars", leftLabel: "WSH", rightLabel: "KC", money: [77, 23], bets: [80, 20] },
     },
     stats: [
-      { kind: "teams", label: "Starter ERA", kc: "6.19", wsh: "5.32", tag: "WSH better" },
-      { kind: "teams", label: "Bullpen quality", kc: "7% worse than lg avg", wsh: "League average" },
-      { kind: "teams", label: "Lineup vs starter", kc: "League average", wsh: "+4% better" },
-      { kind: "single", label: "Weather adjust", value: "Neutral" },
+      { kind: "teams", label: "Starter ERA", kc: "6.19", wsh: "5.32", tag: "WSH edge" },
+      { kind: "teams", label: "Lineup OPS (wtd)", kc: ".720", wsh: ".745", tag: "WSH edge" },
+      { kind: "teams", label: "Bullpen quality", kc: "3.95", wsh: "4.10", tag: "KC edge" },
     ],
-    why: "Driver: model's win-probability edge vs the market price.",
-    risk: "Risk: late line moves or lineup changes can tighten the edge.",
+    why: "Model's win-probability edge over the market price.",
+    risk: "Late line moves or lineup changes can tighten the edge.",
   },
   total: {
     tab: { label: "Total", pick: "Over 10.5", pct: 57 },
@@ -147,14 +146,12 @@ const MOCK: Record<MarketKey, MarketMock> = {
       pulse: { kind: "bars", leftLabel: "Over", rightLabel: "Under", money: [29, 71], bets: [52, 48] },
     },
     stats: [
-      { kind: "single", label: "Weather adjust", value: "Neutral" },
       { kind: "single", label: "Park factor", value: "Slightly hitter-friendly", tag: "+4% runs" },
-      { kind: "teams", label: "Lineup vs starter", kc: "-2% worse", wsh: "+5% better" },
-      { kind: "teams", label: "Bullpen usage", kc: "3rd game in 5 days", wsh: "Fully rested" },
-      { kind: "single", label: "Scoring environment", value: "Above average", tag: "+6% runs" },
+      { kind: "single", label: "Weather adjust", value: "Neutral", tag: "Even" },
+      { kind: "teams", label: "Lineup vs starter", kc: "-2%", wsh: "+5%", tag: "Supports Over" },
     ],
-    why: "Driver: park and matchup factors push the total up.",
-    risk: "Risk: sharp money and rising line suggest caution.",
+    why: "Park and matchup factors push the total up.",
+    risk: "Sharp money and a rising line warrant caution.",
   },
   first_inning: {
     tab: { label: "1st Inning", pick: "YRFI", pct: 52 },
@@ -188,13 +185,13 @@ const MOCK: Record<MarketKey, MarketMock> = {
       pulse: { kind: "note", text: "Public splits are not offered for first-inning markets — model, price, and projected order are the primary inputs." },
     },
     stats: [
-      { kind: "single", label: "Projected 1st-inn runs", value: "1.06 combined", tag: "Toss-up" },
-      { kind: "teams", label: "Starter 1st-inn ERA", kc: "24.75 (5 starts)", wsh: "1.80 (10 starts)", tag: "WSH better" },
-      { kind: "teams", label: "Starter 1st-inn WHIP", kc: "3.25 (5 starts)", wsh: "0.50 (10 starts)", tag: "WSH better" },
-      { kind: "teams", label: "Top-of-order matchup", kc: "Average", wsh: "Above average", tag: "WSH advantage" },
+      { kind: "single", label: "Proj. 1st-inn runs", value: "1.06 combined", tag: "Toss-up" },
+      { kind: "teams", label: "Starter 1st-inn ERA", kc: "24.75", wsh: "1.80", tag: "WSH edge" },
+      { kind: "teams", label: "Starter 1st-inn WHIP", kc: "3.25", wsh: "0.50", tag: "WSH edge" },
+      { kind: "teams", label: "Top-of-order OPS", kc: ".710", wsh: ".780", tag: "WSH edge" },
     ],
-    why: "Driver: stronger top-of-order and better first-inning arms.",
-    risk: "Risk: lineup not yet confirmed — model used projected order.",
+    why: "Stronger top-of-order and better first-inning arms.",
+    risk: "Lineup unconfirmed — model used the projected order.",
   },
 };
 
@@ -525,7 +522,16 @@ function StatLine({ s }: { s: Stat }) {
           <p className="text-[11.5px] font-semibold text-gray-200 text-right">{s.value}</p>
         )}
       </div>
-      {s.tag && <span className="text-[10px] font-bold text-emerald-300 shrink-0 w-20 text-right leading-tight pt-0.5">{s.tag}</span>}
+      {s.tag && (
+        <span
+          className={
+            "text-[10px] font-bold shrink-0 w-20 text-right leading-tight pt-0.5 " +
+            (/toss-?up|even|neutral/i.test(s.tag) ? "text-gray-500" : "text-emerald-300")
+          }
+        >
+          {s.tag}
+        </span>
+      )}
     </div>
   );
 }
