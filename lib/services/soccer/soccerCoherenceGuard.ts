@@ -67,6 +67,39 @@ export function jointProbabilityOfPicks(joint: ScoreDistribution, picks: CrossMa
   return p;
 }
 
+/**
+ * The most-likely COHERENT set of sides — the (match_result, total, BTTS)
+ * combination carrying the most joint probability, i.e. the model's single best
+ * prediction of how the match actually plays out. Every returned side can
+ * coexist by construction, so using it as the published picks guarantees a
+ * logical set (e.g. it resolves "win + Under 2.5 + BTTS-yes" to whichever of
+ * win+Under+No / draw+Under+Yes / win+Over+Yes the distribution most supports).
+ * No market is dropped — one or more marginal picks simply shift to the most
+ * probable side that's consistent with the others.
+ */
+export function mostLikelyCoherentCombo(
+  joint: ScoreDistribution,
+  totalLine: number,
+): { matchSide: MatchSide; totalSide: TotalSide; bttsSide: BttsSide } {
+  const matchSides: MatchSide[] = ["home", "draw", "away"];
+  const totalSides: TotalSide[] = ["over", "under"];
+  const bttsSides: BttsSide[] = ["yes", "no"];
+  let best = { matchSide: "home" as MatchSide, totalSide: "over" as TotalSide, bttsSide: "yes" as BttsSide };
+  let bestP = -1;
+  for (const m of matchSides) {
+    for (const t of totalSides) {
+      for (const b of bttsSides) {
+        const pr = jointProbabilityOfPicks(joint, { matchSide: m, totalSide: t, totalLine, bttsSide: b });
+        if (pr > bestP) {
+          bestP = pr;
+          best = { matchSide: m, totalSide: t, bttsSide: b };
+        }
+      }
+    }
+  }
+  return best;
+}
+
 export interface CoherenceVerdict {
   coherent: boolean;
   jointProb: number;

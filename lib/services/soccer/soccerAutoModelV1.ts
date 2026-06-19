@@ -26,7 +26,7 @@ import { EXTERNAL_PRIORS_V1 } from "./_externalPriorsV1";
 import { computeLambda, bivariatePoissonScoreDistribution, expectedTotalFromDistribution, medianTotalFromDistribution, mostLikelyTotalFromDistribution } from "./dixonColes";
 import { deriveSoccerMarketProbabilities, type SoccerMarketProbabilities } from "./soccerMarketProbabilities";
 import { regressBttsYesTowardBaseRate } from "./bttsSide";
-import { assessCrossMarketCoherence, type MatchSide, type TotalSide, type BttsSide } from "./soccerCoherenceGuard";
+import { assessCrossMarketCoherence, mostLikelyCoherentCombo, type MatchSide, type TotalSide, type BttsSide } from "./soccerCoherenceGuard";
 import { buildMarketProbabilityBundle, computeEdges, selectBestValueSidePerMarket, type EdgeRow } from "./soccerMarketComparison";
 import { deriveMarketImpliedLambdas } from "./marketImpliedLambda";
 import { deriveSoccerGrade, type SoccerGradeDecision } from "./soccerConfidenceGrade";
@@ -385,44 +385,47 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
     valueSideByMarket.set(row.market, row);
   }
 
-  // ─── Cross-market coherence guard (2026-06-19) ────────────────────────
+  // ─── Cross-market coherence correction (2026-06-19) ───────────────────
   // The model picks each market's side from its own marginal. Read together,
   // those marginal favorites can describe an impossible scoreline — e.g.
   // "Team to win + Under 2.5 + BTTS Yes" forces 1-1 (a draw), so the win pick
-  // can't coexist. We measure it against the joint score distribution: when the
-  // match_result / total / BTTS picks share too little probability mass to be
-  // mutually satisfiable, the fixture is incoherent.
+  // can't coexist. When that happens we don't flag or drop a pick — we ALIGN the
+  // picks to the model's most-likely COHERENT outcome (the highest-probability
+  // combination of sides that can actually happen together). Every market keeps
+  // a pick; one or more shift to the most probable side consistent with the
+  // others, so the published set is always logical. Coherent fixtures (the norm)
+  // are untouched.
   const fixtureCoherence = assessCrossMarketCoherence(joint, {
     matchSide: (argmaxPickByMarket.get("match_result")?.selection ?? null) as MatchSide | null,
     totalSide: (argmaxPickByMarket.get("total")?.selection ?? null) as TotalSide | null,
     totalLine,
     bttsSide: (argmaxPickByMarket.get("btts")?.selection ?? null) as BttsSide | null,
   });
-
-  // CORRECT incoherence instead of flagging it: drop the single LEAST-confident
-  // contradicting market (smallest margin between its picked side and the next),
-  // so the remaining picks describe a consistent scoreline. Removing any one of
-  // the trio always restores coherence (only the full three can be impossible).
-  // We don't force a side (e.g. flip to draw) — that could be wrong; we just
-  // don't publish the pick we're least sure of.
-  let coherenceHoldMarket: "match_result" | "total" | "btts" | null = null;
-  if (!fixtureCoherence.coherent) {
-    const mr = marketProbs.match_result;
-    const mrSorted = [mr.home, mr.draw, mr.away].sort((a, b) => b - a);
-    const margin: Record<"match_result" | "total" | "btts", number> = {
-      match_result: mrSorted[0] - mrSorted[1],
-      total: Math.abs(marketProbs.total.over - marketProbs.total.under),
-      btts: Math.abs(marketProbs.btts.yes - marketProbs.btts.no),
-    };
-    coherenceHoldMarket = (["match_result", "total", "btts"] as const).reduce((lo, m) =>
-      margin[m] < margin[lo] ? m : lo,
-    );
-  }
+  const coherentCombo = fixtureCoherence.coherent ? null : mostLikelyCoherentCombo(joint, totalLine);
+  /** Force a market's side to the coherent-combo side when correcting. */
+  const coherentSideFor = (m: string): string | null => {
+    if (coherentCombo === null) return null;
+    if (m === "match_result") return coherentCombo.matchSide;
+    if (m === "total") return coherentCombo.totalSide;
+    if (m === "btts") return coherentCombo.bttsSide;
+    return null;
+  };
 
   const perMarket: SoccerFixtureModelOutput["perMarket"] = [];
   for (const market of ["match_result", "double_chance", "total", "btts"] as const) {
-    const best = argmaxPickByMarket.get(market);
+    let best = argmaxPickByMarket.get(market);
     if (best === undefined) continue;
+
+    // Coherence correction: on an incoherent fixture, force this market's pick
+    // to the most-likely-coherent side so the published set is logical. Grade +
+    // display follow `best`, so overriding it here propagates everywhere. The
+    // per-market totals/match_result reconciliation is skipped for corrected
+    // fixtures (gated below) so it can't re-flip the coherent side.
+    const coherentSide = coherentSideFor(market);
+    if (coherentSide !== null && coherentSide !== best.selection) {
+      const coherentRow = edges.find((e) => e.market === market && e.selection === coherentSide);
+      if (coherentRow !== undefined) best = coherentRow;
+    }
 
     const edge_pp = best.edge_pp;
     const isFarFromMarket = edge_pp !== null && Math.abs(edge_pp) > EXTERNAL_PRIORS_V1.edge_thresholds.far_from_market_hard_hold;
@@ -475,16 +478,7 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
       value_side: valueSide,
       mean_direction_side: meanDirectionSide,
     } as const;
-    let hold = deriveHold(holdCtx);
-    // Coherence correction: hold the least-confident contradicting market so the
-    // fixture's published picks are mutually consistent (no nonsensical set).
-    if (coherenceHoldMarket !== null && market === coherenceHoldMarket && hold.hold === false) {
-      hold = {
-        hold: true,
-        code: "CROSS_MARKET_INCOHERENCE",
-        reason: `Held to keep the fixture's picks coherent — ${fixtureCoherence.reason}.`,
-      };
-    }
+    const hold = deriveHold(holdCtx);
     // Pass 2: soft caps from hold-logic clamp the grade ladder. They
     // only fire on the non-hold branch and never elevate a grade.
     const softCapsFromHold = hold.hold === false ? hold.soft_caps ?? [] : [];
@@ -509,7 +503,7 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
     let bestForGrading = best;
     let edgePpForGrading = edge_pp;
     let softCapsCombined = softCapsFromHold;
-    if (market === "total") {
+    if (market === "total" && coherentCombo === null) {
       const overRow = edges.find((e) => e.market === "total" && e.selection === "over");
       const underRow = edges.find((e) => e.market === "total" && e.selection === "under");
       // Dixon-Coles raw P(over) at canonical line — pulled from the
@@ -582,7 +576,7 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
     // soccerMatchResultProjectionReconciliation.ts. This is what finally
     // lets the model "call a draw" on an even group-stage projection.
     let matchResultReconciliation: SoccerMatchResultReconciliation | null = null;
-    if (market === "match_result") {
+    if (market === "match_result" && coherentCombo === null) {
       // drawPickable = group stage. Mirror the seeder's stage mapping
       // (deriveSeasonType): null or "group…" → group → draws callable;
       // any knockout stage name → no bare draw pick.

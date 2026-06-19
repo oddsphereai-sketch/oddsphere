@@ -5,6 +5,7 @@
 import {
   jointProbabilityOfPicks,
   assessCrossMarketCoherence,
+  mostLikelyCoherentCombo,
   COHERENCE_MIN_JOINT_PROB,
   type CrossMarketPicks,
 } from "../lib/services/soccer/soccerCoherenceGuard";
@@ -61,6 +62,17 @@ check("zero picks → coherent", assessCrossMarketCoherence(J, p({})).coherent =
   // Under 2.5 + BTTS-yes alone is satisfiable (1-1), so coherent on its own...
   const ok = assessCrossMarketCoherence(J, p({ totalSide: "under", totalLine: 2.5, bttsSide: "yes" }));
   check("Under 2.5 + BTTS-yes (→1-1) coherent as a pair", ok.coherent === true && near(ok.jointProb, 0.25));
+}
+
+// ── Most-likely coherent combo (the correction target) ──
+{
+  // Highest-mass coherent combo in J is 1-1 → draw + Under + BTTS-yes (.25).
+  const combo = mostLikelyCoherentCombo(J, 2.5);
+  check("combo = most-probable coherent set (draw/under/yes for J)",
+    combo.matchSide === "draw" && combo.totalSide === "under" && combo.bttsSide === "yes");
+  // The returned combo is always coherent (never the contradiction).
+  const v = assessCrossMarketCoherence(J, { matchSide: combo.matchSide, totalSide: combo.totalSide, totalLine: 2.5, bttsSide: combo.bttsSide });
+  check("combo is itself coherent", v.coherent === true);
 }
 
 // ── Threshold sanity ──
