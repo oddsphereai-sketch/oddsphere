@@ -532,8 +532,13 @@ export async function computeTrackingAggregate(opts: {
     result.thisWeek.daily = buildDailyTrend(weekRows, weekFrom, today);
   }
 
-  // This-month slice (trailing 30 days ending on `today`)
-  const monthFrom = shiftDate(today, -29);
+  // This-month slice. Floored at LAUNCH (2026-06-07): "Monthly" starts at launch
+  // and grows day-by-day until the trailing-30-day window naturally catches up
+  // (~30 days post-launch). Never extend the window before launch — there's no
+  // data there and the label would be misleading.
+  const TRACKING_LAUNCH_DATE = "2026-06-07";
+  const trailing30From = shiftDate(today, -29);
+  const monthFrom = trailing30From > TRACKING_LAUNCH_DATE ? trailing30From : TRACKING_LAUNCH_DATE;
   const monthRows = rows.filter((r) => r.record.slate_date >= monthFrom && r.record.slate_date <= today);
   result.thisMonth.from = monthFrom;
   result.thisMonth.to = today;
