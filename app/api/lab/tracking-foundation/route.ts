@@ -89,6 +89,7 @@ export async function GET(request: Request) {
       leans: result.leans,
       yesterday: result.yesterday,
       thisWeek: result.thisWeek,
+      thisMonth: result.thisMonth,
       dailyTrend: result.dailyTrend,
       recentPicks: result.recentPicks,
       recentlySettled: result.recentlySettled,
