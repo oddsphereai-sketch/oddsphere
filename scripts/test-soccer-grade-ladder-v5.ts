@@ -158,9 +158,12 @@ ok("MR -11.0pp, model_p 0.45 (model does NOT favor pick) → Caution", grade("ma
 import { readFileSync } from "node:fs";
 const shellSrc = readFileSync("app/lab/components/daily-edge/DailyEdgeShell.tsx", "utf8");
 ok("shell defines SoccerGradeContext component", shellSrc.includes("function SoccerGradeContext("));
+// 2026-06-17 de-dup: the grade block is now an honesty NOTE only (calibration
+// label + reason + miscalibration flag). model/market/edge moved to the Model
+// Edge block so the numbers aren't shown twice.
 ok(
-  "shell grade block renders calibration_label + grade_reason + model/market/edge",
-  ["calibration_label", "grade_reason", "model_pct", "market_pct", "edge_pp"].every((f) => shellSrc.includes(`ctx.${f}`)),
+  "shell grade block renders calibration_label + grade_reason + miscalibration flag",
+  ["calibration_label", "grade_reason", "miscalibration_flag"].every((f) => shellSrc.includes(`ctx.${f}`)),
 );
 ok("shell renders SoccerGradeContext in soccer market branches", (shellSrc.match(/<SoccerGradeContext ctx=\{gradeCtx\}/g) ?? []).length >= 3);
 const adapterSrc = readFileSync("lib/services/soccer/buildSoccerDailyEdgeAdapted.ts", "utf8");

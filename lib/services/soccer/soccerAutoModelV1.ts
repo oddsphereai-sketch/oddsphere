@@ -26,6 +26,7 @@ import { EXTERNAL_PRIORS_V1 } from "./_externalPriorsV1";
 import { computeLambda, bivariatePoissonScoreDistribution, expectedTotalFromDistribution, medianTotalFromDistribution, mostLikelyTotalFromDistribution } from "./dixonColes";
 import { deriveSoccerMarketProbabilities, type SoccerMarketProbabilities } from "./soccerMarketProbabilities";
 import { regressBttsYesTowardBaseRate } from "./bttsSide";
+import { assessCrossMarketCoherence, type MatchSide, type TotalSide, type BttsSide } from "./soccerCoherenceGuard";
 import { buildMarketProbabilityBundle, computeEdges, selectBestValueSidePerMarket, type EdgeRow } from "./soccerMarketComparison";
 import { deriveMarketImpliedLambdas } from "./marketImpliedLambda";
 import { deriveSoccerGrade, type SoccerGradeDecision } from "./soccerConfidenceGrade";
@@ -384,6 +385,21 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
     valueSideByMarket.set(row.market, row);
   }
 
+  // ─── Cross-market coherence guard (2026-06-19) ────────────────────────
+  // The model picks each market's side from its own marginal. Read together,
+  // those marginal favorites can describe an impossible scoreline — e.g.
+  // "Team to win + Under 2.5 + BTTS Yes" forces 1-1 (a draw), so the win pick
+  // can't coexist. We measure it against the joint score distribution: when the
+  // match_result / total / BTTS picks share too little probability mass to be
+  // mutually satisfiable, the fixture is flagged incoherent and those markets
+  // are soft-capped to Caution below (never published as a confident play).
+  const fixtureCoherence = assessCrossMarketCoherence(joint, {
+    matchSide: (argmaxPickByMarket.get("match_result")?.selection ?? null) as MatchSide | null,
+    totalSide: (argmaxPickByMarket.get("total")?.selection ?? null) as TotalSide | null,
+    totalLine,
+    bttsSide: (argmaxPickByMarket.get("btts")?.selection ?? null) as BttsSide | null,
+  });
+
   const perMarket: SoccerFixtureModelOutput["perMarket"] = [];
   for (const market of ["match_result", "double_chance", "total", "btts"] as const) {
     const best = argmaxPickByMarket.get(market);
@@ -608,6 +624,20 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
     const lineMovePp = curDevig !== null && openDevig !== null ? (curDevig - openDevig) * 100 : null;
     const marketMovingAgainst =
       lineMovePp !== null && lineMovePp <= -EXTERNAL_PRIORS_V1.hold_thresholds.line_move_against_pp;
+    // Cross-market coherence soft-cap (2026-06-19): if this fixture's marginal
+    // match_result / total / BTTS picks can't coexist on one scoreline, cap
+    // those three markets to Caution so a contradictory set never ships as a
+    // confident play. Double-chance (a hedge) is left alone.
+    if (!fixtureCoherence.coherent && (market === "match_result" || market === "total" || market === "btts")) {
+      softCapsCombined = [
+        ...softCapsCombined,
+        {
+          code: "cross_market_incoherence",
+          cap_at: "Caution",
+          reason: `Cross-market incoherence — ${fixtureCoherence.reason}.`,
+        },
+      ];
+    }
     const grade = deriveSoccerGrade({
       market,
       selection: bestForGrading.selection,
