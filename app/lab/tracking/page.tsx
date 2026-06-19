@@ -126,7 +126,9 @@ const SPORT_LABEL: Record<string, string> = {
 
 const MARKET_LABEL: Record<string, string> = {
   moneyline: "Moneyline",
+  match_result: "Match Result",
   total: "Over / Under",
+  btts: "BTTS",
   first_inning: "First Inning",
   nrfi: "NRFI",
   yrfi: "YRFI",
@@ -135,7 +137,7 @@ const MARKET_LABEL: Record<string, string> = {
 };
 
 const MARKET_SHORT: Record<string, string> = {
-  moneyline: "ML", total: "O/U", first_inning: "FI", nrfi: "NRFI", yrfi: "YRFI", spread: "ATS", double_chance: "DC",
+  moneyline: "ML", match_result: "Match", total: "O/U", btts: "BTTS", first_inning: "FI", nrfi: "NRFI", yrfi: "YRFI", spread: "ATS", double_chance: "DC",
 };
 
 const PLAY_GRADE_LABEL: Record<string, string> = {
@@ -158,7 +160,7 @@ const MODEL_VERSION_LABEL: Record<string, string> = {
 
 // MLB order: ML, O/U, NRFI, YRFI. first_inning rollup goes last.
 const MARKET_ORDER: Record<string, number> = {
-  moneyline: 1, total: 2, nrfi: 3, yrfi: 4, first_inning: 5, spread: 6, double_chance: 7,
+  moneyline: 1, match_result: 1, total: 2, nrfi: 3, yrfi: 4, first_inning: 5, spread: 6, double_chance: 7, btts: 8,
 };
 
 const SPORT_ORDER: Record<string, number> = {
