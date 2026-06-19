@@ -391,14 +391,33 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
   // "Team to win + Under 2.5 + BTTS Yes" forces 1-1 (a draw), so the win pick
   // can't coexist. We measure it against the joint score distribution: when the
   // match_result / total / BTTS picks share too little probability mass to be
-  // mutually satisfiable, the fixture is flagged incoherent and those markets
-  // are soft-capped to Caution below (never published as a confident play).
+  // mutually satisfiable, the fixture is incoherent.
   const fixtureCoherence = assessCrossMarketCoherence(joint, {
     matchSide: (argmaxPickByMarket.get("match_result")?.selection ?? null) as MatchSide | null,
     totalSide: (argmaxPickByMarket.get("total")?.selection ?? null) as TotalSide | null,
     totalLine,
     bttsSide: (argmaxPickByMarket.get("btts")?.selection ?? null) as BttsSide | null,
   });
+
+  // CORRECT incoherence instead of flagging it: drop the single LEAST-confident
+  // contradicting market (smallest margin between its picked side and the next),
+  // so the remaining picks describe a consistent scoreline. Removing any one of
+  // the trio always restores coherence (only the full three can be impossible).
+  // We don't force a side (e.g. flip to draw) — that could be wrong; we just
+  // don't publish the pick we're least sure of.
+  let coherenceHoldMarket: "match_result" | "total" | "btts" | null = null;
+  if (!fixtureCoherence.coherent) {
+    const mr = marketProbs.match_result;
+    const mrSorted = [mr.home, mr.draw, mr.away].sort((a, b) => b - a);
+    const margin: Record<"match_result" | "total" | "btts", number> = {
+      match_result: mrSorted[0] - mrSorted[1],
+      total: Math.abs(marketProbs.total.over - marketProbs.total.under),
+      btts: Math.abs(marketProbs.btts.yes - marketProbs.btts.no),
+    };
+    coherenceHoldMarket = (["match_result", "total", "btts"] as const).reduce((lo, m) =>
+      margin[m] < margin[lo] ? m : lo,
+    );
+  }
 
   const perMarket: SoccerFixtureModelOutput["perMarket"] = [];
   for (const market of ["match_result", "double_chance", "total", "btts"] as const) {
@@ -456,7 +475,16 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
       value_side: valueSide,
       mean_direction_side: meanDirectionSide,
     } as const;
-    const hold = deriveHold(holdCtx);
+    let hold = deriveHold(holdCtx);
+    // Coherence correction: hold the least-confident contradicting market so the
+    // fixture's published picks are mutually consistent (no nonsensical set).
+    if (coherenceHoldMarket !== null && market === coherenceHoldMarket && hold.hold === false) {
+      hold = {
+        hold: true,
+        code: "CROSS_MARKET_INCOHERENCE",
+        reason: `Held to keep the fixture's picks coherent — ${fixtureCoherence.reason}.`,
+      };
+    }
     // Pass 2: soft caps from hold-logic clamp the grade ladder. They
     // only fire on the non-hold branch and never elevate a grade.
     const softCapsFromHold = hold.hold === false ? hold.soft_caps ?? [] : [];
@@ -624,20 +652,6 @@ export function runSoccerAutoModelV1(opts: RunAutoModelOptions): SoccerFixtureMo
     const lineMovePp = curDevig !== null && openDevig !== null ? (curDevig - openDevig) * 100 : null;
     const marketMovingAgainst =
       lineMovePp !== null && lineMovePp <= -EXTERNAL_PRIORS_V1.hold_thresholds.line_move_against_pp;
-    // Cross-market coherence soft-cap (2026-06-19): if this fixture's marginal
-    // match_result / total / BTTS picks can't coexist on one scoreline, cap
-    // those three markets to Caution so a contradictory set never ships as a
-    // confident play. Double-chance (a hedge) is left alone.
-    if (!fixtureCoherence.coherent && (market === "match_result" || market === "total" || market === "btts")) {
-      softCapsCombined = [
-        ...softCapsCombined,
-        {
-          code: "cross_market_incoherence",
-          cap_at: "Caution",
-          reason: `Cross-market incoherence — ${fixtureCoherence.reason}.`,
-        },
-      ];
-    }
     const grade = deriveSoccerGrade({
       market,
       selection: bestForGrading.selection,
