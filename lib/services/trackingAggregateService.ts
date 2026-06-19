@@ -160,6 +160,8 @@ export type TrackingAggregateResult = {
   yesterday: { date: string | null; overall: AggregateMetrics; bySportMarket: SportMarketBucket[] };
   /** Trailing 7-day window ending on `to` (or today). */
   thisWeek: { from: string; to: string; overall: AggregateMetrics; bySportMarket: SportMarketBucket[]; daily: DailyBucket[] };
+  /** Trailing 30-day window ending on `to` (or today). */
+  thisMonth: { from: string; to: string; overall: AggregateMetrics; bySportMarket: SportMarketBucket[] };
   /** Trailing 14-day daily trend for charts. */
   dailyTrend: DailyBucket[];
   /** Last N graded/pending picks (member-safe shape). */
@@ -291,6 +293,7 @@ export async function computeTrackingAggregate(opts: {
     provisionalOnly: emptyMetrics(),
     yesterday: { date: null, overall: emptyMetrics(), bySportMarket: [] },
     thisWeek: { from: "", to: "", overall: emptyMetrics(), bySportMarket: [], daily: [] },
+    thisMonth: { from: "", to: "", overall: emptyMetrics(), bySportMarket: [] },
     dailyTrend: [],
     recentPicks: [],
     recentlySettled: [],
@@ -527,6 +530,17 @@ export async function computeTrackingAggregate(opts: {
     finalize(result.thisWeek.overall, weekRows);
     result.thisWeek.bySportMarket = buildSportMarketBuckets(weekRows);
     result.thisWeek.daily = buildDailyTrend(weekRows, weekFrom, today);
+  }
+
+  // This-month slice (trailing 30 days ending on `today`)
+  const monthFrom = shiftDate(today, -29);
+  const monthRows = rows.filter((r) => r.record.slate_date >= monthFrom && r.record.slate_date <= today);
+  result.thisMonth.from = monthFrom;
+  result.thisMonth.to = today;
+  if (monthRows.length > 0) {
+    for (const r of monthRows) accumulate(result.thisMonth.overall, r);
+    finalize(result.thisMonth.overall, monthRows);
+    result.thisMonth.bySportMarket = buildSportMarketBuckets(monthRows);
   }
 
   // 14-day trailing trend for the chart

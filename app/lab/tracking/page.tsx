@@ -106,6 +106,7 @@ type TrackingResponse = {
   leans?: Metrics;
   yesterday?: { date: string | null; overall: Metrics; bySportMarket: SportMarketBucket[] };
   thisWeek?: { from: string; to: string; overall: Metrics; bySportMarket: SportMarketBucket[] };
+  thisMonth?: { from: string; to: string; overall: Metrics; bySportMarket: SportMarketBucket[] };
   recentPicks?: RecentPickRow[];
   recentlySettled?: RecentlySettledRow[];
   tablesInitialized: boolean;
@@ -369,6 +370,9 @@ export default function LabTrackingPage() {
 
   const yesterdayRows = useMemo(() => visibleBuckets(data?.yesterday?.bySportMarket ?? []), [data]);
   const weekRows      = useMemo(() => visibleBuckets(data?.thisWeek?.bySportMarket ?? []),  [data]);
+  const monthRows     = useMemo(() => visibleBuckets(data?.thisMonth?.bySportMarket ?? []), [data]);
+  // Window tab for the category-tracking section (Weekly / Monthly / Lifetime).
+  const [trackWindow, setTrackWindow] = useState<"weekly" | "monthly" | "lifetime">("weekly");
   // Lifetime Tracking: ONE record per (sport, market). Live automated
   // data takes precedence when decided > 0; otherwise the stored
   // baseline number stands in. Non-MLB sports currently always fall
@@ -421,29 +425,38 @@ export default function LabTrackingPage() {
         <YesterdayBoard date={yest?.date ?? null} rows={yesterdayRows} overall={yest?.overall ?? null} />
       </Section>
 
-      {/* ── 2. THIS WEEK ─────────────────────────────────────────────── */}
+      {/* ── 2. TRACKING BY CATEGORY (Weekly / Monthly / Lifetime) ────── */}
       <Section
-        eyebrow={week !== undefined ? `${fmtShortDate(week.from)} → ${fmtShortDate(week.to)}` : "This week"}
-        title="This week by category"
+        eyebrow={
+          trackWindow === "weekly"
+            ? (week !== undefined ? `${fmtShortDate(week.from)} → ${fmtShortDate(week.to)}` : "This week")
+            : trackWindow === "monthly"
+              ? (data.thisMonth !== undefined ? `${fmtShortDate(data.thisMonth.from)} → ${fmtShortDate(data.thisMonth.to)}` : "Last 30 days")
+              : "All-time"
+        }
+        title="Tracking by category"
       >
-        <Card>
-          <CategoryBars
-            rows={weekRows.map((b) => ({
-              label: `${prettySport(b.sport)} ${prettyMarket(b.market)}`,
-              sublabel: shortMarket(b.market),
-              metrics: b.metrics,
-            }))}
-            emptyBody="Weekly category comparison appears once this week's picks have graded."
-          />
-        </Card>
-      </Section>
-
-      {/* ── 3. LIFETIME TRACKING ─────────────────────────────────────── */}
-      <Section
-        eyebrow="By sport and category"
-        title="Lifetime Tracking"
-      >
-        <LifetimeTrackingBoard records={lifetimeRecords} />
+        <WindowTabs active={trackWindow} onChange={setTrackWindow} />
+        <div className="mt-3.5">
+          {trackWindow === "lifetime" ? (
+            <LifetimeTrackingBoard records={lifetimeRecords} />
+          ) : (
+            <Card>
+              <CategoryBars
+                rows={(trackWindow === "weekly" ? weekRows : monthRows).map((b) => ({
+                  label: `${prettySport(b.sport)} ${prettyMarket(b.market)}`,
+                  sublabel: shortMarket(b.market),
+                  metrics: b.metrics,
+                }))}
+                emptyBody={
+                  trackWindow === "weekly"
+                    ? "Weekly category comparison appears once this week's picks have graded."
+                    : "Monthly category comparison appears once the last 30 days have graded."
+                }
+              />
+            </Card>
+          )}
+        </div>
       </Section>
 
       {/* ── 4. BEST ANGLES ───────────────────────────────────────────── */}
@@ -551,6 +564,43 @@ function Section({ eyebrow, title, children }: { eyebrow?: string; title: string
       </div>
       {children}
     </section>
+  );
+}
+
+function WindowTabs({
+  active,
+  onChange,
+}: {
+  active: "weekly" | "monthly" | "lifetime";
+  onChange: (w: "weekly" | "monthly" | "lifetime") => void;
+}) {
+  const tabs: { key: "weekly" | "monthly" | "lifetime"; label: string }[] = [
+    { key: "weekly", label: "Weekly" },
+    { key: "monthly", label: "Monthly" },
+    { key: "lifetime", label: "Lifetime" },
+  ];
+  return (
+    <div className="inline-flex items-center gap-1 rounded-lg border border-white/[0.06] bg-white/[0.02] p-1">
+      {tabs.map((t) => {
+        const on = t.key === active;
+        return (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => onChange(t.key)}
+            aria-pressed={on}
+            className={
+              "px-3 sm:px-4 py-1.5 rounded-md text-[11px] sm:text-[12px] uppercase tracking-[0.12em] font-bold transition-colors " +
+              (on
+                ? "bg-indigo-500/[0.18] text-indigo-100 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.25)]"
+                : "text-gray-400 hover:text-gray-200")
+            }
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
