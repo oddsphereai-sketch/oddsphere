@@ -24,6 +24,7 @@ import { loadGameIdMap, loadPlayerIdMap } from "./_idMaps";
 import { SharpAPIOddsProvider } from "../providers/real_api/SharpAPIOddsProvider";
 import type { V2DiscoveryReport } from "../providers/real_api/SharpAPIOddsProvider";
 import { flagOpenersInHistoryPayload } from "./_lineHistoryOpenerHelper";
+import { insertLineHistoryResilient, logLineHistoryInsertFailure } from "./lineHistoryWriter";
 
 /**
  * 2026-06-10 phantom-thinning fix — per-(game, market_type, sportsbook)
@@ -475,6 +476,9 @@ export const linesService = {
       linesPayload.push(...g.lineRows);
       historyPayload.push(...g.historyRows);
     }
+    // Surfaced into details so a silent line_history rejection becomes visible.
+    let historyInsertFailed = 0;
+    let historyFirstError: string | null = null;
 
     if (!dryRun && linesPayload.length > 0) {
       // 2026-06-10 phantom-thinning fix — per-(game, market_type, sportsbook)
@@ -501,13 +505,27 @@ export const linesService = {
         const flagged = await flagOpenersInHistoryPayload(
           historyPayload as unknown as Parameters<typeof flagOpenersInHistoryPayload>[0],
         );
-        const { error: histErr } = await supabase
-          .from("line_history")
-          .insert(flagged);
-        if (histErr) {
-          throw new Error(
-            `linesService.refreshGameLinesV2 history insert failed: ${histErr.message}`
+        // 2026-06-22 — resilient insert. Previously a single batched insert
+        // that threw on any rejection: because the `lines` insert above
+        // committed first, one bad row left `lines` populated but
+        // `line_history` empty for the whole slate (silently, as a "partial"
+        // cycle) — the root cause of ~27% CLV/movement coverage. Now: chunk +
+        // row-level isolation so one bad row strands only itself, do NOT throw
+        // (lines + partial history are preserved), and surface the real
+        // rejection to data_refresh_log so the cause stops being invisible.
+        const histResult = await insertLineHistoryResilient(
+          supabase,
+          flagged as unknown as Array<Record<string, unknown>>,
+        );
+        historyInsertFailed = histResult.failed;
+        historyFirstError = histResult.firstError;
+        if (histResult.failed > 0) {
+          console.error(
+            `[linesService.refreshGameLinesV2] line_history: ${histResult.failed}/${histResult.attempted} ` +
+              `rows rejected; firstError=${histResult.firstError}; ` +
+              `sample=${JSON.stringify(histResult.failedSample)}`,
           );
+          await logLineHistoryInsertFailure(supabase, "refreshGameLinesV2", sport, histResult);
         }
       }
     }
@@ -544,6 +562,8 @@ export const linesService = {
         (d) => d.decision === "preserved_call_cap_skip"
       ).length,
       total_history_rows_appended: dryRun ? 0 : totalHistoryRowsWritten,
+      history_insert_failed: historyInsertFailed,
+      history_first_error: historyFirstError,
     };
 
     return {
@@ -885,6 +905,10 @@ export type V2RefreshDetails = {
   preserved_unresolved_count: number;
   preserved_call_cap_count: number;
   total_history_rows_appended: number;
+  /** Count of line_history rows the resilient writer could not persist (0 = healthy). */
+  history_insert_failed: number;
+  /** First Postgres rejection message when history_insert_failed > 0 (else null). */
+  history_first_error: string | null;
 };
 
 /**
