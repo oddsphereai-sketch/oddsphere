@@ -28,6 +28,7 @@ import { classifyEvidence } from "@/lib/services/signalEvidenceClassifier";
 import { generateSignalSummary } from "@/lib/services/signalSummaryGenerator";
 import { resolveMlInversionFlip } from "@/lib/services/mlInversionFlip";
 import { resolveTotalsMeanFlip } from "@/lib/services/totalsMeanFlip";
+import { reconcileDisplayProjection } from "@/lib/services/displayProjectionReconciliation";
 import {
   deriveVerdict,
   VERDICT_LABEL,
@@ -879,6 +880,15 @@ function buildGameDto(
   // pre-lock we only show the final recommendation. No flip vocabulary surfaces.
   let mlFlippedPreLock = false;
   let ouFlippedPreLock = false;
+  // LINE BASIS — the member's bet line, resolved BEFORE the totals flip so the
+  // correction decides the final side against the SAME line the card shows and
+  // tracking grades. selectTotalLine prefers the sportsbook line; manual listed
+  // line is the manual-slate fallback; market_total is the last resort inside
+  // the flip when neither exists. (Re-read below for the display/edge fields;
+  // hoisting here only feeds the flip.)
+  const manualListedLineForFlip =
+    typeof pred.sport_specific?.listed_line === "number" ? pred.sport_specific.listed_line : null;
+  const betLineForFlip: number | null = selectTotalLine(sportsbookTotalLine, manualListedLineForFlip);
   // MLB-only: the flip helpers read MLB-model fields (ml_raw_confidence,
   // posterior_total, total_projection_reconciliation). Explicit sport guard so
   // the flip can never misfire on NBA/NHL/soccer even if a future model
@@ -909,10 +919,19 @@ function buildGameDto(
     }
     const ouLines = currentLinesByGameMarket.get(`${row.id}::total`) ?? [];
     const ouRecon = (sp.total_projection_reconciliation ?? null) as { mean_probability_divergence?: unknown } | null;
+    // Bet-line basis: resolve the correction against the line the member bets
+    // (betLineForFlip) and the displayed projected total (raw score sum), with
+    // market_total / posterior_total only as fallbacks when the bet line or
+    // displayed scores are missing.
+    const betLineForOu = betLineForFlip ?? num(v22.market_total);
+    const scoreSumForOu =
+      typeof pred.predicted_away_score === "number" && typeof pred.predicted_home_score === "number"
+        ? pred.predicted_away_score + pred.predicted_home_score
+        : num(v22.posterior_total);
     const ouFlip = resolveTotalsMeanFlip({
       predictedSide: pred.predicted_ou_side === "over" || pred.predicted_ou_side === "under" ? pred.predicted_ou_side : null,
-      line: num(v22.market_total),
-      projectedTotal: num(v22.posterior_total),
+      line: betLineForOu,
+      projectedTotal: scoreSumForOu,
       modelProb: num(v22.ou_model_prob),
       marketProb: num(v22.ou_market_prob),
       originalConfidence: pred.ou_confidence,
@@ -967,16 +986,31 @@ function buildGameDto(
   // Null is now passed through honestly; the UI renders held markets
   // explicitly.
   const ouSide = pred.predicted_ou_side;
-  const manualListedLine =
-    typeof pred.sport_specific?.listed_line === "number"
-      ? pred.sport_specific.listed_line
-      : null;
-  const totalLine: number | null = selectTotalLine(sportsbookTotalLine, manualListedLine);
+  // Same bet line resolved above for the flip — the line the card displays and
+  // tracking grades against.
+  const totalLine: number | null = betLineForFlip;
   const totalStatus = deriveSharpStatus(pred.ou_grade);
   const totalPick: string | null =
     ouSide === null ? null
       : ouSide === "over" ? "Over"
         : "Under";
+
+  // 2026-06-22 — Display-projection reconciliation. The member-facing projected
+  // scores + total must SUPPORT the final official pick (ML winner + O/U side vs
+  // the displayed line). The raw model projection can disagree — most importantly
+  // for a corrected/flipped pick, where the raw projection favors the side we
+  // flipped away from. This aligns the DISPLAYED projection to the final pick
+  // deterministically (no-op when already coherent); raw stays in
+  // game_predictions. predicted_ml_winner / predicted_ou_side here already
+  // reflect any flip (mutated above for unlocked rows; from the locked record
+  // post-lock). pred.predicted_*_score (raw) is preserved internally.
+  const displayProjection = reconcileDisplayProjection({
+    rawAway: pred.predicted_away_score,
+    rawHome: pred.predicted_home_score,
+    mlPick: pred.predicted_ml_winner === "home" || pred.predicted_ml_winner === "away" ? pred.predicted_ml_winner : null,
+    ouPick: ouSide === "over" || ouSide === "under" ? ouSide : null,
+    line: totalLine,
+  });
 
   // ── NRFI ──
   //
@@ -1190,7 +1224,10 @@ function buildGameDto(
     held: isOuHeld,
     sportSpecific: pred.sport_specific,
     totalsExtras: {
-      modelTotal: pred.predicted_total,
+      // Reconciled projected total — always on the pick's side of the line so the
+      // projected total and the total pick tell one coherent story (raw stays in
+      // game_predictions.predicted_total).
+      modelTotal: displayProjection.total,
       marketTotal: totalLine,
       sportsbookLine: totalLine,
     },
@@ -1369,9 +1406,11 @@ function buildGameDto(
         marketSignal: pred.nrfi_market_signal,
       },
     },
+    // Reconciled projected scores — show the FINAL recommended team winning, with
+    // the total in the same neighborhood. Raw scores stay in game_predictions.
     projected: {
-      away: pred.predicted_away_score ?? 0,
-      home: pred.predicted_home_score ?? 0,
+      away: displayProjection.away,
+      home: displayProjection.home,
     },
     sharpSignals: buildSignalDtos(signals, signalLookup, {
       homeTeamAbbr: home,

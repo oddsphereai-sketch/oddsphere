@@ -51,7 +51,9 @@ function mkPred(over: Record<string, any>, sp: Record<string, any>) {
   return {
     id: 5000, game_id: 700, predicted_ml_winner: "home", ml_confidence: 57, predicted_ou_side: "over", ou_confidence: 56,
     predicted_nrfi: null, nrfi_confidence: 52, prediction_source: "auto_v1", is_override: false,
-    locked_at: "2026-06-22T17:00:00Z", computed_at: "2026-06-22T16:00:00Z", predicted_home_score: 4.2, predicted_away_score: 3.9,
+    // Scores sum to 8.9 (= posterior_total) so the score-sum totals basis agrees
+    // with the OU "over" pick vs line 8.5 → OU non-divergent, untouched by the ML flip.
+    locked_at: "2026-06-22T17:00:00Z", computed_at: "2026-06-22T16:00:00Z", predicted_home_score: 4.6, predicted_away_score: 4.3,
     ml_grade: "market_watch", ou_grade: "market_watch", nrfi_grade: null, ml_signal_type: null, ou_signal_type: null,
     nrfi_signal_type: null, ml_market_signal: null, ou_market_signal: null, nrfi_market_signal: null,
     sport_specific: {

@@ -1179,10 +1179,27 @@ function buildOuRecord(
   const ouReconciliation = (sp.total_projection_reconciliation ?? null) as
     | { mean_probability_divergence?: unknown }
     | null;
+  // 2026-06-22 — LINE BASIS: the totals correction, line_value, and tracking
+  // resolve against the line the user actually BETS (the sportsbook total line
+  // from oddsForGame), falling back to the model's market_total only when the
+  // bet line is unavailable. Keeps the final side/line/tracking aligned to what
+  // members see.
+  const ouBetLine: number | null =
+    (oddsForGame?.oddsSourceOu?.over?.line ?? null) ??
+    (oddsForGame?.oddsSourceOu?.under?.line ?? null) ??
+    lockedTotalLine;
+  // The final O/U side resolves against the SAME projected total members see —
+  // the displayed score sum (predicted_*_score) — not a separate internal total.
+  const ouScoreSum: number | null =
+    typeof pred.predicted_away_score === "number" && typeof pred.predicted_home_score === "number"
+      ? pred.predicted_away_score + pred.predicted_home_score
+      : typeof v22.posterior_total === "number"
+        ? (v22.posterior_total as number)
+        : null;
   const ouFlip = resolveTotalsMeanFlip({
     predictedSide: pred.predicted_ou_side === "over" || pred.predicted_ou_side === "under" ? pred.predicted_ou_side : null,
-    line: lockedTotalLine,
-    projectedTotal: typeof v22.posterior_total === "number" ? (v22.posterior_total as number) : null,
+    line: ouBetLine,
+    projectedTotal: ouScoreSum,
     modelProb: ouModelProb,
     marketProb: ouMarketProb,
     originalConfidence: pred.ou_confidence,
@@ -1215,7 +1232,8 @@ function buildOuRecord(
     market: "total",
     pick: finalOuPick,
     side: finalOuPick,
-    line_value: lockedTotalLine,
+    // LINE BASIS — track against the line the member actually bets.
+    line_value: ouBetLine,
     odds_american: finalOuOdds,
     odds_decimal: null,
     model_used: readStringOrNull(sp.model_used),
@@ -1232,7 +1250,7 @@ function buildOuRecord(
       ? null
       : applyPlayGradeGate(readPublicPlayGrade(sp.ou_play_grade), {
           modelProb: ouModelProb, americanOdds: ouOddsAmerican, market: "total",
-          runGapAbs: null, totalLine: lockedTotalLine,
+          runGapAbs: null, totalLine: ouBetLine,
         }),
     prediction_type: readStringOrNull(sp.ou_prediction_type),
     // Phase 6B.11 + MLB-P0 — same resolution as ML; see resolveMlbBestAngle.
@@ -1308,8 +1326,13 @@ function buildOuRecord(
             original_confidence: pred.ou_confidence,
             original_model_prob: ouModelProb,
             original_odds: ouOddsAmerican,
-            projected_total: typeof v22.posterior_total === "number" ? (v22.posterior_total as number) : null,
-            line: lockedTotalLine,
+            // Bet-line basis: projected_total is the displayed score sum and
+            // `line` is the member's bet line — the pair the flip resolved on.
+            // market_total preserved alongside for audit when they differ.
+            projected_total: ouScoreSum,
+            line: ouBetLine,
+            market_total_internal: typeof v22.market_total === "number" ? (v22.market_total as number) : null,
+            posterior_total_internal: typeof v22.posterior_total === "number" ? (v22.posterior_total as number) : null,
             mean_side: ouFlip.meanSide,
             mean_gap: ouFlip.meanGap,
             flipped_pick: finalOuPick,

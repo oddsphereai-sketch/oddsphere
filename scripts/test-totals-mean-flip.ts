@@ -40,7 +40,7 @@ check("no projected total and NOT reconciliation-divergent → none", resolveTot
 // ── integration ────────────────────────────────────────────────────
 const baseGame = { id: 800, external_id: 9100, game_date: "2026-06-22T18:00:00Z", slate_status: "published", home_team_id: 771, away_team_id: 780 };
 const abbrevByTeamId = new Map<number, string>([[771, "CHC"], [780, "SF"]]);
-const oddsSrc = (odds: number | null) => ({ source: "lines" as const, book: "pinnacle", odds, line: null, observedAt: "2026-06-22T16:00:00Z" });
+const oddsSrc = (odds: number | null, line: number | null = null) => ({ source: "lines" as const, book: "pinnacle", odds, line, observedAt: "2026-06-22T16:00:00Z" });
 function oddsSnap(over: number | null, under: number | null) {
   return { mlHomeOdds: -130, mlAwayOdds: 115, ouOverOdds: over, ouUnderOdds: under, oddsSourceMl: { home: oddsSrc(-130), away: oddsSrc(115) }, oddsSourceOu: { over: oddsSrc(over), under: oddsSrc(under) } };
 }
@@ -88,14 +88,20 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   check("ML record unaffected by totals flip", recs.find((r) => r.market === "moneyline")?.pick === "home");
 }
 {
-  // gap < 0.3 → stand down (no_bet=true), pick stays under.
-  const recs = build(mkPred({}, { posterior_total: 8.6 }), oddsSnap(-105, -115));
+  // gap < 0.3 → stand down (no_bet=true), pick stays under. Score sum 8.6 vs
+  // bet line 8.5 ⇒ divergent (mean over, pick under) but gap 0.1 < 0.3.
+  const pred = mkPred({}, {});
+  pred.predicted_away_score = 4.3; pred.predicted_home_score = 4.3; // sum 8.6
+  const recs = build(pred, oddsSnap(-105, -115));
   const ou = recs.find((r) => r.market === "total");
   check("gap<0.3 → No Play (no_bet=true), pick stays under", ou?.no_bet === true && ou?.pick === "under" && (ou?.snapshot_json as any)?.ou_flip == null);
 }
 {
-  // line>=10 → stand down.
-  const recs = build(mkPred({}, { market_total: 10, posterior_total: 10.6 }), oddsSnap(-105, -115));
+  // line>=10 → stand down. Score sum 10.6 vs bet line 10 ⇒ divergent (mean over,
+  // pick under) but line at the cap.
+  const pred = mkPred({}, { market_total: 10 });
+  pred.predicted_away_score = 5.3; pred.predicted_home_score = 5.3; // sum 10.6
+  const recs = build(pred, oddsSnap(-105, -115));
   const ou = recs.find((r) => r.market === "total");
   check("line>=10 → No Play (no flip)", ou?.no_bet === true && (ou?.snapshot_json as any)?.ou_flip == null);
 }
@@ -113,6 +119,21 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const recs2 = build(pred, oddsSnap(-105, -115));
   const ou = recs2.find((r) => r.market === "total");
   check("non-divergent total unchanged (no flip, no no_bet)", ou?.pick === "over" && ou?.no_bet === false && (ou?.snapshot_json as any)?.ou_flip == null);
+}
+{
+  // LINE BASIS: the bet line (oddsSourceOu.over/under.line) differs from the
+  // model's market_total. The correction + line_value must resolve against the
+  // BET line the member sees, not market_total. Score sum 8.9; book line 9.0 ⇒
+  // mean 8.9 < 9.0 ⇒ mean side UNDER == pick under ⇒ NON-divergent ⇒ no flip,
+  // a real Under pick tracked at 9.0. (Against market_total 8.5 it would have
+  // diverged and flipped to over — proving the basis actually changed the side.)
+  const odds = oddsSnap(-105, -115);
+  odds.oddsSourceOu = { over: oddsSrc(-105, 9.0), under: oddsSrc(-115, 9.0) };
+  const recs = build(mkPred({}, {}), odds);
+  const ou = recs.find((r) => r.market === "total");
+  check("bet-line basis: resolves vs book line 9.0 (not market_total 8.5) → no flip, pick under",
+    ou?.pick === "under" && (ou?.snapshot_json as any)?.ou_flip == null);
+  check("bet-line basis: line_value tracks the bet line 9.0", ou?.line_value === 9.0);
 }
 {
   // Determinism: build twice → identical flipped side (locked snapshot freezes).
