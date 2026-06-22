@@ -22,6 +22,7 @@ import type {
   TrackedMarketV17,
 } from "../types/domain/Tracking";
 import { isBlockedSportsbook } from "../config/blockedSportsbooks";
+import { resolveMlInversionFlip, ML_INVERSION_RULE_ID } from "./mlInversionFlip";
 
 export type CreateRecordsOptions = {
   sport: TrackedSport;
@@ -957,6 +958,30 @@ function buildMlRecord(
     lineDirection: readLineDirection(mlLineMovement),
     opposingPublicMoney: hasOpposingPublicMoneyConflict(signalsForGame, "moneyline", pred.predicted_ml_winner),
   });
+  // 2026-06-22 — ML inverted low-conviction market-divergent flip. For the
+  // proven inverted cohort (final conf 55-60 ∧ raw<60 ∧ market-divergent) the
+  // model is reliably wrong; we flip the OFFICIAL/tracked recommendation to the
+  // opposite ML side at the real opposite-book price (never fabricated). The
+  // model's own opinion (pred.predicted_ml_winner) is preserved in audit; only
+  // the prediction_records pick flips. See resolveMlInversionFlip + snapshot.ml_flip.
+  const mlAf = (sp.auto_factors ?? {}) as Record<string, unknown>;
+  const mlFlip = resolveMlInversionFlip({
+    predictedSide: pred.predicted_ml_winner === "home" || pred.predicted_ml_winner === "away" ? pred.predicted_ml_winner : null,
+    confidence: pred.ml_confidence,
+    rawConfidence: typeof mlAf.ml_raw_confidence === "number" ? (mlAf.ml_raw_confidence as number) : null,
+    marketAligned: readBoolish(sp.ml_market_aligned),
+    modelProb: mlModelProb,
+    marketProb: mlMarketProb,
+    homeOdds: oddsForGame?.mlHomeOdds ?? null,
+    awayOdds: oddsForGame?.mlAwayOdds ?? null,
+  });
+  const mlFlipped = mlFlip.flipped === true;
+  const finalMlPick = mlFlipped ? mlFlip.flippedSide : pred.predicted_ml_winner;
+  const finalMlOdds = mlFlipped ? mlFlip.flippedOdds : mlOddsAmerican;
+  const finalMlModelProb = mlFlipped ? mlFlip.flippedModelProb : mlModelProb;
+  const finalMlMarketProb = mlFlipped ? mlFlip.flippedMarketProb : mlMarketProb;
+  const finalMlEdge = mlFlipped ? mlFlip.flippedEdgePp : mlEdgePp;
+  const finalMlConfidence = mlFlipped ? mlFlip.flippedConfidence : pred.ml_confidence;
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -966,31 +991,36 @@ function buildMlRecord(
     game_date: game.game_date,
     matchup: `${awayAbbrev}@${homeAbbrev}`,
     market: "moneyline",
-    pick: pred.predicted_ml_winner,
-    side: pred.predicted_ml_winner,
+    pick: finalMlPick,
+    side: finalMlPick,
     line_value: null,
-    odds_american: mlOddsAmerican,
+    odds_american: finalMlOdds,
     odds_decimal: null,
     model_used: readStringOrNull(sp.model_used),
     model_version: readStringOrNull(sp.model_version),
     prediction_source: pred.prediction_source,
-    confidence: pred.ml_confidence,
-    model_probability: mlModelProb,
-    market_probability: mlMarketProb,
-    edge: mlEdgePp,
+    confidence: finalMlConfidence,
+    model_probability: finalMlModelProb,
+    market_probability: finalMlMarketProb,
+    edge: finalMlEdge,
     expected_value: null,
     // Phase 6B.27 — strip internal V2.2 diagnostic labels (no_bet/held/
     // toss_up) from the public column; raw stays in snapshot.v2_2_audit.
-    play_grade: applyPlayGradeGate(readPublicPlayGrade(sp.ml_play_grade), {
-      modelProb: mlModelProb, americanOdds: mlOddsAmerican, market: "moneyline",
-      runGapAbs: typeof v22.posterior_home_diff === "number" ? Math.abs(v22.posterior_home_diff as number) : null,
-      totalLine: null,
-    }),
+    // Flipped rows carry no model grade (the override is not a model call);
+    // best_angle is forced false below.
+    play_grade: mlFlipped
+      ? null
+      : applyPlayGradeGate(readPublicPlayGrade(sp.ml_play_grade), {
+          modelProb: mlModelProb, americanOdds: mlOddsAmerican, market: "moneyline",
+          runGapAbs: typeof v22.posterior_home_diff === "number" ? Math.abs(v22.posterior_home_diff as number) : null,
+          totalLine: null,
+        }),
     prediction_type: readStringOrNull(sp.ml_prediction_type),
     // Phase 6B.11 + MLB-P0 — public-money guard PLUS line-movement /
     // large-edge confirmation (see resolveMlbBestAngle). Tracking pending
-    // BA count matches what members see on the live slate.
-    best_angle: mlBest.bestAngle,
+    // BA count matches what members see on the live slate. Flipped rows are
+    // never Best Angle (an inversion override is not a model Best Angle).
+    best_angle: mlFlipped ? false : mlBest.bestAngle,
     no_bet: false,
     no_bet_reason: readStringOrNull(sp.ml_no_bet_reason),
     market_aligned: readBoolish(sp.ml_market_aligned),
@@ -1028,6 +1058,27 @@ function buildMlRecord(
       // the source is "unavailable" with null book/odds/timestamp.
       odds_source_at_lock_ml: oddsForGame
         ? { home: oddsForGame.oddsSourceMl.home, away: oddsForGame.oddsSourceMl.away }
+        : null,
+      // 2026-06-22 — ML inversion flip audit. Present only when the flip fired;
+      // preserves the original model recommendation so the override is fully
+      // reversible and explainable. The model's raw opinion also remains in
+      // game_predictions.predicted_ml_winner (untouched).
+      ml_flip: mlFlipped
+        ? {
+            flipped: true,
+            rule_id: ML_INVERSION_RULE_ID,
+            original_side: pred.predicted_ml_winner,
+            original_pick: pred.predicted_ml_winner,
+            original_confidence: pred.ml_confidence,
+            original_raw_confidence:
+              typeof mlAf.ml_raw_confidence === "number" ? (mlAf.ml_raw_confidence as number) : null,
+            original_market_aligned: readBoolish(sp.ml_market_aligned),
+            original_odds: mlOddsAmerican,
+            flipped_side: finalMlPick,
+            flipped_pick: finalMlPick,
+            flipped_odds: finalMlOdds,
+            reason: "low-conviction market-divergent ML inversion",
+          }
         : null,
     },
   };
