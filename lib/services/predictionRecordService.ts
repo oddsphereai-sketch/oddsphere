@@ -23,6 +23,7 @@ import type {
 } from "../types/domain/Tracking";
 import { isBlockedSportsbook } from "../config/blockedSportsbooks";
 import { resolveMlInversionFlip, ML_INVERSION_RULE_ID } from "./mlInversionFlip";
+import { resolveTotalsMeanFlip, TOTALS_MEAN_FLIP_RULE_ID } from "./totalsMeanFlip";
 
 export type CreateRecordsOptions = {
   sport: TrackedSport;
@@ -1160,14 +1161,37 @@ function buildOuRecord(
   // no_bet (not held) is used deliberately so the row still WRITES and GRADES
   // internally per the tracking-completeness contract; it is only excluded from
   // the public W/L surface at read time.
+  // 2026-06-22 — Totals divergence handling. The divergent cohort (probability
+  // pick opposite the projected-mean side) is upgraded from Patch-1 No Play to a
+  // CONSERVATIVE mean-side FLIP when material (gap>=0.3, line<10, valid mean-side
+  // price). Backtest: flip-to-mean 54.6%/+13.4u beats no-play +1.6u. Non-eligible
+  // divergent rows keep Patch-1 no_bet stand-down. Side-selection reconciliation
+  // only — the projected total and probability model are untouched. The model's
+  // original probability side is preserved in snapshot.ou_flip.
   const ouReconciliation = (sp.total_projection_reconciliation ?? null) as
     | { mean_probability_divergence?: unknown }
     | null;
-  const ouDivergenceStandDown =
-    ouReconciliation !== null && ouReconciliation.mean_probability_divergence === true;
+  const ouFlip = resolveTotalsMeanFlip({
+    predictedSide: pred.predicted_ou_side === "over" || pred.predicted_ou_side === "under" ? pred.predicted_ou_side : null,
+    line: lockedTotalLine,
+    projectedTotal: typeof v22.posterior_total === "number" ? (v22.posterior_total as number) : null,
+    modelProb: ouModelProb,
+    marketProb: ouMarketProb,
+    overOdds: oddsForGame?.ouOverOdds ?? null,
+    underOdds: oddsForGame?.ouUnderOdds ?? null,
+    reconciliationDivergence: ouReconciliation !== null && ouReconciliation.mean_probability_divergence === true,
+  });
+  const ouFlipped = ouFlip.action === "flip";
+  const ouDivergenceStandDown = ouFlip.action === "standdown";
+  const finalOuPick = ouFlipped ? ouFlip.meanSide : pred.predicted_ou_side;
+  const finalOuOdds = ouFlipped ? ouFlip.flippedOdds : ouOddsAmerican;
+  const finalOuModelProb = ouFlipped ? ouFlip.flippedModelProb : ouModelProb;
+  const finalOuMarketProb = ouFlipped ? ouFlip.flippedMarketProb : ouMarketProb;
+  const finalOuEdge = ouFlipped ? ouFlip.flippedEdgePp : ouEdgePp;
+  const finalOuConfidence = ouFlipped ? ouFlip.flippedConfidence : pred.ou_confidence;
   const ouNoBet = ouDivergenceStandDown;
   const ouNoBetReason = ouDivergenceStandDown
-    ? "Stood down: projected total is on the opposite side of the line from the probability-driven pick (mean/probability divergence). Temporary integrity hold."
+    ? "Stood down: projected total is on the opposite side of the line from the probability-driven pick, and the flip rule did not qualify (gap/line/odds). Mean/probability divergence hold."
     : readStringOrNull(sp.ou_no_bet_reason);
   return {
     game_prediction_id: pred.id,
@@ -1178,27 +1202,31 @@ function buildOuRecord(
     game_date: game.game_date,
     matchup: `${awayAbbrev}@${homeAbbrev}`,
     market: "total",
-    pick: pred.predicted_ou_side,
-    side: pred.predicted_ou_side,
+    pick: finalOuPick,
+    side: finalOuPick,
     line_value: lockedTotalLine,
-    odds_american: ouOddsAmerican,
+    odds_american: finalOuOdds,
     odds_decimal: null,
     model_used: readStringOrNull(sp.model_used),
     model_version: readStringOrNull(sp.model_version),
     prediction_source: pred.prediction_source,
-    confidence: pred.ou_confidence,
-    model_probability: ouModelProb,
-    market_probability: ouMarketProb,
-    edge: ouEdgePp,
+    confidence: finalOuConfidence,
+    model_probability: finalOuModelProb,
+    market_probability: finalOuMarketProb,
+    edge: finalOuEdge,
     expected_value: null,
-    // Phase 6B.27 — same translator as ML; see readPublicPlayGrade.
-    play_grade: applyPlayGradeGate(readPublicPlayGrade(sp.ou_play_grade), {
-      modelProb: ouModelProb, americanOdds: ouOddsAmerican, market: "total",
-      runGapAbs: null, totalLine: lockedTotalLine,
-    }),
+    // Phase 6B.27 — same translator as ML; see readPublicPlayGrade. Flipped rows
+    // carry no model grade (the override is not a model call); BA forced false.
+    play_grade: ouFlipped
+      ? null
+      : applyPlayGradeGate(readPublicPlayGrade(sp.ou_play_grade), {
+          modelProb: ouModelProb, americanOdds: ouOddsAmerican, market: "total",
+          runGapAbs: null, totalLine: lockedTotalLine,
+        }),
     prediction_type: readStringOrNull(sp.ou_prediction_type),
     // Phase 6B.11 + MLB-P0 — same resolution as ML; see resolveMlbBestAngle.
-    best_angle: ouDivergenceStandDown ? false : ouBest.bestAngle,
+    // A flipped or stood-down divergent row is never Best Angle.
+    best_angle: ouFlipped || ouDivergenceStandDown ? false : ouBest.bestAngle,
     no_bet: ouNoBet,
     no_bet_reason: ouNoBetReason,
     market_aligned: readBoolish(sp.ou_market_aligned),
@@ -1257,6 +1285,26 @@ function buildOuRecord(
         typeof (v22 as Record<string, unknown>).total_line_consensus_at_same_line === "boolean"
           ? ((v22 as Record<string, unknown>).total_line_consensus_at_same_line as boolean)
           : null,
+      // 2026-06-22 — totals mean-side flip audit. Present only when the flip
+      // fired; preserves the original probability side so the override is fully
+      // reversible. The model's projected total and probability are untouched.
+      ou_flip: ouFlipped
+        ? {
+            flipped: true,
+            rule_id: TOTALS_MEAN_FLIP_RULE_ID,
+            original_probability_side: pred.predicted_ou_side,
+            original_pick: pred.predicted_ou_side,
+            original_confidence: pred.ou_confidence,
+            original_odds: ouOddsAmerican,
+            projected_total: typeof v22.posterior_total === "number" ? (v22.posterior_total as number) : null,
+            line: lockedTotalLine,
+            mean_side: ouFlip.meanSide,
+            mean_gap: ouFlip.meanGap,
+            flipped_pick: finalOuPick,
+            flipped_odds: finalOuOdds,
+            reason: "projected mean/probability divergence, conservative mean-side flip",
+          }
+        : null,
     },
   };
 }
