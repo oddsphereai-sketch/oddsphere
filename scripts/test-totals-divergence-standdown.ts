@@ -47,6 +47,18 @@ const ba = { key: "best_angle" as const, label: "Best Angle", warning: null };
 const r7 = standDownTotalsOnDivergence(ba, "total", divergent);
 check("divergent Best-Angle TOTAL → No Play (de-promoted)", r7.key === "no_play");
 
+// 2026-06-22 — a FLIPPED total (mean-side flip fired) is shown, NOT stood down,
+// even though the divergence flag is still true. Guards against the flip being
+// hidden as No Play (the latent bug from the totals flip patch).
+const flippedDivergent = { ...divergent, ou_flip: { flipped: true } };
+const r8 = standDownTotalsOnDivergence(lean, "total", flippedDivergent);
+check("FLIPPED divergent TOTAL → shown (NOT stood down)", r8.key === "lean");
+const r9 = standDownTotalsOnDivergence({ key: "no_play" as const, label: "No Play", warning: "w" }, "total", flippedDivergent);
+check("FLIPPED divergent TOTAL keeps its own verdict (no forced override)", r9.key === "no_play");
+// ou_flip absent but divergent → still stands down (the non-eligible path)
+const r10 = standDownTotalsOnDivergence(lean, "total", divergent);
+check("divergent TOTAL without ou_flip → still No Play (stand-down path)", r10.key === "no_play");
+
 console.log(`\n  ${pass} pass · ${fail} fail · ${pass + fail} total`);
 if (fail > 0) { console.log("\nFAILURES:\n" + failures.map((f) => "  - " + f).join("\n")); process.exit(1); }
 console.log("\n✅ Totals divergence stand-down read-path smoke passed.");

@@ -26,6 +26,8 @@ import { isBlockedSportsbook } from "@/lib/config/blockedSportsbooks";
 import { filterMockSourceRows } from "@/lib/db/productionFilter";
 import { classifyEvidence } from "@/lib/services/signalEvidenceClassifier";
 import { generateSignalSummary } from "@/lib/services/signalSummaryGenerator";
+import { resolveMlInversionFlip } from "@/lib/services/mlInversionFlip";
+import { resolveTotalsMeanFlip } from "@/lib/services/totalsMeanFlip";
 import {
   deriveVerdict,
   VERDICT_LABEL,
@@ -294,17 +296,25 @@ function readsTotalsDivergence(
   return (recon as { mean_probability_divergence?: unknown }).mean_probability_divergence === true;
 }
 
+/** True when the totals row was FLIPPED to the mean side (then it is shown, not stood down). */
+function totalsWasFlipped(sportSpecific: Record<string, unknown> | null | undefined): boolean {
+  const f = sportSpecific?.ou_flip;
+  if (!f || typeof f !== "object") return false;
+  return (f as { flipped?: unknown }).flipped === true;
+}
+
 /**
  * Force a divergent TOTAL to No Play, preserving the base verdict otherwise.
  * Exported as the testable seam for the pre-lock stand-down gate. No-op for
- * moneyline / first_inning and for coherent totals.
+ * moneyline / first_inning and for coherent totals. A FLIPPED total (mean-side
+ * flip fired) is the eligible-divergent path and is shown, never stood down.
  */
 export function standDownTotalsOnDivergence<W>(
   base: { key: MarketVerdict; label: string; warning: W },
   market: "moneyline" | "total" | "first_inning",
   sportSpecific: Record<string, unknown> | null | undefined,
 ): { key: MarketVerdict; label: string; warning: W } {
-  if (market === "total" && readsTotalsDivergence(sportSpecific)) {
+  if (market === "total" && !totalsWasFlipped(sportSpecific) && readsTotalsDivergence(sportSpecific)) {
     return { key: "no_play" as MarketVerdict, label: "No Play", warning: base.warning };
   }
   return base;
@@ -815,6 +825,59 @@ function buildGameDto(
           | string
           | undefined) ?? null);
 
+  // 2026-06-22 — PRE-LOCK FLIP PARITY. Locked rows already reflect the ML
+  // inversion / totals mean-side flip (mutated from prediction_records earlier
+  // in the handler). For UNLOCKED rows we run the SAME helpers here so the live
+  // card matches the locked record — no customer-visible pick change at lock
+  // from two code paths disagreeing. Mutating pred makes every downstream
+  // derivation (pick, modelSide, odds via pickPriceRow, confidence) follow. The
+  // full audit (snapshot.ml_flip/ou_flip) is the record-writer's job at lock;
+  // pre-lock we only show the final recommendation. No flip vocabulary surfaces.
+  let mlFlippedPreLock = false;
+  let ouFlippedPreLock = false;
+  if (pred.locked_at === null && pred.sport_specific !== null) {
+    const sp = pred.sport_specific as Record<string, unknown>;
+    const v22 = (sp.v2_2_audit ?? {}) as Record<string, unknown>;
+    const af = (sp.auto_factors ?? {}) as Record<string, unknown>;
+    const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
+    const mlLines = currentLinesByGameMarket.get(`${row.id}::moneyline`) ?? [];
+    const mlFlip = resolveMlInversionFlip({
+      predictedSide: pred.predicted_ml_winner === "home" || pred.predicted_ml_winner === "away" ? pred.predicted_ml_winner : null,
+      confidence: pred.ml_confidence,
+      rawConfidence: num(af.ml_raw_confidence),
+      marketAligned: sp.ml_market_aligned === true,
+      modelProb: num(v22.ml_model_prob),
+      marketProb: num(v22.ml_market_prob),
+      homeOdds: pickPriceRow(mlLines, "home")?.odds_american ?? null,
+      awayOdds: pickPriceRow(mlLines, "away")?.odds_american ?? null,
+    });
+    if (mlFlip.flipped) {
+      (pred as unknown as { predicted_ml_winner: string | null }).predicted_ml_winner = mlFlip.flippedSide;
+      (pred as unknown as { ml_confidence: number | null }).ml_confidence = mlFlip.recommendationConfidence;
+      mlFlippedPreLock = true;
+    }
+    const ouLines = currentLinesByGameMarket.get(`${row.id}::total`) ?? [];
+    const ouRecon = (sp.total_projection_reconciliation ?? null) as { mean_probability_divergence?: unknown } | null;
+    const ouFlip = resolveTotalsMeanFlip({
+      predictedSide: pred.predicted_ou_side === "over" || pred.predicted_ou_side === "under" ? pred.predicted_ou_side : null,
+      line: num(v22.market_total),
+      projectedTotal: num(v22.posterior_total),
+      modelProb: num(v22.ou_model_prob),
+      marketProb: num(v22.ou_market_prob),
+      originalConfidence: pred.ou_confidence,
+      overOdds: pickPriceRow(ouLines, "over")?.odds_american ?? null,
+      underOdds: pickPriceRow(ouLines, "under")?.odds_american ?? null,
+      reconciliationDivergence: ouRecon !== null && ouRecon.mean_probability_divergence === true,
+    });
+    if (ouFlip.action === "flip") {
+      (pred as unknown as { predicted_ou_side: string | null }).predicted_ou_side = ouFlip.meanSide;
+      (pred as unknown as { ou_confidence: number | null }).ou_confidence = ouFlip.recommendationConfidence;
+      // Marker so standDownTotalsOnDivergence shows the flip instead of No Play.
+      (sp as Record<string, unknown>).ou_flip = { flipped: true };
+      ouFlippedPreLock = true;
+    }
+  }
+
   // ── ML ──
   // Phase 4.2.C.2 — null pick passes through honestly when held. The
   // home/away resolution only fires when predicted_ml_winner is non-null.
@@ -985,8 +1048,10 @@ function buildGameDto(
   // until lock confirms it. Locked rows are driven by their frozen flag.
   const baRequiresConf = readV22RequiresConfirmation(pred.sport_specific);
   const preLockBA = pred.locked_at === null;
-  const mlBaEligible = baOverride.ml && !(preLockBA && baRequiresConf.ml);
-  const ouBaEligible = baOverride.ou && !(preLockBA && baRequiresConf.ou);
+  // A pre-lock flipped market is never Best Angle (an override is not a model BA),
+  // matching the locked record (best_angle=false on flipped rows).
+  const mlBaEligible = baOverride.ml && !(preLockBA && baRequiresConf.ml) && !mlFlippedPreLock;
+  const ouBaEligible = baOverride.ou && !(preLockBA && baRequiresConf.ou) && !ouFlippedPreLock;
   const mlMoneyConflict = hasOpposingPublicMoneyConflict(signals, "moneyline", pred.predicted_ml_winner);
   const ouMoneyConflict = hasOpposingPublicMoneyConflict(signals, "total", pred.predicted_ou_side);
   const mlMoneySupport = hasSupportingPublicMoneyConfirmation(signals, "moneyline", pred.predicted_ml_winner);
