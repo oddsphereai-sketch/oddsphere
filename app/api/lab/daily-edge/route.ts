@@ -304,6 +304,50 @@ function totalsWasFlipped(sportSpecific: Record<string, unknown> | null | undefi
 }
 
 /**
+ * True when THIS market's recommendation is a flip/correction (ml_flip for
+ * moneyline, ou_flip for total). Used to exempt corrected picks from the
+ * opposing-sharp-money Caution downgrade ONLY: the flip rule intentionally fades
+ * a market-divergent signal, so re-cautioning on that same opposing money would
+ * double-count the very signal we are correcting. All other Caution reasons
+ * (data quality, sharp_conflict grade, etc.) and the market-read chips are
+ * unaffected.
+ */
+function marketWasCorrected(
+  sportSpecific: Record<string, unknown> | null | undefined,
+  market: "moneyline" | "total" | "first_inning",
+): boolean {
+  const key = market === "moneyline" ? "ml_flip" : market === "total" ? "ou_flip" : null;
+  if (key === null) return false;
+  const f = sportSpecific?.[key];
+  if (!f || typeof f !== "object") return false;
+  return (f as { flipped?: unknown }).flipped === true;
+}
+
+/**
+ * Downgrade a positive pick (Best Angle / Lean) to Caution on STRONG opposing
+ * sharp money — EXCEPT for a flipped/corrected market, which is exempt from this
+ * one downgrade (the flip already fades the divergent signal; cautioning on the
+ * same opposing money double-counts it). Exported as the testable seam. Only
+ * this downgrade is gated — all other Caution reasons live in `base`.
+ */
+export function applyOpposingMoneyCaution<W>(
+  base: { key: MarketVerdict; label: string; warning: W },
+  pickMoneyPct: number | null,
+  pickBetsPct: number | null,
+  sportSpecific: Record<string, unknown> | null | undefined,
+  market: "moneyline" | "total" | "first_inning",
+): { key: MarketVerdict; label: string; warning: W } {
+  if (
+    isStrongOpposingSharpMoney(pickMoneyPct, pickBetsPct) &&
+    (base.key === "best_angle" || base.key === "lean") &&
+    !marketWasCorrected(sportSpecific, market)
+  ) {
+    return { key: "caution" as MarketVerdict, label: "Caution", warning: base.warning };
+  }
+  return base;
+}
+
+/**
  * Force a divergent TOTAL to No Play, preserving the base verdict otherwise.
  * Exported as the testable seam for the pre-lock stand-down gate. No-op for
  * moneyline / first_inning and for coherent totals. A FLIPPED total (mean-side
@@ -854,6 +898,9 @@ function buildGameDto(
     if (mlFlip.flipped) {
       (pred as unknown as { predicted_ml_winner: string | null }).predicted_ml_winner = mlFlip.flippedSide;
       (pred as unknown as { ml_confidence: number | null }).ml_confidence = mlFlip.recommendationConfidence;
+      // Marker so the corrected pick is exempt from the opposing-sharp-money
+      // Caution downgrade (parity with the locked snapshot's ml_flip).
+      (sp as Record<string, unknown>).ml_flip = { flipped: true };
       mlFlippedPreLock = true;
     }
     const ouLines = currentLinesByGameMarket.get(`${row.id}::total`) ?? [];
@@ -2251,13 +2298,19 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // The MarketContextWarning from the live ladder is preserved on
   // the result so the body's "watch out" copy still surfaces the
   // warning text — but it never silently overrides the headline.
-  const writerPlayGrade =
-    input.lockedPlayGrade ??
-    resolveWriterPlayGrade(input.sportSpecific ?? null, input.market);
+  // 2026-06-22 — A corrected/flipped market must NOT inherit the ORIGINAL side's
+  // writer play_grade (e.g. the original Best Angle for the side we flipped away
+  // from). Derive the corrected pick's verdict fresh from the live ladder
+  // (writerPlayGrade=null), matching the locked record (play_grade=null,
+  // best_angle=false). The result is a clean conservative non-BA recommendation.
+  const correctedMarket = marketWasCorrected(input.sportSpecific ?? null, input.market);
+  const writerPlayGrade = correctedMarket
+    ? null
+    : (input.lockedPlayGrade ?? resolveWriterPlayGrade(input.sportSpecific ?? null, input.market));
   const writerOverride = resolveLockedVerdict(
     writerPlayGrade,
     input.lockedNoBet ?? null,
-    input.lockedBestAngle ?? null,
+    correctedMarket ? false : (input.lockedBestAngle ?? null),
   );
   const baseVerdictRaw = writerOverride !== null
     ? { key: writerOverride.key as MarketVerdict, label: writerOverride.label, warning: liveVerdict.warning }
@@ -2280,11 +2333,23 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // from effectiveSignals → frozen-at-lock for locked rows, so this never
   // re-grades a locked decision on post-lock money. Coherent with the amber
   // "Sharp money against our side" chip (same direction, stronger bar).
+  // 2026-06-22 — A flipped/corrected market is EXEMPT from this one downgrade
+  // (the flip already fades the market-divergent signal). Only this downgrade is
+  // skipped — the market-read chips and all other Caution reasons remain.
+  const verdictAfterCaution = applyOpposingMoneyCaution(
+    baseVerdict,
+    moneyPct,
+    betsPct,
+    input.sportSpecific ?? null,
+    input.market,
+  );
+  // Point-6 guarantee: a corrected/flipped market is never Best Angle (the BA
+  // belonged to the original side we flipped away from). If any path still
+  // surfaced Best Angle, soften to Lean — the clean conservative recommendation.
   const verdict =
-    isStrongOpposingSharpMoney(moneyPct, betsPct) &&
-    (baseVerdict.key === "best_angle" || baseVerdict.key === "lean")
-      ? { key: "caution" as MarketVerdict, label: "Caution", warning: baseVerdict.warning }
-      : baseVerdict;
+    correctedMarket && verdictAfterCaution.key === "best_angle"
+      ? { key: "lean" as MarketVerdict, label: "Lean", warning: verdictAfterCaution.warning }
+      : verdictAfterCaution;
 
   // Server-generated copy (banned-terms-linted at output time).
   const modelDriver = pickModelDriver(input.autoFactors, input.market, input.pick, input.sportSpecific ?? null);
