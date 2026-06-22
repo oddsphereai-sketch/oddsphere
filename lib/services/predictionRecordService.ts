@@ -1097,6 +1097,27 @@ function buildOuRecord(
     lineDirection: readLineDirection(ouLineMovement),
     opposingPublicMoney: hasOpposingPublicMoneyConflict(signalsForGame, "total", pred.predicted_ou_side),
   });
+  // 2026-06-22 — Integrity stand-down for projection/probability divergence.
+  // The O/U side follows P(over) vs P(under), but the projected MEAN total can
+  // land on the opposite side of the line (right-skew). reconcileTotalProjection
+  // already flags this as `mean_probability_divergence` and caps the GRADE to
+  // "watchlist" — but the row still published as a promoted Lean/market_aligned
+  // play. Backtest (6/6–6/22) shows these go 4-12 (25%), a real model-signal
+  // leak, not just a display artifact. Stand them down to No Play via no_bet
+  // (the resolver maps no_bet=true → "No Play"). This is a TEMPORARY integrity
+  // patch while the totals probability/edge layer is diagnosed — NOT the fix.
+  // no_bet (not held) is used deliberately so the row still WRITES and GRADES
+  // internally per the tracking-completeness contract; it is only excluded from
+  // the public W/L surface at read time.
+  const ouReconciliation = (sp.total_projection_reconciliation ?? null) as
+    | { mean_probability_divergence?: unknown }
+    | null;
+  const ouDivergenceStandDown =
+    ouReconciliation !== null && ouReconciliation.mean_probability_divergence === true;
+  const ouNoBet = ouDivergenceStandDown;
+  const ouNoBetReason = ouDivergenceStandDown
+    ? "Stood down: projected total is on the opposite side of the line from the probability-driven pick (mean/probability divergence). Temporary integrity hold."
+    : readStringOrNull(sp.ou_no_bet_reason);
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -1126,9 +1147,9 @@ function buildOuRecord(
     }),
     prediction_type: readStringOrNull(sp.ou_prediction_type),
     // Phase 6B.11 + MLB-P0 — same resolution as ML; see resolveMlbBestAngle.
-    best_angle: ouBest.bestAngle,
-    no_bet: false,
-    no_bet_reason: readStringOrNull(sp.ou_no_bet_reason),
+    best_angle: ouDivergenceStandDown ? false : ouBest.bestAngle,
+    no_bet: ouNoBet,
+    no_bet_reason: ouNoBetReason,
     market_aligned: readBoolish(sp.ou_market_aligned),
     data_quality_tier: readStringOrNull(sp.v2_data_quality_tier),
     source_quality: null,

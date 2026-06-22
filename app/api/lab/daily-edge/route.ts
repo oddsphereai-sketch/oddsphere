@@ -275,6 +275,41 @@ function resolveWriterPlayGrade(
   return typeof pg === "string" ? pg : null;
 }
 
+/**
+ * 2026-06-22 — Totals projection/probability divergence stand-down (read-path).
+ * The O/U side follows P(over) vs P(under); the projected MEAN total can sit on
+ * the opposite side of the line (right-skew). reconcileTotalProjection flags
+ * this as `mean_probability_divergence`. Such picks are a known losing cohort
+ * (4-12 in the 6/6–6/22 backtest) and an incoherent card (projected total on the
+ * far side of the pick). The locked tracking row is stood down to no_bet in
+ * predictionRecordService.buildOuRecord; this is the matching PRE-LOCK gate so a
+ * divergent total is never promoted at any stage. Read/publish gate only — it
+ * never touches the pick, projection, line, grades, or the probability model.
+ */
+function readsTotalsDivergence(
+  sportSpecific: Record<string, unknown> | null | undefined,
+): boolean {
+  const recon = sportSpecific?.total_projection_reconciliation;
+  if (!recon || typeof recon !== "object") return false;
+  return (recon as { mean_probability_divergence?: unknown }).mean_probability_divergence === true;
+}
+
+/**
+ * Force a divergent TOTAL to No Play, preserving the base verdict otherwise.
+ * Exported as the testable seam for the pre-lock stand-down gate. No-op for
+ * moneyline / first_inning and for coherent totals.
+ */
+export function standDownTotalsOnDivergence<W>(
+  base: { key: MarketVerdict; label: string; warning: W },
+  market: "moneyline" | "total" | "first_inning",
+  sportSpecific: Record<string, unknown> | null | undefined,
+): { key: MarketVerdict; label: string; warning: W } {
+  if (market === "total" && readsTotalsDivergence(sportSpecific)) {
+    return { key: "no_play" as MarketVerdict, label: "No Play", warning: base.warning };
+  }
+  return base;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Time helpers (ET display)
 // ───────────────────────────────────────────────────────────────────────────
@@ -2159,9 +2194,17 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     input.lockedNoBet ?? null,
     input.lockedBestAngle ?? null,
   );
-  const baseVerdict = writerOverride !== null
+  const baseVerdictRaw = writerOverride !== null
     ? { key: writerOverride.key as MarketVerdict, label: writerOverride.label, warning: liveVerdict.warning }
     : liveVerdict;
+  // 2026-06-22 — Pre-lock integrity stand-down: force a divergent total to
+  // No Play at any stage (covers the pre-lock window the locked-row no_bet
+  // gate cannot reach). See standDownTotalsOnDivergence. No-op for ML/FI.
+  const baseVerdict = standDownTotalsOnDivergence(
+    baseVerdictRaw,
+    input.market,
+    input.sportSpecific ?? null,
+  );
 
   // 2026-06-16 — Caution on STRONG opposing sharp money (wrong-side risk).
   // Caution is exactly for "the market/sharp money says our pick may be

@@ -426,6 +426,70 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   check("OU best_angle SUPPRESSED when opposite under has 88% money", ou.best_angle === false);
 }
 
+// ── 2026-06-22 — Totals integrity stand-down on mean/probability divergence ──
+console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━━");
+{
+  // Projected mean lands on the opposite side of the line from the
+  // probability-driven pick → reconcileTotalProjection flags
+  // mean_probability_divergence=true. The OU record must stand down:
+  // no_bet=true (resolver → "No Play"), best_angle=false, clear reason —
+  // but the row STILL WRITES (tracking-completeness; not held).
+  const divergentPred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 56,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "lean",
+      ou_best_angle_eligible: true,
+      total_projection_reconciliation: { mean_probability_divergence: true, grade_cap: "watchlist" },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-22",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, divergentPred]]),
+    abbrevByTeamId,
+    signalsByGameId: new Map(),
+  });
+  const ou = recs.find((r) => r.market === "total");
+  check("Divergent total: row STILL WRITES (not dropped)", ou !== undefined);
+  check("Divergent total: no_bet=true (→ No Play)", ou?.no_bet === true);
+  check("Divergent total: best_angle=false", ou?.best_angle === false);
+  check(
+    "Divergent total: no_bet_reason explains divergence",
+    typeof ou?.no_bet_reason === "string" && /opposite side|divergence/i.test(ou!.no_bet_reason!),
+  );
+}
+{
+  // Negative control: no divergence → unchanged (no_bet stays false).
+  const coherentPred = {
+    ...basePrediction,
+    predicted_ou_side: "over",
+    ou_confidence: 56,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "lean",
+      total_projection_reconciliation: { mean_probability_divergence: false, grade_cap: null },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-22",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, coherentPred]]),
+    abbrevByTeamId,
+    signalsByGameId: new Map(),
+  });
+  const ou = recs.find((r) => r.market === "total");
+  check("Coherent total: no_bet=false (unchanged)", ou?.no_bet === false);
+}
+
 // ── Phase 6B.22 — pure helpers for snapshot context ──────────────────
 console.log("\n━━━ Phase 6B.22 — context snapshot helpers ━━━");
 
