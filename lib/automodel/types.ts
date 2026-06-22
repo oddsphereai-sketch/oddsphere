@@ -1102,6 +1102,13 @@ export function dampenRawConfidence(
     if (flags.partial_market_coverage) add(2, "partial_market");
   } else {
     if (flags.sharp_plus_ev_opposes_ou) add(6, "sharp_ev_opposes");
+    // 2026-06-22 — a reliever's ERA used as a starter's ERA under-projects a
+    // full-game total (the run projection leans heavily on both starters), so
+    // OU confidence must be dampened just like ML. Pre-fix the OU branch omitted
+    // these, letting a reliever-as-starter game (PHI@WSH 2026-06-22) emit a
+    // confident contrarian total off unreliable inputs.
+    if (flags.home_starter_reliever_as_starter) add(4, "home_rp_as_sp");
+    if (flags.away_starter_reliever_as_starter) add(4, "away_rp_as_sp");
     if (flags.bullpen_fallback) add(3, "bullpen_fallback");
     if (flags.morning_unconfirmed) add(3, "morning_unconfirmed");
     if (flags.no_total_split_data) add(2, "no_total_splits");

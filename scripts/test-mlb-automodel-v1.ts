@@ -4023,6 +4023,22 @@ async function main() {
       );
     }
 
+    // R-14B.4b (2026-06-22) — reliever-as-starter now dampens OU too (was ML-only).
+    {
+      const oneFlag: typeof noFlags = {
+        ...noFlags,
+        away_starter_reliever_as_starter: true,
+      };
+      const ml = dampenRawConfidence(80, oneFlag, "ml");
+      const ou = dampenRawConfidence(80, oneFlag, "ou");
+      check("[R-14B] away_rp_as_sp applies to ML (-4)", ml.penalty === 4);
+      check("[R-14B] away_rp_as_sp NOW applies to OU (-4)", ou.penalty === 4);
+      check("[R-14B] OU rp_as_sp reason recorded", ou.reasons.includes("away_rp_as_sp(-4)"));
+      // both starters as relievers → OU penalty 8
+      const both = dampenRawConfidence(80, { ...oneFlag, home_starter_reliever_as_starter: true }, "ou");
+      check("[R-14B] both rp_as_sp → OU penalty 8", both.penalty === 8);
+    }
+
     // R-14B.5 — ML public-smoke flag fires only on ML.
     {
       const oneFlag: typeof noFlags = {
