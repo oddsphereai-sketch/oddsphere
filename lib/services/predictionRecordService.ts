@@ -979,10 +979,13 @@ function buildMlRecord(
   const mlFlipped = mlFlip.flipped === true;
   const finalMlPick = mlFlipped ? mlFlip.flippedSide : pred.predicted_ml_winner;
   const finalMlOdds = mlFlipped ? mlFlip.flippedOdds : mlOddsAmerican;
-  const finalMlModelProb = mlFlipped ? mlFlip.flippedModelProb : mlModelProb;
+  // Member-facing: a flipped row shows the conservative recommendation
+  // confidence (>=55), never the raw sub-50 opposite-side probability. The raw
+  // opposite-side prob/edge live in snapshot.ml_flip (audit only).
+  const finalMlConfidence = mlFlipped ? mlFlip.recommendationConfidence : pred.ml_confidence;
+  const finalMlModelProb = mlFlipped ? mlFlip.recommendationConfidence / 100 : mlModelProb;
   const finalMlMarketProb = mlFlipped ? mlFlip.flippedMarketProb : mlMarketProb;
-  const finalMlEdge = mlFlipped ? mlFlip.flippedEdgePp : mlEdgePp;
-  const finalMlConfidence = mlFlipped ? mlFlip.flippedConfidence : pred.ml_confidence;
+  const finalMlEdge = mlFlipped ? null : mlEdgePp;
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -1073,11 +1076,16 @@ function buildMlRecord(
             original_confidence: pred.ml_confidence,
             original_raw_confidence:
               typeof mlAf.ml_raw_confidence === "number" ? (mlAf.ml_raw_confidence as number) : null,
+            original_model_prob: mlModelProb,
             original_market_aligned: readBoolish(sp.ml_market_aligned),
             original_odds: mlOddsAmerican,
             flipped_side: finalMlPick,
             flipped_pick: finalMlPick,
             flipped_odds: finalMlOdds,
+            // Raw opposite-side probability — AUDIT ONLY, never shown to members.
+            flipped_side_model_prob: mlFlip.flippedSideModelProb,
+            flipped_side_edge_pp: mlFlip.flippedEdgePp,
+            final_displayed_confidence: finalMlConfidence,
             reason: "low-conviction market-divergent ML inversion",
           }
         : null,
@@ -1177,6 +1185,7 @@ function buildOuRecord(
     projectedTotal: typeof v22.posterior_total === "number" ? (v22.posterior_total as number) : null,
     modelProb: ouModelProb,
     marketProb: ouMarketProb,
+    originalConfidence: pred.ou_confidence,
     overOdds: oddsForGame?.ouOverOdds ?? null,
     underOdds: oddsForGame?.ouUnderOdds ?? null,
     reconciliationDivergence: ouReconciliation !== null && ouReconciliation.mean_probability_divergence === true,
@@ -1185,10 +1194,12 @@ function buildOuRecord(
   const ouDivergenceStandDown = ouFlip.action === "standdown";
   const finalOuPick = ouFlipped ? ouFlip.meanSide : pred.predicted_ou_side;
   const finalOuOdds = ouFlipped ? ouFlip.flippedOdds : ouOddsAmerican;
-  const finalOuModelProb = ouFlipped ? ouFlip.flippedModelProb : ouModelProb;
+  // Member-facing: flipped row shows the conservative recommendation confidence
+  // (>=55), never the raw sub-50 mean-side probability (which lives in ou_flip).
+  const finalOuConfidence = ouFlipped ? ouFlip.recommendationConfidence : pred.ou_confidence;
+  const finalOuModelProb = ouFlipped ? ouFlip.recommendationConfidence / 100 : ouModelProb;
   const finalOuMarketProb = ouFlipped ? ouFlip.flippedMarketProb : ouMarketProb;
-  const finalOuEdge = ouFlipped ? ouFlip.flippedEdgePp : ouEdgePp;
-  const finalOuConfidence = ouFlipped ? ouFlip.flippedConfidence : pred.ou_confidence;
+  const finalOuEdge = ouFlipped ? null : ouEdgePp;
   const ouNoBet = ouDivergenceStandDown;
   const ouNoBetReason = ouDivergenceStandDown
     ? "Stood down: projected total is on the opposite side of the line from the probability-driven pick, and the flip rule did not qualify (gap/line/odds). Mean/probability divergence hold."
@@ -1295,6 +1306,7 @@ function buildOuRecord(
             original_probability_side: pred.predicted_ou_side,
             original_pick: pred.predicted_ou_side,
             original_confidence: pred.ou_confidence,
+            original_model_prob: ouModelProb,
             original_odds: ouOddsAmerican,
             projected_total: typeof v22.posterior_total === "number" ? (v22.posterior_total as number) : null,
             line: lockedTotalLine,
@@ -1302,6 +1314,10 @@ function buildOuRecord(
             mean_gap: ouFlip.meanGap,
             flipped_pick: finalOuPick,
             flipped_odds: finalOuOdds,
+            // Raw mean-side probability — AUDIT ONLY, never shown to members.
+            flipped_side_model_prob: ouFlip.flippedSideModelProb,
+            flipped_side_edge_pp: ouFlip.flippedEdgePp,
+            final_displayed_confidence: finalOuConfidence,
             reason: "projected mean/probability divergence, conservative mean-side flip",
           }
         : null,

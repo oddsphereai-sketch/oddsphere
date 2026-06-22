@@ -12,6 +12,8 @@
  * projected total or the probability model — side-selection reconciliation only.
  */
 
+import { flipRecommendationConfidence } from "./flipConfidence";
+
 export const TOTALS_MEAN_FLIP_RULE_ID = "totals_meanflip_conservative_v1";
 
 export type OuSide = "over" | "under";
@@ -25,6 +27,8 @@ export type TotalsFlipInput = {
   modelProb: number | null;
   /** Market (no-vig) prob for the PICKED side (0-1). */
   marketProb: number | null;
+  /** Model conviction on the ORIGINAL pick (0-100); drives member-facing confidence. */
+  originalConfidence: number | null;
   overOdds: number | null;
   underOdds: number | null;
   /** Reconciliation flag fallback when projectedTotal/line are unavailable. */
@@ -40,10 +44,12 @@ export type TotalsFlipResult =
       meanSide: OuSide;
       meanGap: number;
       flippedOdds: number;
-      flippedModelProb: number | null;
+      /** Raw mean-side model probability (< 0.5) — AUDIT ONLY, never displayed. */
+      flippedSideModelProb: number | null;
       flippedMarketProb: number | null;
       flippedEdgePp: number | null;
-      flippedConfidence: number | null;
+      /** Member-facing conservative recommendation confidence (>= 55). */
+      recommendationConfidence: number;
     }
   | { action: "standdown"; reason: string }
   | { action: "none" };
@@ -71,20 +77,19 @@ export function resolveTotalsMeanFlip(i: TotalsFlipInput): TotalsFlipResult {
   if (flippedOdds === null || flippedOdds === undefined || !Number.isFinite(flippedOdds)) {
     return { action: "standdown", reason: "missing_mean_side_odds" };
   }
-  const flippedModelProb = i.modelProb !== null ? 1 - i.modelProb : null;
+  const flippedSideModelProb = i.modelProb !== null ? 1 - i.modelProb : null;
   const flippedMarketProb = i.marketProb !== null ? 1 - i.marketProb : null;
   const flippedEdgePp =
-    flippedModelProb !== null && flippedMarketProb !== null ? round1((flippedModelProb - flippedMarketProb) * 100) : null;
-  const flippedConfidence = flippedModelProb !== null ? round1(flippedModelProb * 100) : null;
+    flippedSideModelProb !== null && flippedMarketProb !== null ? round1((flippedSideModelProb - flippedMarketProb) * 100) : null;
   return {
     action: "flip",
     rule_id: TOTALS_MEAN_FLIP_RULE_ID,
     meanSide,
     meanGap: round2(gap),
     flippedOdds,
-    flippedModelProb,
+    flippedSideModelProb,
     flippedMarketProb,
     flippedEdgePp,
-    flippedConfidence,
+    recommendationConfidence: flipRecommendationConfidence(i.originalConfidence),
   };
 }

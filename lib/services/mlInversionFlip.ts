@@ -14,6 +14,8 @@
  * untouched; only the prediction_records recommendation flips, with full audit.
  */
 
+import { flipRecommendationConfidence } from "./flipConfidence";
+
 export const ML_INVERSION_RULE_ID = "ml_inverted_lowconv_marketdivergent_v1";
 
 export type MlSide = "home" | "away";
@@ -40,10 +42,12 @@ export type MlFlipResult =
       rule_id: string;
       flippedSide: MlSide;
       flippedOdds: number;
-      flippedModelProb: number | null;
+      /** Raw opposite-side model probability (< 0.5) — AUDIT ONLY, never displayed. */
+      flippedSideModelProb: number | null;
       flippedMarketProb: number | null;
       flippedEdgePp: number | null;
-      flippedConfidence: number | null;
+      /** Member-facing conservative recommendation confidence (>= 55). */
+      recommendationConfidence: number;
     }
   | { flipped: false; reason: string };
 
@@ -69,21 +73,20 @@ export function resolveMlInversionFlip(i: MlFlipInput): MlFlipResult {
   if (flippedOdds === null || flippedOdds === undefined || !Number.isFinite(flippedOdds)) {
     return { flipped: false, reason: "missing_opposite_odds" };
   }
-  const flippedModelProb = i.modelProb !== null ? 1 - i.modelProb : null;
+  const flippedSideModelProb = i.modelProb !== null ? 1 - i.modelProb : null;
   const flippedMarketProb = i.marketProb !== null ? 1 - i.marketProb : null;
   const flippedEdgePp =
-    flippedModelProb !== null && flippedMarketProb !== null
-      ? round1((flippedModelProb - flippedMarketProb) * 100)
+    flippedSideModelProb !== null && flippedMarketProb !== null
+      ? round1((flippedSideModelProb - flippedMarketProb) * 100)
       : null;
-  const flippedConfidence = flippedModelProb !== null ? round1(flippedModelProb * 100) : null;
   return {
     flipped: true,
     rule_id: ML_INVERSION_RULE_ID,
     flippedSide,
     flippedOdds,
-    flippedModelProb,
+    flippedSideModelProb,
     flippedMarketProb,
     flippedEdgePp,
-    flippedConfidence,
+    recommendationConfidence: flipRecommendationConfidence(i.confidence),
   };
 }

@@ -17,7 +17,7 @@ function check(label: string, ok: boolean, detail?: string): void {
 // pick=under but projected mean (8.9) > line (8.5) → mean side = over → divergent.
 const base = {
   predictedSide: "under" as const, line: 8.5, projectedTotal: 8.9, modelProb: 0.52, marketProb: 0.5,
-  overOdds: -105, underOdds: -115, reconciliationDivergence: true,
+  originalConfidence: 52, overOdds: -105, underOdds: -115, reconciliationDivergence: true,
 };
 console.log("━━━ resolveTotalsMeanFlip ━━━");
 {
@@ -25,8 +25,11 @@ console.log("━━━ resolveTotalsMeanFlip ━━━");
   check("divergent gap>=0.3 line<10 + odds → FLIP to over", r.action === "flip" && r.action === "flip" && r.meanSide === "over");
   check("flip uses mean-side (over) odds -105", r.action === "flip" && r.flippedOdds === -105);
   check("flip mean_gap = 0.4", r.action === "flip" && Math.abs(r.meanGap - 0.4) < 1e-9);
+  check("member confidence floored to 55 (orig 52, NOT sub-50)", r.action === "flip" && r.recommendationConfidence === 55);
+  check("raw mean-side prob preserved (0.48) [audit only]", r.action === "flip" && Math.abs((r.flippedSideModelProb ?? 0) - 0.48) < 1e-9);
   check("flip rule_id stamped", r.action === "flip" && r.rule_id === TOTALS_MEAN_FLIP_RULE_ID);
 }
+check("member confidence capped at 60 when orig=72", (() => { const r = resolveTotalsMeanFlip({ ...base, originalConfidence: 72 }); return r.action === "flip" && r.recommendationConfidence === 60; })());
 check("gap<0.3 → standdown", resolveTotalsMeanFlip({ ...base, projectedTotal: 8.6 }).action === "standdown");
 check("line>=10 → standdown", resolveTotalsMeanFlip({ ...base, line: 10, projectedTotal: 10.5 }).action === "standdown");
 check("missing mean-side odds → standdown", resolveTotalsMeanFlip({ ...base, overOdds: null }).action === "standdown");
@@ -72,9 +75,14 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   check("flip no_bet=false (real pick, not No Play)", ou?.no_bet === false);
   check("flip best_angle=false", ou?.best_angle === false);
   check("flip play_grade=null", ou?.play_grade === null);
+  check("member confidence >=55 (NOT sub-50 raw)", typeof ou?.confidence === "number" && ou!.confidence >= 55 && ou!.confidence <= 60);
+  check("member model_probability >=0.5 (presentable)", typeof ou?.model_probability === "number" && ou!.model_probability >= 0.5);
+  check("flipped edge column nulled", ou?.edge === null);
   const f = (ou?.snapshot_json as any)?.ou_flip;
   check("ou_flip audit + original side=under, mean_side=over", f?.flipped === true && f?.original_probability_side === "under" && f?.mean_side === "over");
   check("ou_flip records projected_total + gap", f?.projected_total === 8.9 && Math.abs(f?.mean_gap - 0.4) < 1e-9);
+  check("ou_flip preserves RAW mean-side prob in audit (sub-50)", typeof f?.flipped_side_model_prob === "number" && f.flipped_side_model_prob < 0.5);
+  check("ou_flip final_displayed_confidence matches column", f?.final_displayed_confidence === ou?.confidence);
   check("coherent: pick(over) agrees with projected_total>line", ou?.pick === "over" && 8.9 > Number(ou?.line_value));
   // ML + FI unaffected
   check("ML record unaffected by totals flip", recs.find((r) => r.market === "moneyline")?.pick === "home");

@@ -24,7 +24,9 @@ console.log("━━━ resolveMlInversionFlip ━━━");
   const r = resolveMlInversionFlip(base);
   check("eligible cohort flips to opposite (away)", r.flipped === true && r.flipped && r.flippedSide === "away");
   check("flipped uses real opposite odds (135)", r.flipped === true && r.flipped && r.flippedOdds === 135);
-  check("flipped model prob = 1 - model (0.43)", r.flipped === true && r.flipped && Math.abs((r.flippedModelProb ?? 0) - 0.43) < 1e-9);
+  check("raw opposite-side prob = 1 - model (0.43) [audit only]", r.flipped === true && r.flipped && Math.abs((r.flippedSideModelProb ?? 0) - 0.43) < 1e-9);
+  check("member confidence is conservative >=55 (NOT sub-50)", r.flipped === true && r.flipped && r.recommendationConfidence >= 55 && r.recommendationConfidence <= 60);
+  check("member confidence = clamp(orig 57) = 57", r.flipped === true && r.flipped && r.recommendationConfidence === 57);
   check("rule_id stamped", r.flipped === true && r.flipped && r.rule_id === ML_INVERSION_RULE_ID);
 }
 check("raw>=60 does NOT flip", resolveMlInversionFlip({ ...base, rawConfidence: 60 }).flipped === false);
@@ -77,9 +79,14 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   check("flipped record uses opposite odds (135)", ml?.odds_american === 135);
   check("flipped record best_angle=false", ml?.best_angle === false);
   check("flipped record play_grade=null", ml?.play_grade === null);
+  check("member confidence >=55 (NOT sub-50 raw)", typeof ml?.confidence === "number" && ml!.confidence >= 55 && ml!.confidence <= 60);
+  check("member model_probability >=0.5 (presentable)", typeof ml?.model_probability === "number" && ml!.model_probability >= 0.5);
+  check("flipped edge column nulled (no edge claim)", ml?.edge === null);
   const flip = (ml?.snapshot_json as any)?.ml_flip;
   check("ml_flip audit present + original_side=home", flip?.flipped === true && flip?.original_side === "home" && flip?.flipped_side === "away");
   check("ml_flip records original_raw_confidence + original_odds", flip?.original_raw_confidence === 57 && flip?.original_odds === -150);
+  check("ml_flip preserves RAW opposite-side prob in audit (sub-50)", typeof flip?.flipped_side_model_prob === "number" && flip.flipped_side_model_prob < 0.5);
+  check("ml_flip records final_displayed_confidence (matches column)", flip?.final_displayed_confidence === ml?.confidence);
   check("ml_flip rule_id stamped", flip?.rule_id === ML_INVERSION_RULE_ID);
   // model opinion preserved: snapshot keeps original sp.v2_2_audit, and OU record untouched
   const ou = recs.find((r) => r.market === "total");
