@@ -879,7 +879,11 @@ function buildGameDto(
   // pre-lock we only show the final recommendation. No flip vocabulary surfaces.
   let mlFlippedPreLock = false;
   let ouFlippedPreLock = false;
-  if (pred.locked_at === null && pred.sport_specific !== null) {
+  // MLB-only: the flip helpers read MLB-model fields (ml_raw_confidence,
+  // posterior_total, total_projection_reconciliation). Explicit sport guard so
+  // the flip can never misfire on NBA/NHL/soccer even if a future model
+  // populates a same-named field. Matches the MLB-scoped record writer.
+  if (row.sport === "mlb" && pred.locked_at === null && pred.sport_specific !== null) {
     const sp = pred.sport_specific as Record<string, unknown>;
     const v22 = (sp.v2_2_audit ?? {}) as Record<string, unknown>;
     const af = (sp.auto_factors ?? {}) as Record<string, unknown>;
@@ -2434,7 +2438,13 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   let modelTrustPctOverride: number | null = null;
   let marketImpliedPctOverride: number | null = null;
   let modelProbOverride: number | null = null;
-  if (input.market === "moneyline" || input.market === "total") {
+  // 2026-06-22 — A corrected/flipped market must NOT use the v2_2_audit
+  // model/market/edge override: those values are written for the model's
+  // ORIGINAL pick (the side we flipped away from), so on the flipped card they
+  // would show that side's probability and a backwards POSITIVE edge for a pick
+  // we are deliberately fading. Skip the override → modelProb falls back to the
+  // conservative recommendation confidence; the edge gap is nulled below.
+  if ((input.market === "moneyline" || input.market === "total") && !correctedMarket) {
     const v22 = readV22AuditForPick(
       input.sportSpecific ?? null,
       input.market,
@@ -2485,6 +2495,13 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           : +(modelTrustPctOverride - marketImpliedPctOverride).toFixed(1);
       }
     }
+  }
+  // 2026-06-22 — Corrected/flipped market makes no calibrated edge claim (the
+  // override is an empirical fade, not a model edge). Null the model-vs-market
+  // gap so the card never shows a phantom edge for the flipped pick. modelProb
+  // (= recommendation confidence) and the real market-implied % still display.
+  if (correctedMarket) {
+    modelMarketGapPct = null;
   }
 
   return {
