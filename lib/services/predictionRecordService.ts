@@ -24,6 +24,7 @@ import type {
 import { isBlockedSportsbook } from "../config/blockedSportsbooks";
 import { resolveMlInversionFlip, ML_INVERSION_RULE_ID } from "./mlInversionFlip";
 import { resolveTotalsMeanFlip, TOTALS_MEAN_FLIP_RULE_ID } from "./totalsMeanFlip";
+import { resolveFiInversionFlip, FI_INVERSION_RULE_ID } from "./fiInversionFlip";
 
 export type CreateRecordsOptions = {
   sport: TrackedSport;
@@ -1466,6 +1467,32 @@ function buildFiRecord(
       ? "lean"
       : null;
 
+  // 2026-06-22 — FI NRFI overconfident mid-band flip. Confident NRFI picks with
+  // model NRFI prob in [0.57,0.63) are an inverted cohort (FI twin of the ML
+  // flip); fade them to YRFI at the real YRFI price. Only NRFI picks are
+  // eligible (never Toss-Up / YRFI). When fired, the recommendation flips with
+  // full audit; the model opinion (predicted_nrfi) is untouched. No price ⇒ no
+  // flip (original NRFI kept; never a No Play from this rule).
+  const fiNrfiProbability =
+    autoFactors && typeof autoFactors.nrfi_probability === "number"
+      ? (autoFactors.nrfi_probability as number)
+      : null;
+  const fiFlip = resolveFiInversionFlip({
+    predictedSide: isTossUp ? "tossup" : pred.predicted_nrfi === true ? "nrfi" : "yrfi",
+    nrfiProbability: fiNrfiProbability,
+    originalConfidence: pred.nrfi_confidence,
+    nrfiMarketProb: fiMarketProb,
+    yrfiOdds: fiOpposite?.odds ?? null,
+  });
+  const fiFlipped = fiFlip.flipped === true;
+  const finalFiPick = fiFlipped ? "YRFI" : pickLabel;
+  const finalFiSide = fiFlipped ? "over" : sideValue;
+  const finalFiOdds = fiFlipped ? fiFlip.flippedOdds : fiOddsAmerican;
+  const finalFiConfidence = fiFlipped ? fiFlip.recommendationConfidence : pred.nrfi_confidence;
+  const finalFiModelProb = fiFlipped ? fiFlip.recommendationConfidence / 100 : fiModelProb;
+  const finalFiMarketProb = fiFlipped ? fiFlip.flippedMarketProb : fiMarketProb;
+  const finalFiEdge = fiFlipped ? null : fiEdge;
+
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -1475,24 +1502,27 @@ function buildFiRecord(
     game_date: game.game_date,
     matchup: `${awayAbbrev}@${homeAbbrev}`,
     market: "first_inning",
-    pick: pickLabel,
-    side: sideValue,
+    pick: finalFiPick,
+    side: finalFiSide,
     line_value: 0.5,
-    odds_american: fiOddsAmerican,
+    odds_american: finalFiOdds,
     odds_decimal: null,
     model_used: readStringOrNull(sp.model_used),
     model_version: readStringOrNull(sp.model_version),
     prediction_source: pred.prediction_source,
-    confidence: pred.nrfi_confidence,
-    model_probability: fiModelProb,
-    market_probability: fiMarketProb,
-    edge: fiEdge,
+    confidence: finalFiConfidence,
+    model_probability: finalFiModelProb,
+    market_probability: finalFiMarketProb,
+    edge: finalFiEdge,
     expected_value: null,
-    play_grade: applyPlayGradeGate(fiPlayGrade, {
-      modelProb: fiModelProb, americanOdds: fiOddsAmerican, market: "first_inning",
-      runGapAbs: null, totalLine: null,
-    }),
-    prediction_type: predictionTypeValue,
+    // Flipped rows carry no model grade (the override isn't a model call).
+    play_grade: fiFlipped
+      ? null
+      : applyPlayGradeGate(fiPlayGrade, {
+          modelProb: fiModelProb, americanOdds: fiOddsAmerican, market: "first_inning",
+          runGapAbs: null, totalLine: null,
+        }),
+    prediction_type: fiFlipped ? null : predictionTypeValue,
     best_angle: false,
     no_bet: noBetValue,
     no_bet_reason: noBetReasonValue,
@@ -1522,6 +1552,27 @@ function buildFiRecord(
       // loaded in this build). predicted_scores + framework_grades for
       // NRFI/YRFI are still captured.
       ...buildDailyEdgeLockSubstrate({ signalsForGame: [], currentLinesForGame: [], pred }),
+      // 2026-06-22 — FI NRFI overconfident mid-band flip audit. Present only when
+      // the flip fired; preserves the original NRFI side so the override is fully
+      // reversible. The model's NRFI opinion + probability are untouched.
+      fi_flip: fiFlipped
+        ? {
+            flipped: true,
+            rule_id: FI_INVERSION_RULE_ID,
+            original_pick: pickLabel,
+            original_side: internalSide,
+            original_confidence: pred.nrfi_confidence,
+            original_nrfi_probability: fiNrfiProbability,
+            original_odds: fiOddsAmerican,
+            flipped_pick: finalFiPick,
+            flipped_odds: finalFiOdds,
+            // Raw YRFI-side probability — AUDIT ONLY, never shown to members.
+            flipped_side_model_prob: fiFlip.flipped ? fiFlip.flippedSideModelProb : null,
+            flipped_side_edge_pp: fiFlip.flipped ? fiFlip.flippedEdgePp : null,
+            final_displayed_confidence: finalFiConfidence,
+            reason: "NRFI overconfident mid-band [0.57,0.63), conservative YRFI flip",
+          }
+        : null,
     },
   };
 }

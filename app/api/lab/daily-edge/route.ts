@@ -28,6 +28,7 @@ import { classifyEvidence } from "@/lib/services/signalEvidenceClassifier";
 import { generateSignalSummary } from "@/lib/services/signalSummaryGenerator";
 import { resolveMlInversionFlip } from "@/lib/services/mlInversionFlip";
 import { resolveTotalsMeanFlip } from "@/lib/services/totalsMeanFlip";
+import { resolveFiInversionFlip } from "@/lib/services/fiInversionFlip";
 import { reconcileDisplayProjection } from "@/lib/services/displayProjectionReconciliation";
 import {
   deriveVerdict,
@@ -945,6 +946,29 @@ function buildGameDto(
       // Marker so standDownTotalsOnDivergence shows the flip instead of No Play.
       (sp as Record<string, unknown>).ou_flip = { flipped: true };
       ouFlippedPreLock = true;
+    }
+    // FI NRFI overconfident mid-band flip (parity with the locked record). Only
+    // a confident NRFI pick is eligible — never a Toss-Up. Mutating
+    // predicted_nrfi → false propagates to nrfiPick ("YRFI") + nrfiSide ("over").
+    const fiAf = (sp.auto_factors ?? {}) as Record<string, unknown>;
+    const fiExpRuns = num(fiAf.nrfi_expected_runs);
+    const fiKind = typeof sp.nrfi_decision_kind === "string" ? (sp.nrfi_decision_kind as string) : null;
+    const fiIsTossUp =
+      fiKind === "toss_up" ||
+      (fiKind === null && pred.nrfi_confidence !== null && Math.round(pred.nrfi_confidence) === 52 &&
+        fiExpRuns !== null && fiExpRuns >= 0.85 && fiExpRuns < 1.15);
+    const fiLines = currentLinesByGameMarket.get(`${row.id}::first_inning_total`) ?? [];
+    const fiFlip = resolveFiInversionFlip({
+      predictedSide: fiIsTossUp ? "tossup" : pred.predicted_nrfi === true ? "nrfi" : pred.predicted_nrfi === false ? "yrfi" : null,
+      nrfiProbability: num(fiAf.nrfi_probability),
+      originalConfidence: pred.nrfi_confidence,
+      nrfiMarketProb: null,
+      yrfiOdds: pickPriceRow(fiLines, "over")?.odds_american ?? null,
+    });
+    if (fiFlip.flipped) {
+      (pred as unknown as { predicted_nrfi: boolean | null }).predicted_nrfi = false;
+      (pred as unknown as { nrfi_confidence: number | null }).nrfi_confidence = fiFlip.recommendationConfidence;
+      (sp as Record<string, unknown>).fi_flip = { flipped: true };
     }
   }
 
