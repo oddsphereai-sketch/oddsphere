@@ -22,6 +22,11 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { gradePrediction } from "./predictionGrader";
+import {
+  selectClosingLine,
+  buildClosingLineValue,
+  type ClosingLineHistoryRow,
+} from "./closingLineCapture";
 import type {
   PredictionGradeRow,
   PredictionRecordRow,
@@ -41,6 +46,8 @@ export type GradingResult = {
   };
   upsertedCount: number;
   skippedPendingDowngrade: number;
+  /** Settle-time CLV/closing-line captures written to snapshot_json (MLB ml/total). */
+  clvCaptured: number;
   errors: Array<{ prediction_record_id: number | undefined; reason: string }>;
 };
 
@@ -78,6 +85,7 @@ export async function gradePredictionsForSlate(args: {
     computed: { wins: 0, losses: 0, pushes: 0, voids: 0, pending: 0 },
     upsertedCount: 0,
     skippedPendingDowngrade: 0,
+    clvCaptured: 0,
     errors: [],
   };
 
@@ -99,7 +107,7 @@ export async function gradePredictionsForSlate(args: {
   const gameIds = Array.from(new Set(records.map((r) => r.game_id)));
   const { data: gameRows, error: gErr } = await supabase
     .from("games")
-    .select("id, status, home_score, away_score, first_inning_runs")
+    .select("id, status, home_score, away_score, first_inning_runs, game_date")
     .in("id", gameIds);
   if (gErr) {
     result.errors.push({ prediction_record_id: undefined, reason: `games fetch: ${gErr.message}` });
@@ -111,6 +119,7 @@ export async function gradePredictionsForSlate(args: {
     home_score: number | null;
     away_score: number | null;
     first_inning_runs: number | null;
+    game_date: string | null;
   }>(
     ((gameRows ?? []) as Array<{
       id: number;
@@ -118,8 +127,47 @@ export async function gradePredictionsForSlate(args: {
       home_score: number | null;
       away_score: number | null;
       first_inning_runs: number | null;
+      game_date: string | null;
     }>).map((g) => [g.id, g]),
   );
+
+  // 2026-06-22 — Settle-time CLV/closing-line capture (MLB ml/total only;
+  // line_history does not carry first_inning). Reconstruct the closing line
+  // from line_history and stamp a closing_line_value audit blob into
+  // prediction_records.snapshot_json. Only fetch history for games that still
+  // have an uncaptured ml/total record. Additive audit — never touches grades
+  // or any decision field; idempotent (skips rows already captured).
+  const closingHistByGame = new Map<number, ClosingLineHistoryRow[]>();
+  if (apply && sport === "mlb") {
+    const gamesNeedingClv = new Set<number>();
+    for (const rec of records) {
+      if (rec.market !== "moneyline" && rec.market !== "total") continue;
+      if (rec.side === null) continue;
+      const existing = (rec.snapshot_json?.closing_line_value ?? null) as
+        | { closing_odds_american?: number | null }
+        | null;
+      if (existing === null || existing.closing_odds_american == null) {
+        gamesNeedingClv.add(rec.game_id);
+      }
+    }
+    const histResults = await Promise.all(
+      Array.from(gamesNeedingClv).map(async (gid) => {
+        const g = gameById.get(gid);
+        if (!g?.game_date) return [gid, [] as ClosingLineHistoryRow[]] as const;
+        const { data } = await supabase
+          .from("line_history")
+          .select("market_type, side, sportsbook, odds_american, line_value, recorded_at")
+          .eq("game_id", gid)
+          .in("market_type", ["moneyline", "total"])
+          .is("player_id", null)
+          .lte("recorded_at", g.game_date)
+          .order("recorded_at", { ascending: false })
+          .limit(150);
+        return [gid, (data ?? []) as ClosingLineHistoryRow[]] as const;
+      }),
+    );
+    for (const [gid, rows] of histResults) closingHistByGame.set(gid, rows);
+  }
 
   // Existing grades — to decide skip-vs-upsert
   const recordIds = records
@@ -135,6 +183,7 @@ export async function gradePredictionsForSlate(args: {
     ),
   );
 
+  const nowISO = new Date().toISOString();
   for (const rec of records) {
     const game = gameById.get(rec.game_id);
     if (game === undefined || rec.id === undefined) continue;
@@ -153,6 +202,48 @@ export async function gradePredictionsForSlate(args: {
     else if (grade.push) result.computed.pushes++;
     else if (grade.void) result.computed.voids++;
     else result.computed.pending++;
+
+    // Settle-time CLV capture (MLB ml/total). Runs once per record on/after the
+    // first settled result, independent of the grade upsert skip logic, so a
+    // capture that previously failed is retried. Skips gracefully when no
+    // closing line exists (e.g. first_inning, or no pre-start history).
+    if (
+      apply &&
+      sport === "mlb" &&
+      grade.result !== "pending" &&
+      (rec.market === "moneyline" || rec.market === "total") &&
+      rec.side !== null &&
+      game.game_date !== null
+    ) {
+      const existing = (rec.snapshot_json?.closing_line_value ?? null) as
+        | { closing_odds_american?: number | null }
+        | null;
+      const alreadyCaptured = existing !== null && existing.closing_odds_american != null;
+      if (!alreadyCaptured) {
+        const histRows: ClosingLineHistoryRow[] = closingHistByGame.get(rec.game_id) ?? [];
+        const selection = selectClosingLine(histRows, rec.market, rec.side, game.game_date);
+        if (selection !== null) {
+          const closingLineValue = buildClosingLineValue({
+            market: rec.market,
+            side: rec.side,
+            betOddsAmerican: rec.odds_american,
+            selection,
+            gameDateISO: game.game_date,
+            nowISO,
+          });
+          const mergedSnapshot = { ...(rec.snapshot_json ?? {}), closing_line_value: closingLineValue };
+          const { error: clvErr } = await supabase
+            .from("prediction_records")
+            .update({ snapshot_json: mergedSnapshot })
+            .eq("id", rec.id);
+          if (clvErr) {
+            result.errors.push({ prediction_record_id: rec.id, reason: `clv capture: ${clvErr.message}` });
+          } else {
+            result.clvCaptured++;
+          }
+        }
+      }
+    }
 
     const existingResult = existingByRecordId.get(rec.id);
     const shouldWrite = shouldUpsertGrade({
