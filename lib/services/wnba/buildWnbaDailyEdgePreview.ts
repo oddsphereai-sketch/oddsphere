@@ -16,11 +16,12 @@
  */
 
 import { isRealWnbaTeam, wnbaAbbr } from "./wnbaTeams";
+import { selectMainTotalLine } from "@/lib/services/selectMainTotalLine";
 
 const BDL = "https://api.balldontlie.io/wnba/v1";
 const SHARP = "https://api.sharpapi.io/api/v1";
 const BLOCKED = new Set(["fliff", "kalshi", "polymarket"]);
-const SHARP_BOOKS = new Set(["circa", "betonline", "draftkings", "betmgm", "caesars", "bet365 us", "betrivers", "pinnacle"]);
+export const SHARP_BOOKS = new Set(["circa", "betonline", "draftkings", "betmgm", "caesars", "bet365 us", "betrivers", "pinnacle"]);
 const HFA = 65, K = 20, PPE = 25, SIG_M = 12.8, SIG_T = 15.0, COLD = 15;
 
 // ── math ──
@@ -40,7 +41,7 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 // ── types ──
 type BdlGame = { id: number; date: string; season: number; postseason: boolean; h: number; a: number; hs: number; as: number };
 type Grade = "Best Angle" | "Lean" | "Watchlist" | "Caution";
-type ModelState = { elo: Map<number, number>; games: Map<number, number>; pf: Map<number, number[]>; pa: Map<number, number[]>; nameById: Map<number, string>; mascot: [string, number][]; rawGames: BdlGame[]; computedAt: number };
+export type ModelState = { elo: Map<number, number>; games: Map<number, number>; pf: Map<number, number[]>; pa: Map<number, number[]>; nameById: Map<number, string>; mascot: [string, number][]; rawGames: BdlGame[]; computedAt: number };
 
 // ── BDL fetch (cursor) ──
 async function bdl(path: string, key: string): Promise<{ data: unknown[]; meta?: { next_cursor?: number } }> {
@@ -72,7 +73,7 @@ async function bdlGames(key: string): Promise<BdlGame[]> {
 
 // ── Elo (fixed K=20; dynamic K tested & rejected) + recent scoring; cached in-process ──
 let MODEL_CACHE: ModelState | null = null;
-async function getModel(): Promise<ModelState> {
+export async function getModel(): Promise<ModelState> {
   if (MODEL_CACHE && Date.now() - MODEL_CACHE.computedAt < 30 * 60 * 1000) return MODEL_CACHE;
   const key = process.env.BALLDONTLIE_API_KEY;
   if (!key) throw new Error("missing BALLDONTLIE_API_KEY");
@@ -99,7 +100,7 @@ async function getModel(): Promise<ModelState> {
 const roll10 = (m: Map<number, number[]>, t: number) => { const x = m.get(t) ?? []; return x.length ? x.slice(-10).reduce((s, v) => s + v, 0) / Math.min(10, x.length) : 82; };
 
 // ── SharpAPI odds (cursor; game markets; resolve teams; pair+date; trusted consensus) ──
-type OddRow = { book: string; sharp: boolean; mkt: string; selType: string; odds: number | null; line: number | null; date: string | null; h: number; a: number };
+export type OddRow = { book: string; sharp: boolean; mkt: string; selType: string; odds: number | null; line: number | null; date: string | null; h: number; a: number };
 async function wnbaOdds(resolve: (s: string) => number | null): Promise<OddRow[]> {
   const key = process.env.SHARPAPI_KEY; if (!key) throw new Error("missing SHARPAPI_KEY");
   const evDate = (s: string) => { const m = String(s).match(/20\d\d-\d\d-\d\d/); return m ? m[0] : null; };
@@ -134,6 +135,120 @@ function gradeMarket(absEdge: number, books: number, disp: number, sharpAgree: b
   if (absEdge >= 4 && disp <= 2 && books >= 4 && sharpAgree) return "Best Angle";
   if (absEdge >= 2.5 && disp <= 3 && books >= 3) return "Lean";
   return "Watchlist";
+}
+
+/**
+ * Canonical per-game WNBA model compute (single-sourced; used by the DB-backed
+ * runWnbaModel and the live preview). DECISION LAYER honors Decision A: all
+ * non-blocked books feed dispersion/audit, but the FINAL market probability
+ * prefers the trusted/sharp consensus (falls back to all-books), and the
+ * DISPLAYED line uses modal consensus (selectMainTotalLine) so one outlier/alt
+ * line can never drive the side. Coherent by construction: the side is decided
+ * vs the SAME modal line that is displayed/locked/graded.
+ */
+export function computeWnbaPrediction(
+  M: ModelState,
+  g: { id: number; date: string; h: number; a: number },
+  r: OddRow[],
+) {
+  const E = (t: number) => M.elo.get(t) ?? 1500;
+  const hN = M.nameById.get(g.h) ?? wnbaAbbr(g.h) ?? String(g.h);
+  const aN = M.nameById.get(g.a) ?? wnbaAbbr(g.a) ?? String(g.a);
+  const gpH = M.games.get(g.h) ?? 0, gpA = M.games.get(g.a) ?? 0;
+
+  // market consensus: all non-blocked books (storage/audit) + sharp subset (decision)
+  const mlH: { book: string; odds: number }[] = [], mlA: { book: string; odds: number }[] = [];
+  const spBooks: { sportsbook: string; line_value: number }[] = [], spS: number[] = [];
+  const toBooks: { sportsbook: string; line_value: number }[] = [], toS: number[] = [];
+  for (const x of r) {
+    const homeIsBdlHome = x.h === g.h;
+    if (x.mkt === "moneyline" && x.odds != null) ((x.selType === "home") === homeIsBdlHome ? mlH : mlA).push({ book: x.book, odds: x.odds });
+    if (x.mkt === "point_spread" && x.line != null && Math.abs(x.line) < 40 && (x.selType === "home") === homeIsBdlHome) { spBooks.push({ sportsbook: x.book, line_value: x.line }); if (x.sharp) spS.push(x.line); }
+    if (x.mkt === "total_points" && x.selType === "over" && x.line != null && x.line > 120 && x.line < 220) { toBooks.push({ sportsbook: x.book, line_value: x.line }); if (x.sharp) toS.push(x.line); }
+  }
+  const bP: number[] = [], sP: number[] = [];
+  for (const h of mlH) { const a = mlA.find((z) => z.book === h.book); if (a) { const p = amProb(h.odds) / (amProb(h.odds) + amProb(a.odds)); bP.push(p); if (SHARP_BOOKS.has(h.book)) sP.push(p); } }
+  const mktP = median(bP), sharpMktP = median(sP), mlBooks = bP.length, trustedBooks = sP.length;
+  const mktPDec = sharpMktP ?? mktP; // DECISION: trusted/sharp consensus preferred
+  const spVals = spBooks.map((b) => b.line_value), toVals = toBooks.map((b) => b.line_value);
+  const mktSpread = selectMainTotalLine(spBooks), sharpSpread = median(spS); // displayed = modal consensus
+  const mktTotal = selectMainTotalLine(toBooks), sharpTotal = median(toS);
+  const spDisp = spVals.length ? r1(Math.max(...spVals) - Math.min(...spVals)) : 0;
+  const toDisp = toVals.length ? r1(Math.max(...toVals) - Math.min(...toVals)) : 0;
+
+  // independent model + cold-start prior
+  const ehN = E(g.h), eaN = E(g.a), naiveP = platt(dexp(-(ehN + HFA - eaN)));
+  const lm = mktPDec != null ? 400 * Math.log10(mktPDec / (1 - mktPDec)) : null;
+  const coldAdj = (gms: number, isHome: boolean, own: number, opp: number) => {
+    if (gms >= COLD || lm == null) return { rating: own, w: 0, mi: null as number | null };
+    const w = clamp(Math.exp(-gms / 8), 0.1, 0.7); const mi = isHome ? opp - HFA + lm : opp + HFA - lm; return { rating: w * mi + (1 - w) * own, w, mi };
+  };
+  const csH = coldAdj(gpH, true, ehN, eaN), csA = coldAdj(gpA, false, eaN, ehN);
+  const eh = csH.rating, ea = csA.rating;
+  const modelP = platt(dexp(-(eh + HFA - ea)));
+  const projMargin = ((eh + HFA - ea) / PPE) * 0.85;
+  const projTotal = (roll10(M.pf, g.h) + roll10(M.pa, g.a)) / 2 + (roll10(M.pf, g.a) + roll10(M.pa, g.h)) / 2;
+  const minG = Math.min(gpH, gpA), unc = 0.5 * Math.exp(-minG / 8), sigM = SIG_M * (1 + unc), sigT = SIG_T * (1 + unc);
+  const coldStart = csH.w > 0 || csA.w > 0;
+
+  // dynamic blend
+  const sharpPresent = sP.length > 0;
+  const marketRel = mktPDec != null ? clamp((Math.min(mlBooks, 8) / 8) * (spDisp <= 1 ? 1 : spDisp <= 3 ? 0.85 : 0.6) * (sharpPresent ? 1 : 0.85), 0.3, 1) : 0;
+  const modelStab = clamp(minG / 25, 0.4, 1);
+  let wMkt = mktPDec != null ? clamp(0.55 * marketRel / modelStab, 0.35, 0.75) : 0;
+  const edge = mktPDec != null ? modelP - mktPDec : 0;
+  if (Math.abs(edge) >= 0.06 && modelStab >= 0.8) wMkt = Math.max(0.35, wMkt - 0.15);
+  let finalP = mktPDec != null ? wMkt * mktPDec + (1 - wMkt) * modelP : modelP;
+  const conflict = mktPDec != null && (modelP >= 0.5) !== (mktPDec >= 0.5);
+  if (conflict && marketRel >= 0.8 && Math.abs(edge) < 0.04) finalP = 0.5 + (finalP - 0.5) * 0.5;
+
+  // sides
+  const mlSide = finalP >= 0.5 ? hN : aN, mlConf = Math.round(Math.max(finalP, 1 - finalP) * 100);
+  const mlPrice = median((mlSide === hN ? mlH : mlA).map((z) => z.odds));
+  const mlGrade: Grade = mktPDec == null ? "Watchlist" : conflict && marketRel >= 0.8 && Math.abs(edge) < 0.04 ? "Caution"
+    : !conflict && Math.abs(edge) >= 0.04 && mlBooks >= 6 && sharpPresent ? "Best Angle" : Math.abs(edge) >= 0.02 && mlBooks >= 4 ? "Lean" : "Watchlist";
+
+  const pCoverHome = mktSpread != null ? 1 - Phi((-mktSpread - projMargin) / sigM) : null;
+  const spEdge = mktSpread != null ? projMargin - -mktSpread : null;
+  const spSide = mktSpread != null ? (pCoverHome! >= 0.5 ? `${hN} ${mktSpread > 0 ? "+" : ""}${mktSpread}` : `${aN} ${mktSpread > 0 ? "" : "+"}${-mktSpread}`) : null;
+  const spConf = pCoverHome != null ? Math.round(Math.max(pCoverHome, 1 - pCoverHome) * 100) : null;
+  const spGrade = mktSpread != null ? gradeMarket(Math.abs(spEdge!), spVals.length, spDisp, sharpSpread != null && Math.sign(sharpSpread - -projMargin) === Math.sign(spEdge!)) : null;
+
+  const pOver = mktTotal != null ? 1 - Phi((mktTotal - projTotal) / sigT) : null;
+  const toEdge = mktTotal != null ? projTotal - mktTotal : null;
+  const toSide = mktTotal != null ? (pOver! >= 0.5 ? `Over ${mktTotal}` : `Under ${mktTotal}`) : null;
+  const toConf = pOver != null ? Math.round(Math.max(pOver, 1 - pOver) * 100) : null;
+  const toGrade = mktTotal != null ? gradeMarket(Math.abs(toEdge!), toVals.length, toDisp, sharpTotal != null && Math.sign(sharpTotal - projTotal) === -Math.sign(toEdge!)) : null;
+
+  const projHome = r1((projTotal + projMargin) / 2), projAway = r1((projTotal - projMargin) / 2);
+  const outlierTotal = mktTotal != null && toVals.some((v) => Math.abs(v - mktTotal) >= 2);
+  const outlierSpread = mktSpread != null && spVals.some((v) => Math.abs(v - mktSpread) >= 2);
+  const flags: string[] = [];
+  if (mlBooks < 3) flags.push("thin_ml_books");
+  if (!trustedBooks) flags.push("no_trusted_book");
+  if (mktSpread == null) flags.push("no_spread_line");
+  if (mktTotal == null) flags.push("no_total_line");
+  if (minG < COLD) flags.push("low_history_team");
+  if (outlierTotal) flags.push("total_line_outlier");
+  if (outlierSpread) flags.push("spread_line_outlier");
+
+  return {
+    game_id: g.id, date: g.date, start_time: r.find((x) => x)?.date ?? g.date,
+    home_team_id: g.h, away_team_id: g.a, home_abbr: wnbaAbbr(g.h), away_abbr: wnbaAbbr(g.a),
+    home: hN, away: aN,
+    projected_score: { home: projHome, away: projAway },
+    moneyline: { side: mlSide, confidence: mlConf, grade: mlGrade, price: mlPrice },
+    spread: { side: spSide, line: mktSpread, confidence: spConf, grade: spGrade },
+    total: { side: toSide, line: mktTotal, confidence: toConf, grade: toGrade },
+    model: { home_win_prob: r1(modelP * 100) / 100, margin: r1(projMargin), total: r1(projTotal) },
+    market: { home_win_prob: mktP != null ? r1(mktP * 100) / 100 : null, spread: mktSpread, total: mktTotal, book_count: mlBooks, dispersion: { spread: spDisp, total: toDisp } },
+    consensus_source: (sharpMktP != null ? "sharp" : "all_books") as "sharp" | "all_books",
+    trusted: { home_win_prob: sharpMktP != null ? r1(sharpMktP * 100) / 100 : null, spread: sharpSpread, total: sharpTotal, trusted_book_count: trustedBooks },
+    sharp: sharpMktP != null || sharpSpread != null || sharpTotal != null ? { home_win_prob: sharpMktP != null ? r1(sharpMktP * 100) / 100 : null, spread: sharpSpread, total: sharpTotal } : null,
+    dynamic_market_weight: r1(wMkt * 100) / 100,
+    cold_start: coldStart ? { home: { games: gpH, elo: r1(ehN), market_prior: csH.mi != null ? r1(csH.mi) : null, weight: r1(csH.w * 100) / 100, final_rating: r1(csH.rating) }, away: { games: gpA, elo: r1(eaN), market_prior: csA.mi != null ? r1(csA.mi) : null, weight: r1(csA.w * 100) / 100, final_rating: r1(csA.rating) }, rating_uncertainty: r1(unc * 100) / 100, naive_home_win_prob: r1(naiveP * 100) / 100, learning_rate: "fixed K=20 (dynamic K tested & rejected)" } : null,
+    data_quality: { ml_books: mlBooks, trusted_books: trustedBooks, sharp_books: trustedBooks, spread_books: spVals.length, total_books: toVals.length, dispersion: { spread: spDisp, total: toDisp }, outlier_total: outlierTotal, outlier_spread: outlierSpread, flags },
+  };
 }
 
 export async function buildWnbaDailyEdgePreview(dateParam: string | null) {
