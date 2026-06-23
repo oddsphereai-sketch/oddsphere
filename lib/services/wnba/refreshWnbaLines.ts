@@ -141,11 +141,19 @@ export async function refreshWnbaLines(opts: {
   const oddsByGame = new Map<number, OddRow[]>();
   const tipByGame = new Map<number, string>();
   let unmatched = 0;
+  const etDate = (iso: string): string | null => { try { return new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }); } catch { return null; } };
   for (const o of odds) {
     const cands = byPair.get(pairKey(o.h, o.a));
     if (!cands || cands.length === 0) { unmatched++; continue; }
-    const oDate = o.startTime ? o.startTime.slice(0, 10) : null;
-    const g = cands.find((c) => !oDate || Math.abs(+new Date(`${c.slate}T00:00:00Z`) - +new Date(`${oDate}T00:00:00Z`)) <= 86400000) ?? cands[0]!;
+    // Match on the odds' ET slate date (slate_date is ET-anchored). A same-pair
+    // DUPLICATE (series on adjacent days) is matched only on an EXACT ET-date
+    // hit; if still ambiguous (>1 candidate, no exact date) we SKIP rather than
+    // mix two meetings' lines.
+    const oSlateEt = o.startTime ? etDate(o.startTime) : null;
+    let g: G | undefined;
+    if (oSlateEt) g = cands.find((c) => c.slate === oSlateEt);
+    if (!g && cands.length === 1) g = cands[0];
+    if (!g) { unmatched++; continue; }
     if (!oddsByGame.has(g.id)) oddsByGame.set(g.id, []);
     oddsByGame.get(g.id)!.push(o);
     if (o.startTime && !tipByGame.has(g.id)) tipByGame.set(g.id, o.startTime);
@@ -221,12 +229,14 @@ export async function refreshWnbaLines(opts: {
     return result;
   }
 
-  // 4. Apply: DELETE-then-INSERT lines + sharp_signals; append line_history; update tip times.
-  for (const dk of deleteKeys) {
-    const [gid, mkt, book] = dk.split("::");
-    const { error } = await supabase.from("lines").delete()
-      .eq("game_id", Number(gid)).eq("market_type", mkt).eq("sportsbook", book).is("player_id", null);
-    if (error) errors.push(`lines delete ${dk}: ${error.message}`);
+  // 4. Apply. Full window refresh of `lines`: clear current rows for ALL window
+  // scheduled games (removes stale / duplicate-meeting rows), then insert the
+  // freshly matched set. `line_history` stays append-only (history preserved).
+  void deleteKeys;
+  const windowIds = games.map((g) => g.id as number);
+  if (windowIds.length) {
+    const { error } = await supabase.from("lines").delete().in("game_id", windowIds).is("player_id", null);
+    if (error) errors.push(`lines window clear: ${error.message}`);
   }
   if (linesPayload.length) {
     const { error } = await supabase.from("lines").insert(linesPayload);
