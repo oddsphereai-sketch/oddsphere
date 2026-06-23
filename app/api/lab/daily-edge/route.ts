@@ -101,6 +101,7 @@ import {
 } from "@/lib/services/streamOverlay";
 import { interpretMarket } from "@/lib/streaming/marketInterpretation";
 import { selectTotalLine } from "@/app/lab/lib/selectTotalLine";
+import { selectMainTotalLine } from "@/lib/services/selectMainTotalLine";
 
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer"];
 // Phase 7G — NBA goes live in the member-facing Daily Edge via the
@@ -918,7 +919,11 @@ function buildGameDto(
       (sp as Record<string, unknown>).ml_flip = { flipped: true };
       mlFlippedPreLock = true;
     }
-    const ouLines = currentLinesByGameMarket.get(`${row.id}::total`) ?? [];
+    // Price the flip at the consensus bet line only (drop divergent/alt-line books).
+    const ouLinesAll = currentLinesByGameMarket.get(`${row.id}::total`) ?? [];
+    const ouLines = ouLinesAll.filter(
+      (r) => betLineForFlip === null || r.line_value === betLineForFlip || r.line_value === null,
+    );
     const ouRecon = (sp.total_projection_reconciliation ?? null) as { mean_probability_divergence?: unknown } | null;
     // Bet-line basis: resolve the correction against the line the member bets
     // (betLineForFlip) and the displayed projected total (raw score sum), with
@@ -1237,7 +1242,12 @@ function buildGameDto(
     sharpStatus: totalStatus,
     modelSide: pred.predicted_ou_side as Side | null,
     signals,
-    linesCurrent: currentLinesByGameMarket.get(`${row.id}::total`) ?? [],
+    // Price the total at the CONSENSUS line only (drop divergent/alt-line books
+    // like a lone Pinnacle 9.5/10) so the displayed odds match the displayed line.
+    // null-line rows are price-only synthesized rows — keep them.
+    linesCurrent: (currentLinesByGameMarket.get(`${row.id}::total`) ?? []).filter(
+      (r) => totalLine === null || r.line_value === totalLine || r.line_value === null,
+    ),
     lineOpenCandidates:
       openLinesByGameMarket.get(
         `${row.id}::total::${pred.predicted_ou_side ?? "null"}`
@@ -3866,12 +3876,12 @@ export async function GET(request: Request) {
     // with a line_value" was untrusted; the new behavior returns null
     // when no trusted book has the line (rather than an arbitrary
     // book's value).
+    // 2026-06-23 — consensus MAIN total line (modal by distinct-book count), not
+    // the first BOOK_PRIORITY book. Fixes a single divergent/alt-line book (e.g.
+    // Pinnacle posting 9.5/10 at −167 while five books sit at 8.5) overriding the
+    // multi-book consensus on both the displayed line AND the price.
     for (const [gameId, rows] of totalsByGame.entries()) {
-      let chosen: number | null = null;
-      for (const book of BOOK_PRIORITY) {
-        const hit = rows.find((r) => r.sportsbook === book && r.line_value !== null);
-        if (hit) { chosen = hit.line_value!; break; }
-      }
+      const chosen = selectMainTotalLine(rows);
       if (chosen !== null) totalLineByGame.set(gameId, chosen);
     }
 

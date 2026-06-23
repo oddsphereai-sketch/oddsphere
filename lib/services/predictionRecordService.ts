@@ -25,6 +25,7 @@ import { isBlockedSportsbook } from "../config/blockedSportsbooks";
 import { resolveMlInversionFlip, ML_INVERSION_RULE_ID } from "./mlInversionFlip";
 import { resolveTotalsMeanFlip, TOTALS_MEAN_FLIP_RULE_ID } from "./totalsMeanFlip";
 import { resolveFiInversionFlip, FI_INVERSION_RULE_ID } from "./fiInversionFlip";
+import { selectMainTotalLine } from "./selectMainTotalLine";
 
 export type CreateRecordsOptions = {
   sport: TrackedSport;
@@ -473,8 +474,15 @@ export function buildGameOddsSnapshot(
   const gameId = opts?.gameId ?? -1;
   const mlHome = pickOddsWithFallback(lines, history, gameId, "moneyline", "home");
   const mlAway = pickOddsWithFallback(lines, history, gameId, "moneyline", "away");
-  const ouOver = pickOddsWithFallback(lines, history, gameId, "total", "over");
-  const ouUnder = pickOddsWithFallback(lines, history, gameId, "total", "under");
+  // Constrain totals to the CONSENSUS main line so over + under come from the SAME
+  // line (not a divergent/alt-line single book — e.g. a lone Pinnacle 9.5/10). The
+  // bet line + per-side prices in the locked snapshot then stay coherent.
+  const mainTotal = selectMainTotalLine(lines.filter((l) => l.market_type === "total"));
+  const ouLines = mainTotal === null ? lines : lines.filter(
+    (l) => l.market_type !== "total" || l.line_value === mainTotal || l.line_value === null,
+  );
+  const ouOver = pickOddsWithFallback(ouLines, history, gameId, "total", "over");
+  const ouUnder = pickOddsWithFallback(ouLines, history, gameId, "total", "under");
   return {
     mlHomeOdds: mlHome.odds,
     mlAwayOdds: mlAway.odds,
