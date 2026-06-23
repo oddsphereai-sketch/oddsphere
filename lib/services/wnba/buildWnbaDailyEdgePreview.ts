@@ -40,7 +40,7 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 // ── types ──
 type BdlGame = { id: number; date: string; season: number; postseason: boolean; h: number; a: number; hs: number; as: number };
 type Grade = "Best Angle" | "Lean" | "Watchlist" | "Caution";
-type ModelState = { elo: Map<number, number>; games: Map<number, number>; pf: Map<number, number[]>; pa: Map<number, number[]>; nameById: Map<number, string>; mascot: [string, number][]; computedAt: number };
+type ModelState = { elo: Map<number, number>; games: Map<number, number>; pf: Map<number, number[]>; pa: Map<number, number[]>; nameById: Map<number, string>; mascot: [string, number][]; rawGames: BdlGame[]; computedAt: number };
 
 // ── BDL fetch (cursor) ──
 async function bdl(path: string, key: string): Promise<{ data: unknown[]; meta?: { next_cursor?: number } }> {
@@ -49,8 +49,12 @@ async function bdl(path: string, key: string): Promise<{ data: unknown[]; meta?:
   return r.json() as Promise<{ data: unknown[]; meta?: { next_cursor?: number } }>;
 }
 async function bdlGames(key: string): Promise<BdlGame[]> {
-  const out: BdlGame[] = [];
-  for (const yr of [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]) {
+  // Fetch seasons in PARALLEL (was sequential — the dominant cost on a cold
+  // serverless invocation). Pagination within a season stays sequential
+  // (cursor dependency), but ~9 seasons no longer run back-to-back.
+  const years = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026];
+  const perYear = await Promise.all(years.map(async (yr) => {
+    const out: BdlGame[] = [];
     let cursor: number | undefined; let pages = 0;
     while (pages < 8) {
       const j = await bdl(`/games?seasons[]=${yr}&per_page=100${cursor ? `&cursor=${cursor}` : ""}`, key);
@@ -61,8 +65,9 @@ async function bdlGames(key: string): Promise<BdlGame[]> {
       }
       pages++; cursor = j.meta?.next_cursor; if (!cursor) break;
     }
-  }
-  return out.sort((x, y) => (x.date < y.date ? -1 : 1));
+    return out;
+  }));
+  return perYear.flat().sort((x, y) => (x.date < y.date ? -1 : 1));
 }
 
 // ── Elo (fixed K=20; dynamic K tested & rejected) + recent scoring; cached in-process ──
@@ -74,9 +79,10 @@ async function getModel(): Promise<ModelState> {
   const teamsJson = await bdl(`/teams`, key);
   const nameById = new Map<number, string>(); const mascot: [string, number][] = [];
   for (const t of teamsJson.data as Record<string, unknown>[]) { nameById.set(t.id as number, t.full_name as string); mascot.push([norm(t.name as string), t.id as number]); }
+  const rawGames = await bdlGames(key);
   // GUARD: drop future 0-0 games AND non-franchise squads (All-Star / national
   // exhibition / TBD) so they never corrupt ratings or projections.
-  const games = (await bdlGames(key)).filter((g) => g.hs > 0 && g.as > 0 && isRealWnbaTeam(g.h) && isRealWnbaTeam(g.a));
+  const games = rawGames.filter((g) => g.hs > 0 && g.as > 0 && isRealWnbaTeam(g.h) && isRealWnbaTeam(g.a));
   const elo = new Map<number, number>(), ls = new Map<number, number>(), games_ = new Map<number, number>(), pf = new Map<number, number[]>(), pa = new Map<number, number[]>();
   const E = (t: number) => elo.get(t) ?? 1500;
   for (const g of games) {
@@ -87,7 +93,7 @@ async function getModel(): Promise<ModelState> {
     games_.set(g.h, (games_.get(g.h) ?? 0) + 1); games_.set(g.a, (games_.get(g.a) ?? 0) + 1);
     for (const [t, f, ag] of [[g.h, g.hs, g.as], [g.a, g.as, g.hs]] as [number, number, number][]) { (pf.get(t) ?? pf.set(t, []).get(t)!).push(f); (pa.get(t) ?? pa.set(t, []).get(t)!).push(ag); }
   }
-  MODEL_CACHE = { elo, games: games_, pf, pa, nameById, mascot, computedAt: Date.now() };
+  MODEL_CACHE = { elo, games: games_, pf, pa, nameById, mascot, rawGames, computedAt: Date.now() };
   return MODEL_CACHE;
 }
 const roll10 = (m: Map<number, number[]>, t: number) => { const x = m.get(t) ?? []; return x.length ? x.slice(-10).reduce((s, v) => s + v, 0) / Math.min(10, x.length) : 82; };
@@ -97,8 +103,10 @@ type OddRow = { book: string; sharp: boolean; mkt: string; selType: string; odds
 async function wnbaOdds(resolve: (s: string) => number | null): Promise<OddRow[]> {
   const key = process.env.SHARPAPI_KEY; if (!key) throw new Error("missing SHARPAPI_KEY");
   const evDate = (s: string) => { const m = String(s).match(/20\d\d-\d\d-\d\d/); return m ? m[0] : null; };
-  const out: OddRow[] = [];
-  for (const mkt of ["moneyline", "point_spread", "total_points"]) {
+  // Fetch the 3 markets in PARALLEL (pagination within a market stays
+  // sequential on its cursor).
+  const perMarket = await Promise.all(["moneyline", "point_spread", "total_points"].map(async (mkt) => {
+    const rows: OddRow[] = [];
     let cursor: string | null = null, pages = 0;
     while (pages < 10) {
       const url = `${SHARP}/odds?league=wnba&market_type=${mkt}&limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
@@ -109,13 +117,14 @@ async function wnbaOdds(resolve: (s: string) => number | null): Promise<OddRow[]
         const book = String(x.sportsbook ?? "").toLowerCase();
         if (BLOCKED.has(book) || x.is_main_line === false || x.is_stale_pregame_price === true) continue;
         const h = resolve(String(x.home_team)), a = resolve(String(x.away_team)); if (!h || !a || h === a) continue;
-        out.push({ book, sharp: SHARP_BOOKS.has(book), mkt, selType: String(x.selection_type), odds: x.odds_american == null ? null : Number(x.odds_american),
+        rows.push({ book, sharp: SHARP_BOOKS.has(book), mkt, selType: String(x.selection_type), odds: x.odds_american == null ? null : Number(x.odds_american),
           line: x.line == null ? null : Number(x.line), date: evDate(String(x.event_id)) ?? evDate(String(x.event_start_time)), h, a });
       }
       pages++; if (!j.pagination?.has_more || !j.pagination?.next_cursor) break; cursor = j.pagination.next_cursor;
     }
-  }
-  return out;
+    return rows;
+  }));
+  return perMarket.flat();
 }
 
 const shiftDate = (d: string, n: number) => new Date(+new Date(d + "T12:00:00Z") + n * 86400000).toISOString().slice(0, 10);
@@ -136,8 +145,9 @@ export async function buildWnbaDailyEdgePreview(dateParam: string | null) {
   const byGame = new Map<string, OddRow[]>();
   for (const o of odds) { if (!o.date) continue; const k = [o.h, o.a].sort().join("|") + "|" + o.date; (byGame.get(k) ?? byGame.set(k, []).get(k)!).push(o); }
 
-  // authoritative upcoming games (BDL future 0-0), date>=cutoff, that we have odds for
-  const allGames = await bdlGames(process.env.BALLDONTLIE_API_KEY!);
+  // authoritative upcoming games (BDL future 0-0), date>=cutoff, that we have odds
+  // for — reuse the raw games already fetched for the model (no duplicate fetch).
+  const allGames = M.rawGames;
   const seen = new Set<string>();
   const slate = allGames.filter((g) => g.hs === 0 && g.as === 0 && isRealWnbaTeam(g.h) && isRealWnbaTeam(g.a) && g.date >= cutoff && [shiftDate(g.date, -1), g.date, shiftDate(g.date, 1)].some((d) => snapDates.has(d)))
     .sort((x, y) => (x.date < y.date ? -1 : 1)).filter((g) => { const k = [g.h, g.a].sort().join("|") + g.date; if (seen.has(k)) return false; seen.add(k); return true; });
