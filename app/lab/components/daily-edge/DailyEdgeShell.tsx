@@ -1071,9 +1071,13 @@ export function SportRail({ sport }: { sport: Sport }) {
   const ROW: Array<{ key: Sport; label: string; live: boolean; inSeason?: boolean }> = [
     { key: "mlb", label: "MLB", live: true, inSeason: true },
     { key: "soccer", label: "World Cup", live: true, inSeason: true },
+    // WNBA sits with the in-season group (next to World Cup), ahead of the
+    // offseason NBA/NHL, per Daniel — but stays "Coming Soon" (live:false)
+    // until its forward-evidence + tracking gate clears. Flip live:true to
+    // launch it in place.
+    { key: "wnba", label: "WNBA", live: false, inSeason: true },
     { key: "nba", label: "NBA", live: true, inSeason: false },
     { key: "nhl", label: "NHL", live: true, inSeason: false },
-    { key: "wnba", label: "WNBA", live: false },
     { key: "nfl", label: "NFL", live: false },
     { key: "cfb", label: "CFB", live: false },
     { key: "cbb", label: "CBB", live: false },
