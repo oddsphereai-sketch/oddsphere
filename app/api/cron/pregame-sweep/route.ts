@@ -313,7 +313,10 @@ export async function GET(request: Request) {
   return cronHandlerPerSport(
     request,
     "pregame_sweep",
-    sportsInSeasonToday(),
+    // WNBA added to THIS cron only (not sportsInSeasonToday, which feeds 8 crons).
+    // pregame-sweep's WNBA job is the T-60 lock; a no-op when no WNBA games/preds
+    // exist (e.g. WNBA_CRON_ENABLED off). See the wnba lock-only return below.
+    [...new Set<Sport>([...sportsInSeasonToday(), "wnba"])],
     async ({ sport }) => {
       // ── Master gate (write-mode only) ───────────────────────────────
       // Dry-run mode is always allowed. Write mode requires the
@@ -425,6 +428,23 @@ export async function GET(request: Request) {
       // default for V1.
       const lockResult = await applyLocks(sport, date, partition.entering_lock);
       records += lockResult.locked;
+
+      // ── WNBA: lock-only ─────────────────────────────────────────────
+      // applyLocks above already set locked_at on game_predictions AND
+      // propagated to prediction_records (ML/O-U/Spread) for entering-T-60
+      // WNBA games. WNBA's games/lines/model are owned by wnba-daily-refresh,
+      // so STOP here — skip the MLB-specific lines / sharp-signals /
+      // market-signal / grade steps below. Locked rows are never overwritten
+      // by the hourly refresh (runWnbaModel + buildWnbaPredictionRecords both
+      // skip locked_at != null).
+      if (sport === "wnba") {
+        return {
+          records_updated: records,
+          api_calls_made: apiCalls,
+          partial: false,
+          details: { sport, date, lock_only: true, entering_lock: partition.entering_lock.length, locked: lockResult.locked },
+        };
+      }
 
       // ── 4. Refresh lines + sharp signals for the slate ──────────────
       // Phase 6B.15 — switched from refreshGameLines (V1, slate-wide
