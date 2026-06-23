@@ -21,7 +21,9 @@ import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Sport } from "@/lib/types/domain/Sport";
 
-const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer"];
+// "wnba" is deep-link reachable (?sport=wnba) for operator/UI review even though
+// the SportRail tab stays non-live ("Coming Soon") until its smoke + gate clears.
+const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer", "wnba"];
 const PROPS_SPORTS: Sport[] = ["mlb", "nba", "nfl", "nhl"];
 const DEFAULT_SPORT: Sport = "mlb";
 
