@@ -13,7 +13,7 @@
 // distinguished by a `games.competition` field at the DB layer. Here in
 // the lab UI mock-data layer, soccer just needs SPORT_META + PROP_TYPE_META
 // entries so the sport selector renders without crashing.
-export type Sport = "mlb" | "nba" | "nfl" | "cbb" | "cfb" | "nhl" | "ucl" | "soccer";
+export type Sport = "mlb" | "nba" | "nfl" | "cbb" | "cfb" | "nhl" | "ucl" | "soccer" | "wnba";
 
 // Per-sport prop type unions. Note that "assists" and "points" intentionally
 // collide between NBA and NHL — they're disambiguated at runtime by the
@@ -71,6 +71,7 @@ export const SPORT_META: Record<
   // copy reads "World Cup". Empty-state messaging is sport-specific so the
   // tab renders honestly when no fixtures or no published rows exist yet.
   soccer: { label: "World Cup", icon: "⚽", isLive: true },
+  wnba: { label: "WNBA", icon: "🏀", isLive: false, comingSoonLabel: "Coming soon" },
 };
 
 type PropTypeMeta = {
@@ -119,6 +120,7 @@ export const PROP_TYPE_META: Record<Sport, Record<string, PropTypeMeta>> = {
   cfb: {},
   ucl: {},
   soccer: {},
+  wnba: {},
 };
 
 export function getPropTypeMeta(sport: Sport, propType: string): PropTypeMeta {

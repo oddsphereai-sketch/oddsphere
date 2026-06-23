@@ -95,7 +95,7 @@ function isContextOnlyMarket(market: MarketKey, sport: Sport): boolean {
 function marketShortLabelFor(market: MarketKey, sport: Sport): string {
   if (market === "first_inning") {
     if (sport === "nhl") return "PL*";
-    if (sport === "nba") return "Sprd*";
+    if (sport === "nba" || sport === "wnba") return "Sprd*";
     // The soccer first_inning slot carries the BTTS market (the btts
     // prediction record) as its pill/headline. Double Chance is surfaced
     // as a reader context block on the Match Result slot, not here.
@@ -109,7 +109,7 @@ function marketShortLabelFor(market: MarketKey, sport: Sport): string {
 function marketLongLabelFor(market: MarketKey, sport: Sport): string {
   if (market === "first_inning") {
     if (sport === "nhl") return "Puck Line";
-    if (sport === "nba") return "Spread";
+    if (sport === "nba" || sport === "wnba") return "Spread";
     if (sport === "soccer") return "Both Teams To Score";
   }
   if (sport === "soccer") {
@@ -126,7 +126,7 @@ const CONTEXT_ONLY_FOOTNOTE = "* Model context · Not part of official tracking"
 // shows "Toss-Up" on first_inning (the [0.85, 1.15) FI band); NBA
 // and NHL (which never have a held FI concept) show "Held".
 function pickFallbackFor(market: MarketKey, sport: Sport): string {
-  if (sport === "nba" || sport === "nhl" || sport === "soccer") return "Held";
+  if (sport === "nba" || sport === "wnba" || sport === "nhl" || sport === "soccer") return "Held";
   return market === "first_inning" ? "Toss-Up" : "Held";
 }
 
@@ -348,6 +348,9 @@ function espnLogoUrl(abbr: string, sport: Sport = "mlb"): string {
     const slug = ESPN_NBA_SLUG[abbr] ?? abbr.toLowerCase();
     return `https://a.espncdn.com/i/teamlogos/nba/500/${slug}.png`;
   }
+  if (sport === "wnba") {
+    return `https://a.espncdn.com/i/teamlogos/wnba/500/${abbr.toLowerCase()}.png`;
+  }
   if (sport === "nhl") {
     return `https://a.espncdn.com/i/teamlogos/nhl/500/${abbr.toLowerCase()}.png`;
   }
@@ -430,7 +433,7 @@ function buildEdgeRow(market: MarketKey, m: MarketEdgeDto, sport: Sport = "mlb")
       // NBA → points.
       const diff = m.modelTotal - m.marketTotal;
       const sign = diff >= 0 ? "+" : "";
-      const unit = sport === "nhl" || sport === "soccer" ? "goals" : sport === "nba" ? "points" : "runs";
+      const unit = sport === "nhl" || sport === "soccer" ? "goals" : (sport === "nba" || sport === "wnba") ? "points" : "runs";
       return {
         label: "Model read",
         value: `${m.modelTotal.toFixed(1)} ${unit} vs market ${m.marketTotal.toFixed(1)} (${sign}${diff.toFixed(1)})`,
@@ -969,7 +972,7 @@ function SportIcon({ sport, size = 18, active }: { sport: Sport; size?: number; 
       </svg>
     );
   }
-  if (sport === "nba" || sport === "cbb") {
+  if (sport === "nba" || sport === "cbb" || sport === "wnba") {
     // Basketball — orange disc with darker seams
     return (
       <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" className="shrink-0" style={{ opacity: wrapperOpacity }}>
@@ -1059,11 +1062,18 @@ export function SportRail({ sport }: { sport: Sport }) {
   // with WC on the same tab. Internal sport key for soccer stays
   // `soccer` (matches the WC-3 TrackedSport contract); the
   // member-facing label is "World Cup".
-  const ROW: Array<{ key: Sport; label: string; live: boolean }> = [
-    { key: "mlb", label: "MLB", live: true },
-    { key: "nba", label: "NBA", live: true },
-    { key: "nhl", label: "NHL", live: true },
-    { key: "soccer", label: "World Cup", live: true },
+  // Ordered so the models that are ACTIVE / in-season surface first (left),
+  // then live-but-offseason models, then not-yet-ready (right). `inSeason`
+  // drives the subtitle ("Active" / "Live" / "Offseason" / "Coming Soon").
+  // 2026-06: MLB + World Cup are in-season; NBA/NHL seasons are over
+  // (offseason); WNBA is in-season but stays non-live until its UI smoke +
+  // forward-evidence gate clears.
+  const ROW: Array<{ key: Sport; label: string; live: boolean; inSeason?: boolean }> = [
+    { key: "mlb", label: "MLB", live: true, inSeason: true },
+    { key: "soccer", label: "World Cup", live: true, inSeason: true },
+    { key: "nba", label: "NBA", live: true, inSeason: false },
+    { key: "nhl", label: "NHL", live: true, inSeason: false },
+    { key: "wnba", label: "WNBA", live: false },
     { key: "nfl", label: "NFL", live: false },
     { key: "cfb", label: "CFB", live: false },
     { key: "cbb", label: "CBB", live: false },
@@ -1126,7 +1136,7 @@ export function SportRail({ sport }: { sport: Sport }) {
                         Active
                       </span>
                     ) : s.live ? (
-                      "Live"
+                      s.inSeason ? "Live" : "Offseason"
                     ) : (
                       "Coming Soon"
                     )}
@@ -1576,7 +1586,7 @@ function CleanEvRow({ label, children, delta, tone, chip }: { label: string; chi
  */
 function ModelEdgeBlock({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
   const shellSport = useShellSport();
-  const totalUnit = shellSport === "nhl" || shellSport === "soccer" ? "goals" : shellSport === "nba" ? "points" : "runs";
+  const totalUnit = shellSport === "nhl" || shellSport === "soccer" ? "goals" : (shellSport === "nba" || shellSport === "wnba") ? "points" : "runs";
 
   let topLabel = "Confidence";
   let topVal = "—";
@@ -1641,7 +1651,7 @@ function ModelEdgeBlock({ market, marketData }: { market: MarketKey; marketData:
 /** Clean Supporting Evidence column — same real data, reworked presentation. */
 function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
   const shellSport = useShellSport();
-  const totalUnit = shellSport === "nhl" || shellSport === "soccer" ? "goals" : shellSport === "nba" ? "points" : "runs";
+  const totalUnit = shellSport === "nhl" || shellSport === "soccer" ? "goals" : (shellSport === "nba" || shellSport === "wnba") ? "points" : "runs";
   const rows = buildEdgeStackRows(market, marketData, totalUnit);
   const find = (l: string) => rows.find((r) => r.label === l);
   const pinnacle = find("Pinnacle EV");
@@ -3501,6 +3511,7 @@ function emptyStateMessageFor(
       // Sport-specific copy. NBA's offseason / non-game days are common;
       // the honest line is "no games today", not "being ingested".
       if (sport === "nba") return "No NBA games scheduled today.";
+      if (sport === "wnba") return "No WNBA games scheduled today.";
       if (sport === "nhl") return "No NHL games scheduled today.";
       if (sport === "soccer") return "No World Cup matches scheduled today.";
       return "No games on tonight's slate.";

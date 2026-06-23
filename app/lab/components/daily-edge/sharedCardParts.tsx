@@ -155,7 +155,7 @@ export function TeamColorAccent({
   awayTeam: string;
   homeTeam: string;
   /** Sport discriminator for the color lookup. Default "mlb" keeps existing MLB call-sites unchanged. */
-  sport?: "mlb" | "nba" | "nfl" | "nhl" | "cbb" | "cfb" | "ucl" | "soccer";
+  sport?: "mlb" | "nba" | "nfl" | "nhl" | "cbb" | "cfb" | "ucl" | "soccer" | "wnba";
 }) {
   const awayColor = teamPrimaryColor(awayTeam, sport);
   const homeColor = teamPrimaryColor(homeTeam, sport);

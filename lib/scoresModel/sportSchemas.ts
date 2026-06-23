@@ -220,6 +220,8 @@ export const SPORT_SCHEMAS: Record<Sport, SportSchema> = {
   cfb:  NCAAF_SCHEMA,
   cbb:  NCAAB_SCHEMA,
   soccer: SOCCER_SCHEMA,
+  // WNBA shares NBA's basketball scoring schema (home/away points → total).
+  wnba: NBA_SCHEMA,
 };
 
 export function getSportSchema(sport: Sport): SportSchema {

@@ -20,4 +20,5 @@ export type Sport =
   | "cfb"
   | "nhl"
   | "ucl"
-  | "soccer";
+  | "soccer"
+  | "wnba";

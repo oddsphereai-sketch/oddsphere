@@ -207,6 +207,16 @@ export async function runTrackingRefresh(
     globalErrors: [],
   };
 
+  // WNBA is not an officially tracked sport operationally yet (Phase 2 tracking
+  // writer/cron pending). The shared grader path only handles TrackedSport, so
+  // a stray wnba invocation no-ops with an empty summary instead of crashing.
+  // This early return also narrows `sport` to TrackedSport for the loop below.
+  if (sport === "wnba") {
+    summary.finishedAtIso = new Date().toISOString();
+    summary.durationMs = Date.now() - t0;
+    return summary;
+  }
+
   for (const date of opts.dates) {
     const perDate: TrackingRefreshPerDate = {
       date,

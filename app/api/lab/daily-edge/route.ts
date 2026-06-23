@@ -103,7 +103,7 @@ import { interpretMarket } from "@/lib/streaming/marketInterpretation";
 import { selectTotalLine } from "@/app/lab/lib/selectTotalLine";
 import { selectMainTotalLine } from "@/lib/services/selectMainTotalLine";
 
-const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer"];
+const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer", "wnba"];
 // Phase 7G — NBA goes live in the member-facing Daily Edge via the
 // shared adapter below. MLB pipeline below is unchanged.
 const LIVE_SPORTS: Sport[] = ["mlb", "nba"];
@@ -3447,6 +3447,37 @@ export async function GET(request: Request) {
   // direct URL (?sport=nhl) returns the NHL pipeline output for
   // operator review. Read-only — DB writes happen only via the
   // operator scripts (write-nhl-prediction-records, grade-nhl-games).
+  // WNBA branch (Phase 2). Reachable via ?sport=wnba for operator/UI review;
+  // SportRail keeps WNBA non-member-live until the UI smoke + forward-evidence
+  // gate clears. Read-only — independent Elo+Platt model, market-assisted; no DB
+  // writes / cron / tracking yet. Returns the MLB-shaped DailyEdgeResponse so the
+  // shared shell renders WNBA with logos + color accents + ML/spread/total.
+  if (sport === "wnba") {
+    try {
+      const { buildWnbaDailyEdgeAdapted } = await import(
+        "@/lib/services/wnba/buildWnbaDailyEdgeAdapted"
+      );
+      const adapted = await buildWnbaDailyEdgeAdapted(isSlateDate(dateParam) ? dateParam : null);
+      return Response.json(adapted, {
+        headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
+      });
+    } catch (e) {
+      const body: DailyEdgeResponse = {
+        as_of: new Date().toISOString(),
+        sport,
+        date: requestedDate,
+        requested_date: requestedDate,
+        fallback_used: false,
+        slateState: "no_data",
+        slate_status: null,
+        last_slate_update_at: null,
+        games: [],
+      };
+      console.warn(`wnba daily-edge: pipeline error: ${(e as Error).message}`);
+      return Response.json(body, { headers: { "Cache-Control": "no-store" } });
+    }
+  }
+
   if (sport === "nhl") {
     try {
       const { buildNhlDailyEdgeAdapted } = await import(

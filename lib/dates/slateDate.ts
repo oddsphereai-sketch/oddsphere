@@ -35,6 +35,7 @@ const SPORT_TIMEZONE: Record<Sport, string> = {
   cbb: "America/New_York",
   cfb: "America/New_York",
   nhl: "America/New_York",
+  wnba: "America/New_York",
   ucl: "Europe/London",
   // WC-1 — soccer slate anchors to America/New_York to match the
   // ET-anchored daily slate model used elsewhere in the product. FIFA

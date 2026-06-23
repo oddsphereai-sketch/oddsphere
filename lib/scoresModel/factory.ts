@@ -34,6 +34,10 @@ const SPORT_TO_ENV_SUFFIX: Record<Sport, string> = {
   // BDL-WC backed source); enabling USE_AUTO_SCORES_MODEL_SOCCER while
   // the class is missing will still throw the documented helpful error.
   soccer: "SOCCER",
+  // WNBA uses its own market-assisted adapter (buildWnbaDailyEdgeAdapted),
+  // not the manual/auto scores-model factory. Suffix present only so the
+  // sport-keyed lookup compiles; no AutoWnbaScoresModelSource exists.
+  wnba: "WNBA",
 };
 
 function useAutoFor(sport: Sport): boolean {

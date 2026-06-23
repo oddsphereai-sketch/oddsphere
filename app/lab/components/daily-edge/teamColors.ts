@@ -225,6 +225,33 @@ export const SOCCER_TEAM_COLORS: Record<string, TeamColorEntry> = {
 };
 
 /**
+ * WNBA team primary colors — 2026-06-23. All 15 franchises keyed by the
+ * canonical abbreviation (ESPN === BDL form, see lib/services/wnba/wnbaTeams.ts).
+ * Values start from ESPN's official `color` but a few are swapped to the more
+ * saturated/recognizable brand color so the dark-UI accent line never reads as
+ * washed-out/blank (the gate explicitly forbids near-white accents): ESPN ships
+ * POR/LV/GS as near-white primaries, so those use the club's identity hue.
+ * Includes 2025 expansion GS (Valkyries) + 2026 expansion POR/TOR.
+ */
+export const WNBA_TEAM_COLORS: Record<string, TeamColorEntry> = {
+  ATL: { primary: "#E31837" }, // Dream — red
+  CHI: { primary: "#418FDE" }, // Sky — sky blue
+  CON: { primary: "#F05023" }, // Sun — orange
+  DAL: { primary: "#0C2340" }, // Wings — navy
+  GS:  { primary: "#5B2D8E" }, // Valkyries — Bay violet (ESPN primary is near-white)
+  IND: { primary: "#002D62" }, // Fever — navy
+  LA:  { primary: "#552583" }, // Sparks — purple
+  LV:  { primary: "#BA0C2F" }, // Aces — red (ESPN primary is silver)
+  MIN: { primary: "#266092" }, // Lynx — blue
+  NY:  { primary: "#86CEBC" }, // Liberty — seafoam (their real identity color)
+  PHX: { primary: "#3C286E" }, // Mercury — purple
+  POR: { primary: "#E03A3E" }, // Fire — flame red (ESPN primary is near-white)
+  SEA: { primary: "#2C5235" }, // Storm — green
+  TOR: { primary: "#33476D" }, // Tempo — navy
+  WSH: { primary: "#E03A3E" }, // Mystics — red
+};
+
+/**
  * Lookup helper with fallback. Pure, deterministic.
  *
  * Phase 7F: optional `sport` discriminator. Default "mlb" keeps the
@@ -235,9 +262,12 @@ export const SOCCER_TEAM_COLORS: Record<string, TeamColorEntry> = {
  */
 export function teamPrimaryColor(
   abbreviation: string | null | undefined,
-  sport: "mlb" | "nba" | "nfl" | "nhl" | "cbb" | "cfb" | "ucl" | "soccer" = "mlb",
+  sport: "mlb" | "nba" | "nfl" | "nhl" | "cbb" | "cfb" | "ucl" | "soccer" | "wnba" = "mlb",
 ): string {
   if (!abbreviation) return FALLBACK_TEAM_COLOR;
+  if (sport === "wnba") {
+    return WNBA_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
+  }
   if (sport === "nba") {
     return NBA_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
   }

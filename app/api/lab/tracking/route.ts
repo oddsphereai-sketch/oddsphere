@@ -58,6 +58,7 @@ const SPORT_MARKETS: Record<Sport, string[]> = {
   nfl: ["ML", "O/U"],
   cfb: ["ML", "O/U"],
   nhl: ["ML", "O/U"],
+  wnba: ["ML", "O/U"],
   ucl: ["ML", "Double Chance"],
   // WC-1 — soccer launch markets per OFFICIAL_TRACKING_MARKETS:
   //   3-way result, double chance, total goals (canonical 2.5), BTTS.
