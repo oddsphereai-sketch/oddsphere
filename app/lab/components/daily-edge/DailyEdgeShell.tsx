@@ -1100,7 +1100,7 @@ export function SportRail({ sport }: { sport: Sport }) {
                 key={s.key}
                 onClick={clickHandler}
                 type={isClickable ? "button" : undefined}
-                className={`group flex-1 min-w-[120px] sm:min-w-0 inline-flex items-center gap-2.5 px-3 py-2 rounded-lg border whitespace-nowrap transition-colors ${
+                className={`group shrink-0 inline-flex items-center gap-2.5 px-3 py-2 rounded-lg border whitespace-nowrap transition-colors ${
                   isActive
                     ? "border-violet-400/55 bg-violet-500/[0.14] text-violet-50 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.10),0_0_18px_-8px_rgba(139,92,246,0.45)]"
                     : isClickable
