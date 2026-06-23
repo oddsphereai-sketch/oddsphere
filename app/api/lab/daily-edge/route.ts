@@ -1248,10 +1248,13 @@ function buildGameDto(
     linesCurrent: (currentLinesByGameMarket.get(`${row.id}::total`) ?? []).filter(
       (r) => totalLine === null || r.line_value === totalLine || r.line_value === null,
     ),
-    lineOpenCandidates:
+    // Opener candidates constrained to the consensus line too (so line-movement
+    // doesn't open from a divergent/alt-line book — e.g. a lone Pinnacle 10/−206).
+    lineOpenCandidates: (
       openLinesByGameMarket.get(
         `${row.id}::total::${pred.predicted_ou_side ?? "null"}`
-      ) ?? [],
+      ) ?? []
+    ).filter((r) => totalLine === null || r.line_value === totalLine || r.line_value === null),
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
@@ -3380,6 +3383,15 @@ export async function GET(request: Request) {
   // that genuinely want "show me whatever's most recent" pass
   // `?allowStale=true` and accept the labeled stale response.
   const allowStale = url.searchParams.get("allowStale") === "true";
+
+  // WNBA preview-only branch (Phase 1). Gated behind ?preview=1 and intentionally
+  // NOT in VALID_SPORTS/LIVE_SPORTS, so it can never surface on the public app.
+  // Clean JSON only — no DB writes, no cron, no lock, no tracking, no prod.
+  if (sportParam === "wnba" && url.searchParams.get("preview") === "1") {
+    const { buildWnbaDailyEdgePreview } = await import("@/lib/services/wnba/buildWnbaDailyEdgePreview");
+    const adapted = await buildWnbaDailyEdgePreview(isSlateDate(dateParam) ? dateParam : null);
+    return Response.json(adapted, { headers: { "Cache-Control": "no-store" } });
+  }
 
   const sport: Sport =
     sportParam && (VALID_SPORTS as string[]).includes(sportParam)
