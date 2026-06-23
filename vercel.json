@@ -90,6 +90,10 @@
       "schedule": "30 * * * *"
     },
     {
+      "path": "/api/cron/wnba-daily-refresh",
+      "schedule": "15 * * * *"
+    },
+    {
       "path": "/api/cron/nhl-daily-refresh",
       "schedule": "45 * * * *"
     },
