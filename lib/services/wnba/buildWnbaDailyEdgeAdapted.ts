@@ -30,6 +30,65 @@ import type { Verdict } from "../verdictDerivation";
 import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
 import { wnbaLogoUrl } from "./wnbaTeams";
+import { supabase } from "@/lib/db/supabase";
+
+/**
+ * Reconstruct the PreviewGame shape from stored game_predictions (written by
+ * runWnbaModel). The DB row carries the full model output in sport_specific, so
+ * the route serves the EXACT applied rows — no recompute, no model duplication.
+ * Loads the upcoming scheduled-game window (WNBA's bettable slate), ordered by
+ * tip; returns [] when nothing is stored (caller falls back to live compute).
+ */
+async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGame[]> {
+  const today = new Date().toISOString().slice(0, 10);
+  const end = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+  let q = supabase
+    .from("games")
+    .select("id, external_id, slate_date, game_date, home_team_id, away_team_id")
+    .eq("sport", "wnba").eq("status", "scheduled");
+  q = date ? q.eq("slate_date", date) : q.gte("slate_date", today).lte("slate_date", end);
+  const { data: games } = await q.order("game_date");
+  if (!games || games.length === 0) return [];
+  const ids = games.map((g) => g.id as number);
+  const { data: gps } = await supabase
+    .from("game_predictions")
+    .select("game_id, predicted_home_score, predicted_away_score, predicted_total, sport_specific")
+    .in("game_id", ids);
+  const gpByGame = new Map((gps ?? []).map((r) => [r.game_id as number, r]));
+  const { data: teams } = await supabase.from("teams").select("id, abbreviation, name").eq("sport", "wnba");
+  const tById = new Map((teams ?? []).map((t) => [t.id as number, t]));
+  const out: PreviewGame[] = [];
+  const seen = new Set<number>();
+  for (const g of games) {
+    const gp = gpByGame.get(g.id as number) as { sport_specific?: Record<string, unknown>; predicted_home_score?: number; predicted_away_score?: number; predicted_total?: number } | undefined;
+    const ss = (gp?.sport_specific ?? {}) as Record<string, unknown>;
+    const home = tById.get(g.home_team_id as number), away = tById.get(g.away_team_id as number);
+    if (!gp || !home || !away || !ss.moneyline) continue;
+    const extId = (g.external_id as number) ?? (g.id as number);
+    if (seen.has(extId)) continue; // no duplicate games
+    seen.add(extId);
+    const ml = ss.moneyline as PreviewGame["moneyline"];
+    out.push({
+      game_id: extId,
+      date: g.slate_date as string,
+      start_time: (g.game_date as string) ?? (g.slate_date as string),
+      home_team_id: g.home_team_id as number,
+      away_team_id: g.away_team_id as number,
+      home_abbr: home.abbreviation as string,
+      away_abbr: away.abbreviation as string,
+      home: home.name as string,
+      away: away.name as string,
+      projected_score: (ss.projected_score as { home: number; away: number }) ?? { home: gp.predicted_home_score ?? 0, away: gp.predicted_away_score ?? 0 },
+      moneyline: ml,
+      spread: (ss.spread as PreviewGame["spread"]) ?? { side: null, line: null, confidence: null, grade: null },
+      total: (ss.total as PreviewGame["total"]) ?? { side: null, line: null, confidence: null, grade: null },
+      model: (ss.model as PreviewGame["model"]) ?? { home_win_prob: 0.5, margin: 0, total: gp.predicted_total ?? 0 },
+      market: (ss.market as PreviewGame["market"]) ?? { home_win_prob: null, spread: null, total: null, book_count: 0, dispersion: { spread: 0, total: 0 } },
+      data_quality: (ss.data_quality as PreviewGame["data_quality"]) ?? { ml_books: 0, spread_books: 0, total_books: 0, flags: [] },
+    });
+  }
+  return out;
+}
 
 type PreviewModelGrade = "Best Angle" | "Lean" | "Watchlist" | "Caution";
 
@@ -250,18 +309,35 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
 }
 
 export async function buildWnbaDailyEdgeAdapted(date: string | null): Promise<DailyEdgeResponse> {
-  const raw = await buildWnbaDailyEdgePreview(date);
-  const asOf = raw.generated_at;
-  const games = (raw.games as unknown as PreviewGame[]).map((g) => adaptGame(g, asOf));
-  return {
-    as_of: asOf,
-    sport: "wnba",
-    date: raw.slate_date,
-    requested_date: date ?? raw.slate_date,
-    fallback_used: false,
-    slateState: games.length > 0 ? "today_published" : "no_data",
-    slate_status: games.length > 0 ? "published" : null,
-    last_slate_update_at: asOf,
-    games,
-  };
+  const asOf = new Date().toISOString();
+  try {
+    // DB-FIRST: serve the stored game_predictions snapshots (instant; the exact
+    // applied rows). These match what the cron wrote — no recompute.
+    const dbGames = await loadWnbaPredictionsFromDb(date);
+    if (dbGames.length > 0) {
+      const games = dbGames.map((g) => adaptGame(g, asOf));
+      return {
+        as_of: asOf, sport: "wnba", date: date ?? dbGames[0]!.date, requested_date: date ?? dbGames[0]!.date,
+        fallback_used: false, slateState: "today_published", slate_status: "published",
+        last_slate_update_at: asOf, games,
+      };
+    }
+    // DEV/FALLBACK: nothing stored → live compute (cron hasn't run / local dev).
+    const raw = await buildWnbaDailyEdgePreview(date);
+    const games = (raw.games as unknown as PreviewGame[]).map((g) => adaptGame(g, asOf));
+    return {
+      as_of: asOf, sport: "wnba", date: raw.slate_date, requested_date: date ?? raw.slate_date,
+      fallback_used: true, slateState: games.length > 0 ? "today_published" : "no_data",
+      slate_status: games.length > 0 ? "published" : null, last_slate_update_at: asOf, games,
+    };
+  } catch (e) {
+    // HONEST failure state — NOT "no games". "today_pending_ingest" renders
+    // "being ingested, check back shortly" rather than implying an empty slate.
+    console.warn(`wnba daily-edge adapter error: ${(e as Error).message}`);
+    return {
+      as_of: asOf, sport: "wnba", date: date ?? new Date().toISOString().slice(0, 10),
+      requested_date: date ?? new Date().toISOString().slice(0, 10), fallback_used: false,
+      slateState: "today_pending_ingest", slate_status: null, last_slate_update_at: asOf, games: [],
+    };
+  }
 }
