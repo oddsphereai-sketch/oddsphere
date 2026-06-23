@@ -79,10 +79,11 @@ export const OFFICIAL_TRACKING_MARKETS: Readonly<
   // launch market because the tracking page already carries a
   // "Double Chance" column (also used by UCL).
   soccer: ["match_result", "total", "btts", "double_chance"],
-  // WNBA mirrors NBA's tracked set (ML + total; spread context-only). The
-  // tracking WRITER/cron is a later Phase 2 step — this config declares intent
-  // and is inert until a wnba writer runs (none exists yet).
-  wnba: ["moneyline", "total"],
+  // WNBA tracks ALL THREE markets publicly from launch (Daniel 2026-06-23):
+  // ML + total + spread, 0-0 forward-only, no backfill. NOT context-only — if
+  // spread is shown as an official WNBA market it is tracked publicly. Inert
+  // until the Phase 2 writer/cron runs.
+  wnba: ["moneyline", "total", "spread"],
 } as const;
 
 /**
@@ -110,7 +111,7 @@ export const CONTEXT_ONLY_DISPLAY_MARKETS: Readonly<
   cfb: [],
   ucl: [],
   soccer: [], // no context-only markets at WC launch
-  wnba: ["spread"], // WNBA spread is model-context only (stored via first_inning slot), like NBA
+  wnba: [], // WNBA spread is publicly tracked (not context-only) — see OFFICIAL_TRACKING_MARKETS
 } as const;
 
 /** Returns true if the given (sport, market) tuple is officially tracked publicly. */

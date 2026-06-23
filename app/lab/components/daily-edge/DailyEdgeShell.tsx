@@ -95,7 +95,8 @@ function isContextOnlyMarket(market: MarketKey, sport: Sport): boolean {
 function marketShortLabelFor(market: MarketKey, sport: Sport): string {
   if (market === "first_inning") {
     if (sport === "nhl") return "PL*";
-    if (sport === "nba" || sport === "wnba") return "Sprd*";
+    if (sport === "nba") return "Sprd*";
+    if (sport === "wnba") return "Sprd"; // WNBA spread is a publicly-tracked market (no context-only *)
     // The soccer first_inning slot carries the BTTS market (the btts
     // prediction record) as its pill/headline. Double Chance is surfaced
     // as a reader context block on the Match Result slot, not here.

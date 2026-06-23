@@ -58,7 +58,7 @@ const SPORT_MARKETS: Record<Sport, string[]> = {
   nfl: ["ML", "O/U"],
   cfb: ["ML", "O/U"],
   nhl: ["ML", "O/U"],
-  wnba: ["ML", "O/U"],
+  wnba: ["ML", "O/U", "Spread"], // all 3 publicly tracked from launch; shown once wnba is added to SPORT_DISPLAY_ORDER at launch
   ucl: ["ML", "Double Chance"],
   // WC-1 — soccer launch markets per OFFICIAL_TRACKING_MARKETS:
   //   3-way result, double chance, total goals (canonical 2.5), BTTS.

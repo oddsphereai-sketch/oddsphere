@@ -103,7 +103,8 @@ export type TrackedSport =
   | "cbb"
   | "nhl"
   | "ucl"
-  | "soccer";
+  | "soccer"
+  | "wnba";
 
 /**
  * Tracked markets enum (v17). Additive — new entries widen the union
