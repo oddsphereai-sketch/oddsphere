@@ -512,6 +512,29 @@ async function main() {
     check("v22Audit present", out.v22Audit !== null && typeof out.v22Audit === "object");
     check("v22Audit.market_baseline_valid true on good inputs", out.v22Audit.market_baseline_valid);
     check("v22Audit.data_quality_tier === high on full snapshot", out.v22Audit.data_quality_tier === "high");
+    check("workload pitching default disabled", out.v22Audit.workload_pitching_enabled === false);
+    check("workload pitching default not applied", out.v22Audit.workload_pitching_applied === false);
+  }
+  {
+    const out = runMlbAutoModelV2_2(buildSnapshot(), buildV1Out(), "morning_draft", { useWorkloadPitching: true });
+    check("workload pitching flag recorded enabled", out.v22Audit.workload_pitching_enabled === true);
+    check("workload pitching normal-starter fixture not applied", out.v22Audit.workload_pitching_applied === false);
+    check("workload pitching audit captures home role", out.v22Audit.home_starter_workload?.role === "normal_starter");
+  }
+  {
+    const snap = buildSnapshot({
+      awayStarter: buildStarter({
+        season_era: 2.50,
+        season_games_started: 1,
+        season_games_pitched: 17,
+        season_innings_pitched: 24,
+      }),
+      awayTeam: buildTeam({ bullpen_era_proxy: 5.20 }),
+    });
+    const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft", { useWorkloadPitching: true });
+    check("workload pitching opener fixture applied", out.v22Audit.workload_pitching_applied === true);
+    check("workload pitching audit captures opener role", out.v22Audit.away_starter_workload?.role === "opener_or_reliever_start");
+    check("workload pitching integrity note emitted", out.v22Audit.model_integrity_notes.some((n) => /Workload pitching applied/i.test(n)));
   }
   {
     // Missing weather — must not crash

@@ -31,7 +31,11 @@
  */
 
 import { computeMarketBaseline } from "./marketPrior";
-import { projectIndependent } from "./mlbIndependentProjection";
+import {
+  estimateMlbStarterWorkload,
+  projectIndependent,
+  type StarterWorkloadEstimate,
+} from "./mlbIndependentProjection";
 import {
   blendPosterior,
   computeConfidence,
@@ -77,6 +81,10 @@ export type V22Audit = {
   data_quality_tier: "high" | "medium" | "low" | "fallback";
   feature_present_count: number;
   feature_missing_count: number;
+  workload_pitching_enabled?: boolean;
+  workload_pitching_applied?: boolean;
+  home_starter_workload?: StarterWorkloadEstimate;
+  away_starter_workload?: StarterWorkloadEstimate;
   // Push 3A-2 — source/reason hierarchy roll-up
   feature_preferred_count: number;
   feature_fallback_real_count: number;
@@ -239,6 +247,10 @@ export type V22Output = {
   v22Audit: V22Audit;
 };
 
+export type RunMlbAutoModelV2_2Options = {
+  useWorkloadPitching?: boolean;
+};
+
 // Best Angle thresholds — V2.2 uses tighter gates than V2.1 since the
 // independent projection has more freedom to move and we want only
 // genuinely model-driven angles to flow through.
@@ -268,9 +280,17 @@ export function runMlbAutoModelV2_2(
   snap: GameSnapshot,
   v1Output: AutoModelOutput, // for NRFI passthrough and fallback
   stage: ModelStage,
+  opts: RunMlbAutoModelV2_2Options = {},
 ): V22Output {
   void stage;
   const integrityNotes: string[] = [];
+  const workloadPitchingEnabled = opts.useWorkloadPitching === true;
+  const homeStarterWorkload = estimateMlbStarterWorkload(snap.home_starter);
+  const awayStarterWorkload = estimateMlbStarterWorkload(snap.away_starter);
+  const workloadPitchingApplied =
+    workloadPitchingEnabled &&
+    (homeStarterWorkload.role !== "normal_starter" ||
+      awayStarterWorkload.role !== "normal_starter");
 
   // Layer 1 — market baseline
   const market = computeMarketBaseline(snap.market, snap.sharp ?? null);
@@ -282,7 +302,17 @@ export function runMlbAutoModelV2_2(
   }
 
   // Layer 2 — independent projection
-  const indep = projectIndependent(snap);
+  const indep = projectIndependent(snap, {
+    useWorkloadPitching: workloadPitchingEnabled,
+  });
+  if (workloadPitchingApplied) {
+    integrityNotes.push(
+      `Workload pitching applied: home=${homeStarterWorkload.role} ` +
+        `(${homeStarterWorkload.starter_innings}/${homeStarterWorkload.bullpen_innings}), ` +
+        `away=${awayStarterWorkload.role} ` +
+        `(${awayStarterWorkload.starter_innings}/${awayStarterWorkload.bullpen_innings}).`
+    );
+  }
   if (indep.feature_audit.missing_count >= 7) {
     integrityNotes.push(
       `Sparse features (${indep.feature_audit.missing_count} missing); model treated as provisional.`,
@@ -502,6 +532,10 @@ export function runMlbAutoModelV2_2(
     data_quality_tier: indep.data_quality_tier,
     feature_present_count: indep.feature_audit.present_count,
     feature_missing_count: indep.feature_audit.missing_count,
+    workload_pitching_enabled: workloadPitchingEnabled,
+    workload_pitching_applied: workloadPitchingApplied,
+    home_starter_workload: homeStarterWorkload,
+    away_starter_workload: awayStarterWorkload,
     feature_preferred_count: indep.feature_audit.preferred_count,
     feature_fallback_real_count: indep.feature_audit.fallback_real_count,
     feature_proxy_count: indep.feature_audit.proxy_count,

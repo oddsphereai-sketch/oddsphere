@@ -391,7 +391,7 @@ type StarterWorkloadRole =
   | "opener_or_reliever_start"
   | "unknown";
 
-type StarterWorkloadEstimate = {
+export type StarterWorkloadEstimate = {
   role: StarterWorkloadRole;
   starter_innings: number;
   bullpen_innings: number;
@@ -478,6 +478,12 @@ function workloadCandidatePitchingFactor(
     return starterFactorValue * bullpenFactorValue;
   }
   return weighted.factor;
+}
+
+export function estimateMlbStarterWorkload(
+  starter: StarterSnapshot | null
+): StarterWorkloadEstimate {
+  return estimateStarterWorkload(starter);
 }
 
 function parkFactor(snap: GameSnapshot): number {

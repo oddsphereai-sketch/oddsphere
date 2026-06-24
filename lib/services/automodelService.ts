@@ -1230,7 +1230,9 @@ function applyV2IfSelected(args: {
   if (effectiveVersion === "v2_2") {
     let v22;
     try {
-      v22 = runMlbAutoModelV2_2(snap, v1Output, stage);
+      v22 = runMlbAutoModelV2_2(snap, v1Output, stage, {
+        useWorkloadPitching: process.env.MLB_WORKLOAD_PITCHING_ENABLED === "true",
+      });
     } catch (e) {
       console.warn(
         `[automodelService] runMlbAutoModelV2_2 threw for game_external_id=` +
