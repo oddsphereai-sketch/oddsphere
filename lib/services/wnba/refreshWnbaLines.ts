@@ -142,16 +142,24 @@ export async function refreshWnbaLines(opts: {
   const tipByGame = new Map<number, string>();
   let unmatched = 0;
   const etDate = (iso: string): string | null => { try { return new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }); } catch { return null; } };
+  const dayDiff = (a: string, b: string) => Math.abs(+new Date(`${a}T00:00:00Z`) - +new Date(`${b}T00:00:00Z`)) / 86400000;
   for (const o of odds) {
     const cands = byPair.get(pairKey(o.h, o.a));
     if (!cands || cands.length === 0) { unmatched++; continue; }
-    // Match on the odds' ET slate date (slate_date is ET-anchored). A same-pair
-    // DUPLICATE (series on adjacent days) is matched only on an EXACT ET-date
-    // hit; if still ambiguous (>1 candidate, no exact date) we SKIP rather than
-    // mix two meetings' lines.
+    // Match on the odds' ET slate date: exact hit first; else the CLOSEST
+    // same-pair game within ±1 day. A genuine tie (two candidates equidistant)
+    // stays ambiguous → SKIP (never mix meetings). This includes a real game
+    // whose seeded slate is off-by-one while still withholding true duplicates.
     const oSlateEt = o.startTime ? etDate(o.startTime) : null;
     let g: G | undefined;
-    if (oSlateEt) g = cands.find((c) => c.slate === oSlateEt);
+    if (oSlateEt) {
+      g = cands.find((c) => c.slate === oSlateEt);
+      if (!g) {
+        const within = cands.map((c) => ({ c, d: dayDiff(c.slate, oSlateEt) })).filter((x) => x.d <= 1).sort((a, b) => a.d - b.d);
+        if (within.length === 1) g = within[0]!.c;
+        else if (within.length > 1 && within[0]!.d < within[1]!.d) g = within[0]!.c;
+      }
+    }
     if (!g && cands.length === 1) g = cands[0];
     if (!g) { unmatched++; continue; }
     if (!oddsByGame.has(g.id)) oddsByGame.set(g.id, []);

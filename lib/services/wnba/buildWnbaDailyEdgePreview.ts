@@ -210,7 +210,9 @@ export function computeWnbaPrediction(
 
   const pCoverHome = mktSpread != null ? 1 - Phi((-mktSpread - projMargin) / sigM) : null;
   const spEdge = mktSpread != null ? projMargin - -mktSpread : null;
-  const spSide = mktSpread != null ? (pCoverHome! >= 0.5 ? `${hN} ${mktSpread > 0 ? "+" : ""}${mktSpread}` : `${aN} ${mktSpread > 0 ? "" : "+"}${-mktSpread}`) : null;
+  // Use canonical abbreviations (POR/GS/TOR), never BDL mascot names ("Fire").
+  const spHomeAbbr = wnbaAbbr(g.h) ?? hN, spAwayAbbr = wnbaAbbr(g.a) ?? aN;
+  const spSide = mktSpread != null ? (pCoverHome! >= 0.5 ? `${spHomeAbbr} ${mktSpread > 0 ? "+" : ""}${mktSpread}` : `${spAwayAbbr} ${mktSpread > 0 ? "" : "+"}${-mktSpread}`) : null;
   const spConf = pCoverHome != null ? Math.round(Math.max(pCoverHome, 1 - pCoverHome) * 100) : null;
   const spGrade = mktSpread != null ? gradeMarket(Math.abs(spEdge!), spVals.length, spDisp, sharpSpread != null && Math.sign(sharpSpread - -projMargin) === Math.sign(spEdge!)) : null;
 
@@ -320,7 +322,9 @@ export async function buildWnbaDailyEdgePreview(dateParam: string | null) {
 
     const pCoverHome = mktSpread != null ? 1 - Phi((-mktSpread - projMargin) / sigM) : null;
     const spEdge = mktSpread != null ? projMargin - -mktSpread : null;
-    const spSide = mktSpread != null ? (pCoverHome! >= 0.5 ? `${hN} ${mktSpread > 0 ? "+" : ""}${mktSpread}` : `${aN} ${mktSpread > 0 ? "" : "+"}${-mktSpread}`) : null;
+    // Use canonical abbreviations (POR/GS/TOR), never BDL mascot names ("Fire").
+  const spHomeAbbr = wnbaAbbr(g.h) ?? hN, spAwayAbbr = wnbaAbbr(g.a) ?? aN;
+  const spSide = mktSpread != null ? (pCoverHome! >= 0.5 ? `${spHomeAbbr} ${mktSpread > 0 ? "+" : ""}${mktSpread}` : `${spAwayAbbr} ${mktSpread > 0 ? "" : "+"}${-mktSpread}`) : null;
     const spConf = pCoverHome != null ? Math.round(Math.max(pCoverHome, 1 - pCoverHome) * 100) : null;
     const spGrade = mktSpread != null ? gradeMarket(Math.abs(spEdge!), sp.length, spDisp, sharpSpread != null && Math.sign(sharpSpread - -projMargin) === Math.sign(spEdge!)) : null;
 

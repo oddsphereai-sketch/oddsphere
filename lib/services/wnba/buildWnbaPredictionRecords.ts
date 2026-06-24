@@ -20,8 +20,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 const PLAY_GRADE: Record<string, string> = { "Best Angle": "best_angle", "Lean": "lean", "Watchlist": "watchlist", "Caution": "caution" };
 const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]! : null);
 const toDecimal = (o: number | null) => (o == null ? null : o > 0 ? o / 100 + 1 : 100 / Math.abs(o) + 1);
-const isPlaceholderTip = (gameDate: string, slate: string) =>
-  String(gameDate).startsWith(slate) && /T00:00:00(\.000)?(Z|\+00:00)?$/.test(String(gameDate));
 
 export type WnbaRecordsResult = {
   apply: boolean;
@@ -88,16 +86,18 @@ export async function buildWnbaPredictionRecords(opts: {
       result.withheld.push({ matchup, slate, reason });
       continue;
     }
-    if (isPlaceholderTip(g.game_date as string, slate)) {
+    // Real-tip / clean-match signal: a matched game HAS current lines (written
+    // by refreshWnbaLines along with its real SharpAPI tip). A prediction with
+    // no current lines is stale → withhold. (A value-based midnight-placeholder
+    // check false-positives on real 8 PM ET tips that land at T00:00:00Z.)
+    if ((linesByGame.get(g.id as number) ?? []).length === 0) {
       result.missingTip.push(matchup);
-      result.withheld.push({ matchup, slate, reason: "no confirmed tip time (placeholder) — withheld until SharpAPI/ESPN tip confirms" });
+      result.withheld.push({ matchup, slate, reason: "no current market/odds (stale) — withheld" });
       continue;
     }
-    if (isDupPair(g as { home_team_id: number; away_team_id: number })) {
-      result.ambiguous.push(matchup);
-      result.withheld.push({ matchup, slate, reason: "ambiguous duplicate pairing (awaiting clean match)" });
-      continue;
-    }
+    // A duplicate-pair game that reaches here HAS a clean prediction + current
+    // lines → it is the cleanly-matched meeting, so INCLUDE it. Only the
+    // unmatched twin (no prediction) was withheld above.
 
     const ss = gp.sport_specific as Record<string, unknown>;
     const ml = ss.moneyline as { side: string; confidence: number; grade: string; price: number | null };
