@@ -1657,7 +1657,7 @@ function ModelEdgeBlock({ market, marketData }: { market: MarketKey; marketData:
 function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData: MarketEdgeDto }) {
   const shellSport = useShellSport();
   const totalUnit = shellSport === "nhl" || shellSport === "soccer" ? "goals" : (shellSport === "nba" || shellSport === "wnba") ? "points" : "runs";
-  const rows = buildEdgeStackRows(market, marketData, totalUnit);
+  const rows = buildEdgeStackRows(market, marketData, totalUnit, market === "first_inning" && shellSport === "mlb");
   const find = (l: string) => rows.find((r) => r.label === l);
   const pinnacle = find("Pinnacle EV");
   const splits = find("Money vs Bets");
