@@ -309,12 +309,18 @@ export function gradePrediction(inputs: GradeInputs): PredictionGradeRow {
         grade_notes: `${graded.grade_notes ?? ""} | ROI-ineligible: double_chance odds missing at lock (graded from final score)`,
       };
     }
-    return emptyGrade(
-      record,
-      "void",
-      source,
-      record.no_bet_reason ?? "non-actionable: no_bet=true",
-    );
+    // No Bet / No Play is a GUIDANCE signal ("we don't advise betting this"),
+    // NOT a tracking exclusion. A no_bet pick with a real side IS graded and
+    // COUNTS toward the W-L record (Daniel, repeatedly). The ONLY thing withheld
+    // is a Toss-Up (no real side) — and Toss-Ups are First Inning only. (ROI in
+    // HQ can still drop null-odds rows; that's separate from accuracy W-L.)
+    const isTossUp =
+      record.prediction_type === "toss_up" ||
+      String(record.pick ?? "").trim().toLowerCase() === "toss-up";
+    if (isTossUp) {
+      return emptyGrade(record, "void", source, "non-actionable: toss-up (no side) — FI-only, not tracked");
+    }
+    // else: fall through to normal market grading below — win/loss/push count.
   }
 
   // Phase 6B.19 — FI markets grade as soon as first_inning_runs is
