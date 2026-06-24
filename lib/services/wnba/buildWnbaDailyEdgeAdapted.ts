@@ -136,6 +136,7 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
       publicSplits: buildWnbaPublicSplits(
         signalsByGame.get(g.id as number) ?? [],
         splitsHistByGame.get(g.id as number) ?? [],
+        linesByGame.get(g.id as number) ?? [],
         home.abbreviation as string,
         away.abbreviation as string,
         splitsAsOf,
@@ -173,12 +174,40 @@ const PUBLIC_SPLIT_STALE_MS = 6 * 60 * 60 * 1000;
 export function buildWnbaPublicSplits(
   rows: Array<{ market_type: string; side: string; public_betting_pct: number | null; public_money_pct: number | null; computed_at: string | null }>,
   history: SplitsHistoryHit[],
+  lineRows: WnbaLineRow[],
   homeAbbr: string,
   awayAbbr: string,
   asOf: number
 ): { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[]; spread: WnbaPublicSplit[] } {
-  const labelFor = (market: string, side: string): string =>
-    market === "total" ? (side === "over" ? "Over" : "Under") : side === "home" ? homeAbbr : awayAbbr;
+  // Current consensus spread line for a side (home/away), with the sign as stored
+  // (home -8.5 / away +8.5). If a side is missing but the opposite exists, infer
+  // the mirror (-opposite). Null when no spread line source exists at all.
+  const spreadLineForSide = (side: string): number | null => {
+    const vals = lineRows
+      .filter((r) => r.market_type === "spread" && r.side === side && r.line_value !== null)
+      .map((r) => r.line_value as number);
+    if (vals.length > 0) return medianNumber(vals);
+    const opp = side === "home" ? "away" : side === "away" ? "home" : null;
+    if (opp) {
+      const ovals = lineRows
+        .filter((r) => r.market_type === "spread" && r.side === opp && r.line_value !== null)
+        .map((r) => r.line_value as number);
+      const om = medianNumber(ovals);
+      if (om !== null) return -om;
+    }
+    return null;
+  };
+  // "+8.5" / "-8.5" / "PK" — explicit sign so the side is unambiguous.
+  const fmtSpread = (n: number): string => (n > 0 ? `+${n}` : n < 0 ? `${n}` : "PK");
+  const labelFor = (market: string, side: string): string => {
+    if (market === "total") return side === "over" ? "Over" : "Under";
+    const abbr = side === "home" ? homeAbbr : awayAbbr;
+    if (market === "spread") {
+      const ln = spreadLineForSide(side);
+      if (ln !== null) return `${abbr} ${fmtSpread(ln)}`; // e.g. "IND -8.5"
+    }
+    return abbr;
+  };
   const curByKey = new Map(rows.map((r) => [`${r.market_type}::${r.side}`, r]));
   const histByKey = new Map(history.map((h) => [`${h.market_type}::${h.side}`, h]));
   const freshest = (a: string | null, b: string | null): string | null =>
@@ -338,15 +367,35 @@ function buildWnbaPickedPrices(
   const mlCurrent = pickedPrice(rows, "moneyline", mlSide, null) ?? latestPickedPrice(historyRows, "moneyline", mlSide, null);
   const totalCurrent = pickedPrice(rows, "total", totalSide, total.line) ?? latestPickedPrice(historyRows, "total", totalSide, total.line);
   const spreadCurrent = pickedPrice(rows, "spread", spreadSide, pickedSpreadLine) ?? latestPickedPrice(historyRows, "spread", spreadSide, pickedSpreadLine);
+  const totalLineMove = lineMove(historyRows, "total", totalSide, total.line);
+  const spreadLineMove = lineMove(historyRows, "spread", spreadSide, pickedSpreadLine);
   return {
-    ml: priceTrail(historyRows, "moneyline", mlSide, null, mlCurrent),
-    total: priceTrail(historyRows, "total", totalSide, total.line, totalCurrent),
-    spread: priceTrail(historyRows, "spread", spreadSide, pickedSpreadLine, spreadCurrent),
+    ml: { ...priceTrail(historyRows, "moneyline", mlSide, null, mlCurrent), lineMovePrev: null, lineMoveNext: null },
+    total: { ...priceTrail(historyRows, "total", totalSide, total.line, totalCurrent), lineMovePrev: totalLineMove.prev, lineMoveNext: totalLineMove.next },
+    spread: { ...priceTrail(historyRows, "spread", spreadSide, pickedSpreadLine, spreadCurrent), lineMovePrev: spreadLineMove.prev, lineMoveNext: spreadLineMove.next },
   };
 }
 
+/**
+ * Last betting-NUMBER move for a market/side from line_history (e.g. spread
+ * -8.5 → -9.5, total 169.5 → 170.5). Unlike priceTrail (which pins to one line
+ * to track the PRICE), this scans the full line_value history and returns the
+ * most recent value that DIFFERS from the current line, so an intraday line move
+ * surfaces. Reader-only; prev=null when the number never moved (row hidden).
+ */
+function lineMove(history: WnbaLineRow[], market: string, side: string | null, current: number | null): { prev: number | null; next: number | null } {
+  if (side === null || current === null) return { prev: null, next: null };
+  const vals = history
+    .filter((r) => r.market_type === market && r.side === side && r.line_value !== null)
+    .map((r) => r.line_value as number);
+  for (let i = vals.length - 1; i >= 0; i--) {
+    if (!closeLine(vals[i]!, current)) return { prev: vals[i]!, next: current };
+  }
+  return { prev: null, next: current };
+}
+
 type PreviewMarket = { side: string | null; confidence: number | null; grade: PreviewModelGrade | null };
-type WnbaPriceTrail = { current: number | null; open: number | null; previous: number | null };
+type WnbaPriceTrail = { current: number | null; open: number | null; previous: number | null; lineMovePrev?: number | null; lineMoveNext?: number | null };
 type WnbaPickedPrices = { ml: WnbaPriceTrail; total: WnbaPriceTrail; spread: WnbaPriceTrail };
 type PreviewGame = {
   game_id: number;
@@ -443,6 +492,11 @@ function buildMarket(opts: {
     priceAmerican,
     lineOpenAmerican: opts.priceTrail?.open ?? null,
     lastMovePrevAmerican: opts.priceTrail?.previous ?? null,
+    // Betting-NUMBER move (e.g. spread -8.5 → -9.5, total 169.5 → 170.5) — feeds
+    // the UI's "Line" row so members see the line itself move intraday, not just
+    // price drift. Null for ML / when the number never moved (row stays hidden).
+    lastMoveLinePrev: opts.priceTrail?.lineMovePrev ?? null,
+    lastMoveLineNext: opts.priceTrail?.lineMoveNext ?? null,
     modelTotal: slot === "total" ? modelTotal : null,
     marketTotal: slot === "total" ? marketTotal : null,
     line: slot === "ml" ? null : line,
