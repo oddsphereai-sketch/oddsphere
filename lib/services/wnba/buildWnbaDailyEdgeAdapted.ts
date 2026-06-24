@@ -68,6 +68,17 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
     if (!signalsByGame.has(gid)) signalsByGame.set(gid, []);
     signalsByGame.get(gid)!.push(r);
   }
+  const { data: lineRows } = await supabase
+    .from("lines")
+    .select("game_id, market_type, side, line_value, odds_american")
+    .in("game_id", ids)
+    .in("market_type", ["moneyline", "total", "spread"]);
+  const linesByGame = new Map<number, NonNullable<typeof lineRows>>();
+  for (const r of lineRows ?? []) {
+    const gid = r.game_id as number;
+    if (!linesByGame.has(gid)) linesByGame.set(gid, []);
+    linesByGame.get(gid)!.push(r);
+  }
   const splitsAsOf = Date.now();
   const { data: teams } = await supabase.from("teams").select("id, abbreviation, name").eq("sport", "wnba");
   const tById = new Map((teams ?? []).map((t) => [t.id as number, t]));
@@ -104,6 +115,16 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
         home.abbreviation as string,
         away.abbreviation as string,
         splitsAsOf,
+      ),
+      pickedPrices: buildWnbaPickedPrices(
+        linesByGame.get(g.id as number) ?? [],
+        ml,
+        (ss.total as PreviewGame["total"]) ?? { side: null, line: null, confidence: null, grade: null },
+        (ss.spread as PreviewGame["spread"]) ?? { side: null, line: null, confidence: null, grade: null },
+        home.abbreviation as string,
+        away.abbreviation as string,
+        home.name as string,
+        away.name as string,
       ),
     });
   }
@@ -150,7 +171,70 @@ function buildWnbaPublicSplits(
   return { ml: mk("moneyline"), total: mk("total"), spread: mk("spread") };
 }
 
+type WnbaLineRow = {
+  market_type: string;
+  side: string;
+  line_value: number | null;
+  odds_american: number | null;
+};
+
+function medianNumber(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? null;
+}
+
+function closeLine(a: number | null, b: number | null): boolean {
+  if (a === null || b === null) return false;
+  return Math.abs(a - b) < 0.01;
+}
+
+function pickedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
+  if (side === null) return null;
+  const candidates = rows.filter((r) =>
+    r.market_type === market &&
+    r.side === side &&
+    typeof r.odds_american === "number" &&
+    (line === null || closeLine(r.line_value, line))
+  );
+  return medianNumber(candidates.map((r) => r.odds_american as number));
+}
+
+function buildWnbaPickedPrices(
+  rows: WnbaLineRow[],
+  ml: PreviewMarket & { price: number | null },
+  total: PreviewMarket & { line: number | null },
+  spread: PreviewMarket & { line: number | null },
+  homeAbbr: string,
+  awayAbbr: string,
+  homeName: string,
+  awayName: string,
+): WnbaPickedPrices {
+  const mlSide =
+    ml.side === homeAbbr || ml.side === homeName ? "home" :
+    ml.side === awayAbbr || ml.side === awayName ? "away" :
+    null;
+  const totalSide =
+    total.side?.toLowerCase().startsWith("over") ? "over" :
+    total.side?.toLowerCase().startsWith("under") ? "under" :
+    null;
+  const spreadSide =
+    spread.side?.startsWith(homeAbbr) || spread.side?.startsWith(homeName) ? "home" :
+    spread.side?.startsWith(awayAbbr) || spread.side?.startsWith(awayName) ? "away" :
+    null;
+  const pickedSpreadLine =
+    spreadSide === "home" ? spread.line :
+    spreadSide === "away" && spread.line !== null ? -spread.line :
+    null;
+  return {
+    ml: pickedPrice(rows, "moneyline", mlSide, null),
+    total: pickedPrice(rows, "total", totalSide, total.line),
+    spread: pickedPrice(rows, "spread", spreadSide, pickedSpreadLine),
+  };
+}
+
 type PreviewMarket = { side: string | null; confidence: number | null; grade: PreviewModelGrade | null };
+type WnbaPickedPrices = { ml: number | null; total: number | null; spread: number | null };
 type PreviewGame = {
   game_id: number;
   date: string;
@@ -170,6 +254,8 @@ type PreviewGame = {
   data_quality: { ml_books: number; spread_books: number; total_books: number; flags: string[] };
   /** Playbook public splits (ML, total, spread) for display; absent on live fallback. */
   publicSplits?: { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[]; spread: WnbaPublicSplit[] };
+  /** Current picked-side prices from `lines`; absent on live fallback. */
+  pickedPrices?: WnbaPickedPrices;
 };
 
 function gradeToVerdict(g: PreviewModelGrade): Verdict {
@@ -283,7 +369,7 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     grade: game.moneyline.grade,
     modelProbPick: mlModelProb,
     marketFairProbPick: mlMarketFair,
-    priceAmerican: game.moneyline.price,
+    priceAmerican: game.pickedPrices?.ml ?? game.moneyline.price,
     line: null, modelTotal: null, marketTotal: null,
     bookCount: game.data_quality.ml_books,
     aligned: mlAligned,
@@ -299,7 +385,7 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     grade: game.total.grade,
     modelProbPick: game.total.confidence !== null ? game.total.confidence / 100 : null,
     marketFairProbPick: null,
-    priceAmerican: null,
+    priceAmerican: game.pickedPrices?.total ?? null,
     line: game.total.line, modelTotal: game.model.total, marketTotal: game.total.line,
     bookCount: game.data_quality.total_books,
     aligned: null,
@@ -318,7 +404,7 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     grade: game.spread.grade,
     modelProbPick: game.spread.confidence !== null ? game.spread.confidence / 100 : null,
     marketFairProbPick: null,
-    priceAmerican: null,
+    priceAmerican: game.pickedPrices?.spread ?? null,
     line: game.spread.line, modelTotal: null, marketTotal: null,
     bookCount: game.data_quality.spread_books,
     aligned: null,

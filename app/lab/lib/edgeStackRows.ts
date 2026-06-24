@@ -63,6 +63,28 @@ function formatAmerican(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
 }
 
+function splitForPick(
+  marketData: MarketEdgeDto
+): MarketEdgeDto["publicSplits"][number] | null {
+  if (marketData.publicSplits.length === 0 || marketData.pick === null) {
+    return null;
+  }
+  const pick = marketData.pick.toLowerCase();
+  const exact = marketData.publicSplits.find((s) => pick === s.label.toLowerCase());
+  if (exact) return exact;
+  const contained = marketData.publicSplits.find((s) =>
+    pick.includes(s.label.toLowerCase())
+  );
+  if (contained) return contained;
+  if (pick.startsWith("over")) {
+    return marketData.publicSplits.find((s) => s.side === "over") ?? null;
+  }
+  if (pick.startsWith("under")) {
+    return marketData.publicSplits.find((s) => s.side === "under") ?? null;
+  }
+  return null;
+}
+
 /**
  * Build the 4 Edge Stack rows for one (game × market) tile.
  *
@@ -92,7 +114,8 @@ export function buildEdgeStackRows(
   marketData: MarketEdgeDto,
   // Sport-aware total unit: MLB "runs", NBA "points", NHL/soccer "goals".
   // Defaults to "runs" for back-compat with existing MLB-only call sites.
-  totalUnit: string = "runs"
+  totalUnit: string = "runs",
+  isTrueFirstInningMarket: boolean = market === "first_inning"
 ): EdgeStackRow[] {
   const rows: EdgeStackRow[] = [];
 
@@ -222,15 +245,20 @@ export function buildEdgeStackRows(
   // honestly, so members don't lose visibility on real data.
   //
   // Phase 5i Fix C is preserved: when BOTH fields are missing AND
-  // market === "first_inning", the row still says "not offered for FI"
-  // because FI's full miss is an upstream limit, not a partial gap.
-  const haveMoney = marketData.moneyPct !== null;
-  const haveBets = marketData.betsPct !== null;
+  // this is a true first-inning market, the row still says "not offered
+  // for FI" because FI's full miss is an upstream limit, not a partial
+  // gap. Other sports can reuse the `first_inning` DTO slot for spread
+  // or puck line, so those must read from `publicSplits`.
+  const pickedSplit = splitForPick(marketData);
+  const moneyPct = marketData.moneyPct ?? pickedSplit?.moneyPct ?? null;
+  const betsPct = marketData.betsPct ?? pickedSplit?.betsPct ?? null;
+  const haveMoney = moneyPct !== null;
+  const haveBets = betsPct !== null;
   if (haveMoney && haveBets) {
-    const gap = marketData.moneyPct! - marketData.betsPct!;
+    const gap = moneyPct! - betsPct!;
     rows.push({
       label: "Money vs Bets",
-      evidence: `Money ${marketData.moneyPct}% / Bets ${marketData.betsPct}%`,
+      evidence: `Money ${moneyPct}% / Bets ${betsPct}%`,
       delta: `${gap >= 0 ? "+" : ""}${gap}`,
       tone: gap >= 3 ? "emerald" : gap <= -3 ? "amber" : "gray",
     });
@@ -238,7 +266,7 @@ export function buildEdgeStackRows(
     // Money present, bets missing — show the half we have honestly.
     rows.push({
       label: "Money vs Bets",
-      evidence: `Money ${marketData.moneyPct}% · bets split unavailable`,
+      evidence: `Money ${moneyPct}% · bets split unavailable`,
       delta: "—",
       tone: "gray",
     });
@@ -246,7 +274,7 @@ export function buildEdgeStackRows(
     // Bets present, money missing — same treatment.
     rows.push({
       label: "Money vs Bets",
-      evidence: `Bets ${marketData.betsPct}% · money split unavailable`,
+      evidence: `Bets ${betsPct}% · money split unavailable`,
       delta: "—",
       tone: "gray",
     });
@@ -255,7 +283,7 @@ export function buildEdgeStackRows(
     rows.push({
       label: "Money vs Bets",
       evidence:
-        market === "first_inning"
+        isTrueFirstInningMarket
           ? "Public split — not offered for FI"
           : "Public split",
       delta: "unavailable",
