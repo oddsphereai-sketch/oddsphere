@@ -106,7 +106,8 @@ export type RecentPickRow = {
 
 /**
  * 6B.21 — "Latest Results" feed. Ordered by prediction_grades.graded_at
- * DESC, settled-only (no pending), no_bet=true already filtered upstream.
+ * DESC, settled-only (no pending). Toss-Ups are excluded; `no_bet`
+ * stand-downs are included (they are graded calls that count for accuracy).
  * Carries the extra calibration / pricing context the UI shows on the
  * recent-settled card without leaking model-audit internals.
  *
@@ -168,7 +169,8 @@ export type TrackingAggregateResult = {
   recentPicks: RecentPickRow[];
   /**
    * 6B.21 — Last N actually-settled picks ordered by graded_at DESC.
-   * Excludes pending and no_bet=true. Surfaces FI mid-game settles
+   * Excludes pending and Toss-Ups (no_bet stand-downs are included).
+   * Surfaces FI mid-game settles
    * the moment inning 1 grades, plus ML/OU at final. Additive surface
    * — does not replace recentPicks; daily/weekly/lifetime rollups
    * remain slate_date-bucketed and are unchanged.
@@ -193,6 +195,19 @@ function emptyMetrics(): AggregateMetrics {
     brier_score: null,
     log_loss: null,
   };
+}
+
+/**
+ * A genuine Toss-Up — a non-actionable pick with NO side (First-Inning-only).
+ * This is the ONLY thing withheld from the public W/L tally; every other
+ * prediction (incl. `no_bet` stand-downs) has a side and counts. Mirrors the
+ * grader's Toss-Up detection (predictionGrader.ts) so the two stay in lockstep.
+ */
+function isTossUp(r: PredictionRecordRow): boolean {
+  return (
+    r.prediction_type === "toss_up" ||
+    String(r.pick ?? "").trim().toLowerCase() === "toss-up"
+  );
 }
 
 type Row = {
@@ -337,22 +352,17 @@ export async function computeTrackingAggregate(opts: {
     ? recordsRaw
     : recordsRaw.filter((r) => !r.launch_day);
 
-  // Phase 6B.20 — exclude no_bet=true rows from the public W/L tally.
-  // Covers Toss-Up FI rows whose member-facing pill was "Toss-Up", and
-  // any future ML/OU no_bet flagging. These rows still exist in
-  // prediction_records (with prediction_type='toss_up' or similar) and
-  // can be inspected separately; they just don't count toward member-
-  // facing wins / losses on /lab/tracking.
+  // W-L accuracy counts EVERY prediction that has a side. `no_bet` is a GUIDANCE
+  // signal ("we don't advise betting this"), NOT a tracking exclusion — a
+  // stand-down total or model-wrong-side ML is still a graded right/wrong call
+  // and must count toward the public W/L record. The ONLY thing withheld is a
+  // genuine Toss-Up (no side at all), which is First-Inning-only. Toss-Ups also
+  // carry a `void` grade, so they never reach wins/losses regardless; excluding
+  // them here just keeps them out of the row counts entirely.
   //
-  // EXCEPTION (2026-06-15) — soccer DOUBLE_CHANCE held only for missing odds is
-  // ACCURACY-ELIGIBLE: its outcome is fully determined by the 90' score, so it
-  // grades win/loss (see predictionGrader) and must count toward DC W/L. It
-  // stays ROI-INELIGIBLE because odds_american is null (any ROI/units calc skips
-  // null-odds rows). Genuinely-void DC (postponed / model-wrong-side) carries a
-  // `void` grade and so contributes to `voids`, never to wins/losses.
-  const records = launchFiltered.filter(
-    (r) => r.no_bet !== true || (r.sport === "soccer" && r.market === "double_chance"),
-  );
+  // ROI is a SEPARATE (HQ-only) metric and is where null-odds rows get dropped —
+  // never conflate "ROI-ineligible" with "doesn't count for accuracy".
+  const records = launchFiltered.filter((r) => !isTossUp(r));
   result.rowsCounted = records.length;
   if (records.length === 0) return result;
 
@@ -423,11 +433,14 @@ export async function computeTrackingAggregate(opts: {
   const isDemotedBestAngle = (r: Row): boolean =>
     grade(r) === "best_angle" && r.record.best_angle === false;
 
-  const bestRows = rows.filter((r) => grade(r) === "best_angle" && !isDemotedBestAngle(r));
+  // Best Angle / Lean measure how our ACTUAL recommendations performed, so they
+  // stay actionable-only — a `no_bet` stand-down is not advice we gave (it counts
+  // for accuracy above, just not in these recommendation-performance cuts).
+  const bestRows = rows.filter((r) => r.record.no_bet !== true && grade(r) === "best_angle" && !isDemotedBestAngle(r));
   for (const row of bestRows) accumulate(result.bestAngles, row);
   finalize(result.bestAngles, bestRows);
 
-  const leanRows = rows.filter((r) => grade(r) === "lean" || isDemotedBestAngle(r));
+  const leanRows = rows.filter((r) => r.record.no_bet !== true && (grade(r) === "lean" || isDemotedBestAngle(r)));
   for (const row of leanRows) accumulate(result.leans, row);
   finalize(result.leans, leanRows);
 
@@ -460,9 +473,9 @@ export async function computeTrackingAggregate(opts: {
     // NRFI / YRFI grades silently fail to merge with baselines and the
     // page shows the historical baseline frozen in time.
     //
-    // Toss-Up / no_bet rows are already excluded upstream
-    // (records.filter((r) => r.no_bet !== true) at line ~297). NRFI/YRFI
-    // buckets here only see actionable picks.
+    // Toss-Up rows are excluded upstream (records.filter((r) => !isTossUp(r))),
+    // and all FI `no_bet` rows are Toss-Ups, so these NRFI/YRFI buckets only
+    // ever see actionable first-inning picks.
     const mlbFiKey = "mlb::first_inning";
     const mlbFiRows = groups.get(mlbFiKey) ?? [];
     if (mlbFiRows.length > 0) {
@@ -486,11 +499,11 @@ export async function computeTrackingAggregate(opts: {
       // Demotion-aware (2026-06-17): a 'best_angle' play_grade whose best_angle
       // boolean was demoted to false renders as a Lean on the card, so it counts
       // as a Lean here too — not a Best Angle. See isDemotedBestAngle above.
-      const bestRs = rs.filter((r) => grade(r) === "best_angle" && !isDemotedBestAngle(r));
+      const bestRs = rs.filter((r) => r.record.no_bet !== true && grade(r) === "best_angle" && !isDemotedBestAngle(r));
       for (const r of bestRs) accumulate(ba, r);
       finalize(ba, bestRs);
       const le = emptyMetrics();
-      const leanRs = rs.filter((r) => grade(r) === "lean" || isDemotedBestAngle(r));
+      const leanRs = rs.filter((r) => r.record.no_bet !== true && (grade(r) === "lean" || isDemotedBestAngle(r)));
       for (const r of leanRs) accumulate(le, r);
       finalize(le, leanRs);
       out.push({ sport, market, metrics: m, bestAngles: ba, leans: le });
@@ -585,11 +598,11 @@ export async function computeTrackingAggregate(opts: {
     }));
 
   // 6B.21 — Recently settled feed. Settled-only (no pending), ordered
-  // by prediction_grades.graded_at DESC, limit 20. no_bet=true rows
-  // were already filtered out of `rows` at the top of this function;
-  // launch_day rows are also already excluded. Slate_date is preserved
-  // so the per-day rollups in dailyTrend/yesterday/thisWeek stay in
-  // sync — this is a parallel feed, not a substitute.
+  // by prediction_grades.graded_at DESC, limit 20. Toss-Up rows are
+  // excluded upstream; `no_bet` stand-downs DO appear here (they are real
+  // graded calls — the W/L tally counts them, so the settled feed reflects
+  // them too). launch_day rows are already excluded. Slate_date is preserved
+  // so the per-day rollups in dailyTrend/yesterday/thisWeek stay in sync.
   const settledRows = rows.filter(
     (r) =>
       r.grade !== null &&
