@@ -206,7 +206,7 @@ export function computeWnbaPrediction(
   const mlSide = finalP >= 0.5 ? hN : aN, mlConf = Math.round(Math.max(finalP, 1 - finalP) * 100);
   const mlPrice = median((mlSide === hN ? mlH : mlA).map((z) => z.odds));
   const mlGrade: Grade = mktPDec == null ? "Watchlist" : conflict && marketRel >= 0.8 && Math.abs(edge) < 0.04 ? "Caution"
-    : !conflict && Math.abs(edge) >= 0.04 && mlBooks >= 6 && sharpPresent ? "Best Angle" : Math.abs(edge) >= 0.02 && mlBooks >= 4 ? "Lean" : "Watchlist";
+    : !conflict && Math.abs(edge) >= 0.04 && mlBooks >= 6 && sharpPresent && Math.abs(projMargin) >= 3 ? "Best Angle" : Math.abs(edge) >= 0.02 && mlBooks >= 4 ? "Lean" : "Watchlist";
 
   const pCoverHome = mktSpread != null ? 1 - Phi((-mktSpread - projMargin) / sigM) : null;
   const spEdge = mktSpread != null ? projMargin - -mktSpread : null;
@@ -318,7 +318,7 @@ export async function buildWnbaDailyEdgePreview(dateParam: string | null) {
     const mlSide = finalP >= 0.5 ? hN : aN, mlConf = Math.round(Math.max(finalP, 1 - finalP) * 100);
     const mlPrice = median((mlSide === hN ? mlH : mlA).map((z) => z.odds)); // representative consensus price on the pick side
     const mlGrade: Grade = mktP == null ? "Watchlist" : conflict && marketRel >= 0.8 && Math.abs(edge) < 0.04 ? "Caution"
-      : !conflict && Math.abs(edge) >= 0.04 && mlBooks >= 6 && sharpPresent ? "Best Angle" : Math.abs(edge) >= 0.02 && mlBooks >= 4 ? "Lean" : "Watchlist";
+      : !conflict && Math.abs(edge) >= 0.04 && mlBooks >= 6 && sharpPresent && Math.abs(projMargin) >= 3 ? "Best Angle" : Math.abs(edge) >= 0.02 && mlBooks >= 4 ? "Lean" : "Watchlist";
 
     const pCoverHome = mktSpread != null ? 1 - Phi((-mktSpread - projMargin) / sigM) : null;
     const spEdge = mktSpread != null ? projMargin - -mktSpread : null;
