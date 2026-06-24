@@ -55,6 +55,19 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
     .select("game_id, predicted_home_score, predicted_away_score, predicted_total, sport_specific")
     .in("game_id", ids);
   const gpByGame = new Map((gps ?? []).map((r) => [r.game_id as number, r]));
+  // Playbook public splits (display context only) — filled by refreshWnbaPlaybookSplits.
+  const { data: signalRows } = await supabase
+    .from("sharp_signals")
+    .select("game_id, market_type, side, public_betting_pct, public_money_pct, computed_at")
+    .in("game_id", ids)
+    .in("market_type", ["moneyline", "total"]);
+  const signalsByGame = new Map<number, NonNullable<typeof signalRows>>();
+  for (const r of signalRows ?? []) {
+    const gid = r.game_id as number;
+    if (!signalsByGame.has(gid)) signalsByGame.set(gid, []);
+    signalsByGame.get(gid)!.push(r);
+  }
+  const splitsAsOf = Date.now();
   const { data: teams } = await supabase.from("teams").select("id, abbreviation, name").eq("sport", "wnba");
   const tById = new Map((teams ?? []).map((t) => [t.id as number, t]));
   const out: PreviewGame[] = [];
@@ -85,12 +98,55 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
       model: (ss.model as PreviewGame["model"]) ?? { home_win_prob: 0.5, margin: 0, total: gp.predicted_total ?? 0 },
       market: (ss.market as PreviewGame["market"]) ?? { home_win_prob: null, spread: null, total: null, book_count: 0, dispersion: { spread: 0, total: 0 } },
       data_quality: (ss.data_quality as PreviewGame["data_quality"]) ?? { ml_books: 0, spread_books: 0, total_books: 0, flags: [] },
+      publicSplits: buildWnbaPublicSplits(
+        signalsByGame.get(g.id as number) ?? [],
+        home.abbreviation as string,
+        away.abbreviation as string,
+        splitsAsOf,
+      ),
     });
   }
   return out;
 }
 
 type PreviewModelGrade = "Best Angle" | "Lean" | "Watchlist" | "Caution";
+
+/** One public-split row in the DTO (Playbook bet%/money% + freshness). */
+type WnbaPublicSplit = MarketEdgeDto["publicSplits"][number];
+
+/** Stale threshold for the freshness flag: public splits older than 6h. */
+const PUBLIC_SPLIT_STALE_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Convert this game's sharp_signals public-split rows (filled from Playbook by
+ * refreshWnbaPlaybookSplits) into the DTO's publicSplits shape for ML + total.
+ * Display-context only — never reads +EV/steam/RLM/CLV (those stay null).
+ */
+function buildWnbaPublicSplits(
+  rows: Array<{ market_type: string; side: string; public_betting_pct: number | null; public_money_pct: number | null; computed_at: string | null }>,
+  homeAbbr: string,
+  awayAbbr: string,
+  asOf: number
+): { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[] } {
+  const labelFor = (market: string, side: string): string =>
+    market === "total" ? (side === "over" ? "Over" : "Under") : side === "home" ? homeAbbr : awayAbbr;
+  const mk = (market: "moneyline" | "total"): WnbaPublicSplit[] =>
+    rows
+      .filter((r) => r.market_type === market && (r.public_betting_pct !== null || r.public_money_pct !== null))
+      .map((r) => {
+        const observedAt = r.computed_at ?? null;
+        const ageMs = observedAt ? asOf - new Date(observedAt).getTime() : 0;
+        return {
+          side: r.side as WnbaPublicSplit["side"],
+          label: labelFor(market, r.side),
+          moneyPct: r.public_money_pct,
+          betsPct: r.public_betting_pct,
+          observedAt,
+          isStale: observedAt ? ageMs > PUBLIC_SPLIT_STALE_MS : false,
+        };
+      });
+  return { ml: mk("moneyline"), total: mk("total") };
+}
 
 type PreviewMarket = { side: string | null; confidence: number | null; grade: PreviewModelGrade | null };
 type PreviewGame = {
@@ -110,6 +166,8 @@ type PreviewGame = {
   model: { home_win_prob: number; margin: number; total: number };
   market: { home_win_prob: number | null; spread: number | null; total: number | null; book_count: number; dispersion: { spread: number; total: number } };
   data_quality: { ml_books: number; spread_books: number; total_books: number; flags: string[] };
+  /** Playbook public splits (ML + total) for display; absent on live fallback. */
+  publicSplits?: { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[] };
 };
 
 function gradeToVerdict(g: PreviewModelGrade): Verdict {
@@ -152,6 +210,7 @@ function buildMarket(opts: {
   bookCount: number;
   aligned: boolean | null;
   whyLine: string;
+  publicSplits?: WnbaPublicSplit[];
 }): MarketEdgeDto {
   const { slot, pick, confFrac, grade, modelProbPick, marketFairProbPick, priceAmerican, line, modelTotal, marketTotal, bookCount, aligned, whyLine } = opts;
   const held = pick === null || grade === null;
@@ -178,7 +237,7 @@ function buildMarket(opts: {
     pinnacleEvPct: null,
     moneyPct: null,
     betsPct: null,
-    publicSplits: [],
+    publicSplits: opts.publicSplits ?? [],
     priceAmerican,
     lineOpenAmerican: null,
     modelTotal: slot === "total" ? modelTotal : null,
@@ -227,6 +286,7 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     bookCount: game.data_quality.ml_books,
     aligned: mlAligned,
     whyLine: `Independent model ${Math.round(mlModelProb * 100)}% vs market ${mlMarketFair !== null ? Math.round(mlMarketFair * 100) + "%" : "n/a"} on ${game.moneyline.side}.`,
+    publicSplits: game.publicSplits?.ml,
   });
 
   // ── Total ──
@@ -242,6 +302,7 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     bookCount: game.data_quality.total_books,
     aligned: null,
     whyLine: `Model projects ${game.model.total} pts vs market line ${game.total.line ?? "n/a"}.`,
+    publicSplits: game.publicSplits?.total,
   });
 
   // ── Spread (rendered on the first_inning slot, relabeled "Sprd*") ──

@@ -18,6 +18,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { WNBA_TEAMS_BY_BDL_ID } from "./wnbaTeams";
+import { computeSlateDate } from "../../dates/slateDate";
 
 const SHARP = "https://api.sharpapi.io/api/v1";
 const BLOCKED = new Set(["fliff", "kalshi", "polymarket"]);
@@ -92,6 +93,8 @@ export type RefreshWnbaLinesResult = {
   tipTimesUpdated: number;
   missingTipTimes: string[];
   duplicatePairs: string[];
+  /** Games whose ET slate_date is corrected from the real SharpAPI tip time. */
+  slateRebuckets: Array<{ matchup: string; from: string; to: string }>;
   perGame: Array<{ matchup: string; books: number; ml: number; spread: number; total: number; tip: string | null }>;
   errors: string[];
 };
@@ -176,6 +179,10 @@ export async function refreshWnbaLines(opts: {
   const signalDeleteKeys = new Set<string>(); // `${gameId}::${market}::${side}`
   const perGame: RefreshWnbaLinesResult["perGame"] = [];
   const missingTipTimes: string[] = [];
+  // ET slate corrections derived from the real tip time (fixes BDL's UTC-date
+  // bucketing that splits an ET game-day). slate_date := computeSlateDate(tip).
+  const slateRebuckets: RefreshWnbaLinesResult["slateRebuckets"] = [];
+  const newSlateByGame = new Map<number, string>();
 
   for (const [gameId, rows] of oddsByGame.entries()) {
     const books = new Set(rows.map((r) => r.book));
@@ -184,6 +191,13 @@ export async function refreshWnbaLines(opts: {
     const g = games.find((x) => x.id === gameId)!;
     const matchup = `${WNBA_TEAMS_BY_BDL_ID[bdlByTeamId.get(g.away_team_id as number)!]?.abbr}@${WNBA_TEAMS_BY_BDL_ID[bdlByTeamId.get(g.home_team_id as number)!]?.abbr}`;
     if (!tip) missingTipTimes.push(matchup);
+    if (tip) {
+      const correctSlate = computeSlateDate("wnba", tip);
+      if (correctSlate !== (g.slate_date as string)) {
+        slateRebuckets.push({ matchup, from: g.slate_date as string, to: correctSlate });
+        newSlateByGame.set(gameId, correctSlate);
+      }
+    }
     perGame.push({ matchup, books: books.size, ml: byMkt("moneyline").length, spread: byMkt("spread").length, total: byMkt("total").length, tip });
 
     for (const r of rows) {
@@ -226,11 +240,11 @@ export async function refreshWnbaLines(opts: {
   const result: RefreshWnbaLinesResult = {
     apply, gamesScheduled: games.length, gamesMatched: oddsByGame.size, oddsRows: odds.length,
     unmatchedOddsRows: unmatched, linesWritten: 0, lineHistoryWritten: 0, sharpSignalsWritten: 0,
-    tipTimesUpdated: 0, missingTipTimes, duplicatePairs, perGame, errors,
+    tipTimesUpdated: 0, missingTipTimes, duplicatePairs, slateRebuckets, perGame, errors,
   };
 
   if (!apply) {
-    logger(`wnba lines DRY-RUN: ${oddsByGame.size}/${games.length} games matched, ${linesPayload.length} lines, ${signalsPayload.length} signals`);
+    logger(`wnba lines DRY-RUN: ${oddsByGame.size}/${games.length} games matched, ${linesPayload.length} lines, ${signalsPayload.length} signals, ${slateRebuckets.length} slate re-buckets`);
     result.linesWritten = linesPayload.length;
     result.lineHistoryWritten = historyPayload.length;
     result.sharpSignalsWritten = signalsPayload.length;
@@ -265,9 +279,15 @@ export async function refreshWnbaLines(opts: {
     if (error) errors.push(`sharp_signals insert: ${error.message}`); else result.sharpSignalsWritten = signalsPayload.length;
   }
   for (const [gameId, tip] of tipByGame.entries()) {
-    const { error } = await supabase.from("games").update({ game_date: tip }).eq("id", gameId).eq("sport", "wnba");
+    // Update the real tip time AND re-anchor slate_date to the ET slate when
+    // the tip moves it (fixes BDL's UTC-date bucketing). slate_date only
+    // changes when computeSlateDate(tip) differs from the seeded value.
+    const update: { game_date: string; slate_date?: string } = { game_date: tip };
+    const correctSlate = newSlateByGame.get(gameId);
+    if (correctSlate) update.slate_date = correctSlate;
+    const { error } = await supabase.from("games").update(update).eq("id", gameId).eq("sport", "wnba");
     if (error) errors.push(`tip update ${gameId}: ${error.message}`); else result.tipTimesUpdated++;
   }
-  logger(`wnba lines APPLY: lines ${result.linesWritten}, history ${result.lineHistoryWritten}, signals ${result.sharpSignalsWritten}, tips ${result.tipTimesUpdated}`);
+  logger(`wnba lines APPLY: lines ${result.linesWritten}, history ${result.lineHistoryWritten}, signals ${result.sharpSignalsWritten}, tips ${result.tipTimesUpdated}, slate re-buckets ${result.slateRebuckets.length}`);
   return result;
 }
