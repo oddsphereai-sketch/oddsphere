@@ -116,7 +116,7 @@ type TrackingResponse = {
 // ─── Constants ─────────────────────────────────────────────────────────
 
 const SPORT_LABEL: Record<string, string> = {
-  mlb: "MLB", nfl: "NFL", nba: "NBA", nhl: "NHL", cfb: "CFB", cbb: "CBB", ucl: "UCL",
+  mlb: "MLB", wnba: "WNBA", nfl: "NFL", nba: "NBA", nhl: "NHL", cfb: "CFB", cbb: "CBB", ucl: "UCL",
   // Soccer surfaces in tracking as "World Cup" — UCL keeps its own label
   // above. When a non-WC competition launches, the competition column on
   // prediction_records (see project-wc-launch-contract) is the planned
@@ -165,7 +165,7 @@ const MARKET_ORDER: Record<string, number> = {
 };
 
 const SPORT_ORDER: Record<string, number> = {
-  mlb: 1, nfl: 2, nba: 3, nhl: 4, cfb: 5, cbb: 6, ucl: 7,
+  mlb: 1, wnba: 2, soccer: 3, nfl: 4, nba: 5, nhl: 6, cfb: 7, cbb: 8, ucl: 9,
 };
 
 // ─── Format helpers ────────────────────────────────────────────────────

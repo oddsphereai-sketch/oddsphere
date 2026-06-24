@@ -36,6 +36,12 @@ export type SoccerWriterOptions = {
 };
 
 const SPORT: TrackedSport = "soccer";
+const SOCCER_TOTAL_ACTIONABLE_MIN_MODEL_PROB = 55;
+const SOCCER_TOTAL_LOW_MODEL_PROB_REASON = "soccer_total_low_model_probability";
+
+function shouldNoBetLowProbabilityTotal(market: TrackedMarketV17, modelProbabilityPct: number, held: boolean): boolean {
+  return market === "total" && !held && modelProbabilityPct < SOCCER_TOTAL_ACTIONABLE_MIN_MODEL_PROB;
+}
 
 function deriveSideForMarket(market: "match_result" | "double_chance" | "total" | "btts", pick: string): string {
   // The `side` column on prediction_records is sport-conventional. For
@@ -67,6 +73,26 @@ export function buildSoccerPredictionRows(opts: SoccerWriterOptions): Prediction
     const market: TrackedMarketV17 = m.market;
     // Tracked-market guard — refuses to write a non-tracked market by mistake.
     assertOfficialTrackingMarket(SPORT, market);
+    const lowProbabilityTotalNoBet = shouldNoBetLowProbabilityTotal(market, m.grade.model_p_pct, m.hold.hold);
+    const noBet = m.hold.hold || lowProbabilityTotalNoBet;
+    const noBetReason = m.hold.hold
+      ? m.hold.code
+      : lowProbabilityTotalNoBet
+        ? SOCCER_TOTAL_LOW_MODEL_PROB_REASON
+        : null;
+    const snapshot = lowProbabilityTotalNoBet
+      ? {
+          ...(m.snapshot as unknown as Record<string, unknown>),
+          actionability_gate: {
+            rule_id: SOCCER_TOTAL_LOW_MODEL_PROB_REASON,
+            reason: "Soccer totals below 55% model probability are read-only until calibration improves.",
+            market: m.market,
+            original_grade: m.grade.grade,
+            model_probability_pct: m.grade.model_p_pct,
+            threshold_pct: SOCCER_TOTAL_ACTIONABLE_MIN_MODEL_PROB,
+          },
+        }
+      : (m.snapshot as unknown as Record<string, unknown>);
 
     const row: PredictionRecordRow = {
       game_prediction_id: null,
@@ -101,9 +127,9 @@ export function buildSoccerPredictionRows(opts: SoccerWriterOptions): Prediction
       expected_value: null,
       play_grade: m.grade.grade,
       prediction_type: m.market,
-      best_angle: m.grade.best_angle,
-      no_bet: m.hold.hold,
-      no_bet_reason: m.hold.hold ? m.hold.code : null,
+      best_angle: lowProbabilityTotalNoBet ? false : m.grade.best_angle,
+      no_bet: noBet,
+      no_bet_reason: noBetReason,
       market_aligned: m.grade.model_market_agreement,
       data_quality_tier: opts.modelOutput.fixtureHoldReason !== null ? "low" : "medium",
       source_quality: null,
@@ -114,7 +140,7 @@ export function buildSoccerPredictionRows(opts: SoccerWriterOptions): Prediction
       manual_outcome_expected: false,
       locked_at: m.snapshot.locked_at,
       published_at: null,
-      snapshot_json: m.snapshot as unknown as Record<string, unknown>,
+      snapshot_json: snapshot,
       calibration_version: m.snapshot.calibration_version,
     };
 

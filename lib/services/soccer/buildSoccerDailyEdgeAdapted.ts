@@ -203,11 +203,12 @@ export function normalizeGradeKey(playGrade: string | null): string | null {
   return trimmed.toLowerCase().replace(/[\s-]+/g, "_");
 }
 
-export function gradeToVerdict(playGrade: string | null, held: boolean): { key: Verdict; label: string } {
-  // True blockers win: a held/no-bet market shows Held regardless of the
+export function gradeToVerdict(playGrade: string | null, held: boolean, noBet = false): { key: Verdict; label: string } {
+  // True blockers win: a held market shows Held regardless of the
   // underlying grade. This is intentional (see WC integrity contract) and
   // is NOT the casing bug — the casing fix below only affects non-held rows.
   if (held) return { key: "no_play", label: "Held" };
+  if (noBet) return { key: "no_play", label: "No Play" };
   const g = normalizeGradeKey(playGrade);
   if (g === "best_angle") return { key: "best_angle", label: "Best Angle" };
   if (g === "lean") return { key: "lean", label: "Lean" };
@@ -835,7 +836,7 @@ function buildMarketEdgeDto(
     marketSignal: null,
     sharpStatus: "caution",
     held: r.held,
-    verdict: gradeToVerdict(r.play_grade, r.held),
+    verdict: gradeToVerdict(r.play_grade, r.held, r.no_bet),
     guidedGuide: heldHelp,
     guidedWatchOut: "",
     whyLine: heldHelp,
@@ -883,12 +884,12 @@ function buildMarketEdgeDto(
 }
 
 /**
- * Compose the single sentence shown under each held market on the card.
- * Honest about why the model is holding without leaking internal jargon.
- * Returns "" for unheld rows — the card already shows the verdict pill.
+ * Compose the single sentence shown under held/no-bet markets on the card.
+ * Honest about why the model is passing without leaking internal jargon.
+ * Returns "" for fully actionable rows — the card already shows the verdict pill.
  */
 function buildHeldHelpLine(r: PredictionRecordSlim): string {
-  if (!r.held) return "";
+  if (!r.held && !r.no_bet) return "";
   return cleanHoldSentence(r.hold_reason, r.no_bet_reason);
 }
 
@@ -899,6 +900,8 @@ function buildHeldHelpLine(r: PredictionRecordSlim): string {
  */
 function cleanHoldSentence(holdReason: string | null, noBetReason: string | null): string {
   const hr = `${holdReason ?? ""} ${noBetReason ?? ""}`.toLowerCase();
+  if (hr.includes("soccer_total_low_model_probability"))
+    return "The model has a total read, but this confidence range has not been strong enough to bet.";
   if (hr.includes("push") || hr.includes("within") || hr.includes("on the line"))
     return "Our projection lands right on this line — too close to call, so we're passing.";
   if (hr.includes("odds") || hr.includes("stale") || hr.includes("provider") || hr.includes("missing") || hr.includes("data"))

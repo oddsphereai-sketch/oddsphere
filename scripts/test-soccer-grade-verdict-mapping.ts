@@ -64,6 +64,8 @@ async function main() {
   // True blockers still win: held rows show Held regardless of grade.
   check("held Caution → Held", gradeToVerdict("Caution", true), { key: "no_play", label: "Held" });
   check("held Watchlist → Held", gradeToVerdict("Watchlist", true), { key: "no_play", label: "Held" });
+  check("non-held no-bet Lean → No Play", gradeToVerdict("Lean", false, true), { key: "no_play", label: "No Play" });
+  check("held no-bet Lean still → Held", gradeToVerdict("Lean", true, true), { key: "no_play", label: "Held" });
 
   // Unknown / null grade falls back to No Play (non-held).
   check("null grade → No Play", gradeToVerdict(null, false), { key: "no_play", label: "No Play" });
