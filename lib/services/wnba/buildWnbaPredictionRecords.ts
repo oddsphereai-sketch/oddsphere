@@ -70,7 +70,17 @@ export async function buildWnbaPredictionRecords(opts: {
   const isDupPair = (g: { home_team_id: number; away_team_id: number }) => (pairCount.get([g.home_team_id, g.away_team_id].sort((a, b) => a - b).join("|")) ?? 0) > 1;
 
   const priceAt = (gid: number, market: string, side: string, line: number | null) => {
-    const rows = (linesByGame.get(gid) ?? []).filter((r) => r.market_type === market && r.side === side && (line == null || r.line_value === line) && r.odds_american != null);
+    const sideRows = (linesByGame.get(gid) ?? []).filter((r) => r.market_type === market && r.side === side && r.odds_american != null);
+    const rows = line === null
+      ? sideRows
+      : (() => {
+          const exact = sideRows.filter((r) => r.line_value === line);
+          if (exact.length > 0) return exact;
+          const nearest = sideRows
+            .filter((r) => r.line_value != null)
+            .sort((a, b) => Math.abs((a.line_value as number) - line) - Math.abs((b.line_value as number) - line))[0];
+          return nearest ? sideRows.filter((r) => r.line_value === nearest.line_value) : [];
+        })();
     return median(rows.map((r) => r.odds_american as number));
   };
 
