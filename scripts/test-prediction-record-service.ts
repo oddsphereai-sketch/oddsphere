@@ -636,8 +636,10 @@ const FILLER_ML_SRC = { home: FILLER_SRC, away: FILLER_SRC };
 // ── Phase 6B.27 — V2.2 internal labels must not leak into public play_grade ──
 console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━");
 {
-  // V2.2 emitted "no_bet" (edge < -1%) but pill still actionable. Public
-  // column must be null; snapshot.v2_2_audit must keep raw "no_bet".
+  // V2.2 emitted "no_bet" (edge < -1%). Public play_grade column must
+  // be null; no_bet guidance must be true; snapshot.v2_2_audit must keep
+  // raw "no_bet". This does NOT remove the prediction from W/L tracking —
+  // real-sided no_bet rows still grade.
   const noBetSp = {
     ...v21SportSpecific,
     ml_play_grade: "no_bet",
@@ -657,7 +659,7 @@ console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━"
   const ml = recs.find((r) => r.market === "moneyline")!;
   const ou = recs.find((r) => r.market === "total")!;
   check("ML record.play_grade=null when V2.2 emits 'no_bet'", ml.play_grade === null);
-  check("ML record.no_bet=false (exclusion gate untouched)", ml.no_bet === false);
+  check("ML record.no_bet=true when model reason says do not bet", ml.no_bet === true);
   check("ML record.pick still present (customer-facing pick unchanged)", ml.pick === "home");
   check("ML record.confidence still present", ml.confidence === 54.0);
   check("ML snapshot_json.v2_2_audit.ml_play_grade='no_bet' (raw preserved)",
@@ -666,6 +668,37 @@ console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━"
         typeof (ml.snapshot_json as any)?.v2_2_audit?.ml_no_bet_reason === "string");
   check("OU record.play_grade='best_angle' (actionable label pass-through unchanged)",
         ou.play_grade === "best_angle");
+}
+{
+  // Provisional / low-quality rows say "not a betting recommendation".
+  // They should be guidance no_bet rows, but still carry pick/confidence so
+  // the grader and calibration pipeline can track whether the read was right.
+  const provisionalSp = {
+    ...v21SportSpecific,
+    ml_play_grade: "provisional",
+    ml_no_bet_reason: "Data quality tier=low; not a betting recommendation.",
+    ou_play_grade: "provisional",
+    ou_no_bet_reason: "Data quality tier=low; not a betting recommendation.",
+    v2_data_quality_tier: "low",
+    v2_provisional: true,
+    v2_2_audit: {
+      ml_play_grade: "provisional",
+      ou_play_grade: "provisional",
+    },
+  };
+  const pred = { ...basePrediction, sport_specific: provisionalSp };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb", slateDate: "2026-06-06", launchDay: false, games: [baseGame],
+    predictionByGameId: new Map([[14771, pred]]), abbrevByTeamId,
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  const ou = recs.find((r) => r.market === "total")!;
+  check("Provisional ML: no_bet=true guidance", ml.no_bet === true);
+  check("Provisional ML: pick still present", ml.pick === "home");
+  check("Provisional ML: grade preserved as provisional", ml.play_grade === "provisional");
+  check("Provisional total: no_bet=true guidance", ou.no_bet === true);
+  check("Provisional total: pick still present", ou.pick === "over");
+  check("Provisional total: grade preserved as provisional", ou.play_grade === "provisional");
 }
 {
   // V2.2 'held' on ML — same translator behavior.

@@ -103,6 +103,11 @@ function readBoolish(v: unknown): boolean {
 function readStringOrNull(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
 }
+function isExplicitNoBetReason(v: string | null): boolean {
+  if (v === null) return false;
+  const s = v.toLowerCase();
+  return s.includes("not a betting recommendation") || s.includes("do not bet") || /\bno bet\b/.test(s);
+}
 
 /**
  * Phase 6B.27 — V2.2 audit grade → public play_grade translator.
@@ -1005,6 +1010,8 @@ function buildMlRecord(
   const finalMlModelProb = mlFlipped ? mlFlip.recommendationConfidence / 100 : mlModelProb;
   const finalMlMarketProb = mlFlipped ? mlFlip.flippedMarketProb : mlMarketProb;
   const finalMlEdge = mlFlipped ? null : mlEdgePp;
+  const mlNoBetReason = readStringOrNull(sp.ml_no_bet_reason);
+  const mlNoBet = !mlFlipped && isExplicitNoBetReason(mlNoBetReason);
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -1044,8 +1051,8 @@ function buildMlRecord(
     // BA count matches what members see on the live slate. Flipped rows are
     // never Best Angle (an inversion override is not a model Best Angle).
     best_angle: mlFlipped ? false : mlBest.bestAngle,
-    no_bet: false,
-    no_bet_reason: readStringOrNull(sp.ml_no_bet_reason),
+    no_bet: mlNoBet,
+    no_bet_reason: mlNoBetReason,
     market_aligned: readBoolish(sp.ml_market_aligned),
     data_quality_tier: readStringOrNull(sp.v2_data_quality_tier),
     source_quality: null,
@@ -1236,10 +1243,11 @@ function buildOuRecord(
   const finalOuModelProb = ouFlipped ? ouFlip.recommendationConfidence / 100 : ouModelProb;
   const finalOuMarketProb = ouFlipped ? ouFlip.flippedMarketProb : ouMarketProb;
   const finalOuEdge = ouFlipped ? null : ouEdgePp;
-  const ouNoBet = ouDivergenceStandDown;
+  const explicitOuNoBetReason = readStringOrNull(sp.ou_no_bet_reason);
+  const ouNoBet = ouDivergenceStandDown || isExplicitNoBetReason(explicitOuNoBetReason);
   const ouNoBetReason = ouDivergenceStandDown
     ? "Stood down: projected total is on the opposite side of the line from the probability-driven pick, and the flip rule did not qualify (gap/line/odds). Mean/probability divergence hold."
-    : readStringOrNull(sp.ou_no_bet_reason);
+    : explicitOuNoBetReason;
   return {
     game_prediction_id: pred.id,
     game_id: game.id,

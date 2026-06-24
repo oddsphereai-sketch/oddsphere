@@ -4,8 +4,8 @@
  * Verifies predictionGrader.gradePrediction routes soccer markets to the
  * soccer-native grader on the 90' regulation score: Match Result (3-way),
  * Double Chance, Total goals (with push), BTTS. Also checks pending/void
- * handling and that no_bet records still grade (the no_bet EXCLUSION lives
- * at the tracking-aggregate read layer, same as MLB/NBA/NHL).
+ * handling and that real-sided no_bet records still grade. The only no_bet
+ * rows withheld from W/L are true Toss-Ups with no side.
  *
  * Pure logic via the exported grader. Run:
  *   npx tsx scripts/test-soccer-prediction-grading.ts
@@ -67,10 +67,10 @@ ok("pending when not final", grade("match_result", "home", null, null, null, "sc
 ok("pending when final but scores missing", grade("match_result", "home", null, null, null, "final") === "pending");
 ok("total pending when line missing", grade("total", "over", null, 2, 1) === "pending");
 
-// 30 — no_bet/held records are marked no-action (void), consistent with
-// MLB/NBA/NHL: the grader short-circuits no_bet=true → void so the row is
-// auditable but excluded from public W/L tallies.
-ok("no_bet soccer record → void (no-action)", grade("match_result", "home", null, 2, 1, "final", { no_bet: true }) === "void");
+// 30 — no_bet is guidance, not a tracking exclusion. A real-sided no_bet
+// prediction still grades from the final score.
+ok("no_bet soccer record with real side → win", grade("match_result", "home", null, 2, 1, "final", { no_bet: true }) === "win");
+ok("no_bet soccer record with wrong side → loss", grade("match_result", "away", null, 2, 1, "final", { no_bet: true }) === "loss");
 
 // 31 — DOUBLE_CHANCE missing-odds fix (2026-06-15). A DC pick held SOLELY for
 // MARKET_ODDS_MISSING still resolves win/loss from the final regulation score
@@ -88,17 +88,21 @@ const dcOddsMissing = { no_bet: true, no_bet_reason: "MARKET_ODDS_MISSING", held
   // home_or_draw on 0-1 (away win) → LOSS.
   ok("DC odds-missing graded from score → loss", gradeRow("double_chance", "home_or_draw", null, 0, 1, "final", dcOddsMissing).result === "loss");
 }
-// 32 — genuine voids stay void
-ok("DC odds-missing but NO final score → void (no score)", gradeRow("double_chance", "home_or_draw", null, null, null, "final", dcOddsMissing).result === "void");
+// 32 — pending/void game states stay non-W/L
+ok("DC odds-missing but NO final score → pending (no score yet)", gradeRow("double_chance", "home_or_draw", null, null, null, "final", dcOddsMissing).result === "pending");
 ok("DC odds-missing but game scheduled → void/pending (not graded win/loss)", ["void", "pending"].includes(gradeRow("double_chance", "home_or_draw", null, null, null, "scheduled", dcOddsMissing).result));
-ok("DC no_bet for MODEL_WRONG_SIDE → still void", grade("double_chance", "home_or_draw", null, 2, 0, "final", { no_bet: true, no_bet_reason: "MODEL_WRONG_SIDE_OF_MARKET", odds_american: -3000 }) === "void");
+ok("DC no_bet for MODEL_WRONG_SIDE still grades when side is real", grade("double_chance", "home_or_draw", null, 2, 0, "final", { no_bet: true, no_bet_reason: "MODEL_WRONG_SIDE_OF_MARKET", odds_american: -3000 }) === "win");
 ok("DC void game status → void", grade("double_chance", "home_or_draw", null, null, null, "postponed") === "void");
-// 33 — fix is DOUBLE_CHANCE-only: other markets with odds-missing no_bet stay void (behavior unchanged)
-ok("MR odds-missing no_bet → still void (unchanged)", grade("match_result", "home", null, 2, 1, "final", dcOddsMissing) === "void");
-ok("Total odds-missing no_bet → still void (unchanged)", grade("total", "over", 2.5, 2, 1, "final", dcOddsMissing) === "void");
-ok("BTTS odds-missing no_bet → still void (unchanged)", grade("btts", "yes", null, 1, 1, "final", dcOddsMissing) === "void");
-// 34 — non-soccer unaffected: MLB no_bet still void
-ok("MLB FI no_bet → void (non-soccer unaffected)", gradePrediction({ record: { ...rec("first_inning", "under", null, { sport: "mlb", no_bet: true, no_bet_reason: "MARKET_ODDS_MISSING" }) }, game: game(1, 1, "final"), source: "auto_score_ingest" }).result === "void");
+// 33 — no_bet guidance still grades for every real-sided market.
+ok("MR odds-missing no_bet → win", grade("match_result", "home", null, 2, 1, "final", dcOddsMissing) === "win");
+ok("Total odds-missing no_bet → win", grade("total", "over", 2.5, 2, 1, "final", dcOddsMissing) === "win");
+ok("BTTS odds-missing no_bet → win", grade("btts", "yes", null, 1, 1, "final", dcOddsMissing) === "win");
+// 34 — non-soccer follows the same contract: real-sided no_bet still grades.
+ok("MLB FI no_bet with real side → win", gradePrediction({
+  record: { ...rec("first_inning", "NRFI", 0.5, { sport: "mlb", side: "under", no_bet: true, no_bet_reason: "MARKET_ODDS_MISSING" }) },
+  game: { ...game(1, 1, "final"), first_inning_runs: 0 },
+  source: "auto_score_ingest",
+}).result === "win");
 
 if (failures > 0) { console.error(`\n${failures} assertion(s) failed.`); process.exit(1); }
 console.log("\nAll soccer grading-delegation assertions passed.");
