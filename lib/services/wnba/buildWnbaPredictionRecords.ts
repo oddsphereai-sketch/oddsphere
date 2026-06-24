@@ -61,8 +61,27 @@ export async function buildWnbaPredictionRecords(opts: {
   const { data: gps } = ids.length ? await supabase.from("game_predictions").select("id, game_id, locked_at, sport_specific").in("game_id", ids) : { data: [] as Record<string, unknown>[] };
   const gpByGame = new Map((gps ?? []).map((r) => [r.game_id as number, r]));
   const { data: lineRows } = ids.length ? await supabase.from("lines").select("game_id, market_type, side, line_value, odds_american").in("game_id", ids).is("player_id", null) : { data: [] as Record<string, unknown>[] };
+  const { data: historyRows } = ids.length
+    ? await supabase
+        .from("line_history")
+        .select("game_id, market_type, side, line_value, odds_american, recorded_at")
+        .in("game_id", ids)
+        .in("market_type", ["moneyline", "total", "spread"])
+        .not("odds_american", "is", null)
+        .order("recorded_at", { ascending: false })
+    : { data: [] as Record<string, unknown>[] };
   const linesByGame = new Map<number, Record<string, unknown>[]>();
   for (const l of lineRows ?? []) { const gid = l.game_id as number; if (!linesByGame.has(gid)) linesByGame.set(gid, []); linesByGame.get(gid)!.push(l); }
+  const historyByGame = new Map<number, Record<string, unknown>[]>();
+  const seenHistory = new Set<string>();
+  for (const h of historyRows ?? []) {
+    const gid = h.game_id as number;
+    const key = `${gid}::${h.market_type}::${h.side}::${h.line_value ?? ""}::${h.recorded_at}`;
+    if (seenHistory.has(key)) continue;
+    seenHistory.add(key);
+    if (!historyByGame.has(gid)) historyByGame.set(gid, []);
+    historyByGame.get(gid)!.push(h);
+  }
 
   // Duplicate detection: a team-pair with >1 scheduled meeting in the window.
   const pairCount = new Map<string, number>();
@@ -81,7 +100,28 @@ export async function buildWnbaPredictionRecords(opts: {
             .sort((a, b) => Math.abs((a.line_value as number) - line) - Math.abs((b.line_value as number) - line))[0];
           return nearest ? sideRows.filter((r) => r.line_value === nearest.line_value) : [];
         })();
-    return median(rows.map((r) => r.odds_american as number));
+    const currentPrice = median(rows.map((r) => r.odds_american as number));
+    if (currentPrice !== null) return currentPrice;
+
+    const historySideRows = (historyByGame.get(gid) ?? []).filter((r) => r.market_type === market && r.side === side && r.odds_american != null);
+    const historyMatches = line === null
+      ? historySideRows
+      : (() => {
+          const exact = historySideRows.filter((r) => r.line_value === line);
+          if (exact.length > 0) return exact;
+          const nearest = historySideRows
+            .filter((r) => r.line_value != null)
+            .sort((a, b) => Math.abs((a.line_value as number) - line) - Math.abs((b.line_value as number) - line))[0];
+          return nearest ? historySideRows.filter((r) => r.line_value === nearest.line_value) : [];
+        })();
+    const latestAt = historyMatches
+      .map((r) => new Date(r.recorded_at as string).getTime())
+      .filter(Number.isFinite)
+      .sort((a, b) => b - a)[0];
+    if (latestAt === undefined) return null;
+    return median(historyMatches
+      .filter((r) => new Date(r.recorded_at as string).getTime() === latestAt)
+      .map((r) => r.odds_american as number));
   };
 
   const result: WnbaRecordsResult = { apply, eligibleGames: 0, withheld: [], counts: { moneyline: 0, total: 0, spread: 0 }, missingTip: [], missingLinePrice: [], ambiguous: [], written: 0, lockedSkipped: 0, records: [], errors };

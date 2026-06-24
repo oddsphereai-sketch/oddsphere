@@ -229,6 +229,21 @@ function pickedPrice(rows: WnbaLineRow[], market: string, side: string | null, l
   return medianNumber(candidates.map((r) => r.odds_american as number));
 }
 
+function latestPickedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
+  const candidates = pickedRows(rows, market, side, line).filter((r) => r.recorded_at);
+  if (candidates.length === 0) return null;
+  const latest = candidates.reduce((max, r) => {
+    const ts = new Date(r.recorded_at as string).getTime();
+    return Number.isFinite(ts) && ts > max ? ts : max;
+  }, 0);
+  if (latest === 0) return null;
+  return medianNumber(
+    candidates
+      .filter((r) => new Date(r.recorded_at as string).getTime() === latest)
+      .map((r) => r.odds_american as number)
+  );
+}
+
 function firstObservedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
   const candidates = pickedRows(rows, market, side, line);
   return candidates.length > 0 ? (candidates[0]!.odds_american as number) : null;
@@ -278,9 +293,9 @@ function buildWnbaPickedPrices(
     spreadSide === "home" ? spread.line :
     spreadSide === "away" && spread.line !== null ? -spread.line :
     null;
-  const mlCurrent = pickedPrice(rows, "moneyline", mlSide, null);
-  const totalCurrent = pickedPrice(rows, "total", totalSide, total.line);
-  const spreadCurrent = pickedPrice(rows, "spread", spreadSide, pickedSpreadLine);
+  const mlCurrent = pickedPrice(rows, "moneyline", mlSide, null) ?? latestPickedPrice(historyRows, "moneyline", mlSide, null);
+  const totalCurrent = pickedPrice(rows, "total", totalSide, total.line) ?? latestPickedPrice(historyRows, "total", totalSide, total.line);
+  const spreadCurrent = pickedPrice(rows, "spread", spreadSide, pickedSpreadLine) ?? latestPickedPrice(historyRows, "spread", spreadSide, pickedSpreadLine);
   return {
     ml: priceTrail(historyRows, "moneyline", mlSide, null, mlCurrent),
     total: priceTrail(historyRows, "total", totalSide, total.line, totalCurrent),

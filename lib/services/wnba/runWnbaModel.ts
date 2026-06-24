@@ -58,12 +58,51 @@ export async function runWnbaModel(opts: {
   const { data: lineRows } = gameIds.length
     ? await supabase.from("lines").select("game_id, market_type, side, sportsbook, line_value, odds_american").in("game_id", gameIds).is("player_id", null)
     : { data: [] as Record<string, unknown>[] };
+  const { data: historyRows } = gameIds.length
+    ? await supabase
+        .from("line_history")
+        .select("game_id, market_type, side, sportsbook, line_value, odds_american, recorded_at")
+        .in("game_id", gameIds)
+        .in("market_type", ["moneyline", "total", "spread"])
+        .not("odds_american", "is", null)
+        .order("recorded_at", { ascending: false })
+    : { data: [] as Record<string, unknown>[] };
   const linesByGame = new Map<number, Record<string, unknown>[]>();
   for (const l of lineRows ?? []) {
     const gid = l.game_id as number;
     if (!linesByGame.has(gid)) linesByGame.set(gid, []);
     linesByGame.get(gid)!.push(l);
   }
+  const historyByGame = new Map<number, Record<string, unknown>[]>();
+  const seenHistory = new Set<string>();
+  for (const h of historyRows ?? []) {
+    const gid = h.game_id as number;
+    const key = `${gid}::${h.market_type}::${h.side}::${h.line_value ?? ""}::${h.sportsbook ?? ""}`;
+    if (seenHistory.has(key)) continue;
+    seenHistory.add(key);
+    if (!historyByGame.has(gid)) historyByGame.set(gid, []);
+    historyByGame.get(gid)!.push(h);
+  }
+
+  const hydrateLineOnlyRows = (gid: number, currentRows: Record<string, unknown>[]): Record<string, unknown>[] => {
+    const hydrated = [...currentRows];
+    const hasPricedExact = new Set(
+      currentRows
+        .filter((r) => r.odds_american !== null && r.odds_american !== undefined)
+        .map((r) => `${r.market_type}::${r.side}::${r.line_value ?? ""}`)
+    );
+    const needsPrice = new Set(
+      currentRows
+        .filter((r) => r.odds_american === null || r.odds_american === undefined)
+        .map((r) => `${r.market_type}::${r.side}::${r.line_value ?? ""}`)
+    );
+    for (const h of historyByGame.get(gid) ?? []) {
+      const k = `${h.market_type}::${h.side}::${h.line_value ?? ""}`;
+      if (!needsPrice.has(k) || hasPricedExact.has(k)) continue;
+      hydrated.push(h);
+    }
+    return hydrated;
+  };
 
   // Locked-row guard: never overwrite a game_predictions row that's already locked.
   const { data: lockedRows } = gameIds.length
@@ -81,7 +120,7 @@ export async function runWnbaModel(opts: {
   for (const g of games) {
     const homeBdl = bdlByTeamId.get(g.home_team_id as number), awayBdl = bdlByTeamId.get(g.away_team_id as number);
     if (!homeBdl || !awayBdl) continue;
-    const dbLines = linesByGame.get(g.id as number) ?? [];
+    const dbLines = hydrateLineOnlyRows(g.id as number, linesByGame.get(g.id as number) ?? []);
     if (!dbLines.length) continue;
     result.gamesWithOdds++;
 
