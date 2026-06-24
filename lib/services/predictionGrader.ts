@@ -241,6 +241,35 @@ function gradeFirstInning(inputs: GradeInputs): PredictionGradeRow {
   };
 }
 
+function gradeSpread(inputs: GradeInputs): PredictionGradeRow {
+  const { record, game, source } = inputs;
+  if (game.home_score === null || game.away_score === null) {
+    return emptyGrade(record, "pending", source, "missing final scores");
+  }
+  if (record.line_value === null) {
+    return emptyGrade(record, "pending", source, "missing line_value");
+  }
+  const sideToken = resolveSideToken(record, VALID_ML_TOKENS); // home | away
+  if (sideToken !== "home" && sideToken !== "away") {
+    return emptyGrade(record, "void", source, `invalid spread side: ${record.side ?? record.pick}`);
+  }
+  // line_value is the spread FOR THE PICKED SIDE (home −2.5 / away +7.5). The
+  // pick covers when (pickMargin + line_value) > 0; exactly 0 is a push;
+  // < 0 is a loss. Half-point lines can never push.
+  const pickMargin =
+    sideToken === "home" ? game.home_score - game.away_score : game.away_score - game.home_score;
+  const cover = pickMargin + record.line_value;
+  const result: GradeResult = cover > 0 ? "win" : cover < 0 ? "loss" : "push";
+  return {
+    ...emptyGrade(record, result, source, inputs.notes ?? null),
+    actual_home_score: game.home_score,
+    actual_away_score: game.away_score,
+    actual_total: game.home_score + game.away_score,
+    winning_team:
+      game.home_score > game.away_score ? "home" : game.away_score > game.home_score ? "away" : null,
+  };
+}
+
 /**
  * Compute the grade row for a single prediction_records snapshot.
  *
@@ -321,7 +350,8 @@ export function gradePrediction(inputs: GradeInputs): PredictionGradeRow {
   // Final game — grade per market.
   if (m === "moneyline") return gradeMoneyline(inputs);
   if (m === "total") return gradeTotal(inputs);
-  // Markets we don't yet grade (spread, prop). Return pending so they're
+  if (m === "spread") return gradeSpread(inputs);
+  // Markets we don't yet grade (prop). Return pending so they're
   // visible but not falsely counted.
   return emptyGrade(record, "pending", source, `unsupported market for V1 grader: ${m}`);
 }
