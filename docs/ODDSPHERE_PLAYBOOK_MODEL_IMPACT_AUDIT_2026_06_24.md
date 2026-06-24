@@ -31,8 +31,15 @@ It does not write or mutate Daily Edge ordering, Best Angle selection, locked pr
 Command:
 
 ```bash
-npx tsx --env-file=.env.local scripts/operator/playbook-model-impact-audit.ts --sport mlb --date 2026-06-24
+npx tsx --env-file=.env.local scripts/operator/playbook-model-impact-audit.ts \
+  --sport mlb \
+  --date 2026-06-24 \
+  --out ops-local/playbook-model-impact-mlb-2026-06-24.json
 ```
+
+Artifact:
+
+- `ops-local/playbook-model-impact-mlb-2026-06-24.json`
 
 Summary:
 
@@ -40,20 +47,20 @@ Summary:
 - Playbook games matched: 16
 - Markets audited: 32
 - Public percentage changes: 32
-- Market-signal changes: 4
-- Grade changes: 4
-- Public-money conflict guard changes: 8
+- Market-signal changes: 1
+- Grade changes: 2
+- Public-money conflict guard changes: 10
 - Best Angle demotions: 0
-- Best Angle possible restores: 8
+- Best Angle possible restores: 10
 - Missing Playbook matches: 0
 
 ## Interpretation
 
-Playbook public splits differ materially from the current SharpAPI-backed public fields on every audited market, but the production-like market-signal/grade path changed on 4 of 32 ML/total markets in this pass.
+Playbook public splits differ materially from the current SharpAPI-backed public fields on every audited market, but the production-like market-signal/grade path changed on a small subset of ML/total markets in this pass.
 
 The changed grade cases were public-smoke related. That is the expected risk area: public splits can change `public_smoke`, which can change user-facing grade/verdict behavior. This confirms the model-impact gate is necessary before promotion.
 
-The Best Angle public-money conflict guard did not produce any Playbook-driven demotions on this slate. It did produce 8 possible restores where current public-money conflict is present but the Playbook overlay would remove that conflict. These are not automatic promotions because line-movement confirmation, base eligibility, totals divergence, and other guards can still suppress Best Angle. They are review candidates.
+The Best Angle public-money conflict guard did not produce any Playbook-driven demotions on this slate. It did produce 10 possible restores where current public-money conflict is present but the Playbook overlay would remove that conflict. These are not automatic promotions because line-movement confirmation, base eligibility, totals divergence, and other guards can still suppress Best Angle. They are review candidates.
 
 ## Guardrails Confirmed
 
@@ -72,8 +79,7 @@ Playbook was used only as public bet percentage, public money/handle percentage,
 
 Before production promotion:
 
-1. Export exact changed rows as JSON artifacts for operator review.
-2. Add verdict / Daily Edge ordering comparison.
-3. Run across multiple MLB slates.
-4. Repeat for WNBA after user-facing Step A is deployed and stable.
-5. Keep Playbook disabled from production MLB grade influence until the audit results are reviewed.
+1. Add verdict / Daily Edge ordering comparison.
+2. Run across multiple MLB slates.
+3. Repeat for WNBA after user-facing Step A is deployed and stable.
+4. Keep Playbook disabled from production MLB grade influence until the audit results are reviewed.

@@ -31,6 +31,7 @@ import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
 import { wnbaLogoUrl } from "./wnbaTeams";
 import { supabase } from "@/lib/db/supabase";
+import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
 
 /**
  * Reconstruct the PreviewGame shape from stored game_predictions (written by
@@ -40,8 +41,8 @@ import { supabase } from "@/lib/db/supabase";
  * tip; returns [] when nothing is stored (caller falls back to live compute).
  */
 async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGame[]> {
-  const today = new Date().toISOString().slice(0, 10);
-  const end = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+  const today = currentSlateDate("wnba");
+  const end = addDaysToSlate(today, 3);
   let q = supabase
     .from("games")
     .select("id, external_id, slate_date, game_date, home_team_id, away_team_id")
@@ -395,9 +396,10 @@ export async function buildWnbaDailyEdgeAdapted(date: string | null): Promise<Da
     // HONEST failure state — NOT "no games". "today_pending_ingest" renders
     // "being ingested, check back shortly" rather than implying an empty slate.
     console.warn(`wnba daily-edge adapter error: ${(e as Error).message}`);
+    const fallbackDate = date ?? currentSlateDate("wnba");
     return {
-      as_of: asOf, sport: "wnba", date: date ?? new Date().toISOString().slice(0, 10),
-      requested_date: date ?? new Date().toISOString().slice(0, 10), fallback_used: false,
+      as_of: asOf, sport: "wnba", date: fallbackDate,
+      requested_date: fallbackDate, fallback_used: false,
       slateState: "today_pending_ingest", slate_status: null, last_slate_update_at: asOf, games: [],
     };
   }

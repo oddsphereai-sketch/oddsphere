@@ -13,9 +13,11 @@
  *
  * Usage:
  *   npx tsx --env-file=.env.local scripts/operator/playbook-model-impact-audit.ts \
- *     [--sport mlb] [--date YYYY-MM-DD] [--json]
+ *     [--sport mlb] [--date YYYY-MM-DD] [--json] [--out path.json]
  */
 
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { supabase } from "../../lib/db/supabase";
 import { todayUTC, readStringFlag, readBoolFlag } from "./_cliCommon";
 import { PlaybookClient } from "../../lib/providers/playbook/playbookClient";
@@ -312,6 +314,7 @@ async function main() {
   const sport = (readStringFlag(argv, "--sport") ?? "mlb") as Sport;
   const date = readStringFlag(argv, "--date") ?? todayUTC();
   const json = readBoolFlag(argv, "--json");
+  const outPath = readStringFlag(argv, "--out");
   if (sport !== "mlb") {
     console.error("Initial model-impact audit supports --sport mlb only.");
     process.exit(1);
@@ -511,15 +514,34 @@ async function main() {
     bestAnglePossibleRestores: rows.filter((r) => r.tracking.bestAngleImpact === "possible_restore").length,
     noPlaybookMatch: rows.filter((r) => r.note).length,
   };
+  const changedRows = rows.filter(
+    (r) =>
+      r.changed.publicPct ||
+      r.changed.marketSignal ||
+      r.changed.grade ||
+      r.changed.publicMoneyConflict ||
+      r.changed.bestAngle
+  );
+  const artifact = {
+    generatedAt: new Date().toISOString(),
+    readOnly: true,
+    summary,
+    changedRows,
+    rows,
+  };
+
+  if (outPath) {
+    mkdirSync(dirname(outPath), { recursive: true });
+    writeFileSync(outPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+  }
 
   if (json) {
-    console.log(JSON.stringify({ summary, rows }, null, 2));
+    console.log(JSON.stringify(artifact, null, 2));
   } else {
     console.log("\nSummary");
     for (const [k, v] of Object.entries(summary)) console.log(`  ${k}: ${v}`);
-    const changed = rows.filter((r) => r.changed.marketSignal || r.changed.grade || r.changed.publicPct);
     console.log("\nChanged rows (first 25)");
-    for (const r of changed.slice(0, 25)) {
+    for (const r of changedRows.slice(0, 25)) {
       console.log(
         `  ${r.game} ${r.market} model=${r.modelSide} ` +
           `current ${r.current.bets ?? "-"}b/${r.current.money ?? "-"}m ${r.current.marketSignal ?? "-"} ${r.current.grade ?? "-"} ` +
@@ -528,7 +550,8 @@ async function main() {
           `ba=${r.tracking.currentBestAngle ?? "-"} conflict ${r.tracking.currentPublicMoneyConflict ? "Y" : "n"}→${r.tracking.playbookPublicMoneyConflict ? "Y" : "n"} impact=${r.tracking.bestAngleImpact}`
       );
     }
-    if (changed.length > 25) console.log(`  ... ${changed.length - 25} more changed rows`);
+    if (changedRows.length > 25) console.log(`  ... ${changedRows.length - 25} more changed rows`);
+    if (outPath) console.log(`\nArtifact written: ${outPath}`);
     console.log("\n✓ Read-only audit complete. No DB/UI/grading/line-movement writes.");
   }
 }
