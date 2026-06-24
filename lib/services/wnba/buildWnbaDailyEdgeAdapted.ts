@@ -203,14 +203,25 @@ function closeLine(a: number | null, b: number | null): boolean {
   return Math.abs(a - b) < 0.01;
 }
 
+function lineDistance(a: number | null, b: number | null): number {
+  if (a === null || b === null) return Number.POSITIVE_INFINITY;
+  return Math.abs(a - b);
+}
+
 function pickedRows(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): WnbaLineRow[] {
   if (side === null) return [];
-  return rows.filter((r) =>
+  const sideRows = rows.filter((r) =>
     r.market_type === market &&
     r.side === side &&
-    typeof r.odds_american === "number" &&
-    (line === null || closeLine(r.line_value, line))
+    typeof r.odds_american === "number"
   );
+  if (line === null) return sideRows;
+  const exactRows = sideRows.filter((r) => closeLine(r.line_value, line));
+  if (exactRows.length > 0) return exactRows;
+  const nearest = sideRows
+    .filter((r) => r.line_value !== null)
+    .sort((a, b) => lineDistance(a.line_value, line) - lineDistance(b.line_value, line))[0];
+  return nearest ? sideRows.filter((r) => closeLine(r.line_value, nearest.line_value)) : [];
 }
 
 function pickedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
@@ -446,6 +457,20 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
   const spreadPick = game.spread.side
     ? game.spread.side.replace(game.home, homeAbbr).replace(game.away, awayAbbr)
     : null;
+  const spreadPickIsHome =
+    game.spread.side?.startsWith(game.home) === true ||
+    game.spread.side?.startsWith(homeAbbr) === true;
+  const spreadPickIsAway =
+    game.spread.side?.startsWith(game.away) === true ||
+    game.spread.side?.startsWith(awayAbbr) === true;
+  const spreadDisplayLine =
+    game.spread.line === null
+      ? null
+      : spreadPickIsHome
+        ? game.spread.line
+        : spreadPickIsAway
+          ? -game.spread.line
+          : game.spread.line;
   const spread = buildMarket({
     slot: "spread",
     pick: spreadPick,
@@ -454,7 +479,7 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     modelProbPick: game.spread.confidence !== null ? game.spread.confidence / 100 : null,
     marketFairProbPick: null,
     priceAmerican: game.pickedPrices?.spread.current ?? null,
-    line: game.spread.line, modelTotal: null, marketTotal: null,
+    line: spreadDisplayLine, modelTotal: null, marketTotal: null,
     bookCount: game.data_quality.spread_books,
     aligned: null,
     whyLine: `Model margin ${game.model.margin > 0 ? "+" : ""}${game.model.margin} vs market spread ${game.market.spread ?? "n/a"}.`,

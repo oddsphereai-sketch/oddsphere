@@ -19,10 +19,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { WNBA_TEAMS_BY_BDL_ID } from "./wnbaTeams";
 import { addDaysToSlate, computeSlateDate, currentSlateDate } from "../../dates/slateDate";
+import { PlaybookClient } from "../../providers/playbook/playbookClient";
+import type { PlaybookLineGame } from "../../providers/playbook/types";
 
 const SHARP = "https://api.sharpapi.io/api/v1";
 const BLOCKED = new Set(["fliff", "kalshi", "polymarket"]);
 const SHARP_BOOKS = new Set(["circa", "betonline", "draftkings", "betmgm", "caesars", "bet365 us", "betrivers", "pinnacle"]);
+const PLAYBOOK_CONSENSUS_BOOK = "playbook_consensus";
 
 const norm = (s: string) => String(s).replace(/[^a-z]/gi, "").toLowerCase();
 const amProb = (o: number) => (o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs(o) + 100));
@@ -77,6 +80,43 @@ async function fetchSharpWnbaOdds(key: string): Promise<OddRow[]> {
     }),
   );
   return perMarket.flat();
+}
+
+async function fetchPlaybookWnbaLineFallbacks(key: string): Promise<OddRow[]> {
+  const rows: OddRow[] = [];
+  const client = new PlaybookClient(key);
+  const res = await client.lines("wnba");
+  const games = res.body.data ?? [];
+  for (const g of games) {
+    const home = resolveTeam(String(g.homeTeamName ?? ""));
+    const away = resolveTeam(String(g.awayTeamName ?? ""));
+    if (!home || !away || home === away) continue;
+    const startTime = g.startTime ? String(g.startTime) : null;
+    const lines = (g as PlaybookLineGame).lines as {
+      spread?: { home?: number | null; away?: number | null };
+      total?: number | null;
+      moneyline?: { home?: number | null; away?: number | null };
+    } | undefined;
+    if (!lines) continue;
+    if (lines.moneyline?.home != null) {
+      rows.push({ book: PLAYBOOK_CONSENSUS_BOOK, sharp: false, market: "moneyline", side: "home", odds: Number(lines.moneyline.home), line: null, startTime, h: home, a: away });
+    }
+    if (lines.moneyline?.away != null) {
+      rows.push({ book: PLAYBOOK_CONSENSUS_BOOK, sharp: false, market: "moneyline", side: "away", odds: Number(lines.moneyline.away), line: null, startTime, h: home, a: away });
+    }
+    if (lines.spread?.home != null) {
+      rows.push({ book: PLAYBOOK_CONSENSUS_BOOK, sharp: false, market: "spread", side: "home", odds: null, line: Number(lines.spread.home), startTime, h: home, a: away });
+    }
+    if (lines.spread?.away != null) {
+      rows.push({ book: PLAYBOOK_CONSENSUS_BOOK, sharp: false, market: "spread", side: "away", odds: null, line: Number(lines.spread.away), startTime, h: home, a: away });
+    }
+    if (lines.total != null) {
+      const total = Number(lines.total);
+      rows.push({ book: PLAYBOOK_CONSENSUS_BOOK, sharp: false, market: "total", side: "over", odds: null, line: total, startTime, h: home, a: away });
+      rows.push({ book: PLAYBOOK_CONSENSUS_BOOK, sharp: false, market: "total", side: "under", odds: null, line: total, startTime, h: home, a: away });
+    }
+  }
+  return rows;
 }
 
 const pairKey = (a: number, b: number) => [a, b].sort((x, y) => x - y).join("|");
@@ -168,6 +208,41 @@ export async function refreshWnbaLines(opts: {
     if (!oddsByGame.has(g.id)) oddsByGame.set(g.id, []);
     oddsByGame.get(g.id)!.push(o);
     if (o.startTime && !tipByGame.has(g.id)) tipByGame.set(g.id, o.startTime);
+  }
+
+  // Playbook consensus fallback: fill only markets where SharpAPI returned no
+  // rows for a matched game. This fixes missing display/model lines such as a
+  // WNBA total being absent from SharpAPI while Playbook has a tier1 consensus
+  // line. It never overwrites real per-book SharpAPI rows and does not invent
+  // over/under odds for totals/spreads.
+  const playbookKey = process.env.PLAYBOOK_API_KEY;
+  if (playbookKey) {
+    try {
+      const fallbackRows = await fetchPlaybookWnbaLineFallbacks(playbookKey);
+      for (const o of fallbackRows) {
+        const cands = byPair.get(pairKey(o.h, o.a));
+        if (!cands || cands.length === 0) continue;
+        const oSlateEt = o.startTime ? etDate(o.startTime) : null;
+        let g: G | undefined;
+        if (oSlateEt) {
+          g = cands.find((c) => c.slate === oSlateEt);
+          if (!g) {
+            const within = cands.map((c) => ({ c, d: dayDiff(c.slate, oSlateEt) })).filter((x) => x.d <= 1).sort((a, b) => a.d - b.d);
+            if (within.length === 1) g = within[0]!.c;
+            else if (within.length > 1 && within[0]!.d < within[1]!.d) g = within[0]!.c;
+          }
+        }
+        if (!g && cands.length === 1) g = cands[0];
+        if (!g) continue;
+        const existing = oddsByGame.get(g.id) ?? [];
+        if (existing.some((r) => r.market === o.market && r.book !== PLAYBOOK_CONSENSUS_BOOK)) continue;
+        if (!oddsByGame.has(g.id)) oddsByGame.set(g.id, []);
+        oddsByGame.get(g.id)!.push(o);
+        if (o.startTime && !tipByGame.has(g.id)) tipByGame.set(g.id, o.startTime);
+      }
+    } catch (e) {
+      errors.push(`playbook lines fallback: ${(e as Error).message}`);
+    }
   }
 
   // 3. Build rows per matched game.
