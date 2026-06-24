@@ -17,6 +17,7 @@
 
 import { isRealWnbaTeam, wnbaAbbr } from "./wnbaTeams";
 import { selectMainTotalLine } from "@/lib/services/selectMainTotalLine";
+import { applyPublicMarketContext, type PublicMarketContext, type PublicMarketSignal } from "@/lib/services/publicMarketContext";
 
 const BDL = "https://api.balldontlie.io/wnba/v1";
 const SHARP = "https://api.sharpapi.io/api/v1";
@@ -114,6 +115,7 @@ const roll10 = (m: Map<number, number[]>, t: number) => { const x = m.get(t) ?? 
 
 // ── SharpAPI odds (cursor; game markets; resolve teams; pair+date; trusted consensus) ──
 export type OddRow = { book: string; sharp: boolean; mkt: string; selType: string; odds: number | null; line: number | null; date: string | null; h: number; a: number };
+export type WnbaPublicMarketSignals = Partial<Record<"moneyline" | "total" | "spread", Partial<Record<string, PublicMarketSignal>>>>;
 async function wnbaOdds(resolve: (s: string) => number | null): Promise<OddRow[]> {
   const key = process.env.SHARPAPI_KEY; if (!key) throw new Error("missing SHARPAPI_KEY");
   const evDate = (s: string) => { const m = String(s).match(/20\d\d-\d\d-\d\d/); return m ? m[0] : null; };
@@ -163,6 +165,7 @@ export function computeWnbaPrediction(
   M: ModelState,
   g: { id: number; date: string; h: number; a: number },
   r: OddRow[],
+  publicSignals: WnbaPublicMarketSignals = {},
 ) {
   const E = (t: number) => M.elo.get(t) ?? 1500;
   const hN = M.nameById.get(g.h) ?? wnbaAbbr(g.h) ?? String(g.h);
@@ -222,8 +225,15 @@ export function computeWnbaPrediction(
   // sides
   const mlSide = finalP >= 0.5 ? hN : aN, mlConf = Math.round(Math.max(finalP, 1 - finalP) * 100);
   const mlPrice = median((mlSide === hN ? mlH : mlA).map((z) => z.odds));
-  const mlGrade: Grade = mktPDec == null ? "Watchlist" : conflict && marketRel >= 0.8 && Math.abs(edge) < 0.04 ? "Caution"
+  const mlGradeBase: Grade = mktPDec == null ? "Watchlist" : conflict && marketRel >= 0.8 && Math.abs(edge) < 0.04 ? "Caution"
     : !conflict && Math.abs(edge) >= 0.04 && mlBooks >= 6 && sharpPresent && Math.abs(projMargin) >= 3 ? "Best Angle" : Math.abs(edge) >= 0.02 && mlBooks >= 4 ? "Lean" : "Watchlist";
+  const mlSideKey = mlSide === hN ? "home" : "away";
+  const mlPublicContext = applyPublicMarketContext({
+    grade: mlGradeBase,
+    picked: publicSignals.moneyline?.[mlSideKey] ?? null,
+    opposite: publicSignals.moneyline?.[mlSideKey === "home" ? "away" : "home"] ?? null,
+  });
+  const mlGrade = mlPublicContext.gradeAfter;
 
   const pCoverHome = mktSpread != null ? 1 - Phi((-mktSpread - projMargin) / sigM) : null;
   const spEdge = mktSpread != null ? projMargin - -mktSpread : null;
@@ -231,13 +241,27 @@ export function computeWnbaPrediction(
   const spHomeAbbr = wnbaAbbr(g.h) ?? hN, spAwayAbbr = wnbaAbbr(g.a) ?? aN;
   const spSide = mktSpread != null ? (pCoverHome! >= 0.5 ? `${spHomeAbbr} ${mktSpread > 0 ? "+" : ""}${mktSpread}` : `${spAwayAbbr} ${mktSpread > 0 ? "" : "+"}${-mktSpread}`) : null;
   const spConf = pCoverHome != null ? Math.round(Math.max(pCoverHome, 1 - pCoverHome) * 100) : null;
-  const spGrade = mktSpread != null ? gradeMarket(Math.abs(spEdge!), spVals.length, spDisp, sharpSpread != null && Math.sign(sharpSpread - -projMargin) === Math.sign(spEdge!)) : null;
+  const spGradeBase = mktSpread != null ? gradeMarket(Math.abs(spEdge!), spVals.length, spDisp, sharpSpread != null && Math.sign(sharpSpread - -projMargin) === Math.sign(spEdge!)) : null;
+  const spSideKey = pCoverHome == null ? null : pCoverHome >= 0.5 ? "home" : "away";
+  const spPublicContext = spGradeBase !== null && spSideKey !== null ? applyPublicMarketContext({
+    grade: spGradeBase,
+    picked: publicSignals.spread?.[spSideKey] ?? null,
+    opposite: publicSignals.spread?.[spSideKey === "home" ? "away" : "home"] ?? null,
+  }) : null;
+  const spGrade = spPublicContext?.gradeAfter ?? spGradeBase;
 
   const pOver = mktTotal != null ? 1 - Phi((mktTotal - projTotal) / sigT) : null;
   const toEdge = mktTotal != null ? projTotal - mktTotal : null;
   const toSide = mktTotal != null ? (pOver! >= 0.5 ? `Over ${mktTotal}` : `Under ${mktTotal}`) : null;
   const toConf = pOver != null ? Math.round(Math.max(pOver, 1 - pOver) * 100) : null;
-  const toGrade = mktTotal != null ? gradeMarket(Math.abs(toEdge!), toVals.length, toDisp, sharpTotal != null && Math.sign(sharpTotal - projTotal) === -Math.sign(toEdge!)) : null;
+  const toGradeBase = mktTotal != null ? gradeMarket(Math.abs(toEdge!), toVals.length, toDisp, sharpTotal != null && Math.sign(sharpTotal - projTotal) === -Math.sign(toEdge!)) : null;
+  const totalSideKey = pOver == null ? null : pOver >= 0.5 ? "over" : "under";
+  const totalPublicContext = toGradeBase !== null && totalSideKey !== null ? applyPublicMarketContext({
+    grade: toGradeBase,
+    picked: publicSignals.total?.[totalSideKey] ?? null,
+    opposite: publicSignals.total?.[totalSideKey === "over" ? "under" : "over"] ?? null,
+  }) : null;
+  const toGrade = totalPublicContext?.gradeAfter ?? toGradeBase;
 
   const projHome = r1((projTotal + projMargin) / 2), projAway = r1((projTotal - projMargin) / 2);
   const outlierTotal = mktTotal != null && toVals.some((v) => Math.abs(v - mktTotal) >= 2);
@@ -266,6 +290,11 @@ export function computeWnbaPrediction(
     sharp: sharpMktP != null || sharpSpread != null || sharpTotal != null ? { home_win_prob: sharpMktP != null ? r1(sharpMktP * 100) / 100 : null, spread: sharpSpread, total: sharpTotal } : null,
     dynamic_market_weight: r1(wMkt * 100) / 100,
     cold_start: coldStart ? { home: { games: gpH, elo: r1(ehN), market_prior: csH.mi != null ? r1(csH.mi) : null, weight: r1(csH.w * 100) / 100, final_rating: r1(csH.rating) }, away: { games: gpA, elo: r1(eaN), market_prior: csA.mi != null ? r1(csA.mi) : null, weight: r1(csA.w * 100) / 100, final_rating: r1(csA.rating) }, rating_uncertainty: r1(unc * 100) / 100, naive_home_win_prob: r1(naiveP * 100) / 100, learning_rate: "fixed K=20 (dynamic K tested & rejected)" } : null,
+    public_market_context: {
+      moneyline: mlPublicContext,
+      total: totalPublicContext,
+      spread: spPublicContext,
+    } satisfies Record<string, PublicMarketContext | null>,
     data_quality: { ml_books: mlBooks, trusted_books: trustedBooks, sharp_books: trustedBooks, spread_books: spVals.length, total_books: toVals.length, dispersion: { spread: spDisp, total: toDisp }, outlier_total: outlierTotal, outlier_spread: outlierSpread, flags },
   };
 }

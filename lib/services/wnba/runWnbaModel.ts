@@ -11,7 +11,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDaysToSlate, currentSlateDate } from "../../dates/slateDate";
-import { getModel, computeWnbaPrediction, SHARP_BOOKS, type OddRow } from "./buildWnbaDailyEdgePreview";
+import { getModel, computeWnbaPrediction, SHARP_BOOKS, type OddRow, type WnbaPublicMarketSignals } from "./buildWnbaDailyEdgePreview";
 
 // DB market_type → the SharpAPI-style key computeWnbaPrediction expects.
 const MKT_TO_MODEL: Record<string, string> = { moneyline: "moneyline", spread: "point_spread", total: "total_points" };
@@ -67,6 +67,13 @@ export async function runWnbaModel(opts: {
         .not("odds_american", "is", null)
         .order("recorded_at", { ascending: false })
     : { data: [] as Record<string, unknown>[] };
+  const { data: publicSignalRows } = gameIds.length
+    ? await supabase
+        .from("sharp_signals")
+        .select("game_id, market_type, side, public_betting_pct, public_money_pct")
+        .in("game_id", gameIds)
+        .in("market_type", ["moneyline", "total", "spread"])
+    : { data: [] as Record<string, unknown>[] };
   const linesByGame = new Map<number, Record<string, unknown>[]>();
   for (const l of lineRows ?? []) {
     const gid = l.game_id as number;
@@ -104,6 +111,22 @@ export async function runWnbaModel(opts: {
     return hydrated;
   };
 
+  const publicByGame = new Map<number, WnbaPublicMarketSignals>();
+  for (const s of publicSignalRows ?? []) {
+    const gid = s.game_id as number;
+    const market = s.market_type as "moneyline" | "total" | "spread";
+    const side = s.side as string;
+    if (!publicByGame.has(gid)) publicByGame.set(gid, {});
+    const byMarket = publicByGame.get(gid)!;
+    byMarket[market] = {
+      ...(byMarket[market] ?? {}),
+      [side]: {
+        public_betting_pct: s.public_betting_pct as number | null,
+        public_money_pct: s.public_money_pct as number | null,
+      },
+    };
+  }
+
   // Locked-row guard: never overwrite a game_predictions row that's already locked.
   const { data: lockedRows } = gameIds.length
     ? await supabase.from("game_predictions").select("game_id, locked_at").in("game_id", gameIds)
@@ -130,7 +153,7 @@ export async function runWnbaModel(opts: {
       odds: l.odds_american as number | null, line: l.line_value as number | null,
       date: g.slate_date as string, h: homeBdl, a: awayBdl,
     }));
-    const p = computeWnbaPrediction(M, { id: g.id as number, date: g.slate_date as string, h: homeBdl, a: awayBdl }, oddRows);
+    const p = computeWnbaPrediction(M, { id: g.id as number, date: g.slate_date as string, h: homeBdl, a: awayBdl }, oddRows, publicByGame.get(g.id as number) ?? {});
     result.gamesPredicted++;
     const matchup = `${p.away_abbr}@${p.home_abbr}`;
 
