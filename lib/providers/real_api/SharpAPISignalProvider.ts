@@ -21,6 +21,12 @@
  *   • steam_detected_at   → null
  *   • has_reverse_line_movement → false (SharpAPI does NOT expose RLM)
  *   • rlm_direction       → null
+ *
+ *   D1 CONTRACT (2026-06-24): has_reverse_line_movement / rlm_direction may be
+ *   set ONLY from REAL same-source line movement against the public side —
+ *   NEVER derived from public betting % / splits. Public action alone is not
+ *   RLM (see classifyRlm + scripts/test-rlm-public-gate.ts). They stay false/
+ *   null here because the Sharp tier exposes no real RLM source.
  *   • signal_strength     → null  (derived downstream by classifier)
  *   • signal_summary      → null  (generated downstream by summaryGenerator)
  *
@@ -547,6 +553,7 @@ async function mapOpportunity(
     has_steam_move: false,
     steam_detected_at: null,
     steam_books_count: null,
+    // D1: RLM only from REAL same-source movement, never from public %/splits.
     has_reverse_line_movement: false,
     rlm_direction: null,
     // Phase 1.6: public_betting_pct and public_money_pct start NULL.

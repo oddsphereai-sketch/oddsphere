@@ -172,6 +172,18 @@ export function classifySteamTier(
  *
  * Returns `aligned` separately because RLM alignment is encoded in
  * `rlm_direction.endsWith(modelSide)`, not in `signal.side`.
+ *
+ * ── D1 CONTRACT (ratified 2026-06-24) ─────────────────────────────────────
+ * RLM REQUIRES real same-source line movement against the public side. That
+ * requirement is the gate below: `has_rlm` (= `has_reverse_line_movement`) and
+ * `rlm_direction` must come from REAL movement and may NEVER be derived from
+ * public betting %. `public_betting_pct` is consumed ONLY as the framework
+ * strength tier, and ONLY AFTER the real-movement gate is satisfied — so
+ * public action ALONE can never produce RLM. This matches SHARP_SIGNAL_
+ * FRAMEWORK.md Signal 3 (public % is the strength dimension of a CONFIRMED
+ * RLM, not a trigger). Locked by scripts/test-rlm-public-gate.ts. If you ever
+ * wire a real `has_reverse_line_movement` source, it must be computed from
+ * same-source line-history movement, not from splits.
  */
 export function classifyRlm(
   has_rlm: boolean,
