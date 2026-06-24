@@ -1542,11 +1542,11 @@ function cleanFmtAmerican(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
 }
 
-/** Odds Move trail: open → prev → current/lock, spread evenly; drops redundant prev. */
+/** Odds Move trail: first seen → prev → current/lock, spread evenly; drops redundant prev. */
 function CleanOddsTrail({ open, prev, current, locked }: { open: number | null; prev: number | null; current: number | null; locked: boolean }) {
   const num = (v: number | null): v is number => typeof v === "number" && Number.isFinite(v);
   const pts: Array<{ v: number; label: string }> = [];
-  if (num(open)) pts.push({ v: open, label: "OPEN" });
+  if (num(open)) pts.push({ v: open, label: "FIRST" });
   if (num(prev) && prev !== open && prev !== current) pts.push({ v: prev, label: "PREV" });
   if (num(current)) pts.push({ v: current, label: locked ? "LOCK" : "CURRENT" });
   if (pts.length === 0) return null;
@@ -1659,7 +1659,7 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const totalUnit = shellSport === "nhl" || shellSport === "soccer" ? "goals" : (shellSport === "nba" || shellSport === "wnba") ? "points" : "runs";
   const rows = buildEdgeStackRows(market, marketData, totalUnit, market === "first_inning" && shellSport === "mlb");
   const find = (l: string) => rows.find((r) => r.label === l);
-  const pinnacle = find("Pinnacle EV");
+  const marketEv = find("Market EV");
   const splits = find("Money vs Bets");
   const lineMove = find("Line"); // the betting NUMBER move (totals)
   const oddsMove = find("Line Move"); // the PRICE move — carries the directional arrow + tone
@@ -1679,7 +1679,7 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
 
       <div className="divide-y divide-white/[0.04] mt-2">
         {book && <CleanEvRow label="Book">{book}</CleanEvRow>}
-        {pinnacle && pinnacle.delta !== "unavailable" && <CleanEvRow label="Pinnacle EV" delta={pinnacle.delta} tone={pinnacle.tone}>{pinnacle.evidence}</CleanEvRow>}
+        {marketEv && marketEv.delta !== "unavailable" && <CleanEvRow label="Market EV" delta={marketEv.delta} tone={marketEv.tone}>{marketEv.evidence}</CleanEvRow>}
         {splits && <CleanEvRow label="Splits" delta={splits.delta} tone={splits.tone}>{splits.evidence}</CleanEvRow>}
       </div>
 

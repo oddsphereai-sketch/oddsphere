@@ -3,7 +3,7 @@
  * Run: npx tsx scripts/test-line-tracker.ts
  *
  * NOTE (2026-06-16): "First Published" / "Model Posted" is no longer a tracker
- * stop. Stops are only Open · Previous · Current · Locked.
+ * stop. Stops are only First seen · Previous · Current · Locked.
  */
 import { buildLineTrackerEvidence } from "../app/lab/lib/lineTracker";
 
@@ -14,38 +14,38 @@ function eq(name: string, got: unknown, want: unknown): void {
   else console.log(`✓ ${name}`);
 }
 
-// Degrade: only Open + Current → labeled two-stop (no extra stops).
+// Degrade: only First seen + Current → labeled two-stop (no extra stops).
 eq("open+current only",
   buildLineTrackerEvidence({ openAmerican: -170, currentAmerican: -157, lockedAmerican: null }),
-  { evidence: "Open -170 · Current -157", hasExtraStops: false });
+  { evidence: "First seen -170 · Current -157", hasExtraStops: false });
 
-// Full chain Open → Previous → Current → Locked.
+// Full chain First seen → Previous → Current → Locked.
 eq("full 4-stop chain",
   buildLineTrackerEvidence({ openAmerican: -170, previousAmerican: -150, currentAmerican: -157, lockedAmerican: -160 }),
-  { evidence: "Open -170 · Previous -150 · Current -157 · Locked -160", hasExtraStops: true });
+  { evidence: "First seen -170 · Previous -150 · Current -157 · Locked -160", hasExtraStops: true });
 
 // Previous stop (last move) inserted before Current when it differs.
 eq("previous stop present when differs from current",
   buildLineTrackerEvidence({ openAmerican: -170, previousAmerican: -150, currentAmerican: -157, lockedAmerican: null }),
-  { evidence: "Open -170 · Previous -150 · Current -157", hasExtraStops: true });
+  { evidence: "First seen -170 · Previous -150 · Current -157", hasExtraStops: true });
 eq("previous stop omitted when equal to current (no redundant stop)",
   buildLineTrackerEvidence({ openAmerican: -170, previousAmerican: -157, currentAmerican: -157, lockedAmerican: null }),
-  { evidence: "Open -170 · Current -157", hasExtraStops: false });
+  { evidence: "First seen -170 · Current -157", hasExtraStops: false });
 
-// Open + Current, no Previous/Locked.
+// First seen + Current, no Previous/Locked.
 eq("open+current (no previous, no locked)",
   buildLineTrackerEvidence({ openAmerican: -170, currentAmerican: -157, lockedAmerican: null }),
-  { evidence: "Open -170 · Current -157", hasExtraStops: false });
+  { evidence: "First seen -170 · Current -157", hasExtraStops: false });
 
-// Locked-only-after-current (e.g. current null at lock): Open + Locked.
+// Locked-only-after-current (e.g. current null at lock): First seen + Locked.
 eq("open+locked (current null)",
   buildLineTrackerEvidence({ openAmerican: -170, currentAmerican: null, lockedAmerican: -160 }),
-  { evidence: "Open -170 · Locked -160", hasExtraStops: true });
+  { evidence: "First seen -170 · Locked -160", hasExtraStops: true });
 
 // Positive odds formatting.
 eq("positive odds plus sign",
   buildLineTrackerEvidence({ openAmerican: 120, currentAmerican: 135, lockedAmerican: null }),
-  { evidence: "Open +120 · Current +135", hasExtraStops: false });
+  { evidence: "First seen +120 · Current +135", hasExtraStops: false });
 
 // Single stop → no tracker (can't show a move with one point).
 eq("single stop → null evidence",

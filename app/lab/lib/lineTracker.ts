@@ -3,10 +3,10 @@
  * Renders the compact one-line movement story for the Edge Stack "Line Move"
  * row using only meaningful market-reference points:
  *
- *     Open −170 · Previous −150 · Current −157 · Locked −160
+ *     First seen −170 · Previous −150 · Current −157 · Locked −160
  *
  * Only non-null stops are shown, in canonical order. Degrades to
- * "Open −170 · Current −157" when there is no Previous/Locked stop.
+ * "First seen −170 · Current −157" when there is no Previous/Locked stop.
  *
  * NOTE (2026-06-16): the internal "Model Posted" / first-publish price is NOT a
  * timeline stop — it's kept for CLV in the expanded interpretation detail only
@@ -37,7 +37,7 @@ export function buildLineTrackerEvidence(input: LineTrackerInput): LineTrackerEv
   const hasPrevious = previousAmerican !== null && previousAmerican !== input.currentAmerican;
 
   const stops: string[] = [];
-  if (input.openAmerican !== null) stops.push(`Open ${fmt(input.openAmerican)}`);
+  if (input.openAmerican !== null) stops.push(`First seen ${fmt(input.openAmerican)}`);
   if (hasPrevious) stops.push(`Previous ${fmt(previousAmerican as number)}`);
   if (input.currentAmerican !== null) stops.push(`Current ${fmt(input.currentAmerican)}`);
   if (input.lockedAmerican !== null) stops.push(`Locked ${fmt(input.lockedAmerican)}`);

@@ -46,7 +46,7 @@ export type EdgeStackMarket = "moneyline" | "total" | "first_inning";
  *
  *   • "splits_consensus" → "splits consensus" (R-16E synthesized pair —
  *     never impersonates a real book)
- *   • "pinnacle_only"   → "Pinnacle fair" (sharp_signals-only fallback)
+ *   • "pinnacle_only"   → "market fair" (sharp_signals-only fallback)
  *   • real book         → the book name as-is (e.g. "ballybet")
  *   • unavailable/null  → null
  */
@@ -55,7 +55,7 @@ export function marketSourceLabel(
   source: string | null
 ): string | null {
   if (quality === "splits_consensus") return "splits consensus";
-  if (quality === "pinnacle_only") return "Pinnacle fair";
+  if (quality === "pinnacle_only") return "market fair";
   return source;
 }
 
@@ -100,7 +100,7 @@ function splitForPick(
  *     4. Truly no market context — "market unavailable"
  *
  *   Market Value:
- *     1. pinnacleEvPct present — preserve the Pinnacle EV % (the
+ *     1. pinnacleEvPct present — preserve the market EV % (the
  *        strongest signal); evidence label = "Market price check"
  *        (renamed from "Sharper price check")
  *     2. marketImpliedPct present but no pinnacleEvPct — show
@@ -194,19 +194,19 @@ export function buildEdgeStackRows(
   // R-19 Phase 5j Fix 3 — honest label per branch. Pre-5j, the row was
   // always labeled "Market Value", which read as a quantified edge even
   // in the common branch where only marketImpliedPct is available (no
-  // Pinnacle EV %). Members on cards across the slate saw the same
+  // market EV %). Members on cards across the slate saw the same
   // "Market Value · Market price · ballybet · —" line and concluded the
   // row was broken. Now:
-  //   • Pinnacle EV present → label stays "Pinnacle EV"; delta is the
+  //   • EV present → label stays "Market EV"; delta is the
   //     real EV percentage; tone reflects the magnitude
   //   • Only market-implied price exists → label becomes "Market Source"
   //     so the reader understands the row carries attribution, not edge
-  //   • Nothing available → label "Pinnacle EV · unavailable"
+  //   • Nothing available → label "Market EV · unavailable"
   if (marketData.pinnacleEvPct !== null) {
     const ev = marketData.pinnacleEvPct;
     rows.push({
-      label: "Pinnacle EV",
-      evidence: "Pinnacle vs market price",
+      label: "Market EV",
+      evidence: "Fair price vs market price",
       delta: `${ev >= 0 ? "+" : ""}${ev.toFixed(1)}%`,
       tone: ev >= 0.3 ? "emerald" : ev <= -1 ? "amber" : "gray",
     });
@@ -228,8 +228,8 @@ export function buildEdgeStackRows(
     });
   } else {
     rows.push({
-      label: "Pinnacle EV",
-      evidence: "Pinnacle vs market price",
+      label: "Market EV",
+      evidence: "Fair price vs market price",
       delta: "unavailable",
       tone: "gray",
     });
@@ -305,19 +305,19 @@ export function buildEdgeStackRows(
   ) {
     rows.push({
       label: "Line Move",
-      evidence: "Open → Current",
+      evidence: "First seen → Current",
       delta: "unavailable",
       tone: "gray",
     });
   } else {
-    // Tone + arrow stay pick-relative on Open → Current (unchanged rule).
+    // Tone + arrow stay pick-relative on First seen → Current (unchanged rule).
     const dir = classifyPickRelativeLineMove(
       marketData.lineOpenAmerican,
       marketData.priceAmerican
     );
     // 2026-06-16 — render the full stop chain (Open / First Published /
     // Current / Locked) when the streaming-era fields are present; otherwise
-    // degrade to the original "Open → Current" string. Additive: when no
+    // degrade to the original "First seen → Current" string. Additive: when no
     // posted/locked stops exist the displayed info is identical to before,
     // just with explicit labels.
     const tracker = buildLineTrackerEvidence({
