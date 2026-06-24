@@ -203,6 +203,33 @@ export interface PlaybookStartingPitchersResponse {
   data: PlaybookStartingPitchersRow[];
 }
 
+// -- Injury context --------------------------------------------------------
+export interface PlaybookInjuryPlayer {
+  name?: string | null;
+  status?: string | null;
+  statusContext?: string | null;
+  reason?: string | null;
+  [k: string]: unknown;
+}
+
+export interface PlaybookInjuryTeamRow {
+  teamAbbr?: string | null;
+  teamId?: string | null;
+  teamName?: string | null;
+  players?: PlaybookInjuryPlayer[];
+  updatedAt?: string | null;
+  reportDate?: string | null;
+  [k: string]: unknown;
+}
+
+export interface PlaybookInjuriesResponse {
+  count?: number;
+  requestsRemaining?: number;
+  reportDate?: string | null;
+  updatedAt?: string | null;
+  data: PlaybookInjuryTeamRow[];
+}
+
 /** Quota state the client tracks from in-body `requestsRemaining`. */
 export interface PlaybookQuotaSnapshot {
   requestsRemaining: number | null;

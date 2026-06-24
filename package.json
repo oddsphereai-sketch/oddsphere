@@ -53,6 +53,7 @@
     "test:signal-summary-generator": "tsx scripts/test-signal-summary-generator.ts",
     "smoke:wnba-playbook-route": "tsx --env-file=.env.local scripts/operator/wnba-playbook-route-smoke.ts",
     "audit:mlb-playbook-starters": "tsx --env-file=.env.local scripts/operator/playbook-mlb-starting-pitchers-audit.ts",
+    "audit:mlb-playbook-injuries": "tsx --env-file=.env.local scripts/operator/playbook-mlb-injuries-audit.ts",
     "test:auth-gate": "tsx --env-file=.env.local scripts/test-auth-gate.ts",
     "tracking-refresh": "tsx --env-file=.env.local scripts/tracking-refresh.ts",
     "promote-drafts": "tsx --env-file=.env.local scripts/promote-historical-drafts.ts",

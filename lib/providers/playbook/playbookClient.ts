@@ -22,6 +22,7 @@
 
 import type {
   PlaybookHealth,
+  PlaybookInjuriesResponse,
   PlaybookLeague,
   PlaybookLinesResponse,
   PlaybookMe,
@@ -204,7 +205,11 @@ export class PlaybookClient {
     return this.get<PlaybookStartingPitchersResponse>("/v1/mlb/starting-pitchers");
   }
 
-  // NOTE: Playbook also exposes context endpoints (teams, injuries, recent
+  injuries(league: PlaybookLeague | string): Promise<PlaybookResult<PlaybookInjuriesResponse>> {
+    return this.get<PlaybookInjuriesResponse>("/v1/injuries", { league });
+  }
+
+  // NOTE: Playbook also exposes context endpoints (teams, recent
   // form, head-to-head, pitcher-stats / strikeout-predictor). Their exact
   // paths are NOT yet live-verified, so they are intentionally omitted here —
   // add typed methods under the
