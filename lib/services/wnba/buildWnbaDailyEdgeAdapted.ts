@@ -61,7 +61,7 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
     .from("sharp_signals")
     .select("game_id, market_type, side, public_betting_pct, public_money_pct, computed_at")
     .in("game_id", ids)
-    .in("market_type", ["moneyline", "total"]);
+    .in("market_type", ["moneyline", "total", "spread"]);
   const signalsByGame = new Map<number, NonNullable<typeof signalRows>>();
   for (const r of signalRows ?? []) {
     const gid = r.game_id as number;
@@ -120,7 +120,8 @@ const PUBLIC_SPLIT_STALE_MS = 6 * 60 * 60 * 1000;
 
 /**
  * Convert this game's sharp_signals public-split rows (filled from Playbook by
- * refreshWnbaPlaybookSplits) into the DTO's publicSplits shape for ML + total.
+ * refreshWnbaPlaybookSplits) into the DTO's publicSplits shape for ML, total,
+ * and spread.
  * Display-context only — never reads +EV/steam/RLM/CLV (those stay null).
  */
 function buildWnbaPublicSplits(
@@ -128,10 +129,10 @@ function buildWnbaPublicSplits(
   homeAbbr: string,
   awayAbbr: string,
   asOf: number
-): { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[] } {
+): { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[]; spread: WnbaPublicSplit[] } {
   const labelFor = (market: string, side: string): string =>
     market === "total" ? (side === "over" ? "Over" : "Under") : side === "home" ? homeAbbr : awayAbbr;
-  const mk = (market: "moneyline" | "total"): WnbaPublicSplit[] =>
+  const mk = (market: "moneyline" | "total" | "spread"): WnbaPublicSplit[] =>
     rows
       .filter((r) => r.market_type === market && (r.public_betting_pct !== null || r.public_money_pct !== null))
       .map((r) => {
@@ -146,7 +147,7 @@ function buildWnbaPublicSplits(
           isStale: observedAt ? ageMs > PUBLIC_SPLIT_STALE_MS : false,
         };
       });
-  return { ml: mk("moneyline"), total: mk("total") };
+  return { ml: mk("moneyline"), total: mk("total"), spread: mk("spread") };
 }
 
 type PreviewMarket = { side: string | null; confidence: number | null; grade: PreviewModelGrade | null };
@@ -167,8 +168,8 @@ type PreviewGame = {
   model: { home_win_prob: number; margin: number; total: number };
   market: { home_win_prob: number | null; spread: number | null; total: number | null; book_count: number; dispersion: { spread: number; total: number } };
   data_quality: { ml_books: number; spread_books: number; total_books: number; flags: string[] };
-  /** Playbook public splits (ML + total) for display; absent on live fallback. */
-  publicSplits?: { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[] };
+  /** Playbook public splits (ML, total, spread) for display; absent on live fallback. */
+  publicSplits?: { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[]; spread: WnbaPublicSplit[] };
 };
 
 function gradeToVerdict(g: PreviewModelGrade): Verdict {
@@ -322,6 +323,7 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     bookCount: game.data_quality.spread_books,
     aligned: null,
     whyLine: `Model margin ${game.model.margin > 0 ? "+" : ""}${game.model.margin} vs market spread ${game.market.spread ?? "n/a"}.`,
+    publicSplits: game.publicSplits?.spread,
   });
 
   // Top grade across the three markets drives the card verdict pill.
