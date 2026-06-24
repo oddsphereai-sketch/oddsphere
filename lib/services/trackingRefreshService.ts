@@ -46,6 +46,8 @@ import { ingestNbaFinalScores } from "./nba/nbaScoreIngestService";
 import { writeNhlPredictionRecords } from "./nhl/buildNhlPredictionRecords";
 import { ingestNhlFinalScores } from "./nhl/nhlScoreIngestService";
 import { ingestSoccerFinalScores } from "./soccer/soccerScoreIngestService";
+import { buildWnbaPredictionRecords } from "./wnba/buildWnbaPredictionRecords";
+import { ingestWnbaFinalScores } from "./wnba/ingestWnbaFinalScores";
 import { moneyPuckSeasonStartYear } from "../providers/nhl/_moneyPuckClient";
 
 export type TrackingRefreshOptions = {
@@ -182,6 +184,11 @@ async function loadExistingRecordCounts(
  *   2. ingestNbaFinalScores({date})           ← ESPN scoreboard provider
  *   3. gradePredictionsForSlate({sport:"nba"})← shared sport-generic
  *
+ * The WNBA branch (sport === "wnba") mirrors the NBA/NHL shape:
+ *   1. buildWnbaPredictionRecords()            ← WNBA pipeline writer
+ *   2. ingestWnbaFinalScores()                 ← BDL WNBA provider
+ *   3. gradePredictionsForSlate({sport:"wnba"})← shared sport-generic
+ *
  * No MLB code path changes when sport === "nba".
  */
 export async function runTrackingRefresh(
@@ -206,16 +213,6 @@ export async function runTrackingRefresh(
     },
     globalErrors: [],
   };
-
-  // WNBA is not an officially tracked sport operationally yet (Phase 2 tracking
-  // writer/cron pending). The shared grader path only handles TrackedSport, so
-  // a stray wnba invocation no-ops with an empty summary instead of crashing.
-  // This early return also narrows `sport` to TrackedSport for the loop below.
-  if (sport === "wnba") {
-    summary.finishedAtIso = new Date().toISOString();
-    summary.durationMs = Date.now() - t0;
-    return summary;
-  }
 
   for (const date of opts.dates) {
     const perDate: TrackingRefreshPerDate = {
@@ -424,6 +421,47 @@ export async function runTrackingRefresh(
           }
         } catch (e) {
           perDate.errors.push(`soccer-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      } else if (sport === "wnba") {
+        // WNBA launch tracking (2026-06-24). The WNBA daily refresh already
+        // writes records after running the model; this branch makes tracking-
+        // refresh idempotently catch up records, ingest finals, and grade.
+        // buildWnbaPredictionRecords preserves locked rows.
+        const existing = await loadExistingRecordCounts(opts.supabase, sport, date);
+        perDate.records_existed_before = existing.total;
+        if (existing.launchDay > 0) {
+          perDate.records_skipped_due_to_launch_day_preservation = true;
+        } else {
+          try {
+            const createRes = await buildWnbaPredictionRecords({
+              supabase: opts.supabase,
+              apply: opts.apply,
+              slateDate: date,
+              windowDays: 0,
+              logger: () => {},
+            });
+            perDate.records_created = createRes.written;
+            for (const e of createRes.errors) {
+              perDate.errors.push(`wnba-records: ${e}`);
+            }
+          } catch (e) {
+            perDate.errors.push(`wnba-records exception: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+
+        try {
+          const fsRes = await ingestWnbaFinalScores({
+            supabase: opts.supabase,
+            apply: opts.apply,
+          });
+          perDate.final_scores_updated = fsRes.updated;
+          perDate.final_scores_in_progress = 0;
+          perDate.final_scores_scheduled = Math.max(0, fsRes.finalsFound - fsRes.matched);
+          for (const e of fsRes.errors) {
+            perDate.errors.push(`wnba-final-scores: ${e}`);
+          }
+        } catch (e) {
+          perDate.errors.push(`wnba-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
 

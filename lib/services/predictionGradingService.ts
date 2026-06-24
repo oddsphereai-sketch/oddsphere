@@ -32,6 +32,32 @@ import type {
   PredictionRecordRow,
   TrackedSport,
 } from "../types/domain/Tracking";
+import { computeSlateDate } from "../dates/slateDate";
+
+function staleWnbaSlateVoidGrade(
+  record: PredictionRecordRow,
+  source: PredictionGradeRow["grade_source"],
+  expectedSlate: string,
+): PredictionGradeRow {
+  return {
+    prediction_record_id: record.id!,
+    game_id: record.game_id,
+    market: record.market,
+    result: "void",
+    push: false,
+    win: false,
+    loss: false,
+    void: true,
+    pending: false,
+    actual_home_score: null,
+    actual_away_score: null,
+    actual_total: null,
+    actual_first_inning_runs: null,
+    winning_team: null,
+    grade_source: source,
+    grade_notes: `WNBA slate mismatch: game ET slate ${expectedSlate}, record slate ${record.slate_date}`,
+  };
+}
 
 export type GradingResult = {
   sport: TrackedSport;
@@ -187,16 +213,23 @@ export async function gradePredictionsForSlate(args: {
   for (const rec of records) {
     const game = gameById.get(rec.game_id);
     if (game === undefined || rec.id === undefined) continue;
-    const grade = gradePrediction({
-      record: rec,
-      game: {
-        status: game.status ?? "unknown",
-        home_score: game.home_score,
-        away_score: game.away_score,
-        first_inning_runs: game.first_inning_runs,
-      },
-      source,
-    });
+    const wnbaExpectedSlate =
+      sport === "wnba" && game.game_date !== null
+        ? computeSlateDate("wnba", game.game_date)
+        : null;
+    const grade =
+      wnbaExpectedSlate !== null && wnbaExpectedSlate !== rec.slate_date
+        ? staleWnbaSlateVoidGrade(rec, source, wnbaExpectedSlate)
+        : gradePrediction({
+            record: rec,
+            game: {
+              status: game.status ?? "unknown",
+              home_score: game.home_score,
+              away_score: game.away_score,
+              first_inning_runs: game.first_inning_runs,
+            },
+            source,
+          });
     if (grade.win) result.computed.wins++;
     else if (grade.loss) result.computed.losses++;
     else if (grade.push) result.computed.pushes++;
