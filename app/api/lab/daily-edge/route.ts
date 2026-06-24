@@ -3448,7 +3448,7 @@ export async function GET(request: Request) {
       const { buildWnbaDailyEdgeAdapted } = await import(
         "@/lib/services/wnba/buildWnbaDailyEdgeAdapted"
       );
-      const adapted = await buildWnbaDailyEdgeAdapted(isSlateDate(dateParam) ? dateParam : null);
+      const adapted = await buildWnbaDailyEdgeAdapted(requestedDate);
       return Response.json(adapted, {
         headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
       });

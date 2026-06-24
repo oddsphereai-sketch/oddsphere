@@ -23,12 +23,14 @@ import { cronHandler } from "@/lib/cron/runCron";
 import { supabase } from "@/lib/db/supabase";
 import { seedWnbaGames } from "@/lib/services/wnba/seedWnbaGames";
 import { refreshWnbaLines } from "@/lib/services/wnba/refreshWnbaLines";
+import { refreshWnbaPlaybookSplits } from "@/lib/services/wnba/refreshWnbaPlaybookSplits";
 import { runWnbaModel } from "@/lib/services/wnba/runWnbaModel";
+import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
 
 const WNBA_CRON_ENV = "WNBA_CRON_ENABLED";
 
 function slateDateOffset(days: number): string {
-  return new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+  return addDaysToSlate(currentSlateDate("wnba"), days);
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -75,6 +77,28 @@ export async function GET(request: Request): Promise<Response> {
         errors.push(`lines: ${e instanceof Error ? e.message : String(e)}`);
       }
 
+      // ─── Step 2b: Playbook public splits (pregame, display context only) ──
+      // Fills sharp_signals.public_betting_pct/public_money_pct for the existing
+      // UI. WNBA-only. NEVER touches +EV/steam/RLM/Pinnacle/CLV/grades/model.
+      // Skipped (not fatal) if PLAYBOOK_API_KEY is absent, so the cron keeps
+      // running during rollout.
+      let publicSplitsUpdated = 0, publicSplitsInserted = 0;
+      if (process.env.PLAYBOOK_API_KEY) {
+        for (const n of [0, 1, 2]) {
+          const slate = slateDateOffset(n);
+          try {
+            const p = await refreshWnbaPlaybookSplits({ supabase, slateDate: slate, apply: true, logger: log("splits") });
+            publicSplitsUpdated += p.rowsUpdated; publicSplitsInserted += p.rowsInserted;
+            errors.push(...p.errors);
+          } catch (e) {
+            errors.push(`playbook-splits ${slate}: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+        details.playbookSplits = { updated: publicSplitsUpdated, inserted: publicSplitsInserted };
+      } else {
+        details.playbookSplits = { skipped: "PLAYBOOK_API_KEY missing" };
+      }
+
       // ─── Step 3: run model → game_predictions (locked guard) ───────
       let predictionsWritten = 0, skippedLocked = 0;
       try {
@@ -86,8 +110,8 @@ export async function GET(request: Request): Promise<Response> {
         errors.push(`model: ${e instanceof Error ? e.message : String(e)}`);
       }
 
-      const recordsUpdated = teamsUpserted + gamesUpserted + linesWritten + lineHistoryWritten + sharpSignalsWritten + predictionsWritten;
-      console.log(`[wnba-daily-refresh] done — teams:${teamsUpserted} games:${gamesUpserted} lines:${linesWritten} history:${lineHistoryWritten} signals:${sharpSignalsWritten} predictions:${predictionsWritten} lockedSkipped:${skippedLocked} errors:${errors.length}`);
+      const recordsUpdated = teamsUpserted + gamesUpserted + linesWritten + lineHistoryWritten + sharpSignalsWritten + publicSplitsUpdated + publicSplitsInserted + predictionsWritten;
+      console.log(`[wnba-daily-refresh] done — teams:${teamsUpserted} games:${gamesUpserted} lines:${linesWritten} history:${lineHistoryWritten} signals:${sharpSignalsWritten} pubSplits:${publicSplitsUpdated + publicSplitsInserted} predictions:${predictionsWritten} lockedSkipped:${skippedLocked} errors:${errors.length}`);
       if (errors.length) details.errors = errors.slice(0, 20);
       return { records_updated: recordsUpdated, partial: errors.length > 0, details };
     },

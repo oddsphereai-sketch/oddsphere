@@ -28,6 +28,7 @@ export async function GET() {
     env: {
       BALLDONTLIE_API_KEY: !!process.env.BALLDONTLIE_API_KEY,
       SHARPAPI_KEY: !!process.env.SHARPAPI_KEY,
+      PLAYBOOK_API_KEY: !!process.env.PLAYBOOK_API_KEY,
     },
   };
 

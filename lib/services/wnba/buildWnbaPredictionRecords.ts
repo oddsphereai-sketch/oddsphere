@@ -16,6 +16,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { addDaysToSlate, currentSlateDate } from "../../dates/slateDate";
 
 const PLAY_GRADE: Record<string, string> = { "Best Angle": "best_angle", "Lean": "lean", "Watchlist": "watchlist", "Caution": "caution" };
 const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]! : null);
@@ -43,8 +44,8 @@ export async function buildWnbaPredictionRecords(opts: {
 }): Promise<WnbaRecordsResult> {
   const { supabase, apply, windowDays = 3, logger = () => {} } = opts;
   const errors: string[] = [];
-  const today = new Date().toISOString().slice(0, 10);
-  const end = new Date(Date.now() + windowDays * 86400000).toISOString().slice(0, 10);
+  const today = currentSlateDate("wnba");
+  const end = addDaysToSlate(today, windowDays);
   const nowIso = new Date().toISOString();
 
   const { data: games } = await supabase
