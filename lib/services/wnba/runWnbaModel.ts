@@ -10,6 +10,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { addDaysToSlate, currentSlateDate } from "../../dates/slateDate";
 import { getModel, computeWnbaPrediction, SHARP_BOOKS, type OddRow } from "./buildWnbaDailyEdgePreview";
 
 // DB market_type → the SharpAPI-style key computeWnbaPrediction expects.
@@ -41,8 +42,8 @@ export async function runWnbaModel(opts: {
   const errors: string[] = [];
   const M = await getModel();
 
-  const today = new Date().toISOString().slice(0, 10);
-  const end = new Date(Date.now() + windowDays * 86400000).toISOString().slice(0, 10);
+  const today = currentSlateDate("wnba");
+  const end = addDaysToSlate(today, windowDays);
   const { data: gameRows } = await supabase
     .from("games")
     .select("id, external_id, slate_date, game_date, home_team_id, away_team_id")

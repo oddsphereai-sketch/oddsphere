@@ -18,7 +18,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { WNBA_TEAMS_BY_BDL_ID } from "./wnbaTeams";
-import { computeSlateDate } from "../../dates/slateDate";
+import { addDaysToSlate, computeSlateDate, currentSlateDate } from "../../dates/slateDate";
 
 const SHARP = "https://api.sharpapi.io/api/v1";
 const BLOCKED = new Set(["fliff", "kalshi", "polymarket"]);
@@ -111,8 +111,8 @@ export async function refreshWnbaLines(opts: {
   const errors: string[] = [];
 
   // 1. Load scheduled WNBA games in the window + their team BDL ids.
-  const today = new Date().toISOString().slice(0, 10);
-  const end = new Date(Date.now() + windowDays * 86400000).toISOString().slice(0, 10);
+  const today = currentSlateDate("wnba");
+  const end = addDaysToSlate(today, windowDays);
   const { data: gameRows } = await supabase
     .from("games")
     .select("id, external_id, slate_date, game_date, status, home_team_id, away_team_id")
