@@ -6,6 +6,7 @@
  *   2. refreshWnbaLines → SharpAPI odds → lines / line_history / sharp_signals
  *                          + real tip times (games.game_date)
  *   3. runWnbaModel     → Elo+Platt + sharp-preferred decision → game_predictions
+ *   4. buildWnbaPredictionRecords → prediction_records for tracking/audit
  *
  * Auth: cronHandler validates the CRON_SECRET bearer token. The route also
  * requires WNBA_CRON_ENABLED=true. Default OFF: when unset, the wrapper still
@@ -14,9 +15,9 @@
  * without firing any writes until the flag is explicitly flipped.
  *
  * Safety: writes ONLY sport='wnba' rows; NEVER touches another sport. NEVER
- * overwrites a locked game_predictions row (runWnbaModel's locked guard). Does
- * NOT flip live:true, does NOT add WNBA to the public tracker, does NOT write
- * prediction_records/grades. NEVER logs the API keys.
+ * overwrites a locked game_predictions row (runWnbaModel's locked guard) or a
+ * locked prediction_records row (buildWnbaPredictionRecords locked guard). Does
+ * NOT flip live:true. NEVER logs the API keys.
  */
 
 import { cronHandler } from "@/lib/cron/runCron";
@@ -25,6 +26,7 @@ import { seedWnbaGames } from "@/lib/services/wnba/seedWnbaGames";
 import { refreshWnbaLines } from "@/lib/services/wnba/refreshWnbaLines";
 import { refreshWnbaPlaybookSplits } from "@/lib/services/wnba/refreshWnbaPlaybookSplits";
 import { runWnbaModel } from "@/lib/services/wnba/runWnbaModel";
+import { buildWnbaPredictionRecords } from "@/lib/services/wnba/buildWnbaPredictionRecords";
 import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
 
 const WNBA_CRON_ENV = "WNBA_CRON_ENABLED";
@@ -110,8 +112,29 @@ export async function GET(request: Request): Promise<Response> {
         errors.push(`model: ${e instanceof Error ? e.message : String(e)}`);
       }
 
-      const recordsUpdated = teamsUpserted + gamesUpserted + linesWritten + lineHistoryWritten + sharpSignalsWritten + publicSplitsUpdated + publicSplitsInserted + predictionsWritten;
-      console.log(`[wnba-daily-refresh] done — teams:${teamsUpserted} games:${gamesUpserted} lines:${linesWritten} history:${lineHistoryWritten} signals:${sharpSignalsWritten} pubSplits:${publicSplitsUpdated + publicSplitsInserted} predictions:${predictionsWritten} lockedSkipped:${skippedLocked} errors:${errors.length}`);
+      // ─── Step 4: prediction_records for WNBA public tracking/audit ──
+      // Mirrors the displayed ML / O-U / Spread picks into the durable tracking
+      // substrate. Locked records are preserved by the writer; grading happens
+      // in tracking-refresh after final scores land.
+      let predictionRecordsWritten = 0, predictionRecordsLockedSkipped = 0;
+      try {
+        const r = await buildWnbaPredictionRecords({ supabase, apply: true, logger: log("records") });
+        predictionRecordsWritten = r.written; predictionRecordsLockedSkipped = r.lockedSkipped;
+        errors.push(...r.errors);
+        details.records = {
+          eligibleGames: r.eligibleGames,
+          written: predictionRecordsWritten,
+          lockedSkipped: predictionRecordsLockedSkipped,
+          counts: r.counts,
+          withheld: r.withheld.slice(0, 20),
+          missingLinePrice: r.missingLinePrice,
+        };
+      } catch (e) {
+        errors.push(`records: ${e instanceof Error ? e.message : String(e)}`);
+      }
+
+      const recordsUpdated = teamsUpserted + gamesUpserted + linesWritten + lineHistoryWritten + sharpSignalsWritten + publicSplitsUpdated + publicSplitsInserted + predictionsWritten + predictionRecordsWritten;
+      console.log(`[wnba-daily-refresh] done — teams:${teamsUpserted} games:${gamesUpserted} lines:${linesWritten} history:${lineHistoryWritten} signals:${sharpSignalsWritten} pubSplits:${publicSplitsUpdated + publicSplitsInserted} predictions:${predictionsWritten} records:${predictionRecordsWritten} lockedSkipped:${skippedLocked}/${predictionRecordsLockedSkipped} errors:${errors.length}`);
       if (errors.length) details.errors = errors.slice(0, 20);
       return { records_updated: recordsUpdated, partial: errors.length > 0, details };
     },

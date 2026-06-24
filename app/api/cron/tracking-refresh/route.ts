@@ -19,6 +19,9 @@
  * NBA writes ONLY moneyline + total prediction_records. Spread is
  * intentionally deferred. There are NO FI/NRFI rows for NBA.
  *
+ * WNBA writes moneyline + total + spread prediction_records and grades
+ * them through the shared sport-generic grader once finals land.
+ *
  * Auth: CRON_SECRET via cronHandlerPerSport wrapper.
  *
  * SAFETY:
@@ -51,13 +54,9 @@ import {
 
 export const maxDuration = 180;
 
-// Phase 7L Step 6 — NHL added alongside MLB/NBA. The trackingRefreshService
-// has had an NHL branch since Step 5; this flip turns on automated hourly
-// refreshes so NHL prediction_records update pre-lock, freeze at T-60, and
-// grade after final — same operational contract as MLB/NBA. NHL is still
-// hidden from members: SportRail keeps live=false, so this is admin/data
-// pipeline activation only, not a public-facing launch.
-const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "soccer"];
+// WNBA launch tracking is included because OFFICIAL_TRACKING_START.wnba is set
+// and the tracking route has a WNBA prediction_grades bridge.
+const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "soccer", "wnba"];
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

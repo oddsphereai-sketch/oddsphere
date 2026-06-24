@@ -39,12 +39,13 @@ export type WnbaRecordsResult = {
 export async function buildWnbaPredictionRecords(opts: {
   supabase: SupabaseClient;
   apply: boolean;
+  slateDate?: string;
   windowDays?: number;
   logger?: (m: string) => void;
 }): Promise<WnbaRecordsResult> {
-  const { supabase, apply, windowDays = 3, logger = () => {} } = opts;
+  const { supabase, apply, slateDate, windowDays = 3, logger = () => {} } = opts;
   const errors: string[] = [];
-  const today = currentSlateDate("wnba");
+  const today = slateDate ?? currentSlateDate("wnba");
   const end = addDaysToSlate(today, windowDays);
   const nowIso = new Date().toISOString();
 

@@ -7,6 +7,7 @@
  *       MLB: moneyline, total, first_inning
  *       NBA: moneyline, total
  *       NHL: moneyline, total
+ *       WNBA: moneyline, total, spread
  *   • Context-only displayed markets per sport:
  *       NBA: spread (rendered in DailyEdgeShell as `Sprd*`)
  *       NHL: spread (rendered in DailyEdgeShell as `PL*`; puck-line
@@ -77,6 +78,13 @@ check("Soccer moneyline NOT officially tracked (would erase draw)", isOfficially
 check("Soccer spread NOT officially tracked", isOfficiallyTrackedMarket("soccer", "spread") === false);
 check("Soccer context-only is empty", getContextOnlyDisplayMarkets("soccer").length === 0);
 
+// WNBA — public launch tracks moneyline + total + spread
+check("WNBA moneyline officially tracked", isOfficiallyTrackedMarket("wnba", "moneyline") === true);
+check("WNBA total officially tracked", isOfficiallyTrackedMarket("wnba", "total") === true);
+check("WNBA spread officially tracked", isOfficiallyTrackedMarket("wnba", "spread") === true);
+check("WNBA first_inning NOT officially tracked", isOfficiallyTrackedMarket("wnba", "first_inning") === false);
+check("WNBA context-only is empty", getContextOnlyDisplayMarkets("wnba").length === 0);
+
 // Fail-closed semantics — unknown market strings return false
 check("Unknown market 'frobnicate' NOT tracked for any sport (MLB probe)", isOfficiallyTrackedMarket("mlb", "frobnicate") === false);
 check("Unknown market 'frobnicate' NOT context-only for any sport (NBA probe)", isContextOnlyDisplayMarket("nba", "frobnicate") === false);
@@ -90,6 +98,8 @@ check("OFFICIAL_TRACKING_MARKETS.nhl = [moneyline, total]",
   JSON.stringify(OFFICIAL_TRACKING_MARKETS.nhl) === JSON.stringify(["moneyline", "total"]));
 check("OFFICIAL_TRACKING_MARKETS.soccer = [match_result, total, btts, double_chance]",
   JSON.stringify(OFFICIAL_TRACKING_MARKETS.soccer) === JSON.stringify(["match_result", "total", "btts", "double_chance"]));
+check("OFFICIAL_TRACKING_MARKETS.wnba = [moneyline, total, spread]",
+  JSON.stringify(OFFICIAL_TRACKING_MARKETS.wnba) === JSON.stringify(["moneyline", "total", "spread"]));
 check("CONTEXT_ONLY_DISPLAY_MARKETS.nba = [spread]",
   JSON.stringify(CONTEXT_ONLY_DISPLAY_MARKETS.nba) === JSON.stringify(["spread"]));
 check("CONTEXT_ONLY_DISPLAY_MARKETS.nhl = [spread]",
@@ -105,6 +115,9 @@ try {
   assertOfficialTrackingMarket("nba", "total");
   assertOfficialTrackingMarket("nhl", "moneyline");
   assertOfficialTrackingMarket("nhl", "total");
+  assertOfficialTrackingMarket("wnba", "moneyline");
+  assertOfficialTrackingMarket("wnba", "total");
+  assertOfficialTrackingMarket("wnba", "spread");
 } catch {
   assertHappyOk = false;
 }
@@ -148,7 +161,7 @@ check("Unknown market error mentions deliberate product launch",
   `got: ${unknownErrMessage.slice(0, 200)}`);
 
 // Sanity — official and context-only registries must be disjoint per sport
-for (const sport of ["mlb", "nba", "nhl", "nfl", "cbb", "cfb", "ucl", "soccer"] as const) {
+for (const sport of ["mlb", "nba", "nhl", "nfl", "cbb", "cfb", "ucl", "soccer", "wnba"] as const) {
   const official = new Set(getOfficialTrackingMarkets(sport) as ReadonlyArray<string>);
   const context = new Set(getContextOnlyDisplayMarkets(sport));
   let intersect: string[] = [];
