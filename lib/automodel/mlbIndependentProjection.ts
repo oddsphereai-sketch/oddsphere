@@ -46,6 +46,10 @@
  */
 
 import type { GameSnapshot, TeamSnapshot, StarterSnapshot } from "./types";
+import {
+  EXPECTED_BULLPEN_INNINGS,
+  EXPECTED_STARTER_INNINGS,
+} from "./types";
 
 // ─── league constants (2025-2026 MLB ranges) ──────────────────────
 
@@ -381,6 +385,89 @@ function bullpenFactor(team: TeamSnapshot): number {
   return 1.0;
 }
 
+type StarterWorkloadRole =
+  | "normal_starter"
+  | "short_starter"
+  | "opener_or_reliever_start"
+  | "unknown";
+
+type StarterWorkloadEstimate = {
+  role: StarterWorkloadRole;
+  starter_innings: number;
+  bullpen_innings: number;
+};
+
+function clampInnings(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+/**
+ * Estimate how much today's listed "starter" should drive run projection.
+ *
+ * This is not wired into live projections yet. It is the pure math boundary
+ * for the replay gate: normal starters get the modern 6/3 split, while
+ * opener/reliever-start profiles shift most pitching weight to the bullpen.
+ */
+function estimateStarterWorkload(
+  starter: StarterSnapshot | null
+): StarterWorkloadEstimate {
+  if (starter === null) {
+    return {
+      role: "unknown",
+      starter_innings: 0,
+      bullpen_innings: EXPECTED_STARTER_INNINGS + EXPECTED_BULLPEN_INNINGS,
+    };
+  }
+
+  const gs = starter.season_games_started ?? null;
+  const gp = starter.season_games_pitched ?? null;
+  const ip = starter.season_innings_pitched ?? null;
+  const relieverAsStarter =
+    gp !== null && gs !== null && gp >= 10 && gs <= 2;
+
+  if (relieverAsStarter) {
+    return {
+      role: "opener_or_reliever_start",
+      starter_innings: 1.5,
+      bullpen_innings: 7.5,
+    };
+  }
+
+  if (gs !== null && gs > 0 && ip !== null && ip > 0) {
+    const avgIpPerStart = ip / gs;
+    const starterInnings = clampInnings(avgIpPerStart, 2.5, 6.5);
+    return {
+      role: starterInnings < 4.5 ? "short_starter" : "normal_starter",
+      starter_innings: Math.round(starterInnings * 10) / 10,
+      bullpen_innings: Math.round((9 - starterInnings) * 10) / 10,
+    };
+  }
+
+  return {
+    role: "normal_starter",
+    starter_innings: EXPECTED_STARTER_INNINGS,
+    bullpen_innings: EXPECTED_BULLPEN_INNINGS,
+  };
+}
+
+function workloadWeightedPitchingFactor(
+  starterFactorValue: number,
+  bullpenFactorValue: number,
+  starter: StarterSnapshot | null
+): { factor: number; workload: StarterWorkloadEstimate } {
+  const workload = estimateStarterWorkload(starter);
+  const totalInnings = workload.starter_innings + workload.bullpen_innings;
+  if (totalInnings <= 0) return { factor: 1.0, workload };
+
+  const starterWeight = workload.starter_innings / totalInnings;
+  const bullpenWeight = workload.bullpen_innings / totalInnings;
+  const factor =
+    Math.pow(clampFactor(starterFactorValue), starterWeight) *
+    Math.pow(clampFactor(bullpenFactorValue), bullpenWeight);
+
+  return { factor: clampFactor(factor), workload };
+}
+
 function parkFactor(snap: GameSnapshot): number {
   const pf = snap.ballpark?.park_factor_runs;
   if (typeof pf === "number" && pf > 0) {
@@ -565,6 +652,8 @@ export const __TEST__ = {
   offenseFactor,
   pitcherFactor,
   bullpenFactor,
+  estimateStarterWorkload,
+  workloadWeightedPitchingFactor,
   parkFactor,
   weatherFactor,
   clampFactor,

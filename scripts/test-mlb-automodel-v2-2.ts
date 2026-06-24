@@ -100,9 +100,9 @@ function buildStarter(opts: Partial<StarterSnapshot> = {}): StarterSnapshot {
     first_inning_era: null,
     first_inning_starts: null,
     first_inning_whip: null,
-    season_games_started: 15,
-    season_games_pitched: 15,
-    season_innings_pitched: 90,
+    season_games_started: "season_games_started" in opts ? opts.season_games_started : 15,
+    season_games_pitched: "season_games_pitched" in opts ? opts.season_games_pitched : 15,
+    season_innings_pitched: "season_innings_pitched" in opts ? opts.season_innings_pitched : 90,
   };
 }
 
@@ -238,6 +238,46 @@ async function main() {
     "pitcherFactor null ERA → 1.0",
     near(INDEP_TEST.pitcherFactor(buildStarter({ season_era: null })), 1.0),
   );
+
+  // workload-weighted pitching math (replay boundary; not live formula yet)
+  {
+    const normal = buildStarter({
+      season_games_started: 20,
+      season_games_pitched: 20,
+      season_innings_pitched: 120,
+    });
+    const workload = INDEP_TEST.estimateStarterWorkload(normal);
+    check("starter workload: 6 IP starter → normal_starter", workload.role === "normal_starter");
+    check("starter workload: 6 IP starter keeps 6/3 split", near(workload.starter_innings, 6) && near(workload.bullpen_innings, 3));
+
+    const weighted = INDEP_TEST.workloadWeightedPitchingFactor(0.80, 1.20, normal);
+    const expected = Math.pow(0.80, 6 / 9) * Math.pow(1.20, 3 / 9);
+    check("weighted pitching factor: normal starter uses starter-heavy blend", near(weighted.factor, expected, 0.001));
+  }
+  {
+    const short = buildStarter({
+      season_games_started: 6,
+      season_games_pitched: 6,
+      season_innings_pitched: 21,
+    });
+    const workload = INDEP_TEST.estimateStarterWorkload(short);
+    check("starter workload: 3.5 IP profile → short_starter", workload.role === "short_starter");
+    check("starter workload: short starter shifts extra innings to bullpen", near(workload.starter_innings, 3.5) && near(workload.bullpen_innings, 5.5));
+  }
+  {
+    const opener = buildStarter({
+      season_games_started: 1,
+      season_games_pitched: 17,
+      season_innings_pitched: 24,
+    });
+    const workload = INDEP_TEST.estimateStarterWorkload(opener);
+    check("starter workload: GP high + GS low → opener_or_reliever_start", workload.role === "opener_or_reliever_start");
+    check("starter workload: opener gets 1.5/7.5 split", near(workload.starter_innings, 1.5) && near(workload.bullpen_innings, 7.5));
+
+    const normalWeighted = INDEP_TEST.workloadWeightedPitchingFactor(0.80, 1.20, buildStarter()).factor;
+    const openerWeighted = INDEP_TEST.workloadWeightedPitchingFactor(0.80, 1.20, opener).factor;
+    check("weighted pitching factor: opener leans more toward bullpen than normal starter", openerWeighted > normalWeighted);
+  }
 
   // parkFactor
   check(
