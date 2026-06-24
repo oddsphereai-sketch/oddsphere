@@ -43,6 +43,7 @@
     "test:playbook-team-normalizer": "tsx scripts/test-playbook-team-normalizer.ts",
     "test:rlm-public-gate": "tsx scripts/test-rlm-public-gate.ts",
     "test:playbook-public-splits-mapper": "tsx scripts/test-playbook-public-splits-mapper.ts",
+    "test:playbook-public-splits-overlay": "tsx scripts/test-playbook-public-splits-overlay.ts",
     "test:provider-signal-boundaries": "tsx --env-file=.env.local scripts/test-provider-signal-boundaries.ts",
     "test:derive-market-signal-regression": "tsx --env-file=.env.local scripts/test-derive-market-signal-regression.ts",
     "test:signal-evidence-classifier": "tsx scripts/test-signal-evidence-classifier.ts",
