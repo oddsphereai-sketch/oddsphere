@@ -498,22 +498,18 @@ function parkFactor(snap: GameSnapshot): number {
 }
 
 function weatherFactor(snap: GameSnapshot): number {
+  if (snap.ballpark?.is_dome === true) return 1.0;
   if (!snap.data_quality.weather_available || snap.weather === null) return 1.0;
   let factor = 1.0;
   // Wind out → boost; wind in → suppress
   if (typeof snap.weather.wind_speed_mph === "number" && snap.weather.wind_speed_mph >= 10) {
-    const dir = snap.weather.wind_direction_degrees;
-    if (typeof dir === "number") {
-      // Wind blowing OUT to center: ~0 degrees; IN: ~180 degrees.
-      // Very rough heuristic — orientation varies per park; we use the
-      // is_notable flag from the weather service as ground truth when
-      // available.
-      if (snap.weather.is_notable === true) {
-        // notable wind helps offense ~3-5% typical
-        const reason = snap.weather.notable_reason ?? "";
-        if (/out/i.test(reason)) factor *= 1.04;
-        else if (/in/i.test(reason)) factor *= 0.96;
-      }
+    // Wind orientation varies per park; we use the upstream notable_reason
+    // as ground truth when available. Playbook supplies wind type text
+    // (OUT/IN) without degrees, so direction cannot be required here.
+    if (snap.weather.is_notable === true) {
+      const reason = snap.weather.notable_reason ?? "";
+      if (/out/i.test(reason)) factor *= 1.04;
+      else if (/in/i.test(reason)) factor *= 0.96;
     }
   }
   // Temperature effect — hot air carries the ball

@@ -298,6 +298,36 @@ async function main() {
     "weatherFactor no notable + mild temp → ~1.0",
     near(INDEP_TEST.weatherFactor(buildSnapshot()), 1.0, 0.05),
   );
+  check(
+    "weatherFactor closed roof/dome neutralizes weather",
+    near(
+      INDEP_TEST.weatherFactor(buildSnapshot({
+        ballpark: { park_factor_runs: 1.0, is_dome: true },
+        weather: {
+          temperature_f: 92,
+          humidity_pct: 50,
+          wind_speed_mph: 18,
+          wind_direction_degrees: null,
+          is_notable: true,
+          notable_reason: "wind out 18 mph",
+        },
+      })),
+      1.0,
+    ),
+  );
+  check(
+    "weatherFactor uses notable wind text even when direction degrees missing",
+    INDEP_TEST.weatherFactor(buildSnapshot({
+      weather: {
+        temperature_f: 72,
+        humidity_pct: 50,
+        wind_speed_mph: 16,
+        wind_direction_degrees: null,
+        is_notable: true,
+        notable_reason: "wind out 16 mph",
+      },
+    })) > 1.0,
+  );
 
   // ──────────────────────────────────────────────────────────────────
   section("Layer 2 — projectIndependent integration");

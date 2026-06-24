@@ -82,12 +82,17 @@ import { updateMarketSignalsForSlate } from "./marketSignalDerivationService";
 import { updateGradesForSlate } from "./gradeDerivationService";
 import { generatePickBreakdown } from "./pickBreakdownGenerator";
 import {
+  applyMlbPlaybookVenueWeatherOverlay,
+  type MlbPlaybookVenueWeatherAudit,
+} from "./mlbPlaybookVenueWeatherOverlay";
+import {
   applyReviewerIfEnabled,
   fetchReviewerSlateContext,
   type ReviewerSlateContext,
 } from "./aiReviewerWiring";
 import { createPredictionRecords } from "./predictionRecordService";
 import { recordFirstPublishedLines } from "./postedLinesWriter";
+import { PlaybookClient } from "../providers/playbook/playbookClient";
 
 // ─────────────────────────────────────────────────────────────
 // Public types
@@ -518,6 +523,8 @@ export async function generatePredictionsForSlate(
   // Step 1 — build feature snapshots (Phase 4C: filter optional;
   // Phase 4.2.B: locked games already excluded above).
   let snapshots: GameSnapshot[];
+  let playbookVenueWeatherAuditByExternalId =
+    new Map<number, MlbPlaybookVenueWeatherAudit>();
   try {
     snapshots = await buildFeatureSnapshots(
       sport,
@@ -531,6 +538,37 @@ export async function generatePredictionsForSlate(
           e instanceof Error ? e.message : String(e)
         }`
     );
+  }
+
+  if (
+    effectiveVersion === "v2_2" &&
+    process.env.MLB_PLAYBOOK_VENUE_WEATHER_ENABLED === "true" &&
+    process.env.PLAYBOOK_API_KEY &&
+    snapshots.length > 0
+  ) {
+    try {
+      const playbook = new PlaybookClient(process.env.PLAYBOOK_API_KEY);
+      const venueWeather = await playbook.mlbVenueWeather();
+      const overlay = applyMlbPlaybookVenueWeatherOverlay(
+        snapshots,
+        venueWeather.body.data ?? [],
+      );
+      snapshots = overlay.snapshots;
+      playbookVenueWeatherAuditByExternalId = overlay.auditByExternalId;
+      const applied = Array.from(overlay.auditByExternalId.values()).filter(
+        (a) => a.applied,
+      ).length;
+      console.log(
+        `[automodelService] mlb_playbook_venue_weather_overlay rows=` +
+          `${venueWeather.body.data?.length ?? 0} applied=${applied}/${snapshots.length}`,
+      );
+    } catch (e) {
+      console.warn(
+        `[automodelService] Playbook venue/weather overlay failed: ${
+          e instanceof Error ? e.message : String(e)
+        }. Proceeding with DB feature snapshots.`,
+      );
+    }
   }
 
   // Phase 6B.1.7 — load FI line rows once per slate so the FI V2 writer
@@ -753,12 +791,32 @@ export async function generatePredictionsForSlate(
       // For "v2" or "shadow" → run V2 with try/catch; on error, fall back
       // to V1 with a logged warning. "v2" writes V2's prediction values;
       // "shadow" keeps V1's values and only attaches v2_audit.
-      const baseFinalPrediction: AutoModelOutput = applyV2IfSelected({
+      let baseFinalPrediction: AutoModelOutput = applyV2IfSelected({
         snap,
         v1Output: finalPredictionV1,
         stage,
         effectiveVersion,
       });
+      const playbookVenueWeatherAudit = playbookVenueWeatherAuditByExternalId.get(
+        snap.game_external_id,
+      );
+      if (playbookVenueWeatherAudit) {
+        baseFinalPrediction = {
+          ...baseFinalPrediction,
+          sport_specific: {
+            ...baseFinalPrediction.sport_specific,
+            playbook_venue_weather: playbookVenueWeatherAudit,
+            v2_2_audit:
+              baseFinalPrediction.sport_specific.v2_2_audit &&
+              typeof baseFinalPrediction.sport_specific.v2_2_audit === "object"
+                ? {
+                    ...(baseFinalPrediction.sport_specific.v2_2_audit as Record<string, unknown>),
+                    playbook_venue_weather: playbookVenueWeatherAudit,
+                  }
+                : baseFinalPrediction.sport_specific.v2_2_audit,
+          } as AutoModelOutput["sport_specific"],
+        };
+      }
 
       // 2d.6 — Phase 6B.1.7 — FI V2 writer overlay.
       // When FIRST_INNING_MODEL_VERSION=fi_v2 the FI V2 model runs over
