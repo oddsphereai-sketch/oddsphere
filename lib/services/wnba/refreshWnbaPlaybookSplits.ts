@@ -151,6 +151,26 @@ export async function refreshWnbaPlaybookSplits(opts: {
     const { error } = await supabase.from("sharp_signals").insert(payload);
     if (error) errors.push(`insert: ${error.message}`); else result.rowsInserted = inserts.length;
   }
+
+  // Append every applied NON-NULL split to sharp_signals_history — the backbone
+  // of the Last Known Good reader (mirrors linesService). A later thin Playbook
+  // refresh that overwrites a good value with null then can't blank the card:
+  // the display reader (buildWnbaDailyEdgeAdapted) recovers the prior value from
+  // history. Non-null only (history stores recoverable values, not the blanks).
+  // Defensive insert — a missing table (pre-v22 env) must not break the refresh.
+  const histRows = [...updates, ...inserts]
+    .filter((w) => w.betting !== null || w.money !== null)
+    .map((w) => ({
+      game_id: w.gameId, market_type: w.market, side: w.side,
+      public_money_pct: w.money, public_betting_pct: w.betting,
+      rlm_detected: false, steam_detected: false, reverse_line_movement: false,
+      recorded_at: computedAt, source: "playbook_wnba_splits",
+    }));
+  if (histRows.length > 0) {
+    const { error } = await supabase.from("sharp_signals_history").insert(histRows);
+    if (error) errors.push(`history insert: ${error.message}`);
+  }
+
   logger(`wnba playbook splits APPLY ${slateDate}: updated ${result.rowsUpdated}, inserted ${result.rowsInserted}`);
   return result;
 }

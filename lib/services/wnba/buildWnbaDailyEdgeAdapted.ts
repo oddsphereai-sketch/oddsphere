@@ -32,6 +32,7 @@ import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
 import { wnbaLogoUrl } from "./wnbaTeams";
 import { supabase } from "@/lib/db/supabase";
 import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
+import { loadSplitsHistoryForSlate, type SplitsHistoryHit } from "@/lib/services/lastKnownGoodReader";
 
 /**
  * Reconstruct the PreviewGame shape from stored game_predictions (written by
@@ -67,6 +68,16 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
     const gid = r.game_id as number;
     if (!signalsByGame.has(gid)) signalsByGame.set(gid, []);
     signalsByGame.get(gid)!.push(r);
+  }
+  // Last-Known-Good: newest non-null public split per (game, market, side) from
+  // sharp_signals_history, so a bar never blanks when the current row is missing
+  // or was overwritten with null by a thin Playbook refresh (MLB no-blank parity).
+  // Display fallback only — never feeds the WNBA model/grade (that path reads the
+  // live sharp_signals rows in runWnbaModel, untouched here).
+  const splitsHistByGame = new Map<number, SplitsHistoryHit[]>();
+  for (const h of await loadSplitsHistoryForSlate(supabase, ids)) {
+    if (!splitsHistByGame.has(h.game_id)) splitsHistByGame.set(h.game_id, []);
+    splitsHistByGame.get(h.game_id)!.push(h);
   }
   const { data: lineRows } = await supabase
     .from("lines")
@@ -124,6 +135,7 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
       data_quality: (ss.data_quality as PreviewGame["data_quality"]) ?? { ml_books: 0, spread_books: 0, total_books: 0, flags: [] },
       publicSplits: buildWnbaPublicSplits(
         signalsByGame.get(g.id as number) ?? [],
+        splitsHistByGame.get(g.id as number) ?? [],
         home.abbreviation as string,
         away.abbreviation as string,
         splitsAsOf,
@@ -158,29 +170,59 @@ const PUBLIC_SPLIT_STALE_MS = 6 * 60 * 60 * 1000;
  * and spread.
  * Display-context only — never reads +EV/steam/RLM/CLV (those stay null).
  */
-function buildWnbaPublicSplits(
+export function buildWnbaPublicSplits(
   rows: Array<{ market_type: string; side: string; public_betting_pct: number | null; public_money_pct: number | null; computed_at: string | null }>,
+  history: SplitsHistoryHit[],
   homeAbbr: string,
   awayAbbr: string,
   asOf: number
 ): { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[]; spread: WnbaPublicSplit[] } {
   const labelFor = (market: string, side: string): string =>
     market === "total" ? (side === "over" ? "Over" : "Under") : side === "home" ? homeAbbr : awayAbbr;
-  const mk = (market: "moneyline" | "total" | "spread"): WnbaPublicSplit[] =>
-    rows
-      .filter((r) => r.market_type === market && (r.public_betting_pct !== null || r.public_money_pct !== null))
-      .map((r) => {
-        const observedAt = r.computed_at ?? null;
-        const ageMs = observedAt ? asOf - new Date(observedAt).getTime() : 0;
-        return {
-          side: r.side as WnbaPublicSplit["side"],
-          label: labelFor(market, r.side),
-          moneyPct: r.public_money_pct,
-          betsPct: r.public_betting_pct,
-          observedAt,
-          isStale: observedAt ? ageMs > PUBLIC_SPLIT_STALE_MS : false,
-        };
+  const curByKey = new Map(rows.map((r) => [`${r.market_type}::${r.side}`, r]));
+  const histByKey = new Map(history.map((h) => [`${h.market_type}::${h.side}`, h]));
+  const freshest = (a: string | null, b: string | null): string | null =>
+    !a ? b : !b ? a : new Date(a).getTime() >= new Date(b).getTime() ? a : b;
+  const mk = (market: "moneyline" | "total" | "spread"): WnbaPublicSplit[] => {
+    // Sides present in the current rows (preserve their order), then any side
+    // that exists ONLY in history (so a fully-missing current cell still shows).
+    const sides: string[] = [];
+    const seen = new Set<string>();
+    for (const r of rows) if (r.market_type === market && !seen.has(r.side)) { seen.add(r.side); sides.push(r.side); }
+    for (const h of history) if (h.market_type === market && !seen.has(h.side)) { seen.add(h.side); sides.push(h.side); }
+    const out: WnbaPublicSplit[] = [];
+    for (const side of sides) {
+      const cur = curByKey.get(`${market}::${side}`);
+      const hist = histByKey.get(`${market}::${side}`);
+      // Per field: prefer the current non-null value; fall back to last-known
+      // history when current is missing/null. Never blend providers — WNBA has
+      // a single split source (Playbook); this only recovers its own last value.
+      let betsPct = cur?.public_betting_pct ?? null;
+      let betsObs = betsPct !== null ? (cur?.computed_at ?? null) : null;
+      if (betsPct === null && hist?.public_betting_pct != null) {
+        betsPct = hist.public_betting_pct;
+        betsObs = hist.public_betting_pct_observed_at;
+      }
+      let moneyPct = cur?.public_money_pct ?? null;
+      let moneyObs = moneyPct !== null ? (cur?.computed_at ?? null) : null;
+      if (moneyPct === null && hist?.public_money_pct != null) {
+        moneyPct = hist.public_money_pct;
+        moneyObs = hist.public_money_pct_observed_at;
+      }
+      if (betsPct === null && moneyPct === null) continue; // genuinely no source, current or historical
+      const observedAt = freshest(betsObs, moneyObs);
+      const ageMs = observedAt ? asOf - new Date(observedAt).getTime() : 0;
+      out.push({
+        side: side as WnbaPublicSplit["side"],
+        label: labelFor(market, side),
+        moneyPct,
+        betsPct,
+        observedAt,
+        isStale: observedAt ? ageMs > PUBLIC_SPLIT_STALE_MS : false,
       });
+    }
+    return out;
+  };
   return { ml: mk("moneyline"), total: mk("total"), spread: mk("spread") };
 }
 

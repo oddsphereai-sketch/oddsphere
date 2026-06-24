@@ -19,6 +19,7 @@
     "audit:slate-visibility": "tsx --env-file=.env.local scripts/operator/audit-slate-visibility.ts",
     "audit:mlb-workload-replay": "tsx --env-file=.env.local scripts/operator/mlb-workload-pitching-replay.ts",
     "test:tracking": "tsx scripts/test-tracking.ts",
+    "test:wnba-splits-lkg": "tsx --env-file=.env.local scripts/test-wnba-splits-lkg.ts",
     "test:scores-model": "tsx scripts/test-scores-model.ts",
     "test:cron-infra": "tsx --env-file=.env.local scripts/test-cron-infra.ts",
     "test:data-services": "tsx --env-file=.env.local scripts/test-data-services.ts",
