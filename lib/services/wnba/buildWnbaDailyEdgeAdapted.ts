@@ -33,6 +33,8 @@ import { wnbaLogoUrl } from "./wnbaTeams";
 import { supabase } from "@/lib/db/supabase";
 import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
 
+const HISTORY_PAGE_SIZE = 1000;
+
 /**
  * Reconstruct the PreviewGame shape from stored game_predictions (written by
  * runWnbaModel). The DB row carries the full model output in sport_specific, so
@@ -79,14 +81,27 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
     if (!linesByGame.has(gid)) linesByGame.set(gid, []);
     linesByGame.get(gid)!.push(r);
   }
-  const { data: historyRows } = await supabase
-    .from("line_history")
-    .select("game_id, market_type, side, line_value, odds_american, recorded_at")
-    .in("game_id", ids)
-    .in("market_type", ["moneyline", "total", "spread"])
-    .order("recorded_at", { ascending: true });
+  const historyRows: Array<{
+    game_id: number;
+    market_type: string;
+    side: string;
+    line_value: number | null;
+    odds_american: number | null;
+    recorded_at: string | null;
+  }> = [];
+  for (let from = 0; ; from += HISTORY_PAGE_SIZE) {
+    const { data: page } = await supabase
+      .from("line_history")
+      .select("game_id, market_type, side, line_value, odds_american, recorded_at")
+      .in("game_id", ids)
+      .in("market_type", ["moneyline", "total", "spread"])
+      .order("recorded_at", { ascending: true })
+      .range(from, from + HISTORY_PAGE_SIZE - 1);
+    historyRows.push(...((page ?? []) as typeof historyRows));
+    if ((page ?? []).length < HISTORY_PAGE_SIZE) break;
+  }
   const historyByGame = new Map<number, NonNullable<typeof historyRows>>();
-  for (const r of historyRows ?? []) {
+  for (const r of historyRows) {
     const gid = r.game_id as number;
     if (!historyByGame.has(gid)) historyByGame.set(gid, []);
     historyByGame.get(gid)!.push(r);

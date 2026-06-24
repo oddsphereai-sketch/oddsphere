@@ -21,6 +21,7 @@ import { addDaysToSlate, currentSlateDate } from "../../dates/slateDate";
 const PLAY_GRADE: Record<string, string> = { "Best Angle": "best_angle", "Lean": "lean", "Watchlist": "watchlist", "Caution": "caution" };
 const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]! : null);
 const toDecimal = (o: number | null) => (o == null ? null : o > 0 ? o / 100 + 1 : 100 / Math.abs(o) + 1);
+const HISTORY_PAGE_SIZE = 1000;
 
 export type WnbaRecordsResult = {
   apply: boolean;
@@ -61,15 +62,25 @@ export async function buildWnbaPredictionRecords(opts: {
   const { data: gps } = ids.length ? await supabase.from("game_predictions").select("id, game_id, locked_at, sport_specific").in("game_id", ids) : { data: [] as Record<string, unknown>[] };
   const gpByGame = new Map((gps ?? []).map((r) => [r.game_id as number, r]));
   const { data: lineRows } = ids.length ? await supabase.from("lines").select("game_id, market_type, side, line_value, odds_american").in("game_id", ids).is("player_id", null) : { data: [] as Record<string, unknown>[] };
-  const { data: historyRows } = ids.length
-    ? await supabase
+  const historyRows: Record<string, unknown>[] = [];
+  if (ids.length) {
+    for (let from = 0; ; from += HISTORY_PAGE_SIZE) {
+      const { data: page, error } = await supabase
         .from("line_history")
         .select("game_id, market_type, side, line_value, odds_american, recorded_at")
         .in("game_id", ids)
         .in("market_type", ["moneyline", "total", "spread"])
         .not("odds_american", "is", null)
         .order("recorded_at", { ascending: false })
-    : { data: [] as Record<string, unknown>[] };
+        .range(from, from + HISTORY_PAGE_SIZE - 1);
+      if (error) {
+        errors.push(`line_history read: ${error.message}`);
+        break;
+      }
+      historyRows.push(...(page ?? []));
+      if ((page ?? []).length < HISTORY_PAGE_SIZE) break;
+    }
+  }
   const linesByGame = new Map<number, Record<string, unknown>[]>();
   for (const l of lineRows ?? []) { const gid = l.game_id as number; if (!linesByGame.has(gid)) linesByGame.set(gid, []); linesByGame.get(gid)!.push(l); }
   const historyByGame = new Map<number, Record<string, unknown>[]>();
