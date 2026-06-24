@@ -139,22 +139,28 @@ function readPublicPlayGrade(v: unknown): string | null {
 /**
  * Conviction/Value play-grade gate (2026-06-15) — demotes a public **Lean** to
  * `market_aligned` (off the public board, operator-only) when it fails an
- * EVIDENCE-GATED, ENVIRONMENT-INDEPENDENT quality test. Two conditions, both
+ * EVIDENCE-GATED, ENVIRONMENT-INDEPENDENT quality test. Four conditions, all
  * validated on locked tracking (since 6/7) with leave-one-day-out + a clear
  * model reason (NOT a high-scoring-week artifact):
  *
- *   1. NEGATIVE EXPECTED VALUE (coherence). A Lean whose own model probability,
+ *   1. WEAK MODEL PROBABILITY. Cross-market MLB backtest through 2026-06-24:
+ *      demoting Leans with model_probability <55% removed the weakest
+ *      actionable cohort and improved board ROI materially without changing
+ *      raw projections.
+ *   2. NEGATIVE EXPECTED VALUE (coherence). A Lean whose own model probability,
  *      priced at the locked American odds, has EV < 0 loses long-run by the
  *      model's OWN numbers. Favorite Leans with EV<0 went 1-5 (17%, −68% ROI).
  *      Arithmetic, not pattern-fit → environment-independent.
- *   2. LOW-CONVICTION FAVORITE (ML only). A money-line FAVORITE the model
+ *   3. LOW-CONVICTION FAVORITE (ML only). A money-line FAVORITE the model
  *      barely separates (|projected run gap| < 0.5) went 27% / −48% (robust
  *      excl-6/14, LODO never positive); favorites WITH conviction (gap ≥1)
  *      went 73% / +24%. Conviction, not environment.
+ *   4. EXTREME-LOW TOTAL LINE (totals only). Pitcher's-duel totals below 8 have
+ *      shown no demonstrated model edge.
  *
- * Replaces the earlier R1 confidence-floor (which emptied the board). Only
- * touches the "lean" tier; Best Angle / others unchanged. Future-picks + display
- * only — never mutates locked/historical/tracking rows. Reversible (constants).
+ * Only touches the "lean" tier; Best Angle / others unchanged. Future-picks +
+ * display only — never mutates locked/historical/tracking rows. Reversible
+ * (constants).
  *
  * Public-trap (bets≫money) is intentionally EXCLUDED: it only predicts losses
  * on O/U (trap O/U = nearly all Unders = the one high-scoring week; trap×ML is
@@ -162,6 +168,7 @@ function readPublicPlayGrade(v: unknown): string | null {
  * report, not gated, until a low-scoring week validates it out-of-sample.
  */
 export const GATE_EV_FLOOR = 0;
+export const GATE_LEAN_MIN_MODEL_PROB = 0.55;
 export const GATE_LOW_CONVICTION_RUNGAP = 0.5;
 export const GATE_LOW_TOTAL_LINE = 8;
 export interface PlayGradeGateInputs {
@@ -180,9 +187,12 @@ function gateEvNegative(p: number | null, odds: number | null): boolean {
 }
 export function applyPlayGradeGate(grade: string | null, x: PlayGradeGateInputs): string | null {
   if (grade !== "lean") return grade; // gate only demotes the Lean tier
-  // 1. negative-EV coherence demotion (any market) — arithmetic, env-independent
+  // 1. weak Lean demotion (any market) — model is not strong enough to promote
+  //    as user-actionable, even when the raw pick still displays internally.
+  if (x.modelProb !== null && x.modelProb < GATE_LEAN_MIN_MODEL_PROB) return "market_aligned";
+  // 2. negative-EV coherence demotion (any market) — arithmetic, env-independent
   if (gateEvNegative(x.modelProb, x.americanOdds)) return "market_aligned";
-  // 2. low-conviction favorite (money-line only) — run-gap conviction, env-independent
+  // 3. low-conviction favorite (money-line only) — run-gap conviction, env-independent
   if (
     x.market === "moneyline" &&
     x.americanOdds !== null && x.americanOdds < 0 &&
@@ -190,7 +200,7 @@ export function applyPlayGradeGate(grade: string | null, x: PlayGradeGateInputs)
   ) {
     return "market_aligned";
   }
-  // 3. extreme-low total line (totals only) — pitcher's-duel games where the
+  // 4. extreme-low total line (totals only) — pitcher's-duel games where the
   //    model has no demonstrated edge (board 33% / −35%, both sides, robust
   //    excl-6/14 + LODO; structural: compressed run distribution). Pre-game
   //    knowable. Smallest-sample of the three — reversible via constant.

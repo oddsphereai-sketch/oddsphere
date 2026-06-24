@@ -51,6 +51,7 @@
     "test:derive-market-signal-regression": "tsx --env-file=.env.local scripts/test-derive-market-signal-regression.ts",
     "test:signal-evidence-classifier": "tsx scripts/test-signal-evidence-classifier.ts",
     "test:signal-summary-generator": "tsx scripts/test-signal-summary-generator.ts",
+    "test:lean-confidence-floor": "tsx --env-file=.env.local scripts/test-lean-confidence-floor.ts",
     "smoke:wnba-playbook-route": "tsx --env-file=.env.local scripts/operator/wnba-playbook-route-smoke.ts",
     "audit:mlb-playbook-starters": "tsx --env-file=.env.local scripts/operator/playbook-mlb-starting-pitchers-audit.ts",
     "audit:mlb-playbook-injuries": "tsx --env-file=.env.local scripts/operator/playbook-mlb-injuries-audit.ts",
