@@ -28,6 +28,7 @@ import type {
   PlaybookQuotaSnapshot,
   PlaybookSplitsHistoryResponse,
   PlaybookSplitsResponse,
+  PlaybookVenueWeatherResponse,
 } from "./types";
 
 const PLAYBOOK_BASE_URL = "https://api.playbook-api.com";
@@ -194,8 +195,12 @@ export class PlaybookClient {
     return this.get<PlaybookSplitsHistoryResponse>("/v1/splits-history", { league, date });
   }
 
+  mlbVenueWeather(): Promise<PlaybookResult<PlaybookVenueWeatherResponse>> {
+    return this.get<PlaybookVenueWeatherResponse>("/v1/venue-weather", { league: "mlb" });
+  }
+
   // NOTE: Playbook also exposes context endpoints (teams, injuries, recent
-  // form, head-to-head, MLB starters / pitcher-stats / venue-weather /
+  // form, head-to-head, MLB starters / pitcher-stats /
   // strikeout-predictor). Their exact paths are NOT yet live-verified, so
   // they are intentionally omitted here — add typed methods under the
   // `o-mlb-playbook-context` ticket once each path is confirmed. Until then

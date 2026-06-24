@@ -124,6 +124,55 @@ export interface PlaybookSplitsHistoryResponse {
   [k: string]: unknown;
 }
 
+// ── MLB venue/weather context ─────────────────────────────────────────────
+export interface PlaybookVenueWeatherRow {
+  teamId?: string;
+  teamName?: string;
+  error?: string | null;
+  stale?: boolean;
+  staleReason?: string | null;
+  game?: unknown;
+  venue?: {
+    park?: string;
+    parkProfile?: string;
+    roof?: string;
+    roofStatus?: {
+      type?: string;
+      status?: string;
+      confidence?: string;
+    };
+  };
+  conditions?: {
+    summary?: string;
+    tempF?: number | null;
+    wind?: {
+      dir?: string | null;
+      mph?: number | null;
+      type?: string | null;
+    };
+    precipProb?: number | null;
+    isDay?: boolean | null;
+  };
+  impact?: {
+    projectedTotal?: number | null;
+    lean?: string | null;
+    strength?: string | null;
+    confidence?: string | null;
+  };
+  insights?: {
+    hrEnv?: string | null;
+    xbhEnv?: string | null;
+  };
+  weatherSource?: string | null;
+  fetchedAt?: string | null;
+}
+
+export interface PlaybookVenueWeatherResponse {
+  count?: number;
+  requestsRemaining?: number;
+  data: PlaybookVenueWeatherRow[];
+}
+
 /** Quota state the client tracks from in-body `requestsRemaining`. */
 export interface PlaybookQuotaSnapshot {
   requestsRemaining: number | null;
