@@ -40,7 +40,11 @@ export type AuditStarterInput = {
   /** Is this pitcher_id mapped to a players row? Required to be true
    * even if pitcher_id is set, otherwise the model can't use the row. */
   mapped: boolean;
-  /** Does this pitcher have a player_season_stats row for the season? */
+  /**
+   * Does this pitcher have a usable player_season_stats row for the season?
+   * False can mean either a backfillable gap or a real no-MLB-sample starter.
+   * The audit treats mapped/no-stats as no-sample context, not a missing starter.
+   */
   season_stats_present: boolean;
   /** Last update timestamp for the starter mapping (ISO 8601), null if
    * the pitcher_id was never set. */
@@ -103,7 +107,7 @@ export type DailyEdgeCompletenessInput = {
 /** Per-side starter status with policy-relevant classification. */
 export type AuditStarterStatus =
   | "present_mapped_with_stats"
-  | "present_mapped_no_stats"
+  | "present_mapped_no_mlb_sample"
   | "present_unmapped" // pitcher_id set but no players row → ingestion gap
   | "missing_source_unavailable"; // pitcher_id is null
 
@@ -144,8 +148,8 @@ export type AuditFlag =
   | "starter_warning_both_sides"
   /** Pitcher_id is set but no players row → ingestion gap. */
   | "starter_unmapped_player_row_missing"
-  /** Pitcher mapped but no season stats → coverage gap. */
-  | "starter_stats_missing"
+  /** Pitcher mapped but no provider season sample yet. */
+  | "starter_no_mlb_sample"
   /** Lines exist (≥1 book on any market) but no prediction → orchestrator pre-exclusion bug. */
   | "lines_present_but_no_prediction"
   /** Game has zero books across all markets → pending_lines path. */
@@ -190,9 +194,7 @@ export type AuditSlateFlag =
   /** Any game has flag "broad_neutral_fallback". */
   | "broad_neutral_fallback_used"
   /** Any game has flag "starter_unmapped_player_row_missing". */
-  | "starter_player_mapping_gap"
-  /** Any game has flag "starter_stats_missing". */
-  | "starter_stats_coverage_gap";
+  | "starter_player_mapping_gap";
 
 // ─────────────────────────────────────────────────────────────────
 // Per-game classifier
@@ -201,7 +203,7 @@ export type AuditSlateFlag =
 export function classifyStarter(s: AuditStarterInput): AuditStarterStatus {
   if (s.pitcher_id === null) return "missing_source_unavailable";
   if (!s.mapped) return "present_unmapped";
-  if (!s.season_stats_present) return "present_mapped_no_stats";
+  if (!s.season_stats_present) return "present_mapped_no_mlb_sample";
   return "present_mapped_with_stats";
 }
 
@@ -249,8 +251,8 @@ function gameFlags(g: AuditGameInput, neutralFallbackThreshold: number): AuditFl
   if (homeStatus === "present_unmapped" || awayStatus === "present_unmapped") {
     flags.push("starter_unmapped_player_row_missing");
   }
-  if (homeStatus === "present_mapped_no_stats" || awayStatus === "present_mapped_no_stats") {
-    flags.push("starter_stats_missing");
+  if (homeStatus === "present_mapped_no_mlb_sample" || awayStatus === "present_mapped_no_mlb_sample") {
+    flags.push("starter_no_mlb_sample");
   }
 
   if (linesStatus === "missing_all") flags.push("lines_missing_all_markets");
@@ -311,10 +313,6 @@ export function auditDailyEdgeCompleteness(
     if (flags.includes("starter_unmapped_player_row_missing")) {
       slateFlags.add("starter_player_mapping_gap");
     }
-    if (flags.includes("starter_stats_missing")) {
-      slateFlags.add("starter_stats_coverage_gap");
-    }
-
     perGame.push({
       game_external_id: g.game_external_id,
       matchup: g.matchup,

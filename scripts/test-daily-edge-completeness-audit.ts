@@ -89,8 +89,8 @@ async function main() {
     classifyStarter({ pitcher_id: null, mapped: false, season_stats_present: false, last_updated_iso: null }) === "missing_source_unavailable");
   check("classifyStarter: pitcher_id set but mapped=false → present_unmapped (ingestion gap)",
     classifyStarter({ pitcher_id: 99, mapped: false, season_stats_present: false, last_updated_iso: "2026-06-08T00:00:00Z" }) === "present_unmapped");
-  check("classifyStarter: mapped but no stats → present_mapped_no_stats (coverage gap)",
-    classifyStarter({ pitcher_id: 99, mapped: true, season_stats_present: false, last_updated_iso: "2026-06-08T00:00:00Z" }) === "present_mapped_no_stats");
+  check("classifyStarter: mapped but no MLB sample → present_mapped_no_mlb_sample (no-sample context)",
+    classifyStarter({ pitcher_id: 99, mapped: true, season_stats_present: false, last_updated_iso: "2026-06-08T00:00:00Z" }) === "present_mapped_no_mlb_sample");
   check("classifyStarter: fully present → present_mapped_with_stats",
     classifyStarter({ pitcher_id: 99, mapped: true, season_stats_present: true, last_updated_iso: "2026-06-08T00:00:00Z" }) === "present_mapped_with_stats");
 
@@ -325,7 +325,7 @@ async function main() {
     // Four sub-cases, each producing a different starter status:
     //   a. pitcher_id null → source unavailable
     //   b. pitcher_id set, mapped=false → present_unmapped (DB ingestion gap)
-    //   c. pitcher_id set, mapped=true, season_stats=false → mapped but no stats (coverage gap)
+    //   c. pitcher_id set, mapped=true, season_stats=false → mapped but no MLB sample (no-sample context)
     //   d. pitcher_id set, mapped, season_stats → fully present
     const games: AuditGameInput[] = [
       buildGame({
@@ -354,8 +354,8 @@ async function main() {
     check("T23 (a) — flag is starter_warning_single_side, NOT starter_unmapped_player_row_missing",
       una.flags.includes("starter_warning_single_side") &&
         !una.flags.includes("starter_unmapped_player_row_missing"));
-    check("T23 (a) — NOT classified as starter_stats_missing",
-      !una.flags.includes("starter_stats_missing"));
+    check("T23 (a) — NOT classified as starter_no_mlb_sample",
+      !una.flags.includes("starter_no_mlb_sample"));
 
     // (b) available but not mapped — distinct flag
     const unm = report.per_game.find((g) => g.game_external_id === 101)!;
@@ -368,14 +368,14 @@ async function main() {
     check("T23 (b) — slate red_flags includes starter_player_mapping_gap",
       report.red_flags.includes("starter_player_mapping_gap"));
 
-    // (c) mapped but no stats — distinct flag
+    // (c) mapped but no MLB sample — distinct flag
     const ns = report.per_game.find((g) => g.game_external_id === 102)!;
-    check("T23 (c) — mapped + no stats → starter_home = present_mapped_no_stats",
-      ns.starter_home === "present_mapped_no_stats");
-    check("T23 (c) — flag starter_stats_missing fires",
-      ns.flags.includes("starter_stats_missing"));
-    check("T23 (c) — slate red_flags includes starter_stats_coverage_gap",
-      report.red_flags.includes("starter_stats_coverage_gap"));
+    check("T23 (c) — mapped + no MLB sample → starter_home = present_mapped_no_mlb_sample",
+      ns.starter_home === "present_mapped_no_mlb_sample");
+    check("T23 (c) — flag starter_no_mlb_sample fires",
+      ns.flags.includes("starter_no_mlb_sample"));
+    check("T23 (c) — no MLB sample is not a slate-breaking red flag",
+      !report.red_flags.some((f) => String(f).includes("no_mlb_sample")));
 
     // (d) fully present — no starter flags
     const good = report.per_game.find((g) => g.game_external_id === 103)!;
@@ -384,7 +384,7 @@ async function main() {
     check("T23 (d) — no starter-related flags fire",
       !good.flags.includes("starter_warning_single_side") &&
         !good.flags.includes("starter_unmapped_player_row_missing") &&
-        !good.flags.includes("starter_stats_missing"));
+        !good.flags.includes("starter_no_mlb_sample"));
   }
 
   // ──────────────────────────────────────────────────────────────────
