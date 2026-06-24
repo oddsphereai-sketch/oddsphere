@@ -76,9 +76,16 @@ async function route(sport: string, date?: string): Promise<{ status: number; bo
   const wnbaWithMlSplits = wnba.games.filter(
     (g) => (g.markets?.moneyline?.publicSplits ?? []).length >= 2
   );
+  const wnbaWithSpreadSplits = wnba.games.filter(
+    (g) => (g.markets?.first_inning?.publicSplits ?? []).length >= 2
+  );
   ok(
     `WNBA ML publicSplits present on every returned game (${wnbaWithMlSplits.length}/${wnba.games.length})`,
     wnbaWithMlSplits.length === wnba.games.length
+  );
+  ok(
+    `WNBA Spread publicSplits present on every returned game (${wnbaWithSpreadSplits.length}/${wnba.games.length})`,
+    wnbaWithSpreadSplits.length === wnba.games.length
   );
   for (const g of wnba.games) {
     const splits = g.markets?.moneyline?.publicSplits ?? [];

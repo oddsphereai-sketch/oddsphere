@@ -25,7 +25,7 @@ import { mapPlaybookSplitsToSharpSignalRecords } from "../../providers/playbook/
 import type { PlaybookSplitGame } from "../../providers/playbook/types";
 
 // Only the markets the WNBA card surfaces public splits for.
-const DISPLAY_MARKETS = new Set(["moneyline", "total"]);
+const DISPLAY_MARKETS = new Set(["moneyline", "total", "spread"]);
 
 export type RefreshWnbaPlaybookSplitsResult = {
   apply: boolean;
@@ -99,7 +99,7 @@ export async function refreshWnbaPlaybookSplits(opts: {
     .from("sharp_signals")
     .select("game_id, market_type, side")
     .in("game_id", gameIds)
-    .in("market_type", ["moneyline", "total"]);
+    .in("market_type", ["moneyline", "total", "spread"]);
   const existingKeys = new Set((existing ?? []).map((r) => `${r.game_id}::${r.market_type}::${r.side}`));
 
   type Write = { gameId: number; market: string; side: string; betting: number | null; money: number | null };

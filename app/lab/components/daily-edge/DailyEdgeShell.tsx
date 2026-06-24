@@ -2078,12 +2078,15 @@ function MarketPulse({
       </div>
     );
   }
-  // First-inning never uses split copy — V1 SharpAPI tier does not cover
+  // MLB first-inning never uses split copy — V1 SharpAPI tier does not cover
   // first-inning public splits. Phrase as provider-coverage, not failure.
+  // Other sports may reuse the first_inning DTO slot for non-FI markets
+  // (WNBA Spread, NHL Puck Line, soccer BTTS), so they must use the
+  // sport-aware renderer below.
   // When the FI market is held (V1 NRFI threshold not met), surface a
   // subdued "angle unavailable" line instead of the generic splits note —
   // makes it clear the full-game pick is unaffected.
-  if (market === "first_inning" && shellSport !== "nba" && shellSport !== "nhl" && shellSport !== "soccer") {
+  if (market === "first_inning" && shellSport === "mlb") {
     if (marketData.held) {
       return (
         <div className="space-y-1.5">
@@ -4031,4 +4034,3 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
     </ShellSportContext.Provider>
   );
 }
-
