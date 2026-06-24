@@ -79,6 +79,18 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
     if (!linesByGame.has(gid)) linesByGame.set(gid, []);
     linesByGame.get(gid)!.push(r);
   }
+  const { data: historyRows } = await supabase
+    .from("line_history")
+    .select("game_id, market_type, side, line_value, odds_american, recorded_at")
+    .in("game_id", ids)
+    .in("market_type", ["moneyline", "total", "spread"])
+    .order("recorded_at", { ascending: true });
+  const historyByGame = new Map<number, NonNullable<typeof historyRows>>();
+  for (const r of historyRows ?? []) {
+    const gid = r.game_id as number;
+    if (!historyByGame.has(gid)) historyByGame.set(gid, []);
+    historyByGame.get(gid)!.push(r);
+  }
   const splitsAsOf = Date.now();
   const { data: teams } = await supabase.from("teams").select("id, abbreviation, name").eq("sport", "wnba");
   const tById = new Map((teams ?? []).map((t) => [t.id as number, t]));
@@ -118,6 +130,7 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
       ),
       pickedPrices: buildWnbaPickedPrices(
         linesByGame.get(g.id as number) ?? [],
+        historyByGame.get(g.id as number) ?? [],
         ml,
         (ss.total as PreviewGame["total"]) ?? { side: null, line: null, confidence: null, grade: null },
         (ss.spread as PreviewGame["spread"]) ?? { side: null, line: null, confidence: null, grade: null },
@@ -176,6 +189,7 @@ type WnbaLineRow = {
   side: string;
   line_value: number | null;
   odds_american: number | null;
+  recorded_at?: string | null;
 };
 
 function medianNumber(values: number[]): number | null {
@@ -189,19 +203,46 @@ function closeLine(a: number | null, b: number | null): boolean {
   return Math.abs(a - b) < 0.01;
 }
 
-function pickedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
-  if (side === null) return null;
-  const candidates = rows.filter((r) =>
+function pickedRows(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): WnbaLineRow[] {
+  if (side === null) return [];
+  return rows.filter((r) =>
     r.market_type === market &&
     r.side === side &&
     typeof r.odds_american === "number" &&
     (line === null || closeLine(r.line_value, line))
   );
+}
+
+function pickedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
+  const candidates = pickedRows(rows, market, side, line);
   return medianNumber(candidates.map((r) => r.odds_american as number));
+}
+
+function firstObservedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
+  const candidates = pickedRows(rows, market, side, line);
+  return candidates.length > 0 ? (candidates[0]!.odds_american as number) : null;
+}
+
+function previousObservedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null, current: number | null): number | null {
+  if (current === null) return null;
+  const candidates = pickedRows(rows, market, side, line);
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    const price = candidates[i]!.odds_american as number;
+    if (price !== current) return price;
+  }
+  return null;
+}
+
+function priceTrail(rows: WnbaLineRow[], market: string, side: string | null, line: number | null, current: number | null): WnbaPriceTrail {
+  const open = firstObservedPrice(rows, market, side, line);
+  const previousRaw = previousObservedPrice(rows, market, side, line, current);
+  const previous = previousRaw !== null && previousRaw !== open ? previousRaw : null;
+  return { current, open, previous };
 }
 
 function buildWnbaPickedPrices(
   rows: WnbaLineRow[],
+  historyRows: WnbaLineRow[],
   ml: PreviewMarket & { price: number | null },
   total: PreviewMarket & { line: number | null },
   spread: PreviewMarket & { line: number | null },
@@ -226,15 +267,19 @@ function buildWnbaPickedPrices(
     spreadSide === "home" ? spread.line :
     spreadSide === "away" && spread.line !== null ? -spread.line :
     null;
+  const mlCurrent = pickedPrice(rows, "moneyline", mlSide, null);
+  const totalCurrent = pickedPrice(rows, "total", totalSide, total.line);
+  const spreadCurrent = pickedPrice(rows, "spread", spreadSide, pickedSpreadLine);
   return {
-    ml: pickedPrice(rows, "moneyline", mlSide, null),
-    total: pickedPrice(rows, "total", totalSide, total.line),
-    spread: pickedPrice(rows, "spread", spreadSide, pickedSpreadLine),
+    ml: priceTrail(historyRows, "moneyline", mlSide, null, mlCurrent),
+    total: priceTrail(historyRows, "total", totalSide, total.line, totalCurrent),
+    spread: priceTrail(historyRows, "spread", spreadSide, pickedSpreadLine, spreadCurrent),
   };
 }
 
 type PreviewMarket = { side: string | null; confidence: number | null; grade: PreviewModelGrade | null };
-type WnbaPickedPrices = { ml: number | null; total: number | null; spread: number | null };
+type WnbaPriceTrail = { current: number | null; open: number | null; previous: number | null };
+type WnbaPickedPrices = { ml: WnbaPriceTrail; total: WnbaPriceTrail; spread: WnbaPriceTrail };
 type PreviewGame = {
   game_id: number;
   date: string;
@@ -299,6 +344,7 @@ function buildMarket(opts: {
   aligned: boolean | null;
   whyLine: string;
   publicSplits?: WnbaPublicSplit[];
+  priceTrail?: WnbaPriceTrail;
 }): MarketEdgeDto {
   const { slot, pick, confFrac, grade, modelProbPick, marketFairProbPick, priceAmerican, line, modelTotal, marketTotal, bookCount, aligned, whyLine } = opts;
   const held = pick === null || grade === null;
@@ -327,7 +373,8 @@ function buildMarket(opts: {
     betsPct: null,
     publicSplits: opts.publicSplits ?? [],
     priceAmerican,
-    lineOpenAmerican: null,
+    lineOpenAmerican: opts.priceTrail?.open ?? null,
+    lastMovePrevAmerican: opts.priceTrail?.previous ?? null,
     modelTotal: slot === "total" ? modelTotal : null,
     marketTotal: slot === "total" ? marketTotal : null,
     line: slot === "ml" ? null : line,
@@ -369,12 +416,13 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     grade: game.moneyline.grade,
     modelProbPick: mlModelProb,
     marketFairProbPick: mlMarketFair,
-    priceAmerican: game.pickedPrices?.ml ?? game.moneyline.price,
+    priceAmerican: game.pickedPrices?.ml.current ?? game.moneyline.price,
     line: null, modelTotal: null, marketTotal: null,
     bookCount: game.data_quality.ml_books,
     aligned: mlAligned,
     whyLine: `Independent model ${Math.round(mlModelProb * 100)}% vs market ${mlMarketFair !== null ? Math.round(mlMarketFair * 100) + "%" : "n/a"} on ${game.moneyline.side}.`,
     publicSplits: game.publicSplits?.ml,
+    priceTrail: game.pickedPrices?.ml,
   });
 
   // ── Total ──
@@ -385,12 +433,13 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     grade: game.total.grade,
     modelProbPick: game.total.confidence !== null ? game.total.confidence / 100 : null,
     marketFairProbPick: null,
-    priceAmerican: game.pickedPrices?.total ?? null,
+    priceAmerican: game.pickedPrices?.total.current ?? null,
     line: game.total.line, modelTotal: game.model.total, marketTotal: game.total.line,
     bookCount: game.data_quality.total_books,
     aligned: null,
     whyLine: `Model projects ${game.model.total} pts vs market line ${game.total.line ?? "n/a"}.`,
     publicSplits: game.publicSplits?.total,
+    priceTrail: game.pickedPrices?.total,
   });
 
   // ── Spread (rendered on the first_inning slot, relabeled "Sprd*") ──
@@ -404,12 +453,13 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     grade: game.spread.grade,
     modelProbPick: game.spread.confidence !== null ? game.spread.confidence / 100 : null,
     marketFairProbPick: null,
-    priceAmerican: game.pickedPrices?.spread ?? null,
+    priceAmerican: game.pickedPrices?.spread.current ?? null,
     line: game.spread.line, modelTotal: null, marketTotal: null,
     bookCount: game.data_quality.spread_books,
     aligned: null,
     whyLine: `Model margin ${game.model.margin > 0 ? "+" : ""}${game.model.margin} vs market spread ${game.market.spread ?? "n/a"}.`,
     publicSplits: game.publicSplits?.spread,
+    priceTrail: game.pickedPrices?.spread,
   });
 
   // Top grade across the three markets drives the card verdict pill.
