@@ -28,6 +28,7 @@ import type {
   PlaybookQuotaSnapshot,
   PlaybookSplitsHistoryResponse,
   PlaybookSplitsResponse,
+  PlaybookStartingPitchersResponse,
   PlaybookVenueWeatherResponse,
 } from "./types";
 
@@ -199,10 +200,14 @@ export class PlaybookClient {
     return this.get<PlaybookVenueWeatherResponse>("/v1/venue-weather", { league: "mlb" });
   }
 
+  mlbStartingPitchers(): Promise<PlaybookResult<PlaybookStartingPitchersResponse>> {
+    return this.get<PlaybookStartingPitchersResponse>("/v1/mlb/starting-pitchers");
+  }
+
   // NOTE: Playbook also exposes context endpoints (teams, injuries, recent
-  // form, head-to-head, MLB starters / pitcher-stats /
-  // strikeout-predictor). Their exact paths are NOT yet live-verified, so
-  // they are intentionally omitted here — add typed methods under the
+  // form, head-to-head, pitcher-stats / strikeout-predictor). Their exact
+  // paths are NOT yet live-verified, so they are intentionally omitted here —
+  // add typed methods under the
   // `o-mlb-playbook-context` ticket once each path is confirmed. Until then
   // callers can use get<T>(path) directly for one-off probing.
 }

@@ -173,6 +173,36 @@ export interface PlaybookVenueWeatherResponse {
   data: PlaybookVenueWeatherRow[];
 }
 
+// -- MLB starting-pitcher context -----------------------------------------
+export interface PlaybookStartingPitcher {
+  name?: string | null;
+  teamId?: string | null;
+  throws?: string | null;
+  playerKey?: string | null;
+  status?: string | null;
+  firstSeenAt?: string | null;
+  lastSeenAt?: string | null;
+}
+
+export interface PlaybookStartingPitchersRow {
+  gameId?: string;
+  startTime?: string;
+  homeTeamId?: string;
+  homeTeamName?: string;
+  awayTeamId?: string;
+  awayTeamName?: string;
+  starters?: {
+    home?: PlaybookStartingPitcher | null;
+    away?: PlaybookStartingPitcher | null;
+  };
+}
+
+export interface PlaybookStartingPitchersResponse {
+  count?: number;
+  requestsRemaining?: number;
+  data: PlaybookStartingPitchersRow[];
+}
+
 /** Quota state the client tracks from in-body `requestsRemaining`. */
 export interface PlaybookQuotaSnapshot {
   requestsRemaining: number | null;
