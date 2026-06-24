@@ -4385,6 +4385,24 @@ export async function GET(request: Request) {
     }
   }
 
+  // Dual-source public splits (Phase 2 DISPLAY) — flagged, MLB only, additive.
+  // Overlays moneyline/total publicSplits with the provider-resolved read
+  // (Playbook preferred fresh+complete, SharpAPI fallback, stale-but-valid so
+  // bars never disappear; never blended). Touches ONLY publicSplits — grades,
+  // predictions, model, and sharp_signals are unchanged. Default OFF; never
+  // breaks the response on error.
+  if (process.env.DUAL_SOURCE_PUBLIC_SPLITS_DISPLAY_ENABLED === "true" && sport === "mlb") {
+    try {
+      const { loadResolvedPublicSplitsForDisplay, overlayResolvedPublicSplits } = await import(
+        "@/lib/services/publicSplitsDisplayOverlay"
+      );
+      const resolved = await loadResolvedPublicSplitsForDisplay({ supabase, sport, slateDate: effectiveDate });
+      overlayResolvedPublicSplits(dtos, resolved);
+    } catch (e) {
+      console.warn(`dual-source public splits overlay skipped: ${(e as Error).message}`);
+    }
+  }
+
   const body: DailyEdgeResponse = {
     as_of: new Date().toISOString(),
     sport,
