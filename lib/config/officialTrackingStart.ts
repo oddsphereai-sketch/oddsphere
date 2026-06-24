@@ -20,6 +20,13 @@ export const OFFICIAL_TRACKING_START: Partial<Record<Sport, string>> = {
   // wnba: "2026-06-24",  // ← UNCOMMENT AT WNBA LAUNCH (with SPORT_DISPLAY_ORDER)
 };
 
+/**
+ * Sports that use the launch-boundary system. ONLY these are gated by
+ * isPublicallyTracked — every other sport (MLB/NBA/NHL/soccer) keeps its
+ * existing tracking behavior untouched (always returns true below).
+ */
+const BOUNDARIED_SPORTS = new Set<Sport>(["wnba"]);
+
 /** The official public-tracking start date for a sport, or null if not launched. */
 export function officialTrackingStart(sport: Sport): string | null {
   return OFFICIAL_TRACKING_START[sport] ?? null;
@@ -27,10 +34,13 @@ export function officialTrackingStart(sport: Sport): string | null {
 
 /**
  * Whether a (sport, slate_date) record may appear in the PUBLIC lifetime tally.
- * False for any sport without an official start (e.g. WNBA pre-launch) and for
- * any game before the start date. Use to gate grades into public aggregates.
+ * Non-boundaried sports → always true (no behavior change). Boundaried sports
+ * (WNBA) → only on/after their official start, and never before it's set. So
+ * WNBA pre-launch is excluded; at launch (start=launch date) public starts 0-0
+ * from that date forward, no backfill.
  */
 export function isPublicallyTracked(sport: Sport, slateDate: string): boolean {
+  if (!BOUNDARIED_SPORTS.has(sport)) return true;
   const start = officialTrackingStart(sport);
   return start != null && slateDate >= start;
 }

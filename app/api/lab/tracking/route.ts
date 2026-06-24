@@ -31,6 +31,7 @@
 
 import { supabase } from "@/lib/db/supabase";
 import { applyProductionSourceFilter } from "@/lib/db/productionFilter";
+import { officialTrackingStart } from "@/lib/config/officialTrackingStart";
 import type { Sport } from "@/lib/types/domain/Sport";
 import type {
   AllTimeAggregate,
@@ -501,6 +502,46 @@ async function loadSoccerGradeRows(): Promise<ResultRow[]> {
   return rows;
 }
 
+/**
+ * WNBA tracking bridge (ML / O-U / Spread) from modern prediction_grades, with
+ * the PUBLIC LAUNCH BOUNDARY applied. WNBA is excluded entirely until
+ * officialTrackingStart('wnba') is set (launch); then only slate_date >= that
+ * date counts — public lifetime starts 0-0 from launch, no backfill. Pre-launch
+ * gated records never reach the member-facing tally.
+ */
+async function loadWnbaGradeRows(): Promise<ResultRow[]> {
+  const start = officialTrackingStart("wnba");
+  if (start == null) return []; // pre-launch → WNBA fully excluded from public tracking
+  const { data: records, error: recErr } = await supabase
+    .from("prediction_records")
+    .select("id, market, slate_date")
+    .eq("sport", "wnba")
+    .gte("slate_date", start);
+  if (recErr || !records || records.length === 0) return [];
+  const byId = new Map<string, { market: string; slate_date: string }>();
+  for (const r of records as Array<{ id: string; market: string; slate_date: string }>) {
+    byId.set(String(r.id), { market: r.market, slate_date: String(r.slate_date).slice(0, 10) });
+  }
+  const ids = [...byId.keys()];
+  const rows: ResultRow[] = [];
+  const CHUNK = 500;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const slice = ids.slice(i, i + CHUNK);
+    const { data: grades, error: gErr } = await supabase
+      .from("prediction_grades")
+      .select("prediction_record_id, result")
+      .in("prediction_record_id", slice)
+      .in("result", ["win", "loss", "push"]);
+    if (gErr || !grades) continue;
+    for (const g of grades as Array<{ prediction_record_id: string; result: string }>) {
+      const rec = byId.get(String(g.prediction_record_id));
+      if (rec === undefined) continue;
+      rows.push({ sport: "wnba", market: rec.market, outcome: g.result, game_date: rec.slate_date, prediction_type: "game" });
+    }
+  }
+  return rows;
+}
+
 export async function GET(_request: Request) {
   // Pull all rows. Paginate when this crosses ~50k.
   const PAGE = 1000;
@@ -532,6 +573,13 @@ export async function GET(_request: Request) {
     allRows.push(...(await loadSoccerGradeRows()));
   } catch {
     // non-fatal: WC rows simply won't appear this request.
+  }
+
+  // WNBA bridge — gated by the public launch boundary (empty until launch).
+  try {
+    allRows.push(...(await loadWnbaGradeRows()));
+  } catch {
+    // non-fatal: WNBA rows simply won't appear this request.
   }
 
   const body: TrackingResponse = {
