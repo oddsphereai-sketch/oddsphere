@@ -36,6 +36,19 @@ const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
 const norm = (s: string) => String(s).replace(/[^a-z]/gi, "").toLowerCase();
 function erf(x: number) { const t = 1 / (1 + 0.3275911 * Math.abs(x)); const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return x >= 0 ? y : -y; }
 const Phi = (z: number) => 0.5 * (1 + erf(z / Math.SQRT2));
+// Inverse normal CDF (Acklam) — maps a win probability back to a z-score so the
+// projected margin can be derived coherently from the blended win prob.
+function probit(p: number): number {
+  const a = [-3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.38357751867269e2, -3.066479806614716e1, 2.506628277459239e0];
+  const b = [-5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1, -1.328068155288572e1];
+  const c = [-7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838e0, -2.549732539343734e0, 4.374664141464968e0, 2.938163982698783e0];
+  const d = [7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996e0, 3.754408661907416e0];
+  const pl = 0.02425, ph = 1 - pl;
+  let q: number, r: number;
+  if (p < pl) { q = Math.sqrt(-2 * Math.log(p)); return (((((c[0]! * q + c[1]!) * q + c[2]!) * q + c[3]!) * q + c[4]!) * q + c[5]!) / ((((d[0]! * q + d[1]!) * q + d[2]!) * q + d[3]!) * q + 1); }
+  if (p <= ph) { q = p - 0.5; r = q * q; return (((((a[0]! * r + a[1]!) * r + a[2]!) * r + a[3]!) * r + a[4]!) * r + a[5]!) * q / (((((b[0]! * r + b[1]!) * r + b[2]!) * r + b[3]!) * r + b[4]!) * r + 1); }
+  q = Math.sqrt(-2 * Math.log(1 - p)); return -(((((c[0]! * q + c[1]!) * q + c[2]!) * q + c[3]!) * q + c[4]!) * q + c[5]!) / ((((d[0]! * q + d[1]!) * q + d[2]!) * q + d[3]!) * q + 1);
+}
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
 // ── types ──
@@ -186,7 +199,7 @@ export function computeWnbaPrediction(
   const csH = coldAdj(gpH, true, ehN, eaN), csA = coldAdj(gpA, false, eaN, ehN);
   const eh = csH.rating, ea = csA.rating;
   const modelP = platt(dexp(-(eh + HFA - ea)));
-  const projMargin = ((eh + HFA - ea) / PPE) * 0.85;
+  // projMargin is derived from finalP AFTER the blend (coherence) — see below.
   const projTotal = (roll10(M.pf, g.h) + roll10(M.pa, g.a)) / 2 + (roll10(M.pf, g.a) + roll10(M.pa, g.h)) / 2;
   const minG = Math.min(gpH, gpA), unc = 0.5 * Math.exp(-minG / 8), sigM = SIG_M * (1 + unc), sigT = SIG_T * (1 + unc);
   const coldStart = csH.w > 0 || csA.w > 0;
@@ -201,6 +214,10 @@ export function computeWnbaPrediction(
   let finalP = mktPDec != null ? wMkt * mktPDec + (1 - wMkt) * modelP : modelP;
   const conflict = mktPDec != null && (modelP >= 0.5) !== (mktPDec >= 0.5);
   if (conflict && marketRel >= 0.8 && Math.abs(edge) < 0.04) finalP = 0.5 + (finalP - 0.5) * 0.5;
+
+  // COHERENCE: projected margin (→ score + spread basis) derived from the SAME
+  // blended win prob the ML uses, so the projected winner / ML / spread agree.
+  const projMargin = sigM * probit(clp(finalP));
 
   // sides
   const mlSide = finalP >= 0.5 ? hN : aN, mlConf = Math.round(Math.max(finalP, 1 - finalP) * 100);
@@ -298,7 +315,7 @@ export async function buildWnbaDailyEdgePreview(dateParam: string | null) {
     const csH = coldAdj(gpH, true, ehN, eaN), csA = coldAdj(gpA, false, eaN, ehN);
     const eh = csH.rating, ea = csA.rating;
     const modelP = platt(dexp(-(eh + HFA - ea)));
-    const projMargin = ((eh + HFA - ea) / PPE) * 0.85; // shrink — model overshoots favorites
+    // projMargin is derived from finalP AFTER the blend (coherence) — see below.
     const projTotal = (roll10(M.pf, g.h) + roll10(M.pa, g.a)) / 2 + (roll10(M.pf, g.a) + roll10(M.pa, g.h)) / 2;
     const minG = Math.min(gpH, gpA), unc = 0.5 * Math.exp(-minG / 8), sigM = SIG_M * (1 + unc), sigT = SIG_T * (1 + unc);
     const coldStart = csH.w > 0 || csA.w > 0;
@@ -313,6 +330,12 @@ export async function buildWnbaDailyEdgePreview(dateParam: string | null) {
     let finalP = mktP != null ? wMkt * mktP + (1 - wMkt) * modelP : modelP;
     const conflict = mktP != null && (modelP >= 0.5) !== (mktP >= 0.5);
     if (conflict && marketRel >= 0.8 && Math.abs(edge) < 0.04) finalP = 0.5 + (finalP - 0.5) * 0.5; // fighting clean market weakly → damp
+
+    // COHERENCE: the projected margin (→ score + spread basis) is derived from
+    // the SAME blended win prob the ML uses. So the projected winner, the ML
+    // pick, and the spread always tell one story (no ML-on-CHI while the score
+    // says POR). σ = sigM so a pick'em spread maps back exactly to the ML prob.
+    const projMargin = sigM * probit(clp(finalP));
 
     // ---- sides ----
     const mlSide = finalP >= 0.5 ? hN : aN, mlConf = Math.round(Math.max(finalP, 1 - finalP) * 100);
