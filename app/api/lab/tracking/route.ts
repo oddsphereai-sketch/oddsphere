@@ -47,7 +47,7 @@ import type {
 } from "@/app/lab/lib/labTypes";
 
 // ─── Display ordering ────────────────────────────────────────────────────
-const SPORT_DISPLAY_ORDER: Sport[] = ["mlb", "nba", "cbb", "nfl", "cfb", "nhl", "ucl", "soccer"];
+const SPORT_DISPLAY_ORDER: Sport[] = ["mlb", "nba", "wnba", "cbb", "nfl", "cfb", "nhl", "ucl", "soccer"];
 
 // ─── Sport × Market matrix definition ────────────────────────────────────
 // What we WANT to surface in the UI per sport, regardless of whether the

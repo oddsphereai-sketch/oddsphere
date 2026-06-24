@@ -1076,7 +1076,7 @@ export function SportRail({ sport }: { sport: Sport }) {
     // offseason NBA/NHL, per Daniel — but stays "Coming Soon" (live:false)
     // until its forward-evidence + tracking gate clears. Flip live:true to
     // launch it in place.
-    { key: "wnba", label: "WNBA", live: false, inSeason: true },
+    { key: "wnba", label: "WNBA", live: true, inSeason: true },
     { key: "nba", label: "NBA", live: true, inSeason: false },
     { key: "nhl", label: "NHL", live: true, inSeason: false },
     { key: "nfl", label: "NFL", live: false },
