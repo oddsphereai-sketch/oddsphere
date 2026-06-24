@@ -164,7 +164,7 @@ export function computeWnbaPrediction(
     const homeIsBdlHome = x.h === g.h;
     if (x.mkt === "moneyline" && x.odds != null) ((x.selType === "home") === homeIsBdlHome ? mlH : mlA).push({ book: x.book, odds: x.odds });
     if (x.mkt === "point_spread" && x.line != null && Math.abs(x.line) < 40 && (x.selType === "home") === homeIsBdlHome) { spBooks.push({ sportsbook: x.book, line_value: x.line }); if (x.sharp) spS.push(x.line); }
-    if (x.mkt === "total_points" && x.selType === "over" && x.line != null && x.line > 120 && x.line < 220) { toBooks.push({ sportsbook: x.book, line_value: x.line }); if (x.sharp) toS.push(x.line); }
+    if (x.mkt === "total_points" && (x.selType === "over" || x.selType === "under") && x.line != null && x.line > 120 && x.line < 220) { toBooks.push({ sportsbook: x.book, line_value: x.line }); if (x.sharp) toS.push(x.line); }
   }
   const bP: number[] = [], sP: number[] = [];
   for (const h of mlH) { const a = mlA.find((z) => z.book === h.book); if (a) { const p = amProb(h.odds) / (amProb(h.odds) + amProb(a.odds)); bP.push(p); if (SHARP_BOOKS.has(h.book)) sP.push(p); } }
