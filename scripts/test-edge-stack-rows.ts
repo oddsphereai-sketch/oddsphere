@@ -92,8 +92,8 @@ function testSourceLabelHelper() {
     marketSourceLabel("splits_consensus", "splits_consensus") === "splits consensus"
   );
   check(
-    `"pinnacle_only" → "Pinnacle fair"`,
-    marketSourceLabel("pinnacle_only", null) === "Pinnacle fair"
+    `"pinnacle_only" → "market fair"`,
+    marketSourceLabel("pinnacle_only", null) === "market fair"
   );
   check(
     `"two_sided_consensus" with book → book name as-is`,
@@ -246,22 +246,22 @@ function testPinnacleEvPreserved() {
   });
   const rows = buildEdgeStackRows("moneyline", withEv);
   // R-19 Phase 5j Fix 3 — when pinnacleEvPct is present, label is now
-  // "Pinnacle EV" (renamed from "Market Value") so members understand
-  // the quantified delta is Pinnacle's EV percentage.
-  const marketValue = rows.find((r) => r.label === "Pinnacle EV");
+  // "Market EV" so members understand the quantified delta is an EV
+  // percentage rather than just source attribution.
+  const marketValue = rows.find((r) => r.label === "Market EV");
 
   check(
-    `Pinnacle EV: shows EV when pinnacleEvPct is set`,
+    `Market EV: shows EV when pinnacleEvPct is set`,
     marketValue?.delta === "+2.5%",
     `got: "${marketValue?.delta}"`
   );
   check(
-    `Pinnacle EV: evidence is "Pinnacle vs market price"`,
-    marketValue?.evidence === "Pinnacle vs market price",
+    `Market EV: evidence is "Fair price vs market price"`,
+    marketValue?.evidence === "Fair price vs market price",
     `got: "${marketValue?.evidence}"`
   );
   check(
-    `Pinnacle EV: tone is emerald (positive EV)`,
+    `Market EV: tone is emerald (positive EV)`,
     marketValue?.tone === "emerald"
   );
 }
@@ -281,21 +281,21 @@ function testTrulyUnavailable() {
   const rows = buildEdgeStackRows("moneyline", empty);
   const modelEdge = rows.find((r) => r.label === "Model Edge");
   // R-19 Phase 5j Fix 3 — when nothing is available, label stays
-  // "Pinnacle EV" so the unavailable indicator is honest about what
-  // is missing (the Pinnacle EV check, not just any "market value").
-  const marketValue = rows.find((r) => r.label === "Pinnacle EV");
+  // "Market EV" so the unavailable indicator is honest about what is
+  // missing: a quantified market-edge check.
+  const marketValue = rows.find((r) => r.label === "Market EV");
 
   check(
     `Model Edge: shows "market unavailable" fallback`,
     (modelEdge?.evidence ?? "").includes("market unavailable")
   );
   check(
-    `Pinnacle EV: shows "Pinnacle vs market price" + "unavailable"`,
-    marketValue?.evidence === "Pinnacle vs market price" &&
+    `Market EV: shows "Fair price vs market price" + "unavailable"`,
+    marketValue?.evidence === "Fair price vs market price" &&
       marketValue?.delta === "unavailable"
   );
   check(
-    `Pinnacle EV: tone is gray for unavailable`,
+    `Market EV: tone is gray for unavailable`,
     marketValue?.tone === "gray"
   );
 }
@@ -381,8 +381,8 @@ function testSplitsConsensusTotalNoFakeNoVig() {
   });
   const rows = buildEdgeStackRows("total", totalSplits);
   const modelEdge = rows.find((r) => r.label === "Model Edge");
-  // R-19 Phase 5j Fix 3 — label is "Pinnacle EV" in the no-data branch.
-  const marketValue = rows.find((r) => r.label === "Pinnacle EV");
+  // R-19 Phase 5j Fix 3 — label is "Market EV" in the no-data branch.
+  const marketValue = rows.find((r) => r.label === "Market EV");
 
   // Total line is still displayed via the totals path
   check(
@@ -392,16 +392,16 @@ function testSplitsConsensusTotalNoFakeNoVig() {
   );
   // Market value should be honest about no price-check data
   check(
-    `Pinnacle EV: shows "unavailable" when no marketImpliedPct + no EV`,
-    marketValue?.evidence === "Pinnacle vs market price" &&
+    `Market EV: shows "unavailable" when no marketImpliedPct + no EV`,
+    marketValue?.evidence === "Fair price vs market price" &&
       marketValue?.delta === "unavailable"
   );
 }
 
-// ─── Money vs Bets + Line Move unchanged ─────────────────────────────
+// ─── Money vs Bets + Line Move ───────────────────────────────────────
 
 function testUnchangedRows() {
-  section("Money vs Bets + Line Move: unchanged by R-16F-B");
+  section("Money vs Bets + Line Move");
 
   const withSplits = baseMarket({
     moneyPct: 80,
@@ -424,6 +424,23 @@ function testUnchangedRows() {
   check(
     `Line Move: present when both open and current exist`,
     lineMove?.delta !== undefined && lineMove?.evidence !== "Open → Current"
+  );
+
+  const resolvedSplits = baseMarket({
+    pick: "ATL",
+    moneyPct: 80,
+    betsPct: 30,
+    publicSplits: [
+      { side: "away", label: "ATL", moneyPct: 57, betsPct: 56 },
+      { side: "home", label: "GS", moneyPct: 43, betsPct: 44 },
+    ],
+  });
+  const resolvedRows = buildEdgeStackRows("moneyline", resolvedSplits);
+  const resolvedMoneyBets = resolvedRows.find((r) => r.label === "Money vs Bets");
+  check(
+    `Money vs Bets: evidence matches resolved Public Splits bars`,
+    resolvedMoneyBets?.evidence === "Money 57% / Bets 56%",
+    `got ${resolvedMoneyBets?.evidence ?? "missing"}`
   );
 }
 

@@ -13,6 +13,7 @@ import {
   buildLineMovementSnapshot,
   buildDataIntegritySnapshot,
   applyPlayGradeGate,
+  GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
 } from "../lib/services/predictionRecordService";
 
 // Self-consistent expected-grade helper: apply the production gate to a record's
@@ -148,6 +149,70 @@ console.log("\n━━━ V2.1 metadata propagation ━━━");
   check("Data quality tier=high", ml.data_quality_tier === "high");
   check("Provisional=false", ml.provisional === false);
   check("snapshot_json preserved", ml.snapshot_json !== null && (ml.snapshot_json as Record<string, unknown>).model_used === "v2_1");
+}
+
+console.log("\n━━━ MLB total Under Best Angle quality gate ━━━");
+{
+  const lowProbUnderPred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 62,
+    sport_specific: {
+      ...v21SportSpecific,
+      ou_play_grade: "best_angle",
+      ou_best_angle_eligible: true,
+      v2_2_audit: {
+        market_total: 8.5,
+        ou_model_prob: GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB - 0.01,
+        ou_market_prob: 0.52,
+        ou_edge_pct: 17,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, lowProbUnderPred]]),
+    abbrevByTeamId,
+  });
+  const ou = recs.find((r) => r.market === "total")!;
+  const ba = (ou.snapshot_json as any)?.best_angle_resolution;
+  check("low-prob Under pick still writes/tracks", ou.pick === "under" && ou.side === "under" && ou.no_bet === false);
+  check("low-prob Under is not Best Angle", ou.best_angle === false);
+  check("low-prob Under play_grade demotes below Best Angle", ou.play_grade !== "best_angle");
+  check("low-prob Under demotion is snapshotted", ba?.total_under_quality_gate === true && ba?.demote_reason === "total_under_quality_gate");
+}
+{
+  const highProbUnderPred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 72,
+    sport_specific: {
+      ...v21SportSpecific,
+      ou_play_grade: "best_angle",
+      ou_best_angle_eligible: true,
+      v2_2_audit: {
+        market_total: 8.5,
+        ou_model_prob: GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
+        ou_market_prob: 0.52,
+        ou_edge_pct: 18,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, highProbUnderPred]]),
+    abbrevByTeamId,
+  });
+  const ou = recs.find((r) => r.market === "total")!;
+  const ba = (ou.snapshot_json as any)?.best_angle_resolution;
+  check("70%+ Under remains Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
+  check("70%+ Under quality gate is false", ba?.total_under_quality_gate === false);
 }
 
 // ── launch_day flag ─────────────────────────────────────────────────

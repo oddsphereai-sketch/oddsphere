@@ -176,6 +176,7 @@ export const GATE_EV_FLOOR = 0;
 export const GATE_LEAN_MIN_MODEL_PROB = 0.55;
 export const GATE_LOW_CONVICTION_RUNGAP = 0.5;
 export const GATE_LOW_TOTAL_LINE = 8;
+export const GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB = 0.70;
 export interface PlayGradeGateInputs {
   modelProb: number | null;
   americanOdds: number | null;
@@ -216,6 +217,11 @@ export function applyPlayGradeGate(grade: string | null, x: PlayGradeGateInputs)
     return "market_aligned";
   }
   return grade;
+}
+
+function applyMlbTotalUnderBestAngleGate(grade: string | null, demote: boolean): string | null {
+  if (!demote) return grade;
+  return grade === "best_angle" ? "lean" : grade;
 }
 
 /**
@@ -1243,6 +1249,17 @@ function buildOuRecord(
   const finalOuModelProb = ouFlipped ? ouFlip.recommendationConfidence / 100 : ouModelProb;
   const finalOuMarketProb = ouFlipped ? ouFlip.flippedMarketProb : ouMarketProb;
   const finalOuEdge = ouFlipped ? null : ouEdgePp;
+  const ouBaseBestAngle = ouFlipped || ouDivergenceStandDown ? false : ouBest.bestAngle;
+  const ouTotalUnderBestAngleDemote =
+    ouBaseBestAngle &&
+    finalOuPick === "under" &&
+    finalOuModelProb !== null &&
+    finalOuModelProb < GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB;
+  const ouFinalBestAngle = ouBaseBestAngle && !ouTotalUnderBestAngleDemote;
+  const ouPublicPlayGrade = applyMlbTotalUnderBestAngleGate(
+    readPublicPlayGrade(sp.ou_play_grade),
+    ouTotalUnderBestAngleDemote,
+  );
   const explicitOuNoBetReason = readStringOrNull(sp.ou_no_bet_reason);
   const ouNoBet = ouDivergenceStandDown || isExplicitNoBetReason(explicitOuNoBetReason);
   const ouNoBetReason = ouDivergenceStandDown
@@ -1275,14 +1292,14 @@ function buildOuRecord(
     // carry no model grade (the override is not a model call); BA forced false.
     play_grade: ouFlipped
       ? null
-      : applyPlayGradeGate(readPublicPlayGrade(sp.ou_play_grade), {
-          modelProb: ouModelProb, americanOdds: ouOddsAmerican, market: "total",
+      : applyPlayGradeGate(ouPublicPlayGrade, {
+          modelProb: finalOuModelProb, americanOdds: finalOuOdds, market: "total",
           runGapAbs: null, totalLine: ouBetLine,
         }),
     prediction_type: readStringOrNull(sp.ou_prediction_type),
     // Phase 6B.11 + MLB-P0 — same resolution as ML; see resolveMlbBestAngle.
     // A flipped or stood-down divergent row is never Best Angle.
-    best_angle: ouFlipped || ouDivergenceStandDown ? false : ouBest.bestAngle,
+    best_angle: ouFinalBestAngle,
     no_bet: ouNoBet,
     no_bet_reason: ouNoBetReason,
     market_aligned: readBoolish(sp.ou_market_aligned),
@@ -1305,8 +1322,10 @@ function buildOuRecord(
         base_eligible: readBoolish(sp.ou_best_angle_eligible),
         requires_confirmation: readBoolish(v22.ou_requires_market_confirmation),
         line_direction: readLineDirection(ouLineMovement),
-        demote_reason: ouBest.demoteReason,
-        final_best_angle: ouBest.bestAngle,
+        demote_reason: ouTotalUnderBestAngleDemote ? "total_under_quality_gate" : ouBest.demoteReason,
+        total_under_quality_gate: ouTotalUnderBestAngleDemote,
+        total_under_min_model_prob: GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
+        final_best_angle: ouFinalBestAngle,
       },
       data_integrity: buildDataIntegritySnapshot(sp, oddsForGame, "total"),
       // Phase 6B.28 — same rich-and-frozen substrate as ML.

@@ -131,6 +131,26 @@ function pickFallbackFor(market: MarketKey, sport: Sport): string {
   return market === "first_inning" ? "Toss-Up" : "Held";
 }
 
+function resolvedPickedSplit(
+  m: MarketEdgeDto,
+): { moneyPct: number | null; betsPct: number | null } {
+  if (m.publicSplits.length > 0 && m.pick !== null) {
+    const pick = m.pick.toLowerCase();
+    const split =
+      m.publicSplits.find((s) => pick === s.label.toLowerCase()) ??
+      m.publicSplits.find((s) => pick.includes(s.label.toLowerCase())) ??
+      (pick.startsWith("over")
+        ? m.publicSplits.find((s) => s.side === "over")
+        : pick.startsWith("under")
+          ? m.publicSplits.find((s) => s.side === "under")
+          : undefined);
+    if (split !== undefined) {
+      return { moneyPct: split.moneyPct, betsPct: split.betsPct };
+    }
+  }
+  return { moneyPct: m.moneyPct, betsPct: m.betsPct };
+}
+
 /**
  * Sport-aware matchup separator. International football is neutral-venue
  * so " vs " is the convention; MLB/NBA/NHL use the home/away "@".
@@ -449,11 +469,13 @@ function buildEdgeRow(market: MarketKey, m: MarketEdgeDto, sport: Sport = "mlb")
   }
 
   // 3. Bet split — only when both halves are present.
-  if (m.moneyPct !== null && m.betsPct !== null) {
+  const split = resolvedPickedSplit(m);
+  if (split.moneyPct !== null && split.betsPct !== null) {
+    const gap = split.moneyPct - split.betsPct;
     return {
       label: "Bet split",
-      value: `${m.moneyPct}% money / ${m.betsPct}% bets`,
-      tone: m.moneyPct - m.betsPct >= 3 ? "emerald" : m.moneyPct - m.betsPct <= -3 ? "amber" : "gray",
+      value: `${split.moneyPct}% money / ${split.betsPct}% bets`,
+      tone: gap >= 3 ? "emerald" : gap <= -3 ? "amber" : "gray",
     };
   }
 
@@ -500,7 +522,8 @@ function buildCardEdgeChip(m: MarketEdgeDto): { label: string; tone: EdgeRow["to
     const gap = (m.modelProb - m.marketFairProb) * 100;
     if (gap >= 1.5) return { label: "Model edge", tone: "sky" };
   }
-  if (m.moneyPct !== null && m.betsPct !== null && m.moneyPct - m.betsPct >= 5) {
+  const split = resolvedPickedSplit(m);
+  if (split.moneyPct !== null && split.betsPct !== null && split.moneyPct - split.betsPct >= 5) {
     return { label: "Market support", tone: "emerald" };
   }
   return null;

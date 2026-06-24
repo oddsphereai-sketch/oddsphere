@@ -250,8 +250,12 @@ export function buildEdgeStackRows(
   // gap. Other sports can reuse the `first_inning` DTO slot for spread
   // or puck line, so those must read from `publicSplits`.
   const pickedSplit = splitForPick(marketData);
-  const moneyPct = marketData.moneyPct ?? pickedSplit?.moneyPct ?? null;
-  const betsPct = marketData.betsPct ?? pickedSplit?.betsPct ?? null;
+  // Prefer the resolved two-sided display splits. MLB's Playbook/SharpAPI
+  // overlay updates publicSplits after the legacy picked-side scalars are
+  // built, so scalars can be stale while the Market Pulse bars are correct.
+  // Supporting Evidence must match the bars users see.
+  const moneyPct = pickedSplit?.moneyPct ?? marketData.moneyPct ?? null;
+  const betsPct = pickedSplit?.betsPct ?? marketData.betsPct ?? null;
   const haveMoney = moneyPct !== null;
   const haveBets = betsPct !== null;
   if (haveMoney && haveBets) {
