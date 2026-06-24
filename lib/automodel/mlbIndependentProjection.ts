@@ -468,6 +468,18 @@ function workloadWeightedPitchingFactor(
   return { factor: clampFactor(factor), workload };
 }
 
+function workloadCandidatePitchingFactor(
+  starterFactorValue: number,
+  bullpenFactorValue: number,
+  starter: StarterSnapshot | null
+): number {
+  const weighted = workloadWeightedPitchingFactor(starterFactorValue, bullpenFactorValue, starter);
+  if (weighted.workload.role === "normal_starter") {
+    return starterFactorValue * bullpenFactorValue;
+  }
+  return weighted.factor;
+}
+
 function parkFactor(snap: GameSnapshot): number {
   const pf = snap.ballpark?.park_factor_runs;
   if (typeof pf === "number" && pf > 0) {
@@ -553,6 +565,15 @@ export type V22IndependentProjection = {
   data_quality_tier: "high" | "medium" | "low" | "fallback";
 };
 
+export type ProjectIndependentOptions = {
+  /**
+   * Replay-only candidate mode. Defaults false, preserving production
+   * behavior. When true, starter and bullpen pitching are blended by expected
+   * workload instead of both being applied as full-strength factors.
+   */
+  useWorkloadPitching?: boolean;
+};
+
 function deriveQualityTier(audit: V22FeatureAudit): "high" | "medium" | "low" | "fallback" {
   // Threshold-based, scaled to the 14-position audit. Must have starter
   // stats on both sides + team OPS on both sides to qualify above fallback.
@@ -578,6 +599,7 @@ function deriveQualityTier(audit: V22FeatureAudit): "high" | "medium" | "low" | 
  */
 export function projectIndependent(
   snap: GameSnapshot,
+  opts: ProjectIndependentOptions = {},
 ): V22IndependentProjection {
   const audit = auditFeatures(snap);
 
@@ -587,6 +609,12 @@ export function projectIndependent(
   const awayBullpen = bullpenFactor(snap.away_team);
   const homeStarterFactor = pitcherFactor(snap.home_starter);
   const awayStarterFactor = pitcherFactor(snap.away_starter);
+  const homeOpponentPitching = opts.useWorkloadPitching === true
+    ? workloadCandidatePitchingFactor(awayStarterFactor, awayBullpen, snap.away_starter)
+    : awayStarterFactor * awayBullpen;
+  const awayOpponentPitching = opts.useWorkloadPitching === true
+    ? workloadCandidatePitchingFactor(homeStarterFactor, homeBullpen, snap.home_starter)
+    : homeStarterFactor * homeBullpen;
   const park = parkFactor(snap);
   const weather = weatherFactor(snap);
   const handHome = handednessFactor(snap.home_team, snap.away_starter);
@@ -600,16 +628,14 @@ export function projectIndependent(
   const homeRunsBase =
     V22_LEAGUE_AVG_RUNS_PER_GAME *
     homeOffense *
-    awayStarterFactor *
-    awayBullpen *
+    homeOpponentPitching *
     park *
     weather *
     handHome;
   const awayRunsBase =
     V22_LEAGUE_AVG_RUNS_PER_GAME *
     awayOffense *
-    homeStarterFactor *
-    homeBullpen *
+    awayOpponentPitching *
     park *
     weather *
     handAway;

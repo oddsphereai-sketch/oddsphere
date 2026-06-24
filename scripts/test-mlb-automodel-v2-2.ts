@@ -338,6 +338,30 @@ async function main() {
       `actual=${proj.feature_audit.weather.source}`);
   }
   {
+    const snap = buildSnapshot();
+    const current = projectIndependent(snap);
+    const candidate = projectIndependent(snap, { useWorkloadPitching: true });
+    check("workload candidate: normal-starter fixture leaves total unchanged",
+      near(candidate.total_expected_runs, current.total_expected_runs, 0.001));
+    check("workload candidate: normal-starter fixture leaves margin unchanged",
+      near(candidate.home_run_diff, current.home_run_diff, 0.001));
+  }
+  {
+    const snap = buildSnapshot({
+      awayStarter: buildStarter({
+        season_era: 2.50,
+        season_games_started: 1,
+        season_games_pitched: 17,
+        season_innings_pitched: 24,
+      }),
+      awayTeam: buildTeam({ bullpen_era_proxy: 5.20 }),
+    });
+    const current = projectIndependent(snap);
+    const candidate = projectIndependent(snap, { useWorkloadPitching: true });
+    check("workload candidate: opener profile changes projection",
+      !near(candidate.total_expected_runs, current.total_expected_runs, 0.001));
+  }
+  {
     // Home-field differential (2026-06-16) — total-neutral 0.22-run MARGIN edge,
     // applied +0.11 home / −0.11 away so the projected TOTAL is unaffected.
     const proj = projectIndependent(buildSnapshot()); // symmetric inputs

@@ -17,6 +17,7 @@
     "mlb:model-research-report": "tsx --env-file=.env.local scripts/mlb-model-research-report.ts",
     "audit:daily-edge": "tsx --env-file=.env.local scripts/operator/audit-daily-edge-integrity.ts",
     "audit:slate-visibility": "tsx --env-file=.env.local scripts/operator/audit-slate-visibility.ts",
+    "audit:mlb-workload-replay": "tsx --env-file=.env.local scripts/operator/mlb-workload-pitching-replay.ts",
     "test:tracking": "tsx scripts/test-tracking.ts",
     "test:scores-model": "tsx scripts/test-scores-model.ts",
     "test:cron-infra": "tsx --env-file=.env.local scripts/test-cron-infra.ts",
