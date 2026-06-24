@@ -258,6 +258,27 @@ export async function refreshWnbaLines(opts: {
   // bucketing that splits an ET game-day). slate_date := computeSlateDate(tip).
   const slateRebuckets: RefreshWnbaLinesResult["slateRebuckets"] = [];
   const newSlateByGame = new Map<number, string>();
+  const windowIds = games.map((g) => g.id as number);
+  const { data: existingPublicRows } = windowIds.length
+    ? await supabase
+        .from("sharp_signals")
+        .select("game_id, market_type, side, public_betting_pct, public_money_pct, computed_at")
+        .in("game_id", windowIds)
+        .in("market_type", ["moneyline", "total"])
+    : { data: [] as Record<string, unknown>[] };
+  const existingPublicByKey = new Map<string, {
+    betting: number | null;
+    money: number | null;
+    computedAt: string | null;
+  }>();
+  for (const row of existingPublicRows ?? []) {
+    if (row.public_betting_pct == null && row.public_money_pct == null) continue;
+    existingPublicByKey.set(`${row.game_id}::${row.market_type}::${row.side}`, {
+      betting: row.public_betting_pct as number | null,
+      money: row.public_money_pct as number | null,
+      computedAt: row.computed_at as string | null,
+    });
+  }
 
   for (const [gameId, rows] of oddsByGame.entries()) {
     const books = new Set(rows.map((r) => r.book));
@@ -301,12 +322,15 @@ export async function refreshWnbaLines(opts: {
       const sum = pa + pb;
       for (const [side, p] of [[sideA, pa / sum], [sideB, pb / sum]] as [string, number][]) {
         signalDeleteKeys.add(`${gameId}::${market}::${side}`);
+        const existingPublic = existingPublicByKey.get(`${gameId}::${market}::${side}`);
         signalsPayload.push({
           game_id: gameId, market_type: market, side,
           pinnacle_fair_probability: r4(p), is_plus_ev: false, ev_pct: null,
           has_steam_move: false, steam_detected_at: null, steam_books_count: null,
           has_reverse_line_movement: false, rlm_direction: null,
-          public_betting_pct: null, public_money_pct: null, computed_at: fetchedAt,
+          public_betting_pct: existingPublic?.betting ?? null,
+          public_money_pct: existingPublic?.money ?? null,
+          computed_at: existingPublic?.computedAt ?? fetchedAt,
         });
       }
     }
@@ -330,7 +354,6 @@ export async function refreshWnbaLines(opts: {
   // scheduled games (removes stale / duplicate-meeting rows), then insert the
   // freshly matched set. `line_history` stays append-only (history preserved).
   void deleteKeys;
-  const windowIds = games.map((g) => g.id as number);
   if (windowIds.length) {
     const { error } = await supabase.from("lines").delete().in("game_id", windowIds).is("player_id", null);
     if (error) errors.push(`lines window clear: ${error.message}`);
