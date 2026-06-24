@@ -1689,6 +1689,8 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const marketRead = find("Market Read");
   const book = marketSourceLabel(marketData.marketDataQuality, marketData.marketSource) ?? marketData.marketSource;
   const hasTrail = marketData.lineOpenAmerican != null || marketData.priceAmerican != null;
+  const showLineNumberSection = market === "total" || (shellSport === "wnba" && market === "first_inning");
+  const lineNumberLabel = market === "total" ? "Total Line" : "Spread Line";
   return (
     <div>
       <p className="text-[9.5px] uppercase tracking-[0.14em] font-semibold text-gray-300 mb-1.5">
@@ -1706,13 +1708,13 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
         {splits && <CleanEvRow label="Splits" delta={splits.delta} tone={splits.tone}>{splits.evidence}</CleanEvRow>}
       </div>
 
-      {/* Total Line — dedicated section for totals, ALWAYS shown. If the line
-          moved (trusted book) it shows prev → current + direction; otherwise it
-          shows the current line as "no change". */}
-      {market === "total" && (
+      {/* Betting number — totals everywhere, WNBA spread in the repurposed
+          first_inning slot. Shows prev → current when the number moved;
+          otherwise shows the current line as "no change". */}
+      {showLineNumberSection && (
         <div className="border-t border-white/[0.04] py-2.5">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Total Line</p>
+            <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">{lineNumberLabel}</p>
             {lineMove ? (
               <span className="flex items-center gap-2">
                 <span className="text-[13px] font-bold text-gray-100 tabular-nums">{lineMove.evidence}</span>

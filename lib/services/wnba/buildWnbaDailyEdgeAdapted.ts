@@ -124,6 +124,7 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
       data_quality: (ss.data_quality as PreviewGame["data_quality"]) ?? { ml_books: 0, spread_books: 0, total_books: 0, flags: [] },
       publicSplits: buildWnbaPublicSplits(
         signalsByGame.get(g.id as number) ?? [],
+        linesByGame.get(g.id as number) ?? [],
         home.abbreviation as string,
         away.abbreviation as string,
         splitsAsOf,
@@ -160,12 +161,35 @@ const PUBLIC_SPLIT_STALE_MS = 6 * 60 * 60 * 1000;
  */
 function buildWnbaPublicSplits(
   rows: Array<{ market_type: string; side: string; public_betting_pct: number | null; public_money_pct: number | null; computed_at: string | null }>,
+  lineRows: WnbaLineRow[],
   homeAbbr: string,
   awayAbbr: string,
   asOf: number
 ): { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[]; spread: WnbaPublicSplit[] } {
-  const labelFor = (market: string, side: string): string =>
-    market === "total" ? (side === "over" ? "Over" : "Under") : side === "home" ? homeAbbr : awayAbbr;
+  const fmtSpread = (line: number): string => `${line > 0 ? "+" : ""}${line}`;
+  const spreadLineForSide = (side: string): number | null => {
+    const vals = lineRows
+      .filter((r) => r.market_type === "spread" && r.side === side && r.line_value !== null)
+      .map((r) => r.line_value as number);
+    const direct = medianNumber(vals);
+    if (direct !== null) return direct;
+    const opp = side === "home" ? "away" : side === "away" ? "home" : null;
+    if (opp === null) return null;
+    const oppVals = lineRows
+      .filter((r) => r.market_type === "spread" && r.side === opp && r.line_value !== null)
+      .map((r) => r.line_value as number);
+    const oppLine = medianNumber(oppVals);
+    return oppLine !== null ? -oppLine : null;
+  };
+  const labelFor = (market: string, side: string): string => {
+    if (market === "total") return side === "over" ? "Over" : "Under";
+    const abbr = side === "home" ? homeAbbr : awayAbbr;
+    if (market === "spread") {
+      const line = spreadLineForSide(side);
+      if (line !== null) return `${abbr} ${fmtSpread(line)}`;
+    }
+    return abbr;
+  };
   const mk = (market: "moneyline" | "total" | "spread"): WnbaPublicSplit[] =>
     rows
       .filter((r) => r.market_type === market && (r.public_betting_pct !== null || r.public_money_pct !== null))
@@ -229,6 +253,39 @@ function pickedPrice(rows: WnbaLineRow[], market: string, side: string | null, l
   return medianNumber(candidates.map((r) => r.odds_american as number));
 }
 
+function impliedProb(odds: number | null): number | null {
+  if (odds === null || odds === 0) return null;
+  return odds > 0 ? 100 / (odds + 100) : -odds / (-odds + 100);
+}
+
+function oppositeSide(market: string, side: string | null): string | null {
+  if (side === null) return null;
+  if (market === "moneyline" || market === "spread") {
+    if (side === "home") return "away";
+    if (side === "away") return "home";
+  }
+  if (market === "total") {
+    if (side === "over") return "under";
+    if (side === "under") return "over";
+  }
+  return null;
+}
+
+function oppositeLine(market: string, line: number | null): number | null {
+  if (line === null) return null;
+  return market === "spread" ? -line : line;
+}
+
+function pickedNoVigProb(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
+  const pickOdds = pickedPrice(rows, market, side, line);
+  const opp = oppositeSide(market, side);
+  const oppOdds = pickedPrice(rows, market, opp, oppositeLine(market, line));
+  const pickImp = impliedProb(pickOdds);
+  const oppImp = impliedProb(oppOdds);
+  if (pickImp === null || oppImp === null || pickImp + oppImp <= 0) return null;
+  return pickImp / (pickImp + oppImp);
+}
+
 function latestPickedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
   const candidates = pickedRows(rows, market, side, line).filter((r) => r.recorded_at);
   if (candidates.length === 0) return null;
@@ -266,6 +323,30 @@ function priceTrail(rows: WnbaLineRow[], market: string, side: string | null, li
   return { current, open, previous };
 }
 
+function currentLineValue(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
+  if (side === null) return null;
+  const sideRows = rows.filter((r) => r.market_type === market && r.side === side && r.line_value !== null);
+  if (sideRows.length === 0) return null;
+  if (line !== null) {
+    const exact = sideRows.filter((r) => closeLine(r.line_value, line));
+    if (exact.length > 0) return medianNumber(exact.map((r) => r.line_value as number));
+  }
+  return medianNumber(sideRows.map((r) => r.line_value as number));
+}
+
+function lineMove(rows: WnbaLineRow[], market: string, side: string | null, currentLine: number | null): { prev: number | null; next: number | null } {
+  if (side === null || currentLine === null) return { prev: null, next: currentLine };
+  const vals: number[] = [];
+  for (const r of rows) {
+    if (r.market_type !== market || r.side !== side || r.line_value === null) continue;
+    if (vals.length === 0 || !closeLine(vals[vals.length - 1]!, r.line_value)) vals.push(r.line_value);
+  }
+  for (let i = vals.length - 1; i >= 0; i--) {
+    if (!closeLine(vals[i]!, currentLine)) return { prev: vals[i]!, next: currentLine };
+  }
+  return { prev: null, next: currentLine };
+}
+
 function buildWnbaPickedPrices(
   rows: WnbaLineRow[],
   historyRows: WnbaLineRow[],
@@ -296,15 +377,19 @@ function buildWnbaPickedPrices(
   const mlCurrent = pickedPrice(rows, "moneyline", mlSide, null) ?? latestPickedPrice(historyRows, "moneyline", mlSide, null);
   const totalCurrent = pickedPrice(rows, "total", totalSide, total.line) ?? latestPickedPrice(historyRows, "total", totalSide, total.line);
   const spreadCurrent = pickedPrice(rows, "spread", spreadSide, pickedSpreadLine) ?? latestPickedPrice(historyRows, "spread", spreadSide, pickedSpreadLine);
+  const totalCurrentLine = currentLineValue(rows, "total", totalSide, total.line) ?? total.line;
+  const spreadCurrentLine = currentLineValue(rows, "spread", spreadSide, pickedSpreadLine) ?? pickedSpreadLine;
+  const totalLineMove = lineMove(historyRows, "total", totalSide, totalCurrentLine);
+  const spreadLineMove = lineMove(historyRows, "spread", spreadSide, spreadCurrentLine);
   return {
-    ml: priceTrail(historyRows, "moneyline", mlSide, null, mlCurrent),
-    total: priceTrail(historyRows, "total", totalSide, total.line, totalCurrent),
-    spread: priceTrail(historyRows, "spread", spreadSide, pickedSpreadLine, spreadCurrent),
+    ml: { ...priceTrail(historyRows, "moneyline", mlSide, null, mlCurrent), marketProb: pickedNoVigProb(rows, "moneyline", mlSide, null), lineMovePrev: null, lineMoveNext: null },
+    total: { ...priceTrail(historyRows, "total", totalSide, total.line, totalCurrent), marketProb: pickedNoVigProb(rows, "total", totalSide, total.line), lineMovePrev: totalLineMove.prev, lineMoveNext: totalLineMove.next },
+    spread: { ...priceTrail(historyRows, "spread", spreadSide, pickedSpreadLine, spreadCurrent), marketProb: pickedNoVigProb(rows, "spread", spreadSide, pickedSpreadLine), lineMovePrev: spreadLineMove.prev, lineMoveNext: spreadLineMove.next },
   };
 }
 
 type PreviewMarket = { side: string | null; confidence: number | null; grade: PreviewModelGrade | null };
-type WnbaPriceTrail = { current: number | null; open: number | null; previous: number | null };
+type WnbaPriceTrail = { current: number | null; open: number | null; previous: number | null; marketProb?: number | null; lineMovePrev?: number | null; lineMoveNext?: number | null };
 type WnbaPickedPrices = { ml: WnbaPriceTrail; total: WnbaPriceTrail; spread: WnbaPriceTrail };
 type PreviewGame = {
   game_id: number;
@@ -401,6 +486,8 @@ function buildMarket(opts: {
     priceAmerican,
     lineOpenAmerican: opts.priceTrail?.open ?? null,
     lastMovePrevAmerican: opts.priceTrail?.previous ?? null,
+    lastMoveLinePrev: opts.priceTrail?.lineMovePrev ?? null,
+    lastMoveLineNext: opts.priceTrail?.lineMoveNext ?? null,
     modelTotal: slot === "total" ? modelTotal : null,
     marketTotal: slot === "total" ? marketTotal : null,
     line: slot === "ml" ? null : line,
@@ -458,7 +545,7 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     confFrac: game.total.confidence !== null ? game.total.confidence / 100 : null,
     grade: game.total.grade,
     modelProbPick: game.total.confidence !== null ? game.total.confidence / 100 : null,
-    marketFairProbPick: null,
+    marketFairProbPick: game.pickedPrices?.total.marketProb ?? null,
     priceAmerican: game.pickedPrices?.total.current ?? null,
     line: game.total.line, modelTotal: game.model.total, marketTotal: game.total.line,
     bookCount: game.data_quality.total_books,
@@ -492,7 +579,7 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     confFrac: game.spread.confidence !== null ? game.spread.confidence / 100 : null,
     grade: game.spread.grade,
     modelProbPick: game.spread.confidence !== null ? game.spread.confidence / 100 : null,
-    marketFairProbPick: null,
+    marketFairProbPick: game.pickedPrices?.spread.marketProb ?? null,
     priceAmerican: game.pickedPrices?.spread.current ?? null,
     line: spreadDisplayLine, modelTotal: null, marketTotal: null,
     bookCount: game.data_quality.spread_books,
