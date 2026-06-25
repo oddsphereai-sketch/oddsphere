@@ -1402,6 +1402,7 @@ function buildFiRecord(
   slateDate: string,
   launchDay: boolean,
   currentLines: ReadonlyArray<LineRowForOdds>,
+  historyByKey: ReadonlyMap<string, ReadonlyArray<LineHistoryRowForOdds>>,
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
@@ -1451,18 +1452,16 @@ function buildFiRecord(
   const sideValue = isTossUp ? null : internalSide;
   const predictionTypeValue = isTossUp ? "toss_up" : null;
 
-  // 2026-06-15: thread the REAL first-inning lock price (was hardcoded null —
-  // the FI/NRFI/YRFI lock-price gap). first_inning_total lines exist in the DB
-  // (NRFI=under 0.5, YRFI=over 0.5); use the same BOOK_PRIORITY picker as
-  // ML/total. No history map (FI openers aren't loaded) → Tier-1 live lines
-  // only, which is where FI odds live. Toss-Ups stay null (no actionable side).
-  const NO_HISTORY = new Map<string, ReadonlyArray<LineHistoryRowForOdds>>();
+  // 2026-06-15: thread the REAL first-inning lock price (was hardcoded null).
+  // 2026-06-24: include the same line_history fallback used by ML/totals so an
+  // actionable FI row does not lose odds when the current lines table is thin.
+  // Toss-Ups stay null because they have no actionable side.
   const fiPicked = sideValue === null
     ? null
-    : pickOddsWithFallback(currentLines, NO_HISTORY, game.id, "first_inning_total", internalSide);
+    : pickOddsWithFallback(currentLines, historyByKey, game.id, "first_inning_total", internalSide);
   const fiOpposite = sideValue === null
     ? null
-    : pickOddsWithFallback(currentLines, NO_HISTORY, game.id, "first_inning_total", internalSide === "under" ? "over" : "under");
+    : pickOddsWithFallback(currentLines, historyByKey, game.id, "first_inning_total", internalSide === "under" ? "over" : "under");
   const fiOddsAmerican = fiPicked?.odds ?? null;
   // De-vig market probability for the picked side when both sides priced.
   const impPicked = americanToImpliedProb(fiPicked?.odds ?? null);
@@ -1583,9 +1582,8 @@ function buildFiRecord(
     published_at: game.slate_status === "published" ? pred.computed_at : null,
     /* Phase 6B.22 — additive context. Public splits + line movement
        aren't captured for FI markets today (sharp_signals scopes to
-       ML/OU/spread; first_inning_total lines exist but aren't loaded
-       in this build). data_integrity is still meaningful. Surface null
-       for the unavailable ones so the calibration extractor reports
+       ML/OU/spread). data_integrity + odds_source_at_lock_fi are still
+       meaningful. Surface unavailable signals as null so calibration reports
        "unknown" rather than absent. */
     snapshot_json: {
       ...sp,
@@ -1597,6 +1595,12 @@ function buildFiRecord(
       // loaded in this build). predicted_scores + framework_grades for
       // NRFI/YRFI are still captured.
       ...buildDailyEdgeLockSubstrate({ signalsForGame: [], currentLinesForGame: [], pred }),
+      odds_source_at_lock_fi: sideValue === null
+        ? null
+        : {
+            picked: fiPicked,
+            opposite: fiOpposite,
+          },
       // 2026-06-22 — FI NRFI overconfident mid-band flip audit. Present only when
       // the flip fired; preserves the original NRFI side so the override is fully
       // reversible. The model's NRFI opinion + probability are untouched.
@@ -1661,6 +1665,11 @@ export function buildPredictionRecordsFromSlate(args: {
    * helper can read total line drift + per-side current odds.
    */
   currentLinesByGameId?: ReadonlyMap<number, ReadonlyArray<LineRowForOdds>>;
+  /**
+   * Forward odds recovery for FI/NRFI/YRFI. Same key shape used by
+   * pickOddsWithFallback: `${gameId}::${market_type}::${side}`.
+   */
+  historyByKey?: ReadonlyMap<string, ReadonlyArray<LineHistoryRowForOdds>>;
 }): PredictionRecordRow[] {
   const proposed: PredictionRecordRow[] = [];
   for (const g of args.games) {
@@ -1674,7 +1683,16 @@ export function buildPredictionRecordsFromSlate(args: {
     const currentLines = (args.currentLinesByGameId?.get(g.id) ?? []) as LineRowForOdds[];
     const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines);
     const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines);
-    const fi = buildFiRecord(pred, g, home, away, args.slateDate, args.launchDay, currentLines);
+    const fi = buildFiRecord(
+      pred,
+      g,
+      home,
+      away,
+      args.slateDate,
+      args.launchDay,
+      currentLines,
+      args.historyByKey ?? new Map<string, ReadonlyArray<LineHistoryRowForOdds>>(),
+    );
     if (ml) proposed.push(ml);
     if (ou) proposed.push(ou);
     if (fi) proposed.push(fi);
@@ -1819,7 +1837,7 @@ export async function createPredictionRecords(
         .from("line_history")
         .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
         .eq("game_id", gid)
-        .in("market_type", ["moneyline", "total"])
+        .in("market_type", ["moneyline", "total", "first_inning_total"])
         .is("player_id", null)
         .neq("sportsbook", "splits_consensus")
         .not("odds_american", "is", null)
@@ -1924,6 +1942,7 @@ export async function createPredictionRecords(
     oddsByGameId,
     openersByGameId,
     currentLinesByGameId: linesByGame,
+    historyByKey,
   });
   result.proposed = proposed;
   result.skippedHeld =

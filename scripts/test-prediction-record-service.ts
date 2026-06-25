@@ -274,6 +274,35 @@ console.log("\n━━━ NRFI populated → 3 records ━━━");
   check("FI side='under'", fi?.side === "under");
   check("FI line_value=0.5", fi?.line_value === 0.5);
 }
+{
+  const fullPred = {
+    ...basePrediction,
+    predicted_nrfi: false,
+    nrfi_confidence: 61,
+    sport_specific: { ...v21SportSpecific, hold_picks: [], nrfi_decision_kind: "yrfi" },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fullPred]]),
+    abbrevByTeamId,
+    currentLinesByGameId: new Map([[14771, []]]),
+    historyByKey: new Map([
+      ["14771::first_inning_total::over", [
+        { game_id: 14771, market_type: "first_inning_total", side: "over", sportsbook: "ballybet", odds_american: -148, line_value: 0.5, recorded_at: "2026-06-06T16:10:00Z" },
+      ]],
+      ["14771::first_inning_total::under", [
+        { game_id: 14771, market_type: "first_inning_total", side: "under", sportsbook: "ballybet", odds_american: 112, line_value: 0.5, recorded_at: "2026-06-06T16:10:00Z" },
+      ]],
+    ]),
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  check("FI falls back to line_history when live lines are thin", fi.odds_american === -148);
+  check("FI history fallback computes no-vig market probability", typeof fi.market_probability === "number" && fi.market_probability > 0.5);
+  check("FI snapshot audits history fallback source", (fi.snapshot_json as any)?.odds_source_at_lock_fi?.picked?.source === "line_history_fallback");
+}
 
 // ── Phase 6B.20 — Toss-Up FI rows captured as non-actionable ─────
 console.log("\n━━━ Phase 6B.20 — Toss-Up FI rows ━━━");

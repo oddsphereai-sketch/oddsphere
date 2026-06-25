@@ -84,6 +84,7 @@ type DbSignalRow = {
 
 type DbRecordRow = {
   market: string | null;
+  side: string | null;
   locked_at: string | null;
   odds_american: number | null;
   line_value: number | null;
@@ -147,7 +148,7 @@ async function auditSport(sport: Sport, date: string): Promise<SportReport> {
 
   const { data: prRaw, error: prErr } = await supabase
     .from("prediction_records")
-    .select("market,locked_at,odds_american,line_value,held,no_bet")
+    .select("market,side,locked_at,odds_american,line_value,held,no_bet")
     .eq("sport", sport)
     .eq("slate_date", date);
   if (prErr) notes.push(`prediction_records query failed: ${prErr.message}`);
@@ -186,7 +187,10 @@ async function auditSport(sport: Sport, date: string): Promise<SportReport> {
     records: {
       total: records.length,
       locked: records.filter((r) => r.locked_at !== null).length,
-      missingOdds: records.filter((r) => r.odds_american === null).length,
+      // Only real-sided, non-held records need a bet price. Toss-Up/no-side
+      // records are intentionally non-actionable and should not masquerade as
+      // missing odds defects in the operator readiness report.
+      missingOdds: records.filter((r) => r.held !== true && r.side !== null && r.odds_american === null).length,
       missingLineValue: records.filter((r) => r.market !== "moneyline" && r.line_value === null).length,
       held: records.filter((r) => r.held === true).length,
       noBet: records.filter((r) => r.no_bet === true).length,
