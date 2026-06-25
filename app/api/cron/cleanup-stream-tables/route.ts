@@ -8,8 +8,11 @@
  * loading" + slate-cycle overruns its 300s maxDuration (the 2026-06-16 incident).
  *
  * Retention (operator-authorized 2026-06-16):
- *   • line_history     — keep 4 days (covers openers + CLV reconcile catch-up)
- *   • odds_events_raw  — keep 2 days (pure WS audit log, not read by the app)
+ *   • line_history         — keep 4 days (covers openers + CLV reconcile catch-up)
+ *   • odds_events_raw      — keep 2 days (pure WS audit log, not read by the app)
+ *   • line_movements       — keep 2 days (compact WS trigger/display context)
+ *   • odds_current_stream  — keep 2 days (latest stream snapshots for old games
+ *                            otherwise linger forever on the unique key)
  *
  * SAFETY: calibration / tracking data lives in prediction_records and
  * prediction_grades and is NEVER touched here — line_history is the raw odds
@@ -24,6 +27,8 @@ export const maxDuration = 300;
 
 const LINE_HISTORY_RETENTION_DAYS = 4;
 const ODDS_EVENTS_RAW_RETENTION_DAYS = 2;
+const LINE_MOVEMENTS_RETENTION_DAYS = 2;
+const ODDS_CURRENT_STREAM_RETENTION_DAYS = 2;
 const BATCH = 1000; // PostgREST per-request row cap
 const MAX_BATCHES = 2000; // backstop (≤2M rows) so a bug can't loop forever
 
@@ -58,17 +63,29 @@ export async function GET(request: Request): Promise<Response> {
   const now = Date.now();
   const lhCutoff = new Date(now - LINE_HISTORY_RETENTION_DAYS * 86_400_000).toISOString();
   const oerCutoff = new Date(now - ODDS_EVENTS_RAW_RETENTION_DAYS * 86_400_000).toISOString();
+  const lmCutoff = new Date(now - LINE_MOVEMENTS_RETENTION_DAYS * 86_400_000).toISOString();
+  const ocsCutoff = new Date(now - ODDS_CURRENT_STREAM_RETENTION_DAYS * 86_400_000).toISOString();
 
   const odds_events_raw = await prune("odds_events_raw", "received_at", oerCutoff);
   const line_history = await prune("line_history", "recorded_at", lhCutoff);
+  const line_movements = await prune("line_movements", "moved_at", lmCutoff);
+  const odds_current_stream = await prune("odds_current_stream", "observed_at", ocsCutoff);
 
   return Response.json({
-    ok: odds_events_raw.error === null && line_history.error === null,
+    ok:
+      odds_events_raw.error === null &&
+      line_history.error === null &&
+      line_movements.error === null &&
+      odds_current_stream.error === null,
     retention: {
       line_history_days: LINE_HISTORY_RETENTION_DAYS,
       odds_events_raw_days: ODDS_EVENTS_RAW_RETENTION_DAYS,
+      line_movements_days: LINE_MOVEMENTS_RETENTION_DAYS,
+      odds_current_stream_days: ODDS_CURRENT_STREAM_RETENTION_DAYS,
     },
     odds_events_raw,
     line_history,
+    line_movements,
+    odds_current_stream,
   });
 }
