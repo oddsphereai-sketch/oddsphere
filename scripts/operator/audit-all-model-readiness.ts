@@ -40,6 +40,14 @@ const LINE_MARKETS: Record<Sport, readonly string[]> = {
   nhl: ["moneyline", "total", "puckline"],
 };
 
+const LINE_VALUE_REQUIRED_MARKETS: Record<Sport, ReadonlySet<string>> = {
+  mlb: new Set(["total", "first_inning"]),
+  wnba: new Set(["total", "spread"]),
+  soccer: new Set(["total"]),
+  nba: new Set(["total", "spread"]),
+  nhl: new Set(["total", "puckline"]),
+};
+
 type CountByMarket = Record<string, number>;
 
 type SportReport = {
@@ -106,6 +114,10 @@ function countMarkets(rows: readonly DbMarketRow[], key: "market_type" | "market
 function formatCounts(counts: CountByMarket): string {
   const entries = Object.entries(counts).sort(([a], [b]) => a.localeCompare(b));
   return entries.length ? entries.map(([k, v]) => `${k}:${v}`).join(", ") : "-";
+}
+
+function requiresLineValue(sport: Sport, market: string | null): boolean {
+  return market !== null && LINE_VALUE_REQUIRED_MARKETS[sport].has(market);
 }
 
 async function auditSport(sport: Sport, date: string): Promise<SportReport> {
@@ -191,7 +203,7 @@ async function auditSport(sport: Sport, date: string): Promise<SportReport> {
       // records are intentionally non-actionable and should not masquerade as
       // missing odds defects in the operator readiness report.
       missingOdds: records.filter((r) => r.held !== true && r.side !== null && r.odds_american === null).length,
-      missingLineValue: records.filter((r) => r.market !== "moneyline" && r.line_value === null).length,
+      missingLineValue: records.filter((r) => requiresLineValue(sport, r.market) && r.line_value === null).length,
       held: records.filter((r) => r.held === true).length,
       noBet: records.filter((r) => r.no_bet === true).length,
     },

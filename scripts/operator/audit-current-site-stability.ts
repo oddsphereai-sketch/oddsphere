@@ -638,6 +638,14 @@ async function check4LockSnapshotCompleteness(): Promise<Issue[]> {
         pr.market === "total" &&
         typeof s.ou_play_grade === "string" &&
         MLB_HELD_GRADES.has(s.ou_play_grade);
+      const mlMarketFlipped =
+        sport === "mlb" &&
+        pr.market === "moneyline" &&
+        ((s as Record<string, unknown>).ml_flip as { flipped?: unknown } | undefined)?.flipped === true;
+      const ouMarketFlipped =
+        sport === "mlb" &&
+        pr.market === "total" &&
+        ((s as Record<string, unknown>).ou_flip as { flipped?: unknown } | undefined)?.flipped === true;
 
       // Universal required (per Phase 6 §E base) — with v1.2 reclassification
       if (pr.pick === null || pr.pick === undefined) universalMissing.push("pick");
@@ -653,6 +661,10 @@ async function check4LockSnapshotCompleteness(): Promise<Issue[]> {
           expectedNullNotes.push(`play_grade=null is expected for ML held record (ml_play_grade=${s.ml_play_grade})`);
         } else if (ouMarketHeld) {
           expectedNullNotes.push(`play_grade=null is expected for Total held record (ou_play_grade=${s.ou_play_grade})`);
+        } else if (mlMarketFlipped) {
+          expectedNullNotes.push("play_grade=null is expected for flipped ML record (snapshot.ml_flip.flipped=true)");
+        } else if (ouMarketFlipped) {
+          expectedNullNotes.push("play_grade=null is expected for flipped Total record (snapshot.ou_flip.flipped=true)");
         } else {
           universalMissing.push("play_grade");
         }
