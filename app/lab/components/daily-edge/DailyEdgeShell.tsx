@@ -1180,11 +1180,13 @@ export function SportRail({ sport }: { sport: Sport }) {
 }
 
 function SlateControlStrip({
+  sport,
   date,
   gameCount,
   updatedAt,
   fallbackUsed,
 }: {
+  sport: Sport;
   date: string;
   gameCount: number;
   updatedAt: string;
@@ -1193,13 +1195,17 @@ function SlateControlStrip({
   // Locale-dependent time format produces different output on server vs
   // client which trips React's hydration check. Defer formatting until
   // after mount so server and initial client HTML agree (empty string).
-  const [updatedTime, setUpdatedTime] = useState<string>("");
+  const [updatedTime, setUpdatedTime] = useState<string>("—");
   useEffect(() => {
     try {
       const d = new Date(updatedAt);
+      if (Number.isNaN(d.getTime())) {
+        setUpdatedTime("—");
+        return;
+      }
       setUpdatedTime(d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }));
     } catch {
-      setUpdatedTime("");
+      setUpdatedTime("—");
     }
   }, [updatedAt]);
 
@@ -1215,6 +1221,29 @@ function SlateControlStrip({
     }
   }, [date]);
 
+  const sportLabel = useMemo(() => {
+    switch (sport) {
+      case "wnba":
+        return "WNBA slate";
+      case "soccer":
+        return "Soccer slate";
+      case "ucl":
+        return "UCL slate";
+      case "nba":
+        return "NBA slate";
+      case "nfl":
+        return "NFL slate";
+      case "cbb":
+        return "CBB slate";
+      case "cfb":
+        return "CFB slate";
+      case "nhl":
+        return "NHL slate";
+      default:
+        return "MLB slate";
+    }
+  }, [sport]);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-2">
       {/* Two-group layout: left = slate metadata text, right = fallback
@@ -1224,17 +1253,13 @@ function SlateControlStrip({
           gray-700 to recede behind the gray-400/500 text. */}
       <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap text-[11px] text-gray-500">
         <span className="inline-flex items-center gap-2">
-          <span className="uppercase tracking-[0.14em] font-bold text-gray-400">MLB slate</span>
+          <span className="uppercase tracking-[0.14em] font-bold text-gray-400">{sportLabel}</span>
           <span aria-hidden="true" className="text-gray-700">·</span>
           <span className="tabular-nums text-gray-400">{gameCount} games</span>
           <span aria-hidden="true" className="text-gray-700">·</span>
           <span className="tabular-nums">{slateDateLabel}</span>
-          {updatedTime && (
-            <>
-              <span aria-hidden="true" className="text-gray-700">·</span>
-              <span>Updated {updatedTime}</span>
-            </>
-          )}
+          <span aria-hidden="true" className="text-gray-700">·</span>
+          <span>Updated {updatedTime}</span>
         </span>
         {fallbackUsed && (
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-amber-500/35 bg-amber-500/[0.10] text-[10px] uppercase tracking-[0.12em] font-bold text-amber-200">
@@ -3939,6 +3964,7 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
       <SportRail sport={sport} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-1 flex items-center justify-between gap-3">
         <SlateControlStrip
+          sport={sport}
           date={data.date}
           gameCount={games.length}
           updatedAt={data.as_of}

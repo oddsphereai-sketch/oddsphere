@@ -20,6 +20,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRefreshStatus } from "../hooks/useRefreshStatus";
 import type { RefreshSource, RefreshState } from "../lib/labTypes";
+import type { Sport } from "@/lib/types/domain/Sport";
 
 // ─── Time-ago / time-to formatters ───────────────────────────────────────
 
@@ -119,8 +120,8 @@ const STATE_STYLES: Record<RefreshState, StateStyle> = {
 
 // ─── Component ────────────────────────────────────────────────────────────
 
-export default function RefreshIndicator() {
-  const { data, error, isLoading } = useRefreshStatus();
+export default function RefreshIndicator({ sport }: { sport?: Sport }) {
+  const { data, error, isLoading } = useRefreshStatus({ sport });
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 

@@ -26,6 +26,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import RefreshIndicator from "./RefreshIndicator";
+import { useSportSelection } from "../hooks/useSportSelection";
 
 type Tab = {
   href: string;
@@ -55,6 +56,7 @@ function isActive(currentPath: string, tabHref: string): boolean {
 
 export default function LabAppNav() {
   const pathname = usePathname() ?? "";
+  const { sport } = useSportSelection();
 
   return (
     <header className="sticky top-0 z-40 bg-gray-950/85 backdrop-blur-md border-b border-gray-800">
@@ -129,7 +131,7 @@ export default function LabAppNav() {
           {/* Right: status pill + account placeholder */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="hidden sm:block">
-              <RefreshIndicator />
+              <RefreshIndicator sport={sport} />
             </div>
             <Link
               href="/lab/account"
@@ -148,7 +150,7 @@ export default function LabAppNav() {
         {/* Mobile-only: RefreshIndicator stacks below the row so the pill stays
             thumb-reachable without horizontal scroll. */}
         <div className="sm:hidden pb-2 -mt-1 flex justify-end">
-          <RefreshIndicator />
+          <RefreshIndicator sport={sport} />
         </div>
       </div>
     </header>
