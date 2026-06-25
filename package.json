@@ -47,6 +47,7 @@
     "test:playbook-public-splits-overlay": "tsx scripts/test-playbook-public-splits-overlay.ts",
     "test:public-splits-resolver": "tsx scripts/test-public-splits-resolver.ts",
     "test:public-market-context": "tsx scripts/test-public-market-context.ts",
+    "test:mlb-playbook-venue-weather-overlay": "tsx scripts/test-mlb-playbook-venue-weather-overlay.ts",
     "test:provider-signal-boundaries": "tsx --env-file=.env.local scripts/test-provider-signal-boundaries.ts",
     "test:derive-market-signal-regression": "tsx --env-file=.env.local scripts/test-derive-market-signal-regression.ts",
     "test:signal-evidence-classifier": "tsx scripts/test-signal-evidence-classifier.ts",

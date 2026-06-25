@@ -91,6 +91,21 @@ function buildWeatherOverlay(
   };
 }
 
+function buildClosedRoofWeather(
+  existing: WeatherSnapshot | null,
+  row: PlaybookVenueWeatherRow,
+): WeatherSnapshot {
+  return {
+    temperature_f:
+      cleanNumber(row.conditions?.tempF) ?? existing?.temperature_f ?? null,
+    humidity_pct: existing?.humidity_pct ?? null,
+    wind_speed_mph: 0,
+    wind_direction_degrees: existing?.wind_direction_degrees ?? null,
+    is_notable: false,
+    notable_reason: null,
+  };
+}
+
 function buildAudit(
   row: PlaybookVenueWeatherRow | undefined,
   teamId: string | null,
@@ -152,9 +167,15 @@ export function applyMlbPlaybookVenueWeatherOverlay(
       : { park_factor_runs: null, is_dome: false };
 
     if (roofStatus === "CLOSED") {
+      const nextWeather = buildClosedRoofWeather(snap.weather, row);
       const nextSnap: GameSnapshot = {
         ...snap,
         ballpark: { ...park, is_dome: true },
+        weather: nextWeather,
+        data_quality: {
+          ...snap.data_quality,
+          weather_available: true,
+        },
       };
       auditByExternalId.set(
         snap.game_external_id,
@@ -194,4 +215,3 @@ export function applyMlbPlaybookVenueWeatherOverlay(
 
   return { snapshots: overlaid, auditByExternalId };
 }
-
