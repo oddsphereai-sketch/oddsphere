@@ -263,7 +263,7 @@ async function main() {
 
   // Ask for a slate we know is empty (year in the past).
   const emptyRes = await dailyEdge(
-    new Request("https://x/api/lab/daily-edge?sport=mlb&date=2024-01-01")
+    new Request("https://x/api/lab/daily-edge?sport=mlb&date=2024-01-01&allowStale=true")
   );
   check(`empty-slate request returns 200`, emptyRes.status === 200);
   const emptyBody = (await emptyRes.json()) as {

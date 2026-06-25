@@ -31,6 +31,7 @@ import { supabase } from "../lib/db/supabase";
 import { GET as dailyEdge } from "../app/api/lab/daily-edge/route";
 import { GET as playerProps } from "../app/api/lab/player-props/route";
 import { GET as tracking } from "../app/api/lab/tracking/route";
+import { __TEST__ as dailyEdgeTest } from "../app/api/lab/daily-edge/route";
 import type {
   DailyEdgeResponse,
   PlayerPropsResponse,
@@ -189,6 +190,31 @@ async function main() {
         out.some((r) => r.source_type === "real_api") &&
         out.some((r) => r.source_type === "manual") &&
         out.some((r) => r.source_type === null)
+    );
+  }
+
+  section("Daily Edge join normalization");
+  {
+    const normalized = dailyEdgeTest.normalizeGameRow({
+      id: 1,
+      external_id: 1,
+      sport: "mlb",
+      game_date: "2026-06-25T23:00:00.000Z",
+      status: "STATUS_SCHEDULED",
+      updated_at: "2026-06-25T12:00:00.000Z",
+      home_team: [{ abbreviation: "NYY", logo_url: null }] as never,
+      away_team: [{ abbreviation: "BOS", logo_url: null }] as never,
+      home_pitcher: [{ first_name: "Home", last_name: "Starter", throws: "R" }] as never,
+      away_pitcher: [{ first_name: "Away", last_name: "Starter", throws: "L" }] as never,
+      game_predictions: [{ source_type: "real_api" }] as never,
+    });
+    check(
+      "normalizes Supabase to-one relation arrays before source filtering",
+      normalized.home_team?.abbreviation === "NYY" &&
+        normalized.away_team?.abbreviation === "BOS" &&
+        normalized.home_pitcher?.throws === "R" &&
+        normalized.away_pitcher?.throws === "L" &&
+        normalized.game_predictions?.source_type === "real_api",
     );
   }
 

@@ -38,5 +38,20 @@ export function validateCronAuth(request: Request): AuthResult {
       response: new Response(UNAUTHORIZED_BODY, { status: 401 }),
     };
   }
+  if (process.env.ODDSPHERE_CRONS_DISABLED === "true") {
+    return {
+      ok: false,
+      response: Response.json(
+        {
+          ok: true,
+          skipped: true,
+          disabled: true,
+          reason: "ODDSPHERE_CRONS_DISABLED=true",
+          path: new URL(request.url).pathname,
+        },
+        { status: 200 },
+      ),
+    };
+  }
   return { ok: true };
 }

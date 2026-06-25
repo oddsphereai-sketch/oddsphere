@@ -720,6 +720,29 @@ type GameRow = {
   game_predictions: PredictionRow | null;
 };
 
+function firstRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+function normalizeGameRow(row: GameRow): GameRow {
+  const raw = row as GameRow & {
+    home_team?: GameRow["home_team"] | GameRow["home_team"][];
+    away_team?: GameRow["away_team"] | GameRow["away_team"][];
+    home_pitcher?: GameRow["home_pitcher"] | GameRow["home_pitcher"][];
+    away_pitcher?: GameRow["away_pitcher"] | GameRow["away_pitcher"][];
+    game_predictions?: PredictionRow | PredictionRow[] | null;
+  };
+  return {
+    ...row,
+    home_team: firstRelation(raw.home_team),
+    away_team: firstRelation(raw.away_team),
+    home_pitcher: firstRelation(raw.home_pitcher),
+    away_pitcher: firstRelation(raw.away_pitcher),
+    game_predictions: firstRelation(raw.game_predictions),
+  };
+}
+
 /**
  * Phase R-10 — project a joined `players` FK expansion into the DTO
  * starter shape. Returns null when the FK was null (no probable
@@ -3360,6 +3383,7 @@ function buildBreakdownDto(
 // featureSnapshot.ts). Production callers go through the GET handler.
 export const __TEST__ = {
   buildGameDto,
+  normalizeGameRow,
   extractModelBreakdown,
   deriveVerdictForRow,
   projectSharpSignalsForRead,
@@ -3695,7 +3719,7 @@ export async function GET(request: Request) {
   // single object for to-one relations. Cast accordingly.
   // Finished games STAY on the board all day (reverted 2026-06-17 per Daniel —
   // members want to look back on the day's games until the slate rolls over).
-  const rawGames = (gameData ?? []) as unknown as GameRow[];
+  const rawGames = ((gameData ?? []) as unknown as GameRow[]).map(normalizeGameRow);
 
   // ─── Production data-mode filter (Framework §"Signal Source Quality") ──
   // Drops mock-sourced predictions before they reach members. No-op in
@@ -3989,7 +4013,7 @@ export async function GET(request: Request) {
         "game_id, market, pick, side, line_value, odds_american, confidence, model_probability, market_probability, edge, play_grade, best_angle, no_bet, locked_at, snapshot_json",
       )
       .eq("sport", "mlb")
-      .eq("slate_date", requestedDate)
+      .eq("slate_date", effectiveDate)
       // 2026-06-10 FI lock-contract fix — extend to first_inning so the
       // FI Daily Edge card stops drifting post-lock when the model
       // re-runs and flips its pick. ML/Total already follow this
@@ -4065,7 +4089,7 @@ export async function GET(request: Request) {
       .from("prediction_records")
       .select("game_id, market, play_grade, no_bet, best_angle, snapshot_json")
       .eq("sport", "mlb")
-      .eq("slate_date", requestedDate)
+      .eq("slate_date", effectiveDate)
       .in("market", ["moneyline", "total", "first_inning"])
       .is("locked_at", null);
     type UnlockedRec = {
