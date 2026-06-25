@@ -442,6 +442,23 @@ function testUnchangedRows() {
     resolvedMoneyBets?.evidence === "Money 57% / Bets 56%",
     `got ${resolvedMoneyBets?.evidence ?? "missing"}`
   );
+
+  const personaPickSplits = baseMarket({
+    pick: "Tempo",
+    moneyPct: null,
+    betsPct: null,
+    publicSplits: [
+      { side: "home", label: "TOR", moneyPct: 61, betsPct: 53 },
+      { side: "away", label: "LA", moneyPct: 39, betsPct: 47 },
+    ],
+  });
+  const personaRows = buildEdgeStackRows("moneyline", personaPickSplits);
+  const personaMoneyBets = personaRows.find((r) => r.label === "Money vs Bets");
+  check(
+    `Money vs Bets: model-label picks use visible split row when scalars are missing`,
+    personaMoneyBets?.evidence === "Money 61% / Bets 53%",
+    `got ${personaMoneyBets?.evidence ?? "missing"}`
+  );
 }
 
 // ─── Runner ──────────────────────────────────────────────────────────

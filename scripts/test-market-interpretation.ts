@@ -56,6 +56,15 @@ function base(over: Partial<MarketInterpretationInput> = {}): MarketInterpretati
   check("public-heavy unconfirmed → chip", r.chipLabel === "Public-heavy, sharp unconfirmed" && r.chipTone === "amber");
   check("public-heavy unconfirmed → flag", r.flags.includes("public_heavy_unconfirmed"));
 }
+// 5a. Split-ish public reads should not be overstated as public-heavy.
+{
+  const r = interpretMarket(base({
+    openAmerican: -120, currentAmerican: -120,
+    splits: { pickBetsPct: 53, pickMoneyPct: 57, observedAtIso: "2026-06-16T17:55:00Z", isStale: false },
+  }));
+  check("modest public split → no public-heavy chip", r.chipLabel !== "Public-heavy, sharp unconfirmed");
+  check("modest public split → no public-heavy flag", !r.flags.includes("public_heavy_unconfirmed"));
+}
 // 5b. Sharp money AGAINST our pick (17192-like: 82% tickets, 38% money on us →
 //     money piled on the OTHER side). Must NOT read as "unconfirmed".
 {

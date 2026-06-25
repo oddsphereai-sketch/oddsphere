@@ -20,6 +20,8 @@ export type ChipTone = "emerald" | "amber" | "gray";
 
 /** Public-share threshold for "heavy" on a side. */
 const PUBLIC_HEAVY_PCT = 60;
+/** Reserve the compact "public-heavy" chip for a truly crowded side. */
+const PUBLIC_HEAVY_UNCONFIRMED_PCT = 65;
 /** Money-vs-bets gap (pp) that counts as divergence. */
 const MONEY_PUBLIC_DIVERGENCE_PP = 12;
 /**
@@ -185,7 +187,11 @@ export function interpretMarket(input: MarketInterpretationInput): MarketInterpr
   // Public-heavy with NO sharp read either way (genuinely unconfirmed — not just
   // "we didn't look"). Excludes cases where the money split DOES signal.
   const publicHeavyUnconfirmed =
-    pubHeavyOnPick && overall !== "toward" && rlm === null && sharpMoney === null;
+    splits?.pickBetsPct != null &&
+    splits.pickBetsPct >= PUBLIC_HEAVY_UNCONFIRMED_PCT &&
+    overall !== "toward" &&
+    rlm === null &&
+    sharpMoney === null;
   if (publicHeavyUnconfirmed) flags.push("public_heavy_unconfirmed");
 
   if (overall === "toward") flags.push("moved_toward");

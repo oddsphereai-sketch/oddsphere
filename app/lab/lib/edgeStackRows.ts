@@ -82,6 +82,18 @@ function splitForPick(
   if (pick.startsWith("under")) {
     return marketData.publicSplits.find((s) => s.side === "under") ?? null;
   }
+  // Some non-MLB moneyline picks are branded model/persona labels (for
+  // example "Tempo") while their public split rows remain team labels. When
+  // the legacy picked-side scalars are empty, the route/adapters order
+  // publicSplits with the selected side first; use that visible row so the
+  // Edge Stack matches the Market Pulse bars instead of saying unavailable.
+  if (
+    marketData.moneyPct === null &&
+    marketData.betsPct === null &&
+    marketData.publicSplits.length === 2
+  ) {
+    return marketData.publicSplits[0] ?? null;
+  }
   return null;
 }
 
