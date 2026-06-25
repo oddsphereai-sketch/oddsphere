@@ -23,6 +23,7 @@ const BA_OU = 3.0; // BEST_ANGLE_MIN_EDGE_PCT_OU
 const LEAN = 1.0;  // LEAN_MIN_EDGE_PCT
 
 type T = {
+  id: number; gameId: number;
   line: number; postHome: number; postAway: number; marketTotal: number;
   marketOver: number | null; overOdds: number | null; underOdds: number | null;
   shippedPick: "over" | "under"; result: string; actual: number;
@@ -42,6 +43,9 @@ function won(side: "over" | "under", actual: number, line: number): boolean | nu
 function oddsFor(side: "over" | "under", r: T): number | null {
   return side === "over" ? r.overOdds : r.underOdds;
 }
+function num(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
 
 type Agg = { w: number; l: number; push: number; units: number; staked: number; flips: number; w2l: number; l2w: number; div: number; promoted: { w: number; l: number; units: number; staked: number; n: number } };
 function newAgg(): Agg { return { w: 0, l: 0, push: 0, units: 0, staked: 0, flips: 0, w2l: 0, l2w: 0, div: 0, promoted: { w: 0, l: 0, units: 0, staked: 0, n: 0 } }; }
@@ -52,26 +56,43 @@ function line(name: string, a: Agg): string {
 
 async function main() {
   const { data } = await supabase.from("prediction_records")
-    .select(`id, pick, line_value, odds_american, snapshot_json,
+    .select(`id, game_id, pick, line_value, odds_american, model_probability, edge, snapshot_json,
       prediction_grades:prediction_grades!prediction_record_id ( result, actual_total )`)
     .eq("sport", "mlb").eq("market", "total").gte("slate_date", "2026-06-01").limit(3000);
+  const gameIds = [...new Set(((data ?? []) as any[]).map((r) => r.game_id).filter((v) => typeof v === "number"))];
+  const actualByGame = new Map<number, number>();
+  for (let i = 0; i < gameIds.length; i += 200) {
+    const { data: games } = await supabase
+      .from("games")
+      .select("id, total_runs")
+      .in("id", gameIds.slice(i, i + 200));
+    for (const g of (games ?? []) as any[]) {
+      const total = num(g.total_runs);
+      if (typeof g.id === "number" && total !== null) actualByGame.set(g.id, total);
+    }
+  }
   const rows: T[] = [];
   for (const r of (data ?? []) as any[]) {
     const a = (r.snapshot_json ?? {}).v2_2_audit ?? {};
     const g = Array.isArray(r.prediction_grades) ? r.prediction_grades[0] : r.prediction_grades;
     if (!g || (g.result !== "win" && g.result !== "loss" && g.result !== "push")) continue;
-    if (a.posterior_home_runs == null || a.posterior_away_runs == null) continue;
-    if (r.line_value == null || g.actual_total == null) continue;
+    const postHome = num(a.posterior_home_runs);
+    const postAway = num(a.posterior_away_runs);
+    const lineValue = num(r.line_value);
+    const actualTotal = num(g.actual_total) ?? actualByGame.get(r.game_id) ?? null;
+    if (postHome === null || postAway === null) continue;
+    if (lineValue === null || actualTotal === null) continue;
     const pick = String(r.pick).toLowerCase().includes("over") ? "over" : "under";
     rows.push({
-      line: Number(r.line_value), postHome: Number(a.posterior_home_runs), postAway: Number(a.posterior_away_runs),
-      marketTotal: a.market_total != null ? Number(a.market_total) : Number(r.line_value),
-      marketOver: a.ou_market_prob != null ? Number(a.ou_market_prob) : null,
+      id: Number(r.id), gameId: Number(r.game_id),
+      line: lineValue, postHome, postAway,
+      marketTotal: num(a.market_total) ?? lineValue,
+      marketOver: num(a.ou_market_prob),
       overOdds: a.over_odds_american ?? (pick === "over" ? r.odds_american : null),
       underOdds: a.under_odds_american ?? (pick === "under" ? r.odds_american : null),
-      shippedPick: pick, result: g.result, actual: Number(g.actual_total),
-      storedModelProb: a.ou_model_prob != null ? Number(a.ou_model_prob) : null,
-      storedEdge: a.ou_edge_pct != null ? Number(a.ou_edge_pct) : null,
+      shippedPick: pick, result: g.result, actual: actualTotal,
+      storedModelProb: num(a.ou_model_prob) ?? num(r.model_probability),
+      storedEdge: num(a.ou_edge_pct) ?? num(r.edge),
     });
   }
   console.log(`graded totals with replayable inputs: ${rows.length}\n`);
