@@ -2,9 +2,9 @@
  * Conviction/Value play-grade gate regression (2026-06-15). Verifies the four evidence-gated,
  * environment-checked demotions and that non-Lean grades + clean Leans are untouched:
  *   1. weak model probability (<55%)        2. EV<0 (coherence, arithmetic)
- *   3. low-conviction ML favorite           4. extreme-low total line (<8)
+ *   3. low-conviction ML                    4. full-game total Lean stand-down
  */
-import { applyPlayGradeGate, GATE_LEAN_MIN_MODEL_PROB, GATE_LOW_CONVICTION_RUNGAP, GATE_LOW_TOTAL_LINE } from "../lib/services/predictionRecordService";
+import { applyPlayGradeGate, GATE_LEAN_MIN_MODEL_PROB, GATE_LOW_CONVICTION_RUNGAP } from "../lib/services/predictionRecordService";
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean): void { if (cond) pass++; else { fail++; console.error(`❌ ${name}`); } }
@@ -24,16 +24,16 @@ check("lean fav -150 @ 0.62 (EV>0)+conviction stays lean", ml(0.62, -150, 1.5) =
 check("lean dog +120 @ 0.40 (EV<0) → market_aligned", ml(0.40, 120, 0.8) === "market_aligned");
 check("lean dog +120 @ 0.55 (EV>0) stays lean", ml(0.55, 120, 0.8) === "lean");
 
-// 3. low-conviction favorite (run-gap < 0.5)
+// 3. low-conviction moneyline (run-gap < 0.5)
 check("lean fav -110 @ 0.55 gap 0.3 → market_aligned", ml(0.55, -110, 0.3) === "market_aligned");
 check("lean fav -110 @ 0.55 gap 1.2 stays lean", ml(0.55, -110, 1.2) === "lean");
-check("low-conviction = FAVORITES only (dog kept)", ml(0.55, 130, 0.3) === "lean");
+check("lean dog +130 @ 0.55 gap 0.3 → market_aligned", ml(0.55, 130, 0.3) === "market_aligned");
 check(`run-gap boundary ${GATE_LOW_CONVICTION_RUNGAP} inclusive-keep`, ml(0.55, -110, GATE_LOW_CONVICTION_RUNGAP) === "lean");
 
-// 4. extreme-low total line (<8)
+// 4. full-game total Lean stand-down
 check("lean total line 7.5 → market_aligned", ou(0.56, -110, 7.5) === "market_aligned");
-check("lean total line 8.5 stays lean", ou(0.56, -110, 8.5) === "lean");
-check(`total-line boundary ${GATE_LOW_TOTAL_LINE} inclusive-keep`, ou(0.56, -110, GATE_LOW_TOTAL_LINE) === "lean");
+check("lean total line 8.5 → market_aligned", ou(0.56, -110, 8.5) === "market_aligned");
+check("lean total with missing line → market_aligned", ou(0.56, -110, null) === "market_aligned");
 
 // 4. null-safety + non-lean untouched
 check("null prob+odds → unchanged lean", ml(null, null, null) === "lean");

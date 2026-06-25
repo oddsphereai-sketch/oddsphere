@@ -156,12 +156,13 @@ function readPublicPlayGrade(v: unknown): string | null {
  *      priced at the locked American odds, has EV < 0 loses long-run by the
  *      model's OWN numbers. Favorite Leans with EV<0 went 1-5 (17%, −68% ROI).
  *      Arithmetic, not pattern-fit → environment-independent.
- *   3. LOW-CONVICTION FAVORITE (ML only). A money-line FAVORITE the model
- *      barely separates (|projected run gap| < 0.5) went 27% / −48% (robust
- *      excl-6/14, LODO never positive); favorites WITH conviction (gap ≥1)
- *      went 73% / +24%. Conviction, not environment.
- *   4. EXTREME-LOW TOTAL LINE (totals only). Pitcher's-duel totals below 8 have
- *      shown no demonstrated model edge.
+ *   3. LOW-CONVICTION MONEYLINE. A money-line Lean where the model barely
+ *      separates the teams (|projected run gap| < 0.5) remains a real tracked
+ *      pick, but should not be user-promoted as a Lean. Fresh audit through
+ *      2026-06-24: 9-16, -25% ROI.
+ *   4. FULL-GAME TOTAL LEANS. Totals are tracked and may still become Best
+ *      Angle through the stricter Best Angle path, but the lower Lean tier has
+ *      not earned promotion. Fresh audit through 2026-06-24: 19-28, -26% ROI.
  *
  * Only touches the "lean" tier; Best Angle / others unchanged. Future-picks +
  * display only — never mutates locked/historical/tracking rows. Reversible
@@ -175,7 +176,6 @@ function readPublicPlayGrade(v: unknown): string | null {
 export const GATE_EV_FLOOR = 0;
 export const GATE_LEAN_MIN_MODEL_PROB = 0.55;
 export const GATE_LOW_CONVICTION_RUNGAP = 0.5;
-export const GATE_LOW_TOTAL_LINE = 8;
 export const GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB = 0.70;
 export interface PlayGradeGateInputs {
   modelProb: number | null;
@@ -198,24 +198,17 @@ export function applyPlayGradeGate(grade: string | null, x: PlayGradeGateInputs)
   if (x.modelProb !== null && x.modelProb < GATE_LEAN_MIN_MODEL_PROB) return "market_aligned";
   // 2. negative-EV coherence demotion (any market) — arithmetic, env-independent
   if (gateEvNegative(x.modelProb, x.americanOdds)) return "market_aligned";
-  // 3. low-conviction favorite (money-line only) — run-gap conviction, env-independent
+  // 3. low-conviction moneyline — run-gap conviction, env-independent
   if (
     x.market === "moneyline" &&
-    x.americanOdds !== null && x.americanOdds < 0 &&
     x.runGapAbs !== null && x.runGapAbs < GATE_LOW_CONVICTION_RUNGAP
   ) {
     return "market_aligned";
   }
-  // 4. extreme-low total line (totals only) — pitcher's-duel games where the
-  //    model has no demonstrated edge (board 33% / −35%, both sides, robust
-  //    excl-6/14 + LODO; structural: compressed run distribution). Pre-game
-  //    knowable. Smallest-sample of the three — reversible via constant.
-  if (
-    x.market === "total" &&
-    x.totalLine !== null && x.totalLine < GATE_LOW_TOTAL_LINE
-  ) {
-    return "market_aligned";
-  }
+  // 4. full-game total Leans — keep the prediction tracked, but do not promote
+  //    the lower total tier until the calibration earns it. Best Angle totals
+  //    are handled separately before this gate.
+  if (x.market === "total") return "market_aligned";
   return grade;
 }
 
