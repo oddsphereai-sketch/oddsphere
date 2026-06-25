@@ -1103,6 +1103,8 @@ function buildGameDto(
       : isNrfiTossUp ? "Toss-Up"
         : isNrfi ? "NRFI"
           : "YRFI";
+  const nrfiModelSideForMarket: Side | null =
+    nrfiPick === "NRFI" || nrfiPick === "YRFI" ? nrfiSide : null;
 
   // Build the (market → modelSide + grade) lookup that buildSignalDtos
   // consumes for both alignment-aware text generation and direction color.
@@ -1290,13 +1292,15 @@ function buildGameDto(
     signalType: pred.nrfi_signal_type,
     marketSignal: pred.nrfi_market_signal,
     sharpStatus: nrfiStatus,
-    modelSide: nrfiSide as Side,
+    modelSide: nrfiModelSideForMarket,
     signals,
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::first_inning_total`) ?? [],
     lineOpenCandidates:
-      openLinesByGameMarket.get(
-        `${row.id}::first_inning_total::${nrfiSide}`
-      ) ?? [],
+      nrfiModelSideForMarket === null
+        ? []
+        : openLinesByGameMarket.get(
+            `${row.id}::first_inning_total::${nrfiModelSideForMarket}`
+          ) ?? [],
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
@@ -1318,8 +1322,8 @@ function buildGameDto(
     lockedOpenOddsAmerican: lockedFi?.lockedOpenOddsAmerican ?? null,
     lockedOpenerRecordedAt: lockedFi?.lockedOpenerRecordedAt ?? null,
     lockedFrozenSignals: lockedFi?.lockedSignalRowsAtLock ?? null,
-    streamCurrent: streamFor("first_inning_total", nrfiSide),
-    lastMove: lastMoveFor("first_inning_total", nrfiSide),
+    streamCurrent: streamFor("first_inning_total", nrfiModelSideForMarket),
+    lastMove: lastMoveFor("first_inning_total", nrfiModelSideForMarket),
     oddspherePostedAmerican: postedLines.first_inning?.american ?? null,
     oddspherePostedAt: postedLines.first_inning?.at ?? null,
     lockedPriceAmerican: lockedFi?.lockedPriceAmerican ?? null,
@@ -2611,7 +2615,8 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     // rarely surface; today's 4 damaged rows are the visible exception
     // and the UI renders "No price recorded at lock" instead of a blank
     // chip. Never true for unlocked markets.
-    priceUnavailableAtLock: input.isLockedRow === true && priceAmerican === null,
+    priceUnavailableAtLock:
+      input.isLockedRow === true && input.modelSide !== null && priceAmerican === null,
     lineOpenAmerican: openAmerican,
     // Phase 7I — LKG age stamps. Optional fields; absent/null means
     // "fresh, render normally". Present means the value came from
@@ -4226,7 +4231,7 @@ export async function GET(request: Request) {
 
       // Lines swap — same rule structure.
       if (Array.isArray(linesAtLock)) {
-        for (const market of ["moneyline", "total"]) {
+        for (const market of ["moneyline", "total", "first_inning_total"]) {
           currentLinesByGameMarket.delete(`${g.id}::${market}`);
         }
         for (const lr of linesAtLock) {
@@ -4244,7 +4249,7 @@ export async function GET(request: Request) {
           currentLinesByGameMarket.set(key, arr);
         }
       } else if (isLocked) {
-        for (const market of ["moneyline", "total"]) {
+        for (const market of ["moneyline", "total", "first_inning_total"]) {
           currentLinesByGameMarket.delete(`${g.id}::${market}`);
         }
       }
@@ -4260,16 +4265,18 @@ export async function GET(request: Request) {
     //     places "locked_snapshot" first.
     for (const r of lockedByGameMarket.values()) {
       if (r.odds_american === null || r.side === null) continue;
+      const lockedMarketType =
+        r.market === "first_inning" ? "first_inning_total" : r.market;
       const lockedRow: LineRow = {
         game_id: r.game_id,
-        market_type: r.market,
+        market_type: lockedMarketType,
         sportsbook: "locked_snapshot",
         side: r.side,
         line_value: r.line_value,
         odds_american: r.odds_american,
         fetched_at: r.locked_at,
       };
-      const key = `${r.game_id}::${r.market}`;
+      const key = `${r.game_id}::${lockedMarketType}`;
       const arr = currentLinesByGameMarket.get(key) ?? [];
       arr.unshift(lockedRow); // unshift so it's first if BOOK_PRIORITY doesn't include it
       currentLinesByGameMarket.set(key, arr);
