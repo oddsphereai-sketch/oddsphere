@@ -29,6 +29,12 @@ export type UseDailyEdgeOptions = {
   sport: Sport;
   /** Optional YYYY-MM-DD override; defaults to server's "today". */
   date?: string;
+  /**
+   * When true, the API may serve the latest visible slate when the requested
+   * slate is not published yet. The response labels this with
+   * fallback_used/slateState so the UI stays honest instead of blank.
+   */
+  allowStale?: boolean;
   /** Poll interval in ms. Default 300_000 (5 min). Set to 0 to disable polling. */
   refreshIntervalMs?: number;
 };
@@ -41,8 +47,8 @@ export type UseDailyEdgeResult = {
 };
 
 export function useDailyEdge(options: UseDailyEdgeOptions): UseDailyEdgeResult {
-  const { sport, date, refreshIntervalMs = 300_000 } = options;
-  const key = buildLabUrl("/api/lab/daily-edge", { sport, date });
+  const { sport, date, allowStale = true, refreshIntervalMs = 300_000 } = options;
+  const key = buildLabUrl("/api/lab/daily-edge", { sport, date, allowStale });
 
   const { data, error, isLoading, mutate } = useSWR<DailyEdgeResponse>(
     key,

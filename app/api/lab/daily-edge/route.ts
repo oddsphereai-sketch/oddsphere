@@ -3558,11 +3558,31 @@ export async function GET(request: Request) {
   // Step 1: probe the requested date for every `slate_status` row. The
   // determineSlateState helper classifies into one of six states based
   // on what (if anything) lives on the requested date.
-  const { data: probeRows } = await supabase
+  const { data: probeRows, error: probeErr } = await supabase
     .from("games")
     .select("slate_status")
     .eq("sport", sport)
     .eq("slate_date", requestedDate);
+  if (probeErr) {
+    return Response.json(
+      {
+        error: probeErr.message,
+        as_of: new Date().toISOString(),
+        sport,
+        date: requestedDate,
+        requested_date: requestedDate,
+        fallback_used: false,
+        slateState: "no_data",
+        slate_status: null,
+        last_slate_update_at: null,
+        games: [],
+      } satisfies DailyEdgeResponse & { error: string },
+      {
+        status: 503,
+        headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
+      },
+    );
+  }
 
   // Step 2: only query for the fallback when the caller opted in. The
   // helper handles all branches; when allowStale=false we pass null so
@@ -3571,7 +3591,7 @@ export async function GET(request: Request) {
     | { slate_date: string; slate_status: string }
     | null = null;
   if (allowStale) {
-    const { data: latest } = await supabase
+    const { data: latest, error: latestErr } = await supabase
       .from("games")
       .select("slate_date, slate_status")
       .eq("sport", sport)
@@ -3579,6 +3599,26 @@ export async function GET(request: Request) {
       .in("slate_status", [...VISIBLE_SLATE_STATUSES])
       .order("slate_date", { ascending: false })
       .limit(1);
+    if (latestErr) {
+      return Response.json(
+        {
+          error: latestErr.message,
+          as_of: new Date().toISOString(),
+          sport,
+          date: requestedDate,
+          requested_date: requestedDate,
+          fallback_used: false,
+          slateState: "no_data",
+          slate_status: null,
+          last_slate_update_at: null,
+          games: [],
+        } satisfies DailyEdgeResponse & { error: string },
+        {
+          status: 503,
+          headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
+        },
+      );
+    }
     const row = (latest ?? [])[0];
     if (row) {
       mostRecentVisibleFallback = {
