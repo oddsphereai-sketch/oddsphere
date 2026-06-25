@@ -14,6 +14,7 @@ import {
   buildDataIntegritySnapshot,
   applyPlayGradeGate,
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
+  GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
 } from "../lib/services/predictionRecordService";
 
 // Self-consistent expected-grade helper: apply the production gate to a record's
@@ -25,6 +26,19 @@ function expectGate(raw: string | null, rec: { model_probability: number | null;
     market: rec.market as "moneyline" | "total" | "first_inning",
     runGapAbs: null, totalLine: rec.market === "total" ? rec.line_value : null,
   });
+}
+function expectTotalGrade(raw: string | null, rec: { model_probability: number | null; odds_american: number | null; market: string; line_value: number | null; side: string | null }): string | null {
+  let publicGrade = raw;
+  const minProb =
+    rec.side === "over"
+      ? GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB
+      : rec.side === "under"
+        ? GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB
+        : null;
+  if (raw === "best_angle" && minProb !== null && rec.model_probability !== null && rec.model_probability < minProb) {
+    publicGrade = "lean";
+  }
+  return expectGate(publicGrade, rec);
 }
 
 let pass = 0;
@@ -143,8 +157,8 @@ console.log("\n━━━ V2.1 metadata propagation ━━━");
   // EV<0 / low-conviction-fav / low-total-line — self-consistent with the gate.
   check("ML play_grade=lean@0.54 matches gate", ml.play_grade === expectGate("lean", ml));
   check("ML best_angle=false", ml.best_angle === false);
-  check("OU best_angle=true", ou.best_angle === true);
-  check("OU play_grade=best_angle", ou.play_grade === "best_angle");
+  check("OU low-conviction Best Angle demoted", ou.best_angle === false);
+  check("OU play_grade demoted below Best Angle", ou.play_grade !== "best_angle");
   check("OU line_value=7.5 (from v2_1_audit.market_total)", ou.line_value === 7.5);
   check("Data quality tier=high", ml.data_quality_tier === "high");
   check("Provisional=false", ml.provisional === false);
@@ -213,6 +227,74 @@ console.log("\n━━━ MLB total Under Best Angle quality gate ━━━");
   const ba = (ou.snapshot_json as any)?.best_angle_resolution;
   check("70%+ Under remains Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
   check("70%+ Under quality gate is false", ba?.total_under_quality_gate === false);
+}
+
+console.log("\n━━━ MLB total Over Best Angle quality gate ━━━");
+{
+  const lowProbOverPred = {
+    ...basePrediction,
+    predicted_ou_side: "over",
+    ou_confidence: 62,
+    predicted_home_score: 4.5,
+    predicted_away_score: 4.5,
+    sport_specific: {
+      ...v21SportSpecific,
+      ou_play_grade: "best_angle",
+      ou_best_angle_eligible: true,
+      v2_2_audit: {
+        market_total: 8.5,
+        ou_model_prob: GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB - 0.01,
+        ou_market_prob: 0.52,
+        ou_edge_pct: 17,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, lowProbOverPred]]),
+    abbrevByTeamId,
+  });
+  const ou = recs.find((r) => r.market === "total")!;
+  const ba = (ou.snapshot_json as any)?.best_angle_resolution;
+  check("low-prob Over pick still writes/tracks", ou.pick === "over" && ou.side === "over" && ou.no_bet === false);
+  check("low-prob Over is not Best Angle", ou.best_angle === false);
+  check("low-prob Over play_grade demotes below Best Angle", ou.play_grade !== "best_angle");
+  check("low-prob Over demotion is snapshotted", ba?.total_over_quality_gate === true && ba?.demote_reason === "total_over_quality_gate");
+}
+{
+  const highProbOverPred = {
+    ...basePrediction,
+    predicted_ou_side: "over",
+    ou_confidence: 72,
+    predicted_home_score: 4.5,
+    predicted_away_score: 4.5,
+    sport_specific: {
+      ...v21SportSpecific,
+      ou_play_grade: "best_angle",
+      ou_best_angle_eligible: true,
+      v2_2_audit: {
+        market_total: 8.5,
+        ou_model_prob: GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
+        ou_market_prob: 0.52,
+        ou_edge_pct: 18,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, highProbOverPred]]),
+    abbrevByTeamId,
+  });
+  const ou = recs.find((r) => r.market === "total")!;
+  const ba = (ou.snapshot_json as any)?.best_angle_resolution;
+  check("70%+ Over remains Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
+  check("70%+ Over quality gate is false", ba?.total_over_quality_gate === false);
 }
 
 // ── launch_day flag ─────────────────────────────────────────────────
@@ -760,8 +842,8 @@ console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━"
         (ml.snapshot_json as any)?.v2_2_audit?.ml_play_grade === "no_bet");
   check("ML snapshot_json.v2_2_audit.ml_no_bet_reason preserved",
         typeof (ml.snapshot_json as any)?.v2_2_audit?.ml_no_bet_reason === "string");
-  check("OU record.play_grade='best_angle' (actionable label pass-through unchanged)",
-        ou.play_grade === "best_angle");
+  check("OU record.play_grade demoted below Best Angle by total quality gate",
+        ou.play_grade !== "best_angle");
 }
 {
   // Provisional / low-quality rows say "not a betting recommendation".
@@ -851,7 +933,7 @@ console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━"
     // Conviction/value gate: a "lean" demotes to market_aligned only when it
     // fails EV / conviction / low-total-line; every other grade passes through.
     check(`ML record.play_grade='${grade}' (translator + gate)`, ml.play_grade === expectGate(grade, ml));
-    check(`OU record.play_grade='${grade}' (translator + gate)`, ou.play_grade === expectGate(grade, ou));
+    check(`OU record.play_grade='${grade}' (translator + total gate)`, ou.play_grade === expectTotalGrade(grade, ou));
   }
 }
 {
@@ -1098,8 +1180,8 @@ console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━
   const ou = recs.find((r) => r.market === "total")!;
   check("ML play_grade unchanged by FI persistence change",
         ml.play_grade === expectGate("lean", ml) /* FI persistence change must not alter the ML gate result */);
-  check("Total play_grade unchanged by FI persistence change",
-        ou.play_grade === "best_angle" /* from v21 fixture: ou_play_grade='best_angle' */);
+  check("Total play_grade reflects the total quality gate",
+        ou.play_grade !== "best_angle" /* base fixture is below the 70% total BA floor */);
 }
 
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);

@@ -177,6 +177,7 @@ export const GATE_EV_FLOOR = 0;
 export const GATE_LEAN_MIN_MODEL_PROB = 0.55;
 export const GATE_LOW_CONVICTION_RUNGAP = 0.5;
 export const GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB = 0.70;
+export const GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB = 0.70;
 export interface PlayGradeGateInputs {
   modelProb: number | null;
   americanOdds: number | null;
@@ -212,7 +213,7 @@ export function applyPlayGradeGate(grade: string | null, x: PlayGradeGateInputs)
   return grade;
 }
 
-function applyMlbTotalUnderBestAngleGate(grade: string | null, demote: boolean): string | null {
+function applyMlbTotalBestAngleGate(grade: string | null, demote: boolean): string | null {
   if (!demote) return grade;
   return grade === "best_angle" ? "lean" : grade;
 }
@@ -1243,15 +1244,21 @@ function buildOuRecord(
   const finalOuMarketProb = ouFlipped ? ouFlip.flippedMarketProb : ouMarketProb;
   const finalOuEdge = ouFlipped ? null : ouEdgePp;
   const ouBaseBestAngle = ouFlipped || ouDivergenceStandDown ? false : ouBest.bestAngle;
-  const ouTotalUnderBestAngleDemote =
+  const totalBestAngleMinModelProb =
+    finalOuPick === "over"
+      ? GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB
+      : finalOuPick === "under"
+        ? GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB
+        : null;
+  const ouTotalBestAngleDemote =
     ouBaseBestAngle &&
-    finalOuPick === "under" &&
+    totalBestAngleMinModelProb !== null &&
     finalOuModelProb !== null &&
-    finalOuModelProb < GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB;
-  const ouFinalBestAngle = ouBaseBestAngle && !ouTotalUnderBestAngleDemote;
-  const ouPublicPlayGrade = applyMlbTotalUnderBestAngleGate(
+    finalOuModelProb < totalBestAngleMinModelProb;
+  const ouFinalBestAngle = ouBaseBestAngle && !ouTotalBestAngleDemote;
+  const ouPublicPlayGrade = applyMlbTotalBestAngleGate(
     readPublicPlayGrade(sp.ou_play_grade),
-    ouTotalUnderBestAngleDemote,
+    ouTotalBestAngleDemote,
   );
   const explicitOuNoBetReason = readStringOrNull(sp.ou_no_bet_reason);
   const ouNoBet = ouDivergenceStandDown || isExplicitNoBetReason(explicitOuNoBetReason);
@@ -1315,9 +1322,17 @@ function buildOuRecord(
         base_eligible: readBoolish(sp.ou_best_angle_eligible),
         requires_confirmation: readBoolish(v22.ou_requires_market_confirmation),
         line_direction: readLineDirection(ouLineMovement),
-        demote_reason: ouTotalUnderBestAngleDemote ? "total_under_quality_gate" : ouBest.demoteReason,
-        total_under_quality_gate: ouTotalUnderBestAngleDemote,
+        demote_reason: ouTotalBestAngleDemote
+          ? finalOuPick === "over"
+            ? "total_over_quality_gate"
+            : "total_under_quality_gate"
+          : ouBest.demoteReason,
+        total_quality_gate: ouTotalBestAngleDemote,
+        total_over_quality_gate: ouTotalBestAngleDemote && finalOuPick === "over",
+        total_under_quality_gate: ouTotalBestAngleDemote && finalOuPick === "under",
+        total_min_model_prob: totalBestAngleMinModelProb,
         total_under_min_model_prob: GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
+        total_over_min_model_prob: GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
         final_best_angle: ouFinalBestAngle,
       },
       data_integrity: buildDataIntegritySnapshot(sp, oddsForGame, "total"),
