@@ -146,6 +146,14 @@ export function isPregameSweepLockOnly(
   return env[PREGAME_SWEEP_LOCK_ONLY_ENV] === "true";
 }
 
+function pregameSweepSports(
+  env: Record<string, string | undefined> = process.env
+): Sport[] {
+  const sports: Sport[] = [...sportsInSeasonToday()];
+  if (env.WNBA_PREGAME_SWEEP_ENABLED === "true") sports.push("wnba");
+  return [...new Set(sports)];
+}
+
 /**
  * Build the structured blocked response when the master gate is missing
  * in non-dry-run mode. Returned via the cron-handler shape so the
@@ -335,10 +343,9 @@ export async function GET(request: Request) {
   return cronHandlerPerSport(
     request,
     "pregame_sweep",
-    // WNBA added to THIS cron only (not sportsInSeasonToday, which feeds 8 crons).
-    // pregame-sweep's WNBA job is the T-60 lock; a no-op when no WNBA games/preds
-    // exist (e.g. WNBA_CRON_ENABLED off). See the wnba lock-only return below.
-    [...new Set<Sport>([...sportsInSeasonToday(), "wnba"])],
+    // WNBA lock checks are opt-in. They are cheap, but during incident recovery
+    // the 15-minute schedule should touch only MLB unless explicitly enabled.
+    pregameSweepSports(),
     async ({ sport }) => {
       // ── Master gate (write-mode only) ───────────────────────────────
       // Dry-run mode is always allowed. Write mode requires the
