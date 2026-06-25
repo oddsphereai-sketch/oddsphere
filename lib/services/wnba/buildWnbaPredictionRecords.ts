@@ -17,6 +17,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDaysToSlate, currentSlateDate } from "../../dates/slateDate";
+import { isPublicallyTracked } from "../../config/officialTrackingStart";
 
 const PLAY_GRADE: Record<string, string> = { "Best Angle": "best_angle", "Lean": "lean", "Watchlist": "watchlist", "Caution": "caution" };
 const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]! : null);
@@ -44,11 +45,17 @@ export async function buildWnbaPredictionRecords(opts: {
   windowDays?: number;
   logger?: (m: string) => void;
 }): Promise<WnbaRecordsResult> {
-  const { supabase, apply, slateDate, windowDays = 3, logger = () => {} } = opts;
+  const { supabase, apply, slateDate, windowDays = 0, logger = () => {} } = opts;
   const errors: string[] = [];
   const today = slateDate ?? currentSlateDate("wnba");
   const end = addDaysToSlate(today, windowDays);
   const nowIso = new Date().toISOString();
+  const result: WnbaRecordsResult = { apply, eligibleGames: 0, withheld: [], counts: { moneyline: 0, total: 0, spread: 0 }, missingTip: [], missingLinePrice: [], ambiguous: [], written: 0, lockedSkipped: 0, records: [], errors };
+
+  if (!isPublicallyTracked("wnba", today)) {
+    logger(`wnba records ${today}: before official public-tracking start — no records written`);
+    return result;
+  }
 
   const { data: games } = await supabase
     .from("games").select("id, external_id, slate_date, game_date, home_team_id, away_team_id")
@@ -134,8 +141,6 @@ export async function buildWnbaPredictionRecords(opts: {
       .filter((r) => new Date(r.recorded_at as string).getTime() === latestAt)
       .map((r) => r.odds_american as number));
   };
-
-  const result: WnbaRecordsResult = { apply, eligibleGames: 0, withheld: [], counts: { moneyline: 0, total: 0, spread: 0 }, missingTip: [], missingLinePrice: [], ambiguous: [], written: 0, lockedSkipped: 0, records: [], errors };
 
   for (const g of allGames) {
     const matchup = `${ab(g.away_team_id as number)}@${ab(g.home_team_id as number)}`;

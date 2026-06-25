@@ -117,21 +117,34 @@ export async function GET(request: Request): Promise<Response> {
       // substrate. Locked records are preserved by the writer; grading happens
       // in tracking-refresh after final scores land.
       let predictionRecordsWritten = 0, predictionRecordsLockedSkipped = 0;
-      try {
-        const r = await buildWnbaPredictionRecords({ supabase, apply: true, logger: log("records") });
-        predictionRecordsWritten = r.written; predictionRecordsLockedSkipped = r.lockedSkipped;
-        errors.push(...r.errors);
-        details.records = {
-          eligibleGames: r.eligibleGames,
-          written: predictionRecordsWritten,
-          lockedSkipped: predictionRecordsLockedSkipped,
-          counts: r.counts,
-          withheld: r.withheld.slice(0, 20),
-          missingLinePrice: r.missingLinePrice,
-        };
-      } catch (e) {
-        errors.push(`records: ${e instanceof Error ? e.message : String(e)}`);
+      const recordDetails: Array<Record<string, unknown>> = [];
+      for (const n of [0, 1, 2]) {
+        const slate = slateDateOffset(n);
+        try {
+          const r = await buildWnbaPredictionRecords({
+            supabase,
+            apply: true,
+            slateDate: slate,
+            windowDays: 0,
+            logger: log("records"),
+          });
+          predictionRecordsWritten += r.written;
+          predictionRecordsLockedSkipped += r.lockedSkipped;
+          errors.push(...r.errors);
+          recordDetails.push({
+            slate,
+            eligibleGames: r.eligibleGames,
+            written: r.written,
+            lockedSkipped: r.lockedSkipped,
+            counts: r.counts,
+            withheld: r.withheld.slice(0, 20),
+            missingLinePrice: r.missingLinePrice,
+          });
+        } catch (e) {
+          errors.push(`records ${slate}: ${e instanceof Error ? e.message : String(e)}`);
+        }
       }
+      details.records = recordDetails;
 
       const recordsUpdated = teamsUpserted + gamesUpserted + linesWritten + lineHistoryWritten + sharpSignalsWritten + publicSplitsUpdated + publicSplitsInserted + predictionsWritten + predictionRecordsWritten;
       console.log(`[wnba-daily-refresh] done — teams:${teamsUpserted} games:${gamesUpserted} lines:${linesWritten} history:${lineHistoryWritten} signals:${sharpSignalsWritten} pubSplits:${publicSplitsUpdated + publicSplitsInserted} predictions:${predictionsWritten} records:${predictionRecordsWritten} lockedSkipped:${skippedLocked}/${predictionRecordsLockedSkipped} errors:${errors.length}`);

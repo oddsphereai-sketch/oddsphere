@@ -18,7 +18,9 @@
  *
  * Hard rules unchanged from earlier passes:
  *   • Toss-Up and Held are NEVER counted as wins or losses.
- *   • No Bet is never mixed into the main win rate.
+ *   • No Bet / stand-downs with a real side DO count in the main
+ *     prediction-accuracy win rate; they are only excluded from
+ *     recommendation-performance cuts like Best Angle / Lean.
  *   • Pushes / voids / pending always surfaced separately.
  *   • Empty / low-sample states render honest copy.
  *   • NRFI and YRFI are first-class, never hidden behind a
@@ -511,7 +513,7 @@ export default function LabTrackingPage() {
       </Section>
 
       <footer className="mt-10 pt-6 border-t border-white/[0.04] text-[11px] text-gray-600 leading-relaxed">
-        Win rate excludes pushes, voids, pending, Toss-Up and Held picks. Postponed and canceled games count as voids. First-inning grading requires the first-inning linescore.
+        Win rate excludes pushes, voids, pending, Toss-Up and Held picks. Sided No Play stand-downs still count for prediction accuracy. Postponed and canceled games count as voids. First-inning grading requires the first-inning linescore.
       </footer>
     </Shell>
   );
@@ -547,7 +549,7 @@ function Header({ lastUpdated }: { lastUpdated: string | null }) {
         Performance by sport, market, and prediction type.
       </p>
       <p className="text-[12px] text-gray-500 mt-1.5 max-w-2xl leading-relaxed">
-        Records update after games are graded. Toss-Up and Held are not counted as wins or losses.
+        Records update after games are graded. Every sided prediction counts; Toss-Up and Held are not counted as wins or losses.
       </p>
     </header>
   );
@@ -1112,7 +1114,7 @@ function Glossary() {
   const items: { term: string; body: string }[] = [
     { term: "Best Angle", body: "Strongest filtered tier — meaningful edge plus reliable data." },
     { term: "Lean",       body: "Lighter actionable call with positive edge." },
-    { term: "No Bet",     body: "Not playable; surfaced for transparency, not counted in main win rate." },
+    { term: "No Bet",     body: "Not playable; still counted for prediction accuracy when it has a side." },
     { term: "Toss-Up",    body: "Model state, not a bet. Never counted as a win or loss." },
     { term: "Held",       body: "Pick withheld by safety gate. Never counted as a win or loss." },
     { term: "Pending",    body: "Awaiting result." },

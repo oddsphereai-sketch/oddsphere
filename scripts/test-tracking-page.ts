@@ -72,7 +72,7 @@ check(
 
 for (const required of [
   "Yesterday's results",
-  "This week by category",
+  "Tracking by category",
   "Lifetime Tracking",
   "Best Angles by category",
   "Recent Predictions",
@@ -88,34 +88,34 @@ check(
 );
 check(
   "Header carries the brief's small copy",
-  /Records update after games are graded\.[\s\S]{0,80}Toss-Up and Held are not counted as wins or losses/.test(PAGE),
+  /Records update after games are graded\.[\s\S]{0,140}Every sided prediction counts[\s\S]{0,140}Toss-Up and Held are not counted as wins or losses/.test(PAGE),
 );
 
-// ── Order: Yesterday → Week → Lifetime → Best Angles → Recent → Method
+// ── Order: Yesterday → Tracking by category → Best Angles → Latest → Recent → Method
 
-check("Page order: Yesterday → Week → Lifetime → Best Angles → Recent → Method", (() => {
+check("Page order: Yesterday → Tracking by category → Best Angles → Latest → Recent → Method", (() => {
   const idx = {
     yesterday: PAGE.indexOf('title="Yesterday\'s results"'),
-    week:      PAGE.indexOf('title="This week by category"'),
-    lifetime:  PAGE.indexOf('title="Lifetime Tracking"'),
+    tracking:  PAGE.indexOf('title="Tracking by category"'),
     best:      PAGE.indexOf('title="Best Angles by category"'),
+    latest:    PAGE.indexOf('title="Latest Results"'),
     recent:    PAGE.indexOf('title="Recent Predictions"'),
     method:    PAGE.indexOf('title="Method"'),
   };
   return (
-    idx.yesterday !== -1 && idx.week !== -1 && idx.lifetime !== -1 &&
-    idx.best !== -1 && idx.recent !== -1 && idx.method !== -1 &&
-    idx.yesterday < idx.week &&
-    idx.week < idx.lifetime &&
-    idx.lifetime < idx.best &&
-    idx.best < idx.recent &&
+    idx.yesterday !== -1 && idx.tracking !== -1 &&
+    idx.best !== -1 && idx.latest !== -1 && idx.recent !== -1 && idx.method !== -1 &&
+    idx.yesterday < idx.tracking &&
+    idx.tracking < idx.best &&
+    idx.best < idx.latest &&
+    idx.latest < idx.recent &&
     idx.recent < idx.method
   );
 })());
 
 // ── This Week uses the single CategoryBars chart, not multiple ──────
 
-check("This Week section uses CategoryBars chart", /This week by category[\s\S]{0,800}CategoryBars/.test(PAGE));
+check("Tracking by category section uses CategoryBars chart", /Tracking by category[\s\S]{0,1600}CategoryBars/.test(PAGE));
 check("CategoryBars chart component exists", CHARTS.includes("export function CategoryBars"));
 check(
   "CategoryBars renders progress-bar rows",
@@ -192,7 +192,7 @@ check("Market label: NRFI distinct",  PAGE.includes('nrfi: "NRFI"'));
 check("Market label: YRFI distinct",  PAGE.includes('yrfi: "YRFI"'));
 check(
   "MLB order: ML, O/U, NRFI, YRFI",
-  /moneyline: 1, total: 2, nrfi: 3, yrfi: 4/.test(PAGE),
+  /moneyline: 1,[\s\S]{0,80}total: 2,[\s\S]{0,80}nrfi: 3,[\s\S]{0,80}yrfi: 4/.test(PAGE),
 );
 check(
   "first_inning rollup suppressed when NRFI/YRFI present",
@@ -270,6 +270,11 @@ check(
   !/toss_up[\s\S]{0,80}\+=\s*wins/.test(PAGE),
 );
 check(
+  "Page explains sided No Play / No Bet counts for prediction accuracy",
+  PAGE.includes("Sided No Play stand-downs still count for prediction accuracy") &&
+    PAGE.includes("still counted for prediction accuracy when it has a side"),
+);
+check(
   "Yesterday board uses honest empty state, not zeros",
   /Yesterday's results are pending grading/.test(PAGE),
 );
@@ -307,6 +312,22 @@ check("Header drops big metric grid",            !/grid-cols-2 lg:grid-cols-4/.t
 check("Service exposes SportMarketBucket",        SERVICE.includes("export type SportMarketBucket"));
 check("Service exposes RecentPickRow",            SERVICE.includes("export type RecentPickRow"));
 check("Service computes bySportMarket",           /bySportMarket:\s*SportMarketBucket\[\]/.test(SERVICE));
+check(
+  "Service pages prediction_records instead of relying on capped select('*')",
+  SERVICE.includes("TRACKING_PAGE_SIZE") &&
+    SERVICE.includes("fetchAllPredictionRecords") &&
+    /\.range\(fromRow, fromRow \+ TRACKING_PAGE_SIZE - 1\)/.test(SERVICE),
+);
+check(
+  "Service chunks prediction_grades loads so all paged records can grade",
+  SERVICE.includes("TRACKING_GRADE_ID_CHUNK_SIZE") &&
+    SERVICE.includes("fetchGradesForRecordIds"),
+);
+check(
+  "Service applies official public tracking start boundary before member aggregation",
+  SERVICE.includes("isPublicallyTracked") &&
+    /publicStartFiltered[\s\S]{0,300}isPublicallyTracked\(r\.sport, r\.slate_date\)/.test(SERVICE),
+);
 // Phase 6B.24 — first_inning records must split into virtual NRFI / YRFI
 // buckets so the public Tracking page's NRFI / YRFI categories see
 // today's grades alongside the historical baselines.

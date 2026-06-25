@@ -33,6 +33,7 @@ import {
   type TrackedMarketV17,
   type TrackingBaselineRow,
 } from "../types/domain/Tracking";
+import { isPublicallyTracked } from "../config/officialTrackingStart";
 
 export type AggregateKey =
   | "all"
@@ -215,6 +216,52 @@ type Row = {
   grade: PredictionGradeRow | null;
 };
 
+const TRACKING_PAGE_SIZE = 1000;
+const TRACKING_GRADE_ID_CHUNK_SIZE = 500;
+
+async function fetchAllPredictionRecords(
+  supabase: SupabaseClient,
+  opts: {
+    sport?: TrackedSport;
+    from?: string;
+    to?: string;
+  },
+): Promise<{ rows: PredictionRecordRow[]; error: unknown | null }> {
+  const out: PredictionRecordRow[] = [];
+  for (let fromRow = 0; ; fromRow += TRACKING_PAGE_SIZE) {
+    let query = supabase
+      .from("prediction_records")
+      .select("*")
+      .order("id", { ascending: true })
+      .range(fromRow, fromRow + TRACKING_PAGE_SIZE - 1);
+    if (opts.sport !== undefined) query = query.eq("sport", opts.sport);
+    if (opts.from !== undefined) query = query.gte("slate_date", opts.from);
+    if (opts.to !== undefined) query = query.lte("slate_date", opts.to);
+    const { data, error } = await query;
+    if (error) return { rows: out, error };
+    const page = (data ?? []) as PredictionRecordRow[];
+    out.push(...page);
+    if (page.length < TRACKING_PAGE_SIZE) break;
+  }
+  return { rows: out, error: null };
+}
+
+async function fetchGradesForRecordIds(
+  supabase: SupabaseClient,
+  recordIds: number[],
+): Promise<PredictionGradeRow[]> {
+  const out: PredictionGradeRow[] = [];
+  for (let i = 0; i < recordIds.length; i += TRACKING_GRADE_ID_CHUNK_SIZE) {
+    const ids = recordIds.slice(i, i + TRACKING_GRADE_ID_CHUNK_SIZE);
+    const { data } = await supabase
+      .from("prediction_grades")
+      .select("*")
+      .in("prediction_record_id", ids);
+    out.push(...((data ?? []) as PredictionGradeRow[]));
+  }
+  return out;
+}
+
 function accumulate(metrics: AggregateMetrics, row: Row): void {
   metrics.picks++;
   const g = row.grade;
@@ -337,20 +384,25 @@ export async function computeTrackingAggregate(opts: {
   const { data: baselineRows } = await baselinesQuery;
   result.baselines = (baselineRows ?? []) as TrackingBaselineRow[];
 
-  // Records
-  let recQuery = opts.supabase.from("prediction_records").select("*");
-  if (opts.sport !== undefined) recQuery = recQuery.eq("sport", opts.sport);
-  if (opts.from !== undefined) recQuery = recQuery.gte("slate_date", opts.from);
-  if (opts.to !== undefined) recQuery = recQuery.lte("slate_date", opts.to);
-  const { data: recRows, error: recErr } = await recQuery;
+  // Records. Supabase/PostgREST caps un-ranged selects (commonly 1,000 rows).
+  // Tracking is an all-time surface, so a plain `.select("*")` silently drops
+  // newer slates once history grows. Page explicitly to keep Yesterday / Week /
+  // Lifetime based on the full prediction_records table.
+  const { rows: recordsRaw, error: recErr } = await fetchAllPredictionRecords(opts.supabase, {
+    sport: opts.sport,
+    from: opts.from,
+    to: opts.to,
+  });
   if (recErr) return result;
-  const recordsRaw = (recRows ?? []) as PredictionRecordRow[];
   result.rowsConsidered = recordsRaw.length;
 
   // Filter launch-day if requested
   const launchFiltered = opts.includeLaunchDay === true
     ? recordsRaw
     : recordsRaw.filter((r) => !r.launch_day);
+  const publicStartFiltered = launchFiltered.filter((r) =>
+    isPublicallyTracked(r.sport, r.slate_date),
+  );
 
   // W-L accuracy counts EVERY prediction that has a side. `no_bet` is a GUIDANCE
   // signal ("we don't advise betting this"), NOT a tracking exclusion — a
@@ -362,17 +414,13 @@ export async function computeTrackingAggregate(opts: {
   //
   // ROI is a SEPARATE (HQ-only) metric and is where null-odds rows get dropped —
   // never conflate "ROI-ineligible" with "doesn't count for accuracy".
-  const records = launchFiltered.filter((r) => !isTossUp(r));
+  const records = publicStartFiltered.filter((r) => !isTossUp(r));
   result.rowsCounted = records.length;
   if (records.length === 0) return result;
 
   // Grades — load only for the relevant record ids
   const recordIds = records.map((r) => r.id).filter((x): x is number => x !== undefined);
-  const { data: gradeRows } = await opts.supabase
-    .from("prediction_grades")
-    .select("*")
-    .in("prediction_record_id", recordIds);
-  const grades = ((gradeRows ?? []) as PredictionGradeRow[]);
+  const grades = await fetchGradesForRecordIds(opts.supabase, recordIds);
   const gradeByRecordId = new Map<number, PredictionGradeRow>(
     grades.map((g) => [g.prediction_record_id, g]),
   );
