@@ -91,6 +91,14 @@ export const maxDuration = 60;
 export const PREGAME_SWEEP_CRON_ACTIVE_ENV = "PREGAME_SWEEP_CRON_ACTIVE";
 
 /**
+ * Load-control mode for scheduled T-60 checks. When true, this route does only
+ * the lock lifecycle work (classify, final model pass for entering-lock games,
+ * set locked_at, audit) and skips the expensive slate-wide lines/signals/grade
+ * refresh. This keeps frequent lock checks from becoming full refreshes.
+ */
+export const PREGAME_SWEEP_LOCK_ONLY_ENV = "PREGAME_SWEEP_LOCK_ONLY";
+
+/**
  * Env var for dry-run mode (alternative to ?dryRun=true query param).
  * Either trigger flips the route into read-only / report-only mode.
  */
@@ -123,6 +131,19 @@ export function isPregameSweepGateActive(
   env: Record<string, string | undefined> = process.env
 ): boolean {
   return env[PREGAME_SWEEP_CRON_ACTIVE_ENV] === "true";
+}
+
+export function isPregameSweepLockOnly(
+  request: Request,
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  try {
+    const url = new URL(request.url);
+    if (url.searchParams.get("lockOnly") === "true") return true;
+  } catch {
+    // Malformed URL — fall through to env check
+  }
+  return env[PREGAME_SWEEP_LOCK_ONLY_ENV] === "true";
 }
 
 /**
@@ -309,6 +330,7 @@ export async function GET(request: Request) {
   // and should produce identical behavior across MLB / future sports.
   const dryRun = isPregameSweepDryRun(request);
   const gateActive = isPregameSweepGateActive();
+  const lockOnly = isPregameSweepLockOnly(request);
 
   return cronHandlerPerSport(
     request,
@@ -352,6 +374,7 @@ export async function GET(request: Request) {
           details: {
             dry_run: true,
             pregame_sweep_active: gateActive,
+            lock_only: lockOnly,
             sport,
             date,
             candidates_count: candidates.length,
@@ -428,6 +451,43 @@ export async function GET(request: Request) {
       // default for V1.
       const lockResult = await applyLocks(sport, date, partition.entering_lock);
       records += lockResult.locked;
+
+      if (lockOnly) {
+        const anyErrors =
+          lockResult.errors.length > 0 ||
+          enteringLockModelResult.errors.length > 0;
+        return {
+          records_updated: records,
+          api_calls_made: apiCalls,
+          partial: anyErrors,
+          details: {
+            dry_run: false,
+            pregame_sweep_active: true,
+            lock_only: true,
+            sport,
+            date,
+            partition: {
+              locked: partition.locked.length,
+              entering_lock: partition.entering_lock.length,
+              still_unlocked: partition.still_unlocked.length,
+              already_started: partition.already_started.length,
+            },
+            entering_lock_model: enteringLockModelResult,
+            locks_applied: lockResult.locked,
+            audit_rows_written: lockResult.audit_written,
+            lock_errors: lockResult.errors,
+            errors_count:
+              lockResult.errors.length + enteringLockModelResult.errors.length,
+            steps_skipped: [
+              "lines_refresh",
+              "sharp_signals_refresh",
+              "stale_snapshot_detection",
+              "market_signals_derivation",
+              "grade_derivation",
+            ],
+          },
+        };
+      }
 
       // ── WNBA: lock-only ─────────────────────────────────────────────
       // applyLocks above already set locked_at on game_predictions AND
