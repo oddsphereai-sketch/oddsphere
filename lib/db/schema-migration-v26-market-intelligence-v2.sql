@@ -88,7 +88,9 @@ CREATE TABLE IF NOT EXISTS market_price_observations_v2 (
   CONSTRAINT market_price_observations_v2_market_chk
     CHECK (market_type IN ('moneyline', 'spread', 'total')),
   CONSTRAINT market_price_observations_v2_probability_chk
-    CHECK (no_vig_probability IS NULL OR (no_vig_probability >= 0 AND no_vig_probability <= 1))
+    CHECK (no_vig_probability IS NULL OR (no_vig_probability >= 0 AND no_vig_probability <= 1)),
+  CONSTRAINT market_price_observations_v2_unique_price
+    UNIQUE (canonical_market_id, sportsbook, selection_key, line, american_price, provider_timestamp)
 );
 
 CREATE INDEX IF NOT EXISTS market_price_observations_v2_lookup_idx
