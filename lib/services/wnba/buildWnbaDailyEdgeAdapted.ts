@@ -55,9 +55,22 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
   const ids = games.map((g) => g.id as number);
   const { data: gps } = await supabase
     .from("game_predictions")
-    .select("game_id, predicted_home_score, predicted_away_score, predicted_total, sport_specific")
+    .select("game_id, predicted_home_score, predicted_away_score, predicted_total, locked_at, sport_specific")
     .in("game_id", ids);
   const gpByGame = new Map((gps ?? []).map((r) => [r.game_id as number, r]));
+  const { data: lockedRecords } = await supabase
+    .from("prediction_records")
+    .select("game_id, market, pick, side, line_value, odds_american, locked_at")
+    .eq("sport", "wnba")
+    .in("game_id", ids)
+    .not("locked_at", "is", null);
+  const lockedByGame = new Map<number, Map<string, WnbaLockedRecord>>();
+  for (const r of (lockedRecords ?? []) as WnbaLockedRecord[]) {
+    const gid = r.game_id;
+    const byMarket = lockedByGame.get(gid) ?? new Map<string, WnbaLockedRecord>();
+    byMarket.set(r.market, r);
+    lockedByGame.set(gid, byMarket);
+  }
   // Playbook public splits (display context only) — filled by refreshWnbaPlaybookSplits.
   const { data: signalRows } = await supabase
     .from("sharp_signals")
@@ -112,7 +125,7 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
   const out: PreviewGame[] = [];
   const seen = new Set<number>();
   for (const g of games) {
-    const gp = gpByGame.get(g.id as number) as { sport_specific?: Record<string, unknown>; predicted_home_score?: number; predicted_away_score?: number; predicted_total?: number } | undefined;
+    const gp = gpByGame.get(g.id as number) as { sport_specific?: Record<string, unknown>; predicted_home_score?: number; predicted_away_score?: number; predicted_total?: number; locked_at?: string | null } | undefined;
     const ss = (gp?.sport_specific ?? {}) as Record<string, unknown>;
     const home = tById.get(g.home_team_id as number), away = tById.get(g.away_team_id as number);
     if (!gp || !home || !away || !ss.moneyline) continue;
@@ -120,6 +133,11 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
     if (seen.has(extId)) continue; // no duplicate games
     seen.add(extId);
     const ml = ss.moneyline as PreviewGame["moneyline"];
+    const lockedRecordsForGame = lockedByGame.get(g.id as number) ?? new Map<string, WnbaLockedRecord>();
+    const lockedAt =
+      gp.locked_at ??
+      Array.from(lockedRecordsForGame.values()).find((r) => r.locked_at !== null)?.locked_at ??
+      null;
     out.push({
       game_id: extId,
       date: g.slate_date as string,
@@ -147,6 +165,7 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
       pickedPrices: buildWnbaPickedPrices(
         linesByGame.get(g.id as number) ?? [],
         historyByGame.get(g.id as number) ?? [],
+        lockedRecordsForGame,
         ml,
         (ss.total as PreviewGame["total"]) ?? { side: null, line: null, confidence: null, grade: null },
         (ss.spread as PreviewGame["spread"]) ?? { side: null, line: null, confidence: null, grade: null },
@@ -154,7 +173,9 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
         away.abbreviation as string,
         home.name as string,
         away.name as string,
+        lockedAt,
       ),
+      lockedAt,
     });
   }
   return out;
@@ -231,6 +252,16 @@ type WnbaLineRow = {
   recorded_at?: string | null;
 };
 
+type WnbaLockedRecord = {
+  game_id: number;
+  market: string;
+  pick: string | null;
+  side: string | null;
+  line_value: number | null;
+  odds_american: number | null;
+  locked_at: string | null;
+};
+
 function medianNumber(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -301,6 +332,17 @@ function pickedNoVigProb(rows: WnbaLineRow[], market: string, side: string | nul
   return pickImp / (pickImp + oppImp);
 }
 
+function rowsAtOrBefore(rows: WnbaLineRow[], iso: string | null): WnbaLineRow[] {
+  if (iso === null) return rows;
+  const cutoff = new Date(iso).getTime();
+  if (!Number.isFinite(cutoff)) return rows;
+  return rows.filter((r) => {
+    if (!r.recorded_at) return true;
+    const ts = new Date(r.recorded_at).getTime();
+    return Number.isFinite(ts) && ts <= cutoff;
+  });
+}
+
 function latestPickedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
   const candidates = pickedRows(rows, market, side, line).filter((r) => r.recorded_at);
   if (candidates.length === 0) return null;
@@ -365,6 +407,7 @@ function lineMove(rows: WnbaLineRow[], market: string, side: string | null, curr
 function buildWnbaPickedPrices(
   rows: WnbaLineRow[],
   historyRows: WnbaLineRow[],
+  lockedRecords: ReadonlyMap<string, WnbaLockedRecord>,
   ml: PreviewMarket & { price: number | null },
   total: PreviewMarket & { line: number | null },
   spread: PreviewMarket & { line: number | null },
@@ -372,7 +415,13 @@ function buildWnbaPickedPrices(
   awayAbbr: string,
   homeName: string,
   awayName: string,
+  lockedAt: string | null,
 ): WnbaPickedPrices {
+  const liveRows = lockedAt === null ? rows : rowsAtOrBefore(historyRows, lockedAt);
+  const cappedHistoryRows = rowsAtOrBefore(historyRows, lockedAt);
+  const lockedMl = lockedRecords.get("moneyline");
+  const lockedTotal = lockedRecords.get("total");
+  const lockedSpread = lockedRecords.get("spread");
   const mlSide =
     ml.side === homeAbbr || ml.side === homeName ? "home" :
     ml.side === awayAbbr || ml.side === awayName ? "away" :
@@ -389,17 +438,19 @@ function buildWnbaPickedPrices(
     spreadSide === "home" ? spread.line :
     spreadSide === "away" && spread.line !== null ? -spread.line :
     null;
-  const mlCurrent = pickedPrice(rows, "moneyline", mlSide, null) ?? latestPickedPrice(historyRows, "moneyline", mlSide, null);
-  const totalCurrent = pickedPrice(rows, "total", totalSide, total.line) ?? latestPickedPrice(historyRows, "total", totalSide, total.line);
-  const spreadCurrent = pickedPrice(rows, "spread", spreadSide, pickedSpreadLine) ?? latestPickedPrice(historyRows, "spread", spreadSide, pickedSpreadLine);
-  const totalCurrentLine = currentLineValue(rows, "total", totalSide, total.line) ?? total.line;
-  const spreadCurrentLine = currentLineValue(rows, "spread", spreadSide, pickedSpreadLine) ?? pickedSpreadLine;
-  const totalLineMove = lineMove(historyRows, "total", totalSide, totalCurrentLine);
-  const spreadLineMove = lineMove(historyRows, "spread", spreadSide, spreadCurrentLine);
+  const totalLockedLine = lockedTotal?.line_value ?? total.line;
+  const spreadLockedLine = lockedSpread?.line_value ?? pickedSpreadLine;
+  const mlCurrent = lockedMl?.odds_american ?? pickedPrice(liveRows, "moneyline", mlSide, null) ?? latestPickedPrice(cappedHistoryRows, "moneyline", mlSide, null);
+  const totalCurrent = lockedTotal?.odds_american ?? pickedPrice(liveRows, "total", totalSide, totalLockedLine) ?? latestPickedPrice(cappedHistoryRows, "total", totalSide, totalLockedLine);
+  const spreadCurrent = lockedSpread?.odds_american ?? pickedPrice(liveRows, "spread", spreadSide, spreadLockedLine) ?? latestPickedPrice(cappedHistoryRows, "spread", spreadSide, spreadLockedLine);
+  const totalCurrentLine = lockedTotal?.line_value ?? currentLineValue(liveRows, "total", totalSide, totalLockedLine) ?? totalLockedLine;
+  const spreadCurrentLine = lockedSpread?.line_value ?? currentLineValue(liveRows, "spread", spreadSide, spreadLockedLine) ?? spreadLockedLine;
+  const totalLineMove = lineMove(cappedHistoryRows, "total", totalSide, totalCurrentLine);
+  const spreadLineMove = lineMove(cappedHistoryRows, "spread", spreadSide, spreadCurrentLine);
   return {
-    ml: { ...priceTrail(historyRows, "moneyline", mlSide, null, mlCurrent), marketProb: pickedNoVigProb(rows, "moneyline", mlSide, null), lineMovePrev: null, lineMoveNext: null },
-    total: { ...priceTrail(historyRows, "total", totalSide, total.line, totalCurrent), marketProb: pickedNoVigProb(rows, "total", totalSide, total.line), lineMovePrev: totalLineMove.prev, lineMoveNext: totalLineMove.next },
-    spread: { ...priceTrail(historyRows, "spread", spreadSide, pickedSpreadLine, spreadCurrent), marketProb: pickedNoVigProb(rows, "spread", spreadSide, pickedSpreadLine), lineMovePrev: spreadLineMove.prev, lineMoveNext: spreadLineMove.next },
+    ml: { ...priceTrail(cappedHistoryRows, "moneyline", mlSide, null, mlCurrent), marketProb: pickedNoVigProb(liveRows, "moneyline", mlSide, null), lineMovePrev: null, lineMoveNext: null },
+    total: { ...priceTrail(cappedHistoryRows, "total", totalSide, totalLockedLine, totalCurrent), marketProb: pickedNoVigProb(liveRows, "total", totalSide, totalLockedLine), lineMovePrev: totalLineMove.prev, lineMoveNext: totalLineMove.next },
+    spread: { ...priceTrail(cappedHistoryRows, "spread", spreadSide, spreadLockedLine, spreadCurrent), marketProb: pickedNoVigProb(liveRows, "spread", spreadSide, spreadLockedLine), lineMovePrev: spreadLineMove.prev, lineMoveNext: spreadLineMove.next },
   };
 }
 
@@ -427,6 +478,7 @@ type PreviewGame = {
   publicSplits?: { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[]; spread: WnbaPublicSplit[] };
   /** Current picked-side prices from `lines`; absent on live fallback. */
   pickedPrices?: WnbaPickedPrices;
+  lockedAt?: string | null;
 };
 
 function gradeToVerdict(g: PreviewModelGrade): Verdict {
@@ -471,6 +523,7 @@ function buildMarket(opts: {
   whyLine: string;
   publicSplits?: WnbaPublicSplit[];
   priceTrail?: WnbaPriceTrail;
+  lockedAt?: string | null;
 }): MarketEdgeDto {
   const { slot, pick, confFrac, grade, modelProbPick, marketFairProbPick, priceAmerican, line, modelTotal, marketTotal, bookCount, aligned, whyLine } = opts;
   const held = pick === null || grade === null;
@@ -500,6 +553,8 @@ function buildMarket(opts: {
     publicSplits: opts.publicSplits ?? [],
     priceAmerican,
     lineOpenAmerican: opts.priceTrail?.open ?? null,
+    lockedLineAmerican: opts.lockedAt ? priceAmerican : null,
+    lockedLineAt: opts.lockedAt ?? null,
     lastMovePrevAmerican: opts.priceTrail?.previous ?? null,
     lastMoveLinePrev: opts.priceTrail?.lineMovePrev ?? null,
     lastMoveLineNext: opts.priceTrail?.lineMoveNext ?? null,
@@ -551,6 +606,7 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     whyLine: `Independent model ${Math.round(mlModelProb * 100)}% vs market ${mlMarketFair !== null ? Math.round(mlMarketFair * 100) + "%" : "n/a"} on ${game.moneyline.side}.`,
     publicSplits: game.publicSplits?.ml,
     priceTrail: game.pickedPrices?.ml,
+    lockedAt: game.lockedAt ?? null,
   });
 
   // ── Total ──
@@ -568,6 +624,7 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     whyLine: `Model projects ${game.model.total} pts vs market line ${game.total.line ?? "n/a"}.`,
     publicSplits: game.publicSplits?.total,
     priceTrail: game.pickedPrices?.total,
+    lockedAt: game.lockedAt ?? null,
   });
 
   // ── Spread (rendered on the first_inning slot, relabeled "Sprd*") ──
@@ -602,6 +659,7 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     whyLine: `Model margin ${game.model.margin > 0 ? "+" : ""}${game.model.margin} vs market spread ${game.market.spread ?? "n/a"}.`,
     publicSplits: game.publicSplits?.spread,
     priceTrail: game.pickedPrices?.spread,
+    lockedAt: game.lockedAt ?? null,
   });
 
   // Top grade across the three markets drives the card verdict pill.
@@ -623,8 +681,8 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     gameTime: tipDisplayEt(game.start_time),
     gameStartMinutes: 0,
     scheduledLockAt: game.start_time,
-    lockState: "open",
-    lockedAt: null,
+    lockState: game.lockedAt ? "locked" : "open",
+    lockedAt: game.lockedAt ?? null,
     updatedAt: asOf,
     generatedAt: asOf,
     holdReason: null,
