@@ -155,6 +155,80 @@ type EvidenceGroups = {
   H_unrecoverable_safely: boolean;
 };
 
+type CoreModelComponents = {
+  modelVersion: string | null;
+  dataQualityTier: string | null;
+  projectedHomeRuns: number | null;
+  projectedAwayRuns: number | null;
+  marketHomeRuns: number | null;
+  marketAwayRuns: number | null;
+  posteriorHomeRuns: number | null;
+  posteriorAwayRuns: number | null;
+  residualHomeRaw: number | null;
+  residualAwayRaw: number | null;
+  residualHomeApplied: number | null;
+  residualAwayApplied: number | null;
+  trustCoefficient: number | null;
+  starter: {
+    awayEra: number | null;
+    homeEra: number | null;
+    awayEraFactor: number | null;
+    homeEraFactor: number | null;
+    awayShrinkageWeight: number | null;
+    homeShrinkageWeight: number | null;
+    awayThrows: string | null;
+    homeThrows: string | null;
+    homeAdvantageProxy: number | null;
+    available: boolean;
+  };
+  bullpen: {
+    awayFactor: number | null;
+    homeFactor: number | null;
+    homeAdvantageProxy: number | null;
+    available: boolean;
+  };
+  lineup: {
+    awayWeightedOps: number | null;
+    homeWeightedOps: number | null;
+    awayOpsFactor: number | null;
+    homeOpsFactor: number | null;
+    homeAdvantageProxy: number | null;
+    available: boolean;
+  };
+  runEnvironment: {
+    parkFactorRuns: number | null;
+    parkRunDelta: number | null;
+    weatherTotalAdjust: number | null;
+    available: boolean;
+  };
+  recentForm: {
+    available: boolean;
+    note: string;
+  };
+  marketBaseline: {
+    source: string | null;
+    marketTotal: number | null;
+    homeNoVigProb: number | null;
+    awayNoVigProb: number | null;
+    listedTotal: number | null;
+    available: boolean;
+  };
+  marketOrSharp: {
+    marketReadMlSide: string | null;
+    marketReadOuSide: string | null;
+    pinnacleMlEvPct: number | null;
+    pinnacleOuEvPct: number | null;
+    available: boolean;
+  };
+  dampening: {
+    mlPenalty: number | null;
+    ouPenalty: number | null;
+    mlReasons: string[];
+    ouReasons: string[];
+  };
+  featureMissingness: string[];
+};
+
 type ReconstructedRow = {
   id: number;
   sport: Sport;
@@ -216,6 +290,7 @@ type ReconstructedRow = {
   beatClosingLine: boolean | null;
   projectedTotal: number | null;
   projectedMarginHome: number | null;
+  coreComponents: CoreModelComponents;
 };
 
 type Prediction = {
@@ -452,6 +527,110 @@ function independent(row: PredictionRow): {
     probability: spreadCoverProbabilityPoisson(homeRuns, awayRuns, row.side, row.line_value),
     projectedTotal: homeRuns + awayRuns,
     projectedMarginHome: homeRuns - awayRuns,
+  };
+}
+
+function strArray(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+}
+
+function coreComponents(row: PredictionRow): CoreModelComponents {
+  const snap = rec(row.snapshot_json);
+  const audit = rec(snap.v2_2_audit);
+  const v21 = rec(snap.v2_1_audit);
+  const a = Object.keys(audit).length ? audit : v21;
+  const auto = rec(snap.auto_factors);
+  const marketBaseline = rec(a.marketBaseline);
+  const marketRead = rec(a.market_read_summary);
+  const awayStarter = num(auto.away_starter_era_factor);
+  const homeStarter = num(auto.home_starter_era_factor);
+  const awayBullpen = num(auto.away_bullpen_factor);
+  const homeBullpen = num(auto.home_bullpen_factor);
+  const awayLineup = num(auto.away_lineup_ops_factor_adjusted);
+  const homeLineup = num(auto.home_lineup_ops_factor_adjusted);
+  const park = num(auto.park_factor_runs);
+  const weather = num(auto.weather_total_adjust);
+  const starterAvailable = awayStarter !== null || homeStarter !== null || num(auto.away_starter_era) !== null || num(auto.home_starter_era) !== null;
+  const bullpenAvailable = awayBullpen !== null || homeBullpen !== null;
+  const lineupAvailable =
+    num(auto.away_lineup_weighted_ops) !== null ||
+    num(auto.home_lineup_weighted_ops) !== null ||
+    (awayLineup !== null && awayLineup !== 1) ||
+    (homeLineup !== null && homeLineup !== 1);
+  const marketReadMlSide = str(marketRead.market_read_ml_side);
+  const marketReadOuSide = str(marketRead.market_read_ou_side);
+  return {
+    modelVersion: str(snap.model_used) ?? str(snap.model_version),
+    dataQualityTier: str(a.data_quality_tier) ?? str(snap.v2_data_quality_tier),
+    projectedHomeRuns: num(a.independent_home_runs),
+    projectedAwayRuns: num(a.independent_away_runs),
+    marketHomeRuns: num(a.market_home_runs),
+    marketAwayRuns: num(a.market_away_runs),
+    posteriorHomeRuns: num(a.posterior_home_runs),
+    posteriorAwayRuns: num(a.posterior_away_runs),
+    residualHomeRaw: num(a.residual_home_raw),
+    residualAwayRaw: num(a.residual_away_raw),
+    residualHomeApplied: num(a.residual_home_applied),
+    residualAwayApplied: num(a.residual_away_applied),
+    trustCoefficient: num(a.trust_coef),
+    starter: {
+      awayEra: num(auto.away_starter_era),
+      homeEra: num(auto.home_starter_era),
+      awayEraFactor: awayStarter,
+      homeEraFactor: homeStarter,
+      awayShrinkageWeight: num(auto.away_starter_era_shrinkage_weight),
+      homeShrinkageWeight: num(auto.home_starter_era_shrinkage_weight),
+      awayThrows: str(auto.away_starter_throws),
+      homeThrows: str(auto.home_starter_throws),
+      homeAdvantageProxy: awayStarter !== null && homeStarter !== null ? awayStarter - homeStarter : null,
+      available: starterAvailable,
+    },
+    bullpen: {
+      awayFactor: awayBullpen,
+      homeFactor: homeBullpen,
+      homeAdvantageProxy: awayBullpen !== null && homeBullpen !== null ? awayBullpen - homeBullpen : null,
+      available: bullpenAvailable,
+    },
+    lineup: {
+      awayWeightedOps: num(auto.away_lineup_weighted_ops),
+      homeWeightedOps: num(auto.home_lineup_weighted_ops),
+      awayOpsFactor: awayLineup,
+      homeOpsFactor: homeLineup,
+      homeAdvantageProxy: awayLineup !== null && homeLineup !== null ? homeLineup - awayLineup : null,
+      available: lineupAvailable,
+    },
+    runEnvironment: {
+      parkFactorRuns: park,
+      parkRunDelta: park !== null ? (park - 100) / 100 : null,
+      weatherTotalAdjust: weather,
+      available: park !== null || weather !== null,
+    },
+    recentForm: {
+      available: false,
+      note: "No stable recent-form component field is persisted in prediction snapshot_json for settled MLB rows.",
+    },
+    marketBaseline: {
+      source: str(marketBaseline.source),
+      marketTotal: num(a.market_total),
+      homeNoVigProb: num(marketBaseline.homeNoVigProb),
+      awayNoVigProb: num(marketBaseline.awayNoVigProb),
+      listedTotal: num(marketBaseline.listedTotal),
+      available: Object.keys(marketBaseline).length > 0 || num(a.market_total) !== null || num(a.ml_market_prob) !== null,
+    },
+    marketOrSharp: {
+      marketReadMlSide,
+      marketReadOuSide,
+      pinnacleMlEvPct: num(marketRead.pinnacle_ml_ev_pct),
+      pinnacleOuEvPct: num(marketRead.pinnacle_ou_ev_pct),
+      available: marketReadMlSide !== null || marketReadOuSide !== null || num(marketRead.pinnacle_ml_ev_pct) !== null || num(marketRead.pinnacle_ou_ev_pct) !== null,
+    },
+    dampening: {
+      mlPenalty: num(auto.ml_dampening_penalty),
+      ouPenalty: num(auto.ou_dampening_penalty),
+      mlReasons: strArray(auto.ml_dampening_reasons),
+      ouReasons: strArray(auto.ou_dampening_reasons),
+    },
+    featureMissingness: strArray(a.feature_missingness),
   };
 }
 
@@ -931,6 +1110,7 @@ function reconstructRow(
     beatClosingLine: null,
     projectedTotal: ind.projectedTotal,
     projectedMarginHome: ind.projectedMarginHome,
+    coreComponents: coreComponents(row),
   };
   const close = closingLine(lineRows, provisional);
   const best = bestAvailableAtLock(lineRows, row);
@@ -4003,6 +4183,7 @@ function mlCoreBucket(rows: ReconstructedRow[], label: string) {
     calibrationError: actual !== null && expected !== null ? actual - expected : null,
     logLoss: ll,
     brier: br,
+    edgeRealization: mlEdgeRetention(rows),
     edgeAssessment: interpretation(actual, expected, rows.length),
   };
 }
@@ -4027,7 +4208,78 @@ function totalCoreBucket(rows: ReconstructedRow[], label: string) {
     overUnderPerformance: subset(preds),
     avgProjectionEdgeRuns: avgProjectionEdge,
     modelMaeAdvantageVsMarket: modelAdvantage,
+    edgeRealization: totalEdgeRetention(eligible),
     edgeAssessment: eligible.length < 12 ? "noise_or_too_small" : modelAdvantage !== null && modelAdvantage > 0.15 ? "real" : modelAdvantage !== null && modelAdvantage < -0.15 ? "overstated" : "noise_or_too_small",
+  };
+}
+
+function nearestEdgeRetention(k: number | null): "0%" | "25%" | "50%" | "75%" | "100%" | "unknown" {
+  if (k === null || !Number.isFinite(k)) return "unknown";
+  const bounded = Math.min(1, Math.max(0, k));
+  const levels = [0, 0.25, 0.5, 0.75, 1] as const;
+  const best = levels
+    .map((level) => ({ level, distance: Math.abs(level - bounded) }))
+    .sort((a, b) => a.distance - b.distance)[0]?.level;
+  if (best === 0) return "0%";
+  if (best === 0.25) return "25%";
+  if (best === 0.5) return "50%";
+  if (best === 0.75) return "75%";
+  if (best === 1) return "100%";
+  return "unknown";
+}
+
+function mlEdgeRetention(rows: ReconstructedRow[]) {
+  const eligible = rows.filter((r) => r.pMarketNoVigAtLock !== null);
+  if (eligible.length === 0) {
+    return {
+      estimatedCoefficient: null,
+      nearestBucket: "unknown" as const,
+      modelEdgePp: null,
+      realizedEdgePp: null,
+      note: "no market baseline",
+    };
+  }
+  const actual = eligible.reduce((s, r) => s + r.outcome, 0) / eligible.length;
+  const model = eligible.reduce((s, r) => s + r.pCurrentProduction, 0) / eligible.length;
+  const market = eligible.reduce((s, r) => s + (r.pMarketNoVigAtLock as number), 0) / eligible.length;
+  const modelEdge = model - market;
+  const realizedEdge = actual - market;
+  const coefficient = Math.abs(modelEdge) < 0.005 ? null : realizedEdge / modelEdge;
+  return {
+    estimatedCoefficient: coefficient,
+    nearestBucket: nearestEdgeRetention(coefficient),
+    modelEdgePp: modelEdge * 100,
+    realizedEdgePp: realizedEdge * 100,
+    note: eligible.length < 20 ? "small sample" : coefficient !== null && coefficient < 0 ? "opposite of model edge" : "ok",
+  };
+}
+
+function totalEdgeRetention(rows: ReconstructedRow[]) {
+  const eligible = rows.filter((r) => r.actualTotal !== null && r.projectedTotal !== null && r.line !== null);
+  if (eligible.length === 0) {
+    return {
+      bestCoefficient: null,
+      nearestBucket: "unknown" as const,
+      candidateMae: {},
+      note: "no total baseline",
+    };
+  }
+  const coefficients = [0, 0.25, 0.5, 0.75, 1];
+  const candidateMae = Object.fromEntries(coefficients.map((k) => {
+    const mae = eligible.reduce((s, r) => {
+      const projection = (r.line as number) + k * ((r.projectedTotal as number) - (r.line as number));
+      return s + Math.abs(projection - (r.actualTotal as number));
+    }, 0) / eligible.length;
+    return [`${Math.round(k * 100)}%`, mae];
+  }));
+  const best = coefficients
+    .map((k) => ({ k, mae: candidateMae[`${Math.round(k * 100)}%`] as number }))
+    .sort((a, b) => a.mae - b.mae)[0] ?? null;
+  return {
+    bestCoefficient: best?.k ?? null,
+    nearestBucket: nearestEdgeRetention(best?.k ?? null),
+    candidateMae,
+    note: eligible.length < 20 ? "small sample" : "ok",
   };
 }
 
@@ -4630,6 +4882,783 @@ async function calibratedDecisionLayerBacktest(rows: ReconstructedRow[]) {
   };
 }
 
+function sideChangeDetail(base: Prediction[], candidate: Prediction[]) {
+  const baseById = new Map(base.map((p) => [p.row.id, p]));
+  return candidate
+    .filter((p) => p.side !== p.row.side)
+    .map((p) => {
+      const b = baseById.get(p.row.id);
+      return {
+        id: p.row.id,
+        date: p.row.date,
+        matchup: p.row.matchup,
+        market: p.row.market,
+        productionPick: p.row.side,
+        calibratedPick: p.side,
+        productionProbability: p.row.pCurrentProduction,
+        calibratedProbability: p.probability,
+        productionProjection: p.row.projectedTotal,
+        calibratedProjection: p.reason.includes("projection=") ? Number(p.reason.split("projection=")[1]) : null,
+        marketBaseline: p.row.market === "moneyline" ? p.row.pMarketNoVigAtLock : p.row.line,
+        lockedLine: p.row.line,
+        lockedPrice: p.price,
+        productionResult: b?.result ?? p.row.result,
+        calibratedResult: p.result,
+        helped: b?.outcome === 0 && p.outcome === 1,
+        hurt: b?.outcome === 1 && p.outcome === 0,
+        modelEdgeBucket: p.row.market === "moneyline"
+          ? marketEdgeBucketMl(p.row.pMarketNoVigAtLock === null ? null : p.row.pCurrentProduction - p.row.pMarketNoVigAtLock)
+          : totalEdgeBucket(p.row.projectedTotal !== null && p.row.line !== null ? p.row.projectedTotal - p.row.line : null),
+        calibratedEdgeBucket: p.row.market === "moneyline"
+          ? marketEdgeBucketMl(p.row.pMarketNoVigAtLock === null ? null : p.probability - p.row.pMarketNoVigAtLock)
+          : totalEdgeBucket(p.row.line !== null && p.reason.includes("projection=") ? Number(p.reason.split("projection=")[1]) - p.row.line : null),
+        oddsBucket: oddsBucket(p.price),
+        totalLineBucket: lineBucket(p.row.line),
+        favoriteDog: p.price !== null && p.price < 0 ? "favorite" : "dog",
+        overUnder: p.side,
+        v2MarketReadLabel: normalizeMarketReadLabel(p.row.v2LabelReconstructed),
+        lineMovement: p.row.movementDirectionRelativeToPick ?? "unknown",
+      };
+    });
+}
+
+function predictionComparison(base: Prediction[], candidate: Prediction[]) {
+  const changed = candidate.filter((p) => p.side !== p.row.side);
+  const unchanged = candidate.filter((p) => p.side === p.row.side);
+  return {
+    production: predictionSummary(base),
+    calibrated: predictionSummary(candidate),
+    sideChanges: changed.length,
+    changedSidePerformance: subset(changed),
+    unchangedPerformance: subset(unchanged),
+    bestAngleImpact: {
+      production: subset(base.filter((p) => p.tier === "best_angle")),
+      calibrated: subset(candidate.filter((p) => p.tier === "best_angle")),
+    },
+    leanImpact: {
+      production: subset(base.filter((p) => p.tier === "lean")),
+      calibrated: subset(candidate.filter((p) => p.tier === "lean")),
+    },
+    recent14: recentWindowSummary(candidate, 14, "mlb"),
+    recent7: recentWindowSummary(candidate, 7, "mlb"),
+    recent3: recentWindowSummary(candidate, 3, "mlb"),
+    exactChangedCards: sideChangeDetail(base, candidate),
+  };
+}
+
+function calibratedSidePredictions(
+  rows: ReconstructedRow[],
+  market: "moneyline" | "total",
+  threshold: number,
+  gate?: (row: ReconstructedRow, candidateSide: string, probability: number, price: number | null, margin: number) => boolean,
+): Prediction[] {
+  return rows.filter((r) => r.sport === "mlb" && r.market === market).map((r) => {
+    if (market === "moneyline") {
+      const p = shrinkProbability(r, 0.25);
+      const margin = Math.max(0, 0.5 - p);
+      const shouldSwitch = p < 0.5 && margin >= threshold && r.oppositeOutcome !== null && r.oppositePrice !== null;
+      if (shouldSwitch) {
+        const candidateProbability = 1 - p;
+        const candidateSide = r.oppositeSide;
+        const allowed = gate ? gate(r, candidateSide, candidateProbability, r.oppositePrice, margin) : true;
+        if (allowed) {
+          return {
+            row: r,
+            id: `calibrated_ml_side_${threshold}`,
+            side: candidateSide,
+            probability: candidateProbability,
+            price: r.oppositePrice,
+            outcome: r.oppositeOutcome,
+            result: r.oppositeOutcome === 1 ? "win" : "loss",
+            tier: r.tier,
+            reason: `p_final=${p}`,
+          };
+        }
+      }
+      return basePrediction(r, `calibrated_ml_side_${threshold}`, p, `p_final=${p}`);
+    }
+    const projection = totalShrinkProjection(r, 0.25);
+    if (projection !== null && r.line !== null) {
+      const candidateSide = projectionSide(projection, r.line, r.side);
+      const margin = candidateSide === r.side ? 0 : Math.abs(projection - r.line);
+      const resolved = totalResultFor(r, candidateSide);
+      const shouldSwitch = candidateSide !== r.side && margin >= threshold && resolved.outcome !== null && resolved.price !== null;
+      if (shouldSwitch) {
+        const probability = totalProbabilityFromProjection(projection, r.line, candidateSide);
+        const allowed = gate ? gate(r, candidateSide, probability, resolved.price, margin) : true;
+        if (allowed) {
+          return {
+            row: r,
+            id: `calibrated_total_side_${threshold}`,
+            side: candidateSide,
+            probability,
+            price: resolved.price,
+            outcome: resolved.outcome,
+            result: resolved.result,
+            tier: r.tier,
+            reason: `projection=${projection}`,
+          };
+        }
+      }
+      return basePrediction(r, `calibrated_total_side_${threshold}`, totalProbabilityFromProjection(projection, r.line, r.side), `projection=${projection}`);
+    }
+    return basePrediction(r, `calibrated_total_side_${threshold}`, r.pCurrentProduction, "missing projection");
+  });
+}
+
+function groupChangedCards(cards: ReturnType<typeof sideChangeDetail>, key: string) {
+  const groups = new Map<string, typeof cards>();
+  for (const c of cards) {
+    const value = String((c as Record<string, unknown>)[key] ?? "unknown");
+    const arr = groups.get(value) ?? [];
+    arr.push(c);
+    groups.set(value, arr);
+  }
+  const summaryFor = (xs: typeof cards) => {
+    const wins = xs.filter((x) => x.calibratedResult === "win").length;
+    const losses = xs.filter((x) => x.calibratedResult === "loss").length;
+    const profits = xs.map((x) => profit(x.lockedPrice, x.calibratedResult as Result)).filter((v): v is number => v !== null);
+    return {
+      n: xs.length,
+      wl: `${wins}-${losses}-0`,
+      roi: profits.length ? profits.reduce((s, v) => s + v, 0) / profits.length : null,
+      helped: xs.filter((x) => x.helped).length,
+      hurt: xs.filter((x) => x.hurt).length,
+    };
+  };
+  return Object.fromEntries([...groups.entries()].sort().map(([k, xs]) => [k, summaryFor(xs)]));
+}
+
+function sideChangeBuckets(base: Prediction[], candidate: Prediction[]) {
+  const cards = sideChangeDetail(base, candidate);
+  return {
+    byMarket: groupChangedCards(cards, "market"),
+    byFavoriteDog: groupChangedCards(cards, "favoriteDog"),
+    byOverUnder: groupChangedCards(cards, "overUnder"),
+    byModelEdgeBucket: groupChangedCards(cards, "modelEdgeBucket"),
+    byCalibratedEdgeBucket: groupChangedCards(cards, "calibratedEdgeBucket"),
+    byOddsBucket: groupChangedCards(cards, "oddsBucket"),
+    byTotalLineBucket: groupChangedCards(cards, "totalLineBucket"),
+    byMarketReadLabel: groupChangedCards(cards, "v2MarketReadLabel"),
+    byLineMovement: groupChangedCards(cards, "lineMovement"),
+  };
+}
+
+function positiveBucketSet(rows: ReconstructedRow[], market: "moneyline" | "total", changedOnly: boolean): Set<string> {
+  const scoped = rows.filter((r) => r.sport === "mlb" && r.market === market);
+  const buckets = new Map<string, Prediction[]>();
+  const preds = calibratedSidePredictions(rows, market, 0);
+  for (const p of preds) {
+    if (changedOnly && p.side === p.row.side) continue;
+    const key = market === "moneyline"
+      ? marketEdgeBucketMl(p.row.pMarketNoVigAtLock === null ? null : p.row.pCurrentProduction - p.row.pMarketNoVigAtLock)
+      : totalEdgeBucket(p.row.projectedTotal !== null && p.row.line !== null ? p.row.projectedTotal - p.row.line : null);
+    const arr = buckets.get(key) ?? [];
+    arr.push(p);
+    buckets.set(key, arr);
+  }
+  const out = new Set<string>();
+  for (const [key, xs] of buckets.entries()) {
+    const perf = subset(xs);
+    const recent = recentWindowSummary(xs, 7, "mlb");
+    if ((perf.roi ?? -999) > 0 && (recent?.actionableRoi ?? 0) > -0.05 && xs.length >= 8) out.add(key);
+  }
+  if (out.size === 0 && scoped.length > 0) {
+    for (const [key, xs] of buckets.entries()) {
+      const perf = subset(xs);
+      if ((perf.roi ?? -999) > 0 && xs.length >= 8) out.add(key);
+    }
+  }
+  return out;
+}
+
+function gatedCalibratedSideTests(rows: ReconstructedRow[]) {
+  const mlBase = productionPredictions(rows.filter((r) => r.sport === "mlb" && r.market === "moneyline"));
+  const totalBase = productionPredictions(rows.filter((r) => r.sport === "mlb" && r.market === "total"));
+  const mlPositive = positiveBucketSet(rows, "moneyline", false);
+  const totalPositive = positiveBucketSet(rows, "total", true);
+  const gateFor = (market: "moneyline" | "total", mode: "positive_bucket" | "no_resistance" | "ev_positive" | "recent_positive") =>
+    (row: ReconstructedRow, _side: string, probability: number, price: number | null) => {
+      const bucketKey = market === "moneyline"
+        ? marketEdgeBucketMl(row.pMarketNoVigAtLock === null ? null : row.pCurrentProduction - row.pMarketNoVigAtLock)
+        : totalEdgeBucket(row.projectedTotal !== null && row.line !== null ? row.projectedTotal - row.line : null);
+      const positive = market === "moneyline" ? mlPositive.has(bucketKey) : totalPositive.has(bucketKey);
+      if (!positive) return false;
+      if (mode === "positive_bucket") return true;
+      if (mode === "no_resistance") return !normalizeMarketReadLabel(row.v2LabelReconstructed).includes("Resistance");
+      if (mode === "ev_positive") return (expectedValuePerDollar(probability, price) ?? -999) > 0;
+      if (mode === "recent_positive") return true;
+      return false;
+    };
+  const make = (market: "moneyline" | "total", mode: "production" | "always" | "positive_bucket" | "no_resistance" | "ev_positive" | "recent_positive") => {
+    const base = market === "moneyline" ? mlBase : totalBase;
+    const preds = mode === "production"
+      ? base
+      : calibratedSidePredictions(rows, market, 0, mode === "always" ? undefined : gateFor(market, mode));
+    return predictionComparison(base, preds);
+  };
+  return {
+    moneylinePositiveBuckets: [...mlPositive],
+    totalPositiveBuckets: [...totalPositive],
+    moneyline: {
+      A_productionSide: make("moneyline", "production"),
+      B_calibratedSideAlways: make("moneyline", "always"),
+      C_positiveEdgeBucketsOnly: make("moneyline", "positive_bucket"),
+      D_positiveBucketNoMarketResistance: make("moneyline", "no_resistance"),
+      E_positiveBucketEvPositive: make("moneyline", "ev_positive"),
+      F_positiveBucketRecentRobust: make("moneyline", "recent_positive"),
+    },
+    totals: {
+      A_productionSide: make("total", "production"),
+      B_calibratedSideAlways: make("total", "always"),
+      C_positiveEdgeBucketsOnly: make("total", "positive_bucket"),
+      D_positiveBucketNoMarketResistance: make("total", "no_resistance"),
+      E_positiveBucketEvPositive: make("total", "ev_positive"),
+      F_positiveBucketRecentRobust: make("total", "recent_positive"),
+    },
+  };
+}
+
+function calibratedGradeActionTests(rows: ReconstructedRow[]) {
+  const items = calibratedDecisionRows(rows);
+  const mlItems = items.filter((x) => x.row.market === "moneyline");
+  const totalItems = items.filter((x) => x.row.market === "total");
+  const mlBase = productionPredictions(mlItems.map((x) => x.row));
+  const totalBase = productionPredictions(totalItems.map((x) => x.row));
+  const mlRules = DECISION_EV_GRID.flatMap((evThreshold) => [0.53, 0.55, 0.57].map((probabilityThreshold) => ({
+    id: `ML_cal_ev_${Math.round(evThreshold * 100)}_p_${Math.round(probabilityThreshold * 100)}`,
+    market: "moneyline" as const,
+    evThreshold,
+    probabilityThreshold,
+  })));
+  const totalRules = [0.25, 0.5, 0.75].flatMap((edgeThreshold) => DECISION_EV_GRID.map((evThreshold) => ({
+    id: `TOTAL_cal_edge_${String(edgeThreshold).replace(".", "_")}_ev_${Math.round(evThreshold * 100)}`,
+    market: "total" as const,
+    evThreshold,
+    edgeThreshold,
+  })));
+  const reportRules = (scoped: DecisionLayerRow[], base: Prediction[], rules: DecisionLayerRule[]) => rules
+    .map((rule) => {
+      const preds = scoped.map((x) => applyDecisionRule(x, rule));
+      const report = decisionLayerReport(preds, base);
+      return { rule: rule.id, ...report };
+    })
+    .sort((a, b) => (b.summary.actionableRoi ?? -999) - (a.summary.actionableRoi ?? -999))
+    .slice(0, 12);
+  return {
+    moneylineCurrent: {
+      bestAngle: subset(mlBase.filter((p) => p.tier === "best_angle")),
+      lean: subset(mlBase.filter((p) => p.tier === "lean")),
+    },
+    totalsCurrent: {
+      bestAngle: subset(totalBase.filter((p) => p.tier === "best_angle")),
+      lean: subset(totalBase.filter((p) => p.tier === "lean")),
+    },
+    moneylineTopRules: reportRules(mlItems, mlBase, mlRules),
+    totalsTopRules: reportRules(totalItems, totalBase, totalRules),
+  };
+}
+
+async function todayCalibratedDecisionConversionBeforeAfter() {
+  const rows = await todayDecisionLayerBeforeAfter(null, null);
+  return {
+    summary: rows.summary,
+    cards: rows.cards.map((c) => ({
+      ...c,
+      calibratedSuggestedGrade: c.candidateGrade,
+      sideChanges: false,
+      gradeChanges: c.gradeChanged,
+      reasonCode: c.reason,
+    })),
+  };
+}
+
+async function calibratedDecisionConversionReport(rows: ReconstructedRow[]) {
+  const ml = rows.filter((r) => r.sport === "mlb" && r.market === "moneyline");
+  const totals = rows.filter((r) => r.sport === "mlb" && r.market === "total");
+  const mlBase = productionPredictions(ml);
+  const totalBase = productionPredictions(totals);
+  const mlAlways = calibratedSidePredictions(rows, "moneyline", 0);
+  const totalAlways = calibratedSidePredictions(rows, "total", 0);
+  const mlThresholds = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06];
+  const totalThresholds = [0.25, 0.5, 0.75, 1.0, 1.25];
+  const mlThresholdReports = Object.fromEntries(mlThresholds.map((threshold) => {
+    const preds = calibratedSidePredictions(rows, "moneyline", threshold);
+    return [`${Math.round(threshold * 100)}pp`, predictionComparison(mlBase, preds)];
+  }));
+  const totalThresholdReports = Object.fromEntries(totalThresholds.map((threshold) => {
+    const preds = calibratedSidePredictions(rows, "total", threshold);
+    return [`${threshold}_runs`, predictionComparison(totalBase, preds)];
+  }));
+  const gated = gatedCalibratedSideTests(rows);
+  const grades = calibratedGradeActionTests(rows);
+  const today = await todayCalibratedDecisionConversionBeforeAfter();
+  const sidePass = (report: ReturnType<typeof predictionComparison>) =>
+    report.sideChanges >= 10 &&
+    (report.changedSidePerformance.roi ?? -999) > 0 &&
+    (report.recent7?.actionableRoi ?? -999) > -0.05 &&
+    report.calibrated.actionableRoi > report.production.actionableRoi;
+  const mlSideWinner = Object.entries(mlThresholdReports).find(([, report]) => sidePass(report));
+  const totalSideWinner = Object.entries(totalThresholdReports).find(([, report]) => sidePass(report));
+  const gradeWinner = [
+    ...grades.moneylineTopRules.map((r) => ({ market: "moneyline", ...r })),
+    ...grades.totalsTopRules.map((r) => ({ market: "total", ...r })),
+  ].find((r) =>
+    r.summary.actionableRoi > r.baseline.actionableRoi &&
+    (r.recent7?.actionableRoi ?? -999) > -0.05 &&
+    (r.bestAngle.roi ?? -999) > 0 &&
+    r.exactCardsChanged.length > 0
+  );
+  const finalAnswer = mlSideWinner
+    ? "A_Deploy_calibrated_ML_side_selection_for_specific_bucket"
+    : totalSideWinner
+      ? "B_Deploy_calibrated_total_side_selection_for_specific_bucket"
+      : gradeWinner
+        ? "C_Deploy_calibrated_grade_action_layer_only"
+        : "E_No_WL_deployable_decision_layer_exists_yet";
+  return {
+    productionUnchanged: true,
+    calibratedFormula: {
+      moneyline: "p_final = p_market_no_vig + 0.25 * (p_model - p_market_no_vig)",
+      totals: "final_total = market_total + 0.25 * (raw_projection - market_total)",
+    },
+    task1ChangedSideRows: {
+      moneyline: predictionComparison(mlBase, mlAlways),
+      totals: predictionComparison(totalBase, totalAlways),
+      groupedMoneylineChangedRows: sideChangeBuckets(mlBase, mlAlways),
+      groupedTotalChangedRows: sideChangeBuckets(totalBase, totalAlways),
+    },
+    task2MarginThresholds: {
+      moneyline: mlThresholdReports,
+      totals: totalThresholdReports,
+    },
+    task3PositiveBucketGates: gated,
+    task4GradeAction: grades,
+    task5TodaySlate: today,
+    task6FinalAnswer: {
+      finalAnswer,
+      mlSideWinner: mlSideWinner?.[0] ?? null,
+      totalSideWinner: totalSideWinner?.[0] ?? null,
+      gradeWinner: gradeWinner?.rule ?? null,
+      enableNow: false,
+      flagsIfApproved: {
+        MLB_MARKET_AWARE_ML_SIDE_SELECTION_ENABLED: finalAnswer.startsWith("A_"),
+        MLB_MARKET_AWARE_TOTAL_SIDE_SELECTION_ENABLED: finalAnswer.startsWith("B_"),
+        MLB_MARKET_AWARE_CALIBRATED_GRADE_ENABLED: finalAnswer.startsWith("C_"),
+        MLB_MARKET_AWARE_CALIBRATED_ACTION_ENABLED: finalAnswer.startsWith("C_"),
+      },
+      rollbackPlan: "Keep flags false, or set any enabled flag back to false and redeploy. Do not rewrite locked, finished, or tracking rows.",
+      tests: [
+        "Chronological replay of calibrated side thresholds.",
+        "Chronological replay of positive edge-bucket gates.",
+        "Grade/action threshold replay with exact changed cards.",
+        "Today slate before/after asserting locked rows are untouched.",
+      ],
+    },
+  };
+}
+
+function mean(xs: number[]): number | null {
+  const vals = xs.filter((x) => Number.isFinite(x));
+  return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+}
+
+function dot(a: number[], b: number[]): number {
+  let s = 0;
+  for (let i = 0; i < Math.min(a.length, b.length); i++) s += a[i] * b[i];
+  return s;
+}
+
+function solveLinearSystem(a: number[][], b: number[]): number[] | null {
+  const n = b.length;
+  const m = a.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(m[r][col]) > Math.abs(m[pivot][col])) pivot = r;
+    }
+    if (Math.abs(m[pivot][col]) < 1e-10) return null;
+    [m[col], m[pivot]] = [m[pivot], m[col]];
+    const d = m[col][col];
+    for (let c = col; c <= n; c++) m[col][c] /= d;
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const factor = m[r][col];
+      for (let c = col; c <= n; c++) m[r][c] -= factor * m[col][c];
+    }
+  }
+  return m.map((row) => row[n]);
+}
+
+function fitRidgeLinear(rows: number[][], targets: number[], lambda = 1): number[] | null {
+  if (rows.length === 0 || rows.length !== targets.length) return null;
+  const p = rows[0].length;
+  const xtx = Array.from({ length: p }, () => Array.from({ length: p }, () => 0));
+  const xty = Array.from({ length: p }, () => 0);
+  for (let i = 0; i < rows.length; i++) {
+    const x = rows[i];
+    for (let a = 0; a < p; a++) {
+      xty[a] += x[a] * targets[i];
+      for (let b = 0; b < p; b++) xtx[a][b] += x[a] * x[b];
+    }
+  }
+  for (let i = 1; i < p; i++) xtx[i][i] += lambda;
+  return solveLinearSystem(xtx, xty);
+}
+
+function coreFeatureVector(row: ReconstructedRow, market: "moneyline" | "total", omit: string | null = null): number[] {
+  const c = row.coreComponents;
+  const starter = c.starter.homeAdvantageProxy ?? 0;
+  const bullpen = c.bullpen.homeAdvantageProxy ?? 0;
+  const lineup = c.lineup.homeAdvantageProxy ?? 0;
+  const park = c.runEnvironment.parkRunDelta ?? 0;
+  const weather = c.runEnvironment.weatherTotalAdjust ?? 0;
+  const movement =
+    row.movementDirectionRelativeToPick === "support" ? 1 :
+    row.movementDirectionRelativeToPick === "resistance" ? -1 : 0;
+  const playbookGap = row.playbookMoneyBetsGap === null ? 0 : row.playbookMoneyBetsGap / 100;
+  const priceFav = row.price !== null && row.price < 0 ? 1 : 0;
+  const sideHome = row.side === "home" ? 1 : 0;
+  const sideOver = row.side === "over" ? 1 : 0;
+  const modelEdge = market === "moneyline"
+    ? (row.pMarketNoVigAtLock !== null ? row.pCurrentProduction - row.pMarketNoVigAtLock : 0)
+    : (row.projectedTotal !== null && row.line !== null ? row.projectedTotal - row.line : 0);
+  const feature = (group: string, value: number) => omit === group ? 0 : value;
+  return [
+    1,
+    feature("model_edge", modelEdge),
+    feature("starter", market === "moneyline" ? starter * (sideHome ? 1 : -1) : Math.abs(starter)),
+    feature("bullpen", market === "moneyline" ? bullpen * (sideHome ? 1 : -1) : Math.abs(bullpen)),
+    feature("lineup", market === "moneyline" ? lineup * (sideHome ? 1 : -1) : Math.abs(lineup)),
+    feature("park", park),
+    feature("weather", weather),
+    feature("market_movement", movement),
+    feature("playbook", playbookGap),
+    priceFav,
+    sideOver,
+  ];
+}
+
+function chronologicalLinearResidualMaps(
+  rows: ReconstructedRow[],
+  market: "moneyline" | "total",
+  omit: string | null = null,
+): Map<number, number> {
+  const out = new Map<number, number>();
+  const dates = [...new Set(rows.map((r) => r.date))].sort();
+  for (const d of dates) {
+    const train = rows.filter((r) => r.date < d);
+    const test = rows.filter((r) => r.date === d);
+    if (train.length < (market === "moneyline" ? 70 : 60)) {
+      for (const r of test) {
+        if (market === "moneyline") out.set(r.id, shrinkProbability(r, 0.25));
+        else if (r.line !== null && r.projectedTotal !== null) out.set(r.id, r.line + 0.25 * (r.projectedTotal - r.line));
+      }
+      continue;
+    }
+    const xs = train.map((r) => coreFeatureVector(r, market, omit));
+    const ys = train.map((r) => {
+      if (market === "moneyline") return r.outcome - (r.pMarketNoVigAtLock ?? implied(r.price) ?? 0.5);
+      return (r.actualTotal ?? 0) - (r.line ?? 0);
+    });
+    const coef = fitRidgeLinear(xs, ys, 4);
+    for (const r of test) {
+      if (!coef) {
+        if (market === "moneyline") out.set(r.id, shrinkProbability(r, 0.25));
+        else if (r.line !== null && r.projectedTotal !== null) out.set(r.id, r.line + 0.25 * (r.projectedTotal - r.line));
+        continue;
+      }
+      const residual = dot(coreFeatureVector(r, market, omit), coef);
+      if (market === "moneyline") {
+        const base = r.pMarketNoVigAtLock ?? implied(r.price) ?? r.pCurrentProduction;
+        out.set(r.id, clampProbability(base + residual));
+      } else if (r.line !== null) {
+        out.set(r.id, r.line + residual);
+      }
+    }
+  }
+  return out;
+}
+
+function componentCoverage(rows: ReconstructedRow[]) {
+  const mlb = rows.filter((r) => r.sport === "mlb" && (r.market === "moneyline" || r.market === "total"));
+  const pct = (n: number) => mlb.length ? n / mlb.length : null;
+  const missing = new Map<string, number>();
+  for (const r of mlb) for (const m of r.coreComponents.featureMissingness) missing.set(m, (missing.get(m) ?? 0) + 1);
+  return {
+    rows: mlb.length,
+    moneylineRows: mlb.filter((r) => r.market === "moneyline").length,
+    totalRows: mlb.filter((r) => r.market === "total").length,
+    componentAvailability: {
+      projectedRuns: pct(mlb.filter((r) => r.projectedTotal !== null && r.projectedMarginHome !== null).length),
+      starterComponent: pct(mlb.filter((r) => r.coreComponents.starter.available).length),
+      bullpenComponent: pct(mlb.filter((r) => r.coreComponents.bullpen.available).length),
+      lineupComponent: pct(mlb.filter((r) => r.coreComponents.lineup.available).length),
+      parkWeatherComponent: pct(mlb.filter((r) => r.coreComponents.runEnvironment.available).length),
+      recentFormComponent: pct(mlb.filter((r) => r.coreComponents.recentForm.available).length),
+      marketBaseline: pct(mlb.filter((r) => r.coreComponents.marketBaseline.available || r.pMarketNoVigAtLock !== null || r.line !== null).length),
+      marketSharpComponent: pct(mlb.filter((r) => r.coreComponents.marketOrSharp.available || r.v2SnapshotLabel !== null).length),
+    },
+    persistedFields: [
+      "projected home/away runs",
+      "market home/away runs",
+      "raw/applied residual runs",
+      "starter ERA factors and shrinkage weights",
+      "bullpen factors",
+      "lineup OPS factors when available",
+      "park factor",
+      "weather total adjustment",
+      "market baseline",
+      "market-read summary when available",
+      "dampening penalties/reasons",
+    ],
+    missingOrWeakFields: [
+      "lineup weighted OPS is usually null or factor=1 fallback",
+      "recent form is not persisted as a separate component",
+      "starter/bullpen/park/weather are stored as factors, not additive run contributions",
+      "weather adjustment is often 0/unavailable in the settled sample",
+    ],
+    featureMissingnessCounts: Object.fromEntries([...missing.entries()].sort((a, b) => b[1] - a[1])),
+  };
+}
+
+function componentSignalBucket(value: number | null, threshold: number): "large_positive" | "large_negative" | "small_or_missing" {
+  if (value === null || Math.abs(value) < threshold) return "small_or_missing";
+  return value > 0 ? "large_positive" : "large_negative";
+}
+
+function componentAttribution(rows: ReconstructedRow[]) {
+  const ml = rows.filter((r) => r.sport === "mlb" && r.market === "moneyline");
+  const totals = rows.filter((r) => r.sport === "mlb" && r.market === "total" && r.actualTotal !== null && r.projectedTotal !== null && r.line !== null);
+  const mlComponent = (name: string, get: (r: ReconstructedRow) => number | null, threshold: number) => {
+    const buckets = ["large_positive", "large_negative", "small_or_missing"] as const;
+    return Object.fromEntries(buckets.map((b) => {
+      const xs = ml.filter((r) => componentSignalBucket(get(r), threshold) === b);
+      return [b, {
+        n: xs.length,
+        losses: xs.filter((r) => r.result === "loss").length,
+        production: subset(productionPredictions(xs)),
+        avgModelEdgePp: mean(xs.map((r) => r.pMarketNoVigAtLock !== null ? (r.pCurrentProduction - r.pMarketNoVigAtLock) * 100 : NaN)),
+        assessment: xs.length < 20 ? "too_small" : (subset(productionPredictions(xs)).roi ?? -999) < -0.05 ? `${name}_possibly_overweighted_or_noisy` : `${name}_not_primary_damage`,
+      }];
+    }));
+  };
+  const totalComponent = (name: string, get: (r: ReconstructedRow) => number | null, threshold: number) => {
+    const buckets = ["large_positive", "large_negative", "small_or_missing"] as const;
+    return Object.fromEntries(buckets.map((b) => {
+      const xs = totals.filter((r) => componentSignalBucket(get(r), threshold) === b);
+      const errors = xs.map((r) => (r.projectedTotal ?? 0) - (r.actualTotal ?? 0));
+      return [b, {
+        n: xs.length,
+        losses: xs.filter((r) => r.result === "loss").length,
+        production: subset(productionPredictions(xs)),
+        projectedTotalMae: mean(errors.map(Math.abs)),
+        bias: mean(errors),
+        assessment: xs.length < 20 ? "too_small" : Math.abs(mean(errors) ?? 0) > 0.75 ? `${name}_biased` : `${name}_not_primary_damage`,
+      }];
+    }));
+  };
+  return {
+    moneyline: {
+      starter: mlComponent("starter", (r) => r.coreComponents.starter.homeAdvantageProxy, 0.08),
+      bullpen: mlComponent("bullpen", (r) => r.coreComponents.bullpen.homeAdvantageProxy, 0.1),
+      lineup: mlComponent("lineup", (r) => r.coreComponents.lineup.homeAdvantageProxy, 0.03),
+      parkWeather: mlComponent("park_weather", (r) => (r.coreComponents.runEnvironment.parkRunDelta ?? 0) + (r.coreComponents.runEnvironment.weatherTotalAdjust ?? 0) / 10, 0.04),
+      marketDisagreement: mlComponent("market_disagreement", (r) => r.pMarketNoVigAtLock === null ? null : r.pCurrentProduction - r.pMarketNoVigAtLock, 0.04),
+    },
+    totals: {
+      starter: totalComponent("starter", (r) => r.coreComponents.starter.homeAdvantageProxy, 0.08),
+      bullpen: totalComponent("bullpen", (r) => r.coreComponents.bullpen.homeAdvantageProxy, 0.1),
+      lineup: totalComponent("lineup", (r) => r.coreComponents.lineup.homeAdvantageProxy, 0.03),
+      parkWeather: totalComponent("park_weather", (r) => (r.coreComponents.runEnvironment.parkRunDelta ?? 0) + (r.coreComponents.runEnvironment.weatherTotalAdjust ?? 0) / 10, 0.04),
+      totalEdge: totalComponent("total_edge", (r) => r.projectedTotal !== null && r.line !== null ? r.projectedTotal - r.line : null, 0.5),
+    },
+    recentLosses: recentCoreModelLossAutopsy(rows, new Map(), new Map()),
+  };
+}
+
+function coreResidualLab(rows: ReconstructedRow[]) {
+  const ml = rows.filter((r) => r.sport === "mlb" && r.market === "moneyline" && (r.pMarketNoVigAtLock !== null || implied(r.price) !== null));
+  const totals = rows.filter((r) => r.sport === "mlb" && r.market === "total" && r.actualTotal !== null && r.projectedTotal !== null && r.line !== null);
+  const mlBaseline = productionPredictions(ml);
+  const totalBaseline = productionPredictions(totals);
+  const mlMaps: Record<string, Map<number, number>> = {
+    A_currentProduction: new Map(ml.map((r) => [r.id, r.pCurrentProduction])),
+    B_marketNoVig: new Map(ml.map((r) => [r.id, r.pMarketNoVigAtLock ?? implied(r.price) ?? r.pCurrentProduction])),
+    C_marketPlus25PctModelEdge: new Map(ml.map((r) => [r.id, shrinkProbability(r, 0.25)])),
+    D_marketPlus50PctModelEdge: new Map(ml.map((r) => [r.id, shrinkProbability(r, 0.5)])),
+    E_coreResidualAllFeatures: chronologicalLinearResidualMaps(ml, "moneyline"),
+    F_withoutStarter: chronologicalLinearResidualMaps(ml, "moneyline", "starter"),
+    G_withoutBullpen: chronologicalLinearResidualMaps(ml, "moneyline", "bullpen"),
+    H_withoutLineup: chronologicalLinearResidualMaps(ml, "moneyline", "lineup"),
+    I_withoutParkWeather: chronologicalLinearResidualMaps(ml, "moneyline", "park"),
+    J_withoutMarketMovement: chronologicalLinearResidualMaps(ml, "moneyline", "market_movement"),
+  };
+  const totalMaps: Record<string, Map<number, number>> = {
+    A_currentProjectedTotal: new Map(totals.map((r) => [r.id, r.projectedTotal as number])),
+    B_marketTotal: new Map(totals.map((r) => [r.id, r.line as number])),
+    C_marketPlus25PctModelEdge: new Map(totals.map((r) => [r.id, (r.line as number) + 0.25 * ((r.projectedTotal as number) - (r.line as number))])),
+    D_marketPlus50PctModelEdge: new Map(totals.map((r) => [r.id, (r.line as number) + 0.5 * ((r.projectedTotal as number) - (r.line as number))])),
+    E_coreResidualAllFeatures: chronologicalLinearResidualMaps(totals, "total"),
+    F_withoutStarter: chronologicalLinearResidualMaps(totals, "total", "starter"),
+    G_withoutBullpen: chronologicalLinearResidualMaps(totals, "total", "bullpen"),
+    H_withoutLineup: chronologicalLinearResidualMaps(totals, "total", "lineup"),
+    I_withoutParkWeather: chronologicalLinearResidualMaps(totals, "total", "park"),
+    J_withoutMarketMovement: chronologicalLinearResidualMaps(totals, "total", "market_movement"),
+  };
+  const mlReports = Object.fromEntries(Object.entries(mlMaps).map(([id, map]) => {
+    const noSide = mlCoreFormulaPredictions(ml, id, (r) => map.get(r.id) ?? r.pCurrentProduction, false);
+    const withSide = mlCoreFormulaPredictions(ml, `${id}_side`, (r) => map.get(r.id) ?? r.pCurrentProduction, true);
+    return [id, mlCoreCandidateReport(noSide, withSide, mlBaseline)];
+  }));
+  const totalReports = Object.fromEntries(Object.entries(totalMaps).map(([id, map]) => [id, projectionCandidateSummaryV2(totals, id, map)]));
+  const bestMlByLogLoss = Object.entries(mlReports).sort((a, b) => a[1].probabilityOnly.summary.logLoss - b[1].probabilityOnly.summary.logLoss)[0];
+  const bestMlByRoi = Object.entries(mlReports).sort((a, b) => b[1].sideSelection.summary.actionableRoi - a[1].sideSelection.summary.actionableRoi)[0];
+  const bestTotalByMae = Object.entries(totalReports).sort((a, b) => a[1].totalMae - b[1].totalMae)[0];
+  const bestTotalByRoi = Object.entries(totalReports).sort((a, b) => b[1].sidePerformance.actionableRoi - a[1].sidePerformance.actionableRoi)[0];
+  return {
+    trainingTarget: {
+      moneyline: "outcome - market_no_vig_probability",
+      totals: "actual_total - market_total",
+      validation: "chronological by slate_date; no random split; same-day rows never train same-day predictions",
+    },
+    moneylineCandidates: mlReports,
+    totalCandidates: totalReports,
+    bestMoneylineByLogLoss: bestMlByLogLoss,
+    bestMoneylineBySideRoi: bestMlByRoi,
+    bestTotalByMae,
+    bestTotalBySideRoi: bestTotalByRoi,
+    primaryComparisons: {
+      mlProduction: predictionSummary(mlBaseline),
+      mlBestProbability: bestMlByLogLoss[1].probabilityOnly.summary,
+      totalProduction: projectionCandidateSummaryV2(totals, "production", totalMaps.A_currentProjectedTotal),
+      totalBestProjection: bestTotalByMae[1],
+    },
+  };
+}
+
+function mlbCoreModelImprovementLab(rows: ReconstructedRow[]) {
+  const coverage = componentCoverage(rows);
+  const attribution = componentAttribution(rows);
+  const residual = coreResidualLab(rows);
+  const mlProd = residual.primaryComparisons.mlProduction;
+  const mlBest = residual.primaryComparisons.mlBestProbability;
+  const totalProd = residual.primaryComparisons.totalProduction;
+  const totalBest = residual.primaryComparisons.totalBestProjection;
+  const mlProbabilityPass =
+    mlBest.logLoss < mlProd.logLoss &&
+    mlBest.brier <= mlProd.brier &&
+    residual.bestMoneylineByLogLoss[1].sideSelection.picksChanged === 0 &&
+    (residual.bestMoneylineByLogLoss[1].probabilityOnly.recent.last7?.actionableRoi ?? -999) > -0.15;
+  const totalProjectionPass =
+    totalBest.totalMae < totalProd.totalMae &&
+    totalBest.totalRmse <= totalProd.totalRmse &&
+    (totalBest.recent.last7?.actionableRoi ?? -999) > -0.15;
+  const mlSidePass =
+    residual.bestMoneylineBySideRoi[1].sideSelection.picksChanged >= 10 &&
+    (residual.bestMoneylineBySideRoi[1].sideSelection.changedPickPerformance.roi ?? -999) > 0 &&
+    residual.bestMoneylineBySideRoi[1].sideSelection.summary.actionableRoi > mlProd.actionableRoi;
+  const totalSidePass =
+    residual.bestTotalBySideRoi[1].changedSides >= 10 &&
+    (residual.bestTotalBySideRoi[1].changedSidePerformance.roi ?? -999) > 0 &&
+    residual.bestTotalBySideRoi[1].sidePerformance.actionableRoi > totalProd.sidePerformance.actionableRoi &&
+    (residual.bestTotalBySideRoi[1].recent.last7?.actionableRoi ?? -999) > -0.05;
+  const totalMarketAnchorWinner =
+    totalProjectionPass && /^C_marketPlus25PctModelEdge|^D_marketPlus50PctModelEdge|^B_marketTotal/.test(residual.bestTotalByMae[0]);
+  const finalAnswer =
+    totalMarketAnchorWinner ? "D_Deploy_market_anchor_formula" :
+    totalProjectionPass ? "A_Deploy_MLB_total_residual_projection_model" :
+    mlProbabilityPass ? "B_Deploy_MLB_ML_residual_probability_model" :
+    totalSidePass || mlSidePass ? "C_Deploy_new_feature_weights" :
+    "G_No_safe_model_fix_exists_yet";
+  return {
+    productionUnchanged: true,
+    flagsKeptOff: {
+      MARKET_AWARE_ENGINE_ENABLED: false,
+      LEGACY_MARKET_SIGNAL_GRADE_INFLUENCE_ENABLED: false,
+      MLB_MARKET_AWARE_CORE_MODEL_ENABLED: false,
+      MLB_TOTAL_PROJECTION_CALIBRATION_ENABLED: false,
+      MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED: false,
+      MLB_TOTAL_RESIDUAL_MODEL_ENABLED: false,
+      MLB_ML_RESIDUAL_MODEL_ENABLED: false,
+      MLB_FEATURE_WEIGHT_RECALIBRATION_ENABLED: false,
+      MLB_MARKET_ANCHOR_FORMULA_ENABLED: false,
+      MLB_CONFIDENCE_SHRINKAGE_ENABLED: false,
+    },
+    phase1ComponentAudit: coverage,
+    phase2ErrorAttribution: attribution,
+    phase3FeatureAblationBacktest: {
+      moneyline: Object.fromEntries(Object.entries(residual.moneylineCandidates).filter(([k]) => /without|current|marketPlus25|coreResidual/.test(k))),
+      totals: Object.fromEntries(Object.entries(residual.totalCandidates).filter(([k]) => /without|current|marketPlus25|coreResidual/.test(k))),
+      note: "Ablations remove feature families from chronological residual models. Granular additive removal of starter/bullpen/weather is not possible from stored rows because snapshots persist factors, not per-component run deltas.",
+    },
+    phase4TotalProjectionModels: {
+      candidates: residual.totalCandidates,
+      bestByMae: residual.bestTotalByMae,
+      bestBySideRoi: residual.bestTotalBySideRoi,
+    },
+    phase5MlProbabilityModels: {
+      candidates: residual.moneylineCandidates,
+      bestByLogLoss: residual.bestMoneylineByLogLoss,
+      bestBySideRoi: residual.bestMoneylineBySideRoi,
+    },
+    phase6LearnedWeights: {
+      proposedIfApproved: finalAnswer === "A_Deploy_MLB_total_residual_projection_model"
+        ? "final_total = market_total + ridge_linear_residual(core model factors), trained chronologically on actual_total - market_total"
+        : finalAnswer === "D_Deploy_market_anchor_formula"
+          ? `final_total = market_total + 0.25 * (raw_projected_total - market_total)`
+        : finalAnswer === "B_Deploy_MLB_ML_residual_probability_model"
+          ? "p_final = market_no_vig + ridge_linear_residual(core model factors), trained chronologically on result - market_no_vig"
+          : null,
+      modelFeatureFamilies: ["model_edge", "starter", "bullpen", "lineup", "park", "weather", "market_movement", "playbook", "odds/favorite", "side"],
+      deployableWeightChange: finalAnswer.startsWith("G_")
+        ? null
+        : finalAnswer === "D_Deploy_market_anchor_formula"
+          ? "Projection calibration can be computed/stored/audited with MLB_TOTAL_PROJECTION_CALIBRATION_ENABLED; recommendation use remains blocked by MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED=false."
+          : "Use learned ridge coefficients only for future unlocked MLB rows behind flag.",
+    },
+    phase7ChronologicalValidation: {
+      moneyline: {
+        production: mlProd,
+        bestCandidate: residual.bestMoneylineByLogLoss,
+        last14: residual.bestMoneylineByLogLoss[1].probabilityOnly.recent.last14,
+        last7: residual.bestMoneylineByLogLoss[1].probabilityOnly.recent.last7,
+        last3: residual.bestMoneylineByLogLoss[1].probabilityOnly.recent.last3,
+      },
+      totals: {
+        production: totalProd,
+        bestCandidate: residual.bestTotalByMae,
+        last14: residual.bestTotalByMae[1].recent.last14,
+        last7: residual.bestTotalByMae[1].recent.last7,
+        last3: residual.bestTotalByMae[1].recent.last3,
+      },
+      deployabilityChecks: {
+        mlProbabilityPass,
+        totalProjectionPass,
+        mlSidePass,
+        totalSidePass,
+      },
+    },
+    phase8FinalAnswer: {
+      finalAnswer,
+      enableNow: false,
+      featureFlag:
+        finalAnswer === "A_Deploy_MLB_total_residual_projection_model" ? "MLB_TOTAL_RESIDUAL_MODEL_ENABLED" :
+        finalAnswer === "B_Deploy_MLB_ML_residual_probability_model" ? "MLB_ML_RESIDUAL_MODEL_ENABLED" :
+        finalAnswer === "C_Deploy_new_feature_weights" ? "MLB_FEATURE_WEIGHT_RECALIBRATION_ENABLED" :
+        finalAnswer === "D_Deploy_market_anchor_formula" ? "MLB_TOTAL_PROJECTION_CALIBRATION_ENABLED" :
+        null,
+      requiredMasterFlag: finalAnswer === "D_Deploy_market_anchor_formula" ? "MLB_MARKET_AWARE_CORE_MODEL_ENABLED" : null,
+      recommendationUseFlag: finalAnswer === "D_Deploy_market_anchor_formula" ? "MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED=false" : null,
+      rollbackPlan: "Leave flags false. If later enabled, set the feature flag false and redeploy; do not rewrite locked/finished/tracking rows.",
+      lockedRowSafety: "All candidates are research-only here. Any implementation must run only before future prediction lock and never mutate settled prediction_records.",
+      proofIfNoSafeFix: finalAnswer.startsWith("G_")
+        ? "No candidate cleared probability/projection quality plus recent robustness plus non-deletion constraints."
+        : null,
+    },
+  };
+}
+
 function recentCoreModelLossAutopsy(
   rows: ReconstructedRow[],
   mlProbabilityMap: Map<number, number>,
@@ -5206,7 +6235,9 @@ async function main() {
   );
   const modelImprovement = modelImprovementSprint(rows, todayBeforeAfter);
   const mlbCoreMarketAwareBacktest = await mlbCoreMarketAwareModelBacktest(rows);
+  const mlbCoreLab = mlbCoreModelImprovementLab(rows);
   const calibratedDecisionLayer = await calibratedDecisionLayerBacktest(rows);
+  const calibratedDecisionConversion = await calibratedDecisionConversionReport(rows);
   const mlbMlDisagreement = mlbMlDisagreementBacktest(rows, todayMlDisagreement);
   const report = {
     generatedAt: new Date().toISOString(),
@@ -5295,7 +6326,9 @@ async function main() {
     },
     modelImprovementSprint: modelImprovement,
     mlbCoreMarketAwareModelBacktest: mlbCoreMarketAwareBacktest,
+    mlbCoreModelImprovementLab: mlbCoreLab,
     calibratedDecisionLayerBacktest: calibratedDecisionLayer,
+    calibratedDecisionConversion,
     mlbMlDisagreementBacktest: mlbMlDisagreement,
     reconstructedRowsSample: rows.slice(0, 20),
   };

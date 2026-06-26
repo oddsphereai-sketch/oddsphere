@@ -566,6 +566,13 @@ export type AutoModelSportSpecific = {
    * shape at read time.
    */
   total_projection_reconciliation?: unknown | null;
+  /**
+   * 2026-06-26 — MLB Core Model Lab market-anchor formula audit.
+   * Written only by automodelService's V2.2 path. The feature flag is
+   * off by default, but the audit records whether the formula was
+   * eligible, enabled, skipped for lock safety, or disabled by flag.
+   */
+  mlb_core_model_calibration?: unknown | null;
 };
 
 // ─────────────────────────────────────────────────────────────

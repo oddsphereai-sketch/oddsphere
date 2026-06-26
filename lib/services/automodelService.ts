@@ -54,6 +54,7 @@ import {
   reconcileTotalProjection,
   type TotalProjectionReconciliation,
 } from "../automodel/totalProjectionReconciliation";
+import { calibrateMlbTotalProjectionToMarket } from "../automodel/mlbCoreModelCalibration";
 import { reviewAutoModelOutput } from "../automodel/aiSanityBoundary";
 import {
   resolveEffectiveVersion,
@@ -1338,10 +1339,36 @@ function applyV2IfSelected(args: {
     ) ?? null;
     const isLockedHere =
       typeof (v1Output.sport_specific as Record<string, unknown>)?.locked_at === "string";
-    const reconciliation = reconcileTotalProjection({
+    const totalCalibration = calibrateMlbTotalProjectionToMarket({
+      marketTotal: a22.market_total ?? null,
       rawProjectedAwayScore: v22.predicted_away_score,
       rawProjectedHomeScore: v22.predicted_home_score,
-      rawProjectedTotal: v22.predicted_total,
+    });
+    const coreModelEnabled =
+      process.env.MLB_MARKET_AWARE_CORE_MODEL_ENABLED === "true";
+    const projectionCalibrationEnabled =
+      coreModelEnabled &&
+      process.env.MLB_TOTAL_PROJECTION_CALIBRATION_ENABLED === "true" &&
+      !isLockedHere &&
+      totalCalibration.enabled;
+    const recommendationUsesCalibratedProjection =
+      projectionCalibrationEnabled &&
+      process.env.MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED === "true";
+    const legacyMarketAnchorFlag =
+      process.env.MLB_MARKET_ANCHOR_FORMULA_ENABLED === "true";
+    const reconciliationAwayScore = recommendationUsesCalibratedProjection
+      ? totalCalibration.calibratedAwayScore
+      : v22.predicted_away_score;
+    const reconciliationHomeScore = recommendationUsesCalibratedProjection
+      ? totalCalibration.calibratedHomeScore
+      : v22.predicted_home_score;
+    const reconciliationTotal = recommendationUsesCalibratedProjection
+      ? totalCalibration.calibratedTotal
+      : v22.predicted_total;
+    const reconciliation = reconcileTotalProjection({
+      rawProjectedAwayScore: reconciliationAwayScore,
+      rawProjectedHomeScore: reconciliationHomeScore,
+      rawProjectedTotal: reconciliationTotal,
       marketTotal: a22.market_total ?? null,
       // v22.v22Audit.ou_model_prob is the probability of the PICKED
       // side; rebase to OVER-perspective for the reconciler.
@@ -1413,6 +1440,64 @@ function applyV2IfSelected(args: {
         // so a future flip / score-adjustment path can read the prior
         // reconciliation.
         total_projection_reconciliation: reconciliation,
+        mlb_core_model_calibration: {
+          schema_version: "mlb_core_calibration_v1",
+          formula_version: "market_total_plus_25pct_model_edge_v1",
+          formula: "final_total = market_total + 0.25 * (raw_projected_total - market_total)",
+          edge_weight: totalCalibration.edgeWeight,
+          raw_projected_total: totalCalibration.rawProjectedTotal,
+          market_total: totalCalibration.marketTotal,
+          market_aware_projected_total: projectionCalibrationEnabled
+            ? totalCalibration.calibratedTotal
+            : null,
+          market_aware_projected_total_if_enabled: totalCalibration.calibratedTotal,
+          raw_projected_away_score: v22.predicted_away_score,
+          raw_projected_home_score: v22.predicted_home_score,
+          market_aware_projected_away_score: projectionCalibrationEnabled
+            ? totalCalibration.calibratedAwayScore
+            : null,
+          market_aware_projected_home_score: projectionCalibrationEnabled
+            ? totalCalibration.calibratedHomeScore
+            : null,
+          market_aware_projected_away_score_if_enabled: totalCalibration.calibratedAwayScore,
+          market_aware_projected_home_score_if_enabled: totalCalibration.calibratedHomeScore,
+          model_edge_runs: totalCalibration.modelEdgeRuns,
+          formula_available: totalCalibration.enabled,
+          projection_calibration_enabled: projectionCalibrationEnabled,
+          recommendation_uses_calibrated_projection: recommendationUsesCalibratedProjection,
+          feature_flags: {
+            MLB_MARKET_AWARE_CORE_MODEL_ENABLED: coreModelEnabled,
+            MLB_TOTAL_PROJECTION_CALIBRATION_ENABLED:
+              process.env.MLB_TOTAL_PROJECTION_CALIBRATION_ENABLED === "true",
+            MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED:
+              process.env.MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED === "true",
+            MLB_MARKET_ANCHOR_FORMULA_ENABLED_LEGACY: legacyMarketAnchorFlag,
+          },
+          skipped_reason: recommendationUsesCalibratedProjection
+            ? null
+            : isLockedHere
+              ? "locked_prediction"
+              : !coreModelEnabled
+                ? "core_model_flag_disabled"
+                : process.env.MLB_TOTAL_PROJECTION_CALIBRATION_ENABLED !== "true"
+                  ? "projection_calibration_flag_disabled"
+                  : !totalCalibration.enabled
+                    ? "market_total_unavailable"
+                    : process.env.MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED !== "true"
+                      ? "recommendation_use_flag_disabled"
+                      : "not_enabled",
+          legacy_anchor_flag_note: legacyMarketAnchorFlag
+            ? "MLB_MARKET_ANCHOR_FORMULA_ENABLED is ignored for recommendation behavior; use MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED."
+            : null,
+          display_hint:
+            recommendationUsesCalibratedProjection
+              ? "calibrated_projection_used_for_recommendation"
+              : projectionCalibrationEnabled
+                ? "calibrated_projection_available_for_audit_only"
+                : !totalCalibration.enabled
+                  ? "market_total_unavailable"
+                  : "calibration_disabled",
+        },
       },
     };
   }
