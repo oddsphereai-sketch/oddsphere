@@ -809,6 +809,42 @@ const FILLER_ML_SRC = { home: FILLER_SRC, away: FILLER_SRC };
   check("data_integrity: market_two_sided_available=no when away null", di.market_two_sided_available === "no");
 }
 
+console.log("\n━━━ Total record selected-line basis ━━━");
+{
+  const underPred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 55.2,
+    sport_specific: {
+      ...v21SportSpecific,
+      v2_2_audit: { market_total: 8, ou_model_prob: 0.552, ou_market_prob: 0.519, ou_edge_pct: 3.3 },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, underPred]]),
+    abbrevByTeamId,
+    oddsByGameId: new Map([[14771, {
+      mlHomeOdds: -120,
+      mlAwayOdds: 110,
+      ouOverOdds: -114,
+      ouUnderOdds: -125,
+      oddsSourceMl: FILLER_ML_SRC,
+      oddsSourceOu: {
+        over: { source: "lines", book: "ballybet", odds: -114, line: 8, observedAt: "2026-06-26T10:06:53.690Z" },
+        under: { source: "lines", book: "ballybet", odds: -125, line: 8.5, observedAt: "2026-06-26T10:06:53.690Z" },
+      },
+    }]]),
+  });
+  const ou = recs.find((r) => r.market === "total")!;
+  check("Under total stores picked-side line, not Over line", ou.line_value === 8.5);
+  check("Under total stores picked-side price", ou.odds_american === -125);
+  check("Under total pick/side remain under", ou.pick === "under" && ou.side === "under");
+}
+
 // ── Phase 6B.27 — V2.2 internal labels must not leak into public play_grade ──
 console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━");
 {

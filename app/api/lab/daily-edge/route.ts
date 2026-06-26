@@ -23,6 +23,10 @@
 
 import { supabase } from "@/lib/db/supabase";
 import { isBlockedSportsbook } from "@/lib/config/blockedSportsbooks";
+import {
+  marketIntelligenceV2UiEnabledForSport,
+  readMarketIntelligenceV2Config,
+} from "@/lib/config/marketIntelligenceV2";
 import { filterMockSourceRows } from "@/lib/db/productionFilter";
 import { classifyEvidence } from "@/lib/services/signalEvidenceClassifier";
 import { generateSignalSummary } from "@/lib/services/signalSummaryGenerator";
@@ -102,8 +106,16 @@ import {
 import { interpretMarket } from "@/lib/streaming/marketInterpretation";
 import { selectTotalLine } from "@/app/lab/lib/selectTotalLine";
 import { selectMainTotalLine } from "@/lib/services/selectMainTotalLine";
+import {
+  selectMarketIntelligenceSnapshotV2,
+  type MarketIntelligenceSnapshotV2Row,
+} from "@/lib/services/marketIntelligenceV2/snapshotSelector";
+import { marketReadV2DtoFromSnapshot } from "@/lib/services/marketIntelligenceV2/dto";
+import type { MarketReadV2Dto } from "@/lib/types/domain/MarketIntelligenceV2";
 
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer", "wnba"];
+const DAILY_EDGE_CACHE_CONTROL = "public, s-maxage=30, stale-while-revalidate=120";
+const DAILY_EDGE_ERROR_CACHE_CONTROL = "no-store";
 // Phase 7G — NBA goes live in the member-facing Daily Edge via the
 // shared adapter below. MLB pipeline below is unchanged.
 const LIVE_SPORTS: Sport[] = ["mlb", "nba"];
@@ -771,6 +783,12 @@ function buildStarterDto(
  * when the JSONB path is absent, so the First Published stop is simply omitted.
  */
 type PostedLine = { american: number | null; at: string | null };
+type MarketReadV2Lookup = {
+  enabled: boolean;
+  responseAsOf: string;
+  rows: readonly MarketIntelligenceSnapshotV2Row[];
+};
+
 function readPostedLines(
   sportSpecific: Record<string, unknown> | null | undefined,
 ): { moneyline?: PostedLine; total?: PostedLine; first_inning?: PostedLine } {
@@ -788,6 +806,42 @@ function readPostedLines(
     }
   }
   return out;
+}
+
+function marketReadV2ForMarket(opts: {
+  lookup: MarketReadV2Lookup | null;
+  row: GameRow;
+  marketType: "moneyline" | "total";
+  selectedSide: string | null;
+  lockedAt: string | null | undefined;
+  recommendationSnapshotId?: number | null;
+}): MarketReadV2Dto | null {
+  if (!opts.lookup?.enabled) return null;
+  if (opts.selectedSide === null) return null;
+  const canonicalEventId = String(opts.row.external_id);
+  const selectedSide = opts.selectedSide;
+  if (
+    selectedSide !== "home" &&
+    selectedSide !== "away" &&
+    selectedSide !== "over" &&
+    selectedSide !== "under"
+  ) {
+    return null;
+  }
+  const snapshot = selectMarketIntelligenceSnapshotV2({
+    rows: opts.lookup.rows,
+    mode: opts.lockedAt
+      ? {
+          kind: "locked",
+          recommendationLockedAt: opts.lockedAt,
+          recommendationSnapshotId: opts.recommendationSnapshotId ?? null,
+        }
+      : { kind: "unlocked", responseAsOf: opts.lookup.responseAsOf },
+    canonicalEventId,
+    marketType: opts.marketType,
+    selectionKey: `${canonicalEventId}:${opts.marketType}:${selectedSide}`,
+  });
+  return marketReadV2DtoFromSnapshot(snapshot);
 }
 
 function buildGameDto(
@@ -812,6 +866,7 @@ function buildGameDto(
   streamCurrentByGameMarket: Map<string, StreamCurrent> = new Map(),
   // 2026-06-16 — most-recent moves keyed streamKey(gameId, dbMarket, side).
   lastMoveByGameMarket: Map<string, LastMove> = new Map(),
+  marketReadV2Lookup: MarketReadV2Lookup | null = null,
 ): DailyEdgeGameDto | null {
   const home = row.home_team?.abbreviation ?? "—";
   const away = row.away_team?.abbreviation ?? "—";
@@ -861,6 +916,7 @@ function buildGameDto(
     nrfi_signal_type: null,
     nrfi_market_signal: null,
     sport_specific: {
+      held: true,
       hold_reason: "prediction_pending",
       hold_picks: ["ml", "ou", "nrfi"],
     },
@@ -1223,6 +1279,20 @@ function buildGameDto(
   // ladder ran instead, and writer "no_bet" / "toss_up" could
   // silently downgrade to actionable Watchlist or Lean.
   const lockedFi = lockedPlayGradeByGameMarket.get(`${row.id}::first_inning`);
+  const mlMarketReadV2 = marketReadV2ForMarket({
+    lookup: marketReadV2Lookup,
+    row,
+    marketType: "moneyline",
+    selectedSide: pred.predicted_ml_winner,
+    lockedAt: lockedMl?.lockedPriceAt ?? pred.locked_at,
+  });
+  const totalMarketReadV2 = marketReadV2ForMarket({
+    lookup: marketReadV2Lookup,
+    row,
+    marketType: "total",
+    selectedSide: pred.predicted_ou_side,
+    lockedAt: lockedOu?.lockedPriceAt ?? pred.locked_at,
+  });
   const ml = buildMarketEdge({
     market: "moneyline",
     pick: mlPick,
@@ -1256,6 +1326,8 @@ function buildGameDto(
     oddspherePostedAt: postedLines.moneyline?.at ?? null,
     lockedPriceAmerican: lockedMl?.lockedPriceAmerican ?? null,
     lockedPriceAt: lockedMl?.lockedPriceAt ?? null,
+    marketReadV2: mlMarketReadV2,
+    marketReadV2Enabled: marketReadV2Lookup?.enabled === true,
   });
   const total = buildMarketEdge({
     market: "total",
@@ -1306,6 +1378,8 @@ function buildGameDto(
     oddspherePostedAt: postedLines.total?.at ?? null,
     lockedPriceAmerican: lockedOu?.lockedPriceAmerican ?? null,
     lockedPriceAt: lockedOu?.lockedPriceAt ?? null,
+    marketReadV2: totalMarketReadV2,
+    marketReadV2Enabled: marketReadV2Lookup?.enabled === true,
   });
   const firstInning = buildMarketEdge({
     market: "first_inning",
@@ -1351,6 +1425,8 @@ function buildGameDto(
     oddspherePostedAt: postedLines.first_inning?.at ?? null,
     lockedPriceAmerican: lockedFi?.lockedPriceAmerican ?? null,
     lockedPriceAt: lockedFi?.lockedPriceAt ?? null,
+    marketReadV2: null,
+    marketReadV2Enabled: marketReadV2Lookup?.enabled === true,
   });
 
   // 4.1.10 — per-game status flags.
@@ -1568,9 +1644,9 @@ function pickPriceRow<T extends { sportsbook: string; side: string | null; odds_
   // #39 — blocked books (fliff, kalshi) are never a valid card price source.
   const usable = rows.filter((r) => !isBlockedSportsbook(r.sportsbook));
   const sideMatch = usable.filter((r) => r.side === preferredSide);
-  const pool = sideMatch.length > 0 ? sideMatch : usable;
+  if (sideMatch.length === 0) return null;
   for (const book of BOOK_PRIORITY) {
-    const hit = pool.find((r) => r.sportsbook === book && r.odds_american !== null);
+    const hit = sideMatch.find((r) => r.sportsbook === book && r.odds_american !== null);
     if (hit) return hit;
   }
   // No trusted book had a price for this side. Return null rather
@@ -2042,6 +2118,8 @@ type BuildMarketEdgeInput = {
   lockedPriceAt?: string | null;
   /** Most-recent picked-side move (line_movements) for the market-read chip. */
   lastMove?: LastMove | null;
+  marketReadV2?: MarketReadV2Dto | null;
+  marketReadV2Enabled?: boolean;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -2258,6 +2336,10 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const openAmerican: number | null =
     liveOpenAmerican ??
     (input.isLockedRow === true ? input.lockedOpenOddsAmerican ?? null : null);
+  const totalDisplayLine =
+    input.market === "total"
+      ? input.totalsExtras?.sportsbookLine ?? priceRow?.line_value ?? null
+      : null;
   // Phase 7I — openAmerican already comes from line_history (always-LKG
   // semantics). Stamp its recorded_at if we have it so the UI can render
   // the age. lineOpen.recorded_at is the source's natural timestamp.
@@ -2660,14 +2742,16 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     lockedLineAt: input.lockedPriceAt ?? null,
     // 2026-06-16 market-intelligence (derived; display/audit only).
     marketInterpretation,
+    marketReadV2: input.marketReadV2 ?? null,
+    marketReadV2Enabled: input.marketReadV2Enabled === true,
     lastMovePrevAmerican: input.lastMove?.prevAmerican ?? null,
     lastMoveNextAmerican: input.lastMove?.nextAmerican ?? null,
     lastMoveAtIso: input.lastMove?.movedAtIso ?? null,
     lastMoveLinePrev: input.lastMove?.prevLineValue ?? null,
     lastMoveLineNext: input.lastMove?.nextLineValue ?? null,
     modelTotal: input.totalsExtras?.modelTotal ?? null,
-    marketTotal: input.totalsExtras?.marketTotal ?? null,
-    line: input.totalsExtras?.sportsbookLine ?? null,
+    marketTotal: input.totalsExtras?.marketTotal ?? totalDisplayLine,
+    line: totalDisplayLine,
     keyStats,
     // R-14C1 additions
     modelTrustPct: modelTrustPctOverride ?? modelTrustPct,
@@ -3441,7 +3525,7 @@ export async function GET(request: Request) {
     try {
       const adapted = await buildNbaDailyEdgeAdapted(requestedDate);
       return Response.json(adapted, {
-        headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
+        headers: { "Cache-Control": DAILY_EDGE_CACHE_CONTROL },
       });
     } catch (e) {
       const body: DailyEdgeResponse = {
@@ -3457,7 +3541,7 @@ export async function GET(request: Request) {
       };
       console.warn(`nba daily-edge: pipeline error: ${(e as Error).message}`);
       return Response.json(body, {
-        headers: { "Cache-Control": "no-store" },
+        headers: { "Cache-Control": DAILY_EDGE_ERROR_CACHE_CONTROL },
       });
     }
   }
@@ -3477,9 +3561,9 @@ export async function GET(request: Request) {
       const { buildWnbaDailyEdgeAdapted } = await import(
         "@/lib/services/wnba/buildWnbaDailyEdgeAdapted"
       );
-      const adapted = await buildWnbaDailyEdgeAdapted(requestedDate);
+      const adapted = await buildWnbaDailyEdgeAdapted(isSlateDate(dateParam) ? requestedDate : null);
       return Response.json(adapted, {
-        headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
+        headers: { "Cache-Control": DAILY_EDGE_CACHE_CONTROL },
       });
     } catch (e) {
       const body: DailyEdgeResponse = {
@@ -3494,7 +3578,7 @@ export async function GET(request: Request) {
         games: [],
       };
       console.warn(`wnba daily-edge: pipeline error: ${(e as Error).message}`);
-      return Response.json(body, { headers: { "Cache-Control": "no-store" } });
+      return Response.json(body, { headers: { "Cache-Control": DAILY_EDGE_ERROR_CACHE_CONTROL } });
     }
   }
 
@@ -3505,7 +3589,7 @@ export async function GET(request: Request) {
       );
       const adapted = await buildNhlDailyEdgeAdapted(requestedDate);
       return Response.json(adapted, {
-        headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
+        headers: { "Cache-Control": DAILY_EDGE_CACHE_CONTROL },
       });
     } catch (e) {
       const body: DailyEdgeResponse = {
@@ -3521,7 +3605,7 @@ export async function GET(request: Request) {
       };
       console.warn(`nhl daily-edge: pipeline error: ${(e as Error).message}`);
       return Response.json(body, {
-        headers: { "Cache-Control": "no-store" },
+        headers: { "Cache-Control": DAILY_EDGE_ERROR_CACHE_CONTROL },
       });
     }
   }
@@ -3538,7 +3622,7 @@ export async function GET(request: Request) {
       );
       const adapted = await buildSoccerDailyEdgeAdapted(requestedDate);
       return Response.json(adapted, {
-        headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
+        headers: { "Cache-Control": DAILY_EDGE_CACHE_CONTROL },
       });
     } catch (e) {
       const body: DailyEdgeResponse = {
@@ -3554,7 +3638,7 @@ export async function GET(request: Request) {
       };
       console.warn(`soccer daily-edge: pipeline error: ${(e as Error).message}`);
       return Response.json(body, {
-        headers: { "Cache-Control": "no-store" },
+        headers: { "Cache-Control": DAILY_EDGE_ERROR_CACHE_CONTROL },
       });
     }
   }
@@ -3573,7 +3657,7 @@ export async function GET(request: Request) {
       games: [],
     };
     return Response.json(body, {
-      headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
+      headers: { "Cache-Control": DAILY_EDGE_CACHE_CONTROL },
     });
   }
 
@@ -3603,7 +3687,7 @@ export async function GET(request: Request) {
       } satisfies DailyEdgeResponse & { error: string },
       {
         status: 503,
-        headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
+        headers: { "Cache-Control": DAILY_EDGE_ERROR_CACHE_CONTROL },
       },
     );
   }
@@ -3639,7 +3723,7 @@ export async function GET(request: Request) {
         } satisfies DailyEdgeResponse & { error: string },
         {
           status: 503,
-          headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
+          headers: { "Cache-Control": DAILY_EDGE_ERROR_CACHE_CONTROL },
         },
       );
     }
@@ -3677,7 +3761,7 @@ export async function GET(request: Request) {
       games: [],
     };
     return Response.json(body, {
-      headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
+      headers: { "Cache-Control": DAILY_EDGE_CACHE_CONTROL },
     });
   }
 
@@ -3734,7 +3818,7 @@ export async function GET(request: Request) {
 
   // ─── Sharp signals for these games (batched) ─────────────────────────────
   const gameIds = games.map((g) => g.id);
-  let signalsByGame = new Map<number, SignalRow[]>();
+  const signalsByGame = new Map<number, SignalRow[]>();
   // Sportsbook total lines per game (5F.1). Prefer Pinnacle as the de-vig
   // reference; fall back to DraftKings, then the first book we see.
   const totalLineByGame = new Map<number, number>();
@@ -3818,7 +3902,10 @@ export async function GET(request: Request) {
       return Response.json({ error: lineErr.message }, { status: 500 });
     }
     // Group by game, then pick the preferred book per game.
-    const totalsByGame = new Map<number, Array<{ sportsbook: string; line_value: number | null }>>();
+    const totalsByGame = new Map<
+      number,
+      Array<{ sportsbook: string; line_value: number | null; side: string | null }>
+    >();
     for (const row of (lineData ?? []) as LineRow[]) {
       const key = `${row.game_id}::${row.market_type}`;
       const arr = currentLinesByGameMarket.get(key) ?? [];
@@ -3828,7 +3915,7 @@ export async function GET(request: Request) {
       // Maintain the legacy totals-line map for predictions.total.line.
       if (row.market_type === "total") {
         const tot = totalsByGame.get(row.game_id) ?? [];
-        tot.push({ sportsbook: row.sportsbook, line_value: row.line_value });
+        tot.push({ sportsbook: row.sportsbook, line_value: row.line_value, side: row.side });
         totalsByGame.set(row.game_id, tot);
       }
     }
@@ -4419,6 +4506,35 @@ export async function GET(request: Request) {
   // tracker degrades cleanly to the cron `lines` path.
   const streamCurrentByGameMarket = await loadStreamCurrentForSlate(supabase, gameIds);
   const lastMoveByGameMarket = await loadLastMovesForSlate(supabase, gameIds, Date.now());
+  const marketIntelligenceConfig = readMarketIntelligenceV2Config();
+  const marketReadV2Enabled = marketIntelligenceV2UiEnabledForSport(
+    marketIntelligenceConfig,
+    "mlb",
+  );
+  let marketReadV2Lookup: MarketReadV2Lookup | null = marketReadV2Enabled
+    ? { enabled: true, responseAsOf: new Date().toISOString(), rows: [] }
+    : null;
+  if (marketReadV2Enabled && gameIds.length > 0) {
+    const eventIds = games.map((g) => String(g.external_id));
+    const { data: marketReadRows, error: marketReadErr } = await supabase
+      .from("market_intelligence_snapshots_v2")
+      .select(
+        "id, canonical_event_id, canonical_market_id, selection_key, league, market_type, resolver_version, score, label, explanation, evidence_json, generated_at, evidence_as_of, event_start_time, recommendation_snapshot_id, recommendation_locked_at, selected_side, selected_line, selected_price, validity_status",
+      )
+      .eq("league", "mlb")
+      .in("canonical_event_id", eventIds)
+      .in("market_type", ["moneyline", "total"]);
+    if (marketReadErr) {
+      console.warn(`daily-edge: market_intelligence_snapshots_v2 unavailable: ${marketReadErr.message}`);
+      marketReadV2Lookup = { enabled: true, responseAsOf: new Date().toISOString(), rows: [] };
+    } else {
+      marketReadV2Lookup = {
+        enabled: true,
+        responseAsOf: new Date().toISOString(),
+        rows: (marketReadRows ?? []) as MarketIntelligenceSnapshotV2Row[],
+      };
+    }
+  }
   const dtos: DailyEdgeGameDto[] = [];
   for (const g of games) {
     const dto = buildGameDto(
@@ -4429,7 +4545,8 @@ export async function GET(request: Request) {
       openLinesByGameMarket,
       lockedPlayGradeByGameMarket,
       streamCurrentByGameMarket,
-      lastMoveByGameMarket
+      lastMoveByGameMarket,
+      marketReadV2Lookup,
     );
     if (dto) dtos.push(dto);
   }
@@ -4488,7 +4605,7 @@ export async function GET(request: Request) {
   return Response.json(body, {
     headers: {
       // Short edge cache keeps stampedes off Supabase; clients also poll.
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+      "Cache-Control": DAILY_EDGE_CACHE_CONTROL,
     },
   });
 }

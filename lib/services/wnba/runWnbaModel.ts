@@ -15,6 +15,13 @@ import { getModel, computeWnbaPrediction, SHARP_BOOKS, type OddRow, type WnbaPub
 
 // DB market_type → the SharpAPI-style key computeWnbaPrediction expects.
 const MKT_TO_MODEL: Record<string, string> = { moneyline: "moneyline", spread: "point_spread", total: "total_points" };
+const LOCK_WINDOW_MS = 60 * 60 * 1000;
+
+function isBeforeLockWindow(gameDate: unknown, nowMs: number): boolean {
+  if (typeof gameDate !== "string") return false;
+  const startMs = Date.parse(gameDate);
+  return Number.isFinite(startMs) && startMs - nowMs > LOCK_WINDOW_MS;
+}
 
 export type RunWnbaModelResult = {
   apply: boolean;
@@ -48,7 +55,8 @@ export async function runWnbaModel(opts: {
     .from("games")
     .select("id, external_id, slate_date, game_date, home_team_id, away_team_id")
     .eq("sport", "wnba").eq("status", "scheduled").gte("slate_date", today).lte("slate_date", end);
-  const games = gameRows ?? [];
+  const nowMs = Date.now();
+  const games = (gameRows ?? []).filter((g) => isBeforeLockWindow(g.game_date, nowMs));
 
   const { data: teamRows } = await supabase.from("teams").select("id, external_id").eq("sport", "wnba");
   const bdlByTeamId = new Map<number, number>();

@@ -149,8 +149,8 @@ function testSplitsConsensusEdgeStack() {
     `got: "${modelEdge?.evidence}"`
   );
   check(
-    `Model Edge: evidence mentions both model + market %`,
-    (modelEdge?.evidence ?? "").includes("Model 64%") &&
+    `Model Edge: evidence mentions both projection + market %`,
+    (modelEdge?.evidence ?? "").includes("Projection 64%") &&
       (modelEdge?.evidence ?? "").includes("Market 66%"),
     `got: "${modelEdge?.evidence}"`
   );
@@ -424,6 +424,43 @@ function testUnchangedRows() {
   check(
     `Line Move: present when both open and current exist`,
     lineMove?.delta !== undefined && lineMove?.evidence !== "Open → Current"
+  );
+
+  const v2MovementOnly = baseMarket({
+    lineOpenAmerican: null,
+    priceAmerican: null,
+    marketReadV2: {
+      label: "Projection-Led",
+      score: 0,
+      tone: "gray",
+      explanation: "No clear market move.",
+      copyMode: "context_only_not_pick_changing",
+      exactLineEvidenceStatus: "available",
+      evidenceAsOf: "2026-06-26T12:00:00Z",
+      generatedAt: "2026-06-26T12:00:00Z",
+      validityStatus: "valid_nondirectional",
+      movement: {
+        firstTrackedLine: 9,
+        firstTrackedPrice: -120,
+        currentLine: 9,
+        currentPrice: -118,
+        directionRelativeToPick: "neutral",
+        observedAt: "2026-06-26T12:00:00Z",
+      },
+      consensus: null,
+      sourceSummary: {
+        priceAction: "No clear market move.",
+        playbookConsensus: null,
+        sharpApiSourceSpecific: null,
+      },
+    },
+  });
+  const v2Rows = buildEdgeStackRows("total", v2MovementOnly);
+  const v2LineMove = v2Rows.find((r) => r.label === "Line Move");
+  check(
+    `Line Move: falls back to v2 movement prices when lock/current price fields are missing`,
+    v2LineMove?.evidence === "First seen -120 · Current -118",
+    `got ${v2LineMove?.evidence ?? "missing"}`
   );
 
   const resolvedSplits = baseMarket({

@@ -38,6 +38,8 @@ import {
   buildOrchestratorBlockedReport,
 } from "@/lib/services/automationOrchestrator";
 import { isIntradayMode } from "@/lib/services/automationOrchestratorGates";
+import { supabase } from "@/lib/db/supabase";
+import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
 import type { Sport } from "@/lib/types/domain/Sport";
 
 export const maxDuration = 300; // Vercel Pro — full slate cycle can take ~3-5 min
@@ -75,6 +77,12 @@ export async function GET(request: Request) {
       }
 
       const report = await runSlateCycleAutomated({ sport, date, intradayMode });
+      const marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
+        supabase,
+        sport,
+        slateDate: date,
+        phase: "slate_cycle",
+      });
 
       // Aggregate write counts from per-step details for the
       // cron-handler return shape. `records_updated` is the sum across
@@ -92,12 +100,14 @@ export async function GET(request: Request) {
         if (s.mode === "wrote") recordsWritten += r;
         apiCalls += a;
       }
+      recordsWritten += marketIntelligenceV2.recordsUpdated;
+      apiCalls += marketIntelligenceV2.apiCallsMade;
 
       return {
         records_updated: recordsWritten,
         api_calls_made: apiCalls,
-        partial: report.overall_status !== "ok",
-        details: report,
+        partial: report.overall_status !== "ok" || marketIntelligenceV2.errors.length > 0,
+        details: { ...report, market_intelligence_v2: marketIntelligenceV2 },
       };
     }
   );

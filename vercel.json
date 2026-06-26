@@ -3,15 +3,15 @@
   "crons": [
     {
       "path": "/api/cron/slate-cycle",
-      "schedule": "0 8,10,12 * * *"
+      "schedule": "5 8,10,12 * * *"
     },
     {
       "path": "/api/cron/slate-cycle?intraday=true",
-      "schedule": "0 13-23 * * *"
+      "schedule": "5 13-23 * * *"
     },
     {
       "path": "/api/cron/slate-cycle?intraday=true",
-      "schedule": "0 0-2 * * *"
+      "schedule": "5 0-2 * * *"
     },
     {
       "path": "/api/cron/pregame-sweep?lockOnly=true",
@@ -22,8 +22,28 @@
       "schedule": "*/15 0-2 * * *"
     },
     {
+      "path": "/api/cron/public-splits-observations-refresh",
+      "schedule": "12,27,42,57 13-23 * * *"
+    },
+    {
+      "path": "/api/cron/public-splits-observations-refresh",
+      "schedule": "12,27,42,57 0-3 * * *"
+    },
+    {
       "path": "/api/cron/cleanup-stream-tables",
-      "schedule": "0 7 * * *"
+      "schedule": "25 7 * * *"
+    },
+    {
+      "path": "/api/cron/wnba-daily-refresh",
+      "schedule": "20 13-23 * * *"
+    },
+    {
+      "path": "/api/cron/wnba-daily-refresh",
+      "schedule": "20 0-3 * * *"
+    },
+    {
+      "path": "/api/cron/tracking-refresh",
+      "schedule": "10 * * * *"
     }
   ]
 }

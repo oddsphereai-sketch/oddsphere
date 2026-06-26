@@ -14,13 +14,28 @@
 import { isBlockedSportsbook } from "@/lib/config/blockedSportsbooks";
 
 export function selectMainTotalLine(
-  lines: ReadonlyArray<{ sportsbook?: string | null; line_value?: number | null }>,
+  lines: ReadonlyArray<{ sportsbook?: string | null; line_value?: number | null; side?: string | null }>,
 ): number | null {
   const clean = lines.filter((l) => l.line_value != null && !isBlockedSportsbook(l.sportsbook));
   if (clean.length === 0) return null;
+
+  const hasSideData = clean.some((l) => l.side === "over" || l.side === "under");
+  const eligible = hasSideData
+    ? clean.filter((candidate) => {
+        const book = candidate.sportsbook ?? null;
+        const line = candidate.line_value;
+        if (book === null || line === null || line === undefined) return false;
+        return (
+          clean.some((row) => row.sportsbook === book && row.line_value === line && row.side === "over") &&
+          clean.some((row) => row.sportsbook === book && row.line_value === line && row.side === "under")
+        );
+      })
+    : clean;
+  if (eligible.length === 0) return null;
+
   // A book quoting both over+under at one line counts once for that line.
   const booksByLine = new Map<number, Set<string>>();
-  for (const l of clean) {
+  for (const l of eligible) {
     const v = l.line_value as number;
     if (!booksByLine.has(v)) booksByLine.set(v, new Set());
     booksByLine.get(v)!.add(String(l.sportsbook));

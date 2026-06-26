@@ -137,6 +137,12 @@ function shouldLock(gameDateIso: string, now: Date): boolean {
   return elapsedMs <= LOCK_WINDOW_MINUTES * 60 * 1000;
 }
 
+function scheduledLockAt(gameDateIso: string): string | null {
+  const kickoff = new Date(gameDateIso).getTime();
+  if (!Number.isFinite(kickoff)) return null;
+  return new Date(kickoff - LOCK_WINDOW_MINUTES * 60 * 1000).toISOString();
+}
+
 function buildProviders(): {
   bdl: BallDontLieFifaProvider;
   sharp: SharpApiSoccerOddsProvider;
@@ -264,6 +270,20 @@ export async function writeSoccerPredictionRecords(
     // seen. Adapter hides post-kickoff games from the slate anyway,
     // but defense in depth: skip them here too.
     if (new Date(g.game_date).getTime() <= now.getTime()) {
+      const lockAt = scheduledLockAt(g.game_date) ?? now.toISOString();
+      if (opts.apply) {
+        const { error: lockErr } = await supabase
+          .from("prediction_records")
+          .update({ locked_at: lockAt })
+          .eq("game_id", g.id)
+          .eq("sport", "soccer")
+          .eq("model_version", SOCCER_MODEL_VERSION)
+          .eq("slate_date", g.slate_date)
+          .is("locked_at", null);
+        if (lockErr !== null) {
+          errors.push(`  ✗ ${matchup} game_id=${g.id}: post-kickoff lock stamp failed: ${lockErr.message}`);
+        }
+      }
       log(`  ⏭ ${matchup} game_id=${g.id}: kickoff passed (${g.game_date}) — preserving existing rows`);
       continue;
     }
@@ -440,7 +460,7 @@ export async function writeSoccerPredictionRecords(
       log(`  rows produced (including held): ${builtRows.length}`);
 
       const isLockingNow = shouldLock(g.game_date, now);
-      const lockedAtIso = isLockingNow ? now.toISOString() : null;
+      const lockedAtIso = isLockingNow ? scheduledLockAt(g.game_date) ?? now.toISOString() : null;
 
       // 6a. For each built row: replace BDL-keyed identifiers with the
       //     canonical internal `games.id` / `games.external_id`, then

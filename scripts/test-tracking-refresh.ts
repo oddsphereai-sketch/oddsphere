@@ -63,6 +63,12 @@ check("existing pending → upsert allowed (win)", shouldUpsertGrade({ existingR
 check("existing win + new pending → REJECTED (regression guard)", !shouldUpsertGrade({ existingResult: "win", newResult: "pending" }));
 check("existing loss + new pending → REJECTED", !shouldUpsertGrade({ existingResult: "loss", newResult: "pending" }));
 check("existing void + new pending → REJECTED", !shouldUpsertGrade({ existingResult: "void", newResult: "pending" }));
+check("existing Toss-Up void + now-actionable FI pending → allowed", shouldUpsertGrade({
+  existingResult: "void",
+  existingNotes: "non-actionable: toss-up (no side) — FI-only, not tracked",
+  newResult: "pending",
+  record: { market: "first_inning", side: "under", no_bet: false } as never,
+}));
 check("existing win + new loss → allowed (re-grade)", shouldUpsertGrade({ existingResult: "win", newResult: "loss" }));
 check("existing push + new push → allowed (no-op)", shouldUpsertGrade({ existingResult: "push", newResult: "push" }));
 check("undefined existing → upsert allowed", shouldUpsertGrade({ existingResult: undefined, newResult: "win" }));

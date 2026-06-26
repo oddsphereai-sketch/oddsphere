@@ -131,6 +131,16 @@ function pickFallbackFor(market: MarketKey, sport: Sport): string {
   return market === "first_inning" ? "Toss-Up" : "Held";
 }
 
+function formatGameHoldReason(reason: string): string {
+  if (reason === "prediction_pending") {
+    return "Prediction pending - waiting on probable starters";
+  }
+  if (reason === "missing_or_scratched_starter") {
+    return "Held - starter data pending";
+  }
+  return `Held - ${reason.replace(/_/g, " ")}`;
+}
+
 function resolvedPickedSplit(
   m: MarketEdgeDto,
 ): { moneyPct: number | null; betsPct: number | null } {
@@ -883,7 +893,7 @@ function ConfidenceRing({ value, size = 48, stroke = 4 }: { value: number; size?
  * alone — the grade and what it means are stated plainly.
  */
 const PLAY_GRADE_EXPLANATION: Record<VerdictKey, string> = {
-  best_angle: "Strongest read tonight — clear value and aligned signals.",
+  best_angle: "Strongest model read tonight — clear projected value, with no major market resistance.",
   lean: "Moderate model edge. Not a top-tier Best Angle.",
   watchlist: "Interesting read, but not clean enough to act on yet.",
   caution: "Signals conflict — pass unless you have a strong external read.",
@@ -1641,13 +1651,13 @@ function ModelEdgeBlock({ market, marketData }: { market: MarketKey; marketData:
   const shellSport = useShellSport();
   const totalUnit = shellSport === "nhl" || shellSport === "soccer" ? "goals" : (shellSport === "nba" || shellSport === "wnba") ? "points" : "runs";
 
-  let topLabel = "Confidence";
+  let topLabel = "Projection";
   let topVal = "—";
-  let topNote = "model prob";
+  let topNote = "model probability";
   let midVal = "—";
   let midNote = "market";
   let edge = "";
-  let edgeNote = "model prob vs no-vig market";
+  let edgeNote = "projection vs no-vig market";
   let tone: EdgeStackRowTone = "gray";
 
   if (market === "total" && marketData.modelTotal != null && marketData.marketTotal != null) {
@@ -1713,7 +1723,9 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const oddsMove = find("Line Move"); // the PRICE move — carries the directional arrow + tone
   const marketRead = find("Market Read");
   const book = marketSourceLabel(marketData.marketDataQuality, marketData.marketSource) ?? marketData.marketSource;
-  const hasTrail = marketData.lineOpenAmerican != null || marketData.priceAmerican != null;
+  const oddsTrailOpen = marketData.lineOpenAmerican ?? marketData.marketReadV2?.movement?.firstTrackedPrice ?? null;
+  const oddsTrailCurrent = marketData.priceAmerican ?? marketData.marketReadV2?.movement?.currentPrice ?? null;
+  const hasTrail = oddsTrailOpen != null || oddsTrailCurrent != null || marketData.lockedLineAmerican != null;
   const showLineNumberSection = market === "total" || (shellSport === "wnba" && market === "first_inning");
   const lineNumberLabel = market === "total" ? "Total Line" : "Spread Line";
   return (
@@ -1765,11 +1777,16 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
             )}
           </div>
           <CleanOddsTrail
-            open={marketData.lineOpenAmerican}
+            open={oddsTrailOpen}
             prev={marketData.lastMovePrevAmerican ?? null}
-            current={marketData.priceAmerican}
+            current={oddsTrailCurrent}
             locked={marketData.lockedLineAmerican != null}
           />
+          {marketData.priceAmerican == null && oddsTrailCurrent != null && (
+            <p className="mt-2 text-[10px] text-gray-500">
+              Current market price shown; lock price was not recorded.
+            </p>
+          )}
         </div>
       )}
       {marketRead && (
@@ -2918,10 +2935,7 @@ function SlateCard({
         game.markets.total.held &&
         game.markets.first_inning.held ? (
           <div className="mb-2.5 text-[11px] uppercase tracking-[0.14em] font-semibold text-gray-500">
-            Held —{" "}
-            {game.holdReason === "missing_or_scratched_starter"
-              ? "starter data pending"
-              : game.holdReason.replace(/_/g, " ")}
+            {formatGameHoldReason(game.holdReason)}
           </div>
         ) : null}
 

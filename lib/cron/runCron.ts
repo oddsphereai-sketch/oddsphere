@@ -33,6 +33,13 @@
 import type { Sport } from "../types/domain/Sport";
 import { validateCronAuth } from "./auth";
 import { refreshLogger } from "../services/refreshLogger";
+import { randomUUID } from "node:crypto";
+import {
+  acquireCronJobLease,
+  cronJobName,
+  releaseCronJobLease,
+  type CronLeaseAcquireResult,
+} from "./leases";
 
 export type CronHandlerResult = {
   records_updated?: number;
@@ -46,12 +53,14 @@ export type CronHandlerResult = {
 export type CronHandlerContext = {
   logId: number;
   sport: Sport | null;
+  runId: string;
 };
 
 /** Per-sport handler context — `sport` is guaranteed non-null. */
 export type PerSportCronHandlerContext = {
   logId: number;
   sport: Sport;
+  runId: string;
 };
 
 export type CronHandler = (ctx: CronHandlerContext) => Promise<CronHandlerResult>;
@@ -103,6 +112,7 @@ export async function cronHandlerPerSport(
     sport: Sport;
     status: "ok" | "partial" | "skipped" | "failed";
     logId: number | null;
+    runId?: string;
     error?: string;
     records_updated?: number;
     api_calls_made?: number;
@@ -111,7 +121,7 @@ export async function cronHandlerPerSport(
 
   // PerSportCronHandler requires non-null sport. We wrap it to match the
   // wider CronHandler signature for runOneStructured's internal use.
-  const wrapped: CronHandler = async (ctx) => handler({ logId: ctx.logId, sport: ctx.sport! });
+  const wrapped: CronHandler = async (ctx) => handler({ logId: ctx.logId, sport: ctx.sport!, runId: ctx.runId });
   for (const sport of sports) {
     const single = await runOneStructured(dataSource, sport, lockMinutes, wrapped);
     runs.push({ sport, ...single });
@@ -131,14 +141,15 @@ async function runOne(
 ): Promise<Response> {
   const r = await runOneStructured(dataSource, sport, lockMinutes, handler);
   if (r.status === "skipped") {
-    return Response.json({ ok: true, skipped: true, reason: r.error });
+    return Response.json({ ok: true, skipped: true, runId: r.runId, reason: r.error, details: r.details });
   }
   if (r.status === "failed") {
-    return Response.json({ ok: false, logId: r.logId, error: r.error }, { status: 500 });
+    return Response.json({ ok: false, logId: r.logId, runId: r.runId, error: r.error }, { status: 500 });
   }
   return Response.json({
     ok: true,
     logId: r.logId,
+    runId: r.runId,
     status: r.status,
     records_updated: r.records_updated,
     api_calls_made: r.api_calls_made,
@@ -149,6 +160,7 @@ async function runOne(
 type StructuredResult = {
   status: "ok" | "partial" | "skipped" | "failed";
   logId: number | null;
+  runId?: string;
   error?: string;
   records_updated?: number;
   api_calls_made?: number;
@@ -161,21 +173,74 @@ async function runOneStructured(
   lockMinutes: number,
   handler: CronHandler
 ): Promise<StructuredResult> {
-  // Lock check
-  let active = false;
+  const runId = randomUUID();
+  const jobName = cronJobName(dataSource, sport);
+  let lease: CronLeaseAcquireResult | null = null;
+
   try {
-    active = await refreshLogger.isAnotherRunActive(dataSource, sport, lockMinutes);
+    lease = await acquireCronJobLease({
+      jobName,
+      runId,
+      leaseSeconds: lockMinutes * 60,
+    });
   } catch (e) {
-    // If the lock check itself fails, fall back to allowing the run rather
-    // than blocking indefinitely. The error is non-fatal.
-    console.error(`isAnotherRunActive check failed: ${(e as Error).message}`);
+    return {
+      status: "failed",
+      logId: null,
+      runId,
+      error: (e as Error).message,
+    };
   }
-  if (active) {
+
+  if (lease.mode === "skipped_overlap") {
+    let logId: number | null = null;
+    try {
+      logId = await refreshLogger.start(dataSource, sport);
+      await refreshLogger.complete(logId, {
+        success: true,
+        records_updated: 0,
+        api_calls_made: 0,
+        error_message: `skipped_overlap: active run ${lease.existingRunId ?? "unknown"} lease expires ${lease.leaseExpiresAt ?? "unknown"}`,
+      });
+    } catch (e) {
+      console.error(`skipped_overlap log failed: ${(e as Error).message}`);
+    }
     return {
       status: "skipped",
-      logId: null,
-      error: `previous ${dataSource}${sport ? "_" + sport : ""} run still in progress within ${lockMinutes}min`,
+      logId,
+      runId,
+      error: `skipped_overlap: previous ${jobName} run lease still valid`,
+      details: {
+        job_name: jobName,
+        run_id: runId,
+        existing_run_id: lease.existingRunId,
+        lease_expires_at: lease.leaseExpiresAt,
+        overlap_skip: true,
+      },
     };
+  }
+
+  if (lease.mode === "unavailable") {
+    let active = false;
+    try {
+      active = await refreshLogger.isAnotherRunActive(dataSource, sport, lockMinutes);
+    } catch (e) {
+      console.error(`isAnotherRunActive check failed: ${(e as Error).message}`);
+    }
+    if (active) {
+      return {
+        status: "skipped",
+        logId: null,
+        runId,
+        error: `previous ${dataSource}${sport ? "_" + sport : ""} run still in progress within ${lockMinutes}min`,
+        details: {
+          job_name: jobName,
+          run_id: runId,
+          lease_mode: "fallback_log_lock",
+          overlap_skip: true,
+        },
+      };
+    }
   }
 
   // Start log
@@ -188,13 +253,14 @@ async function runOneStructured(
     return {
       status: "failed",
       logId: null,
+      runId,
       error: `refreshLogger.start failed: ${(e as Error).message}`,
     };
   }
 
   // Run handler
   try {
-    const r = await handler({ logId, sport });
+    const r = await handler({ logId, sport, runId });
     await refreshLogger.complete(logId, {
       success: !r.partial,
       partial: r.partial,
@@ -204,9 +270,18 @@ async function runOneStructured(
     return {
       status: r.partial ? "partial" : "ok",
       logId,
+      runId,
       records_updated: r.records_updated,
       api_calls_made: r.api_calls_made,
-      details: r.details,
+      details: {
+        ...(r.details ?? {}),
+        cron_lease: {
+          job_name: jobName,
+          run_id: runId,
+          mode: lease.mode,
+          lease_expires_at: lease.mode === "acquired" ? lease.leaseExpiresAt : null,
+        },
+      },
     };
   } catch (e) {
     const errorMessage = (e as Error).message;
@@ -221,6 +296,14 @@ async function runOneStructured(
         `refreshLogger.complete failed during error handling: ${(closeErr as Error).message}`
       );
     }
-    return { status: "failed", logId, error: errorMessage };
+    return { status: "failed", logId, runId, error: errorMessage };
+  } finally {
+    if (lease?.mode === "acquired") {
+      try {
+        await releaseCronJobLease({ jobName, runId });
+      } catch (e) {
+        console.error(`cron lease release failed: ${(e as Error).message}`);
+      }
+    }
   }
 }

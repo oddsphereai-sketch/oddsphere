@@ -24,6 +24,10 @@ check(
   "WNBA key normalizes known team names",
   marketIntelligenceGameKey("wnba", "Los Angeles Sparks", "Toronto Tempo") === "LA@TOR",
 );
+check(
+  "Unregistered Playbook sports fall back to stable mascot keys",
+  marketIntelligenceGameKey("nfl", "Buffalo Bills", "Houston Texans") === "bills@texans",
+);
 
 console.log(`\nmarket-intelligence-v2-shadow-sync: ${pass} passed, ${fail} failed`);
 if (fail > 0) {

@@ -59,6 +59,43 @@ function staleWnbaSlateVoidGrade(
   };
 }
 
+function staleWnbaPostStartVoidGrade(
+  record: PredictionRecordRow,
+  source: PredictionGradeRow["grade_source"],
+  gameDate: string,
+): PredictionGradeRow {
+  return {
+    prediction_record_id: record.id!,
+    game_id: record.game_id,
+    market: record.market,
+    result: "void",
+    push: false,
+    win: false,
+    loss: false,
+    void: true,
+    pending: false,
+    actual_home_score: null,
+    actual_away_score: null,
+    actual_total: null,
+    actual_first_inning_runs: null,
+    winning_team: null,
+    grade_source: source,
+    grade_notes: `WNBA post-start unlocked record: published_at ${record.published_at ?? "null"} after game_date ${gameDate}`,
+  };
+}
+
+function isUnlockedWnbaRecordPublishedAfterStart(
+  record: PredictionRecordRow,
+  gameDate: string | null,
+): gameDate is string {
+  if (record.sport !== "wnba") return false;
+  if (record.locked_at !== null) return false;
+  if (record.published_at === null || gameDate === null) return false;
+  const publishedMs = Date.parse(record.published_at);
+  const startMs = Date.parse(gameDate);
+  return Number.isFinite(publishedMs) && Number.isFinite(startMs) && publishedMs > startMs;
+}
+
 export type GradingResult = {
   sport: TrackedSport;
   slateDate: string;
@@ -87,11 +124,23 @@ export type GradingResult = {
  */
 export function shouldUpsertGrade(args: {
   existingResult: string | null | undefined;
+  existingNotes?: string | null | undefined;
   newResult: string;
+  record?: PredictionRecordRow;
 }): boolean {
   const existing = args.existingResult;
   if (existing === null || existing === undefined) return true;
   if (existing === "pending") return true;
+  if (
+    existing === "void" &&
+    args.newResult === "pending" &&
+    args.record?.market === "first_inning" &&
+    args.record.no_bet !== true &&
+    args.record.side !== null &&
+    /non-actionable:\s*toss-up/i.test(args.existingNotes ?? "")
+  ) {
+    return true;
+  }
   if (args.newResult === "pending") return false;
   return true;
 }
@@ -201,11 +250,15 @@ export async function gradePredictionsForSlate(args: {
     .filter((x): x is number => x !== undefined);
   const { data: existingGrades } = await supabase
     .from("prediction_grades")
-    .select("prediction_record_id, result")
+    .select("prediction_record_id, result, grade_notes")
     .in("prediction_record_id", recordIds);
-  const existingByRecordId = new Map<number, string>(
-    ((existingGrades ?? []) as Array<{ prediction_record_id: number; result: string }>).map(
-      (g) => [g.prediction_record_id, g.result],
+  const existingByRecordId = new Map<number, { result: string; notes: string | null }>(
+    ((existingGrades ?? []) as Array<{
+      prediction_record_id: number;
+      result: string;
+      grade_notes: string | null;
+    }>).map(
+      (g) => [g.prediction_record_id, { result: g.result, notes: g.grade_notes }],
     ),
   );
 
@@ -218,7 +271,9 @@ export async function gradePredictionsForSlate(args: {
         ? computeSlateDate("wnba", game.game_date)
         : null;
     const grade =
-      wnbaExpectedSlate !== null && wnbaExpectedSlate !== rec.slate_date
+      isUnlockedWnbaRecordPublishedAfterStart(rec, game.game_date)
+        ? staleWnbaPostStartVoidGrade(rec, source, game.game_date)
+        : wnbaExpectedSlate !== null && wnbaExpectedSlate !== rec.slate_date
         ? staleWnbaSlateVoidGrade(rec, source, wnbaExpectedSlate)
         : gradePrediction({
             record: rec,
@@ -278,10 +333,13 @@ export async function gradePredictionsForSlate(args: {
       }
     }
 
-    const existingResult = existingByRecordId.get(rec.id);
+    const existingGrade = existingByRecordId.get(rec.id);
+    const existingResult = existingGrade?.result;
     const shouldWrite = shouldUpsertGrade({
       existingResult,
+      existingNotes: existingGrade?.notes,
       newResult: grade.result,
+      record: rec,
     });
     if (!shouldWrite) {
       result.skippedPendingDowngrade++;

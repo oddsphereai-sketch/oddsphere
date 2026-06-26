@@ -32,6 +32,16 @@ import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
 import { wnbaLogoUrl } from "./wnbaTeams";
 import { supabase } from "@/lib/db/supabase";
 import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
+import {
+  marketIntelligenceV2UiEnabledForWnbaMarket,
+  readMarketIntelligenceV2Config,
+} from "@/lib/config/marketIntelligenceV2";
+import {
+  selectMarketIntelligenceSnapshotV2,
+  type MarketIntelligenceSnapshotV2Row,
+} from "@/lib/services/marketIntelligenceV2/snapshotSelector";
+import { marketReadV2DtoFromSnapshot } from "@/lib/services/marketIntelligenceV2/dto";
+import type { MarketReadV2Dto } from "@/lib/types/domain/MarketIntelligenceV2";
 
 const HISTORY_PAGE_SIZE = 1000;
 
@@ -44,15 +54,25 @@ const HISTORY_PAGE_SIZE = 1000;
  */
 async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGame[]> {
   const today = currentSlateDate("wnba");
+  const start = date ?? addDaysToSlate(today, -1);
   const end = addDaysToSlate(today, 3);
   let q = supabase
     .from("games")
-    .select("id, external_id, slate_date, game_date, home_team_id, away_team_id")
-    .eq("sport", "wnba").eq("status", "scheduled");
-  q = date ? q.eq("slate_date", date) : q.gte("slate_date", today).lte("slate_date", end);
+    .select("id, external_id, slate_date, game_date, status, home_team_id, away_team_id")
+    .eq("sport", "wnba");
+  q = date ? q.eq("slate_date", date) : q.gte("slate_date", start).lte("slate_date", end);
   const { data: games } = await q.order("game_date");
   if (!games || games.length === 0) return [];
-  const ids = games.map((g) => g.id as number);
+  const retentionCutoffMs = Date.now() - 24 * 60 * 60 * 1000;
+  const retainedGames = date === null
+    ? games.filter((g) => {
+        if ((g.slate_date as string) >= today) return true;
+        const gameDateMs = Date.parse((g.game_date as string | null) ?? "");
+        const status = String(g.status ?? "").toLowerCase();
+        return status === "final" && Number.isFinite(gameDateMs) && gameDateMs >= retentionCutoffMs;
+      })
+    : games;
+  const ids = retainedGames.map((g) => g.id as number);
   const { data: gps } = await supabase
     .from("game_predictions")
     .select("game_id, predicted_home_score, predicted_away_score, predicted_total, locked_at, sport_specific")
@@ -60,7 +80,7 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
   const gpByGame = new Map((gps ?? []).map((r) => [r.game_id as number, r]));
   const { data: lockedRecords } = await supabase
     .from("prediction_records")
-    .select("game_id, market, pick, side, line_value, odds_american, locked_at")
+    .select("game_id, market, pick, side, line_value, odds_american, confidence, play_grade, locked_at")
     .eq("sport", "wnba")
     .in("game_id", ids)
     .not("locked_at", "is", null);
@@ -124,7 +144,7 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
   const tById = new Map((teams ?? []).map((t) => [t.id as number, t]));
   const out: PreviewGame[] = [];
   const seen = new Set<number>();
-  for (const g of games) {
+  for (const g of retainedGames) {
     const gp = gpByGame.get(g.id as number) as { sport_specific?: Record<string, unknown>; predicted_home_score?: number; predicted_away_score?: number; predicted_total?: number; locked_at?: string | null } | undefined;
     const ss = (gp?.sport_specific ?? {}) as Record<string, unknown>;
     const home = tById.get(g.home_team_id as number), away = tById.get(g.away_team_id as number);
@@ -134,10 +154,56 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
     seen.add(extId);
     const ml = ss.moneyline as PreviewGame["moneyline"];
     const lockedRecordsForGame = lockedByGame.get(g.id as number) ?? new Map<string, WnbaLockedRecord>();
+    const lockedMl = lockedRecordsForGame.get("moneyline");
+    const lockedTotal = lockedRecordsForGame.get("total");
+    const lockedSpread = lockedRecordsForGame.get("spread");
     const lockedAt =
       gp.locked_at ??
       Array.from(lockedRecordsForGame.values()).find((r) => r.locked_at !== null)?.locked_at ??
       null;
+    const lockedMoneyline =
+      lockedMl === undefined
+        ? ml
+        : {
+            ...ml,
+            side:
+              lockedMl.side === "home"
+                ? (home.name as string)
+                : lockedMl.side === "away"
+                  ? (away.name as string)
+                  : ml.side,
+            price: lockedMl.odds_american,
+            confidence: normalizePctConfidence(lockedMl.confidence) ?? ml.confidence,
+            grade: previewGradeFromPlayGrade(lockedMl.play_grade) ?? ml.grade,
+          };
+    const ssTotal = (ss.total as PreviewGame["total"]) ?? { side: null, line: null, confidence: null, grade: null };
+    const lockedTotalMarket =
+      lockedTotal === undefined
+        ? ssTotal
+        : {
+            ...ssTotal,
+            side: lockedTotal.pick,
+            line: lockedTotal.line_value,
+            confidence: normalizePctConfidence(lockedTotal.confidence) ?? ssTotal.confidence,
+            grade: previewGradeFromPlayGrade(lockedTotal.play_grade) ?? ssTotal.grade,
+          };
+    const ssSpread = (ss.spread as PreviewGame["spread"]) ?? { side: null, line: null, confidence: null, grade: null };
+    const lockedSpreadLine =
+      lockedSpread?.line_value == null
+        ? ssSpread.line
+        : lockedSpread.side === "away"
+          ? -lockedSpread.line_value
+          : lockedSpread.line_value;
+    const lockedSpreadMarket =
+      lockedSpread === undefined
+        ? ssSpread
+        : {
+            ...ssSpread,
+            side: lockedSpread.pick,
+            line: lockedSpreadLine,
+            confidence: normalizePctConfidence(lockedSpread.confidence) ?? ssSpread.confidence,
+            grade: previewGradeFromPlayGrade(lockedSpread.play_grade) ?? ssSpread.grade,
+          };
     out.push({
       game_id: extId,
       date: g.slate_date as string,
@@ -149,9 +215,9 @@ async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGa
       home: home.name as string,
       away: away.name as string,
       projected_score: (ss.projected_score as { home: number; away: number }) ?? { home: gp.predicted_home_score ?? 0, away: gp.predicted_away_score ?? 0 },
-      moneyline: ml,
-      spread: (ss.spread as PreviewGame["spread"]) ?? { side: null, line: null, confidence: null, grade: null },
-      total: (ss.total as PreviewGame["total"]) ?? { side: null, line: null, confidence: null, grade: null },
+      moneyline: lockedMoneyline,
+      spread: lockedSpreadMarket,
+      total: lockedTotalMarket,
       model: (ss.model as PreviewGame["model"]) ?? { home_win_prob: 0.5, margin: 0, total: gp.predicted_total ?? 0 },
       market: (ss.market as PreviewGame["market"]) ?? { home_win_prob: null, spread: null, total: null, book_count: 0, dispersion: { spread: 0, total: 0 } },
       data_quality: (ss.data_quality as PreviewGame["data_quality"]) ?? { ml_books: 0, spread_books: 0, total_books: 0, flags: [] },
@@ -185,6 +251,12 @@ type PreviewModelGrade = "Best Angle" | "Lean" | "Watchlist" | "Caution";
 
 /** One public-split row in the DTO (Playbook bet%/money% + freshness). */
 type WnbaPublicSplit = MarketEdgeDto["publicSplits"][number];
+type MarketReadV2Lookup = {
+  enabled: boolean;
+  enabledByMarket: Record<"moneyline" | "total" | "spread", boolean>;
+  responseAsOf: string;
+  rows: readonly MarketIntelligenceSnapshotV2Row[];
+};
 
 /** Stale threshold for the freshness flag: public splits older than 6h. */
 const PUBLIC_SPLIT_STALE_MS = 6 * 60 * 60 * 1000;
@@ -259,8 +331,35 @@ type WnbaLockedRecord = {
   side: string | null;
   line_value: number | null;
   odds_american: number | null;
+  confidence: number | null;
+  play_grade: string | null;
   locked_at: string | null;
 };
+
+function normalizePctConfidence(value: number | null): number | null {
+  if (value === null) return null;
+  return value <= 1 ? value * 100 : value;
+}
+
+function previewGradeFromPlayGrade(value: string | null): PreviewModelGrade | null {
+  switch (value) {
+    case "best_angle":
+      return "Best Angle";
+    case "lean":
+      return "Lean";
+    case "watchlist":
+    case "market_watch":
+    case "model_only":
+    case "market_aligned":
+      return "Watchlist";
+    case "caution":
+    case "sharp_conflict":
+    case "provisional":
+      return "Caution";
+    default:
+      return null;
+  }
+}
 
 function medianNumber(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -506,6 +605,36 @@ function sharpStatusFromGrade(g: PreviewModelGrade): "confirm" | "mixed" | "caut
   return "mixed";
 }
 
+function marketReadV2ForWnba(opts: {
+  lookup: MarketReadV2Lookup | null;
+  game: PreviewGame;
+  marketType: "moneyline" | "total" | "spread";
+  selectedSide: string | null;
+}): MarketReadV2Dto | null {
+  if (!opts.lookup?.enabled) return null;
+  if (!opts.lookup.enabledByMarket[opts.marketType]) return null;
+  const selectedSide = opts.selectedSide;
+  if (
+    selectedSide !== "home" &&
+    selectedSide !== "away" &&
+    selectedSide !== "over" &&
+    selectedSide !== "under"
+  ) {
+    return null;
+  }
+  const canonicalEventId = String(opts.game.game_id);
+  const snapshot = selectMarketIntelligenceSnapshotV2({
+    rows: opts.lookup.rows,
+    mode: opts.game.lockedAt
+      ? { kind: "locked", recommendationLockedAt: opts.game.lockedAt }
+      : { kind: "unlocked", responseAsOf: opts.lookup.responseAsOf },
+    canonicalEventId,
+    marketType: opts.marketType,
+    selectionKey: `${canonicalEventId}:${opts.marketType}:${selectedSide}`,
+  });
+  return marketReadV2DtoFromSnapshot(snapshot);
+}
+
 /** Build a MarketEdgeDto from the WNBA model's per-market output. */
 function buildMarket(opts: {
   slot: "ml" | "total" | "spread";
@@ -524,6 +653,8 @@ function buildMarket(opts: {
   publicSplits?: WnbaPublicSplit[];
   priceTrail?: WnbaPriceTrail;
   lockedAt?: string | null;
+  marketReadV2?: MarketReadV2Dto | null;
+  marketReadV2Enabled?: boolean;
 }): MarketEdgeDto {
   const { slot, pick, confFrac, grade, modelProbPick, marketFairProbPick, priceAmerican, line, modelTotal, marketTotal, bookCount, aligned, whyLine } = opts;
   const held = pick === null || grade === null;
@@ -568,6 +699,8 @@ function buildMarket(opts: {
     recommendationConfidence: held ? null : confPct,
     marketSource: bookCount > 0 ? "consensus" : null,
     marketDataQuality: bookCount >= 2 ? "two_sided_consensus" : bookCount === 1 ? "single_book" : "unavailable",
+    marketReadV2: opts.marketReadV2 ?? null,
+    marketReadV2Enabled: opts.marketReadV2Enabled === true,
     reviewFlags: [],
     reviewActionSummary: "keep",
   };
@@ -583,7 +716,11 @@ function tipDisplayEt(iso: string): string {
   return iso.length === 10 ? "tip TBD" : (() => { try { return new Date(iso).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true }); } catch { return "tip TBD"; } })();
 }
 
-function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
+function adaptGame(
+  game: PreviewGame,
+  asOf: string,
+  marketReadV2Lookup: MarketReadV2Lookup | null,
+): DailyEdgeGameDto {
   const homeAbbr = game.home_abbr ?? game.home.slice(0, 3).toUpperCase();
   const awayAbbr = game.away_abbr ?? game.away.slice(0, 3).toUpperCase();
 
@@ -592,6 +729,14 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
   const mlModelProb = mlPickIsHome ? game.model.home_win_prob : 1 - game.model.home_win_prob;
   const mlMarketFair = game.market.home_win_prob !== null ? (mlPickIsHome ? game.market.home_win_prob : 1 - game.market.home_win_prob) : null;
   const mlAligned = game.market.home_win_prob !== null ? mlPickIsHome === game.market.home_win_prob >= 0.5 : null;
+  const mlSelectedSide =
+    game.moneyline.side === game.home ? "home" : game.moneyline.side === game.away ? "away" : null;
+  const totalSelectedSide =
+    game.total.side?.toLowerCase().startsWith("over") === true
+      ? "over"
+      : game.total.side?.toLowerCase().startsWith("under") === true
+        ? "under"
+        : null;
   const ml = buildMarket({
     slot: "ml",
     pick: game.moneyline.side === game.home ? homeAbbr : game.moneyline.side === game.away ? awayAbbr : game.moneyline.side,
@@ -607,6 +752,13 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     publicSplits: game.publicSplits?.ml,
     priceTrail: game.pickedPrices?.ml,
     lockedAt: game.lockedAt ?? null,
+    marketReadV2: marketReadV2ForWnba({
+      lookup: marketReadV2Lookup,
+      game,
+      marketType: "moneyline",
+      selectedSide: mlSelectedSide,
+    }),
+    marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.moneyline === true,
   });
 
   // ── Total ──
@@ -625,6 +777,13 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     publicSplits: game.publicSplits?.total,
     priceTrail: game.pickedPrices?.total,
     lockedAt: game.lockedAt ?? null,
+    marketReadV2: marketReadV2ForWnba({
+      lookup: marketReadV2Lookup,
+      game,
+      marketType: "total",
+      selectedSide: totalSelectedSide,
+    }),
+    marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.total === true,
   });
 
   // ── Spread (rendered on the first_inning slot, relabeled "Sprd*") ──
@@ -660,6 +819,13 @@ function adaptGame(game: PreviewGame, asOf: string): DailyEdgeGameDto {
     publicSplits: game.publicSplits?.spread,
     priceTrail: game.pickedPrices?.spread,
     lockedAt: game.lockedAt ?? null,
+    marketReadV2: marketReadV2ForWnba({
+      lookup: marketReadV2Lookup,
+      game,
+      marketType: "spread",
+      selectedSide: spreadPickIsHome ? "home" : spreadPickIsAway ? "away" : null,
+    }),
+    marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.spread === true,
   });
 
   // Top grade across the three markets drives the card verdict pill.
@@ -715,7 +881,38 @@ export async function buildWnbaDailyEdgeAdapted(date: string | null): Promise<Da
     // applied rows). These match what the cron wrote — no recompute.
     const dbGames = await loadWnbaPredictionsFromDb(date);
     if (dbGames.length > 0) {
-      const games = dbGames.map((g) => adaptGame(g, asOf));
+      const config = readMarketIntelligenceV2Config();
+      const enabledByMarket = {
+        moneyline: marketIntelligenceV2UiEnabledForWnbaMarket(config, "moneyline"),
+        total: marketIntelligenceV2UiEnabledForWnbaMarket(config, "total"),
+        spread: marketIntelligenceV2UiEnabledForWnbaMarket(config, "spread"),
+      };
+      const marketReadV2Enabled = Object.values(enabledByMarket).some(Boolean);
+      let marketReadV2Lookup: MarketReadV2Lookup | null = marketReadV2Enabled
+        ? { enabled: true, enabledByMarket, responseAsOf: asOf, rows: [] }
+        : null;
+      if (marketReadV2Enabled) {
+        const eventIds = dbGames.map((g) => String(g.game_id));
+        const { data, error } = await supabase
+          .from("market_intelligence_snapshots_v2")
+          .select(
+            "id, canonical_event_id, canonical_market_id, selection_key, league, market_type, resolver_version, score, label, explanation, evidence_json, generated_at, evidence_as_of, event_start_time, recommendation_snapshot_id, recommendation_locked_at, selected_side, selected_line, selected_price, validity_status",
+          )
+          .eq("league", "wnba")
+          .in("canonical_event_id", eventIds)
+          .in("market_type", ["moneyline", "total", "spread"]);
+        if (error) {
+          console.warn(`wnba daily-edge: market_intelligence_snapshots_v2 unavailable: ${error.message}`);
+        } else {
+          marketReadV2Lookup = {
+            enabled: true,
+            enabledByMarket,
+            responseAsOf: asOf,
+            rows: (data ?? []) as MarketIntelligenceSnapshotV2Row[],
+          };
+        }
+      }
+      const games = dbGames.map((g) => adaptGame(g, asOf, marketReadV2Lookup));
       return {
         as_of: asOf, sport: "wnba", date: date ?? dbGames[0]!.date, requested_date: date ?? dbGames[0]!.date,
         fallback_used: false, slateState: "today_published", slate_status: "published",
@@ -724,7 +921,7 @@ export async function buildWnbaDailyEdgeAdapted(date: string | null): Promise<Da
     }
     // DEV/FALLBACK: nothing stored → live compute (cron hasn't run / local dev).
     const raw = await buildWnbaDailyEdgePreview(date);
-    const games = (raw.games as unknown as PreviewGame[]).map((g) => adaptGame(g, asOf));
+    const games = (raw.games as unknown as PreviewGame[]).map((g) => adaptGame(g, asOf, null));
     return {
       as_of: asOf, sport: "wnba", date: raw.slate_date, requested_date: date ?? raw.slate_date,
       fallback_used: true, slateState: games.length > 0 ? "today_published" : "no_data",

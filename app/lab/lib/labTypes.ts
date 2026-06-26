@@ -13,6 +13,7 @@
  */
 
 import type { Sport } from "@/lib/types/domain/Sport";
+import type { MarketReadV2Dto } from "@/lib/types/domain/MarketIntelligenceV2";
 import type {
   Grade,
   MarketSignal,
@@ -324,6 +325,14 @@ export type MarketEdgeDto = {
     flags: string[];
     detail: string[];
   } | null;
+  /**
+   * Market Intelligence v2 member read. Present only when the global v2 UI flag
+   * and this sport's v2 UI flag are both enabled AND a valid v2 snapshot exists.
+   * When marketReadV2Enabled is true but this is null, the UI omits the Market
+   * Read module instead of falling back to the legacy live-stream read.
+   */
+  marketReadV2?: MarketReadV2Dto | null;
+  marketReadV2Enabled?: boolean;
   lastMovePrevAmerican?: number | null;
   lastMoveNextAmerican?: number | null;
   lastMoveAtIso?: string | null;

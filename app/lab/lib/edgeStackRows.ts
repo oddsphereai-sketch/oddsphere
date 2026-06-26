@@ -63,6 +63,48 @@ function formatAmerican(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
 }
 
+function effectivePriceTrail(marketData: MarketEdgeDto): {
+  open: number | null;
+  previous: number | null;
+  current: number | null;
+  locked: number | null;
+} {
+  const movement = marketData.marketReadV2?.movement ?? null;
+  return {
+    open: marketData.lineOpenAmerican ?? movement?.firstTrackedPrice ?? null,
+    previous: marketData.lastMovePrevAmerican ?? null,
+    current: marketData.priceAmerican ?? movement?.currentPrice ?? null,
+    locked: marketData.lockedLineAmerican ?? null,
+  };
+}
+
+function formatMarketReadLine(n: number): string {
+  return Number.isInteger(n) ? `${n}` : n.toFixed(1);
+}
+
+function marketReadMovementEvidence(
+  marketData: MarketEdgeDto,
+): string | null {
+  if (marketData.marketReadV2?.label === "Projection-Led") return null;
+  const movement = marketData.marketReadV2?.movement;
+  if (!movement) return null;
+  if (
+    movement.firstTrackedLine !== null &&
+    movement.currentLine !== null &&
+    movement.firstTrackedLine !== movement.currentLine
+  ) {
+    return `${formatMarketReadLine(movement.firstTrackedLine)} → ${formatMarketReadLine(movement.currentLine)}`;
+  }
+  if (
+    movement.firstTrackedPrice !== null &&
+    movement.currentPrice !== null &&
+    movement.firstTrackedPrice !== movement.currentPrice
+  ) {
+    return `${formatAmerican(movement.firstTrackedPrice)} → ${formatAmerican(movement.currentPrice)}`;
+  }
+  return null;
+}
+
 function splitForPick(
   marketData: MarketEdgeDto
 ): MarketEdgeDto["publicSplits"][number] | null {
@@ -172,8 +214,8 @@ export function buildEdgeStackRows(
     );
     const modelLabel = modelPct !== null ? `${Math.round(modelPct)}%` : "—";
     const evidence = sourceLabel
-      ? `Model ${modelLabel} · Market ${Math.round(marketPct)}% · ${sourceLabel}`
-      : `Model ${modelLabel} · Market ${Math.round(marketPct)}%`;
+      ? `Projection ${modelLabel} · Market ${Math.round(marketPct)}% · ${sourceLabel}`
+      : `Projection ${modelLabel} · Market ${Math.round(marketPct)}%`;
     rows.push({
       label: "Model Edge",
       evidence,
@@ -189,14 +231,14 @@ export function buildEdgeStackRows(
         : 0) * 100;
     rows.push({
       label: "Model Edge",
-      evidence: `${(((marketData.modelProb ?? 0) * 100)).toFixed(0)}% vs market ${(marketData.marketFairProb * 100).toFixed(0)}%`,
+      evidence: `Projection ${(((marketData.modelProb ?? 0) * 100)).toFixed(0)}% vs market ${(marketData.marketFairProb * 100).toFixed(0)}%`,
       delta: `${gap >= 0 ? "+" : ""}${gap.toFixed(1)}%`,
       tone: gap >= 1 ? "emerald" : gap <= -1 ? "amber" : "gray",
     });
   } else {
     rows.push({
       label: "Model Edge",
-      evidence: `${(((marketData.modelProb ?? 0) * 100)).toFixed(0)}% · market unavailable`,
+      evidence: `Projection ${(((marketData.modelProb ?? 0) * 100)).toFixed(0)}% · market unavailable`,
       delta: "—",
       tone: "gray",
     });
@@ -315,10 +357,8 @@ export function buildEdgeStackRows(
   // moves like -170 → -157 displayed amber compact / emerald expanded.
   // Both surfaces now consume classifyPickRelativeLineMove + lineMoveTone
   // so a future cron regenerating game_predictions cannot drift them apart.
-  if (
-    marketData.lineOpenAmerican === null ||
-    marketData.priceAmerican === null
-  ) {
+  const priceTrail = effectivePriceTrail(marketData);
+  if (priceTrail.open === null || priceTrail.current === null) {
     rows.push({
       label: "Line Move",
       evidence: "First seen → Current",
@@ -328,8 +368,8 @@ export function buildEdgeStackRows(
   } else {
     // Tone + arrow stay pick-relative on First seen → Current (unchanged rule).
     const dir = classifyPickRelativeLineMove(
-      marketData.lineOpenAmerican,
-      marketData.priceAmerican
+      priceTrail.open,
+      priceTrail.current
     );
     // 2026-06-16 — render the full stop chain (Open / First Published /
     // Current / Locked) when the streaming-era fields are present; otherwise
@@ -337,16 +377,16 @@ export function buildEdgeStackRows(
     // posted/locked stops exist the displayed info is identical to before,
     // just with explicit labels.
     const tracker = buildLineTrackerEvidence({
-      openAmerican: marketData.lineOpenAmerican,
-      previousAmerican: marketData.lastMovePrevAmerican ?? null,
-      currentAmerican: marketData.priceAmerican,
-      lockedAmerican: marketData.lockedLineAmerican ?? null,
+      openAmerican: priceTrail.open,
+      previousAmerican: priceTrail.previous,
+      currentAmerican: priceTrail.current,
+      lockedAmerican: priceTrail.locked,
     });
     rows.push({
       label: "Line Move",
       evidence:
         tracker.evidence ??
-        `${formatAmerican(marketData.lineOpenAmerican)} → ${formatAmerican(marketData.priceAmerican)}`,
+        `${formatAmerican(priceTrail.open)} → ${formatAmerican(priceTrail.current)}`,
       delta: lineMoveArrow(dir),
       tone: lineMoveTone(dir),
     });
@@ -370,11 +410,40 @@ export function buildEdgeStackRows(
     });
   }
 
-  // ── Market Read (2026-06-16) ────────────────────────────────────
-  // The derived market-intelligence chip (toward/against/reverse/public read).
-  // Display/audit only. Absent (null) until the live streaming tables populate,
-  // so the row simply doesn't render then.
-  if (marketData.marketInterpretation) {
+  // ── Market Read ─────────────────────────────────────────────────
+  // v2 is sport-scoped behind a master switch. When v2 is enabled for a sport,
+  // never fall back row-by-row to the legacy live-stream read; an absent valid
+  // v2 snapshot means the module cleanly omits.
+  if (marketData.marketReadV2Enabled) {
+    if (marketData.marketReadV2) {
+      const summary =
+        marketData.marketReadV2.sourceSummary.priceAction ??
+        marketData.marketReadV2.explanation;
+      rows.push({
+        label: "Market Read",
+        evidence: `${marketData.marketReadV2.label} · ${summary}`,
+        delta: "",
+        tone: marketData.marketReadV2.tone,
+      });
+      if (marketData.marketReadV2.sourceSummary.playbookConsensus) {
+        rows.push({
+          label: "Consensus",
+          evidence: marketData.marketReadV2.sourceSummary.playbookConsensus.replace(/^Consensus:\s*/i, ""),
+          delta: "",
+          tone: "gray",
+        });
+      }
+      const movement = marketReadMovementEvidence(marketData);
+      if (movement) {
+        rows.push({
+          label: "Line Movement",
+          evidence: movement,
+          delta: "",
+          tone: "gray",
+        });
+      }
+    }
+  } else if (marketData.marketInterpretation) {
     rows.push({
       label: "Market Read",
       evidence: marketData.marketInterpretation.chipLabel,

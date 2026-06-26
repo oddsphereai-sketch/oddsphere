@@ -25,6 +25,7 @@ import { SharpAPIOddsProvider } from "../providers/real_api/SharpAPIOddsProvider
 import type { V2DiscoveryReport } from "../providers/real_api/SharpAPIOddsProvider";
 import { flagOpenersInHistoryPayload } from "./_lineHistoryOpenerHelper";
 import { insertLineHistoryResilient, logLineHistoryInsertFailure } from "./lineHistoryWriter";
+import type { LineHistoryInsertResult } from "./lineHistoryWriter";
 
 /**
  * 2026-06-10 phantom-thinning fix — per-(game, market_type, sportsbook)
@@ -121,6 +122,102 @@ async function deletePerSportsbook(
   }
 }
 
+type BaselineHistoryResult = LineHistoryInsertResult & {
+  missingMarketPairs: number;
+};
+
+function historyMarketKey(gameId: unknown, marketType: unknown): string | null {
+  if (typeof gameId !== "number") return null;
+  if (typeof marketType !== "string") return null;
+  return `${gameId}::${marketType}`;
+}
+
+async function ensureLineHistoryBaselinesForPayload(
+  rows: ReadonlyArray<Record<string, unknown>>,
+  source: string,
+  sport: Sport,
+): Promise<BaselineHistoryResult> {
+  const empty: BaselineHistoryResult = {
+    attempted: 0,
+    inserted: 0,
+    failed: 0,
+    firstError: null,
+    failedSample: null,
+    missingMarketPairs: 0,
+  };
+  if (rows.length === 0) return empty;
+
+  const wanted = new Set<string>();
+  const gameIds = new Set<number>();
+  const markets = new Set<string>();
+  for (const row of rows) {
+    const key = historyMarketKey(row.game_id, row.market_type);
+    if (key === null) continue;
+    wanted.add(key);
+    gameIds.add(row.game_id as number);
+    markets.add(row.market_type as string);
+  }
+  if (wanted.size === 0) return empty;
+
+  const { data, error } = await supabase
+    .from("line_history")
+    .select("game_id, market_type")
+    .in("game_id", [...gameIds])
+    .in("market_type", [...markets])
+    .is("player_id", null);
+
+  if (error !== null) {
+    const result: BaselineHistoryResult = {
+      attempted: rows.length,
+      inserted: 0,
+      failed: rows.length,
+      firstError: error.message,
+      failedSample: rows[0] ?? null,
+      missingMarketPairs: wanted.size,
+    };
+    await logLineHistoryInsertFailure(supabase, `${source}:baseline_check`, sport, result);
+    return result;
+  }
+
+  const existing = new Set<string>();
+  for (const row of data ?? []) {
+    const key = historyMarketKey(row.game_id, row.market_type);
+    if (key !== null) existing.add(key);
+  }
+
+  const missing = new Set([...wanted].filter((key) => !existing.has(key)));
+  if (missing.size === 0) return empty;
+
+  const seenRows = new Set<string>();
+  const baselineRows: Record<string, unknown>[] = [];
+  for (const row of rows) {
+    const marketKey = historyMarketKey(row.game_id, row.market_type);
+    if (marketKey === null || !missing.has(marketKey)) continue;
+    const rowKey = [
+      row.game_id,
+      row.market_type,
+      row.sportsbook,
+      row.side,
+      row.line_value,
+      row.odds_american,
+      row.recorded_at,
+    ].join("::");
+    if (seenRows.has(rowKey)) continue;
+    seenRows.add(rowKey);
+    baselineRows.push({ ...row, is_opener: true });
+  }
+
+  const result = await insertLineHistoryResilient(supabase, baselineRows);
+  const baselineResult: BaselineHistoryResult = {
+    ...result,
+    missingMarketPairs: missing.size,
+  };
+  if (baselineResult.failed > 0) {
+    await logLineHistoryInsertFailure(supabase, `${source}:baseline_insert`, sport, baselineResult);
+  }
+  return baselineResult;
+}
+
 export const linesService = {
   /**
    * Refresh game lines (ML / Total / NRFI etc.) for the slate.
@@ -208,12 +305,18 @@ export const linesService = {
         const flagged = await flagOpenersInHistoryPayload(
           historyPayload as unknown as Parameters<typeof flagOpenersInHistoryPayload>[0],
         );
-        const { error: histErr } = await supabase
-          .from("line_history")
-          .insert(flagged);
-        if (histErr) {
-          throw new Error(`linesService.refreshGameLines history insert failed: ${histErr.message}`);
+        const histResult = await insertLineHistoryResilient(
+          supabase,
+          flagged as unknown as Array<Record<string, unknown>>,
+        );
+        if (histResult.failed > 0) {
+          await logLineHistoryInsertFailure(supabase, "refreshGameLines", sport, histResult);
         }
+        await ensureLineHistoryBaselinesForPayload(
+          flagged as unknown as Array<Record<string, unknown>>,
+          "refreshGameLines",
+          sport,
+        );
       }
     }
 
@@ -479,6 +582,9 @@ export const linesService = {
     // Surfaced into details so a silent line_history rejection becomes visible.
     let historyInsertFailed = 0;
     let historyFirstError: string | null = null;
+    let historyBaselineInserted = 0;
+    let historyBaselineFailed = 0;
+    let historyBaselineMissingMarketPairs = 0;
 
     if (!dryRun && linesPayload.length > 0) {
       // 2026-06-10 phantom-thinning fix — per-(game, market_type, sportsbook)
@@ -527,6 +633,17 @@ export const linesService = {
           );
           await logLineHistoryInsertFailure(supabase, "refreshGameLinesV2", sport, histResult);
         }
+        const baselineResult = await ensureLineHistoryBaselinesForPayload(
+          flagged as unknown as Array<Record<string, unknown>>,
+          "refreshGameLinesV2",
+          sport,
+        );
+        historyBaselineInserted = baselineResult.inserted;
+        historyBaselineFailed = baselineResult.failed;
+        historyBaselineMissingMarketPairs = baselineResult.missingMarketPairs;
+        if (historyFirstError === null && baselineResult.firstError !== null) {
+          historyFirstError = baselineResult.firstError;
+        }
       }
     }
 
@@ -564,6 +681,9 @@ export const linesService = {
       total_history_rows_appended: dryRun ? 0 : totalHistoryRowsWritten,
       history_insert_failed: historyInsertFailed,
       history_first_error: historyFirstError,
+      history_baseline_inserted: historyBaselineInserted,
+      history_baseline_failed: historyBaselineFailed,
+      history_baseline_missing_market_pairs: historyBaselineMissingMarketPairs,
     };
 
     return {
@@ -909,6 +1029,12 @@ export type V2RefreshDetails = {
   history_insert_failed: number;
   /** First Postgres rejection message when history_insert_failed > 0 (else null). */
   history_first_error: string | null;
+  /** Rows inserted by the post-insert baseline safety net. Usually 0. */
+  history_baseline_inserted: number;
+  /** Rows rejected by the post-insert baseline safety net. */
+  history_baseline_failed: number;
+  /** (game, market) pairs that had current lines but no history before the safety net ran. */
+  history_baseline_missing_market_pairs: number;
 };
 
 /**

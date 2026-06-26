@@ -50,6 +50,10 @@ import { updateMarketSignalsForSlate } from "@/lib/services/marketSignalDerivati
 import { updateGradesForSlate } from "@/lib/services/gradeDerivationService";
 import { detectSnapshotStaleness } from "@/lib/services/snapshotStalenessDetector";
 import {
+  runScheduledMarketIntelligenceV2Collection,
+  type ScheduledMarketIntelligenceV2Result,
+} from "@/lib/services/marketIntelligenceV2/scheduledCollection";
+import {
   partitionByLockState,
   type LockCandidate,
 } from "@/lib/automodel/lockState";
@@ -459,10 +463,23 @@ export async function GET(request: Request) {
       const lockResult = await applyLocks(sport, date, partition.entering_lock);
       records += lockResult.locked;
 
+      let marketIntelligenceV2: ScheduledMarketIntelligenceV2Result | null = null;
+      if (sport === "mlb") {
+        marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
+          supabase,
+          sport,
+          slateDate: date,
+          phase: "pregame_sweep",
+        });
+        records += marketIntelligenceV2.recordsUpdated;
+        apiCalls += marketIntelligenceV2.apiCallsMade;
+      }
+
       if (lockOnly) {
         const anyErrors =
           lockResult.errors.length > 0 ||
-          enteringLockModelResult.errors.length > 0;
+          enteringLockModelResult.errors.length > 0 ||
+          (marketIntelligenceV2?.errors.length ?? 0) > 0;
         return {
           records_updated: records,
           api_calls_made: apiCalls,
@@ -483,8 +500,11 @@ export async function GET(request: Request) {
             locks_applied: lockResult.locked,
             audit_rows_written: lockResult.audit_written,
             lock_errors: lockResult.errors,
+            market_intelligence_v2: marketIntelligenceV2,
             errors_count:
-              lockResult.errors.length + enteringLockModelResult.errors.length,
+              lockResult.errors.length +
+              enteringLockModelResult.errors.length +
+              (marketIntelligenceV2?.errors.length ?? 0),
             steps_skipped: [
               "lines_refresh",
               "sharp_signals_refresh",
@@ -509,7 +529,14 @@ export async function GET(request: Request) {
           records_updated: records,
           api_calls_made: apiCalls,
           partial: false,
-          details: { sport, date, lock_only: true, entering_lock: partition.entering_lock.length, locked: lockResult.locked },
+          details: {
+            sport,
+            date,
+            lock_only: true,
+            entering_lock: partition.entering_lock.length,
+            locked: lockResult.locked,
+            market_intelligence_v2: marketIntelligenceV2,
+          },
         };
       }
 
@@ -551,7 +578,7 @@ export async function GET(request: Request) {
       // Sport scope: MLB only in V1, matching the entering_lock pass
       // above. NBA / NHL gain this when their automodel pipelines
       // come online with the same lifecycle.
-      let staleTrigger: {
+      const staleTrigger: {
         considered: number;
         stale: number;
         refreshed: number;
@@ -700,7 +727,8 @@ export async function GET(request: Request) {
       const anyErrors =
         lockResult.errors.length > 0 ||
         enteringLockModelResult.errors.length > 0 ||
-        staleTrigger.errors.length > 0;
+        staleTrigger.errors.length > 0 ||
+        (marketIntelligenceV2?.errors.length ?? 0) > 0;
 
       return {
         records_updated: records,
@@ -721,8 +749,11 @@ export async function GET(request: Request) {
           locks_applied: lockResult.locked,
           audit_rows_written: lockResult.audit_written,
           lock_errors: lockResult.errors,
+          market_intelligence_v2: marketIntelligenceV2,
           errors_count:
-            lockResult.errors.length + enteringLockModelResult.errors.length,
+            lockResult.errors.length +
+            enteringLockModelResult.errors.length +
+            (marketIntelligenceV2?.errors.length ?? 0),
           game_lines: gameLines.records_updated,
           sharp_signals: signals.records_updated,
           stale_snapshot_trigger: staleTrigger,

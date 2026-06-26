@@ -26,6 +26,7 @@ import { resolveMlInversionFlip, ML_INVERSION_RULE_ID } from "./mlInversionFlip"
 import { resolveTotalsMeanFlip, TOTALS_MEAN_FLIP_RULE_ID } from "./totalsMeanFlip";
 import { resolveFiInversionFlip, FI_INVERSION_RULE_ID } from "./fiInversionFlip";
 import { selectMainTotalLine } from "./selectMainTotalLine";
+import { readMarketIntelligenceV2Config } from "../config/marketIntelligenceV2";
 
 export type CreateRecordsOptions = {
   sport: TrackedSport;
@@ -940,6 +941,8 @@ function buildMlRecord(
   if (held) return null;
   const v22 = (sp.v2_2_audit ?? {}) as Record<string, unknown>;
   const v21 = (sp.v2_1_audit ?? {}) as Record<string, unknown>;
+  const legacyMarketSignalGradeInfluenceEnabled =
+    readMarketIntelligenceV2Config().legacyMarketSignalGradeInfluenceEnabled;
   // Phase 6B.18 — capture the pregame price + audit math for the
   // picked side so Daily Edge can render the locked snapshot
   // verbatim after lock instead of falling back to live `lines` and
@@ -977,12 +980,15 @@ function buildMlRecord(
   const mlLineMovement = buildLineMovementSnapshot(
     openersForGame, currentLinesForGame, signalsForGame, "moneyline", pred.predicted_ml_winner,
   );
-  const mlBest = resolveMlbBestAngle({
-    baseEligible: readBoolish(sp.ml_best_angle_eligible),
-    requiresConfirmation: readBoolish(v22.ml_requires_market_confirmation),
-    lineDirection: readLineDirection(mlLineMovement),
-    opposingPublicMoney: hasOpposingPublicMoneyConflict(signalsForGame, "moneyline", pred.predicted_ml_winner),
-  });
+  const mlBaseBestAngleEligible = readBoolish(sp.ml_best_angle_eligible);
+  const mlBest = legacyMarketSignalGradeInfluenceEnabled
+    ? resolveMlbBestAngle({
+        baseEligible: mlBaseBestAngleEligible,
+        requiresConfirmation: readBoolish(v22.ml_requires_market_confirmation),
+        lineDirection: readLineDirection(mlLineMovement),
+        opposingPublicMoney: hasOpposingPublicMoneyConflict(signalsForGame, "moneyline", pred.predicted_ml_winner),
+      })
+    : { bestAngle: mlBaseBestAngleEligible, demoteReason: null };
   // 2026-06-22 — ML inverted low-conviction market-divergent flip. For the
   // proven inverted cohort (final conf 55-60 ∧ raw<60 ∧ market-divergent) the
   // model is reliably wrong; we flip the OFFICIAL/tracked recommendation to the
@@ -1012,6 +1018,7 @@ function buildMlRecord(
   const finalMlEdge = mlFlipped ? null : mlEdgePp;
   const mlNoBetReason = readStringOrNull(sp.ml_no_bet_reason);
   const mlNoBet = !mlFlipped && isExplicitNoBetReason(mlNoBetReason);
+  const mlPublicPlayGrade = readPublicPlayGrade(sp.ml_play_grade);
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -1040,11 +1047,13 @@ function buildMlRecord(
     // best_angle is forced false below.
     play_grade: mlFlipped
       ? null
-      : applyPlayGradeGate(readPublicPlayGrade(sp.ml_play_grade), {
-          modelProb: mlModelProb, americanOdds: mlOddsAmerican, market: "moneyline",
-          runGapAbs: typeof v22.posterior_home_diff === "number" ? Math.abs(v22.posterior_home_diff as number) : null,
-          totalLine: null,
-        }),
+      : legacyMarketSignalGradeInfluenceEnabled
+        ? applyPlayGradeGate(mlPublicPlayGrade, {
+            modelProb: mlModelProb, americanOdds: mlOddsAmerican, market: "moneyline",
+            runGapAbs: typeof v22.posterior_home_diff === "number" ? Math.abs(v22.posterior_home_diff as number) : null,
+            totalLine: null,
+          })
+        : mlPublicPlayGrade,
     prediction_type: readStringOrNull(sp.ml_prediction_type),
     // Phase 6B.11 + MLB-P0 — public-money guard PLUS line-movement /
     // large-edge confirmation (see resolveMlbBestAngle). Tracking pending
@@ -1071,7 +1080,8 @@ function buildMlRecord(
       line_movement: mlLineMovement,
       // MLB-P0 — audit trail for the Best Angle confirmation resolution.
       best_angle_resolution: {
-        base_eligible: readBoolish(sp.ml_best_angle_eligible),
+        base_eligible: mlBaseBestAngleEligible,
+        legacy_market_signal_grade_influence_enabled: legacyMarketSignalGradeInfluenceEnabled,
         requires_confirmation: readBoolish(v22.ml_requires_market_confirmation),
         line_direction: readLineDirection(mlLineMovement),
         demote_reason: mlBest.demoteReason,
@@ -1137,6 +1147,8 @@ function buildOuRecord(
   if (held) return null;
   const v21 = (sp.v2_1_audit ?? {}) as Record<string, unknown>;
   const v22 = (sp.v2_2_audit ?? {}) as Record<string, unknown>;
+  const legacyMarketSignalGradeInfluenceEnabled =
+    readMarketIntelligenceV2Config().legacyMarketSignalGradeInfluenceEnabled;
   // Phase 6B.17 — read line_value from V2.2 audit FIRST (the active
   // model writes here), fall back to V2.1 audit for legacy snapshots.
   // Pre-6B.17 the locked total snapshot stored line_value=null because
@@ -1177,12 +1189,15 @@ function buildOuRecord(
   const ouLineMovement = buildLineMovementSnapshot(
     openersForGame, currentLinesForGame, signalsForGame, "total", pred.predicted_ou_side,
   );
-  const ouBest = resolveMlbBestAngle({
-    baseEligible: readBoolish(sp.ou_best_angle_eligible),
-    requiresConfirmation: readBoolish(v22.ou_requires_market_confirmation),
-    lineDirection: readLineDirection(ouLineMovement),
-    opposingPublicMoney: hasOpposingPublicMoneyConflict(signalsForGame, "total", pred.predicted_ou_side),
-  });
+  const ouBaseBestAngleEligible = readBoolish(sp.ou_best_angle_eligible);
+  const ouBest = legacyMarketSignalGradeInfluenceEnabled
+    ? resolveMlbBestAngle({
+        baseEligible: ouBaseBestAngleEligible,
+        requiresConfirmation: readBoolish(v22.ou_requires_market_confirmation),
+        lineDirection: readLineDirection(ouLineMovement),
+        opposingPublicMoney: hasOpposingPublicMoneyConflict(signalsForGame, "total", pred.predicted_ou_side),
+      })
+    : { bestAngle: ouBaseBestAngleEligible, demoteReason: null };
   // 2026-06-22 — Integrity stand-down for projection/probability divergence.
   // The O/U side follows P(over) vs P(under), but the projected MEAN total can
   // land on the opposite side of the line (right-skew). reconcileTotalProjection
@@ -1210,7 +1225,14 @@ function buildOuRecord(
   // from oddsForGame), falling back to the model's market_total only when the
   // bet line is unavailable. Keeps the final side/line/tracking aligned to what
   // members see.
+  const pickedSideOuLine =
+    pred.predicted_ou_side === "over"
+      ? oddsForGame?.oddsSourceOu?.over?.line ?? null
+      : pred.predicted_ou_side === "under"
+        ? oddsForGame?.oddsSourceOu?.under?.line ?? null
+        : null;
   const ouBetLine: number | null =
+    pickedSideOuLine ??
     (oddsForGame?.oddsSourceOu?.over?.line ?? null) ??
     (oddsForGame?.oddsSourceOu?.under?.line ?? null) ??
     lockedTotalLine;
@@ -1251,15 +1273,16 @@ function buildOuRecord(
         ? GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB
         : null;
   const ouTotalBestAngleDemote =
+    legacyMarketSignalGradeInfluenceEnabled &&
     ouBaseBestAngle &&
     totalBestAngleMinModelProb !== null &&
     finalOuModelProb !== null &&
     finalOuModelProb < totalBestAngleMinModelProb;
   const ouFinalBestAngle = ouBaseBestAngle && !ouTotalBestAngleDemote;
-  const ouPublicPlayGrade = applyMlbTotalBestAngleGate(
-    readPublicPlayGrade(sp.ou_play_grade),
-    ouTotalBestAngleDemote,
-  );
+  const ouRawPublicPlayGrade = readPublicPlayGrade(sp.ou_play_grade);
+  const ouPublicPlayGrade = legacyMarketSignalGradeInfluenceEnabled
+    ? applyMlbTotalBestAngleGate(ouRawPublicPlayGrade, ouTotalBestAngleDemote)
+    : ouRawPublicPlayGrade;
   const explicitOuNoBetReason = readStringOrNull(sp.ou_no_bet_reason);
   const ouNoBet = ouDivergenceStandDown || isExplicitNoBetReason(explicitOuNoBetReason);
   const ouNoBetReason = ouDivergenceStandDown
@@ -1292,10 +1315,12 @@ function buildOuRecord(
     // carry no model grade (the override is not a model call); BA forced false.
     play_grade: ouFlipped
       ? null
-      : applyPlayGradeGate(ouPublicPlayGrade, {
-          modelProb: finalOuModelProb, americanOdds: finalOuOdds, market: "total",
-          runGapAbs: null, totalLine: ouBetLine,
-        }),
+      : legacyMarketSignalGradeInfluenceEnabled
+        ? applyPlayGradeGate(ouPublicPlayGrade, {
+            modelProb: finalOuModelProb, americanOdds: finalOuOdds, market: "total",
+            runGapAbs: null, totalLine: ouBetLine,
+          })
+        : ouPublicPlayGrade,
     prediction_type: readStringOrNull(sp.ou_prediction_type),
     // Phase 6B.11 + MLB-P0 — same resolution as ML; see resolveMlbBestAngle.
     // A flipped or stood-down divergent row is never Best Angle.
@@ -1319,7 +1344,8 @@ function buildOuRecord(
       line_movement: ouLineMovement,
       // MLB-P0 — audit trail for the Best Angle confirmation resolution.
       best_angle_resolution: {
-        base_eligible: readBoolish(sp.ou_best_angle_eligible),
+        base_eligible: ouBaseBestAngleEligible,
+        legacy_market_signal_grade_influence_enabled: legacyMarketSignalGradeInfluenceEnabled,
         requires_confirmation: readBoolish(v22.ou_requires_market_confirmation),
         line_direction: readLineDirection(ouLineMovement),
         demote_reason: ouTotalBestAngleDemote
@@ -1416,6 +1442,8 @@ function buildFiRecord(
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
   const held = holdPicks.includes("nrfi") || pred.predicted_nrfi === null;
   if (held) return null;
+  const legacyMarketSignalGradeInfluenceEnabled =
+    readMarketIntelligenceV2Config().legacyMarketSignalGradeInfluenceEnabled;
 
   // Phase 6B.20 — preserve the member-facing FI pill. Daily Edge
   // (`app/api/lab/daily-edge/route.ts:584-597`) displays "Toss-Up"
@@ -1570,10 +1598,12 @@ function buildFiRecord(
     // Flipped rows carry no model grade (the override isn't a model call).
     play_grade: fiFlipped
       ? null
-      : applyPlayGradeGate(fiPlayGrade, {
-          modelProb: fiModelProb, americanOdds: fiOddsAmerican, market: "first_inning",
-          runGapAbs: null, totalLine: null,
-        }),
+      : legacyMarketSignalGradeInfluenceEnabled
+        ? applyPlayGradeGate(fiPlayGrade, {
+            modelProb: fiModelProb, americanOdds: fiOddsAmerican, market: "first_inning",
+            runGapAbs: null, totalLine: null,
+          })
+        : fiPlayGrade,
     prediction_type: fiFlipped ? null : predictionTypeValue,
     best_angle: false,
     no_bet: noBetValue,

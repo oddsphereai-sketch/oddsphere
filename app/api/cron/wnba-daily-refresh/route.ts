@@ -27,6 +27,7 @@ import { refreshWnbaLines } from "@/lib/services/wnba/refreshWnbaLines";
 import { refreshWnbaPlaybookSplits } from "@/lib/services/wnba/refreshWnbaPlaybookSplits";
 import { runWnbaModel } from "@/lib/services/wnba/runWnbaModel";
 import { buildWnbaPredictionRecords } from "@/lib/services/wnba/buildWnbaPredictionRecords";
+import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
 import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
 
 const WNBA_CRON_ENV = "WNBA_CRON_ENABLED";
@@ -146,10 +147,42 @@ export async function GET(request: Request): Promise<Response> {
       }
       details.records = recordDetails;
 
-      const recordsUpdated = teamsUpserted + gamesUpserted + linesWritten + lineHistoryWritten + sharpSignalsWritten + publicSplitsUpdated + publicSplitsInserted + predictionsWritten + predictionRecordsWritten;
-      console.log(`[wnba-daily-refresh] done — teams:${teamsUpserted} games:${gamesUpserted} lines:${linesWritten} history:${lineHistoryWritten} signals:${sharpSignalsWritten} pubSplits:${publicSplitsUpdated + publicSplitsInserted} predictions:${predictionsWritten} records:${predictionRecordsWritten} lockedSkipped:${skippedLocked}/${predictionRecordsLockedSkipped} errors:${errors.length}`);
+      // ─── Step 5: Market Intelligence v2 collection substrate ───────
+      // Member-facing v2 UI remains gated elsewhere. This keeps WNBA evidence
+      // fresh for validation without restoring the old broad sport cron set.
+      const marketIntelligenceRuns = [];
+      for (const n of [0, 1, 2]) {
+        const slate = slateDateOffset(n);
+        const run = await runScheduledMarketIntelligenceV2Collection({
+          supabase,
+          sport: "wnba",
+          slateDate: slate,
+          phase: "wnba_daily_refresh",
+        });
+        marketIntelligenceRuns.push(run);
+        errors.push(...run.errors.map((err) => `market intelligence ${slate}: ${err}`));
+      }
+      const marketIntelligenceV2 = {
+        enabled: marketIntelligenceRuns.some((run) => run.enabled),
+        sport: "wnba",
+        slateDates: marketIntelligenceRuns.map((run) => run.slateDate),
+        phase: "wnba_daily_refresh",
+        runs: marketIntelligenceRuns,
+        recordsUpdated: marketIntelligenceRuns.reduce((sum, run) => sum + run.recordsUpdated, 0),
+        apiCallsMade: marketIntelligenceRuns.reduce((sum, run) => sum + run.apiCallsMade, 0),
+        errors: marketIntelligenceRuns.flatMap((run) => run.errors),
+      };
+      details.marketIntelligenceV2 = marketIntelligenceV2;
+
+      const recordsUpdated = teamsUpserted + gamesUpserted + linesWritten + lineHistoryWritten + sharpSignalsWritten + publicSplitsUpdated + publicSplitsInserted + predictionsWritten + predictionRecordsWritten + marketIntelligenceV2.recordsUpdated;
+      console.log(`[wnba-daily-refresh] done — teams:${teamsUpserted} games:${gamesUpserted} lines:${linesWritten} history:${lineHistoryWritten} signals:${sharpSignalsWritten} pubSplits:${publicSplitsUpdated + publicSplitsInserted} predictions:${predictionsWritten} records:${predictionRecordsWritten} marketIntel:${marketIntelligenceV2.recordsUpdated} lockedSkipped:${skippedLocked}/${predictionRecordsLockedSkipped} errors:${errors.length}`);
       if (errors.length) details.errors = errors.slice(0, 20);
-      return { records_updated: recordsUpdated, partial: errors.length > 0, details };
+      return {
+        records_updated: recordsUpdated,
+        api_calls_made: marketIntelligenceV2.apiCallsMade,
+        partial: errors.length > 0,
+        details,
+      };
     },
     { sport: "wnba" },
   );

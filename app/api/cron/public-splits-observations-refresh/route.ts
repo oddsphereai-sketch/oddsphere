@@ -12,17 +12,17 @@
  *   • Graceful no-op if the table isn't applied (schema-migration-v25.sql).
  *   • Gate: PUBLIC_SPLITS_OBSERVATIONS_ENABLED=true. Default OFF so the Vercel
  *     cron entry can land without firing any write until explicitly enabled.
- *   • MLB only for now (current ET slate, live Playbook /splits). WNBA added
- *     when explicitly assigned (WNBA cron is a coordination file).
+ *   • MLB + WNBA current ET slate, live Playbook /splits.
  */
 
 import { cronHandler } from "@/lib/cron/runCron";
 import { supabase } from "@/lib/db/supabase";
 import { syncPublicSplitsObservations } from "@/lib/services/syncPublicSplitsObservations";
 import { currentSlateDate } from "@/lib/dates/slateDate";
+import type { Sport } from "@/lib/types/domain/Sport";
 
 const ENV = "PUBLIC_SPLITS_OBSERVATIONS_ENABLED";
-const SPORTS: Array<"mlb"> = ["mlb"]; // WNBA added when assigned
+const SPORTS: Sport[] = ["mlb", "wnba"];
 
 export async function GET(request: Request): Promise<Response> {
   return cronHandler(

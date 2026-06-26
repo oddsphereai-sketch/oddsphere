@@ -23,6 +23,13 @@ const PLAY_GRADE: Record<string, string> = { "Best Angle": "best_angle", "Lean":
 const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]! : null);
 const toDecimal = (o: number | null) => (o == null ? null : o > 0 ? o / 100 + 1 : 100 / Math.abs(o) + 1);
 const HISTORY_PAGE_SIZE = 1000;
+const LOCK_WINDOW_MS = 60 * 60 * 1000;
+
+function isBeforeLockWindow(gameDate: unknown, nowMs: number): boolean {
+  if (typeof gameDate !== "string") return false;
+  const startMs = Date.parse(gameDate);
+  return Number.isFinite(startMs) && startMs - nowMs > LOCK_WINDOW_MS;
+}
 
 export type WnbaRecordsResult = {
   apply: boolean;
@@ -60,7 +67,8 @@ export async function buildWnbaPredictionRecords(opts: {
   const { data: games } = await supabase
     .from("games").select("id, external_id, slate_date, game_date, home_team_id, away_team_id")
     .eq("sport", "wnba").eq("status", "scheduled").gte("slate_date", today).lte("slate_date", end);
-  const allGames = games ?? [];
+  const nowMs = Date.now();
+  const allGames = (games ?? []).filter((g) => isBeforeLockWindow(g.game_date, nowMs));
   const { data: teams } = await supabase.from("teams").select("id, abbreviation, name").eq("sport", "wnba");
   const tById = new Map((teams ?? []).map((t) => [t.id as number, t]));
   const ab = (id: number) => (tById.get(id)?.abbreviation as string) ?? "?";
@@ -224,12 +232,19 @@ export async function buildWnbaPredictionRecords(opts: {
 
     // ── Spread record (if available) — first-class market='spread' ──
     if (spr.side && spr.line != null) {
-      const sprSideHome = spr.side.startsWith(homeName);
-      const sprLine = sprSideHome ? spr.line : -spr.line;
-      const sprPrice = priceAt(g.id as number, "spread", sprSideHome ? "home" : "away", sprLine);
+      const homeAbbr = ab(g.home_team_id as number);
+      const awayAbbr = ab(g.away_team_id as number);
+      const awayName = tById.get(g.away_team_id as number)?.name as string;
+      const sprSideHome = spr.side.startsWith(homeName) || spr.side.startsWith(homeAbbr);
+      const sprSideAway = spr.side.startsWith(awayName) || spr.side.startsWith(awayAbbr);
+      const sprSide = sprSideHome ? "home" : sprSideAway ? "away" : null;
+      const sprLine = sprSide === "home" ? spr.line : sprSide === "away" ? -spr.line : null;
+      const sprPrice = sprLine === null || sprSide === null ? null : priceAt(g.id as number, "spread", sprSide, sprLine);
       if (sprPrice == null) result.missingLinePrice.push(`${matchup} (Spread price@${sprLine})`);
-      result.records.push(baseRec("spread", sprSideHome ? "home" : "away", spr.side, sprLine, sprPrice, spr.confidence, spr.grade, spr.confidence != null ? spr.confidence / 100 : null, null));
-      result.counts.spread++;
+      if (sprSide !== null && sprLine !== null) {
+        result.records.push(baseRec("spread", sprSide, spr.side, sprLine, sprPrice, spr.confidence, spr.grade, spr.confidence != null ? spr.confidence / 100 : null, null));
+        result.counts.spread++;
+      }
     }
   }
 

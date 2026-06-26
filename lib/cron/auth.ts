@@ -20,7 +20,33 @@ export type AuthResult =
 
 const UNAUTHORIZED_BODY = "Unauthorized";
 
+const CRON_ROUTE_FLAGS: Record<string, { env: string; defaultEnabled: boolean }> = {
+  "/api/cron/slate-cycle": { env: "CRON_SLATE_CYCLE_ENABLED", defaultEnabled: true },
+  "/api/cron/pregame-sweep": { env: "CRON_PREGAME_SWEEP_ENABLED", defaultEnabled: true },
+  "/api/cron/tracking-refresh": { env: "CRON_TRACKING_REFRESH_ENABLED", defaultEnabled: true },
+  "/api/cron/cleanup-stream-tables": { env: "CRON_CLEANUP_ENABLED", defaultEnabled: true },
+};
+
+function cronRouteEnabled(pathname: string): { enabled: true } | { enabled: false; env: string; reason: string } {
+  const cfg = CRON_ROUTE_FLAGS[pathname];
+  if (!cfg) return { enabled: true };
+  const raw = process.env[cfg.env];
+  if (raw === undefined || raw === "") {
+    return cfg.defaultEnabled
+      ? { enabled: true }
+      : { enabled: false, env: cfg.env, reason: `${cfg.env} missing; default disabled` };
+  }
+  if (raw === "false") {
+    return { enabled: false, env: cfg.env, reason: `${cfg.env}=false` };
+  }
+  if (raw === "true") return { enabled: true };
+  return cfg.defaultEnabled
+    ? { enabled: true }
+    : { enabled: false, env: cfg.env, reason: `${cfg.env} is not true; default disabled` };
+}
+
 export function validateCronAuth(request: Request): AuthResult {
+  const url = new URL(request.url);
   const secret = process.env.CRON_SECRET;
   if (!secret) {
     return {
@@ -47,7 +73,24 @@ export function validateCronAuth(request: Request): AuthResult {
           skipped: true,
           disabled: true,
           reason: "ODDSPHERE_CRONS_DISABLED=true",
-          path: new URL(request.url).pathname,
+          path: url.pathname,
+        },
+        { status: 200 },
+      ),
+    };
+  }
+  const routeFlag = cronRouteEnabled(url.pathname);
+  if (!routeFlag.enabled) {
+    return {
+      ok: false,
+      response: Response.json(
+        {
+          ok: true,
+          skipped: true,
+          disabled: true,
+          reason: routeFlag.reason,
+          env_flag: routeFlag.env,
+          path: url.pathname,
         },
         { status: 200 },
       ),

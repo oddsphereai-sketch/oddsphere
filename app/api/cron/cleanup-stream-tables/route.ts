@@ -21,7 +21,7 @@
  * pure bloat. CRON_SECRET Bearer auth. Batched delete by id (no giant delete).
  */
 import { supabase } from "@/lib/db/supabase";
-import { validateCronAuth } from "@/lib/cron/auth";
+import { cronHandler } from "@/lib/cron/runCron";
 
 export const maxDuration = 300;
 
@@ -57,35 +57,49 @@ async function prune(
 }
 
 export async function GET(request: Request): Promise<Response> {
-  const auth = validateCronAuth(request);
-  if (!auth.ok) return auth.response;
+  return cronHandler(
+    request,
+    "cleanup_stream_tables",
+    async () => {
+      const now = Date.now();
+      const lhCutoff = new Date(now - LINE_HISTORY_RETENTION_DAYS * 86_400_000).toISOString();
+      const oerCutoff = new Date(now - ODDS_EVENTS_RAW_RETENTION_DAYS * 86_400_000).toISOString();
+      const lmCutoff = new Date(now - LINE_MOVEMENTS_RETENTION_DAYS * 86_400_000).toISOString();
+      const ocsCutoff = new Date(now - ODDS_CURRENT_STREAM_RETENTION_DAYS * 86_400_000).toISOString();
 
-  const now = Date.now();
-  const lhCutoff = new Date(now - LINE_HISTORY_RETENTION_DAYS * 86_400_000).toISOString();
-  const oerCutoff = new Date(now - ODDS_EVENTS_RAW_RETENTION_DAYS * 86_400_000).toISOString();
-  const lmCutoff = new Date(now - LINE_MOVEMENTS_RETENTION_DAYS * 86_400_000).toISOString();
-  const ocsCutoff = new Date(now - ODDS_CURRENT_STREAM_RETENTION_DAYS * 86_400_000).toISOString();
+      const odds_events_raw = await prune("odds_events_raw", "received_at", oerCutoff);
+      const line_history = await prune("line_history", "recorded_at", lhCutoff);
+      const line_movements = await prune("line_movements", "moved_at", lmCutoff);
+      const odds_current_stream = await prune("odds_current_stream", "observed_at", ocsCutoff);
+      const errors = [
+        odds_events_raw.error,
+        line_history.error,
+        line_movements.error,
+        odds_current_stream.error,
+      ].filter((x): x is string => x !== null);
 
-  const odds_events_raw = await prune("odds_events_raw", "received_at", oerCutoff);
-  const line_history = await prune("line_history", "recorded_at", lhCutoff);
-  const line_movements = await prune("line_movements", "moved_at", lmCutoff);
-  const odds_current_stream = await prune("odds_current_stream", "observed_at", ocsCutoff);
-
-  return Response.json({
-    ok:
-      odds_events_raw.error === null &&
-      line_history.error === null &&
-      line_movements.error === null &&
-      odds_current_stream.error === null,
-    retention: {
-      line_history_days: LINE_HISTORY_RETENTION_DAYS,
-      odds_events_raw_days: ODDS_EVENTS_RAW_RETENTION_DAYS,
-      line_movements_days: LINE_MOVEMENTS_RETENTION_DAYS,
-      odds_current_stream_days: ODDS_CURRENT_STREAM_RETENTION_DAYS,
+      return {
+        records_updated:
+          odds_events_raw.deleted +
+          line_history.deleted +
+          line_movements.deleted +
+          odds_current_stream.deleted,
+        api_calls_made: 0,
+        partial: errors.length > 0,
+        details: {
+          retention: {
+            line_history_days: LINE_HISTORY_RETENTION_DAYS,
+            odds_events_raw_days: ODDS_EVENTS_RAW_RETENTION_DAYS,
+            line_movements_days: LINE_MOVEMENTS_RETENTION_DAYS,
+            odds_current_stream_days: ODDS_CURRENT_STREAM_RETENTION_DAYS,
+          },
+          odds_events_raw,
+          line_history,
+          line_movements,
+          odds_current_stream,
+        },
+      };
     },
-    odds_events_raw,
-    line_history,
-    line_movements,
-    odds_current_stream,
-  });
+    { lockMinutes: 60 },
+  );
 }
