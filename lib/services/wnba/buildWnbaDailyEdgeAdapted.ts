@@ -31,7 +31,7 @@ import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
 import { wnbaLogoUrl } from "./wnbaTeams";
 import { supabase } from "@/lib/db/supabase";
-import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
+import { currentSlateDate } from "@/lib/dates/slateDate";
 import {
   marketIntelligenceV2UiEnabledForWnbaMarket,
   readMarketIntelligenceV2Config,
@@ -49,29 +49,18 @@ const HISTORY_PAGE_SIZE = 1000;
  * Reconstruct the PreviewGame shape from stored game_predictions (written by
  * runWnbaModel). The DB row carries the full model output in sport_specific, so
  * the route serves the EXACT applied rows — no recompute, no model duplication.
- * Loads the upcoming scheduled-game window (WNBA's bettable slate), ordered by
- * tip; returns [] when nothing is stored (caller falls back to live compute).
+ * Loads one slate_date, ordered by tip. Finished same-day games stay visible
+ * because the board is scoped by slate date, not by scheduled-only status.
  */
-async function loadWnbaPredictionsFromDb(date: string | null): Promise<PreviewGame[]> {
-  const today = currentSlateDate("wnba");
-  const start = date ?? addDaysToSlate(today, -1);
-  const end = addDaysToSlate(today, 3);
-  let q = supabase
+async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
+  const { data: games } = await supabase
     .from("games")
     .select("id, external_id, slate_date, game_date, status, home_team_id, away_team_id")
-    .eq("sport", "wnba");
-  q = date ? q.eq("slate_date", date) : q.gte("slate_date", start).lte("slate_date", end);
-  const { data: games } = await q.order("game_date");
+    .eq("sport", "wnba")
+    .eq("slate_date", date)
+    .order("game_date");
   if (!games || games.length === 0) return [];
-  const retentionCutoffMs = Date.now() - 24 * 60 * 60 * 1000;
-  const retainedGames = date === null
-    ? games.filter((g) => {
-        if ((g.slate_date as string) >= today) return true;
-        const gameDateMs = Date.parse((g.game_date as string | null) ?? "");
-        const status = String(g.status ?? "").toLowerCase();
-        return status === "final" && Number.isFinite(gameDateMs) && gameDateMs >= retentionCutoffMs;
-      })
-    : games;
+  const retainedGames = games;
   const ids = retainedGames.map((g) => g.id as number);
   const { data: gps } = await supabase
     .from("game_predictions")
@@ -876,10 +865,11 @@ function adaptGame(
 
 export async function buildWnbaDailyEdgeAdapted(date: string | null): Promise<DailyEdgeResponse> {
   const asOf = new Date().toISOString();
+  const requestedDate = date ?? currentSlateDate("wnba");
   try {
     // DB-FIRST: serve the stored game_predictions snapshots (instant; the exact
     // applied rows). These match what the cron wrote — no recompute.
-    const dbGames = await loadWnbaPredictionsFromDb(date);
+    const dbGames = await loadWnbaPredictionsFromDb(requestedDate);
     if (dbGames.length > 0) {
       const config = readMarketIntelligenceV2Config();
       const enabledByMarket = {
@@ -914,16 +904,16 @@ export async function buildWnbaDailyEdgeAdapted(date: string | null): Promise<Da
       }
       const games = dbGames.map((g) => adaptGame(g, asOf, marketReadV2Lookup));
       return {
-        as_of: asOf, sport: "wnba", date: date ?? dbGames[0]!.date, requested_date: date ?? dbGames[0]!.date,
+        as_of: asOf, sport: "wnba", date: requestedDate, requested_date: requestedDate,
         fallback_used: false, slateState: "today_published", slate_status: "published",
         last_slate_update_at: asOf, games,
       };
     }
     // DEV/FALLBACK: nothing stored → live compute (cron hasn't run / local dev).
-    const raw = await buildWnbaDailyEdgePreview(date);
+    const raw = await buildWnbaDailyEdgePreview(requestedDate);
     const games = (raw.games as unknown as PreviewGame[]).map((g) => adaptGame(g, asOf, null));
     return {
-      as_of: asOf, sport: "wnba", date: raw.slate_date, requested_date: date ?? raw.slate_date,
+      as_of: asOf, sport: "wnba", date: raw.slate_date, requested_date: requestedDate,
       fallback_used: true, slateState: games.length > 0 ? "today_published" : "no_data",
       slate_status: games.length > 0 ? "published" : null, last_slate_update_at: asOf, games,
     };
@@ -931,10 +921,9 @@ export async function buildWnbaDailyEdgeAdapted(date: string | null): Promise<Da
     // HONEST failure state — NOT "no games". "today_pending_ingest" renders
     // "being ingested, check back shortly" rather than implying an empty slate.
     console.warn(`wnba daily-edge adapter error: ${(e as Error).message}`);
-    const fallbackDate = date ?? currentSlateDate("wnba");
     return {
-      as_of: asOf, sport: "wnba", date: fallbackDate,
-      requested_date: fallbackDate, fallback_used: false,
+      as_of: asOf, sport: "wnba", date: requestedDate,
+      requested_date: requestedDate, fallback_used: false,
       slateState: "today_pending_ingest", slate_status: null, last_slate_update_at: asOf, games: [],
     };
   }

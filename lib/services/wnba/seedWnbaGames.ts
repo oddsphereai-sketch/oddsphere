@@ -48,6 +48,13 @@ let playbookSlateCache:
   | { key: string; loadedAt: number; map: Map<string, string> }
   | null = null;
 
+function hasSpecificTipTime(value: string | null | undefined): value is string {
+  if (!value) return false;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return false;
+  return d.getUTCHours() !== 0 || d.getUTCMinutes() !== 0 || d.getUTCSeconds() !== 0;
+}
+
 async function bdlGamesByDate(key: string, dates: string[]): Promise<BdlRow[]> {
   const qs = dates.map((d) => `dates[]=${d}`).join("&");
   const out: BdlRow[] = [];
@@ -135,6 +142,20 @@ export async function seedWnbaGames(opts: {
   // real startTime to bucket the game into the correct ET betting slate.
   const next = new Date(+new Date(`${slateDate}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
   const raw = await bdlGamesByDate(key, [slateDate, next]);
+  const existingByExternalId = new Map<number, { game_date: string | null; slate_date: string | null }>();
+  if (raw.length > 0) {
+    const { data: existing } = await supabase
+      .from("games")
+      .select("external_id, game_date, slate_date")
+      .eq("sport", "wnba")
+      .in("external_id", raw.map((g) => g.id));
+    for (const row of existing ?? []) {
+      existingByExternalId.set(row.external_id as number, {
+        game_date: (row.game_date as string | null) ?? null,
+        slate_date: (row.slate_date as string | null) ?? null,
+      });
+    }
+  }
   let playbookSlate = new Map<string, string>();
   if (process.env.PLAYBOOK_API_KEY) {
     try {
@@ -146,7 +167,12 @@ export async function seedWnbaGames(opts: {
   const slateFor = (g: BdlRow): string => {
     const homeAbbr = WNBA_TEAMS_BY_BDL_ID[g.home_team!.id]?.abbr ?? "?";
     const awayAbbr = WNBA_TEAMS_BY_BDL_ID[g.visitor_team!.id]?.abbr ?? "?";
-    return playbookSlate.get(`${awayAbbr}@${homeAbbr}`) ?? String(g.date).slice(0, 10);
+    const playbookDate = playbookSlate.get(`${awayAbbr}@${homeAbbr}`);
+    if (playbookDate) return playbookDate;
+    const existingTip = existingByExternalId.get(g.id)?.game_date;
+    if (hasSpecificTipTime(existingTip)) return computeSlateDate("wnba", existingTip);
+    if (hasSpecificTipTime(g.date)) return computeSlateDate("wnba", g.date);
+    return String(g.date).slice(0, 10);
   };
   const games = raw.filter((g) => {
     if (
@@ -177,6 +203,8 @@ export async function seedWnbaGames(opts: {
     const homeAbbr = WNBA_TEAMS_BY_BDL_ID[g.home_team!.id]?.abbr ?? "?";
     const awayAbbr = WNBA_TEAMS_BY_BDL_ID[g.visitor_team!.id]?.abbr ?? "?";
     const gameSlateDate = slateFor(g);
+    const existingTip = existingByExternalId.get(g.id)?.game_date;
+    const gameDate = hasSpecificTipTime(existingTip) ? existingTip : g.date;
     planned.push({ external_id: g.id, slate_date: gameSlateDate, matchup: `${awayAbbr}@${homeAbbr}`, status });
     if (apply) {
       const payload = {
@@ -184,7 +212,7 @@ export async function seedWnbaGames(opts: {
         sport: "wnba",
         home_team_id: homeId,
         away_team_id: awayId,
-        game_date: g.date, // placeholder UTC; refined from SharpAPI tip time in refreshWnbaLines
+        game_date: gameDate, // placeholder UTC; refined from SharpAPI tip time in refreshWnbaLines
         slate_date: gameSlateDate,
         season: g.season,
         season_type: g.postseason ? "postseason" : "regular",
