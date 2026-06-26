@@ -28,6 +28,25 @@ import { weatherService } from "./weatherService";
 import { runSeasonPitchingCycle } from "../../scripts/operator/backfill-season-pitching-stats";
 import type { Sport } from "../types/domain/Sport";
 
+function providerMlbStatsId(
+  providerIds: Record<string, unknown> | null | undefined
+): number | null {
+  const mlbStats = providerIds?.mlb_stats;
+  if (typeof mlbStats !== "object" || mlbStats === null) return null;
+  const id = (mlbStats as { id?: unknown }).id;
+  if (typeof id === "number" && Number.isFinite(id)) return id;
+  const parsed = typeof id === "string" ? Number(id) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function effectiveMlbStatsId(player: {
+  mlb_person_id?: number | null;
+  provider_ids?: Record<string, unknown> | null;
+} | undefined): number | null {
+  if (player === undefined) return null;
+  return providerMlbStatsId(player.provider_ids) ?? player.mlb_person_id ?? null;
+}
+
 export type ReadinessBlocker =
   | "starter_assignment_missing"
   | "starter_mlb_id_missing"
@@ -204,16 +223,22 @@ export async function auditMlbModelReadiness(args: {
     const blockers: ReadinessBlocker[] = [];
     if (g.home_pitcher_id === null) blockers.push("starter_assignment_missing");
     if (g.away_pitcher_id === null) blockers.push("starter_assignment_missing");
-    if (homePitcher && homePitcher.mlb_person_id === null &&
-        ((homePitcher.provider_ids as { mlb_stats?: { id?: number } } | null)?.mlb_stats?.id === undefined)) {
+    const homePitcherMlbId = effectiveMlbStatsId(homePitcher as {
+      mlb_person_id?: number | null;
+      provider_ids?: Record<string, unknown> | null;
+    } | undefined);
+    const awayPitcherMlbId = effectiveMlbStatsId(awayPitcher as {
+      mlb_person_id?: number | null;
+      provider_ids?: Record<string, unknown> | null;
+    } | undefined);
+    if (homePitcher && homePitcherMlbId === null) {
       blockers.push("starter_mlb_id_missing");
     }
-    if (awayPitcher && awayPitcher.mlb_person_id === null &&
-        ((awayPitcher.provider_ids as { mlb_stats?: { id?: number } } | null)?.mlb_stats?.id === undefined)) {
+    if (awayPitcher && awayPitcherMlbId === null) {
       blockers.push("starter_mlb_id_missing");
     }
-    if (g.home_pitcher_id !== null && !homeStatsOk && homePitcher?.mlb_person_id !== null) blockers.push("starter_stats_missing_backfillable");
-    if (g.away_pitcher_id !== null && !awayStatsOk && awayPitcher?.mlb_person_id !== null) blockers.push("starter_stats_missing_backfillable");
+    if (g.home_pitcher_id !== null && !homeStatsOk && homePitcherMlbId !== null) blockers.push("starter_stats_missing_backfillable");
+    if (g.away_pitcher_id !== null && !awayStatsOk && awayPitcherMlbId !== null) blockers.push("starter_stats_missing_backfillable");
     if (homeLineupCount < 8 || awayLineupCount < 8) blockers.push("lineup_missing_backfillable");
     if (fiMktRows === 0) blockers.push("fi_market_missing");
     if (!weather) blockers.push("weather_missing_backfillable");
@@ -233,8 +258,8 @@ export async function auditMlbModelReadiness(args: {
       away_pitcher_id: g.away_pitcher_id as number | null,
       home_pitcher_name: (homePitcher?.full_name as string | null) ?? null,
       away_pitcher_name: (awayPitcher?.full_name as string | null) ?? null,
-      home_pitcher_mlb_id: (homePitcher?.mlb_person_id as number | null) ?? null,
-      away_pitcher_mlb_id: (awayPitcher?.mlb_person_id as number | null) ?? null,
+      home_pitcher_mlb_id: homePitcherMlbId,
+      away_pitcher_mlb_id: awayPitcherMlbId,
       home_starter_stats: homeStatsOk,
       away_starter_stats: awayStatsOk,
       home_lineup_count: homeLineupCount,
@@ -333,15 +358,16 @@ export async function repairMlbModelReadiness(args: {
     return report;
   }
 
-  const pitchersNeedingStats = audit.pitchers_needing_stats
+  let activeAudit = audit;
+  let pitchersNeedingStats = activeAudit.pitchers_needing_stats
     .filter((p) => p.mlb_id !== null)
     .map((p) => p.id);
-  const lineupGapPresent = audit.per_game.some((p) => p.home_lineup_count < 8 || p.away_lineup_count < 8);
+  const lineupGapPresent = activeAudit.per_game.some((p) => p.home_lineup_count < 8 || p.away_lineup_count < 8);
   // Gap = a game with NO forecast OR a present-but-stale forecast (so the
   // refresh below sharpens weather toward first pitch instead of only
   // filling missing rows once in the morning). refreshForecasts is a full
   // slate re-fetch, so one stale game refreshes the whole slate cleanly.
-  const weatherGapPresent = audit.per_game.some((p) => !p.weather_present || p.weather_stale);
+  const weatherGapPresent = activeAudit.per_game.some((p) => !p.weather_present || p.weather_stale);
 
   if (
     pitchersNeedingStats.length === 0 &&
@@ -378,6 +404,17 @@ export async function repairMlbModelReadiness(args: {
       };
       if (bdlWriteMode && (r.linked + r.created) > 0) reasons.push("bdl_player_backfill_ok");
       else reasons.push("bdl_player_backfill_skipped");
+
+      // BDL player backfill can create/link probable-starter rows during
+      // this same repair pass. Re-audit before the season-pitching step so
+      // newly mapped starters are immediately eligible for stats backfill
+      // instead of waiting for the next cron cycle.
+      if (bdlWriteMode && (r.linked + r.created) > 0) {
+        activeAudit = await auditMlbModelReadiness({ sport: args.sport, date: args.date });
+        pitchersNeedingStats = activeAudit.pitchers_needing_stats
+          .filter((p) => p.mlb_id !== null)
+          .map((p) => p.id);
+      }
     } catch (e) {
       report.steps.bdl_players = { ran: false, reason: (e as Error).message };
       reasons.push("bdl_player_backfill_skipped");
