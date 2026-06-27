@@ -27,6 +27,10 @@ import { resolveTotalsMeanFlip, TOTALS_MEAN_FLIP_RULE_ID } from "./totalsMeanFli
 import { resolveFiInversionFlip, FI_INVERSION_RULE_ID } from "./fiInversionFlip";
 import { selectMainTotalLine } from "./selectMainTotalLine";
 import { readMarketIntelligenceV2Config } from "../config/marketIntelligenceV2";
+import {
+  MLB_ML_RAW_MODEL_SIDE_PICK_CALIBRATION_RULE_ID,
+  resolveMlbMlPickCalibration,
+} from "./pickCalibrationLayer";
 
 export type CreateRecordsOptions = {
   sport: TrackedSport;
@@ -1007,17 +1011,47 @@ function buildMlRecord(
     awayOdds: oddsForGame?.mlAwayOdds ?? null,
   });
   const mlFlipped = mlFlip.flipped === true;
-  const finalMlPick = mlFlipped ? mlFlip.flippedSide : pred.predicted_ml_winner;
-  const finalMlOdds = mlFlipped ? mlFlip.flippedOdds : mlOddsAmerican;
+  const baseMlPick = mlFlipped ? mlFlip.flippedSide : pred.predicted_ml_winner;
+  const baseMlOdds = mlFlipped ? mlFlip.flippedOdds : mlOddsAmerican;
+  const baseMlConfidence = mlFlipped ? mlFlip.recommendationConfidence : pred.ml_confidence;
+  const baseMlModelProb = mlFlipped ? mlFlip.recommendationConfidence / 100 : mlModelProb;
+  const baseMlMarketProb = mlFlipped ? mlFlip.flippedMarketProb : mlMarketProb;
+  const baseMlEdge = mlFlipped ? null : mlEdgePp;
+  const rawModelProbOnBaseSide =
+    baseMlPick === pred.predicted_ml_winner
+      ? mlModelProb
+      : mlModelProb !== null
+        ? 1 - mlModelProb
+        : null;
+  const marketProbOnBaseSide =
+    baseMlPick === pred.predicted_ml_winner
+      ? mlMarketProb
+      : mlMarketProb !== null
+        ? 1 - mlMarketProb
+        : null;
+  const mlPickCalibration = resolveMlbMlPickCalibration({
+    officialSide: baseMlPick === "home" || baseMlPick === "away" ? baseMlPick : null,
+    modelProbOnOfficialSide: rawModelProbOnBaseSide,
+    marketProbOnOfficialSide: marketProbOnBaseSide,
+    homeOdds: oddsForGame?.mlHomeOdds ?? null,
+    awayOdds: oddsForGame?.mlAwayOdds ?? null,
+  });
+  const mlPickCalibrated = mlPickCalibration.applied === true;
+  const finalMlPick = mlPickCalibrated ? mlPickCalibration.calibratedSide : baseMlPick;
+  const finalMlOdds = mlPickCalibrated ? mlPickCalibration.calibratedOdds : baseMlOdds;
   // Member-facing: a flipped row shows the conservative recommendation
   // confidence (>=55), never the raw sub-50 opposite-side probability. The raw
   // opposite-side prob/edge live in snapshot.ml_flip (audit only).
-  const finalMlConfidence = mlFlipped ? mlFlip.recommendationConfidence : pred.ml_confidence;
-  const finalMlModelProb = mlFlipped ? mlFlip.recommendationConfidence / 100 : mlModelProb;
-  const finalMlMarketProb = mlFlipped ? mlFlip.flippedMarketProb : mlMarketProb;
-  const finalMlEdge = mlFlipped ? null : mlEdgePp;
+  const finalMlModelProb = mlPickCalibrated ? mlPickCalibration.calibratedModelProb : baseMlModelProb;
+  const finalMlConfidence = mlPickCalibrated ? Math.round(mlPickCalibration.calibratedModelProb * 100) : baseMlConfidence;
+  const finalMlMarketProb = mlPickCalibrated ? mlPickCalibration.calibratedMarketProb : baseMlMarketProb;
+  const finalMlEdge = mlPickCalibrated ? mlPickCalibration.calibratedEdgePp : baseMlEdge;
+  const finalMlLineMovement =
+    finalMlPick !== pred.predicted_ml_winner
+      ? buildLineMovementSnapshot(openersForGame, currentLinesForGame, signalsForGame, "moneyline", finalMlPick)
+      : mlLineMovement;
   const mlNoBetReason = readStringOrNull(sp.ml_no_bet_reason);
-  const mlNoBet = !mlFlipped && isExplicitNoBetReason(mlNoBetReason);
+  const mlNoBet = !mlFlipped && !mlPickCalibrated && isExplicitNoBetReason(mlNoBetReason);
   const mlPublicPlayGrade = readPublicPlayGrade(sp.ml_play_grade);
   return {
     game_prediction_id: pred.id,
@@ -1043,9 +1077,9 @@ function buildMlRecord(
     expected_value: null,
     // Phase 6B.27 — strip internal V2.2 diagnostic labels (no_bet/held/
     // toss_up) from the public column; raw stays in snapshot.v2_2_audit.
-    // Flipped rows carry no model grade (the override is not a model call);
-    // best_angle is forced false below.
-    play_grade: mlFlipped
+    // Flipped/calibrated rows carry no model grade until the separate grade
+    // calibration layer is validated; best_angle is forced false below.
+    play_grade: mlFlipped || mlPickCalibrated
       ? null
       : legacyMarketSignalGradeInfluenceEnabled
         ? applyPlayGradeGate(mlPublicPlayGrade, {
@@ -1057,9 +1091,9 @@ function buildMlRecord(
     prediction_type: readStringOrNull(sp.ml_prediction_type),
     // Phase 6B.11 + MLB-P0 — public-money guard PLUS line-movement /
     // large-edge confirmation (see resolveMlbBestAngle). Tracking pending
-    // BA count matches what members see on the live slate. Flipped rows are
-    // never Best Angle (an inversion override is not a model Best Angle).
-    best_angle: mlFlipped ? false : mlBest.bestAngle,
+    // BA count matches what members see on the live slate. Flipped/calibrated
+    // rows are never Best Angle until grade calibration is separately validated.
+    best_angle: mlFlipped || mlPickCalibrated ? false : mlBest.bestAngle,
     no_bet: mlNoBet,
     no_bet_reason: mlNoBetReason,
     market_aligned: readBoolish(sp.ml_market_aligned),
@@ -1076,8 +1110,8 @@ function buildMlRecord(
        existing sp keys. */
     snapshot_json: {
       ...sp,
-      public_splits: buildPublicSplitsSnapshot(signalsForGame, "moneyline", pred.predicted_ml_winner),
-      line_movement: mlLineMovement,
+      public_splits: buildPublicSplitsSnapshot(signalsForGame, "moneyline", finalMlPick),
+      line_movement: finalMlLineMovement,
       // MLB-P0 — audit trail for the Best Angle confirmation resolution.
       best_angle_resolution: {
         base_eligible: mlBaseBestAngleEligible,
@@ -1123,6 +1157,24 @@ function buildMlRecord(
             flipped_side_edge_pp: mlFlip.flippedEdgePp,
             final_displayed_confidence: finalMlConfidence,
             reason: "low-conviction market-divergent ML inversion",
+          }
+        : null,
+      pick_calibration: mlPickCalibrated
+        ? {
+            applied: true,
+            rule_id: MLB_ML_RAW_MODEL_SIDE_PICK_CALIBRATION_RULE_ID,
+            original_side: mlPickCalibration.originalSide,
+            original_pick: mlPickCalibration.originalSide,
+            original_odds: baseMlOdds,
+            original_model_prob: mlPickCalibration.originalModelProb,
+            original_market_prob: mlPickCalibration.originalMarketProb,
+            calibrated_side: finalMlPick,
+            calibrated_pick: finalMlPick,
+            calibrated_odds: finalMlOdds,
+            calibrated_model_prob: mlPickCalibration.calibratedModelProb,
+            calibrated_market_prob: mlPickCalibration.calibratedMarketProb,
+            calibrated_edge_pp: mlPickCalibration.calibratedEdgePp,
+            reason: mlPickCalibration.reason,
           }
         : null,
     },
