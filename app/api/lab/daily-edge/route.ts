@@ -4363,7 +4363,9 @@ export async function GET(request: Request) {
     // reflects one coherent recommendation moment.
     const { data: unlockedBaRows } = await supabase
       .from("prediction_records")
-      .select("game_id, market, play_grade, no_bet, best_angle, snapshot_json")
+      .select(
+        "game_id, market, pick, side, line_value, odds_american, confidence, model_probability, market_probability, edge, play_grade, no_bet, best_angle, snapshot_json",
+      )
       .eq("sport", "mlb")
       .eq("slate_date", effectiveDate)
       .in("market", ["moneyline", "total", "first_inning"])
@@ -4371,6 +4373,14 @@ export async function GET(request: Request) {
     type UnlockedRec = {
       game_id: number;
       market: string;
+      pick: string | null;
+      side: string | null;
+      line_value: number | null;
+      odds_american: number | null;
+      confidence: number | null;
+      model_probability: number | null;
+      market_probability: number | null;
+      edge: number | null;
       play_grade: string | null;
       no_bet: boolean | null;
       best_angle: boolean | null;
@@ -4398,6 +4408,39 @@ export async function GET(request: Request) {
         lockedPriceAt: null,
       });
     }
+
+    // Pick Calibration Layer — unlocked MLB ML only.
+    //
+    // The writer stores the official calibrated side in prediction_records,
+    // while game_predictions remains the raw model substrate. For member cards
+    // to match the official tracked pick before lock, overlay only rows with
+    // an explicit pick_calibration audit payload. Totals/FI/WNBA/World Cup are
+    // untouched, and locked rows use the existing locked override above.
+    for (const g of games) {
+      const calibratedMl = unlockedByGameMarket.get(`${g.id}::moneyline`);
+      if (!calibratedMl) continue;
+      const applied = calibratedMl?.snapshot_json?.pick_calibration as
+        | { applied?: boolean }
+        | null
+        | undefined;
+      if (applied?.applied !== true) continue;
+      if (!g.game_predictions) continue;
+      const pred = g.game_predictions;
+      const sp = {
+        ...((pred.sport_specific ?? {}) as Record<string, unknown>),
+        ...((calibratedMl.snapshot_json ?? {}) as Record<string, unknown>),
+      };
+      (pred as unknown as { sport_specific: Record<string, unknown> }).sport_specific = sp;
+      (pred as unknown as { predicted_ml_winner: string | null }).predicted_ml_winner =
+        calibratedMl.pick;
+      (pred as unknown as { ml_confidence: number | null }).ml_confidence =
+        calibratedMl.confidence;
+      (pred as unknown as { ml_grade: string | null }).ml_grade =
+        calibratedMl.play_grade;
+      (pred as unknown as { ml_signal_type: string | null }).ml_signal_type = null;
+      (pred as unknown as { ml_market_signal: string | null }).ml_market_signal = null;
+    }
+
     // (a) totalLineByGame override (6B.17 behavior preserved)
     for (const r of lockedByGameMarket.values()) {
       if (r.market === "total" && r.line_value !== null) {
