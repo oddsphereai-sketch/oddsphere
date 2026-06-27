@@ -62,6 +62,23 @@ type BdlGame = { id: number; date: string; season: number; postseason: boolean; 
 type Grade = "Best Angle" | "Lean" | "Watchlist" | "Caution";
 export type ModelState = { elo: Map<number, number>; games: Map<number, number>; pf: Map<number, number[]>; pa: Map<number, number[]>; nameById: Map<number, string>; mascot: [string, number][]; rawGames: BdlGame[]; computedAt: number };
 
+function moneylineGradeFromPickedEdge(args: {
+  pickedEdge: number | null;
+  conflict: boolean;
+  marketReliability: number;
+  bookCount: number;
+  sharpPresent: boolean;
+  projectedMargin: number;
+}): Grade {
+  const { pickedEdge, conflict, marketReliability, bookCount, sharpPresent, projectedMargin } = args;
+  if (pickedEdge === null) return "Watchlist";
+  if (pickedEdge <= -0.01) return "Caution";
+  if (conflict && marketReliability >= 0.8 && pickedEdge < 0.04) return "Caution";
+  if (pickedEdge >= 0.04 && bookCount >= 6 && sharpPresent && Math.abs(projectedMargin) >= 3) return "Best Angle";
+  if (pickedEdge >= 0.02 && bookCount >= 4) return "Lean";
+  return "Watchlist";
+}
+
 // ── BDL fetch (cursor) ──
 async function bdl(path: string, key: string): Promise<{ data: unknown[]; meta?: { next_cursor?: number } }> {
   const r = await fetch(`${BDL}${path}`, { headers: { Authorization: key } });
@@ -259,8 +276,21 @@ export function computeWnbaPrediction(
   // sides
   const mlSide = finalP >= 0.5 ? hN : aN, mlConf = Math.round(Math.max(finalP, 1 - finalP) * 100);
   const mlPrice = median((mlSide === hN ? mlH : mlA).map((z) => z.odds));
-  const mlGradeBase: Grade = mktPDec == null ? "Watchlist" : conflict && marketRel >= 0.8 && Math.abs(edge) < 0.04 ? "Caution"
-    : !conflict && Math.abs(edge) >= 0.04 && mlBooks >= 6 && sharpPresent && Math.abs(projMargin) >= 3 ? "Best Angle" : Math.abs(edge) >= 0.02 && mlBooks >= 4 ? "Lean" : "Watchlist";
+  const mlPickIsHome = mlSide === hN;
+  const mlPickedEdge =
+    mktPDec == null
+      ? null
+      : mlPickIsHome
+        ? modelP - mktPDec
+        : (1 - modelP) - (1 - mktPDec);
+  const mlGradeBase: Grade = moneylineGradeFromPickedEdge({
+    pickedEdge: mlPickedEdge,
+    conflict,
+    marketReliability: marketRel,
+    bookCount: mlBooks,
+    sharpPresent,
+    projectedMargin: projMargin,
+  });
   const mlSideKey = mlSide === hN ? "home" : "away";
   const mlPublicContext = applyPublicMarketContext({
     grade: mlGradeBase,
@@ -422,8 +452,21 @@ export async function buildWnbaDailyEdgePreview(dateParam: string | null) {
     // ---- sides ----
     const mlSide = finalP >= 0.5 ? hN : aN, mlConf = Math.round(Math.max(finalP, 1 - finalP) * 100);
     const mlPrice = median((mlSide === hN ? mlH : mlA).map((z) => z.odds)); // representative consensus price on the pick side
-    const mlGrade: Grade = mktP == null ? "Watchlist" : conflict && marketRel >= 0.8 && Math.abs(edge) < 0.04 ? "Caution"
-      : !conflict && Math.abs(edge) >= 0.04 && mlBooks >= 6 && sharpPresent && Math.abs(projMargin) >= 3 ? "Best Angle" : Math.abs(edge) >= 0.02 && mlBooks >= 4 ? "Lean" : "Watchlist";
+    const mlPickIsHome = mlSide === hN;
+    const mlPickedEdge =
+      mktP == null
+        ? null
+        : mlPickIsHome
+          ? modelP - mktP
+          : (1 - modelP) - (1 - mktP);
+    const mlGrade: Grade = moneylineGradeFromPickedEdge({
+      pickedEdge: mlPickedEdge,
+      conflict,
+      marketReliability: marketRel,
+      bookCount: mlBooks,
+      sharpPresent,
+      projectedMargin: projMargin,
+    });
 
     const pCoverHome = mktSpread != null ? 1 - Phi((-mktSpread - projMargin) / sigM) : null;
     const spEdge = mktSpread != null ? projMargin - -mktSpread : null;

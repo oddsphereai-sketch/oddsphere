@@ -49,6 +49,10 @@ import {
 } from "@/lib/services/sharpReadSelector";
 import type { Side } from "@/lib/types/domain/Lines";
 import { computeMarketImplied } from "@/app/lab/lib/marketImplied";
+import {
+  americanToImpliedProb,
+  classifyPickRelativeLineMove,
+} from "@/app/lab/lib/lineMoveTone";
 import type { Sport } from "@/lib/types/domain/Sport";
 import type {
   Grade,
@@ -2206,6 +2210,83 @@ type BuildMarketEdgeInput = {
   marketReadV2Enabled?: boolean;
 };
 
+function displayMarketReadLabel(score: number): string {
+  if (score >= 4) return "Strong Market Support";
+  if (score >= 2) return "Market Support";
+  if (score > 0) return "Slight Market Support";
+  if (score <= -4) return "Strong Market Resistance";
+  if (score <= -2) return "Market Resistance";
+  if (score < 0) return "Slight Market Resistance";
+  return "Projection-Led";
+}
+
+function displayMarketReadBody(score: number): string {
+  if (score >= 4) return "The line has clearly moved toward our pick.";
+  if (score >= 2) return "The line has moved toward our pick.";
+  if (score > 0) return "The market is leaning slightly toward our pick.";
+  if (score <= -4) return "The market has moved clearly against our pick.";
+  if (score <= -2) return "The line has moved against our pick, adding risk.";
+  if (score < 0) return "The market is leaning slightly against our pick.";
+  return "No clear market move. This pick is driven by the model edge.";
+}
+
+function visibleOddsMarketReadScore(openAmerican: number, currentAmerican: number): number | null {
+  const direction = classifyPickRelativeLineMove(openAmerican, currentAmerican);
+  if (direction === "flat") return null;
+  const openProb = americanToImpliedProb(openAmerican);
+  const currentProb = americanToImpliedProb(currentAmerican);
+  if (openProb === null || currentProb === null) return null;
+  const absDelta = Math.abs(currentProb - openProb);
+  const magnitude = absDelta >= 0.04 ? 4 : absDelta >= 0.02 ? 3 : 1;
+  return direction === "toward" ? magnitude : -magnitude;
+}
+
+function alignMarketReadV2ToVisibleOdds(opts: {
+  read: MarketReadV2Dto | null;
+  enabled: boolean;
+  market: "moneyline" | "total" | "first_inning";
+  openAmerican: number | null;
+  currentAmerican: number | null;
+  observedAt: string | null;
+  generatedAt: string;
+}): MarketReadV2Dto | null {
+  if (!opts.enabled || opts.market === "first_inning") return opts.read;
+  if (opts.openAmerican === null || opts.currentAmerican === null) return opts.read;
+  const score = visibleOddsMarketReadScore(opts.openAmerican, opts.currentAmerican);
+  if (score === null) return opts.read;
+  const visibleDirection = score > 0 ? "support" : "resistance";
+  const existingDirection = opts.read?.movement?.directionRelativeToPick ?? "neutral";
+  if (opts.read && existingDirection === visibleDirection) return opts.read;
+  const label = displayMarketReadLabel(score);
+  const body = displayMarketReadBody(score);
+  const generatedAt = opts.read?.generatedAt ?? opts.generatedAt;
+  return {
+    label,
+    score,
+    tone: score > 0 ? "emerald" : "amber",
+    explanation: `${label} · ${body}`,
+    copyMode: "context_only_not_pick_changing",
+    exactLineEvidenceStatus: opts.read?.exactLineEvidenceStatus ?? "display_price_trail",
+    evidenceAsOf: opts.observedAt ?? opts.read?.evidenceAsOf ?? null,
+    generatedAt,
+    validityStatus: "valid_directional",
+    movement: {
+      firstTrackedLine: opts.read?.movement?.firstTrackedLine ?? null,
+      firstTrackedPrice: opts.openAmerican,
+      currentLine: opts.read?.movement?.currentLine ?? null,
+      currentPrice: opts.currentAmerican,
+      directionRelativeToPick: visibleDirection,
+      observedAt: opts.observedAt ?? opts.read?.movement?.observedAt ?? null,
+    },
+    consensus: opts.read?.consensus ?? null,
+    sourceSummary: {
+      priceAction: body,
+      playbookConsensus: opts.read?.sourceSummary.playbookConsensus ?? null,
+      sharpApiSourceSpecific: null,
+    },
+  };
+}
+
 // ─────────────────────────────────────────────────────────────
 // Phase 4.2.C.1.R-14C1 / R-16E / R-16F-D — Model / Market / Take strip
 // ─────────────────────────────────────────────────────────────
@@ -2783,6 +2864,15 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   if (correctedMarket) {
     modelMarketGapPct = null;
   }
+  const marketReadV2 = alignMarketReadV2ToVisibleOdds({
+    read: input.marketReadV2 ?? null,
+    enabled: input.marketReadV2Enabled === true,
+    market: input.market,
+    openAmerican,
+    currentAmerican: priceAmerican,
+    observedAt: priceObservedAt ?? lineOpenObservedAt,
+    generatedAt: new Date().toISOString(),
+  });
 
   return {
     pick: input.pick,
@@ -2837,7 +2927,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     lockedLineAt: input.lockedPriceAt ?? null,
     // 2026-06-16 market-intelligence (derived; display/audit only).
     marketInterpretation: input.marketReadV2Enabled === true ? null : marketInterpretation,
-    marketReadV2: input.marketReadV2 ?? null,
+    marketReadV2,
     marketReadV2Enabled: input.marketReadV2Enabled === true,
     lastMovePrevAmerican: input.lastMove?.prevAmerican ?? null,
     lastMoveNextAmerican: input.lastMove?.nextAmerican ?? null,

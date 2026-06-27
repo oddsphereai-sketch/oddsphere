@@ -624,6 +624,155 @@ function marketReadV2ForWnba(opts: {
   return marketReadV2DtoFromSnapshot(snapshot);
 }
 
+function marketReadLabel(score: number): string {
+  if (score >= 4) return "Strong Market Support";
+  if (score >= 2) return "Market Support";
+  if (score > 0) return "Slight Market Support";
+  if (score <= -4) return "Strong Market Resistance";
+  if (score <= -2) return "Market Resistance";
+  if (score < 0) return "Slight Market Resistance";
+  return "Projection-Led";
+}
+
+function marketReadExplanation(score: number): string {
+  if (score >= 4) return "Strong Market Support · The line has clearly moved toward our pick.";
+  if (score >= 2) return "Market Support · The line has moved toward our pick.";
+  if (score > 0) return "Slight Market Support · The market is leaning slightly toward our pick.";
+  if (score <= -4) return "Strong Market Resistance · The market has moved clearly against our pick.";
+  if (score <= -2) return "Market Resistance · The line has moved against our pick, adding risk.";
+  if (score < 0) return "Slight Market Resistance · The market is leaning slightly against our pick.";
+  return "Projection-Led · No clear market move. This pick is driven by the model edge.";
+}
+
+function marketReadBody(score: number): string {
+  if (score >= 4) return "The line has clearly moved toward our pick.";
+  if (score >= 2) return "The line has moved toward our pick.";
+  if (score > 0) return "The market is leaning slightly toward our pick.";
+  if (score <= -4) return "The market has moved clearly against our pick.";
+  if (score <= -2) return "The line has moved against our pick, adding risk.";
+  if (score < 0) return "The market is leaning slightly against our pick.";
+  return "No clear market move. This pick is driven by the model edge.";
+}
+
+function scoreFromDirection(direction: "support" | "resistance", strength: number): number {
+  const magnitude = strength >= 0.04 ? 4 : strength >= 0.02 ? 3 : 1;
+  return direction === "support" ? magnitude : -magnitude;
+}
+
+function priceTrailMovementRead(
+  slot: "ml" | "total" | "spread",
+  pick: string | null,
+  trail: WnbaPriceTrail | undefined,
+  generatedAt: string | null,
+): MarketReadV2Dto | null {
+  if (!trail || pick === null) return null;
+  let direction: "support" | "resistance" | null = null;
+  let strength = 0;
+  let firstLine: number | null = null;
+  let currentLine: number | null = null;
+  const firstProb = impliedProb(trail.open);
+  const currentProb = impliedProb(trail.current);
+  if (firstProb !== null && currentProb !== null && trail.open !== null && trail.current !== null) {
+    const delta = currentProb - firstProb;
+    if (Math.abs(delta) >= 0.005) {
+      direction = delta > 0 ? "support" : "resistance";
+      strength = Math.abs(delta);
+    }
+  }
+  if (slot === "ml") {
+    if (direction === null) return null;
+  } else if (direction === null) {
+    // Fall back to point/line movement only when the picked-side odds trail is
+    // flat or unavailable. This keeps Market Read from contradicting the
+    // visible Odds Move row members can inspect.
+    firstLine = trail.lineMovePrev ?? null;
+    currentLine = trail.lineMoveNext ?? null;
+    if (firstLine === null || currentLine === null || closeLine(firstLine, currentLine)) return null;
+    const delta = currentLine - firstLine;
+    if (Math.abs(delta) < 0.01) return null;
+    const p = pick.toLowerCase();
+    if (slot === "total") {
+      direction =
+        p.startsWith("over")
+          ? delta > 0 ? "support" : "resistance"
+          : p.startsWith("under")
+            ? delta < 0 ? "support" : "resistance"
+            : null;
+    } else {
+      direction = delta < 0 ? "support" : "resistance";
+    }
+    strength = Math.min(0.05, Math.abs(delta) / 20);
+  }
+  if (direction === null) return null;
+  const score = scoreFromDirection(direction, strength);
+  const generated = generatedAt ?? new Date().toISOString();
+  return {
+    label: marketReadLabel(score),
+    score,
+    tone: score > 0 ? "emerald" : "amber",
+    explanation: marketReadExplanation(score),
+    copyMode: "context_only_not_pick_changing",
+    exactLineEvidenceStatus: "display_price_trail",
+    evidenceAsOf: generatedAt,
+    generatedAt: generated,
+    validityStatus: "valid_directional",
+    movement: {
+      firstTrackedLine: firstLine,
+      firstTrackedPrice: trail.open,
+      currentLine,
+      currentPrice: trail.current,
+      directionRelativeToPick: direction,
+      observedAt: generatedAt,
+    },
+    consensus: null,
+    sourceSummary: {
+      priceAction: marketReadBody(score),
+      playbookConsensus: null,
+      sharpApiSourceSpecific: null,
+    },
+  };
+}
+
+function withVisiblePriceTrailMarketRead(opts: {
+  existing: MarketReadV2Dto | null;
+  slot: "ml" | "total" | "spread";
+  pick: string | null;
+  trail?: WnbaPriceTrail;
+  generatedAt: string | null;
+}): MarketReadV2Dto | null {
+  const trailRead = priceTrailMovementRead(opts.slot, opts.pick, opts.trail, opts.generatedAt);
+  if (!trailRead) return opts.existing;
+  const existingDirection = opts.existing?.movement?.directionRelativeToPick ?? "neutral";
+  if (!opts.existing || opts.existing.label === "Projection-Led" || existingDirection === "neutral") {
+    return {
+      ...trailRead,
+      consensus: opts.existing?.consensus ?? null,
+      sourceSummary: {
+        ...trailRead.sourceSummary,
+        playbookConsensus: opts.existing?.sourceSummary.playbookConsensus ?? null,
+      },
+    };
+  }
+  if (existingDirection !== trailRead.movement?.directionRelativeToPick) {
+    return {
+      ...trailRead,
+      consensus: opts.existing.consensus,
+      sourceSummary: {
+        ...trailRead.sourceSummary,
+        playbookConsensus: opts.existing.sourceSummary.playbookConsensus,
+      },
+    };
+  }
+  return opts.existing;
+}
+
+function capWnbaGradeForPickedEdge(grade: PreviewModelGrade | null, modelProbPick: number | null, marketFairProbPick: number | null): PreviewModelGrade | null {
+  if (grade === null || modelProbPick === null || marketFairProbPick === null) return grade;
+  if (modelProbPick - marketFairProbPick >= -0.001) return grade;
+  if (grade === "Best Angle" || grade === "Lean") return "Caution";
+  return grade;
+}
+
 /** Build a MarketEdgeDto from the WNBA model's per-market output. */
 function buildMarket(opts: {
   slot: "ml" | "total" | "spread";
@@ -646,12 +795,25 @@ function buildMarket(opts: {
   marketReadV2Enabled?: boolean;
 }): MarketEdgeDto {
   const { slot, pick, confFrac, grade, modelProbPick, marketFairProbPick, priceAmerican, line, modelTotal, marketTotal, bookCount, aligned, whyLine } = opts;
-  const held = pick === null || grade === null;
-  const g: PreviewModelGrade = grade ?? "Watchlist";
+  const effectiveGrade = capWnbaGradeForPickedEdge(grade, modelProbPick, marketFairProbPick);
+  const held = pick === null || effectiveGrade === null;
+  const g: PreviewModelGrade = effectiveGrade ?? "Watchlist";
   const verdict: { key: Verdict; label: string } = { key: gradeToVerdict(g), label: verdictLabel(g) };
   const marketSignal: MarketSignal = aligned === null ? "market_neutral" : aligned ? "market_confirmed" : "market_resistance";
   const signalType: SignalType = marketFairProbPick !== null ? "balanced" : "model_only";
   const confPct = confFrac !== null ? Math.round(confFrac * 100) : null;
+  const modelProbPct = modelProbPick !== null ? +(modelProbPick * 100).toFixed(1) : null;
+  const marketImpliedPct = marketFairProbPick !== null ? +(marketFairProbPick * 100).toFixed(1) : null;
+  const modelMarketGapPct =
+    modelProbPick === null || marketFairProbPick === null
+      ? null
+      : +((modelProbPick - marketFairProbPick) * 100).toFixed(1);
+  const recommendationConfidence =
+    held
+      ? null
+      : modelMarketGapPct !== null && modelMarketGapPct < 0
+        ? Math.min(confPct ?? 0, 40)
+        : confPct;
   const publicSplits = opts.publicSplits ?? [];
   const pickedSplit = (() => {
     if (pick === null) return null;
@@ -697,10 +859,10 @@ function buildMarket(opts: {
     marketTotal: slot === "total" ? marketTotal : null,
     line: slot === "ml" ? null : line,
     keyStats: [],
-    modelTrustPct: held ? null : confPct,
-    marketImpliedPct: marketFairProbPick !== null ? marketFairProbPick * 100 : null,
-    modelMarketGapPct: held || modelProbPick === null || marketFairProbPick === null ? null : (modelProbPick - marketFairProbPick) * 100,
-    recommendationConfidence: held ? null : confPct,
+    modelTrustPct: held ? null : modelProbPct ?? confPct,
+    marketImpliedPct,
+    modelMarketGapPct: held ? null : modelMarketGapPct,
+    recommendationConfidence,
     marketSource: bookCount > 0 ? "consensus" : null,
     marketDataQuality: bookCount >= 2 ? "two_sided_consensus" : bookCount === 1 ? "single_book" : "unavailable",
     marketReadV2: opts.marketReadV2 ?? null,
@@ -741,6 +903,18 @@ function adaptGame(
       : game.total.side?.toLowerCase().startsWith("under") === true
         ? "under"
         : null;
+  const mlMarketRead = withVisiblePriceTrailMarketRead({
+    existing: marketReadV2ForWnba({
+      lookup: marketReadV2Lookup,
+      game,
+      marketType: "moneyline",
+      selectedSide: mlSelectedSide,
+    }),
+    slot: "ml",
+    pick: game.moneyline.side,
+    trail: game.pickedPrices?.ml,
+    generatedAt: asOf,
+  });
   const ml = buildMarket({
     slot: "ml",
     pick: game.moneyline.side === game.home ? homeAbbr : game.moneyline.side === game.away ? awayAbbr : game.moneyline.side,
@@ -756,16 +930,23 @@ function adaptGame(
     publicSplits: game.publicSplits?.ml,
     priceTrail: game.pickedPrices?.ml,
     lockedAt: game.lockedAt ?? null,
-    marketReadV2: marketReadV2ForWnba({
-      lookup: marketReadV2Lookup,
-      game,
-      marketType: "moneyline",
-      selectedSide: mlSelectedSide,
-    }),
+    marketReadV2: mlMarketRead,
     marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.moneyline === true,
   });
 
   // ── Total ──
+  const totalMarketRead = withVisiblePriceTrailMarketRead({
+    existing: marketReadV2ForWnba({
+      lookup: marketReadV2Lookup,
+      game,
+      marketType: "total",
+      selectedSide: totalSelectedSide,
+    }),
+    slot: "total",
+    pick: game.total.side,
+    trail: game.pickedPrices?.total,
+    generatedAt: asOf,
+  });
   const total = buildMarket({
     slot: "total",
     pick: game.total.side,
@@ -781,12 +962,7 @@ function adaptGame(
     publicSplits: game.publicSplits?.total,
     priceTrail: game.pickedPrices?.total,
     lockedAt: game.lockedAt ?? null,
-    marketReadV2: marketReadV2ForWnba({
-      lookup: marketReadV2Lookup,
-      game,
-      marketType: "total",
-      selectedSide: totalSelectedSide,
-    }),
+    marketReadV2: totalMarketRead,
     marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.total === true,
   });
 
@@ -808,6 +984,18 @@ function adaptGame(
         : spreadPickIsAway
           ? -game.spread.line
           : game.spread.line;
+  const spreadMarketRead = withVisiblePriceTrailMarketRead({
+    existing: marketReadV2ForWnba({
+      lookup: marketReadV2Lookup,
+      game,
+      marketType: "spread",
+      selectedSide: spreadPickIsHome ? "home" : spreadPickIsAway ? "away" : null,
+    }),
+    slot: "spread",
+    pick: spreadPick,
+    trail: game.pickedPrices?.spread,
+    generatedAt: asOf,
+  });
   const spread = buildMarket({
     slot: "spread",
     pick: spreadPick,
@@ -823,19 +1011,16 @@ function adaptGame(
     publicSplits: game.publicSplits?.spread,
     priceTrail: game.pickedPrices?.spread,
     lockedAt: game.lockedAt ?? null,
-    marketReadV2: marketReadV2ForWnba({
-      lookup: marketReadV2Lookup,
-      game,
-      marketType: "spread",
-      selectedSide: spreadPickIsHome ? "home" : spreadPickIsAway ? "away" : null,
-    }),
+    marketReadV2: spreadMarketRead,
     marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.spread === true,
   });
 
   // Top grade across the three markets drives the card verdict pill.
   const order: Record<PreviewModelGrade, number> = { "Best Angle": 3, "Lean": 2, "Watchlist": 1, "Caution": 0 };
-  const grades = [game.moneyline.grade, game.total.grade, game.spread.grade].filter(Boolean) as PreviewModelGrade[];
-  const topGrade = grades.sort((a, b) => order[b] - order[a])[0] ?? "Watchlist";
+  const effectiveGrades = [ml, total, spread]
+    .map((m) => (m.held ? null : m.verdict.label))
+    .filter(Boolean) as PreviewModelGrade[];
+  const topGrade = effectiveGrades.sort((a, b) => order[b] - order[a])[0] ?? "Watchlist";
 
   const decisionLine = `${game.moneyline.side} ML (${game.moneyline.confidence ?? "—"}%) · ${game.total.side ?? "total n/a"} · ${game.spread.side ?? "spread n/a"}`;
   const modelBreakdown = `Independent Elo+Platt with market-assisted blend. ML lean ${game.moneyline.side}. Total: ${game.total.side ?? "n/a"} (proj ${game.model.total}). Spread: ${game.spread.side ?? "n/a"} (proj margin ${game.model.margin}).${game.data_quality.flags.includes("low_history_team") ? " Cold-start prior applied (low game history)." : ""}`;
