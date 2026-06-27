@@ -9,9 +9,11 @@
  *     observation with isStale=true so bars NEVER disappear (LKG behavior);
  *   - never blends two providers into one number.
  *
- * `overlayResolvedPublicSplits` replaces ONLY game.markets.{moneyline,total}
- * .publicSplits on the DTO. It touches NO grade/prediction/model field — grades
- * are unchanged by construction. FI/spread untouched (FI has no public splits).
+ * `overlayResolvedPublicSplits` replaces ONLY display split fields on
+ * game.markets.{moneyline,total}: publicSplits plus the picked-side scalar
+ * moneyPct/betsPct mirrors used by the Supporting Evidence row. It touches NO
+ * grade/prediction/model field — grades are unchanged by construction.
+ * FI/spread untouched (FI has no public splits).
  *
  * Gated by the caller (flag); MLB only for now.
  */
@@ -111,10 +113,28 @@ function labelFor(market: Market, side: Side, homeAbbr: string, awayAbbr: string
   return side === "home" ? homeAbbr : awayAbbr;
 }
 
+function pickedDisplaySide(
+  market: Market,
+  dto: MarketEdgeDto,
+  homeAbbr: string,
+  awayAbbr: string,
+): Side | null {
+  const pick = typeof dto.pick === "string" ? dto.pick.trim().toUpperCase() : "";
+  if (!pick) return null;
+  if (market === "total") {
+    if (pick.includes("UNDER")) return "under";
+    if (pick.includes("OVER")) return "over";
+    return null;
+  }
+  if (pick === homeAbbr.toUpperCase() || pick.includes(`${homeAbbr.toUpperCase()} ML`)) return "home";
+  if (pick === awayAbbr.toUpperCase() || pick.includes(`${awayAbbr.toUpperCase()} ML`)) return "away";
+  return null;
+}
+
 /**
  * Overlay resolved DISPLAY onto the DTO games' moneyline/total publicSplits.
- * Only replaces a market's publicSplits when resolved data exists for it; else
- * leaves the existing (current-source) array untouched. Mutates + returns games.
+ * Only replaces a market's split display when resolved data exists for it; else
+ * leaves the existing (current-source) fields untouched. Mutates + returns games.
  */
 export function overlayResolvedPublicSplits(
   games: DailyEdgeGameDto[],
@@ -137,7 +157,19 @@ export function overlayResolvedPublicSplits(
           moneyPct: d.moneyPct, betsPct: d.betsPct, observedAt: d.observedAt, isStale: d.isStale,
         });
       }
-      if (out.length > 0) dto.publicSplits = out;
+      if (out.length > 0) {
+        dto.publicSplits = out;
+        const picked = pickedDisplaySide(market, dto, game.homeTeam, game.awayTeam);
+        const pickedRow = picked ? out.find((row) => row.side === picked) : null;
+        if (pickedRow) {
+          dto.moneyPct = pickedRow.moneyPct;
+          dto.betsPct = pickedRow.betsPct;
+          dto.moneyPctObservedAt = pickedRow.observedAt ?? null;
+          dto.betsPctObservedAt = pickedRow.observedAt ?? null;
+          dto.moneyPctIsStale = pickedRow.isStale ?? false;
+          dto.betsPctIsStale = pickedRow.isStale ?? false;
+        }
+      }
     }
   }
   return games;

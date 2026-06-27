@@ -232,11 +232,11 @@ check(
 );
 check(
   "copy: money_conflict_line_confirms_market warns about money + line",
-  withCtx("money_conflict_line_confirms_market").guidedWatchOut.toLowerCase().includes("market money and line movement both warn")
+  withCtx("money_conflict_line_confirms_market").guidedWatchOut.toLowerCase().includes("betting read and line movement both lean")
 );
 check(
   "copy: money_conflict_line_confirms_pick frames line as support for the model",
-  withCtx("money_conflict_line_confirms_pick").guidedWatchOut.toLowerCase().includes("line movement supports the model")
+  withCtx("money_conflict_line_confirms_pick").guidedWatchOut.toLowerCase().includes("line has moved toward our pick")
 );
 check(
   "copy: money_conflict_flat_line_thin_edge mentions thin/uncertain edge",
@@ -256,11 +256,11 @@ check(
 );
 check(
   "copy: money_conflict_one_source_only labels as one-source caution",
-  withCtx("money_conflict_one_source_only").guidedWatchOut.toLowerCase().includes("one split source")
+  withCtx("money_conflict_one_source_only").guidedWatchOut.toLowerCase().includes("one market read")
 );
 check(
   "copy: money_conflict_multi_source mentions multiple sources",
-  withCtx("money_conflict_multi_source").guidedWatchOut.toLowerCase().includes("multiple sources")
+  withCtx("money_conflict_multi_source").guidedWatchOut.toLowerCase().includes("multiple market reads")
 );
 check(
   "copy: rlm_against_pick uses linter-approved phrasing (line moved against the public)",
@@ -272,9 +272,9 @@ check(
   const noWarn = withCtx(null);
   check(
     "copy: null warning falls back to standard 'less clean' copy (no warning text)",
-    !noWarn.guidedWatchOut.toLowerCase().includes("market money") &&
+      !noWarn.guidedWatchOut.toLowerCase().includes("betting read") &&
       !noWarn.guidedWatchOut.toLowerCase().includes("line moved against the public") &&
-      !noWarn.guidedWatchOut.toLowerCase().includes("one split source")
+      !noWarn.guidedWatchOut.toLowerCase().includes("one market read")
   );
   check(
     "copy: undefined warning (omitted prop) falls back to standard copy",
@@ -321,7 +321,7 @@ check(
     sharpDirection: "none", modelDriver: null, riskDriver: "weak top-of-order",
     marketDataLimited: false,
     marketContextWarning: "money_conflict_line_confirms_market",
-  }).guidedWatchOut.toLowerCase().includes("market money and line movement both warn")
+  }).guidedWatchOut.toLowerCase().includes("betting read and line movement both lean")
 );
 
 // Banned-terms linter still passes on every warning-mapped output.

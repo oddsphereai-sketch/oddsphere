@@ -169,23 +169,23 @@ function describeMarketContextWarning(
   if (!warning) return null;
   switch (warning) {
     case "money_conflict_strong_edge_survives":
-      return "Market money leans the other way, but the model edge remains strong.";
+      return "The betting read leans the other way, but the model edge remains strong.";
     case "money_conflict_line_confirms_market":
-      return "Market money and line movement both warn against the model side.";
+      return "The betting read and line movement both lean against the pick.";
     case "money_conflict_line_confirms_pick":
-      return "Split money leans the other way, but line movement supports the model side.";
+      return "The betting read leans the other way, but the line has moved toward our pick.";
     case "money_conflict_flat_line_thin_edge":
-      return "Money pressure is on the other side and the edge is thin or uncertain.";
+      return "The betting read is not fully aligned, and the edge is thin or uncertain.";
     case "money_conflict_flat_line_strong_edge":
-      return "Money pressure is on the other side, but the line has not moved.";
+      return "The betting read is not fully aligned, but the line has not moved.";
     case "money_conflict_unknown_line_negative":
-      return "Money pressure is on the other side and the model has no measurable edge.";
+      return "The betting read leans the other way, and the model has no measurable edge.";
     case "money_conflict_unknown_line_thin":
-      return "Money pressure is on the other side and the edge is thin.";
+      return "The betting read is not fully aligned, and the edge is thin.";
     case "money_conflict_one_source_only":
-      return "One split source shows money pressure against the pick.";
+      return "One market read is not fully aligned with the pick.";
     case "money_conflict_multi_source":
-      return "Multiple sources show money pressure against the pick.";
+      return "Multiple market reads lean against the pick.";
     case "rlm_against_pick":
       // Phase 6B.30E note: the banned-terms linter forbids "RLM" and
       // "reverse line movement" by name (the project's approved phrasing
