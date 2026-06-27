@@ -1,13 +1,21 @@
 import type { AutoModelOutput, GameSnapshot } from "../automodel/types";
 
-export type MlbDataCompletenessStatus = "ready" | "degraded" | "incomplete";
+export type MlbDataCompletenessStatus =
+  | "ready"
+  | "provisional_lineup_pending"
+  | "degraded_stats_fallback"
+  | "degraded_pitcher_fallback"
+  | "incomplete_missing_required_data";
 
 export type MlbDataCompletenessAudit = {
-  schema_version: "mlb_data_completeness_v1";
+  schema_version: "mlb_data_completeness_v2";
   sport: "mlb";
   status: MlbDataCompletenessStatus;
   can_publish_normal: boolean;
   best_angle_allowed: boolean;
+  repair_eligible: boolean;
+  lock_protected: boolean;
+  last_repair_attempt_at: string | null;
   missing_fields: string[];
   degraded_fields: string[];
   fallback_reasons: string[];
@@ -133,10 +141,19 @@ export function assessMlbDataCompleteness(
   }
 
   const v22 = prediction.sport_specific.v2_2_audit as
-    | { data_quality_tier?: unknown; feature_neutral_fallback_count?: unknown; feature_missing_count?: unknown }
+    | {
+        data_quality_tier?: unknown;
+        feature_neutral_fallback_count?: unknown;
+        feature_missing_count?: unknown;
+        feature_reason_codes?: unknown;
+      }
     | null
     | undefined;
   const v22Tier = typeof v22?.data_quality_tier === "string" ? v22.data_quality_tier : null;
+  const v22ReasonCodes = Array.isArray(v22?.feature_reason_codes)
+    ? v22.feature_reason_codes.filter((value): value is string => typeof value === "string")
+    : [];
+  const hasV22Reason = (reason: string) => v22ReasonCodes.includes(reason);
   const neutralFallbackCount = finite(v22?.feature_neutral_fallback_count)
     ? v22.feature_neutral_fallback_count
     : 0;
@@ -154,16 +171,45 @@ export function assessMlbDataCompleteness(
     fallbackReasons.push("sparse_model_features");
   }
 
-  const status: MlbDataCompletenessStatus =
-    missing.length > 0 ? "incomplete" : degraded.length > 0 ? "degraded" : "ready";
-  const severeFallback =
-    status === "incomplete" ||
-    v22Tier === "fallback" ||
+  const pitcherFallback =
+    degraded.some((field) => field.includes("starter")) ||
+    hasV22Reason("starter_missing") ||
+    hasV22Reason("pitch_quality_missing");
+  const statsFallback =
+    degraded.some((field) =>
+      field.includes("bullpen") ||
+      field.includes("broad_neutral") ||
+      field.includes("sparse_model") ||
+      field.includes("v2_2_data_quality"),
+    ) ||
+    hasV22Reason("offense_missing") ||
+    hasV22Reason("bullpen_missing") ||
     neutralFallbackCount > 3 ||
-    missing.some((f) => f.includes("pitcher") || f.includes("price") || f.includes("line"));
+    featureMissingCount >= 7;
+  const lineupPending =
+    degraded.some((field) => field.includes("lineup")) ||
+    hasV22Reason("lineup_missing") ||
+    hasV22Reason("lineup_projected");
 
-  if (status === "incomplete") notes.push("Card requires repair before normal pre-lock display.");
-  if (severeFallback) notes.push("Fallback-heavy card cannot be promoted to Best Angle.");
+  const status: MlbDataCompletenessStatus =
+    missing.length > 0
+      ? "incomplete_missing_required_data"
+      : pitcherFallback
+        ? "degraded_pitcher_fallback"
+        : statsFallback
+          ? "degraded_stats_fallback"
+          : lineupPending
+            ? "provisional_lineup_pending"
+            : "ready";
+  const bestAngleAllowed = status === "ready" || status === "provisional_lineup_pending";
+
+  if (status === "incomplete_missing_required_data") {
+    notes.push("Card requires repair before normal pre-lock display.");
+  }
+  if (status === "provisional_lineup_pending") {
+    notes.push("Official lineup is pending; card can publish and should repair when lineup data arrives.");
+  }
+  if (!bestAngleAllowed) notes.push("Fallback-heavy card cannot be promoted to Best Angle.");
 
   const pitcherStatsMissing =
     snap.home_starter === null ||
@@ -175,17 +221,26 @@ export function assessMlbDataCompleteness(
   const offenseMissing = snap.home_lineup_top8.length < 8 || snap.away_lineup_top8.length < 8;
   const parkWeatherMissing =
     snap.ballpark === null || snap.ballpark.park_factor_runs === null || snap.weather === null;
+  const sportSpecificRecord = prediction.sport_specific as Record<string, unknown>;
+  const lockProtected = typeof sportSpecificRecord.locked_at === "string";
+  const repairActions = buildRepairActions(missing, degraded);
 
   return {
-    schema_version: "mlb_data_completeness_v1",
+    schema_version: "mlb_data_completeness_v2",
     sport: "mlb",
     status,
-    can_publish_normal: status !== "incomplete",
-    best_angle_allowed: !severeFallback,
+    can_publish_normal: status !== "incomplete_missing_required_data",
+    best_angle_allowed: bestAngleAllowed,
+    repair_eligible: repairActions.length > 0 && !lockProtected,
+    lock_protected: lockProtected,
+    last_repair_attempt_at:
+      typeof sportSpecificRecord.last_repair_attempt_at === "string"
+        ? sportSpecificRecord.last_repair_attempt_at
+        : null,
     missing_fields: missing,
     degraded_fields: degraded,
     fallback_reasons: fallbackReasons,
-    repair_actions: buildRepairActions(missing, degraded),
+    repair_actions: repairActions,
     starter_policy: {
       away: starterStatus(snap.away_starter),
       home: starterStatus(snap.home_starter),

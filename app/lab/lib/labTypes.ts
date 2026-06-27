@@ -606,9 +606,17 @@ export type GameStatusDto = {
 };
 
 export type DataCompletenessDto = {
-  status: "ready" | "degraded" | "incomplete";
+  status:
+    | "ready"
+    | "provisional_lineup_pending"
+    | "degraded_stats_fallback"
+    | "degraded_pitcher_fallback"
+    | "incomplete_missing_required_data";
   canPublishNormal: boolean;
   bestAngleAllowed: boolean;
+  repairEligible: boolean;
+  lockProtected: boolean;
+  lastRepairAttemptAt: string | null;
   missingFields: string[];
   degradedFields: string[];
   fallbackReasons: string[];

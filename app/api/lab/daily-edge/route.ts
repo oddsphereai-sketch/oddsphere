@@ -776,10 +776,19 @@ function buildStarterDto(
 
 function readMlbDataCompletenessDto(
   sportSpecific: Record<string, unknown> | null | undefined,
+  meta: { computedAt?: string | null; lockedAt?: string | null } = {},
 ): {
-  status: "ready" | "degraded" | "incomplete";
+  status:
+    | "ready"
+    | "provisional_lineup_pending"
+    | "degraded_stats_fallback"
+    | "degraded_pitcher_fallback"
+    | "incomplete_missing_required_data";
   canPublishNormal: boolean;
   bestAngleAllowed: boolean;
+  repairEligible: boolean;
+  lockProtected: boolean;
+  lastRepairAttemptAt: string | null;
   missingFields: string[];
   degradedFields: string[];
   fallbackReasons: string[];
@@ -790,10 +799,20 @@ function readMlbDataCompletenessDto(
   const raw = sportSpecific?.mlb_data_completeness;
   if (!raw || typeof raw !== "object") return null;
   const audit = raw as Record<string, unknown>;
-  const status =
-    audit.status === "ready" || audit.status === "degraded" || audit.status === "incomplete"
-      ? audit.status
-      : "incomplete";
+  const status = (() => {
+    if (
+      audit.status === "ready" ||
+      audit.status === "provisional_lineup_pending" ||
+      audit.status === "degraded_stats_fallback" ||
+      audit.status === "degraded_pitcher_fallback" ||
+      audit.status === "incomplete_missing_required_data"
+    ) {
+      return audit.status;
+    }
+    if (audit.status === "degraded") return "degraded_stats_fallback";
+    if (audit.status === "incomplete") return "incomplete_missing_required_data";
+    return "incomplete_missing_required_data";
+  })();
   const arrayOfStrings = (value: unknown): string[] =>
     Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
   const starter = audit.starter_policy && typeof audit.starter_policy === "object"
@@ -802,10 +821,17 @@ function readMlbDataCompletenessDto(
   const stats = audit.stats_policy && typeof audit.stats_policy === "object"
     ? (audit.stats_policy as Record<string, unknown>)
     : null;
+  const lockProtected = Boolean(meta.lockedAt) || audit.lock_protected === true;
   return {
     status,
     canPublishNormal: audit.can_publish_normal === true,
     bestAngleAllowed: audit.best_angle_allowed === true,
+    repairEligible: audit.repair_eligible === true && !lockProtected,
+    lockProtected,
+    lastRepairAttemptAt:
+      typeof audit.last_repair_attempt_at === "string"
+        ? audit.last_repair_attempt_at
+        : meta.computedAt ?? null,
     missingFields: arrayOfStrings(audit.missing_fields),
     degradedFields: arrayOfStrings(audit.degraded_fields),
     fallbackReasons: arrayOfStrings(audit.fallback_reasons),
@@ -1531,7 +1557,10 @@ function buildGameDto(
   // starter isn't posted yet. Handedness limited to "L" / "R" / null.
   const homeStarter = buildStarterDto(row.home_pitcher);
   const awayStarter = buildStarterDto(row.away_pitcher);
-  const dataCompleteness = readMlbDataCompletenessDto(pred.sport_specific);
+  const dataCompleteness = readMlbDataCompletenessDto(pred.sport_specific, {
+    computedAt: pred.computed_at,
+    lockedAt: pred.locked_at,
+  });
 
   return {
     id: `${row.sport}-${row.external_id}`,

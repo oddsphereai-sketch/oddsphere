@@ -194,7 +194,7 @@ check("ready card has no missing fields", ready.missing_fields.length === 0);
 
 const missingStarterSnap = snapshot({ home_starter: null });
 const missingStarter = assessMlbDataCompleteness(missingStarterSnap, prediction());
-check("missing starter marks card incomplete", missingStarter.status === "incomplete");
+check("missing starter marks card incomplete", missingStarter.status === "incomplete_missing_required_data");
 check("missing starter records exact missing field", missingStarter.missing_fields.includes("home_probable_pitcher"));
 check("missing starter schedules probable pitcher repair", missingStarter.repair_actions.includes("retry_probable_pitcher_fetch"));
 check("missing starter blocks Best Angle", missingStarter.best_angle_allowed === false);
@@ -204,9 +204,55 @@ const fallbackStatsSnap = snapshot({
   home_team: { ...snapshot().home_team, bullpen_era_proxy: null },
 });
 const fallbackStats = assessMlbDataCompleteness(fallbackStatsSnap, prediction());
-check("missing stats are degraded not silently ready", fallbackStats.status === "degraded");
+check("missing stats are pitcher degraded not silently ready", fallbackStats.status === "degraded_pitcher_fallback");
 check("missing stats have explicit fallback reason", fallbackStats.fallback_reasons.includes("away_starter_stats_fallback"));
 check("missing bullpen has explicit fallback reason", fallbackStats.fallback_reasons.includes("home_bullpen_league_fallback"));
+
+const lineupPendingPrediction = prediction({
+  sport_specific: {
+    ...prediction().sport_specific,
+    v2_2_audit: {
+      data_quality_tier: "high",
+      feature_neutral_fallback_count: 1,
+      feature_missing_count: 1,
+      feature_reason_codes: ["lineup_missing", "lineup_projected", "offense_team_proxy_ops"],
+      ml_play_grade: "best_angle",
+      ou_play_grade: "best_angle",
+      ml_best_angle_eligible: true,
+      ou_best_angle_eligible: true,
+    },
+  },
+});
+const lineupPending = assessMlbDataCompleteness(
+  snapshot({ home_lineup_top8: [], away_lineup_top8: [] }),
+  lineupPendingPrediction,
+);
+check("official lineup pending is provisional not critical", lineupPending.status === "provisional_lineup_pending");
+check("official lineup pending can publish", lineupPending.can_publish_normal === true);
+check("official lineup pending can still be Best Angle eligible", lineupPending.best_angle_allowed === true);
+check("official lineup pending is repair eligible", lineupPending.repair_eligible === true);
+
+const missingOffensePrediction = prediction({
+  sport_specific: {
+    ...prediction().sport_specific,
+    v2_2_audit: {
+      data_quality_tier: "low",
+      feature_neutral_fallback_count: 2,
+      feature_missing_count: 4,
+      feature_reason_codes: ["lineup_missing", "offense_missing"],
+      ml_play_grade: "best_angle",
+      ou_play_grade: "best_angle",
+      ml_best_angle_eligible: true,
+      ou_best_angle_eligible: true,
+    },
+  },
+});
+const missingOffense = assessMlbDataCompleteness(
+  snapshot({ home_lineup_top8: [], away_lineup_top8: [] }),
+  missingOffensePrediction,
+);
+check("team offense missing is stats degraded", missingOffense.status === "degraded_stats_fallback");
+check("team offense missing blocks Best Angle", missingOffense.best_angle_allowed === false);
 
 const fallbackPrediction = prediction({
   sport_specific: {
@@ -227,6 +273,18 @@ check("fallback-heavy card cannot remain ML Best Angle", gated.sport_specific.ml
 check("fallback-heavy card cannot remain total Best Angle", gated.sport_specific.ou_play_grade !== "best_angle");
 check("fallback-heavy card stores completeness audit", gated.sport_specific.mlb_data_completeness != null);
 check("fallback-heavy card preserves picks", gated.predicted_ml_winner === "home" && gated.predicted_ou_side === "under");
+
+const lockedLineupPending = assessMlbDataCompleteness(
+  snapshot({ home_lineup_top8: [], away_lineup_top8: [] }),
+  prediction({
+    sport_specific: {
+      ...lineupPendingPrediction.sport_specific,
+      locked_at: "2026-06-27T20:00:00Z",
+    } as AutoModelOutput["sport_specific"],
+  }),
+);
+check("locked cards are not repair eligible", lockedLineupPending.repair_eligible === false);
+check("locked cards expose lock protection", lockedLineupPending.lock_protected === true);
 
 if (fail > 0) {
   console.error(`mlb data completeness gate tests: ${pass} passed, ${fail} failed`);
