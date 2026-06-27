@@ -5,6 +5,7 @@ import { SharpApiClient, SharpApiNotFoundError } from "../../providers/real_api/
 import { normalizeMlbTeamName } from "../../providers/real_api/_teamNameNormalizer";
 import { buildGameKey, type NormalizerSport } from "../../providers/playbook/playbookTeamNormalizer";
 import { readMarketIntelligenceV2Config } from "../../config/marketIntelligenceV2";
+import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import type { Sport } from "../../types/domain/Sport";
 import type {
   CanonicalObservationRejection,
@@ -219,6 +220,7 @@ async function loadPriceObservations(opts: {
   for (const r of (data ?? []) as LineRow[]) {
     const game = gameById.get(r.game_id);
     if (!game) continue;
+    if (isBlockedSportsbook(r.sportsbook)) continue;
     const market = r.market_type as MarketIntelligenceMarketType;
     if (!MARKET_TYPES.includes(market)) continue;
     const side = r.side as MarketIntelligenceSelectionSide | null;

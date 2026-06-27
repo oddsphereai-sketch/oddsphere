@@ -8,6 +8,8 @@
  *  - Hides (null) when no interpretation on the headline market.
  *  - Hides when tone is gray AND there are no flags (pure "Market steady").
  *  - Surfaces emerald/amber always, and gray when it carries a flag.
+ *  - When v2 is enabled, uses v2's member-safe label and never falls back to
+ *    legacy interpretation row-by-row.
  *  - first_inning_total headline maps to the `first_inning` market key.
  */
 import { selectHeadlineMarketChip } from "../app/lab/components/daily-edge/sharedCardParts";
@@ -21,6 +23,7 @@ function eq(name: string, got: unknown, want: unknown): void {
 }
 
 type Interp = { chipLabel: string; chipTone: "emerald" | "amber" | "gray"; flags: string[]; detail?: string[] } | undefined;
+type V2Read = { label: string; tone: "emerald" | "amber" | "gray" } | null | undefined;
 
 // Minimal fixture: per-pick grades drive the headline market; markets carry
 // the interpretation. Everything else is cast away — the function only reads
@@ -32,6 +35,12 @@ function makeGame(opts: {
   mlInterp?: Interp;
   totalInterp?: Interp;
   fiInterp?: Interp;
+  mlV2Enabled?: boolean;
+  totalV2Enabled?: boolean;
+  fiV2Enabled?: boolean;
+  mlV2?: V2Read;
+  totalV2?: V2Read;
+  fiV2?: V2Read;
 }): DailyEdgeGameDto {
   return {
     predictions: {
@@ -40,9 +49,9 @@ function makeGame(opts: {
       nrfi: { grade: opts.nrfiGrade ?? null },
     },
     markets: {
-      moneyline: { marketInterpretation: opts.mlInterp },
-      total: { marketInterpretation: opts.totalInterp },
-      first_inning: { marketInterpretation: opts.fiInterp },
+      moneyline: { marketInterpretation: opts.mlInterp, marketReadV2Enabled: opts.mlV2Enabled, marketReadV2: opts.mlV2 },
+      total: { marketInterpretation: opts.totalInterp, marketReadV2Enabled: opts.totalV2Enabled, marketReadV2: opts.totalV2 },
+      first_inning: { marketInterpretation: opts.fiInterp, marketReadV2Enabled: opts.fiV2Enabled, marketReadV2: opts.fiV2 },
     },
   } as unknown as DailyEdgeGameDto;
 }
@@ -85,6 +94,26 @@ eq("no interp on headline market → hidden",
   selectHeadlineMarketChip(makeGame({
     mlGrade: "sharp_confirmed", totalGrade: "market_watch",
     totalInterp: { chipLabel: "Market moved toward our side", chipTone: "emerald", flags: ["toward"] },
+  })),
+  null);
+
+// v2 enabled: headline chip must use v2 and ignore contradictory legacy copy.
+eq("v2 enabled → v2 label wins over legacy",
+  selectHeadlineMarketChip(makeGame({
+    mlGrade: "sharp_confirmed",
+    mlV2Enabled: true,
+    mlV2: { label: "Market Support", tone: "emerald" },
+    mlInterp: { chipLabel: "Sharp money against our side", chipTone: "amber", flags: ["sharp_money_against"] },
+  })),
+  { label: "Market Support", tone: "emerald" });
+
+// v2 enabled but no valid read: hide cleanly, no row-level legacy fallback.
+eq("v2 enabled with no valid read → hidden, no legacy fallback",
+  selectHeadlineMarketChip(makeGame({
+    mlGrade: "sharp_confirmed",
+    mlV2Enabled: true,
+    mlV2: null,
+    mlInterp: { chipLabel: "Sharp money against our side", chipTone: "amber", flags: ["sharp_money_against"] },
   })),
   null);
 

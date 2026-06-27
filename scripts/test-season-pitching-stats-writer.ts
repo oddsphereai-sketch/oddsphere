@@ -226,6 +226,25 @@ async function test_FiOnlyRowIsNotCleanup() {
   );
 }
 
+async function test_CurrentSeasonPlaceholderIsNotCleanup() {
+  section("current-season all-null placeholder row is refillable");
+  const client = makeStubClient({
+    existingRow: {
+      pitching_ip: null,
+      pitching_era: null,
+      pitching_k: null,
+      batting_ab: null,
+      first_inning_era: null,
+    },
+  });
+  const r = await persistSeasonPitchingStats(14553, new Date().getUTCFullYear(), sampleRecord(), {
+    write: true,
+    quiet: true,
+    client,
+  });
+  check("current-season placeholder → UPSERTed", r.kind === "updated");
+}
+
 async function test_WritePathAllowsNormalRow() {
   section("write path — normal existing row gets UPSERTed");
   const client = makeStubClient({
@@ -300,6 +319,7 @@ async function main() {
   await test_SkipEmptyRecord();
   await test_NulledCleanupGuard();
   await test_FiOnlyRowIsNotCleanup();
+  await test_CurrentSeasonPlaceholderIsNotCleanup();
   await test_WritePathAllowsNormalRow();
   await test_WritePathInsertWhenNoRow();
   test_WriteGateHelper();

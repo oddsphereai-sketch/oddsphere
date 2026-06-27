@@ -2631,12 +2631,14 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // generatePerMarketCopy takes a numeric confidence; held markets always
   // route to verdict="no_play" (short-circuit above) so the no_play
   // template fires regardless of the confidence value.
+  const suppressLegacyMarketCopy =
+    input.market !== "first_inning" && input.marketReadV2Enabled === true;
   const copy = generatePerMarketCopy({
     market: input.market,
     verdict: verdict.key,
     pick: input.pick ?? "—",
     confidence: input.confidence ?? 0,
-    sharpDirection,
+    sharpDirection: suppressLegacyMarketCopy ? "none" : sharpDirection,
     modelDriver,
     riskDriver,
     marketDataLimited,
@@ -2644,7 +2646,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     // code into the copy generator so the "watch out" line names the
     // conflict explicitly. `verdict.warning` is null when no rule
     // fired or for held/null-confidence rows (short-circuit above).
-    marketContextWarning: "warning" in verdict ? verdict.warning : null,
+    marketContextWarning: suppressLegacyMarketCopy ? null : ("warning" in verdict ? verdict.warning : null),
   });
 
   // KeyStats.
@@ -2825,7 +2827,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     lockedLineAmerican: input.lockedPriceAmerican ?? null,
     lockedLineAt: input.lockedPriceAt ?? null,
     // 2026-06-16 market-intelligence (derived; display/audit only).
-    marketInterpretation,
+    marketInterpretation: input.marketReadV2Enabled === true ? null : marketInterpretation,
     marketReadV2: input.marketReadV2 ?? null,
     marketReadV2Enabled: input.marketReadV2Enabled === true,
     lastMovePrevAmerican: input.lastMove?.prevAmerican ?? null,

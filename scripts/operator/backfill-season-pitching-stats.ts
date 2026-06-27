@@ -108,8 +108,11 @@ type SeasonRowGuard = {
  * (INSERT vs UPDATE vs SKIP_NULLED) matches what the writer will
  * actually do at write time.
  */
-function isFullyNulledCleanupRow(row: SeasonRowGuard | undefined): boolean {
+function isFullyNulledCleanupRow(row: SeasonRowGuard | undefined, season: number): boolean {
   if (row === undefined) return false;
+  // Current-season all-null rows are refillable placeholders for newly
+  // mapped active starters. Keep historical all-null rows cleanup-protected.
+  if (season >= new Date().getUTCFullYear()) return false;
   return (
     row.pitching_ip === null &&
     row.pitching_era === null &&
@@ -416,7 +419,7 @@ export async function runSeasonPitchingCycle(
   const plans: Plan[] = [];
   for (const p of players) {
     const seasonRow = existingRows.get(p.id);
-    if (isFullyNulledCleanupRow(seasonRow)) {
+    if (isFullyNulledCleanupRow(seasonRow, season)) {
       plans.push({ player: p, action: "skip_nulled" });
     } else if (seasonRow === undefined) {
       plans.push({ player: p, action: "insert" });

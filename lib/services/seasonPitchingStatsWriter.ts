@@ -74,13 +74,21 @@ function log(opts: WriterOpts, message: string): void {
  * an FI-only row from R-2 looks identical to a Cole cleanup row at
  * the 4-field level.
  */
-function isFullyNulledCleanupRow(existing: {
+function isFullyNulledCleanupRow(
+  existing: {
   pitching_ip: number | null;
   pitching_era: number | null;
   pitching_k: number | null;
   batting_ab: number | null;
   first_inning_era: number | null;
-}): boolean {
+  },
+  season: number,
+): boolean {
+  // Treat all-null current-season rows as refillable placeholders. They
+  // commonly appear when a newly mapped starter was inserted before the
+  // provider had a season line ready. Historical all-null rows remain
+  // cleanup-protected, preserving the Cole-style manual nulled cleanup.
+  if (season >= new Date().getUTCFullYear()) return false;
   return (
     existing.pitching_ip === null &&
     existing.pitching_era === null &&
@@ -205,7 +213,7 @@ export async function persistSeasonPitchingStats(
     .eq("season", season)
     .eq("season_type", "regular")
     .maybeSingle();
-  if (existing !== null && isFullyNulledCleanupRow(existing)) {
+  if (existing !== null && isFullyNulledCleanupRow(existing, season)) {
     log(
       opts,
       `skipped_nulled_cleanup player_id=${playerId} season=${season} (row matches cleanup signature)`

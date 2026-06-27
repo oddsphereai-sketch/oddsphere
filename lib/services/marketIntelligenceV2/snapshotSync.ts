@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { readMarketIntelligenceV2Config } from "../../config/marketIntelligenceV2";
+import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import type { Sport } from "../../types/domain/Sport";
 import type { MarketIntelligenceMarketType } from "../../types/domain/MarketIntelligenceV2";
 import {
@@ -8,7 +9,7 @@ import {
   type SplitObservationForResolver,
 } from "./resolver";
 
-export const MARKET_INTELLIGENCE_V2_RESOLVER_VERSION = "market-intelligence-v2.2-ui-movement-0.4.1-main-line";
+export const MARKET_INTELLIGENCE_V2_RESOLVER_VERSION = "market-intelligence-v2.2-ui-movement-0.4.2-blocked-book-filter";
 const OBSERVATION_PAGE_SIZE = 1000;
 
 type GameRow = {
@@ -137,7 +138,8 @@ async function loadPriceObservations(opts: {
       if (isTableMissing(page.error.message)) return { rows: [], tableMissing: true };
       throw new Error(`price observations fetch failed: ${page.error.message}`);
     }
-    const rows = (page.data ?? []) as PriceObservationForResolver[];
+    const rows = ((page.data ?? []) as PriceObservationForResolver[])
+      .filter((row) => !isBlockedSportsbook(row.sportsbook));
     out.push(...rows);
     if (rows.length < OBSERVATION_PAGE_SIZE) return { rows: out, tableMissing: false };
   }

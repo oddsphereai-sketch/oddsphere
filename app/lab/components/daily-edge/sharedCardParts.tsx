@@ -214,7 +214,14 @@ export function selectHeadlineMarketChip(
   const headline: HeadlineMarket = headlinePrimaryMarket(game);
   if (headline === null) return null;
   const key = headline === "first_inning_total" ? "first_inning" : headline;
-  const mi = game.markets[key]?.marketInterpretation;
+  const market = game.markets[key];
+  if (!market) return null;
+  if (market.marketReadV2Enabled === true) {
+    const read = market.marketReadV2;
+    if (!read) return null;
+    return { label: read.label, tone: read.tone };
+  }
+  const mi = market.marketInterpretation;
   if (!mi) return null;
   if (mi.chipTone === "gray" && mi.flags.length === 0) return null; // nothing reliable → hide
   return { label: mi.chipLabel, tone: mi.chipTone };
