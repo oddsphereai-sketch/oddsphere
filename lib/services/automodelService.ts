@@ -94,6 +94,7 @@ import {
 import { createPredictionRecords } from "./predictionRecordService";
 import { recordFirstPublishedLines } from "./postedLinesWriter";
 import { PlaybookClient } from "../providers/playbook/playbookClient";
+import { applyMlbDataCompletenessGate } from "./mlbDataCompletenessGate";
 
 // ─────────────────────────────────────────────────────────────
 // Public types
@@ -852,6 +853,10 @@ export async function generatePredictionsForSlate(
               `Preserving legacy FI fields.`,
           );
         }
+      }
+
+      if (sport === "mlb") {
+        finalPrediction = applyMlbDataCompletenessGate(snap, finalPrediction);
       }
 
       // 2e — tally

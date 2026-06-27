@@ -557,6 +557,14 @@ export type AutoModelSportSpecific = {
   v2_1_audit?: unknown | null;
   v2_2_audit?: unknown | null;
   /**
+   * MLB full-game data-completeness gate. Written by automodelService
+   * after the selected model runs, before DB ingest / prediction_records
+   * sync. Lets Daily Edge and operators distinguish normal cards from
+   * repaired/fallback-heavy/incomplete cards without inferring from
+   * blank starter/stat fields.
+   */
+  mlb_data_completeness?: unknown | null;
+  /**
    * 2026-06-12 — MLB totals projection/side reconciliation audit blob.
    * Written by automodelService after runMlbAutoModelV2_2 so the
    * downstream record writer + grade derivation can read both the raw

@@ -774,6 +774,59 @@ function buildStarterDto(
   return { name, throws };
 }
 
+function readMlbDataCompletenessDto(
+  sportSpecific: Record<string, unknown> | null | undefined,
+): {
+  status: "ready" | "degraded" | "incomplete";
+  canPublishNormal: boolean;
+  bestAngleAllowed: boolean;
+  missingFields: string[];
+  degradedFields: string[];
+  fallbackReasons: string[];
+  repairActions: string[];
+  starterPolicy: { away: string; home: string } | null;
+  statsPolicy: { pitcher: string; bullpen: string; offense: string; parkWeather: string } | null;
+} | null {
+  const raw = sportSpecific?.mlb_data_completeness;
+  if (!raw || typeof raw !== "object") return null;
+  const audit = raw as Record<string, unknown>;
+  const status =
+    audit.status === "ready" || audit.status === "degraded" || audit.status === "incomplete"
+      ? audit.status
+      : "incomplete";
+  const arrayOfStrings = (value: unknown): string[] =>
+    Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+  const starter = audit.starter_policy && typeof audit.starter_policy === "object"
+    ? (audit.starter_policy as Record<string, unknown>)
+    : null;
+  const stats = audit.stats_policy && typeof audit.stats_policy === "object"
+    ? (audit.stats_policy as Record<string, unknown>)
+    : null;
+  return {
+    status,
+    canPublishNormal: audit.can_publish_normal === true,
+    bestAngleAllowed: audit.best_angle_allowed === true,
+    missingFields: arrayOfStrings(audit.missing_fields),
+    degradedFields: arrayOfStrings(audit.degraded_fields),
+    fallbackReasons: arrayOfStrings(audit.fallback_reasons),
+    repairActions: arrayOfStrings(audit.repair_actions),
+    starterPolicy: starter
+      ? {
+          away: typeof starter.away === "string" ? starter.away : "missing",
+          home: typeof starter.home === "string" ? starter.home : "missing",
+        }
+      : null,
+    statsPolicy: stats
+      ? {
+          pitcher: typeof stats.pitcher === "string" ? stats.pitcher : "missing",
+          bullpen: typeof stats.bullpen === "string" ? stats.bullpen : "missing",
+          offense: typeof stats.offense === "string" ? stats.offense : "missing",
+          parkWeather: typeof stats.park_weather === "string" ? stats.park_weather : "missing",
+        }
+      : null,
+  };
+}
+
 /**
  * 2026-06-16 — read the per-market "First Published" lines from
  * game_predictions.sport_specific.posted_lines (set-if-null upstream). The
@@ -1478,6 +1531,7 @@ function buildGameDto(
   // starter isn't posted yet. Handedness limited to "L" / "R" / null.
   const homeStarter = buildStarterDto(row.home_pitcher);
   const awayStarter = buildStarterDto(row.away_pitcher);
+  const dataCompleteness = readMlbDataCompletenessDto(pred.sport_specific);
 
   return {
     id: `${row.sport}-${row.external_id}`,
@@ -1497,6 +1551,7 @@ function buildGameDto(
     generatedAt,
     updatedAt: pred.computed_at,
     holdReason,
+    dataCompleteness,
     homeStarter,
     awayStarter,
     markets: { moneyline: ml, total, first_inning: firstInning },

@@ -605,6 +605,23 @@ export type GameStatusDto = {
   marketDataLimited: boolean;
 };
 
+export type DataCompletenessDto = {
+  status: "ready" | "degraded" | "incomplete";
+  canPublishNormal: boolean;
+  bestAngleAllowed: boolean;
+  missingFields: string[];
+  degradedFields: string[];
+  fallbackReasons: string[];
+  repairActions: string[];
+  starterPolicy: { away: string; home: string } | null;
+  statsPolicy: {
+    pitcher: string;
+    bullpen: string;
+    offense: string;
+    parkWeather: string;
+  } | null;
+};
+
 export type DailyEdgeGameDto = {
   /** Stable ID for React keys: `${sport}-${external_id}`. */
   id: string;
@@ -664,6 +681,12 @@ export type DailyEdgeGameDto = {
    *   • Other values map to a generic "Held" fallback in the UI
    */
   holdReason: string | null;
+  /**
+   * MLB full-game data-completeness status. Null on legacy rows / non-MLB
+   * adapters that have not yet adopted the gate. The UI should never infer
+   * data health from blank pitcher/stat text when this is present.
+   */
+  dataCompleteness?: DataCompletenessDto | null;
   /**
    * Phase 4.2.C.1.R-10 — starter info per side. Joined from
    * `players` via `games.{home,away}_pitcher_id` at API time. Null when
