@@ -3,6 +3,9 @@ export const WNBA_TOTAL_MARKET_ANCHOR_50 = 0.5;
 export const WNBA_SPREAD_MARKET_ANCHOR_25 = 0.25;
 export const WNBA_SPREAD_MARKET_ANCHOR_50 = 0.5;
 export const WNBA_DIAGNOSTIC_HOME_MARGIN_CORRECTION = 12;
+export const WNBA_EMERGENCY_SPREAD_HOME_BIAS_POINTS = 11.944;
+export const WNBA_EMERGENCY_TOTAL_FORMULA_VERSION = "wnba_total_market_anchor_25_v1";
+export const WNBA_EMERGENCY_SPREAD_FORMULA_VERSION = "wnba_spread_market25_homebias25_2026_06_27";
 
 export type WnbaCoreModelCalibrationInput = {
   rawProjectedAwayScore: number | null;
@@ -29,6 +32,10 @@ export type WnbaCoreModelCalibrationAudit = {
     spread_50: "market_implied_home_margin + 0.50 * (raw_projected_home_margin - market_implied_home_margin)";
     home_bias_diagnostic: "raw_projected_home_margin + 12";
   };
+  formula_versions: {
+    total_recommendation: typeof WNBA_EMERGENCY_TOTAL_FORMULA_VERSION;
+    spread_recommendation: typeof WNBA_EMERGENCY_SPREAD_FORMULA_VERSION;
+  };
   raw_projected_total: number | null;
   raw_projected_away_score: number | null;
   raw_projected_home_score: number | null;
@@ -44,6 +51,10 @@ export type WnbaCoreModelCalibrationAudit = {
   market_anchored_home_margin_50: number | null;
   home_bias_corrected_margin: number | null;
   learned_calibrated_home_margin: number | null;
+  emergency_calibrated_projected_total: number | null;
+  emergency_calibrated_home_margin: number | null;
+  recommendation_projected_total_used: number | null;
+  recommendation_home_margin_used: number | null;
   projection_calibration_enabled: boolean;
   total_projection_calibration_enabled: boolean;
   spread_margin_calibration_enabled: boolean;
@@ -75,6 +86,21 @@ function round1(value: number): number {
 
 function roundNullable(value: number | null): number | null {
   return finite(value) ? round1(value) : null;
+}
+
+export function readWnbaCoreModelCalibrationFlagsFromEnv() {
+  return {
+    coreModelEnabled: process.env.WNBA_CORE_MODEL_CALIBRATION_ENABLED === "true",
+    totalProjectionCalibrationEnabled:
+      process.env.WNBA_TOTAL_PROJECTION_CALIBRATION_ENABLED === "true",
+    spreadMarginCalibrationEnabled:
+      process.env.WNBA_SPREAD_MARGIN_CALIBRATION_ENABLED === "true",
+    totalRecommendationUsesCalibratedProjection:
+      process.env.WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED === "true",
+    spreadRecommendationUsesCalibratedMargin:
+      process.env.WNBA_SPREAD_RECOMMENDATION_USES_CALIBRATED_MARGIN_ENABLED === "true",
+    gradeCalibrationEnabled: process.env.WNBA_GRADE_CALIBRATION_ENABLED === "true",
+  };
 }
 
 export function marketImpliedHomeMarginFromSpread(
@@ -130,6 +156,12 @@ export function buildWnbaCoreModelCalibrationAudit(
   const homeBiasCorrected = finite(rawProjectedHomeMargin)
     ? rawProjectedHomeMargin + WNBA_DIAGNOSTIC_HOME_MARGIN_CORRECTION
     : null;
+  const emergencyTotal = total25;
+  const emergencySpread = finite(marketImpliedHomeMargin) && finite(spreadEdge)
+    ? marketImpliedHomeMargin +
+      WNBA_SPREAD_MARKET_ANCHOR_25 * spreadEdge +
+      0.25 * WNBA_EMERGENCY_SPREAD_HOME_BIAS_POINTS
+    : null;
 
   return {
     schema_version: "wnba_core_calibration_v1",
@@ -140,6 +172,10 @@ export function buildWnbaCoreModelCalibrationAudit(
       spread_25: "market_implied_home_margin + 0.25 * (raw_projected_home_margin - market_implied_home_margin)",
       spread_50: "market_implied_home_margin + 0.50 * (raw_projected_home_margin - market_implied_home_margin)",
       home_bias_diagnostic: "raw_projected_home_margin + 12",
+    },
+    formula_versions: {
+      total_recommendation: WNBA_EMERGENCY_TOTAL_FORMULA_VERSION,
+      spread_recommendation: WNBA_EMERGENCY_SPREAD_FORMULA_VERSION,
     },
     raw_projected_total: roundNullable(rawProjectedTotal),
     raw_projected_away_score: roundNullable(input.rawProjectedAwayScore),
@@ -156,6 +192,10 @@ export function buildWnbaCoreModelCalibrationAudit(
     market_anchored_home_margin_50: spreadEnabled ? roundNullable(spread50) : null,
     home_bias_corrected_margin: spreadEnabled ? roundNullable(homeBiasCorrected) : null,
     learned_calibrated_home_margin: null,
+    emergency_calibrated_projected_total: totalEnabled ? roundNullable(emergencyTotal) : null,
+    emergency_calibrated_home_margin: spreadEnabled ? roundNullable(emergencySpread) : null,
+    recommendation_projected_total_used: totalRecommendationUse ? roundNullable(emergencyTotal) : null,
+    recommendation_home_margin_used: spreadRecommendationUse ? roundNullable(emergencySpread) : null,
     projection_calibration_enabled: totalEnabled || spreadEnabled,
     total_projection_calibration_enabled: totalEnabled,
     spread_margin_calibration_enabled: spreadEnabled,

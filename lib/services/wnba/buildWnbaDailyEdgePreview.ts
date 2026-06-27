@@ -18,6 +18,10 @@
 import { isRealWnbaTeam, wnbaAbbr } from "./wnbaTeams";
 import { selectMainTotalLine } from "@/lib/services/selectMainTotalLine";
 import { applyPublicMarketContext, type PublicMarketContext, type PublicMarketSignal } from "@/lib/services/publicMarketContext";
+import {
+  buildWnbaCoreModelCalibrationAudit,
+  readWnbaCoreModelCalibrationFlagsFromEnv,
+} from "@/lib/automodel/wnbaCoreModelCalibration";
 
 const BDL = "https://api.balldontlie.io/wnba/v1";
 const SHARP = "https://api.sharpapi.io/api/v1";
@@ -35,6 +39,7 @@ const amProb = (o: number) => (o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs
 const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] : null);
 const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
 const norm = (s: string) => String(s).replace(/[^a-z]/gi, "").toLowerCase();
+const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 function erf(x: number) { const t = 1 / (1 + 0.3275911 * Math.abs(x)); const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return x >= 0 ? y : -y; }
 const Phi = (z: number) => 0.5 * (1 + erf(z / Math.SQRT2));
 // Inverse normal CDF (Acklam) — maps a win probability back to a z-score so the
@@ -221,6 +226,35 @@ export function computeWnbaPrediction(
   // COHERENCE: projected margin (→ score + spread basis) derived from the SAME
   // blended win prob the ML uses, so the projected winner / ML / spread agree.
   const projMargin = sigM * probit(clp(finalP));
+  const calibrationAudit = buildWnbaCoreModelCalibrationAudit({
+    rawProjectedAwayScore: null,
+    rawProjectedHomeScore: null,
+    rawProjectedTotal: projTotal,
+    rawProjectedHomeMargin: projMargin,
+    marketTotal: mktTotal,
+    marketSpreadForHome: mktSpread,
+    ...readWnbaCoreModelCalibrationFlagsFromEnv(),
+  });
+  const totalForRecommendation =
+    calibrationAudit.recommendation_uses_calibrated_total &&
+    finite(calibrationAudit.recommendation_projected_total_used)
+      ? calibrationAudit.recommendation_projected_total_used
+      : projTotal;
+  const marginForSpreadRecommendation =
+    calibrationAudit.recommendation_uses_calibrated_spread &&
+    finite(calibrationAudit.recommendation_home_margin_used)
+      ? calibrationAudit.recommendation_home_margin_used
+      : projMargin;
+  const marginForDisplayedScore =
+    calibrationAudit.recommendation_uses_calibrated_spread &&
+    finite(calibrationAudit.recommendation_home_margin_used)
+      ? calibrationAudit.recommendation_home_margin_used
+      : projMargin;
+  const totalForDisplayedScore =
+    calibrationAudit.recommendation_uses_calibrated_total &&
+    finite(calibrationAudit.recommendation_projected_total_used)
+      ? calibrationAudit.recommendation_projected_total_used
+      : projTotal;
 
   // sides
   const mlSide = finalP >= 0.5 ? hN : aN, mlConf = Math.round(Math.max(finalP, 1 - finalP) * 100);
@@ -235,13 +269,15 @@ export function computeWnbaPrediction(
   });
   const mlGrade = mlPublicContext.gradeAfter;
 
-  const pCoverHome = mktSpread != null ? 1 - Phi((-mktSpread - projMargin) / sigM) : null;
-  const spEdge = mktSpread != null ? projMargin - -mktSpread : null;
+  const pCoverHome = mktSpread != null ? 1 - Phi((-mktSpread - marginForSpreadRecommendation) / sigM) : null;
+  const spEdge = mktSpread != null ? marginForSpreadRecommendation - -mktSpread : null;
   // Use canonical abbreviations (POR/GS/TOR), never BDL mascot names ("Fire").
   const spHomeAbbr = wnbaAbbr(g.h) ?? hN, spAwayAbbr = wnbaAbbr(g.a) ?? aN;
   const spSide = mktSpread != null ? (pCoverHome! >= 0.5 ? `${spHomeAbbr} ${mktSpread > 0 ? "+" : ""}${mktSpread}` : `${spAwayAbbr} ${mktSpread > 0 ? "" : "+"}${-mktSpread}`) : null;
   const spConf = pCoverHome != null ? Math.round(Math.max(pCoverHome, 1 - pCoverHome) * 100) : null;
-  const spGradeBase = mktSpread != null ? gradeMarket(Math.abs(spEdge!), spVals.length, spDisp, sharpSpread != null && Math.sign(sharpSpread - -projMargin) === Math.sign(spEdge!)) : null;
+  const rawSpEdge = mktSpread != null ? projMargin - -mktSpread : null;
+  const spGradeEdge = calibrationAudit.grade_calibration_enabled ? spEdge : rawSpEdge;
+  const spGradeBase = mktSpread != null ? gradeMarket(Math.abs(spGradeEdge!), spVals.length, spDisp, sharpSpread != null && Math.sign(sharpSpread - -marginForSpreadRecommendation) === Math.sign(spEdge!)) : null;
   const spSideKey = pCoverHome == null ? null : pCoverHome >= 0.5 ? "home" : "away";
   const spPublicContext = spGradeBase !== null && spSideKey !== null ? applyPublicMarketContext({
     grade: spGradeBase,
@@ -250,11 +286,13 @@ export function computeWnbaPrediction(
   }) : null;
   const spGrade = spPublicContext?.gradeAfter ?? spGradeBase;
 
-  const pOver = mktTotal != null ? 1 - Phi((mktTotal - projTotal) / sigT) : null;
-  const toEdge = mktTotal != null ? projTotal - mktTotal : null;
+  const pOver = mktTotal != null ? 1 - Phi((mktTotal - totalForRecommendation) / sigT) : null;
+  const toEdge = mktTotal != null ? totalForRecommendation - mktTotal : null;
   const toSide = mktTotal != null ? (pOver! >= 0.5 ? `Over ${mktTotal}` : `Under ${mktTotal}`) : null;
   const toConf = pOver != null ? Math.round(Math.max(pOver, 1 - pOver) * 100) : null;
-  const toGradeBase = mktTotal != null ? gradeMarket(Math.abs(toEdge!), toVals.length, toDisp, sharpTotal != null && Math.sign(sharpTotal - projTotal) === -Math.sign(toEdge!)) : null;
+  const rawToEdge = mktTotal != null ? projTotal - mktTotal : null;
+  const totalGradeEdge = calibrationAudit.grade_calibration_enabled ? toEdge : rawToEdge;
+  const toGradeBase = mktTotal != null ? gradeMarket(Math.abs(totalGradeEdge!), toVals.length, toDisp, sharpTotal != null && Math.sign(sharpTotal - totalForRecommendation) === -Math.sign(toEdge!)) : null;
   const totalSideKey = pOver == null ? null : pOver >= 0.5 ? "over" : "under";
   const totalPublicContext = toGradeBase !== null && totalSideKey !== null ? applyPublicMarketContext({
     grade: toGradeBase,
@@ -263,7 +301,7 @@ export function computeWnbaPrediction(
   }) : null;
   const toGrade = totalPublicContext?.gradeAfter ?? toGradeBase;
 
-  const projHome = r1((projTotal + projMargin) / 2), projAway = r1((projTotal - projMargin) / 2);
+  const projHome = r1((totalForDisplayedScore + marginForDisplayedScore) / 2), projAway = r1((totalForDisplayedScore - marginForDisplayedScore) / 2);
   const outlierTotal = mktTotal != null && toVals.some((v) => Math.abs(v - mktTotal) >= 2);
   const outlierSpread = mktSpread != null && spVals.some((v) => Math.abs(v - mktSpread) >= 2);
   const flags: string[] = [];
@@ -284,6 +322,7 @@ export function computeWnbaPrediction(
     spread: { side: spSide, line: mktSpread, confidence: spConf, grade: spGrade },
     total: { side: toSide, line: mktTotal, confidence: toConf, grade: toGrade },
     model: { home_win_prob: r1(modelP * 100) / 100, margin: r1(projMargin), total: r1(projTotal) },
+    wnba_core_model_calibration: calibrationAudit,
     market: { home_win_prob: mktP != null ? r1(mktP * 100) / 100 : null, spread: mktSpread, total: mktTotal, book_count: mlBooks, dispersion: { spread: spDisp, total: toDisp } },
     consensus_source: (sharpMktP != null ? "sharp" : "all_books") as "sharp" | "all_books",
     trusted: { home_win_prob: sharpMktP != null ? r1(sharpMktP * 100) / 100 : null, spread: sharpSpread, total: sharpTotal, trusted_book_count: trustedBooks },

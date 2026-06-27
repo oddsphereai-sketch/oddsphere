@@ -196,6 +196,7 @@ export async function runWnbaModel(opts: {
         model_version: "wnba_v1", model: p.model, market: p.market, trusted: p.trusted, sharp: p.sharp,
         consensus_source: p.consensus_source, dynamic_market_weight: p.dynamic_market_weight,
         cold_start: p.cold_start, data_quality: p.data_quality,
+        wnba_core_model_calibration: p.wnba_core_model_calibration,
         public_market_context: p.public_market_context,
         moneyline: { side: p.moneyline.side, confidence: p.moneyline.confidence, grade: p.moneyline.grade, price: p.moneyline.price },
         total: { side: p.total.side, line: p.total.line, confidence: p.total.confidence, grade: p.total.grade },
