@@ -18,6 +18,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDaysToSlate, currentSlateDate } from "../../dates/slateDate";
 import { isPublicallyTracked } from "../../config/officialTrackingStart";
+import { buildWnbaCoreModelCalibrationAudit } from "../../automodel/wnbaCoreModelCalibration";
 
 const PLAY_GRADE: Record<string, string> = { "Best Angle": "best_angle", "Lean": "lean", "Watchlist": "watchlist", "Caution": "caution" };
 const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]! : null);
@@ -195,6 +196,37 @@ export async function buildWnbaPredictionRecords(opts: {
     }
     result.eligibleGames++;
 
+    const wnbaCalibrationAudit = buildWnbaCoreModelCalibrationAudit({
+      rawProjectedAwayScore: Number.isFinite(Number((ss.projected_score as { away?: unknown } | undefined)?.away))
+        ? Number((ss.projected_score as { away?: unknown }).away)
+        : null,
+      rawProjectedHomeScore: Number.isFinite(Number((ss.projected_score as { home?: unknown } | undefined)?.home))
+        ? Number((ss.projected_score as { home?: unknown }).home)
+        : null,
+      rawProjectedTotal: typeof model.total === "number" ? model.total : null,
+      rawProjectedHomeMargin: typeof model.margin === "number" ? model.margin : null,
+      marketTotal: typeof (ss.market as { total?: unknown } | undefined)?.total === "number"
+        ? (ss.market as { total: number }).total
+        : typeof tot.line === "number"
+          ? tot.line
+          : null,
+      marketSpreadForHome: typeof (ss.market as { spread?: unknown } | undefined)?.spread === "number"
+        ? (ss.market as { spread: number }).spread
+        : typeof spr.line === "number"
+          ? spr.line
+          : null,
+      coreModelEnabled: process.env.WNBA_CORE_MODEL_CALIBRATION_ENABLED === "true",
+      totalProjectionCalibrationEnabled:
+        process.env.WNBA_TOTAL_PROJECTION_CALIBRATION_ENABLED === "true",
+      spreadMarginCalibrationEnabled:
+        process.env.WNBA_SPREAD_MARGIN_CALIBRATION_ENABLED === "true",
+      totalRecommendationUsesCalibratedProjection:
+        process.env.WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED === "true",
+      spreadRecommendationUsesCalibratedMargin:
+        process.env.WNBA_SPREAD_RECOMMENDATION_USES_CALIBRATED_MARGIN_ENABLED === "true",
+      gradeCalibrationEnabled: process.env.WNBA_GRADE_CALIBRATION_ENABLED === "true",
+    });
+
     const baseRec = (market_type: string, side: string, pick: string, line_value: number | null, odds: number | null, confidence: number | null, gradeStr: string | null, modelProb: number | null, mktProb: number | null) => ({
       game_prediction_id: gp.id, game_id: g.id, external_id: g.external_id, sport: "wnba",
       slate_date: slate, game_date: g.game_date, matchup, market: market_type, pick, side,
@@ -212,6 +244,7 @@ export async function buildWnbaPredictionRecords(opts: {
         projected_score: ss.projected_score, model, market_consensus: market, trusted_consensus: trusted,
         sharp_consensus: ss.sharp, consensus_source: ss.consensus_source, dynamic_market_weight: ss.dynamic_market_weight,
         data_quality: ss.data_quality, cold_start: ss.cold_start,
+        wnba_core_model_calibration: wnbaCalibrationAudit,
       },
     });
 
