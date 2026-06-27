@@ -2627,6 +2627,15 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // Server-generated copy (banned-terms-linted at output time).
   const modelDriver = pickModelDriver(input.autoFactors, input.market, input.pick, input.sportSpecific ?? null);
   const riskDriver = pickRiskDriver(input.autoFactors, input.market, input.pick, input.sportSpecific ?? null);
+  const copyModelProb =
+    (input.market === "moneyline" || input.market === "total") && !correctedMarket
+      ? (readV22AuditForPick(
+          input.sportSpecific ?? null,
+          input.market,
+          input.market === "moneyline" ? input.modelSide === "home" : null,
+          input.market === "total" ? input.modelSide === "over" : null,
+        )?.modelProb ?? null)
+      : null;
   // Phase 4.2.C.2 — held markets pass 0 confidence to the copy generator.
   // generatePerMarketCopy takes a numeric confidence; held markets always
   // route to verdict="no_play" (short-circuit above) so the no_play
@@ -2637,7 +2646,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     market: input.market,
     verdict: verdict.key,
     pick: input.pick ?? "—",
-    confidence: input.confidence ?? 0,
+    confidence: copyModelProb ?? input.confidence ?? 0,
     sharpDirection: suppressLegacyMarketCopy ? "none" : sharpDirection,
     modelDriver,
     riskDriver,
@@ -2850,7 +2859,11 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     // Phase 6B.1.6m — recommendation confidence (0..100). Edge-aware,
     // tier-capped. Separate from raw model probability.
     recommendationConfidence: computeRecommendationConfidence({
-      edgePctPp: input.market === "total" ? null : modelMarketGapPct,
+      // ML and totals both have a picked-side probability-vs-market edge when
+      // v2_2_audit is available. Use it first so Rec matches the same edge the
+      // grade/evidence stack displays; fall back to run-delta units only when a
+      // total lacks probability-market context.
+      edgePctPp: modelMarketGapPct,
       edgeUnits: (() => {
         if (input.market !== "total") return null;
         const mt = input.totalsExtras?.modelTotal ?? null;

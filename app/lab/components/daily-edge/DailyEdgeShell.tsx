@@ -459,6 +459,14 @@ function buildEdgeRow(market: MarketKey, m: MarketEdgeDto, sport: Sport = "mlb")
     const marketPct = Math.round(m.marketFairProb * 100);
     const gap = modelPct - marketPct;
     if (market === "total" && m.modelTotal !== null && m.marketTotal !== null) {
+      const supportsPick = totalProjectionSupportsPick(m);
+      if (supportsPick === false) {
+        return {
+          label: "Model read",
+          value: `${modelPct}% vs market ${marketPct}%`,
+          tone: gap >= 1 ? "sky" : gap <= -1 ? "amber" : "gray",
+        };
+      }
       // For totals, the absolute unit-difference is more intuitive than a
       // probability gap. Unit name is sport-aware: MLB → runs, NHL → goals,
       // NBA → points.
@@ -686,7 +694,7 @@ function MarketPill({
   market,
   pick,
   line = null,
-  confidence,
+  displayPct,
   verdict,
   selected,
   onClick,
@@ -697,8 +705,8 @@ function MarketPill({
   pick: string | null;
   /** Total line, so soccer "Over"/"Under" render with the number. */
   line?: number | null;
-  /** Phase 4.2.C.2 — nullable; held markets render "—". */
-  confidence: number | null;
+  /** Picked-side model probability; nullable held markets render "—". */
+  displayPct: number | null;
   verdict: VerdictKey;
   selected: boolean;
   onClick: () => void;
@@ -723,7 +731,7 @@ function MarketPill({
       </span>
       <span className={`text-[12px] font-bold tabular-nums shrink-0 ${pick === null ? "text-gray-500" : ""}`}>{pick === null ? pickFallbackFor(market, shellSport) : formatPickWithLine(market, pick, line, shellSport, awayTeam, homeTeam)}</span>
       <span className={`text-[10.5px] tabular-nums shrink-0 ${selected ? "text-gray-300" : "text-gray-500"}`}>
-        {confidence === null ? "—" : `${Math.round(confidence * 100)}%`}
+        {displayPct === null ? "—" : `${Math.round(displayPct * 100)}%`}
       </span>
       <span
         aria-hidden="true"
@@ -783,6 +791,18 @@ export function formatPickWithLine(
   return pick;
 }
 
+function displayPctForMarket(m: MarketEdgeDto): number | null {
+  return m.modelProb ?? m.confidence;
+}
+
+function totalProjectionSupportsPick(m: MarketEdgeDto): boolean | null {
+  if (m.modelTotal === null || m.marketTotal === null || m.pick === null) return null;
+  const diff = m.modelTotal - m.marketTotal;
+  if (Math.abs(diff) < 0.05) return null;
+  const isOver = m.pick.toUpperCase().startsWith("OVER");
+  return (isOver && diff > 0) || (!isOver && diff < 0);
+}
+
 /**
  * Larger segmented market selector for the reader header. One segment
  * per market (Moneyline / Total / 1st Inning), each showing the long
@@ -794,7 +814,7 @@ function ReaderMarketSegment({
   market,
   pick,
   line,
-  confidence,
+  displayPct,
   verdict,
   selected,
   onClick,
@@ -804,8 +824,8 @@ function ReaderMarketSegment({
   market: MarketKey;
   pick: string | null;
   line: number | null;
-  /** Phase 4.2.C.2 — nullable; held markets render "—" for confidence. */
-  confidence: number | null;
+  /** Picked-side model probability; nullable held markets render "—". */
+  displayPct: number | null;
   verdict: VerdictKey;
   selected: boolean;
   onClick: () => void;
@@ -855,7 +875,7 @@ function ReaderMarketSegment({
             selected ? "text-violet-100/85" : "text-gray-500"
           }`}
         >
-          {confidence === null ? "—" : `${Math.round(confidence * 100)}%`}
+          {displayPct === null ? "—" : `${Math.round(displayPct * 100)}%`}
         </span>
       </div>
     </button>
@@ -1458,11 +1478,11 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
               {market === "moneyline" ? "Win Prob" : market === "total" ? "Model Prob" : "Model Prob"}
             </span>
             <span className="text-[12.5px] tabular-nums font-bold text-gray-300">
-              {marketData.confidence === null
+              {marketData.modelProb === null
                 ? "—"
-                : `${Math.round(marketData.confidence * 100)}%`}
+                : `${Math.round(marketData.modelProb * 100)}%`}
             </span>
-            {marketData.modelMarketGapPct !== null && marketData.confidence !== null && (
+            {marketData.modelMarketGapPct !== null && marketData.modelProb !== null && (
               <>
                 <span className="text-gray-700">·</span>
                 <span className="text-[9.5px] uppercase tracking-[0.14em] font-bold text-gray-500">Edge</span>
@@ -1477,7 +1497,7 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
                 >
                   {Math.abs(marketData.modelMarketGapPct) < 0.5
                     ? "No edge"
-                    : `${marketData.modelMarketGapPct > 0 ? "+" : ""}${marketData.modelMarketGapPct.toFixed(1)}%`}
+                    : `${marketData.modelMarketGapPct > 0 ? "+" : ""}${marketData.modelMarketGapPct.toFixed(1)} pp`}
                 </span>
               </>
             )}
@@ -1528,7 +1548,7 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
             </span>
           </div>
         </div>
-        <ConfidenceRing value={(marketData.confidence ?? 0) * 100} size={48} stroke={4} />
+        <ConfidenceRing value={(displayPctForMarket(marketData) ?? 0) * 100} size={48} stroke={4} />
       </div>
 
       {/* Guided read */}
@@ -1662,16 +1682,31 @@ function ModelEdgeBlock({ market, marketData }: { market: MarketKey; marketData:
 
   if (market === "total" && marketData.modelTotal != null && marketData.marketTotal != null) {
     const diff = marketData.modelTotal - marketData.marketTotal;
-    const isOver = (marketData.pick ?? "").toUpperCase().startsWith("OVER");
-    const supports = (isOver && diff > 0) || (!isOver && diff < 0);
-    tone = Math.abs(diff) < 0.2 ? "gray" : supports ? "emerald" : "amber";
-    topLabel = "Model";
-    topVal = marketData.modelTotal.toFixed(1);
-    topNote = "projected total";
-    midVal = marketData.marketTotal.toFixed(1);
-    midNote = "market line";
-    edge = `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} ${totalUnit}`;
-    edgeNote = "projection vs line";
+    const supportsPick = totalProjectionSupportsPick(marketData);
+    if (supportsPick === false && marketData.modelProb !== null && marketData.marketImpliedPct !== null) {
+      const modelPct = marketData.modelProb * 100;
+      const marketPct = marketData.marketImpliedPct;
+      const gap = marketData.modelMarketGapPct ?? modelPct - marketPct;
+      tone = gap >= 1 ? "emerald" : gap <= -1 ? "amber" : "gray";
+      topLabel = "Model";
+      topVal = `${Math.round(modelPct)}%`;
+      topNote = "picked-side probability";
+      midVal = `${Math.round(marketPct)}%`;
+      midNote = "market";
+      edge = `${gap >= 0 ? "+" : ""}${gap.toFixed(1)} pp`;
+      edgeNote = "probability vs market";
+    } else {
+      const isOver = (marketData.pick ?? "").toUpperCase().startsWith("OVER");
+      const supports = (isOver && diff > 0) || (!isOver && diff < 0);
+      tone = Math.abs(diff) < 0.2 ? "gray" : supports ? "emerald" : "amber";
+      topLabel = "Model";
+      topVal = marketData.modelTotal.toFixed(1);
+      topNote = "projected total";
+      midVal = marketData.marketTotal.toFixed(1);
+      midNote = "market line";
+      edge = `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} ${totalUnit}`;
+      edgeNote = "projection vs line";
+    }
   } else {
     const modelPct = marketData.modelTrustPct ?? (marketData.modelProb != null ? marketData.modelProb * 100 : null);
     const marketPct = marketData.marketImpliedPct;
@@ -2953,9 +2988,9 @@ function SlateCard({
             {marketShortLabelFor(headlineMarket, shellSport)}
           </span>
           <span className="text-[13px] tabular-nums font-bold text-gray-300">
-            {headlineMarketData.confidence === null
+            {displayPctForMarket(headlineMarketData) === null
               ? "—"
-              : `${Math.round(headlineMarketData.confidence * 100)}%`}
+              : `${Math.round(displayPctForMarket(headlineMarketData)! * 100)}%`}
           </span>
           {headlineMarketData.priceAmerican !== null ? (
             <span className="text-[12px] tabular-nums font-medium text-gray-500 ml-1">
@@ -3255,7 +3290,7 @@ function SelectedEdgeReader({
               market={m}
               pick={game.markets[m].pick}
               line={game.markets[m].line}
-              confidence={game.markets[m].confidence}
+              displayPct={displayPctForMarket(game.markets[m])}
               verdict={asVerdictKey(game.markets[m].verdict.key)}
               selected={market === m}
               onClick={() => onMarketChange(m)}
@@ -3293,9 +3328,9 @@ function SelectedEdgeReader({
                     </span>
                     <span aria-hidden="true" className="text-gray-700 text-[10px]">·</span>
                     <span className="text-[11px] tabular-nums font-bold text-gray-200">
-                      {marketData.confidence === null
+                      {displayPctForMarket(marketData) === null
                         ? "—"
-                        : `${Math.round(marketData.confidence * 100)}%`}
+                        : `${Math.round(displayPctForMarket(marketData)! * 100)}%`}
                     </span>
                     {marketData.priceAmerican !== null ? (
                       <>
@@ -3495,7 +3530,7 @@ function MobileDetailSheet({
               market={m}
               pick={game.markets[m].pick}
               line={game.markets[m].line}
-              confidence={game.markets[m].confidence}
+              displayPct={displayPctForMarket(game.markets[m])}
               verdict={asVerdictKey(game.markets[m].verdict.key)}
               selected={selectedMarket === m}
               onClick={() => onMarketChange(m)}

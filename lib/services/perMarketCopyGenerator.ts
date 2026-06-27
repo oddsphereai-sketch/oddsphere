@@ -97,6 +97,7 @@ const VERDICT_FRAMING: Record<Verdict, { open: string; tone: string }> = {
 function buildGuidedGuide(input: CopyInput): string {
   const noun = MARKET_NOUN[input.market];
   const conf = Math.round(input.confidence * 100);
+  const pctLabel = input.market === "first_inning" ? "confidence" : "model probability";
   const framing = VERDICT_FRAMING[input.verdict];
 
   // First-inning Toss-Up display fix (Change A). When the route passes
@@ -105,12 +106,9 @@ function buildGuidedGuide(input: CopyInput): string {
   // awkwardly because the pick is exactly the "no clean side" state.
   // Use Toss-Up-specific copy that names the zone honestly.
   //
-  // P7-B2 (2026-06-11) — every `${conf}%` in this generator is the
-  // recommendation confidence (0–1), NOT the model win probability.
-  // Pre-B2 phrasing like "at ${conf}%" / "a clean ${conf}% case" read
-  // as a probability claim and could disagree with the actual
-  // model_probability on the card. We now anchor every percent to
-  // "confidence" so the number is honestly labeled wherever it appears.
+  // For ML/total, the route now passes picked-side model probability so the
+  // prose matches the evidence rows. FI still uses confidence because its
+  // toss-up/NRFI/YRFI presentation is confidence-zone based.
   if (input.market === "first_inning" && input.pick === "Toss-Up") {
     if (input.verdict === "watchlist") {
       return `Worth tracking: the first-inning model lands in the toss-up zone at ${conf}% confidence — too close to call cleanly.`;
@@ -128,28 +126,28 @@ function buildGuidedGuide(input: CopyInput): string {
   }
 
   if (input.verdict === "no_play") {
-    return `On the ${noun}, the model doesn't see enough edge tonight (${conf}% confidence). Skip unless something changes pre-game.`;
+    return `On the ${noun}, this is not actionable yet (${conf}% ${pctLabel}). Skip unless something changes pre-game.`;
   }
   if (input.verdict === "caution") {
     if (input.sharpDirection === "push_against") {
-      return `The model likes ${input.pick} on the ${noun} at ${conf}% confidence, but market action is pushing the other way. Treat as caution, not a play.`;
+      return `The model has ${input.pick} on the ${noun} at ${conf}% ${pctLabel}, but market action is pushing the other way. Treat as caution, not a play.`;
     }
-    return `The model likes ${input.pick} on the ${noun} at ${conf}% confidence, but our signals conflict. Treat as caution, not a play.`;
+    return `The model has ${input.pick} on the ${noun} at ${conf}% ${pctLabel}, but our signals conflict. Treat as caution, not a play.`;
   }
   if (input.verdict === "watchlist") {
-    return `${framing.open}: the model leans ${input.pick} on the ${noun} at ${conf}% confidence, ${framing.tone}.`;
+    return `${framing.open}: the model leans ${input.pick} on the ${noun} at ${conf}% ${pctLabel}, ${framing.tone}.`;
   }
   if (input.verdict === "lean") {
     if (input.sharpDirection === "support" && input.market !== "first_inning") {
-      return `${framing.open} toward ${input.pick} on the ${noun} (${conf}% confidence) — and market support is consistent with the pick.`;
+      return `${framing.open} toward ${input.pick} on the ${noun} (${conf}% ${pctLabel}) — and market support is consistent with the pick.`;
     }
-    return `${framing.open} toward ${input.pick} on the ${noun} at ${conf}% confidence. ${capitalize(framing.tone)}.`;
+    return `${framing.open} toward ${input.pick} on the ${noun} at ${conf}% ${pctLabel}. ${capitalize(framing.tone)}.`;
   }
   // best_angle
   if (input.sharpDirection === "support" && input.market !== "first_inning") {
-    return `${framing.open}: the model likes ${input.pick} on the ${noun} at ${conf}% confidence, and market support is on the same side.`;
+    return `${framing.open}: the model sees value on ${input.pick} on the ${noun} at ${conf}% ${pctLabel}, and market support is on the same side.`;
   }
-  return `${framing.open}: the model leans ${input.pick} on the ${noun} at ${conf}% confidence — a clean read.`;
+  return `${framing.open}: the model sees value on ${input.pick} on the ${noun} at ${conf}% ${pctLabel} — a clean read.`;
 }
 
 /**

@@ -37,6 +37,14 @@ export type EdgeStackRow = {
   tone: EdgeStackRowTone;
 };
 
+function totalProjectionSupportsPick(marketData: MarketEdgeDto): boolean | null {
+  if (marketData.modelTotal === null || marketData.marketTotal === null || marketData.pick === null) return null;
+  const diff = marketData.modelTotal - marketData.marketTotal;
+  if (Math.abs(diff) < 0.05) return null;
+  const isOver = marketData.pick.toUpperCase().startsWith("OVER");
+  return (isOver && diff > 0) || (!isOver && diff < 0);
+}
+
 export type EdgeStackMarket = "moneyline" | "total" | "first_inning";
 
 /**
@@ -180,17 +188,37 @@ export function buildEdgeStackRows(
     marketData.marketTotal !== null
   ) {
     const diff = marketData.modelTotal - marketData.marketTotal;
-    const isOver = (marketData.pick ?? "").toUpperCase().startsWith("OVER");
-    const supports = (isOver && diff > 0) || (!isOver && diff < 0);
-    const mag = Math.abs(diff);
-    const tone: EdgeStackRowTone =
-      mag < 0.2 ? "gray" : supports ? "emerald" : "amber";
-    rows.push({
-      label: "Model Edge",
-      evidence: `Model ${marketData.modelTotal.toFixed(1)} vs market ${marketData.marketTotal.toFixed(1)}`,
-      delta: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} ${totalUnit}`,
-      tone,
-    });
+    const supportsPick = totalProjectionSupportsPick(marketData);
+    if (
+      supportsPick === false &&
+      marketData.modelProb !== null &&
+      marketData.marketImpliedPct !== null
+    ) {
+      const modelPct = marketData.modelProb * 100;
+      const marketPct = marketData.marketImpliedPct;
+      const gap =
+        marketData.modelMarketGapPct !== null
+          ? marketData.modelMarketGapPct
+          : modelPct - marketPct;
+      rows.push({
+        label: "Model Edge",
+        evidence: `Projection ${Math.round(modelPct)}% · Market ${Math.round(marketPct)}%`,
+        delta: `${gap >= 0 ? "+" : ""}${gap.toFixed(1)} pp`,
+        tone: gap >= 1 ? "emerald" : gap <= -1 ? "amber" : "gray",
+      });
+    } else {
+      const isOver = (marketData.pick ?? "").toUpperCase().startsWith("OVER");
+      const supports = (isOver && diff > 0) || (!isOver && diff < 0);
+      const mag = Math.abs(diff);
+      const tone: EdgeStackRowTone =
+        mag < 0.2 ? "gray" : supports ? "emerald" : "amber";
+      rows.push({
+        label: "Model Edge",
+        evidence: `Model ${marketData.modelTotal.toFixed(1)} vs market ${marketData.marketTotal.toFixed(1)}`,
+        delta: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} ${totalUnit}`,
+        tone,
+      });
+    }
   } else if (marketData.marketImpliedPct !== null) {
     // R-16F-B — primary path for ML/FI. Splits_consensus AND real-book
     // pairs both land here because the route's computeMarketImplied
