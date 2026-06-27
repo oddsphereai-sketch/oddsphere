@@ -291,8 +291,22 @@ export function computeWnbaPrediction(
   const toSide = mktTotal != null ? (pOver! >= 0.5 ? `Over ${mktTotal}` : `Under ${mktTotal}`) : null;
   const toConf = pOver != null ? Math.round(Math.max(pOver, 1 - pOver) * 100) : null;
   const rawToEdge = mktTotal != null ? projTotal - mktTotal : null;
-  const totalGradeEdge = calibrationAudit.grade_calibration_enabled ? toEdge : rawToEdge;
-  const toGradeBase = mktTotal != null ? gradeMarket(Math.abs(totalGradeEdge!), toVals.length, toDisp, sharpTotal != null && Math.sign(sharpTotal - totalForRecommendation) === -Math.sign(toEdge!)) : null;
+  const calibratedTotalGradeEdge =
+    mktTotal != null &&
+    calibrationAudit.total_projection_calibration_enabled &&
+    finite(calibrationAudit.emergency_calibrated_projected_total)
+      ? calibrationAudit.emergency_calibrated_projected_total - mktTotal
+      : toEdge;
+  const totalGradeEdge = calibrationAudit.grade_calibration_enabled ? calibratedTotalGradeEdge : rawToEdge;
+  let toGradeBase = mktTotal != null ? gradeMarket(Math.abs(totalGradeEdge!), toVals.length, toDisp, sharpTotal != null && Math.sign(sharpTotal - totalForRecommendation) === -Math.sign(toEdge!)) : null;
+  if (
+    toGradeBase === "Best Angle" &&
+    calibrationAudit.grade_calibration_enabled &&
+    calibrationAudit.total_projection_calibration_enabled &&
+    !calibrationAudit.recommendation_uses_calibrated_total
+  ) {
+    toGradeBase = "Lean";
+  }
   const totalSideKey = pOver == null ? null : pOver >= 0.5 ? "over" : "under";
   const totalPublicContext = toGradeBase !== null && totalSideKey !== null ? applyPublicMarketContext({
     grade: toGradeBase,

@@ -116,6 +116,14 @@ check("recommendation-use can activate spread only with margin flag", recommenda
 check("recommendation total used is recorded", recommendationEnabled.recommendation_projected_total_used === 169);
 check("recommendation spread used is recorded", recommendationEnabled.recommendation_home_margin_used === 0.1);
 check("recommendation mode display hint is explicit", recommendationEnabled.display_hint === "calibrated_projection_used_for_recommendation");
+check(
+  "recommendation audit records spread home-bias reason code",
+  recommendationEnabled.recommendation_reason_codes.spread.includes("home_bias_correction_applied"),
+);
+check(
+  "recommendation audit records total formula reason code",
+  recommendationEnabled.recommendation_reason_codes.total.includes("market_anchor_25_total_used_for_recommendation"),
+);
 
 const spreadWin = gradePrediction({
   record: {
@@ -230,6 +238,7 @@ check("compute flags off leaves spread on raw side", computeDisabled.spread.side
 check("compute spread recommendation flag can move spread to calibrated side", computeSpreadEnabled.spread.side === "TOR -6.5");
 check("compute total recommendation flag off leaves total side unchanged", computeSpreadEnabled.total.side === computeDisabled.total.side);
 check("compute moneyline remains unchanged by spread calibration", computeSpreadEnabled.moneyline.side === computeDisabled.moneyline.side);
+check("compute total grade calibration avoids unvalidated total Best Angle", computeSpreadEnabled.total.grade !== "Best Angle");
 check("compute records spread recommendation-used audit", computeSpreadEnabled.wnba_core_model_calibration.recommendation_uses_calibrated_spread === true);
 check("compute keeps raw model margin for audit", computeSpreadEnabled.model.margin === computeDisabled.model.margin);
 restoreEnv();

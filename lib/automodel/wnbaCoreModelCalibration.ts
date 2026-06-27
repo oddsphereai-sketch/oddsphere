@@ -55,6 +55,10 @@ export type WnbaCoreModelCalibrationAudit = {
   emergency_calibrated_home_margin: number | null;
   recommendation_projected_total_used: number | null;
   recommendation_home_margin_used: number | null;
+  recommendation_reason_codes: {
+    total: string[];
+    spread: string[];
+  };
   projection_calibration_enabled: boolean;
   total_projection_calibration_enabled: boolean;
   spread_margin_calibration_enabled: boolean;
@@ -162,6 +166,17 @@ export function buildWnbaCoreModelCalibrationAudit(
       WNBA_SPREAD_MARKET_ANCHOR_25 * spreadEdge +
       0.25 * WNBA_EMERGENCY_SPREAD_HOME_BIAS_POINTS
     : null;
+  const totalReasonCodes = [
+    ...(totalEnabled ? ["market_anchor_25_total_available"] : []),
+    ...(totalEnabled && !totalRecommendationUse ? ["total_recommendation_use_disabled"] : []),
+    ...(totalRecommendationUse ? ["market_anchor_25_total_used_for_recommendation"] : []),
+  ];
+  const spreadReasonCodes = [
+    ...(spreadEnabled ? ["market_anchor_25_spread_available"] : []),
+    ...(spreadEnabled ? ["home_bias_correction_applied"] : []),
+    ...(spreadEnabled && !spreadRecommendationUse ? ["spread_recommendation_use_disabled"] : []),
+    ...(spreadRecommendationUse ? ["market_anchor_25_home_bias_spread_used_for_recommendation"] : []),
+  ];
 
   return {
     schema_version: "wnba_core_calibration_v1",
@@ -196,6 +211,10 @@ export function buildWnbaCoreModelCalibrationAudit(
     emergency_calibrated_home_margin: spreadEnabled ? roundNullable(emergencySpread) : null,
     recommendation_projected_total_used: totalRecommendationUse ? roundNullable(emergencyTotal) : null,
     recommendation_home_margin_used: spreadRecommendationUse ? roundNullable(emergencySpread) : null,
+    recommendation_reason_codes: {
+      total: totalReasonCodes,
+      spread: spreadReasonCodes,
+    },
     projection_calibration_enabled: totalEnabled || spreadEnabled,
     total_projection_calibration_enabled: totalEnabled,
     spread_margin_calibration_enabled: spreadEnabled,
