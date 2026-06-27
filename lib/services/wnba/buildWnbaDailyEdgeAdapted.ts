@@ -652,6 +652,21 @@ function buildMarket(opts: {
   const marketSignal: MarketSignal = aligned === null ? "market_neutral" : aligned ? "market_confirmed" : "market_resistance";
   const signalType: SignalType = marketFairProbPick !== null ? "balanced" : "model_only";
   const confPct = confFrac !== null ? Math.round(confFrac * 100) : null;
+  const publicSplits = opts.publicSplits ?? [];
+  const pickedSplit = (() => {
+    if (pick === null) return null;
+    const p = pick.toLowerCase();
+    return publicSplits.find((s) => {
+      const label = s.label.toLowerCase();
+      return (
+        label === p ||
+        label.includes(p) ||
+        p.includes(label) ||
+        (p.startsWith("over") && s.side === "over") ||
+        (p.startsWith("under") && s.side === "under")
+      );
+    }) ?? null;
+  })();
   return {
     pick,
     confidence: confFrac,
@@ -668,9 +683,9 @@ function buildMarket(opts: {
     modelProb: modelProbPick,
     marketFairProb: marketFairProbPick,
     pinnacleEvPct: null,
-    moneyPct: null,
-    betsPct: null,
-    publicSplits: opts.publicSplits ?? [],
+    moneyPct: pickedSplit?.moneyPct ?? null,
+    betsPct: pickedSplit?.betsPct ?? null,
+    publicSplits,
     priceAmerican,
     lineOpenAmerican: opts.priceTrail?.open ?? null,
     lockedLineAmerican: opts.lockedAt ? priceAmerican : null,
