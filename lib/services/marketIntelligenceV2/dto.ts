@@ -127,15 +127,23 @@ function priceActionSummary(evidence: EvidenceJson, score: number): string | nul
   if (relative === "support") {
     if (score >= 4) return "The line has clearly moved toward our pick.";
     if (score >= 2) {
-      return lean === "mixed"
+      return lean === "mixed" || lean === "against"
         ? "The line has moved toward our pick, while consensus is mixed."
         : "The line has moved toward our pick.";
     }
-    return "The market is leaning slightly toward our pick.";
+    if (lean === "against" || lean === "mixed") {
+      return "The line is nudging toward our pick, while consensus is not fully aligned.";
+    }
+    return "The line is nudging slightly toward our pick.";
   }
-  if (score <= -4) return "The market has moved clearly against our pick.";
+  if (lean === "our_way") {
+    if (score <= -4) return "Consensus leans our way, but the line has moved clearly against our pick.";
+    if (score <= -2) return "Consensus leans our way, but the line has moved against our pick, adding risk.";
+    return "Consensus leans our way, but the line has drifted slightly against our pick.";
+  }
+  if (score <= -4) return "The line has moved clearly against our pick.";
   if (score <= -2) return "The line has moved against our pick, adding risk.";
-  return "The market is leaning slightly against our pick.";
+  return "The line has drifted slightly against our pick.";
 }
 
 function playbookSummary(evidence: EvidenceJson): string | null {

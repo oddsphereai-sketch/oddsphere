@@ -656,20 +656,20 @@ function marketReadLabel(score: number): string {
 function marketReadExplanation(score: number): string {
   if (score >= 4) return "Strong Market Support · The line has clearly moved toward our pick.";
   if (score >= 2) return "Market Support · The line has moved toward our pick.";
-  if (score > 0) return "Slight Market Support · The market is leaning slightly toward our pick.";
-  if (score <= -4) return "Strong Market Resistance · The market has moved clearly against our pick.";
+  if (score > 0) return "Slight Market Support · The line is nudging slightly toward our pick.";
+  if (score <= -4) return "Strong Market Resistance · The line has moved clearly against our pick.";
   if (score <= -2) return "Market Resistance · The line has moved against our pick, adding risk.";
-  if (score < 0) return "Slight Market Resistance · The market is leaning slightly against our pick.";
+  if (score < 0) return "Slight Market Resistance · The line has drifted slightly against our pick.";
   return "Projection-Led · No clear market move. This pick is driven by the model edge.";
 }
 
 function marketReadBody(score: number): string {
   if (score >= 4) return "The line has clearly moved toward our pick.";
   if (score >= 2) return "The line has moved toward our pick.";
-  if (score > 0) return "The market is leaning slightly toward our pick.";
-  if (score <= -4) return "The market has moved clearly against our pick.";
+  if (score > 0) return "The line is nudging slightly toward our pick.";
+  if (score <= -4) return "The line has moved clearly against our pick.";
   if (score <= -2) return "The line has moved against our pick, adding risk.";
-  if (score < 0) return "The market is leaning slightly against our pick.";
+  if (score < 0) return "The line has drifted slightly against our pick.";
   return "No clear market move. This pick is driven by the model edge.";
 }
 

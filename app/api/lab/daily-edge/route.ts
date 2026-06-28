@@ -2223,11 +2223,58 @@ function displayMarketReadLabel(score: number): string {
 function displayMarketReadBody(score: number): string {
   if (score >= 4) return "The line has clearly moved toward our pick.";
   if (score >= 2) return "The line has moved toward our pick.";
-  if (score > 0) return "The market is leaning slightly toward our pick.";
-  if (score <= -4) return "The market has moved clearly against our pick.";
+  if (score > 0) return "The line is nudging slightly toward our pick.";
+  if (score <= -4) return "The line has moved clearly against our pick.";
   if (score <= -2) return "The line has moved against our pick, adding risk.";
-  if (score < 0) return "The market is leaning slightly against our pick.";
+  if (score < 0) return "The line has drifted slightly against our pick.";
   return "No clear market move. This pick is driven by the model edge.";
+}
+
+function formatMarketReadConsensusPct(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const pct = value <= 1 ? value * 100 : value;
+  return Math.max(0, Math.min(100, Math.round(pct)));
+}
+
+function oppositeDisplaySide(side: string | null): string | null {
+  if (side === "home") return "away";
+  if (side === "away") return "home";
+  if (side === "over") return "under";
+  if (side === "under") return "over";
+  return null;
+}
+
+function alignPublicSplitsToMarketReadConsensus(
+  publicSplits: MarketEdgeDto["publicSplits"],
+  read: MarketReadV2Dto | null,
+  selectedSide: string | null,
+): MarketEdgeDto["publicSplits"] {
+  if (!read?.consensus || selectedSide === null) return publicSplits;
+  const moneyPct = formatMarketReadConsensusPct(read.consensus.moneyPct);
+  const betsPct = formatMarketReadConsensusPct(read.consensus.betsPct);
+  if (moneyPct === null && betsPct === null) return publicSplits;
+
+  const opposite = oppositeDisplaySide(selectedSide);
+  const observedAt = read.evidenceAsOf ?? null;
+  return publicSplits.map((row) => {
+    if (row.side === selectedSide) {
+      return {
+        ...row,
+        moneyPct: moneyPct ?? row.moneyPct,
+        betsPct: betsPct ?? row.betsPct,
+        observedAt: observedAt ?? row.observedAt,
+      };
+    }
+    if (opposite !== null && row.side === opposite) {
+      return {
+        ...row,
+        moneyPct: moneyPct !== null ? 100 - moneyPct : row.moneyPct,
+        betsPct: betsPct !== null ? 100 - betsPct : row.betsPct,
+        observedAt: observedAt ?? row.observedAt,
+      };
+    }
+    return row;
+  });
 }
 
 function visibleOddsMarketReadScore(openAmerican: number, currentAmerican: number): number | null {
@@ -2873,6 +2920,15 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     observedAt: priceObservedAt ?? lineOpenObservedAt,
     generatedAt: new Date().toISOString(),
   });
+  const displayPublicSplits = alignPublicSplitsToMarketReadConsensus(
+    publicSplits,
+    marketReadV2,
+    input.market === "first_inning" ? null : input.modelSide,
+  );
+  const displayPickedSplit =
+    input.modelSide !== null
+      ? displayPublicSplits.find((s) => s.side === input.modelSide) ?? null
+      : null;
 
   return {
     pick: input.pick,
@@ -2895,9 +2951,9 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     modelProb: modelProbOverride ?? input.confidence,
     marketFairProb,
     pinnacleEvPct,
-    moneyPct,
-    betsPct,
-    publicSplits,
+    moneyPct: displayPickedSplit?.moneyPct ?? moneyPct,
+    betsPct: displayPickedSplit?.betsPct ?? betsPct,
+    publicSplits: displayPublicSplits,
     priceAmerican,
     // Lock-snapshot honesty (2026-06-09 lock-contract fix). Only ever true
     // on locked rows when no usable real-book price exists. With Forward
