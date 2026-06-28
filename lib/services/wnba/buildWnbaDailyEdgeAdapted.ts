@@ -31,7 +31,7 @@ import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
 import { wnbaLogoUrl } from "./wnbaTeams";
 import { supabase } from "@/lib/db/supabase";
-import { currentSlateDate } from "@/lib/dates/slateDate";
+import { computeSlateDate, currentSlateDate } from "@/lib/dates/slateDate";
 import {
   marketIntelligenceV2UiEnabledForWnbaMarket,
   readMarketIntelligenceV2Config,
@@ -60,25 +60,44 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
     .eq("slate_date", date)
     .order("game_date");
   if (!games || games.length === 0) return [];
-  const retainedGames = games;
+  const allIds = games.map((g) => g.id as number);
+  const { data: predictionRecords } = await supabase
+    .from("prediction_records")
+    .select("game_id, market, pick, side, line_value, odds_american, confidence, play_grade, locked_at")
+    .eq("sport", "wnba")
+    .in("game_id", allIds);
+  const allRecords = (predictionRecords ?? []) as WnbaLockedRecord[];
+  const recordGameIds = new Set(allRecords.map((r) => r.game_id));
+  const retainedGames = games.filter((g) => {
+    const status = String(g.status ?? "").toLowerCase();
+    const isFinished = status === "final" || status === "completed";
+    const startsOnRequestedSlate =
+      !g.game_date ||
+      (() => {
+        try {
+          return computeSlateDate("wnba", g.game_date as string) === date;
+        } catch {
+          return true;
+        }
+      })();
+    if (isFinished && !startsOnRequestedSlate) return false;
+    return !isFinished || recordGameIds.has(g.id as number);
+  });
   const ids = retainedGames.map((g) => g.id as number);
+  if (ids.length === 0) return [];
+  const retainedIdSet = new Set(ids);
+  const retainedRecords = allRecords.filter((r) => retainedIdSet.has(r.game_id));
   const { data: gps } = await supabase
     .from("game_predictions")
     .select("game_id, predicted_home_score, predicted_away_score, predicted_total, locked_at, sport_specific")
     .in("game_id", ids);
   const gpByGame = new Map((gps ?? []).map((r) => [r.game_id as number, r]));
-  const { data: lockedRecords } = await supabase
-    .from("prediction_records")
-    .select("game_id, market, pick, side, line_value, odds_american, confidence, play_grade, locked_at")
-    .eq("sport", "wnba")
-    .in("game_id", ids)
-    .not("locked_at", "is", null);
-  const lockedByGame = new Map<number, Map<string, WnbaLockedRecord>>();
-  for (const r of (lockedRecords ?? []) as WnbaLockedRecord[]) {
+  const recordsByGame = new Map<number, Map<string, WnbaLockedRecord>>();
+  for (const r of retainedRecords) {
     const gid = r.game_id;
-    const byMarket = lockedByGame.get(gid) ?? new Map<string, WnbaLockedRecord>();
+    const byMarket = recordsByGame.get(gid) ?? new Map<string, WnbaLockedRecord>();
     byMarket.set(r.market, r);
-    lockedByGame.set(gid, byMarket);
+    recordsByGame.set(gid, byMarket);
   }
   // Playbook public splits (display context only) — filled by refreshWnbaPlaybookSplits.
   const { data: signalRows } = await supabase
@@ -142,7 +161,7 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
     if (seen.has(extId)) continue; // no duplicate games
     seen.add(extId);
     const ml = ss.moneyline as PreviewGame["moneyline"];
-    const lockedRecordsForGame = lockedByGame.get(g.id as number) ?? new Map<string, WnbaLockedRecord>();
+    const lockedRecordsForGame = recordsByGame.get(g.id as number) ?? new Map<string, WnbaLockedRecord>();
     const lockedMl = lockedRecordsForGame.get("moneyline");
     const lockedTotal = lockedRecordsForGame.get("total");
     const lockedSpread = lockedRecordsForGame.get("spread");
