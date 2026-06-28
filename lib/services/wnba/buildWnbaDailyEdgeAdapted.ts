@@ -748,6 +748,7 @@ function priceTrailMovementRead(
       priceAction: marketReadBody(score),
       playbookConsensus: null,
       sharpApiSourceSpecific: null,
+      sharpMoney: null,
     },
   };
 }
@@ -769,6 +770,7 @@ function withVisiblePriceTrailMarketRead(opts: {
       sourceSummary: {
         ...trailRead.sourceSummary,
         playbookConsensus: opts.existing?.sourceSummary.playbookConsensus ?? null,
+        sharpMoney: opts.existing?.sourceSummary.sharpMoney ?? trailRead.sourceSummary.sharpMoney,
       },
     };
   }
@@ -779,6 +781,7 @@ function withVisiblePriceTrailMarketRead(opts: {
       sourceSummary: {
         ...trailRead.sourceSummary,
         playbookConsensus: opts.existing.sourceSummary.playbookConsensus,
+        sharpMoney: opts.existing.sourceSummary.sharpMoney ?? trailRead.sourceSummary.sharpMoney,
       },
     };
   }

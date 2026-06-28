@@ -452,6 +452,7 @@ function testUnchangedRows() {
         priceAction: "No clear market move.",
         playbookConsensus: null,
         sharpApiSourceSpecific: null,
+        sharpMoney: null,
       },
     },
   });
@@ -461,6 +462,36 @@ function testUnchangedRows() {
     `Line Move: falls back to v2 movement prices when lock/current price fields are missing`,
     v2LineMove?.evidence === "First seen -120 · Current -118",
     `got ${v2LineMove?.evidence ?? "missing"}`
+  );
+
+  const sharpMoneyRead = baseMarket({
+    marketReadV2Enabled: true,
+    marketReadV2: {
+      label: "Market Support",
+      score: 2,
+      tone: "emerald",
+      explanation: "The line has moved toward our pick.",
+      copyMode: "context_only_not_pick_changing",
+      exactLineEvidenceStatus: "available",
+      evidenceAsOf: "2026-06-26T12:00:00Z",
+      generatedAt: "2026-06-26T12:00:00Z",
+      validityStatus: "valid_directional",
+      movement: null,
+      consensus: null,
+      sourceSummary: {
+        priceAction: "The line has moved toward our pick.",
+        playbookConsensus: null,
+        sharpApiSourceSpecific: null,
+        sharpMoney: "Sharp Money: sharp-book price action moved with our pick.",
+      },
+    },
+  });
+  const sharpRows = buildEdgeStackRows("moneyline", sharpMoneyRead);
+  const sharpMoney = sharpRows.find((r) => r.label === "Sharp Money");
+  check(
+    `Sharp Money: renders explicit member-facing row when strict evidence exists`,
+    sharpMoney?.evidence === "sharp-book price action moved with our pick." && sharpMoney.tone === "emerald",
+    `got ${sharpMoney?.evidence ?? "missing"} / ${sharpMoney?.tone ?? "missing"}`
   );
 
   const resolvedSplits = baseMarket({

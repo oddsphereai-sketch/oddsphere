@@ -54,6 +54,7 @@ export type MarketReadV2Dto = {
     priceAction: string | null;
     playbookConsensus: string | null;
     sharpApiSourceSpecific: string | null;
+    sharpMoney: string | null;
   };
 };
 

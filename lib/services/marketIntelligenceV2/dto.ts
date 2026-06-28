@@ -5,6 +5,7 @@ import type {
   MarketReadValidityStatus,
 } from "../../types/domain/MarketIntelligenceV2";
 import type { MarketIntelligenceSnapshotV2Row } from "./snapshotSelector";
+import { SHARP_SIGNAL_THRESHOLDS } from "../../config/constants";
 
 type EvidenceJson = {
   exactLinePriceEvidence?: {
@@ -18,6 +19,9 @@ type EvidenceJson = {
     currentPrice?: number | null;
     observedAt?: string | null;
     trackedBooks?: number;
+    sharpBooksMovingWithPick?: number;
+    sharpBooksMovingAgainstPick?: number;
+    sharpBooksTracked?: number;
   };
   price?: {
     direction?: string;
@@ -171,6 +175,42 @@ function sharpApiSourceSummary(evidence: EvidenceJson): string | null {
   return null;
 }
 
+function sharpMoneySummary(evidence: EvidenceJson): string | null {
+  const movement = evidence.marketMovementEvidence;
+  const sharpWith = movement?.sharpBooksMovingWithPick ?? 0;
+  const sharpAgainst = movement?.sharpBooksMovingAgainstPick ?? 0;
+  if (sharpWith > sharpAgainst && sharpWith > 0) {
+    return "Sharp Money: sharp-book price action moved with our pick.";
+  }
+  if (sharpAgainst > sharpWith && sharpAgainst > 0) {
+    return "Sharp Money: sharp-book price action moved against our pick.";
+  }
+
+  const minGap = SHARP_SIGNAL_THRESHOLDS.MIN_SHARP_MONEY_DIVERGENCE_PP / 100;
+  const sourceSpecific = evidence.sharpApiSourceSpecific?.sources ?? [];
+  let withPick = 0;
+  let againstPick = 0;
+  for (const source of sourceSpecific) {
+    if (source.sourceType !== "sharp_adjacent_book") continue;
+    const money = typeof source.moneyPct === "number" && Number.isFinite(source.moneyPct) ? source.moneyPct : null;
+    const bets = typeof source.betsPct === "number" && Number.isFinite(source.betsPct) ? source.betsPct : null;
+    if (money === null || bets === null) continue;
+    const gap = money - bets;
+    if (gap >= minGap) withPick++;
+    else if (gap <= -minGap) againstPick++;
+  }
+  if (withPick > againstPick && withPick > 0) {
+    return "Sharp Money: source-specific money is showing with our pick.";
+  }
+  if (againstPick > withPick && againstPick > 0) {
+    return "Sharp Money: source-specific money is showing against our pick.";
+  }
+  if (withPick > 0 && againstPick > 0) {
+    return "Sharp Money: source-specific signals are mixed.";
+  }
+  return null;
+}
+
 export function marketReadV2DtoFromSnapshot(
   row: MarketIntelligenceSnapshotV2Row | null,
 ): MarketReadV2Dto | null {
@@ -214,6 +254,7 @@ export function marketReadV2DtoFromSnapshot(
       priceAction,
       playbookConsensus: playbookSummary(evidence),
       sharpApiSourceSpecific: sharpApiSourceSummary(evidence),
+      sharpMoney: sharpMoneySummary(evidence),
     },
   };
 }

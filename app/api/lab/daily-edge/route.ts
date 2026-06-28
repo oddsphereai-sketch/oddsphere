@@ -2330,6 +2330,7 @@ function alignMarketReadV2ToVisibleOdds(opts: {
       priceAction: body,
       playbookConsensus: opts.read?.sourceSummary.playbookConsensus ?? null,
       sharpApiSourceSpecific: null,
+      sharpMoney: opts.read?.sourceSummary.sharpMoney ?? null,
     },
   };
 }

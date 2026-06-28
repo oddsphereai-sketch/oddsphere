@@ -75,6 +75,9 @@ export type ResolverEvidence = {
     impliedDeltaPct: number | null;
     booksMovingWithPick: number;
     booksMovingAgainstPick: number;
+    sharpBooksMovingWithPick: number;
+    sharpBooksMovingAgainstPick: number;
+    sharpBooksTracked: number;
     trackedBooks: number;
     observedAt: string | null;
     note: string;
@@ -412,6 +415,9 @@ function resolveMarketMovementEvidence(
       impliedDeltaPct: null,
       booksMovingWithPick: 0,
       booksMovingAgainstPick: 0,
+      sharpBooksMovingWithPick: 0,
+      sharpBooksMovingAgainstPick: 0,
+      sharpBooksTracked: 0,
       trackedBooks: 0,
       observedAt: null,
       note: "No usable price observations.",
@@ -428,6 +434,9 @@ function resolveMarketMovementEvidence(
   let withPick = 0;
   let againstPick = 0;
   let tracked = 0;
+  let sharpWithPick = 0;
+  let sharpAgainstPick = 0;
+  let sharpTracked = 0;
   let bestFirst: PriceObservationForResolver | null = null;
   let bestLast: PriceObservationForResolver | null = null;
   let bestDirection: MovementDirection = "neutral";
@@ -446,6 +455,11 @@ function resolveMarketMovementEvidence(
     tracked++;
     if (direction === "support") withPick++;
     else if (direction === "resistance") againstPick++;
+    if (first.sharp_book || last.sharp_book) {
+      sharpTracked++;
+      if (direction === "support") sharpWithPick++;
+      else if (direction === "resistance") sharpAgainstPick++;
+    }
 
     const prefer = first.sharp_book && !bestFirst?.sharp_book;
     if (bestFirst === null || prefer || (first.sharp_book === bestFirst.sharp_book && magnitude > bestMagnitude)) {
@@ -469,6 +483,9 @@ function resolveMarketMovementEvidence(
       impliedDeltaPct: null,
       booksMovingWithPick: 0,
       booksMovingAgainstPick: 0,
+      sharpBooksMovingWithPick: 0,
+      sharpBooksMovingAgainstPick: 0,
+      sharpBooksTracked: 0,
       trackedBooks: new Set(usable.map((r) => r.sportsbook)).size,
       observedAt: obsIso(only),
       note: "Not enough distinct price states yet.",
@@ -495,6 +512,9 @@ function resolveMarketMovementEvidence(
     impliedDeltaPct,
     booksMovingWithPick: withPick,
     booksMovingAgainstPick: againstPick,
+    sharpBooksMovingWithPick: sharpWithPick,
+    sharpBooksMovingAgainstPick: sharpAgainstPick,
+    sharpBooksTracked: sharpTracked,
     trackedBooks: tracked,
     observedAt: obsIso(bestLast),
     note:

@@ -461,6 +461,18 @@ export function buildEdgeStackRows(
           tone: "gray",
         });
       }
+      if (marketData.marketReadV2.sourceSummary.sharpMoney) {
+        rows.push({
+          label: "Sharp Money",
+          evidence: marketData.marketReadV2.sourceSummary.sharpMoney.replace(/^Sharp Money:\s*/i, ""),
+          delta: "",
+          tone: marketData.marketReadV2.sourceSummary.sharpMoney.toLowerCase().includes("against")
+            ? "amber"
+            : marketData.marketReadV2.sourceSummary.sharpMoney.toLowerCase().includes("mixed")
+              ? "gray"
+              : "emerald",
+        });
+      }
       const movement = marketReadMovementEvidence(marketData);
       if (movement) {
         rows.push({
