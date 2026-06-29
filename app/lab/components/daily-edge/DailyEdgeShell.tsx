@@ -3908,6 +3908,19 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   if (error) {
     return <ShellChrome sport={sport}><ErrorState error={error.message} /></ShellChrome>;
   }
+  const suppressWnbaFallbackSlate =
+    sport === "wnba" &&
+    !!data &&
+    (data.fallback_used === true ||
+      data.slateState === "stale_fallback" ||
+      data.date !== data.requested_date);
+  if (suppressWnbaFallbackSlate) {
+    return (
+      <ShellChrome sport={sport}>
+        <EmptyState message={emptyStateMessageFor("no_data", sport)} />
+      </ShellChrome>
+    );
+  }
   if (!data || games.length === 0) {
     // Phase 6B.4 — honest empty state by slateState. The API tells us
     // WHY there are no games (draft / hidden / pending / stale fallback

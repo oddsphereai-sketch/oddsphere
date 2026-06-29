@@ -44,6 +44,8 @@ import { marketReadV2DtoFromSnapshot } from "@/lib/services/marketIntelligenceV2
 import type { MarketReadV2Dto } from "@/lib/types/domain/MarketIntelligenceV2";
 
 const HISTORY_PAGE_SIZE = 1000;
+const ENABLE_WNBA_LIVE_PREVIEW_FALLBACK =
+  process.env.WNBA_DAILY_EDGE_PREVIEW_FALLBACK === "true";
 
 /**
  * Reconstruct the PreviewGame shape from stored game_predictions (written by
@@ -253,6 +255,15 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
     });
   }
   return out;
+}
+
+async function countWnbaGamesForSlate(date: string): Promise<number> {
+  const { count } = await supabase
+    .from("games")
+    .select("id", { count: "exact", head: true })
+    .eq("sport", "wnba")
+    .eq("slate_date", date);
+  return count ?? 0;
 }
 
 type PreviewModelGrade = "Best Angle" | "Lean" | "Watchlist" | "Caution";
@@ -1131,11 +1142,43 @@ export async function buildWnbaDailyEdgeAdapted(date: string | null): Promise<Da
         last_slate_update_at: asOf, games,
       };
     }
+    const slateGameCount = await countWnbaGamesForSlate(requestedDate);
+    if (slateGameCount === 0) {
+      return {
+        as_of: asOf,
+        sport: "wnba",
+        date: requestedDate,
+        requested_date: requestedDate,
+        fallback_used: false,
+        slateState: "no_data",
+        slate_status: null,
+        last_slate_update_at: null,
+        games: [],
+      };
+    }
+    if (!ENABLE_WNBA_LIVE_PREVIEW_FALLBACK) {
+      return {
+        as_of: asOf,
+        sport: "wnba",
+        date: requestedDate,
+        requested_date: requestedDate,
+        fallback_used: false,
+        slateState: "today_pending_ingest",
+        slate_status: null,
+        last_slate_update_at: null,
+        games: [],
+      };
+    }
+
     // DEV/FALLBACK: nothing stored → live compute (cron hasn't run / local dev).
+    // Keep fallback scoped to the requested slate so an off-day cannot display
+    // the next available future WNBA slate as today's board.
     const raw = await buildWnbaDailyEdgePreview(requestedDate);
-    const games = (raw.games as unknown as PreviewGame[]).map((g) => adaptGame(g, asOf, null));
+    const previewGames = (raw.games as unknown as PreviewGame[])
+      .filter((g) => g.date === requestedDate);
+    const games = previewGames.map((g) => adaptGame(g, asOf, null));
     return {
-      as_of: asOf, sport: "wnba", date: raw.slate_date, requested_date: requestedDate,
+      as_of: asOf, sport: "wnba", date: requestedDate, requested_date: requestedDate,
       fallback_used: true, slateState: games.length > 0 ? "today_published" : "no_data",
       slate_status: games.length > 0 ? "published" : null, last_slate_update_at: asOf, games,
     };
