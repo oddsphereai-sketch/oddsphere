@@ -37,6 +37,8 @@ export type UseDailyEdgeOptions = {
   allowStale?: boolean;
   /** Poll interval in ms. Default 300_000 (5 min). Set to 0 to disable polling. */
   refreshIntervalMs?: number;
+  /** Local/admin visual preview for deterministic member copy. */
+  copyPreview?: boolean;
 };
 
 export type UseDailyEdgeResult = {
@@ -47,8 +49,8 @@ export type UseDailyEdgeResult = {
 };
 
 export function useDailyEdge(options: UseDailyEdgeOptions): UseDailyEdgeResult {
-  const { sport, date, allowStale = true, refreshIntervalMs = 300_000 } = options;
-  const key = buildLabUrl("/api/lab/daily-edge", { sport, date, allowStale });
+  const { sport, date, allowStale = false, refreshIntervalMs = 300_000, copyPreview = false } = options;
+  const key = buildLabUrl("/api/lab/daily-edge", { sport, date, allowStale, copyPreview: copyPreview ? 1 : undefined });
 
   const { data, error, isLoading, mutate } = useSWR<DailyEdgeResponse>(
     key,

@@ -28,6 +28,7 @@ import {
   noVigTwoWayProb,
   americanCentsDelta,
 } from "../../lib/streaming/lineDirection";
+import { isDisplayableAmericanOdds } from "../../lib/streaming/oddsSanity";
 import type {
   StreamWriter,
   RawEventRow,
@@ -195,6 +196,18 @@ export class StreamPipeline {
       // write load and the app never reads odds_events_raw).
       if (this.d.rawAuditEnabled === true) {
         await this.d.writer.writeRawEvents([this.rawRow(ev, gameId, resolved.externalId, "accepted", true)]);
+        this.d.health.onWrite();
+      }
+      return;
+    }
+
+    // Provider sanity guard: impossible American odds must never enter the
+    // current-price table, movement table, trigger path, or throttle state.
+    // Keep this intentionally narrow so legitimate big-but-valid moves can
+    // still be audited while display readers independently fail closed.
+    if (!removed && !isDisplayableAmericanOdds(ev.oddsAmerican)) {
+      if (this.d.rawAuditEnabled === true) {
+        await this.d.writer.writeRawEvents([this.rawRow(ev, gameId, resolved.externalId, "dropped", false)]);
         this.d.health.onWrite();
       }
       return;

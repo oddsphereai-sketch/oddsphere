@@ -21,6 +21,7 @@ import type {
 } from "@/lib/types/domain/Grade";
 import type { Verdict } from "@/lib/services/verdictDerivation";
 import type { SharpReadKey } from "@/lib/services/sharpReadSelector";
+import type { RecommendationDecision } from "@/lib/types/domain/RecommendationDecision";
 
 // ───────────────────────────────────────────────────────────────────────────
 // /api/lab/refresh-status
@@ -220,6 +221,13 @@ export type MarketEdgeDto = {
 
   // ── 4.1.10 per-market verdict ──
   verdict: { key: Verdict; label: string };
+  rawGrade?: Grade | null;
+  rawRecScore?: number | null;
+  capReasons?: string[];
+  finalGrade?: Grade | null;
+  finalRecScore?: number | null;
+  actionabilityLabel?: string;
+  displayReason?: string | null;
 
   // ── 4.1.10 server-generated beginner copy (banned-terms-linted) ──
   guidedGuide: string;
@@ -311,6 +319,22 @@ export type MarketEdgeDto = {
   oddspherePostedAt?: string | null;
   lockedLineAmerican?: number | null;
   lockedLineAt?: string | null;
+  /**
+   * Persisted picked-side odds trail for the Odds Move module.
+   *
+   * Built from append-only `line_history` rows at the same sportsbook/side as
+   * the displayed price when possible, then capped with the current/locked
+   * display price. Consecutive unchanged snapshots are deduped so the UI shows
+   * true price changes instead of repeated polling rows.
+   */
+  oddsTrail?: Array<{
+    american: number;
+    line: number | null;
+    observedAt: string | null;
+    sportsbook: string | null;
+    source: "line_history" | "current_line" | "locked_snapshot";
+    label: "first" | "move" | "current" | "locked";
+  }>;
 
   /**
    * Live market-intelligence (2026-06-16). Derived (display/audit only — no
@@ -391,6 +415,12 @@ export type MarketEdgeDto = {
    * actionable play even when the projected edge looks big.
    */
   recommendationConfidence?: number | null;
+  /**
+   * Canonical source-aware recommendation surface for this market. When present,
+   * member UI reads Market Pulse, Market Read, Quick Read, grade coherence, and
+   * evidence from this normalized object instead of reinterpreting source rows.
+   */
+  recommendationDecision?: RecommendationDecision["markets"][keyof RecommendationDecision["markets"]];
   /**
    * Sportsbook that produced the no-vig pair. Diagnostic display so
    * members can see "Market 50% · ballybet" or "Market 50% · pinnacle".
@@ -726,6 +756,7 @@ export type DailyEdgeGameDto = {
     total: MarketEdgeDto;
     first_inning: MarketEdgeDto;
   };
+  recommendationDecision?: RecommendationDecision;
   /**
    * 4.1.10 — short directive sentence for the v13.1 Edge Board card.
    * Server-generated, banned-terms-linted. Example: "Best angle tonight: KC ML".

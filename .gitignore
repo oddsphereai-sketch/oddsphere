@@ -40,3 +40,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local research/output artifacts
+ops-local/*.json
+ops-local/ai-sharp-analyst/*.json
+wnba-research/espn-cache/
+wnba-research/*.json
+wnba-research/*.jsonl
+wnba-research/*.log

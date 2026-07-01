@@ -52,6 +52,7 @@ import type { Verdict } from "../verdictDerivation";
 import type { SharpReadKey } from "../sharpReadSelector";
 import { flagCdnUrl } from "./_countryFlags";
 import { soccerPickLabel } from "./soccerPickLabel";
+import { normalizeDailyEdgeActionability } from "@/lib/services/dailyEdgeActionability";
 
 const SOCCER_MODEL_VERSION = "soccer_dixon_coles_v1";
 const LOCK_WINDOW_MINUTES = 60;
@@ -827,19 +828,40 @@ function buildMarketEdgeDto(
         nowMs: stream.nowMs,
       })
     : undefined;
+  const rawVerdict = gradeToVerdict(r.play_grade, r.held, r.no_bet);
+  const normalizedAction = normalizeDailyEdgeActionability({
+    market: r.market === "total" ? "soccer_total" : r.market === "btts" ? "soccer_btts" : "soccer_moneyline",
+    rawVerdict,
+    rawGrade: null,
+    rawRecScore: r.held || r.no_bet || r.confidence === null ? null : r.confidence,
+    modelMarketGapPct: gap,
+    marketReadV2: null,
+    hasPick: !r.held && !r.no_bet,
+    held: r.held || r.no_bet,
+    dataQualityTier: r.market_probability === null ? "fallback" : "medium",
+    priceAmerican: currentAmerican,
+  });
+  const guide = normalizedAction.displayReason ?? heldHelp;
 
   return {
     pick: r.held ? null : r.pick,
     confidence: r.held || r.confidence === null ? null : r.confidence / 100,
-    grade: null,
+    grade: normalizedAction.finalGrade,
     signalType: null,
     marketSignal: null,
     sharpStatus: "caution",
     held: r.held,
-    verdict: gradeToVerdict(r.play_grade, r.held, r.no_bet),
-    guidedGuide: heldHelp,
+    verdict: normalizedAction.finalVerdict,
+    rawGrade: normalizedAction.rawGrade,
+    rawRecScore: normalizedAction.rawRecScore,
+    capReasons: normalizedAction.capReasons,
+    finalGrade: normalizedAction.finalGrade,
+    finalRecScore: normalizedAction.finalRecScore,
+    actionabilityLabel: normalizedAction.actionabilityLabel,
+    displayReason: normalizedAction.displayReason,
+    guidedGuide: guide,
     guidedWatchOut: "",
-    whyLine: heldHelp,
+    whyLine: guide,
     riskLine: "",
     modelProb: r.model_probability,
     marketFairProb: r.market_probability,
@@ -870,6 +892,7 @@ function buildMarketEdgeDto(
     modelTrustPct,
     marketImpliedPct,
     modelMarketGapPct: gap,
+    recommendationConfidence: normalizedAction.finalRecScore,
     marketSource: "Market odds (prematch)",
     // WC-2 contract: SharpAPI /splits is empty_as_of_probe for FIFA WC,
     // so calling this "two_sided_consensus" would imply public-split

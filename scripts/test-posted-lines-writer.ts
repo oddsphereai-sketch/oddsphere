@@ -47,6 +47,23 @@ const cron: LineRowLite[] = [
   check("stream entry odds", e?.odds_american === -138);
 }
 
+// ── stream/cron sanity: impossible odds cannot become posted/locked prices ──
+{
+  const stream: StreamRowLite[] = [
+    { market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -4900, line_value: null, observed_at: "bad" },
+    { market_type: "moneyline", side: "home", sportsbook: "draftkings", odds_american: 1329, line_value: null, observed_at: "bad2" },
+    { market_type: "moneyline", side: "home", sportsbook: "fanduel", odds_american: -120, line_value: null, observed_at: "good" },
+  ];
+  const e = pickStreamEntry(stream, "moneyline", "home", "t1");
+  check("stream entry skips impossible odds", e?.book === "fanduel" && e?.odds_american === -120);
+  const badCron: LineRowLite[] = [
+    { market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -4900, line_value: null },
+    { market_type: "moneyline", side: "home", sportsbook: "betmgm", odds_american: -118, line_value: null },
+  ];
+  const c = pickCronEntry(badCron, "moneyline", "home", "t1");
+  check("cron entry skips impossible odds", c?.book === "betmgm" && c?.odds_american === -118);
+}
+
 // ── buildIncomingPostedLines: stream preferred over cron; NRFI→under ──
 {
   const stream: StreamRowLite[] = [

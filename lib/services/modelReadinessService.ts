@@ -53,6 +53,7 @@ export type ReadinessBlocker =
   | "starter_stats_missing_backfillable"
   | "starter_stats_provider_empty"
   | "lineup_missing_backfillable"
+  | "lineup_not_announced_yet"
   | "fi_market_missing"
   | "weather_missing_backfillable"
   | "weather_stale_refreshable"
@@ -187,6 +188,7 @@ export async function auditMlbModelReadiness(args: {
   // not change a frozen snapshot. Tuned for an hourly cron.
   const WEATHER_STALE_MS = 3 * 60 * 60 * 1000;
   const WEATHER_REFRESH_WINDOW_MS = 8 * 60 * 60 * 1000;
+  const LINEUP_EXPECTED_WINDOW_MS = 2 * 60 * 60 * 1000;
   const nowMsReadiness = Date.now();
 
   const parkIds = Array.from(new Set(games.map((g) => g.ballpark_id).filter((x): x is number => x !== null)));
@@ -239,7 +241,14 @@ export async function auditMlbModelReadiness(args: {
     }
     if (g.home_pitcher_id !== null && !homeStatsOk && homePitcherMlbId !== null) blockers.push("starter_stats_missing_backfillable");
     if (g.away_pitcher_id !== null && !awayStatsOk && awayPitcherMlbId !== null) blockers.push("starter_stats_missing_backfillable");
-    if (homeLineupCount < 8 || awayLineupCount < 8) blockers.push("lineup_missing_backfillable");
+    const lineupIncomplete = homeLineupCount < 8 || awayLineupCount < 8;
+    const lineupExpected =
+      Number.isNaN(gameStartMs) ||
+      gameStartMs <= nowMsReadiness ||
+      gameStartMs - nowMsReadiness <= LINEUP_EXPECTED_WINDOW_MS;
+    if (lineupIncomplete) {
+      blockers.push(lineupExpected ? "lineup_missing_backfillable" : "lineup_not_announced_yet");
+    }
     if (fiMktRows === 0) blockers.push("fi_market_missing");
     if (!weather) blockers.push("weather_missing_backfillable");
     else if (weatherStale) blockers.push("weather_stale_refreshable");

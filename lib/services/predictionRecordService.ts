@@ -249,6 +249,90 @@ type PublicSplitsRow = {
   steam_books_count: number | null;
 };
 
+type SourceAwareSplitObservationRow = {
+  canonical_event_id: string;
+  market_type: string;
+  selection_key: string | null;
+  provider: string | null;
+  source_type: string | null;
+  bets_pct: number | null;
+  money_pct: number | null;
+  source_observed_at: string | null;
+  fetched_at: string | null;
+};
+
+function sourceAwareSide(row: SourceAwareSplitObservationRow): string | null {
+  const side = row.selection_key?.split(":").pop();
+  return side === "home" || side === "away" || side === "over" || side === "under" ? side : null;
+}
+
+function sourceAwarePct(value: number | null): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(100, Math.round(value <= 1 ? value * 100 : value)));
+}
+
+function sourceAwarePairScore(a: SourceAwareSplitObservationRow, b: SourceAwareSplitObservationRow): number {
+  const moneyA = sourceAwarePct(a.money_pct);
+  const moneyB = sourceAwarePct(b.money_pct);
+  const betsA = sourceAwarePct(a.bets_pct);
+  const betsB = sourceAwarePct(b.bets_pct);
+  let score = 0;
+  let fields = 0;
+  if (moneyA !== null && moneyB !== null) {
+    score += Math.abs(moneyA + moneyB - 100);
+    fields += 1;
+  }
+  if (betsA !== null && betsB !== null) {
+    score += Math.abs(betsA + betsB - 100);
+    fields += 1;
+  }
+  return fields === 0 ? Number.POSITIVE_INFINITY : score;
+}
+
+function compactSourceAwareRowsForLock(
+  rows: ReadonlyArray<SourceAwareSplitObservationRow>,
+): SourceAwareSplitObservationRow[] {
+  const out: SourceAwareSplitObservationRow[] = [];
+  for (const market of ["moneyline", "total"] as const) {
+    const sideOrder = market === "moneyline" ? ["away", "home"] : ["over", "under"];
+    for (const source of ["consensus", "sharp"] as const) {
+      const candidates = rows
+        .filter((row) => row.market_type === market)
+        .filter((row) => {
+          const provider = (row.provider ?? "").toLowerCase();
+          const sourceType = (row.source_type ?? "").toLowerCase();
+          return source === "consensus"
+            ? provider === "playbook" || sourceType === "multi_book_consensus"
+            : provider === "sharpapi" && sourceType === "sharp_adjacent_book";
+        })
+        .map((row, index) => ({ row, index, side: sourceAwareSide(row) }))
+        .filter((candidate) => candidate.side !== null);
+      const [leftSide, rightSide] = sideOrder;
+      const leftRows = candidates.filter((candidate) => candidate.side === leftSide);
+      const rightRows = candidates.filter((candidate) => candidate.side === rightSide);
+      if (leftRows.length === 0 || rightRows.length === 0) continue;
+      let bestPair: { left: (typeof candidates)[number]; right: (typeof candidates)[number]; score: number; indexGap: number } | null = null;
+      for (const left of leftRows) {
+        for (const right of rightRows) {
+          const score = sourceAwarePairScore(left.row, right.row);
+          const indexGap = Math.abs(left.index - right.index);
+          if (
+            bestPair === null ||
+            score < bestPair.score ||
+            (score === bestPair.score && indexGap < bestPair.indexGap)
+          ) {
+            bestPair = { left, right, score, indexGap };
+          }
+        }
+      }
+      if (bestPair !== null && bestPair.score <= 2) {
+        out.push(bestPair.left.row, bestPair.right.row);
+      }
+    }
+  }
+  return out;
+}
+
 /**
  * Phase 6B.22 — opener row from `line_history` (is_opener=true). One per
  * (game, market, side, book). Combined with the lock-time price in `lines`,
@@ -781,6 +865,7 @@ export function buildDataIntegritySnapshot(
 function buildDailyEdgeLockSubstrate(args: {
   signalsForGame: ReadonlyArray<PublicSplitsRow>;
   currentLinesForGame: ReadonlyArray<LineRowForOdds>;
+  sourceAwareSplitsForGame?: ReadonlyArray<SourceAwareSplitObservationRow>;
   pred: PredictionRow;
 }): Record<string, unknown> {
   return {
@@ -808,6 +893,17 @@ function buildDailyEdgeLockSubstrate(args: {
       odds_american: l.odds_american,
       line_value: l.line_value ?? null,
       fetched_at: l.fetched_at ?? null,
+    })),
+    source_aware_split_rows_at_lock: (args.sourceAwareSplitsForGame ?? []).map((s) => ({
+      canonical_event_id: s.canonical_event_id,
+      market_type: s.market_type,
+      selection_key: s.selection_key,
+      provider: s.provider,
+      source_type: s.source_type,
+      bets_pct: s.bets_pct,
+      money_pct: s.money_pct,
+      source_observed_at: s.source_observed_at,
+      fetched_at: s.fetched_at,
     })),
     predicted_scores_at_lock: {
       home: args.pred.predicted_home_score,
@@ -938,6 +1034,7 @@ function buildMlRecord(
   oddsForGame: GameOddsSnapshot | null,
   openersForGame: LineHistoryOpenerRow[],
   currentLinesForGame: LineRowForOdds[],
+  sourceAwareSplitsForGame: SourceAwareSplitObservationRow[] = [],
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
@@ -1123,7 +1220,7 @@ function buildMlRecord(
       },
       data_integrity: buildDataIntegritySnapshot(sp, oddsForGame, "moneyline"),
       // Phase 6B.28 — rich-and-frozen Daily Edge substrate at lock.
-      ...buildDailyEdgeLockSubstrate({ signalsForGame, currentLinesForGame, pred }),
+      ...buildDailyEdgeLockSubstrate({ signalsForGame, currentLinesForGame, sourceAwareSplitsForGame, pred }),
       // Forward Fix A (2026-06-09) — audit trail for the writer's odds
       // source per (market, side). Lets operators verify the lock used
       // a real-book price (lines vs line_history_fallback) and detect
@@ -1192,6 +1289,7 @@ function buildOuRecord(
   oddsForGame: GameOddsSnapshot | null,
   openersForGame: LineHistoryOpenerRow[],
   currentLinesForGame: LineRowForOdds[],
+  sourceAwareSplitsForGame: SourceAwareSplitObservationRow[] = [],
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
@@ -1415,7 +1513,7 @@ function buildOuRecord(
       },
       data_integrity: buildDataIntegritySnapshot(sp, oddsForGame, "total"),
       // Phase 6B.28 — same rich-and-frozen substrate as ML.
-      ...buildDailyEdgeLockSubstrate({ signalsForGame, currentLinesForGame, pred }),
+      ...buildDailyEdgeLockSubstrate({ signalsForGame, currentLinesForGame, sourceAwareSplitsForGame, pred }),
       // Forward Fix A (2026-06-09) — audit trail for the writer's odds
       // source per (market, side). Same shape as the ML record's ML
       // variant; lets operators verify the lock used a real-book price.
@@ -1756,6 +1854,12 @@ export function buildPredictionRecordsFromSlate(args: {
    */
   currentLinesByGameId?: ReadonlyMap<number, ReadonlyArray<LineRowForOdds>>;
   /**
+   * Lock-time source-aware split observations used by the rendered reader:
+   * Consensus Splits plus Sharp Book Splits/Signal. Stored raw so post-lock
+   * cards can render the same split package that existed at lock.
+   */
+  sourceAwareSplitsByGameId?: ReadonlyMap<number, ReadonlyArray<SourceAwareSplitObservationRow>>;
+  /**
    * Forward odds recovery for FI/NRFI/YRFI. Same key shape used by
    * pickOddsWithFallback: `${gameId}::${market_type}::${side}`.
    */
@@ -1771,8 +1875,9 @@ export function buildPredictionRecordsFromSlate(args: {
     const odds = args.oddsByGameId?.get(g.id) ?? null;
     const openers = (args.openersByGameId?.get(g.id) ?? []) as LineHistoryOpenerRow[];
     const currentLines = (args.currentLinesByGameId?.get(g.id) ?? []) as LineRowForOdds[];
-    const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines);
-    const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines);
+    const sourceAwareSplits = (args.sourceAwareSplitsByGameId?.get(g.id) ?? []) as SourceAwareSplitObservationRow[];
+    const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines, sourceAwareSplits);
+    const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines, sourceAwareSplits);
     const fi = buildFiRecord(
       pred,
       g,
@@ -2021,6 +2126,51 @@ export async function createPredictionRecords(
     openersByGameId.set(o.game_id, arr);
   }
 
+  // 2026-06-30 — lock the exact source-aware split package the Daily Edge
+  // reader shows pregame. `sharp_signals` is the older source; the modern
+  // reader renders Consensus Splits + Sharp Book Splits from
+  // market_split_observations_v2. Without freezing these rows, locked cards
+  // can lose Sharp Book context after providers rotate/expire live data.
+  const sourceAwareSplitsByGameId = new Map<number, SourceAwareSplitObservationRow[]>();
+  if (sport === "mlb") {
+    const externalIdToGameId = new Map<string, number>(
+      games.map((g) => [String(g.external_id), g.id]),
+    );
+    const eventIds = Array.from(externalIdToGameId.keys());
+    const sourceAwareResults = await Promise.all(
+      eventIds.map((eventId) =>
+        supabase
+          .from("market_split_observations_v2")
+          .select("canonical_event_id, market_type, selection_key, provider, source_type, bets_pct, money_pct, source_observed_at, fetched_at")
+          .eq("league", "mlb")
+          .eq("canonical_event_id", eventId)
+          .in("market_type", ["moneyline", "total"])
+          .order("fetched_at", { ascending: false })
+          .limit(500),
+      ),
+    );
+    for (const sourceAwareResult of sourceAwareResults) {
+      if (sourceAwareResult.error) {
+        result.errors.push({
+          game_id: 0,
+          market: "moneyline",
+          reason: `source-aware split lock fetch failed: ${sourceAwareResult.error.message}`,
+        });
+        continue;
+      }
+      const compactRows = compactSourceAwareRowsForLock(
+        (sourceAwareResult.data ?? []) as SourceAwareSplitObservationRow[],
+      );
+      for (const row of compactRows) {
+        const gameId = externalIdToGameId.get(String(row.canonical_event_id));
+        if (gameId === undefined) continue;
+        const list = sourceAwareSplitsByGameId.get(gameId) ?? [];
+        list.push(row);
+        sourceAwareSplitsByGameId.set(gameId, list);
+      }
+    }
+  }
+
   const proposed = buildPredictionRecordsFromSlate({
     sport,
     slateDate,
@@ -2032,6 +2182,7 @@ export async function createPredictionRecords(
     oddsByGameId,
     openersByGameId,
     currentLinesByGameId: linesByGame,
+    sourceAwareSplitsByGameId,
     historyByKey,
   });
   result.proposed = proposed;

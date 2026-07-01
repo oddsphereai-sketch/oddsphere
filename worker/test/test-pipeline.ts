@@ -144,6 +144,32 @@ async function main() {
   check("moved-against-BA → recompute fired", recompute.requests.length === 1);
 }
 
+// ── impossible provider odds are raw-dropped and cannot pollute current/movement ──
+{
+  const { writer, pipeline } = makePipeline({ recomputeActive: true });
+  await pipeline.handleMessage({ type: "snapshot:complete" });
+  await pipeline.handleMessage(oddsFrame([mlRow({ odds_american: -112 })], "odds:update", 1));
+  await pipeline.handleMessage(oddsFrame([mlRow({ odds_american: -4900 })], "odds:update", 2));
+  await pipeline.handleMessage(oddsFrame([mlRow({ odds_american: -118 })], "odds:update", 3));
+  check("bad odds → raw row marked dropped", writer.raw.some((r) => r.odds_american === -4900 && r.status === "dropped"));
+  check("bad odds → no current row", !writer.current.some((c) => c.odds_american === -4900));
+  check("bad odds → no movement row", !writer.movements.some((m) => m.prev_odds_american === -4900 || m.next_odds_american === -4900));
+  check("bad odds → throttle stayed on last valid price", writer.movements.some((m) => m.prev_odds_american === -112 && m.next_odds_american === -118));
+}
+
+// ── longshot typo is dropped too (observed +1329 paired with -4900) ──
+{
+  const { writer, pipeline } = makePipeline({ recomputeActive: true });
+  await pipeline.handleMessage({ type: "snapshot:complete" });
+  await pipeline.handleMessage(oddsFrame([mlRow({ selection_type: "away", odds_american: +101 })], "odds:update", 1));
+  await pipeline.handleMessage(oddsFrame([mlRow({ selection_type: "away", odds_american: +1329 })], "odds:update", 2));
+  await pipeline.handleMessage(oddsFrame([mlRow({ selection_type: "away", odds_american: +100 })], "odds:update", 3));
+  check("bad longshot odds → raw row marked dropped", writer.raw.some((r) => r.odds_american === 1329 && r.status === "dropped"));
+  check("bad longshot odds → no current row", !writer.current.some((c) => c.odds_american === 1329));
+  check("bad longshot odds → no movement row", !writer.movements.some((m) => m.prev_odds_american === 1329 || m.next_odds_american === 1329));
+  check("bad longshot odds → next sane movement uses previous sane price", writer.movements.some((m) => m.prev_odds_american === 101 && m.next_odds_american === 100));
+}
+
 // ── hashEvent deterministic + excludes any key material ──
 {
   const ev: NormalizedOddsEvent = {

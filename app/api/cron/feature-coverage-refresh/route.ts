@@ -31,11 +31,13 @@
  *   • model version flags
  *   • prediction grades
  *
- * Suggested schedule (vercel.json, UTC):
- *   `30 13 * * *`  — 13:30 UTC (~9:30am ET) for projected lineups +
- *                    initial weather
- *   Add a second entry for closer-to-game refresh once a confirmed
- *   lineup source is wired (Push 3A-5+).
+ * Schedule (vercel.json, UTC):
+ *   `55 7,9,11,12-23 * * *` and `55 0-2 * * *`.
+ *
+ * Runs shortly before slate-cycle so lineups, weather, player mappings,
+ * and starter stats are available before predictions are rebuilt. This is
+ * intentionally independent of slate-cycle: backfillable feature gaps are
+ * data-pipeline failures first, not reasons to silently weaken every card.
  */
 
 import { cronHandlerPerSport } from "@/lib/cron/runCron";

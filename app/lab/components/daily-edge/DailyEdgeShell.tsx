@@ -25,7 +25,8 @@
  * Visual review with Daniel after this lands, then iterate on detail.
  */
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { useDailyEdge } from "../../hooks/useDailyEdge";
 import { useSportSelection } from "../../hooks/useSportSelection";
 import {
@@ -39,6 +40,7 @@ import type {
   DailyEdgeGameDto,
   MarketEdgeDto,
 } from "../../lib/labTypes";
+import type { MarketDecision } from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { isContextOnlyDisplayMarket } from "@/lib/config/officialTrackingMarkets";
 import { TWO_SIDED_KEY_STAT_LABELS, keyStatIsTwoSided } from "@/lib/services/keyStatsFormatter";
@@ -427,6 +429,20 @@ function asVerdictKey(s: string): VerdictKey {
   return "no_play";
 }
 
+function playGradeToVerdictKey(s: string | null | undefined): VerdictKey {
+  if (s === "Best Angle") return "best_angle";
+  if (s === "Lean") return "lean";
+  if (s === "Watchlist") return "watchlist";
+  if (s === "Caution") return "caution";
+  return "no_play";
+}
+
+function marketVerdictKey(market: MarketEdgeDto): VerdictKey {
+  return market.recommendationDecision
+    ? playGradeToVerdictKey(market.recommendationDecision.playGrade)
+    : asVerdictKey(market.verdict.key);
+}
+
 /**
  * Build the single "edge row" surfaced in the Compact reader. Picks the
  * strongest available signal in priority order: value gap → model vs
@@ -557,9 +573,9 @@ function headlineMarketFor(game: DailyEdgeGameDto): MarketKey {
     no_play: 0,
   };
   const candidates: Array<{ key: MarketKey; r: number }> = [
-    { key: "moneyline", r: rank[asVerdictKey(game.markets.moneyline.verdict.key)] },
-    { key: "total", r: rank[asVerdictKey(game.markets.total.verdict.key)] },
-    { key: "first_inning", r: rank[asVerdictKey(game.markets.first_inning.verdict.key)] },
+    { key: "moneyline", r: rank[marketVerdictKey(game.markets.moneyline)] },
+    { key: "total", r: rank[marketVerdictKey(game.markets.total)] },
+    { key: "first_inning", r: rank[marketVerdictKey(game.markets.first_inning)] },
   ];
   candidates.sort((a, b) => b.r - a.r);
   return candidates[0]!.key;
@@ -1420,7 +1436,7 @@ function ModelTake({ game }: { game: DailyEdgeGameDto }) {
 }
 
 function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; market: MarketKey; marketData: MarketEdgeDto }) {
-  const verdict = asVerdictKey(marketData.verdict.key);
+  const verdict = marketVerdictKey(marketData);
   const shellSport = useShellSport();
   return (
     <div className="bg-white/[0.015] border border-white/[0.04] rounded-xl px-3.5 py-2.5 space-y-2 min-w-0">
@@ -1643,6 +1659,135 @@ function CleanOddsTrail({ open, prev, current, locked }: { open: number | null; 
   );
 }
 
+function cleanTrailLabel(label: NonNullable<MarketEdgeDto["oddsTrail"]>[number]["label"]): string {
+  if (label === "first") return "FIRST";
+  if (label === "locked") return "LOCK";
+  if (label === "current") return "CURRENT";
+  return "MOVE";
+}
+
+type DisplayOddsTrailStop = NonNullable<MarketEdgeDto["oddsTrail"]>[number];
+
+function sameOddsStop(a: DisplayOddsTrailStop | undefined, b: DisplayOddsTrailStop): boolean {
+  return a !== undefined && a.american === b.american && a.line === b.line;
+}
+
+function makeFallbackOddsStop(
+  american: number | null,
+  label: DisplayOddsTrailStop["label"],
+  source: DisplayOddsTrailStop["source"],
+): DisplayOddsTrailStop | null {
+  if (typeof american !== "number" || !Number.isFinite(american)) return null;
+  return {
+    american,
+    line: null,
+    observedAt: null,
+    sportsbook: null,
+    source,
+    label,
+  };
+}
+
+function sortTrailByObservedAt(
+  stops: DisplayOddsTrailStop[],
+): DisplayOddsTrailStop[] {
+  return [...stops].sort((a, b) => {
+    const aTime = a.observedAt ? Date.parse(a.observedAt) : Number.NaN;
+    const bTime = b.observedAt ? Date.parse(b.observedAt) : Number.NaN;
+    if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) return aTime - bTime;
+    return 0;
+  });
+}
+
+function summarizePersistedOddsTrail(
+  trail: NonNullable<MarketEdgeDto["oddsTrail"]>,
+  fallback: {
+    open: number | null;
+    prev: number | null;
+    current: number | null;
+    locked: boolean;
+  },
+): NonNullable<MarketEdgeDto["oddsTrail"]> {
+  const orderedTrail = sortTrailByObservedAt(trail);
+  const deduped = orderedTrail.filter((stop, index) => {
+    return !sameOddsStop(orderedTrail[index - 1], stop);
+  });
+  const fallbackOpen = makeFallbackOddsStop(fallback.open, "first", "line_history");
+  const fallbackPrev = makeFallbackOddsStop(fallback.prev, "move", "line_history");
+  const fallbackCurrent = makeFallbackOddsStop(
+    fallback.current,
+    fallback.locked ? "locked" : "current",
+    fallback.locked ? "locked_snapshot" : "current_line",
+  );
+
+  const first = deduped.find((stop) => stop.label === "first") ?? fallbackOpen ?? deduped[0] ?? null;
+  const last =
+    deduped.find((stop) => stop.label === "locked") ??
+    deduped.find((stop) => stop.label === "current") ??
+    fallbackCurrent ??
+    deduped[deduped.length - 1] ??
+    null;
+  if (first === null && last === null) return [];
+
+  const middleCandidates = [
+    ...deduped.filter((stop) => !sameOddsStop(first ?? undefined, stop) && !sameOddsStop(last ?? undefined, stop)),
+    fallbackPrev,
+  ].filter((stop): stop is DisplayOddsTrailStop => stop !== null);
+  const middle =
+    middleCandidates
+      .filter((stop) => !sameOddsStop(first ?? undefined, stop) && !sameOddsStop(last ?? undefined, stop))
+      .sort((a, b) => {
+        const aTime = a.observedAt ? Date.parse(a.observedAt) : Number.NaN;
+        const bTime = b.observedAt ? Date.parse(b.observedAt) : Number.NaN;
+        if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) return bTime - aTime;
+        if (a.label === "move" && b.label !== "move") return -1;
+        if (a.label !== "move" && b.label === "move") return 1;
+        return 0;
+      })[0] ?? null;
+
+  const summary = [
+    first ? { ...first, label: "first" as const } : null,
+    middle ? { ...middle, label: "move" as const } : null,
+    last ? { ...last, label: fallback.locked ? "locked" as const : "current" as const } : null,
+  ].filter((stop): stop is DisplayOddsTrailStop => stop !== null);
+  return summary.filter((stop, index, arr) => {
+    const prev = arr[index - 1];
+    return prev === undefined || !sameOddsStop(prev, stop) || prev.label !== stop.label;
+  });
+}
+
+function CleanPersistedOddsTrail({
+  trail,
+  open,
+  prev,
+  current,
+  locked,
+}: {
+  trail: NonNullable<MarketEdgeDto["oddsTrail"]>;
+  open: number | null;
+  prev: number | null;
+  current: number | null;
+  locked: boolean;
+}) {
+  const displayTrail = summarizePersistedOddsTrail(trail, { open, prev, current, locked });
+  if (displayTrail.length === 0) return null;
+  return (
+    <div className="flex w-full items-start px-2 pb-1">
+      {displayTrail.map((p, i) => (
+        <Fragment key={`${p.observedAt ?? i}-${p.american}-${p.line ?? "noline"}-${p.label}`}>
+          {i > 0 && (
+            <span aria-hidden="true" className="flex-1 pt-0.5 text-center text-gray-600 text-[15px] leading-none">→</span>
+          )}
+          <div className="flex min-w-[54px] flex-col items-center">
+            <span className="tabular-nums font-bold text-[15px] text-gray-100 leading-none">{cleanFmtAmerican(p.american)}</span>
+            <span className="mt-1.5 max-w-full truncate text-[8px] uppercase tracking-[0.14em] text-gray-500">{cleanTrailLabel(p.label)}</span>
+          </div>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
 /** Clean definition row: label LEFT, evidence + delta RIGHT. When `chip`, the
  *  delta renders as a small tone pill instead of a plain colored number. */
 function CleanEvRow({ label, children, delta, tone, chip }: { label: string; children: React.ReactNode; delta?: string; tone?: EdgeStackRowTone; chip?: boolean }) {
@@ -1757,10 +1902,12 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const lineMove = find("Line"); // the betting NUMBER move (totals)
   const oddsMove = find("Line Move"); // the PRICE move — carries the directional arrow + tone
   const marketRead = find("Market Read");
+  const renderedSupportingEvidence = find("Supporting Evidence");
   const book = marketSourceLabel(marketData.marketDataQuality, marketData.marketSource) ?? marketData.marketSource;
   const oddsTrailOpen = marketData.lineOpenAmerican ?? marketData.marketReadV2?.movement?.firstTrackedPrice ?? null;
   const oddsTrailCurrent = marketData.priceAmerican ?? marketData.marketReadV2?.movement?.currentPrice ?? null;
-  const hasTrail = oddsTrailOpen != null || oddsTrailCurrent != null || marketData.lockedLineAmerican != null;
+  const persistedOddsTrail = marketData.oddsTrail ?? [];
+  const hasTrail = persistedOddsTrail.length > 0 || oddsTrailOpen != null || oddsTrailCurrent != null || marketData.lockedLineAmerican != null;
   const showLineNumberSection = market === "total" || (shellSport === "wnba" && market === "first_inning");
   const lineNumberLabel = market === "total" ? "Total Line" : "Spread Line";
   return (
@@ -1773,6 +1920,13 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
           the edge as a tone chip). Merges the old Model Edge row + the
           Confidence-vs-Market strip — same numbers, no redundancy. */}
       <ModelEdgeBlock market={market} marketData={marketData} />
+
+      {renderedSupportingEvidence && (
+        <div className="border-t border-white/[0.04] mt-2 py-2.5">
+          <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300 mb-1.5">Supporting Evidence</p>
+          <p className="text-[11.5px] leading-snug text-gray-300">{renderedSupportingEvidence.evidence}</p>
+        </div>
+      )}
 
       <div className="divide-y divide-white/[0.04] mt-2">
         {book && <CleanEvRow label="Book">{book}</CleanEvRow>}
@@ -1811,12 +1965,22 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
               <span className={"text-[14px] font-black leading-none " + cleanDeltaClass(oddsMove.tone)}>{oddsMove.delta}</span>
             )}
           </div>
-          <CleanOddsTrail
-            open={oddsTrailOpen}
-            prev={marketData.lastMovePrevAmerican ?? null}
-            current={oddsTrailCurrent}
-            locked={marketData.lockedLineAmerican != null}
-          />
+          {persistedOddsTrail.length > 0 ? (
+            <CleanPersistedOddsTrail
+              trail={persistedOddsTrail}
+              open={oddsTrailOpen}
+              prev={marketData.lastMovePrevAmerican ?? null}
+              current={oddsTrailCurrent}
+              locked={marketData.lockedLineAmerican != null}
+            />
+          ) : (
+            <CleanOddsTrail
+              open={oddsTrailOpen}
+              prev={marketData.lastMovePrevAmerican ?? null}
+              current={oddsTrailCurrent}
+              locked={marketData.lockedLineAmerican != null}
+            />
+          )}
           {marketData.priceAmerican == null && oddsTrailCurrent != null && (
             <p className="mt-2 text-[10px] text-gray-500">
               Current market price shown; lock price was not recorded.
@@ -2214,6 +2378,10 @@ function MarketPulse({
   // to the legacy single-side scalars if it isn't populated (e.g.,
   // older cached DTOs).
   const splits = marketData.publicSplits;
+  const decision = marketData.recommendationDecision;
+  if (decision?.consensusSplits || decision?.sharpBookSplits) {
+    return <SourceAwareMarketPulse decision={decision} />;
+  }
   if (splits.length === 0) {
     return (
       <div className="space-y-1.5">
@@ -2240,6 +2408,49 @@ function MarketPulse({
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+function SourceAwareMarketPulse({ decision }: { decision: MarketDecision }) {
+  return (
+    <div className="space-y-2.5">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Market Pulse · Splits</p>
+      {decision.consensusSplits !== null && (
+        <SplitSection section={decision.consensusSplits} />
+      )}
+      {decision.sharpBookSplits !== null && (
+        <SplitSection section={decision.sharpBookSplits} />
+      )}
+    </div>
+  );
+}
+
+function SplitSection({ section }: { section: NonNullable<MarketDecision["consensusSplits"]> }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-gray-300">{section.label}</p>
+        {section.lastUpdated ? (
+          <p className="text-[9px] text-gray-500">{formatStaleStamp(section.lastUpdated) ?? ""}</p>
+        ) : null}
+      </div>
+      {section.rows.length > 0 ? (
+        <div className="space-y-2">
+          {section.rows.map((s) => (
+            <SideSplitsBlock
+              key={s.side}
+              label={s.label}
+              moneyPct={s.moneyPct}
+              betsPct={s.betsPct}
+              observedAt={s.observedAt ?? null}
+              isStale={s.isStale ?? false}
+            />
+          ))}
+        </div>
+      ) : section.signal ? (
+        <p className="text-[11.5px] text-gray-400 leading-snug">{section.signal}</p>
+      ) : null}
     </div>
   );
 }
@@ -2889,7 +3100,7 @@ function SlateCard({
 }) {
   const headlineMarket = headlineMarketFor(game);
   const headlineMarketData = game.markets[headlineMarket];
-  const headlineVerdict = asVerdictKey(headlineMarketData.verdict.key);
+  const headlineVerdict = marketVerdictKey(headlineMarketData);
   const t = CARD_TREATMENT[headlineVerdict];
   const shellSport = useShellSport();
 
@@ -3051,7 +3262,7 @@ function SlateCard({
             saturation keeps three different tones from feeling busy. */}
         <div className="flex items-center justify-between gap-1 mb-3 px-0.5 text-[10px] uppercase tracking-[0.10em] font-bold whitespace-nowrap overflow-hidden">
           {marketKeysFor(shellSport).map((m, i) => {
-            const v = asVerdictKey(game.markets[m].verdict.key);
+            const v = marketVerdictKey(game.markets[m]);
             const isContext = isContextOnlyMarket(m, shellSport);
             return (
               <span
@@ -3085,7 +3296,7 @@ function SlateCard({
         >
           {marketKeysFor(shellSport).map((m) => {
             const md = game.markets[m];
-            const mv = asVerdictKey(md.verdict.key);
+            const mv = marketVerdictKey(md);
             const isActiveMarket = active && activeMarket === m;
             const isContext = isContextOnlyMarket(m, shellSport);
             return (
@@ -3184,7 +3395,7 @@ function SelectedEdgeReader({
   index: number;
   total: number;
 }) {
-  const verdict = asVerdictKey(marketData.verdict.key);
+  const verdict = marketVerdictKey(marketData);
   const shellSport = useShellSport();
 
   return (
@@ -3291,7 +3502,7 @@ function SelectedEdgeReader({
               pick={game.markets[m].pick}
               line={game.markets[m].line}
               displayPct={displayPctForMarket(game.markets[m])}
-              verdict={asVerdictKey(game.markets[m].verdict.key)}
+              verdict={marketVerdictKey(game.markets[m])}
               selected={market === m}
               onClick={() => onMarketChange(m)}
               awayTeam={game.awayTeam}
@@ -3531,7 +3742,7 @@ function MobileDetailSheet({
               pick={game.markets[m].pick}
               line={game.markets[m].line}
               displayPct={displayPctForMarket(game.markets[m])}
-              verdict={asVerdictKey(game.markets[m].verdict.key)}
+              verdict={marketVerdictKey(game.markets[m])}
               selected={selectedMarket === m}
               onClick={() => onMarketChange(m)}
               awayTeam={game.awayTeam}
@@ -3685,7 +3896,7 @@ function computeVerdictCounts(games: DailyEdgeGameDto[]): Record<SlateFilter, nu
   for (const g of games) {
     const seen = new Set<VerdictKey>();
     for (const mk of ["moneyline", "total", "first_inning"] as MarketKey[]) {
-      seen.add(asVerdictKey(g.markets[mk].verdict.key));
+      seen.add(marketVerdictKey(g.markets[mk]));
     }
     for (const v of seen) counts[v]++;
   }
@@ -3695,7 +3906,7 @@ function computeVerdictCounts(games: DailyEdgeGameDto[]): Record<SlateFilter, nu
 function gameMatchesFilter(game: DailyEdgeGameDto, filter: SlateFilter): boolean {
   if (filter === "all") return true;
   for (const mk of ["moneyline", "total", "first_inning"] as MarketKey[]) {
-    if (asVerdictKey(game.markets[mk].verdict.key) === filter) return true;
+    if (marketVerdictKey(game.markets[mk]) === filter) return true;
   }
   return false;
 }
@@ -3782,7 +3993,15 @@ function SlateBoardHeader({
 // ─── Shell ──────────────────────────────────────────────────────────────
 
 export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
-  const { data, error, isLoading, refresh } = useDailyEdge({ sport });
+  const searchParams = useSearchParams();
+  const dateParam = searchParams.get("date");
+  const requestedDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : undefined;
+  const copyPreview = searchParams.get("copyPreview") === "1";
+  const { data, error, isLoading, refresh } = useDailyEdge({
+    sport,
+    date: requestedDate,
+    copyPreview,
+  });
 
   // Reader state. Preselected to the first game (game-time-ASC from the
   // route) once data lands. Compact is the resting state.
@@ -4013,7 +4232,7 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
     if (matching.length === 0) return; // belt-and-suspenders; chip should be disabled
     const firstGame = matching[0]!;
     const firstMarket = (["moneyline", "total", "first_inning"] as MarketKey[]).find(
-      (mk) => asVerdictKey(firstGame.markets[mk].verdict.key) === next
+      (mk) => marketVerdictKey(firstGame.markets[mk]) === next
     );
     setSelectedGameId(firstGame.id);
     setSelectedMarket(firstMarket ?? headlineMarketFor(firstGame));

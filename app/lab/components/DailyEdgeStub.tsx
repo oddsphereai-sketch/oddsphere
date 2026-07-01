@@ -14,7 +14,7 @@ export default function DailyEdgeStub() {
           Daily Edge
         </h2>
         <p className="text-base text-gray-200 leading-relaxed">
-          Coming next · Your model predictions across all 7 sports with sharp money signals.
+          Coming next · Your model predictions across all 7 sports with market signals.
         </p>
       </div>
     </div>

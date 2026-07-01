@@ -127,6 +127,20 @@ eq("streamKey", streamKey(777, "moneyline", "home"), "777::moneyline::home");
       m.get(key), { american: 103, line: 9.5, observedAt: "2026-06-17T13:00:00Z" });
   }
 
+  // 4b. Implausible stream prices are skipped before they can become Current.
+  {
+    const m = await loadStreamCurrentForSlate(
+      mockSupabase([
+        row("pinnacle", 9.5, -4900, "2026-06-17T13:30:00Z"),
+        row("draftkings", 9.5, 1329, "2026-06-17T13:29:00Z"),
+        row("fanduel", 9.5, -108, "2026-06-17T13:00:00Z"),
+      ]),
+      [G],
+    );
+    eq("implausible stream prices skipped; next trusted sane price used",
+      m.get(key), { american: -108, line: 9.5, observedAt: "2026-06-17T13:00:00Z" });
+  }
+
   // 5. Empty input + error degrade to empty map.
   {
     const m = await loadStreamCurrentForSlate(mockSupabase([]), [G]);
@@ -167,6 +181,34 @@ eq("streamKey", streamKey(777, "moneyline", "home"), "777::moneyline::home");
         mvRow("pinnacle", 8.5, 9, "2026-06-17T16:20:00Z"),
       ]), [G2], NOW2);
       ok("line move prefers sharper trusted book (pinnacle)", m.get(key2)?.nextLineValue === 9);
+    }
+    // implausible one-tick odds moves are omitted, even from trusted books.
+    {
+      const badMove = {
+        game_id: G2,
+        market_type: "moneyline",
+        side: "home",
+        sportsbook: "bookmaker",
+        prev_odds_american: -112,
+        next_odds_american: -4900,
+        prev_line_value: null,
+        next_line_value: null,
+        moved_at: "2026-06-17T16:56:00Z",
+      };
+      const goodMove = {
+        game_id: G2,
+        market_type: "moneyline",
+        side: "home",
+        sportsbook: "betmgm",
+        prev_odds_american: -120,
+        next_odds_american: -118,
+        prev_line_value: null,
+        next_line_value: null,
+        moved_at: "2026-06-17T16:30:00Z",
+      };
+      const m = await loadLastMovesForSlate(mockLM([badMove, goodMove]), [G2], NOW2);
+      eq("implausible line move skipped before Odds Move display",
+        m.get(streamKey(G2, "moneyline", "home"))?.prevAmerican, -120);
     }
   })().then(() => {
     console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILED`}`);

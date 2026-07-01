@@ -26,11 +26,9 @@
  *     refuses to apply and reports.
  *
  * Why this script exists:
- *   3A-3 Phase 0 audit found that the morning-slate / evening-refresh /
- *   afternoon-refresh routes (which call weatherService) are not
- *   scheduled in vercel.json — so weather hasn't refreshed since
- *   2026-06-03 for MLB. This script gives the operator a manual path
- *   while we decide on cron-schedule changes.
+ *   The scheduled feature-coverage refresh should keep weather current,
+ *   but this script gives the operator a direct manual repair path when
+ *   a slate shows backfillable weather gaps.
  */
 
 import { supabase } from "../../lib/db/supabase";

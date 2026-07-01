@@ -72,7 +72,7 @@ function moneylineGradeFromPickedEdge(args: {
 }): Grade {
   const { pickedEdge, conflict, marketReliability, bookCount, sharpPresent, projectedMargin } = args;
   if (pickedEdge === null) return "Watchlist";
-  if (pickedEdge <= -0.01) return "Caution";
+  if (pickedEdge <= -0.01) return "Watchlist";
   if (conflict && marketReliability >= 0.8 && pickedEdge < 0.04) return "Caution";
   if (pickedEdge >= 0.04 && bookCount >= 6 && sharpPresent && Math.abs(projectedMargin) >= 3) return "Best Angle";
   if (pickedEdge >= 0.02 && bookCount >= 4) return "Lean";

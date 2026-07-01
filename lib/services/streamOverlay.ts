@@ -11,6 +11,7 @@
 
 import { bookPriorityRank } from "../config/bookPriority";
 import { isBlockedSportsbook } from "../config/blockedSportsbooks";
+import { isDisplayableAmericanOdds, isDisplayableOddsMove } from "../streaming/oddsSanity";
 
 export type PriceObservation = {
   american: number | null;
@@ -113,7 +114,10 @@ export async function loadLastMovesForSlate(
     // sharp Market line. Fail closed: if no trusted book moved, emit nothing for
     // this key (the move row simply doesn't render) rather than show an outlier.
     const rows = rowsAll.filter(
-      (r) => !isBlockedSportsbook(r.sportsbook) && Number.isFinite(bookPriorityRank(r.sportsbook)),
+      (r) =>
+        !isBlockedSportsbook(r.sportsbook) &&
+        Number.isFinite(bookPriorityRank(r.sportsbook)) &&
+        isDisplayableOddsMove(r.prev_odds_american, r.next_odds_american),
     );
     if (rows.length === 0) continue;
     // The displayed move = the sharpest trusted book that moved; within that
@@ -183,7 +187,7 @@ export async function loadStreamCurrentForSlate(
     // unset → the reader falls back to the cron `lines` value.
     const bestRankByKey = new Map<string, number>();
     for (const r of rows) {
-      if (r.odds_american === null) continue;           // no usable price
+      if (!isDisplayableAmericanOdds(r.odds_american)) continue; // no usable/display-safe price
       if (isBlockedSportsbook(r.sportsbook)) continue;  // #39 defense-in-depth
       const rank = bookPriorityRank(r.sportsbook);
       if (!Number.isFinite(rank)) continue;             // untrusted book → skip

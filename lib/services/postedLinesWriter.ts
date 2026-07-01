@@ -22,6 +22,7 @@
  */
 
 import { isBlockedSportsbook } from "../config/blockedSportsbooks";
+import { isDisplayableAmericanOdds } from "../streaming/oddsSanity";
 
 /** Rich per-market entry — enough for the line tracker + audit (req 7). */
 export type PostedLineEntry = {
@@ -82,7 +83,12 @@ function bookRank(book: string): number {
 /** Live-stream entry for the picked side (preferred). Null when none. */
 export function pickStreamEntry(rows: StreamRowLite[], marketType: string, side: string, nowIso: string): PostedLineEntry | null {
   const hit = rows.find(
-    (r) => r.market_type === marketType && r.side === side && r.odds_american !== null && !isBlockedSportsbook(r.sportsbook) && r.sportsbook !== "splits_consensus",
+    (r) =>
+      r.market_type === marketType &&
+      r.side === side &&
+      isDisplayableAmericanOdds(r.odds_american) &&
+      !isBlockedSportsbook(r.sportsbook) &&
+      r.sportsbook !== "splits_consensus",
   );
   if (hit === undefined) return null;
   return {
@@ -94,7 +100,12 @@ export function pickStreamEntry(rows: StreamRowLite[], marketType: string, side:
 /** Cron `lines` entry for the picked side (trusted book). Null when none. */
 export function pickCronEntry(rows: LineRowLite[], marketType: string, side: string, nowIso: string): PostedLineEntry | null {
   const eligible = rows.filter(
-    (r) => r.market_type === marketType && r.side === side && r.odds_american !== null && !isBlockedSportsbook(r.sportsbook) && r.sportsbook !== "splits_consensus",
+    (r) =>
+      r.market_type === marketType &&
+      r.side === side &&
+      isDisplayableAmericanOdds(r.odds_american) &&
+      !isBlockedSportsbook(r.sportsbook) &&
+      r.sportsbook !== "splits_consensus",
   );
   if (eligible.length === 0) return null;
   eligible.sort((a, b) => bookRank(a.sportsbook) - bookRank(b.sportsbook));

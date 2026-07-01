@@ -14,6 +14,14 @@
       "schedule": "5 0-2 * * *"
     },
     {
+      "path": "/api/cron/feature-coverage-refresh",
+      "schedule": "55 7,9,11,12-23 * * *"
+    },
+    {
+      "path": "/api/cron/feature-coverage-refresh",
+      "schedule": "55 0-2 * * *"
+    },
+    {
       "path": "/api/cron/pregame-sweep?lockOnly=true",
       "schedule": "*/15 14-23 * * *"
     },
@@ -28,6 +36,14 @@
     {
       "path": "/api/cron/public-splits-observations-refresh",
       "schedule": "12,27,42,57 0-3 * * *"
+    },
+    {
+      "path": "/api/cron/ai-daily-edge-shadow?sport=mlb&markets=ML,TOTAL",
+      "schedule": "22 13-23 * * *"
+    },
+    {
+      "path": "/api/cron/ai-daily-edge-shadow?sport=mlb&markets=ML,TOTAL",
+      "schedule": "22 0-3 * * *"
     },
     {
       "path": "/api/cron/cleanup-stream-tables",

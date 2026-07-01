@@ -26,11 +26,9 @@
  *     games (< 50% of expected).
  *
  * Why this script exists:
- *   3A-3 Phase 0 audit found that lineup-watch / evening-refresh routes
- *   (which call lineupService) aren't scheduled in vercel.json — so the
- *   lineups table has been empty for the last 3 MLB slates. This script
- *   gives the operator a manual path while we decide on cron-schedule
- *   changes.
+ *   The scheduled feature-coverage refresh should keep lineups current,
+ *   but this script gives the operator a direct manual repair path when
+ *   a slate shows backfillable lineup gaps.
  */
 
 import { supabase } from "../../lib/db/supabase";

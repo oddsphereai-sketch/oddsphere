@@ -17,6 +17,7 @@
 import { readFileSync } from "node:fs";
 
 const ROUTE_PATH = "app/api/cron/feature-coverage-refresh/route.ts";
+const VERCEL_JSON_PATH = "vercel.json";
 
 function fail(name: string, msg: string): never {
   console.error(`  ✗ ${name}`);
@@ -105,7 +106,24 @@ async function main() {
   }
   ok("T7 partial-result propagation present");
 
-  console.log(`\n  result: 7/7 pass\n`);
+  // T8 — cron is actually scheduled before slate-cycle so repair runs
+  // before the hourly model rebuild, not merely as a dormant route.
+  const vercel = readFileSync(VERCEL_JSON_PATH, "utf8");
+  const vercelConfig = JSON.parse(vercel) as {
+    crons?: Array<{ path?: string; schedule?: string }>;
+  };
+  const schedules = (vercelConfig.crons ?? [])
+    .filter((c) => c.path === "/api/cron/feature-coverage-refresh")
+    .map((c) => c.schedule);
+  if (schedules.length < 2) {
+    fail("T8 feature cron scheduled", "feature-coverage-refresh must be scheduled for daytime and late-game windows");
+  }
+  if (!schedules.includes("55 7,9,11,12-23 * * *") || !schedules.includes("55 0-2 * * *")) {
+    fail("T8 feature cron scheduled", `unexpected schedules: ${schedules.join(", ")}`);
+  }
+  ok("T8 feature-coverage-refresh scheduled before slate-cycle");
+
+  console.log(`\n  result: 8/8 pass\n`);
 }
 
 main().catch((e) => { console.error("FATAL:", e); process.exit(1); });

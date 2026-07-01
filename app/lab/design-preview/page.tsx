@@ -324,7 +324,7 @@ const GAMES: Game[] = [
           { label: "Market implied prob", value: "56.0%" },
           { label: "Starter edge", value: "+0.42 xFIP", tone: "emerald" },
         ],
-        whyLine: "Matchup edge + line moving on sharp money.",
+        whyLine: "Matchup edge + line moving with market support.",
         riskLine: "Avoid forcing the 1st-inning.",
         guidedGuide: "The model likes HOU and the market is moving the same way.",
         guidedWatchOut: "Avoid stretching this into related side bets.",

@@ -147,6 +147,25 @@ function splitForPick(
   return null;
 }
 
+function formatSplitPct(value: number | null | undefined): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const pct = value <= 1 ? value * 100 : value;
+  return `${Math.round(pct)}%`;
+}
+
+function canonicalSplitEvidence(rows: Array<{ label: string; moneyPct: number | null; betsPct: number | null }>): string {
+  const parts = rows.map((row) => {
+    const money = formatSplitPct(row.moneyPct);
+    const bets = formatSplitPct(row.betsPct);
+    const values = [
+      money ? `${money} money` : null,
+      bets ? `${bets} bets` : null,
+    ].filter(Boolean);
+    return values.length > 0 ? `${row.label} ${values.join(" / ")}` : row.label;
+  });
+  return parts.length > 0 ? parts.join(" · ") : "Signal row available";
+}
+
 /**
  * Build the 4 Edge Stack rows for one (game × market) tile.
  *
@@ -331,6 +350,55 @@ export function buildEdgeStackRows(
   // for FI" because FI's full miss is an upstream limit, not a partial
   // gap. Other sports can reuse the `first_inning` DTO slot for spread
   // or puck line, so those must read from `publicSplits`.
+  const canonicalDecision = marketData.recommendationDecision;
+  if (canonicalDecision) {
+    if (canonicalDecision.consensusSplits) {
+      rows.push({
+        label: "Consensus Splits",
+        evidence: canonicalSplitEvidence(canonicalDecision.consensusSplits.rows),
+        delta: "",
+        tone: "gray",
+      });
+    } else {
+      rows.push({
+        label: "Consensus Splits",
+        evidence: "Consensus split unavailable",
+        delta: "",
+        tone: "gray",
+      });
+    }
+    if (canonicalDecision.sharpBookSplits) {
+      rows.push({
+        label: canonicalDecision.sharpBookSplits.label,
+        evidence:
+          canonicalDecision.sharpBookSplits.rows.length > 0
+            ? canonicalSplitEvidence(canonicalDecision.sharpBookSplits.rows)
+            : (canonicalDecision.sharpBookSplits.signal ?? "Sharp book signal available"),
+        delta: "",
+        tone:
+          canonicalDecision.resolvedMarketRead.status === "mixed"
+            ? "gray"
+            : canonicalDecision.resolvedMarketRead.status === "resistance" ||
+                canonicalDecision.resolvedMarketRead.status === "consensus_resistance"
+              ? "amber"
+              : "emerald",
+      });
+    }
+    rows.push({
+      label: "Market Read",
+      evidence: `${canonicalDecision.resolvedMarketRead.label} · ${canonicalDecision.resolvedMarketRead.copy}`,
+      delta: "",
+      tone: canonicalDecision.resolvedMarketRead.tone,
+    });
+    if (canonicalDecision.renderedSupportingEvidenceCopy) {
+      rows.push({
+        label: "Supporting Evidence",
+        evidence: canonicalDecision.renderedSupportingEvidenceCopy,
+        delta: "",
+        tone: "gray",
+      });
+    }
+  } else {
   const pickedSplit = splitForPick(marketData);
   // Prefer the resolved two-sided display splits. MLB's Playbook/SharpAPI
   // overlay updates publicSplits after the legacy picked-side scalars are
@@ -375,6 +443,7 @@ export function buildEdgeStackRows(
       delta: "unavailable",
       tone: "gray",
     });
+  }
   }
 
   // ── Line Move ───────────────────────────────────────────────────
@@ -442,7 +511,9 @@ export function buildEdgeStackRows(
   // v2 is sport-scoped behind a master switch. When v2 is enabled for a sport,
   // never fall back row-by-row to the legacy live-stream read; an absent valid
   // v2 snapshot means the module cleanly omits.
-  if (marketData.marketReadV2Enabled) {
+  if (canonicalDecision) {
+    // Already rendered from recommendationDecision above.
+  } else if (marketData.marketReadV2Enabled) {
     if (marketData.marketReadV2) {
       const summary =
         marketData.marketReadV2.sourceSummary.priceAction ??
@@ -455,7 +526,7 @@ export function buildEdgeStackRows(
       });
       if (marketData.marketReadV2.sourceSummary.playbookConsensus) {
         rows.push({
-          label: "Consensus",
+          label: "Consensus Splits",
           evidence: marketData.marketReadV2.sourceSummary.playbookConsensus.replace(/^Consensus:\s*/i, ""),
           delta: "",
           tone: "gray",
@@ -463,8 +534,11 @@ export function buildEdgeStackRows(
       }
       if (marketData.marketReadV2.sourceSummary.sharpMoney) {
         rows.push({
-          label: "Sharp Money",
-          evidence: marketData.marketReadV2.sourceSummary.sharpMoney.replace(/^Sharp Money:\s*/i, ""),
+          label: "Sharp Book Splits",
+          evidence: marketData.marketReadV2.sourceSummary.sharpMoney
+            .replace(/^Sharp Money:\s*/i, "")
+            .replace(/\bsharp money\b/gi, "sharp-book splits")
+            .replace(/\bsource-specific money\b/gi, "sharp-book splits"),
           delta: "",
           tone: marketData.marketReadV2.sourceSummary.sharpMoney.toLowerCase().includes("against")
             ? "amber"

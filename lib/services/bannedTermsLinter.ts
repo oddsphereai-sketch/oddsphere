@@ -39,7 +39,6 @@ const BANNED_TERM_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
   { name: "juice",                 pattern: /\bjuice\b/i },
   { name: "no-vig",                pattern: /\bno[- ]vig\b/i },
   { name: "de-vig",                pattern: /\bde[- ]vig(?:ged)?\b/i },
-  { name: "consensus",             pattern: /\bconsensus\b/i },
   { name: "RLM",                   pattern: /\bRLM\b/i },
   { name: "reverse line movement", pattern: /\breverse line movement\b/i },
   { name: "CLV",                   pattern: /\bCLV\b/i },

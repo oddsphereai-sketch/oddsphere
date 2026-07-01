@@ -23,6 +23,7 @@ export const BOOK_PRIORITY = [
   "fanduel",
   "betmgm",
   "caesars",
+  "recommendation_snapshot",
   "bet365 us",
   "bookmaker",
   "ballybet",
