@@ -126,6 +126,7 @@ import {
   applyDailyEdgeRenderedCopyFlags,
   type DailyEdgeRenderedCopyFlagOverrides,
 } from "@/lib/services/dailyEdge/memberFacingCopyRenderer";
+import { applyMlbSameDayGradeGuardrails } from "@/lib/services/dailyEdge/mlbSameDayGradeGuardrails";
 import type { MarketDecision, MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer", "wnba"];
@@ -1562,7 +1563,7 @@ function buildGameDto(
     selectedSide: pred.predicted_ou_side,
     lockedAt: lockedOu?.lockedPriceAt ?? pred.locked_at,
   });
-  const ml = buildMarketEdge({
+  let ml = buildMarketEdge({
     market: "moneyline",
     pick: mlPick,
     confidence: mlConfidence,
@@ -1598,7 +1599,7 @@ function buildGameDto(
     marketReadV2: mlMarketReadV2,
     marketReadV2Enabled: marketReadV2Lookup?.enabled === true,
   });
-  const total = buildMarketEdge({
+  let total = buildMarketEdge({
     market: "total",
     pick: totalPick,
     confidence: ouConfidence,
@@ -1650,7 +1651,7 @@ function buildGameDto(
     marketReadV2: totalMarketReadV2,
     marketReadV2Enabled: marketReadV2Lookup?.enabled === true,
   });
-  const firstInning = buildMarketEdge({
+  let firstInning = buildMarketEdge({
     market: "first_inning",
     pick: nrfiPick,
     confidence: nrfiConfidence,
@@ -1697,6 +1698,15 @@ function buildGameDto(
     marketReadV2: null,
     marketReadV2Enabled: marketReadV2Lookup?.enabled === true,
   });
+
+  const guardrailedMarkets = applyMlbSameDayGradeGuardrails({
+    moneyline: ml,
+    total,
+    firstInning,
+  });
+  ml = guardrailedMarkets.moneyline;
+  total = guardrailedMarkets.total;
+  firstInning = guardrailedMarkets.firstInning;
 
   // 4.1.10 — per-game status flags.
   const status: GameStatusDto = {
