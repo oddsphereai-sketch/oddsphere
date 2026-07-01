@@ -25,6 +25,7 @@
  */
 
 import Link from "next/link";
+import type { Metadata } from "next";
 
 import { sanitizeNext } from "@/lib/auth/betaSession";
 import {
@@ -33,6 +34,15 @@ import {
   isBetaLoginPubliclyVisible,
   isWhopAccessEnabled,
 } from "@/lib/auth/whopConfig";
+
+export const metadata: Metadata = {
+  title: "Log In — OddSphere AI",
+  description: "Sign in to the OddSphere AI member dashboard through Whop.",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 type SearchParams = { next?: string; error?: string; wd?: string; wdd?: string };
 

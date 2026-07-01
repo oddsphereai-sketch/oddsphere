@@ -199,7 +199,7 @@ export default function PublicTrackRecordPage() {
           Join Premium — $25/mo →
         </Link>
         <p className="text-xs text-gray-400 mt-4 italic">
-          Locked for life. Cancel anytime through Whop.
+          Charter pricing while available. Cancel anytime through Whop.
         </p>
       </section>
     </main>

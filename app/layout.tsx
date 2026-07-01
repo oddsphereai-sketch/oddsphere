@@ -19,9 +19,9 @@ const geistMono = Geist_Mono({
 // `oddsphere-ruby.vercel.app` resolves to the same deployment but is
 // not customer-facing.
 const SITE_URL = "https://www.oddsphereai.com";
-const SITE_TITLE = "OddSphere AI — AI-Powered Sports Predictions";
+const SITE_TITLE = "OddSphere AI — Sports Prediction Models & Market Analysis";
 const SITE_DESCRIPTION =
-  "Publicly-tracked AI sports predictions across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL. Where data meets winning. For entertainment and informational purposes only.";
+  "Sports prediction models, market movement analysis, Play Grades, and tracked results in one Daily Edge dashboard. Informational sports analytics only.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -36,7 +36,9 @@ export const metadata: Metadata = {
     images: [
       {
         url: "/og-image.png",
-        alt: "OddSphere AI — AI-Powered Sports Predictions",
+        width: 1200,
+        height: 630,
+        alt: "OddSphere AI sports analytics dashboard preview",
       },
     ],
   },
@@ -54,11 +56,7 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
-// Organization + WebSite structured data (JSON-LD). Brand/identity only —
-// deliberately NO sports-pick / betting-offer schema (would be misleading and
-// could expose premium picks). Brand rendered as "OddSphere AI" to match the
-// product surfaces (note: SITE_TITLE constant uses "Oddsphere" — a casing
-// cleanup is recommended but left for a brand-owner decision).
+// Organization + WebSite structured data (JSON-LD). Brand/identity only.
 const JSON_LD = {
   "@context": "https://schema.org",
   "@graph": [

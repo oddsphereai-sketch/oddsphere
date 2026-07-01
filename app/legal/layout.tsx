@@ -2,7 +2,7 @@
  * /legal/* shared layout — Phase 6B.4 launch.
  *
  * Light wrapper around the marketing chrome for Terms / Privacy /
- * Responsible Gambling. Constrains line length, keeps typography
+ * Responsible Gambling, and Refund/Cancellation. Constrains line length, keeps typography
  * consistent across the three pages.
  */
 

@@ -57,6 +57,13 @@ export default function Footer() {
             Responsible Gambling
           </Link>
           <span aria-hidden="true" className="text-gray-700">·</span>
+          <Link
+            href="/legal/refund-cancellation"
+            className="hover:text-white transition-colors focus-visible:outline-none focus-visible:text-white"
+          >
+            Refund &amp; Cancellation
+          </Link>
+          <span aria-hidden="true" className="text-gray-700">·</span>
           <a
             href="mailto:support@oddsphereai.com"
             className="hover:text-white transition-colors focus-visible:outline-none focus-visible:text-white"

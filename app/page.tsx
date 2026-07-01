@@ -1,422 +1,439 @@
-/**
- * / — Home / marketing landing (Phase 6.2b, V2.1 spec Part 11).
- *
- * Nine sections per spec:
- *   a. Hero with CTAs
- *   b. Problem statement
- *   c. What You Get (4 cards)
- *   d. How It Works (Model Pick → Market Context → Signal Label → Tracked Result)
- *   e. Signal Language Preview (5 example signals)
- *   f. Track Record Preview (top 3-5 markets, real data)
- *   g. Pricing CTA card
- *   h. FAQ (6 questions, collapsible)
- *   i. Responsible footer (Global Footer lands in 6.2c — for now layout.tsx footer)
- *
- * Voice (locked): premium handicapping, never capper. No "LOCK"/"HAMMER"/
- * "GUARANTEED" / multiple fire-emoji explosions / picks-as-promises framing.
- */
-
+import type { Metadata } from "next";
 import Link from "next/link";
-import { TRACK_RECORD, type TrackRecordRow } from "./data/trackRecord";
 
-export const metadata = {
-  title: "OddSphere AI — AI Sports Picks Built for Clarity",
+const SITE_URL = "https://www.oddsphereai.com";
+
+export const metadata: Metadata = {
+  title: "OddSphere AI | Sports Prediction Models & Market Analysis",
   description:
-    "OddSphere turns model projections, market movement, and betting context into clear daily signals. Daily picks, player props research, sharp signals, and tracked results across 7 leagues.",
+    "OddSphere AI combines sports prediction models, market movement analysis, Play Grades, and tracked results in one Daily Edge dashboard.",
   alternates: { canonical: "/" },
+  keywords: [
+    "AI sports predictions",
+    "sports prediction models",
+    "MLB predictions",
+    "WNBA predictions",
+    "World Cup predictions",
+    "sports betting analytics",
+    "market movement analysis",
+    "sports model dashboard",
+  ],
+  openGraph: {
+    type: "website",
+    url: "/",
+    title: "OddSphere AI | Daily Edge Sports Model Dashboard",
+    description:
+      "Model projections, price/value context, market movement, Play Grades, and tracked results in one clean sports analytics dashboard.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "OddSphere AI sports analytics dashboard preview",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@OddSphereAI",
+    title: "OddSphere AI | Daily Edge Sports Model Dashboard",
+    description:
+      "Sports prediction models, market analysis, Play Grades, and tracked results in one Daily Edge dashboard.",
+    images: ["/og-image.png"],
+  },
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────
+type FaqItem = { q: string; a: string };
 
-function pct(n: number, digits = 1): string {
-  return `${n.toFixed(digits)}%`;
-}
+const supportedSports = ["MLB", "WNBA", "World Cup", "NBA", "NHL"];
 
-function fmtCompact(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return n.toLocaleString();
-}
-
-function aggregateLifetime(rows: TrackRecordRow[]) {
-  const wins = rows.reduce((s, r) => s + r.lifetimeWins, 0);
-  const total = rows.reduce((s, r) => s + r.lifetimeTotal, 0);
-  return { wins, total, hitRate: total > 0 ? (wins / total) * 100 : 0 };
-}
-
-function topMarkets(rows: TrackRecordRow[], n: number): TrackRecordRow[] {
-  return [...rows]
-    .filter((r) => r.lifetimeTotal >= 100)
-    .sort((a, b) => b.lifetimePercent - a.lifetimePercent)
-    .slice(0, n);
-}
-
-// ─── Content blocks ───────────────────────────────────────────────────────
-
-const WHAT_YOU_GET = [
+const faq: FaqItem[] = [
   {
-    icon: "🎯",
-    title: "Daily Edge",
-    body: "Tonight&rsquo;s board across every game, ranked by signal strength. See which picks the model + sharps agree on, which are model-only, and which to skip.",
+    q: "What is Daily Edge?",
+    a: "Daily Edge is OddSphere's main dashboard for model-driven game predictions. It organizes each slate by Play Grade, market context, price/value, and supporting evidence.",
   },
   {
-    icon: "🎮",
-    title: "Player Props Lab",
-    body: "Ranked prop edges with a drill-down for every line — projection, edge%, supporting signals, and a Risk Check that names the catches before you bet.",
+    q: "Are picks guaranteed?",
+    a: "No. Sports outcomes are uncertain. OddSphere provides informational sports analytics, model projections, and market context. It does not guarantee outcomes or profits.",
   },
   {
-    icon: "🦈",
-    title: "Sharp Signals",
-    body: "Steam moves, reverse line movement, Pinnacle fair-line agreement, and public-vs-sharp money divergence — surfaced where it matters, hidden where it doesn&rsquo;t.",
+    q: "What are Play Grades?",
+    a: "Play Grades are simple labels that summarize the current model/value setup: Best Angle, Lean, Watchlist, Caution, and No Play. They are decision-support labels, not guarantees.",
   },
   {
-    icon: "📈",
-    title: "Tracked Results",
-    body: "Every pick logged before games start, graded against final scores. Honest calibration: when we say 60%, we show you what we actually hit.",
-  },
-];
-
-const HOW_IT_WORKS = [
-  {
-    n: 1,
-    label: "Model Pick",
-    body: "Our model produces a projection + confidence for each game and prop line.",
+    q: "What are Consensus Splits and Sharp Book Splits?",
+    a: "Consensus Splits summarize broader money and bet distribution where available. Sharp Book Splits or Signals summarize a sharper market context when the sport and market support it. OddSphere hides unsupported sections instead of showing empty placeholders.",
   },
   {
-    n: 2,
-    label: "Market Context",
-    body: "We layer sharp-money signals, line movement, and public action on top.",
+    q: "Does OddSphere place bets for users?",
+    a: "No. OddSphere is not a sportsbook and does not place, accept, or settle wagers. Users make their own decisions and are responsible for complying with local laws.",
   },
   {
-    n: 3,
-    label: "Signal Label",
-    body: "One of 7 grades: Best Signal, Sharp Confirmed, Market-Led, Model Only, Market Watch, Public Smoke, or Sharp Conflict.",
+    q: "Can I cancel?",
+    a: "Yes. Membership billing is managed through Whop, and users can cancel through their Whop account. See the Refund & Cancellation Policy for details.",
   },
   {
-    n: 4,
-    label: "Tracked Result",
-    body: "Pick is logged, the game plays out, the result hits Tracking the next morning.",
-  },
-];
-
-const SIGNAL_PREVIEW: Array<{ emoji: string; label: string; body: string; color: string }> = [
-  {
-    emoji: "🔥",
-    label: "Best Signal",
-    body: "Model + sharps agree on the pick.",
-    color: "text-emerald-300 border-emerald-700/40 bg-emerald-950/30",
-  },
-  {
-    emoji: "✅",
-    label: "Sharp Confirmed",
-    body: "Market supports the model pick.",
-    color: "text-emerald-300 border-emerald-700/40 bg-emerald-950/30",
-  },
-  {
-    emoji: "⚡",
-    label: "Market-Led",
-    body: "Sharp money is driving this read, even though model edge is light.",
-    color: "text-sky-300 border-sky-700/40 bg-sky-950/30",
-  },
-  {
-    emoji: "📊",
-    label: "Model Only",
-    body: "Strong model edge with no major market signal.",
-    color: "text-gray-300 border-gray-700/50 bg-gray-900/60",
-  },
-  {
-    emoji: "⚠️",
-    label: "Sharp Conflict",
-    body: "Market is moving against the model — proceed with caution.",
-    color: "text-amber-300 border-amber-700/40 bg-amber-950/30",
-  },
-];
-
-const FAQ: Array<{ q: string; a: string }> = [
-  {
-    q: "What exactly do I get for $25/month?",
-    a: "Daily model picks across NFL, CFB, NBA, CBB, MLB, NHL, and UCL. The Player Props Lab with edge rankings and drill-down. Sharp signal analysis. Honest tracking with calibration. Discord access included.",
-  },
-  {
-    q: "How is this different from a typical picks Discord?",
-    a: "We publish the math, the line, the confidence, and the result — before and after the game. No \"hammer this\" hype. You see exactly how often our 60% confidence picks actually hit.",
+    q: "What sports are included?",
+    a: "Daily Edge currently supports MLB, WNBA, and World Cup/Soccer views, with NBA and NHL surfaces available as those seasons and data pipelines are active.",
   },
   {
     q: "Is this betting advice?",
-    a: "No. We provide model projections and market context as research. You decide what to bet, how much, and whether to bet at all. Hit rate doesn&rsquo;t equal profit — odds, line shopping, and bankroll matter.",
-  },
-  {
-    q: "What sports are covered at launch?",
-    a: "MLB is fully live in The Lab. NBA, NFL, NHL, CBB, CFB, and UCL show in tracking but Lab functionality rolls in as each season starts. Discord covers all 7 leagues year-round.",
-  },
-  {
-    q: "What if I want to cancel?",
-    a: "Subscriptions are managed through Whop — cancel anytime in your Whop account. No questions, no retention calls.",
-  },
-  {
-    q: "Why $25 locked for life?",
-    a: "Charter pricing for our first members. The rate you sign up at is the rate you keep, as long as your subscription stays active. New tiers may launch later at higher prices; existing members are grandfathered.",
+    a: "No. OddSphere provides informational and educational sports analytics. Nothing on the site should be treated as financial advice or a recommendation to place any wager.",
   },
 ];
 
-// ─── Component ────────────────────────────────────────────────────────────
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "FAQPage",
+      "@id": `${SITE_URL}/#faq`,
+      mainEntity: faq.map((item) => ({
+        "@type": "Question",
+        name: item.q,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: item.a,
+        },
+      })),
+    },
+    {
+      "@type": "Product",
+      "@id": `${SITE_URL}/#product`,
+      name: "OddSphere AI Premium",
+      description:
+        "A subscription sports analytics dashboard with model projections, market movement analysis, Play Grades, and tracked results.",
+      brand: { "@id": `${SITE_URL}/#organization` },
+      offers: {
+        "@type": "Offer",
+        price: "25",
+        priceCurrency: "USD",
+        availability: "https://schema.org/InStock",
+        url: `${SITE_URL}/pricing`,
+        category: "Subscription",
+      },
+    },
+  ],
+};
+
+function StatPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2">
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-400">{label}</p>
+      <p className="mt-1 text-lg font-black tabular-nums text-white">{value}</p>
+    </div>
+  );
+}
+
+function MiniBar({ label, money, bets }: { label: string; money: number; bets: number }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.12em] text-gray-300">
+        <span>{label}</span>
+      </div>
+      <div className="grid grid-cols-[44px_1fr_34px] items-center gap-2 text-[11px] text-gray-400">
+        <span>Money</span>
+        <span className="h-2 rounded-full bg-gray-800">
+          <span className="block h-full rounded-full bg-violet-400" style={{ width: `${money}%` }} />
+        </span>
+        <span className="text-right tabular-nums">{money}%</span>
+      </div>
+      <div className="grid grid-cols-[44px_1fr_34px] items-center gap-2 text-[11px] text-gray-400">
+        <span>Bets</span>
+        <span className="h-2 rounded-full bg-gray-800">
+          <span className="block h-full rounded-full bg-emerald-300" style={{ width: `${bets}%` }} />
+        </span>
+        <span className="text-right tabular-nums">{bets}%</span>
+      </div>
+    </div>
+  );
+}
+
+function ProductMockup() {
+  return (
+    <div
+      aria-label="Daily Edge product preview showing Play Grade, Market Read, Supporting Evidence, and split context"
+      className="relative mx-auto max-w-6xl overflow-hidden rounded-2xl border border-violet-500/30 bg-gray-950 shadow-[0_0_70px_rgba(139,92,246,0.18)]"
+    >
+      <div className="border-b border-white/10 bg-white/[0.03] px-4 py-3 sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-300">Daily Edge Preview</p>
+            <p className="mt-1 text-sm font-semibold text-white">MLB slate dashboard</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-semibold text-gray-300">
+            {["MLB", "WNBA", "World Cup"].map((sport) => (
+              <span key={sport} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+                {sport}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-0 lg:grid-cols-[1.05fr_1.35fr]">
+        <div className="border-b border-white/10 p-4 sm:p-5 lg:border-b-0 lg:border-r">
+          <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Selected Edge</p>
+                <h3 className="mt-2 text-2xl font-black tracking-tight text-white">NYM @ TOR</h3>
+              </div>
+              <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-emerald-300">
+                Best Angle
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <StatPill label="Pick" value="NYM" />
+              <StatPill label="Model" value="56%" />
+              <StatPill label="Price" value="-104" />
+            </div>
+
+            <div className="mt-4 rounded-xl border border-white/10 bg-gray-950/70 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">Quick Read</p>
+              <p className="mt-2 text-sm leading-relaxed text-gray-200">
+                Strong model/value case with odds movement and sharper market context behind it.
+              </p>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {[
+                ["Moneyline", "NYM", "Best Angle"],
+                ["Total", "Over 7.5", "Lean"],
+                ["1st Inning", "Toss-Up", "No Play"],
+              ].map(([market, pick, grade]) => (
+                <div key={market} className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">{market}</p>
+                    <p className="text-sm font-bold text-white">{pick}</p>
+                  </div>
+                  <p className="text-xs font-semibold text-violet-200">{grade}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-5">
+          <div className="grid gap-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">Supporting Evidence</p>
+              <p className="mt-2 text-sm leading-relaxed text-gray-200">
+                NYM has 56% model probability versus 46% implied at -104, for about 10 percentage points of edge.
+              </p>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <StatPill label="Projection" value="56%" />
+                <StatPill label="Market" value="46%" />
+                <StatPill label="Edge" value="+10pp" />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">Market Read</p>
+              <p className="mt-2 text-sm leading-relaxed text-gray-200">
+                Mixed consensus, but the sharper split profile and odds movement support the pick. Price remains playable.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-300">Market Pulse - Splits</p>
+                <p className="text-[11px] text-gray-500">Example display</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-white">Consensus Splits</p>
+                  <MiniBar label="NYM" money={41} bets={45} />
+                  <div className="mt-3">
+                    <MiniBar label="TOR" money={59} bets={55} />
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-white">Sharp Book Splits</p>
+                  <MiniBar label="NYM" money={78} bets={36} />
+                  <div className="mt-3">
+                    <MiniBar label="TOR" money={22} bets={64} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({ eyebrow, title, body }: { eyebrow: string; title: string; body?: string }) {
+  return (
+    <header className="mx-auto mb-10 max-w-3xl text-center">
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-300">{eyebrow}</p>
+      <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">{title}</h2>
+      {body ? <p className="mt-4 text-base leading-relaxed text-gray-300">{body}</p> : null}
+    </header>
+  );
+}
 
 export default function HomePage() {
-  const lifetime = aggregateLifetime(TRACK_RECORD);
-  const top = topMarkets(TRACK_RECORD, 4);
-
   return (
     <main>
-      {/* a) Hero */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 sm:pt-24 pb-16 text-center">
-        <p className="inline-block text-xs font-bold uppercase tracking-[0.18em] text-violet-300 mb-4 border border-violet-700/40 bg-violet-950/30 rounded-full px-3 py-1">
-          OddSphere Premium · $25/mo
-        </p>
-        <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight mb-5 leading-[1.05]">
-          AI sports picks <span className="text-violet-300">built for clarity.</span>
-        </h1>
-        <p className="text-lg sm:text-xl text-gray-200 max-w-2xl mx-auto leading-relaxed mb-8">
-          Model projections, market movement, and betting context — turned into
-          clear daily signals. Every pick tracked.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Link
-            href="/pricing"
-            className="inline-block bg-violet-600 hover:bg-violet-500 text-white font-bold px-8 py-3.5 rounded-lg transition-all duration-200 shadow-lg shadow-violet-900/40 hover:shadow-[0_0_25px_rgba(167,139,250,0.5)] hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
-          >
-            Join Premium → $25/mo
-          </Link>
-          <Link
-            href="/track-record"
-            className="inline-block bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-violet-500/40 text-gray-100 hover:text-white font-semibold px-8 py-3.5 rounded-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
-          >
-            See the track record →
-          </Link>
-        </div>
-        <p className="text-xs text-gray-400 mt-5 tabular-nums">
-          {fmtCompact(lifetime.total)}+ picks tracked · {pct(lifetime.hitRate, 1)} lifetime hit rate
-        </p>
-      </section>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      {/* b) Problem */}
-      <section className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-        <div className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-2xl p-8 sm:p-10 text-center">
-          <h2 className="text-2xl sm:text-3xl font-black tracking-tight mb-4">
-            Most pick services don&rsquo;t show you the math.
-          </h2>
-          <p className="text-base sm:text-lg text-gray-200 leading-relaxed">
-            You get hype, capper-speak, and emoji explosions — but rarely a clear
-            answer to <em>why</em> a pick is the pick, what the model actually
-            projected, and how often that grade has hit in the past.
-            <br />
-            <br />
-            We do that differently.
+      <section className="mx-auto max-w-7xl px-4 pb-14 pt-16 sm:px-6 sm:pb-20 sm:pt-24 lg:px-8">
+        <div className="mx-auto max-w-4xl text-center">
+          <p className="inline-flex rounded-full border border-violet-400/30 bg-violet-400/10 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.16em] text-violet-200">
+            Sports model dashboard
           </p>
-        </div>
-      </section>
-
-      {/* c) What You Get */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-        <header className="text-center mb-10">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-300 mb-2">
-            What you get
+          <h1 className="mt-6 text-4xl font-black tracking-tight text-white sm:text-6xl">
+            AI-powered sports prediction models and market analysis in one Daily Edge dashboard.
+          </h1>
+          <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-gray-200">
+            OddSphere turns model projections, price/value context, market movement, and tracked results into a clean daily reader for serious sports fans.
           </p>
-          <h2 className="text-3xl sm:text-4xl font-black tracking-tight">
-            Four tools. One membership.
-          </h2>
-        </header>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-          {WHAT_YOU_GET.map((feat) => (
-            <div
-              key={feat.title}
-              className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-2xl p-6 sm:p-7 transition-all duration-200 hover:border-violet-500/40 hover:shadow-[0_0_24px_rgba(167,139,250,0.12)]"
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link
+              href="/pricing"
+              className="rounded-lg bg-violet-600 px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-900/40 transition hover:bg-violet-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
-              <p className="text-3xl mb-3" aria-hidden="true">{feat.icon}</p>
-              <h3 className="text-lg sm:text-xl font-bold mb-2 tracking-tight">
-                {feat.title}
-              </h3>
-              <p
-                className="text-sm sm:text-base text-gray-300 leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: feat.body }}
-              />
+              Get Access
+            </Link>
+            <Link
+              href="#product-preview"
+              className="rounded-lg border border-white/15 bg-white/[0.04] px-7 py-3.5 text-sm font-bold text-white transition hover:border-violet-400/40 hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+            >
+              See What's Inside
+            </Link>
+            <Link
+              href="/track-record"
+              className="rounded-lg border border-white/15 bg-gray-950 px-7 py-3.5 text-sm font-bold text-white transition hover:border-violet-400/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+            >
+              View Tracking
+            </Link>
+          </div>
+          <p className="mt-5 text-xs leading-relaxed text-gray-400">
+            Informational sports analytics only. No guaranteed outcomes. Betting involves risk.
+          </p>
+        </div>
+      </section>
+
+      <section id="product-preview" className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
+        <ProductMockup />
+        <p className="mx-auto mt-4 max-w-3xl text-center text-xs leading-relaxed text-gray-500">
+          Product preview uses representative display data and member-facing labels. It does not expose private member-only live card data.
+        </p>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <SectionHeader
+          eyebrow="How it works"
+          title="The reader connects model, market, and price."
+          body="OddSphere is built to show why a prediction is graded the way it is, not just the pick."
+        />
+        <div className="grid gap-4 md:grid-cols-4">
+          {[
+            ["Model Projection", "Game and market-level model probabilities create the starting point for every read."],
+            ["Market Context", "Odds movement, price, Consensus Splits, and Sharp Book context are surfaced when supported."],
+            ["Play Grade", "Each prediction is simplified into Best Angle, Lean, Watchlist, Caution, or No Play."],
+            ["Tracked Results", "Public tracking shows historical performance and keeps the product accountable."],
+          ].map(([title, body], index) => (
+            <div key={title} className="rounded-xl border border-white/10 bg-white/[0.035] p-5">
+              <p className="mb-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-violet-500/15 text-sm font-black text-violet-200">
+                {index + 1}
+              </p>
+              <h3 className="text-base font-bold text-white">{title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-gray-300">{body}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* d) How It Works */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-        <header className="text-center mb-10">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-300 mb-2">
-            How it works
-          </p>
-          <h2 className="text-3xl sm:text-4xl font-black tracking-tight">
-            Model + market → clear signal.
-          </h2>
-        </header>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {HOW_IT_WORKS.map((step) => (
-            <div
-              key={step.n}
-              className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-2xl p-5 sm:p-6 text-center"
-            >
-              <p className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-violet-600/20 border border-violet-500/40 text-violet-300 text-sm font-black tabular-nums mb-3">
-                {step.n}
-              </p>
-              <p className="text-sm font-bold uppercase tracking-[0.1em] text-white mb-2">
-                {step.label}
-              </p>
-              <p className="text-sm text-gray-300 leading-relaxed">
-                {step.body}
+      <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <SectionHeader
+          eyebrow="Supported sports"
+          title="Built for multi-sport slates."
+          body="Daily Edge copy adapts by sport, so unsupported split sections are hidden instead of forced into the reader."
+        />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {supportedSports.map((sport) => (
+            <div key={sport} className="rounded-xl border border-white/10 bg-white/[0.035] px-5 py-6 text-center">
+              <p className="text-xl font-black text-white">{sport}</p>
+              <p className="mt-2 text-xs leading-relaxed text-gray-400">
+                {sport === "MLB"
+                  ? "Daily Edge, ML/Totals/FI, splits where available"
+                  : sport === "WNBA"
+                    ? "Consensus-only reader context"
+                    : sport === "World Cup"
+                      ? "Soccer model, movement, BTTS and totals context"
+                      : "Seasonal surfaces as data is active"}
               </p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* e) Signal Language Preview */}
-      <section className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-        <header className="text-center mb-10">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-300 mb-2">
-            Signal language
-          </p>
-          <h2 className="text-3xl sm:text-4xl font-black tracking-tight">
-            Plain English on every pick.
-          </h2>
-          <p className="text-sm text-gray-300 mt-3 max-w-xl mx-auto">
-            Every card carries one of 7 grade badges. The label tells you what
-            the model and the market agree (or disagree) on — no decoding required.
-          </p>
-        </header>
-        <ul className="space-y-3">
-          {SIGNAL_PREVIEW.map((sig) => (
-            <li
-              key={sig.label}
-              className={`flex items-start gap-3 border rounded-xl px-4 py-3 ${sig.color}`}
-            >
-              <span aria-hidden="true" className="shrink-0 text-xl">
-                {sig.emoji}
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-bold uppercase tracking-wider">
-                  {sig.label}
-                </p>
-                <p className="text-sm text-gray-200 mt-0.5">{sig.body}</p>
-              </div>
-            </li>
+      <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <SectionHeader
+          eyebrow="Why OddSphere"
+          title="A cleaner way to read the board."
+        />
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            ["No hype language", "The reader avoids exaggerated betting slang and focuses on evidence, value, and risk."],
+            ["Market-aware copy", "Market Read explains support, resistance, mixed signals, price caps, and model/value overrides."],
+            ["Transparent access", "Pricing, cancellation, terms, privacy, and responsible-use information are linked before signup."],
+          ].map(([title, body]) => (
+            <div key={title} className="rounded-xl border border-white/10 bg-white/[0.035] p-6">
+              <h3 className="text-lg font-bold text-white">{title}</h3>
+              <p className="mt-3 text-sm leading-relaxed text-gray-300">{body}</p>
+            </div>
           ))}
-        </ul>
-        <p className="text-xs text-gray-400 text-center mt-4 italic">
-          Two more grades live inside the Lab — Market Watch and Public Smoke.
-        </p>
-      </section>
-
-      {/* f) Track Record Preview */}
-      <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-        <header className="text-center mb-8">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-300 mb-2">
-            Track record
-          </p>
-          <h2 className="text-3xl sm:text-4xl font-black tracking-tight">
-            {pct(lifetime.hitRate, 1)} lifetime · {fmtCompact(lifetime.total)}+ picks.
-          </h2>
-          <p className="text-sm text-gray-300 mt-3 max-w-xl mx-auto">
-            Strongest performing markets across our model history. Every pick
-            logged before games start.
-          </p>
-        </header>
-        <div className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-2xl overflow-hidden mb-6">
-          <ul className="divide-y divide-gray-800/60">
-            {top.map((row) => (
-              <li
-                key={row.market}
-                className="flex items-center gap-4 px-5 py-4"
-              >
-                <span aria-hidden="true" className="text-lg">{row.emoji}</span>
-                <span className="flex-1 min-w-0 truncate text-base font-medium text-gray-100">
-                  {row.market}
-                </span>
-                <span className="text-xs text-gray-400 tabular-nums hidden sm:inline">
-                  {row.lifetimeWins.toLocaleString()}/{row.lifetimeTotal.toLocaleString()}
-                </span>
-                <span className="text-lg font-black tabular-nums text-violet-300 shrink-0">
-                  {row.lifetimePercent.toFixed(1)}%
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="text-center">
-          <Link
-            href="/track-record"
-            className="inline-block text-sm font-semibold text-violet-300 hover:text-violet-200 transition-colors"
-          >
-            See the full snapshot →
-          </Link>
         </div>
       </section>
 
-      {/* g) Pricing CTA */}
-      <section className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-        <div className="bg-gradient-to-br from-violet-900/40 to-fuchsia-900/20 border border-violet-700/40 rounded-2xl p-8 sm:p-12 text-center shadow-[0_0_40px_rgba(167,139,250,0.18)]">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-300 mb-3">
-            Charter pricing
+      <section className="mx-auto max-w-4xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <div className="rounded-2xl border border-violet-500/30 bg-violet-500/[0.08] p-6 text-center sm:p-10">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Pricing</p>
+          <h2 className="mt-3 text-4xl font-black tracking-tight text-white">$25/month</h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-gray-200">
+            Charter pricing for the first members. If pricing changes later, the pricing page will show the current offer before checkout.
           </p>
-          <p className="text-5xl sm:text-6xl font-black tabular-nums leading-none mb-3">
-            $25
-            <span className="text-xl sm:text-2xl text-gray-400 font-bold">
-              {" "}/ month
-            </span>
-          </p>
-          <p className="text-sm text-emerald-300 font-semibold mb-6">
-            Locked for life · cancel anytime
-          </p>
-          <Link
-            href="/pricing"
-            className="inline-block bg-violet-600 hover:bg-violet-500 text-white font-bold px-8 py-3.5 rounded-lg transition-all duration-200 shadow-lg shadow-violet-900/40 hover:shadow-[0_0_25px_rgba(167,139,250,0.5)] hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
-          >
-            Join Premium →
-          </Link>
+          <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link href="/pricing" className="rounded-lg bg-violet-600 px-7 py-3 text-sm font-bold text-white transition hover:bg-violet-500">
+              View Pricing
+            </Link>
+            <Link href="/legal/refund-cancellation" className="rounded-lg border border-white/15 px-7 py-3 text-sm font-bold text-white transition hover:border-violet-400/40">
+              Cancellation Policy
+            </Link>
+          </div>
         </div>
       </section>
 
-      {/* h) FAQ */}
-      <section className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-        <header className="text-center mb-10">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-300 mb-2">
-            Questions
-          </p>
-          <h2 className="text-3xl sm:text-4xl font-black tracking-tight">
-            Frequently asked.
-          </h2>
-        </header>
+      <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <SectionHeader
+          eyebrow="Responsible use"
+          title="Sports analytics, not guarantees."
+          body="OddSphere is designed as an informational decision-support dashboard. Users are responsible for their own decisions and for following the laws in their jurisdiction."
+        />
+        <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-5 text-sm leading-relaxed text-amber-50">
+          OddSphere AI does not place bets, accept wagers, or guarantee any outcome. Betting involves risk and may not be legal in every jurisdiction. Users must be 21+ where applicable. If gambling is a problem, call 1-800-GAMBLER.
+        </div>
+      </section>
+
+      <section id="faq" className="mx-auto max-w-3xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <SectionHeader eyebrow="FAQ" title="Questions before joining." />
         <div className="space-y-3">
-          {FAQ.map((item) => (
-            <details
-              key={item.q}
-              className="group bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-700 transition-colors"
-            >
-              <summary className="flex items-center justify-between gap-3 px-5 py-4 cursor-pointer list-none">
-                <span className="text-sm sm:text-base font-semibold text-white">
-                  {item.q}
-                </span>
-                <span
-                  aria-hidden="true"
-                  className="text-gray-400 text-lg transition-transform duration-200 group-open:rotate-180"
-                >
-                  ⌄
-                </span>
+          {faq.map((item) => (
+            <details key={item.q} className="group rounded-xl border border-white/10 bg-white/[0.035]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-sm font-bold text-white">
+                {item.q}
+                <span className="text-gray-500 transition group-open:rotate-180" aria-hidden="true">v</span>
               </summary>
-              <p
-                className="px-5 pb-5 text-sm sm:text-base text-gray-300 leading-relaxed border-t border-gray-800/40 pt-4"
-                dangerouslySetInnerHTML={{ __html: item.a }}
-              />
+              <p className="border-t border-white/10 px-5 py-4 text-sm leading-relaxed text-gray-300">{item.a}</p>
             </details>
           ))}
         </div>
       </section>
-
-      {/* i) Footer is rendered by app/layout.tsx — Global Footer component
-            lands in 6.2c. */}
     </main>
   );
 }

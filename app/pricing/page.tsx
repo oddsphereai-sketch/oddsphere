@@ -14,20 +14,20 @@ import Link from "next/link";
 import { getCheckoutUrl } from "@/lib/auth/whopConfig";
 
 export const metadata = {
-  title: "Pricing — OddSphere Premium",
+  title: "Pricing — OddSphere AI Premium",
   description:
-    "OddSphere Premium · $25/month locked for life. One membership unlocks daily AI picks, player props research, sharp signals, transparent tracking, and Discord.",
+    "OddSphere AI Premium is $25/month for sports model dashboards, Daily Edge market analysis, tracking, and member access.",
   alternates: { canonical: "/pricing" },
 };
 
 const FEATURES: string[] = [
-  "Daily Edge — model picks across all 7 leagues with sharp-market context",
-  "Player Props Lab — ranked edges with drill-down breakdown",
-  "Sharp Signals — market moves, line history, steam alerts",
-  "Transparent tracking — every pick logged before games start",
-  "Confidence calibration — see how honest our confidence actually is",
-  "Discord access — daily alerts + community",
-  "Locked-in $25/month — your rate never changes",
+  "Daily Edge — model projections, Play Grades, Market Read, and Supporting Evidence",
+  "Market movement context — opening, previous, and current price movement where available",
+  "Consensus and Sharp Book context where each sport and market supports it",
+  "Transparent tracking — results logged and displayed without outcome guarantees",
+  "Multi-sport dashboard — MLB, WNBA, World Cup/Soccer, NBA, and NHL surfaces as active",
+  "Member access through Whop",
+  "$25/month charter pricing while available",
 ];
 
 export default function PricingPage() {
@@ -38,11 +38,11 @@ export default function PricingPage() {
           OddSphere Premium
         </p>
         <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-3">
-          One membership unlocks everything.
+          One membership includes the Daily Edge dashboard.
         </h1>
         <p className="text-base sm:text-lg text-gray-300 max-w-xl mx-auto leading-relaxed">
-          Daily model picks. Player prop research. Honest tracking. One price,
-          locked in for as long as you stay subscribed.
+          Daily Edge model dashboards, market context, and tracked results. One
+          transparent monthly subscription.
         </p>
       </header>
 
@@ -58,7 +58,7 @@ export default function PricingPage() {
             </span>
           </p>
           <p className="text-sm text-emerald-300 font-semibold">
-            Locked for life. Your rate never changes.
+            Charter pricing while available.
           </p>
         </div>
 
@@ -81,7 +81,11 @@ export default function PricingPage() {
         <PricingCta />
         <p className="text-xs text-gray-500 text-center mt-3 italic">
           Whop handles checkout and Discord access. Cancel anytime through
-          your Whop account.
+          your Whop account.{" "}
+          <Link href="/legal/refund-cancellation" className="text-violet-300 hover:text-violet-200 underline underline-offset-2">
+            Refund &amp; cancellation policy
+          </Link>
+          .
         </p>
       </div>
 

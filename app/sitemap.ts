@@ -31,6 +31,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     page("/pricing", 0.9, "monthly"), // premium conversion
     page("/track-record", 0.8, "daily"), // public proof / results (updates often)
     page("/legal/responsible-gambling", 0.3, "yearly"),
+    page("/legal/refund-cancellation", 0.3, "yearly"),
     page("/legal/privacy", 0.3, "yearly"),
     page("/legal/terms", 0.3, "yearly"),
   ];
