@@ -39,7 +39,8 @@ import {
   type StreamCurrent,
   type LastMove,
 } from "../streamOverlay";
-import { interpretMarket } from "../../streaming/marketInterpretation";
+import { interpretMarket, type MarketInterpretation } from "../../streaming/marketInterpretation";
+import { classifyMove } from "../../streaming/lineDirection";
 import { addDaysToSlate, SOCCER_BOARD_ROLL_HOUR } from "../../dates/slateDate";
 import type {
   DailyEdgeResponse,
@@ -985,6 +986,20 @@ function soccerSelectedSide(row: PredictionRecordSlim | null): "home" | "away" |
   return null;
 }
 
+function soccerMovementOverride(
+  marketInterpretation: MarketInterpretation | null | undefined,
+  openAmerican: number | null | undefined,
+  currentAmerican: number | null | undefined,
+): "support" | "resistance" | "neutral" | null {
+  const flags = marketInterpretation?.flags ?? [];
+  if (flags.includes("moved_toward")) return "support";
+  if (flags.includes("moved_against")) return "resistance";
+  const fallbackMove = classifyMove(openAmerican, currentAmerican);
+  if (fallbackMove === "toward") return "support";
+  if (fallbackMove === "against") return "resistance";
+  return "neutral";
+}
+
 function buildSharpRead(perMarket: Map<string, PredictionRecordSlim>): {
   key: SharpReadKey;
   sentence: string;
@@ -1366,6 +1381,7 @@ export async function buildSoccerDailyEdgeAdapted(
           publicSplits: [],
           marketReadV2: null,
           marketReadV2Enabled: false,
+          lineMovementOverride: soccerMovementOverride(moneyline.marketInterpretation, moneyline.lineOpenAmerican, moneyline.priceAmerican),
         },
         {
           key: "total",
@@ -1381,6 +1397,7 @@ export async function buildSoccerDailyEdgeAdapted(
           publicSplits: [],
           marketReadV2: null,
           marketReadV2Enabled: false,
+          lineMovementOverride: soccerMovementOverride(totalMarket.marketInterpretation, totalMarket.lineOpenAmerican, totalMarket.priceAmerican),
         },
         {
           key: "firstInning",
@@ -1396,6 +1413,7 @@ export async function buildSoccerDailyEdgeAdapted(
           publicSplits: [],
           marketReadV2: null,
           marketReadV2Enabled: false,
+          lineMovementOverride: soccerMovementOverride(bttsMarket.marketInterpretation, bttsMarket.lineOpenAmerican, bttsMarket.priceAmerican),
         },
       ],
     }), renderedCopyFlagOverrides);

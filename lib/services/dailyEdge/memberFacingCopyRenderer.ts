@@ -572,6 +572,12 @@ function soccerDecisionPickLabel(decision: MarketDecision, key: keyof Recommenda
   return decision.pick ?? "The BTTS pick";
 }
 
+function soccerMovementCopy(decision: MarketDecision): string {
+  if (decision.lineMovement === "support") return "odds movement toward the pick";
+  if (decision.lineMovement === "resistance") return "odds movement against the pick";
+  return "no clear odds-move signal";
+}
+
 function decisionQuickReadCopy(decision: MarketDecision, key: keyof RecommendationDecision["markets"], sport = "mlb"): string {
   const caps = dailyEdgeMarketCapabilities(sport, key);
   const grade = decision.playGrade;
@@ -591,10 +597,13 @@ function decisionQuickReadCopy(decision: MarketDecision, key: keyof Recommendati
 
   if (caps.isSoccerLike) {
     const soccerPick = soccerDecisionPickLabel(decision, key);
-    if (grade === "Best Angle") return `${soccerPick} has a strong model/value case at the current price.`;
-    if (grade === "Lean") return `${soccerPick} is playable, but price, movement, or draw risk keeps it below the strongest tier.`;
-    if (grade === "Watchlist") return `${soccerPick} is worth monitoring, but price, movement, or draw risk keeps it below action.`;
-    if (grade === "Caution") return `${soccerPick} has some model interest, but price or market movement keeps this in Caution.`;
+    const movement = soccerMovementCopy(decision);
+    if (grade === "Best Angle") return `${soccerPick} has a strong model/value case, with ${movement}.`;
+    if (grade === "Lean") return `${soccerPick} is playable, with ${movement}; price or draw risk keeps it below the strongest tier.`;
+    if (grade === "Watchlist") return `${soccerPick} is worth monitoring, with ${movement}, but it is not strong enough for action yet.`;
+    if (grade === "Caution") return `${soccerPick} has some model interest, but ${movement} and price/risk keep this in Caution.`;
+    if (decision.lineMovement === "support") return `${soccerPick} has odds movement support, but the current price or model edge is not enough to make it actionable.`;
+    if (decision.lineMovement === "resistance") return `${soccerPick} has odds movement against it and is not actionable at the current price or model edge.`;
     return `${soccerPick} is not actionable at the current price or model edge.`;
   }
 
@@ -658,13 +667,26 @@ function decisionMarketRead(decision: MarketDecision, key: keyof RecommendationD
 
   if (caps.isSoccerLike) {
     const soccerPick = soccerDecisionPickLabel(decision, key);
+    if (decision.lineMovement === "support") {
+      return {
+        ...decision.resolvedMarketRead,
+        status: "aligned",
+        label: "Market Support",
+        tone: "emerald",
+        copy: grade === "No Play"
+          ? `Odds movement supports ${soccerPick}, but the current price or model edge is not enough to make it actionable.`
+          : `Odds movement supports ${soccerPick}, while price and model edge determine how actionable it is.`,
+      };
+    }
     if (decision.lineMovement === "resistance") {
       return {
         ...decision.resolvedMarketRead,
         status: "resistance",
         label: "Market Resistance",
         tone: "amber",
-        copy: `Price or movement is creating resistance against ${soccerPick}.`,
+        copy: grade === "No Play"
+          ? `Odds movement is against ${soccerPick}, and the current model/value case is not enough to make it actionable.`
+          : `Odds movement is against ${soccerPick}, so market friction remains part of the read.`,
       };
     }
     if (grade === "No Play") {
@@ -756,13 +778,19 @@ function decisionSupportingEvidenceCopy(decision: MarketDecision, key: keyof Rec
   if (caps.isSoccerLike) {
     const soccerPick = soccerDecisionPickLabel(decision, key);
     const base = `${soccerPick} has ${pctFromDecision(decision.modelProbability)} model probability versus ${pctFromDecision(decision.marketImplied)} implied at ${priceFromDecision(decision.price)}, for about ${pctPointFromDecision(displayedEdge)} edge.`;
+    const movement =
+      decision.lineMovement === "support"
+        ? " Odds movement is toward the pick."
+        : decision.lineMovement === "resistance"
+          ? " Odds movement is against the pick."
+          : "";
     if (key === "total" && decision.projectedScore) {
       const projected = +(decision.projectedScore.away + decision.projectedScore.home).toFixed(1);
-      return `${base} Projected goals are ${projected}; price and movement decide whether this is actionable.`;
+      return `${base} Projected goals are ${projected}.${movement} Price and edge decide whether this is actionable.`;
     }
-    if (key === "moneyline") return `${base} Draw risk and price quality are the main soccer-specific checks.`;
-    if (key === "firstInning") return `${base} BTTS reads depend on scoring context, price quality, and movement.`;
-    return `${base} Price and movement decide whether this is actionable.`;
+    if (key === "moneyline") return `${base}${movement} Draw risk and price quality are the main soccer-specific checks.`;
+    if (key === "firstInning") return `${base}${movement} BTTS reads depend on scoring context and price quality.`;
+    return `${base}${movement} Price and edge decide whether this is actionable.`;
   }
   const base = `${decision.pick ?? "The pick"} has ${pctFromDecision(decision.modelProbability)} model probability versus ${pctFromDecision(decision.marketImplied)} implied at ${priceFromDecision(decision.price)}, for about ${pctPointFromDecision(displayedEdge)} edge.`;
   const splitConflict = decisionSplitConflictKind(decision);

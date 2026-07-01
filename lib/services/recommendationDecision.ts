@@ -29,6 +29,7 @@ type MarketInput = {
   marketReadV2Enabled: boolean;
   consensusSplitsOverride?: MarketSplitDisplaySection | null;
   sharpBookSplitsOverride?: MarketSplitDisplaySection | null;
+  lineMovementOverride?: "support" | "resistance" | "neutral" | null;
 };
 
 export type BuildRecommendationDecisionInput = {
@@ -149,7 +150,7 @@ function resolveMarketRead(sport: string, market: MarketInput, consensus: Market
   const caps = dailyEdgeMarketCapabilities(sport, market.key);
   const consensusLean = sideLean(consensus, market.selectedSide);
   const sharpLean = sideLean(sharp, market.selectedSide);
-  const movement = market.marketReadV2?.movement?.directionRelativeToPick ?? "neutral";
+  const movement = market.lineMovementOverride ?? market.marketReadV2?.movement?.directionRelativeToPick ?? "neutral";
   const pick = market.pick ?? "the pick";
   const sharpAvailable = sharp !== null;
   const hasCoreFirstInningEvidence =
@@ -177,6 +178,14 @@ function resolveMarketRead(sport: string, market: MarketInput, consensus: Market
         label: "No Clear Signal",
         tone: "gray",
         copy: `Core ${caps.marketContextName} evidence is incomplete.`,
+      };
+    }
+    if (movement === "support") {
+      return {
+        status: "aligned",
+        label: "Market Support",
+        tone: "emerald",
+        copy: `${caps.marketContextName === "BTTS" ? "BTTS" : "The market"} has price movement toward ${pick}.`,
       };
     }
     if (movement === "resistance") {
@@ -290,7 +299,7 @@ function buildMarketDecision(sport: string, market: MarketInput, projectedScore:
     projectedScore: projectedScore ?? null,
     consensusSplits: consensus,
     sharpBookSplits: sharp,
-    lineMovement: market.marketReadV2?.movement?.directionRelativeToPick ?? null,
+    lineMovement: market.lineMovementOverride ?? market.marketReadV2?.movement?.directionRelativeToPick ?? null,
     resolvedMarketRead: read,
     sourceConflict,
     playGrade: grade,
