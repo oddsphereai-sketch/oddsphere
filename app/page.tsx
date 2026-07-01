@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import {
+  getPublicTrackRecordSummary,
+  type PublicTrackRecordSummary,
+} from "@/lib/services/tracking/publicTrackRecordSummary";
 
 const SITE_URL = "https://www.oddsphereai.com";
+
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "OddSphere AI | Sports Prediction Models & Market Analysis",
@@ -65,6 +71,14 @@ const faq: FaqItem[] = [
     a: "Consensus Splits summarize broader money and bet distribution where available. Sharp Book Splits or Signals summarize a sharper market context when the sport and market support it. OddSphere hides unsupported sections instead of showing empty placeholders.",
   },
   {
+    q: "Why do some sports not show Sharp Book data?",
+    a: "Not every sport or market has reliable split sources. MLB moneyline and totals can show richer market context when available, WNBA is generally consensus-only, and World Cup/Soccer copy focuses on model, price, movement, and market-specific context.",
+  },
+  {
+    q: "How is the track record updated?",
+    a: "Tracked results update after games settle and grading completes. Pending rows are separated from settled win rate so the public view does not mix unresolved predictions with finished outcomes.",
+  },
+  {
     q: "Does OddSphere place bets for users?",
     a: "No. OddSphere is not a sportsbook and does not place, accept, or settle wagers. Users make their own decisions and are responsible for complying with local laws.",
   },
@@ -125,6 +139,14 @@ function StatPill({ label, value }: { label: string; value: string }) {
   );
 }
 
+function trackingPct(summary: PublicTrackRecordSummary): string {
+  return summary.overall.winPct === null ? "—" : `${summary.overall.winPct.toFixed(1)}%`;
+}
+
+function trackingRecord(summary: PublicTrackRecordSummary): string {
+  return `${summary.overall.wins.toLocaleString()}-${summary.overall.losses.toLocaleString()}`;
+}
+
 function MiniBar({ label, money, bets }: { label: string; money: number; bets: number }) {
   return (
     <div className="space-y-1.5">
@@ -144,6 +166,59 @@ function MiniBar({ label, money, bets }: { label: string; money: number; bets: n
           <span className="block h-full rounded-full bg-emerald-300" style={{ width: `${bets}%` }} />
         </span>
         <span className="text-right tabular-nums">{bets}%</span>
+      </div>
+    </div>
+  );
+}
+
+function TrackRecordPreview({ summary }: { summary: PublicTrackRecordSummary }) {
+  const markets = summary.markets.slice(0, 4);
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-5 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-300">
+            Tracked results
+          </p>
+          <h3 className="mt-2 text-2xl font-black text-white">Public record preview</h3>
+        </div>
+        <p className="text-xs text-gray-500">Updated {summary.lastUpdatedLabel}</p>
+      </div>
+
+      {!summary.tablesInitialized ? (
+        <p className="mt-5 rounded-xl border border-amber-400/25 bg-amber-400/[0.06] p-4 text-sm leading-relaxed text-amber-50">
+          Tracking summary is temporarily unavailable, so this preview is not showing stale manual numbers.
+        </p>
+      ) : (
+        <>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <StatPill label="Overall" value={trackingRecord(summary)} />
+            <StatPill label="Win Rate" value={trackingPct(summary)} />
+            <StatPill label="Pending" value={summary.overall.pending.toLocaleString()} />
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            {markets.map((row) => (
+              <div key={`${row.sport}-${row.market}`} className="rounded-xl border border-white/10 bg-gray-950/70 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">{row.sportLabel}</p>
+                <p className="mt-1 font-bold text-white">{row.marketLabel}</p>
+                <p className="mt-2 text-sm tabular-nums text-gray-300">
+                  {row.metrics.wins}-{row.metrics.losses}
+                  <span className="text-gray-500"> · </span>
+                  {row.metrics.winPct === null ? "—" : `${row.metrics.winPct.toFixed(1)}%`}
+                </p>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs leading-relaxed text-gray-500">
+          Results update after games settle. Pending rows are separated from settled hit rate.
+        </p>
+        <Link href="/track-record" className="text-sm font-bold text-violet-200 hover:text-violet-100">
+          View full track record
+        </Link>
       </div>
     </div>
   );
@@ -265,6 +340,75 @@ function ProductMockup() {
   );
 }
 
+function ProductVisualGrid() {
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">WNBA preview</p>
+        <h3 className="mt-2 text-xl font-black text-white">Consensus-only context</h3>
+        <p className="mt-3 text-sm leading-relaxed text-gray-300">
+          WNBA reader copy uses model, price, spread/total context, line movement, and Consensus Splits where available.
+        </p>
+        <div className="mt-4 rounded-xl border border-white/10 bg-gray-950/70 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-bold text-white">ATL @ WSH</span>
+            <span className="text-xs font-bold text-violet-200">Watchlist</span>
+          </div>
+          <p className="mt-3 text-sm text-gray-300">
+            Projection supports the Over, but the current number keeps this in monitor territory.
+          </p>
+          <div className="mt-4">
+            <MiniBar label="Consensus Splits" money={54} bets={51} />
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">World Cup preview</p>
+        <h3 className="mt-2 text-xl font-black text-white">Soccer-specific read</h3>
+        <p className="mt-3 text-sm leading-relaxed text-gray-300">
+          Soccer copy avoids split assumptions and focuses on model probability, price, draw risk, movement, totals, BTTS, and Double Chance context.
+        </p>
+        <div className="mt-4 rounded-xl border border-white/10 bg-gray-950/70 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-bold text-white">BEL vs CAN</span>
+            <span className="text-xs font-bold text-amber-200">Lean</span>
+          </div>
+          <p className="mt-3 text-sm text-gray-300">
+            Odds movement supports the Over, while price and match-state risk keep the read measured.
+          </p>
+          <div className="mt-4 grid grid-cols-3 items-center gap-2 text-center text-sm font-bold tabular-nums text-white">
+            <span>+112</span>
+            <span className="text-gray-500">→</span>
+            <span>-112</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">MLB FI preview</p>
+        <h3 className="mt-2 text-xl font-black text-white">First-inning discipline</h3>
+        <p className="mt-3 text-sm leading-relaxed text-gray-300">
+          FI copy stays prediction-specific and does not treat missing Consensus or Sharp split bars as a problem.
+        </p>
+        <div className="mt-4 rounded-xl border border-white/10 bg-gray-950/70 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-bold text-white">SD @ CHC</span>
+            <span className="text-xs font-bold text-gray-300">No Play</span>
+          </div>
+          <p className="mt-3 text-sm text-gray-300">
+            First inning is a Toss-Up, so there is not enough actionable edge at the current number.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <StatPill label="FI Prob" value="52%" />
+            <StatPill label="Grade" value="No Play" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SectionHeader({ eyebrow, title, body }: { eyebrow: string; title: string; body?: string }) {
   return (
     <header className="mx-auto mb-10 max-w-3xl text-center">
@@ -275,7 +419,9 @@ function SectionHeader({ eyebrow, title, body }: { eyebrow: string; title: strin
   );
 }
 
-export default function HomePage() {
+export default async function HomePage() {
+  const trackingSummary = await getPublicTrackRecordSummary();
+
   return (
     <main>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
@@ -324,6 +470,15 @@ export default function HomePage() {
         </p>
       </section>
 
+      <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <SectionHeader
+          eyebrow="What members see"
+          title="Readable previews by sport and market."
+          body="The public mockups use sample display data to show the reader structure without exposing private member-only cards."
+        />
+        <ProductVisualGrid />
+      </section>
+
       <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
         <SectionHeader
           eyebrow="How it works"
@@ -363,13 +518,17 @@ export default function HomePage() {
                   ? "Daily Edge, ML/Totals/FI, splits where available"
                   : sport === "WNBA"
                     ? "Consensus-only reader context"
-                    : sport === "World Cup"
-                      ? "Soccer model, movement, BTTS and totals context"
-                      : "Seasonal surfaces as data is active"}
+                  : sport === "World Cup"
+                    ? "Soccer model, movement, BTTS and totals context"
+                    : "Limited tracked rows appear as seasonal data is active"}
               </p>
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <TrackRecordPreview summary={trackingSummary} />
       </section>
 
       <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">

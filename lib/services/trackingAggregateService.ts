@@ -34,6 +34,15 @@ import {
   type TrackingBaselineRow,
 } from "../types/domain/Tracking";
 import { isPublicallyTracked } from "../config/officialTrackingStart";
+import {
+  computeRecommendationConfidence,
+  type RecommendationPlayGrade,
+  type RecommendationTier,
+} from "./recommendationConfidence";
+import { normalizeDailyEdgeActionability } from "./dailyEdgeActionability";
+import type { DailyEdgeActionabilityMarket } from "./dailyEdgeActionability";
+import type { Grade } from "../types/domain/Grade";
+import type { Verdict } from "./verdictDerivation";
 
 export type AggregateKey =
   | "all"
@@ -223,15 +232,210 @@ function storedGrade(record: PredictionRecordRow): string {
   return String(record.play_grade ?? "").trim().toLowerCase();
 }
 
+function flagEnabled(name: string): boolean {
+  return process.env[name] === "true";
+}
+
+function snapshotNumber(record: PredictionRecordRow, path: string[]): number | null {
+  let cursor: unknown = record.snapshot_json;
+  for (const key of path) {
+    if (cursor === null || typeof cursor !== "object") return null;
+    cursor = (cursor as Record<string, unknown>)[key];
+  }
+  return typeof cursor === "number" && Number.isFinite(cursor) ? cursor : null;
+}
+
+function snapshotString(record: PredictionRecordRow, path: string[]): string | null {
+  let cursor: unknown = record.snapshot_json;
+  for (const key of path) {
+    if (cursor === null || typeof cursor !== "object") return null;
+    cursor = (cursor as Record<string, unknown>)[key];
+  }
+  return typeof cursor === "string" ? cursor.trim().toLowerCase() : null;
+}
+
+function isKnownMlMovementNotTowardPick(record: PredictionRecordRow): boolean {
+  const direction = snapshotString(record, ["line_movement", "direction"]);
+  return direction === "neutral" || direction === "resistance" || direction === "against_pick";
+}
+
+function movementDirectionRelativeToPick(record: PredictionRecordRow): "support" | "resistance" | "neutral" | null {
+  const direction = snapshotString(record, ["line_movement", "direction"]);
+  if (direction === "toward_pick" || direction === "support") return "support";
+  if (direction === "against_pick" || direction === "resistance") return "resistance";
+  if (direction === "neutral") return "neutral";
+  return null;
+}
+
+function totalProjectionGap(record: PredictionRecordRow): number | null {
+  if (typeof record.line_value !== "number") return null;
+  const projectedTotal =
+    snapshotNumber(record, ["v2_2_audit", "posterior_total"]) ??
+    snapshotNumber(record, ["predicted_scores_at_lock", "total"]);
+  if (projectedTotal === null) return null;
+  return Math.abs(projectedTotal - record.line_value);
+}
+
+function verdictForStoredGrade(grade: string): Verdict {
+  if (grade === "best_angle") return "best_angle";
+  if (grade === "lean") return "lean";
+  if (grade === "market_watch" || grade === "model_only" || grade === "provisional" || grade === "market_aligned" || grade === "watchlist") {
+    return "watchlist";
+  }
+  if (grade === "caution" || grade === "sharp_conflict") return "caution";
+  return "no_play";
+}
+
+function labelForVerdict(verdict: Verdict): string {
+  if (verdict === "best_angle") return "Best Angle";
+  if (verdict === "lean") return "Lean";
+  if (verdict === "watchlist") return "Watchlist";
+  if (verdict === "caution") return "Caution";
+  return "No Play";
+}
+
+function rawGradeForStoredGrade(grade: string): Grade | null {
+  if (grade === "best_angle") return "best_signal";
+  if (grade === "lean") return "model_only";
+  if (grade === "caution" || grade === "sharp_conflict") return "sharp_conflict";
+  if (grade.length > 0) return "market_watch";
+  return null;
+}
+
+function recommendationPlayGrade(grade: string): RecommendationPlayGrade | null {
+  if (grade === "best_angle") return "best_angle";
+  if (grade === "lean") return "lean";
+  if (grade === "toss_up") return "toss_up";
+  if (grade === "held") return "held";
+  if (grade === "no_bet" || grade === "no_play") return "no_bet";
+  if (grade === "market_aligned") return "market_aligned";
+  return null;
+}
+
+function recommendationTier(record: PredictionRecordRow): RecommendationTier {
+  const tier = String(
+    record.data_quality_tier ??
+    snapshotString(record, ["v2_2_audit", "data_quality_tier"]) ??
+    snapshotString(record, ["fi_v2_audit", "data_quality_tier"]) ??
+    "",
+  ).toLowerCase();
+  if (tier === "high" || tier === "medium" || tier === "low" || tier === "fallback") return tier;
+  return "fallback";
+}
+
+function actionabilityMarket(record: PredictionRecordRow): DailyEdgeActionabilityMarket | null {
+  if (record.market === "moneyline") return "moneyline";
+  if (record.market === "total") return "total";
+  if (record.market === "first_inning") return "first_inning";
+  if (record.market === "spread") return "spread";
+  if (record.market === "match_result") return "soccer_moneyline";
+  if (record.market === "btts") return "soccer_btts";
+  return null;
+}
+
+function actionabilityGrade(record: PredictionRecordRow, grade: string): string {
+  if (grade.length === 0) return grade;
+  const market = actionabilityMarket(record);
+  if (market === null) return grade;
+  const verdict = verdictForStoredGrade(grade);
+  const edgeUnits = record.market === "total" && typeof record.line_value === "number"
+    ? totalProjectionGap(record)
+    : null;
+  const hasPick = record.pick !== null && record.pick !== "Held" && !isTossUp(record);
+  const recScore = computeRecommendationConfidence({
+    edgePctPp: typeof record.edge === "number" ? record.edge : null,
+    edgeUnits,
+    tier: recommendationTier(record),
+    playGrade: recommendationPlayGrade(grade),
+    hasPick,
+  });
+  const normalized = normalizeDailyEdgeActionability({
+    market,
+    rawVerdict: { key: verdict, label: labelForVerdict(verdict) },
+    rawGrade: rawGradeForStoredGrade(grade),
+    rawRecScore: recScore,
+    modelMarketGapPct: typeof record.edge === "number" ? record.edge : null,
+    marketReadV2: {
+      movement: {
+        directionRelativeToPick: movementDirectionRelativeToPick(record),
+      },
+    } as never,
+    hasPick,
+    held: record.held === true,
+    dataQualityTier: recommendationTier(record),
+    priceAmerican: record.odds_american,
+    priceUnavailableAtLock: record.locked_at !== null && record.odds_american === null && hasPick,
+  });
+  return normalized.finalVerdict.key;
+}
+
 /**
  * Tracking must match the member-facing action grade, not just the raw writer
  * grade. A stored Best Angle whose boolean was explicitly demoted is not a Best
- * Angle in public tracking. Do not infer hidden split/caution states here; those
- * must come from a persisted/displayed final action object in a future migration.
+ * Angle in public tracking. Same-day deterministic guardrails are display-layer
+ * grade caps, so public tracking buckets apply the same caps without mutating
+ * prediction_records or prediction_grades.
  */
 export function effectiveTrackingPlayGrade(record: PredictionRecordRow): string {
-  const grade = storedGrade(record);
+  let grade = storedGrade(record);
   if (grade === "best_angle" && record.best_angle === false) return "lean";
+  grade = actionabilityGrade(record, grade);
+
+  if (
+    record.sport === "mlb" &&
+    record.market === "first_inning" &&
+    flagEnabled("MLB_FI_TOSSUP_FORCE_NO_PLAY_ENABLED") &&
+    isTossUp(record)
+  ) {
+    return "no_play";
+  }
+
+  if (
+    record.sport === "mlb" &&
+    record.market === "first_inning" &&
+    flagEnabled("MLB_FI_MISSING_PRICE_BLOCKS_GRADE_STRENGTHENING_ENABLED") &&
+    record.odds_american === null &&
+    (grade === "best_angle" || grade === "lean")
+  ) {
+    return "watchlist";
+  }
+
+  if (
+    record.sport === "mlb" &&
+    record.market === "total" &&
+    flagEnabled("MLB_TOTALS_THIN_GAP_LEAN_CAP_ENABLED") &&
+    grade === "lean"
+  ) {
+    const gap = totalProjectionGap(record);
+    if (gap !== null && gap < 0.5) return "watchlist";
+  }
+
+  if (
+    record.sport === "mlb" &&
+    record.market === "moneyline" &&
+    flagEnabled("MLB_ML_BEST_ANGLE_MOVEMENT_EDGE_CAP_ENABLED") &&
+    grade === "best_angle" &&
+    (
+      snapshotNumber(record, ["v2_2_audit", "ml_distance_cap_applied"]) === 1 ||
+      (record.snapshot_json?.v2_2_audit as { ml_distance_cap_applied?: unknown } | undefined)?.ml_distance_cap_applied === true ||
+      (record.snapshot_json?.v2_2_audit as { ml_miscalibration_flag?: unknown } | undefined)?.ml_miscalibration_flag === true
+    )
+  ) {
+    return "lean";
+  }
+
+  if (
+    record.sport === "mlb" &&
+    record.market === "moneyline" &&
+    flagEnabled("MLB_ML_BEST_ANGLE_MOVEMENT_EDGE_CAP_ENABLED") &&
+    grade === "best_angle" &&
+    isKnownMlMovementNotTowardPick(record) &&
+    typeof record.edge === "number" &&
+    record.edge < 8
+  ) {
+    return "lean";
+  }
+
   return grade;
 }
 

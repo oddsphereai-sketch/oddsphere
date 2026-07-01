@@ -1,206 +1,233 @@
-/**
- * /track-record — public "Performance Snapshot" (Phase 6.2b, V2.1 spec Part 11).
- *
- * Marketing-grade framing — NOT the full analytical view that members get
- * inside /lab/track-record. Per V2.1: lifetime overview, current-season
- * snapshot, strongest markets, "every pick tracked" note, profitability
- * disclaimer, Join Premium CTA.
- *
- * Data source: static app/data/trackRecord.ts (Daniel's authoritative
- * pre-launch baseline). Phase 7.5 swaps to tracking_baseline DB reads
- * without changing this page's shape.
- */
-
 import Link from "next/link";
-import { TRACK_RECORD, LAST_UPDATED, type TrackRecordRow } from "../data/trackRecord";
+import { getPublicTrackRecordSummary } from "@/lib/services/tracking/publicTrackRecordSummary";
+import type { PublicTrackRecordMetric } from "@/lib/services/tracking/publicTrackRecordSummary";
+
+export const revalidate = 300;
 
 export const metadata = {
   title: "Track Record — OddSphere AI",
   description:
-    "Performance snapshot for OddSphere model picks across the NFL, NBA, MLB, CBB, CFB, UCL, and NHL. Every pick tracked.",
+    "Public tracked results for OddSphere AI sports prediction models by sport and market, updated after games settle.",
   alternates: { canonical: "/track-record" },
 };
 
-// Lifetime totals across every tracked market.
-function aggregate(rows: TrackRecordRow[]): {
-  wins: number;
-  total: number;
-  hitRate: number;
-} {
-  const wins = rows.reduce((s, r) => s + r.lifetimeWins, 0);
-  const total = rows.reduce((s, r) => s + r.lifetimeTotal, 0);
-  return { wins, total, hitRate: total > 0 ? wins / total : 0 };
+function pct(metric: PublicTrackRecordMetric): string {
+  return metric.winPct === null ? "—" : `${metric.winPct.toFixed(1)}%`;
 }
 
-// Current-season totals where data exists (some sports off-season → null).
-function seasonAggregate(rows: TrackRecordRow[]): {
-  wins: number;
-  total: number;
-  hitRate: number;
-} {
-  const live = rows.filter(
-    (r) => r.currentSeasonWins !== null && r.currentSeasonTotal !== null
-  );
-  const wins = live.reduce((s, r) => s + (r.currentSeasonWins ?? 0), 0);
-  const total = live.reduce((s, r) => s + (r.currentSeasonTotal ?? 0), 0);
-  return { wins, total, hitRate: total > 0 ? wins / total : 0 };
+function record(metric: PublicTrackRecordMetric): string {
+  return `${metric.wins.toLocaleString()}-${metric.losses.toLocaleString()}`;
 }
 
-// Strongest 5 markets by lifetime hit rate (require >= 100 picks for honesty).
-function strongestMarkets(rows: TrackRecordRow[]): TrackRecordRow[] {
-  return [...rows]
-    .filter((r) => r.lifetimeTotal >= 100)
-    .sort((a, b) => b.lifetimePercent - a.lifetimePercent)
-    .slice(0, 5);
-}
-
-function pct(n: number, digits = 1): string {
-  return `${(n * 100).toFixed(digits)}%`;
-}
-
-function fmtCompact(n: number): string {
+function compact(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
   return n.toLocaleString();
 }
 
-export default function PublicTrackRecordPage() {
-  const lifetime = aggregate(TRACK_RECORD);
-  const season = seasonAggregate(TRACK_RECORD);
-  const strongest = strongestMarkets(TRACK_RECORD);
+function dateRange(from: string | null, to: string | null): string {
+  if (from === null && to === null) return "Updates as tracked results settle";
+  if (from !== null && to !== null && from !== to) return `${from} through ${to}`;
+  return from ?? to ?? "Updates as tracked results settle";
+}
+
+function MetricCard({
+  label,
+  value,
+  sub,
+  tone = "violet",
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  tone?: "violet" | "emerald" | "amber";
+}) {
+  const color =
+    tone === "emerald"
+      ? "text-emerald-300"
+      : tone === "amber"
+        ? "text-amber-200"
+        : "text-violet-300";
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.035] p-5 sm:p-6">
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-400">
+        {label}
+      </p>
+      <p className={`mt-3 text-3xl font-black tabular-nums ${color}`}>{value}</p>
+      <p className="mt-2 text-sm leading-relaxed text-gray-300">{sub}</p>
+    </div>
+  );
+}
+
+export default async function PublicTrackRecordPage() {
+  const summary = await getPublicTrackRecordSummary();
+  const markets = summary.markets.filter((row) => row.metrics.picks > 0);
 
   return (
-    <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
-      <header className="text-center mb-12">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-300 mb-3">
-          Performance snapshot
+    <main className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
+      <header className="mx-auto mb-12 max-w-3xl text-center">
+        <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-violet-300">
+          Public tracking
         </p>
-        <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-3">
-          Every model pick. Tracked.
+        <h1 className="text-4xl font-black tracking-tight sm:text-5xl">
+          Tracked Results Since Launch
         </h1>
-        <p className="text-base sm:text-lg text-gray-200 max-w-2xl mx-auto leading-relaxed">
-          Lifetime hit rates across seven leagues. Logged before games start,
-          marked W/L based on final scores. No edits, no cherry-picking.
+        <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-gray-200 sm:text-lg">
+          OddSphere tracks settled model predictions by sport and market from the
+          public launch window beginning June 7, 2026. Pending games are kept separate
+          and win rate excludes pushes, voids, and pending rows.
         </p>
-        <p className="text-xs text-gray-400 mt-3 tabular-nums">
-          Last updated {LAST_UPDATED}
+        <p className="mt-3 text-xs text-gray-400">
+          Public launch tracking, not legacy all-time history · Last updated {summary.lastUpdatedLabel}
         </p>
       </header>
 
-      {/* Lifetime + current season overview */}
-      <section
-        aria-label="Overview"
-        className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-12"
-      >
-        <div className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-2xl p-6 sm:p-8 text-center">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-gray-400 font-bold mb-2">
-            Lifetime
+      {!summary.tablesInitialized ? (
+        <section className="rounded-2xl border border-amber-400/25 bg-amber-400/[0.07] p-6 text-center text-amber-50">
+          <h2 className="text-xl font-bold">Tracking summary temporarily unavailable</h2>
+          <p className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-amber-100/85">
+            The public page is connected to the live tracking service, but it could not
+            load a safe aggregate summary right now. No stale manual numbers are shown.
           </p>
-          <p className="text-4xl sm:text-5xl font-black tabular-nums text-violet-300 mb-1">
-            {pct(lifetime.hitRate, 1)}
-          </p>
-          <p className="text-sm text-gray-200 tabular-nums">
-            {lifetime.wins.toLocaleString()}–
-            {(lifetime.total - lifetime.wins).toLocaleString()}
-            <span className="text-gray-500"> · </span>
-            {fmtCompact(lifetime.total)} picks
-          </p>
-        </div>
-        <div className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-2xl p-6 sm:p-8 text-center">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-gray-400 font-bold mb-2">
-            Current season
-          </p>
-          {season.total > 0 ? (
-            <>
-              <p className="text-4xl sm:text-5xl font-black tabular-nums text-emerald-300 mb-1">
-                {pct(season.hitRate, 1)}
-              </p>
-              <p className="text-sm text-gray-200 tabular-nums">
-                {season.wins.toLocaleString()}–
-                {(season.total - season.wins).toLocaleString()}
-                <span className="text-gray-500"> · </span>
-                {fmtCompact(season.total)} picks
-              </p>
-            </>
-          ) : (
-            <p className="text-sm text-gray-300 italic mt-4">
-              In-season data activates as sports begin their schedules.
-            </p>
-          )}
-        </div>
-      </section>
+        </section>
+      ) : (
+        <>
+          <section className="mb-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <MetricCard
+              label="Overall settled record"
+              value={record(summary.overall)}
+              sub={`${pct(summary.overall)} win rate · ${compact(summary.overall.picks)} tracked rows`}
+            />
+            <MetricCard
+              label="Settled"
+              value={compact(summary.overall.settled)}
+              sub={`${summary.overall.pending.toLocaleString()} pending rows update after games settle`}
+              tone="emerald"
+            />
+            <MetricCard
+              label="Best Angle"
+              value={record(summary.bestAngles)}
+              sub={`${pct(summary.bestAngles)} · ${compact(summary.bestAngles.picks)} tracked top-grade rows`}
+            />
+            <MetricCard
+              label="Lean"
+              value={record(summary.leans)}
+              sub={`${pct(summary.leans)} · ${compact(summary.leans.picks)} tracked Lean rows`}
+              tone="amber"
+            />
+          </section>
 
-      {/* Strongest markets */}
-      <section className="mb-12">
-        <header className="mb-4">
-          <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">
-            Strongest markets
-          </h2>
-          <p className="text-sm text-gray-400 mt-1">
-            Top hit rates with a meaningful sample (100+ picks).
-          </p>
-        </header>
-        <div className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl overflow-hidden">
-          <ul className="divide-y divide-gray-800/60">
-            {strongest.map((row, i) => (
-              <li
-                key={row.market}
-                className="flex items-center gap-4 px-5 py-4 sm:px-6 sm:py-5"
-              >
-                <span
-                  aria-hidden="true"
-                  className="text-xs font-bold uppercase tracking-wider text-gray-500 tabular-nums w-5 shrink-0"
-                >
-                  #{i + 1}
-                </span>
-                <span className="text-base sm:text-lg font-medium text-gray-100 flex-1 min-w-0 truncate">
-                  <span aria-hidden="true" className="mr-2">{row.emoji}</span>
-                  {row.market}
-                </span>
-                <span className="text-xs text-gray-400 tabular-nums hidden sm:inline">
-                  {row.lifetimeWins.toLocaleString()}/{row.lifetimeTotal.toLocaleString()}
-                </span>
-                <span className="text-xl sm:text-2xl font-black tabular-nums text-violet-300 shrink-0">
-                  {row.lifetimePercent.toFixed(1)}%
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
+          <section className="mb-12 rounded-2xl border border-white/10 bg-white/[0.035] p-5 sm:p-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-2xl font-black tracking-tight">Sport summary</h2>
+                <p className="mt-1 text-sm text-gray-400">
+                  Since public launch: {dateRange(summary.dateRange.from, summary.dateRange.to)}
+                </p>
+              </div>
+              <p className="text-xs text-gray-500">
+                Public accuracy counts only predictions with a tracked side.
+              </p>
+            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              {summary.sports.map((sport) => (
+                <div key={sport.sport} className="rounded-xl border border-white/10 bg-gray-950/60 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-bold text-white">{sport.label}</p>
+                    <p className="text-sm font-black tabular-nums text-violet-300">
+                      {pct(sport.metrics)}
+                    </p>
+                  </div>
+                  <p className="mt-2 text-sm text-gray-300">
+                    {record(sport.metrics)} · {sport.metrics.pending.toLocaleString()} pending
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {sport.metrics.picks.toLocaleString()} total tracked rows
+                  </p>
+                </div>
+              ))}
+              {summary.sports.length === 0 ? (
+                <p className="rounded-xl border border-white/10 bg-gray-950/60 p-4 text-sm text-gray-400">
+                  No public tracked results are available yet.
+                </p>
+              ) : null}
+            </div>
+          </section>
 
-      {/* Profitability disclaimer */}
-      <section className="mb-12 bg-amber-950/20 border border-amber-800/30 rounded-xl p-5 sm:p-6 text-sm leading-relaxed text-amber-100/90">
-        <p className="font-semibold text-amber-200 mb-1">
-          Hit rate isn&rsquo;t the same as profit.
-        </p>
+          <section className="mb-12">
+            <div className="mb-4">
+              <h2 className="text-2xl font-black tracking-tight">Market breakdown</h2>
+              <p className="mt-1 text-sm text-gray-400">
+                Includes MLB Moneyline, Totals, First Inning, WNBA markets, and World Cup/Soccer markets when tracked.
+              </p>
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035]">
+              <div className="hidden grid-cols-[1.1fr_1.1fr_0.8fr_0.8fr_0.8fr] gap-3 border-b border-white/10 px-5 py-3 text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 md:grid">
+                <span>Sport</span>
+                <span>Market</span>
+                <span className="text-right">Record</span>
+                <span className="text-right">Win Rate</span>
+                <span className="text-right">Pending</span>
+              </div>
+              <div className="divide-y divide-white/10">
+                {markets.map((row) => (
+                  <div
+                    key={`${row.sport}-${row.market}`}
+                    className="grid gap-2 px-5 py-4 md:grid-cols-[1.1fr_1.1fr_0.8fr_0.8fr_0.8fr] md:items-center"
+                  >
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 md:hidden">Sport</p>
+                      <p className="font-semibold text-white">{row.sportLabel}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 md:hidden">Market</p>
+                      <p className="text-sm text-gray-200">{row.marketLabel}</p>
+                    </div>
+                    <p className="text-sm tabular-nums text-gray-200 md:text-right">{record(row.metrics)}</p>
+                    <p className="text-sm font-black tabular-nums text-violet-300 md:text-right">{pct(row.metrics)}</p>
+                    <p className="text-sm tabular-nums text-gray-400 md:text-right">{row.metrics.pending.toLocaleString()}</p>
+                  </div>
+                ))}
+                {markets.length === 0 ? (
+                  <p className="px-5 py-8 text-center text-sm text-gray-400">
+                    Market-level records will appear after public tracked results settle.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </section>
+        </>
+      )}
+
+      <section className="mb-12 rounded-xl border border-amber-400/25 bg-amber-400/[0.06] p-5 text-sm leading-relaxed text-amber-50">
+        <p className="mb-1 font-semibold text-amber-200">Tracking is accountability, not a promise.</p>
         <p>
-          A 60% hit rate at <span className="font-semibold">−150 odds</span> loses
-          money. A 53% hit rate at <span className="font-semibold">+110 odds</span>
-          {" "}wins. Odds, line shopping, and unit sizing matter. Inside the Lab
-          you get every pick with its line and confidence so you can size and
-          act for yourself.
+          Past results do not guarantee future outcomes. Prices, lines, timing, and user decisions all matter.
+          OddSphere is an informational sports analytics product and does not place or settle wagers.
         </p>
       </section>
 
-      {/* Join Premium CTA */}
-      <section className="bg-gradient-to-br from-violet-900/40 to-fuchsia-900/20 border border-violet-700/40 rounded-2xl p-8 sm:p-12 text-center shadow-[0_0_40px_rgba(167,139,250,0.18)]">
-        <h2 className="text-2xl sm:text-3xl font-black tracking-tight mb-3">
-          Want the full analytical view?
+      <section className="rounded-2xl border border-violet-500/30 bg-violet-500/[0.08] p-8 text-center sm:p-12">
+        <h2 className="text-2xl font-black tracking-tight sm:text-3xl">
+          Want the Daily Edge dashboard behind the tracking?
         </h2>
-        <p className="text-base text-gray-200 max-w-xl mx-auto mb-6 leading-relaxed">
-          Premium members see every pick by sport and market, daily and weekly
-          hit-rate charts, calibration honesty, and the underlying signal
-          breakdown for every game.
+        <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-gray-200">
+          Premium members get the current slate reader, Play Grades, Market Read,
+          Supporting Evidence, and sport-specific prediction context.
         </p>
-        <Link
-          href="/pricing"
-          className="inline-block bg-violet-600 hover:bg-violet-500 text-white font-bold px-8 py-3.5 rounded-lg transition-all duration-200 shadow-lg shadow-violet-900/40 hover:shadow-[0_0_25px_rgba(167,139,250,0.5)] hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
-        >
-          Join Premium — $25/mo →
-        </Link>
-        <p className="text-xs text-gray-400 mt-4 italic">
-          Charter pricing while available. Cancel anytime through Whop.
-        </p>
+        <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+          <Link
+            href="/pricing"
+            className="rounded-lg bg-violet-600 px-7 py-3 text-sm font-bold text-white transition hover:bg-violet-500"
+          >
+            See Pricing
+          </Link>
+          <Link
+            href="/"
+            className="rounded-lg border border-white/15 px-7 py-3 text-sm font-bold text-white transition hover:border-violet-400/40"
+          >
+            Back to Overview
+          </Link>
+        </div>
       </section>
     </main>
   );
