@@ -23,6 +23,7 @@
 
 import { supabase } from "../db/supabase";
 import { runBdlPlayerBackfillCycle } from "./bdlPlayerBackfillService";
+import { getPlayerStatsProvider } from "../providers/factory";
 import { lineupService } from "./lineupService";
 import { weatherService } from "./weatherService";
 import { runSeasonPitchingCycle } from "../../scripts/operator/backfill-season-pitching-stats";
@@ -307,10 +308,189 @@ export async function auditMlbModelReadiness(args: {
 
 // ─── Repair ─────────────────────────────────────────────────────────
 
+function providerBdlId(
+  providerIds: Record<string, unknown> | null | undefined
+): number | null {
+  const bdl = providerIds?.bdl;
+  if (typeof bdl !== "object" || bdl === null) return null;
+  const id = (bdl as { id?: unknown }).id;
+  if (typeof id === "number" && Number.isFinite(id)) return id;
+  const parsed = typeof id === "string" ? Number(id) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+type BatterBackfillCandidate = {
+  id: number;
+  team_id: number | null;
+  bdl_id: number;
+};
+
+async function loadTeamBattingBackfillCandidates(args: {
+  sport: Sport;
+  date: string;
+  season: number;
+}): Promise<{ teamsChecked: number; candidates: BatterBackfillCandidate[] }> {
+  const { data: games, error: gamesErr } = await supabase
+    .from("games")
+    .select("home_team_id, away_team_id")
+    .eq("slate_date", args.date)
+    .eq("sport", args.sport);
+  if (gamesErr) throw new Error(`team batting repair games query failed: ${gamesErr.message}`);
+
+  const teamIds = Array.from(new Set(
+    (games ?? [])
+      .flatMap((g) => [g.home_team_id, g.away_team_id])
+      .filter((id): id is number => typeof id === "number"),
+  ));
+  if (teamIds.length === 0) return { teamsChecked: 0, candidates: [] };
+
+  const { data: players, error: playersErr } = await supabase
+    .from("players")
+    .select("id, team_id, provider_ids")
+    .in("team_id", teamIds)
+    .eq("active", true)
+    .eq("is_pitcher", false);
+  if (playersErr) throw new Error(`team batting repair players query failed: ${playersErr.message}`);
+
+  const playerRows = (players ?? []) as Array<{
+    id: number;
+    team_id: number | null;
+    provider_ids: Record<string, unknown> | null;
+  }>;
+  const playerIds = playerRows.map((p) => p.id);
+  if (playerIds.length === 0) return { teamsChecked: teamIds.length, candidates: [] };
+
+  const { data: stats, error: statsErr } = await supabase
+    .from("player_season_stats")
+    .select("player_id, batting_ops, batting_pa")
+    .in("player_id", playerIds)
+    .eq("season", args.season)
+    .eq("season_type", "regular");
+  if (statsErr) throw new Error(`team batting repair stats query failed: ${statsErr.message}`);
+
+  const statsByPlayer = new Map((stats ?? []).map((s) => [s.player_id as number, s]));
+  const teamHasQualifiedOps = new Map<number, boolean>();
+  for (const p of playerRows) {
+    if (p.team_id === null) continue;
+    const existing = statsByPlayer.get(p.id);
+    if (
+      typeof existing?.batting_ops === "number" &&
+      typeof existing?.batting_pa === "number" &&
+      existing.batting_pa >= 100
+    ) {
+      teamHasQualifiedOps.set(p.team_id, true);
+    }
+  }
+
+  const candidates: BatterBackfillCandidate[] = [];
+  for (const p of playerRows) {
+    if (p.team_id !== null && teamHasQualifiedOps.get(p.team_id) === true) {
+      continue;
+    }
+    const existing = statsByPlayer.get(p.id);
+    const hasUsableBatting =
+      typeof existing?.batting_ops === "number" &&
+      typeof existing?.batting_pa === "number";
+    if (hasUsableBatting) continue;
+    const bdlId = providerBdlId(p.provider_ids);
+    if (bdlId === null) continue;
+    candidates.push({ id: p.id, team_id: p.team_id, bdl_id: bdlId });
+  }
+
+  return { teamsChecked: teamIds.length, candidates };
+}
+
+async function runSeasonBattingRepair(args: {
+  sport: Sport;
+  date: string;
+  season: number;
+  writeMode: boolean;
+  log: (m: string) => void;
+}): Promise<{
+  teams_checked: number;
+  players_checked: number;
+  rows_written: number;
+  errors: number;
+}> {
+  const { teamsChecked, candidates } = await loadTeamBattingBackfillCandidates({
+    sport: args.sport,
+    date: args.date,
+    season: args.season,
+  });
+  if (!args.writeMode || candidates.length === 0) {
+    return {
+      teams_checked: teamsChecked,
+      players_checked: candidates.length,
+      rows_written: 0,
+      errors: 0,
+    };
+  }
+
+  const statsProvider = getPlayerStatsProvider();
+  const payload: Array<Record<string, unknown>> = [];
+  let errors = 0;
+
+  for (const c of candidates) {
+    try {
+      const rows = await statsProvider.getPlayerSeasonStats(c.bdl_id, [args.season]);
+      const regular = rows.find((r) => r.season === args.season && r.season_type === "regular") ?? rows[0];
+      if (regular === undefined) continue;
+      payload.push({
+        player_id: c.id,
+        team_id: c.team_id,
+        season: regular.season,
+        season_type: regular.season_type,
+        postseason: regular.postseason,
+        batting_gp: regular.batting_gp,
+        batting_ab: regular.batting_ab,
+        batting_r: regular.batting_r,
+        batting_h: regular.batting_h,
+        batting_avg: regular.batting_avg,
+        batting_2b: regular.batting_2b,
+        batting_3b: regular.batting_3b,
+        batting_hr: regular.batting_hr,
+        batting_rbi: regular.batting_rbi,
+        batting_tb: regular.batting_tb,
+        batting_bb: regular.batting_bb,
+        batting_so: regular.batting_so,
+        batting_sb: regular.batting_sb,
+        batting_obp: regular.batting_obp,
+        batting_slg: regular.batting_slg,
+        batting_ops: regular.batting_ops,
+        batting_war: regular.batting_war,
+        batting_pa: regular.batting_pa,
+        batting_hbp: regular.batting_hbp,
+        batting_sf: regular.batting_sf,
+        updated_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      errors++;
+      args.log(`  [batter] player_id=${c.id} bdl_id=${c.bdl_id} failed: ${(e as Error).message}`);
+    }
+  }
+
+  if (payload.length > 0) {
+    const { error } = await supabase
+      .from("player_season_stats")
+      .upsert(payload, { onConflict: "player_id,season,season_type" });
+    if (error) throw new Error(`team batting repair upsert failed: ${error.message}`);
+  }
+
+  return {
+    teams_checked: teamsChecked,
+    players_checked: candidates.length,
+    rows_written: payload.length,
+    errors,
+  };
+}
+
 export type ReadinessRepairReason =
   | "readiness_ok"
   | "bdl_player_backfill_ok"
   | "bdl_player_backfill_skipped"
+  | "team_batting_stats_backfilled"
+  | "team_batting_stats_provider_empty"
+  | "team_batting_stats_api_error"
   | "starter_stats_backfilled"
   | "starter_stats_provider_empty"
   | "starter_stats_api_error"
@@ -325,6 +505,7 @@ export type ReadinessRepairReport = {
   write_mode: boolean;
   steps: {
     bdl_players: { ran: boolean; status?: string; counts?: Record<string, number>; linked?: number; created?: number; failed?: number; pre_map_size?: number; post_map_size?: number; reason?: string };
+    season_batting: { ran: boolean; teams_checked?: number; players_checked?: number; rows_written?: number; errors?: number; reason?: string };
     season_pitching: { ran: boolean; planned_inserts?: number; rows_written?: number; errors?: number; status?: string; reason?: string };
     lineup: { ran: boolean; records_updated?: number; skipped_by_reason?: Record<string, number>; reason?: string };
     weather: { ran: boolean; records_updated?: number; reason?: string };
@@ -354,6 +535,7 @@ export async function repairMlbModelReadiness(args: {
     write_mode: args.writeMode,
     steps: {
       bdl_players: { ran: false },
+      season_batting: { ran: false },
       season_pitching: { ran: false },
       lineup: { ran: false },
       weather: { ran: false },
@@ -371,6 +553,13 @@ export async function repairMlbModelReadiness(args: {
   let pitchersNeedingStats = activeAudit.pitchers_needing_stats
     .filter((p) => p.mlb_id !== null)
     .map((p) => p.id);
+  const season = Number(args.date.slice(0, 4));
+  const battingCandidatesPre = await loadTeamBattingBackfillCandidates({
+    sport: args.sport,
+    date: args.date,
+    season,
+  });
+  const teamBattingGapPresent = battingCandidatesPre.candidates.length > 0;
   const lineupGapPresent = activeAudit.per_game.some((p) => p.home_lineup_count < 8 || p.away_lineup_count < 8);
   // Gap = a game with NO forecast OR a present-but-stale forecast (so the
   // refresh below sharpens weather toward first pitch instead of only
@@ -380,6 +569,7 @@ export async function repairMlbModelReadiness(args: {
 
   if (
     pitchersNeedingStats.length === 0 &&
+    !teamBattingGapPresent &&
     !lineupGapPresent &&
     !weatherGapPresent
   ) {
@@ -433,6 +623,40 @@ export async function repairMlbModelReadiness(args: {
     reasons.push("bdl_player_backfill_skipped");
   }
 
+  // ─── Step A2 — team batting season-stats backfill ─────────────────
+  // Narrow repair: active non-pitchers on teams in today's slate only.
+  // Writes batting_* columns on player_season_stats and leaves pitching,
+  // predictions, locks, grades, and tracking untouched.
+  if (teamBattingGapPresent) {
+    if (args.writeMode && !args.providerGuards.playerStatsProviderReal) {
+      report.steps.season_batting = { ran: false, reason: "PLAYER_STATS_PROVIDER!=real_api" };
+      reasons.push("team_batting_stats_api_error");
+    } else {
+      try {
+        const r = await runSeasonBattingRepair({
+          sport: args.sport,
+          date: args.date,
+          season,
+          writeMode: args.writeMode,
+          log,
+        });
+        report.steps.season_batting = {
+          ran: true,
+          teams_checked: r.teams_checked,
+          players_checked: r.players_checked,
+          rows_written: r.rows_written,
+          errors: r.errors,
+        };
+        if (r.rows_written > 0) reasons.push("team_batting_stats_backfilled");
+        else if (r.errors > 0) reasons.push("team_batting_stats_api_error");
+        else reasons.push("team_batting_stats_provider_empty");
+      } catch (e) {
+        report.steps.season_batting = { ran: false, reason: (e as Error).message };
+        reasons.push("team_batting_stats_api_error");
+      }
+    }
+  }
+
   // ─── Step B — pitcher season-stats backfill ─────────────────────────
   if (pitchersNeedingStats.length > 0) {
     if (args.writeMode && !args.providerGuards.playerStatsProviderReal) {
@@ -440,7 +664,6 @@ export async function repairMlbModelReadiness(args: {
       reasons.push("starter_stats_api_error");
     } else {
       try {
-        const season = Number(args.date.slice(0, 4));
         const r = await runSeasonPitchingCycle({
           sport: args.sport,
           playerIds: pitchersNeedingStats,

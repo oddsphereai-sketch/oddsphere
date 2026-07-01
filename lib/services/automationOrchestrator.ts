@@ -832,6 +832,8 @@ export async function runSlateCycleAutomated(opts: {
         reasons: r.reasons,
         bdl_linked: r.steps.bdl_players.linked ?? 0,
         bdl_created: r.steps.bdl_players.created ?? 0,
+        batter_rows_written: r.steps.season_batting.rows_written ?? 0,
+        batter_players_checked: r.steps.season_batting.players_checked ?? 0,
         pitcher_rows_written: r.steps.season_pitching.rows_written ?? 0,
         lineup_records_updated: r.steps.lineup.records_updated ?? 0,
         weather_records_updated: r.steps.weather.records_updated ?? 0,
@@ -1702,4 +1704,3 @@ function firstInningReasonFromStatus(
   if (status === "failed") return `failed: ${res.message ?? "unknown"}`;
   return status;
 }
-

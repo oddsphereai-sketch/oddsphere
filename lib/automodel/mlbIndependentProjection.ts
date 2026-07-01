@@ -184,7 +184,7 @@ function parkStatus(snap: GameSnapshot): V22FeatureStatus {
 function starterEraStatus(starter: StarterSnapshot | null): V22FeatureStatus {
   if (starter === null) return { source: "missing", reason: "starter_missing" };
   if (starter.season_era != null) {
-    return { source: "proxy", reason: "starter_proxy_era_whip_k9" };
+    return { source: "preferred", reason: "starter_season_era" };
   }
   if (starter.season_whip != null || starter.season_k_per_9 != null) {
     return { source: "fallback_real", reason: "starter_whip_or_k9_only" };
@@ -193,8 +193,8 @@ function starterEraStatus(starter: StarterSnapshot | null): V22FeatureStatus {
 }
 
 /** Pitch quality status — preferred is the Statcast-derived
- *  `pitch_quality_score`. When absent, V2.2 derives a proxy from
- *  ERA+WHIP+K/9 in `pitcherFactor` and labels this position `proxy`. */
+ *  `pitch_quality_score`. When absent, V2.2 derives a weaker but real
+ *  fallback from ERA+WHIP+K/9 in `pitcherFactor`. */
 function pitchQualityStatus(starter: StarterSnapshot | null): V22FeatureStatus {
   if (starter === null) return { source: "missing", reason: "starter_missing" };
   if (starter.pitch_quality_score != null) {
@@ -206,7 +206,7 @@ function pitchQualityStatus(starter: StarterSnapshot | null): V22FeatureStatus {
   // Need at least 2 of 3 stats to derive a usable proxy.
   const score = [eraReal, whipReal, k9Real].filter(Boolean).length;
   if (score >= 2) {
-    return { source: "proxy", reason: "pitch_quality_proxy_era_whip_k9" };
+    return { source: "fallback_real", reason: "pitch_quality_era_whip_k9_fallback" };
   }
   return { source: "missing", reason: "pitch_quality_missing" };
 }
@@ -219,12 +219,12 @@ function starterHandednessStatus(starter: StarterSnapshot | null): V22FeatureSta
   return { source: "missing", reason: "handedness_missing" };
 }
 
-/** Team OPS status — preferred is `team_avg_batter_ops`. When missing, we
- *  could try a runs-per-game fallback (currently always null in
- *  featureSnapshot) — flagged here for future wiring. */
+/** Team OPS status — preferred is the PA-weighted active-roster OPS
+ *  aggregate built from real `player_season_stats` rows. When missing,
+ *  try a weaker team runs/game fallback if it is wired. */
 function teamOpsStatus(team: TeamSnapshot): V22FeatureStatus {
   if (team.team_avg_batter_ops != null) {
-    return { source: "proxy", reason: "offense_team_proxy_ops" };
+    return { source: "preferred", reason: "offense_roster_ops" };
   }
   if (typeof team.season_runs_per_game === "number" && team.season_runs_per_game > 0) {
     return { source: "fallback_real", reason: "offense_runs_per_game_fallback" };
@@ -234,7 +234,7 @@ function teamOpsStatus(team: TeamSnapshot): V22FeatureStatus {
 
 function bullpenStatus(team: TeamSnapshot): V22FeatureStatus {
   if (team.bullpen_era_proxy != null) {
-    return { source: "proxy", reason: "bullpen_proxy_era" };
+    return { source: "preferred", reason: "bullpen_real_rp_era" };
   }
   return { source: "missing", reason: "bullpen_missing" };
 }

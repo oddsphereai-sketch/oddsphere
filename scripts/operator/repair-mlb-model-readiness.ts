@@ -110,6 +110,7 @@ async function main() {
 
   console.log(`\n━━━ Repair steps ━━━`);
   console.log(`  BDL players:      ran=${report.steps.bdl_players.ran} linked=${report.steps.bdl_players.linked ?? "-"} created=${report.steps.bdl_players.created ?? "-"} status=${report.steps.bdl_players.status ?? "-"} ${report.steps.bdl_players.reason ?? ""}`);
+  console.log(`  Batter stats:     ran=${report.steps.season_batting.ran} teams_checked=${report.steps.season_batting.teams_checked ?? "-"} players_checked=${report.steps.season_batting.players_checked ?? "-"} rows_written=${report.steps.season_batting.rows_written ?? "-"} errors=${report.steps.season_batting.errors ?? "-"} ${report.steps.season_batting.reason ?? ""}`);
   console.log(`  Pitcher stats:    ran=${report.steps.season_pitching.ran} rows_written=${report.steps.season_pitching.rows_written ?? "-"} errors=${report.steps.season_pitching.errors ?? "-"} status=${report.steps.season_pitching.status ?? "-"} ${report.steps.season_pitching.reason ?? ""}`);
   console.log(`  Lineup refresh:   ran=${report.steps.lineup.ran} records_updated=${report.steps.lineup.records_updated ?? "-"} ${report.steps.lineup.reason ?? ""}`);
   console.log(`  Weather refresh:  ran=${report.steps.weather.ran} records_updated=${report.steps.weather.records_updated ?? "-"} ${report.steps.weather.reason ?? ""}`);
