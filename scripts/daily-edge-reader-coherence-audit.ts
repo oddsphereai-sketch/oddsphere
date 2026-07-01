@@ -9,6 +9,7 @@ import {
   hasSharpWordingWithoutContext,
   sharpContextStatusForEvidence,
 } from "@/lib/services/dailyEdge/memberFacingCopyRenderer";
+import { dailyEdgeMarketCapabilities } from "@/lib/services/dailyEdge/dailyEdgeSportCapabilities";
 import { reviewPredictionEvidence } from "@/lib/services/dailyEdge/predictionEvidenceReviewer";
 import { selfHealDailyEdgePrediction } from "@/lib/services/dailyEdge/dailyEdgeSelfHealingEngine";
 import type { Sport } from "@/lib/types/domain/Sport";
@@ -45,7 +46,7 @@ const QUICK_READ_HYPE_TERMS = /\b(not a hammer|hammer|lock|free money|smash|love
 const SHARP_OVERCLAIM = /\bsharp money\b/i;
 const FI_MISSING_SPLIT_COPY_RE = /\b(split bars?|splits?|sharp signal|sharp-book signal)\b.{0,50}\b(unavailable|missing|not available|absent)\b|\b(unavailable|missing|not available|absent)\b.{0,50}\b(split bars?|splits?|sharp signal|sharp-book signal)\b/i;
 const FI_MISSING_SPLIT_NEGATIVE_RE = /\b(missing|unavailable|not available|absent)\b.{0,80}\b(split bars?|splits?|sharp signal|sharp-book signal)\b.{0,80}\b(confidence|lower|hurts?|downgrade|block|uncertain|risk|negative|problem)\b/i;
-const PREDICTION_SPECIFIC_RE = /\b(model|edge|price|juice|line|movement|starter|context|projection|projected|consensus|sharp-book|market resistance|mixed|value|grade|risk|support|split|probability|implied|confidence|yrfi|nrfi|toss-up|first-inning)\b/i;
+const PREDICTION_SPECIFIC_RE = /\b(model|edge|price|juice|line|movement|starter|context|projection|projected|consensus|sharp-book|market resistance|mixed|value|grade|risk|support|split|probability|implied|confidence|yrfi|nrfi|toss-up|first-inning|spread|draw|goals?|match result|btts)\b/i;
 const RAW_AI_RE = /\b(ai says|ai recommended|ai recommendation|raw ai|language model)\b/i;
 const MEMBER_COPY_META_LANGUAGE_RE = /\b(the reader should|needs to|should mention|needs thesis|internal|grade caveat|flagged for review|human review|copy should|renderer)\b/i;
 const FI_FULL_GAME_MARKET_LANGUAGE_RE = /\bmarket resistance or price|starter\/context quality and price decide|overcome market resistance\b/i;
@@ -98,6 +99,16 @@ function diagnosticDetails(row: PredictionEvidenceObject): Record<string, unknow
     sourceMissingReason: row.marketEvidence.sourceMissingReason,
     evidenceSource: row.evidenceSource.kind,
   };
+}
+
+function decisionKeyForEvidence(row: PredictionEvidenceObject) {
+  if (row.identity.normalizedMarket === "total") return "total";
+  if (row.identity.normalizedMarket === "moneyline") return "moneyline";
+  return "firstInning";
+}
+
+function capabilitiesForEvidence(row: PredictionEvidenceObject) {
+  return dailyEdgeMarketCapabilities(row.identity.sport, decisionKeyForEvidence(row));
 }
 
 function push(findings: Finding[], row: PredictionEvidenceObject, code: string, severity: Finding["severity"], message: string, details?: Record<string, unknown>) {
@@ -194,7 +205,8 @@ function auditRow(row: PredictionEvidenceObject): Finding[] {
   const findings: Finding[] = [];
   const read = row.marketEvidence.deterministicMarketRead;
   const source = row.marketEvidence.sourceAgreement;
-  const isFi = row.identity.marketType === "FI";
+  const caps = capabilitiesForEvidence(row);
+  const isFi = caps.isFirstInning;
   const dimensions = row.internalGradeDimensions;
   const hasBothSources = row.marketEvidence.consensusSplitsAvailable &&
     (row.marketEvidence.sharpBookSplitsAvailable || row.marketEvidence.sharpBookSignalAvailable);
@@ -249,27 +261,27 @@ function auditRow(row: PredictionEvidenceObject): Finding[] {
     push(findings, row, "market_read_alignment_mismatch", "block", "Rendered Market Read says clean/aligned while source evidence conflicts.");
   }
 
-  if (!isFi && hasBothSources && read === "insufficient_data") {
+  if (!isFi && (caps.expectsConsensusSplits || caps.expectsSharpBookContext) && hasBothSources && read === "insufficient_data") {
     push(findings, row, "market_read_insufficient_despite_sources", "high", "ML/Total has price and source context but Market Read is insufficient_data.");
   }
 
-  if (!isFi && hasBothSources && (source === "consensus_supports_sharp_opposes" || source === "sharp_supports_consensus_opposes") && read !== "mixed" && read !== "resistance" && read !== "consensus_resistance") {
+  if (!isFi && (caps.expectsConsensusSplits || caps.expectsSharpBookContext) && hasBothSources && (source === "consensus_supports_sharp_opposes" || source === "sharp_supports_consensus_opposes") && read !== "mixed" && read !== "resistance" && read !== "consensus_resistance") {
     push(findings, row, "market_read_hides_source_conflict", "high", "Consensus and Sharp source context disagree, but Market Read does not reflect mixed/resistance.");
   }
 
-  if (!isFi && row.evidenceSource.kind === "current_live" && !row.marketEvidence.consensusSplitsAvailable) {
+  if (!isFi && caps.expectsConsensusSplits && row.evidenceSource.kind === "current_live" && !row.marketEvidence.consensusSplitsAvailable) {
     push(findings, row, "consensus_context_unavailable_current_source", "info", "Current source has no Consensus Splits context for this ML/Total row; this is not a reader display failure unless source recovery finds it.", diagnosticDetails(row));
   }
 
-  if (!isFi && row.evidenceSource.kind === "current_live" && !row.marketEvidence.sharpBookSplitsAvailable && !row.marketEvidence.sharpBookSignalAvailable) {
+  if (!isFi && caps.expectsSharpBookContext && row.evidenceSource.kind === "current_live" && !row.marketEvidence.sharpBookSplitsAvailable && !row.marketEvidence.sharpBookSignalAvailable) {
     const severity: Finding["severity"] = isPublicGrade(row.identity.originalPlayGrade) ? "high" : "medium";
     push(findings, row, "sharp_context_unavailable_current_source", severity, "Current/pre-lock ML/Total row has no Sharp Book Splits/Signal after selected evidence recovery; treat as degraded market context, not clean.", {
       ...diagnosticDetails(row),
       sharpContextStatus: sharpContextStatusForEvidence(row),
     });
-  } else if (!isFi && row.evidenceSource.kind === "current_live" && !row.currentReaderState.supportingEvidence.sharpBookSplitsDisplayed && !row.currentReaderState.supportingEvidence.sharpBookSignalDisplayed && (row.marketEvidence.sharpBookSplitsAvailable || row.marketEvidence.sharpBookSignalAvailable)) {
+  } else if (!isFi && caps.expectsSharpBookContext && row.evidenceSource.kind === "current_live" && !row.currentReaderState.supportingEvidence.sharpBookSplitsDisplayed && !row.currentReaderState.supportingEvidence.sharpBookSignalDisplayed && (row.marketEvidence.sharpBookSplitsAvailable || row.marketEvidence.sharpBookSignalAvailable)) {
     push(findings, row, "sharp_context_available_not_displayed", "medium", "Sharp Book context exists in evidence but is not display-ready in the reader state.", diagnosticDetails(row));
-  } else if (!isFi && row.evidenceSource.kind === "current_live" && row.marketEvidence.sharpBookSignalAvailable && !row.marketEvidence.sharpBookSplitsAvailable) {
+  } else if (!isFi && caps.expectsSharpBookContext && row.evidenceSource.kind === "current_live" && row.marketEvidence.sharpBookSignalAvailable && !row.marketEvidence.sharpBookSplitsAvailable) {
     push(findings, row, "sharp_full_splits_missing_but_signal_available", "info", "Sharp full split bars are unavailable, but a Sharp Book Signal exists; use signal labeling, not full split bars.", diagnosticDetails(row));
   }
 

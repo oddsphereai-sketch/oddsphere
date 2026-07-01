@@ -288,7 +288,7 @@ export async function buildWnbaPredictionRecords(opts: {
 
   // Apply: upsert records; NEVER overwrite a locked record (locked_at != null).
   const { data: existing } = ids.length
-    ? await supabase.from("prediction_records").select("game_id, market, locked_at").eq("sport", "wnba").in("game_id", ids)
+    ? await supabase.from("prediction_records").select("game_id, market, locked_at").eq("sport", "wnba").eq("slate_date", today).in("game_id", ids)
     : { data: [] as Record<string, unknown>[] };
   const lockedRec = new Set((existing ?? []).filter((r) => r.locked_at != null).map((r) => `${r.game_id}::${r.market}`));
   const toWrite = result.records.filter((r) => !lockedRec.has(`${r.game_id}::${r.market}`));

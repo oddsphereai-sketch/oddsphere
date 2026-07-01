@@ -8,6 +8,10 @@ import type {
   ResolvedMarketRead,
   SplitSideDisplay,
 } from "../types/domain/RecommendationDecision";
+import {
+  dailyEdgeMarketCapabilities,
+  sportExpectsSharpBookContext,
+} from "@/lib/services/dailyEdge/dailyEdgeSportCapabilities";
 
 type MarketInput = {
   key: "moneyline" | "total" | "firstInning";
@@ -141,18 +145,55 @@ function sideLean(section: MarketSplitDisplaySection | null, side: MarketInput["
   return "none";
 }
 
-function resolveMarketRead(market: MarketInput, consensus: MarketSplitDisplaySection | null, sharp: MarketSplitDisplaySection | null): ResolvedMarketRead {
+function resolveMarketRead(sport: string, market: MarketInput, consensus: MarketSplitDisplaySection | null, sharp: MarketSplitDisplaySection | null): ResolvedMarketRead {
+  const caps = dailyEdgeMarketCapabilities(sport, market.key);
   const consensusLean = sideLean(consensus, market.selectedSide);
   const sharpLean = sideLean(sharp, market.selectedSide);
   const movement = market.marketReadV2?.movement?.directionRelativeToPick ?? "neutral";
   const pick = market.pick ?? "the pick";
   const sharpAvailable = sharp !== null;
   const hasCoreFirstInningEvidence =
-    market.key === "firstInning" &&
+    caps.isFirstInning &&
     (market.price !== null ||
       market.modelProbability !== null ||
       market.marketImplied !== null ||
       market.edgePp !== null);
+  const hasCoreMarketEvidence =
+    market.price !== null ||
+    market.modelProbability !== null ||
+    market.marketImplied !== null ||
+    market.edgePp !== null;
+
+  if (!caps.expectsConsensusSplits && !caps.expectsSharpBookContext) {
+    const lineMovementCopy =
+      movement === "support"
+        ? " Price movement is not fighting the prediction."
+        : movement === "resistance"
+          ? " Price movement adds some resistance."
+          : "";
+    if (!hasCoreMarketEvidence) {
+      return {
+        status: "insufficient_data",
+        label: "No Clear Signal",
+        tone: "gray",
+        copy: `Core ${caps.marketContextName} evidence is incomplete.`,
+      };
+    }
+    if (movement === "resistance") {
+      return {
+        status: "resistance",
+        label: "Market Resistance",
+        tone: "amber",
+        copy: `${caps.marketContextName === "BTTS" ? "BTTS" : "The market"} has price/movement resistance against ${pick}.`,
+      };
+    }
+    return {
+      status: "no_clear_signal",
+      label: "No Clear Signal",
+      tone: "gray",
+      copy: `${caps.marketContextName === "BTTS" ? "BTTS" : "This read"} is driven by model value, price, and movement context.${lineMovementCopy}`,
+    };
+  }
 
   if (sharpAvailable && ((consensusLean === "support" && sharpLean === "resistance") || (consensusLean === "resistance" && sharpLean === "support"))) {
     const moveCopy = movement === "support" ? " and line movement" : "";
@@ -189,10 +230,11 @@ function hasProviderLeak(value: unknown): boolean {
   return JSON.stringify(value).match(/\b(playbook|sharpapi)\b/i) !== null;
 }
 
-function buildMarketDecision(market: MarketInput, projectedScore: { away: number; home: number } | null | undefined): MarketDecision {
+function buildMarketDecision(sport: string, market: MarketInput, projectedScore: { away: number; home: number } | null | undefined): MarketDecision {
+  const caps = dailyEdgeMarketCapabilities(sport, market.key);
   const consensus = consensusSection(market);
   const sharp = sharpSection(market);
-  const read = resolveMarketRead(market, consensus, sharp);
+  const read = resolveMarketRead(sport, market, consensus, sharp);
   const rawGrade = normalizeGrade(market.playGrade);
   const sourceConflict = read.status === "mixed";
   const hasBestAngleConflict =
@@ -210,8 +252,12 @@ function buildMarketDecision(market: MarketInput, projectedScore: { away: number
         : "Lean"
       : rawGrade;
   const reasonCodes = [
-    consensus ? "consensus_splits_available" : "consensus_splits_unavailable",
-    sharp ? "sharp_book_splits_available" : "sharp_book_splits_unavailable",
+    caps.expectsConsensusSplits
+      ? consensus ? "consensus_splits_available" : "consensus_splits_unavailable"
+      : "consensus_splits_not_required",
+    caps.expectsSharpBookContext
+      ? sharp ? "sharp_book_splits_available" : "sharp_book_splits_unavailable"
+      : "sharp_book_splits_not_required",
     `market_read_${read.status}`,
     `grade_${grade.toLowerCase().replaceAll(" ", "_")}`,
     ...(sourceConflict ? ["source_conflict"] : []),
@@ -219,8 +265,12 @@ function buildMarketDecision(market: MarketInput, projectedScore: { away: number
     ...(hasBestAngleConflict ? [hasExplicitOverride ? "best_angle_model_edge_override" : "best_angle_capped_by_market_conflict"] : []),
   ];
   const evidence = [
-    consensus ? "Consensus splits reviewed." : "Consensus splits unavailable.",
-    sharp ? "Sharp book splits reviewed." : "Sharp book splits unavailable.",
+    ...(caps.expectsConsensusSplits
+      ? [consensus ? "Consensus splits reviewed." : "Consensus splits unavailable."]
+      : []),
+    ...(caps.expectsSharpBookContext
+      ? [sharp ? "Sharp book splits reviewed." : "Sharp book splits unavailable."]
+      : []),
     read.copy,
   ];
   const quickRead =
@@ -252,7 +302,7 @@ function buildMarketDecision(market: MarketInput, projectedScore: { away: number
 }
 
 export function buildRecommendationDecision(input: BuildRecommendationDecisionInput): RecommendationDecision {
-  const marketEntries = input.markets.map((m) => [m.key, buildMarketDecision(m, input.projectedScore)] as const);
+  const marketEntries = input.markets.map((m) => [m.key, buildMarketDecision(input.sport, m, input.projectedScore)] as const);
   const markets: RecommendationDecision["markets"] = {};
   for (const [key, decision] of marketEntries) markets[key] = decision;
 
@@ -265,7 +315,7 @@ export function buildRecommendationDecision(input: BuildRecommendationDecisionIn
     ...(d.sharpBookSplits?.rows.some((r) => r.isStale) ? ["Sharp Book Splits"] : []),
   ]);
   const missingExpectedSources =
-    input.sport === "mlb" && !sharpBookSplitsAvailable ? ["Sharp Book Splits"] : [];
+    sportExpectsSharpBookContext(input.sport) && !sharpBookSplitsAvailable ? ["Sharp Book Splits"] : [];
   const issues = decisions.flatMap((d) => {
     const out: string[] = [];
     if (!PLAY_GRADES.includes(d.playGrade)) out.push("invalid_play_grade");

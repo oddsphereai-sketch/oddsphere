@@ -3,6 +3,7 @@ import {
   hasSharpWordingWithoutContext,
 } from "@/lib/services/dailyEdge/memberFacingCopyRenderer";
 import type { PredictionEvidenceObject } from "@/lib/services/dailyEdge/predictionEvidenceBuilder";
+import { dailyEdgeMarketCapabilities } from "@/lib/services/dailyEdge/dailyEdgeSportCapabilities";
 
 export type SanitizerInput = {
   marketReadLabel?: string | null;
@@ -31,7 +32,17 @@ export type SanitizedAiOutput = {
 const PROVIDER_OR_SOURCE_LEAK_RE = /\b(playbook|sharpapi|circa|draftkings|fanduel|betmgm|pinnacle)\b/i;
 const HYPE_RE = /\b(sharp money loves|overwhelmingly on|guaranteed|free money|lock of the day|lock play|stone cold lock|can't lose)\b/i;
 const FI_MISSING_SPLIT_NEGATIVE_RE = /\b(missing|unavailable|not available|absent)\b.{0,80}\b(split bars?|splits?|sharp signal|sharp-book signal)\b.{0,80}\b(confidence|lower|hurts?|downgrade|block|uncertain|risk|negative|problem)\b/i;
-const PREDICTION_SPECIFIC_RE = /\b(model|edge|price|juice|line|movement|starter|context|projection|projected|consensus|sharp-book|market resistance|mixed|value|grade|risk|support|probability|implied|yrfi|nrfi|over|under|moneyline)\b/i;
+const PREDICTION_SPECIFIC_RE = /\b(model|edge|price|juice|line|movement|starter|context|projection|projected|consensus|sharp-book|market resistance|mixed|value|grade|risk|support|probability|implied|yrfi|nrfi|over|under|moneyline|spread|draw|goals?|match result|btts)\b/i;
+
+function decisionKeyForEvidence(row: PredictionEvidenceObject) {
+  if (row.identity.normalizedMarket === "total") return "total";
+  if (row.identity.normalizedMarket === "moneyline") return "moneyline";
+  return "firstInning";
+}
+
+function isTrueFirstInning(row: PredictionEvidenceObject): boolean {
+  return dailyEdgeMarketCapabilities(row.identity.sport, decisionKeyForEvidence(row)).isFirstInning;
+}
 
 function cleanCopy(value: string | null | undefined): { value: string | null; sanitized: boolean; reasons: string[] } {
   if (!value || !value.trim()) return { value: null, sanitized: false, reasons: ["missing_copy"] };
@@ -62,7 +73,7 @@ export function sanitizeDailyEdgeAiOutput(row: PredictionEvidenceObject, input: 
   const risk = cleanCopy(input.riskCopy);
   blockedReasons.push(...marketRead.reasons, ...supporting.reasons, ...risk.reasons);
 
-  if (row.identity.marketType === "FI") {
+  if (isTrueFirstInning(row)) {
     const allCopy = [marketRead.value, supporting.value, risk.value].filter(Boolean).join("\n");
     if (FI_MISSING_SPLIT_NEGATIVE_RE.test(allCopy)) blockedReasons.push("fi_missing_split_used_as_negative");
   }

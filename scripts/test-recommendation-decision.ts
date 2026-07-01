@@ -1,4 +1,5 @@
 import { buildRecommendationDecision } from "../lib/services/recommendationDecision";
+import { applyDailyEdgeRenderedCopyFlags } from "../lib/services/dailyEdge/memberFacingCopyRenderer";
 import { buildEdgeStackRows } from "../app/lab/lib/edgeStackRows";
 import type { MarketEdgeDto } from "../app/lab/lib/labTypes";
 import type { MarketReadV2Dto } from "../lib/types/domain/MarketIntelligenceV2";
@@ -132,6 +133,68 @@ const wnba = buildRecommendationDecision({
 check("WNBA consensus-only omits sharp book section", wnba.markets.moneyline?.sharpBookSplits === null);
 check("WNBA consensus-only resolves consensus support", wnba.markets.moneyline?.resolvedMarketRead.status === "consensus_support");
 check("No provider names in canonical decision", !JSON.stringify(wnba).match(/\b(Playbook|SharpAPI)\b/));
+
+const wnbaSpread = applyDailyEdgeRenderedCopyFlags(buildRecommendationDecision({
+  sport: "wnba",
+  slateDate: "2026-06-28",
+  gameId: "game-wnba-spread",
+  homeTeam: "NY",
+  awayTeam: "LV",
+  markets: [{
+    ...baseMarket,
+    key: "firstInning",
+    pick: "NY +6.5",
+    selectedSide: "home",
+    playGrade: "Watchlist",
+    marketReadV2: read({ consensusMoney: 0.58, consensusBets: 0.55, sharp: null }),
+  }],
+}), { quickRead: true, marketRead: true, supportingEvidence: true, risk: false });
+const wnbaSpreadText = JSON.stringify(wnbaSpread.markets.firstInning);
+check("WNBA spread slot keeps consensus-only context", wnbaSpread.markets.firstInning?.consensusSplits !== null && wnbaSpread.markets.firstInning?.sharpBookSplits === null);
+check("WNBA spread slot does not render FI copy", !wnbaSpreadText.match(/\b(FI|YRFI|NRFI|first-inning)\b/i), wnbaSpreadText);
+check("WNBA spread slot does not mention missing sharp", !wnbaSpreadText.match(/\b(sharp).{0,40}\b(unavailable|missing|absent|not available)\b/i), wnbaSpreadText);
+
+const worldCup = applyDailyEdgeRenderedCopyFlags(buildRecommendationDecision({
+  sport: "soccer",
+  slateDate: "2026-06-28",
+  gameId: "game-wc-1",
+  homeTeam: "KOR",
+  awayTeam: "CZE",
+  projectedScore: { away: 1.4, home: 1.1 },
+  markets: [
+    {
+      ...baseMarket,
+      key: "moneyline",
+      pick: "CZE Win",
+      selectedSide: null,
+      modelProbability: 0.47,
+      marketImplied: 42,
+      edgePp: 5,
+      price: 138,
+      playGrade: "Lean",
+      publicSplits: [],
+      marketReadV2: null,
+    },
+    {
+      ...baseMarket,
+      key: "total",
+      pick: "Over 2.5",
+      selectedSide: "over",
+      modelProbability: 0.54,
+      marketImplied: 50,
+      edgePp: 4,
+      price: -105,
+      playGrade: "Watchlist",
+      publicSplits: [],
+      marketReadV2: null,
+    },
+  ],
+}), { quickRead: true, marketRead: true, supportingEvidence: true, risk: false });
+const worldCupText = JSON.stringify(worldCup);
+check("World Cup does not expect Consensus Splits", worldCup.sourceState.missingExpectedSources.length === 0);
+check("World Cup no-split copy does not mention Consensus Splits", !worldCupText.match(/Consensus Splits/i), worldCupText);
+check("World Cup no-split copy does not mention Sharp Book", !worldCupText.match(/Sharp Book|Sharp-book/i), worldCupText);
+check("World Cup rendered copy uses price/model context", worldCupText.match(/model|price|movement|edge/i) !== null, worldCupText);
 
 const noEdge = buildRecommendationDecision({
   sport: "mlb",

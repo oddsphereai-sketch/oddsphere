@@ -8,6 +8,7 @@ import type {
   ResolvedMarketRead,
   SplitSideDisplay,
 } from "@/lib/types/domain/RecommendationDecision";
+import { dailyEdgeMarketCapabilities } from "@/lib/services/dailyEdge/dailyEdgeSportCapabilities";
 
 export type RenderedDailyEdgeMemberCopy = {
   marketReadLabel: string;
@@ -85,6 +86,16 @@ function price(value: number | null | undefined): string {
 const MEMBER_COPY_META_LANGUAGE_RE =
   /\b(the reader should|needs to|should mention|needs thesis|internal|grade caveat|flagged for review|human review|copy should|renderer)\b/i;
 
+function decisionKeyForEvidence(row: PredictionEvidenceObject): keyof RecommendationDecision["markets"] {
+  if (row.identity.normalizedMarket === "total") return "total";
+  if (row.identity.normalizedMarket === "moneyline") return "moneyline";
+  return "firstInning";
+}
+
+function capabilitiesForEvidence(row: PredictionEvidenceObject) {
+  return dailyEdgeMarketCapabilities(row.identity.sport, decisionKeyForEvidence(row));
+}
+
 function sanitizeMemberCopy(copy: string, fallback: string): string {
   return MEMBER_COPY_META_LANGUAGE_RE.test(copy) ? fallback : copy;
 }
@@ -114,7 +125,8 @@ function evidenceSplitConflictKind(row: PredictionEvidenceObject): "consensus_ag
 }
 
 export function sharpContextStatusForEvidence(row: PredictionEvidenceObject): SharpContextStatus {
-  if (row.identity.marketType === "FI") return "sharp_context_not_required";
+  const caps = capabilitiesForEvidence(row);
+  if (!caps.expectsSharpBookContext) return "sharp_context_not_required";
   if (row.marketEvidence.sharpBookSplitsAvailable) return "sharp_full_splits_available";
   if (row.marketEvidence.sharpBookSignalAvailable) return "sharp_signal_available";
   if (row.priceValueEvidence.priceRecovered || row.modelStatsEvidence.edgeRecovered) return "sharp_context_mapping_gap";
@@ -145,13 +157,13 @@ function labelWithoutMarketPrefix(label: string): string {
 export function allowedDailyEdgeMemberCopyLabel(row: PredictionEvidenceObject, label: string | null | undefined): boolean {
   if (!label) return false;
   const normalized = normalizeDailyEdgeMemberCopyLabel(row, label);
-  return row.identity.marketType === "FI" ? FI_LABELS.has(normalized) : ML_TOTAL_LABELS.has(normalized);
+  return capabilitiesForEvidence(row).isFirstInning ? FI_LABELS.has(normalized) : ML_TOTAL_LABELS.has(normalized);
 }
 
 export function normalizeDailyEdgeMemberCopyLabel(row: PredictionEvidenceObject, label: string | null | undefined): string {
   const raw = String(label ?? "").trim();
   if (!raw) return "";
-  if (row.identity.marketType === "FI") return raw;
+  if (capabilitiesForEvidence(row).isFirstInning) return raw;
   return labelWithoutMarketPrefix(raw);
 }
 
@@ -166,12 +178,13 @@ export function deriveDailyEdgeMemberCopyLabel(args: {
   const edge = row.modelStatsEvidence.edge ?? 0;
   const read = row.marketEvidence.deterministicMarketRead;
   const dimensions = row.internalGradeDimensions;
+  const caps = capabilitiesForEvidence(row);
 
   if (review?.evidenceQuality === "blocked") {
-    return row.identity.marketType === "FI" ? "fi_insufficient_core_data" : "insufficient_core_data";
+    return caps.isFirstInning ? "fi_insufficient_core_data" : "insufficient_core_data";
   }
 
-  if (row.identity.marketType === "FI") {
+  if (caps.isFirstInning) {
     if (/toss/i.test(row.identity.pick ?? "")) return "fi_toss_up_no_play";
     if (row.priceValueEvidence.heavyJuiceWarning) return "fi_price_capped";
     if (market.priceMovementDirection === "toward_pick") return "fi_line_movement_support";
@@ -217,7 +230,8 @@ export function deriveDailyEdgeMemberCopyLabel(args: {
 function marketReadCopy(row: PredictionEvidenceObject, label: string): string {
   const pick = row.identity.pick ?? "the pick";
   const grade = row.identity.originalPlayGrade;
-  if (row.identity.marketType === "FI") {
+  const caps = capabilitiesForEvidence(row);
+  if (caps.isFirstInning) {
     if (label === "fi_toss_up_no_play") return "FI is Toss-Up, so there is no actionable YRFI/NRFI side yet.";
     if (label === "fi_price_capped") return `The FI model leans ${pick}, but the current ${price(row.priceValueEvidence.priceAmerican)} price does not leave enough value.`;
     if (label === "fi_line_movement_support") return `${pick} has FI model support and price movement is not fighting the prediction.`;
@@ -273,7 +287,7 @@ function marketReadCopy(row: PredictionEvidenceObject, label: string): string {
   if (label === "likely_winner_bad_price") return "The win case may be reasonable, but the current price leaves too little actionable betting value.";
   if (label === "projection_support") return "The projection supports the total at this number, giving the pick a clear model/stat case.";
   if (label === "thin_edge") return "The model leans this way, but the edge is thin enough to keep the read below a stronger play.";
-  if (label === "insufficient_core_data") return "Core betting evidence is incomplete, so the reader should avoid making this look actionable.";
+  if (label === "insufficient_core_data") return "Core price/model context is incomplete, so this is not actionable yet.";
   return "Market confirmation is not clear enough by itself, so the read leans on model edge, price, and line context.";
 }
 
@@ -283,8 +297,9 @@ function quickReadCopy(row: PredictionEvidenceObject, label: string): string {
   const edge = row.modelStatsEvidence.edge ?? null;
   const priceText = price(row.priceValueEvidence.priceAmerican);
   const valueText = plusMoneyValueText(row);
+  const caps = capabilitiesForEvidence(row);
 
-  if (row.identity.marketType === "FI") {
+  if (caps.isFirstInning) {
     if (label === "fi_toss_up_no_play") return "FI is Toss-Up, so there is no actionable YRFI/NRFI side yet.";
     if (grade === "No Play") return `At ${priceText}, the FI edge is too thin to make ${pick} actionable.`;
     if (grade === "Watchlist") return `${pick} has FI model interest, but price and context keep it on Watchlist.`;
@@ -334,6 +349,7 @@ function supportingEvidenceCopy(row: PredictionEvidenceObject, label: string): s
   const odds = price(row.priceValueEvidence.priceAmerican);
 
   const grade = row.identity.originalPlayGrade;
+  const caps = capabilitiesForEvidence(row);
   const lowGradeContext =
     grade === "Caution"
       ? " Market friction is why this remains Caution."
@@ -343,7 +359,7 @@ function supportingEvidenceCopy(row: PredictionEvidenceObject, label: string): s
           ? " This keeps the prediction worth monitoring, not automatically actionable."
           : "";
 
-  if (row.identity.marketType === "FI") {
+  if (caps.isFirstInning) {
     if (/toss/i.test(row.identity.pick ?? "")) return "FI is Toss-Up, so there is no actionable YRFI/NRFI side yet. The model is not creating enough separation for a first-inning play.";
     if (grade === "No Play") return `FI model probability is ${model} with about ${edge} edge at ${odds}. At this price, the FI edge is too thin to make ${pick} actionable.`;
     if (grade === "Lean") return `${pick} has ${model} FI model probability with about ${edge} edge at ${odds}; price keeps it below a stronger grade.`;
@@ -369,7 +385,8 @@ function supportingEvidenceCopy(row: PredictionEvidenceObject, label: string): s
 }
 
 function riskCopy(row: PredictionEvidenceObject, label: string): string {
-  if (row.identity.marketType === "FI") {
+  const caps = capabilitiesForEvidence(row);
+  if (caps.isFirstInning) {
     if (label === "fi_toss_up_no_play") return "No actionable FI edge is present right now; wait for a clearer YRFI or NRFI setup.";
     if (label === "fi_price_capped") return `The ${price(row.priceValueEvidence.priceAmerican)} price is the main cap, so the FI edge needs to hold up cleanly.`;
     return "A thin FI model edge can disappear quickly if starter/top-order context is weaker than expected.";
@@ -379,7 +396,7 @@ function riskCopy(row: PredictionEvidenceObject, label: string): string {
   if (label === "market_resistance_with_model_value_override") return "The thesis depends on the model/value edge overriding market resistance, so the risk note should say that plainly.";
   if (label === "price_capped" || label === "likely_winner_bad_price") return "Price is the main cap here; a likely outcome is not automatically a good bet.";
   if (label === "thin_edge") return "The edge is thin, so small price or lineup movement can erase the value.";
-  if (label === "insufficient_core_data") return "Core evidence is incomplete; keep this out of actionable copy until the missing fields are repaired.";
+  if (label === "insufficient_core_data") return "Core price, model, or line evidence is incomplete; keep this below action until the missing fields are repaired.";
   return "The main risk is that market conditions or price movement weaken the model edge before lock.";
 }
 
@@ -444,8 +461,8 @@ function priceFromDecision(value: number | null): string {
   return value > 0 ? `+${value}` : String(value);
 }
 
-function hasDecisionSharpContext(decision: MarketDecision): boolean {
-  return decision.sharpBookSplits !== null;
+function hasDecisionSharpContext(decision: MarketDecision, sport = "mlb", key: keyof RecommendationDecision["markets"] = "moneyline"): boolean {
+  return dailyEdgeMarketCapabilities(sport, key).expectsSharpBookContext && decision.sharpBookSplits !== null;
 }
 
 function decisionHasSourceConflict(decision: MarketDecision): boolean {
@@ -538,7 +555,8 @@ function lineMovementSupportPhrase(decision: MarketDecision): string {
   return "";
 }
 
-function decisionQuickReadCopy(decision: MarketDecision, key: keyof RecommendationDecision["markets"]): string {
+function decisionQuickReadCopy(decision: MarketDecision, key: keyof RecommendationDecision["markets"], sport = "mlb"): string {
+  const caps = dailyEdgeMarketCapabilities(sport, key);
   const grade = decision.playGrade;
   const status = decision.resolvedMarketRead.status;
   const edge = edgePctFromDecision(decision);
@@ -546,12 +564,20 @@ function decisionQuickReadCopy(decision: MarketDecision, key: keyof Recommendati
   const pick = decision.pick ?? "This prediction";
   const plusMoneyValue = typeof decision.price === "number" && decision.price > 0 ? "plus-money model edge" : "model/value case";
 
-  if (key === "firstInning") {
+  if (caps.isFirstInning) {
     if (/toss/i.test(pick)) return "FI is Toss-Up, so there is no actionable YRFI/NRFI side yet.";
     if (grade === "No Play") return `At ${price}, the FI edge is too thin to make ${pick} actionable.`;
     if (grade === "Watchlist") return `${pick} has FI model interest, but price and context keep it on Watchlist.`;
     if (grade === "Lean") return `${pick} has a playable FI model case, with price keeping it below a stronger grade.`;
     return `${pick} has FI model support, with price and FI context carrying the read.`;
+  }
+
+  if (caps.isSoccerLike) {
+    if (grade === "Best Angle") return `${pick} has a strong model/value case at the current price.`;
+    if (grade === "Lean") return `${pick} has playable model/value, with price and movement keeping it below a top-tier play.`;
+    if (grade === "Watchlist") return `${pick} is worth monitoring, but price, movement, or draw risk keeps it below action.`;
+    if (grade === "Caution") return `${pick} has some model interest, but price or market movement keeps this in Caution.`;
+    return `${pick} is not actionable at the current price or model edge.`;
   }
 
   const splitConflict = decisionSplitConflictKind(decision);
@@ -565,7 +591,7 @@ function decisionQuickReadCopy(decision: MarketDecision, key: keyof Recommendati
     }
     if (sharpMoneyDivergence) return "Strong model/value case with Sharp Book money heavier than bet count and a playable price.";
     if (status === "mixed" || status === "resistance" || status === "consensus_resistance") return `Strong ${plusMoneyValue}, but market resistance keeps some friction in the thesis.`;
-    if (hasDecisionSharpContext(decision)) return "Strong model/value case with Sharp Book support and a playable price.";
+    if (hasDecisionSharpContext(decision, sport, key)) return "Strong model/value case with Sharp Book support and a playable price.";
     return "Strong model/value case with enough price and market context to support the top grade.";
   }
   if (grade === "Lean") {
@@ -596,19 +622,44 @@ function decisionQuickReadCopy(decision: MarketDecision, key: keyof Recommendati
   return "No Play until core price, model, and market evidence are complete.";
 }
 
-function decisionMarketRead(decision: MarketDecision, key: keyof RecommendationDecision["markets"]): ResolvedMarketRead {
+function decisionMarketRead(decision: MarketDecision, key: keyof RecommendationDecision["markets"], sport = "mlb"): ResolvedMarketRead {
+  const caps = dailyEdgeMarketCapabilities(sport, key);
   const grade = decision.playGrade;
   const status = decision.resolvedMarketRead.status;
   const edge = decision.edgePp ?? 0;
-  const sharp = hasDecisionSharpContext(decision);
+  const sharp = hasDecisionSharpContext(decision, sport, key);
   const pick = decision.pick ?? "This FI prediction";
-  if (key === "firstInning") {
+  if (caps.isFirstInning) {
     if (/toss/i.test(pick)) return { ...decision.resolvedMarketRead, copy: "FI is Toss-Up, so there is no actionable YRFI/NRFI side yet." };
     if (grade === "No Play") return { ...decision.resolvedMarketRead, copy: `The FI model leans ${pick}, but the current ${priceFromDecision(decision.price)} price does not leave enough value.` };
     if (grade === "Lean") return { ...decision.resolvedMarketRead, copy: `${pick} is mostly model/stat driven, with price and FI context carrying the read.` };
     if (grade === "Watchlist") return { ...decision.resolvedMarketRead, copy: `${pick} is worth monitoring, but the FI edge is not strong enough for action yet.` };
     if (grade === "Caution") return { ...decision.resolvedMarketRead, copy: "The FI read has a material price/context concern, so this stays in Caution." };
     return { ...decision.resolvedMarketRead, copy: `${pick} is mostly model/stat driven, with price and FI context carrying the read.` };
+  }
+
+  if (caps.isSoccerLike) {
+    if (decision.lineMovement === "resistance") {
+      return {
+        ...decision.resolvedMarketRead,
+        status: "resistance",
+        label: "Market Resistance",
+        tone: "amber",
+        copy: `${caps.marketContextName === "BTTS" ? "BTTS" : "The market"} has price/movement resistance against ${pick}.`,
+      };
+    }
+    if (grade === "No Play") {
+      return {
+        ...decision.resolvedMarketRead,
+        status: decision.resolvedMarketRead.status === "insufficient_data" ? "insufficient_data" : "no_clear_signal",
+        copy: `${pick} is not actionable at the current price or model edge.`,
+      };
+    }
+    return {
+      ...decision.resolvedMarketRead,
+      status: decision.resolvedMarketRead.status === "insufficient_data" ? "no_clear_signal" : decision.resolvedMarketRead.status,
+      copy: `${pick} is driven by model value, price, and movement context rather than split-source confirmation.`,
+    };
   }
   const splitConflict = decisionSplitConflictKind(decision);
   const sharpMoneyDivergence = decisionHasSharpMoneyDivergence(decision);
@@ -670,17 +721,26 @@ function decisionMarketRead(decision: MarketDecision, key: keyof RecommendationD
   return { ...decision.resolvedMarketRead, copy: "Market confirmation is not clear enough by itself, so the read leans on model edge, price, and line context." };
 }
 
-function decisionSupportingEvidenceCopy(decision: MarketDecision, key: keyof RecommendationDecision["markets"]): string {
+function decisionSupportingEvidenceCopy(decision: MarketDecision, key: keyof RecommendationDecision["markets"], sport = "mlb"): string {
+  const caps = dailyEdgeMarketCapabilities(sport, key);
   const grade = decision.playGrade;
   const edge = decision.edgePp ?? 0;
   const displayedEdge = edgePctFromDecision(decision);
-  if (key === "firstInning") {
+  if (caps.isFirstInning) {
     const pick = decision.pick ?? "FI";
     if (/toss/i.test(pick)) return "FI is Toss-Up, so there is no actionable YRFI/NRFI side yet. The model is not creating enough separation for a first-inning play.";
     if (grade === "No Play") return `FI model probability is ${pctFromDecision(decision.modelProbability)} with about ${pctPointFromDecision(displayedEdge)} edge at ${priceFromDecision(decision.price)}. At this price, the FI edge is too thin to make ${pick} actionable.`;
     if (grade === "Lean") return `${pick} has ${pctFromDecision(decision.modelProbability)} FI model probability with about ${pctPointFromDecision(displayedEdge)} edge at ${priceFromDecision(decision.price)}; price keeps it below a stronger grade.`;
     if (grade === "Watchlist") return `${pick} is worth monitoring, but the FI edge is not strong enough for action yet.`;
     if (grade === "Caution") return `The FI read has a material price/context concern at ${priceFromDecision(decision.price)}, so this stays in Caution.`;
+  }
+  if (caps.isSoccerLike) {
+    const base = `${decision.pick ?? "The pick"} has ${pctFromDecision(decision.modelProbability)} model probability versus ${pctFromDecision(decision.marketImplied)} implied at ${priceFromDecision(decision.price)}, for about ${pctPointFromDecision(displayedEdge)} edge.`;
+    if (key === "total" && decision.projectedScore) {
+      const projected = +(decision.projectedScore.away + decision.projectedScore.home).toFixed(1);
+      return `${base} Projected goals are ${projected}; price and movement decide whether this is actionable.`;
+    }
+    return `${base} World Cup reads use model probability, price, draw/market risk, and movement context instead of split bars.`;
   }
   const base = `${decision.pick ?? "The pick"} has ${pctFromDecision(decision.modelProbability)} model probability versus ${pctFromDecision(decision.marketImplied)} implied at ${priceFromDecision(decision.price)}, for about ${pctPointFromDecision(displayedEdge)} edge.`;
   const splitConflict = decisionSplitConflictKind(decision);
@@ -721,10 +781,10 @@ export function applyDailyEdgeRenderedCopyFlags(
     if (!market) continue;
     next.markets[key] = {
       ...market,
-      quickRead: quickReadEnabled ? decisionQuickReadCopy(market, key) : market.quickRead,
+      quickRead: quickReadEnabled ? decisionQuickReadCopy(market, key, decision.sport) : market.quickRead,
       resolvedMarketRead: marketReadEnabled
         ? (() => {
-            const read = decisionMarketRead(market, key);
+            const read = decisionMarketRead(market, key, decision.sport);
             return {
               ...read,
               copy: sanitizeMemberCopy(read.copy, "Market context and model/value evidence set the current read."),
@@ -732,10 +792,10 @@ export function applyDailyEdgeRenderedCopyFlags(
           })()
         : market.resolvedMarketRead,
       supportingEvidence: supportingEnabled
-        ? market.supportingEvidence.map((item) => item === market.resolvedMarketRead.copy ? decisionSupportingEvidenceCopy(market, key) : item)
+        ? market.supportingEvidence.map((item) => item === market.resolvedMarketRead.copy ? decisionSupportingEvidenceCopy(market, key, decision.sport) : item)
         : market.supportingEvidence,
-      renderedQuickReadCopy: quickReadEnabled ? sanitizeMemberCopy(decisionQuickReadCopy(market, key), "Model, price, and market context set the current grade.") : market.renderedQuickReadCopy ?? null,
-      renderedSupportingEvidenceCopy: supportingEnabled ? sanitizeMemberCopy(decisionSupportingEvidenceCopy(market, key), "Model probability, implied price, and market context explain the current grade.") : market.renderedSupportingEvidenceCopy ?? null,
+      renderedQuickReadCopy: quickReadEnabled ? sanitizeMemberCopy(decisionQuickReadCopy(market, key, decision.sport), "Model, price, and market context set the current grade.") : market.renderedQuickReadCopy ?? null,
+      renderedSupportingEvidenceCopy: supportingEnabled ? sanitizeMemberCopy(decisionSupportingEvidenceCopy(market, key, decision.sport), "Model probability, implied price, and market context explain the current grade.") : market.renderedSupportingEvidenceCopy ?? null,
       renderedRiskCopy: riskEnabled ? market.riskNote : market.renderedRiskCopy ?? null,
       riskNote: riskEnabled ? market.riskNote : market.riskNote,
     };

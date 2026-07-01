@@ -3,6 +3,7 @@ import {
   marketImpliedHomeMarginFromSpread,
 } from "../lib/automodel/wnbaCoreModelCalibration";
 import { computeWnbaPrediction, type ModelState, type OddRow } from "../lib/services/wnba/buildWnbaDailyEdgePreview";
+import { selectPreferredWnbaTipTime } from "../lib/services/wnba/refreshWnbaLines";
 import { gradePrediction } from "../lib/services/predictionGrader";
 
 let pass = 0;
@@ -241,6 +242,15 @@ check("compute moneyline remains unchanged by spread calibration", computeSpread
 check("compute total grade calibration avoids unvalidated total Best Angle", computeSpreadEnabled.total.grade !== "Best Angle");
 check("compute records spread recommendation-used audit", computeSpreadEnabled.wnba_core_model_calibration.recommendation_uses_calibrated_spread === true);
 check("compute keeps raw model margin for audit", computeSpreadEnabled.model.margin === computeDisabled.model.margin);
+check(
+  "WNBA Playbook tip overrides stale provider anchor",
+  selectPreferredWnbaTipTime(["2026-07-03T00:00:00Z"], "2026-07-01T17:35:00Z") === "2026-07-03T00:00:00Z",
+);
+check(
+  "WNBA preferred tip chooses nearest Playbook meeting",
+  selectPreferredWnbaTipTime(["2026-07-03T00:00:00Z", "2026-07-04T00:00:00Z"], "2026-07-03T01:00:00Z") === "2026-07-03T00:00:00Z",
+);
+check("WNBA preferred tip returns null without Playbook schedule", selectPreferredWnbaTipTime([], "2026-07-01T17:35:00Z") === null);
 restoreEnv();
 
 if (fail > 0) {

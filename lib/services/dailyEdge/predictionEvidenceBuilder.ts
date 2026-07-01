@@ -8,6 +8,10 @@ import {
   type PromotionCandidateScan,
 } from "@/lib/services/aiAuditor/promotionCandidateScanner";
 import type { RehydratedLockedMarketPayload } from "@/lib/services/aiAuditor/rehydratedLockedPayload";
+import {
+  dailyEdgeMarketCapabilities,
+  type DailyEdgeDecisionMarketKey,
+} from "@/lib/services/dailyEdge/dailyEdgeSportCapabilities";
 
 export type DailyEdgeEvidenceMarketType = "ML" | "TOTAL" | "FI";
 
@@ -176,10 +180,17 @@ function sourceOpposesPick(value: unknown): boolean {
   return text.includes("resistance") || text.includes("against") || text.includes("opposes");
 }
 
-function sourceAgreementLabel(market: AiAuditorCompactMarketPayload): SourceAgreementLabel {
+function decisionKeyForEvidenceMarket(market: AiAuditorCompactMarketPayload["market"]): DailyEdgeDecisionMarketKey {
+  if (market === "moneyline") return "moneyline";
+  if (market === "total") return "total";
+  return "firstInning";
+}
+
+function sourceAgreementLabel(sport: string, market: AiAuditorCompactMarketPayload): SourceAgreementLabel {
+  const caps = dailyEdgeMarketCapabilities(sport, decisionKeyForEvidenceMarket(market.market));
   const consensusAvailable = Boolean(market.consensusSplits);
   const sharpAvailable = Boolean(market.sharpBookSplits);
-  if (market.market === "first_inning" && !consensusAvailable && !sharpAvailable) return "not_required";
+  if (!caps.expectsConsensusSplits && !caps.expectsSharpBookContext && !consensusAvailable && !sharpAvailable) return "not_required";
   if (!consensusAvailable && !sharpAvailable) return "insufficient_market_source";
   if (consensusAvailable && !sharpAvailable) return "consensus_only";
   if (!consensusAvailable && sharpAvailable) return "sharp_only";
@@ -195,18 +206,32 @@ function sourceAgreementLabel(market: AiAuditorCompactMarketPayload): SourceAgre
   return market.sourceConflict ? "consensus_supports_sharp_opposes" : "both_align";
 }
 
-function sourceMissingReason(market: AiAuditorCompactMarketPayload): string | null {
-  if (market.market === "first_inning" && !market.consensusSplits && !market.sharpBookSplits) {
+function sourceMissingReason(sport: string, market: AiAuditorCompactMarketPayload): string | null {
+  const caps = dailyEdgeMarketCapabilities(sport, decisionKeyForEvidenceMarket(market.market));
+  if (!caps.expectsConsensusSplits && !caps.expectsSharpBookContext && !market.consensusSplits && !market.sharpBookSplits) {
+    if (caps.isFirstInning) {
+      return "FI consensus/sharp split bars are not expected in current coverage.";
+    }
+    if (caps.isSoccerLike) {
+      return "World Cup split bars are not expected in current coverage.";
+    }
+    return "Consensus/sharp split bars are not expected for this market.";
+  }
+  if (caps.isFirstInning && !market.consensusSplits && !market.sharpBookSplits) {
     return "FI consensus/sharp split bars are not expected in current coverage.";
   }
   if (market.consensusSplits && market.sharpBookSplits) return null;
+  if (market.consensusSplits && !caps.expectsSharpBookContext) return null;
   if (!market.consensusSplits && !market.sharpBookSplits) return "Consensus and sharp-book market sources are unavailable.";
   if (!market.consensusSplits) return "Consensus split source is unavailable.";
   return "Sharp-book split/signal source is unavailable.";
 }
 
-function sourceMissingMateriality(market: AiAuditorCompactMarketPayload): "low" | "medium" | "high" {
-  if (market.market === "first_inning" && !market.consensusSplits && !market.sharpBookSplits) return "low";
+function sourceMissingMateriality(sport: string, market: AiAuditorCompactMarketPayload): "low" | "medium" | "high" {
+  const caps = dailyEdgeMarketCapabilities(sport, decisionKeyForEvidenceMarket(market.market));
+  if (!caps.expectsConsensusSplits && !caps.expectsSharpBookContext && !market.consensusSplits && !market.sharpBookSplits) return "low";
+  if (caps.isFirstInning && !market.consensusSplits && !market.sharpBookSplits) return "low";
+  if (market.consensusSplits && !caps.expectsSharpBookContext) return "low";
   if (!market.consensusSplits || !market.sharpBookSplits) return "medium";
   return "low";
 }
@@ -283,8 +308,12 @@ export function buildPredictionEvidenceObject(args: {
   market: AiAuditorCompactMarketPayload;
 }): PredictionEvidenceObject {
   const { card, market } = args;
+  const caps = dailyEdgeMarketCapabilities(card.sport, decisionKeyForEvidenceMarket(market.market));
   const splitRows = hasSplitRows(market.sharpBookSplits);
   const signalOnly = !splitRows && hasDirectionalSignal(market.sharpBookSplits);
+  const consensusAvailable = caps.expectsConsensusSplits && Boolean(market.consensusSplits);
+  const sharpSplitsAvailable = caps.expectsSharpBookContext && splitRows;
+  const sharpSignalAvailable = caps.expectsSharpBookContext && signalOnly;
   return {
     schemaVersion: "daily-edge-prediction-evidence-v1",
     evidenceSource: {
@@ -349,16 +378,16 @@ export function buildPredictionEvidenceObject(args: {
       edgeMissingReason: market.modelMarketGapPct === null ? "edge_unavailable_from_current_payload" : null,
     },
     marketEvidence: {
-      consensusSplits: market.market === "first_inning" ? null : market.consensusSplits,
-      sharpBookSplits: market.market === "first_inning" || signalOnly ? null : market.sharpBookSplits,
-      sharpBookSignal: market.market === "first_inning" || splitRows ? null : market.sharpBookSplits,
-      consensusSplitsAvailable: market.market !== "first_inning" && Boolean(market.consensusSplits),
-      sharpBookSplitsAvailable: market.market !== "first_inning" && splitRows,
-      sharpBookSignalAvailable: market.market !== "first_inning" && signalOnly,
-      sourceAgreement: sourceAgreementLabel(market),
-      sourceConflict: market.market === "first_inning" ? false : Boolean(market.sourceConflict),
-      sourceMissingReason: sourceMissingReason(market),
-      sourceMissingMateriality: sourceMissingMateriality(market),
+      consensusSplits: consensusAvailable ? market.consensusSplits : null,
+      sharpBookSplits: sharpSplitsAvailable ? market.sharpBookSplits : null,
+      sharpBookSignal: sharpSignalAvailable ? market.sharpBookSplits : null,
+      consensusSplitsAvailable: consensusAvailable,
+      sharpBookSplitsAvailable: sharpSplitsAvailable,
+      sharpBookSignalAvailable: sharpSignalAvailable,
+      sourceAgreement: sourceAgreementLabel(card.sport, market),
+      sourceConflict: caps.isFirstInning || (!caps.expectsConsensusSplits && !caps.expectsSharpBookContext) ? false : Boolean(market.sourceConflict),
+      sourceMissingReason: sourceMissingReason(card.sport, market),
+      sourceMissingMateriality: sourceMissingMateriality(card.sport, market),
       lineMovement: {
         ...market.lineMovement,
         movementTowardAgainstPick: market.lineMovement.directionRelativeToPick,
@@ -431,7 +460,9 @@ function lockedMarketReadForEvidence(read: RehydratedLockedMarketPayload["market
 }
 
 function lockedSourceAgreement(payload: RehydratedLockedMarketPayload): SourceAgreementLabel {
-  if (payload.market === "first_inning") return "not_required";
+  const caps = dailyEdgeMarketCapabilities(payload.sport, decisionKeyForEvidenceMarket(payload.market));
+  if (!caps.expectsConsensusSplits && !caps.expectsSharpBookContext) return "not_required";
+  if (caps.isFirstInning) return "not_required";
   if (payload.sourceConflict === true) return "consensus_supports_sharp_opposes";
   if (payload.consensusSplits.available && payload.sharpBookSplitsOrSignal.available) return "both_align";
   if (payload.consensusSplits.available) return "consensus_only";
@@ -440,8 +471,13 @@ function lockedSourceAgreement(payload: RehydratedLockedMarketPayload): SourceAg
 }
 
 function lockedSourceMissingReason(payload: RehydratedLockedMarketPayload): string | null {
-  if (payload.market === "first_inning") return "FI consensus/sharp split bars are not expected in current coverage.";
-  if (payload.consensusSplits.available && payload.sharpBookSplitsOrSignal.available) return null;
+  const caps = dailyEdgeMarketCapabilities(payload.sport, decisionKeyForEvidenceMarket(payload.market));
+  if (!caps.expectsConsensusSplits && !caps.expectsSharpBookContext) {
+    if (caps.isSoccerLike) return "World Cup split bars are not expected in current coverage.";
+    return "Consensus/sharp split bars are not expected for this market.";
+  }
+  if (caps.isFirstInning) return "FI consensus/sharp split bars are not expected in current coverage.";
+  if (payload.consensusSplits.available && (!caps.expectsSharpBookContext || payload.sharpBookSplitsOrSignal.available)) return null;
   if (!payload.consensusSplits.available && !payload.sharpBookSplitsOrSignal.available) return "Consensus and sharp-book market sources were not persisted at lock.";
   if (!payload.consensusSplits.available) return "Consensus split source was not persisted at lock.";
   return "Sharp-book split/signal source was not persisted at lock.";
@@ -552,6 +588,10 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
   const marketRead = lockedMarketReadForEvidence(payload.marketRead);
   const scores = lockedScores(payload);
   const sharpSignalOnly = payload.sharpBookSplitsOrSignal.available && payload.sharpBookSplitsOrSignal.rows.length === 0;
+  const caps = dailyEdgeMarketCapabilities(payload.sport, decisionKeyForEvidenceMarket(payload.market));
+  const consensusAvailable = caps.expectsConsensusSplits && payload.consensusSplits.available;
+  const sharpSplitsAvailable = caps.expectsSharpBookContext && payload.sharpBookSplitsOrSignal.rows.length > 0;
+  const sharpSignalAvailable = caps.expectsSharpBookContext && sharpSignalOnly;
   const compactForScanner: AiAuditorCompactMarketPayload = {
     market: payload.market,
     pick: payload.pick,
@@ -575,10 +615,10 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
     marketRead,
     sourceConflict: payload.sourceConflict,
     reasonCodes: payload.marketRead.reasonCodes,
-    consensusSplits: payload.market === "first_inning" || !payload.consensusSplits.available
+    consensusSplits: !consensusAvailable
       ? null
       : { label: "Consensus Splits", rows: payload.consensusSplits.rows, source: payload.consensusSplits.source },
-    sharpBookSplits: payload.market === "first_inning" || !payload.sharpBookSplitsOrSignal.available
+    sharpBookSplits: !caps.expectsSharpBookContext || !payload.sharpBookSplitsOrSignal.available
       ? null
       : sharpSignalOnly
         ? { label: "Sharp Book Signal", summary: payload.sharpBookSplitsOrSignal.signal, source: payload.sharpBookSplitsOrSignal.source }
@@ -643,9 +683,9 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
       supportingEvidence: {
         verdict: payload.originalGrade,
         quickRead: null,
-        consensusSplitsDisplayed: payload.market !== "first_inning" && payload.consensusSplits.available,
-        sharpBookSplitsDisplayed: payload.market !== "first_inning" && payload.sharpBookSplitsOrSignal.rows.length > 0,
-        sharpBookSignalDisplayed: payload.market !== "first_inning" && sharpSignalOnly,
+        consensusSplitsDisplayed: consensusAvailable,
+        sharpBookSplitsDisplayed: sharpSplitsAvailable,
+        sharpBookSignalDisplayed: sharpSignalAvailable,
       },
       riskNote: payload.dataWarnings.length > 0 ? payload.dataWarnings.join(", ") : null,
       providerNamesHidden: true,
@@ -679,16 +719,21 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
       edgeMissingReason: payload.edgePct === null ? "edge_unavailable_from_locked_payload" : null,
     },
     marketEvidence: {
-      consensusSplits: compactForScanner.consensusSplits,
-      sharpBookSplits: payload.market === "first_inning" || sharpSignalOnly ? null : compactForScanner.sharpBookSplits,
-      sharpBookSignal: payload.market === "first_inning" || !sharpSignalOnly ? null : compactForScanner.sharpBookSplits,
-      consensusSplitsAvailable: payload.market !== "first_inning" && payload.consensusSplits.available,
-      sharpBookSplitsAvailable: payload.market !== "first_inning" && payload.sharpBookSplitsOrSignal.rows.length > 0,
-      sharpBookSignalAvailable: payload.market !== "first_inning" && sharpSignalOnly,
+      consensusSplits: consensusAvailable ? compactForScanner.consensusSplits : null,
+      sharpBookSplits: sharpSplitsAvailable ? compactForScanner.sharpBookSplits : null,
+      sharpBookSignal: sharpSignalAvailable ? compactForScanner.sharpBookSplits : null,
+      consensusSplitsAvailable: consensusAvailable,
+      sharpBookSplitsAvailable: sharpSplitsAvailable,
+      sharpBookSignalAvailable: sharpSignalAvailable,
       sourceAgreement: lockedSourceAgreement(payload),
-      sourceConflict: payload.market === "first_inning" ? false : Boolean(payload.sourceConflict),
+      sourceConflict: caps.isFirstInning || (!caps.expectsConsensusSplits && !caps.expectsSharpBookContext) ? false : Boolean(payload.sourceConflict),
       sourceMissingReason: lockedSourceMissingReason(payload),
-      sourceMissingMateriality: payload.market === "first_inning" || (payload.consensusSplits.available && payload.sharpBookSplitsOrSignal.available) ? "low" : "medium",
+      sourceMissingMateriality:
+        (!caps.expectsConsensusSplits && !caps.expectsSharpBookContext) ||
+        caps.isFirstInning ||
+        (consensusAvailable && (!caps.expectsSharpBookContext || payload.sharpBookSplitsOrSignal.available))
+          ? "low"
+          : "medium",
       lineMovement: {
         ...compactForScanner.lineMovement,
         movementTowardAgainstPick: payload.lineMovementDirection,

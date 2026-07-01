@@ -121,6 +121,14 @@ async function fetchPlaybookWnbaLineFallbacks(key: string): Promise<OddRow[]> {
 
 const pairKey = (a: number, b: number) => [a, b].sort((x, y) => x - y).join("|");
 
+export function selectPreferredWnbaTipTime(tips: string[], anchor: string | null): string | null {
+  if (tips.length === 0) return null;
+  if (tips.length === 1 || !anchor) return tips[0]!;
+  const anchorMs = Date.parse(anchor);
+  if (!Number.isFinite(anchorMs)) return tips[0]!;
+  return [...tips].sort((a, b) => Math.abs(Date.parse(a) - anchorMs) - Math.abs(Date.parse(b) - anchorMs))[0] ?? null;
+}
+
 export type RefreshWnbaLinesResult = {
   apply: boolean;
   gamesScheduled: number;
@@ -179,6 +187,26 @@ export async function refreshWnbaLines(opts: {
     if (byPair.get(k)!.length === 2) duplicatePairs.push(k);
   }
 
+  const playbookKey = process.env.PLAYBOOK_API_KEY;
+  let fallbackRows: OddRow[] = [];
+  const playbookTipsByPair = new Map<string, string[]>();
+  if (playbookKey) {
+    try {
+      fallbackRows = await fetchPlaybookWnbaLineFallbacks(playbookKey);
+      for (const row of fallbackRows) {
+        if (!row.startTime) continue;
+        const k = pairKey(row.h, row.a);
+        if (!playbookTipsByPair.has(k)) playbookTipsByPair.set(k, []);
+        const tips = playbookTipsByPair.get(k)!;
+        if (!tips.includes(row.startTime)) tips.push(row.startTime);
+      }
+    } catch (e) {
+      errors.push(`playbook lines fallback: ${(e as Error).message}`);
+    }
+  }
+  const preferredTip = (row: OddRow): string | null =>
+    selectPreferredWnbaTipTime(playbookTipsByPair.get(pairKey(row.h, row.a)) ?? [], row.startTime) ?? row.startTime;
+
   // 2. Fetch + match odds to a game by team-pair + date (±1 day).
   const odds = await fetchSharpWnbaOdds(key);
   const oddsByGame = new Map<number, OddRow[]>();
@@ -193,7 +221,8 @@ export async function refreshWnbaLines(opts: {
     // same-pair game within ±1 day. A genuine tie (two candidates equidistant)
     // stays ambiguous → SKIP (never mix meetings). This includes a real game
     // whose seeded slate is off-by-one while still withholding true duplicates.
-    const oSlateEt = o.startTime ? etDate(o.startTime) : null;
+    const tip = preferredTip(o);
+    const oSlateEt = tip ? etDate(tip) : null;
     let g: G | undefined;
     if (oSlateEt) {
       g = cands.find((c) => c.slate === oSlateEt);
@@ -207,7 +236,7 @@ export async function refreshWnbaLines(opts: {
     if (!g) { unmatched++; continue; }
     if (!oddsByGame.has(g.id)) oddsByGame.set(g.id, []);
     oddsByGame.get(g.id)!.push(o);
-    if (o.startTime && !tipByGame.has(g.id)) tipByGame.set(g.id, o.startTime);
+    if (tip && !tipByGame.has(g.id)) tipByGame.set(g.id, tip);
   }
 
   // Playbook consensus fallback: fill only markets where SharpAPI returned no
@@ -215,14 +244,13 @@ export async function refreshWnbaLines(opts: {
   // WNBA total being absent from SharpAPI while Playbook has a tier1 consensus
   // line. It never overwrites real per-book SharpAPI rows and does not invent
   // over/under odds for totals/spreads.
-  const playbookKey = process.env.PLAYBOOK_API_KEY;
   if (playbookKey) {
     try {
-      const fallbackRows = await fetchPlaybookWnbaLineFallbacks(playbookKey);
       for (const o of fallbackRows) {
         const cands = byPair.get(pairKey(o.h, o.a));
         if (!cands || cands.length === 0) continue;
-        const oSlateEt = o.startTime ? etDate(o.startTime) : null;
+        const tip = preferredTip(o);
+        const oSlateEt = tip ? etDate(tip) : null;
         let g: G | undefined;
         if (oSlateEt) {
           g = cands.find((c) => c.slate === oSlateEt);
@@ -238,7 +266,7 @@ export async function refreshWnbaLines(opts: {
         if (existing.some((r) => r.market === o.market && r.book !== PLAYBOOK_CONSENSUS_BOOK)) continue;
         if (!oddsByGame.has(g.id)) oddsByGame.set(g.id, []);
         oddsByGame.get(g.id)!.push(o);
-        if (o.startTime && !tipByGame.has(g.id)) tipByGame.set(g.id, o.startTime);
+        if (tip && !tipByGame.has(g.id)) tipByGame.set(g.id, tip);
       }
     } catch (e) {
       errors.push(`playbook lines fallback: ${(e as Error).message}`);

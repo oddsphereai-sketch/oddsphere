@@ -70,6 +70,7 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
     .from("prediction_records")
     .select("game_id, market, pick, side, line_value, odds_american, confidence, play_grade, locked_at")
     .eq("sport", "wnba")
+    .eq("slate_date", date)
     .in("game_id", allIds);
   const allRecords = (predictionRecords ?? []) as WnbaLockedRecord[];
   const recordGameIds = new Set(allRecords.map((r) => r.game_id));

@@ -1,4 +1,5 @@
 import type { PredictionEvidenceObject } from "@/lib/services/dailyEdge/predictionEvidenceBuilder";
+import { dailyEdgeMarketCapabilities } from "@/lib/services/dailyEdge/dailyEdgeSportCapabilities";
 
 export type EvidenceQuality = "strong" | "usable" | "limited" | "blocked";
 export type ReviewModeAllowed = "full_review" | "copy_only" | "market_read_only" | "no_grade_change" | "blocked";
@@ -26,17 +27,25 @@ function pushIfMissing(target: string[], key: string, value: unknown): void {
 }
 
 function requiredFieldsFor(row: PredictionEvidenceObject): string[] {
+  const caps = dailyEdgeMarketCapabilities(row.identity.sport, row.identity.normalizedMarket === "total" ? "total" : row.identity.normalizedMarket === "moneyline" ? "moneyline" : "firstInning");
   const fields = ["pick", "model_probability"];
-  if (row.identity.marketType !== "FI") fields.push("price", "market_implied_probability", "edge");
+  if (!caps.isFirstInning) fields.push("price", "market_implied_probability", "edge");
   if (row.identity.marketType === "TOTAL") fields.push("line_value", "projected_total");
-  if (row.identity.marketType === "FI") fields.push("fi_pick", "fi_context");
+  if (caps.isFirstInning) fields.push("fi_pick", "fi_context");
   return fields;
 }
 
 function marketContextQuality(row: PredictionEvidenceObject): MarketContextQuality {
-  if (row.identity.marketType === "FI") {
+  const caps = dailyEdgeMarketCapabilities(row.identity.sport, row.identity.normalizedMarket === "total" ? "total" : row.identity.normalizedMarket === "moneyline" ? "moneyline" : "firstInning");
+  if (caps.isFirstInning) {
     if (row.marketEvidence.lineMovement.currentAmerican !== null || row.marketEvidence.lineMovement.currentLine !== null) return "usable";
     return "limited";
+  }
+  if (!caps.expectsConsensusSplits && !caps.expectsSharpBookContext) {
+    const hasMovement = row.marketEvidence.lineMovement.movementTowardAgainstPick !== null ||
+      row.marketEvidence.lineMovement.currentAmerican !== null ||
+      row.marketEvidence.lineMovement.currentLine !== null;
+    return hasMovement ? "usable" : "limited";
   }
   const hasConsensus = row.marketEvidence.consensusSplitsAvailable;
   const hasSharp = row.marketEvidence.sharpBookSplitsAvailable || row.marketEvidence.sharpBookSignalAvailable;
@@ -50,6 +59,7 @@ function marketContextQuality(row: PredictionEvidenceObject): MarketContextQuali
 }
 
 export function reviewPredictionEvidence(row: PredictionEvidenceObject): PredictionEvidenceReview {
+  const caps = dailyEdgeMarketCapabilities(row.identity.sport, row.identity.normalizedMarket === "total" ? "total" : row.identity.normalizedMarket === "moneyline" ? "moneyline" : "firstInning");
   const missingRequiredFields: string[] = [];
   const missingOptionalFields: string[] = [];
   const expectedMissingFields: string[] = [];
@@ -72,7 +82,7 @@ export function reviewPredictionEvidence(row: PredictionEvidenceObject): Predict
     missingRequiredFields.push("fi_context");
   }
 
-  if (row.identity.marketType === "FI") {
+  if (caps.isFirstInning) {
     expectedMissingFields.push("fi_consensus_splits", "fi_sharp_book_splits", "fi_sharp_book_signal");
     if (row.priceValueEvidence.priceAmerican === null) {
       if (row.evidenceSource.kind === "locked_snapshot") {
@@ -92,8 +102,8 @@ export function reviewPredictionEvidence(row: PredictionEvidenceObject): Predict
       persistenceGaps.push(row.evidenceSource.kind === "locked_snapshot" ? "fi_edge_missing_locked_snapshot" : "fi_edge_missing_current_prelock");
     }
   } else {
-    if (!row.marketEvidence.consensusSplitsAvailable) missingOptionalFields.push("consensus_splits");
-    if (!row.marketEvidence.sharpBookSplitsAvailable && !row.marketEvidence.sharpBookSignalAvailable) {
+    if (caps.expectsConsensusSplits && !row.marketEvidence.consensusSplitsAvailable) missingOptionalFields.push("consensus_splits");
+    if (caps.expectsSharpBookContext && !row.marketEvidence.sharpBookSplitsAvailable && !row.marketEvidence.sharpBookSignalAvailable) {
       missingOptionalFields.push("sharp_book_context");
       if (row.evidenceSource.kind === "locked_snapshot") persistenceGaps.push("sharp_book_context_not_persisted_at_lock");
     }
@@ -103,7 +113,7 @@ export function reviewPredictionEvidence(row: PredictionEvidenceObject): Predict
     persistenceGaps.push("total_edge_missing_at_lock");
   }
   if (row.priceValueEvidence.priceNullReason) dataWarnings.push(row.priceValueEvidence.priceNullReason);
-  if (row.marketEvidence.sourceMissingReason && row.identity.marketType !== "FI") dataWarnings.push(row.marketEvidence.sourceMissingReason);
+  if (row.marketEvidence.sourceMissingReason && !caps.isFirstInning && (caps.expectsConsensusSplits || caps.expectsSharpBookContext)) dataWarnings.push(row.marketEvidence.sourceMissingReason);
 
   const highMaterialityDataWarnings = dataWarnings.filter((warning) =>
     /\b(stale|missing starter|injury|lineup|blocked|unavailable price|no_price|price missing)\b/i.test(warning),
@@ -111,7 +121,7 @@ export function reviewPredictionEvidence(row: PredictionEvidenceObject): Predict
   const contextQuality = marketContextQuality(row);
   const priceValueAvailable = row.priceValueEvidence.priceAmerican !== null &&
     row.modelStatsEvidence.marketImpliedProbability !== null &&
-    (row.identity.marketType === "FI" || row.modelStatsEvidence.edge !== null);
+    (caps.isFirstInning || row.modelStatsEvidence.edge !== null);
   const modelStatContextAvailable = row.modelStatsEvidence.modelProbability !== null &&
     (row.identity.marketType !== "TOTAL" || row.modelStatsEvidence.projectedTotal !== null);
 

@@ -7,6 +7,7 @@ import { selfHealDailyEdgePrediction } from "@/lib/services/dailyEdge/dailyEdgeS
 import { buildPredictionEvidenceForDailyEdgeEvaluation } from "@/lib/services/dailyEdge/lockedPredictionEvidenceSource";
 import { interpretMarketIntelligence } from "@/lib/services/dailyEdge/marketIntelligenceInterpreter";
 import { sharpContextStatusForEvidence } from "@/lib/services/dailyEdge/memberFacingCopyRenderer";
+import { dailyEdgeMarketCapabilities } from "@/lib/services/dailyEdge/dailyEdgeSportCapabilities";
 import type { PredictionEvidenceObject } from "@/lib/services/dailyEdge/predictionEvidenceBuilder";
 import { reviewPredictionEvidence } from "@/lib/services/dailyEdge/predictionEvidenceReviewer";
 import type { Sport } from "@/lib/types/domain/Sport";
@@ -64,7 +65,7 @@ function currentReaderCopy(row: PredictionEvidenceObject) {
 }
 
 const QUICK_READ_HYPE_RE = /\b(not a hammer|hammer|lock|free money|smash|love this|sharp money loves|guaranteed)\b/i;
-const QUICK_READ_PRIMARY_REASON_RE = /\b(model|edge|price|value|market|resistance|mixed|projection|line|consensus|sharp-book|split|probability|implied|starter|context|yrfi|nrfi|toss-up)\b/i;
+const QUICK_READ_PRIMARY_REASON_RE = /\b(model|edge|price|value|market|resistance|mixed|projection|projected|line|consensus|sharp-book|split|probability|implied|starter|context|yrfi|nrfi|toss-up|spread|draw|goals?|match result|btts)\b/i;
 const RAW_AI_RE = /\b(ai says|ai recommended|ai recommendation|raw ai|language model)\b/i;
 const MEMBER_COPY_META_LANGUAGE_RE = /\b(the reader should|needs to|should mention|needs thesis|internal|grade caveat|flagged for review|human review|copy should|renderer)\b/i;
 const FI_FULL_GAME_MARKET_LANGUAGE_RE = /\bmarket resistance or price|starter\/context quality and price decide|overcome market resistance\b/i;
@@ -126,6 +127,16 @@ function renderedCopyText(copy: { quickReadCopy?: string; marketReadCopy: string
   return `${copy.quickReadCopy ?? ""}\n${copy.marketReadCopy}\n${copy.supportingEvidenceCopy}\n${copy.riskCopy}`;
 }
 
+function decisionKeyForEvidence(row: PredictionEvidenceObject) {
+  if (row.identity.normalizedMarket === "total") return "total";
+  if (row.identity.normalizedMarket === "moneyline") return "moneyline";
+  return "firstInning";
+}
+
+function capabilitiesForEvidence(row: PredictionEvidenceObject) {
+  return dailyEdgeMarketCapabilities(row.identity.sport, decisionKeyForEvidence(row));
+}
+
 function gradeToneViolations(grade: string | null, copy: { quickReadCopy?: string; marketReadCopy: string; supportingEvidenceCopy: string; riskCopy: string }): string[] {
   const text = renderedCopyText(copy);
   const out: string[] = [];
@@ -145,8 +156,9 @@ function renderedCopyValidationCodes(row: PredictionEvidenceObject, copy: { quic
   const text = renderedCopyText(copy);
   const readText = `${copy.quickReadCopy ?? ""}\n${copy.marketReadCopy}`;
   const out: string[] = [];
+  const caps = capabilitiesForEvidence(row);
   if (MEMBER_COPY_META_LANGUAGE_RE.test(text)) out.push("member_copy_meta_language");
-  if (row.identity.marketType === "FI") {
+  if (caps.isFirstInning) {
     if (FI_FULL_GAME_MARKET_LANGUAGE_RE.test(text)) out.push("fi_full_game_market_language_used");
     if (/toss/i.test(row.identity.pick ?? "") && !/Toss-Up.+no actionable YRFI\/NRFI side/i.test(text)) out.push("fi_toss_up_copy_not_clear");
     if (!/\b(FI|YRFI|NRFI|Toss-Up|model probability|edge|price|juice|\+\d+|-\d+|first-inning)\b/i.test(text)) {
@@ -160,22 +172,23 @@ function renderedCopyValidationCodes(row: PredictionEvidenceObject, copy: { quic
   const conflictEvidence = row.marketEvidence.sourceConflict ||
     row.marketEvidence.sourceAgreement === "consensus_supports_sharp_opposes" ||
     row.marketEvidence.sourceAgreement === "sharp_supports_consensus_opposes";
-  if (alignedEvidence && /\b(mixed|resistance)\b/i.test(readText)) out.push("market_read_alignment_mismatch");
-  if (conflictEvidence && /\b(clean|aligned)\b/i.test(readText)) out.push("market_read_alignment_mismatch");
+  if ((caps.expectsConsensusSplits || caps.expectsSharpBookContext) && alignedEvidence && /\b(mixed|resistance)\b/i.test(readText)) out.push("market_read_alignment_mismatch");
+  if ((caps.expectsConsensusSplits || caps.expectsSharpBookContext) && conflictEvidence && /\b(clean|aligned)\b/i.test(readText)) out.push("market_read_alignment_mismatch");
   return out;
 }
 
 function splitDisplay(row: PredictionEvidenceObject) {
+  const caps = capabilitiesForEvidence(row);
   return {
     consensusSplits: row.marketEvidence.consensusSplitsAvailable
       ? "display"
-      : row.identity.marketType === "FI" ? "not_required" : "unavailable",
+      : caps.expectsConsensusSplits ? "unavailable" : "not_required",
     sharpContextStatus: sharpContextStatusForEvidence(row),
     sharpBookSplits: row.marketEvidence.sharpBookSplitsAvailable ? "display" : "not_displayed",
     sharpBookSignal: row.marketEvidence.sharpBookSignalAvailable ? "display" : "not_displayed",
     sourceAgreement: row.marketEvidence.sourceAgreement,
     sourceConflict: row.marketEvidence.sourceConflict,
-    fiMissingSplitsExpected: row.identity.marketType === "FI",
+    fiMissingSplitsExpected: caps.isFirstInning,
   };
 }
 
