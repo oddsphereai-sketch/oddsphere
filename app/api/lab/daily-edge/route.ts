@@ -4317,10 +4317,11 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const sportParam = url.searchParams.get("sport");
   const dateParam = url.searchParams.get("date");
+  const copyPreview = url.searchParams.get("copyPreview") === "1";
   const renderedCopyFlagOverrides: DailyEdgeRenderedCopyFlagOverrides = {
-    quickRead: process.env.DAILY_EDGE_RENDERED_QUICK_READ_ENABLED === "true",
-    marketRead: process.env.DAILY_EDGE_RENDERED_MARKET_READ_ENABLED === "true",
-    supportingEvidence: process.env.DAILY_EDGE_RENDERED_SUPPORTING_EVIDENCE_ENABLED === "true",
+    quickRead: copyPreview || process.env.DAILY_EDGE_RENDERED_QUICK_READ_ENABLED === "true",
+    marketRead: copyPreview || process.env.DAILY_EDGE_RENDERED_MARKET_READ_ENABLED === "true",
+    supportingEvidence: copyPreview || process.env.DAILY_EDGE_RENDERED_SUPPORTING_EVIDENCE_ENABLED === "true",
     risk: false,
   };
   const frozenSourceAwareSplitRowsByGameId = new Map<number, SourceAwareSplitObservationRow[]>();
@@ -4395,7 +4396,7 @@ export async function GET(request: Request) {
       const { buildWnbaDailyEdgeAdapted } = await import(
         "@/lib/services/wnba/buildWnbaDailyEdgeAdapted"
       );
-      const adapted = await buildWnbaDailyEdgeAdapted(requestedDate);
+      const adapted = await buildWnbaDailyEdgeAdapted(requestedDate, renderedCopyFlagOverrides);
       return Response.json(adapted, {
         headers: { "Cache-Control": DAILY_EDGE_CACHE_CONTROL },
       });
@@ -4454,7 +4455,7 @@ export async function GET(request: Request) {
       const { buildSoccerDailyEdgeAdapted } = await import(
         "@/lib/services/soccer/buildSoccerDailyEdgeAdapted"
       );
-      const adapted = await buildSoccerDailyEdgeAdapted(requestedDate);
+      const adapted = await buildSoccerDailyEdgeAdapted(requestedDate, renderedCopyFlagOverrides);
       return Response.json(adapted, {
         headers: { "Cache-Control": DAILY_EDGE_CACHE_CONTROL },
       });

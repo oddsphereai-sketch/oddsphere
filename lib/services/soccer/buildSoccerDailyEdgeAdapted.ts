@@ -53,6 +53,11 @@ import type { SharpReadKey } from "../sharpReadSelector";
 import { flagCdnUrl } from "./_countryFlags";
 import { soccerPickLabel } from "./soccerPickLabel";
 import { normalizeDailyEdgeActionability } from "@/lib/services/dailyEdgeActionability";
+import { buildRecommendationDecision } from "@/lib/services/recommendationDecision";
+import {
+  applyDailyEdgeRenderedCopyFlags,
+  type DailyEdgeRenderedCopyFlagOverrides,
+} from "@/lib/services/dailyEdge/memberFacingCopyRenderer";
 
 const SOCCER_MODEL_VERSION = "soccer_dixon_coles_v1";
 const LOCK_WINDOW_MINUTES = 60;
@@ -968,6 +973,18 @@ function marketDisplayName(market: string): string {
   return market;
 }
 
+function soccerSelectedSide(row: PredictionRecordSlim | null): "home" | "away" | "over" | "under" | null {
+  if (row?.market === "match_result") {
+    if (row.side === "home" || row.pick === "home") return "home";
+    if (row.side === "away" || row.pick === "away") return "away";
+  }
+  if (row?.market === "total") {
+    if (row.side === "over" || row.pick === "over") return "over";
+    if (row.side === "under" || row.pick === "under") return "under";
+  }
+  return null;
+}
+
 function buildSharpRead(perMarket: Map<string, PredictionRecordSlim>): {
   key: SharpReadKey;
   sentence: string;
@@ -1091,6 +1108,7 @@ function pickFreshestLockedAt(rows: PredictionRecordSlim[]): string | null {
 
 export async function buildSoccerDailyEdgeAdapted(
   requestedDate: string,
+  renderedCopyFlagOverrides: DailyEdgeRenderedCopyFlagOverrides | null = null,
 ): Promise<DailyEdgeResponse> {
   const asOf = new Date().toISOString();
 
@@ -1309,6 +1327,96 @@ export async function buildSoccerDailyEdgeAdapted(
     // "Projection" display so it no longer reads 0–0.
     const lambdas = extractFixtureLambdas(rows);
 
+    const moneyline = {
+      ...buildMarketEdgeDto(mr, openerLookup, soccerStream),
+      matchResultThreeWayProbs: extractMatchResultThreeWayProbs(mr?.snapshot_json ?? null),
+      soccerMatchResultContext: buildSoccerMatchResultContext(mr),
+      soccerDoubleChanceContext: buildSoccerDoubleChanceContext(dc, homeAbbr, awayAbbr),
+      soccerGradeContext: buildSoccerGradeContext(mr),
+    };
+    const totalMarket = {
+      ...buildMarketEdgeDto(total, openerLookup, soccerStream),
+      soccerTotalContext: buildSoccerTotalContext(total),
+      soccerGradeContext: buildSoccerGradeContext(total),
+    };
+    const bttsMarket = {
+      ...buildMarketEdgeDto(btts, openerLookup, soccerStream),
+      soccerBttsContext: buildSoccerBttsContext(btts),
+      soccerGradeContext: buildSoccerGradeContext(btts),
+    };
+    const recommendationDecision = applyDailyEdgeRenderedCopyFlags(buildRecommendationDecision({
+      sport: "soccer",
+      slateDate: g.slate_date,
+      gameId: String(g.external_id),
+      homeTeam: homeAbbr,
+      awayTeam: awayAbbr,
+      projectedScore: { away: lambdas.away ?? 0, home: lambdas.home ?? 0 },
+      markets: [
+        {
+          key: "moneyline",
+          pick: moneyline.pick,
+          selectedSide: soccerSelectedSide(mr),
+          modelProbability: moneyline.modelProb,
+          marketImplied: moneyline.marketImpliedPct,
+          edgePp: moneyline.modelMarketGapPct,
+          price: moneyline.priceAmerican,
+          playGrade: moneyline.verdict.label,
+          quickRead: moneyline.guidedGuide,
+          riskNote: moneyline.riskLine,
+          publicSplits: [],
+          marketReadV2: null,
+          marketReadV2Enabled: false,
+        },
+        {
+          key: "total",
+          pick: totalMarket.pick,
+          selectedSide: soccerSelectedSide(total),
+          modelProbability: totalMarket.modelProb,
+          marketImplied: totalMarket.marketImpliedPct,
+          edgePp: totalMarket.modelMarketGapPct,
+          price: totalMarket.priceAmerican,
+          playGrade: totalMarket.verdict.label,
+          quickRead: totalMarket.guidedGuide,
+          riskNote: totalMarket.riskLine,
+          publicSplits: [],
+          marketReadV2: null,
+          marketReadV2Enabled: false,
+        },
+        {
+          key: "firstInning",
+          pick: bttsMarket.pick,
+          selectedSide: null,
+          modelProbability: bttsMarket.modelProb,
+          marketImplied: bttsMarket.marketImpliedPct,
+          edgePp: bttsMarket.modelMarketGapPct,
+          price: bttsMarket.priceAmerican,
+          playGrade: bttsMarket.verdict.label,
+          quickRead: bttsMarket.guidedGuide,
+          riskNote: bttsMarket.riskLine,
+          publicSplits: [],
+          marketReadV2: null,
+          marketReadV2Enabled: false,
+        },
+      ],
+    }), renderedCopyFlagOverrides);
+    if (recommendationDecision.markets.moneyline?.renderedQuickReadCopy) {
+      moneyline.guidedGuide = recommendationDecision.markets.moneyline.renderedQuickReadCopy;
+    }
+    if (recommendationDecision.markets.total?.renderedQuickReadCopy) {
+      totalMarket.guidedGuide = recommendationDecision.markets.total.renderedQuickReadCopy;
+    }
+    if (recommendationDecision.markets.firstInning?.renderedQuickReadCopy) {
+      bttsMarket.guidedGuide = recommendationDecision.markets.firstInning.renderedQuickReadCopy;
+    }
+    moneyline.recommendationDecision = recommendationDecision.markets.moneyline;
+    totalMarket.recommendationDecision = recommendationDecision.markets.total;
+    bttsMarket.recommendationDecision = recommendationDecision.markets.firstInning;
+    const renderedDecisionLine =
+      recommendationDecision.markets.moneyline?.renderedQuickReadCopy ??
+      recommendationDecision.markets.total?.renderedQuickReadCopy ??
+      recommendationDecision.markets.firstInning?.renderedQuickReadCopy ??
+      decisionLine;
+
     return {
       id: `soccer-${g.external_id}`,
       sport: "soccer",
@@ -1328,48 +1436,17 @@ export async function buildSoccerDailyEdgeAdapted(
       homeStarter: null,
       awayStarter: null,
       predictions: {
-        ml: buildPredictionDto(mr),
-        total: buildTotalPredictionDto(total),
-        nrfi: buildPredictionDto(btts),
+        ml: { ...buildPredictionDto(mr), pick: moneyline.pick, confidence: moneyline.confidence, grade: moneyline.grade },
+        total: { ...buildTotalPredictionDto(total), pick: totalMarket.pick, confidence: totalMarket.confidence, grade: totalMarket.grade },
+        nrfi: { ...buildPredictionDto(btts), pick: bttsMarket.pick, confidence: bttsMarket.confidence, grade: bttsMarket.grade },
       },
       markets: {
-        // WC reader follow-up (2026-06-12): attach the Match Result
-        // three-way model probabilities to the moneyline slot. Pulled
-        // from the Dixon-Coles snapshot via extractMatchResultThreeWayProbs.
-        // The reader hides the W/D/L band when this field is null, so
-        // soccer rows without an mr snapshot stay clean.
-        moneyline: {
-          ...buildMarketEdgeDto(mr, openerLookup, soccerStream),
-          matchResultThreeWayProbs: extractMatchResultThreeWayProbs(mr?.snapshot_json ?? null),
-          // WC reader full-completion pass (2026-06-12):
-          // Soccer-only reader context blocks. The moneyline slot
-          // carries both Match Result and BTTS context — the reader
-          // surfaces BTTS alongside Match Result rather than as its
-          // own card slot, because the soccer card has no nrfi slot.
-          soccerMatchResultContext: buildSoccerMatchResultContext(mr),
-          // 2026-06-13 swap: Double Chance rides the Match Result slot as a
-          // reader context block; BTTS now owns the first_inning pill.
-          soccerDoubleChanceContext: buildSoccerDoubleChanceContext(dc, homeAbbr, awayAbbr),
-          // WC-MODEL-5 grade-honesty block for the Match Result headline.
-          soccerGradeContext: buildSoccerGradeContext(mr),
-        },
-        total: {
-          ...buildMarketEdgeDto(total, openerLookup, soccerStream),
-          soccerTotalContext: buildSoccerTotalContext(total),
-          soccerGradeContext: buildSoccerGradeContext(total),
-        },
-        first_inning: {
-          // The "first_inning" slot is the soccer BTTS carrier (pill +
-          // headline). 2026-06-13 swap: BTTS moved here from the Match
-          // Result context block, and Double Chance moved to the Match
-          // Result slot's reader context. Headline pick/price come from the
-          // real `btts` prediction_record.
-          ...buildMarketEdgeDto(btts, openerLookup, soccerStream),
-          soccerBttsContext: buildSoccerBttsContext(btts),
-          soccerGradeContext: buildSoccerGradeContext(btts),
-        },
+        moneyline,
+        total: totalMarket,
+        first_inning: bttsMarket,
       },
-      decisionLine,
+      recommendationDecision,
+      decisionLine: renderedDecisionLine,
       projected: {
         away: lambdas.away ?? 0,
         home: lambdas.home ?? 0,

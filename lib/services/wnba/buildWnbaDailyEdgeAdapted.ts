@@ -45,6 +45,10 @@ import { projectionLedMarketRead, withConfirmedSharpMoney } from "@/lib/services
 import type { MarketReadV2Dto } from "@/lib/types/domain/MarketIntelligenceV2";
 import { normalizeDailyEdgeActionability } from "@/lib/services/dailyEdgeActionability";
 import { buildRecommendationDecision } from "@/lib/services/recommendationDecision";
+import {
+  applyDailyEdgeRenderedCopyFlags,
+  type DailyEdgeRenderedCopyFlagOverrides,
+} from "@/lib/services/dailyEdge/memberFacingCopyRenderer";
 
 const HISTORY_PAGE_SIZE = 1000;
 const ENABLE_WNBA_LIVE_PREVIEW_FALLBACK =
@@ -1009,6 +1013,7 @@ function adaptGame(
   game: PreviewGame,
   asOf: string,
   marketReadV2Lookup: MarketReadV2Lookup | null,
+  renderedCopyFlagOverrides: DailyEdgeRenderedCopyFlagOverrides | null,
 ): DailyEdgeGameDto {
   const homeAbbr = game.home_abbr ?? game.home.slice(0, 3).toUpperCase();
   const awayAbbr = game.away_abbr ?? game.away.slice(0, 3).toUpperCase();
@@ -1147,7 +1152,7 @@ function adaptGame(
 
   const decisionLine = `${game.moneyline.side} ML (${game.moneyline.confidence ?? "—"}%) · ${game.total.side ?? "total n/a"} · ${game.spread.side ?? "spread n/a"}`;
   const modelBreakdown = `Independent Elo+Platt with market-assisted blend. ML lean ${game.moneyline.side}. Total: ${game.total.side ?? "n/a"} (proj ${game.model.total}). Spread: ${game.spread.side ?? "n/a"} (proj margin ${game.model.margin}).${game.data_quality.flags.includes("low_history_team") ? " Cold-start prior applied (low game history)." : ""}`;
-  const recommendationDecision = buildRecommendationDecision({
+  const recommendationDecision = applyDailyEdgeRenderedCopyFlags(buildRecommendationDecision({
     sport: "wnba",
     slateDate: game.date,
     gameId: String(game.game_id),
@@ -1201,7 +1206,16 @@ function adaptGame(
         marketReadV2Enabled: spread.marketReadV2Enabled === true,
       },
     ],
-  });
+  }), renderedCopyFlagOverrides);
+  if (recommendationDecision.markets.moneyline?.renderedQuickReadCopy) {
+    ml.guidedGuide = recommendationDecision.markets.moneyline.renderedQuickReadCopy;
+  }
+  if (recommendationDecision.markets.total?.renderedQuickReadCopy) {
+    total.guidedGuide = recommendationDecision.markets.total.renderedQuickReadCopy;
+  }
+  if (recommendationDecision.markets.firstInning?.renderedQuickReadCopy) {
+    spread.guidedGuide = recommendationDecision.markets.firstInning.renderedQuickReadCopy;
+  }
   ml.recommendationDecision = recommendationDecision.markets.moneyline;
   total.recommendationDecision = recommendationDecision.markets.total;
   spread.recommendationDecision = recommendationDecision.markets.firstInning;
@@ -1245,7 +1259,10 @@ function adaptGame(
   };
 }
 
-export async function buildWnbaDailyEdgeAdapted(date: string | null): Promise<DailyEdgeResponse> {
+export async function buildWnbaDailyEdgeAdapted(
+  date: string | null,
+  renderedCopyFlagOverrides: DailyEdgeRenderedCopyFlagOverrides | null = null,
+): Promise<DailyEdgeResponse> {
   const asOf = new Date().toISOString();
   const requestedDate = date ?? currentSlateDate("wnba");
   try {
@@ -1284,7 +1301,7 @@ export async function buildWnbaDailyEdgeAdapted(date: string | null): Promise<Da
           };
         }
       }
-      const games = dbGames.map((g) => adaptGame(g, asOf, marketReadV2Lookup));
+      const games = dbGames.map((g) => adaptGame(g, asOf, marketReadV2Lookup, renderedCopyFlagOverrides));
       return {
         as_of: asOf, sport: "wnba", date: requestedDate, requested_date: requestedDate,
         fallback_used: false, slateState: "today_published", slate_status: "published",
@@ -1325,7 +1342,7 @@ export async function buildWnbaDailyEdgeAdapted(date: string | null): Promise<Da
     const raw = await buildWnbaDailyEdgePreview(requestedDate);
     const previewGames = (raw.games as unknown as PreviewGame[])
       .filter((g) => g.date === requestedDate);
-    const games = previewGames.map((g) => adaptGame(g, asOf, null));
+    const games = previewGames.map((g) => adaptGame(g, asOf, null, renderedCopyFlagOverrides));
     return {
       as_of: asOf, sport: "wnba", date: requestedDate, requested_date: requestedDate,
       fallback_used: true, slateState: games.length > 0 ? "today_published" : "no_data",
