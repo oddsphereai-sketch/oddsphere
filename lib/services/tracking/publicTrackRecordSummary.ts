@@ -140,7 +140,15 @@ function parseMarket(market: string): TrackedMarketV17 {
 }
 
 function cleanMarketLabel(raw: string): string {
-  return raw.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const match = raw.match(/\(([^)]+)\)/);
+  const label = match?.[1]?.replace("*", "").trim();
+  if (label === "ML") return "Moneyline";
+  if (label === "O/U") return "Totals";
+  if (label === "NRFI/YRFI") return "NRFI/YRFI";
+  if (label === "NRFI") return "NRFI";
+  if (label === "YRFI") return "YRFI";
+  if (label === "Double Chance") return "Double Chance";
+  return raw.trim();
 }
 
 function compareSport(a: TrackedSport, b: TrackedSport): number {
