@@ -2319,6 +2319,10 @@ function readFiV2Audit(sp: Record<string, unknown> | null): {
   market_nrfi_no_vig: number | null;
   fi_edge_pct: number | null;
   data_quality_tier: string | null;
+  market_listed_fi_total: number | null;
+  market_nrfi_odds_american: number | null;
+  market_yrfi_odds_american: number | null;
+  market_reason: string | null;
   reason_codes: string[];
 } | null {
   if (!sp || typeof sp !== "object") return null;
@@ -2338,6 +2342,10 @@ function readFiV2Audit(sp: Record<string, unknown> | null): {
     market_nrfi_no_vig: num(audit.market_nrfi_no_vig),
     fi_edge_pct: num(audit.fi_edge_pct),
     data_quality_tier: typeof audit.data_quality_tier === "string" ? audit.data_quality_tier : null,
+    market_listed_fi_total: num(audit.market_listed_fi_total),
+    market_nrfi_odds_american: num(audit.market_nrfi_odds_american),
+    market_yrfi_odds_american: num(audit.market_yrfi_odds_american),
+    market_reason: typeof audit.market_reason === "string" ? audit.market_reason : null,
     reason_codes: codes,
   };
 }
@@ -2983,6 +2991,17 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const priceObservedAt: string | null = overlaidCurrent.observedAt;
   const priceIsStale =
     priceObservedAt !== null ? isObservationStale(priceObservedAt) : false;
+  const fiAuditForBoard = input.market === "first_inning"
+    ? readFiV2Audit(input.sportSpecific ?? null)
+    : null;
+  const fiMarketBoard = fiAuditForBoard !== null
+    ? {
+        line: fiAuditForBoard.market_listed_fi_total,
+        nrfiAmerican: fiAuditForBoard.market_nrfi_odds_american,
+        yrfiAmerican: fiAuditForBoard.market_yrfi_odds_american,
+        source: fiAuditForBoard.market_reason,
+      }
+    : null;
 
   // First-seen line for the picked side.
   //
@@ -3514,6 +3533,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     betsPct: displayPickedSplit?.betsPct ?? betsPct,
     publicSplits: displayPublicSplits,
     priceAmerican,
+    fiMarketBoard,
     // Lock-snapshot honesty (2026-06-09 lock-contract fix). Only ever true
     // on locked rows when no usable real-book price exists. With Forward
     // Fix A in place (writer line_history fallback), this flag should

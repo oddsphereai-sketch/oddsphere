@@ -95,6 +95,9 @@ type FiHoldDiagnostic = {
   degradedFields: string[];
   posteriorNrfi: number | null;
   posteriorYrfi: number | null;
+  marketListedFiTotal: number | null;
+  marketNrfiOddsAmerican: number | null;
+  marketYrfiOddsAmerican: number | null;
 };
 
 type GamePredictionDiagnosticRow = {
@@ -245,6 +248,9 @@ function classifyFiHoldDiagnostic(sportSpecific: Record<string, unknown> | null)
       degradedFields: [],
       posteriorNrfi: null,
       posteriorYrfi: null,
+      marketListedFiTotal: null,
+      marketNrfiOddsAmerican: null,
+      marketYrfiOddsAmerican: null,
     };
   }
 
@@ -308,6 +314,9 @@ function classifyFiHoldDiagnostic(sportSpecific: Record<string, unknown> | null)
     degradedFields: stringArrayAt(completeness, "degraded_fields"),
     posteriorNrfi: numberAt(audit, "posterior_p_nrfi"),
     posteriorYrfi: numberAt(audit, "posterior_p_yrfi"),
+    marketListedFiTotal: numberAt(audit, "market_listed_fi_total"),
+    marketNrfiOddsAmerican: numberAt(audit, "market_nrfi_odds_american"),
+    marketYrfiOddsAmerican: numberAt(audit, "market_yrfi_odds_american"),
   };
 }
 

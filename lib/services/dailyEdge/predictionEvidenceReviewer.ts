@@ -99,9 +99,9 @@ export function reviewPredictionEvidence(row: PredictionEvidenceObject): Predict
     const heldNoSide = isFiHeldNoSide(row);
     if ((tossUp || heldNoSide) && row.priceValueEvidence.priceAmerican === null) {
       expectedMissingFields.push(
-        tossUp ? "fi_toss_up_price" : "fi_held_price",
-        tossUp ? "fi_toss_up_market_implied_probability" : "fi_held_market_implied_probability",
-        tossUp ? "fi_toss_up_edge" : "fi_held_edge",
+        tossUp ? "fi_toss_up_selected_side_price_not_applicable" : "fi_held_selected_side_price_not_applicable",
+        tossUp ? "fi_toss_up_selected_side_market_implied_not_applicable" : "fi_held_selected_side_market_implied_not_applicable",
+        tossUp ? "fi_toss_up_selected_side_edge_not_applicable" : "fi_held_selected_side_edge_not_applicable",
       );
     } else if (row.priceValueEvidence.priceAmerican === null) {
       if (row.evidenceSource.kind === "locked_snapshot") {

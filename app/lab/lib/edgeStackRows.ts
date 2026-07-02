@@ -71,6 +71,17 @@ function formatAmerican(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
 }
 
+function fiMarketBoardEvidence(marketData: MarketEdgeDto): string | null {
+  const board = marketData.fiMarketBoard;
+  if (!board || (board.nrfiAmerican === null && board.yrfiAmerican === null)) return null;
+  const pieces = [
+    board.yrfiAmerican !== null ? `YRFI ${formatAmerican(board.yrfiAmerican)}` : null,
+    board.nrfiAmerican !== null ? `NRFI ${formatAmerican(board.nrfiAmerican)}` : null,
+  ].filter((piece): piece is string => piece !== null);
+  const line = board.line !== null ? `FI ${board.line}` : "FI board";
+  return `${line} · ${pieces.join(" / ")}`;
+}
+
 function effectivePriceTrail(marketData: MarketEdgeDto): {
   open: number | null;
   previous: number | null;
@@ -199,6 +210,17 @@ export function buildEdgeStackRows(
   isTrueFirstInningMarket: boolean = market === "first_inning"
 ): EdgeStackRow[] {
   const rows: EdgeStackRow[] = [];
+  if (market === "first_inning") {
+    const board = fiMarketBoardEvidence(marketData);
+    if (board !== null) {
+      rows.push({
+        label: "FI Market",
+        evidence: board,
+        delta: marketData.pick === null || marketData.held ? "context" : "board",
+        tone: "gray",
+      });
+    }
+  }
 
   // ── Model Edge ─────────────────────────────────────────────────
   if (

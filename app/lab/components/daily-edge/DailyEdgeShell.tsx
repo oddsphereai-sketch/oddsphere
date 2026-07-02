@@ -402,6 +402,15 @@ function formatAmerican(price: number | null): string {
   return price > 0 ? `+${price}` : String(price);
 }
 
+function formatFiMarketBoard(board: MarketEdgeDto["fiMarketBoard"] | undefined | null): string | null {
+  if (!board || (board.nrfiAmerican === null && board.yrfiAmerican === null)) return null;
+  const parts = [
+    board.yrfiAmerican !== null ? `YRFI ${formatAmerican(board.yrfiAmerican)}` : null,
+    board.nrfiAmerican !== null ? `NRFI ${formatAmerican(board.nrfiAmerican)}` : null,
+  ].filter((part): part is string => part !== null);
+  return parts.join(" / ");
+}
+
 /**
  * Defensive: return null if the game's markets block is missing or the
  * requested market slot is empty. This protects against stale SWR cache
@@ -1545,6 +1554,13 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
                   {formatAmerican(marketData.priceAmerican)}
                 </span>
               </>
+            ) : market === "first_inning" && formatFiMarketBoard(marketData.fiMarketBoard) !== null ? (
+              <>
+                <span className="text-gray-700">·</span>
+                <span className="text-[11px] tabular-nums font-semibold text-gray-400">
+                  {formatFiMarketBoard(marketData.fiMarketBoard)}
+                </span>
+              </>
             ) : marketData.priceUnavailableAtLock ? (
               <>
                 <span className="text-gray-700">·</span>
@@ -1898,6 +1914,7 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const rows = buildEdgeStackRows(market, marketData, totalUnit, market === "first_inning" && shellSport === "mlb");
   const find = (l: string) => rows.find((r) => r.label === l);
   const marketEv = find("Market EV");
+  const fiMarket = find("FI Market");
   const splits = find("Money vs Bets");
   const lineMove = find("Line"); // the betting NUMBER move (totals)
   const oddsMove = find("Line Move"); // the PRICE move — carries the directional arrow + tone
@@ -1930,6 +1947,7 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
 
       <div className="divide-y divide-white/[0.04] mt-2">
         {book && <CleanEvRow label="Book">{book}</CleanEvRow>}
+        {fiMarket && <CleanEvRow label="FI Market" delta={fiMarket.delta} tone={fiMarket.tone}>{fiMarket.evidence}</CleanEvRow>}
         {marketEv && marketEv.delta !== "unavailable" && <CleanEvRow label="Market EV" delta={marketEv.delta} tone={marketEv.tone}>{marketEv.evidence}</CleanEvRow>}
         {splits && <CleanEvRow label="Splits" delta={splits.delta} tone={splits.tone}>{splits.evidence}</CleanEvRow>}
       </div>
@@ -3207,6 +3225,10 @@ function SlateCard({
             <span className="text-[12px] tabular-nums font-medium text-gray-500 ml-1">
               {formatAmerican(headlineMarketData.priceAmerican)}
             </span>
+          ) : headlineMarket === "first_inning" && formatFiMarketBoard(headlineMarketData.fiMarketBoard) !== null ? (
+            <span className="text-[11px] tabular-nums font-medium text-gray-500 ml-1">
+              {formatFiMarketBoard(headlineMarketData.fiMarketBoard)}
+            </span>
           ) : headlineMarketData.priceUnavailableAtLock ? (
             <span className="text-[10px] uppercase tracking-[0.14em] font-bold text-gray-500 ml-1">
               no price at lock
@@ -3548,6 +3570,13 @@ function SelectedEdgeReader({
                         <span aria-hidden="true" className="text-gray-700 text-[10px]">·</span>
                         <span className="text-[11px] tabular-nums font-medium text-gray-400">
                           {formatAmerican(marketData.priceAmerican)}
+                        </span>
+                      </>
+                    ) : market === "first_inning" && formatFiMarketBoard(marketData.fiMarketBoard) !== null ? (
+                      <>
+                        <span aria-hidden="true" className="text-gray-700 text-[10px]">·</span>
+                        <span className="text-[10px] tabular-nums font-medium text-gray-400">
+                          {formatFiMarketBoard(marketData.fiMarketBoard)}
                         </span>
                       </>
                     ) : marketData.priceUnavailableAtLock ? (

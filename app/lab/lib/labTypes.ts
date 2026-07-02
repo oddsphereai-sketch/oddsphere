@@ -273,6 +273,17 @@ export type MarketEdgeDto = {
     isStale?: boolean;
   }>;
   priceAmerican: number | null;
+  /**
+   * First-inning market-board context when the model does not choose a side.
+   * This is display-only: it must not be treated as a picked-side price,
+   * edge, grade input, or tracking price.
+   */
+  fiMarketBoard?: {
+    line: number | null;
+    nrfiAmerican: number | null;
+    yrfiAmerican: number | null;
+    source: string | null;
+  } | null;
   lineOpenAmerican: number | null;
   /**
    * Lock-snapshot honesty flag (2026-06-09 lock-contract fix).
