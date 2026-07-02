@@ -69,6 +69,11 @@ export async function GET(request: Request) {
         repair?.postRepairHealth?.unresolvedBlockingOrHigh ??
         report.unresolvedBlockingOrHigh;
       const repairErrors = repair?.errors.length ?? 0;
+      const automodelRecordsUpdated =
+        typeof repair?.steps.automodel?.recordsUpdated === "number"
+          ? repair.steps.automodel.recordsUpdated
+          : 0;
+      const predictionOrGradeRepairRan = automodelRecordsUpdated > 0;
       return {
         records_updated: repair?.recordsUpdated ?? 0,
         api_calls_made: repair?.apiCallsMade ?? 0,
@@ -88,8 +93,8 @@ export async function GET(request: Request) {
           repairEnabled,
           repair,
           noOpenAiCalls: true,
-          noPredictionChanges: !repairEnabled,
-          noGradeChanges: !repairEnabled,
+          noPredictionChanges: !predictionOrGradeRepairRan,
+          noGradeChanges: !predictionOrGradeRepairRan,
           noTrackingChanges: true,
         },
       };
