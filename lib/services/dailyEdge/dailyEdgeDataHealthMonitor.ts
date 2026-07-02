@@ -69,6 +69,7 @@ type MarketCoverage = {
 
 type FiHoldClassification =
   | "legit_model_toss_up"
+  | "provisional_lineup_pending"
   | "missing_inputs"
   | "provider_gap"
   | "mapping_bug_or_missing_audit"
@@ -257,6 +258,8 @@ function classifyFiHoldDiagnostic(sportSpecific: Record<string, unknown> | null)
   const missingFeatureCount = numberAt(featureAudit, "missing_count");
   const featureReasonCodes = stringArrayAt(featureAudit, "reason_codes");
   const completenessStatus = stringAt(completeness, "status");
+  const canPublishNormal = booleanAt(completeness, "can_publish_normal");
+  const repairEligible = booleanAt(completeness, "repair_eligible");
   const noBetText = `${fiPick ?? ""} ${fiPickReason ?? ""} ${fiNoBetReason ?? ""} ${completenessStatus ?? ""} ${featureReasonCodes.join(" ")}`.toLowerCase();
 
   let classification: FiHoldClassification = "unknown";
@@ -267,6 +270,10 @@ function classifyFiHoldDiagnostic(sportSpecific: Record<string, unknown> | null)
     classification = "mapping_bug_or_missing_audit";
     materiality = "high";
     reason = "FI side is held but the fi_v2_audit payload is missing.";
+  } else if (completenessStatus === "provisional_lineup_pending" && canPublishNormal === true) {
+    classification = "provisional_lineup_pending";
+    materiality = "medium";
+    reason = "FI side is held while official lineup/top-order context is pending; the card can publish normally and should update through lineup refresh.";
   } else if (/\b(provider|market|odds|line|price)\b/.test(noBetText) && marketDataQuality !== "ok") {
     classification = "provider_gap";
     materiality = "high";
@@ -295,8 +302,8 @@ function classifyFiHoldDiagnostic(sportSpecific: Record<string, unknown> | null)
     missingFeatureCount,
     presentFeatureCount: numberAt(featureAudit, "present_count"),
     featureReasonCodes,
-    canPublishNormal: booleanAt(completeness, "can_publish_normal"),
-    repairEligible: booleanAt(completeness, "repair_eligible"),
+    canPublishNormal,
+    repairEligible,
     completenessStatus,
     degradedFields: stringArrayAt(completeness, "degraded_fields"),
     posteriorNrfi: numberAt(audit, "posterior_p_nrfi"),
@@ -331,6 +338,7 @@ async function loadFiHoldDiagnostics(rows: PredictionEvidenceObject[]): Promise<
 function fiHoldFindingCode(diagnostic: FiHoldDiagnostic | undefined): string {
   if (!diagnostic) return "fi_model_hold_diagnostic_missing";
   if (diagnostic.classification === "legit_model_toss_up") return "fi_legit_model_toss_up";
+  if (diagnostic.classification === "provisional_lineup_pending") return "fi_provisional_lineup_pending";
   if (diagnostic.classification === "missing_inputs") return "fi_model_hold_missing_inputs";
   if (diagnostic.classification === "provider_gap") return "fi_model_hold_provider_gap";
   return "fi_model_hold_diagnostic_missing";
