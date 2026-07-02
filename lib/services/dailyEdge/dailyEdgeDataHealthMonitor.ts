@@ -139,7 +139,13 @@ function pushFinding(
     pick: row.identity.pick,
     evidenceSource: row.evidenceSource.kind,
     message,
-    details,
+    details: {
+      gameId: row.identity.gameId,
+      externalId: row.identity.externalId,
+      gameTime: row.identity.gameTime,
+      marketType: row.identity.marketType,
+      ...details,
+    },
   });
 }
 

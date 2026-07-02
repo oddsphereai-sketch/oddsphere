@@ -82,6 +82,7 @@
     "daily-edge:reader-coherence-audit": "tsx --env-file=.env.local scripts/daily-edge-reader-coherence-audit.ts",
     "daily-edge:locked-snapshot-completeness-audit": "tsx --env-file=.env.local scripts/daily-edge-locked-snapshot-completeness-audit.ts",
     "daily-edge:data-health-monitor": "tsx --env-file=.env.local scripts/daily-edge-data-health-monitor.ts",
+    "daily-edge:data-health-repair": "tsx --env-file=.env.local scripts/daily-edge-data-health-repair.ts",
     "test:mlb-playbook-venue-weather-overlay": "tsx scripts/test-mlb-playbook-venue-weather-overlay.ts",
     "test:provider-signal-boundaries": "tsx --env-file=.env.local scripts/test-provider-signal-boundaries.ts",
     "test:derive-market-signal-regression": "tsx --env-file=.env.local scripts/test-derive-market-signal-regression.ts",
