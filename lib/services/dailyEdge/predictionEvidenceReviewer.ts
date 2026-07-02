@@ -58,6 +58,14 @@ function marketContextQuality(row: PredictionEvidenceObject): MarketContextQuali
   return "unavailable";
 }
 
+function isFiTossUp(row: PredictionEvidenceObject): boolean {
+  return row.identity.marketType === "FI" && /toss[\s-]*up/i.test(String(row.identity.pick ?? ""));
+}
+
+function isFiHeldNoSide(row: PredictionEvidenceObject): boolean {
+  return row.identity.marketType === "FI" && row.identity.pick === null;
+}
+
 export function reviewPredictionEvidence(row: PredictionEvidenceObject): PredictionEvidenceReview {
   const caps = dailyEdgeMarketCapabilities(row.identity.sport, row.identity.normalizedMarket === "total" ? "total" : row.identity.normalizedMarket === "moneyline" ? "moneyline" : "firstInning");
   const missingRequiredFields: string[] = [];
@@ -84,7 +92,15 @@ export function reviewPredictionEvidence(row: PredictionEvidenceObject): Predict
 
   if (caps.isFirstInning) {
     expectedMissingFields.push("fi_consensus_splits", "fi_sharp_book_splits", "fi_sharp_book_signal");
-    if (row.priceValueEvidence.priceAmerican === null) {
+    const tossUp = isFiTossUp(row);
+    const heldNoSide = isFiHeldNoSide(row);
+    if ((tossUp || heldNoSide) && row.priceValueEvidence.priceAmerican === null) {
+      expectedMissingFields.push(
+        tossUp ? "fi_toss_up_price" : "fi_held_price",
+        tossUp ? "fi_toss_up_market_implied_probability" : "fi_held_market_implied_probability",
+        tossUp ? "fi_toss_up_edge" : "fi_held_edge",
+      );
+    } else if (row.priceValueEvidence.priceAmerican === null) {
       if (row.evidenceSource.kind === "locked_snapshot") {
         persistenceGaps.push("fi_price_missing_locked_snapshot");
       } else if (/\b(not offered|not_offered|unavailable|no_price|no price)\b/i.test(row.priceValueEvidence.priceNullReason ?? "")) {
@@ -95,10 +111,10 @@ export function reviewPredictionEvidence(row: PredictionEvidenceObject): Predict
     } else if (row.priceValueEvidence.priceSource === "locked_snapshot") {
       persistenceGaps.push("fi_price_recovered_from_snapshot");
     }
-    if (row.modelStatsEvidence.marketImpliedProbability === null) {
+    if (!tossUp && !heldNoSide && row.modelStatsEvidence.marketImpliedProbability === null) {
       persistenceGaps.push(row.evidenceSource.kind === "locked_snapshot" ? "fi_market_implied_missing_locked_snapshot" : "fi_market_implied_missing_current_prelock");
     }
-    if (row.modelStatsEvidence.edge === null) {
+    if (!tossUp && !heldNoSide && row.modelStatsEvidence.edge === null) {
       persistenceGaps.push(row.evidenceSource.kind === "locked_snapshot" ? "fi_edge_missing_locked_snapshot" : "fi_edge_missing_current_prelock");
     }
   } else {

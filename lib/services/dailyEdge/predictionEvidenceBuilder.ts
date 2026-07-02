@@ -587,6 +587,7 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
   const teams = splitMatchup(payload.matchup);
   const marketRead = lockedMarketReadForEvidence(payload.marketRead);
   const scores = lockedScores(payload);
+  const isFiTossUp = payload.market === "first_inning" && /toss[\s-]*up/i.test(String(payload.pick ?? ""));
   const sharpSignalOnly = payload.sharpBookSplitsOrSignal.available && payload.sharpBookSplitsOrSignal.rows.length === 0;
   const caps = dailyEdgeMarketCapabilities(payload.sport, decisionKeyForEvidenceMarket(payload.market));
   const consensusAvailable = caps.expectsConsensusSplits && payload.consensusSplits.available;
@@ -751,7 +752,7 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
       priceQualityScore: scores.priceQualityScore,
       heavyJuiceWarning: payload.displayPriceAmerican !== null && payload.displayPriceAmerican <= -150,
       plusMoneyValueFlag: payload.displayPriceAmerican !== null && payload.displayPriceAmerican > 0 && (payload.edgePct ?? 0) > 0,
-      priceBecameUnplayable: Boolean(payload.priceNullReason) || scores.priceQualityScore < 20,
+      priceBecameUnplayable: !isFiTossUp && (Boolean(payload.priceNullReason) || scores.priceQualityScore < 20),
       priceRecovered: payload.priceSource === "snapshot_json",
       priceRecoverySource: payload.priceSource === "snapshot_json" ? "snapshot_json" : null,
       priceRecoveryConfidence: payload.priceSource === "snapshot_json" ? "high" : null,

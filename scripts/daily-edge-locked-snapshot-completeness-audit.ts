@@ -67,6 +67,11 @@ function hasSharp(row: PredictionEvidenceObject): boolean {
 }
 
 function hasCoreFi(row: PredictionEvidenceObject): boolean {
+  if (/toss[\s-]*up/i.test(String(row.identity.pick ?? ""))) {
+    return row.modelStatsEvidence.modelProbability !== null &&
+      row.identity.pick !== null &&
+      row.modelStatsEvidence.fiStarterTopOrderContext?.isFirstInning === true;
+  }
   return row.modelStatsEvidence.modelProbability !== null &&
     row.modelStatsEvidence.edge !== null &&
     row.priceValueEvidence.marketImpliedProbability !== null;
@@ -120,6 +125,7 @@ function auditLockedRow(args: {
 }) {
   const { locked, current, findings } = args;
   const isFi = locked.identity.marketType === "FI";
+  const isFiTossUp = isFi && /toss[\s-]*up/i.test(String(locked.identity.pick ?? ""));
   if (!isFi) {
     if (!locked.marketEvidence.consensusSplitsAvailable) {
       push(findings, locked, "locked_consensus_missing", "high", "consensus_splits", "persistence_gap", "ML/Total locked snapshot lacks Consensus Splits.");
@@ -137,10 +143,10 @@ function auditLockedRow(args: {
   }
 
   const required: Array<[string, boolean, FindingSeverity, string]> = [
-    ["price", locked.priceValueEvidence.priceAmerican !== null, "high", "Locked snapshot should persist the display price/odds."],
+    ["price", isFiTossUp || locked.priceValueEvidence.priceAmerican !== null, "high", isFiTossUp ? "FI Toss-Up has no actionable side price requirement." : "Locked snapshot should persist the display price/odds."],
     ["model_probability", locked.modelStatsEvidence.modelProbability !== null, "high", "Locked snapshot should persist model probability."],
-    ["market_implied_probability", locked.modelStatsEvidence.marketImpliedProbability !== null, "high", "Locked snapshot should persist market implied probability."],
-    ["edge", locked.modelStatsEvidence.edge !== null, "high", "Locked snapshot should persist model edge."],
+    ["market_implied_probability", isFiTossUp || locked.modelStatsEvidence.marketImpliedProbability !== null, "high", isFiTossUp ? "FI Toss-Up has no actionable side market-implied requirement." : "Locked snapshot should persist market implied probability."],
+    ["edge", isFiTossUp || locked.modelStatsEvidence.edge !== null, "high", isFiTossUp ? "FI Toss-Up has no actionable side edge requirement." : "Locked snapshot should persist model edge."],
     ["market_read", locked.marketEvidence.marketReadRaw !== null, "medium", "Locked snapshot should persist or reconstruct Market Read."],
   ];
   if (!isFi) {

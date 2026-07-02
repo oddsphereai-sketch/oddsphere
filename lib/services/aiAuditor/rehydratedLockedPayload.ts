@@ -402,6 +402,7 @@ export function buildRehydratedLockedMarketPayload(record: RehydratedPredictionR
   const read = reconstructRead(record, splits);
   const source = oddsSource(record);
   const originalGrade = normalizePublicGrade(record.play_grade, record);
+  const isFiTossUp = record.market === "first_inning" && /toss[\s-]*up/i.test(record.pick ?? "");
   const marketSignalRows = snapshotSignalRows(record.snapshot_json, record.market);
   const hasSharpSignal = sourceAwareSharp.length > 0 || marketSignalRows.some((row) =>
     str(row.signal_strength) !== null ||
@@ -428,7 +429,11 @@ export function buildRehydratedLockedMarketPayload(record: RehydratedPredictionR
     originalGrade,
     displayPriceAmerican: record.odds_american,
     priceSource: source.source,
-    priceNullReason: record.odds_american === null ? "historical_locked_price_not_persisted" : null,
+    priceNullReason: record.odds_american === null
+      ? isFiTossUp
+        ? "fi_toss_up_no_actionable_side_price_not_required"
+        : "historical_locked_price_not_persisted"
+      : null,
     sportsbook: source.sportsbook,
     marketImpliedProbabilityPct: toPct(record.market_probability),
     modelProbabilityPct: toPct(record.model_probability),
@@ -474,10 +479,12 @@ export function buildRehydratedLockedMarketPayload(record: RehydratedPredictionR
     fiContext: {
       isFirstInning: record.market === "first_inning",
       oddsAvailable: record.market === "first_inning" ? record.odds_american !== null : false,
-      marketProbabilityAvailable: record.market === "first_inning" ? record.market_probability !== null : false,
+      marketProbabilityAvailable: record.market === "first_inning" ? (record.market_probability !== null || isFiTossUp) : false,
       expectedSplitSourceAvailable: false,
       note: record.market === "first_inning"
-        ? "FI price/model/market fields are actionable; FI consensus/sharp split source is not expected historically and should not force a downgrade by itself."
+        ? isFiTossUp
+          ? "FI locked as Toss-Up: no actionable YRFI/NRFI side, so picked-side price/value is not required. FI split source is not expected and should not be treated as a data failure."
+          : "FI price/model/market fields are actionable; FI consensus/sharp split source is not expected historically and should not force a downgrade by itself."
         : null,
     },
     lock: {

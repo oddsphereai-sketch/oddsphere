@@ -12,6 +12,7 @@ import {
   type AiAuditorMarketKey,
   type AiAuditorPayloadEstimate,
 } from "@/lib/services/aiAuditor/costPreview";
+import { getCurrentOrLastKnownLine } from "@/lib/services/lastKnownGoodReader";
 import type { DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import type { Sport } from "@/lib/types/domain/Sport";
 
@@ -134,6 +135,102 @@ function withUnavailableEdge(row: PredictionEvidenceObject): PredictionEvidenceO
       edgeRecoverySource: null,
       edgeRecoveryConfidence: null,
       edgeMissingReason: "edge_unavailable",
+    },
+  };
+}
+
+function americanToImpliedPct(american: number | null): number | null {
+  if (american === null || !Number.isFinite(american) || american === 0) return null;
+  const implied = american < 0 ? -american / (-american + 100) : 100 / (american + 100);
+  return +(implied * 100).toFixed(2);
+}
+
+function noVigPickedPct(pickedAmerican: number | null, oppositeAmerican: number | null): number | null {
+  const picked = americanToImpliedPct(pickedAmerican);
+  const opposite = americanToImpliedPct(oppositeAmerican);
+  if (picked === null || opposite === null || picked + opposite <= 0) return null;
+  return +((picked / (picked + opposite)) * 100).toFixed(2);
+}
+
+function fiSide(row: PredictionEvidenceObject): "over" | "under" | null {
+  if (row.identity.marketType !== "FI") return null;
+  const pick = String(row.identity.pick ?? "").toLowerCase();
+  if (pick.includes("yrfi") || pick.includes("over")) return "over";
+  if (pick.includes("nrfi") || pick.includes("under")) return "under";
+  return null;
+}
+
+function oppositeSide(side: "over" | "under"): "over" | "under" {
+  return side === "over" ? "under" : "over";
+}
+
+function withRecoveredFiPricing(args: {
+  row: PredictionEvidenceObject;
+  pickedPrice: number;
+  oppositePrice: number | null;
+  source: "current" | "history";
+  observedAt: string | null;
+}): PredictionEvidenceObject {
+  const { row, pickedPrice, oppositePrice, source, observedAt } = args;
+  const marketImplied = noVigPickedPct(pickedPrice, oppositePrice);
+  const model = row.modelStatsEvidence.modelProbability;
+  const edge = typeof model === "number" && marketImplied !== null
+    ? +(model - marketImplied).toFixed(2)
+    : row.modelStatsEvidence.edge;
+  const priceScore = priceQualityScore(pickedPrice);
+  const edgeScore = modelEdgeScore(edge, model);
+  const recoverySource = source === "history" ? "line_history" : "current_source";
+  return {
+    ...row,
+    identity: {
+      ...row.identity,
+      priceAmerican: pickedPrice,
+    },
+    modelStatsEvidence: {
+      ...row.modelStatsEvidence,
+      marketImpliedProbability: marketImplied ?? row.modelStatsEvidence.marketImpliedProbability,
+      edge,
+      deterministicScores: {
+        ...row.modelStatsEvidence.deterministicScores,
+        modelEdgeScore: edgeScore,
+        priceQualityScore: priceScore,
+      },
+      edgeRecovered: edge !== null && row.modelStatsEvidence.edge === null,
+      edgeRecoverySource: edge !== null && row.modelStatsEvidence.edge === null ? "model_minus_market_implied" : row.modelStatsEvidence.edgeRecoverySource,
+      edgeRecoveryConfidence: edge !== null && row.modelStatsEvidence.edge === null ? "high" : row.modelStatsEvidence.edgeRecoveryConfidence,
+      edgeMissingReason: edge !== null ? null : row.modelStatsEvidence.edgeMissingReason,
+    },
+    marketEvidence: {
+      ...row.marketEvidence,
+      lineMovement: {
+        ...row.marketEvidence.lineMovement,
+        currentAmerican: row.marketEvidence.lineMovement.currentAmerican ?? pickedPrice,
+        displayCurrentAmerican: row.marketEvidence.lineMovement.displayCurrentAmerican ?? pickedPrice,
+        lastMoveCurrentAmerican: row.marketEvidence.lineMovement.lastMoveCurrentAmerican ?? pickedPrice,
+        lastMoveAt: row.marketEvidence.lineMovement.lastMoveAt ?? observedAt,
+      },
+    },
+    priceValueEvidence: {
+      ...row.priceValueEvidence,
+      priceAmerican: pickedPrice,
+      priceSource: `${recoverySource}_recovered`,
+      priceNullReason: null,
+      marketImpliedProbability: marketImplied ?? row.priceValueEvidence.marketImpliedProbability,
+      edge,
+      priceQualityScore: priceScore,
+      heavyJuiceWarning: pickedPrice <= -150,
+      plusMoneyValueFlag: pickedPrice > 0 && (edge ?? 0) > 0,
+      priceBecameUnplayable: priceScore < 20,
+      priceRecovered: true,
+      priceRecoverySource: recoverySource,
+      priceRecoveryConfidence: marketImplied !== null ? "high" : "medium",
+      priceDisplayAllowed: true,
+    },
+    internalGradeDimensions: {
+      ...row.internalGradeDimensions,
+      priceQualityScore: priceScore,
+      modelStatSupportScore: edgeScore,
+      bettingValueStrengthScore: Math.max(row.internalGradeDimensions.bettingValueStrengthScore, Math.min(100, priceScore * 0.45 + Math.max(0, edge ?? 0) * 5)),
     },
   };
 }
@@ -266,7 +363,43 @@ async function applyTrustedEvidenceRecovery(args: {
       return entries;
     }));
   }
-  return args.selected.map((row) => {
+  const { supabase } = await import("@/lib/db/supabase");
+  const recoverFiPricing = async (row: PredictionEvidenceObject): Promise<PredictionEvidenceObject> => {
+    if (
+      row.evidenceSource.kind !== "current_live" ||
+      row.identity.marketType !== "FI" ||
+      row.priceValueEvidence.priceAmerican !== null
+    ) {
+      return row;
+    }
+    const side = fiSide(row);
+    const gameId = Number(row.identity.externalId);
+    if (side === null || !Number.isFinite(gameId)) return row;
+    const picked = await getCurrentOrLastKnownLine({
+      supabase,
+      gameId,
+      marketType: "first_inning_total",
+      side,
+      field: "odds_american",
+    });
+    if (picked.value === null || !Number.isFinite(picked.value)) return row;
+    const opposite = await getCurrentOrLastKnownLine({
+      supabase,
+      gameId,
+      marketType: "first_inning_total",
+      side: oppositeSide(side),
+      field: "odds_american",
+    });
+    return withRecoveredFiPricing({
+      row,
+      pickedPrice: picked.value,
+      oppositePrice: opposite.value,
+      source: picked.source ?? "history",
+      observedAt: picked.observed_at,
+    });
+  };
+
+  const recovered = await Promise.all(args.selected.map(async (row) => {
     let next = row;
     if (
       next.evidenceSource.kind === "current_live" &&
@@ -287,6 +420,8 @@ async function applyTrustedEvidenceRecovery(args: {
         next = withUnavailableEdge(next);
       }
     }
+    next = await recoverFiPricing(next);
     return next;
-  });
+  }));
+  return recovered;
 }

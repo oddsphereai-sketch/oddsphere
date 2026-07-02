@@ -38,6 +38,14 @@
       "schedule": "12,27,42,57 0-3 * * *"
     },
     {
+      "path": "/api/cron/daily-edge-data-health",
+      "schedule": "35 13-23 * * *"
+    },
+    {
+      "path": "/api/cron/daily-edge-data-health",
+      "schedule": "35 0-3 * * *"
+    },
+    {
       "path": "/api/cron/ai-daily-edge-shadow?sport=mlb&markets=ML,TOTAL",
       "schedule": "22 13-23 * * *"
     },

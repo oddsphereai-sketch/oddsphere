@@ -77,6 +77,10 @@ function marketTypeForRecovery(row: PredictionEvidenceObject): "moneyline" | "to
   return null;
 }
 
+function isFiTossUp(row: PredictionEvidenceObject): boolean {
+  return row.identity.marketType === "FI" && /toss[\s-]*up/i.test(String(row.identity.pick ?? ""));
+}
+
 async function recoverPriceDiagnostic(row: PredictionEvidenceObject) {
   if (row.priceValueEvidence.priceAmerican !== null) {
     return {
@@ -85,6 +89,15 @@ async function recoverPriceDiagnostic(row: PredictionEvidenceObject) {
       source: row.priceValueEvidence.priceSource,
       observedAt: row.evidenceSource.asOfTimestamp,
       note: "Price already present in selected evidence.",
+    };
+  }
+  if (isFiTossUp(row)) {
+    return {
+      status: "fi_toss_up_price_not_required",
+      recoveredPrice: null,
+      source: null,
+      observedAt: row.evidenceSource.asOfTimestamp,
+      note: "FI Toss-Up has no actionable YRFI/NRFI side, so a picked-side price is not required and should not be treated as a data gap.",
     };
   }
   const side = sideForRecovery(row);
@@ -148,6 +161,9 @@ async function recoverPriceDiagnostic(row: PredictionEvidenceObject) {
 function coverage(rows: PredictionEvidenceObject[]) {
   const rowCount = rows.length;
   const c = (fn: (row: PredictionEvidenceObject) => boolean) => rows.filter(fn).length;
+  const actionableRows = rows.filter((row) => !(row.identity.marketType === "FI" && (isFiTossUp(row) || row.identity.pick === null)));
+  const actionableCount = actionableRows.length;
+  const actionable = (fn: (row: PredictionEvidenceObject) => boolean) => actionableRows.filter(fn).length;
   return {
     rows: rowCount,
     price: { count: c((row) => row.priceValueEvidence.priceAmerican !== null), pct: pct(c((row) => row.priceValueEvidence.priceAmerican !== null), rowCount) },
@@ -173,6 +189,10 @@ function coverage(rows: PredictionEvidenceObject[]) {
     sharpSignal: { count: c((row) => row.marketEvidence.sharpBookSignalAvailable), pct: pct(c((row) => row.marketEvidence.sharpBookSignalAvailable), rowCount) },
     sharpAny: { count: c((row) => row.marketEvidence.sharpBookSplitsAvailable || row.marketEvidence.sharpBookSignalAvailable), pct: pct(c((row) => row.marketEvidence.sharpBookSplitsAvailable || row.marketEvidence.sharpBookSignalAvailable), rowCount) },
     marketRead: { count: c((row) => row.marketEvidence.marketReadRaw !== null), pct: pct(c((row) => row.marketEvidence.marketReadRaw !== null), rowCount) },
+    actionableRows: actionableCount,
+    actionablePrice: { count: actionable((row) => row.priceValueEvidence.priceAmerican !== null), pct: pct(actionable((row) => row.priceValueEvidence.priceAmerican !== null), actionableCount) },
+    actionableMarketImplied: { count: actionable((row) => row.modelStatsEvidence.marketImpliedProbability !== null), pct: pct(actionable((row) => row.modelStatsEvidence.marketImpliedProbability !== null), actionableCount) },
+    actionableEdge: { count: actionable((row) => row.modelStatsEvidence.edge !== null), pct: pct(actionable((row) => row.modelStatsEvidence.edge !== null), actionableCount) },
   };
 }
 
