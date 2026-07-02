@@ -124,6 +124,41 @@ function evidenceSplitConflictKind(row: PredictionEvidenceObject): "consensus_ag
   return null;
 }
 
+function soccerLikePickLabel(row: PredictionEvidenceObject): string {
+  const raw = String(row.identity.pick ?? "").toLowerCase();
+  if (row.identity.marketType === "TOTAL") {
+    if (raw === "over" || raw.startsWith("over")) return "the Over";
+    if (raw === "under" || raw.startsWith("under")) return "the Under";
+    return row.identity.pick ?? "the total pick";
+  }
+  if (row.identity.normalizedMarket === "first_inning") {
+    if (raw === "yes") return "BTTS Yes";
+    if (raw === "no") return "BTTS No";
+    return row.identity.pick ?? "the BTTS pick";
+  }
+  if (raw === "draw") return "the draw";
+  return "the match-result side";
+}
+
+function soccerLikeMovementPhrase(row: PredictionEvidenceObject): string {
+  const pick = soccerLikePickLabel(row);
+  const movement = row.marketEvidence.lineMovement.movementTowardAgainstPick ??
+    row.marketEvidence.lineMovement.directionRelativeToPick ??
+    null;
+  if (movement === "toward_pick" || movement === "support") return `Odds movement supports ${pick}.`;
+  if (movement === "against_pick" || movement === "resistance") return `Odds movement is against ${pick}.`;
+  return "Odds movement has not created a clear market signal.";
+}
+
+function soccerLikeMovementPhraseForLabel(row: PredictionEvidenceObject, label: string): string {
+  const pick = soccerLikePickLabel(row);
+  if (label === "clean_market_support") return `Odds movement supports ${pick}.`;
+  if (label === "market_resistance" || label === "market_resistance_with_model_value_override") {
+    return `Odds movement is against ${pick}.`;
+  }
+  return soccerLikeMovementPhrase(row);
+}
+
 export function sharpContextStatusForEvidence(row: PredictionEvidenceObject): SharpContextStatus {
   const caps = capabilitiesForEvidence(row);
   if (!caps.expectsSharpBookContext) return "sharp_context_not_required";
@@ -198,6 +233,12 @@ export function deriveDailyEdgeMemberCopyLabel(args: {
   if (row.identity.originalPlayGrade === "Lean" && dimensions.bettingValueStrengthScore < 45 && dimensions.winCaseStrengthScore < 55) {
     return row.identity.marketType === "TOTAL" ? "thin_edge" : "price_capped";
   }
+  if (caps.isSoccerLike) {
+    if (market.priceMovementDirection === "toward_pick") return "clean_market_support";
+    if (market.priceMovementDirection === "against_pick") {
+      return edge >= 5 ? "market_resistance_with_model_value_override" : "market_resistance";
+    }
+  }
   if (read === "resistance" || read === "consensus_resistance") {
     return edge >= 5 ? "market_resistance_with_model_value_override" : "market_resistance";
   }
@@ -239,6 +280,25 @@ function marketReadCopy(row: PredictionEvidenceObject, label: string): string {
     if (label === "fi_model_support") return `${pick} is mostly model/stat driven, with price and FI context carrying the read.`;
     if (label === "fi_thin_edge") return `The FI model leans ${pick}, but the edge is thin at this number.`;
     return `${pick} is mostly model/stat driven, with price and FI context carrying the read.`;
+  }
+
+  if (caps.isSoccerLike) {
+    const movement = soccerLikeMovementPhraseForLabel(row, label);
+    if (label === "clean_market_support") return grade === "No Play"
+      ? `${movement} The current price or model edge still is not enough to make it actionable.`
+      : `${movement} Price and model edge determine how actionable the read is.`;
+    if (label === "market_resistance") return grade === "No Play"
+      ? `${movement} The model/value case is not strong enough to make this actionable at the current number.`
+      : `${movement} That market friction remains part of the read.`;
+    if (label === "market_resistance_with_model_value_override") {
+      if (grade === "No Play") return `${movement} The model/value case is still not strong enough to make this actionable.`;
+      return `${movement} The model/value edge has to carry the thesis through that friction.`;
+    }
+    if (label === "likely_winner_bad_price") return "The win case may be reasonable, but the current price leaves too little actionable betting value.";
+    if (label === "price_capped") return "The model case is present, but the current price caps how strong the read can be.";
+    if (label === "thin_edge") return `${movement} The edge is still thin enough to keep this below a stronger play.`;
+    if (label === "insufficient_core_data") return "Core price/model context is incomplete, so this is not actionable yet.";
+    return "The read leans on model value, price, odds movement, and soccer-specific match context.";
   }
 
   if (label === "clean_market_support") return grade === "No Play"
@@ -368,11 +428,13 @@ function supportingEvidenceCopy(row: PredictionEvidenceObject, label: string): s
     return `${pick} has ${model} FI model probability with about ${edge} edge at ${odds}.`;
   }
 
+  const movementContext = caps.isSoccerLike ? ` ${soccerLikeMovementPhraseForLabel(row, label)}` : "";
+
   if (row.identity.marketType === "TOTAL") {
     const projected = row.modelStatsEvidence.projectedTotal;
     const line = row.identity.lineValue;
     const projectionText = projected !== null && line !== null ? `Projection is ${projected} against line ${line}` : "Projection/line context is limited";
-    return `${projectionText}; ${pick} has ${model} model probability versus ${implied} implied at ${odds}, for about ${edge} edge.${lowGradeContext}`;
+    return `${projectionText}; ${pick} has ${model} model probability versus ${implied} implied at ${odds}, for about ${edge} edge.${movementContext}${lowGradeContext}`;
   }
 
   if (label === "mixed_but_playable") {
@@ -381,7 +443,7 @@ function supportingEvidenceCopy(row: PredictionEvidenceObject, label: string): s
     if (splitConflict === "consensus_support_sharp_against") return `${pick} has ${model} model probability versus ${implied} implied at ${odds}, for about ${edge} edge. Consensus Splits support the pick, but Sharp Book resistance keeps the read mixed.${lowGradeContext}`;
   }
 
-  return `${pick} has ${model} model probability versus ${implied} implied at ${odds}, for about ${edge} edge.${lowGradeContext}`;
+  return `${pick} has ${model} model probability versus ${implied} implied at ${odds}, for about ${edge} edge.${movementContext}${lowGradeContext}`;
 }
 
 function riskCopy(row: PredictionEvidenceObject, label: string): string {
