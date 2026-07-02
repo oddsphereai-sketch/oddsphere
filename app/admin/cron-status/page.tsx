@@ -11,9 +11,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type Sport = "mlb" | "nba" | "nfl" | "cbb" | "cfb" | "nhl" | "ucl";
+type Sport = "mlb" | "nba" | "nfl" | "cbb" | "cfb" | "nhl" | "ucl" | "wnba" | "soccer";
 
-type SourceState = "live" | "updating" | "stale" | "error" | "unknown";
+type SourceState = "live" | "updating" | "warning" | "stale" | "error" | "unknown";
 
 type SourceStatus = {
   data_source: string;
@@ -24,14 +24,25 @@ type SourceStatus = {
   last_started_at: string | null;
   last_completed_at: string | null;
   last_status: "success" | "partial" | "failed" | "in_progress" | null;
+  last_error_message: string | null;
   records_updated: number | null;
   age_minutes: number | null;
   state: SourceState;
 };
 
+type DailyEdgeHealthAlert = {
+  sport: Sport | null;
+  refresh_started_at: string;
+  refresh_completed_at: string | null;
+  refresh_status: "success" | "partial" | "failed" | "in_progress";
+  records_updated: number | null;
+  error_message: string | null;
+};
+
 type ApiResponse = {
   as_of: string;
   sources: SourceStatus[];
+  daily_edge_health_alerts: DailyEdgeHealthAlert[];
 };
 
 const STATE_VISUAL: Record<SourceState, { label: string; dotBg: string; textColor: string; pillBg: string; pillBorder: string }> = {
@@ -48,6 +59,13 @@ const STATE_VISUAL: Record<SourceState, { label: string; dotBg: string; textColo
     textColor: "text-amber-300",
     pillBg: "bg-amber-950/30",
     pillBorder: "border-amber-700/40",
+  },
+  warning: {
+    label: "WARNING",
+    dotBg: "bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.7)]",
+    textColor: "text-yellow-300",
+    pillBg: "bg-yellow-950/30",
+    pillBorder: "border-yellow-700/50",
   },
   stale: {
     label: "STALE",
@@ -212,6 +230,38 @@ export default function AdminCronStatusPage() {
       )}
 
       {data ? (
+        <>
+        {data.daily_edge_health_alerts.length > 0 && (
+          <section className="mb-4 rounded-xl border border-yellow-700/50 bg-yellow-950/20 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-black uppercase tracking-wider text-yellow-200">
+                  Daily Edge Health Alerts
+                </h2>
+                <p className="mt-1 text-xs text-yellow-100/70">
+                  Unresolved monitor findings from the last 24 hours after repair attempts.
+                </p>
+              </div>
+              <span className="rounded-full border border-yellow-700/60 bg-yellow-950/40 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-yellow-200">
+                {data.daily_edge_health_alerts.length}
+              </span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {data.daily_edge_health_alerts.map((alert, index) => (
+                <div key={`${alert.refresh_started_at}-${alert.sport ?? "x"}-${index}`} className="rounded-lg border border-yellow-800/40 bg-black/20 p-3">
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider text-yellow-100/60">
+                    <span>{alert.sport ? alert.sport.toUpperCase() : "Cross-sport"}</span>
+                    <span>·</span>
+                    <span>{alert.refresh_status}</span>
+                    <span>·</span>
+                    <span>{new Date(alert.refresh_started_at).toLocaleString()}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-yellow-50">{alert.error_message}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
         <div className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-xl overflow-hidden">
           {/* Desktop: table */}
           <div className="hidden md:block overflow-x-auto">
@@ -290,6 +340,7 @@ export default function AdminCronStatusPage() {
             Snapshot: {new Date(data.as_of).toLocaleString()}
           </div>
         </div>
+        </>
       ) : !error ? (
         <div className="text-sm text-gray-400">Loading…</div>
       ) : null}

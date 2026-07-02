@@ -59,9 +59,10 @@ type LogRow = {
   refresh_status: "success" | "partial" | "failed" | "in_progress";
   records_updated: number | null;
   scheduled_next_refresh: string | null;
+  error_message: string | null;
 };
 
-type SourceState = "live" | "updating" | "stale" | "error" | "unknown";
+type SourceState = "live" | "updating" | "warning" | "stale" | "error" | "unknown";
 
 type SourceStatus = {
   data_source: string;
@@ -72,16 +73,26 @@ type SourceStatus = {
   last_started_at: string | null;
   last_completed_at: string | null;
   last_status: LogRow["refresh_status"] | null;
+  last_error_message: string | null;
   records_updated: number | null;
   age_minutes: number | null;
   state: SourceState;
+};
+
+type DailyEdgeHealthAlert = {
+  sport: Sport | null;
+  refresh_started_at: string;
+  refresh_completed_at: string | null;
+  refresh_status: LogRow["refresh_status"];
+  records_updated: number | null;
+  error_message: string | null;
 };
 
 async function loadLatest(data_source: string, sport: Sport | null): Promise<{ latest: LogRow | null; active: LogRow | null }> {
   // Latest completed run.
   let qCompleted = supabase
     .from("data_refresh_log")
-    .select("refresh_started_at, refresh_completed_at, refresh_status, records_updated, scheduled_next_refresh")
+    .select("refresh_started_at, refresh_completed_at, refresh_status, records_updated, scheduled_next_refresh, error_message")
     .eq("data_source", data_source)
     .neq("refresh_status", "in_progress")
     .order("refresh_started_at", { ascending: false })
@@ -94,7 +105,7 @@ async function loadLatest(data_source: string, sport: Sport | null): Promise<{ l
   const threshold = new Date(Date.now() - IN_PROGRESS_WINDOW_MS).toISOString();
   let qActive = supabase
     .from("data_refresh_log")
-    .select("refresh_started_at, refresh_completed_at, refresh_status, records_updated, scheduled_next_refresh")
+    .select("refresh_started_at, refresh_completed_at, refresh_status, records_updated, scheduled_next_refresh, error_message")
     .eq("data_source", data_source)
     .eq("refresh_status", "in_progress")
     .gte("refresh_started_at", threshold)
@@ -116,11 +127,31 @@ function deriveState(
   if (active) return "updating";
   if (!latest) return "unknown";
   if (latest.refresh_status === "failed") return "error";
+  if (latest.refresh_status === "partial") return "warning";
   if (!latest.refresh_completed_at) return "unknown";
   const ageMs = now.getTime() - new Date(latest.refresh_completed_at).getTime();
   const ageMinutes = ageMs / 60_000;
   if (ageMinutes > cfg.cadence_minutes * 2) return "stale";
   return "live";
+}
+
+async function loadDailyEdgeHealthAlerts(): Promise<DailyEdgeHealthAlert[]> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("data_refresh_log")
+    .select("sport, refresh_started_at, refresh_completed_at, refresh_status, records_updated, error_message")
+    .eq("data_source", "daily_edge_data_health")
+    .in("refresh_status", ["partial", "failed"])
+    .gte("refresh_started_at", since)
+    .order("refresh_started_at", { ascending: false })
+    .limit(12);
+  if (error) {
+    console.warn(`loadDailyEdgeHealthAlerts failed: ${error.message}`);
+    return [];
+  }
+  return ((data ?? []) as DailyEdgeHealthAlert[]).filter((row) =>
+    row.error_message !== null && row.error_message.trim() !== ""
+  );
 }
 
 export async function GET(request: Request) {
@@ -129,6 +160,7 @@ export async function GET(request: Request) {
 
   const now = new Date();
   const sources: SourceStatus[] = [];
+  const dailyEdgeHealthAlerts = await loadDailyEdgeHealthAlerts();
 
   for (const cfg of CRON_CONFIGS) {
     // Per-sport crons report MLB only in V1 (the only live sport). Cross-sport
@@ -147,6 +179,7 @@ export async function GET(request: Request) {
       last_started_at: active?.refresh_started_at ?? latest?.refresh_started_at ?? null,
       last_completed_at: latest?.refresh_completed_at ?? null,
       last_status: active ? "in_progress" : latest?.refresh_status ?? null,
+      last_error_message: active?.error_message ?? latest?.error_message ?? null,
       records_updated: latest?.records_updated ?? null,
       age_minutes: ageMinutes,
       state: deriveState(cfg, now, latest, active),
@@ -156,7 +189,7 @@ export async function GET(request: Request) {
   // Sort: errors first, then stale, then updating, then live, then unknown.
   // Within each bucket, oldest first so the most-out-of-date catches the eye.
   const STATE_ORDER: Record<SourceState, number> = {
-    error: 0, stale: 1, updating: 2, live: 3, unknown: 4,
+    error: 0, warning: 1, stale: 2, updating: 3, live: 4, unknown: 5,
   };
   sources.sort((a, b) => {
     if (STATE_ORDER[a.state] !== STATE_ORDER[b.state]) return STATE_ORDER[a.state] - STATE_ORDER[b.state];
@@ -168,5 +201,6 @@ export async function GET(request: Request) {
   return Response.json({
     as_of: now.toISOString(),
     sources,
+    daily_edge_health_alerts: dailyEdgeHealthAlerts,
   });
 }

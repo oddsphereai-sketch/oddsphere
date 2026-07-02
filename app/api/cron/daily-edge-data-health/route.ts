@@ -25,6 +25,27 @@ function parseSports(request: Request): Sport[] {
   return raw.split(",").map((sport) => sport.trim().toLowerCase()).filter(Boolean) as Sport[];
 }
 
+function buildHealthAlertSummary(args: {
+  sport: Sport;
+  unresolved: number;
+  findings: Array<{ game: string; market: string; code: string; severity: string }>;
+  repair?: { eligibleGames: number; repairedGames: number; stillUnhealthyGames: number; errors: string[] } | null;
+}): string | null {
+  if (args.unresolved <= 0 && (args.repair?.errors.length ?? 0) === 0) return null;
+  const findingSummary = args.findings
+    .filter((finding) => finding.severity === "blocking" || finding.severity === "high")
+    .slice(0, 6)
+    .map((finding) => `${finding.game} ${finding.market} ${finding.code}`)
+    .join("; ");
+  const repairSummary = args.repair
+    ? `repair eligible=${args.repair.eligibleGames} repaired=${args.repair.repairedGames} still=${args.repair.stillUnhealthyGames}`
+    : "repair not run";
+  const errorSummary = args.repair?.errors.length
+    ? ` errors=${args.repair.errors.slice(0, 2).join(" | ")}`
+    : "";
+  return `Daily Edge health unresolved ${args.sport}: unresolved=${args.unresolved}; ${repairSummary}; ${findingSummary}${errorSummary}`.slice(0, 1000);
+}
+
 export async function GET(request: Request) {
   const date = parseDateFromUrl(request);
   const sports = parseSports(request);
@@ -78,6 +99,12 @@ export async function GET(request: Request) {
         records_updated: repair?.recordsUpdated ?? 0,
         api_calls_made: repair?.apiCallsMade ?? 0,
         partial: finalUnresolved > 0 || repairErrors > 0,
+        error_message: buildHealthAlertSummary({
+          sport,
+          unresolved: finalUnresolved,
+          findings: report.findings,
+          repair,
+        }),
         details: {
           date,
           sport,

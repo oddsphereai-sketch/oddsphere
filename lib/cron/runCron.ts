@@ -46,6 +46,8 @@ export type CronHandlerResult = {
   api_calls_made?: number;
   /** If true, the run is marked 'partial' in the log instead of 'success'. */
   partial?: boolean;
+  /** Optional compact summary persisted to data_refresh_log.error_message. */
+  error_message?: string | null;
   /** Free-form additional payload echoed back in the JSON response. */
   details?: Record<string, unknown>;
 };
@@ -266,6 +268,7 @@ async function runOneStructured(
       partial: r.partial,
       records_updated: r.records_updated,
       api_calls_made: r.api_calls_made,
+      error_message: r.error_message,
     });
     return {
       status: r.partial ? "partial" : "ok",
