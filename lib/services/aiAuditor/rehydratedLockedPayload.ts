@@ -243,10 +243,29 @@ function lineMovement(snapshot: Record<string, unknown> | null): Record<string, 
 
 function projectedScore(snapshot: Record<string, unknown> | null): { away: number | null; home: number | null } | null {
   const raw = snapshot?.predicted_scores_at_lock;
-  if (raw === null || typeof raw !== "object") return null;
-  const record = raw as Record<string, unknown>;
-  const away = num(record.away) ?? num(record.away_score) ?? num(record.away_runs);
-  const home = num(record.home) ?? num(record.home_score) ?? num(record.home_runs);
+  let record: Record<string, unknown> | null = null;
+  if (raw !== null && typeof raw === "object") {
+    record = raw as Record<string, unknown>;
+  } else if (snapshot?.model !== null && typeof snapshot?.model === "object") {
+    // Soccer locked snapshots store expected goals under `model.lambda_*`
+    // rather than the MLB/NBA-style predicted_scores_at_lock object.
+    record = snapshot.model as Record<string, unknown>;
+  }
+  if (record === null) return null;
+  const away =
+    num(record.away) ??
+    num(record.away_score) ??
+    num(record.away_runs) ??
+    num(record.lambda_away) ??
+    num(record.raw_projected_away_goals) ??
+    num(record.reconciled_away_goals);
+  const home =
+    num(record.home) ??
+    num(record.home_score) ??
+    num(record.home_runs) ??
+    num(record.lambda_home) ??
+    num(record.raw_projected_home_goals) ??
+    num(record.reconciled_home_goals);
   return away !== null || home !== null ? { away, home } : null;
 }
 
