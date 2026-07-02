@@ -227,6 +227,7 @@ type Row = {
 
 const TRACKING_PAGE_SIZE = 1000;
 const TRACKING_GRADE_ID_CHUNK_SIZE = 500;
+const EFFECTIVE_TRACKING_GRADE_CUTOVER_DATE = "2026-07-01";
 
 function storedGrade(record: PredictionRecordRow): string {
   return String(record.play_grade ?? "").trim().toLowerCase();
@@ -379,6 +380,7 @@ function actionabilityGrade(record: PredictionRecordRow, grade: string): string 
 export function effectiveTrackingPlayGrade(record: PredictionRecordRow): string {
   let grade = storedGrade(record);
   if (grade === "best_angle" && record.best_angle === false) return "lean";
+  if (record.slate_date < EFFECTIVE_TRACKING_GRADE_CUTOVER_DATE) return grade;
   grade = actionabilityGrade(record, grade);
 
   if (
@@ -782,7 +784,11 @@ export async function computeTrackingAggregate(opts: {
   const weekFrom = shiftDate(today, -6);
 
   // Yesterday slice
-  const yesterdayRows = rows.filter((r) => r.record.slate_date === yesterdayDate);
+  const yesterdayRows = rows.filter((r) =>
+    r.record.slate_date === yesterdayDate &&
+    r.grade !== null &&
+    r.grade.result !== "pending"
+  );
   if (yesterdayRows.length > 0) {
     result.yesterday.date = yesterdayDate;
     for (const r of yesterdayRows) accumulate(result.yesterday.overall, r);

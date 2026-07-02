@@ -25,9 +25,9 @@ function compact(n: number): string {
 }
 
 function dateRange(from: string | null, to: string | null): string {
-  if (from === null && to === null) return "Updates as tracked results settle";
+  if (from === null && to === null) return "Historical model archive";
   if (from !== null && to !== null && from !== to) return `${from} through ${to}`;
-  return from ?? to ?? "Updates as tracked results settle";
+  return from ?? to ?? "Historical model archive";
 }
 
 function MetricCard({
@@ -66,18 +66,17 @@ export default async function PublicTrackRecordPage() {
     <main className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
       <header className="mx-auto mb-12 max-w-3xl text-center">
         <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-violet-300">
-          Public tracking
+          Model performance archive
         </p>
         <h1 className="text-4xl font-black tracking-tight sm:text-5xl">
-          Tracked Results Since Launch
+          Lifetime Track Record
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-gray-200 sm:text-lg">
-          OddSphere tracks settled model predictions by sport and market from the
-          public launch window beginning June 7, 2026. Pending games are kept separate
-          and win rate excludes pushes, voids, and pending rows.
+          Historical model records across OddSphere sports and markets. This public page is a
+          lifetime model archive, not a live member-only Daily Edge ledger.
         </p>
         <p className="mt-3 text-xs text-gray-400">
-          Public launch tracking, not legacy all-time history · Last updated {summary.lastUpdatedLabel}
+          Lifetime archive · Last updated {summary.lastUpdatedLabel}
         </p>
       </header>
 
@@ -93,25 +92,25 @@ export default async function PublicTrackRecordPage() {
         <>
           <section className="mb-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
-              label="Overall settled record"
+              label="Lifetime record"
               value={record(summary.overall)}
-              sub={`${pct(summary.overall)} win rate · ${compact(summary.overall.picks)} tracked rows`}
+              sub={`${pct(summary.overall)} win rate · ${compact(summary.overall.picks)} historical picks`}
             />
             <MetricCard
-              label="Settled"
-              value={compact(summary.overall.settled)}
-              sub={`${summary.overall.pending.toLocaleString()} pending rows update after games settle`}
+              label="Tracked Picks"
+              value={compact(summary.overall.picks)}
+              sub="Historical archive only; no pending rows are mixed into this view"
               tone="emerald"
             />
             <MetricCard
-              label="Best Angle"
-              value={record(summary.bestAngles)}
-              sub={`${pct(summary.bestAngles)} · ${compact(summary.bestAngles.picks)} tracked top-grade rows`}
+              label="Sports"
+              value={String(summary.sports.length)}
+              sub="Football, basketball, baseball, soccer, and hockey model families"
             />
             <MetricCard
-              label="Lean"
-              value={record(summary.leans)}
-              sub={`${pct(summary.leans)} · ${compact(summary.leans.picks)} tracked Lean rows`}
+              label="Markets"
+              value={String(summary.markets.length)}
+              sub="Moneyline, totals, first inning, Double Chance, and more"
               tone="amber"
             />
           </section>
@@ -121,11 +120,11 @@ export default async function PublicTrackRecordPage() {
               <div>
                 <h2 className="text-2xl font-black tracking-tight">Sport summary</h2>
                 <p className="mt-1 text-sm text-gray-400">
-                  Since public launch: {dateRange(summary.dateRange.from, summary.dateRange.to)}
+                  {summary.dateRange.label}: {dateRange(summary.dateRange.from, summary.dateRange.to)}
                 </p>
               </div>
               <p className="text-xs text-gray-500">
-                Public accuracy counts only predictions with a tracked side.
+                Public accuracy is grouped by sport family and market.
               </p>
             </div>
             <div className="mt-5 grid gap-3 md:grid-cols-3">
@@ -138,10 +137,10 @@ export default async function PublicTrackRecordPage() {
                     </p>
                   </div>
                   <p className="mt-2 text-sm text-gray-300">
-                    {record(sport.metrics)} · {sport.metrics.pending.toLocaleString()} pending
+                    {record(sport.metrics)} · {sport.metrics.picks.toLocaleString()} picks
                   </p>
                   <p className="mt-1 text-xs text-gray-500">
-                    {sport.metrics.picks.toLocaleString()} total tracked rows
+                    {sport.metrics.picks.toLocaleString()} historical picks
                   </p>
                 </div>
               ))}
@@ -166,7 +165,7 @@ export default async function PublicTrackRecordPage() {
                 <span>Market</span>
                 <span className="text-right">Record</span>
                 <span className="text-right">Win Rate</span>
-                <span className="text-right">Pending</span>
+                <span className="text-right">Picks</span>
               </div>
               <div className="divide-y divide-white/10">
                 {markets.map((row) => (
@@ -184,7 +183,7 @@ export default async function PublicTrackRecordPage() {
                     </div>
                     <p className="text-sm tabular-nums text-gray-200 md:text-right">{record(row.metrics)}</p>
                     <p className="text-sm font-black tabular-nums text-violet-300 md:text-right">{pct(row.metrics)}</p>
-                    <p className="text-sm tabular-nums text-gray-400 md:text-right">{row.metrics.pending.toLocaleString()}</p>
+                    <p className="text-sm tabular-nums text-gray-400 md:text-right">{row.metrics.picks.toLocaleString()}</p>
                   </div>
                 ))}
                 {markets.length === 0 ? (

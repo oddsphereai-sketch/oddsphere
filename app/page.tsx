@@ -76,7 +76,7 @@ const faq: FaqItem[] = [
   },
   {
     q: "How is the track record updated?",
-    a: "Tracked results update after games settle and grading completes. Pending rows are separated from settled win rate so the public view does not mix unresolved predictions with finished outcomes.",
+    a: "The public track record is a lifetime model archive updated periodically from historical model records. Member-only Daily Edge tracking continues separately inside the dashboard.",
   },
   {
     q: "Does OddSphere place bets for users?",
@@ -178,9 +178,9 @@ function TrackRecordPreview({ summary }: { summary: PublicTrackRecordSummary }) 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-300">
-            Tracked results
+            Lifetime tracking
           </p>
-          <h3 className="mt-2 text-2xl font-black text-white">Public record preview</h3>
+          <h3 className="mt-2 text-2xl font-black text-white">Lifetime model record preview</h3>
         </div>
         <p className="text-xs text-gray-500">Updated {summary.lastUpdatedLabel}</p>
       </div>
@@ -192,9 +192,9 @@ function TrackRecordPreview({ summary }: { summary: PublicTrackRecordSummary }) 
       ) : (
         <>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <StatPill label="Overall" value={trackingRecord(summary)} />
+            <StatPill label="Lifetime" value={trackingRecord(summary)} />
             <StatPill label="Win Rate" value={trackingPct(summary)} />
-            <StatPill label="Pending" value={summary.overall.pending.toLocaleString()} />
+            <StatPill label="Tracked Picks" value={summary.overall.picks.toLocaleString()} />
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-4">
             {markets.map((row) => (
@@ -214,7 +214,7 @@ function TrackRecordPreview({ summary }: { summary: PublicTrackRecordSummary }) 
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs leading-relaxed text-gray-500">
-          Results update after games settle. Pending rows are separated from settled hit rate.
+          Lifetime archive across historical model families. Daily Edge member tracking remains separate.
         </p>
         <Link href="/track-record" className="text-sm font-bold text-violet-200 hover:text-violet-100">
           View full track record
@@ -520,7 +520,7 @@ export default async function HomePage() {
                     ? "Consensus-only reader context"
                   : sport === "World Cup"
                     ? "Soccer model, movement, BTTS and totals context"
-                    : "Limited tracked rows appear as seasonal data is active"}
+                    : "Historical model-family records in the archive"}
               </p>
             </div>
           ))}

@@ -1,8 +1,4 @@
-import { supabase } from "@/lib/db/supabase";
-import {
-  computeTrackingAggregate,
-  type AggregateMetrics,
-} from "@/lib/services/trackingAggregateService";
+import { LAST_UPDATED, TRACK_RECORD } from "@/app/data/trackRecord";
 import type {
   TrackedMarketV17,
   TrackedSport,
@@ -53,6 +49,18 @@ export type PublicTrackRecordSummary = {
   unavailableReason?: string;
 };
 
+const ZERO_METRIC: PublicTrackRecordMetric = {
+  picks: 0,
+  wins: 0,
+  losses: 0,
+  pushes: 0,
+  voids: 0,
+  pending: 0,
+  settled: 0,
+  decided: 0,
+  winPct: null,
+};
+
 const SPORT_LABEL: Record<TrackedSport, string> = {
   mlb: "MLB",
   wnba: "WNBA",
@@ -66,15 +74,15 @@ const SPORT_LABEL: Record<TrackedSport, string> = {
 };
 
 const SPORT_ORDER: TrackedSport[] = [
+  "nfl",
+  "cfb",
+  "nba",
+  "cbb",
   "mlb",
   "wnba",
   "soccer",
-  "nba",
-  "nhl",
-  "nfl",
-  "cfb",
-  "cbb",
   "ucl",
+  "nhl",
 ];
 
 const MARKET_LABEL: Record<TrackedMarketV17, string> = {
@@ -89,20 +97,50 @@ const MARKET_LABEL: Record<TrackedMarketV17, string> = {
   btts: "BTTS",
 };
 
-function toMetric(m: AggregateMetrics): PublicTrackRecordMetric {
-  const settled = m.wins + m.losses + m.pushes + m.voids;
-  const decided = m.wins + m.losses;
+function metric(wins: number, total: number): PublicTrackRecordMetric {
+  const losses = Math.max(0, total - wins);
   return {
-    picks: m.picks,
-    wins: m.wins,
-    losses: m.losses,
-    pushes: m.pushes,
-    voids: m.voids,
-    pending: m.pending,
-    settled,
-    decided,
-    winPct: m.win_pct,
+    picks: total,
+    wins,
+    losses,
+    pushes: 0,
+    voids: 0,
+    pending: 0,
+    settled: total,
+    decided: total,
+    winPct: total > 0 ? Math.round((wins / total) * 1000) / 10 : null,
   };
+}
+
+function addMetric(a: PublicTrackRecordMetric, b: PublicTrackRecordMetric): PublicTrackRecordMetric {
+  return metric(a.wins + b.wins, a.picks + b.picks);
+}
+
+function parseSport(market: string): TrackedSport {
+  const prefix = market.split(" ")[0]?.toUpperCase();
+  if (prefix === "NFL") return "nfl";
+  if (prefix === "CFB") return "cfb";
+  if (prefix === "NBA") return "nba";
+  if (prefix === "CBB") return "cbb";
+  if (prefix === "MLB") return "mlb";
+  if (prefix === "UCL") return "ucl";
+  if (prefix === "NHL") return "nhl";
+  return "mlb";
+}
+
+function parseMarket(market: string): TrackedMarketV17 {
+  const text = market.toLowerCase();
+  if (text.includes("double chance")) return "double_chance";
+  if (text.includes("nrfi/yrfi")) return "first_inning";
+  if (text.includes("nrfi")) return "nrfi";
+  if (text.includes("yrfi")) return "yrfi";
+  if (text.includes("o/u")) return "total";
+  if (text.includes("ml")) return "moneyline";
+  return "moneyline";
+}
+
+function cleanMarketLabel(raw: string): string {
+  return raw.replace(/\s*\([^)]*\)\s*$/, "").trim();
 }
 
 function compareSport(a: TrackedSport, b: TrackedSport): number {
@@ -112,145 +150,53 @@ function compareSport(a: TrackedSport, b: TrackedSport): number {
   return a.localeCompare(b);
 }
 
-function formatUpdatedLabel(iso: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  }).format(new Date(iso));
-}
-
 export async function getPublicTrackRecordSummary(): Promise<PublicTrackRecordSummary> {
   const asOf = new Date().toISOString();
-  const base: Omit<PublicTrackRecordSummary, "overall" | "bestAngles" | "leans"> = {
+  let overall = ZERO_METRIC;
+  const sportMap = new Map<TrackedSport, PublicTrackRecordMetric>();
+
+  const markets: PublicTrackRecordMarket[] = TRACK_RECORD.map((row) => {
+    const sport = parseSport(row.market);
+    const market = parseMarket(row.market);
+    const metrics = metric(row.lifetimeWins, row.lifetimeTotal);
+    overall = addMetric(overall, metrics);
+    sportMap.set(sport, addMetric(sportMap.get(sport) ?? ZERO_METRIC, metrics));
+    return {
+      sport,
+      sportLabel: SPORT_LABEL[sport] ?? sport.toUpperCase(),
+      market,
+      marketLabel: cleanMarketLabel(row.market),
+      metrics,
+      bestAngles: ZERO_METRIC,
+      leans: ZERO_METRIC,
+    };
+  }).sort((a, b) => {
+    const sportDiff = compareSport(a.sport, b.sport);
+    if (sportDiff !== 0) return sportDiff;
+    return a.marketLabel.localeCompare(b.marketLabel);
+  });
+
+  const sports = Array.from(sportMap.entries())
+    .map(([sport, metrics]) => ({
+      sport,
+      label: SPORT_LABEL[sport] ?? sport.toUpperCase(),
+      metrics,
+    }))
+    .sort((a, b) => compareSport(a.sport, b.sport));
+
+  return {
     asOf,
     tablesInitialized: true,
     dateRange: {
-      label: "Tracked Results Since Launch",
+      label: "Lifetime Model Archive",
       from: null,
-      to: null,
+      to: LAST_UPDATED,
     },
-    sports: [],
-    markets: [],
-    lastUpdatedLabel: formatUpdatedLabel(asOf),
+    overall,
+    bestAngles: ZERO_METRIC,
+    leans: ZERO_METRIC,
+    sports,
+    markets,
+    lastUpdatedLabel: LAST_UPDATED,
   };
-
-  try {
-    const aggregate = await computeTrackingAggregate({
-      supabase,
-      includeLaunchDay: false,
-    });
-
-    if (!aggregate.tablesInitialized) {
-      return {
-        ...base,
-        tablesInitialized: false,
-        unavailableReason: "Tracking tables are not initialized yet.",
-        overall: toMetric(aggregate.overall),
-        bestAngles: toMetric(aggregate.bestAngles),
-        leans: toMetric(aggregate.leans),
-      };
-    }
-
-    const settledDates = aggregate.recentlySettled
-      .map((p) => p.slate_date)
-      .filter((d): d is string => typeof d === "string" && d.length > 0);
-    const recentDates = [
-      ...settledDates,
-      aggregate.thisMonth.from,
-    ].filter((d): d is string => typeof d === "string" && d.length > 0);
-    const sortedDates = [...new Set(recentDates)].sort();
-
-    const sports = aggregate.bySport
-      .filter((row) => row.metrics.picks > 0)
-      .map((row) => ({
-        sport: row.label,
-        label: SPORT_LABEL[row.label] ?? row.label.toUpperCase(),
-        metrics: toMetric(row.metrics),
-      }))
-      .sort((a, b) => compareSport(a.sport, b.sport));
-
-    const markets = aggregate.bySportMarket
-      .filter((row) => row.metrics.picks > 0)
-      .map((row) => ({
-        sport: row.sport,
-        sportLabel: SPORT_LABEL[row.sport] ?? row.sport.toUpperCase(),
-        market: row.market,
-        marketLabel: MARKET_LABEL[row.market] ?? row.market,
-        metrics: toMetric(row.metrics),
-        bestAngles: toMetric(row.bestAngles),
-        leans: toMetric(row.leans),
-      }))
-      .sort((a, b) => {
-        const sportDiff = compareSport(a.sport, b.sport);
-        if (sportDiff !== 0) return sportDiff;
-        return a.marketLabel.localeCompare(b.marketLabel);
-      });
-
-    return {
-      ...base,
-      tablesInitialized: aggregate.tablesInitialized,
-      dateRange: {
-        label: "Tracked Results Since Launch",
-        from: "2026-06-07",
-        to: sortedDates[sortedDates.length - 1] ?? null,
-      },
-      overall: toMetric(aggregate.overall),
-      bestAngles: toMetric(aggregate.bestAngles),
-      leans: toMetric(aggregate.leans),
-      sports,
-      markets,
-    };
-  } catch (error) {
-    return {
-      ...base,
-      tablesInitialized: false,
-      unavailableReason: "Tracking summary is temporarily unavailable.",
-      overall: toMetric({
-        picks: 0,
-        wins: 0,
-        losses: 0,
-        pushes: 0,
-        voids: 0,
-        pending: 0,
-        win_pct: null,
-        avg_confidence: null,
-        avg_edge: null,
-        avg_ev: null,
-        brier_score: null,
-        log_loss: null,
-      }),
-      bestAngles: toMetric({
-        picks: 0,
-        wins: 0,
-        losses: 0,
-        pushes: 0,
-        voids: 0,
-        pending: 0,
-        win_pct: null,
-        avg_confidence: null,
-        avg_edge: null,
-        avg_ev: null,
-        brier_score: null,
-        log_loss: null,
-      }),
-      leans: toMetric({
-        picks: 0,
-        wins: 0,
-        losses: 0,
-        pushes: 0,
-        voids: 0,
-        pending: 0,
-        win_pct: null,
-        avg_confidence: null,
-        avg_edge: null,
-        avg_ev: null,
-        brier_score: null,
-        log_loss: null,
-      }),
-    };
-  }
 }
