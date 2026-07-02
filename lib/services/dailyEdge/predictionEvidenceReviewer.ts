@@ -28,6 +28,9 @@ function pushIfMissing(target: string[], key: string, value: unknown): void {
 
 function requiredFieldsFor(row: PredictionEvidenceObject): string[] {
   const caps = dailyEdgeMarketCapabilities(row.identity.sport, row.identity.normalizedMarket === "total" ? "total" : row.identity.normalizedMarket === "moneyline" ? "moneyline" : "firstInning");
+  if (caps.isFirstInning && isFiHeldNoSide(row)) {
+    return ["fi_context"];
+  }
   const fields = ["pick", "model_probability"];
   if (!caps.isFirstInning) fields.push("price", "market_implied_probability", "edge");
   if (row.identity.marketType === "TOTAL") fields.push("line_value", "projected_total");

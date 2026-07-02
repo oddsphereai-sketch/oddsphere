@@ -7,6 +7,7 @@ import { buildPredictionEvidenceForDailyEdgeEvaluation } from "@/lib/services/da
 import { reviewPredictionEvidence } from "@/lib/services/dailyEdge/predictionEvidenceReviewer";
 import { sharpContextStatusForEvidence } from "@/lib/services/dailyEdge/memberFacingCopyRenderer";
 import type { PredictionEvidenceObject } from "@/lib/services/dailyEdge/predictionEvidenceBuilder";
+import { supabase } from "@/lib/db/supabase";
 import type { Sport } from "@/lib/types/domain/Sport";
 
 export type DailyEdgeDataHealthSeverity = "info" | "medium" | "high" | "blocking";
@@ -66,6 +67,74 @@ type MarketCoverage = {
   strongOrUsable: string;
 };
 
+type FiHoldClassification =
+  | "legit_model_toss_up"
+  | "missing_inputs"
+  | "provider_gap"
+  | "mapping_bug_or_missing_audit"
+  | "unknown";
+
+type FiHoldDiagnostic = {
+  classification: FiHoldClassification;
+  materiality: "low" | "medium" | "high";
+  reason: string;
+  fiPick: string | null;
+  fiPickReason: string | null;
+  fiNoBetReason: string | null;
+  fiPlayGrade: string | null;
+  dataQualityTier: string | null;
+  marketDataQuality: string | null;
+  marketReason: string | null;
+  missingFeatureCount: number | null;
+  presentFeatureCount: number | null;
+  featureReasonCodes: string[];
+  canPublishNormal: boolean | null;
+  repairEligible: boolean | null;
+  completenessStatus: string | null;
+  degradedFields: string[];
+  posteriorNrfi: number | null;
+  posteriorYrfi: number | null;
+};
+
+type GamePredictionDiagnosticRow = {
+  sport_specific: Record<string, unknown> | null;
+  games: { external_id: number } | null;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function recordAt(value: unknown, key: string): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  const child = value[key];
+  return isRecord(child) ? child : null;
+}
+
+function stringAt(value: unknown, key: string): string | null {
+  if (!isRecord(value)) return null;
+  const child = value[key];
+  return typeof child === "string" && child.trim() !== "" ? child : null;
+}
+
+function numberAt(value: unknown, key: string): number | null {
+  if (!isRecord(value)) return null;
+  const child = value[key];
+  return typeof child === "number" && Number.isFinite(child) ? child : null;
+}
+
+function booleanAt(value: unknown, key: string): boolean | null {
+  if (!isRecord(value)) return null;
+  const child = value[key];
+  return typeof child === "boolean" ? child : null;
+}
+
+function stringArrayAt(value: unknown, key: string): string[] {
+  if (!isRecord(value)) return [];
+  const child = value[key];
+  return Array.isArray(child) ? child.filter((item): item is string => typeof item === "string" && item.trim() !== "") : [];
+}
+
 function countBy<T>(rows: T[], keyFn: (row: T) => string): Record<string, number> {
   return rows.reduce<Record<string, number>>((acc, row) => {
     const key = keyFn(row);
@@ -90,6 +159,10 @@ function isFiTossUp(row: PredictionEvidenceObject): boolean {
 function isActionableRow(row: PredictionEvidenceObject): boolean {
   if (row.identity.marketType === "FI" && (isFiTossUp(row) || row.identity.pick === null)) return false;
   return row.identity.pick !== null;
+}
+
+function isFiHeldNoSide(row: PredictionEvidenceObject): boolean {
+  return row.identity.marketType === "FI" && row.identity.pick === null;
 }
 
 function hasLineMovement(row: PredictionEvidenceObject): boolean {
@@ -149,24 +222,159 @@ function pushFinding(
   });
 }
 
-function collectFindings(rows: PredictionEvidenceObject[]): DailyEdgeDataHealthFinding[] {
+function classifyFiHoldDiagnostic(sportSpecific: Record<string, unknown> | null): FiHoldDiagnostic {
+  if (!sportSpecific) {
+    return {
+      classification: "mapping_bug_or_missing_audit",
+      materiality: "high",
+      reason: "No sport_specific audit payload was available for this FI hold.",
+      fiPick: null,
+      fiPickReason: null,
+      fiNoBetReason: null,
+      fiPlayGrade: null,
+      dataQualityTier: null,
+      marketDataQuality: null,
+      marketReason: null,
+      missingFeatureCount: null,
+      presentFeatureCount: null,
+      featureReasonCodes: [],
+      canPublishNormal: null,
+      repairEligible: null,
+      completenessStatus: null,
+      degradedFields: [],
+      posteriorNrfi: null,
+      posteriorYrfi: null,
+    };
+  }
+
+  const audit = recordAt(sportSpecific, "fi_v2_audit");
+  const featureAudit = recordAt(audit, "feature_audit");
+  const completeness = recordAt(sportSpecific, "mlb_data_completeness");
+  const fiPick = stringAt(audit, "fi_pick");
+  const fiPickReason = stringAt(audit, "fi_pick_reason");
+  const fiNoBetReason = stringAt(audit, "fi_no_bet_reason");
+  const marketDataQuality = stringAt(audit, "market_data_quality");
+  const missingFeatureCount = numberAt(featureAudit, "missing_count");
+  const featureReasonCodes = stringArrayAt(featureAudit, "reason_codes");
+  const completenessStatus = stringAt(completeness, "status");
+  const noBetText = `${fiPick ?? ""} ${fiPickReason ?? ""} ${fiNoBetReason ?? ""} ${completenessStatus ?? ""} ${featureReasonCodes.join(" ")}`.toLowerCase();
+
+  let classification: FiHoldClassification = "unknown";
+  let materiality: FiHoldDiagnostic["materiality"] = "medium";
+  let reason = "FI side is held, but the audit payload did not identify a precise reason.";
+
+  if (!audit) {
+    classification = "mapping_bug_or_missing_audit";
+    materiality = "high";
+    reason = "FI side is held but the fi_v2_audit payload is missing.";
+  } else if (/\b(provider|market|odds|line|price)\b/.test(noBetText) && marketDataQuality !== "ok") {
+    classification = "provider_gap";
+    materiality = "high";
+    reason = "FI side is held because market/price provider context is unavailable or not trusted.";
+  } else if (/\b(data|lineup|starter|missing|fallback|pending|sparse)\b/.test(noBetText) || (missingFeatureCount ?? 0) > 0) {
+    classification = "missing_inputs";
+    materiality = "high";
+    reason = "FI side is held because starter/lineup/context inputs are sparse or pending.";
+  } else if (/\btoss\b|\btoss_up\b|\btoss-up\b/.test(noBetText) || stringAt(sportSpecific, "nrfi_threshold_zone") === "toss_up") {
+    classification = "legit_model_toss_up";
+    materiality = "low";
+    reason = "FI model sees this as a true toss-up/no-actionable-side rather than a data gap.";
+  }
+
+  return {
+    classification,
+    materiality,
+    reason,
+    fiPick,
+    fiPickReason,
+    fiNoBetReason,
+    fiPlayGrade: stringAt(audit, "fi_play_grade"),
+    dataQualityTier: stringAt(audit, "data_quality_tier"),
+    marketDataQuality,
+    marketReason: stringAt(audit, "market_reason"),
+    missingFeatureCount,
+    presentFeatureCount: numberAt(featureAudit, "present_count"),
+    featureReasonCodes,
+    canPublishNormal: booleanAt(completeness, "can_publish_normal"),
+    repairEligible: booleanAt(completeness, "repair_eligible"),
+    completenessStatus,
+    degradedFields: stringArrayAt(completeness, "degraded_fields"),
+    posteriorNrfi: numberAt(audit, "posterior_p_nrfi"),
+    posteriorYrfi: numberAt(audit, "posterior_p_yrfi"),
+  };
+}
+
+async function loadFiHoldDiagnostics(rows: PredictionEvidenceObject[]): Promise<Map<number, FiHoldDiagnostic>> {
+  const externalIds = Array.from(new Set(rows.filter(isFiHeldNoSide).map((row) => row.identity.externalId)));
+  if (externalIds.length === 0) return new Map();
+  const { data, error } = await supabase
+    .from("game_predictions")
+    .select("sport_specific, games!inner ( external_id, sport, slate_date )")
+    .eq("games.sport", rows[0]?.identity.sport ?? "mlb")
+    .eq("games.slate_date", rows[0]?.identity.slateDate ?? "")
+    .in("games.external_id", externalIds);
+  if (error) {
+    throw new Error(`daily-edge health FI diagnostics failed: ${error.message}`);
+  }
+  const out = new Map<number, FiHoldDiagnostic>();
+  for (const row of (data ?? []) as unknown as GamePredictionDiagnosticRow[]) {
+    const externalId = row.games?.external_id;
+    if (typeof externalId !== "number") continue;
+    out.set(externalId, classifyFiHoldDiagnostic(row.sport_specific));
+  }
+  for (const externalId of externalIds) {
+    if (!out.has(externalId)) out.set(externalId, classifyFiHoldDiagnostic(null));
+  }
+  return out;
+}
+
+function fiHoldFindingCode(diagnostic: FiHoldDiagnostic | undefined): string {
+  if (!diagnostic) return "fi_model_hold_diagnostic_missing";
+  if (diagnostic.classification === "legit_model_toss_up") return "fi_legit_model_toss_up";
+  if (diagnostic.classification === "missing_inputs") return "fi_model_hold_missing_inputs";
+  if (diagnostic.classification === "provider_gap") return "fi_model_hold_provider_gap";
+  return "fi_model_hold_diagnostic_missing";
+}
+
+function fiHoldFindingSeverity(diagnostic: FiHoldDiagnostic | undefined): DailyEdgeDataHealthSeverity {
+  if (diagnostic?.classification === "legit_model_toss_up") return "info";
+  if (diagnostic?.materiality === "medium") return "medium";
+  return "high";
+}
+
+function collectFindings(
+  rows: PredictionEvidenceObject[],
+  fiHoldDiagnostics: Map<number, FiHoldDiagnostic>,
+): DailyEdgeDataHealthFinding[] {
   const findings: DailyEdgeDataHealthFinding[] = [];
   for (const row of rows) {
     const review = reviewPredictionEvidence(row);
     const actionable = isActionableRow(row);
     const sharpStatus = sharpContextStatusForEvidence(row);
+    const fiHeldNoSide = isFiHeldNoSide(row);
+    const fiDiagnostic = fiHeldNoSide ? fiHoldDiagnostics.get(row.identity.externalId) : undefined;
     if (review.evidenceQuality === "blocked") {
-      pushFinding(findings, row, "evidence_blocked", "blocking", "Prediction evidence is blocked for review/display quality.", {
-        missingRequiredFields: review.missingRequiredFields,
-        persistenceGaps: review.persistenceGaps,
-        dataWarnings: review.dataWarnings,
-      });
-    }
-    if (row.identity.marketType === "FI" && row.identity.pick === null) {
-      pushFinding(findings, row, "fi_held_no_actionable_side", "high", "FI model produced no actionable YRFI/NRFI side; verify repairable starter/lineup/context inputs.", {
+      if (fiHeldNoSide) {
+        pushFinding(findings, row, fiHoldFindingCode(fiDiagnostic), fiHoldFindingSeverity(fiDiagnostic), fiDiagnostic?.reason ?? "FI side is held with no diagnostic payload available.", {
+          missingRequiredFields: review.missingRequiredFields,
+          persistenceGaps: review.persistenceGaps,
+          dataWarnings: review.dataWarnings,
+          expectedMissingFields: review.expectedMissingFields,
+          fiHoldDiagnostic: fiDiagnostic ?? null,
+        });
+      } else {
+        pushFinding(findings, row, "evidence_blocked", "blocking", "Prediction evidence is blocked for review/display quality.", {
+          missingRequiredFields: review.missingRequiredFields,
+          persistenceGaps: review.persistenceGaps,
+          dataWarnings: review.dataWarnings,
+        });
+      }
+    } else if (fiHeldNoSide) {
+      pushFinding(findings, row, fiHoldFindingCode(fiDiagnostic), fiHoldFindingSeverity(fiDiagnostic), fiDiagnostic?.reason ?? "FI model produced no actionable YRFI/NRFI side.", {
         missingRequiredFields: review.missingRequiredFields,
         dataWarnings: review.dataWarnings,
         expectedMissingFields: review.expectedMissingFields,
+        fiHoldDiagnostic: fiDiagnostic ?? null,
       });
     }
     for (const gap of review.persistenceGaps) {
@@ -206,7 +414,8 @@ export async function runDailyEdgeDataHealthMonitor(args: {
     response,
   });
   const rows = selection.evidence;
-  const findings = collectFindings(rows);
+  const fiHoldDiagnostics = await loadFiHoldDiagnostics(rows);
+  const findings = collectFindings(rows, fiHoldDiagnostics);
   const bySeverity = countBy(findings, (finding) => finding.severity);
   const byCode = countBy(findings, (finding) => finding.code);
   const unresolvedBlockingOrHigh = findings.filter((finding) =>
