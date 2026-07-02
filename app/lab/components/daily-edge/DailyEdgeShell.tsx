@@ -1915,6 +1915,7 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const find = (l: string) => rows.find((r) => r.label === l);
   const marketEv = find("Market EV");
   const fiMarket = find("FI Market");
+  const fiOddsMove = find("FI Odds Move");
   const splits = find("Money vs Bets");
   const lineMove = find("Line"); // the betting NUMBER move (totals)
   const oddsMove = find("Line Move"); // the PRICE move — carries the directional arrow + tone
@@ -1948,6 +1949,7 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
       <div className="divide-y divide-white/[0.04] mt-2">
         {book && <CleanEvRow label="Book">{book}</CleanEvRow>}
         {fiMarket && <CleanEvRow label="FI Market" delta={fiMarket.delta} tone={fiMarket.tone}>{fiMarket.evidence}</CleanEvRow>}
+        {fiOddsMove && <CleanEvRow label="FI Odds Move" delta={fiOddsMove.delta} tone={fiOddsMove.tone}>{fiOddsMove.evidence}</CleanEvRow>}
         {marketEv && marketEv.delta !== "unavailable" && <CleanEvRow label="Market EV" delta={marketEv.delta} tone={marketEv.tone}>{marketEv.evidence}</CleanEvRow>}
         {splits && <CleanEvRow label="Splits" delta={splits.delta} tone={splits.tone}>{splits.evidence}</CleanEvRow>}
       </div>

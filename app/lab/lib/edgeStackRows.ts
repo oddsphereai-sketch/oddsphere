@@ -82,6 +82,24 @@ function fiMarketBoardEvidence(marketData: MarketEdgeDto): string | null {
   return `${line} · ${pieces.join(" / ")}`;
 }
 
+function fiBoardSideMove(label: string, open: number | null | undefined, previous: number | null | undefined, current: number | null): string | null {
+  if (current === null) return null;
+  if (open === null || open === undefined) return `${label} current ${formatAmerican(current)}`;
+  if (previous !== null && previous !== undefined && previous !== open && previous !== current) {
+    return `${label} ${formatAmerican(open)} → ${formatAmerican(previous)} → ${formatAmerican(current)}`;
+  }
+  if (open !== current) return `${label} ${formatAmerican(open)} → ${formatAmerican(current)}`;
+  return `${label} ${formatAmerican(current)} unchanged`;
+}
+
+function fiMarketBoardMovementEvidence(marketData: MarketEdgeDto): string | null {
+  const board = marketData.fiMarketBoard;
+  if (!board) return null;
+  const yrfi = fiBoardSideMove("YRFI", board.yrfiOpenAmerican, board.yrfiPreviousAmerican, board.yrfiAmerican);
+  const nrfi = fiBoardSideMove("NRFI", board.nrfiOpenAmerican, board.nrfiPreviousAmerican, board.nrfiAmerican);
+  return [yrfi, nrfi].filter((piece): piece is string => piece !== null).join(" · ") || null;
+}
+
 function effectivePriceTrail(marketData: MarketEdgeDto): {
   open: number | null;
   previous: number | null;
@@ -217,6 +235,15 @@ export function buildEdgeStackRows(
         label: "FI Market",
         evidence: board,
         delta: marketData.pick === null || marketData.held ? "context" : "board",
+        tone: "gray",
+      });
+    }
+    const movement = fiMarketBoardMovementEvidence(marketData);
+    if (movement !== null) {
+      rows.push({
+        label: "FI Odds Move",
+        evidence: movement,
+        delta: "board",
         tone: "gray",
       });
     }

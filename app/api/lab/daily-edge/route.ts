@@ -1664,7 +1664,10 @@ function buildGameDto(
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::first_inning_total`) ?? [],
     lineOpenCandidates:
       nrfiModelSideForMarket === null
-        ? []
+        ? [
+            ...(openLinesByGameMarket.get(`${row.id}::first_inning_total::over`) ?? []),
+            ...(openLinesByGameMarket.get(`${row.id}::first_inning_total::under`) ?? []),
+          ].sort((a, b) => a.recorded_at.localeCompare(b.recorded_at) || a.id - b.id)
         : openLinesByGameMarket.get(
             `${row.id}::first_inning_total::${nrfiModelSideForMarket}`
           ) ?? [],
@@ -2350,6 +2353,37 @@ function readFiV2Audit(sp: Record<string, unknown> | null): {
   };
 }
 
+function fiBoardSportsbookFromReason(reason: string | null): string | null {
+  if (!reason) return null;
+  const match = reason.match(/^fi_market_ok_(.+)$/);
+  return match?.[1] ?? null;
+}
+
+function fiBoardHistorySide(args: {
+  candidates: LineHistoryRow[];
+  side: "over" | "under";
+  sportsbook: string | null;
+  currentAmerican: number | null;
+}): { openAmerican: number | null; previousAmerican: number | null } {
+  const sideRows = args.candidates.filter((row) => row.side === args.side && row.odds_american !== null);
+  const sameBookRows = args.sportsbook !== null
+    ? sideRows.filter((row) => row.sportsbook === args.sportsbook)
+    : [];
+  const rows = sameBookRows.length > 0 ? sameBookRows : sideRows;
+  const openAmerican = rows[0]?.odds_american ?? null;
+  const distinct = rows
+    .map((row) => row.odds_american)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+    .filter((value, index, arr) => index === 0 || value !== arr[index - 1]);
+  const withoutCurrent = args.currentAmerican !== null
+    ? distinct.filter((value) => value !== args.currentAmerican)
+    : distinct;
+  return {
+    openAmerican,
+    previousAmerican: withoutCurrent.length > 0 ? withoutCurrent[withoutCurrent.length - 1] ?? null : openAmerican,
+  };
+}
+
 /**
  * Phase 6B.7 — read true model + market probabilities for the picked side
  * out of v2_2_audit. Mirrors the existing readFiV2Audit/FI-override path so
@@ -2994,11 +3028,28 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const fiAuditForBoard = input.market === "first_inning"
     ? readFiV2Audit(input.sportSpecific ?? null)
     : null;
+  const fiBoardSportsbook = fiBoardSportsbookFromReason(fiAuditForBoard?.market_reason ?? null);
+  const fiYrfiHistory = fiBoardHistorySide({
+    candidates: input.lineOpenCandidates,
+    side: "over",
+    sportsbook: fiBoardSportsbook,
+    currentAmerican: fiAuditForBoard?.market_yrfi_odds_american ?? null,
+  });
+  const fiNrfiHistory = fiBoardHistorySide({
+    candidates: input.lineOpenCandidates,
+    side: "under",
+    sportsbook: fiBoardSportsbook,
+    currentAmerican: fiAuditForBoard?.market_nrfi_odds_american ?? null,
+  });
   const fiMarketBoard = fiAuditForBoard !== null
     ? {
         line: fiAuditForBoard.market_listed_fi_total,
         nrfiAmerican: fiAuditForBoard.market_nrfi_odds_american,
         yrfiAmerican: fiAuditForBoard.market_yrfi_odds_american,
+        nrfiOpenAmerican: fiNrfiHistory.openAmerican,
+        yrfiOpenAmerican: fiYrfiHistory.openAmerican,
+        nrfiPreviousAmerican: fiNrfiHistory.previousAmerican,
+        yrfiPreviousAmerican: fiYrfiHistory.previousAmerican,
         source: fiAuditForBoard.market_reason,
       }
     : null;

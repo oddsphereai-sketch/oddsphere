@@ -282,6 +282,10 @@ export type MarketEdgeDto = {
     line: number | null;
     nrfiAmerican: number | null;
     yrfiAmerican: number | null;
+    nrfiOpenAmerican?: number | null;
+    yrfiOpenAmerican?: number | null;
+    nrfiPreviousAmerican?: number | null;
+    yrfiPreviousAmerican?: number | null;
     source: string | null;
   } | null;
   lineOpenAmerican: number | null;

@@ -43,6 +43,7 @@ next-env.d.ts
 
 # local research/output artifacts
 ops-local/*.json
+ops-local/learning-lab/
 ops-local/ai-sharp-analyst/*.json
 wnba-research/espn-cache/
 wnba-research/*.json
