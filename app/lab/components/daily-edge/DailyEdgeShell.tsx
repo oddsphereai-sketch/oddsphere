@@ -447,9 +447,7 @@ function playGradeToVerdictKey(s: string | null | undefined): VerdictKey {
 }
 
 function marketVerdictKey(market: MarketEdgeDto): VerdictKey {
-  return market.recommendationDecision
-    ? playGradeToVerdictKey(market.recommendationDecision.playGrade)
-    : asVerdictKey(market.verdict.key);
+  return asVerdictKey(market.verdict.key);
 }
 
 /**

@@ -775,23 +775,26 @@ export async function computeTrackingAggregate(opts: {
       return bId - aId;
     })
     .slice(0, 20)
-    .map((r) => ({
-      slate_date: r.record.slate_date,
-      sport: r.record.sport,
-      market: r.record.market,
-      matchup: r.record.matchup,
-      pick: r.record.pick,
-      play_grade: r.record.play_grade,
-      result:
-        r.grade === null
-          ? "pending"
-          : (r.grade.result as "win" | "loss" | "push" | "void" | "pending"),
-      actual_home_score: r.grade?.actual_home_score ?? null,
-      actual_away_score: r.grade?.actual_away_score ?? null,
-      actual_first_inning_runs: r.grade?.actual_first_inning_runs ?? null,
-      best_angle: String(r.record.play_grade ?? "").trim().toLowerCase() === "best_angle" && r.record.best_angle !== false,
-      held: r.record.held === true,
-    }));
+    .map((r) => {
+      const effectiveGrade = effectiveTrackingPlayGrade(r.record);
+      return {
+        slate_date: r.record.slate_date,
+        sport: r.record.sport,
+        market: r.record.market,
+        matchup: r.record.matchup,
+        pick: r.record.pick,
+        play_grade: effectiveGrade || r.record.play_grade,
+        result:
+          r.grade === null
+            ? "pending"
+            : (r.grade.result as "win" | "loss" | "push" | "void" | "pending"),
+        actual_home_score: r.grade?.actual_home_score ?? null,
+        actual_away_score: r.grade?.actual_away_score ?? null,
+        actual_first_inning_runs: r.grade?.actual_first_inning_runs ?? null,
+        best_angle: effectiveGrade === "best_angle",
+        held: r.record.held === true,
+      };
+    });
 
   // 6B.21 — Recently settled feed. Settled-only (no pending), ordered
   // by prediction_grades.graded_at DESC, limit 20. Toss-Up rows are
@@ -819,6 +822,7 @@ export async function computeTrackingAggregate(opts: {
     .map((r) => {
       const g = r.grade!;
       const res = g.result as "win" | "loss" | "push" | "void";
+      const effectiveGrade = effectiveTrackingPlayGrade(r.record);
       return {
         slate_date: r.record.slate_date,
         sport: r.record.sport,
@@ -829,8 +833,8 @@ export async function computeTrackingAggregate(opts: {
         line_value: r.record.line_value,
         odds_american: r.record.odds_american,
         confidence: r.record.confidence,
-        play_grade: r.record.play_grade,
-        best_angle: String(r.record.play_grade ?? "").trim().toLowerCase() === "best_angle" && r.record.best_angle !== false,
+        play_grade: effectiveGrade || r.record.play_grade,
+        best_angle: effectiveGrade === "best_angle",
         result: res,
         win: res === "win",
         loss: res === "loss",
