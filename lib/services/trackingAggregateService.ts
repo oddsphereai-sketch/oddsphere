@@ -231,10 +231,6 @@ function storedGrade(record: PredictionRecordRow): string {
   return String(record.play_grade ?? "").trim().toLowerCase();
 }
 
-function flagEnabled(name: string): boolean {
-  return process.env[name] === "true";
-}
-
 function snapshotNumber(record: PredictionRecordRow, path: string[]): number | null {
   let cursor: unknown = record.snapshot_json;
   for (const key of path) {
@@ -251,11 +247,6 @@ function snapshotString(record: PredictionRecordRow, path: string[]): string | n
     cursor = (cursor as Record<string, unknown>)[key];
   }
   return typeof cursor === "string" ? cursor.trim().toLowerCase() : null;
-}
-
-function isKnownMlMovementNotTowardPick(record: PredictionRecordRow): boolean {
-  const direction = snapshotString(record, ["line_movement", "direction"]);
-  return direction === "neutral" || direction === "resistance" || direction === "against_pick";
 }
 
 function movementDirectionRelativeToPick(record: PredictionRecordRow): "support" | "resistance" | "neutral" | null {
@@ -369,73 +360,19 @@ function actionabilityGrade(record: PredictionRecordRow, grade: string): string 
 }
 
 /**
- * Tracking must match the member-facing action grade, not just the raw writer
- * grade. A stored Best Angle whose boolean was explicitly demoted is not a Best
- * Angle in public tracking. Same-day deterministic guardrails are display-layer
- * grade caps, so public tracking buckets apply the same caps without mutating
- * prediction_records or prediction_grades.
+ * Tracking must match the member-facing locked grade, not a second grading pass.
+ * A stored Best Angle whose boolean was explicitly demoted is not a Best Angle
+ * in public tracking, and the actionability normalizer is used for post-cutover
+ * records whose stored grade needs the same public-grade normalization as the
+ * reader. Same-day guardrail feature flags intentionally do not run here; if a
+ * guardrail did not change the locked/displayed card, it must not rebucket
+ * settled tracking later.
  */
 export function effectiveTrackingPlayGrade(record: PredictionRecordRow): string {
   let grade = storedGrade(record);
   if (grade === "best_angle" && record.best_angle === false) return "lean";
   if (record.slate_date < EFFECTIVE_TRACKING_GRADE_CUTOVER_DATE) return grade;
   grade = actionabilityGrade(record, grade);
-
-  if (
-    record.sport === "mlb" &&
-    record.market === "first_inning" &&
-    flagEnabled("MLB_FI_TOSSUP_FORCE_NO_PLAY_ENABLED") &&
-    isTossUp(record)
-  ) {
-    return "no_play";
-  }
-
-  if (
-    record.sport === "mlb" &&
-    record.market === "first_inning" &&
-    flagEnabled("MLB_FI_MISSING_PRICE_BLOCKS_GRADE_STRENGTHENING_ENABLED") &&
-    record.odds_american === null &&
-    (grade === "best_angle" || grade === "lean")
-  ) {
-    return "watchlist";
-  }
-
-  if (
-    record.sport === "mlb" &&
-    record.market === "total" &&
-    flagEnabled("MLB_TOTALS_THIN_GAP_LEAN_CAP_ENABLED") &&
-    grade === "lean"
-  ) {
-    const gap = totalProjectionGap(record);
-    if (gap !== null && gap < 0.5) return "watchlist";
-  }
-
-  if (
-    record.sport === "mlb" &&
-    record.market === "moneyline" &&
-    flagEnabled("MLB_ML_BEST_ANGLE_MOVEMENT_EDGE_CAP_ENABLED") &&
-    grade === "best_angle" &&
-    (
-      snapshotNumber(record, ["v2_2_audit", "ml_distance_cap_applied"]) === 1 ||
-      (record.snapshot_json?.v2_2_audit as { ml_distance_cap_applied?: unknown } | undefined)?.ml_distance_cap_applied === true ||
-      (record.snapshot_json?.v2_2_audit as { ml_miscalibration_flag?: unknown } | undefined)?.ml_miscalibration_flag === true
-    )
-  ) {
-    return "lean";
-  }
-
-  if (
-    record.sport === "mlb" &&
-    record.market === "moneyline" &&
-    flagEnabled("MLB_ML_BEST_ANGLE_MOVEMENT_EDGE_CAP_ENABLED") &&
-    grade === "best_angle" &&
-    isKnownMlMovementNotTowardPick(record) &&
-    typeof record.edge === "number" &&
-    record.edge < 8
-  ) {
-    return "lean";
-  }
-
   return grade;
 }
 
