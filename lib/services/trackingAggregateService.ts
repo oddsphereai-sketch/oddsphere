@@ -96,7 +96,7 @@ export type DailyBucket = {
 /**
  * Member-safe recent pick. Carries enough for a stacked card list —
  * never raw audit fields (no model_probability / model audit / raw
- * snapshot_json).
+ * snapshot_json / model-version labels).
  */
 export type RecentPickRow = {
   slate_date: string;
@@ -105,7 +105,6 @@ export type RecentPickRow = {
   matchup: string;
   pick: string | null;
   play_grade: string | null;
-  model_version: string | null;
   result: "win" | "loss" | "push" | "void" | "pending";
   actual_home_score: number | null;
   actual_away_score: number | null;
@@ -137,7 +136,6 @@ export type RecentlySettledPickRow = {
   confidence: number | null;
   play_grade: string | null;
   best_angle: boolean;
-  model_version: string | null;
   /** Settled result — never "pending" (filtered upstream). */
   result: "win" | "loss" | "push" | "void";
   win: boolean;
@@ -847,7 +845,6 @@ export async function computeTrackingAggregate(opts: {
       matchup: r.record.matchup,
       pick: r.record.pick,
       play_grade: r.record.play_grade,
-      model_version: r.record.model_version,
       result:
         r.grade === null
           ? "pending"
@@ -897,7 +894,6 @@ export async function computeTrackingAggregate(opts: {
         confidence: r.record.confidence,
         play_grade: r.record.play_grade,
         best_angle: String(r.record.play_grade ?? "").trim().toLowerCase() === "best_angle" && r.record.best_angle !== false,
-        model_version: r.record.model_version,
         result: res,
         win: res === "win",
         loss: res === "loss",

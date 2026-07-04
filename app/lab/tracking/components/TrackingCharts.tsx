@@ -46,14 +46,14 @@ export function CategoryBars({
         const pct = m.win_pct ?? 0;
         return (
           <div key={`${r.label}-${r.sublabel ?? ""}`}>
-            <div className="flex items-baseline justify-between gap-2 mb-1.5">
-              <div className="flex items-baseline gap-2 min-w-0">
+            <div className="mb-1.5 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-2">
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <span className="text-[12.5px] font-semibold text-gray-100 truncate">{r.label}</span>
                 {r.sublabel !== undefined && (
                   <span className="text-[10px] uppercase tracking-[0.14em] text-gray-500 font-bold shrink-0">{r.sublabel}</span>
                 )}
               </div>
-              <div className="text-[11px] tabular-nums text-gray-400 shrink-0">
+              <div className="shrink-0 text-[11px] tabular-nums text-gray-400">
                 {decided > 0 ? (
                   <>
                     <span className="font-bold text-gray-200">{m.wins}-{m.losses}{m.pushes > 0 ? `-${m.pushes}` : ""}</span>

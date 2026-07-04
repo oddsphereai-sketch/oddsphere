@@ -7,7 +7,7 @@
  *   • This Week is a single chart (CategoryBars)
  *   • Best Angles is a per-category list
  *   • Recent Results sits below the analytical sections
- *   • Method consolidates glossary + model versions + baselines +
+ *   • Method consolidates glossary + baselines +
  *     a secondary "all tracked actionable picks" footer
  *   • No standalone "Overall record" / "All picks" hero
  *   • No 14-day TrendChart or DailyBars (removed)
@@ -211,8 +211,12 @@ check(
   /Method[\s\S]{0,2000}<Glossary/.test(PAGE),
 );
 check(
-  "Method section combines model versions",
-  /Method[\s\S]{0,2000}<ModelVersions/.test(PAGE),
+  "Method section does NOT expose model versions",
+  !/Method[\s\S]{0,2000}<ModelVersions/.test(PAGE),
+);
+check(
+  "Page does NOT render model_version values in member-facing cards",
+  !/pick\.model_version|model_version\}/.test(PAGE),
 );
 // "Legacy Historical Baseline" must NOT appear on the member-facing page
 check(
@@ -350,6 +354,7 @@ check("API surfaces thisWeek",                    API.includes("thisWeek: result
 check("API surfaces recentPicks",                 API.includes("recentPicks: result.recentPicks"));
 check("API surfaces recentlySettled (6B.21)",     API.includes("recentlySettled: result.recentlySettled"));
 check("API does not expose raw audit fields",     !/sport_specific|fi_v2_audit|v2_2_audit|snapshot_json/.test(API));
+check("API does not expose model-version breakdowns to members", !API.includes("byModelVersion"));
 check("API excludes launch-day picks",            API.includes("includeLaunchDay: false"));
 check("API marks no-store",                       API.includes('"Cache-Control": "no-store"'));
 

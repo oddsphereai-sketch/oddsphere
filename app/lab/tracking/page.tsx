@@ -13,7 +13,7 @@
  *   3. This week — single chart, category-comparison bars
  *   4. Best Angles — category list, not cards
  *   5. Recent results — stacked cards
- *   6. Method — combined glossary, model versions, baselines,
+ *   6. Method — combined glossary, baselines,
  *      tiny "all tracked actionable picks" footer
  *
  * Hard rules unchanged from earlier passes:
@@ -54,7 +54,6 @@ type RecentPickRow = {
   matchup: string;
   pick: string | null;
   play_grade: string | null;
-  model_version: string | null;
   result: "win" | "loss" | "push" | "void" | "pending";
   actual_home_score: number | null;
   actual_away_score: number | null;
@@ -75,7 +74,6 @@ type RecentlySettledRow = {
   confidence: number | null;
   play_grade: string | null;
   best_angle: boolean;
-  model_version: string | null;
   result: "win" | "loss" | "push" | "void";
   win: boolean;
   loss: boolean;
@@ -103,7 +101,6 @@ type TrackingResponse = {
   overall: Metrics;
   byMarket: DimensionRow[];
   bySportMarket?: SportMarketBucket[];
-  byModelVersion?: DimensionRow[];
   bestAngles: Metrics;
   leans?: Metrics;
   yesterday?: { date: string | null; overall: Metrics; bySportMarket: SportMarketBucket[] };
@@ -153,14 +150,6 @@ const PLAY_GRADE_LABEL: Record<string, string> = {
   "(none)": "Unclassified",
 };
 
-const MODEL_VERSION_LABEL: Record<string, string> = {
-  "auto_v2.2_mlb_full_game_projection": "V2.2 Full-Game",
-  "auto_v1.0_mlb_rules": "Rules V1",
-  fi_v2: "FI V2",
-  legacy: "Legacy",
-  "(unknown)": "Pre-cutover",
-};
-
 // MLB order: ML, O/U, NRFI, YRFI. first_inning rollup goes last.
 const MARKET_ORDER: Record<string, number> = {
   moneyline: 1, match_result: 1, total: 2, nrfi: 3, yrfi: 4, first_inning: 5, spread: 6, double_chance: 7, btts: 8,
@@ -189,7 +178,6 @@ function fmtShortDate(yyyyMmDd: string): string {
   const dt = new Date(Date.UTC(y, m - 1, d));
   return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
-function prettyModelVersion(label: string): string { return MODEL_VERSION_LABEL[label] ?? label; }
 function prettyMarket(label: string): string { return MARKET_LABEL[label] ?? label; }
 function shortMarket(label: string): string { return MARKET_SHORT[label] ?? label.toUpperCase(); }
 function prettySport(label: string): string { return SPORT_LABEL[label] ?? label.toUpperCase(); }
@@ -506,8 +494,6 @@ export default function LabTrackingPage() {
         <Card>
           <Glossary />
           <MethodDivider />
-          <ModelVersions rows={data.byModelVersion ?? []} />
-          <MethodDivider />
           <AllActionableFooter overall={data.overall} bestAngles={data.bestAngles} leans={data.leans} />
         </Card>
       </Section>
@@ -537,7 +523,7 @@ function Header({ lastUpdated }: { lastUpdated: string | null }) {
     <header className="mb-9 sm:mb-12">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <h1 className="text-[28px] sm:text-[34px] font-bold tracking-tight text-white" style={{ letterSpacing: "-0.025em" }}>
-          Model Tracking
+          Prediction Tracking
         </h1>
         {lastUpdated !== null && (
           <span className="text-[10px] uppercase tracking-[0.16em] text-gray-500 font-bold">
@@ -670,13 +656,13 @@ function SportGroup({ sport, rows }: { sport: string; rows: LifetimeRecord[] }) 
   const hasAuto = rows.some((r) => r.source_type === "lifetime_merged" || r.source_type === "since_launch");
   return (
     <div>
-      <div className="flex items-center gap-2.5 mb-2.5">
+      <div className="flex items-center gap-2.5 mb-2.5 flex-wrap">
         <SportPill sport={sport} />
         <span className="text-[11px] uppercase tracking-[0.14em] font-bold text-gray-500">
           {rows.length} {rows.length === 1 ? "category" : "categories"}
         </span>
         {hasAuto && (
-          <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] font-bold text-emerald-300/85">
+          <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] font-bold text-emerald-300/85 sm:ml-auto">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/85" />
             Auto-updating
           </span>
@@ -712,11 +698,13 @@ function LifetimeRow({ record }: { record: LifetimeRecord }) {
     (record.pending > 0 || (record.bestAngles?.picks ?? 0) > 0 || (record.leans?.picks ?? 0) > 0);
   return (
     <div>
-      <div className="flex items-baseline gap-3 flex-wrap">
-        <span className="text-[14px] sm:text-[14.5px] font-semibold text-gray-100">{prettyMarket(record.market)}</span>
-        <CategoryBadge market={record.market} />
-        <span className="text-[10px] uppercase tracking-[0.14em] font-bold text-gray-500">{sourceLabel}</span>
-        <div className="ml-auto flex items-baseline gap-3 sm:gap-4 tabular-nums">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-3">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+          <span className="text-[14px] sm:text-[14.5px] font-semibold text-gray-100">{prettyMarket(record.market)}</span>
+          <CategoryBadge market={record.market} />
+          <span className="text-[10px] uppercase tracking-[0.14em] font-bold text-gray-500">{sourceLabel}</span>
+        </div>
+        <div className="flex w-full items-baseline justify-between gap-3 tabular-nums sm:ml-auto sm:w-auto sm:justify-start sm:gap-4">
           <span className="text-[17px] sm:text-[18px] font-extrabold text-gray-50 leading-none">{record.display_record}</span>
           {record.display_pct !== null && (
             <span className="text-[13px] font-bold text-emerald-300/95 leading-none">{record.display_pct}</span>
@@ -801,11 +789,13 @@ function CategoryListRow({ bucket }: { bucket: SportMarketBucket }) {
 
   return (
     <div>
-      <div className="flex items-center gap-2.5 flex-wrap">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         <SportPill sport={bucket.sport} />
         <span className="text-[14.5px] sm:text-[15.5px] font-semibold text-gray-50">{prettyMarket(bucket.market)}</span>
         <CategoryBadge market={bucket.market} />
-        <div className="ml-auto flex items-baseline gap-3 sm:gap-4 tabular-nums">
+        </div>
+        <div className="flex w-full items-baseline justify-between gap-3 tabular-nums sm:ml-auto sm:w-auto sm:justify-start sm:gap-4">
           {allPending ? (
             <>
               <span className="text-[19px] sm:text-[20px] font-extrabold text-gray-50 leading-none">{m.pending}</span>
@@ -897,7 +887,7 @@ function BestAnglesBoard({ rows }: { rows: SportMarketBucket[] }) {
                 <span className="text-[14px] font-semibold text-gray-100">{prettyMarket(b.market)}</span>
                 <CategoryBadge market={b.market} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <BestAnglesPanel
                   label="Best Angle"
                   color="rgb(52 211 153)"
@@ -1003,10 +993,9 @@ function RecentPickCard({ pick }: { pick: RecentPickRow }) {
         </div>
         {scoreLine !== "" && <span className="text-[11.5px] tabular-nums text-gray-400 font-semibold">{scoreLine}</span>}
       </div>
-      {(playGradeLabel !== null || pick.model_version !== null) && (
+      {playGradeLabel !== null && !showBestAngle && !showLean && (
         <div className="mt-1 text-[10.5px] uppercase tracking-[0.14em] font-bold text-gray-500 flex items-center gap-2 flex-wrap">
-          {playGradeLabel !== null && !showBestAngle && !showLean && <span>{playGradeLabel}</span>}
-          {pick.model_version !== null && <span className="text-gray-600">· {prettyModelVersion(pick.model_version)}</span>}
+          <span>{playGradeLabel}</span>
         </div>
       )}
     </div>
@@ -1061,6 +1050,12 @@ function RecentlySettledCard({ pick }: { pick: RecentlySettledRow }) {
   const line = pick.line_value !== null ? pick.line_value.toString() : null;
   const conf = pick.confidence !== null ? `${Math.round(pick.confidence)}%` : null;
   const ago = fmtClock(pick.graded_at);
+  const soccerRegulationNote = pick.sport === "soccer" && (
+    pick.market === "match_result" ||
+    pick.market === "double_chance" ||
+    pick.market === "total" ||
+    pick.market === "btts"
+  );
 
   return (
     <div
@@ -1097,7 +1092,7 @@ function RecentlySettledCard({ pick }: { pick: RecentlySettledRow }) {
           {line !== null && <span>Line {line}</span>}
           {odds !== "" && <span className="text-gray-600">· {odds}</span>}
           {conf !== null && <span className="text-gray-600">· Conf {conf}</span>}
-          {pick.model_version !== null && <span className="text-gray-600">· {prettyModelVersion(pick.model_version)}</span>}
+          {soccerRegulationNote && <span className="text-gray-600">· Regulation result</span>}
         </div>
       )}
     </div>
@@ -1134,27 +1129,6 @@ function Glossary() {
     </div>
   );
 }
-
-function ModelVersions({ rows }: { rows: DimensionRow[] }) {
-  if (rows.length === 0) return null;
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-[0.16em] font-bold text-gray-500 mb-2.5">Model versions</div>
-      <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-[12.5px] tabular-nums">
-        {rows.map((r) => (
-          <div key={r.label} className="flex items-baseline gap-2">
-            <span className="text-gray-200 font-semibold">{prettyModelVersion(r.label)}</span>
-            <span className="text-gray-500">
-              {r.metrics.picks === 0 ? "—" : `${fmtRecord(r.metrics)}${fmtPct(r.metrics) !== null ? ` · ${fmtPct(r.metrics)}` : ""}`}
-              {r.metrics.pending > 0 ? ` · ${r.metrics.pending} pend` : ""}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 
 function AllActionableFooter({ overall, bestAngles, leans }: { overall: Metrics; bestAngles: Metrics; leans?: Metrics }) {
   // Secondary blended footer — explicitly NOT a hero. Lives at the

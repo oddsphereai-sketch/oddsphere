@@ -16,6 +16,7 @@
  *   - in-flight pending grades
  *   - draft/unverified records
  *   - per-game model audit
+ *   - model version names / internal model labels
  */
 
 import { supabase } from "@/lib/db/supabase";
@@ -72,9 +73,7 @@ export async function GET(request: Request) {
   //     inning 1 closes; ML/OU enter at status=final. Slate_date is
   //     preserved so the daily/weekly/lifetime rollups stay correct.
   // Toss-Up / Held remain as state counts only. No raw model audit
-  // leaks to the member API — admin-only fields are stripped before
-  // they reach this layer (the service already returns member-shaped
-  // recent picks).
+  // or model-version labels leak to the member API.
   return Response.json(
     {
       sport: sport ?? "all",
@@ -84,7 +83,6 @@ export async function GET(request: Request) {
       byMarket: result.byMarket,
       bySportMarket: result.bySportMarket,
       byPlayGrade: result.byPlayGrade,
-      byModelVersion: result.byModelVersion,
       bestAngles: result.bestAngles,
       leans: result.leans,
       yesterday: result.yesterday,

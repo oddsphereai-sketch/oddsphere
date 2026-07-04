@@ -96,6 +96,7 @@
     "audit:model-inputs": "tsx --env-file=.env.local scripts/operator/audit-model-input-attribution.ts",
     "test:auth-gate": "tsx --env-file=.env.local scripts/test-auth-gate.ts",
     "tracking-refresh": "tsx --env-file=.env.local scripts/tracking-refresh.ts",
+    "tracking:consistency-audit": "tsx --env-file=.env.local scripts/tracking-consistency-audit.ts",
     "promote-drafts": "tsx --env-file=.env.local scripts/promote-historical-drafts.ts",
     "audit:all-model-readiness": "tsx --env-file=.env.local scripts/operator/audit-all-model-readiness.ts"
   },
