@@ -4,6 +4,7 @@ import { runBdlPlayerBackfillCycle } from "@/lib/services/bdlPlayerBackfillServi
 import { generatePredictionsForSlate } from "@/lib/services/automodelService";
 import { linesService } from "@/lib/services/linesService";
 import { lineupService } from "@/lib/services/lineupService";
+import { repairMlbModelReadiness } from "@/lib/services/modelReadinessService";
 import { weatherService } from "@/lib/services/weatherService";
 import type {
   DailyEdgeDataHealthFinding,
@@ -51,6 +52,7 @@ export type DailyEdgeDataHealthRepairReport = {
     weather?: Record<string, unknown>;
     lineups?: Record<string, unknown>;
     lines?: Record<string, unknown>;
+    modelReadiness?: Record<string, unknown>;
     sharpSignals?: Record<string, unknown>;
     automodel?: Record<string, unknown>;
   };
@@ -305,6 +307,41 @@ export async function runDailyEdgeDataHealthRepair(args: {
       errors,
       attempts,
     };
+  }
+
+  try {
+    const playerStatsProviderReal = process.env.PLAYER_STATS_PROVIDER === "real_api";
+    const weatherProviderReal = process.env.WEATHER_PROVIDER === "real_api";
+    const bdlWritesEnabled = process.env.BDL_PLAYER_BACKFILL_DB_WRITES_ENABLED === "true";
+    const readinessWriteMode = process.env.AUTOMODEL_DB_WRITES_ENABLED === "true";
+    const readiness = await repairMlbModelReadiness({
+      sport: args.report.sport,
+      date: args.report.date,
+      writeMode: readinessWriteMode,
+      providerGuards: {
+        playerStatsProviderReal,
+        weatherProviderReal,
+        bdlWritesEnabled,
+      },
+    });
+    steps.modelReadiness = {
+      writeMode: readiness.write_mode,
+      reasons: readiness.reasons,
+      bdlPlayers: readiness.steps.bdl_players,
+      seasonBatting: readiness.steps.season_batting,
+      seasonPitching: readiness.steps.season_pitching,
+      lineup: readiness.steps.lineup,
+      weather: readiness.steps.weather,
+    };
+    recordsUpdated +=
+      (readiness.steps.season_batting.rows_written ?? 0) +
+      (readiness.steps.season_pitching.rows_written ?? 0) +
+      (readiness.steps.lineup.records_updated ?? 0) +
+      (readiness.steps.weather.records_updated ?? 0);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    steps.modelReadiness = { failed: true, error: message };
+    errors.push(`model_readiness: ${message}`);
   }
 
   if (process.env.PLAYER_STATS_PROVIDER === "real_api") {
