@@ -24,9 +24,26 @@ import { computeTrackingAggregate } from "@/lib/services/trackingAggregateServic
 import type { TrackedSport } from "@/lib/types/domain/Tracking";
 
 const MEMBER_TRACKING_FROM = "2026-06-07";
+const TRACKING_AGGREGATE_TIMEOUT_MS = 10000;
 
 function todayEt(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
 }
 
 export async function GET(request: Request) {
@@ -44,13 +61,31 @@ export async function GET(request: Request) {
       ? (sportRaw as TrackedSport)
       : undefined;
 
-  const result = await computeTrackingAggregate({
-    supabase,
-    sport,
-    from: MEMBER_TRACKING_FROM,
-    to: todayEt(),
-    includeLaunchDay: false,
-  });
+  let result;
+  try {
+    result = await withTimeout(
+      computeTrackingAggregate({
+        supabase,
+        sport,
+        from: MEMBER_TRACKING_FROM,
+        to: todayEt(),
+        includeLaunchDay: false,
+      }),
+      TRACKING_AGGREGATE_TIMEOUT_MS,
+      "tracking aggregate",
+    );
+  } catch (error) {
+    return Response.json(
+      {
+        error: "tracking_temporarily_unavailable",
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      {
+        status: 503,
+        headers: { "Cache-Control": "no-store" },
+      },
+    );
+  }
 
   const safeBaselines = result.baselines.map((b) => ({
     sport: b.sport,

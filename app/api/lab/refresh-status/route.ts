@@ -94,6 +94,7 @@ const CRON_CONFIGS: CronCfg[] = [
 
 /** Window during which an in_progress row counts as "actively updating". */
 const IN_PROGRESS_WINDOW_MS = 5 * 60 * 1000;
+const SOURCE_STATUS_TIMEOUT_MS = 2500;
 
 type LogRow = {
   refresh_started_at: string;
@@ -102,6 +103,22 @@ type LogRow = {
   records_updated: number | null;
   scheduled_next_refresh: string | null;
 };
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
+}
 
 /**
  * Pull the most recent row for (data_source, sport) and the most recent
@@ -276,14 +293,35 @@ export async function GET(request: Request) {
   // cross-sport rows — MLB is the only live sport in V1.
   const effectiveSport: Sport = sport ?? "mlb";
 
-  for (const cfg of CRON_CONFIGS) {
+  const sourceResults = await Promise.all(CRON_CONFIGS.map(async (cfg) => {
     const scope: Sport | null = cfg.per_sport ? effectiveSport : null;
-    const { latestCompleted, activeInProgress } = await loadSourceRows(
-      cfg.data_source,
-      scope
-    );
-    sources.push(deriveSource(cfg, scope, now, latestCompleted, activeInProgress));
-  }
+    try {
+      const { latestCompleted, activeInProgress } = await withTimeout(
+        loadSourceRows(cfg.data_source, scope),
+        SOURCE_STATUS_TIMEOUT_MS,
+        `refresh-status ${cfg.data_source} ${scope ?? "all"}`,
+      );
+      return deriveSource(cfg, scope, now, latestCompleted, activeInProgress);
+    } catch (error) {
+      console.warn(
+        `refresh-status: ${cfg.data_source} ${scope ?? "all"} unavailable: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return {
+        data_source: cfg.data_source,
+        sport: scope,
+        last_started_at: null,
+        last_completed_at: null,
+        last_status: null,
+        records_updated: null,
+        expected_cadence_minutes: cfg.cadence_minutes,
+        age_minutes: null,
+        state: "unknown",
+      } satisfies RefreshSource;
+    }
+  }));
+  sources.push(...sourceResults);
 
   const frontline = sources.filter((s, i) => CRON_CONFIGS[i]!.frontline);
   const overall = deriveOverall(frontline, now);

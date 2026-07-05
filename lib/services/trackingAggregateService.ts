@@ -464,7 +464,14 @@ export async function computeTrackingAggregate(opts: {
     from: opts.from,
     to: opts.to,
   });
-  if (recErr) return result;
+  if (recErr) {
+    const message = recErr instanceof Error
+      ? recErr.message
+      : typeof recErr === "object" && recErr !== null && "message" in recErr
+        ? String((recErr as { message?: unknown }).message)
+        : String(recErr);
+    throw new Error(`tracking records read failed: ${message}`);
+  }
   result.rowsConsidered = recordsRaw.length;
 
   // Filter launch-day if requested
