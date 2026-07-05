@@ -34,15 +34,6 @@ import {
   type TrackingBaselineRow,
 } from "../types/domain/Tracking";
 import { isPublicallyTracked } from "../config/officialTrackingStart";
-import {
-  computeRecommendationConfidence,
-  type RecommendationPlayGrade,
-  type RecommendationTier,
-} from "./recommendationConfidence";
-import { normalizeDailyEdgeActionability } from "./dailyEdgeActionability";
-import type { DailyEdgeActionabilityMarket } from "./dailyEdgeActionability";
-import type { Grade } from "../types/domain/Grade";
-import type { Verdict } from "./verdictDerivation";
 
 export type AggregateKey =
   | "all"
@@ -225,154 +216,77 @@ type Row = {
 
 const TRACKING_PAGE_SIZE = 1000;
 const TRACKING_GRADE_ID_CHUNK_SIZE = 500;
-const EFFECTIVE_TRACKING_GRADE_CUTOVER_DATE = "2026-07-01";
 
 function storedGrade(record: PredictionRecordRow): string {
   return String(record.play_grade ?? "").trim().toLowerCase();
 }
 
-function snapshotNumber(record: PredictionRecordRow, path: string[]): number | null {
-  let cursor: unknown = record.snapshot_json;
-  for (const key of path) {
-    if (cursor === null || typeof cursor !== "object") return null;
-    cursor = (cursor as Record<string, unknown>)[key];
+function gradeStrength(record: PredictionRecordRow): number {
+  const grade = storedGrade(record);
+  if (grade === "best_angle") return 5;
+  if (grade === "lean") return 4;
+  if (grade === "watchlist") return 3;
+  if (grade === "caution") return 2;
+  if (grade === "no_play") return 1;
+  return 0;
+}
+
+function createdAtMs(record: PredictionRecordRow): number {
+  const value = typeof record.created_at === "string" ? Date.parse(record.created_at) : Number.NaN;
+  return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
+}
+
+function trackingDedupeKey(record: PredictionRecordRow): string {
+  return [
+    record.sport,
+    record.slate_date,
+    record.game_id ?? record.external_id ?? record.matchup,
+    record.market,
+  ].join("::");
+}
+
+function chooseCanonicalTrackingRecord(
+  current: PredictionRecordRow,
+  candidate: PredictionRecordRow,
+): PredictionRecordRow {
+  const currentGradeStrength = gradeStrength(current);
+  const candidateGradeStrength = gradeStrength(candidate);
+  if (candidateGradeStrength !== currentGradeStrength) {
+    return candidateGradeStrength > currentGradeStrength ? candidate : current;
   }
-  return typeof cursor === "number" && Number.isFinite(cursor) ? cursor : null;
-}
-
-function snapshotString(record: PredictionRecordRow, path: string[]): string | null {
-  let cursor: unknown = record.snapshot_json;
-  for (const key of path) {
-    if (cursor === null || typeof cursor !== "object") return null;
-    cursor = (cursor as Record<string, unknown>)[key];
+  if (candidate.no_bet !== current.no_bet) {
+    return candidate.no_bet === true ? candidate : current;
   }
-  return typeof cursor === "string" ? cursor.trim().toLowerCase() : null;
-}
-
-function movementDirectionRelativeToPick(record: PredictionRecordRow): "support" | "resistance" | "neutral" | null {
-  const direction = snapshotString(record, ["line_movement", "direction"]);
-  if (direction === "toward_pick" || direction === "support") return "support";
-  if (direction === "against_pick" || direction === "resistance") return "resistance";
-  if (direction === "neutral") return "neutral";
-  return null;
-}
-
-function totalProjectionGap(record: PredictionRecordRow): number | null {
-  if (typeof record.line_value !== "number") return null;
-  const projectedTotal =
-    snapshotNumber(record, ["v2_2_audit", "posterior_total"]) ??
-    snapshotNumber(record, ["predicted_scores_at_lock", "total"]);
-  if (projectedTotal === null) return null;
-  return Math.abs(projectedTotal - record.line_value);
-}
-
-function verdictForStoredGrade(grade: string): Verdict {
-  if (grade === "best_angle") return "best_angle";
-  if (grade === "lean") return "lean";
-  if (grade === "market_watch" || grade === "model_only" || grade === "provisional" || grade === "market_aligned" || grade === "watchlist") {
-    return "watchlist";
+  if (candidate.best_angle !== current.best_angle) {
+    return candidate.best_angle === true ? candidate : current;
   }
-  if (grade === "caution" || grade === "sharp_conflict") return "caution";
-  return "no_play";
+  if (createdAtMs(candidate) !== createdAtMs(current)) {
+    return createdAtMs(candidate) < createdAtMs(current) ? candidate : current;
+  }
+  return (candidate.id ?? Number.POSITIVE_INFINITY) < (current.id ?? Number.POSITIVE_INFINITY)
+    ? candidate
+    : current;
 }
 
-function labelForVerdict(verdict: Verdict): string {
-  if (verdict === "best_angle") return "Best Angle";
-  if (verdict === "lean") return "Lean";
-  if (verdict === "watchlist") return "Watchlist";
-  if (verdict === "caution") return "Caution";
-  return "No Play";
-}
-
-function rawGradeForStoredGrade(grade: string): Grade | null {
-  if (grade === "best_angle") return "best_signal";
-  if (grade === "lean") return "model_only";
-  if (grade === "caution" || grade === "sharp_conflict") return "sharp_conflict";
-  if (grade.length > 0) return "market_watch";
-  return null;
-}
-
-function recommendationPlayGrade(grade: string): RecommendationPlayGrade | null {
-  if (grade === "best_angle") return "best_angle";
-  if (grade === "lean") return "lean";
-  if (grade === "toss_up") return "toss_up";
-  if (grade === "held") return "held";
-  if (grade === "no_bet" || grade === "no_play") return "no_bet";
-  if (grade === "market_aligned") return "market_aligned";
-  return null;
-}
-
-function recommendationTier(record: PredictionRecordRow): RecommendationTier {
-  const tier = String(
-    record.data_quality_tier ??
-    snapshotString(record, ["v2_2_audit", "data_quality_tier"]) ??
-    snapshotString(record, ["fi_v2_audit", "data_quality_tier"]) ??
-    "",
-  ).toLowerCase();
-  if (tier === "high" || tier === "medium" || tier === "low" || tier === "fallback") return tier;
-  return "fallback";
-}
-
-function actionabilityMarket(record: PredictionRecordRow): DailyEdgeActionabilityMarket | null {
-  if (record.market === "moneyline") return "moneyline";
-  if (record.market === "total") return "total";
-  if (record.market === "first_inning") return "first_inning";
-  if (record.market === "spread") return "spread";
-  if (record.market === "match_result") return "soccer_moneyline";
-  if (record.market === "btts") return "soccer_btts";
-  return null;
-}
-
-function actionabilityGrade(record: PredictionRecordRow, grade: string): string {
-  if (grade.length === 0) return grade;
-  const market = actionabilityMarket(record);
-  if (market === null) return grade;
-  const verdict = verdictForStoredGrade(grade);
-  const edgeUnits = record.market === "total" && typeof record.line_value === "number"
-    ? totalProjectionGap(record)
-    : null;
-  const hasPick = record.pick !== null && record.pick !== "Held" && !isTossUp(record);
-  const recScore = computeRecommendationConfidence({
-    edgePctPp: typeof record.edge === "number" ? record.edge : null,
-    edgeUnits,
-    tier: recommendationTier(record),
-    playGrade: recommendationPlayGrade(grade),
-    hasPick,
-  });
-  const normalized = normalizeDailyEdgeActionability({
-    market,
-    rawVerdict: { key: verdict, label: labelForVerdict(verdict) },
-    rawGrade: rawGradeForStoredGrade(grade),
-    rawRecScore: recScore,
-    modelMarketGapPct: typeof record.edge === "number" ? record.edge : null,
-    marketReadV2: {
-      movement: {
-        directionRelativeToPick: movementDirectionRelativeToPick(record),
-      },
-    } as never,
-    hasPick,
-    held: record.held === true,
-    dataQualityTier: recommendationTier(record),
-    priceAmerican: record.odds_american,
-    priceUnavailableAtLock: record.locked_at !== null && record.odds_american === null && hasPick,
-  });
-  return normalized.finalVerdict.key;
+export function dedupePredictionRecordsForTracking(records: PredictionRecordRow[]): PredictionRecordRow[] {
+  const byKey = new Map<string, PredictionRecordRow>();
+  for (const record of records) {
+    const key = trackingDedupeKey(record);
+    const existing = byKey.get(key);
+    byKey.set(key, existing === undefined ? record : chooseCanonicalTrackingRecord(existing, record));
+  }
+  return Array.from(byKey.values()).sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
 }
 
 /**
  * Tracking must match the member-facing locked grade, not a second grading pass.
- * A stored Best Angle whose boolean was explicitly demoted is not a Best Angle
- * in public tracking, and the actionability normalizer is used for post-cutover
- * records whose stored grade needs the same public-grade normalization as the
- * reader. Same-day guardrail feature flags intentionally do not run here; if a
- * guardrail did not change the locked/displayed card, it must not rebucket
- * settled tracking later.
+ * Same-day guardrail / actionability logic belongs upstream, before the card
+ * locks. Once a prediction is stored, tracking buckets by that stored grade so
+ * the member page cannot later reclassify a Lean as a Best Angle or vice versa.
  */
 export function effectiveTrackingPlayGrade(record: PredictionRecordRow): string {
-  let grade = storedGrade(record);
+  const grade = storedGrade(record);
   if (grade === "best_angle" && record.best_angle === false) return "lean";
-  if (record.slate_date < EFFECTIVE_TRACKING_GRADE_CUTOVER_DATE) return grade;
-  grade = actionabilityGrade(record, grade);
   return grade;
 }
 
@@ -571,7 +485,7 @@ export async function computeTrackingAggregate(opts: {
   //
   // ROI is a SEPARATE (HQ-only) metric and is where null-odds rows get dropped —
   // never conflate "ROI-ineligible" with "doesn't count for accuracy".
-  const records = publicStartFiltered.filter((r) => !isTossUp(r));
+  const records = dedupePredictionRecordsForTracking(publicStartFiltered).filter((r) => !isTossUp(r));
   result.rowsCounted = records.length;
   if (records.length === 0) return result;
 

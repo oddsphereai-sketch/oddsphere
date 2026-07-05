@@ -346,7 +346,12 @@ export default function LabTrackingPage() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/lab/tracking-foundation")
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12000);
+    fetch("/api/lab/tracking-foundation", {
+      signal: controller.signal,
+      cache: "no-store",
+    })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -355,7 +360,19 @@ export default function LabTrackingPage() {
         setData(d);
         setLastUpdated(new Date().toISOString());
       })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => {
+        if (e instanceof DOMException && e.name === "AbortError") {
+          setError("Tracking data is taking too long to respond. Please refresh in a moment.");
+          return;
+        }
+        setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => window.clearTimeout(timeout));
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, []);
 
   const yesterdayRows = useMemo(() => visibleBuckets(data?.yesterday?.bySportMarket ?? []), [data]);
@@ -910,11 +927,19 @@ function BestAnglesBoard({ rows }: { rows: SportMarketBucket[] }) {
 }
 
 function BestAnglesPanel({ label, color, metrics, decided }: { label: string; color: string; metrics: Metrics; decided: number }) {
+  const nonDecisionCount = metrics.pending + metrics.pushes + metrics.voids;
+  const nonDecisionParts = [
+    metrics.pending > 0 ? `${metrics.pending} pending` : null,
+    metrics.pushes > 0 ? `${metrics.pushes} push` : null,
+    metrics.voids > 0 ? `${metrics.voids} void` : null,
+  ].filter(Boolean);
   return (
     <div className="rounded-lg bg-white/[0.018] border border-white/[0.04] px-3 py-2.5">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-[10px] uppercase tracking-[0.14em] font-bold" style={{ color }}>{label}</span>
-        <span className="text-[10px] tabular-nums text-gray-500 font-semibold">{metrics.picks} picks</span>
+        <span className="text-[10px] tabular-nums text-gray-500 font-semibold">
+          {decided > 0 ? `${decided} decided` : `${metrics.picks} picks`}
+        </span>
       </div>
       {metrics.picks === 0 ? (
         <div className="mt-1.5 text-[13px] text-gray-600">—</div>
@@ -928,6 +953,11 @@ function BestAnglesPanel({ label, color, metrics, decided }: { label: string; co
           <div className="mt-1.5 text-[16px] tabular-nums font-extrabold text-gray-100 leading-none">{fmtRecord(metrics)}</div>
           <div className="text-[10.5px] tabular-nums text-emerald-300/90 font-bold mt-1.5">{fmtPct(metrics) ?? ""}</div>
         </>
+      )}
+      {nonDecisionCount > 0 && decided > 0 && (
+        <div className="mt-1.5 text-[10px] tabular-nums text-gray-500">
+          + {nonDecisionParts.join(" · ")}
+        </div>
       )}
     </div>
   );

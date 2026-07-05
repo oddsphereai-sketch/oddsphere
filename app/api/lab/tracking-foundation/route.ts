@@ -23,6 +23,12 @@ import { supabase } from "@/lib/db/supabase";
 import { computeTrackingAggregate } from "@/lib/services/trackingAggregateService";
 import type { TrackedSport } from "@/lib/types/domain/Tracking";
 
+const MEMBER_TRACKING_FROM = "2026-06-07";
+
+function todayEt(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const sportRaw = url.searchParams.get("sport");
@@ -41,6 +47,8 @@ export async function GET(request: Request) {
   const result = await computeTrackingAggregate({
     supabase,
     sport,
+    from: MEMBER_TRACKING_FROM,
+    to: todayEt(),
     includeLaunchDay: false,
   });
 
