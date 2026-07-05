@@ -1913,7 +1913,6 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const find = (l: string) => rows.find((r) => r.label === l);
   const marketEv = find("Market EV");
   const fiMarket = find("FI Market");
-  const fiOddsMove = find("FI Odds Move");
   const splits = find("Money vs Bets");
   const lineMove = find("Line"); // the betting NUMBER move (totals)
   const oddsMove = find("Line Move"); // the PRICE move — carries the directional arrow + tone
@@ -1947,7 +1946,6 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
       <div className="divide-y divide-white/[0.04] mt-2">
         {book && <CleanEvRow label="Book">{book}</CleanEvRow>}
         {fiMarket && <CleanEvRow label="FI Market" delta={fiMarket.delta} tone={fiMarket.tone}>{fiMarket.evidence}</CleanEvRow>}
-        {fiOddsMove && <CleanEvRow label="FI Odds Move" delta={fiOddsMove.delta} tone={fiOddsMove.tone}>{fiOddsMove.evidence}</CleanEvRow>}
         {marketEv && marketEv.delta !== "unavailable" && <CleanEvRow label="Market EV" delta={marketEv.delta} tone={marketEv.tone}>{marketEv.evidence}</CleanEvRow>}
         {splits && <CleanEvRow label="Splits" delta={splits.delta} tone={splits.tone}>{splits.evidence}</CleanEvRow>}
       </div>
@@ -3869,11 +3867,18 @@ function emptyStateMessageFor(
   }
 }
 
+function dailyEdgeMemberErrorMessage(error: string): string {
+  if (/timed out|522|temporarily_unavailable|failed to fetch|network/i.test(error)) {
+    return "Daily Edge data is temporarily unavailable while the data service catches up. Please refresh in a moment.";
+  }
+  return "Daily Edge data is temporarily unavailable. Please refresh in a moment.";
+}
+
 function ErrorState({ error }: { error: string }) {
   return (
     <div className="max-w-7xl mx-auto px-6 py-16 text-center">
-      <p className="text-[14px] text-amber-200">Something went wrong loading the slate.</p>
-      <p className="text-[12px] text-gray-500 mt-2">{error}</p>
+      <p className="text-[14px] text-amber-200">Daily Edge is temporarily unavailable.</p>
+      <p className="text-[12px] text-gray-400 mt-2">{dailyEdgeMemberErrorMessage(error)}</p>
     </div>
   );
 }

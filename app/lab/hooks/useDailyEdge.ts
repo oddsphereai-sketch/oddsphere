@@ -59,6 +59,9 @@ export function useDailyEdge(options: UseDailyEdgeOptions): UseDailyEdgeResult {
       refreshInterval: refreshIntervalMs,
       revalidateOnFocus: true,
       revalidateOnReconnect: true,
+      errorRetryCount: 1,
+      errorRetryInterval: 60_000,
+      dedupingInterval: 15_000,
       // P0 tab-switching fix (2026-06-12): keepPreviousData=true caused the
       // shell to render the PREVIOUS sport's response while the new sport's
       // fetch was in flight, which (combined with the never-remounted shell)

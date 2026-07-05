@@ -353,7 +353,11 @@ export default function LabTrackingPage() {
       cache: "no-store",
     })
       .then(async (r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        if (!r.ok) {
+          const body = await r.json().catch(() => null) as { error?: string; detail?: string } | null;
+          const detail = body?.detail || body?.error || `HTTP ${r.status}`;
+          throw new Error(detail);
+        }
         return r.json();
       })
       .then((d) => {
@@ -365,7 +369,10 @@ export default function LabTrackingPage() {
           setError("Tracking data is taking too long to respond. Please refresh in a moment.");
           return;
         }
-        setError(e instanceof Error ? e.message : String(e));
+        const message = e instanceof Error ? e.message : String(e);
+        setError(/timed out|522|temporarily_unavailable|failed to fetch|network/i.test(message)
+          ? "The data service is taking too long to respond. Please refresh in a moment."
+          : message);
       })
       .finally(() => window.clearTimeout(timeout));
 

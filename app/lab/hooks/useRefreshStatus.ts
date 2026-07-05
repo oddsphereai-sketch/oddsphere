@@ -3,8 +3,8 @@
 /**
  * useRefreshStatus — SWR hook for /api/lab/refresh-status.
  *
- * Polls every 60s by default so the RefreshIndicator in the navbar stays
- * within ~1 minute of truth without hammering Supabase. SWR also revalidates
+ * Polls every 5 minutes by default so the RefreshIndicator in the navbar stays
+ * reasonably fresh without hammering Supabase. SWR also revalidates
  * on focus + reconnect — when a user tabs back in we recheck immediately.
  *
  * Returns the raw `RefreshStatusResponse` plus SWR's loading/error state.
@@ -23,7 +23,7 @@ import type { Sport } from "@/lib/types/domain/Sport";
 export type UseRefreshStatusOptions = {
   /** Sport scope. Pass undefined for the default (MLB) view. */
   sport?: Sport;
-  /** Poll interval in ms. Default 60_000 (60s). Set to 0 to disable polling. */
+  /** Poll interval in ms. Default 300_000 (5 min). Set to 0 to disable polling. */
   refreshIntervalMs?: number;
 };
 
@@ -38,7 +38,7 @@ export type UseRefreshStatusResult = {
 export function useRefreshStatus(
   options: UseRefreshStatusOptions = {}
 ): UseRefreshStatusResult {
-  const { sport, refreshIntervalMs = 60_000 } = options;
+  const { sport, refreshIntervalMs = 300_000 } = options;
   const key = buildLabUrl("/api/lab/refresh-status", { sport });
 
   const { data, error, isLoading, mutate } = useSWR<RefreshStatusResponse>(
@@ -48,6 +48,8 @@ export function useRefreshStatus(
       refreshInterval: refreshIntervalMs,
       revalidateOnFocus: true,
       revalidateOnReconnect: true,
+      errorRetryCount: 0,
+      dedupingInterval: 60_000,
       // Keep last good data visible while a revalidation runs — prevents the
       // indicator from flickering to a loading state every 60s.
       keepPreviousData: true,
