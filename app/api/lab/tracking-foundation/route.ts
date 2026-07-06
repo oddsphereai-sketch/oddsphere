@@ -24,7 +24,7 @@ import { computeTrackingAggregate } from "@/lib/services/trackingAggregateServic
 import type { TrackedSport } from "@/lib/types/domain/Tracking";
 
 const MEMBER_TRACKING_FROM = "2026-06-07";
-const TRACKING_AGGREGATE_TIMEOUT_MS = 10000;
+const TRACKING_AGGREGATE_TIMEOUT_MS = 25000;
 
 function todayEt(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
