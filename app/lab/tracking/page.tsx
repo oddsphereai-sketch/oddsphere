@@ -347,7 +347,7 @@ export default function LabTrackingPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 30000);
+    const timeout = window.setTimeout(() => controller.abort(), 60000);
     fetch("/api/lab/tracking-foundation", {
       signal: controller.signal,
       cache: "no-store",

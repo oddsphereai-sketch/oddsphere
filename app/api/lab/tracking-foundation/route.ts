@@ -23,8 +23,10 @@ import { supabase } from "@/lib/db/supabase";
 import { computeTrackingAggregate } from "@/lib/services/trackingAggregateService";
 import type { TrackedSport } from "@/lib/types/domain/Tracking";
 
+export const maxDuration = 60;
+
 const MEMBER_TRACKING_FROM = "2026-06-07";
-const TRACKING_AGGREGATE_TIMEOUT_MS = 25000;
+const TRACKING_AGGREGATE_TIMEOUT_MS = 50000;
 
 function todayEt(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
