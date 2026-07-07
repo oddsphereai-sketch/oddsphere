@@ -98,11 +98,85 @@ type FiHoldDiagnostic = {
   marketListedFiTotal: number | null;
   marketNrfiOddsAmerican: number | null;
   marketYrfiOddsAmerican: number | null;
+  officialProbableStarters?: OfficialMlbProbableStarterDiagnostic | null;
 };
 
 type GamePredictionDiagnosticRow = {
   sport_specific: Record<string, unknown> | null;
   games: { external_id: number } | null;
+};
+
+type GameDateRow = {
+  external_id: number;
+  game_date: string | null;
+};
+
+type OfficialMlbProbableStarterDiagnostic = {
+  source: "mlb_statsapi";
+  matched: boolean;
+  gamePk: number | null;
+  officialGameDate: string | null;
+  awayTeam: string | null;
+  homeTeam: string | null;
+  awayStarter: string | null;
+  homeStarter: string | null;
+  missingSides: Array<"away" | "home">;
+  matchDistanceMinutes: number | null;
+  classification:
+    | "official_probables_complete"
+    | "official_probable_starter_unannounced"
+    | "official_match_missing"
+    | "official_fetch_failed";
+  error?: string;
+};
+
+type OfficialScheduleGame = {
+  gamePk?: number;
+  gameDate?: string;
+  teams?: {
+    away?: {
+      team?: { name?: string };
+      probablePitcher?: { fullName?: string };
+    };
+    home?: {
+      team?: { name?: string };
+      probablePitcher?: { fullName?: string };
+    };
+  };
+};
+
+const MLB_TEAM_NAME_TO_ABBR: Record<string, string> = {
+  "arizona diamondbacks": "ARI",
+  "athletics": "ATH",
+  "atlanta braves": "ATL",
+  "baltimore orioles": "BAL",
+  "boston red sox": "BOS",
+  "chicago cubs": "CHC",
+  "chicago white sox": "CWS",
+  "cincinnati reds": "CIN",
+  "cleveland guardians": "CLE",
+  "colorado rockies": "COL",
+  "detroit tigers": "DET",
+  "houston astros": "HOU",
+  "kansas city royals": "KC",
+  "los angeles angels": "LAA",
+  "los angeles dodgers": "LAD",
+  "miami marlins": "MIA",
+  "milwaukee brewers": "MIL",
+  "minnesota twins": "MIN",
+  "new york mets": "NYM",
+  "new york yankees": "NYY",
+  "philadelphia phillies": "PHI",
+  "pittsburgh pirates": "PIT",
+  "san diego padres": "SD",
+  "san francisco giants": "SF",
+  "seattle mariners": "SEA",
+  "st. louis cardinals": "STL",
+  "st louis cardinals": "STL",
+  "tampa bay rays": "TB",
+  "texas rangers": "TEX",
+  "toronto blue jays": "TOR",
+  "washington nationals": "WSH",
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -145,6 +219,132 @@ function countBy<T>(rows: T[], keyFn: (row: T) => string): Record<string, number
     acc[key] = (acc[key] ?? 0) + 1;
     return acc;
   }, {});
+}
+
+function cleanTeamName(value: unknown): string {
+  return typeof value === "string"
+    ? value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ")
+    : "";
+}
+
+function officialTeamAbbr(value: unknown): string | null {
+  const cleaned = cleanTeamName(value);
+  return MLB_TEAM_NAME_TO_ABBR[cleaned] ?? null;
+}
+
+function officialMissingSides(game: OfficialScheduleGame): Array<"away" | "home"> {
+  const missing: Array<"away" | "home"> = [];
+  if (!game.teams?.away?.probablePitcher?.fullName) missing.push("away");
+  if (!game.teams?.home?.probablePitcher?.fullName) missing.push("home");
+  return missing;
+}
+
+async function loadGameDatesByExternalId(
+  sport: Sport,
+  date: string,
+  externalIds: readonly number[],
+): Promise<Map<number, string | null>> {
+  if (externalIds.length === 0) return new Map();
+  const { data, error } = await supabase
+    .from("games")
+    .select("external_id, game_date")
+    .eq("sport", sport)
+    .eq("slate_date", date)
+    .in("external_id", [...externalIds]);
+  if (error) {
+    throw new Error(`daily-edge health game date lookup failed: ${error.message}`);
+  }
+  return new Map((data ?? []).map((row) => {
+    const r = row as GameDateRow;
+    return [r.external_id, r.game_date];
+  }));
+}
+
+async function loadOfficialMlbProbableStarterDiagnostics(
+  rows: PredictionEvidenceObject[],
+): Promise<Map<number, OfficialMlbProbableStarterDiagnostic>> {
+  const fiHeldRows = rows.filter((row) => row.identity.sport === "mlb" && isFiHeldNoSide(row));
+  if (fiHeldRows.length === 0) return new Map();
+
+  const externalIds = Array.from(new Set(fiHeldRows.map((row) => row.identity.externalId)));
+  const gameDates = await loadGameDatesByExternalId("mlb", fiHeldRows[0]?.identity.slateDate ?? "", externalIds);
+  let officialGames: OfficialScheduleGame[] = [];
+  try {
+    const res = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${fiHeldRows[0]?.identity.slateDate ?? ""}&hydrate=probablePitcher`, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json() as { dates?: Array<{ games?: OfficialScheduleGame[] }> };
+    officialGames = (json.dates ?? []).flatMap((d) => d.games ?? []);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new Map(externalIds.map((externalId) => [externalId, {
+      source: "mlb_statsapi",
+      matched: false,
+      gamePk: null,
+      officialGameDate: null,
+      awayTeam: null,
+      homeTeam: null,
+      awayStarter: null,
+      homeStarter: null,
+      missingSides: [],
+      matchDistanceMinutes: null,
+      classification: "official_fetch_failed",
+      error: message,
+    } satisfies OfficialMlbProbableStarterDiagnostic]));
+  }
+
+  const out = new Map<number, OfficialMlbProbableStarterDiagnostic>();
+  for (const row of fiHeldRows) {
+    const gameDate = gameDates.get(row.identity.externalId) ?? null;
+    const targetTime = gameDate && Number.isFinite(Date.parse(gameDate)) ? Date.parse(gameDate) : null;
+    const candidates = officialGames
+      .filter((game) =>
+        officialTeamAbbr(game.teams?.away?.team?.name) === row.identity.awayTeam &&
+        officialTeamAbbr(game.teams?.home?.team?.name) === row.identity.homeTeam
+      )
+      .map((game) => {
+        const officialTime = game.gameDate && Number.isFinite(Date.parse(game.gameDate)) ? Date.parse(game.gameDate) : null;
+        const distance = targetTime !== null && officialTime !== null ? Math.abs(targetTime - officialTime) : null;
+        return { game, distance };
+      })
+      .sort((a, b) => (a.distance ?? Number.POSITIVE_INFINITY) - (b.distance ?? Number.POSITIVE_INFINITY));
+    const best = candidates[0] ?? null;
+    if (!best) {
+      out.set(row.identity.externalId, {
+        source: "mlb_statsapi",
+        matched: false,
+        gamePk: null,
+        officialGameDate: null,
+        awayTeam: null,
+        homeTeam: null,
+        awayStarter: null,
+        homeStarter: null,
+        missingSides: [],
+        matchDistanceMinutes: null,
+        classification: "official_match_missing",
+      });
+      continue;
+    }
+    const missingSides = officialMissingSides(best.game);
+    out.set(row.identity.externalId, {
+      source: "mlb_statsapi",
+      matched: true,
+      gamePk: typeof best.game.gamePk === "number" ? best.game.gamePk : null,
+      officialGameDate: best.game.gameDate ?? null,
+      awayTeam: best.game.teams?.away?.team?.name ?? null,
+      homeTeam: best.game.teams?.home?.team?.name ?? null,
+      awayStarter: best.game.teams?.away?.probablePitcher?.fullName ?? null,
+      homeStarter: best.game.teams?.home?.probablePitcher?.fullName ?? null,
+      missingSides,
+      matchDistanceMinutes: best.distance === null ? null : Math.round(best.distance / 60_000),
+      classification: missingSides.length > 0
+        ? "official_probable_starter_unannounced"
+        : "official_probables_complete",
+    });
+  }
+  return out;
 }
 
 function pct(count: number, total: number): string {
@@ -347,6 +547,15 @@ async function loadFiHoldDiagnostics(rows: PredictionEvidenceObject[]): Promise<
 
 function fiHoldFindingCode(diagnostic: FiHoldDiagnostic | undefined): string {
   if (!diagnostic) return "fi_model_hold_diagnostic_missing";
+  if (diagnostic.officialProbableStarters?.classification === "official_probable_starter_unannounced") {
+    return "fi_official_probable_starter_unannounced";
+  }
+  if (
+    diagnostic.classification === "missing_inputs" &&
+    diagnostic.officialProbableStarters?.classification === "official_probables_complete"
+  ) {
+    return "fi_starter_ingestion_miss";
+  }
   if (diagnostic.classification === "legit_model_toss_up") return "fi_legit_model_toss_up";
   if (diagnostic.classification === "provisional_lineup_pending") return "fi_provisional_lineup_pending";
   if (diagnostic.classification === "missing_inputs") return "fi_model_hold_missing_inputs";
@@ -356,13 +565,27 @@ function fiHoldFindingCode(diagnostic: FiHoldDiagnostic | undefined): string {
 
 function fiHoldFindingSeverity(diagnostic: FiHoldDiagnostic | undefined): DailyEdgeDataHealthSeverity {
   if (diagnostic?.classification === "legit_model_toss_up") return "info";
+  if (diagnostic?.officialProbableStarters?.classification === "official_probable_starter_unannounced") return "medium";
   if (diagnostic?.materiality === "medium") return "medium";
   return "high";
+}
+
+function fiHoldFindingMessage(diagnostic: FiHoldDiagnostic | undefined): string {
+  const official = diagnostic?.officialProbableStarters;
+  if (official?.classification === "official_probable_starter_unannounced") {
+    const sides = official.missingSides.join("/");
+    return `FI side is held because MLB official probable starter data is still unannounced for ${sides || "one side"}.`;
+  }
+  if (official?.classification === "official_probables_complete" && diagnostic?.classification === "missing_inputs") {
+    return "FI side is held even though MLB official probable starters are complete; this is an ingestion/mapping issue.";
+  }
+  return diagnostic?.reason ?? "FI model produced no actionable YRFI/NRFI side.";
 }
 
 function collectFindings(
   rows: PredictionEvidenceObject[],
   fiHoldDiagnostics: Map<number, FiHoldDiagnostic>,
+  officialMlbProbableStarters: Map<number, OfficialMlbProbableStarterDiagnostic>,
 ): DailyEdgeDataHealthFinding[] {
   const findings: DailyEdgeDataHealthFinding[] = [];
   for (const row of rows) {
@@ -370,10 +593,16 @@ function collectFindings(
     const actionable = isActionableRow(row);
     const sharpStatus = sharpContextStatusForEvidence(row);
     const fiHeldNoSide = isFiHeldNoSide(row);
-    const fiDiagnostic = fiHeldNoSide ? fiHoldDiagnostics.get(row.identity.externalId) : undefined;
+    const baseFiDiagnostic = fiHeldNoSide ? fiHoldDiagnostics.get(row.identity.externalId) : undefined;
+    const fiDiagnostic = baseFiDiagnostic
+      ? {
+          ...baseFiDiagnostic,
+          officialProbableStarters: officialMlbProbableStarters.get(row.identity.externalId) ?? null,
+        }
+      : undefined;
     if (review.evidenceQuality === "blocked") {
       if (fiHeldNoSide) {
-        pushFinding(findings, row, fiHoldFindingCode(fiDiagnostic), fiHoldFindingSeverity(fiDiagnostic), fiDiagnostic?.reason ?? "FI side is held with no diagnostic payload available.", {
+        pushFinding(findings, row, fiHoldFindingCode(fiDiagnostic), fiHoldFindingSeverity(fiDiagnostic), fiHoldFindingMessage(fiDiagnostic), {
           missingRequiredFields: review.missingRequiredFields,
           persistenceGaps: review.persistenceGaps,
           dataWarnings: review.dataWarnings,
@@ -388,7 +617,7 @@ function collectFindings(
         });
       }
     } else if (fiHeldNoSide) {
-      pushFinding(findings, row, fiHoldFindingCode(fiDiagnostic), fiHoldFindingSeverity(fiDiagnostic), fiDiagnostic?.reason ?? "FI model produced no actionable YRFI/NRFI side.", {
+      pushFinding(findings, row, fiHoldFindingCode(fiDiagnostic), fiHoldFindingSeverity(fiDiagnostic), fiHoldFindingMessage(fiDiagnostic), {
         missingRequiredFields: review.missingRequiredFields,
         dataWarnings: review.dataWarnings,
         expectedMissingFields: review.expectedMissingFields,
@@ -415,6 +644,16 @@ function collectFindings(
     if (row.identity.marketType !== "FI" && sharpStatus === "sharp_context_unavailable_current_source") {
       pushFinding(findings, row, "ml_total_sharp_context_missing", "medium", "ML/Total row is missing Sharp Book context.");
     }
+    if (
+      row.identity.marketType !== "FI" &&
+      row.marketEvidence.sourceAgreement !== "not_required" &&
+      !row.marketEvidence.consensusSplitsAvailable
+    ) {
+      pushFinding(findings, row, "ml_total_consensus_context_missing", "medium", "ML/Total row is missing Consensus Splits context.", {
+        sourceMissingReason: row.marketEvidence.sourceMissingReason,
+        sourceAgreement: row.marketEvidence.sourceAgreement,
+      });
+    }
     if (row.identity.marketType === "FI" && sharpStatus !== "sharp_context_not_required") {
       pushFinding(findings, row, "fi_unexpected_sharp_context_status", "medium", "FI should not require Consensus/Sharp split context.", { sharpStatus });
     }
@@ -437,7 +676,10 @@ export async function runDailyEdgeDataHealthMonitor(args: {
   });
   const rows = selection.evidence;
   const fiHoldDiagnostics = await loadFiHoldDiagnostics(rows);
-  const findings = collectFindings(rows, fiHoldDiagnostics);
+  const officialMlbProbableStarters = args.sport === "mlb"
+    ? await loadOfficialMlbProbableStarterDiagnostics(rows)
+    : new Map<number, OfficialMlbProbableStarterDiagnostic>();
+  const findings = collectFindings(rows, fiHoldDiagnostics, officialMlbProbableStarters);
   const bySeverity = countBy(findings, (finding) => finding.severity);
   const byCode = countBy(findings, (finding) => finding.code);
   const unresolvedBlockingOrHigh = findings.filter((finding) =>
