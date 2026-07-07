@@ -37,6 +37,7 @@ import {
 import { classifyPickRelativeLineMove } from "../../lib/lineMoveTone";
 import { reviewActionLabel } from "../../lib/reviewActionLabel";
 import type {
+  DailyEdgePredictionDto,
   DailyEdgeGameDto,
   MarketEdgeDto,
 } from "../../lib/labTypes";
@@ -4025,6 +4026,472 @@ function SlateBoardHeader({
 }
 
 // ─── Shell ──────────────────────────────────────────────────────────────
+
+type MarketingPreviewMarketInput = {
+  pick: string | null;
+  confidence: number | null;
+  verdict: VerdictKey;
+  grade: MarketEdgeDto["grade"];
+  line?: number | null;
+  modelProb?: number | null;
+  marketFairProb?: number | null;
+  modelMarketGapPct?: number | null;
+  priceAmerican?: number | null;
+  lineOpenAmerican?: number | null;
+  oddsTrail?: MarketEdgeDto["oddsTrail"];
+  modelTotal?: number | null;
+  marketTotal?: number | null;
+  moneyPct?: number | null;
+  betsPct?: number | null;
+  publicSplits?: MarketEdgeDto["publicSplits"];
+  guidedGuide: string;
+  guidedWatchOut: string;
+  whyLine: string;
+  riskLine: string;
+  keyStats?: MarketEdgeDto["keyStats"];
+};
+
+function marketingPreviewMarket(input: MarketingPreviewMarketInput): MarketEdgeDto {
+  const modelProb = input.modelProb ?? input.confidence;
+  const marketFairProb = input.marketFairProb ?? null;
+  const modelTrustPct = modelProb === null ? null : modelProb * 100;
+  const marketImpliedPct = marketFairProb === null ? null : marketFairProb * 100;
+  const modelMarketGapPct =
+    input.modelMarketGapPct ??
+    (modelTrustPct !== null && marketImpliedPct !== null ? modelTrustPct - marketImpliedPct : null);
+
+  return {
+    pick: input.pick,
+    confidence: input.confidence,
+    grade: input.grade,
+    signalType: input.grade === "best_signal" ? "model_dominant" : "balanced",
+    marketSignal: input.verdict === "caution" ? "market_resistance" : "market_neutral",
+    sharpStatus: input.verdict === "caution" ? "caution" : "mixed",
+    held: input.pick === null,
+    verdict: { key: input.verdict, label: VERDICT_LABEL[input.verdict] },
+    rawGrade: input.grade,
+    rawRecScore: input.confidence === null ? null : Math.round(input.confidence * 100),
+    capReasons: [],
+    finalGrade: input.grade,
+    finalRecScore: input.confidence === null ? null : Math.round(input.confidence * 100),
+    actionabilityLabel: VERDICT_LABEL[input.verdict],
+    displayReason: input.guidedGuide,
+    guidedGuide: input.guidedGuide,
+    guidedWatchOut: input.guidedWatchOut,
+    whyLine: input.whyLine,
+    riskLine: input.riskLine,
+    modelProb,
+    marketFairProb,
+    pinnacleEvPct: modelMarketGapPct === null ? null : modelMarketGapPct / 10,
+    moneyPct: input.moneyPct ?? null,
+    betsPct: input.betsPct ?? null,
+    publicSplits: input.publicSplits ?? [],
+    priceAmerican: input.priceAmerican ?? null,
+    fiMarketBoard: null,
+    lineOpenAmerican: input.lineOpenAmerican ?? null,
+    priceUnavailableAtLock: false,
+    priceObservedAt: null,
+    priceIsStale: false,
+    lineOpenObservedAt: null,
+    lineOpenIsStale: false,
+    moneyPctObservedAt: null,
+    moneyPctIsStale: false,
+    betsPctObservedAt: null,
+    betsPctIsStale: false,
+    oddspherePostedAmerican: null,
+    oddspherePostedAt: null,
+    lockedLineAmerican: null,
+    lockedLineAt: null,
+    oddsTrail: input.oddsTrail ?? [],
+    marketInterpretation: null,
+    marketReadV2: null,
+    marketReadV2Enabled: false,
+    lastMovePrevAmerican: null,
+    lastMoveNextAmerican: null,
+    lastMoveAtIso: null,
+    lastMoveLinePrev: null,
+    lastMoveLineNext: null,
+    modelTotal: input.modelTotal ?? null,
+    marketTotal: input.marketTotal ?? input.line ?? null,
+    line: input.line ?? null,
+    keyStats: input.keyStats ?? [],
+    modelTrustPct,
+    marketImpliedPct,
+    modelMarketGapPct,
+    recommendationConfidence: input.confidence === null ? null : Math.round(input.confidence * 100),
+    recommendationDecision: undefined,
+    marketSource: input.priceAmerican === null || input.priceAmerican === undefined ? null : "consensus",
+    marketDataQuality: input.priceAmerican === null || input.priceAmerican === undefined ? "unavailable" : "two_sided_consensus",
+    reviewFlags: [],
+    reviewActionSummary: "keep",
+  };
+}
+
+function marketingPreviewGame(input: {
+  id: string;
+  awayTeam: string;
+  homeTeam: string;
+  gameTime: string;
+  projected: { away: number; home: number };
+  decisionLine: string;
+  homeStarter: DailyEdgeGameDto["homeStarter"];
+  awayStarter: DailyEdgeGameDto["awayStarter"];
+  markets: DailyEdgeGameDto["markets"];
+}): DailyEdgeGameDto {
+  const predictionFromMarket = (market: MarketEdgeDto): DailyEdgePredictionDto => ({
+    pick: market.pick,
+    confidence: market.confidence,
+    sharpStatus: market.sharpStatus,
+    grade: market.grade,
+    signalType: market.signalType,
+    marketSignal: market.marketSignal,
+  });
+
+  return {
+    id: input.id,
+    sport: "mlb",
+    external_id: Number.parseInt(input.id.replace(/\D/g, ""), 10) || 1001,
+    awayTeam: input.awayTeam,
+    awayTeamLogo: null,
+    homeTeam: input.homeTeam,
+    homeTeamLogo: null,
+    gameTime: input.gameTime,
+    gameStartMinutes: 19 * 60 + 7,
+    scheduledLockAt: "2026-07-07T22:07:00.000Z",
+    lockState: "open",
+    lockedAt: null,
+    updatedAt: "2026-07-07T19:30:00.000Z",
+    generatedAt: "2026-07-07T19:30:00.000Z",
+    holdReason: null,
+    dataCompleteness: null,
+    homeStarter: input.homeStarter,
+    awayStarter: input.awayStarter,
+    predictions: {
+      ml: predictionFromMarket(input.markets.moneyline),
+      total: { ...predictionFromMarket(input.markets.total), line: input.markets.total.line },
+      nrfi: predictionFromMarket(input.markets.first_inning),
+    },
+    markets: input.markets,
+    decisionLine: input.decisionLine,
+    projected: input.projected,
+    sharpSignals: [],
+    status: {
+      lineupConfirmed: true,
+      linesLocked: false,
+      sharpSignalPending: false,
+      marketDataLimited: false,
+    },
+    result: null,
+    breakdown: {
+      verdict: { key: "best_angle", label: "Best Angle" },
+      sharpRead: { key: "mixed", sentence: "Market context is visible in the reader." },
+      modelBreakdown: input.decisionLine,
+    },
+  } as unknown as DailyEdgeGameDto;
+}
+
+const marketingPreviewGames: DailyEdgeGameDto[] = [
+  marketingPreviewGame({
+    id: "marketing-1001",
+    awayTeam: "NYM",
+    homeTeam: "TOR",
+    gameTime: "7:07 PM",
+    projected: { away: 5.0, home: 4.0 },
+    decisionLine: "NYM has a strong model/value case with movement toward the pick.",
+    awayStarter: { name: "Nolan McLean", throws: "R" },
+    homeStarter: { name: "Kevin Gausman", throws: "R" },
+    markets: {
+      moneyline: marketingPreviewMarket({
+        pick: "NYM",
+        confidence: 0.56,
+        verdict: "best_angle",
+        grade: "best_signal",
+        modelProb: 0.56,
+        marketFairProb: 0.46,
+        priceAmerican: -104,
+        lineOpenAmerican: 106,
+        oddsTrail: [
+          { american: 106, line: null, observedAt: "2026-07-07T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
+          { american: -101, line: null, observedAt: "2026-07-07T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
+          { american: -104, line: null, observedAt: "2026-07-07T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
+        ],
+        moneyPct: 60,
+        betsPct: 56,
+        publicSplits: [
+          { side: "away", label: "NYM", moneyPct: 60, betsPct: 56 },
+          { side: "home", label: "TOR", moneyPct: 40, betsPct: 44 },
+        ],
+        guidedGuide: "Strong model/value case with a price move toward NYM, though consensus is not fully aligned.",
+        guidedWatchOut: "Consensus is not fully aligned, so late price tightening can reduce the value.",
+        whyLine: "Driver: model win-probability edge, playable price, and movement toward the pick.",
+        riskLine: "Consensus is not fully aligned; price movement late in the day can change the value.",
+        keyStats: [
+          { label: "Starter ERA", awayValue: "4.03", homeValue: "4.36", source: "computed" },
+          { label: "Bullpen Quality", awayValue: "NYM clear edge", homeValue: "TOR below avg", source: "computed" },
+        ],
+      }),
+      total: marketingPreviewMarket({
+        pick: "Over",
+        confidence: 0.60,
+        verdict: "lean",
+        grade: "model_only",
+        line: 7.5,
+        modelProb: 0.60,
+        marketFairProb: 0.52,
+        modelTotal: 9.0,
+        marketTotal: 7.5,
+        priceAmerican: -112,
+        lineOpenAmerican: 100,
+        oddsTrail: [
+          { american: 100, line: 7.5, observedAt: "2026-07-07T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
+          { american: -108, line: 7.5, observedAt: "2026-07-07T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
+          { american: -112, line: 7.5, observedAt: "2026-07-07T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
+        ],
+        moneyPct: 64,
+        betsPct: 58,
+        publicSplits: [
+          { side: "over", label: "Over", moneyPct: 64, betsPct: 58 },
+          { side: "under", label: "Under", moneyPct: 36, betsPct: 42 },
+        ],
+        guidedGuide: "Projection supports the Over, with price movement adding confirmation.",
+        guidedWatchOut: "The number has already moved, so the edge is more sensitive to late juice.",
+        whyLine: "Driver: projected total above the market line and movement toward the Over.",
+        riskLine: "Current juice keeps this as a Lean instead of a cleaner Best Angle.",
+        keyStats: [
+          { label: "Projected Total", awayValue: null, homeValue: "9.0 vs 7.5", source: "computed" },
+          { label: "Run Environment", awayValue: null, homeValue: "Above average", source: "computed" },
+        ],
+      }),
+      first_inning: marketingPreviewMarket({
+        pick: "Toss-Up",
+        confidence: 0.52,
+        verdict: "no_play",
+        grade: null,
+        modelProb: 0.52,
+        marketFairProb: 0.51,
+        priceAmerican: null,
+        guidedGuide: "FI remains No Play because the model edge is too thin.",
+        guidedWatchOut: "No first-inning edge is strong enough to act on.",
+        whyLine: "Driver: thin FI edge.",
+        riskLine: "The first-inning model is close to market and does not show a clear side.",
+      }),
+    },
+  }),
+  marketingPreviewGame({
+    id: "marketing-1002",
+    awayTeam: "ATL",
+    homeTeam: "WSH",
+    gameTime: "7:30 PM",
+    projected: { away: 4.8, home: 4.2 },
+    decisionLine: "ATL has model support, but the odds move keeps it below top-tier.",
+    awayStarter: { name: "Spencer Strider", throws: "R" },
+    homeStarter: { name: "Jake Irvin", throws: "R" },
+    markets: {
+      moneyline: marketingPreviewMarket({
+        pick: "ATL",
+        confidence: 0.59,
+        verdict: "lean",
+        grade: "model_only",
+        modelProb: 0.59,
+        marketFairProb: 0.54,
+        priceAmerican: -126,
+        lineOpenAmerican: -121,
+        oddsTrail: [
+          { american: -121, line: null, observedAt: "2026-07-07T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
+          { american: -117, line: null, observedAt: "2026-07-07T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
+          { american: -110, line: null, observedAt: "2026-07-07T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
+        ],
+        moneyPct: 57,
+        betsPct: 54,
+        publicSplits: [
+          { side: "away", label: "ATL", moneyPct: 57, betsPct: 54 },
+          { side: "home", label: "WSH", moneyPct: 43, betsPct: 46 },
+        ],
+        guidedGuide: "Playable model edge, but the odds move keeps the read below top-tier.",
+        guidedWatchOut: "Movement away from ATL is the main cap on the grade.",
+        whyLine: "Driver: model edge with movement friction.",
+        riskLine: "Movement away from the pick makes this less clean than a Best Angle.",
+        keyStats: [
+          { label: "Starter Profile", awayValue: "Strikeout edge", homeValue: "Contact risk", source: "computed" },
+          { label: "Lineup Form", awayValue: "Above average", homeValue: "Neutral", source: "computed" },
+        ],
+      }),
+      total: marketingPreviewMarket({
+        pick: "Over",
+        confidence: 0.57,
+        verdict: "watchlist",
+        grade: "model_only",
+        line: 8.5,
+        modelProb: 0.57,
+        marketFairProb: 0.53,
+        modelTotal: 9.1,
+        marketTotal: 8.5,
+        priceAmerican: -115,
+        lineOpenAmerican: -110,
+        moneyPct: 55,
+        betsPct: 51,
+        publicSplits: [
+          { side: "over", label: "Over", moneyPct: 55, betsPct: 51 },
+          { side: "under", label: "Under", moneyPct: 45, betsPct: 49 },
+        ],
+        guidedGuide: "Projection leans Over, but the price keeps it on Watchlist.",
+        guidedWatchOut: "Thin edge and added juice are the main reasons this is not stronger.",
+        whyLine: "Driver: projection support, capped by price.",
+        riskLine: "Current juice limits the betting value.",
+      }),
+      first_inning: marketingPreviewMarket({
+        pick: "YRFI",
+        confidence: 0.55,
+        verdict: "watchlist",
+        grade: "model_only",
+        modelProb: 0.55,
+        marketFairProb: 0.56,
+        priceAmerican: -128,
+        lineOpenAmerican: -124,
+        guidedGuide: "YRFI has a case, but current price keeps it in monitor territory.",
+        guidedWatchOut: "Price is the cap here.",
+        whyLine: "Driver: FI context with limited price value.",
+        riskLine: "The FI price leaves limited value cushion.",
+      }),
+    },
+  }),
+  marketingPreviewGame({
+    id: "marketing-1003",
+    awayTeam: "CWS",
+    homeTeam: "BAL",
+    gameTime: "8:05 PM",
+    projected: { away: 4.1, home: 4.9 },
+    decisionLine: "The Over is interesting, but market friction keeps it on Watchlist.",
+    awayStarter: { name: "Davis Martin", throws: "R" },
+    homeStarter: { name: "Dean Kremer", throws: "R" },
+    markets: {
+      moneyline: marketingPreviewMarket({
+        pick: "BAL",
+        confidence: 0.62,
+        verdict: "caution",
+        grade: "sharp_conflict",
+        modelProb: 0.62,
+        marketFairProb: 0.60,
+        priceAmerican: -154,
+        lineOpenAmerican: -146,
+        guidedGuide: "Likely winner, but price and market friction keep this in Caution territory.",
+        guidedWatchOut: "The current price limits betting value.",
+        whyLine: "Driver: win case is present, but value is capped by price.",
+        riskLine: "Heavy juice makes the moneyline less attractive.",
+      }),
+      total: marketingPreviewMarket({
+        pick: "Over",
+        confidence: 0.58,
+        verdict: "watchlist",
+        grade: "model_only",
+        line: 8.5,
+        modelProb: 0.58,
+        marketFairProb: 0.54,
+        modelTotal: 9.2,
+        marketTotal: 8.5,
+        priceAmerican: -110,
+        lineOpenAmerican: 102,
+        oddsTrail: [
+          { american: 102, line: 8.5, observedAt: "2026-07-07T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
+          { american: -106, line: 8.5, observedAt: "2026-07-07T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
+          { american: -110, line: 8.5, observedAt: "2026-07-07T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
+        ],
+        moneyPct: 61,
+        betsPct: 56,
+        publicSplits: [
+          { side: "over", label: "Over", moneyPct: 61, betsPct: 56 },
+          { side: "under", label: "Under", moneyPct: 39, betsPct: 44 },
+        ],
+        guidedGuide: "Projection supports the Over, though market resistance keeps it from being fully clean.",
+        guidedWatchOut: "This is worth monitoring, not a top-tier bet.",
+        whyLine: "Driver: projected total above the line.",
+        riskLine: "Market friction keeps the grade capped.",
+      }),
+      first_inning: marketingPreviewMarket({
+        pick: "NRFI",
+        confidence: 0.54,
+        verdict: "watchlist",
+        grade: "model_only",
+        modelProb: 0.54,
+        marketFairProb: 0.53,
+        priceAmerican: -112,
+        guidedGuide: "NRFI has modest starter support, but the edge is thin.",
+        guidedWatchOut: "Thin FI edge keeps this below Lean.",
+        whyLine: "Driver: starter profile with a small FI edge.",
+        riskLine: "Limited value at the current number.",
+      }),
+    },
+  }),
+];
+
+export function MarketingDailyEdgePreviewSurface(): ReactNode {
+  const [selectedGameId, setSelectedGameId] = useState(marketingPreviewGames[0]!.id);
+  const [selectedMarket, setSelectedMarket] = useState<MarketKey>("moneyline");
+  const [readerMode, setReaderMode] = useState<"compact" | "full">("full");
+  const selectedGame = marketingPreviewGames.find((g) => g.id === selectedGameId) ?? marketingPreviewGames[0]!;
+  const selectedMarketData = pickMarket(selectedGame, selectedMarket) ?? selectedGame.markets.moneyline;
+  const selectedIndex = marketingPreviewGames.findIndex((g) => g.id === selectedGame.id);
+
+  function selectGame(game: DailyEdgeGameDto) {
+    setSelectedGameId(game.id);
+    setSelectedMarket(headlineMarketFor(game));
+  }
+
+  function selectMarket(game: DailyEdgeGameDto, market: MarketKey) {
+    setSelectedGameId(game.id);
+    setSelectedMarket(market);
+  }
+
+  function goToAdjacentGame(dir: -1 | 1) {
+    const nextIdx = selectedIndex + dir;
+    if (nextIdx < 0 || nextIdx >= marketingPreviewGames.length) return;
+    const next = marketingPreviewGames[nextIdx]!;
+    selectGame(next);
+  }
+
+  return (
+    <ShellSportContext.Provider value="mlb">
+      <div className="bg-[#0A0A0F] text-gray-200 rounded-xl overflow-hidden border border-violet-400/35">
+        <div className="px-4 sm:px-6 pt-4 pb-6">
+          <SelectedEdgeReader
+            game={selectedGame}
+            market={selectedMarket}
+            marketData={selectedMarketData}
+            mode={readerMode}
+            onMarketChange={setSelectedMarket}
+            onExpand={() => setReaderMode("full")}
+            onCollapse={() => setReaderMode("compact")}
+            onPrev={selectedIndex > 0 ? () => goToAdjacentGame(-1) : null}
+            onNext={selectedIndex < marketingPreviewGames.length - 1 ? () => goToAdjacentGame(1) : null}
+            index={selectedIndex + 1}
+            total={marketingPreviewGames.length}
+          />
+        </div>
+
+        <SlateBoardHeader
+          totalGames={marketingPreviewGames.length}
+          counts={computeVerdictCounts(marketingPreviewGames)}
+          active="all"
+          onFilterChange={() => undefined}
+        />
+        <main className="px-4 sm:px-6 pb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {marketingPreviewGames.map((game) => (
+              <SlateCard
+                key={game.id}
+                game={game}
+                active={game.id === selectedGameId}
+                activeMarket={game.id === selectedGameId ? selectedMarket : null}
+                onSelectGame={() => selectGame(game)}
+                onSelectMarket={(market) => selectMarket(game, market)}
+              />
+            ))}
+          </div>
+        </main>
+      </div>
+    </ShellSportContext.Provider>
+  );
+}
 
 export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   const searchParams = useSearchParams();
