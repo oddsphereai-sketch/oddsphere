@@ -48,11 +48,11 @@ function MetricCard({
         ? "text-amber-200"
         : "text-violet-300";
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.035] p-5 sm:p-6">
+    <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.035] p-5 sm:p-6">
       <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-400">
         {label}
       </p>
-      <p className={`mt-3 text-3xl font-black tabular-nums ${color}`}>{value}</p>
+      <p className={`mt-3 break-words text-3xl font-black tabular-nums ${color}`}>{value}</p>
       <p className="mt-2 text-sm leading-relaxed text-gray-300">{sub}</p>
     </div>
   );
@@ -69,11 +69,11 @@ export default async function PublicTrackRecordPage() {
           Model performance archive
         </p>
         <h1 className="text-4xl font-black tracking-tight sm:text-5xl">
-          Lifetime Track Record
+          Historical Tracking, Not Cherry-Picked Screenshots
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-gray-200 sm:text-lg">
-          Historical model records across OddSphere sports and markets. This public page is a
-          lifetime model archive, not a live member-only Daily Edge ledger.
+          OddSphere maintains a public lifetime model archive for accountability.
+          Current Daily Edge tracking continues inside the member dashboard.
         </p>
         <p className="mt-3 text-xs text-gray-400">
           Lifetime archive · Last updated {summary.lastUpdatedLabel}
@@ -171,19 +171,30 @@ export default async function PublicTrackRecordPage() {
                 {markets.map((row) => (
                   <div
                     key={`${row.sport}-${row.market}`}
-                    className="grid gap-2 px-5 py-4 md:grid-cols-[1.1fr_1.1fr_0.8fr_0.8fr_0.8fr] md:items-center"
+                    className="grid gap-3 px-4 py-4 sm:px-5 md:grid-cols-[1.1fr_1.1fr_0.8fr_0.8fr_0.8fr] md:items-center"
                   >
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 md:hidden">Sport</p>
                       <p className="font-semibold text-white">{row.sportLabel}</p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500 md:hidden">Market</p>
                       <p className="text-sm text-gray-200">{row.marketLabel}</p>
                     </div>
-                    <p className="text-sm tabular-nums text-gray-200 md:text-right">{record(row.metrics)}</p>
-                    <p className="text-sm font-black tabular-nums text-violet-300 md:text-right">{pct(row.metrics)}</p>
-                    <p className="text-sm tabular-nums text-gray-400 md:text-right">{row.metrics.picks.toLocaleString()}</p>
+                    <div className="grid gap-2 rounded-xl border border-white/10 bg-gray-950/50 p-3 sm:grid-cols-3 md:contents">
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500 md:hidden">Record</p>
+                        <p className="mt-1 text-sm tabular-nums text-gray-200 md:mt-0 md:text-right">{record(row.metrics)}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500 md:hidden">Win Rate</p>
+                        <p className="mt-1 text-sm font-black tabular-nums text-violet-300 md:mt-0 md:text-right">{pct(row.metrics)}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500 md:hidden">Picks</p>
+                        <p className="mt-1 text-sm tabular-nums text-gray-400 md:mt-0 md:text-right">{row.metrics.picks.toLocaleString()}</p>
+                      </div>
+                    </div>
                   </div>
                 ))}
                 {markets.length === 0 ? (

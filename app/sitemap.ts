@@ -28,6 +28,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   return [
     page("/", 1.0, "weekly"), // homepage — brand/value
+    page("/ai-sports-predictions", 0.85, "weekly"), // SEO hub — AI sports predictions
+    page("/mlb-predictions", 0.8, "daily"), // SEO — MLB moneyline/totals/FI overview
+    page("/mlb-first-inning-picks", 0.75, "daily"), // SEO — NRFI/YRFI overview
+    page("/world-cup-predictions", 0.75, "daily"), // SEO — World Cup/Soccer overview
+    page("/sports-betting-ai", 0.75, "weekly"), // SEO — sports betting AI overview
     page("/pricing", 0.9, "monthly"), // premium conversion
     page("/track-record", 0.8, "daily"), // public proof / results (updates often)
     page("/legal/responsible-gambling", 0.3, "yearly"),

@@ -24,16 +24,15 @@
  *   whop_session_error — could not mint our own session cookie
  */
 
-import Link from "next/link";
 import type { Metadata } from "next";
 
 import { sanitizeNext } from "@/lib/auth/betaSession";
 import {
-  getCheckoutUrl,
   isBetaFallbackEnabled,
   isBetaLoginPubliclyVisible,
   isWhopAccessEnabled,
 } from "@/lib/auth/whopConfig";
+import { TRIAL_CHECKOUT_URL } from "@/lib/marketing/trialOffer";
 
 export const metadata: Metadata = {
   title: "Log In — OddSphere AI",
@@ -111,8 +110,6 @@ export default async function LoginPage({
   const betaEnabled = whopEnabled
     ? isBetaLoginPubliclyVisible()
     : betaEnabledServerSide;
-  const checkoutUrl = getCheckoutUrl();
-
   const whopStartHref = `/api/auth/whop/start?next=${encodeURIComponent(nextValue)}`;
 
   return (
@@ -122,11 +119,11 @@ export default async function LoginPage({
           OddSphere AI
         </p>
         <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2">
-          Sign in to the Lab
+          Member Login
         </h1>
         <p className="text-sm text-gray-300">
           {whopEnabled
-            ? "Use the Whop account connected to your OddSphere AI membership."
+            ? "Use the Whop account connected to your OddSphere membership or trial."
             : "Enter your beta access password to continue."}
         </p>
       </header>
@@ -206,40 +203,19 @@ export default async function LoginPage({
           </div>
         )}
 
-        {whopEnabled && (
-          <p className="text-[11px] text-gray-500 leading-relaxed pt-2 border-t border-gray-800/60">
-            Don&rsquo;t have a membership yet?{" "}
-            {checkoutUrl !== null ? (
-              <a
-                href={checkoutUrl}
-                className="text-violet-300 hover:text-violet-200 font-semibold underline underline-offset-2"
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                Get access on Whop
-              </a>
-            ) : (
-              <Link
-                href="/pricing"
-                className="text-violet-300 hover:text-violet-200 font-semibold underline underline-offset-2"
-              >
-                See membership
-              </Link>
-            )}
-            .
-          </p>
-        )}
+        <p className="text-[11px] text-gray-500 leading-relaxed pt-2 border-t border-gray-800/60">
+          Not a member yet?{" "}
+          <a
+            href={TRIAL_CHECKOUT_URL}
+            className="text-violet-300 hover:text-violet-200 font-semibold underline underline-offset-2"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Start your 7-day free trial
+          </a>
+          .
+        </p>
       </div>
-
-      <p className="text-center text-sm text-gray-300 mt-8">
-        Not a member yet?{" "}
-        <Link
-          href="/pricing"
-          className="text-violet-300 hover:text-violet-200 font-semibold underline underline-offset-2"
-        >
-          Join Premium
-        </Link>
-      </p>
     </main>
   );
 }

@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { TRIAL_CHECKOUT_URL } from "@/lib/marketing/trialOffer";
+
 export default function Navbar() {
   const pathname = usePathname();
 
@@ -14,9 +16,6 @@ export default function Navbar() {
     return null;
   }
 
-  // 6.2a: nav per V2.1 spec § Part 4 — Home / Track Record / Pricing / Log In / Join Premium.
-  // "Tools" link retired entirely (it had been re-purposed as "The Lab" in 5F.3,
-  // but the V2.1 spec puts Lab access behind the Join Premium CTA flow instead).
   const navLinks: Array<{ href: string; label: string }> = [
     { href: "/", label: "Home" },
     { href: "/track-record", label: "Track Record" },
@@ -58,7 +57,8 @@ export default function Navbar() {
             {navLinks.map((link) => {
               const isActive = pathname === link.href;
               const baseClasses =
-                "inline-flex items-center px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:bg-gray-800 focus-visible:text-white";
+                "items-center px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:bg-gray-800 focus-visible:text-white";
+              const mobileVisibility = link.label === "Log In" ? "inline-flex" : "hidden sm:inline-flex";
               const stateClasses = isActive
                 ? "bg-violet-600 text-white"
                 : "text-gray-300 hover:bg-gray-800 hover:text-white";
@@ -66,7 +66,7 @@ export default function Navbar() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`${baseClasses} ${stateClasses}`}
+                  className={`${baseClasses} ${mobileVisibility} ${stateClasses}`}
                 >
                   {link.label === "Track Record" ? (
                     <>
@@ -84,13 +84,14 @@ export default function Navbar() {
                 </Link>
               );
             })}
-            <Link
-              href="/pricing"
+            <a
+              href={TRIAL_CHECKOUT_URL}
               className="ml-1 sm:ml-2 px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-all duration-200 whitespace-nowrap shadow-sm shadow-violet-900/40 hover:shadow-[0_0_15px_rgba(167,139,250,0.45)] hover:scale-[1.03]"
+              rel="noopener noreferrer"
+              target="_blank"
             >
-              <span className="sm:hidden">Join</span>
-              <span className="hidden sm:inline">Join Premium</span>
-            </Link>
+              Start Free Trial
+            </a>
           </div>
         </div>
       </div>

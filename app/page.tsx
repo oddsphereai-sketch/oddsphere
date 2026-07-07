@@ -4,9 +4,12 @@ import {
   getPublicTrackRecordSummary,
   type PublicTrackRecordSummary,
 } from "@/lib/services/tracking/publicTrackRecordSummary";
+import {
+  TRIAL_CHECKOUT_URL,
+  TRIAL_DISCLOSURE,
+} from "@/lib/marketing/trialOffer";
 
 const SITE_URL = "https://www.oddsphereai.com";
-const TRIAL_CHECKOUT_URL = "https://whop.com/checkout/plan_Fe6L8iSreOPYb";
 
 export const revalidate = 300;
 
@@ -57,8 +60,6 @@ type StepCard = { title: string; body: string };
 const trustChips = [
   "Full Daily Edge access",
   "7 days free",
-  "Then $25/month",
-  "Cancel anytime",
   "Every pick tracked",
 ];
 
@@ -119,7 +120,7 @@ const faq: FaqItem[] = [
   },
   {
     q: "What sports are currently supported?",
-    a: "OddSphere supports active Daily Edge markets as data and schedules are available, including MLB, WNBA, and World Cup/Soccer, with additional seasonal surfaces returning as leagues are active.",
+    a: "Daily Edge currently supports active MLB, WNBA, and World Cup/Soccer slates when schedules and data are available. The public lifetime tracking archive also includes NFL, CFB, NBA, CBB, MLB, UCL/Soccer, and NHL model families, with seasonal Daily Edge surfaces returning as supported leagues are active.",
   },
   {
     q: "Is this betting advice?",
@@ -212,12 +213,15 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Public accountability</p>
-            <h3 className="mt-2 text-2xl font-black tracking-tight text-white">Tracked Results. Not Cherry-Picked Screenshots.</h3>
+            <h3 className="mt-2 text-2xl font-black tracking-tight text-white">Historical Tracking, Not Cherry-Picked Screenshots</h3>
           </div>
-          <p className="text-xs text-gray-500">Updated {summary.lastUpdatedLabel}</p>
+          <p className="text-xs text-gray-500">
+            Lifetime archive snapshot · {summary.lastUpdatedLabel}
+          </p>
         </div>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-gray-300">
-          OddSphere keeps public historical tracking to show accountability over time. Current Daily Edge tracking continues inside the member dashboard.
+          OddSphere maintains a public lifetime model archive for accountability.
+          Current Daily Edge results continue inside the member dashboard.
         </p>
       </div>
 
@@ -255,19 +259,43 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
 }
 
 function DailyEdgePreview() {
+  const slateRows = [
+    {
+      matchup: "NYM @ TOR",
+      grade: "Best Angle",
+      pick: "NYM ML",
+      detail: "56% · +10.0 pp",
+      tone: "best",
+    },
+    {
+      matchup: "ATL @ WSH",
+      grade: "Lean",
+      pick: "ATL -3.5",
+      detail: "59% · +4.4 pp",
+      tone: "lean",
+    },
+    {
+      matchup: "BEL @ BRA",
+      grade: "Watchlist",
+      pick: "Over 2.5",
+      detail: "54% · movement watch",
+      tone: "watch",
+    },
+  ];
+
   return (
     <div
-      aria-label="Sample Daily Edge dashboard preview"
-      className="relative overflow-hidden rounded-2xl border border-violet-500/30 bg-gray-950 shadow-[0_0_80px_rgba(124,58,237,0.18)]"
+      aria-label="Daily Edge dashboard preview"
+      className="relative overflow-hidden rounded-2xl border border-violet-500/30 bg-[#080712] shadow-[0_0_80px_rgba(124,58,237,0.18)]"
     >
-      <div className="border-b border-white/10 bg-white/[0.035] px-4 py-3 sm:px-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="border-b border-white/10 bg-white/[0.035] px-4 py-4 sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-300">Sample Daily Edge Preview</p>
-            <p className="mt-1 text-sm font-semibold text-white">Representative display data only</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-300">Daily Edge</p>
+            <p className="mt-1 text-lg font-black tracking-tight text-white">Selected Edge</p>
           </div>
-          <div className="flex flex-wrap gap-2 text-[11px] font-semibold text-gray-300">
-            {["Model Pick", "Market Read", "Play Grade"].map((label) => (
+          <div className="flex flex-wrap justify-end gap-2 text-[11px] font-semibold text-gray-300">
+            {["15 games", "3 Best Angles", "8 Leans"].map((label) => (
               <span key={label} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
                 {label}
               </span>
@@ -276,68 +304,131 @@ function DailyEdgePreview() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-[0.95fr_1.25fr]">
+      <div className="grid lg:grid-cols-[0.85fr_1.15fr]">
         <div className="border-b border-white/10 p-4 sm:p-5 lg:border-b-0 lg:border-r">
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-            <div className="flex items-start justify-between gap-4">
+          <div className="mb-4 rounded-xl border border-emerald-400/25 bg-emerald-400/[0.06] p-4 shadow-[0_0_24px_rgba(52,211,153,0.08)]">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-400">Selected Edge</p>
-                <h3 className="mt-2 text-2xl font-black tracking-tight text-white">Sample MLB Matchup</h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200">Action</p>
+                <h3 className="mt-2 text-2xl font-black tracking-tight text-white">NYM ML</h3>
+                <p className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">NYM @ TOR · Moneyline</p>
               </div>
-              <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-emerald-300">
-                Lean
+              <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-emerald-200">
+                Best Angle
               </span>
             </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-2">
-              <MetricTile label="Model Pick" value="Over 8.5" />
-              <MetricTile label="Projected Total" value="9.3" />
-              <MetricTile label="Model Prob." value="58%" />
-              <MetricTile label="Price" value="-112" />
-            </div>
-
-            <div className="mt-4 rounded-xl border border-white/10 bg-gray-950/70 p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">Quick Read</p>
-              <p className="mt-2 text-sm leading-relaxed text-gray-200">
-                Projection supports the Over, with price still playable and market movement not fighting the read.
-              </p>
-            </div>
-
-            <div className="mt-4 grid grid-cols-3 items-center gap-2 rounded-xl border border-white/10 bg-gray-950/70 p-4 text-center">
-              <div>
-                <p className="text-lg font-black tabular-nums text-white">8.0</p>
-                <p className="mt-1 text-[10px] font-black uppercase tracking-[0.14em] text-gray-500">Open</p>
+            <p className="mt-4 text-sm leading-relaxed text-gray-200">
+              Strong model/value case with a supportive price move. Market context is not perfectly clean, but the thesis is clear.
+            </p>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-lg border border-white/10 bg-gray-950/70 p-3">
+                <p className="text-lg font-black text-white">56%</p>
+                <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">Model</p>
               </div>
-              <div>
-                <p className="text-lg font-black tabular-nums text-white">8.5</p>
-                <p className="mt-1 text-[10px] font-black uppercase tracking-[0.14em] text-gray-500">Move</p>
+              <div className="rounded-lg border border-white/10 bg-gray-950/70 p-3">
+                <p className="text-lg font-black text-white">46%</p>
+                <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">Market</p>
               </div>
-              <div>
-                <p className="text-lg font-black tabular-nums text-white">8.5</p>
-                <p className="mt-1 text-[10px] font-black uppercase tracking-[0.14em] text-gray-500">Current</p>
+              <div className="rounded-lg border border-white/10 bg-gray-950/70 p-3">
+                <p className="text-lg font-black text-emerald-300">+10.0</p>
+                <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">Edge</p>
               </div>
             </div>
+          </div>
+
+          <div className="space-y-3">
+            {slateRows.map((row) => (
+              <div
+                key={`${row.matchup}-${row.grade}`}
+                className="rounded-xl border border-white/10 bg-white/[0.04] p-4 transition hover:border-violet-400/30"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-500">{row.matchup}</p>
+                    <p className="mt-1 text-base font-black text-white">{row.pick}</p>
+                  </div>
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${
+                      row.tone === "best"
+                        ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+                        : row.tone === "lean"
+                          ? "border-violet-400/30 bg-violet-400/10 text-violet-200"
+                          : "border-amber-300/30 bg-amber-300/10 text-amber-200"
+                    }`}
+                  >
+                    {row.grade}
+                  </span>
+                </div>
+                <p className="mt-3 text-xs font-semibold text-gray-300">{row.detail}</p>
+              </div>
+            ))}
           </div>
         </div>
 
         <div className="p-4 sm:p-5">
           <div className="grid gap-4">
+            <div className="rounded-xl border border-emerald-400/25 bg-emerald-400/[0.06] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200">Expanded Read</p>
+                  <h3 className="mt-2 text-2xl font-black tracking-tight text-white">NYM @ TOR</h3>
+                </div>
+                <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-emerald-200">
+                  Best Angle
+                </span>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <MetricTile label="Pick" value="NYM ML" />
+                <MetricTile label="Model Prob." value="56%" />
+                <MetricTile label="Market" value="46%" />
+                <MetricTile label="Model Edge" value="+10.0 pp" />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">Odds Move</p>
+                <div className="mt-3 grid grid-cols-3 items-center gap-2 text-center">
+                  <div>
+                    <p className="text-lg font-black tabular-nums text-white">+106</p>
+                    <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">First</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black tabular-nums text-white">-101</p>
+                    <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">Move</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black tabular-nums text-white">-104</p>
+                    <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">Current</p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">Market Pulse</p>
+                <div className="mt-3 space-y-2 text-sm text-gray-200">
+                  <p>Consensus: balanced</p>
+                  <p>Sharp Book: money support</p>
+                  <p>Movement: toward pick</p>
+                </div>
+              </div>
+            </div>
+
             <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">Market Read</p>
               <p className="mt-2 text-sm leading-relaxed text-gray-200">
-                Model edge with supportive movement, but monitor late steam before treating it as a cleaner top-tier look.
+                Consensus is balanced, but sharper money and the price move both lean toward the pick.
               </p>
             </div>
 
             <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">Supporting Evidence</p>
               <p className="mt-2 text-sm leading-relaxed text-gray-200">
-                Projection clears the market total, price movement is not fighting the read, and risk remains moderate.
+                The model is above market implied probability, current price is playable, and movement has improved from plus money toward the pick.
               </p>
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                <MetricTile label="Projection Gap" value="+0.8" />
-                <MetricTile label="Play Grade" value="Lean" />
-                <MetricTile label="Risk" value="Moderate" />
+                <MetricTile label="Play Grade" value="Best Angle" />
+                <MetricTile label="Price" value="-104" />
+                <MetricTile label="Tracking" value="Logged" />
               </div>
             </div>
 
@@ -356,6 +447,13 @@ function DailyEdgePreview() {
                 ))}
               </div>
             </div>
+
+            <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200">Accountability</p>
+              <p className="mt-2 text-sm leading-relaxed text-gray-200">
+                Every posted Daily Edge result is tracked after settlement.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -370,16 +468,16 @@ export default async function HomePage() {
     <main className="overflow-hidden">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      <section className="mx-auto grid max-w-7xl items-center gap-10 px-4 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-20 lg:grid-cols-[0.9fr_1.1fr] lg:px-8">
+      <section className="mx-auto grid max-w-7xl items-start gap-10 px-4 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-20 lg:grid-cols-[0.9fr_1.1fr] lg:px-8">
         <div>
           <p className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-200">
             7-Day Free Trial · OddSphere Daily Edge
           </p>
           <h1 className="mt-6 max-w-3xl text-4xl font-black tracking-tight text-white sm:text-6xl">
-            Stop Betting Blind. See the Edge Before You Play.
+            Cut Through the Noise. Find the Plays Worth Your Attention.
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-gray-200">
-            OddSphere turns model projections, market movement, Play Grades, and transparent tracking into one clean Daily Edge, so you can quickly see which games are worth your attention and why.
+            Model projections, market movement, Play Grades, and tracking — organized into one Daily Edge dashboard built to show the why behind every pick.
           </p>
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
             <TrialButton />
@@ -387,17 +485,11 @@ export default async function HomePage() {
               href="#product-preview"
               className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-white/[0.05] px-7 py-3.5 text-sm font-bold text-white transition hover:border-violet-400/50 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
-              See What&apos;s Inside
-            </Link>
-            <Link
-              href="/track-record"
-              className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-gray-950 px-7 py-3.5 text-sm font-bold text-gray-200 transition hover:border-white/25 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
-            >
-              View Track Record
+              Preview Dashboard
             </Link>
           </div>
           <p className="mt-4 text-sm font-semibold text-violet-100">
-            Free for 7 days, then $25/month. Cancel anytime before the trial ends.
+            {TRIAL_DISCLOSURE}
           </p>
           <div className="mt-6 flex flex-wrap gap-2">
             {trustChips.map((chip) => (
@@ -407,15 +499,41 @@ export default async function HomePage() {
             ))}
           </div>
           <p className="mt-6 max-w-2xl text-xs leading-relaxed text-gray-500">
-            OddSphere provides sports prediction and betting analysis for informational purposes only. No pick is guaranteed. Bet responsibly.
+            21+. No guarantees. Bet responsibly.
           </p>
         </div>
 
         <div id="product-preview">
           <DailyEdgePreview />
-          <p className="mx-auto mt-4 max-w-2xl text-center text-xs leading-relaxed text-gray-500">
-            Preview uses static representative display data and does not expose member-only live picks.
-          </p>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
+        <SectionHeader
+          eyebrow="Inside the Daily Edge"
+          title="The slate, the selected edge, and the accountability layer."
+          body="OddSphere is designed around the actual decision flow: scan the board, open the strongest reads, and understand why each grade exists."
+        />
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            {
+              title: "Slate Scanner",
+              body: "Sort the day by sport, market, Play Grade, and signal quality without digging through noisy one-off posts.",
+            },
+            {
+              title: "Selected Edge",
+              body: "Open a pick to see the projection, price/value context, market read, supporting evidence, and risk language.",
+            },
+            {
+              title: "Tracking",
+              body: "Posted Daily Edge results are tracked after settlement so the product stays accountable.",
+            },
+          ].map((item) => (
+            <div key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.035] p-6">
+              <h3 className="text-lg font-black text-white">{item.title}</h3>
+              <p className="mt-3 text-sm leading-relaxed text-gray-300">{item.body}</p>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -446,7 +564,7 @@ export default async function HomePage() {
           ))}
         </div>
         <p className="mx-auto mt-6 max-w-3xl text-center text-sm leading-relaxed text-gray-400">
-          Daily Edge currently supports active markets like MLB, WNBA, and World Cup/Soccer, with NBA, NHL, NFL, CFB, and CBB surfaces available as seasons and supported data pipelines are active.
+          Daily Edge currently supports active MLB, WNBA, and World Cup/Soccer slates. The public archive also tracks NFL, CFB, NBA, CBB, MLB, UCL/Soccer, and NHL model families, with seasonal member surfaces returning as leagues and data pipelines are active.
         </p>
       </section>
 
@@ -480,7 +598,7 @@ export default async function HomePage() {
             Get full access to Daily Edge, including model-backed picks, projected scores, market reads, Play Grades, supporting evidence, and transparent tracking.
           </p>
           <p className="mt-4 text-sm font-bold text-emerald-100">
-            Free for 7 days, then $25/month. Cancel anytime before the trial ends.
+            {TRIAL_DISCLOSURE}
           </p>
           <div className="mt-7">
             <TrialButton />
@@ -495,7 +613,8 @@ export default async function HomePage() {
             <details key={item.q} className="group rounded-xl border border-white/10 bg-white/[0.035]">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-sm font-bold text-white">
                 {item.q}
-                <span className="text-gray-500 transition group-open:rotate-180" aria-hidden="true">v</span>
+                <span className="text-gray-500 group-open:hidden" aria-hidden="true">+</span>
+                <span className="hidden text-gray-500 group-open:inline" aria-hidden="true">-</span>
               </summary>
               <p className="border-t border-white/10 px-5 py-4 text-sm leading-relaxed text-gray-300">{item.a}</p>
             </details>
