@@ -4141,6 +4141,7 @@ type MarketingPreviewMarketInput = {
   marketFairProb?: number | null;
   modelMarketGapPct?: number | null;
   priceAmerican?: number | null;
+  fiMarketBoard?: MarketEdgeDto["fiMarketBoard"];
   lineOpenAmerican?: number | null;
   oddsTrail?: MarketEdgeDto["oddsTrail"];
   modelTotal?: number | null;
@@ -4215,7 +4216,7 @@ function marketingPreviewMarket(input: MarketingPreviewMarketInput): MarketEdgeD
     betsPct: input.betsPct ?? null,
     publicSplits: input.publicSplits ?? [],
     priceAmerican: input.priceAmerican ?? null,
-    fiMarketBoard: null,
+    fiMarketBoard: input.fiMarketBoard ?? null,
     lineOpenAmerican: input.lineOpenAmerican ?? null,
     priceUnavailableAtLock: false,
     priceObservedAt: null,
@@ -4443,6 +4444,16 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
         modelProb: 0.52,
         marketFairProb: 0.51,
         priceAmerican: null,
+        fiMarketBoard: {
+          line: 0.5,
+          nrfiAmerican: -118,
+          yrfiAmerican: -111,
+          nrfiOpenAmerican: -124,
+          yrfiOpenAmerican: -104,
+          nrfiPreviousAmerican: -121,
+          yrfiPreviousAmerican: -108,
+          source: "preview_consensus",
+        },
         guidedGuide: "FI remains No Play because the model edge is too thin.",
         guidedWatchOut: "No first-inning edge is strong enough to act on.",
         whyLine: "Driver: thin FI edge.",
