@@ -43,7 +43,6 @@ import {
 import {
   selectSharpReadKey,
   SHARP_READ_SENTENCES,
-  type SharpReadKey,
   type SharpReadMarket,
   type SharpSignalProjection,
 } from "@/lib/services/sharpReadSelector";
@@ -5128,13 +5127,6 @@ export async function GET(request: Request) {
     for (const r of (unlockedBaRows ?? []) as UnlockedRec[]) {
       const key = `${r.game_id}::${r.market}`;
       unlockedByGameMarket.set(key, r);
-      const sourceAwareRowsAtLock = r.snapshot_json?.source_aware_split_rows_at_lock;
-      if (!frozenSourceAwareSplitRowsByGameId.has(r.game_id) && Array.isArray(sourceAwareRowsAtLock) && sourceAwareRowsAtLock.length > 0) {
-        frozenSourceAwareSplitRowsByGameId.set(
-          r.game_id,
-          sourceAwareRowsAtLock.filter((row): row is SourceAwareSplitObservationRow => row !== null && typeof row === "object") as SourceAwareSplitObservationRow[],
-        );
-      }
       if (r.odds_american !== null && r.side !== null) {
         const snapshotMarketType =
           r.market === "first_inning" ? "first_inning_total" : r.market;

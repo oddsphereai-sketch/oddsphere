@@ -280,6 +280,9 @@ export function classifySharpApiSplitSourceBook(raw: string | null | undefined):
   if (v === "circa") {
     return { source_book: "circa", source_type: "sharp_adjacent_book" };
   }
+  if (v === "consensus") {
+    return { source_book: "consensus", source_type: "sharp_adjacent_book" };
+  }
   if (v === "betmgm") {
     return { source_book: "betmgm", source_type: "retail_ticket_share" };
   }

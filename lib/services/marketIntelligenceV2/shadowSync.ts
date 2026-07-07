@@ -435,6 +435,13 @@ function findPlaybookGameMatch(
   return null;
 }
 
+function findSharpApiGameMatches(
+  candidates: readonly GameRef[],
+): GameRef[] {
+  if (candidates.length <= 1) return [...candidates];
+  return [...candidates];
+}
+
 async function collectSharpApiSplits(opts: {
   supabase: SupabaseClient;
   sport: Sport;
@@ -469,14 +476,21 @@ async function collectSharpApiSplits(opts: {
     else throw e;
   }
 
-  const gameByKey = new Map(opts.games.map((g) => [`${g.awayAbbr}@${g.homeAbbr}`, g]));
+  const gamesByKey = new Map<string, GameRef[]>();
+  for (const game of opts.games) {
+    const key = `${game.awayAbbr}@${game.homeAbbr}`;
+    const list = gamesByKey.get(key) ?? [];
+    list.push(game);
+    gamesByKey.set(key, list);
+  }
   const existingHistory = await loadSharpHistoryExistingState({
     supabase: opts.supabase,
     canonicalEventIds: opts.games.map((g) => String(g.externalId)),
   });
   const observations: MarketSplitObservationV2[] = [];
   const rejected: CanonicalObservationRejection[] = [];
-  const unsupportedCurrentRows: SharpSplitRowWithTeams[] = [];
+  const currentConsensusRows: SharpSplitRowWithTeams[] = [];
+  let duplicateMatchRows = 0;
   const historyRequests: Array<Promise<{
     eventId: string;
     game: GameRef;
@@ -487,8 +501,8 @@ async function collectSharpApiSplits(opts: {
     const rowDate = extractEventIdDate(row.event_id);
     if (rowDate !== null && rowDate !== opts.slateDate) continue;
     const key = marketIntelligenceGameKey(opts.sport, row.away_team, row.home_team);
-    const game = key ? gameByKey.get(key) : undefined;
-    if (!game) {
+    const matchedGames = key ? findSharpApiGameMatches(gamesByKey.get(key) ?? []) : [];
+    if (matchedGames.length === 0) {
       rejected.push({
         provider: "sharpapi",
         provider_event_id: row.event_id === undefined || row.event_id === null ? null : String(row.event_id),
@@ -498,39 +512,41 @@ async function collectSharpApiSplits(opts: {
       });
       continue;
     }
+    if (matchedGames.length > 1) duplicateMatchRows += 1;
     const providerEventId = row.event_id === undefined || row.event_id === null ? null : String(row.event_id);
     const sourceBook = String(row.sportsbook ?? "").toLowerCase();
     if (sourceBook === "consensus") {
-      unsupportedCurrentRows.push(row);
+      currentConsensusRows.push(row);
     }
-    const eventStarted = game.gameDate !== null && Date.parse(game.gameDate) <= opts.now.getTime();
-    if (providerEventId !== null && !eventStarted) {
-      const startTime = historyStartTimeForEvent(game, existingHistory);
-      historyRequests.push(
-        client.fetchAll<RawSharpApiSplitHistoryRowV2>({
-          path: "/splits/history",
-          query: startTime === null
-            ? { event_id: providerEventId }
-            : { event_id: providerEventId, start_time: startTime },
-          maxPages: 20,
-        })
-          .then((historyRows) => ({ eventId: providerEventId, game, rows: historyRows, startTime }))
-          .catch(() => ({ eventId: providerEventId, game, rows: [], startTime })),
-      );
+    for (const game of matchedGames) {
+      const eventStarted = game.gameDate !== null && Date.parse(game.gameDate) <= opts.now.getTime();
+      if (providerEventId !== null && !eventStarted) {
+        const startTime = historyStartTimeForEvent(game, existingHistory);
+        historyRequests.push(
+          client.fetchAll<RawSharpApiSplitHistoryRowV2>({
+            path: "/splits/history",
+            query: startTime === null
+              ? { event_id: providerEventId }
+              : { event_id: providerEventId, start_time: startTime },
+            maxPages: 20,
+          })
+            .then((historyRows) => ({ eventId: providerEventId, game, rows: historyRows, startTime }))
+            .catch(() => ({ eventId: providerEventId, game, rows: [], startTime })),
+        );
+      }
+      const built = buildSharpApiSplitObservationsV2({
+        row,
+        canonicalEventId: String(game.externalId),
+        league: opts.sport,
+        fetchedAt: opts.now.toISOString(),
+        minutesToStart: minutesToStart(game.gameDate, opts.now),
+        ingestionRunId: opts.ingestionRunId,
+        canonicalMarketId: (m) => externalMarketId(game, m),
+        selectionKey: (m, s) => externalSelectionKey(game, m, s),
+      });
+      observations.push(...built.observations);
+      rejected.push(...built.rejected);
     }
-    if (sourceBook === "consensus") continue;
-    const built = buildSharpApiSplitObservationsV2({
-      row,
-      canonicalEventId: String(game.externalId),
-      league: opts.sport,
-      fetchedAt: opts.now.toISOString(),
-      minutesToStart: minutesToStart(game.gameDate, opts.now),
-      ingestionRunId: opts.ingestionRunId,
-      canonicalMarketId: (m) => externalMarketId(game, m),
-      selectionKey: (m, s) => externalSelectionKey(game, m, s),
-    });
-    observations.push(...built.observations);
-    rejected.push(...built.rejected);
   }
   const historyResults = await Promise.all(historyRequests);
   let historyRowsReceived = 0;
@@ -581,10 +597,11 @@ async function collectSharpApiSplits(opts: {
     errors: [],
     details: {
       current_split_rows_received: rows.length,
-      unsupported_current_consensus_rows: unsupportedCurrentRows.length,
-      unsupported_current_consensus_sample: unsupportedCurrentRows[0] ? sanitizeSharpSplitSample(unsupportedCurrentRows[0]) : null,
+      current_consensus_rows_ingested: currentConsensusRows.length,
+      current_consensus_sample: currentConsensusRows[0] ? sanitizeSharpSplitSample(currentConsensusRows[0]) : null,
+      duplicate_match_rows_copied_to_each_game: duplicateMatchRows,
       history_requests_made: historyRequests.length,
-      history_requests_skipped_after_start: opts.games.length - historyRequests.length,
+      history_requests_skipped_after_start: Math.max(0, rows.length - historyRequests.length),
       history_rows_received: historyRowsReceived,
       history_rows_after_incremental_filter: historyRowsAfterStartTime,
       history_canonical_constructed: historyCanonicalConstructed,
