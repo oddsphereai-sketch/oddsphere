@@ -685,8 +685,12 @@ export function HomepageDashboardPrototype() {
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   {games.map((game) => {
-                    const featured = game.markets.moneyline.grade === "Best Angle" ? game.markets.moneyline : game.markets.total;
                     const active = game.id === selectedGame.id;
+                    const featured = active
+                      ? game.markets[selectedMarket]
+                      : game.markets.moneyline.grade === "Best Angle"
+                        ? game.markets.moneyline
+                        : game.markets.total;
                     return (
                       <button
                         key={game.id}
