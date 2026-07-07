@@ -93,6 +93,80 @@ function withRecoveredTotalPrice(row: PredictionEvidenceObject, price: number): 
   };
 }
 
+function withRecoveredMarketPrice(args: {
+  row: PredictionEvidenceObject;
+  price: number;
+  oppositePrice?: number | null;
+  source: "current" | "history";
+  observedAt: string | null;
+}): PredictionEvidenceObject {
+  const { row, price, oppositePrice = null, source, observedAt } = args;
+  const score = priceQualityScore(price);
+  const marketImplied = noVigPickedPct(price, oppositePrice);
+  const model = row.modelStatsEvidence.modelProbability;
+  const edge = typeof model === "number" && marketImplied !== null
+    ? +(model - marketImplied).toFixed(2)
+    : row.modelStatsEvidence.edge;
+  const edgeScore = modelEdgeScore(edge, model);
+  const recoverySource = source === "history" ? "line_history" : "current_source";
+  return {
+    ...row,
+    identity: {
+      ...row.identity,
+      priceAmerican: price,
+    },
+    marketEvidence: {
+      ...row.marketEvidence,
+      lineMovement: {
+        ...row.marketEvidence.lineMovement,
+        currentAmerican: row.marketEvidence.lineMovement.currentAmerican ?? price,
+        displayCurrentAmerican: row.marketEvidence.lineMovement.displayCurrentAmerican ?? price,
+        lastMoveCurrentAmerican: row.marketEvidence.lineMovement.lastMoveCurrentAmerican ?? price,
+        lastMoveAt: row.marketEvidence.lineMovement.lastMoveAt ?? observedAt,
+      },
+    },
+    modelStatsEvidence: {
+      ...row.modelStatsEvidence,
+      marketImpliedProbability: marketImplied ?? row.modelStatsEvidence.marketImpliedProbability,
+      edge,
+      deterministicScores: {
+        ...row.modelStatsEvidence.deterministicScores,
+        modelEdgeScore: edgeScore,
+        priceQualityScore: score,
+      },
+      edgeRecovered: edge !== null && row.modelStatsEvidence.edge === null,
+      edgeRecoverySource: edge !== null && row.modelStatsEvidence.edge === null ? "model_minus_market_implied" : row.modelStatsEvidence.edgeRecoverySource,
+      edgeRecoveryConfidence: edge !== null && row.modelStatsEvidence.edge === null ? "high" : row.modelStatsEvidence.edgeRecoveryConfidence,
+      edgeMissingReason: edge !== null ? null : row.modelStatsEvidence.edgeMissingReason,
+    },
+    priceValueEvidence: {
+      ...row.priceValueEvidence,
+      priceAmerican: price,
+      priceSource: `${recoverySource}_recovered`,
+      priceNullReason: null,
+      marketImpliedProbability: marketImplied ?? row.priceValueEvidence.marketImpliedProbability,
+      edge,
+      priceQualityScore: score,
+      heavyJuiceWarning: price <= -150,
+      plusMoneyValueFlag: price > 0 && (edge ?? 0) > 0,
+      priceBecameUnplayable: score < 20,
+      priceRecovered: true,
+      priceRecoverySource: recoverySource,
+      priceRecoveryConfidence: "high",
+      priceDisplayAllowed: true,
+    },
+    internalGradeDimensions: {
+      ...row.internalGradeDimensions,
+      priceQualityScore: score,
+      modelStatSupportScore: edgeScore,
+      bettingValueStrengthScore: Math.max(
+        row.internalGradeDimensions.bettingValueStrengthScore,
+        Math.min(100, score * 0.45 + Math.max(0, edge ?? 0) * 5),
+      ),
+    },
+  };
+}
+
 function withRecoveredEdge(row: PredictionEvidenceObject, edge: number): PredictionEvidenceObject {
   const score = modelEdgeScore(edge, row.modelStatsEvidence.modelProbability);
   return {
@@ -162,6 +236,19 @@ function fiSide(row: PredictionEvidenceObject): "over" | "under" | null {
 
 function oppositeSide(side: "over" | "under"): "over" | "under" {
   return side === "over" ? "under" : "over";
+}
+
+function marketSide(row: PredictionEvidenceObject): "home" | "away" | "over" | "under" | null {
+  const pick = String(row.identity.pick ?? "").trim().toLowerCase();
+  if (row.identity.marketType === "ML") {
+    if (pick === String(row.identity.homeTeam ?? "").trim().toLowerCase()) return "home";
+    if (pick === String(row.identity.awayTeam ?? "").trim().toLowerCase()) return "away";
+  }
+  if (row.identity.marketType === "TOTAL") {
+    if (pick.includes("over")) return "over";
+    if (pick.includes("under")) return "under";
+  }
+  return null;
 }
 
 function withRecoveredFiPricing(args: {
@@ -364,6 +451,76 @@ async function applyTrustedEvidenceRecovery(args: {
     }));
   }
   const { supabase } = await import("@/lib/db/supabase");
+  const externalIdsNeedingLineRecovery = Array.from(new Set(args.selected
+    .filter((row) =>
+      row.evidenceSource.kind === "current_live" &&
+      (
+        row.priceValueEvidence.priceAmerican === null ||
+        row.modelStatsEvidence.marketImpliedProbability === null ||
+        row.modelStatsEvidence.edge === null
+      ) &&
+      (row.identity.marketType === "ML" || row.identity.marketType === "TOTAL" || row.identity.marketType === "FI")
+    )
+    .map((row) => row.identity.externalId)
+    .filter((id) => Number.isFinite(id))));
+  let internalGameIdByExternal = new Map<number, number>();
+  if (externalIdsNeedingLineRecovery.length > 0) {
+    const { data, error } = await supabase
+      .from("games")
+      .select("id, external_id")
+      .eq("sport", args.sport)
+      .eq("slate_date", args.date)
+      .in("external_id", externalIdsNeedingLineRecovery);
+    if (error) throw new Error(`games trusted recovery load failed: ${error.message}`);
+    internalGameIdByExternal = new Map(((data ?? []) as Array<{ id: number; external_id: number | null }>).flatMap((row) =>
+      row.external_id === null ? [] : [[row.external_id, row.id] as const],
+    ));
+  }
+  const internalGameIdFor = (row: PredictionEvidenceObject): number | null => {
+    const fromIdentity = Number(row.identity.gameId);
+    if (Number.isFinite(fromIdentity)) return fromIdentity;
+    return internalGameIdByExternal.get(row.identity.externalId) ?? null;
+  };
+  const recoverMarketPrice = async (row: PredictionEvidenceObject): Promise<PredictionEvidenceObject> => {
+    if (
+      row.evidenceSource.kind !== "current_live" ||
+      (
+        row.priceValueEvidence.priceAmerican !== null &&
+        row.modelStatsEvidence.marketImpliedProbability !== null &&
+        row.modelStatsEvidence.edge !== null
+      ) ||
+      (row.identity.marketType !== "ML" && row.identity.marketType !== "TOTAL")
+    ) {
+      return row;
+    }
+    const side = marketSide(row);
+    const gameId = internalGameIdFor(row);
+    if (side === null || gameId === null) return row;
+    const marketType = row.identity.marketType === "ML" ? "moneyline" : "total";
+    const picked = await getCurrentOrLastKnownLine({
+      supabase,
+      gameId,
+      marketType,
+      side,
+      field: "odds_american",
+    });
+    const pickedPrice = picked.value ?? row.priceValueEvidence.priceAmerican;
+    if (pickedPrice === null || !Number.isFinite(pickedPrice)) return row;
+    const opposite = await getCurrentOrLastKnownLine({
+      supabase,
+      gameId,
+      marketType,
+      side: side === "home" ? "away" : side === "away" ? "home" : oppositeSide(side),
+      field: "odds_american",
+    });
+    return withRecoveredMarketPrice({
+      row,
+      price: pickedPrice,
+      oppositePrice: opposite.value,
+      source: picked.source ?? "history",
+      observedAt: picked.observed_at,
+    });
+  };
   const recoverFiPricing = async (row: PredictionEvidenceObject): Promise<PredictionEvidenceObject> => {
     if (
       row.evidenceSource.kind !== "current_live" ||
@@ -373,8 +530,8 @@ async function applyTrustedEvidenceRecovery(args: {
       return row;
     }
     const side = fiSide(row);
-    const gameId = Number(row.identity.externalId);
-    if (side === null || !Number.isFinite(gameId)) return row;
+    const gameId = internalGameIdFor(row);
+    if (side === null || gameId === null) return row;
     const picked = await getCurrentOrLastKnownLine({
       supabase,
       gameId,
@@ -400,7 +557,7 @@ async function applyTrustedEvidenceRecovery(args: {
   };
 
   const recovered = await Promise.all(args.selected.map(async (row) => {
-    let next = row;
+    let next = await recoverMarketPrice(row);
     if (
       next.evidenceSource.kind === "current_live" &&
       next.identity.normalizedMarket === "total" &&

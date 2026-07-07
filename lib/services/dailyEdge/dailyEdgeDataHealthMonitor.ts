@@ -161,6 +161,7 @@ function isFiTossUp(row: PredictionEvidenceObject): boolean {
 }
 
 function isActionableRow(row: PredictionEvidenceObject): boolean {
+  if (/^no\s*play$/i.test(String(row.identity.originalPlayGrade ?? ""))) return false;
   if (row.identity.marketType === "FI" && (isFiTossUp(row) || row.identity.pick === null)) return false;
   return row.identity.pick !== null;
 }
@@ -396,7 +397,11 @@ function collectFindings(
     }
     for (const gap of review.persistenceGaps) {
       if (gap === "fi_price_recovered_from_snapshot") continue;
-      pushFinding(findings, row, gap, gap.includes("not_offered") ? "info" : "high", "Evidence reviewer reported a persistence/source gap.", {
+      const severity: DailyEdgeDataHealthSeverity =
+        gap.includes("not_offered") ? "info" :
+        row.identity.marketType === "FI" && !actionable ? "medium" :
+        "high";
+      pushFinding(findings, row, gap, severity, "Evidence reviewer reported a persistence/source gap.", {
         gap,
         priceNullReason: row.priceValueEvidence.priceNullReason,
       });
