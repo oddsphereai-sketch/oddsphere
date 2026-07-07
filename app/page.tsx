@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import {
   getPublicTrackRecordSummary,
@@ -259,163 +260,37 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
 }
 
 function DailyEdgePreview() {
-  const slateRows = [
-    {
-      matchup: "NYM @ TOR",
-      grade: "Best Angle",
-      pick: "NYM ML",
-      detail: "56% · +10.0 pp",
-      tone: "best",
-    },
-    {
-      matchup: "ATL @ WSH",
-      grade: "Lean",
-      pick: "ATL -3.5",
-      detail: "59% · +4.4 pp",
-      tone: "lean",
-    },
-    {
-      matchup: "BEL @ BRA",
-      grade: "Watchlist",
-      pick: "Over 2.5",
-      detail: "54% · movement watch",
-      tone: "watch",
-    },
-  ];
-
   return (
-    <div
-      aria-label="Daily Edge dashboard preview"
-      className="relative overflow-hidden rounded-2xl border border-violet-500/30 bg-[#080712] shadow-[0_0_80px_rgba(124,58,237,0.18)]"
-    >
-      <div className="border-b border-white/10 bg-white/[0.035] px-4 py-3 sm:px-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-300">Daily Edge</p>
-            <p className="mt-1 text-base font-black tracking-tight text-white">Today&apos;s Slate</p>
+    <div aria-label="Daily Edge product preview" className="relative">
+      <div className="absolute -inset-5 rounded-[2rem] bg-violet-700/20 blur-3xl" />
+      <div className="relative overflow-hidden rounded-2xl border border-violet-400/30 bg-[#080712] shadow-[0_0_90px_rgba(124,58,237,0.22)]">
+        <div className="flex items-center justify-between gap-4 border-b border-white/10 bg-white/[0.035] px-4 py-3 sm:px-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-200">Daily Edge reader</p>
+          <div className="flex gap-1.5" aria-hidden="true">
+            <span className="h-2 w-2 rounded-full bg-emerald-300/80" />
+            <span className="h-2 w-2 rounded-full bg-violet-300/70" />
+            <span className="h-2 w-2 rounded-full bg-white/30" />
           </div>
-          <div className="flex flex-wrap justify-end gap-2 text-[11px] font-semibold text-gray-300">
-            {["15 games", "3 Best Angles", "8 Leans"].map((label) => (
-              <span key={label} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-                {label}
-              </span>
-            ))}
-          </div>
+        </div>
+        <div className="relative aspect-[1.18/1] overflow-hidden bg-black">
+          <Image
+            src="/marketing/daily-edge-expanded-reader.jpg"
+            alt="OddSphere Daily Edge selected edge, supporting evidence, odds movement, and market pulse"
+            fill
+            priority
+            sizes="(min-width: 1024px) 58vw, 100vw"
+            className="object-cover object-[46%_26%]"
+          />
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(3,2,12,0.08),rgba(3,2,12,0)_20%,rgba(3,2,12,0)_78%,rgba(3,2,12,0.16))]" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#080712] to-transparent" />
         </div>
       </div>
-
-      <div className="grid lg:grid-cols-[0.78fr_1.22fr]">
-        <div className="border-b border-white/10 p-3 sm:p-4 lg:border-b-0 lg:border-r">
-          <div className="space-y-2">
-            {slateRows.map((row) => (
-              <div
-                key={`${row.matchup}-${row.grade}`}
-                className={`rounded-xl border p-3 transition ${
-                  row.tone === "best"
-                    ? "border-emerald-400/25 bg-emerald-400/[0.06]"
-                    : "border-white/10 bg-white/[0.04]"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-500">{row.matchup}</p>
-                    <p className="mt-1 text-base font-black text-white">{row.pick}</p>
-                  </div>
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${
-                      row.tone === "best"
-                        ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
-                        : row.tone === "lean"
-                          ? "border-violet-400/30 bg-violet-400/10 text-violet-200"
-                          : "border-amber-300/30 bg-amber-300/10 text-amber-200"
-                    }`}
-                  >
-                    {row.grade}
-                  </span>
-                </div>
-                <p className="mt-3 text-xs font-semibold text-gray-300">{row.detail}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="p-3 sm:p-4">
-          <div className="grid gap-3">
-            <div className="rounded-xl border border-emerald-400/25 bg-emerald-400/[0.06] p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200">Selected Edge</p>
-                  <h3 className="mt-1 text-2xl font-black tracking-tight text-white">NYM ML</h3>
-                  <p className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">NYM @ TOR · Moneyline</p>
-                </div>
-                <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-emerald-200">
-                  Best Angle
-                </span>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {[
-                  ["Model Prob.", "56%"],
-                  ["Market", "46%"],
-                  ["Edge", "+10.0 pp"],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-lg border border-white/10 bg-white/[0.045] p-3">
-                    <p className="text-[9px] font-black uppercase tracking-[0.12em] text-gray-400">{label}</p>
-                    <p className="mt-1 text-lg font-black tabular-nums text-white">{value}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-[0.9fr_1.1fr]">
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">Odds Move</p>
-                <div className="mt-3 grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2 text-center">
-                  <div>
-                    <p className="text-base font-black tabular-nums text-white">+106</p>
-                    <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">First</p>
-                  </div>
-                  <span className="text-gray-600">→</span>
-                  <div>
-                    <p className="text-base font-black tabular-nums text-white">-101</p>
-                    <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">Move</p>
-                  </div>
-                  <span className="text-emerald-300">↗</span>
-                  <div>
-                    <p className="text-base font-black tabular-nums text-white">-104</p>
-                    <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">Current</p>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">Market Pulse</p>
-                <div className="mt-3 grid gap-2 text-sm text-gray-200">
-                  <p className="flex justify-between gap-3"><span className="text-gray-400">Consensus</span><span>Balanced</span></p>
-                  <p className="flex justify-between gap-3"><span className="text-gray-400">Sharp Book</span><span>Money support</span></p>
-                  <p className="flex justify-between gap-3"><span className="text-gray-400">Movement</span><span className="text-emerald-300">Toward pick</span></p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">Market Read</p>
-              <p className="mt-2 text-sm leading-relaxed text-gray-200">
-                Consensus is balanced, but sharper money and the price move both lean toward the pick.
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">Supporting Evidence</p>
-              <p className="mt-2 text-sm leading-relaxed text-gray-200">
-                The model is above market implied probability, current price is playable, and movement has improved from plus money toward the pick.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-gray-300">
-                <span className="rounded-full border border-emerald-400/20 bg-emerald-400/[0.08] px-3 py-1 text-emerald-200">Best Angle</span>
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">Price -104</span>
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">Tracked after settlement</span>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className="relative mx-auto -mt-5 flex max-w-xl flex-wrap justify-center gap-2 px-4">
+        {["Quick Read", "Odds Move", "Market Pulse", "Supporting Evidence"].map((label) => (
+          <span key={label} className="rounded-full border border-white/10 bg-gray-950/90 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-gray-200 shadow-lg shadow-black/30">
+            {label}
+          </span>
+        ))}
       </div>
     </div>
   );
