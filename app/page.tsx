@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
+import { HomepageDashboardPrototype } from "@/app/components/HomepageDashboardPrototype";
 import {
   getPublicTrackRecordSummary,
   type PublicTrackRecordSummary,
@@ -316,12 +316,7 @@ export default async function HomePage() {
           </p>
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <TrialButton />
-            <Link
-              href="#product-preview"
-              className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-white/[0.05] px-7 py-3.5 text-sm font-bold text-white transition hover:border-violet-400/50 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
-            >
-              Preview Dashboard
-            </Link>
+            <HomepageDashboardPrototype />
           </div>
           <p className="mt-4 text-sm font-semibold text-violet-100">
             {TRIAL_DISCLOSURE}
