@@ -1679,6 +1679,31 @@ function CleanOddsTrail({ open, prev, current, locked }: { open: number | null; 
   );
 }
 
+function selectedFiBoardOddsTrail(marketData: MarketEdgeDto): {
+  open: number | null;
+  prev: number | null;
+  current: number | null;
+} | null {
+  const board = marketData.fiMarketBoard;
+  const pick = (marketData.pick ?? "").toUpperCase();
+  if (!board) return null;
+  if (pick.includes("YRFI") || pick === "OVER") {
+    return {
+      open: board.yrfiOpenAmerican ?? null,
+      prev: board.yrfiPreviousAmerican ?? null,
+      current: board.yrfiAmerican ?? null,
+    };
+  }
+  if (pick.includes("NRFI") || pick === "UNDER") {
+    return {
+      open: board.nrfiOpenAmerican ?? null,
+      prev: board.nrfiPreviousAmerican ?? null,
+      current: board.nrfiAmerican ?? null,
+    };
+  }
+  return null;
+}
+
 function cleanTrailLabel(label: NonNullable<MarketEdgeDto["oddsTrail"]>[number]["label"]): string {
   if (label === "first") return "FIRST";
   if (label === "locked") return "LOCK";
@@ -1925,8 +1950,20 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const marketRead = find("Market Read");
   const renderedSupportingEvidence = find("Supporting Evidence");
   const book = marketSourceLabel(marketData.marketDataQuality, marketData.marketSource) ?? marketData.marketSource;
-  const oddsTrailOpen = marketData.lineOpenAmerican ?? marketData.marketReadV2?.movement?.firstTrackedPrice ?? null;
-  const oddsTrailCurrent = marketData.priceAmerican ?? marketData.marketReadV2?.movement?.currentPrice ?? null;
+  const fiBoardTrail = market === "first_inning" && shellSport === "mlb"
+    ? selectedFiBoardOddsTrail(marketData)
+    : null;
+  const oddsTrailOpen =
+    marketData.lineOpenAmerican ??
+    marketData.marketReadV2?.movement?.firstTrackedPrice ??
+    fiBoardTrail?.open ??
+    null;
+  const oddsTrailPrev = marketData.lastMovePrevAmerican ?? fiBoardTrail?.prev ?? null;
+  const oddsTrailCurrent =
+    marketData.priceAmerican ??
+    marketData.marketReadV2?.movement?.currentPrice ??
+    fiBoardTrail?.current ??
+    null;
   const persistedOddsTrail = marketData.oddsTrail ?? [];
   const hasTrail = persistedOddsTrail.length > 0 || oddsTrailOpen != null || oddsTrailCurrent != null || marketData.lockedLineAmerican != null;
   const showLineNumberSection = market === "total" || (shellSport === "wnba" && market === "first_inning");
@@ -1991,14 +2028,14 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
             <CleanPersistedOddsTrail
               trail={persistedOddsTrail}
               open={oddsTrailOpen}
-              prev={marketData.lastMovePrevAmerican ?? null}
+              prev={oddsTrailPrev}
               current={oddsTrailCurrent}
               locked={marketData.lockedLineAmerican != null}
             />
           ) : (
             <CleanOddsTrail
               open={oddsTrailOpen}
-              prev={marketData.lastMovePrevAmerican ?? null}
+              prev={oddsTrailPrev}
               current={oddsTrailCurrent}
               locked={marketData.lockedLineAmerican != null}
             />
