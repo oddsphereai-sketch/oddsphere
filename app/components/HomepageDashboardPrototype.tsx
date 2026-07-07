@@ -9,6 +9,7 @@ type Hotspot = {
   title: string;
   body: string;
   className: string;
+  markerClassName: string;
 };
 
 const hotspots: Hotspot[] = [
@@ -18,6 +19,7 @@ const hotspots: Hotspot[] = [
     title: "Switch between markets",
     body: "The selected edge lets members move between moneyline, total, and first-inning reads without leaving the card.",
     className: "left-[38%] top-[11%] h-[8%] w-[56%]",
+    markerClassName: "left-[50%] top-[11%]",
   },
   {
     id: "quick-read",
@@ -25,6 +27,7 @@ const hotspots: Hotspot[] = [
     title: "Quick Read",
     body: "The left rail explains the pick, projected score, model edge, price, grade, and risk note in the same format members see.",
     className: "left-[3%] top-[23%] h-[54%] w-[25%]",
+    markerClassName: "left-[4%] top-[31%]",
   },
   {
     id: "evidence",
@@ -32,6 +35,7 @@ const hotspots: Hotspot[] = [
     title: "Supporting Evidence",
     body: "The center column shows model probability, market implied probability, price, odds movement, Market Read, and split context.",
     className: "left-[30%] top-[24%] h-[61%] w-[40%]",
+    markerClassName: "left-[37%] top-[31%]",
   },
   {
     id: "stats",
@@ -39,6 +43,7 @@ const hotspots: Hotspot[] = [
     title: "Key Stats & Notes",
     body: "The right rail adds matchup context, market notes, and risk language so the pick is not just a label.",
     className: "left-[70%] top-[24%] h-[38%] w-[27%]",
+    markerClassName: "left-[75%] top-[31%]",
   },
   {
     id: "splits",
@@ -46,6 +51,7 @@ const hotspots: Hotspot[] = [
     title: "Market Pulse · Splits",
     body: "When available, the reader shows Consensus Splits and Sharp Book Splits directly in the card. Unsupported sports do not show empty split sections.",
     className: "left-[30%] top-[64%] h-[32%] w-[39%]",
+    markerClassName: "left-[41%] top-[68%]",
   },
 ];
 
@@ -88,6 +94,9 @@ export function HomepageDashboardPrototype() {
                 <h2 id="dashboard-preview-title" className="mt-1 text-xl font-black tracking-tight text-white sm:text-2xl">
                   Daily Edge reader preview
                 </h2>
+                <p className="mt-1 text-xs text-gray-400">
+                  Click the labeled sections on the reader to see what each part does.
+                </p>
               </div>
               <button
                 type="button"
@@ -114,8 +123,22 @@ export function HomepageDashboardPrototype() {
                     type="button"
                     aria-label={hotspot.label}
                     onClick={() => setActiveHotspot(hotspot)}
-                    className={`absolute rounded-xl border border-transparent bg-transparent transition hover:border-emerald-300/45 hover:bg-emerald-300/[0.06] focus-visible:border-emerald-200 focus-visible:bg-emerald-300/[0.08] focus-visible:outline-none ${hotspot.className}`}
-                  />
+                    className={`group absolute rounded-xl border transition focus-visible:outline-none ${
+                      activeHotspot.id === hotspot.id
+                        ? "border-emerald-300/70 bg-emerald-300/[0.09] shadow-[0_0_24px_rgba(52,211,153,0.22)]"
+                        : "border-white/0 bg-black/0 hover:border-emerald-300/50 hover:bg-emerald-300/[0.06] focus-visible:border-emerald-200 focus-visible:bg-emerald-300/[0.08]"
+                    } ${hotspot.className}`}
+                  >
+                    <span
+                      className={`absolute rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] shadow-xl shadow-black/40 transition ${
+                        activeHotspot.id === hotspot.id
+                          ? "border-emerald-300/60 bg-emerald-300 text-gray-950"
+                          : "border-white/15 bg-gray-950/90 text-white group-hover:border-emerald-300/50 group-hover:text-emerald-100"
+                      } ${hotspot.markerClassName}`}
+                    >
+                      {hotspot.label}
+                    </span>
+                  </button>
                 ))}
               </div>
             </div>
