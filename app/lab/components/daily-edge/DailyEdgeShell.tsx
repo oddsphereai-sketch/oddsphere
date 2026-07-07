@@ -41,7 +41,12 @@ import type {
   DailyEdgeGameDto,
   MarketEdgeDto,
 } from "../../lib/labTypes";
-import type { MarketDecision } from "@/lib/types/domain/RecommendationDecision";
+import type {
+  MarketDecision,
+  MarketSplitDisplaySection,
+  PlayGradeLabel,
+  SplitSideDisplay,
+} from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { isContextOnlyDisplayMarket } from "@/lib/config/officialTrackingMarkets";
 import { TWO_SIDED_KEY_STAT_LABELS, keyStatIsTwoSided } from "@/lib/services/keyStatsFormatter";
@@ -4044,12 +4049,34 @@ type MarketingPreviewMarketInput = {
   moneyPct?: number | null;
   betsPct?: number | null;
   publicSplits?: MarketEdgeDto["publicSplits"];
+  consensusSplits?: SplitSideDisplay[];
+  sharpBookSplits?: SplitSideDisplay[];
+  splitsUpdatedAt?: string | null;
+  sharpUpdatedAt?: string | null;
   guidedGuide: string;
   guidedWatchOut: string;
   whyLine: string;
   riskLine: string;
   keyStats?: MarketEdgeDto["keyStats"];
 };
+
+function marketingSplitSection(
+  label: MarketSplitDisplaySection["label"],
+  rows: SplitSideDisplay[] | undefined,
+  lastUpdated: string | null | undefined,
+): MarketSplitDisplaySection | null {
+  if (!rows || rows.length === 0) return null;
+  return {
+    label,
+    rows,
+    signal: null,
+    lastUpdated: lastUpdated ?? null,
+  };
+}
+
+function marketingPlayGradeLabel(verdict: VerdictKey): PlayGradeLabel {
+  return VERDICT_LABEL[verdict] as PlayGradeLabel;
+}
 
 function marketingPreviewMarket(input: MarketingPreviewMarketInput): MarketEdgeDto {
   const modelProb = input.modelProb ?? input.confidence;
@@ -4059,6 +4086,8 @@ function marketingPreviewMarket(input: MarketingPreviewMarketInput): MarketEdgeD
   const modelMarketGapPct =
     input.modelMarketGapPct ??
     (modelTrustPct !== null && marketImpliedPct !== null ? modelTrustPct - marketImpliedPct : null);
+  const consensusSection = marketingSplitSection("Consensus Splits", input.consensusSplits ?? input.publicSplits, input.splitsUpdatedAt);
+  const sharpSection = marketingSplitSection("Sharp Book Splits", input.sharpBookSplits, input.sharpUpdatedAt);
 
   return {
     pick: input.pick,
@@ -4119,7 +4148,40 @@ function marketingPreviewMarket(input: MarketingPreviewMarketInput): MarketEdgeD
     marketImpliedPct,
     modelMarketGapPct,
     recommendationConfidence: input.confidence === null ? null : Math.round(input.confidence * 100),
-    recommendationDecision: undefined,
+    recommendationDecision: consensusSection !== null || sharpSection !== null
+      ? {
+          pick: input.pick,
+          modelProbability: modelProb,
+          marketImplied: marketFairProb,
+          edgePp: modelMarketGapPct,
+          price: input.priceAmerican ?? null,
+          consensusSplits: consensusSection,
+          sharpBookSplits: sharpSection,
+          lineMovement:
+            input.lineOpenAmerican !== null &&
+            input.lineOpenAmerican !== undefined &&
+            input.priceAmerican !== null &&
+            input.priceAmerican !== undefined
+              ? classifyPickRelativeLineMove(input.lineOpenAmerican, input.priceAmerican) === "toward"
+                ? "support"
+                : classifyPickRelativeLineMove(input.lineOpenAmerican, input.priceAmerican) === "against"
+                  ? "resistance"
+                  : "neutral"
+              : null,
+          resolvedMarketRead: {
+            status: input.verdict === "caution" ? "resistance" : input.verdict === "watchlist" ? "mixed" : "aligned",
+            label: input.verdict === "caution" ? "Market Resistance" : input.verdict === "watchlist" ? "Mixed" : "Market Support",
+            copy: input.guidedGuide,
+            tone: input.verdict === "caution" ? "amber" : input.verdict === "no_play" ? "gray" : "emerald",
+          },
+          sourceConflict: false,
+          playGrade: marketingPlayGradeLabel(input.verdict),
+          quickRead: input.guidedGuide,
+          supportingEvidence: [input.whyLine],
+          riskNote: input.riskLine,
+          reasonCodes: [],
+        }
+      : undefined,
     marketSource: input.priceAmerican === null || input.priceAmerican === undefined ? null : "consensus",
     marketDataQuality: input.priceAmerican === null || input.priceAmerican === undefined ? "unavailable" : "two_sided_consensus",
     reviewFlags: [],
@@ -4221,6 +4283,12 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
           { side: "away", label: "NYM", moneyPct: 60, betsPct: 56 },
           { side: "home", label: "TOR", moneyPct: 40, betsPct: 44 },
         ],
+        sharpBookSplits: [
+          { side: "away", label: "NYM", moneyPct: 78, betsPct: 37 },
+          { side: "home", label: "TOR", moneyPct: 22, betsPct: 63 },
+        ],
+        splitsUpdatedAt: "2026-07-07T19:30:00.000Z",
+        sharpUpdatedAt: "2026-07-07T19:21:00.000Z",
         guidedGuide: "Strong model/value case with a price move toward NYM, though consensus is not fully aligned.",
         guidedWatchOut: "Consensus is not fully aligned, so late price tightening can reduce the value.",
         whyLine: "Driver: model win-probability edge, playable price, and movement toward the pick.",
@@ -4253,6 +4321,12 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
           { side: "over", label: "Over", moneyPct: 64, betsPct: 58 },
           { side: "under", label: "Under", moneyPct: 36, betsPct: 42 },
         ],
+        sharpBookSplits: [
+          { side: "over", label: "Over", moneyPct: 69, betsPct: 44 },
+          { side: "under", label: "Under", moneyPct: 31, betsPct: 56 },
+        ],
+        splitsUpdatedAt: "2026-07-07T19:30:00.000Z",
+        sharpUpdatedAt: "2026-07-07T19:21:00.000Z",
         guidedGuide: "Projection supports the Over, with price movement adding confirmation.",
         guidedWatchOut: "The number has already moved, so the edge is more sensitive to late juice.",
         whyLine: "Driver: projected total above the market line and movement toward the Over.",
@@ -4307,6 +4381,12 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
           { side: "away", label: "ATL", moneyPct: 57, betsPct: 54 },
           { side: "home", label: "WSH", moneyPct: 43, betsPct: 46 },
         ],
+        sharpBookSplits: [
+          { side: "away", label: "ATL", moneyPct: 51, betsPct: 55 },
+          { side: "home", label: "WSH", moneyPct: 49, betsPct: 45 },
+        ],
+        splitsUpdatedAt: "2026-07-07T19:15:00.000Z",
+        sharpUpdatedAt: "2026-07-07T19:10:00.000Z",
         guidedGuide: "Playable model edge, but the odds move keeps the read below top-tier.",
         guidedWatchOut: "Movement away from ATL is the main cap on the grade.",
         whyLine: "Driver: model edge with movement friction.",
@@ -4334,6 +4414,12 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
           { side: "over", label: "Over", moneyPct: 55, betsPct: 51 },
           { side: "under", label: "Under", moneyPct: 45, betsPct: 49 },
         ],
+        sharpBookSplits: [
+          { side: "over", label: "Over", moneyPct: 48, betsPct: 52 },
+          { side: "under", label: "Under", moneyPct: 52, betsPct: 48 },
+        ],
+        splitsUpdatedAt: "2026-07-07T19:15:00.000Z",
+        sharpUpdatedAt: "2026-07-07T19:10:00.000Z",
         guidedGuide: "Projection leans Over, but the price keeps it on Watchlist.",
         guidedWatchOut: "Thin edge and added juice are the main reasons this is not stronger.",
         whyLine: "Driver: projection support, capped by price.",
@@ -4402,6 +4488,12 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
           { side: "over", label: "Over", moneyPct: 61, betsPct: 56 },
           { side: "under", label: "Under", moneyPct: 39, betsPct: 44 },
         ],
+        sharpBookSplits: [
+          { side: "over", label: "Over", moneyPct: 46, betsPct: 58 },
+          { side: "under", label: "Under", moneyPct: 54, betsPct: 42 },
+        ],
+        splitsUpdatedAt: "2026-07-07T19:20:00.000Z",
+        sharpUpdatedAt: "2026-07-07T19:12:00.000Z",
         guidedGuide: "Projection supports the Over, though market resistance keeps it from being fully clean.",
         guidedWatchOut: "This is worth monitoring, not a top-tier bet.",
         whyLine: "Driver: projected total above the line.",
