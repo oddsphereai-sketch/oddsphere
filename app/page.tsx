@@ -288,11 +288,11 @@ function DailyEdgePreview() {
       aria-label="Daily Edge dashboard preview"
       className="relative overflow-hidden rounded-2xl border border-violet-500/30 bg-[#080712] shadow-[0_0_80px_rgba(124,58,237,0.18)]"
     >
-      <div className="border-b border-white/10 bg-white/[0.035] px-4 py-4 sm:px-5">
+      <div className="border-b border-white/10 bg-white/[0.035] px-4 py-3 sm:px-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-300">Daily Edge</p>
-            <p className="mt-1 text-lg font-black tracking-tight text-white">Selected Edge</p>
+            <p className="mt-1 text-base font-black tracking-tight text-white">Today&apos;s Slate</p>
           </div>
           <div className="flex flex-wrap justify-end gap-2 text-[11px] font-semibold text-gray-300">
             {["15 games", "3 Best Angles", "8 Leans"].map((label) => (
@@ -304,43 +304,17 @@ function DailyEdgePreview() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-[0.85fr_1.15fr]">
-        <div className="border-b border-white/10 p-4 sm:p-5 lg:border-b-0 lg:border-r">
-          <div className="mb-4 rounded-xl border border-emerald-400/25 bg-emerald-400/[0.06] p-4 shadow-[0_0_24px_rgba(52,211,153,0.08)]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200">Action</p>
-                <h3 className="mt-2 text-2xl font-black tracking-tight text-white">NYM ML</h3>
-                <p className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">NYM @ TOR · Moneyline</p>
-              </div>
-              <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-emerald-200">
-                Best Angle
-              </span>
-            </div>
-            <p className="mt-4 text-sm leading-relaxed text-gray-200">
-              Strong model/value case with a supportive price move. Market context is not perfectly clean, but the thesis is clear.
-            </p>
-            <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-lg border border-white/10 bg-gray-950/70 p-3">
-                <p className="text-lg font-black text-white">56%</p>
-                <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">Model</p>
-              </div>
-              <div className="rounded-lg border border-white/10 bg-gray-950/70 p-3">
-                <p className="text-lg font-black text-white">46%</p>
-                <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">Market</p>
-              </div>
-              <div className="rounded-lg border border-white/10 bg-gray-950/70 p-3">
-                <p className="text-lg font-black text-emerald-300">+10.0</p>
-                <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">Edge</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3">
+      <div className="grid lg:grid-cols-[0.78fr_1.22fr]">
+        <div className="border-b border-white/10 p-3 sm:p-4 lg:border-b-0 lg:border-r">
+          <div className="space-y-2">
             {slateRows.map((row) => (
               <div
                 key={`${row.matchup}-${row.grade}`}
-                className="rounded-xl border border-white/10 bg-white/[0.04] p-4 transition hover:border-violet-400/30"
+                className={`rounded-xl border p-3 transition ${
+                  row.tone === "best"
+                    ? "border-emerald-400/25 bg-emerald-400/[0.06]"
+                    : "border-white/10 bg-white/[0.04]"
+                }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -365,94 +339,80 @@ function DailyEdgePreview() {
           </div>
         </div>
 
-        <div className="p-4 sm:p-5">
-          <div className="grid gap-4">
+        <div className="p-3 sm:p-4">
+          <div className="grid gap-3">
             <div className="rounded-xl border border-emerald-400/25 bg-emerald-400/[0.06] p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200">Expanded Read</p>
-                  <h3 className="mt-2 text-2xl font-black tracking-tight text-white">NYM @ TOR</h3>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200">Selected Edge</p>
+                  <h3 className="mt-1 text-2xl font-black tracking-tight text-white">NYM ML</h3>
+                  <p className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">NYM @ TOR · Moneyline</p>
                 </div>
                 <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-emerald-200">
                   Best Angle
                 </span>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <MetricTile label="Pick" value="NYM ML" />
-                <MetricTile label="Model Prob." value="56%" />
-                <MetricTile label="Market" value="46%" />
-                <MetricTile label="Model Edge" value="+10.0 pp" />
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {[
+                  ["Model Prob.", "56%"],
+                  ["Market", "46%"],
+                  ["Edge", "+10.0 pp"],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-lg border border-white/10 bg-white/[0.045] p-3">
+                    <p className="text-[9px] font-black uppercase tracking-[0.12em] text-gray-400">{label}</p>
+                    <p className="mt-1 text-lg font-black tabular-nums text-white">{value}</p>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+            <div className="grid gap-3 md:grid-cols-[0.9fr_1.1fr]">
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">Odds Move</p>
-                <div className="mt-3 grid grid-cols-3 items-center gap-2 text-center">
+                <div className="mt-3 grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2 text-center">
                   <div>
-                    <p className="text-lg font-black tabular-nums text-white">+106</p>
+                    <p className="text-base font-black tabular-nums text-white">+106</p>
                     <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">First</p>
                   </div>
+                  <span className="text-gray-600">→</span>
                   <div>
-                    <p className="text-lg font-black tabular-nums text-white">-101</p>
+                    <p className="text-base font-black tabular-nums text-white">-101</p>
                     <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">Move</p>
                   </div>
+                  <span className="text-emerald-300">↗</span>
                   <div>
-                    <p className="text-lg font-black tabular-nums text-white">-104</p>
+                    <p className="text-base font-black tabular-nums text-white">-104</p>
                     <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">Current</p>
                   </div>
                 </div>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">Market Pulse</p>
-                <div className="mt-3 space-y-2 text-sm text-gray-200">
-                  <p>Consensus: balanced</p>
-                  <p>Sharp Book: money support</p>
-                  <p>Movement: toward pick</p>
+                <div className="mt-3 grid gap-2 text-sm text-gray-200">
+                  <p className="flex justify-between gap-3"><span className="text-gray-400">Consensus</span><span>Balanced</span></p>
+                  <p className="flex justify-between gap-3"><span className="text-gray-400">Sharp Book</span><span>Money support</span></p>
+                  <p className="flex justify-between gap-3"><span className="text-gray-400">Movement</span><span className="text-emerald-300">Toward pick</span></p>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">Market Read</p>
               <p className="mt-2 text-sm leading-relaxed text-gray-200">
                 Consensus is balanced, but sharper money and the price move both lean toward the pick.
               </p>
             </div>
 
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">Supporting Evidence</p>
               <p className="mt-2 text-sm leading-relaxed text-gray-200">
                 The model is above market implied probability, current price is playable, and movement has improved from plus money toward the pick.
               </p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                <MetricTile label="Play Grade" value="Best Angle" />
-                <MetricTile label="Price" value="-104" />
-                <MetricTile label="Tracking" value="Logged" />
+              <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-gray-300">
+                <span className="rounded-full border border-emerald-400/20 bg-emerald-400/[0.08] px-3 py-1 text-emerald-200">Best Angle</span>
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">Price -104</span>
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">Tracked after settlement</span>
               </div>
-            </div>
-
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300">What the card explains</p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {[
-                  "Why the model likes it",
-                  "Whether price is playable",
-                  "How the market is moving",
-                  "Why the grade is not stronger",
-                ].map((item) => (
-                  <div key={item} className="rounded-lg border border-white/10 bg-gray-950/70 px-3 py-2 text-sm font-semibold text-gray-200">
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06] p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200">Accountability</p>
-              <p className="mt-2 text-sm leading-relaxed text-gray-200">
-                Every posted Daily Edge result is tracked after settlement.
-              </p>
             </div>
           </div>
         </div>
@@ -468,18 +428,18 @@ export default async function HomePage() {
     <main className="overflow-hidden">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      <section className="mx-auto grid max-w-7xl items-start gap-10 px-4 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-20 lg:grid-cols-[0.9fr_1.1fr] lg:px-8">
+      <section className="mx-auto grid max-w-7xl items-center gap-10 px-4 pb-14 pt-10 sm:px-6 sm:pb-16 sm:pt-12 lg:grid-cols-[0.88fr_1.12fr] lg:px-8">
         <div>
           <p className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-200">
             7-Day Free Trial · OddSphere Daily Edge
           </p>
-          <h1 className="mt-6 max-w-3xl text-4xl font-black tracking-tight text-white sm:text-6xl">
+          <h1 className="mt-5 max-w-3xl text-4xl font-black tracking-tight text-white sm:text-5xl xl:text-6xl">
             Cut Through the Noise. Find the Plays Worth Your Attention.
           </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-gray-200">
+          <p className="mt-5 max-w-2xl text-lg leading-relaxed text-gray-200">
             Model projections, market movement, Play Grades, and tracking — organized into one Daily Edge dashboard built to show the why behind every pick.
           </p>
-          <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <TrialButton />
             <Link
               href="#product-preview"
@@ -491,14 +451,14 @@ export default async function HomePage() {
           <p className="mt-4 text-sm font-semibold text-violet-100">
             {TRIAL_DISCLOSURE}
           </p>
-          <div className="mt-6 flex flex-wrap gap-2">
+          <div className="mt-5 flex flex-wrap gap-2">
             {trustChips.map((chip) => (
               <span key={chip} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-gray-200">
                 {chip}
               </span>
             ))}
           </div>
-          <p className="mt-6 max-w-2xl text-xs leading-relaxed text-gray-500">
+          <p className="mt-5 max-w-2xl text-xs leading-relaxed text-gray-500">
             21+. No guarantees. Bet responsibly.
           </p>
         </div>
