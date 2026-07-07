@@ -3027,29 +3027,51 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const fiAuditForBoard = input.market === "first_inning"
     ? readFiV2Audit(input.sportSpecific ?? null)
     : null;
+  const fiYrfiCurrentRow = input.market === "first_inning"
+    ? pickPriceRow(input.linesCurrent, "over")
+    : null;
+  const fiNrfiCurrentRow = input.market === "first_inning"
+    ? pickPriceRow(input.linesCurrent, "under")
+    : null;
+  const fiYrfiCurrentAmerican =
+    fiAuditForBoard?.market_yrfi_odds_american ?? fiYrfiCurrentRow?.odds_american ?? null;
+  const fiNrfiCurrentAmerican =
+    fiAuditForBoard?.market_nrfi_odds_american ?? fiNrfiCurrentRow?.odds_american ?? null;
   const fiBoardSportsbook = fiBoardSportsbookFromReason(fiAuditForBoard?.market_reason ?? null);
   const fiYrfiHistory = fiBoardHistorySide({
     candidates: input.lineOpenCandidates,
     side: "over",
-    sportsbook: fiBoardSportsbook,
-    currentAmerican: fiAuditForBoard?.market_yrfi_odds_american ?? null,
+    sportsbook: fiBoardSportsbook ?? fiYrfiCurrentRow?.sportsbook ?? null,
+    currentAmerican: fiYrfiCurrentAmerican,
   });
   const fiNrfiHistory = fiBoardHistorySide({
     candidates: input.lineOpenCandidates,
     side: "under",
-    sportsbook: fiBoardSportsbook,
-    currentAmerican: fiAuditForBoard?.market_nrfi_odds_american ?? null,
+    sportsbook: fiBoardSportsbook ?? fiNrfiCurrentRow?.sportsbook ?? null,
+    currentAmerican: fiNrfiCurrentAmerican,
   });
-  const fiMarketBoard = fiAuditForBoard !== null
+  const fiMarketBoard = input.market === "first_inning" && (
+    fiAuditForBoard !== null ||
+    fiNrfiCurrentAmerican !== null ||
+    fiYrfiCurrentAmerican !== null
+  )
     ? {
-        line: fiAuditForBoard.market_listed_fi_total,
-        nrfiAmerican: fiAuditForBoard.market_nrfi_odds_american,
-        yrfiAmerican: fiAuditForBoard.market_yrfi_odds_american,
+        line:
+          fiAuditForBoard?.market_listed_fi_total ??
+          fiYrfiCurrentRow?.line_value ??
+          fiNrfiCurrentRow?.line_value ??
+          null,
+        nrfiAmerican: fiNrfiCurrentAmerican,
+        yrfiAmerican: fiYrfiCurrentAmerican,
         nrfiOpenAmerican: fiNrfiHistory.openAmerican,
         yrfiOpenAmerican: fiYrfiHistory.openAmerican,
         nrfiPreviousAmerican: fiNrfiHistory.previousAmerican,
         yrfiPreviousAmerican: fiYrfiHistory.previousAmerican,
-        source: fiAuditForBoard.market_reason,
+        source:
+          fiAuditForBoard?.market_reason ??
+          fiYrfiCurrentRow?.sportsbook ??
+          fiNrfiCurrentRow?.sportsbook ??
+          "lines",
       }
     : null;
 

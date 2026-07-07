@@ -1704,6 +1704,23 @@ function selectedFiBoardOddsTrail(marketData: MarketEdgeDto): {
   return null;
 }
 
+function fiBoardSideTrail(
+  board: NonNullable<MarketEdgeDto["fiMarketBoard"]>,
+  side: "yrfi" | "nrfi",
+): { open: number | null; prev: number | null; current: number | null } {
+  return side === "yrfi"
+    ? {
+        open: board.yrfiOpenAmerican ?? null,
+        prev: board.yrfiPreviousAmerican ?? null,
+        current: board.yrfiAmerican ?? null,
+      }
+    : {
+        open: board.nrfiOpenAmerican ?? null,
+        prev: board.nrfiPreviousAmerican ?? null,
+        current: board.nrfiAmerican ?? null,
+      };
+}
+
 function cleanTrailLabel(label: NonNullable<MarketEdgeDto["oddsTrail"]>[number]["label"]): string {
   if (label === "first") return "FIRST";
   if (label === "locked") return "LOCK";
@@ -1833,6 +1850,36 @@ function CleanPersistedOddsTrail({
   );
 }
 
+function CleanFiBoardOddsTrail({
+  marketData,
+  locked,
+}: {
+  marketData: MarketEdgeDto;
+  locked: boolean;
+}) {
+  const board = marketData.fiMarketBoard;
+  if (!board) return null;
+  const yrfi = fiBoardSideTrail(board, "yrfi");
+  const nrfi = fiBoardSideTrail(board, "nrfi");
+  const hasYrfi = yrfi.open !== null || yrfi.prev !== null || yrfi.current !== null;
+  const hasNrfi = nrfi.open !== null || nrfi.prev !== null || nrfi.current !== null;
+  if (!hasYrfi && !hasNrfi) return null;
+
+  const Row = ({ label, trail }: { label: string; trail: { open: number | null; prev: number | null; current: number | null } }) => (
+    <div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-2">
+      <span className="text-[8.5px] uppercase tracking-[0.14em] text-gray-500 font-bold">{label}</span>
+      <CleanOddsTrail open={trail.open} prev={trail.prev} current={trail.current} locked={locked} />
+    </div>
+  );
+
+  return (
+    <div className="space-y-2">
+      {hasYrfi && <Row label="YRFI" trail={yrfi} />}
+      {hasNrfi && <Row label="NRFI" trail={nrfi} />}
+    </div>
+  );
+}
+
 /** Clean definition row: label LEFT, evidence + delta RIGHT. When `chip`, the
  *  delta renders as a small tone pill instead of a plain colored number. */
 function CleanEvRow({ label, children, delta, tone, chip }: { label: string; children: React.ReactNode; delta?: string; tone?: EdgeStackRowTone; chip?: boolean }) {
@@ -1953,6 +2000,11 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const fiBoardTrail = market === "first_inning" && shellSport === "mlb"
     ? selectedFiBoardOddsTrail(marketData)
     : null;
+  const showFiBoardOddsTrail =
+    market === "first_inning" &&
+    shellSport === "mlb" &&
+    fiBoardTrail === null &&
+    marketData.fiMarketBoard != null;
   const oddsTrailOpen =
     marketData.lineOpenAmerican ??
     marketData.marketReadV2?.movement?.firstTrackedPrice ??
@@ -1965,7 +2017,12 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
     fiBoardTrail?.current ??
     null;
   const persistedOddsTrail = marketData.oddsTrail ?? [];
-  const hasTrail = persistedOddsTrail.length > 0 || oddsTrailOpen != null || oddsTrailCurrent != null || marketData.lockedLineAmerican != null;
+  const hasTrail =
+    persistedOddsTrail.length > 0 ||
+    oddsTrailOpen != null ||
+    oddsTrailCurrent != null ||
+    marketData.lockedLineAmerican != null ||
+    showFiBoardOddsTrail;
   const showLineNumberSection = market === "total" || (shellSport === "wnba" && market === "first_inning");
   const lineNumberLabel = market === "total" ? "Total Line" : "Spread Line";
   return (
@@ -2030,6 +2087,11 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
               open={oddsTrailOpen}
               prev={oddsTrailPrev}
               current={oddsTrailCurrent}
+              locked={marketData.lockedLineAmerican != null}
+            />
+          ) : showFiBoardOddsTrail ? (
+            <CleanFiBoardOddsTrail
+              marketData={marketData}
               locked={marketData.lockedLineAmerican != null}
             />
           ) : (
