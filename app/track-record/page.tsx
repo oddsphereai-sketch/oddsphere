@@ -1,14 +1,38 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { getPublicTrackRecordSummary } from "@/lib/services/tracking/publicTrackRecordSummary";
 import type { PublicTrackRecordMetric } from "@/lib/services/tracking/publicTrackRecordSummary";
 
 export const revalidate = 300;
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Track Record — OddSphere AI",
   description:
-    "Public tracked results for OddSphere AI sports prediction models by sport and market, updated after games settle.",
+    "Public settled-result archive for OddSphere AI sports prediction models by sport and market, updated after games settle.",
   alternates: { canonical: "/track-record" },
+  openGraph: {
+    type: "website",
+    url: "/track-record",
+    title: "Track Record — OddSphere AI",
+    description:
+      "A public settled-result archive for OddSphere model families, separated from pending member-dashboard results.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "OddSphere AI public track record preview",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@OddSphereAI",
+    title: "Track Record — OddSphere AI",
+    description:
+      "Public settled-result archive by sport and market. Past performance does not guarantee future results.",
+    images: ["/og-image.png"],
+  },
 };
 
 function pct(metric: PublicTrackRecordMetric): string {
@@ -73,10 +97,11 @@ export default async function PublicTrackRecordPage() {
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-gray-200 sm:text-lg">
           OddSphere maintains a public lifetime model archive for accountability.
-          Current Daily Edge tracking continues inside the member dashboard.
+          This page shows settled historical summaries only; pending Daily Edge
+          results continue inside the member dashboard until graded.
         </p>
         <p className="mt-3 text-xs text-gray-400">
-          Lifetime archive · Last updated {summary.lastUpdatedLabel}
+          Lifetime archive · Settled results only · Last updated {summary.lastUpdatedLabel}
         </p>
       </header>
 
@@ -212,7 +237,7 @@ export default async function PublicTrackRecordPage() {
         <p className="mb-1 font-semibold text-amber-200">Tracking is accountability, not a promise.</p>
         <p>
           Past results do not guarantee future outcomes. Prices, lines, timing, and user decisions all matter.
-          OddSphere is an informational sports analytics product and does not place or settle wagers.
+          OddSphere is an informational sports analytics product and does not place, accept, or settle wagers.
         </p>
       </section>
 

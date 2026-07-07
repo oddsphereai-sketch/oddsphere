@@ -1,15 +1,39 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 
 import {
   TRIAL_CHECKOUT_URL,
   TRIAL_DISCLOSURE_WITH_BILLING,
 } from "@/lib/marketing/trialOffer";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Pricing — Start with 7 Days Free | OddSphere AI",
   description:
-    "Start a 7-day free trial of OddSphere Daily Edge. Then $25/month for sports model projections, market reads, Play Grades, and transparent tracking.",
+    "Start a 7-day free trial of OddSphere Daily Edge. Then $25/month for sports model projections, market reads, Play Grades, transparent tracking, and responsible-use disclosures.",
   alternates: { canonical: "/pricing" },
+  openGraph: {
+    type: "website",
+    url: "/pricing",
+    title: "Pricing — Start with 7 Days Free | OddSphere AI",
+    description:
+      "Daily Edge includes model projections, market reads, Play Grades, supporting evidence, transparent tracking, and responsible-use context.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "OddSphere AI pricing and Daily Edge preview",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@OddSphereAI",
+    title: "Pricing — Start with 7 Days Free | OddSphere AI",
+    description:
+      "Start a 7-day free trial of Daily Edge, then $25/month unless canceled before the trial ends.",
+    images: ["/og-image.png"],
+  },
 };
 
 const FEATURES: string[] = [
@@ -61,6 +85,15 @@ export default function PricingPage() {
             </li>
           ))}
         </ul>
+
+        <div className="mb-8 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 text-sm leading-relaxed text-amber-50">
+          <p className="font-bold text-amber-100">What this membership is and is not</p>
+          <p className="mt-2 text-amber-50/85">
+            Daily Edge is an informational sports analytics dashboard. OddSphere is not a
+            sportsbook, does not accept wagers, does not place bets, and does not guarantee
+            outcomes or profits.
+          </p>
+        </div>
 
         <PricingCta />
         <p className="text-xs text-gray-500 text-center mt-3 italic">

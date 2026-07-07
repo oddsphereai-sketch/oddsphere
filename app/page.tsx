@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import { HomepageDashboardPrototype } from "@/app/components/HomepageDashboardPrototype";
 import {
   getPublicTrackRecordSummary,
@@ -15,9 +16,9 @@ const SITE_URL = "https://www.oddsphereai.com";
 export const revalidate = 300;
 
 export const metadata: Metadata = {
-  title: "OddSphere AI | Daily Edge Sports Betting Intelligence",
+  title: "OddSphere AI | Sports Prediction & Market Intelligence",
   description:
-    "Start a 7-day free trial of OddSphere Daily Edge: AI sports predictions, model projections, market reads, Play Grades, and transparent tracking.",
+    "Start a 7-day free trial of OddSphere Daily Edge: AI sports predictions, model projections, market reads, Play Grades, transparent tracking, and responsible-use disclosures.",
   alternates: { canonical: "/" },
   keywords: [
     "AI sports predictions",
@@ -32,9 +33,9 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: "/",
-    title: "OddSphere AI | Daily Edge Sports Betting Intelligence",
+    title: "OddSphere AI | Sports Prediction & Market Intelligence",
     description:
-      "Model projections, market movement, Play Grades, supporting evidence, and transparent tracking in one Daily Edge dashboard.",
+      "Model projections, market movement, Play Grades, supporting evidence, transparent tracking, and responsible-use context in one Daily Edge dashboard.",
     images: [
       {
         url: "/og-image.png",
@@ -47,9 +48,9 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     site: "@OddSphereAI",
-    title: "OddSphere AI | Daily Edge Sports Betting Intelligence",
+    title: "OddSphere AI | Sports Prediction & Market Intelligence",
     description:
-      "Start a 7-day free trial of OddSphere Daily Edge: AI-powered picks, market reads, Play Grades, and tracking.",
+      "Start a 7-day free trial of OddSphere Daily Edge: AI-powered predictions, market reads, Play Grades, and tracking.",
     images: ["/og-image.png"],
   },
 };
@@ -61,7 +62,8 @@ type StepCard = { title: string; body: string };
 const trustChips = [
   "Full Daily Edge access",
   "7 days free",
-  "Every pick tracked",
+  "Transparent tracking",
+  "21+ responsible use",
 ];
 
 const memberFeatures: FeatureCard[] = [
@@ -124,12 +126,20 @@ const faq: FaqItem[] = [
     a: "Daily Edge currently supports active MLB, WNBA, and World Cup/Soccer slates when schedules and data are available. The public lifetime tracking archive also includes NFL, CFB, NBA, CBB, MLB, UCL/Soccer, and NHL model families, with seasonal Daily Edge surfaces returning as supported leagues are active.",
   },
   {
-    q: "Is this betting advice?",
+    q: "Is this financial or wagering advice?",
     a: "No. OddSphere provides informational sports analytics, model projections, and market context. Users make their own decisions and are responsible for following applicable laws.",
+  },
+  {
+    q: "Does OddSphere take bets or connect to sportsbooks?",
+    a: "No. OddSphere is not a sportsbook, does not accept wagers, does not place bets for users, and does not require connecting a betting account.",
   },
   {
     q: "Are picks guaranteed?",
     a: "No. Sports outcomes are uncertain. OddSphere does not guarantee outcomes, profits, or results.",
+  },
+  {
+    q: "Can minors use OddSphere?",
+    a: "No. OddSphere is intended only for adults 21+ where applicable. Users are responsible for following all local laws and responsible gambling guidelines.",
   },
   {
     q: "How is OddSphere different from a picks Discord?",
@@ -157,7 +167,7 @@ const jsonLd = {
       "@id": `${SITE_URL}/#product`,
       name: "OddSphere AI Daily Edge",
       description:
-        "A subscription sports analytics dashboard with model projections, market movement analysis, Play Grades, supporting evidence, and tracked results.",
+        "A subscription sports analytics dashboard with model projections, market movement analysis, Play Grades, supporting evidence, responsible-use disclosures, and tracked results.",
       brand: { "@id": `${SITE_URL}/#organization` },
       offers: {
         "@type": "Offer",
@@ -328,9 +338,17 @@ export default async function HomePage() {
               </span>
             ))}
           </div>
-          <p className="mt-5 max-w-2xl text-xs leading-relaxed text-gray-500">
-            21+. No guarantees. Bet responsibly.
-          </p>
+          <div className="mt-5 max-w-2xl rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 text-xs leading-relaxed text-amber-50">
+            <p className="font-bold text-amber-100">Informational sports analytics only.</p>
+            <p className="mt-1 text-amber-50/85">
+              OddSphere does not accept wagers, place bets, or guarantee outcomes. 21+ where applicable.
+              Betting involves risk.{" "}
+              <Link href="/legal/responsible-gambling" className="font-bold text-amber-100 underline underline-offset-2">
+                Bet responsibly
+              </Link>
+              .
+            </p>
+          </div>
         </div>
 
         <div id="product-preview">

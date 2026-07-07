@@ -173,7 +173,7 @@ function JsonLd({ config }: { config: SeoLandingPageConfig }) {
         operatingSystem: "Web",
         url: SITE_URL,
         description:
-          "OddSphere AI is a sports prediction and betting intelligence platform with model projections, market reads, Play Grades, and transparent tracking.",
+          "OddSphere AI is a sports prediction and market intelligence platform with model projections, market reads, Play Grades, responsible-use disclosures, and transparent tracking.",
         publisher: { "@id": `${SITE_URL}/#organization` },
       },
     ],
@@ -219,7 +219,7 @@ export default function PublicSeoLandingPage({ config }: { config: SeoLandingPag
               </Link>
             </div>
             <p className="mt-5 text-xs leading-relaxed text-gray-400">
-              Informational sports analytics only. No outcome is guaranteed, and betting involves risk.
+              Informational sports analytics only. OddSphere is not a sportsbook, does not accept wagers, and does not guarantee outcomes.
             </p>
           </div>
           <ProductPreviewPanel />
@@ -287,10 +287,10 @@ export default function PublicSeoLandingPage({ config }: { config: SeoLandingPag
         <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-5 text-sm leading-relaxed text-amber-50">
             OddSphere provides sports research, model projections, and market context for
-            informational purposes. It is not a sportsbook, does not place bets, and does
-            not guarantee outcomes or profits. Users are responsible for their own decisions
-            and for following local laws. 21+ where applicable. If gambling is a problem,
-            call 1-800-GAMBLER.
+            informational purposes. It is not a sportsbook, does not accept wagers, does not
+            place bets for users, and does not guarantee outcomes or profits. Users are
+            responsible for their own decisions and for following local laws. 21+ where
+            applicable. If gambling is a problem, call 1-800-GAMBLER.
           </div>
           <nav className="rounded-xl border border-white/10 bg-white/[0.035] p-5" aria-label="Related pages">
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">
@@ -309,4 +309,3 @@ export default function PublicSeoLandingPage({ config }: { config: SeoLandingPag
     </main>
   );
 }
-
