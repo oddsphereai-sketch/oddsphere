@@ -279,11 +279,16 @@ async function main() {
     grade: record.id !== undefined ? gradeByRecordId.get(record.id) ?? null : null,
   }));
 
-  const expected = buildExpectedBuckets(rows);
+  // The public "yesterday" tracking aggregate is a results surface: it only
+  // includes settled rows. Pending plays remain visible in recentPicks, but not
+  // in by-sport/market result buckets.
+  const settledRows = rows.filter((r) => r.grade !== null && r.grade.result !== "pending");
+  const expected = buildExpectedBuckets(settledRows);
   const nextDate = shiftDate(args.date, 1);
   const aggregate = await computeTrackingAggregate({
     supabase,
     sport: args.sport === "all" ? undefined : args.sport,
+    from: args.date,
     to: nextDate,
     includeLaunchDay: false,
   });
@@ -301,6 +306,7 @@ async function main() {
     sourceRows: sourceRecords.length,
     dedupedSourceRows: records.length,
     gradedRows: rows.filter((r) => r.grade !== null).length,
+    settledRows: settledRows.length,
     expected,
     actual,
     mismatches,
