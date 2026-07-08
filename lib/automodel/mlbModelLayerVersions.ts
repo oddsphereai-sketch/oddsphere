@@ -15,12 +15,12 @@ export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v1";
 export const MLB_MODEL_LAYER_VERSION_IDS = {
   projection_core: "mlb_projection_core_v2_2_baseline_2026_07_08",
   score_distribution: "mlb_score_distribution_poisson_skellam_v2_2_baseline_2026_07_08",
-  moneyline_probability_head: "mlb_moneyline_probability_regularized_v2_2_baseline_2026_07_08",
-  total_probability_head: "mlb_total_probability_market_read_v2_baseline_2026_07_08",
-  first_inning_probability_head: "mlb_first_inning_fi_v2_fresh_data_baseline_2026_07_08",
+  moneyline_probability_head: "mlb_moneyline_launch_profile_restored_champion_2026_07_08",
+  total_probability_head: "mlb_total_market_read_epoch_champion_2026_07_08",
+  first_inning_probability_head: "mlb_first_inning_launch_probability_side_champion_2026_07_08",
   market_calibration_policy: "mlb_model_market_calibration_baseline_2026_07_08",
-  grade_policy: "mlb_public_grade_policy_market_read_v2_baseline_2026_07_08",
-  correction_policy: "mlb_prediction_corrections_baseline_2026_07_08",
+  grade_policy: "mlb_public_grade_policy_category_champions_2026_07_08",
+  correction_policy: "mlb_prediction_corrections_category_champions_2026_07_08",
   tracking_contract: "member_facing_lock_v1",
 } as const;
 

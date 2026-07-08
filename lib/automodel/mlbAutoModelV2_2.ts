@@ -285,11 +285,12 @@ const V22_BEST_ANGLE_MIN_CONFIDENCE_PCT = 56;
 // edge + grade ONLY — the pick/side is decided upstream from the raw prob.
 //   k        — fraction of the raw model's distance-from-market it keeps.
 //   maxDist  — hard ceiling on |regularized − market| in percentage points.
-// O/U is shrunk harder (lower k, tighter cap) because totals are the
-// worst-calibrated market in the audit (observed 49.4% vs predicted 58.6%).
-const V22_SHRINK_K_ML = 0.1;
+// ML keeps more of the raw model's edge after the category audit showed the
+// launch-window ML profile had real signal; totals remain guarded downstream
+// by stricter quality gates because they were less stable week to week.
+const V22_SHRINK_K_ML = 0.25;
 const V22_SHRINK_K_OU = 0.4;
-const V22_MAX_DISTANCE_PP_ML = 6.0;
+const V22_MAX_DISTANCE_PP_ML = 8.0;
 const V22_MAX_DISTANCE_PP_OU = 8.0;
 const V22_OU_MIN_ACTIONABLE_EDGE_PCT = 5.0;
 

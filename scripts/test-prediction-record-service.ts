@@ -66,6 +66,20 @@ const freshFiLines = [
   { game_id: 14771, market_type: "first_inning_total", side: "over", sportsbook: "pinnacle", odds_american: 105, line_value: 0.5, fetched_at: "2026-06-06T16:10:00Z" },
 ];
 const freshFiLinesByGameId = new Map([[14771, freshFiLines]]);
+const restoredMlBestAngleOddsByGameId = new Map([[14771, {
+  mlHomeOdds: -170,
+  mlAwayOdds: 150,
+  ouOverOdds: null,
+  ouUnderOdds: null,
+  oddsSourceMl: {
+    home: { source: "lines" as const, book: "pinnacle", odds: -170, line: null, observedAt: "2026-06-06T16:10:00Z" },
+    away: { source: "lines" as const, book: "pinnacle", odds: 150, line: null, observedAt: "2026-06-06T16:10:00Z" },
+  },
+  oddsSourceOu: {
+    over: { source: "unavailable" as const, book: null, odds: null, line: null, observedAt: null },
+    under: { source: "unavailable" as const, book: null, odds: null, line: null, observedAt: null },
+  },
+}]]);
 
 const v21SportSpecific = {
   model_used: "v2_1",
@@ -80,6 +94,25 @@ const v21SportSpecific = {
   v2_data_quality_tier: "high",
   v2_provisional: false,
   v2_1_audit: { market_total: 7.5, market_home_win_prob: 0.5, market_away_win_prob: 0.5 },
+};
+
+const restoredMlBestAngleSportSpecific = {
+  ...v21SportSpecific,
+  hold_picks: [],
+  ml_play_grade: "best_angle",
+  ml_prediction_type: "best_angle",
+  ml_best_angle_eligible: true,
+  ou_best_angle_eligible: false,
+  v2_2_audit: {
+    market_home_win_prob: 0.56,
+    market_away_win_prob: 0.44,
+    ml_model_prob: 0.64,
+    ml_market_prob: 0.56,
+    ml_edge_pct: 6,
+    ml_raw_edge_pct: 8,
+    ml_requires_market_confirmation: false,
+    posterior_home_diff: 0.8,
+  },
 };
 
 const basePrediction = {
@@ -546,7 +579,8 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   // 51pp divergence. Guard should SUPPRESS best_angle.
   const baTorPred = {
     ...basePrediction,
-    sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
+    ml_confidence: 64,
+    sport_specific: restoredMlBestAngleSportSpecific,
   };
   const signalsConflict = new Map([
     [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 78, public_betting_pct: 27, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null }]],
@@ -573,7 +607,8 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   // BAL@TOR moneyline with no signals → guard goes neutral, BA passes through.
   const baTorPred = {
     ...basePrediction,
-    sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
+    ml_confidence: 64,
+    sport_specific: restoredMlBestAngleSportSpecific,
   };
   const recs = buildPredictionRecordsFromSlate({
     sport: "mlb",
@@ -582,6 +617,7 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     games: [baseGame],
     predictionByGameId: new Map([[14771, baTorPred]]),
     abbrevByTeamId,
+    oddsByGameId: restoredMlBestAngleOddsByGameId,
     // no signalsByGameId — guard must default to V2.2 raw eligibility
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
@@ -593,7 +629,8 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   // NYY ML / TOR ML this morning.
   const baTorPred = {
     ...basePrediction,
-    sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
+    ml_confidence: 64,
+    sport_specific: restoredMlBestAngleSportSpecific,
   };
   const signalsNullMoney = new Map([
     [14771, [{ market_type: "moneyline", side: "away", public_money_pct: null, public_betting_pct: 33, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null }]],
@@ -606,6 +643,7 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     predictionByGameId: new Map([[14771, baTorPred]]),
     abbrevByTeamId,
     signalsByGameId: signalsNullMoney,
+    oddsByGameId: restoredMlBestAngleOddsByGameId,
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
   check(
@@ -617,7 +655,8 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   // Below-threshold opposing money (e.g. 57/33) → guard does NOT fire.
   const baTorPred = {
     ...basePrediction,
-    sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
+    ml_confidence: 64,
+    sport_specific: restoredMlBestAngleSportSpecific,
   };
   const signalsBelowThreshold = new Map([
     [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 57, public_betting_pct: 33, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null }]],
@@ -630,6 +669,7 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     predictionByGameId: new Map([[14771, baTorPred]]),
     abbrevByTeamId,
     signalsByGameId: signalsBelowThreshold,
+    oddsByGameId: restoredMlBestAngleOddsByGameId,
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
   check("ML best_angle PRESERVED when opp money <60", ml.best_angle === true);

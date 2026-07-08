@@ -187,6 +187,7 @@ export const GATE_LEAN_MIN_MODEL_PROB = 0.55;
 export const GATE_LOW_CONVICTION_RUNGAP = 0.5;
 export const GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB = 0.70;
 export const GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB = 0.70;
+const MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION = "ml_best_angle_launch_profile_restoration_2026_07_08";
 export interface PlayGradeGateInputs {
   modelProb: number | null;
   americanOdds: number | null;
@@ -229,6 +230,82 @@ function applyMlbBestAngleFinalGate(
 ): string | null {
   if (!baseBestAngleEligible || finalBestAngle) return grade;
   return grade === "best_angle" ? "lean" : grade;
+}
+
+function resolveMlbMlBestAngleRestorationProfile(args: {
+  resolvedBestAngle: boolean;
+  oddsAmerican: number | null;
+  edgePp: number | null;
+  modelProb: number | null;
+  rawEdgePp: number | null;
+  lineDirection: "toward_pick" | "against_pick" | "neutral" | "unknown" | null;
+}): {
+  bestAngle: boolean;
+  demoteReason: string | null;
+  profileVersion: typeof MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION;
+} {
+  if (!args.resolvedBestAngle) {
+    return {
+      bestAngle: false,
+      demoteReason: null,
+      profileVersion: MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION,
+    };
+  }
+  if (args.oddsAmerican === null) {
+    return {
+      bestAngle: false,
+      demoteReason: "ml_profile_missing_price",
+      profileVersion: MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION,
+    };
+  }
+  if (args.edgePp === null || args.modelProb === null) {
+    return {
+      bestAngle: false,
+      demoteReason: "ml_profile_missing_probability_edge",
+      profileVersion: MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION,
+    };
+  }
+
+  const edge = Math.abs(args.edgePp);
+  const rawEdge = args.rawEdgePp === null ? null : Math.abs(args.rawEdgePp);
+  const disciplinedFavorite =
+    args.oddsAmerican >= -240 &&
+    args.oddsAmerican <= -151 &&
+    args.modelProb >= 0.60 &&
+    edge >= 3.0 &&
+    edge <= 8.0;
+  const heavyFavorite =
+    args.oddsAmerican < -240 &&
+    args.modelProb >= 0.72 &&
+    edge >= 3.0 &&
+    edge <= 8.0 &&
+    (rawEdge === null || rawEdge <= 12 || args.lineDirection === "toward_pick");
+  const shortFavoriteOrSmallDog =
+    args.oddsAmerican > -151 &&
+    args.oddsAmerican <= 120 &&
+    args.modelProb >= 0.62 &&
+    edge >= 5.5 &&
+    edge <= 8.0 &&
+    args.lineDirection === "toward_pick";
+
+  if (disciplinedFavorite || heavyFavorite || shortFavoriteOrSmallDog) {
+    return {
+      bestAngle: true,
+      demoteReason: null,
+      profileVersion: MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION,
+    };
+  }
+
+  return {
+    bestAngle: false,
+    demoteReason:
+      args.oddsAmerican > -151 && args.oddsAmerican < 0
+        ? "ml_profile_short_favorite_not_confirmed"
+        : rawEdge !== null && rawEdge > 12 && args.lineDirection !== "toward_pick"
+          ? "ml_profile_large_raw_edge_requires_market_confirmation"
+          : "ml_profile_outside_restored_winning_band",
+    profileVersion: MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION,
+  };
 }
 
 /**
@@ -1273,9 +1350,10 @@ function buildMlRecord(
   const finalMlLineDirection = readLineDirection(finalMlLineMovement);
   const finalMlPublicSplitConflict = hasOpposingPublicMoneyConflict(signalsForGame, "moneyline", finalMlPick);
   const mlProjectionConflict = projectionContradictsMoneylinePick(pred, v22, finalMlPick);
+  const mlRequiresMarketConfirmationWithoutConfirmingMove =
+    readBoolish(v22.ml_requires_market_confirmation) && finalMlLineDirection !== "toward_pick";
   const mlChampionCorrectionReasons = [
     mlProjectionConflict ? "projected_score_contradicts_ml_pick" : null,
-    readBoolish(v22.ml_requires_market_confirmation) ? "ml_requires_market_confirmation" : null,
     finalMlLineDirection === "against_pick" ? "line_movement_against_pick" : null,
     finalMlPublicSplitConflict ? "opposing_public_split_conflict" : null,
   ].filter((r): r is string => r !== null);
@@ -1283,6 +1361,14 @@ function buildMlRecord(
     mlChampionCorrectionReasons.length > 0
       ? `champion_candidate_ml_stand_down: ${mlChampionCorrectionReasons.join(", ")}`
       : null;
+  const mlBestAngleProfile = resolveMlbMlBestAngleRestorationProfile({
+    resolvedBestAngle: mlChampionStandDownReason === null && !mlFlipped && !mlPickCalibrated && mlBest.bestAngle,
+    oddsAmerican: finalMlOdds,
+    edgePp: finalMlEdge,
+    modelProb: finalMlModelProb,
+    rawEdgePp: typeof v22.ml_raw_edge_pct === "number" ? (v22.ml_raw_edge_pct as number) : null,
+    lineDirection: finalMlLineDirection,
+  });
   const mlNoBetReason = readStringOrNull(sp.ml_no_bet_reason);
   const mlNoBet = mlChampionStandDownReason !== null || (!mlFlipped && !mlPickCalibrated && isExplicitNoBetReason(mlNoBetReason));
   const finalMlNoBetReason = mlChampionStandDownReason ?? mlNoBetReason;
@@ -1324,14 +1410,14 @@ function buildMlRecord(
           })
             : mlPublicPlayGrade,
           mlBaseBestAngleEligible,
-          mlBest.bestAngle,
+          mlBestAngleProfile.bestAngle,
         ),
     prediction_type: readStringOrNull(sp.ml_prediction_type),
     // Phase 6B.11 + MLB-P0 — public-money guard PLUS line-movement /
     // large-edge confirmation (see resolveMlbBestAngle). Tracking pending
     // BA count matches what members see on the live slate. Flipped/calibrated
     // rows are never Best Angle until grade calibration is separately validated.
-    best_angle: mlFlipped || mlPickCalibrated || mlChampionStandDownReason !== null ? false : mlBest.bestAngle,
+    best_angle: mlBestAngleProfile.bestAngle,
     no_bet: mlNoBet,
     no_bet_reason: finalMlNoBetReason,
     market_aligned: readBoolish(sp.ml_market_aligned),
@@ -1356,9 +1442,12 @@ function buildMlRecord(
         base_eligible: mlBaseBestAngleEligible,
         legacy_market_signal_grade_influence_enabled: legacyMarketSignalGradeInfluenceEnabled,
         requires_confirmation: readBoolish(v22.ml_requires_market_confirmation),
-        line_direction: readLineDirection(mlLineMovement),
-        demote_reason: mlBest.demoteReason,
-        final_best_angle: mlChampionStandDownReason !== null ? false : mlBest.bestAngle,
+        requires_confirmation_without_confirming_move: mlRequiresMarketConfirmationWithoutConfirmingMove,
+        line_direction: finalMlLineDirection,
+        demote_reason: mlBestAngleProfile.demoteReason ?? mlBest.demoteReason,
+        final_best_angle: mlBestAngleProfile.bestAngle,
+        ml_restoration_profile_version: mlBestAngleProfile.profileVersion,
+        ml_restoration_profile_demote_reason: mlBestAngleProfile.demoteReason,
       },
       champion_candidate_correction: mlChampionStandDownReason === null
         ? null
