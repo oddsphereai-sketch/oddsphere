@@ -75,6 +75,9 @@ import type {
   SharpSignalDto,
   SharpStatus,
 } from "@/app/lab/lib/labTypes";
+
+const DAILY_EDGE_MARKET_INTELLIGENCE_OVERLAY_ENABLED =
+  process.env.DAILY_EDGE_MARKET_INTELLIGENCE_OVERLAY_ENABLED === "true";
 import {
   marketVerdictFor,
   type SharpDirection,
@@ -5563,10 +5566,12 @@ export async function GET(request: Request) {
   const streamCurrentByGameMarket = await loadStreamCurrentForSlate(supabase, gameIds);
   const lastMoveByGameMarket = await loadLastMovesForSlate(supabase, gameIds, Date.now());
   const marketIntelligenceConfig = readMarketIntelligenceV2Config();
-  const marketReadV2Enabled = marketIntelligenceV2UiEnabledForSport(
-    marketIntelligenceConfig,
-    "mlb",
-  );
+  const marketReadV2Enabled =
+    DAILY_EDGE_MARKET_INTELLIGENCE_OVERLAY_ENABLED &&
+    marketIntelligenceV2UiEnabledForSport(
+      marketIntelligenceConfig,
+      "mlb",
+    );
   let marketReadV2Lookup: MarketReadV2Lookup | null = marketReadV2Enabled
     ? { enabled: true, responseAsOf: new Date().toISOString(), rows: [] }
     : null;
@@ -5592,7 +5597,7 @@ export async function GET(request: Request) {
     }
   }
   const sourceAwareSplits =
-    sport === "mlb"
+    DAILY_EDGE_MARKET_INTELLIGENCE_OVERLAY_ENABLED && sport === "mlb"
       ? await loadSourceAwareSplitSections({
           eventIds: games.map((g) => String(g.external_id)),
           games,

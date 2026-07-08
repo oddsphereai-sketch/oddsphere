@@ -52,6 +52,8 @@ import {
 const HISTORY_PAGE_SIZE = 1000;
 const ENABLE_WNBA_LIVE_PREVIEW_FALLBACK =
   process.env.WNBA_DAILY_EDGE_PREVIEW_FALLBACK === "true";
+const DAILY_EDGE_MARKET_INTELLIGENCE_OVERLAY_ENABLED =
+  process.env.DAILY_EDGE_MARKET_INTELLIGENCE_OVERLAY_ENABLED === "true";
 
 /**
  * Reconstruct the PreviewGame shape from stored game_predictions (written by
@@ -1275,7 +1277,9 @@ export async function buildWnbaDailyEdgeAdapted(
         total: marketIntelligenceV2UiEnabledForWnbaMarket(config, "total"),
         spread: marketIntelligenceV2UiEnabledForWnbaMarket(config, "spread"),
       };
-      const marketReadV2Enabled = Object.values(enabledByMarket).some(Boolean);
+      const marketReadV2Enabled =
+        DAILY_EDGE_MARKET_INTELLIGENCE_OVERLAY_ENABLED &&
+        Object.values(enabledByMarket).some(Boolean);
       let marketReadV2Lookup: MarketReadV2Lookup | null = marketReadV2Enabled
         ? { enabled: true, enabledByMarket, responseAsOf: asOf, rows: [] }
         : null;
