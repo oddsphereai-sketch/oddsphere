@@ -130,7 +130,40 @@ function classifyNoPredictionReason(args: {
 }
 
 // Pure helpers exported for tests.
-export const __TEST__ = { classifyNoPredictionReason, slatesForSport, addDays };
+type CorePredictionSubstrateInput = {
+  sport: Sport;
+  market: string | null;
+  pick: string | null;
+  held: boolean | null;
+  odds_american: number | null;
+  model_probability: number | null;
+  market_probability: number | null;
+  edge: number | null;
+};
+
+function corePredictionSubstrateIssues(record: CorePredictionSubstrateInput): string[] {
+  if (record.sport !== "mlb") return [];
+  if (record.held === true) return [];
+  if (record.market !== "moneyline" && record.market !== "total") return [];
+  if (record.pick === null || record.pick === "") return [];
+
+  const issues: string[] = [];
+  if (typeof record.odds_american !== "number" || !Number.isFinite(record.odds_american)) {
+    issues.push("odds_american missing/non-finite");
+  }
+  if (typeof record.model_probability !== "number" || !Number.isFinite(record.model_probability)) {
+    issues.push("model_probability missing/non-finite");
+  }
+  if (typeof record.market_probability !== "number" || !Number.isFinite(record.market_probability)) {
+    issues.push("market_probability missing/non-finite");
+  }
+  if (typeof record.edge !== "number" || !Number.isFinite(record.edge)) {
+    issues.push("edge missing/non-finite");
+  }
+  return issues;
+}
+
+export const __TEST__ = { classifyNoPredictionReason, slatesForSport, addDays, corePredictionSubstrateIssues };
 
 // ───────────────────────────────────────────────────────────────────────
 // Main
@@ -170,13 +203,29 @@ export async function runSlateHealthAudit(opts: AuditOptions): Promise<AuditResu
     const gameIds = gameRows.map((g) => g.id);
     const lineCountByGame = new Map<number, number>();
     const predMarketsByGame = new Map<number, Set<string>>();
+    const predRowsByGame = new Map<number, Array<{
+      id: number;
+      game_id: number;
+      market: string | null;
+      pick: string | null;
+      held: boolean | null;
+      odds_american: number | null;
+      model_probability: number | null;
+      market_probability: number | null;
+      edge: number | null;
+    }>>();
     if (gameIds.length) {
       const { data: lns } = await sb.from("lines").select("game_id, sportsbook, market_type, side, odds_american").in("game_id", gameIds);
       for (const r of lns ?? []) lineCountByGame.set(r.game_id, (lineCountByGame.get(r.game_id) ?? 0) + 1);
-      const { data: prs } = await sb.from("prediction_records").select("game_id, market, held").in("game_id", gameIds);
+      const { data: prs } = await sb
+        .from("prediction_records")
+        .select("id, game_id, market, pick, held, odds_american, model_probability, market_probability, edge")
+        .in("game_id", gameIds);
       for (const r of prs ?? []) {
         if (!predMarketsByGame.has(r.game_id)) predMarketsByGame.set(r.game_id, new Set());
         predMarketsByGame.get(r.game_id)!.add(r.market);
+        if (!predRowsByGame.has(r.game_id)) predRowsByGame.set(r.game_id, []);
+        predRowsByGame.get(r.game_id)!.push(r);
       }
     }
 
@@ -229,6 +278,7 @@ export async function runSlateHealthAudit(opts: AuditOptions): Promise<AuditResu
       const kickoffMs = new Date(g.game_date).getTime();
       const lineN = lineCountByGame.get(g.id) ?? 0;
       const predMarkets = predMarketsByGame.get(g.id) ?? new Set<string>();
+      const predRows = predRowsByGame.get(g.id) ?? [];
       const mlabel = label(g);
 
       // Check 2: seeded + odds + 0 predictions.
@@ -269,6 +319,25 @@ export async function runSlateHealthAudit(opts: AuditOptions): Promise<AuditResu
             detail: "No first_inning prediction.",
             reason: "first_inning intentionally unavailable or FI line missing", autofix: "manual",
             autofix_action: "confirm FI line availability for this game",
+          }));
+        }
+      }
+
+      if (sport === "mlb" && predRows.length > 0) {
+        for (const row of predRows) {
+          const issues = corePredictionSubstrateIssues({ sport, ...row });
+          if (issues.length === 0) continue;
+          findings.push(newFinding({
+            check: "mlb_core_prediction_substrate_missing",
+            sport,
+            severity: "error",
+            game_id: g.id,
+            matchup: mlabel,
+            slate_date: g.slate_date,
+            detail: `MLB ${row.market} prediction record ${row.id} has invalid core substrate: ${issues.join("; ")}.`,
+            reason: "MLB moneyline/total price/probability/edge substrate must be present before play-grade calibration",
+            autofix: "hold",
+            autofix_action: "rerun MLB line refresh + prediction writer; if persistent, inspect selected-side price and model_probability/market_probability derivation",
           }));
         }
       }

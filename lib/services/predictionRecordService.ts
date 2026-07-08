@@ -1325,7 +1325,10 @@ function buildMlRecord(
   const baseMlConfidence = mlFlipped ? mlFlip.recommendationConfidence : pred.ml_confidence;
   const baseMlModelProb = mlFlipped ? mlFlip.recommendationConfidence / 100 : mlModelProb;
   const baseMlMarketProb = mlFlipped ? mlFlip.flippedMarketProb : mlMarketProb;
-  const baseMlEdge = mlFlipped ? null : mlEdgePp;
+  const baseMlEdge =
+    mlFlipped && baseMlModelProb !== null && baseMlMarketProb !== null
+      ? Math.round((baseMlModelProb - baseMlMarketProb) * 1000) / 10
+      : mlEdgePp;
   const rawModelProbOnBaseSide =
     baseMlPick === pred.predicted_ml_winner
       ? mlModelProb
@@ -1673,7 +1676,10 @@ function buildOuRecord(
   const finalOuConfidence = ouFlipped ? ouFlip.recommendationConfidence : pred.ou_confidence;
   const finalOuModelProb = ouFlipped ? ouFlip.recommendationConfidence / 100 : ouModelProb;
   const finalOuMarketProb = ouFlipped ? ouFlip.flippedMarketProb : ouMarketProb;
-  const finalOuEdge = ouFlipped ? null : ouEdgePp;
+  const finalOuEdge =
+    finalOuModelProb !== null && finalOuMarketProb !== null
+      ? Math.round((finalOuModelProb - finalOuMarketProb) * 1000) / 10
+      : ouEdgePp;
   const ouBaseBestAngle = ouFlipped || ouDivergenceStandDown ? false : ouBest.bestAngle;
   const ouRawBestAngleCandidate = ouBaseBestAngleEligible && !ouFlipped && !ouDivergenceStandDown;
   const totalBestAngleMinModelProb =
