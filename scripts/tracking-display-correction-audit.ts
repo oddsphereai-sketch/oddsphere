@@ -130,6 +130,7 @@ function normalizeGrade(raw: string | null | undefined, bestAngle?: boolean | nu
   if (noBet === true) return "No Play";
   if (bestAngle === true) return "Best Angle";
   const v = String(raw ?? "").toLowerCase().replace(/[_-]/g, " ");
+  if (v.trim() === "" && noBet === false) return "Watchlist";
   if (v.includes("best")) return "Best Angle";
   if (v.includes("lean")) return "Lean";
   if (v.includes("watch") || v.includes("market aligned") || v.includes("provisional")) return "Watchlist";

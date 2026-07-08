@@ -334,7 +334,10 @@ export function effectiveTrackingPlayGrade(record: PredictionRecordRow): string 
   const override = displayGradeOverride(record);
   if (override !== null) return override;
   const grade = storedGrade(record);
+  if (record.no_bet === true) return "no_play";
   if (grade === "best_angle" && record.best_angle === false) return "lean";
+  if (grade === "toss_up") return "watchlist";
+  if (grade === "" && record.no_bet === false) return "watchlist";
   return grade;
 }
 

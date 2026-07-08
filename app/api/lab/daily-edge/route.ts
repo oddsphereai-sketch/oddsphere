@@ -200,7 +200,11 @@ const VISIBLE_SLATE_STATUSES = ["published", "final"] as const;
 //
 //   Cross-market:
 //     no_bet=true (any market)                       → "No Play"
-//     play_grade=null + no_bet=false                 → null (live ladder)
+//     play_grade=null + no_bet=false                 → "Watchlist"
+//        (A stored prediction_records row means the writer saw the
+//         market but did not approve a stronger public grade. Keep the
+//         card and tracking in lockstep instead of letting the live
+//         fallback ladder promote it to an untracked Lean.)
 //
 // 2026-06-10 v15.2 — Single source of truth extended pre-lock. This
 // resolver is now used for BOTH locked rows AND unlocked rows whose
@@ -242,6 +246,9 @@ function resolveLockedVerdict(
   // No Play and hide the model's neutral read from the member.
   if (lockedPlayGrade === "toss_up") return { key: "watchlist", label: "Watchlist" };
   if (lockedNoBet === true) return { key: "no_play", label: "No Play" };
+  if ((lockedPlayGrade === null || lockedPlayGrade === undefined) && lockedNoBet === false) {
+    return { key: "watchlist", label: "Watchlist" };
+  }
   switch (lockedPlayGrade) {
     case "best_angle":
       // P7-B1 truthfulness guard (2026-06-11). The writer's
@@ -351,6 +358,14 @@ function marketWasCorrected(
   const f = sportSpecific?.[key];
   if (!f || typeof f !== "object") return false;
   return (f as { flipped?: unknown }).flipped === true;
+}
+
+function gradeForStoredVerdict(verdict: MarketVerdict, rawGrade: Grade | null): Grade | null {
+  if (verdict === "best_angle") return "best_signal";
+  if (verdict === "caution") return "sharp_conflict";
+  if (verdict === "watchlist") return "market_watch";
+  if (verdict === "no_play") return rawGrade === null ? null : "market_watch";
+  return rawGrade === "best_signal" ? "model_only" : (rawGrade ?? "model_only");
 }
 
 /**
@@ -1706,9 +1721,13 @@ function buildGameDto(
     total,
     firstInning,
   });
-  ml = guardrailedMarkets.moneyline;
-  total = guardrailedMarkets.total;
-  firstInning = guardrailedMarkets.firstInning;
+  // 2026-07-08 — Same-day grade adjustments are a live fallback only.
+  // Once prediction_records has a row for this market, that writer row is
+  // the public/tracking source of truth. Do not let a route-only pass turn
+  // a stored Lean into Watchlist/Caution or vice versa.
+  ml = lockedMl === undefined ? guardrailedMarkets.moneyline : ml;
+  total = lockedOu === undefined ? guardrailedMarkets.total : total;
+  firstInning = lockedFi === undefined ? guardrailedMarkets.firstInning : firstInning;
 
   // 4.1.10 — per-game status flags.
   const status: GameStatusDto = {
@@ -3283,15 +3302,26 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // The MarketContextWarning from the live ladder is preserved on
   // the result so the body's "watch out" copy still surfaces the
   // warning text — but it never silently overrides the headline.
+  //
+  // 2026-07-08 — If prediction_records has a row, that row is the grade
+  // authority even when play_grade is null. Null + no_bet=false means
+  // "seen, but not approved as Lean/Best Angle"; letting this coalesce
+  // through to live sport_specific promoted public FI Leans that tracking
+  // did not count. The same rule lets corrected ML records keep their
+  // stored Lean instead of being softened by the live corrected-market path.
   // 2026-06-22 — A corrected/flipped market must NOT inherit the ORIGINAL side's
   // writer play_grade (e.g. the original Best Angle for the side we flipped away
   // from). Derive the corrected pick's verdict fresh from the live ladder
   // (writerPlayGrade=null), matching the locked record (play_grade=null,
   // best_angle=false). The result is a clean conservative non-BA recommendation.
   const correctedMarket = marketWasCorrected(input.sportSpecific ?? null, input.market);
-  const writerPlayGrade = correctedMarket
-    ? null
-    : (input.lockedPlayGrade ?? resolveWriterPlayGrade(input.sportSpecific ?? null, input.market));
+  const hasStoredPredictionRecord = input.isLockedRow === true;
+  const writerPlayGrade =
+    hasStoredPredictionRecord
+      ? (input.lockedPlayGrade ?? null)
+      : correctedMarket
+        ? null
+        : resolveWriterPlayGrade(input.sportSpecific ?? null, input.market);
   const writerOverride = resolveLockedVerdict(
     writerPlayGrade,
     input.lockedNoBet ?? null,
@@ -3321,13 +3351,20 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // 2026-06-22 — A flipped/corrected market is EXEMPT from this one downgrade
   // (the flip already fades the market-divergent signal). Only this downgrade is
   // skipped — the market-read chips and all other Caution reasons remain.
-  const verdictAfterCaution = applyOpposingMoneyCaution(
-    baseVerdict,
-    moneyPct,
-    betsPct,
-    input.sportSpecific ?? null,
-    input.market,
-  );
+  // 2026-07-08 — Do not create a route-only Caution once the writer has
+  // supplied an authoritative grade. Caution must either be written into
+  // prediction_records or remain a live fallback for markets with no row;
+  // otherwise the card can show Caution while tracking stores Lean.
+  const verdictAfterCaution =
+    hasStoredPredictionRecord && writerOverride !== null
+      ? baseVerdict
+      : applyOpposingMoneyCaution(
+          baseVerdict,
+          moneyPct,
+          betsPct,
+          input.sportSpecific ?? null,
+          input.market,
+        );
   // Point-6 guarantee: a corrected/flipped market is never Best Angle (the BA
   // belonged to the original side we flipped away from). If any path still
   // surfaced Best Angle, soften to Lean — the clean conservative recommendation.
@@ -3564,28 +3601,40 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     priceUnavailableAtLock:
       input.isLockedRow === true && input.modelSide !== null && priceAmerican === null,
   });
+  const finalAction =
+    hasStoredPredictionRecord && writerOverride !== null
+      ? {
+          ...normalizedAction,
+          capReasons: [],
+          finalGrade: gradeForStoredVerdict(verdict.key, input.grade),
+          finalVerdict: verdict,
+          finalRecScore: rawRecommendationConfidence,
+          actionabilityLabel: verdict.label,
+          displayReason: null,
+        }
+      : normalizedAction;
   const guidedGuide =
-    normalizedAction.displayReason ??
-    (normalizedAction.finalVerdict.key !== verdict.key && normalizedAction.finalVerdict.key === "no_play"
-      ? `Skip this one: ${normalizedAction.capReasons[0]?.replaceAll("_", " ") ?? "the setup is not actionable"}.`
+    finalAction.displayReason ??
+    (finalAction.finalVerdict.key !== verdict.key && finalAction.finalVerdict.key === "no_play"
+      ? `Skip this one: ${finalAction.capReasons[0]?.replaceAll("_", " ") ?? "the setup is not actionable"}.`
       : copy.guidedGuide);
 
   return {
     pick: input.pick,
     confidence: input.confidence,
-    grade: normalizedAction.finalGrade,
+    grade: finalAction.finalGrade,
     signalType: input.signalType,
     marketSignal: input.marketSignal,
     sharpStatus: input.sharpStatus,
     held: input.held,
-    verdict: normalizedAction.finalVerdict,
-    rawGrade: normalizedAction.rawGrade,
-    rawRecScore: normalizedAction.rawRecScore,
-    capReasons: normalizedAction.capReasons,
-    finalGrade: normalizedAction.finalGrade,
-    finalRecScore: normalizedAction.finalRecScore,
-    actionabilityLabel: normalizedAction.actionabilityLabel,
-    displayReason: normalizedAction.displayReason,
+    verdict: finalAction.finalVerdict,
+    rawGrade: finalAction.rawGrade,
+    rawRecScore: finalAction.rawRecScore,
+    capReasons: finalAction.capReasons,
+    finalGrade: finalAction.finalGrade,
+    finalRecScore: finalAction.finalRecScore,
+    actionabilityLabel: finalAction.actionabilityLabel,
+    displayReason: finalAction.displayReason,
     guidedGuide,
     guidedWatchOut: copy.guidedWatchOut,
     whyLine: copy.whyLine,

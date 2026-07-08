@@ -86,5 +86,14 @@ check(
   })) === "market_aligned",
 );
 
+check(
+  "stored null grade with no_bet=false tracks as watchlist",
+  effectiveTrackingPlayGrade(record({
+    play_grade: null,
+    best_angle: false,
+    no_bet: false,
+  })) === "watchlist",
+);
+
 console.log(`\n  result: ${pass}/${pass + fail} pass`);
 if (fail > 0) process.exit(1);
