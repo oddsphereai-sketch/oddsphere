@@ -134,7 +134,7 @@ withFlags(() => {
       },
     }),
   });
-  check("ML known resistance and edge < 8 caps Best Angle to Lean", mlKnownResistance.market.verdict.key === "lean");
+  check("ML known resistance and edge < 8 corrects Best Angle to Watchlist", mlKnownResistance.market.verdict.key === "watchlist");
   check("ML cap rule recorded", mlKnownResistance.appliedRules.includes("ml_best_angle_movement_edge_cap"));
 
   const mlUnknownMovement = applyMlbSameDayGradeGuardrail({
@@ -146,6 +146,6 @@ withFlags(() => {
       marketReadV2: null,
     }),
   });
-  check("ML unknown movement does not fire", mlUnknownMovement.market.verdict.key === "best_angle");
-  check("ML unknown movement has no rule", mlUnknownMovement.appliedRules.length === 0);
+  check("ML unknown movement and edge < 8 corrects Best Angle to Watchlist", mlUnknownMovement.market.verdict.key === "watchlist");
+  check("ML unknown movement records rule", mlUnknownMovement.appliedRules.includes("ml_best_angle_movement_edge_cap"));
 });

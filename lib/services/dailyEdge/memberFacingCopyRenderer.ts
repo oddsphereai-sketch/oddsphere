@@ -377,7 +377,7 @@ function marketReadCopy(row: PredictionEvidenceObject, label: string): string {
 }
 
 function quickReadCopy(row: PredictionEvidenceObject, label: string): string {
-  const pick = row.identity.pick ?? "This prediction";
+  const pick = row.identity.pick ?? "the FI side";
   const grade = row.identity.originalPlayGrade;
   const edge = row.modelStatsEvidence.edge ?? null;
   const priceText = price(row.priceValueEvidence.priceAmerican);
@@ -386,7 +386,12 @@ function quickReadCopy(row: PredictionEvidenceObject, label: string): string {
 
   if (caps.isFirstInning) {
     if (label === "fi_toss_up_no_play") return "FI is Toss-Up, so there is no actionable YRFI/NRFI side yet.";
-    if (grade === "No Play") return `At ${priceText}, the FI edge is too thin to make ${pick} actionable.`;
+    if (grade === "No Play") {
+      const pricePhrase = typeof row.priceValueEvidence.priceAmerican === "number"
+        ? `At ${priceText},`
+        : "Without a trusted FI price,";
+      return `${pricePhrase} the FI edge is too thin to make ${pick} actionable.`;
+    }
     if (grade === "Watchlist") return `${pick} has FI model interest, but price and context keep it on Watchlist.`;
     if (grade === "Lean") return `${pick} has a playable FI model case, with price keeping it below a stronger grade.`;
     return `${pick} has FI model support, with price and FI context carrying the read.`;
@@ -450,7 +455,12 @@ function supportingEvidenceCopy(row: PredictionEvidenceObject, label: string): s
 
   if (caps.isFirstInning) {
     if (/toss/i.test(row.identity.pick ?? "")) return "FI is Toss-Up, so there is no actionable YRFI/NRFI side yet. The model is not creating enough separation for a first-inning play.";
-    if (grade === "No Play") return `FI model probability is ${model} with about ${edge} edge at ${odds}. At this price, the FI edge is too thin to make ${pick} actionable.`;
+    if (grade === "No Play") {
+      if (row.priceValueEvidence.priceAmerican === null) {
+        return `FI model probability is ${model} with about ${edge} edge. Without a trusted FI price, this is not actionable.`;
+      }
+      return `FI model probability is ${model} with about ${edge} edge at ${odds}. At this price, the FI edge is too thin to make ${pick} actionable.`;
+    }
     if (grade === "Lean") return `${pick} has ${model} FI model probability with about ${edge} edge at ${odds}; price keeps it below a stronger grade.`;
     if (grade === "Watchlist") return `${pick} is worth monitoring, but the FI edge is not strong enough for action yet.`;
     if (grade === "Caution") return `The FI read has a material price/context concern at ${odds}, so this stays in Caution.`;
@@ -685,12 +695,15 @@ function decisionQuickReadCopy(decision: MarketDecision, key: keyof Recommendati
   const status = decision.resolvedMarketRead.status;
   const edge = edgePctFromDecision(decision);
   const price = priceFromDecision(decision.price);
-  const pick = decision.pick ?? "This prediction";
+  const pick = decision.pick ?? "the FI side";
   const plusMoneyValue = typeof decision.price === "number" && decision.price > 0 ? "plus-money model edge" : "model/value case";
 
   if (caps.isFirstInning) {
     if (/toss/i.test(pick)) return "FI is Toss-Up, so there is no actionable YRFI/NRFI side yet.";
-    if (grade === "No Play") return `At ${price}, the FI edge is too thin to make ${pick} actionable.`;
+    if (grade === "No Play") {
+      const pricePhrase = typeof decision.price === "number" ? `At ${price},` : "Without a trusted FI price,";
+      return `${pricePhrase} the FI edge is too thin to make ${pick} actionable.`;
+    }
     if (grade === "Watchlist") return `${pick} has FI model interest, but price and context keep it on Watchlist.`;
     if (grade === "Lean") return `${pick} has a playable FI model case, with price keeping it below a stronger grade.`;
     return `${pick} has FI model support, with price and FI context carrying the read.`;
@@ -889,7 +902,12 @@ function decisionSupportingEvidenceCopy(decision: MarketDecision, key: keyof Rec
   if (caps.isFirstInning) {
     const pick = decision.pick ?? "FI";
     if (/toss/i.test(pick)) return "FI is Toss-Up, so there is no actionable YRFI/NRFI side yet. The model is not creating enough separation for a first-inning play.";
-    if (grade === "No Play") return `FI model probability is ${pctFromDecision(decision.modelProbability)} with about ${pctPointFromDecision(displayedEdge)} edge at ${priceFromDecision(decision.price)}. At this price, the FI edge is too thin to make ${pick} actionable.`;
+    if (grade === "No Play") {
+      if (decision.price === null) {
+        return `FI model probability is ${pctFromDecision(decision.modelProbability)} with about ${pctPointFromDecision(displayedEdge)} edge. Without a trusted FI price, this is not actionable.`;
+      }
+      return `FI model probability is ${pctFromDecision(decision.modelProbability)} with about ${pctPointFromDecision(displayedEdge)} edge at ${priceFromDecision(decision.price)}. At this price, the FI edge is too thin to make ${pick} actionable.`;
+    }
     if (grade === "Lean") return `${pick} has ${pctFromDecision(decision.modelProbability)} FI model probability with about ${pctPointFromDecision(displayedEdge)} edge at ${priceFromDecision(decision.price)}; price keeps it below a stronger grade.`;
     if (grade === "Watchlist") return `${pick} is worth monitoring, but the FI edge is not strong enough for action yet.`;
     if (grade === "Caution") return `The FI read has a material price/context concern at ${priceFromDecision(decision.price)}, so this stays in Caution.`;
