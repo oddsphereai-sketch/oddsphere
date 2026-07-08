@@ -121,9 +121,9 @@ type SnapOverrides = {
   market?: Partial<MarketSnapshot>;
 };
 
-function buildLineup(opsByPos: number[]): BatterSnapshot[] {
+function buildLineup(opsByPos: number[], lineupSource: "confirmed" | "projected" = "confirmed"): BatterSnapshot[] {
   return opsByPos.map((ops, i) =>
-    buildBatter({ batting_position: i + 1, season_ops: ops, lineup_source: "projected" }),
+    buildBatter({ batting_position: i + 1, season_ops: ops, lineup_source: lineupSource }),
   );
 }
 
@@ -270,6 +270,28 @@ async function main() {
     check("confirmed lineup → fi_lineup_confirmed source = preferred",
       p.feature_audit.home_lineup.source === "preferred");
   }
+  {
+    // Confirmed lineups should refine FI, not block the entire market.
+    // When batting orders are not posted yet, fresh team-offense context
+    // is publishable as lower-trust provisional FI input.
+    const snap = buildSnapshot({
+      homeLineup: [],
+      awayLineup: [],
+      homeTeam: { team_avg_batter_ops: 0.745, team_avg_batter_ops_sample: 3600 },
+      awayTeam: { team_avg_batter_ops: 0.710, team_avg_batter_ops_sample: 3600 },
+      homeStarter: { first_inning_era: 3.80, first_inning_starts: 10 },
+      awayStarter: { first_inning_era: 4.20, first_inning_starts: 10 },
+    });
+    const p = projectFiIndependent(snap);
+    check("missing batting order can use team-offense proxy",
+      p.feature_audit.home_lineup.source === "fallback_real" &&
+        p.feature_audit.away_lineup.source === "fallback_real");
+    check("team-offense proxy is not fallback tier", p.data_quality_tier !== "fallback");
+    const out = runMlbFirstInningModelV2(snap, buildFiLines(+105, -120));
+    check("FI V2 does not hold solely because confirmed lineups are pending",
+      out.fiV2Audit.fi_pick !== "Held",
+      `pick=${out.fiV2Audit.fi_pick} blockers=${out.fiV2Audit.fresh_data_blockers.join(",")}`);
+  }
 
   // ──────────────────────────────────────────────────────────────────
   section("Push 3B-2 — FiLineRow shape contract (fetched_at, not updated_at)");
@@ -364,8 +386,8 @@ async function main() {
   {
     // Full-info game with market → NRFI band
     const snap = buildSnapshot({
-      homeStarter: { season_era: 2.30 },
-      awayStarter: { season_era: 2.30 },
+      homeStarter: { season_era: 2.30, first_inning_era: 2.30, first_inning_starts: 10 },
+      awayStarter: { season_era: 2.30, first_inning_era: 2.30, first_inning_starts: 10 },
     });
     const out = runMlbFirstInningModelV2(snap, buildFiLines(110, -130));
     check("good SPs + balanced market → posterior P(NRFI) reasonable",
@@ -376,7 +398,10 @@ async function main() {
   }
   {
     // Posterior in toss-up band → Toss-Up classification
-    const snap = buildSnapshot();
+    const snap = buildSnapshot({
+      homeStarter: { first_inning_era: 4.10, first_inning_starts: 10 },
+      awayStarter: { first_inning_era: 4.10, first_inning_starts: 10 },
+    });
     const r = projectFiIndependent(snap);
     if (r.p_nrfi >= 0.45 && r.p_nrfi <= 0.55) {
       const out = runMlbFirstInningModelV2(snap, buildFiLines(105, -125));
@@ -386,8 +411,8 @@ async function main() {
     }
     // Explicit toss-up case: force posterior into band by setting starter ERAs slightly off-balance
     const snap2 = buildSnapshot({
-      homeStarter: { season_era: 3.90 },
-      awayStarter: { season_era: 4.30 },
+      homeStarter: { season_era: 3.90, first_inning_era: 3.90, first_inning_starts: 10 },
+      awayStarter: { season_era: 4.30, first_inning_era: 4.30, first_inning_starts: 10 },
     });
     const out2 = runMlbFirstInningModelV2(snap2, buildFiLines(110, -130));
     check("near-balanced posterior, threshold band → emits Toss-Up OR a directional pick",
@@ -404,7 +429,10 @@ async function main() {
   }
   {
     // No market → provisional + lean cap (no Best Angle)
-    const snap = buildSnapshot();
+    const snap = buildSnapshot({
+      homeStarter: { first_inning_era: 4.10, first_inning_starts: 10 },
+      awayStarter: { first_inning_era: 4.10, first_inning_starts: 10 },
+    });
     const out = runMlbFirstInningModelV2(snap, []);
     check("no market → provisional=true", out.fiV2Audit.provisional === true);
     check("no market → fi_play_grade !== best_angle", out.fiV2Audit.fi_play_grade !== "best_angle");
@@ -417,8 +445,8 @@ async function main() {
     const snap = buildSnapshot({
       homeLineup: buildLineup([eliteOps, eliteOps, eliteOps, 0.720, 0.700, 0.680, 0.640, 0.620]),
       awayLineup: buildLineup([eliteOps, eliteOps, eliteOps, 0.720, 0.700, 0.680, 0.640, 0.620]),
-      awayStarter: { season_era: 7.50 },
-      homeStarter: { season_era: 7.50 },
+      awayStarter: { season_era: 7.50, first_inning_era: 7.50, first_inning_starts: 10 },
+      homeStarter: { season_era: 7.50, first_inning_era: 7.50, first_inning_starts: 10 },
     });
     const out = runMlbFirstInningModelV2(snap, buildFiLines(140, -160)); // YRFI line
     check("extreme independent vs market → posterior_capped=true",
@@ -429,8 +457,8 @@ async function main() {
   {
     // Legacy predicted_nrfi mapping
     const snap = buildSnapshot({
-      homeStarter: { season_era: 2.30 },
-      awayStarter: { season_era: 2.30 },
+      homeStarter: { season_era: 2.30, first_inning_era: 2.30, first_inning_starts: 10 },
+      awayStarter: { season_era: 2.30, first_inning_era: 2.30, first_inning_starts: 10 },
     });
     const out = runMlbFirstInningModelV2(snap, buildFiLines(110, -130));
     if (out.fiV2Audit.fi_pick === "NRFI") {
@@ -457,8 +485,8 @@ async function main() {
   {
     // Push 3B-3 — posterior just above 0.52 must classify as NRFI (not Toss-Up)
     const snap = buildSnapshot({
-      homeStarter: { season_era: 3.50 },
-      awayStarter: { season_era: 3.50 },
+      homeStarter: { season_era: 3.50, first_inning_era: 3.50, first_inning_starts: 10 },
+      awayStarter: { season_era: 3.50, first_inning_era: 3.50, first_inning_starts: 10 },
     });
     const out = runMlbFirstInningModelV2(snap, buildFiLines(110, -130));
     // Probe: this combination historically lands near 0.52-0.53 posterior

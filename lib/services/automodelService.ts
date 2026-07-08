@@ -1348,6 +1348,24 @@ function applyV2IfSelected(args: {
       marketTotal: a22.market_total ?? null,
       rawProjectedAwayScore: v22.predicted_away_score,
       rawProjectedHomeScore: v22.predicted_home_score,
+      homeStarterEraFactor:
+        typeof (v1Output.sport_specific.auto_factors as Record<string, unknown> | undefined)?.home_starter_era_factor === "number"
+          ? (v1Output.sport_specific.auto_factors as Record<string, unknown>).home_starter_era_factor as number
+          : null,
+      awayStarterEraFactor:
+        typeof (v1Output.sport_specific.auto_factors as Record<string, unknown> | undefined)?.away_starter_era_factor === "number"
+          ? (v1Output.sport_specific.auto_factors as Record<string, unknown>).away_starter_era_factor as number
+          : null,
+      homeBullpenFactor:
+        typeof (v1Output.sport_specific.auto_factors as Record<string, unknown> | undefined)?.home_bullpen_factor === "number"
+          ? (v1Output.sport_specific.auto_factors as Record<string, unknown>).home_bullpen_factor as number
+          : null,
+      awayBullpenFactor:
+        typeof (v1Output.sport_specific.auto_factors as Record<string, unknown> | undefined)?.away_bullpen_factor === "number"
+          ? (v1Output.sport_specific.auto_factors as Record<string, unknown>).away_bullpen_factor as number
+          : null,
+      homeStarterWorkloadRole: a22.home_starter_workload?.role ?? null,
+      awayStarterWorkloadRole: a22.away_starter_workload?.role ?? null,
     });
     const coreModelEnabled =
       process.env.MLB_MARKET_AWARE_CORE_MODEL_ENABLED === "true";
@@ -1467,6 +1485,8 @@ function applyV2IfSelected(args: {
           market_aware_projected_away_score_if_enabled: totalCalibration.calibratedAwayScore,
           market_aware_projected_home_score_if_enabled: totalCalibration.calibratedHomeScore,
           model_edge_runs: totalCalibration.modelEdgeRuns,
+          run_environment_correction_runs: totalCalibration.runEnvironmentCorrectionRuns,
+          run_environment_correction_reasons: totalCalibration.runEnvironmentCorrectionReasons,
           formula_available: totalCalibration.enabled,
           projection_calibration_enabled: projectionCalibrationEnabled,
           recommendation_uses_calibrated_projection: recommendationUsesCalibratedProjection,

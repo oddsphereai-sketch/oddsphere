@@ -2,8 +2,9 @@
  * Tests for the FI NRFI overconfident mid-band flip
  * (lib/services/fiInversionFlip.ts) + its integration in buildFiRecord.
  * Confident NRFI picks with NRFI prob in [0.57,0.63) fade to YRFI at the real
- * YRFI price; Toss-Up / YRFI / out-of-band are never flipped; missing YRFI odds
- * ⇒ no flip (original NRFI kept, never a No Play).
+ * YRFI price at the pure helper layer. The live writer now stands that replay-
+ * flat cohort down to Toss-Up/No Play while preserving the proposed flip audit.
+ * Toss-Up / YRFI / out-of-band are never flipped; missing YRFI odds => no flip.
  * Run: npx tsx --env-file=.env.local scripts/test-fi-inversion-flip.ts
  */
 import { resolveFiInversionFlip, FI_INVERSION_RULE_ID } from "../lib/services/fiInversionFlip";
@@ -67,15 +68,18 @@ function build(pred: any) {
   });
 }
 {
-  // In-band confident NRFI → flips to YRFI at +120.
+  // In-band confident NRFI => proposed flip is audited, but the live writer
+  // stands the cohort down after replay showed it did not add value.
   const fi = build(mkPred(0.60, 58, true)).find((r) => r.market === "first_inning");
-  check("in-band NRFI record flips to YRFI", fi?.pick === "YRFI" && fi?.side === "over");
-  check("flip uses YRFI odds +120", fi?.odds_american === 120);
-  check("flip confidence clamped 55-60", typeof fi?.confidence === "number" && fi!.confidence >= 55 && fi!.confidence <= 60);
-  check("flip play_grade null + best_angle false + edge null", fi?.play_grade === null && fi?.best_angle === false && fi?.edge === null);
+  check("in-band NRFI writer stands down to Toss-Up", fi?.pick === "Toss-Up" && fi?.side === null);
+  check("stand-down clears actionable FI odds/confidence", fi?.odds_american === null && fi?.confidence === null);
+  check("stand-down is no_bet with toss_up prediction_type", fi?.no_bet === true && fi?.prediction_type === "toss_up");
+  check("stand-down play_grade null + best_angle false + edge null", fi?.play_grade === null && fi?.best_angle === false && fi?.edge === null);
   const f = (fi?.snapshot_json as any)?.fi_flip;
   check("fi_flip audit + original NRFI preserved", f?.flipped === true && f?.original_pick === "NRFI" && f?.flipped_pick === "YRFI" && f?.rule_id === FI_INVERSION_RULE_ID);
   check("fi_flip raw YRFI prob < 0.5 in audit", typeof f?.flipped_side_model_prob === "number" && f.flipped_side_model_prob < 0.5);
+  check("fi_flip audit marks writer stand-down", f?.stood_down === true);
+  check("champion correction audit present", (fi?.snapshot_json as any)?.champion_candidate_correction?.action === "stand_down");
 }
 {
   // Out-of-band NRFI (0.66) → unchanged.

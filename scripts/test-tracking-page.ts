@@ -332,6 +332,12 @@ check(
   SERVICE.includes("isPublicallyTracked") &&
     /publicStartFiltered[\s\S]{0,300}isPublicallyTracked\(r\.sport, r\.slate_date\)/.test(SERVICE),
 );
+check(
+  "Service prefers member_facing_at_lock grade for tracking buckets",
+  SERVICE.includes("memberFacingGradeAtLock") &&
+    SERVICE.includes("member_facing_at_lock") &&
+    /memberFacingGradeAtLock\(record\)[\s\S]{0,120}displayGradeOverride\(record\)/.test(SERVICE),
+);
 // Phase 6B.24 — first_inning records must split into virtual NRFI / YRFI
 // buckets so the public Tracking page's NRFI / YRFI categories see
 // today's grades alongside the historical baselines.

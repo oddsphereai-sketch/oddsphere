@@ -246,6 +246,8 @@ function projectedScore(snapshot: Record<string, unknown> | null): { away: numbe
   let record: Record<string, unknown> | null = null;
   if (raw !== null && typeof raw === "object") {
     record = raw as Record<string, unknown>;
+  } else if (snapshot?.projected_score !== null && typeof snapshot?.projected_score === "object") {
+    record = snapshot.projected_score as Record<string, unknown>;
   } else if (snapshot?.model !== null && typeof snapshot?.model === "object") {
     // Soccer locked snapshots store expected goals under `model.lambda_*`
     // rather than the MLB/NBA-style predicted_scores_at_lock object.
@@ -267,6 +269,34 @@ function projectedScore(snapshot: Record<string, unknown> | null): { away: numbe
     num(record.raw_projected_home_goals) ??
     num(record.reconciled_home_goals);
   return away !== null || home !== null ? { away, home } : null;
+}
+
+function americanToImpliedPct(american: number | null | undefined): number | null {
+  if (typeof american !== "number" || !Number.isFinite(american) || american === 0) return null;
+  const implied = american < 0 ? -american / (-american + 100) : 100 / (american + 100);
+  return +(implied * 100).toFixed(2);
+}
+
+function marketImpliedProbabilityPct(record: RehydratedPredictionRecord, effectivePriceAmerican: number | null = record.odds_american): number | null {
+  const persisted = toPct(record.market_probability);
+  if (persisted !== null) return persisted;
+  return americanToImpliedPct(effectivePriceAmerican);
+}
+
+function fiLockedEdgePct(record: RehydratedPredictionRecord): number | null {
+  if (record.market !== "first_inning") return null;
+  const fi = record.snapshot_json?.fi_v2_audit;
+  if (fi === null || typeof fi !== "object") return null;
+  return num((fi as Record<string, unknown>).fi_edge_pct);
+}
+
+function edgePct(record: RehydratedPredictionRecord, marketImpliedPct: number | null): number | null {
+  if (record.edge !== null && Number.isFinite(record.edge)) return record.edge;
+  const fiEdge = fiLockedEdgePct(record);
+  if (fiEdge !== null) return +fiEdge.toFixed(2);
+  const model = toPct(record.model_probability);
+  if (model !== null && marketImpliedPct !== null) return +(model - marketImpliedPct).toFixed(2);
+  return null;
 }
 
 function dataWarnings(snapshot: Record<string, unknown> | null, market: RehydratedMarketKey): string[] {
@@ -400,8 +430,96 @@ function reconstructRead(record: RehydratedPredictionRecord, splits: RehydratedS
   };
 }
 
+function postedLinePrice(record: RehydratedPredictionRecord): { price: number | null; sportsbook: string | null } {
+  const key = record.market === "moneyline" ? "moneyline" : record.market === "total" ? "total" : "first_inning";
+  const postedLines = record.snapshot_json?.posted_lines;
+  const raw = postedLines && typeof postedLines === "object"
+    ? (postedLines as Record<string, unknown>)[key]
+    : null;
+  if (!raw || typeof raw !== "object") return { price: null, sportsbook: null };
+  const line = raw as Record<string, unknown>;
+  const side = str(line.side);
+  if (side && record.side && side !== record.side) return { price: null, sportsbook: null };
+  return {
+    price: num(line.odds_american),
+    sportsbook: str(line.book) ?? str(line.sportsbook),
+  };
+}
+
+function auditPrice(record: RehydratedPredictionRecord): number | null {
+  if (record.market === "total") {
+    const audit = record.snapshot_json?.v2_2_audit;
+    if (!audit || typeof audit !== "object") return null;
+    const row = audit as Record<string, unknown>;
+    if (record.side === "over") return num(row.over_odds_american);
+    if (record.side === "under") return num(row.under_odds_american);
+  }
+  if (record.market === "first_inning") {
+    const audit = record.snapshot_json?.fi_v2_audit;
+    if (!audit || typeof audit !== "object") return null;
+    const row = audit as Record<string, unknown>;
+    if (record.side === "over") return num(row.market_yrfi_odds_american);
+    if (record.side === "under") return num(row.market_nrfi_odds_american);
+  }
+  return null;
+}
+
+function oddsSourceAtLockPrice(record: RehydratedPredictionRecord): { price: number | null; sportsbook: string | null } {
+  const marketKey = record.market === "moneyline" ? "ml" : record.market === "total" ? "ou" : "fi";
+  const raw = record.snapshot_json?.[`odds_source_at_lock_${marketKey}`];
+  if (!raw || typeof raw !== "object") return { price: null, sportsbook: null };
+  const obj = raw as Record<string, unknown>;
+  const sideRaw = record.side ? obj[record.side] : null;
+  if (sideRaw && typeof sideRaw === "object") {
+    const sideObj = sideRaw as Record<string, unknown>;
+    return {
+      price: num(sideObj.odds) ?? num(sideObj.odds_american),
+      sportsbook: str(sideObj.book) ?? str(sideObj.sportsbook),
+    };
+  }
+  return {
+    price: num(obj.odds) ?? num(obj.odds_american),
+    sportsbook: str(obj.book) ?? str(obj.sportsbook),
+  };
+}
+
+function linesAtLockPrice(record: RehydratedPredictionRecord): { price: number | null; sportsbook: string | null } {
+  const raw = record.snapshot_json?.lines_at_lock;
+  if (!Array.isArray(raw)) return { price: null, sportsbook: null };
+  const marketType = record.market === "first_inning" ? "first_inning_total" : record.market;
+  const match = raw.find((row): row is Record<string, unknown> => {
+    if (!row || typeof row !== "object") return false;
+    return str(row.market_type) === marketType &&
+      (!record.side || str(row.side) === record.side) &&
+      typeof row.odds_american === "number";
+  });
+  if (!match) return { price: null, sportsbook: null };
+  return {
+    price: num(match.odds_american),
+    sportsbook: str(match.book) ?? str(match.sportsbook),
+  };
+}
+
+function effectiveLockedPrice(record: RehydratedPredictionRecord): { price: number | null; sportsbook: string | null; source: "prediction_records" | "snapshot_json" | "unavailable" } {
+  if (record.odds_american !== null) return { price: record.odds_american, sportsbook: null, source: "prediction_records" };
+  const candidates = [
+    oddsSourceAtLockPrice(record),
+    linesAtLockPrice(record),
+    { price: auditPrice(record), sportsbook: null },
+    postedLinePrice(record),
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate.price === "number" && Number.isFinite(candidate.price)) {
+      return { price: candidate.price, sportsbook: candidate.sportsbook, source: "snapshot_json" };
+    }
+  }
+  return { price: null, sportsbook: null, source: "unavailable" };
+}
+
 function oddsSource(record: RehydratedPredictionRecord): { sportsbook: string | null; source: "prediction_records" | "snapshot_json" | "unavailable" } {
   if (record.odds_american !== null) return { sportsbook: null, source: "prediction_records" };
+  const effective = effectiveLockedPrice(record);
+  if (effective.source === "snapshot_json") return { sportsbook: effective.sportsbook, source: "snapshot_json" };
   const marketKey = record.market === "moneyline" ? "ml" : record.market === "total" ? "ou" : "fi";
   const raw = record.snapshot_json?.[`odds_source_at_lock_${marketKey}`];
   if (raw && typeof raw === "object") {
@@ -419,8 +537,11 @@ export function buildRehydratedLockedMarketPayload(record: RehydratedPredictionR
     .map((row) => ({ ...row, label: sideLabel(row.side, record.market, record.matchup) }));
   const movement = lineMovement(record.snapshot_json);
   const read = reconstructRead(record, splits);
-  const source = oddsSource(record);
+  const effectivePrice = effectiveLockedPrice(record);
+  const source = effectivePrice.source === "unavailable" ? oddsSource(record) : { sportsbook: effectivePrice.sportsbook, source: effectivePrice.source };
   const originalGrade = normalizePublicGrade(record.play_grade, record);
+  const marketImpliedPct = marketImpliedProbabilityPct(record, effectivePrice.price);
+  const computedEdgePct = edgePct(record, marketImpliedPct);
   const isFiTossUp = record.market === "first_inning" && /toss[\s-]*up/i.test(record.pick ?? "");
   const marketSignalRows = snapshotSignalRows(record.snapshot_json, record.market);
   const hasSharpSignal = sourceAwareSharp.length > 0 || marketSignalRows.some((row) =>
@@ -446,24 +567,24 @@ export function buildRehydratedLockedMarketPayload(record: RehydratedPredictionR
     pick: record.pick,
     selectedSide: record.side,
     originalGrade,
-    displayPriceAmerican: record.odds_american,
+    displayPriceAmerican: effectivePrice.price,
     priceSource: source.source,
-    priceNullReason: record.odds_american === null
+    priceNullReason: effectivePrice.price === null
       ? isFiTossUp
         ? "fi_toss_up_no_actionable_side_price_not_required"
         : "historical_locked_price_not_persisted"
       : null,
     sportsbook: source.sportsbook,
-    marketImpliedProbabilityPct: toPct(record.market_probability),
+    marketImpliedProbabilityPct: marketImpliedPct,
     modelProbabilityPct: toPct(record.model_probability),
-    edgePct: record.edge,
+    edgePct: computedEdgePct,
     projectedScore: projectedScore(record.snapshot_json),
     lineValue: record.line_value,
     openLineValue: num(movement?.total_open),
     currentLineValue: num(movement?.total_current) ?? record.line_value,
     openPriceAmerican: num(movement?.open_odds_american),
-    currentPriceAmerican: num(movement?.current_odds_american) ?? record.odds_american,
-    lockedPriceAmerican: record.odds_american,
+    currentPriceAmerican: num(movement?.current_odds_american) ?? effectivePrice.price,
+    lockedPriceAmerican: effectivePrice.price,
     lineMovementDirection: str(movement?.direction),
     consensusSplits: {
       available: splits.length > 0,
@@ -497,7 +618,7 @@ export function buildRehydratedLockedMarketPayload(record: RehydratedPredictionR
     dataWarnings: dataWarnings(record.snapshot_json, record.market),
     fiContext: {
       isFirstInning: record.market === "first_inning",
-      oddsAvailable: record.market === "first_inning" ? record.odds_american !== null : false,
+      oddsAvailable: record.market === "first_inning" ? effectivePrice.price !== null : false,
       marketProbabilityAvailable: record.market === "first_inning" ? (record.market_probability !== null || isFiTossUp) : false,
       expectedSplitSourceAvailable: false,
       note: record.market === "first_inning"

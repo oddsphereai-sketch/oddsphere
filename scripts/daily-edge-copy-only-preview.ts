@@ -93,7 +93,20 @@ function quickReadValidationCodes(args: {
   return out;
 }
 
-function gradeCaveats(row: PredictionEvidenceObject): GradeCaveat[] {
+function hasMaterialMarketFriction(row: PredictionEvidenceObject, marketIntelligence: ReturnType<typeof interpretMarketIntelligence>): boolean {
+  if (row.marketEvidence.sourceConflict) return true;
+  if (
+    row.marketEvidence.sourceAgreement === "consensus_supports_sharp_opposes" ||
+    row.marketEvidence.sourceAgreement === "sharp_supports_consensus_opposes" ||
+    row.marketEvidence.sourceAgreement === "both_oppose"
+  ) {
+    return true;
+  }
+  if (marketIntelligence.priceMovementDirection === "against_pick" && marketIntelligence.marketFrictionLevel !== "low") return true;
+  return marketIntelligence.marketFrictionLevel === "high";
+}
+
+function gradeCaveats(row: PredictionEvidenceObject, marketIntelligence: ReturnType<typeof interpretMarketIntelligence>): GradeCaveat[] {
   const caveats: GradeCaveat[] = [];
   const dimensions = row.internalGradeDimensions;
   if (row.identity.originalPlayGrade === "Caution" && dimensions.riskPenaltyScore < 20 && dimensions.dataQualityScore >= 60) {
@@ -112,7 +125,7 @@ function gradeCaveats(row: PredictionEvidenceObject): GradeCaveat[] {
       treatment: "human_review",
     });
   }
-  if (row.identity.originalPlayGrade === "Best Angle" && (row.marketEvidence.deterministicMarketRead === "mixed" || row.marketEvidence.deterministicMarketRead === "resistance" || row.marketEvidence.sourceConflict)) {
+  if (row.identity.originalPlayGrade === "Best Angle" && hasMaterialMarketFriction(row, marketIntelligence)) {
     caveats.push({
       severity: "medium",
       code: "best_angle_market_friction_needs_thesis_copy",
@@ -143,7 +156,7 @@ function gradeToneViolations(grade: string | null, copy: { quickReadCopy?: strin
   if ((grade === "Caution" || grade === "No Play") && /\b(keeps? this playable|strong enough to keep this playable|positive value|actionable edge is present)\b/i.test(text)) {
     out.push("low_grade_copy_sounds_actionable");
   }
-  if (grade === "Watchlist" && /\bplayable|actionable|bet\b/i.test(text) && !/\bworth monitoring|not automatically actionable|not strong enough for action/i.test(text)) {
+  if (grade === "Watchlist" && /\bplayable|actionable|bet\b/i.test(text) && !/\bworth monitoring|not automatically actionable|not strong enough for action|no actionable\b/i.test(text)) {
     out.push("watchlist_copy_sounds_actionable");
   }
   if (grade === "Lean" && /\btop-tier|top play|hammer|lock of the day|best bet\b/i.test(text)) {
@@ -229,7 +242,7 @@ async function main() {
       marketIntelligence,
       healed,
       sanitizer,
-      caveats: gradeCaveats(evidence),
+      caveats: gradeCaveats(evidence, marketIntelligence),
       gradeToneViolations: gradeToneViolations(evidence.identity.originalPlayGrade, healed.repairedReaderFields),
       renderedCopyValidationCodes: renderedCopyValidationCodes(evidence, healed.repairedReaderFields),
       currentQuickReadValidationCodes: quickReadValidationCodes({

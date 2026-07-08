@@ -134,6 +134,27 @@ check("WNBA consensus-only omits sharp book section", wnba.markets.moneyline?.sh
 check("WNBA consensus-only resolves consensus support", wnba.markets.moneyline?.resolvedMarketRead.status === "consensus_support");
 check("No provider names in canonical decision", !JSON.stringify(wnba).match(/\b(Playbook|SharpAPI)\b/));
 
+const splitSupportOddsResistance = applyDailyEdgeRenderedCopyFlags(buildRecommendationDecision({
+  sport: "mlb",
+  slateDate: "2026-06-28",
+  gameId: "game-split-support-odds-resistance",
+  homeTeam: "ATL",
+  awayTeam: "STL",
+  markets: [{
+    ...baseMarket,
+    pick: "ATL",
+    selectedSide: "home",
+    playGrade: "Best Angle",
+    marketReadV2: read({ consensusMoney: 0.61, consensusBets: 0.57, sharp: null, move: "resistance" }),
+    lineMovementOverride: "resistance",
+  }],
+}), { quickRead: true, marketRead: true, supportingEvidence: true, risk: false });
+const splitSupportOddsResistanceText = JSON.stringify(splitSupportOddsResistance.markets.moneyline);
+check("Rendered Market Read does not call odds resistance clean support", splitSupportOddsResistance.markets.moneyline?.resolvedMarketRead.label === "Mixed", splitSupportOddsResistanceText);
+check("Rendered Market Read mentions odds movement against pick", splitSupportOddsResistance.markets.moneyline?.resolvedMarketRead.copy.toLowerCase().includes("odds movement is against the pick") === true, splitSupportOddsResistanceText);
+check("Rendered Quick Read names odds movement friction", splitSupportOddsResistance.markets.moneyline?.quickRead.toLowerCase().includes("odds movement against the pick") === true, splitSupportOddsResistanceText);
+check("Rendered Supporting Evidence names odds movement friction", splitSupportOddsResistance.markets.moneyline?.supportingEvidence.some((line) => line.toLowerCase().includes("odds movement is against the pick")) === true, splitSupportOddsResistanceText);
+
 const wnbaSpread = applyDailyEdgeRenderedCopyFlags(buildRecommendationDecision({
   sport: "wnba",
   slateDate: "2026-06-28",

@@ -19,9 +19,10 @@ const anchored = calibrateMlbTotalProjectionToMarket({
   rawProjectedHomeScore: 5,
 });
 
-check("uses 25% of model edge over market", anchored.calibratedTotal === 8.5);
-check("preserves team run share", anchored.calibratedAwayScore === 4.3 && anchored.calibratedHomeScore === 4.3);
+check("uses 25% of model edge plus run-environment correction", anchored.calibratedTotal === 8.8);
+check("preserves team run share", anchored.calibratedAwayScore === 4.4 && anchored.calibratedHomeScore === 4.4);
 check("records model edge", anchored.modelEdgeRuns === 2);
+check("records run-environment correction", anchored.runEnvironmentCorrectionRuns === 0.3);
 
 const fallback = calibrateMlbTotalProjectionToMarket({
   marketTotal: null,
@@ -30,7 +31,7 @@ const fallback = calibrateMlbTotalProjectionToMarket({
 });
 
 check("does not enable without market total", fallback.enabled === false);
-check("returns raw projection when market total is missing", fallback.calibratedTotal === 8);
+check("returns raw projection plus run-environment correction when market total is missing", fallback.calibratedTotal === 8.3);
 
 if (fail > 0) {
   console.error(`mlb core model calibration tests: ${pass} passed, ${fail} failed`);

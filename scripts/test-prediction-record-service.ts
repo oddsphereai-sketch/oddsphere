@@ -6,6 +6,7 @@
  * into ML/total/FI prediction_records. Pure / fixture-only — no DB.
  */
 
+import { readFileSync } from "node:fs";
 import {
   buildPredictionRecordsFromSlate,
   americanToImpliedProb,
@@ -16,6 +17,7 @@ import {
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
   GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
 } from "../lib/services/predictionRecordService";
+import { MLB_MODEL_LAYER_VERSION_SCHEMA } from "../lib/automodel/mlbModelLayerVersions";
 
 // Self-consistent expected-grade helper: apply the production gate to a record's
 // own fields (fixtures don't set posterior_home_diff → run-gap null, so the
@@ -36,7 +38,7 @@ function expectTotalGrade(raw: string | null, rec: { model_probability: number |
         ? GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB
         : null;
   if (raw === "best_angle" && minProb !== null && rec.model_probability !== null && rec.model_probability < minProb) {
-    publicGrade = "lean";
+    return "lean";
   }
   return expectGate(publicGrade, rec);
 }
@@ -58,6 +60,12 @@ const baseGame = {
   home_team_id: 771,
   away_team_id: 780,
 };
+
+const freshFiLines = [
+  { game_id: 14771, market_type: "first_inning_total", side: "under", sportsbook: "pinnacle", odds_american: -120, line_value: 0.5, fetched_at: "2026-06-06T16:10:00Z" },
+  { game_id: 14771, market_type: "first_inning_total", side: "over", sportsbook: "pinnacle", odds_american: 105, line_value: 0.5, fetched_at: "2026-06-06T16:10:00Z" },
+];
+const freshFiLinesByGameId = new Map([[14771, freshFiLines]]);
 
 const v21SportSpecific = {
   model_used: "v2_1",
@@ -297,6 +305,49 @@ console.log("\n━━━ MLB total Over Best Angle quality gate ━━━");
   check("70%+ Over quality gate is false", ba?.total_over_quality_gate === false);
 }
 
+console.log("\n━━━ MLB Best Angle tracking/display guard under market-aware engine ━━━");
+{
+  const previousMarketAware = process.env.MARKET_AWARE_ENGINE_ENABLED;
+  process.env.MARKET_AWARE_ENGINE_ENABLED = "true";
+  try {
+    const lowProbMarketAwarePred = {
+      ...basePrediction,
+      predicted_ou_side: "over",
+      ou_confidence: 57,
+      predicted_home_score: 5.6,
+      predicted_away_score: 5.8,
+      sport_specific: {
+        ...v21SportSpecific,
+        ou_play_grade: "best_angle",
+        ou_best_angle_eligible: true,
+        v2_2_audit: {
+          market_total: 9.5,
+          ou_model_prob: 0.57,
+          ou_market_prob: 0.49,
+          ou_edge_pct: 8,
+          ou_requires_market_confirmation: true,
+        },
+      },
+    };
+    const recs = buildPredictionRecordsFromSlate({
+      sport: "mlb",
+      slateDate: "2026-06-06",
+      launchDay: false,
+      games: [baseGame],
+      predictionByGameId: new Map([[14771, lowProbMarketAwarePred]]),
+      abbrevByTeamId,
+    });
+    const ou = recs.find((r) => r.market === "total")!;
+    const ba = (ou.snapshot_json as any)?.best_angle_resolution;
+    check("market-aware engine still demotes unqualified total Best Angle", ou.best_angle === false);
+    check("market-aware engine demotes unqualified public total grade", ou.play_grade === "lean");
+    check("market-aware engine snapshots Best Angle demotion", ba?.final_best_angle === false && ba?.demote_reason !== null);
+  } finally {
+    if (previousMarketAware === undefined) delete process.env.MARKET_AWARE_ENGINE_ENABLED;
+    else process.env.MARKET_AWARE_ENGINE_ENABLED = previousMarketAware;
+  }
+}
+
 // ── launch_day flag ─────────────────────────────────────────────────
 console.log("\n━━━ launch_day flag propagation ━━━");
 {
@@ -348,6 +399,7 @@ console.log("\n━━━ NRFI populated → 3 records ━━━");
     games: [baseGame],
     predictionByGameId: new Map([[14771, fullPred]]),
     abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
   });
   check("returns 3 records", recs.length === 3);
   const fi = recs.find((r) => r.market === "first_inning");
@@ -380,10 +432,8 @@ console.log("\n━━━ NRFI populated → 3 records ━━━");
       ]],
     ]),
   });
-  const fi = recs.find((r) => r.market === "first_inning")!;
-  check("FI falls back to line_history when live lines are thin", fi.odds_american === -148);
-  check("FI history fallback computes no-vig market probability", typeof fi.market_probability === "number" && fi.market_probability > 0.5);
-  check("FI snapshot audits history fallback source", (fi.snapshot_json as any)?.odds_source_at_lock_fi?.picked?.source === "line_history_fallback");
+  const fi = recs.find((r) => r.market === "first_inning");
+  check("FI does not use line_history fallback for actionable tracking", fi === undefined);
 }
 
 // ── Phase 6B.20 — Toss-Up FI rows captured as non-actionable ─────
@@ -436,6 +486,7 @@ console.log("\n━━━ Phase 6B.20 — Toss-Up FI rows ━━━");
     games: [baseGame],
     predictionByGameId: new Map([[14771, actionablePred]]),
     abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
   });
   const fi = recs.find((r) => r.market === "first_inning")!;
   check("Actionable NRFI: pick='NRFI'", fi.pick === "NRFI");
@@ -511,6 +562,12 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
   check("ML best_angle SUPPRESSED when opposing money ≥60 + divergence ≥15", ml.best_angle === false);
+  check("ML public split conflict stands down from actionable board",
+        ml.no_bet === true &&
+        typeof ml.no_bet_reason === "string" &&
+        /champion_candidate_ml_stand_down/.test(ml.no_bet_reason));
+  check("ML champion correction audit captures public split conflict",
+        (ml.snapshot_json as any)?.champion_candidate_correction?.public_split_conflict === true);
 }
 {
   // BAL@TOR moneyline with no signals → guard goes neutral, BA passes through.
@@ -845,6 +902,44 @@ console.log("\n━━━ Total record selected-line basis ━━━");
   check("Under total pick/side remain under", ou.pick === "under" && ou.side === "under");
 }
 
+console.log("\n━━━ Champion candidate correction — total projection conflict ━━━");
+{
+  const conflictPred = {
+    ...basePrediction,
+    predicted_ou_side: "over",
+    ou_confidence: 58,
+    predicted_home_score: 4.0,
+    predicted_away_score: 4.0,
+    sport_specific: {
+      ...v21SportSpecific,
+      ou_play_grade: "lean",
+      ou_best_angle_eligible: false,
+      total_projection_reconciliation: { mean_probability_divergence: false, grade_cap: null },
+      v2_2_audit: {
+        market_total: 8.5,
+        ou_model_prob: 0.58,
+        ou_market_prob: 0.52,
+        ou_edge_pct: 6,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, conflictPred]]),
+    abbrevByTeamId,
+  });
+  const ou = recs.find((r) => r.market === "total")!;
+  check("projection-conflict total stands down", ou.no_bet === true && ou.best_angle === false && ou.play_grade === null);
+  check("projection-conflict reason is explicit",
+        typeof ou.no_bet_reason === "string" &&
+        /champion_candidate_total_projection_conflict|projected total/i.test(ou.no_bet_reason));
+  check("projection-conflict audit is snapshotted",
+        (ou.snapshot_json as any)?.champion_candidate_correction?.replay_policy === "champion_candidate_guardrails_2026_07_08");
+}
+
 // ── Phase 6B.27 — V2.2 internal labels must not leak into public play_grade ──
 console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━");
 {
@@ -1032,6 +1127,27 @@ console.log("\n━━━ Phase 6B.28 — Daily Edge lock substrate ━━━");
   check("snapshot.framework_grades_at_lock captures ml/ou_grade",
         (sp.framework_grades_at_lock as any)?.ml_grade === "market_watch" &&
         (sp.framework_grades_at_lock as any)?.ou_grade === "market_watch");
+  const memberFacing = sp.member_facing_at_lock as any;
+  const layerVersions = sp.model_layer_versions as any;
+  const expectedMemberGrade = ml.no_bet === true
+    ? "no_play"
+    : ml.best_angle === true
+      ? "best_angle"
+      : ml.play_grade;
+  check("snapshot.model_layer_versions carries schema",
+        layerVersions?.schema_version === MLB_MODEL_LAYER_VERSION_SCHEMA);
+  check("snapshot.model_layer_versions marks active ML head",
+        layerVersions?.market === "moneyline" &&
+        layerVersions?.active_probability_head === layerVersions?.moneyline_probability_head);
+  check("member_facing_at_lock captures finalized ML grade",
+        memberFacing?.grade === expectedMemberGrade);
+  check("member_facing_at_lock captures finalized ML pick/price",
+        memberFacing?.pick === ml.pick &&
+        memberFacing?.odds_american === ml.odds_american);
+  check("member_facing_at_lock captures finalized ML Best Angle flag",
+        memberFacing?.best_angle === ml.best_angle);
+  check("member_facing_at_lock carries model layer stamp",
+        memberFacing?.model_layer_versions?.active_probability_head === layerVersions?.active_probability_head);
 }
 {
   // Empty signals/lines → arrays still present but empty (honest "not
@@ -1063,6 +1179,7 @@ console.log("\n━━━ Phase 6B.28 — Daily Edge lock substrate ━━━");
   const recs = buildPredictionRecordsFromSlate({
     sport: "mlb", slateDate: "2026-06-06", launchDay: false, games: [baseGame],
     predictionByGameId: new Map([[14771, fullPred]]), abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
   });
   const fi = recs.find((r) => r.market === "first_inning")!;
   const sp = fi.snapshot_json as Record<string, unknown>;
@@ -1070,6 +1187,13 @@ console.log("\n━━━ Phase 6B.28 — Daily Edge lock substrate ━━━");
         (sp.framework_grades_at_lock as any)?.nrfi_grade === "market_watch");
   check("FI snapshot has predicted_scores_at_lock",
         (sp.predicted_scores_at_lock as any)?.home === 4.2);
+  check("FI snapshot has member_facing_at_lock",
+        (sp.member_facing_at_lock as any)?.market === "first_inning" &&
+        (sp.member_facing_at_lock as any)?.pick === "NRFI");
+  check("FI snapshot marks active FI probability head",
+        (sp.model_layer_versions as any)?.market === "first_inning" &&
+        (sp.model_layer_versions as any)?.active_probability_head ===
+          (sp.model_layer_versions as any)?.first_inning_probability_head);
 }
 
 // ── P7-Commit-B — FI play_grade persistence going forward ──────────
@@ -1094,6 +1218,7 @@ console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━
     games: [baseGame],
     predictionByGameId: new Map([[14771, fiLean]]),
     abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
   });
   const fi = recs.find((r) => r.market === "first_inning")!;
   check("FI conf=58 → play_grade='lean'", fi.play_grade === "lean");
@@ -1119,6 +1244,7 @@ console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━
     games: [baseGame],
     predictionByGameId: new Map([[14771, fiBelow]]),
     abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
   });
   const fi = recs.find((r) => r.market === "first_inning")!;
   check("FI conf=57 (below floor) → play_grade=null", fi.play_grade === null);
@@ -1142,6 +1268,7 @@ console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━
     games: [baseGame],
     predictionByGameId: new Map([[14771, fiHigh]]),
     abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
   });
   const fi = recs.find((r) => r.market === "first_inning")!;
   check("FI conf=65 (YRFI) → play_grade='lean'", fi.play_grade === "lean");
@@ -1211,6 +1338,7 @@ console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━
     games: [baseGame],
     predictionByGameId: new Map([[14771, baseFiLean]]),
     abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
   const ou = recs.find((r) => r.market === "total")!;
@@ -1218,6 +1346,17 @@ console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━
         ml.play_grade === expectGate("lean", ml) /* FI persistence change must not alter the ML gate result */);
   check("Total play_grade reflects the total quality gate",
         ou.play_grade !== "best_angle" /* base fixture is below the 70% total BA floor */);
+}
+
+// ── Stale unlocked FI cleanup guard ────────────────────────────────
+console.log("\n━━━ stale unlocked FI cleanup guard ━━━");
+{
+  const src = readFileSync("lib/services/predictionRecordService.ts", "utf8");
+  check("sync neutralizes stale unlocked FI rows when fresh-data gate stops proposing FI",
+        src.includes("staleUnlockedFiIds") &&
+        src.includes('r.market === "first_inning"') &&
+        src.includes('prediction_type: "toss_up"') &&
+        src.includes("locked rows are never touched"));
 }
 
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);

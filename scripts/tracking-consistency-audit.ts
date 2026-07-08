@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/db/supabase";
 import {
   computeTrackingAggregate,
+  dedupePredictionRecordsForTracking,
   effectiveTrackingPlayGrade,
   type AggregateMetrics,
   type SportMarketBucket,
@@ -264,12 +265,13 @@ async function main() {
   const { data, error } = await query;
   if (error) throw new Error(`prediction_records query failed: ${error.message}`);
 
-  const records = ((data ?? []) as PredictionRecordRow[]).filter(
+  const sourceRecords = ((data ?? []) as PredictionRecordRow[]).filter(
     (record) =>
       !record.launch_day &&
       isPublicallyTracked(record.sport, record.slate_date) &&
       !isTossUp(record),
   );
+  const records = dedupePredictionRecordsForTracking(sourceRecords);
   const recordIds = records.map((r) => r.id).filter((id): id is number => id !== undefined);
   const gradeByRecordId = await fetchGrades(recordIds);
   const rows: Row[] = records.map((record) => ({
@@ -296,7 +298,8 @@ async function main() {
     date: args.date,
     sport: args.sport,
     aggregateYesterdayDate: aggregate.yesterday.date,
-    sourceRows: records.length,
+    sourceRows: sourceRecords.length,
+    dedupedSourceRows: records.length,
     gradedRows: rows.filter((r) => r.grade !== null).length,
     expected,
     actual,

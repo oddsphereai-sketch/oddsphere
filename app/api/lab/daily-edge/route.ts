@@ -3321,16 +3321,13 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // 2026-06-22 — A flipped/corrected market is EXEMPT from this one downgrade
   // (the flip already fades the market-divergent signal). Only this downgrade is
   // skipped — the market-read chips and all other Caution reasons remain.
-  const verdictAfterCaution =
-    input.marketReadV2Enabled === true && input.market !== "first_inning"
-      ? baseVerdict
-      : applyOpposingMoneyCaution(
-          baseVerdict,
-          moneyPct,
-          betsPct,
-          input.sportSpecific ?? null,
-          input.market,
-        );
+  const verdictAfterCaution = applyOpposingMoneyCaution(
+    baseVerdict,
+    moneyPct,
+    betsPct,
+    input.sportSpecific ?? null,
+    input.market,
+  );
   // Point-6 guarantee: a corrected/flipped market is never Best Angle (the BA
   // belonged to the original side we flipped away from). If any path still
   // surfaced Best Angle, soften to Lean — the clean conservative recommendation.

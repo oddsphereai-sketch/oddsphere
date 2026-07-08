@@ -201,6 +201,20 @@ function bestAngleCopyExplainsFriction(row: PredictionEvidenceObject): boolean {
   return /override|edge|value|model|price|despite|mixed|resistance|friction/.test(text);
 }
 
+function hasMaterialMarketFriction(row: PredictionEvidenceObject): boolean {
+  const market = interpretMarketIntelligence(row);
+  if (row.marketEvidence.sourceConflict) return true;
+  if (
+    row.marketEvidence.sourceAgreement === "consensus_supports_sharp_opposes" ||
+    row.marketEvidence.sourceAgreement === "sharp_supports_consensus_opposes" ||
+    row.marketEvidence.sourceAgreement === "both_oppose"
+  ) {
+    return true;
+  }
+  if (market.priceMovementDirection === "against_pick" && market.marketFrictionLevel !== "low") return true;
+  return market.marketFrictionLevel === "high";
+}
+
 function auditRow(row: PredictionEvidenceObject): Finding[] {
   const findings: Finding[] = [];
   const read = row.marketEvidence.deterministicMarketRead;
@@ -327,7 +341,7 @@ function auditRow(row: PredictionEvidenceObject): Finding[] {
     push(findings, row, "generic_copy_detected", "medium", "Reader copy appears generic and should include the prediction-specific reason.");
   }
 
-  if (row.identity.originalPlayGrade === "Best Angle" && (read === "resistance" || read === "mixed" || row.marketEvidence.sourceConflict)) {
+  if (row.identity.originalPlayGrade === "Best Angle" && hasMaterialMarketFriction(row)) {
     if (!hasBestAngleOverrideEvidence(row)) {
       push(findings, row, "best_angle_market_friction_without_override", "high", "Best Angle has mixed/resistant market context without enough model/value override evidence.");
     } else if (!bestAngleCopyExplainsFriction(row)) {

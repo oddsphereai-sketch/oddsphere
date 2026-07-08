@@ -24,6 +24,10 @@
     "learning-lab:projection-improvement-search": "tsx --env-file=.env.local scripts/balanced-grade-and-projection-improvement.ts",
     "learning-lab:ml-probability-improvement-search": "tsx --env-file=.env.local scripts/balanced-grade-and-projection-improvement.ts",
     "learning-lab:ml-ba-movement-cap-decision": "tsx --env-file=.env.local scripts/ml-best-angle-movement-cap-decision-review.ts",
+    "learning-lab:launch-calibration-audit": "tsx --env-file=.env.local scripts/launch-calibration-audit.ts",
+    "learning-lab:mlb-complete-calibration-audit": "tsx --env-file=.env.local scripts/mlb-model-complete-calibration-audit.ts",
+    "learning-lab:mlb-model-deep-dive-audit": "tsx --env-file=.env.local scripts/mlb-model-deep-dive-audit.ts",
+    "learning-lab:mlb-truthful-edge-audit": "tsx --env-file=.env.local scripts/mlb-truthful-edge-audit.ts",
     "audit:daily-edge": "tsx --env-file=.env.local scripts/operator/audit-daily-edge-integrity.ts",
     "audit:slate-visibility": "tsx --env-file=.env.local scripts/operator/audit-slate-visibility.ts",
     "audit:mlb-workload-replay": "tsx --env-file=.env.local scripts/operator/mlb-workload-pitching-replay.ts",
@@ -97,6 +101,7 @@
     "test:auth-gate": "tsx --env-file=.env.local scripts/test-auth-gate.ts",
     "tracking-refresh": "tsx --env-file=.env.local scripts/tracking-refresh.ts",
     "tracking:consistency-audit": "tsx --env-file=.env.local scripts/tracking-consistency-audit.ts",
+    "tracking:display-correction-audit": "tsx --env-file=.env.local scripts/tracking-display-correction-audit.ts",
     "promote-drafts": "tsx --env-file=.env.local scripts/promote-historical-drafts.ts",
     "audit:all-model-readiness": "tsx --env-file=.env.local scripts/operator/audit-all-model-readiness.ts"
   },

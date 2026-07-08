@@ -221,6 +221,50 @@ function storedGrade(record: PredictionRecordRow): string {
   return String(record.play_grade ?? "").trim().toLowerCase();
 }
 
+function displayGradeOverride(record: PredictionRecordRow): string | null {
+  const snapshot = record.snapshot_json;
+  if (snapshot === null || typeof snapshot !== "object") return null;
+  const value = (snapshot as Record<string, unknown>).tracking_display_grade_override;
+  if (typeof value !== "string") return null;
+  const grade = value.trim().toLowerCase();
+  if (
+    grade === "best_angle" ||
+    grade === "lean" ||
+    grade === "watchlist" ||
+    grade === "caution" ||
+    grade === "no_play" ||
+    grade === "market_aligned" ||
+    grade === "provisional" ||
+    grade === "held"
+  ) {
+    return grade;
+  }
+  return null;
+}
+
+function memberFacingGradeAtLock(record: PredictionRecordRow): string | null {
+  const snapshot = record.snapshot_json;
+  if (snapshot === null || typeof snapshot !== "object") return null;
+  const memberFacing = (snapshot as Record<string, unknown>).member_facing_at_lock;
+  if (memberFacing === null || typeof memberFacing !== "object") return null;
+  const raw = (memberFacing as Record<string, unknown>).grade;
+  if (typeof raw !== "string") return null;
+  const grade = raw.trim().toLowerCase();
+  if (
+    grade === "best_angle" ||
+    grade === "lean" ||
+    grade === "watchlist" ||
+    grade === "caution" ||
+    grade === "no_play" ||
+    grade === "market_aligned" ||
+    grade === "provisional" ||
+    grade === "held"
+  ) {
+    return grade;
+  }
+  return null;
+}
+
 function gradeStrength(record: PredictionRecordRow): number {
   const grade = storedGrade(record);
   if (grade === "best_angle") return 5;
@@ -285,6 +329,10 @@ export function dedupePredictionRecordsForTracking(records: PredictionRecordRow[
  * the member page cannot later reclassify a Lean as a Best Angle or vice versa.
  */
 export function effectiveTrackingPlayGrade(record: PredictionRecordRow): string {
+  const memberFacingAtLock = memberFacingGradeAtLock(record);
+  if (memberFacingAtLock !== null) return memberFacingAtLock;
+  const override = displayGradeOverride(record);
+  if (override !== null) return override;
   const grade = storedGrade(record);
   if (grade === "best_angle" && record.best_angle === false) return "lean";
   return grade;
