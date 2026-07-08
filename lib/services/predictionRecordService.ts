@@ -268,6 +268,15 @@ function resolveMlbMlBestAngleRestorationProfile(args: {
 
   const edge = Math.abs(args.edgePp);
   const rawEdge = args.rawEdgePp === null ? null : Math.abs(args.rawEdgePp);
+  const movementKnownNotToward =
+    args.lineDirection === "neutral" || args.lineDirection === "against_pick";
+  if (edge < 8.0 && movementKnownNotToward) {
+    return {
+      bestAngle: false,
+      demoteReason: "ml_profile_sub_8pp_edge_needs_confirming_move",
+      profileVersion: MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION,
+    };
+  }
   const disciplinedFavorite =
     args.oddsAmerican >= -240 &&
     args.oddsAmerican <= -151 &&

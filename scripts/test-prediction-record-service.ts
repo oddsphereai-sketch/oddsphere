@@ -624,6 +624,45 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   check("ML best_angle PRESERVED when signals map is absent", ml.best_angle === true);
 }
 {
+  // Same-day member-card correction: a restored ML Best Angle candidate with
+  // sub-8pp edge and neutral movement is displayed as Lean on Daily Edge, so
+  // tracking must store the same final public grade.
+  const baNeutralPred = {
+    ...basePrediction,
+    ml_confidence: 64,
+    sport_specific: restoredMlBestAngleSportSpecific,
+  };
+  const neutralOpeners = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -170, line_value: null, recorded_at: "2026-06-07T08:00:00Z" },
+    ]],
+  ]);
+  const neutralCurrent = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -170, line_value: null, fetched_at: "2026-06-07T16:00:00Z" },
+    ]],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-07",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, baNeutralPred]]),
+    abbrevByTeamId,
+    oddsByGameId: restoredMlBestAngleOddsByGameId,
+    openersByGameId: neutralOpeners,
+    currentLinesByGameId: neutralCurrent,
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  check("ML neutral sub-8pp candidate demotes from Best Angle",
+    ml.best_angle === false && ml.play_grade === "lean",
+    `best_angle=${ml.best_angle} grade=${ml.play_grade}`);
+  check("ML neutral sub-8pp demotion is snapshotted",
+    (ml.snapshot_json as any)?.best_angle_resolution?.demote_reason === "ml_profile_sub_8pp_edge_needs_confirming_move");
+  check("ML neutral sub-8pp member lock stores Lean",
+    (ml.snapshot_json as any)?.member_facing_at_lock?.grade === "lean");
+}
+{
   // Phase 6B.12 — explicit null public_money_pct must be treated as
   // NEUTRAL (no suppression). This is the regression that re-Best-Angled
   // NYY ML / TOR ML this morning.

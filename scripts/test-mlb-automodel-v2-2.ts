@@ -660,6 +660,30 @@ async function main() {
       out.v22Audit.ml_model_prob > 0.5);
   }
   {
+    // LAA@TEX-style coherence: the raw model barely prefers the away dog,
+    // while the market strongly prefers the home side. Probability-space
+    // shrink can fall below 50, but the member-facing picked-side
+    // probability must not display as sub-coin-flip.
+    const snap = buildSnapshot({
+      homeTeam: { team_avg_batter_ops: 0.720 },
+      awayTeam: { team_avg_batter_ops: 0.800 },
+      market: { listed_total: 8.5, home_ml_odds_american: -160, away_ml_odds_american: 135 },
+    });
+    const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
+    check("bare-away-dog: ML pick = away",
+      out.predicted_ml_winner === "away",
+      `got=${out.predicted_ml_winner}`);
+    check("bare-away-dog: raw picked-side prob > 0.5",
+      out.v22Audit.ml_raw_model_prob > 0.5);
+    check("bare-away-dog: regularized prob can audit below 0.5",
+      out.v22Audit.ml_regularized_model_prob < 0.5,
+      `got=${out.v22Audit.ml_regularized_model_prob}`);
+    check("bare-away-dog: public picked-side prob floors at 0.5",
+      out.v22Audit.ml_model_prob === 0.5 &&
+      out.v22Audit.ml_display_probability_floor_applied === true,
+      `got=${out.v22Audit.ml_model_prob}`);
+  }
+  {
     // LAA@LAD-style scenario — home (LAD): elite starter + strong offense.
     // away (LAA): bad starter + weak offense. Confidence must attach to home.
     const snap = buildSnapshot({

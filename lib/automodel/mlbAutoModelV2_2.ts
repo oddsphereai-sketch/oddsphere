@@ -132,6 +132,8 @@ export type V22Audit = {
   ml_raw_edge_pct: number | null;
   ml_regularized_model_prob: number;
   ml_regularized_edge_pct: number | null;
+  ml_display_probability_floor_applied?: boolean;
+  ml_display_probability_floor_reason?: string | null;
   ml_shrink_factor: number;
   ml_distance_cap_pp: number;
   ml_distance_cap_applied: boolean;
@@ -485,8 +487,12 @@ export function runMlbAutoModelV2_2(
     k: V22_SHRINK_K_ML,
     maxDistancePp: V22_MAX_DISTANCE_PP_ML,
   });
-  const mlModelProb = mlReg.regularizedProb ?? mlRawModelProb;
-  const mlEdgePct = mlReg.regularizedEdgePct ?? 0;
+  const mlRegularizedProb = mlReg.regularizedProb ?? mlRawModelProb;
+  const mlDisplayProbabilityFloorApplied = mlRegularizedProb < 0.5 && mlRawModelProb >= 0.5;
+  const mlModelProb = mlDisplayProbabilityFloorApplied ? 0.5 : mlRegularizedProb;
+  const mlEdgePct = mlMarketProb === null
+    ? 0
+    : Math.round((mlModelProb - mlMarketProb) * 1000) / 10;
 
   // OU using market_total (or independent total when market missing)
   const ouLine = market.listedTotal ?? posteriorTotalRuns;
@@ -686,8 +692,12 @@ export function runMlbAutoModelV2_2(
     // MLB-P0 regularization audit — raw preserved, regularizer math exposed.
     ml_raw_model_prob: mlRawModelProb,
     ml_raw_edge_pct: mlReg.rawEdgePct,
-    ml_regularized_model_prob: mlModelProb,
+    ml_regularized_model_prob: mlRegularizedProb,
     ml_regularized_edge_pct: mlReg.regularizedEdgePct,
+    ml_display_probability_floor_applied: mlDisplayProbabilityFloorApplied,
+    ml_display_probability_floor_reason: mlDisplayProbabilityFloorApplied
+      ? "picked_side_probability_cannot_display_below_coin_flip"
+      : null,
     ml_shrink_factor: mlReg.shrinkFactor,
     ml_distance_cap_pp: mlReg.distanceCapPp,
     ml_distance_cap_applied: mlReg.capApplied,
