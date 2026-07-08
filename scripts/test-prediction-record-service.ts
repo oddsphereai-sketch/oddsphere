@@ -1302,11 +1302,11 @@ console.log("\n━━━ Phase 6B.28 — Daily Edge lock substrate ━━━");
           (sp.model_layer_versions as any)?.first_inning_probability_head);
 }
 
-// ── P7-Commit-B — FI play_grade persistence going forward ──────────
-console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━━");
+// ── FI V2 audit-grade persistence going forward ──────────
+console.log("\n━━━ FI V2 audit-grade persistence ━━━");
 {
-  // Actionable FI with confidence ≥ 58 must persist play_grade='lean',
-  // matching what marketVerdictFor Rule 5 would render on the card.
+  // Actionable FI must persist the public grade from fi_v2_audit, not a
+  // confidence-only fallback.
   const fiLean = {
     ...basePrediction,
     predicted_nrfi: true,
@@ -1315,6 +1315,11 @@ console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━
       ...v21SportSpecific,
       hold_picks: [],
       nrfi_decision_kind: "nrfi",
+      fi_v2_audit: {
+        fi_pick: "NRFI",
+        fi_play_grade: "lean",
+        fi_no_bet_reason: null,
+      },
     },
   };
   const recs = buildPredictionRecordsFromSlate({
@@ -1327,9 +1332,9 @@ console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━
     currentLinesByGameId: freshFiLinesByGameId,
   });
   const fi = recs.find((r) => r.market === "first_inning")!;
-  check("FI conf=58 → play_grade='lean'", fi.play_grade === "lean");
-  check("FI conf=58 → best_angle stays false (no FI BA policy)", fi.best_angle === false);
-  check("FI conf=58 → no_bet stays false", fi.no_bet === false);
+  check("FI audit lean → play_grade='lean'", fi.play_grade === "lean");
+  check("FI audit lean → best_angle=false", fi.best_angle === false);
+  check("FI audit lean → no_bet=false", fi.no_bet === false);
 }
 {
   // Confidence just below threshold (57) must NOT persist lean.
@@ -1356,8 +1361,8 @@ console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━
   check("FI conf=57 (below floor) → play_grade=null", fi.play_grade === null);
 }
 {
-  // High-confidence FI well above the floor.
-  const fiHigh = {
+  // FI Best Angle must also persist from the FI V2 audit.
+  const fiBest = {
     ...basePrediction,
     predicted_nrfi: false,
     nrfi_confidence: 65,
@@ -1365,6 +1370,11 @@ console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━
       ...v21SportSpecific,
       hold_picks: [],
       nrfi_decision_kind: "yrfi",
+      fi_v2_audit: {
+        fi_pick: "YRFI",
+        fi_play_grade: "best_angle",
+        fi_no_bet_reason: null,
+      },
     },
   };
   const recs = buildPredictionRecordsFromSlate({
@@ -1372,13 +1382,13 @@ console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━
     slateDate: "2026-06-11",
     launchDay: false,
     games: [baseGame],
-    predictionByGameId: new Map([[14771, fiHigh]]),
+    predictionByGameId: new Map([[14771, fiBest]]),
     abbrevByTeamId,
     currentLinesByGameId: freshFiLinesByGameId,
   });
   const fi = recs.find((r) => r.market === "first_inning")!;
-  check("FI conf=65 (YRFI) → play_grade='lean'", fi.play_grade === "lean");
-  check("FI conf=65 → best_angle still false (FI BA policy not approved)", fi.best_angle === false);
+  check("FI audit Best Angle → play_grade='best_angle'", fi.play_grade === "best_angle");
+  check("FI audit Best Angle → best_angle=true", fi.best_angle === true);
 }
 {
   // Toss-Up FI (canonical) must NOT persist lean even if confidence

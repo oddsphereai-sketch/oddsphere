@@ -1949,57 +1949,38 @@ function buildFiRecord(
     ? "non-actionable: locked pill was Toss-Up"
     : null;
 
-  // P7-Commit-B (2026-06-11) — FI play_grade persistence going forward.
-  //
-  // Before this change FI rows always wrote play_grade=null, so the Daily
-  // Edge card could render a "Lean" pill (via marketVerdictFor Rule 5)
-  // that was never captured in prediction_records. Tracking's Lean bucket
-  // silently dropped those FI Leans because its filter is
-  // `play_grade === "lean"`.
-  //
-  // Fix: mirror the card's Rule 5 in the writer. Rule 5 says
-  // `confidence >= LEAN_CONFIDENCE_FLOOR (0.58)` → "lean". For FI, the
-  // route divides nrfi_confidence by 100 before calling marketVerdictFor,
-  // so 58 on the 0–100 scale = 0.58 in marketVerdictFor's space. Match it
-  // exactly so the writer never disagrees with the displayed pill.
-  //
-  // Scope (explicit per operator directive):
-  //   • Toss-Up / no_bet → keep play_grade=null (already handled above
-  //     via isTossUp + noBetValue; never reach the lean check)
-  //   • held → returns earlier (line 1032); no record written
-  //   • best_angle stays false unless / until a separate FI Best Angle
-  //     policy is approved (none today)
-  //   • Watchlist / No Play continue to write play_grade=null — only
-  //     "lean" gains explicit persistence in this change
-  //
-  // No tracking UI is changed. No historical FI rows are backfilled. The
-  // Best Angles section still reads `best_angle === true` and remains
-  // empty for FI by design.
-  const FI_LEAN_CONFIDENCE_FLOOR_PCT = 58;
-  const fiPlayGrade: string | null =
-    !isTossUp &&
-    typeof pred.nrfi_confidence === "number" &&
-    pred.nrfi_confidence >= FI_LEAN_CONFIDENCE_FLOOR_PCT
-      ? "lean"
+  // FI V2 is the source of truth for first-inning actionability. The public
+  // tracking row must mirror the audit grade users see on the Daily Edge card:
+  // best_angle/lean are actionable; no_bet/toss_up/held collapse to null with
+  // no_bet metadata preserved below.
+  const fiAudit =
+    sp.fi_v2_audit && typeof sp.fi_v2_audit === "object"
+      ? (sp.fi_v2_audit as Record<string, unknown>)
       : null;
+  const fiAuditGrade = readStringOrNull(fiAudit?.fi_play_grade);
+  const fiPlayGrade = isTossUp ? null : readPublicPlayGrade(fiAuditGrade);
+  const fiAuditNoBet =
+    fiAuditGrade === "no_bet" ||
+    fiAuditGrade === "toss_up" ||
+    fiAuditGrade === "held";
+  const fiAuditNoBetReason = readStringOrNull(fiAudit?.fi_no_bet_reason);
 
-  // 2026-06-22 — FI NRFI overconfident mid-band flip. Confident NRFI picks with
-  // model NRFI prob in [0.57,0.63) are an inverted cohort (FI twin of the ML
-  // flip); fade them to YRFI at the real YRFI price. Only NRFI picks are
-  // eligible (never Toss-Up / YRFI). When fired, the recommendation flips with
-  // full audit; the model opinion (predicted_nrfi) is untouched. No price ⇒ no
-  // flip (original NRFI kept; never a No Play from this rule).
+  // Legacy-only FI inversion fallback. FI V2 audit grades are authoritative;
+  // do not let an older post-model flip override the current FI model's
+  // audited actionability decision.
   const fiNrfiProbability =
     autoFactors && typeof autoFactors.nrfi_probability === "number"
       ? (autoFactors.nrfi_probability as number)
       : null;
-  const fiFlip = resolveFiInversionFlip({
-    predictedSide: isTossUp ? "tossup" : pred.predicted_nrfi === true ? "nrfi" : "yrfi",
-    nrfiProbability: fiNrfiProbability,
-    originalConfidence: pred.nrfi_confidence,
-    nrfiMarketProb: fiMarketProb,
-    yrfiOdds: fiOpposite?.odds ?? null,
-  });
+  const fiFlip = fiAudit !== null
+    ? { flipped: false as const, reason: "fi_v2_audit_grade_authoritative" }
+    : resolveFiInversionFlip({
+        predictedSide: isTossUp ? "tossup" : pred.predicted_nrfi === true ? "nrfi" : "yrfi",
+        nrfiProbability: fiNrfiProbability,
+        originalConfidence: pred.nrfi_confidence,
+        nrfiMarketProb: fiMarketProb,
+        yrfiOdds: fiOpposite?.odds ?? null,
+      });
   const fiFlipped = fiFlip.flipped === true;
   const fiChampionStandDown = fiFlipped;
   const finalFiPick = fiChampionStandDown ? "Toss-Up" : pickLabel;
@@ -2009,10 +1990,10 @@ function buildFiRecord(
   const finalFiModelProb = fiChampionStandDown ? null : fiModelProb;
   const finalFiMarketProb = fiChampionStandDown ? null : fiMarketProb;
   const finalFiEdge = fiChampionStandDown ? null : fiEdge;
-  const finalFiNoBet = noBetValue || fiChampionStandDown;
+  const finalFiNoBet = noBetValue || fiAuditNoBet || fiChampionStandDown;
   const finalFiNoBetReason = fiChampionStandDown
     ? "champion_candidate_fi_flip_stand_down: FI flip cohort replayed flat; no actionable FI."
-    : noBetReasonValue;
+    : noBetReasonValue ?? fiAuditNoBetReason;
 
   return {
     game_prediction_id: pred.id,
@@ -2046,7 +2027,7 @@ function buildFiRecord(
           })
         : fiPlayGrade,
     prediction_type: fiChampionStandDown ? "toss_up" : fiFlipped ? null : predictionTypeValue,
-    best_angle: false,
+    best_angle: fiPlayGrade === "best_angle" && !fiChampionStandDown && !fiFlipped,
     no_bet: finalFiNoBet,
     no_bet_reason: finalFiNoBetReason,
     market_aligned: false,
@@ -2510,19 +2491,18 @@ export async function createPredictionRecords(
   // unlocked rows so tracking stays in sync with intraday game_predictions
   // refreshes, but we must NEVER overwrite a row that already has
   // locked_at != null (pregame-sweep / lock-on-write owns that
-  // transition; pick + line + confidence must freeze at lock). Load
-  // existing lock state per (game_id, market, model_version, slate_date)
-  // first, then skip the upsert for any locked match.
+  // transition; pick + line + confidence must freeze at lock). Operationally
+  // there is one public row per (game_id, market, slate_date); model_version is
+  // payload provenance, not a reason to create a duplicate market row.
   const { data: existingLocks } = await supabase
     .from("prediction_records")
     .select("id, game_id, market, model_version, slate_date, locked_at")
     .in("game_id", proposed.map((r) => r.game_id))
     .eq("slate_date", slateDate);
   const lockedKeys = new Set<string>();
+  const existingUnlockedIdByKey = new Map<string, number>();
   const proposedKeys = new Set(
-    proposed.map((r) =>
-      `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`,
-    ),
+    proposed.map((r) => `${r.game_id}::${r.market}::${r.slate_date}`),
   );
   for (const r of (existingLocks ?? []) as Array<{
     id: number;
@@ -2532,10 +2512,11 @@ export async function createPredictionRecords(
     slate_date: string;
     locked_at: string | null;
   }>) {
+    const key = `${r.game_id}::${r.market}::${r.slate_date}`;
     if (r.locked_at !== null) {
-      lockedKeys.add(
-        `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`,
-      );
+      lockedKeys.add(key);
+    } else if (!existingUnlockedIdByKey.has(key)) {
+      existingUnlockedIdByKey.set(key, r.id);
     }
   }
 
@@ -2557,7 +2538,7 @@ export async function createPredictionRecords(
     .filter((r) =>
       r.locked_at === null &&
       r.market === "first_inning" &&
-      !proposedKeys.has(`${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`),
+      !proposedKeys.has(`${r.game_id}::${r.market}::${r.slate_date}`),
     )
     .map((r) => r.id);
   if (staleUnlockedFiIds.length > 0) {
@@ -2584,13 +2565,29 @@ export async function createPredictionRecords(
     }
   }
 
-  // Upsert per (game_id, market, model_version, slate_date). Locked
-  // rows are skipped entirely (counted as skippedExisting so the
-  // operator/cron summary surfaces them).
+  // Upsert/update per public market row. Locked rows are skipped entirely
+  // (counted as skippedExisting so the operator/cron summary surfaces them).
   for (const rec of proposed) {
-    const key = `${rec.game_id}::${rec.market}::${rec.model_version ?? ""}::${rec.slate_date}`;
+    const key = `${rec.game_id}::${rec.market}::${rec.slate_date}`;
     if (lockedKeys.has(key)) {
       result.skippedExisting++;
+      continue;
+    }
+    const existingUnlockedId = existingUnlockedIdByKey.get(key);
+    if (existingUnlockedId !== undefined) {
+      const { error: updateErr } = await supabase
+        .from("prediction_records")
+        .update(rec)
+        .eq("id", existingUnlockedId);
+      if (updateErr) {
+        result.errors.push({
+          game_id: rec.game_id,
+          market: rec.market,
+          reason: updateErr.message,
+        });
+      } else {
+        result.insertedCount++;
+      }
       continue;
     }
     const { error: upErr } = await supabase

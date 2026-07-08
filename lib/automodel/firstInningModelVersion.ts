@@ -6,12 +6,13 @@
  * no service imports.
  *
  * Env: FIRST_INNING_MODEL_VERSION
- *   absent / "legacy" / "v1" → legacy FI writer (V1 NRFI passthrough)
+ *   absent / ""              → FI V2 overrides member-facing FI fields
+ *   "legacy" / "v1"          → legacy FI writer (V1 NRFI passthrough)
  *   "fi_v2"                  → FI V2 overrides member-facing FI fields
  *
- * Invalid values → "legacy" with a console.warn so misconfigured
- * deploys are visible without throwing. Same posture as
- * AUTOMODEL_VERSION.
+ * Invalid values → "fi_v2" with a console.warn so misconfigured
+ * deploys stay on the current production FI writer instead of silently
+ * falling back to legacy.
  */
 
 export type FirstInningModelVersion = "legacy" | "fi_v2";
@@ -24,15 +25,15 @@ export function resolveFirstInningModelVersion(
   env: Record<string, string | undefined> = process.env,
 ): FirstInningModelVersion {
   const raw = env[FIRST_INNING_MODEL_VERSION_ENV];
-  if (raw === undefined || raw === "") return "legacy";
+  if (raw === undefined || raw.trim() === "") return "fi_v2";
   const v = raw.trim().toLowerCase();
   if (v === "fi_v2") return "fi_v2";
   if (v === "legacy" || v === "v1") return "legacy";
   // eslint-disable-next-line no-console
   console.warn(
     `[firstInningModelVersion] FIRST_INNING_MODEL_VERSION="${raw}" is invalid; ` +
-    `defaulting to "legacy". Valid values: legacy, v1, fi_v2.`,
+    `defaulting to "fi_v2". Valid values: legacy, v1, fi_v2.`,
   );
   void VALID_FI_VERSIONS;
-  return "legacy";
+  return "fi_v2";
 }

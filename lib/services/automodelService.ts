@@ -437,8 +437,8 @@ export async function generatePredictionsForSlate(
   const effectiveVersion = resolveEffectiveVersion(opts.modelVersion);
   // Phase 6B.1.7 — independent FI model version resolver. Controls
   // whether FI V2 overrides the legacy V1 NRFI passthrough on the
-  // member-facing first-inning surface. Defaults to "legacy" so
-  // FI V2 is opt-in via env until tracking justifies default-on.
+  // member-facing first-inning surface. Defaults to FI V2 so operator
+  // runs cannot silently fall back to legacy when env is unset.
   const firstInningVersion = resolveFirstInningModelVersion();
 
   // Two-key gate (Phase 3C): EITHER missing while caller asked for a

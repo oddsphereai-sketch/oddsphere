@@ -7,9 +7,7 @@
  *   • Tossup forces nrfi_decision_kind="toss_up" + sentinel 52
  *   • Held adds "nrfi" to hold_picks and predicted_nrfi=null
  *   • automodelService grep guards: imports resolver, applies overlay,
- *     loads FI lines only when fi_v2 mode
- *   • No edits to model math files (lib/automodel/mlbAutoModel*.ts /
- *     mlbFirstInningModelV2.ts) in this push
+ *     loads FI lines in default fi_v2 mode
  */
 
 import { readFileSync } from "node:fs";
@@ -28,23 +26,20 @@ function check(name: string, cond: boolean, msg?: string) {
 console.log(`\n━━━ FI V2 writer tests ━━━\n`);
 
 // ── T1. Resolver behavior
-check("T1 resolver unset → legacy", resolveFirstInningModelVersion({}) === "legacy");
-check("T1 resolver empty → legacy", resolveFirstInningModelVersion({ FIRST_INNING_MODEL_VERSION: "" }) === "legacy");
+check("T1 resolver unset → fi_v2", resolveFirstInningModelVersion({}) === "fi_v2");
+check("T1 resolver empty → fi_v2", resolveFirstInningModelVersion({ FIRST_INNING_MODEL_VERSION: "" }) === "fi_v2");
 check("T1 resolver 'legacy' → legacy", resolveFirstInningModelVersion({ FIRST_INNING_MODEL_VERSION: "legacy" }) === "legacy");
 check("T1 resolver 'v1' → legacy", resolveFirstInningModelVersion({ FIRST_INNING_MODEL_VERSION: "v1" }) === "legacy");
 check("T1 resolver 'fi_v2' → fi_v2", resolveFirstInningModelVersion({ FIRST_INNING_MODEL_VERSION: "fi_v2" }) === "fi_v2");
 check("T1 resolver 'FI_V2' (case) → fi_v2", resolveFirstInningModelVersion({ FIRST_INNING_MODEL_VERSION: "FI_V2" }) === "fi_v2");
-check("T1 resolver garbage → legacy (fail-safe)", resolveFirstInningModelVersion({ FIRST_INNING_MODEL_VERSION: "v3_yolo" }) === "legacy");
+check("T1 resolver garbage → fi_v2 (production-safe default)", resolveFirstInningModelVersion({ FIRST_INNING_MODEL_VERSION: "v3_yolo" }) === "fi_v2");
 
 // ── T2. automodelService source grep — imports + invocation
 const SERVICE = readFileSync("lib/services/automodelService.ts", "utf8");
 check("T2 service imports firstInningModelVersion resolver", SERVICE.includes("resolveFirstInningModelVersion"));
 check("T2 service imports applyFiV2WriterOverride", SERVICE.includes("applyFiV2WriterOverride"));
 check("T2 service resolves firstInningVersion at entry", SERVICE.includes("const firstInningVersion = resolveFirstInningModelVersion()"));
-check(
-  "T2 FI lines loaded ONLY when fi_v2 mode (legacy mode skips DB call)",
-  /firstInningVersion === "fi_v2" && snapshots\.length > 0[\s\S]*?\.from\("lines"\)/.test(SERVICE),
-);
+check("T2 FI lines loaded when resolved mode is fi_v2", /firstInningVersion === "fi_v2" && snapshots\.length > 0[\s\S]*?\.from\("lines"\)/.test(SERVICE));
 check(
   "T2 overlay applied per-game when fi_v2",
   /firstInningVersion === "fi_v2"[\s\S]{0,400}?applyFiV2WriterOverride/.test(SERVICE),
@@ -62,14 +57,11 @@ check(
   /applyFiV2WriterOverride[\s\S]*?catch \(fiErr\)/.test(SERVICE),
 );
 
-// ── T3. No edits to model math files in this push.
-// (Model math files were already present; the new code touches only
-// lib/automodel/firstInningModelVersion.ts and lib/services/fiV2Writer.ts +
-// the automodelService overlay site. The model itself wasn't changed.)
+// ── T3. FI V2 model freshness gate keeps known-starter proxy data publishable.
 const V22 = readFileSync("lib/automodel/mlbAutoModelV2_2.ts", "utf8");
 const FIV2 = readFileSync("lib/automodel/mlbFirstInningModelV2.ts", "utf8");
 check("T3 no 'Phase 6B.1.7' marker in V2.2 model", !V22.includes("Phase 6B.1.7"));
-check("T3 no 'Phase 6B.1.7' marker in FI V2 model", !FIV2.includes("Phase 6B.1.7"));
+check("T3 FI V2 no longer hard-blocks starter proxy data", !FIV2.includes('source !== "preferred"'));
 
 // ── T4. applyFiV2WriterOverride — NRFI mapping.
 // Use `unknown` cast so this test file isn't bound to the precise

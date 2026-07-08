@@ -269,11 +269,15 @@ export function runMlbFirstInningModelV2(
 
   const freshDataBlockers: string[] = [];
   if (!hasMarket) freshDataBlockers.push("fi_market_not_fresh_or_two_sided");
-  if (indep.feature_audit.away_starter_fi.source !== "preferred") {
-    freshDataBlockers.push(`away_batting_opposing_starter_fi_${indep.feature_audit.away_starter_fi.source}`);
+  // Starter FI split samples can be sparse in the morning slate. A known,
+  // current starter with season-stat proxy support is publishable and still
+  // handled by the downstream quality/grade controls; only a missing starter
+  // identity/data source should hard-hold FI.
+  if (indep.feature_audit.away_starter_fi.source === "missing") {
+    freshDataBlockers.push("away_batting_opposing_starter_fi_missing");
   }
-  if (indep.feature_audit.home_starter_fi.source !== "preferred") {
-    freshDataBlockers.push(`home_batting_opposing_starter_fi_${indep.feature_audit.home_starter_fi.source}`);
+  if (indep.feature_audit.home_starter_fi.source === "missing") {
+    freshDataBlockers.push("home_batting_opposing_starter_fi_missing");
   }
   const awayLineupPublishable =
     indep.feature_audit.away_lineup.source === "preferred" ||
@@ -369,13 +373,13 @@ export function runMlbFirstInningModelV2(
     fi_miscalibration_flag = true;
   } else if (
     fi_edge_pct !== null &&
-    Math.abs(fi_edge_pct) >= FI_BEST_ANGLE_MIN_EDGE_PCT &&
+    fi_edge_pct >= FI_BEST_ANGLE_MIN_EDGE_PCT &&
     fi_confidence >= FI_BEST_ANGLE_MIN_CONFIDENCE
   ) {
     fi_play_grade = "best_angle";
     fi_play_grade_reason = "fi_best_angle_edge";
     fi_best_angle_eligible = true;
-  } else if (fi_edge_pct !== null && Math.abs(fi_edge_pct) >= 1.5) {
+  } else if (fi_edge_pct !== null && fi_edge_pct >= 1.5) {
     fi_play_grade = "lean";
     fi_play_grade_reason = "fi_lean_edge";
   } else {
