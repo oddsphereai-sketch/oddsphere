@@ -745,11 +745,13 @@ function MarketPill({
 }) {
   const shellSport = useShellSport();
   const isContext = isContextOnlyMarket(market, shellSport);
+  const primaryPick = formatPrimaryPickForVerdict(market, pick, line, verdict, shellSport, awayTeam, homeTeam);
+  const modelRead = formatCompactModelRead(market, pick, line, displayPct, verdict, shellSport, awayTeam, homeTeam);
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-2 px-2.5 py-1 min-h-[30px] rounded-md text-left transition-all ${
+      className={`inline-flex items-center gap-2 px-2.5 py-1 min-h-[34px] rounded-md text-left transition-all ${
         selected
           ? "bg-violet-500/[0.18] text-white border border-violet-400/45"
           : "bg-white/[0.03] text-gray-300 border border-transparent hover:bg-white/[0.06]"
@@ -758,10 +760,21 @@ function MarketPill({
       <span className={`text-[10px] uppercase tracking-[0.14em] font-bold shrink-0 ${selected ? "text-violet-100" : "text-gray-500"}`}>
         {marketShortLabelFor(market, shellSport)}
       </span>
-      <span className={`text-[12px] font-bold tabular-nums shrink-0 ${pick === null ? "text-gray-500" : ""}`}>{pick === null ? pickFallbackFor(market, shellSport) : formatPickWithLine(market, pick, line, shellSport, awayTeam, homeTeam)}</span>
-      <span className={`text-[10.5px] tabular-nums shrink-0 ${selected ? "text-gray-300" : "text-gray-500"}`}>
-        {displayPct === null ? "—" : `${Math.round(displayPct * 100)}%`}
+      <span className="flex min-w-0 flex-col leading-tight">
+        <span className={`text-[12px] font-bold tabular-nums truncate ${pick === null || verdict === "no_play" ? "text-gray-400" : ""}`}>
+          {primaryPick}
+        </span>
+        {modelRead !== null && (
+          <span className={`text-[9.5px] tabular-nums truncate ${selected ? "text-gray-300" : "text-gray-500"}`}>
+            {modelRead}
+          </span>
+        )}
       </span>
+      {modelRead === null && (
+        <span className={`text-[10.5px] tabular-nums shrink-0 ${selected ? "text-gray-300" : "text-gray-500"}`}>
+          {displayPct === null ? "—" : `${Math.round(displayPct * 100)}%`}
+        </span>
+      )}
       <span
         aria-hidden="true"
         className={`ml-auto text-[12px] leading-none shrink-0 ${VERDICT_TEXT_COLOR[verdict]} ${VERDICT_GLOW[verdict]}`}
@@ -824,6 +837,85 @@ function displayPctForMarket(m: MarketEdgeDto): number | null {
   return m.modelProb ?? m.confidence;
 }
 
+function formatPrimaryPickForVerdict(
+  market: MarketKey,
+  pick: string | null,
+  line: number | null,
+  verdict: VerdictKey,
+  sport: Sport,
+  awayAbbr: string | null = null,
+  homeAbbr: string | null = null,
+): string {
+  const rawPick = formatPickWithLine(market, pick, line, sport, awayAbbr, homeAbbr);
+  if (verdict === "no_play") return "No Play";
+  if (verdict === "caution") return "Caution";
+  if (verdict === "watchlist" && pick !== null) return `Watch ${rawPick}`;
+  return rawPick;
+}
+
+function formatModelReadForVerdict(
+  market: MarketKey,
+  pick: string | null,
+  line: number | null,
+  verdict: VerdictKey,
+  sport: Sport,
+  awayAbbr: string | null = null,
+  homeAbbr: string | null = null,
+): string | null {
+  if (pick === null) return null;
+  if (verdict !== "no_play" && verdict !== "caution") return null;
+  return formatPickWithLine(market, pick, line, sport, awayAbbr, homeAbbr);
+}
+
+function formatModelReadSummary(
+  market: MarketKey,
+  marketData: MarketEdgeDto,
+  verdict: VerdictKey,
+  sport: Sport,
+  awayAbbr: string | null = null,
+  homeAbbr: string | null = null,
+): string | null {
+  const rawPick = formatModelReadForVerdict(
+    market,
+    marketData.pick,
+    marketData.line,
+    verdict,
+    sport,
+    awayAbbr,
+    homeAbbr,
+  );
+  if (rawPick === null) return null;
+
+  const parts = [`Model read: ${rawPick}`];
+  const pct = displayPctForMarket(marketData);
+  if (pct !== null) parts.push(`${Math.round(pct * 100)}%`);
+  if (marketData.priceAmerican !== null) {
+    parts.push(formatAmerican(marketData.priceAmerican));
+  } else if (market === "first_inning") {
+    const fiBoard = formatFiMarketBoard(marketData.fiMarketBoard);
+    if (fiBoard !== null) parts.push(fiBoard);
+  } else if (marketData.priceUnavailableAtLock) {
+    parts.push("no price at lock");
+  }
+  return parts.join(" · ");
+}
+
+function formatCompactModelRead(
+  market: MarketKey,
+  pick: string | null,
+  line: number | null,
+  displayPct: number | null,
+  verdict: VerdictKey,
+  sport: Sport,
+  awayAbbr: string | null = null,
+  homeAbbr: string | null = null,
+): string | null {
+  const rawPick = formatModelReadForVerdict(market, pick, line, verdict, sport, awayAbbr, homeAbbr);
+  if (rawPick === null) return null;
+  const pctText = displayPct === null ? null : `${Math.round(displayPct * 100)}%`;
+  return pctText === null ? rawPick : `${rawPick} · ${pctText}`;
+}
+
 function totalProjectionSupportsPick(m: MarketEdgeDto): boolean | null {
   if (m.modelTotal === null || m.marketTotal === null || m.pick === null) return null;
   const diff = m.modelTotal - m.marketTotal;
@@ -863,7 +955,8 @@ function ReaderMarketSegment({
   homeTeam?: string | null;
 }) {
   const shellSport = useShellSport();
-  const pickText = formatPickWithLine(market, pick, line, shellSport, awayTeam, homeTeam);
+  const pickText = formatPrimaryPickForVerdict(market, pick, line, verdict, shellSport, awayTeam, homeTeam);
+  const modelRead = formatCompactModelRead(market, pick, line, displayPct, verdict, shellSport, awayTeam, homeTeam);
   return (
     <button
       type="button"
@@ -891,21 +984,30 @@ function ReaderMarketSegment({
         </span>
       </div>
       <div className="mt-1 flex items-baseline gap-2 min-w-0">
-        <span
-          className={`text-[15px] font-bold tabular-nums truncate ${
-            selected ? "text-white" : "text-gray-100"
-          }`}
-          style={{ letterSpacing: "-0.01em" }}
-        >
-          {pickText}
+        <span className="min-w-0 flex-1">
+          <span
+            className={`block text-[15px] font-bold tabular-nums truncate ${
+              selected ? "text-white" : verdict === "no_play" ? "text-gray-400" : "text-gray-100"
+            }`}
+            style={{ letterSpacing: "-0.01em" }}
+          >
+            {pickText}
+          </span>
+          {modelRead !== null && (
+            <span className={`block text-[10.5px] tabular-nums truncate ${selected ? "text-gray-300" : "text-gray-500"}`}>
+              {modelRead}
+            </span>
+          )}
         </span>
-        <span
-          className={`text-[12px] tabular-nums ml-auto shrink-0 ${
-            selected ? "text-violet-100/85" : "text-gray-500"
-          }`}
-        >
-          {displayPct === null ? "—" : `${Math.round(displayPct * 100)}%`}
-        </span>
+        {modelRead === null && (
+          <span
+            className={`text-[12px] tabular-nums ml-auto shrink-0 ${
+              selected ? "text-violet-100/85" : "text-gray-500"
+            }`}
+          >
+            {displayPct === null ? "—" : `${Math.round(displayPct * 100)}%`}
+          </span>
+        )}
       </div>
     </button>
   );
@@ -1331,9 +1433,9 @@ function SlateControlStrip({
   );
 }
 
-// ─── How this works (popover) ──────────────────────────────────────────
+// ─── Grade legend (popover) ────────────────────────────────────────────
 
-function HowThisWorks() {
+function GradeLegend() {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
@@ -1342,27 +1444,21 @@ function HowThisWorks() {
         onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-violet-400/35 bg-violet-500/[0.10] text-[10px] uppercase tracking-[0.14em] font-bold text-violet-100 hover:bg-violet-500/[0.18] hover:border-violet-400/55 transition-colors"
       >
-        How this works
+        Grade legend
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 z-30 w-[320px] bg-[#0F0F1A] border border-white/[0.10] rounded-lg shadow-xl p-4 text-[12px] text-gray-300 leading-relaxed">
-          <p className="font-bold text-gray-100 mb-2">How to use this page</p>
-          <ol className="space-y-1.5 list-decimal list-inside">
-            <li>Browse tonight&apos;s slate in the Edge Board below.</li>
-            <li>Click any game card to focus the reader on it.</li>
-            <li>Click a market pill (ML / Total / 1st) to focus that read.</li>
-            <li>Quick Read on the left shows the takeaway.</li>
-            <li>Supporting Evidence in the middle shows price + market data.</li>
-            <li>Market Notes on the right show why and the risk.</li>
-          </ol>
-          <p className="mt-3 font-bold text-gray-100 mb-1">Signals</p>
+          <p className="font-bold text-gray-100 mb-2">Official grades</p>
           <ul className="space-y-0.5 list-disc list-inside text-[11.5px]">
             <li><span className="text-emerald-300 drop-shadow-[0_0_4px_rgba(110,231,183,0.45)]">★ Best Angle</span> — strongest read</li>
             <li><span className="text-sky-300">↗ Lean</span> — moderate read</li>
             <li><span className="text-indigo-300">◐ Watchlist</span> — interesting, not clean</li>
             <li><span className="text-amber-300">⚠ Caution</span> — signals conflict</li>
-            <li><span className="text-gray-500">○ No Play</span> — skip</li>
+            <li><span className="text-gray-500">○ No Play</span> — no official pick</li>
           </ul>
+          <p className="mt-3 text-[11.5px] text-gray-500 leading-snug">
+            A No Play may still show a quiet model read for context, but it is not tracked as an actionable pick.
+          </p>
           <button
             type="button"
             onClick={() => setOpen(false)}
@@ -1451,6 +1547,25 @@ function ModelTake({ game }: { game: DailyEdgeGameDto }) {
 function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; market: MarketKey; marketData: MarketEdgeDto }) {
   const verdict = marketVerdictKey(marketData);
   const shellSport = useShellSport();
+  const primaryPick = formatPrimaryPickForVerdict(
+    market,
+    marketData.pick,
+    marketData.line,
+    verdict,
+    shellSport,
+    game.awayTeam,
+    game.homeTeam,
+  );
+  const modelRead = formatCompactModelRead(
+    market,
+    marketData.pick,
+    marketData.line,
+    displayPctForMarket(marketData),
+    verdict,
+    shellSport,
+    game.awayTeam,
+    game.homeTeam,
+  );
   return (
     <div className="bg-white/[0.015] border border-white/[0.04] rounded-xl px-3.5 py-2.5 space-y-2 min-w-0">
       <div className="flex items-center gap-2 pb-1 border-b border-white/[0.06]">
@@ -1494,8 +1609,13 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
       <div className="grid grid-cols-[1fr_auto] items-center gap-3">
         <div className="min-w-0">
           <h2 className="text-[24px] font-black tabular-nums text-white leading-none" style={{ letterSpacing: "-0.04em" }}>
-            {formatPickWithLine(market, marketData.pick, marketData.line, shellSport, game.awayTeam, game.homeTeam)}
+            {primaryPick}
           </h2>
+          {modelRead !== null && (
+            <p className="mt-1 text-[11px] text-gray-500 leading-tight">
+              Model read: {modelRead}
+            </p>
+          )}
           <div className="mt-1.5 flex items-baseline gap-1.5 flex-wrap">
             {/* Phase 6B.1.6L — pivot from a single "confidence" number to
                 "Win Prob NN%" + a separate Edge readout. Win Prob is
@@ -3224,6 +3344,23 @@ function SlateCard({
   const headlineVerdict = marketVerdictKey(headlineMarketData);
   const t = CARD_TREATMENT[headlineVerdict];
   const shellSport = useShellSport();
+  const headlinePrimaryPick = formatPrimaryPickForVerdict(
+    headlineMarket,
+    headlineMarketData.pick,
+    headlineMarketData.line,
+    headlineVerdict,
+    shellSport,
+    game.awayTeam,
+    game.homeTeam,
+  );
+  const headlineModelRead = formatModelReadSummary(
+    headlineMarket,
+    headlineMarketData,
+    headlineVerdict,
+    shellSport,
+    game.awayTeam,
+    game.homeTeam,
+  );
 
   return (
     <article
@@ -3314,7 +3451,7 @@ function SlateCard({
             className="text-[28px] font-black tabular-nums leading-none text-white"
             style={{ letterSpacing: "-0.03em" }}
           >
-            {formatPickWithLine(headlineMarket, headlineMarketData.pick, headlineMarketData.line, shellSport, game.awayTeam, game.homeTeam)}
+            {headlinePrimaryPick}
           </span>
           <span className="text-[11px] uppercase tracking-[0.14em] text-gray-500 font-bold">
             {marketShortLabelFor(headlineMarket, shellSport)}
@@ -3357,6 +3494,11 @@ function SlateCard({
             );
           })()}
         </div>
+        {headlineModelRead !== null && (
+          <p className="text-[11px] text-gray-500 leading-snug mb-2">
+            {headlineModelRead}
+          </p>
+        )}
 
         {/* Decision line — softer color, single tight line */}
         <p className="text-[12.5px] text-gray-500 leading-snug mb-2 line-clamp-2">{game.decisionLine}</p>
@@ -3385,22 +3527,21 @@ function SlateCard({
             headline chip is one market of three. The market label is
             muted; the verdict glyph + label carries the tone. Subtle
             saturation keeps three different tones from feeling busy. */}
-        <div className="flex items-center justify-between gap-1 mb-3 px-0.5 text-[10px] uppercase tracking-[0.10em] font-bold whitespace-nowrap overflow-hidden">
-          {marketKeysFor(shellSport).map((m, i) => {
+        <div className="grid grid-cols-3 gap-1.5 mb-3 px-0.5 text-[9.5px] sm:text-[10px] uppercase tracking-[0.08em] sm:tracking-[0.10em] font-bold">
+          {marketKeysFor(shellSport).map((m) => {
             const v = marketVerdictKey(game.markets[m]);
             const isContext = isContextOnlyMarket(m, shellSport);
             return (
               <span
                 key={m}
-                className={`inline-flex items-center gap-1 min-w-0 ${
+                className={`min-w-0 leading-tight ${
                   isContext ? "opacity-80" : ""
                 }`}
               >
-                {i > 0 && <span aria-hidden="true" className="text-gray-700 mr-1">·</span>}
-                <span className="text-gray-500">{marketShortLabelFor(m, shellSport)}</span>
-                <span className={VERDICT_TEXT_COLOR[v]}>
+                <span className="block text-gray-500 truncate">{marketShortLabelFor(m, shellSport)}</span>
+                <span className={`mt-0.5 flex items-center gap-1 min-w-0 ${VERDICT_TEXT_COLOR[v]}`}>
                   <span aria-hidden="true" className="mr-0.5">{VERDICT_GLYPH[v]}</span>
-                  <span>{VERDICT_LABEL[v]}</span>
+                  <span className="truncate">{VERDICT_LABEL[v]}</span>
                 </span>
               </span>
             );
@@ -3424,6 +3565,31 @@ function SlateCard({
             const mv = marketVerdictKey(md);
             const isActiveMarket = active && activeMarket === m;
             const isContext = isContextOnlyMarket(m, shellSport);
+            const primaryPick = formatPrimaryPickForVerdict(
+              m,
+              md.pick,
+              md.line,
+              mv,
+              shellSport,
+              game.awayTeam,
+              game.homeTeam,
+            );
+            const compactModelRead = formatCompactModelRead(
+              m,
+              md.pick,
+              md.line,
+              displayPctForMarket(md),
+              mv,
+              shellSport,
+              game.awayTeam,
+              game.homeTeam,
+            );
+            const watchlistRead =
+              mv === "watchlist" && md.pick !== null
+                ? formatPickWithLine(m, md.pick, md.line, shellSport, game.awayTeam, game.homeTeam)
+                : null;
+            const chipPrimaryPick = mv === "watchlist" ? VERDICT_LABEL[mv] : primaryPick;
+            const chipModelRead = watchlistRead ?? compactModelRead;
             return (
               <button
                 key={m}
@@ -3446,8 +3612,13 @@ function SlateCard({
                   {marketShortLabelFor(m, shellSport)}
                 </span>
                 <span className="block text-[12.5px] font-bold tabular-nums text-gray-100 truncate">
-                  {formatPickWithLine(m, md.pick, md.line, shellSport, game.awayTeam, game.homeTeam)}
+                  {chipPrimaryPick}
                 </span>
+                {chipModelRead !== null && (
+                  <span className="block text-[9.5px] tabular-nums text-gray-500 truncate mt-0.5">
+                    {chipModelRead}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -3522,6 +3693,25 @@ function SelectedEdgeReader({
 }) {
   const verdict = marketVerdictKey(marketData);
   const shellSport = useShellSport();
+  const primaryPick = formatPrimaryPickForVerdict(
+    market,
+    marketData.pick,
+    marketData.line,
+    verdict,
+    shellSport,
+    game.awayTeam,
+    game.homeTeam,
+  );
+  const modelRead = formatCompactModelRead(
+    market,
+    marketData.pick,
+    marketData.line,
+    displayPctForMarket(marketData),
+    verdict,
+    shellSport,
+    game.awayTeam,
+    game.homeTeam,
+  );
 
   return (
     <section
@@ -3549,7 +3739,7 @@ function SelectedEdgeReader({
               Selected Edge
             </h2>
             <span className="hidden sm:inline text-[11px] text-gray-500 ml-2">
-              Click any game below — or use ← → — to update this read.
+              {marketLongLabelFor(market, shellSport)} read
             </span>
           </div>
           {mode === "full" ? (
@@ -3656,8 +3846,13 @@ function SelectedEdgeReader({
                 </div>
                 <div className="flex flex-col min-w-0 leading-tight">
                   <span className="text-[18px] font-black tabular-nums text-white truncate" style={{ letterSpacing: "-0.02em" }}>
-                    {formatPickWithLine(market, marketData.pick, marketData.line, shellSport, game.awayTeam, game.homeTeam)}
+                    {primaryPick}
                   </span>
+                  {modelRead !== null && (
+                    <span className="text-[10.5px] text-gray-500 truncate mt-0.5">
+                      Model read: {modelRead}
+                    </span>
+                  )}
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span className="text-[9.5px] uppercase tracking-[0.14em] text-violet-200/75 font-bold">
                       {marketShortLabelFor(market, shellSport)}
@@ -4504,7 +4699,7 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
         splitsUpdatedAt: "2026-07-07T19:15:00.000Z",
         sharpUpdatedAt: "2026-07-07T19:10:00.000Z",
         guidedGuide: "Playable model edge, but the odds move keeps the read below top-tier.",
-        guidedWatchOut: "Movement away from ATL is the main cap on the grade.",
+        guidedWatchOut: "Movement away from ATL is the main limiter on the grade.",
         whyLine: "Driver: model edge with movement friction.",
         riskLine: "Movement away from the pick makes this less clean than a Best Angle.",
         keyStats: [
@@ -4538,7 +4733,7 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
         sharpUpdatedAt: "2026-07-07T19:10:00.000Z",
         guidedGuide: "Projection leans Over, but the price keeps it on Watchlist.",
         guidedWatchOut: "Thin edge and added juice are the main reasons this is not stronger.",
-        whyLine: "Driver: projection support, capped by price.",
+        whyLine: "Driver: projection support, limited by price.",
         riskLine: "Current juice limits the betting value.",
       }),
       first_inning: marketingPreviewMarket({
@@ -4551,7 +4746,7 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
         priceAmerican: -128,
         lineOpenAmerican: -124,
         guidedGuide: "YRFI has a case, but current price keeps it in monitor territory.",
-        guidedWatchOut: "Price is the cap here.",
+        guidedWatchOut: "Price is the limiter here.",
         whyLine: "Driver: FI context with limited price value.",
         riskLine: "The FI price leaves limited value cushion.",
       }),
@@ -4578,7 +4773,7 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
         lineOpenAmerican: -146,
         guidedGuide: "Likely winner, but price and market friction keep this in Caution territory.",
         guidedWatchOut: "The current price limits betting value.",
-        whyLine: "Driver: win case is present, but value is capped by price.",
+        whyLine: "Driver: win case is present, but value is limited by price.",
         riskLine: "Heavy juice makes the moneyline less attractive.",
       }),
       total: marketingPreviewMarket({
@@ -4613,7 +4808,7 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
         guidedGuide: "Projection supports the Over, though market resistance keeps it from being fully clean.",
         guidedWatchOut: "This is worth monitoring, not a top-tier bet.",
         whyLine: "Driver: projected total above the line.",
-        riskLine: "Market friction keeps the grade capped.",
+        riskLine: "Market friction keeps the grade below a stronger tier.",
       }),
       first_inning: marketingPreviewMarket({
         pick: "NRFI",
@@ -4961,7 +5156,7 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
           fallbackUsed={data.fallback_used === true}
         />
         <div className="hidden sm:block">
-          <HowThisWorks />
+          <GradeLegend />
         </div>
       </div>
 
