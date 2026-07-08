@@ -27,6 +27,7 @@ export type RehydratedPredictionRecord = {
   market_probability: number | null;
   edge: number | null;
   play_grade: string | null;
+  no_bet: boolean | null;
   confidence: number | null;
   locked_at: string | null;
   snapshot_json: Record<string, unknown> | null;
@@ -335,10 +336,9 @@ function snapshotGrade(record: RehydratedPredictionRecord): string | null {
   return null;
 }
 
-function normalizePublicGrade(value: string | null, record: RehydratedPredictionRecord): string | null {
-  const raw = (value ?? snapshotGrade(record) ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+function normalizeGradeToken(value: string | null): string | null {
+  const raw = (value ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
   if (!raw) {
-    if (record.market === "first_inning" && /toss[\s-]*up/i.test(record.pick ?? "")) return "No Play";
     return null;
   }
   if (raw === "best_angle" || raw === "bestangle") return "Best Angle";
@@ -347,6 +347,37 @@ function normalizePublicGrade(value: string | null, record: RehydratedPrediction
   if (raw === "caution" || raw === "public_smoke") return "Caution";
   if (raw === "no_play" || raw === "noplay" || raw === "pass" || raw === "held" || raw === "toss_up") return "No Play";
   return null;
+}
+
+function memberFacingAtLock(record: RehydratedPredictionRecord): Record<string, unknown> | null {
+  const raw = record.snapshot_json?.member_facing_at_lock;
+  return raw !== null && typeof raw === "object" ? raw as Record<string, unknown> : null;
+}
+
+function fallbackStoredGrade(record: RehydratedPredictionRecord): string | null {
+  if (record.no_bet === true) return "No Play";
+  if (record.play_grade === null && record.no_bet === false) {
+    if (record.market === "first_inning" && /toss[\s-]*up/i.test(record.pick ?? "")) return "No Play";
+    return "Watchlist";
+  }
+  if (record.market === "first_inning" && /toss[\s-]*up/i.test(record.pick ?? "")) return "No Play";
+  return null;
+}
+
+function normalizePublicGrade(value: string | null, record: RehydratedPredictionRecord): string | null {
+  const memberFacing = memberFacingAtLock(record);
+  if (memberFacing !== null) {
+    const memberRaw = str(memberFacing.play_grade) ?? str(memberFacing.grade);
+    const memberGrade = normalizeGradeToken(memberRaw);
+    if (memberGrade !== null) return memberGrade;
+    return fallbackStoredGrade(record);
+  }
+
+  const storedGrade = normalizeGradeToken(value);
+  if (storedGrade !== null) return storedGrade;
+  const fallback = fallbackStoredGrade(record);
+  if (fallback !== null) return fallback;
+  return normalizeGradeToken(snapshotGrade(record));
 }
 
 function reconstructRead(record: RehydratedPredictionRecord, splits: RehydratedSplitRow[]): RehydratedLockedMarketPayload["marketRead"] {

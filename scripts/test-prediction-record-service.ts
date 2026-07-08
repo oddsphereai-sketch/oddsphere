@@ -375,6 +375,33 @@ console.log("\n━━━ MLB Best Angle tracking/display guard under market-awar
     check("market-aware engine still demotes unqualified total Best Angle", ou.best_angle === false);
     check("market-aware engine demotes unqualified public total grade", ou.play_grade === "lean");
     check("market-aware engine snapshots Best Angle demotion", ba?.final_best_angle === false && ba?.demote_reason !== null);
+
+    const negativeValueMlLeanPred = {
+      ...basePrediction,
+      ml_confidence: 58,
+      sport_specific: {
+        ...v21SportSpecific,
+        ml_play_grade: "lean",
+        ml_best_angle_eligible: false,
+        v2_2_audit: {
+          ml_model_prob: 0.58,
+          ml_market_prob: 0.57,
+          ml_edge_pct: 1,
+          posterior_home_diff: 1.2,
+        },
+      },
+    };
+    const mlRecs = buildPredictionRecordsFromSlate({
+      sport: "mlb",
+      slateDate: "2026-06-06",
+      launchDay: false,
+      games: [baseGame],
+      predictionByGameId: new Map([[14771, negativeValueMlLeanPred]]),
+      abbrevByTeamId,
+      oddsByGameId: restoredMlBestAngleOddsByGameId,
+    });
+    const ml = mlRecs.find((r) => r.market === "moneyline")!;
+    check("market-aware engine still applies ML Lean value gate", ml.play_grade === "market_aligned");
   } finally {
     if (previousMarketAware === undefined) delete process.env.MARKET_AWARE_ENGINE_ENABLED;
     else process.env.MARKET_AWARE_ENGINE_ENABLED = previousMarketAware;

@@ -1385,6 +1385,16 @@ function buildMlRecord(
   const mlNoBet = mlChampionStandDownReason !== null || (!mlFlipped && !mlPickCalibrated && isExplicitNoBetReason(mlNoBetReason));
   const finalMlNoBetReason = mlChampionStandDownReason ?? mlNoBetReason;
   const mlPublicPlayGrade = readPublicPlayGrade(sp.ml_play_grade);
+  // Keep ML value discipline active under both the legacy and market-aware
+  // engines. The market-aware path decides how to read market context, but a
+  // public Lean still has to pass the same basic price/probability gate.
+  const mlPublicPlayGradeAfterValueGate = applyPlayGradeGate(mlPublicPlayGrade, {
+    modelProb: finalMlModelProb,
+    americanOdds: finalMlOdds,
+    market: "moneyline",
+    runGapAbs: typeof v22.posterior_home_diff === "number" ? Math.abs(v22.posterior_home_diff as number) : null,
+    totalLine: null,
+  });
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -1414,13 +1424,7 @@ function buildMlRecord(
     play_grade: mlFlipped || mlPickCalibrated || mlChampionStandDownReason !== null
       ? null
       : applyMlbBestAngleFinalGate(
-          legacyMarketSignalGradeInfluenceEnabled
-            ? applyPlayGradeGate(mlPublicPlayGrade, {
-            modelProb: mlModelProb, americanOdds: mlOddsAmerican, market: "moneyline",
-            runGapAbs: typeof v22.posterior_home_diff === "number" ? Math.abs(v22.posterior_home_diff as number) : null,
-            totalLine: null,
-          })
-            : mlPublicPlayGrade,
+          mlPublicPlayGradeAfterValueGate,
           mlBaseBestAngleEligible,
           mlBestAngleProfile.bestAngle,
         ),

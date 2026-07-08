@@ -338,7 +338,7 @@ export async function loadLockedPredictionEvidence(args: {
   const { supabase } = await import("@/lib/db/supabase");
   const { data, error } = await supabase
     .from("prediction_records")
-    .select("id,game_prediction_id,game_id,external_id,sport,slate_date,game_date,matchup,market,pick,side,line_value,odds_american,model_probability,market_probability,edge,play_grade,confidence,locked_at,snapshot_json,game_predictions(locked_at)")
+    .select("id,game_prediction_id,game_id,external_id,sport,slate_date,game_date,matchup,market,pick,side,line_value,odds_american,model_probability,market_probability,edge,play_grade,no_bet,confidence,locked_at,snapshot_json,game_predictions(locked_at)")
     .eq("sport", args.sport)
     .eq("slate_date", args.date)
     .in("market", args.markets)

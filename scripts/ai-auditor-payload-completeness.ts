@@ -182,7 +182,7 @@ async function lockedAudit(args: Args) {
   const { supabase } = await import("@/lib/db/supabase");
   const { data, error } = await supabase
     .from("prediction_records")
-    .select("id,game_prediction_id,game_id,external_id,sport,slate_date,game_date,matchup,market,pick,side,line_value,odds_american,model_probability,market_probability,edge,play_grade,confidence,locked_at,snapshot_json,prediction_grades(result),game_predictions(locked_at)")
+    .select("id,game_prediction_id,game_id,external_id,sport,slate_date,game_date,matchup,market,pick,side,line_value,odds_american,model_probability,market_probability,edge,play_grade,no_bet,confidence,locked_at,snapshot_json,prediction_grades(result),game_predictions(locked_at)")
     .eq("sport", args.sport)
     .gte("slate_date", args.from)
     .lte("slate_date", args.to)

@@ -6,7 +6,8 @@ export type MlbGradeGuardrailRule =
   | "fi_tossup_no_play"
   | "fi_missing_price_blocks_grade_strengthening"
   | "totals_thin_gap_lean_cap"
-  | "ml_best_angle_movement_edge_cap";
+  | "ml_best_angle_movement_edge_cap"
+  | "ml_lean_value_gate";
 
 export type MlbGradeGuardrailResult = {
   market: MarketEdgeDto;
@@ -76,6 +77,13 @@ function americanToImpliedProbability(american: number | null | undefined): numb
   return Math.abs(american) / (Math.abs(american) + 100);
 }
 
+function mlLeanFailsValueGate(market: MarketEdgeDto): boolean {
+  if (typeof market.modelProb === "number" && market.modelProb < 0.55) return true;
+  const implied = americanToImpliedProbability(market.priceAmerican);
+  if (typeof market.modelProb === "number" && implied !== null && market.modelProb < implied) return true;
+  return false;
+}
+
 function pickedSideMovementDirectionFromOdds(market: MarketEdgeDto): "toward" | "against" | "neutral" | "unknown" {
   const trail = market.oddsTrail?.filter((point) => typeof point.american === "number" && Number.isFinite(point.american)) ?? [];
   const first = trail[0]?.american ?? market.lineOpenAmerican ?? market.marketReadV2?.movement?.firstTrackedPrice ?? null;
@@ -139,6 +147,16 @@ export function applyMlbSameDayGradeGuardrail(args: {
       market = capMarket(market, "watchlist", "totals_thin_gap_lean_cap");
       appliedRules.push("totals_thin_gap_lean_cap");
     }
+  }
+
+  if (
+    args.market === "moneyline" &&
+    correctionEnabled("MLB_ML_LEAN_VALUE_GATE_ENABLED") &&
+    isLean(market) &&
+    mlLeanFailsValueGate(market)
+  ) {
+    market = capMarket(market, "watchlist", "ml_lean_value_gate");
+    appliedRules.push("ml_lean_value_gate");
   }
 
   if (

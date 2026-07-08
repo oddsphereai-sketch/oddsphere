@@ -13,7 +13,8 @@ type RuleId =
   | "fi_tossup_no_play"
   | "fi_missing_price_block"
   | "totals_thin_gap_lean_cap"
-  | "ml_best_angle_movement_edge_cap";
+  | "ml_best_angle_movement_edge_cap"
+  | "ml_lean_value_gate";
 
 type Args = {
   sport: Sport;
@@ -39,6 +40,7 @@ const DEFAULT_RULES: RuleId[] = [
   "fi_missing_price_block",
   "totals_thin_gap_lean_cap",
   "ml_best_angle_movement_edge_cap",
+  "ml_lean_value_gate",
 ];
 
 const RULE_FLAGS: Record<RuleId, string> = {
@@ -46,6 +48,7 @@ const RULE_FLAGS: Record<RuleId, string> = {
   fi_missing_price_block: "MLB_FI_MISSING_PRICE_BLOCKS_GRADE_STRENGTHENING_ENABLED",
   totals_thin_gap_lean_cap: "MLB_TOTALS_THIN_GAP_LEAN_CAP_ENABLED",
   ml_best_angle_movement_edge_cap: "MLB_ML_BEST_ANGLE_MOVEMENT_EDGE_CAP_ENABLED",
+  ml_lean_value_gate: "MLB_ML_LEAN_VALUE_GATE_ENABLED",
 };
 
 function todayEt(): string {
@@ -126,6 +129,25 @@ function missingMlMovementCapData(row: PredictionEvidenceObject): string[] {
   return missing;
 }
 
+function americanToImpliedProbability(american: number | null): number | null {
+  if (typeof american !== "number" || !Number.isFinite(american) || american === 0) return null;
+  if (american > 0) return 100 / (american + 100);
+  return Math.abs(american) / (Math.abs(american) + 100);
+}
+
+function mlLeanValueGateReason(row: PredictionEvidenceObject): string | null {
+  const modelProbability = row.modelStatsEvidence.modelProbability;
+  if (typeof modelProbability === "number" && modelProbability < 55) {
+    return `ML Lean model probability is ${modelProbability.toFixed(1)}%, below the 55% Lean value floor.`;
+  }
+  const price = row.priceValueEvidence.priceAmerican;
+  const implied = americanToImpliedProbability(price);
+  if (typeof modelProbability === "number" && implied !== null && modelProbability / 100 < implied) {
+    return `ML Lean is negative value at ${price}; model ${modelProbability.toFixed(1)}% is below market breakeven ${(implied * 100).toFixed(1)}%.`;
+  }
+  return null;
+}
+
 function candidateRules(row: PredictionEvidenceObject, rules: RuleId[]): RulePreview[] {
   const out: RulePreview[] = [];
   const currentGrade = normalizeGrade(row.identity.originalPlayGrade);
@@ -192,6 +214,23 @@ function candidateRules(row: PredictionEvidenceObject, rules: RuleId[]): RulePre
         requiredDataPresent: true,
         missingData: [],
         rollbackFlag: RULE_FLAGS.ml_best_angle_movement_edge_cap,
+      });
+    }
+  }
+
+  if (rules.includes("ml_lean_value_gate") &&
+    row.identity.marketType === "ML" &&
+    currentGrade === "Lean") {
+    const reason = mlLeanValueGateReason(row);
+    if (reason !== null) {
+      out.push({
+        rule: "ml_lean_value_gate",
+        currentGrade,
+        candidateGrade: "Watchlist",
+        reason,
+        requiredDataPresent: true,
+        missingData: [],
+        rollbackFlag: RULE_FLAGS.ml_lean_value_gate,
       });
     }
   }

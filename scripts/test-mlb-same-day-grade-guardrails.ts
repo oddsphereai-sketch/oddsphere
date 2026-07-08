@@ -57,11 +57,13 @@ function withFlags(fn: () => void) {
     MLB_FI_MISSING_PRICE_BLOCKS_GRADE_STRENGTHENING_ENABLED: process.env.MLB_FI_MISSING_PRICE_BLOCKS_GRADE_STRENGTHENING_ENABLED,
     MLB_TOTALS_THIN_GAP_LEAN_CAP_ENABLED: process.env.MLB_TOTALS_THIN_GAP_LEAN_CAP_ENABLED,
     MLB_ML_BEST_ANGLE_MOVEMENT_EDGE_CAP_ENABLED: process.env.MLB_ML_BEST_ANGLE_MOVEMENT_EDGE_CAP_ENABLED,
+    MLB_ML_LEAN_VALUE_GATE_ENABLED: process.env.MLB_ML_LEAN_VALUE_GATE_ENABLED,
   };
   process.env.MLB_FI_TOSSUP_FORCE_NO_PLAY_ENABLED = "true";
   process.env.MLB_FI_MISSING_PRICE_BLOCKS_GRADE_STRENGTHENING_ENABLED = "true";
   process.env.MLB_TOTALS_THIN_GAP_LEAN_CAP_ENABLED = "true";
   process.env.MLB_ML_BEST_ANGLE_MOVEMENT_EDGE_CAP_ENABLED = "true";
+  process.env.MLB_ML_LEAN_VALUE_GATE_ENABLED = "true";
   try {
     fn();
   } finally {
@@ -99,6 +101,19 @@ withFlags(() => {
   });
   check("Total projection gap under .5 caps Lean to Watchlist", totalThinLean.market.verdict.key === "watchlist");
   check("Total thin gap rule recorded", totalThinLean.appliedRules.includes("totals_thin_gap_lean_cap"));
+
+  const mlBadValueLean = applyMlbSameDayGradeGuardrail({
+    market: "moneyline",
+    dto: baseMarket({
+      pick: "NYM",
+      verdict: { key: "lean", label: "Lean" },
+      modelProb: 0.58,
+      priceAmerican: -170,
+      modelMarketGapPct: 1,
+    }),
+  });
+  check("ML negative-value Lean caps to Watchlist", mlBadValueLean.market.verdict.key === "watchlist");
+  check("ML Lean value gate rule recorded", mlBadValueLean.appliedRules.includes("ml_lean_value_gate"));
 
   const mlKnownResistance = applyMlbSameDayGradeGuardrail({
     market: "moneyline",

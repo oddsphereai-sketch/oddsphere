@@ -588,6 +588,7 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
   const marketRead = lockedMarketReadForEvidence(payload.marketRead);
   const scores = lockedScores(payload);
   const isFiTossUp = payload.market === "first_inning" && /toss[\s-]*up/i.test(String(payload.pick ?? ""));
+  const fiTossUpQuickRead = "FI is Toss-Up, so there is no actionable YRFI/NRFI side yet.";
   const sharpSignalOnly = payload.sharpBookSplitsOrSignal.available && payload.sharpBookSplitsOrSignal.rows.length === 0;
   const caps = dailyEdgeMarketCapabilities(payload.sport, decisionKeyForEvidenceMarket(payload.market));
   const consensusAvailable = caps.expectsConsensusSplits && payload.consensusSplits.available;
@@ -612,7 +613,7 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
     lineValueSource: payload.lineValue !== null ? "market_edge" : "unavailable",
     lineValueNullReason: payload.market === "moneyline" ? "moneyline_has_no_point_line" : payload.lineValue === null ? "historical_locked_line_not_persisted" : null,
     verdict: payload.originalGrade,
-    quickRead: null,
+    quickRead: isFiTossUp ? fiTossUpQuickRead : null,
     marketRead,
     sourceConflict: payload.sourceConflict,
     reasonCodes: payload.marketRead.reasonCodes,
@@ -683,7 +684,7 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
       displayedMarketRead: marketRead,
       supportingEvidence: {
         verdict: payload.originalGrade,
-        quickRead: null,
+        quickRead: isFiTossUp ? fiTossUpQuickRead : null,
         consensusSplitsDisplayed: consensusAvailable,
         sharpBookSplitsDisplayed: sharpSplitsAvailable,
         sharpBookSignalDisplayed: sharpSignalAvailable,
