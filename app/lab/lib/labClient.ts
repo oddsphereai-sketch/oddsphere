@@ -23,7 +23,7 @@ export class LabApiError extends Error {
 
 export async function labFetcher<T>(url: string): Promise<T> {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 10000);
+  const timeout = window.setTimeout(() => controller.abort(), 45000);
   try {
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
