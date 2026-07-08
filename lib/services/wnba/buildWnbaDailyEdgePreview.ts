@@ -60,7 +60,20 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 // ── types ──
 type BdlGame = { id: number; date: string; season: number; postseason: boolean; h: number; a: number; hs: number; as: number };
 type Grade = "Best Angle" | "Lean" | "Watchlist" | "Caution";
-export type ModelState = { elo: Map<number, number>; games: Map<number, number>; pf: Map<number, number[]>; pa: Map<number, number[]>; nameById: Map<number, string>; mascot: [string, number][]; rawGames: BdlGame[]; computedAt: number };
+export type ModelState = {
+  elo: Map<number, number>;
+  games: Map<number, number>;
+  pf: Map<number, number[]>;
+  pa: Map<number, number[]>;
+  margins?: Map<number, number[]>;
+  lastGameDate?: Map<number, string>;
+  leagueAvgScore?: number;
+  leagueAvgTotal?: number;
+  nameById: Map<number, string>;
+  mascot: [string, number][];
+  rawGames: BdlGame[];
+  computedAt: number;
+};
 
 function moneylineGradeFromPickedEdge(args: {
   pickedEdge: number | null;
@@ -130,7 +143,8 @@ export async function getModel(): Promise<ModelState> {
   // GUARD: drop future 0-0 games AND non-franchise squads (All-Star / national
   // exhibition / TBD) so they never corrupt ratings or projections.
   const games = rawGames.filter((g) => g.hs > 0 && g.as > 0 && isRealWnbaTeam(g.h) && isRealWnbaTeam(g.a));
-  const elo = new Map<number, number>(), ls = new Map<number, number>(), games_ = new Map<number, number>(), pf = new Map<number, number[]>(), pa = new Map<number, number[]>();
+  const elo = new Map<number, number>(), ls = new Map<number, number>(), games_ = new Map<number, number>(), pf = new Map<number, number[]>(), pa = new Map<number, number[]>(), margins = new Map<number, number[]>(), lastGameDate = new Map<number, string>();
+  let leaguePoints = 0, leagueTeamGames = 0;
   const E = (t: number) => elo.get(t) ?? 1500;
   for (const g of games) {
     for (const t of [g.h, g.a]) { if (ls.get(t) !== undefined && ls.get(t) !== g.season) elo.set(t, 1500 + 0.75 * (E(t) - 1500)); ls.set(t, g.season); }
@@ -138,12 +152,29 @@ export async function getModel(): Promise<ModelState> {
     const m = g.hs - g.as, hw = m > 0, mult = Math.log(Math.abs(m) + 1) * (2.2 / ((hw ? eh + HFA - ea : ea - eh - HFA) * 0.001 + 2.2));
     elo.set(g.h, eh + K * mult * (won - pH)); elo.set(g.a, ea - K * mult * (won - pH));
     games_.set(g.h, (games_.get(g.h) ?? 0) + 1); games_.set(g.a, (games_.get(g.a) ?? 0) + 1);
-    for (const [t, f, ag] of [[g.h, g.hs, g.as], [g.a, g.as, g.hs]] as [number, number, number][]) { (pf.get(t) ?? pf.set(t, []).get(t)!).push(f); (pa.get(t) ?? pa.set(t, []).get(t)!).push(ag); }
+    for (const [t, f, ag] of [[g.h, g.hs, g.as], [g.a, g.as, g.hs]] as [number, number, number][]) {
+      (pf.get(t) ?? pf.set(t, []).get(t)!).push(f);
+      (pa.get(t) ?? pa.set(t, []).get(t)!).push(ag);
+      (margins.get(t) ?? margins.set(t, []).get(t)!).push(f - ag);
+      lastGameDate.set(t, g.date);
+      leaguePoints += f;
+      leagueTeamGames++;
+    }
   }
-  MODEL_CACHE = { elo, games: games_, pf, pa, nameById, mascot, rawGames, computedAt: Date.now() };
+  const leagueAvgScore = leagueTeamGames > 0 ? leaguePoints / leagueTeamGames : 82;
+  MODEL_CACHE = { elo, games: games_, pf, pa, margins, lastGameDate, leagueAvgScore, leagueAvgTotal: leagueAvgScore * 2, nameById, mascot, rawGames, computedAt: Date.now() };
   return MODEL_CACHE;
 }
 const roll10 = (m: Map<number, number[]>, t: number) => { const x = m.get(t) ?? []; return x.length ? x.slice(-10).reduce((s, v) => s + v, 0) / Math.min(10, x.length) : 82; };
+const rollN = (m: Map<number, number[]> | undefined, t: number, fallback: number, n = 10) => {
+  const x = m?.get(t) ?? [];
+  return x.length ? x.slice(-n).reduce((s, v) => s + v, 0) / Math.min(n, x.length) : fallback;
+};
+const daysBetween = (from: string | undefined, to: string) => {
+  if (!from) return 7;
+  const d = Math.round((+new Date(to + "T12:00:00Z") - +new Date(from + "T12:00:00Z")) / 86400000);
+  return Number.isFinite(d) ? d : 7;
+};
 
 // ── SharpAPI odds (cursor; game markets; resolve teams; pair+date; trusted consensus) ──
 export type OddRow = { book: string; sharp: boolean; mkt: string; selType: string; odds: number | null; line: number | null; date: string | null; h: number; a: number };
@@ -233,9 +264,31 @@ export function computeWnbaPrediction(
   };
   const csH = coldAdj(gpH, true, ehN, eaN), csA = coldAdj(gpA, false, eaN, ehN);
   const eh = csH.rating, ea = csA.rating;
-  const modelP = platt(dexp(-(eh + HFA - ea)));
-  // projMargin is derived from finalP AFTER the blend (coherence) — see below.
-  const projTotal = (roll10(M.pf, g.h) + roll10(M.pa, g.a)) / 2 + (roll10(M.pf, g.a) + roll10(M.pa, g.h)) / 2;
+  const eloMargin = (eh + HFA - ea) / PPE;
+  const leagueAvgScore = M.leagueAvgScore ?? 82;
+  const leagueAvgTotal = M.leagueAvgTotal ?? leagueAvgScore * 2;
+  const hOff = rollN(M.pf, g.h, leagueAvgScore);
+  const aDef = rollN(M.pa, g.a, leagueAvgScore);
+  const aOff = rollN(M.pf, g.a, leagueAvgScore);
+  const hDef = rollN(M.pa, g.h, leagueAvgScore);
+  const statHomeScore = (hOff + aDef) / 2;
+  const statAwayScore = (aOff + hDef) / 2;
+  const statTotal = statHomeScore + statAwayScore;
+  const statMargin = statHomeScore - statAwayScore + 1.3;
+  const marginForm = clamp(
+    (rollN(M.margins, g.h, 0, 6) - rollN(M.margins, g.a, 0, 6)) * 0.08,
+    -1.5,
+    1.5,
+  );
+  const restH = daysBetween(M.lastGameDate?.get(g.h), g.date);
+  const restA = daysBetween(M.lastGameDate?.get(g.a), g.date);
+  const restAdv = clamp(restH - restA, -3, 3);
+  const restAdj = restAdv * 0.25;
+  const rawModelMargin = 0.52 * eloMargin + 0.48 * statMargin + marginForm + restAdj;
+  const marginModelP = sigm(rawModelMargin / 6);
+  const eloModelP = platt(dexp(-(eh + HFA - ea)));
+  const modelP = clp(0.55 * eloModelP + 0.45 * marginModelP);
+  const projTotal = Number.isFinite(statTotal) ? statTotal : leagueAvgTotal;
   const minG = Math.min(gpH, gpA), unc = 0.5 * Math.exp(-minG / 8), sigM = SIG_M * (1 + unc), sigT = SIG_T * (1 + unc);
   const coldStart = csH.w > 0 || csA.w > 0;
 
@@ -250,9 +303,11 @@ export function computeWnbaPrediction(
   const conflict = mktPDec != null && (modelP >= 0.5) !== (mktPDec >= 0.5);
   if (conflict && marketRel >= 0.8 && Math.abs(edge) < 0.04) finalP = 0.5 + (finalP - 0.5) * 0.5;
 
-  // COHERENCE: projected margin (→ score + spread basis) derived from the SAME
-  // blended win prob the ML uses, so the projected winner / ML / spread agree.
-  const projMargin = sigM * probit(clp(finalP));
+  // COHERENCE: projections start from the independent team-stat margin, then
+  // receive a small market-coherence nudge through finalP. This avoids letting
+  // the market fully write the score while keeping ML/spread/score aligned.
+  const finalPImpliedMargin = sigM * probit(clp(finalP));
+  const projMargin = 0.7 * rawModelMargin + 0.3 * finalPImpliedMargin;
   const calibrationAudit = buildWnbaCoreModelCalibrationAudit({
     rawProjectedAwayScore: null,
     rawProjectedHomeScore: null,
@@ -383,7 +438,24 @@ export function computeWnbaPrediction(
     moneyline: { side: mlSide, confidence: mlConf, grade: mlGrade, price: mlPrice },
     spread: { side: spSide, line: mktSpread, confidence: spConf, grade: spGrade },
     total: { side: toSide, line: mktTotal, confidence: toConf, grade: toGrade },
-    model: { home_win_prob: r1(modelP * 100) / 100, margin: r1(projMargin), total: r1(projTotal) },
+    model: {
+      home_win_prob: r1(modelP * 100) / 100,
+      margin: r1(projMargin),
+      total: r1(projTotal),
+      components: {
+        elo_margin: r1(eloMargin),
+        stat_margin: r1(statMargin),
+        raw_model_margin: r1(rawModelMargin),
+        market_coherent_margin: r1(finalPImpliedMargin),
+        stat_home_score: r1(statHomeScore),
+        stat_away_score: r1(statAwayScore),
+        margin_form_adjustment: r1(marginForm),
+        rest_adjustment: r1(restAdj),
+        home_rest_days: restH,
+        away_rest_days: restA,
+        market_weight: r1(wMkt),
+      },
+    },
     wnba_core_model_calibration: calibrationAudit,
     market: { home_win_prob: mktP != null ? r1(mktP * 100) / 100 : null, spread: mktSpread, total: mktTotal, book_count: mlBooks, dispersion: { spread: spDisp, total: toDisp } },
     consensus_source: (sharpMktP != null ? "sharp" : "all_books") as "sharp" | "all_books",
