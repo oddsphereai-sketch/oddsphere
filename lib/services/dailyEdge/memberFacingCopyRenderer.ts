@@ -431,8 +431,8 @@ function quickReadCopy(row: PredictionEvidenceObject, label: string): string {
     return "Caution grade: the setup needs cleaner value, price, or market context.";
   }
   if (label === "likely_winner_bad_price" || label === "price_capped") return "Likely winner profile, but the current price limits betting value.";
-  if (label === "insufficient_core_data") return "No Play until core price, model, and market evidence are complete.";
-  return "No Play: the current setup does not show enough actionable betting edge.";
+  if (label === "insufficient_core_data") return `${pick} is the model side, but core price, model, and market evidence are not complete enough for action.`;
+  return `${pick} is the model side, but the current setup does not show enough actionable betting edge.`;
 }
 
 function supportingEvidenceCopy(row: PredictionEvidenceObject, label: string): string {
@@ -762,9 +762,9 @@ function decisionQuickReadCopy(decision: MarketDecision, key: keyof Recommendati
     return "Caution grade: the setup needs cleaner value, price, or market context.";
   }
   if (decision.price !== null && decision.modelProbability !== null && decision.marketImplied !== null) {
-    return "No Play: the current setup does not show enough actionable betting edge.";
+    return `${pick} is the model side, but the current setup does not show enough actionable betting edge.`;
   }
-  return "No Play until core price, model, and market evidence are complete.";
+  return `${pick} is the model side, but core price, model, and market evidence are not complete enough for action.`;
 }
 
 function decisionMarketRead(decision: MarketDecision, key: keyof RecommendationDecision["markets"], sport = "mlb"): ResolvedMarketRead {

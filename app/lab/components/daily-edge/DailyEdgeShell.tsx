@@ -846,11 +846,7 @@ function formatPrimaryPickForVerdict(
   awayAbbr: string | null = null,
   homeAbbr: string | null = null,
 ): string {
-  const rawPick = formatPickWithLine(market, pick, line, sport, awayAbbr, homeAbbr);
-  if (verdict === "no_play") return "No Play";
-  if (verdict === "caution") return "Caution";
-  if (verdict === "watchlist" && pick !== null) return `Watch ${rawPick}`;
-  return rawPick;
+  return formatPickWithLine(market, pick, line, sport, awayAbbr, homeAbbr);
 }
 
 function formatModelReadForVerdict(
@@ -863,7 +859,7 @@ function formatModelReadForVerdict(
   homeAbbr: string | null = null,
 ): string | null {
   if (pick === null) return null;
-  if (verdict !== "no_play" && verdict !== "caution") return null;
+  if (verdict !== "caution") return null;
   return formatPickWithLine(market, pick, line, sport, awayAbbr, homeAbbr);
 }
 
@@ -1454,10 +1450,10 @@ function GradeLegend() {
             <li><span className="text-sky-300">↗ Lean</span> — moderate read</li>
             <li><span className="text-indigo-300">◐ Watchlist</span> — interesting, not clean</li>
             <li><span className="text-amber-300">⚠ Caution</span> — signals conflict</li>
-            <li><span className="text-gray-500">○ No Play</span> — no official pick</li>
+            <li><span className="text-gray-500">○ No Play</span> — model prediction shown, not an actionable betting pick</li>
           </ul>
           <p className="mt-3 text-[11.5px] text-gray-500 leading-snug">
-            A No Play may still show a quiet model read for context, but it is not tracked as an actionable pick.
+            No Play rows still show the model side for context; they are not tracked as actionable picks.
           </p>
           <button
             type="button"
@@ -3584,12 +3580,8 @@ function SlateCard({
               game.awayTeam,
               game.homeTeam,
             );
-            const watchlistRead =
-              mv === "watchlist" && md.pick !== null
-                ? formatPickWithLine(m, md.pick, md.line, shellSport, game.awayTeam, game.homeTeam)
-                : null;
-            const chipPrimaryPick = mv === "watchlist" ? VERDICT_LABEL[mv] : primaryPick;
-            const chipModelRead = watchlistRead ?? compactModelRead;
+            const chipPrimaryPick = primaryPick;
+            const chipModelRead = compactModelRead;
             return (
               <button
                 key={m}
