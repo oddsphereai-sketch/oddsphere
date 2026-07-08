@@ -253,7 +253,11 @@ async function main(): Promise<void> {
   const records = await loadRecords(args);
   const shadows = await loadShadowRows(args);
   const rows = records.map((record) => {
-    const display = latestShadowBeforeLock(record, shadows);
+    // Only use captured member-facing shadows once the row has actually
+    // locked. Unlocked cards can legitimately change during the day; comparing
+    // them to an older shadow snapshot would create a false "correction" and
+    // could revert the current live card.
+    const display = record.locked_at === null ? null : latestShadowBeforeLock(record, shadows);
     const trackingGrade = overrideGrade(record.snapshot_json) ?? normalizeGrade(record.play_grade, record.best_angle, record.no_bet);
     const displayedGrade = display ? normalizeGrade(display.original_grade) : null;
     const guardDemoteReason = deterministicDemoteReason(record);
