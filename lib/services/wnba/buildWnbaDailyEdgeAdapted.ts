@@ -43,7 +43,6 @@ import {
 import { marketReadV2DtoFromSnapshot } from "@/lib/services/marketIntelligenceV2/dto";
 import { projectionLedMarketRead, withConfirmedSharpMoney } from "@/lib/services/marketIntelligenceV2/displayCoherence";
 import type { MarketReadV2Dto } from "@/lib/types/domain/MarketIntelligenceV2";
-import { normalizeDailyEdgeActionability } from "@/lib/services/dailyEdgeActionability";
 import { buildRecommendationDecision } from "@/lib/services/recommendationDecision";
 import {
   applyDailyEdgeRenderedCopyFlags,
@@ -881,6 +880,11 @@ function capWnbaGradeForPickedEdge(
   return grade;
 }
 
+function wnbaPickProbabilityFromConfidence(confidence: number | null): number | null {
+  if (confidence === null) return null;
+  return Math.max(0, Math.min(1, confidence / 100));
+}
+
 /** Build a MarketEdgeDto from the WNBA model's per-market output. */
 function buildMarket(opts: {
   slot: "ml" | "total" | "spread";
@@ -937,35 +941,28 @@ function buildMarket(opts: {
       );
     }) ?? null;
   })();
-  const normalizedAction = normalizeDailyEdgeActionability({
-    market: slot === "spread" ? "spread" : slot === "total" ? "total" : "moneyline",
-    rawVerdict: verdict,
-    rawGrade: held ? null : gradeToMlbGrade(g),
-    rawRecScore: recommendationConfidence,
-    modelMarketGapPct: held ? null : modelMarketGapPct,
-    marketReadV2: opts.marketReadV2 ?? null,
-    hasPick: pick !== null,
-    held,
-    dataQualityTier: marketFairProbPick !== null && priceAmerican !== null ? "high" : "medium",
-    priceAmerican,
-  });
+  const finalGrade = held ? null : gradeToMlbGrade(g);
+  const finalRecScore = held ? null : recommendationConfidence;
+  const finalVerdict = held
+    ? { key: "no_play" as Verdict, label: "No Play" }
+    : verdict;
   return {
     pick,
     confidence: confFrac,
-    grade: normalizedAction.finalGrade,
+    grade: finalGrade,
     signalType,
     marketSignal,
     sharpStatus: sharpStatusFromGrade(g),
     held,
-    verdict: normalizedAction.finalVerdict,
-    rawGrade: normalizedAction.rawGrade,
-    rawRecScore: normalizedAction.rawRecScore,
-    capReasons: normalizedAction.capReasons,
-    finalGrade: normalizedAction.finalGrade,
-    finalRecScore: normalizedAction.finalRecScore,
-    actionabilityLabel: normalizedAction.actionabilityLabel,
-    displayReason: normalizedAction.displayReason,
-    guidedGuide: normalizedAction.displayReason ?? (held ? "Model is not picking a side here." : `Model lean: ${pick}.`),
+    verdict: finalVerdict,
+    rawGrade: finalGrade,
+    rawRecScore: finalRecScore,
+    capReasons: [],
+    finalGrade,
+    finalRecScore,
+    actionabilityLabel: finalVerdict.label,
+    displayReason: null,
+    guidedGuide: held ? "Model is not picking a side here." : `Model lean: ${pick}.`,
     guidedWatchOut: whyLine,
     whyLine,
     riskLine: "Forward line tracking begins at the first observed price.",
@@ -989,7 +986,7 @@ function buildMarket(opts: {
     modelTrustPct: held ? null : modelProbPct ?? confPct,
     marketImpliedPct,
     modelMarketGapPct: held ? null : modelMarketGapPct,
-    recommendationConfidence: normalizedAction.finalRecScore,
+    recommendationConfidence: finalRecScore,
     marketSource: bookCount > 0 ? "consensus" : null,
     marketDataQuality: bookCount >= 2 ? "two_sided_consensus" : bookCount === 1 ? "single_book" : "unavailable",
     marketReadV2: opts.marketReadV2 ?? null,
@@ -1020,7 +1017,9 @@ function adaptGame(
 
   // ── ML ──
   const mlPickIsHome = game.moneyline.side === game.home;
-  const mlModelProb = mlPickIsHome ? game.model.home_win_prob : 1 - game.model.home_win_prob;
+  const mlModelProb =
+    wnbaPickProbabilityFromConfidence(game.moneyline.confidence) ??
+    (mlPickIsHome ? game.model.home_win_prob : 1 - game.model.home_win_prob);
   const mlMarketFair = game.market.home_win_prob !== null ? (mlPickIsHome ? game.market.home_win_prob : 1 - game.market.home_win_prob) : null;
   const mlAligned = game.market.home_win_prob !== null ? mlPickIsHome === game.market.home_win_prob >= 0.5 : null;
   const mlSelectedSide =
