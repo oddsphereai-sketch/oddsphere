@@ -198,8 +198,8 @@ console.log("\n━━━ V2.1 metadata propagation ━━━");
   // EV<0 / low-conviction-fav / low-total-line — self-consistent with the gate.
   check("ML play_grade=lean@0.54 matches gate", ml.play_grade === expectGate("lean", ml));
   check("ML best_angle=false", ml.best_angle === false);
-  check("OU low-conviction Best Angle demoted", ou.best_angle === false);
-  check("OU play_grade demoted below Best Angle", ou.play_grade !== "best_angle");
+  check("OU Best Angle preserved at the V2.2 total confidence floor", ou.best_angle === true);
+  check("OU play_grade remains Best Angle", ou.play_grade === "best_angle");
   check("OU line_value=7.5 (from v2_1_audit.market_total)", ou.line_value === 7.5);
   check("Data quality tier=high", ml.data_quality_tier === "high");
   check("Provisional=false", ml.provisional === false);
@@ -266,8 +266,8 @@ console.log("\n━━━ MLB total Under Best Angle quality gate ━━━");
   });
   const ou = recs.find((r) => r.market === "total")!;
   const ba = (ou.snapshot_json as any)?.best_angle_resolution;
-  check("70%+ Under remains Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
-  check("70%+ Under quality gate is false", ba?.total_under_quality_gate === false);
+  check("threshold+ Under remains Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
+  check("threshold+ Under quality gate is false", ba?.total_under_quality_gate === false);
 }
 
 console.log("\n━━━ MLB total Over Best Angle quality gate ━━━");
@@ -334,8 +334,8 @@ console.log("\n━━━ MLB total Over Best Angle quality gate ━━━");
   });
   const ou = recs.find((r) => r.market === "total")!;
   const ba = (ou.snapshot_json as any)?.best_angle_resolution;
-  check("70%+ Over remains Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
-  check("70%+ Over quality gate is false", ba?.total_over_quality_gate === false);
+  check("threshold+ Over remains Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
+  check("threshold+ Over quality gate is false", ba?.total_over_quality_gate === false);
 }
 
 console.log("\n━━━ MLB Best Angle tracking/display guard under market-aware engine ━━━");
@@ -1052,8 +1052,8 @@ console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━"
         (ml.snapshot_json as any)?.v2_2_audit?.ml_play_grade === "no_bet");
   check("ML snapshot_json.v2_2_audit.ml_no_bet_reason preserved",
         typeof (ml.snapshot_json as any)?.v2_2_audit?.ml_no_bet_reason === "string");
-  check("OU record.play_grade demoted below Best Angle by total quality gate",
-        ou.play_grade !== "best_angle");
+  check("OU record.play_grade preserves qualified Best Angle",
+        ou.play_grade === "best_angle");
 }
 {
   // Provisional / low-quality rows say "not a betting recommendation".
@@ -1424,7 +1424,7 @@ console.log("\n━━━ P7-Commit-B — FI play_grade='lean' persistence ━━
   check("ML play_grade unchanged by FI persistence change",
         ml.play_grade === expectGate("lean", ml) /* FI persistence change must not alter the ML gate result */);
   check("Total play_grade reflects the total quality gate",
-        ou.play_grade !== "best_angle" /* base fixture is below the 70% total BA floor */);
+        ou.play_grade === expectTotalGrade("best_angle", ou));
 }
 
 // ── Stale unlocked FI cleanup guard ────────────────────────────────

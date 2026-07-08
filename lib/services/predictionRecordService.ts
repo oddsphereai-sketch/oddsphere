@@ -185,8 +185,11 @@ function readPublicPlayGrade(v: unknown): string | null {
 export const GATE_EV_FLOOR = 0;
 export const GATE_LEAN_MIN_MODEL_PROB = 0.55;
 export const GATE_LOW_CONVICTION_RUNGAP = 0.5;
-export const GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB = 0.70;
-export const GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB = 0.70;
+// Mirror the MLB V2.2 Best Angle confidence floor. The V2.2 total BA path
+// already requires high data quality, edge, positive EV, and 56% confidence;
+// a second 70% writer gate over-suppresses normal MLB totals edges.
+export const GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB = 0.56;
+export const GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB = 0.56;
 const MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION = "ml_best_angle_launch_profile_restoration_2026_07_08";
 export interface PlayGradeGateInputs {
   modelProb: number | null;
