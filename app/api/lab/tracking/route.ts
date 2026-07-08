@@ -45,6 +45,10 @@ import type {
   WeeklyAggregate,
   WindowTally,
 } from "@/app/lab/lib/labTypes";
+import {
+  readLabResponseSnapshot,
+  trackingSnapshotKey,
+} from "@/lib/services/labResponseSnapshots";
 
 // ─── Display ordering ────────────────────────────────────────────────────
 const SPORT_DISPLAY_ORDER: Sport[] = ["mlb", "nba", "wnba", "cbb", "nfl", "cfb", "nhl", "ucl", "soccer"];
@@ -114,7 +118,7 @@ let trackingResponseCache: TrackingResponseCacheEntry | null = null;
 
 function trackingJsonResponse(
   body: TrackingResponse,
-  cacheState: "HIT" | "MISS" | "STALE",
+  cacheState: "HIT" | "MISS" | "STALE" | "DB_SNAPSHOT" | "DB_SNAPSHOT_STALE",
 ): Response {
   return Response.json(body, {
     headers: {
@@ -569,10 +573,27 @@ async function loadWnbaGradeRows(): Promise<ResultRow[]> {
   return rows;
 }
 
-export async function GET(_request: Request) {
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const snapshotBypass = url.searchParams.get("snapshotBypass") === "true";
   const now = Date.now();
-  if (trackingResponseCache !== null && now < trackingResponseCache.expiresAt) {
-    return trackingJsonResponse(trackingResponseCache.body, "HIT");
+  if (!snapshotBypass) {
+    if (trackingResponseCache !== null && now < trackingResponseCache.expiresAt) {
+      return trackingJsonResponse(trackingResponseCache.body, "HIT");
+    }
+
+    const snapshot = await readLabResponseSnapshot<TrackingResponse>(
+      trackingSnapshotKey(),
+      "stale",
+    );
+    if (snapshot !== null) {
+      trackingResponseCache = {
+        body: snapshot.payload,
+        expiresAt: Date.now() + TRACKING_RESPONSE_CACHE_TTL_MS,
+        staleUntil: Date.now() + TRACKING_RESPONSE_STALE_MS,
+      };
+      return trackingJsonResponse(snapshot.payload, snapshot.cacheState);
+    }
   }
 
   // Pull all rows. Paginate when this crosses ~50k.

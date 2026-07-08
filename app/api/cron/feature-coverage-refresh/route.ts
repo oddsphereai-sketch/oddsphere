@@ -46,6 +46,7 @@ import { weatherService } from "@/lib/services/weatherService";
 import { lineupService } from "@/lib/services/lineupService";
 import { runBdlPlayerBackfillCycle } from "@/lib/services/bdlPlayerBackfillService";
 import type { Sport } from "@/lib/types/domain/Sport";
+import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 
 export const maxDuration = 120;
 
@@ -78,6 +79,15 @@ type FeatureRefreshDetails = {
     api_calls_made: number;
     reason?: string;
     skipped_by_reason?: Record<string, number>;
+  };
+  daily_edge_snapshot?: {
+    ok: boolean;
+    snapshotKey: string;
+    status?: number;
+    games?: number;
+    error?: string;
+    expiresAt?: string;
+    staleUntil?: string;
   };
 };
 
@@ -187,6 +197,14 @@ export async function GET(request: Request) {
         details.lineup.reason = "PLAYER_STATS_PROVIDER!=real_api; lineup refresh skipped to avoid mock writes.";
         partial = true;
       }
+
+      const dailyEdgeSnapshot = await refreshDailyEdgeResponseSnapshot({
+        sport,
+        date,
+        source: "feature_coverage_refresh",
+      });
+      details.daily_edge_snapshot = dailyEdgeSnapshot;
+      if (dailyEdgeSnapshot.ok) totalRecords += 1;
 
       return {
         records_updated: totalRecords,

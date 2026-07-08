@@ -51,6 +51,7 @@ import {
   runTrackingRefresh,
   computeRefreshDates,
 } from "@/lib/services/trackingRefreshService";
+import { refreshTrackingResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 
 export const maxDuration = 180;
 
@@ -82,13 +83,18 @@ export async function GET(request: Request) {
         apply,
         supabase,
       });
+      const shouldRefreshSnapshot = apply && sport === sports[sports.length - 1];
+      const trackingSnapshot = shouldRefreshSnapshot
+        ? await refreshTrackingResponseSnapshot({ source: "tracking_refresh" })
+        : null;
 
       return {
         records_updated:
           summary.totals.records_created +
           summary.totals.linescores_updated +
           summary.totals.final_scores_updated +
-          summary.totals.grades_upserted,
+          summary.totals.grades_upserted +
+          (trackingSnapshot?.ok ? 1 : 0),
         api_calls_made: summary.datesProcessed,
         partial: summary.totals.errors > 0,
         details: {
@@ -101,6 +107,7 @@ export async function GET(request: Request) {
           startedAtIso: summary.startedAtIso,
           finishedAtIso: summary.finishedAtIso,
           durationMs: summary.durationMs,
+          trackingSnapshot,
         },
       };
     },

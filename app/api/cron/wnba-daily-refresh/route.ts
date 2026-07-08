@@ -29,6 +29,7 @@ import { runWnbaModel } from "@/lib/services/wnba/runWnbaModel";
 import { buildWnbaPredictionRecords } from "@/lib/services/wnba/buildWnbaPredictionRecords";
 import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
 import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
+import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 
 const WNBA_CRON_ENV = "WNBA_CRON_ENABLED";
 
@@ -174,7 +175,14 @@ export async function GET(request: Request): Promise<Response> {
       };
       details.marketIntelligenceV2 = marketIntelligenceV2;
 
-      const recordsUpdated = teamsUpserted + gamesUpserted + linesWritten + lineHistoryWritten + sharpSignalsWritten + publicSplitsUpdated + publicSplitsInserted + predictionsWritten + predictionRecordsWritten + marketIntelligenceV2.recordsUpdated;
+      const dailyEdgeSnapshot = await refreshDailyEdgeResponseSnapshot({
+        sport: "wnba",
+        date: currentSlateDate("wnba"),
+        source: "wnba_daily_refresh",
+      });
+      details.dailyEdgeSnapshot = dailyEdgeSnapshot;
+
+      const recordsUpdated = teamsUpserted + gamesUpserted + linesWritten + lineHistoryWritten + sharpSignalsWritten + publicSplitsUpdated + publicSplitsInserted + predictionsWritten + predictionRecordsWritten + marketIntelligenceV2.recordsUpdated + (dailyEdgeSnapshot.ok ? 1 : 0);
       console.log(`[wnba-daily-refresh] done — teams:${teamsUpserted} games:${gamesUpserted} lines:${linesWritten} history:${lineHistoryWritten} signals:${sharpSignalsWritten} pubSplits:${publicSplitsUpdated + publicSplitsInserted} predictions:${predictionsWritten} records:${predictionRecordsWritten} marketIntel:${marketIntelligenceV2.recordsUpdated} lockedSkipped:${skippedLocked}/${predictionRecordsLockedSkipped} errors:${errors.length}`);
       if (errors.length) details.errors = errors.slice(0, 20);
       return {

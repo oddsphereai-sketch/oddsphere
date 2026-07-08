@@ -130,6 +130,10 @@ import {
 } from "@/lib/services/dailyEdge/memberFacingCopyRenderer";
 import { applyMlbSameDayGradeGuardrails } from "@/lib/services/dailyEdge/mlbSameDayGradeGuardrails";
 import type { MarketDecision, MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
+import {
+  dailyEdgeSnapshotKey,
+  readLabResponseSnapshot,
+} from "@/lib/services/labResponseSnapshots";
 
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer", "wnba"];
 const DAILY_EDGE_CACHE_CONTROL = "public, s-maxage=30, stale-while-revalidate=120";
@@ -149,23 +153,9 @@ type DailyEdgeResponseCacheEntry = {
 
 const dailyEdgeResponseCache = new Map<string, DailyEdgeResponseCacheEntry>();
 
-function dailyEdgeCacheKey(input: {
-  sport: Sport;
-  requestedDate: string;
-  allowStale: boolean;
-  copyPreview: boolean;
-}): string {
-  return [
-    input.sport,
-    input.requestedDate,
-    input.allowStale ? "allow-stale" : "current-only",
-    input.copyPreview ? "copy-preview" : "live-copy",
-  ].join("::");
-}
-
 function dailyEdgeJsonResponse(
   body: DailyEdgeResponse,
-  cacheState: "HIT" | "MISS" | "STALE",
+  cacheState: "HIT" | "MISS" | "STALE" | "DB_SNAPSHOT" | "DB_SNAPSHOT_STALE",
   cacheControl = DAILY_EDGE_CACHE_CONTROL,
 ): Response {
   return Response.json(body, {
@@ -4520,6 +4510,7 @@ export async function GET(request: Request) {
   const sportParam = url.searchParams.get("sport");
   const dateParam = url.searchParams.get("date");
   const copyPreview = url.searchParams.get("copyPreview") === "1";
+  const snapshotBypass = url.searchParams.get("snapshotBypass") === "true";
   const renderedCopyFlagOverrides: DailyEdgeRenderedCopyFlagOverrides = {
     quickRead: copyPreview || process.env.DAILY_EDGE_RENDERED_QUICK_READ_ENABLED === "true",
     marketRead: copyPreview || process.env.DAILY_EDGE_RENDERED_MARKET_READ_ENABLED === "true",
@@ -4548,15 +4539,26 @@ export async function GET(request: Request) {
     : sport === "soccer" || sport === "ucl"
       ? currentSoccerBoardDate()
       : currentSlateDate(sport);
-  const responseCacheKey = dailyEdgeCacheKey({
+  const responseCacheKey = dailyEdgeSnapshotKey({
     sport,
     requestedDate,
     allowStale,
     copyPreview,
   });
-  const freshCachedResponse = readDailyEdgeResponseCache(responseCacheKey, "fresh");
-  if (freshCachedResponse !== null) {
-    return dailyEdgeJsonResponse(freshCachedResponse, "HIT");
+  if (!snapshotBypass) {
+    const freshCachedResponse = readDailyEdgeResponseCache(responseCacheKey, "fresh");
+    if (freshCachedResponse !== null) {
+      return dailyEdgeJsonResponse(freshCachedResponse, "HIT");
+    }
+
+    const snapshot = await readLabResponseSnapshot<DailyEdgeResponse>(
+      responseCacheKey,
+      "stale",
+    );
+    if (snapshot !== null) {
+      writeDailyEdgeResponseCache(responseCacheKey, snapshot.payload);
+      return dailyEdgeJsonResponse(snapshot.payload, snapshot.cacheState);
+    }
   }
 
   // Phase 7G — NBA branch. Member-safe path that hands off to the
