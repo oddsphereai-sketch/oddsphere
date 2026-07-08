@@ -190,7 +190,7 @@ export async function runWnbaModel(opts: {
       ml_confidence: p.moneyline.confidence,
       predicted_ou_side: p.total.side ? (p.total.side.startsWith("Over") ? "over" : "under") : null,
       ou_confidence: p.total.confidence,
-      predicted_home_score: p.projected_score.home, predicted_away_score: p.projected_score.away, predicted_total: p.model.total,
+      predicted_home_score: p.projected_score.home, predicted_away_score: p.projected_score.away, predicted_total: Math.round((p.projected_score.home + p.projected_score.away) * 10) / 10,
       // Grades live in sport_specific (avoid any CHECK constraint on the MLB-shaped grade columns).
       sport_specific: {
         model_version: "wnba_v1", model: p.model, market: p.market, trusted: p.trusted, sharp: p.sharp,

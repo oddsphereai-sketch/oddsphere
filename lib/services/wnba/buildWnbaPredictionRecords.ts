@@ -18,7 +18,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDaysToSlate, currentSlateDate } from "../../dates/slateDate";
 import { isPublicallyTracked } from "../../config/officialTrackingStart";
-import { buildWnbaCoreModelCalibrationAudit } from "../../automodel/wnbaCoreModelCalibration";
+import {
+  buildWnbaCoreModelCalibrationAudit,
+  readWnbaCoreModelCalibrationFlagsFromEnv,
+  type WnbaCoreModelCalibrationAudit,
+} from "../../automodel/wnbaCoreModelCalibration";
 
 const PLAY_GRADE: Record<string, string> = { "Best Angle": "best_angle", "Lean": "lean", "Watchlist": "watchlist", "Caution": "caution" };
 const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]! : null);
@@ -196,7 +200,12 @@ export async function buildWnbaPredictionRecords(opts: {
     }
     result.eligibleGames++;
 
-    const wnbaCalibrationAudit = buildWnbaCoreModelCalibrationAudit({
+    const storedCalibrationAudit =
+      ss.wnba_core_model_calibration &&
+      typeof ss.wnba_core_model_calibration === "object"
+        ? ss.wnba_core_model_calibration as WnbaCoreModelCalibrationAudit
+        : null;
+    const wnbaCalibrationAudit = storedCalibrationAudit ?? buildWnbaCoreModelCalibrationAudit({
       rawProjectedAwayScore: Number.isFinite(Number((ss.projected_score as { away?: unknown } | undefined)?.away))
         ? Number((ss.projected_score as { away?: unknown }).away)
         : null,
@@ -215,16 +224,7 @@ export async function buildWnbaPredictionRecords(opts: {
         : typeof spr.line === "number"
           ? spr.line
           : null,
-      coreModelEnabled: process.env.WNBA_CORE_MODEL_CALIBRATION_ENABLED === "true",
-      totalProjectionCalibrationEnabled:
-        process.env.WNBA_TOTAL_PROJECTION_CALIBRATION_ENABLED === "true",
-      spreadMarginCalibrationEnabled:
-        process.env.WNBA_SPREAD_MARGIN_CALIBRATION_ENABLED === "true",
-      totalRecommendationUsesCalibratedProjection:
-        process.env.WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED === "true",
-      spreadRecommendationUsesCalibratedMargin:
-        process.env.WNBA_SPREAD_RECOMMENDATION_USES_CALIBRATED_MARGIN_ENABLED === "true",
-      gradeCalibrationEnabled: process.env.WNBA_GRADE_CALIBRATION_ENABLED === "true",
+      ...readWnbaCoreModelCalibrationFlagsFromEnv(),
     });
 
     const baseRec = (market_type: string, side: string, pick: string, line_value: number | null, odds: number | null, confidence: number | null, gradeStr: string | null, modelProb: number | null, mktProb: number | null) => ({
@@ -286,17 +286,31 @@ export async function buildWnbaPredictionRecords(opts: {
     return result;
   }
 
-  // Apply: upsert records; NEVER overwrite a locked record (locked_at != null).
+  // Apply: one public WNBA record per (game_id, market, slate_date). NEVER
+  // overwrite a locked record (locked_at != null), and do not create duplicate
+  // rows if model_version changes.
   const { data: existing } = ids.length
-    ? await supabase.from("prediction_records").select("game_id, market, locked_at").eq("sport", "wnba").eq("slate_date", today).in("game_id", ids)
+    ? await supabase.from("prediction_records").select("id, game_id, market, locked_at").eq("sport", "wnba").in("game_id", ids)
     : { data: [] as Record<string, unknown>[] };
   const lockedRec = new Set((existing ?? []).filter((r) => r.locked_at != null).map((r) => `${r.game_id}::${r.market}`));
+  const unlockedIdByKey = new Map(
+    (existing ?? [])
+      .filter((r) => r.locked_at == null)
+      .map((r) => [`${r.game_id}::${r.market}`, r.id as number]),
+  );
   const toWrite = result.records.filter((r) => !lockedRec.has(`${r.game_id}::${r.market}`));
   result.lockedSkipped = result.records.length - toWrite.length;
-  if (toWrite.length) {
-    const { error } = await supabase.from("prediction_records").upsert(toWrite, { onConflict: "game_id,market,model_version,slate_date" });
-    if (error) errors.push(`prediction_records upsert: ${error.message}`);
-    else result.written = toWrite.length;
+  for (const rec of toWrite) {
+    const existingId = unlockedIdByKey.get(`${rec.game_id}::${rec.market}`);
+    if (existingId !== undefined) {
+      const { error } = await supabase.from("prediction_records").update(rec).eq("id", existingId);
+      if (error) errors.push(`prediction_records update ${rec.game_id}/${rec.market}: ${error.message}`);
+      else result.written++;
+      continue;
+    }
+    const { error } = await supabase.from("prediction_records").insert(rec);
+    if (error) errors.push(`prediction_records insert ${rec.game_id}/${rec.market}: ${error.message}`);
+    else result.written++;
   }
   logger(`wnba records APPLY: ${result.written} written, ${result.lockedSkipped} locked-skipped`);
   return result;

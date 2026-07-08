@@ -93,17 +93,18 @@ function roundNullable(value: number | null): number | null {
 }
 
 export function readWnbaCoreModelCalibrationFlagsFromEnv() {
+  const enabledUnlessFalse = (name: string) => process.env[name] !== "false";
   return {
-    coreModelEnabled: process.env.WNBA_CORE_MODEL_CALIBRATION_ENABLED === "true",
+    coreModelEnabled: enabledUnlessFalse("WNBA_CORE_MODEL_CALIBRATION_ENABLED"),
     totalProjectionCalibrationEnabled:
-      process.env.WNBA_TOTAL_PROJECTION_CALIBRATION_ENABLED === "true",
+      enabledUnlessFalse("WNBA_TOTAL_PROJECTION_CALIBRATION_ENABLED"),
     spreadMarginCalibrationEnabled:
-      process.env.WNBA_SPREAD_MARGIN_CALIBRATION_ENABLED === "true",
+      enabledUnlessFalse("WNBA_SPREAD_MARGIN_CALIBRATION_ENABLED"),
     totalRecommendationUsesCalibratedProjection:
-      process.env.WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED === "true",
+      process.env.WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED !== "false",
     spreadRecommendationUsesCalibratedMargin:
-      process.env.WNBA_SPREAD_RECOMMENDATION_USES_CALIBRATED_MARGIN_ENABLED === "true",
-    gradeCalibrationEnabled: process.env.WNBA_GRADE_CALIBRATION_ENABLED === "true",
+      process.env.WNBA_SPREAD_RECOMMENDATION_USES_CALIBRATED_MARGIN_ENABLED !== "false",
+    gradeCalibrationEnabled: enabledUnlessFalse("WNBA_GRADE_CALIBRATION_ENABLED"),
   };
 }
 

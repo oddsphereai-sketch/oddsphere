@@ -64,17 +64,27 @@ export type ModelState = { elo: Map<number, number>; games: Map<number, number>;
 
 function moneylineGradeFromPickedEdge(args: {
   pickedEdge: number | null;
+  pickedOdds: number | null;
   conflict: boolean;
   marketReliability: number;
   bookCount: number;
   sharpPresent: boolean;
   projectedMargin: number;
 }): Grade {
-  const { pickedEdge, conflict, marketReliability, bookCount, sharpPresent, projectedMargin } = args;
+  const { pickedEdge, pickedOdds, conflict, marketReliability, bookCount, sharpPresent, projectedMargin } = args;
   if (pickedEdge === null) return "Watchlist";
   if (pickedEdge <= -0.01) return "Watchlist";
+  if (pickedOdds !== null && pickedOdds <= -300) return "Watchlist";
   if (conflict && marketReliability >= 0.8 && pickedEdge < 0.04) return "Caution";
-  if (pickedEdge >= 0.04 && bookCount >= 6 && sharpPresent && Math.abs(projectedMargin) >= 3) return "Best Angle";
+  if (
+    pickedEdge >= 0.04 &&
+    bookCount >= 6 &&
+    sharpPresent &&
+    Math.abs(projectedMargin) >= 3 &&
+    pickedOdds !== null &&
+    pickedOdds <= -200 &&
+    pickedOdds > -300
+  ) return "Best Angle";
   if (pickedEdge >= 0.02 && bookCount >= 4) return "Lean";
   return "Watchlist";
 }
@@ -285,6 +295,7 @@ export function computeWnbaPrediction(
         : (1 - modelP) - (1 - mktPDec);
   const mlGradeBase: Grade = moneylineGradeFromPickedEdge({
     pickedEdge: mlPickedEdge,
+    pickedOdds: mlPrice,
     conflict,
     marketReliability: marketRel,
     bookCount: mlBooks,
@@ -307,7 +318,14 @@ export function computeWnbaPrediction(
   const spConf = pCoverHome != null ? Math.round(Math.max(pCoverHome, 1 - pCoverHome) * 100) : null;
   const rawSpEdge = mktSpread != null ? projMargin - -mktSpread : null;
   const spGradeEdge = calibrationAudit.grade_calibration_enabled ? spEdge : rawSpEdge;
-  const spGradeBase = mktSpread != null ? gradeMarket(Math.abs(spGradeEdge!), spVals.length, spDisp, sharpSpread != null && Math.sign(sharpSpread - -marginForSpreadRecommendation) === Math.sign(spEdge!)) : null;
+  let spGradeBase = mktSpread != null ? gradeMarket(Math.abs(spGradeEdge!), spVals.length, spDisp, sharpSpread != null && Math.sign(sharpSpread - -marginForSpreadRecommendation) === Math.sign(spEdge!)) : null;
+  if (
+    spGradeBase !== null &&
+    calibrationAudit.grade_calibration_enabled &&
+    calibrationAudit.spread_margin_calibration_enabled
+  ) {
+    spGradeBase = "Watchlist";
+  }
   const spSideKey = pCoverHome == null ? null : pCoverHome >= 0.5 ? "home" : "away";
   const spPublicContext = spGradeBase !== null && spSideKey !== null ? applyPublicMarketContext({
     grade: spGradeBase,
@@ -330,12 +348,12 @@ export function computeWnbaPrediction(
   const totalGradeEdge = calibrationAudit.grade_calibration_enabled ? calibratedTotalGradeEdge : rawToEdge;
   let toGradeBase = mktTotal != null ? gradeMarket(Math.abs(totalGradeEdge!), toVals.length, toDisp, sharpTotal != null && Math.sign(sharpTotal - totalForRecommendation) === -Math.sign(toEdge!)) : null;
   if (
-    toGradeBase === "Best Angle" &&
+    toGradeBase !== null &&
     calibrationAudit.grade_calibration_enabled &&
     calibrationAudit.total_projection_calibration_enabled &&
     !calibrationAudit.recommendation_uses_calibrated_total
   ) {
-    toGradeBase = "Lean";
+    toGradeBase = "Watchlist";
   }
   const totalSideKey = pOver == null ? null : pOver >= 0.5 ? "over" : "under";
   const totalPublicContext = toGradeBase !== null && totalSideKey !== null ? applyPublicMarketContext({
@@ -461,6 +479,7 @@ export async function buildWnbaDailyEdgePreview(dateParam: string | null) {
           : (1 - modelP) - (1 - mktP);
     const mlGrade: Grade = moneylineGradeFromPickedEdge({
       pickedEdge: mlPickedEdge,
+      pickedOdds: mlPrice,
       conflict,
       marketReliability: marketRel,
       bookCount: mlBooks,
