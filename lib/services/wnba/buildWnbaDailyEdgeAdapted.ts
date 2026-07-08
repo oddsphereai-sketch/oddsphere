@@ -54,6 +54,47 @@ const ENABLE_WNBA_LIVE_PREVIEW_FALLBACK =
   process.env.WNBA_DAILY_EDGE_PREVIEW_FALLBACK === "true";
 const DAILY_EDGE_MARKET_INTELLIGENCE_OVERLAY_ENABLED =
   process.env.DAILY_EDGE_MARKET_INTELLIGENCE_OVERLAY_ENABLED === "true";
+const WNBA_ADAPTED_RESPONSE_CACHE_TTL_MS = Number(
+  process.env.WNBA_ADAPTED_RESPONSE_CACHE_TTL_MS ?? 60 * 1000,
+);
+const WNBA_ADAPTED_RESPONSE_STALE_MS = Number(
+  process.env.WNBA_ADAPTED_RESPONSE_STALE_MS ?? 15 * 60 * 1000,
+);
+
+type WnbaAdaptedResponseCacheEntry = {
+  body: DailyEdgeResponse;
+  expiresAt: number;
+  staleUntil: number;
+};
+
+const wnbaAdaptedResponseCache = new Map<string, WnbaAdaptedResponseCacheEntry>();
+
+function wnbaAdaptedCacheKey(
+  requestedDate: string,
+  renderedCopyFlagOverrides: DailyEdgeRenderedCopyFlagOverrides | null,
+): string {
+  const flags = renderedCopyFlagOverrides === null
+    ? "default"
+    : JSON.stringify(renderedCopyFlagOverrides);
+  return `${requestedDate}::${flags}`;
+}
+
+function readWnbaAdaptedCache(key: string, mode: "fresh" | "stale"): DailyEdgeResponse | null {
+  const entry = wnbaAdaptedResponseCache.get(key);
+  if (!entry) return null;
+  const now = Date.now();
+  if (mode === "fresh") return now < entry.expiresAt ? entry.body : null;
+  return now < entry.staleUntil ? entry.body : null;
+}
+
+function writeWnbaAdaptedCache(key: string, body: DailyEdgeResponse): void {
+  const now = Date.now();
+  wnbaAdaptedResponseCache.set(key, {
+    body,
+    expiresAt: now + WNBA_ADAPTED_RESPONSE_CACHE_TTL_MS,
+    staleUntil: now + WNBA_ADAPTED_RESPONSE_STALE_MS,
+  });
+}
 
 /**
  * Reconstruct the PreviewGame shape from stored game_predictions (written by
@@ -63,12 +104,13 @@ const DAILY_EDGE_MARKET_INTELLIGENCE_OVERLAY_ENABLED =
  * because the board is scoped by slate date, not by scheduled-only status.
  */
 async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
-  const { data: games } = await supabase
+  const { data: games, error: gamesError } = await supabase
     .from("games")
     .select("id, external_id, slate_date, game_date, status, home_team_id, away_team_id")
     .eq("sport", "wnba")
     .eq("slate_date", date)
     .order("game_date");
+  if (gamesError) throw new Error(gamesError.message);
   if (!games || games.length === 0) return [];
   const allIds = games.map((g) => g.id as number);
   const { data: predictionRecords } = await supabase
@@ -267,11 +309,12 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
 }
 
 async function countWnbaGamesForSlate(date: string): Promise<number> {
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from("games")
     .select("id", { count: "exact", head: true })
     .eq("sport", "wnba")
     .eq("slate_date", date);
+  if (error) throw new Error(error.message);
   return count ?? 0;
 }
 
@@ -1266,6 +1309,9 @@ export async function buildWnbaDailyEdgeAdapted(
 ): Promise<DailyEdgeResponse> {
   const asOf = new Date().toISOString();
   const requestedDate = date ?? currentSlateDate("wnba");
+  const cacheKey = wnbaAdaptedCacheKey(requestedDate, renderedCopyFlagOverrides);
+  const freshCached = readWnbaAdaptedCache(cacheKey, "fresh");
+  if (freshCached !== null) return freshCached;
   try {
     // DB-FIRST: serve the stored game_predictions snapshots (instant; the exact
     // applied rows). These match what the cron wrote — no recompute.
@@ -1305,11 +1351,13 @@ export async function buildWnbaDailyEdgeAdapted(
         }
       }
       const games = dbGames.map((g) => adaptGame(g, asOf, marketReadV2Lookup, renderedCopyFlagOverrides));
-      return {
+      const body: DailyEdgeResponse = {
         as_of: asOf, sport: "wnba", date: requestedDate, requested_date: requestedDate,
         fallback_used: false, slateState: "today_published", slate_status: "published",
         last_slate_update_at: asOf, games,
       };
+      writeWnbaAdaptedCache(cacheKey, body);
+      return body;
     }
     const slateGameCount = await countWnbaGamesForSlate(requestedDate);
     if (slateGameCount === 0) {
@@ -1346,15 +1394,19 @@ export async function buildWnbaDailyEdgeAdapted(
     const previewGames = (raw.games as unknown as PreviewGame[])
       .filter((g) => g.date === requestedDate);
     const games = previewGames.map((g) => adaptGame(g, asOf, null, renderedCopyFlagOverrides));
-    return {
+    const body: DailyEdgeResponse = {
       as_of: asOf, sport: "wnba", date: requestedDate, requested_date: requestedDate,
       fallback_used: true, slateState: games.length > 0 ? "today_published" : "no_data",
       slate_status: games.length > 0 ? "published" : null, last_slate_update_at: asOf, games,
     };
+    writeWnbaAdaptedCache(cacheKey, body);
+    return body;
   } catch (e) {
     // HONEST failure state — NOT "no games". "today_pending_ingest" renders
     // "being ingested, check back shortly" rather than implying an empty slate.
     console.warn(`wnba daily-edge adapter error: ${(e as Error).message}`);
+    const stale = readWnbaAdaptedCache(cacheKey, "stale");
+    if (stale !== null) return stale;
     return {
       as_of: asOf, sport: "wnba", date: requestedDate,
       requested_date: requestedDate, fallback_used: false,

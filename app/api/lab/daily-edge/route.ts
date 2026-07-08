@@ -134,6 +134,67 @@ import type { MarketDecision, MarketSplitDisplaySection } from "@/lib/types/doma
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer", "wnba"];
 const DAILY_EDGE_CACHE_CONTROL = "public, s-maxage=30, stale-while-revalidate=120";
 const DAILY_EDGE_ERROR_CACHE_CONTROL = "no-store";
+const DAILY_EDGE_RESPONSE_CACHE_TTL_MS = Number(
+  process.env.DAILY_EDGE_RESPONSE_CACHE_TTL_MS ?? 60 * 1000,
+);
+const DAILY_EDGE_RESPONSE_STALE_MS = Number(
+  process.env.DAILY_EDGE_RESPONSE_STALE_MS ?? 15 * 60 * 1000,
+);
+
+type DailyEdgeResponseCacheEntry = {
+  body: DailyEdgeResponse;
+  expiresAt: number;
+  staleUntil: number;
+};
+
+const dailyEdgeResponseCache = new Map<string, DailyEdgeResponseCacheEntry>();
+
+function dailyEdgeCacheKey(input: {
+  sport: Sport;
+  requestedDate: string;
+  allowStale: boolean;
+  copyPreview: boolean;
+}): string {
+  return [
+    input.sport,
+    input.requestedDate,
+    input.allowStale ? "allow-stale" : "current-only",
+    input.copyPreview ? "copy-preview" : "live-copy",
+  ].join("::");
+}
+
+function dailyEdgeJsonResponse(
+  body: DailyEdgeResponse,
+  cacheState: "HIT" | "MISS" | "STALE",
+  cacheControl = DAILY_EDGE_CACHE_CONTROL,
+): Response {
+  return Response.json(body, {
+    headers: {
+      "Cache-Control": cacheControl,
+      "X-Oddsphere-Cache": cacheState,
+    },
+  });
+}
+
+function writeDailyEdgeResponseCache(key: string, body: DailyEdgeResponse): void {
+  const now = Date.now();
+  dailyEdgeResponseCache.set(key, {
+    body,
+    expiresAt: now + DAILY_EDGE_RESPONSE_CACHE_TTL_MS,
+    staleUntil: now + DAILY_EDGE_RESPONSE_STALE_MS,
+  });
+}
+
+function readDailyEdgeResponseCache(
+  key: string,
+  mode: "fresh" | "stale",
+): DailyEdgeResponse | null {
+  const entry = dailyEdgeResponseCache.get(key);
+  if (!entry) return null;
+  const now = Date.now();
+  if (mode === "fresh") return now < entry.expiresAt ? entry.body : null;
+  return now < entry.staleUntil ? entry.body : null;
+}
 // Phase 7G — NBA goes live in the member-facing Daily Edge via the
 // shared adapter below. MLB pipeline below is unchanged.
 const LIVE_SPORTS: Sport[] = ["mlb", "nba"];
@@ -4487,6 +4548,16 @@ export async function GET(request: Request) {
     : sport === "soccer" || sport === "ucl"
       ? currentSoccerBoardDate()
       : currentSlateDate(sport);
+  const responseCacheKey = dailyEdgeCacheKey({
+    sport,
+    requestedDate,
+    allowStale,
+    copyPreview,
+  });
+  const freshCachedResponse = readDailyEdgeResponseCache(responseCacheKey, "fresh");
+  if (freshCachedResponse !== null) {
+    return dailyEdgeJsonResponse(freshCachedResponse, "HIT");
+  }
 
   // Phase 7G — NBA branch. Member-safe path that hands off to the
   // shared NBA adapter service. Returns the MLB-shaped DailyEdgeResponse
@@ -4538,10 +4609,14 @@ export async function GET(request: Request) {
         "@/lib/services/wnba/buildWnbaDailyEdgeAdapted"
       );
       const adapted = await buildWnbaDailyEdgeAdapted(requestedDate, renderedCopyFlagOverrides);
-      return Response.json(adapted, {
-        headers: { "Cache-Control": DAILY_EDGE_CACHE_CONTROL },
-      });
+      writeDailyEdgeResponseCache(responseCacheKey, adapted);
+      return dailyEdgeJsonResponse(adapted, "MISS");
     } catch (e) {
+      const stale = readDailyEdgeResponseCache(responseCacheKey, "stale");
+      if (stale !== null) {
+        console.warn(`wnba daily-edge: serving stale cache after pipeline error: ${(e as Error).message}`);
+        return dailyEdgeJsonResponse(stale, "STALE");
+      }
       const body: DailyEdgeResponse = {
         as_of: new Date().toISOString(),
         sport,
@@ -4554,7 +4629,7 @@ export async function GET(request: Request) {
         games: [],
       };
       console.warn(`wnba daily-edge: pipeline error: ${(e as Error).message}`);
-      return Response.json(body, { headers: { "Cache-Control": DAILY_EDGE_ERROR_CACHE_CONTROL } });
+      return dailyEdgeJsonResponse(body, "MISS", DAILY_EDGE_ERROR_CACHE_CONTROL);
     }
   }
 
@@ -4648,6 +4723,11 @@ export async function GET(request: Request) {
     .eq("sport", sport)
     .eq("slate_date", requestedDate);
   if (probeErr) {
+    const stale = readDailyEdgeResponseCache(responseCacheKey, "stale");
+    if (stale !== null) {
+      console.warn(`daily-edge: serving stale cache after slate probe error: ${probeErr.message}`);
+      return dailyEdgeJsonResponse(stale, "STALE");
+    }
     return Response.json(
       {
         error: probeErr.message,
@@ -4684,6 +4764,11 @@ export async function GET(request: Request) {
       .order("slate_date", { ascending: false })
       .limit(1);
     if (latestErr) {
+      const stale = readDailyEdgeResponseCache(responseCacheKey, "stale");
+      if (stale !== null) {
+        console.warn(`daily-edge: serving stale cache after stale-slate probe error: ${latestErr.message}`);
+        return dailyEdgeJsonResponse(stale, "STALE");
+      }
       return Response.json(
         {
           error: latestErr.message,
@@ -4736,9 +4821,8 @@ export async function GET(request: Request) {
       last_slate_update_at: null,
       games: [],
     };
-    return Response.json(body, {
-      headers: { "Cache-Control": DAILY_EDGE_CACHE_CONTROL },
-    });
+    writeDailyEdgeResponseCache(responseCacheKey, body);
+    return dailyEdgeJsonResponse(body, "MISS");
   }
 
   // ─── Games + teams + predictions (one round-trip) ────────────────────────
@@ -4772,6 +4856,11 @@ export async function GET(request: Request) {
     .order("game_date", { ascending: true });
 
   if (gamesErr) {
+    const stale = readDailyEdgeResponseCache(responseCacheKey, "stale");
+    if (stale !== null) {
+      console.warn(`daily-edge: serving stale cache after games query error: ${gamesErr.message}`);
+      return dailyEdgeJsonResponse(stale, "STALE");
+    }
     return Response.json({ error: gamesErr.message }, { status: 500 });
   }
 
@@ -4855,6 +4944,11 @@ export async function GET(request: Request) {
       )
       .in("game_id", gameIds);
     if (sigErr) {
+      const stale = readDailyEdgeResponseCache(responseCacheKey, "stale");
+      if (stale !== null) {
+        console.warn(`daily-edge: serving stale cache after sharp_signals error: ${sigErr.message}`);
+        return dailyEdgeJsonResponse(stale, "STALE");
+      }
       return Response.json({ error: sigErr.message }, { status: 500 });
     }
     for (const row of (signalData ?? []) as SignalRow[]) {
@@ -4875,6 +4969,11 @@ export async function GET(request: Request) {
       .in("market_type", ["moneyline", "total", "first_inning_total"])
       .is("player_id", null);
     if (lineErr) {
+      const stale = readDailyEdgeResponseCache(responseCacheKey, "stale");
+      if (stale !== null) {
+        console.warn(`daily-edge: serving stale cache after lines error: ${lineErr.message}`);
+        return dailyEdgeJsonResponse(stale, "STALE");
+      }
       return Response.json({ error: lineErr.message }, { status: 500 });
     }
     // Group by game, then pick the preferred book per game.
@@ -5685,10 +5784,6 @@ export async function GET(request: Request) {
     last_slate_update_at: lastSlateUpdateAt,
     games: dtos,
   };
-  return Response.json(body, {
-    headers: {
-      // Short edge cache keeps stampedes off Supabase; clients also poll.
-      "Cache-Control": DAILY_EDGE_CACHE_CONTROL,
-    },
-  });
+  writeDailyEdgeResponseCache(responseCacheKey, body);
+  return dailyEdgeJsonResponse(body, "MISS");
 }
