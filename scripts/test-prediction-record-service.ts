@@ -372,9 +372,13 @@ console.log("\n━━━ MLB Best Angle tracking/display guard under market-awar
     });
     const ou = recs.find((r) => r.market === "total")!;
     const ba = (ou.snapshot_json as any)?.best_angle_resolution;
-    check("market-aware engine still demotes unqualified total Best Angle", ou.best_angle === false);
-    check("market-aware engine demotes unqualified public total grade", ou.play_grade === "lean");
-    check("market-aware engine snapshots Best Angle demotion", ba?.final_best_angle === false && ba?.demote_reason !== null);
+    check("market-aware totals ignore stale confirmation-only demotion", ou.best_angle === true);
+    check("market-aware totals preserve public Best Angle grade", ou.play_grade === "best_angle");
+    check("market-aware totals snapshot stale confirmation flag as audit-only",
+      ba?.final_best_angle === true &&
+      ba?.requires_confirmation === false &&
+      ba?.raw_requires_confirmation_signal === true &&
+      ba?.demote_reason === null);
 
     const negativeValueMlLeanPred = {
       ...basePrediction,

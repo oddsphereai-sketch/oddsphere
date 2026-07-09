@@ -1575,10 +1575,10 @@ function buildGameDto(
   // with the game-level verdict + propagates the sharp-confirmation
   // bump to per-market display.
   const baOverride = readV22BestAngleOverride(pred.sport_specific);
-  // MLB-P0 (2026-06-13) — pre-lock confirmation gate (see
-  // readV22RequiresConfirmation): a confirmation-required would-be Best Angle
-  // has no line-direction signal pre-lock, so it cannot surface as Best Angle
-  // until lock confirms it. Locked rows are driven by their frozen flag.
+  // MLB-P0 (2026-06-13) — ML-only pre-lock confirmation gate (see
+  // readV22RequiresConfirmation): a confirmation-required would-be ML Best
+  // Angle has no line-direction signal pre-lock, so it cannot surface as Best
+  // Angle until lock confirms it. Locked rows are driven by their frozen flag.
   const baRequiresConf = readV22RequiresConfirmation(pred.sport_specific);
   const preLockBA = pred.locked_at === null;
   // A pre-lock flipped market is never Best Angle (an override is not a model BA),
@@ -4030,18 +4030,22 @@ function readV22BestAngleOverride(
 }
 
 /**
- * MLB-P0 (2026-06-13) — read the V2.2 "requires market confirmation" flags.
- * Set when the regularizer had to CAP an implausibly large RAW edge: the pure
- * model itself says "this would-be Best Angle is only valid if the market
+ * MLB-P0 (2026-06-13) — read the V2.2 ML "requires market confirmation" flag.
+ * Set when the regularizer had to CAP an implausibly large RAW ML edge: the pure
+ * model itself says "this would-be ML Best Angle is only valid if the market
  * confirms it." The write/lock path (resolveMlbBestAngle) keeps such a pick a
  * Best Angle ONLY when line movement is toward_pick — "neutral"/"unknown" is
  * NOT confirmation, because an unavailable signal can't confirm.
  *
  * The PRE-LOCK verdict path has no line-direction signal, so a confirmation-
- * required pick must NOT surface as a Best Angle pre-lock — otherwise it shows
+ * required ML pick must NOT surface as a Best Angle pre-lock — otherwise it shows
  * as a fully-qualified Best Angle now and silently softens to Lean at lock (the
  * exact unqualified-Best-Angle the product contract forbids). Locked rows are
  * unaffected: their frozen resolved flag drives resolveLockedVerdict.
+ *
+ * Totals intentionally return false here. Settled launch-window evidence did
+ * not support using "no confirming movement" as a hard totals demotion; totals
+ * still use active conflict, probability, price, and data-quality gates.
  */
 function readV22RequiresConfirmation(
   sportSpecific: Record<string, unknown> | null | undefined,
@@ -4053,7 +4057,7 @@ function readV22RequiresConfirmation(
   const audit = a as Record<string, unknown>;
   return {
     ml: audit.ml_requires_market_confirmation === true,
-    ou: audit.ou_requires_market_confirmation === true,
+    ou: false,
   };
 }
 
@@ -4372,10 +4376,10 @@ function deriveVerdictForRow(pred: PredictionRow, signals: SignalRow[] = []): {
   // visible inconsistency. Fix: for locked games, pass empty signals
   // so conflict/support are false and the frozen override propagates.
   const override = readV22BestAngleOverride(pred.sport_specific);
-  // MLB-P0 (2026-06-13) — pre-lock confirmation gate (see
+  // MLB-P0 (2026-06-13) — ML-only pre-lock confirmation gate (see
   // readV22RequiresConfirmation). Keeps the breakdown verdict in sync with the
   // per-market pill and with the write/lock path: an unconfirmed,
-  // confirmation-required would-be Best Angle is held to Lean pre-lock.
+  // confirmation-required would-be ML Best Angle is held to Lean pre-lock.
   const requiresConf = readV22RequiresConfirmation(pred.sport_specific);
   const preLock = pred.locked_at === null;
   const mlEligible = override.ml && !(preLock && requiresConf.ml);

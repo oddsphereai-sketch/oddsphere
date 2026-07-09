@@ -1558,11 +1558,15 @@ function buildOuRecord(
     openersForGame, currentLinesForGame, signalsForGame, "total", pred.predicted_ou_side,
   );
   const ouBaseBestAngleEligible = readBoolish(sp.ou_best_angle_eligible);
-  // This is tracking/display truth, not legacy market-grade influence. Keep
-  // the final Best Angle resolver active under the market-aware engine too.
+  const ouRequiresConfirmationSignal = readBoolish(v22.ou_requires_market_confirmation);
+  // Totals keep active conflict gates (line movement against pick and opposing
+  // public-money conflict), but settled launch-window evidence did not support
+  // treating "no confirming movement" as a hard totals demotion. Older rows may
+  // still carry ou_requires_market_confirmation=true, so force that flag off for
+  // the totals writer while preserving it in the audit trail below.
   const ouBest = resolveMlbBestAngle({
     baseEligible: ouBaseBestAngleEligible,
-    requiresConfirmation: readBoolish(v22.ou_requires_market_confirmation),
+    requiresConfirmation: false,
     lineDirection: readLineDirection(ouLineMovement),
     opposingPublicMoney: hasOpposingPublicMoneyConflict(signalsForGame, "total", pred.predicted_ou_side),
   });
@@ -1722,7 +1726,8 @@ function buildOuRecord(
       best_angle_resolution: {
         base_eligible: ouBaseBestAngleEligible,
         legacy_market_signal_grade_influence_enabled: legacyMarketSignalGradeInfluenceEnabled,
-        requires_confirmation: readBoolish(v22.ou_requires_market_confirmation),
+        requires_confirmation: false,
+        raw_requires_confirmation_signal: ouRequiresConfirmationSignal,
         line_direction: readLineDirection(ouLineMovement),
         demote_reason: ouTotalBestAngleDemote
           ? finalOuPick === "over"

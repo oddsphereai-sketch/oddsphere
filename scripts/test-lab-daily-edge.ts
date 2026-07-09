@@ -1041,6 +1041,24 @@ async function main() {
         r.verdict === "best_angle",
       );
     }
+    {
+      // Totals no longer use the stale confirmation-only flag as a hard
+      // pre-lock demotion; active conflict/data/value gates still apply.
+      const r = deriveVerdictForRow(
+        predRow({
+          ou_grade: "market_watch",
+          ou_confidence: 60,
+          predicted_ou_side: "over",
+          sport_specific: { v2_2_audit: { ou_best_angle_eligible: true, ou_requires_market_confirmation: true, ou_edge_pct: 4 } },
+          locked_at: null,
+        }),
+        [],
+      );
+      check(
+        "[MLB-P0.4] total requires_confirmation flag is audit-only pre-lock",
+        r.verdict === "best_angle",
+      );
+    }
 
     // ─── projectSharpSignalsForRead: market normalization + direction ─────
     section("Phase 4.1.8.B — projectSharpSignalsForRead");

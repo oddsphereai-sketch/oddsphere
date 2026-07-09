@@ -170,9 +170,11 @@ export type V22Audit = {
   ou_best_angle_blocked: boolean;
   ml_best_angle_block_reason: string | null;
   ou_best_angle_block_reason: string | null;
-  // requires_market_confirmation = a would-be Best Angle whose edge was
-  // capped; remains Best Angle only if line movement confirms (resolved in
-  // the writer). Picks below Best Angle are always false.
+  // requires_market_confirmation = a would-be ML Best Angle whose edge was
+  // capped and whose raw model-market disagreement is historically fragile;
+  // remains Best Angle only if line movement confirms (resolved in the writer).
+  // Totals keep cap/miscalibration audit fields but do not use missing
+  // confirmation as a hard Best Angle demotion.
   ml_requires_market_confirmation: boolean;
   ou_requires_market_confirmation: boolean;
   truthful_edge_correction?: {
@@ -645,18 +647,12 @@ export function runMlbAutoModelV2_2(
   // market confirmation only for genuinely large RAW gaps.
   const mlBaseBestAngle =
     mlPlayGrade.grade === "best_angle" && !neutralFallbackBlocksBA;
-  const ouBaseBestAngle =
-    finalOuPlayGrade === "best_angle" && !neutralFallbackBlocksBA;
   const mlRawEdgeMagnitude = mlReg.rawEdgePct === null ? 0 : Math.abs(mlReg.rawEdgePct);
-  const ouRawEdgeMagnitude = ouReg.rawEdgePct === null ? 0 : Math.abs(ouReg.rawEdgePct);
   const mlRequiresMarketConfirmation =
     mlBaseBestAngle &&
     mlReg.capApplied &&
     mlRawEdgeMagnitude >= V22_MARKET_CONFIRMATION_MIN_RAW_EDGE_PCT;
-  const ouRequiresMarketConfirmation =
-    ouBaseBestAngle &&
-    ouReg.capApplied &&
-    ouRawEdgeMagnitude >= V22_MARKET_CONFIRMATION_MIN_RAW_EDGE_PCT;
+  const ouRequiresMarketConfirmation = false;
   // probabilityToAmericanOdds / expectedValuePerDollar are no longer
   // called directly here — the grader handles EV computation.
   void probabilityToAmericanOdds;
