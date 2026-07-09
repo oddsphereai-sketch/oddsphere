@@ -3495,9 +3495,17 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     input.modelSide,
     marketFairProb,
   );
-  const marketImpliedPct = implied.pickPct;
+  let marketImpliedPct = implied.pickPct;
   const marketSource = implied.source;
   const marketDataQuality = implied.quality;
+  if (marketImpliedPct === null && priceAmerican !== null) {
+    const singlePriceImplied = americanToImpliedProb(priceAmerican);
+    if (singlePriceImplied !== null) {
+      // Display fallback only: keep marketDataQuality as reported above so
+      // single-book reads are not mislabeled as no-vig consensus.
+      marketImpliedPct = +(singlePriceImplied * 100).toFixed(1);
+    }
+  }
   let modelMarketGapPct =
     modelTrustPct !== null && marketImpliedPct !== null
       ? +(modelTrustPct - marketImpliedPct).toFixed(1)
@@ -3580,12 +3588,17 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
       }
     }
   }
-  // 2026-06-22 — Corrected/flipped market makes no calibrated edge claim (the
-  // override is an empirical fade, not a model edge). Null the model-vs-market
-  // gap so the card never shows a phantom edge for the flipped pick. modelProb
-  // (= recommendation confidence) and the real market-implied % still display.
+  // 2026-07-09 — Corrected/flipped markets still need a displayed edge when
+  // the card shows a picked-side probability and market-implied probability.
+  // Keep the conservative grade/no-bet behavior, but do not make the reader
+  // look like data is missing; compute the edge from the same displayed fields.
   if (correctedMarket) {
-    modelMarketGapPct = null;
+    const correctedModelPct = modelTrustPctOverride ?? modelTrustPct;
+    const correctedMarketPct = marketImpliedPctOverride ?? marketImpliedPct;
+    modelMarketGapPct =
+      correctedModelPct !== null && correctedMarketPct !== null
+        ? +(correctedModelPct - correctedMarketPct).toFixed(1)
+        : null;
   }
   const marketReadV2 = alignMarketReadV2ToVisibleOdds({
     read: input.marketReadV2 ?? null,
