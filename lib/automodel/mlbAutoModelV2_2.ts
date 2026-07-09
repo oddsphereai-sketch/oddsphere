@@ -308,6 +308,7 @@ const V22_SHRINK_K_OU = 0.15;
 const V22_MAX_DISTANCE_PP_ML = 3.0;
 const V22_MAX_DISTANCE_PP_OU = 3.0;
 const V22_OU_MIN_ACTIONABLE_EDGE_PCT = 1.0;
+const V22_MARKET_CONFIRMATION_MIN_RAW_EDGE_PCT = 8.0;
 
 const MLB_TEAM_RESIDUAL_CORRECTION_VERSION = "launch_window_team_residual_v1" as const;
 
@@ -638,19 +639,24 @@ export function runMlbAutoModelV2_2(
     edgePct: ouEdgePct,
   });
   const finalOuPlayGrade = ouGradeCorrection.grade;
-  // MLB-P0 post-shrink large-edge backstop: a pick whose RAW edge was so
-  // large that regularization pinned it to the distance cap (capApplied)
-  // is a strong model-market disagreement. It can REMAIN a Best Angle only
-  // if the market later confirms it (line movement toward the pick) — that
-  // resolution happens in the writer (predictionRecordService), which has
-  // the line-movement snapshot. Here we just flag that confirmation is
-  // required. Picks that don't reach Best Angle never require confirmation.
+  // MLB-P0 post-shrink large-edge backstop. With the 2026-07-09 cap=3
+  // calibration, "capApplied" alone is no longer evidence of an extreme model
+  // market disagreement; normal playable edges can hit that cap. Require
+  // market confirmation only for genuinely large RAW gaps.
   const mlBaseBestAngle =
     mlPlayGrade.grade === "best_angle" && !neutralFallbackBlocksBA;
   const ouBaseBestAngle =
     finalOuPlayGrade === "best_angle" && !neutralFallbackBlocksBA;
-  const mlRequiresMarketConfirmation = mlBaseBestAngle && mlReg.capApplied;
-  const ouRequiresMarketConfirmation = ouBaseBestAngle && ouReg.capApplied;
+  const mlRawEdgeMagnitude = mlReg.rawEdgePct === null ? 0 : Math.abs(mlReg.rawEdgePct);
+  const ouRawEdgeMagnitude = ouReg.rawEdgePct === null ? 0 : Math.abs(ouReg.rawEdgePct);
+  const mlRequiresMarketConfirmation =
+    mlBaseBestAngle &&
+    mlReg.capApplied &&
+    mlRawEdgeMagnitude >= V22_MARKET_CONFIRMATION_MIN_RAW_EDGE_PCT;
+  const ouRequiresMarketConfirmation =
+    ouBaseBestAngle &&
+    ouReg.capApplied &&
+    ouRawEdgeMagnitude >= V22_MARKET_CONFIRMATION_MIN_RAW_EDGE_PCT;
   // probabilityToAmericanOdds / expectedValuePerDollar are no longer
   // called directly here — the grader handles EV computation.
   void probabilityToAmericanOdds;

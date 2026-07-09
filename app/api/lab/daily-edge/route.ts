@@ -3992,7 +3992,7 @@ const GRADE_RANK: Record<Grade, number> = {
 /**
  * Phase 6B.9 — read the V2.2 model's own best_angle eligibility flags
  * out of the audit JSON. V2.2 already enforces strict gates internally
- * (edge ≥ 3pp ML / 3.5pp OU, conf ≥ 56%, high data quality, no key
+ * (calibrated market-specific edge/confidence floors, high data quality, no key
  * feature on neutral fallback) — the resulting ml_best_angle_eligible
  * / ou_best_angle_eligible booleans ARE the model's authoritative
  * Best Angle decision.

@@ -169,9 +169,10 @@ function readPublicPlayGrade(v: unknown): string | null {
  *      separates the teams (|projected run gap| < 0.5) remains a real tracked
  *      pick, but should not be user-promoted as a Lean. Fresh audit through
  *      2026-06-24: 9-16, -25% ROI.
- *   4. FULL-GAME TOTAL LEANS. Totals are tracked and may still become Best
- *      Angle through the stricter Best Angle path, but the lower Lean tier has
- *      not earned promotion. Fresh audit through 2026-06-24: 19-28, -26% ROI.
+ *   4. FULL-GAME TOTAL LEANS. The 2026-07-09 totals calibration moved O/U onto
+ *      a tighter market-anchored edge scale; the model now owns the O/U Lean
+ *      threshold directly. The writer still applies weak-probability and EV
+ *      checks, but no longer blanket-demotes every total Lean.
  *
  * Only touches the "lean" tier; Best Angle / others unchanged. Future-picks +
  * display only — never mutates locked/historical/tracking rows. Reversible
@@ -184,13 +185,14 @@ function readPublicPlayGrade(v: unknown): string | null {
  */
 export const GATE_EV_FLOOR = 0;
 export const GATE_LEAN_MIN_MODEL_PROB = 0.55;
+export const GATE_TOTAL_LEAN_MIN_MODEL_PROB = 0.515;
 export const GATE_LOW_CONVICTION_RUNGAP = 0.5;
-// Mirror the MLB V2.2 Best Angle confidence floor. The V2.2 total BA path
-// already requires high data quality, edge, positive EV, and 56% confidence;
-// a second 70% writer gate over-suppresses normal MLB totals edges.
-export const GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB = 0.56;
-export const GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB = 0.56;
-const MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION = "ml_best_angle_launch_profile_restoration_2026_07_08";
+// Mirror the calibrated MLB V2.2 total Best Angle confidence floor. The
+// previous 56% writer gate lived on the pre-cap scale and could demote every
+// otherwise valid totals Best Angle after the 2026-07-09 cap=3 calibration.
+export const GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB = 0.53;
+export const GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB = 0.53;
+const MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION = "ml_best_angle_calibrated_writer_passthrough_2026_07_09";
 export interface PlayGradeGateInputs {
   modelProb: number | null;
   americanOdds: number | null;
@@ -209,7 +211,9 @@ export function applyPlayGradeGate(grade: string | null, x: PlayGradeGateInputs)
   if (grade !== "lean") return grade; // gate only demotes the Lean tier
   // 1. weak Lean demotion (any market) — model is not strong enough to promote
   //    as user-actionable, even when the raw pick still displays internally.
-  if (x.modelProb !== null && x.modelProb < GATE_LEAN_MIN_MODEL_PROB) return "market_aligned";
+  const minModelProb =
+    x.market === "total" ? GATE_TOTAL_LEAN_MIN_MODEL_PROB : GATE_LEAN_MIN_MODEL_PROB;
+  if (x.modelProb !== null && x.modelProb < minModelProb) return "market_aligned";
   // 2. negative-EV coherence demotion (any market) — arithmetic, env-independent
   if (gateEvNegative(x.modelProb, x.americanOdds)) return "market_aligned";
   // 3. low-conviction moneyline — run-gap conviction, env-independent
@@ -219,10 +223,6 @@ export function applyPlayGradeGate(grade: string | null, x: PlayGradeGateInputs)
   ) {
     return "market_aligned";
   }
-  // 4. full-game total Leans — keep the prediction tracked, but do not promote
-  //    the lower total tier until the calibration earns it. Best Angle totals
-  //    are handled separately before this gate.
-  if (x.market === "total") return "market_aligned";
   return grade;
 }
 
@@ -269,53 +269,9 @@ function resolveMlbMlBestAngleRestorationProfile(args: {
     };
   }
 
-  const edge = Math.abs(args.edgePp);
-  const rawEdge = args.rawEdgePp === null ? null : Math.abs(args.rawEdgePp);
-  const movementKnownNotToward =
-    args.lineDirection === "neutral" || args.lineDirection === "against_pick";
-  if (edge < 8.0 && movementKnownNotToward) {
-    return {
-      bestAngle: false,
-      demoteReason: "ml_profile_sub_8pp_edge_needs_confirming_move",
-      profileVersion: MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION,
-    };
-  }
-  const disciplinedFavorite =
-    args.oddsAmerican >= -240 &&
-    args.oddsAmerican <= -151 &&
-    args.modelProb >= 0.60 &&
-    edge >= 3.0 &&
-    edge <= 8.0;
-  const heavyFavorite =
-    args.oddsAmerican < -240 &&
-    args.modelProb >= 0.72 &&
-    edge >= 3.0 &&
-    edge <= 8.0 &&
-    (rawEdge === null || rawEdge <= 12 || args.lineDirection === "toward_pick");
-  const shortFavoriteOrSmallDog =
-    args.oddsAmerican > -151 &&
-    args.oddsAmerican <= 120 &&
-    args.modelProb >= 0.62 &&
-    edge >= 5.5 &&
-    edge <= 8.0 &&
-    args.lineDirection === "toward_pick";
-
-  if (disciplinedFavorite || heavyFavorite || shortFavoriteOrSmallDog) {
-    return {
-      bestAngle: true,
-      demoteReason: null,
-      profileVersion: MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION,
-    };
-  }
-
   return {
-    bestAngle: false,
-    demoteReason:
-      args.oddsAmerican > -151 && args.oddsAmerican < 0
-        ? "ml_profile_short_favorite_not_confirmed"
-        : rawEdge !== null && rawEdge > 12 && args.lineDirection !== "toward_pick"
-          ? "ml_profile_large_raw_edge_requires_market_confirmation"
-          : "ml_profile_outside_restored_winning_band",
+    bestAngle: true,
+    demoteReason: null,
     profileVersion: MLB_ML_BEST_ANGLE_RESTORATION_PROFILE_VERSION,
   };
 }

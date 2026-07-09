@@ -651,9 +651,9 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   check("ML best_angle PRESERVED when signals map is absent", ml.best_angle === true);
 }
 {
-  // Same-day member-card correction: a restored ML Best Angle candidate with
-  // sub-8pp edge and neutral movement is displayed as Lean on Daily Edge, so
-  // tracking must store the same final public grade.
+  // 2026-07-09 calibrated edge scale: a normal restored ML Best Angle candidate
+  // may stay Best Angle on neutral movement. The old sub-8pp neutral demotion
+  // expected pre-cap edge sizes and starved the board after cap=3 calibration.
   const baNeutralPred = {
     ...basePrediction,
     ml_confidence: 64,
@@ -681,12 +681,57 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     currentLinesByGameId: neutralCurrent,
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
-  check("ML neutral sub-8pp candidate demotes from Best Angle",
+  check("ML calibrated neutral candidate can remain Best Angle",
+    ml.best_angle === true && ml.play_grade === "best_angle",
+    `best_angle=${ml.best_angle} grade=${ml.play_grade}`);
+  check("ML calibrated neutral pass-through is snapshotted",
+    (ml.snapshot_json as any)?.best_angle_resolution?.demote_reason === null);
+  check("ML calibrated neutral member lock stores Best Angle",
+    (ml.snapshot_json as any)?.member_facing_at_lock?.grade === "best_angle");
+}
+{
+  // Explicit large raw-edge confirmation-required candidates still need market
+  // confirmation. This preserves the original safety behavior for true extreme
+  // model-market disagreement without applying it to every capped 3pp edge.
+  const baRequiresConfirmationPred = {
+    ...basePrediction,
+    ml_confidence: 64,
+    sport_specific: {
+      ...restoredMlBestAngleSportSpecific,
+      v2_2_audit: {
+        ...restoredMlBestAngleSportSpecific.v2_2_audit,
+        ml_requires_market_confirmation: true,
+      },
+    },
+  };
+  const neutralOpeners = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -170, line_value: null, recorded_at: "2026-06-07T08:00:00Z" },
+    ]],
+  ]);
+  const neutralCurrent = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -170, line_value: null, fetched_at: "2026-06-07T16:00:00Z" },
+    ]],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-07",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, baRequiresConfirmationPred]]),
+    abbrevByTeamId,
+    oddsByGameId: restoredMlBestAngleOddsByGameId,
+    openersByGameId: neutralOpeners,
+    currentLinesByGameId: neutralCurrent,
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  check("ML confirmation-required neutral candidate demotes from Best Angle",
     ml.best_angle === false && ml.play_grade === "lean",
     `best_angle=${ml.best_angle} grade=${ml.play_grade}`);
-  check("ML neutral sub-8pp demotion is snapshotted",
-    (ml.snapshot_json as any)?.best_angle_resolution?.demote_reason === "ml_profile_sub_8pp_edge_needs_confirming_move");
-  check("ML neutral sub-8pp member lock stores Lean",
+  check("ML confirmation-required demotion is snapshotted",
+    (ml.snapshot_json as any)?.best_angle_resolution?.demote_reason === "large_unconfirmed_regularized_edge");
+  check("ML confirmation-required member lock stores Lean",
     (ml.snapshot_json as any)?.member_facing_at_lock?.grade === "lean");
 }
 {
