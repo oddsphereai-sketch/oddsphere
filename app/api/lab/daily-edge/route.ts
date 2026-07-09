@@ -1124,34 +1124,11 @@ function buildSourceAwareSplitSectionsFromRows(
         }))
         .filter((candidate) => splitSideLabel(market, candidate.side, home, away) !== null);
       const latestBySide = new Map<string, (typeof rows)[number]>();
-      if (sideOrder.length === 2) {
-        const [leftSide, rightSide] = sideOrder;
-        const leftRows = candidates.filter((candidate) => candidate.side === leftSide);
-        const rightRows = candidates.filter((candidate) => candidate.side === rightSide);
-        const hasBothSides = leftRows.length > 0 && rightRows.length > 0;
-        let bestPair: { left: (typeof candidates)[number]; right: (typeof candidates)[number]; score: number; indexGap: number } | null = null;
-        for (const left of leftRows) {
-          for (const right of rightRows) {
-            const score = splitPairScore(left.row, right.row);
-            const indexGap = Math.abs(left.index - right.index);
-            if (
-              bestPair === null ||
-              score < bestPair.score ||
-              (score === bestPair.score && indexGap < bestPair.indexGap)
-            ) {
-              bestPair = { left, right, score, indexGap };
-            }
-          }
-        }
-        if (bestPair !== null && bestPair.score <= 2) {
-          latestBySide.set(leftSide!, bestPair.left.row);
-          latestBySide.set(rightSide!, bestPair.right.row);
-        } else if (hasBothSides) {
-          return null;
-        }
-      }
       for (const candidate of candidates) {
-        if (!latestBySide.has(candidate.side)) latestBySide.set(candidate.side, candidate.row);
+        const existing = latestBySide.get(candidate.side);
+        const candidateAt = candidate.row.source_observed_at ?? candidate.row.fetched_at ?? "";
+        const existingAt = existing?.source_observed_at ?? existing?.fetched_at ?? "";
+        if (!existing || candidateAt > existingAt) latestBySide.set(candidate.side, candidate.row);
       }
       const sectionRows = sideOrder.flatMap((side) => {
         const row = latestBySide.get(side);
@@ -4547,6 +4524,7 @@ export async function GET(request: Request) {
     risk: false,
   };
   const frozenSourceAwareSplitRowsByGameId = new Map<number, SourceAwareSplitObservationRow[]>();
+  const lockedSplitSnapshotGameIds = new Set<number>();
   // R-19 Phase 1 (C7) — explicit opt-in for stale-slate fallback. Default
   // (no param, or any value other than "true") = no fallback; route
   // surfaces an explicit pending/empty state via `slateState`. Callers
@@ -5249,6 +5227,7 @@ export async function GET(request: Request) {
       lockedByGameMarket.set(`${r.game_id}::${r.market}`, effectiveRow);
       const sourceAwareRowsAtLock = effectiveRow.snapshot_json?.source_aware_split_rows_at_lock;
       if (Array.isArray(sourceAwareRowsAtLock) && sourceAwareRowsAtLock.length > 0) {
+        lockedSplitSnapshotGameIds.add(r.game_id);
         frozenSourceAwareSplitRowsByGameId.set(
           r.game_id,
           sourceAwareRowsAtLock.filter((row): row is SourceAwareSplitObservationRow => row !== null && typeof row === "object") as SourceAwareSplitObservationRow[],
@@ -5741,7 +5720,7 @@ export async function GET(request: Request) {
     }
   }
   const sourceAwareSplits =
-    DAILY_EDGE_MARKET_INTELLIGENCE_OVERLAY_ENABLED && sport === "mlb"
+    sport === "mlb"
       ? await loadSourceAwareSplitSections({
           eventIds: games.map((g) => String(g.external_id)),
           games,
@@ -5749,6 +5728,7 @@ export async function GET(request: Request) {
       : new Map();
   if (sport === "mlb") {
     for (const g of games) {
+      if (!lockedSplitSnapshotGameIds.has(g.id)) continue;
       const frozenRows = frozenSourceAwareSplitRowsByGameId.get(g.id) ?? [];
       if (frozenRows.length === 0) continue;
       const frozenLookup = buildSourceAwareSplitSectionsFromRows(
