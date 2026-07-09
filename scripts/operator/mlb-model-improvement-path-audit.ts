@@ -43,6 +43,8 @@ type Rec = {
   play_grade: string | null;
   best_angle: boolean | null;
   no_bet: boolean | null;
+  model_version: string | null;
+  calibration_version: string | null;
   locked_at: string | null;
   snapshot_json: unknown;
   prediction_grades?: unknown;
@@ -65,6 +67,8 @@ type Agg = {
   staked: number;
   brierSum: number;
   brierN: number;
+  logLossSum: number;
+  logLossN: number;
   clvN: number;
   clvBeat: number;
 };
@@ -129,8 +133,31 @@ function profit(odds: number | null, r: "win" | "loss"): number | null {
   return odds > 0 ? odds / 100 : 100 / Math.abs(odds);
 }
 
+function expectedValueFromAmerican(prob: number | null, odds: number | null): number | null {
+  if (prob === null || odds === null || !Number.isFinite(prob) || !Number.isFinite(odds) || odds === 0) return null;
+  const profitOnWin = odds > 0 ? odds / 100 : 100 / Math.abs(odds);
+  return prob * profitOnWin - (1 - prob);
+}
+
 function newAgg(): Agg {
-  return { n: 0, w: 0, l: 0, push: 0, units: 0, staked: 0, brierSum: 0, brierN: 0, clvN: 0, clvBeat: 0 };
+  return {
+    n: 0,
+    w: 0,
+    l: 0,
+    push: 0,
+    units: 0,
+    staked: 0,
+    brierSum: 0,
+    brierN: 0,
+    logLossSum: 0,
+    logLossN: 0,
+    clvN: 0,
+    clvBeat: 0,
+  };
+}
+
+function clampProbability(p: number): number {
+  return Math.min(0.99, Math.max(0.01, p));
 }
 
 function add(a: Agg, odds: number | null, r: Result, prob: number | null, clvBeat: boolean | null): void {
@@ -148,6 +175,9 @@ function add(a: Agg, odds: number | null, r: Result, prob: number | null, clvBea
       const y = r === "win" ? 1 : 0;
       a.brierSum += (prob - y) ** 2;
       a.brierN++;
+      const p = clampProbability(prob);
+      a.logLossSum += -(y * Math.log(p) + (1 - y) * Math.log(1 - p));
+      a.logLossN++;
     }
   }
   if (clvBeat !== null) {
@@ -165,6 +195,7 @@ function summarize(a: Agg): Record<string, number | string | null> {
     units: Number(a.units.toFixed(2)),
     roiPct: a.staked ? Number(((a.units / a.staked) * 100).toFixed(1)) : null,
     brier: a.brierN ? Number((a.brierSum / a.brierN).toFixed(4)) : null,
+    logLoss: a.logLossN ? Number((a.logLossSum / a.logLossN).toFixed(4)) : null,
     clvBeatPct: a.clvN ? Number(((a.clvBeat / a.clvN) * 100).toFixed(1)) : null,
   };
 }
@@ -248,7 +279,7 @@ async function loadRecords(opts: Opts): Promise<Rec[]> {
     const rows = await withRetry<Rec[]>(`prediction_records ${slateDate}`, async () =>
       await supabase
         .from("prediction_records")
-        .select("id,game_id,slate_date,market,pick,side,line_value,odds_american,confidence,model_probability,market_probability,edge,play_grade,best_angle,no_bet,locked_at,snapshot_json,prediction_grades:prediction_grades!prediction_record_id(result)")
+        .select("id,game_id,slate_date,market,pick,side,line_value,odds_american,confidence,model_probability,market_probability,edge,play_grade,best_angle,no_bet,model_version,calibration_version,locked_at,snapshot_json,prediction_grades:prediction_grades!prediction_record_id(result)")
         .eq("sport", "mlb")
         .in("market", ["moneyline", "total", "first_inning"])
         .eq("slate_date", slateDate)
@@ -347,6 +378,54 @@ function auditTotals(records: Rec[], games: Map<number, Game>): Record<string, u
   };
 }
 
+function auditMoneylineProbability(records: Rec[]): Record<string, unknown> {
+  const candidates = new Map<string, Agg>();
+  const positiveEvCandidates = new Map<string, Agg>();
+  const mlRows = records.filter((r) => r.market === "moneyline");
+  const addCandidate = (label: string, row: Rec, prob: number | null, r: Result) => {
+    if (prob === null) return;
+    const agg = candidates.get(label) ?? newAgg();
+    add(agg, row.odds_american, r, prob, clvBeat(row));
+    candidates.set(label, agg);
+    const ev = row.odds_american === null ? null : expectedValueFromAmerican(prob, row.odds_american);
+    if (ev !== null && ev > 0) {
+      const evAgg = positiveEvCandidates.get(label) ?? newAgg();
+      add(evAgg, row.odds_american, r, prob, clvBeat(row));
+      positiveEvCandidates.set(label, evAgg);
+    }
+  };
+
+  for (const row of mlRows) {
+    const r = result(row.prediction_grades);
+    if (r !== "win" && r !== "loss") continue;
+    const v22 = obj(obj(row.snapshot_json).v2_2_audit);
+    const rawProb = num(v22.ml_raw_model_prob) ?? row.model_probability;
+    const currentProb = row.model_probability ?? num(v22.ml_model_prob) ?? num(v22.ml_regularized_model_prob);
+    const marketProb = row.market_probability ?? num(v22.ml_market_prob);
+    addCandidate("current_recorded_probability", row, currentProb, r);
+    addCandidate("raw_model_probability", row, rawProb, r);
+    addCandidate("market_probability", row, marketProb, r);
+    if (rawProb === null || marketProb === null) continue;
+    for (const k of [0.15, 0.25, 0.35, 0.5, 0.65]) {
+      for (const cap of [3, 5, 8]) {
+        const p = regularizeProbability({ rawProb, marketProb, k, maxDistancePp: cap }).regularizedProb;
+        addCandidate(`regularized_k_${k}_cap_${cap}`, row, p, r);
+      }
+    }
+  }
+
+  return {
+    allRows: Object.fromEntries(
+      [...candidates.entries()]
+        .sort((a, b) => (summarize(a[1]).logLoss as number) - (summarize(b[1]).logLoss as number))
+        .map(([k, v]) => [k, summarize(v)]),
+    ),
+    positiveEvRows: Object.fromEntries(
+      sortedEntries(positiveEvCandidates).map(([k, v]) => [k, summarize(v)]),
+    ),
+  };
+}
+
 function auditFi(records: Rec[], games: Map<number, Game>): Record<string, unknown> {
   const candidates = new Map<string, Agg>();
   const fiRows = records.filter((r) => r.market === "first_inning");
@@ -400,6 +479,91 @@ function auditGrades(records: Rec[]): Record<string, unknown> {
   ]));
 }
 
+function auditModelVersions(records: Rec[]): Record<string, unknown> {
+  const groups = new Map<string, Agg>();
+  const dates = new Map<string, Set<string>>();
+  const grades = new Map<string, Record<string, number>>();
+  for (const row of records) {
+    const r = result(row.prediction_grades);
+    if (r !== "win" && r !== "loss" && r !== "push") continue;
+    const key = [
+      row.market,
+      row.model_version ?? "null",
+      row.calibration_version ?? "null",
+    ].join("::");
+    const agg = groups.get(key) ?? newAgg();
+    add(agg, row.odds_american, r, row.model_probability, clvBeat(row));
+    groups.set(key, agg);
+
+    const dateSet = dates.get(key) ?? new Set<string>();
+    dateSet.add(row.slate_date);
+    dates.set(key, dateSet);
+
+    const gradeCounts = grades.get(key) ?? {};
+    const label = gradeLabel(row);
+    gradeCounts[label] = (gradeCounts[label] ?? 0) + 1;
+    grades.set(key, gradeCounts);
+  }
+
+  return Object.fromEntries(
+    sortedEntries(groups).map(([key, agg]) => {
+      const [market, modelVersion, calibrationVersion] = key.split("::");
+      return [
+        key,
+        {
+          market,
+          modelVersion,
+          calibrationVersion,
+          ...summarize(agg),
+          dates: [...(dates.get(key) ?? new Set<string>())].sort(),
+          gradeCounts: grades.get(key) ?? {},
+        },
+      ];
+    }),
+  );
+}
+
+function launchEra(date: string): string {
+  if (date <= "2026-06-12") return "launch_2026_06_06_to_06_12";
+  if (date <= "2026-06-19") return "week2_2026_06_13_to_06_19";
+  if (date <= "2026-06-26") return "week3_2026_06_20_to_06_26";
+  if (date <= "2026-07-03") return "week4_2026_06_27_to_07_03";
+  return "week5_2026_07_04_plus";
+}
+
+function auditDateEras(records: Rec[]): Record<string, unknown> {
+  const groups = new Map<string, Agg>();
+  const gradeGroups = new Map<string, Agg>();
+  for (const row of records) {
+    const r = result(row.prediction_grades);
+    if (r !== "win" && r !== "loss" && r !== "push") continue;
+    const era = launchEra(row.slate_date);
+    const key = `${era}::${row.market}`;
+    const agg = groups.get(key) ?? newAgg();
+    add(agg, row.odds_american, r, row.model_probability, clvBeat(row));
+    groups.set(key, agg);
+
+    const gradeKey = `${era}::${row.market}::${gradeLabel(row)}`;
+    const gradeAgg = gradeGroups.get(gradeKey) ?? newAgg();
+    add(gradeAgg, row.odds_american, r, row.model_probability, clvBeat(row));
+    gradeGroups.set(gradeKey, gradeAgg);
+  }
+
+  const byMarket = Object.fromEntries(
+    [...groups.entries()].map(([key, agg]) => {
+      const [era, market] = key.split("::");
+      return [key, { era, market, ...summarize(agg) }];
+    }),
+  );
+  const byGrade = Object.fromEntries(
+    [...gradeGroups.entries()].map(([key, agg]) => {
+      const [era, market, grade] = key.split("::");
+      return [key, { era, market, grade, ...summarize(agg) }];
+    }),
+  );
+  return { byMarket, byGrade };
+}
+
 function auditLockCoverage(records: Rec[]): Record<string, unknown> {
   const byMarket = new Map<string, { n: number; locked: number; lines: number; signals: number; memberFacing: number; clv: number }>();
   for (const row of records) {
@@ -423,9 +587,12 @@ async function main(): Promise<void> {
   const games = await loadGames(records);
   const report = {
     scope: { sport: "mlb", dateFrom: opts.dateFrom, dateTo: opts.dateTo, rows: records.length },
+    moneylineProbabilityCalibration: auditMoneylineProbability(records),
     totalsDistributionAndRegularization: auditTotals(records, games),
     firstInningEmpiricalBayes: auditFi(records, games),
     playGradeMonotonicity: auditGrades(records),
+    modelVersionEras: auditModelVersions(records),
+    dateEras: auditDateEras(records),
     lockTimeCoverage: auditLockCoverage(records),
     recommendation: [
       "Promote a candidate only if it improves ROI/Brier without collapsing sample size and without using post-lock data.",
@@ -442,6 +609,16 @@ async function main(): Promise<void> {
 
   console.log(`\nMLB MODEL IMPROVEMENT PATH AUDIT ${opts.dateFrom}..${opts.dateTo}`);
   console.log(`Rows: ${records.length}`);
+  console.log("\nMoneyline probability candidates");
+  for (const [label, s] of Object.entries(report.moneylineProbabilityCalibration.allRows as Record<string, unknown>).slice(0, 15)) {
+    const a = s as Record<string, unknown>;
+    console.log(`${label.padEnd(44)} n=${a.n} rec=${a.record} win=${a.winPct}% units=${a.units} roi=${a.roiPct}% brier=${a.brier} logloss=${a.logLoss}`);
+  }
+  console.log("\nMoneyline positive-EV candidates");
+  for (const [label, s] of Object.entries(report.moneylineProbabilityCalibration.positiveEvRows as Record<string, unknown>).slice(0, 10)) {
+    const a = s as Record<string, unknown>;
+    console.log(`${label.padEnd(44)} n=${a.n} rec=${a.record} win=${a.winPct}% units=${a.units} roi=${a.roiPct}% brier=${a.brier} logloss=${a.logLoss}`);
+  }
   console.log("\nTotals candidates");
   for (const [label, s] of Object.entries(report.totalsDistributionAndRegularization.candidates as Record<string, unknown>).slice(0, 20)) {
     const a = s as Record<string, unknown>;
@@ -454,6 +631,10 @@ async function main(): Promise<void> {
   }
   console.log("\nPlay grade monotonicity");
   console.log(JSON.stringify(report.playGradeMonotonicity, null, 2));
+  console.log("\nModel/version eras");
+  console.log(JSON.stringify(report.modelVersionEras, null, 2));
+  console.log("\nDate eras");
+  console.log(JSON.stringify(report.dateEras, null, 2));
   console.log("\nLock-time coverage");
   console.log(JSON.stringify(report.lockTimeCoverage, null, 2));
 }
