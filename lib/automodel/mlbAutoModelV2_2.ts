@@ -48,6 +48,7 @@ import {
 } from "./runDistribution";
 import { computePlayGrade } from "./playGrade";
 import { regularizeProbability } from "./mlbProbabilityRegularization";
+import { buildMlbMatchupFeatureAudit, type MlbMatchupFeatureAudit } from "./mlbMatchupFeatures";
 import type { AutoModelOutput, GameSnapshot, ModelStage, StarterSnapshot, TeamSnapshot, BatterSnapshot } from "./types";
 import { MODEL_VERSION_V2_2 } from "./types";
 
@@ -206,6 +207,11 @@ export type V22Audit = {
    * grades, or display. Optional for back-compat with pre-capture snapshots.
    */
   feature_capture?: V22FeatureCapture | null;
+  /**
+   * Shadow-only matchup feature layer. Captured for audit/backtest; does not
+   * affect projections, probabilities, grades, or display until promoted.
+   */
+  matchup_features?: MlbMatchupFeatureAudit | null;
 };
 
 /** Shape of the forward-only feature-capture diagnostic block. */
@@ -763,6 +769,7 @@ export function runMlbAutoModelV2_2(
       (indep as { audit_per_team?: unknown }).audit_per_team ?? null,
       indep.data_quality_tier,
     ),
+    matchup_features: buildMlbMatchupFeatureAudit(snap),
   };
 
   return {

@@ -18,6 +18,7 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   moneyline_probability_head: "mlb_moneyline_launch_profile_cap3_champion_2026_07_09",
   total_probability_head: "mlb_total_grid_calibrated_k04_cap8_2026_07_09",
   first_inning_probability_head: "mlb_first_inning_launch_probability_side_champion_2026_07_08",
+  matchup_feature_layer: "mlb_matchup_features_shadow_v1_2026_07_09",
   market_calibration_policy: "mlb_model_market_calibration_baseline_2026_07_08",
   grade_policy: "mlb_public_grade_policy_calibrated_edge_scale_ou_no_confirm_gate_2026_07_09",
   correction_policy: "mlb_prediction_corrections_category_champions_2026_07_09",
