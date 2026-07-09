@@ -327,11 +327,11 @@ export function computeWnbaPrediction(
     finite(calibrationAudit.recommendation_home_margin_used)
       ? calibrationAudit.recommendation_home_margin_used
       : projMargin;
-  const marginForDisplayedScore =
-    calibrationAudit.recommendation_uses_calibrated_spread &&
-    finite(calibrationAudit.recommendation_home_margin_used)
-      ? calibrationAudit.recommendation_home_margin_used
-      : projMargin;
+  // The displayed score is the model projection, not the calibrated spread
+  // recommendation substrate. Spread calibration can help price the spread
+  // market, but using its home-bias correction here can make the score imply
+  // the opposite ML winner from the model's moneyline prediction.
+  const marginForDisplayedScore = projMargin;
   const totalForDisplayedScore =
     calibrationAudit.recommendation_uses_calibrated_total &&
     finite(calibrationAudit.recommendation_projected_total_used)
