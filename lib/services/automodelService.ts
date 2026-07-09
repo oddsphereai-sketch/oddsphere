@@ -1376,7 +1376,13 @@ function applyV2IfSelected(args: {
       totalCalibration.enabled;
     const recommendationUsesCalibratedProjection =
       projectionCalibrationEnabled &&
-      process.env.MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED === "true";
+      process.env.MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED === "true" &&
+      // 2026-07-08 — keep market-aware totals as audit/calibration substrate
+      // unless a separate reviewed rollout flag is enabled. The launch-window
+      // audit showed the market-aware projection did not beat the raw total or
+      // market line on MAE, and using it for recommendations can make the
+      // displayed score/projection feel detached from the O/U prediction.
+      process.env.MLB_TOTAL_MARKET_AWARE_RECOMMENDATION_ROLLOUT_ENABLED === "true";
     const legacyMarketAnchorFlag =
       process.env.MLB_MARKET_ANCHOR_FORMULA_ENABLED === "true";
     const reconciliationAwayScore = recommendationUsesCalibratedProjection
@@ -1496,6 +1502,8 @@ function applyV2IfSelected(args: {
               process.env.MLB_TOTAL_PROJECTION_CALIBRATION_ENABLED === "true",
             MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED:
               process.env.MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED === "true",
+            MLB_TOTAL_MARKET_AWARE_RECOMMENDATION_ROLLOUT_ENABLED:
+              process.env.MLB_TOTAL_MARKET_AWARE_RECOMMENDATION_ROLLOUT_ENABLED === "true",
             MLB_MARKET_ANCHOR_FORMULA_ENABLED_LEGACY: legacyMarketAnchorFlag,
           },
           skipped_reason: recommendationUsesCalibratedProjection
@@ -1510,6 +1518,8 @@ function applyV2IfSelected(args: {
                     ? "market_total_unavailable"
                     : process.env.MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED !== "true"
                       ? "recommendation_use_flag_disabled"
+                      : process.env.MLB_TOTAL_MARKET_AWARE_RECOMMENDATION_ROLLOUT_ENABLED !== "true"
+                        ? "market_aware_recommendation_rollout_disabled"
                       : "not_enabled",
           legacy_anchor_flag_note: legacyMarketAnchorFlag
             ? "MLB_MARKET_ANCHOR_FORMULA_ENABLED is ignored for recommendation behavior; use MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED."
