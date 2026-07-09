@@ -296,19 +296,19 @@ const V22_BEST_ANGLE_MIN_CONFIDENCE_PCT_OU = 53;
 // launch-window ML profile had real signal; totals remain guarded downstream
 // by stricter quality gates because they were less stable week to week.
 const V22_SHRINK_K_ML = 0.25;
-// 2026-07-09 model-improvement audit, 2026-06-07..2026-07-08:
-// O/U side selection tested best when the probability/edge substrate was
-// regularized hard toward the no-vig market (k=.15, cap=3pp). The model still
-// picks the raw probability side; this only calibrates probability,
-// confidence, edge, and downstream sorting to the empirically stronger totals
-// version.
-const V22_SHRINK_K_OU = 0.15;
+// 2026-07-09 raw-probability grid audit, 2026-06-07..2026-07-09:
+// O/U calibrated best at k=.4/cap=8pp. The tighter k=.15/cap=3pp setting was
+// well targeted but too sparse; k=.4/cap=8pp preserved the late-June totals
+// signal while keeping average probability within ~0.5pp of observed results.
+// The model still picks the raw probability side; this calibrates probability,
+// confidence, edge, and downstream sorting.
+const V22_SHRINK_K_OU = 0.4;
 // 2026-07-09 since-launch calibration audit: ML probability quality improved
 // with the same launch-profile blend (k=.25) but a tighter 3pp distance cap
 // versus the prior 8pp cap. This does not flip sides; it only prevents
 // overconfident model-vs-market gaps from driving confidence/EV/grades.
 const V22_MAX_DISTANCE_PP_ML = 3.0;
-const V22_MAX_DISTANCE_PP_OU = 3.0;
+const V22_MAX_DISTANCE_PP_OU = 8.0;
 const V22_OU_MIN_ACTIONABLE_EDGE_PCT = 1.0;
 const V22_MARKET_CONFIRMATION_MIN_RAW_EDGE_PCT = 8.0;
 
