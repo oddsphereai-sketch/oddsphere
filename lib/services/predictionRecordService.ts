@@ -999,9 +999,10 @@ function buildDailyEdgeLockSubstrate(args: {
 }
 
 function canonicalPublicGrade(record: PredictionRecordRow): string | null {
+  const raw = typeof record.play_grade === "string" ? record.play_grade.trim().toLowerCase() : "";
+  if (raw === "toss_up") return "watchlist";
   if (record.no_bet === true) return "no_play";
   if (record.best_angle === true) return "best_angle";
-  const raw = typeof record.play_grade === "string" ? record.play_grade.trim().toLowerCase() : "";
   if (
     raw === "best_angle" ||
     raw === "lean" ||
@@ -1010,8 +1011,10 @@ function canonicalPublicGrade(record: PredictionRecordRow): string | null {
     raw === "no_play" ||
     raw === "market_aligned" ||
     raw === "provisional" ||
-    raw === "held"
+    raw === "held" ||
+    raw === "no_bet"
   ) {
+    if (raw === "held" || raw === "no_bet") return "no_play";
     return raw;
   }
   if (record.held === true) return "held";
@@ -1834,8 +1837,6 @@ function buildFiRecord(
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
   const held = holdPicks.includes("nrfi") || pred.predicted_nrfi === null;
   if (held) return null;
-  const legacyMarketSignalGradeInfluenceEnabled =
-    readMarketIntelligenceV2Config().legacyMarketSignalGradeInfluenceEnabled;
   const freshAudit = fiAuditFreshDataReady(sp);
   if (!freshAudit.ready) return null;
 
@@ -1857,6 +1858,19 @@ function buildFiRecord(
     typeof sp.nrfi_decision_kind === "string"
       ? (sp.nrfi_decision_kind as string)
       : null;
+  const fiAudit =
+    sp.fi_v2_audit && typeof sp.fi_v2_audit === "object"
+      ? (sp.fi_v2_audit as Record<string, unknown>)
+      : null;
+  const fiWriterPlayGradeRaw = readStringOrNull(fiAudit?.fi_play_grade);
+  const fiWriterPlayGrade =
+    fiWriterPlayGradeRaw === "best_angle" ||
+    fiWriterPlayGradeRaw === "lean" ||
+    fiWriterPlayGradeRaw === "toss_up" ||
+    fiWriterPlayGradeRaw === "no_bet" ||
+    fiWriterPlayGradeRaw === "held"
+      ? fiWriterPlayGradeRaw
+      : null;
   const autoFactors =
     sp.auto_factors && typeof sp.auto_factors === "object"
       ? (sp.auto_factors as Record<string, unknown>)
@@ -1866,6 +1880,7 @@ function buildFiRecord(
       ? (autoFactors.nrfi_expected_runs as number)
       : null;
   const isTossUp =
+    fiWriterPlayGrade === "toss_up" ||
     nrfiDecisionKind === "toss_up" ||
     (nrfiDecisionKind === null &&
       typeof pred.nrfi_confidence === "number" &&
@@ -1910,21 +1925,16 @@ function buildFiRecord(
     ? "non-actionable: locked pill was Toss-Up"
     : null;
 
-  // FI V2 is the source of truth for first-inning actionability. The public
-  // tracking row must mirror the audit grade users see on the Daily Edge card:
-  // best_angle/lean are actionable; no_bet/toss_up/held collapse to null with
-  // no_bet metadata preserved below.
-  const fiAudit =
-    sp.fi_v2_audit && typeof sp.fi_v2_audit === "object"
-      ? (sp.fi_v2_audit as Record<string, unknown>)
-      : null;
-  const fiAuditGrade = readStringOrNull(fiAudit?.fi_play_grade);
-  const fiPlayGrade = isTossUp ? null : readPublicPlayGrade(fiAuditGrade);
-  const fiAuditNoBet =
-    fiAuditGrade === "no_bet" ||
-    fiAuditGrade === "toss_up" ||
-    fiAuditGrade === "held";
-  const fiAuditNoBetReason = readStringOrNull(fiAudit?.fi_no_bet_reason);
+  // FI V2 is the source of truth for first-inning actionability. Persist the
+  // exact writer grade users see on Daily Edge: Best Angle, Lean, Toss-Up,
+  // no-bet, and held must not be recreated from a confidence-only ladder.
+  const fiWriterNoBetReason = readStringOrNull(fiAudit?.fi_no_bet_reason);
+  const fiWriterNoBet =
+    fiWriterPlayGrade === "no_bet" ||
+    fiWriterPlayGrade === "held";
+  const fiPlayGrade: string | null =
+    fiWriterPlayGrade ??
+    (isTossUp ? "toss_up" : null);
 
   // Legacy-only FI inversion fallback. FI V2 audit grades are authoritative;
   // do not let an older post-model flip override the current FI model's
@@ -1951,10 +1961,20 @@ function buildFiRecord(
   const finalFiModelProb = fiChampionStandDown ? null : fiModelProb;
   const finalFiMarketProb = fiChampionStandDown ? null : fiMarketProb;
   const finalFiEdge = fiChampionStandDown ? null : fiEdge;
-  const finalFiNoBet = noBetValue || fiAuditNoBet || fiChampionStandDown;
+  const finalFiNoBet = noBetValue || fiWriterNoBet || fiChampionStandDown;
   const finalFiNoBetReason = fiChampionStandDown
     ? "champion_candidate_fi_flip_stand_down: FI flip cohort replayed flat; no actionable FI."
-    : noBetReasonValue ?? fiAuditNoBetReason;
+    : noBetReasonValue ??
+      fiWriterNoBetReason ??
+      (fiWriterPlayGrade === "held"
+        ? "Held — data quality insufficient."
+        : fiWriterPlayGrade === "no_bet"
+          ? "Edge too thin; no bet."
+          : null);
+  const finalFiPlayGrade = fiChampionStandDown ? null : fiPlayGrade;
+  const finalFiBestAngle =
+    finalFiPlayGrade === "best_angle" &&
+    !finalFiNoBet;
 
   return {
     game_prediction_id: pred.id,
@@ -1979,16 +1999,9 @@ function buildFiRecord(
     edge: finalFiEdge,
     expected_value: null,
     // Flipped rows carry no model grade (the override isn't a model call).
-    play_grade: fiFlipped || fiChampionStandDown
-      ? null
-      : legacyMarketSignalGradeInfluenceEnabled
-        ? applyPlayGradeGate(fiPlayGrade, {
-            modelProb: fiModelProb, americanOdds: fiOddsAmerican, market: "first_inning",
-            runGapAbs: null, totalLine: null,
-          })
-        : fiPlayGrade,
+    play_grade: finalFiPlayGrade,
     prediction_type: fiChampionStandDown ? "toss_up" : fiFlipped ? null : predictionTypeValue,
-    best_angle: fiPlayGrade === "best_angle" && !fiChampionStandDown && !fiFlipped,
+    best_angle: finalFiBestAngle,
     no_bet: finalFiNoBet,
     no_bet_reason: finalFiNoBetReason,
     market_aligned: false,

@@ -1440,6 +1440,36 @@ console.log("\n━━━ FI V2 audit-grade persistence ━━━");
   check("FI audit Best Angle → best_angle=true", fi.best_angle === true);
 }
 {
+  const fiNoBet = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 56,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "nrfi",
+      fi_v2_audit: {
+        fi_pick: "NRFI",
+        fi_play_grade: "no_bet",
+        fi_no_bet_reason: "Edge too thin; no bet.",
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fiNoBet]]),
+    abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  check("FI audit no_bet → play_grade='no_bet'", fi.play_grade === "no_bet");
+  check("FI audit no_bet → no_bet=true", fi.no_bet === true);
+  check("FI audit no_bet → reason persisted", fi.no_bet_reason === "Edge too thin; no bet.");
+}
+{
   // Toss-Up FI (canonical) must NOT persist lean even if confidence
   // somehow clears the floor — Toss-Up always wins.
   const fiTossUp = {
@@ -1462,9 +1492,11 @@ console.log("\n━━━ FI V2 audit-grade persistence ━━━");
     abbrevByTeamId,
   });
   const fi = recs.find((r) => r.market === "first_inning")!;
-  check("Toss-Up FI → play_grade=null even at conf=60", fi.play_grade === null);
+  check("Toss-Up FI → play_grade='toss_up' even at conf=60", fi.play_grade === "toss_up");
   check("Toss-Up FI → no_bet=true preserved", fi.no_bet === true);
   check("Toss-Up FI → prediction_type='toss_up' preserved", fi.prediction_type === "toss_up");
+  check("Toss-Up FI → member-facing lock grade remains watchlist",
+        (fi.snapshot_json as any)?.member_facing_at_lock?.grade === "watchlist");
 }
 {
   // FI held (nrfi in hold_picks) returns no record — already covered by

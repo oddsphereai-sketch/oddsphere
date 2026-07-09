@@ -23,6 +23,12 @@ export type DailyEdgeActionabilityInput = {
   dataQualityTier: "high" | "medium" | "low" | "fallback";
   priceAmerican: number | null;
   priceUnavailableAtLock?: boolean;
+  /**
+   * Non-actionable neutral state that should stay visible as Watchlist.
+   * Used for MLB FI Toss-Up: it intentionally has no picked side price, but it
+   * is still a real model read rather than a missing-price failure.
+   */
+  neutralNonActionable?: boolean;
 };
 
 export type DailyEdgeActionabilityResult = {
@@ -103,10 +109,11 @@ export function normalizeDailyEdgeActionability(
 ): DailyEdgeActionabilityResult {
   const capReasons: string[] = [];
   const hasPick = input.hasPick && !input.held;
+  const neutralNonActionable = input.neutralNonActionable === true;
   const recAfterDataCap = clampRecForTier(input.rawRecScore, input.dataQualityTier);
 
   if (!hasPick) capReasons.push("no_pick_or_held");
-  if (input.priceUnavailableAtLock === true || (hasPick && input.priceAmerican === null)) {
+  if (!neutralNonActionable && (input.priceUnavailableAtLock === true || (hasPick && input.priceAmerican === null))) {
     capReasons.push("missing_price");
   }
   if (input.dataQualityTier === "fallback") capReasons.push("fallback_data_cap");
@@ -116,12 +123,14 @@ export function normalizeDailyEdgeActionability(
   if (readDirection === "resistance" && input.rawVerdict.key === "best_angle") {
     capReasons.push("market_resistance");
   }
-  if (input.market === "first_inning" && (recAfterDataCap ?? 0) < MIN_REC_BY_VERDICT.lean) {
+  if (input.market === "first_inning" && !neutralNonActionable && (recAfterDataCap ?? 0) < MIN_REC_BY_VERDICT.lean) {
     capReasons.push("first_inning_volatility_cap");
   }
 
   let finalVerdictKey = input.rawVerdict.key;
-  if (!hasPick || input.rawRecScore === null) {
+  if (neutralNonActionable) {
+    finalVerdictKey = input.rawVerdict.key === "no_play" ? "watchlist" : input.rawVerdict.key;
+  } else if (!hasPick || input.rawRecScore === null) {
     finalVerdictKey = "no_play";
   } else if (finalVerdictKey === "best_angle" && (recAfterDataCap ?? 0) < MIN_REC_BY_VERDICT.best_angle) {
     capReasons.push("low_action_score");

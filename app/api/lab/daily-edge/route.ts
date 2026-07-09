@@ -3654,6 +3654,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     priceAmerican,
     priceUnavailableAtLock:
       input.isLockedRow === true && input.modelSide !== null && priceAmerican === null,
+    neutralNonActionable: input.market === "first_inning" && input.pick === "Toss-Up",
   });
   const finalAction =
     hasStoredPredictionRecord && writerOverride !== null
