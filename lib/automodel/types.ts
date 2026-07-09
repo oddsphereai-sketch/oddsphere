@@ -44,6 +44,11 @@ export type StarterSnapshot = {
   season_era: number | null;
   season_whip: number | null;
   season_k_per_9: number | null;
+  /** Season that supplied the starter season stats. Current season is
+   * preferred; prior seasons may be used only as an explicit degraded proxy
+   * when the current-season provider row is empty. */
+  season_stats_season?: number | null;
+  season_stats_source?: "current" | "prior_season_proxy" | "missing";
   /** Rolling 30-day ERA. Null when insufficient data. */
   last30_era: number | null;
   /** Pitch-quality score derived from pitcher_pitch_stats. Null when

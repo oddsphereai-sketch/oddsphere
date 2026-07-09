@@ -22,6 +22,14 @@
       "schedule": "55 0-2 * * *"
     },
     {
+      "path": "/api/cron/lineup-watch",
+      "schedule": "*/30 13-23 * * *"
+    },
+    {
+      "path": "/api/cron/lineup-watch",
+      "schedule": "*/30 0-3 * * *"
+    },
+    {
       "path": "/api/cron/pregame-sweep?lockOnly=true",
       "schedule": "*/15 14-23 * * *"
     },

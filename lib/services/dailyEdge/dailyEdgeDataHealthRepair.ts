@@ -84,6 +84,7 @@ function repairableFindings(report: DailyEdgeDataHealthReport): DailyEdgeDataHea
   if (report.sport !== "mlb") return [];
   return report.findings.filter((finding) =>
     finding.code === "fi_held_no_actionable_side" ||
+    finding.code === "fi_starter_ingestion_miss" ||
     finding.code === "fi_model_hold_missing_inputs" ||
     finding.code === "fi_model_hold_provider_gap" ||
     finding.code === "fi_model_hold_diagnostic_missing" ||

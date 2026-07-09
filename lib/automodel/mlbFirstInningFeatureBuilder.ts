@@ -29,7 +29,8 @@
  * Pure / no DB / no network.
  */
 
-import type { GameSnapshot, StarterSnapshot, BatterSnapshot } from "./types";
+import type { GameSnapshot, StarterSnapshot, BatterSnapshot, TeamSnapshot } from "./types";
+import { LEAGUE_CONSTANTS_V1, SHRINKAGE_K_TEAM_OPS } from "./types";
 
 // ─── league anchors (post-pitch-clock-era MLB first-inning rates) ──
 // Calibrated to match historical MLB NRFI rate ~55%.
@@ -93,17 +94,40 @@ function clamp(x: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, x));
 }
 
+function shrinkRate(raw: number, n: number | null | undefined, k: number, prior: number): number {
+  if (n === null || n === undefined || !Number.isFinite(n) || n <= 0) return prior;
+  return (n * raw + k * prior) / (n + k);
+}
+
 /** Top-3 OPS factor with shrinkage when lineup is partial / projected. */
 function topOrderFactor(
   lineup_top8: BatterSnapshot[],
+  team: TeamSnapshot,
 ): { factor: number; status: FiFeatureStatus; lineupStatus: FiFeatureStatus } {
   const top3 = lineup_top8.slice(0, 3);
   const top3WithOps = top3.filter((b) => b.season_ops != null && b.season_ops > 0);
   if (top3.length === 0) {
+    if (
+      typeof team.team_avg_batter_ops === "number" &&
+      Number.isFinite(team.team_avg_batter_ops) &&
+      team.team_avg_batter_ops > 0
+    ) {
+      const effectiveOps = shrinkRate(
+        team.team_avg_batter_ops,
+        team.team_avg_batter_ops_sample,
+        SHRINKAGE_K_TEAM_OPS,
+        LEAGUE_CONSTANTS_V1.AVG_OPS,
+      );
+      return {
+        factor: clamp(effectiveOps / FI_LEAGUE_AVG_TOP3_OPS, FACTOR_CLAMP_MIN, FACTOR_CLAMP_MAX),
+        status: { source: "proxy", reason: "fi_top_order_team_ops_proxy" },
+        lineupStatus: { source: "fallback_real", reason: "fi_lineup_team_offense_proxy" },
+      };
+    }
     return {
       factor: 1.0,
-      status: { source: "missing", reason: "fi_top_order_lineup_empty" },
-      lineupStatus: { source: "missing", reason: "fi_lineup_missing" },
+      status: { source: "neutral_fallback", reason: "fi_top_order_league_average" },
+      lineupStatus: { source: "neutral_fallback", reason: "fi_lineup_no_team_offense_proxy" },
     };
   }
   const allConfirmed = top3.every((b) => b.lineup_source === "confirmed");
@@ -206,8 +230,8 @@ function deriveTier(audit: FiFeatureAudit): "high" | "medium" | "low" | "fallbac
  */
 export function projectFiIndependent(snap: GameSnapshot): FiIndependentProjection {
   // Top-of-order factor + lineup status per team
-  const awayTo = topOrderFactor(snap.away_lineup_top8);
-  const homeTo = topOrderFactor(snap.home_lineup_top8);
+  const awayTo = topOrderFactor(snap.away_lineup_top8, snap.away_team);
+  const homeTo = topOrderFactor(snap.home_lineup_top8, snap.home_team);
   // Opposing starter factor
   // Away team bats in T1 vs HOME starter; so away λ uses home_starter's FI factor.
   const homeStarterFi = starterFiFactor(snap.home_starter);

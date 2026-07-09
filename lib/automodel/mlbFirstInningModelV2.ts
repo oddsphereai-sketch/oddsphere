@@ -121,6 +121,8 @@ export type FiV2Audit = {
   /** MLB-P0: FI edge exceeded the post-shrink ceiling (capped to lean). */
   fi_miscalibration_flag: boolean;
   fi_no_bet_reason: string | null;
+  fresh_data_ready: boolean;
+  fresh_data_blockers: string[];
   // Misc
   provisional: boolean;
   integrity_notes: string[];
@@ -265,10 +267,38 @@ export function runMlbFirstInningModelV2(
   if (indep.feature_audit.missing_count >= 5) integrityNotes.push(`Sparse FI features (${indep.feature_audit.missing_count} missing).`);
   if (indep.data_quality_tier === "fallback") integrityNotes.push("FI tier=fallback (key starter missing).");
 
+  const freshDataBlockers: string[] = [];
+  if (!hasMarket) freshDataBlockers.push("fi_market_not_fresh_or_two_sided");
+  if (indep.feature_audit.away_starter_fi.source !== "preferred") {
+    freshDataBlockers.push(`away_batting_opposing_starter_fi_${indep.feature_audit.away_starter_fi.source}`);
+  }
+  if (indep.feature_audit.home_starter_fi.source !== "preferred") {
+    freshDataBlockers.push(`home_batting_opposing_starter_fi_${indep.feature_audit.home_starter_fi.source}`);
+  }
+  const awayLineupPublishable =
+    indep.feature_audit.away_lineup.source === "preferred" ||
+    indep.feature_audit.away_lineup.source === "fallback_real";
+  const homeLineupPublishable =
+    indep.feature_audit.home_lineup.source === "preferred" ||
+    indep.feature_audit.home_lineup.source === "fallback_real";
+  if (!awayLineupPublishable) {
+    freshDataBlockers.push(`away_lineup_${indep.feature_audit.away_lineup.source}`);
+  }
+  if (!homeLineupPublishable) {
+    freshDataBlockers.push(`home_lineup_${indep.feature_audit.home_lineup.source}`);
+  }
+  const freshDataReady = freshDataBlockers.length === 0;
+  if (!freshDataReady) {
+    integrityNotes.push(`FI held for fresh data: ${freshDataBlockers.join(", ")}.`);
+  }
+
   // Layer 4 — classification
   let fi_pick: FiPick;
   let fi_pick_reason: string;
-  if (indep.data_quality_tier === "fallback" || indep.feature_audit.missing_count >= 6) {
+  if (!freshDataReady) {
+    fi_pick = "Held";
+    fi_pick_reason = "fi_waiting_for_fresh_data";
+  } else if (indep.data_quality_tier === "fallback" || indep.feature_audit.missing_count >= 6) {
     fi_pick = "Held";
     fi_pick_reason = "fi_no_bet_data_quality";
   } else if (posteriorNrfi >= FI_NRFI_THRESHOLD) {
@@ -392,6 +422,8 @@ export function runMlbFirstInningModelV2(
     fi_best_angle_eligible,
     fi_miscalibration_flag,
     fi_no_bet_reason,
+    fresh_data_ready: freshDataReady,
+    fresh_data_blockers: freshDataBlockers,
     provisional,
     integrity_notes: integrityNotes,
     feature_capture: buildFiFeatureCapture(

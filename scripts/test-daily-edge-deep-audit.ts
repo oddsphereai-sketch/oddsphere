@@ -155,6 +155,25 @@ function board(market: Record<string, unknown>) {
 }
 
 {
+  const normalized = normalizeDailyEdgeActionability({
+    market: "first_inning",
+    rawVerdict: { key: "watchlist", label: "Watchlist" },
+    rawGrade: "market_watch",
+    rawRecScore: null,
+    modelMarketGapPct: 0,
+    marketReadV2: null,
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: null,
+    neutralNonActionable: true,
+  });
+  check("FI Toss-Up stays visible as Watchlist without a side price",
+        normalized.finalVerdict.key === "watchlist" &&
+        !normalized.capReasons.includes("missing_price"));
+}
+
+{
   const result = auditDailyEdgeBoards({
     mlb: board({
       grade: "market_watch",

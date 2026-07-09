@@ -48,6 +48,7 @@ const ML_TOTAL_LABELS = new Set([
   "clean_market_support",
   "consensus_support",
   "sharp_book_support",
+  "split_support_with_price_drift",
   "mixed_but_playable",
   "market_resistance",
   "market_resistance_with_model_value_override",
@@ -110,6 +111,12 @@ function sourceContextIsConflicted(row: PredictionEvidenceObject): boolean {
   return row.marketEvidence.sourceConflict ||
     row.marketEvidence.sourceAgreement === "consensus_supports_sharp_opposes" ||
     row.marketEvidence.sourceAgreement === "sharp_supports_consensus_opposes";
+}
+
+function alignedSourcesWithPriceDrift(row: PredictionEvidenceObject, market: MarketIntelligenceInterpretation): boolean {
+  return sourceContextIsAligned(row) &&
+    !sourceContextIsConflicted(row) &&
+    market.priceMovementDirection === "against_pick";
 }
 
 function plusMoneyValueText(row: PredictionEvidenceObject): string {
@@ -239,7 +246,14 @@ export function deriveDailyEdgeMemberCopyLabel(args: {
       return edge >= 5 ? "market_resistance_with_model_value_override" : "market_resistance";
     }
   }
+  if (alignedSourcesWithPriceDrift(row, market)) return "split_support_with_price_drift";
   if (read === "resistance" || read === "consensus_resistance") {
+    if (sourceContextIsAligned(row) && !sourceContextIsConflicted(row)) {
+      if (row.identity.marketType === "TOTAL" && row.modelStatsEvidence.projectedTotal !== null && row.identity.lineValue !== null) {
+        return edge < 2.5 ? "thin_edge" : "projection_support";
+      }
+      return hasUsableSharpContext(row) ? "sharp_book_support" : "consensus_support";
+    }
     return edge >= 5 ? "market_resistance_with_model_value_override" : "market_resistance";
   }
   if (read === "mixed" || sourceContextIsConflicted(row)) return "mixed_but_playable";
@@ -256,14 +270,19 @@ export function deriveDailyEdgeMemberCopyLabel(args: {
     return "clean_market_support";
   }
   if (market.marketFrictionLevel === "high") {
+    if (sourceContextIsAligned(row) && !sourceContextIsConflicted(row)) return "split_support_with_price_drift";
     return edge >= 5 ? "market_resistance_with_model_value_override" : "market_resistance";
   }
-  if (market.marketFrictionLevel === "medium") return "mixed_but_playable";
+  if (market.marketFrictionLevel === "medium") {
+    if (sourceContextIsAligned(row) && !sourceContextIsConflicted(row)) return "split_support_with_price_drift";
+    return "mixed_but_playable";
+  }
   if (row.identity.marketType === "TOTAL" && row.modelStatsEvidence.projectedTotal !== null && row.identity.lineValue !== null) {
     return edge < 2.5 ? "thin_edge" : "projection_support";
   }
   if (hasUsableSharpContext(row) && (market.consensusVsSharpRelationship === "sharp_only" || market.consensusVsSharpRelationship === "both_support")) return "sharp_book_support";
   if (market.consensusVsSharpRelationship === "consensus_only") return "consensus_support";
+  if (market.priceMovementDirection === "against_pick") return sourceContextIsAligned(row) ? "split_support_with_price_drift" : edge >= 5 ? "mixed_but_playable" : "market_resistance";
   if (market.marketFrictionLevel === "none" || market.marketFrictionLevel === "low") return "clean_market_support";
   return "no_clear_market_signal";
 }
@@ -312,6 +331,12 @@ function marketReadCopy(row: PredictionEvidenceObject, label: string): string {
       ? "Market confirmation is limited, and the model/value case is not strong enough to make this actionable."
       : "Market context is supportive, but the read leans more on model/value and price.";
     return "The Sharp-book split profile supports the pick, giving the model case added market confirmation.";
+  }
+  if (label === "split_support_with_price_drift") {
+    if (grade === "No Play") return "Visible split context supports the pick, but price movement has drifted away and the model/value case is not strong enough to make this actionable.";
+    if (grade === "Caution") return "Visible split context supports the pick, but price movement has drifted away enough to keep this in caution territory.";
+    if (grade === "Watchlist") return "Visible split context supports the pick, but price movement has drifted away enough to keep this worth monitoring.";
+    return "Visible split context supports the pick, while price movement has drifted away enough to keep the read from being fully clean.";
   }
   if (label === "mixed_but_playable") {
     const splitConflict = evidenceSplitConflictKind(row);
@@ -369,6 +394,7 @@ function quickReadCopy(row: PredictionEvidenceObject, label: string): string {
 
   if (grade === "Best Angle") {
     if (label === "market_resistance_with_model_value_override") return `Strong ${valueText}, but market resistance keeps some friction in the thesis.`;
+    if (label === "split_support_with_price_drift") return `Strong ${valueText} with split support, though price movement keeps the thesis from being fully clean.`;
     if (label === "sharp_book_support") return "Strong model/value case with Sharp Book support and a playable price.";
     return "Strong model/value case with enough price and market context to support the top grade.";
   }
@@ -379,6 +405,7 @@ function quickReadCopy(row: PredictionEvidenceObject, label: string): string {
       return `${pick} has a playable lean, but the edge is thin enough to keep this below a stronger grade.`;
     }
     if (label === "market_resistance" || label === "market_resistance_with_model_value_override") return "Playable model/value case, though market resistance keeps friction in the read.";
+    if (label === "split_support_with_price_drift") return "Playable model/value case with split support, though price movement has drifted away.";
     if (label === "mixed_but_playable" && evidenceSplitConflictKind(row) === "consensus_against_sharp_support") return "Playable model/value case with Sharp Book support, though consensus leans the other way.";
     if (label === "mixed_but_playable" && evidenceSplitConflictKind(row) === "consensus_support_sharp_against") return "Playable model/value case, though Sharp Book resistance keeps friction in the read.";
     if (label === "price_capped" || label === "likely_winner_bad_price") return "Playable win case, but the current price keeps this below a stronger grade.";
@@ -389,10 +416,12 @@ function quickReadCopy(row: PredictionEvidenceObject, label: string): string {
       return `The plus-money model edge is real, but market resistance keeps this on Watchlist.`;
     }
     if (label === "mixed_but_playable" || label === "market_resistance" || label === "market_resistance_with_model_value_override") return "Model/value case is present, but the market read keeps this on Watchlist.";
+    if (label === "split_support_with_price_drift") return "Split context is supportive, but price movement keeps this on Watchlist.";
     return "Model/value interest is present, but not strong enough for action yet.";
   }
   if (grade === "Caution") {
     if (label === "market_resistance_with_model_value_override" || label === "market_resistance") return `${pick} shows ${valueText}, but market resistance keeps this in Caution rather than action territory.`;
+    if (label === "split_support_with_price_drift") return `${pick} has supportive split context, but price movement keeps this in Caution rather than action territory.`;
     if (label === "price_capped" || label === "likely_winner_bad_price") return "Win case is present, but price limits the betting value.";
     return "Caution grade: the setup needs cleaner value, price, or market context.";
   }
@@ -443,6 +472,15 @@ function supportingEvidenceCopy(row: PredictionEvidenceObject, label: string): s
     if (splitConflict === "consensus_support_sharp_against") return `${pick} has ${model} model probability versus ${implied} implied at ${odds}, for about ${edge} edge. Consensus Splits support the pick, but Sharp Book resistance keeps the read mixed.${lowGradeContext}`;
   }
 
+  if (label === "split_support_with_price_drift") {
+    const driftContext = grade === "Caution"
+      ? " Price movement is the caution point despite supportive split context."
+      : grade === "No Play"
+        ? " Supportive splits are not enough to make this actionable with price movement drifting away."
+        : " Price movement has drifted away, so the read is supportive but not fully clean.";
+    return `${pick} has ${model} model probability versus ${implied} implied at ${odds}, for about ${edge} edge.${driftContext}`;
+  }
+
   return `${pick} has ${model} model probability versus ${implied} implied at ${odds}, for about ${edge} edge.${movementContext}${lowGradeContext}`;
 }
 
@@ -456,6 +494,7 @@ function riskCopy(row: PredictionEvidenceObject, label: string): string {
 
   if (label === "market_resistance") return "Market resistance keeps this from being cleaner; avoid treating the model edge as confirmation by itself.";
   if (label === "market_resistance_with_model_value_override") return "The thesis depends on the model/value edge overriding market resistance, so the risk note should say that plainly.";
+  if (label === "split_support_with_price_drift") return "Split context is supportive, but price movement has drifted away; avoid treating the read as perfectly clean.";
   if (label === "price_capped" || label === "likely_winner_bad_price") return "Price is the main cap here; a likely outcome is not automatically a good bet.";
   if (label === "thin_edge") return "The edge is thin, so small price or lineup movement can erase the value.";
   if (label === "insufficient_core_data") return "Core price, model, or line evidence is incomplete; keep this below action until the missing fields are repaired.";
@@ -680,6 +719,7 @@ function decisionQuickReadCopy(decision: MarketDecision, key: keyof Recommendati
     }
     if (sharpMoneyDivergence) return "Strong model/value case with Sharp Book money heavier than bet count and a playable price.";
     if (status === "mixed" || status === "resistance" || status === "consensus_resistance") return `Strong ${plusMoneyValue}, but market resistance keeps some friction in the thesis.`;
+    if (decision.lineMovement === "resistance") return `Strong ${plusMoneyValue}, but odds movement against the pick keeps the market read from being fully clean.`;
     if (hasDecisionSharpContext(decision, sport, key)) return "Strong model/value case with Sharp Book support and a playable price.";
     return "Strong model/value case with enough price and market context to support the top grade.";
   }
@@ -690,6 +730,7 @@ function decisionQuickReadCopy(decision: MarketDecision, key: keyof Recommendati
       return `${pick} has a playable lean, but the edge is thin enough to keep this below a stronger grade.`;
     }
     if (sharpMoneyDivergence) return "Playable model/value case with Sharp Book money heavier than bet count.";
+    if (decision.lineMovement === "resistance") return "Playable model/value case, though odds movement against the pick keeps friction in the read.";
     if (status === "mixed" || status === "resistance" || status === "consensus_resistance") return "Playable model/value case, though market resistance keeps friction in the read.";
     if (splitConflict === "consensus_against_sharp_support") return "Playable model/value case with Sharp Book support, though consensus is leaning the other way.";
     if (splitConflict === "consensus_support_sharp_against") return "Playable model/value case, though Sharp Book resistance keeps friction in the read.";
@@ -697,11 +738,13 @@ function decisionQuickReadCopy(decision: MarketDecision, key: keyof Recommendati
   }
   if (grade === "Watchlist") {
     if (edge !== null && edge >= 5 && typeof decision.price === "number" && decision.price > 0) return "The plus-money model edge is real, but market resistance keeps this on Watchlist.";
+    if (decision.lineMovement === "resistance") return "Model/value case is present, but odds movement against the pick keeps this on Watchlist.";
     if (status === "mixed" || status === "resistance" || status === "consensus_resistance") return "Model/value case is present, but the market read keeps this on Watchlist.";
     if (splitConflict !== null) return "Model/value case is present, but split-source conflict keeps this on Watchlist.";
     return "Model/value interest is present, but not strong enough for action yet.";
   }
   if (grade === "Caution") {
+    if (decision.lineMovement === "resistance") return `${pick} shows ${plusMoneyValue}, but odds movement against the pick keeps this in Caution rather than action territory.`;
     if (status === "mixed" || status === "resistance" || status === "consensus_resistance") return `${pick} shows ${plusMoneyValue}, but market resistance keeps this in Caution rather than action territory.`;
     return "Caution grade: the setup needs cleaner value, price, or market context.";
   }
@@ -793,6 +836,20 @@ function decisionMarketRead(decision: MarketDecision, key: keyof RecommendationD
       copy: `${consensusSupportPhrase(decision)}, while ${sharpMoneySupportPhrase(decision)}.${lineMovementSupportPhrase(decision)}${modelContext}`,
     };
   }
+  if (
+    decision.lineMovement === "resistance" &&
+    (status === "aligned" || status === "consensus_support")
+  ) {
+    return {
+      ...decision.resolvedMarketRead,
+      status: "mixed",
+      label: "Mixed",
+      tone: "gray",
+      copy: grade === "No Play"
+        ? "Split context is supportive, but odds movement is against the pick and the model/value case is not strong enough to make this actionable."
+        : "Split context is supportive, but odds movement is against the pick, so the market read is not fully clean.",
+    };
+  }
   if ((status === "resistance" || status === "consensus_resistance") && edge >= 5) {
     if (grade === "Lean") return { ...decision.resolvedMarketRead, copy: "Market resistance is present, but the model/value edge is strong enough to keep this playable." };
     if (grade === "Watchlist") return { ...decision.resolvedMarketRead, copy: "Market resistance is present, but the model/value case is strong enough to keep this worth monitoring." };
@@ -869,6 +926,7 @@ function decisionSupportingEvidenceCopy(decision: MarketDecision, key: keyof Rec
   }
   if (grade === "Caution") return `${base} Market friction is why this remains Caution.`;
   if (grade === "No Play") return `${base} The projection/model case is not strong enough to overcome the current number or market resistance.`;
+  if (decision.lineMovement === "resistance") return `${base} Odds movement is against the pick, so the support is not fully clean.`;
   if (grade === "Watchlist") return `${base} This keeps the prediction worth monitoring, not automatically actionable.`;
   if (grade === "Lean" && edge < 3) return `${base} The edge is thin, so this should stay value-capped rather than treated as a stronger play.`;
   return base;

@@ -14,6 +14,7 @@ import { getPlayerStatsProvider } from "../providers/factory";
 import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
 import { loadGameIdMap, loadPlayerBdlIdMap, loadTeamIdMap } from "./_idMaps";
+import { refreshMlbOfficialLineups } from "./mlbOfficialLineupService";
 
 type SkipReason =
   | "lineup_player_map_missing"
@@ -122,17 +123,27 @@ export const lineupService = {
       }
     }
 
+    let officialMlb: Awaited<ReturnType<typeof refreshMlbOfficialLineups>> | null = null;
+    if (sport === "mlb") {
+      officialMlb = await refreshMlbOfficialLineups(date);
+    }
+
     const skipByReason: Record<string, number> = {};
     for (const s of skipped) {
       skipByReason[s.reason] = (skipByReason[s.reason] ?? 0) + 1;
     }
 
     return {
-      records_updated: allRows.length,
-      api_calls_made: apiCalls,
-      details: skipped.length > 0
-        ? { skipped_by_reason: skipByReason, sample_skipped: skipped.slice(0, 10) }
-        : undefined,
+      records_updated: allRows.length + (officialMlb?.records_updated ?? 0),
+      api_calls_made: apiCalls + (officialMlb?.api_calls_made ?? 0),
+      details:
+        skipped.length > 0 || officialMlb !== null
+          ? {
+              skipped_by_reason: skipByReason,
+              sample_skipped: skipped.slice(0, 10),
+              official_mlb_lineups: officialMlb?.details ?? null,
+            }
+          : undefined,
     };
   },
 };

@@ -36,7 +36,10 @@ import {
   V22_POSTERIOR_DIFF_CAP_RUNS,
   V22_CONFIDENCE_CEILING,
 } from "../lib/automodel/mlbV22PosteriorBlend";
-import { runMlbAutoModelV2_2 } from "../lib/automodel/mlbAutoModelV2_2";
+import {
+  applyMlbTeamResidualRunCorrection,
+  runMlbAutoModelV2_2,
+} from "../lib/automodel/mlbAutoModelV2_2";
 import { computeMarketBaseline } from "../lib/automodel/marketPrior";
 import type {
   GameSnapshot,
@@ -354,10 +357,10 @@ async function main() {
     check("feature_audit lineup_missing reason emitted",
       proj.feature_audit.reason_codes.includes("lineup_missing"),
       `codes=${JSON.stringify(proj.feature_audit.reason_codes)}`);
-    check("feature_audit.starter_era status = proxy on default fixture",
-      proj.feature_audit.starter_era.home.source === "proxy" && proj.feature_audit.starter_era.away.source === "proxy");
-    check("feature_audit.team_ops status = proxy on default fixture",
-      proj.feature_audit.team_ops.home.source === "proxy" && proj.feature_audit.team_ops.away.source === "proxy");
+    check("feature_audit.starter_era status = preferred on default fixture",
+      proj.feature_audit.starter_era.home.source === "preferred" && proj.feature_audit.starter_era.away.source === "preferred");
+    check("feature_audit.team_ops status = preferred on default fixture",
+      proj.feature_audit.team_ops.home.source === "preferred" && proj.feature_audit.team_ops.away.source === "preferred");
     check("feature_audit.starter_pitch_quality status = preferred on default fixture",
       proj.feature_audit.starter_pitch_quality.home.source === "preferred",
       `actual=${proj.feature_audit.starter_pitch_quality.home.source}`);
@@ -732,14 +735,14 @@ async function main() {
       awayStarter: { pitch_quality_score: null, season_era: 3.5, season_whip: 1.15, season_k_per_9: 9.5 },
     });
     const proj = projectIndependent(snap);
-    check("starter_pitch_quality status = proxy when raw absent + ERA/WHIP/K9 present",
-      proj.feature_audit.starter_pitch_quality.home.source === "proxy" &&
-      proj.feature_audit.starter_pitch_quality.away.source === "proxy",
+    check("starter_pitch_quality status = fallback_real when raw absent + ERA/WHIP/K9 present",
+      proj.feature_audit.starter_pitch_quality.home.source === "fallback_real" &&
+      proj.feature_audit.starter_pitch_quality.away.source === "fallback_real",
       `home=${proj.feature_audit.starter_pitch_quality.home.source} away=${proj.feature_audit.starter_pitch_quality.away.source}`);
-    check("starter_pitch_quality reason = pitch_quality_proxy_era_whip_k9",
-      proj.feature_audit.starter_pitch_quality.home.reason === "pitch_quality_proxy_era_whip_k9");
-    check("audit.proxy_count includes the pitch_quality proxy (≥2)",
-      proj.feature_audit.proxy_count >= 2);
+    check("starter_pitch_quality reason = pitch_quality_era_whip_k9_fallback",
+      proj.feature_audit.starter_pitch_quality.home.reason === "pitch_quality_era_whip_k9_fallback");
+    check("audit.fallback_real_count includes the pitch-quality fallback (≥2)",
+      proj.feature_audit.fallback_real_count >= 2);
   }
   {
     // Audit reflects missing pitch_quality when ALL stats absent
@@ -784,9 +787,9 @@ async function main() {
     check("V22Audit carries feature_preferred_count",
       typeof out.v22Audit.feature_preferred_count === "number" && out.v22Audit.feature_preferred_count >= 1,
       `actual=${out.v22Audit.feature_preferred_count}`);
-    check("V22Audit carries feature_proxy_count",
-      typeof out.v22Audit.feature_proxy_count === "number" && out.v22Audit.feature_proxy_count >= 2,
-      `actual=${out.v22Audit.feature_proxy_count}`);
+    check("V22Audit carries feature_fallback_real_count",
+      typeof out.v22Audit.feature_fallback_real_count === "number" && out.v22Audit.feature_fallback_real_count >= 0,
+      `actual=${out.v22Audit.feature_fallback_real_count}`);
     check("V22Audit carries feature_reason_codes array",
       Array.isArray(out.v22Audit.feature_reason_codes) && out.v22Audit.feature_reason_codes.length >= 4);
   }
@@ -967,6 +970,37 @@ async function main() {
     } else {
       check("Phase 6B.30C T12 — V2.2 emitted null on broad-missing inputs", true);
     }
+  }
+
+  section("Launch-window team residual correction");
+  {
+    const corrected = applyMlbTeamResidualRunCorrection({
+      awayTeam: "PIT",
+      homeTeam: "CLE",
+      awayRuns: 4.0,
+      homeRuns: 4.0,
+    });
+    check(
+      "team residual correction nudges under/over-projected teams in opposite directions",
+      near(corrected.awayRuns, 4.2) && near(corrected.homeRuns, 3.85),
+      `away=${corrected.awayRuns} home=${corrected.homeRuns}`,
+    );
+    check(
+      "team residual correction records an auditable reason",
+      corrected.audit.applied === true &&
+        corrected.audit.reason === "launch_window_team_residual_correction",
+    );
+
+    const neutral = applyMlbTeamResidualRunCorrection({
+      awayTeam: "TST",
+      homeTeam: "ABC",
+      awayRuns: 4.0,
+      homeRuns: 4.0,
+    });
+    check(
+      "team residual correction leaves unlisted teams unchanged",
+      near(neutral.awayRuns, 4.0) && near(neutral.homeRuns, 4.0) && neutral.audit.applied === false,
+    );
   }
 
   // ──────────────────────────────────────────────────────────────────

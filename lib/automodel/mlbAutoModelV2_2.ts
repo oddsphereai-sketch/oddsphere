@@ -173,6 +173,25 @@ export type V22Audit = {
   // the writer). Picks below Best Angle are always false.
   ml_requires_market_confirmation: boolean;
   ou_requires_market_confirmation: boolean;
+  truthful_edge_correction?: {
+    ml_probability_blend_weight: number;
+    total_probability_blend_weight: number;
+    total_min_actionable_edge_pct: number;
+    ou_grade_before_correction: string;
+    ou_grade_after_correction: string;
+    ou_correction_applied: boolean;
+    ou_correction_reason: string | null;
+  };
+  team_residual_correction?: {
+    version: "launch_window_team_residual_v1";
+    home_team: string;
+    away_team: string;
+    home_runs: number;
+    away_runs: number;
+    total_runs: number;
+    applied: boolean;
+    reason: string | null;
+  };
   model_integrity_notes: string[];
   provisional: boolean;
   /**
@@ -205,6 +224,8 @@ function captureStarter(s: StarterSnapshot | null) {
     player_id: s.player_external_id, name: s.player_name, throws: s.throws,
     confirmed: s.is_confirmed, scratched: s.is_scratched,
     season_era: s.season_era, season_whip: s.season_whip, season_k_per_9: s.season_k_per_9,
+    season_stats_season: s.season_stats_season ?? null,
+    season_stats_source: s.season_stats_source ?? "missing",
     last30_era: s.last30_era, pitch_quality_score: s.pitch_quality_score,
     first_inning_era: s.first_inning_era, first_inning_starts: s.first_inning_starts, first_inning_whip: s.first_inning_whip,
     season_games_started: s.season_games_started ?? null, season_innings_pitched: s.season_innings_pitched ?? null,
@@ -255,7 +276,7 @@ export type RunMlbAutoModelV2_2Options = {
 // independent projection has more freedom to move and we want only
 // genuinely model-driven angles to flow through.
 const V22_BEST_ANGLE_MIN_EDGE_PCT_ML = 3.0;
-const V22_BEST_ANGLE_MIN_EDGE_PCT_OU = 3.5;
+const V22_BEST_ANGLE_MIN_EDGE_PCT_OU = 5.0;
 const V22_BEST_ANGLE_MIN_CONFIDENCE_PCT = 56;
 
 // MLB-P0 probability-space regularization (the E-first fix). Applied to
@@ -268,10 +289,95 @@ const V22_BEST_ANGLE_MIN_CONFIDENCE_PCT = 56;
 //   maxDist  — hard ceiling on |regularized − market| in percentage points.
 // O/U is shrunk harder (lower k, tighter cap) because totals are the
 // worst-calibrated market in the audit (observed 49.4% vs predicted 58.6%).
-const V22_SHRINK_K_ML = 0.6;
-const V22_SHRINK_K_OU = 0.5;
-const V22_MAX_DISTANCE_PP_ML = 10.0;
-const V22_MAX_DISTANCE_PP_OU = 9.0;
+const V22_SHRINK_K_ML = 0.1;
+const V22_SHRINK_K_OU = 0.4;
+const V22_MAX_DISTANCE_PP_ML = 6.0;
+const V22_MAX_DISTANCE_PP_OU = 8.0;
+const V22_OU_MIN_ACTIONABLE_EDGE_PCT = 5.0;
+
+const MLB_TEAM_RESIDUAL_CORRECTION_VERSION = "launch_window_team_residual_v1" as const;
+
+// Small, audited corrections from the launch-window calibration audit.
+// Positive means the model had been under-projecting that team's runs;
+// negative means it had been over-projecting them. Kept intentionally
+// conservative so this nudges the run model without letting team labels
+// dominate pitcher, lineup, park, weather, and market inputs.
+export const MLB_TEAM_RESIDUAL_RUN_CORRECTIONS: Readonly<Record<string, number>> = {
+  PIT: 0.2,
+  MIN: 0.2,
+  CHC: 0.2,
+  KC: 0.15,
+  DET: 0.15,
+  MIA: 0.1,
+  STL: 0.1,
+  COL: 0.1,
+  PHI: 0.1,
+  WSH: 0.1,
+  CLE: -0.15,
+  TOR: -0.1,
+  NYY: -0.1,
+  SEA: -0.1,
+  SD: -0.1,
+  BAL: -0.1,
+};
+
+export function applyMlbTeamResidualRunCorrection(args: {
+  homeTeam: string | null | undefined;
+  awayTeam: string | null | undefined;
+  homeRuns: number;
+  awayRuns: number;
+}): {
+  homeRuns: number;
+  awayRuns: number;
+  audit: NonNullable<V22Audit["team_residual_correction"]>;
+} {
+  const homeTeam = String(args.homeTeam ?? "").toUpperCase();
+  const awayTeam = String(args.awayTeam ?? "").toUpperCase();
+  const homeDelta = MLB_TEAM_RESIDUAL_RUN_CORRECTIONS[homeTeam] ?? 0;
+  const awayDelta = MLB_TEAM_RESIDUAL_RUN_CORRECTIONS[awayTeam] ?? 0;
+  const homeRuns = Math.max(0.05, args.homeRuns + homeDelta);
+  const awayRuns = Math.max(0.05, args.awayRuns + awayDelta);
+  const totalDelta = homeDelta + awayDelta;
+  return {
+    homeRuns,
+    awayRuns,
+    audit: {
+      version: MLB_TEAM_RESIDUAL_CORRECTION_VERSION,
+      home_team: homeTeam,
+      away_team: awayTeam,
+      home_runs: Math.round(homeDelta * 100) / 100,
+      away_runs: Math.round(awayDelta * 100) / 100,
+      total_runs: Math.round(totalDelta * 100) / 100,
+      applied: homeDelta !== 0 || awayDelta !== 0,
+      reason: homeDelta !== 0 || awayDelta !== 0
+        ? "launch_window_team_residual_correction"
+        : null,
+    },
+  };
+}
+
+function applyMlbTruthfulEdgeGradeCorrection(args: {
+  market: "moneyline" | "total";
+  grade: string;
+  edgePct: number | null;
+}): {
+  grade: string;
+  applied: boolean;
+  reason: string | null;
+} {
+  if (
+    args.market === "total" &&
+    (args.grade === "lean" || args.grade === "best_angle") &&
+    (args.edgePct === null || Math.abs(args.edgePct) < V22_OU_MIN_ACTIONABLE_EDGE_PCT)
+  ) {
+    return {
+      grade: "market_aligned",
+      applied: true,
+      reason: `total_edge_below_${V22_OU_MIN_ACTIONABLE_EDGE_PCT.toFixed(1)}pp_truthful_edge_floor`,
+    };
+  }
+  return { grade: args.grade, applied: false, reason: null };
+}
 
 /**
  * Run V2.2 for a single game. Pure function — no DB, no network.
@@ -337,6 +443,21 @@ export function runMlbAutoModelV2_2(
   if (posterior.capped_by_diff) {
     integrityNotes.push("Posterior run differential capped vs market.");
   }
+  const correctedPosterior = applyMlbTeamResidualRunCorrection({
+    homeTeam: snap.home_team.abbreviation,
+    awayTeam: snap.away_team.abbreviation,
+    homeRuns: posterior.home_expected_runs,
+    awayRuns: posterior.away_expected_runs,
+  });
+  const posteriorHomeRuns = correctedPosterior.homeRuns;
+  const posteriorAwayRuns = correctedPosterior.awayRuns;
+  const posteriorTotalRuns = posteriorHomeRuns + posteriorAwayRuns;
+  const posteriorHomeDiff = posteriorHomeRuns - posteriorAwayRuns;
+  if (correctedPosterior.audit.applied) {
+    integrityNotes.push(
+      `Team residual correction applied (${correctedPosterior.audit.away_team} ${correctedPosterior.audit.away_runs >= 0 ? "+" : ""}${correctedPosterior.audit.away_runs}, ${correctedPosterior.audit.home_team} ${correctedPosterior.audit.home_runs >= 0 ? "+" : ""}${correctedPosterior.audit.home_runs}).`,
+    );
+  }
 
   // Layer 4 — probabilities from Poisson on unrounded posterior.
   // homeWinProbabilityPoisson signature is (lambdaHome, lambdaAway).
@@ -344,8 +465,8 @@ export function runMlbAutoModelV2_2(
   // returned P(away wins) and inverted every ML pick. Test added in
   // scripts/test-mlb-automodel-v2-2.ts ("skewed lambdas — ML direction").
   const mlHomeProb = homeWinProbabilityPoisson(
-    posterior.home_expected_runs,
-    posterior.away_expected_runs,
+    posteriorHomeRuns,
+    posteriorAwayRuns,
   );
   const mlAwayProb = 1 - mlHomeProb;
   // Pick direction is decided from the RAW Poisson probability — never
@@ -369,10 +490,10 @@ export function runMlbAutoModelV2_2(
   const mlEdgePct = mlReg.regularizedEdgePct ?? 0;
 
   // OU using market_total (or independent total when market missing)
-  const ouLine = market.listedTotal ?? posterior.total_expected_runs;
+  const ouLine = market.listedTotal ?? posteriorTotalRuns;
   const ouOverProb = overProbabilityPoisson(
-    posterior.away_expected_runs,
-    posterior.home_expected_runs,
+    posteriorAwayRuns,
+    posteriorHomeRuns,
     ouLine,
   );
   const ouPickIsOver = ouOverProb >= 0.5;
@@ -406,13 +527,13 @@ export function runMlbAutoModelV2_2(
   const mlConfidence = computeConfidence({
     win_prob: mlModelProb,
     ou_prob: ouModelProb,
-    run_diff_abs: Math.abs(posterior.home_run_diff),
+    run_diff_abs: Math.abs(posteriorHomeDiff),
     tier: indep.data_quality_tier,
   });
   const ouConfidence = computeConfidence({
     win_prob: ouModelProb,
     ou_prob: ouModelProb,
-    run_diff_abs: Math.abs(posterior.total_expected_runs - ouLine),
+    run_diff_abs: Math.abs(posteriorTotalRuns - ouLine),
     tier: indep.data_quality_tier,
   });
 
@@ -493,6 +614,12 @@ export function runMlbAutoModelV2_2(
         ? "key feature group on neutral fallback / missing for both sides"
         : null,
   });
+  const ouGradeCorrection = applyMlbTruthfulEdgeGradeCorrection({
+    market: "total",
+    grade: ouPlayGrade.grade,
+    edgePct: ouEdgePct,
+  });
+  const finalOuPlayGrade = ouGradeCorrection.grade;
   // MLB-P0 post-shrink large-edge backstop: a pick whose RAW edge was so
   // large that regularization pinned it to the distance cap (capApplied)
   // is a strong model-market disagreement. It can REMAIN a Best Angle only
@@ -503,7 +630,7 @@ export function runMlbAutoModelV2_2(
   const mlBaseBestAngle =
     mlPlayGrade.grade === "best_angle" && !neutralFallbackBlocksBA;
   const ouBaseBestAngle =
-    ouPlayGrade.grade === "best_angle" && !neutralFallbackBlocksBA;
+    finalOuPlayGrade === "best_angle" && !neutralFallbackBlocksBA;
   const mlRequiresMarketConfirmation = mlBaseBestAngle && mlReg.capApplied;
   const ouRequiresMarketConfirmation = ouBaseBestAngle && ouReg.capApplied;
   // probabilityToAmericanOdds / expectedValuePerDollar are no longer
@@ -541,10 +668,10 @@ export function runMlbAutoModelV2_2(
     feature_proxy_count: indep.feature_audit.proxy_count,
     feature_neutral_fallback_count: indep.feature_audit.neutral_fallback_count,
     feature_reason_codes: indep.feature_audit.reason_codes,
-    posterior_away_runs: posterior.away_expected_runs,
-    posterior_home_runs: posterior.home_expected_runs,
-    posterior_total: posterior.total_expected_runs,
-    posterior_home_diff: posterior.home_run_diff,
+    posterior_away_runs: posteriorAwayRuns,
+    posterior_home_runs: posteriorHomeRuns,
+    posterior_total: posteriorTotalRuns,
+    posterior_home_diff: posteriorHomeDiff,
     trust_independent: posterior.trust_independent,
     posterior_moved_runs_from_market: posterior.posterior_moved_runs_from_market,
     capped_by_total: posterior.capped_by_total,
@@ -574,11 +701,11 @@ export function runMlbAutoModelV2_2(
     ou_distance_cap_applied: ouReg.capApplied,
     regularization_reason: mlReg.reason,
     ml_play_grade: mlPlayGrade.grade,
-    ou_play_grade: ouPlayGrade.grade,
+    ou_play_grade: finalOuPlayGrade,
     ml_prediction_type: mlPlayGrade.predictionType,
-    ou_prediction_type: ouPlayGrade.predictionType,
+    ou_prediction_type: finalOuPlayGrade === "market_aligned" ? "market_aligned" : ouPlayGrade.predictionType,
     ml_best_angle_eligible: mlPlayGrade.grade === "best_angle" && !neutralFallbackBlocksBA,
-    ou_best_angle_eligible: ouPlayGrade.grade === "best_angle" && !neutralFallbackBlocksBA,
+    ou_best_angle_eligible: finalOuPlayGrade === "best_angle" && !neutralFallbackBlocksBA,
     ml_no_bet_reason: mlPlayGrade.noBetReason,
     ou_no_bet_reason: ouPlayGrade.noBetReason,
     ml_market_aligned: mlPlayGrade.marketAligned,
@@ -595,6 +722,16 @@ export function runMlbAutoModelV2_2(
     ou_best_angle_block_reason: ouPlayGrade.bestAngleBlockReason,
     ml_requires_market_confirmation: mlRequiresMarketConfirmation,
     ou_requires_market_confirmation: ouRequiresMarketConfirmation,
+    truthful_edge_correction: {
+      ml_probability_blend_weight: V22_SHRINK_K_ML,
+      total_probability_blend_weight: V22_SHRINK_K_OU,
+      total_min_actionable_edge_pct: V22_OU_MIN_ACTIONABLE_EDGE_PCT,
+      ou_grade_before_correction: ouPlayGrade.grade,
+      ou_grade_after_correction: finalOuPlayGrade,
+      ou_correction_applied: ouGradeCorrection.applied,
+      ou_correction_reason: ouGradeCorrection.reason,
+    },
+    team_residual_correction: correctedPosterior.audit,
     model_integrity_notes: integrityNotes,
     provisional,
     feature_capture: buildV22FeatureCapture(
@@ -605,9 +742,9 @@ export function runMlbAutoModelV2_2(
   };
 
   return {
-    predicted_home_score: posterior.home_expected_runs,
-    predicted_away_score: posterior.away_expected_runs,
-    predicted_total: posterior.total_expected_runs,
+    predicted_home_score: posteriorHomeRuns,
+    predicted_away_score: posteriorAwayRuns,
+    predicted_total: posteriorTotalRuns,
     predicted_ml_winner: mlPickIsHome ? "home" : "away",
     ml_confidence: Math.round(mlConfidence * 10) / 10,
     predicted_ou_side: ouPickIsOver ? "over" : "under",

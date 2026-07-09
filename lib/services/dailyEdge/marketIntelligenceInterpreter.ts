@@ -47,6 +47,12 @@ function americanMove(row: PredictionEvidenceObject): number | null {
   return +(current - open).toFixed(1);
 }
 
+function americanToImpliedProbability(american: number | null | undefined): number | null {
+  if (typeof american !== "number" || !Number.isFinite(american) || american === 0) return null;
+  if (american > 0) return 100 / (american + 100);
+  return Math.abs(american) / (Math.abs(american) + 100);
+}
+
 function movementDirection(row: PredictionEvidenceObject): MarketIntelligenceInterpretation["priceMovementDirection"] {
   const raw = row.marketEvidence.lineMovement.movementTowardAgainstPick ?? row.marketEvidence.lineMovement.directionRelativeToPick;
   if (typeof raw === "string") {
@@ -56,7 +62,15 @@ function movementDirection(row: PredictionEvidenceObject): MarketIntelligenceInt
   }
   const move = americanMove(row);
   if (move === null || Math.abs(move) < 2) return move === null ? "unknown" : "neutral";
-  return move < 0 ? "toward_pick" : "against_pick";
+  const movement = row.marketEvidence.lineMovement;
+  const open = movement.openAmerican ?? movement.firstTrackedLine;
+  const current = movement.currentAmerican ?? movement.displayCurrentAmerican ?? movement.lockedAmerican;
+  const openImplied = americanToImpliedProbability(open);
+  const currentImplied = americanToImpliedProbability(current);
+  if (openImplied === null || currentImplied === null) return "unknown";
+  const delta = currentImplied - openImplied;
+  if (Math.abs(delta) < 0.005) return "neutral";
+  return delta > 0 ? "toward_pick" : "against_pick";
 }
 
 function consensusSharpRelationship(row: PredictionEvidenceObject): ConsensusSharpRelationship {

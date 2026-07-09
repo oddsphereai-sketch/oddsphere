@@ -109,6 +109,9 @@ export function assessMlbDataCompleteness(
     if (starter.season_era === null) {
       pushUnique(degraded, `${side}_starter_season_stats`);
       fallbackReasons.push(`${side}_starter_stats_fallback`);
+    } else if (starter.season_stats_source === "prior_season_proxy") {
+      pushUnique(degraded, `${side}_starter_prior_season_stats`);
+      fallbackReasons.push(`${side}_starter_prior_season_proxy`);
     }
     if (starter.pitch_quality_score === null) {
       fallbackReasons.push(`${side}_pitch_quality_proxy_unavailable`);

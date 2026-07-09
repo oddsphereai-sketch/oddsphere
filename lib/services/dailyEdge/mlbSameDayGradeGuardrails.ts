@@ -70,9 +70,35 @@ function totalProjectionGap(market: MarketEdgeDto): number | null {
   return Math.abs(market.modelTotal - market.line);
 }
 
+function americanToImpliedProbability(american: number | null | undefined): number | null {
+  if (typeof american !== "number" || !Number.isFinite(american) || american === 0) return null;
+  if (american > 0) return 100 / (american + 100);
+  return Math.abs(american) / (Math.abs(american) + 100);
+}
+
+function pickedSideMovementDirectionFromOdds(market: MarketEdgeDto): "toward" | "against" | "neutral" | "unknown" {
+  const trail = market.oddsTrail?.filter((point) => typeof point.american === "number" && Number.isFinite(point.american)) ?? [];
+  const first = trail[0]?.american ?? market.lineOpenAmerican ?? market.marketReadV2?.movement?.firstTrackedPrice ?? null;
+  const current =
+    market.lockedLineAmerican ??
+    market.priceAmerican ??
+    trail[trail.length - 1]?.american ??
+    market.marketReadV2?.movement?.currentPrice ??
+    null;
+  const firstImplied = americanToImpliedProbability(first);
+  const currentImplied = americanToImpliedProbability(current);
+  if (firstImplied === null || currentImplied === null) return "unknown";
+  const delta = currentImplied - firstImplied;
+  if (Math.abs(delta) < 0.005) return "neutral";
+  return delta > 0 ? "toward" : "against";
+}
+
 function mlMovementKnownNotToward(market: MarketEdgeDto): boolean {
   const direction = market.marketReadV2?.movement?.directionRelativeToPick ?? null;
-  return direction === "neutral" || direction === "resistance";
+  if (direction === "neutral" || direction === "resistance") return true;
+  if (direction === "support") return false;
+  const oddsDirection = pickedSideMovementDirectionFromOdds(market);
+  return oddsDirection === "neutral" || oddsDirection === "against";
 }
 
 export function applyMlbSameDayGradeGuardrail(args: {

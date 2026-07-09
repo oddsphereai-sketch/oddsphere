@@ -330,14 +330,26 @@ type SharpHistoryExistingState = {
   existingObservationKeys: Set<string>;
 };
 
+const SHARP_HISTORY_SOURCE_BOOKS = new Set(["draftkings", "circa"]);
+
 function sharpHistoryStateKey(eventId: string, sourceBook: string): string {
   return `${eventId}:${sourceBook}`;
 }
 
-function sharpHistoryObservationKey(row: Pick<MarketSplitObservationV2,
+function isSharpApiHistoryIdentityRow(row: Pick<MarketSplitObservationV2,
+  "provider" | "source_book" | "source_observed_at"
+>): boolean {
+  return (
+    row.provider === "sharpapi" &&
+    SHARP_HISTORY_SOURCE_BOOKS.has(row.source_book) &&
+    row.source_observed_at !== null
+  );
+}
+
+export function sharpHistoryObservationKey(row: Pick<MarketSplitObservationV2,
   "provider" | "source_book" | "canonical_event_id" | "canonical_market_id" | "selection_key" | "source_observed_at"
 >): string | null {
-  if (row.source_observed_at === null) return null;
+  if (!isSharpApiHistoryIdentityRow(row)) return null;
   return [
     row.provider,
     row.source_book,
@@ -346,6 +358,27 @@ function sharpHistoryObservationKey(row: Pick<MarketSplitObservationV2,
     row.selection_key,
     row.source_observed_at,
   ].join("|");
+}
+
+export function dedupeSharpApiHistorySplitObservations(
+  rows: readonly MarketSplitObservationV2[],
+  existingObservationKeys: ReadonlySet<string> = new Set(),
+): { rows: MarketSplitObservationV2[]; skipped: number } {
+  const seen = new Set(existingObservationKeys);
+  const out: MarketSplitObservationV2[] = [];
+  let skipped = 0;
+  for (const row of rows) {
+    const key = sharpHistoryObservationKey(row);
+    if (key !== null) {
+      if (seen.has(key)) {
+        skipped++;
+        continue;
+      }
+      seen.add(key);
+    }
+    out.push(row);
+  }
+  return { rows: out, skipped };
 }
 
 async function loadSharpHistoryExistingState(opts: {
@@ -621,10 +654,26 @@ async function writeRows(opts: {
   let splitWritten = 0;
   let priceWritten = 0;
 
-  if (opts.splitObservations.length > 0) {
+  let splitObservationsForWrite = [...opts.splitObservations];
+  if (splitObservationsForWrite.some(isSharpApiHistoryIdentityRow)) {
+    const existing = await loadSharpHistoryExistingState({
+      supabase: opts.supabase,
+      canonicalEventIds: Array.from(new Set(
+        splitObservationsForWrite
+          .filter(isSharpApiHistoryIdentityRow)
+          .map((row) => row.canonical_event_id),
+      )),
+    });
+    splitObservationsForWrite = dedupeSharpApiHistorySplitObservations(
+      splitObservationsForWrite,
+      existing.existingObservationKeys,
+    ).rows;
+  }
+
+  if (splitObservationsForWrite.length > 0) {
     const { error } = await opts.supabase
       .from("market_split_observations_v2")
-      .upsert(opts.splitObservations, {
+      .upsert(splitObservationsForWrite, {
         onConflict: "provider,source_book,canonical_event_id,canonical_market_id,selection_key,raw_payload_hash,fetched_at",
         ignoreDuplicates: true,
       });
@@ -633,24 +682,24 @@ async function writeRows(opts: {
       else if (isColumnMissing(error.message)) {
         const { error: retryError } = await opts.supabase
           .from("market_split_observations_v2")
-          .upsert(opts.splitObservations.map(stripV27SplitColumns), {
+          .upsert(splitObservationsForWrite.map(stripV27SplitColumns), {
             onConflict: "provider,source_book,canonical_event_id,canonical_market_id,selection_key,raw_payload_hash",
             ignoreDuplicates: true,
           });
         if (retryError) errors.push(`split upsert legacy retry: ${retryError.message}`);
-        else splitWritten = opts.splitObservations.length;
+        else splitWritten = splitObservationsForWrite.length;
       } else if (isConflictTargetMissing(error.message)) {
         const { error: retryError } = await opts.supabase
           .from("market_split_observations_v2")
-          .upsert(opts.splitObservations, {
+          .upsert(splitObservationsForWrite, {
             onConflict: "provider,source_book,canonical_event_id,canonical_market_id,selection_key,raw_payload_hash",
             ignoreDuplicates: true,
           });
         if (retryError) errors.push(`split upsert legacy conflict retry: ${retryError.message}`);
-        else splitWritten = opts.splitObservations.length;
+        else splitWritten = splitObservationsForWrite.length;
       } else errors.push(`split upsert: ${error.message}`);
     } else {
-      splitWritten = opts.splitObservations.length;
+      splitWritten = splitObservationsForWrite.length;
     }
   }
 

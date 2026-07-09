@@ -184,6 +184,9 @@ function parkStatus(snap: GameSnapshot): V22FeatureStatus {
 function starterEraStatus(starter: StarterSnapshot | null): V22FeatureStatus {
   if (starter === null) return { source: "missing", reason: "starter_missing" };
   if (starter.season_era != null) {
+    if (starter.season_stats_source === "prior_season_proxy") {
+      return { source: "fallback_real", reason: "starter_prior_season_era" };
+    }
     return { source: "preferred", reason: "starter_season_era" };
   }
   if (starter.season_whip != null || starter.season_k_per_9 != null) {
