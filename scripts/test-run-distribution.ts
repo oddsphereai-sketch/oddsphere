@@ -8,6 +8,10 @@ import {
   poissonCdf,
   homeWinProbabilityPoisson,
   overProbabilityPoisson,
+  negativeBinomialPmf,
+  negativeBinomialCdf,
+  overProbabilityNegativeBinomial,
+  overProbabilityZeroInflatedPoisson,
   homeMinus1_5Probability,
   awayPlus1_5Probability,
   probabilityToAmericanOdds,
@@ -117,6 +121,24 @@ async function main() {
   check(".5 line: P(over 8.5 | λ=8.5) ~ near 0.5", near(overProbabilityPoisson(4.25, 4.25, 8.5), 0.5, 0.05));
   check("very high total → P(over) low", overProbabilityPoisson(4.5, 4.0, 15.5) < 0.05);
   check("very low total → P(over) high", overProbabilityPoisson(4.5, 4.0, 4.5) > 0.9);
+
+  // ─── candidate totals distributions ─────────────────────────────────
+  section("candidate totals distributions");
+  check("NB α=0 matches Poisson PMF", near(negativeBinomialPmf(5, 8.5, 0), poissonPmf(5, 8.5), 0.000001));
+  check("NB CDF monotonic non-decreasing", (() => {
+    let prev = -1;
+    for (let k = 0; k <= 20; k++) {
+      const c = negativeBinomialCdf(k, 8.5, 0.18);
+      if (c < prev) return false;
+      prev = c;
+    }
+    return true;
+  })());
+  check("NB over probability in [0,1]", inRange(overProbabilityNegativeBinomial(4.5, 4.0, 8.5, 0.18), 0, 1));
+  check("NB heavier tails lifts high-total over vs Poisson", overProbabilityNegativeBinomial(4.5, 4.0, 12.5, 0.18) > overProbabilityPoisson(4.5, 4.0, 12.5));
+  check("ZIP pi=0 matches Poisson over", near(overProbabilityZeroInflatedPoisson(4.5, 4.0, 8.5, 0), overProbabilityPoisson(4.5, 4.0, 8.5), 0.000001));
+  check("ZIP over probability in [0,1]", inRange(overProbabilityZeroInflatedPoisson(4.5, 4.0, 8.5, 0.04), 0, 1));
+  check("ZIP extra zero mass lowers over probability", overProbabilityZeroInflatedPoisson(4.5, 4.0, 8.5, 0.04) < overProbabilityPoisson(4.5, 4.0, 8.5));
 
   // ─── run-line probabilities ─────────────────────────────────────────
   section("run-line probabilities");

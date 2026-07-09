@@ -291,15 +291,15 @@ const V22_BEST_ANGLE_MIN_CONFIDENCE_PCT = 56;
 // launch-window ML profile had real signal; totals remain guarded downstream
 // by stricter quality gates because they were less stable week to week.
 const V22_SHRINK_K_ML = 0.25;
-// 2026-07-09 model-first replay, 2026-06-07..2026-07-08:
+// 2026-07-09 model-improvement audit, 2026-06-07..2026-07-08:
 // O/U side selection tested best when the probability/edge substrate was
-// regularized harder toward the no-vig market (k=.25, cap=5pp). The model
-// still picks the raw probability side; this only calibrates probability,
+// regularized hard toward the no-vig market (k=.15, cap=3pp). The model still
+// picks the raw probability side; this only calibrates probability,
 // confidence, edge, and downstream sorting to the empirically stronger totals
 // version.
-const V22_SHRINK_K_OU = 0.25;
+const V22_SHRINK_K_OU = 0.15;
 const V22_MAX_DISTANCE_PP_ML = 8.0;
-const V22_MAX_DISTANCE_PP_OU = 5.0;
+const V22_MAX_DISTANCE_PP_OU = 3.0;
 const V22_OU_MIN_ACTIONABLE_EDGE_PCT = 5.0;
 
 const MLB_TEAM_RESIDUAL_CORRECTION_VERSION = "launch_window_team_residual_v1" as const;

@@ -59,6 +59,26 @@ function logFactorial(n: number): number {
   return n * Math.log(n) - n + 0.5 * Math.log(2 * Math.PI * n);
 }
 
+function logGamma(z: number): number {
+  // Lanczos approximation, coefficients from Numerical Recipes.
+  const p = [
+    676.5203681218851,
+    -1259.1392167224028,
+    771.3234287776531,
+    -176.6150291621406,
+    12.507343278686905,
+    -0.13857109526572012,
+    9.984369578019571e-6,
+    1.5056327351493116e-7,
+  ];
+  if (z < 0.5) return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * z)) - logGamma(1 - z);
+  z -= 1;
+  let x = 0.9999999999998099;
+  for (let i = 0; i < p.length; i++) x += p[i] / (z + i + 1);
+  const t = z + p.length - 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+}
+
 /**
  * Probability the home team's run total exceeds the away team's, given
  * independent Poisson scoring. Ties are reallocated proportional to
@@ -121,6 +141,78 @@ export function overProbabilityPoisson(
   }
   // Integer — over fires at > listed (push refunds aren't modeled)
   return 1 - poissonCdf(listedTotal, lambdaTotal);
+}
+
+/**
+ * Negative-binomial PMF using mean/dispersion parameterization:
+ *
+ *   mean = μ
+ *   variance = μ + αμ²
+ *
+ * α=0 collapses to Poisson. Larger α creates heavier tails, which is useful
+ * as a candidate model for MLB totals because real scoring is often more
+ * dispersed than a pure Poisson assumption.
+ */
+export function negativeBinomialPmf(k: number, mean: number, alpha: number): number {
+  if (k < 0 || !Number.isInteger(k)) return 0;
+  if (mean <= 0) return k === 0 ? 1 : 0;
+  if (alpha <= 0) return poissonPmf(k, mean);
+
+  const r = 1 / alpha;
+  const p = r / (r + mean);
+  const logP =
+    logGamma(k + r) -
+    logGamma(r) -
+    logFactorial(k) +
+    r * Math.log(p) +
+    k * Math.log(1 - p);
+  return Math.exp(logP);
+}
+
+/** Negative-binomial CDF: P(X <= k). */
+export function negativeBinomialCdf(k: number, mean: number, alpha: number): number {
+  if (k < 0) return 0;
+  let sum = 0;
+  for (let i = 0; i <= k; i++) sum += negativeBinomialPmf(i, mean, alpha);
+  return Math.min(1, sum);
+}
+
+/**
+ * Probability total runs exceed `listedTotal` under a negative-binomial
+ * total-runs model. This is research/audit-ready and not used by production
+ * unless explicitly wired in by a future model change.
+ */
+export function overProbabilityNegativeBinomial(
+  lambdaHome: number,
+  lambdaAway: number,
+  listedTotal: number,
+  alpha: number,
+): number {
+  const mean = Math.max(0, lambdaHome) + Math.max(0, lambdaAway);
+  if (mean <= 0) return 0;
+  const cutoff = Math.floor(listedTotal);
+  return 1 - negativeBinomialCdf(cutoff, mean, alpha);
+}
+
+/**
+ * Probability total runs exceed `listedTotal` under a zero-inflated Poisson
+ * total-runs model. `zeroInflation` is the extra mass assigned to zero total
+ * runs before scaling the ordinary Poisson distribution by (1 - pi).
+ */
+export function overProbabilityZeroInflatedPoisson(
+  lambdaHome: number,
+  lambdaAway: number,
+  listedTotal: number,
+  zeroInflation: number,
+): number {
+  const mean = Math.max(0, lambdaHome) + Math.max(0, lambdaAway);
+  if (mean <= 0) return 0;
+  const pi = Math.max(0, Math.min(0.95, zeroInflation));
+  const cutoff = Math.floor(listedTotal);
+  const poissonCdfAtCutoff = poissonCdf(cutoff, mean);
+  const zeroIncluded = cutoff >= 0 ? pi : 0;
+  const cdf = zeroIncluded + (1 - pi) * poissonCdfAtCutoff;
+  return 1 - Math.min(1, cdf);
 }
 
 /**
