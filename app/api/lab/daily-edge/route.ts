@@ -4917,6 +4917,13 @@ export async function GET(request: Request) {
   const lockedPlayGradeByGameMarket = new Map<
     string,
     {
+      pick: string | null;
+      side: string | null;
+      confidence: number | null;
+      modelProbability: number | null;
+      marketProbability: number | null;
+      edge: number | null;
+      lineValue: number | null;
       playGrade: string | null;
       noBet: boolean | null;
       bestAngle: boolean | null;
