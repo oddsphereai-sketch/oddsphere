@@ -272,12 +272,15 @@ export type RunMlbAutoModelV2_2Options = {
   useWorkloadPitching?: boolean;
 };
 
-// Best Angle thresholds — V2.2 uses tighter gates than V2.1 since the
-// independent projection has more freedom to move and we want only
-// genuinely model-driven angles to flow through.
-const V22_BEST_ANGLE_MIN_EDGE_PCT_ML = 3.0;
-const V22_BEST_ANGLE_MIN_EDGE_PCT_OU = 5.0;
-const V22_BEST_ANGLE_MIN_CONFIDENCE_PCT = 56;
+// Best Angle thresholds on the POST-calibration edge scale. After the
+// 2026-07-09 cap=3 probability calibration, old 5pp-style thresholds made
+// totals mathematically unable to promote. These floors are still positive
+// EV/data-quality gated by computePlayGrade; they just match the tighter edge
+// substrate instead of expecting pre-calibration phantom gaps.
+const V22_BEST_ANGLE_MIN_EDGE_PCT_ML = 2.0;
+const V22_BEST_ANGLE_MIN_EDGE_PCT_OU = 1.5;
+const V22_BEST_ANGLE_MIN_CONFIDENCE_PCT_ML = 56;
+const V22_BEST_ANGLE_MIN_CONFIDENCE_PCT_OU = 53;
 
 // MLB-P0 probability-space regularization (the E-first fix). Applied to
 // the Poisson probability AFTER the run-space posterior blend and BEFORE
@@ -304,7 +307,7 @@ const V22_SHRINK_K_OU = 0.15;
 // overconfident model-vs-market gaps from driving confidence/EV/grades.
 const V22_MAX_DISTANCE_PP_ML = 3.0;
 const V22_MAX_DISTANCE_PP_OU = 3.0;
-const V22_OU_MIN_ACTIONABLE_EDGE_PCT = 5.0;
+const V22_OU_MIN_ACTIONABLE_EDGE_PCT = 1.0;
 
 const MLB_TEAM_RESIDUAL_CORRECTION_VERSION = "launch_window_team_residual_v1" as const;
 
@@ -593,7 +596,7 @@ export function runMlbAutoModelV2_2(
     provisional,
     isHeld: false,
     minBestAngleEdgePct: V22_BEST_ANGLE_MIN_EDGE_PCT_ML,
-    minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT,
+    minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT_ML,
     marketProbIsFallback: mlMarketProbIsFallback,
     bestAngleHardBlockReason: neutralFallbackBlocksBA
       ? "key feature group on neutral fallback / missing for both sides"
@@ -621,7 +624,7 @@ export function runMlbAutoModelV2_2(
     provisional,
     isHeld: false,
     minBestAngleEdgePct: V22_BEST_ANGLE_MIN_EDGE_PCT_OU,
-    minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT,
+    minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT_OU,
     marketProbIsFallback: ouOddsMissing,
     bestAngleHardBlockReason: ouOddsMissing
       ? "total requires real O/U odds (no fallback) for Best Angle"

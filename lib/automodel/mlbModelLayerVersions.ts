@@ -19,7 +19,7 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   total_probability_head: "mlb_total_market_read_epoch_champion_2026_07_08",
   first_inning_probability_head: "mlb_first_inning_launch_probability_side_champion_2026_07_08",
   market_calibration_policy: "mlb_model_market_calibration_baseline_2026_07_08",
-  grade_policy: "mlb_public_grade_policy_category_champions_2026_07_08",
+  grade_policy: "mlb_public_grade_policy_calibrated_edge_scale_2026_07_09",
   correction_policy: "mlb_prediction_corrections_category_champions_2026_07_08",
   tracking_contract: "member_facing_lock_v1",
 } as const;
