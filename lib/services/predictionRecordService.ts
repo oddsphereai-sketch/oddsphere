@@ -2521,7 +2521,7 @@ export async function createPredictionRecords(
       .update({
         pick: "Toss-Up",
         side: null,
-        play_grade: null,
+        play_grade: "held",
         best_angle: false,
         no_bet: true,
         no_bet_reason: "fi_fresh_data_gate_no_current_actionable_prediction",

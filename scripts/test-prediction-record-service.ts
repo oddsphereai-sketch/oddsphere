@@ -1552,6 +1552,7 @@ console.log("\n━━━ stale unlocked FI cleanup guard ━━━");
   check("sync neutralizes stale unlocked FI rows when fresh-data gate stops proposing FI",
         src.includes("staleUnlockedFiIds") &&
         src.includes('r.market === "first_inning"') &&
+        src.includes('play_grade: "held"') &&
         src.includes('prediction_type: "toss_up"') &&
         src.includes("locked rows are never touched"));
 }

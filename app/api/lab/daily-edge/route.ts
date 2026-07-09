@@ -1187,6 +1187,13 @@ function buildGameDto(
   currentLinesByGameMarket: Map<string, LineRow[]>,
   openLinesByGameMarket: Map<string, LineHistoryRow[]>,
   lockedPlayGradeByGameMarket: Map<string, {
+    pick: string | null;
+    side: string | null;
+    confidence: number | null;
+    modelProbability: number | null;
+    marketProbability: number | null;
+    edge: number | null;
+    lineValue: number | null;
     playGrade: string | null;
     noBet: boolean | null;
     bestAngle: boolean | null;
@@ -1617,6 +1624,23 @@ function buildGameDto(
   // ladder ran instead, and writer "no_bet" / "toss_up" could
   // silently downgrade to actionable Watchlist or Lean.
   const lockedFi = lockedPlayGradeByGameMarket.get(`${row.id}::first_inning`);
+  const fiWriterHeld = lockedFi?.playGrade === "held";
+  const fiWriterPick = lockedFi !== undefined && !fiWriterHeld ? lockedFi.pick : null;
+  const fiEffectivePick = fiWriterPick ?? nrfiPick;
+  const fiEffectiveSide: Side | null =
+    lockedFi !== undefined && !fiWriterHeld
+      ? lockedFi.side === "under" || lockedFi.side === "over"
+        ? lockedFi.side
+        : fiEffectivePick === "NRFI"
+          ? "under"
+          : fiEffectivePick === "YRFI"
+            ? "over"
+            : null
+      : nrfiModelSideForMarket;
+  const fiEffectiveConfidence =
+    lockedFi !== undefined && !fiWriterHeld && typeof lockedFi.confidence === "number"
+      ? Math.max(0, Math.min(1, lockedFi.confidence / 100))
+      : nrfiConfidence;
   const mlMarketReadV2 = marketReadV2ForMarket({
     lookup: marketReadV2Lookup,
     row,
@@ -1721,23 +1745,23 @@ function buildGameDto(
   });
   let firstInning = buildMarketEdge({
     market: "first_inning",
-    pick: nrfiPick,
-    confidence: nrfiConfidence,
+    pick: fiEffectivePick,
+    confidence: fiEffectiveConfidence,
     grade: pred.nrfi_grade,
     signalType: pred.nrfi_signal_type,
     marketSignal: pred.nrfi_market_signal,
     sharpStatus: nrfiStatus,
-    modelSide: nrfiModelSideForMarket,
+    modelSide: fiEffectiveSide,
     signals,
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::first_inning_total`) ?? [],
     lineOpenCandidates:
-      nrfiModelSideForMarket === null
+      fiEffectiveSide === null
         ? [
             ...(openLinesByGameMarket.get(`${row.id}::first_inning_total::over`) ?? []),
             ...(openLinesByGameMarket.get(`${row.id}::first_inning_total::under`) ?? []),
           ].sort((a, b) => a.recorded_at.localeCompare(b.recorded_at) || a.id - b.id)
         : openLinesByGameMarket.get(
-            `${row.id}::first_inning_total::${nrfiModelSideForMarket}`
+            `${row.id}::first_inning_total::${fiEffectiveSide}`
           ) ?? [],
     autoFactors,
     homeAbbr: home,
@@ -1760,8 +1784,8 @@ function buildGameDto(
     lockedOpenOddsAmerican: lockedFi?.lockedOpenOddsAmerican ?? null,
     lockedOpenerRecordedAt: lockedFi?.lockedOpenerRecordedAt ?? null,
     lockedFrozenSignals: lockedFi?.lockedSignalRowsAtLock ?? null,
-    streamCurrent: streamFor("first_inning_total", nrfiModelSideForMarket),
-    lastMove: lastMoveFor("first_inning_total", nrfiModelSideForMarket),
+    streamCurrent: streamFor("first_inning_total", fiEffectiveSide),
+    lastMove: lastMoveFor("first_inning_total", fiEffectiveSide),
     oddspherePostedAmerican: postedLines.first_inning?.american ?? null,
     oddspherePostedAt: postedLines.first_inning?.at ?? null,
     lockedPriceAmerican: lockedFi?.lockedPriceAmerican ?? null,
@@ -5241,6 +5265,13 @@ export async function GET(request: Request) {
       const lm = (effectiveRow.snapshot_json as { line_movement?: { open_odds_american?: number | null; opener_recorded_at?: string | null } } | null)?.line_movement;
       const sigsAtLock = (effectiveRow.snapshot_json as { signal_rows_at_lock?: unknown[] } | null)?.signal_rows_at_lock;
       lockedPlayGradeByGameMarket.set(`${r.game_id}::${r.market}`, {
+        pick: effectiveRow.pick,
+        side: effectiveRow.side,
+        confidence: effectiveRow.confidence,
+        modelProbability: effectiveRow.model_probability,
+        marketProbability: effectiveRow.market_probability,
+        edge: effectiveRow.edge,
+        lineValue: effectiveRow.line_value,
         playGrade: effectiveRow.play_grade,
         noBet: effectiveRow.no_bet,
         bestAngle: effectiveRow.best_angle,
@@ -5328,6 +5359,13 @@ export async function GET(request: Request) {
       // state.
       if (lockedPlayGradeByGameMarket.has(key)) continue;
       lockedPlayGradeByGameMarket.set(key, {
+        pick: r.pick,
+        side: r.side,
+        confidence: r.confidence,
+        modelProbability: r.model_probability,
+        marketProbability: r.market_probability,
+        edge: r.edge,
+        lineValue: r.line_value,
         playGrade: r.play_grade,
         noBet: r.no_bet,
         bestAngle: r.best_angle,
