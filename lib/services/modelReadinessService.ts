@@ -52,6 +52,7 @@ export type ReadinessBlocker =
   | "starter_assignment_missing"
   | "starter_mlb_id_missing"
   | "starter_stats_missing_backfillable"
+  | "starter_stats_prior_season_proxy"
   | "starter_stats_provider_empty"
   | "lineup_missing_backfillable"
   | "lineup_not_announced_yet"
@@ -98,6 +99,31 @@ export type ReadinessAuditReport = {
   per_game: ReadinessPerGame[];
 };
 
+type PitchingStatsLite = {
+  player_id: number;
+  season?: number | null;
+  pitching_era: number | null;
+  pitching_whip?: number | null;
+  pitching_k_per_9?: number | null;
+  pitching_gs?: number | null;
+  pitching_gp?: number | null;
+  pitching_ip?: number | null;
+  first_inning_era?: number | null;
+  first_inning_starts?: number | null;
+};
+
+function hasUsableStarterPitchingStats(row: PitchingStatsLite | undefined): row is PitchingStatsLite {
+  if (row === undefined) return false;
+  return (
+    row.pitching_era !== null ||
+    row.pitching_whip !== null ||
+    row.pitching_k_per_9 !== null ||
+    row.pitching_gs !== null ||
+    row.pitching_gp !== null ||
+    row.pitching_ip !== null
+  );
+}
+
 /**
  * Pure read of DB state. Never writes. Never calls external providers.
  */
@@ -135,10 +161,26 @@ export async function auditMlbModelReadiness(args: {
   const season = Number(date.slice(0, 4));
   const { data: pStats } = await supabase
     .from("player_season_stats")
-    .select("player_id, pitching_era, first_inning_era, first_inning_starts")
+    .select("player_id, season, pitching_era, pitching_whip, pitching_k_per_9, pitching_gs, pitching_gp, pitching_ip, first_inning_era, first_inning_starts")
     .in("player_id", allPitcherIds)
     .eq("season", season);
-  const statsByPlayer = new Map((pStats ?? []).map((s) => [s.player_id as number, s]));
+  const statsByPlayer = new Map((pStats ?? []).map((s) => [s.player_id as number, s as PitchingStatsLite]));
+  const priorSeasons = [season - 1, season - 2].filter((s) => s > 0);
+  const { data: priorPStats } = allPitcherIds.length > 0 && priorSeasons.length > 0
+    ? await supabase
+        .from("player_season_stats")
+        .select("player_id, season, pitching_era, pitching_whip, pitching_k_per_9, pitching_gs, pitching_gp, pitching_ip, first_inning_era, first_inning_starts")
+        .in("player_id", allPitcherIds)
+        .in("season", priorSeasons)
+        .eq("season_type", "regular")
+        .order("season", { ascending: false })
+    : { data: null };
+  const priorStatsByPlayer = new Map<number, PitchingStatsLite>();
+  for (const row of (priorPStats ?? []) as PitchingStatsLite[]) {
+    if (priorStatsByPlayer.has(row.player_id)) continue;
+    if (!hasUsableStarterPitchingStats(row)) continue;
+    priorStatsByPlayer.set(row.player_id, row);
+  }
 
   const { data: lineupRows } = await supabase
     .from("lineups")
@@ -203,8 +245,12 @@ export async function auditMlbModelReadiness(args: {
     const awayPitcher = g.away_pitcher_id !== null ? pitcherById.get(g.away_pitcher_id as number) : undefined;
     const homeStats = g.home_pitcher_id !== null ? statsByPlayer.get(g.home_pitcher_id as number) : undefined;
     const awayStats = g.away_pitcher_id !== null ? statsByPlayer.get(g.away_pitcher_id as number) : undefined;
-    const homeStatsOk = homeStats !== undefined && homeStats.pitching_era !== null;
-    const awayStatsOk = awayStats !== undefined && awayStats.pitching_era !== null;
+    const homeCurrentStatsOk = hasUsableStarterPitchingStats(homeStats);
+    const awayCurrentStatsOk = hasUsableStarterPitchingStats(awayStats);
+    const homePriorStatsOk = g.home_pitcher_id !== null && hasUsableStarterPitchingStats(priorStatsByPlayer.get(g.home_pitcher_id as number));
+    const awayPriorStatsOk = g.away_pitcher_id !== null && hasUsableStarterPitchingStats(priorStatsByPlayer.get(g.away_pitcher_id as number));
+    const homeStatsOk = homeCurrentStatsOk || homePriorStatsOk;
+    const awayStatsOk = awayCurrentStatsOk || awayPriorStatsOk;
     const homeLineupCount = lineupCounts.get(`${g.id}|${g.home_team_id}`) ?? 0;
     const awayLineupCount = lineupCounts.get(`${g.id}|${g.away_team_id}`) ?? 0;
     const fiMktRows = fiCounts.get(g.id as number) ?? 0;
@@ -240,8 +286,10 @@ export async function auditMlbModelReadiness(args: {
     if (awayPitcher && awayPitcherMlbId === null) {
       blockers.push("starter_mlb_id_missing");
     }
-    if (g.home_pitcher_id !== null && !homeStatsOk && homePitcherMlbId !== null) blockers.push("starter_stats_missing_backfillable");
-    if (g.away_pitcher_id !== null && !awayStatsOk && awayPitcherMlbId !== null) blockers.push("starter_stats_missing_backfillable");
+    if (g.home_pitcher_id !== null && !homeCurrentStatsOk && homePriorStatsOk) blockers.push("starter_stats_prior_season_proxy");
+    else if (g.home_pitcher_id !== null && !homeStatsOk && homePitcherMlbId !== null) blockers.push("starter_stats_missing_backfillable");
+    if (g.away_pitcher_id !== null && !awayCurrentStatsOk && awayPriorStatsOk) blockers.push("starter_stats_prior_season_proxy");
+    else if (g.away_pitcher_id !== null && !awayStatsOk && awayPitcherMlbId !== null) blockers.push("starter_stats_missing_backfillable");
     const lineupIncomplete = homeLineupCount < 8 || awayLineupCount < 8;
     const lineupExpected =
       Number.isNaN(gameStartMs) ||
@@ -260,7 +308,7 @@ export async function auditMlbModelReadiness(args: {
       homeStatsOk && awayStatsOk && fgMktRows >= 4 && park;
     const fiV2Ready =
       g.home_pitcher_id !== null && g.away_pitcher_id !== null &&
-      homeStatsOk && awayStatsOk && fiMktRows >= 2 && park;
+      homeCurrentStatsOk && awayCurrentStatsOk && fiMktRows >= 2 && park;
 
     perGame.push({
       matchup, game_id: g.id as number, external_id: g.external_id as number,

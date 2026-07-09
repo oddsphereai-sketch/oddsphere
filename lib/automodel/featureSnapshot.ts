@@ -273,6 +273,11 @@ type SeasonStatsRow = {
   pitching_ip: number | null;
 };
 
+type StarterSeasonStatsSelection = {
+  row: SeasonStatsRow | undefined;
+  source: "current" | "prior_season_proxy" | "missing";
+};
+
 type SplitRow = {
   player_id: number;
   season: number;
@@ -366,6 +371,31 @@ function indexBy<T, K extends string | number>(
   return map;
 }
 
+function hasUsableStarterSeasonStats(row: SeasonStatsRow | undefined): row is SeasonStatsRow {
+  if (row === undefined) return false;
+  return (
+    row.pitching_era !== null ||
+    row.pitching_whip !== null ||
+    row.pitching_k_per_9 !== null ||
+    row.pitching_gs !== null ||
+    row.pitching_gp !== null ||
+    row.pitching_ip !== null
+  );
+}
+
+function selectStarterSeasonStats(
+  current: SeasonStatsRow | undefined,
+  prior: SeasonStatsRow | undefined,
+): StarterSeasonStatsSelection {
+  if (hasUsableStarterSeasonStats(current)) {
+    return { row: current, source: "current" };
+  }
+  if (hasUsableStarterSeasonStats(prior)) {
+    return { row: prior, source: "prior_season_proxy" };
+  }
+  return { row: undefined, source: "missing" };
+}
+
 // ─────────────────────────────────────────────────────────────
 // Snapshot builders (pure transforms from raw rows)
 // ─────────────────────────────────────────────────────────────
@@ -395,11 +425,13 @@ function buildTeamSnapshot(
 
 function buildStarterSnapshot(
   player: PlayerRow,
-  seasonStats: SeasonStatsRow | undefined,
+  seasonStatsSelection: StarterSeasonStatsSelection,
   pitchStats: PitchStatRow[],
   lineups: LineupRow[],
   injuries: InjuryRow[]
 ): StarterSnapshot {
+  const seasonStats = seasonStatsSelection.row;
+  const useCurrentFirstInningStats = seasonStatsSelection.source === "current";
   const isConfirmed = lineups.some(
     (l) =>
       l.player_id === player.id &&
@@ -419,14 +451,16 @@ function buildStarterSnapshot(
     season_era: seasonStats?.pitching_era ?? null,
     season_whip: seasonStats?.pitching_whip ?? null,
     season_k_per_9: seasonStats?.pitching_k_per_9 ?? null,
+    season_stats_season: seasonStats?.season ?? null,
+    season_stats_source: seasonStatsSelection.source,
     // V1: no rolling 30-day table. Phase 3.x optimization.
     last30_era: null,
     pitch_quality_score: computePitchQualityScore(pitchStats),
     is_confirmed: isConfirmed,
     is_scratched: isScratched,
-    first_inning_era: seasonStats?.first_inning_era ?? null,
-    first_inning_starts: seasonStats?.first_inning_starts ?? null,
-    first_inning_whip: seasonStats?.first_inning_whip ?? null,
+    first_inning_era: useCurrentFirstInningStats ? (seasonStats?.first_inning_era ?? null) : null,
+    first_inning_starts: useCurrentFirstInningStats ? (seasonStats?.first_inning_starts ?? null) : null,
+    first_inning_whip: useCurrentFirstInningStats ? (seasonStats?.first_inning_whip ?? null) : null,
     season_games_started: seasonStats?.pitching_gs ?? null,
     season_games_pitched: seasonStats?.pitching_gp ?? null,
     season_innings_pitched: seasonStats?.pitching_ip ?? null,
@@ -909,14 +943,14 @@ export async function buildFeatureSnapshots(
   );
 
   // ── Query 6: season stats for everyone ──────────────────────────
+  const seasonStatsSelect =
+    "player_id, season, season_type, pitching_era, pitching_whip, pitching_k_per_9, " +
+    "batting_obp, batting_slg, batting_ops, batting_pa, " +
+    "first_inning_era, first_inning_starts, first_inning_whip, " +
+    "pitching_gs, pitching_gp, pitching_ip";
   const { data: seasonStatsRaw, error: ssErr } = await supabase
     .from("player_season_stats")
-    .select(
-      "player_id, season, season_type, pitching_era, pitching_whip, pitching_k_per_9, " +
-        "batting_obp, batting_slg, batting_ops, batting_pa, " +
-        "first_inning_era, first_inning_starts, first_inning_whip, " +
-        "pitching_gs, pitching_gp, pitching_ip"
-    )
+    .select(seasonStatsSelect)
     .in("player_id", Array.from(allPlayerIds))
     .eq("season", season)
     .eq("season_type", "regular");
@@ -929,6 +963,27 @@ export async function buildFeatureSnapshots(
     (seasonStatsRaw ?? []) as unknown as SeasonStatsRow[],
     (s) => s.player_id
   );
+  const priorSeasonCandidates = [season - 1, season - 2].filter((s) => s > 0);
+  const { data: priorStarterStatsRaw, error: priorSsErr } = starterIds.size > 0 && priorSeasonCandidates.length > 0
+    ? await supabase
+        .from("player_season_stats")
+        .select(seasonStatsSelect)
+        .in("player_id", Array.from(starterIds))
+        .in("season", priorSeasonCandidates)
+        .eq("season_type", "regular")
+        .order("season", { ascending: false })
+    : { data: null, error: null };
+  if (priorSsErr) {
+    throw new Error(
+      `featureSnapshot: prior starter player_season_stats query failed: ${priorSsErr.message}`
+    );
+  }
+  const priorStarterStatsByPlayer = new Map<number, SeasonStatsRow>();
+  for (const row of (priorStarterStatsRaw ?? []) as unknown as SeasonStatsRow[]) {
+    if (priorStarterStatsByPlayer.has(row.player_id)) continue;
+    if (!hasUsableStarterSeasonStats(row)) continue;
+    priorStarterStatsByPlayer.set(row.player_id, row);
+  }
 
   // ── Query 7: splits (batters only, vs_lhp/vs_rhp) ──────────────
   const batterPlayerIds = Array.from(batterAndLineupPitcherIds);
@@ -1176,7 +1231,10 @@ export async function buildFeatureSnapshots(
       if (player === undefined) return null;
       return buildStarterSnapshot(
         player,
-        seasonStatsByPlayer.get(player.id),
+        selectStarterSeasonStats(
+          seasonStatsByPlayer.get(player.id),
+          priorStarterStatsByPlayer.get(player.id),
+        ),
         pitchStatsByPlayer.get(player.id) ?? [],
         gameLineups,
         injuries
