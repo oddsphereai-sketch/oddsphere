@@ -1192,7 +1192,7 @@ export async function runDailyEdgeDataHealthMonitor(args: {
     sport: args.sport,
     date: args.date,
     markets,
-    gameCount: new Set(rows.map((row) => row.identity.gameId)).size,
+    gameCount: new Set(rows.map((row) => row.identity.externalId)).size,
     predictionCount: rows.length,
     evidenceSource: selection.selectionSummary,
     coverage: {
