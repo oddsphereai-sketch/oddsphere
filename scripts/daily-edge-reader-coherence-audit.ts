@@ -185,6 +185,7 @@ function selfHealedReaderText(row: PredictionEvidenceObject): string {
 
 function hasBestAngleOverrideEvidence(row: PredictionEvidenceObject): boolean {
   if (row.priceValueEvidence.priceBecameUnplayable) return false;
+  if (row.marketEvidence.reasonCodes.includes("best_angle_official_writer_override")) return true;
   const edge = row.modelStatsEvidence.edge ?? 0;
   const modelEdgeScore = row.modelStatsEvidence.deterministicScores.modelEdgeScore;
   const priceQualityScore = row.priceValueEvidence.priceQualityScore;
@@ -320,7 +321,8 @@ function auditRow(row: PredictionEvidenceObject): Finding[] {
   if (isFi && FI_FULL_GAME_MARKET_LANGUAGE_RE.test(fullCopyText)) {
     push(findings, row, "fi_full_game_market_language_used", "block", "FI copy uses full-game market language instead of FI-specific model/price/context language.");
   }
-  if (isFi && /toss/i.test(row.identity.pick ?? "") && !/Toss-Up.+no actionable YRFI\/NRFI side/i.test(fullCopyText)) {
+  const fiTossUpText = `${fullCopyText} ${selfHealedReaderText(row)}`;
+  if (isFi && /toss/i.test(row.identity.pick ?? "") && !/Toss-Up.+no actionable YRFI\/NRFI side/i.test(fiTossUpText)) {
     push(findings, row, "fi_toss_up_copy_not_clear", "block", "FI Toss-Up copy must clearly say there is no actionable YRFI/NRFI side.");
   }
 

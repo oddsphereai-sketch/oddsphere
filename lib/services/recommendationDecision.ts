@@ -30,6 +30,7 @@ type MarketInput = {
   consensusSplitsOverride?: MarketSplitDisplaySection | null;
   sharpBookSplitsOverride?: MarketSplitDisplaySection | null;
   lineMovementOverride?: "support" | "resistance" | "neutral" | null;
+  allowBestAngleMarketConflict?: boolean;
 };
 
 export type BuildRecommendationDecisionInput = {
@@ -254,8 +255,9 @@ function buildMarketDecision(sport: string, market: MarketInput, projectedScore:
     typeof market.edgePp === "number" &&
     market.edgePp >= BEST_ANGLE_CONFLICT_OVERRIDE_EDGE_PP &&
     market.price !== null;
+  const hasOfficialGradeOverride = hasBestAngleConflict && market.allowBestAngleMarketConflict === true;
   const grade: PlayGradeLabel =
-    hasBestAngleConflict && !hasExplicitOverride
+    hasBestAngleConflict && !hasExplicitOverride && !hasOfficialGradeOverride
       ? read.status === "resistance" || read.status === "consensus_resistance"
         ? "Caution"
         : "Lean"
@@ -271,7 +273,15 @@ function buildMarketDecision(sport: string, market: MarketInput, projectedScore:
     `grade_${grade.toLowerCase().replaceAll(" ", "_")}`,
     ...(sourceConflict ? ["source_conflict"] : []),
     ...(read.status === "resistance" || read.status === "consensus_resistance" ? ["market_resistance"] : []),
-    ...(hasBestAngleConflict ? [hasExplicitOverride ? "best_angle_model_edge_override" : "best_angle_capped_by_market_conflict"] : []),
+    ...(hasBestAngleConflict
+      ? [
+          hasExplicitOverride
+            ? "best_angle_model_edge_override"
+            : hasOfficialGradeOverride
+              ? "best_angle_official_writer_override"
+              : "best_angle_capped_by_market_conflict",
+        ]
+      : []),
   ];
   const evidence = [
     ...(caps.expectsConsensusSplits
@@ -328,7 +338,12 @@ export function buildRecommendationDecision(input: BuildRecommendationDecisionIn
   const issues = decisions.flatMap((d) => {
     const out: string[] = [];
     if (!PLAY_GRADES.includes(d.playGrade)) out.push("invalid_play_grade");
-    if (d.playGrade === "Best Angle" && (d.resolvedMarketRead.status === "mixed" || d.resolvedMarketRead.status === "resistance") && !d.reasonCodes.includes("best_angle_model_edge_override")) out.push("best_angle_market_conflict");
+    if (
+      d.playGrade === "Best Angle" &&
+      (d.resolvedMarketRead.status === "mixed" || d.resolvedMarketRead.status === "resistance") &&
+      !d.reasonCodes.includes("best_angle_model_edge_override") &&
+      !d.reasonCodes.includes("best_angle_official_writer_override")
+    ) out.push("best_angle_market_conflict");
     if (hasProviderLeak(d)) out.push("provider_name_leak");
     return out;
   });

@@ -244,7 +244,15 @@ function stringArrayAt(value: unknown, key: string): string[] {
 }
 
 function hasSparseStarterHistory(sportSpecific: Record<string, unknown>, featureReasonCodes: string[]): boolean {
-  if (!featureReasonCodes.includes("fi_starter_missing")) return false;
+  const fiAudit = recordAt(sportSpecific, "fi_v2_audit");
+  const freshDataBlockers = stringArrayAt(fiAudit, "fresh_data_blockers");
+  if (
+    featureReasonCodes.includes("fi_starter_proxy_season_stats") &&
+    freshDataBlockers.some((reason) => /opposing_starter_fi_proxy|starter_fi_proxy/i.test(reason))
+  ) {
+    return true;
+  }
+  if (!featureReasonCodes.includes("fi_starter_missing") && !featureReasonCodes.includes("fi_starter_proxy_season_stats")) return false;
   const v22Audit = recordAt(sportSpecific, "v2_2_audit");
   const featureCapture = recordAt(v22Audit, "feature_capture");
   const starters = recordAt(featureCapture, "starter");
@@ -252,12 +260,18 @@ function hasSparseStarterHistory(sportSpecific: Record<string, unknown>, feature
   return starterRows.some((starter) => {
     if (!starter) return false;
     const hasKnownIdentity = stringAt(starter, "name") !== null || numberAt(starter, "player_id") !== null;
-    if (!hasKnownIdentity) return false;
+    const hasKnownStats =
+      numberAt(starter, "first_inning_starts") !== null ||
+      numberAt(starter, "season_games_started") !== null ||
+      numberAt(starter, "season_innings_pitched") !== null ||
+      numberAt(starter, "season_era") !== null;
+    if (!hasKnownIdentity && !hasKnownStats) return false;
     const fiStarts = numberAt(starter, "first_inning_starts");
     const seasonStarts = numberAt(starter, "season_games_started");
     const seasonInnings = numberAt(starter, "season_innings_pitched");
     const seasonEra = numberAt(starter, "season_era");
     const hasSparseFi = fiStarts === null || fiStarts < 5;
+    if (featureReasonCodes.includes("fi_starter_proxy_season_stats") && hasSparseFi) return true;
     const hasTinyStarterSample =
       (seasonStarts !== null && seasonStarts <= 1) ||
       (seasonInnings !== null && seasonInnings < 10) ||

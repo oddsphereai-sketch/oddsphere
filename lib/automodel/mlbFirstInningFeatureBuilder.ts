@@ -104,26 +104,31 @@ function topOrderFactor(
   lineup_top8: BatterSnapshot[],
   team: TeamSnapshot,
 ): { factor: number; status: FiFeatureStatus; lineupStatus: FiFeatureStatus } {
+  const teamOpsProxy = (lineupStatus: FiFeatureStatus) => {
+    if (
+      typeof team.team_avg_batter_ops !== "number" ||
+      !Number.isFinite(team.team_avg_batter_ops) ||
+      team.team_avg_batter_ops <= 0
+    ) {
+      return null;
+    }
+    const effectiveOps = shrinkRate(
+      team.team_avg_batter_ops,
+      team.team_avg_batter_ops_sample,
+      SHRINKAGE_K_TEAM_OPS,
+      LEAGUE_CONSTANTS_V1.AVG_OPS,
+    );
+    return {
+      factor: clamp(effectiveOps / FI_LEAGUE_AVG_TOP3_OPS, FACTOR_CLAMP_MIN, FACTOR_CLAMP_MAX),
+      status: { source: "proxy", reason: "fi_top_order_team_ops_proxy" } as FiFeatureStatus,
+      lineupStatus,
+    };
+  };
   const top3 = lineup_top8.slice(0, 3);
   const top3WithOps = top3.filter((b) => b.season_ops != null && b.season_ops > 0);
   if (top3.length === 0) {
-    if (
-      typeof team.team_avg_batter_ops === "number" &&
-      Number.isFinite(team.team_avg_batter_ops) &&
-      team.team_avg_batter_ops > 0
-    ) {
-      const effectiveOps = shrinkRate(
-        team.team_avg_batter_ops,
-        team.team_avg_batter_ops_sample,
-        SHRINKAGE_K_TEAM_OPS,
-        LEAGUE_CONSTANTS_V1.AVG_OPS,
-      );
-      return {
-        factor: clamp(effectiveOps / FI_LEAGUE_AVG_TOP3_OPS, FACTOR_CLAMP_MIN, FACTOR_CLAMP_MAX),
-        status: { source: "proxy", reason: "fi_top_order_team_ops_proxy" },
-        lineupStatus: { source: "fallback_real", reason: "fi_lineup_team_offense_proxy" },
-      };
-    }
+    const proxy = teamOpsProxy({ source: "fallback_real", reason: "fi_lineup_team_offense_proxy" });
+    if (proxy !== null) return proxy;
     return {
       factor: 1.0,
       status: { source: "neutral_fallback", reason: "fi_top_order_league_average" },
@@ -138,6 +143,8 @@ function topOrderFactor(
     : { source: "missing", reason: "fi_lineup_partial" };
 
   if (top3WithOps.length === 0) {
+    const proxy = teamOpsProxy(lineupStatus);
+    if (proxy !== null) return proxy;
     return {
       factor: 1.0,
       status: { source: "missing", reason: "fi_top_order_no_ops" },

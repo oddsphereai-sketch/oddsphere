@@ -496,7 +496,7 @@ function supportingEvidenceCopy(row: PredictionEvidenceObject, label: string): s
 function riskCopy(row: PredictionEvidenceObject, label: string): string {
   const caps = capabilitiesForEvidence(row);
   if (caps.isFirstInning) {
-    if (label === "fi_toss_up_no_play") return "No actionable FI edge is present right now; wait for a clearer YRFI or NRFI setup.";
+    if (label === "fi_toss_up_no_play") return "FI is Toss-Up, so there is no actionable YRFI/NRFI side yet; wait for a clearer setup.";
     if (label === "fi_price_capped") return `The ${price(row.priceValueEvidence.priceAmerican)} price is the main cap, so the FI edge needs to hold up cleanly.`;
     return "A thin FI model edge can disappear quickly if starter/top-order context is weaker than expected.";
   }

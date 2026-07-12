@@ -292,6 +292,27 @@ async function main() {
       out.fiV2Audit.fi_pick !== "Held",
       `pick=${out.fiV2Audit.fi_pick} blockers=${out.fiV2Audit.fresh_data_blockers.join(",")}`);
   }
+  {
+    // Confirmed top three with missing individual OPS should still use the
+    // real team-offense proxy instead of becoming a hard missing-input hold.
+    const noOpsLineup = buildLineup([0, 0, 0, 0.720, 0.700, 0.680, 0.640, 0.620])
+      .map((b, i) => i < 3 ? { ...b, season_ops: null, lineup_source: "confirmed" as const } : b);
+    const snap = buildSnapshot({
+      homeLineup: noOpsLineup,
+      awayLineup: noOpsLineup,
+      homeTeam: { team_avg_batter_ops: 0.745, team_avg_batter_ops_sample: 3600 },
+      awayTeam: { team_avg_batter_ops: 0.710, team_avg_batter_ops_sample: 3600 },
+    });
+    const p = projectFiIndependent(snap);
+    check("confirmed top-3 with no OPS uses team-offense proxy",
+      p.feature_audit.home_top_order.reason === "fi_top_order_team_ops_proxy" &&
+        p.feature_audit.away_top_order.reason === "fi_top_order_team_ops_proxy");
+    check("confirmed top-3 with no OPS keeps lineup status confirmed",
+      p.feature_audit.home_lineup.reason === "fi_lineup_confirmed" &&
+        p.feature_audit.away_lineup.reason === "fi_lineup_confirmed");
+    check("confirmed top-3 with team proxy is not low tier",
+      p.data_quality_tier !== "low" && p.data_quality_tier !== "fallback");
+  }
 
   // ──────────────────────────────────────────────────────────────────
   section("Push 3B-2 — FiLineRow shape contract (fetched_at, not updated_at)");

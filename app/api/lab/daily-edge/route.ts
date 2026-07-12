@@ -467,6 +467,13 @@ function gradeForStoredVerdict(verdict: MarketVerdict, rawGrade: Grade | null): 
   return rawGrade === "best_signal" ? "model_only" : (rawGrade ?? "model_only");
 }
 
+function recommendationScoreFloorForStoredVerdict(verdict: MarketVerdict): number | null {
+  if (verdict === "best_angle") return 60;
+  if (verdict === "lean") return 45;
+  if (verdict === "watchlist") return 40;
+  return null;
+}
+
 function isResolvedMarketSupport(decision: MarketDecision | undefined): boolean {
   if (!decision || decision.sourceConflict) return false;
   return decision.resolvedMarketRead.status === "aligned" || decision.resolvedMarketRead.status === "consensus_support";
@@ -2084,6 +2091,7 @@ function buildGameDto(
     sportSpecific: pred.sport_specific,
     lockedPlayGrade: lockedMl?.playGrade ?? null,
     lockedNoBet: lockedMl?.noBet ?? null,
+    hasPredictionRecord: lockedMl !== undefined,
     lockedBestAngle: lockedMl?.bestAngle ?? null,
     isLockedRow: isMlActuallyLocked,
     lockedOpenOddsAmerican: lockedMl?.lockedOpenOddsAmerican ?? null,
@@ -2136,6 +2144,7 @@ function buildGameDto(
     },
     lockedPlayGrade: lockedOu?.playGrade ?? null,
     lockedNoBet: lockedOu?.noBet ?? null,
+    hasPredictionRecord: lockedOu !== undefined,
     lockedBestAngle: lockedOu?.bestAngle ?? null,
     isLockedRow: isOuActuallyLocked,
     lockedOpenOddsAmerican: lockedOu?.lockedOpenOddsAmerican ?? null,
@@ -2186,6 +2195,7 @@ function buildGameDto(
     // which reads sport_specific.fi_v2_audit.fi_play_grade).
     lockedPlayGrade: lockedFi?.playGrade ?? null,
     lockedNoBet: lockedFi?.noBet ?? null,
+    hasPredictionRecord: lockedFi !== undefined,
     lockedBestAngle: lockedFi?.bestAngle ?? null,
     isLockedRow: isFiActuallyLocked,
     lockedOpenOddsAmerican: lockedFi?.lockedOpenOddsAmerican ?? null,
@@ -2298,6 +2308,7 @@ function buildGameDto(
           marketReadV2Enabled: ml.marketReadV2Enabled === true,
           consensusSplitsOverride: mlSourceAwareSplits?.consensus ?? undefined,
           sharpBookSplitsOverride: mlSourceAwareSplits?.sharpBook ?? undefined,
+          allowBestAngleMarketConflict: lockedMl !== undefined && ml.verdict.key === "best_angle",
         },
         {
           key: "total",
@@ -2315,6 +2326,7 @@ function buildGameDto(
           marketReadV2Enabled: total.marketReadV2Enabled === true,
           consensusSplitsOverride: totalSourceAwareSplits?.consensus ?? undefined,
           sharpBookSplitsOverride: totalSourceAwareSplits?.sharpBook ?? undefined,
+          allowBestAngleMarketConflict: lockedOu !== undefined && total.verdict.key === "best_angle",
         },
         {
           key: "firstInning",
@@ -2330,6 +2342,7 @@ function buildGameDto(
           publicSplits: firstInning.publicSplits,
           marketReadV2: null,
           marketReadV2Enabled: firstInning.marketReadV2Enabled === true,
+          allowBestAngleMarketConflict: lockedFi !== undefined && firstInning.verdict.key === "best_angle",
         },
       ],
     }), renderedCopyFlagOverrides);
@@ -3269,6 +3282,12 @@ type BuildMarketEdgeInput = {
   lockedPlayGrade?: string | null;
   lockedNoBet?: boolean | null;
   /**
+   * True when prediction_records has a row for this market even if the game is
+   * not locked yet. Public tracking is sourced from prediction_records, so the
+   * reader must honor the writer's current row pre-lock too.
+   */
+  hasPredictionRecord?: boolean;
+  /**
    * P7-B1 (2026-06-11) — final `prediction_records.best_angle` boolean
    * for this (game, market). Passed through to resolveLockedVerdict to
    * honor the writer's public-money conflict guard when the text label
@@ -3930,7 +3949,8 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           reasons: marketAwareCorrectionReasons(input.sportSpecific ?? null, input.market),
         })
       : null;
-  const hasStoredPredictionRecord = input.isLockedRow === true;
+  const hasStoredPredictionRecord =
+    input.isLockedRow === true || input.hasPredictionRecord === true;
   const writerPlayGrade =
     hasStoredPredictionRecord
       ? (input.lockedPlayGrade ?? null)
@@ -4260,15 +4280,22 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const finalAction =
     hasStoredPredictionRecord &&
     writerOverride !== null
-      ? {
-          ...normalizedAction,
-          capReasons: [],
-          finalGrade: gradeForStoredVerdict(verdict.key, input.grade),
-          finalVerdict: verdict,
-          finalRecScore: rawRecommendationConfidence,
-          actionabilityLabel: verdict.label,
-          displayReason: null,
-        }
+      ? (() => {
+          const recFloor = recommendationScoreFloorForStoredVerdict(verdict.key);
+          const finalRecScore =
+            recFloor === null
+              ? rawRecommendationConfidence
+              : Math.max(rawRecommendationConfidence ?? 0, recFloor);
+          return {
+            ...normalizedAction,
+            capReasons: [],
+            finalGrade: gradeForStoredVerdict(verdict.key, input.grade),
+            finalVerdict: verdict,
+            finalRecScore,
+            actionabilityLabel: verdict.label,
+            displayReason: null,
+          };
+        })()
       : normalizedAction;
   const guidedGuide =
     finalAction.displayReason ??
