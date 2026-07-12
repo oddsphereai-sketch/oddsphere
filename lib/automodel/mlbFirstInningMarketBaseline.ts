@@ -15,6 +15,8 @@
  */
 
 import { americanToImpliedProb, noVigPair } from "./marketPrior";
+import { isBlockedSportsbook } from "../config/blockedSportsbooks";
+import { BOOK_PRIORITY } from "../config/bookPriority";
 
 export type FiMarketBaseline = {
   /** Listed FI total (typically 0.5). null when no line. */
@@ -44,7 +46,17 @@ export type FiLineRow = {
   fetched_at?: string | null;
 };
 
-const FI_BOOK_PRIORITY = ["pinnacle", "fanduel", "draftkings", "betmgm", "caesars"];
+const FI_BOOK_PRIORITY = BOOK_PRIORITY.filter(
+  (book) => book !== "locked_snapshot" && book !== "recommendation_snapshot" && book !== "splits_consensus",
+);
+const FI_PRICE_MAX_SOURCE_AGE_MS = 90 * 60 * 1000;
+
+function isFreshFiMarketPriceSource(observedAt: string | null | undefined, nowMs = Date.now()): boolean {
+  if (observedAt === null || observedAt === undefined) return true;
+  const observedMs = Date.parse(observedAt);
+  if (!Number.isFinite(observedMs)) return false;
+  return nowMs - observedMs <= FI_PRICE_MAX_SOURCE_AGE_MS;
+}
 
 export function computeFiMarketBaseline(linesForGame: FiLineRow[]): FiMarketBaseline {
   const empty: FiMarketBaseline = {
@@ -61,7 +73,12 @@ export function computeFiMarketBaseline(linesForGame: FiLineRow[]): FiMarketBase
 
   // Pick the highest-priority book that has BOTH over and under for the
   // first_inning_total market.
-  const candidates = linesForGame.filter((l) => l.market_type === "first_inning_total");
+  const candidates = linesForGame.filter(
+    (l) =>
+      l.market_type === "first_inning_total" &&
+      !isBlockedSportsbook(l.sportsbook) &&
+      isFreshFiMarketPriceSource(l.fetched_at),
+  );
   if (candidates.length === 0) return empty;
 
   let chosenBook: string | null = null;
@@ -73,18 +90,19 @@ export function computeFiMarketBaseline(linesForGame: FiLineRow[]): FiMarketBase
     if (o && u) { chosenBook = book; overRow = o; underRow = u; break; }
   }
   if (overRow === null || underRow === null) {
-    // Fall through to any book that has both sides.
-    const overAny = candidates.find((l) => (l.side ?? "").toLowerCase() === "over" && l.odds_american !== null);
-    const underAny = candidates.find((l) => (l.side ?? "").toLowerCase() === "under" && l.odds_american !== null);
-    if (overAny === undefined || underAny === undefined) {
+    // Fall through to any trusted, fresh book that has both sides.
+    const books = Array.from(new Set(candidates.map((l) => l.sportsbook)));
+    for (const book of books) {
+      const o = candidates.find((l) => l.sportsbook === book && (l.side ?? "").toLowerCase() === "over" && l.odds_american !== null);
+      const u = candidates.find((l) => l.sportsbook === book && (l.side ?? "").toLowerCase() === "under" && l.odds_american !== null);
+      if (o && u) { chosenBook = book; overRow = o; underRow = u; break; }
+    }
+    if (overRow === null || underRow === null) {
       return {
         ...empty,
         reason: "fi_market_one_sided",
       };
     }
-    chosenBook = overAny.sportsbook;
-    overRow = overAny;
-    underRow = underAny;
   }
   if (overRow.odds_american === null || underRow.odds_american === null) return empty;
 

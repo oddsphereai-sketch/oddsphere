@@ -63,6 +63,14 @@ export type CreateRecordsOptions = {
    * snapshots represent picks the model actually made).
    */
   includeHeld?: boolean;
+  /**
+   * Lock-stage safety: when true, an existing prediction_records row for the
+   * same game/market/model/slate is treated as the public card to preserve,
+   * even if it is not locked yet. Used by pregame-sweep's t60 path so the
+   * final lock stamps what members were already shown instead of overwriting it
+   * with a last-second model recompute.
+   */
+  preserveExistingUnlocked?: boolean;
 };
 
 export type CreateRecordsResult = {
@@ -535,6 +543,27 @@ type LineHistoryRowForOdds = {
   recorded_at: string;
 };
 
+const LOCK_PRICE_MAX_SOURCE_AGE_MS = 90 * 60 * 1000;
+
+function isFreshLockPriceSource(observedAt: string | null | undefined, nowMs = Date.now()): boolean {
+  if (observedAt === null || observedAt === undefined) return true;
+  const observedMs = Date.parse(observedAt);
+  if (!Number.isFinite(observedMs)) return false;
+  return nowMs - observedMs <= LOCK_PRICE_MAX_SOURCE_AGE_MS;
+}
+
+function currentEasternDate(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+function freshnessReferenceMsForGame(game: GameRow, slateDate: string): number {
+  if (slateDate >= currentEasternDate()) return Date.now();
+  const gameMs = game.game_date === null ? NaN : Date.parse(game.game_date);
+  if (Number.isFinite(gameMs)) return gameMs - 60 * 60 * 1000;
+  const slateEndMs = Date.parse(`${slateDate}T23:59:00.000Z`);
+  return Number.isFinite(slateEndMs) ? slateEndMs : Date.now();
+}
+
 /**
  * For one (game, market, side), return the picked-side odds_american
  * from the highest-priority book that has a non-null value. Excludes
@@ -586,6 +615,7 @@ function pickOddsWithFallback(
   gameId: number,
   marketType: "moneyline" | "total" | "first_inning_total",
   side: string,
+  nowMs = Date.now(),
 ): OddsSourceDetail {
   // Tier 1 — current `lines` real-book. Blocked books (fliff, kalshi) are
   // never a valid price source (#39): drop them here so they cannot be the
@@ -596,7 +626,8 @@ function pickOddsWithFallback(
       r.side === side &&
       r.odds_american !== null &&
       r.sportsbook !== "splits_consensus" &&
-      !isBlockedSportsbook(r.sportsbook),
+      !isBlockedSportsbook(r.sportsbook) &&
+      isFreshLockPriceSource(r.fetched_at, nowMs),
   );
   for (const book of BOOK_PRIORITY) {
     if (book === "splits_consensus") continue;
@@ -618,7 +649,7 @@ function pickOddsWithFallback(
   // Drop blocked books (fliff, kalshi) up front so neither the BOOK_PRIORITY
   // pass nor the "first real book" fallback below can surface one (#39).
   const history = (historyByKey.get(historyKey) ?? []).filter(
-    (r) => !isBlockedSportsbook(r.sportsbook),
+    (r) => !isBlockedSportsbook(r.sportsbook) && isFreshLockPriceSource(r.recorded_at, nowMs),
   );
   if (history.length > 0) {
     // History is pre-sorted by recorded_at DESC. Pick the most-recent
@@ -658,8 +689,9 @@ function pickFreshOnlyOdds(
   gameId: number,
   marketType: "first_inning_total",
   side: string,
+  nowMs = Date.now(),
 ): OddsSourceDetail {
-  const picked = pickOddsWithFallback(lines, new Map(), gameId, marketType, side);
+  const picked = pickOddsWithFallback(lines, new Map(), gameId, marketType, side, nowMs);
   return picked.source === "lines" ? picked : { source: "unavailable", book: null, odds: null, line: null, observedAt: null };
 }
 
@@ -693,21 +725,24 @@ export function buildGameOddsSnapshot(
   opts?: {
     historyByKey?: ReadonlyMap<string, ReadonlyArray<LineHistoryRowForOdds>>;
     gameId?: number;
+    freshnessReferenceMs?: number;
   },
 ): GameOddsSnapshot {
   const history = opts?.historyByKey ?? new Map<string, ReadonlyArray<LineHistoryRowForOdds>>();
   const gameId = opts?.gameId ?? -1;
-  const mlHome = pickOddsWithFallback(lines, history, gameId, "moneyline", "home");
-  const mlAway = pickOddsWithFallback(lines, history, gameId, "moneyline", "away");
+  const freshnessReferenceMs = opts?.freshnessReferenceMs ?? Date.now();
+  const freshLines = lines.filter((l) => isFreshLockPriceSource(l.fetched_at, freshnessReferenceMs));
+  const mlHome = pickOddsWithFallback(freshLines, history, gameId, "moneyline", "home", freshnessReferenceMs);
+  const mlAway = pickOddsWithFallback(freshLines, history, gameId, "moneyline", "away", freshnessReferenceMs);
   // Constrain totals to the CONSENSUS main line so over + under come from the SAME
   // line (not a divergent/alt-line single book — e.g. a lone Pinnacle 9.5/10). The
   // bet line + per-side prices in the locked snapshot then stay coherent.
-  const mainTotal = selectMainTotalLine(lines.filter((l) => l.market_type === "total"));
-  const ouLines = mainTotal === null ? lines : lines.filter(
+  const mainTotal = selectMainTotalLine(freshLines.filter((l) => l.market_type === "total"));
+  const ouLines = mainTotal === null ? freshLines : freshLines.filter(
     (l) => l.market_type !== "total" || l.line_value === mainTotal || l.line_value === null,
   );
-  const ouOver = pickOddsWithFallback(ouLines, history, gameId, "total", "over");
-  const ouUnder = pickOddsWithFallback(ouLines, history, gameId, "total", "under");
+  const ouOver = pickOddsWithFallback(ouLines, history, gameId, "total", "over", freshnessReferenceMs);
+  const ouUnder = pickOddsWithFallback(ouLines, history, gameId, "total", "under", freshnessReferenceMs);
   return {
     mlHomeOdds: mlHome.odds,
     mlAwayOdds: mlAway.odds,
@@ -2751,6 +2786,7 @@ function buildFiRecord(
   launchDay: boolean,
   currentLines: ReadonlyArray<LineRowForOdds>,
   historyByKey: ReadonlyMap<string, ReadonlyArray<LineHistoryRowForOdds>>,
+  freshnessReferenceMs: number = Date.now(),
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
@@ -2821,10 +2857,10 @@ function buildFiRecord(
   // users should never have seen.
   const fiPicked = sideValue === null
     ? null
-    : pickFreshOnlyOdds(currentLines, game.id, "first_inning_total", internalSide);
+    : pickFreshOnlyOdds(currentLines, game.id, "first_inning_total", internalSide, freshnessReferenceMs);
   const fiOpposite = sideValue === null
     ? null
-    : pickFreshOnlyOdds(currentLines, game.id, "first_inning_total", internalSide === "under" ? "over" : "under");
+    : pickFreshOnlyOdds(currentLines, game.id, "first_inning_total", internalSide === "under" ? "over" : "under", freshnessReferenceMs);
   if (sideValue !== null && (fiPicked?.source !== "lines" || fiOpposite?.source !== "lines")) {
     return null;
   }
@@ -3061,6 +3097,7 @@ export function buildPredictionRecordsFromSlate(args: {
     const openers = (args.openersByGameId?.get(g.id) ?? []) as LineHistoryOpenerRow[];
     const currentLines = (args.currentLinesByGameId?.get(g.id) ?? []) as LineRowForOdds[];
     const sourceAwareSplits = (args.sourceAwareSplitsByGameId?.get(g.id) ?? []) as SourceAwareSplitObservationRow[];
+    const freshnessReferenceMs = freshnessReferenceMsForGame(g, args.slateDate);
     const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines, sourceAwareSplits);
     const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines, sourceAwareSplits);
     const fi = buildFiRecord(
@@ -3072,6 +3109,7 @@ export function buildPredictionRecordsFromSlate(args: {
       args.launchDay,
       currentLines,
       args.historyByKey ?? new Map<string, ReadonlyArray<LineHistoryRowForOdds>>(),
+      freshnessReferenceMs,
     );
     if (ml) proposed.push(withMemberFacingAtLock(ml));
     if (ou) proposed.push(withMemberFacingAtLock(ou));
@@ -3087,6 +3125,7 @@ export async function createPredictionRecords(
   opts: CreateRecordsOptions,
 ): Promise<CreateRecordsResult> {
   const { sport, slateDate, launchDay, apply, supabase } = opts;
+  const preserveExistingUnlocked = opts.preserveExistingUnlocked === true;
   const result: CreateRecordsResult = {
     scanned: 0,
     proposed: [],
@@ -3242,11 +3281,19 @@ export async function createPredictionRecords(
   const oddsByGameId = new Map<number, GameOddsSnapshot>();
   // Build a snapshot for every game in the slate, even when `lines` is
   // empty for that game — the history fallback may still recover a price.
+  const gameById = new Map(games.map((g) => [g.id, g]));
   for (const gameId of gameIds) {
     const lines = linesByGame.get(gameId) ?? [];
+    const gameForFreshness = gameById.get(gameId);
     oddsByGameId.set(
       gameId,
-      buildGameOddsSnapshot(lines, { historyByKey, gameId }),
+      buildGameOddsSnapshot(lines, {
+        historyByKey,
+        gameId,
+        freshnessReferenceMs: gameForFreshness
+          ? freshnessReferenceMsForGame(gameForFreshness, slateDate)
+          : Date.now(),
+      }),
     );
   }
 
@@ -3401,6 +3448,7 @@ export async function createPredictionRecords(
     .in("game_id", proposed.map((r) => r.game_id))
     .eq("slate_date", slateDate);
   const lockedKeys = new Set<string>();
+  const existingKeys = new Set<string>();
   const proposedKeys = new Set(
     proposed.map((r) =>
       `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`,
@@ -3414,6 +3462,9 @@ export async function createPredictionRecords(
     slate_date: string;
     locked_at: string | null;
   }>) {
+    existingKeys.add(
+      `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`,
+    );
     if (r.locked_at !== null) {
       lockedKeys.add(
         `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`,
@@ -3428,7 +3479,7 @@ export async function createPredictionRecords(
   // gate is correctly refusing to create a new actionable FI row. We update
   // instead of deleting because some rows may already have prediction_grades
   // children; locked rows are never touched.
-  const staleUnlockedFiIds = ((existingLocks ?? []) as Array<{
+  const staleUnlockedFiIds = preserveExistingUnlocked ? [] : ((existingLocks ?? []) as Array<{
     id: number;
     game_id: number;
     market: string;
@@ -3471,7 +3522,7 @@ export async function createPredictionRecords(
   // operator/cron summary surfaces them).
   for (const rec of proposed) {
     const key = `${rec.game_id}::${rec.market}::${rec.model_version ?? ""}::${rec.slate_date}`;
-    if (lockedKeys.has(key)) {
+    if (lockedKeys.has(key) || (preserveExistingUnlocked && existingKeys.has(key))) {
       result.skippedExisting++;
       continue;
     }

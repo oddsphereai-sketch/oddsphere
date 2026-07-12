@@ -2434,41 +2434,32 @@ function buildGameDto(
     // this block remains for back-compat consumers.
     predictions: {
       ml: {
-        pick: mlPick,
-        confidence: mlConfidence,
-        sharpStatus: mlStatus,
-        // V13 per-pick triplet for ML — sourced from ml_* DB columns.
-        // Phase 6B.9 — apply V2.2 best_angle override (see deriveVerdictForRow
-        // above for full rationale). headlinePrimaryMarket + findBestOfMarket
-        // rank by this grade, so without the override the briefing's
-        // 3-up "Best Moneyline / Total / 1st Inning" row would always
-        // surface ML on every game (precedence-tiebreak on tied
-        // market_watch grades). The override aligns this with the
-        // game-level verdict.
-        grade: mlGradeForMarket,
-        signalType: pred.ml_signal_type,
-        marketSignal: pred.ml_market_signal,
+        pick: ml.pick,
+        confidence: ml.confidence,
+        sharpStatus: deriveSharpStatus(ml.grade),
+        // Back-compat consumers must see the same final grade as the
+        // per-market card after writer/lock overrides and promotions.
+        grade: ml.grade,
+        signalType: ml.signalType,
+        marketSignal: ml.marketSignal,
       },
       total: {
-        pick: totalPick,
-        confidence: ouConfidence,
-        sharpStatus: totalStatus,
-        line: totalLine,
-        // V13 per-pick triplet for the total — sourced from ou_* DB columns
-        // (note DB ou_* ↔ DTO predictions.total name asymmetry).
-        // Phase 6B.9 — same override as predictions.ml above.
-        grade: ouGradeForMarket,
-        signalType: pred.ou_signal_type,
-        marketSignal: pred.ou_market_signal,
+        pick: total.pick,
+        confidence: total.confidence,
+        sharpStatus: deriveSharpStatus(total.grade),
+        line: total.line,
+        grade: total.grade,
+        signalType: total.signalType,
+        marketSignal: total.marketSignal,
       },
       nrfi: {
-        pick: nrfiPick,
-        confidence: nrfiConfidence,
-        sharpStatus: nrfiStatus,
+        pick: firstInning.pick,
+        confidence: firstInning.confidence,
+        sharpStatus: deriveSharpStatus(firstInning.grade),
         // V13 per-pick triplet for 1st inning — sourced from nrfi_* DB columns.
-        grade: pred.nrfi_grade,
-        signalType: pred.nrfi_signal_type,
-        marketSignal: pred.nrfi_market_signal,
+        grade: firstInning.grade,
+        signalType: firstInning.signalType,
+        marketSignal: firstInning.marketSignal,
       },
     },
     // Reconciled projected scores — show the FINAL recommended team winning, with

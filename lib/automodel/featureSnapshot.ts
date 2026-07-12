@@ -74,6 +74,7 @@ const TRUSTED_REAL_BOOK_PRIORITY: readonly string[] = BOOK_PRIORITY.filter(
 
 const TOTAL_BOOK_PRIORITY: readonly string[] = TRUSTED_REAL_BOOK_PRIORITY;
 const ML_BOOK_PRIORITY: readonly string[] = TRUSTED_REAL_BOOK_PRIORITY;
+const MODEL_PRICE_MAX_SOURCE_AGE_MS = 90 * 60 * 1000;
 
 /**
  * Lock-line guard (2026-06-09 phantom-alt-line fix).
@@ -150,6 +151,13 @@ function asStringOrNull(v: unknown): string | null {
 
 function asBoolOrFalse(v: unknown): boolean {
   return v === true || v === "true" || v === 1 || v === "1";
+}
+
+function isFreshModelPriceSource(observedAt: string | null | undefined, nowMs = Date.now()): boolean {
+  if (observedAt === null || observedAt === undefined) return true;
+  const observedMs = Date.parse(observedAt);
+  if (!Number.isFinite(observedMs)) return false;
+  return nowMs - observedMs <= MODEL_PRICE_MAX_SOURCE_AGE_MS;
 }
 
 function asHandedness(v: unknown): "L" | "R" | "S" | null {
@@ -649,6 +657,7 @@ function pickMlOdds(
       l.market_type === "moneyline" &&
       l.side === side &&
       l.odds_american !== null &&
+      isFreshModelPriceSource(l.fetched_at) &&
       ML_BOOK_PRIORITY.includes(l.sportsbook.toLowerCase())
   );
   for (const book of ML_BOOK_PRIORITY) {
@@ -690,6 +699,7 @@ function pickOuOdds(
       l.market_type === "total" &&
       l.side === side &&
       l.odds_american !== null &&
+      isFreshModelPriceSource(l.fetched_at) &&
       TOTAL_BOOK_PRIORITY.includes(l.sportsbook.toLowerCase()),
   );
   for (const book of TOTAL_BOOK_PRIORITY) {
@@ -1070,7 +1080,7 @@ export async function buildFeatureSnapshots(
     throw new Error(`featureSnapshot: lines query failed: ${linesErr.message}`);
   }
   const linesByGame = groupBy(
-    (linesRaw ?? []) as unknown as LineRow[],
+    ((linesRaw ?? []) as unknown as LineRow[]).filter((line) => isFreshModelPriceSource(line.fetched_at)),
     (l) => l.game_id
   );
 

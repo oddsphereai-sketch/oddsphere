@@ -141,6 +141,9 @@ type PredictionRecordContractRow = {
   snapshot_json: unknown;
 };
 
+const LOCKED_PRICE_MAX_SOURCE_AGE_MINUTES = 90;
+const LOCKED_PRICE_MAX_SOURCE_AGE_MS = LOCKED_PRICE_MAX_SOURCE_AGE_MINUTES * 60 * 1000;
+
 type OfficialMlbProbableStarterDiagnostic = {
   source: "mlb_statsapi";
   matched: boolean;
@@ -546,6 +549,122 @@ function marketAwareCorrectedGrade(row: PredictionRecordContractRow): Record<str
   return grade?.rule_id === MLB_MARKET_AWARE_CORRECTED_GRADE_RULE_ID ? grade : null;
 }
 
+function lockedPriceSourceKey(market: string | null): string | null {
+  if (market === "moneyline") return "odds_source_at_lock_ml";
+  if (market === "total") return "odds_source_at_lock_ou";
+  if (market === "first_inning") return "odds_source_at_lock_fi";
+  return null;
+}
+
+function lockedPriceSelectedSide(row: PredictionRecordContractRow): string | null {
+  if (row.side === "home" || row.side === "away" || row.side === "over" || row.side === "under") {
+    return row.side;
+  }
+  if (row.market === "first_inning") {
+    if (row.pick === "NRFI") return "under";
+    if (row.pick === "YRFI") return "over";
+  }
+  return null;
+}
+
+function selectedLockedPriceSource(row: PredictionRecordContractRow): {
+  sourceKey: string | null;
+  selectedSide: string | null;
+  source: Record<string, unknown> | null;
+} {
+  const sourceKey = lockedPriceSourceKey(row.market);
+  const selectedSide = lockedPriceSelectedSide(row);
+  if (sourceKey === null) return { sourceKey, selectedSide, source: null };
+  const sourceBucket = snapshotRecord(row.snapshot_json, sourceKey);
+  if (row.market === "first_inning") {
+    return { sourceKey, selectedSide, source: recordAt(sourceBucket, "picked") };
+  }
+  if (selectedSide === null) return { sourceKey, selectedSide, source: null };
+  return { sourceKey, selectedSide, source: recordAt(sourceBucket, selectedSide) };
+}
+
+function lockedPriceFindingSeverity(row: PredictionRecordContractRow): DailyEdgeDataHealthSeverity {
+  return row.no_bet === true ? "medium" : "high";
+}
+
+function pushLockedPriceFreshnessFinding(
+  findings: DailyEdgeDataHealthFinding[],
+  row: PredictionRecordContractRow,
+) {
+  if (row.locked_at === null) return;
+  if (row.market !== "moneyline" && row.market !== "total" && row.market !== "first_inning") return;
+  if (row.pick === null || row.pick === "Toss-Up") return;
+
+  const { sourceKey, selectedSide, source } = selectedLockedPriceSource(row);
+  const severity = lockedPriceFindingSeverity(row);
+  if (row.odds_american === null) {
+    pushPredictionRecordFinding(
+      findings,
+      row,
+      "locked_price_missing",
+      severity,
+      "Locked prediction row has a member-facing pick but no selected price.",
+      { sourceKey, selectedSide },
+    );
+    return;
+  }
+
+  const sourceName = stringAt(source, "source");
+  if (source === null || sourceName === "unavailable") {
+    pushPredictionRecordFinding(
+      findings,
+      row,
+      "locked_price_source_missing",
+      severity,
+      "Locked prediction row has a price but no auditable lock-price source.",
+      { sourceKey, selectedSide },
+    );
+    return;
+  }
+
+  const observedAt = stringAt(source, "observedAt");
+  const lockedMs = Date.parse(row.locked_at);
+  const observedMs = observedAt === null ? NaN : Date.parse(observedAt);
+  if (!Number.isFinite(lockedMs) || !Number.isFinite(observedMs)) {
+    pushPredictionRecordFinding(
+      findings,
+      row,
+      "locked_price_source_timestamp_invalid",
+      severity,
+      "Locked prediction row has an invalid or missing lock-price source timestamp.",
+      {
+        sourceKey,
+        selectedSide,
+        source,
+        lockedAt: row.locked_at,
+        observedAt,
+      },
+    );
+    return;
+  }
+
+  const ageMs = lockedMs - observedMs;
+  const ageMinutes = Math.round(ageMs / 60000);
+  if (ageMs < 0 || ageMs > LOCKED_PRICE_MAX_SOURCE_AGE_MS) {
+    pushPredictionRecordFinding(
+      findings,
+      row,
+      "locked_price_source_stale",
+      severity,
+      "Locked prediction row selected a stale price source instead of a fresh lock-time market price.",
+      {
+        sourceKey,
+        selectedSide,
+        source,
+        lockedAt: row.locked_at,
+        observedAt,
+        ageMinutes,
+        maxAgeMinutes: LOCKED_PRICE_MAX_SOURCE_AGE_MINUTES,
+      },
+    );
+  }
+}
+
 async function loadPredictionRecordContractFindings(args: {
   sport: Sport;
   date: string;
@@ -575,6 +694,7 @@ async function loadPredictionRecordContractFindings(args: {
     }
 
     if (args.sport !== "mlb") continue;
+    pushLockedPriceFreshnessFinding(findings, row);
     if (row.market !== "moneyline" && row.market !== "total") continue;
     if (!isMarketAwareCorrectedRow(row)) continue;
 

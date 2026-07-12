@@ -337,6 +337,34 @@ export async function GET(request: Request) {
         };
       }
 
+      let preLockGameLines: Awaited<ReturnType<typeof linesService.refreshGameLinesV2>> | null = null;
+      let preLockSignals: Awaited<ReturnType<typeof linesService.refreshSharpSignals>> | null = null;
+      let marketIntelligenceV2: ScheduledMarketIntelligenceV2Result | null = null;
+
+      // Fresh market data must exist BEFORE the T-60 model pass. The scheduled
+      // Vercel job runs this route with lockOnly=true, so the old flow skipped
+      // the slate-wide lines/sharp refresh and could freeze stale morning odds.
+      // Refresh only when a game is actually entering lock to keep the 15-minute
+      // sweep light while still making the lock snapshot market-current.
+      if (partition.entering_lock.length > 0 && sport === "mlb") {
+        preLockGameLines = await linesService.refreshGameLinesV2(sport, date);
+        records += preLockGameLines.records_updated ?? 0;
+        apiCalls += preLockGameLines.api_calls_made ?? 0;
+
+        preLockSignals = await linesService.refreshSharpSignals(sport, date);
+        records += preLockSignals.records_updated ?? 0;
+        apiCalls += preLockSignals.api_calls_made ?? 0;
+
+        marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
+          supabase,
+          sport,
+          slateDate: date,
+          phase: "pregame_sweep",
+        });
+        records += marketIntelligenceV2.recordsUpdated;
+        apiCalls += marketIntelligenceV2.apiCallsMade;
+      }
+
       // ── 2. Final pre-lock auto-model pass for ENTERING_LOCK games ───
       // We use respectLocks=false because these games aren't locked YET
       // — the lock transition happens AFTER this refresh. The Layer 1
@@ -385,8 +413,7 @@ export async function GET(request: Request) {
       const lockResult = await applyLocks(sport, date, partition.entering_lock);
       records += lockResult.locked;
 
-      let marketIntelligenceV2: ScheduledMarketIntelligenceV2Result | null = null;
-      if (sport === "mlb") {
+      if (sport === "mlb" && marketIntelligenceV2 === null) {
         marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
           supabase,
           sport,
@@ -423,6 +450,13 @@ export async function GET(request: Request) {
             audit_rows_written: lockResult.audit_written,
             lock_errors: lockResult.errors,
             market_intelligence_v2: marketIntelligenceV2,
+            pre_lock_market_refresh: {
+              lines_records_updated: preLockGameLines?.records_updated ?? 0,
+              lines_api_calls_made: preLockGameLines?.api_calls_made ?? 0,
+              sharp_signal_records_updated: preLockSignals?.records_updated ?? 0,
+              sharp_signal_api_calls_made: preLockSignals?.api_calls_made ?? 0,
+              ran_before_t60_model: preLockGameLines !== null || preLockSignals !== null,
+            },
             errors_count:
               lockResult.errors.length +
               enteringLockModelResult.errors.length +
@@ -472,13 +506,17 @@ export async function GET(request: Request) {
       // touches (game, market) pairs where the provider returned at
       // least one row; markets the provider didn't return for stay
       // preserved with their prior data + computed_at intact.
-      const gameLines = await linesService.refreshGameLinesV2(sport, date);
-      records += gameLines.records_updated ?? 0;
-      apiCalls += gameLines.api_calls_made ?? 0;
+      const gameLines = preLockGameLines ?? await linesService.refreshGameLinesV2(sport, date);
+      if (preLockGameLines === null) {
+        records += gameLines.records_updated ?? 0;
+        apiCalls += gameLines.api_calls_made ?? 0;
+      }
 
-      const signals = await linesService.refreshSharpSignals(sport, date);
-      records += signals.records_updated ?? 0;
-      apiCalls += signals.api_calls_made ?? 0;
+      const signals = preLockSignals ?? await linesService.refreshSharpSignals(sport, date);
+      if (preLockSignals === null) {
+        records += signals.records_updated ?? 0;
+        apiCalls += signals.api_calls_made ?? 0;
+      }
 
       // ── 4.5. P7-Commit-B Phase 2 — stale-snapshot trigger ─────────────
       //
