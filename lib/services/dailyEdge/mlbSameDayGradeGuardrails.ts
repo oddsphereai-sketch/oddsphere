@@ -39,14 +39,16 @@ function capMarket(
   reason: string,
 ): MarketEdgeDto {
   const capReasons = Array.from(new Set([...(market.capReasons ?? []), reason]));
+  const cappedGrade = gradeForVerdict(verdict, market.rawGrade ?? market.grade ?? null);
   return {
     ...market,
+    grade: cappedGrade,
     verdict: {
       ...market.verdict,
       key: verdict,
       label: VERDICT_LABEL[verdict],
     },
-    finalGrade: gradeForVerdict(verdict, market.rawGrade ?? market.grade ?? null),
+    finalGrade: cappedGrade,
     actionabilityLabel: VERDICT_LABEL[verdict],
     displayReason: `Capped to ${VERDICT_LABEL[verdict]} because ${reason.replaceAll("_", " ")}.`,
     capReasons,
