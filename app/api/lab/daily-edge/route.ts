@@ -2216,9 +2216,13 @@ function buildGameDto(
     total,
     firstInning,
   });
-  ml = guardrailedMarkets.moneyline;
-  total = guardrailedMarkets.total;
-  firstInning = guardrailedMarkets.firstInning;
+  // Once the public writer has produced a prediction_records row, that row is
+  // the card/tracking source of truth. Same-day guardrails remain useful for
+  // pre-writer fallback cards, but they must not silently demote an official
+  // stored Best Angle/Lean at read time.
+  ml = lockedMl !== undefined ? ml : guardrailedMarkets.moneyline;
+  total = lockedOu !== undefined ? total : guardrailedMarkets.total;
+  firstInning = lockedFi !== undefined ? firstInning : guardrailedMarkets.firstInning;
 
   // 4.1.10 — per-game status flags.
   const status: GameStatusDto = {
@@ -4286,14 +4290,21 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
             recFloor === null
               ? rawRecommendationConfidence
               : Math.max(rawRecommendationConfidence ?? 0, recFloor);
+          const explainStoredPositiveEdgeNoPlay =
+            verdict.key === "no_play" &&
+            input.market !== "first_inning" &&
+            modelMarketGapPct !== null &&
+            modelMarketGapPct > 2;
           return {
             ...normalizedAction,
-            capReasons: [],
+            capReasons: explainStoredPositiveEdgeNoPlay ? ["stored_no_play_price_market_context"] : [],
             finalGrade: gradeForStoredVerdict(verdict.key, input.grade),
             finalVerdict: verdict,
             finalRecScore,
             actionabilityLabel: verdict.label,
-            displayReason: null,
+            displayReason: explainStoredPositiveEdgeNoPlay
+              ? "No Play because the current price and market context do not make the edge actionable."
+              : null,
           };
         })()
       : normalizedAction;
