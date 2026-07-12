@@ -13,6 +13,11 @@ import {
   MLB_MARKET_AWARE_CORRECTED_GRADE_RULE_ID,
   MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
 } from "@/lib/services/predictionRecordService";
+import {
+  MLB_MODEL_LAYER_VERSION_IDS,
+  MLB_MODEL_LAYER_VERSION_SCHEMA,
+  type MlbModelLayerMarket,
+} from "@/lib/automodel/mlbModelLayerVersions";
 
 export type DailyEdgeDataHealthSeverity = "info" | "medium" | "high" | "blocking";
 
@@ -143,6 +148,8 @@ type PredictionRecordContractRow = {
 
 const LOCKED_PRICE_MAX_SOURCE_AGE_MINUTES = 90;
 const LOCKED_PRICE_MAX_SOURCE_AGE_MS = LOCKED_PRICE_MAX_SOURCE_AGE_MINUTES * 60 * 1000;
+const MLB_MODEL_LAYER_CONTRACT_EFFECTIVE_DATE = "2026-07-11";
+const MLB_MODEL_LAYER_PUBLIC_NAME = "MLB Market-Aware Champion v2";
 
 type OfficialMlbProbableStarterDiagnostic = {
   source: "mlb_statsapi";
@@ -549,6 +556,116 @@ function marketAwareCorrectedGrade(row: PredictionRecordContractRow): Record<str
   return grade?.rule_id === MLB_MARKET_AWARE_CORRECTED_GRADE_RULE_ID ? grade : null;
 }
 
+function isMlbModelLayerContractEffective(row: PredictionRecordContractRow): boolean {
+  return row.slate_date >= MLB_MODEL_LAYER_CONTRACT_EFFECTIVE_DATE;
+}
+
+function expectedMlbModelLayerMarket(market: string | null): MlbModelLayerMarket | null {
+  const normalized = String(market ?? "").toLowerCase();
+  if (normalized === "moneyline" || normalized === "ml") return "moneyline";
+  if (normalized === "total" || normalized === "totals" || normalized === "ou") return "total";
+  if (normalized === "first_inning" || normalized === "first-inning" || normalized === "fi") return "first_inning";
+  return null;
+}
+
+function expectedMlbActiveProbabilityHead(market: MlbModelLayerMarket): string {
+  if (market === "moneyline") return MLB_MODEL_LAYER_VERSION_IDS.moneyline_probability_head;
+  if (market === "total") return MLB_MODEL_LAYER_VERSION_IDS.total_probability_head;
+  return MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head;
+}
+
+function modelLayerVersionsFromSnapshot(snapshot: unknown): Record<string, unknown> | null {
+  const direct = snapshotRecord(snapshot, "model_layer_versions");
+  if (direct) return direct;
+  const memberFacing = snapshotRecord(snapshot, "member_facing_at_lock");
+  return snapshotRecord(memberFacing, "model_layer_versions");
+}
+
+function modelLayerFindingSeverity(row: PredictionRecordContractRow): DailyEdgeDataHealthSeverity {
+  return row.no_bet === true && row.best_angle !== true ? "medium" : "high";
+}
+
+function pushMlbModelLayerContractFinding(
+  findings: DailyEdgeDataHealthFinding[],
+  row: PredictionRecordContractRow,
+) {
+  if (!isMlbModelLayerContractEffective(row)) return;
+
+  const expectedMarket = expectedMlbModelLayerMarket(row.market);
+  if (expectedMarket === null) return;
+
+  const actual = modelLayerVersionsFromSnapshot(row.snapshot_json);
+  const severity = modelLayerFindingSeverity(row);
+  const expected = {
+    publicName: MLB_MODEL_LAYER_PUBLIC_NAME,
+    schema_version: MLB_MODEL_LAYER_VERSION_SCHEMA,
+    projection_core: MLB_MODEL_LAYER_VERSION_IDS.projection_core,
+    score_distribution: MLB_MODEL_LAYER_VERSION_IDS.score_distribution,
+    moneyline_probability_head: MLB_MODEL_LAYER_VERSION_IDS.moneyline_probability_head,
+    total_probability_head: MLB_MODEL_LAYER_VERSION_IDS.total_probability_head,
+    first_inning_probability_head: MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head,
+    market_calibration_policy: MLB_MODEL_LAYER_VERSION_IDS.market_calibration_policy,
+    grade_policy: MLB_MODEL_LAYER_VERSION_IDS.grade_policy,
+    correction_policy: MLB_MODEL_LAYER_VERSION_IDS.correction_policy,
+    tracking_contract: MLB_MODEL_LAYER_VERSION_IDS.tracking_contract,
+    market: expectedMarket,
+    active_probability_head: expectedMlbActiveProbabilityHead(expectedMarket),
+  };
+
+  if (actual === null) {
+    pushPredictionRecordFinding(
+      findings,
+      row,
+      "mlb_model_layer_stamp_missing",
+      severity,
+      "MLB prediction row is not stamped with the active MLB Market-Aware Champion v2 model layer contract.",
+      {
+        expected,
+        effectiveDate: MLB_MODEL_LAYER_CONTRACT_EFFECTIVE_DATE,
+      },
+    );
+    return;
+  }
+
+  const fieldsToCompare = [
+    "schema_version",
+    "projection_core",
+    "score_distribution",
+    "moneyline_probability_head",
+    "total_probability_head",
+    "first_inning_probability_head",
+    "market_calibration_policy",
+    "grade_policy",
+    "correction_policy",
+    "tracking_contract",
+    "market",
+    "active_probability_head",
+  ] as const;
+  const mismatches = fieldsToCompare
+    .map((field) => ({
+      field,
+      expected: expected[field],
+      actual: actual[field],
+    }))
+    .filter((mismatch) => mismatch.actual !== mismatch.expected);
+
+  if (mismatches.length === 0) return;
+
+  pushPredictionRecordFinding(
+    findings,
+    row,
+    "mlb_model_layer_stamp_mismatch",
+    severity,
+    "MLB prediction row is stamped with a model layer contract that does not match MLB Market-Aware Champion v2.",
+    {
+      publicName: MLB_MODEL_LAYER_PUBLIC_NAME,
+      mismatches,
+      actualRuntimeEnv: recordAt(actual, "runtime_env"),
+      effectiveDate: MLB_MODEL_LAYER_CONTRACT_EFFECTIVE_DATE,
+    },
+  );
+}
+
 function lockedPriceSourceKey(market: string | null): string | null {
   if (market === "moneyline") return "odds_source_at_lock_ml";
   if (market === "total") return "odds_source_at_lock_ou";
@@ -694,6 +811,7 @@ async function loadPredictionRecordContractFindings(args: {
     }
 
     if (args.sport !== "mlb") continue;
+    pushMlbModelLayerContractFinding(findings, row);
     pushLockedPriceFreshnessFinding(findings, row);
     if (row.market !== "moneyline" && row.market !== "total") continue;
     if (!isMarketAwareCorrectedRow(row)) continue;

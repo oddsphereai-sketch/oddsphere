@@ -58,12 +58,14 @@ export async function GET(request: Request) {
     sports,
     async ({ sport }) => {
       if (process.env[ENABLE_ENV] !== "true") {
+        const reason = `${ENABLE_ENV}!=true`;
         return {
           records_updated: 0,
-          partial: false,
+          partial: true,
+          error_message: `Daily Edge health monitor disabled: ${reason}`,
           details: {
             disabled: true,
-            reason: `${ENABLE_ENV}!=true`,
+            reason,
             noOpenAiCalls: true,
             noPredictionChanges: true,
           },
