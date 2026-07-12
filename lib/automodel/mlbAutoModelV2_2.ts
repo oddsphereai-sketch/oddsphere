@@ -48,7 +48,6 @@ import {
 } from "./runDistribution";
 import { computePlayGrade } from "./playGrade";
 import { regularizeProbability } from "./mlbProbabilityRegularization";
-import { buildMlbMatchupFeatureAudit, type MlbMatchupFeatureAudit } from "./mlbMatchupFeatures";
 import type { AutoModelOutput, GameSnapshot, ModelStage, StarterSnapshot, TeamSnapshot, BatterSnapshot } from "./types";
 import { MODEL_VERSION_V2_2 } from "./types";
 
@@ -133,8 +132,6 @@ export type V22Audit = {
   ml_raw_edge_pct: number | null;
   ml_regularized_model_prob: number;
   ml_regularized_edge_pct: number | null;
-  ml_display_probability_floor_applied?: boolean;
-  ml_display_probability_floor_reason?: string | null;
   ml_shrink_factor: number;
   ml_distance_cap_pp: number;
   ml_distance_cap_applied: boolean;
@@ -171,11 +168,9 @@ export type V22Audit = {
   ou_best_angle_blocked: boolean;
   ml_best_angle_block_reason: string | null;
   ou_best_angle_block_reason: string | null;
-  // requires_market_confirmation = a would-be ML Best Angle whose edge was
-  // capped and whose raw model-market disagreement is historically fragile;
-  // remains Best Angle only if line movement confirms (resolved in the writer).
-  // Totals keep cap/miscalibration audit fields but do not use missing
-  // confirmation as a hard Best Angle demotion.
+  // requires_market_confirmation = a would-be Best Angle whose edge was
+  // capped; remains Best Angle only if line movement confirms (resolved in
+  // the writer). Picks below Best Angle are always false.
   ml_requires_market_confirmation: boolean;
   ou_requires_market_confirmation: boolean;
   truthful_edge_correction?: {
@@ -207,11 +202,6 @@ export type V22Audit = {
    * grades, or display. Optional for back-compat with pre-capture snapshots.
    */
   feature_capture?: V22FeatureCapture | null;
-  /**
-   * Shadow-only matchup feature layer. Captured for audit/backtest; does not
-   * affect projections, probabilities, grades, or display until promoted.
-   */
-  matchup_features?: MlbMatchupFeatureAudit | null;
 };
 
 /** Shape of the forward-only feature-capture diagnostic block. */
@@ -234,6 +224,8 @@ function captureStarter(s: StarterSnapshot | null) {
     player_id: s.player_external_id, name: s.player_name, throws: s.throws,
     confirmed: s.is_confirmed, scratched: s.is_scratched,
     season_era: s.season_era, season_whip: s.season_whip, season_k_per_9: s.season_k_per_9,
+    season_stats_season: s.season_stats_season ?? null,
+    season_stats_source: s.season_stats_source ?? "missing",
     last30_era: s.last30_era, pitch_quality_score: s.pitch_quality_score,
     first_inning_era: s.first_inning_era, first_inning_starts: s.first_inning_starts, first_inning_whip: s.first_inning_whip,
     season_games_started: s.season_games_started ?? null, season_innings_pitched: s.season_innings_pitched ?? null,
@@ -280,15 +272,12 @@ export type RunMlbAutoModelV2_2Options = {
   useWorkloadPitching?: boolean;
 };
 
-// Best Angle thresholds on the POST-calibration edge scale. After the
-// 2026-07-09 cap=3 probability calibration, old 5pp-style thresholds made
-// totals mathematically unable to promote. These floors are still positive
-// EV/data-quality gated by computePlayGrade; they just match the tighter edge
-// substrate instead of expecting pre-calibration phantom gaps.
-const V22_BEST_ANGLE_MIN_EDGE_PCT_ML = 2.0;
-const V22_BEST_ANGLE_MIN_EDGE_PCT_OU = 1.5;
-const V22_BEST_ANGLE_MIN_CONFIDENCE_PCT_ML = 56;
-const V22_BEST_ANGLE_MIN_CONFIDENCE_PCT_OU = 53;
+// Best Angle thresholds — V2.2 uses tighter gates than V2.1 since the
+// independent projection has more freedom to move and we want only
+// genuinely model-driven angles to flow through.
+const V22_BEST_ANGLE_MIN_EDGE_PCT_ML = 3.0;
+const V22_BEST_ANGLE_MIN_EDGE_PCT_OU = 5.0;
+const V22_BEST_ANGLE_MIN_CONFIDENCE_PCT = 56;
 
 // MLB-P0 probability-space regularization (the E-first fix). Applied to
 // the Poisson probability AFTER the run-space posterior blend and BEFORE
@@ -298,25 +287,13 @@ const V22_BEST_ANGLE_MIN_CONFIDENCE_PCT_OU = 53;
 // edge + grade ONLY — the pick/side is decided upstream from the raw prob.
 //   k        — fraction of the raw model's distance-from-market it keeps.
 //   maxDist  — hard ceiling on |regularized − market| in percentage points.
-// ML keeps more of the raw model's edge after the category audit showed the
-// launch-window ML profile had real signal; totals remain guarded downstream
-// by stricter quality gates because they were less stable week to week.
-const V22_SHRINK_K_ML = 0.25;
-// 2026-07-09 raw-probability grid audit, 2026-06-07..2026-07-09:
-// O/U calibrated best at k=.4/cap=8pp. The tighter k=.15/cap=3pp setting was
-// well targeted but too sparse; k=.4/cap=8pp preserved the late-June totals
-// signal while keeping average probability within ~0.5pp of observed results.
-// The model still picks the raw probability side; this calibrates probability,
-// confidence, edge, and downstream sorting.
-const V22_SHRINK_K_OU = 0.4;
-// 2026-07-09 since-launch calibration audit: ML probability quality improved
-// with the same launch-profile blend (k=.25) but a tighter 3pp distance cap
-// versus the prior 8pp cap. This does not flip sides; it only prevents
-// overconfident model-vs-market gaps from driving confidence/EV/grades.
-const V22_MAX_DISTANCE_PP_ML = 3.0;
-const V22_MAX_DISTANCE_PP_OU = 8.0;
-const V22_OU_MIN_ACTIONABLE_EDGE_PCT = 1.0;
-const V22_MARKET_CONFIRMATION_MIN_RAW_EDGE_PCT = 8.0;
+// O/U is shrunk harder (lower k, tighter cap) because totals are the
+// worst-calibrated market in the audit (observed 49.4% vs predicted 58.6%).
+const V22_SHRINK_K_ML = 0.1;
+export const V22_SHRINK_K_OU = 0.4;
+const V22_MAX_DISTANCE_PP_ML = 6.0;
+export const V22_MAX_DISTANCE_PP_OU = 8.0;
+const V22_OU_MIN_ACTIONABLE_EDGE_PCT = 5.0;
 
 const MLB_TEAM_RESIDUAL_CORRECTION_VERSION = "launch_window_team_residual_v1" as const;
 
@@ -509,12 +486,8 @@ export function runMlbAutoModelV2_2(
     k: V22_SHRINK_K_ML,
     maxDistancePp: V22_MAX_DISTANCE_PP_ML,
   });
-  const mlRegularizedProb = mlReg.regularizedProb ?? mlRawModelProb;
-  const mlDisplayProbabilityFloorApplied = mlRegularizedProb < 0.5 && mlRawModelProb >= 0.5;
-  const mlModelProb = mlDisplayProbabilityFloorApplied ? 0.5 : mlRegularizedProb;
-  const mlEdgePct = mlMarketProb === null
-    ? 0
-    : Math.round((mlModelProb - mlMarketProb) * 1000) / 10;
+  const mlModelProb = mlReg.regularizedProb ?? mlRawModelProb;
+  const mlEdgePct = mlReg.regularizedEdgePct ?? 0;
 
   // OU using market_total (or independent total when market missing)
   const ouLine = market.listedTotal ?? posteriorTotalRuns;
@@ -605,7 +578,7 @@ export function runMlbAutoModelV2_2(
     provisional,
     isHeld: false,
     minBestAngleEdgePct: V22_BEST_ANGLE_MIN_EDGE_PCT_ML,
-    minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT_ML,
+    minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT,
     marketProbIsFallback: mlMarketProbIsFallback,
     bestAngleHardBlockReason: neutralFallbackBlocksBA
       ? "key feature group on neutral fallback / missing for both sides"
@@ -633,7 +606,7 @@ export function runMlbAutoModelV2_2(
     provisional,
     isHeld: false,
     minBestAngleEdgePct: V22_BEST_ANGLE_MIN_EDGE_PCT_OU,
-    minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT_OU,
+    minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT,
     marketProbIsFallback: ouOddsMissing,
     bestAngleHardBlockReason: ouOddsMissing
       ? "total requires real O/U odds (no fallback) for Best Angle"
@@ -647,18 +620,19 @@ export function runMlbAutoModelV2_2(
     edgePct: ouEdgePct,
   });
   const finalOuPlayGrade = ouGradeCorrection.grade;
-  // MLB-P0 post-shrink large-edge backstop. With the 2026-07-09 cap=3
-  // calibration, "capApplied" alone is no longer evidence of an extreme model
-  // market disagreement; normal playable edges can hit that cap. Require
-  // market confirmation only for genuinely large RAW gaps.
+  // MLB-P0 post-shrink large-edge backstop: a pick whose RAW edge was so
+  // large that regularization pinned it to the distance cap (capApplied)
+  // is a strong model-market disagreement. It can REMAIN a Best Angle only
+  // if the market later confirms it (line movement toward the pick) — that
+  // resolution happens in the writer (predictionRecordService), which has
+  // the line-movement snapshot. Here we just flag that confirmation is
+  // required. Picks that don't reach Best Angle never require confirmation.
   const mlBaseBestAngle =
     mlPlayGrade.grade === "best_angle" && !neutralFallbackBlocksBA;
-  const mlRawEdgeMagnitude = mlReg.rawEdgePct === null ? 0 : Math.abs(mlReg.rawEdgePct);
-  const mlRequiresMarketConfirmation =
-    mlBaseBestAngle &&
-    mlReg.capApplied &&
-    mlRawEdgeMagnitude >= V22_MARKET_CONFIRMATION_MIN_RAW_EDGE_PCT;
-  const ouRequiresMarketConfirmation = false;
+  const ouBaseBestAngle =
+    finalOuPlayGrade === "best_angle" && !neutralFallbackBlocksBA;
+  const mlRequiresMarketConfirmation = mlBaseBestAngle && mlReg.capApplied;
+  const ouRequiresMarketConfirmation = ouBaseBestAngle && ouReg.capApplied;
   // probabilityToAmericanOdds / expectedValuePerDollar are no longer
   // called directly here — the grader handles EV computation.
   void probabilityToAmericanOdds;
@@ -713,12 +687,8 @@ export function runMlbAutoModelV2_2(
     // MLB-P0 regularization audit — raw preserved, regularizer math exposed.
     ml_raw_model_prob: mlRawModelProb,
     ml_raw_edge_pct: mlReg.rawEdgePct,
-    ml_regularized_model_prob: mlRegularizedProb,
+    ml_regularized_model_prob: mlModelProb,
     ml_regularized_edge_pct: mlReg.regularizedEdgePct,
-    ml_display_probability_floor_applied: mlDisplayProbabilityFloorApplied,
-    ml_display_probability_floor_reason: mlDisplayProbabilityFloorApplied
-      ? "picked_side_probability_cannot_display_below_coin_flip"
-      : null,
     ml_shrink_factor: mlReg.shrinkFactor,
     ml_distance_cap_pp: mlReg.distanceCapPp,
     ml_distance_cap_applied: mlReg.capApplied,
@@ -769,7 +739,6 @@ export function runMlbAutoModelV2_2(
       (indep as { audit_per_team?: unknown }).audit_per_team ?? null,
       indep.data_quality_tier,
     ),
-    matchup_features: buildMlbMatchupFeatureAudit(snap),
   };
 
   return {

@@ -41,7 +41,6 @@ import { isIntradayMode } from "@/lib/services/automationOrchestratorGates";
 import { supabase } from "@/lib/db/supabase";
 import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
 import type { Sport } from "@/lib/types/domain/Sport";
-import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 
 export const maxDuration = 300; // Vercel Pro — full slate cycle can take ~3-5 min
 
@@ -84,11 +83,6 @@ export async function GET(request: Request) {
         slateDate: date,
         phase: "slate_cycle",
       });
-      const dailyEdgeSnapshot = await refreshDailyEdgeResponseSnapshot({
-        sport,
-        date,
-        source: "slate_cycle",
-      });
 
       // Aggregate write counts from per-step details for the
       // cron-handler return shape. `records_updated` is the sum across
@@ -108,19 +102,12 @@ export async function GET(request: Request) {
       }
       recordsWritten += marketIntelligenceV2.recordsUpdated;
       apiCalls += marketIntelligenceV2.apiCallsMade;
-      if (dailyEdgeSnapshot.ok) recordsWritten += 1;
 
       return {
         records_updated: recordsWritten,
         api_calls_made: apiCalls,
-        partial:
-          report.overall_status !== "ok" ||
-          marketIntelligenceV2.errors.length > 0,
-        details: {
-          ...report,
-          market_intelligence_v2: marketIntelligenceV2,
-          daily_edge_snapshot: dailyEdgeSnapshot,
-        },
+        partial: report.overall_status !== "ok" || marketIntelligenceV2.errors.length > 0,
+        details: { ...report, market_intelligence_v2: marketIntelligenceV2 },
       };
     }
   );

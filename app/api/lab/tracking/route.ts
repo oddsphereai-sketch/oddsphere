@@ -2,9 +2,9 @@
  * GET /api/lab/tracking
  *
  * Query-time aggregations over prediction_results powering the Lab's
- * Tracking page. The route keeps a short process-local response cache plus a
- * stale last-good fallback so transient Supabase slowness does not make the
- * member UI unavailable.
+ * Tracking page. Per Decision F: no nightly rollup table — we recompute on
+ * each request. Cheap until prediction_results crosses ~hundreds of
+ * thousands of rows; revisit then.
  *
  * One round-trip: pull every prediction_results row (currently 450 in seed,
  * grows ~30/day) and aggregate in TypeScript. Returns five sections:
@@ -45,10 +45,6 @@ import type {
   WeeklyAggregate,
   WindowTally,
 } from "@/app/lab/lib/labTypes";
-import {
-  readLabResponseSnapshot,
-  trackingSnapshotKey,
-} from "@/lib/services/labResponseSnapshots";
 
 // ─── Display ordering ────────────────────────────────────────────────────
 const SPORT_DISPLAY_ORDER: Sport[] = ["mlb", "nba", "wnba", "cbb", "nfl", "cfb", "nhl", "ucl", "soccer"];
@@ -100,33 +96,6 @@ const MARKET_DB_TO_UI: Record<string, string> = {
  * kickoff like SCO@HAI (6/13 slate, 6/14 00:01 UTC) is correctly excluded.
  */
 const SOCCER_OFFICIAL_TRACKING_START = "2026-06-14";
-
-const TRACKING_RESPONSE_CACHE_TTL_MS = Number(
-  process.env.TRACKING_RESPONSE_CACHE_TTL_MS ?? 5 * 60 * 1000,
-);
-const TRACKING_RESPONSE_STALE_MS = Number(
-  process.env.TRACKING_RESPONSE_STALE_MS ?? 60 * 60 * 1000,
-);
-
-type TrackingResponseCacheEntry = {
-  body: TrackingResponse;
-  expiresAt: number;
-  staleUntil: number;
-};
-
-let trackingResponseCache: TrackingResponseCacheEntry | null = null;
-
-function trackingJsonResponse(
-  body: TrackingResponse,
-  cacheState: "HIT" | "MISS" | "STALE" | "DB_SNAPSHOT" | "DB_SNAPSHOT_STALE",
-): Response {
-  return Response.json(body, {
-    headers: {
-      "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120",
-      "X-Oddsphere-Cache": cacheState,
-    },
-  });
-}
 
 // ─── Date helpers ────────────────────────────────────────────────────────
 
@@ -573,29 +542,7 @@ async function loadWnbaGradeRows(): Promise<ResultRow[]> {
   return rows;
 }
 
-export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const snapshotBypass = url.searchParams.get("snapshotBypass") === "true";
-  const now = Date.now();
-  if (!snapshotBypass) {
-    if (trackingResponseCache !== null && now < trackingResponseCache.expiresAt) {
-      return trackingJsonResponse(trackingResponseCache.body, "HIT");
-    }
-
-    const snapshot = await readLabResponseSnapshot<TrackingResponse>(
-      trackingSnapshotKey(),
-      "stale",
-    );
-    if (snapshot !== null) {
-      trackingResponseCache = {
-        body: snapshot.payload,
-        expiresAt: Date.now() + TRACKING_RESPONSE_CACHE_TTL_MS,
-        staleUntil: Date.now() + TRACKING_RESPONSE_STALE_MS,
-      };
-      return trackingJsonResponse(snapshot.payload, snapshot.cacheState);
-    }
-  }
-
+export async function GET(_request: Request) {
   // Pull all rows. Paginate when this crosses ~50k.
   const PAGE = 1000;
   const allRows: ResultRow[] = [];
@@ -612,13 +559,7 @@ export async function GET(request: Request) {
         .order("game_date", { ascending: true })
         .range(from, from + PAGE - 1)
     );
-    if (error) {
-      if (trackingResponseCache !== null && now < trackingResponseCache.staleUntil) {
-        console.warn(`tracking: serving stale cache after prediction_results error: ${error.message}`);
-        return trackingJsonResponse(trackingResponseCache.body, "STALE");
-      }
-      return Response.json({ error: error.message }, { status: 500 });
-    }
+    if (error) return Response.json({ error: error.message }, { status: 500 });
     const rows = (data ?? []) as ResultRow[];
     allRows.push(...rows);
     if (rows.length < PAGE) break;
@@ -657,11 +598,9 @@ export async function GET(request: Request) {
   // labels (e.g., "as of MM/DD").
   void todayUtc;
 
-  trackingResponseCache = {
-    body,
-    expiresAt: Date.now() + TRACKING_RESPONSE_CACHE_TTL_MS,
-    staleUntil: Date.now() + TRACKING_RESPONSE_STALE_MS,
-  };
-
-  return trackingJsonResponse(body, "MISS");
+  return Response.json(body, {
+    headers: {
+      "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120",
+    },
+  });
 }

@@ -1,4 +1,5 @@
 import { supabase } from "../db/supabase";
+import { mlbStatsTeamIdToAbbr } from "./starterResolver";
 
 type DbGame = {
   id: number;
@@ -62,44 +63,6 @@ export type MlbOfficialLineupRefreshResult = {
 const MLB_STATS_BASE_URL =
   process.env.ODDSPHERE_MLB_STATS_API_BASE_URL ?? "https://statsapi.mlb.com/api/v1";
 
-const MLB_STATS_TEAM_ID_TO_ABBR: Readonly<Record<string, string>> = {
-  "108": "LAA",
-  "109": "ARI",
-  "110": "BAL",
-  "111": "BOS",
-  "112": "CHC",
-  "113": "CIN",
-  "114": "CLE",
-  "115": "COL",
-  "116": "DET",
-  "117": "HOU",
-  "118": "KC",
-  "119": "LAD",
-  "120": "WSH",
-  "121": "NYM",
-  "133": "ATH",
-  "134": "PIT",
-  "135": "SD",
-  "136": "SEA",
-  "137": "SF",
-  "138": "STL",
-  "139": "TB",
-  "140": "TEX",
-  "141": "TOR",
-  "142": "MIN",
-  "143": "PHI",
-  "144": "ATL",
-  "145": "CWS",
-  "146": "MIA",
-  "147": "NYY",
-  "158": "MIL",
-};
-
-function resolveMlbStatsTeamAbbr(teamId: number | null): string | null {
-  if (teamId === null) return null;
-  return MLB_STATS_TEAM_ID_TO_ABBR[String(teamId)] ?? null;
-}
-
 function asObject(value: unknown): Record<string, unknown> | null {
   if (Array.isArray(value)) return asObject(value[0]);
   return typeof value === "object" && value !== null
@@ -161,8 +124,8 @@ export function parseMlbStatsScheduleGames(payload: unknown): ScheduleGame[] {
         gameDate: asString(g.gameDate),
         homeMlbTeamId,
         awayMlbTeamId,
-        homeAbbr: resolveMlbStatsTeamAbbr(homeMlbTeamId),
-        awayAbbr: resolveMlbStatsTeamAbbr(awayMlbTeamId),
+        homeAbbr: mlbStatsTeamIdToAbbr(homeMlbTeamId),
+        awayAbbr: mlbStatsTeamIdToAbbr(awayMlbTeamId),
       });
     }
   }

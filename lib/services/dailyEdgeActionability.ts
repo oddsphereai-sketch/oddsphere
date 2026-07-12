@@ -16,17 +16,22 @@ export type DailyEdgeActionabilityInput = {
   rawVerdict: { key: Verdict; label: string; warning?: string | null };
   rawGrade: Grade | null;
   rawRecScore: number | null;
+  modelProbability?: number | null;
+  rawModelProbability?: number | null;
+  rawModelMarketGapPct?: number | null;
   modelMarketGapPct: number | null;
+  totalProjectionGapRuns?: number | null;
   marketReadV2: MarketReadV2Dto | null;
+  marketSupportSignal?: "support" | "resistance" | "neutral" | null;
   hasPick: boolean;
   held: boolean;
   dataQualityTier: "high" | "medium" | "low" | "fallback";
   priceAmerican: number | null;
   priceUnavailableAtLock?: boolean;
   /**
-   * Non-actionable neutral state that should stay visible as Watchlist.
-   * Used for MLB FI Toss-Up: it intentionally has no picked side price, but it
-   * is still a real model read rather than a missing-price failure.
+   * Non-actionable neutral state. Used for MLB FI Toss-Up: it intentionally has
+   * no picked side price, but it is still a real model read rather than a
+   * missing-price failure. It should not be promoted above No Play.
    */
   neutralNonActionable?: boolean;
 };
@@ -83,6 +88,153 @@ function gradeForVerdict(verdict: Verdict, rawGrade: Grade | null): Grade | null
   return rawGrade === "best_signal" ? "model_only" : (rawGrade ?? "model_only");
 }
 
+function supportsMarketConfirmedLean(input: DailyEdgeActionabilityInput, recAfterDataCap: number | null): boolean {
+  if (input.market !== "moneyline" && input.market !== "total") return false;
+  if (input.rawVerdict.key !== "watchlist") return false;
+  if ((recAfterDataCap ?? 0) < MIN_REC_BY_VERDICT.lean) return false;
+  if (input.priceAmerican === null || input.priceUnavailableAtLock === true) return false;
+  if (input.dataQualityTier === "fallback" || input.dataQualityTier === "low") return false;
+
+  const edge = input.modelMarketGapPct ?? 0;
+  const edgeFloor = input.market === "moneyline" ? 5 : 4;
+  if (edge < edgeFloor) return false;
+
+  const movement = input.marketReadV2?.movement?.directionRelativeToPick ?? input.marketSupportSignal ?? null;
+  if (movement !== "support") return false;
+
+  return true;
+}
+
+function hasMarketSupport(input: DailyEdgeActionabilityInput): boolean {
+  const movement = input.marketReadV2?.movement?.directionRelativeToPick ?? input.marketSupportSignal ?? null;
+  return movement === "support";
+}
+
+function hasMarketResistance(input: DailyEdgeActionabilityInput): boolean {
+  const movement = input.marketReadV2?.movement?.directionRelativeToPick ?? input.marketSupportSignal ?? null;
+  return movement === "resistance";
+}
+
+function isPlayableBestAngleTotalPrice(price: number | null): boolean {
+  if (price === null || !Number.isFinite(price) || price < -1000 || price > 1000) return false;
+  return price > -135;
+}
+
+function isPlayableMoneylineWinnerPrice(price: number | null): boolean {
+  if (price === null || !Number.isFinite(price) || price < -1000 || price > 1000) return false;
+  return price > -185;
+}
+
+function isPredictionQualityMarket(input: DailyEdgeActionabilityInput): boolean {
+  return input.market === "moneyline" || input.market === "total" || input.market === "soccer_moneyline";
+}
+
+function hasPlayablePredictionQualityPrice(input: DailyEdgeActionabilityInput): boolean {
+  if (input.market === "total") return isPlayableBestAngleTotalPrice(input.priceAmerican);
+  return isPlayableMoneylineWinnerPrice(input.priceAmerican);
+}
+
+function supportsPredictionQualityLean(
+  input: DailyEdgeActionabilityInput,
+  _recAfterDataCap: number | null,
+): boolean {
+  if (!isPredictionQualityMarket(input)) return false;
+  if (input.rawVerdict.key !== "watchlist") return false;
+  if (input.rawRecScore === null) return false;
+  if (input.dataQualityTier === "fallback" || input.dataQualityTier === "low") return false;
+  if (input.priceUnavailableAtLock === true || !hasPlayablePredictionQualityPrice(input)) return false;
+  if (hasMarketResistance(input)) return false;
+
+  const regularizedProbability = input.modelProbability ?? null;
+  const rawProbability = input.rawModelProbability ?? regularizedProbability;
+  const regularizedEdge = input.modelMarketGapPct ?? null;
+  if (regularizedEdge === null || regularizedEdge < 0) return false;
+  if (
+    (regularizedProbability === null || regularizedProbability < 0.56) &&
+    (rawProbability === null || rawProbability < 0.6 || regularizedEdge < 1)
+  ) return false;
+  if (input.market === "total" && input.totalProjectionGapRuns != null && input.totalProjectionGapRuns < 0.25) return false;
+
+  return true;
+}
+
+function supportsPredictionQualityBestAngle(
+  input: DailyEdgeActionabilityInput,
+  _recAfterDataCap: number | null,
+  finalVerdictKey: Verdict,
+): boolean {
+  if (!isPredictionQualityMarket(input)) return false;
+  if (finalVerdictKey !== "lean") return false;
+  if (input.rawRecScore === null) return false;
+  if (input.dataQualityTier === "fallback" || input.dataQualityTier === "low") return false;
+  if (input.priceUnavailableAtLock === true || !hasPlayablePredictionQualityPrice(input)) return false;
+  if (hasMarketResistance(input)) return false;
+
+  const regularizedProbability = input.modelProbability ?? null;
+  const rawProbability = input.rawModelProbability ?? regularizedProbability;
+  const regularizedEdge = input.modelMarketGapPct ?? null;
+  if (regularizedEdge === null || regularizedEdge < 0) return false;
+  if (
+    (regularizedProbability === null || regularizedProbability < 0.6) &&
+    (
+      rawProbability === null ||
+      rawProbability < 0.66 ||
+      (regularizedProbability ?? 0) < 0.57 ||
+      regularizedEdge < 2
+    )
+  ) return false;
+  if (input.market === "total" && input.totalProjectionGapRuns != null && input.totalProjectionGapRuns < 0.35) return false;
+
+  return true;
+}
+
+function supportsTotalMarketConfirmedBestAngle(
+  input: DailyEdgeActionabilityInput,
+  recAfterDataCap: number | null,
+  finalVerdictKey: Verdict,
+): boolean {
+  if (input.market !== "total") return false;
+  if (input.rawVerdict.key !== "lean" || finalVerdictKey !== "lean") return false;
+  if ((recAfterDataCap ?? 0) < MIN_REC_BY_VERDICT.best_angle) return false;
+  if (input.dataQualityTier === "fallback" || input.dataQualityTier === "low") return false;
+  if (!isPlayableBestAngleTotalPrice(input.priceAmerican) || input.priceUnavailableAtLock === true) return false;
+  if (!hasMarketSupport(input)) return false;
+
+  const edge = input.modelMarketGapPct ?? 0;
+  const gap = input.totalProjectionGapRuns ?? 0;
+  if (edge < 6) return false;
+  if (gap < 0.5) return false;
+
+  return true;
+}
+
+function supportsTotalHighConvictionBestAngle(
+  input: DailyEdgeActionabilityInput,
+  recAfterDataCap: number | null,
+  finalVerdictKey: Verdict,
+): boolean {
+  if (input.market !== "total") return false;
+  if (finalVerdictKey !== "lean") return false;
+  if ((recAfterDataCap ?? 0) < MIN_REC_BY_VERDICT.best_angle) return false;
+  if (input.dataQualityTier === "fallback" || input.dataQualityTier === "low") return false;
+  if (!isPlayableBestAngleTotalPrice(input.priceAmerican) || input.priceUnavailableAtLock === true) return false;
+  if (hasMarketResistance(input)) return false;
+
+  const regularizedProbability = input.modelProbability ?? 0;
+  const rawProbability = input.rawModelProbability ?? regularizedProbability;
+  const edge = input.modelMarketGapPct ?? 0;
+  const rawEdge = input.rawModelMarketGapPct ?? edge;
+  const gap = input.totalProjectionGapRuns ?? 0;
+
+  return (
+    regularizedProbability >= 0.555 &&
+    rawProbability >= 0.555 &&
+    edge >= 7 &&
+    rawEdge >= 7 &&
+    gap >= 0.9
+  );
+}
+
 function explainCap(reason: string): string {
   switch (reason) {
     case "low_action_score":
@@ -99,6 +251,16 @@ function explainCap(reason: string): string {
       return "first-inning volatility is too high for an actionable play";
     case "no_pick_or_held":
       return "the model is not making an official play";
+    case "market_support_promotion":
+      return "the model edge, playable price, and market movement all support the pick";
+    case "market_support_best_angle_promotion":
+      return "the total has Best Angle-level edge, projection gap, playable price, and market movement support";
+    case "prediction_quality_promotion":
+      return "the pick has strong model probability, playable price, clean data, and no market resistance";
+    case "prediction_quality_best_angle_promotion":
+      return "the pick has Best Angle-level model probability, playable price, clean data, and no market resistance";
+    case "total_high_conviction_best_angle_promotion":
+      return "the total has a strong model edge, clear projection gap, playable price, and no direct market resistance";
     default:
       return reason.replaceAll("_", " ");
   }
@@ -129,7 +291,7 @@ export function normalizeDailyEdgeActionability(
 
   let finalVerdictKey = input.rawVerdict.key;
   if (neutralNonActionable) {
-    finalVerdictKey = input.rawVerdict.key === "no_play" ? "watchlist" : input.rawVerdict.key;
+    finalVerdictKey = "no_play";
   } else if (!hasPick || input.rawRecScore === null) {
     finalVerdictKey = "no_play";
   } else if (finalVerdictKey === "best_angle" && (recAfterDataCap ?? 0) < MIN_REC_BY_VERDICT.best_angle) {
@@ -152,16 +314,62 @@ export function normalizeDailyEdgeActionability(
   if (capReasons.includes("missing_price") && (finalVerdictKey === "best_angle" || finalVerdictKey === "lean")) {
     finalVerdictKey = "watchlist";
   }
+  if (supportsMarketConfirmedLean(input, recAfterDataCap) && finalVerdictKey === "watchlist" && capReasons.length === 0) {
+    finalVerdictKey = "lean";
+    capReasons.push("market_support_promotion");
+  }
+  if (supportsPredictionQualityLean(input, recAfterDataCap) && finalVerdictKey === "watchlist" && capReasons.length === 0) {
+    finalVerdictKey = "lean";
+    capReasons.push("prediction_quality_promotion");
+  }
+  if (supportsTotalMarketConfirmedBestAngle(input, recAfterDataCap, finalVerdictKey) && capReasons.length === 0) {
+    finalVerdictKey = "best_angle";
+    capReasons.push("market_support_best_angle_promotion");
+  }
+  if (supportsTotalHighConvictionBestAngle(input, recAfterDataCap, finalVerdictKey) && capReasons.length === 0) {
+    finalVerdictKey = "best_angle";
+    capReasons.push("total_high_conviction_best_angle_promotion");
+  }
+  if (
+    supportsPredictionQualityBestAngle(input, recAfterDataCap, finalVerdictKey) &&
+    (capReasons.length === 0 || capReasons.every((reason) => reason === "prediction_quality_promotion"))
+  ) {
+    finalVerdictKey = "best_angle";
+    capReasons.push("prediction_quality_best_angle_promotion");
+  }
 
-  const finalRecScore = recAfterDataCap;
+  let finalRecScore = recAfterDataCap;
+  if (capReasons.includes("prediction_quality_promotion")) {
+    finalRecScore = Math.max(finalRecScore ?? 0, MIN_REC_BY_VERDICT.lean);
+  }
+  if (capReasons.includes("prediction_quality_best_angle_promotion")) {
+    finalRecScore = Math.max(finalRecScore ?? 0, MIN_REC_BY_VERDICT.best_angle);
+  }
   const finalGrade = gradeForVerdict(finalVerdictKey, input.rawGrade);
   const positiveDisplayedEdge = input.modelMarketGapPct !== null && input.modelMarketGapPct > 2;
   if (finalVerdictKey === "no_play" && positiveDisplayedEdge && capReasons.length === 0) {
     capReasons.push("low_action_score");
   }
-  const primaryReason = capReasons[0] ?? null;
+  const primaryReason =
+    finalVerdictKey === "best_angle" && capReasons.includes("prediction_quality_best_angle_promotion")
+      ? "prediction_quality_best_angle_promotion"
+      : finalVerdictKey === "best_angle" && capReasons.includes("total_high_conviction_best_angle_promotion")
+        ? "total_high_conviction_best_angle_promotion"
+      : finalVerdictKey === "best_angle" && capReasons.includes("market_support_best_angle_promotion")
+        ? "market_support_best_angle_promotion"
+        : capReasons[0] ?? null;
   const displayReason =
-    finalVerdictKey === "no_play" && positiveDisplayedEdge && primaryReason !== null
+    primaryReason === "market_support_promotion" && finalVerdictKey === "lean"
+      ? `Promoted to Lean because ${explainCap(primaryReason)}.`
+      : primaryReason === "prediction_quality_promotion" && finalVerdictKey === "lean"
+      ? `Promoted to Lean because ${explainCap(primaryReason)}.`
+      : primaryReason === "market_support_best_angle_promotion" && finalVerdictKey === "best_angle"
+      ? `Promoted to Best Angle because ${explainCap(primaryReason)}.`
+      : primaryReason === "total_high_conviction_best_angle_promotion" && finalVerdictKey === "best_angle"
+      ? `Promoted to Best Angle because ${explainCap(primaryReason)}.`
+      : primaryReason === "prediction_quality_best_angle_promotion" && finalVerdictKey === "best_angle"
+      ? `Promoted to Best Angle because ${explainCap(primaryReason)}.`
+      : finalVerdictKey === "no_play" && positiveDisplayedEdge && primaryReason !== null
       ? `Edge exists, but we are skipping because ${explainCap(primaryReason)}.`
       : primaryReason !== null && finalVerdictKey !== input.rawVerdict.key
         ? `Capped to ${VERDICT_LABEL[finalVerdictKey]} because ${explainCap(primaryReason)}.`

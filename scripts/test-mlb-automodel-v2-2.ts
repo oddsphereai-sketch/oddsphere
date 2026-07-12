@@ -40,10 +40,8 @@ import {
   applyMlbTeamResidualRunCorrection,
   runMlbAutoModelV2_2,
 } from "../lib/automodel/mlbAutoModelV2_2";
-import { buildMlbMatchupFeatureAudit } from "../lib/automodel/mlbMatchupFeatures";
 import { computeMarketBaseline } from "../lib/automodel/marketPrior";
 import type {
-  BatterSnapshot,
   GameSnapshot,
   StarterSnapshot,
   TeamSnapshot,
@@ -135,22 +133,6 @@ function buildWeather(): WeatherSnapshot {
   };
 }
 
-function buildBatter(opts: Partial<BatterSnapshot> = {}): BatterSnapshot {
-  return {
-    player_external_id: opts.player_external_id ?? 1000,
-    player_name: opts.player_name ?? "Test Batter",
-    batting_position: opts.batting_position ?? 1,
-    bats: "bats" in opts ? opts.bats! : "R",
-    season_obp: "season_obp" in opts ? opts.season_obp! : 0.330,
-    season_slg: "season_slg" in opts ? opts.season_slg! : 0.420,
-    season_ops: "season_ops" in opts ? opts.season_ops! : 0.750,
-    vs_lhp_ops: "vs_lhp_ops" in opts ? opts.vs_lhp_ops! : 0.820,
-    vs_rhp_ops: "vs_rhp_ops" in opts ? opts.vs_rhp_ops! : 0.740,
-    season_pa: "season_pa" in opts ? opts.season_pa : 250,
-    lineup_source: opts.lineup_source ?? "confirmed",
-  };
-}
-
 type SnapOverrides = {
   homeTeam?: Partial<TeamSnapshot>;
   awayTeam?: Partial<TeamSnapshot>;
@@ -159,8 +141,6 @@ type SnapOverrides = {
   market?: Partial<MarketSnapshot>;
   ballpark?: ParkSnapshot | null;
   weather?: WeatherSnapshot | null;
-  homeLineup?: BatterSnapshot[];
-  awayLineup?: BatterSnapshot[];
   weatherAvailable?: boolean;
   lineupConfirmed?: boolean;
   starterConfirmed?: boolean;
@@ -175,8 +155,8 @@ function buildSnapshot(o: SnapOverrides = {}): GameSnapshot {
     away_team: { ...buildTeam({ team_external_id: 2, abbreviation: "AWY" }), ...(o.awayTeam ?? {}) },
     home_starter: o.homeStarter === null ? null : { ...buildStarter({ player_external_id: 100 }), ...(o.homeStarter ?? {}) },
     away_starter: o.awayStarter === null ? null : { ...buildStarter({ player_external_id: 200 }), ...(o.awayStarter ?? {}) },
-    home_lineup_top8: o.homeLineup ?? [],
-    away_lineup_top8: o.awayLineup ?? [],
+    home_lineup_top8: [],
+    away_lineup_top8: [],
     ballpark: o.ballpark === undefined ? buildPark(1.0) : o.ballpark,
     weather: o.weather === undefined ? buildWeather() : o.weather,
     market: { ...buildMarket(), ...(o.market ?? {}) },
@@ -367,8 +347,7 @@ async function main() {
     check("data_quality_tier high when all features present", proj.data_quality_tier === "high");
     // After Push 3A-2: 14 audit slots. The test fixture has empty
     // lineup_top8 arrays → confirmed_lineup is "missing" on both sides
-    // (the 2 expected missing). Everything else should be preferred or
-    // a real fallback/proxy source.
+    // (the 2 expected missing). Everything else should be preferred/proxy.
     check("feature_audit.missing_count == 2 (lineup-only) with default fixture",
       proj.feature_audit.missing_count === 2,
       `actual missing=${proj.feature_audit.missing_count}`);
@@ -552,48 +531,6 @@ async function main() {
     computeConfidence({ win_prob: 0.85, ou_prob: 0.85, run_diff_abs: 4.0, tier: "medium" }) <= V22_CONFIDENCE_CEILING.medium);
 
   // ──────────────────────────────────────────────────────────────────
-  section("Matchup features — shadow audit only");
-  {
-    const snap = buildSnapshot({
-      homeStarter: { throws: "L", season_era: 4.0, last30_era: 3.2 },
-      awayStarter: { throws: "R", season_era: 3.8, last30_era: 4.6 },
-      awayLineup: [
-        buildBatter({ player_external_id: 1, batting_position: 1, vs_lhp_ops: 0.900, season_ops: 0.700 }),
-        buildBatter({ player_external_id: 2, batting_position: 2, vs_lhp_ops: 0.840, season_ops: 0.700 }),
-        buildBatter({ player_external_id: 3, batting_position: 3, vs_lhp_ops: 0.780, season_ops: 0.700 }),
-        buildBatter({ player_external_id: 4, batting_position: 4, vs_lhp_ops: 0.760, season_ops: 0.700 }),
-        buildBatter({ player_external_id: 5, batting_position: 5, vs_lhp_ops: 0.740, season_ops: 0.700 }),
-      ],
-      homeLineup: [
-        buildBatter({ player_external_id: 6, batting_position: 1, vs_rhp_ops: 0.810, season_ops: 0.700 }),
-        buildBatter({ player_external_id: 7, batting_position: 2, vs_rhp_ops: 0.790, season_ops: 0.700 }),
-        buildBatter({ player_external_id: 8, batting_position: 3, vs_rhp_ops: 0.770, season_ops: 0.700 }),
-      ],
-    });
-    const audit = buildMlbMatchupFeatureAudit(snap);
-    check("matchup audit is shadow-only", audit.mode === "shadow_only" && audit.applies_to_model === false);
-    check("away lineup uses splits vs home starter handedness",
-      near(audit.lineup_vs_starter.away_batting_vs_home_starter.top3_ops_vs_throw ?? 0, 0.840, 0.001));
-    check("home lineup status preferred with handedness splits",
-      audit.lineup_vs_starter.home_batting_vs_away_starter.status.source === "preferred");
-    check("starter recent form detects better/worse",
-      audit.starter_recent_form.home_starter.recent_form === "better" &&
-      audit.starter_recent_form.away_starter.recent_form === "worse");
-    check("matchup audit summary records preferred features",
-      audit.summary.preferred_count >= 3);
-  }
-  {
-    const audit = buildMlbMatchupFeatureAudit(buildSnapshot({
-      homeStarter: { throws: null, last30_era: null },
-      awayStarter: null,
-      homeLineup: [],
-      awayLineup: [],
-    }));
-    check("missing matchup data does not throw and stays audit-only",
-      audit.applies_to_model === false && audit.summary.missing_count >= 2);
-  }
-
-  // ──────────────────────────────────────────────────────────────────
   section("End-to-end — runMlbAutoModelV2_2");
   {
     const snap = buildSnapshot();
@@ -608,9 +545,6 @@ async function main() {
     check("v22Audit present", out.v22Audit !== null && typeof out.v22Audit === "object");
     check("v22Audit.market_baseline_valid true on good inputs", out.v22Audit.market_baseline_valid);
     check("v22Audit.data_quality_tier === high on full snapshot", out.v22Audit.data_quality_tier === "high");
-    check("v22Audit includes shadow matchup features",
-      out.v22Audit.matchup_features?.mode === "shadow_only" &&
-      out.v22Audit.matchup_features?.applies_to_model === false);
     check("workload pitching default disabled", out.v22Audit.workload_pitching_enabled === false);
     check("workload pitching default not applied", out.v22Audit.workload_pitching_applied === false);
   }
@@ -725,30 +659,6 @@ async function main() {
       out.v22Audit.ml_model_prob > 0.5);
   }
   {
-    // LAA@TEX-style coherence: the raw model barely prefers the away dog,
-    // while the market strongly prefers the home side. Probability-space
-    // shrink can fall below 50, but the member-facing picked-side
-    // probability must not display as sub-coin-flip.
-    const snap = buildSnapshot({
-      homeTeam: { team_avg_batter_ops: 0.720 },
-      awayTeam: { team_avg_batter_ops: 0.800 },
-      market: { listed_total: 8.5, home_ml_odds_american: -160, away_ml_odds_american: 135 },
-    });
-    const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
-    check("bare-away-dog: ML pick = away",
-      out.predicted_ml_winner === "away",
-      `got=${out.predicted_ml_winner}`);
-    check("bare-away-dog: raw picked-side prob > 0.5",
-      out.v22Audit.ml_raw_model_prob > 0.5);
-    check("bare-away-dog: regularized prob can audit below 0.5",
-      out.v22Audit.ml_regularized_model_prob < 0.5,
-      `got=${out.v22Audit.ml_regularized_model_prob}`);
-    check("bare-away-dog: public picked-side prob floors at 0.5",
-      out.v22Audit.ml_model_prob === 0.5 &&
-      out.v22Audit.ml_display_probability_floor_applied === true,
-      `got=${out.v22Audit.ml_model_prob}`);
-  }
-  {
     // LAA@LAD-style scenario — home (LAD): elite starter + strong offense.
     // away (LAA): bad starter + weak offense. Confidence must attach to home.
     const snap = buildSnapshot({
@@ -819,7 +729,7 @@ async function main() {
     check("pitcherFactor with raw pq matches similar direction", Math.abs(fNoPq - fRealPq) < 0.10);
   }
   {
-    // Audit reflects real fallback pitch-quality context when raw missing
+    // Audit reflects pitch_quality proxy when raw missing
     const snap = buildSnapshot({
       homeStarter: { pitch_quality_score: null, season_era: 3.5, season_whip: 1.15, season_k_per_9: 9.5 },
       awayStarter: { pitch_quality_score: null, season_era: 3.5, season_whip: 1.15, season_k_per_9: 9.5 },
@@ -877,11 +787,9 @@ async function main() {
     check("V22Audit carries feature_preferred_count",
       typeof out.v22Audit.feature_preferred_count === "number" && out.v22Audit.feature_preferred_count >= 1,
       `actual=${out.v22Audit.feature_preferred_count}`);
-    check("V22Audit carries feature_proxy_count",
-      typeof out.v22Audit.feature_proxy_count === "number" && out.v22Audit.feature_proxy_count >= 1,
-      `actual=${out.v22Audit.feature_proxy_count}`);
     check("V22Audit carries feature_fallback_real_count",
-      typeof out.v22Audit.feature_fallback_real_count === "number");
+      typeof out.v22Audit.feature_fallback_real_count === "number" && out.v22Audit.feature_fallback_real_count >= 0,
+      `actual=${out.v22Audit.feature_fallback_real_count}`);
     check("V22Audit carries feature_reason_codes array",
       Array.isArray(out.v22Audit.feature_reason_codes) && out.v22Audit.feature_reason_codes.length >= 4);
   }

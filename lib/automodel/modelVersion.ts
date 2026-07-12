@@ -3,9 +3,7 @@
  *
  * Pure module. No DB, no service imports. Single export reads
  * `AUTOMODEL_VERSION` from env (or a passed-in record) and returns a
- * narrowed AutomodelVersion. Defaults to "v1" — production stays on the
- * existing V1 pipeline until an operator explicitly opts into V2 or
- * shadow mode.
+ * narrowed AutomodelVersion. Defaults to the MLB champion model (`v2_2`).
  *
  * Modes:
  *   "v1"     — V1 writes predictions to game_predictions. V2 never runs.
@@ -20,13 +18,14 @@
  *              sport_specific.v2_audit for side-by-side comparison
  *              without behavioral risk.
  *
- * Invalid / missing env value → "v1" with a console.warn so misconfigured
+ * Invalid / missing env value → "v2_2" with a console.warn so misconfigured
  * deploys are visible without throwing.
  */
 
 export type AutomodelVersion = "v1" | "v2" | "v2_1" | "v2_2" | "shadow";
 
 export const AUTOMODEL_VERSION_ENV = "AUTOMODEL_VERSION";
+export const DEFAULT_AUTOMODEL_VERSION: AutomodelVersion = "v2_2";
 
 const VALID_VERSIONS: ReadonlySet<AutomodelVersion> = new Set(["v1", "v2", "v2_1", "v2_2", "shadow"]);
 
@@ -40,19 +39,19 @@ export function resolveAutomodelVersion(
   env: Record<string, string | undefined> = process.env,
 ): AutomodelVersion {
   const raw = env[AUTOMODEL_VERSION_ENV];
-  if (raw === undefined || raw === "") return "v1";
+  if (raw === undefined || raw === "") return DEFAULT_AUTOMODEL_VERSION;
   const v = raw.trim().toLowerCase();
   if (VALID_VERSIONS.has(v as AutomodelVersion)) {
     return v as AutomodelVersion;
   }
   // eslint-disable-next-line no-console
   console.warn(
-    `[automodelVersion] AUTOMODEL_VERSION="${raw}" is invalid; defaulting to "v1". Valid values: v1, v2, v2_1, v2_2, shadow.`,
+    `[automodelVersion] AUTOMODEL_VERSION="${raw}" is invalid; defaulting to "${DEFAULT_AUTOMODEL_VERSION}". Valid values: v1, v2, v2_1, v2_2, shadow.`,
   );
-  return "v1";
+  return DEFAULT_AUTOMODEL_VERSION;
 }
 
-/** Resolve precedence: explicit opt-override > env > default v1. */
+/** Resolve precedence: explicit opt-override > env > champion default. */
 export function resolveEffectiveVersion(
   override: AutomodelVersion | undefined,
   env: Record<string, string | undefined> = process.env,

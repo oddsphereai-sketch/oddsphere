@@ -1,10 +1,15 @@
 /**
- * Tests for the totals conservative mean-side flip.
+ * Tests for the totals official mean-side selector.
  *   - pure helper: lib/services/totalsMeanFlip.ts
  *   - integration: predictionRecordService.buildPredictionRecordsFromSlate
  * Run: npx tsx scripts/test-totals-mean-flip.ts
  */
-import { resolveTotalsMeanFlip, TOTALS_MEAN_FLIP_RULE_ID } from "../lib/services/totalsMeanFlip";
+import {
+  resolveTotalsMarketOpposedFlip,
+  resolveTotalsMeanFlip,
+  TOTALS_MARKET_OPPOSED_FLIP_RULE_ID,
+  TOTALS_MEAN_FLIP_RULE_ID,
+} from "../lib/services/totalsMeanFlip";
 import { buildPredictionRecordsFromSlate } from "../lib/services/predictionRecordService";
 
 let pass = 0, fail = 0;
@@ -30,12 +35,46 @@ console.log("━━━ resolveTotalsMeanFlip ━━━");
   check("flip rule_id stamped", r.action === "flip" && r.rule_id === TOTALS_MEAN_FLIP_RULE_ID);
 }
 check("member confidence capped at 60 when orig=72", (() => { const r = resolveTotalsMeanFlip({ ...base, originalConfidence: 72 }); return r.action === "flip" && r.recommendationConfidence === 60; })());
-check("gap<0.3 → standdown", resolveTotalsMeanFlip({ ...base, projectedTotal: 8.6 }).action === "standdown");
-check("line>=10 → standdown", resolveTotalsMeanFlip({ ...base, line: 10, projectedTotal: 10.5 }).action === "standdown");
+check("gap<0.3 → still flips under v2 selector", (() => { const r = resolveTotalsMeanFlip({ ...base, projectedTotal: 8.6 }); return r.action === "flip" && r.meanSide === "over"; })());
+check("line>=10 → still flips under v2 selector", (() => { const r = resolveTotalsMeanFlip({ ...base, line: 10, projectedTotal: 10.5 }); return r.action === "flip" && r.meanSide === "over"; })());
 check("missing mean-side odds → standdown", resolveTotalsMeanFlip({ ...base, overOdds: null }).action === "standdown");
 check("non-divergent (pick==mean side) → none", resolveTotalsMeanFlip({ ...base, predictedSide: "over" }).action === "none");
+check("projected total exactly equals line → none unless reconciliation fallback says divergent", resolveTotalsMeanFlip({ ...base, projectedTotal: 8.5 }).action === "standdown");
 check("no projected total but reconciliation flag → standdown", resolveTotalsMeanFlip({ ...base, projectedTotal: null, line: null }).action === "standdown");
 check("no projected total and NOT reconciliation-divergent → none", resolveTotalsMeanFlip({ ...base, projectedTotal: null, line: null, reconciliationDivergence: false }).action === "none");
+
+console.log("\n━━━ resolveTotalsMarketOpposedFlip ━━━");
+{
+  const r = resolveTotalsMarketOpposedFlip({
+    predictedSide: "over",
+    modelProb: 0.56,
+    marketProb: 0.49,
+    opposingPublicSplitConflict: true,
+    originalConfidence: 56,
+    overOdds: -110,
+    underOdds: -105,
+  });
+  check("market-opposed weak total + public conflict → FLIP to under", r.action === "flip" && r.flippedSide === "under");
+  check("market-opposed flip uses opposite-side odds", r.action === "flip" && r.flippedOdds === -105);
+  check("market-opposed flip rule_id stamped", r.action === "flip" && r.rule_id === TOTALS_MARKET_OPPOSED_FLIP_RULE_ID);
+  check("market-opposed flip preserves raw opposite-side model prob", r.action === "flip" && r.flippedSideModelProb !== null && Math.abs(r.flippedSideModelProb - 0.44) < 1e-9);
+}
+check("market-opposed flip blocked without public conflict", resolveTotalsMarketOpposedFlip({
+  predictedSide: "over", modelProb: 0.56, marketProb: 0.49, opposingPublicSplitConflict: false,
+  originalConfidence: 56, overOdds: -110, underOdds: -105,
+}).action === "none");
+check("market-opposed flip blocked when model is strong", resolveTotalsMarketOpposedFlip({
+  predictedSide: "over", modelProb: 0.59, marketProb: 0.49, opposingPublicSplitConflict: true,
+  originalConfidence: 59, overOdds: -110, underOdds: -105,
+}).action === "none");
+check("market-opposed flip blocked when book does not oppose picked side", resolveTotalsMarketOpposedFlip({
+  predictedSide: "over", modelProb: 0.56, marketProb: 0.51, opposingPublicSplitConflict: true,
+  originalConfidence: 56, overOdds: -110, underOdds: -105,
+}).action === "none");
+check("market-opposed flip stands down when opposite price is missing", resolveTotalsMarketOpposedFlip({
+  predictedSide: "over", modelProb: 0.56, marketProb: 0.49, opposingPublicSplitConflict: true,
+  originalConfidence: 56, overOdds: -110, underOdds: null,
+}).action === "standdown");
 
 // ── integration ────────────────────────────────────────────────────
 const baseGame = { id: 800, external_id: 9100, game_date: "2026-06-22T18:00:00Z", slate_status: "published", home_team_id: 771, away_team_id: 780 };
@@ -61,8 +100,8 @@ function mkPred(spOver: Record<string, any>, audit: Record<string, any>) {
     },
   };
 }
-function build(pred: any, odds: any) {
-  return buildPredictionRecordsFromSlate({ sport: "mlb", slateDate: "2026-06-22", launchDay: false, games: [baseGame], predictionByGameId: new Map([[800, pred]]), abbrevByTeamId, signalsByGameId: new Map(), oddsByGameId: new Map([[800, odds as any]]) });
+function build(pred: any, odds: any, signals: Map<number, any[]> = new Map()) {
+  return buildPredictionRecordsFromSlate({ sport: "mlb", slateDate: "2026-06-22", launchDay: false, games: [baseGame], predictionByGameId: new Map([[800, pred]]), abbrevByTeamId, signalsByGameId: signals, oddsByGameId: new Map([[800, odds as any]]) });
 }
 
 console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━");
@@ -88,22 +127,21 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   check("ML record unaffected by totals flip", recs.find((r) => r.market === "moneyline")?.pick === "home");
 }
 {
-  // gap < 0.3 → stand down (no_bet=true), pick stays under. Score sum 8.6 vs
-  // bet line 8.5 ⇒ divergent (mean over, pick under) but gap 0.1 < 0.3.
-  const pred = mkPred({}, {});
-  pred.predicted_away_score = 4.3; pred.predicted_home_score = 4.3; // sum 8.6
+  // gap < 0.3 still flips in v2. Score sum 8.6 vs bet line 8.5 ⇒ divergent
+  // (mean over, pick under); the full historical replay favored mean-aligned
+  // side selection over standing down thin gaps.
+  const pred = mkPred({}, { posterior_total: 8.6 });
   const recs = build(pred, oddsSnap(-105, -115));
   const ou = recs.find((r) => r.market === "total");
-  check("gap<0.3 → No Play (no_bet=true), pick stays under", ou?.no_bet === true && ou?.pick === "under" && (ou?.snapshot_json as any)?.ou_flip == null);
+  check("gap<0.3 → flips to over", ou?.no_bet === false && ou?.pick === "over" && (ou?.snapshot_json as any)?.ou_flip?.flipped === true);
 }
 {
-  // line>=10 → stand down. Score sum 10.6 vs bet line 10 ⇒ divergent (mean over,
-  // pick under) but line at the cap.
-  const pred = mkPred({}, { market_total: 10 });
-  pred.predicted_away_score = 5.3; pred.predicted_home_score = 5.3; // sum 10.6
+  // line>=10 still flips in v2. Score sum 10.6 vs bet line 10 ⇒ divergent
+  // (mean over, pick under); the prior line cap is removed.
+  const pred = mkPred({}, { market_total: 10, posterior_total: 10.6 });
   const recs = build(pred, oddsSnap(-105, -115));
   const ou = recs.find((r) => r.market === "total");
-  check("line>=10 → No Play (no flip)", ou?.no_bet === true && (ou?.snapshot_json as any)?.ou_flip == null);
+  check("line>=10 → flips to over", ou?.no_bet === false && ou?.pick === "over" && (ou?.snapshot_json as any)?.ou_flip?.flipped === true);
 }
 {
   // missing mean-side (over) odds → stand down.
@@ -119,6 +157,24 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const recs2 = build(pred, oddsSnap(-105, -115));
   const ou = recs2.find((r) => r.market === "total");
   check("non-divergent total unchanged (no flip, no no_bet)", ou?.pick === "over" && ou?.no_bet === false && (ou?.snapshot_json as any)?.ou_flip == null);
+}
+{
+  // Non-divergent model Over (projection also Over), but the no-vig market is
+  // against the picked side and opposite Under has the public-money conflict.
+  const pred = mkPred({}, { ou_model_prob: 0.56, ou_market_prob: 0.49, posterior_total: 8.9 });
+  pred.predicted_ou_side = "over";
+  pred.ou_confidence = 56;
+  const signals = new Map([
+    [800, [{ market_type: "total", side: "under", public_money_pct: 80, public_betting_pct: 50 }]],
+  ]);
+  const recs = build(pred, oddsSnap(-110, -105), signals);
+  const ou = recs.find((r) => r.market === "total");
+  const f = (ou?.snapshot_json as any)?.ou_flip;
+  check("market-opposed public-conflict total flips to under", ou?.pick === "under" && ou?.side === "under");
+  check("market-opposed flip stays a tracked prediction", ou?.no_bet === false);
+  check("market-opposed flip has no public play grade", ou?.play_grade === null);
+  check("market-opposed flip audit stamped", f?.flipped === true && f?.rule_id === TOTALS_MARKET_OPPOSED_FLIP_RULE_ID);
+  check("market-opposed flip audit kind stamped", f?.flip_kind === "market_opposed_public_conflict");
 }
 {
   // LINE BASIS: the bet line (oddsSourceOu.over/under.line) differs from the

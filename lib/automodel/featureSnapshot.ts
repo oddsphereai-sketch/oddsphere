@@ -38,6 +38,9 @@
  */
 
 import { supabase } from "../db/supabase";
+import { isBlockedSportsbook } from "../config/blockedSportsbooks";
+import { BOOK_PRIORITY } from "../config/bookPriority";
+import { filterToFreshestTotalLineCluster } from "../services/selectMainTotalLine";
 import type { Sport } from "../types/domain/Sport";
 import type {
   ActiveInjuries,
@@ -58,16 +61,19 @@ import { shrinkBullpenEra } from "./types";
  */
 const CURRENT_SEASON_FALLBACK = 2026;
 
-/** Sharpbook priority for the `listed_total` chain (Pinnacle first). */
-const TOTAL_BOOK_PRIORITY: readonly string[] = [
-  "pinnacle",
-  "draftkings",
-  "fanduel",
-  "betmgm",
-  "caesars",
-] as const;
+const SYNTHETIC_PRICE_BOOKS = new Set(["locked_snapshot", "recommendation_snapshot", "splits_consensus"]);
 
-const ML_BOOK_PRIORITY: readonly string[] = TOTAL_BOOK_PRIORITY;
+/**
+ * Trusted real-book priority used by the model snapshot for ML and O/U prices.
+ * Keep this derived from the public Daily Edge selector so prediction math,
+ * displayed prices, and stream overlays all read the same book universe.
+ */
+const TRUSTED_REAL_BOOK_PRIORITY: readonly string[] = BOOK_PRIORITY.filter(
+  (book) => !SYNTHETIC_PRICE_BOOKS.has(book) && !isBlockedSportsbook(book),
+);
+
+const TOTAL_BOOK_PRIORITY: readonly string[] = TRUSTED_REAL_BOOK_PRIORITY;
+const ML_BOOK_PRIORITY: readonly string[] = TRUSTED_REAL_BOOK_PRIORITY;
 
 /**
  * Lock-line guard (2026-06-09 phantom-alt-line fix).
@@ -81,30 +87,12 @@ const ML_BOOK_PRIORITY: readonly string[] = TOTAL_BOOK_PRIORITY;
  * Books listed AFTER `caesars` were missing from the original
  * `TOTAL_BOOK_PRIORITY` and that gap let the writer's fallback pick
  * the FIRST `lines` row when none of the 5 priority books were
- * present — which on a SharpAPI-only feed routinely meant a Kalshi
- * binary-contract alt line (every 0.5 from 2.5..12.5) or a
- * splits_consensus row. Two tonight's locked totals (SEA@BAL, STL@NYM)
- * locked at phantom alt lines because of that. This list is the
- * "real-book priority" used by the resolver and is never
- * splits_consensus.
+ * present. This list is now derived from the shared customer-facing
+ * trusted-book priority, excludes synthetic sources, and excludes blocked
+ * sources such as Kalshi/Fliff so model snapshots and Daily Edge cards use
+ * the same real-book universe.
  */
-const REAL_BOOK_TOTAL_PRIORITY: readonly string[] = [
-  "pinnacle",
-  "draftkings",
-  "fanduel",
-  "betmgm",
-  "caesars",
-  "bet365 us",
-  "bookmaker",
-  "ballybet",
-  "betrivers",
-  "bovada",
-  "circa",
-  "kalshi",
-  "onexbet",
-  "saba",
-  "fliff",
-] as const;
+const REAL_BOOK_TOTAL_PRIORITY: readonly string[] = TRUSTED_REAL_BOOK_PRIORITY;
 const REAL_BOOK_SET: ReadonlySet<string> = new Set(REAL_BOOK_TOTAL_PRIORITY);
 
 /**
@@ -321,6 +309,7 @@ type LineRow = {
   side: string | null;
   line_value: number | null;
   odds_american: number | null;
+  fetched_at?: string | null;
 };
 
 type SharpSignalRow = {
@@ -543,7 +532,9 @@ function buildWeatherSnapshot(
  * Returns the resolution with audit metadata for snapshot_json.
  */
 function pickListedTotal(linesForGame: LineRow[]): TotalLineResolution {
-  const totals = linesForGame.filter((l) => l.market_type === "total");
+  const totals = filterToFreshestTotalLineCluster(
+    linesForGame.filter((l) => l.market_type === "total"),
+  );
 
   // Consensus line(s) — splits_consensus has at most one main line per
   // game. Captured separately so we can use it as a corroborator AND as
@@ -654,7 +645,11 @@ function pickMlOdds(
   side: "home" | "away"
 ): number | null {
   const candidates = linesForGame.filter(
-    (l) => l.market_type === "moneyline" && l.side === side
+    (l) =>
+      l.market_type === "moneyline" &&
+      l.side === side &&
+      l.odds_american !== null &&
+      ML_BOOK_PRIORITY.includes(l.sportsbook.toLowerCase())
   );
   for (const book of ML_BOOK_PRIORITY) {
     const match = candidates.find(
@@ -694,7 +689,8 @@ function pickOuOdds(
     (l) =>
       l.market_type === "total" &&
       l.side === side &&
-      l.odds_american !== null,
+      l.odds_american !== null &&
+      TOTAL_BOOK_PRIORITY.includes(l.sportsbook.toLowerCase()),
   );
   for (const book of TOTAL_BOOK_PRIORITY) {
     const match = candidates.find(
@@ -1067,7 +1063,7 @@ export async function buildFeatureSnapshots(
   // ── Query 12: lines ────────────────────────────────────────────
   const { data: linesRaw, error: linesErr } = await supabase
     .from("lines")
-    .select("game_id, market_type, sportsbook, side, line_value, odds_american")
+    .select("game_id, market_type, sportsbook, side, line_value, odds_american, fetched_at")
     .in("game_id", Array.from(gameIds))
     .in("market_type", ["total", "moneyline", "spread"]);
   if (linesErr) {

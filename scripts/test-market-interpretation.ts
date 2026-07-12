@@ -85,6 +85,16 @@ function base(over: Partial<MarketInterpretationInput> = {}): MarketInterpretati
   check("sharp money with → chip", r.chipLabel === "Sharp money on our side" && r.chipTone === "emerald");
   check("sharp money with → flag", r.flags.includes("sharp_money_with"));
 }
+// 5c-2. Split-derived sharp support must not override actual price resistance.
+{
+  const r = interpretMarket(base({
+    openAmerican: -170, currentAmerican: -150,
+    splits: { pickBetsPct: 45, pickMoneyPct: 65, observedAtIso: "2026-06-16T17:55:00Z", isStale: false },
+  }));
+  check("sharp split + price resistance → mixed chip", r.chipLabel === "Mixed market signal" && r.chipTone === "gray");
+  check("sharp split + price resistance → conflict flag", r.flags.includes("market_signal_conflict"));
+  check("sharp split + price resistance → still tracks moved against", r.flags.includes("moved_against"));
+}
 // 5d. Public-heavy but money still MAJORITY on us (17181-like: bets 81, money 65)
 //     → no strong sharp read either way → still honestly "unconfirmed".
 {

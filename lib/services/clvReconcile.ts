@@ -13,13 +13,12 @@
  * locked decision field.
  */
 
+import { BOOK_PRIORITY } from "../config/bookPriority";
 import { isBlockedSportsbook } from "../config/blockedSportsbooks";
 import { computeClv } from "../streaming/clvMath";
 
-/** Trusted-book preference for the closing price (highest first). */
-const CLOSING_BOOK_PRIORITY = [
-  "pinnacle", "circa", "draftkings", "fanduel", "betmgm", "caesars",
-];
+const SYNTHETIC_PRICE_BOOKS = new Set(["locked_snapshot", "recommendation_snapshot", "splits_consensus"]);
+const CLOSING_BOOK_PRIORITY: readonly string[] = BOOK_PRIORITY.filter((book) => !SYNTHETIC_PRICE_BOOKS.has(book));
 
 export type HistoryTick = {
   sportsbook: string;

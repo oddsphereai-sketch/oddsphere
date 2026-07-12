@@ -58,6 +58,13 @@ import {
   type LockCandidate,
 } from "@/lib/automodel/lockState";
 import type { Sport } from "@/lib/types/domain/Sport";
+import {
+  PREGAME_SWEEP_CRON_ACTIVE_ENV,
+  buildPregameSweepBlockedDetails,
+  isPregameSweepDryRun,
+  isPregameSweepGateActive,
+  isPregameSweepLockOnly,
+} from "@/lib/cron/pregameSweepSafety";
 
 export const maxDuration = 60;
 
@@ -87,97 +94,12 @@ export const maxDuration = 60;
 //     failure pushes to errors[] and continues)
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Env var operator sets when pregame-sweep is scheduled in vercel.json
- * and intended to perform writes. Strict equality with "true" — same
- * pattern as ORCHESTRATOR_SKIP_CONFIRMATION + MORNING_SLATE_AUTO_PUBLISH.
- */
-export const PREGAME_SWEEP_CRON_ACTIVE_ENV = "PREGAME_SWEEP_CRON_ACTIVE";
-
-/**
- * Load-control mode for scheduled T-60 checks. When true, this route does only
- * the lock lifecycle work (classify, final model pass for entering-lock games,
- * set locked_at, audit) and skips the expensive slate-wide lines/signals/grade
- * refresh. This keeps frequent lock checks from becoming full refreshes.
- */
-export const PREGAME_SWEEP_LOCK_ONLY_ENV = "PREGAME_SWEEP_LOCK_ONLY";
-
-/**
- * Env var for dry-run mode (alternative to ?dryRun=true query param).
- * Either trigger flips the route into read-only / report-only mode.
- */
-export const PREGAME_SWEEP_DRY_RUN_ENV = "PREGAME_SWEEP_DRY_RUN";
-
-/**
- * True when the caller explicitly opted into read-only via either
- * `?dryRun=true` on the request URL or `PREGAME_SWEEP_DRY_RUN=true` in
- * the env. Strict equality on both — typos / casing do not satisfy.
- */
-export function isPregameSweepDryRun(
-  request: Request,
-  env: Record<string, string | undefined> = process.env
-): boolean {
-  try {
-    const url = new URL(request.url);
-    if (url.searchParams.get("dryRun") === "true") return true;
-  } catch {
-    // Malformed URL — fall through to env check
-  }
-  return env[PREGAME_SWEEP_DRY_RUN_ENV] === "true";
-}
-
-/**
- * True when the operator has declared pregame-sweep cron active via env.
- * Strict equality with "true". Does NOT examine vercel.json — the flag is
- * the operator's explicit signal that the cron schedule has been wired.
- */
-export function isPregameSweepGateActive(
-  env: Record<string, string | undefined> = process.env
-): boolean {
-  return env[PREGAME_SWEEP_CRON_ACTIVE_ENV] === "true";
-}
-
-export function isPregameSweepLockOnly(
-  request: Request,
-  env: Record<string, string | undefined> = process.env
-): boolean {
-  try {
-    const url = new URL(request.url);
-    if (url.searchParams.get("lockOnly") === "true") return true;
-  } catch {
-    // Malformed URL — fall through to env check
-  }
-  return env[PREGAME_SWEEP_LOCK_ONLY_ENV] === "true";
-}
-
 function pregameSweepSports(
   env: Record<string, string | undefined> = process.env
 ): Sport[] {
   const sports: Sport[] = [...sportsInSeasonToday()];
   if (env.WNBA_PREGAME_SWEEP_ENABLED === "true") sports.push("wnba");
   return [...new Set(sports)];
-}
-
-/**
- * Build the structured blocked response when the master gate is missing
- * in non-dry-run mode. Returned via the cron-handler shape so the
- * refresh_log row + JSON body both surface the block clearly.
- */
-export function buildPregameSweepBlockedDetails(opts: {
-  sport: Sport;
-  date: string;
-}): Record<string, unknown> {
-  return {
-    blocked: true,
-    reason:
-      `${PREGAME_SWEEP_CRON_ACTIVE_ENV} env var must be 'true' for non-dry-run ` +
-      `cron execution. Pass ?dryRun=true to invoke in read-only mode.`,
-    env_flag_required: PREGAME_SWEEP_CRON_ACTIVE_ENV,
-    dry_run: false,
-    pregame_sweep_active: false,
-    sport: opts.sport,
-    date: opts.date,
-  };
 }
 
 // ─────────────────────────────────────────────────────────────

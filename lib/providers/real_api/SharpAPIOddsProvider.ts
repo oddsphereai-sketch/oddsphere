@@ -96,7 +96,8 @@ export type SharpApiGameResolver = (
   sport: Sport,
   date: string,
   homeAbbrev: MlbTeamAbbrev,
-  awayAbbrev: MlbTeamAbbrev
+  awayAbbrev: MlbTeamAbbrev,
+  referenceTimeIso?: string
 ) => Promise<number | null>;
 
 /** Hard cap on SharpAPI calls per getGameLines invocation (safety net). */
@@ -301,6 +302,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
       });
     }
 
+    const fetchedAt = new Date().toISOString();
     const resolved: ResolvedEvent[] = [];
     for (const cand of eventCandidates.values()) {
       const homeAbbrev = normalizeMlbTeamName(cand.homeRaw);
@@ -315,7 +317,8 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         sportKey,
         date,
         homeAbbrev,
-        awayAbbrev
+        awayAbbrev,
+        fetchedAt
       );
       if (gameExternalId === null) {
         // Game not in our DB for this slate. Expected for postponed games
@@ -332,7 +335,6 @@ export class SharpAPIOddsProvider implements IOddsProvider {
 
     // Step 3: fetch /odds per resolved event, map to LineRecord.
     const out: LineRecord[] = [];
-    const fetchedAt = new Date().toISOString();
     for (const ev of resolved) {
       if (callsUsed >= MAX_CALLS_PER_INVOCATION) {
         console.warn(
@@ -404,10 +406,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
           ev_percent: null,
           fair_odds: null,
           is_ev_positive: null,
-          fetched_at:
-            asStringOrNull(row.last_seen_at) ??
-            asStringOrNull(row.wire_received_at) ??
-            fetchedAt,
+          fetched_at: fetchedAt,
         });
       }
     }
@@ -560,7 +559,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
     const unresolvedTeamPairs: Array<{ home: MlbTeamAbbrev; away: MlbTeamAbbrev }> = [];
 
     for (const ev of evResult.events) {
-      const gameExtId = await this.resolveGame(sportKey, date, ev.home, ev.away);
+      const gameExtId = await this.resolveGame(sportKey, date, ev.home, ev.away, fetchedAt);
       if (gameExtId === null) {
         unresolvedTeamPairs.push({ home: ev.home, away: ev.away });
         continue;
@@ -601,6 +600,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         date,
         sev.home,
         sev.away,
+        fetchedAt,
       );
       if (gameExtId === null) {
         unresolvedTeamPairs.push({ home: sev.home, away: sev.away });
@@ -761,10 +761,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
             ev_percent: null,
             fair_odds: null,
             is_ev_positive: null,
-            fetched_at:
-              asStringOrNull(row.last_seen_at) ??
-              asStringOrNull(row.wire_received_at) ??
-              fetchedAt,
+            fetched_at: fetchedAt,
           });
         }
       }
@@ -911,10 +908,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
             ev_percent: null,
             fair_odds: null,
             is_ev_positive: null,
-            fetched_at:
-              asStringOrNull(row.last_seen_at) ??
-              asStringOrNull(row.wire_received_at) ??
-              fetchedAt,
+            fetched_at: fetchedAt,
           });
           mergedFromThisBucket++;
         }
@@ -944,8 +938,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         totFromSplits = 0,
         sprFromSplits = 0;
       const splitsRow = splitsRowByPair.get(`${ev.home}|${ev.away}`);
-      const splitsFetchedAt =
-        asStringOrNull(splitsRow?.fetched_at as unknown) ?? fetchedAt;
+      const splitsFetchedAt = fetchedAt;
 
       if (splitsRow !== undefined) {
         // ML — both sides + American odds present → full fallback.
@@ -1254,4 +1247,3 @@ export const __TEST__ = {
   mapSportsbook,
   mapSide,
 };
-

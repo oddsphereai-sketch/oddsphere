@@ -66,6 +66,34 @@ function classify(status: string | null): "final" | "live" | "scheduled" | "void
   return "other";
 }
 
+export function resolveScoreIngestNextScores(args: {
+  sport: Sport;
+  currentStatus: string | null;
+  currentHomeScore: number | null;
+  currentAwayScore: number | null;
+  providerHomeScore: number | null;
+  providerAwayScore: number | null;
+}): { home_score: number | null; away_score: number | null; preservedMlbStatsFinalScore: boolean } {
+  const preserveMlbStatsFinalScore =
+    args.sport === "mlb" &&
+    classify(args.currentStatus) === "final" &&
+    args.currentHomeScore !== null &&
+    args.currentAwayScore !== null;
+  return {
+    home_score: preserveMlbStatsFinalScore
+      ? args.currentHomeScore
+      : args.providerHomeScore !== null
+        ? args.providerHomeScore
+        : args.currentHomeScore,
+    away_score: preserveMlbStatsFinalScore
+      ? args.currentAwayScore
+      : args.providerAwayScore !== null
+        ? args.providerAwayScore
+        : args.currentAwayScore,
+    preservedMlbStatsFinalScore: preserveMlbStatsFinalScore,
+  };
+}
+
 /**
  * Fetch the latest provider snapshot for a slate and update the
  * games table where any field has changed.
@@ -167,15 +195,23 @@ export async function ingestFinalScores(args: {
     else if (cls === "void") result.voidCount++;
 
     // Phase 6B.26 — Preserve non-null DB scores when BDL returns null.
-    // 6B.23 made MLB Stats authoritative for final scores; without this
-    // guard, the next BDL ingest pass overwrites those scores back to
-    // null whenever BDL doesn't yet have the box score. The result was
-    // an oscillation: MLB Stats fills scores → BDL clears them → ML/OU
-    // grades flip back to pending. Rule: NEVER let a non-null DB value
-    // get clobbered by a null provider value. We accept provider values
-    // that are non-null OR introduce new data (DB was null before).
-    const nextHomeScore = provider.home_score !== null ? provider.home_score : g.home_score;
-    const nextAwayScore = provider.away_score !== null ? provider.away_score : g.away_score;
+    // 6B.23 made MLB Stats authoritative for MLB final scores; without
+    // this guard, the next BDL ingest pass can overwrite those scores
+    // whenever BDL is late, incomplete, or mismatched on a doubleheader.
+    // Rule: for MLB, once the DB already has final scores from the
+    // MLB Stats linescore step, BDL may update status but not scores.
+    // For other sports, and for MLB rows still missing scores, accept
+    // provider values when they are non-null.
+    const nextScores = resolveScoreIngestNextScores({
+      sport,
+      currentStatus: g.status,
+      currentHomeScore: g.home_score,
+      currentAwayScore: g.away_score,
+      providerHomeScore: provider.home_score,
+      providerAwayScore: provider.away_score,
+    });
+    const nextHomeScore = nextScores.home_score;
+    const nextAwayScore = nextScores.away_score;
     // Status stays provider-driven (BDL is fine for status; MLB Stats
     // also writes "STATUS_FINAL" via the 6B.23 path, so values agree).
     const nextStatus = provider.status;

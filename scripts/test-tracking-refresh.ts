@@ -11,6 +11,7 @@
 
 import { computeRefreshDates } from "../lib/services/trackingRefreshService";
 import { shouldUpsertGrade } from "../lib/services/predictionGradingService";
+import { resolveScoreIngestNextScores } from "../lib/services/scoreIngestService";
 
 let pass = 0;
 let fail = 0;
@@ -72,6 +73,51 @@ check("existing Toss-Up void + now-actionable FI pending → allowed", shouldUps
 check("existing win + new loss → allowed (re-grade)", shouldUpsertGrade({ existingResult: "win", newResult: "loss" }));
 check("existing push + new push → allowed (no-op)", shouldUpsertGrade({ existingResult: "push", newResult: "push" }));
 check("undefined existing → upsert allowed", shouldUpsertGrade({ existingResult: undefined, newResult: "win" }));
+
+// ── MLB final score preservation ─────────────────────────────────
+console.log("\n━━━ score ingest MLB final-score preservation ━━━");
+{
+  const next = resolveScoreIngestNextScores({
+    sport: "mlb",
+    currentStatus: "STATUS_FINAL",
+    currentHomeScore: 7,
+    currentAwayScore: 6,
+    providerHomeScore: 3,
+    providerAwayScore: 2,
+  });
+  check(
+    "MLB Stats final score already present → BDL cannot overwrite it",
+    next.home_score === 7 && next.away_score === 6 && next.preservedMlbStatsFinalScore,
+  );
+}
+{
+  const next = resolveScoreIngestNextScores({
+    sport: "mlb",
+    currentStatus: "STATUS_IN_PROGRESS",
+    currentHomeScore: null,
+    currentAwayScore: null,
+    providerHomeScore: 3,
+    providerAwayScore: 2,
+  });
+  check(
+    "MLB missing scores → provider can fill scores",
+    next.home_score === 3 && next.away_score === 2 && !next.preservedMlbStatsFinalScore,
+  );
+}
+{
+  const next = resolveScoreIngestNextScores({
+    sport: "nba",
+    currentStatus: "STATUS_FINAL",
+    currentHomeScore: 101,
+    currentAwayScore: 99,
+    providerHomeScore: 102,
+    providerAwayScore: 98,
+  });
+  check(
+    "non-MLB sports keep provider-driven final-score updates",
+    next.home_score === 102 && next.away_score === 98 && !next.preservedMlbStatsFinalScore,
+  );
+}
 
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);

@@ -167,6 +167,12 @@ function deterministicGradeAlignment(
   const strongEdge = e >= (evidence.identity.marketType === "ML" ? 6 : evidence.identity.marketType === "TOTAL" ? 4 : 3);
   const veryStrongEdge = e >= (evidence.identity.marketType === "ML" ? 9 : evidence.identity.marketType === "TOTAL" ? 6 : 5);
   const frictionOverride = strongEdge && playable && !dataRisk;
+  const mlHeavyThinRiskOnly =
+    evidence.identity.marketType === "ML" &&
+    publicGrade &&
+    heavyThin &&
+    !dataRisk &&
+    !(highFriction && !frictionOverride);
 
   if (blocked) {
     classification = publicGrade ? "overgraded" : "risk_only";
@@ -174,14 +180,21 @@ function deterministicGradeAlignment(
     supportedDowngrade = publicGrade;
     riskOnlyImprovement = !publicGrade;
     reasons.push("blocked_core_evidence");
-  } else if (publicGrade && (!playable || heavyThin || dataRisk || (highFriction && !frictionOverride))) {
+  } else if (mlHeavyThinRiskOnly) {
+    classification = "risk_only";
+    riskOnlyImprovement = true;
+    reasons.push("heavy_juice_thin_edge_needs_reader_thesis");
+  } else if (publicGrade && (!playable || dataRisk || (highFriction && !frictionOverride))) {
     classification = "overgraded";
     supportedDowngrade = true;
     suggested = original === "Best Angle" ? "Lean" : "Watchlist";
     if (!playable) reasons.push("current_number_not_playable");
-    if (heavyThin) reasons.push("heavy_juice_thin_edge");
     if (dataRisk) reasons.push("material_data_warning");
     if (highFriction && !frictionOverride) reasons.push("high_market_friction_without_override");
+  } else if (publicGrade && heavyThin) {
+    classification = "risk_only";
+    riskOnlyImprovement = true;
+    reasons.push("heavy_juice_thin_edge_needs_reader_thesis");
   } else if (nonActionable && playable && evidenceReview.gradeChangeAllowed && veryStrongEdge && !highFriction && !dataRisk) {
     classification = "undergraded";
     supportedPromotion = true;

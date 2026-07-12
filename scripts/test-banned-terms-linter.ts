@@ -81,7 +81,7 @@ const allowedPhrases = [
   "Sharper price check shows the model on the same side.",
   "Market value sits with the underdog tonight.",
   "Market support is consistent with the pick.",
-  "Consensus Splits support the pick.",
+  "Market split support is on the same side as the pick.",
   "Line moved against the public — usually a tell.",
   "Driver: starter ERA edge and park factor.",
   "Risk: lineup changes after the post.",

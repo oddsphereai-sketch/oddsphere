@@ -3,10 +3,10 @@
  *
  * Reads prediction_records + prediction_grades and produces the
  * aggregates the admin/member tracking pages render. Service-level
- * aggregation (no materialized table) — the slate volume (15 games
- * × 3 markets × 1 day ≈ 45 rows/day) means even a slow scan is
- * sub-second. When tracking volume grows, a materialized refresh
- * fits naturally on top of this same shape.
+ * aggregation (no materialized table). The member API wraps this service
+ * with response caching because the history window grows every slate.
+ * When tracking volume grows further, a materialized refresh fits naturally
+ * on top of this same shape.
  *
  * Aggregation dimensions:
  *   - by sport / market / model_version
@@ -216,6 +216,68 @@ type Row = {
 
 const TRACKING_PAGE_SIZE = 1000;
 const TRACKING_GRADE_ID_CHUNK_SIZE = 500;
+const TRACKING_RECORD_SELECT = [
+  "id",
+  "game_prediction_id",
+  "game_id",
+  "external_id",
+  "sport",
+  "slate_date",
+  "game_date",
+  "matchup",
+  "market",
+  "pick",
+  "side",
+  "line_value",
+  "odds_american",
+  "odds_decimal",
+  "model_used",
+  "model_version",
+  "prediction_source",
+  "confidence",
+  "model_probability",
+  "market_probability",
+  "edge",
+  "expected_value",
+  "play_grade",
+  "prediction_type",
+  "best_angle",
+  "no_bet",
+  "no_bet_reason",
+  "market_aligned",
+  "data_quality_tier",
+  "source_quality",
+  "provisional",
+  "held",
+  "hold_reason",
+  "launch_day",
+  "manual_outcome_expected",
+  "locked_at",
+  "published_at",
+  "created_at",
+  "snapshot_json",
+  "calibration_version",
+].join(",");
+const TRACKING_GRADE_SELECT = [
+  "id",
+  "prediction_record_id",
+  "game_id",
+  "market",
+  "result",
+  "push",
+  "win",
+  "loss",
+  "void",
+  "pending",
+  "actual_home_score",
+  "actual_away_score",
+  "actual_total",
+  "actual_first_inning_runs",
+  "winning_team",
+  "graded_at",
+  "grade_source",
+  "grade_notes",
+].join(",");
 
 function storedGrade(record: PredictionRecordRow): string {
   return String(record.play_grade ?? "").trim().toLowerCase();
@@ -323,21 +385,18 @@ export function dedupePredictionRecordsForTracking(records: PredictionRecordRow[
 }
 
 /**
- * Tracking must match the member-facing locked grade, not a second grading pass.
- * Same-day guardrail / actionability logic belongs upstream, before the card
- * locks. Once a prediction is stored, tracking buckets by that stored grade so
- * the member page cannot later reclassify a Lean as a Best Angle or vice versa.
+ * Tracking must match the official locked/display grade, not a second grading
+ * pass. Explicit tracking display corrections are the repair path; otherwise
+ * the member-facing lock wins. Same-day guardrail / actionability logic belongs
+ * upstream, before the card locks.
  */
 export function effectiveTrackingPlayGrade(record: PredictionRecordRow): string {
-  const memberFacingAtLock = memberFacingGradeAtLock(record);
-  if (memberFacingAtLock !== null) return memberFacingAtLock;
   const override = displayGradeOverride(record);
   if (override !== null) return override;
+  const memberFacingAtLock = memberFacingGradeAtLock(record);
+  if (memberFacingAtLock !== null) return memberFacingAtLock;
   const grade = storedGrade(record);
-  if (record.no_bet === true) return "no_play";
   if (grade === "best_angle" && record.best_angle === false) return "lean";
-  if (grade === "toss_up") return "watchlist";
-  if (grade === "" && record.no_bet === false) return "watchlist";
   return grade;
 }
 
@@ -353,7 +412,7 @@ async function fetchAllPredictionRecords(
   for (let fromRow = 0; ; fromRow += TRACKING_PAGE_SIZE) {
     let query = supabase
       .from("prediction_records")
-      .select("*")
+      .select(TRACKING_RECORD_SELECT)
       .order("id", { ascending: true })
       .range(fromRow, fromRow + TRACKING_PAGE_SIZE - 1);
     if (opts.sport !== undefined) query = query.eq("sport", opts.sport);
@@ -361,7 +420,7 @@ async function fetchAllPredictionRecords(
     if (opts.to !== undefined) query = query.lte("slate_date", opts.to);
     const { data, error } = await query;
     if (error) return { rows: out, error };
-    const page = (data ?? []) as PredictionRecordRow[];
+    const page = ((data ?? []) as unknown) as PredictionRecordRow[];
     out.push(...page);
     if (page.length < TRACKING_PAGE_SIZE) break;
   }
@@ -377,9 +436,9 @@ async function fetchGradesForRecordIds(
     const ids = recordIds.slice(i, i + TRACKING_GRADE_ID_CHUNK_SIZE);
     const { data } = await supabase
       .from("prediction_grades")
-      .select("*")
+      .select(TRACKING_GRADE_SELECT)
       .in("prediction_record_id", ids);
-    out.push(...((data ?? []) as PredictionGradeRow[]));
+    out.push(...(((data ?? []) as unknown) as PredictionGradeRow[]));
   }
   return out;
 }

@@ -72,8 +72,14 @@ const FI_TOSS_UP_MIN = FI_YRFI_THRESHOLD;
 const FI_TOSS_UP_MAX = FI_NRFI_THRESHOLD;
 
 // Best Angle gates (post-classification).
-const FI_BEST_ANGLE_MIN_EDGE_PCT = 4.0;
+//
+// 2026-07-11 grade-policy replay: the old absolute-edge FI gate let
+// model-confidence rows through even when the picked side was negative value.
+// Reserve Best Angle for signed positive edge with a playable picked-side
+// price; 30-day replay favored the >=6pp signed-edge cohort.
+const FI_BEST_ANGLE_MIN_EDGE_PCT = 6.0;
 const FI_BEST_ANGLE_MIN_CONFIDENCE = 56;
+const FI_BEST_ANGLE_MIN_PRICE_EXCLUSIVE = -130;
 // MLB-P0 post-shrink large-edge backstop (abs edge %). FI is not
 // probability-regularized in P0 (its market prob is null on ~100% of
 // rows), but where a market line DOES exist an implausibly large
@@ -269,15 +275,11 @@ export function runMlbFirstInningModelV2(
 
   const freshDataBlockers: string[] = [];
   if (!hasMarket) freshDataBlockers.push("fi_market_not_fresh_or_two_sided");
-  // Starter FI split samples can be sparse in the morning slate. A known,
-  // current starter with season-stat proxy support is publishable and still
-  // handled by the downstream quality/grade controls; only a missing starter
-  // identity/data source should hard-hold FI.
-  if (indep.feature_audit.away_starter_fi.source === "missing") {
-    freshDataBlockers.push("away_batting_opposing_starter_fi_missing");
+  if (indep.feature_audit.away_starter_fi.source !== "preferred") {
+    freshDataBlockers.push(`away_batting_opposing_starter_fi_${indep.feature_audit.away_starter_fi.source}`);
   }
-  if (indep.feature_audit.home_starter_fi.source === "missing") {
-    freshDataBlockers.push("home_batting_opposing_starter_fi_missing");
+  if (indep.feature_audit.home_starter_fi.source !== "preferred") {
+    freshDataBlockers.push(`home_batting_opposing_starter_fi_${indep.feature_audit.home_starter_fi.source}`);
   }
   const awayLineupPublishable =
     indep.feature_audit.away_lineup.source === "preferred" ||
@@ -342,6 +344,12 @@ export function runMlbFirstInningModelV2(
   let fi_no_bet_reason: string | null = null;
   let fi_best_angle_eligible = false;
   let fi_miscalibration_flag = false;
+  const fiPickedOdds =
+    fi_pick === "NRFI"
+      ? market.nrfi_odds_american
+      : fi_pick === "YRFI"
+        ? market.yrfi_odds_american
+        : null;
   const keyFeatureMissing =
     indep.feature_audit.away_starter_fi.source === "missing" ||
     indep.feature_audit.home_starter_fi.source === "missing";
@@ -361,9 +369,13 @@ export function runMlbFirstInningModelV2(
     fi_play_grade = "lean";
     fi_play_grade_reason = "fi_best_angle_blocked_fallback";
     fi_no_bet_reason = "Provisional / key feature missing; lean only.";
+  } else if (fi_edge_pct !== null && fi_edge_pct < 0) {
+    fi_play_grade = "no_bet";
+    fi_play_grade_reason = "fi_no_bet_negative_edge";
+    fi_no_bet_reason = `Negative FI edge (${fi_edge_pct.toFixed(1)}%); market price is richer than the model.`;
   } else if (
     fi_edge_pct !== null &&
-    Math.abs(fi_edge_pct) > FI_BEST_ANGLE_MISCAL_CEILING_PCT
+    fi_edge_pct > FI_BEST_ANGLE_MISCAL_CEILING_PCT
   ) {
     // MLB-P0: implausibly large FI edge → possible model-market
     // disagreement, not a top play. Cap to lean + flag.
@@ -374,7 +386,9 @@ export function runMlbFirstInningModelV2(
   } else if (
     fi_edge_pct !== null &&
     fi_edge_pct >= FI_BEST_ANGLE_MIN_EDGE_PCT &&
-    fi_confidence >= FI_BEST_ANGLE_MIN_CONFIDENCE
+    fi_confidence >= FI_BEST_ANGLE_MIN_CONFIDENCE &&
+    fiPickedOdds !== null &&
+    fiPickedOdds > FI_BEST_ANGLE_MIN_PRICE_EXCLUSIVE
   ) {
     fi_play_grade = "best_angle";
     fi_play_grade_reason = "fi_best_angle_edge";

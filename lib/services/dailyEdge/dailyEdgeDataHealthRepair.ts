@@ -24,6 +24,7 @@ export type DailyEdgeDataHealthRepairAttempt = {
   status:
     | "eligible"
     | "repaired"
+    | "still_monitoring"
     | "still_unhealthy"
     | "skipped_locked"
     | "skipped_entering_lock"
@@ -84,6 +85,8 @@ function repairableFindings(report: DailyEdgeDataHealthReport): DailyEdgeDataHea
   if (report.sport !== "mlb") return [];
   return report.findings.filter((finding) =>
     finding.code === "fi_held_no_actionable_side" ||
+    finding.code === "fi_publishable_degraded_stats" ||
+    finding.code === "fi_provisional_lineup_pending" ||
     finding.code === "fi_starter_ingestion_miss" ||
     finding.code === "fi_model_hold_missing_inputs" ||
     finding.code === "fi_model_hold_provider_gap" ||
@@ -441,21 +444,92 @@ export async function runDailyEdgeDataHealthRepair(args: {
     };
   } else {
     try {
-      const model = await generatePredictionsForSlate(args.report.sport, args.report.date, "morning_draft", {
-        writeToDb: true,
-        gameExternalIdsFilter: uniqueEligibleExternalIds,
-        respectLocks: true,
-      });
+      const previousFiModelVersion = process.env.FIRST_INNING_MODEL_VERSION;
+      if (args.report.sport === "mlb" && (previousFiModelVersion === undefined || previousFiModelVersion.trim() === "")) {
+        process.env.FIRST_INNING_MODEL_VERSION = "fi_v2";
+      }
+      let model: Awaited<ReturnType<typeof generatePredictionsForSlate>>;
+      try {
+        model = await generatePredictionsForSlate(args.report.sport, args.report.date, "morning_draft", {
+          writeToDb: true,
+          gameExternalIdsFilter: uniqueEligibleExternalIds,
+          respectLocks: true,
+          modelVersion: args.report.sport === "mlb" ? "v2_2" : undefined,
+        });
+      } finally {
+        if (previousFiModelVersion === undefined) {
+          delete process.env.FIRST_INNING_MODEL_VERSION;
+        } else {
+          process.env.FIRST_INNING_MODEL_VERSION = previousFiModelVersion;
+        }
+      }
       const ingest = model.db_writes?.ingest;
       const modelWrites = (ingest?.inserted ?? 0) + (ingest?.updated ?? 0);
       recordsUpdated += modelWrites;
+      let legacyDuplicatesRemoved = 0;
+      if (args.report.sport === "mlb") {
+        const targetedGameIds = uniqueEligibleExternalIds
+          .map((externalId) => gamesByExternalId.get(externalId)?.id)
+          .filter((id): id is number => typeof id === "number" && Number.isFinite(id));
+        if (targetedGameIds.length > 0) {
+          const { data: duplicateRows, error: duplicateLoadErr } = await supabase
+            .from("prediction_records")
+            .select("id, game_id, market, model_version, locked_at")
+            .in("game_id", targetedGameIds)
+            .eq("sport", "mlb")
+            .eq("slate_date", args.report.date)
+            .in("market", ["moneyline", "total"]);
+          if (duplicateLoadErr) {
+            errors.push(`automodel_legacy_duplicate_cleanup_load: ${duplicateLoadErr.message}`);
+          } else {
+            const rows = (duplicateRows ?? []) as Array<{
+              id: number;
+              game_id: number;
+              market: string;
+              model_version: string | null;
+              locked_at: string | null;
+            }>;
+            const hasV22 = new Set(
+              rows
+                .filter((row) => row.model_version === "auto_v2.2_mlb_full_game_projection")
+                .map((row) => `${row.game_id}::${row.market}`),
+            );
+            const legacyIds = rows
+              .filter((row) =>
+                row.locked_at === null &&
+                row.model_version === "auto_v1.0_mlb_rules" &&
+                hasV22.has(`${row.game_id}::${row.market}`),
+              )
+              .map((row) => row.id);
+            if (legacyIds.length > 0) {
+              const { data: deletedRows, error: duplicateDeleteErr } = await supabase
+                .from("prediction_records")
+                .delete()
+                .in("id", legacyIds)
+                .eq("sport", "mlb")
+                .eq("slate_date", args.report.date)
+                .eq("model_version", "auto_v1.0_mlb_rules")
+                .is("locked_at", null)
+                .select("id");
+              if (duplicateDeleteErr) {
+                errors.push(`automodel_legacy_duplicate_cleanup_delete: ${duplicateDeleteErr.message}`);
+              } else {
+                legacyDuplicatesRemoved = deletedRows?.length ?? 0;
+              }
+            }
+          }
+        }
+      }
       steps.automodel = {
         targetedExternalIds: uniqueEligibleExternalIds,
+        modelVersion: args.report.sport === "mlb" ? "v2_2" : null,
+        fiWriterMode: args.report.sport === "mlb" ? (previousFiModelVersion?.trim() ? previousFiModelVersion : "fi_v2") : null,
         predictionsBuilt: model.predictions.length,
         heldCount: model.held_count,
         pickNullCounts: model.pick_null_counts,
         recordsUpdated: modelWrites,
         errors: model.errors,
+        legacyDuplicatesRemoved,
         marketSignals: model.db_writes?.market_signals ?? null,
         grades: model.db_writes?.grades ?? null,
       };
@@ -484,8 +558,16 @@ export async function runDailyEdgeDataHealthRepair(args: {
       byCode: post.byCode,
       unresolvedBlockingOrHigh: post.unresolvedBlockingOrHigh,
     };
+    const postRepairableFindings = repairableFindings(post);
     const postBadExternalIds = new Set(
-      repairableFindings(post)
+      postRepairableFindings
+        .filter((finding) => finding.severity === "blocking" || finding.severity === "high")
+        .map((finding) => numberFromDetails(finding, "externalId"))
+        .filter((id): id is number => id !== null),
+    );
+    const postMonitoredExternalIds = new Set(
+      postRepairableFindings
+        .filter((finding) => finding.severity !== "blocking" && finding.severity !== "high")
         .map((finding) => numberFromDetails(finding, "externalId"))
         .filter((id): id is number => id !== null),
     );
@@ -495,6 +577,10 @@ export async function runDailyEdgeDataHealthRepair(args: {
         attempt.status = "still_unhealthy";
         attempt.message = "Repair ran, but the post-repair monitor still sees this gap.";
         stillUnhealthyExternalIds.add(attempt.externalId);
+      } else if (postMonitoredExternalIds.has(attempt.externalId)) {
+        attempt.status = "still_monitoring";
+        attempt.message = "Repair ran; no blocking/high gap remains, but the monitor still tracks a publishable medium follow-up.";
+        repairedExternalIds.add(attempt.externalId);
       } else {
         attempt.status = "repaired";
         attempt.message = "Post-repair monitor no longer reports this repairable gap.";

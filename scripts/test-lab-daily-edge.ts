@@ -27,7 +27,7 @@
 // call time, so this assignment is effective.
 process.env.ODDSPHERE_DATA_MODE = "development";
 
-import { GET as dailyEdge } from "../app/api/lab/daily-edge/route";
+import { GET as dailyEdge, __TEST__ as dailyEdgeTest } from "../app/api/lab/daily-edge/route";
 import { supabase } from "../lib/db/supabase";
 import type {
   DailyEdgeGameDto,
@@ -94,6 +94,88 @@ const VALID_MARKET_SIGNALS = new Set<MarketSignal>([
 ]);
 
 async function main() {
+  section("Source-aware split sections");
+  {
+    const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
+      [
+        {
+          canonical_event_id: "12345",
+          market_type: "moneyline",
+          selection_key: "12345:moneyline:away",
+          provider: "sharpapi",
+          source_book: "circa",
+          source_type: "sharp_adjacent_book",
+          bets_pct: 0.62,
+          money_pct: 0.58,
+          source_observed_at: "2026-07-10T13:00:00Z",
+          fetched_at: "2026-07-10T13:00:00Z",
+        },
+        {
+          canonical_event_id: "12345",
+          market_type: "moneyline",
+          selection_key: "12345:moneyline:home",
+          provider: "sharpapi",
+          source_book: "circa",
+          source_type: "sharp_adjacent_book",
+          bets_pct: 0.38,
+          money_pct: 0.42,
+          source_observed_at: "2026-07-10T13:00:00Z",
+          fetched_at: "2026-07-10T13:00:00Z",
+        },
+      ],
+      [
+        {
+          external_id: 12345,
+          away_team: { abbreviation: "BOS" },
+          home_team: { abbreviation: "NYY" },
+        },
+      ] as never,
+    );
+    const sharpBook = sections.get("12345::moneyline")?.sharpBook ?? null;
+    check("Circa source rows render Sharp Book Splits", sharpBook?.label === "Sharp Book Splits");
+    check("Circa source rows keep both sides", sharpBook?.rows.length === 2, `got: ${sharpBook?.rows.length ?? 0}`);
+    check("Circa source rows normalize percentages", sharpBook?.rows[0]?.moneyPct === 58 && sharpBook.rows[1]?.moneyPct === 42);
+  }
+  {
+    const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
+      [
+        {
+          canonical_event_id: "67890",
+          market_type: "total",
+          selection_key: "67890:total:over",
+          provider: "sharpapi",
+          source_book: null,
+          source_type: "sharp_adjacent_book",
+          bets_pct: 0.44,
+          money_pct: 0.61,
+          source_observed_at: "2026-07-10T13:00:00Z",
+          fetched_at: "2026-07-10T13:00:00Z",
+        },
+        {
+          canonical_event_id: "67890",
+          market_type: "total",
+          selection_key: "67890:total:under",
+          provider: "sharpapi",
+          source_book: null,
+          source_type: "sharp_adjacent_book",
+          bets_pct: 0.56,
+          money_pct: 0.39,
+          source_observed_at: "2026-07-10T13:00:00Z",
+          fetched_at: "2026-07-10T13:00:00Z",
+        },
+      ],
+      [
+        {
+          external_id: 67890,
+          away_team: { abbreviation: "BOS" },
+          home_team: { abbreviation: "NYY" },
+        },
+      ] as never,
+    );
+    const sharpBook = sections.get("67890::total")?.sharpBook ?? null;
+    check("Locked sharp-adjacent snapshots without source_book render Sharp Book Splits", sharpBook?.rows.length === 2);
+  }
+
   // ─── Happy path: MLB slate ────────────────────────────────────────────────
   section("GET /api/lab/daily-edge?sport=mlb&date=2026-05-22");
 
@@ -717,11 +799,25 @@ async function main() {
       sharpRead: { key: string; sentence: string };
       modelBreakdown: string | null;
     };
+    type MarketAwareBreakdownFn = (
+      pred: Record<string, unknown>,
+      signals: Array<Record<string, unknown>>,
+      markets: {
+        moneyline: { verdict: { key: string; label: string } };
+        total: { verdict: { key: string; label: string } };
+        firstInning: { verdict: { key: string; label: string } };
+      }
+    ) => {
+      verdict: { key: string; label: string };
+      sharpRead: { key: string; sentence: string };
+      modelBreakdown: string | null;
+    };
     const {
       extractModelBreakdown,
       deriveVerdictForRow,
       projectSharpSignalsForRead,
       buildBreakdownDto,
+      marketAwareBreakdownDto,
       GRADE_RANK,
     } = await import("../app/api/lab/daily-edge/route").then(
       (m) =>
@@ -735,6 +831,7 @@ async function main() {
             deriveVerdictForRow: DeriveVerdictFn;
             projectSharpSignalsForRead: ProjectFn;
             buildBreakdownDto: BuildBreakdownFn;
+            marketAwareBreakdownDto: MarketAwareBreakdownFn;
             GRADE_RANK: Record<string, number>;
           };
         }).__TEST__
@@ -1041,24 +1138,6 @@ async function main() {
         r.verdict === "best_angle",
       );
     }
-    {
-      // Totals no longer use the stale confirmation-only flag as a hard
-      // pre-lock demotion; active conflict/data/value gates still apply.
-      const r = deriveVerdictForRow(
-        predRow({
-          ou_grade: "market_watch",
-          ou_confidence: 60,
-          predicted_ou_side: "over",
-          sport_specific: { v2_2_audit: { ou_best_angle_eligible: true, ou_requires_market_confirmation: true, ou_edge_pct: 4 } },
-          locked_at: null,
-        }),
-        [],
-      );
-      check(
-        "[MLB-P0.4] total requires_confirmation flag is audit-only pre-lock",
-        r.verdict === "best_angle",
-      );
-    }
 
     // ─── projectSharpSignalsForRead: market normalization + direction ─────
     section("Phase 4.1.8.B — projectSharpSignalsForRead");
@@ -1214,6 +1293,27 @@ async function main() {
       check(
         "[4.1.8.B.25] both v2 and legacy present → modelBreakdown is v2",
         r.modelBreakdown === "v2 fresh text"
+      );
+    }
+    {
+      const r = marketAwareBreakdownDto(
+        predRow({
+          ml_grade: "best_signal",
+          ml_confidence: 64,
+          sport_specific: {
+            breakdown_v2: { model_breakdown: "legacy row grade says Best Angle." },
+          },
+        }),
+        [],
+        {
+          moneyline: { verdict: { key: "lean", label: "Lean" } },
+          total: { verdict: { key: "watchlist", label: "Watchlist" } },
+          firstInning: { verdict: { key: "no_play", label: "No Play" } },
+        }
+      );
+      check(
+        "[4.1.8.B.26] market-aware breakdown cannot show game Best Angle when strongest tracked market is Lean",
+        r.verdict.key === "lean" && r.verdict.label === "Lean"
       );
     }
   }

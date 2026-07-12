@@ -14,10 +14,15 @@ import {
   buildLineMovementSnapshot,
   buildDataIntegritySnapshot,
   applyPlayGradeGate,
+  GATE_TOTAL_LEAN_MARKET_FRICTION_MAX_EDGE_PCT,
+  FI_VALIDATED_BEST_ANGLE_RULE_ID,
+  TOTAL_VALIDATED_LEAN_RULE_ID,
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
   GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
+  MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
 } from "../lib/services/predictionRecordService";
 import { MLB_MODEL_LAYER_VERSION_SCHEMA } from "../lib/automodel/mlbModelLayerVersions";
+import { TOTALS_MARKET_OPPOSED_FLIP_RULE_ID } from "../lib/services/totalsMeanFlip";
 
 // Self-consistent expected-grade helper: apply the production gate to a record's
 // own fields (fixtures don't set posterior_home_diff → run-gap null, so the
@@ -38,8 +43,14 @@ function expectTotalGrade(raw: string | null, rec: { model_probability: number |
         ? GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB
         : null;
   if (raw === "best_angle" && minProb !== null && rec.model_probability !== null && rec.model_probability < minProb) {
-    return "lean";
+    publicGrade = "lean";
   }
+  const gapCap = (rec as any).snapshot_json?.total_lean_projection_gap_cap;
+  if (publicGrade === "lean" && gapCap?.action === "cap_to_watchlist") return "market_aligned";
+  const frictionCap = (rec as any).snapshot_json?.total_lean_market_friction_cap;
+  if (publicGrade === "lean" && frictionCap?.action === "cap_to_watchlist") return "market_aligned";
+  const unvalidatedCap = (rec as any).snapshot_json?.total_lean_recalibration_cap;
+  if (publicGrade === "lean" && unvalidatedCap?.action === "cap_to_watchlist") return "market_aligned";
   return expectGate(publicGrade, rec);
 }
 
@@ -66,20 +77,6 @@ const freshFiLines = [
   { game_id: 14771, market_type: "first_inning_total", side: "over", sportsbook: "pinnacle", odds_american: 105, line_value: 0.5, fetched_at: "2026-06-06T16:10:00Z" },
 ];
 const freshFiLinesByGameId = new Map([[14771, freshFiLines]]);
-const restoredMlBestAngleOddsByGameId = new Map([[14771, {
-  mlHomeOdds: -170,
-  mlAwayOdds: 150,
-  ouOverOdds: null,
-  ouUnderOdds: null,
-  oddsSourceMl: {
-    home: { source: "lines" as const, book: "pinnacle", odds: -170, line: null, observedAt: "2026-06-06T16:10:00Z" },
-    away: { source: "lines" as const, book: "pinnacle", odds: 150, line: null, observedAt: "2026-06-06T16:10:00Z" },
-  },
-  oddsSourceOu: {
-    over: { source: "unavailable" as const, book: null, odds: null, line: null, observedAt: null },
-    under: { source: "unavailable" as const, book: null, odds: null, line: null, observedAt: null },
-  },
-}]]);
 
 const v21SportSpecific = {
   model_used: "v2_1",
@@ -94,25 +91,6 @@ const v21SportSpecific = {
   v2_data_quality_tier: "high",
   v2_provisional: false,
   v2_1_audit: { market_total: 7.5, market_home_win_prob: 0.5, market_away_win_prob: 0.5 },
-};
-
-const restoredMlBestAngleSportSpecific = {
-  ...v21SportSpecific,
-  hold_picks: [],
-  ml_play_grade: "best_angle",
-  ml_prediction_type: "best_angle",
-  ml_best_angle_eligible: true,
-  ou_best_angle_eligible: false,
-  v2_2_audit: {
-    market_home_win_prob: 0.56,
-    market_away_win_prob: 0.44,
-    ml_model_prob: 0.64,
-    ml_market_prob: 0.56,
-    ml_edge_pct: 6,
-    ml_raw_edge_pct: 8,
-    ml_requires_market_confirmation: false,
-    posterior_home_diff: 0.8,
-  },
 };
 
 const basePrediction = {
@@ -194,12 +172,13 @@ console.log("\n━━━ V2.1 metadata propagation ━━━");
   check("ML pick=home", ml.pick === "home");
   check("ML confidence=54.0", ml.confidence === 54.0);
   check("ML model_probability=0.54", ml.model_probability === 0.54);
-  // Conviction/value gate (2026-06-15): ml_play_grade='lean' is demoted only by
-  // EV<0 / low-conviction-fav / low-total-line — self-consistent with the gate.
-  check("ML play_grade=lean@0.54 matches gate", ml.play_grade === expectGate("lean", ml));
+  // Champion ML writer authority: the public grade sorter is calibrated
+  // separately from raw prediction side. A 54% ML Lean is tracked but no
+  // longer promoted as an actionable Lean.
+  check("ML play_grade=lean@0.54 is capped to Watchlist", ml.play_grade === "market_aligned");
   check("ML best_angle=false", ml.best_angle === false);
-  check("OU Best Angle preserved at the V2.2 total confidence floor", ou.best_angle === true);
-  check("OU play_grade remains Best Angle", ou.play_grade === "best_angle");
+  check("OU low-conviction Best Angle demoted", ou.best_angle === false);
+  check("OU play_grade demoted below Best Angle", ou.play_grade !== "best_angle");
   check("OU line_value=7.5 (from v2_1_audit.market_total)", ou.line_value === 7.5);
   check("Data quality tier=high", ml.data_quality_tier === "high");
   check("Provisional=false", ml.provisional === false);
@@ -266,8 +245,8 @@ console.log("\n━━━ MLB total Under Best Angle quality gate ━━━");
   });
   const ou = recs.find((r) => r.market === "total")!;
   const ba = (ou.snapshot_json as any)?.best_angle_resolution;
-  check("threshold+ Under remains Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
-  check("threshold+ Under quality gate is false", ba?.total_under_quality_gate === false);
+  check("70%+ Under remains Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
+  check("70%+ Under quality gate is false", ba?.total_under_quality_gate === false);
 }
 
 console.log("\n━━━ MLB total Over Best Angle quality gate ━━━");
@@ -334,8 +313,8 @@ console.log("\n━━━ MLB total Over Best Angle quality gate ━━━");
   });
   const ou = recs.find((r) => r.market === "total")!;
   const ba = (ou.snapshot_json as any)?.best_angle_resolution;
-  check("threshold+ Over remains Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
-  check("threshold+ Over quality gate is false", ba?.total_over_quality_gate === false);
+  check("70%+ Over remains Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
+  check("70%+ Over quality gate is false", ba?.total_over_quality_gate === false);
 }
 
 console.log("\n━━━ MLB Best Angle tracking/display guard under market-aware engine ━━━");
@@ -372,44 +351,473 @@ console.log("\n━━━ MLB Best Angle tracking/display guard under market-awar
     });
     const ou = recs.find((r) => r.market === "total")!;
     const ba = (ou.snapshot_json as any)?.best_angle_resolution;
-    check("market-aware totals ignore stale confirmation-only demotion", ou.best_angle === true);
-    check("market-aware totals preserve public Best Angle grade", ou.play_grade === "best_angle");
-    check("market-aware totals snapshot stale confirmation flag as audit-only",
-      ba?.final_best_angle === true &&
-      ba?.requires_confirmation === false &&
-      ba?.raw_requires_confirmation_signal === true &&
-      ba?.demote_reason === null);
-
-    const negativeValueMlLeanPred = {
-      ...basePrediction,
-      ml_confidence: 58,
-      sport_specific: {
-        ...v21SportSpecific,
-        ml_play_grade: "lean",
-        ml_best_angle_eligible: false,
-        v2_2_audit: {
-          ml_model_prob: 0.58,
-          ml_market_prob: 0.57,
-          ml_edge_pct: 1,
-          posterior_home_diff: 1.2,
-        },
-      },
-    };
-    const mlRecs = buildPredictionRecordsFromSlate({
-      sport: "mlb",
-      slateDate: "2026-06-06",
-      launchDay: false,
-      games: [baseGame],
-      predictionByGameId: new Map([[14771, negativeValueMlLeanPred]]),
-      abbrevByTeamId,
-      oddsByGameId: restoredMlBestAngleOddsByGameId,
-    });
-    const ml = mlRecs.find((r) => r.market === "moneyline")!;
-    check("market-aware engine still applies ML Lean value gate", ml.play_grade === "market_aligned");
+    check("market-aware engine still demotes unqualified total Best Angle", ou.best_angle === false);
+    check("market-aware engine demotes unqualified public total grade", ou.play_grade === "market_aligned");
+    check("market-aware engine snapshots Best Angle demotion", ba?.final_best_angle === false && ba?.demote_reason !== null);
   } finally {
     if (previousMarketAware === undefined) delete process.env.MARKET_AWARE_ENGINE_ENABLED;
     else process.env.MARKET_AWARE_ENGINE_ENABLED = previousMarketAware;
   }
+}
+
+console.log("\n━━━ MLB total clean strong Best Angle promotion ━━━");
+{
+  const cleanConfirmedTotalPred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 58,
+    predicted_home_score: 3.6,
+    predicted_away_score: 3.8,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "market_aligned",
+      ou_best_angle_eligible: false,
+      v2_2_audit: {
+        ou_play_grade: "market_aligned",
+        market_total: 8,
+        posterior_total: 7.2,
+        ou_model_prob: 0.58,
+        ou_market_prob: 0.525,
+        ou_edge_pct: 5.5,
+      },
+    },
+  };
+  const openersByGameId = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "total", side: "under", sportsbook: "pinnacle", odds_american: -105, line_value: 8, recorded_at: "2026-07-11T12:00:00Z" },
+    ]],
+  ]);
+  const currentLinesByGameId = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "total", side: "under", sportsbook: "pinnacle", odds_american: -120, line_value: 8, fetched_at: "2026-07-11T16:00:00Z" },
+      { game_id: 14771, market_type: "total", side: "over", sportsbook: "pinnacle", odds_american: 100, line_value: 8, fetched_at: "2026-07-11T16:00:00Z" },
+    ]],
+  ]);
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -120,
+      mlAwayOdds: 110,
+      ouOverOdds: 100,
+      ouUnderOdds: -120,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -120, line: null, observedAt: "2026-07-11T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 110, line: null, observedAt: "2026-07-11T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: 100, line: 8, observedAt: "2026-07-11T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -120, line: 8, observedAt: "2026-07-11T16:00:00Z" },
+      },
+    }],
+  ]);
+  const signalsByGameId = new Map([
+    [14771, [
+      { market_type: "total", side: "under", public_money_pct: 72, public_betting_pct: 45, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+    ]],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, cleanConfirmedTotalPred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    openersByGameId,
+    currentLinesByGameId,
+    signalsByGameId,
+  });
+  const ou = recs.find((r) => r.market === "total")!;
+  const promo = (ou.snapshot_json as any)?.total_clean_confirmed_best_angle_promotion;
+  const ba = (ou.snapshot_json as any)?.best_angle_resolution;
+  check("clean strong total promotes to Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
+  check("clean strong total promotion audit is stamped", promo?.rule_id === "total_clean_strong_best_angle_v4_2026_07_11");
+  check("clean strong total final BA resolution reflects promotion", ba?.clean_confirmed_promotion === true && ba?.final_best_angle === true);
+}
+{
+  const conflictTotalPred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 58,
+    predicted_home_score: 3.6,
+    predicted_away_score: 3.8,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "market_aligned",
+      ou_best_angle_eligible: false,
+      v2_2_audit: {
+        ou_play_grade: "market_aligned",
+        market_total: 8,
+        posterior_total: 7.2,
+        ou_model_prob: 0.58,
+        ou_market_prob: 0.525,
+        ou_edge_pct: 5.5,
+      },
+    },
+  };
+  const currentLinesByGameId = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "total", side: "under", sportsbook: "pinnacle", odds_american: -120, line_value: 8, fetched_at: "2026-07-11T16:00:00Z" },
+      { game_id: 14771, market_type: "total", side: "over", sportsbook: "pinnacle", odds_american: 100, line_value: 8, fetched_at: "2026-07-11T16:00:00Z" },
+    ]],
+  ]);
+  const openersByGameId = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "total", side: "under", sportsbook: "pinnacle", odds_american: 100, line_value: 8, recorded_at: "2026-07-11T12:00:00Z" },
+    ]],
+  ]);
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -120,
+      mlAwayOdds: 110,
+      ouOverOdds: 100,
+      ouUnderOdds: -120,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -120, line: null, observedAt: "2026-07-11T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 110, line: null, observedAt: "2026-07-11T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: 100, line: 8, observedAt: "2026-07-11T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -120, line: 8, observedAt: "2026-07-11T16:00:00Z" },
+      },
+    }],
+  ]);
+  const signalsByGameId = new Map([
+    [14771, [
+      { market_type: "total", side: "over", public_money_pct: 80, public_betting_pct: 50, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+    ]],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, conflictTotalPred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    openersByGameId,
+    currentLinesByGameId,
+    signalsByGameId,
+  });
+  const ou = recs.find((r) => r.market === "total")!;
+  check("opposing public-money conflict blocks clean total promotion", ou.best_angle === false && ou.play_grade !== "best_angle");
+}
+
+console.log("\n━━━ MLB ML clean tight-edge Best Angle promotion ━━━");
+{
+  const cleanTightMlPred = {
+    ...basePrediction,
+    predicted_ml_winner: "home",
+    ml_confidence: 56,
+    predicted_home_score: 4.4,
+    predicted_away_score: 4.0,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ml_play_grade: "market_aligned",
+      ml_best_angle_eligible: false,
+      v2_2_audit: {
+        ml_play_grade: "market_aligned",
+        ml_model_prob: 0.56,
+        ml_market_prob: 0.55,
+        ml_edge_pct: 1.0,
+        posterior_home_diff: 0.4,
+      },
+    },
+  };
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -145,
+      mlAwayOdds: 125,
+      ouOverOdds: 100,
+      ouUnderOdds: -120,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -145, line: null, observedAt: "2026-07-11T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 125, line: null, observedAt: "2026-07-11T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: 100, line: 8, observedAt: "2026-07-11T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -120, line: 8, observedAt: "2026-07-11T16:00:00Z" },
+      },
+    }],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, cleanTightMlPred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    signalsByGameId: new Map(),
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  const promo = (ml.snapshot_json as any)?.ml_clean_tight_edge_best_angle_promotion;
+  const ba = (ml.snapshot_json as any)?.best_angle_resolution;
+  check("clean tight-edge ML promotes to Best Angle", ml.best_angle === true && ml.play_grade === "best_angle");
+  check("clean tight-edge ML promotion audit is stamped", promo?.rule_id === "ml_clean_tight_edge_best_angle_v1_2026_07_11");
+  check("clean tight-edge ML final BA resolution reflects promotion", ba?.clean_tight_edge_promotion === true && ba?.final_best_angle === true);
+}
+
+console.log("\n━━━ MLB market-aware final side correction ━━━");
+{
+  const distanceCapMlPred = {
+    ...basePrediction,
+    predicted_ml_winner: "home",
+    ml_confidence: 56,
+    predicted_home_score: 4.0,
+    predicted_away_score: 4.6,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ml_play_grade: "lean",
+      ml_best_angle_eligible: true,
+      v2_2_audit: {
+        ml_play_grade: "lean",
+        ml_model_prob: 0.56,
+        ml_market_prob: 0.54,
+        ml_edge_pct: 2.0,
+        posterior_home_diff: -0.6,
+        ml_distance_cap_applied: true,
+      },
+    },
+  };
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -145,
+      mlAwayOdds: 125,
+      ouOverOdds: -110,
+      ouUnderOdds: -110,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -145, line: null, observedAt: "2026-07-11T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 125, line: null, observedAt: "2026-07-11T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-11T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-11T16:00:00Z" },
+      },
+    }],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, distanceCapMlPred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    signalsByGameId: new Map(),
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  const correction = (ml.snapshot_json as any)?.market_aware_side_correction;
+  check("ML market-aware correction flips to priced opposite side", ml.pick === "away" && ml.odds_american === 125 && ml.confidence === 56);
+  check("ML market-aware correction can earn calibrated Best Angle", ml.best_angle === true && ml.play_grade === "best_angle" && ml.no_bet === false);
+  check(
+    "ML market-aware correction audit is stamped",
+    correction?.rule_id === MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID &&
+      correction?.market === "moneyline" &&
+      correction?.reasons?.includes("regularization_distance_cap_applied"),
+  );
+}
+{
+  const projectionConflictCorrectedMlPred = {
+    ...basePrediction,
+    predicted_ml_winner: "home",
+    ml_confidence: 56,
+    predicted_home_score: 4.7,
+    predicted_away_score: 4.1,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ml_play_grade: "lean",
+      ml_best_angle_eligible: true,
+      v2_2_audit: {
+        ml_play_grade: "lean",
+        ml_model_prob: 0.56,
+        ml_market_prob: 0.54,
+        ml_edge_pct: 2.0,
+        posterior_home_diff: 0.6,
+        ml_distance_cap_applied: true,
+      },
+    },
+  };
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -105,
+      mlAwayOdds: -115,
+      ouOverOdds: -110,
+      ouUnderOdds: -110,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -105, line: null, observedAt: "2026-07-11T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: -115, line: null, observedAt: "2026-07-11T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-11T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-11T16:00:00Z" },
+      },
+    }],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, projectionConflictCorrectedMlPred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    signalsByGameId: new Map(),
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  const championCorrection = (ml.snapshot_json as any)?.champion_candidate_correction;
+  check("ML market-aware correction clears stale projection-conflict no-bet", ml.pick === "away" && ml.best_angle === true && ml.play_grade === "best_angle" && ml.no_bet === false);
+  check("ML market-aware correction does not keep original-side champion stand-down", championCorrection === null);
+}
+{
+  const splitSignalTotalPred = {
+    ...basePrediction,
+    predicted_ou_side: "over",
+    ou_confidence: 56,
+    predicted_home_score: 4.6,
+    predicted_away_score: 4.5,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "lean",
+      ou_best_angle_eligible: true,
+      v2_2_audit: {
+        ou_play_grade: "lean",
+        market_total: 8.5,
+        posterior_total: 9.1,
+        ou_model_prob: 0.56,
+        ou_market_prob: 0.52,
+        ou_edge_pct: 4.0,
+      },
+    },
+  };
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -120,
+      mlAwayOdds: 110,
+      ouOverOdds: -112,
+      ouUnderOdds: 105,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -120, line: null, observedAt: "2026-07-11T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 110, line: null, observedAt: "2026-07-11T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -112, line: 8.5, observedAt: "2026-07-11T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: 105, line: 8.5, observedAt: "2026-07-11T16:00:00Z" },
+      },
+    }],
+  ]);
+  const currentLinesByGameId = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "total", side: "over", sportsbook: "pinnacle", odds_american: -112, line_value: 8.5, fetched_at: "2026-07-11T16:00:00Z" },
+      { game_id: 14771, market_type: "total", side: "under", sportsbook: "pinnacle", odds_american: 105, line_value: 8.5, fetched_at: "2026-07-11T16:00:00Z" },
+    ]],
+  ]);
+  const signalsByGameId = new Map([
+    [14771, [
+      { market_type: "total", side: "over", public_money_pct: 72, public_betting_pct: 45, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+    ]],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, splitSignalTotalPred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    currentLinesByGameId,
+    signalsByGameId,
+  });
+  const ou = recs.find((r) => r.market === "total")!;
+  const correction = (ou.snapshot_json as any)?.market_aware_side_correction;
+  const flip = (ou.snapshot_json as any)?.ou_flip;
+  check("Total market-aware split signal fades to priced opposite side", ou.pick === "under" && ou.odds_american === 105 && ou.confidence === 56);
+  check("Total market-aware correction persists corrected edge", typeof ou.edge === "number" && ou.edge === correction?.corrected_edge_pp);
+  check("Plus-money total market-aware correction can earn calibrated Best Angle", ou.best_angle === true && ou.play_grade === "best_angle" && ou.no_bet === false);
+  check(
+    "Total market-aware correction audit is stamped",
+    correction?.rule_id === MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID &&
+      correction?.market === "total" &&
+      correction?.reasons?.includes("total_split_support_fade") &&
+      flip?.rule_id === MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
+  );
+}
+{
+  const marketOpposedFlipPred = {
+    ...basePrediction,
+    predicted_ou_side: "over",
+    ou_confidence: 51.6,
+    predicted_home_score: 5.2,
+    predicted_away_score: 4.4,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "market_aligned",
+      ou_best_angle_eligible: false,
+      v2_2_audit: {
+        ou_play_grade: "market_aligned",
+        market_total: 9,
+        posterior_total: 10.13,
+        ou_model_prob: 0.5156,
+        ou_market_prob: 0.4872,
+        ou_edge_pct: 2.8,
+      },
+    },
+  };
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -120,
+      mlAwayOdds: 110,
+      ouOverOdds: -105,
+      ouUnderOdds: -117,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -120, line: null, observedAt: "2026-07-11T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 110, line: null, observedAt: "2026-07-11T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -105, line: 9, observedAt: "2026-07-11T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -117, line: 9, observedAt: "2026-07-11T16:00:00Z" },
+      },
+    }],
+  ]);
+  const currentLinesByGameId = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "total", side: "over", sportsbook: "pinnacle", odds_american: -105, line_value: 9, fetched_at: "2026-07-11T16:00:00Z" },
+      { game_id: 14771, market_type: "total", side: "under", sportsbook: "pinnacle", odds_american: -117, line_value: 9, fetched_at: "2026-07-11T16:00:00Z" },
+    ]],
+  ]);
+  const signalsByGameId = new Map([
+    [14771, [
+      { market_type: "total", side: "under", public_money_pct: 70, public_betting_pct: 52, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+    ]],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, marketOpposedFlipPred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    currentLinesByGameId,
+    signalsByGameId,
+  });
+  const ou = recs.find((r) => r.market === "total")!;
+  const flip = (ou.snapshot_json as any)?.ou_flip;
+  const gradeResolution = (ou.snapshot_json as any)?.total_flip_public_grade_resolution;
+  check("Market-opposed weak total flips to the priced opposite side", ou.pick === "under" && ou.odds_american === -117);
+  check("Market-opposed total flip stores Watchlist grade", ou.play_grade === "market_aligned" && ou.best_angle === false && ou.no_bet === false);
+  check(
+    "Market-opposed total flip audit stamps Watchlist floor",
+    flip?.rule_id === TOTALS_MARKET_OPPOSED_FLIP_RULE_ID &&
+      gradeResolution?.action === "store_as_watchlist" &&
+      gradeResolution?.public_play_grade === "market_aligned",
+  );
 }
 
 // ── launch_day flag ─────────────────────────────────────────────────
@@ -610,8 +1018,7 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   // 51pp divergence. Guard should SUPPRESS best_angle.
   const baTorPred = {
     ...basePrediction,
-    ml_confidence: 64,
-    sport_specific: restoredMlBestAngleSportSpecific,
+    sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
   };
   const signalsConflict = new Map([
     [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 78, public_betting_pct: 27, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null }]],
@@ -635,11 +1042,11 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
         (ml.snapshot_json as any)?.champion_candidate_correction?.public_split_conflict === true);
 }
 {
-  // BAL@TOR moneyline with no signals → guard goes neutral, BA passes through.
+  // BAL@TOR moneyline with no signals → public-money guard goes neutral, but
+  // the separate ML grade recalibration can still reject the broad raw BA.
   const baTorPred = {
     ...basePrediction,
-    ml_confidence: 64,
-    sport_specific: restoredMlBestAngleSportSpecific,
+    sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
   };
   const recs = buildPredictionRecordsFromSlate({
     sport: "mlb",
@@ -648,95 +1055,14 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     games: [baseGame],
     predictionByGameId: new Map([[14771, baTorPred]]),
     abbrevByTeamId,
-    oddsByGameId: restoredMlBestAngleOddsByGameId,
     // no signalsByGameId — guard must default to V2.2 raw eligibility
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
-  check("ML best_angle PRESERVED when signals map is absent", ml.best_angle === true);
-}
-{
-  // 2026-07-09 calibrated edge scale: a normal restored ML Best Angle candidate
-  // may stay Best Angle on neutral movement. The old sub-8pp neutral demotion
-  // expected pre-cap edge sizes and starved the board after cap=3 calibration.
-  const baNeutralPred = {
-    ...basePrediction,
-    ml_confidence: 64,
-    sport_specific: restoredMlBestAngleSportSpecific,
-  };
-  const neutralOpeners = new Map([
-    [14771, [
-      { game_id: 14771, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -170, line_value: null, recorded_at: "2026-06-07T08:00:00Z" },
-    ]],
-  ]);
-  const neutralCurrent = new Map([
-    [14771, [
-      { game_id: 14771, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -170, line_value: null, fetched_at: "2026-06-07T16:00:00Z" },
-    ]],
-  ]);
-  const recs = buildPredictionRecordsFromSlate({
-    sport: "mlb",
-    slateDate: "2026-06-07",
-    launchDay: false,
-    games: [baseGame],
-    predictionByGameId: new Map([[14771, baNeutralPred]]),
-    abbrevByTeamId,
-    oddsByGameId: restoredMlBestAngleOddsByGameId,
-    openersByGameId: neutralOpeners,
-    currentLinesByGameId: neutralCurrent,
-  });
-  const ml = recs.find((r) => r.market === "moneyline")!;
-  check("ML calibrated neutral candidate can remain Best Angle",
-    ml.best_angle === true && ml.play_grade === "best_angle",
-    `best_angle=${ml.best_angle} grade=${ml.play_grade}`);
-  check("ML calibrated neutral pass-through is snapshotted",
-    (ml.snapshot_json as any)?.best_angle_resolution?.demote_reason === null);
-  check("ML calibrated neutral member lock stores Best Angle",
-    (ml.snapshot_json as any)?.member_facing_at_lock?.grade === "best_angle");
-}
-{
-  // Explicit large raw-edge confirmation-required candidates still need market
-  // confirmation. This preserves the original safety behavior for true extreme
-  // model-market disagreement without applying it to every capped 3pp edge.
-  const baRequiresConfirmationPred = {
-    ...basePrediction,
-    ml_confidence: 64,
-    sport_specific: {
-      ...restoredMlBestAngleSportSpecific,
-      v2_2_audit: {
-        ...restoredMlBestAngleSportSpecific.v2_2_audit,
-        ml_requires_market_confirmation: true,
-      },
-    },
-  };
-  const neutralOpeners = new Map([
-    [14771, [
-      { game_id: 14771, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -170, line_value: null, recorded_at: "2026-06-07T08:00:00Z" },
-    ]],
-  ]);
-  const neutralCurrent = new Map([
-    [14771, [
-      { game_id: 14771, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -170, line_value: null, fetched_at: "2026-06-07T16:00:00Z" },
-    ]],
-  ]);
-  const recs = buildPredictionRecordsFromSlate({
-    sport: "mlb",
-    slateDate: "2026-06-07",
-    launchDay: false,
-    games: [baseGame],
-    predictionByGameId: new Map([[14771, baRequiresConfirmationPred]]),
-    abbrevByTeamId,
-    oddsByGameId: restoredMlBestAngleOddsByGameId,
-    openersByGameId: neutralOpeners,
-    currentLinesByGameId: neutralCurrent,
-  });
-  const ml = recs.find((r) => r.market === "moneyline")!;
-  check("ML confirmation-required neutral candidate demotes from Best Angle",
-    ml.best_angle === false && ml.play_grade === "lean",
-    `best_angle=${ml.best_angle} grade=${ml.play_grade}`);
-  check("ML confirmation-required demotion is snapshotted",
-    (ml.snapshot_json as any)?.best_angle_resolution?.demote_reason === "large_unconfirmed_regularized_edge");
-  check("ML confirmation-required member lock stores Lean",
-    (ml.snapshot_json as any)?.member_facing_at_lock?.grade === "lean");
+  check(
+    "ML best_angle demoted by grade recalibration when signals map is absent",
+    ml.best_angle === false &&
+      (ml.snapshot_json as any)?.best_angle_resolution?.broad_best_angle_demoted_by_recalibration === true,
+  );
 }
 {
   // Phase 6B.12 — explicit null public_money_pct must be treated as
@@ -744,8 +1070,7 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   // NYY ML / TOR ML this morning.
   const baTorPred = {
     ...basePrediction,
-    ml_confidence: 64,
-    sport_specific: restoredMlBestAngleSportSpecific,
+    sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
   };
   const signalsNullMoney = new Map([
     [14771, [{ market_type: "moneyline", side: "away", public_money_pct: null, public_betting_pct: 33, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null }]],
@@ -758,20 +1083,19 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     predictionByGameId: new Map([[14771, baTorPred]]),
     abbrevByTeamId,
     signalsByGameId: signalsNullMoney,
-    oddsByGameId: restoredMlBestAngleOddsByGameId,
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
   check(
-    "ML best_angle PRESERVED when opp.public_money_pct is null (missing ≠ confirmation)",
-    ml.best_angle === true,
+    "ML best_angle demoted by grade recalibration when opp.public_money_pct is null (missing ≠ conflict)",
+    ml.best_angle === false &&
+      (ml.snapshot_json as any)?.best_angle_resolution?.broad_best_angle_demoted_by_recalibration === true,
   );
 }
 {
   // Below-threshold opposing money (e.g. 57/33) → guard does NOT fire.
   const baTorPred = {
     ...basePrediction,
-    ml_confidence: 64,
-    sport_specific: restoredMlBestAngleSportSpecific,
+    sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
   };
   const signalsBelowThreshold = new Map([
     [14771, [{ market_type: "moneyline", side: "away", public_money_pct: 57, public_betting_pct: 33, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null }]],
@@ -784,10 +1108,13 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
     predictionByGameId: new Map([[14771, baTorPred]]),
     abbrevByTeamId,
     signalsByGameId: signalsBelowThreshold,
-    oddsByGameId: restoredMlBestAngleOddsByGameId,
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
-  check("ML best_angle PRESERVED when opp money <60", ml.best_angle === true);
+  check(
+    "ML best_angle demoted by grade recalibration when opp money <60",
+    ml.best_angle === false &&
+      (ml.snapshot_json as any)?.best_angle_resolution?.broad_best_angle_demoted_by_recalibration === true,
+  );
 }
 {
   // OU side: pick=over, opposite=under has 88% money / 50% bets = 38pp →
@@ -876,6 +1203,234 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
   });
   const ou = recs.find((r) => r.market === "total");
   check("Coherent total: no_bet=false (unchanged)", ou?.no_bet === false);
+}
+{
+  // Champion/current-control: calibrated probability heads no longer suppress
+  // the mean-side reconciliation. If the selected side conflicts with the model
+  // total and no valid mean-side price is available, the total stands down
+  // instead of quietly tracking an incoherent pick.
+  const calibratedHeadPred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 56,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "lean",
+      total_projection_reconciliation: {
+        mean_probability_divergence: true,
+        reconciled_total_side: "under",
+        grade_cap: "watchlist",
+      },
+      mlb_core_model_calibration: {
+        recommendation_uses_calibrated_projection: true,
+        calibrated_probability_head: {
+          selected_side: "under",
+          regularized_probability_over: 0.49,
+        },
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-10",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, calibratedHeadPred]]),
+    abbrevByTeamId,
+    signalsByGameId: new Map(),
+  });
+  const ou = recs.find((r) => r.market === "total");
+  const ouFlip = ou?.snapshot_json?.ou_flip as { action?: string; flipped?: boolean } | null | undefined;
+  check("Calibrated total head: row still writes", ou !== undefined);
+  check("Calibrated total head: stored pick remains model side", ou?.pick === "under" && ou?.side === "under");
+  check("Calibrated total head: divergent/no mean-price stands down", ou?.no_bet === true);
+  check("Calibrated total head: no suppressed-legacy audit remains", ouFlip == null);
+}
+{
+  const projectionOpposedPred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 57,
+    predicted_home_score: 4.1,
+    predicted_away_score: 4.1,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "best_angle",
+      ou_best_angle_eligible: true,
+      v2_2_audit: {
+        ou_play_grade: "best_angle",
+        market_total: 8,
+        ou_model_prob: 0.57,
+        ou_market_prob: 0.5,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-10",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, projectionOpposedPred]]),
+    abbrevByTeamId,
+  });
+  const ou = recs.find((r) => r.market === "total");
+  const cap = (ou?.snapshot_json as any)?.total_lean_projection_gap_cap;
+  check("Total Lean projection-opposed total stands down", ou?.play_grade === null && ou?.no_bet === true);
+  check("Total Lean projection-opposed early stand-down does not need a duplicate cap audit", cap === null);
+}
+{
+  const clearGapPred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 57,
+    predicted_home_score: 3.1,
+    predicted_away_score: 3.2,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "best_angle",
+      ou_best_angle_eligible: true,
+      v2_2_audit: {
+        ou_play_grade: "best_angle",
+        market_total: 8,
+        ou_model_prob: 0.57,
+        ou_market_prob: 0.5,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-10",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, clearGapPred]]),
+    abbrevByTeamId,
+  });
+  const ou = recs.find((r) => r.market === "total");
+  check("Total Lean clear projection gap without price is capped by actionability recalibration", ou?.play_grade === "market_aligned");
+  check("Total Lean clear projection gap has no cap audit", (ou?.snapshot_json as any)?.total_lean_projection_gap_cap === null);
+  check("Total Lean clear projection gap without price records recalibration cap", (ou?.snapshot_json as any)?.total_lean_recalibration_cap?.action === "cap_to_watchlist");
+}
+{
+  const validatedLeanPred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 57,
+    predicted_home_score: 3.4,
+    predicted_away_score: 3.9,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "best_angle",
+      ou_best_angle_eligible: true,
+      v2_2_audit: {
+        ou_play_grade: "best_angle",
+        market_total: 8,
+        posterior_total: 7.3,
+        ou_model_prob: 0.57,
+        ou_market_prob: 0.49,
+        ou_edge_pct: 8,
+      },
+    },
+  };
+  const currentLinesByGameId = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "total", side: "under", sportsbook: "pinnacle", odds_american: -105, line_value: 8, fetched_at: "2026-07-10T16:00:00Z" },
+      { game_id: 14771, market_type: "total", side: "over", sportsbook: "pinnacle", odds_american: -105, line_value: 8, fetched_at: "2026-07-10T16:00:00Z" },
+    ]],
+  ]);
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -120,
+      mlAwayOdds: 110,
+      ouOverOdds: -105,
+      ouUnderOdds: -105,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -120, line: null, observedAt: "2026-07-10T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 110, line: null, observedAt: "2026-07-10T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -105, line: 8, observedAt: "2026-07-10T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -105, line: 8, observedAt: "2026-07-10T16:00:00Z" },
+      },
+    }],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-10",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, validatedLeanPred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    currentLinesByGameId,
+  });
+  const ou = recs.find((r) => r.market === "total");
+  const lean = (ou?.snapshot_json as any)?.total_validated_lean;
+  check("Total Lean validated profile stays Lean", ou?.play_grade === "lean" && ou?.best_angle === false);
+  check("Total Lean validated profile records audit", lean?.rule_id === TOTAL_VALIDATED_LEAN_RULE_ID && lean?.action === "keep_as_lean");
+}
+{
+  const frictionPred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 54,
+    predicted_home_score: 3.1,
+    predicted_away_score: 3.2,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "best_angle",
+      ou_best_angle_eligible: true,
+      v2_2_audit: {
+        ou_play_grade: "best_angle",
+        market_total: 8,
+        posterior_total: 6.3,
+        ou_model_prob: 0.56,
+        ou_market_prob: 0.52,
+        ou_edge_pct: 4,
+      },
+    },
+  };
+  const openersByGameId = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "total", side: "under", sportsbook: "pinnacle", odds_american: -120, line_value: 8, recorded_at: "2026-07-10T12:00:00Z" },
+    ]],
+  ]);
+  const currentLinesByGameId = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "total", side: "under", sportsbook: "pinnacle", odds_american: -105, line_value: 8, fetched_at: "2026-07-10T16:00:00Z" },
+    ]],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-10",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, frictionPred]]),
+    abbrevByTeamId,
+    openersByGameId,
+    currentLinesByGameId,
+  });
+  const ou = recs.find((r) => r.market === "total");
+  const cap = (ou?.snapshot_json as any)?.total_lean_market_friction_cap;
+  check("Total Lean thin edge + market friction caps to Watchlist grade", ou?.play_grade === "market_aligned");
+  check(
+    "Total Lean market friction cap records audit",
+    cap?.rule_id === "total_lean_edge_lt_5_market_friction_cap" &&
+      cap?.edge_pct < GATE_TOTAL_LEAN_MARKET_FRICTION_MAX_EDGE_PCT &&
+      cap?.line_direction === "against_pick",
+    JSON.stringify({
+      cap,
+      gapCap: (ou?.snapshot_json as any)?.total_lean_projection_gap_cap,
+      lineMovement: (ou?.snapshot_json as any)?.line_movement,
+      playGrade: ou?.play_grade,
+      edge: ou?.edge,
+      modelProbability: ou?.model_probability,
+    }),
+  );
 }
 
 // ── Phase 6B.22 — pure helpers for snapshot context ──────────────────
@@ -1128,8 +1683,8 @@ console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━"
         (ml.snapshot_json as any)?.v2_2_audit?.ml_play_grade === "no_bet");
   check("ML snapshot_json.v2_2_audit.ml_no_bet_reason preserved",
         typeof (ml.snapshot_json as any)?.v2_2_audit?.ml_no_bet_reason === "string");
-  check("OU record.play_grade preserves qualified Best Angle",
-        ou.play_grade === "best_angle");
+  check("OU record.play_grade demoted below Best Angle by total quality gate",
+        ou.play_grade !== "best_angle");
 }
 {
   // Provisional / low-quality rows say "not a betting recommendation".
@@ -1163,6 +1718,50 @@ console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━"
   check("Provisional total: grade preserved as provisional", ou.play_grade === "provisional");
 }
 {
+  const unavailable = { source: "unavailable", book: null, odds: null, line: null, observedAt: null } as const;
+  const missingTotalPricePred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 58,
+    sport_specific: {
+      ...v21SportSpecific,
+      ou_play_grade: "lean",
+      ou_best_angle_eligible: true,
+      v2_2_audit: {
+        market_total: 8.5,
+        ou_model_prob: 0.58,
+        ou_market_prob: 0.52,
+        ou_edge_pct: 6,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, missingTotalPricePred]]),
+    abbrevByTeamId,
+    oddsByGameId: new Map([[14771, {
+      mlHomeOdds: null,
+      mlAwayOdds: null,
+      ouOverOdds: null,
+      ouUnderOdds: null,
+      oddsSourceMl: { home: unavailable, away: unavailable },
+      oddsSourceOu: { over: unavailable, under: unavailable },
+    }]]),
+  });
+  const ou = recs.find((r) => r.market === "total")!;
+  check("Missing total price: row still writes for audit", ou.pick === "under" && ou.line_value === 8.5);
+  check("Missing total price: no_bet=true", ou.no_bet === true);
+  check("Missing total price: never Best Angle", ou.best_angle === false);
+  check("Missing total price: public play grade cleared", ou.play_grade === null);
+  check(
+    "Missing total price: no_bet_reason names price/implied gap",
+    typeof ou.no_bet_reason === "string" && /real-book total price|market-implied/i.test(ou.no_bet_reason),
+  );
+}
+{
   // V2.2 'held' on ML — same translator behavior.
   const heldSp = {
     ...v21SportSpecific,
@@ -1179,7 +1778,7 @@ console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━"
   const ou = recs.find((r) => r.market === "total")!;
   check("ML record.play_grade=null when V2.2 emits 'held'", ml.play_grade === null);
   check("ML snapshot raw 'held' preserved", (ml.snapshot_json as any)?.v2_2_audit?.ml_play_grade === "held");
-  check("OU record.play_grade='lean' → gate", ou.play_grade === expectGate("lean", ou));
+  check("OU record.play_grade='lean' without validated profile caps to Watchlist", ou.play_grade === expectTotalGrade("lean", ou));
 }
 {
   // V2.2 'toss_up' on OU side.
@@ -1216,9 +1815,13 @@ console.log("\n━━━ Phase 6B.27 — public play_grade leak guard ━━━"
     });
     const ml = recs.find((r) => r.market === "moneyline")!;
     const ou = recs.find((r) => r.market === "total")!;
-    // Conviction/value gate: a "lean" demotes to market_aligned only when it
-    // fails EV / conviction / low-total-line; every other grade passes through.
-    check(`ML record.play_grade='${grade}' (translator + gate)`, ml.play_grade === expectGate(grade, ml));
+    const expectedMl =
+      grade === "provisional"
+        ? "provisional"
+        : grade === "market_aligned" || grade === "lean" || grade === "best_angle"
+          ? "market_aligned"
+          : grade;
+    check(`ML record.play_grade='${grade}' (translator + grade recalibration)`, ml.play_grade === expectedMl);
     check(`OU record.play_grade='${grade}' (translator + total gate)`, ou.play_grade === expectTotalGrade(grade, ou));
   }
 }
@@ -1351,11 +1954,11 @@ console.log("\n━━━ Phase 6B.28 — Daily Edge lock substrate ━━━");
           (sp.model_layer_versions as any)?.first_inning_probability_head);
 }
 
-// ── FI V2 audit-grade persistence going forward ──────────
-console.log("\n━━━ FI V2 audit-grade persistence ━━━");
+// ── P7-Commit-B — FI play_grade persistence going forward ──────────
+console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━");
 {
-  // Actionable FI must persist the public grade from fi_v2_audit, not a
-  // confidence-only fallback.
+  // Without a current FI V2 audit grade, confidence alone must not invent an
+  // actionable FI public grade.
   const fiLean = {
     ...basePrediction,
     predicted_nrfi: true,
@@ -1364,11 +1967,6 @@ console.log("\n━━━ FI V2 audit-grade persistence ━━━");
       ...v21SportSpecific,
       hold_picks: [],
       nrfi_decision_kind: "nrfi",
-      fi_v2_audit: {
-        fi_pick: "NRFI",
-        fi_play_grade: "lean",
-        fi_no_bet_reason: null,
-      },
     },
   };
   const recs = buildPredictionRecordsFromSlate({
@@ -1381,9 +1979,169 @@ console.log("\n━━━ FI V2 audit-grade persistence ━━━");
     currentLinesByGameId: freshFiLinesByGameId,
   });
   const fi = recs.find((r) => r.market === "first_inning")!;
-  check("FI audit lean → play_grade='lean'", fi.play_grade === "lean");
-  check("FI audit lean → best_angle=false", fi.best_angle === false);
-  check("FI audit lean → no_bet=false", fi.no_bet === false);
+  check("FI conf=58 without audit grade → play_grade=null", fi.play_grade === null);
+  check("FI conf=58 without audit grade → best_angle stays false", fi.best_angle === false);
+  check("FI conf=58 → no_bet stays false", fi.no_bet === false);
+}
+{
+  // Current FI v2 writer Best Angle must pass the final signed-edge/price gate
+  // before it persists both play_grade and the tracking boolean.
+  const fiBestAngle = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 60,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "nrfi",
+      fi_v2_audit: {
+        fi_play_grade: "best_angle",
+        fi_no_bet_reason: null,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fiBestAngle]]),
+    abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  const gate = (fi.snapshot_json as any)?.fi_final_grade_resolution;
+  check("FI v2 best_angle → play_grade='best_angle'", fi.play_grade === "best_angle");
+  check("FI v2 best_angle → best_angle=true", fi.best_angle === true);
+  check("FI v2 best_angle → final signed-edge gate stamped",
+        gate?.rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID && gate?.action === "keep_as_best_angle");
+  check("FI v2 best_angle → member-facing lock grade is best_angle",
+        (fi.snapshot_json as any)?.member_facing_at_lock?.grade === "best_angle");
+}
+{
+  const fiThinBestAngle = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 56,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "nrfi",
+      fi_v2_audit: {
+        fi_play_grade: "best_angle",
+        fi_no_bet_reason: null,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fiThinBestAngle]]),
+    abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  const gate = (fi.snapshot_json as any)?.fi_final_grade_resolution;
+  check("FI v2 thin final edge demotes stale Best Angle to Lean", fi.play_grade === "lean" && fi.best_angle === false);
+  check("FI v2 thin final edge demotion is audited",
+        gate?.rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID && gate?.action === "demote_to_lean");
+}
+{
+  const expensiveNegativeEdgeLines = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "first_inning_total", side: "under", sportsbook: "pinnacle", odds_american: -385, line_value: 0.5, fetched_at: "2026-06-11T16:10:00Z" },
+      { game_id: 14771, market_type: "first_inning_total", side: "over", sportsbook: "pinnacle", odds_american: 300, line_value: 0.5, fetched_at: "2026-06-11T16:10:00Z" },
+    ]],
+  ]);
+  const fiNegativeBestAngle = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 65,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "nrfi",
+      fi_v2_audit: {
+        fi_play_grade: "best_angle",
+        fi_no_bet_reason: null,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fiNegativeBestAngle]]),
+    abbrevByTeamId,
+    currentLinesByGameId: expensiveNegativeEdgeLines,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  const gate = (fi.snapshot_json as any)?.fi_final_grade_resolution;
+  check("FI v2 negative final edge blocks stale Best Angle to no_bet",
+        fi.play_grade === "no_bet" && fi.best_angle === false && fi.no_bet === true);
+  check("FI v2 negative final edge block is audited",
+        gate?.rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID && gate?.action === "block_to_no_bet" && gate?.reason === "negative_final_edge");
+}
+{
+  // The FI v2 writer can emit a Lean below the old confidence-only floor.
+  const fiWriterLean = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 54,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "nrfi",
+      fi_v2_audit: {
+        fi_play_grade: "lean",
+        fi_no_bet_reason: null,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fiWriterLean]]),
+    abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  check("FI v2 lean below old floor → play_grade='lean'", fi.play_grade === "lean");
+  check("FI v2 lean below old floor → best_angle=false", fi.best_angle === false);
+}
+{
+  const fiWriterNoBet = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 56,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "nrfi",
+      fi_v2_audit: {
+        fi_play_grade: "no_bet",
+        fi_no_bet_reason: "Edge too thin; no bet.",
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fiWriterNoBet]]),
+    abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  check("FI v2 no_bet → play_grade='no_bet'", fi.play_grade === "no_bet");
+  check("FI v2 no_bet → no_bet=true", fi.no_bet === true);
+  check("FI v2 no_bet → reason persisted", fi.no_bet_reason === "Edge too thin; no bet.");
 }
 {
   // Confidence just below threshold (57) must NOT persist lean.
@@ -1410,8 +2168,8 @@ console.log("\n━━━ FI V2 audit-grade persistence ━━━");
   check("FI conf=57 (below floor) → play_grade=null", fi.play_grade === null);
 }
 {
-  // FI Best Angle must also persist from the FI V2 audit.
-  const fiBest = {
+  // High-confidence FI still needs the FI V2 audit grade to become actionable.
+  const fiHigh = {
     ...basePrediction,
     predicted_nrfi: false,
     nrfi_confidence: 65,
@@ -1419,11 +2177,6 @@ console.log("\n━━━ FI V2 audit-grade persistence ━━━");
       ...v21SportSpecific,
       hold_picks: [],
       nrfi_decision_kind: "yrfi",
-      fi_v2_audit: {
-        fi_pick: "YRFI",
-        fi_play_grade: "best_angle",
-        fi_no_bet_reason: null,
-      },
     },
   };
   const recs = buildPredictionRecordsFromSlate({
@@ -1431,43 +2184,13 @@ console.log("\n━━━ FI V2 audit-grade persistence ━━━");
     slateDate: "2026-06-11",
     launchDay: false,
     games: [baseGame],
-    predictionByGameId: new Map([[14771, fiBest]]),
+    predictionByGameId: new Map([[14771, fiHigh]]),
     abbrevByTeamId,
     currentLinesByGameId: freshFiLinesByGameId,
   });
   const fi = recs.find((r) => r.market === "first_inning")!;
-  check("FI audit Best Angle → play_grade='best_angle'", fi.play_grade === "best_angle");
-  check("FI audit Best Angle → best_angle=true", fi.best_angle === true);
-}
-{
-  const fiNoBet = {
-    ...basePrediction,
-    predicted_nrfi: true,
-    nrfi_confidence: 56,
-    sport_specific: {
-      ...v21SportSpecific,
-      hold_picks: [],
-      nrfi_decision_kind: "nrfi",
-      fi_v2_audit: {
-        fi_pick: "NRFI",
-        fi_play_grade: "no_bet",
-        fi_no_bet_reason: "Edge too thin; no bet.",
-      },
-    },
-  };
-  const recs = buildPredictionRecordsFromSlate({
-    sport: "mlb",
-    slateDate: "2026-06-11",
-    launchDay: false,
-    games: [baseGame],
-    predictionByGameId: new Map([[14771, fiNoBet]]),
-    abbrevByTeamId,
-    currentLinesByGameId: freshFiLinesByGameId,
-  });
-  const fi = recs.find((r) => r.market === "first_inning")!;
-  check("FI audit no_bet → play_grade='no_bet'", fi.play_grade === "no_bet");
-  check("FI audit no_bet → no_bet=true", fi.no_bet === true);
-  check("FI audit no_bet → reason persisted", fi.no_bet_reason === "Edge too thin; no bet.");
+  check("FI conf=65 without audit grade → play_grade=null", fi.play_grade === null);
+  check("FI conf=65 without audit grade → best_angle stays false", fi.best_angle === false);
 }
 {
   // Toss-Up FI (canonical) must NOT persist lean even if confidence
@@ -1495,8 +2218,8 @@ console.log("\n━━━ FI V2 audit-grade persistence ━━━");
   check("Toss-Up FI → play_grade='toss_up' even at conf=60", fi.play_grade === "toss_up");
   check("Toss-Up FI → no_bet=true preserved", fi.no_bet === true);
   check("Toss-Up FI → prediction_type='toss_up' preserved", fi.prediction_type === "toss_up");
-  check("Toss-Up FI → member-facing lock grade remains watchlist",
-        (fi.snapshot_json as any)?.member_facing_at_lock?.grade === "watchlist");
+  check("Toss-Up FI → member-facing lock grade is no_play",
+        (fi.snapshot_json as any)?.member_facing_at_lock?.grade === "no_play");
 }
 {
   // FI held (nrfi in hold_picks) returns no record — already covered by
@@ -1540,9 +2263,9 @@ console.log("\n━━━ FI V2 audit-grade persistence ━━━");
   const ml = recs.find((r) => r.market === "moneyline")!;
   const ou = recs.find((r) => r.market === "total")!;
   check("ML play_grade unchanged by FI persistence change",
-        ml.play_grade === expectGate("lean", ml) /* FI persistence change must not alter the ML gate result */);
+        ml.play_grade === "market_aligned" /* FI persistence change must not alter champion ML grade calibration */);
   check("Total play_grade reflects the total quality gate",
-        ou.play_grade === expectTotalGrade("best_angle", ou));
+        ou.play_grade !== "best_angle" /* base fixture is below the 70% total BA floor */);
 }
 
 // ── Stale unlocked FI cleanup guard ────────────────────────────────

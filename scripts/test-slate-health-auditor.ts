@@ -6,7 +6,7 @@
 
 import { __TEST__ } from "../lib/services/audit/slateHealthAuditor";
 
-const { classifyNoPredictionReason, slatesForSport, addDays, corePredictionSubstrateIssues } = __TEST__;
+const { classifyNoPredictionReason, slatesForSport, addDays } = __TEST__;
 
 let pass = 0, fail = 0;
 function assert(c: boolean, m?: string): void { if (!c) throw new Error(`Assertion failed: ${m ?? ""}`); }
@@ -58,62 +58,6 @@ test("non-soccer sports audit yesterday + today only", () => {
 test("addDays handles month boundary", () => {
   assert(addDays("2026-06-30", 1) === "2026-07-01", addDays("2026-06-30", 1));
   assert(addDays("2026-06-14", -1) === "2026-06-13", addDays("2026-06-14", -1));
-});
-
-test("MLB moneyline core substrate flags missing price/probability/edge", () => {
-  const issues = corePredictionSubstrateIssues({
-    sport: "mlb",
-    market: "moneyline",
-    pick: "BOS",
-    held: false,
-    odds_american: null,
-    model_probability: null,
-    market_probability: null,
-    edge: null,
-  });
-  assert(issues.includes("odds_american missing/non-finite"), issues.join(","));
-  assert(issues.includes("model_probability missing/non-finite"), issues.join(","));
-  assert(issues.includes("market_probability missing/non-finite"), issues.join(","));
-  assert(issues.includes("edge missing/non-finite"), issues.join(","));
-});
-
-test("MLB total core substrate passes when price/probability/edge are present", () => {
-  const issues = corePredictionSubstrateIssues({
-    sport: "mlb",
-    market: "total",
-    pick: "Over",
-    held: false,
-    odds_american: -110,
-    model_probability: 0.57,
-    market_probability: 0.524,
-    edge: 4.6,
-  });
-  assert(issues.length === 0, issues.join(","));
-});
-
-test("core substrate check ignores held rows and FI rows", () => {
-  const heldIssues = corePredictionSubstrateIssues({
-    sport: "mlb",
-    market: "moneyline",
-    pick: "BOS",
-    held: true,
-    odds_american: null,
-    model_probability: null,
-    market_probability: null,
-    edge: null,
-  });
-  const fiIssues = corePredictionSubstrateIssues({
-    sport: "mlb",
-    market: "first_inning",
-    pick: "Toss-Up",
-    held: false,
-    odds_american: null,
-    model_probability: null,
-    market_probability: null,
-    edge: null,
-  });
-  assert(heldIssues.length === 0, heldIssues.join(","));
-  assert(fiIssues.length === 0, fiIssues.join(","));
 });
 
 console.log("─".repeat(60));

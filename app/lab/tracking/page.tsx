@@ -110,6 +110,8 @@ type TrackingResponse = {
   recentlySettled?: RecentlySettledRow[];
   tablesInitialized: boolean;
   freshTrackingStarted: boolean;
+  generatedAt?: string;
+  trackingCacheStatus?: "hit" | "miss" | "stale" | "error";
 };
 
 // ─── Constants ─────────────────────────────────────────────────────────
@@ -347,10 +349,9 @@ export default function LabTrackingPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 60000);
+    const timeout = window.setTimeout(() => controller.abort(), 35000);
     fetch("/api/lab/tracking-foundation", {
       signal: controller.signal,
-      cache: "no-store",
     })
       .then(async (r) => {
         if (!r.ok) {
@@ -362,7 +363,7 @@ export default function LabTrackingPage() {
       })
       .then((d) => {
         setData(d);
-        setLastUpdated(new Date().toISOString());
+        setLastUpdated(typeof d.generatedAt === "string" ? d.generatedAt : new Date().toISOString());
       })
       .catch((e) => {
         if (e instanceof DOMException && e.name === "AbortError") {

@@ -279,16 +279,15 @@ async function main() {
     grade: record.id !== undefined ? gradeByRecordId.get(record.id) ?? null : null,
   }));
 
-  // The public "yesterday" tracking aggregate is a results surface: it only
-  // includes settled rows. Pending plays remain visible in recentPicks, but not
-  // in by-sport/market result buckets.
-  const settledRows = rows.filter((r) => r.grade !== null && r.grade.result !== "pending");
+  // trackingAggregateService.yesterday intentionally reports settled rows only.
+  // Keep the audit contract aligned with the UI/API aggregate instead of
+  // counting still-pending records as expected yesterday picks.
+  const settledRows = rows.filter((row) => row.grade !== null && row.grade.result !== "pending");
   const expected = buildExpectedBuckets(settledRows);
   const nextDate = shiftDate(args.date, 1);
   const aggregate = await computeTrackingAggregate({
     supabase,
     sport: args.sport === "all" ? undefined : args.sport,
-    from: args.date,
     to: nextDate,
     includeLaunchDay: false,
   });

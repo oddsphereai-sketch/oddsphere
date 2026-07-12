@@ -57,13 +57,11 @@ function withFlags(fn: () => void) {
     MLB_FI_MISSING_PRICE_BLOCKS_GRADE_STRENGTHENING_ENABLED: process.env.MLB_FI_MISSING_PRICE_BLOCKS_GRADE_STRENGTHENING_ENABLED,
     MLB_TOTALS_THIN_GAP_LEAN_CAP_ENABLED: process.env.MLB_TOTALS_THIN_GAP_LEAN_CAP_ENABLED,
     MLB_ML_BEST_ANGLE_MOVEMENT_EDGE_CAP_ENABLED: process.env.MLB_ML_BEST_ANGLE_MOVEMENT_EDGE_CAP_ENABLED,
-    MLB_ML_LEAN_VALUE_GATE_ENABLED: process.env.MLB_ML_LEAN_VALUE_GATE_ENABLED,
   };
   process.env.MLB_FI_TOSSUP_FORCE_NO_PLAY_ENABLED = "true";
   process.env.MLB_FI_MISSING_PRICE_BLOCKS_GRADE_STRENGTHENING_ENABLED = "true";
   process.env.MLB_TOTALS_THIN_GAP_LEAN_CAP_ENABLED = "true";
   process.env.MLB_ML_BEST_ANGLE_MOVEMENT_EDGE_CAP_ENABLED = "true";
-  process.env.MLB_ML_LEAN_VALUE_GATE_ENABLED = "true";
   try {
     fn();
   } finally {
@@ -102,19 +100,6 @@ withFlags(() => {
   check("Total projection gap under .5 caps Lean to Watchlist", totalThinLean.market.verdict.key === "watchlist");
   check("Total thin gap rule recorded", totalThinLean.appliedRules.includes("totals_thin_gap_lean_cap"));
 
-  const mlBadValueLean = applyMlbSameDayGradeGuardrail({
-    market: "moneyline",
-    dto: baseMarket({
-      pick: "NYM",
-      verdict: { key: "lean", label: "Lean" },
-      modelProb: 0.58,
-      priceAmerican: -170,
-      modelMarketGapPct: 1,
-    }),
-  });
-  check("ML negative-value Lean caps to Watchlist", mlBadValueLean.market.verdict.key === "watchlist");
-  check("ML Lean value gate rule recorded", mlBadValueLean.appliedRules.includes("ml_lean_value_gate"));
-
   const mlKnownResistance = applyMlbSameDayGradeGuardrail({
     market: "moneyline",
     dto: baseMarket({
@@ -149,8 +134,48 @@ withFlags(() => {
       },
     }),
   });
-  check("ML known resistance and edge < 8 corrects Best Angle to Watchlist", mlKnownResistance.market.verdict.key === "watchlist");
+  check("ML known resistance and edge < 8 caps Best Angle to Lean", mlKnownResistance.market.verdict.key === "lean");
   check("ML cap rule recorded", mlKnownResistance.appliedRules.includes("ml_best_angle_movement_edge_cap"));
+
+  const mlPredictionQualityBestAngle = applyMlbSameDayGradeGuardrail({
+    market: "moneyline",
+    dto: baseMarket({
+      pick: "SF",
+      verdict: { key: "best_angle", label: "Best Angle" },
+      modelMarketGapPct: 2.1,
+      capReasons: ["prediction_quality_best_angle_promotion"],
+      marketReadV2: {
+        label: "Projection-Led",
+        score: 50,
+        tone: "gray",
+        explanation: "",
+        copyMode: "context_only_not_pick_changing",
+        exactLineEvidenceStatus: "valid",
+        evidenceAsOf: null,
+        generatedAt: new Date().toISOString(),
+        validityStatus: "valid_directional",
+        movement: {
+          firstTrackedLine: null,
+          firstTrackedPrice: -160,
+          currentLine: null,
+          currentPrice: -159,
+          directionRelativeToPick: "neutral",
+          observedAt: null,
+        },
+        consensus: null,
+        sourceSummary: {
+          priceAction: null,
+          playbookConsensus: null,
+          sharpApiSourceSpecific: null,
+          sharpMoney: null,
+        },
+      },
+    }),
+  });
+  check("Prediction-quality ML Best Angle is not capped by old movement-edge rule",
+        mlPredictionQualityBestAngle.market.verdict.key === "best_angle");
+  check("Prediction-quality ML Best Angle records no movement-edge cap",
+        !mlPredictionQualityBestAngle.appliedRules.includes("ml_best_angle_movement_edge_cap"));
 
   const mlUnknownMovement = applyMlbSameDayGradeGuardrail({
     market: "moneyline",
@@ -161,6 +186,6 @@ withFlags(() => {
       marketReadV2: null,
     }),
   });
-  check("ML unknown movement and edge < 8 corrects Best Angle to Watchlist", mlUnknownMovement.market.verdict.key === "watchlist");
-  check("ML unknown movement records rule", mlUnknownMovement.appliedRules.includes("ml_best_angle_movement_edge_cap"));
+  check("ML unknown movement does not fire", mlUnknownMovement.market.verdict.key === "best_angle");
+  check("ML unknown movement has no rule", mlUnknownMovement.appliedRules.length === 0);
 });

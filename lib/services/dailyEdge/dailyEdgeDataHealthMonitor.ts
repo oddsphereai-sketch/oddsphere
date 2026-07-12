@@ -9,6 +9,10 @@ import { sharpContextStatusForEvidence } from "@/lib/services/dailyEdge/memberFa
 import type { PredictionEvidenceObject } from "@/lib/services/dailyEdge/predictionEvidenceBuilder";
 import { supabase } from "@/lib/db/supabase";
 import type { Sport } from "@/lib/types/domain/Sport";
+import {
+  MLB_MARKET_AWARE_CORRECTED_GRADE_RULE_ID,
+  MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
+} from "@/lib/services/predictionRecordService";
 
 export type DailyEdgeDataHealthSeverity = "info" | "medium" | "high" | "blocking";
 
@@ -69,7 +73,9 @@ type MarketCoverage = {
 
 type FiHoldClassification =
   | "legit_model_toss_up"
+  | "publishable_degraded_stats"
   | "provisional_lineup_pending"
+  | "sparse_starter_history"
   | "missing_inputs"
   | "provider_gap"
   | "mapping_bug_or_missing_audit"
@@ -109,6 +115,30 @@ type GamePredictionDiagnosticRow = {
 type GameDateRow = {
   external_id: number;
   game_date: string | null;
+};
+
+type PredictionRecordContractRow = {
+  id: number;
+  game_id: string | number | null;
+  external_id: number | null;
+  sport: Sport;
+  slate_date: string;
+  game_date: string | null;
+  matchup: string | null;
+  market: string | null;
+  pick: string | null;
+  side: string | null;
+  line_value: number | null;
+  odds_american: number | null;
+  model_probability: number | null;
+  market_probability: number | null;
+  edge: number | null;
+  play_grade: string | null;
+  best_angle: boolean | null;
+  no_bet: boolean | null;
+  no_bet_reason: string | null;
+  locked_at: string | null;
+  snapshot_json: unknown;
 };
 
 type OfficialMlbProbableStarterDiagnostic = {
@@ -211,6 +241,29 @@ function stringArrayAt(value: unknown, key: string): string[] {
   if (!isRecord(value)) return [];
   const child = value[key];
   return Array.isArray(child) ? child.filter((item): item is string => typeof item === "string" && item.trim() !== "") : [];
+}
+
+function hasSparseStarterHistory(sportSpecific: Record<string, unknown>, featureReasonCodes: string[]): boolean {
+  if (!featureReasonCodes.includes("fi_starter_missing")) return false;
+  const v22Audit = recordAt(sportSpecific, "v2_2_audit");
+  const featureCapture = recordAt(v22Audit, "feature_capture");
+  const starters = recordAt(featureCapture, "starter");
+  const starterRows = [recordAt(starters, "home"), recordAt(starters, "away")];
+  return starterRows.some((starter) => {
+    if (!starter) return false;
+    const hasKnownIdentity = stringAt(starter, "name") !== null || numberAt(starter, "player_id") !== null;
+    if (!hasKnownIdentity) return false;
+    const fiStarts = numberAt(starter, "first_inning_starts");
+    const seasonStarts = numberAt(starter, "season_games_started");
+    const seasonInnings = numberAt(starter, "season_innings_pitched");
+    const seasonEra = numberAt(starter, "season_era");
+    const hasSparseFi = fiStarts === null || fiStarts < 5;
+    const hasTinyStarterSample =
+      (seasonStarts !== null && seasonStarts <= 1) ||
+      (seasonInnings !== null && seasonInnings < 10) ||
+      seasonEra === 0;
+    return hasSparseFi && hasTinyStarterSample;
+  });
 }
 
 function countBy<T>(rows: T[], keyFn: (row: T) => string): Record<string, number> {
@@ -361,6 +414,7 @@ function isFiTossUp(row: PredictionEvidenceObject): boolean {
 }
 
 function isActionableRow(row: PredictionEvidenceObject): boolean {
+  if (row.identity.noBet === true) return false;
   if (/^no\s*play$/i.test(String(row.identity.originalPlayGrade ?? ""))) return false;
   if (row.identity.marketType === "FI" && (isFiTossUp(row) || row.identity.pick === null)) return false;
   return row.identity.pick !== null;
@@ -427,6 +481,155 @@ function pushFinding(
   });
 }
 
+function pushPredictionRecordFinding(
+  findings: DailyEdgeDataHealthFinding[],
+  row: PredictionRecordContractRow,
+  code: string,
+  severity: DailyEdgeDataHealthSeverity,
+  message: string,
+  details?: Record<string, unknown>,
+) {
+  findings.push({
+    severity,
+    code,
+    sport: row.sport,
+    date: row.slate_date,
+    game: row.matchup ?? String(row.game_id ?? row.external_id ?? "unknown_game"),
+    market: row.market ?? "unknown_market",
+    pick: row.pick,
+    evidenceSource: row.locked_at ? "locked_snapshot" : "current_live",
+    message,
+    details: {
+      predictionRecordId: row.id,
+      gameId: row.game_id,
+      externalId: row.external_id,
+      gameTime: row.game_date,
+      lineValue: row.line_value,
+      oddsAmerican: row.odds_american,
+      modelProbability: row.model_probability,
+      marketProbability: row.market_probability,
+      edge: row.edge,
+      playGrade: row.play_grade,
+      bestAngle: row.best_angle,
+      noBet: row.no_bet,
+      noBetReason: row.no_bet_reason,
+      ...details,
+    },
+  });
+}
+
+function snapshotRecord(value: unknown, key: string): Record<string, unknown> | null {
+  return recordAt(value, key);
+}
+
+function isMarketAwareCorrectedRow(row: PredictionRecordContractRow): boolean {
+  const correction = snapshotRecord(row.snapshot_json, "market_aware_side_correction");
+  return correction?.applied === true && correction.rule_id === MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID;
+}
+
+function marketAwareCorrectedGrade(row: PredictionRecordContractRow): Record<string, unknown> | null {
+  const grade = snapshotRecord(row.snapshot_json, "market_aware_corrected_grade");
+  return grade?.rule_id === MLB_MARKET_AWARE_CORRECTED_GRADE_RULE_ID ? grade : null;
+}
+
+async function loadPredictionRecordContractFindings(args: {
+  sport: Sport;
+  date: string;
+  markets: AiAuditorMarketKey[];
+}): Promise<DailyEdgeDataHealthFinding[]> {
+  const { data, error } = await supabase
+    .from("prediction_records")
+    .select("id,game_id,external_id,sport,slate_date,game_date,matchup,market,pick,side,line_value,odds_american,model_probability,market_probability,edge,play_grade,best_angle,no_bet,no_bet_reason,locked_at,snapshot_json")
+    .eq("sport", args.sport)
+    .eq("slate_date", args.date)
+    .in("market", args.markets)
+    .limit(10000);
+  if (error) {
+    throw new Error(`daily-edge health prediction_records contract scan failed: ${error.message}`);
+  }
+
+  const findings: DailyEdgeDataHealthFinding[] = [];
+  for (const row of (data ?? []) as PredictionRecordContractRow[]) {
+    if (row.best_angle === true && row.no_bet === true) {
+      pushPredictionRecordFinding(
+        findings,
+        row,
+        "best_angle_no_bet_contradiction",
+        "blocking",
+        "prediction_records has best_angle=true and no_bet=true; this cannot be member-facing or tracked coherently.",
+      );
+    }
+
+    if (args.sport !== "mlb") continue;
+    if (row.market !== "moneyline" && row.market !== "total") continue;
+    if (!isMarketAwareCorrectedRow(row)) continue;
+
+    const correctedGrade = marketAwareCorrectedGrade(row);
+    const correctedBestAngle = correctedGrade?.bestAngle === true;
+    const correctedPlayGrade = typeof correctedGrade?.playGrade === "string" ? correctedGrade.playGrade : null;
+    if (!correctedGrade) {
+      pushPredictionRecordFinding(
+        findings,
+        row,
+        "market_aware_corrected_grade_missing",
+        "high",
+        "Market-aware corrected ML/Total row is missing the official corrected grade audit stamp.",
+        {
+          expectedCorrectedGradeRuleId: MLB_MARKET_AWARE_CORRECTED_GRADE_RULE_ID,
+          sideCorrectionRuleId: MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
+        },
+      );
+      continue;
+    }
+
+    if (row.best_angle === true && !correctedBestAngle) {
+      pushPredictionRecordFinding(
+        findings,
+        row,
+        "unvalidated_corrected_row_marked_best_angle",
+        "blocking",
+        "Market-aware corrected row is marked Best Angle even though the corrected grade audit did not validate it as Best Angle.",
+        {
+          correctedPlayGrade,
+          correctedBestAngle,
+          correctedGradeReason: correctedGrade.reason ?? null,
+        },
+      );
+    }
+
+    if (correctedBestAngle && row.no_bet === true) {
+      pushPredictionRecordFinding(
+        findings,
+        row,
+        "corrected_best_angle_stale_no_bet",
+        "blocking",
+        "Market-aware corrected Best Angle still carries no_bet=true, likely from the pre-correction side.",
+        {
+          correctedPlayGrade,
+          correctedBestAngle,
+          correctedGradeReason: correctedGrade.reason ?? null,
+        },
+      );
+    }
+
+    if (!correctedBestAngle && row.play_grade !== "market_aligned") {
+      pushPredictionRecordFinding(
+        findings,
+        row,
+        "unvalidated_corrected_row_not_watchlist",
+        row.best_angle === true ? "blocking" : "medium",
+        "Unvalidated market-aware corrected row should remain market_aligned/Watchlist.",
+        {
+          correctedPlayGrade,
+          correctedBestAngle,
+          correctedGradeReason: correctedGrade.reason ?? null,
+        },
+      );
+    }
+  }
+  return findings;
+}
+
 function classifyFiHoldDiagnostic(sportSpecific: Record<string, unknown> | null): FiHoldDiagnostic {
   if (!sportSpecific) {
     return {
@@ -468,6 +671,7 @@ function classifyFiHoldDiagnostic(sportSpecific: Record<string, unknown> | null)
   const canPublishNormal = booleanAt(completeness, "can_publish_normal");
   const repairEligible = booleanAt(completeness, "repair_eligible");
   const noBetText = `${fiPick ?? ""} ${fiPickReason ?? ""} ${fiNoBetReason ?? ""} ${completenessStatus ?? ""} ${featureReasonCodes.join(" ")}`.toLowerCase();
+  const sparseStarterHistory = hasSparseStarterHistory(sportSpecific, featureReasonCodes);
 
   let classification: FiHoldClassification = "unknown";
   let materiality: FiHoldDiagnostic["materiality"] = "medium";
@@ -477,10 +681,18 @@ function classifyFiHoldDiagnostic(sportSpecific: Record<string, unknown> | null)
     classification = "mapping_bug_or_missing_audit";
     materiality = "high";
     reason = "FI side is held but the fi_v2_audit payload is missing.";
+  } else if (completenessStatus === "degraded_stats_fallback" && canPublishNormal === true) {
+    classification = "publishable_degraded_stats";
+    materiality = "medium";
+    reason = "FI side is held because some stats are using degraded fallbacks; the card can publish normally as No Play and should update when richer stats arrive.";
   } else if (completenessStatus === "provisional_lineup_pending" && canPublishNormal === true) {
     classification = "provisional_lineup_pending";
     materiality = "medium";
     reason = "FI side is held while official lineup/top-order context is pending; the card can publish normally and should update through lineup refresh.";
+  } else if (sparseStarterHistory && canPublishNormal === true && repairEligible !== true) {
+    classification = "sparse_starter_history";
+    materiality = "medium";
+    reason = "FI side is held because the official starter is known but has too little first-inning starter history to publish a normal side.";
   } else if (/\b(provider|market|odds|line|price)\b/.test(noBetText) && marketDataQuality !== "ok") {
     classification = "provider_gap";
     materiality = "high";
@@ -550,6 +762,8 @@ function fiHoldFindingCode(diagnostic: FiHoldDiagnostic | undefined): string {
   if (diagnostic.officialProbableStarters?.classification === "official_probable_starter_unannounced") {
     return "fi_official_probable_starter_unannounced";
   }
+  if (diagnostic.classification === "publishable_degraded_stats") return "fi_publishable_degraded_stats";
+  if (diagnostic.classification === "sparse_starter_history") return "fi_sparse_starter_history";
   if (
     diagnostic.classification === "missing_inputs" &&
     diagnostic.officialProbableStarters?.classification === "official_probables_complete"
@@ -575,6 +789,12 @@ function fiHoldFindingMessage(diagnostic: FiHoldDiagnostic | undefined): string 
   if (official?.classification === "official_probable_starter_unannounced") {
     const sides = official.missingSides.join("/");
     return `FI side is held because MLB official probable starter data is still unannounced for ${sides || "one side"}.`;
+  }
+  if (diagnostic?.classification === "publishable_degraded_stats") {
+    return "FI side is held on degraded fallback stats; the card can publish normally as No Play.";
+  }
+  if (diagnostic?.classification === "sparse_starter_history") {
+    return "FI side is held because the official starter is known but lacks enough first-inning starter history for a normal side.";
   }
   if (official?.classification === "official_probables_complete" && diagnostic?.classification === "missing_inputs") {
     return "FI side is held even though MLB official probable starters are complete; this is an ingestion/mapping issue.";
@@ -638,6 +858,26 @@ function collectFindings(
     if (actionable && row.priceValueEvidence.priceAmerican === null) {
       pushFinding(findings, row, "actionable_price_missing", "high", "Actionable prediction is missing a display price.");
     }
+    if (row.identity.marketType === "TOTAL" && row.priceValueEvidence.priceAmerican === null) {
+      const staleOrUnavailable = /\b(stale|unavailable|no_price|no price|price missing)\b/i.test(
+        row.priceValueEvidence.priceNullReason ?? "",
+      );
+      pushFinding(
+        findings,
+        row,
+        staleOrUnavailable ? "total_price_stale_or_unavailable" : "total_price_missing",
+        actionable ? "high" : "medium",
+        staleOrUnavailable
+          ? "Total market is missing a fresh trusted-book display price."
+          : "Total market has no trusted-book display price in Daily Edge evidence.",
+        {
+          priceNullReason: row.priceValueEvidence.priceNullReason,
+          priceSource: row.priceValueEvidence.priceSource,
+          marketImpliedProbability: row.modelStatsEvidence.marketImpliedProbability,
+          edge: row.modelStatsEvidence.edge,
+        },
+      );
+    }
     if (actionable && row.modelStatsEvidence.edge === null) {
       pushFinding(findings, row, "actionable_edge_missing", "high", "Actionable prediction is missing model-vs-market edge.");
     }
@@ -679,7 +919,13 @@ export async function runDailyEdgeDataHealthMonitor(args: {
   const officialMlbProbableStarters = args.sport === "mlb"
     ? await loadOfficialMlbProbableStarterDiagnostics(rows)
     : new Map<number, OfficialMlbProbableStarterDiagnostic>();
-  const findings = collectFindings(rows, fiHoldDiagnostics, officialMlbProbableStarters);
+  const evidenceFindings = collectFindings(rows, fiHoldDiagnostics, officialMlbProbableStarters);
+  const predictionRecordContractFindings = await loadPredictionRecordContractFindings({
+    sport: args.sport,
+    date: args.date,
+    markets,
+  });
+  const findings = [...evidenceFindings, ...predictionRecordContractFindings];
   const bySeverity = countBy(findings, (finding) => finding.severity);
   const byCode = countBy(findings, (finding) => finding.code);
   const unresolvedBlockingOrHigh = findings.filter((finding) =>

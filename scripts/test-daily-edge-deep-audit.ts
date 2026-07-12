@@ -156,6 +156,362 @@ function board(market: Record<string, unknown>) {
 
 {
   const normalized = normalizeDailyEdgeActionability({
+    market: "total",
+    rawVerdict: { key: "watchlist", label: "Watchlist" },
+    rawGrade: "market_watch",
+    rawRecScore: 48,
+    modelMarketGapPct: 4.5,
+    marketReadV2: {
+      label: "Market Support",
+      score: 72,
+      tone: "emerald",
+      explanation: "Movement supports the pick.",
+      copyMode: "context_only_not_pick_changing",
+      exactLineEvidenceStatus: "valid",
+      evidenceAsOf: "2026-07-10T12:00:00Z",
+      generatedAt: "2026-07-10T12:00:00Z",
+      validityStatus: "valid_directional",
+      movement: {
+        firstTrackedLine: 8.5,
+        firstTrackedPrice: -110,
+        currentLine: 8.5,
+        currentPrice: -120,
+        directionRelativeToPick: "support",
+        observedAt: "2026-07-10T12:00:00Z",
+      },
+      consensus: null,
+      sourceSummary: {
+        priceAction: null,
+        playbookConsensus: null,
+        sharpApiSourceSpecific: null,
+        sharpMoney: null,
+      },
+    },
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: -120,
+  });
+  check("Market-supported Total Watchlist can promote to Lean",
+        normalized.finalVerdict.key === "lean" &&
+        normalized.capReasons.includes("market_support_promotion"));
+}
+
+{
+  const normalized = normalizeDailyEdgeActionability({
+    market: "total",
+    rawVerdict: { key: "watchlist", label: "Watchlist" },
+    rawGrade: "market_watch",
+    rawRecScore: 48,
+    modelMarketGapPct: 4.5,
+    marketReadV2: {
+      label: "Market Resistance",
+      score: 35,
+      tone: "amber",
+      explanation: "Movement is against the pick.",
+      copyMode: "context_only_not_pick_changing",
+      exactLineEvidenceStatus: "valid",
+      evidenceAsOf: "2026-07-10T12:00:00Z",
+      generatedAt: "2026-07-10T12:00:00Z",
+      validityStatus: "valid_directional",
+      movement: {
+        firstTrackedLine: 8.5,
+        firstTrackedPrice: -110,
+        currentLine: 8.5,
+        currentPrice: 100,
+        directionRelativeToPick: "resistance",
+        observedAt: "2026-07-10T12:00:00Z",
+      },
+      consensus: null,
+      sourceSummary: {
+        priceAction: null,
+        playbookConsensus: null,
+        sharpApiSourceSpecific: null,
+        sharpMoney: null,
+      },
+    },
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: 100,
+  });
+  check("Market resistance does not promote Total Watchlist",
+        normalized.finalVerdict.key === "watchlist");
+}
+
+{
+  const marketSupport = {
+    label: "Market Support",
+    score: 72,
+    tone: "emerald" as const,
+    explanation: "Movement supports the pick.",
+    copyMode: "context_only_not_pick_changing" as const,
+    exactLineEvidenceStatus: "valid" as const,
+    evidenceAsOf: "2026-07-10T12:00:00Z",
+    generatedAt: "2026-07-10T12:00:00Z",
+    validityStatus: "valid_directional" as const,
+    movement: {
+      firstTrackedLine: 8.5,
+      firstTrackedPrice: -110,
+      currentLine: 8.5,
+      currentPrice: -120,
+      directionRelativeToPick: "support" as const,
+      observedAt: "2026-07-10T12:00:00Z",
+    },
+    consensus: null,
+    sourceSummary: {
+      priceAction: null,
+      playbookConsensus: null,
+      sharpApiSourceSpecific: null,
+      sharpMoney: null,
+    },
+  };
+  const normalized = normalizeDailyEdgeActionability({
+    market: "total",
+    rawVerdict: { key: "lean", label: "Lean" },
+    rawGrade: "model_only",
+    rawRecScore: 66,
+    modelMarketGapPct: 6.2,
+    totalProjectionGapRuns: 0.6,
+    marketReadV2: marketSupport,
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: -120,
+  });
+  check("Market-confirmed Total Lean can promote to Best Angle",
+        normalized.finalVerdict.key === "best_angle" &&
+        normalized.capReasons.includes("market_support_best_angle_promotion"));
+
+  const mlNormalized = normalizeDailyEdgeActionability({
+    market: "moneyline",
+    rawVerdict: { key: "lean", label: "Lean" },
+    rawGrade: "model_only",
+    rawRecScore: 66,
+    modelMarketGapPct: 8,
+    marketReadV2: marketSupport,
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: -120,
+  });
+  check("Market-confirmed ML Lean does not use Total Best Angle promotion",
+        mlNormalized.finalVerdict.key === "lean");
+}
+
+{
+  const winnerQualityMl = normalizeDailyEdgeActionability({
+    market: "moneyline",
+    rawVerdict: { key: "lean", label: "Lean" },
+    rawGrade: "model_only",
+    rawRecScore: 52,
+    modelProbability: 0.6,
+    modelMarketGapPct: 0.4,
+    marketReadV2: null,
+    marketSupportSignal: "neutral",
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: -145,
+  });
+  check("Winner-quality ML Lean can promote to Best Angle without a huge value edge",
+        winnerQualityMl.finalVerdict.key === "best_angle" &&
+        winnerQualityMl.capReasons.includes("prediction_quality_best_angle_promotion"));
+
+  const rawConvictionMl = normalizeDailyEdgeActionability({
+    market: "moneyline",
+    rawVerdict: { key: "lean", label: "Lean" },
+    rawGrade: "model_only",
+    rawRecScore: 52,
+    modelProbability: 0.58,
+    rawModelProbability: 0.67,
+    rawModelMarketGapPct: 11.9,
+    modelMarketGapPct: 3,
+    marketReadV2: null,
+    marketSupportSignal: "neutral",
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: -160,
+  });
+  check("Raw-conviction ML can promote when regularized edge remains positive",
+        rawConvictionMl.finalVerdict.key === "best_angle" &&
+        rawConvictionMl.capReasons.includes("prediction_quality_best_angle_promotion"));
+
+  const overShrunkMl = normalizeDailyEdgeActionability({
+    market: "moneyline",
+    rawVerdict: { key: "lean", label: "Lean" },
+    rawGrade: "model_only",
+    rawRecScore: 52,
+    modelProbability: 0.555,
+    rawModelProbability: 0.75,
+    rawModelMarketGapPct: 21,
+    modelMarketGapPct: 0.6,
+    marketReadV2: null,
+    marketSupportSignal: "neutral",
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: -145,
+  });
+  check("Raw-conviction ML stays Lean when regularized edge is too thin",
+        overShrunkMl.finalVerdict.key === "lean");
+
+  const winnerQualityWatch = normalizeDailyEdgeActionability({
+    market: "moneyline",
+    rawVerdict: { key: "watchlist", label: "Watchlist" },
+    rawGrade: "market_watch",
+    rawRecScore: 46,
+    modelProbability: 0.57,
+    modelMarketGapPct: 0.2,
+    marketReadV2: null,
+    marketSupportSignal: "neutral",
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: -125,
+  });
+  check("Winner-quality ML Watchlist can promote to Lean",
+        winnerQualityWatch.finalVerdict.key === "lean" &&
+        winnerQualityWatch.capReasons.includes("prediction_quality_promotion"));
+
+  const eliteWatchlistTotal = normalizeDailyEdgeActionability({
+    market: "total",
+    rawVerdict: { key: "watchlist", label: "Watchlist" },
+    rawGrade: "market_watch",
+    rawRecScore: 50,
+    modelProbability: 0.65,
+    modelMarketGapPct: 4.5,
+    totalProjectionGapRuns: 0.75,
+    marketReadV2: null,
+    marketSupportSignal: "neutral",
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: -110,
+  });
+  check("Elite prediction-quality Total Watchlist can promote through Lean to Best Angle",
+        eliteWatchlistTotal.finalVerdict.key === "best_angle" &&
+        eliteWatchlistTotal.capReasons.includes("prediction_quality_promotion") &&
+        eliteWatchlistTotal.capReasons.includes("prediction_quality_best_angle_promotion"));
+
+  const resistedWinnerQualityMl = normalizeDailyEdgeActionability({
+    market: "moneyline",
+    rawVerdict: { key: "lean", label: "Lean" },
+    rawGrade: "model_only",
+    rawRecScore: 52,
+    modelProbability: 0.6,
+    modelMarketGapPct: 0.4,
+    marketReadV2: null,
+    marketSupportSignal: "resistance",
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: -145,
+  });
+  check("Market resistance blocks winner-quality ML Best Angle promotion",
+        resistedWinnerQualityMl.finalVerdict.key === "lean");
+
+  const overpricedWinnerQualityMl = normalizeDailyEdgeActionability({
+    market: "moneyline",
+    rawVerdict: { key: "lean", label: "Lean" },
+    rawGrade: "model_only",
+    rawRecScore: 52,
+    modelProbability: 0.64,
+    modelMarketGapPct: -0.1,
+    marketReadV2: null,
+    marketSupportSignal: "neutral",
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: -210,
+  });
+  check("Overpriced ML favorite does not get winner-quality Best Angle promotion",
+        overpricedWinnerQualityMl.finalVerdict.key === "lean");
+
+  const predictionQualityTotal = normalizeDailyEdgeActionability({
+    market: "total",
+    rawVerdict: { key: "lean", label: "Lean" },
+    rawGrade: "model_only",
+    rawRecScore: 52,
+    modelProbability: 0.6,
+    modelMarketGapPct: 0.4,
+    totalProjectionGapRuns: 0.45,
+    marketReadV2: null,
+    marketSupportSignal: "neutral",
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: -115,
+  });
+  check("Prediction-quality Total Lean can promote to Best Angle without a huge value edge",
+        predictionQualityTotal.finalVerdict.key === "best_angle" &&
+        predictionQualityTotal.capReasons.includes("prediction_quality_best_angle_promotion"));
+
+  const thinProjectionTotal = normalizeDailyEdgeActionability({
+    market: "total",
+    rawVerdict: { key: "lean", label: "Lean" },
+    rawGrade: "model_only",
+    rawRecScore: 52,
+    modelProbability: 0.6,
+    modelMarketGapPct: 0.4,
+    totalProjectionGapRuns: 0.1,
+    marketReadV2: null,
+    marketSupportSignal: "neutral",
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: -115,
+  });
+  check("Tiny total projection gap blocks prediction-quality Best Angle",
+        thinProjectionTotal.finalVerdict.key === "lean");
+}
+
+{
+  const normalized = normalizeDailyEdgeActionability({
+    market: "total",
+    rawVerdict: { key: "lean", label: "Lean" },
+    rawGrade: "model_only",
+    rawRecScore: 66,
+    modelMarketGapPct: 7,
+    totalProjectionGapRuns: 1,
+    marketReadV2: {
+      label: "Market Resistance",
+      score: 35,
+      tone: "amber",
+      explanation: "Movement is against the pick.",
+      copyMode: "context_only_not_pick_changing",
+      exactLineEvidenceStatus: "valid",
+      evidenceAsOf: "2026-07-10T12:00:00Z",
+      generatedAt: "2026-07-10T12:00:00Z",
+      validityStatus: "valid_directional",
+      movement: {
+        firstTrackedLine: 8.5,
+        firstTrackedPrice: -110,
+        currentLine: 8.5,
+        currentPrice: 100,
+        directionRelativeToPick: "resistance",
+        observedAt: "2026-07-10T12:00:00Z",
+      },
+      consensus: null,
+      sourceSummary: {
+        priceAction: null,
+        playbookConsensus: null,
+        sharpApiSourceSpecific: null,
+        sharpMoney: null,
+      },
+    },
+    hasPick: true,
+    held: false,
+    dataQualityTier: "high",
+    priceAmerican: -120,
+  });
+  check("Market resistance blocks Total Best Angle promotion",
+        normalized.finalVerdict.key === "lean");
+}
+
+{
+  const normalized = normalizeDailyEdgeActionability({
     market: "first_inning",
     rawVerdict: { key: "watchlist", label: "Watchlist" },
     rawGrade: "market_watch",
@@ -168,8 +524,8 @@ function board(market: Record<string, unknown>) {
     priceAmerican: null,
     neutralNonActionable: true,
   });
-  check("FI Toss-Up stays visible as Watchlist without a side price",
-        normalized.finalVerdict.key === "watchlist" &&
+  check("FI Toss-Up stays No Play without a side price",
+        normalized.finalVerdict.key === "no_play" &&
         !normalized.capReasons.includes("missing_price"));
 }
 

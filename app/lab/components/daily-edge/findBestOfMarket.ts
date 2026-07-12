@@ -30,6 +30,14 @@ const GRADE_RANK: Record<Grade, number> = {
   market_watch: 10,
 };
 
+const VERDICT_RANK = {
+  best_angle: 50,
+  lean: 40,
+  caution: 30,
+  watchlist: 20,
+  no_play: 10,
+} as const;
+
 type EligibleMarket = "moneyline" | "total" | "first_inning_total";
 
 function perMarketGrade(
@@ -61,6 +69,10 @@ function sortAndPickStrongest(
 ): DailyEdgeGameDto | null {
   if (candidates.length === 0) return null;
   const sorted = [...candidates].sort((a, b) => {
+    const aVerdict = pickMarket(a, market)?.verdict.key ?? "no_play";
+    const bVerdict = pickMarket(b, market)?.verdict.key ?? "no_play";
+    const verdictRank = VERDICT_RANK[bVerdict] - VERDICT_RANK[aVerdict];
+    if (verdictRank !== 0) return verdictRank;
     const aGrade = perMarketGrade(a, market);
     const bGrade = perMarketGrade(b, market);
     const aRank = aGrade !== null ? GRADE_RANK[aGrade] : 0;
@@ -72,6 +84,12 @@ function sortAndPickStrongest(
     return a.gameStartMinutes - b.gameStartMinutes;
   });
   return sorted[0] ?? null;
+}
+
+function pickMarket(game: DailyEdgeGameDto, market: EligibleMarket) {
+  if (market === "moneyline") return game.markets.moneyline;
+  if (market === "total") return game.markets.total;
+  return game.markets.first_inning;
 }
 
 /**

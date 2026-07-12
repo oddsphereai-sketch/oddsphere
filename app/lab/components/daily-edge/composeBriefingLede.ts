@@ -47,7 +47,7 @@ export function composeBriefingLede(grouped: Grouped): string {
     caution.length === 0 &&
     no_play.length > 0
   ) {
-    return "Tonight is mostly No Play reads — the model has sides, but the betting picture doesn't create enough separation for a clean angle.";
+    return "Tonight is mostly No Play — the model and sharp picture don't create enough separation for a clean angle.";
   }
 
   // Quiet slate: 0 top angles, no cautions, but watchlist + maybe no_play.

@@ -49,7 +49,13 @@ import type { FiLineRow } from "../automodel/mlbFirstInningMarketBaseline";
 import { runMlbAutoModelV1 } from "../automodel/mlbAutoModelV1";
 import { runMlbAutoModelV2 } from "../automodel/mlbAutoModelV2";
 import { runMlbAutoModelV2_1 } from "../automodel/mlbAutoModelV2_1";
-import { runMlbAutoModelV2_2 } from "../automodel/mlbAutoModelV2_2";
+import {
+  runMlbAutoModelV2_2,
+  V22_MAX_DISTANCE_PP_OU,
+  V22_SHRINK_K_OU,
+} from "../automodel/mlbAutoModelV2_2";
+import { overProbabilityPoisson } from "../automodel/runDistribution";
+import { regularizeProbability } from "../automodel/mlbProbabilityRegularization";
 import {
   reconcileTotalProjection,
   type TotalProjectionReconciliation,
@@ -174,13 +180,13 @@ export type AutoModelRunOpts = {
   respectLocks?: boolean;
   /**
    * Phase 6B.1 — explicit auto-model version override.
-   *   "v1"     — V1 writes predictions (default).
+   *   "v1"     — V1 writes predictions.
    *   "v2"     — V2 market-prior writes predictions.
    *              V1 still runs first to produce the residual signal.
    *              V2 errors → fall back to V1 with a logged warning.
    *   "shadow" — V1 writes predictions; V2 also runs and its audit is
    *              attached to sport_specific.v2_audit for comparison.
-   * When undefined, reads AUTOMODEL_VERSION env (default "v1").
+   * When undefined, reads AUTOMODEL_VERSION env (default MLB champion "v2_2").
    */
   modelVersion?: AutomodelVersion;
 };
@@ -433,12 +439,12 @@ export async function generatePredictionsForSlate(
   const wantWrite = opts.writeToDb === true;
   const envEnabled = process.env.AUTOMODEL_DB_WRITES_ENABLED === "true";
 
-  // Phase 6B.1 — resolve effective auto-model version (override > env > v1).
+  // Phase 6B.1 — resolve effective auto-model version (override > env > champion default).
   const effectiveVersion = resolveEffectiveVersion(opts.modelVersion);
   // Phase 6B.1.7 — independent FI model version resolver. Controls
   // whether FI V2 overrides the legacy V1 NRFI passthrough on the
-  // member-facing first-inning surface. Defaults to FI V2 so operator
-  // runs cannot silently fall back to legacy when env is unset.
+  // member-facing first-inning surface. Defaults to the FI V2 champion
+  // path; explicit FIRST_INNING_MODEL_VERSION=legacy remains the rollback.
   const firstInningVersion = resolveFirstInningModelVersion();
 
   // Two-key gate (Phase 3C): EITHER missing while caller asked for a
@@ -883,30 +889,34 @@ export async function generatePredictionsForSlate(
 
   // ─── Step 3.5 — Atomic prediction_records sync (2026-06-10 v15.3) ──
   //
-  // FI integrity contract: every actionable game_predictions write
-  // must be paired with a matching prediction_records row so the card
-  // never displays an FI pick that has no tracking row, and so unlocked
-  // prediction_records never lag behind game_predictions.
+  // Current product contract (2026-07-11): member-facing MLB cards publish
+  // on the hourly tracking-refresh cadence and at lock. Regular automodel
+  // refreshes may update game_predictions intraday, but prediction_records is
+  // the public/tracking surface and should not twitch between hourly ticks.
+  // The t60_locked path is the exception: pregame-sweep must publish the final
+  // card before it stamps locked_at, so lock-stage writes still sync here.
   //
-  // Before this sync existed, prediction_records could only catch up
-  // on the next /api/cron/tracking-refresh tick (hourly), so any
-  // intraday model refresh (slate-cycle intraday or readiness-driven
-  // refresh) produced a window where:
+  // Before this sync existed, prediction_records could only catch up on the
+  // next /api/cron/tracking-refresh tick (hourly), so an intraday model refresh
+  // near lock could produce a window where:
   //   - game_predictions had fresh FI play_grade=best_angle / lean
   //   - prediction_records still had the previous (or no) FI row
   //   - card showed the new pick; tracking pointed at the old one
   //
-  // This call closes that window by chaining the same locked-row-aware
-  // upsert that tracking-refresh uses, but immediately after the model
-  // write. createPredictionRecords:
+  // This lock-stage call closes that window by chaining the same
+  // locked-row-aware upsert that tracking-refresh uses, immediately after the
+  // final pre-lock model write. createPredictionRecords:
   //   - skips locked rows (pregame-sweep owns the lock transition)
-  //   - upserts unlocked rows in place (pick/conf/snapshot stay fresh)
+  //   - upserts entering-lock rows in place (pick/conf/snapshot stay fresh)
   //   - is idempotent; safe to chain after every write
   //
   // Failure here MUST NOT fail the model write — log and continue so
   // the hourly tracking-refresh still catches up if this sync hits a
   // transient error.
-  if (wantWrite && sport === "mlb") {
+  const immediatePredictionRecordSyncEnabled =
+    stage === "t60_locked" ||
+    process.env.AUTOMODEL_IMMEDIATE_PREDICTION_RECORDS_SYNC_ENABLED === "true";
+  if (wantWrite && sport === "mlb" && immediatePredictionRecordSyncEnabled) {
     // Phase 6B.36 (P0 visibility fix) — when this sync errors, the
     // operator MUST be able to see it from the DB. Before this commit
     // failures only landed in Vercel function logs (console.warn), which
@@ -986,6 +996,11 @@ export async function generatePredictionsForSlate(
         );
       }
     }
+  } else if (wantWrite && sport === "mlb") {
+    console.log(
+      `[automodelService] prediction_records immediate sync skipped for stage=${stage}; ` +
+        "hourly tracking-refresh owns public MLB card updates until lock.",
+    );
   }
 
   // ─── Step 3.6 — First Published lines (2026-06-16) ─────────────────
@@ -1374,15 +1389,16 @@ function applyV2IfSelected(args: {
       process.env.MLB_TOTAL_PROJECTION_CALIBRATION_ENABLED === "true" &&
       !isLockedHere &&
       totalCalibration.enabled;
+    // Best settled totals cohort since launch (2026-06-26..2026-06-30)
+    // kept calibrated projection as audit/context only. Do not let a stale
+    // env var silently promote the unvalidated calibrated probability head
+    // into the live O/U recommendation engine.
+    const calibratedTotalRecommendationExperimentEnabled =
+      process.env.MLB_TOTAL_CALIBRATED_HEAD_EXPERIMENT_ENABLED === "true";
     const recommendationUsesCalibratedProjection =
       projectionCalibrationEnabled &&
       process.env.MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED === "true" &&
-      // 2026-07-08 — keep market-aware totals as audit/calibration substrate
-      // unless a separate reviewed rollout flag is enabled. The launch-window
-      // audit showed the market-aware projection did not beat the raw total or
-      // market line on MAE, and using it for recommendations can make the
-      // displayed score/projection feel detached from the O/U prediction.
-      process.env.MLB_TOTAL_MARKET_AWARE_RECOMMENDATION_ROLLOUT_ENABLED === "true";
+      calibratedTotalRecommendationExperimentEnabled;
     const legacyMarketAnchorFlag =
       process.env.MLB_MARKET_ANCHOR_FORMULA_ENABLED === "true";
     const reconciliationAwayScore = recommendationUsesCalibratedProjection
@@ -1394,23 +1410,40 @@ function applyV2IfSelected(args: {
     const reconciliationTotal = recommendationUsesCalibratedProjection
       ? totalCalibration.calibratedTotal
       : v22.predicted_total;
+    const marketImpliedOver =
+      a22.ou_market_prob === null
+        ? null
+        : v22.predicted_ou_side === "over"
+          ? a22.ou_market_prob
+          : 1 - a22.ou_market_prob;
+    const rawProbabilityOverFromV22 =
+      v22.predicted_ou_side === "over"
+        ? a22.ou_model_prob
+        : 1 - a22.ou_model_prob;
+    const calibratedRawProbabilityOver = recommendationUsesCalibratedProjection
+      ? overProbabilityPoisson(
+          reconciliationHomeScore,
+          reconciliationAwayScore,
+          a22.market_total ?? reconciliationTotal,
+        )
+      : null;
+    const calibratedRegularization = calibratedRawProbabilityOver === null
+      ? null
+      : regularizeProbability({
+          rawProb: calibratedRawProbabilityOver,
+          marketProb: marketImpliedOver,
+          k: V22_SHRINK_K_OU,
+          maxDistancePp: V22_MAX_DISTANCE_PP_OU,
+        });
+    const probabilityOverForReconciliation =
+      calibratedRegularization?.regularizedProb ?? rawProbabilityOverFromV22;
     const reconciliation = reconcileTotalProjection({
       rawProjectedAwayScore: reconciliationAwayScore,
       rawProjectedHomeScore: reconciliationHomeScore,
       rawProjectedTotal: reconciliationTotal,
       marketTotal: a22.market_total ?? null,
-      // v22.v22Audit.ou_model_prob is the probability of the PICKED
-      // side; rebase to OVER-perspective for the reconciler.
-      rawProbabilityOver:
-        v22.predicted_ou_side === "over"
-          ? a22.ou_model_prob
-          : 1 - a22.ou_model_prob,
-      marketImpliedOver:
-        a22.ou_market_prob === null
-          ? null
-          : v22.predicted_ou_side === "over"
-            ? a22.ou_market_prob
-            : 1 - a22.ou_market_prob,
+      rawProbabilityOver: probabilityOverForReconciliation,
+      marketImpliedOver,
       // V1 wires market_pressure null; future PR will inject from
       // sharp_signals + line_history.
       marketPressureSide: null,
@@ -1496,14 +1529,32 @@ function applyV2IfSelected(args: {
           formula_available: totalCalibration.enabled,
           projection_calibration_enabled: projectionCalibrationEnabled,
           recommendation_uses_calibrated_projection: recommendationUsesCalibratedProjection,
+          calibrated_probability_head: calibratedRegularization === null
+            ? null
+            : {
+                schema_version: "mlb_total_calibrated_probability_head_v1",
+                raw_over_probability_from_v2_2: rawProbabilityOverFromV22,
+                raw_over_probability_from_calibrated_projection: calibratedRawProbabilityOver,
+                market_implied_over_probability: marketImpliedOver,
+                regularized_over_probability: calibratedRegularization.regularizedProb,
+                raw_over_edge_pct: calibratedRegularization.rawEdgePct,
+                regularized_over_edge_pct: calibratedRegularization.regularizedEdgePct,
+                shrink_factor: calibratedRegularization.shrinkFactor,
+                distance_cap_pp: calibratedRegularization.distanceCapPp,
+                cap_applied: calibratedRegularization.capApplied,
+                selected_side:
+                  (calibratedRegularization.regularizedProb ?? rawProbabilityOverFromV22) >= 0.5
+                    ? "over"
+                    : "under",
+              },
           feature_flags: {
             MLB_MARKET_AWARE_CORE_MODEL_ENABLED: coreModelEnabled,
             MLB_TOTAL_PROJECTION_CALIBRATION_ENABLED:
               process.env.MLB_TOTAL_PROJECTION_CALIBRATION_ENABLED === "true",
             MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED:
               process.env.MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED === "true",
-            MLB_TOTAL_MARKET_AWARE_RECOMMENDATION_ROLLOUT_ENABLED:
-              process.env.MLB_TOTAL_MARKET_AWARE_RECOMMENDATION_ROLLOUT_ENABLED === "true",
+            MLB_TOTAL_CALIBRATED_HEAD_EXPERIMENT_ENABLED:
+              calibratedTotalRecommendationExperimentEnabled,
             MLB_MARKET_ANCHOR_FORMULA_ENABLED_LEGACY: legacyMarketAnchorFlag,
           },
           skipped_reason: recommendationUsesCalibratedProjection
@@ -1518,8 +1569,8 @@ function applyV2IfSelected(args: {
                     ? "market_total_unavailable"
                     : process.env.MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED !== "true"
                       ? "recommendation_use_flag_disabled"
-                      : process.env.MLB_TOTAL_MARKET_AWARE_RECOMMENDATION_ROLLOUT_ENABLED !== "true"
-                        ? "market_aware_recommendation_rollout_disabled"
+                      : !calibratedTotalRecommendationExperimentEnabled
+                        ? "calibrated_probability_head_experiment_disabled"
                       : "not_enabled",
           legacy_anchor_flag_note: legacyMarketAnchorFlag
             ? "MLB_MARKET_ANCHOR_FORMULA_ENABLED is ignored for recommendation behavior; use MLB_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED."

@@ -32,6 +32,7 @@ import type { Grade } from "@/lib/types/domain/Grade";
 import type { DailyEdgeGameDto } from "./labTypes";
 
 export type HeadlineMarket = "moneyline" | "total" | "first_inning_total" | null;
+type Verdict = DailyEdgeGameDto["breakdown"]["verdict"]["key"];
 
 /**
  * V2.1 GRADE_RANK — higher = stronger headline. Mirrors the V2.1 spec
@@ -51,6 +52,15 @@ const GRADE_RANK: Record<Grade, number> = {
 };
 
 type Candidate = { market: HeadlineMarket; grade: Grade; precedence: number };
+type VerdictCandidate = { market: HeadlineMarket; verdict: Verdict; precedence: number };
+
+const VERDICT_RANK: Record<Verdict, number> = {
+  best_angle: 50,
+  lean: 40,
+  caution: 30,
+  watchlist: 20,
+  no_play: 10,
+};
 
 /**
  * Build the per-pick candidate list and sort by (rank DESC, precedence ASC).
@@ -90,6 +100,21 @@ function rankedCandidates(g: DailyEdgeGameDto): Candidate[] {
   return out;
 }
 
+function rankedVerdictCandidates(g: DailyEdgeGameDto): VerdictCandidate[] {
+  const candidates: VerdictCandidate[] = [
+    { market: "moneyline", verdict: g.markets.moneyline.verdict.key, precedence: 0 },
+    { market: "total", verdict: g.markets.total.verdict.key, precedence: 1 },
+    { market: "first_inning_total", verdict: g.markets.first_inning.verdict.key, precedence: 2 },
+  ];
+  const out = candidates.filter((candidate) => candidate.verdict !== "no_play");
+  out.sort((a, b) => {
+    const r = VERDICT_RANK[b.verdict] - VERDICT_RANK[a.verdict];
+    if (r !== 0) return r;
+    return a.precedence - b.precedence;
+  });
+  return out;
+}
+
 /**
  * The market the row's headline grade is "about" — the market carrying the
  * strongest grade across the per-pick triplet, with ML → OU → NRFI as the
@@ -98,6 +123,8 @@ function rankedCandidates(g: DailyEdgeGameDto): Candidate[] {
  * has all 3 picks predicted).
  */
 export function headlinePrimaryMarket(g: DailyEdgeGameDto): HeadlineMarket {
+  const verdictMarket = rankedVerdictCandidates(g)[0]?.market;
+  if (verdictMarket !== undefined) return verdictMarket;
   return rankedCandidates(g)[0]?.market ?? null;
 }
 

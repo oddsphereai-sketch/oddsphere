@@ -268,8 +268,11 @@ function auditRow(row: PredictionEvidenceObject): Finding[] {
   const readCopyText = `${visibleState.quickRead ?? ""}\n${typeof visibleState.marketRead === "string" ? visibleState.marketRead : JSON.stringify(visibleState.marketRead)}`;
   const alignedEvidence = read === "aligned" && (source === "both_align" || source === "consensus_only" || source === "sharp_only");
   const conflictEvidence = row.marketEvidence.sourceConflict || source === "consensus_supports_sharp_opposes" || source === "sharp_supports_consensus_opposes";
-  if (alignedEvidence && /\b(mixed|resistance)\b/i.test(readCopyText)) {
-    push(findings, row, "market_read_alignment_mismatch", "block", "Rendered Market Read says mixed/resistance while evidence is aligned.");
+  const sourceResistanceCopy =
+    /\b(market signals?|split context|consensus|sharp(?:-book)?|source context|visible sources?)\b.{0,80}\b(mixed|resistance|conflict|fighting|not fully aligned|not fully clean)\b/i.test(readCopyText) ||
+    /\b(mixed|resistance|conflict|fighting|not fully aligned|not fully clean)\b.{0,80}\b(market signals?|split context|consensus|sharp(?:-book)?|source context|visible sources?)\b/i.test(readCopyText);
+  if (alignedEvidence && sourceResistanceCopy) {
+    push(findings, row, "market_read_alignment_mismatch", "block", "Rendered Market Read says source/split context is mixed or resistant while evidence is aligned.");
   }
   if (conflictEvidence && /\b(clean|aligned)\b/i.test(readCopyText)) {
     push(findings, row, "market_read_alignment_mismatch", "block", "Rendered Market Read says clean/aligned while source evidence conflicts.");

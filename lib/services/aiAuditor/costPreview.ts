@@ -35,6 +35,8 @@ export type AiAuditorCostPreviewOptions = {
 export type AiAuditorCompactMarketPayload = {
   market: AiAuditorMarketKey;
   pick: string | null;
+  noBet: boolean | null;
+  noBetReason: string | null;
   playGrade: string | null;
   modelProbabilityPct: number | null;
   marketProbabilityPct: number | null;
@@ -451,6 +453,10 @@ function compactMarket(market: AiAuditorMarketKey, dto: MarketEdgeDto): AiAudito
   return {
     market,
     pick: dto.pick,
+    noBet: dto.verdict?.key === "no_play",
+    noBetReason: dto.verdict?.key === "no_play"
+      ? dto.displayReason ?? dto.reviewActionSummary ?? price.priceNullReason ?? null
+      : null,
     playGrade: decision?.playGrade ?? dto.verdict?.label ?? dto.grade ?? null,
     modelProbabilityPct,
     marketProbabilityPct,

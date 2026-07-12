@@ -333,10 +333,11 @@ check(
     /publicStartFiltered[\s\S]{0,300}isPublicallyTracked\(r\.sport, r\.slate_date\)/.test(SERVICE),
 );
 check(
-  "Service prefers member_facing_at_lock grade for tracking buckets",
+  "Service prefers explicit tracking display override before member_facing_at_lock",
   SERVICE.includes("memberFacingGradeAtLock") &&
+    SERVICE.includes("displayGradeOverride") &&
     SERVICE.includes("member_facing_at_lock") &&
-    /memberFacingGradeAtLock\(record\)[\s\S]{0,120}displayGradeOverride\(record\)/.test(SERVICE),
+    /displayGradeOverride\(record\)[\s\S]{0,160}memberFacingGradeAtLock\(record\)/.test(SERVICE),
 );
 // Phase 6B.24 — first_inning records must split into virtual NRFI / YRFI
 // buckets so the public Tracking page's NRFI / YRFI categories see
@@ -362,7 +363,17 @@ check("API surfaces recentlySettled (6B.21)",     API.includes("recentlySettled:
 check("API does not expose raw audit fields",     !/sport_specific|fi_v2_audit|v2_2_audit|snapshot_json/.test(API));
 check("API does not expose model-version breakdowns to members", !API.includes("byModelVersion"));
 check("API excludes launch-day picks",            API.includes("includeLaunchDay: false"));
-check("API marks no-store",                       API.includes('"Cache-Control": "no-store"'));
+check(
+  "API privately caches the expensive tracking snapshot",
+  API.includes("TRACKING_RESPONSE_CACHE_CONTROL") &&
+    API.includes('"Cache-Control": TRACKING_RESPONSE_CACHE_CONTROL') &&
+    API.includes('"X-Oddsphere-Tracking-Cache"') &&
+    API.includes('"Vary": "Cookie"'),
+);
+check(
+  "Page allows browser caching for tracking snapshot",
+  !/fetch\("\/api\/lab\/tracking-foundation"[\s\S]{0,160}cache:\s*"no-store"/.test(PAGE),
+);
 
 // ── 6B.21 — Recently Settled feed ─────────────────────────────────
 check(

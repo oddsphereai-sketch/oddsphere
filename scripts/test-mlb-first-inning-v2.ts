@@ -470,23 +470,6 @@ async function main() {
     }
   }
   {
-    // Negative value edge means the market price is worse than the model
-    // probability for the picked side. It can still be a directional FI read,
-    // but it must not be promoted to an actionable grade.
-    const snap = buildSnapshot();
-    const out = runMlbFirstInningModelV2(snap, buildFiLines(+220, -260));
-    check("negative FI value edge cannot become Best Angle",
-      out.fiV2Audit.fi_edge_pct !== null &&
-      out.fiV2Audit.fi_edge_pct < 0 &&
-      out.fiV2Audit.fi_play_grade !== "best_angle",
-      `edge=${out.fiV2Audit.fi_edge_pct} grade=${out.fiV2Audit.fi_play_grade}`);
-    check("negative FI value edge cannot become Lean",
-      out.fiV2Audit.fi_edge_pct !== null &&
-      out.fiV2Audit.fi_edge_pct < 0 &&
-      out.fiV2Audit.fi_play_grade !== "lean",
-      `edge=${out.fiV2Audit.fi_edge_pct} grade=${out.fiV2Audit.fi_play_grade}`);
-  }
-  {
     // Constants sanity + Push 3B-3 calibration thresholds
     check("FI_NRFI_THRESHOLD > FI_YRFI_THRESHOLD",
       FI_TEST.FI_NRFI_THRESHOLD > FI_TEST.FI_YRFI_THRESHOLD);

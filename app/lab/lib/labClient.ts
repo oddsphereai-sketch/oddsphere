@@ -21,9 +21,18 @@ export class LabApiError extends Error {
   }
 }
 
+const DEFAULT_LAB_FETCH_TIMEOUT_MS = 10_000;
+const DAILY_EDGE_FETCH_TIMEOUT_MS = 30_000;
+
+function timeoutMsForLabUrl(url: string): number {
+  return url.startsWith("/api/lab/daily-edge") || url.includes("/api/lab/daily-edge?")
+    ? DAILY_EDGE_FETCH_TIMEOUT_MS
+    : DEFAULT_LAB_FETCH_TIMEOUT_MS;
+}
+
 export async function labFetcher<T>(url: string): Promise<T> {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 45000);
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMsForLabUrl(url));
   try {
     const res = await fetch(url, {
       headers: { Accept: "application/json" },

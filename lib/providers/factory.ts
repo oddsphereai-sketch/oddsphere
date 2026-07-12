@@ -109,7 +109,8 @@ function makeSharpApiGameResolver(): SharpApiGameResolver {
     sport: Sport,
     date: string,
     homeAbbrev: MlbTeamAbbrev,
-    awayAbbrev: MlbTeamAbbrev
+    awayAbbrev: MlbTeamAbbrev,
+    referenceTimeIso?: string
   ): Promise<number | null> => {
     const { data: teams, error: teamsError } = await supabase
       .from("teams")
@@ -122,17 +123,30 @@ function makeSharpApiGameResolver(): SharpApiGameResolver {
     const awayRow = teams.find((t) => t.abbreviation === awayAbbrev);
     if (homeRow === undefined || awayRow === undefined) return null;
 
-    const { data: game, error: gameError } = await supabase
+    const { data: games, error: gameError } = await supabase
       .from("games")
-      .select("external_id")
+      .select("external_id, game_date")
       .eq("sport", sport)
       .eq("slate_date", date)
       .eq("home_team_id", homeRow.id)
       .eq("away_team_id", awayRow.id)
-      .limit(1)
-      .maybeSingle();
+      .order("game_date", { ascending: true });
     if (gameError) return null;
-    return game?.external_id ?? null;
+    const candidates = games ?? [];
+    if (candidates.length === 0) return null;
+    if (candidates.length === 1) return candidates[0]?.external_id ?? null;
+
+    const referenceMs = Date.parse(referenceTimeIso ?? "");
+    const effectiveReferenceMs = Number.isFinite(referenceMs) ? referenceMs : Date.now();
+    const withDates = candidates
+      .map((game) => ({
+        external_id: game.external_id,
+        gameMs: typeof game.game_date === "string" ? Date.parse(game.game_date) : NaN,
+      }))
+      .filter((game) => Number.isFinite(game.gameMs));
+    const upcoming = withDates.find((game) => game.gameMs >= effectiveReferenceMs);
+    if (upcoming !== undefined) return upcoming.external_id;
+    return candidates[0]?.external_id ?? null;
   };
 }
 

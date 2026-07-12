@@ -334,6 +334,13 @@ const rules: CandidateRule[] = [
     applies: (row) => row.market === "total" && (row.grade === "Caution" || row.grade === "Watchlist") && (row.absProjectionGap ?? -999) >= 0.75 && (row.edge ?? -999) >= 5 && row.price !== null && row.price > -130,
   },
   {
+    id: "total_gap_0_75_edge_4_toward_watchlist_to_lean",
+    intent: "promotion",
+    target: "Lean",
+    description: "Total Watchlist + projection gap >= .75 + edge >= 4 + playable price + movement toward pick -> Lean candidate.",
+    applies: (row) => row.market === "total" && row.grade === "Watchlist" && (row.absProjectionGap ?? -999) >= 0.75 && (row.edge ?? -999) >= 4 && row.price !== null && row.price > -130 && row.movement === "toward",
+  },
+  {
     id: "fi_price_edge_5_watchlist_to_lean",
     intent: "promotion",
     target: "Lean",
@@ -348,11 +355,11 @@ const rules: CandidateRule[] = [
     applies: (row) => row.market === "moneyline" && ACTIONABLE.has(row.grade) && row.price !== null && row.price <= -160 && (row.edge ?? 999) < 5,
   },
   {
-    id: "total_lean_gap_lt_0_75_cap",
+    id: "total_lean_projection_opposed_cap_v1_2026_07_11",
     intent: "cap",
     target: "Watchlist",
-    description: "Total Lean + projection gap < .75 -> Watchlist candidate.",
-    applies: (row) => row.market === "total" && row.grade === "Lean" && (row.absProjectionGap ?? 999) < 0.75,
+    description: "Total Lean + signed same-side projection gap below 0 -> projection-opposed stand-down/cap candidate.",
+    applies: (row) => row.market === "total" && row.grade === "Lean" && (row.projectionGap ?? 999) < 0,
   },
 ];
 

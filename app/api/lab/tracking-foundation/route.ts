@@ -26,7 +26,20 @@ import type { TrackedSport } from "@/lib/types/domain/Tracking";
 export const maxDuration = 60;
 
 const MEMBER_TRACKING_FROM = "2026-06-07";
-const TRACKING_AGGREGATE_TIMEOUT_MS = 50000;
+const TRACKING_AGGREGATE_TIMEOUT_MS = 30000;
+const TRACKING_RESPONSE_CACHE_TTL_MS = 5 * 60 * 1000;
+const TRACKING_RESPONSE_STALE_TTL_MS = 30 * 60 * 1000;
+const TRACKING_RESPONSE_CACHE_CONTROL = "private, max-age=60, stale-while-revalidate=300";
+
+type TrackingResponseBody = Record<string, unknown>;
+
+type TrackingResponseCacheEntry = {
+  body: TrackingResponseBody;
+  freshUntilMs: number;
+  staleUntilMs: number;
+};
+
+const trackingResponseCache = new Map<string, TrackingResponseCacheEntry>();
 
 function todayEt(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -48,6 +61,32 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
+function cacheKeyFor(sport: TrackedSport | undefined, today: string): string {
+  return `${sport ?? "all"}::${today}`;
+}
+
+function trackingJson(
+  body: TrackingResponseBody,
+  opts: { status?: number; cacheStatus: "hit" | "miss" | "stale" | "error" },
+) {
+  const init: ResponseInit = {
+    headers: {
+      "Cache-Control": TRACKING_RESPONSE_CACHE_CONTROL,
+      "X-Oddsphere-Tracking-Cache": opts.cacheStatus,
+      "Vary": "Cookie",
+    },
+  };
+  if (opts.status !== undefined) init.status = opts.status;
+
+  return Response.json(
+    {
+      ...body,
+      trackingCacheStatus: opts.cacheStatus,
+    },
+    init,
+  );
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const sportRaw = url.searchParams.get("sport");
@@ -63,6 +102,14 @@ export async function GET(request: Request) {
       ? (sportRaw as TrackedSport)
       : undefined;
 
+  const today = todayEt();
+  const cacheKey = cacheKeyFor(sport, today);
+  const nowMs = Date.now();
+  const cached = trackingResponseCache.get(cacheKey);
+  if (cached !== undefined && cached.freshUntilMs > nowMs) {
+    return trackingJson(cached.body, { cacheStatus: "hit" });
+  }
+
   let result;
   try {
     result = await withTimeout(
@@ -70,22 +117,28 @@ export async function GET(request: Request) {
         supabase,
         sport,
         from: MEMBER_TRACKING_FROM,
-        to: todayEt(),
+        to: today,
         includeLaunchDay: false,
       }),
       TRACKING_AGGREGATE_TIMEOUT_MS,
       "tracking aggregate",
     );
   } catch (error) {
-    return Response.json(
+    if (cached !== undefined && cached.staleUntilMs > nowMs) {
+      return trackingJson(
+        {
+          ...cached.body,
+          warning: "tracking_served_stale_after_refresh_error",
+        },
+        { cacheStatus: "stale" },
+      );
+    }
+    return trackingJson(
       {
         error: "tracking_temporarily_unavailable",
         detail: error instanceof Error ? error.message : String(error),
       },
-      {
-        status: 503,
-        headers: { "Cache-Control": "no-store" },
-      },
+      { status: 503, cacheStatus: "error" },
     );
   }
 
@@ -119,28 +172,33 @@ export async function GET(request: Request) {
   //     preserved so the daily/weekly/lifetime rollups stay correct.
   // Toss-Up / Held remain as state counts only. No raw model audit
   // or model-version labels leak to the member API.
-  return Response.json(
-    {
-      sport: sport ?? "all",
-      baselines: safeBaselines,
-      overall: result.overall,
-      bySport: result.bySport,
-      byMarket: result.byMarket,
-      bySportMarket: result.bySportMarket,
-      byPlayGrade: result.byPlayGrade,
-      bestAngles: result.bestAngles,
-      leans: result.leans,
-      yesterday: result.yesterday,
-      thisWeek: result.thisWeek,
-      thisMonth: result.thisMonth,
-      dailyTrend: result.dailyTrend,
-      recentPicks: result.recentPicks,
-      recentlySettled: result.recentlySettled,
-      tablesInitialized: result.tablesInitialized,
-      freshTrackingStarted: result.overall.picks > 0,
-    },
-    {
-      headers: { "Cache-Control": "no-store" },
-    },
-  );
+  const body: TrackingResponseBody = {
+    sport: sport ?? "all",
+    baselines: safeBaselines,
+    overall: result.overall,
+    bySport: result.bySport,
+    byMarket: result.byMarket,
+    bySportMarket: result.bySportMarket,
+    byPlayGrade: result.byPlayGrade,
+    bestAngles: result.bestAngles,
+    leans: result.leans,
+    yesterday: result.yesterday,
+    thisWeek: result.thisWeek,
+    thisMonth: result.thisMonth,
+    dailyTrend: result.dailyTrend,
+    recentPicks: result.recentPicks,
+    recentlySettled: result.recentlySettled,
+    tablesInitialized: result.tablesInitialized,
+    freshTrackingStarted: result.overall.picks > 0,
+    generatedAt: new Date().toISOString(),
+  };
+
+  const cacheWrittenAtMs = Date.now();
+  trackingResponseCache.set(cacheKey, {
+    body,
+    freshUntilMs: cacheWrittenAtMs + TRACKING_RESPONSE_CACHE_TTL_MS,
+    staleUntilMs: cacheWrittenAtMs + TRACKING_RESPONSE_STALE_TTL_MS,
+  });
+
+  return trackingJson(body, { cacheStatus: "miss" });
 }

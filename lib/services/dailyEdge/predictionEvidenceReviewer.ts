@@ -32,7 +32,7 @@ function requiredFieldsFor(row: PredictionEvidenceObject): string[] {
     return ["fi_context"];
   }
   const fields = ["pick", "model_probability"];
-  if (!caps.isFirstInning) fields.push("price", "market_implied_probability", "edge");
+  if (!caps.isFirstInning && row.identity.noBet !== true) fields.push("price", "market_implied_probability", "edge");
   if (row.identity.marketType === "TOTAL") fields.push("line_value", "projected_total");
   if (caps.isFirstInning) fields.push("fi_pick", "fi_context");
   return fields;
@@ -67,6 +67,10 @@ function isFiTossUp(row: PredictionEvidenceObject): boolean {
 
 function isFiHeldNoSide(row: PredictionEvidenceObject): boolean {
   return row.identity.marketType === "FI" && row.identity.pick === null;
+}
+
+function isNonActionableNoBet(row: PredictionEvidenceObject): boolean {
+  return row.identity.noBet === true || /^no\s*play$/i.test(String(row.identity.originalPlayGrade ?? ""));
 }
 
 export function reviewPredictionEvidence(row: PredictionEvidenceObject): PredictionEvidenceReview {
@@ -128,7 +132,7 @@ export function reviewPredictionEvidence(row: PredictionEvidenceObject): Predict
     }
   }
 
-  if (row.identity.marketType === "TOTAL" && row.modelStatsEvidence.edge === null) {
+  if (row.identity.marketType === "TOTAL" && row.modelStatsEvidence.edge === null && !isNonActionableNoBet(row)) {
     persistenceGaps.push("total_edge_missing_at_lock");
   }
   if (row.priceValueEvidence.priceNullReason) dataWarnings.push(row.priceValueEvidence.priceNullReason);
@@ -138,9 +142,10 @@ export function reviewPredictionEvidence(row: PredictionEvidenceObject): Predict
     /\b(stale|missing starter|injury|lineup|blocked|unavailable price|no_price|price missing)\b/i.test(warning),
   );
   const contextQuality = marketContextQuality(row);
-  const priceValueAvailable = row.priceValueEvidence.priceAmerican !== null &&
-    row.modelStatsEvidence.marketImpliedProbability !== null &&
-    (caps.isFirstInning || row.modelStatsEvidence.edge !== null);
+  const priceValueAvailable = row.identity.noBet === true ||
+    (row.priceValueEvidence.priceAmerican !== null &&
+      row.modelStatsEvidence.marketImpliedProbability !== null &&
+      (caps.isFirstInning || row.modelStatsEvidence.edge !== null));
   const modelStatContextAvailable = row.modelStatsEvidence.modelProbability !== null &&
     (row.identity.marketType !== "TOTAL" || row.modelStatsEvidence.projectedTotal !== null);
 

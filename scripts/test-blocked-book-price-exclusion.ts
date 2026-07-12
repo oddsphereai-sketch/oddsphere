@@ -18,6 +18,10 @@ function ml(side: "home" | "away", book: string, odds: number) {
   return { game_id: 1, market_type: "moneyline", side, sportsbook: book, odds_american: odds, line_value: null, fetched_at: "2026-06-15T12:00:00Z" };
 }
 
+function total(side: "over" | "under", book: string, odds: number) {
+  return { game_id: 1, market_type: "total", side, sportsbook: book, odds_american: odds, line_value: 8.5, fetched_at: "2026-06-15T12:00:00Z" };
+}
+
 // 1. central set contains both blocked books
 check("BLOCKED_SPORTSBOOKS has fliff", BLOCKED_SPORTSBOOKS.has("fliff"));
 check("BLOCKED_SPORTSBOOKS has kalshi", BLOCKED_SPORTSBOOKS.has("kalshi"));
@@ -45,6 +49,16 @@ check("isBlockedSportsbook case-insensitive", isBlockedSportsbook("Fliff") && is
 {
   const snap = buildGameOddsSnapshot([ml("away", "kalshi", 999), ml("away", "fanduel", 120)]);
   check("kalshi-first + fanduel → fanduel price", snap.mlAwayOdds === 120);
+}
+
+// 5b. newly trusted real books must be usable by cron/writer paths too
+{
+  const snap = buildGameOddsSnapshot([
+    total("over", "fanatics", -105),
+    total("under", "betrivers", -115),
+  ]);
+  check("newly trusted total over book selected", snap.ouOverOdds === -105);
+  check("newly trusted total under book selected", snap.ouUnderOdds === -115);
 }
 
 // 6. #39 fix — AI reviewer no-vig book priority must NOT contain blocked books.

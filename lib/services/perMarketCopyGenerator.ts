@@ -74,7 +74,7 @@ const VERDICT_FRAMING: Record<Verdict, { open: string; tone: string }> = {
   },
   lean: {
     open: "Soft lean",
-    tone: "the model edge is present, but this stays below the strongest tier",
+    tone: "the model leans this way but the edge is below a stronger grade",
   },
   watchlist: {
     open: "Worth tracking",
@@ -111,18 +111,18 @@ function buildGuidedGuide(input: CopyInput): string {
   // toss-up/NRFI/YRFI presentation is confidence-zone based.
   if (input.market === "first_inning" && input.pick === "Toss-Up") {
     if (input.verdict === "watchlist") {
-      return `FI Toss-Up: there is no actionable YRFI/NRFI side yet at ${conf}% confidence.`;
+      return `Worth tracking: the first-inning model lands in the toss-up zone at ${conf}% confidence — too close to call cleanly.`;
     }
     if (input.verdict === "caution") {
-      return `FI Toss-Up: there is no actionable YRFI/NRFI side yet, and other signals conflict.`;
+      return `The first-inning model lands in the toss-up zone at ${conf}% confidence, and other signals conflict. Pass.`;
     }
     if (input.verdict === "no_play") {
-      return `FI Toss-Up: there is no actionable YRFI/NRFI side yet at ${conf}% confidence.`;
+      return `FI is Toss-Up at ${conf}% confidence, so there is no actionable YRFI/NRFI side yet.`;
     }
     // lean / best_angle shouldn't actually happen for Toss-Up zone rows
     // (Toss-Up confidence is always 52, well below the lean floor), but
     // be defensive with copy in case verdict logic ever changes.
-    return `FI Toss-Up: there is no actionable YRFI/NRFI side yet at ${conf}% confidence.`;
+    return `The first-inning model lands in the toss-up zone at ${conf}% confidence — too close to call cleanly.`;
   }
 
   if (input.verdict === "no_play") {

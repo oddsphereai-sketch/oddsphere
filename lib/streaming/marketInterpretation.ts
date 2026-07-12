@@ -183,6 +183,17 @@ export function interpretMarket(input: MarketInterpretationInput): MarketInterpr
   }
   if (sharpMoney === "with") flags.push("sharp_money_with");
   if (sharpMoney === "against") flags.push("sharp_money_against");
+  const splitPriceConflict =
+    (sharpMoney === "with" && overall === "against") ||
+    (sharpMoney === "against" && overall === "toward");
+  if (splitPriceConflict) {
+    flags.push("market_signal_conflict");
+    detail.push(
+      sharpMoney === "with"
+        ? "Split signal supports our side, but price movement is against the pick."
+        : "Split signal is against our side, but price movement is toward the pick.",
+    );
+  }
 
   // Public-heavy with NO sharp read either way (genuinely unconfirmed — not just
   // "we didn't look"). Excludes cases where the money split DOES signal.
@@ -204,6 +215,7 @@ export function interpretMarket(input: MarketInterpretationInput): MarketInterpr
   let chipTone: ChipTone = "gray";
   if (rlm === "favor") { chipLabel = "Sharp reverse move our way"; chipTone = "emerald"; }
   else if (rlm === "against") { chipLabel = "Reverse move against our side"; chipTone = "amber"; }
+  else if (splitPriceConflict) { chipLabel = "Mixed market signal"; chipTone = "gray"; }
   else if (sharpMoney === "against") { chipLabel = "Sharp money against our side"; chipTone = "amber"; }
   else if (sharpMoney === "with") { chipLabel = "Sharp money on our side"; chipTone = "emerald"; }
   else if (overall === "against") { chipLabel = "Market moved against our side"; chipTone = "amber"; }

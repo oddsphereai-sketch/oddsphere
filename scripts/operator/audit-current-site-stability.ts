@@ -586,6 +586,9 @@ interface SnapshotJson {
   // Generic
   pick?: string;
   side?: string;
+  member_facing_at_lock?: unknown;
+  market_aware_side_correction?: unknown;
+  market_aware_corrected_grade?: unknown;
 }
 
 // MLB grade labels that indicate intentional "held" / "no_bet" state.
@@ -641,11 +644,28 @@ async function check4LockSnapshotCompleteness(): Promise<Issue[]> {
       const mlMarketFlipped =
         sport === "mlb" &&
         pr.market === "moneyline" &&
-        ((s as Record<string, unknown>).ml_flip as { flipped?: unknown } | undefined)?.flipped === true;
+        (((s as Record<string, unknown>).ml_flip as { flipped?: unknown } | undefined)?.flipped === true ||
+          ((s as Record<string, unknown>).market_aware_side_correction as { market?: unknown; applied?: unknown } | undefined)?.market === "moneyline");
       const ouMarketFlipped =
         sport === "mlb" &&
         pr.market === "total" &&
-        ((s as Record<string, unknown>).ou_flip as { flipped?: unknown } | undefined)?.flipped === true;
+        (((s as Record<string, unknown>).ou_flip as { flipped?: unknown } | undefined)?.flipped === true ||
+          ((s as Record<string, unknown>).market_aware_side_correction as { market?: unknown; applied?: unknown } | undefined)?.market === "total");
+      const memberFacingAtLock =
+        s.member_facing_at_lock !== null &&
+        typeof s.member_facing_at_lock === "object" &&
+        !Array.isArray(s.member_facing_at_lock)
+          ? s.member_facing_at_lock as Record<string, unknown>
+          : null;
+      const memberFacingGrade =
+        typeof memberFacingAtLock?.grade === "string"
+          ? memberFacingAtLock.grade.trim().toLowerCase()
+          : null;
+      const memberFacingPredictionType =
+        typeof memberFacingAtLock?.prediction_type === "string"
+          ? memberFacingAtLock.prediction_type.trim().toLowerCase()
+          : null;
+      const memberFacingNoBet = memberFacingAtLock?.no_bet === true;
 
       // Universal required (per Phase 6 §E base) — with v1.2 reclassification
       if (pr.pick === null || pr.pick === undefined) universalMissing.push("pick");
@@ -661,10 +681,14 @@ async function check4LockSnapshotCompleteness(): Promise<Issue[]> {
           expectedNullNotes.push(`play_grade=null is expected for ML held record (ml_play_grade=${s.ml_play_grade})`);
         } else if (ouMarketHeld) {
           expectedNullNotes.push(`play_grade=null is expected for Total held record (ou_play_grade=${s.ou_play_grade})`);
+        } else if (memberFacingNoBet || memberFacingGrade === "no_play") {
+          expectedNullNotes.push("play_grade=null is expected when member_facing_at_lock freezes the row as No Play");
+        } else if (memberFacingGrade === "market_aligned" || memberFacingPredictionType === "market_aligned") {
+          expectedNullNotes.push("play_grade=null is expected for historical locked market-aligned rows with member_facing_at_lock authority");
         } else if (mlMarketFlipped) {
-          expectedNullNotes.push("play_grade=null is expected for flipped ML record (snapshot.ml_flip.flipped=true)");
+          expectedNullNotes.push("play_grade=null is expected for flipped/market-aware-corrected ML record");
         } else if (ouMarketFlipped) {
-          expectedNullNotes.push("play_grade=null is expected for flipped Total record (snapshot.ou_flip.flipped=true)");
+          expectedNullNotes.push("play_grade=null is expected for flipped/market-aware-corrected Total record");
         } else {
           universalMissing.push("play_grade");
         }
@@ -1553,6 +1577,17 @@ async function check10FirstInningIntegrity(slateDate: string): Promise<Issue[]> 
     locked_at: string | null;
     snapshot_json: Record<string, unknown> | null;
   };
+  const effectiveUnlockedFiPlayGrade = (pr: PrRow): string | null => {
+    if (typeof pr.play_grade === "string" && pr.play_grade.length > 0) {
+      return pr.play_grade;
+    }
+    if (pr.no_bet === true && pr.pick === "Toss-Up") {
+      return "toss_up";
+    }
+    const prSnap = pr.snapshot_json ?? null;
+    const prFi = prSnap ? (prSnap.fi_v2_audit as Record<string, unknown> | undefined) ?? null : null;
+    return prFi ? (prFi.fi_play_grade as string | undefined) ?? null : null;
+  };
   const prByGame = new Map<number, PrRow>();
   for (const r of (prRows ?? []) as PrRow[]) prByGame.set(r.game_id, r);
 
@@ -1671,10 +1706,14 @@ async function check10FirstInningIntegrity(slateDate: string): Promise<Issue[]> 
     //     2026-06-10 v15.3 this is auto-fixable for the same reason
     //     as (D): the atomic sync now re-upserts unlocked rows on every
     //     model write. Persistent divergence indicates a sync error.
+    //
+    //     Unlocked Daily Edge cards resolve from prediction_records'
+    //     top-level writer fields. A repair sync can correctly neutralize
+    //     those fields while leaving the historical snapshot_json audit block
+    //     intact, so compare against the effective top-level grade first and
+    //     use snapshot_json only as a legacy fallback.
     if (pr !== null && pr.locked_at === null) {
-      const prSnap = pr.snapshot_json ?? null;
-      const prFi = prSnap ? (prSnap.fi_v2_audit as Record<string, unknown> | undefined) ?? null : null;
-      const prFiPg = prFi ? (prFi.fi_play_grade as string | undefined) ?? null : null;
+      const prFiPg = effectiveUnlockedFiPlayGrade(pr);
       if (prFiPg !== null && liveFiPg !== null && prFiPg !== liveFiPg) {
         pushIssue(issues, {
           code: "FI_STATE_DIVERGENCE",

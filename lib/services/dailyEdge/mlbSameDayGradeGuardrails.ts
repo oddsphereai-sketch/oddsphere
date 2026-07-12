@@ -6,8 +6,7 @@ export type MlbGradeGuardrailRule =
   | "fi_tossup_no_play"
   | "fi_missing_price_blocks_grade_strengthening"
   | "totals_thin_gap_lean_cap"
-  | "ml_best_angle_movement_edge_cap"
-  | "ml_lean_value_gate";
+  | "ml_best_angle_movement_edge_cap";
 
 export type MlbGradeGuardrailResult = {
   market: MarketEdgeDto;
@@ -22,8 +21,8 @@ const VERDICT_LABEL: Record<Verdict, string> = {
   no_play: "No Play",
 };
 
-function correctionEnabled(name: string): boolean {
-  return process.env[name] !== "false";
+function flagEnabled(name: string): boolean {
+  return process.env[name] === "true";
 }
 
 function gradeForVerdict(verdict: Verdict, rawGrade: Grade | null): Grade | null {
@@ -49,7 +48,7 @@ function capMarket(
     },
     finalGrade: gradeForVerdict(verdict, market.rawGrade ?? market.grade ?? null),
     actionabilityLabel: VERDICT_LABEL[verdict],
-    displayReason: `Grade correction: ${VERDICT_LABEL[verdict]} because ${reason.replaceAll("_", " ")}.`,
+    displayReason: `Capped to ${VERDICT_LABEL[verdict]} because ${reason.replaceAll("_", " ")}.`,
     capReasons,
   };
 }
@@ -77,13 +76,6 @@ function americanToImpliedProbability(american: number | null | undefined): numb
   return Math.abs(american) / (Math.abs(american) + 100);
 }
 
-function mlLeanFailsValueGate(market: MarketEdgeDto): boolean {
-  if (typeof market.modelProb === "number" && market.modelProb < 0.55) return true;
-  const implied = americanToImpliedProbability(market.priceAmerican);
-  if (typeof market.modelProb === "number" && implied !== null && market.modelProb < implied) return true;
-  return false;
-}
-
 function pickedSideMovementDirectionFromOdds(market: MarketEdgeDto): "toward" | "against" | "neutral" | "unknown" {
   const trail = market.oddsTrail?.filter((point) => typeof point.american === "number" && Number.isFinite(point.american)) ?? [];
   const first = trail[0]?.american ?? market.lineOpenAmerican ?? market.marketReadV2?.movement?.firstTrackedPrice ?? null;
@@ -101,12 +93,16 @@ function pickedSideMovementDirectionFromOdds(market: MarketEdgeDto): "toward" | 
   return delta > 0 ? "toward" : "against";
 }
 
-function mlMovementNotTowardOrUnknown(market: MarketEdgeDto): boolean {
+function mlMovementKnownNotToward(market: MarketEdgeDto): boolean {
   const direction = market.marketReadV2?.movement?.directionRelativeToPick ?? null;
   if (direction === "neutral" || direction === "resistance") return true;
   if (direction === "support") return false;
   const oddsDirection = pickedSideMovementDirectionFromOdds(market);
-  return oddsDirection !== "toward";
+  return oddsDirection === "neutral" || oddsDirection === "against";
+}
+
+function isPredictionQualityBestAngle(market: MarketEdgeDto): boolean {
+  return (market.capReasons ?? []).includes("prediction_quality_best_angle_promotion");
 }
 
 export function applyMlbSameDayGradeGuardrail(args: {
@@ -118,7 +114,7 @@ export function applyMlbSameDayGradeGuardrail(args: {
 
   if (
     args.market === "first_inning" &&
-    correctionEnabled("MLB_FI_TOSSUP_FORCE_NO_PLAY_ENABLED") &&
+    flagEnabled("MLB_FI_TOSSUP_FORCE_NO_PLAY_ENABLED") &&
     /\btoss[- ]?up\b/i.test(market.pick ?? "")
   ) {
     if (market.verdict.key !== "no_play") {
@@ -129,7 +125,7 @@ export function applyMlbSameDayGradeGuardrail(args: {
 
   if (
     args.market === "first_inning" &&
-    correctionEnabled("MLB_FI_MISSING_PRICE_BLOCKS_GRADE_STRENGTHENING_ENABLED") &&
+    flagEnabled("MLB_FI_MISSING_PRICE_BLOCKS_GRADE_STRENGTHENING_ENABLED") &&
     market.priceAmerican === null &&
     isActionable(market)
   ) {
@@ -139,7 +135,7 @@ export function applyMlbSameDayGradeGuardrail(args: {
 
   if (
     args.market === "total" &&
-    correctionEnabled("MLB_TOTALS_THIN_GAP_LEAN_CAP_ENABLED") &&
+    flagEnabled("MLB_TOTALS_THIN_GAP_LEAN_CAP_ENABLED") &&
     isLean(market)
   ) {
     const gap = totalProjectionGap(market);
@@ -151,23 +147,14 @@ export function applyMlbSameDayGradeGuardrail(args: {
 
   if (
     args.market === "moneyline" &&
-    correctionEnabled("MLB_ML_LEAN_VALUE_GATE_ENABLED") &&
-    isLean(market) &&
-    mlLeanFailsValueGate(market)
-  ) {
-    market = capMarket(market, "watchlist", "ml_lean_value_gate");
-    appliedRules.push("ml_lean_value_gate");
-  }
-
-  if (
-    args.market === "moneyline" &&
-    correctionEnabled("MLB_ML_BEST_ANGLE_MOVEMENT_EDGE_CAP_ENABLED") &&
+    flagEnabled("MLB_ML_BEST_ANGLE_MOVEMENT_EDGE_CAP_ENABLED") &&
     isBestAngle(market) &&
-    mlMovementNotTowardOrUnknown(market) &&
+    !isPredictionQualityBestAngle(market) &&
+    mlMovementKnownNotToward(market) &&
     typeof market.modelMarketGapPct === "number" &&
     market.modelMarketGapPct < 8
   ) {
-    market = capMarket(market, "watchlist", "ml_best_angle_movement_edge_cap");
+    market = capMarket(market, "lean", "ml_best_angle_movement_edge_cap");
     appliedRules.push("ml_best_angle_movement_edge_cap");
   }
 

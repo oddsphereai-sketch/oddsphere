@@ -44,6 +44,8 @@ export type PredictionEvidenceObject = {
     marketType: DailyEdgeEvidenceMarketType;
     normalizedMarket: SharpAnalystMarket;
     pick: string | null;
+    noBet: boolean | null;
+    noBetReason: string | null;
     lineValue: number | null;
     priceAmerican: number | null;
     originalPlayGrade: string | null;
@@ -335,6 +337,8 @@ export function buildPredictionEvidenceObject(args: {
       marketType: marketTypeForEvidence(market.market),
       normalizedMarket: market.market,
       pick: market.pick,
+      noBet: market.noBet,
+      noBetReason: market.noBetReason,
       lineValue: market.lineValue,
       priceAmerican: market.displayPriceAmerican,
       originalPlayGrade: market.playGrade,
@@ -588,7 +592,6 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
   const marketRead = lockedMarketReadForEvidence(payload.marketRead);
   const scores = lockedScores(payload);
   const isFiTossUp = payload.market === "first_inning" && /toss[\s-]*up/i.test(String(payload.pick ?? ""));
-  const fiTossUpQuickRead = "FI is Toss-Up, so there is no actionable YRFI/NRFI side yet.";
   const sharpSignalOnly = payload.sharpBookSplitsOrSignal.available && payload.sharpBookSplitsOrSignal.rows.length === 0;
   const caps = dailyEdgeMarketCapabilities(payload.sport, decisionKeyForEvidenceMarket(payload.market));
   const consensusAvailable = caps.expectsConsensusSplits && payload.consensusSplits.available;
@@ -597,6 +600,8 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
   const compactForScanner: AiAuditorCompactMarketPayload = {
     market: payload.market,
     pick: payload.pick,
+    noBet: payload.noBet,
+    noBetReason: payload.noBetReason,
     playGrade: payload.originalGrade,
     modelProbabilityPct: payload.modelProbabilityPct,
     marketProbabilityPct: payload.marketImpliedProbabilityPct,
@@ -613,7 +618,7 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
     lineValueSource: payload.lineValue !== null ? "market_edge" : "unavailable",
     lineValueNullReason: payload.market === "moneyline" ? "moneyline_has_no_point_line" : payload.lineValue === null ? "historical_locked_line_not_persisted" : null,
     verdict: payload.originalGrade,
-    quickRead: isFiTossUp ? fiTossUpQuickRead : null,
+    quickRead: null,
     marketRead,
     sourceConflict: payload.sourceConflict,
     reasonCodes: payload.marketRead.reasonCodes,
@@ -675,6 +680,8 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
       marketType: marketTypeForEvidence(payload.market),
       normalizedMarket: payload.market,
       pick: payload.pick,
+      noBet: payload.noBet,
+      noBetReason: payload.noBetReason,
       lineValue: payload.lineValue,
       priceAmerican: payload.displayPriceAmerican,
       originalPlayGrade: payload.originalGrade,
@@ -684,7 +691,7 @@ export function buildPredictionEvidenceObjectFromLockedPayload(payload: Rehydrat
       displayedMarketRead: marketRead,
       supportingEvidence: {
         verdict: payload.originalGrade,
-        quickRead: isFiTossUp ? fiTossUpQuickRead : null,
+        quickRead: null,
         consensusSplitsDisplayed: consensusAvailable,
         sharpBookSplitsDisplayed: sharpSplitsAvailable,
         sharpBookSignalDisplayed: sharpSignalAvailable,

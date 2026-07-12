@@ -74,6 +74,22 @@
       "schedule": "20,50 0-3 * * *"
     },
     {
+      "path": "/api/cron/nba-daily-refresh",
+      "schedule": "20,50 13-23 * * *"
+    },
+    {
+      "path": "/api/cron/nba-daily-refresh",
+      "schedule": "20,50 0-3 * * *"
+    },
+    {
+      "path": "/api/cron/nhl-daily-refresh",
+      "schedule": "25,55 13-23 * * *"
+    },
+    {
+      "path": "/api/cron/nhl-daily-refresh",
+      "schedule": "25,55 0-3 * * *"
+    },
+    {
       "path": "/api/cron/soccer-daily-refresh",
       "schedule": "0 10-23 * * *"
     },

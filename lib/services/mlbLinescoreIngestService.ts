@@ -187,9 +187,10 @@ export type LinescoreIngestResult = {
   errors: Array<{ reason: string }>;
 };
 
-type OurGameRow = {
+export type OurGameRow = {
   id: number;
   external_id: number;
+  game_date: string | null;
   status: string | null;
   home_team_id: number;
   away_team_id: number;
@@ -199,6 +200,38 @@ type OurGameRow = {
   home_score: number | null;
   away_score: number | null;
 };
+
+const DOUBLEHEADER_START_TIME_MATCH_WINDOW_MS = 90 * 60 * 1000;
+
+function timestampMs(value: string | null | undefined): number | null {
+  if (value === null || value === undefined || value.length === 0) return null;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+export function selectOurGameForMlbStatsGame(
+  mlb: MlbStatsRawGame,
+  candidates: OurGameRow[],
+): OurGameRow | null {
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0] ?? null;
+
+  const mlbStartMs = timestampMs(mlb.gameDate);
+  if (mlbStartMs === null) return null;
+
+  let best: { row: OurGameRow; deltaMs: number } | null = null;
+  for (const row of candidates) {
+    const ourStartMs = timestampMs(row.game_date);
+    if (ourStartMs === null) continue;
+    const deltaMs = Math.abs(ourStartMs - mlbStartMs);
+    if (best === null || deltaMs < best.deltaMs) {
+      best = { row, deltaMs };
+    }
+  }
+
+  if (best === null) return null;
+  return best.deltaMs <= DOUBLEHEADER_START_TIME_MATCH_WINDOW_MS ? best.row : null;
+}
 
 /**
  * Pure helper: classify an MLB Stats API raw game against our DB
@@ -354,7 +387,7 @@ export async function ingestMlbLinescores(
   const { data: ourRows, error: ourErr } = await supabase
     .from("games")
     .select(
-      "id, external_id, status, home_team_id, away_team_id, first_inning_runs, inning_scores, home_score, away_score",
+      "id, external_id, game_date, status, home_team_id, away_team_id, first_inning_runs, inning_scores, home_score, away_score",
     )
     .eq("sport", "mlb")
     .eq("slate_date", date);
@@ -382,13 +415,17 @@ export async function ingestMlbLinescores(
     ),
   );
 
-  // 4) Build a lookup from (homeAbbrev, awayAbbrev) → our row
-  const oursByPair = new Map<string, OurGameRow>();
+  // 4) Build a lookup from (homeAbbrev, awayAbbrev) → our rows. Multiple
+  // rows are possible on MLB doubleheaders, so later we select by start time.
+  const oursByPair = new Map<string, OurGameRow[]>();
   for (const o of ours) {
     const home = abbrevByTeamId.get(o.home_team_id) ?? null;
     const away = abbrevByTeamId.get(o.away_team_id) ?? null;
     if (home !== null && away !== null) {
-      oursByPair.set(`${home}|${away}`, o);
+      const key = `${home}|${away}`;
+      const bucket = oursByPair.get(key) ?? [];
+      bucket.push(o);
+      oursByPair.set(key, bucket);
     }
   }
 
@@ -396,10 +433,20 @@ export async function ingestMlbLinescores(
   for (const mlb of mlbGames) {
     const mlbHomeAbbrev = normalizeMlbTeamName(mlb.teams?.home?.team?.name);
     const mlbAwayAbbrev = normalizeMlbTeamName(mlb.teams?.away?.team?.name);
+    const candidateRows =
+      mlbHomeAbbrev !== null && mlbAwayAbbrev !== null
+        ? oursByPair.get(`${mlbHomeAbbrev}|${mlbAwayAbbrev}`) ?? []
+        : [];
     const ourRow =
       mlbHomeAbbrev !== null && mlbAwayAbbrev !== null
-        ? oursByPair.get(`${mlbHomeAbbrev}|${mlbAwayAbbrev}`) ?? null
+        ? selectOurGameForMlbStatsGame(mlb, candidateRows)
         : null;
+    if (candidateRows.length > 1 && ourRow === null) {
+      result.errors.push({
+        reason: `doubleheader match failed for ${mlbAwayAbbrev ?? "?"}@${mlbHomeAbbrev ?? "?"} gameDate=${mlb.gameDate ?? "unknown"}`,
+      });
+      result.errorCount++;
+    }
     const expectedHome = ourRow
       ? (abbrevByTeamId.get(ourRow.home_team_id) as MlbTeamAbbrev | undefined) ?? null
       : null;

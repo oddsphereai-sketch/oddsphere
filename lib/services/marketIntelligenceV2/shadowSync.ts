@@ -139,6 +139,10 @@ function isConflictTargetMissing(message: string): boolean {
   return /no unique or exclusion constraint matching the ON CONFLICT specification/i.test(message);
 }
 
+export function isSharpApiHistoryUniqueConflict(message: string): boolean {
+  return /market_split_observations_v2_sharp_history_source_uidx/i.test(message);
+}
+
 function stripV27SplitColumns(row: MarketSplitObservationV2): Omit<MarketSplitObservationV2, "split_line_basis" | "ingestion_run_id"> {
   const { split_line_basis: _splitLineBasis, ingestion_run_id: _ingestionRunId, ...legacyRow } = row;
   void _splitLineBasis;
@@ -379,6 +383,24 @@ export function dedupeSharpApiHistorySplitObservations(
     out.push(row);
   }
   return { rows: out, skipped };
+}
+
+async function dedupeSharpApiHistorySplitObservationsFromDb(opts: {
+  supabase: SupabaseClient;
+  rows: readonly MarketSplitObservationV2[];
+}): Promise<{ rows: MarketSplitObservationV2[]; skipped: number }> {
+  if (!opts.rows.some(isSharpApiHistoryIdentityRow)) {
+    return { rows: [...opts.rows], skipped: 0 };
+  }
+  const existing = await loadSharpHistoryExistingState({
+    supabase: opts.supabase,
+    canonicalEventIds: Array.from(new Set(
+      opts.rows
+        .filter(isSharpApiHistoryIdentityRow)
+        .map((row) => row.canonical_event_id),
+    )),
+  });
+  return dedupeSharpApiHistorySplitObservations(opts.rows, existing.existingObservationKeys);
 }
 
 async function loadSharpHistoryExistingState(opts: {
@@ -644,7 +666,57 @@ async function collectSharpApiSplits(opts: {
   };
 }
 
-async function writeRows(opts: {
+type SplitUpsertResult = {
+  written: number;
+  tableMissing: boolean;
+  error: string | null;
+};
+
+async function upsertSplitObservationsWithHistoryRetry(opts: {
+  supabase: SupabaseClient;
+  rows: readonly MarketSplitObservationV2[];
+  onConflict: string;
+  legacyColumns: boolean;
+}): Promise<SplitUpsertResult> {
+  const payload = opts.legacyColumns ? opts.rows.map(stripV27SplitColumns) : [...opts.rows];
+  const { error } = await opts.supabase
+    .from("market_split_observations_v2")
+    .upsert(payload, {
+      onConflict: opts.onConflict,
+      ignoreDuplicates: true,
+    });
+
+  if (!error) return { written: opts.rows.length, tableMissing: false, error: null };
+  if (isTableMissing(error.message)) return { written: 0, tableMissing: true, error: null };
+  if (!isSharpApiHistoryUniqueConflict(error.message) || !opts.rows.some(isSharpApiHistoryIdentityRow)) {
+    return { written: 0, tableMissing: false, error: error.message };
+  }
+
+  // Another cron can insert the same SharpAPI history observation after our
+  // preflight state read but before this upsert. Reload the identity set and
+  // drop those now-existing history rows, then retry once. Non-history rows stay
+  // in the payload, and any non-race error still bubbles up.
+  const deduped = await dedupeSharpApiHistorySplitObservationsFromDb({
+    supabase: opts.supabase,
+    rows: opts.rows,
+  });
+  if (deduped.rows.length === 0) return { written: 0, tableMissing: false, error: null };
+
+  const retryPayload = opts.legacyColumns ? deduped.rows.map(stripV27SplitColumns) : deduped.rows;
+  const retry = await opts.supabase
+    .from("market_split_observations_v2")
+    .upsert(retryPayload, {
+      onConflict: opts.onConflict,
+      ignoreDuplicates: true,
+    });
+  if (retry.error) {
+    if (isTableMissing(retry.error.message)) return { written: 0, tableMissing: true, error: null };
+    return { written: 0, tableMissing: false, error: retry.error.message };
+  }
+  return { written: deduped.rows.length, tableMissing: false, error: null };
+}
+
+export async function writeRows(opts: {
   supabase: SupabaseClient;
   splitObservations: readonly MarketSplitObservationV2[];
   priceObservations: readonly MarketPriceObservationV2[];
@@ -655,66 +727,45 @@ async function writeRows(opts: {
   let priceWritten = 0;
 
   let splitObservationsForWrite = [...opts.splitObservations];
-  if (splitObservationsForWrite.some(isSharpApiHistoryIdentityRow)) {
-    const existing = await loadSharpHistoryExistingState({
-      supabase: opts.supabase,
-      canonicalEventIds: Array.from(new Set(
-        splitObservationsForWrite
-          .filter(isSharpApiHistoryIdentityRow)
-          .map((row) => row.canonical_event_id),
-      )),
-    });
-    splitObservationsForWrite = dedupeSharpApiHistorySplitObservations(
-      splitObservationsForWrite,
-      existing.existingObservationKeys,
-    ).rows;
-  }
+  splitObservationsForWrite = (await dedupeSharpApiHistorySplitObservationsFromDb({
+    supabase: opts.supabase,
+    rows: splitObservationsForWrite,
+  })).rows;
 
   if (splitObservationsForWrite.length > 0) {
-    const sharpHistoryRows = splitObservationsForWrite.filter(isSharpApiHistoryIdentityRow);
-    const standardSplitRows = splitObservationsForWrite.filter((row) => !isSharpApiHistoryIdentityRow(row));
-    if (sharpHistoryRows.length > 0) {
-      const { error } = await opts.supabase
-        .from("market_split_observations_v2")
-        .insert(sharpHistoryRows);
-      if (error) {
-        if (isTableMissing(error.message)) tableMissing = true;
-        else errors.push(`split upsert sharp history: ${error.message}`);
-      } else {
-        splitWritten += sharpHistoryRows.length;
-      }
-    }
-    if (standardSplitRows.length > 0) {
-    const { error } = await opts.supabase
-      .from("market_split_observations_v2")
-      .upsert(standardSplitRows, {
-        onConflict: "provider,source_book,canonical_event_id,canonical_market_id,selection_key,raw_payload_hash,fetched_at",
-        ignoreDuplicates: true,
+    const primary = await upsertSplitObservationsWithHistoryRetry({
+      supabase: opts.supabase,
+      rows: splitObservationsForWrite,
+      onConflict: "provider,source_book,canonical_event_id,canonical_market_id,selection_key,raw_payload_hash,fetched_at",
+      legacyColumns: false,
+    });
+    if (primary.tableMissing) tableMissing = true;
+    if (primary.error === null && !primary.tableMissing) {
+      splitWritten = primary.written;
+    } else if (primary.error !== null && isColumnMissing(primary.error)) {
+      const retry = await upsertSplitObservationsWithHistoryRetry({
+        supabase: opts.supabase,
+        rows: splitObservationsForWrite,
+        onConflict: "provider,source_book,canonical_event_id,canonical_market_id,selection_key,raw_payload_hash",
+        legacyColumns: true,
       });
-    if (error) {
-      if (isTableMissing(error.message)) tableMissing = true;
-      else if (isColumnMissing(error.message)) {
-        const { error: retryError } = await opts.supabase
-          .from("market_split_observations_v2")
-          .upsert(standardSplitRows.map(stripV27SplitColumns), {
-            onConflict: "provider,source_book,canonical_event_id,canonical_market_id,selection_key,raw_payload_hash",
-            ignoreDuplicates: true,
-          });
-        if (retryError) errors.push(`split upsert legacy retry: ${retryError.message}`);
-        else splitWritten += standardSplitRows.length;
-      } else if (isConflictTargetMissing(error.message)) {
-        const { error: retryError } = await opts.supabase
-          .from("market_split_observations_v2")
-          .upsert(standardSplitRows, {
-            onConflict: "provider,source_book,canonical_event_id,canonical_market_id,selection_key,raw_payload_hash",
-            ignoreDuplicates: true,
-          });
-        if (retryError) errors.push(`split upsert legacy conflict retry: ${retryError.message}`);
-        else splitWritten += standardSplitRows.length;
-      } else errors.push(`split upsert: ${error.message}`);
+      if (retry.tableMissing) tableMissing = true;
+      if (retry.error) errors.push(`split upsert legacy retry: ${retry.error}`);
+      else splitWritten = retry.written;
+    } else if (primary.error !== null && isConflictTargetMissing(primary.error)) {
+      const retry = await upsertSplitObservationsWithHistoryRetry({
+        supabase: opts.supabase,
+        rows: splitObservationsForWrite,
+        onConflict: "provider,source_book,canonical_event_id,canonical_market_id,selection_key,raw_payload_hash",
+        legacyColumns: false,
+      });
+      if (retry.tableMissing) tableMissing = true;
+      if (retry.error) errors.push(`split upsert legacy conflict retry: ${retry.error}`);
+      else splitWritten = retry.written;
+    } else if (primary.error !== null) {
+      errors.push(`split upsert: ${primary.error}`);
     } else {
-      splitWritten += standardSplitRows.length;
-    }
+      splitWritten = primary.written;
     }
   }
 

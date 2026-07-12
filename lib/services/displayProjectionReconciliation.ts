@@ -4,20 +4,18 @@
  * The member-facing card must tell ONE coherent story: the displayed projected
  * scores and total must SUPPORT the final official pick.
  *
- * TOTALS need no bending here. The totals mean-side flip (totalsMeanFlip.ts)
- * resolves the final O/U side against the SAME displayed line and the SAME
- * displayed projected total (the raw score sum). So a *made* O/U pick is always
- * already coherent with the raw total: either the side matches the mean, or the
- * row stood down to no-bet (no pick to contradict). We therefore keep the
- * displayed total at the genuine raw score sum and NEVER bend it below/above the
- * line to protect a stale side — that was the explicitly-rejected approach.
+ * TOTALS are display-reconciled only when the visible projected score would
+ * contradict the visible O/U pick. The raw model projection remains preserved
+ * upstream in game_predictions / snapshot_json; this module only prevents a
+ * member-facing card from saying "Under 8.5" while showing a 9.0 projected
+ * score, or "Over 8.5" while showing 8.2.
  *
  * The one thing that still needs reconciling is the ML MARGIN SIGN. A corrected
  * (flipped) ML pick has the raw projection favoring the side we flipped away
  * from — e.g. raw shows CLE outscoring CWS but the final pick is CWS. We flip
- * the margin sign so the displayed scores show the FINAL ML pick winning, while
- * holding the displayed TOTAL fixed at the raw score sum (we only redistribute
- * runs between the two teams, never change their sum).
+ * the margin sign so the displayed scores show the FINAL ML pick winning. When
+ * total reconciliation is also needed, we scale the displayed total first and
+ * then redistribute that total across the picked ML margin.
  *
  * Deterministic, conservative, and a NO-OP when the raw projection already
  * supports the pick. The raw projection is preserved upstream
@@ -35,6 +33,8 @@ const ML_MIN_WIN_MARGIN = 0.3;
  * the picked team visibly ahead without overstating a blowout.
  */
 const ML_MIN_DISPLAY_MARGIN = 0.2;
+/** Minimal distance from the total line so a rounded score never lands on push. */
+const TOTAL_MIN_DISPLAY_GAP = 0.2;
 
 export type DisplayProjectionInput = {
   rawAway: number | null;
@@ -61,8 +61,21 @@ export function reconcileDisplayProjection(i: DisplayProjectionInput): DisplayPr
   const rawAway = typeof i.rawAway === "number" && Number.isFinite(i.rawAway) ? i.rawAway : 0;
   const rawHome = typeof i.rawHome === "number" && Number.isFinite(i.rawHome) ? i.rawHome : 0;
 
-  // Displayed total is the genuine raw score sum — never bent to a line.
-  const targetTotal = rawAway + rawHome;
+  // Displayed total starts from raw, then moves only if it would contradict the
+  // visible O/U pick. Keep one decimal so the score total and card math agree.
+  const rawTotal = rawAway + rawHome;
+  let targetTotal = rawTotal;
+  let totalReconciled = false;
+  if (i.line !== null && Number.isFinite(i.line)) {
+    if (i.ouPick === "over" && targetTotal <= i.line) {
+      targetTotal = i.line + TOTAL_MIN_DISPLAY_GAP;
+      totalReconciled = true;
+    } else if (i.ouPick === "under" && targetTotal >= i.line) {
+      targetTotal = Math.max(0, i.line - TOTAL_MIN_DISPLAY_GAP);
+      totalReconciled = true;
+    }
+  }
+  targetTotal = round1(targetTotal);
   const rawMargin = rawHome - rawAway; // > 0 ⇒ home projected to win
 
   // Margin must show the FINAL ML pick winning. If the raw projection already
@@ -81,6 +94,7 @@ export function reconcileDisplayProjection(i: DisplayProjectionInput): DisplayPr
     signedMargin = i.mlPick === "home" ? magnitude : -magnitude;
     if (!supportsRaw || magnitude !== Math.abs(rawMargin)) marginReconciled = true;
   }
+  signedMargin = Math.max(-targetTotal, Math.min(targetTotal, signedMargin));
 
   const home = Math.max(0, round1((targetTotal + signedMargin) / 2));
   const away = Math.max(0, round1((targetTotal - signedMargin) / 2));
@@ -90,7 +104,7 @@ export function reconcileDisplayProjection(i: DisplayProjectionInput): DisplayPr
     away,
     home,
     total,
-    reconciled: marginReconciled,
+    reconciled: marginReconciled || totalReconciled,
     rule_id: DISPLAY_PROJECTION_RECON_RULE_ID,
   };
 }

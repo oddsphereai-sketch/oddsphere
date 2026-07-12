@@ -28,6 +28,7 @@ type SourceAwareSplitObservationRow = {
   market_type: string;
   selection_key: string | null;
   provider: string | null;
+  source_book: string | null;
   source_type: string | null;
   bets_pct: number | null;
   money_pct: number | null;
@@ -154,7 +155,7 @@ async function main() {
     if (!eventId || !lockedAt) continue;
     const { data: splitRows, error: splitErr } = await supabase
       .from("market_split_observations_v2")
-      .select("canonical_event_id, market_type, selection_key, provider, source_type, bets_pct, money_pct, source_observed_at, fetched_at")
+      .select("canonical_event_id, market_type, selection_key, provider, source_book, source_type, bets_pct, money_pct, source_observed_at, fetched_at")
       .eq("league", args.sport)
       .eq("canonical_event_id", eventId)
       .in("market_type", ["moneyline", "total"])

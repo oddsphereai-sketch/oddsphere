@@ -13,27 +13,13 @@
  * testable without env. The grading service does the I/O and calls these.
  */
 import { computeClv } from "../models/tracking/clvCalculator";
+import { BOOK_PRIORITY } from "../config/bookPriority";
 import { isBlockedSportsbook } from "../config/blockedSportsbooks";
 
-/**
- * Closing-line book priority. Intentionally a local copy of
- * predictionRecordService's BOOK_PRIORITY (not imported) so this module stays
- * dependency-light and pure for testing. Pinnacle first = sharpest close.
- * Keep in sync with predictionRecordService.BOOK_PRIORITY.
- */
-export const CLOSING_BOOK_PRIORITY: readonly string[] = [
-  "pinnacle",
-  "draftkings",
-  "fanduel",
-  "betmgm",
-  "caesars",
-  "bet365 us",
-  "bookmaker",
-  "ballybet",
-  "onexbet",
-  "saba",
-  "splits_consensus",
-] as const;
+const SYNTHETIC_PRICE_BOOKS = new Set(["locked_snapshot", "recommendation_snapshot", "splits_consensus"]);
+export const CLOSING_BOOK_PRIORITY: readonly string[] = BOOK_PRIORITY.filter(
+  (book) => !SYNTHETIC_PRICE_BOOKS.has(book),
+);
 
 export type ClosingLineHistoryRow = {
   market_type: string | null;

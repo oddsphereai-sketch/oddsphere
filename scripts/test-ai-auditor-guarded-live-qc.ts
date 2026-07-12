@@ -9,6 +9,8 @@ function payload(overrides: Partial<AiAuditorPayloadEstimate["payload"]["markets
   const market = {
     market: "moneyline" as const,
     pick: "CWS",
+    noBet: false,
+    noBetReason: null,
     playGrade: "Best Angle",
     modelProbabilityPct: 60,
     marketProbabilityPct: 53,

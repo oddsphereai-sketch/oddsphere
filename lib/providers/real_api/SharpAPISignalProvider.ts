@@ -523,7 +523,8 @@ async function mapOpportunity(
     sportKey,
     date,
     homeAbbrev,
-    awayAbbrev
+    awayAbbrev,
+    fallbackComputedAt
   );
   if (gameExternalId === null) return null;
 
@@ -755,7 +756,7 @@ export class SharpAPISignalProvider implements ISharpSignalProvider {
         // normalizeMlbTeamName — safe to cast back.
         const home = homeStr as MlbTeamAbbrev;
         const away = awayStr as MlbTeamAbbrev;
-        const gameExtId = await this.resolveGame(sportKey, date, home, away);
+        const gameExtId = await this.resolveGame(sportKey, date, home, away, fallbackComputedAt);
         if (gameExtId === null) continue;
         if (gameExternalId !== undefined && gameExtId !== gameExternalId) continue;
         const splitsOnly = buildSplitsOnlySignalsForRow({
