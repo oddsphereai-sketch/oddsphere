@@ -3960,12 +3960,14 @@ function emptyStateMessageFor(
     case "no_data":
       // Sport-specific copy. NBA's offseason / non-game days are common;
       // the honest line is "no games today", not "being ingested".
+      if (sport === "mlb") return "No MLB games scheduled today.";
       if (sport === "nba") return "No NBA games scheduled today.";
       if (sport === "wnba") return "No WNBA games scheduled today.";
       if (sport === "nhl") return "No NHL games scheduled today.";
       if (sport === "soccer") return "No World Cup matches scheduled today.";
       return "No games on tonight's slate.";
     default:
+      if (sport === "mlb") return "No MLB games scheduled today.";
       if (sport === "nba") return "No NBA games scheduled today.";
       if (sport === "soccer") return "No World Cup matches scheduled today.";
       return "No games on tonight's slate.";

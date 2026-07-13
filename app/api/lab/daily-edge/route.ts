@@ -23,6 +23,7 @@
 
 import { supabase } from "@/lib/db/supabase";
 import { isBlockedSportsbook } from "@/lib/config/blockedSportsbooks";
+import { fetchMlbStatsScheduleRaw } from "@/lib/providers/real_api/_mlbStatsApiClient";
 import {
   marketIntelligenceV2UiEnabledForSport,
   readMarketIntelligenceV2Config,
@@ -179,6 +180,44 @@ function cachedDailyEdgeResponse(body: DailyEdgeResponse, cacheStatus: "hit" | "
       "X-Oddsphere-Daily-Edge-Cache": cacheStatus,
     },
   });
+}
+
+function countMlbDailyEdgeSupportedGames(rawSchedule: unknown): number | null {
+  if (rawSchedule === null || typeof rawSchedule !== "object" || Array.isArray(rawSchedule)) {
+    return null;
+  }
+  const root = rawSchedule as { totalGames?: unknown; dates?: unknown };
+  const games: unknown[] = [];
+  if (Array.isArray(root.dates)) {
+    for (const d of root.dates) {
+      if (d === null || typeof d !== "object" || Array.isArray(d)) continue;
+      const dayGames = (d as { games?: unknown }).games;
+      if (Array.isArray(dayGames)) games.push(...dayGames);
+    }
+  }
+
+  if (games.length === 0) {
+    if (typeof root.totalGames === "number" && Number.isFinite(root.totalGames)) {
+      return Math.max(0, Math.trunc(root.totalGames));
+    }
+    return Array.isArray(root.dates) ? 0 : null;
+  }
+
+  return games.filter((game) => {
+    if (game === null || typeof game !== "object" || Array.isArray(game)) return true;
+    const gameType = (game as { gameType?: unknown }).gameType;
+    // Daily Edge covers normal MLB slates. Do not make All-Star, spring, or
+    // exhibition events look like missing ingestion.
+    return gameType !== "A" && gameType !== "S" && gameType !== "E";
+  }).length;
+}
+
+async function loadOfficialMlbDailyEdgeSupportedGameCount(date: string): Promise<number | null> {
+  const raw = await fetchMlbStatsScheduleRaw(date, {
+    quiet: true,
+    signal: AbortSignal.timeout(6_000),
+  });
+  return countMlbDailyEdgeSupportedGames(raw);
 }
 // Phase 7G — NBA goes live in the member-facing Daily Edge via the
 // shared adapter below. MLB pipeline below is unchanged.
@@ -5426,6 +5465,10 @@ export async function GET(request: Request) {
       },
     );
   }
+  const officialMlbDailyEdgeSupportedGameCount =
+    sport === "mlb" && (probeRows ?? []).length === 0
+      ? await loadOfficialMlbDailyEdgeSupportedGameCount(requestedDate)
+      : null;
 
   // Step 2: only query for the fallback when the caller opted in. The
   // helper handles all branches; when allowStale=false we pass null so
@@ -5476,6 +5519,7 @@ export async function GET(request: Request) {
     rowsForRequestedDate: (probeRows ?? []) as Array<{ slate_status: string }>,
     mostRecentVisibleFallback,
     allowStale,
+    officialSupportedGameCountForRequestedDate: officialMlbDailyEdgeSupportedGameCount,
   });
   const effectiveDate = slateResult.effectiveDate;
 

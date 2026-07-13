@@ -13,8 +13,9 @@
  *
  *   • Default behavior (no query opt-in): if today has no visible games,
  *     the route returns games:[] with a slateState explaining WHY —
- *     "today_pending_ingest", "today_draft_only", "today_hidden_only".
- *     UI can render an honest "today's slate isn't available yet" copy.
+ *     "today_pending_ingest", "today_draft_only", "today_hidden_only",
+ *     or "no_data" when an official schedule probe confirms there are no
+ *     supported games to ingest. UI can render honest copy.
  *   • Opt-in fallback (`?allowStale=true`): the route walks history to
  *     the most recent visible slate and returns its games, with
  *     slateState="stale_fallback", effectiveDate=that-past-date,
@@ -35,12 +36,15 @@
  *                          see drafts).
  *   today_hidden_only    — requested date has games, but only `hidden` status.
  *                          UI should render pending-ingest copy.
- *   today_pending_ingest — requested date has ZERO game rows of any status.
+ *   today_pending_ingest — requested date has ZERO game rows of any status,
+ *                          and the official schedule probe is unavailable
+ *                          or confirms supported games exist.
  *   stale_fallback       — `?allowStale=true` and we returned a past slate.
  *                          UI should label this clearly (existing amber pill
  *                          still applies; effectiveDate != requestedDate).
- *   no_data              — fallback was attempted and history has no visible
- *                          slate at all. Extreme edge case.
+ *   no_data              — official schedule confirms there are no supported
+ *                          games to ingest, or fallback was attempted and
+ *                          history has no visible slate at all.
  */
 export type SlateState =
   | "today_published"
@@ -69,6 +73,12 @@ export interface SlateStateInput {
     | null;
   /** Whether the caller explicitly opted into stale fallback via ?allowStale=true. */
   allowStale: boolean;
+  /**
+   * Official schedule count for supported games on the requested date.
+   * Null/undefined means "unknown"; fail closed to pending-ingest so an
+   * upstream outage never hides a real slate.
+   */
+  officialSupportedGameCountForRequestedDate?: number | null;
 }
 
 export interface SlateStateResult {
@@ -101,13 +111,20 @@ export interface SlateStateResult {
  * Decision order:
  *   1. ANY visible rows on the requested date → today_published.
  *   2. No visible rows but ANY rows → today_draft_only / today_hidden_only.
- *   3. Zero rows on the requested date → today_pending_ingest.
- *   4. If allowStale=true AND mostRecentVisibleFallback != null:
+ *   3. Zero rows on the requested date + official supported count is 0 → no_data.
+ *   4. Zero rows on the requested date + official count unknown/nonzero → today_pending_ingest.
+ *   5. If allowStale=true AND mostRecentVisibleFallback != null:
  *      upgrade pending state → stale_fallback.
- *   5. Else if allowStale=true AND no fallback exists: no_data.
+ *   6. Else if allowStale=true AND no fallback exists: no_data.
  */
 export function determineSlateState(input: SlateStateInput): SlateStateResult {
-  const { requestedDate, rowsForRequestedDate, mostRecentVisibleFallback, allowStale } = input;
+  const {
+    requestedDate,
+    rowsForRequestedDate,
+    mostRecentVisibleFallback,
+    allowStale,
+    officialSupportedGameCountForRequestedDate,
+  } = input;
 
   const counts = new Map<string, number>();
   for (const r of rowsForRequestedDate) {
@@ -133,7 +150,10 @@ export function determineSlateState(input: SlateStateInput): SlateStateResult {
   let pendingState: SlateState;
   let pendingStatus: string | null;
   if (rowsForRequestedDate.length === 0) {
-    pendingState = "today_pending_ingest";
+    pendingState =
+      officialSupportedGameCountForRequestedDate === 0
+        ? "no_data"
+        : "today_pending_ingest";
     pendingStatus = null;
   } else {
     const hasDraft = counts.has("draft");

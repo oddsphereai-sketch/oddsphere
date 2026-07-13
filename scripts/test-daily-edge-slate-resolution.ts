@@ -123,6 +123,38 @@ async function main() {
     check("shouldFetchGames = false (silent fallback BLOCKED)", r.shouldFetchGames === false);
   }
 
+  // [B.3] Official off-day: local DB has zero rows AND official schedule says
+  // zero supported games. This must read as no_data, not pending ingest.
+  section("Today empty + official supported count 0 → no_data");
+  {
+    const r = determineSlateState({
+      requestedDate: REQ,
+      rowsForRequestedDate: [],
+      mostRecentVisibleFallback: null,
+      allowStale: false,
+      officialSupportedGameCountForRequestedDate: 0,
+    });
+    check("state = no_data", r.slateState === "no_data");
+    check("effectiveDate = requested", r.effectiveDate === REQ);
+    check("slate_status = null", r.slate_status === null);
+    check("shouldFetchGames = false", r.shouldFetchGames === false);
+  }
+
+  // [B.4] Fail-closed ingest state: if the official schedule says supported
+  // games exist but DB rows are missing, this is still an ingestion problem.
+  section("Today empty + official supported count > 0 → today_pending_ingest");
+  {
+    const r = determineSlateState({
+      requestedDate: REQ,
+      rowsForRequestedDate: [],
+      mostRecentVisibleFallback: null,
+      allowStale: false,
+      officialSupportedGameCountForRequestedDate: 15,
+    });
+    check("state = today_pending_ingest", r.slateState === "today_pending_ingest");
+    check("shouldFetchGames = false", r.shouldFetchGames === false);
+  }
+
   // ── [C] today_draft_only ─────────────────────────────────────────────
   section("Today has draft-only games → today_draft_only");
   {

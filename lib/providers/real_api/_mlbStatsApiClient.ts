@@ -90,7 +90,7 @@ export type PitcherFirstInningStatsRecord = {
   raw_source: "mlb_stats_api";
 };
 
-type Opts = { quiet?: boolean };
+type Opts = { quiet?: boolean; signal?: AbortSignal };
 
 function log(opts: Opts | undefined, message: string): void {
   if (opts?.quiet) return;
@@ -606,7 +606,7 @@ export async function fetchMlbStatsScheduleRaw(
     `&sportId=1&hydrate=probablePitcher`;
   let res: Response;
   try {
-    res = await fetch(url, { headers: HEADERS });
+    res = await fetch(url, { headers: HEADERS, signal: opts?.signal });
   } catch {
     log(opts, `network error on /schedule for ${date}`);
     return null;
