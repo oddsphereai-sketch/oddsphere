@@ -728,7 +728,7 @@ function buildDashboardRows(args: {
     if (!opponent) continue;
     const lineupStatus = lineupStatusFor(mapped, identity, args.lineupRows.get(mapped.bdlGameId) ?? [], args.asOfTimestamp);
     const scored = findScoringCandidate(args.scoringCandidates, mapped, identity.player.fullName);
-    const scoredPitcherSignal = definition.family === "pitcher" && definition.recommendationEligibility === "eligible_now" ? scored : null;
+    const scoredPitcherSignal = definition.family === "pitcher" && definition.recommendationEligibility !== "research_only" ? scored : null;
     const marketProbability = pairs.get(oddsPairKey(mapped))?.[mapped.odds.side] ?? null;
     const price = assessPropPrice(mapped.odds.americanOdds);
     if (!price.displayEligible) continue;
@@ -742,7 +742,7 @@ function buildDashboardRows(args: {
       underModelProbability: scoredPitcherSignal.side === "under" ? scoredPitcherSignal.modelProbability : 1 - scoredPitcherSignal.modelProbability,
       overFinalProbability: scoredPitcherSignal.side === "over" ? scoredPitcherSignal.finalProbability : 1 - scoredPitcherSignal.finalProbability,
       underFinalProbability: scoredPitcherSignal.side === "under" ? scoredPitcherSignal.finalProbability : 1 - scoredPitcherSignal.finalProbability,
-      playGrade: signalGrade(scoredPitcherSignal.playGrade),
+      playGrade: definition.recommendationEligibility === "watchlist_until_context" ? "WATCHLIST" : signalGrade(scoredPitcherSignal.playGrade),
       confidence: scoredPitcherSignal.featureConfidence ?? 0.65,
       reasonCodes: scoredPitcherSignal.reasonCodes,
       projection,
