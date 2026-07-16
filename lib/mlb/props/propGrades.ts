@@ -17,19 +17,19 @@ export type PropGradeColor = {
 
 const GRADE_META: Record<PropGrade, { label: string; description: string; color: PropGradeColor }> = {
   BEST_ANGLE: {
-    label: "Strong Signal",
+    label: "Best Angle",
     description: "The model's strongest current alignment across projection, price, confidence, and data quality.",
     color: { text: "#a7f3d0", border: "#10b981", background: "rgba(16, 185, 129, 0.13)" },
   },
   LEAN: {
-    label: "Positive Signal",
+    label: "Lean",
     description: "Positive model value with a thinner margin or greater sensitivity to the available price.",
     color: { text: "#bae6fd", border: "#38bdf8", background: "rgba(56, 189, 248, 0.12)" },
   },
   WATCHLIST: {
-    label: "Watch",
-    description: "An interesting model read that still needs confirmation from price, lineup, starter, or context.",
-    color: { text: "#cbd5e1", border: "#64748b", background: "rgba(100, 116, 139, 0.11)" },
+    label: "Watchlist",
+    description: "An interesting model read that still needs confirmation from price, starter, lineup update, or matchup context.",
+    color: { text: "#c7d2fe", border: "#6366f1", background: "rgba(99, 102, 241, 0.11)" },
   },
   NO_PLAY: {
     label: "No Edge",
@@ -38,13 +38,13 @@ const GRADE_META: Record<PropGrade, { label: string; description: string; color:
   },
   PENDING_DATA: {
     label: "Pending",
-    description: "A required input, mapping, timestamp, or valid market pair is missing or stale.",
-    color: { text: "#c7d2fe", border: "#6366f1", background: "rgba(99, 102, 241, 0.11)" },
+    description: "A core model input, mapping, timestamp, or valid market pair is still updating.",
+    color: { text: "#fde68a", border: "#f59e0b", background: "rgba(245, 158, 11, 0.10)" },
   },
   RESEARCH: {
     label: "Research",
     description: "The market is visible, but the model or available features are not mature enough for action.",
-    color: { text: "#ddd6fe", border: "#8b5cf6", background: "rgba(139, 92, 246, 0.13)" },
+    color: { text: "#cbd5e1", border: "#475569", background: "rgba(71, 85, 105, 0.10)" },
   },
 };
 

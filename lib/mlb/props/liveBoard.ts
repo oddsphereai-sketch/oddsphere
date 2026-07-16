@@ -730,9 +730,9 @@ function buildDashboardRows(args: {
     const canSignal = Boolean(eligibleModel && modelContextIntegrated && isSelectedModelSide && memberReady && price.signalEligible && scored?.status === "recommended" && !isOddsStale(mapped.odds.asOfTimestamp, args.asOfTimestamp));
     const playGrade = canSignal
       ? scored?.playGrade ?? "LEAN"
-      : !memberReady ? "PENDING_DATA"
-        : !price.signalEligible ? "RESEARCH"
-        : definition.recommendationEligibility === "research_only" || !eligibleModel ? "RESEARCH"
+      : definition.recommendationEligibility === "research_only" || !eligibleModel ? "RESEARCH"
+        : !memberReady ? "PENDING_DATA"
+          : !price.signalEligible ? "RESEARCH"
           : isSelectedModelSide ? "WATCHLIST" : "NO_PLAY";
     const reasonCodes = uniqueStrings([
       ...(scored?.reasonCodes ?? []),
@@ -799,7 +799,7 @@ function buildDashboardRows(args: {
       missingFeatures: research?.missingModules.map((module) => module.replaceAll("_", " ")) ?? ["research evidence"],
       modelInputWarnings: scored?.featureWarnings ?? [],
       marketContext: [
-        `Lineup ${lineupStatus.status}`,
+        `Lineup ${lineupContextLabel(lineupStatus.status)}`,
         `Quote updated ${mapped.odds.asOfTimestamp}`,
         bdlPlayerTeamId ? `Provider team ${bdlPlayerTeamId}` : "Provider team pending",
       ],
@@ -971,7 +971,7 @@ export function validateMlbPropsBoardData(args: {
     warnings.push(`${staleOddsRows}_STALE_ODDS_ROWS_WITHHELD_FROM_SIGNALS`);
   }
   const pendingLineups = args.data.props.filter((row) => row.marketFamily !== "pitcher" && row.lineupStatus?.status === "pending").length;
-  if (pendingLineups > 0) warnings.push(`${pendingLineups}_HITTER_ROWS_AWAITING_LINEUP`);
+  if (pendingLineups > 0) warnings.push(`${pendingLineups}_HITTER_ROWS_PROJECTED_LINEUP`);
   const actionableRows = args.data.props.filter((row) => ACTIONABLE_GRADES.has(row.playGrade)).length;
   const invalidActionable = args.data.props.filter((row) => ACTIONABLE_GRADES.has(row.playGrade) && (
     row.finalProbability === null
@@ -1244,6 +1244,12 @@ function lineupStatusFor(
     source: "Ball Don't Lie",
     asOfTimestamp,
   };
+}
+
+function lineupContextLabel(status: NonNullable<PlayerPropPreviewRow["lineupStatus"]>["status"]): string {
+  if (status === "pending") return "projected";
+  if (status === "not_in_lineup") return "not listed";
+  return status;
 }
 
 function twoWayMarketProbabilities(rows: MappedOddsRow[]): Map<string, { over: number; under: number }> {

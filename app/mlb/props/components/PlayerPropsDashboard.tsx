@@ -333,6 +333,8 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
         </div>
         <div data-product-zone="board-controls" className="mt-3 border-t border-gray-800 pt-3">
           <div className="flex flex-wrap items-center gap-2">
+          <FilterSelect label="Model signal" value={grade} onChange={(value) => setGrade(value as PropGrade | "all")} options={PROP_GRADES.map((value) => ({ value, label: getPropGradeLabel(value) }))} includeAll />
+          <FilterSelect label="Team / game" value={team} onChange={setTeam} options={teams} includeAll />
           <FilterSelect label="Book" value={book} onChange={setBook} options={books} includeAll />
           <FilterSelect label="Sort" value={sort} onChange={(value) => setSort(value as SortKey)} options={[
             { value: "player", label: "Player A–Z" }, { value: "market", label: "Market" }, { value: "start", label: "Start time" },
@@ -344,8 +346,6 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
           {activeFilterCount > 0 ? <button type="button" onClick={clearFilters} className="h-9 px-2 text-xs font-bold text-sky-300 hover:text-white">Clear {activeFilterCount}</button> : null}
           </div>
           <details className="group mt-2"><summary className="flex h-8 w-fit cursor-pointer list-none items-center gap-2 text-xs font-bold text-gray-500 hover:text-white">More filters <span className="transition-transform group-open:rotate-180">⌄</span></summary><div className="mt-2 flex flex-wrap items-center gap-2">
-            <FilterSelect label="Model signal" value={grade} onChange={(value) => setGrade(value as PropGrade | "all")} options={PROP_GRADES.map((value) => ({ value, label: getPropGradeLabel(value) }))} includeAll />
-            <FilterSelect label="Team / game" value={team} onChange={setTeam} options={teams} includeAll />
             <FilterSelect label="Research coverage" value={confidence} onChange={setConfidence} options={["high", "medium", "low"]} includeAll />
             <FilterSelect label="EV range" value={evRange} onChange={setEvRange} options={[{ value: "0", label: "EV 0%+" }, { value: "0.05", label: "EV 5%+" }, { value: "0.10", label: "EV 10%+" }]} includeAll />
             <FilterSelect label="Model-edge range" value={edgeRange} onChange={setEdgeRange} options={[{ value: "0", label: "Edge 0%+" }, { value: "0.03", label: "Edge 3%+" }, { value: "0.05", label: "Edge 5%+" }]} includeAll />
@@ -607,7 +607,7 @@ function MarketPairCards({ pairs, selectedId, onSelect }: { pairs: MarketPair[];
   return <div className="divide-y divide-gray-800 overflow-hidden rounded-lg border border-gray-800 bg-gray-950">{pairs.map((pair) => {
     const lean = modelLeanSide(pair);
     return <article key={pair.key} className={`p-4 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : ""}`}>
-      <div className="flex min-w-0 items-start justify-between gap-3"><span className="flex min-w-0 items-center gap-3"><PlayerAvatar player={pair.primary.player} team={pair.primary.team} headshotUrl={pair.primary.headshotUrl} compact /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.player}</strong><span className="block truncate text-xs text-gray-500">{pair.primary.team} {pair.primary.homeAway === "home" ? "vs" : "@"} {pair.primary.opponent} · {pair.primary.marketLabel}</span></span></span><span className={`shrink-0 rounded border px-2 py-1 text-[9px] font-black uppercase ${lean ? "border-emerald-400/35 bg-emerald-400/[0.08] text-emerald-300" : "border-gray-800 text-gray-500"}`}>{lean ? `Model lean: ${lean === "over" ? "Over" : "Under"}` : "No model lean"}</span></div>
+      <div className="flex min-w-0 items-start justify-between gap-3"><span className="flex min-w-0 items-center gap-3"><PlayerAvatar player={pair.primary.player} team={pair.primary.team} headshotUrl={pair.primary.headshotUrl} compact /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.player}</strong><span className="block truncate text-xs text-gray-500">{pair.primary.team} {pair.primary.homeAway === "home" ? "vs" : "@"} {pair.primary.opponent} · {pair.primary.marketLabel}</span></span></span><span className={`shrink-0 rounded border px-2 py-1 text-[9px] font-black uppercase ${lean ? "border-sky-400/35 bg-sky-400/[0.07] text-sky-300" : "border-gray-800 text-gray-500"}`}>{lean ? `Projection side: ${lean === "over" ? "Over" : "Under"}` : "Research only"}</span></div>
       <div className="mt-3 flex items-center justify-between border-y border-gray-800 py-2 text-xs"><span className="text-gray-500">Line <strong className="ml-1 text-white">{pair.primary.line}</strong></span><span className="text-gray-500">{pair.primary.projectionSource === "recent_form" ? "Recent avg" : "Projection"} <strong className="ml-1 text-white">{pair.primary.projection}</strong></span></div>
       <div className="mt-3 grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" isLean={lean === "over"} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" isLean={lean === "under"} onSelect={onSelect} /></div>
     </article>;
@@ -616,7 +616,7 @@ function MarketPairCards({ pairs, selectedId, onSelect }: { pairs: MarketPair[];
 
 function MarketSideQuote({ row, side, isLean, onSelect }: { row: PlayerPropPreviewRow | null; side: "over" | "under"; isLean: boolean; onSelect: (id: string) => void }) {
   if (!row) return <span className="flex min-h-[72px] items-center justify-center rounded-md border border-dashed border-gray-800 bg-black/10 px-2 text-center text-[10px] font-semibold text-gray-600">{side === "over" ? "Over" : "Under"}<br />Not offered</span>;
-  return <button type="button" onClick={() => onSelect(row.id)} className={`min-w-0 rounded-md border px-2.5 py-2 text-left ${isLean ? "border-emerald-400/45 bg-emerald-400/[0.07]" : "border-gray-800 bg-black/20 hover:border-sky-500/50 hover:bg-sky-500/[0.05]"}`}><span className="flex items-center justify-between gap-2"><strong className="text-xs text-white">{side === "over" ? "O" : "U"} {row.line} · {signed(row.odds)}</strong><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-0.5 flex items-center justify-between gap-2"><span className="truncate text-[9px] text-gray-600">{row.book}</span>{isLean ? <span className="shrink-0 text-[9px] font-black uppercase text-emerald-300">Model lean</span> : null}</span><OddsMovementTag row={row} /></button>;
+  return <button type="button" onClick={() => onSelect(row.id)} className={`min-w-0 rounded-md border px-2.5 py-2 text-left ${isLean ? "border-sky-400/40 bg-sky-400/[0.06]" : "border-gray-800 bg-black/20 hover:border-sky-500/50 hover:bg-sky-500/[0.05]"}`}><span className="flex items-center justify-between gap-2"><strong className="text-xs text-white">{side === "over" ? "O" : "U"} {row.line} · {signed(row.odds)}</strong><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-0.5 flex items-center justify-between gap-2"><span className="truncate text-[9px] text-gray-600">{row.book}</span>{isLean ? <span className="shrink-0 text-[9px] font-black uppercase text-sky-300">Projection side</span> : null}</span><OddsMovementTag row={row} /></button>;
 }
 
 function modelLeanSide(pair: MarketPair): "over" | "under" | null {
@@ -671,7 +671,7 @@ function PlayerView({ rows, player, selectedId, onSelect, onClear }: { rows: Pla
       const leanRow = pair.rows.find((row) => row.side === lean) ?? pair.primary;
       return <article key={pair.key} className={`grid gap-3 p-4 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : "hover:bg-gray-900"} lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1.1fr)_minmax(320px,1.25fr)] lg:items-center`}>
         <div className="flex min-w-0 items-center gap-2"><MarketChip row={pair.primary} /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.marketLabel}</strong><span className="block truncate text-xs text-gray-500">Line {pair.primary.line} · {pair.primary.projectionSource === "recent_form" ? "Recent avg" : "Projection"} {pair.primary.projection}</span></span></div>
-        <div className="min-w-0"><span className={`inline-flex rounded border px-2 py-1 text-[9px] font-black uppercase ${lean ? "border-emerald-400/35 bg-emerald-400/[0.08] text-emerald-300" : "border-gray-800 text-gray-500"}`}>{lean ? `Model lean: ${lean === "over" ? "Over" : "Under"}` : "No model lean"}</span><span className="mt-1.5 block truncate text-xs text-gray-400">{cardReason(leanRow)}</span></div>
+        <div className="min-w-0"><span className={`inline-flex rounded border px-2 py-1 text-[9px] font-black uppercase ${lean ? "border-sky-400/35 bg-sky-400/[0.07] text-sky-300" : "border-gray-800 text-gray-500"}`}>{lean ? `Projection side: ${lean === "over" ? "Over" : "Under"}` : "Research only"}</span><span className="mt-1.5 block truncate text-xs text-gray-400">{cardReason(leanRow)}</span></div>
         <div className="grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" isLean={lean === "over"} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" isLean={lean === "under"} onSelect={onSelect} /></div>
       </article>;
     })}</div>
@@ -927,7 +927,7 @@ function MarketContextSummary({ row }: { row: PlayerPropPreviewRow }) {
     { label: "Probable", value: used.includes("starter") ? "Verified" : "Pending" },
     { label: "Odds", value: row.oddsSanity.length ? "Review" : "Fresh" },
     { label: "Season stat", value: playerStatDescriptor(row).feature ? "Available" : "Unavailable" },
-    { label: "Lineup", value: row.lineupStatus ? sentenceCase(row.lineupStatus.status) : "Pending" },
+    { label: "Lineup", value: lineupDisplayStatus(row.lineupStatus?.status) },
   ];
   return <div data-research-module="market-context" className="mt-4 border-t border-gray-800 pt-4"><div className="flex flex-wrap gap-x-5 gap-y-2">{items.map((item) => <span key={item.label} className="text-xs"><span className="text-gray-600">{item.label}</span> <strong className="ml-1 text-gray-300">{item.value}</strong></span>)}</div><p className="mt-2 text-xs leading-5 text-gray-600">Additional matchup and market-movement trends will appear here when available.</p></div>;
 }
@@ -950,7 +950,7 @@ function playerStatDescriptor(row: PlayerPropPreviewRow): { label: string; featu
 }
 
 function ConfidenceMeter({ row }: { row: PlayerPropPreviewRow }) {
-  const explanation = row.confidenceBucket === "high" ? "Most required player, price, lineup, and matchup inputs are available." : row.confidenceBucket === "medium" ? "Core inputs are available, with some pregame context still developing." : "Several supporting inputs may still change before first pitch.";
+  const explanation = row.confidenceBucket === "high" ? "Most required player, price, and matchup inputs are available." : row.confidenceBucket === "medium" ? "Core inputs are available, with some pregame context still developing." : "Several supporting inputs may still change before first pitch.";
   return <div data-visual="confidence-meter" className="rounded-lg border border-gray-800 bg-black/20 p-3"><div className="flex items-center justify-between"><span className="text-xs text-gray-500">Coverage level</span><strong className="capitalize text-white">{row.confidenceBucket}</strong></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-800"><span className={`block h-full rounded-full ${row.confidenceBucket === "high" ? "bg-emerald-400" : row.confidenceBucket === "medium" ? "bg-sky-400" : "bg-amber-400"}`} style={{ width: `${Math.round(row.confidence * 100)}%` }} /></div><p className="mt-2 text-xs leading-5 text-gray-500">{explanation}</p></div>;
 }
 
@@ -960,7 +960,7 @@ export function FeatureConfidenceChecklist({ row }: { row: PlayerPropPreviewRow 
   const items = [
     featureState("Player", Boolean(row.player && row.team && row.opponent), false),
     featureState("Price", row.marketProbability !== null && row.oddsSanity.length === 0, row.marketProbability === null),
-    featureState("Lineup", /(starter|lineup)/.test(used), /(starter|lineup)/.test(missing)),
+    featureState("Lineup", Boolean(row.lineupStatus && row.lineupStatus.status !== "not_in_lineup"), row.lineupStatus?.status === "not_in_lineup" || /(starter|lineup)/.test(missing)),
     featureState("Form", /(season|stats|rate|baseline|recent|start|game log)/.test(used), /(stats|rate|logs|contact)/.test(missing)),
     featureState("Matchup", (row.marketContext?.length ?? 0) > 0, row.missingFeatures.length > 0),
   ];
@@ -1333,6 +1333,13 @@ function sentenceCase(value: string): string {
   return clean ? clean[0].toUpperCase() + clean.slice(1) : clean;
 }
 
+function lineupDisplayStatus(status: NonNullable<PlayerPropPreviewRow["lineupStatus"]>["status"] | undefined): string {
+  if (status === "confirmed") return "Confirmed";
+  if (status === "posted") return "Posted";
+  if (status === "not_in_lineup") return "Not listed";
+  return "Projected";
+}
+
 function humanStatus(value: string): string {
   return value.replace(/_/g, " ");
 }
@@ -1341,7 +1348,7 @@ function memberReason(value: string): string {
   const labels: Record<string, string> = {
     HIGH_EV: "Strong model value",
     BATTER_CONTEXT_INSUFFICIENT: "More batter context needed",
-    LINEUP_CONTEXT_INSUFFICIENT: "Waiting for lineup confirmation",
+    LINEUP_CONTEXT_INSUFFICIENT: "Projected lineup context",
     LOW_DATA_CONFIDENCE: "Limited supporting data",
     STOLEN_BASE_CONTEXT_INSUFFICIENT: "More stolen-base context needed",
     STALE_BDL_ODDS: "Price is updating",
@@ -1382,7 +1389,7 @@ function memberGradeDescription(grade: PropGrade): string {
   if (grade === "LEAN") return "A positive model difference that is more sensitive to the available price.";
   if (grade === "WATCHLIST") return "An interesting read that still depends on additional confirmation.";
   if (grade === "NO_PLAY") return "The model does not show a meaningful advantage at the current line.";
-  if (grade === "PENDING_DATA") return "Waiting for a key pregame update.";
+  if (grade === "PENDING_DATA") return "A core model or market input is still updating.";
   return "Available for research, but the model or supporting data is not mature enough for a stronger signal.";
 }
 
