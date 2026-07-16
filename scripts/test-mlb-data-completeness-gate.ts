@@ -2,7 +2,7 @@ import {
   applyMlbDataCompletenessGate,
   assessMlbDataCompleteness,
 } from "../lib/services/mlbDataCompletenessGate";
-import type { AutoModelOutput, GameSnapshot, StarterSnapshot } from "../lib/automodel/types";
+import type { AutoFactors, AutoModelOutput, GameSnapshot, StarterSnapshot } from "../lib/automodel/types";
 
 let pass = 0;
 let fail = 0;
@@ -158,7 +158,7 @@ function prediction(overrides: Partial<AutoModelOutput> = {}): AutoModelOutput {
       stale_reason: null,
       predicted_nrfi: true,
       nrfi_confidence: 53,
-      auto_factors: {} as any,
+      auto_factors: {} as AutoFactors,
       ai_sanity: {
         action: "approve",
         reasoning: "ok",
@@ -198,6 +198,15 @@ check("missing starter marks card incomplete", missingStarter.status === "incomp
 check("missing starter records exact missing field", missingStarter.missing_fields.includes("home_probable_pitcher"));
 check("missing starter schedules probable pitcher repair", missingStarter.repair_actions.includes("retry_probable_pitcher_fetch"));
 check("missing starter blocks Best Angle", missingStarter.best_angle_allowed === false);
+
+const probableStarter = assessMlbDataCompleteness(
+  snapshot({ home_starter: starter({ is_confirmed: false }) }),
+  prediction(),
+);
+check("probable starter is explicitly provisional", probableStarter.status === "provisional_starters_pending");
+check("probable starter blocks Best Angle", probableStarter.best_angle_allowed === false);
+check("probable starter remains publishable as provisional", probableStarter.can_publish_normal === true);
+check("probable starter schedules confirmation repair", probableStarter.repair_actions.includes("retry_probable_pitcher_fetch"));
 
 const fallbackStatsSnap = snapshot({
   away_starter: starter({ season_era: null, pitch_quality_score: null }),
