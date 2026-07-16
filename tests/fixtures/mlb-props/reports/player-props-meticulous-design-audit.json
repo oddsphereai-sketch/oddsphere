@@ -129,8 +129,8 @@
       "section": "Model signals",
       "userQuestion": "How does the model currently classify this prop?",
       "benchmarkPattern": "Compact analytical labels that can be filtered without replacing the underlying data.",
-      "decision": "Show Strong Signal, Positive Signal, Watch, No Edge, Pending, and Research as one board column and filter.",
-      "passCriteria": ["Signals do not create a separate pick feed.", "Watch and No Edge retain neutral status colors."]
+      "decision": "Show Best Angle, Lean, Watchlist, No Edge, Pending, and Research as one board column and filter.",
+      "passCriteria": ["Signals do not create a separate pick feed.", "Signal colors align with Daily Edge: emerald Best Angle, sky Lean, indigo Watchlist, gray No Edge."]
     },
     {
       "section": "Admin boundary",

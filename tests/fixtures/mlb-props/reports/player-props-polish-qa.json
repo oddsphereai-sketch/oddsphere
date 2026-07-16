@@ -69,7 +69,7 @@
     "pickFeedRemoved": true,
     "playerSearchAndRadarArePrimary": true,
     "compactSlateHeader": true,
-    "neutralWatchlistAndNoPlayColors": true,
+    "dailyEdgeSignalPaletteAligned": true,
     "researchLedWorkspace": true,
     "operationalHeroCopyRemoved": true,
     "providerHealthAdminOnly": true,

@@ -103,7 +103,7 @@ export function evaluateMlbPropsLaunchReadiness(args: {
     check("DIRECT_MATCHUP_VERIFIED", Boolean(research?.directMatchupComplete), true, "Every hitter prop has official matchup history or an explicit no-history result."),
     check("STARTER_CONTEXT", Boolean(latest?.data.slate?.matchups.some((matchup) => matchup.starterStatus !== "pending")), true, "Probable-pitcher context is present for the slate."),
     check("ENVIRONMENT_CONTEXT", Boolean(research?.environmentComplete), true, "Every displayed prop has park and game-time weather context."),
-    check("LINEUP_CONTEXT", Boolean(research?.lineupsComplete), false, "Posted lineups are available for every hitter prop."),
+    check("LINEUP_CONTEXT", Boolean(research?.lineupsComplete), false, "Projected lineup context is being tracked; posted lineups refresh the board and are not required to open it."),
     check("LATEST_SETTLEMENT_HEALTHY", String(args.tracking.latestSettlementRun?.status ?? "none") !== "failed", false, "The latest settlement run did not fail."),
   ];
   const blockers = checks.filter((item) => item.critical && !item.ok).map((item) => item.code);

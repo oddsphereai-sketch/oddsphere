@@ -311,7 +311,7 @@ function requiredFeaturesFor(marketKey: MlbPropMarketKey): string[] {
     return ["starter_confirmation", "season_rate", "workload_projection", "two_way_odds"];
   }
   if (marketKey === "first_home_run") return ["field_wide_hr_probabilities", "batting_order", "milestone_odds"];
-  if (["batter_rbis", "batter_runs_scored", "batter_hits_runs_rbis"].includes(marketKey)) return ["plate_appearance_projection", "confirmed_lineup", "team_run_context", "two_way_odds"];
+  if (["batter_rbis", "batter_runs_scored", "batter_hits_runs_rbis"].includes(marketKey)) return ["plate_appearance_projection", "projected_or_confirmed_lineup", "team_run_context", "two_way_odds"];
   if (marketKey === "batter_stolen_bases") return ["times_on_base_projection", "steal_attempt_rate", "opposing_battery_context"];
   if (marketKey === "batter_home_runs") return ["plate_appearance_projection", "home_run_rate", "milestone_odds"];
   return ["plate_appearance_projection", "season_event_rate", "two_way_odds"];
