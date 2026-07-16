@@ -713,6 +713,14 @@ function marketDirection(pair: MarketPair): MarketDirection | null {
 }
 
 function modelPrediction(pair: MarketPair): ModelPrediction | null {
+  const longshotValue = pair.rows
+    .filter(isLongshotValueRow)
+    .sort((a, b) => (b.expectedValue ?? Number.NEGATIVE_INFINITY) - (a.expectedValue ?? Number.NEGATIVE_INFINITY))[0];
+  if (longshotValue) return {
+    side: longshotValue.side,
+    row: longshotValue,
+    probability: longshotValue.finalProbability ?? longshotValue.modelProbability ?? longshotValue.overProbability ?? null,
+  };
   const probabilityPrediction = pair.rows
     .map((row): ModelPrediction | null => {
       if (row.overProbability === null || row.underProbability === null) return null;
@@ -744,6 +752,7 @@ function rowMarketDirection(row: PlayerPropPreviewRow): MarketDirection | null {
 }
 
 function rowPredictionSide(row: PlayerPropPreviewRow): "over" | "under" | null {
+  if (isLongshotValueRow(row)) return row.side;
   if (row.overProbability !== null && row.underProbability !== null) return row.overProbability >= row.underProbability ? "over" : "under";
   if (row.finalProbability !== null) return row.side;
   return null;
@@ -770,6 +779,10 @@ function pairSignalRow(pair: MarketPair): PlayerPropPreviewRow | null {
   return pair.rows
     .filter(isPositiveSignal)
     .sort((a, b) => (b.modelEdge ?? 0) - (a.modelEdge ?? 0))[0] ?? null;
+}
+
+function isLongshotValueRow(row: PlayerPropPreviewRow): boolean {
+  return row.reasonCodes.includes("LONGSHOT_VALUE_CONTEXT") && row.playGrade === "WATCHLIST";
 }
 
 function isPositiveSignal(row: PlayerPropPreviewRow): boolean {
