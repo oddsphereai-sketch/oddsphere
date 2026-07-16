@@ -419,6 +419,7 @@ async function main() {
   check("grade helpers use Daily Edge-aligned member labels", getPropGradeLabel("BEST_ANGLE") === "Best Angle" && getPropGradeLabel("LEAN") === "Lean" && getPropGradeLabel("WATCHLIST") === "Watchlist" && getPropGradeLabel("NO_PLAY") === "No Edge" && getPropGradeLabel("PENDING_DATA") === "Data Check" && getPropGradeDescription("BEST_ANGLE").length > 0);
   check("player-prop status colors align to Daily Edge signal palette", getPropGradeColor("BEST_ANGLE").border === "#10b981" && getPropGradeColor("LEAN").border === "#38bdf8" && getPropGradeColor("WATCHLIST").border === "#6366f1" && getPropGradeColor("NO_PLAY").border === "#4b5563" && getPropGradeColor("RESEARCH").border === "#475569");
   check("legacy blocked data maps to Pending Data", mapLegacyPropStatusToGrade("blocked", { reasonCodes: ["STALE_BDL_ODDS"] }) === "PENDING_DATA");
+  check("price policy and projection mismatches do not become Data Check", mapLegacyPropStatusToGrade("no_play", { reasonCodes: ["EXTREME_PRICE_RESEARCH_ONLY"] }) === "RESEARCH" && mapLegacyPropStatusToGrade("no_play", { reasonCodes: ["PROJECTION_SIDE_CONTRADICTION"] }) === "NO_PLAY" && mapLegacyPropStatusToGrade("no_play", { reasonCodes: ["INVALID_PRICE_FORMAT"] }) === "PENDING_DATA");
   check("legacy milestone maps to Research", mapLegacyPropStatusToGrade("research_only", { reasonCodes: ["FIRST_HR_FIELD_MODEL_NOT_PROMOTED"] }) === "RESEARCH");
   check("dev preview route exists", existsSync("app/dev/mlb-props-preview/page.tsx"));
   check("dev preview supports a validated Reader deep link", readFileSync("app/dev/mlb-props-preview/page.tsx", "utf8").includes("searchParams: Promise") && readFileSync("app/dev/mlb-props-preview/page.tsx", "utf8").includes("initialSelectedId"));
@@ -643,7 +644,7 @@ async function main() {
     asOfTimestamp: "2026-07-07T15:00:00.000Z",
     config: { maxOddsAgeSeconds: 10_000 },
   });
-  check("projection-side contradiction blocks actionable grade", contradictoryOver.status === "no_play" && contradictoryOver.playGrade === "PENDING_DATA" && contradictoryOver.reasonCodes.includes("PROJECTION_SIDE_CONTRADICTION"));
+  check("projection-side contradiction blocks actionable grade", contradictoryOver.status === "no_play" && contradictoryOver.playGrade === "NO_PLAY" && contradictoryOver.reasonCodes.includes("PROJECTION_SIDE_CONTRADICTION"));
   const contradictoryUnder = recommendPropBet({
     prediction: { ...prediction, side: "under", modelProbability: 0.68, explanation: { ...prediction.explanation, projectedStrikeouts: 5.8 } },
     overOdds: over,
