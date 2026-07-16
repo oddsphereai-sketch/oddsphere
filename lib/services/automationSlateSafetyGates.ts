@@ -64,6 +64,8 @@ export interface MinimumGameCountInput {
   bdlGameCount: number;
   /** Optional override — defaults to DEFAULT_MIN_MLB_GAMES for MLB. */
   minGameCount?: number;
+  /** Authoritative schedule count; keeps legitimate short slates valid. */
+  officialScheduledGameCount?: number | null;
 }
 
 export interface MinimumGameCountResult {
@@ -76,9 +78,17 @@ export interface MinimumGameCountResult {
 export function assessMinimumGameCount(
   opts: MinimumGameCountInput
 ): MinimumGameCountResult {
-  const threshold =
+  const defaultThreshold =
     opts.minGameCount ??
     (opts.sport === "mlb" ? DEFAULT_MIN_MLB_GAMES : 1);
+  const officialCount = opts.officialScheduledGameCount;
+  const hasOfficialCount =
+    typeof officialCount === "number" &&
+    Number.isInteger(officialCount) &&
+    officialCount >= 0;
+  const threshold = hasOfficialCount
+    ? Math.min(defaultThreshold, officialCount)
+    : defaultThreshold;
   const observed = opts.bdlGameCount;
   if (observed >= threshold) {
     return {

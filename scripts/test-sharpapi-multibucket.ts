@@ -42,7 +42,8 @@ class StubClient extends SharpApiClient {
   public readonly calls: Array<{ path: string; query: Record<string, unknown> }> = [];
   constructor(
     private readonly oppRows: Array<Record<string, unknown>>,
-    private readonly oddsByEventId: Map<string, Array<Record<string, unknown>>>
+    private readonly oddsByEventId: Map<string, Array<Record<string, unknown>>>,
+    private readonly targetedTotalsByEventId: Map<string, Array<Record<string, unknown>>> = new Map()
   ) {
     super("stub-key");
   }
@@ -57,6 +58,9 @@ class StubClient extends SharpApiClient {
     }
     if (opts.path === "/odds") {
       const evId = String(opts.query?.event_id ?? "");
+      if (opts.query?.market_type === "total_runs") {
+        return (this.targetedTotalsByEventId.get(evId) ?? []) as unknown as T[];
+      }
       const rows = this.oddsByEventId.get(evId) ?? [];
       return rows as unknown as T[];
     }
@@ -156,7 +160,7 @@ async function main() {
     // here, so `_b0` is probed). Stub returns [] for `_b0` so the
     // speculative call is harmless. Test now asserts both calls fire
     // AND the speculative one contributes zero records.
-    check("single-bucket — 2 /odds calls (1 advertised + 1 speculative)", oddsCalls.length === 2);
+    check("single-bucket — 4 /odds calls (1 advertised + 3 speculative)", oddsCalls.length === 4);
     check(
       "single-bucket — advertised call hit the canonical suffix",
       oddsCalls.some((c) => c.query.event_id === "mlb_royals_twins_2026-06-05_b3")
@@ -177,8 +181,8 @@ async function main() {
     // Step 2F.1 expectation: speculative probe ran, found nothing,
     // recorded nothing.
     check(
-      "single-bucket — speculativeBucketsAttempted = 1 (probe ran)",
-      result.discovery.perGame[0]?.speculativeBucketsAttempted.length === 1
+      "single-bucket — speculativeBucketsAttempted = 3",
+      result.discovery.perGame[0]?.speculativeBucketsAttempted.length === 3
     );
     check(
       "single-bucket — speculativeRowsRecovered = 0 (probe returned nothing)",
@@ -224,7 +228,7 @@ async function main() {
     const result = await provider.getGameLinesV2(SLATE, "mlb");
 
     const oddsCalls = stub.calls.filter((c) => c.path === "/odds");
-    check("multi-bucket — 2 /odds calls (one per bucket)", oddsCalls.length === 2);
+    check("multi-bucket — 6 /odds calls (advertised + targeted totals + speculative)", oddsCalls.length === 6);
     check(
       "multi-bucket — _b0 fetched",
       oddsCalls.some((c) => c.query.event_id === "mlb_royals_twins_2026-06-05_b0")
@@ -247,6 +251,27 @@ async function main() {
       "multi-bucket — dedupedAcrossBuckets = 0 (no duplicate keys)",
       result.discovery.perGame[0]?.dedupedAcrossBuckets === 0
     );
+  }
+
+  section("Props-heavy generic payload recovers full-game totals");
+  {
+    const eventId = "mlb_royals_twins_2026-06-05_b3";
+    const oppRows = [oppRow({ eventId, away: "Kansas City Royals", home: "Minnesota Twins" })];
+    const genericRows = new Map<string, Array<Record<string, unknown>>>([[eventId, [
+      oddsRow({ market_type: "moneyline", sportsbook: "pinnacle", selection_type: "home", odds_american: -112 }),
+    ]]]);
+    const targetedTotals = new Map<string, Array<Record<string, unknown>>>([[eventId, [
+      oddsRow({ market_type: "total_runs", sportsbook: "pinnacle", selection_type: "over", line: 9.5, odds_american: -104 }),
+      oddsRow({ market_type: "total_runs", sportsbook: "pinnacle", selection_type: "under", line: 9.5, odds_american: -116 }),
+    ]]]);
+    const stub = new StubClient(oppRows, genericRows, targetedTotals);
+    const provider = new SharpAPIOddsProvider("stub-key", mockResolver, { client: stub });
+    const result = await provider.getGameLinesV2(SLATE, "mlb");
+    const totals = result.records.filter((r) => r.market_type === "total");
+
+    check("targeted total query fired", stub.calls.some((c) => c.query.event_id === eventId && c.query.market_type === "total_runs"));
+    check("both recovered total sides survive", totals.length === 2);
+    check("generic moneyline remains present", result.records.some((r) => r.market_type === "moneyline"));
   }
 
   // ── [2E.1-C] Multi-bucket — duplicate (book, market, side, line) deduped

@@ -54,6 +54,7 @@ import { linesService } from "./linesService";
 import { auditMarketCoverage } from "./marketCoverageAudit";
 import { supabase as supabaseClient } from "../db/supabase";
 import { generatePredictionsForSlate } from "./automodelService";
+import { createPredictionRecords } from "./predictionRecordService";
 import { publishSlate } from "./slatePublishService";
 import {
   shouldAutoPublishMorningSlate,
@@ -84,6 +85,7 @@ import {
   type LockWarning,
 } from "./automationSlateLockSnapshot";
 import type { Sport } from "../types/domain/Sport";
+import { fetchMlbStatsScheduleRaw } from "../providers/real_api/_mlbStatsApiClient";
 
 // ─── Pure gate helpers — re-exported from automationOrchestratorGates ───
 //
@@ -172,6 +174,7 @@ export type AutomationStepName =
   | "m1_starter_refresh_final"
   | "g2_starter_coverage"
   | "m2_automodel"
+  | "m3_prediction_records_sync"
   | "s11_publish_gate";
 
 export type StepMode =
@@ -327,6 +330,21 @@ export async function runSlateCycleAutomated(opts: {
   const steps: AutomationStepReport[] = [];
   const blockingReasons: string[] = [];
   const warnings: string[] = [];
+  let officialScheduledGameCount: number | null = null;
+  if (opts.sport === "mlb") {
+    try {
+      const schedule = await fetchMlbStatsScheduleRaw(opts.date, {
+        quiet: true,
+        signal: AbortSignal.timeout(6_000),
+      }) as { dates?: Array<{ games?: Array<{ gameType?: string }> }> } | null;
+      const officialGames = schedule?.dates?.flatMap((day) => day.games ?? []) ?? [];
+      officialScheduledGameCount = officialGames.filter((game) =>
+        game.gameType !== "A" && game.gameType !== "S" && game.gameType !== "E"
+      ).length;
+    } catch (error) {
+      warnings.push(`official MLB schedule count unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 
   // ── P0. Provider mode audit ──────────────────────────────────────────
   const t0p = Date.now();
@@ -374,7 +392,9 @@ export async function runSlateCycleAutomated(opts: {
     try {
       const client = new SharpApiClient(sharpKey);
       const gameIdByExternalProbe = await loadGameIdMap(opts.sport, opts.date);
-      const slateSize = gameIdByExternalProbe.size > 0 ? gameIdByExternalProbe.size : 9;
+      const slateSize = gameIdByExternalProbe.size > 0
+        ? gameIdByExternalProbe.size
+        : officialScheduledGameCount ?? 9;
       alignment = await assessProviderDateAlignment(client, opts.sport, opts.date, {
         slate_size: slateSize,
       });
@@ -538,6 +558,7 @@ export async function runSlateCycleAutomated(opts: {
     g1Result = assessMinimumGameCount({
       sport: opts.sport,
       bdlGameCount,
+      officialScheduledGameCount,
     });
     steps.push({
       name: "g1_minimum_game_count",
@@ -1323,7 +1344,7 @@ export async function runSlateCycleAutomated(opts: {
   // affect model). Provider-mode / G1 / G3 are inherited from V2 via
   // effectiveWriteMode.automodel, no double-counting needed.
   const m2Blocked = gateBlocking || g2Blocking;
-  steps.push(await runStep(
+  const m2Step = await runStep(
     "m2_automodel",
     !m2Blocked && effectiveWriteMode.automodel,
     "automodel",
@@ -1387,7 +1408,47 @@ export async function runSlateCycleAutomated(opts: {
     m2Blocked
       ? "blocked by upstream gate (provider/reconciliation/R-17 G1/R-19 G1-G2-G3)"
       : undefined
-  ));
+  );
+  steps.push(m2Step);
+
+  // Daily Edge reads prediction_records, not the game_predictions substrate.
+  // Synchronize immediately after every successful writable model cycle so
+  // the separate hourly tracking cron is only a backup, never a stale window.
+  const m3Step = await runStep(
+    "m3_prediction_records_sync",
+    m2Step.mode === "wrote" && effectiveWriteMode.automodel,
+    "automodel",
+    async (writeMode) => {
+      const res = await createPredictionRecords({
+        sport: opts.sport,
+        slateDate: opts.date,
+        launchDay: false,
+        apply: writeMode,
+        supabase: supabaseClient,
+      });
+      return {
+        details: {
+          games_scanned: res.scanned,
+          records_proposed: res.proposed.length,
+          records_written: writeMode ? res.insertedCount : 0,
+          locked_or_existing_skipped: res.skippedExisting,
+          held_or_skipped_markets: res.skippedHeld,
+          errors: res.errors,
+        },
+        reason: writeMode
+          ? `synchronized ${res.insertedCount} member-facing prediction record(s) immediately after M2`
+          : `dry-run; would synchronize ${res.proposed.length} member-facing prediction record(s)`,
+      };
+    },
+    m2Step.mode !== "wrote"
+      ? `blocked until M2 completes a writable refresh (M2 mode=${m2Step.mode})`
+      : undefined,
+  );
+  steps.push(m3Step);
+  const memberRecordSyncBlocking = m2Step.mode === "wrote" && m3Step.mode !== "wrote";
+  if (memberRecordSyncBlocking) {
+    blockingReasons.push(`member-facing prediction record sync failed after M2: ${m3Step.reason}`);
+  }
 
   // ── S11. Publish gate ────────────────────────────────────────────────
   // R-19 Phase 1 (C4) — HOLD-as-draft default. Auto-publish only when
@@ -1438,7 +1499,8 @@ export async function runSlateCycleAutomated(opts: {
     slateSafetyBlocking ||
     lockMissBlocking ||
     g3IntradayBlocking ||
-    intradayAlignmentDegraded
+    intradayAlignmentDegraded ||
+    memberRecordSyncBlocking
   ) {
     publishDecision = "skipped_blocked";
     publishMode = "blocked";

@@ -157,6 +157,7 @@ type RawOpportunity = {
  * `league`, `sport`, `last_seen_at`, `wire_received_at`.
  */
 type RawOddsRow = {
+  id?: string | number | null;
   event_id?: string | number | null;
   sportsbook?: string | null;
   sport?: string | null;
@@ -181,6 +182,17 @@ type RawOddsRow = {
   home_team?: string | null;
   away_team?: string | null;
 };
+
+function mergeRawOddsRows(primary: RawOddsRow[], recovery: RawOddsRow[]): RawOddsRow[] {
+  const merged = new Map<string, RawOddsRow>();
+  for (const row of [...primary, ...recovery]) {
+    const key = row.id !== null && row.id !== undefined
+      ? String(row.id)
+      : [row.event_id, row.sportsbook, row.market_type, row.selection_type, row.line, row.odds_american].join("::");
+    if (!merged.has(key)) merged.set(key, row);
+  }
+  return [...merged.values()];
+}
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -675,6 +687,19 @@ export class SharpAPIOddsProvider implements IOddsProvider {
             query: { event_id: effectiveEventId },
             maxPages: 3,
           });
+          const hasMainTotal = oddsRows.some((row) =>
+            mapMarketType(asStringOrNull(row.market_type)) === "total" &&
+            row.is_alternate_line !== true
+          );
+          if (!hasMainTotal && callsUsed < MAX_CALLS_PER_INVOCATION) {
+            callsUsed++;
+            const targetedTotals = await this.client.fetchAll<RawOddsRow>({
+              path: "/odds",
+              query: { event_id: effectiveEventId, market_type: "total_runs" },
+              maxPages: 10,
+            });
+            oddsRows = mergeRawOddsRows(oddsRows, targetedTotals);
+          }
           bucketStatus = oddsRows.length === 0 ? "empty" : "ok";
         } catch (e) {
           if (e instanceof SharpApiNotFoundError) {
@@ -838,6 +863,19 @@ export class SharpAPIOddsProvider implements IOddsProvider {
             query: { event_id: probe.fullId },
             maxPages: 3,
           });
+          const hasMainTotal = probeRows.some((row) =>
+            mapMarketType(asStringOrNull(row.market_type)) === "total" &&
+            row.is_alternate_line !== true
+          );
+          if (!hasMainTotal && probeRows.length > 0 && callsUsed < MAX_CALLS_PER_INVOCATION) {
+            callsUsed++;
+            const targetedTotals = await this.client.fetchAll<RawOddsRow>({
+              path: "/odds",
+              query: { event_id: probe.fullId, market_type: "total_runs" },
+              maxPages: 10,
+            });
+            probeRows = mergeRawOddsRows(probeRows, targetedTotals);
+          }
         } catch (e) {
           if (e instanceof SharpApiNotFoundError) {
             probeRows = [];

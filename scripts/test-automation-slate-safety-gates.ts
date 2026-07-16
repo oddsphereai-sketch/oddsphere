@@ -55,6 +55,23 @@ async function main() {
     check("MLB 8 games (at threshold) → ok", r.status === "ok");
   }
   {
+    const r = assessMinimumGameCount({
+      sport: "mlb",
+      bdlGameCount: 1,
+      officialScheduledGameCount: 1,
+    });
+    check("official one-game MLB slate → ok", r.status === "ok");
+    check("official one-game slate lowers effective threshold to 1", r.threshold === 1);
+  }
+  {
+    const r = assessMinimumGameCount({
+      sport: "mlb",
+      bdlGameCount: 1,
+      officialScheduledGameCount: 2,
+    });
+    check("partial provider response still fails against official slate", r.status === "fail_closed");
+  }
+  {
     const r = assessMinimumGameCount({ sport: "mlb", bdlGameCount: 7 });
     check("MLB 7 games (below threshold) → fail_closed", r.status === "fail_closed");
     check("reason mentions below-floor", r.reason.includes("below"));
