@@ -28,7 +28,7 @@ const GRADE_META: Record<PropGrade, { label: string; description: string; color:
   },
   WATCHLIST: {
     label: "Watchlist",
-    description: "An interesting model read that still needs confirmation from price, starter, lineup update, or matchup context.",
+    description: "An interesting model read that still needs a cleaner price, role, or matchup setup.",
     color: { text: "#c7d2fe", border: "#6366f1", background: "rgba(99, 102, 241, 0.11)" },
   },
   NO_PLAY: {
