@@ -38,7 +38,8 @@ export type {
 type SortKey = "ev" | "edge" | "probability" | "confidence" | "start" | "player" | "market" | "book" | "updated";
 type PriceMode = "best" | "all";
 type LineMode = "main" | "all";
-type MarketFilter = "all" | "pitcher" | "batter" | "research";
+type MarketFilter = string;
+type MarketFamilyFilter = "all" | "pitcher" | "batter";
 type RadarItem = { row: PlayerPropPreviewRow; label: string; note: string };
 type DashboardMode = "preview" | "live-preview" | "admin" | "member" | "member-disabled";
 
@@ -208,23 +209,60 @@ const QUICK_MARKETS = [
   { id: "batter_stolen_bases", label: "Stolen Bases" },
 ] as const;
 
-const MARKET_FILTER_LABELS: Record<MarketFilter, string> = {
+const MEMBER_HIDDEN_MARKETS = new Set(["first_home_run", "pitcher_record_a_win"]);
+
+const MARKET_FILTER_LABELS: Record<string, string> = {
   all: "All markets",
-  pitcher: "Pitcher props",
-  batter: "Batter props",
-  research: "Research markets",
+  pitcher_strikeouts: "Pitcher Ks",
+  pitcher_outs: "Pitcher Outs",
+  pitcher_earned_runs: "Pitcher Runs",
+  pitcher_hits_allowed: "Pitcher Hits",
+  pitcher_walks: "Pitcher Walks",
+  batter_hits: "Hits",
+  batter_total_bases: "Total Bases",
+  batter_strikeouts: "Batter Ks",
+  batter_walks: "Batter Walks",
+  batter_singles: "Singles",
+  batter_doubles: "Doubles",
+  batter_home_runs: "Home Runs",
+  batter_rbis: "RBIs",
+  batter_runs_scored: "Runs",
+  batter_hits_runs_rbis: "H+R+RBI",
+  batter_stolen_bases: "Stolen Bases",
+  batter_triples: "Triples",
 };
 
 const MARKET_FILTERS: Array<{ id: MarketFilter; label: string }> = [
-  { id: "pitcher", label: MARKET_FILTER_LABELS.pitcher },
-  { id: "batter", label: MARKET_FILTER_LABELS.batter },
-  { id: "research", label: MARKET_FILTER_LABELS.research },
+  { id: "pitcher_strikeouts", label: MARKET_FILTER_LABELS.pitcher_strikeouts },
+  { id: "pitcher_outs", label: MARKET_FILTER_LABELS.pitcher_outs },
+  { id: "pitcher_earned_runs", label: MARKET_FILTER_LABELS.pitcher_earned_runs },
+  { id: "pitcher_hits_allowed", label: MARKET_FILTER_LABELS.pitcher_hits_allowed },
+  { id: "pitcher_walks", label: MARKET_FILTER_LABELS.pitcher_walks },
+  { id: "batter_hits", label: MARKET_FILTER_LABELS.batter_hits },
+  { id: "batter_total_bases", label: MARKET_FILTER_LABELS.batter_total_bases },
+  { id: "batter_strikeouts", label: MARKET_FILTER_LABELS.batter_strikeouts },
+  { id: "batter_walks", label: MARKET_FILTER_LABELS.batter_walks },
+  { id: "batter_singles", label: MARKET_FILTER_LABELS.batter_singles },
+  { id: "batter_doubles", label: MARKET_FILTER_LABELS.batter_doubles },
+  { id: "batter_home_runs", label: MARKET_FILTER_LABELS.batter_home_runs },
+  { id: "batter_rbis", label: MARKET_FILTER_LABELS.batter_rbis },
+  { id: "batter_runs_scored", label: MARKET_FILTER_LABELS.batter_runs_scored },
+  { id: "batter_hits_runs_rbis", label: MARKET_FILTER_LABELS.batter_hits_runs_rbis },
+  { id: "batter_stolen_bases", label: MARKET_FILTER_LABELS.batter_stolen_bases },
+  { id: "batter_triples", label: MARKET_FILTER_LABELS.batter_triples },
+];
+
+const MARKET_FAMILY_FILTERS: Array<{ id: MarketFamilyFilter; label: string }> = [
+  { id: "all", label: "All markets" },
+  { id: "pitcher", label: "Pitcher props" },
+  { id: "batter", label: "Batter props" },
 ];
 
 export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId = null }: { data: PlayerPropsDashboardData; mode?: DashboardMode; initialSelectedId?: string | null }) {
   const [search, setSearch] = useState("");
   const [selectedGame, setSelectedGame] = useState("all");
   const [grade, setGrade] = useState<PropGrade | "all">("all");
+  const [marketFamilyFilter, setMarketFamilyFilter] = useState<MarketFamilyFilter>("all");
   const [marketFilter, setMarketFilter] = useState<MarketFilter>("all");
   const [book, setBook] = useState("all");
   const [team, setTeam] = useState("all");
@@ -239,14 +277,16 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
   const [hideResearch, setHideResearch] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
 
-  const displayProps = useMemo(() => data.props.map((row) => enforcePreviewIntegrity(hydrateResearchEvidence(row, data.research))), [data.props, data.research]);
-  const displayData = useMemo(() => ({ ...data, props: displayProps }), [data, displayProps]);
+  const hydratedProps = useMemo(() => data.props.map((row) => enforcePreviewIntegrity(hydrateResearchEvidence(row, data.research))), [data.props, data.research]);
+  const displayProps = useMemo(() => hydratedProps.filter((row) => mode === "admin" || isMemberVisibleMarket(row)), [hydratedProps, mode]);
+  const displayData = useMemo(() => ({ ...data, summary: summarizeRows(displayProps), props: displayProps }), [data, displayProps]);
   const books = useMemo(() => unique(displayProps.map((row) => row.book)), [displayProps]);
   const teams = useMemo(() => unique(displayProps.flatMap((row) => [row.team, row.opponent])), [displayProps]);
   const marketFilters = useMemo(() => {
-    const available = new Set(displayProps.map(rowMarketFilter));
+    if (marketFamilyFilter === "all") return [];
+    const available = new Set(displayProps.filter((row) => row.marketFamily === marketFamilyFilter).map((row) => row.market));
     return MARKET_FILTERS.filter((filter) => available.has(filter.id));
-  }, [displayProps]);
+  }, [displayProps, marketFamilyFilter]);
   const gradeOptions = useMemo(() => {
     const available = new Set(displayProps.map((row) => row.playGrade));
     return PROP_GRADES
@@ -261,7 +301,8 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
     let next = displayProps.filter((row) => {
       if (grade !== "all" && row.playGrade !== grade) return false;
       if (selectedGame !== "all" && gameKeyForRow(row) !== selectedGame) return false;
-      if (marketFilter !== "all" && rowMarketFilter(row) !== marketFilter) return false;
+      if (marketFamilyFilter !== "all" && row.marketFamily !== marketFamilyFilter) return false;
+      if (marketFilter !== "all" && row.market !== marketFilter) return false;
       if (book !== "all" && row.book !== book) return false;
       if (team !== "all" && row.team !== team && row.opponent !== team) return false;
       if (confidence !== "all" && row.confidenceBucket !== confidence) return false;
@@ -279,17 +320,18 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
     if (lineMode === "main") next = selectPrimaryPropLines(next);
     if (priceMode === "best") next = dedupeBestPrices(next);
     return [...next].sort(sortRows(sort));
-  }, [book, confidence, displayProps, edgeRange, evRange, grade, hideResearch, lineMode, marketFilter, oddsRange, priceMode, search, selectedGame, sort, startRange, team]);
+  }, [book, confidence, displayProps, edgeRange, evRange, grade, hideResearch, lineMode, marketFamilyFilter, marketFilter, oddsRange, priceMode, search, selectedGame, sort, startRange, team]);
 
   const selected = selectedId ? displayProps.find((row) => row.id === selectedId) ?? null : null;
   const selectedPlayer = players.find((player) => player.toLowerCase() === search.trim().toLowerCase()) ?? null;
   const isSearching = search.trim().length > 0;
-  const activeFilterCount = [selectedGame, grade, marketFilter, book, team, confidence, evRange, edgeRange, oddsRange, startRange]
+  const activeFilterCount = [selectedGame, grade, marketFamilyFilter, marketFilter, book, team, confidence, evRange, edgeRange, oddsRange, startRange]
     .filter((value) => value !== "all").length + (hideResearch ? 1 : 0) + (lineMode === "all" ? 1 : 0);
 
   const clearFilters = () => {
     setSelectedGame("all");
     setGrade("all");
+    setMarketFamilyFilter("all");
     setMarketFilter("all");
     setBook("all");
     setTeam("all");
@@ -302,7 +344,7 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
     setLineMode("main");
   };
 
-  if (data.props.length === 0) {
+  if (displayProps.length === 0) {
     return <PendingPropsState data={data} mode={mode} matchups={matchups} />;
   }
 
@@ -326,10 +368,13 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
           </label>
           <p className="shrink-0 text-xs text-gray-500"><strong className="text-gray-200">{filteredRows.length}</strong> options shown · {players.length} players priced</p>
         </div>
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Market filters">
-          <MarketFilterButton label={MARKET_FILTER_LABELS.all} active={marketFilter === "all"} onClick={() => setMarketFilter("all")} />
-          {marketFilters.map((filter) => <MarketFilterButton key={filter.id} label={filter.label} active={marketFilter === filter.id} onClick={() => setMarketFilter(filter.id)} />)}
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Market groups">
+          {MARKET_FAMILY_FILTERS.map((filter) => <MarketFilterButton key={filter.id} label={filter.label} active={marketFamilyFilter === filter.id} onClick={() => { setMarketFamilyFilter(filter.id); setMarketFilter("all"); }} />)}
         </div>
+        {marketFamilyFilter !== "all" && marketFilters.length ? <div className="mt-2 flex gap-2 overflow-x-auto pb-1" aria-label="Specific market filters">
+          <MarketFilterButton label={marketFamilyFilter === "pitcher" ? "All pitcher props" : "All batter props"} active={marketFilter === "all"} onClick={() => setMarketFilter("all")} />
+          {marketFilters.map((filter) => <MarketFilterButton key={filter.id} label={filter.label} active={marketFilter === filter.id} onClick={() => setMarketFilter(filter.id)} />)}
+        </div> : null}
         <div data-product-zone="board-controls" className="mt-3 border-t border-gray-800 pt-3">
           <div className="flex flex-wrap items-center gap-2">
           <FilterSelect label="Model signal" value={grade} onChange={(value) => setGrade(value as PropGrade | "all")} options={gradeOptions} includeAll />
@@ -338,14 +383,14 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
           <FilterSelect label="Sort" value={sort} onChange={(value) => setSort(value as SortKey)} options={[
             { value: "player", label: "Player A–Z" }, { value: "market", label: "Market" }, { value: "start", label: "Start time" },
             { value: "ev", label: "Highest EV" }, { value: "edge", label: "Highest model edge" }, { value: "probability", label: "Model probability" },
-            { value: "confidence", label: "Research coverage" }, { value: "book", label: "Book" }, { value: "updated", label: "Last updated" },
+            { value: "confidence", label: "Evidence strength" }, { value: "book", label: "Book" }, { value: "updated", label: "Last updated" },
           ]} />
           <LineModeControl value={lineMode} onChange={setLineMode} />
           <PriceModeControl value={priceMode} onChange={setPriceMode} />
           {activeFilterCount > 0 ? <button type="button" onClick={clearFilters} className="h-9 px-2 text-xs font-bold text-sky-300 hover:text-white">Clear {activeFilterCount}</button> : null}
           </div>
           <details className="group mt-2"><summary className="flex h-8 w-fit cursor-pointer list-none items-center gap-2 text-xs font-bold text-gray-500 hover:text-white">More filters <span className="transition-transform group-open:rotate-180">⌄</span></summary><div className="mt-2 flex flex-wrap items-center gap-2">
-            <FilterSelect label="Research coverage" value={confidence} onChange={setConfidence} options={["high", "medium", "low"]} includeAll />
+            <FilterSelect label="Evidence strength" value={confidence} onChange={setConfidence} options={["high", "medium", "low"]} includeAll />
             <FilterSelect label="EV range" value={evRange} onChange={setEvRange} options={[{ value: "0", label: "EV 0%+" }, { value: "0.05", label: "EV 5%+" }, { value: "0.10", label: "EV 10%+" }]} includeAll />
             <FilterSelect label="Model-edge range" value={edgeRange} onChange={setEdgeRange} options={[{ value: "0", label: "Edge 0%+" }, { value: "0.03", label: "Edge 3%+" }, { value: "0.05", label: "Edge 5%+" }]} includeAll />
             <FilterSelect label="Odds range" value={oddsRange} onChange={setOddsRange} options={[{ value: "favorite", label: "Favorites" }, { value: "short", label: "-130 to +130" }, { value: "plus", label: "Plus money" }]} includeAll />
@@ -554,7 +599,7 @@ function FeaturedPropCard({ row, onSelect }: { row: PlayerPropPreviewRow; onSele
     <PlayerEditorialVisual row={row} />
     <div className="flex min-w-0 flex-col p-5 sm:p-7"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase text-emerald-300">OddSphere featured read</p><h3 className="mt-1 text-2xl font-black text-white">{row.player}</h3><p className="mt-1 text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {formatTime(row.gameStartTime)}</p></div><PropGradeBadge grade={row.playGrade} /></div>
     <p className="mt-8 text-[10px] font-black uppercase text-gray-600">{row.marketLabel}</p><p className="mt-1 text-4xl font-black leading-none text-white">{row.side === "over" ? "Over" : "Under"} {row.line}</p><p className="mt-2 text-sm font-semibold text-gray-300">{pickMarketLabel(row)} · <span className="font-black text-white">{row.book} {signed(row.odds)}</span> <span className="text-gray-600">best price</span></p>
-    <div className="mt-6 grid grid-cols-3 border-y border-gray-800 py-4 text-xs font-bold tabular-nums"><span><span className="block text-[9px] uppercase text-gray-600">Model edge</span><strong className="mt-1 block text-lg text-emerald-300">{row.modelEdge === null ? "-" : pct(row.modelEdge, true)}</strong></span><span><span className="block text-[9px] uppercase text-gray-600">Expected value</span><strong className="mt-1 block text-lg text-emerald-300">{row.expectedValue === null ? "-" : pct(row.expectedValue, true)}</strong></span><span><span className="block text-[9px] uppercase text-gray-600">Coverage</span><strong className="mt-1 block text-lg capitalize text-white">{row.confidenceBucket}</strong></span></div>
+    <div className="mt-6 grid grid-cols-3 border-y border-gray-800 py-4 text-xs font-bold tabular-nums"><span><span className="block text-[9px] uppercase text-gray-600">Model edge</span><strong className="mt-1 block text-lg text-emerald-300">{row.modelEdge === null ? "-" : pct(row.modelEdge, true)}</strong></span><span><span className="block text-[9px] uppercase text-gray-600">Expected value</span><strong className="mt-1 block text-lg text-emerald-300">{row.expectedValue === null ? "-" : pct(row.expectedValue, true)}</strong></span><span><span className="block text-[9px] uppercase text-gray-600">Evidence</span><strong className="mt-1 block text-lg capitalize text-white">{row.confidenceBucket}</strong></span></div>
     <p className="mt-5 text-sm leading-6 text-gray-300">{cardReason(row)}</p><footer className="mt-auto flex items-center justify-between gap-3 pt-6"><span className="text-[10px] text-gray-600">Updated {formatTime(row.lastUpdated)}</span><button type="button" onClick={() => onSelect(row.id)} className="h-10 rounded-md bg-white px-4 text-xs font-black text-black hover:bg-emerald-200">Open Reader</button></footer></div>
   </article>;
 }
@@ -734,7 +779,7 @@ export function PropsTable({ rows, selectedId, onSelect }: { rows: PlayerPropPre
   const projectionLabel = rows.every((row) => row.projectionSource === "recent_form") ? "Recent avg" : "Projection";
   return <div className="overflow-hidden rounded-lg border border-gray-800 bg-gray-950">
     <div className="grid grid-cols-[1.25fr_1.08fr_0.78fr_0.64fr_0.82fr_0.56fr_0.54fr_0.68fr_0.82fr_0.48fr] gap-2 border-b border-gray-800 bg-black/40 px-3 py-2 text-[9px] font-bold uppercase text-gray-500 max-xl:hidden">
-      <span>Player</span><span>Market</span><span>Side / Line</span><span>{projectionLabel}</span><span>Book / Odds</span><span>Edge</span><span>EV</span><span>Coverage</span><span>Model Signal</span><span>Reader</span>
+      <span>Player</span><span>Market</span><span>Side / Line</span><span>{projectionLabel}</span><span>Book / Odds</span><span>Edge</span><span>EV</span><span>Evidence</span><span>Model Signal</span><span>Reader</span>
     </div>
     <div className="divide-y divide-gray-800">{rows.map((row) => <div key={row.id} className={`px-3 py-3 hover:bg-gray-900 ${selectedId === row.id ? "bg-violet-400/10" : ""}`}>
       <button type="button" onClick={() => onSelect(row.id)} className="hidden w-full grid-cols-[1.25fr_1.08fr_0.78fr_0.64fr_0.82fr_0.56fr_0.54fr_0.68fr_0.82fr_0.48fr] items-center gap-2 text-left xl:grid">
@@ -789,7 +834,7 @@ export function PropDetailDrawer({ row, comparisons, onClose, showDiagnostics = 
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-800 bg-gray-950/95 px-4 py-3 backdrop-blur sm:px-6"><div className="flex min-w-0 items-center gap-3"><PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} compact /><div className="min-w-0"><p className="text-[10px] font-bold uppercase text-violet-300">Prop Reader</p><h2 className="truncate font-black text-white">{row.player}</h2></div></div><button type="button" onClick={onClose} aria-label="Close reader" className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-700 text-lg text-gray-300 hover:border-gray-500 hover:text-white">×</button></div>
       <div className="grid min-w-0 gap-4 p-4 sm:p-6 lg:grid-cols-2">
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Prop Summary"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><MarketChip row={row} /><span className="truncate text-sm text-gray-400">{row.marketLabel}</span></div><p className="mt-3 text-2xl font-black text-white">{row.side === "over" ? "Over" : "Under"} {row.line}{" "}<span className={assessPropPrice(row.odds).signalEligible ? "text-emerald-300" : "text-sky-300"}>{signed(row.odds)}</span></p><p className="mt-1 text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {formatTime(row.gameStartTime)} · {row.book}</p><ReaderDirectionTag row={row} /></div><PropGradeBadge grade={row.playGrade} /></div><PriceContextLine odds={row.odds} /></DrawerSection></div>
-        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Reader Summary"><p className="max-w-3xl text-base font-semibold leading-7 text-gray-100">{propReaderSummary(row, prices)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-gray-800 pt-3 text-xs"><span className="text-gray-500">Signal <strong className="ml-1 text-gray-200">{getPropGradeLabel(row.playGrade)}</strong></span><span className="text-gray-500">Research coverage <strong className="ml-1 capitalize text-gray-200">{row.confidenceBucket}</strong></span><span className="text-gray-500">Updated <strong className="ml-1 text-gray-200">{formatTime(row.lastUpdated)}</strong></span></div></DrawerSection></div>
+        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Reader Summary"><p className="max-w-3xl text-base font-semibold leading-7 text-gray-100">{propReaderSummary(row, prices)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-gray-800 pt-3 text-xs"><span className="text-gray-500">Signal <strong className="ml-1 text-gray-200">{getPropGradeLabel(row.playGrade)}</strong></span><span className="text-gray-500">Evidence strength <strong className="ml-1 capitalize text-gray-200">{row.confidenceBucket}</strong></span><span className="text-gray-500">Updated <strong className="ml-1 text-gray-200">{formatTime(row.lastUpdated)}</strong></span></div></DrawerSection></div>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Recent Form"><RecentFormPanel row={row} /></DrawerSection></div>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Matchup Context">{row.marketFamily === "pitcher" ? <div className="grid min-w-0 overflow-hidden rounded-lg border border-gray-800 lg:grid-cols-2 lg:divide-x lg:divide-gray-800"><OpponentProfilePanel row={row} /><PitchArsenalPanel row={row} /></div> : <div className="space-y-3"><BatterPitcherHistoryPanel row={row} /><PitchMixMatchupPanel row={row} /></div>}</DrawerSection></div>
         <DrawerSection title="Model Comparison"><ModelVsMarketVisual row={row} /><div className="mt-3 grid grid-cols-3 gap-2"><Metric label="Model edge" value={row.modelEdge === null ? "-" : pct(row.modelEdge, true)} /><Metric label="Expected value" value={row.expectedValue === null ? "-" : pct(row.expectedValue, true)} /><Metric label="Fair price" value={row.fairOdds === null ? "-" : signed(row.fairOdds)} /></div></DrawerSection>
@@ -797,7 +842,7 @@ export function PropDetailDrawer({ row, comparisons, onClose, showDiagnostics = 
         <DrawerSection title="Best Available Price"><BookPriceLadder prices={prices} allBooks={unique(comparisons.map((price) => price.book))} /></DrawerSection>
         <DrawerSection title="Odds Movement"><OddsMovementPanel row={row} /></DrawerSection>
         <DrawerSection title="Signal Context"><p className="text-sm leading-6 text-gray-200">{cardReason(row)}</p><p className="mt-3 text-xs leading-5 text-gray-500">{memberGradeDescription(row.playGrade)}</p></DrawerSection>
-        <DrawerSection title="Research Coverage"><ConfidenceMeter row={row} /><FeatureConfidenceChecklist row={row} /></DrawerSection>
+        <DrawerSection title="Evidence Strength"><ConfidenceMeter row={row} /><FeatureConfidenceChecklist row={row} /></DrawerSection>
         <DrawerSection title="What Could Change"><DetailList title="Still watching" items={row.missingFeatures.map(memberFeatureLabel)} empty="No major pregame questions are currently flagged." /></DrawerSection>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Game Environment"><EnvironmentPanel row={row} /></DrawerSection></div>
         {showDiagnostics ? <div className="min-w-0 lg:col-span-2"><details className="group border-t border-violet-400/20 pt-4"><summary className="cursor-pointer text-xs font-black uppercase text-violet-300">Admin diagnostics</summary><div className="mt-4 grid gap-4 lg:grid-cols-2"><DrawerSection title="Reason Codes"><DetailList title="Raw flags" items={row.reasonCodes} mono /></DrawerSection><DrawerSection title="Feature Inputs"><DetailList title="Verified model inputs" items={row.keyFeatures} /></DrawerSection><DrawerSection title="Missing Features"><DetailList title="Unavailable inputs" items={row.missingFeatures} /><div className="mt-3 text-xs text-gray-500">Odds sanity: {row.oddsSanity.length ? row.oddsSanity.join(", ") : "Passed"}</div></DrawerSection><DrawerSection title="Model Diagnostics"><div className="grid grid-cols-2 gap-2"><Metric label="Independent probability" value={row.independentProbability === null ? "-" : pct(row.independentProbability)} /><Metric label="Market probability" value={row.marketProbability === null ? "-" : pct(row.marketProbability)} /><Metric label="Shrinkage weight" value={pct(row.shrinkageWeight)} /><Metric label="Settlement / CLV" value={`${sentenceCase(row.settlementStatus)} / ${sentenceCase(row.clvStatus)}`} /></div><p className="mt-3 text-xs text-gray-500">Source {row.source} · Updated {formatDateTime(row.lastUpdated)}</p></DrawerSection></div></details></div> : null}
@@ -1053,7 +1098,7 @@ function playerStatDescriptor(row: PlayerPropPreviewRow): { label: string; featu
 
 function ConfidenceMeter({ row }: { row: PlayerPropPreviewRow }) {
   const explanation = row.confidenceBucket === "high" ? "Most required player, price, and matchup inputs are available." : row.confidenceBucket === "medium" ? "Core inputs are available, with some pregame context still developing." : "Several supporting inputs may still change before first pitch.";
-  return <div data-visual="confidence-meter" className="rounded-lg border border-gray-800 bg-black/20 p-3"><div className="flex items-center justify-between"><span className="text-xs text-gray-500">Coverage level</span><strong className="capitalize text-white">{row.confidenceBucket}</strong></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-800"><span className={`block h-full rounded-full ${row.confidenceBucket === "high" ? "bg-emerald-400" : row.confidenceBucket === "medium" ? "bg-sky-400" : "bg-amber-400"}`} style={{ width: `${Math.round(row.confidence * 100)}%` }} /></div><p className="mt-2 text-xs leading-5 text-gray-500">{explanation}</p></div>;
+  return <div data-visual="confidence-meter" className="rounded-lg border border-gray-800 bg-black/20 p-3"><div className="flex items-center justify-between"><span className="text-xs text-gray-500">Evidence strength</span><strong className="capitalize text-white">{row.confidenceBucket}</strong></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-800"><span className={`block h-full rounded-full ${row.confidenceBucket === "high" ? "bg-emerald-400" : row.confidenceBucket === "medium" ? "bg-sky-400" : "bg-amber-400"}`} style={{ width: `${Math.round(row.confidence * 100)}%` }} /></div><p className="mt-2 text-xs leading-5 text-gray-500">{explanation}</p></div>;
 }
 
 export function FeatureConfidenceChecklist({ row }: { row: PlayerPropPreviewRow }) {
@@ -1289,7 +1334,7 @@ function buildRadarItems(rows: PlayerPropPreviewRow[]): RadarItem[] {
   const modelRows = signalRows.length ? signalRows : uniqueRows.filter((row) => row.playGrade === "WATCHLIST");
   for (const row of [...modelRows].sort((a, b) => Math.abs(b.modelEdge ?? 0) - Math.abs(a.modelEdge ?? 0))) {
     if (items.length >= 3) break;
-    add(row, "Model signal", `${getPropGradeLabel(row.playGrade)} · ${sentenceCase(row.confidenceBucket)} research coverage at the current price.`);
+    add(row, "Model signal", `${getPropGradeLabel(row.playGrade)} · ${sentenceCase(row.confidenceBucket)} evidence strength at the current price.`);
   }
   return items.slice(0, 3);
 }
@@ -1457,14 +1502,36 @@ function lineupDisplayStatus(status: NonNullable<PlayerPropPreviewRow["lineupSta
   return "Projected";
 }
 
+function isMemberVisibleMarket(row: PlayerPropPreviewRow): boolean {
+  return !MEMBER_HIDDEN_MARKETS.has(row.market);
+}
+
+function summarizeRows(rows: PlayerPropPreviewRow[]): PlayerPropsDashboardData["summary"] {
+  const grades = (grade: PropGrade) => rows.filter((row) => row.playGrade === grade).length;
+  const averageDataConfidence = rows.length
+    ? rows.reduce((sum, row) => sum + row.confidence, 0) / rows.length
+    : 0;
+  return {
+    gamesWithProps: unique(rows.map(gameKeyForRow)).length,
+    scoredProps: rows.filter((row) => row.projectionSource === "model").length,
+    recommendations: grades("BEST_ANGLE"),
+    leans: grades("LEAN"),
+    watchlist: grades("WATCHLIST"),
+    noPlay: grades("NO_PLAY"),
+    pendingData: grades("PENDING_DATA"),
+    researchOnly: grades("RESEARCH"),
+    booksCovered: unique(rows.map((row) => row.book)).length,
+    marketsAvailable: unique(rows.map((row) => row.market)).length,
+    averageDataConfidence,
+  };
+}
+
 function rowMarketFilter(row: PlayerPropPreviewRow): MarketFilter {
-  if (row.marketFamily === "pitcher") return "pitcher";
-  if (row.marketFamily === "batter") return "batter";
-  return "research";
+  return row.market;
 }
 
 function rowMarketFilterLabel(row: PlayerPropPreviewRow): string {
-  return MARKET_FILTER_LABELS[rowMarketFilter(row)];
+  return MARKET_FILTER_LABELS[rowMarketFilter(row)] ?? row.marketLabel;
 }
 
 function humanStatus(value: string): string {
