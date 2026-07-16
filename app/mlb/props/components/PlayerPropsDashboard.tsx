@@ -893,7 +893,9 @@ export function ProjectionVsLineVisual({ projection, line, side, label = "Projec
 
 function ProjectionIntegrityNotice({ row }: { row: PlayerPropPreviewRow }) {
   if (isProjectionSideCoherent(row)) return null;
-  return <div className="mb-3 rounded-md border border-rose-500/35 bg-rose-500/10 p-3"><p className="text-xs font-bold text-rose-200">Blocked projection-side contradiction</p><p className="mt-1 text-xs leading-5 text-rose-100/70">The selected {row.side} side conflicts with a {row.projection} projection against a {row.line} line. This prop remains visible for review but is excluded from positive model signals.</p></div>;
+  const selectedSide = row.side === "over" ? "Over" : "Under";
+  const otherSide = row.side === "over" ? "Under" : "Over";
+  return <div className="mb-3 rounded-md border border-amber-400/30 bg-amber-400/10 p-3"><p className="text-xs font-bold text-amber-100">Projection points to {otherSide}</p><p className="mt-1 text-xs leading-5 text-amber-100/75">The current projection is {row.projection} against a {row.line} line, so it does not support {selectedSide}. You can still compare prices and research context here.</p></div>;
 }
 
 export function BookPriceLadder({ prices, allBooks = [] }: { prices: PlayerPropPreviewRow[]; allBooks?: string[] }) {
@@ -1402,7 +1404,7 @@ function propReaderSummary(row: PlayerPropPreviewRow, prices: PlayerPropPreviewR
     ? "Recent results add context; they are not a standalone prediction."
     : isProjectionSideCoherent(row)
       ? `That projection supports the ${selectedSide} side currently shown.`
-      : `That projection conflicts with the ${selectedSide} side currently shown, so the signal is blocked.`;
+      : `That projection does not support the ${selectedSide} side currently shown.`;
   const probability = row.finalProbability === null
     ? "A promoted model probability is not available for this market, so this remains a research view."
     : row.marketProbability === null

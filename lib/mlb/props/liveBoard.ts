@@ -847,7 +847,7 @@ function buildDashboardRows(args: {
       clvStatus: "pending",
     });
   }
-  return applyHitterSignalDiscipline(dedupeRows(rows));
+  return applyHitterSignalDiscipline(applyBestPriceSignalDiscipline(dedupeRows(rows)));
 }
 
 const HITTER_LEAN_ELIGIBLE_MARKETS = new Set([
@@ -871,6 +871,28 @@ const HITTER_WATCHLIST_ONLY_MARKETS = new Set([
 const DEFAULT_HITTER_LEAN_MIN_AMERICAN_ODDS = -250;
 const DEFAULT_HITTER_LEANS_PER_PLAYER = 2;
 const DEFAULT_HITTER_LEANS_PER_GAME = 12;
+
+function applyBestPriceSignalDiscipline(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
+  const signalRows = rows.filter((row) => row.playGrade === "BEST_ANGLE" || row.playGrade === "LEAN");
+  if (!signalRows.length) return rows;
+
+  const duplicateSignalIds = new Set<string>();
+  for (const group of groupRows(signalRows, signalOfferKey).values()) {
+    const [best, ...duplicates] = [...group].sort(comparePropSignals);
+    if (!best) continue;
+    for (const row of duplicates) duplicateSignalIds.add(row.id);
+  }
+
+  if (!duplicateSignalIds.size) return rows;
+  return rows.map((row) => duplicateSignalIds.has(row.id)
+    ? {
+      ...row,
+      playGrade: "WATCHLIST",
+      units: 0,
+      reasonCodes: uniqueStrings([...row.reasonCodes, "BETTER_PRICE_AVAILABLE"]),
+    }
+    : row);
+}
 
 function applyHitterSignalDiscipline(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
   const hitterLeans = rows.filter((row) => row.marketFamily !== "pitcher" && row.playGrade === "LEAN");
@@ -943,6 +965,10 @@ function groupRows<T>(rows: T[], keyFor: (row: T) => string): Map<string, T[]> {
 }
 
 function hitterOfferKey(row: PlayerPropPreviewRow): string {
+  return signalOfferKey(row);
+}
+
+function signalOfferKey(row: PlayerPropPreviewRow): string {
   return [
     row.providerIds?.gameId ?? row.gameStartTime,
     row.providerIds?.bdlPlayerId ?? row.player,
@@ -964,13 +990,17 @@ function hitterSignalCluster(market: string): string {
 }
 
 function compareHitterSignals(a: PlayerPropPreviewRow, b: PlayerPropPreviewRow): number {
-  return hitterSignalScore(b) - hitterSignalScore(a)
+  return comparePropSignals(a, b);
+}
+
+function comparePropSignals(a: PlayerPropPreviewRow, b: PlayerPropPreviewRow): number {
+  return propSignalScore(b) - propSignalScore(a)
     || (b.expectedValue ?? -99) - (a.expectedValue ?? -99)
     || (b.modelEdge ?? -99) - (a.modelEdge ?? -99)
     || b.odds - a.odds;
 }
 
-function hitterSignalScore(row: PlayerPropPreviewRow): number {
+function propSignalScore(row: PlayerPropPreviewRow): number {
   return (row.expectedValue ?? -99) * 100 + (row.modelEdge ?? 0) * 20 + row.confidence;
 }
 
