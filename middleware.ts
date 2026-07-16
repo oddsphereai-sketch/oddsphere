@@ -43,13 +43,13 @@ import {
  * Page-route prefixes that require the beta session cookie. On miss,
  * unauthenticated visitors are redirected to /login?next=<encoded-path>.
  */
-const PROTECTED_PAGE_PREFIXES = ["/lab", "/admin"];
+const PROTECTED_PAGE_PREFIXES = ["/lab", "/admin", "/mlb/props"];
 
 /**
  * API-route prefixes that require the beta session cookie. On miss,
  * return JSON 401 (no redirect — API consumers expect JSON).
  */
-const PROTECTED_API_PREFIXES = ["/api/lab"];
+const PROTECTED_API_PREFIXES = ["/api/lab", "/api/mlb/props"];
 
 function isProtectedPagePath(pathname: string): boolean {
   return PROTECTED_PAGE_PREFIXES.some(

@@ -1,0 +1,46 @@
+{
+  "lines": [
+    {
+      "gameId": "pbk_sample_game",
+      "league": "mlb",
+      "date": "2026-07-07",
+      "startTime": "2026-07-07T23:07:00Z",
+      "homeTeamName": "Home Club",
+      "awayTeamName": "Away Club",
+      "lines": {
+        "moneyline": { "home": -120, "away": 105 },
+        "spread": { "home": -1.5, "away": 1.5 },
+        "total": 8.5
+      },
+      "lineSourceTier": "tier1"
+    }
+  ],
+  "splits": [
+    {
+      "gameId": "pbk_sample_game",
+      "sportKey": "mlb",
+      "league": "mlb",
+      "date": "2026-07-07",
+      "homeTeamName": "Home Club",
+      "awayTeamName": "Away Club",
+      "splits": {
+        "moneyline": {
+          "bets": { "homePercent": 54, "awayPercent": 46 },
+          "money": { "homePercent": 58, "awayPercent": 42 },
+          "source": { "booksUsed": 6 }
+        }
+      }
+    }
+  ],
+  "starting_pitchers": [
+    {
+      "gameId": "pbk_sample_game",
+      "homeTeamName": "Home Club",
+      "awayTeamName": "Away Club",
+      "starters": {
+        "home": { "name": "Home Pitcher", "throws": "R", "status": "confirmed" },
+        "away": { "name": "Away Pitcher", "throws": "L", "status": "confirmed" }
+      }
+    }
+  ]
+}

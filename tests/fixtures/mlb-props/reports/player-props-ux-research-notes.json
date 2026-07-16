@@ -1,0 +1,68 @@
+{
+  "generatedAt": "2026-07-14T00:00:00.000Z",
+  "scope": "MLB player-prop discovery, price comparison, projection, and breakdown patterns",
+  "sources": [
+    {
+      "product": "OddsJam Positive EV",
+      "url": "https://oddsjam.com/betting-education/how-to-use-the-oddsjam-positive-ev-tool",
+      "patternsFound": [
+        "Strong book, league, market, player-prop, and date filters",
+        "The actionable bet and best price are visually elevated",
+        "Clicking an opportunity reveals cross-book price comparison"
+      ]
+    },
+    {
+      "product": "PFF Player Prop Tool",
+      "url": "https://www.pff.com/news/pff-player-prop-tool-is-now-live-on-web-for-pff-subscribers",
+      "patternsFound": [
+        "Highest-value props surface before the full board",
+        "Player/game search and fast market filters reduce scanning time",
+        "Projection, matchup context, edge, and concise narratives support deeper review"
+      ]
+    },
+    {
+      "product": "Action Network Matchup PRO Report",
+      "url": "https://actionnetworkhq.zendesk.com/hc/en-us/articles/14474947004173-Matchup-PRO-Report",
+      "patternsFound": [
+        "Top props are summarized in the matchup view",
+        "View More progressively reveals the full prop set",
+        "Signals are grouped inside a game-detail context"
+      ]
+    },
+    {
+      "product": "Slipscore",
+      "url": "https://slipscore.io/",
+      "patternsFound": [
+        "Prominent player search",
+        "Fast game, sport, side, and trend filters",
+        "Ranked results prioritize discovery speed"
+      ]
+    }
+  ],
+  "adopt": [
+    "Rank Best Angles and Leans ahead of the complete board",
+    "Make player, team, market, and book search a primary module",
+    "Provide one-tap market chips for common MLB prop categories",
+    "Highlight the best available price and show the remaining ladder on demand",
+    "Use compact visual comparisons for model versus market and projection versus line",
+    "Use short plain-English reasons on cards and detailed evidence in a drawer",
+    "Keep watchlist conditions distinct from recommendations"
+  ],
+  "avoid": [
+    "Opening on a wide spreadsheet",
+    "Showing every probability and feature on recommendation cards",
+    "Treating unverified splits, movement, or consensus as live context",
+    "Using decorative charts that are not tied to current model values",
+    "Depending on unlicensed player photography",
+    "Copying another product's branding, terminology, or page composition"
+  ],
+  "oddsphereMapping": {
+    "commandCenter": "Daily Edge shell, slate status, matchup, probable pitchers, provider health, and safety state",
+    "featuredProps": "Best Angle and Lean cards with best price, edge, EV, confidence, and one reason",
+    "discovery": "Prominent search plus MLB market chips; results open the same trusted breakdown drawer",
+    "visualAnalysis": "Model-vs-market bars, projection-vs-line scale, book ladder, confidence meter, and feature checklist built only from current row data",
+    "watchlist": "Compact unlock conditions without recommendation styling",
+    "advancedScanner": "Secondary Full Board with filters, sorting, responsive rows, and a Details action",
+    "safety": "Practice and public-display-off labels remain explicit; unavailable context stays unavailable"
+  }
+}

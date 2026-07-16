@@ -7,7 +7,7 @@
  * Active-state is now path-based — each module gets its own route segment.
  *
  *   /lab/daily-edge    → Daily Edge
- *   /lab/player-props  → Player Props
+ *   /mlb/props         → Player Props
  *   /lab/tracking      → Model Tracking (member-facing, Phase 6B.2b)
  *   /lab/my-bets       → My Bets (stub, V1)
  *   /lab/account       → Account (stub, V1)
@@ -36,7 +36,7 @@ type Tab = {
 
 const TABS: Tab[] = [
   { href: "/lab/daily-edge",   label: "Daily Edge",   icon: "🎯" },
-  { href: "/lab/player-props", label: "Player Props", icon: "🎮" },
+  { href: "/mlb/props",        label: "Player Props", icon: "🎮" },
   { href: "/lab/tracking",     label: "Tracking",     icon: "📈" },
   { href: "/lab/my-bets",      label: "My Bets",      icon: "📊" },
 ];
@@ -47,6 +47,8 @@ const TABS: Tab[] = [
 // as active while we're reviewing it.
 const ALIASED_AS: Record<string, string> = {
   "/lab/design-preview": "/lab/daily-edge",
+  "/lab/player-props": "/mlb/props",
+  "/dev/mlb-props-preview": "/mlb/props",
 };
 
 function isActive(currentPath: string, tabHref: string): boolean {
@@ -57,6 +59,7 @@ function isActive(currentPath: string, tabHref: string): boolean {
 export default function LabAppNav() {
   const pathname = usePathname() ?? "";
   const { sport } = useSportSelection();
+  const isPropsPreview = pathname === "/dev/mlb-props-preview";
 
   return (
     <header className="sticky top-0 z-40 bg-gray-950/85 backdrop-blur-md border-b border-gray-800">
@@ -102,6 +105,7 @@ export default function LabAppNav() {
                     href={t.href}
                     role="tab"
                     aria-selected={active}
+                    aria-label={t.label}
                     className={`relative inline-flex items-center gap-1.5 whitespace-nowrap px-2.5 sm:px-3 py-2 min-h-10 rounded-md text-[11px] sm:text-xs font-bold uppercase tracking-[0.1em] transition-colors focus-visible:outline-none focus-visible:bg-gray-900/60 focus-visible:text-white ${
                       active
                         ? "text-white"
@@ -131,7 +135,7 @@ export default function LabAppNav() {
           {/* Right: status pill + account placeholder */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="hidden sm:block">
-              <RefreshIndicator sport={sport} />
+              {isPropsPreview ? <PreviewStatus /> : <RefreshIndicator sport={sport} />}
             </div>
             <Link
               href="/lab/account"
@@ -150,11 +154,15 @@ export default function LabAppNav() {
         {/* Mobile-only: RefreshIndicator stacks below the row so the pill stays
             thumb-reachable without horizontal scroll. */}
         <div className="sm:hidden pb-2 -mt-1 flex justify-end">
-          <RefreshIndicator sport={sport} />
+          {isPropsPreview ? <PreviewStatus /> : <RefreshIndicator sport={sport} />}
         </div>
       </div>
     </header>
   );
+}
+
+function PreviewStatus() {
+  return <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/[0.08] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-amber-200"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Preview mode</span>;
 }
 
 function abbreviateLabel(label: string): string {

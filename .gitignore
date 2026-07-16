@@ -49,3 +49,5 @@ wnba-research/espn-cache/
 wnba-research/*.json
 wnba-research/*.jsonl
 wnba-research/*.log
+tmp/mlb-props/provider-samples/
+tmp/mlb-props/reports/

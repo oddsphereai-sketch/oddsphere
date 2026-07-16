@@ -1,0 +1,26 @@
+{
+  "dates": [
+    {
+      "date": "2026-07-07",
+      "games": [
+        {
+          "gamePk": 123456,
+          "season": "2026",
+          "gameDate": "2026-07-07T23:07:00Z",
+          "venue": { "name": "Sample Park" },
+          "status": { "abstractGameState": "Preview" },
+          "teams": {
+            "away": {
+              "team": { "id": 121, "name": "Away Club" },
+              "probablePitcher": { "id": 9001, "fullName": "Away Pitcher" }
+            },
+            "home": {
+              "team": { "id": 141, "name": "Home Club" },
+              "probablePitcher": { "id": 9002, "fullName": "Home Pitcher" }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

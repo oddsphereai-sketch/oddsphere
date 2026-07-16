@@ -1,0 +1,41 @@
+{
+  "generatedAt": "2026-07-14T00:00:00.000Z",
+  "answer": {
+    "technicallyPossible": true,
+    "safeToUseFreeMlbCdnInCommercialProduct": false,
+    "currentProductHasLicensedFeed": false,
+    "recommendedPath": "Contract for a licensed MLB headshot feed, map its player identifier to the existing entity-resolution layer, and populate the existing local headshotUrl contract."
+  },
+  "sources": [
+    {
+      "name": "MLB digital properties",
+      "url": "https://www.mlb.com/official-information/terms-of-use",
+      "finding": "MLB materials may not be commercially reproduced or displayed without written permission; an accessible image URL is not a commercial-use license.",
+      "decision": "Do not hotlink MLB CDN headshots."
+    },
+    {
+      "name": "SportsDataIO Player Headshots",
+      "url": "https://sportsdata.io/developers/sports-player-headshots-api",
+      "finding": "Licensed MLB headshots are available through USA Today/IMAGN-backed packages and transparent-background options.",
+      "decision": "Strongest direct fit for a headshot-only integration; requires sales access and pricing."
+    },
+    {
+      "name": "Sportradar Images API",
+      "url": "https://developer.sportradar.com/images-and-editorials/reference/images-player-image",
+      "finding": "MLB player headshots are available through production image feeds with provider, manifest, asset, and size contracts.",
+      "decision": "Strong fit if OddSphere also wants a broader licensed sports editorial image platform."
+    }
+  ],
+  "integrationShape": {
+    "requiredFields": [
+      "providerPlayerId",
+      "providerAssetId",
+      "licensedImageUrlOrLocalCachePath",
+      "licenseProvider",
+      "licenseExpiresAt",
+      "lastVerifiedAt"
+    ],
+    "existingUiContract": "PlayerPropPreviewRow.headshotUrl already accepts safe local paths and falls back when unavailable.",
+    "identityWarning": "BDL IDs must not be treated as MLBAM, SportsDataIO, or Sportradar IDs without verified mapping."
+  }
+}

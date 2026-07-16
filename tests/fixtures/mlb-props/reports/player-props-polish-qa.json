@@ -1,0 +1,125 @@
+{
+  "generatedAt": "2026-07-14T00:00:00.000Z",
+  "scope": "Prop Researcher with Today’s Radar, player workspaces, a complete market board, and a responsive Prop Reader",
+  "featuredCardCount": {
+    "desktop": 0,
+    "mobile": 0
+  },
+  "defaultWorkspace": "Prop Researcher",
+  "radarResearchQuestions": [
+    "Projection gap",
+    "Book spread",
+    "Context watch"
+  ],
+  "playerDirectoryVisible": true,
+  "focusedPlayerWorkspace": true,
+  "plainEnglishReader": true,
+  "continuousMarketBoard": true,
+  "neutralDefaultSort": "Player A-Z",
+  "modelSignalFilter": true,
+  "priceComparisonModes": [
+    "Best price",
+    "All books"
+  ],
+  "advancedDiagnosticsHiddenFromBoard": true,
+  "projectionSideContradictionsCount": 0,
+  "selectedSideProbabilityMismatchesCount": 0,
+  "fixtureAbsoluteEvAbove15PercentCount": 0,
+  "allModelStatesInspectable": true,
+  "searchVisible": true,
+  "commandCenterVisible": true,
+  "productZones": [
+    "Compact Slate Context",
+    "Research Entry",
+    "Today’s Radar",
+    "Player Directory",
+    "Player Workspace",
+    "Market Board",
+    "Prop Reader"
+  ],
+  "visualRedesign": {
+    "rankedPickFeedRemoved": true,
+    "variedRadarDiscovery": true,
+    "playerWorkspaceAvailable": true,
+    "projectionVisibleInBoard": true,
+    "playerIdentityVisibleInEveryRow": true,
+    "licensedPlayerVisualsOnDefaultPage": 0,
+    "freshBrowserQaRequired": true
+  },
+  "portraitFallback": {
+    "oversizedInitialsRemoved": true,
+    "featuredFallback": "Projection, line, team mark, market identity, and home-away context",
+    "compactFallback": "Team mark",
+    "licensedLocalHeadshotContractPreserved": true
+  },
+  "readerPresentation": {
+    "desktop": "Centered 980px responsive modal with paired analysis sections",
+    "mobile": "Full-height sheet",
+    "rightSideDrawerRemovedOnDesktop": true,
+    "desktopHorizontalOverflow": null,
+    "mobileHorizontalOverflow": null
+  },
+  "memberProductPass": {
+    "wideDesktopCanvas": false,
+    "emojiNavigationRemoved": false,
+    "sharedProductShellPreserved": true,
+    "workspaceModes": [
+      "Prop Researcher"
+    ],
+    "pickFeedRemoved": true,
+    "playerSearchAndRadarArePrimary": true,
+    "compactSlateHeader": true,
+    "neutralWatchlistAndNoPlayColors": true,
+    "researchLedWorkspace": true,
+    "operationalHeroCopyRemoved": true,
+    "providerHealthAdminOnly": true,
+    "rawDiagnosticsAdminOnly": true,
+    "memberAnalysisSections": [
+      "Prop Summary",
+      "Reader Summary",
+      "Model Comparison",
+      "Projection vs Line",
+      "Best Available Price",
+      "Signal Context",
+      "Research Confidence",
+      "What Could Change",
+      "Matchup Context"
+    ],
+    "desktopHorizontalOverflow": null,
+    "mobileHorizontalOverflow": null,
+    "memberOperationalCopyMatches": 0
+  },
+  "mobileOverflow": null,
+  "browserQa": {
+    "status": "blocked_by_browser_url_policy_after_tool-first_refocus",
+    "freshVisualInspectionRequired": true,
+    "staticResponsiveContractsPassed": true,
+    "memberOperationalCopyMatches": 0
+  },
+  "fixtureCoherence": true,
+  "drawerAllowsBlockedContradictionDiagnostic": true,
+  "publicDisplayEnabled": false,
+  "paperPersistenceEnabled": false,
+  "writesToSupabase": false,
+  "headshotStrategy": {
+    "licensedPipelineAvailable": false,
+    "externalImagesAllowed": false,
+    "fallback": "Team mark in Radar, player-directory, workspace, and market-board surfaces",
+    "futureRequirement": "Verified MLBAM identifier mapping or a licensed player-image source"
+  },
+  "contextStrategy": {
+    "fakeSplitsShown": false,
+    "available": [
+      "starter status when verified",
+      "schedule and probable pitchers",
+      "BDL season statistics when present",
+      "player-prop odds freshness"
+    ],
+    "unavailable": [
+      "live splits",
+      "handle",
+      "line movement",
+      "consensus"
+    ]
+  }
+}
