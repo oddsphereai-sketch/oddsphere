@@ -940,7 +940,6 @@ export async function generatePredictionsForSlate(
         launchDay: false, // cron/automodel-created records are always fresh-tracking
         apply: true,
         supabase,
-        preserveExistingUnlocked: stage === "t60_locked",
       });
       if (syncRes.errors.length > 0) {
         const summary = `${syncRes.errors.length} error(s): ${JSON.stringify(syncRes.errors).slice(0, 500)}`;
