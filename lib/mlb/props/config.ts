@@ -1,0 +1,86 @@
+export const MLB_PROP_MARKET_KEYS = [
+  "pitcher_strikeouts",
+  "pitcher_outs",
+  "pitcher_hits_allowed",
+  "pitcher_walks",
+  "pitcher_earned_runs",
+  "pitcher_record_a_win",
+  "batter_strikeouts",
+  "batter_hits",
+  "batter_total_bases",
+  "batter_home_runs",
+  "batter_rbis",
+  "batter_runs_scored",
+  "batter_hits_runs_rbis",
+  "batter_singles",
+  "batter_doubles",
+  "batter_triples",
+  "batter_walks",
+  "batter_stolen_bases",
+  "first_home_run",
+] as const;
+
+export type MlbPropMarketKey = (typeof MLB_PROP_MARKET_KEYS)[number];
+
+export const DEFAULT_PROP_RECOMMENDATION_CONFIG = {
+  minEv: Number(process.env.ODDSPHERE_PROP_MIN_EV ?? 0.05),
+  minEdge: Number(process.env.ODDSPHERE_PROP_MIN_EDGE ?? 0.035),
+  maxOddsAgeSeconds: Number(process.env.ODDSPHERE_PROP_MAX_ODDS_AGE_SECONDS ?? 60),
+  minMappingConfidence: 0.98,
+  maxStakePerPickBankrollFraction: 0.005,
+  maxTotalSlateExposureBankrollFraction: 0.05,
+  fractionalKelly: 0.15,
+  bankrollDefault: Number(process.env.ODDSPHERE_PROP_BANKROLL_DEFAULT ?? 1000),
+  minSignalAmericanOdds: Number(process.env.ODDSPHERE_PROPS_SIGNAL_MIN_AMERICAN_ODDS ?? -500),
+  maxSignalAmericanOdds: Number(process.env.ODDSPHERE_PROPS_SIGNAL_MAX_AMERICAN_ODDS ?? 1000),
+} as const;
+
+export const PROP_REASON_CODES = [
+  "HIGH_EV",
+  "POSITIVE_CLV_PROFILE",
+  "LINEUP_CONFIRMED",
+  "LINE_VALUE",
+  "WEATHER_EDGE",
+  "MATCHUP_EDGE",
+  "WORKLOAD_EDGE",
+  "LOW_DATA_CONFIDENCE",
+  "STALE_ODDS",
+  "INJURY_RISK",
+  "LINEUP_RISK",
+  "MAPPING_RISK",
+  "BDL_PROVIDER_ID_CONFIRMED",
+  "BDL_GAME_ID_CONFIRMED",
+  "BDL_PLAYER_CONTEXT_MISSING",
+  "STARTER_CONFIRMED_BDL",
+  "STARTER_CONFIRMED_MLB_STATS",
+  "STARTER_CONFIRMED_PLAYBOOK",
+  "STARTER_CONFLICT",
+  "STARTER_NOT_CONFIRMED",
+  "NO_VIG_SUM_ANOMALY",
+  "SIDE_ODDS_MISMATCH",
+  "LINE_MISMATCH",
+  "DUPLICATE_VENDOR_LINE",
+  "CONFLICTING_SIDE_RECOMMENDATION",
+  "PROJECTION_SIDE_CONTRADICTION",
+  "UNUSUALLY_HIGH_EV",
+  "STALE_BDL_ODDS",
+  "MISSING_UPDATED_AT",
+  "MISSING_TWO_WAY_PAIR",
+  "MILESTONE_MODEL_NOT_PROMOTED",
+  "PITCHER_WIN_CONTEXT_INSUFFICIENT",
+  "BATTER_CONTEXT_INSUFFICIENT",
+  "LINEUP_CONTEXT_INSUFFICIENT",
+  "STOLEN_BASE_CONTEXT_INSUFFICIENT",
+  "FIRST_HR_FIELD_MODEL_NOT_PROMOTED",
+  "MARKET_PRIOR_SHRINKAGE",
+  "MARKET_RESEARCH_ONLY",
+  "EXTREME_PRICE_RESEARCH_ONLY",
+  "INVALID_PRICE_FORMAT",
+  "NO_PLAY",
+] as const;
+
+export type PropReasonCode = (typeof PROP_REASON_CODES)[number];
+
+export function isMlbPropMarketKey(value: string): value is MlbPropMarketKey {
+  return (MLB_PROP_MARKET_KEYS as readonly string[]).includes(value);
+}

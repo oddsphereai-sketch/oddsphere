@@ -1,0 +1,99 @@
+{
+  "generatedAt": "2026-07-14T00:00:00.000Z",
+  "target": "Prop Researcher + Today’s Radar + plain-English Prop Reader",
+  "visualFindings": {
+    "competitorStrengths": [
+      "A selected player or prop becomes the visual focal point instead of one of many equal cards",
+      "Player and team imagery occupy meaningful space and establish sports identity immediately",
+      "One chart or comparison dominates the research state while supporting controls recede",
+      "Prices behave like compact, actionable controls rather than paragraphs of metadata",
+      "Navigation and filters are dense but visually quiet, preserving attention for the bet"
+    ],
+    "previousOddSphereWeaknesses": [
+      "Repeated equal-size bordered cards gave every item the same weight",
+      "Small initials avatars could not carry player identity",
+      "Four equal research modules read as a generic SaaS dashboard",
+      "Typography hierarchy changed size but not composition",
+      "Provider and status boxes consumed too much first-screen attention"
+    ],
+    "redesignDecision": "Use Radar for varied discovery, a player directory for focused research, a continuous market board for coverage, and a plain-English Reader after selection."
+  },
+  "sources": [
+    {
+      "product": "Outlier",
+      "url": "https://outlier.bet/",
+      "patterns": [
+        "A broad Prop Finder supports market browsing before deeper research",
+        "Research combines trends, matchup and injury context, public data, and line movement",
+        "Cross-book comparison keeps the best available price attached to the decision"
+      ]
+    },
+    {
+      "product": "OddsJam Positive EV",
+      "url": "https://oddsjam.com/betting-tools/positive-ev",
+      "patterns": [
+        "A filterable value feed elevates the exact pick, sportsbook, and price",
+        "Selecting an opportunity reveals cross-book odds comparison",
+        "Outlier pricing is visually distinct from the rest of the market"
+      ]
+    },
+    {
+      "product": "Props.Cash",
+      "url": "https://props.cash/",
+      "patterns": [
+        "Search and prop filters are primary paths into player research",
+        "Player-centered research reduces the need to scan a full sportsbook board",
+        "Charts and trends are useful only when their source data is current and attributable"
+      ],
+      "evidenceNote": "Public product detail was limited during this benchmark; OddSphere should not infer unavailable feature specifics."
+    },
+    {
+      "product": "Unabated",
+      "url": "https://unabated.com/plans/concierge-weekly",
+      "patterns": [
+        "Fair-price and outcome-distribution thinking supports decisions beyond a single edge number",
+        "Odds snapshots and simulation outputs belong in inspectable analysis surfaces",
+        "Advanced detail can remain progressive instead of crowding the discovery feed"
+      ]
+    },
+    {
+      "product": "Sportsbook prop navigation",
+      "url": null,
+      "patterns": [
+        "Readable side, line, and price remain the visual anchor",
+        "Common market categories make large slates easier to navigate",
+        "A bet should be understandable before advanced model detail is opened"
+      ]
+    }
+  ],
+  "adopt": [
+    "Lead with search and a Radar of varied research questions instead of a ranked pick feed",
+    "Make player, team, opponent, market, and book search the primary entry point",
+    "Keep projection, line, price, model difference, EV, confidence, and signal visible in the board",
+    "Highlight the best verified price and clearly dim books without a price for that prop",
+    "Use progressive disclosure: Radar or player discovery, focused workspace, then centered Reader",
+    "Show stat and context provenance; state unavailable inputs without synthesizing them",
+    "Treat stronger model signals as filters and sortable evidence, not a separate destination"
+  ],
+  "avoid": [
+    "Copying competitor branding, visual composition, or proprietary terminology",
+    "Opening on a curated pick feed that hides the broader research universe",
+    "Decorative trend charts unsupported by the current provider contract",
+    "Exposing shrinkage, every probability, reason code, and settlement state on pick cards",
+    "Hotlinked or unlicensed player photography",
+    "Presenting absent splits, handle, movement, consensus, injuries, weather, or lineups as verified"
+  ],
+  "oddsphereDifferentiation": {
+    "promise": "An MLB prop researcher that finds questions worth investigating, organizes every player market, and reads the model-versus-market case in plain language.",
+    "flow": [
+      "Orient in Slate Intelligence",
+      "Begin with Today’s Radar or search a player directly",
+      "Move into a focused player workspace when a player is selected",
+      "Compare sportsbook line, model projection, price, edge, and signal in one row",
+      "Switch between the best available price and all covered books",
+      "Open the Prop Reader for a plain-English model, price, confidence, and context interpretation",
+      "Return to the same research state to continue exploring"
+    ],
+    "trustModel": "Every visual is bound to current row data, contradictions are blocked, and unavailable provider context is named rather than invented."
+  }
+}

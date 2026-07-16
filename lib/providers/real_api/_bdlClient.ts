@@ -133,6 +133,7 @@ function parseQuotaHeaders(headers: Headers): {
 
 export class BdlClient {
   private readonly apiKey: string;
+  private requestCount = 0;
   private quota: QuotaSnapshot = {
     limit: null,
     remaining: null,
@@ -150,6 +151,10 @@ export class BdlClient {
     return { ...this.quota };
   }
 
+  getRequestCount(): number {
+    return this.requestCount;
+  }
+
   async fetch<T>(opts: BdlRequestOptions): Promise<BdlResponse<T>> {
     // If the previous response told us we're out of quota, wait for reset
     // before issuing the next request. First call has no prior state so
@@ -161,6 +166,7 @@ export class BdlClient {
     const url = buildUrl(opts.path, opts.query);
     let res: Response;
     try {
+      this.requestCount++;
       res = await globalThis.fetch(url, {
         headers: {
           Authorization: this.apiKey,
@@ -186,6 +192,7 @@ export class BdlClient {
       this.quota.remaining = null;
       this.quota.resetEpoch = null;
       try {
+        this.requestCount++;
         res = await globalThis.fetch(url, {
           headers: {
             Authorization: this.apiKey,

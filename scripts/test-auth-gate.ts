@@ -212,6 +212,7 @@ async function main() {
     "/lab/track-record",
     "/lab/tracking",
     "/lab/account",
+    "/mlb/props",
     "/admin",
     "/admin/scores-model",
     "/admin/cron-status",
@@ -240,6 +241,8 @@ async function main() {
     "/api/lab/tracking",
     "/api/lab/calibration",
     "/api/lab/refresh-status",
+    "/api/mlb/props/picks",
+    "/api/mlb/props/player/123",
   ]) {
     const req = makeRequest(apiPath);
     const res = await middleware(req);
@@ -260,7 +263,9 @@ async function main() {
 
   for (const path of [
     "/lab/daily-edge",
+    "/mlb/props",
     "/api/lab/daily-edge",
+    "/api/mlb/props/picks",
     "/admin/scores-model",
   ]) {
     const req = makeRequest(path, { cookieValue: VALID_COOKIE });

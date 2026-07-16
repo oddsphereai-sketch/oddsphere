@@ -1,0 +1,58 @@
+{
+  "games": [
+    {
+      "id": 123456,
+      "home_team_name": "Home Club",
+      "away_team_name": "Away Club",
+      "season": 2026,
+      "date": "2026-07-07",
+      "status": "Scheduled",
+      "venue": "Sample Park",
+      "home_team": 141,
+      "away_team": 121
+    }
+  ],
+  "players": [
+    {
+      "id": 9001,
+      "first_name": "Sample",
+      "last_name": "Pitcher",
+      "full_name": "Sample Pitcher",
+      "position": "P",
+      "active": true,
+      "bats_throws": "R/R",
+      "team": { "id": 121, "abbreviation": "AWY" }
+    }
+  ],
+  "season_stats": [
+    {
+      "player": { "id": 9001, "full_name": "Sample Pitcher" },
+      "team_name": "Away Club",
+      "season": 2026,
+      "batting_h": 0,
+      "batting_2b": 0,
+      "batting_3b": 0,
+      "batting_hr": 0,
+      "batting_tb": 0,
+      "batting_so": 0,
+      "batting_bb": 0,
+      "pitching_ip": 92.1,
+      "pitching_h": 80,
+      "pitching_er": 32,
+      "pitching_bb": 24,
+      "pitching_k": 104,
+      "pitching_k_per_9": 10.15
+    }
+  ],
+  "lineups": [
+    {
+      "id": 555001,
+      "game_id": 123456,
+      "player": { "id": 9001, "full_name": "Sample Pitcher" },
+      "team": { "id": 121, "abbreviation": "AWY" },
+      "batting_order": null,
+      "position": "P",
+      "is_probable_pitcher": true
+    }
+  ]
+}

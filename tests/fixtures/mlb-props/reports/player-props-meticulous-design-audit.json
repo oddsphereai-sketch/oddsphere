@@ -1,0 +1,158 @@
+{
+  "generatedAt": "2026-07-14T00:00:00.000Z",
+  "objective": "Build a model-assisted player props research tool around explicit member jobs, using proven information architecture without copying a competitor's brand or inventing unavailable data.",
+  "shellDecision": "Keep the shared OddSphere product navigation and max-w-7xl frame consistent across Daily Edge, Player Props, Tracking, My Bets, and Account.",
+  "sources": [
+    {
+      "product": "Outlier",
+      "url": "https://outlier.bet/",
+      "bestFeature": "A guided path from trending or curated props into performance, matchup, injury, line-movement, and best-price context.",
+      "oddsphereUse": "Make broad prop discovery and filtering the default, then move supporting evidence behind the selected prop."
+    },
+    {
+      "product": "Props.Cash",
+      "url": "https://play.google.com/store/apps/details/Props_cash?id=cash.props.app",
+      "bestFeature": "One player and one line anchor the research screen, with recent-performance views doing most of the explanatory work.",
+      "oddsphereUse": "Use a single selected prop as the visual anchor; reserve trend charts until verified game-log data exists."
+    },
+    {
+      "product": "OddsJam",
+      "url": "https://oddsjam.com/betting-education/positive-ev-betting-walking-through-an-example",
+      "bestFeature": "A filter-first positive-EV scanner sorted by profit margin with the executable sportsbook price visible.",
+      "oddsphereUse": "Keep model signals, price comparison, and dense controls inside one configurable market board."
+    },
+    {
+      "product": "Robinhood Legend",
+      "url": "https://robinhood.com/us/en/legend/",
+      "bestFeature": "Linked widgets and preset workspaces distinguish monitoring from analysis while keeping the primary number dominant.",
+      "oddsphereUse": "Use one stable workspace with linked evidence modules, while preserving the existing shared app shell."
+    },
+    {
+      "product": "Linear",
+      "url": "https://linear.app/now/behind-the-latest-design-refresh",
+      "bestFeature": "Muted navigation, compact tabs, and fewer borders allow hierarchy to be felt instead of announced.",
+      "oddsphereUse": "Use one quiet explorer control zone, restrained accents, and progressive disclosure for secondary evidence."
+    },
+    {
+      "product": "FanGraphs",
+      "url": "https://library.fangraphs.com/how-to-use-fangraphs-player-pages/",
+      "bestFeature": "Player research is organized into distinct thematic views for season stats, splits, logs, and comparisons.",
+      "oddsphereUse": "Let search or the player directory open a focused player workspace without introducing another navigation mode."
+    },
+    {
+      "product": "RotoWire MLB Optimizer",
+      "url": "https://www.rotowire.com/daily/mlb/optimizer.php?site=Yahoo",
+      "bestFeature": "Dense operational data stays scannable through search, filters, and consistent player columns.",
+      "oddsphereUse": "Keep the market board compact and sortable without grouping the universe by recommendation grade."
+    }
+  ],
+  "userJobs": [
+    "Explore the full loaded player-prop market without being pushed toward a pick.",
+    "Research a favorite player quickly.",
+    "Compare the model projection with the sportsbook line.",
+    "See the best available sportsbook price.",
+    "Understand why OddSphere differs from the market and what may change.",
+    "Scan every market, grade, team, book, and start time when needed."
+  ],
+  "sectionAudit": [
+    {
+      "section": "Shared product shell",
+      "userQuestion": "Where am I in OddSphere and how do I move to another product?",
+      "benchmarkPattern": "Persistent, stable application navigation.",
+      "decision": "Keep the existing OddSphere top bar, icons, dimensions, and max-w-7xl frame unchanged.",
+      "passCriteria": ["Player Props is visibly active.", "The shell matches Daily Edge and does not introduce a props-only header style."]
+    },
+    {
+      "section": "Slate header",
+      "userQuestion": "What slate am I viewing and is there anything worth opening?",
+      "benchmarkPattern": "A compact context header with the most decision-relevant summary values.",
+      "decision": "Use a compact slate strip for date, matchup, first pitch, probable pitchers, loaded prop count, books, and freshness; keep provider operations admin-only.",
+      "passCriteria": ["A member can identify the slate without scrolling.", "No provider, fixture, database, or publishing-control copy appears."]
+    },
+    {
+      "section": "Prop Researcher entry",
+      "userQuestion": "How do I narrow the loaded market universe to the players, markets, and books I care about?",
+      "benchmarkPattern": "One global search, quick market filters, and configurable price coverage.",
+      "decision": "Use one Prop Researcher with player, team, market, and sportsbook search; quick market filters; and a direct path into focused player workspaces.",
+      "passCriteria": ["Search and market navigation are the primary entry point.", "Model signals are filters rather than a competing destination."]
+    },
+    {
+      "section": "Today's Radar",
+      "userQuestion": "Which parts of the slate are worth investigating, and for what reason?",
+      "benchmarkPattern": "Curated discovery that opens into research without claiming to be a definitive pick list.",
+      "decision": "Surface a projection gap, a cross-book price spread, and a context-dependent market; use model signal only as supporting metadata.",
+      "passCriteria": ["Radar cards represent different research questions rather than a ranking.", "Every Radar card opens the same Prop Reader used by the full board."]
+    },
+    {
+      "section": "Market board",
+      "userQuestion": "What player markets are loaded, and how does the model compare with each current line and price?",
+      "benchmarkPattern": "A filterable prop finder with at-a-glance market and model comparison.",
+      "decision": "Use one continuous board with player, market, side and line, projection, book price, edge, EV, confidence, and model signal.",
+      "passCriteria": ["Every inspectable model state remains available in the same board.", "The board defaults to a neutral player sort rather than model rank."]
+    },
+    {
+      "section": "No-photo featured visual",
+      "userQuestion": "What makes this prop visually memorable if a licensed portrait is unavailable?",
+      "benchmarkPattern": "Use the primary decision number as the visual anchor.",
+      "decision": "Replace initials with a projection-versus-line panel, team mark, market code, and matchup status; preserve the local licensed-image contract.",
+      "passCriteria": ["No oversized initials or fake portrait appears.", "The panel communicates projection, line, direction, team, and market without invented data."]
+    },
+    {
+      "section": "Player discovery",
+      "userQuestion": "What props are loaded for my favorite player?",
+      "benchmarkPattern": "Dedicated player pages organized by thematic market views.",
+      "decision": "Search a player or select them from the player directory to open a focused player workspace.",
+      "passCriteria": ["One search control handles player discovery.", "The workspace preserves every loaded market, projection, price, signal, and Reader access point for that player."]
+    },
+    {
+      "section": "Search results",
+      "userQuestion": "What did my board search find?",
+      "benchmarkPattern": "Selected player and line dominate; supporting modules are linked and secondary.",
+      "decision": "Filter the market board in place and use the centered Prop Reader for focused interpretation.",
+      "passCriteria": ["Search does not introduce a second navigation system.", "Each result keeps a direct path to projection, market comparison, price, and context."]
+    },
+    {
+      "section": "Responsive market board",
+      "userQuestion": "How can I inspect the complete board with my own criteria?",
+      "benchmarkPattern": "Filter-first dense scanner with stable columns and execution price.",
+      "decision": "Expose the primary research controls first, keep advanced filters collapsed, and do not group rows by recommendation grade.",
+      "passCriteria": ["Desktop columns support fast model-versus-market comparison.", "Mobile cards remain complete and tappable without horizontal overflow."]
+    },
+    {
+      "section": "Prop Reader",
+      "userQuestion": "How does the model compare with the market, where is the best price, and what can change the read?",
+      "benchmarkPattern": "Centered analytical workspace with primary evidence before methodology.",
+      "decision": "Use a centered desktop Reader and full-screen mobile Reader with a plain-English lead summary followed by model comparison, projection, price, confidence, change risks, and matchup context.",
+      "passCriteria": ["No right-side desktop drawer remains.", "The member sees evidence and caveats without raw model or provider diagnostics."]
+    },
+    {
+      "section": "Model signals",
+      "userQuestion": "How does the model currently classify this prop?",
+      "benchmarkPattern": "Compact analytical labels that can be filtered without replacing the underlying data.",
+      "decision": "Show Strong Signal, Positive Signal, Watch, No Edge, Pending, and Research as one board column and filter.",
+      "passCriteria": ["Signals do not create a separate pick feed.", "Watch and No Edge retain neutral status colors."]
+    },
+    {
+      "section": "Admin boundary",
+      "userQuestion": "Which information belongs to operators rather than members?",
+      "benchmarkPattern": "Operational diagnostics stay behind an administrative boundary.",
+      "decision": "Keep providers, raw reason codes, source data, feature inventories, shrinkage, settlement, and CLV in admin review only.",
+      "passCriteria": ["Member and preview modes contain no operational narration.", "Admin review preserves all required audit fields."]
+    }
+  ],
+  "rejectedPatterns": [
+    "Do not fabricate L5, L10, L20, matchup, split, or line-movement charts before verified data exists.",
+    "Do not scrape or hotlink unlicensed player portraits; accept only verified local licensed assets.",
+    "Do not show oversized initials as a substitute for a player portrait.",
+    "Do not imply bet placement, saved picks, public publishing, or persistence that is not implemented.",
+    "Do not expose provider health, database state, fixture mechanics, or raw model internals to members.",
+    "Do not change the shared top navigation to make one feature look separately branded."
+  ],
+  "safety": {
+    "publicDisplayEnabled": false,
+    "paperPersistenceEnabled": false,
+    "writesToSupabase": false,
+    "inventedStatsShown": false,
+    "unlicensedHeadshotsShown": false
+  }
+}

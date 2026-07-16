@@ -1108,13 +1108,23 @@ export class BallDontLieProvider implements IPlayerStatsProvider {
   }
 
   async getLineups(gameExternalId: number): Promise<StatsLineupRecord[]> {
+    return this.getLineupsForGames([gameExternalId]);
+  }
+
+  async getLineupsForGames(gameExternalIds: number[]): Promise<StatsLineupRecord[]> {
+    const ids = [...new Set(gameExternalIds.filter((id) => Number.isSafeInteger(id) && id > 0))];
+    if (!ids.length) return [];
     try {
-      const rows = await this.client.fetchAll<RawLineup>({
-        path: "/lineups",
-        query: { "game_ids[]": [gameExternalId], per_page: 100 },
-        maxPages: 5,
-      });
-      return rows.map(mapLineup);
+      const out: StatsLineupRecord[] = [];
+      for (let index = 0; index < ids.length; index += 25) {
+        const rows = await this.client.fetchAll<RawLineup>({
+          path: "/lineups",
+          query: { "game_ids[]": ids.slice(index, index + 25), per_page: 100 },
+          maxPages: 10,
+        });
+        out.push(...rows.map(mapLineup));
+      }
+      return out;
     } catch (e) {
       if (e instanceof BdlNotFoundError) return [];
       throw e;

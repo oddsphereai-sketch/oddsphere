@@ -90,7 +90,116 @@ export type PitcherFirstInningStatsRecord = {
   raw_source: "mlb_stats_api";
 };
 
-type Opts = { quiet?: boolean };
+export type PitcherGameLogRecord = {
+  mlb_person_id: number;
+  season: number;
+  game_pk: number;
+  game_date: string;
+  team_id: number;
+  opponent_team_id: number;
+  opponent_name: string | null;
+  is_home: boolean | null;
+  is_start: boolean;
+  innings_pitched: number | null;
+  outs: number | null;
+  strikeouts: number | null;
+  walks: number | null;
+  hits_allowed: number | null;
+  earned_runs: number | null;
+  runs_allowed: number | null;
+  home_runs_allowed: number | null;
+  batters_faced: number | null;
+  pitch_count: number | null;
+  raw_source: "mlb_stats_api";
+};
+
+export type HitterGameLogRecord = {
+  mlb_person_id: number;
+  season: number;
+  game_pk: number;
+  game_date: string;
+  team_id: number;
+  opponent_team_id: number;
+  opponent_name: string | null;
+  is_home: boolean | null;
+  plate_appearances: number | null;
+  at_bats: number | null;
+  hits: number | null;
+  singles: number | null;
+  doubles: number | null;
+  triples: number | null;
+  home_runs: number | null;
+  total_bases: number | null;
+  rbis: number | null;
+  runs: number | null;
+  strikeouts: number | null;
+  walks: number | null;
+  stolen_bases: number | null;
+  hits_runs_rbis: number | null;
+  raw_source: "mlb_stats_api";
+};
+
+export type BatterVsPitcherStatsRecord = {
+  batter_id: number;
+  pitcher_id: number;
+  batter_name: string | null;
+  pitcher_name: string | null;
+  games_played: number;
+  plate_appearances: number;
+  at_bats: number;
+  hits: number;
+  doubles: number;
+  triples: number;
+  home_runs: number;
+  walks: number;
+  strikeouts: number;
+  total_bases: number;
+  rbis: number;
+  batting_average: number | null;
+  on_base_percentage: number | null;
+  slugging_percentage: number | null;
+  ops: number | null;
+  pitches_seen: number;
+  raw_source: "mlb_stats_api";
+};
+
+export type MlbTeamHittingProfile = {
+  team_id: number;
+  team_name: string;
+  season: number;
+  games_played: number | null;
+  plate_appearances: number;
+  at_bats: number | null;
+  hits: number | null;
+  strikeouts: number | null;
+  walks: number | null;
+  home_runs: number | null;
+  batting_average: number | null;
+  on_base_percentage: number | null;
+  slugging_percentage: number | null;
+  ops: number | null;
+  strikeout_rate: number | null;
+  walk_rate: number | null;
+  home_run_rate: number | null;
+  ranks: {
+    strikeout_rate: number | null;
+    walk_rate: number | null;
+    batting_average: number | null;
+    ops: number | null;
+    home_run_rate: number | null;
+    out_of: number;
+  };
+  league_average: {
+    strikeout_rate: number | null;
+    walk_rate: number | null;
+    batting_average: number | null;
+    ops: number | null;
+    home_run_rate: number | null;
+  };
+  raw_source: "mlb_stats_api";
+};
+
+type Opts = { quiet?: boolean; signal?: AbortSignal };
 
 function log(opts: Opts | undefined, message: string): void {
   if (opts?.quiet) return;
@@ -117,6 +226,21 @@ function parseIntSafe(s: unknown): number | null {
   return null;
 }
 
+function nullableDifference(
+  total: number | null,
+  ...parts: Array<number | null>
+): number | null {
+  return total === null || parts.some((part) => part === null)
+    ? null
+    : Math.max(0, total - parts.reduce<number>((sum, part) => sum + (part ?? 0), 0));
+}
+
+function nullableSum(...values: Array<number | null>): number | null {
+  return values.some((value) => value === null)
+    ? null
+    : values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+}
+
 /**
  * Baseball-decimal innings parser. "6.0" → 6, "6.1" → 6+1/3, "6.2" →
  * 6+2/3, "5.2" → 5+2/3 (NOT 5.2 decimal — common bug source). Suffix
@@ -133,6 +257,409 @@ export function parseBaseballInningsPitched(s: unknown): number | null {
   const fracStr = parts[1] ?? "0";
   if (!/^[0-2]$/.test(fracStr)) return null;
   return whole + parseInt(fracStr, 10) / 3;
+}
+
+export function parsePitcherGameLogPayload(
+  payload: unknown,
+  personId: number,
+  season: number
+): PitcherGameLogRecord[] {
+  if (!isObject(payload) || !Array.isArray(payload.stats)) return [];
+  const block = payload.stats.find((candidate) => {
+    if (!isObject(candidate) || !isObject(candidate.type)) return false;
+    return candidate.type.displayName === "gameLog";
+  }) ?? payload.stats[0];
+  if (!isObject(block) || !Array.isArray(block.splits)) return [];
+
+  const rows: PitcherGameLogRecord[] = [];
+  for (const candidate of block.splits) {
+    if (!isObject(candidate) || !isObject(candidate.stat)) continue;
+    const game = isObject(candidate.game) ? candidate.game : null;
+    const team = isObject(candidate.team) ? candidate.team : null;
+    const opponent = isObject(candidate.opponent) ? candidate.opponent : null;
+    const gamePk = parseIntSafe(game?.gamePk);
+    const teamId = parseIntSafe(team?.id);
+    const opponentTeamId = parseIntSafe(opponent?.id);
+    const gameDate = typeof candidate.date === "string" ? candidate.date : null;
+    if (gamePk === null || teamId === null || opponentTeamId === null || gameDate === null) continue;
+
+    const stat = candidate.stat;
+    rows.push({
+      mlb_person_id: personId,
+      season,
+      game_pk: gamePk,
+      game_date: gameDate,
+      team_id: teamId,
+      opponent_team_id: opponentTeamId,
+      opponent_name: typeof opponent?.name === "string" ? opponent.name : null,
+      is_home: typeof candidate.isHome === "boolean" ? candidate.isHome : null,
+      is_start: parseIntSafe(stat.gamesStarted) === 1,
+      innings_pitched: parseBaseballInningsPitched(stat.inningsPitched),
+      outs: parseIntSafe(stat.outs),
+      strikeouts: parseIntSafe(stat.strikeOuts),
+      walks: parseIntSafe(stat.baseOnBalls),
+      hits_allowed: parseIntSafe(stat.hits),
+      earned_runs: parseIntSafe(stat.earnedRuns),
+      runs_allowed: parseIntSafe(stat.runs),
+      home_runs_allowed: parseIntSafe(stat.homeRuns),
+      batters_faced: parseIntSafe(stat.battersFaced),
+      pitch_count: parseIntSafe(stat.numberOfPitches),
+      raw_source: "mlb_stats_api",
+    });
+  }
+  return rows;
+}
+
+/**
+ * Read-only season game log for one pitcher. Callers apply their own
+ * pregame as-of filter so a future game can never leak into a feature row.
+ */
+export async function getPitcherGameLogs(
+  personId: number,
+  season: number,
+  opts?: Opts
+): Promise<PitcherGameLogRecord[] | null> {
+  const url =
+    `${BASE_URL}/people/${personId}/stats?stats=gameLog` +
+    `&group=pitching&season=${season}&sportId=1`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: HEADERS, signal: opts?.signal });
+  } catch {
+    log(opts, "network error on pitcher game log");
+    return null;
+  }
+  if (!res.ok) {
+    log(opts, `non-200 on pitcher game log: HTTP ${res.status}`);
+    return null;
+  }
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    log(opts, "JSON parse error on pitcher game log");
+    return null;
+  }
+  return parsePitcherGameLogPayload(body, personId, season);
+}
+
+export function parseHitterGameLogPayload(
+  payload: unknown,
+  personId: number,
+  season: number
+): HitterGameLogRecord[] {
+  if (!isObject(payload) || !Array.isArray(payload.stats)) return [];
+  const block = payload.stats.find((candidate) => {
+    if (!isObject(candidate) || !isObject(candidate.type)) return false;
+    return candidate.type.displayName === "gameLog";
+  }) ?? payload.stats[0];
+  if (!isObject(block) || !Array.isArray(block.splits)) return [];
+
+  const rows: HitterGameLogRecord[] = [];
+  for (const candidate of block.splits) {
+    if (!isObject(candidate) || !isObject(candidate.stat)) continue;
+    const game = isObject(candidate.game) ? candidate.game : null;
+    const team = isObject(candidate.team) ? candidate.team : null;
+    const opponent = isObject(candidate.opponent) ? candidate.opponent : null;
+    const gamePk = parseIntSafe(game?.gamePk);
+    const teamId = parseIntSafe(team?.id);
+    const opponentTeamId = parseIntSafe(opponent?.id);
+    const gameDate = typeof candidate.date === "string" ? candidate.date : null;
+    if (gamePk === null || teamId === null || opponentTeamId === null || gameDate === null) continue;
+    const stat = candidate.stat;
+    const hits = parseIntSafe(stat.hits);
+    const doubles = parseIntSafe(stat.doubles);
+    const triples = parseIntSafe(stat.triples);
+    const homeRuns = parseIntSafe(stat.homeRuns);
+    const rbis = parseIntSafe(stat.rbi);
+    const runs = parseIntSafe(stat.runs);
+    rows.push({
+      mlb_person_id: personId,
+      season,
+      game_pk: gamePk,
+      game_date: gameDate,
+      team_id: teamId,
+      opponent_team_id: opponentTeamId,
+      opponent_name: typeof opponent?.name === "string" ? opponent.name : null,
+      is_home: typeof candidate.isHome === "boolean" ? candidate.isHome : null,
+      plate_appearances: parseIntSafe(stat.plateAppearances),
+      at_bats: parseIntSafe(stat.atBats),
+      hits,
+      singles: nullableDifference(hits, doubles, triples, homeRuns),
+      doubles,
+      triples,
+      home_runs: homeRuns,
+      total_bases: parseIntSafe(stat.totalBases),
+      rbis,
+      runs,
+      strikeouts: parseIntSafe(stat.strikeOuts),
+      walks: parseIntSafe(stat.baseOnBalls),
+      stolen_bases: parseIntSafe(stat.stolenBases),
+      hits_runs_rbis: nullableSum(hits, runs, rbis),
+      raw_source: "mlb_stats_api",
+    });
+  }
+  return rows;
+}
+
+export async function getHitterGameLogs(
+  personId: number,
+  season: number,
+  opts?: Opts
+): Promise<HitterGameLogRecord[] | null> {
+  const url =
+    `${BASE_URL}/people/${personId}/stats?stats=gameLog` +
+    `&group=hitting&season=${season}&sportId=1`;
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: HEADERS, signal: opts?.signal });
+  } catch {
+    log(opts, "network error on hitter game log");
+    return null;
+  }
+  if (!res.ok) {
+    log(opts, `non-200 on hitter game log: HTTP ${res.status}`);
+    return null;
+  }
+  try {
+    return parseHitterGameLogPayload(await res.json(), personId, season);
+  } catch {
+    log(opts, "JSON parse error on hitter game log");
+    return null;
+  }
+}
+
+export function parseBatterVsPitcherStatsPayload(
+  payload: unknown,
+  batterId: number,
+  pitcherId: number,
+): BatterVsPitcherStatsRecord | null {
+  if (!isObject(payload) || !Array.isArray(payload.stats)) return null;
+  const block = payload.stats.find((candidate) => {
+    if (!isObject(candidate) || !isObject(candidate.type)) return false;
+    return candidate.type.displayName === "vsPlayerTotal";
+  }) ?? payload.stats.find((candidate) => {
+    if (!isObject(candidate) || !isObject(candidate.type)) return false;
+    return candidate.type.displayName === "vsPlayer";
+  });
+  if (!isObject(block) || !Array.isArray(block.splits)) return null;
+  const split = block.splits.find((candidate) => isObject(candidate) && isObject(candidate.stat));
+  if (!isObject(split) || !isObject(split.stat)) return emptyBatterVsPitcherRecord(batterId, pitcherId);
+  const batter = isObject(split.batter) ? split.batter : null;
+  const pitcher = isObject(split.pitcher) ? split.pitcher : null;
+  const stat = split.stat;
+  return {
+    batter_id: batterId,
+    pitcher_id: pitcherId,
+    batter_name: typeof batter?.fullName === "string" ? batter.fullName : null,
+    pitcher_name: typeof pitcher?.fullName === "string" ? pitcher.fullName : null,
+    games_played: parseIntSafe(stat.gamesPlayed) ?? 0,
+    plate_appearances: parseIntSafe(stat.plateAppearances) ?? 0,
+    at_bats: parseIntSafe(stat.atBats) ?? 0,
+    hits: parseIntSafe(stat.hits) ?? 0,
+    doubles: parseIntSafe(stat.doubles) ?? 0,
+    triples: parseIntSafe(stat.triples) ?? 0,
+    home_runs: parseIntSafe(stat.homeRuns) ?? 0,
+    walks: parseIntSafe(stat.baseOnBalls) ?? 0,
+    strikeouts: parseIntSafe(stat.strikeOuts) ?? 0,
+    total_bases: parseIntSafe(stat.totalBases) ?? 0,
+    rbis: parseIntSafe(stat.rbi) ?? 0,
+    batting_average: parseFloatSafe(stat.avg),
+    on_base_percentage: parseFloatSafe(stat.obp),
+    slugging_percentage: parseFloatSafe(stat.slg),
+    ops: parseFloatSafe(stat.ops),
+    pitches_seen: parseIntSafe(stat.numberOfPitches) ?? 0,
+    raw_source: "mlb_stats_api",
+  };
+}
+
+export async function getBatterVsPitcherStats(
+  batterId: number,
+  pitcherId: number,
+  opts?: Opts,
+): Promise<BatterVsPitcherStatsRecord | null> {
+  const url = `${BASE_URL}/people/${batterId}/stats?stats=vsPlayer&group=hitting&opposingPlayerId=${pitcherId}`;
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: HEADERS, signal: opts?.signal });
+  } catch {
+    log(opts, "network error on batter-vs-pitcher stats");
+    return null;
+  }
+  if (!res.ok) {
+    log(opts, `non-200 on batter-vs-pitcher stats: HTTP ${res.status}`);
+    return null;
+  }
+  try {
+    return parseBatterVsPitcherStatsPayload(await res.json(), batterId, pitcherId);
+  } catch {
+    log(opts, "JSON parse error on batter-vs-pitcher stats");
+    return null;
+  }
+}
+
+function emptyBatterVsPitcherRecord(batterId: number, pitcherId: number): BatterVsPitcherStatsRecord {
+  return {
+    batter_id: batterId,
+    pitcher_id: pitcherId,
+    batter_name: null,
+    pitcher_name: null,
+    games_played: 0,
+    plate_appearances: 0,
+    at_bats: 0,
+    hits: 0,
+    doubles: 0,
+    triples: 0,
+    home_runs: 0,
+    walks: 0,
+    strikeouts: 0,
+    total_bases: 0,
+    rbis: 0,
+    batting_average: null,
+    on_base_percentage: null,
+    slugging_percentage: null,
+    ops: null,
+    pitches_seen: 0,
+    raw_source: "mlb_stats_api",
+  };
+}
+
+/**
+ * Parse the all-team season hitting response into research-ready opponent
+ * profiles. Rank 1 always means the highest value for that metric; callers
+ * decide whether a high value is favorable for the selected prop.
+ */
+export function parseMlbTeamHittingProfiles(
+  payload: unknown,
+  season: number
+): MlbTeamHittingProfile[] {
+  if (!isObject(payload) || !Array.isArray(payload.stats)) return [];
+  const block = payload.stats.find((candidate) => {
+    if (!isObject(candidate) || !isObject(candidate.group)) return false;
+    return candidate.group.displayName === "hitting";
+  }) ?? payload.stats[0];
+  if (!isObject(block) || !Array.isArray(block.splits)) return [];
+
+  type ParsedTeam = Omit<MlbTeamHittingProfile, "ranks" | "league_average">;
+  const teams: ParsedTeam[] = [];
+  for (const candidate of block.splits) {
+    if (!isObject(candidate) || !isObject(candidate.team) || !isObject(candidate.stat)) continue;
+    const teamId = parseIntSafe(candidate.team.id);
+    const teamName = typeof candidate.team.name === "string" ? candidate.team.name : null;
+    const plateAppearances = parseIntSafe(candidate.stat.plateAppearances);
+    if (teamId === null || teamName === null || plateAppearances === null || plateAppearances <= 0) continue;
+    const atBats = parseIntSafe(candidate.stat.atBats);
+    const hits = parseIntSafe(candidate.stat.hits);
+    const strikeouts = parseIntSafe(candidate.stat.strikeOuts);
+    const walks = parseIntSafe(candidate.stat.baseOnBalls);
+    const homeRuns = parseIntSafe(candidate.stat.homeRuns);
+    teams.push({
+      team_id: teamId,
+      team_name: teamName,
+      season,
+      games_played: parseIntSafe(candidate.stat.gamesPlayed),
+      plate_appearances: plateAppearances,
+      at_bats: atBats,
+      hits,
+      strikeouts,
+      walks,
+      home_runs: homeRuns,
+      batting_average: parseFloatSafe(candidate.stat.avg),
+      on_base_percentage: parseFloatSafe(candidate.stat.obp),
+      slugging_percentage: parseFloatSafe(candidate.stat.slg),
+      ops: parseFloatSafe(candidate.stat.ops),
+      strikeout_rate: rate(strikeouts, plateAppearances),
+      walk_rate: rate(walks, plateAppearances),
+      home_run_rate: rate(homeRuns, plateAppearances),
+      raw_source: "mlb_stats_api",
+    });
+  }
+  if (!teams.length) return [];
+
+  const leagueAverage = {
+    strikeout_rate: rate(sumNullable(teams.map((team) => team.strikeouts)), sumNullable(teams.map((team) => team.plate_appearances))),
+    walk_rate: rate(sumNullable(teams.map((team) => team.walks)), sumNullable(teams.map((team) => team.plate_appearances))),
+    batting_average: rate(sumNullable(teams.map((team) => team.hits)), sumNullable(teams.map((team) => team.at_bats))),
+    ops: averageNullable(teams.map((team) => team.ops)),
+    home_run_rate: rate(sumNullable(teams.map((team) => team.home_runs)), sumNullable(teams.map((team) => team.plate_appearances))),
+  };
+  const rankMaps = {
+    strikeout_rate: rankDescending(teams, "strikeout_rate"),
+    walk_rate: rankDescending(teams, "walk_rate"),
+    batting_average: rankDescending(teams, "batting_average"),
+    ops: rankDescending(teams, "ops"),
+    home_run_rate: rankDescending(teams, "home_run_rate"),
+  };
+
+  return teams.map((team) => ({
+    ...team,
+    ranks: {
+      strikeout_rate: rankMaps.strikeout_rate.get(team.team_id) ?? null,
+      walk_rate: rankMaps.walk_rate.get(team.team_id) ?? null,
+      batting_average: rankMaps.batting_average.get(team.team_id) ?? null,
+      ops: rankMaps.ops.get(team.team_id) ?? null,
+      home_run_rate: rankMaps.home_run_rate.get(team.team_id) ?? null,
+      out_of: teams.length,
+    },
+    league_average: leagueAverage,
+  }));
+}
+
+/** Read-only all-team season hitting profiles for opponent research. */
+export async function getMlbTeamHittingProfiles(
+  season: number,
+  opts?: Opts
+): Promise<MlbTeamHittingProfile[] | null> {
+  const url = `${BASE_URL}/teams/stats?stats=season&group=hitting&season=${season}&sportIds=1`;
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: HEADERS, signal: opts?.signal });
+  } catch {
+    log(opts, "network error on team hitting profiles");
+    return null;
+  }
+  if (!res.ok) {
+    log(opts, `non-200 on team hitting profiles: HTTP ${res.status}`);
+    return null;
+  }
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    log(opts, "JSON parse error on team hitting profiles");
+    return null;
+  }
+  return parseMlbTeamHittingProfiles(body, season);
+}
+
+function rate(numerator: number | null, denominator: number | null): number | null {
+  if (numerator === null || denominator === null || denominator <= 0) return null;
+  return numerator / denominator;
+}
+
+function sumNullable(values: Array<number | null>): number | null {
+  const present = values.filter((value): value is number => value !== null && Number.isFinite(value));
+  return present.length ? present.reduce((sum, value) => sum + value, 0) : null;
+}
+
+function averageNullable(values: Array<number | null>): number | null {
+  const present = values.filter((value): value is number => value !== null && Number.isFinite(value));
+  return present.length ? present.reduce((sum, value) => sum + value, 0) / present.length : null;
+}
+
+function rankDescending<T extends { team_id: number }>(
+  rows: T[],
+  key: keyof T
+): Map<number, number> {
+  const sorted = rows
+    .filter((row) => typeof row[key] === "number" && Number.isFinite(row[key]))
+    .sort((a, b) => Number(b[key]) - Number(a[key]));
+  return new Map(sorted.map((row, index) => [row.team_id, index + 1]));
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export async function searchPersonByNameDob(
@@ -606,7 +1133,7 @@ export async function fetchMlbStatsScheduleRaw(
     `&sportId=1&hydrate=probablePitcher`;
   let res: Response;
   try {
-    res = await fetch(url, { headers: HEADERS });
+    res = await fetch(url, { headers: HEADERS, signal: opts?.signal });
   } catch {
     log(opts, `network error on /schedule for ${date}`);
     return null;

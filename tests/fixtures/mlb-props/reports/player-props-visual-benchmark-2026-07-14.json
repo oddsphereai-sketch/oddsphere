@@ -1,0 +1,60 @@
+{
+  "generatedAt": "2026-07-14T00:00:00.000Z",
+  "objective": "Move the member experience from an internal model console toward a premium decision-led sports research product.",
+  "sources": [
+    {
+      "product": "Outlier",
+      "url": "https://outlier.bet/",
+      "observedPattern": "Curated discovery feed, compact prop rows, player-specific context, best-price comparison, and deeper analysis only after selection.",
+      "adopt": "Use a guided feed followed by a focused research surface; keep one-click movement from prop to supporting evidence."
+    },
+    {
+      "product": "Props.Cash",
+      "url": "https://play.google.com/store/apps/details/Props_cash?id=cash.props.app",
+      "observedPattern": "One player and line anchor the screen while high-contrast trend visuals carry the explanation.",
+      "adopt": "Let the selected prop and projection comparison dominate before secondary methodology."
+    },
+    {
+      "product": "OddsJam Positive EV",
+      "url": "https://dev.oddsjam.com/betting-tools/positive-ev",
+      "observedPattern": "Dense scanning is reserved for a dedicated tool view with persistent filters, sortable value fields, and exact sportsbook execution context.",
+      "adopt": "Keep the full board dense and filterable, but separate it from the guided member feed."
+    },
+    {
+      "product": "Robinhood Legend",
+      "url": "https://robinhood.com/us/en/legend/",
+      "observedPattern": "Wide desktop canvas, linked analysis modules, restrained chrome, and clear hierarchy between the primary number and supporting widgets.",
+      "adopt": "Use a centered analysis workspace with linked evidence modules inside the established OddSphere shell."
+    },
+    {
+      "product": "Linear",
+      "url": "https://linear.app/now/behind-the-latest-design-refresh",
+      "observedPattern": "Compact tabs, reduced decorative chrome, careful contrast, and familiar controls make a dense product feel calmer.",
+      "adopt": "Use compact workspace controls, restrained accents, and fewer competing borders without changing shared navigation."
+    }
+  ],
+  "memberCopyRemoved": [
+    "public display flags",
+    "provider names and health",
+    "Supabase and fixture narration",
+    "raw reason codes",
+    "shrinkage weight",
+    "payload availability language",
+    "source fields",
+    "settlement and CLV scaffolding"
+  ],
+  "visualDecisions": [
+    "shared max-w-7xl OddSphere canvas and navigation",
+    "decision-led hero with best angles, top value, and books compared",
+    "member-like preview separated from admin diagnostics",
+    "centered desktop breakdown with paired evidence modules",
+    "team marks instead of fake or oversized player initials",
+    "compact task controls below the unchanged product navigation"
+  ],
+  "adminBoundary": "Provider health, raw reason codes, feature inventories, odds sanity, source metadata, shrinkage, settlement, and CLV remain available only in admin review surfaces.",
+  "safety": {
+    "publicDisplayEnabled": false,
+    "paperPersistenceEnabled": false,
+    "writesToSupabase": false
+  }
+}
