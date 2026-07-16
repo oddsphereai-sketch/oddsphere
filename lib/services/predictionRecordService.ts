@@ -2351,6 +2351,16 @@ function buildOuRecord(
     );
     ouLineDirection = readLineDirection(finalOuLineMovement);
   }
+  // Late totals recovery can supply a real price after the automodel snapshot
+  // was written without `ou_market_prob`. Derive the picked-side implied
+  // probability from that actual price so a priced total cannot be published
+  // with the contradictory "no real-book price" stand-down.
+  if (finalOuMarketProb === null && finalOuOdds !== null) {
+    finalOuMarketProb = americanToImpliedProb(finalOuOdds);
+    if (finalOuEdge === null && finalOuModelProb !== null && finalOuMarketProb !== null) {
+      finalOuEdge = roundEdgePp((finalOuModelProb - finalOuMarketProb) * 100);
+    }
+  }
   const ouBaseBestAngle = ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouDivergenceStandDown
     ? false
     : ouBest.bestAngle;
