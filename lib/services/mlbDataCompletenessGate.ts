@@ -2,6 +2,7 @@ import type { AutoModelOutput, GameSnapshot } from "../automodel/types";
 
 export type MlbDataCompletenessStatus =
   | "ready"
+  | "provisional_starters_pending"
   | "provisional_lineup_pending"
   | "degraded_stats_fallback"
   | "degraded_pitcher_fallback"
@@ -106,6 +107,10 @@ export function assessMlbDataCompleteness(
     ["away", snap.away_starter],
   ] as const) {
     if (starter === null) continue;
+    if (!starter.is_confirmed) {
+      pushUnique(degraded, `${side}_starter_confirmation`);
+      fallbackReasons.push(`${side}_starter_probable_unconfirmed`);
+    }
     if (starter.season_era === null) {
       pushUnique(degraded, `${side}_starter_season_stats`);
       fallbackReasons.push(`${side}_starter_stats_fallback`);
@@ -175,7 +180,7 @@ export function assessMlbDataCompleteness(
   }
 
   const pitcherFallback =
-    degraded.some((field) => field.includes("starter")) ||
+    degraded.some((field) => field.includes("starter") && !field.includes("confirmation")) ||
     hasV22Reason("starter_missing") ||
     hasV22Reason("pitch_quality_missing");
   const statsFallback =
@@ -193,6 +198,10 @@ export function assessMlbDataCompleteness(
     degraded.some((field) => field.includes("lineup")) ||
     hasV22Reason("lineup_missing") ||
     hasV22Reason("lineup_projected");
+  const startersPending =
+    snap.home_starter !== null &&
+    snap.away_starter !== null &&
+    (!snap.home_starter.is_confirmed || !snap.away_starter.is_confirmed);
 
   const status: MlbDataCompletenessStatus =
     missing.length > 0
@@ -201,6 +210,8 @@ export function assessMlbDataCompleteness(
         ? "degraded_pitcher_fallback"
         : statsFallback
           ? "degraded_stats_fallback"
+          : startersPending
+            ? "provisional_starters_pending"
           : lineupPending
             ? "provisional_lineup_pending"
             : "ready";
@@ -211,6 +222,9 @@ export function assessMlbDataCompleteness(
   }
   if (status === "provisional_lineup_pending") {
     notes.push("Official lineup is pending; card can publish and should repair when lineup data arrives.");
+  }
+  if (status === "provisional_starters_pending") {
+    notes.push("Probable starters are not confirmed; card can publish provisionally but cannot be Best Angle.");
   }
   if (!bestAngleAllowed) notes.push("Fallback-heavy card cannot be promoted to Best Angle.");
 

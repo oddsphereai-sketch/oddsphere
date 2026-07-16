@@ -46,6 +46,8 @@ import { sportsInSeasonToday } from "@/lib/cron/seasons";
 import { supabase } from "@/lib/db/supabase";
 import { linesService } from "@/lib/services/linesService";
 import { generatePredictionsForSlate } from "@/lib/services/automodelService";
+import { createPredictionRecords } from "@/lib/services/predictionRecordService";
+import { assessMlbLockCoherence } from "@/lib/services/mlbLockCoherence";
 import { updateMarketSignalsForSlate } from "@/lib/services/marketSignalDerivationService";
 import { updateGradesForSlate } from "@/lib/services/gradeDerivationService";
 import { detectSnapshotStaleness } from "@/lib/services/snapshotStalenessDetector";
@@ -405,12 +407,65 @@ export async function GET(request: Request) {
         }
       }
 
+      // ── 2.5. Fail-closed member-record coherence gate ───────────────
+      // The final T-60 model write and its member-facing prediction_records
+      // sync must describe the same recommendation before either row can be
+      // frozen. A sync failure or stale member row blocks only that game from
+      // locking; the next sweep can retry after the underlying issue clears.
+      let gamesReadyForLock = partition.entering_lock;
+      let lockCoherence: {
+        checked: number;
+        coherent: number;
+        blocked_game_ids: number[];
+        errors: string[];
+      } = { checked: 0, coherent: 0, blocked_game_ids: [], errors: [] };
+      if (partition.entering_lock.length > 0 && sport === "mlb") {
+        const enteringGameIds = new Set(partition.entering_lock.map((game) => game.game_id));
+        try {
+          const expectedResult = await createPredictionRecords({
+            sport: "mlb",
+            slateDate: date,
+            launchDay: false,
+            apply: false,
+            supabase,
+          });
+          const expectedRows = expectedResult.proposed.filter((row) => enteringGameIds.has(row.game_id));
+          const { data: storedRows, error: storedError } = await supabase
+            .from("prediction_records")
+            .select("game_id, market, pick, side, odds_american, confidence, play_grade, best_angle, no_bet")
+            .in("game_id", [...enteringGameIds])
+            .eq("sport", "mlb")
+            .eq("slate_date", date)
+            .is("locked_at", null);
+          if (storedError) throw new Error(storedError.message);
+          const assessment = assessMlbLockCoherence({
+            gameIds: [...enteringGameIds],
+            expectedRows,
+            storedRows: storedRows ?? [],
+          });
+          lockCoherence = {
+            checked: assessment.checked,
+            coherent: assessment.coherentGameIds.length,
+            blocked_game_ids: assessment.blockedGameIds,
+            errors: assessment.errors,
+          };
+          const coherentIds = new Set(assessment.coherentGameIds);
+          gamesReadyForLock = partition.entering_lock.filter((game) => coherentIds.has(game.game_id));
+        } catch (error) {
+          gamesReadyForLock = [];
+          lockCoherence = {
+            checked: partition.entering_lock.length,
+            coherent: 0,
+            blocked_game_ids: partition.entering_lock.map((game) => game.game_id),
+            errors: [`lock coherence check failed closed: ${error instanceof Error ? error.message : String(error)}`],
+          };
+        }
+      }
+
       // ── 3. Apply locks (set locked_at + audit) ──────────────────────
-      // Run for entering_lock games regardless of whether the model
-      // refresh in step 2 succeeded — locking the row prevents future
-      // sweeps from re-attempting a failed refresh, which is the safer
-      // default for V1.
-      const lockResult = await applyLocks(sport, date, partition.entering_lock);
+      // MLB locks only games that passed the model/member-record coherence
+      // gate. Other sports retain their existing lock behavior.
+      const lockResult = await applyLocks(sport, date, gamesReadyForLock);
       records += lockResult.locked;
 
       if (sport === "mlb" && marketIntelligenceV2 === null) {
@@ -428,6 +483,7 @@ export async function GET(request: Request) {
         const anyErrors =
           lockResult.errors.length > 0 ||
           enteringLockModelResult.errors.length > 0 ||
+          lockCoherence.errors.length > 0 ||
           (marketIntelligenceV2?.errors.length ?? 0) > 0;
         return {
           records_updated: records,
@@ -446,6 +502,7 @@ export async function GET(request: Request) {
               already_started: partition.already_started.length,
             },
             entering_lock_model: enteringLockModelResult,
+            lock_coherence: lockCoherence,
             locks_applied: lockResult.locked,
             audit_rows_written: lockResult.audit_written,
             lock_errors: lockResult.errors,
@@ -460,6 +517,7 @@ export async function GET(request: Request) {
             errors_count:
               lockResult.errors.length +
               enteringLockModelResult.errors.length +
+              lockCoherence.errors.length +
               (marketIntelligenceV2?.errors.length ?? 0),
             steps_skipped: [
               "lines_refresh",
@@ -687,6 +745,7 @@ export async function GET(request: Request) {
       const anyErrors =
         lockResult.errors.length > 0 ||
         enteringLockModelResult.errors.length > 0 ||
+        lockCoherence.errors.length > 0 ||
         staleTrigger.errors.length > 0 ||
         (marketIntelligenceV2?.errors.length ?? 0) > 0;
 
@@ -706,6 +765,7 @@ export async function GET(request: Request) {
             already_started: partition.already_started.length,
           },
           entering_lock_model: enteringLockModelResult,
+          lock_coherence: lockCoherence,
           locks_applied: lockResult.locked,
           audit_rows_written: lockResult.audit_written,
           lock_errors: lockResult.errors,
@@ -713,6 +773,7 @@ export async function GET(request: Request) {
           errors_count:
             lockResult.errors.length +
             enteringLockModelResult.errors.length +
+            lockCoherence.errors.length +
             (marketIntelligenceV2?.errors.length ?? 0),
           game_lines: gameLines.records_updated,
           sharp_signals: signals.records_updated,
