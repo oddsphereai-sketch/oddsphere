@@ -17,7 +17,7 @@ type PreviewSearchParams = {
 };
 
 export default async function MlbPropsPreviewPage({ searchParams }: { searchParams: Promise<PreviewSearchParams> }) {
-  if (process.env.NODE_ENV === "production") notFound();
+  if (isProductionDeployment()) notFound();
   const query = await searchParams;
   const requestedReader = firstQueryValue(query.reader);
   const requestedDate = firstQueryValue(query.date);
@@ -37,6 +37,11 @@ export default async function MlbPropsPreviewPage({ searchParams }: { searchPara
   }
   const initialSelectedId = snapshot.data.props.some((row) => row.id === requestedReader) ? requestedReader : null;
   return <ProductAppFrame><PlayerPropsDashboard data={snapshot.data} mode="live-preview" initialSelectedId={initialSelectedId} /></ProductAppFrame>;
+}
+
+function isProductionDeployment(): boolean {
+  if (process.env.VERCEL_ENV === "production") return true;
+  return process.env.VERCEL_ENV === undefined && process.env.NODE_ENV === "production";
 }
 
 function firstQueryValue(value: string | string[] | undefined): string | null {
