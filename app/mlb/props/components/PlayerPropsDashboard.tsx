@@ -257,6 +257,12 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
     const available = new Set(displayProps.map((row) => row.marketGroup));
     return MARKET_GROUP_ORDER.filter((group) => available.has(group));
   }, [displayProps]);
+  const gradeOptions = useMemo(() => {
+    const available = new Set(displayProps.map((row) => row.playGrade));
+    return PROP_GRADES
+      .filter((value) => available.has(value))
+      .map((value) => ({ value, label: getPropGradeLabel(value) }));
+  }, [displayProps]);
   const players = useMemo(() => unique(displayProps.map((row) => row.player)), [displayProps]);
   const matchups = data.slate?.matchups.length ? data.slate.matchups : deriveMatchups(displayProps);
 
@@ -336,7 +342,7 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
         </div>
         <div data-product-zone="board-controls" className="mt-3 border-t border-gray-800 pt-3">
           <div className="flex flex-wrap items-center gap-2">
-          <FilterSelect label="Model signal" value={grade} onChange={(value) => setGrade(value as PropGrade | "all")} options={PROP_GRADES.map((value) => ({ value, label: getPropGradeLabel(value) }))} includeAll />
+          <FilterSelect label="Model signal" value={grade} onChange={(value) => setGrade(value as PropGrade | "all")} options={gradeOptions} includeAll />
           <FilterSelect label="Team / game" value={team} onChange={setTeam} options={teams} includeAll />
           <FilterSelect label="Book" value={book} onChange={setBook} options={books} includeAll />
           <FilterSelect label="Sort" value={sort} onChange={(value) => setSort(value as SortKey)} options={[
@@ -448,7 +454,7 @@ function SlateGameNavigator({ data, matchups, selectedGame, onSelectGame, isPrev
         const active = selectedGame === key || (matchups.length === 1 && selectedGame === "all");
         return <button key={key} type="button" onClick={() => onSelectGame(matchups.length === 1 ? "all" : key)} aria-pressed={active} className={`w-[330px] shrink-0 rounded-lg border p-3 text-left ${active ? "border-sky-400/70 bg-sky-400/[0.07]" : "border-gray-800 bg-[#0d1015] hover:border-gray-700"}`}>
           <span className="flex items-center gap-2"><ProductTeamBadge abbreviation={matchup.awayTeam} size={28} /><strong className="text-sm text-white">{matchup.awayTeam}</strong><span className="text-[9px] font-bold text-gray-600">AT</span><ProductTeamBadge abbreviation={matchup.homeTeam} size={28} /><strong className="text-sm text-white">{matchup.homeTeam}</strong><span className="ml-auto text-xs font-black text-white">{formatTime(matchup.gameStartTime)}</span></span>
-          <span className="mt-3 block truncate border-t border-gray-800 pt-2 text-[10px] text-gray-500">{matchup.awayProbablePitcher ?? "Starter pending"} <span className="text-gray-700">vs</span> {matchup.homeProbablePitcher ?? "Starter pending"}</span>
+          <span className="mt-3 block truncate border-t border-gray-800 pt-2 text-[10px] text-gray-500">{matchup.awayProbablePitcher ?? "Starter TBD"} <span className="text-gray-700">vs</span> {matchup.homeProbablePitcher ?? "Starter TBD"}</span>
           <span className="mt-1 block text-[10px] text-gray-600">{gamePlayers} players · {gameProps} {isPreview ? "sample options" : "prop options"} · {gameBooks} books</span>
         </button>;
       })}
@@ -457,7 +463,7 @@ function SlateGameNavigator({ data, matchups, selectedGame, onSelectGame, isPrev
 }
 
 function ProviderHealthStrip({ data, matchups }: { data: PlayerPropsDashboardData; matchups: SlateMatchup[] }) {
-  const starters = matchups.every((item) => item.starterStatus === "confirmed") ? "Confirmed" : matchups.some((item) => item.starterStatus === "partial") ? "Partial" : "Pending";
+  const starters = matchups.every((item) => item.starterStatus === "confirmed") ? "Confirmed" : matchups.some((item) => item.starterStatus === "partial") ? "Partial" : "Projected";
   const context = data.slate?.contextStatus ?? "unavailable";
   const items: Array<[string, string, "good" | "warn" | "bad"]> = [
     ["BDL odds", humanStatus(data.providerStatus.bdl), data.providerStatus.bdl.includes("flow") ? "good" : "warn"],
@@ -806,7 +812,7 @@ function PitchArsenalPanel({ row }: { row: PlayerPropPreviewRow }) {
   const primary = arsenal.pitches[0];
   const bestWhiff = [...arsenal.pitches].filter((pitch) => pitch.whiffPercent !== null).sort((a, b) => (b.whiffPercent ?? 0) - (a.whiffPercent ?? 0))[0] ?? null;
   return <div data-research-module="pitch-arsenal" data-state="available" className="min-w-0 border-t border-gray-800 bg-black/20 p-4 sm:p-5 lg:border-t-0">
-    <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-black text-white">Pitch arsenal</p><p className="mt-0.5 text-[10px] text-gray-500">{arsenal.throws ? `${arsenal.throws === "R" ? "Right" : "Left"}-handed` : "Handedness pending"} · {arsenal.pitchesTracked.toLocaleString()} pitches</p></div><span className="rounded border border-violet-500/25 bg-violet-500/5 px-2 py-1 text-[9px] font-bold text-violet-200">{arsenal.pitches.length} pitches</span></div>
+    <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-black text-white">Pitch arsenal</p><p className="mt-0.5 text-[10px] text-gray-500">{arsenal.throws ? `${arsenal.throws === "R" ? "Right" : "Left"}-handed` : "Handedness unavailable"} · {arsenal.pitchesTracked.toLocaleString()} pitches</p></div><span className="rounded border border-violet-500/25 bg-violet-500/5 px-2 py-1 text-[9px] font-bold text-violet-200">{arsenal.pitches.length} pitches</span></div>
     <div className="mt-4 space-y-3">{arsenal.pitches.map((pitch) => <div key={pitch.code} className="grid grid-cols-[minmax(0,1fr)_48px_48px] items-center gap-3"><div className="min-w-0"><div className="flex items-center justify-between gap-2"><span className="truncate text-xs font-bold text-gray-200">{pitch.name}</span><span className="text-[9px] text-gray-600">{pitch.code}</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-800"><span className="block h-full rounded-full bg-violet-400" style={{ width: `${Math.min(100, pitch.usagePercent)}%` }} /></div></div><div className="text-right"><p className="text-[9px] text-gray-600">Usage</p><p className="text-xs font-black tabular-nums text-gray-200">{pitch.usagePercent.toFixed(1)}%</p></div><div className="text-right"><p className="text-[9px] text-gray-600">Whiff</p><p className="text-xs font-black tabular-nums text-gray-200">{pitch.whiffPercent === null ? "-" : `${pitch.whiffPercent.toFixed(1)}%`}</p></div></div>)}</div>
     <p className="mt-4 border-t border-gray-800 pt-3 text-xs leading-5 text-gray-400">Primary pitch: <strong className="text-gray-200">{primary.name} ({primary.usagePercent.toFixed(1)}%)</strong>{bestWhiff ? <> · Best whiff rate: <strong className="text-gray-200">{bestWhiff.name} ({bestWhiff.whiffPercent?.toFixed(1)}%)</strong></> : null}</p>
     <ResearchSource source={arsenal.source} asOfTimestamp={arsenal.asOfTimestamp} note={`Through ${formatGameLogDate(arsenal.lastGameDate)} · research context only`} />
@@ -865,10 +871,10 @@ function PitchMixCell({ label, value }: { label: string; value: string }) {
 
 function EnvironmentPanel({ row }: { row: PlayerPropPreviewRow }) {
   const evidence = row.environment;
-  const venue = evidence?.venue ?? "Venue updating";
+  const venue = evidence?.venue ?? "Venue TBD";
   return <div data-research-module="game-environment" data-state={evidence ? "available" : "pending"} className="grid overflow-hidden rounded-lg border border-gray-800 bg-gray-800 md:grid-cols-3">
     <EnvironmentItem label="Venue" value={venue} detail={evidence ? roofStatusLabel(evidence.roofStatus) : "Schedule details will appear here."} status={evidence?.venue ? "available" : "pending"} />
-    <EnvironmentItem label="Park profile" value={evidence?.park.status === "available" ? parkProfileLabel(evidence.park.runFactor) : "Updating"} detail={evidence?.park.status === "available" ? `HR factor ${factorLabel(evidence.park.homeRunFactor)} · K factor ${factorLabel(evidence.park.strikeoutFactor)}` : "Verified run and home-run factors will appear here."} status={evidence?.park.status ?? "pending"} />
+    <EnvironmentItem label="Park profile" value={evidence?.park.status === "available" ? parkProfileLabel(evidence.park.runFactor) : "Park check"} detail={evidence?.park.status === "available" ? `HR factor ${factorLabel(evidence.park.homeRunFactor)} · K factor ${factorLabel(evidence.park.strikeoutFactor)}` : "Verified run and home-run factors will appear here."} status={evidence?.park.status ?? "pending"} />
     <EnvironmentItem label="Game-time forecast" value={weatherHeadline(evidence)} detail={weatherDetail(evidence)} status={evidence?.weather.status ?? "pending"} />
   </div>;
 }
@@ -878,7 +884,7 @@ function EnvironmentItem({ label, value, detail, status }: { label: string; valu
 }
 
 function ResearchModulePending({ title, note }: { title: string; note: string }) {
-  return <div data-state="pending" className="flex min-h-56 flex-col justify-center bg-black/20 p-5"><p className="text-sm font-black text-gray-300">{title}</p><p className="mt-2 max-w-sm text-xs leading-5 text-gray-500">{note}</p><span className="mt-4 w-fit rounded border border-gray-700 px-2 py-1 text-[9px] font-bold text-gray-500">Updating</span></div>;
+  return <div data-state="pending" className="flex min-h-56 flex-col justify-center bg-black/20 p-5"><p className="text-sm font-black text-gray-300">{title}</p><p className="mt-2 max-w-sm text-xs leading-5 text-gray-500">{note}</p><span className="mt-4 w-fit rounded border border-gray-700 px-2 py-1 text-[9px] font-bold text-gray-500">Research check</span></div>;
 }
 
 function ResearchSource({ source, asOfTimestamp, note }: { source: string; asOfTimestamp: string; note: string }) {
@@ -918,7 +924,7 @@ function ProjectionIntegrityNotice({ row }: { row: PlayerPropPreviewRow }) {
 export function BookPriceLadder({ prices, allBooks = [] }: { prices: PlayerPropPreviewRow[]; allBooks?: string[] }) {
   const availableBooks = new Set(prices.map((price) => price.book));
   const unavailableBooks = allBooks.filter((book) => !availableBooks.has(book));
-  return <div data-visual="book-price-ladder" className="overflow-hidden rounded-lg border border-gray-800">{prices.length ? prices.map((price, index) => { const stale = price.reasonCodes.some((code) => code.includes("STALE")) || price.oddsSanity.some((flag) => flag.includes("STALE")); const assessment = assessPropPrice(price.odds); return <div key={price.id} className={`flex items-center justify-between border-b border-gray-800 px-3 py-2.5 last:border-b-0 ${index === 0 ? "bg-emerald-500/5" : ""}`}><div className="flex items-center gap-2"><BookChip book={price.book} />{index === 0 ? <span className="text-[10px] font-bold uppercase text-emerald-300">Best price</span> : null}{stale ? <span className="text-[10px] font-bold uppercase text-amber-300">Updating</span> : null}{assessment.label ? <span className="text-[9px] font-bold text-sky-300">{assessment.label}</span> : null}</div><span className="text-right"><strong className="block font-black tabular-nums text-white">{signed(price.odds)}</strong><span className="block text-[9px] tabular-nums text-gray-600">{assessment.impliedProbability === null ? "Reviewing" : `${pct(assessment.impliedProbability)} implied`}</span></span></div>; }) : <p className="p-3 text-xs text-gray-500">Book prices are not available yet.</p>}{unavailableBooks.length ? <div className="flex flex-wrap items-center gap-2 border-t border-gray-800 px-3 py-2" data-book-availability="unavailable"><span className="text-[9px] font-bold uppercase text-gray-600">More books</span>{unavailableBooks.map((book) => <span key={book} className="opacity-35"><BookChip book={book} /></span>)}</div> : null}<p className="border-t border-gray-800 px-3 py-2 text-[10px] text-gray-600">{prices.length > 1 ? `${prices.length} prices compared` : "Best available price shown"}</p></div>;
+  return <div data-visual="book-price-ladder" className="overflow-hidden rounded-lg border border-gray-800">{prices.length ? prices.map((price, index) => { const stale = price.reasonCodes.some((code) => code.includes("STALE")) || price.oddsSanity.some((flag) => flag.includes("STALE")); const assessment = assessPropPrice(price.odds); return <div key={price.id} className={`flex items-center justify-between border-b border-gray-800 px-3 py-2.5 last:border-b-0 ${index === 0 ? "bg-emerald-500/5" : ""}`}><div className="flex items-center gap-2"><BookChip book={price.book} />{index === 0 ? <span className="text-[10px] font-bold uppercase text-emerald-300">Best price</span> : null}{stale ? <span className="text-[10px] font-bold uppercase text-amber-300">Refreshing</span> : null}{assessment.label ? <span className="text-[9px] font-bold text-sky-300">{assessment.label}</span> : null}</div><span className="text-right"><strong className="block font-black tabular-nums text-white">{signed(price.odds)}</strong><span className="block text-[9px] tabular-nums text-gray-600">{assessment.impliedProbability === null ? "Reviewing" : `${pct(assessment.impliedProbability)} implied`}</span></span></div>; }) : <p className="p-3 text-xs text-gray-500">Book prices are not available yet.</p>}{unavailableBooks.length ? <div className="flex flex-wrap items-center gap-2 border-t border-gray-800 px-3 py-2" data-book-availability="unavailable"><span className="text-[9px] font-bold uppercase text-gray-600">More books</span>{unavailableBooks.map((book) => <span key={book} className="opacity-35"><BookChip book={book} /></span>)}</div> : null}<p className="border-t border-gray-800 px-3 py-2 text-[10px] text-gray-600">{prices.length > 1 ? `${prices.length} prices compared` : "Best available price shown"}</p></div>;
 }
 
 function PriceContextLine({ odds }: { odds: number }) {
@@ -943,7 +949,7 @@ export function PlayerStatSnapshot({ row }: { row: PlayerPropPreviewRow }) {
 function MarketContextSummary({ row }: { row: PlayerPropPreviewRow }) {
   const used = `${row.keyFeatures.join(" ")} ${(row.marketContext ?? []).join(" ")}`.toLowerCase();
   const items = [
-    { label: "Probable", value: used.includes("starter") ? "Verified" : "Pending" },
+    { label: "Probable", value: used.includes("starter") ? "Verified" : "Projected" },
     { label: "Odds", value: row.oddsSanity.length ? "Review" : "Fresh" },
     { label: "Season stat", value: playerStatDescriptor(row).feature ? "Available" : "Unavailable" },
     { label: "Lineup", value: lineupDisplayStatus(row.lineupStatus?.status) },
@@ -999,7 +1005,7 @@ function PendingPropsState({ data, mode, matchups }: { data: PlayerPropsDashboar
     ? "Confirmed"
     : matchups.some((item) => item.starterStatus !== "pending")
       ? "Partially confirmed"
-      : "Pending";
+      : "Projected";
   return <div className="w-full pb-8"><PropLeagueRail />{mode === "live-preview" ? <LivePreviewDataNotice /> : null}<PropsSlateHeader data={data} mode={mode} matchups={matchups} selectedGame="all" onSelectGame={() => undefined} />{mode === "admin" ? <ProviderHealthStrip data={data} matchups={matchups} /> : null}<section className="mt-7 border-y border-gray-800 py-8 sm:py-10"><span className="inline-flex rounded border border-gray-600 px-2.5 py-1 text-[11px] font-bold text-gray-300">Markets opening soon</span><h2 className="mt-4 text-2xl font-black text-white">Player prop lines have not posted yet.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">Today’s board will populate automatically as sportsbooks publish their first prices.</p><div className="mt-6 grid gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800 md:grid-cols-3"><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Games scheduled</p><p className="mt-2 text-lg font-black text-white">{matchups.length}</p></div><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Probable pitchers</p><p className="mt-2 text-sm font-semibold text-gray-200">{probablePitcherStatus}</p></div><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Next update</p><p className="mt-2 text-sm font-semibold text-gray-200">{data.slate?.nextCheckLabel ?? "When player markets open"}</p></div></div></section></div>;
 }
 
@@ -1306,18 +1312,18 @@ function roofStatusLabel(status: PlayerPropEnvironmentEvidence["roofStatus"]): s
   if (status === "dome") return "Controlled indoor environment";
   if (status === "retractable") return "Retractable roof";
   if (status === "outdoor") return "Outdoor ballpark";
-  return "Roof status updating";
+  return "Roof info unavailable";
 }
 
 function handednessLabel(value: "L" | "R" | "S" | null, action: "bats" | "throws"): string {
   if (value === "S") return "Switch hitter";
   if (value === "L") return action === "bats" ? "Bats left" : "Throws left";
   if (value === "R") return action === "bats" ? "Bats right" : "Throws right";
-  return action === "bats" ? "Batting side updating" : "Throwing hand updating";
+  return action === "bats" ? "Batting side unavailable" : "Throwing hand unavailable";
 }
 
 function weatherHeadline(evidence: PlayerPropEnvironmentEvidence | null | undefined): string {
-  if (!evidence || evidence.weather.status !== "available") return "Updating";
+  if (!evidence || evidence.weather.status !== "available") return "Forecast check";
   const parts = [
     evidence.weather.temperatureF === null ? null : `${Math.round(evidence.weather.temperatureF)}°F`,
     evidence.weather.conditions,
@@ -1383,7 +1389,7 @@ function memberReason(value: string): string {
     LINEUP_CONTEXT_INSUFFICIENT: "Projected lineup context",
     LOW_DATA_CONFIDENCE: "Limited supporting data",
     STOLEN_BASE_CONTEXT_INSUFFICIENT: "More stolen-base context needed",
-    STALE_BDL_ODDS: "Price is updating",
+    STALE_BDL_ODDS: "Price refresh in progress",
     FIRST_HR_FIELD_MODEL_NOT_PROMOTED: "Research market only",
     MILESTONE_MODEL_NOT_PROMOTED: "Research market only",
     PITCHER_WIN_CONTEXT_INSUFFICIENT: "More win context needed",
@@ -1421,7 +1427,7 @@ function memberGradeDescription(grade: PropGrade): string {
   if (grade === "LEAN") return "A positive model difference that is more sensitive to the available price.";
   if (grade === "WATCHLIST") return "An interesting read that still depends on additional confirmation.";
   if (grade === "NO_PLAY") return "The model does not show a meaningful advantage at the current line.";
-  if (grade === "PENDING_DATA") return "A core model or market input is still updating.";
+  if (grade === "PENDING_DATA") return "A core model or market input needs a fresh check.";
   return "Available for research, but the model or supporting data is not mature enough for a stronger signal.";
 }
 
