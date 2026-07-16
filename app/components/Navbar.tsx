@@ -12,7 +12,12 @@ export default function Navbar() {
   // 6.2a: hide the public marketing Navbar on premium + admin shells. /lab/*
   // gets its own LabAppNav (app-style header); /admin/* uses its scoped chrome.
   // This way the marketing chrome only ever appears on actual marketing pages.
-  if (pathname.startsWith("/lab") || pathname.startsWith("/admin")) {
+  if (
+    pathname.startsWith("/lab") ||
+    pathname.startsWith("/admin") ||
+    pathname === "/mlb/props" ||
+    pathname === "/dev/mlb-props-preview"
+  ) {
     return null;
   }
 

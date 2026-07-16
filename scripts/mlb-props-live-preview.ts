@@ -7,17 +7,29 @@ function argument(name: string): string | null {
   return process.argv.find((value) => value.startsWith(prefix))?.slice(prefix.length) ?? null;
 }
 
+function booleanArgument(name: string, fallback = false): boolean {
+  const raw = argument(name);
+  if (raw === null) return fallback;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new Error(`--${name} must be true or false`);
+}
+
 async function main() {
   const slateDate = argument("date") ?? easternSlateDate();
+  const persist = booleanArgument("persist");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(slateDate)) throw new Error("--date must use YYYY-MM-DD");
 
-  const result = await refreshMlbPropsBoard({ slateDate, refreshMode: "full", persist: false });
+  const result = await refreshMlbPropsBoard({ slateDate, refreshMode: "full", persist });
   const destination = await writeMlbPropsLivePreviewSnapshot(result.snapshot);
   const size = measureMlbPropsBoardSnapshot(result.snapshot);
 
   console.log(JSON.stringify({
     slateDate,
     destination,
+    persisted: result.published,
+    scoringRunId: result.scoringRunId,
+    tracking: result.tracking,
     asOfTimestamp: result.snapshot.asOfTimestamp,
     props: result.snapshot.data.props.length,
     games: result.snapshot.data.summary.gamesWithProps,

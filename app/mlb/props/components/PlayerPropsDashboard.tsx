@@ -356,7 +356,7 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
         </div>
       </section>
 
-      {selectedPlayer ? <PlayerView rows={filteredRows} player={selectedPlayer} onSelect={setSelectedId} onClear={() => setSearch("")} /> : <>
+      {selectedPlayer ? <PlayerView rows={filteredRows} player={selectedPlayer} selectedId={selectedId} onSelect={setSelectedId} onClear={() => setSearch("")} /> : <>
       <FullBoardView rows={filteredRows} totalCount={dedupeBestPrices(displayProps).length} priceMode={priceMode} selectedId={selectedId} onSelect={setSelectedId} />
       </>}
       {!isSearching ? <PlayerDirectory rows={displayProps} onSelectPlayer={setSearch} /> : null}
@@ -375,7 +375,7 @@ function PreviewDataNotice() {
 function LivePreviewDataNotice() {
   return <aside role="status" className="mb-5 border border-emerald-400/35 bg-emerald-400/[0.07] px-4 py-3 sm:px-5">
     <p className="text-[10px] font-black uppercase text-emerald-300">Live internal preview</p>
-    <p className="mt-1 max-w-4xl text-sm leading-6 text-emerald-50/80">Current sportsbook markets and official MLB research data from a read-only full refresh. Member publishing and database persistence remain off.</p>
+    <p className="mt-1 max-w-4xl text-sm leading-6 text-emerald-50/80">Current sportsbook markets and official MLB research data from the latest private refresh. Public member access remains off.</p>
   </aside>;
 }
 
@@ -570,7 +570,7 @@ function FullBoardView({ rows, totalCount, priceMode, selectedId, onSelect }: { 
   const totalUnits = priceMode === "best" ? marketPairs.length : rows.length;
   return <div data-product-zone="full-board" className="pt-5">
     <div className="mb-3 flex items-end justify-between gap-4"><div><p className="text-[10px] font-black uppercase text-gray-500">Search results</p><h2 className="mt-1 text-xl font-black text-white">Prop Board</h2></div><p className="text-right text-xs text-gray-500"><strong className="text-gray-200">{priceMode === "best" ? marketPairs.length : rows.length}</strong> {priceMode === "best" ? "markets" : "sportsbook prices"} shown<br />{rows.length} filtered options · {totalCount} posted</p></div>
-    {priceMode === "best" ? <><div className="hidden xl:block"><MarketPairTable pairs={visiblePairs} selectedId={selectedId ?? ""} onSelect={onSelect} /></div><div className="xl:hidden"><PropsTable rows={visiblePairs.flatMap((pair) => pair.rows)} selectedId={selectedId ?? ""} onSelect={onSelect} /></div></> : <PropsTable rows={visibleRows} selectedId={selectedId ?? ""} onSelect={onSelect} />}
+    {priceMode === "best" ? <><div className="hidden xl:block"><MarketPairTable pairs={visiblePairs} selectedId={selectedId ?? ""} onSelect={onSelect} /></div><div className="xl:hidden"><MarketPairCards pairs={visiblePairs} selectedId={selectedId ?? ""} onSelect={onSelect} /></div></> : <PropsTable rows={visibleRows} selectedId={selectedId ?? ""} onSelect={onSelect} />}
     {visibleUnits < totalUnits ? <div className="flex flex-col items-center border-x border-b border-gray-800 bg-gray-950 px-4 py-4 sm:flex-row sm:justify-between"><p className="text-xs text-gray-500">Showing {visibleUnits} of {totalUnits} {priceMode === "best" ? "markets" : "prices"}</p><button type="button" onClick={() => setVisibleCount((count) => Math.min(count + pageSize, totalUnits))} className="mt-3 h-9 rounded-md border border-gray-700 px-4 text-xs font-bold text-gray-200 hover:border-gray-500 hover:text-white sm:mt-0">Load more markets</button></div> : null}
     {!rows.length ? <EmptyBoard /> : null}
   </div>;
@@ -589,20 +589,45 @@ function MarketPairTable({ pairs, selectedId, onSelect }: { pairs: MarketPair[];
   const projectionLabel = pairs.every((pair) => pair.primary.projectionSource === "recent_form") ? "Recent avg" : "Projection";
   return <div className="overflow-hidden rounded-lg border border-gray-800 bg-gray-950">
     <div className="grid grid-cols-[1.2fr_1fr_0.5fr_0.55fr_1.25fr_1.25fr] gap-3 border-b border-gray-800 bg-black/40 px-3 py-2 text-[9px] font-bold uppercase text-gray-500"><span>Player</span><span>Market</span><span>Line</span><span>{projectionLabel}</span><span>Over</span><span>Under</span></div>
-    <div className="divide-y divide-gray-800">{pairs.map((pair) => <div key={pair.key} className={`grid grid-cols-[1.2fr_1fr_0.5fr_0.55fr_1.25fr_1.25fr] items-center gap-3 px-3 py-2.5 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : "hover:bg-gray-900"}`}>
+    <div className="divide-y divide-gray-800">{pairs.map((pair) => {
+      const lean = modelLeanSide(pair);
+      return <div key={pair.key} className={`grid grid-cols-[1.2fr_1fr_0.5fr_0.55fr_1.25fr_1.25fr] items-center gap-3 px-3 py-2.5 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : "hover:bg-gray-900"}`}>
       <span className="flex min-w-0 items-center gap-2"><PlayerAvatar player={pair.primary.player} team={pair.primary.team} headshotUrl={pair.primary.headshotUrl} compact /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.player}</strong><span className="block truncate text-[10px] text-gray-600">{pair.primary.team} {pair.primary.homeAway === "home" ? "vs" : "@"} {pair.primary.opponent}</span></span></span>
       <span className="truncate text-xs font-semibold text-gray-200">{pair.primary.marketLabel}</span>
       <strong className="text-xs tabular-nums text-white">{pair.primary.line}</strong>
       <span className="text-xs font-bold tabular-nums text-gray-300">{pair.primary.projection}</span>
-      <MarketSideQuote row={pair.over} side="over" onSelect={onSelect} />
-      <MarketSideQuote row={pair.under} side="under" onSelect={onSelect} />
-    </div>)}</div>
+      <MarketSideQuote row={pair.over} side="over" isLean={lean === "over"} onSelect={onSelect} />
+      <MarketSideQuote row={pair.under} side="under" isLean={lean === "under"} onSelect={onSelect} />
+    </div>})}</div>
   </div>;
 }
 
-function MarketSideQuote({ row, side, onSelect }: { row: PlayerPropPreviewRow | null; side: "over" | "under"; onSelect: (id: string) => void }) {
-  if (!row) return <span className="text-[10px] font-semibold text-gray-700">Not posted</span>;
-  return <button type="button" onClick={() => onSelect(row.id)} className="min-w-0 rounded-md border border-gray-800 bg-black/20 px-2.5 py-2 text-left hover:border-sky-500/50 hover:bg-sky-500/[0.05]"><span className="flex items-center justify-between gap-2"><strong className="text-xs text-white">{side === "over" ? "O" : "U"} {row.line} · {signed(row.odds)}</strong><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-0.5 block truncate text-[9px] text-gray-600">{row.book}</span><OddsMovementTag row={row} /></button>;
+function MarketPairCards({ pairs, selectedId, onSelect }: { pairs: MarketPair[]; selectedId: string; onSelect: (id: string) => void }) {
+  if (!pairs.length) return null;
+  return <div className="divide-y divide-gray-800 overflow-hidden rounded-lg border border-gray-800 bg-gray-950">{pairs.map((pair) => {
+    const lean = modelLeanSide(pair);
+    return <article key={pair.key} className={`p-4 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : ""}`}>
+      <div className="flex min-w-0 items-start justify-between gap-3"><span className="flex min-w-0 items-center gap-3"><PlayerAvatar player={pair.primary.player} team={pair.primary.team} headshotUrl={pair.primary.headshotUrl} compact /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.player}</strong><span className="block truncate text-xs text-gray-500">{pair.primary.team} {pair.primary.homeAway === "home" ? "vs" : "@"} {pair.primary.opponent} · {pair.primary.marketLabel}</span></span></span><span className={`shrink-0 rounded border px-2 py-1 text-[9px] font-black uppercase ${lean ? "border-emerald-400/35 bg-emerald-400/[0.08] text-emerald-300" : "border-gray-800 text-gray-500"}`}>{lean ? `Model lean: ${lean === "over" ? "Over" : "Under"}` : "No model lean"}</span></div>
+      <div className="mt-3 flex items-center justify-between border-y border-gray-800 py-2 text-xs"><span className="text-gray-500">Line <strong className="ml-1 text-white">{pair.primary.line}</strong></span><span className="text-gray-500">{pair.primary.projectionSource === "recent_form" ? "Recent avg" : "Projection"} <strong className="ml-1 text-white">{pair.primary.projection}</strong></span></div>
+      <div className="mt-3 grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" isLean={lean === "over"} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" isLean={lean === "under"} onSelect={onSelect} /></div>
+    </article>;
+  })}</div>;
+}
+
+function MarketSideQuote({ row, side, isLean, onSelect }: { row: PlayerPropPreviewRow | null; side: "over" | "under"; isLean: boolean; onSelect: (id: string) => void }) {
+  if (!row) return <span className="flex min-h-[72px] items-center justify-center rounded-md border border-dashed border-gray-800 bg-black/10 px-2 text-center text-[10px] font-semibold text-gray-600">{side === "over" ? "Over" : "Under"}<br />Not offered</span>;
+  return <button type="button" onClick={() => onSelect(row.id)} className={`min-w-0 rounded-md border px-2.5 py-2 text-left ${isLean ? "border-emerald-400/45 bg-emerald-400/[0.07]" : "border-gray-800 bg-black/20 hover:border-sky-500/50 hover:bg-sky-500/[0.05]"}`}><span className="flex items-center justify-between gap-2"><strong className="text-xs text-white">{side === "over" ? "O" : "U"} {row.line} · {signed(row.odds)}</strong><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-0.5 flex items-center justify-between gap-2"><span className="truncate text-[9px] text-gray-600">{row.book}</span>{isLean ? <span className="shrink-0 text-[9px] font-black uppercase text-emerald-300">Model lean</span> : null}</span><OddsMovementTag row={row} /></button>;
+}
+
+function modelLeanSide(pair: MarketPair): "over" | "under" | null {
+  const actionable = pair.rows
+    .filter((row) => row.playGrade === "BEST_ANGLE" || row.playGrade === "LEAN")
+    .sort((a, b) => (b.modelEdge ?? 0) - (a.modelEdge ?? 0))[0];
+  if (actionable) return actionable.side;
+  const modeled = pair.rows
+    .filter((row) => row.finalProbability !== null && row.modelEdge !== null)
+    .sort((a, b) => (b.modelEdge ?? Number.NEGATIVE_INFINITY) - (a.modelEdge ?? Number.NEGATIVE_INFINITY))[0];
+  return modeled?.side ?? null;
 }
 
 export function PropsTable({ rows, selectedId, onSelect }: { rows: PlayerPropPreviewRow[]; selectedId: string; onSelect: (id: string) => void }) {
@@ -610,7 +635,7 @@ export function PropsTable({ rows, selectedId, onSelect }: { rows: PlayerPropPre
   const projectionLabel = rows.every((row) => row.projectionSource === "recent_form") ? "Recent avg" : "Projection";
   return <div className="overflow-hidden rounded-lg border border-gray-800 bg-gray-950">
     <div className="grid grid-cols-[1.25fr_1.08fr_0.78fr_0.64fr_0.82fr_0.56fr_0.54fr_0.68fr_0.82fr_0.48fr] gap-2 border-b border-gray-800 bg-black/40 px-3 py-2 text-[9px] font-bold uppercase text-gray-500 max-xl:hidden">
-      <span>Player</span><span>Market</span><span>Pick / Line</span><span>{projectionLabel}</span><span>Book / Odds</span><span>Edge</span><span>EV</span><span>Coverage</span><span>Model Signal</span><span>Reader</span>
+      <span>Player</span><span>Market</span><span>Side / Line</span><span>{projectionLabel}</span><span>Book / Odds</span><span>Edge</span><span>EV</span><span>Coverage</span><span>Model Signal</span><span>Reader</span>
     </div>
     <div className="divide-y divide-gray-800">{rows.map((row) => <div key={row.id} className={`px-3 py-3 hover:bg-gray-900 ${selectedId === row.id ? "bg-violet-400/10" : ""}`}>
       <button type="button" onClick={() => onSelect(row.id)} className="hidden w-full grid-cols-[1.25fr_1.08fr_0.78fr_0.64fr_0.82fr_0.56fr_0.54fr_0.68fr_0.82fr_0.48fr] items-center gap-2 text-left xl:grid">
@@ -630,16 +655,26 @@ export function PropsTable({ rows, selectedId, onSelect }: { rows: PlayerPropPre
   </div>;
 }
 
-function PlayerView({ rows, player, onSelect, onClear }: { rows: PlayerPropPreviewRow[]; player: string; onSelect: (id: string) => void; onClear: () => void }) {
-  const marketRows = bestPlayerMarketPrices(rows);
-  const primary = marketRows[0];
-  const topModelGap = marketRows.length ? Math.max(...marketRows.map((row) => row.modelEdge ?? 0)) : 0;
+function PlayerView({ rows, player, selectedId, onSelect, onClear }: { rows: PlayerPropPreviewRow[]; player: string; selectedId: string | null; onSelect: (id: string) => void; onClear: () => void }) {
+  const marketRows = dedupeBestPrices(rows);
+  const marketPairs = pairMarketRows(marketRows).sort((a, b) => a.primary.marketLabel.localeCompare(b.primary.marketLabel));
+  const primary = marketPairs[0]?.primary ?? null;
+  const pairedRows = marketPairs.flatMap((pair) => pair.rows);
+  const topModelGap = pairedRows.length ? Math.max(...pairedRows.map((row) => row.modelEdge ?? 0)) : 0;
   const playerBooks = unique(marketRows.map((row) => row.book)).length;
   if (!primary) return <div className="mt-5"><EmptyBoard label={`No markets match for ${player}.`} /></div>;
   return <div data-product-zone="player-workspace" className="mt-5">
-    <button type="button" onClick={onClear} className="mb-3 inline-flex h-8 items-center gap-2 text-xs font-bold text-gray-500 hover:text-white"><span aria-hidden="true">←</span> Back to Radar</button>
-    <header className="rounded-lg border border-gray-800 bg-[#0b0e14] p-5"><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div className="flex items-center gap-4"><PlayerAvatar player={player} team={primary.team} headshotUrl={primary.headshotUrl} large /><div><p className="text-[11px] font-bold uppercase text-violet-300">Player workspace</p><h2 className="mt-1 text-2xl font-black text-white">{player}</h2><p className="mt-1 text-sm text-gray-400">{primary.team} {primary.homeAway === "home" ? "vs" : "@"} {primary.opponent} · {formatTime(primary.gameStartTime)}</p></div></div><div className="grid grid-cols-3 border-t border-gray-800 pt-4 lg:min-w-[360px] lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0"><PlayerSummaryMetric label="Markets" value={String(marketRows.length)} /><PlayerSummaryMetric label="Top model gap" value={pct(topModelGap, true)} /><PlayerSummaryMetric label="Books" value={String(playerBooks)} /></div></div></header>
-    <div className="mt-3 overflow-hidden rounded-lg border border-gray-800 bg-gray-950">{marketRows.map((row) => <button key={row.id} type="button" onClick={() => onSelect(row.id)} className="grid w-full gap-3 border-b border-gray-800 p-4 text-left last:border-b-0 hover:bg-gray-900 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)_minmax(0,1.6fr)_auto] sm:items-center"><span className="flex min-w-0 items-center gap-2"><MarketChip row={row} /><span className="min-w-0"><strong className="block truncate text-sm text-white">{row.marketLabel}</strong><span className="block truncate text-xs text-gray-500">{row.side === "over" ? "Over" : "Under"} {row.line}</span></span></span><span><strong className="text-sm tabular-nums text-white">{signed(row.odds)}</strong><span className="ml-2 text-xs text-gray-500">{row.book}</span><span className="mt-1 block text-[10px] text-gray-500">{row.projectionSource === "recent_form" ? "Recent avg" : "Projection"} {row.projection} vs line {row.line}</span></span><span className="min-w-0"><PropGradeBadge grade={row.playGrade} compact /><span className="mt-1.5 block truncate text-xs text-gray-400">{cardReason(row)}</span></span><span className="text-xs font-bold text-violet-200">Read</span></button>)}</div>
+    <button type="button" onClick={onClear} className="mb-3 inline-flex h-8 items-center gap-2 text-xs font-bold text-gray-500 hover:text-white"><span aria-hidden="true">←</span> Clear player search</button>
+    <header className="rounded-lg border border-gray-800 bg-[#0b0e14] p-5"><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div className="flex items-center gap-4"><PlayerAvatar player={player} team={primary.team} headshotUrl={primary.headshotUrl} large /><div><p className="text-[11px] font-bold uppercase text-violet-300">Player workspace</p><h2 className="mt-1 text-2xl font-black text-white">{player}</h2><p className="mt-1 text-sm text-gray-400">{primary.team} {primary.homeAway === "home" ? "vs" : "@"} {primary.opponent} · {formatTime(primary.gameStartTime)}</p></div></div><div className="grid grid-cols-3 border-t border-gray-800 pt-4 lg:min-w-[360px] lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0"><PlayerSummaryMetric label="Markets" value={String(marketPairs.length)} /><PlayerSummaryMetric label="Top model gap" value={pct(topModelGap, true)} /><PlayerSummaryMetric label="Books" value={String(playerBooks)} /></div></div></header>
+    <div className="mt-3 divide-y divide-gray-800 overflow-hidden rounded-lg border border-gray-800 bg-gray-950">{marketPairs.map((pair) => {
+      const lean = modelLeanSide(pair);
+      const leanRow = pair.rows.find((row) => row.side === lean) ?? pair.primary;
+      return <article key={pair.key} className={`grid gap-3 p-4 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : "hover:bg-gray-900"} lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1.1fr)_minmax(320px,1.25fr)] lg:items-center`}>
+        <div className="flex min-w-0 items-center gap-2"><MarketChip row={pair.primary} /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.marketLabel}</strong><span className="block truncate text-xs text-gray-500">Line {pair.primary.line} · {pair.primary.projectionSource === "recent_form" ? "Recent avg" : "Projection"} {pair.primary.projection}</span></span></div>
+        <div className="min-w-0"><span className={`inline-flex rounded border px-2 py-1 text-[9px] font-black uppercase ${lean ? "border-emerald-400/35 bg-emerald-400/[0.08] text-emerald-300" : "border-gray-800 text-gray-500"}`}>{lean ? `Model lean: ${lean === "over" ? "Over" : "Under"}` : "No model lean"}</span><span className="mt-1.5 block truncate text-xs text-gray-400">{cardReason(leanRow)}</span></div>
+        <div className="grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" isLean={lean === "over"} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" isLean={lean === "under"} onSelect={onSelect} /></div>
+      </article>;
+    })}</div>
   </div>;
 }
 
@@ -1441,15 +1476,4 @@ function hydrateResearchEvidence(
 function money(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "-";
   return value.toLocaleString("en-US", { maximumFractionDigits: value >= 100 ? 0 : 2 });
-}
-
-function bestPlayerMarketPrices(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
-  const best = new Map<string, PlayerPropPreviewRow>();
-  for (const row of rows) {
-    const current = best.get(row.market);
-    if (!current || row.odds > current.odds || (row.odds === current.odds && row.lastUpdated > current.lastUpdated)) {
-      best.set(row.market, row);
-    }
-  }
-  return [...best.values()].sort((a, b) => a.marketLabel.localeCompare(b.marketLabel));
 }
