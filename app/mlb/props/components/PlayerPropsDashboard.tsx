@@ -322,30 +322,6 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
     return [...next].sort(sortRows(sort));
   }, [book, confidence, displayProps, edgeRange, evRange, grade, hideResearch, lineMode, marketFamilyFilter, marketFilter, oddsRange, priceMode, search, selectedGame, sort, startRange, team]);
 
-  const longshotWatchRows = useMemo(() => {
-    if (marketFilter !== "batter_home_runs") return [];
-    const query = search.trim().toLowerCase();
-    let next = displayProps.filter((row) => {
-      if (!isLongshotValueRow(row)) return false;
-      if (selectedGame !== "all" && gameKeyForRow(row) !== selectedGame) return false;
-      if (book !== "all" && row.book !== book) return false;
-      if (team !== "all" && row.team !== team && row.opponent !== team) return false;
-      if (confidence !== "all" && row.confidenceBucket !== confidence) return false;
-      if (!matchesMinimum(row.expectedValue, evRange) || !matchesMinimum(row.modelEdge, edgeRange)) return false;
-      if (oddsRange === "favorite" && row.odds >= 0) return false;
-      if (oddsRange === "plus" && row.odds <= 0) return false;
-      if (oddsRange === "short" && (row.odds < -130 || row.odds > 130)) return false;
-      const startHour = new Date(row.gameStartTime).getHours();
-      if (startRange === "early" && startHour >= 20) return false;
-      if (startRange === "late" && startHour < 20) return false;
-      return !query || [row.player, row.team, row.opponent, row.marketLabel, row.marketGroup, rowMarketFilterLabel(row), row.book]
-        .some((value) => value.toLowerCase().includes(query));
-    });
-    if (lineMode === "main") next = selectPrimaryPropLines(next);
-    if (priceMode === "best") next = dedupeBestPrices(next);
-    return [...next].sort((a, b) => (b.expectedValue ?? -Infinity) - (a.expectedValue ?? -Infinity) || b.odds - a.odds || a.player.localeCompare(b.player));
-  }, [book, confidence, displayProps, edgeRange, evRange, lineMode, marketFilter, oddsRange, priceMode, search, selectedGame, startRange, team]);
-
   const selected = selectedId ? displayProps.find((row) => row.id === selectedId) ?? null : null;
   const selectedPlayer = players.find((player) => player.toLowerCase() === search.trim().toLowerCase()) ?? null;
   const isSearching = search.trim().length > 0;
@@ -425,7 +401,7 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
       </section>
 
       {selectedPlayer ? <PlayerView rows={filteredRows} player={selectedPlayer} selectedId={selectedId} onSelect={setSelectedId} onClear={() => setSearch("")} /> : <>
-      <FullBoardView rows={filteredRows} totalCount={dedupeBestPrices(displayProps).length} priceMode={priceMode} selectedId={selectedId} onSelect={setSelectedId} longshotWatchRows={longshotWatchRows} />
+      <FullBoardView rows={filteredRows} totalCount={dedupeBestPrices(displayProps).length} priceMode={priceMode} selectedId={selectedId} onSelect={setSelectedId} />
       </>}
       {!isSearching ? <PlayerDirectory rows={displayProps} onSelectPlayer={setSearch} /> : null}
       {selected ? <PropDetailDrawer row={selected} comparisons={displayProps.filter((row) => sameProp(row, selected))} onClose={() => setSelectedId(null)} showDiagnostics={mode === "admin"} /> : null}
@@ -630,7 +606,7 @@ function FeaturedPropCard({ row, onSelect }: { row: PlayerPropPreviewRow; onSele
   </article>;
 }
 
-function FullBoardView({ rows, totalCount, priceMode, selectedId, onSelect, longshotWatchRows = [] }: { rows: PlayerPropPreviewRow[]; totalCount: number; priceMode: PriceMode; selectedId: string | null; onSelect: (id: string) => void; longshotWatchRows?: PlayerPropPreviewRow[] }) {
+function FullBoardView({ rows, totalCount, priceMode, selectedId, onSelect }: { rows: PlayerPropPreviewRow[]; totalCount: number; priceMode: PriceMode; selectedId: string | null; onSelect: (id: string) => void }) {
   const pageSize = priceMode === "best" ? 40 : 75;
   const [visibleCount, setVisibleCount] = useState(pageSize);
   const visibleRows = rows.slice(0, visibleCount);
@@ -640,31 +616,10 @@ function FullBoardView({ rows, totalCount, priceMode, selectedId, onSelect, long
   const totalUnits = priceMode === "best" ? marketPairs.length : rows.length;
   return <div data-product-zone="full-board" className="pt-5">
     <div className="mb-3 flex items-end justify-between gap-4"><div><p className="text-[10px] font-black uppercase text-gray-500">Search results</p><h2 className="mt-1 text-xl font-black text-white">Prop Board</h2></div><p className="text-right text-xs text-gray-500"><strong className="text-gray-200">{priceMode === "best" ? marketPairs.length : rows.length}</strong> {priceMode === "best" ? "markets" : "sportsbook prices"} shown<br />{rows.length} filtered options · {totalCount} posted</p></div>
-    <LongshotWatchStrip rows={longshotWatchRows} onSelect={onSelect} />
     {priceMode === "best" ? <><div className="hidden xl:block"><MarketPairTable pairs={visiblePairs} selectedId={selectedId ?? ""} onSelect={onSelect} /></div><div className="xl:hidden"><MarketPairCards pairs={visiblePairs} selectedId={selectedId ?? ""} onSelect={onSelect} /></div></> : <PropsTable rows={visibleRows} selectedId={selectedId ?? ""} onSelect={onSelect} />}
     {visibleUnits < totalUnits ? <div className="flex flex-col items-center border-x border-b border-gray-800 bg-gray-950 px-4 py-4 sm:flex-row sm:justify-between"><p className="text-xs text-gray-500">Showing {visibleUnits} of {totalUnits} {priceMode === "best" ? "markets" : "prices"}</p><button type="button" onClick={() => setVisibleCount((count) => Math.min(count + pageSize, totalUnits))} className="mt-3 h-9 rounded-md border border-gray-700 px-4 text-xs font-bold text-gray-200 hover:border-gray-500 hover:text-white sm:mt-0">Load more markets</button></div> : null}
     {!rows.length ? <EmptyBoard /> : null}
   </div>;
-}
-
-function LongshotWatchStrip({ rows, onSelect }: { rows: PlayerPropPreviewRow[]; onSelect: (id: string) => void }) {
-  if (!rows.length) return null;
-  return <section className="mb-3 rounded-lg border border-indigo-400/40 bg-indigo-500/[0.08] p-3" aria-label="Longshot Watch">
-    <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-      <div><p className="text-[10px] font-black uppercase text-indigo-200">Longshot Watch</p><h3 className="mt-0.5 text-sm font-black text-white">Home run price reads</h3></div>
-      <p className="text-xs text-indigo-100/75">Rare-event props where the model price is stronger than the market.</p>
-    </div>
-    <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-      {rows.slice(0, 3).map((row) => {
-        const color = getPropGradeColor(row.playGrade);
-        return <button key={row.id} type="button" onClick={() => onSelect(row.id)} className="rounded-md border bg-gray-950/80 p-3 text-left hover:brightness-110" style={{ borderColor: color.border }}>
-          <span className="flex items-start justify-between gap-3"><span className="min-w-0"><strong className="block truncate text-sm text-white">{row.player}</strong><span className="mt-0.5 block text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent}</span></span><PropGradeBadge grade={row.playGrade} compact /></span>
-          <span className="mt-3 flex items-end justify-between gap-3"><span><span className="block text-[9px] font-black uppercase text-indigo-200">Prediction</span><strong className="mt-0.5 block text-xl text-white">Over {row.line}</strong></span><span className="text-right"><span className="block text-[9px] font-black uppercase text-gray-600">{row.book}</span><strong className="mt-0.5 block text-lg" style={{ color: color.text }}>{signed(row.odds)}</strong></span></span>
-          <span className="mt-2 block text-[10px] text-gray-500">Estimated chance {row.finalProbability === null ? "-" : pct(row.finalProbability)}</span>
-        </button>;
-      })}
-    </div>
-  </section>;
 }
 
 type MarketPair = {
