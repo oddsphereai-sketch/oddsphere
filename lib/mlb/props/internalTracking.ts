@@ -1,12 +1,17 @@
 import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import type { PlayerPropPreviewRow } from "@/app/mlb/props/components/PlayerPropsDashboard";
-import { getPitcherGameLogs, type PitcherGameLogRecord } from "@/lib/providers/real_api/_mlbStatsApiClient";
+import {
+  getHitterGameLogs,
+  getPitcherGameLogs,
+  type HitterGameLogRecord,
+  type PitcherGameLogRecord,
+} from "@/lib/providers/real_api/_mlbStatsApiClient";
 import type { MlbPropsBoardSnapshot } from "./boardSnapshotStore";
 import { isPaperTradingMarketAllowed } from "./paperTrading";
 import { assessPropPrice } from "./pricePolicy";
 import { MLBStatsAPIClient } from "./providerClients";
-import { settlePropPick } from "./settlement";
+import { settlePropPick, type PropSettlementInput } from "./settlement";
 
 const TRACKABLE_GRADES = new Set(["BEST_ANGLE", "LEAN", "WATCHLIST"]);
 const ACTIONABLE_GRADES = new Set(["BEST_ANGLE", "LEAN"]);
@@ -301,15 +306,19 @@ export async function settleInternalMlbProps(args: { dates?: string[] } = {}) {
         .map((game) => game.id)),
     );
     const finalRows = pending.filter((row) => finalGameIds.has(row.external_game_id));
-    const logKeys = [...new Set(finalRows.map((row) => `${row.mlb_player_id}|${row.slate_date.slice(0, 4)}`))];
-    const logsByKey = new Map<string, PitcherGameLogRecord[] | null>();
+    const logKeys = [...new Set(finalRows.map((row) => gameLogKey(row)))];
+    const logsByKey = new Map<string, Array<PitcherGameLogRecord | HitterGameLogRecord> | null>();
     await mapWithConcurrency(logKeys, 4, async (key) => {
-      const [playerId, season] = key.split("|").map(Number);
-      logsByKey.set(key, await getPitcherGameLogs(playerId, season, { quiet: true }));
+      const [family, playerIdRaw, seasonRaw] = key.split("|");
+      const playerId = Number(playerIdRaw);
+      const season = Number(seasonRaw);
+      logsByKey.set(key, family === "hitter"
+        ? await getHitterGameLogs(playerId, season, { quiet: true })
+        : await getPitcherGameLogs(playerId, season, { quiet: true }));
     });
 
     for (const entry of finalRows) {
-      const logs = logsByKey.get(`${entry.mlb_player_id}|${entry.slate_date.slice(0, 4)}`);
+      const logs = logsByKey.get(gameLogKey(entry));
       if (logs === null || logs === undefined) {
         unresolved++;
         await markSettlementAttempt(supabase, entry, "MLB Stats game log unavailable");
@@ -337,7 +346,8 @@ export async function settleInternalMlbProps(args: { dates?: string[] } = {}) {
         gamesSettled.add(entry.external_game_id);
         continue;
       }
-      if (!gameLog.is_start) {
+      const pitcherLog = isPitcherGameLog(gameLog) ? gameLog : null;
+      if (pitcherLog && !pitcherLog.is_start) {
         const { error: updateError } = await supabase.from("mlb_prop_tracking_entries").update({
           result_status: "void",
           result_units: 0,
@@ -353,12 +363,12 @@ export async function settleInternalMlbProps(args: { dates?: string[] } = {}) {
         continue;
       }
       const decision = settlePropPick({
-        marketKey: entry.market_key as "pitcher_strikeouts" | "pitcher_outs",
+        marketKey: entry.market_key as PropSettlementInput["marketKey"],
         playerId: entry.external_player_id,
         gameId: entry.external_game_id,
         line: entry.line,
         side: entry.side,
-        finalStats: { strikeouts: gameLog.strikeouts, outs: gameLog.outs, innings_pitched: gameLog.innings_pitched },
+        finalStats: finalStatsForEntry(entry, gameLog),
         playerStarted: true,
         stakeUnits: entry.stake_units,
         americanOdds: entry.locked_american_odds,
@@ -429,6 +439,47 @@ function selectTrackingCandidates(snapshot: MlbPropsBoardSnapshot): TrackingCand
     if (!previous || candidateRank(candidate) > candidateRank(previous)) byNaturalKey.set(naturalKey, candidate);
   }
   return [...byNaturalKey.values()];
+}
+
+function gameLogKey(row: Pick<TrackingEntry, "market_key" | "mlb_player_id" | "slate_date">): string {
+  return `${row.market_key.startsWith("batter_") ? "hitter" : "pitcher"}|${row.mlb_player_id}|${row.slate_date.slice(0, 4)}`;
+}
+
+function isPitcherGameLog(log: PitcherGameLogRecord | HitterGameLogRecord): log is PitcherGameLogRecord {
+  return "is_start" in log;
+}
+
+function finalStatsForEntry(
+  entry: Pick<TrackingEntry, "market_key">,
+  log: PitcherGameLogRecord | HitterGameLogRecord,
+): Record<string, number | string | boolean | null> {
+  if (isPitcherGameLog(log)) {
+    return {
+      strikeouts: log.strikeouts,
+      outs: log.outs,
+      innings_pitched: log.innings_pitched,
+      hits_allowed: log.hits_allowed,
+      walks: log.walks,
+      earned_runs: log.earned_runs,
+    };
+  }
+  return {
+    plate_appearances: log.plate_appearances,
+    at_bats: log.at_bats,
+    hits: log.hits,
+    singles: log.singles,
+    doubles: log.doubles,
+    triples: log.triples,
+    home_runs: log.home_runs,
+    total_bases: log.total_bases,
+    rbis: log.rbis,
+    runs: log.runs,
+    strikeouts: log.strikeouts,
+    walks: log.walks,
+    stolen_bases: log.stolen_bases,
+    hits_runs_rbis: log.hits_runs_rbis,
+    market_key: entry.market_key,
+  };
 }
 
 function candidateRank(candidate: TrackingCandidate): number {

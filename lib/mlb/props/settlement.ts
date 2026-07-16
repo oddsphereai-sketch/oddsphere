@@ -90,11 +90,44 @@ function statValueForMarket(marketKey: MlbPropMarketKey, stats?: Record<string, 
   if (!stats) return null;
   if (marketKey === "pitcher_strikeouts") return numeric(stats.strikeouts ?? stats.so ?? stats.k);
   if (marketKey === "pitcher_outs") return numeric(stats.outs) ?? outsFromInningsPitched(stats.innings_pitched as string | number | null | undefined);
+  if (marketKey === "pitcher_hits_allowed") return numeric(stats.hits_allowed);
+  if (marketKey === "pitcher_walks") return numeric(stats.walks);
+  if (marketKey === "pitcher_earned_runs") return numeric(stats.earned_runs);
+  if (marketKey === "batter_strikeouts") return numeric(stats.strikeouts ?? stats.so ?? stats.k);
+  if (marketKey === "batter_hits") return numeric(stats.hits);
+  if (marketKey === "batter_total_bases") return numeric(stats.total_bases);
+  if (marketKey === "batter_home_runs") return numeric(stats.home_runs);
+  if (marketKey === "batter_rbis") return numeric(stats.rbis);
+  if (marketKey === "batter_runs_scored") return numeric(stats.runs);
+  if (marketKey === "batter_hits_runs_rbis") return numeric(stats.hits_runs_rbis);
+  if (marketKey === "batter_singles") return numeric(stats.singles);
+  if (marketKey === "batter_doubles") return numeric(stats.doubles);
+  if (marketKey === "batter_triples") return numeric(stats.triples);
+  if (marketKey === "batter_walks") return numeric(stats.walks);
+  if (marketKey === "batter_stolen_bases") return numeric(stats.stolen_bases);
   return null;
 }
 
 function isSupportedSettlementMarket(marketKey: MlbPropMarketKey): boolean {
-  return marketKey === "pitcher_strikeouts" || marketKey === "pitcher_outs";
+  return [
+    "pitcher_strikeouts",
+    "pitcher_outs",
+    "pitcher_hits_allowed",
+    "pitcher_walks",
+    "pitcher_earned_runs",
+    "batter_strikeouts",
+    "batter_hits",
+    "batter_total_bases",
+    "batter_home_runs",
+    "batter_rbis",
+    "batter_runs_scored",
+    "batter_hits_runs_rbis",
+    "batter_singles",
+    "batter_doubles",
+    "batter_triples",
+    "batter_walks",
+    "batter_stolen_bases",
+  ].includes(marketKey);
 }
 
 function numeric(value: unknown): number | null {

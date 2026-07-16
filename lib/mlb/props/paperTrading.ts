@@ -3,6 +3,21 @@ import type { MlbPropMarketKey } from "./config";
 export const PAPER_TRADING_MARKETS: readonly MlbPropMarketKey[] = [
   "pitcher_strikeouts",
   "pitcher_outs",
+  "pitcher_hits_allowed",
+  "pitcher_walks",
+  "pitcher_earned_runs",
+  "batter_strikeouts",
+  "batter_hits",
+  "batter_total_bases",
+  "batter_home_runs",
+  "batter_rbis",
+  "batter_runs_scored",
+  "batter_hits_runs_rbis",
+  "batter_singles",
+  "batter_doubles",
+  "batter_triples",
+  "batter_walks",
+  "batter_stolen_bases",
 ];
 
 export type RealPaperPersistenceGateArgs = {
