@@ -84,6 +84,60 @@ export type CreateRecordsResult = {
   tablesInitialized: boolean;
 };
 
+const OPERATOR_DISPLAY_GRADES = new Set([
+  "best_angle",
+  "lean",
+  "watchlist",
+  "caution",
+  "no_play",
+  "market_aligned",
+  "provisional",
+  "held",
+]);
+
+/**
+ * Preserve an explicit operator correction when the scheduled refresh rebuilds
+ * an unlocked prediction record. The cron owns live model/price fields, but an
+ * operator-authored `tracking_display_grade_override` is a higher-priority
+ * decision and must survive the snapshot_json upsert until it is deliberately
+ * cleared from the stored row.
+ */
+export function preserveTrackingDisplayGradeOverride(
+  proposed: PredictionRecordRow,
+  existingSnapshot: Record<string, unknown> | null | undefined,
+): PredictionRecordRow {
+  const rawOverride = existingSnapshot?.tracking_display_grade_override;
+  if (typeof rawOverride !== "string") return proposed;
+  const override = rawOverride.trim().toLowerCase();
+  if (!OPERATOR_DISPLAY_GRADES.has(override)) return proposed;
+
+  const proposedSnapshot =
+    proposed.snapshot_json !== null &&
+    typeof proposed.snapshot_json === "object" &&
+    !Array.isArray(proposed.snapshot_json)
+      ? proposed.snapshot_json as Record<string, unknown>
+      : {};
+  const correctionAudit = existingSnapshot?.tracking_display_grade_correction;
+  const repairAudit = existingSnapshot?.tracking_repair_audit;
+
+  return {
+    ...proposed,
+    play_grade: override,
+    best_angle: override === "best_angle",
+    no_bet: override === "no_play" || override === "held",
+    snapshot_json: {
+      ...proposedSnapshot,
+      tracking_display_grade_override: override,
+      ...(correctionAudit === undefined
+        ? {}
+        : { tracking_display_grade_correction: correctionAudit }),
+      ...(repairAudit === undefined
+        ? {}
+        : { tracking_repair_audit: repairAudit }),
+    },
+  };
+}
+
 type GameRow = {
   id: number;
   external_id: number;
@@ -3454,11 +3508,12 @@ export async function createPredictionRecords(
   // first, then skip the upsert for any locked match.
   const { data: existingLocks } = await supabase
     .from("prediction_records")
-    .select("id, game_id, market, model_version, slate_date, locked_at")
+    .select("id, game_id, market, model_version, slate_date, locked_at, snapshot_json")
     .in("game_id", proposed.map((r) => r.game_id))
     .eq("slate_date", slateDate);
   const lockedKeys = new Set<string>();
   const existingKeys = new Set<string>();
+  const existingSnapshotByKey = new Map<string, Record<string, unknown> | null>();
   const proposedKeys = new Set(
     proposed.map((r) =>
       `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`,
@@ -3471,14 +3526,13 @@ export async function createPredictionRecords(
     model_version: string | null;
     slate_date: string;
     locked_at: string | null;
+    snapshot_json: Record<string, unknown> | null;
   }>) {
-    existingKeys.add(
-      `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`,
-    );
+    const key = `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`;
+    existingKeys.add(key);
+    existingSnapshotByKey.set(key, r.snapshot_json);
     if (r.locked_at !== null) {
-      lockedKeys.add(
-        `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`,
-      );
+      lockedKeys.add(key);
     }
   }
 
@@ -3530,7 +3584,13 @@ export async function createPredictionRecords(
   // Upsert per (game_id, market, model_version, slate_date). Locked
   // rows are skipped entirely (counted as skippedExisting so the
   // operator/cron summary surfaces them).
-  for (const rec of proposed) {
+  for (const proposedRecord of proposed) {
+    const rec = preserveTrackingDisplayGradeOverride(
+      proposedRecord,
+      existingSnapshotByKey.get(
+        `${proposedRecord.game_id}::${proposedRecord.market}::${proposedRecord.model_version ?? ""}::${proposedRecord.slate_date}`,
+      ),
+    );
     const key = `${rec.game_id}::${rec.market}::${rec.model_version ?? ""}::${rec.slate_date}`;
     if (lockedKeys.has(key) || (preserveExistingUnlocked && existingKeys.has(key))) {
       result.skippedExisting++;
