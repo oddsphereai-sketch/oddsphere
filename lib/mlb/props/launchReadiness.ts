@@ -164,7 +164,7 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
     };
   });
   const hitterRows = evidence.filter(({ row }) => row.marketFamily !== "pitcher");
-  const promotedPitcherRows = evidence.filter(({ row }) => row.market === "pitcher_strikeouts" || row.market === "pitcher_outs");
+  const promotedPitcherRows = evidence.filter(({ row }) => isPromotedPitcherModelRow(row));
   return {
     playerIdentitiesComplete: rows.length > 0 && rows.every((row) => Boolean(
       row.providerIds?.gameId && row.providerIds.bdlGameId && row.providerIds.bdlPlayerId && row.providerIds.mlbStatsPlayerId,
@@ -186,6 +186,11 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
     )),
     lineupsComplete: hitterRows.every(({ row }) => row.lineupStatus?.status === "posted" || row.lineupStatus?.status === "confirmed"),
   };
+}
+
+function isPromotedPitcherModelRow(row: MlbPropsBoardSnapshot["data"]["props"][number]): boolean {
+  return (row.market === "pitcher_strikeouts" || row.market === "pitcher_outs") &&
+    !row.reasonCodes.includes("MARKET_RESEARCH_ONLY");
 }
 
 function check(code: string, ok: boolean, critical: boolean, message: string): MlbPropsLaunchCheck {

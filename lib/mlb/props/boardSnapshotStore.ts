@@ -161,7 +161,7 @@ export function assertSnapshotSizeWithinLimits(size: MlbPropsBoardSnapshotSize):
   }
 }
 
-export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapshot): Promise<number> {
+export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapshot): Promise<string> {
   if (!snapshot.validation.publishable) throw new Error("Refusing to publish an invalid MLB props board snapshot.");
   const metadata = encodeMlbPropsBoardSnapshot(snapshot);
   const { data, error } = await getSupabase()
@@ -193,7 +193,7 @@ export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapsh
     .select("id")
     .single();
   if (error) throw error;
-  return Number(data.id);
+  return String(data.id);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

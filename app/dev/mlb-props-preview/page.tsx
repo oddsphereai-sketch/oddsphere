@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import fixture from "@/tests/fixtures/mlb-props/player-props-preview-full.json";
 import { PlayerPropsDashboard, type PlayerPropsDashboardData } from "@/app/mlb/props/components/PlayerPropsDashboard";
 import ProductAppFrame from "@/app/lab/components/ProductAppFrame";
+import { loadLatestMlbPropsBoardSnapshot } from "@/lib/mlb/props/boardSnapshotStore";
 import { easternSlateDate } from "@/lib/mlb/props/liveBoard";
 import { loadMlbPropsLivePreviewSnapshot } from "@/lib/mlb/props/livePreviewStore";
 
@@ -31,12 +32,19 @@ export default async function MlbPropsPreviewPage({ searchParams }: { searchPara
     return <ProductAppFrame><PlayerPropsDashboard data={data} mode="preview" initialSelectedId={initialSelectedId} /></ProductAppFrame>;
   }
 
-  const snapshot = await loadMlbPropsLivePreviewSnapshot(slateDate);
+  const snapshot = await loadLivePreviewSnapshot(slateDate);
   if (!snapshot) {
     return <ProductAppFrame><LivePreviewUnavailable slateDate={slateDate} /></ProductAppFrame>;
   }
   const initialSelectedId = snapshot.data.props.some((row) => row.id === requestedReader) ? requestedReader : null;
   return <ProductAppFrame><PlayerPropsDashboard data={snapshot.data} mode="live-preview" initialSelectedId={initialSelectedId} /></ProductAppFrame>;
+}
+
+async function loadLivePreviewSnapshot(slateDate: string) {
+  const localSnapshot = await loadMlbPropsLivePreviewSnapshot(slateDate);
+  if (localSnapshot) return localSnapshot;
+  if (process.env.VERCEL_ENV !== "preview") return null;
+  return loadLatestMlbPropsBoardSnapshot(slateDate).catch(() => null);
 }
 
 function isProductionDeployment(): boolean {

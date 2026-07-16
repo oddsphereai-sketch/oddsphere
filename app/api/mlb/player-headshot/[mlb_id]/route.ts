@@ -4,7 +4,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ mlb_id: string }> },
 ) {
-  if (process.env.NODE_ENV === "production") {
+  if (isProductionDeployment()) {
     return new Response(null, { status: 404 });
   }
 
@@ -21,4 +21,9 @@ export async function GET(
       Location: headshotUrl,
     },
   });
+}
+
+function isProductionDeployment(): boolean {
+  if (process.env.VERCEL_ENV === "production") return true;
+  return process.env.VERCEL_ENV === undefined && process.env.NODE_ENV === "production";
 }

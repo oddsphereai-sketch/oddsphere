@@ -247,7 +247,7 @@ const trackingHealth = {
   latestSettlementRun: null,
   error: null,
 };
-const launchSnapshot = snapshot([row({
+const modeledPitcherRow = row({
   market: "pitcher_strikeouts",
   marketLabel: "Pitcher Strikeouts",
   marketFamily: "pitcher",
@@ -259,6 +259,7 @@ const launchSnapshot = snapshot([row({
   modelEdge: 0.07,
   expectedValue: 0.04,
   fairOdds: -138,
+  reasonCodes: [],
   recentForm: {
     statLabel: "Strikeouts",
     sampleLabel: "starts",
@@ -282,7 +283,22 @@ const launchSnapshot = snapshot([row({
     asOfTimestamp: asOf,
     researchOnly: true,
   },
-})]);
+});
+const researchOnlyPitcherAltLine = row({
+  ...modeledPitcherRow,
+  id: "research-only-alt-pitcher-line",
+  line: 7.5,
+  odds: 310,
+  playGrade: "RESEARCH",
+  finalProbability: null,
+  modelProbability: null,
+  independentProbability: null,
+  modelEdge: null,
+  expectedValue: null,
+  fairOdds: null,
+  reasonCodes: ["MARKET_RESEARCH_ONLY"],
+});
+const launchSnapshot = snapshot([modeledPitcherRow, researchOnlyPitcherAltLine]);
 const launchSnapshots = [
   { ...launchSnapshot, snapshotId: "snapshot-3", asOfTimestamp: "2026-07-16T16:00:00.000Z" },
   { ...launchSnapshot, snapshotId: "snapshot-2", asOfTimestamp: "2026-07-16T15:50:00.000Z" },

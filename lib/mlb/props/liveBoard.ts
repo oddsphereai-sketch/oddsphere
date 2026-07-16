@@ -91,7 +91,7 @@ type MappedOddsRow = {
 
 export type MlbPropsBoardRefreshResult = {
   published: boolean;
-  scoringRunId: number | null;
+  scoringRunId: string | null;
   usedPreviousSnapshot: boolean;
   snapshot: MlbPropsBoardSnapshot;
   tracking: MlbPropsTrackingSyncResult;

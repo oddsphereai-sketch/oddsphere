@@ -3,9 +3,8 @@
 /**
  * Footer — global responsible-gambling footer (V2.1 spec Part 13, Phase 6.2c).
  *
- * Visible on every public page. Hides itself on /lab/* and /admin/* via the
- * same pathname check Navbar uses — the premium app shell + admin chrome own
- * their own bottom-of-page treatment (or none at all).
+ * Visible on every public page. Hides itself on product and admin routes via
+ * the same pathname check Navbar uses — those screens own their app chrome.
  *
  * Phase 6B.4 — wired the utility links to real V1 launch pages under
  * /legal/* (terms / privacy / responsible-gambling). Contact remains a
@@ -24,7 +23,12 @@ export default function Footer() {
   const pathname = usePathname();
 
   // Hide on premium + admin shells (V2.1: footer is public-pages only).
-  if (pathname.startsWith("/lab") || pathname.startsWith("/admin")) {
+  if (
+    pathname.startsWith("/lab") ||
+    pathname.startsWith("/admin") ||
+    pathname === "/mlb/props" ||
+    pathname === "/dev/mlb-props-preview"
+  ) {
     return null;
   }
 
