@@ -2,7 +2,7 @@ import { MLB_PROP_MARKET_KEYS, type MlbPropMarketKey } from "./config";
 import type { PropGrade } from "./propGrades";
 
 export type MlbPropMarketFamily = "pitcher" | "batter" | "milestone";
-export type MlbPropMarketGroup = "Strikeouts" | "Outs" | "Hits/Bases" | "Power" | "Walks" | "Runs/RBI" | "Speed" | "Research";
+export type MlbPropMarketGroup = "Pitcher Strikeouts" | "Batter Strikeouts" | "Outs" | "Hits/Bases" | "Power" | "Walks" | "Runs/RBI" | "Speed" | "Research";
 export type MlbPropDisplayStatus = "recommendation_eligible" | "watchlist" | "no_play" | "research_only";
 
 export type MlbPropMarketDefinition = {
@@ -295,7 +295,8 @@ export function marketDisplayStatus(marketKey: MlbPropMarketKey, confidence: num
 }
 
 function marketGroupFor(marketKey: MlbPropMarketKey): MlbPropMarketGroup {
-  if (marketKey.includes("strikeouts")) return "Strikeouts";
+  if (marketKey === "pitcher_strikeouts") return "Pitcher Strikeouts";
+  if (marketKey === "batter_strikeouts") return "Batter Strikeouts";
   if (marketKey === "pitcher_outs") return "Outs";
   if (marketKey.includes("walks")) return "Walks";
   if (["batter_hits", "batter_total_bases", "batter_singles", "batter_doubles", "batter_triples", "pitcher_hits_allowed"].includes(marketKey)) return "Hits/Bases";

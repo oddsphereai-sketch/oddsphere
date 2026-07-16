@@ -251,7 +251,7 @@ const modeledPitcherRow = row({
   market: "pitcher_strikeouts",
   marketLabel: "Pitcher Strikeouts",
   marketFamily: "pitcher",
-  marketGroup: "Strikeouts",
+  marketGroup: "Pitcher Strikeouts",
   playGrade: "WATCHLIST",
   finalProbability: 0.58,
   modelProbability: 0.6,
