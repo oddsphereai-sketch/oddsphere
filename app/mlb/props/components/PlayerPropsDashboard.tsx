@@ -38,6 +38,7 @@ export type {
 type SortKey = "ev" | "edge" | "probability" | "confidence" | "start" | "player" | "market" | "book" | "updated";
 type PriceMode = "best" | "all";
 type LineMode = "main" | "all";
+type MarketFilter = "all" | "pitcher" | "batter" | "research";
 type RadarItem = { row: PlayerPropPreviewRow; label: string; note: string };
 type DashboardMode = "preview" | "live-preview" | "admin" | "member" | "member-disabled";
 
@@ -207,35 +208,24 @@ const QUICK_MARKETS = [
   { id: "batter_stolen_bases", label: "Stolen Bases" },
 ] as const;
 
-const MARKET_GROUP_ORDER: PlayerPropPreviewRow["marketGroup"][] = [
-  "Pitcher Strikeouts",
-  "Batter Strikeouts",
-  "Outs",
-  "Hits/Bases",
-  "Power",
-  "Runs/RBI",
-  "Walks",
-  "Speed",
-  "Research",
-];
-
-const MARKET_GROUP_LABELS: Record<PlayerPropPreviewRow["marketGroup"], string> = {
-  "Pitcher Strikeouts": "Pitcher Ks",
-  "Batter Strikeouts": "Batter Ks",
-  Outs: "Pitcher Outs",
-  "Hits/Bases": "Hits & Bases",
-  Power: "Home Runs",
-  "Runs/RBI": "Runs & RBIs",
-  Walks: "Walks",
-  Speed: "Stolen Bases",
-  Research: "Other",
+const MARKET_FILTER_LABELS: Record<MarketFilter, string> = {
+  all: "All markets",
+  pitcher: "Pitcher props",
+  batter: "Batter props",
+  research: "Research markets",
 };
+
+const MARKET_FILTERS: Array<{ id: MarketFilter; label: string }> = [
+  { id: "pitcher", label: MARKET_FILTER_LABELS.pitcher },
+  { id: "batter", label: MARKET_FILTER_LABELS.batter },
+  { id: "research", label: MARKET_FILTER_LABELS.research },
+];
 
 export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId = null }: { data: PlayerPropsDashboardData; mode?: DashboardMode; initialSelectedId?: string | null }) {
   const [search, setSearch] = useState("");
   const [selectedGame, setSelectedGame] = useState("all");
   const [grade, setGrade] = useState<PropGrade | "all">("all");
-  const [marketGroup, setMarketGroup] = useState("all");
+  const [marketFilter, setMarketFilter] = useState<MarketFilter>("all");
   const [book, setBook] = useState("all");
   const [team, setTeam] = useState("all");
   const [confidence, setConfidence] = useState("all");
@@ -253,9 +243,9 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
   const displayData = useMemo(() => ({ ...data, props: displayProps }), [data, displayProps]);
   const books = useMemo(() => unique(displayProps.map((row) => row.book)), [displayProps]);
   const teams = useMemo(() => unique(displayProps.flatMap((row) => [row.team, row.opponent])), [displayProps]);
-  const groups = useMemo(() => {
-    const available = new Set(displayProps.map((row) => row.marketGroup));
-    return MARKET_GROUP_ORDER.filter((group) => available.has(group));
+  const marketFilters = useMemo(() => {
+    const available = new Set(displayProps.map(rowMarketFilter));
+    return MARKET_FILTERS.filter((filter) => available.has(filter.id));
   }, [displayProps]);
   const gradeOptions = useMemo(() => {
     const available = new Set(displayProps.map((row) => row.playGrade));
@@ -271,7 +261,7 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
     let next = displayProps.filter((row) => {
       if (grade !== "all" && row.playGrade !== grade) return false;
       if (selectedGame !== "all" && gameKeyForRow(row) !== selectedGame) return false;
-      if (marketGroup !== "all" && row.marketGroup !== marketGroup) return false;
+      if (marketFilter !== "all" && rowMarketFilter(row) !== marketFilter) return false;
       if (book !== "all" && row.book !== book) return false;
       if (team !== "all" && row.team !== team && row.opponent !== team) return false;
       if (confidence !== "all" && row.confidenceBucket !== confidence) return false;
@@ -283,24 +273,24 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
       const startHour = new Date(row.gameStartTime).getHours();
       if (startRange === "early" && startHour >= 20) return false;
       if (startRange === "late" && startHour < 20) return false;
-      return !query || [row.player, row.team, row.opponent, row.marketLabel, row.marketGroup, row.book]
+      return !query || [row.player, row.team, row.opponent, row.marketLabel, row.marketGroup, rowMarketFilterLabel(row), row.book]
         .some((value) => value.toLowerCase().includes(query));
     });
     if (lineMode === "main") next = selectPrimaryPropLines(next);
     if (priceMode === "best") next = dedupeBestPrices(next);
     return [...next].sort(sortRows(sort));
-  }, [book, confidence, displayProps, edgeRange, evRange, grade, hideResearch, lineMode, marketGroup, oddsRange, priceMode, search, selectedGame, sort, startRange, team]);
+  }, [book, confidence, displayProps, edgeRange, evRange, grade, hideResearch, lineMode, marketFilter, oddsRange, priceMode, search, selectedGame, sort, startRange, team]);
 
   const selected = selectedId ? displayProps.find((row) => row.id === selectedId) ?? null : null;
   const selectedPlayer = players.find((player) => player.toLowerCase() === search.trim().toLowerCase()) ?? null;
   const isSearching = search.trim().length > 0;
-  const activeFilterCount = [selectedGame, grade, marketGroup, book, team, confidence, evRange, edgeRange, oddsRange, startRange]
+  const activeFilterCount = [selectedGame, grade, marketFilter, book, team, confidence, evRange, edgeRange, oddsRange, startRange]
     .filter((value) => value !== "all").length + (hideResearch ? 1 : 0) + (lineMode === "all" ? 1 : 0);
 
   const clearFilters = () => {
     setSelectedGame("all");
     setGrade("all");
-    setMarketGroup("all");
+    setMarketFilter("all");
     setBook("all");
     setTeam("all");
     setConfidence("all");
@@ -337,8 +327,8 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
           <p className="shrink-0 text-xs text-gray-500"><strong className="text-gray-200">{filteredRows.length}</strong> options shown · {players.length} players priced</p>
         </div>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Market filters">
-          <MarketFilterButton label="All markets" active={marketGroup === "all"} onClick={() => setMarketGroup("all")} />
-          {groups.map((group) => <MarketFilterButton key={group} label={MARKET_GROUP_LABELS[group]} active={marketGroup === group} onClick={() => setMarketGroup(group)} />)}
+          <MarketFilterButton label={MARKET_FILTER_LABELS.all} active={marketFilter === "all"} onClick={() => setMarketFilter("all")} />
+          {marketFilters.map((filter) => <MarketFilterButton key={filter.id} label={filter.label} active={marketFilter === filter.id} onClick={() => setMarketFilter(filter.id)} />)}
         </div>
         <div data-product-zone="board-controls" className="mt-3 border-t border-gray-800 pt-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -501,7 +491,7 @@ function PriceModeControl({ value, onChange }: { value: PriceMode; onChange: (va
 function TodayRadar({ rows, onSelect }: { rows: PlayerPropPreviewRow[]; onSelect: (id: string) => void }) {
   const items = buildRadarItems(rows);
   return <section data-product-zone="today-radar" className="border-b border-gray-800 py-7">
-    <div className="flex items-end justify-between gap-4"><div><p className="text-[10px] font-black uppercase text-emerald-300">Today&apos;s Radar</p><h2 className="mt-1 text-2xl font-black text-white">Markets to investigate</h2></div><span className="text-xs text-gray-500">{items.length} reads</span></div>
+    <div className="flex items-end justify-between gap-4"><div><p className="text-[10px] font-black uppercase text-emerald-300">Today&apos;s Radar</p><h2 className="mt-1 text-2xl font-black text-white">Top model predictions</h2></div><span className="text-xs text-gray-500">{items.length} reads</span></div>
     <div className="mt-4 grid gap-3 lg:grid-cols-3">{items.map((item) => <RadarCard key={`${item.label}-${item.row.id}`} item={item} onSelect={onSelect} />)}</div>
   </section>;
 }
@@ -513,7 +503,7 @@ function RadarCard({ item, onSelect }: { item: RadarItem; onSelect: (id: string)
     <div className="absolute -right-8 top-12 opacity-[0.045]"><ProductTeamBadge abbreviation={row.team} size={150} /></div>
     <div className="relative p-4"><div className="flex items-start justify-between gap-3"><span className="text-[10px] font-black uppercase text-violet-300">{item.label}</span><PropGradeBadge grade={row.playGrade} compact /></div>
       <div className="mt-4 flex min-w-0 items-center gap-3"><PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} /><div className="min-w-0"><h3 className="truncate text-base font-black text-white">{row.player}</h3><p className="truncate text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {row.marketLabel}</p></div></div>
-      <div className="mt-5 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3"><div><p className="text-[9px] font-bold uppercase text-gray-600">Market line</p><p className="mt-1 text-2xl font-black text-white">{row.side === "over" ? "Over" : "Under"} {row.line}</p></div><div className="text-right"><p className="text-[9px] font-bold uppercase text-gray-600">Best price</p><p className="mt-1 text-xl font-black text-white">{signed(row.odds)}</p><p className="text-[10px] text-gray-500">{row.book}</p></div></div>
+      <div className="mt-5 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3"><div><p className="text-[9px] font-bold uppercase text-gray-600">Prediction</p><p className="mt-1 text-2xl font-black text-white">{row.side === "over" ? "Over" : "Under"} {row.line}</p></div><div className="text-right"><p className="text-[9px] font-bold uppercase text-gray-600">Best price</p><p className="mt-1 text-xl font-black text-white">{signed(row.odds)}</p><p className="text-[10px] text-gray-500">{row.book}</p></div></div>
       <div className="mt-4 border-y border-gray-800 py-3"><div className="flex items-center justify-between text-xs"><span className="text-gray-500">{row.projectionSource === "recent_form" ? "Recent avg" : "Projection"} <strong className="ml-1 text-white">{row.projection}</strong></span><span className="text-gray-500">Edge <strong className={(row.modelEdge ?? 0) > 0 ? "ml-1 text-emerald-300" : "ml-1 text-gray-300"}>{row.modelEdge === null ? "-" : pct(row.modelEdge, true)}</strong></span></div><p className="mt-2 text-xs leading-5 text-gray-400">{item.note}</p></div>
       <button type="button" onClick={() => onSelect(row.id)} className="mt-4 h-9 w-full rounded-md border border-gray-700 text-xs font-black text-gray-100 hover:border-violet-400 hover:bg-violet-500/10">Open Reader</button>
     </div>
@@ -593,20 +583,28 @@ type MarketPair = {
   under: PlayerPropPreviewRow | null;
 };
 
+type ModelPrediction = {
+  side: "over" | "under";
+  row: PlayerPropPreviewRow;
+  probability: number | null;
+};
+
 function MarketPairTable({ pairs, selectedId, onSelect }: { pairs: MarketPair[]; selectedId: string; onSelect: (id: string) => void }) {
   if (!pairs.length) return null;
   const projectionLabel = pairs.every((pair) => pair.primary.projectionSource === "recent_form") ? "Recent avg" : "Projection";
   return <div className="overflow-hidden rounded-lg border border-gray-800 bg-gray-950">
-    <div className="grid grid-cols-[1.2fr_1fr_0.5fr_0.55fr_1.25fr_1.25fr] gap-3 border-b border-gray-800 bg-black/40 px-3 py-2 text-[9px] font-bold uppercase text-gray-500"><span>Player</span><span>Market</span><span>Line</span><span>{projectionLabel}</span><span>Over</span><span>Under</span></div>
+    <div className="grid grid-cols-[1.15fr_0.95fr_0.42fr_0.5fr_0.78fr_1.18fr_1.18fr] gap-3 border-b border-gray-800 bg-black/40 px-3 py-2 text-[9px] font-bold uppercase text-gray-500"><span>Player</span><span>Market</span><span>Line</span><span>{projectionLabel}</span><span>Prediction</span><span>Over</span><span>Under</span></div>
     <div className="divide-y divide-gray-800">{pairs.map((pair) => {
-      const modelSide = modelLeanSide(pair);
-      return <div key={pair.key} className={`grid grid-cols-[1.2fr_1fr_0.5fr_0.55fr_1.25fr_1.25fr] items-center gap-3 px-3 py-2.5 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : "hover:bg-gray-900"}`}>
+      const prediction = modelPrediction(pair);
+      const predictionSide = prediction?.side ?? null;
+      return <div key={pair.key} className={`grid grid-cols-[1.15fr_0.95fr_0.42fr_0.5fr_0.78fr_1.18fr_1.18fr] items-center gap-3 px-3 py-2.5 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : "hover:bg-gray-900"}`}>
       <span className="flex min-w-0 items-center gap-2"><PlayerAvatar player={pair.primary.player} team={pair.primary.team} headshotUrl={pair.primary.headshotUrl} compact /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.player}</strong><span className="block truncate text-[10px] text-gray-600">{pair.primary.team} {pair.primary.homeAway === "home" ? "vs" : "@"} {pair.primary.opponent}</span></span></span>
       <span className="truncate text-xs font-semibold text-gray-200">{pair.primary.marketLabel}</span>
       <strong className="text-xs tabular-nums text-white">{pair.primary.line}</strong>
       <span className="text-xs font-bold tabular-nums text-gray-300">{pair.primary.projection}</span>
-      <MarketSideQuote row={pair.over} side="over" isModelSide={modelSide === "over"} onSelect={onSelect} />
-      <MarketSideQuote row={pair.under} side="under" isModelSide={modelSide === "under"} onSelect={onSelect} />
+      <ModelPredictionBadge prediction={prediction} />
+      <MarketSideQuote row={pair.over} side="over" isPredictionSide={predictionSide === "over"} onSelect={onSelect} />
+      <MarketSideQuote row={pair.under} side="under" isPredictionSide={predictionSide === "under"} onSelect={onSelect} />
     </div>})}</div>
   </div>;
 }
@@ -614,31 +612,71 @@ function MarketPairTable({ pairs, selectedId, onSelect }: { pairs: MarketPair[];
 function MarketPairCards({ pairs, selectedId, onSelect }: { pairs: MarketPair[]; selectedId: string; onSelect: (id: string) => void }) {
   if (!pairs.length) return null;
   return <div className="divide-y divide-gray-800 overflow-hidden rounded-lg border border-gray-800 bg-gray-950">{pairs.map((pair) => {
-    const modelSide = modelLeanSide(pair);
-    const signal = pairSignalRow(pair);
-    const signalColor = signal ? getPropGradeColor(signal.playGrade) : null;
+    const prediction = modelPrediction(pair);
+    const predictionSide = prediction?.side ?? null;
     return <article key={pair.key} className={`p-4 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : ""}`}>
-      <div className="flex min-w-0 items-start justify-between gap-3"><span className="flex min-w-0 items-center gap-3"><PlayerAvatar player={pair.primary.player} team={pair.primary.team} headshotUrl={pair.primary.headshotUrl} compact /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.player}</strong><span className="block truncate text-xs text-gray-500">{pair.primary.team} {pair.primary.homeAway === "home" ? "vs" : "@"} {pair.primary.opponent} · {pair.primary.marketLabel}</span></span></span><span className={`shrink-0 rounded border px-2 py-1 text-[9px] font-black uppercase ${signal ? "" : "border-gray-800 text-gray-500"}`} style={signalColor ? { color: signalColor.text, borderColor: signalColor.border, background: signalColor.background } : undefined}>{signal ? `${getPropGradeLabel(signal.playGrade)}: ${signal.side === "over" ? "Over" : "Under"}` : modelSide ? `Model side: ${modelSide === "over" ? "Over" : "Under"}` : "Research only"}</span></div>
+      <div className="flex min-w-0 items-start justify-between gap-3"><span className="flex min-w-0 items-center gap-3"><PlayerAvatar player={pair.primary.player} team={pair.primary.team} headshotUrl={pair.primary.headshotUrl} compact /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.player}</strong><span className="block truncate text-xs text-gray-500">{pair.primary.team} {pair.primary.homeAway === "home" ? "vs" : "@"} {pair.primary.opponent} · {pair.primary.marketLabel}</span></span></span><ModelPredictionBadge prediction={prediction} compact /></div>
       <div className="mt-3 flex items-center justify-between border-y border-gray-800 py-2 text-xs"><span className="text-gray-500">Line <strong className="ml-1 text-white">{pair.primary.line}</strong></span><span className="text-gray-500">{pair.primary.projectionSource === "recent_form" ? "Recent avg" : "Projection"} <strong className="ml-1 text-white">{pair.primary.projection}</strong></span></div>
-      <div className="mt-3 grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" isModelSide={modelSide === "over"} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" isModelSide={modelSide === "under"} onSelect={onSelect} /></div>
+      <div className="mt-3 grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" isPredictionSide={predictionSide === "over"} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" isPredictionSide={predictionSide === "under"} onSelect={onSelect} /></div>
     </article>;
   })}</div>;
 }
 
-function MarketSideQuote({ row, side, isModelSide, onSelect }: { row: PlayerPropPreviewRow | null; side: "over" | "under"; isModelSide: boolean; onSelect: (id: string) => void }) {
+function MarketSideQuote({ row, side, isPredictionSide, onSelect }: { row: PlayerPropPreviewRow | null; side: "over" | "under"; isPredictionSide: boolean; onSelect: (id: string) => void }) {
   if (!row) return <span className="flex min-h-[72px] items-center justify-center rounded-md border border-dashed border-gray-800 bg-black/10 px-2 text-center text-[10px] font-semibold text-gray-600">{side === "over" ? "Over" : "Under"}<br />Not offered</span>;
   const signal = isPositiveSignal(row);
-  const color = signal ? getPropGradeColor(row.playGrade) : null;
-  return <button type="button" onClick={() => onSelect(row.id)} className={`min-w-0 rounded-md border px-2.5 py-2 text-left ${signal ? "" : "border-gray-800 bg-black/20 hover:border-gray-700 hover:bg-gray-900"}`} style={color ? { borderColor: color.border, background: color.background } : undefined}><span className="flex items-center justify-between gap-2"><strong className="text-xs text-white">{side === "over" ? "O" : "U"} {row.line} · {signed(row.odds)}</strong><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-0.5 flex items-center justify-between gap-2"><span className="truncate text-[9px] text-gray-600">{row.book}</span>{signal ? <span className="shrink-0 text-[9px] font-black uppercase" style={color ? { color: color.text } : undefined}>{getPropGradeLabel(row.playGrade)}</span> : isModelSide ? <span className="shrink-0 text-[9px] font-black uppercase text-gray-500">Model side</span> : null}</span><OddsMovementTag row={row} /></button>;
+  const color = signal && !isPredictionSide ? getPropGradeColor(row.playGrade) : null;
+  const predictionClass = isPredictionSide
+    ? "border-white/45 bg-white/[0.055] shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset] hover:border-white/70 hover:bg-white/[0.075]"
+    : signal
+      ? ""
+      : "border-gray-800 bg-black/20 hover:border-gray-700 hover:bg-gray-900";
+  return <button type="button" onClick={() => onSelect(row.id)} className={`min-w-0 rounded-md border px-2.5 py-2 text-left ${predictionClass}`} style={color ? { borderColor: color.border, background: color.background } : undefined}><span className="flex items-center justify-between gap-2"><strong className="text-xs text-white">{side === "over" ? "O" : "U"} {row.line} · {signed(row.odds)}</strong><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-0.5 flex items-center justify-between gap-2"><span className="truncate text-[9px] text-gray-600">{row.book}</span>{isPredictionSide ? <span className="shrink-0 text-[9px] font-black uppercase text-white">Prediction</span> : signal ? <span className="shrink-0 text-[9px] font-black uppercase" style={color ? { color: color.text } : undefined}>{getPropGradeLabel(row.playGrade)}</span> : null}</span><OddsMovementTag row={row} /></button>;
 }
 
-function modelLeanSide(pair: MarketPair): "over" | "under" | null {
-  const signal = pairSignalRow(pair);
-  if (signal) return signal.side;
+function ModelPredictionBadge({ prediction, compact = false }: { prediction: ModelPrediction | null; compact?: boolean }) {
+  if (!prediction) return <span className={`inline-flex shrink-0 flex-col rounded border border-gray-800 bg-black/20 ${compact ? "px-2 py-1" : "px-2.5 py-1.5"}`}><span className="text-[8px] font-black uppercase text-gray-600">Prediction</span><span className="text-[10px] font-black text-gray-400">Research</span></span>;
+  return <span className={`inline-flex shrink-0 flex-col rounded border border-white/35 bg-white/[0.055] shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset] ${compact ? "px-2 py-1" : "px-2.5 py-1.5"}`}><span className="text-[8px] font-black uppercase text-gray-500">Prediction</span><span className={`${compact ? "text-[11px]" : "text-xs"} font-black text-white`}>{prediction.side === "over" ? "Over" : "Under"}{prediction.probability === null ? "" : ` · ${pct(prediction.probability)}`}</span></span>;
+}
+
+function modelPrediction(pair: MarketPair): ModelPrediction | null {
+  const probabilityPrediction = pair.rows
+    .map((row): ModelPrediction | null => {
+      if (row.overProbability === null || row.underProbability === null) return null;
+      const side = row.overProbability >= row.underProbability ? "over" : "under";
+      const sideRow = pair.rows.find((candidate) => candidate.side === side) ?? row;
+      return { side, row: sideRow, probability: side === "over" ? row.overProbability : row.underProbability };
+    })
+    .filter((prediction): prediction is ModelPrediction => prediction !== null)
+    .sort((a, b) => (b.probability ?? Number.NEGATIVE_INFINITY) - (a.probability ?? Number.NEGATIVE_INFINITY))[0];
+  if (probabilityPrediction) return probabilityPrediction;
   const modeled = pair.rows
-    .filter((row) => row.finalProbability !== null && row.modelEdge !== null)
-    .sort((a, b) => (b.modelEdge ?? Number.NEGATIVE_INFINITY) - (a.modelEdge ?? Number.NEGATIVE_INFINITY))[0];
-  return modeled?.side ?? null;
+    .filter((row) => row.finalProbability !== null)
+    .sort((a, b) => (b.finalProbability ?? Number.NEGATIVE_INFINITY) - (a.finalProbability ?? Number.NEGATIVE_INFINITY))[0];
+  if (modeled) return { side: modeled.side, row: modeled, probability: modeled.finalProbability };
+  if (pair.primary.projectionSource !== "recent_form" && pair.primary.projection !== pair.primary.line) {
+    const side = pair.primary.projection > pair.primary.line ? "over" : "under";
+    return { side, row: pair.rows.find((row) => row.side === side) ?? pair.primary, probability: null };
+  }
+  return null;
+}
+
+function rowPredictionSide(row: PlayerPropPreviewRow): "over" | "under" | null {
+  if (row.overProbability !== null && row.underProbability !== null) return row.overProbability >= row.underProbability ? "over" : "under";
+  if (row.finalProbability !== null) return row.side;
+  if (row.projectionSource !== "recent_form" && row.projection !== row.line) return row.projection > row.line ? "over" : "under";
+  return null;
+}
+
+function rowPredictionProbability(row: PlayerPropPreviewRow): number | null {
+  const side = rowPredictionSide(row);
+  if (side === "over") return row.overProbability ?? row.finalProbability;
+  if (side === "under") return row.underProbability ?? row.finalProbability;
+  return null;
+}
+
+function isRowPredictionSide(row: PlayerPropPreviewRow): boolean {
+  return rowPredictionSide(row) === row.side;
 }
 
 function pairSignalRow(pair: MarketPair): PlayerPropPreviewRow | null {
@@ -662,7 +700,7 @@ export function PropsTable({ rows, selectedId, onSelect }: { rows: PlayerPropPre
       <button type="button" onClick={() => onSelect(row.id)} className="hidden w-full grid-cols-[1.25fr_1.08fr_0.78fr_0.64fr_0.82fr_0.56fr_0.54fr_0.68fr_0.82fr_0.48fr] items-center gap-2 text-left xl:grid">
         <span className="flex min-w-0 items-center gap-2"><PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} compact /><span className="min-w-0"><span className="block truncate text-sm font-bold text-white">{row.player}</span><span className="block truncate text-[10px] text-gray-600">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent}</span></span></span>
         <span className="truncate text-xs font-semibold text-gray-200">{row.marketLabel}</span>
-        <span className="text-xs font-bold text-white">{row.side === "over" ? "Over" : "Under"} {row.line}</span>
+        <span className="text-xs font-bold text-white">{row.side === "over" ? "Over" : "Under"} {row.line}{isRowPredictionSide(row) ? <span className="mt-1 block w-fit rounded border border-white/35 bg-white/[0.055] px-1.5 py-0.5 text-[8px] font-black uppercase text-white">Prediction</span> : null}</span>
         <span className="text-xs font-bold tabular-nums text-gray-200">{row.projection}</span>
         <span className="text-xs text-gray-300">{row.book} <strong className="text-white">{signed(row.odds)}</strong><PriceBandTag odds={row.odds} /><OddsMovementTag row={row} /></span>
         <BoardMetric label="Edge" value={row.modelEdge === null ? "-" : pct(row.modelEdge, true)} positive={(row.modelEdge ?? 0) > 0} />
@@ -671,7 +709,7 @@ export function PropsTable({ rows, selectedId, onSelect }: { rows: PlayerPropPre
         <PropGradeBadge grade={row.playGrade} compact />
         <span className="text-[10px] font-bold text-violet-200">Open</span>
       </button>
-      <button type="button" onClick={() => onSelect(row.id)} className="w-full text-left xl:hidden"><span className="flex items-start justify-between gap-3"><span className="flex min-w-0 items-center gap-3"><PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} compact /><span className="min-w-0"><span className="block truncate text-sm font-bold text-white">{row.player}</span><span className="block truncate text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {row.marketLabel}</span></span></span><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3"><span><span className="block text-[9px] font-bold uppercase text-gray-600">Market line</span><strong className="mt-1 block text-xl text-white">{row.side === "over" ? "Over" : "Under"} {row.line}</strong></span><span className="text-right"><span className="block text-[9px] font-bold uppercase text-gray-600">Price</span><strong className="mt-1 block text-lg text-white">{signed(row.odds)}</strong><span className="block text-[10px] text-gray-500">{row.book}</span><OddsMovementTag row={row} align="right" /></span></span><span className="mt-4 grid grid-cols-3 border-y border-gray-800 py-3"><CompactMetric label={row.projectionSource === "recent_form" ? "Recent avg" : "Projection"} value={String(row.projection)} /><CompactMetric label="Model edge" value={row.modelEdge === null ? "-" : pct(row.modelEdge, true)} positive /><CompactMetric label="Expected value" value={row.expectedValue === null ? "-" : pct(row.expectedValue, true)} positive /></span><span className="mt-3 flex h-9 items-center justify-center rounded-md border border-gray-700 text-xs font-bold text-gray-200">Open Reader</span></button>
+      <button type="button" onClick={() => onSelect(row.id)} className="w-full text-left xl:hidden"><span className="flex items-start justify-between gap-3"><span className="flex min-w-0 items-center gap-3"><PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} compact /><span className="min-w-0"><span className="block truncate text-sm font-bold text-white">{row.player}</span><span className="block truncate text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {row.marketLabel}</span></span></span><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3"><span><span className="block text-[9px] font-bold uppercase text-gray-600">Market line</span><strong className="mt-1 block text-xl text-white">{row.side === "over" ? "Over" : "Under"} {row.line}</strong>{isRowPredictionSide(row) ? <span className="mt-1 inline-flex rounded border border-white/35 bg-white/[0.055] px-1.5 py-0.5 text-[8px] font-black uppercase text-white">Prediction</span> : null}</span><span className="text-right"><span className="block text-[9px] font-bold uppercase text-gray-600">Price</span><strong className="mt-1 block text-lg text-white">{signed(row.odds)}</strong><span className="block text-[10px] text-gray-500">{row.book}</span><OddsMovementTag row={row} align="right" /></span></span><span className="mt-4 grid grid-cols-3 border-y border-gray-800 py-3"><CompactMetric label={row.projectionSource === "recent_form" ? "Recent avg" : "Projection"} value={String(row.projection)} /><CompactMetric label="Model edge" value={row.modelEdge === null ? "-" : pct(row.modelEdge, true)} positive /><CompactMetric label="Expected value" value={row.expectedValue === null ? "-" : pct(row.expectedValue, true)} positive /></span><span className="mt-3 flex h-9 items-center justify-center rounded-md border border-gray-700 text-xs font-bold text-gray-200">Open Reader</span></button>
     </div>)}</div>
   </div>;
 }
@@ -688,14 +726,13 @@ function PlayerView({ rows, player, selectedId, onSelect, onClear }: { rows: Pla
     <button type="button" onClick={onClear} className="mb-3 inline-flex h-8 items-center gap-2 text-xs font-bold text-gray-500 hover:text-white"><span aria-hidden="true">←</span> Clear player search</button>
     <header className="rounded-lg border border-gray-800 bg-[#0b0e14] p-5"><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div className="flex items-center gap-4"><PlayerAvatar player={player} team={primary.team} headshotUrl={primary.headshotUrl} large /><div><p className="text-[11px] font-bold uppercase text-violet-300">Player workspace</p><h2 className="mt-1 text-2xl font-black text-white">{player}</h2><p className="mt-1 text-sm text-gray-400">{primary.team} {primary.homeAway === "home" ? "vs" : "@"} {primary.opponent} · {formatTime(primary.gameStartTime)}</p></div></div><div className="grid grid-cols-3 border-t border-gray-800 pt-4 lg:min-w-[360px] lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0"><PlayerSummaryMetric label="Markets" value={String(marketPairs.length)} /><PlayerSummaryMetric label="Top model gap" value={pct(topModelGap, true)} /><PlayerSummaryMetric label="Books" value={String(playerBooks)} /></div></div></header>
     <div className="mt-3 divide-y divide-gray-800 overflow-hidden rounded-lg border border-gray-800 bg-gray-950">{marketPairs.map((pair) => {
-      const modelSide = modelLeanSide(pair);
-      const signal = pairSignalRow(pair);
-      const signalColor = signal ? getPropGradeColor(signal.playGrade) : null;
-      const leanRow = pair.rows.find((row) => row.side === modelSide) ?? pair.primary;
+      const prediction = modelPrediction(pair);
+      const predictionSide = prediction?.side ?? null;
+      const predictionRow = prediction?.row ?? pair.primary;
       return <article key={pair.key} className={`grid gap-3 p-4 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : "hover:bg-gray-900"} lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1.1fr)_minmax(320px,1.25fr)] lg:items-center`}>
         <div className="flex min-w-0 items-center gap-2"><MarketChip row={pair.primary} /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.marketLabel}</strong><span className="block truncate text-xs text-gray-500">Line {pair.primary.line} · {pair.primary.projectionSource === "recent_form" ? "Recent avg" : "Projection"} {pair.primary.projection}</span></span></div>
-        <div className="min-w-0"><span className={`inline-flex rounded border px-2 py-1 text-[9px] font-black uppercase ${signal ? "" : "border-gray-800 text-gray-500"}`} style={signalColor ? { color: signalColor.text, borderColor: signalColor.border, background: signalColor.background } : undefined}>{signal ? `${getPropGradeLabel(signal.playGrade)}: ${signal.side === "over" ? "Over" : "Under"}` : modelSide ? `Model side: ${modelSide === "over" ? "Over" : "Under"}` : "Research only"}</span><span className="mt-1.5 block truncate text-xs text-gray-400">{cardReason(leanRow)}</span></div>
-        <div className="grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" isModelSide={modelSide === "over"} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" isModelSide={modelSide === "under"} onSelect={onSelect} /></div>
+        <div className="min-w-0"><ModelPredictionBadge prediction={prediction} /><span className="mt-1.5 block truncate text-xs text-gray-400">{cardReason(predictionRow)}</span></div>
+        <div className="grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" isPredictionSide={predictionSide === "over"} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" isPredictionSide={predictionSide === "under"} onSelect={onSelect} /></div>
       </article>;
     })}</div>
   </div>;
@@ -711,7 +748,7 @@ export function PropDetailDrawer({ row, comparisons, onClose, showDiagnostics = 
     <aside role="dialog" aria-modal="true" aria-label={`${row.player} prop details`} className="h-[100dvh] w-full overflow-y-auto border-gray-800 bg-gray-950 shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:max-w-[980px] sm:rounded-lg sm:border">
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-800 bg-gray-950/95 px-4 py-3 backdrop-blur sm:px-6"><div className="flex min-w-0 items-center gap-3"><PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} compact /><div className="min-w-0"><p className="text-[10px] font-bold uppercase text-violet-300">Prop Reader</p><h2 className="truncate font-black text-white">{row.player}</h2></div></div><button type="button" onClick={onClose} aria-label="Close reader" className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-700 text-lg text-gray-300 hover:border-gray-500 hover:text-white">×</button></div>
       <div className="grid min-w-0 gap-4 p-4 sm:p-6 lg:grid-cols-2">
-        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Prop Summary"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><MarketChip row={row} /><span className="truncate text-sm text-gray-400">{row.marketLabel}</span></div><p className="mt-3 text-2xl font-black text-white">{row.side === "over" ? "Over" : "Under"} {row.line}{" "}<span className={assessPropPrice(row.odds).signalEligible ? "text-emerald-300" : "text-sky-300"}>{signed(row.odds)}</span></p><p className="mt-1 text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {formatTime(row.gameStartTime)} · {row.book}</p></div><PropGradeBadge grade={row.playGrade} /></div><PriceContextLine odds={row.odds} /></DrawerSection></div>
+        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Prop Summary"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><MarketChip row={row} /><span className="truncate text-sm text-gray-400">{row.marketLabel}</span></div><p className="mt-3 text-2xl font-black text-white">{row.side === "over" ? "Over" : "Under"} {row.line}{" "}<span className={assessPropPrice(row.odds).signalEligible ? "text-emerald-300" : "text-sky-300"}>{signed(row.odds)}</span></p><p className="mt-1 text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {formatTime(row.gameStartTime)} · {row.book}</p>{rowPredictionSide(row) ? <p className="mt-3 inline-flex rounded border border-white/35 bg-white/[0.055] px-2 py-1 text-[10px] font-black uppercase text-white">Prediction: {rowPredictionSide(row) === "over" ? "Over" : "Under"}{rowPredictionProbability(row) === null ? "" : ` · ${pct(rowPredictionProbability(row)!)}`}</p> : null}</div><PropGradeBadge grade={row.playGrade} /></div><PriceContextLine odds={row.odds} /></DrawerSection></div>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Reader Summary"><p className="max-w-3xl text-base font-semibold leading-7 text-gray-100">{propReaderSummary(row, prices)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-gray-800 pt-3 text-xs"><span className="text-gray-500">Signal <strong className="ml-1 text-gray-200">{getPropGradeLabel(row.playGrade)}</strong></span><span className="text-gray-500">Research coverage <strong className="ml-1 capitalize text-gray-200">{row.confidenceBucket}</strong></span><span className="text-gray-500">Updated <strong className="ml-1 text-gray-200">{formatTime(row.lastUpdated)}</strong></span></div></DrawerSection></div>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Recent Form"><RecentFormPanel row={row} /></DrawerSection></div>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Matchup Context">{row.marketFamily === "pitcher" ? <div className="grid min-w-0 overflow-hidden rounded-lg border border-gray-800 lg:grid-cols-2 lg:divide-x lg:divide-gray-800"><OpponentProfilePanel row={row} /><PitchArsenalPanel row={row} /></div> : <div className="space-y-3"><BatterPitcherHistoryPanel row={row} /><PitchMixMatchupPanel row={row} /></div>}</DrawerSection></div>
@@ -1376,6 +1413,16 @@ function lineupDisplayStatus(status: NonNullable<PlayerPropPreviewRow["lineupSta
   if (status === "posted") return "Posted";
   if (status === "not_in_lineup") return "Not listed";
   return "Projected";
+}
+
+function rowMarketFilter(row: PlayerPropPreviewRow): MarketFilter {
+  if (row.marketFamily === "pitcher") return "pitcher";
+  if (row.marketFamily === "batter") return "batter";
+  return "research";
+}
+
+function rowMarketFilterLabel(row: PlayerPropPreviewRow): string {
+  return MARKET_FILTER_LABELS[rowMarketFilter(row)];
 }
 
 function humanStatus(value: string): string {
