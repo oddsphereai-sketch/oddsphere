@@ -35,7 +35,7 @@ export type {
   PlayerPropRecentForm,
 } from "@/lib/mlb/props/researchEvidence";
 
-type SortKey = "ev" | "edge" | "probability" | "confidence" | "start" | "player" | "market" | "book" | "updated";
+type SortKey = "signal" | "ev" | "edge" | "probability" | "confidence" | "start" | "player" | "market" | "book" | "updated";
 type PriceMode = "best" | "all";
 type LineMode = "main" | "all";
 type MarketFilter = string;
@@ -271,7 +271,7 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
   const [edgeRange, setEdgeRange] = useState("all");
   const [oddsRange, setOddsRange] = useState("all");
   const [startRange, setStartRange] = useState("all");
-  const [sort, setSort] = useState<SortKey>("player");
+  const [sort, setSort] = useState<SortKey>("signal");
   const [priceMode, setPriceMode] = useState<PriceMode>("best");
   const [lineMode, setLineMode] = useState<LineMode>("main");
   const [hideResearch, setHideResearch] = useState(false);
@@ -381,7 +381,7 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
           <FilterSelect label="Team / game" value={team} onChange={setTeam} options={teams} includeAll />
           <FilterSelect label="Book" value={book} onChange={setBook} options={books} includeAll />
           <FilterSelect label="Sort" value={sort} onChange={(value) => setSort(value as SortKey)} options={[
-            { value: "player", label: "Player A–Z" }, { value: "market", label: "Market" }, { value: "start", label: "Start time" },
+            { value: "signal", label: "Signal first" }, { value: "player", label: "Player A–Z" }, { value: "market", label: "Market" }, { value: "start", label: "Start time" },
             { value: "ev", label: "Highest EV" }, { value: "edge", label: "Highest model edge" }, { value: "probability", label: "Model probability" },
             { value: "confidence", label: "Evidence strength" }, { value: "book", label: "Book" }, { value: "updated", label: "Last updated" },
           ]} />
@@ -1387,6 +1387,10 @@ function gameKeyForRow(row: PlayerPropPreviewRow): string {
 }
 
 function sortRows(sort: SortKey): (a: PlayerPropPreviewRow, b: PlayerPropPreviewRow) => number {
+  if (sort === "signal") return (a, b) => signalSortRank(a) - signalSortRank(b)
+    || (b.expectedValue ?? -Infinity) - (a.expectedValue ?? -Infinity)
+    || (b.modelEdge ?? -Infinity) - (a.modelEdge ?? -Infinity)
+    || a.player.localeCompare(b.player);
   if (sort === "ev") return (a, b) => (b.expectedValue ?? -Infinity) - (a.expectedValue ?? -Infinity);
   if (sort === "edge") return (a, b) => (b.modelEdge ?? -Infinity) - (a.modelEdge ?? -Infinity);
   if (sort === "probability") return (a, b) => (b.finalProbability ?? -Infinity) - (a.finalProbability ?? -Infinity);
@@ -1396,6 +1400,15 @@ function sortRows(sort: SortKey): (a: PlayerPropPreviewRow, b: PlayerPropPreview
   if (sort === "market") return (a, b) => a.marketLabel.localeCompare(b.marketLabel);
   if (sort === "book") return (a, b) => a.book.localeCompare(b.book);
   return (a, b) => b.lastUpdated.localeCompare(a.lastUpdated);
+}
+
+function signalSortRank(row: PlayerPropPreviewRow): number {
+  if (row.playGrade === "BEST_ANGLE") return 0;
+  if (row.playGrade === "LEAN") return 1;
+  if (row.playGrade === "WATCHLIST") return 2;
+  if (row.playGrade === "NO_PLAY") return 3;
+  if (row.playGrade === "PENDING_DATA") return 4;
+  return 5;
 }
 
 function unique(values: string[]): string[] {

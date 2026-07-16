@@ -15,7 +15,7 @@
   "focusedPlayerWorkspace": true,
   "plainEnglishReader": true,
   "continuousMarketBoard": true,
-  "neutralDefaultSort": "Player A-Z",
+  "defaultSort": "Signal first",
   "modelSignalFilter": true,
   "priceComparisonModes": [
     "Best price",

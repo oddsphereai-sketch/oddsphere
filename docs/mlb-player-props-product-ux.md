@@ -45,7 +45,7 @@ Game Environment separates three different confidence states. Venue and roof con
 
 ## Search And Controls
 
-Search matches player, team, opponent, market, market group, and sportsbook. Filters cover model signal, market group, book, team/game, confidence, EV, model edge, odds range, and start time. Sorts cover player, market, start time, EV, model edge, final model probability, confidence, book, and update time. Player A-Z is the neutral default sort.
+Search matches player, team, opponent, market, market group, and sportsbook. Filters cover model signal, market group, book, team/game, confidence, EV, model edge, odds range, and start time. Sorts cover signal priority, player, market, start time, EV, model edge, final model probability, confidence, book, and update time. Signal first is the default sort so actionable reads and Watchlist context do not get buried inside large market views.
 
 The centered Reader shows the prop summary, plain-English interpretation, model-versus-market comparison, projection versus line, EV, numeric model edge, fair odds, comparable book prices, research confidence, missing context, and verified matchup context. Independent probability, shrinkage, raw features, reason codes, odds sanity, settlement, and CLV stay in admin diagnostics.
 
