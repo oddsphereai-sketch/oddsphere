@@ -357,6 +357,7 @@ async function main() {
   const launchReadinessSource = readFileSync("lib/mlb/props/launchReadiness.ts", "utf8");
   const marketCatalogSource = readFileSync("lib/mlb/props/marketCatalog.ts", "utf8");
   const propsConfigSource = readFileSync("lib/mlb/props/config.ts", "utf8");
+  const internalTrackingSource = readFileSync("lib/mlb/props/internalTracking.ts", "utf8");
   check("preview UI clearly discloses simulated data", propsUiSource.includes("Design preview · Simulated board") && propsUiSource.includes("not live, bettable, or sourced from today&apos;s BDL response") && propsUiSource.includes("Fixture timestamp") && propsUiSource.includes("Sample options"));
   check("props UI contains no Best Edge copy", !propsUiSource.includes("Best Edge"));
   check("props UI is a researcher rather than a pick feed", ["Prop Researcher", "Today&apos;s Radar", "Prop Reader"].every((label) => propsUiSource.includes(label)) && !propsUiSource.includes("Best Bets") && !propsUiSource.includes("All Props") && !propsUiSource.includes("VIEW_OPTIONS"));
@@ -413,6 +414,7 @@ async function main() {
   check("pre-lineup props use projected member wording", propsUiSource.includes("function lineupDisplayStatus") && propsUiSource.includes('return "Projected"') && propsUiSource.includes('LINEUP_CONTEXT_INSUFFICIENT: "Projected lineup context"') && !propsUiSource.includes("Waiting for lineup confirmation"));
   check("launch readiness treats posted lineups as non-critical refresh context", launchReadinessSource.includes("posted lineups refresh the board and are not required to open it") && marketCatalogSource.includes("projected_or_confirmed_lineup") && !marketCatalogSource.includes('"confirmed_lineup"'));
   check("props UI includes member-friendly pending market state", propsUiSource.includes("PendingPropsState") && propsUiSource.includes("Player prop lines have not posted yet.") && propsUiSource.includes("Today’s board will populate automatically"));
+  check("internal tracking settles hitter and pitcher markets from the right official game logs", internalTrackingSource.includes("getHitterGameLogs") && internalTrackingSource.includes("getPitcherGameLogs") && internalTrackingSource.includes("gameLogKey") && internalTrackingSource.includes("finalStatsForEntry"));
   check("props UI exposes search/filter data shape", ["type=\"search\"", "Model signal", "Market filters", "Book", "Team / game", "Confidence", "EV range", "Model-edge range", "Odds range", "Start time", "Sort"].every((label) => propsUiSource.includes(label)));
   check("positive model signals retain actionable backend semantics", isActionablePropGrade("BEST_ANGLE") && isActionablePropGrade("LEAN") && !isActionablePropGrade("WATCHLIST"));
   check("all props grades are inspectable", PROP_GRADES.every(isInspectablePropGrade));
@@ -538,7 +540,7 @@ async function main() {
     }),
   });
   check("real paper gate permits hidden paper only", paperGatePass.ok && paperGatePass.recommendationStatus === "paper");
-  check("paper markets limited to pitcher Ks and outs", isPaperTradingMarketAllowed("pitcher_strikeouts") && isPaperTradingMarketAllowed("pitcher_outs") && !isPaperTradingMarketAllowed("batter_hits"));
+  check("internal tracking markets cover promoted pitcher and hitter props", isPaperTradingMarketAllowed("pitcher_strikeouts") && isPaperTradingMarketAllowed("pitcher_outs") && isPaperTradingMarketAllowed("batter_hits") && isPaperTradingMarketAllowed("batter_total_bases") && isPaperTradingMarketAllowed("batter_strikeouts") && !isPaperTradingMarketAllowed("first_home_run"));
 
   const provider = new MockMLBProvider();
   const odds = await provider.getPropOdds({ date: "2026-07-07", asOfTimestamp: "2026-07-07T15:00:00.000Z" });
@@ -1235,6 +1237,13 @@ async function main() {
     line: 17.5,
     finalStats: { innings_pitched: "6.0" },
   }).overWon === true);
+  check("hitter settlement supports member-facing prop markets", [
+    settlePropPick({ marketKey: "batter_hits", playerId: "mock-hitter-1", gameId: "mock-game-1", line: 1.5, side: "over", finalStats: { hits: 2 } }),
+    settlePropPick({ marketKey: "batter_total_bases", playerId: "mock-hitter-1", gameId: "mock-game-1", line: 2.5, side: "over", finalStats: { total_bases: 4 } }),
+    settlePropPick({ marketKey: "batter_strikeouts", playerId: "mock-hitter-1", gameId: "mock-game-1", line: 0.5, side: "under", finalStats: { strikeouts: 0 } }),
+    settlePropPick({ marketKey: "batter_hits_runs_rbis", playerId: "mock-hitter-1", gameId: "mock-game-1", line: 1.5, side: "over", finalStats: { hits_runs_rbis: 3 } }),
+    settlePropPick({ marketKey: "batter_stolen_bases", playerId: "mock-hitter-1", gameId: "mock-game-1", line: 0.5, side: "over", finalStats: { stolen_bases: 1 } }),
+  ].every((result) => result.status === "settled" && result.result === "win"));
 
   const backtest = await runFixtureMlbPropBacktest({
     provider,
