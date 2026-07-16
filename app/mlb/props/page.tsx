@@ -31,8 +31,8 @@ export default async function MlbPropsMemberPage({
     <section className="mx-auto max-w-4xl py-10 sm:py-20">
       <div className="border-y border-gray-800 py-10 sm:py-14">
         <div className="flex items-center gap-3 text-xs font-bold text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />MLB Prop Researcher</div>
-        <h1 className="mt-5 max-w-2xl text-4xl font-black leading-tight text-white sm:text-5xl">Today’s board is updating.</h1>
-        <p className="mt-4 max-w-2xl text-base leading-7 text-gray-400">The latest complete market snapshot will appear here as soon as prices and matchup data pass the live checks.</p>
+        <h1 className="mt-5 max-w-2xl text-4xl font-black leading-tight text-white sm:text-5xl">Today’s prop board is loading.</h1>
+        <p className="mt-4 max-w-2xl text-base leading-7 text-gray-400">The latest complete market snapshot will appear here as soon as sportsbook prices are ready.</p>
       </div>
     </section>
   </ProductAppFrame>;
