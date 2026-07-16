@@ -175,10 +175,10 @@ export async function syncInternalMlbPropsTracking(
   const candidates = selectTrackingCandidates(snapshot);
   const lockMinutes = envPositiveInteger("ODDSPHERE_PROPS_TRACKING_LOCK_MINUTES", DEFAULT_LOCK_MINUTES);
   const graceMinutes = envPositiveInteger("ODDSPHERE_PROPS_TRACKING_LOCK_GRACE_MINUTES", DEFAULT_LOCK_GRACE_MINUTES);
-  const due = candidates.filter((candidate) => candidate.minutesToStart > 0 && candidate.minutesToStart <= lockMinutes + graceMinutes);
+  const due = candidates.filter((candidate) => candidate.minutesToStart > 0 && candidate.minutesToStart <= lockMinutes);
   let entriesLocked = 0;
   if (due.length > 0) {
-    const rows = due.map((candidate) => trackingInsert(candidate, snapshot, lockMinutes));
+    const rows = due.map((candidate) => trackingInsert(candidate, snapshot, lockMinutes, graceMinutes));
     const { data, error } = await supabase
       .from("mlb_prop_tracking_entries")
       .upsert(rows, { onConflict: "tracking_key", ignoreDuplicates: true })
@@ -487,7 +487,7 @@ function candidateRank(candidate: TrackingCandidate): number {
   return grade * 1_000_000 + (candidate.row.expectedValue ?? -1) * 10_000 + (candidate.row.modelEdge ?? -1) * 1_000 + candidate.row.odds / 10_000;
 }
 
-function trackingInsert(candidate: TrackingCandidate, snapshot: MlbPropsBoardSnapshot, targetLockMinutes: number) {
+function trackingInsert(candidate: TrackingCandidate, snapshot: MlbPropsBoardSnapshot, targetLockMinutes: number, graceMinutes: number) {
   const row = candidate.row;
   const actionable = ACTIONABLE_GRADES.has(row.playGrade) && row.units > 0;
   const bdlPlayerId = row.providerIds?.bdlPlayerId ?? null;
@@ -538,7 +538,7 @@ function trackingInsert(candidate: TrackingCandidate, snapshot: MlbPropsBoardSna
       private: true,
       lockPolicy: `T-${targetLockMinutes}`,
       minutesToStart: round(candidate.minutesToStart, 2),
-      lateLock: candidate.minutesToStart < Math.max(1, targetLockMinutes - 15),
+      lateLock: candidate.minutesToStart < Math.max(1, targetLockMinutes - graceMinutes),
       reasonCodes: row.reasonCodes,
       source: row.source,
       publicDisplayEnabledAtLock: process.env.ODDSPHERE_PROPS_DISPLAY_ENABLED === "true",
