@@ -719,22 +719,20 @@ function modelPrediction(pair: MarketPair): ModelPrediction | null {
   if (longshotValue) return {
     side: longshotValue.side,
     row: longshotValue,
-    probability: longshotValue.finalProbability ?? longshotValue.modelProbability ?? longshotValue.overProbability ?? null,
+    probability: longshotValue.modelProbability ?? longshotValue.finalProbability ?? null,
   };
-  const probabilityPrediction = pair.rows
-    .map((row): ModelPrediction | null => {
-      if (row.overProbability === null || row.underProbability === null) return null;
-      const side = row.overProbability >= row.underProbability ? "over" : "under";
-      const sideRow = pair.rows.find((candidate) => candidate.side === side) ?? row;
-      return { side, row: sideRow, probability: side === "over" ? row.overProbability : row.underProbability };
-    })
-    .filter((prediction): prediction is ModelPrediction => prediction !== null)
-    .sort((a, b) => (b.probability ?? Number.NEGATIVE_INFINITY) - (a.probability ?? Number.NEGATIVE_INFINITY))[0];
-  if (probabilityPrediction) return probabilityPrediction;
+  const signalPrediction = pair.rows
+    .filter(isModelSignalSide)
+    .sort((a, b) => modelSignalRank(b) - modelSignalRank(a))[0];
+  if (signalPrediction) return {
+    side: signalPrediction.side,
+    row: signalPrediction,
+    probability: signalPrediction.modelProbability ?? signalPrediction.finalProbability,
+  };
   const modeled = pair.rows
-    .filter((row) => row.finalProbability !== null)
-    .sort((a, b) => (b.finalProbability ?? Number.NEGATIVE_INFINITY) - (a.finalProbability ?? Number.NEGATIVE_INFINITY))[0];
-  if (modeled) return { side: modeled.side, row: modeled, probability: modeled.finalProbability };
+    .filter((row) => row.modelProbability !== null && row.modelProbability >= 0.5)
+    .sort((a, b) => (b.modelProbability ?? Number.NEGATIVE_INFINITY) - (a.modelProbability ?? Number.NEGATIVE_INFINITY))[0];
+  if (modeled) return { side: modeled.side, row: modeled, probability: modeled.modelProbability };
   return null;
 }
 
@@ -753,8 +751,8 @@ function rowMarketDirection(row: PlayerPropPreviewRow): MarketDirection | null {
 
 function rowPredictionSide(row: PlayerPropPreviewRow): "over" | "under" | null {
   if (isLongshotValueRow(row)) return row.side;
-  if (row.overProbability !== null && row.underProbability !== null) return row.overProbability >= row.underProbability ? "over" : "under";
-  if (row.finalProbability !== null) return row.side;
+  if (isModelSignalSide(row)) return row.side;
+  if (row.modelProbability !== null && row.modelProbability >= 0.5) return row.side;
   return null;
 }
 
@@ -765,8 +763,10 @@ function projectionSideFor(row: PlayerPropPreviewRow): "over" | "under" | null {
 
 function rowPredictionProbability(row: PlayerPropPreviewRow): number | null {
   const side = rowPredictionSide(row);
-  if (side === "over") return row.overProbability ?? row.finalProbability;
-  if (side === "under") return row.underProbability ?? row.finalProbability;
+  if (!side) return null;
+  if (side === row.side) return row.modelProbability ?? row.finalProbability;
+  if (side === "over") return row.overProbability ?? null;
+  if (side === "under") return row.underProbability ?? null;
   return null;
 }
 
@@ -783,6 +783,15 @@ function pairSignalRow(pair: MarketPair): PlayerPropPreviewRow | null {
 
 function isLongshotValueRow(row: PlayerPropPreviewRow): boolean {
   return row.reasonCodes.includes("LONGSHOT_VALUE_CONTEXT") && row.playGrade === "WATCHLIST";
+}
+
+function isModelSignalSide(row: PlayerPropPreviewRow): boolean {
+  return row.playGrade === "BEST_ANGLE" || row.playGrade === "LEAN" || row.playGrade === "WATCHLIST";
+}
+
+function modelSignalRank(row: PlayerPropPreviewRow): number {
+  const grade = row.playGrade === "BEST_ANGLE" ? 3 : row.playGrade === "LEAN" ? 2 : row.playGrade === "WATCHLIST" ? 1 : 0;
+  return grade * 1_000_000 + (row.expectedValue ?? -1) * 10_000 + (row.modelEdge ?? -1) * 1_000 + (row.modelProbability ?? 0);
 }
 
 function isPositiveSignal(row: PlayerPropPreviewRow): boolean {
