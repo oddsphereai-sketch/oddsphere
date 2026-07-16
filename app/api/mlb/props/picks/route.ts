@@ -1,4 +1,4 @@
-import { loadCachedLatestMlbPropsBoardSnapshot } from "@/lib/mlb/props/boardSnapshotStore";
+import { loadCachedLatestMlbPropsDisplaySnapshot } from "@/lib/mlb/props/boardSnapshotStore";
 import { easternSlateDate, mlbPropsSnapshotIsFresh } from "@/lib/mlb/props/liveBoard";
 import { getPublicPicksMode } from "@/lib/mlb/props/publicPicksSafety";
 
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
       board: null,
     }, { status: 503, headers: { "Cache-Control": "private, no-store" } });
   }
-  const snapshot = await loadCachedLatestMlbPropsBoardSnapshot(date);
+  const snapshot = await loadCachedLatestMlbPropsDisplaySnapshot(date);
   if (!snapshot || !mlbPropsSnapshotIsFresh(snapshot)) {
     return Response.json({
       ok: false,

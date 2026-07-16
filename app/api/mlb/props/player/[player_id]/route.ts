@@ -1,4 +1,4 @@
-import { loadLatestMlbPropsBoardSnapshot } from "@/lib/mlb/props/boardSnapshotStore";
+import { loadLatestMlbPropsDisplaySnapshot } from "@/lib/mlb/props/boardSnapshotStore";
 import { easternSlateDate, mlbPropsSnapshotIsFresh } from "@/lib/mlb/props/liveBoard";
 import { getPublicPicksMode } from "@/lib/mlb/props/publicPicksSafety";
 
@@ -13,7 +13,7 @@ export async function GET(
     });
   }
   const { player_id: playerId } = await params;
-  const snapshot = await loadLatestMlbPropsBoardSnapshot(easternSlateDate());
+  const snapshot = await loadLatestMlbPropsDisplaySnapshot(easternSlateDate());
   if (!snapshot || !mlbPropsSnapshotIsFresh(snapshot)) {
     return Response.json({ ok: false, mode: "temporarily_unavailable", player: null }, {
       status: 503,

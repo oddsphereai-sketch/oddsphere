@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { createClient } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
-import type { PlayerPropsDashboardData } from "@/app/mlb/props/components/PlayerPropsDashboard";
+import type { PlayerPropPreviewRow, PlayerPropsDashboardData } from "@/app/mlb/props/components/PlayerPropsDashboard";
 import type { RealPitcherSeasonStat } from "./realScoring";
 import type { PropOddsSnapshot } from "./providers";
 
@@ -115,6 +115,12 @@ export async function loadLatestMlbPropsBoardSnapshot(slateDate: string): Promis
   return (await loadRecentMlbPropsBoardSnapshots(slateDate, 1))[0] ?? null;
 }
 
+export async function loadLatestMlbPropsDisplaySnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
+  const latest = await loadLatestMlbPropsBoardSnapshot(slateDate);
+  if (!latest) return null;
+  return applyMlbPropsDisplayLocks(latest).catch(() => latest);
+}
+
 export async function loadRecentMlbPropsBoardSnapshots(slateDate: string, limit = 3): Promise<MlbPropsBoardSnapshot[]> {
   const { data, error } = await getSupabase()
     .from("prop_scoring_runs")
@@ -135,6 +141,126 @@ export async function loadRecentMlbPropsBoardSnapshots(slateDate: string, limit 
   return snapshots;
 }
 
+type LockedDisplaySnapshotRef = {
+  external_game_id: string | null;
+  board_snapshot_id: string | null;
+  locked_at: string | null;
+};
+
+async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): Promise<MlbPropsBoardSnapshot> {
+  const lockedRefs = await loadLockedDisplaySnapshotRefs(latest.slateDate);
+  if (!lockedRefs.size) return latest;
+
+  const lockedSnapshots = new Map<string, MlbPropsBoardSnapshot>();
+  for (const snapshotId of new Set(lockedRefs.values())) {
+    const snapshot = await loadMlbPropsBoardSnapshotById(latest.slateDate, snapshotId);
+    if (snapshot) lockedSnapshots.set(snapshotId, snapshot);
+  }
+  if (!lockedSnapshots.size) return latest;
+
+  const lockedRowsByGame = new Map<string, PlayerPropPreviewRow[]>();
+  const lockedResearch: NonNullable<PlayerPropsDashboardData["research"]> = {};
+  const lockedUpdatedByGame = new Map<string, string>();
+  for (const [gameId, snapshotId] of lockedRefs) {
+    const locked = lockedSnapshots.get(snapshotId);
+    if (!locked) continue;
+    const rows = locked.data.props.filter((row) => row.providerIds?.gameId === gameId);
+    if (!rows.length) continue;
+    lockedRowsByGame.set(gameId, rows);
+    lockedUpdatedByGame.set(gameId, locked.data.lastUpdated);
+    for (const row of rows) {
+      if (row.researchKey && locked.data.research?.[row.researchKey]) {
+        lockedResearch[row.researchKey] = locked.data.research[row.researchKey];
+      }
+    }
+  }
+  if (!lockedRowsByGame.size) return latest;
+
+  const emittedLockedGames = new Set<string>();
+  const props: PlayerPropPreviewRow[] = [];
+  for (const row of latest.data.props) {
+    const gameId = row.providerIds?.gameId;
+    if (gameId && lockedRowsByGame.has(gameId)) {
+      if (!emittedLockedGames.has(gameId)) {
+        props.push(...(lockedRowsByGame.get(gameId) ?? []));
+        emittedLockedGames.add(gameId);
+      }
+      continue;
+    }
+    props.push(row);
+  }
+  for (const [gameId, rows] of lockedRowsByGame) {
+    if (!emittedLockedGames.has(gameId)) props.push(...rows);
+  }
+
+  const allDisplayGames = new Set(props.map((row) => row.providerIds?.gameId).filter(Boolean) as string[]);
+  const allGamesLocked = allDisplayGames.size > 0 && [...allDisplayGames].every((gameId) => lockedRowsByGame.has(gameId));
+  const lockedLastUpdated = [...lockedUpdatedByGame.values()].sort().at(-1) ?? latest.data.lastUpdated;
+  const data: PlayerPropsDashboardData = {
+    ...latest.data,
+    lastUpdated: allGamesLocked ? lockedLastUpdated : latest.data.lastUpdated,
+    props,
+    research: {
+      ...(latest.data.research ?? {}),
+      ...lockedResearch,
+    },
+    summary: summarizeDisplayProps(latest.data, props),
+  };
+
+  return { ...latest, data };
+}
+
+async function loadLockedDisplaySnapshotRefs(slateDate: string): Promise<Map<string, string>> {
+  const { data, error } = await getSupabase()
+    .from("mlb_prop_tracking_entries")
+    .select("external_game_id,board_snapshot_id,locked_at")
+    .eq("slate_date", slateDate)
+    .not("locked_at", "is", null)
+    .order("locked_at", { ascending: true })
+    .limit(5000);
+  if (error) throw error;
+  const refs = new Map<string, string>();
+  for (const row of (data ?? []) as LockedDisplaySnapshotRef[]) {
+    if (row.external_game_id && row.board_snapshot_id && !refs.has(row.external_game_id)) {
+      refs.set(row.external_game_id, row.board_snapshot_id);
+    }
+  }
+  return refs;
+}
+
+async function loadMlbPropsBoardSnapshotById(slateDate: string, snapshotId: string): Promise<MlbPropsBoardSnapshot | null> {
+  const { data, error } = await getSupabase()
+    .from("prop_scoring_runs")
+    .select("metadata_json")
+    .eq("sport", "mlb")
+    .eq("slate_date", slateDate)
+    .eq("status", "completed")
+    .eq("metadata_json->>kind", MLB_PROPS_BOARD_SNAPSHOT_KIND)
+    .eq("metadata_json->>snapshot_id", snapshotId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return decodeMlbPropsBoardSnapshot(data?.metadata_json) ?? null;
+}
+
+function summarizeDisplayProps(data: PlayerPropsDashboardData, props: PlayerPropPreviewRow[]): PlayerPropsDashboardData["summary"] {
+  const grades = (grade: PlayerPropPreviewRow["playGrade"]) => props.filter((row) => row.playGrade === grade).length;
+  return {
+    ...data.summary,
+    gamesWithProps: new Set(props.map((row) => row.providerIds?.gameId).filter(Boolean)).size,
+    scoredProps: props.filter((row) => row.finalProbability !== null).length,
+    recommendations: grades("BEST_ANGLE"),
+    leans: grades("LEAN"),
+    watchlist: grades("WATCHLIST"),
+    noPlay: grades("NO_PLAY"),
+    pendingData: grades("PENDING_DATA"),
+    researchOnly: grades("RESEARCH"),
+    booksCovered: new Set(props.map((row) => row.book)).size,
+    marketsAvailable: new Set(props.map((row) => row.market)).size,
+    averageDataConfidence: props.length ? round(props.reduce((sum, row) => sum + row.confidence, 0) / props.length, 3) : 0,
+  };
+}
+
 const loadCachedSnapshot = unstable_cache(
   async (slateDate: string) => loadLatestMlbPropsBoardSnapshot(slateDate),
   ["mlb-props-member-board-latest-v1"],
@@ -143,6 +269,16 @@ const loadCachedSnapshot = unstable_cache(
 
 export async function loadCachedLatestMlbPropsBoardSnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
   return loadCachedSnapshot(slateDate);
+}
+
+const loadCachedDisplaySnapshot = unstable_cache(
+  async (slateDate: string) => loadLatestMlbPropsDisplaySnapshot(slateDate),
+  ["mlb-props-member-board-display-v1"],
+  { revalidate: 60, tags: ["mlb-props-member-board"] },
+);
+
+export async function loadCachedLatestMlbPropsDisplaySnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
+  return loadCachedDisplaySnapshot(slateDate);
 }
 
 export function measureMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapshot): MlbPropsBoardSnapshotSize {
@@ -203,4 +339,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function envPositiveInteger(name: string, fallback: number): number {
   const parsed = Number(process.env[name]);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function round(value: number, digits = 3): number {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
 }

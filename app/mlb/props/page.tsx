@@ -1,6 +1,6 @@
 import ProductAppFrame from "@/app/lab/components/ProductAppFrame";
 import { PlayerPropsDashboard } from "./components/PlayerPropsDashboard";
-import { loadCachedLatestMlbPropsBoardSnapshot } from "@/lib/mlb/props/boardSnapshotStore";
+import { loadCachedLatestMlbPropsDisplaySnapshot } from "@/lib/mlb/props/boardSnapshotStore";
 import { easternSlateDate, mlbPropsSnapshotIsFresh } from "@/lib/mlb/props/liveBoard";
 import { getPublicPicksMode } from "@/lib/mlb/props/publicPicksSafety";
 
@@ -20,7 +20,7 @@ export default async function MlbPropsMemberPage({
   const query = await searchParams;
   const requestedReader = typeof query.reader === "string" ? query.reader : null;
   if (mode.mode === "display_enabled") {
-    const snapshot = await loadCachedLatestMlbPropsBoardSnapshot(easternSlateDate()).catch(() => null);
+    const snapshot = await loadCachedLatestMlbPropsDisplaySnapshot(easternSlateDate()).catch(() => null);
     if (snapshot && mlbPropsSnapshotIsFresh(snapshot)) {
       const initialSelectedId = snapshot.data.props.some((row) => row.id === requestedReader) ? requestedReader : null;
       return <ProductAppFrame><PlayerPropsDashboard data={snapshot.data} mode="member" initialSelectedId={initialSelectedId} /></ProductAppFrame>;

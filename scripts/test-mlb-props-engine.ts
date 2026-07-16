@@ -358,6 +358,7 @@ async function main() {
   const marketCatalogSource = readFileSync("lib/mlb/props/marketCatalog.ts", "utf8");
   const propsConfigSource = readFileSync("lib/mlb/props/config.ts", "utf8");
   const internalTrackingSource = readFileSync("lib/mlb/props/internalTracking.ts", "utf8");
+  const boardSnapshotStoreSource = readFileSync("lib/mlb/props/boardSnapshotStore.ts", "utf8");
   check("preview UI clearly discloses simulated data", propsUiSource.includes("Design preview · Simulated board") && propsUiSource.includes("not live, bettable, or sourced from today&apos;s BDL response") && propsUiSource.includes("Fixture timestamp") && propsUiSource.includes("Sample options"));
   check("props UI contains no Best Edge copy", !propsUiSource.includes("Best Edge"));
   check("props UI is a researcher rather than a pick feed", ["Prop Researcher", "Today&apos;s Radar", "Prop Reader"].every((label) => propsUiSource.includes(label)) && !propsUiSource.includes("Best Bets") && !propsUiSource.includes("All Props") && !propsUiSource.includes("VIEW_OPTIONS"));
@@ -417,6 +418,7 @@ async function main() {
   check("props UI includes member-friendly pending market state", propsUiSource.includes("PendingPropsState") && propsUiSource.includes("Player prop lines have not posted yet.") && propsUiSource.includes("Today’s board will populate automatically"));
   check("internal tracking settles hitter and pitcher markets from the right official game logs", internalTrackingSource.includes("getHitterGameLogs") && internalTrackingSource.includes("getPitcherGameLogs") && internalTrackingSource.includes("gameLogKey") && internalTrackingSource.includes("finalStatsForEntry"));
   check("internal tracking lock window does not open before T-60", internalTrackingSource.includes("candidate.minutesToStart > 0 && candidate.minutesToStart <= lockMinutes") && !internalTrackingSource.includes("candidate.minutesToStart <= lockMinutes + graceMinutes"));
+  check("member props display freezes games from locked board snapshots", boardSnapshotStoreSource.includes("loadLatestMlbPropsDisplaySnapshot") && boardSnapshotStoreSource.includes("applyMlbPropsDisplayLocks") && boardSnapshotStoreSource.includes("mlb_prop_tracking_entries") && boardSnapshotStoreSource.includes("board_snapshot_id") && boardSnapshotStoreSource.includes("lockedRowsByGame"));
   check("props UI exposes search/filter data shape", ["type=\"search\"", "Model signal", "Market groups", "Specific market filters", "Book", "Team / game", "Evidence strength", "EV range", "Model-edge range", "Odds range", "Start time", "Sort"].every((label) => propsUiSource.includes(label)));
   check("positive model signals retain actionable backend semantics", isActionablePropGrade("BEST_ANGLE") && isActionablePropGrade("LEAN") && !isActionablePropGrade("WATCHLIST"));
   check("all props grades are inspectable", PROP_GRADES.every(isInspectablePropGrade));
@@ -431,6 +433,8 @@ async function main() {
   const productFrameSource = readFileSync("app/lab/components/ProductAppFrame.tsx", "utf8");
   const devPreviewSource = readFileSync("app/dev/mlb-props-preview/page.tsx", "utf8");
   const memberPropsSource = readFileSync("app/mlb/props/page.tsx", "utf8");
+  const memberPropsApiSource = readFileSync("app/api/mlb/props/picks/route.ts", "utf8");
+  const playerPropsApiSource = readFileSync("app/api/mlb/props/player/[player_id]/route.ts", "utf8");
   const teamBadgeSource = readFileSync("app/lab/components/daily-edge/ProductTeamBadge.tsx", "utf8");
   const marketingNavSource = readFileSync("app/components/Navbar.tsx", "utf8");
   const marketingFooterSource = readFileSync("app/components/Footer.tsx", "utf8");
@@ -442,6 +446,7 @@ async function main() {
   check("hosted dev preview reads the latest private live snapshot", devPreviewSource.includes("loadLatestMlbPropsBoardSnapshot") && devPreviewSource.includes('process.env.VERCEL_ENV !== "preview"'));
   check("props routes use only the authenticated product shell", [marketingNavSource, marketingFooterSource].every((source) => source.includes('pathname === "/mlb/props"') && source.includes('pathname === "/dev/mlb-props-preview"')));
   check("member route scaffold is gated and fixture-free", memberPropsSource.includes("getPublicPicksMode") && memberPropsSource.includes("ProductAppFrame") && !memberPropsSource.includes("player-props-preview-full.json"));
+  check("member routes read display-locked props snapshots", memberPropsSource.includes("loadCachedLatestMlbPropsDisplaySnapshot") && memberPropsApiSource.includes("loadCachedLatestMlbPropsDisplaySnapshot") && playerPropsApiSource.includes("loadLatestMlbPropsDisplaySnapshot") && !memberPropsSource.includes("loadCachedLatestMlbPropsBoardSnapshot"));
   check("member route uses product copy without operational internals", memberPropsSource.includes("Today’s prop board is loading.") && memberPropsSource.includes("latest complete market snapshot") && !["Supabase", "fixture", "flags", "Public picks hidden"].some((label) => memberPropsSource.includes(label)));
   check("team visual uses existing ESPN MLB strategy with fallback", teamBadgeSource.includes("a.espncdn.com/i/teamlogos/mlb/500") && teamBadgeSource.includes("onError") && propsUiSource.includes("ProductTeamBadge"));
   check("player avatar supports safe optional headshots with team fallback", propsUiSource.includes("headshotUrl?: string | null") && propsUiSource.includes('headshotUrl?.startsWith("/")') && propsUiSource.includes("imageFailed") && propsUiSource.includes("<ProductTeamBadge abbreviation={team}"));
