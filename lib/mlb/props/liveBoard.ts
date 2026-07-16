@@ -847,7 +847,7 @@ function buildDashboardRows(args: {
       clvStatus: "pending",
     });
   }
-  return dedupeRows(rows);
+  return applyHitterSignalDiscipline(dedupeRows(rows));
 }
 
 const HITTER_LEAN_ELIGIBLE_MARKETS = new Set([
@@ -867,6 +867,112 @@ const HITTER_WATCHLIST_ONLY_MARKETS = new Set([
   "batter_home_runs",
   "batter_stolen_bases",
 ]);
+
+const DEFAULT_HITTER_LEAN_MIN_AMERICAN_ODDS = -250;
+const DEFAULT_HITTER_LEANS_PER_PLAYER = 2;
+const DEFAULT_HITTER_LEANS_PER_GAME = 12;
+
+function applyHitterSignalDiscipline(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
+  const hitterLeans = rows.filter((row) => row.marketFamily !== "pitcher" && row.playGrade === "LEAN");
+  if (!hitterLeans.length) return rows;
+
+  const minOdds = envInteger("ODDSPHERE_PROPS_HITTER_LEAN_MIN_AMERICAN_ODDS", DEFAULT_HITTER_LEAN_MIN_AMERICAN_ODDS);
+  const perPlayerLimit = envPositiveInteger("ODDSPHERE_PROPS_HITTER_LEANS_PER_PLAYER", DEFAULT_HITTER_LEANS_PER_PLAYER);
+  const perGameLimit = envPositiveInteger("ODDSPHERE_PROPS_HITTER_LEANS_PER_GAME", DEFAULT_HITTER_LEANS_PER_GAME);
+  const downgradeReasons = new Map<string, string>();
+  const bestOfferIds = new Set<string>();
+
+  for (const group of groupRows(hitterLeans, hitterOfferKey).values()) {
+    const eligible = group.filter((row) => row.odds >= minOdds);
+    if (!eligible.length) {
+      for (const row of group) downgradeReasons.set(row.id, "HITTER_LEAN_PRICE_TOO_SHORT");
+      continue;
+    }
+    const [best] = [...eligible].sort(compareHitterSignals);
+    if (!best) continue;
+    bestOfferIds.add(best.id);
+    for (const row of group) {
+      if (row.id !== best.id) downgradeReasons.set(row.id, row.odds < minOdds ? "HITTER_LEAN_PRICE_TOO_SHORT" : "BETTER_PRICE_AVAILABLE");
+    }
+  }
+
+  const clusterCandidateIds = new Set<string>();
+  const bestOfferRows = hitterLeans.filter((row) => bestOfferIds.has(row.id));
+  for (const playerRows of groupRows(bestOfferRows, hitterPlayerKey).values()) {
+    const clusterWinners: PlayerPropPreviewRow[] = [];
+    for (const clusterRows of groupRows(playerRows, (row) => hitterSignalCluster(row.market)).values()) {
+      const [winner, ...clusterDuplicates] = [...clusterRows].sort(compareHitterSignals);
+      if (!winner) continue;
+      clusterWinners.push(winner);
+      for (const row of clusterDuplicates) downgradeReasons.set(row.id, "CORRELATED_HITTER_MARKET_CAPPED");
+    }
+    const ranked = clusterWinners.sort(compareHitterSignals);
+    for (const row of ranked.slice(0, perPlayerLimit)) clusterCandidateIds.add(row.id);
+    for (const row of ranked.slice(perPlayerLimit)) downgradeReasons.set(row.id, "PLAYER_HITTER_SIGNAL_LIMIT");
+  }
+
+  const keptIds = new Set<string>();
+  const clusterCandidates = hitterLeans.filter((row) => clusterCandidateIds.has(row.id));
+  for (const gameRows of groupRows(clusterCandidates, (row) => row.providerIds?.gameId ?? row.gameStartTime).values()) {
+    const ranked = [...gameRows].sort(compareHitterSignals);
+    for (const row of ranked.slice(0, perGameLimit)) keptIds.add(row.id);
+    for (const row of ranked.slice(perGameLimit)) downgradeReasons.set(row.id, "SLATE_HITTER_SIGNAL_LIMIT");
+  }
+
+  return rows.map((row) => {
+    if (row.marketFamily === "pitcher" || row.playGrade !== "LEAN" || keptIds.has(row.id)) return row;
+    const reasonCode = downgradeReasons.get(row.id) ?? "HITTER_SIGNAL_DISCIPLINE";
+    return {
+      ...row,
+      playGrade: "WATCHLIST",
+      units: 0,
+      reasonCodes: uniqueStrings([...row.reasonCodes, reasonCode]),
+    };
+  });
+}
+
+function groupRows<T>(rows: T[], keyFor: (row: T) => string): Map<string, T[]> {
+  const out = new Map<string, T[]>();
+  for (const row of rows) {
+    const key = keyFor(row);
+    const existing = out.get(key);
+    if (existing) existing.push(row);
+    else out.set(key, [row]);
+  }
+  return out;
+}
+
+function hitterOfferKey(row: PlayerPropPreviewRow): string {
+  return [
+    row.providerIds?.gameId ?? row.gameStartTime,
+    row.providerIds?.bdlPlayerId ?? row.player,
+    row.market,
+    row.side,
+    row.line,
+  ].join("|");
+}
+
+function hitterPlayerKey(row: PlayerPropPreviewRow): string {
+  return `${row.providerIds?.gameId ?? row.gameStartTime}|${row.providerIds?.bdlPlayerId ?? row.player}`;
+}
+
+function hitterSignalCluster(market: string): string {
+  if (["batter_hits", "batter_total_bases", "batter_singles", "batter_hits_runs_rbis"].includes(market)) return "hit_production";
+  if (market === "batter_walks") return "walks";
+  if (market === "batter_strikeouts") return "strikeouts";
+  return market;
+}
+
+function compareHitterSignals(a: PlayerPropPreviewRow, b: PlayerPropPreviewRow): number {
+  return hitterSignalScore(b) - hitterSignalScore(a)
+    || (b.expectedValue ?? -99) - (a.expectedValue ?? -99)
+    || (b.modelEdge ?? -99) - (a.modelEdge ?? -99)
+    || b.odds - a.odds;
+}
+
+function hitterSignalScore(row: PlayerPropPreviewRow): number {
+  return (row.expectedValue ?? -99) * 100 + (row.modelEdge ?? 0) * 20 + row.confidence;
+}
 
 function buildIntegratedHitterSignal(args: {
   mapped: MappedOddsRow;
@@ -1694,6 +1800,11 @@ function addCalendarDays(date: string, days: number): string {
 function envPositiveInteger(name: string, fallback: number): number {
   const parsed = Number(process.env[name]);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function envInteger(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]);
+  return Number.isInteger(parsed) ? parsed : fallback;
 }
 
 export function easternSlateDate(now = new Date()): string {
