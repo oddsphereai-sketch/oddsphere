@@ -147,12 +147,17 @@ type LockedDisplaySnapshotRef = {
   locked_at: string | null;
 };
 
+type LockedDisplaySnapshotPointer = {
+  snapshotId: string;
+  lockedAt: string;
+};
+
 async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): Promise<MlbPropsBoardSnapshot> {
   const lockedRefs = await loadLockedDisplaySnapshotRefs(latest.slateDate);
   if (!lockedRefs.size) return latest;
 
   const lockedSnapshots = new Map<string, MlbPropsBoardSnapshot>();
-  for (const snapshotId of new Set(lockedRefs.values())) {
+  for (const snapshotId of new Set([...lockedRefs.values()].map((ref) => ref.snapshotId))) {
     const snapshot = await loadMlbPropsBoardSnapshotById(latest.slateDate, snapshotId);
     if (snapshot) lockedSnapshots.set(snapshotId, snapshot);
   }
@@ -161,13 +166,15 @@ async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): Promise
   const lockedRowsByGame = new Map<string, PlayerPropPreviewRow[]>();
   const lockedResearch: NonNullable<PlayerPropsDashboardData["research"]> = {};
   const lockedUpdatedByGame = new Map<string, string>();
-  for (const [gameId, snapshotId] of lockedRefs) {
-    const locked = lockedSnapshots.get(snapshotId);
+  for (const [gameId, ref] of lockedRefs) {
+    const locked = lockedSnapshots.get(ref.snapshotId);
     if (!locked) continue;
-    const rows = locked.data.props.filter((row) => row.providerIds?.gameId === gameId);
+    const rows = locked.data.props
+      .filter((row) => row.providerIds?.gameId === gameId)
+      .map((row) => ({ ...row, lockStatus: { status: "locked" as const, lockedAt: ref.lockedAt } }));
     if (!rows.length) continue;
     lockedRowsByGame.set(gameId, rows);
-    lockedUpdatedByGame.set(gameId, locked.data.lastUpdated);
+    lockedUpdatedByGame.set(gameId, ref.lockedAt);
     for (const row of rows) {
       if (row.researchKey && locked.data.research?.[row.researchKey]) {
         lockedResearch[row.researchKey] = locked.data.research[row.researchKey];
@@ -210,7 +217,7 @@ async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): Promise
   return { ...latest, data };
 }
 
-async function loadLockedDisplaySnapshotRefs(slateDate: string): Promise<Map<string, string>> {
+async function loadLockedDisplaySnapshotRefs(slateDate: string): Promise<Map<string, LockedDisplaySnapshotPointer>> {
   const { data, error } = await getSupabase()
     .from("mlb_prop_tracking_entries")
     .select("external_game_id,board_snapshot_id,locked_at")
@@ -219,10 +226,13 @@ async function loadLockedDisplaySnapshotRefs(slateDate: string): Promise<Map<str
     .order("locked_at", { ascending: true })
     .limit(5000);
   if (error) throw error;
-  const refs = new Map<string, string>();
+  const refs = new Map<string, LockedDisplaySnapshotPointer>();
   for (const row of (data ?? []) as LockedDisplaySnapshotRef[]) {
-    if (row.external_game_id && row.board_snapshot_id && !refs.has(row.external_game_id)) {
-      refs.set(row.external_game_id, row.board_snapshot_id);
+    if (row.external_game_id && row.board_snapshot_id && row.locked_at && !refs.has(row.external_game_id)) {
+      refs.set(row.external_game_id, {
+        snapshotId: row.board_snapshot_id,
+        lockedAt: row.locked_at,
+      });
     }
   }
   return refs;
