@@ -625,18 +625,30 @@ function MarketPairCards({ pairs, selectedId, onSelect }: { pairs: MarketPair[];
 function MarketSideQuote({ row, side, isPredictionSide, onSelect }: { row: PlayerPropPreviewRow | null; side: "over" | "under"; isPredictionSide: boolean; onSelect: (id: string) => void }) {
   if (!row) return <span className="flex min-h-[72px] items-center justify-center rounded-md border border-dashed border-gray-800 bg-black/10 px-2 text-center text-[10px] font-semibold text-gray-600">{side === "over" ? "Over" : "Under"}<br />Not offered</span>;
   const signal = isPositiveSignal(row);
-  const color = signal && !isPredictionSide ? getPropGradeColor(row.playGrade) : null;
+  const color = isPredictionSide || signal ? getPropGradeColor(row.playGrade) : null;
   const predictionClass = isPredictionSide
-    ? "border-white/45 bg-white/[0.055] shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset] hover:border-white/70 hover:bg-white/[0.075]"
+    ? "shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset] hover:brightness-125"
     : signal
       ? ""
       : "border-gray-800 bg-black/20 hover:border-gray-700 hover:bg-gray-900";
-  return <button type="button" onClick={() => onSelect(row.id)} className={`min-w-0 rounded-md border px-2.5 py-2 text-left ${predictionClass}`} style={color ? { borderColor: color.border, background: color.background } : undefined}><span className="flex items-center justify-between gap-2"><strong className="text-xs text-white">{side === "over" ? "O" : "U"} {row.line} · {signed(row.odds)}</strong><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-0.5 flex items-center justify-between gap-2"><span className="truncate text-[9px] text-gray-600">{row.book}</span>{isPredictionSide ? <span className="shrink-0 text-[9px] font-black uppercase text-white">Prediction</span> : signal ? <span className="shrink-0 text-[9px] font-black uppercase" style={color ? { color: color.text } : undefined}>{getPropGradeLabel(row.playGrade)}</span> : null}</span><OddsMovementTag row={row} /></button>;
+  return <button type="button" onClick={() => onSelect(row.id)} className={`min-w-0 rounded-md border px-2.5 py-2 text-left ${predictionClass}`} style={color ? { borderColor: color.border, background: color.background } : undefined}><span className="flex items-center justify-between gap-2"><strong className="text-xs text-white">{side === "over" ? "O" : "U"} {row.line} · {signed(row.odds)}</strong><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-0.5 flex items-center justify-between gap-2"><span className="truncate text-[9px] text-gray-600">{row.book}</span>{isPredictionSide ? <span className="shrink-0 text-[9px] font-black uppercase" style={color ? { color: color.text } : undefined}>Prediction</span> : signal ? <span className="shrink-0 text-[9px] font-black uppercase" style={color ? { color: color.text } : undefined}>{getPropGradeLabel(row.playGrade)}</span> : null}</span><OddsMovementTag row={row} /></button>;
 }
 
 function ModelPredictionBadge({ prediction, compact = false }: { prediction: ModelPrediction | null; compact?: boolean }) {
   if (!prediction) return <span className={`inline-flex shrink-0 flex-col rounded border border-gray-800 bg-black/20 ${compact ? "px-2 py-1" : "px-2.5 py-1.5"}`}><span className="text-[8px] font-black uppercase text-gray-600">Prediction</span><span className="text-[10px] font-black text-gray-400">Research</span></span>;
-  return <span className={`inline-flex shrink-0 flex-col rounded border border-white/35 bg-white/[0.055] shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset] ${compact ? "px-2 py-1" : "px-2.5 py-1.5"}`}><span className="text-[8px] font-black uppercase text-gray-500">Prediction</span><span className={`${compact ? "text-[11px]" : "text-xs"} font-black text-white`}>{prediction.side === "over" ? "Over" : "Under"}{prediction.probability === null ? "" : ` · ${pct(prediction.probability)}`}</span></span>;
+  const color = getPropGradeColor(prediction.row.playGrade);
+  return <span className={`inline-flex shrink-0 flex-col rounded border shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset] ${compact ? "px-2 py-1" : "px-2.5 py-1.5"}`} style={{ borderColor: color.border, background: color.background }}><span className="text-[8px] font-black uppercase text-gray-500">Prediction</span><span className={`${compact ? "text-[11px]" : "text-xs"} font-black`} style={{ color: color.text }}>{prediction.side === "over" ? "Over" : "Under"}{prediction.probability === null ? "" : ` · ${pct(prediction.probability)}`}</span></span>;
+}
+
+function InlinePredictionTag({ row, inline = false }: { row: PlayerPropPreviewRow; inline?: boolean }) {
+  const color = getPropGradeColor(row.playGrade);
+  return <span className={`${inline ? "mt-1 inline-flex" : "mt-1 flex w-fit"} rounded border px-1.5 py-0.5 text-[8px] font-black uppercase`} style={{ color: color.text, borderColor: color.border, background: color.background }}>Prediction</span>;
+}
+
+function ReaderPredictionTag({ row }: { row: PlayerPropPreviewRow }) {
+  const color = getPropGradeColor(row.playGrade);
+  const probability = rowPredictionProbability(row);
+  return <p className="mt-3 inline-flex rounded border px-2 py-1 text-[10px] font-black uppercase" style={{ color: color.text, borderColor: color.border, background: color.background }}>Prediction: {rowPredictionSide(row) === "over" ? "Over" : "Under"}{probability === null ? "" : ` · ${pct(probability)}`}</p>;
 }
 
 function modelPrediction(pair: MarketPair): ModelPrediction | null {
@@ -700,7 +712,7 @@ export function PropsTable({ rows, selectedId, onSelect }: { rows: PlayerPropPre
       <button type="button" onClick={() => onSelect(row.id)} className="hidden w-full grid-cols-[1.25fr_1.08fr_0.78fr_0.64fr_0.82fr_0.56fr_0.54fr_0.68fr_0.82fr_0.48fr] items-center gap-2 text-left xl:grid">
         <span className="flex min-w-0 items-center gap-2"><PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} compact /><span className="min-w-0"><span className="block truncate text-sm font-bold text-white">{row.player}</span><span className="block truncate text-[10px] text-gray-600">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent}</span></span></span>
         <span className="truncate text-xs font-semibold text-gray-200">{row.marketLabel}</span>
-        <span className="text-xs font-bold text-white">{row.side === "over" ? "Over" : "Under"} {row.line}{isRowPredictionSide(row) ? <span className="mt-1 block w-fit rounded border border-white/35 bg-white/[0.055] px-1.5 py-0.5 text-[8px] font-black uppercase text-white">Prediction</span> : null}</span>
+        <span className="text-xs font-bold text-white">{row.side === "over" ? "Over" : "Under"} {row.line}{isRowPredictionSide(row) ? <InlinePredictionTag row={row} /> : null}</span>
         <span className="text-xs font-bold tabular-nums text-gray-200">{row.projection}</span>
         <span className="text-xs text-gray-300">{row.book} <strong className="text-white">{signed(row.odds)}</strong><PriceBandTag odds={row.odds} /><OddsMovementTag row={row} /></span>
         <BoardMetric label="Edge" value={row.modelEdge === null ? "-" : pct(row.modelEdge, true)} positive={(row.modelEdge ?? 0) > 0} />
@@ -709,7 +721,7 @@ export function PropsTable({ rows, selectedId, onSelect }: { rows: PlayerPropPre
         <PropGradeBadge grade={row.playGrade} compact />
         <span className="text-[10px] font-bold text-violet-200">Open</span>
       </button>
-      <button type="button" onClick={() => onSelect(row.id)} className="w-full text-left xl:hidden"><span className="flex items-start justify-between gap-3"><span className="flex min-w-0 items-center gap-3"><PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} compact /><span className="min-w-0"><span className="block truncate text-sm font-bold text-white">{row.player}</span><span className="block truncate text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {row.marketLabel}</span></span></span><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3"><span><span className="block text-[9px] font-bold uppercase text-gray-600">Market line</span><strong className="mt-1 block text-xl text-white">{row.side === "over" ? "Over" : "Under"} {row.line}</strong>{isRowPredictionSide(row) ? <span className="mt-1 inline-flex rounded border border-white/35 bg-white/[0.055] px-1.5 py-0.5 text-[8px] font-black uppercase text-white">Prediction</span> : null}</span><span className="text-right"><span className="block text-[9px] font-bold uppercase text-gray-600">Price</span><strong className="mt-1 block text-lg text-white">{signed(row.odds)}</strong><span className="block text-[10px] text-gray-500">{row.book}</span><OddsMovementTag row={row} align="right" /></span></span><span className="mt-4 grid grid-cols-3 border-y border-gray-800 py-3"><CompactMetric label={row.projectionSource === "recent_form" ? "Recent avg" : "Projection"} value={String(row.projection)} /><CompactMetric label="Model edge" value={row.modelEdge === null ? "-" : pct(row.modelEdge, true)} positive /><CompactMetric label="Expected value" value={row.expectedValue === null ? "-" : pct(row.expectedValue, true)} positive /></span><span className="mt-3 flex h-9 items-center justify-center rounded-md border border-gray-700 text-xs font-bold text-gray-200">Open Reader</span></button>
+      <button type="button" onClick={() => onSelect(row.id)} className="w-full text-left xl:hidden"><span className="flex items-start justify-between gap-3"><span className="flex min-w-0 items-center gap-3"><PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} compact /><span className="min-w-0"><span className="block truncate text-sm font-bold text-white">{row.player}</span><span className="block truncate text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {row.marketLabel}</span></span></span><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3"><span><span className="block text-[9px] font-bold uppercase text-gray-600">Market line</span><strong className="mt-1 block text-xl text-white">{row.side === "over" ? "Over" : "Under"} {row.line}</strong>{isRowPredictionSide(row) ? <InlinePredictionTag row={row} inline /> : null}</span><span className="text-right"><span className="block text-[9px] font-bold uppercase text-gray-600">Price</span><strong className="mt-1 block text-lg text-white">{signed(row.odds)}</strong><span className="block text-[10px] text-gray-500">{row.book}</span><OddsMovementTag row={row} align="right" /></span></span><span className="mt-4 grid grid-cols-3 border-y border-gray-800 py-3"><CompactMetric label={row.projectionSource === "recent_form" ? "Recent avg" : "Projection"} value={String(row.projection)} /><CompactMetric label="Model edge" value={row.modelEdge === null ? "-" : pct(row.modelEdge, true)} positive /><CompactMetric label="Expected value" value={row.expectedValue === null ? "-" : pct(row.expectedValue, true)} positive /></span><span className="mt-3 flex h-9 items-center justify-center rounded-md border border-gray-700 text-xs font-bold text-gray-200">Open Reader</span></button>
     </div>)}</div>
   </div>;
 }
@@ -748,7 +760,7 @@ export function PropDetailDrawer({ row, comparisons, onClose, showDiagnostics = 
     <aside role="dialog" aria-modal="true" aria-label={`${row.player} prop details`} className="h-[100dvh] w-full overflow-y-auto border-gray-800 bg-gray-950 shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:max-w-[980px] sm:rounded-lg sm:border">
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-800 bg-gray-950/95 px-4 py-3 backdrop-blur sm:px-6"><div className="flex min-w-0 items-center gap-3"><PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} compact /><div className="min-w-0"><p className="text-[10px] font-bold uppercase text-violet-300">Prop Reader</p><h2 className="truncate font-black text-white">{row.player}</h2></div></div><button type="button" onClick={onClose} aria-label="Close reader" className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-700 text-lg text-gray-300 hover:border-gray-500 hover:text-white">×</button></div>
       <div className="grid min-w-0 gap-4 p-4 sm:p-6 lg:grid-cols-2">
-        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Prop Summary"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><MarketChip row={row} /><span className="truncate text-sm text-gray-400">{row.marketLabel}</span></div><p className="mt-3 text-2xl font-black text-white">{row.side === "over" ? "Over" : "Under"} {row.line}{" "}<span className={assessPropPrice(row.odds).signalEligible ? "text-emerald-300" : "text-sky-300"}>{signed(row.odds)}</span></p><p className="mt-1 text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {formatTime(row.gameStartTime)} · {row.book}</p>{rowPredictionSide(row) ? <p className="mt-3 inline-flex rounded border border-white/35 bg-white/[0.055] px-2 py-1 text-[10px] font-black uppercase text-white">Prediction: {rowPredictionSide(row) === "over" ? "Over" : "Under"}{rowPredictionProbability(row) === null ? "" : ` · ${pct(rowPredictionProbability(row)!)}`}</p> : null}</div><PropGradeBadge grade={row.playGrade} /></div><PriceContextLine odds={row.odds} /></DrawerSection></div>
+        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Prop Summary"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><MarketChip row={row} /><span className="truncate text-sm text-gray-400">{row.marketLabel}</span></div><p className="mt-3 text-2xl font-black text-white">{row.side === "over" ? "Over" : "Under"} {row.line}{" "}<span className={assessPropPrice(row.odds).signalEligible ? "text-emerald-300" : "text-sky-300"}>{signed(row.odds)}</span></p><p className="mt-1 text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {formatTime(row.gameStartTime)} · {row.book}</p>{rowPredictionSide(row) ? <ReaderPredictionTag row={row} /> : null}</div><PropGradeBadge grade={row.playGrade} /></div><PriceContextLine odds={row.odds} /></DrawerSection></div>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Reader Summary"><p className="max-w-3xl text-base font-semibold leading-7 text-gray-100">{propReaderSummary(row, prices)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-gray-800 pt-3 text-xs"><span className="text-gray-500">Signal <strong className="ml-1 text-gray-200">{getPropGradeLabel(row.playGrade)}</strong></span><span className="text-gray-500">Research coverage <strong className="ml-1 capitalize text-gray-200">{row.confidenceBucket}</strong></span><span className="text-gray-500">Updated <strong className="ml-1 text-gray-200">{formatTime(row.lastUpdated)}</strong></span></div></DrawerSection></div>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Recent Form"><RecentFormPanel row={row} /></DrawerSection></div>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Matchup Context">{row.marketFamily === "pitcher" ? <div className="grid min-w-0 overflow-hidden rounded-lg border border-gray-800 lg:grid-cols-2 lg:divide-x lg:divide-gray-800"><OpponentProfilePanel row={row} /><PitchArsenalPanel row={row} /></div> : <div className="space-y-3"><BatterPitcherHistoryPanel row={row} /><PitchMixMatchupPanel row={row} /></div>}</DrawerSection></div>
@@ -947,15 +959,15 @@ export function ProjectionVsLineVisual({ projection, line, side, label = "Projec
   const low = Math.max(0, Math.min(projection, line) * 0.75);
   const high = Math.max(projection, line) * 1.25 || 1;
   const position = (value: number) => `${Math.max(3, Math.min(97, ((value - low) / (high - low)) * 100))}%`;
-  const integrity = checkProjectionSideIntegrity({ side, line, projection });
-  return <div data-visual="projection-vs-line" data-projection={projection} data-line={line} data-side={side} className="rounded-lg border border-gray-800 bg-black/20 p-3"><div className="flex items-center justify-between gap-3 text-xs"><span className="text-gray-500">{label} <strong className="ml-1 text-white">{projection}</strong></span><span className={`font-bold ${integrity.status === "coherent" ? "text-emerald-300" : "text-rose-300"}`}>{integrity.status === "coherent" ? `Supports ${sentenceCase(side)}` : "Side conflict"}</span><span className="text-gray-500">Line <strong className="ml-1 text-white">{line}</strong></span></div><div className="relative mt-5 h-2 rounded-full bg-gray-800"><span className={`absolute inset-y-0 rounded-full ${integrity.status === "coherent" ? "bg-emerald-400/35" : "bg-rose-400/35"}`} style={{ left: position(Math.min(line, projection)), right: `${100 - Number.parseFloat(position(Math.max(line, projection)))}%` }} /><span className="absolute -top-1.5 h-5 w-0.5 bg-white" style={{ left: position(line) }} /><span className={`absolute -top-1 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-gray-950 ${integrity.status === "coherent" ? "bg-emerald-400" : "bg-rose-400"}`} style={{ left: position(projection) }} /></div><div className="mt-4 flex justify-between text-[9px] text-gray-600"><span>{low.toFixed(1)}</span><span>{high.toFixed(1)}</span></div></div>;
+  const projectionDirection = projection === line ? "On the line" : `Projection favors ${projection > line ? "Over" : "Under"}`;
+  return <div data-visual="projection-vs-line" data-projection={projection} data-line={line} data-side={side} className="rounded-lg border border-gray-800 bg-black/20 p-3"><div className="flex items-center justify-between gap-3 text-xs"><span className="text-gray-500">{label} <strong className="ml-1 text-white">{projection}</strong></span><span className="font-bold text-sky-300">{projectionDirection}</span><span className="text-gray-500">Line <strong className="ml-1 text-white">{line}</strong></span></div><div className="relative mt-5 h-2 rounded-full bg-gray-800"><span className="absolute inset-y-0 rounded-full bg-sky-400/25" style={{ left: position(Math.min(line, projection)), right: `${100 - Number.parseFloat(position(Math.max(line, projection)))}%` }} /><span className="absolute -top-1.5 h-5 w-0.5 bg-white" style={{ left: position(line) }} /><span className="absolute -top-1 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-gray-950 bg-sky-400" style={{ left: position(projection) }} /></div><div className="mt-4 flex justify-between text-[9px] text-gray-600"><span>{low.toFixed(1)}</span><span>{high.toFixed(1)}</span></div></div>;
 }
 
 function ProjectionIntegrityNotice({ row }: { row: PlayerPropPreviewRow }) {
   if (isProjectionSideCoherent(row)) return null;
-  const selectedSide = row.side === "over" ? "Over" : "Under";
-  const otherSide = row.side === "over" ? "Under" : "Over";
-  return <div className="mb-3 rounded-md border border-amber-400/30 bg-amber-400/10 p-3"><p className="text-xs font-bold text-amber-100">Projection points to {otherSide}</p><p className="mt-1 text-xs leading-5 text-amber-100/75">The current projection is {row.projection} against a {row.line} line, so it does not support {selectedSide}. You can still compare prices and research context here.</p></div>;
+  const projectionSide = row.projection > row.line ? "Over" : "Under";
+  const predictionSide = rowPredictionSide(row);
+  return <div className="mb-3 rounded-md border border-gray-700 bg-white/[0.03] p-3"><p className="text-xs font-bold text-gray-200">Projection favors {projectionSide}</p><p className="mt-1 text-xs leading-5 text-gray-500">{predictionSide ? `Final prediction: ${predictionSide === "over" ? "Over" : "Under"}. ` : ""}Price and matchup context can move the final read away from the raw projection.</p></div>;
 }
 
 export function BookPriceLadder({ prices, allBooks = [] }: { prices: PlayerPropPreviewRow[]; allBooks?: string[] }) {
@@ -1122,23 +1134,25 @@ function BoardMetric({ label, value, positive = false }: { label: string; value:
 function OddsMovementTag({ row, align = "left" }: { row: PlayerPropPreviewRow; align?: "left" | "right" }) {
   const movement = row.oddsMovement;
   if (!movement?.hasMoved) return null;
+  const color = getPropGradeColor(row.playGrade);
   const label = movement.lineDelta !== 0
     ? `Open ${movement.openingLine}`
     : `Open ${signed(movement.openingOdds)}`;
-  return <span className={`mt-1 block text-[9px] font-bold text-sky-300 ${align === "right" ? "text-right" : "text-left"}`}>{label}</span>;
+  return <span className={`mt-1 block text-[9px] font-bold ${align === "right" ? "text-right" : "text-left"}`} style={{ color: color.text }}>{label}</span>;
 }
 
 function OddsMovementPanel({ row }: { row: PlayerPropPreviewRow }) {
   const movement = row.oddsMovement;
   if (!movement) return <div className="rounded-lg border border-dashed border-gray-700 bg-black/20 p-4"><p className="text-sm font-bold text-gray-300">Movement starts with the first verified price.</p><p className="mt-1 text-xs leading-5 text-gray-500">Opening and current prices will appear together once the market history is available.</p></div>;
+  const color = getPropGradeColor(row.playGrade);
   const probabilityShift = movement.impliedProbabilityDelta * 100;
   const sourceLabel = movement.openingSource === "balldontlie_opening" ? "Sportsbook opening feed" : "First OddSphere snapshot";
   return <div className="overflow-hidden rounded-lg border border-gray-800 bg-black/20">
     <div className="grid grid-cols-2 gap-px bg-gray-800">
       <div className="bg-gray-950 p-4"><p className="text-[9px] font-bold uppercase text-gray-600">Opening</p><p className="mt-1 text-lg font-black text-white">{row.side === "over" ? "Over" : "Under"} {movement.openingLine}</p><p className="mt-0.5 text-sm font-bold text-gray-300">{signed(movement.openingOdds)}</p><p className="mt-2 text-[9px] text-gray-600">{formatDateTime(movement.openingTimestamp)}</p></div>
-      <div className="bg-gray-950 p-4"><p className="text-[9px] font-bold uppercase text-gray-600">Current</p><p className="mt-1 text-lg font-black text-white">{row.side === "over" ? "Over" : "Under"} {movement.currentLine}</p><p className="mt-0.5 text-sm font-bold text-sky-300">{signed(movement.currentOdds)}</p><p className="mt-2 text-[9px] text-gray-600">{formatDateTime(movement.currentTimestamp)}</p></div>
+      <div className="p-4" style={{ background: color.background }}><p className="text-[9px] font-bold uppercase text-gray-500">Current</p><p className="mt-1 text-lg font-black text-white">{row.side === "over" ? "Over" : "Under"} {movement.currentLine}</p><p className="mt-0.5 text-sm font-bold" style={{ color: color.text }}>{signed(movement.currentOdds)}</p><p className="mt-2 text-[9px] text-gray-600">{formatDateTime(movement.currentTimestamp)}</p></div>
     </div>
-    <div className="p-4"><p className="text-xs font-semibold text-gray-200">{movement.hasMoved ? `${movement.lineDelta === 0 ? "Price changed" : `Line changed by ${signedDecimal(movement.lineDelta)}`} · implied probability ${probabilityShift >= 0 ? "+" : ""}${probabilityShift.toFixed(1)} pts` : "No change from the opening quote"}</p><p className="mt-1 text-[10px] text-gray-600">{sourceLabel} · {row.book}</p></div>
+    <div className="p-4"><p className="text-xs font-semibold" style={{ color: movement.hasMoved ? color.text : undefined }}>{movement.hasMoved ? `${movement.lineDelta === 0 ? "Price changed" : `Line changed by ${signedDecimal(movement.lineDelta)}`} · implied probability ${probabilityShift >= 0 ? "+" : ""}${probabilityShift.toFixed(1)} pts` : "No change from the opening quote"}</p><p className="mt-1 text-[10px] text-gray-600">{sourceLabel} · {row.book}</p></div>
   </div>;
 }
 
@@ -1487,7 +1501,7 @@ function propReaderSummary(row: PlayerPropPreviewRow, prices: PlayerPropPreviewR
     ? "Recent results add context; they are not a standalone prediction."
     : isProjectionSideCoherent(row)
       ? `That projection supports the ${selectedSide} side currently shown.`
-      : `That projection does not support the ${selectedSide} side currently shown.`;
+      : "The final prediction also weighs price, market, and matchup context.";
   const probability = row.finalProbability === null
     ? "A promoted model probability is not available for this market, so this remains a research view."
     : row.marketProbability === null
@@ -1505,7 +1519,7 @@ function propReaderSummary(row: PlayerPropPreviewRow, prices: PlayerPropPreviewR
 
 function cardReason(row: PlayerPropPreviewRow): string {
   if (!assessPropPrice(row.odds).signalEligible) return "This price remains visible for comparison but is not eligible for a positive signal.";
-  if (!isProjectionSideCoherent(row)) return "The projection does not support the selected side, so no positive signal is shown.";
+  if (!isProjectionSideCoherent(row)) return "The final prediction weighs projection, price, and matchup context together.";
   const feature = (row.keyFeatures[0] ? memberFeatureLabel(row.keyFeatures[0]) : "Verified inputs")
     .replace(/\bk\b/g, "K")
     .replace(/bb\/ip/gi, "BB/IP")
@@ -1552,7 +1566,7 @@ function enforcePreviewIntegrity(row: PlayerPropPreviewRow): PlayerPropPreviewRo
   const alreadyBlocked = row.playGrade === "NO_PLAY" || row.playGrade === "PENDING_DATA" || row.playGrade === "RESEARCH";
   return {
     ...row,
-    playGrade: alreadyBlocked ? row.playGrade : "PENDING_DATA",
+    playGrade: alreadyBlocked ? row.playGrade : "NO_PLAY",
     reasonCodes: [PROJECTION_SIDE_CONTRADICTION, ...row.reasonCodes.filter((code) => code !== PROJECTION_SIDE_CONTRADICTION)],
   };
 }
