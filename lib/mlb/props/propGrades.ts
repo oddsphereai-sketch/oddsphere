@@ -37,7 +37,7 @@ const GRADE_META: Record<PropGrade, { label: string; description: string; color:
     color: { text: "#9ca3af", border: "#4b5563", background: "rgba(75, 85, 99, 0.10)" },
   },
   PENDING_DATA: {
-    label: "Pending",
+    label: "Updating",
     description: "A core model input, mapping, timestamp, or valid market pair is still updating.",
     color: { text: "#fde68a", border: "#f59e0b", background: "rgba(245, 158, 11, 0.10)" },
   },

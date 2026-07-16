@@ -78,7 +78,7 @@ export type PlayerPropPreviewRow = {
   market: string;
   marketLabel: string;
   marketFamily: "pitcher" | "batter" | "milestone";
-  marketGroup: "Strikeouts" | "Outs" | "Hits/Bases" | "Power" | "Walks" | "Runs/RBI" | "Speed" | "Research";
+  marketGroup: "Pitcher Strikeouts" | "Batter Strikeouts" | "Outs" | "Hits/Bases" | "Power" | "Walks" | "Runs/RBI" | "Speed" | "Research";
   side: "over" | "under";
   line: number;
   odds: number;
@@ -197,6 +197,7 @@ const MARKET_CODES: Record<string, string> = {
 
 const QUICK_MARKETS = [
   { id: "pitcher_strikeouts", label: "Pitcher Ks" },
+  { id: "batter_strikeouts", label: "Batter Ks" },
   { id: "pitcher_outs", label: "Outs" },
   { id: "batter_hits", label: "Hits" },
   { id: "batter_total_bases", label: "Total Bases" },
@@ -207,7 +208,8 @@ const QUICK_MARKETS = [
 ] as const;
 
 const MARKET_GROUP_ORDER: PlayerPropPreviewRow["marketGroup"][] = [
-  "Strikeouts",
+  "Pitcher Strikeouts",
+  "Batter Strikeouts",
   "Outs",
   "Hits/Bases",
   "Power",
@@ -218,7 +220,8 @@ const MARKET_GROUP_ORDER: PlayerPropPreviewRow["marketGroup"][] = [
 ];
 
 const MARKET_GROUP_LABELS: Record<PlayerPropPreviewRow["marketGroup"], string> = {
-  Strikeouts: "Strikeouts",
+  "Pitcher Strikeouts": "Pitcher Ks",
+  "Batter Strikeouts": "Batter Ks",
   Outs: "Pitcher Outs",
   "Hits/Bases": "Hits & Bases",
   Power: "Home Runs",
@@ -590,14 +593,14 @@ function MarketPairTable({ pairs, selectedId, onSelect }: { pairs: MarketPair[];
   return <div className="overflow-hidden rounded-lg border border-gray-800 bg-gray-950">
     <div className="grid grid-cols-[1.2fr_1fr_0.5fr_0.55fr_1.25fr_1.25fr] gap-3 border-b border-gray-800 bg-black/40 px-3 py-2 text-[9px] font-bold uppercase text-gray-500"><span>Player</span><span>Market</span><span>Line</span><span>{projectionLabel}</span><span>Over</span><span>Under</span></div>
     <div className="divide-y divide-gray-800">{pairs.map((pair) => {
-      const lean = modelLeanSide(pair);
+      const modelSide = modelLeanSide(pair);
       return <div key={pair.key} className={`grid grid-cols-[1.2fr_1fr_0.5fr_0.55fr_1.25fr_1.25fr] items-center gap-3 px-3 py-2.5 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : "hover:bg-gray-900"}`}>
       <span className="flex min-w-0 items-center gap-2"><PlayerAvatar player={pair.primary.player} team={pair.primary.team} headshotUrl={pair.primary.headshotUrl} compact /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.player}</strong><span className="block truncate text-[10px] text-gray-600">{pair.primary.team} {pair.primary.homeAway === "home" ? "vs" : "@"} {pair.primary.opponent}</span></span></span>
       <span className="truncate text-xs font-semibold text-gray-200">{pair.primary.marketLabel}</span>
       <strong className="text-xs tabular-nums text-white">{pair.primary.line}</strong>
       <span className="text-xs font-bold tabular-nums text-gray-300">{pair.primary.projection}</span>
-      <MarketSideQuote row={pair.over} side="over" isLean={lean === "over"} onSelect={onSelect} />
-      <MarketSideQuote row={pair.under} side="under" isLean={lean === "under"} onSelect={onSelect} />
+      <MarketSideQuote row={pair.over} side="over" isModelSide={modelSide === "over"} onSelect={onSelect} />
+      <MarketSideQuote row={pair.under} side="under" isModelSide={modelSide === "under"} onSelect={onSelect} />
     </div>})}</div>
   </div>;
 }
@@ -605,29 +608,41 @@ function MarketPairTable({ pairs, selectedId, onSelect }: { pairs: MarketPair[];
 function MarketPairCards({ pairs, selectedId, onSelect }: { pairs: MarketPair[]; selectedId: string; onSelect: (id: string) => void }) {
   if (!pairs.length) return null;
   return <div className="divide-y divide-gray-800 overflow-hidden rounded-lg border border-gray-800 bg-gray-950">{pairs.map((pair) => {
-    const lean = modelLeanSide(pair);
+    const modelSide = modelLeanSide(pair);
+    const signal = pairSignalRow(pair);
+    const signalColor = signal ? getPropGradeColor(signal.playGrade) : null;
     return <article key={pair.key} className={`p-4 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : ""}`}>
-      <div className="flex min-w-0 items-start justify-between gap-3"><span className="flex min-w-0 items-center gap-3"><PlayerAvatar player={pair.primary.player} team={pair.primary.team} headshotUrl={pair.primary.headshotUrl} compact /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.player}</strong><span className="block truncate text-xs text-gray-500">{pair.primary.team} {pair.primary.homeAway === "home" ? "vs" : "@"} {pair.primary.opponent} · {pair.primary.marketLabel}</span></span></span><span className={`shrink-0 rounded border px-2 py-1 text-[9px] font-black uppercase ${lean ? "border-sky-400/35 bg-sky-400/[0.07] text-sky-300" : "border-gray-800 text-gray-500"}`}>{lean ? `Projection side: ${lean === "over" ? "Over" : "Under"}` : "Research only"}</span></div>
+      <div className="flex min-w-0 items-start justify-between gap-3"><span className="flex min-w-0 items-center gap-3"><PlayerAvatar player={pair.primary.player} team={pair.primary.team} headshotUrl={pair.primary.headshotUrl} compact /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.player}</strong><span className="block truncate text-xs text-gray-500">{pair.primary.team} {pair.primary.homeAway === "home" ? "vs" : "@"} {pair.primary.opponent} · {pair.primary.marketLabel}</span></span></span><span className={`shrink-0 rounded border px-2 py-1 text-[9px] font-black uppercase ${signal ? "" : "border-gray-800 text-gray-500"}`} style={signalColor ? { color: signalColor.text, borderColor: signalColor.border, background: signalColor.background } : undefined}>{signal ? `${getPropGradeLabel(signal.playGrade)}: ${signal.side === "over" ? "Over" : "Under"}` : modelSide ? `Model side: ${modelSide === "over" ? "Over" : "Under"}` : "Research only"}</span></div>
       <div className="mt-3 flex items-center justify-between border-y border-gray-800 py-2 text-xs"><span className="text-gray-500">Line <strong className="ml-1 text-white">{pair.primary.line}</strong></span><span className="text-gray-500">{pair.primary.projectionSource === "recent_form" ? "Recent avg" : "Projection"} <strong className="ml-1 text-white">{pair.primary.projection}</strong></span></div>
-      <div className="mt-3 grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" isLean={lean === "over"} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" isLean={lean === "under"} onSelect={onSelect} /></div>
+      <div className="mt-3 grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" isModelSide={modelSide === "over"} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" isModelSide={modelSide === "under"} onSelect={onSelect} /></div>
     </article>;
   })}</div>;
 }
 
-function MarketSideQuote({ row, side, isLean, onSelect }: { row: PlayerPropPreviewRow | null; side: "over" | "under"; isLean: boolean; onSelect: (id: string) => void }) {
+function MarketSideQuote({ row, side, isModelSide, onSelect }: { row: PlayerPropPreviewRow | null; side: "over" | "under"; isModelSide: boolean; onSelect: (id: string) => void }) {
   if (!row) return <span className="flex min-h-[72px] items-center justify-center rounded-md border border-dashed border-gray-800 bg-black/10 px-2 text-center text-[10px] font-semibold text-gray-600">{side === "over" ? "Over" : "Under"}<br />Not offered</span>;
-  return <button type="button" onClick={() => onSelect(row.id)} className={`min-w-0 rounded-md border px-2.5 py-2 text-left ${isLean ? "border-sky-400/40 bg-sky-400/[0.06]" : "border-gray-800 bg-black/20 hover:border-sky-500/50 hover:bg-sky-500/[0.05]"}`}><span className="flex items-center justify-between gap-2"><strong className="text-xs text-white">{side === "over" ? "O" : "U"} {row.line} · {signed(row.odds)}</strong><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-0.5 flex items-center justify-between gap-2"><span className="truncate text-[9px] text-gray-600">{row.book}</span>{isLean ? <span className="shrink-0 text-[9px] font-black uppercase text-sky-300">Projection side</span> : null}</span><OddsMovementTag row={row} /></button>;
+  const signal = isPositiveSignal(row);
+  const color = signal ? getPropGradeColor(row.playGrade) : null;
+  return <button type="button" onClick={() => onSelect(row.id)} className={`min-w-0 rounded-md border px-2.5 py-2 text-left ${signal ? "" : "border-gray-800 bg-black/20 hover:border-gray-700 hover:bg-gray-900"}`} style={color ? { borderColor: color.border, background: color.background } : undefined}><span className="flex items-center justify-between gap-2"><strong className="text-xs text-white">{side === "over" ? "O" : "U"} {row.line} · {signed(row.odds)}</strong><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-0.5 flex items-center justify-between gap-2"><span className="truncate text-[9px] text-gray-600">{row.book}</span>{signal ? <span className="shrink-0 text-[9px] font-black uppercase" style={color ? { color: color.text } : undefined}>{getPropGradeLabel(row.playGrade)}</span> : isModelSide ? <span className="shrink-0 text-[9px] font-black uppercase text-gray-500">Model side</span> : null}</span><OddsMovementTag row={row} /></button>;
 }
 
 function modelLeanSide(pair: MarketPair): "over" | "under" | null {
-  const actionable = pair.rows
-    .filter((row) => row.playGrade === "BEST_ANGLE" || row.playGrade === "LEAN")
-    .sort((a, b) => (b.modelEdge ?? 0) - (a.modelEdge ?? 0))[0];
-  if (actionable) return actionable.side;
+  const signal = pairSignalRow(pair);
+  if (signal) return signal.side;
   const modeled = pair.rows
     .filter((row) => row.finalProbability !== null && row.modelEdge !== null)
     .sort((a, b) => (b.modelEdge ?? Number.NEGATIVE_INFINITY) - (a.modelEdge ?? Number.NEGATIVE_INFINITY))[0];
   return modeled?.side ?? null;
+}
+
+function pairSignalRow(pair: MarketPair): PlayerPropPreviewRow | null {
+  return pair.rows
+    .filter(isPositiveSignal)
+    .sort((a, b) => (b.modelEdge ?? 0) - (a.modelEdge ?? 0))[0] ?? null;
+}
+
+function isPositiveSignal(row: PlayerPropPreviewRow): boolean {
+  return row.playGrade === "BEST_ANGLE" || row.playGrade === "LEAN";
 }
 
 export function PropsTable({ rows, selectedId, onSelect }: { rows: PlayerPropPreviewRow[]; selectedId: string; onSelect: (id: string) => void }) {
@@ -667,12 +682,14 @@ function PlayerView({ rows, player, selectedId, onSelect, onClear }: { rows: Pla
     <button type="button" onClick={onClear} className="mb-3 inline-flex h-8 items-center gap-2 text-xs font-bold text-gray-500 hover:text-white"><span aria-hidden="true">←</span> Clear player search</button>
     <header className="rounded-lg border border-gray-800 bg-[#0b0e14] p-5"><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div className="flex items-center gap-4"><PlayerAvatar player={player} team={primary.team} headshotUrl={primary.headshotUrl} large /><div><p className="text-[11px] font-bold uppercase text-violet-300">Player workspace</p><h2 className="mt-1 text-2xl font-black text-white">{player}</h2><p className="mt-1 text-sm text-gray-400">{primary.team} {primary.homeAway === "home" ? "vs" : "@"} {primary.opponent} · {formatTime(primary.gameStartTime)}</p></div></div><div className="grid grid-cols-3 border-t border-gray-800 pt-4 lg:min-w-[360px] lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0"><PlayerSummaryMetric label="Markets" value={String(marketPairs.length)} /><PlayerSummaryMetric label="Top model gap" value={pct(topModelGap, true)} /><PlayerSummaryMetric label="Books" value={String(playerBooks)} /></div></div></header>
     <div className="mt-3 divide-y divide-gray-800 overflow-hidden rounded-lg border border-gray-800 bg-gray-950">{marketPairs.map((pair) => {
-      const lean = modelLeanSide(pair);
-      const leanRow = pair.rows.find((row) => row.side === lean) ?? pair.primary;
+      const modelSide = modelLeanSide(pair);
+      const signal = pairSignalRow(pair);
+      const signalColor = signal ? getPropGradeColor(signal.playGrade) : null;
+      const leanRow = pair.rows.find((row) => row.side === modelSide) ?? pair.primary;
       return <article key={pair.key} className={`grid gap-3 p-4 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : "hover:bg-gray-900"} lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1.1fr)_minmax(320px,1.25fr)] lg:items-center`}>
         <div className="flex min-w-0 items-center gap-2"><MarketChip row={pair.primary} /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.marketLabel}</strong><span className="block truncate text-xs text-gray-500">Line {pair.primary.line} · {pair.primary.projectionSource === "recent_form" ? "Recent avg" : "Projection"} {pair.primary.projection}</span></span></div>
-        <div className="min-w-0"><span className={`inline-flex rounded border px-2 py-1 text-[9px] font-black uppercase ${lean ? "border-sky-400/35 bg-sky-400/[0.07] text-sky-300" : "border-gray-800 text-gray-500"}`}>{lean ? `Projection side: ${lean === "over" ? "Over" : "Under"}` : "Research only"}</span><span className="mt-1.5 block truncate text-xs text-gray-400">{cardReason(leanRow)}</span></div>
-        <div className="grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" isLean={lean === "over"} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" isLean={lean === "under"} onSelect={onSelect} /></div>
+        <div className="min-w-0"><span className={`inline-flex rounded border px-2 py-1 text-[9px] font-black uppercase ${signal ? "" : "border-gray-800 text-gray-500"}`} style={signalColor ? { color: signalColor.text, borderColor: signalColor.border, background: signalColor.background } : undefined}>{signal ? `${getPropGradeLabel(signal.playGrade)}: ${signal.side === "over" ? "Over" : "Under"}` : modelSide ? `Model side: ${modelSide === "over" ? "Over" : "Under"}` : "Research only"}</span><span className="mt-1.5 block truncate text-xs text-gray-400">{cardReason(leanRow)}</span></div>
+        <div className="grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" isModelSide={modelSide === "over"} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" isModelSide={modelSide === "under"} onSelect={onSelect} /></div>
       </article>;
     })}</div>
   </div>;
@@ -1142,7 +1159,9 @@ function dedupeBestPrices(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] 
 }
 
 function buildRadarItems(rows: PlayerPropPreviewRow[]): RadarItem[] {
-  const uniqueRows = dedupeBestPrices(rows).filter((row) => assessPropPrice(row.odds).signalEligible);
+  const uniqueRows = dedupeBestPrices(rows).filter(isRadarEligible);
+  const signalRows = uniqueRows.filter(isPositiveSignal);
+  const primaryRows = signalRows.length ? signalRows : uniqueRows.filter((row) => row.playGrade === "WATCHLIST");
   const items: RadarItem[] = [];
   const used = new Set<string>();
   const keyFor = (row: PlayerPropPreviewRow) => `${row.player}|${row.market}|${row.side}|${row.line}`;
@@ -1152,7 +1171,7 @@ function buildRadarItems(rows: PlayerPropPreviewRow[]): RadarItem[] {
     items.push({ row, label, note });
   };
 
-  const projectionGap = [...uniqueRows]
+  const projectionGap = [...primaryRows]
     .filter((row) => row.projectionSource !== "recent_form" && isProjectionSideCoherent(row))
     .sort((a, b) => Math.abs(b.projection - b.line) - Math.abs(a.projection - a.line))[0];
   if (projectionGap) {
@@ -1161,7 +1180,8 @@ function buildRadarItems(rows: PlayerPropPreviewRow[]): RadarItem[] {
   }
 
   const priceGroups = new Map<string, PlayerPropPreviewRow[]>();
-  for (const row of rows.filter((candidate) => assessPropPrice(candidate.odds).signalEligible)) {
+  for (const row of rows.filter(isRadarEligible)) {
+    if (signalRows.length && !signalRows.some((signal) => keyFor(signal) === keyFor(row))) continue;
     const key = keyFor(row);
     priceGroups.set(key, [...(priceGroups.get(key) ?? []), row]);
   }
@@ -1175,17 +1195,27 @@ function buildRadarItems(rows: PlayerPropPreviewRow[]): RadarItem[] {
     add(best, "Book spread", `Available prices range from ${signed(lowestOdds)} to ${signed(highestOdds)} across ${widestPriceGroup.length} sportsbooks.`);
   }
 
-  const contextWatch = uniqueRows.find((row) => row.playGrade === "WATCHLIST" || row.playGrade === "PENDING_DATA");
+  const contextWatch = items.length < 2 && signalRows.length < 3 ? uniqueRows.find((row) => row.playGrade === "WATCHLIST") : null;
   if (contextWatch) {
     const missing = contextWatch.missingFeatures[0] ? memberFeatureLabel(contextWatch.missingFeatures[0]) : "additional pregame context";
     add(contextWatch, "Context watch", `The current read is waiting on ${missing.toLowerCase()}.`);
   }
 
-  for (const row of [...uniqueRows].sort((a, b) => Math.abs(b.modelEdge ?? 0) - Math.abs(a.modelEdge ?? 0))) {
+  const modelRows = signalRows.length ? signalRows : uniqueRows.filter((row) => row.playGrade === "WATCHLIST");
+  for (const row of [...modelRows].sort((a, b) => Math.abs(b.modelEdge ?? 0) - Math.abs(a.modelEdge ?? 0))) {
     if (items.length >= 3) break;
     add(row, "Model signal", `${getPropGradeLabel(row.playGrade)} · ${sentenceCase(row.confidenceBucket)} research coverage at the current price.`);
   }
   return items.slice(0, 3);
+}
+
+function isRadarEligible(row: PlayerPropPreviewRow): boolean {
+  const price = assessPropPrice(row.odds);
+  return price.signalEligible
+    && row.odds >= -250
+    && row.playGrade !== "NO_PLAY"
+    && row.playGrade !== "PENDING_DATA"
+    && row.playGrade !== "RESEARCH";
 }
 
 function playerDirectorySummaries(rows: PlayerPropPreviewRow[]): Array<{ player: string; team: string; headshotUrl?: string | null; markets: number; books: number }> {
