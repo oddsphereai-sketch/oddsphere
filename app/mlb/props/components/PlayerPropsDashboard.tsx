@@ -544,7 +544,9 @@ function TodayRadar({ rows, onSelect }: { rows: PlayerPropPreviewRow[]; onSelect
 function RadarCard({ item, onSelect }: { item: RadarItem; onSelect: (id: string) => void }) {
   const { row } = item;
   const teamColor = teamPrimaryColor(row.team, "mlb");
-  return <article className="relative overflow-hidden rounded-lg border border-gray-800 bg-[#0e1218]" style={{ borderTopColor: teamColor, borderTopWidth: 2 }}>
+  const gradeColor = getPropGradeColor(row.playGrade);
+  return <article className="relative overflow-hidden rounded-lg border bg-[#0e1218]" style={{ borderColor: gradeColor.border, boxShadow: `0 0 0 1px ${gradeColor.border}22 inset`, background: `linear-gradient(180deg, ${gradeColor.background}, rgba(14, 18, 24, 0.98) 42%)` }}>
+    <div className="absolute inset-x-0 top-0 h-0.5" style={{ backgroundColor: teamColor }} />
     <div className="absolute -right-8 top-12 opacity-[0.045]"><ProductTeamBadge abbreviation={row.team} size={150} /></div>
     <div className="relative p-4"><div className="flex items-start justify-between gap-3"><span className="text-[10px] font-black uppercase text-violet-300">{item.label}</span><PropGradeBadge grade={row.playGrade} compact /></div>
       <div className="mt-4 flex min-w-0 items-center gap-3"><PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} /><div className="min-w-0"><h3 className="truncate text-base font-black text-white">{row.player}</h3><p className="truncate text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {row.marketLabel}</p></div></div>
@@ -1545,6 +1547,7 @@ function memberReason(value: string): string {
     LINEUP_CONTEXT_INSUFFICIENT: "Projected lineup context",
     LOW_DATA_CONFIDENCE: "Limited supporting data",
     STOLEN_BASE_CONTEXT_INSUFFICIENT: "More stolen-base context needed",
+    LONGSHOT_VALUE_CONTEXT: "Longshot value context",
     STALE_BDL_ODDS: "Price refresh in progress",
     FIRST_HR_FIELD_MODEL_NOT_PROMOTED: "Research market only",
     MILESTONE_MODEL_NOT_PROMOTED: "Research market only",
@@ -1608,12 +1611,16 @@ function propReaderSummary(row: PlayerPropPreviewRow, prices: PlayerPropPreviewR
   const pricePolicy = assessPropPrice(bestPrice.odds).signalEligible
     ? ""
     : " The quote remains visible for comparison but is not eligible for a positive signal.";
+  const longshotContext = row.reasonCodes.includes("LONGSHOT_VALUE_CONTEXT")
+    ? " This is a rare-event market, so the read is about price versus estimated chance, not the event being more likely than not."
+    : "";
   const estimateLabel = row.projectionSource === "recent_form" ? "recent-game average" : "projection";
-  return `${row.player}'s ${row.projection} ${estimateLabel} sits ${Math.abs(delta).toFixed(1)} ${direction} the ${row.line} line. ${integrity} ${probability} ${price}${pricePolicy}`;
+  return `${row.player}'s ${row.projection} ${estimateLabel} sits ${Math.abs(delta).toFixed(1)} ${direction} the ${row.line} line. ${integrity} ${probability} ${price}${pricePolicy}${longshotContext}`;
 }
 
 function cardReason(row: PlayerPropPreviewRow): string {
   if (!assessPropPrice(row.odds).signalEligible) return "This price remains visible for comparison but is not eligible for a positive signal.";
+  if (row.reasonCodes.includes("LONGSHOT_VALUE_CONTEXT")) return "Longshot watch: the model price is better than the market, but this remains a rare-event prop.";
   if (!isProjectionSideCoherent(row)) return "The final prediction weighs projection, price, and matchup context together.";
   const feature = (row.keyFeatures[0] ? memberFeatureLabel(row.keyFeatures[0]) : "Verified inputs")
     .replace(/\bk\b/g, "K")

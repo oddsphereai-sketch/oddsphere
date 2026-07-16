@@ -868,6 +868,10 @@ const HITTER_WATCHLIST_ONLY_MARKETS = new Set([
   "batter_stolen_bases",
 ]);
 
+const HITTER_LONGSHOT_VALUE_MARKETS = new Set([
+  "batter_home_runs",
+]);
+
 const DEFAULT_HITTER_LEAN_MIN_AMERICAN_ODDS = -250;
 const DEFAULT_HITTER_LEANS_PER_PLAYER = 2;
 const DEFAULT_HITTER_LEANS_PER_GAME = 12;
@@ -1073,10 +1077,13 @@ function buildIntegratedHitterSignal(args: {
     reasons.push("MARKET_MOVEMENT_CONTEXT");
   }
   const underModelProbability = round(1 - overModelProbability, 4);
-  const side = overModelProbability >= underModelProbability ? "over" : "under";
+  const longshotValueRead = HITTER_LONGSHOT_VALUE_MARKETS.has(market) && args.mapped.odds.side === "over";
+  const side = longshotValueRead ? "over" : overModelProbability >= underModelProbability ? "over" : "under";
   const modelProbability = side === "over" ? overModelProbability : underModelProbability;
+  const priceAssessment = assessPropPrice(args.currentOdds);
+  const priceProbability = priceAssessment.impliedProbability;
   const marketSideProbability = args.marketProbability === null
-    ? null
+    ? longshotValueRead ? priceProbability : null
     : args.mapped.odds.side === side ? args.marketProbability : 1 - args.marketProbability;
   const shrinkageWeight = confidence >= 0.78 ? 0.62 : confidence >= 0.68 ? 0.52 : 0.42;
   const finalProbability = marketSideProbability === null
@@ -1094,8 +1101,15 @@ function buildIntegratedHitterSignal(args: {
     && modelProbability >= 0.56
     && (edge ?? 0) >= 0.02
     && (ev ?? 0) >= 0.01;
-  const canWatch = modelProbability >= 0.54 || (edge ?? 0) >= 0.01 || Math.abs(projection - args.mapped.odds.line) >= lineGapThreshold(market);
+  const longshotValueWatch = longshotValueRead
+    && priceAssessment.signalEligible
+    && confidence >= 0.62
+    && (edge ?? 0) >= 0.012
+    && (ev ?? 0) >= 0.02;
+  const standardWatch = modelProbability >= 0.54 || (edge ?? 0) >= 0.01 || Math.abs(projection - args.mapped.odds.line) >= lineGapThreshold(market);
+  const canWatch = longshotValueRead ? longshotValueWatch : standardWatch;
   if (!canLean && !canWatch) return null;
+  if (longshotValueWatch) reasons.push("LONGSHOT_VALUE_CONTEXT");
   if (watchlistOnly) reasons.push("RARE_OR_CONTEXT_HEAVY_MARKET_CAPPED");
   return {
     side,

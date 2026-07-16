@@ -144,8 +144,8 @@ const MLB_PROP_MARKET_BASE_CATALOG: Record<MlbPropMarketKey, MlbPropMarketBaseDe
     modelFamily: "batter_home_runs_rare_event",
     twoWayEligible: false,
     milestone: true,
-    recommendationEligibility: "research_only",
-    defaultDisplayStatus: "research_only",
+    recommendationEligibility: "watchlist_until_context",
+    defaultDisplayStatus: "watchlist",
     missingFeatureReasons: ["power_context_unavailable", "opposing_pitcher_hr_profile_unavailable"],
   },
   batter_rbis: {
