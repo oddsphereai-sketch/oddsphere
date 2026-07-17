@@ -23,7 +23,7 @@
  * hero from app/lab/page.tsx is gone — module pages own their own H1.
  */
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import RefreshIndicator from "./RefreshIndicator";
 import { useSportSelection } from "../hooks/useSportSelection";
@@ -120,6 +120,7 @@ export default function LabAppNav() {
                     <span className="sm:hidden">
                       {abbreviateLabel(t.label)}
                     </span>
+                    <NavigationPendingIndicator />
                     {active && (
                       <span
                         aria-hidden="true"
@@ -158,6 +159,18 @@ export default function LabAppNav() {
         </div>
       </div>
     </header>
+  );
+}
+
+function NavigationPendingIndicator() {
+  const { pending } = useLinkStatus();
+  return (
+    <span
+      aria-hidden="true"
+      className={`h-2 w-2 shrink-0 rounded-full border border-current border-r-transparent transition-opacity ${
+        pending ? "animate-spin opacity-80" : "opacity-0"
+      }`}
+    />
   );
 }
 

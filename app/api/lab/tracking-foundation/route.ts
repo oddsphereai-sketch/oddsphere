@@ -22,6 +22,7 @@
 import { supabase } from "@/lib/db/supabase";
 import { computeTrackingAggregate } from "@/lib/services/trackingAggregateService";
 import type { TrackedSport } from "@/lib/types/domain/Tracking";
+import { unstable_cache } from "next/cache";
 
 export const maxDuration = 60;
 
@@ -40,6 +41,18 @@ type TrackingResponseCacheEntry = {
 };
 
 const trackingResponseCache = new Map<string, TrackingResponseCacheEntry>();
+
+const loadSharedTrackingAggregate = unstable_cache(
+  async (sportKey: TrackedSport | "all", today: string) => computeTrackingAggregate({
+    supabase,
+    sport: sportKey === "all" ? undefined : sportKey,
+    from: MEMBER_TRACKING_FROM,
+    to: today,
+    includeLaunchDay: false,
+  }),
+  ["member-tracking-aggregate-v1"],
+  { revalidate: TRACKING_RESPONSE_CACHE_TTL_MS / 1000, tags: ["member-tracking-aggregate"] },
+);
 
 function todayEt(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -113,13 +126,7 @@ export async function GET(request: Request) {
   let result;
   try {
     result = await withTimeout(
-      computeTrackingAggregate({
-        supabase,
-        sport,
-        from: MEMBER_TRACKING_FROM,
-        to: today,
-        includeLaunchDay: false,
-      }),
+      loadSharedTrackingAggregate(sport ?? "all", today),
       TRACKING_AGGREGATE_TIMEOUT_MS,
       "tracking aggregate",
     );
