@@ -42,6 +42,7 @@ import {
   resolveMlbMarketAwareSideCorrection,
 } from "@/lib/services/predictionRecordService";
 import { reconcileDisplayProjection } from "@/lib/services/displayProjectionReconciliation";
+import { isDisplayableAmericanOdds } from "@/lib/streaming/oddsSanity";
 import {
   deriveVerdict,
   VERDICT_LABEL,
@@ -2130,6 +2131,8 @@ function buildGameDto(
     sportSpecific: pred.sport_specific,
     lockedPlayGrade: lockedMl?.playGrade ?? null,
     lockedNoBet: lockedMl?.noBet ?? null,
+    lockedModelProbability: lockedMl?.modelProbability ?? null,
+    lockedMarketProbability: lockedMl?.marketProbability ?? null,
     hasPredictionRecord: lockedMl !== undefined,
     lockedBestAngle: lockedMl?.bestAngle ?? null,
     isLockedRow: isMlActuallyLocked,
@@ -2183,6 +2186,8 @@ function buildGameDto(
     },
     lockedPlayGrade: lockedOu?.playGrade ?? null,
     lockedNoBet: lockedOu?.noBet ?? null,
+    lockedModelProbability: lockedOu?.modelProbability ?? null,
+    lockedMarketProbability: lockedOu?.marketProbability ?? null,
     hasPredictionRecord: lockedOu !== undefined,
     lockedBestAngle: lockedOu?.bestAngle ?? null,
     isLockedRow: isOuActuallyLocked,
@@ -2234,6 +2239,8 @@ function buildGameDto(
     // which reads sport_specific.fi_v2_audit.fi_play_grade).
     lockedPlayGrade: lockedFi?.playGrade ?? null,
     lockedNoBet: lockedFi?.noBet ?? null,
+    lockedModelProbability: lockedFi?.modelProbability ?? null,
+    lockedMarketProbability: lockedFi?.marketProbability ?? null,
     hasPredictionRecord: lockedFi !== undefined,
     lockedBestAngle: lockedFi?.bestAngle ?? null,
     isLockedRow: isFiActuallyLocked,
@@ -2806,7 +2813,7 @@ function buildPersistedOddsTrail(args: {
   const stops: OddsTrailStop[] = [];
 
   const pushStop = (stop: Omit<OddsTrailStop, "label">) => {
-    if (!Number.isFinite(stop.american)) return;
+    if (!isDisplayableAmericanOdds(stop.american)) return;
     const prev = stops[stops.length - 1];
     if (
       prev !== undefined &&
@@ -3315,6 +3322,9 @@ type BuildMarketEdgeInput = {
    */
   lockedPlayGrade?: string | null;
   lockedNoBet?: boolean | null;
+  /** Official prediction-record probabilities for the displayed pick. */
+  lockedModelProbability?: number | null;
+  lockedMarketProbability?: number | null;
   /**
    * True when prediction_records has a row for this market even if the game is
    * not locked yet. Public tracking is sourced from prediction_records, so the
@@ -3779,12 +3789,15 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // oldest→newest, so [0] is the earliest available opener. A genuine
   // opener that merely lives at a different book is better than no line
   // move at all.
+  const displayableOpenCandidates = input.lineOpenCandidates.filter((candidate) =>
+    isDisplayableAmericanOdds(candidate.odds_american),
+  );
   const lineOpen: LineHistoryRow | null =
     priceRow !== null
-      ? (input.lineOpenCandidates.find(
+      ? (displayableOpenCandidates.find(
           (c) => c.sportsbook === priceRow.sportsbook,
         ) ??
-        input.lineOpenCandidates[0] ??
+        displayableOpenCandidates[0] ??
         null)
       : null;
   const liveOpenAmerican: number | null = lineOpen?.odds_american ?? null;
@@ -3798,7 +3811,9 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // null, so unlocked rows still take the live live-history value.
   const openAmerican: number | null =
     liveOpenAmerican ??
-    (input.isLockedRow === true ? input.lockedOpenOddsAmerican ?? null : null);
+    (input.isLockedRow === true && isDisplayableAmericanOdds(input.lockedOpenOddsAmerican ?? null)
+      ? input.lockedOpenOddsAmerican ?? null
+      : null);
   const totalDisplayLine =
     input.market === "total"
       ? input.totalsExtras?.sportsbookLine ?? priceRow?.line_value ?? null
@@ -3822,7 +3837,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
       ? isObservationStale(lineOpenObservedAt)
       : false;
   const oddsTrail = buildPersistedOddsTrail({
-    candidates: input.lineOpenCandidates,
+    candidates: displayableOpenCandidates,
     priceRow,
     currentAmerican: priceAmerican,
     currentLine: priceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null,
@@ -4211,6 +4226,21 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           ? 0
           : +(modelTrustPctOverride - marketImpliedPctOverride).toFixed(1);
       }
+    }
+  }
+  // prediction_records is the official member/tracking contract. When the
+  // writer has already produced a row, display its picked-side probabilities
+  // rather than the pre-correction v2.2 audit perspective.
+  if (hasStoredPredictionRecord && input.pick !== "Toss-Up") {
+    if (typeof input.lockedModelProbability === "number") {
+      modelProbOverride = input.lockedModelProbability;
+      modelTrustPctOverride = +(input.lockedModelProbability * 100).toFixed(1);
+    }
+    if (typeof input.lockedMarketProbability === "number") {
+      marketImpliedPctOverride = +(input.lockedMarketProbability * 100).toFixed(1);
+    }
+    if (modelTrustPctOverride !== null && marketImpliedPctOverride !== null) {
+      modelMarketGapPct = +(modelTrustPctOverride - marketImpliedPctOverride).toFixed(1);
     }
   }
   // 2026-06-22 — Corrected/flipped market makes no calibrated edge claim (the
