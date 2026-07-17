@@ -25,6 +25,21 @@ export type IngestWnbaScoresResult = {
   errors: string[];
 };
 
+/**
+ * BDL can temporarily label a postponed WNBA game as final with a synthetic
+ * 0-0 score. A real completed WNBA game cannot finish 0-0, so never promote
+ * that provider placeholder into grading truth.
+ */
+export function isValidWnbaFinalScore(homeScore: unknown, awayScore: unknown): boolean {
+  return (
+    typeof homeScore === "number" &&
+    Number.isFinite(homeScore) &&
+    typeof awayScore === "number" &&
+    Number.isFinite(awayScore) &&
+    homeScore + awayScore > 0
+  );
+}
+
 export async function ingestWnbaFinalScores(opts: {
   supabase: SupabaseClient;
   apply: boolean;
@@ -67,6 +82,11 @@ export async function ingestWnbaFinalScores(opts: {
     const as = typeof g.away_score === "number" ? g.away_score : null;
     if (!db) { result.unmatched++; result.perGame.push({ external_id: g.id as number, home_score: hs, away_score: as, action: "unmatched (not seeded — skip)" }); continue; }
     result.matched++;
+    if (!isValidWnbaFinalScore(hs, as)) {
+      result.perGame.push({ external_id: g.id as number, home_score: hs, away_score: as, action: "invalid final score — skipped" });
+      logger(`wnba scores: game ${g.id} rejected invalid final score ${as}-${hs}`);
+      continue;
+    }
     if (db.status === "final" && db.home_score === hs && db.away_score === as) {
       result.alreadyFinal++;
       result.perGame.push({ external_id: g.id as number, home_score: hs, away_score: as, action: "already final" });
