@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { createClient } from "@supabase/supabase-js";
-import { unstable_cache } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 import type { PlayerPropPreviewRow, PlayerPropsDashboardData } from "@/app/mlb/props/components/PlayerPropsDashboard";
 import type { RealPitcherSeasonStat } from "./realScoring";
 import type { PropOddsSnapshot } from "./providers";
@@ -340,8 +340,17 @@ export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapsh
     .select("id")
     .single();
   if (error) throw error;
+  revalidateMlbPropsBoardCache();
   await pruneOldMlbPropsBoardSnapshots(snapshot.slateDate, snapshot.snapshotId).catch(() => undefined);
   return String(data.id);
+}
+
+function revalidateMlbPropsBoardCache(): void {
+  try {
+    revalidateTag("mlb-props-member-board", { expire: 0 });
+  } catch {
+    // Cache invalidation is best-effort outside Next route handlers.
+  }
 }
 
 async function pruneOldMlbPropsBoardSnapshots(slateDate: string, currentSnapshotId: string): Promise<void> {
