@@ -138,6 +138,26 @@ export function preserveTrackingDisplayGradeOverride(
   };
 }
 
+export function shouldPreserveLastCompleteMarketRecord(args: {
+  sport: TrackedSport;
+  proposed: PredictionRecordRow;
+  existing: {
+    odds_american: number | null;
+    play_grade: string | null;
+    no_bet: boolean | null;
+  } | null | undefined;
+}): boolean {
+  if (args.sport !== "mlb") return false;
+  if (args.proposed.market !== "moneyline" && args.proposed.market !== "total") return false;
+  if (args.proposed.odds_american !== null) return false;
+  const existing = args.existing;
+  return existing !== null &&
+    existing !== undefined &&
+    existing.odds_american !== null &&
+    existing.no_bet === false &&
+    existing.play_grade !== null;
+}
+
 type GameRow = {
   id: number;
   external_id: number;
@@ -3508,12 +3528,17 @@ export async function createPredictionRecords(
   // first, then skip the upsert for any locked match.
   const { data: existingLocks } = await supabase
     .from("prediction_records")
-    .select("id, game_id, market, model_version, slate_date, locked_at, snapshot_json")
+    .select("id, game_id, market, model_version, slate_date, locked_at, odds_american, play_grade, no_bet, snapshot_json")
     .in("game_id", proposed.map((r) => r.game_id))
     .eq("slate_date", slateDate);
   const lockedKeys = new Set<string>();
   const existingKeys = new Set<string>();
   const existingSnapshotByKey = new Map<string, Record<string, unknown> | null>();
+  const existingMarketRecordByKey = new Map<string, {
+    odds_american: number | null;
+    play_grade: string | null;
+    no_bet: boolean | null;
+  }>();
   const proposedKeys = new Set(
     proposed.map((r) =>
       `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`,
@@ -3526,11 +3551,19 @@ export async function createPredictionRecords(
     model_version: string | null;
     slate_date: string;
     locked_at: string | null;
+    odds_american: number | null;
+    play_grade: string | null;
+    no_bet: boolean | null;
     snapshot_json: Record<string, unknown> | null;
   }>) {
     const key = `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`;
     existingKeys.add(key);
     existingSnapshotByKey.set(key, r.snapshot_json);
+    existingMarketRecordByKey.set(key, {
+      odds_american: r.odds_american,
+      play_grade: r.play_grade,
+      no_bet: r.no_bet,
+    });
     if (r.locked_at !== null) {
       lockedKeys.add(key);
     }
@@ -3592,6 +3625,14 @@ export async function createPredictionRecords(
       ),
     );
     const key = `${rec.game_id}::${rec.market}::${rec.model_version ?? ""}::${rec.slate_date}`;
+    if (shouldPreserveLastCompleteMarketRecord({
+      sport,
+      proposed: rec,
+      existing: existingMarketRecordByKey.get(key),
+    })) {
+      result.skippedExisting++;
+      continue;
+    }
     if (lockedKeys.has(key) || (preserveExistingUnlocked && existingKeys.has(key))) {
       result.skippedExisting++;
       continue;

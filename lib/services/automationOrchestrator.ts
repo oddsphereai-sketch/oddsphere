@@ -47,6 +47,7 @@ import {
 } from "./slateReconciliation";
 import {
   assessAutomationGate,
+  shouldFailClosedForStaleLines,
   type AutomationGateReport,
 } from "./automationGate";
 import { slateService } from "./slateService";
@@ -1041,6 +1042,33 @@ export async function runSlateCycleAutomated(opts: {
     g1Report = await assessAutomationGate(opts.sport, opts.date, {
       providerAlignment: alignmentForGate,
     });
+    if (
+      shouldFailClosedForStaleLines(
+        g1Report.aggregate.stale_line_games,
+        g1Report.aggregate.total_games,
+      ) &&
+      effectiveWriteMode.lines
+    ) {
+      const retryStartedAt = Date.now();
+      const retry = await linesService.refreshGameLinesV2(opts.sport, opts.date, {
+        dryRun: false,
+      });
+      steps.push({
+        name: "s7_lines_v2_refresh",
+        mode: "wrote",
+        duration_ms: Date.now() - retryStartedAt,
+        reason: `automatic stale-price retry wrote ${retry.records_updated} line row(s); api_calls=${retry.api_calls_made}`,
+        details: {
+          automatic_retry: true,
+          stale_games_before_retry: g1Report.aggregate.stale_line_games,
+          records_updated: retry.records_updated,
+          api_calls: retry.api_calls_made,
+        },
+      });
+      g1Report = await assessAutomationGate(opts.sport, opts.date, {
+        providerAlignment: alignmentForGate,
+      });
+    }
     steps.push({
       name: "g1_automation_gate",
       mode: g1Report.overall === "fail_closed" ? "blocked" : "dry_run",
