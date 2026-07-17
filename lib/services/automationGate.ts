@@ -93,6 +93,11 @@ export type AutomationGateOpts = {
   providerAlignment: ProviderDateAlignmentReport | null;
 };
 
+export function shouldFailClosedForStaleLines(staleGames: number, totalGames: number): boolean {
+  if (totalGames <= 0 || staleGames <= 0) return false;
+  return staleGames / totalGames >= 0.5;
+}
+
 export async function assessAutomationGate(
   sport: Sport,
   date: string,
@@ -323,6 +328,12 @@ export async function assessAutomationGate(
   }
   if (staleLineGames > 0) {
     reasons.push(`${staleLineGames} game(s) have stale lines (> ${staleMinutes} min)`);
+    if (shouldFailClosedForStaleLines(staleLineGames, gameIds.length)) {
+      overall = "fail_closed";
+      reasons.push("at least half of the slate has stale prices; model and member-record writes blocked");
+    } else if (overall === "ok") {
+      overall = "degraded";
+    }
   }
   if (reasons.length === 0) reasons.push("all checks passed");
 
