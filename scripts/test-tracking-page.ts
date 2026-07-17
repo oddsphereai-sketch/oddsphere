@@ -28,6 +28,8 @@ const API = readFileSync("app/api/lab/tracking-foundation/route.ts", "utf8");
 const TRACK_RECORD = readFileSync("app/lab/track-record/page.tsx", "utf8");
 const LAB_NAV = readFileSync("app/lab/components/LabAppNav.tsx", "utf8");
 const SERVICE = readFileSync("lib/services/trackingAggregateService.ts", "utf8");
+const TRACKING_LOADING = readFileSync("app/lab/tracking/loading.tsx", "utf8");
+const PROPS_LOADING = readFileSync("app/mlb/props/loading.tsx", "utf8");
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean, msg?: string) {
@@ -373,6 +375,21 @@ check(
 check(
   "Page allows browser caching for tracking snapshot",
   !/fetch\("\/api\/lab\/tracking-foundation"[\s\S]{0,160}cache:\s*"no-store"/.test(PAGE),
+);
+check(
+  "API shares the five-minute aggregate cache across server instances",
+  API.includes("unstable_cache") &&
+    API.includes('"member-tracking-aggregate-v1"') &&
+    API.includes("TRACKING_RESPONSE_CACHE_TTL_MS / 1000"),
+);
+check(
+  "Slow member routes provide immediate loading states",
+  TRACKING_LOADING.includes("Loading verified tracking results") &&
+    PROPS_LOADING.includes("Loading the latest player props"),
+);
+check(
+  "Lab navigation shows pending feedback without changing destinations",
+  LAB_NAV.includes("useLinkStatus") && LAB_NAV.includes("NavigationPendingIndicator"),
 );
 
 // ── 6B.21 — Recently Settled feed ─────────────────────────────────
