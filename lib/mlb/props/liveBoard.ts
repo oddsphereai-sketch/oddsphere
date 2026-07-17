@@ -738,6 +738,7 @@ function buildDashboardRows(args: {
     if (!price.displayEligible) continue;
     const memberReady = Boolean(research?.memberReady);
     const hitterSignal = buildIntegratedHitterSignal({ mapped, definition, research, lineupStatus, marketProbability, currentOdds: mapped.odds.americanOdds, projection });
+    const pitcherModelProjection = scoredPitcherSignal?.modelProjection ?? projection;
     const signal: IntegratedPropSignal | null = scoredPitcherSignal ? {
       side: scoredPitcherSignal.side,
       modelProbability: scoredPitcherSignal.modelProbability,
@@ -746,10 +747,16 @@ function buildDashboardRows(args: {
       underModelProbability: scoredPitcherSignal.side === "under" ? scoredPitcherSignal.modelProbability : 1 - scoredPitcherSignal.modelProbability,
       overFinalProbability: scoredPitcherSignal.side === "over" ? scoredPitcherSignal.finalProbability : 1 - scoredPitcherSignal.finalProbability,
       underFinalProbability: scoredPitcherSignal.side === "under" ? scoredPitcherSignal.finalProbability : 1 - scoredPitcherSignal.finalProbability,
-      playGrade: definition.recommendationEligibility === "watchlist_until_context" ? "WATCHLIST" : signalGrade(scoredPitcherSignal.playGrade),
+      playGrade: definition.recommendationEligibility === "watchlist_until_context" ? "WATCHLIST" : pitcherSignalGrade({
+        market: definition.marketKey,
+        grade: scoredPitcherSignal.playGrade,
+        projection: pitcherModelProjection,
+        line: mapped.odds.line,
+        side: scoredPitcherSignal.side,
+      }),
       confidence: scoredPitcherSignal.featureConfidence ?? 0.65,
       reasonCodes: scoredPitcherSignal.reasonCodes,
-      projection,
+      projection: pitcherModelProjection,
       modelFamily: definition.modelFamily,
     } : hitterSignal;
     const selectedProbability = signal
@@ -1193,6 +1200,20 @@ function lineGapThreshold(market: string): number {
 
 function signalGrade(value: string | null | undefined): IntegratedPropSignal["playGrade"] {
   return value === "BEST_ANGLE" || value === "LEAN" || value === "WATCHLIST" ? value : "LEAN";
+}
+
+function pitcherSignalGrade(args: {
+  market: string;
+  grade: string | null | undefined;
+  projection: number;
+  line: number;
+  side: "over" | "under";
+}): IntegratedPropSignal["playGrade"] {
+  const grade = signalGrade(args.grade);
+  if (grade !== "BEST_ANGLE") return grade;
+  const signedGap = args.side === "over" ? args.projection - args.line : args.line - args.projection;
+  const minGap = args.market === "pitcher_outs" ? 1 : args.market === "pitcher_strikeouts" ? 0.35 : 0;
+  return signedGap >= minGap ? "BEST_ANGLE" : "LEAN";
 }
 
 function averageNumber(values: number[]): number {

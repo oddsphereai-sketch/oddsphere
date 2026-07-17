@@ -108,6 +108,7 @@ export type RealPropsCandidateSummary = {
   sportsbook: string;
   side: "over" | "under";
   americanOdds: number | null;
+  modelProjection: number | null;
   modelProbability: number;
   finalProbability: number;
   marketProbability: number | null;
@@ -455,6 +456,7 @@ export async function scoreRealMlbPropsForPaper(args: {
     const warnings = featureWarningCodes(feature, group);
     for (const warning of warnings) inc(featureWarnings, warning);
     const [prediction] = await model.predict_proba([feature]);
+    const modelProjection = modelProjectionFromExplanation(group.marketKey, prediction.explanation);
     candidatesScored++;
     const featureConfidence = featureConfidenceScore(feature, group);
     const diagnostic = diagnosticMarketMath({ prediction, over: group.over, under: group.under });
@@ -561,6 +563,7 @@ export async function scoreRealMlbPropsForPaper(args: {
       sportsbook: group.sportsbook,
       side: recommendation.side,
       americanOdds: recommendation.americanOdds,
+      modelProjection,
       modelProbability: round(recommendation.modelProbability),
       finalProbability: round(recommendation.finalProbability),
       marketProbability: recommendation.noVigMarketProbability === null ? null : round(recommendation.noVigMarketProbability),
@@ -729,6 +732,12 @@ export async function scoreRealMlbPropsForPaper(args: {
     sampleCandidates,
     },
   };
+}
+
+function modelProjectionFromExplanation(marketKey: MlbPropMarketKey, explanation: Record<string, unknown>): number | null {
+  const key = marketKey === "pitcher_outs" ? "projectedOuts" : marketKey === "pitcher_strikeouts" ? "projectedStrikeouts" : "projectedValue";
+  const value = explanation[key];
+  return typeof value === "number" && Number.isFinite(value) ? round(value) : null;
 }
 
 export type RealPropsProviderContext = {
