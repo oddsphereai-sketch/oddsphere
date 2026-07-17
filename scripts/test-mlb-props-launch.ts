@@ -18,6 +18,10 @@ import { parseBatterVsPitcherStatsPayload } from "../lib/providers/real_api/_mlb
 import { evaluateMlbPropsLaunchReadiness } from "../lib/mlb/props/launchReadiness";
 import { outsFromInningsPitched, settlePropPick } from "../lib/mlb/props/settlement";
 import type { PropOddsSnapshot } from "../lib/mlb/props/providers";
+import {
+  buildMlbPropsMemberBoardData,
+  selectMlbPropsResearchForRows,
+} from "../lib/mlb/props/memberPayload";
 
 const asOf = "2026-07-16T16:00:00.000Z";
 
@@ -132,6 +136,26 @@ function snapshot(props = [row()]): MlbPropsBoardSnapshot {
 
 const valid = validateMlbPropsBoardData({ data: data(), sourceRows: 1, mappedRows: 1, asOfTimestamp: asOf });
 assert.equal(valid.publishable, true, "research-only rows can publish without fake model confidence");
+
+const payloadEvidence = {
+  recentForm: null,
+  opponentProfile: null,
+  pitchArsenal: null,
+  pitchMatchup: null,
+  matchupHistory: null,
+  environment: null,
+};
+const payloadData = data([{ ...row(), researchKey: "research-1" }]);
+payloadData.research = { "research-1": payloadEvidence };
+const memberPayload = buildMlbPropsMemberBoardData(payloadData);
+assert.deepEqual(memberPayload.props, payloadData.props, "member payload preserves every price, projection, grade, and row field");
+assert.deepEqual(memberPayload.summary, payloadData.summary, "member payload preserves board summaries");
+assert.equal(memberPayload.research, undefined, "member payload defers only the research dictionary");
+assert.deepEqual(
+  selectMlbPropsResearchForRows(payloadData, payloadData.props),
+  { "research-1": payloadEvidence },
+  "player research endpoint returns the exact deferred evidence",
+);
 
 const staleResearch = validateMlbPropsBoardData({
   data: data([row({ lastUpdated: "2026-07-16T14:00:00.000Z", oddsSanity: ["STALE_ODDS"] })]),

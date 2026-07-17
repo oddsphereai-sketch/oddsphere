@@ -3,6 +3,7 @@ import { PlayerPropsDashboard } from "./components/PlayerPropsDashboard";
 import { loadCachedLatestMlbPropsDisplaySnapshot } from "@/lib/mlb/props/boardSnapshotStore";
 import { easternSlateDate, mlbPropsSnapshotIsFresh } from "@/lib/mlb/props/liveBoard";
 import { getPublicPicksMode } from "@/lib/mlb/props/publicPicksSafety";
+import { buildMlbPropsMemberBoardData } from "@/lib/mlb/props/memberPayload";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,11 @@ export default async function MlbPropsMemberPage({
     const snapshot = await loadCachedLatestMlbPropsDisplaySnapshot(easternSlateDate()).catch(() => null);
     if (snapshot && mlbPropsSnapshotIsFresh(snapshot)) {
       const initialSelectedId = snapshot.data.props.some((row) => row.id === requestedReader) ? requestedReader : null;
-      return <ProductAppFrame><PlayerPropsDashboard data={snapshot.data} mode="member" initialSelectedId={initialSelectedId} /></ProductAppFrame>;
+      // Research evidence accounts for most of the member payload and is only
+      // rendered after a prop is opened. Keep the board's price/model rows
+      // byte-for-byte intact and load that evidence on demand per player.
+      const memberData = buildMlbPropsMemberBoardData(snapshot.data);
+      return <ProductAppFrame><PlayerPropsDashboard data={memberData} mode="member" initialSelectedId={initialSelectedId} /></ProductAppFrame>;
     }
   }
 

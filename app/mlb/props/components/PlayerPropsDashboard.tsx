@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   PROP_GRADES,
   getPropGradeColor,
@@ -281,8 +281,12 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
   const [lineMode, setLineMode] = useState<LineMode>("main");
   const [hideResearch, setHideResearch] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
+  const [loadedResearch, setLoadedResearch] = useState<NonNullable<PlayerPropsDashboardData["research"]>>({});
+  const [researchLoadingPlayerId, setResearchLoadingPlayerId] = useState<string | null>(null);
+  const requestedResearchPlayers = useRef(new Set<string>());
 
-  const hydratedProps = useMemo(() => data.props.map((row) => enforcePreviewIntegrity(hydrateResearchEvidence(row, data.research))), [data.props, data.research]);
+  const availableResearch = useMemo(() => ({ ...(data.research ?? {}), ...loadedResearch }), [data.research, loadedResearch]);
+  const hydratedProps = useMemo(() => data.props.map((row) => enforcePreviewIntegrity(hydrateResearchEvidence(row, availableResearch))), [availableResearch, data.props]);
   const displayProps = useMemo(() => hydratedProps.filter((row) => mode === "admin" || isMemberVisibleMarket(row)), [hydratedProps, mode]);
   const displayData = useMemo(() => ({ ...data, summary: summarizeRows(displayProps), props: displayProps }), [data, displayProps]);
   const books = useMemo(() => unique(displayProps.map((row) => row.book)), [displayProps]);
@@ -349,6 +353,30 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
     setLineMode("main");
   };
 
+  useEffect(() => {
+    if (mode !== "member" || !selectedId) return;
+    const row = data.props.find((item) => item.id === selectedId);
+    if (!row?.researchKey || availableResearch[row.researchKey]) return;
+    const playerId = row.providerIds?.mlbStatsPlayerId ?? row.providerIds?.bdlPlayerId?.toString() ?? row.id;
+    if (requestedResearchPlayers.current.has(playerId)) return;
+    requestedResearchPlayers.current.add(playerId);
+    const controller = new AbortController();
+    setResearchLoadingPlayerId(playerId);
+    fetch(`/api/mlb/props/player/${encodeURIComponent(playerId)}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Player research request failed with ${response.status}`);
+        return response.json() as Promise<{ research?: PlayerPropsDashboardData["research"] }>;
+      })
+      .then((payload) => {
+        if (payload.research) setLoadedResearch((current) => ({ ...current, ...payload.research }));
+      })
+      .catch(() => {
+        requestedResearchPlayers.current.delete(playerId);
+      })
+      .finally(() => setResearchLoadingPlayerId((current) => current === playerId ? null : current));
+    return () => controller.abort();
+  }, [availableResearch, data.props, mode, selectedId]);
+
   if (displayProps.length === 0) {
     return <PendingPropsState data={data} mode={mode} matchups={matchups} />;
   }
@@ -409,6 +437,7 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
       <FullBoardView rows={filteredRows} totalCount={dedupeBestPrices(displayProps).length} priceMode={priceMode} selectedId={selectedId} onSelect={setSelectedId} />
       </>}
       {!isSearching ? <PlayerDirectory rows={displayProps} onSelectPlayer={setSearch} /> : null}
+      {selected && researchLoadingPlayerId ? <p className="mt-3 text-xs text-violet-200">Loading verified player research…</p> : null}
       {selected ? <PropDetailDrawer row={selected} comparisons={displayProps.filter((row) => sameProp(row, selected))} onClose={() => setSelectedId(null)} showDiagnostics={mode === "admin"} /> : null}
     </div>
   );
