@@ -1,6 +1,7 @@
-import { loadLatestMlbPropsDisplaySnapshot } from "@/lib/mlb/props/boardSnapshotStore";
+import { loadCachedLatestMlbPropsDisplaySnapshot } from "@/lib/mlb/props/boardSnapshotStore";
 import { easternSlateDate, mlbPropsSnapshotIsFresh } from "@/lib/mlb/props/liveBoard";
 import { getPublicPicksMode } from "@/lib/mlb/props/publicPicksSafety";
+import { selectMlbPropsResearchForRows } from "@/lib/mlb/props/memberPayload";
 
 export async function GET(
   _request: Request,
@@ -13,7 +14,7 @@ export async function GET(
     });
   }
   const { player_id: playerId } = await params;
-  const snapshot = await loadLatestMlbPropsDisplaySnapshot(easternSlateDate());
+  const snapshot = await loadCachedLatestMlbPropsDisplaySnapshot(easternSlateDate());
   if (!snapshot || !mlbPropsSnapshotIsFresh(snapshot)) {
     return Response.json({ ok: false, mode: "temporarily_unavailable", player: null }, {
       status: 503,
@@ -27,6 +28,7 @@ export async function GET(
   );
   if (!rows.length) return Response.json({ ok: false, player: null }, { status: 404 });
   const first = rows[0];
+  const research = selectMlbPropsResearchForRows(snapshot.data, rows);
   return Response.json({
     ok: true,
     mode: "display_enabled",
@@ -39,5 +41,6 @@ export async function GET(
       lineupStatus: first.lineupStatus ?? null,
     },
     props: rows,
-  }, { headers: { "Cache-Control": "private, no-store" } });
+    research,
+  }, { headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=60" } });
 }
