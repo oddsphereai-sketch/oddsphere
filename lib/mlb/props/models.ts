@@ -216,7 +216,7 @@ function strikeoutDistribution(row: PropFeatureSnapshot): Record<string, unknown
 } {
   const seasonKRate = numberFeature(row, "season_strikeout_rate", numberFeature(row, "strikeout_rate_recent", 0.218));
   const recentKRate = nullableNumberFeature(row, "recent_strikeout_rate");
-  const rateWeight = recentKRate === null ? 0 : Math.min(0.35, Math.max(0.1, numberFeature(row, "recent_logs", 0) / 30));
+  const rateWeight = recentKRate === null ? 0 : Math.min(0.35, Math.max(0.1, recentSampleCount(row) / 30));
   const baselineKRate = seasonKRate * (1 - rateWeight) + (recentKRate ?? seasonKRate) * rateWeight;
   const opponentMultiplier = ratioMultiplier(
     nullableNumberFeature(row, "opponent_strikeout_rate"),
@@ -276,7 +276,7 @@ function outsDistribution(row: PropFeatureSnapshot): Record<string, unknown> & {
 } {
   const seasonOuts = numberFeature(row, "season_outs_per_start", numberFeature(row, "rolling_10_outs", 16));
   const recentOuts = nullableNumberFeature(row, "recent_outs_per_start");
-  const recentWeight = recentOuts === null ? 0 : Math.min(0.4, Math.max(0.12, numberFeature(row, "recent_logs", 0) / 25));
+  const recentWeight = recentOuts === null ? 0 : Math.min(0.4, Math.max(0.12, recentSampleCount(row) / 25));
   const rest = nullableNumberFeature(row, "days_rest");
   const restMultiplier = rest === null ? 1 : rest < 4 ? 0.94 : rest > 6 ? 1.03 : 1;
   const opponentMultiplier = inverseRatioMultiplier(
@@ -378,6 +378,10 @@ function numberFeature(row: PropFeatureSnapshot, key: string, fallback: number):
 function nullableNumberFeature(row: PropFeatureSnapshot, key: string): number | null {
   const value = row.features[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function recentSampleCount(row: PropFeatureSnapshot): number {
+  return numberFeature(row, "recent_logs", numberFeature(row, "recent_starts", 0));
 }
 
 function ratioMultiplier(value: number | null, leagueAverage: number | null, weight: number, min: number, max: number): number {

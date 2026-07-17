@@ -1049,6 +1049,7 @@ function buildConservativePitcherFeature(args: {
     wind_speed_mph: args.modelContext?.windSpeedMph ?? null,
     precipitation_probability: args.modelContext?.precipitationProbability ?? null,
     recent_starts: recentStarts ?? starts ?? 4,
+    recent_logs: recentStarts ?? 0,
     rolling_10_start_k: args.group.marketKey === "pitcher_strikeouts" ? recentKPerStart ?? kPerStart : 0,
     rolling_10_batters_faced: recentBattersFacedPerStart ?? battersFacedProxy,
     rolling_10_outs: recentOutsPerStart ?? outsPerStart,

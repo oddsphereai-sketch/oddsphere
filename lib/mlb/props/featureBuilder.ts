@@ -52,6 +52,7 @@ export async function buildMlbPropFeatureSnapshot(args: {
     temperature_f: weather?.temperatureF ?? null,
     wind_speed_mph: weather?.windSpeedMph ?? null,
     recent_starts: recentStarts,
+    recent_logs: recentStarts,
     rolling_10_start_k: avgStrikeouts,
     rolling_10_batters_faced: avgBattersFaced,
     rolling_10_outs: avgOuts,

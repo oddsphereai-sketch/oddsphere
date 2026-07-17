@@ -626,6 +626,22 @@ async function main() {
   };
   const [contextualOutsDistribution] = await new PitcherOutsModel().predict_distribution([contextualOutsFeature]);
   check("pitcher outs model consumes opponent, park, and weather context", Number(contextualOutsDistribution.opponentMultiplier) !== 1 && Number(contextualOutsDistribution.parkMultiplier) !== 1 && Number(contextualOutsDistribution.weatherMultiplier) !== 1);
+  const recentStartsOnlyOutsFeature = {
+    ...outsFeature,
+    features: {
+      ...outsFeature.features,
+      recent_logs: null,
+      recent_starts: 10,
+      season_outs_per_start: 19,
+      recent_outs_per_start: 15.6,
+    },
+    dataAvailability: {
+      ...outsFeature.dataAvailability,
+      recent_logs: 10,
+    },
+  };
+  const [recentStartsOnlyOutsDistribution] = await new PitcherOutsModel().predict_distribution([recentStartsOnlyOutsFeature]);
+  check("pitcher models weight recent starts even when recent_logs feature alias is absent", Number(recentStartsOnlyOutsDistribution.recentWeight) === 0.4);
 
   const over = odds.find((row) => row.marketKey === "pitcher_strikeouts" && row.side === "over" && row.snapshotRole === "current") ?? null;
   const under = odds.find((row) => row.marketKey === "pitcher_strikeouts" && row.side === "under" && row.snapshotRole === "current") ?? null;
