@@ -1316,7 +1316,7 @@ function compactResearchEvidence(rows: PlayerPropPreviewRow[]): {
         recentForm: recentForm ? { ...recentForm, logs: recentForm.logs.slice(0, 10) } : null,
         opponentProfile,
         pitchArsenal,
-        pitchMatchup: pitchMatchup ? { ...pitchMatchup, pitches: pitchMatchup.pitches.slice(0, 2) } : null,
+        pitchMatchup,
         matchupHistory,
         environment,
       };
