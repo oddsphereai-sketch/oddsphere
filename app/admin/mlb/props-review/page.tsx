@@ -82,8 +82,13 @@ type TrackingResponse = {
     generatedAt: string;
     summary: Metrics;
     calibration: Metrics;
+    oneUnitAll: Metrics;
     byMarket: Array<{ key: string } & Metrics>;
+    byCategory: Array<{ key: string } & Metrics>;
     byGrade: Array<{ key: string } & Metrics>;
+    oneUnitByMarket: Array<{ key: string } & Metrics>;
+    oneUnitByCategory: Array<{ key: string } & Metrics>;
+    oneUnitByGrade: Array<{ key: string } & Metrics>;
     recent: RecentRow[];
   };
 };
@@ -255,6 +260,14 @@ function ControlRoomContent({ data }: { data: TrackingResponse }) {
         <MetricCard label="Avg CLV" value={probabilityPoints(data.report.summary.averageClvProbabilityDelta)} detail="Same line, same book" tone="violet" />
       </section>
 
+      <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <MetricCard label="All tracked 1u" value={`${data.report.oneUnitAll.wins}-${data.report.oneUnitAll.losses}`} detail={`${data.report.oneUnitAll.tracked} locked rows`} tone="cyan" />
+        <MetricCard label="Flat 1u net" value={`${signed(data.report.oneUnitAll.units, 2)}u`} detail={`${data.report.oneUnitAll.riskedUnits.toFixed(1)}u hypothetical`} tone={data.report.oneUnitAll.units >= 0 ? "green" : "rose"} />
+        <MetricCard label="Flat 1u ROI" value={percent(data.report.oneUnitAll.roi)} detail="Every tracked row" tone={Number(data.report.oneUnitAll.roi) >= 0 ? "green" : "rose"} />
+        <MetricCard label="Flat hit rate" value={percent(data.report.oneUnitAll.hitRate)} detail="Pushes excluded" tone="blue" />
+        <MetricCard label="Actual-unit ROI" value={percent(data.report.summary.roi)} detail="Official actionables" tone="violet" />
+      </section>
+
       <section className="mt-5 grid gap-5 xl:grid-cols-[1fr_1fr_1.2fr]">
         <Breakdown title="By market" rows={data.report.byMarket} />
         <Breakdown title="By grade" rows={data.report.byGrade} />
@@ -274,6 +287,12 @@ function ControlRoomContent({ data }: { data: TrackingResponse }) {
             </div>
           )}
         </div>
+      </section>
+
+      <section className="mt-5 grid gap-5 xl:grid-cols-[0.8fr_1fr_1fr]">
+        <Breakdown title="Flat 1u by category" rows={data.report.oneUnitByCategory} />
+        <Breakdown title="Flat 1u by grade" rows={data.report.oneUnitByGrade} />
+        <Breakdown title="Flat 1u by market" rows={data.report.oneUnitByMarket} />
       </section>
 
       <section className="mt-5 overflow-hidden rounded-lg border border-slate-800 bg-[#0d1a2b]">
@@ -303,7 +322,7 @@ function MetricCard({ label, value, detail, tone }: { label: string; value: stri
 }
 
 function Breakdown({ title, rows }: { title: string; rows: Array<{ key: string } & Metrics> }) {
-  return <div className="rounded-lg border border-slate-800 bg-[#0d1a2b] p-5"><h2 className="text-sm font-semibold">{title}</h2><div className="mt-3 divide-y divide-slate-800">{rows.map((row) => <div className="grid grid-cols-[1fr_auto_auto] gap-4 py-3 text-sm" key={row.key}><span>{labelFor(row.key)}</span><span className="text-slate-400">{row.wins}-{row.losses}</span><span className="w-14 text-right font-medium">{percent(row.hitRate)}</span></div>)}{rows.length === 0 && <div className="py-8 text-center text-sm text-slate-500">Awaiting locked results</div>}</div></div>;
+  return <div className="rounded-lg border border-slate-800 bg-[#0d1a2b] p-5"><h2 className="text-sm font-semibold">{title}</h2><div className="mt-3 divide-y divide-slate-800">{rows.map((row) => <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 py-3 text-sm" key={row.key}><span>{labelFor(row.key)}</span><span className="text-slate-400">{row.wins}-{row.losses}</span><span className={`w-16 text-right font-medium ${row.units >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{signed(row.units, 1)}u</span><span className="w-14 text-right font-medium">{percent(row.roi)}</span></div>)}{rows.length === 0 && <div className="py-8 text-center text-sm text-slate-500">Awaiting locked results</div>}</div></div>;
 }
 
 function Stat({ label, value }: { label: string; value: string }) { return <div><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 font-medium text-slate-200">{value}</dd></div>; }

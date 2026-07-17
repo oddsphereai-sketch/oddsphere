@@ -47,5 +47,18 @@ async function safeJson(request: Request): Promise<Record<string, unknown>> {
 
 function emptyReport(startDate?: string) {
   const metrics = { tracked: 0, wins: 0, losses: 0, pushes: 0, voids: 0, pending: 0, hitRate: null, units: 0, riskedUnits: 0, roi: null, averageClvProbabilityDelta: null, brierScore: null };
-  return { startDate: startDate ?? "not-initialized", generatedAt: new Date().toISOString(), summary: metrics, calibration: metrics, byMarket: [], byGrade: [], recent: [] };
+  return {
+    startDate: startDate ?? "not-initialized",
+    generatedAt: new Date().toISOString(),
+    summary: metrics,
+    calibration: metrics,
+    oneUnitAll: metrics,
+    byMarket: [],
+    byCategory: [],
+    byGrade: [],
+    oneUnitByMarket: [],
+    oneUnitByCategory: [],
+    oneUnitByGrade: [],
+    recent: [],
+  };
 }

@@ -255,8 +255,13 @@ export async function getInternalMlbPropsTrackingReport(args: { startDate?: stri
     generatedAt: new Date().toISOString(),
     summary: performanceMetrics(actionable),
     calibration: performanceMetrics(rows),
+    oneUnitAll: oneUnitPerformanceMetrics(rows),
     byMarket: groupMetrics(actionable, (row) => row.market_key),
+    byCategory: groupMetrics(actionable, marketCategory),
     byGrade: groupMetrics(actionable, (row) => row.play_grade),
+    oneUnitByMarket: groupMetrics(rows, (row) => row.market_key, oneUnitPerformanceMetrics),
+    oneUnitByCategory: groupMetrics(rows, marketCategory, oneUnitPerformanceMetrics),
+    oneUnitByGrade: groupMetrics(rows, (row) => row.play_grade, oneUnitPerformanceMetrics),
     recent: rows.slice(0, 250).map(publicTrackingRow),
   };
 }
@@ -405,7 +410,7 @@ export async function settleInternalMlbProps(args: { dates?: string[] } = {}) {
       metadata_json: { requestedDates: dates, pendingLoaded: pending.length, finalRows: finalRows.length, voided, internalLedger: true },
     }).eq("id", run.id);
     if (completeError) throw completeError;
-    return { runId: Number(run.id), pendingLoaded: pending.length, finalRows: finalRows.length, gamesSettled: gamesSettled.size, propsSettled, pushes, voided, unresolved };
+    return { runId: String(run.id), pendingLoaded: pending.length, finalRows: finalRows.length, gamesSettled: gamesSettled.size, propsSettled, pushes, voided, unresolved };
   } catch (settlementError) {
     await supabase.from("prop_settlement_runs").update({
       completed_at: new Date().toISOString(),
@@ -606,10 +611,59 @@ function performanceMetrics(rows: TrackingEntry[]) {
   };
 }
 
-function groupMetrics(rows: TrackingEntry[], keyFor: (row: TrackingEntry) => string) {
+function oneUnitPerformanceMetrics(rows: TrackingEntry[]) {
+  const wins = rows.filter((row) => row.result_status === "win").length;
+  const losses = rows.filter((row) => row.result_status === "loss").length;
+  const pushes = rows.filter((row) => row.result_status === "push").length;
+  const voids = rows.filter((row) => row.result_status === "void").length;
+  const pending = rows.filter((row) => row.result_status === "pending").length;
+  const decisions = wins + losses;
+  const pricedDecisions = rows.filter((row) => row.result_status === "win" || row.result_status === "loss");
+  const units = pricedDecisions.reduce((sum, row) => sum + oneUnitResult(row), 0);
+  const riskedUnits = pricedDecisions.length;
+  const clvRows = rows.filter((row) => row.clv_status === "comparable" && row.clv_probability_delta !== null);
+  const brierRows = rows.filter((row) => row.result_status === "win" || row.result_status === "loss");
+  return {
+    tracked: rows.length,
+    wins,
+    losses,
+    pushes,
+    voids,
+    pending,
+    hitRate: decisions ? round(wins / decisions, 4) : null,
+    units: round(units, 3),
+    riskedUnits: round(riskedUnits, 3),
+    roi: riskedUnits ? round(units / riskedUnits, 4) : null,
+    averageClvProbabilityDelta: clvRows.length ? round(clvRows.reduce((sum, row) => sum + (row.clv_probability_delta ?? 0), 0) / clvRows.length, 6) : null,
+    brierScore: brierRows.length ? round(brierRows.reduce((sum, row) => {
+      const outcome = row.result_status === "win" ? 1 : 0;
+      return sum + (row.locked_final_probability - outcome) ** 2;
+    }, 0) / brierRows.length, 6) : null,
+  };
+}
+
+function oneUnitResult(row: TrackingEntry): number {
+  if (row.result_status === "win") return profitPerUnit(row.locked_american_odds);
+  if (row.result_status === "loss") return -1;
+  return 0;
+}
+
+function profitPerUnit(americanOdds: number): number {
+  return americanOdds > 0 ? americanOdds / 100 : 100 / Math.abs(americanOdds);
+}
+
+function marketCategory(row: TrackingEntry): string {
+  return row.market_key.startsWith("pitcher_") ? "Pitcher props" : "Batter props";
+}
+
+function groupMetrics(
+  rows: TrackingEntry[],
+  keyFor: (row: TrackingEntry) => string,
+  metricsFor: (rows: TrackingEntry[]) => ReturnType<typeof performanceMetrics> = performanceMetrics,
+) {
   const groups = new Map<string, TrackingEntry[]>();
   for (const row of rows) groups.set(keyFor(row), [...(groups.get(keyFor(row)) ?? []), row]);
-  return [...groups.entries()].map(([key, grouped]) => ({ key, ...performanceMetrics(grouped) })).sort((a, b) => b.tracked - a.tracked);
+  return [...groups.entries()].map(([key, grouped]) => ({ key, ...metricsFor(grouped) })).sort((a, b) => b.tracked - a.tracked);
 }
 
 function publicTrackingRow(row: TrackingEntry) {
