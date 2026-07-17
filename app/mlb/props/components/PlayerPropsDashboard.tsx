@@ -902,22 +902,27 @@ function RecentFormPanel({ row }: { row: PlayerPropPreviewRow }) {
     ...(evidence.coverage === "full_season" ? [{ value: "season" as const, label: "Season" }] : []),
   ];
   const activeRange = options.some((option) => option.value === range) ? range : "5";
-  const limit = activeRange === "season" ? orderedLogs.length : Number(activeRange);
-  const logs = orderedLogs.slice(0, limit);
-  const outcomes = logs.map((log) => propResult(log.value, row.line, row.side));
+  const sampleValues = recentFormSampleValues(evidence, activeRange, orderedLogs);
+  const chartLimit = activeRange === "10" ? 10 : activeRange === "season" ? Math.min(10, orderedLogs.length) : 5;
+  const logs = orderedLogs.slice(0, Math.min(chartLimit, orderedLogs.length));
+  const outcomes = sampleValues.map((value) => propResult(value, row.line, row.side));
+  const chartOutcomes = logs.map((log) => propResult(log.value, row.line, row.side));
   const hits = outcomes.filter((outcome) => outcome === "hit").length;
   const pushes = outcomes.filter((outcome) => outcome === "push").length;
-  const hitRate = logs.length ? hits / logs.length : 0;
-  const average = logs.reduce((sum, log) => sum + log.value, 0) / Math.max(1, logs.length);
+  const hitRate = sampleValues.length ? hits / sampleValues.length : 0;
+  const average = sampleValues.reduce((sum, value) => sum + value, 0) / Math.max(1, sampleValues.length);
   const opponentLogs = orderedLogs.filter((log) => log.opponent === row.opponent);
   const opponentHits = opponentLogs.filter((log) => propResult(log.value, row.line, row.side) === "hit").length;
   const maxValue = Math.max(row.line * 1.2, ...logs.map((log) => log.value), 1);
   const linePosition = Math.max(0, Math.min(100, (row.line / maxValue) * 100));
   const minChartWidth = Math.max(420, logs.length * 58);
+  const sampleNote = sampleValues.length > logs.length
+    ? activeRange === "season" ? "Bars show latest 10; season summary uses full sample." : `Bars show latest ${logs.length}; summary uses selected sample.`
+    : null;
 
   return <div data-visual="recent-form" data-state="available" className="overflow-hidden rounded-lg border border-gray-800 bg-black/20">
     <div className="flex flex-col gap-4 border-b border-gray-800 p-4 sm:flex-row sm:items-start sm:justify-between">
-      <div><p className="text-[10px] font-black uppercase text-gray-500">{sentenceCase(row.side)} {row.line} hit rate</p><div className="mt-1 flex items-baseline gap-2"><strong className="text-3xl font-black tabular-nums text-white">{hits}/{logs.length}</strong><span className="text-sm font-bold text-emerald-300">{pct(hitRate)}</span></div><p className="mt-1 text-xs text-gray-500">{evidence.statLabel} across the selected {evidence.sampleLabel}</p></div>
+      <div><p className="text-[10px] font-black uppercase text-gray-500">{sentenceCase(row.side)} {row.line} hit rate</p><div className="mt-1 flex items-baseline gap-2"><strong className="text-3xl font-black tabular-nums text-white">{hits}/{sampleValues.length}</strong><span className="text-sm font-bold text-emerald-300">{pct(hitRate)}</span></div><p className="mt-1 text-xs text-gray-500">{evidence.statLabel} across the selected {evidence.sampleLabel}</p></div>
       <div role="group" aria-label="Recent form sample" className="inline-flex w-fit rounded-md border border-gray-700 bg-gray-950 p-1">{options.map((option) => <button key={option.value} type="button" onClick={() => setRange(option.value)} aria-pressed={activeRange === option.value} className={`h-8 rounded px-3 text-xs font-black ${activeRange === option.value ? "bg-gray-200 text-gray-950" : "text-gray-500 hover:text-white"}`}>{option.label}</button>)}</div>
     </div>
     <div className="grid grid-cols-2 gap-px border-b border-gray-800 bg-gray-800 sm:grid-cols-4"><RecentFormMetric label="Average" value={average.toFixed(1)} /><RecentFormMetric label="Current line" value={String(row.line)} /><RecentFormMetric label={`Vs ${row.opponent}`} value={opponentLogs.length ? `${opponentHits}/${opponentLogs.length}` : "No sample"} /><RecentFormMetric label="Pushes" value={String(pushes)} /></div>
@@ -926,7 +931,7 @@ function RecentFormPanel({ row }: { row: PlayerPropPreviewRow }) {
         <div className="relative h-32 border-b border-gray-800">
           <span className="absolute inset-x-0 z-[1] border-t border-dashed border-sky-400/70" style={{ bottom: `${linePosition}%` }} />
           <div className="absolute inset-0 flex items-end justify-around gap-2 px-2">{logs.map((log, index) => {
-            const outcome = outcomes[index];
+            const outcome = chartOutcomes[index];
             const height = Math.max(4, (log.value / maxValue) * 100);
             return <div key={log.gameId} className="flex h-full w-12 shrink-0 items-end justify-center"><span title={`${formatGameLogDate(log.date)} ${log.homeAway === "home" ? "vs" : "at"} ${log.opponent}: ${log.value} ${evidence.statLabel.toLowerCase()}${log.secondaryLabel ? `, ${log.secondaryLabel}` : ""}`} className={`relative z-[2] block w-7 rounded-t-sm ${outcome === "hit" ? "bg-emerald-400" : outcome === "push" ? "bg-sky-400" : "bg-gray-600"}`} style={{ height: `${height}%` }}><strong className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] tabular-nums text-gray-200">{log.value}</strong></span></div>;
           })}</div>
@@ -934,8 +939,17 @@ function RecentFormPanel({ row }: { row: PlayerPropPreviewRow }) {
         <div className="flex justify-around gap-2 px-2 pt-2">{logs.map((log) => <div key={log.gameId} className="w-12 shrink-0 text-center"><p className="text-[9px] font-bold text-gray-400">{formatGameLogDate(log.date)}</p><p className="mt-0.5 truncate text-[9px] text-gray-600">{log.homeAway === "home" ? "vs" : "@"} {log.opponent}</p></div>)}</div>
       </div>
     </div>
-    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-800 px-4 py-2 text-[10px] text-gray-600"><span><span className="mr-2 inline-block h-2 w-2 bg-emerald-400" />Selected side hit <span className="ml-3 mr-2 inline-block h-2 w-2 bg-gray-600" />Did not hit</span><span>{evidence.source} · through {formatGameLogDate(orderedLogs[0].date)}</span></div>
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-800 px-4 py-2 text-[10px] text-gray-600"><span><span className="mr-2 inline-block h-2 w-2 bg-emerald-400" />Selected side hit <span className="ml-3 mr-2 inline-block h-2 w-2 bg-gray-600" />Did not hit</span><span>{sampleNote ? `${sampleNote} ` : ""}{evidence.source} · through {formatGameLogDate(orderedLogs[0].date)}</span></div>
   </div>;
+}
+
+function recentFormSampleValues(evidence: PlayerPropRecentForm, range: RecentFormRange, orderedLogs: PlayerPropRecentForm["logs"]): number[] {
+  const fallbackLimit = range === "season" ? orderedLogs.length : Number(range);
+  const fallback = orderedLogs.slice(0, fallbackLimit).map((log) => log.value);
+  const sample = range === "season" ? evidence.samples?.season
+    : range === "10" ? evidence.samples?.last10
+      : evidence.samples?.last5;
+  return sample?.values?.length ? sample.values : fallback;
 }
 
 function RecentFormMetric({ label, value }: { label: string; value: string }) {

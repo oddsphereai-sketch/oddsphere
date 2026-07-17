@@ -7,8 +7,9 @@ import type { RealPitcherSeasonStat } from "./realScoring";
 import type { PropOddsSnapshot } from "./providers";
 
 export const MLB_PROPS_BOARD_SNAPSHOT_KIND = "member_board_snapshot_v1";
-export const DEFAULT_MLB_PROPS_MAX_SNAPSHOT_JSON_BYTES = 16_000_000;
-export const DEFAULT_MLB_PROPS_MAX_SNAPSHOT_GZIP_BYTES = 1_250_000;
+export const DEFAULT_MLB_PROPS_MAX_SNAPSHOT_JSON_BYTES = 40_000_000;
+export const DEFAULT_MLB_PROPS_MAX_SNAPSHOT_GZIP_BYTES = 2_000_000;
+const DEFAULT_MLB_PROPS_SNAPSHOT_RETENTION_PER_SLATE = 36;
 
 export type MlbPropsBoardValidation = {
   publishable: boolean;
@@ -339,7 +340,54 @@ export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapsh
     .select("id")
     .single();
   if (error) throw error;
+  await pruneOldMlbPropsBoardSnapshots(snapshot.slateDate, snapshot.snapshotId).catch(() => undefined);
   return String(data.id);
+}
+
+async function pruneOldMlbPropsBoardSnapshots(slateDate: string, currentSnapshotId: string): Promise<void> {
+  const retention = envPositiveInteger("ODDSPHERE_PROPS_SNAPSHOT_RETENTION_PER_SLATE", DEFAULT_MLB_PROPS_SNAPSHOT_RETENTION_PER_SLATE);
+  const supabase = getSupabase();
+  const [{ data: rows, error: rowsError }, { data: lockedRefs, error: refsError }] = await Promise.all([
+    supabase
+      .from("prop_scoring_runs")
+      .select("id,metadata_json,created_at")
+      .eq("sport", "mlb")
+      .eq("slate_date", slateDate)
+      .eq("status", "completed")
+      .eq("metadata_json->>kind", MLB_PROPS_BOARD_SNAPSHOT_KIND)
+      .order("created_at", { ascending: false })
+      .limit(250),
+    supabase
+      .from("mlb_prop_tracking_entries")
+      .select("board_snapshot_id")
+      .eq("slate_date", slateDate)
+      .not("board_snapshot_id", "is", null)
+      .limit(5000),
+  ]);
+  if (rowsError) throw rowsError;
+  if (refsError) throw refsError;
+
+  const keepSnapshotIds = new Set<string>([
+    currentSnapshotId,
+    ...((lockedRefs ?? []) as Array<{ board_snapshot_id: string | null }>).map((row) => row.board_snapshot_id).filter((value): value is string => Boolean(value)),
+  ]);
+  for (const row of (rows ?? []).slice(0, retention)) {
+    const snapshotId = snapshotIdFromMetadata((row as { metadata_json?: unknown }).metadata_json);
+    if (snapshotId) keepSnapshotIds.add(snapshotId);
+  }
+  const deleteIds = (rows ?? [])
+    .filter((row) => {
+      const snapshotId = snapshotIdFromMetadata((row as { metadata_json?: unknown }).metadata_json);
+      return snapshotId !== null && !keepSnapshotIds.has(snapshotId);
+    })
+    .map((row) => (row as { id: string | number }).id);
+  if (!deleteIds.length) return;
+  const { error } = await supabase.from("prop_scoring_runs").delete().in("id", deleteIds);
+  if (error) throw error;
+}
+
+function snapshotIdFromMetadata(metadata: unknown): string | null {
+  return isRecord(metadata) && typeof metadata.snapshot_id === "string" ? metadata.snapshot_id : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

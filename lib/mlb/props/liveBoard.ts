@@ -120,9 +120,11 @@ export type MlbPropsBoardRefreshResult = {
 
 const ACTIONABLE_GRADES = new Set(["BEST_ANGLE", "LEAN"]);
 const DEFAULT_MAX_ODDS_AGE_MINUTES = 45;
-const DEFAULT_MAX_SOURCE_ODDS_ROWS = 8_000;
-const DEFAULT_MAX_BOARD_ROWS = 4_000;
+const DEFAULT_MAX_SOURCE_ODDS_ROWS = 25_000;
+const DEFAULT_MAX_BOARD_ROWS = 6_000;
 const DEFAULT_MAX_BDL_CALLS_PER_REFRESH = 300;
+const DEFAULT_RECENT_FORM_SEASON_LOG_LIMIT = 180;
+const MEMBER_EXCLUDED_MARKETS = new Set(["first_home_run", "pitcher_record_a_win"]);
 
 export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsBoardRefreshResult> {
   const asOfTimestamp = args.asOfTimestamp ?? new Date().toISOString();
@@ -144,7 +146,8 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     throw new Error(`MLB props source-row circuit breaker opened: ${sourceOdds.length} exceeds ${maxSourceRows}.`);
   }
 
-  const mappedOdds = mapOddsToMlbGames(sourceOdds, games);
+  const boardSourceOdds = sourceOdds.filter((row) => !isMemberExcludedSourceOdds(row));
+  const mappedOdds = mapOddsToMlbGames(boardSourceOdds, games);
   const previousIdentities = identitiesFromPrevious(previous);
   const requiredPlayerIds = [...new Set(mappedOdds.map((row) => row.bdlPlayerId))];
   const starterContextChangedGameIds = new Set([
@@ -155,7 +158,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
   const refreshMode: "fast" | "full" = needsFullResearch ? "full" : "fast";
   const openingOdds = await loadOpeningPropOdds({
     oddsClient,
-    sourceOdds,
+    sourceOdds: boardSourceOdds,
     previous,
     asOfTimestamp,
     refreshMode,
@@ -187,7 +190,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     ? await loadProbablePitcherSeasonStats(probablePitchers, args.slateDate)
     : new Map(previous?.modelContext?.probablePitcherSeasonStats ?? []);
   const pitcherModelContext = buildPitcherModelContext({ mappedOdds, identities, researchByKey });
-  const scoringOdds = sourceOdds.map((odds) => {
+  const scoringOdds = boardSourceOdds.map((odds) => {
     const raw = record(odds.rawPayload);
     const bdlPlayerId = numberValue(raw.bdl_player_id ?? odds.playerId.replace(/^balldontlie-player-/, ""));
     const identity = bdlPlayerId === null ? null : identities.get(bdlPlayerId);
@@ -195,7 +198,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       ? { ...odds, rawPayload: { ...raw, player_name: identity.player.fullName } }
       : odds;
   });
-  const scoring = sourceOdds.length
+  const scoring = boardSourceOdds.length
     ? await scoreRealMlbPropsForPaper({
       games,
       probablePitchers,
@@ -207,13 +210,13 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       providerContext: {
         selectedOddsProvider: "balldontlie",
         sharpApiPropRows: 0,
-        bdlPropRows: sourceOdds.length,
+        bdlPropRows: boardSourceOdds.length,
         fallbackReason: null,
       },
     })
     : null;
 
-  const props = attachMlbPropOddsMovement(buildDashboardRows({
+  const props = compactMemberBoardRows(attachMlbPropOddsMovement(buildDashboardRows({
     mappedOdds,
     identities,
     probablePitchers,
@@ -221,19 +224,19 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     researchByKey,
     scoringCandidates: scoring?.summary.sampleCandidates ?? [],
     asOfTimestamp,
-  }), openingOdds, previous);
+  }), openingOdds, previous), asOfTimestamp);
   const data = buildDashboardData({
     slateDate: args.slateDate,
     asOfTimestamp,
     games,
     probablePitchers,
     props,
-    sourceOdds,
+    sourceOdds: boardSourceOdds,
     environmentErrors: environment.errors,
   });
   const validation = validateMlbPropsBoardData({
     data,
-    sourceRows: sourceOdds.length,
+    sourceRows: boardSourceOdds.length,
     mappedRows: mappedOdds.length,
     asOfTimestamp,
     providerCoverage,
@@ -543,10 +546,11 @@ async function loadRecentLogCache(
   }
   const out = new Map<string, Awaited<ReturnType<MLBStatsGameLogClient["getPlayerGameLogs"]>>>();
   const concurrency = Math.min(12, envPositiveInteger("ODDSPHERE_PROPS_GAME_LOG_CONCURRENCY", 8));
+  const seasonLogLimit = envPositiveInteger("ODDSPHERE_PROPS_RECENT_FORM_SEASON_LOG_LIMIT", DEFAULT_RECENT_FORM_SEASON_LOG_LIMIT);
   await mapWithConcurrency([...requests.entries()], concurrency, async ([key, request]) => {
     const logs = request.family === "pitcher"
-      ? await gameLogs.getPlayerGameLogs({ playerId: request.playerId, before: addCalendarDays(slateDate, 1), limit: 40 }).catch(() => [])
-      : await gameLogs.getHitterGameLogs({ playerId: request.playerId, before: addCalendarDays(slateDate, 1), limit: 40 }).catch(() => []);
+      ? await gameLogs.getPlayerGameLogs({ playerId: request.playerId, before: addCalendarDays(slateDate, 1), limit: seasonLogLimit }).catch(() => [])
+      : await gameLogs.getHitterGameLogs({ playerId: request.playerId, before: addCalendarDays(slateDate, 1), limit: seasonLogLimit }).catch(() => []);
     out.set(key, logs);
   });
   return out;
@@ -1308,7 +1312,14 @@ function compactResearchEvidence(rows: PlayerPropPreviewRow[]): {
       ...compact
     } = row;
     if (row.researchKey && !research[row.researchKey]) {
-      research[row.researchKey] = { recentForm, opponentProfile, pitchArsenal, pitchMatchup, matchupHistory, environment };
+      research[row.researchKey] = {
+        recentForm: recentForm ? { ...recentForm, logs: recentForm.logs.slice(0, 10) } : null,
+        opponentProfile,
+        pitchArsenal,
+        pitchMatchup: pitchMatchup ? { ...pitchMatchup, pitches: pitchMatchup.pitches.slice(0, 2) } : null,
+        matchupHistory,
+        environment,
+      };
     }
     return compact;
   });
@@ -1352,7 +1363,7 @@ export function validateMlbPropsBoardData(args: {
   const ids = args.data.props.map((row) => row.id);
   if (args.sourceRows === 0) errors.push("PROP_ODDS_UNAVAILABLE");
   if (args.providerCoverage) {
-    if (args.providerCoverage.normalizedRows !== args.sourceRows) errors.push("BDL_NORMALIZED_ROW_COUNT_MISMATCH");
+    if (args.providerCoverage.normalizedRows < args.sourceRows) errors.push("BDL_NORMALIZED_ROW_COUNT_MISMATCH");
     if (args.providerCoverage.normalizedRawProps + args.providerCoverage.droppedRawProps !== args.providerCoverage.totalRawProps) {
       errors.push("BDL_RAW_COVERAGE_COUNT_MISMATCH");
     }
@@ -1768,6 +1779,62 @@ function dedupeRows(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
     if (!current || row.lastUpdated > current.lastUpdated) out.set(row.id, row);
   }
   return [...out.values()].sort((a, b) => a.gameStartTime.localeCompare(b.gameStartTime) || a.player.localeCompare(b.player) || a.marketLabel.localeCompare(b.marketLabel));
+}
+
+function compactMemberBoardRows(rows: PlayerPropPreviewRow[], asOfTimestamp: string): PlayerPropPreviewRow[] {
+  const freshVisible = rows.filter((row) => !isOddsStale(row.lastUpdated, asOfTimestamp) && !MEMBER_EXCLUDED_MARKETS.has(row.market));
+  const selectedLines = selectMainLines(freshVisible);
+  const mainLineRows = freshVisible.filter((row) => selectedLines.get(mainLineKey(row)) === row.line);
+  return selectBestPriceRows(mainLineRows).sort((a, b) =>
+    a.gameStartTime.localeCompare(b.gameStartTime)
+    || a.player.localeCompare(b.player)
+    || a.marketLabel.localeCompare(b.marketLabel)
+    || a.side.localeCompare(b.side)
+  );
+}
+
+function isMemberExcludedSourceOdds(row: PropOddsSnapshot): boolean {
+  if (MEMBER_EXCLUDED_MARKETS.has(row.marketKey)) return true;
+  const raw = record(row.rawPayload);
+  const alternateLine = raw.is_alternate_line ?? raw.alternate ?? raw.isAlternateLine;
+  return alternateLine === true || alternateLine === "true";
+}
+
+function selectMainLines(rows: PlayerPropPreviewRow[]): Map<string, number> {
+  const groups = new Map<string, Map<number, PlayerPropPreviewRow[]>>();
+  for (const row of rows) {
+    const key = mainLineKey(row);
+    const lines = groups.get(key) ?? new Map<number, PlayerPropPreviewRow[]>();
+    lines.set(row.line, [...(lines.get(row.line) ?? []), row]);
+    groups.set(key, lines);
+  }
+  const selected = new Map<string, number>();
+  for (const [key, lines] of groups) {
+    const ranked = [...lines.entries()].map(([line, lineRows]) => ({
+      line,
+      sides: new Set(lineRows.map((row) => row.side)).size,
+      books: new Set(lineRows.map((row) => row.book)).size,
+      balance: lineRows.reduce((sum, row) => sum + Math.abs((assessPropPrice(row.odds).impliedProbability ?? 0.5) - 0.5), 0) / lineRows.length,
+    })).sort((a, b) => b.sides - a.sides || b.books - a.books || a.balance - b.balance || a.line - b.line);
+    if (ranked[0]) selected.set(key, ranked[0].line);
+  }
+  return selected;
+}
+
+function selectBestPriceRows(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
+  const best = new Map<string, PlayerPropPreviewRow>();
+  for (const row of rows) {
+    const key = `${mainLineKey(row)}|${row.side}|${row.line}`;
+    const current = best.get(key);
+    if (!current || row.odds > current.odds || (row.odds === current.odds && row.lastUpdated > current.lastUpdated)) {
+      best.set(key, row);
+    }
+  }
+  return [...best.values()];
+}
+
+function mainLineKey(row: PlayerPropPreviewRow): string {
+  return `${row.providerIds?.gameId ?? row.gameStartTime}|${row.providerIds?.bdlPlayerId ?? row.player}|${row.team}|${row.opponent}|${row.market}`;
 }
 
 function isOddsStale(timestamp: string, asOfTimestamp: string): boolean {

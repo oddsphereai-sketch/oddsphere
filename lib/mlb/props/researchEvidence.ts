@@ -10,6 +10,11 @@ export type PlayerPropRecentForm = {
   source: string;
   asOfTimestamp: string;
   coverage: "full_season" | "recent_only";
+  samples?: {
+    last5: PlayerPropRecentFormSample;
+    last10: PlayerPropRecentFormSample;
+    season: PlayerPropRecentFormSample;
+  };
   logs: Array<{
     gameId: string;
     date: string;
@@ -18,6 +23,12 @@ export type PlayerPropRecentForm = {
     value: number;
     secondaryLabel?: string | null;
   }>;
+};
+
+export type PlayerPropRecentFormSample = {
+  count: number;
+  average: number | null;
+  values: number[];
 };
 
 export type RankedResearchMetric = {
@@ -222,7 +233,21 @@ export function buildPlayerPropRecentForm(args: {
     source: "MLB Stats",
     asOfTimestamp: args.asOfTimestamp,
     coverage: args.coverage ?? "recent_only",
+    samples: {
+      last5: recentFormSample(logs.slice(0, 5).map((row) => row.value)),
+      last10: recentFormSample(logs.slice(0, 10).map((row) => row.value)),
+      season: recentFormSample(logs.map((row) => row.value)),
+    },
     logs,
+  };
+}
+
+function recentFormSample(values: number[]): PlayerPropRecentFormSample {
+  const finite = values.filter((value) => Number.isFinite(value));
+  return {
+    count: finite.length,
+    average: finite.length ? finite.reduce((sum, value) => sum + value, 0) / finite.length : null,
+    values: finite,
   };
 }
 
