@@ -53,6 +53,72 @@ type ObsRow = {
   observed_at: string;
 };
 
+type SlateGame = {
+  id: number;
+  key: string;
+  gameDate: string | null;
+};
+
+function providerStartMs(row: PlaybookSplitGame): number | null {
+  const raw = row.startTime ?? row.startTimeEst ?? row.date ?? null;
+  if (!raw) return null;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * Assign Playbook rows one-to-one. A matchup-only map is unsafe for a
+ * doubleheader: its second row overwrites the first and then gets copied to
+ * both canonical games. When a matchup repeats, both sides must have usable
+ * start times and are paired chronologically; otherwise none are assigned.
+ */
+export function matchPlaybookSplitsToSlateGames(
+  games: readonly SlateGame[],
+  rows: readonly PlaybookSplitGame[],
+  sport: string,
+): Map<number, PlaybookSplitGame> {
+  const gamesByKey = new Map<string, SlateGame[]>();
+  for (const game of games) {
+    const list = gamesByKey.get(game.key) ?? [];
+    list.push(game);
+    gamesByKey.set(game.key, list);
+  }
+  const rowsByKey = new Map<string, PlaybookSplitGame[]>();
+  for (const row of rows) {
+    const key = gameKey(sport, row.awayTeamName, row.homeTeamName);
+    if (!key) continue;
+    const list = rowsByKey.get(key) ?? [];
+    list.push(row);
+    rowsByKey.set(key, list);
+  }
+
+  const matched = new Map<number, PlaybookSplitGame>();
+  for (const [key, slateGames] of gamesByKey) {
+    const providerRows = rowsByKey.get(key) ?? [];
+    if (slateGames.length === 1 && providerRows.length === 1) {
+      matched.set(slateGames[0]!.id, providerRows[0]!);
+      continue;
+    }
+    if (slateGames.length !== providerRows.length || slateGames.length === 0) continue;
+    const orderedGames = slateGames
+      .map((game) => ({ game, ms: game.gameDate ? Date.parse(game.gameDate) : NaN }))
+      .filter((x) => Number.isFinite(x.ms))
+      .sort((a, b) => a.ms - b.ms);
+    const orderedRows = providerRows
+      .map((row) => ({ row, ms: providerStartMs(row) }))
+      .filter((x): x is { row: PlaybookSplitGame; ms: number } => x.ms !== null)
+      .sort((a, b) => a.ms - b.ms);
+    if (orderedGames.length !== slateGames.length || orderedRows.length !== providerRows.length) continue;
+    for (let i = 0; i < orderedGames.length; i++) {
+      // Six hours permits ordinary provider clock drift while preventing a
+      // morning/evening doubleheader row from crossing to the other game.
+      if (Math.abs(orderedGames[i]!.ms - orderedRows[i]!.ms) > 6 * 60 * 60 * 1000) continue;
+      matched.set(orderedGames[i]!.game.id, orderedRows[i]!.row);
+    }
+  }
+  return matched;
+}
+
 function gameKey(sport: string, away: unknown, home: unknown): string | null {
   if (sport === "mlb") {
     const a = normalizeMlbTeamName(String(away ?? "")), h = normalizeMlbTeamName(String(home ?? ""));
@@ -93,13 +159,17 @@ export async function syncPublicSplitsObservations(opts: {
   const { data: teams } = await supabase.from("teams").select("id, abbreviation, name").eq("sport", sport);
   const abbr = new Map<number, string>(), tname = new Map<number, string>();
   for (const t of teams ?? []) { abbr.set(t.id as number, (t.abbreviation as string) ?? ""); tname.set(t.id as number, (t.name as string) ?? ""); }
-  const { data: games } = await supabase.from("games").select("id, home_team_id, away_team_id").eq("sport", sport).eq("slate_date", slateDate);
+  const { data: games } = await supabase.from("games").select("id, home_team_id, away_team_id, game_date").eq("sport", sport).eq("slate_date", slateDate);
   const ids = (games ?? []).map((g) => g.id as number);
   if (ids.length === 0) { logger(`${sport} ${slateDate}: no games`); return res; }
   const keyById = new Map<number, string>();
+  const slateGames: SlateGame[] = [];
   for (const g of games ?? []) {
     const k = sport === "mlb" ? `${abbr.get(g.away_team_id as number)}@${abbr.get(g.home_team_id as number)}` : gameKey(sport, tname.get(g.away_team_id as number), tname.get(g.home_team_id as number));
-    if (k) keyById.set(g.id as number, k);
+    if (k) {
+      keyById.set(g.id as number, k);
+      slateGames.push({ id: g.id as number, key: k, gameDate: (g.game_date as string | null) ?? null });
+    }
   }
 
   const rows: ObsRow[] = [];
@@ -132,11 +202,10 @@ export async function syncPublicSplitsObservations(opts: {
       const r = slateDate === todayUtc ? await client.splits(sport) : await client.splitsHistory(sport, slateDate);
       pbRows = ((r.body as { data?: PlaybookSplitGame[] }).data) ?? [];
     } catch (e) { res.errors.push(`playbook fetch: ${(e as Error).message}`); }
-    const pbByKey = new Map<string, PlaybookSplitGame>();
-    for (const r of pbRows) { const k = gameKey(sport, r.awayTeamName, r.homeTeamName); if (k) pbByKey.set(k, r); }
+    const pbByGameId = matchPlaybookSplitsToSlateGames(slateGames, pbRows, sport);
     const observedAt = new Date().toISOString();
     for (const [gid, gkey] of keyById) {
-      const pb = pbByKey.get(gkey); if (!pb) continue;
+      const pb = pbByGameId.get(gid); if (!pb) continue;
       for (const market of ["moneyline", "total", "spread"] as Market[]) {
         for (const side of SIDES[market]) {
           const c = pbCells(pb, market, side);

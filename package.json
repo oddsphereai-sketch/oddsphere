@@ -59,6 +59,7 @@
     "test:playbook-public-splits-mapper": "tsx scripts/test-playbook-public-splits-mapper.ts",
     "test:playbook-public-splits-overlay": "tsx scripts/test-playbook-public-splits-overlay.ts",
     "test:public-splits-resolver": "tsx scripts/test-public-splits-resolver.ts",
+    "test:mlb-doubleheader-public-splits": "tsx scripts/test-mlb-doubleheader-public-splits.ts",
     "test:public-market-context": "tsx scripts/test-public-market-context.ts",
     "test:recommendation-decision": "tsx scripts/test-recommendation-decision.ts",
     "test:ai-audit-cost-control": "tsx scripts/test-ai-audit-cost-control.ts",
