@@ -157,9 +157,15 @@ async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): Promise
   const lockedRefs = await loadLockedDisplaySnapshotRefs(latest.slateDate);
   if (!lockedRefs.size) return latest;
 
+  const snapshotIds = [...new Set([...lockedRefs.values()].map((ref) => ref.snapshotId))];
+  const loadedSnapshots = await Promise.all(
+    snapshotIds.map(async (snapshotId) => ({
+      snapshotId,
+      snapshot: await loadMlbPropsBoardSnapshotById(latest.slateDate, snapshotId),
+    })),
+  );
   const lockedSnapshots = new Map<string, MlbPropsBoardSnapshot>();
-  for (const snapshotId of new Set([...lockedRefs.values()].map((ref) => ref.snapshotId))) {
-    const snapshot = await loadMlbPropsBoardSnapshotById(latest.slateDate, snapshotId);
+  for (const { snapshotId, snapshot } of loadedSnapshots) {
     if (snapshot) lockedSnapshots.set(snapshotId, snapshot);
   }
   if (!lockedSnapshots.size) return latest;
