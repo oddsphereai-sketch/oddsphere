@@ -129,9 +129,16 @@ export async function loadRecentMlbPropsBoardSnapshots(slateDate: string, limit 
     .eq("sport", "mlb")
     .eq("slate_date", slateDate)
     .eq("status", "completed")
-    .eq("metadata_json->>kind", MLB_PROPS_BOARD_SNAPSHOT_KIND)
+    .eq("provider_mode", "real")
+    .eq("odds_provider", "balldontlie")
+    .eq("context_provider", "nws+baseball_savant+balldontlie")
+    .eq("persisted", true)
     .order("created_at", { ascending: false })
-    .limit(Math.max(5, Math.min(limit * 2, 20)));
+    // Snapshot payloads can be several megabytes on a full slate. Fetch only
+    // the requested number of already-filtered rows; over-fetching five rows
+    // for the common "latest" lookup can exceed the database statement
+    // timeout before the page has a chance to decode the first snapshot.
+    .limit(Math.max(1, Math.min(limit, 20)));
   if (error) throw error;
   const snapshots: MlbPropsBoardSnapshot[] = [];
   for (const row of data ?? []) {
@@ -157,9 +164,10 @@ async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): Promise
   const lockedRefs = await loadLockedDisplaySnapshotRefs(latest.slateDate);
   if (!lockedRefs.size) return latest;
 
-  const snapshotIds = [...new Set([...lockedRefs.values()].map((ref) => ref.snapshotId))];
+  const snapshotPointers = new Map<string, LockedDisplaySnapshotPointer>();
+  for (const ref of lockedRefs.values()) snapshotPointers.set(ref.snapshotId, ref);
   const loadedSnapshots = await Promise.all(
-    snapshotIds.map(async (snapshotId) => ({
+    [...snapshotPointers.values()].map(async ({ snapshotId }) => ({
       snapshotId,
       snapshot: await loadMlbPropsBoardSnapshotById(latest.slateDate, snapshotId),
     })),
@@ -252,7 +260,10 @@ async function loadMlbPropsBoardSnapshotById(slateDate: string, snapshotId: stri
     .eq("sport", "mlb")
     .eq("slate_date", slateDate)
     .eq("status", "completed")
-    .eq("metadata_json->>kind", MLB_PROPS_BOARD_SNAPSHOT_KIND)
+    .eq("provider_mode", "real")
+    .eq("odds_provider", "balldontlie")
+    .eq("context_provider", "nws+baseball_savant+balldontlie")
+    .eq("persisted", true)
     .eq("metadata_json->>snapshot_id", snapshotId)
     .limit(1)
     .maybeSingle();
