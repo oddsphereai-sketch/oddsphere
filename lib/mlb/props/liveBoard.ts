@@ -1211,9 +1211,16 @@ function pitcherSignalGrade(args: {
 }): IntegratedPropSignal["playGrade"] {
   const grade = signalGrade(args.grade);
   if (grade !== "BEST_ANGLE") return grade;
+  const minGap = pitcherBestAngleProjectionGap(args.market);
+  if (minGap === null) return "LEAN";
   const signedGap = args.side === "over" ? args.projection - args.line : args.line - args.projection;
-  const minGap = args.market === "pitcher_outs" ? 1 : args.market === "pitcher_strikeouts" ? 0.35 : 0;
   return signedGap >= minGap ? "BEST_ANGLE" : "LEAN";
+}
+
+function pitcherBestAngleProjectionGap(market: string): number | null {
+  if (market === "pitcher_outs") return 1;
+  if (market === "pitcher_strikeouts") return 0.35;
+  return null;
 }
 
 function averageNumber(values: number[]): number {
