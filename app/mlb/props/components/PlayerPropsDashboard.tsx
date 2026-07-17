@@ -42,6 +42,7 @@ type MarketFilter = string;
 type MarketFamilyFilter = "all" | "pitcher" | "batter";
 type RadarItem = { row: PlayerPropPreviewRow; label: string; note: string };
 type DashboardMode = "preview" | "live-preview" | "admin" | "member" | "member-disabled";
+const RADAR_ITEM_LIMIT = 6;
 
 export type PlayerPropOddsMovement = {
   openingLine: number;
@@ -541,7 +542,7 @@ function TodayRadar({ rows, onSelect }: { rows: PlayerPropPreviewRow[]; onSelect
   const items = buildRadarItems(rows);
   return <section data-product-zone="today-radar" className="border-b border-gray-800 py-7">
     <div className="flex items-end justify-between gap-4"><div><p className="text-[10px] font-black uppercase text-emerald-300">Today&apos;s Radar</p><h2 className="mt-1 text-2xl font-black text-white">Top model predictions</h2></div><span className="text-xs text-gray-500">{items.length} reads</span></div>
-    <div className="mt-4 grid gap-3 lg:grid-cols-3">{items.map((item) => <RadarCard key={`${item.label}-${item.row.id}`} item={item} onSelect={onSelect} />)}</div>
+    <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2" aria-label="Top model prediction cards">{items.map((item) => <RadarCard key={`${item.label}-${item.row.id}`} item={item} onSelect={onSelect} />)}</div>
   </section>;
 }
 
@@ -549,7 +550,7 @@ function RadarCard({ item, onSelect }: { item: RadarItem; onSelect: (id: string)
   const { row } = item;
   const teamColor = teamPrimaryColor(row.team, "mlb");
   const gradeColor = getPropGradeColor(row.playGrade);
-  return <article className="relative overflow-hidden rounded-lg border bg-[#0e1218]" style={{ borderColor: gradeColor.border, boxShadow: `0 0 0 1px ${gradeColor.border}22 inset`, background: `linear-gradient(180deg, ${gradeColor.background}, rgba(14, 18, 24, 0.98) 42%)` }}>
+  return <article className="relative h-full w-[min(84vw,340px)] shrink-0 snap-start overflow-hidden rounded-lg border bg-[#0e1218] lg:w-[360px]" style={{ borderColor: gradeColor.border, boxShadow: `0 0 0 1px ${gradeColor.border}22 inset`, background: `linear-gradient(180deg, ${gradeColor.background}, rgba(14, 18, 24, 0.98) 42%)` }}>
     <div className="absolute inset-x-0 top-0 h-0.5" style={{ backgroundColor: teamColor }} />
     <div className="absolute -right-8 top-12 opacity-[0.045]"><ProductTeamBadge abbreviation={row.team} size={150} /></div>
     <div className="relative p-4"><div className="flex items-start justify-between gap-3"><span className="text-[10px] font-black uppercase text-violet-300">{item.label}</span><PropGradeBadge grade={row.playGrade} compact /></div>
@@ -1374,7 +1375,7 @@ function buildRadarItems(rows: PlayerPropPreviewRow[]): RadarItem[] {
     add(best, "Book spread", `Available prices range from ${signed(lowestOdds)} to ${signed(highestOdds)} across ${widestPriceGroup.length} sportsbooks.`);
   }
 
-  const contextWatch = items.length < 2 && signalRows.length < 3 ? uniqueRows.find((row) => row.playGrade === "WATCHLIST") : null;
+  const contextWatch = items.length < 2 && signalRows.length < RADAR_ITEM_LIMIT ? uniqueRows.find((row) => row.playGrade === "WATCHLIST") : null;
   if (contextWatch) {
     const missing = contextWatch.missingFeatures[0] ? memberFeatureLabel(contextWatch.missingFeatures[0]) : "additional pregame context";
     add(contextWatch, "Context watch", `The current read is waiting on ${missing.toLowerCase()}.`);
@@ -1382,10 +1383,10 @@ function buildRadarItems(rows: PlayerPropPreviewRow[]): RadarItem[] {
 
   const modelRows = signalRows.length ? signalRows : uniqueRows.filter((row) => row.playGrade === "WATCHLIST");
   for (const row of [...modelRows].sort((a, b) => Math.abs(b.modelEdge ?? 0) - Math.abs(a.modelEdge ?? 0))) {
-    if (items.length >= 3) break;
+    if (items.length >= RADAR_ITEM_LIMIT) break;
     add(row, "Model signal", `${getPropGradeLabel(row.playGrade)} · ${sentenceCase(row.confidenceBucket)} evidence strength at the current price.`);
   }
-  return items.slice(0, 3);
+  return items.slice(0, RADAR_ITEM_LIMIT);
 }
 
 function isRadarEligible(row: PlayerPropPreviewRow): boolean {
