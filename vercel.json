@@ -47,19 +47,11 @@
     },
     {
       "path": "/api/cron/daily-edge-data-health",
-      "schedule": "35 13-23 * * *"
-    },
-    {
-      "path": "/api/cron/daily-edge-data-health",
-      "schedule": "35 0-3 * * *"
+      "schedule": "35 8 * * *"
     },
     {
       "path": "/api/cron/ai-daily-edge-shadow?sport=mlb&markets=ML,TOTAL",
-      "schedule": "22 13-23 * * *"
-    },
-    {
-      "path": "/api/cron/ai-daily-edge-shadow?sport=mlb&markets=ML,TOTAL",
-      "schedule": "22 0-3 * * *"
+      "schedule": "22 9 * * *"
     },
     {
       "path": "/api/cron/cleanup-stream-tables",
