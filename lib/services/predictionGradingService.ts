@@ -165,11 +165,16 @@ export async function gradePredictionsForSlate(args: {
   };
 
   // Load records
-  const { data: recRows, error: recErr } = await supabase
+  let recordsQuery = supabase
     .from("prediction_records")
     .select("*")
     .eq("sport", sport)
     .eq("slate_date", slateDate);
+  // MLB's public record is defined at the persisted lock boundary. If a
+  // pregame sweep is missed (for example during a database outage), the
+  // unlocked row remains mutable and must never be settled into Tracking.
+  if (sport === "mlb") recordsQuery = recordsQuery.not("locked_at", "is", null);
+  const { data: recRows, error: recErr } = await recordsQuery;
   if (recErr) {
     result.errors.push({ prediction_record_id: undefined, reason: `records fetch: ${recErr.message}` });
     return result;
