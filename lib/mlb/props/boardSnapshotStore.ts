@@ -9,7 +9,10 @@ import type { PropOddsSnapshot } from "./providers";
 export const MLB_PROPS_BOARD_SNAPSHOT_KIND = "member_board_snapshot_v1";
 export const DEFAULT_MLB_PROPS_MAX_SNAPSHOT_JSON_BYTES = 40_000_000;
 export const DEFAULT_MLB_PROPS_MAX_SNAPSHOT_GZIP_BYTES = 2_000_000;
-const DEFAULT_MLB_PROPS_SNAPSHOT_RETENTION_PER_SLATE = 36;
+// Keep a short rolling history for movement/debugging. Any snapshot referenced
+// by a locked internal tracking entry is preserved independently, so lowering
+// this bound reduces database pressure without sacrificing lock evidence.
+const DEFAULT_MLB_PROPS_SNAPSHOT_RETENTION_PER_SLATE = 12;
 
 export type MlbPropsBoardValidation = {
   publishable: boolean;

@@ -10,7 +10,7 @@
  */
 
 import { computeRefreshDates } from "../lib/services/trackingRefreshService";
-import { shouldUpsertGrade } from "../lib/services/predictionGradingService";
+import { resolveRecordForGrading, shouldUpsertGrade } from "../lib/services/predictionGradingService";
 import { resolveScoreIngestNextScores } from "../lib/services/scoreIngestService";
 import { readFileSync } from "node:fs";
 
@@ -80,6 +80,41 @@ check(
   "MLB grading excludes records that never reached the persisted lock boundary",
   gradingSource.includes('if (sport === "mlb") recordsQuery = recordsQuery.not("locked_at", "is", null)'),
 );
+
+console.log("\n━━━ immutable FI grading substrate ━━━");
+{
+  const restored = resolveRecordForGrading({
+    market: "first_inning",
+    locked_at: "2026-07-17T21:07:21.995Z",
+    pick: "Toss-Up",
+    side: null,
+    prediction_type: "toss_up",
+    no_bet: true,
+    held: true,
+    play_grade: "held",
+    best_angle: false,
+    confidence: 52,
+    line_value: 0.5,
+    odds_american: null,
+    snapshot_json: { member_facing_at_lock: {
+      pick: "NRFI", side: "under", no_bet: false, play_grade: "best_angle",
+      confidence: 59, line_value: 0.5, odds_american: -121,
+    } },
+  } as never);
+  check(
+    "locked actionable FI snapshot overrides a contradictory Toss-Up row",
+    restored.pick === "NRFI" && restored.side === "under" && restored.no_bet === false &&
+      restored.held === false && restored.play_grade === "best_angle" && restored.odds_american === -121,
+  );
+}
+{
+  const tossUp = {
+    market: "first_inning", locked_at: "2026-07-17T21:07:21.995Z", pick: "Toss-Up",
+    side: null, prediction_type: "toss_up", no_bet: true, held: true,
+    snapshot_json: { member_facing_at_lock: { pick: "Toss-Up", side: null, no_bet: true } },
+  } as never;
+  check("genuine locked FI Toss-Up remains non-actionable", resolveRecordForGrading(tossUp) === tossUp);
+}
 
 // ── MLB final score preservation ─────────────────────────────────
 console.log("\n━━━ score ingest MLB final-score preservation ━━━");

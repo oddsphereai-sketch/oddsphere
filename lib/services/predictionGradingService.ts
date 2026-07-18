@@ -145,6 +145,48 @@ export function shouldUpsertGrade(args: {
   return true;
 }
 
+/**
+ * Grade a locked first-inning pick from the immutable member-facing lock
+ * substrate when a later mutable-row write contradicts it. This is narrowly
+ * scoped to NRFI/YRFI: genuine locked Toss-Ups remain non-actionable.
+ */
+export function resolveRecordForGrading(record: PredictionRecordRow): PredictionRecordRow {
+  if (record.market !== "first_inning" || record.locked_at === null) return record;
+  const locked = record.snapshot_json?.member_facing_at_lock;
+  if (typeof locked !== "object" || locked === null || Array.isArray(locked)) return record;
+  const snapshot = locked as Record<string, unknown>;
+  const pick = snapshot.pick;
+  const side = snapshot.side;
+  const actionableSnapshot =
+    (pick === "NRFI" || pick === "YRFI") &&
+    (side === "under" || side === "over") &&
+    snapshot.no_bet !== true;
+  const contradictoryRow =
+    record.prediction_type === "toss_up" ||
+    record.side === null ||
+    record.no_bet === true ||
+    record.held === true;
+  if (!actionableSnapshot || !contradictoryRow) return record;
+
+  return {
+    ...record,
+    pick,
+    side,
+    prediction_type: null,
+    no_bet: false,
+    held: false,
+    play_grade: typeof snapshot.play_grade === "string"
+      ? snapshot.play_grade as PredictionRecordRow["play_grade"]
+      : record.play_grade,
+    best_angle: typeof snapshot.play_grade === "string"
+      ? snapshot.play_grade === "best_angle"
+      : record.best_angle,
+    confidence: typeof snapshot.confidence === "number" ? snapshot.confidence : record.confidence,
+    line_value: typeof snapshot.line_value === "number" ? snapshot.line_value : record.line_value,
+    odds_american: typeof snapshot.odds_american === "number" ? snapshot.odds_american : record.odds_american,
+  };
+}
+
 export async function gradePredictionsForSlate(args: {
   sport: TrackedSport;
   slateDate: string;
@@ -269,6 +311,7 @@ export async function gradePredictionsForSlate(args: {
 
   const nowISO = new Date().toISOString();
   for (const rec of records) {
+    const gradingRecord = resolveRecordForGrading(rec);
     const game = gameById.get(rec.game_id);
     if (game === undefined || rec.id === undefined) continue;
     const wnbaExpectedSlate =
@@ -281,7 +324,7 @@ export async function gradePredictionsForSlate(args: {
         : wnbaExpectedSlate !== null && wnbaExpectedSlate !== rec.slate_date
         ? staleWnbaSlateVoidGrade(rec, source, wnbaExpectedSlate)
         : gradePrediction({
-            record: rec,
+            record: gradingRecord,
             game: {
               status: game.status ?? "unknown",
               home_score: game.home_score,
@@ -344,7 +387,7 @@ export async function gradePredictionsForSlate(args: {
       existingResult,
       existingNotes: existingGrade?.notes,
       newResult: grade.result,
-      record: rec,
+      record: gradingRecord,
     });
     if (!shouldWrite) {
       result.skippedPendingDowngrade++;

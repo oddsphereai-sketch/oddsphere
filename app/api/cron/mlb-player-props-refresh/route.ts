@@ -22,7 +22,12 @@ export async function GET(request: Request) {
     const result = await refreshMlbPropsBoard({ slateDate, refreshMode, persist: true });
     const trackingFailed = result.tracking.status === "failed";
     return {
-      records_updated: result.published ? result.snapshot.data.props.length : 0,
+      // This metric is database writes, not the number of display rows carried
+      // inside one compressed snapshot. Reporting thousands of props here made
+      // capacity monitoring misleading and obscured the actual write load.
+      records_updated: result.published
+        ? 2 + result.tracking.entriesLocked + result.tracking.closingPricesUpdated
+        : 0,
       api_calls_made: result.providerCalls.balldontlie,
       partial: !result.published || trackingFailed,
       error_message: !result.published
