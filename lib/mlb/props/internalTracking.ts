@@ -263,6 +263,11 @@ export async function getInternalMlbPropsTrackingReport(args: { startDate?: stri
     oneUnitByCategory: groupMetrics(rows, marketCategory, oneUnitPerformanceMetrics),
     oneUnitByGrade: groupMetrics(rows, (row) => row.play_grade, oneUnitPerformanceMetrics),
     recent: rows.slice(0, 250).map(publicTrackingRow),
+    recentSettled: rows
+      .filter((row) => row.result_status !== "pending")
+      .sort((a, b) => Date.parse(b.settled_at ?? "") - Date.parse(a.settled_at ?? ""))
+      .slice(0, 250)
+      .map(publicTrackingRow),
   };
 }
 

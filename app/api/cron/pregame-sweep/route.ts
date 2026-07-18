@@ -468,6 +468,32 @@ export async function GET(request: Request) {
       const lockResult = await applyLocks(sport, date, gamesReadyForLock);
       records += lockResult.locked;
 
+      // Persist lock-health failures as small operational events. Successful
+      // sweeps add no rows. This makes a missed/blocked lock visible before
+      // settlement instead of discovering it from a flipped Tracking slate.
+      const missedLockGames = partition.already_started.map((game) => game.game_id);
+      const blockedLockGames = lockCoherence.blocked_game_ids;
+      if (missedLockGames.length > 0 || blockedLockGames.length > 0) {
+        const events = [
+          ...missedLockGames.map((gameId) => ({
+            severity: "critical",
+            component: "pregame_sweep",
+            event_type: "game_started_without_lock",
+            message: `Game ${gameId} started without an authoritative prediction lock`,
+            context_json: { sport, slate_date: date, game_id: gameId },
+          })),
+          ...blockedLockGames.map((gameId) => ({
+            severity: "high",
+            component: "pregame_sweep",
+            event_type: "lock_coherence_blocked",
+            message: `Game ${gameId} lock was blocked by member/model coherence checks`,
+            context_json: { sport, slate_date: date, game_id: gameId, errors: lockCoherence.errors },
+          })),
+        ];
+        const { error: healthEventError } = await supabase.from("data_quality_events").insert(events);
+        if (healthEventError) lockResult.errors.push(`lock-health event write failed: ${healthEventError.message}`);
+      }
+
       if (sport === "mlb" && marketIntelligenceV2 === null) {
         marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
           supabase,
@@ -484,6 +510,7 @@ export async function GET(request: Request) {
           lockResult.errors.length > 0 ||
           enteringLockModelResult.errors.length > 0 ||
           lockCoherence.errors.length > 0 ||
+          missedLockGames.length > 0 ||
           (marketIntelligenceV2?.errors.length ?? 0) > 0;
         return {
           records_updated: records,
@@ -506,6 +533,7 @@ export async function GET(request: Request) {
             locks_applied: lockResult.locked,
             audit_rows_written: lockResult.audit_written,
             lock_errors: lockResult.errors,
+            missed_lock_game_ids: missedLockGames,
             market_intelligence_v2: marketIntelligenceV2,
             pre_lock_market_refresh: {
               lines_records_updated: preLockGameLines?.records_updated ?? 0,

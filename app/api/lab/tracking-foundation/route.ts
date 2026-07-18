@@ -21,6 +21,7 @@
 
 import { supabase } from "@/lib/db/supabase";
 import { computeTrackingAggregate } from "@/lib/services/trackingAggregateService";
+import { getInternalMlbPropsTrackingReport } from "@/lib/mlb/props/internalTracking";
 import type { TrackedSport } from "@/lib/types/domain/Tracking";
 import { unstable_cache } from "next/cache";
 
@@ -51,6 +52,12 @@ const loadSharedTrackingAggregate = unstable_cache(
     includeLaunchDay: false,
   }),
   ["member-tracking-aggregate-v1"],
+  { revalidate: TRACKING_RESPONSE_CACHE_TTL_MS / 1000, tags: ["member-tracking-aggregate"] },
+);
+
+const loadSharedPlayerPropsTracking = unstable_cache(
+  async () => getInternalMlbPropsTrackingReport({ startDate: MEMBER_TRACKING_FROM, limit: 5_000 }),
+  ["member-mlb-props-tracking-v1"],
   { revalidate: TRACKING_RESPONSE_CACHE_TTL_MS / 1000, tags: ["member-tracking-aggregate"] },
 );
 
@@ -124,9 +131,13 @@ export async function GET(request: Request) {
   }
 
   let result;
+  let playerProps;
   try {
-    result = await withTimeout(
-      loadSharedTrackingAggregate(sport ?? "all", today),
+    [result, playerProps] = await withTimeout(
+      Promise.all([
+        loadSharedTrackingAggregate(sport ?? "all", today),
+        sport === undefined || sport === "mlb" ? loadSharedPlayerPropsTracking() : Promise.resolve(null),
+      ]),
       TRACKING_AGGREGATE_TIMEOUT_MS,
       "tracking aggregate",
     );
@@ -195,6 +206,7 @@ export async function GET(request: Request) {
     dailyTrend: result.dailyTrend,
     recentPicks: result.recentPicks,
     recentlySettled: result.recentlySettled,
+    playerProps,
     tablesInitialized: result.tablesInitialized,
     freshTrackingStarted: result.overall.picks > 0,
     generatedAt: new Date().toISOString(),
