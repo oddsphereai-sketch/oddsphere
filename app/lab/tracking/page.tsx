@@ -108,10 +108,48 @@ type TrackingResponse = {
   thisMonth?: { from: string; to: string; overall: Metrics; bySportMarket: SportMarketBucket[] };
   recentPicks?: RecentPickRow[];
   recentlySettled?: RecentlySettledRow[];
+  playerProps?: PlayerPropsTracking | null;
   tablesInitialized: boolean;
   freshTrackingStarted: boolean;
   generatedAt?: string;
   trackingCacheStatus?: "hit" | "miss" | "stale" | "error";
+};
+
+type PropMetrics = {
+  tracked: number;
+  wins: number;
+  losses: number;
+  pushes: number;
+  voids: number;
+  pending: number;
+  hitRate: number | null;
+  units: number;
+  roi: number | null;
+};
+
+type PropGroupMetrics = PropMetrics & { key: string };
+
+type PropTrackingRow = {
+  id: number;
+  slateDate: string;
+  player: string;
+  team: string;
+  opponent: string;
+  market: string;
+  side: string;
+  line: number;
+  lockedOdds: number;
+  grade: string;
+  resultStatus: "win" | "loss" | "push" | "void" | "pending";
+  resultValue: number | null;
+  settledAt: string | null;
+};
+
+type PlayerPropsTracking = {
+  summary: PropMetrics;
+  byCategory: PropGroupMetrics[];
+  byMarket: PropGroupMetrics[];
+  recentSettled: PropTrackingRow[];
 };
 
 // ─── Constants ─────────────────────────────────────────────────────────
@@ -440,6 +478,13 @@ export default function LabTrackingPage() {
         <YesterdayBoard date={yest?.date ?? null} rows={yesterdayRows} overall={yest?.overall ?? null} />
       </Section>
 
+      {/* Player props use their immutable lock/settlement ledger. They remain
+          separate from game-market accuracy so the much larger prop sample
+          cannot distort Daily Edge records. */}
+      <Section eyebrow="Immutable locked picks" title="Player Props Tracking">
+        <PlayerPropsTrackingBoard report={data.playerProps ?? null} />
+      </Section>
+
       {/* ── 2. TRACKING BY CATEGORY (Weekly / Monthly / Lifetime) ────── */}
       <Section
         eyebrow={
@@ -632,6 +677,47 @@ function Empty({ body }: { body: string }) {
   return (
     <div className="rounded-lg bg-white/[0.012] border border-dashed border-white/[0.05] py-6 px-4 text-center text-[12px] text-gray-500/85 leading-relaxed">
       {body}
+    </div>
+  );
+}
+
+function PlayerPropsTrackingBoard({ report }: { report: PlayerPropsTracking | null }) {
+  if (report === null || report.summary.tracked === 0) {
+    return <Card><Empty body="Player Props results appear here as locked picks settle." /></Card>;
+  }
+  const settled = report.recentSettled.slice(0, 50);
+  const decided = report.summary.wins + report.summary.losses;
+  return (
+    <div className="space-y-3">
+      <Card>
+        <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2 tabular-nums">
+          <span className="text-[22px] font-extrabold text-gray-50">{report.summary.wins}-{report.summary.losses}</span>
+          <span className="text-[13px] font-bold text-emerald-300/95">{decided > 0 && report.summary.hitRate !== null ? `${(report.summary.hitRate * 100).toFixed(1)}%` : "—"}</span>
+          <span className="text-[11px] text-gray-500">{report.summary.pending} pending · {report.summary.pushes} pushes · {report.summary.voids} voids</span>
+        </div>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {report.byCategory.map((row) => (
+            <div key={row.key} className="rounded-xl border border-white/[0.04] bg-white/[0.015] px-3 py-2.5 flex items-baseline justify-between gap-3">
+              <span className="text-[12px] font-semibold text-gray-300">{row.key}</span>
+              <span className="text-[13px] font-bold text-gray-100 tabular-nums">{row.wins}-{row.losses}{row.pending > 0 ? ` · ${row.pending} pending` : ""}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+      <div className="space-y-2">
+        {settled.map((row) => (
+          <div key={row.id} className="rounded-xl border border-white/[0.05] bg-white/[0.018] px-3.5 py-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="text-[10px] uppercase tracking-[0.13em] font-bold text-indigo-300/90">MLB Prop</span>
+            <span className="text-[13px] font-semibold text-gray-100">{row.player}</span>
+            <span className="text-[11px] text-gray-500">{row.team} vs {row.opponent}</span>
+            <span className="text-[12px] text-gray-300">{row.side} {row.line} · {row.market.replaceAll("_", " ")}</span>
+            <span className={`sm:ml-auto text-[11px] uppercase tracking-[0.12em] font-extrabold ${row.resultStatus === "win" ? "text-emerald-300" : row.resultStatus === "loss" ? "text-rose-300" : "text-gray-400"}`}>{row.resultStatus}</span>
+          </div>
+        ))}
+      </div>
+      {report.recentSettled.length > settled.length && (
+        <p className="text-[11px] text-gray-500">Showing the latest {settled.length}; all {report.summary.wins + report.summary.losses + report.summary.pushes + report.summary.voids} settled props are included in the record above.</p>
+      )}
     </div>
   );
 }
