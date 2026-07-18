@@ -51,6 +51,7 @@ import {
   runTrackingRefresh,
   computeRefreshDates,
 } from "@/lib/services/trackingRefreshService";
+import { revalidateTag } from "next/cache";
 
 export const maxDuration = 180;
 
@@ -82,6 +83,13 @@ export async function GET(request: Request) {
         apply,
         supabase,
       });
+
+      // Grades are the source of truth for the member Tracking aggregate.
+      // Expire it immediately after writes so repaired/settled FI results do
+      // not remain hidden behind the previous five-minute aggregate.
+      if (apply && summary.totals.grades_upserted > 0) {
+        revalidateTag("member-tracking-aggregate", { expire: 0 });
+      }
 
       return {
         records_updated:

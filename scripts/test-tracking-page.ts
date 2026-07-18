@@ -373,8 +373,9 @@ check(
     API.includes('"Vary": "Cookie"'),
 );
 check(
-  "Page allows browser caching for tracking snapshot",
-  !/fetch\("\/api\/lab\/tracking-foundation"[\s\S]{0,160}cache:\s*"no-store"/.test(PAGE),
+  "Tracking avoids stacked browser stale cache over the server aggregate",
+  API.includes('TRACKING_RESPONSE_CACHE_CONTROL = "private, no-store"') &&
+    !API.includes("cached.freshUntilMs > nowMs"),
 );
 check(
   "API shares the five-minute aggregate cache across server instances",
