@@ -117,14 +117,13 @@ async function loadSlateCandidates(
   sport: Sport,
   date: string
 ): Promise<SlateCandidate[]> {
-  // Select games + their game_predictions.locked_at via inner join. Games
-  // without a prediction row LEFT join → locked_at is null (correct for
-  // "no lock recorded yet").
+  // Read games and authoritative prediction locks separately. The embedded
+  // relation occasionally returned a null/partial child projection while the
+  // underlying game_predictions row was already locked, producing a false
+  // started-without-lock alert. An explicit keyed lookup is deterministic.
   const { data, error } = await supabase
     .from("games")
-    .select(
-      "id, external_id, game_date, game_predictions ( locked_at )"
-    )
+    .select("id, external_id, game_date")
     .eq("sport", sport)
     .eq("slate_date", date);
   if (error) {
@@ -136,15 +135,29 @@ async function loadSlateCandidates(
     id: number;
     external_id: number;
     game_date: string | null;
-    game_predictions: Array<{ locked_at: string | null }> | null;
   };
-  return ((data ?? []) as Row[]).map((r) => ({
+  const games = (data ?? []) as Row[];
+  const gameIds = games.map((game) => game.id);
+  const lockByGame = new Map<number, string | null>();
+  if (gameIds.length > 0) {
+    const { data: predictionRows, error: predictionError } = await supabase
+      .from("game_predictions")
+      .select("game_id, locked_at")
+      .in("game_id", gameIds);
+    if (predictionError) {
+      throw new Error(
+        `pregame-sweep lock lookup failed for ${sport}/${date}: ${predictionError.message}`
+      );
+    }
+    for (const row of (predictionRows ?? []) as Array<{ game_id: number; locked_at: string | null }>) {
+      lockByGame.set(row.game_id, row.locked_at);
+    }
+  }
+  return games.map((r) => ({
     game_id: r.id,
     external_id: r.external_id,
     game_date: r.game_date,
-    // game_predictions is array-typed (one-to-many) from the embedded
-    // relation; one prediction row per game so .[0] is canonical.
-    locked_at: r.game_predictions?.[0]?.locked_at ?? null,
+    locked_at: lockByGame.get(r.id) ?? null,
   }));
 }
 
