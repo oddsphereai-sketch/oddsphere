@@ -3544,14 +3544,12 @@ export async function createPredictionRecords(
   // first, then skip the upsert for any locked match.
   const { data: existingLocks } = await supabase
     .from("prediction_records")
-    .select("id, game_id, market, model_version, slate_date, locked_at, pick, side, line_value, odds_american, confidence, play_grade, prediction_type, no_bet, snapshot_json")
+    .select("id, game_id, market, model_version, slate_date, locked_at, odds_american, play_grade, no_bet, snapshot_json")
     .in("game_id", proposed.map((r) => r.game_id))
     .eq("slate_date", slateDate);
   const lockedKeys = new Set<string>();
   const existingKeys = new Set<string>();
   const existingSnapshotByKey = new Map<string, Record<string, unknown> | null>();
-  const existingIdByKey = new Map<string, number>();
-  const existingCoreByKey = new Map<string, Record<string, unknown>>();
   const existingMarketRecordByKey = new Map<string, {
     odds_american: number | null;
     play_grade: string | null;
@@ -3569,29 +3567,13 @@ export async function createPredictionRecords(
     model_version: string | null;
     slate_date: string;
     locked_at: string | null;
-    pick: string | null;
-    side: string | null;
-    line_value: number | null;
     odds_american: number | null;
-    confidence: number | null;
     play_grade: string | null;
-    prediction_type: string | null;
     no_bet: boolean | null;
     snapshot_json: Record<string, unknown> | null;
   }>) {
     const key = `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`;
     existingKeys.add(key);
-    existingIdByKey.set(key, r.id);
-    existingCoreByKey.set(key, {
-      pick: r.pick,
-      side: r.side,
-      line_value: r.line_value,
-      odds_american: r.odds_american,
-      confidence: r.confidence,
-      play_grade: r.play_grade,
-      prediction_type: r.prediction_type,
-      no_bet: r.no_bet,
-    });
     existingSnapshotByKey.set(key, r.snapshot_json);
     existingMarketRecordByKey.set(key, {
       odds_american: r.odds_american,
@@ -3652,7 +3634,6 @@ export async function createPredictionRecords(
   // Upsert per (game_id, market, model_version, slate_date). Locked
   // rows are skipped entirely (counted as skippedExisting so the
   // operator/cron summary surfaces them).
-  const immutableRunAuditRows: Array<Record<string, unknown>> = [];
   for (const proposedRecord of proposed) {
     if (startedGameIds.has(proposedRecord.game_id)) {
       result.skippedExisting++;
@@ -3698,48 +3679,6 @@ export async function createPredictionRecords(
       }
     } else {
       result.insertedCount++;
-      const afterState = {
-        pick: rec.pick,
-        side: rec.side,
-        line_value: rec.line_value,
-        odds_american: rec.odds_american,
-        confidence: rec.confidence,
-        play_grade: rec.play_grade,
-        prediction_type: rec.prediction_type,
-        no_bet: rec.no_bet,
-        model_version: rec.model_version,
-        published_at: rec.published_at,
-      };
-      const beforeState = existingCoreByKey.get(key) ?? null;
-      if (beforeState === null || JSON.stringify(beforeState) !== JSON.stringify({
-        pick: afterState.pick,
-        side: afterState.side,
-        line_value: afterState.line_value,
-        odds_american: afterState.odds_american,
-        confidence: afterState.confidence,
-        play_grade: afterState.play_grade,
-        prediction_type: afterState.prediction_type,
-        no_bet: afterState.no_bet,
-      })) {
-        immutableRunAuditRows.push({
-          action_type: "prediction_record.pregame_version",
-          target_table: "prediction_records",
-          target_id: String(existingIdByKey.get(key) ?? key),
-          before_state: beforeState,
-          after_state: afterState,
-          source_type: "real_api",
-        });
-      }
-    }
-  }
-  if (immutableRunAuditRows.length > 0) {
-    const { error: auditError } = await supabase.from("admin_audit_log").insert(immutableRunAuditRows);
-    if (auditError) {
-      result.errors.push({
-        game_id: 0,
-        market: "moneyline",
-        reason: `immutable pregame version audit failed: ${auditError.message}`,
-      });
     }
   }
   return result;
