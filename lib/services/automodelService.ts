@@ -360,6 +360,32 @@ async function fetchSlateExternalIds(
   );
 }
 
+async function fetchStartedExternalIds(
+  sport: Sport,
+  slate_date: string,
+  nowMs = Date.now(),
+): Promise<Set<number>> {
+  const { data, error } = await supabase
+    .from("games")
+    .select("external_id, game_date")
+    .eq("sport", sport)
+    .eq("slate_date", slate_date);
+  if (error) {
+    throw new Error(
+      `automodelService.fetchStartedExternalIds failed for ${sport}/${slate_date}: ${error.message}`,
+    );
+  }
+  return new Set(
+    ((data ?? []) as Array<{ external_id: number; game_date: string | null }>)
+      .filter((game) => {
+        if (typeof game.game_date !== "string") return false;
+        const startMs = new Date(game.game_date).getTime();
+        return Number.isFinite(startMs) && startMs <= nowMs;
+      })
+      .map((game) => game.external_id),
+  );
+}
+
 function autoModelOutputToScoresRow(
   output: AutoModelOutput,
   computed_at: string
@@ -502,8 +528,13 @@ export async function generatePredictionsForSlate(
   // remaining eligible games.
   const respectLocks = opts.respectLocks !== false;
   const callerExclusions = new Set<number>(opts.excludeGameExternalIds ?? []);
+  // A write run must always fail closed after first pitch, even when a prior
+  // lock job was missed and locked_at is still null.
+  const startedExternalIds = wantWrite
+    ? await fetchStartedExternalIds(sport, slate_date)
+    : new Set<number>();
   let effectiveFilter: number[] | undefined = opts.gameExternalIdsFilter;
-  if (respectLocks || callerExclusions.size > 0) {
+  if (respectLocks || callerExclusions.size > 0 || startedExternalIds.size > 0) {
     const lockedExternalIds = respectLocks
       ? await fetchLockedExternalIds(sport, slate_date)
       : new Set<number>();
@@ -512,6 +543,7 @@ export async function generatePredictionsForSlate(
     const combinedExclusions = new Set<number>([
       ...lockedExternalIds,
       ...callerExclusions,
+      ...startedExternalIds,
     ]);
     if (combinedExclusions.size > 0) {
       if (effectiveFilter === undefined) {

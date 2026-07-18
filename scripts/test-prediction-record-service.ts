@@ -2291,6 +2291,12 @@ console.log("\n━━━ post-start prediction record guard ━━━");
         src.includes("if (startedGameIds.has(proposedRecord.game_id))"));
   check("stale FI cleanup cannot mutate a post-start game",
         src.includes("!startedGameIds.has(r.game_id)"));
+
+  const automodelSrc = readFileSync("lib/services/automodelService.ts", "utf8");
+  check("automodel write runs independently exclude already-started games",
+        automodelSrc.includes("fetchStartedExternalIds") &&
+        automodelSrc.includes("const startedExternalIds = wantWrite") &&
+        automodelSrc.includes("...startedExternalIds"));
 }
 
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
