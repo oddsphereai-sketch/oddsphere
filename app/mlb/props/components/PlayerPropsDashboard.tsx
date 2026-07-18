@@ -263,7 +263,9 @@ const MARKET_FAMILY_FILTERS: Array<{ id: MarketFamilyFilter; label: string }> = 
   { id: "batter", label: "Batter props" },
 ];
 
-export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId = null }: { data: PlayerPropsDashboardData; mode?: DashboardMode; initialSelectedId?: string | null }) {
+export function PlayerPropsDashboard({ data: initialData, mode = "preview", initialSelectedId = null }: { data: PlayerPropsDashboardData; mode?: DashboardMode; initialSelectedId?: string | null }) {
+  const [fullData, setFullData] = useState<PlayerPropsDashboardData | null>(null);
+  const data = fullData ?? initialData;
   const [search, setSearch] = useState("");
   const [selectedGame, setSelectedGame] = useState("all");
   const [grade, setGrade] = useState<PropGrade | "all">("all");
@@ -284,6 +286,18 @@ export function PlayerPropsDashboard({ data, mode = "preview", initialSelectedId
   const [loadedResearch, setLoadedResearch] = useState<NonNullable<PlayerPropsDashboardData["research"]>>({});
   const [researchLoadingPlayerId, setResearchLoadingPlayerId] = useState<string | null>(null);
   const requestedResearchPlayers = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (mode !== "member" || fullData) return;
+    const controller = new AbortController();
+    fetch("/api/mlb/props/picks?full=true", { signal: controller.signal })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((payload: { board?: PlayerPropsDashboardData } | null) => {
+        if (payload?.board) setFullData(payload.board);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [fullData, mode]);
 
   const availableResearch = useMemo(() => ({ ...(data.research ?? {}), ...loadedResearch }), [data.research, loadedResearch]);
   const hydratedProps = useMemo(() => data.props.map((row) => enforcePreviewIntegrity(hydrateResearchEvidence(row, availableResearch))), [availableResearch, data.props]);
@@ -1357,7 +1371,7 @@ function pairMarketRows(rows: PlayerPropPreviewRow[]): MarketPair[] {
   });
 }
 
-function dedupeBestPrices(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
+export function dedupeBestPrices(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
   const best = new Map<string, PlayerPropPreviewRow>();
   for (const row of rows) {
     const key = `${row.player}|${row.team}|${row.opponent}|${row.market}|${row.side}|${row.line}`;

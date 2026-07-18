@@ -5272,6 +5272,27 @@ export async function GET(request: Request) {
     : sport === "soccer" || sport === "ucl"
       ? currentSoccerBoardDate()
       : currentSlateDate(sport);
+
+  // Member reads must never rebuild the full Daily Edge response. Cron jobs
+  // publish an indexed, last-known-good response snapshot after model/market
+  // refreshes. The explicit bypass is reserved for those writers.
+  if (url.searchParams.get("snapshotBypass") !== "true") {
+    const { dailyEdgeSnapshotKey, readLabResponseSnapshot } = await import(
+      "@/lib/services/labResponseSnapshots"
+    );
+    const snapshotKey = dailyEdgeSnapshotKey({ sport, requestedDate, allowStale, copyPreview });
+    const snapshot = await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "fresh")
+      ?? await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "stale");
+    if (snapshot) {
+      return Response.json(snapshot.payload, {
+        headers: {
+          "Cache-Control": "private, max-age=30, stale-while-revalidate=300",
+          "X-Oddsphere-Response-Source": snapshot.cacheState,
+        },
+      });
+    }
+  }
+
   const warmCacheKey = dailyEdgeWarmCacheKey({
     sport,
     requestedDate,

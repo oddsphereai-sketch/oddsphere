@@ -11,7 +11,7 @@ BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.lab_response_snapshots (
   snapshot_key TEXT PRIMARY KEY,
-  kind TEXT NOT NULL CHECK (kind IN ('daily_edge', 'tracking')),
+  kind TEXT NOT NULL CHECK (kind IN ('daily_edge', 'tracking', 'mlb_props_board', 'mlb_props_player')),
   sport TEXT,
   slate_date DATE,
   payload JSONB NOT NULL,

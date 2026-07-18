@@ -52,6 +52,7 @@ import {
   computeRefreshDates,
 } from "@/lib/services/trackingRefreshService";
 import { revalidateTag } from "next/cache";
+import { refreshTrackingResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 
 export const maxDuration = 180;
 
@@ -91,6 +92,13 @@ export async function GET(request: Request) {
         revalidateTag("member-tracking-aggregate", { expire: 0 });
       }
 
+      // The wrapper runs sports sequentially. Publish the member response once
+      // after the final sport instead of making every user request aggregate
+      // the full historical ledger.
+      const responseSnapshot = apply && sport === sports.at(-1)
+        ? await refreshTrackingResponseSnapshot({ source: "tracking_refresh" })
+        : null;
+
       return {
         records_updated:
           summary.totals.records_created +
@@ -109,6 +117,7 @@ export async function GET(request: Request) {
           startedAtIso: summary.startedAtIso,
           finishedAtIso: summary.finishedAtIso,
           durationMs: summary.durationMs,
+          responseSnapshot,
         },
       };
     },

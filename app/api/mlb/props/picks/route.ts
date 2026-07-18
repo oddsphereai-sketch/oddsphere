@@ -1,6 +1,8 @@
 import { loadCachedLatestMlbPropsDisplaySnapshot } from "@/lib/mlb/props/boardSnapshotStore";
 import { easternSlateDate, mlbPropsSnapshotIsFresh } from "@/lib/mlb/props/liveBoard";
+import { buildMlbPropsMemberBoardData } from "@/lib/mlb/props/memberPayload";
 import { getPublicPicksMode } from "@/lib/mlb/props/publicPicksSafety";
+import { loadMlbPropsMemberBoardSnapshot } from "@/lib/mlb/props/memberReadSnapshotStore";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -14,6 +16,20 @@ export async function GET(request: Request) {
       date,
       board: null,
     }, { status: 503, headers: { "Cache-Control": "private, no-store" } });
+  }
+  {
+    const full = url.searchParams.get("full") === "true";
+    const memberSnapshot = await loadMlbPropsMemberBoardSnapshot(date, full).catch(() => null);
+    if (memberSnapshot) {
+      return Response.json({
+        ok: true,
+        mode: "display_enabled",
+        date,
+        snapshotId: memberSnapshot.snapshotId,
+        asOfTimestamp: memberSnapshot.asOfTimestamp,
+        board: memberSnapshot.data,
+      }, { headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=600" } });
+    }
   }
   const snapshot = await loadCachedLatestMlbPropsDisplaySnapshot(date);
   if (!snapshot || !mlbPropsSnapshotIsFresh(snapshot)) {
@@ -31,6 +47,9 @@ export async function GET(request: Request) {
     snapshotId: snapshot.snapshotId,
     asOfTimestamp: snapshot.asOfTimestamp,
     movement: snapshot.movement,
-    board: snapshot.data,
+    // The full research map is loaded per player by the reader endpoint. Do
+    // not duplicate that multi-megabyte evidence blob in the board response.
+    // Every prop row and market remains present.
+    board: buildMlbPropsMemberBoardData(snapshot.data),
   }, { headers: { "Cache-Control": "private, no-store" } });
 }

@@ -10,13 +10,13 @@ const DAILY_EDGE_SNAPSHOT_TTL_MS = Number(
   process.env.DAILY_EDGE_DB_SNAPSHOT_TTL_MS ?? 10 * 60 * 1000,
 );
 const DAILY_EDGE_SNAPSHOT_STALE_MS = Number(
-  process.env.DAILY_EDGE_DB_SNAPSHOT_STALE_MS ?? 60 * 60 * 1000,
+  process.env.DAILY_EDGE_DB_SNAPSHOT_STALE_MS ?? 24 * 60 * 60 * 1000,
 );
 const TRACKING_SNAPSHOT_TTL_MS = Number(
   process.env.TRACKING_DB_SNAPSHOT_TTL_MS ?? 30 * 60 * 1000,
 );
 const TRACKING_SNAPSHOT_STALE_MS = Number(
-  process.env.TRACKING_DB_SNAPSHOT_STALE_MS ?? 6 * 60 * 60 * 1000,
+  process.env.TRACKING_DB_SNAPSHOT_STALE_MS ?? 7 * 24 * 60 * 60 * 1000,
 );
 
 type SnapshotWriteResult = {

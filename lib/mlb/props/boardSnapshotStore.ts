@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { createClient } from "@supabase/supabase-js";
-import { revalidateTag, unstable_cache } from "next/cache";
 import type { PlayerPropPreviewRow, PlayerPropsDashboardData } from "@/app/mlb/props/components/PlayerPropsDashboard";
 import type { RealPitcherSeasonStat } from "./realScoring";
 import type { PropOddsSnapshot } from "./providers";
@@ -13,6 +12,7 @@ export const DEFAULT_MLB_PROPS_MAX_SNAPSHOT_GZIP_BYTES = 2_000_000;
 // by a locked internal tracking entry is preserved independently, so lowering
 // this bound reduces database pressure without sacrificing lock evidence.
 const DEFAULT_MLB_PROPS_SNAPSHOT_RETENTION_PER_SLATE = 12;
+const MLB_PROPS_MEMORY_CACHE_TTL_MS = 60_000;
 
 export type MlbPropsBoardValidation = {
   publishable: boolean;
@@ -116,7 +116,30 @@ export function decodeMlbPropsBoardSnapshot(value: unknown): MlbPropsBoardSnapsh
 }
 
 export async function loadLatestMlbPropsBoardSnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
+  const indexed = await loadIndexedMlbPropsBoardSnapshot(slateDate);
+  if (indexed) return indexed;
   return (await loadRecentMlbPropsBoardSnapshots(slateDate, 1))[0] ?? null;
+}
+
+async function loadIndexedMlbPropsBoardSnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
+  const supabase = getSupabase();
+  const { data: indexRows, error: indexError } = await supabase
+    .from("admin_audit_log")
+    .select("target_id,after_state")
+    .eq("action_type", "mlb_props.board_snapshot_published")
+    .eq("target_table", "prop_scoring_runs")
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (indexError) throw indexError;
+  const index = (indexRows ?? []).find((row) => isRecord(row.after_state) && row.after_state.slate_date === slateDate);
+  if (!index?.target_id) return null;
+  const { data, error } = await supabase
+    .from("prop_scoring_runs")
+    .select("metadata_json")
+    .eq("id", index.target_id)
+    .single();
+  if (error) throw error;
+  return decodeMlbPropsBoardSnapshot(data?.metadata_json) ?? null;
 }
 
 export async function loadLatestMlbPropsDisplaySnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
@@ -163,7 +186,7 @@ type LockedDisplaySnapshotPointer = {
   lockedAt: string;
 };
 
-async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): Promise<MlbPropsBoardSnapshot> {
+export async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): Promise<MlbPropsBoardSnapshot> {
   const lockedRefs = await loadLockedDisplaySnapshotRefs(latest.slateDate);
   if (!lockedRefs.size) return latest;
 
@@ -258,21 +281,20 @@ async function loadLockedDisplaySnapshotRefs(slateDate: string): Promise<Map<str
 
 export async function loadMlbPropsBoardSnapshotById(slateDate: string, snapshotId: string): Promise<MlbPropsBoardSnapshot | null> {
   const supabase = getSupabase();
-  // Resolve the run using scalar projections first. Returning metadata_json
-  // while filtering a slate with many multi-megabyte payloads can exceed the
-  // database statement timeout before PostgREST returns the matching row.
+  // Resolve through the lightweight audit index. Filtering metadata_json —
+  // even through ->> — makes Postgres scan multi-megabyte JSON documents and
+  // can hit the statement timeout on a full slate.
   const { data: refs, error: refsError } = await supabase
-    .from("prop_scoring_runs")
-    .select("id,snapshot_id:metadata_json->>snapshot_id")
-    .eq("sport", "mlb")
-    .eq("slate_date", slateDate)
-    .eq("status", "completed")
-    .eq("provider_mode", "real")
-    .eq("odds_provider", "balldontlie")
-    .eq("context_provider", "nws+baseball_savant+balldontlie")
-    .eq("persisted", true);
+    .from("admin_audit_log")
+    .select("target_id,after_state")
+    .eq("action_type", "mlb_props.board_snapshot_published")
+    .eq("target_table", "prop_scoring_runs")
+    .order("created_at", { ascending: false })
+    .limit(500);
   if (refsError) throw refsError;
-  const runId = (refs ?? []).find((row) => row.snapshot_id === snapshotId)?.id;
+  const runId = (refs ?? []).find((row) => isRecord(row.after_state)
+    && row.after_state.slate_date === slateDate
+    && row.after_state.snapshot_id === snapshotId)?.target_id;
   if (runId === undefined) return null;
   const { data, error } = await supabase.from("prop_scoring_runs").select("metadata_json").eq("id", runId).single();
   if (error) throw error;
@@ -297,24 +319,45 @@ function summarizeDisplayProps(data: PlayerPropsDashboardData, props: PlayerProp
   };
 }
 
-const loadCachedSnapshot = unstable_cache(
-  async (slateDate: string) => loadLatestMlbPropsBoardSnapshot(slateDate),
-  ["mlb-props-member-board-latest-v1"],
-  { revalidate: 60, tags: ["mlb-props-member-board"] },
-);
+type MlbPropsMemoryCacheEntry = {
+  freshUntilMs: number;
+  value: Promise<MlbPropsBoardSnapshot | null>;
+};
 
-export async function loadCachedLatestMlbPropsBoardSnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
-  return loadCachedSnapshot(slateDate);
+// Full MLB prop snapshots are intentionally comprehensive and can decode to
+// tens of megabytes. Next's persistent incremental cache rejects values above
+// its 2 MB item limit, which turns every request into another Supabase read and
+// produces a cache-error loop under traffic. Keep one in-flight/result promise
+// per warm function instance instead. This coalesces concurrent requests and
+// bounds staleness without attempting to persist the oversized object.
+const boardSnapshotMemoryCache = new Map<string, MlbPropsMemoryCacheEntry>();
+const displaySnapshotMemoryCache = new Map<string, MlbPropsMemoryCacheEntry>();
+
+function loadMlbPropsSnapshotWithMemoryCache(
+  cache: Map<string, MlbPropsMemoryCacheEntry>,
+  slateDate: string,
+  loader: (date: string) => Promise<MlbPropsBoardSnapshot | null>,
+): Promise<MlbPropsBoardSnapshot | null> {
+  const now = Date.now();
+  const cached = cache.get(slateDate);
+  if (cached && cached.freshUntilMs > now) return cached.value;
+
+  let value: Promise<MlbPropsBoardSnapshot | null>;
+  value = loader(slateDate).catch((error) => {
+    const current = cache.get(slateDate);
+    if (current?.value === value) cache.delete(slateDate);
+    throw error;
+  });
+  cache.set(slateDate, { freshUntilMs: now + MLB_PROPS_MEMORY_CACHE_TTL_MS, value });
+  return value;
 }
 
-const loadCachedDisplaySnapshot = unstable_cache(
-  async (slateDate: string) => loadLatestMlbPropsDisplaySnapshot(slateDate),
-  ["mlb-props-member-board-display-v1"],
-  { revalidate: 60, tags: ["mlb-props-member-board"] },
-);
+export async function loadCachedLatestMlbPropsBoardSnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
+  return loadMlbPropsSnapshotWithMemoryCache(boardSnapshotMemoryCache, slateDate, loadLatestMlbPropsBoardSnapshot);
+}
 
 export async function loadCachedLatestMlbPropsDisplaySnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
-  return loadCachedDisplaySnapshot(slateDate);
+  return loadMlbPropsSnapshotWithMemoryCache(displaySnapshotMemoryCache, slateDate, loadLatestMlbPropsDisplaySnapshot);
 }
 
 export function measureMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapshot): MlbPropsBoardSnapshotSize {
@@ -384,11 +427,8 @@ export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapsh
 }
 
 function revalidateMlbPropsBoardCache(): void {
-  try {
-    revalidateTag("mlb-props-member-board", { expire: 0 });
-  } catch {
-    // Cache invalidation is best-effort outside Next route handlers.
-  }
+  boardSnapshotMemoryCache.clear();
+  displaySnapshotMemoryCache.clear();
 }
 
 async function pruneOldMlbPropsBoardSnapshots(slateDate: string, currentSnapshotId: string): Promise<void> {

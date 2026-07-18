@@ -45,6 +45,10 @@ import type {
   WeeklyAggregate,
   WindowTally,
 } from "@/app/lab/lib/labTypes";
+import {
+  readLabResponseSnapshot,
+  trackingSnapshotKey,
+} from "@/lib/services/labResponseSnapshots";
 
 // ─── Display ordering ────────────────────────────────────────────────────
 const SPORT_DISPLAY_ORDER: Sport[] = ["mlb", "nba", "wnba", "cbb", "nfl", "cfb", "nhl", "ucl", "soccer"];
@@ -542,7 +546,21 @@ async function loadWnbaGradeRows(): Promise<ResultRow[]> {
   return rows;
 }
 
-export async function GET(_request: Request) {
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  if (url.searchParams.get("snapshotBypass") !== "true") {
+    const snapshot = await readLabResponseSnapshot<TrackingResponse>(trackingSnapshotKey(), "fresh")
+      ?? await readLabResponseSnapshot<TrackingResponse>(trackingSnapshotKey(), "stale");
+    if (snapshot) {
+      return Response.json(snapshot.payload, {
+        headers: {
+          "Cache-Control": "private, max-age=60, stale-while-revalidate=600",
+          "X-Oddsphere-Response-Source": snapshot.cacheState,
+        },
+      });
+    }
+  }
+
   // Pull all rows. Paginate when this crosses ~50k.
   const PAGE = 1000;
   const allRows: ResultRow[] = [];

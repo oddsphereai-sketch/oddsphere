@@ -4,6 +4,7 @@ import { loadCachedLatestMlbPropsDisplaySnapshot } from "@/lib/mlb/props/boardSn
 import { easternSlateDate, mlbPropsSnapshotIsFresh } from "@/lib/mlb/props/liveBoard";
 import { getPublicPicksMode } from "@/lib/mlb/props/publicPicksSafety";
 import { buildMlbPropsMemberBoardData } from "@/lib/mlb/props/memberPayload";
+import { loadMlbPropsMemberBoardSnapshot } from "@/lib/mlb/props/memberReadSnapshotStore";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,10 @@ export default async function MlbPropsMemberPage({
   const query = await searchParams;
   const requestedReader = typeof query.reader === "string" ? query.reader : null;
   if (mode.mode === "display_enabled") {
+    const memberSnapshot = await loadMlbPropsMemberBoardSnapshot(easternSlateDate()).catch(() => null);
+    if (memberSnapshot && (!requestedReader || memberSnapshot.data.props.some((row) => row.id === requestedReader))) {
+      return <ProductAppFrame><PlayerPropsDashboard data={memberSnapshot.data} mode="member" initialSelectedId={requestedReader} /></ProductAppFrame>;
+    }
     const snapshot = await loadCachedLatestMlbPropsDisplaySnapshot(easternSlateDate()).catch(() => null);
     if (snapshot && mlbPropsSnapshotIsFresh(snapshot)) {
       const initialSelectedId = snapshot.data.props.some((row) => row.id === requestedReader) ? requestedReader : null;
