@@ -195,14 +195,22 @@ export async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): 
   const loadedSnapshots = await Promise.all(
     [...snapshotPointers.values()].map(async ({ snapshotId }) => ({
       snapshotId,
-      snapshot: await loadMlbPropsBoardSnapshotById(latest.slateDate, snapshotId),
+      // One historical snapshot may have been removed before lock-aware
+      // retention existed. Do not let that make every other game fall back to
+      // mutable live rows.
+      snapshot: await loadMlbPropsBoardSnapshotById(latest.slateDate, snapshotId).catch(() => null),
     })),
   );
   const lockedSnapshots = new Map<string, MlbPropsBoardSnapshot>();
   for (const { snapshotId, snapshot } of loadedSnapshots) {
     if (snapshot) lockedSnapshots.set(snapshotId, snapshot);
   }
-  if (!lockedSnapshots.size) return latest;
+  const unrecoverableLockedGames = new Set(
+    [...lockedRefs.entries()]
+      .filter(([, ref]) => !lockedSnapshots.has(ref.snapshotId))
+      .map(([gameId]) => gameId),
+  );
+  if (!lockedSnapshots.size && !unrecoverableLockedGames.size) return latest;
 
   const lockedRowsByGame = new Map<string, PlayerPropPreviewRow[]>();
   const lockedResearch: NonNullable<PlayerPropsDashboardData["research"]> = {};
@@ -228,6 +236,10 @@ export async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): 
   const props: PlayerPropPreviewRow[] = [];
   for (const row of latest.data.props) {
     const gameId = row.providerIds?.gameId;
+    // Fail closed when immutable pregame evidence is unavailable. Showing no
+    // rows for one locked game is safer than presenting in-game values with a
+    // pregame lock label.
+    if (gameId && unrecoverableLockedGames.has(gameId)) continue;
     if (gameId && lockedRowsByGame.has(gameId)) {
       if (!emittedLockedGames.has(gameId)) {
         props.push(...(lockedRowsByGame.get(gameId) ?? []));
@@ -296,8 +308,9 @@ export async function loadMlbPropsBoardSnapshotById(slateDate: string, snapshotI
     && row.after_state.slate_date === slateDate
     && row.after_state.snapshot_id === snapshotId)?.target_id;
   if (runId === undefined) return null;
-  const { data, error } = await supabase.from("prop_scoring_runs").select("metadata_json").eq("id", runId).single();
+  const { data, error } = await supabase.from("prop_scoring_runs").select("metadata_json").eq("id", runId).maybeSingle();
   if (error) throw error;
+  if (!data) return null;
   return decodeMlbPropsBoardSnapshot(data?.metadata_json) ?? null;
 }
 
