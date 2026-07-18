@@ -37,6 +37,38 @@ function resolveStatus(opts: RefreshCompleteOptions): "success" | "partial" | "f
 
 export const refreshLogger = {
   /**
+   * Close abandoned lifecycle rows left behind when the runtime is killed
+   * before the handler's finally block can execute. A current run is guarded
+   * by the lease; this only touches older rows for the same job and sport.
+   */
+  async closeStaleRuns(
+    dataSource: string,
+    sport: Sport | null,
+    olderThanMinutes: number = 15
+  ): Promise<number> {
+    const threshold = new Date(
+      Date.now() - olderThanMinutes * 60_000
+    ).toISOString();
+    let q = supabase
+      .from("data_refresh_log")
+      .update({
+        refresh_completed_at: new Date().toISOString(),
+        refresh_status: "failed",
+        error_message: "stale_run_reconciled: runtime ended before lifecycle close",
+      })
+      .eq("data_source", dataSource)
+      .eq("refresh_status", "in_progress")
+      .lt("refresh_started_at", threshold)
+      .select("id");
+    q = sport === null ? q.is("sport", null) : q.eq("sport", sport);
+    const { data, error } = await q;
+    if (error) {
+      throw new Error(`refreshLogger.closeStaleRuns failed: ${error.message}`);
+    }
+    return data?.length ?? 0;
+  },
+
+  /**
    * Start a new run row. Returns the row id used by complete() and any
    * downstream tracing.
    *

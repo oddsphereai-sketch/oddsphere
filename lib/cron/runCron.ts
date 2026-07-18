@@ -248,6 +248,14 @@ async function runOneStructured(
   // Start log
   let logId: number;
   try {
+    // A hard runtime termination cannot execute our catch/finally path. Once
+    // this invocation owns the lease, reconcile only sufficiently old rows
+    // for the same job before opening the new lifecycle row.
+    await refreshLogger.closeStaleRuns(
+      dataSource,
+      sport,
+      Math.max(15, lockMinutes * 3)
+    );
     logId = await refreshLogger.start(dataSource, sport);
   } catch (e) {
     // If logger fails, surface a 500 but don't try to run the handler —

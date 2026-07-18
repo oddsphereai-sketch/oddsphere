@@ -57,6 +57,7 @@ export type ReadinessBlocker =
   | "lineup_missing_backfillable"
   | "lineup_not_announced_yet"
   | "fi_market_missing"
+  | "fi_market_one_sided"
   | "weather_missing_backfillable"
   | "weather_stale_refreshable"
   | "park_factor_missing";
@@ -299,6 +300,7 @@ export async function auditMlbModelReadiness(args: {
       blockers.push(lineupExpected ? "lineup_missing_backfillable" : "lineup_not_announced_yet");
     }
     if (fiMktRows === 0) blockers.push("fi_market_missing");
+    else if (fiMktRows < 2) blockers.push("fi_market_one_sided");
     if (!weather) blockers.push("weather_missing_backfillable");
     else if (weatherStale) blockers.push("weather_stale_refreshable");
     if (!park) blockers.push("park_factor_missing");
