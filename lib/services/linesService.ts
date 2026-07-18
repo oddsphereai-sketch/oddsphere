@@ -364,7 +364,7 @@ export const linesService = {
   async refreshGameLinesV2(
     sport: Sport,
     date: string,
-    opts?: { dryRun?: boolean }
+    opts?: { dryRun?: boolean; externalIdsFilter?: readonly number[] }
   ): Promise<CronHandlerResult> {
     const dryRun = opts?.dryRun === true;
     const odds = getOddsProvider();
@@ -376,6 +376,12 @@ export const linesService = {
     }
 
     const gameIdByExternal = await loadGameIdMap(sport, date);
+    if (opts?.externalIdsFilter !== undefined) {
+      const allowed = new Set(opts.externalIdsFilter);
+      for (const externalId of gameIdByExternal.keys()) {
+        if (!allowed.has(externalId)) gameIdByExternal.delete(externalId);
+      }
+    }
     const slateGameIds = [...gameIdByExternal.values()];
     if (slateGameIds.length === 0) {
       return {
@@ -396,7 +402,9 @@ export const linesService = {
     const preCoverage = preSnap.aggregate;
     const preCoveragePerGame = preSnap.perGame;
 
-    const { records, discovery } = await odds.getGameLinesV2(date, sport);
+    const { records, discovery } = await odds.getGameLinesV2(date, sport, {
+      externalIdsFilter: opts?.externalIdsFilter,
+    });
 
     // Partition provider rows by (game_id, market_type). This is the
     // unit of preservation: a market the provider didn't return for a
@@ -787,11 +795,17 @@ export const linesService = {
   async refreshSharpSignals(
     sport: Sport,
     date: string,
-    opts?: { dryRun?: boolean }
+    opts?: { dryRun?: boolean; externalIdsFilter?: readonly number[] }
   ): Promise<CronHandlerResult> {
     const dryRun = opts?.dryRun === true;
     const sharp = getSharpSignalProvider();
     const gameIdByExternal = await loadGameIdMap(sport, date);
+    if (opts?.externalIdsFilter !== undefined) {
+      const allowed = new Set(opts.externalIdsFilter);
+      for (const externalId of gameIdByExternal.keys()) {
+        if (!allowed.has(externalId)) gameIdByExternal.delete(externalId);
+      }
+    }
     const gameIds = [...gameIdByExternal.values()];
 
     if (gameIds.length === 0) {
