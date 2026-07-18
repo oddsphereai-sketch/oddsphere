@@ -62,6 +62,7 @@ import {
   type MlbPropsBoardSnapshot,
   type MlbPropsBoardValidation,
 } from "./boardSnapshotStore";
+import { publishMlbPropsMemberReadSnapshots } from "./memberReadSnapshotStore";
 import { assessPropPrice } from "./pricePolicy";
 import {
   syncInternalMlbPropsTracking,
@@ -296,6 +297,20 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       closingPricesUpdated: 0,
       error: error instanceof Error ? error.message : String(error),
     };
+  }
+  // Publish the small, indexed member read models after lock reconciliation.
+  // A failure here must not discard the canonical scoring snapshot; readers
+  // retain the previous last-known-good member snapshot and the next refresh
+  // retries automatically.
+  try {
+    await publishMlbPropsMemberReadSnapshots(snapshot);
+  } catch (error) {
+    const detail = error instanceof Error
+      ? error.message
+      : typeof error === "object" && error !== null
+        ? JSON.stringify(error)
+        : String(error);
+    console.warn(`MLB props member snapshot publish failed: ${detail}`);
   }
   return {
     published: true,

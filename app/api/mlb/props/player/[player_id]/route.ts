@@ -2,6 +2,7 @@ import { loadCachedLatestMlbPropsDisplaySnapshot } from "@/lib/mlb/props/boardSn
 import { easternSlateDate, mlbPropsSnapshotIsFresh } from "@/lib/mlb/props/liveBoard";
 import { getPublicPicksMode } from "@/lib/mlb/props/publicPicksSafety";
 import { selectMlbPropsResearchForRows } from "@/lib/mlb/props/memberPayload";
+import { loadMlbPropsPlayerReadSnapshot } from "@/lib/mlb/props/memberReadSnapshotStore";
 
 export async function GET(
   _request: Request,
@@ -14,6 +15,15 @@ export async function GET(
     });
   }
   const { player_id: playerId } = await params;
+  const readSnapshot = await loadMlbPropsPlayerReadSnapshot(easternSlateDate(), playerId).catch(() => null);
+  if (readSnapshot) {
+    return Response.json({
+      ok: true,
+      mode: "display_enabled",
+      asOfTimestamp: readSnapshot.asOfTimestamp,
+      research: readSnapshot.research,
+    }, { headers: { "Cache-Control": "private, max-age=300, stale-while-revalidate=3600" } });
+  }
   const snapshot = await loadCachedLatestMlbPropsDisplaySnapshot(easternSlateDate());
   if (!snapshot || !mlbPropsSnapshotIsFresh(snapshot)) {
     return Response.json({ ok: false, mode: "temporarily_unavailable", player: null }, {

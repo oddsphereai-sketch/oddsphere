@@ -2,8 +2,8 @@ import { supabase } from "@/lib/db/supabase";
 import type { DailyEdgeResponse, TrackingResponse } from "@/app/lab/lib/labTypes";
 import type { Sport } from "@/lib/types/domain/Sport";
 
-export type LabResponseSnapshotKind = "daily_edge" | "tracking";
-export type LabResponseSnapshotPayload = DailyEdgeResponse | TrackingResponse;
+export type LabResponseSnapshotKind = "daily_edge" | "tracking" | "mlb_props_board" | "mlb_props_player";
+export type LabResponseSnapshotPayload = DailyEdgeResponse | TrackingResponse | Record<string, unknown>;
 export type LabResponseSnapshotCacheState = "DB_SNAPSHOT" | "DB_SNAPSHOT_STALE";
 
 export type DailyEdgeSnapshotKeyInput = {
