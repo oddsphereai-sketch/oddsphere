@@ -1,6 +1,9 @@
 import { supabase } from "@/lib/db/supabase";
 import type { PlayerPropsDashboardData } from "@/app/mlb/props/components/PlayerPropsDashboard";
-import type { MlbPropsBoardSnapshot } from "./boardSnapshotStore";
+import {
+  applyMlbPropsDisplayLocks,
+  type MlbPropsBoardSnapshot,
+} from "./boardSnapshotStore";
 import {
   buildMlbPropsInitialMemberBoardData,
   selectMlbPropsResearchForRows,
@@ -38,10 +41,17 @@ function playerKey(date: string, playerId: string): string {
 }
 
 export async function publishMlbPropsMemberReadSnapshots(snapshot: MlbPropsBoardSnapshot): Promise<void> {
+  // The tracking ledger points at the exact canonical pregame board snapshot
+  // for every locked game. Reconcile from that source before building any
+  // member payload. Never infer a lock by applying an old timestamp to rows
+  // from the latest (potentially in-game) refresh.
+  const displaySnapshot = await applyMlbPropsDisplayLocks(snapshot);
+  const lockedGames = await loadLockedGameTimes(displaySnapshot.slateDate);
+  assertLockedGamesUseAuthoritativeRows(displaySnapshot.data.props, lockedGames);
   const now = Date.now();
   const common = {
     sport: "mlb",
-    slate_date: snapshot.slateDate,
+    slate_date: displaySnapshot.slateDate,
     payload_version: "v1",
     source: "mlb_props_refresh",
     generated_at: new Date(now).toISOString(),
@@ -49,36 +59,29 @@ export async function publishMlbPropsMemberReadSnapshots(snapshot: MlbPropsBoard
     stale_until: new Date(now + STALE_TTL_MS).toISOString(),
     updated_at: new Date(now).toISOString(),
   };
-  const currentBoard = buildMlbPropsInitialMemberBoardData(snapshot.data);
-  const existingBoard = await loadMlbPropsMemberBoardSnapshot(snapshot.slateDate).catch(() => null);
-  const existingFullBoard = await loadMlbPropsMemberBoardSnapshot(snapshot.slateDate, true).catch(() => null);
-  const lockedGames = await loadLockedGameTimes(snapshot.slateDate);
-  const boundedBoard = buildMlbPropsInitialMemberBoardData({
-    ...currentBoard,
-    props: mergeLockedBoardRows(currentBoard.props, existingBoard?.data.props ?? null, lockedGames),
-  });
+  const boundedBoard = buildMlbPropsInitialMemberBoardData(displaySnapshot.data);
   const boardPayload: BoardPayload = {
     schemaVersion: 1,
-    snapshotId: snapshot.snapshotId,
-    asOfTimestamp: snapshot.asOfTimestamp,
+    snapshotId: displaySnapshot.snapshotId,
+    asOfTimestamp: displaySnapshot.asOfTimestamp,
     data: boundedBoard,
   };
   const fullBoardPayload: BoardPayload = {
     schemaVersion: 1,
-    snapshotId: snapshot.snapshotId,
-    asOfTimestamp: snapshot.asOfTimestamp,
-    data: { ...snapshot.data, research: undefined, props: [] },
+    snapshotId: displaySnapshot.snapshotId,
+    asOfTimestamp: displaySnapshot.asOfTimestamp,
+    data: { ...displaySnapshot.data, research: undefined, props: [] },
   };
-  const fullProps = mergeLockedBoardRows(snapshot.data.props, existingFullBoard?.data.props ?? null, lockedGames);
+  const fullProps = displaySnapshot.data.props;
   const fullPropsByGame = new Map<string, typeof fullProps>();
   for (const prop of fullProps) {
     const gameId = prop.providerIds?.gameId ?? "unmapped";
     fullPropsByGame.set(gameId, [...(fullPropsByGame.get(gameId) ?? []), prop]);
   }
-  const fullShardKeys = [...fullPropsByGame.keys()].map((gameId) => `${fullBoardKey(snapshot.slateDate)}::${gameId}`);
+  const fullShardKeys = [...fullPropsByGame.keys()].map((gameId) => `${fullBoardKey(displaySnapshot.slateDate)}::${gameId}`);
   fullBoardPayload.shardKeys = fullShardKeys;
-  const playerRows = new Map<string, typeof snapshot.data.props>();
-  for (const row of snapshot.data.props) {
+  const playerRows = new Map<string, typeof displaySnapshot.data.props>();
+  for (const row of displaySnapshot.data.props) {
     const playerId = row.providerIds?.mlbStatsPlayerId
       ?? row.providerIds?.bdlPlayerId?.toString()
       ?? row.id;
@@ -86,25 +89,25 @@ export async function publishMlbPropsMemberReadSnapshots(snapshot: MlbPropsBoard
   }
   const boardRows: Record<string, unknown>[] = [{
     ...common,
-    snapshot_key: boardKey(snapshot.slateDate),
+    snapshot_key: boardKey(displaySnapshot.slateDate),
     kind: "mlb_props_board",
     payload: boardPayload,
   }, {
     ...common,
-    snapshot_key: fullBoardKey(snapshot.slateDate),
+    snapshot_key: fullBoardKey(displaySnapshot.slateDate),
     kind: "mlb_props_board",
     payload: fullBoardPayload,
   }];
   for (const [gameId, props] of fullPropsByGame) {
     boardRows.push({
       ...common,
-      snapshot_key: `${fullBoardKey(snapshot.slateDate)}::${gameId}`,
+      snapshot_key: `${fullBoardKey(displaySnapshot.slateDate)}::${gameId}`,
       kind: "mlb_props_board",
       payload: {
         schemaVersion: 1,
-        snapshotId: snapshot.snapshotId,
-        asOfTimestamp: snapshot.asOfTimestamp,
-        data: { ...snapshot.data, research: undefined, props },
+        snapshotId: displaySnapshot.snapshotId,
+        asOfTimestamp: displaySnapshot.asOfTimestamp,
+        data: { ...displaySnapshot.data, research: undefined, props },
       } satisfies BoardPayload,
     });
   }
@@ -112,10 +115,10 @@ export async function publishMlbPropsMemberReadSnapshots(snapshot: MlbPropsBoard
   for (const [playerId, props] of playerRows) {
     const payload: PlayerPayload = {
       schemaVersion: 1,
-      snapshotId: snapshot.snapshotId,
-      asOfTimestamp: snapshot.asOfTimestamp,
+      snapshotId: displaySnapshot.snapshotId,
+      asOfTimestamp: displaySnapshot.asOfTimestamp,
       playerId,
-      research: selectMlbPropsResearchForRows(snapshot.data, props),
+      research: selectMlbPropsResearchForRows(displaySnapshot.data, props),
     };
     playerSnapshotRows.push({
       ...common,
@@ -142,24 +145,22 @@ export async function publishMlbPropsMemberReadSnapshots(snapshot: MlbPropsBoard
   }
 }
 
-function mergeLockedBoardRows(
-  current: PlayerPropsDashboardData["props"],
-  existing: PlayerPropsDashboardData["props"] | null,
+function assertLockedGamesUseAuthoritativeRows(
+  rows: PlayerPropsDashboardData["props"],
   lockedGames: Map<string, string>,
-): PlayerPropsDashboardData["props"] {
-  const preserved = existing?.filter((row) => {
+): void {
+  if (!lockedGames.size) return;
+  const rowsByGame = new Map<string, PlayerPropsDashboardData["props"]>();
+  for (const row of rows) {
     const gameId = row.providerIds?.gameId;
-    return gameId ? lockedGames.has(gameId) : false;
-  }) ?? [];
-  const next = current.filter((row) => {
-    const gameId = row.providerIds?.gameId;
-    return !gameId || !lockedGames.has(gameId) || !existing;
-  }).map((row) => {
-    const gameId = row.providerIds?.gameId;
-    const lockedAt = gameId ? lockedGames.get(gameId) : null;
-    return lockedAt ? { ...row, lockStatus: { status: "locked" as const, lockedAt } } : row;
-  });
-  return [...preserved, ...next];
+    if (gameId) rowsByGame.set(gameId, [...(rowsByGame.get(gameId) ?? []), row]);
+  }
+  for (const gameId of lockedGames.keys()) {
+    const gameRows = rowsByGame.get(gameId) ?? [];
+    if (gameRows.some((row) => row.lockStatus?.status !== "locked")) {
+      throw new Error(`Refusing to publish mutable member rows for locked MLB game ${gameId}.`);
+    }
+  }
 }
 
 async function loadLockedGameTimes(date: string): Promise<Map<string, string>> {
