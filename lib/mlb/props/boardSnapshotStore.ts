@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { createClient } from "@supabase/supabase-js";
-import { revalidateTag, unstable_cache } from "next/cache";
 import type { PlayerPropPreviewRow, PlayerPropsDashboardData } from "@/app/mlb/props/components/PlayerPropsDashboard";
 import type { RealPitcherSeasonStat } from "./realScoring";
 import type { PropOddsSnapshot } from "./providers";
@@ -13,6 +12,7 @@ export const DEFAULT_MLB_PROPS_MAX_SNAPSHOT_GZIP_BYTES = 2_000_000;
 // by a locked internal tracking entry is preserved independently, so lowering
 // this bound reduces database pressure without sacrificing lock evidence.
 const DEFAULT_MLB_PROPS_SNAPSHOT_RETENTION_PER_SLATE = 12;
+const MLB_PROPS_MEMORY_CACHE_TTL_MS = 60_000;
 
 export type MlbPropsBoardValidation = {
   publishable: boolean;
@@ -297,24 +297,45 @@ function summarizeDisplayProps(data: PlayerPropsDashboardData, props: PlayerProp
   };
 }
 
-const loadCachedSnapshot = unstable_cache(
-  async (slateDate: string) => loadLatestMlbPropsBoardSnapshot(slateDate),
-  ["mlb-props-member-board-latest-v1"],
-  { revalidate: 60, tags: ["mlb-props-member-board"] },
-);
+type MlbPropsMemoryCacheEntry = {
+  freshUntilMs: number;
+  value: Promise<MlbPropsBoardSnapshot | null>;
+};
 
-export async function loadCachedLatestMlbPropsBoardSnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
-  return loadCachedSnapshot(slateDate);
+// Full MLB prop snapshots are intentionally comprehensive and can decode to
+// tens of megabytes. Next's persistent incremental cache rejects values above
+// its 2 MB item limit, which turns every request into another Supabase read and
+// produces a cache-error loop under traffic. Keep one in-flight/result promise
+// per warm function instance instead. This coalesces concurrent requests and
+// bounds staleness without attempting to persist the oversized object.
+const boardSnapshotMemoryCache = new Map<string, MlbPropsMemoryCacheEntry>();
+const displaySnapshotMemoryCache = new Map<string, MlbPropsMemoryCacheEntry>();
+
+function loadMlbPropsSnapshotWithMemoryCache(
+  cache: Map<string, MlbPropsMemoryCacheEntry>,
+  slateDate: string,
+  loader: (date: string) => Promise<MlbPropsBoardSnapshot | null>,
+): Promise<MlbPropsBoardSnapshot | null> {
+  const now = Date.now();
+  const cached = cache.get(slateDate);
+  if (cached && cached.freshUntilMs > now) return cached.value;
+
+  let value: Promise<MlbPropsBoardSnapshot | null>;
+  value = loader(slateDate).catch((error) => {
+    const current = cache.get(slateDate);
+    if (current?.value === value) cache.delete(slateDate);
+    throw error;
+  });
+  cache.set(slateDate, { freshUntilMs: now + MLB_PROPS_MEMORY_CACHE_TTL_MS, value });
+  return value;
 }
 
-const loadCachedDisplaySnapshot = unstable_cache(
-  async (slateDate: string) => loadLatestMlbPropsDisplaySnapshot(slateDate),
-  ["mlb-props-member-board-display-v1"],
-  { revalidate: 60, tags: ["mlb-props-member-board"] },
-);
+export async function loadCachedLatestMlbPropsBoardSnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
+  return loadMlbPropsSnapshotWithMemoryCache(boardSnapshotMemoryCache, slateDate, loadLatestMlbPropsBoardSnapshot);
+}
 
 export async function loadCachedLatestMlbPropsDisplaySnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
-  return loadCachedDisplaySnapshot(slateDate);
+  return loadMlbPropsSnapshotWithMemoryCache(displaySnapshotMemoryCache, slateDate, loadLatestMlbPropsDisplaySnapshot);
 }
 
 export function measureMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapshot): MlbPropsBoardSnapshotSize {
@@ -384,11 +405,8 @@ export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapsh
 }
 
 function revalidateMlbPropsBoardCache(): void {
-  try {
-    revalidateTag("mlb-props-member-board", { expire: 0 });
-  } catch {
-    // Cache invalidation is best-effort outside Next route handlers.
-  }
+  boardSnapshotMemoryCache.clear();
+  displaySnapshotMemoryCache.clear();
 }
 
 async function pruneOldMlbPropsBoardSnapshots(slateDate: string, currentSnapshotId: string): Promise<void> {

@@ -15,7 +15,7 @@
     },
     {
       "path": "/api/cron/feature-coverage-refresh",
-      "schedule": "55 7,9,11,12-23 * * *"
+      "schedule": "55 7,9,11,13,15,17,19,21,23 * * *"
     },
     {
       "path": "/api/cron/feature-coverage-refresh",
@@ -31,19 +31,19 @@
     },
     {
       "path": "/api/cron/pregame-sweep?lockOnly=true",
-      "schedule": "*/15 14-23 * * *"
+      "schedule": "8,38 14-23 * * *"
     },
     {
       "path": "/api/cron/pregame-sweep?lockOnly=true",
-      "schedule": "*/15 0-2 * * *"
+      "schedule": "8,38 0-2 * * *"
     },
     {
       "path": "/api/cron/public-splits-observations-refresh",
-      "schedule": "12,27,42,57 13-23 * * *"
+      "schedule": "12,42 13-23 * * *"
     },
     {
       "path": "/api/cron/public-splits-observations-refresh",
-      "schedule": "12,27,42,57 0-3 * * *"
+      "schedule": "12,42 0-3 * * *"
     },
     {
       "path": "/api/cron/daily-edge-data-health",
@@ -66,22 +66,6 @@
       "schedule": "20,50 0-3 * * *"
     },
     {
-      "path": "/api/cron/nba-daily-refresh",
-      "schedule": "20,50 13-23 * * *"
-    },
-    {
-      "path": "/api/cron/nba-daily-refresh",
-      "schedule": "20,50 0-3 * * *"
-    },
-    {
-      "path": "/api/cron/nhl-daily-refresh",
-      "schedule": "25,55 13-23 * * *"
-    },
-    {
-      "path": "/api/cron/nhl-daily-refresh",
-      "schedule": "25,55 0-3 * * *"
-    },
-    {
       "path": "/api/cron/soccer-daily-refresh",
       "schedule": "0 10-23 * * *"
     },
@@ -95,11 +79,11 @@
     },
     {
       "path": "/api/cron/mlb-player-props-refresh",
-      "schedule": "7,22,37,52 0-4,10-23 * * *"
+      "schedule": "17,47 0-4,10-23 * * *"
     },
     {
       "path": "/api/cron/mlb-player-props-refresh?full=true",
-      "schedule": "2 0-4,10-23 * * *"
+      "schedule": "2 1,4,10,13,16,19,22 * * *"
     },
     {
       "path": "/api/cron/mlb-player-props-settlement",

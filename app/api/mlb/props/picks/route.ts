@@ -1,5 +1,6 @@
 import { loadCachedLatestMlbPropsDisplaySnapshot } from "@/lib/mlb/props/boardSnapshotStore";
 import { easternSlateDate, mlbPropsSnapshotIsFresh } from "@/lib/mlb/props/liveBoard";
+import { buildMlbPropsMemberBoardData } from "@/lib/mlb/props/memberPayload";
 import { getPublicPicksMode } from "@/lib/mlb/props/publicPicksSafety";
 
 export async function GET(request: Request) {
@@ -31,6 +32,9 @@ export async function GET(request: Request) {
     snapshotId: snapshot.snapshotId,
     asOfTimestamp: snapshot.asOfTimestamp,
     movement: snapshot.movement,
-    board: snapshot.data,
+    // The full research map is loaded per player by the reader endpoint. Do
+    // not duplicate that multi-megabyte evidence blob in the board response.
+    // Every prop row and market remains present.
+    board: buildMlbPropsMemberBoardData(snapshot.data),
   }, { headers: { "Cache-Control": "private, no-store" } });
 }
