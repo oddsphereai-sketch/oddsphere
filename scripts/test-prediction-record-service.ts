@@ -2280,6 +2280,19 @@ console.log("\n━━━ stale unlocked FI cleanup guard ━━━");
         src.includes("locked rows are never touched"));
 }
 
+// ── Post-start mutation guard ─────────────────────────────────────
+console.log("\n━━━ post-start prediction record guard ━━━");
+{
+  const src = readFileSync("lib/services/predictionRecordService.ts", "utf8");
+  check("MLB sync identifies games that already started",
+        src.includes("const startedGameIds = new Set") &&
+        src.includes('sport === "mlb"'));
+  check("MLB sync refuses post-start prediction record upserts",
+        src.includes("if (startedGameIds.has(proposedRecord.game_id))"));
+  check("stale FI cleanup cannot mutate a post-start game",
+        src.includes("!startedGameIds.has(r.game_id)"));
+}
+
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
 if (fail > 0) {

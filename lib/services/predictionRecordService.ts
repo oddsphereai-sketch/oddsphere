@@ -3509,6 +3509,22 @@ export async function createPredictionRecords(
 
   if (!apply) return result;
 
+  // A missed lock must fail closed. Once an MLB game has started, neither a
+  // refresh nor a recovery run may insert/update the public prediction record;
+  // doing so would replace the pregame opinion with in-game information.
+  const nowMs = Date.now();
+  const startedGameIds = new Set(
+    sport === "mlb"
+      ? games
+          .filter((game) => {
+            if (typeof game.game_date !== "string") return false;
+            const startMs = new Date(game.game_date).getTime();
+            return Number.isFinite(startMs) && startMs <= nowMs;
+          })
+          .map((game) => game.id)
+      : [],
+  );
+
   // Probe table existence with a HEAD-style query
   const { error: probeErr } = await supabase
     .from("prediction_records")
@@ -3586,6 +3602,7 @@ export async function createPredictionRecords(
   }>)
     .filter((r) =>
       r.locked_at === null &&
+      !startedGameIds.has(r.game_id) &&
       r.market === "first_inning" &&
       !proposedKeys.has(`${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`),
     )
@@ -3618,6 +3635,10 @@ export async function createPredictionRecords(
   // rows are skipped entirely (counted as skippedExisting so the
   // operator/cron summary surfaces them).
   for (const proposedRecord of proposed) {
+    if (startedGameIds.has(proposedRecord.game_id)) {
+      result.skippedExisting++;
+      continue;
+    }
     const rec = preserveTrackingDisplayGradeOverride(
       proposedRecord,
       existingSnapshotByKey.get(
