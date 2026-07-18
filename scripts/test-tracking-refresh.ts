@@ -12,6 +12,7 @@
 import { computeRefreshDates } from "../lib/services/trackingRefreshService";
 import { shouldUpsertGrade } from "../lib/services/predictionGradingService";
 import { resolveScoreIngestNextScores } from "../lib/services/scoreIngestService";
+import { readFileSync } from "node:fs";
 
 let pass = 0;
 let fail = 0;
@@ -73,6 +74,12 @@ check("existing Toss-Up void + now-actionable FI pending → allowed", shouldUps
 check("existing win + new loss → allowed (re-grade)", shouldUpsertGrade({ existingResult: "win", newResult: "loss" }));
 check("existing push + new push → allowed (no-op)", shouldUpsertGrade({ existingResult: "push", newResult: "push" }));
 check("undefined existing → upsert allowed", shouldUpsertGrade({ existingResult: undefined, newResult: "win" }));
+
+const gradingSource = readFileSync(new URL("../lib/services/predictionGradingService.ts", import.meta.url), "utf8");
+check(
+  "MLB grading excludes records that never reached the persisted lock boundary",
+  gradingSource.includes('if (sport === "mlb") recordsQuery = recordsQuery.not("locked_at", "is", null)'),
+);
 
 // ── MLB final score preservation ─────────────────────────────────
 console.log("\n━━━ score ingest MLB final-score preservation ━━━");
