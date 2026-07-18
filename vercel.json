@@ -95,7 +95,7 @@
     },
     {
       "path": "/api/cron/mlb-player-props-refresh",
-      "schedule": "7,17,27,37,47,57 0-4,10-23 * * *"
+      "schedule": "7,22,37,52 0-4,10-23 * * *"
     },
     {
       "path": "/api/cron/mlb-player-props-refresh?full=true",

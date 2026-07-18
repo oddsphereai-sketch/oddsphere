@@ -99,7 +99,7 @@ type TrackingEntry = {
   updated_at: string;
 };
 
-type TrackingCandidate = {
+export type TrackingCandidate = {
   naturalKey: string;
   row: PlayerPropPreviewRow;
   mlbGamePk: number;
@@ -426,7 +426,7 @@ export async function settleInternalMlbProps(args: { dates?: string[] } = {}) {
   }
 }
 
-function selectTrackingCandidates(snapshot: MlbPropsBoardSnapshot): TrackingCandidate[] {
+export function selectTrackingCandidates(snapshot: MlbPropsBoardSnapshot): TrackingCandidate[] {
   const asOf = Date.parse(snapshot.asOfTimestamp);
   const byNaturalKey = new Map<string, TrackingCandidate>();
   for (const row of snapshot.data.props) {
@@ -492,7 +492,7 @@ function candidateRank(candidate: TrackingCandidate): number {
   return grade * 1_000_000 + (candidate.row.expectedValue ?? -1) * 10_000 + (candidate.row.modelEdge ?? -1) * 1_000 + candidate.row.odds / 10_000;
 }
 
-function trackingInsert(candidate: TrackingCandidate, snapshot: MlbPropsBoardSnapshot, targetLockMinutes: number, graceMinutes: number) {
+export function trackingInsert(candidate: TrackingCandidate, snapshot: MlbPropsBoardSnapshot, targetLockMinutes: number, graceMinutes: number) {
   const row = candidate.row;
   const actionable = ACTIONABLE_GRADES.has(row.playGrade) && row.units > 0;
   const bdlPlayerId = row.providerIds?.bdlPlayerId ?? null;

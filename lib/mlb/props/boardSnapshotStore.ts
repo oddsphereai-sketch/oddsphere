@@ -253,20 +253,25 @@ async function loadLockedDisplaySnapshotRefs(slateDate: string): Promise<Map<str
   return refs;
 }
 
-async function loadMlbPropsBoardSnapshotById(slateDate: string, snapshotId: string): Promise<MlbPropsBoardSnapshot | null> {
-  const { data, error } = await getSupabase()
+export async function loadMlbPropsBoardSnapshotById(slateDate: string, snapshotId: string): Promise<MlbPropsBoardSnapshot | null> {
+  const supabase = getSupabase();
+  // Resolve the run using scalar projections first. Returning metadata_json
+  // while filtering a slate with many multi-megabyte payloads can exceed the
+  // database statement timeout before PostgREST returns the matching row.
+  const { data: refs, error: refsError } = await supabase
     .from("prop_scoring_runs")
-    .select("metadata_json")
+    .select("id,snapshot_id:metadata_json->>snapshot_id")
     .eq("sport", "mlb")
     .eq("slate_date", slateDate)
     .eq("status", "completed")
     .eq("provider_mode", "real")
     .eq("odds_provider", "balldontlie")
     .eq("context_provider", "nws+baseball_savant+balldontlie")
-    .eq("persisted", true)
-    .eq("metadata_json->>snapshot_id", snapshotId)
-    .limit(1)
-    .maybeSingle();
+    .eq("persisted", true);
+  if (refsError) throw refsError;
+  const runId = (refs ?? []).find((row) => row.snapshot_id === snapshotId)?.id;
+  if (runId === undefined) return null;
+  const { data, error } = await supabase.from("prop_scoring_runs").select("metadata_json").eq("id", runId).single();
   if (error) throw error;
   return decodeMlbPropsBoardSnapshot(data?.metadata_json) ?? null;
 }
@@ -376,7 +381,10 @@ async function pruneOldMlbPropsBoardSnapshots(slateDate: string, currentSnapshot
   const [{ data: rows, error: rowsError }, { data: lockedRefs, error: refsError }] = await Promise.all([
     supabase
       .from("prop_scoring_runs")
-      .select("id,metadata_json,created_at")
+      // Project only the scalar snapshot id. Selecting metadata_json here
+      // downloads every compressed board payload (often megabytes each),
+      // which made pruning time out and allowed snapshots to accumulate.
+      .select("id,created_at,snapshot_id:metadata_json->>snapshot_id")
       .eq("sport", "mlb")
       .eq("slate_date", slateDate)
       .eq("status", "completed")
@@ -398,22 +406,18 @@ async function pruneOldMlbPropsBoardSnapshots(slateDate: string, currentSnapshot
     ...((lockedRefs ?? []) as Array<{ board_snapshot_id: string | null }>).map((row) => row.board_snapshot_id).filter((value): value is string => Boolean(value)),
   ]);
   for (const row of (rows ?? []).slice(0, retention)) {
-    const snapshotId = snapshotIdFromMetadata((row as { metadata_json?: unknown }).metadata_json);
+    const snapshotId = (row as { snapshot_id?: string | null }).snapshot_id ?? null;
     if (snapshotId) keepSnapshotIds.add(snapshotId);
   }
   const deleteIds = (rows ?? [])
     .filter((row) => {
-      const snapshotId = snapshotIdFromMetadata((row as { metadata_json?: unknown }).metadata_json);
+      const snapshotId = (row as { snapshot_id?: string | null }).snapshot_id ?? null;
       return snapshotId !== null && !keepSnapshotIds.has(snapshotId);
     })
     .map((row) => (row as { id: string | number }).id);
   if (!deleteIds.length) return;
   const { error } = await supabase.from("prop_scoring_runs").delete().in("id", deleteIds);
   if (error) throw error;
-}
-
-function snapshotIdFromMetadata(metadata: unknown): string | null {
-  return isRecord(metadata) && typeof metadata.snapshot_id === "string" ? metadata.snapshot_id : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
