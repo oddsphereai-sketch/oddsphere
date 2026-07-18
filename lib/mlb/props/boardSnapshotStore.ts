@@ -333,7 +333,8 @@ export function assertSnapshotSizeWithinLimits(size: MlbPropsBoardSnapshotSize):
 export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapshot): Promise<string> {
   if (!snapshot.validation.publishable) throw new Error("Refusing to publish an invalid MLB props board snapshot.");
   const metadata = encodeMlbPropsBoardSnapshot(snapshot);
-  const { data, error } = await getSupabase()
+  const supabase = getSupabase();
+  const { data, error } = await supabase
     .from("prop_scoring_runs")
     .insert({
       sport: "mlb",
@@ -362,6 +363,18 @@ export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapsh
     .select("id")
     .single();
   if (error) throw error;
+  // Lightweight scalar index for retention and lock-reference resolution.
+  // Keeping this outside metadata_json prevents maintenance queries from
+  // scanning/decompressing every multi-megabyte board payload.
+  const { error: indexError } = await supabase.from("admin_audit_log").insert({
+    action_type: "mlb_props.board_snapshot_published",
+    target_table: "prop_scoring_runs",
+    target_id: String(data.id),
+    before_state: null,
+    after_state: { snapshot_id: snapshot.snapshotId, slate_date: snapshot.slateDate },
+    source_type: "real_api",
+  });
+  if (indexError) console.warn(`MLB props snapshot index write failed: ${indexError.message}`);
   revalidateMlbPropsBoardCache();
   await pruneOldMlbPropsBoardSnapshots(snapshot.slateDate, snapshot.snapshotId).catch(() => undefined);
   return String(data.id);
@@ -378,17 +391,20 @@ function revalidateMlbPropsBoardCache(): void {
 async function pruneOldMlbPropsBoardSnapshots(slateDate: string, currentSnapshotId: string): Promise<void> {
   const retention = envPositiveInteger("ODDSPHERE_PROPS_SNAPSHOT_RETENTION_PER_SLATE", DEFAULT_MLB_PROPS_SNAPSHOT_RETENTION_PER_SLATE);
   const supabase = getSupabase();
-  const [{ data: rows, error: rowsError }, { data: lockedRefs, error: refsError }] = await Promise.all([
+  const [
+    { data: rows, error: rowsError },
+    { data: lockedRefs, error: refsError },
+    { data: snapshotIndex, error: indexError },
+  ] = await Promise.all([
     supabase
       .from("prop_scoring_runs")
-      // Project only the scalar snapshot id. Selecting metadata_json here
-      // downloads every compressed board payload (often megabytes each),
-      // which made pruning time out and allowed snapshots to accumulate.
-      .select("id,created_at,snapshot_id:metadata_json->>snapshot_id")
+      .select("id,created_at")
       .eq("sport", "mlb")
       .eq("slate_date", slateDate)
       .eq("status", "completed")
-      .eq("metadata_json->>kind", MLB_PROPS_BOARD_SNAPSHOT_KIND)
+      .eq("persisted", true)
+      .eq("dry_run", false)
+      .eq("provider_mode", "real")
       .order("created_at", { ascending: false })
       .limit(250),
     supabase
@@ -397,22 +413,37 @@ async function pruneOldMlbPropsBoardSnapshots(slateDate: string, currentSnapshot
       .eq("slate_date", slateDate)
       .not("board_snapshot_id", "is", null)
       .limit(5000),
+    supabase
+      .from("admin_audit_log")
+      .select("target_id,after_state")
+      .eq("action_type", "mlb_props.board_snapshot_published")
+      .eq("target_table", "prop_scoring_runs")
+      .order("created_at", { ascending: false })
+      .limit(5000),
   ]);
   if (rowsError) throw rowsError;
   if (refsError) throw refsError;
+  if (indexError) throw indexError;
 
-  const keepSnapshotIds = new Set<string>([
+  const referencedSnapshotIds = new Set<string>([
     currentSnapshotId,
     ...((lockedRefs ?? []) as Array<{ board_snapshot_id: string | null }>).map((row) => row.board_snapshot_id).filter((value): value is string => Boolean(value)),
   ]);
-  for (const row of (rows ?? []).slice(0, retention)) {
-    const snapshotId = (row as { snapshot_id?: string | null }).snapshot_id ?? null;
-    if (snapshotId) keepSnapshotIds.add(snapshotId);
+  const indexedSnapshotByRunId = new Map<string, string>();
+  for (const entry of (snapshotIndex ?? []) as Array<{ target_id: string; after_state: unknown }>) {
+    if (!isRecord(entry.after_state)) continue;
+    if (entry.after_state.slate_date !== slateDate || typeof entry.after_state.snapshot_id !== "string") continue;
+    indexedSnapshotByRunId.set(String(entry.target_id), entry.after_state.snapshot_id);
   }
+  const newestRunIds = new Set((rows ?? []).slice(0, retention).map((row) => String(row.id)));
   const deleteIds = (rows ?? [])
-    .filter((row) => {
-      const snapshotId = (row as { snapshot_id?: string | null }).snapshot_id ?? null;
-      return snapshotId !== null && !keepSnapshotIds.has(snapshotId);
+      .filter((row) => {
+      const runId = String(row.id);
+      const snapshotId = indexedSnapshotByRunId.get(runId);
+      // Legacy rows have no lightweight index. Preserve them rather than risk
+      // deleting lock evidence; only indexed, provably unreferenced rows prune.
+      if (snapshotId === undefined) return false;
+      return !newestRunIds.has(runId) && !referencedSnapshotIds.has(snapshotId);
     })
     .map((row) => (row as { id: string | number }).id);
   if (!deleteIds.length) return;
