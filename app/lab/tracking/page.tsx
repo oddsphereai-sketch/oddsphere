@@ -348,51 +348,38 @@ export default function LabTrackingPage() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   useEffect(() => {
-    let activeController: AbortController | null = null;
-    let activeTimeout: number | null = null;
-    const loadTracking = () => {
-      activeController?.abort();
-      if (activeTimeout !== null) window.clearTimeout(activeTimeout);
-      const controller = new AbortController();
-      activeController = controller;
-      activeTimeout = window.setTimeout(() => controller.abort(), 35000);
-      fetch("/api/lab/tracking-foundation", {
-        signal: controller.signal,
-        cache: "no-store",
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 35000);
+    fetch("/api/lab/tracking-foundation", {
+      signal: controller.signal,
+    })
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null) as { error?: string; detail?: string } | null;
+          const detail = body?.detail || body?.error || `HTTP ${r.status}`;
+          throw new Error(detail);
+        }
+        return r.json();
       })
-        .then(async (r) => {
-          if (!r.ok) {
-            const body = await r.json().catch(() => null) as { error?: string; detail?: string } | null;
-            const detail = body?.detail || body?.error || `HTTP ${r.status}`;
-            throw new Error(detail);
-          }
-          return r.json();
-        })
-        .then((d) => {
-          setData(d);
-          setError(null);
-          setLastUpdated(typeof d.generatedAt === "string" ? d.generatedAt : new Date().toISOString());
-        })
-        .catch((e) => {
-          if (e instanceof DOMException && e.name === "AbortError") return;
-          const message = e instanceof Error ? e.message : String(e);
-          setError(/timed out|522|temporarily_unavailable|failed to fetch|network/i.test(message)
-            ? "The data service is taking too long to respond. Please refresh in a moment."
-            : message);
-        })
-        .finally(() => {
-          if (activeController === controller) activeController = null;
-          if (activeTimeout !== null) window.clearTimeout(activeTimeout);
-          activeTimeout = null;
-        });
-    };
-    loadTracking();
-    const refreshInterval = window.setInterval(loadTracking, 60_000);
+      .then((d) => {
+        setData(d);
+        setLastUpdated(typeof d.generatedAt === "string" ? d.generatedAt : new Date().toISOString());
+      })
+      .catch((e) => {
+        if (e instanceof DOMException && e.name === "AbortError") {
+          setError("Tracking data is taking too long to respond. Please refresh in a moment.");
+          return;
+        }
+        const message = e instanceof Error ? e.message : String(e);
+        setError(/timed out|522|temporarily_unavailable|failed to fetch|network/i.test(message)
+          ? "The data service is taking too long to respond. Please refresh in a moment."
+          : message);
+      })
+      .finally(() => window.clearTimeout(timeout));
 
     return () => {
-      window.clearInterval(refreshInterval);
-      if (activeTimeout !== null) window.clearTimeout(activeTimeout);
-      activeController?.abort();
+      window.clearTimeout(timeout);
+      controller.abort();
     };
   }, []);
 

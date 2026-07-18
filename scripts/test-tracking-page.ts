@@ -373,17 +373,14 @@ check(
     API.includes('"Vary": "Cookie"'),
 );
 check(
-  "Page bypasses browser cache and refreshes corrected tracking automatically",
-  /fetch\("\/api\/lab\/tracking-foundation"[\s\S]{0,160}cache:\s*"no-store"/.test(PAGE) &&
-    PAGE.includes("window.setInterval(loadTracking, 60_000)"),
+  "Page allows browser caching for tracking snapshot",
+  !/fetch\("\/api\/lab\/tracking-foundation"[\s\S]{0,160}cache:\s*"no-store"/.test(PAGE),
 );
 check(
-  "API shares the aggregate cache but revisions it on grade corrections",
+  "API shares the five-minute aggregate cache across server instances",
   API.includes("unstable_cache") &&
     API.includes('"member-tracking-aggregate-v1"') &&
-    API.includes("TRACKING_RESPONSE_CACHE_TTL_MS / 1000") &&
-    API.includes("gradeRevision") &&
-    API.includes('TRACKING_RESPONSE_CACHE_CONTROL = "private, no-store"'),
+    API.includes("TRACKING_RESPONSE_CACHE_TTL_MS / 1000"),
 );
 check(
   "Slow member routes provide immediate loading states",

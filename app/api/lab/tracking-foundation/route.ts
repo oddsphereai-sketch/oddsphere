@@ -30,7 +30,7 @@ const MEMBER_TRACKING_FROM = "2026-06-07";
 const TRACKING_AGGREGATE_TIMEOUT_MS = 30000;
 const TRACKING_RESPONSE_CACHE_TTL_MS = 5 * 60 * 1000;
 const TRACKING_RESPONSE_STALE_TTL_MS = 30 * 60 * 1000;
-const TRACKING_RESPONSE_CACHE_CONTROL = "private, no-store";
+const TRACKING_RESPONSE_CACHE_CONTROL = "private, max-age=60, stale-while-revalidate=300";
 
 type TrackingResponseBody = Record<string, unknown>;
 
@@ -43,7 +43,7 @@ type TrackingResponseCacheEntry = {
 const trackingResponseCache = new Map<string, TrackingResponseCacheEntry>();
 
 const loadSharedTrackingAggregate = unstable_cache(
-  async (sportKey: TrackedSport | "all", today: string, _gradeRevision: string) => computeTrackingAggregate({
+  async (sportKey: TrackedSport | "all", today: string) => computeTrackingAggregate({
     supabase,
     sport: sportKey === "all" ? undefined : sportKey,
     from: MEMBER_TRACKING_FROM,
@@ -74,8 +74,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
-function cacheKeyFor(sport: TrackedSport | undefined, today: string, gradeRevision: string): string {
-  return `${sport ?? "all"}::${today}::${gradeRevision}`;
+function cacheKeyFor(sport: TrackedSport | undefined, today: string): string {
+  return `${sport ?? "all"}::${today}`;
 }
 
 function trackingJson(
@@ -105,7 +105,6 @@ export async function GET(request: Request) {
   const sportRaw = url.searchParams.get("sport");
   const sport: TrackedSport | undefined =
     sportRaw === "mlb" ||
-    sportRaw === "wnba" ||
     sportRaw === "nfl" ||
     sportRaw === "nba" ||
     sportRaw === "cfb" ||
@@ -117,16 +116,7 @@ export async function GET(request: Request) {
       : undefined;
 
   const today = todayEt();
-  // Grade corrections must create a new shared-cache key immediately. A
-  // time-only key can keep a corrected result stale across server instances.
-  const { data: latestGrade } = await supabase
-    .from("prediction_grades")
-    .select("graded_at")
-    .order("graded_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const gradeRevision = typeof latestGrade?.graded_at === "string" ? latestGrade.graded_at : "none";
-  const cacheKey = cacheKeyFor(sport, today, gradeRevision);
+  const cacheKey = cacheKeyFor(sport, today);
   const nowMs = Date.now();
   const cached = trackingResponseCache.get(cacheKey);
   if (cached !== undefined && cached.freshUntilMs > nowMs) {
@@ -136,7 +126,7 @@ export async function GET(request: Request) {
   let result;
   try {
     result = await withTimeout(
-      loadSharedTrackingAggregate(sport ?? "all", today, gradeRevision),
+      loadSharedTrackingAggregate(sport ?? "all", today),
       TRACKING_AGGREGATE_TIMEOUT_MS,
       "tracking aggregate",
     );
