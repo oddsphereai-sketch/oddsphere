@@ -471,7 +471,8 @@ export class SharpAPIOddsProvider implements IOddsProvider {
    */
   async getGameLinesV2(
     date: string,
-    sport?: Sport
+    sport?: Sport,
+    opts?: { externalIdsFilter?: readonly number[] }
   ): Promise<{ records: LineRecord[]; discovery: V2DiscoveryReport }> {
     const sportKey = sport ?? "mlb";
     if (sportKey !== "mlb") {
@@ -628,6 +629,16 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         ),
         eventIdSource: "splits_discovery_fallback",
       });
+    }
+
+    // Lock sweeps need fresh prices only for games crossing T-60. Filtering
+    // after canonical event resolution preserves identity checks while
+    // avoiding dozens of unrelated per-game /odds calls.
+    if (opts?.externalIdsFilter !== undefined) {
+      const allowed = new Set(opts.externalIdsFilter);
+      for (let i = resolved.length - 1; i >= 0; i--) {
+        if (!allowed.has(resolved[i]!.gameExternalId)) resolved.splice(i, 1);
+      }
     }
 
     // Build a quick lookup from (home, away) → /splits raw row so

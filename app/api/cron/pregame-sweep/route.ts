@@ -349,22 +349,29 @@ export async function GET(request: Request) {
       // Refresh only when a game is actually entering lock to keep the 15-minute
       // sweep light while still making the lock snapshot market-current.
       if (partition.entering_lock.length > 0 && sport === "mlb") {
-        preLockGameLines = await linesService.refreshGameLinesV2(sport, date);
+        const enteringExternalIds = partition.entering_lock.map((g) => g.external_id);
+        preLockGameLines = await linesService.refreshGameLinesV2(sport, date, {
+          externalIdsFilter: enteringExternalIds,
+        });
         records += preLockGameLines.records_updated ?? 0;
         apiCalls += preLockGameLines.api_calls_made ?? 0;
 
-        preLockSignals = await linesService.refreshSharpSignals(sport, date);
+        preLockSignals = await linesService.refreshSharpSignals(sport, date, {
+          externalIdsFilter: enteringExternalIds,
+        });
         records += preLockSignals.records_updated ?? 0;
         apiCalls += preLockSignals.api_calls_made ?? 0;
 
-        marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
-          supabase,
-          sport,
-          slateDate: date,
-          phase: "pregame_sweep",
-        });
-        records += marketIntelligenceV2.recordsUpdated;
-        apiCalls += marketIntelligenceV2.apiCallsMade;
+        if (!lockOnly) {
+          marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
+            supabase,
+            sport,
+            slateDate: date,
+            phase: "pregame_sweep",
+          });
+          records += marketIntelligenceV2.recordsUpdated;
+          apiCalls += marketIntelligenceV2.apiCallsMade;
+        }
       }
 
       // ── 2. Final pre-lock auto-model pass for ENTERING_LOCK games ───
@@ -494,17 +501,6 @@ export async function GET(request: Request) {
         if (healthEventError) lockResult.errors.push(`lock-health event write failed: ${healthEventError.message}`);
       }
 
-      if (sport === "mlb" && marketIntelligenceV2 === null) {
-        marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
-          supabase,
-          sport,
-          slateDate: date,
-          phase: "pregame_sweep",
-        });
-        records += marketIntelligenceV2.recordsUpdated;
-        apiCalls += marketIntelligenceV2.apiCallsMade;
-      }
-
       if (lockOnly) {
         const anyErrors =
           lockResult.errors.length > 0 ||
@@ -556,6 +552,17 @@ export async function GET(request: Request) {
             ],
           },
         };
+      }
+
+      if (sport === "mlb" && marketIntelligenceV2 === null) {
+        marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
+          supabase,
+          sport,
+          slateDate: date,
+          phase: "pregame_sweep",
+        });
+        records += marketIntelligenceV2.recordsUpdated;
+        apiCalls += marketIntelligenceV2.apiCallsMade;
       }
 
       // ── WNBA: lock-only ─────────────────────────────────────────────
@@ -815,7 +822,8 @@ export async function GET(request: Request) {
           total_derived_picks: grades.monitor.totalDerivedPicks,
         },
       };
-    }
+    },
+    { lockMinutes: 20 }
   );
 }
 
