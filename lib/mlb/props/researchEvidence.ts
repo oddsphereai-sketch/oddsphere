@@ -195,6 +195,24 @@ const PITCHER_LOG_MARKETS: Partial<Record<MlbPropMarketKey, MarketLogDescriptor>
   first_home_run: { statKey: "home_runs", statLabel: "Home runs", sampleLabel: "games" },
 };
 
+// A defensive replacement or pinch runner can receive an official game-log
+// row with zero plate appearances. That is a real appearance, but it is not a
+// batting opportunity and must not count as a zero in batting-event form.
+// Runs and stolen bases remain appearance-based because a pinch runner can
+// record either without taking a plate appearance.
+const BATTER_MARKETS_REQUIRING_PLATE_APPEARANCE = new Set<MlbPropMarketKey>([
+  "batter_strikeouts",
+  "batter_hits",
+  "batter_total_bases",
+  "batter_home_runs",
+  "batter_rbis",
+  "batter_walks",
+  "batter_singles",
+  "batter_doubles",
+  "batter_triples",
+  "first_home_run",
+]);
+
 export function buildPlayerPropRecentForm(args: {
   logs: MlbHistoricalStatRow[];
   marketKey: MlbPropMarketKey;
@@ -206,6 +224,11 @@ export function buildPlayerPropRecentForm(args: {
   const asOf = new Date(args.asOfTimestamp).getTime();
   const logs = args.logs
     .filter((row) => new Date(row.asOfTimestamp ?? `${row.gameDate}T23:59:59.999Z`).getTime() < asOf)
+    .filter((row) => {
+      if (!BATTER_MARKETS_REQUIRING_PLATE_APPEARANCE.has(args.marketKey)) return true;
+      const plateAppearances = row.stats.plate_appearances;
+      return typeof plateAppearances !== "number" || plateAppearances > 0;
+    })
     .map((row) => {
       const value = row.stats[descriptor.statKey];
       if (typeof value !== "number" || !Number.isFinite(value)) return null;
