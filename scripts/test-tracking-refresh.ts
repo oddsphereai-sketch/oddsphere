@@ -76,9 +76,15 @@ check("existing push + new push → allowed (no-op)", shouldUpsertGrade({ existi
 check("undefined existing → upsert allowed", shouldUpsertGrade({ existingResult: undefined, newResult: "win" }));
 
 const gradingSource = readFileSync(new URL("../lib/services/predictionGradingService.ts", import.meta.url), "utf8");
+const trackingCronSource = readFileSync(new URL("../app/api/cron/tracking-refresh/route.ts", import.meta.url), "utf8");
 check(
   "MLB grading excludes records that never reached the persisted lock boundary",
   gradingSource.includes('if (sport === "mlb") recordsQuery = recordsQuery.not("locked_at", "is", null)'),
+);
+check(
+  "successful grade writes immediately invalidate the member Tracking aggregate",
+  trackingCronSource.includes('revalidateTag("member-tracking-aggregate", { expire: 0 })') &&
+    trackingCronSource.includes("summary.totals.grades_upserted > 0"),
 );
 
 console.log("\n━━━ immutable FI grading substrate ━━━");

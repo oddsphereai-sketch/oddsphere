@@ -30,7 +30,10 @@ const MEMBER_TRACKING_FROM = "2026-06-07";
 const TRACKING_AGGREGATE_TIMEOUT_MS = 30000;
 const TRACKING_RESPONSE_CACHE_TTL_MS = 5 * 60 * 1000;
 const TRACKING_RESPONSE_STALE_TTL_MS = 30 * 60 * 1000;
-const TRACKING_RESPONSE_CACHE_CONTROL = "private, max-age=60, stale-while-revalidate=300";
+// The expensive aggregate is cached server-side with unstable_cache. Do not
+// stack a browser stale cache on top: it can keep pre-repair grades visible
+// after the server cache has been explicitly invalidated.
+const TRACKING_RESPONSE_CACHE_CONTROL = "private, no-store";
 
 type TrackingResponseBody = Record<string, unknown>;
 
@@ -119,10 +122,6 @@ export async function GET(request: Request) {
   const cacheKey = cacheKeyFor(sport, today);
   const nowMs = Date.now();
   const cached = trackingResponseCache.get(cacheKey);
-  if (cached !== undefined && cached.freshUntilMs > nowMs) {
-    return trackingJson(cached.body, { cacheStatus: "hit" });
-  }
-
   let result;
   try {
     result = await withTimeout(
