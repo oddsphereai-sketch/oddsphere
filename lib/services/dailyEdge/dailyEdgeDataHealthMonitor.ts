@@ -1016,12 +1016,21 @@ function fiHoldFindingCode(diagnostic: FiHoldDiagnostic | undefined): string {
   }
   if (diagnostic.classification === "publishable_degraded_stats") return "fi_publishable_degraded_stats";
   if (diagnostic.classification === "sparse_starter_history") return "fi_sparse_starter_history";
-  if (
-    diagnostic.classification === "missing_inputs" &&
-    diagnostic.officialProbableStarters?.classification === "official_probables_complete"
-  ) {
+  if (hasActualStarterIngestionGap(diagnostic)) {
     return "fi_starter_ingestion_miss";
   }
+  if (
+    diagnostic.classification === "missing_inputs" &&
+    diagnostic.officialProbableStarters?.classification === "official_probables_complete" &&
+    diagnostic.marketDataQuality === "missing"
+  ) return "fi_model_hold_provider_gap";
+  if (
+    diagnostic.classification === "missing_inputs" &&
+    diagnostic.officialProbableStarters?.classification === "official_probables_complete" &&
+    diagnostic.posteriorNrfi !== null &&
+    diagnostic.posteriorYrfi !== null &&
+    Math.max(diagnostic.posteriorNrfi, diagnostic.posteriorYrfi) < 0.54
+  ) return "fi_legit_model_toss_up";
   if (diagnostic.classification === "legit_model_toss_up") return "fi_legit_model_toss_up";
   if (diagnostic.classification === "provisional_lineup_pending") return "fi_provisional_lineup_pending";
   if (diagnostic.classification === "missing_inputs") return "fi_model_hold_missing_inputs";
@@ -1030,8 +1039,9 @@ function fiHoldFindingCode(diagnostic: FiHoldDiagnostic | undefined): string {
 }
 
 function fiHoldFindingSeverity(diagnostic: FiHoldDiagnostic | undefined): DailyEdgeDataHealthSeverity {
-  if (diagnostic?.classification === "legit_model_toss_up") return "info";
+  if (diagnostic && fiHoldFindingCode(diagnostic) === "fi_legit_model_toss_up") return "info";
   if (diagnostic?.officialProbableStarters?.classification === "official_probable_starter_unannounced") return "medium";
+  if (diagnostic && fiHoldFindingCode(diagnostic) === "fi_model_hold_provider_gap") return "medium";
   if (diagnostic?.materiality === "medium") return "medium";
   return "high";
 }
@@ -1048,10 +1058,23 @@ function fiHoldFindingMessage(diagnostic: FiHoldDiagnostic | undefined): string 
   if (diagnostic?.classification === "sparse_starter_history") {
     return "FI side is held because the official starter is known but lacks enough first-inning starter history for a normal side.";
   }
-  if (official?.classification === "official_probables_complete" && diagnostic?.classification === "missing_inputs") {
+  if (diagnostic && hasActualStarterIngestionGap(diagnostic)) {
     return "FI side is held even though MLB official probable starters are complete; this is an ingestion/mapping issue.";
   }
+  if (diagnostic && fiHoldFindingCode(diagnostic) === "fi_model_hold_provider_gap") {
+    return "FI side is held because the sportsbook FI market is unavailable; official starter inputs are present.";
+  }
+  if (diagnostic && fiHoldFindingCode(diagnostic) === "fi_legit_model_toss_up") {
+    return "FI side is held because the model is a legitimate toss-up; official starter inputs are present.";
+  }
   return diagnostic?.reason ?? "FI model produced no actionable YRFI/NRFI side.";
+}
+
+function hasActualStarterIngestionGap(diagnostic: FiHoldDiagnostic): boolean {
+  if (diagnostic.classification !== "missing_inputs") return false;
+  if (diagnostic.officialProbableStarters?.classification !== "official_probables_complete") return false;
+  return diagnostic.featureReasonCodes.includes("fi_starter_missing") ||
+    diagnostic.degradedFields.some((field) => /probable_pitcher|starter_missing/i.test(field));
 }
 
 function collectFindings(

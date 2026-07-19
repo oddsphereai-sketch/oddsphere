@@ -27,6 +27,7 @@
 // call time, so this assignment is effective.
 process.env.ODDSPHERE_DATA_MODE = "development";
 
+import { readFileSync } from "node:fs";
 import { GET as dailyEdge, __TEST__ as dailyEdgeTest } from "../app/api/lab/daily-edge/route";
 import { supabase } from "../lib/db/supabase";
 import type {
@@ -96,6 +97,9 @@ const VALID_MARKET_SIGNALS = new Set<MarketSignal>([
 async function main() {
   section("Incomplete MLB market safety");
   {
+    const healthMonitorSource = readFileSync("lib/services/dailyEdge/dailyEdgeDataHealthMonitor.ts", "utf8");
+    const healthRepairSource = readFileSync("lib/services/dailyEdge/dailyEdgeDataHealthRepair.ts", "utf8");
+    const dailyEdgeRouteSource = readFileSync("app/api/lab/daily-edge/route.ts", "utf8");
     const held = dailyEdgeTest.forceIncompleteMlbMarketNoPlay({
       held: false,
       rawGrade: "best_signal",
@@ -106,6 +110,10 @@ async function main() {
       capReasons: [],
     } as unknown as Parameters<typeof dailyEdgeTest.forceIncompleteMlbMarketNoPlay>[0]);
     check("incomplete unlocked markets fail closed", held.held === true && held.verdict.key === "no_play" && held.actionabilityLabel === "No Play" && held.capReasons?.includes("incomplete_required_data_no_play") === true);
+    check("incomplete-market safety runs after all support promotions", dailyEdgeRouteSource.indexOf("if (forceIncompleteNoPlay)") > dailyEdgeRouteSource.indexOf("applyHighConvictionTotalPromotion") && dailyEdgeRouteSource.indexOf("if (forceIncompleteNoPlay)") < dailyEdgeRouteSource.indexOf("ml.recommendationDecision = recommendationDecision.markets.moneyline"));
+    check("FI health requires a real starter gap before reporting ingestion failure", healthMonitorSource.includes("hasActualStarterIngestionGap") && healthMonitorSource.includes('featureReasonCodes.includes("fi_starter_missing")') && healthMonitorSource.includes('return "fi_model_hold_provider_gap"') && healthMonitorSource.includes('return "fi_legit_model_toss_up"'));
+    check("FI repair reruns canonical starter reconciliation after player readiness", healthRepairSource.includes("runStarterRefreshCycle") && healthRepairSource.indexOf("const readiness = await repairMlbModelReadiness") < healthRepairSource.indexOf("const starterRefresh = await runStarterRefreshCycle"));
+    check("Daily Edge repair targets missing ML and total market evidence", ['finding.code === "evidence_blocked"', 'finding.code === "actionable_price_missing"', 'finding.code === "actionable_edge_missing"', 'finding.code === "total_price_missing"'].every((needle) => healthRepairSource.includes(needle)));
   }
 
   section("Source-aware split sections");
