@@ -6,6 +6,7 @@ import { linesService } from "@/lib/services/linesService";
 import { lineupService } from "@/lib/services/lineupService";
 import { repairMlbModelReadiness } from "@/lib/services/modelReadinessService";
 import { weatherService } from "@/lib/services/weatherService";
+import { runStarterRefreshCycle } from "../../../scripts/operator/refresh-starters";
 import type {
   DailyEdgeDataHealthFinding,
   DailyEdgeDataHealthReport,
@@ -54,6 +55,7 @@ export type DailyEdgeDataHealthRepairReport = {
     lineups?: Record<string, unknown>;
     lines?: Record<string, unknown>;
     modelReadiness?: Record<string, unknown>;
+    starterRefresh?: Record<string, unknown>;
     sharpSignals?: Record<string, unknown>;
     automodel?: Record<string, unknown>;
   };
@@ -346,6 +348,36 @@ export async function runDailyEdgeDataHealthRepair(args: {
     const message = error instanceof Error ? error.message : String(error);
     steps.modelReadiness = { failed: true, error: message };
     errors.push(`model_readiness: ${message}`);
+  }
+
+  if (candidates.some((finding) => finding.code === "fi_starter_ingestion_miss")) {
+    try {
+      const writeMode = process.env.STARTER_DB_WRITES_ENABLED === "true";
+      const starterRefresh = await runStarterRefreshCycle({
+        sport: args.report.sport,
+        date: args.report.date,
+        writeMode,
+        limit: Math.max(1, gamesByExternalId.size),
+        log: () => undefined,
+      });
+      steps.starterRefresh = {
+        writeMode,
+        status: starterRefresh.status,
+        gamesInSlate: starterRefresh.games_in_slate,
+        gamesUpdated: starterRefresh.games_updated,
+        sidesWritten: starterRefresh.sides_written,
+        unresolved: starterRefresh.unresolved,
+        errors: starterRefresh.errors,
+      };
+      recordsUpdated += starterRefresh.sides_written;
+      if (starterRefresh.status === "failed") {
+        errors.push(`starter_refresh: ${starterRefresh.message ?? "failed"}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      steps.starterRefresh = { failed: true, error: message };
+      errors.push(`starter_refresh: ${message}`);
+    }
   }
 
   if (process.env.PLAYER_STATS_PROVIDER === "real_api") {
