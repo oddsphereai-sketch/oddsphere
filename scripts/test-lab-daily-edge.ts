@@ -99,6 +99,7 @@ async function main() {
   {
     const healthMonitorSource = readFileSync("lib/services/dailyEdge/dailyEdgeDataHealthMonitor.ts", "utf8");
     const healthRepairSource = readFileSync("lib/services/dailyEdge/dailyEdgeDataHealthRepair.ts", "utf8");
+    const refreshStatusSource = readFileSync("app/api/lab/refresh-status/route.ts", "utf8");
     const dailyEdgeRouteSource = readFileSync("app/api/lab/daily-edge/route.ts", "utf8");
     const held = dailyEdgeTest.forceIncompleteMlbMarketNoPlay({
       held: false,
@@ -115,6 +116,7 @@ async function main() {
     check("FI repair reruns canonical starter reconciliation after player readiness", healthRepairSource.includes("runStarterRefreshCycle") && healthRepairSource.indexOf("const readiness = await repairMlbModelReadiness") < healthRepairSource.indexOf("const starterRefresh = await runStarterRefreshCycle"));
     check("FI starter repair covers the complete slate instead of an unrelated finding-sized prefix", healthRepairSource.includes("limit: Math.max(1, args.report.gameCount)") && !healthRepairSource.includes("limit: Math.max(1, gamesByExternalId.size)"));
     check("Daily Edge repair targets missing ML and total market evidence", ['finding.code === "evidence_blocked"', 'finding.code === "actionable_price_missing"', 'finding.code === "actionable_edge_missing"', 'finding.code === "total_price_missing"'].every((needle) => healthRepairSource.includes(needle)));
+    check("refresh pill follows each live league's actual cron", refreshStatusSource.includes('data_source: "wnba_daily_refresh"') && refreshStatusSource.includes('cadence_minutes: 30') && refreshStatusSource.includes('data_source: "soccer_daily_refresh"') && refreshStatusSource.includes('cadence_minutes: 60') && refreshStatusSource.includes("cronConfigsForSport(effectiveSport)"));
   }
 
   section("Source-aware split sections");
