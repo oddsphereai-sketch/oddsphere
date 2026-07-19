@@ -64,6 +64,7 @@ import {
   type MlbTeamAbbrev,
 } from "./_teamNameNormalizer";
 import type { SharpApiGameResolver } from "./SharpAPIOddsProvider";
+import { extractDoubleheaderGameNumberFromEventId } from "./_opportunitiesDiscovery";
 
 /**
  * Hard cap on SharpAPI calls per getSharpSignals invocation.
@@ -83,7 +84,7 @@ const MAX_CALLS_PER_INVOCATION = 8;
  * merge.
  */
 function stripEventBucketSuffix(eventId: string): string {
-  return eventId.replace(/_b\d+$/, "");
+  return eventId.replace(/_b\d+(?=_g\d+$|$)/, "");
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -262,7 +263,7 @@ function buildDedupeKey(
 function extractSlateDateFromEventId(eventId: string | null): string | null {
   if (eventId === null) return null;
   const stripped = stripEventBucketSuffix(eventId);
-  const m = stripped.match(/_(\d{4}-\d{2}-\d{2})$/);
+  const m = stripped.match(/_(\d{4}-\d{2}-\d{2})(?:_g\d+)?$/);
   return m ? m[1] ?? null : null;
 }
 
@@ -524,7 +525,8 @@ async function mapOpportunity(
     date,
     homeAbbrev,
     awayAbbrev,
-    fallbackComputedAt
+    fallbackComputedAt,
+    extractDoubleheaderGameNumberFromEventId(asStringOrNull(row.event_id)),
   );
   if (gameExternalId === null) return null;
 
@@ -756,7 +758,14 @@ export class SharpAPISignalProvider implements ISharpSignalProvider {
         // normalizeMlbTeamName — safe to cast back.
         const home = homeStr as MlbTeamAbbrev;
         const away = awayStr as MlbTeamAbbrev;
-        const gameExtId = await this.resolveGame(sportKey, date, home, away, fallbackComputedAt);
+        const gameExtId = await this.resolveGame(
+          sportKey,
+          date,
+          home,
+          away,
+          fallbackComputedAt,
+          extractDoubleheaderGameNumberFromEventId(asStringOrNull(splitsRow.event_id)),
+        );
         if (gameExtId === null) continue;
         if (gameExternalId !== undefined && gameExtId !== gameExternalId) continue;
         const splitsOnly = buildSplitsOnlySignalsForRow({

@@ -752,8 +752,15 @@ export async function runStarterRefreshCycle(
       };
     }
 
-    const espnForGame = espnByDbGameSide.get(String(c.id))
-      ?? { home: { candidate: null, skipReason: null }, away: { candidate: null, skipReason: null } };
+    const sameMatchupGames = candidates.filter(
+      (candidate) => candidate.homeAbbr === c.homeAbbr && candidate.awayAbbr === c.awayAbbr,
+    ).length;
+    // ESPN's scoreboard identity is team-pair based and cannot safely
+    // distinguish game one from game two. MLB Stats and BDL game IDs can.
+    const espnForGame = sameMatchupGames > 1
+      ? { home: { candidate: null, skipReason: null }, away: { candidate: null, skipReason: null } }
+      : espnByDbGameSide.get(String(c.id))
+        ?? { home: { candidate: null, skipReason: null }, away: { candidate: null, skipReason: null } };
     rows.push({
       dbGame,
       homeTeamAbbr: c.homeAbbr,

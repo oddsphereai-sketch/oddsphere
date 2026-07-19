@@ -125,7 +125,21 @@ const OPPORTUNITIES_PATH = "/opportunities/ev";
  * here so this module stays self-contained.
  */
 export function stripEventBucketSuffix(eventId: string): string {
-  return eventId.replace(/_b\d+$/, "");
+  // Doubleheader IDs put the game marker after the bucket, e.g.
+  // `..._b2_g1`. Preserve `_g1`/`_g2` as part of event identity while
+  // removing only the market bucket.
+  return eventId.replace(/_b\d+(?=_g\d+$|$)/, "");
+}
+
+/** SharpAPI appends `_g1`, `_g2`, ... for doubleheader games. */
+export function extractDoubleheaderGameNumberFromEventId(
+  eventId: string | null,
+): number | null {
+  if (eventId === null) return null;
+  const match = stripEventBucketSuffix(eventId).match(/_g(\d+)$/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isInteger(value) && value > 0 ? value : null;
 }
 
 /**
@@ -138,7 +152,7 @@ export function extractSlateDateFromEventId(
 ): string | null {
   if (eventId === null) return null;
   const stripped = stripEventBucketSuffix(eventId);
-  const m = stripped.match(/_(\d{4}-\d{2}-\d{2})$/);
+  const m = stripped.match(/_(\d{4}-\d{2}-\d{2})(?:_g\d+)?$/);
   return m ? (m[1] ?? null) : null;
 }
 
@@ -233,7 +247,7 @@ export function buildDiscoveryFromOpportunitiesRows(
     // we'd actually harvest. Step 2E.1 (multi-bucket /odds harvest)
     // consumes the same `suffixesByStrippedId` map to populate the
     // canonical event's full suffix list.
-    const suffixMatch = rawEventId.match(/_b\d+$/);
+    const suffixMatch = rawEventId.match(/_b\d+(?=_g\d+$|$)/);
     const suffix = suffixMatch ? suffixMatch[0] : "";
     let suffixSet = suffixesByStrippedId.get(strippedId);
     if (!suffixSet) {
@@ -302,7 +316,9 @@ export function buildDiscoveryFromOpportunitiesRows(
       // would land on the stripped id, which the SharpAPI audit
       // confirmed returns 0 rows.
       if (sfx === "") continue;
-      const fullId = ev.sharpEventId + sfx;
+      const fullId = /_g\d+$/.test(ev.sharpEventId)
+        ? ev.sharpEventId.replace(/(_g\d+)$/, `${sfx}$1`)
+        : ev.sharpEventId + sfx;
       if (!seen.has(fullId)) {
         ev.suffixedEventIds.push(fullId);
         seen.add(fullId);

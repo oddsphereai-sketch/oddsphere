@@ -110,7 +110,8 @@ function makeSharpApiGameResolver(): SharpApiGameResolver {
     date: string,
     homeAbbrev: MlbTeamAbbrev,
     awayAbbrev: MlbTeamAbbrev,
-    referenceTimeIso?: string
+    referenceTimeIso?: string,
+    gameNumber?: number | null,
   ): Promise<number | null> => {
     const { data: teams, error: teamsError } = await supabase
       .from("teams")
@@ -135,6 +136,14 @@ function makeSharpApiGameResolver(): SharpApiGameResolver {
     const candidates = games ?? [];
     if (candidates.length === 0) return null;
     if (candidates.length === 1) return candidates[0]?.external_id ?? null;
+
+    // SharpAPI distinguishes doubleheaders with `_g1`, `_g2`, etc.
+    // Candidates are already ordered by scheduled start, so route the
+    // provider event to that exact game instead of assigning every event
+    // for the same teams/date to whichever game happens to be upcoming.
+    if (gameNumber !== null && gameNumber !== undefined) {
+      return candidates[gameNumber - 1]?.external_id ?? null;
+    }
 
     const referenceMs = Date.parse(referenceTimeIso ?? "");
     const effectiveReferenceMs = Number.isFinite(referenceMs) ? referenceMs : Date.now();

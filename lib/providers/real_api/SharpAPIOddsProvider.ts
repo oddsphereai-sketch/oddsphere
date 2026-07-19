@@ -45,6 +45,7 @@ import {
 } from "./_teamNameNormalizer";
 import {
   discoverEventsFromOpportunities,
+  extractDoubleheaderGameNumberFromEventId,
   type DiscoveryStats as EvDiscoveryStats,
 } from "./_opportunitiesDiscovery";
 import {
@@ -97,7 +98,8 @@ export type SharpApiGameResolver = (
   date: string,
   homeAbbrev: MlbTeamAbbrev,
   awayAbbrev: MlbTeamAbbrev,
-  referenceTimeIso?: string
+  referenceTimeIso?: string,
+  gameNumber?: number | null,
 ) => Promise<number | null>;
 
 /** Hard cap on SharpAPI calls per getGameLines invocation (safety net). */
@@ -330,7 +332,8 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         date,
         homeAbbrev,
         awayAbbrev,
-        fetchedAt
+        fetchedAt,
+        extractDoubleheaderGameNumberFromEventId(cand.sharpEventId),
       );
       if (gameExternalId === null) {
         // Game not in our DB for this slate. Expected for postponed games
@@ -572,7 +575,14 @@ export class SharpAPIOddsProvider implements IOddsProvider {
     const unresolvedTeamPairs: Array<{ home: MlbTeamAbbrev; away: MlbTeamAbbrev }> = [];
 
     for (const ev of evResult.events) {
-      const gameExtId = await this.resolveGame(sportKey, date, ev.home, ev.away, fetchedAt);
+      const gameExtId = await this.resolveGame(
+        sportKey,
+        date,
+        ev.home,
+        ev.away,
+        fetchedAt,
+        extractDoubleheaderGameNumberFromEventId(ev.sharpEventId),
+      );
       if (gameExtId === null) {
         unresolvedTeamPairs.push({ home: ev.home, away: ev.away });
         continue;
@@ -614,6 +624,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         sev.home,
         sev.away,
         fetchedAt,
+        extractDoubleheaderGameNumberFromEventId(sev.splitsEventId),
       );
       if (gameExtId === null) {
         unresolvedTeamPairs.push({ home: sev.home, away: sev.away });

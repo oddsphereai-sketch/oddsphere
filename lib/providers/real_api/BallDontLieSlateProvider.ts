@@ -263,6 +263,59 @@ function mapGame(
   };
 }
 
+/**
+ * BDL occasionally repeats game-one probable pitchers onto game two of a
+ * doubleheader. Keep the first scheduled assignment and clear only repeated
+ * later-game assignments. Distinct game-two pitchers remain untouched.
+ */
+export function suppressDuplicateDoubleheaderStarters<T extends Pick<
+  SlateGameRecord,
+  | "external_id"
+  | "game_date"
+  | "home_team_external_id"
+  | "away_team_external_id"
+  | "home_pitcher_external_id"
+  | "away_pitcher_external_id"
+> & { provider_ids?: Record<string, string | number> }>(
+  records: T[],
+): T[] {
+  const groups = new Map<string, T[]>();
+  for (const record of records) {
+    const key = `${record.away_team_external_id ?? "?"}|${record.home_team_external_id ?? "?"}`;
+    const group = groups.get(key) ?? [];
+    group.push(record);
+    groups.set(key, group);
+  }
+
+  const replacements = new Map<number, T>();
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const seenHome = new Set<number>();
+    const seenAway = new Set<number>();
+    for (const record of [...group].sort((a, b) => Date.parse(a.game_date) - Date.parse(b.game_date))) {
+      const duplicateHome = record.home_pitcher_external_id !== null
+        && seenHome.has(record.home_pitcher_external_id);
+      const duplicateAway = record.away_pitcher_external_id !== null
+        && seenAway.has(record.away_pitcher_external_id);
+      if (record.home_pitcher_external_id !== null) seenHome.add(record.home_pitcher_external_id);
+      if (record.away_pitcher_external_id !== null) seenAway.add(record.away_pitcher_external_id);
+      if (duplicateHome || duplicateAway) {
+        replacements.set(record.external_id, {
+          ...record,
+          home_pitcher_external_id: duplicateHome ? null : record.home_pitcher_external_id,
+          away_pitcher_external_id: duplicateAway ? null : record.away_pitcher_external_id,
+          provider_ids: {
+            ...(record.provider_ids ?? {}),
+            ...(duplicateHome ? { oddsphere_suppress_duplicate_home_pitcher: 1 } : {}),
+            ...(duplicateAway ? { oddsphere_suppress_duplicate_away_pitcher: 1 } : {}),
+          },
+        });
+      }
+    }
+  }
+  return records.map((record) => replacements.get(record.external_id) ?? record);
+}
+
 // ─────────────────────────────────────────────────────────────
 // Provider
 // ─────────────────────────────────────────────────────────────
@@ -375,7 +428,7 @@ export class BallDontLieSlateProvider implements ISlateProvider {
       }
       out.push(mapGame(raw, homeFromLineup, awayFromLineup));
     }
-    return out;
+    return suppressDuplicateDoubleheaderStarters(out);
   }
 
   /**
