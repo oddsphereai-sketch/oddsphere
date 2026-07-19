@@ -190,8 +190,9 @@ const LOCK_REF_PAGE_SIZE = 1_000;
 const MAX_LOCK_REF_PAGES = 20;
 
 export async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): Promise<MlbPropsBoardSnapshot> {
+  const safeLatest = suppressOfficialPitcherTeamConflicts(latest);
   const lockedRefs = await loadLockedDisplaySnapshotRefs(latest.slateDate);
-  if (!lockedRefs.size) return latest;
+  if (!lockedRefs.size) return safeLatest;
 
   const snapshotPointers = new Map<string, LockedDisplaySnapshotPointer>();
   for (const ref of lockedRefs.values()) snapshotPointers.set(ref.snapshotId, ref);
@@ -213,7 +214,7 @@ export async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): 
       .filter(([, ref]) => !lockedSnapshots.has(ref.snapshotId))
       .map(([gameId]) => gameId),
   );
-  if (!lockedSnapshots.size && !unrecoverableLockedGames.size) return latest;
+  if (!lockedSnapshots.size && !unrecoverableLockedGames.size) return safeLatest;
 
   const lockedRowsByGame = new Map<string, PlayerPropPreviewRow[]>();
   const lockedResearch: NonNullable<PlayerPropsDashboardData["research"]> = {};
@@ -222,7 +223,7 @@ export async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): 
     const locked = lockedSnapshots.get(ref.snapshotId);
     if (!locked) continue;
     const rows = locked.data.props
-      .filter((row) => row.providerIds?.gameId === gameId)
+      .filter((row) => row.providerIds?.gameId === gameId && officialPitcherTeamIsCoherent(locked.data, row))
       .map((row) => ({ ...row, lockStatus: { status: "locked" as const, lockedAt: ref.lockedAt } }));
     if (!rows.length) continue;
     lockedRowsByGame.set(gameId, rows);
@@ -233,11 +234,11 @@ export async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): 
       }
     }
   }
-  if (!lockedRowsByGame.size) return latest;
+  if (!lockedRowsByGame.size) return safeLatest;
 
   const emittedLockedGames = new Set<string>();
   const props: PlayerPropPreviewRow[] = [];
-  for (const row of latest.data.props) {
+  for (const row of safeLatest.data.props) {
     const gameId = row.providerIds?.gameId;
     // Fail closed when immutable pregame evidence is unavailable. Showing no
     // rows for one locked game is safer than presenting in-game values with a
@@ -258,19 +259,52 @@ export async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): 
 
   const allDisplayGames = new Set(props.map((row) => row.providerIds?.gameId).filter(Boolean) as string[]);
   const allGamesLocked = allDisplayGames.size > 0 && [...allDisplayGames].every((gameId) => lockedRowsByGame.has(gameId));
-  const lockedLastUpdated = [...lockedUpdatedByGame.values()].sort().at(-1) ?? latest.data.lastUpdated;
+  const lockedLastUpdated = [...lockedUpdatedByGame.values()].sort().at(-1) ?? safeLatest.data.lastUpdated;
   const data: PlayerPropsDashboardData = {
-    ...latest.data,
-    lastUpdated: allGamesLocked ? lockedLastUpdated : latest.data.lastUpdated,
+    ...safeLatest.data,
+    lastUpdated: allGamesLocked ? lockedLastUpdated : safeLatest.data.lastUpdated,
     props,
     research: {
-      ...(latest.data.research ?? {}),
+      ...(safeLatest.data.research ?? {}),
       ...lockedResearch,
     },
-    summary: summarizeDisplayProps(latest.data, props),
+    summary: summarizeDisplayProps(safeLatest.data, props),
   };
 
-  return { ...latest, data };
+  return { ...safeLatest, data };
+}
+
+function suppressOfficialPitcherTeamConflicts(snapshot: MlbPropsBoardSnapshot): MlbPropsBoardSnapshot {
+  const props = snapshot.data.props.filter((row) => officialPitcherTeamIsCoherent(snapshot.data, row));
+  if (props.length === snapshot.data.props.length) return snapshot;
+  return {
+    ...snapshot,
+    data: {
+      ...snapshot.data,
+      props,
+      summary: summarizeDisplayProps(snapshot.data, props),
+    },
+  };
+}
+
+function officialPitcherTeamIsCoherent(data: PlayerPropsDashboardData, row: PlayerPropPreviewRow): boolean {
+  if (row.marketFamily !== "pitcher") return true;
+  const matchup = data.slate?.matchups.find((candidate) =>
+    candidate.gameStartTime === row.gameStartTime
+    && ((candidate.awayTeam === row.team && candidate.homeTeam === row.opponent)
+      || (candidate.homeTeam === row.team && candidate.awayTeam === row.opponent)),
+  );
+  if (!matchup) return true;
+  const player = normalizeDisplayPlayerName(row.player);
+  const awayStarter = normalizeDisplayPlayerName(matchup.awayProbablePitcher ?? "");
+  const homeStarter = normalizeDisplayPlayerName(matchup.homeProbablePitcher ?? "");
+  if (player === awayStarter) return row.team === matchup.awayTeam;
+  if (player === homeStarter) return row.team === matchup.homeTeam;
+  return true;
+}
+
+function normalizeDisplayPlayerName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 async function loadLockedDisplaySnapshotRefs(slateDate: string): Promise<Map<string, LockedDisplaySnapshotPointer>> {

@@ -468,7 +468,7 @@ async function loadFullResearch(args: {
       .map((log) => completedSameDayGames.has(log.gameId)
         ? { ...log, asOfTimestamp: new Date(Date.parse(args.asOfTimestamp) - 1).toISOString() }
         : log);
-    const opponentTeamId = opponentTeamFor(row, identity);
+    const opponentTeamId = opponentTeamFor(row, identity, args.probablePitchers);
     const opposingProbable = opposingProbableFor(row, identity, args.probablePitchers);
     const matchupHistoryKey = mlbMatchupKey(mlbId, opposingProbable?.playerId ?? null);
     candidates.push({
@@ -740,7 +740,15 @@ function buildDashboardRows(args: {
     if (!identity || !recentLogs.length) continue;
     const projection = round(recentLogs.reduce((sum, row) => sum + row.value, 0) / recentLogs.length, 2);
     const definition = getMlbPropMarketDefinition(mapped.odds.marketKey);
-    const playerTeam = resolveMlbTeamAlias(identity.player.teamAbbreviation);
+    // A provider player profile can lag a trade or roster move. For pitchers,
+    // the official probable-pitcher assignment is the authoritative game-side
+    // identity and must win over the provider's cached team abbreviation.
+    const officialPitcher = definition.family === "pitcher"
+      ? probableForPlayer(args.probablePitchers, mapped.game.id, identity.player.fullName)
+      : null;
+    const playerTeam = officialPitcher
+      ? resolveMlbStatsTeamId(officialPitcher.teamId)
+      : resolveMlbTeamAlias(identity.player.teamAbbreviation);
     const homeTeam = resolveMlbStatsTeamId(mapped.game.homeTeamId);
     const awayTeam = resolveMlbStatsTeamId(mapped.game.awayTeamId);
     const team = playerTeam?.abbreviation ?? awayTeam?.abbreviation ?? "MLB";
@@ -1644,8 +1652,17 @@ function researchKey(playerId: number, market: PropOddsSnapshot["marketKey"], ga
   return `${gameId}|${playerId}|${market}`;
 }
 
-function opponentTeamFor(row: MappedOddsRow, identity: PlayerIdentity | undefined): string | null {
-  const playerTeam = resolveMlbTeamAlias(identity?.player.teamAbbreviation);
+function opponentTeamFor(
+  row: MappedOddsRow,
+  identity: PlayerIdentity | undefined,
+  probables: MlbProbablePitcher[] = [],
+): string | null {
+  const officialPitcher = identity
+    ? probableForPlayer(probables, row.game.id, identity.player.fullName)
+    : null;
+  const playerTeam = officialPitcher
+    ? resolveMlbStatsTeamId(officialPitcher.teamId)
+    : resolveMlbTeamAlias(identity?.player.teamAbbreviation);
   const home = resolveMlbStatsTeamId(row.game.homeTeamId);
   return playerTeam?.id === home?.id ? row.game.awayTeamId : row.game.homeTeamId;
 }
@@ -1662,7 +1679,7 @@ function opposingProbableFor(
   identity: PlayerIdentity | undefined,
   probables: MlbProbablePitcher[],
 ): MlbProbablePitcher | null {
-  const opponentTeamId = opponentTeamFor(row, identity);
+  const opponentTeamId = opponentTeamFor(row, identity, probables);
   return probables.find((probable) => probable.gameId === row.game.id && probable.teamId === opponentTeamId) ?? null;
 }
 

@@ -22,7 +22,7 @@ export async function GET(
       mode: "display_enabled",
       asOfTimestamp: readSnapshot.asOfTimestamp,
       research: readSnapshot.research,
-    }, { headers: { "Cache-Control": "private, max-age=300, stale-while-revalidate=3600" } });
+    }, { headers: { "Cache-Control": "private, no-store" } });
   }
   const snapshot = await loadCachedLatestMlbPropsDisplaySnapshot(easternSlateDate());
   if (!snapshot || !mlbPropsSnapshotIsFresh(snapshot)) {
