@@ -94,6 +94,20 @@ const VALID_MARKET_SIGNALS = new Set<MarketSignal>([
 ]);
 
 async function main() {
+  section("Incomplete MLB market safety");
+  {
+    const held = dailyEdgeTest.forceIncompleteMlbMarketNoPlay({
+      held: false,
+      rawGrade: "best_signal",
+      grade: "best_signal",
+      finalGrade: "best_signal",
+      verdict: { key: "best_angle", label: "Best Angle" },
+      actionabilityLabel: "Best Angle",
+      capReasons: [],
+    } as unknown as Parameters<typeof dailyEdgeTest.forceIncompleteMlbMarketNoPlay>[0]);
+    check("incomplete unlocked markets fail closed", held.held === true && held.verdict.key === "no_play" && held.actionabilityLabel === "No Play" && held.capReasons?.includes("incomplete_required_data_no_play") === true);
+  }
+
   section("Source-aware split sections");
   {
     const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(

@@ -33,7 +33,7 @@ function requiredFieldsFor(row: PredictionEvidenceObject): string[] {
   }
   const fields = ["pick", "model_probability"];
   if (!caps.isFirstInning && row.identity.noBet !== true) fields.push("price", "market_implied_probability", "edge");
-  if (row.identity.marketType === "TOTAL") fields.push("line_value", "projected_total");
+  if (row.identity.marketType === "TOTAL" && row.identity.noBet !== true) fields.push("line_value", "projected_total");
   if (caps.isFirstInning) fields.push("fi_pick", "fi_context");
   return fields;
 }

@@ -531,6 +531,23 @@ function marketHasBlockingFriction(
   );
 }
 
+function forceIncompleteMlbMarketNoPlay(market: MarketEdgeDto): MarketEdgeDto {
+  const reason = "Required market prices or verified game inputs are not available yet.";
+  const cappedGrade = gradeForStoredVerdict("no_play", market.rawGrade ?? market.grade ?? null);
+  return {
+    ...market,
+    held: true,
+    grade: cappedGrade,
+    finalGrade: cappedGrade,
+    verdict: { key: "no_play", label: "No Play" },
+    actionabilityLabel: "No Play",
+    displayReason: reason,
+    guidedGuide: "Data check — this market is held until its lines and required inputs are verified.",
+    riskLine: reason,
+    capReasons: Array.from(new Set([...(market.capReasons ?? []), "incomplete_required_data_no_play"])),
+  };
+}
+
 function totalProjectionGap(market: MarketEdgeDto): number | null {
   if (typeof market.modelTotal !== "number" || typeof market.line !== "number") return null;
   return Math.abs(market.modelTotal - market.line);
@@ -2263,6 +2280,16 @@ function buildGameDto(
   total = lockedOu !== undefined ? total : guardrailedMarkets.total;
   firstInning = lockedFi !== undefined ? firstInning : guardrailedMarkets.firstInning;
 
+  const dataCompleteness = readMlbDataCompletenessDto(pred.sport_specific, {
+    computedAt: pred.computed_at,
+    lockedAt: pred.locked_at,
+  });
+  if (dataCompleteness?.canPublishNormal === false && !dataCompleteness.lockProtected) {
+    ml = forceIncompleteMlbMarketNoPlay(ml);
+    total = forceIncompleteMlbMarketNoPlay(total);
+    firstInning = forceIncompleteMlbMarketNoPlay(firstInning);
+  }
+
   // 4.1.10 — per-game status flags.
   const status: GameStatusDto = {
     lineupConfirmed: extractLineupConfirmed(pred.sport_specific),
@@ -2312,10 +2339,6 @@ function buildGameDto(
   // starter isn't posted yet. Handedness limited to "L" / "R" / null.
   const homeStarter = buildStarterDto(row.home_pitcher);
   const awayStarter = buildStarterDto(row.away_pitcher);
-  const dataCompleteness = readMlbDataCompletenessDto(pred.sport_specific, {
-    computedAt: pred.computed_at,
-    lockedAt: pred.locked_at,
-  });
   const mlSelectedSide =
     pred.predicted_ml_winner === "home" || pred.predicted_ml_winner === "away"
       ? pred.predicted_ml_winner
@@ -5218,6 +5241,7 @@ function marketAwareBreakdownDto(
 // featureSnapshot.ts). Production callers go through the GET handler.
 export const __TEST__ = {
   buildGameDto,
+  forceIncompleteMlbMarketNoPlay,
   normalizeGameRow,
   extractModelBreakdown,
   deriveVerdictForRow,

@@ -287,18 +287,6 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
   const [researchLoadingPlayerId, setResearchLoadingPlayerId] = useState<string | null>(null);
   const requestedResearchPlayers = useRef(new Set<string>());
 
-  useEffect(() => {
-    if (mode !== "member" || fullData) return;
-    const controller = new AbortController();
-    fetch("/api/mlb/props/picks?full=true", { signal: controller.signal })
-      .then(async (response) => response.ok ? response.json() : null)
-      .then((payload: { board?: PlayerPropsDashboardData } | null) => {
-        if (payload?.board) setFullData(payload.board);
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [fullData, mode]);
-
   const availableResearch = useMemo(() => ({ ...(data.research ?? {}), ...loadedResearch }), [data.research, loadedResearch]);
   const hydratedProps = useMemo(() => data.props.map((row) => enforcePreviewIntegrity(hydrateResearchEvidence(row, availableResearch))), [availableResearch, data.props]);
   const displayProps = useMemo(() => hydratedProps.filter((row) => mode === "admin" || isMemberVisibleMarket(row)), [hydratedProps, mode]);
@@ -368,8 +356,12 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
   };
 
   useEffect(() => {
-    if (mode !== "member" || !selectedId) return;
-    const row = data.props.find((item) => item.id === selectedId);
+    if (mode !== "member") return;
+    const row = selectedId
+      ? data.props.find((item) => item.id === selectedId)
+      : selectedPlayer
+        ? data.props.find((item) => item.player === selectedPlayer)
+        : null;
     if (!row?.researchKey || availableResearch[row.researchKey]) return;
     const playerId = row.providerIds?.mlbStatsPlayerId ?? row.providerIds?.bdlPlayerId?.toString() ?? row.id;
     if (requestedResearchPlayers.current.has(playerId)) return;
@@ -384,17 +376,25 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
     })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Player research request failed with ${response.status}`);
-        return response.json() as Promise<{ research?: PlayerPropsDashboardData["research"] }>;
+        return response.json() as Promise<{ props?: PlayerPropsDashboardData["props"]; research?: PlayerPropsDashboardData["research"] }>;
       })
       .then((payload) => {
         if (payload.research) setLoadedResearch((current) => ({ ...current, ...payload.research }));
+        if (payload.props?.length) {
+          setFullData((current) => {
+            const base = current ?? data;
+            const props = new Map(base.props.map((item) => [item.id, item]));
+            for (const item of payload.props ?? []) props.set(item.id, item);
+            return { ...base, props: [...props.values()] };
+          });
+        }
       })
       .catch(() => {
         requestedResearchPlayers.current.delete(playerId);
       })
       .finally(() => setResearchLoadingPlayerId((current) => current === playerId ? null : current));
     return () => controller.abort();
-  }, [availableResearch, data.props, mode, selectedId]);
+  }, [availableResearch, data, mode, selectedId, selectedPlayer]);
 
   if (displayProps.length === 0) {
     return <PendingPropsState data={data} mode={mode} matchups={matchups} />;
