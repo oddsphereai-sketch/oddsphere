@@ -93,7 +93,11 @@ function repairableFindings(report: DailyEdgeDataHealthReport): DailyEdgeDataHea
     finding.code === "fi_model_hold_missing_inputs" ||
     finding.code === "fi_model_hold_provider_gap" ||
     finding.code === "fi_model_hold_diagnostic_missing" ||
-    (finding.code === "evidence_blocked" && finding.market === "first_inning")
+    finding.code === "evidence_blocked" ||
+    finding.code === "actionable_price_missing" ||
+    finding.code === "actionable_edge_missing" ||
+    finding.code === "total_price_missing" ||
+    finding.code === "total_price_stale_or_unavailable"
   );
 }
 
@@ -145,7 +149,7 @@ export async function runDailyEdgeDataHealthRepair(args: {
         externalId: numberFromDetails(finding, "externalId"),
         lockState: "unknown",
         status: "skipped_unsupported",
-        message: "Automated repair currently supports MLB FI data gaps only.",
+        message: "Automated repair currently supports MLB market and model-input gaps only.",
       });
     }
     return {

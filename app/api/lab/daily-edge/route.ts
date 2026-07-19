@@ -2284,11 +2284,7 @@ function buildGameDto(
     computedAt: pred.computed_at,
     lockedAt: pred.locked_at,
   });
-  if (dataCompleteness?.canPublishNormal === false && !dataCompleteness.lockProtected) {
-    ml = forceIncompleteMlbMarketNoPlay(ml);
-    total = forceIncompleteMlbMarketNoPlay(total);
-    firstInning = forceIncompleteMlbMarketNoPlay(firstInning);
-  }
+  const forceIncompleteNoPlay = dataCompleteness?.canPublishNormal === false && !dataCompleteness.lockProtected;
 
   // 4.1.10 — per-game status flags.
   const status: GameStatusDto = {
@@ -2441,6 +2437,16 @@ function buildGameDto(
   if (marketSyncedMl !== ml || marketSyncedTotal !== total) {
     ml = marketSyncedMl;
     total = marketSyncedTotal;
+    decisionLine = buildDecisionLine({ ml, total, firstInning, awayAbbr: away, homeAbbr: home });
+    recommendationDecision = buildSourceAwareRecommendationDecision();
+  }
+  // This is the final pre-lock market authority. Market-support promotions
+  // above must never turn a card with missing required inputs back into an
+  // actionable or Watchlist presentation.
+  if (forceIncompleteNoPlay) {
+    ml = forceIncompleteMlbMarketNoPlay(ml);
+    total = forceIncompleteMlbMarketNoPlay(total);
+    firstInning = forceIncompleteMlbMarketNoPlay(firstInning);
     decisionLine = buildDecisionLine({ ml, total, firstInning, awayAbbr: away, homeAbbr: home });
     recommendationDecision = buildSourceAwareRecommendationDecision();
   }
