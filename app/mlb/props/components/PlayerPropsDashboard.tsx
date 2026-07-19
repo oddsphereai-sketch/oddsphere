@@ -376,7 +376,12 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
     requestedResearchPlayers.current.add(playerId);
     const controller = new AbortController();
     setResearchLoadingPlayerId(playerId);
-    fetch(`/api/mlb/props/player/${encodeURIComponent(playerId)}`, { signal: controller.signal })
+    // Player research is repaired independently from the immutable board. Do
+    // not reuse an older private response after a shard republish.
+    fetch(`/api/mlb/props/player/${encodeURIComponent(playerId)}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Player research request failed with ${response.status}`);
         return response.json() as Promise<{ research?: PlayerPropsDashboardData["research"] }>;
