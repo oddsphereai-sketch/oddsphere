@@ -20,6 +20,18 @@ const FIELDS = [
   "no_bet",
 ] as const;
 
+function isSafeStoredOnlyMarket(rows: LockComparableRow[]): boolean {
+  // The first-inning writer intentionally omits a row from `proposed` when
+  // fresh data cannot support a current prediction. An existing member row
+  // may still truthfully remain as a held Toss-Up. That fail-closed row should
+  // freeze with the game instead of blocking otherwise coherent ML/total
+  // records. Never tolerate an extra actionable or picked market here.
+  return rows.length === 1
+    && rows[0]?.market === "first_inning"
+    && rows[0]?.no_bet === true
+    && (rows[0]?.pick === null || rows[0]?.pick === "Toss-Up");
+}
+
 export function assessMlbLockCoherence(args: {
   gameIds: number[];
   expectedRows: LockComparableRow[];
@@ -42,8 +54,15 @@ export function assessMlbLockCoherence(args: {
     const gameErrors: string[] = [];
 
     if (expected.length === 0) gameErrors.push("writer proposed no member records");
-    if (JSON.stringify(expectedMarkets) !== JSON.stringify(storedMarkets)) {
-      gameErrors.push(`market set differs expected=${expectedMarkets.join(",")} stored=${storedMarkets.join(",")}`);
+    const missingMarkets = expectedMarkets.filter((market) => !storedMarkets.includes(market));
+    if (missingMarkets.length > 0) {
+      gameErrors.push(`missing stored markets=${missingMarkets.join(",")} expected=${expectedMarkets.join(",")} stored=${storedMarkets.join(",")}`);
+    }
+    for (const market of storedMarkets.filter((value) => !expectedMarkets.includes(value))) {
+      const storedOnlyRows = stored.filter((row) => row.market === market);
+      if (!isSafeStoredOnlyMarket(storedOnlyRows)) {
+        gameErrors.push(`unexpected stored market=${market} is not a held first-inning Toss-Up`);
+      }
     }
 
     for (const expectedRow of expected) {
