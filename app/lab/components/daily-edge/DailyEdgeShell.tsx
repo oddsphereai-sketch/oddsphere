@@ -1390,11 +1390,8 @@ function HowThisWorks() {
 function StartersLine({ game }: { game: DailyEdgeGameDto }) {
   // Phase 7F (Path A) — NBA has no probable pitchers; the adapter
   // sets both starters to null. Early return for any non-MLB sport so
-  // the row never even attempts to render (MLB behavior unchanged).
+  // the row never attempts to render.
   if (game.sport !== "mlb") return null;
-  // Skip entirely when BOTH sides are null — no useful info to show
-  // and we don't want an empty "TBD · TBD" row screaming "missing data."
-  if (game.homeStarter === null && game.awayStarter === null) return null;
 
   const renderSide = (starter: typeof game.homeStarter, fallback: string) => {
     if (starter === null) {
