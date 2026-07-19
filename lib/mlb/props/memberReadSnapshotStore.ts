@@ -2,6 +2,7 @@ import { supabase } from "@/lib/db/supabase";
 import type { PlayerPropsDashboardData } from "@/app/mlb/props/components/PlayerPropsDashboard";
 import {
   applyMlbPropsDisplayLocks,
+  loadMlbPropsLockedGameTimes,
   type MlbPropsBoardSnapshot,
 } from "./boardSnapshotStore";
 import {
@@ -46,7 +47,7 @@ export async function publishMlbPropsMemberReadSnapshots(snapshot: MlbPropsBoard
   // member payload. Never infer a lock by applying an old timestamp to rows
   // from the latest (potentially in-game) refresh.
   const displaySnapshot = await applyMlbPropsDisplayLocks(snapshot);
-  const lockedGames = await loadLockedGameTimes(displaySnapshot.slateDate);
+  const lockedGames = await loadMlbPropsLockedGameTimes(displaySnapshot.slateDate);
   assertLockedGamesUseAuthoritativeRows(displaySnapshot.data.props, lockedGames);
   const now = Date.now();
   const common = {
@@ -161,24 +162,6 @@ function assertLockedGamesUseAuthoritativeRows(
       throw new Error(`Refusing to publish mutable member rows for locked MLB game ${gameId}.`);
     }
   }
-}
-
-async function loadLockedGameTimes(date: string): Promise<Map<string, string>> {
-  const { data, error } = await supabase
-    .from("mlb_prop_tracking_entries")
-    .select("external_game_id,locked_at")
-    .eq("slate_date", date)
-    .not("locked_at", "is", null)
-    .order("locked_at", { ascending: true })
-    .limit(5000);
-  if (error) throw error;
-  const result = new Map<string, string>();
-  for (const row of data ?? []) {
-    if (row.external_game_id && row.locked_at && !result.has(row.external_game_id)) {
-      result.set(row.external_game_id, row.locked_at);
-    }
-  }
-  return result;
 }
 
 export async function loadMlbPropsMemberBoardSnapshot(date: string, full = false): Promise<BoardPayload | null> {
