@@ -123,7 +123,10 @@ export type MlbPropsBoardRefreshResult = {
 const ACTIONABLE_GRADES = new Set(["BEST_ANGLE", "LEAN"]);
 const DEFAULT_MAX_ODDS_AGE_MINUTES = 45;
 const DEFAULT_MAX_SOURCE_ODDS_ROWS = 25_000;
-const DEFAULT_MAX_BOARD_ROWS = 6_000;
+// Full MLB slates can legitimately exceed 6,000 book/side/line rows. Keep a
+// bounded corruption guard without rejecting a healthy board merely because
+// more sportsbooks or alternates are posted on a larger slate.
+const DEFAULT_MAX_BOARD_ROWS = 7_500;
 const DEFAULT_MAX_BDL_CALLS_PER_REFRESH = 300;
 const DEFAULT_RECENT_FORM_SEASON_LOG_LIMIT = 180;
 const MEMBER_EXCLUDED_MARKETS = new Set(["first_home_run", "pitcher_record_a_win"]);
