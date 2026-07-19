@@ -22,7 +22,10 @@
 
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { BallDontLieSlateProvider } from "../lib/providers/real_api/BallDontLieSlateProvider";
+import {
+  BallDontLieSlateProvider,
+  suppressDuplicateDoubleheaderStarters,
+} from "../lib/providers/real_api/BallDontLieSlateProvider";
 
 const FIXTURES_DIR = resolve(__dirname, "..", "tests", "fixtures", "bdl");
 
@@ -153,6 +156,41 @@ async function main() {
   section("Empty input handling");
   const emptyResult = provider.__testOnly_filterToSportsDay([], [], SLATE_DATE, "mlb") as RawGame[];
   check("empty inputs return []", emptyResult.length === 0);
+
+  section("Doubleheader starter safety");
+  const doubleheader = suppressDuplicateDoubleheaderStarters([
+    {
+      external_id: 1,
+      game_date: "2026-07-19T16:35:00Z",
+      home_team_external_id: 147,
+      away_team_external_id: 119,
+      home_pitcher_external_id: 10,
+      away_pitcher_external_id: 20,
+      provider_ids: { balldontlie: 1 } as Record<string, string | number>,
+    },
+    {
+      external_id: 2,
+      game_date: "2026-07-19T23:20:00Z",
+      home_team_external_id: 147,
+      away_team_external_id: 119,
+      home_pitcher_external_id: 10,
+      away_pitcher_external_id: 20,
+      provider_ids: { balldontlie: 2 } as Record<string, string | number>,
+    },
+  ]);
+  check(
+    "keeps game-one starter assignments",
+    doubleheader[0]?.home_pitcher_external_id === 10 && doubleheader[0]?.away_pitcher_external_id === 20,
+  );
+  check(
+    "clears copied game-two starter assignments",
+    doubleheader[1]?.home_pitcher_external_id === null && doubleheader[1]?.away_pitcher_external_id === null,
+  );
+  check(
+    "marks copied game-two starter assignments as intentional clears",
+    doubleheader[1]?.provider_ids?.oddsphere_suppress_duplicate_home_pitcher === 1
+      && doubleheader[1]?.provider_ids?.oddsphere_suppress_duplicate_away_pitcher === 1,
+  );
 
   section("Different slate date filters differently");
   const june2Filtered = provider.__testOnly_filterToSportsDay(rowsD, rowsD1, "2026-06-02", "mlb") as RawGame[];

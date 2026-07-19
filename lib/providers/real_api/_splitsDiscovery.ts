@@ -96,7 +96,7 @@ const SPLITS_PATH = "/splits";
  * carry but /splits event_ids do not. Idempotent on already-stripped ids.
  */
 export function stripEventBucketSuffix(eventId: string): string {
-  return eventId.replace(/_b\d+$/, "");
+  return eventId.replace(/_b\d+(?=_g\d+$|$)/, "");
 }
 
 /**
@@ -109,7 +109,7 @@ export function extractSlateDateFromEventId(
 ): string | null {
   if (eventId === null) return null;
   const stripped = stripEventBucketSuffix(eventId);
-  const m = stripped.match(/_(\d{4}-\d{2}-\d{2})$/);
+  const m = stripped.match(/_(\d{4}-\d{2}-\d{2})(?:_g\d+)?$/);
   return m ? m[1] ?? null : null;
 }
 

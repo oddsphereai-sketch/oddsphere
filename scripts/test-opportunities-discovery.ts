@@ -13,6 +13,7 @@ import {
   buildDiscoveryFromOpportunitiesRows,
   stripEventBucketSuffix,
   extractSlateDateFromEventId,
+  extractDoubleheaderGameNumberFromEventId,
   type RawOpportunityRow,
 } from "../lib/providers/real_api/_opportunitiesDiscovery";
 
@@ -68,6 +69,11 @@ function main() {
     stripEventBucketSuffix("mlb_royals_twins_2026-06-05") ===
       "mlb_royals_twins_2026-06-05"
   );
+  check(
+    "strips bucket but preserves doubleheader game marker",
+    stripEventBucketSuffix("mlb_dodgers_yankees_2026-07-19_b2_g1") ===
+      "mlb_dodgers_yankees_2026-07-19_g1"
+  );
 
   section("Helper — extractSlateDateFromEventId");
   check(
@@ -86,6 +92,25 @@ function main() {
     "returns null on null input",
     extractSlateDateFromEventId(null) === null
   );
+  check(
+    "parses date and game number from a doubleheader id",
+    extractSlateDateFromEventId("mlb_dodgers_yankees_2026-07-19_b2_g1") === "2026-07-19" &&
+      extractDoubleheaderGameNumberFromEventId("mlb_dodgers_yankees_2026-07-19_b2_g1") === 1
+  );
+
+  section("Build — doubleheader event identity");
+  {
+    const res = buildDiscoveryFromOpportunitiesRows(
+      [
+        row({ event_id: "mlb_dodgers_yankees_2026-07-19_b2_g1", home_team: "New York Yankees", away_team: "Los Angeles Dodgers" }),
+        row({ event_id: "mlb_dodgers_yankees_2026-07-19_b3_g2", home_team: "New York Yankees", away_team: "Los Angeles Dodgers" }),
+      ],
+      "2026-07-19"
+    );
+    check("keeps both doubleheader games distinct", res.events.length === 2);
+    check("preserves the g1 bucket id", res.events[0]?.suffixedEventIds[0] === "mlb_dodgers_yankees_2026-07-19_b2_g1");
+    check("preserves the g2 bucket id", res.events[1]?.suffixedEventIds[0] === "mlb_dodgers_yankees_2026-07-19_b3_g2");
+  }
 
   section("Build — happy path: 1 row, 1 event");
   {

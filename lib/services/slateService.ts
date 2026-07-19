@@ -78,19 +78,13 @@ export const slateService = {
         continue;
       }
       const ballparkId = ballparkIdByTeamId.get(homeTeamId) ?? null;
+      const suppressDuplicateHome = g.provider_ids?.oddsphere_suppress_duplicate_home_pitcher === 1;
+      const suppressDuplicateAway = g.provider_ids?.oddsphere_suppress_duplicate_away_pitcher === 1;
       const row: Record<string, unknown> = {
         sport: g.sport,
         external_id: g.external_id,
         home_team_id: homeTeamId,
         away_team_id: awayTeamId,
-        home_pitcher_id:
-          g.home_pitcher_external_id !== null
-            ? playerIdByExternal.get(g.home_pitcher_external_id) ?? null
-            : null,
-        away_pitcher_id:
-          g.away_pitcher_external_id !== null
-            ? playerIdByExternal.get(g.away_pitcher_external_id) ?? null
-            : null,
         ballpark_id: ballparkId,
         game_date: g.game_date,
         // slate_date is the local-evening date in the sport's anchor timezone
@@ -105,6 +99,20 @@ export const slateService = {
         away_score: g.away_score,
         inning_scores: g.inning_scores,
       };
+      // A missing provider value means "not supplied yet", not "erase a
+      // previously verified starter." Omit that column from the upsert so
+      // an existing assignment survives. The doubleheader sanitizer marks
+      // the one case that is an intentional clear: a copied game-one starter.
+      if (g.home_pitcher_external_id !== null) {
+        row.home_pitcher_id = playerIdByExternal.get(g.home_pitcher_external_id) ?? null;
+      } else if (suppressDuplicateHome) {
+        row.home_pitcher_id = null;
+      }
+      if (g.away_pitcher_external_id !== null) {
+        row.away_pitcher_id = playerIdByExternal.get(g.away_pitcher_external_id) ?? null;
+      } else if (suppressDuplicateAway) {
+        row.away_pitcher_id = null;
+      }
       // Fix 7.2: propagate provider_ids when the provider attached one
       // (manual provider always does — see ManualSlateProvider.getGames).
       // Mock provider omits it; the DB default '{}' applies in that case.
