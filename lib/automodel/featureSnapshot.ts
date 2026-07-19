@@ -75,6 +75,10 @@ const TRUSTED_REAL_BOOK_PRIORITY: readonly string[] = BOOK_PRIORITY.filter(
 const TOTAL_BOOK_PRIORITY: readonly string[] = TRUSTED_REAL_BOOK_PRIORITY;
 const ML_BOOK_PRIORITY: readonly string[] = TRUSTED_REAL_BOOK_PRIORITY;
 const MODEL_PRICE_MAX_SOURCE_AGE_MS = 90 * 60 * 1000;
+// Supabase/PostgREST projects commonly cap a response at 1,000 rows. A full
+// MLB slate can exceed that once active team batters, lineups, relievers, and
+// starters are combined, so every all-player lookup must stay below the cap.
+const FEATURE_SNAPSHOT_PLAYER_BATCH_SIZE = 500;
 
 /**
  * Lock-line guard (2026-06-09 phantom-alt-line fix).
@@ -932,19 +936,24 @@ export async function buildFeatureSnapshots(
     ...rpIds,
     ...teamBatterIds,
   ]);
-  const { data: playersRaw, error: playersErr } = await supabase
-    .from("players")
-    .select(
-      "id, external_id, full_name, team_id, position_abbr, is_pitcher, bats, throws, active"
-    )
-    .in("id", Array.from(allPlayerIds));
-  if (playersErr) {
-    throw new Error(
-      `featureSnapshot: players query failed: ${playersErr.message}`
-    );
+  const allPlayerIdList = Array.from(allPlayerIds);
+  const playersRaw: PlayerRow[] = [];
+  for (let offset = 0; offset < allPlayerIdList.length; offset += FEATURE_SNAPSHOT_PLAYER_BATCH_SIZE) {
+    const playerIdBatch = allPlayerIdList.slice(offset, offset + FEATURE_SNAPSHOT_PLAYER_BATCH_SIZE);
+    const { data, error } = await supabase
+      .from("players")
+      .select(
+        "id, external_id, full_name, team_id, position_abbr, is_pitcher, bats, throws, active"
+      )
+      .in("id", playerIdBatch)
+      .limit(playerIdBatch.length);
+    if (error) {
+      throw new Error(`featureSnapshot: players query failed: ${error.message}`);
+    }
+    playersRaw.push(...((data ?? []) as unknown as PlayerRow[]));
   }
   const playersById = indexBy(
-    (playersRaw ?? []) as unknown as PlayerRow[],
+    playersRaw,
     (p) => p.id
   );
 
@@ -954,19 +963,23 @@ export async function buildFeatureSnapshots(
     "batting_obp, batting_slg, batting_ops, batting_pa, " +
     "first_inning_era, first_inning_starts, first_inning_whip, " +
     "pitching_gs, pitching_gp, pitching_ip";
-  const { data: seasonStatsRaw, error: ssErr } = await supabase
-    .from("player_season_stats")
-    .select(seasonStatsSelect)
-    .in("player_id", Array.from(allPlayerIds))
-    .eq("season", season)
-    .eq("season_type", "regular");
-  if (ssErr) {
-    throw new Error(
-      `featureSnapshot: player_season_stats query failed: ${ssErr.message}`
-    );
+  const seasonStatsRaw: SeasonStatsRow[] = [];
+  for (let offset = 0; offset < allPlayerIdList.length; offset += FEATURE_SNAPSHOT_PLAYER_BATCH_SIZE) {
+    const playerIdBatch = allPlayerIdList.slice(offset, offset + FEATURE_SNAPSHOT_PLAYER_BATCH_SIZE);
+    const { data, error } = await supabase
+      .from("player_season_stats")
+      .select(seasonStatsSelect)
+      .in("player_id", playerIdBatch)
+      .eq("season", season)
+      .eq("season_type", "regular")
+      .limit(playerIdBatch.length);
+    if (error) {
+      throw new Error(`featureSnapshot: player_season_stats query failed: ${error.message}`);
+    }
+    seasonStatsRaw.push(...((data ?? []) as unknown as SeasonStatsRow[]));
   }
   const seasonStatsByPlayer = indexBy(
-    (seasonStatsRaw ?? []) as unknown as SeasonStatsRow[],
+    seasonStatsRaw,
     (s) => s.player_id
   );
   const priorSeasonCandidates = [season - 1, season - 2].filter((s) => s > 0);
@@ -1026,17 +1039,20 @@ export async function buildFeatureSnapshots(
   );
 
   // ── Query 9: active injuries for any player we care about ──────
-  const { data: injRaw, error: injErr } = await supabase
-    .from("player_injuries")
-    .select("player_id, is_active, status")
-    .in("player_id", Array.from(allPlayerIds))
-    .eq("is_active", true);
-  if (injErr) {
-    throw new Error(
-      `featureSnapshot: player_injuries query failed: ${injErr.message}`
-    );
+  const injuries: InjuryRow[] = [];
+  for (let offset = 0; offset < allPlayerIdList.length; offset += FEATURE_SNAPSHOT_PLAYER_BATCH_SIZE) {
+    const playerIdBatch = allPlayerIdList.slice(offset, offset + FEATURE_SNAPSHOT_PLAYER_BATCH_SIZE);
+    const { data, error } = await supabase
+      .from("player_injuries")
+      .select("player_id, is_active, status")
+      .in("player_id", playerIdBatch)
+      .eq("is_active", true)
+      .limit(playerIdBatch.length);
+    if (error) {
+      throw new Error(`featureSnapshot: player_injuries query failed: ${error.message}`);
+    }
+    injuries.push(...((data ?? []) as unknown as InjuryRow[]));
   }
-  const injuries = (injRaw ?? []) as unknown as InjuryRow[];
 
   // ── Query 10: ballparks ────────────────────────────────────────
   const { data: parksRaw, error: parksErr } = await supabase

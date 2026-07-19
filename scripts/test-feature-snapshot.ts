@@ -216,8 +216,8 @@ async function main() {
     );
   }
   {
-    // Kalshi alt-line corroborated by another real-book at same line → accepted as real_book.
-    // Kalshi posts alt-lines at 7.5, 8.5, 9.5; betmgm has main at 8.5.
+    // Kalshi is outside the trusted sportsbook universe. Its alt lines cannot
+    // corroborate a lone real-book total.
     const lines = [
       ...ou("kalshi", 7.5),
       ...ou("kalshi", 8.5),
@@ -226,8 +226,8 @@ async function main() {
     ];
     const r = fs.pickListedTotal(lines);
     check(
-      "pickListedTotal: Kalshi alt-line corroborated by another real-book at 8.5 → real_book",
-      r.source === "real_book" && r.listed_total === 8.5 && r.agreement_count === 2
+      "pickListedTotal: blocked Kalshi alt-lines cannot corroborate a lone real-book total",
+      r.source === "unavailable" && r.listed_total === null
     );
   }
   {
@@ -384,8 +384,8 @@ async function main() {
         s.home_starter.last30_era === null
       );
       check(
-        "home_starter.first_inning_era is null (V1: no BDL plays integration)",
-        s.home_starter.first_inning_era === null
+        "home_starter.first_inning_era is a finite official aggregate or an honest null",
+        s.home_starter.first_inning_era === null || Number.isFinite(s.home_starter.first_inning_era)
       );
     } else {
       console.log("  ! home_starter is null (probable starter not posted)");

@@ -384,7 +384,21 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
           setFullData((current) => {
             const base = current ?? data;
             const props = new Map(base.props.map((item) => [item.id, item]));
-            for (const item of payload.props ?? []) props.set(item.id, item);
+            for (const item of payload.props ?? []) {
+              const existing = props.get(item.id);
+              const incomingUpdatedAt = Date.parse(item.lastUpdated);
+              const existingUpdatedAt = existing ? Date.parse(existing.lastUpdated) : Number.NaN;
+              // Full player shards intentionally refresh less often than the
+              // compact board. Never let an older shard roll a current price,
+              // projection, grade, or lock state backward when the reader opens.
+              if (
+                !existing
+                || !Number.isFinite(existingUpdatedAt)
+                || (Number.isFinite(incomingUpdatedAt) && incomingUpdatedAt > existingUpdatedAt)
+              ) {
+                props.set(item.id, item);
+              }
+            }
             return { ...base, props: [...props.values()] };
           });
         }
@@ -787,7 +801,7 @@ function modelPrediction(pair: MarketPair): ModelPrediction | null {
   if (signalPrediction) return {
     side: signalPrediction.side,
     row: signalPrediction,
-    probability: signalPrediction.finalProbability ?? signalPrediction.modelProbability,
+    probability: signalPrediction.modelProbability ?? signalPrediction.finalProbability,
   };
   const modeled = pair.rows
     .filter((row) => row.modelProbability !== null && row.modelProbability >= 0.5)
@@ -824,7 +838,7 @@ function projectionSideFor(row: PlayerPropPreviewRow): "over" | "under" | null {
 function rowPredictionProbability(row: PlayerPropPreviewRow): number | null {
   const side = rowPredictionSide(row);
   if (!side) return null;
-  if (side === row.side) return row.finalProbability ?? row.modelProbability;
+  if (side === row.side) return row.modelProbability ?? row.finalProbability;
   if (side === "over") return row.overProbability ?? null;
   if (side === "under") return row.underProbability ?? null;
   return null;
@@ -1138,7 +1152,8 @@ function ProjectionIntegrityNotice({ row }: { row: PlayerPropPreviewRow }) {
   if (isProjectionSideCoherent(row)) return null;
   const projectionSide = row.projection > row.line ? "Over" : "Under";
   const predictionSide = rowPredictionSide(row);
-  return <div className="mb-3 rounded-md border border-gray-700 bg-white/[0.03] p-3"><p className="text-xs font-bold text-gray-200">Projection favors {projectionSide}</p><p className="mt-1 text-xs leading-5 text-gray-500">{predictionSide ? `Final prediction: ${predictionSide === "over" ? "Over" : "Under"}. ` : ""}Price and matchup context can move the final read away from the raw projection.</p></div>;
+  const distributionProbability = row.modelProbability === null ? "" : ` The full model assigns ${pct(row.modelProbability)} to that side before market adjustment.`;
+  return <div className="mb-3 rounded-md border border-gray-700 bg-white/[0.03] p-3"><p className="text-xs font-bold text-gray-200">Average projection favors {projectionSide}</p><p className="mt-1 text-xs leading-5 text-gray-500">{predictionSide ? `Model prediction: ${predictionSide === "over" ? "Over" : "Under"}. ` : ""}For count props, the average and the most likely side can differ because the model uses the full outcome distribution.{distributionProbability}</p></div>;
 }
 
 export function BookPriceLadder({ prices, allBooks = [] }: { prices: PlayerPropPreviewRow[]; allBooks?: string[] }) {
@@ -1708,7 +1723,7 @@ function propReaderSummary(row: PlayerPropPreviewRow, prices: PlayerPropPreviewR
     ? "Recent results add context; they are not a standalone prediction."
     : isProjectionSideCoherent(row)
       ? `That projection supports the ${selectedSide} side currently shown.`
-      : "The final prediction also weighs price, market, and matchup context.";
+      : `For this count prop, the average and the most likely side differ because the model uses the full outcome distribution${row.modelProbability === null ? "." : `; it assigns ${pct(row.modelProbability)} to the ${selectedSide} before market adjustment.`}`;
   const probability = row.finalProbability === null
     ? "A probability-backed OddSphere prediction is not available for this side yet, so this remains a projection-led research view."
     : row.marketProbability === null
@@ -1730,7 +1745,7 @@ function propReaderSummary(row: PlayerPropPreviewRow, prices: PlayerPropPreviewR
 function cardReason(row: PlayerPropPreviewRow): string {
   if (!assessPropPrice(row.odds).signalEligible) return "This price remains visible for comparison but is not eligible for a positive signal.";
   if (row.reasonCodes.includes("LONGSHOT_VALUE_CONTEXT")) return "Longshot watch: the model price is better than the market, but this remains a rare-event prop.";
-  if (!isProjectionSideCoherent(row)) return "The final prediction weighs projection, price, and matchup context together.";
+  if (!isProjectionSideCoherent(row)) return "The count model uses the full outcome distribution, so its likely side can differ from the average projection.";
   const feature = (row.keyFeatures[0] ? memberFeatureLabel(row.keyFeatures[0]) : "Verified inputs")
     .replace(/\bk\b/g, "K")
     .replace(/bb\/ip/gi, "BB/IP")

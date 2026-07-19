@@ -113,7 +113,7 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   check("flip uses mean-side odds -105", ou?.odds_american === -105);
   check("flip no_bet=false (real pick, not No Play)", ou?.no_bet === false);
   check("flip best_angle=false", ou?.best_angle === false);
-  check("flip play_grade=null", ou?.play_grade === null);
+  check("flip is retained as a Watchlist-grade market read", ou?.play_grade === "market_aligned");
   check("member confidence >=55 (NOT sub-50 raw)", typeof ou?.confidence === "number" && ou!.confidence >= 55 && ou!.confidence <= 60);
   check("member model_probability >=0.5 (presentable)", typeof ou?.model_probability === "number" && ou!.model_probability >= 0.5);
   check("flipped edge column nulled", ou?.edge === null);
@@ -172,7 +172,7 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const f = (ou?.snapshot_json as any)?.ou_flip;
   check("market-opposed public-conflict total flips to under", ou?.pick === "under" && ou?.side === "under");
   check("market-opposed flip stays a tracked prediction", ou?.no_bet === false);
-  check("market-opposed flip has no public play grade", ou?.play_grade === null);
+  check("market-opposed flip is retained as a Watchlist-grade market read", ou?.play_grade === "market_aligned");
   check("market-opposed flip audit stamped", f?.flipped === true && f?.rule_id === TOTALS_MARKET_OPPOSED_FLIP_RULE_ID);
   check("market-opposed flip audit kind stamped", f?.flip_kind === "market_opposed_public_conflict");
 }
