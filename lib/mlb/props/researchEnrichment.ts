@@ -86,6 +86,15 @@ const PITCHER_RECENT_FORM_MARKETS = new Set<MlbPropMarketKey>([
   "pitcher_earned_runs",
 ]);
 
+const SIGNAL_OPTIONAL_RESEARCH_MODULES = new Set<PlayerPropResearchModule>([
+  "park_factor",
+  "game_time_weather",
+]);
+
+export function isSignalOptionalResearchModule(module: PlayerPropResearchModule): boolean {
+  return SIGNAL_OPTIONAL_RESEARCH_MODULES.has(module);
+}
+
 const ALL_RESEARCH_MODULES: PlayerPropResearchModule[] = [
   "player_identity",
   "recent_form",
@@ -206,10 +215,14 @@ async function enrichCandidate(
   const missing = required.filter((module) => !available.includes(module));
   const blocking = missing.includes("player_identity") || missing.includes("opposing_starter");
   const status = blocking ? "blocked" : missing.length ? "partial" : "complete";
+  const blockingMissing = missing.filter((module) => !isSignalOptionalResearchModule(module));
+  const blockingProviderErrors = providerErrors.filter((error) =>
+    ![...SIGNAL_OPTIONAL_RESEARCH_MODULES].some((module) => error.startsWith(`${module}:`)),
+  );
   return {
     rowId: candidate.rowId,
     status,
-    memberReady: status === "complete" && providerErrors.length === 0,
+    memberReady: blockingMissing.length === 0 && blockingProviderErrors.length === 0,
     evidence,
     availableModules: available,
     missingModules: missing,

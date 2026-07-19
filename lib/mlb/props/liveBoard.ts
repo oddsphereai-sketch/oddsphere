@@ -43,6 +43,7 @@ import {
 import { BallDontLieResearchClient, type BdlResearchPlayer } from "./ballDontLieResearch";
 import {
   enrichPlayerPropResearchRows,
+  isSignalOptionalResearchModule,
   type PlayerPropResearchEnrichment,
 } from "./researchEnrichment";
 import {
@@ -608,7 +609,8 @@ function reusePreviousResearch(
     out.set(key, {
       rowId: key,
       status: row.missingFeatures.length || missingModules.length ? "partial" : "complete",
-      memberReady: row.missingFeatures.length === 0 && missingModules.length === 0,
+      memberReady: missingModules.every(isSignalOptionalResearchModule)
+        && row.missingFeatures.every(isSignalOptionalMemberFeature),
       evidence,
       availableModules,
       missingModules,
@@ -1435,7 +1437,7 @@ export function validateMlbPropsBoardData(args: {
     row.finalProbability === null
     || row.modelEdge === null
     || row.oddsSanity.length > 0
-    || row.missingFeatures.length > 0
+    || row.missingFeatures.some((feature) => !isSignalOptionalMemberFeature(feature))
     || !assessPropPrice(row.odds).signalEligible
   ));
   if (invalidActionable.length) errors.push("ACTIONABLE_ROWS_FAILED_DATA_GATE");
@@ -1458,6 +1460,11 @@ export function validateMlbPropsBoardData(args: {
     errors,
     warnings,
   };
+}
+
+function isSignalOptionalMemberFeature(feature: string): boolean {
+  const normalized = feature.trim().toLowerCase().replaceAll("_", " ");
+  return normalized === "park factor" || normalized === "game time weather";
 }
 
 export function compareMlbPropsBoardMovement(
