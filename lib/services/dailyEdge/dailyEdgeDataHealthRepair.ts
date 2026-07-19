@@ -361,7 +361,10 @@ export async function runDailyEdgeDataHealthRepair(args: {
         sport: args.report.sport,
         date: args.report.date,
         writeMode,
-        limit: Math.max(1, gamesByExternalId.size),
+        // The starter refresher plans the whole slate before applying this
+        // limit. Limiting it to the number of findings can select unrelated
+        // early games and leave the flagged matchup untouched.
+        limit: Math.max(1, args.report.gameCount),
         log: () => undefined,
       });
       steps.starterRefresh = {
