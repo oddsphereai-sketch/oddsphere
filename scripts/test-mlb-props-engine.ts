@@ -330,6 +330,27 @@ async function main() {
   }) : null;
   check("research enrichment marks a row complete only when every required module is available", coverageReport?.completeRows === 2 && coverageReport.rows.every((row) => row.memberReady));
   check("research enrichment reports full-slate automatic readiness explicitly", coverageReport?.automaticRefreshReady === true && coverageReport?.withheldRowIds.length === 0);
+  const optionalEnvironmentGap = buildPlayerPropEnvironmentEvidence({
+    venue: "Park Without Verified Factor",
+    roofStatus: "outdoor",
+    asOfTimestamp: "2026-07-15T22:05:00.000Z",
+    weather: { status: "available", temperatureF: 80, conditions: "Clear", windSpeedMph: 5, windDirection: "W", precipitationProbability: 0, source: "Verified test source" },
+  });
+  const optionalGapCoverage = bdlPlayer && bdlHitter && hitterRecentEvidence ? await enrichPlayerPropResearchRows([{
+    rowId: "optional-environment-gap",
+    playerName: bdlHitter.fullName,
+    marketKey: "batter_hits",
+    bdlPlayerId: bdlHitter.playerId,
+    opposingPitcherBdlId: bdlPlayer.playerId,
+    asOfTimestamp: "2026-07-15T22:05:00.000Z",
+    recentForm: hitterRecentEvidence,
+    environment: optionalEnvironmentGap,
+  }], {
+    getBdlPlayer: async (playerId) => playerId === bdlPlayer.playerId ? bdlPlayer : playerId === bdlHitter.playerId ? bdlHitter : null,
+    getPitcherPitchTypes: async () => bdlPitchRows,
+    getHitterPitchTypes: async () => hitterPitchRows,
+  }) : null;
+  check("missing park factor remains disclosed without blocking an otherwise ready hitter prop", optionalGapCoverage?.rows[0]?.status === "partial" && optionalGapCoverage.rows[0].memberReady && optionalGapCoverage.rows[0].missingModules.includes("park_factor"));
   const blockedCoverage = await enrichPlayerPropResearchRows([{ rowId: "blocked", playerName: "Unknown", marketKey: "batter_hits", asOfTimestamp: "2026-07-15T22:05:00.000Z", environment: completeEnvironment }], {
     getBdlPlayer: async () => null,
     getPitcherPitchTypes: async () => [],
