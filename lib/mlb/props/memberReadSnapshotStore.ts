@@ -26,6 +26,7 @@ type PlayerPayload = {
   snapshotId: string;
   asOfTimestamp: string;
   playerId: string;
+  props?: PlayerPropsDashboardData["props"];
   research: NonNullable<PlayerPropsDashboardData["research"]>;
 };
 
@@ -93,13 +94,19 @@ export async function publishMlbPropsMemberReadSnapshots(snapshot: MlbPropsBoard
     snapshot_key: boardKey(displaySnapshot.slateDate),
     kind: "mlb_props_board",
     payload: boardPayload,
-  }, {
-    ...common,
-    snapshot_key: fullBoardKey(displaySnapshot.slateDate),
-    kind: "mlb_props_board",
-    payload: fullBoardPayload,
   }];
-  for (const [gameId, props] of fullPropsByGame) {
+  // Fast odds refreshes update one compact indexed member row only. Rewriting
+  // every game and player shard on each price tick creates a connection/write
+  // storm on the smallest Supabase tier. Full refreshes rebuild drill-downs.
+  if (snapshot.refreshMode === "full") {
+    boardRows.push({
+      ...common,
+      snapshot_key: fullBoardKey(displaySnapshot.slateDate),
+      kind: "mlb_props_board",
+      payload: fullBoardPayload,
+    });
+  }
+  for (const [gameId, props] of snapshot.refreshMode === "full" ? fullPropsByGame : []) {
     boardRows.push({
       ...common,
       snapshot_key: `${fullBoardKey(displaySnapshot.slateDate)}::${gameId}`,
@@ -113,12 +120,13 @@ export async function publishMlbPropsMemberReadSnapshots(snapshot: MlbPropsBoard
     });
   }
   const playerSnapshotRows: Record<string, unknown>[] = [];
-  for (const [playerId, props] of playerRows) {
+  for (const [playerId, props] of snapshot.refreshMode === "full" ? playerRows : []) {
     const payload: PlayerPayload = {
       schemaVersion: 1,
       snapshotId: displaySnapshot.snapshotId,
       asOfTimestamp: displaySnapshot.asOfTimestamp,
       playerId,
+      props,
       research: selectMlbPropsResearchForRows(displaySnapshot.data, props),
     };
     playerSnapshotRows.push({
@@ -175,16 +183,23 @@ export async function loadMlbPropsMemberBoardSnapshot(date: string, full = false
   if (!validBoardPayload(data?.payload)) return null;
   const manifest = data.payload;
   if (!full || !manifest.shardKeys?.length) return manifest;
-  const shards = await Promise.all(manifest.shardKeys.map(async (snapshotKey) => {
-    const { data: shard, error: shardError } = await supabase
+  const shards: Array<BoardPayload | null> = [];
+  // Full-board reads are operator/fallback paths now. Fetch bounded batches
+  // instead of opening one concurrent database request per MLB game.
+  for (let index = 0; index < manifest.shardKeys.length; index += 4) {
+    const keys = manifest.shardKeys.slice(index, index + 4);
+    const { data: rows, error: shardError } = await supabase
       .from("lab_response_snapshots")
-      .select("payload")
-      .eq("snapshot_key", snapshotKey)
-      .gt("stale_until", new Date().toISOString())
-      .maybeSingle();
+      .select("snapshot_key,payload")
+      .in("snapshot_key", keys)
+      .gt("stale_until", new Date().toISOString());
     if (shardError) throw shardError;
-    return validBoardPayload(shard?.payload) ? shard.payload : null;
-  }));
+    const byKey = new Map((rows ?? []).map((row) => [row.snapshot_key, row.payload]));
+    for (const key of keys) {
+      const payload = byKey.get(key);
+      shards.push(validBoardPayload(payload) ? payload : null);
+    }
+  }
   if (shards.some((shard) => shard === null || shard.snapshotId !== manifest.snapshotId)) return null;
   return {
     ...manifest,
@@ -217,6 +232,7 @@ function validPlayerPayload(value: unknown): value is PlayerPayload {
     && typeof value.snapshotId === "string"
     && typeof value.asOfTimestamp === "string"
     && typeof value.playerId === "string"
+    && (value.props === undefined || Array.isArray(value.props))
     && isRecord(value.research);
 }
 

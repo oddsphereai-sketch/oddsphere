@@ -21,6 +21,7 @@ export async function GET(
       ok: true,
       mode: "display_enabled",
       asOfTimestamp: readSnapshot.asOfTimestamp,
+      props: readSnapshot.props ?? [],
       research: readSnapshot.research,
     }, { headers: { "Cache-Control": "private, no-store" } });
   }
