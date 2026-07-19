@@ -78,7 +78,7 @@ type CronCfg = {
 // "Last updated" pill. feature_coverage_refresh stays out so a
 // midday operator skip doesn't mislead members. pregame_sweep also
 // stays out — it's an automation/health source, not member-facing.
-const CRON_CONFIGS: CronCfg[] = [
+const MLB_CRON_CONFIGS: CronCfg[] = [
   // slate_cycle_automation runs every 2 hours in the morning pre-game
   // window (8 / 10 / 12 UTC) and then HOURLY during the intraday
   // window (13 → 23 UTC). vercel.json is the source of truth. The
@@ -91,6 +91,28 @@ const CRON_CONFIGS: CronCfg[] = [
   { data_source: "pregame_sweep",            per_sport: true, cadence_minutes: 30,  frontline: false },
   { data_source: "feature_coverage_refresh", per_sport: true, cadence_minutes: 720, frontline: false },
 ];
+
+/**
+ * Each live league owns a different refresh loop. Using MLB's slate-cycle
+ * sources for every tab makes healthy WNBA and soccer pipelines resolve to
+ * `unknown`, which causes RefreshIndicator to hide the pill entirely.
+ */
+function cronConfigsForSport(sport: Sport): CronCfg[] {
+  if (sport === "wnba") {
+    return [
+      { data_source: "wnba_daily_refresh", per_sport: true, cadence_minutes: 30, frontline: true },
+      { data_source: "tracking_refresh", per_sport: true, cadence_minutes: 120, frontline: true },
+      { data_source: "pregame_sweep", per_sport: true, cadence_minutes: 30, frontline: false },
+    ];
+  }
+  if (sport === "soccer" || sport === "ucl") {
+    return [
+      { data_source: "soccer_daily_refresh", per_sport: true, cadence_minutes: 60, frontline: true },
+      { data_source: "tracking_refresh", per_sport: true, cadence_minutes: 120, frontline: true },
+    ];
+  }
+  return MLB_CRON_CONFIGS;
+}
 
 /** Window during which an in_progress row counts as "actively updating". */
 const IN_PROGRESS_WINDOW_MS = 5 * 60 * 1000;
@@ -292,8 +314,9 @@ export async function GET(request: Request) {
   // If no sport requested, default to surfacing MLB per-sport rows + all
   // cross-sport rows — MLB is the only live sport in V1.
   const effectiveSport: Sport = sport ?? "mlb";
+  const cronConfigs = cronConfigsForSport(effectiveSport);
 
-  const sourceResults = await Promise.all(CRON_CONFIGS.map(async (cfg) => {
+  const sourceResults = await Promise.all(cronConfigs.map(async (cfg) => {
     const scope: Sport | null = cfg.per_sport ? effectiveSport : null;
     try {
       const { latestCompleted, activeInProgress } = await withTimeout(
@@ -323,7 +346,7 @@ export async function GET(request: Request) {
   }));
   sources.push(...sourceResults);
 
-  const frontline = sources.filter((s, i) => CRON_CONFIGS[i]!.frontline);
+  const frontline = sources.filter((s, i) => cronConfigs[i]!.frontline);
   const overall = deriveOverall(frontline, now);
 
   const body: RefreshStatusResponse = {
