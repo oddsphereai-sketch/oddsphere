@@ -1063,9 +1063,15 @@ function buildIntegratedHitterSignal(args: {
   const logs = recent?.logs ?? [];
   if (logs.length < 5) return null;
 
-  const l5 = averageNumber(logs.slice(0, 5).map((row) => row.value));
-  const l10 = averageNumber(logs.slice(0, 10).map((row) => row.value));
-  const season = averageNumber(logs.map((row) => row.value));
+  // Published snapshots intentionally keep only the ten display logs. The
+  // sample summaries still contain the full-season aggregates, so fast
+  // refreshes must read those summaries instead of treating the compact log
+  // list as the player's entire season. Otherwise a fast refresh can produce
+  // a materially different projection from a full research refresh.
+  const l5 = recent?.samples?.last5.average ?? averageNumber(logs.slice(0, 5).map((row) => row.value));
+  const l10 = recent?.samples?.last10.average ?? averageNumber(logs.slice(0, 10).map((row) => row.value));
+  const season = recent?.samples?.season.average ?? averageNumber(logs.map((row) => row.value));
+  const seasonSampleSize = recent?.samples?.season.count ?? logs.length;
   const hitRate = recentHitRate(logs.slice(0, 10), args.mapped.odds.line);
   const market = args.definition.marketKey;
   const pitchMix = args.research?.evidence.pitchMatchup ?? null;
@@ -1077,7 +1083,7 @@ function buildIntegratedHitterSignal(args: {
   let confidence = 0.46;
   const reasons = ["HITTER_INTEGRATED_MODEL_READ", "RECENT_FORM_EDGE"];
   if (logs.length >= 10) confidence += 0.12;
-  if (logs.length >= 20) confidence += 0.06;
+  if (seasonSampleSize >= 20) confidence += 0.06;
   if (hitRate >= 0.7 || hitRate <= 0.3) confidence += 0.04;
 
   const pitchMixEdge = hitterPitchMixAdjustment(market, pitchMix);
