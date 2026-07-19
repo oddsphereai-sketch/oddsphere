@@ -186,6 +186,9 @@ type LockedDisplaySnapshotPointer = {
   lockedAt: string;
 };
 
+const LOCK_REF_PAGE_SIZE = 1_000;
+const MAX_LOCK_REF_PAGES = 20;
+
 export async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): Promise<MlbPropsBoardSnapshot> {
   const lockedRefs = await loadLockedDisplaySnapshotRefs(latest.slateDate);
   if (!lockedRefs.size) return latest;
@@ -271,16 +274,9 @@ export async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): 
 }
 
 async function loadLockedDisplaySnapshotRefs(slateDate: string): Promise<Map<string, LockedDisplaySnapshotPointer>> {
-  const { data, error } = await getSupabase()
-    .from("mlb_prop_tracking_entries")
-    .select("external_game_id,board_snapshot_id,locked_at")
-    .eq("slate_date", slateDate)
-    .not("locked_at", "is", null)
-    .order("locked_at", { ascending: true })
-    .limit(5000);
-  if (error) throw error;
+  const data = await loadLockedDisplaySnapshotRows(slateDate);
   const refs = new Map<string, LockedDisplaySnapshotPointer>();
-  for (const row of (data ?? []) as LockedDisplaySnapshotRef[]) {
+  for (const row of data) {
     if (row.external_game_id && row.board_snapshot_id && row.locked_at && !refs.has(row.external_game_id)) {
       refs.set(row.external_game_id, {
         snapshotId: row.board_snapshot_id,
@@ -289,6 +285,31 @@ async function loadLockedDisplaySnapshotRefs(slateDate: string): Promise<Map<str
     }
   }
   return refs;
+}
+
+export async function loadMlbPropsLockedGameTimes(slateDate: string): Promise<Map<string, string>> {
+  const refs = await loadLockedDisplaySnapshotRefs(slateDate);
+  return new Map([...refs.entries()].map(([gameId, ref]) => [gameId, ref.lockedAt]));
+}
+
+async function loadLockedDisplaySnapshotRows(slateDate: string): Promise<LockedDisplaySnapshotRef[]> {
+  const supabase = getSupabase();
+  const rows: LockedDisplaySnapshotRef[] = [];
+  for (let page = 0; page < MAX_LOCK_REF_PAGES; page++) {
+    const from = page * LOCK_REF_PAGE_SIZE;
+    const { data, error } = await supabase
+      .from("mlb_prop_tracking_entries")
+      .select("external_game_id,board_snapshot_id,locked_at")
+      .eq("slate_date", slateDate)
+      .not("locked_at", "is", null)
+      .order("locked_at", { ascending: true })
+      .range(from, from + LOCK_REF_PAGE_SIZE - 1);
+    if (error) throw error;
+    const pageRows = (data ?? []) as LockedDisplaySnapshotRef[];
+    rows.push(...pageRows);
+    if (pageRows.length < LOCK_REF_PAGE_SIZE) return rows;
+  }
+  throw new Error(`MLB props lock reference limit exceeded for ${slateDate}.`);
 }
 
 export async function loadMlbPropsBoardSnapshotById(slateDate: string, snapshotId: string): Promise<MlbPropsBoardSnapshot | null> {
