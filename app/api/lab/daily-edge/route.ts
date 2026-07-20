@@ -134,6 +134,10 @@ import {
   type DailyEdgeRenderedCopyFlagOverrides,
 } from "@/lib/services/dailyEdge/memberFacingCopyRenderer";
 import { applyMlbSameDayGradeGuardrails } from "@/lib/services/dailyEdge/mlbSameDayGradeGuardrails";
+// Keep this import relative so standalone operator scripts executed from a
+// linked worktree resolve the worktree implementation, not the primary
+// checkout through the shared node_modules/tsx binary.
+import { alignMarketReadsToDisplayedPublicSplits } from "../../../../lib/services/publicSplitsDisplayOverlay";
 import type { MarketDecision, MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 
 export const dynamic = "force-dynamic";
@@ -5355,6 +5359,10 @@ export async function GET(request: Request) {
     const snapshot = await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "fresh")
       ?? await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "stale");
     if (snapshot) {
+      // Stored snapshots may predate the latest provider display overlay. Keep
+      // the cached fast path coherent too; this is an in-memory display-only
+      // normalization and does not rebuild the board or touch model outputs.
+      if (sport === "mlb") alignMarketReadsToDisplayedPublicSplits(snapshot.payload.games);
       return Response.json(snapshot.payload, {
         headers: {
           "Cache-Control": "private, max-age=30, stale-while-revalidate=300",
@@ -6638,6 +6646,11 @@ export async function GET(request: Request) {
       console.warn(`dual-source public splits overlay skipped: ${(e as Error).message}`);
     }
   }
+
+  // Keep the final response internally coherent after every source-aware and
+  // provider-resolved display overlay. This is a pure O(markets) display pass;
+  // it never changes predictions, prices, probabilities, verdicts, or grades.
+  if (sport === "mlb") alignMarketReadsToDisplayedPublicSplits(dtos);
 
   const body: DailyEdgeResponse = {
     as_of: new Date().toISOString(),

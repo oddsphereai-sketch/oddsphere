@@ -20,6 +20,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MarketEdgeDto, DailyEdgeGameDto } from "../../app/lab/lib/labTypes";
+import type { MarketReadV2Dto } from "../types/domain/MarketIntelligenceV2";
 import { STALE_AGE_MINUTES } from "./lastKnownGoodReader";
 
 type Market = "moneyline" | "total";
@@ -52,9 +53,13 @@ function fresh(o: ObsRow | undefined, now: number): boolean {
 
 /** Display pick: fresh Playbook > fresh SharpAPI > freshest-complete (stale). */
 function pickDisplay(playbook: ObsRow | undefined, sharpapi: ObsRow | undefined, now: number):
-  { betsPct: number | null; moneyPct: number | null; observedAt: string | null; isStale: boolean } | null {
+  { betsPct: number | null; moneyPct: number | null; booksUsed?: number | null; observedAt: string | null; isStale: boolean } | null {
   const mk = (o: ObsRow, stale: boolean) => ({
-    betsPct: o.public_betting_pct, moneyPct: o.public_money_pct, observedAt: o.observed_at, isStale: stale,
+    betsPct: o.public_betting_pct,
+    moneyPct: o.public_money_pct,
+    booksUsed: o.books_used,
+    observedAt: o.observed_at,
+    isStale: stale,
   });
   if (complete(playbook) && fresh(playbook, now)) return mk(playbook, false);
   if (complete(sharpapi) && fresh(sharpapi, now)) return mk(sharpapi, false);
@@ -131,6 +136,141 @@ function pickedDisplaySide(
   return null;
 }
 
+function consensusLean(
+  moneyPct: number | null,
+  betsPct: number | null,
+): "our_way" | "against" | "mixed" | null {
+  if (moneyPct === null && betsPct === null) return null;
+  const money = moneyPct === null ? null : moneyPct / 100;
+  const bets = betsPct === null ? null : betsPct / 100;
+  if (money !== null && bets !== null) {
+    if (money >= 0.5 && bets >= 0.5) return "our_way";
+    if (money < 0.5 && bets < 0.5) return "against";
+    return "mixed";
+  }
+  return (money ?? bets ?? 0) >= 0.5 ? "our_way" : "against";
+}
+
+function priceActionForResolvedConsensus(
+  read: MarketReadV2Dto,
+  moneyPct: number | null,
+  betsPct: number | null,
+): string | null {
+  // Preserve a snapshot that intentionally had no price-action summary. When
+  // one exists, rebuild it from the final display consensus so qualitative
+  // copy cannot disagree with the bars after the dual-provider overlay.
+  if (read.sourceSummary.priceAction === null) return null;
+  const lean = consensusLean(moneyPct, betsPct);
+  const relative = read.movement?.directionRelativeToPick ?? "neutral";
+  const score = read.score;
+  if (relative === "neutral" || score === 0) {
+    if (lean === "our_way") return "Consensus leans our way, but the line has not confirmed the move.";
+    if (lean === "against" || lean === "mixed") return "The model edge is clear, but betting consensus is not fully aligned.";
+    return "No clear market move. This pick is driven by the model edge.";
+  }
+  if (relative === "support") {
+    if (score >= 4) return "The line has clearly moved toward our pick.";
+    if (score >= 2) {
+      return lean === "mixed" || lean === "against"
+        ? "The line has moved toward our pick, while consensus is mixed."
+        : "The line has moved toward our pick.";
+    }
+    if (lean === "against" || lean === "mixed") {
+      return "The line is nudging toward our pick, while consensus is not fully aligned.";
+    }
+    return "The line is nudging slightly toward our pick.";
+  }
+  if (lean === "our_way") {
+    if (score <= -4) return "Consensus leans our way, but the line has moved clearly against our pick.";
+    if (score <= -2) return "Consensus leans our way, but the line has moved against our pick, adding risk.";
+    return "Consensus leans our way, but the line has drifted slightly against our pick.";
+  }
+  if (score <= -4) return "The line has moved clearly against our pick.";
+  if (score <= -2) return "The line has moved against our pick, adding risk.";
+  return "The line has drifted slightly against our pick.";
+}
+
+function alignMarketReadToResolvedConsensus(
+  read: MarketReadV2Dto | null | undefined,
+  resolved: {
+    moneyPct: number | null;
+    betsPct: number | null;
+    booksUsed?: number | null;
+    observedAt: string | null;
+  },
+): MarketReadV2Dto | null | undefined {
+  if (!read) return read;
+  const moneyPct = isPct(resolved.moneyPct) ? resolved.moneyPct : null;
+  const betsPct = isPct(resolved.betsPct) ? resolved.betsPct : null;
+  if (moneyPct === null && betsPct === null) return read;
+  const priceAction = priceActionForResolvedConsensus(read, moneyPct, betsPct);
+  const summaryParts = [
+    moneyPct === null ? null : `${Math.round(moneyPct)}% money`,
+    betsPct === null ? null : `${Math.round(betsPct)}% bets`,
+  ].filter((part): part is string => part !== null);
+  const booksUsed = resolved.booksUsed === undefined
+    ? read.consensus?.booksUsed ?? null
+    : resolved.booksUsed;
+  const books = booksUsed !== null
+    ? ` across ${booksUsed} book${booksUsed === 1 ? "" : "s"}`
+    : "";
+  const replaceExplanation =
+    priceAction !== null && read.explanation === read.sourceSummary.priceAction;
+  return {
+    ...read,
+    evidenceAsOf: resolved.observedAt ?? read.evidenceAsOf,
+    explanation: replaceExplanation ? priceAction : read.explanation,
+    consensus: {
+      betsPct: betsPct === null ? null : betsPct / 100,
+      moneyPct: moneyPct === null ? null : moneyPct / 100,
+      booksUsed,
+      lineBasis: read.consensus?.lineBasis ?? "unknown",
+    },
+    sourceSummary: {
+      ...read.sourceSummary,
+      priceAction,
+      playbookConsensus: `Consensus: ${summaryParts.join(" / ")}${books}.`,
+    },
+  };
+}
+
+/**
+ * Final response-coherence pass. Some source-aware recommendation inputs and
+ * the optional dual-provider display overlay are resolved after the initial
+ * Market Read snapshot. At the API boundary the rows users actually see are
+ * authoritative for consensus display, so mirror the picked row into the
+ * scalar fields and Market Read copy. This never changes a pick, model value,
+ * price, probability, edge, verdict, or grade.
+ */
+export function alignMarketReadsToDisplayedPublicSplits(
+  games: DailyEdgeGameDto[],
+): DailyEdgeGameDto[] {
+  for (const game of games) {
+    for (const market of ["moneyline", "total"] as Market[]) {
+      const dto = (game.markets as Record<string, MarketEdgeDto | undefined>)[market];
+      if (!dto || !dto.marketReadV2) continue;
+      const picked = pickedDisplaySide(market, dto, game.homeTeam, game.awayTeam);
+      const pickedRow = picked
+        ? dto.publicSplits.find((row) => row.side === picked)
+        : null;
+      if (!pickedRow) continue;
+
+      dto.moneyPct = pickedRow.moneyPct;
+      dto.betsPct = pickedRow.betsPct;
+      dto.moneyPctObservedAt = pickedRow.observedAt ?? null;
+      dto.betsPctObservedAt = pickedRow.observedAt ?? null;
+      dto.moneyPctIsStale = pickedRow.isStale ?? false;
+      dto.betsPctIsStale = pickedRow.isStale ?? false;
+      dto.marketReadV2 = alignMarketReadToResolvedConsensus(dto.marketReadV2, {
+        moneyPct: pickedRow.moneyPct,
+        betsPct: pickedRow.betsPct,
+        observedAt: pickedRow.observedAt ?? null,
+      });
+    }
+  }
+  return games;
+}
+
 /**
  * Overlay resolved DISPLAY onto the DTO games' moneyline/total publicSplits.
  * Only replaces a market's split display when resolved data exists for it; else
@@ -161,6 +301,7 @@ export function overlayResolvedPublicSplits(
         dto.publicSplits = out;
         const picked = pickedDisplaySide(market, dto, game.homeTeam, game.awayTeam);
         const pickedRow = picked ? out.find((row) => row.side === picked) : null;
+        const pickedResolved = picked ? sides[picked] : null;
         if (pickedRow) {
           dto.moneyPct = pickedRow.moneyPct;
           dto.betsPct = pickedRow.betsPct;
@@ -168,6 +309,14 @@ export function overlayResolvedPublicSplits(
           dto.betsPctObservedAt = pickedRow.observedAt ?? null;
           dto.moneyPctIsStale = pickedRow.isStale ?? false;
           dto.betsPctIsStale = pickedRow.isStale ?? false;
+        }
+        if (pickedResolved) {
+          dto.marketReadV2 = alignMarketReadToResolvedConsensus(dto.marketReadV2, {
+            moneyPct: pickedResolved.moneyPct,
+            betsPct: pickedResolved.betsPct,
+            booksUsed: pickedResolved.booksUsed ?? null,
+            observedAt: pickedResolved.observedAt,
+          });
         }
       }
     }
