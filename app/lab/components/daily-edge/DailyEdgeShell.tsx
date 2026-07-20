@@ -1148,17 +1148,16 @@ export function SportRail({ sport }: { sport: Sport }) {
   // Ordered so the models that are ACTIVE / in-season surface first (left),
   // then live-but-offseason models, then not-yet-ready (right). `inSeason`
   // drives the subtitle ("Active" / "Live" / "Offseason" / "Coming Soon").
-  // 2026-06: MLB + World Cup are in-season; NBA/NHL seasons are over
-  // (offseason); WNBA is in-season but stays non-live until its UI smoke +
-  // forward-evidence gate clears.
+  // 2026-07: World Cup has moved to offseason. The tab stays accessible for
+  // its completed slate/history while its recurring model work is dormant.
   const ROW: Array<{ key: Sport; label: string; live: boolean; inSeason?: boolean }> = [
     { key: "mlb", label: "MLB", live: true, inSeason: true },
-    { key: "soccer", label: "World Cup", live: true, inSeason: true },
     // WNBA sits with the in-season group (next to World Cup), ahead of the
     // offseason NBA/NHL, per Daniel — but stays "Coming Soon" (live:false)
     // until its forward-evidence + tracking gate clears. Flip live:true to
     // launch it in place.
     { key: "wnba", label: "WNBA", live: true, inSeason: true },
+    { key: "soccer", label: "World Cup", live: true, inSeason: false },
     { key: "nba", label: "NBA", live: true, inSeason: false },
     { key: "nhl", label: "NHL", live: true, inSeason: false },
     { key: "nfl", label: "NFL", live: false },
@@ -1176,6 +1175,7 @@ export function SportRail({ sport }: { sport: Sport }) {
           {ROW.map((s) => {
             const isActive = s.key === sport && s.live;
             const isClickable = s.live;
+            const isActiveInSeason = isActive && s.inSeason === true;
             const Tag = isClickable ? "button" : "div";
             const clickHandler = isClickable && !isActive ? () => setSport(s.key) : undefined;
             return (
@@ -1190,7 +1190,7 @@ export function SportRail({ sport }: { sport: Sport }) {
                       ? "border-white/[0.06] bg-white/[0.02] text-gray-400 hover:border-violet-400/30 hover:bg-violet-500/[0.06] cursor-pointer"
                       : "border-white/[0.06] bg-white/[0.02] text-gray-400"
                 }`}
-                aria-label={`${s.label} — ${isActive ? "active model" : isClickable ? "switch to this sport" : "coming soon"}`}
+                aria-label={`${s.label} — ${s.live && !s.inSeason ? "offseason model" : isActive ? "active model" : isClickable ? "switch to this sport" : "coming soon"}`}
               >
                 {/* Circular icon container — tinted violet for active,
                     neutral for inactive. The container itself, not just
@@ -1214,10 +1214,10 @@ export function SportRail({ sport }: { sport: Sport }) {
                   </span>
                   <span
                     className={`text-[9.5px] tracking-[0.06em] truncate ${
-                      isActive ? "text-emerald-300" : "text-gray-500"
+                      isActiveInSeason ? "text-emerald-300" : "text-gray-500"
                     }`}
                   >
-                    {isActive ? (
+                    {isActiveInSeason ? (
                       <span className="inline-flex items-center gap-1">
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(110,231,183,0.6)]" />
                         Active

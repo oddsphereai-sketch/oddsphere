@@ -220,6 +220,12 @@ check(
 for (const sport of [["nba", "NBA"], ["nfl", "NFL"], ["nhl", "NHL"], ["cfb", "CFB"], ["cbb", "CBB"]]) {
   check(`Sport label supported: ${sport[1]}`, PAGE.includes(`${sport[0]}: "${sport[1]}"`));
 }
+const sportOrderBlock = PAGE.slice(PAGE.indexOf("const SPORT_ORDER"), PAGE.indexOf("// ─── Format helpers"));
+check(
+  "Tracking keeps related sports adjacent and World Cup beside UCL",
+  ["mlb", "nba", "cbb", "wnba", "nfl", "cfb", "nhl", "soccer", "ucl"]
+    .every((sport, index, order) => index === 0 || sportOrderBlock.indexOf(`${order[index - 1]}:`) < sportOrderBlock.indexOf(`${sport}:`)),
+);
 
 // ── Method section consolidates everything secondary ────────────────
 

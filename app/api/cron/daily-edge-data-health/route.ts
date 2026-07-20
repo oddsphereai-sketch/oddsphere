@@ -21,7 +21,9 @@ const REPAIR_ENV = "DAILY_EDGE_DATA_HEALTH_AUTO_REPAIR_ENABLED";
 function parseSports(request: Request): Sport[] {
   const url = new URL(request.url);
   const raw = url.searchParams.get("sports");
-  if (!raw) return ["mlb", "wnba", "soccer"];
+  // World Cup is off-season. Keep `?sports=soccer` as the explicit manual
+  // re-enable path without spending the default daily health sweep on it.
+  if (!raw) return ["mlb", "wnba"];
   return raw.split(",").map((sport) => sport.trim().toLowerCase()).filter(Boolean) as Sport[];
 }
 

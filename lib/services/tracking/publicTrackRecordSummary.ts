@@ -74,15 +74,15 @@ const SPORT_LABEL: Record<TrackedSport, string> = {
 };
 
 const SPORT_ORDER: TrackedSport[] = [
-  "nfl",
-  "cfb",
+  "mlb",
   "nba",
   "cbb",
-  "mlb",
   "wnba",
+  "nfl",
+  "cfb",
+  "nhl",
   "soccer",
   "ucl",
-  "nhl",
 ];
 
 const MARKET_LABEL: Record<TrackedMarketV17, string> = {
