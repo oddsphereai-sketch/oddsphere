@@ -131,7 +131,11 @@ export type MlbPropsBoardRefreshResult = {
 
 const ACTIONABLE_GRADES = new Set(["BEST_ANGLE", "LEAN"]);
 const DEFAULT_MAX_ODDS_AGE_MINUTES = 45;
-const DEFAULT_MAX_SOURCE_ODDS_ROWS = 25_000;
+// BDL expands each posted offer into side/price rows, so a healthy full slate
+// can exceed 25k normalized source rows even while the compact member board
+// remains safely below its independent 7,500-row payload guard. Keep a real
+// corruption ceiling without rejecting normal late-day sportsbook expansion.
+const DEFAULT_MAX_SOURCE_ODDS_ROWS = 35_000;
 // Full MLB slates can legitimately exceed 6,000 book/side/line rows. Keep a
 // bounded corruption guard without rejecting a healthy board merely because
 // more sportsbooks or alternates are posted on a larger slate.
