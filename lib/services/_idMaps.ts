@@ -10,6 +10,11 @@
 import { supabase } from "../db/supabase";
 import type { Sport } from "../types/domain/Sport";
 
+// Supabase/PostgREST returns at most 1,000 rows unless the caller paginates.
+// MLB has more than 1,000 player rows, so one-shot player-map reads silently
+// omitted newer/later rows from stats, lineup, props, and prediction refreshes.
+const PLAYER_MAP_PAGE_SIZE = 1_000;
+
 export async function loadTeamIdMap(
   sport?: Sport
 ): Promise<Map<number, number>> {
@@ -31,15 +36,23 @@ export async function loadPlayerIdMap(
   // Phase 4.2.C.1.H-0: external_id is nullable for MLB-Stats-only rows;
   // skip them — this map is keyed by BDL external_id and a null key would
   // be meaningless to every caller.
-  let q = supabase
-    .from("players")
-    .select("id, external_id")
-    .not("external_id", "is", null);
-  if (sport !== undefined) q = q.eq("sport", sport);
-  const { data, error } = await q;
-  if (error) throw new Error(`loadPlayerIdMap failed: ${error.message}`);
+  const rows: Array<{ id: number; external_id: number }> = [];
+  for (let from = 0; ; from += PLAYER_MAP_PAGE_SIZE) {
+    let q = supabase
+      .from("players")
+      .select("id, external_id")
+      .not("external_id", "is", null)
+      .order("id", { ascending: true })
+      .range(from, from + PLAYER_MAP_PAGE_SIZE - 1);
+    if (sport !== undefined) q = q.eq("sport", sport);
+    const { data, error } = await q;
+    if (error) throw new Error(`loadPlayerIdMap failed: ${error.message}`);
+    const page = (data ?? []) as Array<{ id: number; external_id: number }>;
+    rows.push(...page);
+    if (page.length < PLAYER_MAP_PAGE_SIZE) break;
+  }
   return new Map(
-    ((data ?? []) as { id: number; external_id: number }[]).map((r) => [
+    rows.map((r) => [
       r.external_id,
       r.id,
     ])
@@ -53,15 +66,23 @@ export async function loadPlayerMetadata(
 ): Promise<Map<number, PlayerMetadata>> {
   // Phase 4.2.C.1.H-0: skip MLB-Stats-only rows (external_id null) — same
   // rationale as loadPlayerIdMap; the map is keyed by BDL external_id.
-  let q = supabase
-    .from("players")
-    .select("id, external_id, is_pitcher, team_id")
-    .not("external_id", "is", null);
-  if (sport !== undefined) q = q.eq("sport", sport);
-  const { data, error } = await q;
-  if (error) throw new Error(`loadPlayerMetadata failed: ${error.message}`);
+  const rows: PlayerMetadata[] = [];
+  for (let from = 0; ; from += PLAYER_MAP_PAGE_SIZE) {
+    let q = supabase
+      .from("players")
+      .select("id, external_id, is_pitcher, team_id")
+      .not("external_id", "is", null)
+      .order("id", { ascending: true })
+      .range(from, from + PLAYER_MAP_PAGE_SIZE - 1);
+    if (sport !== undefined) q = q.eq("sport", sport);
+    const { data, error } = await q;
+    if (error) throw new Error(`loadPlayerMetadata failed: ${error.message}`);
+    const page = (data ?? []) as PlayerMetadata[];
+    rows.push(...page);
+    if (page.length < PLAYER_MAP_PAGE_SIZE) break;
+  }
   return new Map(
-    ((data ?? []) as PlayerMetadata[]).map((r) => [r.external_id, r])
+    rows.map((r) => [r.external_id, r])
   );
 }
 
@@ -75,7 +96,7 @@ export async function loadPlayerMetadata(
  */
 export type PlayerMappingMetadata = {
   id: number;
-  external_id: number;
+  external_id: number | null;
   bdl_id: number;
   mlb_stats_id: number | null;
   is_pitcher: boolean;
@@ -85,20 +106,28 @@ export type PlayerMappingMetadata = {
 export async function loadPlayerBdlIdMap(
   sport?: Sport
 ): Promise<Map<number, PlayerMappingMetadata>> {
-  let q = supabase
-    .from("players")
-    .select("id, external_id, is_pitcher, team_id, provider_ids");
-  if (sport !== undefined) q = q.eq("sport", sport);
-  const { data, error } = await q;
-  if (error) throw new Error(`loadPlayerBdlIdMap failed: ${error.message}`);
-  const out = new Map<number, PlayerMappingMetadata>();
-  for (const r of (data ?? []) as Array<{
+  const rows: Array<{
     id: number;
-    external_id: number;
+    external_id: number | null;
     is_pitcher: boolean;
     team_id: number | null;
     provider_ids: Record<string, unknown> | null;
-  }>) {
+  }> = [];
+  for (let from = 0; ; from += PLAYER_MAP_PAGE_SIZE) {
+    let q = supabase
+      .from("players")
+      .select("id, external_id, is_pitcher, team_id, provider_ids")
+      .order("id", { ascending: true })
+      .range(from, from + PLAYER_MAP_PAGE_SIZE - 1);
+    if (sport !== undefined) q = q.eq("sport", sport);
+    const { data, error } = await q;
+    if (error) throw new Error(`loadPlayerBdlIdMap failed: ${error.message}`);
+    const page = (data ?? []) as typeof rows;
+    rows.push(...page);
+    if (page.length < PLAYER_MAP_PAGE_SIZE) break;
+  }
+  const out = new Map<number, PlayerMappingMetadata>();
+  for (const r of rows) {
     const pi = r.provider_ids ?? {};
     const bdl = pi.bdl as { id?: unknown } | undefined;
     const mlbStats = pi.mlb_stats as { id?: unknown } | undefined;

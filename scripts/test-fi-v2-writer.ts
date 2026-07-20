@@ -94,6 +94,8 @@ const buildSnap = (): GameSnapshot => (({
   } as unknown as GameSnapshot["away_starter"],
   home_lineup_top8: Array(8).fill({ ops: 0.700, lineup_source: "projected" }) as unknown as GameSnapshot["home_lineup_top8"],
   away_lineup_top8: Array(8).fill({ ops: 0.700, lineup_source: "projected" }) as unknown as GameSnapshot["away_lineup_top8"],
+  home_team: { team_avg_batter_ops: 0.730, team_avg_batter_ops_sample: 600 } as unknown as GameSnapshot["home_team"],
+  away_team: { team_avg_batter_ops: 0.730, team_avg_batter_ops_sample: 600 } as unknown as GameSnapshot["away_team"],
   weather: { temperature_f: 70, wind_mph: 5, wind_dir_deg: 0, humidity_pct: 50, is_dome: false } as unknown as GameSnapshot["weather"],
   market: {} as unknown as GameSnapshot["market"],
   park_factor: 1.0,
