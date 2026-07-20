@@ -1570,8 +1570,15 @@ export function validateMlbPropsBoardData(args: {
     if (args.providerCoverage.normalizedRawProps + args.providerCoverage.droppedRawProps !== args.providerCoverage.totalRawProps) {
       errors.push("BDL_RAW_COVERAGE_COUNT_MISMATCH");
     }
-    if (args.providerCoverage.unmappedMarketTypes.length > 0) {
-      errors.push(`UNMAPPED_BDL_MARKET_TYPES_${args.providerCoverage.unmappedMarketTypes.join("_")}`);
+    const malformedMarketTypes = args.providerCoverage.unmappedMarketTypes.filter((market) => market === "missing");
+    const unsupportedMarketTypes = args.providerCoverage.unmappedMarketTypes.filter((market) => market !== "missing");
+    if (malformedMarketTypes.length > 0) errors.push("BDL_PLAYER_PROP_TYPE_MISSING");
+    // BDL can add unrelated combo or game markets to the player-props
+    // endpoint without notice. Preserve every normalized supported market,
+    // disclose the extras, and do not freeze the complete board merely
+    // because the provider expanded its response.
+    if (unsupportedMarketTypes.length > 0) {
+      warnings.push(`IGNORED_UNSUPPORTED_BDL_MARKET_TYPES_${unsupportedMarketTypes.join("|")}`);
     }
     if (args.providerCoverage.droppedRawProps > 0) {
       warnings.push(`${args.providerCoverage.droppedRawProps}_BDL_RAW_OFFERS_NOT_NORMALIZED`);
