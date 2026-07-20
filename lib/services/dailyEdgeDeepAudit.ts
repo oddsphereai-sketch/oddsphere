@@ -109,6 +109,17 @@ function selectedPublicSplit(market: Row): Row | null {
     null;
 }
 
+function selectedRecommendationConsensusSplit(market: Row): Row | null {
+  const splits = Array.isArray(market.recommendationDecision?.consensusSplits?.rows)
+    ? market.recommendationDecision.consensusSplits.rows as Row[]
+    : [];
+  const pick = String(market.pick ?? "").toLowerCase();
+  const side = String(market.side ?? market.modelSide ?? "").toLowerCase();
+  return splits.find((s) => String(s.side ?? "").toLowerCase() === side) ??
+    splits.find((s) => String(s.label ?? "").toLowerCase() === pick) ??
+    null;
+}
+
 function priceDirection(open: number | null, current: number | null): Direction {
   if (open === null || current === null) return "neutral";
   if (Math.abs(current - open) < 5) return "neutral";
@@ -361,6 +372,22 @@ export function auditDailyEdgeBoards(
             push("consensus_bar_mismatch", sport, game, slot, market, {
               selectedSplit: { moneyPct: splitMoney, betsPct: splitBets },
               readConsensus: { moneyPct: consensusMoney, betsPct: consensusBets },
+            });
+          }
+        }
+        const recommendationSplit = selectedRecommendationConsensusSplit(market);
+        if (split && recommendationSplit) {
+          const splitMoney = n(split.moneyPct);
+          const splitBets = n(split.betsPct);
+          const recommendationMoney = n(recommendationSplit.moneyPct);
+          const recommendationBets = n(recommendationSplit.betsPct);
+          if (
+            (splitMoney !== null && recommendationMoney !== null && Math.abs(splitMoney - recommendationMoney) > 1) ||
+            (splitBets !== null && recommendationBets !== null && Math.abs(splitBets - recommendationBets) > 1)
+          ) {
+            push("consensus_reader_mismatch", sport, game, slot, market, {
+              collapsedConsensus: { moneyPct: splitMoney, betsPct: splitBets },
+              expandedConsensus: { moneyPct: recommendationMoney, betsPct: recommendationBets },
             });
           }
         }
