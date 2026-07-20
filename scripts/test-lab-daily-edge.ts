@@ -200,6 +200,58 @@ async function main() {
     const sharpBook = sections.get("67890::total")?.sharpBook ?? null;
     check("Locked sharp-adjacent snapshots without source_book render Sharp Book Splits", sharpBook?.rows.length === 2);
   }
+  {
+    const legacySignals = [
+      {
+        market_type: "moneyline",
+        side: "away",
+        public_betting_pct: 61,
+        public_money_pct: null,
+        public_betting_pct_observed_at: "2026-07-20T12:06:00Z",
+        public_money_pct_observed_at: null,
+        computed_at: "2026-07-20T12:06:00Z",
+      },
+      {
+        market_type: "moneyline",
+        side: "home",
+        public_betting_pct: 39,
+        public_money_pct: null,
+        public_betting_pct_observed_at: "2026-07-20T12:06:00Z",
+        public_money_pct_observed_at: null,
+        computed_at: "2026-07-20T12:06:00Z",
+      },
+    ];
+    const fallback = dailyEdgeTest.resolveSharpBookSplitSection(undefined, {
+      direction: "support",
+      pick: "BOS",
+      signals: [] as never,
+      dbMarket: "moneyline",
+      market: "moneyline",
+      homeAbbr: "BOS",
+      awayAbbr: "NYY",
+    }, legacySignals.map((row) => ({
+      side: row.side as "away" | "home",
+      label: row.side === "away" ? "NYY" : "BOS",
+      betsPct: row.public_betting_pct,
+      moneyPct: row.public_money_pct,
+      observedAt: row.computed_at,
+      isStale: false,
+    })));
+    check("Legacy SharpAPI percentages fill Sharp Book Splits when source-aware rows are absent", fallback?.rows.length === 2);
+    check("Legacy SharpAPI fallback preserves the current-side percentages", fallback?.rows[0]?.betsPct === 61 && fallback.rows[1]?.betsPct === 39);
+
+    const sourceAware = { label: "Sharp Book Splits" as const, rows: [], signal: "source-aware", lastUpdated: null };
+    const preferred = dailyEdgeTest.resolveSharpBookSplitSection({ sharpBook: sourceAware }, {
+      direction: "support",
+      pick: "BOS",
+      signals: legacySignals as never,
+      dbMarket: "moneyline",
+      market: "moneyline",
+      homeAbbr: "BOS",
+      awayAbbr: "NYY",
+    });
+    check("Source-aware Sharp Book Splits remain preferred when available", preferred === sourceAware);
+  }
 
   // ─── Happy path: MLB slate ────────────────────────────────────────────────
   section("GET /api/lab/daily-edge?sport=mlb&date=2026-05-22");

@@ -1517,6 +1517,28 @@ function legacySharpSplitSection(args: {
   };
 }
 
+function resolveSharpBookSplitSection(
+  sourceAware: { sharpBook: MarketSplitDisplaySection | null } | undefined,
+  legacyArgs: Parameters<typeof legacySharpSplitSection>[0],
+  effectiveSplitRows: MarketSplitDisplaySection["rows"] = [],
+): MarketSplitDisplaySection | null {
+  if (sourceAware?.sharpBook) return sourceAware.sharpBook;
+  if (effectiveSplitRows.length > 0) {
+    const lastUpdated = effectiveSplitRows
+      .map((row) => row.observedAt)
+      .filter((value): value is string => typeof value === "string" && value.length > 0)
+      .sort()
+      .at(-1) ?? null;
+    return {
+      label: "Sharp Book Splits",
+      rows: effectiveSplitRows,
+      signal: null,
+      lastUpdated,
+    };
+  }
+  return legacySharpSplitSection(legacyArgs);
+}
+
 function buildGameDto(
   row: GameRow,
   signals: SignalRow[],
@@ -2345,6 +2367,24 @@ function buildGameDto(
       : null;
   const mlSourceAwareSplits = sourceAwareSplits.get(`${row.external_id}::moneyline`);
   const totalSourceAwareSplits = sourceAwareSplits.get(`${row.external_id}::total`);
+  const mlSharpBookSplits = resolveSharpBookSplitSection(mlSourceAwareSplits, {
+    direction: ml.sharpDirection,
+    pick: ml.pick,
+    signals,
+    dbMarket: "moneyline",
+    market: "moneyline",
+    homeAbbr: home,
+    awayAbbr: away,
+  }, ml.publicSplits);
+  const totalSharpBookSplits = resolveSharpBookSplitSection(totalSourceAwareSplits, {
+    direction: total.sharpDirection,
+    pick: total.pick,
+    signals,
+    dbMarket: "total",
+    market: "total",
+    homeAbbr: home,
+    awayAbbr: away,
+  }, total.publicSplits);
   const buildSourceAwareRecommendationDecision = () =>
     applyDailyEdgeRenderedCopyFlags(buildRecommendationDecision({
       sport: row.sport,
@@ -2369,7 +2409,7 @@ function buildGameDto(
           marketReadV2: ml.marketReadV2 ?? null,
           marketReadV2Enabled: ml.marketReadV2Enabled === true,
           consensusSplitsOverride: mlSourceAwareSplits?.consensus ?? undefined,
-          sharpBookSplitsOverride: mlSourceAwareSplits?.sharpBook ?? undefined,
+          sharpBookSplitsOverride: mlSharpBookSplits ?? undefined,
           allowBestAngleMarketConflict: lockedMl !== undefined && ml.verdict.key === "best_angle",
         },
         {
@@ -2387,7 +2427,7 @@ function buildGameDto(
           marketReadV2: total.marketReadV2 ?? null,
           marketReadV2Enabled: total.marketReadV2Enabled === true,
           consensusSplitsOverride: totalSourceAwareSplits?.consensus ?? undefined,
-          sharpBookSplitsOverride: totalSourceAwareSplits?.sharpBook ?? undefined,
+          sharpBookSplitsOverride: totalSharpBookSplits ?? undefined,
           allowBestAngleMarketConflict: lockedOu !== undefined && total.verdict.key === "best_angle",
         },
         {
@@ -5255,6 +5295,7 @@ export const __TEST__ = {
   buildBreakdownDto,
   marketAwareBreakdownDto,
   buildSourceAwareSplitSectionsFromRows,
+  resolveSharpBookSplitSection,
   GRADE_RANK,
 };
 
