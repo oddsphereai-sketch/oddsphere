@@ -516,9 +516,11 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
       </section>
 
       {selectedPlayer ? <PlayerView rows={filteredRows} player={selectedPlayer} selectedId={selectedId} onSelect={setSelectedId} onClear={() => setSearch("")} /> : <>
-      <FullBoardView rows={filteredRows} totalCount={dedupeBestPrices(displayProps).length} priceMode={priceMode} selectedId={selectedId} onSelect={setSelectedId} />
+      <FullBoardView key={[selectedGame, grade, marketFamilyFilter, marketFilter, book, team, confidence, evRange, edgeRange, oddsRange, startRange, sort, priceMode, lineMode, hideResearch, search].join("|")} rows={filteredRows} totalCount={dedupeBestPrices(displayProps).length} priceMode={priceMode} selectedId={selectedId} onSelect={setSelectedId} />
       </>}
-      {!isSearching ? <PlayerDirectory rows={displayProps} onSelectPlayer={setSearch} /> : null}
+      {!isSearching && selectedGame === "all" && marketFamilyFilter === "all" && marketFilter === "all"
+        ? <PlayerDirectory rows={displayProps} onSelectPlayer={setSearch} />
+        : null}
       {selected && researchLoadingPlayerId ? <p className="mt-3 text-xs text-violet-200">Loading verified player research…</p> : null}
       {selected ? <PropDetailDrawer row={selected} comparisons={displayProps.filter((row) => sameProp(row, selected))} onClose={() => setSelectedId(null)} showDiagnostics={mode === "admin"} /> : null}
     </div>
@@ -725,15 +727,30 @@ function FeaturedPropCard({ row, onSelect }: { row: PlayerPropPreviewRow; onSele
 function FullBoardView({ rows, totalCount, priceMode, selectedId, onSelect }: { rows: PlayerPropPreviewRow[]; totalCount: number; priceMode: PriceMode; selectedId: string | null; onSelect: (id: string) => void }) {
   const pageSize = priceMode === "best" ? 40 : 75;
   const [visibleCount, setVisibleCount] = useState(pageSize);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const visibleRows = rows.slice(0, visibleCount);
   const marketPairs = pairMarketRows(rows);
   const visiblePairs = marketPairs.slice(0, visibleCount);
   const visibleUnits = priceMode === "best" ? visiblePairs.length : visibleRows.length;
   const totalUnits = priceMode === "best" ? marketPairs.length : rows.length;
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || visibleUnits >= totalUnits) return;
+    if (typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setVisibleCount((count) => Math.min(count + pageSize, totalUnits));
+      }
+    }, { rootMargin: "600px 0px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [pageSize, totalUnits, visibleUnits]);
+
   return <div data-product-zone="full-board" className="pt-5">
     <div className="mb-3 flex items-end justify-between gap-4"><div><p className="text-[10px] font-black uppercase text-gray-500">Search results</p><h2 className="mt-1 text-xl font-black text-white">Prop Board</h2></div><p className="text-right text-xs text-gray-500"><strong className="text-gray-200">{priceMode === "best" ? marketPairs.length : rows.length}</strong> {priceMode === "best" ? "markets" : "sportsbook prices"} shown<br />{rows.length} filtered options · {totalCount} posted</p></div>
     {priceMode === "best" ? <><div className="hidden xl:block"><MarketPairTable pairs={visiblePairs} selectedId={selectedId ?? ""} onSelect={onSelect} /></div><div className="xl:hidden"><MarketPairCards pairs={visiblePairs} selectedId={selectedId ?? ""} onSelect={onSelect} /></div></> : <PropsTable rows={visibleRows} selectedId={selectedId ?? ""} onSelect={onSelect} />}
-    {visibleUnits < totalUnits ? <div className="flex flex-col items-center border-x border-b border-gray-800 bg-gray-950 px-4 py-4 sm:flex-row sm:justify-between"><p className="text-xs text-gray-500">Showing {visibleUnits} of {totalUnits} {priceMode === "best" ? "markets" : "prices"}</p><button type="button" onClick={() => setVisibleCount((count) => Math.min(count + pageSize, totalUnits))} className="mt-3 h-9 rounded-md border border-gray-700 px-4 text-xs font-bold text-gray-200 hover:border-gray-500 hover:text-white sm:mt-0">Load more markets</button></div> : null}
+    {visibleUnits < totalUnits ? <div ref={loadMoreRef} role="status" className="border-x border-b border-gray-800 bg-gray-950 px-4 py-4 text-center text-xs text-gray-500">Showing {visibleUnits} of {totalUnits} {priceMode === "best" ? "markets" : "prices"} · more appear as you scroll</div> : null}
     {!rows.length ? <EmptyBoard /> : null}
   </div>;
 }
