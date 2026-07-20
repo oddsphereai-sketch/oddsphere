@@ -54,6 +54,7 @@ export type MlbPropsBoardSnapshot = {
   modelContext?: {
     probablePitcherSeasonStats: Array<[string, RealPitcherSeasonStat]>;
     openingPropOdds?: PropOddsSnapshot[];
+    marketModelVersions?: Record<string, string>;
   };
 };
 
