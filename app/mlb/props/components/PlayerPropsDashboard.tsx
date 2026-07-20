@@ -285,7 +285,9 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [loadedResearch, setLoadedResearch] = useState<NonNullable<PlayerPropsDashboardData["research"]>>({});
   const [researchLoadingPlayerId, setResearchLoadingPlayerId] = useState<string | null>(null);
+  const [boardScopeLoading, setBoardScopeLoading] = useState(false);
   const requestedResearchPlayers = useRef(new Set<string>());
+  const requestedBoardScopes = useRef(new Set<string>());
 
   const availableResearch = useMemo(() => ({ ...(data.research ?? {}), ...loadedResearch }), [data.research, loadedResearch]);
   const hydratedProps = useMemo(() => data.props.map((row) => enforcePreviewIntegrity(hydrateResearchEvidence(row, availableResearch))), [availableResearch, data.props]);
@@ -354,6 +356,46 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
     setHideResearch(false);
     setLineMode("main");
   };
+
+  useEffect(() => {
+    if (mode !== "member") return;
+    const market = marketFilter === "all" ? null : marketFilter;
+    const family = marketFamilyFilter === "all" ? null : marketFamilyFilter;
+    const gameId = selectedGame === "all"
+      ? null
+      : data.props.find((row) => gameKeyForRow(row) === selectedGame)?.providerIds?.gameId ?? null;
+    if (!market && !family && !gameId) return;
+    if (selectedGame !== "all" && !gameId) return;
+
+    const scopeKey = [initialData.date, family ?? "all", market ?? "all", gameId ?? "all"].join("|");
+    if (requestedBoardScopes.current.has(scopeKey)) return;
+    requestedBoardScopes.current.add(scopeKey);
+    const controller = new AbortController();
+    const params = new URLSearchParams({ date: initialData.date });
+    if (family) params.set("family", family);
+    if (market) params.set("market", market);
+    if (gameId) params.set("game_id", gameId);
+    setBoardScopeLoading(true);
+
+    fetch(`/api/mlb/props/picks?${params.toString()}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Player prop board request failed with ${response.status}`);
+        return response.json() as Promise<{ board?: PlayerPropsDashboardData }>;
+      })
+      .then((payload) => {
+        if (!payload.board) throw new Error("Player prop board response did not contain a board.");
+        setFullData((current) => mergeScopedBoardData(current ?? data, payload.board!, { family, market, gameId }));
+      })
+      .catch(() => {
+        requestedBoardScopes.current.delete(scopeKey);
+      })
+      .finally(() => setBoardScopeLoading(false));
+
+    return () => controller.abort();
+  }, [data, initialData.date, marketFamilyFilter, marketFilter, mode, selectedGame]);
 
   useEffect(() => {
     if (mode !== "member") return;
@@ -432,7 +474,7 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
             <input type="search" list="mlb-props-players" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search a player, team, market, or sportsbook" className="h-11 w-full rounded-md border border-gray-700 bg-gray-950 pl-9 pr-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-violet-400" />
             <datalist id="mlb-props-players">{players.map((player) => <option key={player} value={player} />)}</datalist>
           </label>
-          <p className="shrink-0 text-xs text-gray-500"><strong className="text-gray-200">{filteredRows.length}</strong> options shown · {players.length} players priced</p>
+          <p className="shrink-0 text-xs text-gray-500">{boardScopeLoading ? <strong className="text-violet-200">Loading complete selection…</strong> : <><strong className="text-gray-200">{filteredRows.length}</strong> options shown · {players.length} players priced</>}</p>
         </div>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Market groups">
           {MARKET_FAMILY_FILTERS.map((filter) => <MarketFilterButton key={filter.id} label={filter.label} active={marketFamilyFilter === filter.id} onClick={() => { setMarketFamilyFilter(filter.id); setMarketFilter("all"); }} />)}
@@ -1474,6 +1516,34 @@ function playerDirectorySummaries(rows: PlayerPropPreviewRow[]): Array<{ player:
 
 function sameProp(a: PlayerPropPreviewRow, b: PlayerPropPreviewRow): boolean {
   return a.player === b.player && a.market === b.market && a.side === b.side && a.line === b.line;
+}
+
+function mergeScopedBoardData(
+  current: PlayerPropsDashboardData,
+  incoming: PlayerPropsDashboardData,
+  scope: { family: MarketFamilyFilter | null; market: string | null; gameId: string | null },
+): PlayerPropsDashboardData {
+  const currentUpdatedAt = Date.parse(current.lastUpdated);
+  const incomingUpdatedAt = Date.parse(incoming.lastUpdated);
+  if (Number.isFinite(currentUpdatedAt) && Number.isFinite(incomingUpdatedAt) && incomingUpdatedAt < currentUpdatedAt) return current;
+
+  const matchesScope = (row: PlayerPropPreviewRow) => (
+    (!scope.family || row.marketFamily === scope.family)
+    && (!scope.market || row.market === scope.market)
+    && (!scope.gameId || row.providerIds?.gameId === scope.gameId)
+  );
+  const props = new Map<string, PlayerPropPreviewRow>();
+  for (const row of current.props) {
+    if (!matchesScope(row)) props.set(row.id, row);
+  }
+  for (const row of incoming.props) props.set(row.id, row);
+  return {
+    ...current,
+    lastUpdated: incoming.lastUpdated,
+    slate: incoming.slate ?? current.slate,
+    providerStatus: incoming.providerStatus,
+    props: [...props.values()],
+  };
 }
 
 function deriveMatchups(rows: PlayerPropPreviewRow[]): SlateMatchup[] {
