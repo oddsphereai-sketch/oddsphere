@@ -128,15 +128,24 @@ check(
   /CategoryBars[\s\S]{0,800}!anyDecided[\s\S]{0,400}<EmptyState/.test(CHARTS),
 );
 
-// ── Yesterday, Lifetime, Best Angles are list-style, not card-grid ──
+// ── Yesterday and Best Angles are lists; Lifetime shares category bars ──
 
 check(
   "Yesterday board renders divider-list rows, not card grid",
   /YesterdayBoard[\s\S]{0,800}divide-y/.test(PAGE),
 );
 check(
-  "Lifetime Tracking board groups by sport",
-  /LifetimeTrackingBoard[\s\S]{0,2000}SportGroup/.test(PAGE),
+  "Lifetime Tracking uses the same Card and CategoryBars visual as weekly/monthly",
+  /LifetimeTrackingBoard[\s\S]{0,1200}<Card>[\s\S]{0,500}<CategoryBars/.test(PAGE),
+);
+check(
+  "Lifetime Tracking preserves honest historical/live source labels",
+  /lifetimeSourceLabel[\s\S]{0,500}Lifetime · live \+\$\{record\.live_decided_contribution\}[\s\S]{0,300}Since launch/.test(PAGE),
+);
+check(
+  "Lifetime records expose numeric metrics without replacing merged history",
+  /type LifetimeRecord[\s\S]{0,1200}metrics:\s*Metrics/.test(PAGE) &&
+    /source_type:\s*"lifetime_merged"[\s\S]{0,1000}metrics:\s*\{[\s\S]{0,300}wins:\s*mergedWins/.test(PAGE),
 );
 check(
   "Lifetime Tracking uses merged buildLifetimeRecords helper",
@@ -167,11 +176,11 @@ check(
 );
 check(
   "Lifetime row shows source label so merged vs baseline-only is visible",
-  /sourceLabel[\s\S]{0,400}Lifetime · live \+/.test(PAGE),
+  /lifetimeSourceLabel[\s\S]{0,400}Lifetime · live \+/.test(PAGE),
 );
 check(
   "Lifetime row shows 'Since launch' for live-only categories",
-  /sourceLabel[\s\S]{0,400}"Since launch"/.test(PAGE),
+  /lifetimeSourceLabel[\s\S]{0,400}"Since launch"/.test(PAGE),
 );
 check(
   "Lifetime Tracking explains MLB auto-update + maintained other sports",
