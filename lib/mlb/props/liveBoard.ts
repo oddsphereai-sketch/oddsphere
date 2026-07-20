@@ -65,6 +65,15 @@ import {
 } from "./boardSnapshotStore";
 import { publishMlbPropsMemberReadSnapshots } from "./memberReadSnapshotStore";
 import { assessPropPrice } from "./pricePolicy";
+import { activeMlbPropMarketModelVersions } from "./marketModelVersions";
+import {
+  BATTER_HITS_PA_MODEL_VERSION,
+  projectBatterHitsPa,
+} from "./batterHitsPaModel";
+import {
+  BATTER_HRR_MODEL_VERSION,
+  projectBatterHrr,
+} from "./batterHrrCountModel";
 import {
   syncInternalMlbPropsTracking,
   type MlbPropsTrackingSyncResult,
@@ -259,6 +268,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     modelContext: {
       probablePitcherSeasonStats: [...seasonStats.entries()],
       openingPropOdds: openingOdds,
+      marketModelVersions: activeMlbPropMarketModelVersions(),
     },
   };
   enforceSnapshotPayloadLimits(snapshot);
@@ -1063,6 +1073,13 @@ function buildIntegratedHitterSignal(args: {
   const logs = recent?.logs ?? [];
   if (logs.length < 5) return null;
 
+  if (args.definition.marketKey === "batter_hits") {
+    return buildDedicatedBatterHitsSignal(args, logs);
+  }
+  if (args.definition.marketKey === "batter_hits_runs_rbis") {
+    return buildDedicatedBatterHrrSignal(args, logs);
+  }
+
   // Published snapshots intentionally keep only the ten display logs. The
   // sample summaries still contain the full-season aggregates, so fast
   // refreshes must read those summaries instead of treating the compact log
@@ -1169,6 +1186,130 @@ function buildIntegratedHitterSignal(args: {
     reasonCodes: uniqueStrings(reasons),
     projection,
     modelFamily: `${args.definition.modelFamily}_integrated_read_v1`,
+  };
+}
+
+function buildDedicatedBatterHitsSignal(
+  args: Parameters<typeof buildIntegratedHitterSignal>[0],
+  logs: NonNullable<PlayerPropResearchEnrichment["evidence"]["recentForm"]>["logs"],
+): IntegratedPropSignal | null {
+  const pitchMix = args.research?.evidence.pitchMatchup ?? null;
+  const distribution = projectBatterHitsPa({
+    line: args.mapped.odds.line,
+    battingOrder: args.lineupStatus.battingOrder,
+    recentLogs: logs,
+    pitchMixBattingAverage: pitchMix?.weighted.battingAverage ?? null,
+    pitchMixPitchesSeen: pitchMix?.hitterPitchesSeen ?? null,
+  });
+  if (!distribution) return null;
+
+  const side = distribution.overProbability >= distribution.underProbability ? "over" : "under";
+  const modelProbability = side === "over" ? distribution.overProbability : distribution.underProbability;
+  const marketSideProbability = args.marketProbability === null
+    ? null
+    : args.mapped.odds.side === side ? args.marketProbability : 1 - args.marketProbability;
+  const finalProbability = modelProbability;
+  const overFinalProbability = distribution.overProbability;
+  const underFinalProbability = distribution.underProbability;
+  const edge = marketSideProbability === null ? null : finalProbability - marketSideProbability;
+  const ev = args.mapped.odds.side === side ? safeExpectedValue(finalProbability, args.currentOdds) : null;
+  const confidence = round(Math.min(0.9,
+    0.58
+    + (distribution.games >= 10 ? 0.08 : 0)
+    + (distribution.observedAtBats >= 30 ? 0.06 : 0)
+    + (args.lineupStatus.battingOrder !== null ? 0.04 : 0)
+    + 0.06
+    + (distribution.pitchMixWeight > 0 ? 0.04 : 0),
+  ), 3);
+  const canLean = args.mapped.odds.side === side
+    && confidence >= 0.66
+    && modelProbability >= 0.56
+    && (edge ?? 0) >= 0.02
+    && (ev ?? 0) >= 0.01;
+  const canWatch = modelProbability >= 0.54
+    || (edge ?? 0) >= 0.01
+    || Math.abs(distribution.projectedHits - args.mapped.odds.line) >= lineGapThreshold("batter_hits");
+  if (!canLean && !canWatch) return null;
+
+  return {
+    side,
+    modelProbability,
+    finalProbability,
+    overModelProbability: distribution.overProbability,
+    underModelProbability: distribution.underProbability,
+    overFinalProbability,
+    underFinalProbability,
+    playGrade: canLean ? "LEAN" : "WATCHLIST",
+    confidence,
+    reasonCodes: uniqueStrings([
+      "HITTER_INTEGRATED_MODEL_READ",
+      "RECENT_FORM_EDGE",
+      "MARKET_PRIOR_SHRINKAGE",
+      args.lineupStatus.status === "posted" || args.lineupStatus.status === "confirmed"
+        ? "LINEUP_STATUS_POSTED"
+        : "PROJECTED_LINEUP_CONTEXT",
+      distribution.pitchMixWeight > 0 ? "PITCH_MIX_MATCHUP_EDGE" : "PITCH_MIX_MATCHUP_NEUTRAL",
+    ]),
+    projection: distribution.projectedHits,
+    modelFamily: BATTER_HITS_PA_MODEL_VERSION,
+  };
+}
+
+function buildDedicatedBatterHrrSignal(
+  args: Parameters<typeof buildIntegratedHitterSignal>[0],
+  logs: NonNullable<PlayerPropResearchEnrichment["evidence"]["recentForm"]>["logs"],
+): IntegratedPropSignal | null {
+  const distribution = projectBatterHrr({
+    line: args.mapped.odds.line,
+    battingOrder: args.lineupStatus.battingOrder,
+    recentValues: logs.map((row) => row.value),
+  });
+  if (!distribution) return null;
+
+  const side = distribution.overProbability >= distribution.underProbability ? "over" : "under";
+  const modelProbability = side === "over" ? distribution.overProbability : distribution.underProbability;
+  const marketSideProbability = args.marketProbability === null
+    ? null
+    : args.mapped.odds.side === side ? args.marketProbability : 1 - args.marketProbability;
+  const finalProbability = modelProbability;
+  const edge = marketSideProbability === null ? null : finalProbability - marketSideProbability;
+  const ev = args.mapped.odds.side === side ? safeExpectedValue(finalProbability, args.currentOdds) : null;
+  const confidence = round(Math.min(0.88,
+    0.6
+    + (distribution.games >= 10 ? 0.08 : 0)
+    + (args.lineupStatus.battingOrder !== null ? 0.04 : 0)
+    + 0.06,
+  ), 3);
+  const canLean = args.mapped.odds.side === side
+    && confidence >= 0.66
+    && modelProbability >= 0.56
+    && (edge ?? 0) >= 0.02
+    && (ev ?? 0) >= 0.01;
+  const canWatch = modelProbability >= 0.54
+    || (edge ?? 0) >= 0.01
+    || Math.abs(distribution.projectedMean - args.mapped.odds.line) >= lineGapThreshold("batter_hits_runs_rbis");
+  if (!canLean && !canWatch) return null;
+
+  return {
+    side,
+    modelProbability,
+    finalProbability,
+    overModelProbability: distribution.overProbability,
+    underModelProbability: distribution.underProbability,
+    overFinalProbability: distribution.overProbability,
+    underFinalProbability: distribution.underProbability,
+    playGrade: canLean ? "LEAN" : "WATCHLIST",
+    confidence,
+    reasonCodes: uniqueStrings([
+      "HITTER_INTEGRATED_MODEL_READ",
+      "RECENT_FORM_EDGE",
+      "MARKET_PRIOR_SHRINKAGE",
+      args.lineupStatus.status === "posted" || args.lineupStatus.status === "confirmed"
+        ? "LINEUP_STATUS_POSTED"
+        : "PROJECTED_LINEUP_CONTEXT",
+    ]),
+    projection: distribution.projectedMean,
+    modelFamily: BATTER_HRR_MODEL_VERSION,
   };
 }
 
