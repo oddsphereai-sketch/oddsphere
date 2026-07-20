@@ -674,6 +674,7 @@ function LifetimeTrackingBoard({ records }: { records: LifetimeRecord[] }) {
         rows={records.map((record) => ({
           label: `${prettySport(record.sport)} ${prettyMarket(record.market)}`,
           sublabel: `${shortMarket(record.market)} · ${lifetimeSourceLabel(record)}`,
+          group: record.sport,
           metrics: record.metrics,
         }))}
         emptyBody="Lifetime records appear here as predictions settle and sport tracking comes online."

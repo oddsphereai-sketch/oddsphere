@@ -31,7 +31,7 @@ export function CategoryBars({
   rows,
   emptyBody = "Comparison appears once categories have graded picks.",
 }: {
-  rows: { label: string; sublabel?: string; metrics: ChartMetrics }[];
+  rows: { label: string; sublabel?: string; group?: string; metrics: ChartMetrics }[];
   emptyBody?: string;
 }) {
   const anyDecided = rows.some((r) => r.metrics.wins + r.metrics.losses > 0);
@@ -40,12 +40,17 @@ export function CategoryBars({
   }
   return (
     <div className="space-y-3">
-      {rows.map((r) => {
+      {rows.map((r, index) => {
         const m = r.metrics;
         const decided = m.wins + m.losses;
         const pct = m.win_pct ?? 0;
+        const startsGroup = index > 0 && r.group !== rows[index - 1]?.group;
         return (
-          <div key={`${r.label}-${r.sublabel ?? ""}`}>
+          <div
+            key={`${r.label}-${r.sublabel ?? ""}`}
+            data-group-start={startsGroup ? "true" : "false"}
+            className={startsGroup ? "border-t border-white/[0.08] pt-4" : undefined}
+          >
             <div className="mb-1.5 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-2">
               <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <span className="text-[12.5px] font-semibold text-gray-100 truncate">{r.label}</span>
