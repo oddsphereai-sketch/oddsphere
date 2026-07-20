@@ -233,6 +233,8 @@ type LifetimeRecord = {
   voids: number;
   /** How many of the live wins / losses are merged in (0 when none). */
   live_decided_contribution: number;
+  /** Numeric record used by the same category chart as weekly/monthly. */
+  metrics: Metrics;
   bestAngles?: Metrics;
   leans?: Metrics;
 };
@@ -271,6 +273,15 @@ function buildLifetimeRecords(
         pushes: live?.metrics.pushes ?? 0,
         voids: live?.metrics.voids ?? 0,
         live_decided_contribution: liveDecided,
+        metrics: {
+          picks: mergedTotal,
+          wins: mergedWins,
+          losses: mergedTotal - mergedWins,
+          pushes: live?.metrics.pushes ?? 0,
+          voids: live?.metrics.voids ?? 0,
+          pending: livePending,
+          win_pct: mergedPct,
+        },
         bestAngles: live?.bestAngles,
         leans: live?.leans,
       });
@@ -286,6 +297,15 @@ function buildLifetimeRecords(
         pushes: 0,
         voids: 0,
         live_decided_contribution: 0,
+        metrics: {
+          picks: base.lifetime_total,
+          wins: base.lifetime_wins,
+          losses: base.lifetime_total - base.lifetime_wins,
+          pushes: 0,
+          voids: 0,
+          pending: livePending,
+          win_pct: base.lifetime_pct,
+        },
         bestAngles: live?.bestAngles,
         leans: live?.leans,
       });
@@ -302,6 +322,7 @@ function buildLifetimeRecords(
         pushes: live.metrics.pushes,
         voids: live.metrics.voids,
         live_decided_contribution: liveDecided,
+        metrics: live.metrics,
         bestAngles: live.bestAngles,
         leans: live.leans,
       });
@@ -318,6 +339,7 @@ function buildLifetimeRecords(
         pushes: 0,
         voids: 0,
         live_decided_contribution: 0,
+        metrics: live.metrics,
         bestAngles: live.bestAngles,
         leans: live.leans,
       });
@@ -636,126 +658,30 @@ function Empty({ body }: { body: string }) {
   );
 }
 
-// ─── Lifetime tracking board — single unified source by sport+category
+// ─── Lifetime tracking board — shared visual, honest merged source ─────
+
+function lifetimeSourceLabel(record: LifetimeRecord): string {
+  if (record.source_type === "lifetime_merged") {
+    return `Lifetime · live +${record.live_decided_contribution}`;
+  }
+  return record.source_type === "since_launch" ? "Since launch" : "Lifetime";
+}
 
 function LifetimeTrackingBoard({ records }: { records: LifetimeRecord[] }) {
-  if (records.length === 0) {
-    return (
-      <Card>
-        <Empty body="Lifetime records appear here as predictions settle and sport tracking comes online." />
-      </Card>
-    );
-  }
-
-  // Group records by sport so the section reads as a sport rollup, not
-  // a long flat list. Sport order already enforced upstream.
-  const groups: { sport: string; rows: LifetimeRecord[] }[] = [];
-  for (const r of records) {
-    const last = groups[groups.length - 1];
-    if (last !== undefined && last.sport === r.sport) {
-      last.rows.push(r);
-    } else {
-      groups.push({ sport: r.sport, rows: [r] });
-    }
-  }
-
   return (
-    <div
-      className="relative rounded-2xl border border-white/[0.06] p-4 sm:p-5 overflow-hidden"
-      style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.030), rgba(255,255,255,0.012))" }}
-    >
-      <div className="absolute inset-x-0 top-0 h-[1.5px]" style={{ background: "linear-gradient(90deg, transparent, rgba(52,211,153,0.5), transparent)" }} />
-      <p className="text-[11.5px] text-gray-500 mb-4 leading-relaxed max-w-xl">
-        Records by sport and category. MLB updates automatically as games grade. Other sports are maintained as their models come online.
+    <Card>
+      <CategoryBars
+        rows={records.map((record) => ({
+          label: `${prettySport(record.sport)} ${prettyMarket(record.market)}`,
+          sublabel: `${shortMarket(record.market)} · ${lifetimeSourceLabel(record)}`,
+          metrics: record.metrics,
+        }))}
+        emptyBody="Lifetime records appear here as predictions settle and sport tracking comes online."
+      />
+      <p className="mt-4 border-t border-white/[0.05] pt-3 text-[11px] leading-relaxed text-gray-500">
+        MLB updates automatically as games grade. Other sports are maintained as their models come online.
       </p>
-      <div className="space-y-5">
-        {groups.map((g) => (
-          <SportGroup key={g.sport} sport={g.sport} rows={g.rows} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SportGroup({ sport, rows }: { sport: string; rows: LifetimeRecord[] }) {
-  const hasAuto = rows.some((r) => r.source_type === "lifetime_merged" || r.source_type === "since_launch");
-  return (
-    <div>
-      <div className="flex items-center gap-2.5 mb-2.5 flex-wrap">
-        <SportPill sport={sport} />
-        <span className="text-[11px] uppercase tracking-[0.14em] font-bold text-gray-500">
-          {rows.length} {rows.length === 1 ? "category" : "categories"}
-        </span>
-        {hasAuto && (
-          <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] font-bold text-emerald-300/85 sm:ml-auto">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/85" />
-            Auto-updating
-          </span>
-        )}
-      </div>
-      <ul className="divide-y divide-white/[0.05] -my-1.5 rounded-xl bg-white/[0.012] border border-white/[0.035] px-3 sm:px-4">
-        {rows.map((r) => (
-          <li key={`${r.sport}-${r.market}`} className="py-3">
-            <LifetimeRow record={r} />
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function LifetimeRow({ record }: { record: LifetimeRecord }) {
-  /**
-   * Phase 6B.24 — source label makes the rollup honest:
-   *   "Lifetime"           → baseline only, nothing live decided yet today
-   *   "Lifetime · live +N" → baseline + live decided picks merged
-   *   "Since launch"       → no baseline; live-only record (member should
-   *                          not read this as all-time history)
-   */
-  const sourceLabel =
-    record.source_type === "lifetime_merged"
-      ? `Lifetime · live +${record.live_decided_contribution}`
-      : record.source_type === "since_launch"
-        ? "Since launch"
-        : "Lifetime";
-  const showDetailRow =
-    (record.source_type === "lifetime_merged" || record.source_type === "since_launch") &&
-    (record.pending > 0 || (record.bestAngles?.picks ?? 0) > 0 || (record.leans?.picks ?? 0) > 0);
-  return (
-    <div>
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-3">
-        <div className="flex min-w-0 flex-wrap items-baseline gap-2">
-          <span className="text-[14px] sm:text-[14.5px] font-semibold text-gray-100">{prettyMarket(record.market)}</span>
-          <CategoryBadge market={record.market} />
-          <span className="text-[10px] uppercase tracking-[0.14em] font-bold text-gray-500">{sourceLabel}</span>
-        </div>
-        <div className="flex w-full items-baseline justify-between gap-3 tabular-nums sm:ml-auto sm:w-auto sm:justify-start sm:gap-4">
-          <span className="text-[17px] sm:text-[18px] font-extrabold text-gray-50 leading-none">{record.display_record}</span>
-          {record.display_pct !== null && (
-            <span className="text-[13px] font-bold text-emerald-300/95 leading-none">{record.display_pct}</span>
-          )}
-        </div>
-      </div>
-      {showDetailRow && (
-        <div className="mt-1.5 flex items-center gap-x-4 gap-y-1 flex-wrap text-[11px] tabular-nums">
-          {record.bestAngles !== undefined && record.bestAngles.picks > 0 && (
-            <SubChip label="Best Angle" m={record.bestAngles} color="rgb(110 231 183)" />
-          )}
-          {record.leans !== undefined && record.leans.picks > 0 && (
-            <SubChip label="Lean" m={record.leans} color="rgb(165 180 252)" />
-          )}
-          {record.pending > 0 && (
-            <span className="text-gray-500"><span className="text-gray-400 font-semibold">{record.pending}</span> pending</span>
-          )}
-          {record.pushes > 0 && (
-            <span className="text-gray-500"><span className="text-gray-400 font-semibold">{record.pushes}</span> push</span>
-          )}
-          {record.voids > 0 && (
-            <span className="text-gray-500"><span className="text-gray-400 font-semibold">{record.voids}</span> void</span>
-          )}
-        </div>
-      )}
-    </div>
+    </Card>
   );
 }
 

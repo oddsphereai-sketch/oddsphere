@@ -420,6 +420,15 @@ async function main() {
   check("admin diagnostics retain advanced audit fields", drawerSource.includes("showDiagnostics ?") && ["Reason Codes", "Feature Inputs", "Missing Features", "Settlement / CLV", "shrinkageWeight"].every((label) => drawerSource.includes(label)));
   check("detail drawer includes all data-bound visual modules", ["model-vs-market", "projection-vs-line", "book-price-ladder", "confidence-meter", "feature-confidence-checklist"].every((label) => drawerSource.includes(`data-visual="${label}"`)));
   check("projection and model visuals expose member-friendly comparison", drawerSource.includes("data-projection={projection}") && drawerSource.includes("data-line={line}") && drawerSource.includes("OddSphere estimate") && drawerSource.includes("Market implied") && drawerSource.includes("Model difference"));
+  check(
+    "player prop projections display with one decimal without rounding model inputs",
+    propsUiSource.includes("function formatProjection(value: number): string") &&
+      propsUiSource.includes("return value.toFixed(1);") &&
+      drawerSource.includes("data-projection={projection}") &&
+      !propsUiSource.includes("String(row.projection)") &&
+      !propsUiSource.includes("{pair.primary.projection}</") &&
+      !propsUiSource.includes("{row.projection}</"),
+  );
   check("member probability visual matches the displayed edge while admin retains raw probability", propsUiSource.includes("const model = row.finalProbability") && drawerSource.includes('label="Independent probability"') && drawerSource.includes('label="Shrinkage weight"'));
   check("drawer explains discrete projection-side mismatches in member language", drawerSource.includes("ProjectionIntegrityNotice") && drawerSource.includes("Average projection favors") && drawerSource.includes("Model prediction:") && drawerSource.includes("full outcome distribution") && !drawerSource.includes("Blocked projection-side contradiction") && !drawerSource.includes("excluded from positive model signals") && !drawerSource.includes("does not support"));
   check("member context avoids payload and provider narration", drawerSource.includes("Season opponent tendencies will appear when the team profile is verified.") && !drawerSource.includes("current provider payload"));
