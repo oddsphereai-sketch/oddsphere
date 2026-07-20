@@ -1,6 +1,10 @@
 import { loadCachedLatestMlbPropsDisplaySnapshot } from "@/lib/mlb/props/boardSnapshotStore";
 import { easternSlateDate, mlbPropsSnapshotIsFresh } from "@/lib/mlb/props/liveBoard";
-import { buildMlbPropsMemberBoardData } from "@/lib/mlb/props/memberPayload";
+import {
+  buildMlbPropsMemberBoardData,
+  buildMlbPropsScopedMemberBoardData,
+  type MlbPropsMemberBoardScope,
+} from "@/lib/mlb/props/memberPayload";
 import { getPublicPicksMode } from "@/lib/mlb/props/publicPicksSafety";
 import { loadMlbPropsMemberBoardSnapshot } from "@/lib/mlb/props/memberReadSnapshotStore";
 
@@ -17,9 +21,25 @@ export async function GET(request: Request) {
       board: null,
     }, { status: 503, headers: { "Cache-Control": "private, no-store" } });
   }
+  const full = url.searchParams.get("full") === "true";
+  const marketParam = url.searchParams.get("market");
+  const familyParam = url.searchParams.get("family");
+  const gameIdParam = url.searchParams.get("game_id");
+  const scope: MlbPropsMemberBoardScope = {
+    market: marketParam && /^[a-z0-9_]{1,64}$/.test(marketParam) ? marketParam : undefined,
+    family: familyParam === "pitcher" || familyParam === "batter" || familyParam === "milestone"
+      ? familyParam
+      : undefined,
+    gameId: gameIdParam && gameIdParam.length <= 128 ? gameIdParam : undefined,
+  };
+  const scoped = full || Boolean(scope.market || scope.family || scope.gameId);
   {
-    const full = url.searchParams.get("full") === "true";
-    const memberSnapshot = await loadMlbPropsMemberBoardSnapshot(date, full).catch(() => null);
+    // The compact member snapshot is rewritten on every fast refresh. Full
+    // shards intentionally are not, so never serve them for a scoped member
+    // request: doing so can roll current odds back to an older full refresh.
+    const memberSnapshot = scoped
+      ? null
+      : await loadMlbPropsMemberBoardSnapshot(date).catch(() => null);
     if (memberSnapshot) {
       return Response.json({
         ok: true,
@@ -50,6 +70,8 @@ export async function GET(request: Request) {
     // The full research map is loaded per player by the reader endpoint. Do
     // not duplicate that multi-megabyte evidence blob in the board response.
     // Every prop row and market remains present.
-    board: buildMlbPropsMemberBoardData(snapshot.data),
-  }, { headers: { "Cache-Control": "private, no-store" } });
+    board: scoped
+      ? buildMlbPropsScopedMemberBoardData(snapshot.data, scope)
+      : buildMlbPropsMemberBoardData(snapshot.data),
+  }, { headers: { "Cache-Control": scoped ? "private, max-age=30" : "private, no-store" } });
 }

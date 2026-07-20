@@ -24,6 +24,11 @@ export function buildMlbPropsInitialMemberBoardData(data: PlayerPropsDashboardDa
     const playerKey = `${row.player}|${row.team}`;
     if (![...selected.values()].some((item) => `${item.player}|${item.team}` === playerKey)) selected.set(row.id, row);
   }
+  // Keep every posted market discoverable in the lightweight board. The
+  // complete rows for that market are fetched only after a member selects it.
+  for (const row of ranked) {
+    if (![...selected.values()].some((item) => item.market === row.market)) selected.set(row.id, row);
+  }
   for (const row of ranked) {
     if (selected.size >= 600) break;
     selected.set(row.id, row);
@@ -31,6 +36,27 @@ export function buildMlbPropsInitialMemberBoardData(data: PlayerPropsDashboardDa
   return {
     ...data,
     props: [...selected.values()],
+    research: undefined,
+  };
+}
+
+export type MlbPropsMemberBoardScope = {
+  market?: string;
+  family?: PlayerPropPreviewRow["marketFamily"];
+  gameId?: string;
+};
+
+export function buildMlbPropsScopedMemberBoardData(
+  data: PlayerPropsDashboardData,
+  scope: MlbPropsMemberBoardScope,
+): PlayerPropsDashboardData {
+  return {
+    ...data,
+    props: data.props.filter((row) => (
+      (!scope.market || row.market === scope.market)
+      && (!scope.family || row.marketFamily === scope.family)
+      && (!scope.gameId || row.providerIds?.gameId === scope.gameId)
+    )),
     research: undefined,
   };
 }

@@ -384,6 +384,7 @@ async function main() {
   const internalTrackingSource = readFileSync("lib/mlb/props/internalTracking.ts", "utf8");
   const boardSnapshotStoreSource = readFileSync("lib/mlb/props/boardSnapshotStore.ts", "utf8");
   const memberReadSnapshotStoreSource = readFileSync("lib/mlb/props/memberReadSnapshotStore.ts", "utf8");
+  const memberPayloadSource = readFileSync("lib/mlb/props/memberPayload.ts", "utf8");
   const propsRefreshRouteSource = readFileSync("app/api/cron/mlb-player-props-refresh/route.ts", "utf8");
   check("preview UI clearly discloses simulated data", propsUiSource.includes("Design preview · Simulated board") && propsUiSource.includes("not live, bettable, or sourced from today&apos;s BDL response") && propsUiSource.includes("Fixture timestamp") && propsUiSource.includes("Sample options"));
   check("props UI contains no Best Edge copy", !propsUiSource.includes("Best Edge"));
@@ -501,6 +502,9 @@ async function main() {
   check("member routes read cached display-locked props snapshots", memberPropsSource.includes("loadCachedLatestMlbPropsDisplaySnapshot") && memberPropsApiSource.includes("loadCachedLatestMlbPropsDisplaySnapshot") && playerPropsApiSource.includes("loadCachedLatestMlbPropsDisplaySnapshot") && !memberPropsSource.includes("loadCachedLatestMlbPropsBoardSnapshot"));
   check("member board defers only research evidence", memberPropsSource.includes("buildMlbPropsMemberBoardData") && propsUiSource.includes("loadedResearch") && propsUiSource.includes("/api/mlb/props/player/") && playerPropsApiSource.includes("selectMlbPropsResearchForRows") && playerPropsApiSource.includes("research,"));
   check("member page does not automatically download the full slate", !propsUiSource.includes('fetch("/api/mlb/props/picks?full=true"'));
+  check("member market and game filters hydrate complete current slices on demand", propsUiSource.includes("requestedBoardScopes") && propsUiSource.includes('params.set("market", market)') && propsUiSource.includes('params.set("game_id", gameId)') && propsUiSource.includes("mergeScopedBoardData"));
+  check("scoped member reads bypass stale full-refresh shards", memberPropsApiSource.includes("buildMlbPropsScopedMemberBoardData") && memberPropsApiSource.includes("const memberSnapshot = scoped") && memberPropsApiSource.includes("loadCachedLatestMlbPropsDisplaySnapshot"));
+  check("lightweight member board keeps every posted market discoverable", memberPayloadSource.includes("item.market === row.market"));
   check("player drill-down progressively loads that player's complete prop set", memberReadSnapshotStoreSource.includes('props?: PlayerPropsDashboardData["props"]') && playerPropsApiSource.includes("props: readSnapshot.props ?? []") && propsUiSource.includes("payload.props?.length"));
   check("member route uses product copy without operational internals", memberPropsSource.includes("Today’s prop board is loading.") && memberPropsSource.includes("latest complete market snapshot") && !["Supabase", "fixture", "flags", "Public picks hidden"].some((label) => memberPropsSource.includes(label)));
   check("team visual uses existing ESPN MLB strategy with fallback", teamBadgeSource.includes("a.espncdn.com/i/teamlogos/mlb/500") && teamBadgeSource.includes("onError") && propsUiSource.includes("ProductTeamBadge"));
