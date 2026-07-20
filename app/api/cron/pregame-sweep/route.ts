@@ -51,6 +51,8 @@ import { assessMlbLockCoherence } from "@/lib/services/mlbLockCoherence";
 import { updateMarketSignalsForSlate } from "@/lib/services/marketSignalDerivationService";
 import { updateGradesForSlate } from "@/lib/services/gradeDerivationService";
 import { detectSnapshotStaleness } from "@/lib/services/snapshotStalenessDetector";
+import { dailyEdgeSnapshotKey } from "@/lib/services/labResponseSnapshots";
+import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import {
   runScheduledMarketIntelligenceV2Collection,
   type ScheduledMarketIntelligenceV2Result,
@@ -515,6 +517,49 @@ export async function GET(request: Request) {
       }
 
       if (lockOnly) {
+        // Member reads use the prebuilt Daily Edge response snapshot for speed.
+        // A lock write without a matching snapshot publish leaves the database
+        // frozen while the page still says "open" until another slate writer
+        // happens to rebuild it. Publish only when a lock was just applied, or
+        // when a prior publish failed and the stored snapshot still predates the
+        // newest authoritative lock. The metadata check is one small indexed DB
+        // read; the heavier response rebuild never runs on ordinary 5-minute
+        // no-op sweeps.
+        let responseSnapshot: Awaited<ReturnType<typeof refreshDailyEdgeResponseSnapshot>> | null = null;
+        let responseSnapshotRefreshNeeded = lockResult.locked > 0;
+        if (!responseSnapshotRefreshNeeded) {
+          const latestKnownLockMs = partition.locked.reduce((latest, game) => {
+            const parsed = Date.parse(String(game.locked_at ?? ""));
+            return Number.isFinite(parsed) ? Math.max(latest, parsed) : latest;
+          }, Number.NEGATIVE_INFINITY);
+          if (Number.isFinite(latestKnownLockMs)) {
+            const snapshotKey = dailyEdgeSnapshotKey({
+              sport,
+              requestedDate: date,
+              allowStale: false,
+              copyPreview: false,
+            });
+            const { data: snapshotMeta, error: snapshotMetaError } = await supabase
+              .from("lab_response_snapshots")
+              .select("generated_at")
+              .eq("snapshot_key", snapshotKey)
+              .maybeSingle();
+            responseSnapshotRefreshNeeded = snapshotMetaError !== null ||
+              snapshotMeta === null ||
+              Date.parse(String(snapshotMeta.generated_at)) < latestKnownLockMs;
+          }
+        }
+        if (responseSnapshotRefreshNeeded) {
+          responseSnapshot = await refreshDailyEdgeResponseSnapshot({
+            sport,
+            date,
+            source: "pregame_sweep_lock",
+          });
+          if (!responseSnapshot.ok) {
+            lockResult.errors.push(`daily-edge lock snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`);
+          }
+        }
+
         const anyErrors =
           lockResult.errors.length > 0 ||
           enteringLockModelResult.errors.length > 0 ||
@@ -543,6 +588,7 @@ export async function GET(request: Request) {
             audit_rows_written: lockResult.audit_written,
             lock_errors: lockResult.errors,
             missed_lock_game_ids: missedLockGames,
+            response_snapshot: responseSnapshot,
             market_intelligence_v2: marketIntelligenceV2,
             pre_lock_market_refresh: {
               lines_records_updated: preLockGameLines?.records_updated ?? 0,
