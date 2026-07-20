@@ -9,6 +9,8 @@ import {
 import { getPublicPicksMode } from "@/lib/mlb/props/publicPicksSafety";
 import { loadMlbPropsMemberBoardSnapshot } from "@/lib/mlb/props/memberReadSnapshotStore";
 
+const MAX_SCOPED_LAST_KNOWN_GOOD_AGE_MS = 2 * 60 * 60 * 1000;
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const requestedDate = url.searchParams.get("date");
@@ -54,7 +56,14 @@ export async function GET(request: Request) {
     }
   }
   const snapshot = await loadCachedLatestMlbPropsDisplaySnapshot(date);
-  if (!snapshot || !mlbPropsSnapshotIsFresh(snapshot)) {
+  const snapshotAgeMs = snapshot ? Date.now() - Date.parse(snapshot.asOfTimestamp) : Number.POSITIVE_INFINITY;
+  const scopedLastKnownGood = Boolean(
+    scoped
+    && snapshot
+    && Number.isFinite(snapshotAgeMs)
+    && snapshotAgeMs <= MAX_SCOPED_LAST_KNOWN_GOOD_AGE_MS,
+  );
+  if (!snapshot || (!mlbPropsSnapshotIsFresh(snapshot) && !scopedLastKnownGood)) {
     return Response.json({
       ok: false,
       mode: "temporarily_unavailable",
@@ -64,7 +73,7 @@ export async function GET(request: Request) {
   }
   return Response.json({
     ok: true,
-    mode: "display_enabled",
+    mode: mlbPropsSnapshotIsFresh(snapshot) ? "display_enabled" : "degraded_last_known_good",
     date,
     snapshotId: snapshot.snapshotId,
     asOfTimestamp: snapshot.asOfTimestamp,
@@ -77,5 +86,5 @@ export async function GET(request: Request) {
       : scoped
         ? buildMlbPropsScopedMemberBoardData(snapshot.data, scope)
       : buildMlbPropsMemberBoardData(snapshot.data),
-  }, { headers: { "Cache-Control": scoped ? "private, max-age=30" : "private, no-store" } });
+  }, { headers: { "Cache-Control": scopedLastKnownGood && !mlbPropsSnapshotIsFresh(snapshot) ? "private, no-store" : scoped ? "private, max-age=30" : "private, no-store" } });
 }

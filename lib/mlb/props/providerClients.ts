@@ -117,6 +117,7 @@ const BALLDONTLIE_MARKET_MAP: Record<string, MlbPropMarketKey> = {
   pitching_outs: "pitcher_outs",
   pitcher_outs_recorded: "pitcher_outs",
   outs_recorded: "pitcher_outs",
+  outs: "pitcher_outs",
   pitcher_hits_allowed: "pitcher_hits_allowed",
   pitching_hits_allowed: "pitcher_hits_allowed",
   hits_allowed: "pitcher_hits_allowed",
