@@ -1,4 +1,9 @@
 import { cronHandler } from "@/lib/cron/runCron";
+import { loadLatestMlbPropsBoardSnapshot } from "@/lib/mlb/props/boardSnapshotStore";
+import {
+  syncInternalMlbPropsTracking,
+  type MlbPropsTrackingSyncResult,
+} from "@/lib/mlb/props/internalTracking";
 import { easternSlateDate, refreshMlbPropsBoard } from "@/lib/mlb/props/liveBoard";
 
 export const runtime = "nodejs";
@@ -19,7 +24,48 @@ export async function GET(request: Request) {
       ? requestedDate
       : easternSlateDate();
     const refreshMode = url.searchParams.get("full") === "true" ? "full" : "fast";
-    const result = await refreshMlbPropsBoard({ slateDate, refreshMode, persist: true });
+    let result: Awaited<ReturnType<typeof refreshMlbPropsBoard>>;
+    try {
+      result = await refreshMlbPropsBoard({ slateDate, refreshMode, persist: true });
+    } catch (error) {
+      // Locking must not depend on a completely successful provider refresh.
+      // If BDL expands unexpectedly or a nonessential enrichment call fails,
+      // freeze the latest publishable pregame board for every game currently
+      // inside T-60. This preserves a deterministic member/tracking snapshot
+      // while the next refresh retries the live provider work.
+      const refreshError = error instanceof Error ? error.message : String(error);
+      const previous = await loadLatestMlbPropsBoardSnapshot(slateDate).catch(() => null);
+      let tracking: MlbPropsTrackingSyncResult | null = null;
+      let trackingError: string | null = null;
+      if (previous) {
+        try {
+          tracking = await syncInternalMlbPropsTracking(previous);
+        } catch (trackingFailure) {
+          trackingError = trackingFailure instanceof Error
+            ? trackingFailure.message
+            : String(trackingFailure);
+        }
+      }
+      return {
+        records_updated: (tracking?.entriesLocked ?? 0) + (tracking?.closingPricesUpdated ?? 0),
+        api_calls_made: 0,
+        partial: true,
+        error_message: trackingError
+          ? `${refreshError}; last-known-good lock fallback failed: ${trackingError}`
+          : refreshError,
+        details: {
+          slateDate,
+          refreshMode,
+          published: false,
+          refreshFailed: true,
+          refreshError,
+          tracking,
+          trackingError,
+          lastKnownGoodPreserved: Boolean(previous),
+          lockFallbackAttempted: Boolean(previous),
+        },
+      };
+    }
     const trackingFailed = result.tracking.status === "failed";
     return {
       // This metric is database writes, not the number of display rows carried
