@@ -143,6 +143,12 @@ check(
   /lifetimeSourceLabel[\s\S]{0,500}Lifetime · live \+\$\{record\.live_decided_contribution\}[\s\S]{0,300}Since launch/.test(PAGE),
 );
 check(
+  "Lifetime Tracking adds a subtle separator only when the sport group changes",
+  /group:\s*record\.sport/.test(PAGE) &&
+    /startsGroup\s*=\s*index\s*>\s*0\s*&&\s*r\.group\s*!==\s*rows\[index\s*-\s*1\]\?\.group/.test(CHARTS) &&
+    /border-t border-white\/\[0\.08\] pt-4/.test(CHARTS),
+);
+check(
   "Lifetime records expose numeric metrics without replacing merged history",
   /type LifetimeRecord[\s\S]{0,1200}metrics:\s*Metrics/.test(PAGE) &&
     /source_type:\s*"lifetime_merged"[\s\S]{0,1000}metrics:\s*\{[\s\S]{0,300}wins:\s*mergedWins/.test(PAGE),
