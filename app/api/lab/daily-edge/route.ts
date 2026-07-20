@@ -2368,7 +2368,7 @@ function buildGameDto(
   const mlSourceAwareSplits = sourceAwareSplits.get(`${row.external_id}::moneyline`);
   const totalSourceAwareSplits = sourceAwareSplits.get(`${row.external_id}::total`);
   const mlSharpBookSplits = resolveSharpBookSplitSection(mlSourceAwareSplits, {
-    direction: ml.sharpDirection,
+    direction: deriveSharpDirection(signals, "moneyline", mlSelectedSide),
     pick: ml.pick,
     signals,
     dbMarket: "moneyline",
@@ -2377,7 +2377,7 @@ function buildGameDto(
     awayAbbr: away,
   }, ml.publicSplits);
   const totalSharpBookSplits = resolveSharpBookSplitSection(totalSourceAwareSplits, {
-    direction: total.sharpDirection,
+    direction: deriveSharpDirection(signals, "total", totalSelectedSide),
     pick: total.pick,
     signals,
     dbMarket: "total",
