@@ -364,7 +364,10 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
     const gameId = selectedGame === "all"
       ? null
       : data.props.find((row) => gameKeyForRow(row) === selectedGame)?.providerIds?.gameId ?? null;
-    if (!market && !family && !gameId) return;
+    // A complete batter-family payload is roughly 11 MB on a full slate.
+    // Keep family-only views as fast overviews; hydrate complete rows after a
+    // member chooses one market or one game.
+    if (!market && !gameId) return;
     if (selectedGame !== "all" && !gameId) return;
 
     const scopeKey = [initialData.date, family ?? "all", market ?? "all", gameId ?? "all"].join("|");
@@ -474,13 +477,17 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
             <input type="search" list="mlb-props-players" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search a player, team, market, or sportsbook" className="h-11 w-full rounded-md border border-gray-700 bg-gray-950 pl-9 pr-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-violet-400" />
             <datalist id="mlb-props-players">{players.map((player) => <option key={player} value={player} />)}</datalist>
           </label>
-          <p className="shrink-0 text-xs text-gray-500">{boardScopeLoading ? <strong className="text-violet-200">Loading complete selection…</strong> : <><strong className="text-gray-200">{filteredRows.length}</strong> options shown · {players.length} players priced</>}</p>
+          <p className="shrink-0 text-xs text-gray-500">{boardScopeLoading
+            ? <strong className="text-violet-200">Loading complete selection…</strong>
+            : marketFamilyFilter !== "all" && marketFilter === "all" && selectedGame === "all"
+              ? <strong className="text-gray-300">Overview · choose a market for complete coverage</strong>
+              : <><strong className="text-gray-200">{filteredRows.length}</strong> options shown · {players.length} players priced</>}</p>
         </div>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Market groups">
           {MARKET_FAMILY_FILTERS.map((filter) => <MarketFilterButton key={filter.id} label={filter.label} active={marketFamilyFilter === filter.id} onClick={() => { setMarketFamilyFilter(filter.id); setMarketFilter("all"); }} />)}
         </div>
         {marketFamilyFilter !== "all" && marketFilters.length ? <div className="mt-2 flex gap-2 overflow-x-auto pb-1" aria-label="Specific market filters">
-          <MarketFilterButton label={marketFamilyFilter === "pitcher" ? "All pitcher props" : "All batter props"} active={marketFilter === "all"} onClick={() => setMarketFilter("all")} />
+          <MarketFilterButton label={marketFamilyFilter === "pitcher" ? "Pitcher overview" : "Batter overview"} active={marketFilter === "all"} onClick={() => setMarketFilter("all")} />
           {marketFilters.map((filter) => <MarketFilterButton key={filter.id} label={filter.label} active={marketFilter === filter.id} onClick={() => setMarketFilter(filter.id)} />)}
         </div> : null}
         <div data-product-zone="board-controls" className="mt-3 border-t border-gray-800 pt-3">

@@ -2,6 +2,7 @@ import { loadCachedLatestMlbPropsDisplaySnapshot } from "@/lib/mlb/props/boardSn
 import { easternSlateDate, mlbPropsSnapshotIsFresh } from "@/lib/mlb/props/liveBoard";
 import {
   buildMlbPropsMemberBoardData,
+  buildMlbPropsInitialMemberBoardData,
   buildMlbPropsScopedMemberBoardData,
   type MlbPropsMemberBoardScope,
 } from "@/lib/mlb/props/memberPayload";
@@ -33,6 +34,7 @@ export async function GET(request: Request) {
     gameId: gameIdParam && gameIdParam.length <= 128 ? gameIdParam : undefined,
   };
   const scoped = full || Boolean(scope.market || scope.family || scope.gameId);
+  const familyOverview = !full && Boolean(scope.family && !scope.market && !scope.gameId);
   {
     // The compact member snapshot is rewritten on every fast refresh. Full
     // shards intentionally are not, so never serve them for a scoped member
@@ -70,8 +72,10 @@ export async function GET(request: Request) {
     // The full research map is loaded per player by the reader endpoint. Do
     // not duplicate that multi-megabyte evidence blob in the board response.
     // Every prop row and market remains present.
-    board: scoped
-      ? buildMlbPropsScopedMemberBoardData(snapshot.data, scope)
+    board: familyOverview
+      ? buildMlbPropsScopedMemberBoardData(buildMlbPropsInitialMemberBoardData(snapshot.data), scope)
+      : scoped
+        ? buildMlbPropsScopedMemberBoardData(snapshot.data, scope)
       : buildMlbPropsMemberBoardData(snapshot.data),
   }, { headers: { "Cache-Control": scoped ? "private, max-age=30" : "private, no-store" } });
 }
