@@ -389,7 +389,7 @@ async function main() {
   const propsRefreshRouteSource = readFileSync("app/api/cron/mlb-player-props-refresh/route.ts", "utf8");
   const vercelConfigSource = readFileSync("vercel.json", "utf8");
   check("preview UI clearly discloses simulated data", propsUiSource.includes("Design preview · Simulated board") && propsUiSource.includes("not live, bettable, or sourced from today&apos;s BDL response") && propsUiSource.includes("Fixture timestamp") && propsUiSource.includes("Sample options"));
-  check("pregame lock sweep runs at least every 15 minutes during active windows", vercelConfigSource.includes('"schedule": "8,23,38,53 14-23 * * *"') && vercelConfigSource.includes('"schedule": "8,23,38,53 0-2 * * *"'));
+  check("pregame lock sweep runs every 5 minutes during active windows", vercelConfigSource.includes('"schedule": "*/5 14-23 * * *"') && vercelConfigSource.includes('"schedule": "*/5 0-2 * * *"'));
   check("props source-row guard accommodates healthy late-day provider expansion", liveBoardSource.includes("DEFAULT_MAX_SOURCE_ODDS_ROWS = 35_000"));
   check("props refresh failure still attempts T-60 lock from last-known-good board", propsRefreshRouteSource.includes("loadLatestMlbPropsBoardSnapshot") && propsRefreshRouteSource.includes("syncInternalMlbPropsTracking(previous)") && propsRefreshRouteSource.includes("lockFallbackAttempted"));
   check("props UI contains no Best Edge copy", !propsUiSource.includes("Best Edge"));
