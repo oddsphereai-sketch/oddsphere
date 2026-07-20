@@ -56,9 +56,10 @@ import { refreshTrackingResponseSnapshot } from "@/lib/services/labResponseSnaps
 
 export const maxDuration = 180;
 
-// WNBA launch tracking is included because OFFICIAL_TRACKING_START.wnba is set
-// and the tracking route has a WNBA prediction_grades bridge.
-const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "soccer", "wnba"];
+// World Cup automation is dormant after the 2026 tournament. Soccer remains
+// available through the explicit `?sport=soccer` override so historical fixes
+// and the next tournament do not require rebuilding the tracking pipeline.
+const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba"];
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

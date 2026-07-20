@@ -77,6 +77,12 @@ check("undefined existing → upsert allowed", shouldUpsertGrade({ existingResul
 
 const gradingSource = readFileSync(new URL("../lib/services/predictionGradingService.ts", import.meta.url), "utf8");
 const trackingCronSource = readFileSync(new URL("../app/api/cron/tracking-refresh/route.ts", import.meta.url), "utf8");
+const healthCronSource = readFileSync(new URL("../app/api/cron/daily-edge-data-health/route.ts", import.meta.url), "utf8");
+const soccerCronSource = readFileSync(new URL("../app/api/cron/soccer-daily-refresh/route.ts", import.meta.url), "utf8");
+const dailyEdgeShellSource = readFileSync(new URL("../app/lab/components/daily-edge/DailyEdgeShell.tsx", import.meta.url), "utf8");
+const vercelConfig = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as {
+  crons?: Array<{ path?: string }>;
+};
 check(
   "MLB grading excludes records that never reached the persisted lock boundary",
   gradingSource.includes('if (sport === "mlb") recordsQuery = recordsQuery.not("locked_at", "is", null)'),
@@ -85,6 +91,31 @@ check(
   "successful grade writes immediately invalidate the member Tracking aggregate",
   trackingCronSource.includes('revalidateTag("member-tracking-aggregate", { expire: 0 })') &&
     trackingCronSource.includes("summary.totals.grades_upserted > 0"),
+);
+check(
+  "World Cup provider/model refresh is unscheduled during offseason",
+  !(vercelConfig.crons ?? []).some((cron) => cron.path === "/api/cron/soccer-daily-refresh"),
+);
+check(
+  "World Cup route is preserved behind its gate for future reactivation",
+  soccerCronSource.includes('const CRON_ENV = "SOCCER_CRON_ENABLED"') &&
+    soccerCronSource.includes("OFF-SEASON (2026-07-20)"),
+);
+check(
+  "hourly tracking excludes soccer by default but keeps the manual override",
+  trackingCronSource.includes('const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba"]') &&
+    trackingCronSource.includes("overrideSport") && trackingCronSource.includes("[overrideSport]"),
+);
+check(
+  "daily health excludes soccer by default but keeps explicit sports override",
+  healthCronSource.includes('if (!raw) return ["mlb", "wnba"]') &&
+    healthCronSource.includes('url.searchParams.get("sports")'),
+);
+check(
+  "Daily Edge labels World Cup as offseason while keeping history accessible",
+  dailyEdgeShellSource.includes('{ key: "soccer", label: "World Cup", live: true, inSeason: false }') &&
+    dailyEdgeShellSource.includes("const isActiveInSeason = isActive && s.inSeason === true") &&
+    dailyEdgeShellSource.includes('s.live && !s.inSeason ? "offseason model"'),
 );
 
 console.log("\n━━━ immutable FI grading substrate ━━━");

@@ -1,6 +1,11 @@
 /**
  * Soccer (FIFA World Cup) daily refresh cron route.
  *
+ * OFF-SEASON (2026-07-20): this route is intentionally retained but is no
+ * longer scheduled in vercel.json. Re-enable for the next World Cup by
+ * restoring its Vercel schedules and setting SOCCER_CRON_ENABLED=true. Until
+ * then, an authenticated manual call remains available for historical repair.
+ *
  * Mirrors /api/cron/nhl-daily-refresh in shape. Runs the soccer seed +
  * prediction + (optional) line persistence once per cron tick.
  *

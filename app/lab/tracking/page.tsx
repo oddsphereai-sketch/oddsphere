@@ -158,7 +158,11 @@ const MARKET_ORDER: Record<string, number> = {
 };
 
 const SPORT_ORDER: Record<string, number> = {
-  mlb: 1, wnba: 2, soccer: 3, nfl: 4, nba: 5, nhl: 6, cfb: 7, cbb: 8, ucl: 9,
+  mlb: 1,
+  nba: 2, cbb: 3, wnba: 4,
+  nfl: 5, cfb: 6,
+  nhl: 7,
+  soccer: 8, ucl: 9,
 };
 
 // ─── Format helpers ────────────────────────────────────────────────────
