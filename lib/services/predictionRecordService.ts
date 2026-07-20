@@ -26,8 +26,10 @@ import { isBlockedSportsbook } from "../config/blockedSportsbooks";
 import { resolveMlInversionFlip, ML_INVERSION_RULE_ID } from "./mlInversionFlip";
 import {
   resolveTotalsMarketOpposedFlip,
+  resolveTotalsMidEdgeFlip,
   resolveTotalsMeanFlip,
   TOTALS_MARKET_OPPOSED_FLIP_RULE_ID,
+  TOTALS_MID_EDGE_FLIP_RULE_ID,
   TOTALS_MEAN_FLIP_RULE_ID,
 } from "./totalsMeanFlip";
 import { resolveFiInversionFlip, FI_INVERSION_RULE_ID } from "./fiInversionFlip";
@@ -301,6 +303,11 @@ export const ML_CLEAN_TIGHT_EDGE_MAX_MODEL_PROB_EXCLUSIVE = 0.58;
 export const ML_CLEAN_TIGHT_EDGE_MIN_EDGE_PCT = 0.5;
 export const ML_CLEAN_TIGHT_EDGE_MIN_PRICE_EXCLUSIVE = -220;
 export const ML_CLEAN_TIGHT_EDGE_MAX_ABS_PROJECTION_GAP_EXCLUSIVE = 0.75;
+export const ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID = "ml_tight_market_price_best_angle_v1_2026_07_20";
+export const ML_TIGHT_MARKET_PRICE_MIN_EDGE_PCT = -1;
+export const ML_TIGHT_MARKET_PRICE_MAX_EDGE_PCT_EXCLUSIVE = 1;
+export const ML_TIGHT_MARKET_PRICE_MIN_ODDS = -160;
+export const ML_TIGHT_MARKET_PRICE_MAX_ODDS = -131;
 export const FI_VALIDATED_BEST_ANGLE_RULE_ID = "fi_validated_best_angle_v1_2026_07_11";
 export const FI_FINAL_BEST_ANGLE_MIN_EDGE = 0.06;
 export const FI_FINAL_BEST_ANGLE_MIN_CONFIDENCE = 56;
@@ -421,6 +428,33 @@ function resolveMlCleanTightEdgeBestAngle(args: {
     bestAngle: qualified,
     reason: qualified ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID : null,
     absProjectionGap,
+  };
+}
+
+export function resolveMlTightMarketPriceBestAngle(args: {
+  blocked: boolean;
+  side: string | null;
+  edgePct: number | null;
+  oddsAmerican: number | null;
+  lineDirection: "toward_pick" | "against_pick" | "neutral" | "unknown" | null;
+  publicSplitConflict: boolean;
+}): { bestAngle: boolean; reason: string | null } {
+  const qualified =
+    !args.blocked &&
+    (args.side === "home" || args.side === "away") &&
+    args.edgePct !== null &&
+    Number.isFinite(args.edgePct) &&
+    args.edgePct >= ML_TIGHT_MARKET_PRICE_MIN_EDGE_PCT &&
+    args.edgePct < ML_TIGHT_MARKET_PRICE_MAX_EDGE_PCT_EXCLUSIVE &&
+    args.oddsAmerican !== null &&
+    Number.isFinite(args.oddsAmerican) &&
+    args.oddsAmerican >= ML_TIGHT_MARKET_PRICE_MIN_ODDS &&
+    args.oddsAmerican <= ML_TIGHT_MARKET_PRICE_MAX_ODDS &&
+    args.lineDirection !== "against_pick" &&
+    !args.publicSplitConflict;
+  return {
+    bestAngle: qualified,
+    reason: qualified ? ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID : null,
   };
 }
 
@@ -1582,7 +1616,7 @@ export function resolveMlbBestAngle(args: {
 export const MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID =
   "mlb_market_aware_final_side_selector_v1_2026_07_11";
 export const MLB_MARKET_AWARE_CORRECTED_GRADE_RULE_ID =
-  "mlb_market_aware_corrected_grade_v3_ba_only_2026_07_11";
+  "mlb_market_aware_corrected_grade_v4_2026_07_20";
 
 type MlbMarketAwareSideCorrectionInput = {
   market: "moneyline" | "total";
@@ -1727,14 +1761,7 @@ export function resolveMlbMarketAwareCorrectedPlayGrade(
   if (price === null || !Number.isFinite(price)) return watchlist("missing_corrected_side_price");
 
   if (args.market === "moneyline") {
-    if (price <= -170) return watchlist("corrected_ml_price_too_expensive");
-    if (price >= 140) return watchlist("corrected_ml_plus_price_too_volatile");
-    if (reasons.has("line_movement_against_pick") && reasons.has("regularization_distance_cap_applied")) {
-      return watchlist("corrected_ml_line_against_plus_distance_cap_unvalidated");
-    }
-    if (price > -136 && price < 100) return bestAngle("corrected_ml_short_playable_favorite");
-    if (reasons.has("regularization_distance_cap_applied")) return bestAngle("corrected_ml_distance_cap_playable_price");
-    return watchlist("corrected_ml_unvalidated_watchlist");
+    return watchlist("corrected_ml_best_angle_stood_down_by_2026_07_20_recalibration");
   }
 
   if (price <= -135) return watchlist("corrected_total_price_not_best_angle_playable");
@@ -1939,8 +1966,25 @@ function buildMlRecord(
     lineDirection: finalMlLineDirection,
     publicSplitConflict: finalMlPublicSplitConflict,
   });
-  const mlCalibratedBestAngle = mlCleanTightEdgeBestAngle.bestAngle;
-  const mlPromotedBestAngle = !mlBest.bestAngle && mlCalibratedBestAngle;
+  const mlTightMarketPriceBestAngle = resolveMlTightMarketPriceBestAngle({
+    // The older clean-tight cohort has first priority. Both rules can point to
+    // Best Angle, but a row receives exactly one promotion rule/audit stamp.
+    blocked:
+      mlNoBet ||
+      mlFlipped ||
+      mlPickCalibrated ||
+      mlMarketSideCorrected ||
+      mlCleanTightEdgeBestAngle.bestAngle,
+    side: finalMlPick,
+    edgePct: finalMlEdge,
+    oddsAmerican: finalMlOdds,
+    lineDirection: finalMlLineDirection,
+    publicSplitConflict: finalMlPublicSplitConflict,
+  });
+  const mlCalibratedBestAngle =
+    mlCleanTightEdgeBestAngle.bestAngle || mlTightMarketPriceBestAngle.bestAngle;
+  const mlCleanTightEdgePromoted = !mlBest.bestAngle && mlCleanTightEdgeBestAngle.bestAngle;
+  const mlTightMarketPricePromoted = !mlBest.bestAngle && mlTightMarketPriceBestAngle.bestAngle;
   const mlDemotedBroadBestAngle = mlBest.bestAngle && !mlCalibratedBestAngle;
   const trackedMlBestAngle =
     mlMarketAwareCorrectedGrade !== null
@@ -2038,14 +2082,16 @@ function buildMlRecord(
         requires_confirmation: readBoolish(v22.ml_requires_market_confirmation),
         line_direction: finalMlLineDirection,
         demote_reason: mlBest.demoteReason,
-        clean_tight_edge_promotion: mlPromotedBestAngle,
-        clean_tight_edge_promotion_rule_id: mlPromotedBestAngle ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID : null,
+        clean_tight_edge_promotion: mlCleanTightEdgePromoted,
+        clean_tight_edge_promotion_rule_id: mlCleanTightEdgePromoted ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID : null,
+        tight_market_price_promotion: mlTightMarketPricePromoted,
+        tight_market_price_promotion_rule_id: mlTightMarketPricePromoted ? ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID : null,
         broad_best_angle_demoted_by_recalibration: mlDemotedBroadBestAngle,
         final_best_angle: trackedMlBestAngle,
       },
       market_aware_corrected_grade: mlMarketAwareCorrectedGrade,
       ml_grade_recalibration: {
-        rule_id: "ml_grade_recalibration_v2_2026_07_11",
+        rule_id: "ml_grade_recalibration_v3_2026_07_20",
         original_public_play_grade: mlPublicPlayGrade,
         final_public_play_grade: mlMarketAwareCorrectedGrade?.playGrade ?? trackedMlPublicPlayGrade,
         final_best_angle: trackedMlBestAngle,
@@ -2067,9 +2113,9 @@ function buildMlRecord(
         market_aware_corrected_grade: mlMarketAwareCorrectedGrade,
         demoted_broad_best_angle: mlDemotedBroadBestAngle,
         validation_note:
-          "Historical MLB grade replay 2026-06-11..2026-07-10: market-aware corrected ML Best Angles under v3 BA-only policy replayed 76-48, +13.96u; unvalidated corrected rows stay Watchlist.",
+          "MLB recalibration through 2026-07-19: recently graded market-aware corrected Moneyline Best Angles went 4-4, so v4 caps every corrected Moneyline at Market Aligned. The replacement clean tight-market-price cohort replayed 31-9 across three chronological windows.",
       },
-      ml_clean_tight_edge_best_angle_promotion: mlPromotedBestAngle
+      ml_clean_tight_edge_best_angle_promotion: mlCleanTightEdgePromoted
         ? {
             rule_id: ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID,
             action: "promote_to_best_angle",
@@ -2086,6 +2132,22 @@ function buildMlRecord(
             public_split_conflict: finalMlPublicSplitConflict,
             validation_note:
               "Historical MLB replay 2026-06-01..2026-07-10 on current non-Best-Angles: 17-7, +6.7824u, 70.83% win rate, 28.26% ROI.",
+          }
+        : null,
+      ml_tight_market_price_best_angle_promotion: mlTightMarketPricePromoted
+        ? {
+            rule_id: ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID,
+            action: "promote_to_best_angle",
+            edge_pct: finalMlEdge,
+            min_edge_pct: ML_TIGHT_MARKET_PRICE_MIN_EDGE_PCT,
+            max_edge_pct_exclusive: ML_TIGHT_MARKET_PRICE_MAX_EDGE_PCT_EXCLUSIVE,
+            odds_american: finalMlOdds,
+            min_odds_inclusive: ML_TIGHT_MARKET_PRICE_MIN_ODDS,
+            max_odds_inclusive: ML_TIGHT_MARKET_PRICE_MAX_ODDS,
+            line_direction: finalMlLineDirection,
+            public_split_conflict: finalMlPublicSplitConflict,
+            validation_note:
+              "Chronological MLB replay through 2026-07-19: clean uncorrected moneylines within 1pp of market at -131..-160 went 11-3, 9-5, and 11-1 across three windows (31-9, +12.81u).",
           }
         : null,
       champion_candidate_correction: mlChampionStandDownReason === null
@@ -2137,7 +2199,7 @@ function buildMlRecord(
             public_best_angle: mlMarketAwareCorrectedGrade?.bestAngle ?? false,
             public_grade_reason: mlMarketAwareCorrectedGrade?.reason ?? null,
             validation_note:
-              "Historical MLB side-correction replay through 2026-07-10: ML market-against/distance-cap rows improved when flipped before grading; corrected Best Angle promotion is limited to validated v3 cohorts.",
+              "MLB replay through 2026-07-19: market-aware Moneyline side corrections remain tracked, but v4 caps them at Market Aligned after the recent corrected Best Angle cohort went 4-4.",
           }
         : null,
       // 2026-06-22 — ML inversion flip audit. Present only when the flip fired;
@@ -2342,6 +2404,15 @@ function buildOuRecord(
   const ouMarketFlipped = ouMarketFlip.action === "flip";
   let finalOuPick = ouFlipped ? ouFlip.meanSide : ouMarketFlipped ? ouMarketFlip.flippedSide : pred.predicted_ou_side;
   let finalOuOdds = ouFlipped ? ouFlip.flippedOdds : ouMarketFlipped ? ouMarketFlip.flippedOdds : ouOddsAmerican;
+  const pricedTotalLineForSide = (side: string | null): number | null =>
+    side === "over"
+      ? oddsForGame?.oddsSourceOu?.over?.line ?? null
+      : side === "under"
+        ? oddsForGame?.oddsSourceOu?.under?.line ?? null
+        : null;
+  // A side correction must carry the corrected side's exact posted line as
+  // well as its price when provider rows are temporarily asymmetric.
+  let finalOuBetLine = pricedTotalLineForSide(finalOuPick) ?? ouBetLine;
   let ouCorrectionRuleId: string | null = ouFlipped
     ? TOTALS_MEAN_FLIP_RULE_ID
     : ouMarketFlipped
@@ -2420,6 +2491,7 @@ function buildOuRecord(
     finalOuModelProb = ouMarketSideCorrection.correctedModelProb;
     finalOuMarketProb = ouMarketSideCorrection.correctedMarketProb;
     finalOuEdge = ouMarketSideCorrection.correctedEdgePp;
+    finalOuBetLine = pricedTotalLineForSide(finalOuPick) ?? finalOuBetLine;
     finalOuLineMovement = buildLineMovementSnapshot(
       openersForGame, currentLinesForGame, signalsForGame, "total", finalOuPick,
     );
@@ -2435,7 +2507,36 @@ function buildOuRecord(
       finalOuEdge = roundEdgePp((finalOuModelProb - finalOuMarketProb) * 100);
     }
   }
-  const ouBaseBestAngle = ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouDivergenceStandDown
+  const ouMidEdgeFlip = resolveTotalsMidEdgeFlip({
+    currentSide: finalOuPick === "over" || finalOuPick === "under" ? finalOuPick : null,
+    currentEdgePp: finalOuEdge,
+    currentModelProb: finalOuModelProb,
+    currentMarketProb: finalOuMarketProb,
+    currentConfidence: finalOuConfidence,
+    overOdds: oddsForGame?.ouOverOdds ?? null,
+    underOdds: oddsForGame?.ouUnderOdds ?? null,
+    priorCorrectionApplied: ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouDivergenceStandDown,
+  });
+  const ouMidEdgeFlipped = ouMidEdgeFlip.action === "flip";
+  if (ouMidEdgeFlipped) {
+    finalOuPick = ouMidEdgeFlip.flippedSide;
+    finalOuOdds = ouMidEdgeFlip.flippedOdds;
+    ouCorrectionRuleId = TOTALS_MID_EDGE_FLIP_RULE_ID;
+    ouCorrectionKind = "mid_edge_inversion";
+    ouCorrectedSideModelProb = ouMidEdgeFlip.flippedSideModelProb;
+    ouCorrectedSideMarketProb = ouMidEdgeFlip.flippedMarketProb;
+    ouCorrectedSideEdgePp = ouMidEdgeFlip.flippedEdgePp;
+    finalOuConfidence = ouMidEdgeFlip.recommendationConfidence;
+    finalOuModelProb = ouMidEdgeFlip.recommendationConfidence / 100;
+    finalOuMarketProb = ouMidEdgeFlip.flippedMarketProb;
+    finalOuEdge = ouMidEdgeFlip.flippedEdgePp;
+    finalOuBetLine = pricedTotalLineForSide(finalOuPick) ?? finalOuBetLine;
+    finalOuLineMovement = buildLineMovementSnapshot(
+      openersForGame, currentLinesForGame, signalsForGame, "total", finalOuPick,
+    );
+    ouLineDirection = readLineDirection(finalOuLineMovement);
+  }
+  const ouBaseBestAngle = ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouMidEdgeFlipped || ouDivergenceStandDown
     ? false
     : ouBest.bestAngle;
   const ouRawBestAngleCandidate =
@@ -2443,6 +2544,7 @@ function buildOuRecord(
     !ouFlipped &&
     !ouMarketFlipped &&
     !ouMarketSideCorrected &&
+    !ouMidEdgeFlipped &&
     !ouDivergenceStandDown;
   const totalBestAngleMinModelProb =
     finalOuPick === "over"
@@ -2461,14 +2563,14 @@ function buildOuRecord(
     legacyMarketSignalGradeInfluenceEnabled
       ? applyPlayGradeGate(ouRawPublicPlayGrade, {
           modelProb: finalOuModelProb, americanOdds: finalOuOdds, market: "total",
-          runGapAbs: null, totalLine: ouBetLine,
+          runGapAbs: null, totalLine: finalOuBetLine,
         })
       : ouRawPublicPlayGrade,
     ouRawBestAngleCandidate,
     ouFinalBestAngle,
   );
-  const ouSameSideProjectionGap = totalProjectionSameSideGap(finalOuPick, ouScoreSum, ouBetLine);
-  const ouProjectionGapAbs = totalProjectionGapAbs(finalOuPick, ouScoreSum, ouBetLine);
+  const ouSameSideProjectionGap = totalProjectionSameSideGap(finalOuPick, ouScoreSum, finalOuBetLine);
+  const ouProjectionGapAbs = totalProjectionGapAbs(finalOuPick, ouScoreSum, finalOuBetLine);
   const ouThinProjectionLeanCap =
     ouPublicPlayGrade === "lean" &&
     ouSameSideProjectionGap !== null &&
@@ -2485,7 +2587,8 @@ function buildOuRecord(
   const ouProjectionConflict =
     !ouMarketFlipped &&
     !ouMarketSideCorrected &&
-    projectionContradictsTotalPick(ouScoreSum, ouBetLine, finalOuPick);
+    !ouMidEdgeFlipped &&
+    projectionContradictsTotalPick(ouScoreSum, finalOuBetLine, finalOuPick);
   const ouChampionStandDownReason = ouProjectionConflict
     ? "champion_candidate_total_projection_conflict: projected_total_contradicts_total_pick"
     : null;
@@ -2513,10 +2616,10 @@ function buildOuRecord(
       })
     : null;
   const ouCleanConfirmedBestAngle = resolveTotalCleanConfirmedBestAngle({
-    blocked: ouNoBet || ouFlipped || ouMarketFlipped || ouMarketSideCorrected,
+    blocked: ouNoBet || ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouMidEdgeFlipped,
     side: finalOuPick,
     projectedTotal: ouScoreSum,
-    line: ouBetLine,
+    line: finalOuBetLine,
     modelProb: finalOuModelProb,
     edgePct: finalOuEdge,
     oddsAmerican: finalOuOdds,
@@ -2527,6 +2630,7 @@ function buildOuRecord(
   const ouPromotedBestAngle = !ouFinalBestAngle && ouCleanConfirmedBestAngle.bestAngle;
   const trackedOuFinalBestAngle = ouChampionStandDownReason !== null
     || ouNoBet
+    || ouMidEdgeFlipped
     ? false
     : ouMarketAwareCorrectedGrade !== null
       ? ouMarketAwareCorrectedGrade.bestAngle
@@ -2537,7 +2641,8 @@ function buildOuRecord(
       ouNoBet ||
       ouFlipped ||
       ouMarketFlipped ||
-      ouMarketSideCorrected,
+      ouMarketSideCorrected ||
+      ouMidEdgeFlipped,
     side: finalOuPick,
     modelProb: finalOuModelProb,
     edgePct: finalOuEdge,
@@ -2548,7 +2653,9 @@ function buildOuRecord(
     !trackedOuFinalBestAngle &&
     finalOuPublicPlayGrade === "lean" &&
     !ouValidatedLean.lean;
-  const trackedOuPublicPlayGrade = ouMarketAwareCorrectedGrade !== null
+  const trackedOuPublicPlayGrade = ouMidEdgeFlipped
+    ? (ouNoBet ? null : "lean")
+    : ouMarketAwareCorrectedGrade !== null
     ? ouMarketAwareCorrectedGrade.playGrade
     : ouPromotedBestAngle
     ? "best_angle"
@@ -2571,7 +2678,7 @@ function buildOuRecord(
     pick: finalOuPick,
     side: finalOuPick,
     // LINE BASIS — track against the line the member actually bets.
-    line_value: ouBetLine,
+    line_value: finalOuBetLine,
     odds_american: finalOuOdds,
     odds_decimal: null,
     model_used: readStringOrNull(sp.model_used),
@@ -2647,7 +2754,7 @@ function buildOuRecord(
             edge_pct: finalOuEdge,
             min_edge_pct: TOTAL_BEST_ANGLE_MIN_EDGE_PCT,
             projected_total: ouScoreSum,
-            line: ouBetLine,
+            line: finalOuBetLine,
             abs_projection_gap: ouCleanConfirmedBestAngle.absProjectionGap,
             strong_projection_gap: ouCleanConfirmedBestAngle.strongProjection,
             medium_gap_confirmed: ouCleanConfirmedBestAngle.mediumGapConfirmed,
@@ -2667,7 +2774,7 @@ function buildOuRecord(
             original_play_grade: ouPublicPlayGrade,
             final_play_grade: finalOuPublicPlayGrade,
             projected_total: ouScoreSum,
-            line: ouBetLine,
+            line: finalOuBetLine,
             pick: finalOuPick,
             same_side_projection_gap: ouSameSideProjectionGap,
             validation_note:
@@ -2699,7 +2806,7 @@ function buildOuRecord(
             original_play_grade: finalOuPublicPlayGrade,
             final_play_grade: trackedOuPublicPlayGrade,
             projected_total: ouScoreSum,
-            line: ouBetLine,
+            line: finalOuBetLine,
             pick: finalOuPick,
             model_prob: finalOuModelProb,
             edge_pct: finalOuEdge,
@@ -2720,7 +2827,7 @@ function buildOuRecord(
             odds_american: finalOuOdds,
             min_price_exclusive: TOTAL_VALIDATED_LEAN_MIN_PRICE_EXCLUSIVE,
             projected_total: ouScoreSum,
-            line: ouBetLine,
+            line: finalOuBetLine,
             same_side_projection_gap: ouSameSideProjectionGap,
             strong_min_model_prob: TOTAL_VALIDATED_STRONG_LEAN_MIN_MODEL_PROB,
             strong_min_projection_gap: TOTAL_VALIDATED_STRONG_LEAN_MIN_PROJECTION_GAP,
@@ -2728,16 +2835,20 @@ function buildOuRecord(
               "Normalized MLB replay 2026-06-11..2026-07-10: non-Best-Angle totals with p>=54%, edge>=5pp, price>-145, and projection aligned went 47-35, +7.8662u, +9.59% ROI; stronger gap>=0.75 subset went 17-8, +6.6929u.",
           }
         : null,
-      total_flip_public_grade_resolution: ouFlipped || ouMarketFlipped
+      total_flip_public_grade_resolution: ouFlipped || ouMarketFlipped || ouMidEdgeFlipped
         ? {
             rule_id: ouCorrectionRuleId,
             flip_kind: ouCorrectionKind,
-            action: ouUnvalidatedFlipPublicPlayGrade !== null ? "store_as_watchlist" : "no_public_grade",
-            public_play_grade: ouUnvalidatedFlipPublicPlayGrade,
+            action: ouMidEdgeFlipped
+              ? ouNoBet ? "no_public_grade" : "store_as_lean"
+              : ouUnvalidatedFlipPublicPlayGrade !== null ? "store_as_watchlist" : "no_public_grade",
+            public_play_grade: ouMidEdgeFlipped && !ouNoBet ? "lean" : ouUnvalidatedFlipPublicPlayGrade,
             no_bet: ouNoBet,
             reason: ouNoBet
               ? ouNoBetReason
-              : "Flipped totals are actionable only as market_aligned Watchlist unless a validated correction cohort promotes them.",
+              : ouMidEdgeFlipped
+                ? "Chronologically validated 3-5pp totals inversion; priced opposite side is actionable as Lean, never Best Angle."
+                : "Flipped totals are actionable only as market_aligned Watchlist unless a validated correction cohort promotes them.",
           }
         : null,
       champion_candidate_correction: ouChampionStandDownReason === null
@@ -2748,7 +2859,7 @@ function buildOuRecord(
             reasons: ["projected_total_contradicts_total_pick"],
             replay_policy: "champion_candidate_guardrails_2026_07_08",
             projected_total: ouScoreSum,
-            line: ouBetLine,
+            line: finalOuBetLine,
             pick: finalOuPick,
           },
       data_integrity: buildDataIntegritySnapshot(sp, oddsForGame, "total"),
@@ -2812,14 +2923,14 @@ function buildOuRecord(
             public_best_angle: ouMarketAwareCorrectedGrade?.bestAngle ?? false,
             public_grade_reason: ouMarketAwareCorrectedGrade?.reason ?? null,
             validation_note:
-              "Historical MLB side-correction replay through 2026-07-10: totals split-signal rows improved when flipped before grading; corrected Best Angle promotion is limited to validated v3 plus-money cohorts.",
+              "Historical MLB side-correction replay through 2026-07-10: totals split-signal rows improved when flipped before grading; corrected Total Best Angle promotion remains limited to the validated plus-money cohorts.",
           }
         : null,
       // 2026-06-22 / 2026-07-11 — totals side-correction audit. Present only
       // when a correction fired; preserves the original probability side so the
       // override is fully reversible. The model's projected total and raw
       // probability are untouched.
-      ou_flip: ouFlipped || ouMarketFlipped || ouMarketSideCorrected
+      ou_flip: ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouMidEdgeFlipped
         ? {
             flipped: true,
             rule_id: ouCorrectionRuleId,
@@ -2829,11 +2940,12 @@ function buildOuRecord(
             original_confidence: pred.ou_confidence,
             original_model_prob: ouModelProb,
             original_odds: ouOddsAmerican,
-            // Bet-line basis: projected_total is the displayed score sum and
-            // `line` is the member's bet line — the pair the flip resolved on.
-            // market_total preserved alongside for audit when they differ.
+            // Bet-line basis: `line` is the corrected side's member-facing
+            // posted line; `original_side_line` preserves the line used before
+            // correction. Internal model totals remain alongside for audit.
             projected_total: ouScoreSum,
-            line: ouBetLine,
+            line: finalOuBetLine,
+            original_side_line: ouBetLine,
             market_total_internal: typeof v22.market_total === "number" ? (v22.market_total as number) : null,
             posterior_total_internal: typeof v22.posterior_total === "number" ? (v22.posterior_total as number) : null,
             mean_side: ouFlipped ? ouFlip.meanSide : null,
@@ -2843,6 +2955,11 @@ function buildOuRecord(
             opposing_public_split_conflict: ouMarketFlipped ? initialOuPublicSplitConflict : null,
             market_aware_side_correction: ouMarketSideCorrected,
             market_aware_reasons: ouMarketSideCorrection.applied === true ? ouMarketSideCorrection.reasons : null,
+            mid_edge_inversion: ouMidEdgeFlipped,
+            mid_edge_original_side: ouMidEdgeFlipped ? ouMidEdgeFlip.originalSide : null,
+            mid_edge_original_edge_pp: ouMidEdgeFlipped ? ouMidEdgeFlip.originalEdgePp : null,
+            mid_edge_min_pp: ouMidEdgeFlipped ? 3 : null,
+            mid_edge_max_pp_exclusive: ouMidEdgeFlipped ? 5 : null,
             flipped_pick: finalOuPick,
             flipped_odds: finalOuOdds,
             // Raw corrected-side probability — AUDIT ONLY, never shown to members.
@@ -2854,7 +2971,9 @@ function buildOuRecord(
               ? "projected mean/probability divergence, mean-side selector"
               : ouMarketFlipped
                 ? "market opposed weak total with opposing public split conflict"
-                : "market-aware total split signal fade",
+                : ouMarketSideCorrected
+                  ? "market-aware total split signal fade"
+                  : "chronologically validated 3-5pp totals edge inversion",
           }
         : null,
     },

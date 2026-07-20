@@ -17,6 +17,9 @@ import { flipRecommendationConfidence } from "./flipConfidence";
 
 export const TOTALS_MEAN_FLIP_RULE_ID = "totals_mean_side_selector_v2_2026_07_11";
 export const TOTALS_MARKET_OPPOSED_FLIP_RULE_ID = "totals_market_opposed_public_conflict_v1_2026_07_11";
+export const TOTALS_MID_EDGE_FLIP_RULE_ID = "totals_mid_edge_inversion_v1_2026_07_20";
+export const TOTALS_MID_EDGE_MIN_PCT = 3;
+export const TOTALS_MID_EDGE_MAX_PCT_EXCLUSIVE = 5;
 export const TOTALS_MARKET_OPPOSED_MAX_MODEL_PROB = 0.575;
 
 export type OuSide = "over" | "under";
@@ -84,6 +87,32 @@ export type TotalsMarketOpposedFlipResult =
     }
   | { action: "standdown"; reason: string }
   | { action: "none" };
+
+export type TotalsMidEdgeFlipInput = {
+  currentSide: OuSide | null;
+  currentEdgePp: number | null;
+  currentModelProb: number | null;
+  currentMarketProb: number | null;
+  currentConfidence: number | null;
+  overOdds: number | null;
+  underOdds: number | null;
+  priorCorrectionApplied: boolean;
+};
+
+export type TotalsMidEdgeFlipResult =
+  | {
+      action: "flip";
+      rule_id: typeof TOTALS_MID_EDGE_FLIP_RULE_ID;
+      originalSide: OuSide;
+      flippedSide: OuSide;
+      originalEdgePp: number;
+      flippedOdds: number;
+      flippedSideModelProb: number | null;
+      flippedMarketProb: number | null;
+      flippedEdgePp: number | null;
+      recommendationConfidence: number;
+    }
+  | { action: "none"; reason: string };
 
 function round1(n: number): number { return Math.round(n * 10) / 10; }
 function round2(n: number): number { return Math.round(n * 100) / 100; }
@@ -161,5 +190,54 @@ export function resolveTotalsMarketOpposedFlip(
     flippedMarketProb,
     flippedEdgePp: round1((flippedSideModelProb - flippedMarketProb) * 100),
     recommendationConfidence: flipRecommendationConfidence(i.originalConfidence),
+  };
+}
+
+/**
+ * Chronologically validated MLB correction (2026-07-20): uncorrected totals
+ * with a final absolute model-vs-market edge in [3pp, 5pp) were inverted in
+ * three consecutive windows. The opposite side is published only when it has
+ * a real price; existing mean/market-aware corrections are never double-flipped.
+ */
+export function resolveTotalsMidEdgeFlip(i: TotalsMidEdgeFlipInput): TotalsMidEdgeFlipResult {
+  if (i.priorCorrectionApplied) return { action: "none", reason: "prior_correction_applied" };
+  if (i.currentSide !== "over" && i.currentSide !== "under") {
+    return { action: "none", reason: "unsupported_side" };
+  }
+  if (i.currentEdgePp === null || !Number.isFinite(i.currentEdgePp)) {
+    return { action: "none", reason: "missing_edge" };
+  }
+  const absEdge = Math.abs(i.currentEdgePp);
+  if (absEdge < TOTALS_MID_EDGE_MIN_PCT || absEdge >= TOTALS_MID_EDGE_MAX_PCT_EXCLUSIVE) {
+    return { action: "none", reason: "outside_mid_edge_band" };
+  }
+
+  const flippedSide: OuSide = i.currentSide === "over" ? "under" : "over";
+  const flippedOdds = flippedSide === "over" ? i.overOdds : i.underOdds;
+  if (flippedOdds === null || !Number.isFinite(flippedOdds)) {
+    return { action: "none", reason: "missing_opposite_price" };
+  }
+
+  const flippedSideModelProb = i.currentModelProb !== null && Number.isFinite(i.currentModelProb)
+    ? 1 - i.currentModelProb
+    : null;
+  const flippedMarketProb = i.currentMarketProb !== null && Number.isFinite(i.currentMarketProb)
+    ? 1 - i.currentMarketProb
+    : null;
+  const recommendationConfidence = flipRecommendationConfidence(i.currentConfidence);
+
+  return {
+    action: "flip",
+    rule_id: TOTALS_MID_EDGE_FLIP_RULE_ID,
+    originalSide: i.currentSide,
+    flippedSide,
+    originalEdgePp: round1(i.currentEdgePp),
+    flippedOdds,
+    flippedSideModelProb,
+    flippedMarketProb,
+    flippedEdgePp: flippedMarketProb === null
+      ? null
+      : round1((recommendationConfidence / 100 - flippedMarketProb) * 100),
+    recommendationConfidence,
   };
 }

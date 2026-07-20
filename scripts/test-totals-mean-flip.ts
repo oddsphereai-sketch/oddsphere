@@ -6,8 +6,10 @@
  */
 import {
   resolveTotalsMarketOpposedFlip,
+  resolveTotalsMidEdgeFlip,
   resolveTotalsMeanFlip,
   TOTALS_MARKET_OPPOSED_FLIP_RULE_ID,
+  TOTALS_MID_EDGE_FLIP_RULE_ID,
   TOTALS_MEAN_FLIP_RULE_ID,
 } from "../lib/services/totalsMeanFlip";
 import { buildPredictionRecordsFromSlate } from "../lib/services/predictionRecordService";
@@ -75,6 +77,31 @@ check("market-opposed flip stands down when opposite price is missing", resolveT
   predictedSide: "over", modelProb: 0.56, marketProb: 0.49, opposingPublicSplitConflict: true,
   originalConfidence: 56, overOdds: -110, underOdds: null,
 }).action === "standdown");
+
+console.log("\n━━━ resolveTotalsMidEdgeFlip ━━━");
+const midEdgeBase = {
+  currentSide: "over" as const,
+  currentEdgePp: 3.8,
+  currentModelProb: 0.558,
+  currentMarketProb: 0.52,
+  currentConfidence: 56,
+  overOdds: -110,
+  underOdds: -105,
+  priorCorrectionApplied: false,
+};
+{
+  const r = resolveTotalsMidEdgeFlip(midEdgeBase);
+  check("3-5pp uncorrected total flips to priced opposite side", r.action === "flip" && r.flippedSide === "under" && r.flippedOdds === -105);
+  check("mid-edge flip stamps dedicated rule", r.action === "flip" && r.rule_id === TOTALS_MID_EDGE_FLIP_RULE_ID);
+  check("mid-edge flip preserves original edge for audit", r.action === "flip" && r.originalEdgePp === 3.8);
+  check("mid-edge flip uses presentable recommendation confidence", r.action === "flip" && r.recommendationConfidence >= 55 && r.recommendationConfidence <= 60);
+}
+check("3.0pp lower boundary qualifies", resolveTotalsMidEdgeFlip({ ...midEdgeBase, currentEdgePp: 3 }).action === "flip");
+check("negative 3-5pp edge qualifies by absolute magnitude", resolveTotalsMidEdgeFlip({ ...midEdgeBase, currentEdgePp: -4.9 }).action === "flip");
+check("5.0pp upper boundary does not qualify", resolveTotalsMidEdgeFlip({ ...midEdgeBase, currentEdgePp: 5 }).action === "none");
+check("below 3.0pp does not qualify", resolveTotalsMidEdgeFlip({ ...midEdgeBase, currentEdgePp: 2.9 }).action === "none");
+check("missing opposite price leaves original prediction unchanged", resolveTotalsMidEdgeFlip({ ...midEdgeBase, underOdds: null }).action === "none");
+check("prior correction is never double-flipped", resolveTotalsMidEdgeFlip({ ...midEdgeBase, priorCorrectionApplied: true }).action === "none");
 
 // ── integration ────────────────────────────────────────────────────
 const baseGame = { id: 800, external_id: 9100, game_date: "2026-06-22T18:00:00Z", slate_status: "published", home_team_id: 771, away_team_id: 780 };
@@ -190,6 +217,30 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   check("bet-line basis: resolves vs book line 9.0 (not market_total 8.5) → no flip, pick under",
     ou?.pick === "under" && (ou?.snapshot_json as any)?.ou_flip == null);
   check("bet-line basis: line_value tracks the bet line 9.0", ou?.line_value === 9.0);
+}
+{
+  const pred = mkPred({}, { ou_model_prob: 0.558, ou_market_prob: 0.52, ou_edge_pct: 3.8, posterior_total: 8.9 });
+  pred.predicted_ou_side = "over";
+  pred.ou_confidence = 56;
+  const odds = oddsSnap(-110, -105);
+  odds.oddsSourceOu.over.line = 8.5;
+  odds.oddsSourceOu.under.line = 9;
+  const recs = build(pred, odds);
+  const ou = recs.find((r) => r.market === "total");
+  const f = (ou?.snapshot_json as any)?.ou_flip;
+  const gradeResolution = (ou?.snapshot_json as any)?.total_flip_public_grade_resolution;
+  check("3-5pp integration flips uncorrected total to opposite side", ou?.pick === "under" && ou?.odds_american === -105);
+  check("3-5pp integration carries the corrected side's exact line", ou?.line_value === 9);
+  check("3-5pp integration publishes validated Lean, never Best Angle", ou?.play_grade === "lean" && ou?.best_angle === false && ou?.no_bet === false);
+  check("3-5pp integration stamps dedicated audit metadata", f?.rule_id === TOTALS_MID_EDGE_FLIP_RULE_ID && f?.mid_edge_inversion === true && f?.mid_edge_original_edge_pp === 3.8);
+  check("3-5pp integration records Lean resolution", gradeResolution?.action === "store_as_lean" && gradeResolution?.public_play_grade === "lean");
+}
+{
+  const pred = mkPred({}, { ou_model_prob: 0.558, ou_market_prob: 0.52, ou_edge_pct: 3.8, posterior_total: 8.9 });
+  pred.predicted_ou_side = "over";
+  const recs = build(pred, oddsSnap(-110, null));
+  const ou = recs.find((r) => r.market === "total");
+  check("3-5pp integration never flips without opposite price", ou?.pick === "over" && (ou?.snapshot_json as any)?.ou_flip == null);
 }
 {
   // Determinism: build twice → identical flipped side (locked snapshot freezes).

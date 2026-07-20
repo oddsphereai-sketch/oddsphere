@@ -20,6 +20,8 @@ import {
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
   GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
   MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
+  ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID,
+  resolveMlTightMarketPriceBestAngle,
 } from "../lib/services/predictionRecordService";
 import { MLB_MODEL_LAYER_VERSION_SCHEMA } from "../lib/automodel/mlbModelLayerVersions";
 import { TOTALS_MARKET_OPPOSED_FLIP_RULE_ID } from "../lib/services/totalsMeanFlip";
@@ -61,6 +63,24 @@ function check(label: string, ok: boolean, detail?: string): void {
   if (ok) { pass++; console.log(`  ✓ ${label}`); }
   else { fail++; failures.push(`${label}${detail ? ` — ${detail}` : ""}`); console.log(`  ✗ ${label}${detail ? ` — ${detail}` : ""}`); }
 }
+
+console.log("━━━ MLB tight market-price Best Angle resolver ━━━");
+const tightMarketPriceBase = {
+  blocked: false,
+  side: "home",
+  edgePct: 0.5,
+  oddsAmerican: -145,
+  lineDirection: "neutral" as const,
+  publicSplitConflict: false,
+};
+check("clean -131..-160 moneyline within 1pp promotes", resolveMlTightMarketPriceBestAngle(tightMarketPriceBase).bestAngle === true);
+check("-160 price boundary promotes", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, oddsAmerican: -160 }).bestAngle === true);
+check("-131 price boundary promotes", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, oddsAmerican: -131 }).bestAngle === true);
+check("edge -1 boundary promotes", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, edgePct: -1 }).bestAngle === true);
+check("edge +1 upper boundary does not promote", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, edgePct: 1 }).bestAngle === false);
+check("movement against pick blocks promotion", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, lineDirection: "against_pick" }).bestAngle === false);
+check("opposing split conflict blocks promotion", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, publicSplitConflict: true }).bestAngle === false);
+check("corrected/blocked row cannot promote", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, blocked: true }).bestAngle === false);
 
 // ── Game + prediction fixtures ────────────────────────────────────
 const baseGame = {
@@ -520,8 +540,8 @@ console.log("\n━━━ MLB ML clean tight-edge Best Angle promotion ━━━"
       v2_2_audit: {
         ml_play_grade: "market_aligned",
         ml_model_prob: 0.56,
-        ml_market_prob: 0.55,
-        ml_edge_pct: 1.0,
+        ml_market_prob: 0.553,
+        ml_edge_pct: 0.7,
         posterior_home_diff: 0.4,
       },
     },
@@ -554,10 +574,66 @@ console.log("\n━━━ MLB ML clean tight-edge Best Angle promotion ━━━"
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
   const promo = (ml.snapshot_json as any)?.ml_clean_tight_edge_best_angle_promotion;
+  const secondPromo = (ml.snapshot_json as any)?.ml_tight_market_price_best_angle_promotion;
   const ba = (ml.snapshot_json as any)?.best_angle_resolution;
   check("clean tight-edge ML promotes to Best Angle", ml.best_angle === true && ml.play_grade === "best_angle");
   check("clean tight-edge ML promotion audit is stamped", promo?.rule_id === "ml_clean_tight_edge_best_angle_v1_2026_07_11");
+  check("overlapping ML promotion cohorts stamp exactly one rule", secondPromo === null);
   check("clean tight-edge ML final BA resolution reflects promotion", ba?.clean_tight_edge_promotion === true && ba?.final_best_angle === true);
+}
+
+console.log("\n━━━ MLB tight market-price Best Angle integration ━━━");
+{
+  const tightMarketMlPred = {
+    ...basePrediction,
+    predicted_ml_winner: "home",
+    ml_confidence: 59,
+    predicted_home_score: 4.8,
+    predicted_away_score: 4.2,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ml_play_grade: "market_aligned",
+      ml_best_angle_eligible: false,
+      v2_2_audit: {
+        ml_play_grade: "market_aligned",
+        ml_model_prob: 0.59,
+        ml_market_prob: 0.585,
+        ml_edge_pct: 0.5,
+        posterior_home_diff: 0.6,
+      },
+    },
+  };
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -145,
+      mlAwayOdds: 125,
+      ouOverOdds: -110,
+      ouUnderOdds: -110,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -145, line: null, observedAt: "2026-07-20T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 125, line: null, observedAt: "2026-07-20T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-20T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-20T16:00:00Z" },
+      },
+    }],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-20",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, tightMarketMlPred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    signalsByGameId: new Map(),
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  const promo = (ml.snapshot_json as any)?.ml_tight_market_price_best_angle_promotion;
+  check("tight market-price ML promotes to Best Angle", ml.best_angle === true && ml.play_grade === "best_angle");
+  check("tight market-price promotion audit is stamped", promo?.rule_id === ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID);
 }
 
 console.log("\n━━━ MLB market-aware final side correction ━━━");
@@ -612,7 +688,7 @@ console.log("\n━━━ MLB market-aware final side correction ━━━");
   const ml = recs.find((r) => r.market === "moneyline")!;
   const correction = (ml.snapshot_json as any)?.market_aware_side_correction;
   check("ML market-aware correction flips to priced opposite side", ml.pick === "away" && ml.odds_american === 125 && ml.confidence === 56);
-  check("ML market-aware correction can earn calibrated Best Angle", ml.best_angle === true && ml.play_grade === "best_angle" && ml.no_bet === false);
+  check("ML market-aware correction is capped below Best Angle", ml.best_angle === false && ml.play_grade === "market_aligned" && ml.no_bet === false);
   check(
     "ML market-aware correction audit is stamped",
     correction?.rule_id === MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID &&
@@ -670,7 +746,7 @@ console.log("\n━━━ MLB market-aware final side correction ━━━");
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
   const championCorrection = (ml.snapshot_json as any)?.champion_candidate_correction;
-  check("ML market-aware correction clears stale projection-conflict no-bet", ml.pick === "away" && ml.best_angle === true && ml.play_grade === "best_angle" && ml.no_bet === false);
+  check("ML market-aware correction clears stale projection-conflict no-bet but remains below Best Angle", ml.pick === "away" && ml.best_angle === false && ml.play_grade === "market_aligned" && ml.no_bet === false);
   check("ML market-aware correction does not keep original-side champion stand-down", championCorrection === null);
 }
 {
@@ -1584,7 +1660,9 @@ console.log("\n━━━ Total record selected-line basis ━━━");
     ou_confidence: 55.2,
     sport_specific: {
       ...v21SportSpecific,
-      v2_2_audit: { market_total: 8, ou_model_prob: 0.552, ou_market_prob: 0.519, ou_edge_pct: 3.3 },
+      // Keep this selected-line storage test outside the calibrated 3-5pp
+      // inversion band; that behavior has its own integration coverage.
+      v2_2_audit: { market_total: 8, ou_model_prob: 0.548, ou_market_prob: 0.519, ou_edge_pct: 2.9 },
     },
   };
   const recs = buildPredictionRecordsFromSlate({
