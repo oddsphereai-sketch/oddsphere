@@ -237,10 +237,13 @@ function alignMarketReadToResolvedConsensus(
 /**
  * Final response-coherence pass. Some source-aware recommendation inputs and
  * the optional dual-provider display overlay are resolved after the initial
- * Market Read snapshot. At the API boundary the rows users actually see are
- * authoritative for consensus display, so mirror the picked row into the
- * scalar fields and Market Read copy. This never changes a pick, model value,
- * price, probability, edge, verdict, or grade.
+ * Market Read snapshot. The source-aware consensus stored on the canonical
+ * recommendation decision is the authority when it has a complete two-sided
+ * section because that is the consensus the recommendation actually used.
+ * Mirror it into the collapsed bars/scalars and Market Read copy. If that
+ * section is absent, retain the resolved public-splits display as the fallback.
+ * This never changes a pick, model value, price, probability, edge, verdict,
+ * or grade.
  */
 export function alignMarketReadsToDisplayedPublicSplits(
   games: DailyEdgeGameDto[],
@@ -248,8 +251,18 @@ export function alignMarketReadsToDisplayedPublicSplits(
   for (const game of games) {
     for (const market of ["moneyline", "total"] as Market[]) {
       const dto = (game.markets as Record<string, MarketEdgeDto | undefined>)[market];
-      if (!dto || !dto.marketReadV2) continue;
+      if (!dto) continue;
       const picked = pickedDisplaySide(market, dto, game.homeTeam, game.awayTeam);
+      const expectedSides = SIDES[market];
+      const recommendationRows = dto.recommendationDecision?.consensusSplits?.rows ?? [];
+      const recommendationIsComplete = expectedSides.every((side) =>
+        recommendationRows.some((row) =>
+          row.side === side && (isPct(row.moneyPct) || isPct(row.betsPct)),
+        ),
+      );
+      if (recommendationIsComplete) {
+        dto.publicSplits = recommendationRows.map((row) => ({ ...row }));
+      }
       const pickedRow = picked
         ? dto.publicSplits.find((row) => row.side === picked)
         : null;
@@ -261,11 +274,13 @@ export function alignMarketReadsToDisplayedPublicSplits(
       dto.betsPctObservedAt = pickedRow.observedAt ?? null;
       dto.moneyPctIsStale = pickedRow.isStale ?? false;
       dto.betsPctIsStale = pickedRow.isStale ?? false;
-      dto.marketReadV2 = alignMarketReadToResolvedConsensus(dto.marketReadV2, {
-        moneyPct: pickedRow.moneyPct,
-        betsPct: pickedRow.betsPct,
-        observedAt: pickedRow.observedAt ?? null,
-      });
+      if (dto.marketReadV2) {
+        dto.marketReadV2 = alignMarketReadToResolvedConsensus(dto.marketReadV2, {
+          moneyPct: pickedRow.moneyPct,
+          betsPct: pickedRow.betsPct,
+          observedAt: pickedRow.observedAt ?? null,
+        });
+      }
     }
   }
   return games;

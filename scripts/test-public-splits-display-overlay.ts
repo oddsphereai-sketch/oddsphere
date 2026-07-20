@@ -114,6 +114,28 @@ check("final coherence pass preserves the existing book count when display rows 
 check("final coherence pass updates qualitative copy for opposing consensus", sourceAwareMl.marketReadV2?.explanation === "The model edge is clear, but betting consensus is not fully aligned.");
 check("final coherence pass never changes the pick", sourceAwareMl.pick === "WSH");
 
+const expandedReaderAuthority = game();
+expandedReaderAuthority.markets.moneyline!.publicSplits = [
+  { side: "home", label: "BAL", moneyPct: 35, betsPct: 39, observedAt: "2026-06-27T16:00:00.000Z", isStale: true },
+  { side: "away", label: "WSH", moneyPct: 65, betsPct: 61, observedAt: "2026-06-27T16:00:00.000Z", isStale: true },
+];
+expandedReaderAuthority.markets.moneyline!.recommendationDecision = {
+  consensusSplits: {
+    label: "Consensus Splits",
+    rows: [
+      { side: "home", label: "BAL", moneyPct: 37, betsPct: 41, observedAt: "2026-06-27T17:00:00.000Z" },
+      { side: "away", label: "WSH", moneyPct: 63, betsPct: 59, observedAt: "2026-06-27T17:00:00.000Z" },
+    ],
+    signal: null,
+    lastUpdated: "2026-06-27T17:00:00.000Z",
+  },
+} as NonNullable<typeof expandedReaderAuthority.markets.moneyline>["recommendationDecision"];
+alignMarketReadsToDisplayedPublicSplits([expandedReaderAuthority]);
+const expandedMl = expandedReaderAuthority.markets.moneyline!;
+check("canonical recommendation consensus replaces stale collapsed bars", expandedMl.publicSplits[1]?.moneyPct === 63 && expandedMl.publicSplits[1]?.betsPct === 59);
+check("Market Read follows canonical recommendation consensus", expandedMl.marketReadV2?.consensus?.moneyPct === 0.63 && expandedMl.marketReadV2?.consensus?.betsPct === 0.59);
+check("canonical consensus alignment leaves the pick unchanged", expandedMl.pick === "WSH");
+
 if (fail > 0) {
   console.error(`public splits display overlay tests: ${pass} passed, ${fail} failed`);
   process.exit(1);

@@ -100,6 +100,20 @@ function board(market: Record<string, unknown>) {
 {
   const result = auditDailyEdgeBoards({
     mlb: board({
+      publicSplits: [{ side: "home", label: "BOS", moneyPct: 65, betsPct: 61 }],
+      recommendationDecision: {
+        consensusSplits: {
+          rows: [{ side: "home", label: "BOS", moneyPct: 63, betsPct: 59 }],
+        },
+      },
+    }),
+  });
+  check("collapsed and expanded consensus mismatch is warning", result.summary.issueCounts.consensus_reader_mismatch === 1);
+}
+
+{
+  const result = auditDailyEdgeBoards({
+    mlb: board({
       priceAmerican: -145,
       lineOpenAmerican: null,
       lockedLineAmerican: -145,
