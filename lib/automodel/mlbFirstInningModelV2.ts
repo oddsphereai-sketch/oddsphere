@@ -23,6 +23,7 @@ import {
   projectFiIndependent,
   type FiIndependentProjection,
   type FiFeatureAudit,
+  type FiFeatureSource,
 } from "./mlbFirstInningFeatureBuilder";
 import {
   computeFiMarketBaseline,
@@ -265,20 +266,29 @@ export function runMlbFirstInningModelV2(
   posteriorNrfi = clamp(posteriorNrfi, 0.02, 0.98);
   const posteriorYrfi = 1 - posteriorNrfi;
 
+  const awayStarterFiPreferred = indep.feature_audit.away_starter_fi.source === "preferred";
+  const homeStarterFiPreferred = indep.feature_audit.home_starter_fi.source === "preferred";
+  const starterFiFullyPreferred = awayStarterFiPreferred && homeStarterFiPreferred;
+  const starterFiSourcePublishable = (source: FiFeatureSource) =>
+    source === "preferred" || source === "proxy";
   const provisional =
     !hasMarket ||
     indep.feature_audit.missing_count >= 5 ||
-    indep.data_quality_tier === "fallback";
+    indep.data_quality_tier === "fallback" ||
+    !starterFiFullyPreferred;
   if (provisional && !hasMarket) integrityNotes.push("No FI market line; prediction marked provisional.");
   if (indep.feature_audit.missing_count >= 5) integrityNotes.push(`Sparse FI features (${indep.feature_audit.missing_count} missing).`);
   if (indep.data_quality_tier === "fallback") integrityNotes.push("FI tier=fallback (key starter missing).");
+  if (!starterFiFullyPreferred && indep.data_quality_tier !== "fallback") {
+    integrityNotes.push("Starter FI history uses a real season-ERA proxy; prediction is provisional and capped below Best Angle.");
+  }
 
   const freshDataBlockers: string[] = [];
   if (!hasMarket) freshDataBlockers.push("fi_market_not_fresh_or_two_sided");
-  if (indep.feature_audit.away_starter_fi.source !== "preferred") {
+  if (!starterFiSourcePublishable(indep.feature_audit.away_starter_fi.source)) {
     freshDataBlockers.push(`away_batting_opposing_starter_fi_${indep.feature_audit.away_starter_fi.source}`);
   }
-  if (indep.feature_audit.home_starter_fi.source !== "preferred") {
+  if (!starterFiSourcePublishable(indep.feature_audit.home_starter_fi.source)) {
     freshDataBlockers.push(`home_batting_opposing_starter_fi_${indep.feature_audit.home_starter_fi.source}`);
   }
   const awayLineupPublishable =

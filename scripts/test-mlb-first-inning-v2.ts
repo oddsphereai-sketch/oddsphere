@@ -321,13 +321,14 @@ async function main() {
     // baseline used `updated_at` which doesn't exist on the `lines`
     // table. The schema field is `fetched_at`. If anyone reverts the
     // type, this test asserts the contract.
+    const freshObservedAt = new Date().toISOString();
     const probe: FiLineRow = {
       market_type: "first_inning_total",
       sportsbook: "betmgm",
       side: "over",
       line_value: 0.5,
       odds_american: -105,
-      fetched_at: "2026-06-06T18:00:00Z",
+      fetched_at: freshObservedAt,
     };
     check("FiLineRow accepts fetched_at field",
       typeof probe.fetched_at === "string");
@@ -337,7 +338,7 @@ async function main() {
       { ...probe, side: "under", odds_american: 105 },
     ]);
     check("baseline.freshness reads from fetched_at",
-      baseline.freshness === "2026-06-06T18:00:00Z");
+      baseline.freshness === freshObservedAt);
   }
 
   section("Push 3B-2 — non-priority books still work (fall-through)");
@@ -447,6 +448,21 @@ async function main() {
     check("missing starter → predicted_nrfi=null (held)", out.predicted_nrfi === null);
     check("missing starter → fi_no_bet_reason set", out.fiV2Audit.fi_no_bet_reason !== null);
     check("missing starter → BA eligible=false", out.fiV2Audit.fi_best_angle_eligible === false);
+  }
+  {
+    // Real season ERA is an intentional FI proxy. It is sufficient to
+    // publish a direction, but must remain provisional/Lean-only until
+    // preferred first-inning history is available.
+    const snap = buildSnapshot({
+      homeStarter: { season_era: 3.60, first_inning_era: null, first_inning_starts: null },
+      awayStarter: { season_era: 4.40, first_inning_era: null, first_inning_starts: null },
+    });
+    const out = runMlbFirstInningModelV2(snap, buildFiLines(110, -130));
+    check("season-ERA starter proxies → FI side is not Held", out.fiV2Audit.fi_pick !== "Held");
+    check("season-ERA starter proxies → fresh-data gate passes", out.fiV2Audit.fresh_data_ready === true);
+    check("season-ERA starter proxies → prediction remains provisional", out.fiV2Audit.provisional === true);
+    check("season-ERA starter proxies → Best Angle remains blocked", out.fiV2Audit.fi_best_angle_eligible === false);
+    check("season-ERA starter proxies → grade capped at Lean", out.fiV2Audit.fi_play_grade === "lean");
   }
   {
     // No market → provisional + lean cap (no Best Angle)
