@@ -66,6 +66,7 @@ import {
   resolveEffectiveVersion,
   type AutomodelVersion,
 } from "../automodel/modelVersion";
+import { assertMlbChampionVersions } from "../automodel/mlbChampionRuntime";
 import {
   MODEL_VERSION_V2,
   MODEL_VERSION_V2_1,
@@ -472,6 +473,16 @@ export async function generatePredictionsForSlate(
   // member-facing first-inning surface. Defaults to the FI V2 champion
   // path; explicit FIRST_INNING_MODEL_VERSION=legacy remains the rollback.
   const firstInningVersion = resolveFirstInningModelVersion();
+
+  // Enforce the champion at the write boundary, not only in scheduled route
+  // wrappers. This also protects repair, streaming, adapter, and operator
+  // entry points, including explicit per-call model overrides.
+  if (sport === "mlb" && wantWrite) {
+    assertMlbChampionVersions({
+      automodel: effectiveVersion,
+      firstInning: firstInningVersion,
+    });
+  }
 
   // Two-key gate (Phase 3C): EITHER missing while caller asked for a
   // write → throw immediately, BEFORE any DB read or model work. This is

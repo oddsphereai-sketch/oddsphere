@@ -92,8 +92,10 @@ function roundNullable(value: number | null): number | null {
   return finite(value) ? round1(value) : null;
 }
 
-export function readWnbaCoreModelCalibrationFlagsFromEnv() {
-  const enabledUnlessFalse = (name: string) => process.env[name] !== "false";
+export function readWnbaCoreModelCalibrationFlagsFromEnv(
+  env: Record<string, string | undefined> = process.env,
+) {
+  const enabledUnlessFalse = (name: string) => env[name] !== "false";
   return {
     coreModelEnabled: enabledUnlessFalse("WNBA_CORE_MODEL_CALIBRATION_ENABLED"),
     totalProjectionCalibrationEnabled:
@@ -101,9 +103,9 @@ export function readWnbaCoreModelCalibrationFlagsFromEnv() {
     spreadMarginCalibrationEnabled:
       enabledUnlessFalse("WNBA_SPREAD_MARGIN_CALIBRATION_ENABLED"),
     totalRecommendationUsesCalibratedProjection:
-      process.env.WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED !== "false",
+      env.WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED !== "false",
     spreadRecommendationUsesCalibratedMargin:
-      process.env.WNBA_SPREAD_RECOMMENDATION_USES_CALIBRATED_MARGIN_ENABLED !== "false",
+      env.WNBA_SPREAD_RECOMMENDATION_USES_CALIBRATED_MARGIN_ENABLED !== "false",
     gradeCalibrationEnabled: enabledUnlessFalse("WNBA_GRADE_CALIBRATION_ENABLED"),
   };
 }

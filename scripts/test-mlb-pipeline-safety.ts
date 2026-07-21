@@ -9,6 +9,10 @@ import {
 } from "../lib/automodel/mlbModelLayerVersions";
 import { withPredictionGradeHistory } from "../lib/services/predictionRecordService";
 import { assertMlbChampionRuntime } from "../lib/automodel/mlbChampionRuntime";
+import {
+  assertWnbaChampionRuntime,
+  EXPECTED_WNBA_MODEL_VERSION,
+} from "../lib/automodel/wnbaChampionRuntime";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 
 let passed = 0;
@@ -53,6 +57,32 @@ check("champion runtime accepts resolved defaults", (() => {
 check("champion runtime refuses an explicit old model", (() => {
   try { assertMlbChampionRuntime({ AUTOMODEL_VERSION: "v1" }); return false; } catch { return true; }
 })());
+check("WNBA model version is single-sourced", EXPECTED_WNBA_MODEL_VERSION === "wnba_v1");
+const wnbaChampionEnv = {
+  WNBA_CORE_MODEL_CALIBRATION_ENABLED: "true",
+  WNBA_TOTAL_PROJECTION_CALIBRATION_ENABLED: "true",
+  WNBA_SPREAD_MARGIN_CALIBRATION_ENABLED: "true",
+  WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED: "false",
+  WNBA_SPREAD_RECOMMENDATION_USES_CALIBRATED_MARGIN_ENABLED: "true",
+  WNBA_GRADE_CALIBRATION_ENABLED: "true",
+};
+check("WNBA champion runtime accepts the production calibration", (() => {
+  try { assertWnbaChampionRuntime(wnbaChampionEnv); return true; } catch { return false; }
+})());
+check("WNBA champion runtime refuses calibration drift", (() => {
+  try {
+    assertWnbaChampionRuntime({
+      ...wnbaChampionEnv,
+      WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED: "true",
+    });
+    return false;
+  } catch { return true; }
+})());
+check(
+  "WNBA daily refresh joins the shared prediction lease",
+  resolveCronLeaseJobName("wnba_daily_refresh", "wnba", "prediction_pipeline") ===
+    resolveCronLeaseJobName("tracking_refresh", "wnba", "prediction_pipeline"),
+);
 
 const base: PredictionRecordRow = {
   game_prediction_id: 1,
