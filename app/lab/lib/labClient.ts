@@ -33,10 +33,15 @@ function timeoutMsForLabUrl(url: string): number {
 export async function labFetcher<T>(url: string): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMsForLabUrl(url));
+  const isDailyEdge = url.startsWith("/api/lab/daily-edge") || url.includes("/api/lab/daily-edge?");
   try {
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
-      cache: "no-store",
+      // Daily Edge is identical for every member and carries a short CDN TTL.
+      // Allow that shared cache to absorb navigation/refetch bursts instead of
+      // forcing every browser request through to Supabase. Other Lab endpoints
+      // keep their existing explicit no-store request behavior.
+      cache: isDailyEdge ? "default" : "no-store",
       signal: controller.signal,
     });
     if (!res.ok) {

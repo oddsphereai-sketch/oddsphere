@@ -144,11 +144,11 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const VALID_SPORTS: Sport[] = ["mlb", "nba", "nfl", "cbb", "cfb", "nhl", "ucl", "soccer", "wnba"];
-const DAILY_EDGE_CACHE_CONTROL = "private, no-store, no-cache, max-age=0, must-revalidate";
+const DAILY_EDGE_CACHE_CONTROL = "public, s-maxage=15, stale-while-revalidate=60";
 const DAILY_EDGE_NO_STORE_HEADERS = {
   "Cache-Control": DAILY_EDGE_CACHE_CONTROL,
-  "CDN-Cache-Control": "no-store",
-  "Vercel-CDN-Cache-Control": "no-store",
+  "CDN-Cache-Control": DAILY_EDGE_CACHE_CONTROL,
+  "Vercel-CDN-Cache-Control": DAILY_EDGE_CACHE_CONTROL,
 } as const;
 const DAILY_EDGE_ERROR_CACHE_CONTROL = "no-store";
 const DAILY_EDGE_WARM_CACHE_TTL_MS = 30 * 1000;
