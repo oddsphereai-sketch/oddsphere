@@ -47,6 +47,7 @@ import { supabase } from "@/lib/db/supabase";
 import { linesService } from "@/lib/services/linesService";
 import { generatePredictionsForSlate } from "@/lib/services/automodelService";
 import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
+import { assertWnbaChampionRuntime } from "@/lib/automodel/wnbaChampionRuntime";
 import { createPredictionRecords } from "@/lib/services/predictionRecordService";
 import { assessMlbLockCoherence } from "@/lib/services/mlbLockCoherence";
 import { updateMarketSignalsForSlate } from "@/lib/services/marketSignalDerivationService";
@@ -292,6 +293,7 @@ export async function GET(request: Request) {
     pregameSweepSports(),
     async ({ sport }) => {
       if (sport === "mlb" && !dryRun && gateActive) assertMlbChampionRuntime();
+      if (sport === "wnba" && !dryRun && gateActive) assertWnbaChampionRuntime();
       // ── Master gate (write-mode only) ───────────────────────────────
       // Dry-run mode is always allowed. Write mode requires the
       // PREGAME_SWEEP_CRON_ACTIVE env flag. Missing → structured

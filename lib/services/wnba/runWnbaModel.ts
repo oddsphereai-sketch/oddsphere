@@ -12,6 +12,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDaysToSlate, currentSlateDate } from "../../dates/slateDate";
 import { getModel, computeWnbaPrediction, SHARP_BOOKS, type OddRow, type WnbaPublicMarketSignals } from "./buildWnbaDailyEdgePreview";
+import {
+  assertWnbaChampionRuntime,
+  EXPECTED_WNBA_MODEL_VERSION,
+} from "../../automodel/wnbaChampionRuntime";
 
 // DB market_type → the SharpAPI-style key computeWnbaPrediction expects.
 const MKT_TO_MODEL: Record<string, string> = { moneyline: "moneyline", spread: "point_spread", total: "total_points" };
@@ -46,6 +50,7 @@ export async function runWnbaModel(opts: {
   logger?: (m: string) => void;
 }): Promise<RunWnbaModelResult> {
   const { supabase, apply, windowDays = 3, logger = () => {} } = opts;
+  if (apply) assertWnbaChampionRuntime();
   const errors: string[] = [];
   const M = await getModel();
 
@@ -185,7 +190,7 @@ export async function runWnbaModel(opts: {
 
     payloads.push({
       game_id: g.id, prediction_source: "auto_v1_wnba", source_type: "real_api", is_override: false,
-      model_version: "wnba_v1", computed_at: computedAt,
+      model_version: EXPECTED_WNBA_MODEL_VERSION, computed_at: computedAt,
       predicted_ml_winner: p.moneyline.side === p.home ? "home" : "away",
       ml_confidence: p.moneyline.confidence,
       predicted_ou_side: p.total.side ? (p.total.side.startsWith("Over") ? "over" : "under") : null,
@@ -193,7 +198,7 @@ export async function runWnbaModel(opts: {
       predicted_home_score: p.projected_score.home, predicted_away_score: p.projected_score.away, predicted_total: Math.round((p.projected_score.home + p.projected_score.away) * 10) / 10,
       // Grades live in sport_specific (avoid any CHECK constraint on the MLB-shaped grade columns).
       sport_specific: {
-        model_version: "wnba_v1", model: p.model, market: p.market, trusted: p.trusted, sharp: p.sharp,
+        model_version: EXPECTED_WNBA_MODEL_VERSION, model: p.model, market: p.market, trusted: p.trusted, sharp: p.sharp,
         consensus_source: p.consensus_source, dynamic_market_weight: p.dynamic_market_weight,
         cold_start: p.cold_start, data_quality: p.data_quality,
         wnba_core_model_calibration: p.wnba_core_model_calibration,

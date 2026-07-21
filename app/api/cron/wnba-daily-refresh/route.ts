@@ -30,6 +30,7 @@ import { buildWnbaPredictionRecords } from "@/lib/services/wnba/buildWnbaPredict
 import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
 import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
+import { assertWnbaChampionRuntime } from "@/lib/automodel/wnbaChampionRuntime";
 
 const WNBA_CRON_ENV = "WNBA_CRON_ENABLED";
 
@@ -46,6 +47,7 @@ export async function GET(request: Request): Promise<Response> {
       if (process.env[WNBA_CRON_ENV] !== "true") {
         return { records_updated: 0, details: { disabled: true, reason: `${WNBA_CRON_ENV}!=true` } };
       }
+      assertWnbaChampionRuntime();
       // ─── Gate 2: required keys (config errors, not data conditions) ─
       if (!process.env.BALLDONTLIE_API_KEY) throw new Error("BALLDONTLIE_API_KEY missing from env");
       if (!process.env.SHARPAPI_KEY) throw new Error("SHARPAPI_KEY missing from env");
@@ -192,6 +194,11 @@ export async function GET(request: Request): Promise<Response> {
         details,
       };
     },
-    { sport: "wnba" },
+    {
+      sport: "wnba",
+      leaseGroup: "prediction_pipeline",
+      requireLease: true,
+      lockMinutes: 10,
+    },
   );
 }

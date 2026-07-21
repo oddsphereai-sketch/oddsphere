@@ -23,6 +23,10 @@ import {
   readWnbaCoreModelCalibrationFlagsFromEnv,
   type WnbaCoreModelCalibrationAudit,
 } from "../../automodel/wnbaCoreModelCalibration";
+import {
+  assertWnbaChampionRuntime,
+  EXPECTED_WNBA_MODEL_VERSION,
+} from "../../automodel/wnbaChampionRuntime";
 
 const PLAY_GRADE: Record<string, string> = { "Best Angle": "best_angle", "Lean": "lean", "Watchlist": "watchlist", "Caution": "caution" };
 const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]! : null);
@@ -58,6 +62,7 @@ export async function buildWnbaPredictionRecords(opts: {
   logger?: (m: string) => void;
 }): Promise<WnbaRecordsResult> {
   const { supabase, apply, slateDate, windowDays = 0, logger = () => {} } = opts;
+  if (apply) assertWnbaChampionRuntime();
   const errors: string[] = [];
   const today = slateDate ?? currentSlateDate("wnba");
   const end = addDaysToSlate(today, windowDays);
@@ -231,7 +236,7 @@ export async function buildWnbaPredictionRecords(opts: {
       game_prediction_id: gp.id, game_id: g.id, external_id: g.external_id, sport: "wnba",
       slate_date: slate, game_date: g.game_date, matchup, market: market_type, pick, side,
       line_value, odds_american: odds, odds_decimal: toDecimal(odds),
-      model_used: "wnba_v1", model_version: "wnba_v1", prediction_source: "auto_v1_wnba",
+      model_used: EXPECTED_WNBA_MODEL_VERSION, model_version: EXPECTED_WNBA_MODEL_VERSION, prediction_source: "auto_v1_wnba",
       confidence, model_probability: modelProb, market_probability: mktProb,
       edge: modelProb != null && mktProb != null ? Math.round((modelProb - mktProb) * 1000) / 10 : null,
       play_grade: gradeStr ? PLAY_GRADE[gradeStr] ?? "watchlist" : null,
