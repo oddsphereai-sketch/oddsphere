@@ -198,6 +198,40 @@ assert.equal(moved.changedLines, 1);
 assert.equal(moved.changedPrices, 1);
 assert.equal(moved.addedRows, 0);
 
+const rotatedProviderQuote = compareMlbPropsBoardMovement(previous, [row({
+  providerIds: {
+    gameId: "mlbstats-game-1",
+    bdlGameId: "10",
+    bdlPropId: "replacement-provider-quote-id",
+    bdlPlayerId: 20,
+    mlbStatsPlayerId: "mlbstats-player-30",
+  },
+})]);
+assert.deepEqual(rotatedProviderQuote, {
+  comparedWith: "snapshot-1",
+  changedPrices: 0,
+  changedLines: 0,
+  addedRows: 0,
+  removedRows: 0,
+}, "refresh-scoped provider quote IDs do not create false row turnover");
+
+const rotatedQuoteWithMarketMove = compareMlbPropsBoardMovement(previous, [row({
+  book: "FanDuel",
+  line: 1.5,
+  odds: 105,
+  providerIds: {
+    gameId: "mlbstats-game-1",
+    bdlGameId: "10",
+    bdlPropId: "replacement-provider-quote-id",
+    bdlPlayerId: 20,
+    mlbStatsPlayerId: "mlbstats-player-30",
+  },
+})]);
+assert.equal(rotatedQuoteWithMarketMove.changedLines, 1);
+assert.equal(rotatedQuoteWithMarketMove.changedPrices, 1);
+assert.equal(rotatedQuoteWithMarketMove.addedRows, 0);
+assert.equal(rotatedQuoteWithMarketMove.removedRows, 0);
+
 const openingQuote: PropOddsSnapshot = {
   marketKey: "batter_hits",
   gameId: "balldontlie-game-10",
@@ -218,6 +252,42 @@ assert.equal(withOpeningMovement.oddsMovement?.openingOdds, 105);
 assert.equal(withOpeningMovement.oddsMovement?.currentOdds, -115);
 assert.equal(withOpeningMovement.oddsMovement?.openingSource, "balldontlie_opening");
 assert.equal(withOpeningMovement.oddsMovement?.hasMoved, true);
+
+const previousMovement = snapshot([row({
+  oddsMovement: {
+    openingLine: 0.5,
+    openingOdds: 105,
+    openingTimestamp: "2026-07-16T12:00:00.000Z",
+    openingSource: "balldontlie_opening",
+    previousLine: 0.5,
+    previousOdds: -110,
+    previousTimestamp: "2026-07-16T15:30:00.000Z",
+    currentLine: 0.5,
+    currentOdds: -115,
+    currentTimestamp: "2026-07-16T15:55:00.000Z",
+    lineDelta: 0,
+    impliedProbabilityDelta: 0.0474,
+    hasMoved: true,
+  },
+})]);
+const inheritedAcrossProviderRotation = attachMlbPropOddsMovement([row({
+  book: "FanDuel",
+  line: 1.5,
+  odds: -120,
+  providerIds: {
+    gameId: "mlbstats-game-1",
+    bdlGameId: "10",
+    bdlPropId: "replacement-provider-quote-id",
+    bdlPlayerId: 20,
+    mlbStatsPlayerId: "mlbstats-player-30",
+  },
+})], [], previousMovement)[0];
+assert.equal(inheritedAcrossProviderRotation.oddsMovement?.openingLine, 0.5);
+assert.equal(inheritedAcrossProviderRotation.oddsMovement?.openingOdds, 105);
+assert.equal(inheritedAcrossProviderRotation.oddsMovement?.previousLine, 0.5);
+assert.equal(inheritedAcrossProviderRotation.oddsMovement?.previousOdds, -115);
+assert.equal(inheritedAcrossProviderRotation.oddsMovement?.currentLine, 1.5);
+assert.equal(inheritedAcrossProviderRotation.oddsMovement?.currentOdds, -120);
 
 const primaryLines = selectPrimaryPropLines([
   row({ id: "main-over-dk", line: 0.5, side: "over", book: "DraftKings", odds: -115 }),

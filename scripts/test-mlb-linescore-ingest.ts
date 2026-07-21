@@ -116,6 +116,13 @@ for (const [detailed, want] of statuses) {
   const got = normalizeMlbStatsStatus({ gamePk: 1, status: { detailedState: detailed } });
   check(`"${detailed}" → "${want}"`, got === want);
 }
+check(
+  '"Postponed" overrides abstractGameState="Final"',
+  normalizeMlbStatsStatus({
+    gamePk: 1,
+    status: { detailedState: "Postponed", abstractGameState: "Final" },
+  }) === "postponed",
+);
 
 // ── classifyLinescoreAction ───────────────────────────────────────
 console.log("\n━━━ classifyLinescoreAction ━━━");
@@ -190,11 +197,29 @@ const baseOurs = {
 {
   const cls = classifyLinescoreAction({
     mlb: makeRaw({ status: { detailedState: "Postponed" }, linescore: {} }),
-    ours: baseOurs,
+    ours: { ...baseOurs, status: "STATUS_SCHEDULED" },
     expectedHomeAbbrev: "CHC",
     expectedAwayAbbrev: "SF",
   });
-  check("postponed game → skipped (FI stays pending)", cls.action === "skipped" && (cls.reason ?? "").toLowerCase().includes("postponed"));
+  check("postponed game with stale scheduled status → would_update", cls.action === "would_update" && cls.normalized_status === "postponed");
+}
+{
+  const cls = classifyLinescoreAction({
+    mlb: makeRaw({ status: { detailedState: "Postponed" }, linescore: {} }),
+    ours: { ...baseOurs, status: "STATUS_POSTPONED" },
+    expectedHomeAbbrev: "CHC",
+    expectedAwayAbbrev: "SF",
+  });
+  check("postponed game already synced → noop (idempotent)", cls.action === "noop");
+}
+{
+  const cls = classifyLinescoreAction({
+    mlb: makeRaw({ status: { detailedState: "Cancelled" }, linescore: {} }),
+    ours: { ...baseOurs, status: "STATUS_SCHEDULED" },
+    expectedHomeAbbrev: "CHC",
+    expectedAwayAbbrev: "SF",
+  });
+  check("canceled game with stale scheduled status → would_update", cls.action === "would_update" && cls.normalized_status === "canceled");
 }
 {
   // Live game with first inning complete should still be writable

@@ -143,10 +143,13 @@ export function buildInningScoresJson(
 export function normalizeMlbStatsStatus(g: MlbStatsRawGame): string {
   const det = g.status?.detailedState ?? "";
   const abs = g.status?.abstractGameState ?? "";
-  if (det === "Final" || det === "Game Over" || abs === "Final") return "final";
+  // MLB uses abstractGameState="Final" for terminal non-played states too.
+  // The detailed lifecycle state must win or postponements get mistaken for
+  // completed games and remain live on the member board.
   if (det === "Postponed") return "postponed";
   if (det === "Cancelled") return "canceled";
   if (det === "Suspended" || det === "Suspended: Rain") return "suspended";
+  if (det === "Final" || det === "Game Over" || abs === "Final") return "final";
   if (det === "In Progress" || abs === "Live") return "in_progress";
   if (det === "Scheduled" || det === "Pre-Game" || det === "Warmup" || abs === "Preview") return "scheduled";
   return det.toLowerCase();
@@ -304,11 +307,12 @@ export function classifyLinescoreAction(args: {
   // FI extraction rules
   if (fi.total === null) {
     if (normalized_status === "postponed" || normalized_status === "canceled") {
+      const targetStatus = normalized_status === "postponed" ? "STATUS_POSTPONED" : "STATUS_CANCELED";
       return {
         fi,
         normalized_status,
-        action: "skipped",
-        reason: `game ${normalized_status} — FI stays pending`,
+        action: ours.status === targetStatus ? "noop" : "would_update",
+        reason: ours.status === targetStatus ? undefined : `sync game lifecycle to ${targetStatus}`,
       };
     }
     if (fi.status === "incomplete") {
@@ -508,10 +512,11 @@ export async function ingestMlbLinescores(
       // unreliable to surface scores (the 2026-06-07 launch incident:
       // BDL flipped status to STATUS_FINAL but never populated the box
       // score, leaving all ML / OU picks pending after the games ended).
-      const payload: Record<string, unknown> = {
-        first_inning_runs: cls.fi.total,
-        inning_scores: inningScores,
-      };
+      const payload: Record<string, unknown> = {};
+      if (cls.fi.total !== null) {
+        payload.first_inning_runs = cls.fi.total;
+        payload.inning_scores = inningScores;
+      }
       if (cls.normalized_status === "final") {
         const homeScore = typeof mlb.teams?.home?.score === "number" ? mlb.teams.home.score : null;
         const awayScore = typeof mlb.teams?.away?.score === "number" ? mlb.teams.away.score : null;
@@ -521,6 +526,10 @@ export async function ingestMlbLinescores(
           payload.away_score = awayScore;
           payload.total_runs = homeScore + awayScore;
         }
+      } else if (cls.normalized_status === "postponed") {
+        payload.status = "STATUS_POSTPONED";
+      } else if (cls.normalized_status === "canceled") {
+        payload.status = "STATUS_CANCELED";
       }
       const { error: upErr } = await supabase
         .from("games")

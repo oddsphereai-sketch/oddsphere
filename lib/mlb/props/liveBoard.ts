@@ -1995,9 +1995,12 @@ function rowId(row: MappedOddsRow): string {
 }
 
 function movementKey(row: PlayerPropPreviewRow): string {
-  const providerPropId = row.providerIds?.bdlPropId;
-  if (providerPropId) return `${row.providerIds?.gameId ?? ""}|prop:${providerPropId}|${row.side}`;
-  return `${row.providerIds?.gameId ?? ""}|${row.providerIds?.bdlPlayerId ?? row.player}|${row.market}|${row.side}|${row.book}|${row.line}`;
+  // Provider quote IDs are refresh-scoped and can rotate even when the
+  // underlying offer is unchanged. The compact member board has one selected
+  // main-line row per player/market/side, so use that stable identity here and
+  // leave book, line, and price out of the key: those are the values movement
+  // tracking is supposed to compare between snapshots.
+  return `${mainLineKey(row)}|${row.side}`;
 }
 
 function dedupeRows(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {

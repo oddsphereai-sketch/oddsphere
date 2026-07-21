@@ -69,6 +69,7 @@ import type {
 import { currentSlateDate, currentSoccerBoardDate, isSlateDate } from "@/lib/dates/slateDate";
 import { BOOK_PRIORITY } from "@/lib/config/bookPriority";
 import { determineSlateState } from "@/lib/services/dailyEdgeSlateResolution";
+import { isVoidStatus } from "@/lib/services/gameLifecycle";
 import {
   classifyLockState,
   computeLocksAt,
@@ -2174,6 +2175,9 @@ function buildGameDto(
     lockedPlayGrade: lockedMl?.playGrade ?? null,
     lockedNoBet: lockedMl?.noBet ?? null,
     hasPredictionRecord: lockedMl !== undefined,
+    storedModelProbability: lockedMl?.modelProbability ?? null,
+    storedMarketProbability: lockedMl?.marketProbability ?? null,
+    storedEdgePctPp: lockedMl?.edge ?? null,
     lockedBestAngle: lockedMl?.bestAngle ?? null,
     isLockedRow: isMlActuallyLocked,
     lockedOpenOddsAmerican: lockedMl?.lockedOpenOddsAmerican ?? null,
@@ -2227,6 +2231,9 @@ function buildGameDto(
     lockedPlayGrade: lockedOu?.playGrade ?? null,
     lockedNoBet: lockedOu?.noBet ?? null,
     hasPredictionRecord: lockedOu !== undefined,
+    storedModelProbability: lockedOu?.modelProbability ?? null,
+    storedMarketProbability: lockedOu?.marketProbability ?? null,
+    storedEdgePctPp: lockedOu?.edge ?? null,
     lockedBestAngle: lockedOu?.bestAngle ?? null,
     isLockedRow: isOuActuallyLocked,
     lockedOpenOddsAmerican: lockedOu?.lockedOpenOddsAmerican ?? null,
@@ -2278,6 +2285,9 @@ function buildGameDto(
     lockedPlayGrade: lockedFi?.playGrade ?? null,
     lockedNoBet: lockedFi?.noBet ?? null,
     hasPredictionRecord: lockedFi !== undefined,
+    storedModelProbability: lockedFi?.modelProbability ?? null,
+    storedMarketProbability: lockedFi?.marketProbability ?? null,
+    storedEdgePctPp: lockedFi?.edge ?? null,
     lockedBestAngle: lockedFi?.bestAngle ?? null,
     isLockedRow: isFiActuallyLocked,
     lockedOpenOddsAmerican: lockedFi?.lockedOpenOddsAmerican ?? null,
@@ -3395,6 +3405,15 @@ type BuildMarketEdgeInput = {
    */
   hasPredictionRecord?: boolean;
   /**
+   * The writer's picked-side probability tuple. Once a prediction record
+   * exists, these values must travel with its pick; reading the live model
+   * audit after overlaying only the stored pick can orient the probability to
+   * the opposite side and make the card internally contradictory pre-lock.
+   */
+  storedModelProbability?: number | null;
+  storedMarketProbability?: number | null;
+  storedEdgePctPp?: number | null;
+  /**
    * P7-B1 (2026-06-11) — final `prediction_records.best_angle` boolean
    * for this (game, market). Passed through to resolveLockedVerdict to
    * honor the writer's public-money conflict guard when the text label
@@ -4134,14 +4153,16 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const modelDriver = pickModelDriver(input.autoFactors, input.market, input.pick, input.sportSpecific ?? null);
   const riskDriver = pickRiskDriver(input.autoFactors, input.market, input.pick, input.sportSpecific ?? null);
   const copyModelProb =
-    (input.market === "moneyline" || input.market === "total") && !correctedMarket
-      ? (readV22AuditForPick(
+    hasStoredPredictionRecord && typeof input.storedModelProbability === "number"
+      ? input.storedModelProbability
+      : (input.market === "moneyline" || input.market === "total") && !correctedMarket
+        ? (readV22AuditForPick(
           input.sportSpecific ?? null,
           input.market,
           input.market === "moneyline" ? input.modelSide === "home" : null,
           input.market === "total" ? input.modelSide === "over" : null,
         )?.modelProb ?? null)
-      : null;
+        : null;
   // Phase 4.2.C.2 — held markets pass 0 confidence to the copy generator.
   // generatePerMarketCopy takes a numeric confidence; held markets always
   // route to verdict="no_play" (short-circuit above) so the no_play
@@ -4284,6 +4305,25 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           ? 0
           : +(modelTrustPctOverride - marketImpliedPctOverride).toFixed(1);
       }
+    }
+  }
+  // prediction_records is the public writer authority for pick, grade, and
+  // tracking. Keep its complete picked-side probability tuple together too.
+  // This override intentionally runs after the live audit extractors so an
+  // unlocked stored pick can never be paired with the opposite side's live
+  // model probability while waiting for the next model refresh or lock sweep.
+  if (hasStoredPredictionRecord) {
+    if (typeof input.storedModelProbability === "number") {
+      modelProbOverride = input.storedModelProbability;
+      modelTrustPctOverride = +(input.storedModelProbability * 100).toFixed(1);
+    }
+    if (typeof input.storedMarketProbability === "number") {
+      marketImpliedPctOverride = +(input.storedMarketProbability * 100).toFixed(1);
+    }
+    if (typeof input.storedEdgePctPp === "number") {
+      modelMarketGapPct = +input.storedEdgePctPp.toFixed(1);
+    } else if (modelTrustPctOverride !== null && marketImpliedPctOverride !== null) {
+      modelMarketGapPct = +(modelTrustPctOverride - marketImpliedPctOverride).toFixed(1);
     }
   }
   // 2026-06-22 — Corrected/flipped market makes no calibrated edge claim (the
@@ -5682,7 +5722,9 @@ export async function GET(request: Request) {
   // single object for to-one relations. Cast accordingly.
   // Finished games STAY on the board all day (reverted 2026-06-17 per Daniel —
   // members want to look back on the day's games until the slate rolls over).
-  const rawGames = ((gameData ?? []) as unknown as GameRow[]).map(normalizeGameRow);
+  const rawGames = ((gameData ?? []) as unknown as GameRow[])
+    .map(normalizeGameRow)
+    .filter((game) => !isVoidStatus(game.status));
 
   // ─── Production data-mode filter (Framework §"Signal Source Quality") ──
   // Drops mock-sourced predictions before they reach members. No-op in

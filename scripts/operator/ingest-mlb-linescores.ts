@@ -12,8 +12,9 @@
  *       scripts/operator/ingest-mlb-linescores.ts --date 2026-06-06 --apply
  *
  * Hits MLB Stats API for the slate, matches to our games rows, writes
- * `first_inning_runs` + `inning_scores` ONLY. Never touches predictions
- * or slate_status or locked_at.
+ * `first_inning_runs` + `inning_scores` for completed games and official
+ * postponed/canceled lifecycle statuses. Never touches predictions,
+ * slate_status, or locked_at.
  *
  * Wrong-game guard: linescore only written when both team abbrevs
  * match our games row.
@@ -54,7 +55,7 @@ async function main() {
   console.log(`\n━━━ ingest-mlb-linescores · MLB ${opts.date} ━━━`);
   console.log(`  --apply flag:                          ${opts.apply ? "YES" : "no"}`);
   console.log(`  MLB_LINESCORE_DB_WRITES_ENABLED:       ${envEnabled ? "true" : "missing"}`);
-  console.log(`  mode:                                  ${willApply ? "APPLY (will UPDATE games.first_inning_runs + inning_scores)" : "DRY-RUN (no DB writes)"}`);
+  console.log(`  mode:                                  ${willApply ? "APPLY (will UPDATE first-inning results / terminal status)" : "DRY-RUN (no DB writes)"}`);
   if (opts.apply && !envEnabled) {
     console.warn(`  ⚠ --apply was set but MLB_LINESCORE_DB_WRITES_ENABLED is missing — forcing dry-run.`);
   }

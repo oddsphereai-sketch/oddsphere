@@ -157,6 +157,12 @@ check(
   dailyEdgeSource.includes("const hasStoredPredictionRecord") &&
     dailyEdgeSource.includes("input.hasPredictionRecord === true"),
 );
+check(
+  "Daily Edge keeps the stored pick and probability tuple together before lock",
+  dailyEdgeSource.includes("storedModelProbability: lockedMl?.modelProbability") &&
+    dailyEdgeSource.includes("storedMarketProbability: lockedOu?.marketProbability") &&
+    dailyEdgeSource.includes("if (hasStoredPredictionRecord)"),
+);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
