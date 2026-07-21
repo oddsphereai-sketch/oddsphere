@@ -41,12 +41,9 @@ export const WHOP_SESSION_COOKIE_NAME = "oddsphere_whop_session";
 export const WHOP_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
 /**
- * Re-check Whop access at most this often. Older sessions still in
- * window are accepted as-is; older than this and we should ideally
- * re-verify (the V1 scaffold doesn't do this transparent re-check —
- * a separate /api/auth/whop/refresh endpoint can be added later).
- *
- * Today, the cookie's own exp is the upper bound on staleness.
+ * Re-check Whop access after this interval. Successful checks rotate
+ * the signed session, so active members stay signed in while revoked,
+ * cancelled, and past-due memberships age out within this window.
  */
 export const WHOP_ACCESS_REFRESH_INTERVAL_SECONDS = 60 * 60 * 6; // 6 hours
 
@@ -57,6 +54,14 @@ export type WhopSessionPayload = {
   iat: number;
   exp: number;
 };
+
+/** True when the session needs a fresh server-side Whop access check. */
+export function shouldRefreshWhopAccess(
+  payload: WhopSessionPayload,
+  nowSec = Math.floor(Date.now() / 1000),
+): boolean {
+  return payload.iat + WHOP_ACCESS_REFRESH_INTERVAL_SECONDS <= nowSec;
+}
 
 // ─── encode helpers (Edge-safe) ────────────────────────────────────────
 

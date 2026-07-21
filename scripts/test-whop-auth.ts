@@ -217,6 +217,20 @@ await asyncCheck("verifyWhopSession REJECTS expired cookie", async () => {
   });
 });
 
+await asyncCheck("Whop access refresh becomes due at six hours", async () => {
+  const sess = await import("../lib/auth/whopSession");
+  const now = 2_000_000_000;
+  const payload = {
+    v: 1 as const,
+    uid: "user_abc",
+    acl: "customer" as const,
+    iat: now - sess.WHOP_ACCESS_REFRESH_INTERVAL_SECONDS,
+    exp: now + 60,
+  };
+  return sess.shouldRefreshWhopAccess(payload, now) &&
+    !sess.shouldRefreshWhopAccess({ ...payload, iat: payload.iat + 1 }, now);
+});
+
 // ── Access check fail-closed behavior ────────────────────────────────
 
 await asyncCheck("checkWhopAccess returns config_missing when env not set", async () => {
@@ -243,10 +257,109 @@ await asyncCheck("checkWhopAccess returns denied for empty user id", async () =>
   });
 });
 
+const WHOP_TEST_ENV = {
+  WHOP_OAUTH_ENABLED: "true",
+  WHOP_CLIENT_ID: "app_test",
+  WHOP_CLIENT_SECRET: "secret",
+  WHOP_REDIRECT_URI: "https://oddsphereai.com/api/auth/whop/callback",
+  WHOP_API_KEY: "key",
+  WHOP_RESOURCE_ID: "prod_test",
+  WHOP_SESSION_SECRET: "x".repeat(32),
+};
+
+async function whopMiddlewareRequest(opts: {
+  ageSeconds: number;
+  fetchImpl: typeof fetch;
+}) {
+  const sess = await import("../lib/auth/whopSession");
+  const { middleware } = await import("../middleware");
+  const { NextRequest } = await import("next/server");
+  const originalFetch = globalThis.fetch;
+
+  return withEnv(WHOP_TEST_ENV, async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const cookie = await sess.signWhopSession({
+      v: 1,
+      uid: "user_abc",
+      acl: "customer",
+      iat: now - opts.ageSeconds,
+      exp: now + sess.WHOP_SESSION_MAX_AGE_SECONDS,
+    });
+    if (cookie === null) throw new Error("Could not mint test Whop session");
+
+    globalThis.fetch = opts.fetchImpl;
+    try {
+      const request = new NextRequest("https://oddsphereai.com/api/lab/test", {
+        headers: { Cookie: `${sess.WHOP_SESSION_COOKIE_NAME}=${cookie}` },
+      });
+      return await middleware(request);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+}
+
+await asyncCheck("Fresh Whop session passes without an API access check", async () => {
+  let fetchCalls = 0;
+  const response = await whopMiddlewareRequest({
+    ageSeconds: 60,
+    fetchImpl: async () => {
+      fetchCalls++;
+      throw new Error("Fresh session must not call Whop");
+    },
+  });
+  return response.headers.get("x-middleware-next") === "1" && fetchCalls === 0;
+});
+
+await asyncCheck("Stale active Whop session passes and rotates its cookie", async () => {
+  const response = await whopMiddlewareRequest({
+    ageSeconds: 60 * 60 * 6 + 1,
+    fetchImpl: async () => Response.json({
+      has_access: true,
+      access_level: "customer",
+    }),
+  });
+  const setCookie = response.headers.get("set-cookie") ?? "";
+  return response.headers.get("x-middleware-next") === "1" &&
+    setCookie.includes("oddsphere_whop_session=") &&
+    setCookie.includes("Max-Age=604800");
+});
+
+await asyncCheck("Stale denied Whop session is blocked and cleared", async () => {
+  const response = await whopMiddlewareRequest({
+    ageSeconds: 60 * 60 * 6 + 1,
+    fetchImpl: async () => Response.json({
+      has_access: false,
+      access_level: "no_access",
+    }),
+  });
+  const setCookie = response.headers.get("set-cookie") ?? "";
+  return response.status === 401 && setCookie.includes("Max-Age=0");
+});
+
+await asyncCheck("Whop API outage fails closed but preserves session for retry", async () => {
+  const response = await whopMiddlewareRequest({
+    ageSeconds: 60 * 60 * 6 + 1,
+    fetchImpl: async () => new Response("unavailable", { status: 503 }),
+  });
+  return response.status === 503 && response.headers.get("set-cookie") === null;
+});
+
 // ── Route shape + safety asserts ──────────────────────────────────────
 
 check("Middleware verifies the Whop session BEFORE beta session",
-  /verifyWhopSession[\s\S]{0,400}isValidBetaSession/.test(MIDDLEWARE));
+  /verifyWhopSession[\s\S]{0,2000}isValidBetaSession/.test(MIDDLEWARE));
+check("Middleware re-checks stale Whop sessions against live access",
+  MIDDLEWARE.includes("shouldRefreshWhopAccess") &&
+  MIDDLEWARE.includes("checkWhopAccess({ userId: whopPayload.uid })"));
+check("Middleware rotates active Whop sessions after a successful refresh",
+  MIDDLEWARE.includes("buildWhopSessionSetCookie(refreshedCookie)"));
+check("Middleware clears the Whop session after explicit access denial",
+  MIDDLEWARE.includes('access.reason === "denied"') &&
+  MIDDLEWARE.includes("buildWhopSessionClearCookie"));
+check("Middleware fails closed without clearing sessions on transient access errors",
+  MIDDLEWARE.includes('error: "access_check_unavailable"') &&
+  MIDDLEWARE.includes("whopAccessCheckUnavailable"));
 check("Logout route clears beta session cookie",
   LOGOUT_ROUTE.includes(`${"oddsphere_beta_session"}=`) || LOGOUT_ROUTE.includes("BETA_SESSION_COOKIE_NAME"));
 check("Logout route clears Whop session cookie",
@@ -282,13 +395,12 @@ check("Login page shows neither-enabled fallback copy",
 
 // ── Pricing CTA wires checkout URL when configured ───────────────────
 
-check("Pricing imports getCheckoutUrl",
-  PRICING_PAGE.includes("getCheckoutUrl"));
-check("Pricing CTA opens Whop checkout in new tab when configured",
-  /checkoutUrl[\s\S]{0,300}target="_blank"[\s\S]{0,300}Join through Whop/.test(PRICING_PAGE));
-check("Pricing CTA falls back to /login (never fakes a Whop URL)",
-  /checkoutUrl === null[\s\S]{0,400}href="\/login"/.test(PRICING_PAGE) ||
-  /href="\/login"[\s\S]{0,400}Continue to Sign In/.test(PRICING_PAGE));
+check("Pricing imports the canonical trial checkout URL",
+  PRICING_PAGE.includes("TRIAL_CHECKOUT_URL"));
+check("Pricing CTA opens the canonical checkout in a new tab",
+  /href=\{TRIAL_CHECKOUT_URL\}[\s\S]{0,200}target="_blank"/.test(PRICING_PAGE));
+check("Pricing CTA uses safe external-link attributes",
+  /rel="noopener noreferrer"[\s\S]{0,100}target="_blank"/.test(PRICING_PAGE));
 
 // ── Cookie attribute safety ──────────────────────────────────────────
 
@@ -630,8 +742,7 @@ check("Whop access response 'admin' level does NOT trigger admin route bypass",
   // /api/admin/* is excluded from middleware entirely and uses
   // validateAdminAuth at the handler — confirm middleware excludes it
   // by virtue of the PROTECTED_API_PREFIXES list (no /api/admin).
-  !/\/api\/admin/.test(MIDDLEWARE) ||
-  MIDDLEWARE.includes("PROTECTED_API_PREFIXES = [\"/api/lab\"]"));
+  !/PROTECTED_API_PREFIXES\s*=\s*\[[^\]]*"\/api\/admin/.test(MIDDLEWARE));
 
 console.log(`\n  result: ${pass}/${pass + fail} pass`);
 if (fail > 0) process.exit(1);

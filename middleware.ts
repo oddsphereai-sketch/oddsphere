@@ -35,9 +35,15 @@ import {
   isValidBetaSession,
 } from "@/lib/auth/betaSession";
 import {
+  buildWhopSessionClearCookie,
+  buildWhopSessionSetCookie,
+  WHOP_SESSION_MAX_AGE_SECONDS,
   WHOP_SESSION_COOKIE_NAME,
+  shouldRefreshWhopAccess,
+  signWhopSession,
   verifyWhopSession,
 } from "@/lib/auth/whopSession";
+import { checkWhopAccess } from "@/lib/auth/whopAccess";
 
 /**
  * Page-route prefixes that require the beta session cookie. On miss,
@@ -61,6 +67,46 @@ function isProtectedApiPath(pathname: string): boolean {
   return PROTECTED_API_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
+}
+
+function withClearedWhopSession(response: NextResponse): NextResponse {
+  response.headers.append("Set-Cookie", buildWhopSessionClearCookie());
+  return response;
+}
+
+function unauthenticatedResponse(
+  request: NextRequest,
+  isApi: boolean,
+  clearWhopSession: boolean,
+): NextResponse {
+  const response = isApi
+    ? NextResponse.json(
+        { error: "auth_required", login_url: "/login" },
+        { status: 401 },
+      )
+    : (() => {
+        const loginUrl = new URL("/login", request.url);
+        const nextParam = request.nextUrl.pathname + (request.nextUrl.search || "");
+        loginUrl.searchParams.set("next", nextParam);
+        return NextResponse.redirect(loginUrl, { status: 302 });
+      })();
+
+  return clearWhopSession ? withClearedWhopSession(response) : response;
+}
+
+function accessCheckUnavailableResponse(request: NextRequest, isApi: boolean): NextResponse {
+  if (isApi) {
+    return NextResponse.json(
+      { error: "access_check_unavailable", login_url: "/login" },
+      { status: 503 },
+    );
+  }
+
+  const loginUrl = new URL("/login", request.url);
+  const nextParam = request.nextUrl.pathname + (request.nextUrl.search || "");
+  loginUrl.searchParams.set("next", nextParam);
+  loginUrl.searchParams.set("error", "whop_access_check_failed");
+  return NextResponse.redirect(loginUrl, { status: 302 });
 }
 
 // ─── TEMPORARY: nba-v0a preview-branch bypass ─────────────────────────
@@ -115,30 +161,49 @@ export async function middleware(request: NextRequest) {
   // a Whop user is the launch-target case; beta is the fallback.
   const whopCookie = request.cookies.get(WHOP_SESSION_COOKIE_NAME)?.value;
   const whopPayload = await verifyWhopSession(whopCookie);
-  if (whopPayload !== null) return NextResponse.next();
+  let clearWhopSession = false;
+  let whopAccessCheckUnavailable = false;
+
+  if (whopPayload !== null) {
+    if (!shouldRefreshWhopAccess(whopPayload)) return NextResponse.next();
+
+    const access = await checkWhopAccess({ userId: whopPayload.uid });
+    if (access.has_access) {
+      const refreshedPayload = {
+        ...whopPayload,
+        acl: access.access_level,
+        iat: access.checked_at,
+        exp: access.checked_at + WHOP_SESSION_MAX_AGE_SECONDS,
+      };
+      const refreshedCookie = await signWhopSession(refreshedPayload);
+      if (refreshedCookie !== null) {
+        const response = NextResponse.next();
+        response.headers.append("Set-Cookie", buildWhopSessionSetCookie(refreshedCookie));
+        return response;
+      }
+      whopAccessCheckUnavailable = true;
+    } else if (access.reason === "denied") {
+      clearWhopSession = true;
+    } else {
+      // Fail closed for this request, but retain the signed session so an
+      // active member can retry after a transient Whop/configuration issue.
+      whopAccessCheckUnavailable = true;
+    }
+  }
 
   const betaCookie = request.cookies.get(BETA_SESSION_COOKIE_NAME)?.value;
   const betaAuthenticated = await isValidBetaSession(betaCookie);
-  if (betaAuthenticated) return NextResponse.next();
-
-  // Unauthenticated. Branch on path style — page → redirect, API → JSON 401.
-  if (isApi) {
-    return NextResponse.json(
-      {
-        error: "auth_required",
-        login_url: "/login",
-      },
-      { status: 401 }
-    );
+  if (betaAuthenticated) {
+    const response = NextResponse.next();
+    return clearWhopSession ? withClearedWhopSession(response) : response;
   }
 
-  // Page route — redirect to /login?next=<original-path>.
-  // The `next` param is URL-encoded; the login route's sanitizeNext()
-  // re-validates that the value is a same-origin path.
-  const loginUrl = new URL("/login", request.url);
-  const nextParam = pathname + (request.nextUrl.search || "");
-  loginUrl.searchParams.set("next", nextParam);
-  return NextResponse.redirect(loginUrl, { status: 302 });
+  if (whopAccessCheckUnavailable) {
+    return accessCheckUnavailableResponse(request, isApi);
+  }
+
+  // Unauthenticated. Branch on path style — page → redirect, API → JSON 401.
+  return unauthenticatedResponse(request, isApi, clearWhopSession);
 }
 
 /**
