@@ -40,7 +40,10 @@ import {
   MLB_ML_RAW_MODEL_SIDE_PICK_CALIBRATION_RULE_ID,
   resolveMlbMlPickCalibration,
 } from "./pickCalibrationLayer";
-import { buildMlbModelLayerVersions } from "../automodel/mlbModelLayerVersions";
+import {
+  buildMlbModelLayerVersions,
+  MLB_PUBLIC_CALIBRATION_VERSION,
+} from "../automodel/mlbModelLayerVersions";
 
 const SYNTHETIC_PRICE_BOOKS = new Set(["locked_snapshot", "recommendation_snapshot", "splits_consensus"]);
 const BOOK_PRIORITY: readonly string[] = SHARED_BOOK_PRIORITY.filter(
@@ -136,6 +139,86 @@ export function preserveTrackingDisplayGradeOverride(
       ...(repairAudit === undefined
         ? {}
         : { tracking_repair_audit: repairAudit }),
+    },
+  };
+}
+
+type ExistingPredictionRecordState = Pick<
+  PredictionRecordRow,
+  | "game_id"
+  | "market"
+  | "model_version"
+  | "slate_date"
+  | "pick"
+  | "side"
+  | "line_value"
+  | "odds_american"
+  | "confidence"
+  | "model_probability"
+  | "market_probability"
+  | "edge"
+  | "play_grade"
+  | "best_angle"
+  | "no_bet"
+  | "calibration_version"
+  | "snapshot_json"
+>;
+
+function publicDecisionState(record: ExistingPredictionRecordState) {
+  return {
+    pick: record.pick,
+    side: record.side,
+    line_value: record.line_value,
+    odds_american: record.odds_american,
+    confidence: record.confidence,
+    model_probability: record.model_probability,
+    market_probability: record.market_probability,
+    edge: record.edge,
+    play_grade: record.play_grade,
+    best_angle: record.best_angle,
+    no_bet: record.no_bet,
+    model_version: record.model_version,
+    calibration_version: record.calibration_version ?? null,
+  };
+}
+
+/** Preserve a bounded audit trail whenever an unlocked public decision changes. */
+export function withPredictionGradeHistory(
+  proposed: PredictionRecordRow,
+  existing: ExistingPredictionRecordState | null | undefined,
+  changedAt = new Date().toISOString(),
+): PredictionRecordRow {
+  if (!existing) return proposed;
+  const proposedSnapshot = proposed.snapshot_json && typeof proposed.snapshot_json === "object"
+    ? proposed.snapshot_json
+    : {};
+  const existingSnapshot = existing.snapshot_json && typeof existing.snapshot_json === "object"
+    ? existing.snapshot_json
+    : {};
+  const priorHistory = Array.isArray(existingSnapshot.prediction_grade_history_v1)
+    ? existingSnapshot.prediction_grade_history_v1.filter(
+        (entry): entry is Record<string, unknown> => entry !== null && typeof entry === "object",
+      )
+    : [];
+  const previousState = publicDecisionState(existing);
+  const nextState = publicDecisionState(proposed);
+  const history = JSON.stringify(previousState) !== JSON.stringify(nextState)
+    ? [
+        ...priorHistory,
+        {
+          replaced_at: changedAt,
+          source: "prediction_records_writer",
+          ...previousState,
+        },
+      ].slice(-50)
+    : priorHistory;
+
+  if (history.length === 0) return proposed;
+  return {
+    ...proposed,
+    snapshot_json: {
+      ...proposedSnapshot,
+      prediction_grade_history_v1: history,
     },
   };
 }
@@ -2035,6 +2118,7 @@ function buildMlRecord(
     odds_decimal: null,
     model_used: readStringOrNull(sp.model_used),
     model_version: readStringOrNull(sp.model_version),
+    calibration_version: MLB_PUBLIC_CALIBRATION_VERSION,
     prediction_source: pred.prediction_source,
     confidence: finalMlConfidence,
     model_probability: finalMlModelProb,
@@ -2683,6 +2767,7 @@ function buildOuRecord(
     odds_decimal: null,
     model_used: readStringOrNull(sp.model_used),
     model_version: readStringOrNull(sp.model_version),
+    calibration_version: MLB_PUBLIC_CALIBRATION_VERSION,
     prediction_source: pred.prediction_source,
     confidence: finalOuConfidence,
     model_probability: finalOuModelProb,
@@ -3157,6 +3242,7 @@ function buildFiRecord(
     odds_decimal: null,
     model_used: readStringOrNull(sp.model_used),
     model_version: readStringOrNull(sp.model_version),
+    calibration_version: MLB_PUBLIC_CALIBRATION_VERSION,
     prediction_source: pred.prediction_source,
     confidence: finalFiConfidence,
     model_probability: finalFiModelProb,
@@ -3663,7 +3749,7 @@ export async function createPredictionRecords(
   // first, then skip the upsert for any locked match.
   const { data: existingLocks } = await supabase
     .from("prediction_records")
-    .select("id, game_id, market, model_version, slate_date, locked_at, pick, side, line_value, odds_american, confidence, play_grade, prediction_type, no_bet, snapshot_json")
+    .select("id, game_id, market, model_version, slate_date, locked_at, pick, side, line_value, odds_american, confidence, model_probability, market_probability, edge, play_grade, prediction_type, best_angle, no_bet, calibration_version, snapshot_json")
     .in("game_id", proposed.map((r) => r.game_id))
     .eq("slate_date", slateDate);
   const lockedKeys = new Set<string>();
@@ -3676,6 +3762,7 @@ export async function createPredictionRecords(
     play_grade: string | null;
     no_bet: boolean | null;
   }>();
+  const existingRecordByKey = new Map<string, ExistingPredictionRecordState>();
   const proposedKeys = new Set(
     proposed.map((r) =>
       `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`,
@@ -3693,9 +3780,14 @@ export async function createPredictionRecords(
     line_value: number | null;
     odds_american: number | null;
     confidence: number | null;
+    model_probability: number | null;
+    market_probability: number | null;
+    edge: number | null;
     play_grade: string | null;
     prediction_type: string | null;
+    best_angle: boolean;
     no_bet: boolean | null;
+    calibration_version: string | null;
     snapshot_json: Record<string, unknown> | null;
   }>) {
     const key = `${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`;
@@ -3712,6 +3804,7 @@ export async function createPredictionRecords(
       no_bet: r.no_bet,
     });
     existingSnapshotByKey.set(key, r.snapshot_json);
+    existingRecordByKey.set(key, r as ExistingPredictionRecordState);
     existingMarketRecordByKey.set(key, {
       odds_american: r.odds_american,
       play_grade: r.play_grade,
@@ -3777,11 +3870,14 @@ export async function createPredictionRecords(
       result.skippedExisting++;
       continue;
     }
-    const rec = preserveTrackingDisplayGradeOverride(
-      proposedRecord,
-      existingSnapshotByKey.get(
-        `${proposedRecord.game_id}::${proposedRecord.market}::${proposedRecord.model_version ?? ""}::${proposedRecord.slate_date}`,
+    const proposedKey =
+      `${proposedRecord.game_id}::${proposedRecord.market}::${proposedRecord.model_version ?? ""}::${proposedRecord.slate_date}`;
+    const rec = withPredictionGradeHistory(
+      preserveTrackingDisplayGradeOverride(
+        proposedRecord,
+        existingSnapshotByKey.get(proposedKey),
       ),
+      existingRecordByKey.get(proposedKey),
     );
     const key = `${rec.game_id}::${rec.market}::${rec.model_version ?? ""}::${rec.slate_date}`;
     if (shouldPreserveLastCompleteMarketRecord({

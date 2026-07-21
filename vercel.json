@@ -23,11 +23,11 @@
     },
     {
       "path": "/api/cron/lineup-watch",
-      "schedule": "*/30 13-23 * * *"
+      "schedule": "13,43 13-23 * * *"
     },
     {
       "path": "/api/cron/lineup-watch",
-      "schedule": "*/30 0-3 * * *"
+      "schedule": "13,43 0-3 * * *"
     },
     {
       "path": "/api/cron/pregame-sweep?lockOnly=true",

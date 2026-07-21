@@ -17,6 +17,7 @@ import { lineupService } from "@/lib/services/lineupService";
 import { predictionService } from "@/lib/services/predictionService";
 import { generatePredictionsForSlate } from "@/lib/services/automodelService";
 import { runFirstInningCycle } from "@/scripts/operator/backfill-first-inning-stats";
+import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 
 export const maxDuration = 300;
 
@@ -27,6 +28,7 @@ export async function GET(request: Request) {
     "lineup_watch",
     sportsInSeasonToday(),
     async ({ sport }) => {
+      if (sport === "mlb") assertMlbChampionRuntime();
       let records = 0;
       let apiCalls = 0;
 
@@ -112,7 +114,13 @@ export async function GET(request: Request) {
           prop_predictions: propPreds.records_updated,
         },
       };
-    }
+    },
+    {
+      leaseGroup: "prediction_pipeline",
+      requireLease: true,
+      lockMinutes: 6,
+      minIntervalMinutes: 20,
+    },
   );
 }
 

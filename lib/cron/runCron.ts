@@ -74,6 +74,12 @@ export type CronHandlerOptions = {
   sport?: Sport | null;
   /** Window in minutes during which another in-progress run blocks a new one. */
   lockMinutes?: number;
+  /** Shared namespace for jobs that mutate the same prediction pipeline. */
+  leaseGroup?: string;
+  /** Fail closed instead of falling back when the lease RPC is unavailable. */
+  requireLease?: boolean;
+  /** Suppress duplicate schedulers after a healthy recent completion. */
+  minIntervalMinutes?: number;
 };
 
 /**
@@ -89,9 +95,7 @@ export async function cronHandler(
   if (!auth.ok) return auth.response;
 
   const sport = options.sport ?? null;
-  const lockMinutes = options.lockMinutes ?? 5;
-
-  return runOne(dataSource, sport, lockMinutes, handler);
+  return runOne(dataSource, sport, options, handler);
 }
 
 /**
@@ -108,8 +112,6 @@ export async function cronHandlerPerSport(
 ): Promise<Response> {
   const auth = validateCronAuth(request);
   if (!auth.ok) return auth.response;
-  const lockMinutes = options.lockMinutes ?? 5;
-
   const runs: Array<{
     sport: Sport;
     status: "ok" | "partial" | "skipped" | "failed";
@@ -125,7 +127,7 @@ export async function cronHandlerPerSport(
   // wider CronHandler signature for runOneStructured's internal use.
   const wrapped: CronHandler = async (ctx) => handler({ logId: ctx.logId, sport: ctx.sport!, runId: ctx.runId });
   for (const sport of sports) {
-    const single = await runOneStructured(dataSource, sport, lockMinutes, wrapped);
+    const single = await runOneStructured(dataSource, sport, options, wrapped);
     runs.push({ sport, ...single });
   }
 
@@ -138,10 +140,10 @@ export async function cronHandlerPerSport(
 async function runOne(
   dataSource: string,
   sport: Sport | null,
-  lockMinutes: number,
+  options: CronHandlerOptions,
   handler: CronHandler
 ): Promise<Response> {
-  const r = await runOneStructured(dataSource, sport, lockMinutes, handler);
+  const r = await runOneStructured(dataSource, sport, options, handler);
   if (r.status === "skipped") {
     return Response.json({ ok: true, skipped: true, runId: r.runId, reason: r.error, details: r.details });
   }
@@ -169,15 +171,59 @@ type StructuredResult = {
   details?: Record<string, unknown>;
 };
 
+export function resolveCronLeaseJobName(
+  dataSource: string,
+  sport: Sport | null,
+  leaseGroup?: string,
+): string {
+  return cronJobName(leaseGroup ?? dataSource, sport);
+}
+
+export function isWithinCronMinimumInterval(
+  lastHealthy: Date | null,
+  minimumMinutes: number,
+  nowMs = Date.now(),
+): boolean {
+  if (lastHealthy === null || minimumMinutes <= 0) return false;
+  const elapsedMs = nowMs - lastHealthy.getTime();
+  return elapsedMs >= 0 && elapsedMs < minimumMinutes * 60_000;
+}
+
 async function runOneStructured(
   dataSource: string,
   sport: Sport | null,
-  lockMinutes: number,
+  options: CronHandlerOptions,
   handler: CronHandler
 ): Promise<StructuredResult> {
   const runId = randomUUID();
-  const jobName = cronJobName(dataSource, sport);
+  const lockMinutes = options.lockMinutes ?? 5;
+  const jobName = resolveCronLeaseJobName(dataSource, sport, options.leaseGroup);
   let lease: CronLeaseAcquireResult | null = null;
+
+  if ((options.minIntervalMinutes ?? 0) > 0) {
+    let lastHealthy: Date | null;
+    try {
+      lastHealthy = await refreshLogger.getLastHealthyCompleted(dataSource, sport);
+    } catch (e) {
+      return { status: "failed", logId: null, runId, error: (e as Error).message };
+    }
+    if (isWithinCronMinimumInterval(lastHealthy, options.minIntervalMinutes ?? 0)) {
+      const elapsedMs = Date.now() - lastHealthy!.getTime();
+      return {
+        status: "skipped",
+        logId: null,
+        runId,
+        error: `minimum_interval: ${dataSource}${sport ? ":" + sport : ""} completed ${Math.round(elapsedMs / 1000)}s ago`,
+        details: {
+          job_name: jobName,
+          run_id: runId,
+          minimum_interval_minutes: options.minIntervalMinutes,
+          last_healthy_completed_at: lastHealthy!.toISOString(),
+          cadence_skip: true,
+        },
+      };
+    }
+  }
 
   try {
     lease = await acquireCronJobLease({
@@ -223,6 +269,14 @@ async function runOneStructured(
   }
 
   if (lease.mode === "unavailable") {
+    if (options.requireLease === true) {
+      return {
+        status: "failed",
+        logId: null,
+        runId,
+        error: `required cron lease unavailable for ${jobName}: ${lease.reason}`,
+      };
+    }
     let active = false;
     try {
       active = await refreshLogger.isAnotherRunActive(dataSource, sport, lockMinutes);

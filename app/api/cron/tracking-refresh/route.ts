@@ -53,6 +53,7 @@ import {
 } from "@/lib/services/trackingRefreshService";
 import { revalidateTag } from "next/cache";
 import { refreshTrackingResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
+import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 
 export const maxDuration = 180;
 
@@ -73,6 +74,7 @@ export async function GET(request: Request) {
     "tracking_refresh",
     sports,
     async ({ sport }) => {
+      if (sport === "mlb") assertMlbChampionRuntime();
       const overrideDate = url.searchParams.get("date");
       const dates = overrideDate
         ? [overrideDate]
@@ -121,6 +123,11 @@ export async function GET(request: Request) {
           responseSnapshot,
         },
       };
+    },
+    {
+      leaseGroup: "prediction_pipeline",
+      requireLease: true,
+      lockMinutes: 6,
     },
   );
 }

@@ -8,9 +8,13 @@
  * grade policy, and correction policy.
  */
 
+import { resolveAutomodelVersion } from "./modelVersion";
+import { resolveFirstInningModelVersion } from "./firstInningModelVersion";
+
 export type MlbModelLayerMarket = "moneyline" | "total" | "first_inning";
 
 export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v1";
+export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v3_2026_07_20";
 
 export const MLB_MODEL_LAYER_VERSION_IDS = {
   projection_core: "mlb_projection_core_v2_2_baseline_2026_07_08",
@@ -19,9 +23,9 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   total_probability_head: "mlb_total_market_read_k04_cap8_thin_gap_guard_2026_07_11",
   first_inning_probability_head: "mlb_first_inning_fi_v2_signed_edge_price_gate_2026_07_11",
   market_calibration_policy: "mlb_model_market_calibration_baseline_2026_07_08",
-  grade_policy: "mlb_public_grade_policy_ml_clean_tight_total_strong_fi_signed_edge_gate_2026_07_11",
-  correction_policy: "mlb_prediction_corrections_mean_side_market_opposed_v2_2026_07_11",
-  tracking_contract: "member_facing_lock_v1",
+  grade_policy: "mlb_public_grade_policy_v3_2026_07_20",
+  correction_policy: "mlb_prediction_corrections_v3_2026_07_20",
+  tracking_contract: "member_facing_lock_v2_writer_authority",
 } as const;
 
 const ACTIVE_PROBABILITY_HEAD_BY_MARKET: Record<MlbModelLayerMarket, string> = {
@@ -50,8 +54,8 @@ export function buildMlbModelLayerVersions(
     market,
     active_probability_head: market === null ? null : ACTIVE_PROBABILITY_HEAD_BY_MARKET[market],
     runtime_env: {
-      automodel_version: env.AUTOMODEL_VERSION ?? null,
-      first_inning_model_version: env.FIRST_INNING_MODEL_VERSION ?? null,
+      automodel_version: resolveAutomodelVersion(env),
+      first_inning_model_version: resolveFirstInningModelVersion(env),
     },
   };
 }

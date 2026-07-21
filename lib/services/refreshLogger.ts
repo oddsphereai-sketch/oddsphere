@@ -172,4 +172,32 @@ export const refreshLogger = {
     if (!data?.refresh_completed_at) return null;
     return new Date(data.refresh_completed_at);
   },
+
+  /**
+   * Latest successful/partial completion for cadence protection. Failed runs
+   * are ignored so an operator can retry immediately after a real failure.
+   */
+  async getLastHealthyCompleted(
+    dataSource: string,
+    sport: Sport | null
+  ): Promise<Date | null> {
+    let q = supabase
+      .from("data_refresh_log")
+      .select("refresh_completed_at")
+      .eq("data_source", dataSource)
+      .in("refresh_status", ["success", "partial"])
+      .not("refresh_completed_at", "is", null)
+      .order("refresh_completed_at", { ascending: false })
+      .limit(1);
+    q = sport === null ? q.is("sport", null) : q.eq("sport", sport);
+    const { data, error } = await q.maybeSingle();
+    if (error) {
+      if (error.code === "PGRST116") return null;
+      throw new Error(
+        `refreshLogger.getLastHealthyCompleted failed: ${error.message}`
+      );
+    }
+    if (!data?.refresh_completed_at) return null;
+    return new Date(data.refresh_completed_at);
+  },
 };
