@@ -127,9 +127,12 @@ function addOneCalendarDayUTC(date: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-function normalizeGameStatus(raw: string | null): string {
+export function normalizeGameStatus(raw: string | null): string {
   if (raw === null) return "STATUS_SCHEDULED";
   const v = raw.toLowerCase();
+  if (v.includes("postpon")) return "STATUS_POSTPONED";
+  if (v.includes("cancel")) return "STATUS_CANCELED";
+  if (v.includes("suspend")) return "STATUS_IN_PROGRESS";
   if (v.includes("final")) return "STATUS_FINAL";
   if (v.includes("progress") || v.includes("live") || v.includes("in")) {
     return "STATUS_IN_PROGRESS";

@@ -22,6 +22,30 @@ import {
   loadPlayerIdMap,
   loadTeamIdMap,
 } from "./_idMaps";
+import {
+  isFinalStatus,
+  isLiveStatus,
+  isUpcomingStatus,
+  isVoidStatus,
+} from "./gameLifecycle";
+
+/**
+ * A lower-authority slate refresh may lag the official lifecycle feed. Never
+ * let that refresh move a game backward from live/final/void to scheduled, or
+ * replace an official void state with a played state. A genuinely rescheduled
+ * MLB game is expected to arrive as its new provider event rather than reuse
+ * the void event row.
+ */
+export function preserveAuthoritativeGameStatus(
+  existingStatus: string | null | undefined,
+  incomingStatus: string | null | undefined,
+): string | null | undefined {
+  if (existingStatus === null || existingStatus === undefined) return incomingStatus;
+  if (isVoidStatus(existingStatus)) return existingStatus;
+  if (isFinalStatus(existingStatus) && !isFinalStatus(incomingStatus)) return existingStatus;
+  if (isLiveStatus(existingStatus) && isUpcomingStatus(incomingStatus)) return existingStatus;
+  return incomingStatus;
+}
 
 export const slateService = {
   /**
@@ -60,6 +84,24 @@ export const slateService = {
       return { records_updated: 0, api_calls_made: apiCalls };
     }
 
+    // Preserve lifecycle states written by the official score/linescore feed.
+    // This is one bounded slate-level read, not a per-game query.
+    const externalIds = [...new Set(gameRecords.map((game) => game.external_id))];
+    const { data: existingGames, error: existingGamesError } = await supabase
+      .from("games")
+      .select("external_id, status")
+      .eq("sport", sport)
+      .in("external_id", externalIds);
+    if (existingGamesError) {
+      throw new Error(`slateService.refreshGames status read failed: ${existingGamesError.message}`);
+    }
+    const existingStatusByExternalId = new Map<number, string | null>(
+      ((existingGames ?? []) as Array<{ external_id: number; status: string | null }>).map((game) => [
+        game.external_id,
+        game.status,
+      ]),
+    );
+
     const payload: Array<Record<string, unknown>> = [];
     const skipped: number[] = [];
 
@@ -93,7 +135,10 @@ export const slateService = {
         season: g.season,
         season_type: g.season_type,
         postseason: g.postseason,
-        status: g.status,
+        status: preserveAuthoritativeGameStatus(
+          existingStatusByExternalId.get(g.external_id),
+          g.status,
+        ),
         venue: g.venue,
         home_score: g.home_score,
         away_score: g.away_score,
