@@ -55,6 +55,7 @@ import {
   type LockState,
 } from "../../lib/automodel/lockState";
 import type { Sport } from "../../lib/types/domain/Sport";
+import { isVoidStatus } from "../../lib/services/gameLifecycle";
 
 // ─── Per-game shape ─────────────────────────────────────────────────────
 
@@ -94,6 +95,7 @@ async function loadSlate(sport: Sport, slate_date: string): Promise<GameRow[]> {
     .from("games")
     .select(
       "id, external_id, game_date, " +
+        "status, " +
         "home_team:home_team_id ( abbreviation ), " +
         "away_team:away_team_id ( abbreviation ), " +
         "game_predictions ( locked_at )"
@@ -110,6 +112,7 @@ async function loadSlate(sport: Sport, slate_date: string): Promise<GameRow[]> {
     id: number;
     external_id: number;
     game_date: string | null;
+    status: string | null;
     home_team: { abbreviation: string } | null;
     away_team: { abbreviation: string } | null;
     // Supabase one-to-one returns object, one-to-many returns array.
@@ -121,7 +124,7 @@ async function loadSlate(sport: Sport, slate_date: string): Promise<GameRow[]> {
       | { locked_at: string | null }
       | null;
   };
-  return ((data ?? []) as unknown as Raw[]).map((r) => {
+  return ((data ?? []) as unknown as Raw[]).filter((r) => !isVoidStatus(r.status)).map((r) => {
     const pred = Array.isArray(r.game_predictions)
       ? (r.game_predictions[0] ?? null)
       : r.game_predictions;

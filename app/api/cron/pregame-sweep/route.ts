@@ -55,6 +55,7 @@ import { updateGradesForSlate } from "@/lib/services/gradeDerivationService";
 import { detectSnapshotStaleness } from "@/lib/services/snapshotStalenessDetector";
 import { dailyEdgeSnapshotKey } from "@/lib/services/labResponseSnapshots";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
+import { isVoidStatus } from "@/lib/services/gameLifecycle";
 import {
   runScheduledMarketIntelligenceV2Collection,
   type ScheduledMarketIntelligenceV2Result,
@@ -127,7 +128,7 @@ async function loadSlateCandidates(
   // started-without-lock alert. An explicit keyed lookup is deterministic.
   const { data, error } = await supabase
     .from("games")
-    .select("id, external_id, game_date")
+    .select("id, external_id, game_date, status")
     .eq("sport", sport)
     .eq("slate_date", date);
   if (error) {
@@ -139,8 +140,11 @@ async function loadSlateCandidates(
     id: number;
     external_id: number;
     game_date: string | null;
+    status: string | null;
   };
-  const games = (data ?? []) as Row[];
+  // A postponed/canceled game must never enter the final model refresh or
+  // lock path even if its original first-pitch time reaches T-60.
+  const games = ((data ?? []) as Row[]).filter((game) => !isVoidStatus(game.status));
   const gameIds = games.map((game) => game.id);
   const lockByGame = new Map<number, string | null>();
   if (gameIds.length > 0) {
