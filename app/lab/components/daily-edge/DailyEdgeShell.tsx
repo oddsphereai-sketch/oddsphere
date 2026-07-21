@@ -3170,8 +3170,15 @@ const CARD_TREATMENT: Record<VerdictKey, {
   },
 };
 
-const ACTIVE_RING =
-  "border-violet-400/55 shadow-[0_0_0_1px_rgba(167,139,250,0.30),0_8px_28px_-8px_rgba(167,139,250,0.40),inset_0_1px_0_0_rgba(167,139,250,0.18)]";
+/**
+ * Reader selection is navigation state, not a Play Grade. Keep it neutral
+ * so it can never be mistaken for Watchlist/Lean/etc. It is desktop-only:
+ * mobile opens the detail sheet directly, so a preselected card has no
+ * visible reader to point at and should retain only its real grade styling.
+ */
+const ACTIVE_SELECTION =
+  "sm:outline sm:outline-2 sm:outline-white/35 sm:outline-offset-2 " +
+  "sm:shadow-[0_8px_28px_-8px_rgba(255,255,255,0.16),inset_0_1px_0_0_rgba(255,255,255,0.08)]";
 
 /**
  * Shared base depth treatment applied to every slate card regardless of
@@ -3234,8 +3241,8 @@ function SlateCard({
           onSelectGame();
         }
       }}
-      className={`group relative rounded-xl overflow-hidden border cursor-pointer transition-all bg-[#0D0D14] ${CARD_BASE_DEPTH} ${
-        active ? ACTIVE_RING : t.ring
+      className={`group relative rounded-xl overflow-hidden border cursor-pointer transition-all bg-[#0D0D14] ${CARD_BASE_DEPTH} ${t.ring} ${
+        active ? ACTIVE_SELECTION : ""
       }`}
     >
       {/* Top-edge accent — team-color gradient (away → home). Carries
@@ -3408,10 +3415,11 @@ function SlateCard({
             (the top-edge accent + headline tint already carry verdict).
             Less visual noise. Confidence stays on the headline pick only.
             stopPropagation so chip click doesn't fire the card-body handler. */}
-        {/* Market pills — each one now tinted by ITS OWN market's verdict
-            so the user can scan ML / Total / 1st verdicts at a glance.
-            Active state (violet) overrides the verdict tint when the
-            reader is showing this market. Total pill includes the line. */}
+        {/* Market pills — each one stays tinted by ITS OWN market's verdict
+            so selection can never disguise a Best Angle as Watchlist. On
+            desktop, the market shown in the reader gets a neutral white
+            ring; mobile opens the detail sheet and needs no persistent
+            selected-market treatment. Total pill includes the line. */}
         <div
           className="grid gap-1.5 mb-3.5"
           style={{ gridTemplateColumns: `repeat(${marketKeysFor(shellSport).length}, minmax(0, 1fr))` }}
@@ -3429,16 +3437,14 @@ function SlateCard({
                   e.stopPropagation();
                   onSelectMarket(m);
                 }}
-                className={`text-left px-2.5 py-1.5 rounded-md border transition-colors ${
+                className={`text-left px-2.5 py-1.5 rounded-md border transition-colors ${VERDICT_PILL_TINT[mv]} ${
                   isActiveMarket
-                    ? "bg-violet-500/[0.16] border-violet-400/50"
-                    : VERDICT_PILL_TINT[mv]
+                    ? "sm:ring-2 sm:ring-white/40 sm:ring-offset-1 sm:ring-offset-[#0D0D14]"
+                    : ""
                 } ${isContext && !isActiveMarket ? "opacity-80" : ""}`}
               >
                 <span
-                  className={`block text-[9.5px] uppercase tracking-[0.14em] font-bold mb-0.5 ${
-                    isActiveMarket ? "text-violet-200/85" : VERDICT_TEXT_COLOR[mv]
-                  }`}
+                  className={`block text-[9.5px] uppercase tracking-[0.14em] font-bold mb-0.5 ${VERDICT_TEXT_COLOR[mv]}`}
                 >
                   {marketShortLabelFor(m, shellSport)}
                 </span>
@@ -3464,14 +3470,24 @@ function SlateCard({
         {/* Action affordance — slimmer, link-style. The whole card is a
             click target anyway; this is just the eye-cue. */}
         <div className="flex items-center justify-end">
-          <span
-            className={`inline-flex items-center gap-1 text-[10.5px] uppercase tracking-[0.16em] font-bold transition-colors ${
-              active ? "text-violet-200" : "text-violet-200/70 group-hover:text-violet-200"
-            }`}
-          >
-            {active ? "In the reader" : "View breakdown"}
-            <span aria-hidden="true" className="text-[11px]">↑</span>
-          </span>
+          {active ? (
+            <>
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/[0.07] px-2 py-1 text-[10px] uppercase tracking-[0.16em] font-bold text-white">
+                <span aria-hidden="true" className="text-[9px]">●</span>
+                Open in reader
+                <span aria-hidden="true" className="text-[11px]">↑</span>
+              </span>
+              <span className="sm:hidden inline-flex items-center gap-1 text-[10.5px] uppercase tracking-[0.16em] font-bold text-violet-200/70 group-hover:text-violet-200">
+                View breakdown
+                <span aria-hidden="true" className="text-[11px]">↑</span>
+              </span>
+            </>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[10.5px] uppercase tracking-[0.16em] font-bold text-violet-200/70 group-hover:text-violet-200 transition-colors">
+              View breakdown
+              <span aria-hidden="true" className="text-[11px]">↑</span>
+            </span>
+          )}
         </div>
       </div>
     </article>
