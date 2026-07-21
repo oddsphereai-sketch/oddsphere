@@ -46,6 +46,7 @@ import { sportsInSeasonToday } from "@/lib/cron/seasons";
 import { supabase } from "@/lib/db/supabase";
 import { linesService } from "@/lib/services/linesService";
 import { generatePredictionsForSlate } from "@/lib/services/automodelService";
+import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 import { createPredictionRecords } from "@/lib/services/predictionRecordService";
 import { assessMlbLockCoherence } from "@/lib/services/mlbLockCoherence";
 import { updateMarketSignalsForSlate } from "@/lib/services/marketSignalDerivationService";
@@ -290,6 +291,7 @@ export async function GET(request: Request) {
     // the 15-minute schedule should touch only MLB unless explicitly enabled.
     pregameSweepSports(),
     async ({ sport }) => {
+      if (sport === "mlb" && !dryRun && gateActive) assertMlbChampionRuntime();
       // ── Master gate (write-mode only) ───────────────────────────────
       // Dry-run mode is always allowed. Write mode requires the
       // PREGAME_SWEEP_CRON_ACTIVE env flag. Missing → structured
@@ -400,6 +402,8 @@ export async function GET(request: Request) {
         successful: number;
         errors: string[];
       } = { attempted: 0, successful: 0, errors: [] };
+      let enteringLockRefreshThrew = false;
+      const failedEnteringLockExternalIds = new Set<number>();
       if (partition.entering_lock.length > 0 && sport === "mlb") {
         const externalIds = partition.entering_lock.map((g) => g.external_id);
         try {
@@ -415,14 +419,23 @@ export async function GET(request: Request) {
           );
           enteringLockModelResult = {
             attempted: externalIds.length,
-            successful: result.db_writes?.ingest.inserted ?? 0,
+            successful: Math.max(0, externalIds.length - result.errors.length),
             errors: result.errors.map(
               (e) => `ext=${e.game_external_id}: ${e.error}`
             ),
           };
+          for (const error of result.errors) {
+            if (typeof error.game_external_id === "number") {
+              failedEnteringLockExternalIds.add(error.game_external_id);
+            } else {
+              // An unscoped failure cannot be proven safe for any candidate.
+              enteringLockRefreshThrew = true;
+            }
+          }
           records += result.db_writes?.ingest.inserted ?? 0;
           records += result.db_writes?.ingest.updated ?? 0;
         } catch (e) {
+          enteringLockRefreshThrew = true;
           enteringLockModelResult.errors.push(
             e instanceof Error ? e.message : String(e)
           );
@@ -434,15 +447,32 @@ export async function GET(request: Request) {
       // sync must describe the same recommendation before either row can be
       // frozen. A sync failure or stale member row blocks only that game from
       // locking; the next sweep can retry after the underlying issue clears.
-      let gamesReadyForLock = partition.entering_lock;
+      const modelEligibleGames = sport !== "mlb"
+        ? partition.entering_lock
+        : enteringLockRefreshThrew
+          ? []
+          : partition.entering_lock.filter(
+              (game) => !failedEnteringLockExternalIds.has(game.external_id),
+            );
+      const modelDeferredGames = partition.entering_lock.filter(
+        (game) => !modelEligibleGames.some((eligible) => eligible.game_id === game.game_id),
+      );
+      let gamesReadyForLock = modelEligibleGames;
       let lockCoherence: {
         checked: number;
         coherent: number;
         blocked_game_ids: number[];
         errors: string[];
-      } = { checked: 0, coherent: 0, blocked_game_ids: [], errors: [] };
-      if (partition.entering_lock.length > 0 && sport === "mlb") {
-        const enteringGameIds = new Set(partition.entering_lock.map((game) => game.game_id));
+      } = {
+        checked: 0,
+        coherent: 0,
+        blocked_game_ids: modelDeferredGames.map((game) => game.game_id),
+        errors: modelDeferredGames.length > 0
+          ? ["final T-60 model refresh failed; lock deferred until the next sweep"]
+          : [],
+      };
+      if (modelEligibleGames.length > 0 && sport === "mlb") {
+        const enteringGameIds = new Set(modelEligibleGames.map((game) => game.game_id));
         try {
           const expectedResult = await createPredictionRecords({
             sport: "mlb",
@@ -468,15 +498,23 @@ export async function GET(request: Request) {
           lockCoherence = {
             checked: assessment.checked,
             coherent: assessment.coherentGameIds.length,
-            blocked_game_ids: assessment.blockedGameIds,
-            errors: assessment.errors,
+            blocked_game_ids: [
+              ...modelDeferredGames.map((game) => game.game_id),
+              ...assessment.blockedGameIds,
+            ],
+            errors: [
+              ...(modelDeferredGames.length > 0
+                ? ["final T-60 model refresh failed; lock deferred until the next sweep"]
+                : []),
+              ...assessment.errors,
+            ],
           };
           const coherentIds = new Set(assessment.coherentGameIds);
-          gamesReadyForLock = partition.entering_lock.filter((game) => coherentIds.has(game.game_id));
+          gamesReadyForLock = modelEligibleGames.filter((game) => coherentIds.has(game.game_id));
         } catch (error) {
           gamesReadyForLock = [];
           lockCoherence = {
-            checked: partition.entering_lock.length,
+            checked: modelEligibleGames.length,
             coherent: 0,
             blocked_game_ids: partition.entering_lock.map((game) => game.game_id),
             errors: [`lock coherence check failed closed: ${error instanceof Error ? error.message : String(error)}`],
@@ -570,6 +608,17 @@ export async function GET(request: Request) {
           records_updated: records,
           api_calls_made: apiCalls,
           partial: anyErrors,
+          error_message: anyErrors
+            ? [
+                ...enteringLockModelResult.errors,
+                ...lockCoherence.errors,
+                ...lockResult.errors,
+                ...(missedLockGames.length > 0
+                  ? [`${missedLockGames.length} game(s) started without a lock`]
+                  : []),
+                ...(marketIntelligenceV2?.errors ?? []),
+              ].slice(0, 5).join(" | ").slice(0, 1500)
+            : null,
           details: {
             dry_run: false,
             pregame_sweep_active: true,
@@ -583,6 +632,7 @@ export async function GET(request: Request) {
               already_started: partition.already_started.length,
             },
             entering_lock_model: enteringLockModelResult,
+            locks_deferred_after_model_failure: modelDeferredGames.map((game) => game.external_id),
             lock_coherence: lockCoherence,
             locks_applied: lockResult.locked,
             audit_rows_written: lockResult.audit_written,
@@ -847,6 +897,15 @@ export async function GET(request: Request) {
         records_updated: records,
         api_calls_made: apiCalls,
         partial: anyErrors,
+        error_message: anyErrors
+          ? [
+              ...enteringLockModelResult.errors,
+              ...lockCoherence.errors,
+              ...lockResult.errors,
+              ...staleTrigger.errors,
+              ...(marketIntelligenceV2?.errors ?? []),
+            ].slice(0, 5).join(" | ").slice(0, 1500)
+          : null,
         details: {
           dry_run: false,
           pregame_sweep_active: true,
@@ -859,6 +918,7 @@ export async function GET(request: Request) {
             already_started: partition.already_started.length,
           },
           entering_lock_model: enteringLockModelResult,
+          locks_deferred_after_model_failure: modelDeferredGames.map((game) => game.external_id),
           lock_coherence: lockCoherence,
           locks_applied: lockResult.locked,
           audit_rows_written: lockResult.audit_written,
@@ -882,7 +942,14 @@ export async function GET(request: Request) {
         },
       };
     },
-    { lockMinutes: 20 }
+    {
+      leaseGroup: "prediction_pipeline",
+      requireLease: true,
+      lockMinutes: 6,
+      // Suppress near-simultaneous duplicate schedulers without skipping the
+      // intended five-minute lock cadence. Diagnostics remain repeatable.
+      minIntervalMinutes: !dryRun && gateActive ? 4 : undefined,
+    }
   );
 }
 

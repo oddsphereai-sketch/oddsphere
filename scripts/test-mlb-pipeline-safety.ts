@@ -1,0 +1,132 @@
+import { readFileSync } from "node:fs";
+import {
+  isWithinCronMinimumInterval,
+  resolveCronLeaseJobName,
+} from "../lib/cron/runCron";
+import {
+  buildMlbModelLayerVersions,
+  MLB_PUBLIC_CALIBRATION_VERSION,
+} from "../lib/automodel/mlbModelLayerVersions";
+import { withPredictionGradeHistory } from "../lib/services/predictionRecordService";
+import { assertMlbChampionRuntime } from "../lib/automodel/mlbChampionRuntime";
+import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
+
+let passed = 0;
+let failed = 0;
+function check(label: string, condition: boolean): void {
+  if (condition) {
+    passed++;
+    console.log(`✓ ${label}`);
+  } else {
+    failed++;
+    console.log(`✗ ${label}`);
+  }
+}
+
+check(
+  "different MLB writers resolve to one shared lease",
+  resolveCronLeaseJobName("slate_cycle_automation", "mlb", "prediction_pipeline") ===
+    resolveCronLeaseJobName("pregame_sweep", "mlb", "prediction_pipeline"),
+);
+check(
+  "shared lease remains isolated by sport",
+  resolveCronLeaseJobName("tracking_refresh", "mlb", "prediction_pipeline") !==
+    resolveCronLeaseJobName("tracking_refresh", "wnba", "prediction_pipeline"),
+);
+const now = Date.parse("2026-07-21T12:00:00Z");
+check(
+  "duplicate run inside cooldown is suppressed",
+  isWithinCronMinimumInterval(new Date(now - 9 * 60_000), 10, now),
+);
+check(
+  "scheduled run outside cooldown proceeds",
+  !isWithinCronMinimumInterval(new Date(now - 10 * 60_000), 10, now),
+);
+
+const layers = buildMlbModelLayerVersions("total", {});
+check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
+check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
+check("grade policy carries July 20 v3 version", layers.grade_policy.includes("v3_2026_07_20"));
+check("champion runtime accepts resolved defaults", (() => {
+  try { assertMlbChampionRuntime({}); return true; } catch { return false; }
+})());
+check("champion runtime refuses an explicit old model", (() => {
+  try { assertMlbChampionRuntime({ AUTOMODEL_VERSION: "v1" }); return false; } catch { return true; }
+})());
+
+const base: PredictionRecordRow = {
+  game_prediction_id: 1,
+  game_id: 1,
+  external_id: 1,
+  sport: "mlb",
+  slate_date: "2026-07-21",
+  game_date: "2026-07-21T23:00:00Z",
+  matchup: "AWY@HME",
+  market: "total",
+  pick: "over",
+  side: "over",
+  line_value: 8.5,
+  odds_american: -110,
+  odds_decimal: null,
+  model_used: "v2_2",
+  model_version: "auto_v2.2_mlb_full_game_projection",
+  calibration_version: MLB_PUBLIC_CALIBRATION_VERSION,
+  prediction_source: "auto_model",
+  confidence: 58,
+  model_probability: 0.58,
+  market_probability: 0.52,
+  edge: 6,
+  expected_value: null,
+  play_grade: "best_angle",
+  prediction_type: "best_angle",
+  best_angle: true,
+  no_bet: false,
+  no_bet_reason: null,
+  market_aligned: false,
+  data_quality_tier: "high",
+  source_quality: null,
+  provisional: false,
+  held: false,
+  hold_reason: null,
+  launch_day: false,
+  manual_outcome_expected: false,
+  locked_at: null,
+  published_at: null,
+  snapshot_json: {},
+};
+const changed = withPredictionGradeHistory(
+  { ...base, play_grade: "lean", best_angle: false },
+  base,
+  "2026-07-21T12:00:00Z",
+);
+const history = changed.snapshot_json?.prediction_grade_history_v1;
+check("grade change preserves previous public decision", Array.isArray(history) && history.length === 1);
+check(
+  "grade history records the previous Best Angle",
+  Array.isArray(history) && history[0]?.play_grade === "best_angle" && history[0]?.best_angle === true,
+);
+
+const sweepSource = readFileSync("app/api/cron/pregame-sweep/route.ts", "utf8");
+check(
+  "T-60 lock defers games with failed model refresh",
+  sweepSource.includes("locks_deferred_after_model_failure") &&
+    sweepSource.includes("failedEnteringLockExternalIds"),
+);
+check(
+  "pregame duplicate cooldown preserves the five-minute lock cadence",
+  sweepSource.includes("minIntervalMinutes: !dryRun && gateActive ? 4 : undefined"),
+);
+check(
+  "lock-only sweep avoids full market intelligence collection",
+  sweepSource.includes("if (!lockOnly)") &&
+    sweepSource.indexOf("if (lockOnly)") < sweepSource.indexOf('sport === "mlb" && marketIntelligenceV2 === null'),
+);
+const dailyEdgeSource = readFileSync("app/api/lab/daily-edge/route.ts", "utf8");
+check(
+  "Daily Edge uses a stored prediction record as writer authority before lock",
+  dailyEdgeSource.includes("const hasStoredPredictionRecord") &&
+    dailyEdgeSource.includes("input.hasPredictionRecord === true"),
+);
+
+console.log(`\n${passed} passed, ${failed} failed`);
+if (failed > 0) process.exit(1);

@@ -42,6 +42,7 @@ import { supabase } from "@/lib/db/supabase";
 import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
+import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 
 export const maxDuration = 300; // Vercel Pro — full slate cycle can take ~3-5 min
 
@@ -63,6 +64,7 @@ export async function GET(request: Request) {
     "slate_cycle_automation",
     sports,
     async ({ sport }) => {
+      assertMlbChampionRuntime();
       // Hard gate #2 — orchestrator-skip-confirmation. Missing → return
       // a structured blocked report. No provider calls. No DB I/O. The
       // request is acknowledged (200) so the scheduler doesn't retry
@@ -109,13 +111,31 @@ export async function GET(request: Request) {
         source: "slate_cycle",
       });
 
+      const incomplete =
+        report.overall_status === "blocked" ||
+        report.overall_status === "failed" ||
+        marketIntelligenceV2.errors.length > 0;
       return {
         records_updated: recordsWritten,
         api_calls_made: apiCalls,
-        partial: report.overall_status !== "ok" || marketIntelligenceV2.errors.length > 0,
+        // Degraded can mean non-blocking provider warnings even when every
+        // required write completed. Reserve partial for incomplete work.
+        partial: incomplete,
+        error_message: incomplete
+          ? [
+              ...report.blocking_reasons,
+              ...report.steps.filter((step) => step.mode === "failed").map((step) => step.reason),
+              ...marketIntelligenceV2.errors,
+            ].slice(0, 5).join(" | ").slice(0, 1500)
+          : null,
         details: { ...report, market_intelligence_v2: marketIntelligenceV2, response_snapshot: responseSnapshot },
       };
-    }
+    },
+    {
+      leaseGroup: "prediction_pipeline",
+      requireLease: true,
+      lockMinutes: 6,
+    },
   );
 }
 
