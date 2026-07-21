@@ -14,6 +14,8 @@ import {
   EXPECTED_WNBA_MODEL_VERSION,
 } from "../lib/automodel/wnbaChampionRuntime";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
+import { normalizeGameStatus } from "../lib/providers/real_api/BallDontLieSlateProvider";
+import { preserveAuthoritativeGameStatus } from "../lib/services/slateService";
 
 let passed = 0;
 let failed = 0;
@@ -82,6 +84,20 @@ check(
   "WNBA daily refresh joins the shared prediction lease",
   resolveCronLeaseJobName("wnba_daily_refresh", "wnba", "prediction_pipeline") ===
     resolveCronLeaseJobName("tracking_refresh", "wnba", "prediction_pipeline"),
+);
+check("BDL maps postponed explicitly", normalizeGameStatus("Postponed") === "STATUS_POSTPONED");
+check("BDL maps canceled explicitly", normalizeGameStatus("Cancelled") === "STATUS_CANCELED");
+check(
+  "slate refresh cannot regress postponed to scheduled",
+  preserveAuthoritativeGameStatus("STATUS_POSTPONED", "STATUS_SCHEDULED") === "STATUS_POSTPONED",
+);
+check(
+  "slate refresh cannot regress final to scheduled",
+  preserveAuthoritativeGameStatus("STATUS_FINAL", "STATUS_SCHEDULED") === "STATUS_FINAL",
+);
+check(
+  "slate refresh can advance scheduled to live",
+  preserveAuthoritativeGameStatus("STATUS_SCHEDULED", "STATUS_IN_PROGRESS") === "STATUS_IN_PROGRESS",
 );
 
 const base: PredictionRecordRow = {
