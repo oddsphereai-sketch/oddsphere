@@ -23,7 +23,8 @@ import { mapSharpEventToGame, resolveSharpPropRow, scoreRealMlbPropsDryRun, scor
 import { classifySharpApiAvailability, diagnoseSharpApiMlbPropsAvailability } from "../lib/mlb/props/sharpApiAvailabilityDiagnostics";
 import { resolveMlbTeamAlias } from "../lib/mlb/props/mlbTeamAliases";
 import { evaluateRealPaperPersistenceGate, isPaperTradingMarketAllowed } from "../lib/mlb/props/paperTrading";
-import { allMlbPropMarketDefinitions } from "../lib/mlb/props/marketCatalog";
+import { allMlbPropMarketDefinitions, getMlbPropMarketDefinition } from "../lib/mlb/props/marketCatalog";
+import { calibratedPropModelWeight } from "../lib/mlb/props/probabilityCalibration";
 import { checkProjectionSideIntegrity } from "../lib/mlb/props/projectionSideIntegrity";
 import {
   buildPlayerPitchArsenalEvidence,
@@ -92,6 +93,27 @@ async function main() {
     fractionalKelly: 0.15,
     maxBankrollFraction: 0.005,
   }) === 0);
+  check("pitcher strikeout over model uses the chronologically calibrated weight", approx(calibratedPropModelWeight({
+    marketKey: "pitcher_strikeouts",
+    side: "over",
+    baseWeight: 0.72,
+  }), 0.4));
+  check("healthy pitcher earned-runs model is not reliability-capped", approx(calibratedPropModelWeight({
+    marketKey: "pitcher_earned_runs",
+    side: "over",
+    baseWeight: 0.72,
+  }), 0.72));
+  check("total-bases over calibration is stricter than total-bases under", calibratedPropModelWeight({
+    marketKey: "batter_total_bases",
+    side: "over",
+    baseWeight: 0.62,
+  }) < calibratedPropModelWeight({
+    marketKey: "batter_total_bases",
+    side: "under",
+    baseWeight: 0.62,
+  }));
+  check("pitcher earned runs is eligible for strict actionable grading", getMlbPropMarketDefinition("pitcher_earned_runs").recommendationEligibility === "eligible_now");
+  check("runs scored is eligible for strict actionable grading", getMlbPropMarketDefinition("batter_runs_scored").recommendationEligibility === "eligible_now");
 
   const oddsSample = JSON.parse(readFileSync("tests/fixtures/mlb-props/real-contract-samples/sharpapi-props-sample.json", "utf8"));
   const parsedOddsSample = parseSharpApiProps(oddsSample, "2026-07-07T15:00:00.000Z");
@@ -444,7 +466,7 @@ async function main() {
   check("member context avoids payload and provider narration", drawerSource.includes("Season opponent tendencies will appear when the team profile is verified.") && !drawerSource.includes("current provider payload"));
   check("member reason and context translators remove operational language", propsUiSource.includes("function memberReason") && propsUiSource.includes('STALE_BDL_ODDS: "Price refresh in progress"') && propsUiSource.includes('FIRST_HR_FIELD_MODEL_NOT_PROMOTED: "Research market only"') && propsUiSource.includes('.replace(/^BDL\\s+/i, "")') && propsUiSource.includes('.replace(/^MLB Stats\\s+/i, "")') && propsUiSource.includes("verified fixture field"));
   check("longshot value rows display the priced side as the prediction", propsUiSource.includes("function isLongshotValueRow") && propsUiSource.includes("const longshotValue = pair.rows") && propsUiSource.includes("if (isLongshotValueRow(row)) return row.side"));
-  check("paired prediction badge cannot contradict the graded model side", propsUiSource.includes("function isModelSignalSide") && propsUiSource.includes(".filter(isModelSignalSide)") && propsUiSource.includes("probability: signalPrediction.modelProbability ?? signalPrediction.finalProbability") && propsUiSource.includes("if (isModelSignalSide(row)) return row.side"));
+  check("paired prediction badge cannot contradict the graded model side", propsUiSource.includes("function isModelSignalSide") && propsUiSource.includes(".filter(isModelSignalSide)") && propsUiSource.includes("probability: signalPrediction.finalProbability ?? signalPrediction.modelProbability") && propsUiSource.includes("if (isModelSignalSide(row)) return row.side"));
   check("research cockpit contains decision visuals", ["projection-vs-line", "model-vs-market", "book-price-ladder", "player-stat-snapshot", "market-context"].every((module) => propsUiSource.includes(`data-research-module="${module}"`)));
   check("player stat snapshot uses truthful member-facing labels", propsUiSource.includes('data-visual="player-stat-snapshot"') && propsUiSource.includes('data-stat-available={stat.feature ? "true" : "false"}') && propsUiSource.includes('stat.feature ? "Included in this projection" : "More data coming"') && propsUiSource.includes("playerStatDescriptor"));
   check("book ladder distinguishes unavailable covered books", propsUiSource.includes("unavailableBooks") && propsUiSource.includes('data-book-availability="unavailable"') && propsUiSource.includes("opacity-35"));
@@ -456,11 +478,12 @@ async function main() {
   check("hitter model reads use integrated evidence stack", liveBoardSource.includes("buildIntegratedHitterSignal") && ["RECENT_FORM_EDGE", "PITCH_MIX_MATCHUP_EDGE", "DIRECT_MATCHUP_CONTEXT", "PARK_WEATHER_CONTEXT", "MARKET_MOVEMENT_CONTEXT"].every((label) => liveBoardSource.includes(label)));
   check("fast hitter refreshes preserve full-season projection inputs", liveBoardSource.includes("recent?.samples?.last5.average") && liveBoardSource.includes("recent?.samples?.last10.average") && liveBoardSource.includes("recent?.samples?.season.average") && liveBoardSource.includes("recent?.samples?.season.count") && !liveBoardSource.includes("const season = averageNumber(logs.map"));
   check("hitter market tiers allow volume leans while capping rare events", liveBoardSource.includes("HITTER_LEAN_ELIGIBLE_MARKETS") && liveBoardSource.includes('"batter_hits"') && liveBoardSource.includes('"batter_total_bases"') && liveBoardSource.includes("HITTER_WATCHLIST_ONLY_MARKETS") && liveBoardSource.includes("HITTER_LONGSHOT_VALUE_MARKETS") && liveBoardSource.includes('"batter_home_runs"') && liveBoardSource.includes("LONGSHOT_VALUE_CONTEXT") && liveBoardSource.includes("RARE_OR_CONTEXT_HEAVY_MARKET_CAPPED"));
+  check("home-run actionable promotion is bounded and probability-gated", liveBoardSource.includes("HOME_RUN_ACTIONABLE_PROMOTION_LIMIT = 5") && liveBoardSource.includes("applyHomeRunActionablePromotions") && liveBoardSource.includes("row.finalProbability >= 0.15") && liveBoardSource.includes("row.finalProbability <= 0.18") && liveBoardSource.includes("(row.expectedValue ?? 0) > 0"));
   check("generic pitcher scorer warnings cannot suppress integrated hitter reads", liveBoardSource.includes('const scoredPitcherSignal = definition.family === "pitcher"') && liveBoardSource.includes("const signal: IntegratedPropSignal | null = scoredPitcherSignal ?") && liveBoardSource.includes("const blockingModelWarnings = (scoredPitcherSignal?.featureWarnings ?? [])"));
-  check("positive prop signals collapse duplicate sportsbook rows to the best price", liveBoardSource.includes("applyBestPriceSignalDiscipline") && liveBoardSource.includes("applyHitterSignalDiscipline(applyBestPriceSignalDiscipline(dedupeRows(rows)))") && liveBoardSource.includes("signalOfferKey") && liveBoardSource.includes("BETTER_PRICE_AVAILABLE"));
+  check("positive prop signals collapse duplicate sportsbook rows to the best price", liveBoardSource.includes("applyBestPriceSignalDiscipline") && liveBoardSource.includes("applyHitterSignalDiscipline(applyBestPriceSignalDiscipline(applyHomeRunActionablePromotions(deduped)))") && liveBoardSource.includes("signalOfferKey") && liveBoardSource.includes("BETTER_PRICE_AVAILABLE"));
   check("pitcher best angles require a material model projection cushion", liveBoardSource.includes("function pitcherSignalGrade") && liveBoardSource.includes("function pitcherBestAngleProjectionGap") && liveBoardSource.includes('market === "pitcher_outs"') && liveBoardSource.includes('market === "pitcher_strikeouts"') && liveBoardSource.includes('if (minGap === null) return "LEAN"') && liveBoardSource.includes("scoredPitcherSignal?.modelProjection ?? projection"));
   check("pitcher board projection uses the model projection when available", realScoringSource.includes("modelProjectionFromExplanation") && realScoringSource.includes("projectedOuts") && realScoringSource.includes("projectedStrikeouts") && realScoringSource.includes("modelProjection: number | null"));
-  check("prediction badges show the independent probability that selected the model side", propsUiSource.includes("probability: signalPrediction.modelProbability ?? signalPrediction.finalProbability") && propsUiSource.includes("return row.modelProbability ?? row.finalProbability"));
+  check("member prediction badges show the calibrated probability", propsUiSource.includes("probability: signalPrediction.finalProbability ?? signalPrediction.modelProbability") && propsUiSource.includes("return row.finalProbability ?? row.modelProbability"));
   check("older player detail shards cannot overwrite current board rows", propsUiSource.includes("incomingUpdatedAt > existingUpdatedAt") && propsUiSource.includes("Never let an older shard roll a current price"));
   check("hitter leans are de-duplicated and capped for slate readability", liveBoardSource.includes("applyHitterSignalDiscipline") && ["BETTER_PRICE_AVAILABLE", "CORRELATED_HITTER_MARKET_CAPPED", "PLAYER_HITTER_SIGNAL_LIMIT", "SLATE_HITTER_SIGNAL_LIMIT"].every((code) => liveBoardSource.includes(code) && propsConfigSource.includes(code)) && liveBoardSource.includes("ODDSPHERE_PROPS_HITTER_LEANS_PER_GAME"));
   check("short hitter prices stay visible without being elevated to Lean", liveBoardSource.includes("ODDSPHERE_PROPS_HITTER_LEAN_MIN_AMERICAN_ODDS") && liveBoardSource.includes("HITTER_LEAN_PRICE_TOO_SHORT"));
@@ -1347,13 +1370,14 @@ async function main() {
   });
   check("fixture backtest runs", backtest.recommendations.length > 0);
   check("fixture backtest reproducible", backtest.name === "fixture_2026-07-07");
-  check("fixture backtest calculates CLV when closing line exists", backtest.recommendations.some((row) => row.clv !== null));
-  check("fixture backtest supports pitcher outs market", (await runFixtureMlbPropBacktest({
+  const outsBacktest = await runFixtureMlbPropBacktest({
     provider,
     date: "2026-07-07",
     asOfTimestamp: "2026-07-07T15:00:00.000Z",
     marketKeys: ["pitcher_outs"],
-  })).recommendations.some((row) => row.marketKey === "pitcher_outs"));
+  });
+  check("fixture backtest captures closing price when closing line exists", backtest.recommendations.some((row) => row.closingAmericanOdds !== null));
+  check("fixture backtest supports pitcher outs market", outsBacktest.recommendations.some((row) => row.marketKey === "pitcher_outs"));
 
   console.log(`\nPass: ${pass}  Fail: ${fail}`);
   if (fail > 0) {

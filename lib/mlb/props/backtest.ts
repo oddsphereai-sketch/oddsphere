@@ -65,6 +65,7 @@ export async function runFixtureMlbPropBacktest(args: {
         result.marketKey === row.marketKey,
     );
     const closing = findClosingOdds(closingOdds, row, recommendation.side);
+    const opening = recommendation.side === "over" ? row.over : row.under;
     recommendations.push({
       gameId: row.gameId,
       playerId: row.playerId,
@@ -72,7 +73,7 @@ export async function runFixtureMlbPropBacktest(args: {
       recommendation,
       result: recommendation.status === "recommended" ? settle(recommendation, settled) : "no_play",
       closingAmericanOdds: closing?.americanOdds ?? null,
-      clv: recommendation.americanOdds && closing ? recommendation.americanOdds - closing.americanOdds : null,
+      clv: opening && closing ? opening.americanOdds - closing.americanOdds : null,
     });
   }
 

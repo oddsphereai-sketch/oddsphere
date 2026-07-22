@@ -111,6 +111,7 @@ export type RealPropsCandidateSummary = {
   modelProjection: number | null;
   modelProbability: number;
   finalProbability: number;
+  shrinkageWeight: number;
   marketProbability: number | null;
   edge: number | null;
   modelEdge: number | null;
@@ -566,6 +567,7 @@ export async function scoreRealMlbPropsForPaper(args: {
       modelProjection,
       modelProbability: round(recommendation.modelProbability),
       finalProbability: round(recommendation.finalProbability),
+      shrinkageWeight: round(recommendation.shrinkageWeight),
       marketProbability: recommendation.noVigMarketProbability === null ? null : round(recommendation.noVigMarketProbability),
       edge: recommendation.edge === null ? null : round(recommendation.edge),
       modelEdge: recommendation.modelEdge === null ? null : round(recommendation.modelEdge),

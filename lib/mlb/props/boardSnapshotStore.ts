@@ -52,6 +52,7 @@ export type MlbPropsBoardSnapshot = {
   validation: MlbPropsBoardValidation;
   movement: MlbPropsBoardMovement;
   modelContext?: {
+    modelReleaseId?: string;
     probablePitcherSeasonStats: Array<[string, RealPitcherSeasonStat]>;
     openingPropOdds?: PropOddsSnapshot[];
     marketModelVersions?: Record<string, string>;

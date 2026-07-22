@@ -56,9 +56,11 @@ function emptyReport(startDate?: string) {
     byMarket: [],
     byCategory: [],
     byGrade: [],
+    byRelease: [],
     oneUnitByMarket: [],
     oneUnitByCategory: [],
     oneUnitByGrade: [],
+    oneUnitByRelease: [],
     recent: [],
   };
 }
