@@ -265,6 +265,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     providerCoverage,
   });
   const movement = compareMlbPropsBoardMovement(previous, data.props);
+  const snapshotOpeningOdds = compactOpeningPropOddsForSnapshot(openingOdds, data.props);
   const snapshot: MlbPropsBoardSnapshot = {
     schemaVersion: 1,
     snapshotId: randomUUID(),
@@ -277,7 +278,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     modelContext: {
       modelReleaseId: MLB_PROPS_MODEL_RELEASE_ID,
       probablePitcherSeasonStats: [...seasonStats.entries()],
-      openingPropOdds: openingOdds,
+      openingPropOdds: snapshotOpeningOdds,
       marketModelVersions: activeMlbPropMarketModelVersions(),
     },
   };
@@ -1803,6 +1804,25 @@ export function attachMlbPropOddsMovement(
 function nearestOpeningQuote(row: PlayerPropPreviewRow, candidates: PropOddsSnapshot[]): PropOddsSnapshot | null {
   if (!candidates.length) return null;
   return [...candidates].sort((a, b) => Math.abs(a.line - row.line) - Math.abs(b.line - row.line))[0] ?? null;
+}
+
+function compactOpeningPropOddsForSnapshot(
+  openingOdds: PropOddsSnapshot[],
+  memberRows: PlayerPropPreviewRow[],
+): PropOddsSnapshot[] {
+  const exactOpenings = new Map(openingOdds.map((row) => [openingOddsExactKey(row), row]));
+  const openingsByBase = new Map<string, PropOddsSnapshot[]>();
+  for (const opening of openingOdds) {
+    const base = openingOddsBaseKey(opening);
+    openingsByBase.set(base, [...(openingsByBase.get(base) ?? []), opening]);
+  }
+  const selected = new Map<string, PropOddsSnapshot>();
+  for (const row of memberRows) {
+    const opening = exactOpenings.get(dashboardOddsExactKey(row))
+      ?? nearestOpeningQuote(row, openingsByBase.get(dashboardOddsBaseKey(row)) ?? []);
+    if (opening) selected.set(openingOddsExactKey(opening), opening);
+  }
+  return [...selected.values()];
 }
 
 function stripOpeningQuote(row: PropOddsSnapshot): PropOddsSnapshot {
