@@ -211,7 +211,6 @@ check(
     bookCount: 5,
   }) === "Best Angle",
 );
-
 const fixtureModel: ModelState = {
   elo: new Map([[10, 1500], [30, 1500]]),
   games: new Map([[10, 30], [30, 30]]),
