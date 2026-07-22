@@ -14,6 +14,7 @@ import {
   stripEventBucketSuffix,
   extractSlateDateFromEventId,
   extractDoubleheaderGameNumberFromEventId,
+  withEventBucketSuffix,
   type RawOpportunityRow,
 } from "../lib/providers/real_api/_opportunitiesDiscovery";
 
@@ -74,6 +75,11 @@ function main() {
     stripEventBucketSuffix("mlb_dodgers_yankees_2026-07-19_b2_g1") ===
       "mlb_dodgers_yankees_2026-07-19_g1"
   );
+  check(
+    "inserts bucket before doubleheader game marker",
+    withEventBucketSuffix("mlb_dodgers_yankees_2026-07-19_g2", "_b3") ===
+      "mlb_dodgers_yankees_2026-07-19_b3_g2"
+  );
 
   section("Helper — extractSlateDateFromEventId");
   check(
@@ -110,6 +116,33 @@ function main() {
     check("keeps both doubleheader games distinct", res.events.length === 2);
     check("preserves the g1 bucket id", res.events[0]?.suffixedEventIds[0] === "mlb_dodgers_yankees_2026-07-19_b2_g1");
     check("preserves the g2 bucket id", res.events[1]?.suffixedEventIds[0] === "mlb_dodgers_yankees_2026-07-19_b3_g2");
+  }
+
+  section("Build — recover doubleheader game exposed only by prop rows");
+  {
+    const res = buildDiscoveryFromOpportunitiesRows(
+      [
+        row({
+          event_id: "mlb_pirates_yankees_2026-07-22_b2_g1",
+          home_team: "New York Yankees",
+          away_team: "Pittsburgh Pirates",
+        }),
+        row({
+          event_id: "mlb_pirates_yankees_2026-07-22_b3_g2",
+          home_team: "New York Yankees",
+          away_team: "Pittsburgh Pirates",
+          is_player_prop: true,
+        }),
+      ],
+      "2026-07-22"
+    );
+    const game2 = res.events.find((event) => event.sharpEventId.endsWith("_g2"));
+    check("keeps both games when g2 has no main-line opportunity", res.events.length === 2);
+    check(
+      "g2 retains its provider-valid bucket ordering",
+      game2?.suffixedEventIds.includes("mlb_pirates_yankees_2026-07-22_b3_g2") === true
+    );
+    check("prop row remains counted as skipped", res.stats.skippedPlayerProp === 1);
   }
 
   section("Build — happy path: 1 row, 1 event");

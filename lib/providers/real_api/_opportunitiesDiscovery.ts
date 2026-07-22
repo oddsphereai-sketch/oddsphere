@@ -131,6 +131,14 @@ export function stripEventBucketSuffix(eventId: string): string {
   return eventId.replace(/_b\d+(?=_g\d+$|$)/, "");
 }
 
+/** Insert a SharpAPI market bucket before a trailing doubleheader marker. */
+export function withEventBucketSuffix(eventId: string, suffix: string): string {
+  const stripped = stripEventBucketSuffix(eventId);
+  return /_g\d+$/.test(stripped)
+    ? stripped.replace(/(_g\d+)$/, `${suffix}$1`)
+    : stripped + suffix;
+}
+
 /** SharpAPI appends `_g1`, `_g2`, ... for doubleheader games. */
 export function extractDoubleheaderGameNumberFromEventId(
   eventId: string | null,
@@ -184,6 +192,20 @@ export function buildDiscoveryFromOpportunitiesRows(
 ): { events: CanonicalEvent[]; stats: DiscoveryStats } {
   const events: CanonicalEvent[] = [];
   const byStrippedId = new Map<string, CanonicalEvent>();
+  // SharpAPI can expose a doubleheader game only through prop/alternate
+  // opportunity rows even while its /odds endpoint has full game prices.
+  // Preserve one normalized row so that game identity is not lost merely
+  // because no main-line opportunity happened to be +EV at this poll.
+  const doubleheaderFallbackByStrippedId = new Map<
+    string,
+    {
+      rawEventId: string;
+      rowDate: string;
+      home: MlbTeamAbbrev;
+      away: MlbTeamAbbrev;
+      rawRow: RawOpportunityRow;
+    }
+  >();
   // R-17 Step 2D — track every observed suffix per stripped event_id so
   // we can detect multi-bucket drift after the build loop completes.
   // Populated for ALL rows that pass the league + non-prop + non-alt
@@ -256,6 +278,23 @@ export function buildDiscoveryFromOpportunitiesRows(
     }
     suffixSet.add(suffix);
 
+    if (
+      extractDoubleheaderGameNumberFromEventId(strippedId) !== null &&
+      !doubleheaderFallbackByStrippedId.has(strippedId)
+    ) {
+      const fallbackHome = normalizeMlbTeamName(row.home_team);
+      const fallbackAway = normalizeMlbTeamName(row.away_team);
+      if (fallbackHome !== null && fallbackAway !== null) {
+        doubleheaderFallbackByStrippedId.set(strippedId, {
+          rawEventId,
+          rowDate,
+          home: fallbackHome,
+          away: fallbackAway,
+          rawRow: row,
+        });
+      }
+    }
+
     // ── Stage 3: row-level harvest filters ──
     // These flags don't change the event's bucket identity — they just
     // mark this PARTICULAR row as not-for-V2-harvest. Drop the row but
@@ -296,6 +335,24 @@ export function buildDiscoveryFromOpportunitiesRows(
     stats.keptEvents++;
   }
 
+  // Promote only missing doubleheader identities. Ordinary prop/alternate
+  // rows remain excluded exactly as before; this narrow recovery prevents
+  // Game 2 from disappearing when Game 1 has the only main-line opportunity.
+  for (const [strippedId, fallback] of doubleheaderFallbackByStrippedId) {
+    if (byStrippedId.has(strippedId)) continue;
+    const ev: CanonicalEvent = {
+      sharpEventId: strippedId,
+      suffixedEventIds: [fallback.rawEventId],
+      dateSuffix: fallback.rowDate,
+      home: fallback.home,
+      away: fallback.away,
+      rawRow: fallback.rawRow,
+    };
+    byStrippedId.set(strippedId, ev);
+    events.push(ev);
+    stats.keptEvents++;
+  }
+
   // ── R-17 Step 2E.1 — post-loop suffix expansion ──
   //
   // The build loop only assigned one `suffixedEventIds` entry per
@@ -316,9 +373,7 @@ export function buildDiscoveryFromOpportunitiesRows(
       // would land on the stripped id, which the SharpAPI audit
       // confirmed returns 0 rows.
       if (sfx === "") continue;
-      const fullId = /_g\d+$/.test(ev.sharpEventId)
-        ? ev.sharpEventId.replace(/(_g\d+)$/, `${sfx}$1`)
-        : ev.sharpEventId + sfx;
+      const fullId = withEventBucketSuffix(ev.sharpEventId, sfx);
       if (!seen.has(fullId)) {
         ev.suffixedEventIds.push(fullId);
         seen.add(fullId);

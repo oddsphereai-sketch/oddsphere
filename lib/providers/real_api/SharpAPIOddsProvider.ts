@@ -46,6 +46,7 @@ import {
 import {
   discoverEventsFromOpportunities,
   extractDoubleheaderGameNumberFromEventId,
+  withEventBucketSuffix,
   type DiscoveryStats as EvDiscoveryStats,
 } from "./_opportunitiesDiscovery";
 import {
@@ -568,7 +569,8 @@ export class SharpAPIOddsProvider implements IOddsProvider {
       eventIdSource:
         | "opportunities_suffixed"
         | "splits_stripped"
-        | "splits_discovery_fallback";
+        | "splits_discovery_fallback"
+        | "schedule_doubleheader_sibling";
     };
 
     const resolved: ResolvedV2Event[] = [];
@@ -612,12 +614,9 @@ export class SharpAPIOddsProvider implements IOddsProvider {
     // returned 50-row /odds payloads at the _b2 suffix from real
     // books, even though /opportunities/ev returned 0 matches for
     // each one.
-    const resolvedPairs = new Set(
-      resolved.map((r) => `${r.home}|${r.away}`),
-    );
+    const resolvedExternalIds = new Set(resolved.map((r) => r.gameExternalId));
     const SPLITS_FALLBACK_SUFFIXES = ["_b0", "_b1", "_b2", "_b3"];
     for (const sev of splitsLookupEvents) {
-      if (resolvedPairs.has(`${sev.home}|${sev.away}`)) continue;
       const gameExtId = await this.resolveGame(
         sportKey,
         date,
@@ -630,16 +629,60 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         unresolvedTeamPairs.push({ home: sev.home, away: sev.away });
         continue;
       }
+      // Team-pair dedupe collapses doubleheaders. Resolve the provider's
+      // game marker first, then dedupe on the actual schedule game id.
+      if (resolvedExternalIds.has(gameExtId)) continue;
       resolved.push({
         home: sev.home,
         away: sev.away,
         gameExternalId: gameExtId,
         splitsEventId: sev.splitsEventId,
         effectiveEventIds: SPLITS_FALLBACK_SUFFIXES.map(
-          (s) => `${sev.splitsEventId}${s}`,
+          (s) => withEventBucketSuffix(sev.splitsEventId, s),
         ),
         eventIdSource: "splits_discovery_fallback",
       });
+      resolvedExternalIds.add(gameExtId);
+    }
+
+    // A second game can be absent from both discovery feeds even while
+    // SharpAPI's /odds endpoint publishes full `_g2` buckets. Ask the
+    // schedule resolver for Game 2 once per team pair and add it only when
+    // it resolves to a distinct scheduled game. Single-game matchups return
+    // the same external id and are left untouched.
+    const siblingCheckedPairs = new Set<string>();
+    for (const ev of [...resolved]) {
+      const pair = `${ev.home}|${ev.away}`;
+      if (siblingCheckedPairs.has(pair)) continue;
+      siblingCheckedPairs.add(pair);
+      const game2ExternalId = await this.resolveGame(
+        sportKey,
+        date,
+        ev.home,
+        ev.away,
+        fetchedAt,
+        2,
+      );
+      if (
+        game2ExternalId === null ||
+        game2ExternalId === ev.gameExternalId ||
+        resolvedExternalIds.has(game2ExternalId)
+      ) {
+        continue;
+      }
+      const baseEventId = ev.splitsEventId.replace(/_g\d+$/, "");
+      const game2EventId = `${baseEventId}_g2`;
+      resolved.push({
+        home: ev.home,
+        away: ev.away,
+        gameExternalId: game2ExternalId,
+        splitsEventId: game2EventId,
+        effectiveEventIds: SPLITS_FALLBACK_SUFFIXES.map((suffix) =>
+          withEventBucketSuffix(game2EventId, suffix),
+        ),
+        eventIdSource: "schedule_doubleheader_sibling",
+      });
+      resolvedExternalIds.add(game2ExternalId);
     }
 
     // Lock sweeps need fresh prices only for games crossing T-60. Filtering
@@ -852,7 +895,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
       // recovery counters below capture only TRUE additions.
       const observedSuffixSet = new Set<string>(
         ev.effectiveEventIds
-          .map((id) => id.match(/_b\d+$/)?.[0] ?? "")
+          .map((id) => id.match(/_b\d+(?=_g\d+$|$)/)?.[0] ?? "")
           .filter((s): s is string => s.length > 0)
       );
       const speculativeProbeIds: Array<{ suffix: string; fullId: string }> = [];
@@ -860,7 +903,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         if (observedSuffixSet.has(sfx)) continue;
         speculativeProbeIds.push({
           suffix: sfx,
-          fullId: `${ev.splitsEventId}${sfx}`,
+          fullId: withEventBucketSuffix(ev.splitsEventId, sfx),
         });
       }
 
@@ -1229,7 +1272,8 @@ export type V2DiscoveryPerGame = {
   eventIdSource:
     | "opportunities_suffixed"
     | "splits_stripped"
-    | "splits_discovery_fallback";
+    | "splits_discovery_fallback"
+    | "schedule_doubleheader_sibling";
   oddsCallStatus: V2OddsCallStatus;
   /** Combined row counts (real /odds + R-16E /splits fallback). */
   mlRows: number;
