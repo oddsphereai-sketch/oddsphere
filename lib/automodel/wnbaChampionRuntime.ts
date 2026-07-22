@@ -6,7 +6,7 @@ import {
 
 export const EXPECTED_WNBA_MODEL_VERSION = "wnba_v1" as const;
 export const EXPECTED_WNBA_DISTRIBUTION_VERSION =
-  "wnba_market_specific_heads_shared_score_projection_2026_07_22" as const;
+  "wnba_market_heads_value_calibrated_2026_07_22_v2" as const;
 export const EXPECTED_WNBA_CALIBRATION_SCHEMA_VERSION = "wnba_core_calibration_v1" as const;
 export const EXPECTED_WNBA_FORMULA_VERSIONS = {
   total_recommendation: WNBA_EMERGENCY_TOTAL_FORMULA_VERSION,

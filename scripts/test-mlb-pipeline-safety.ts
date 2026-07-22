@@ -63,7 +63,7 @@ check("champion runtime refuses an explicit old model", (() => {
 check("WNBA model family is single-sourced", EXPECTED_WNBA_MODEL_VERSION === "wnba_v1");
 check(
   "WNBA distribution version is explicit",
-  EXPECTED_WNBA_DISTRIBUTION_VERSION === "wnba_market_specific_heads_shared_score_projection_2026_07_22",
+  EXPECTED_WNBA_DISTRIBUTION_VERSION === "wnba_market_heads_value_calibrated_2026_07_22_v2",
 );
 const wnbaModelSource = readFileSync("lib/services/wnba/buildWnbaDailyEdgePreview.ts", "utf8");
 check(

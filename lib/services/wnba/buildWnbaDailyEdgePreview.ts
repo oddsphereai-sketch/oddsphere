@@ -27,7 +27,11 @@ const BDL = "https://api.balldontlie.io/wnba/v1";
 const SHARP = "https://api.sharpapi.io/api/v1";
 const BLOCKED = new Set(["fliff", "kalshi", "polymarket"]);
 export const SHARP_BOOKS = new Set(["circa", "betonline", "draftkings", "betmgm", "caesars", "bet365 us", "betrivers", "pinnacle"]);
-const HFA = 65, K = 20, PPE = 25, SIG_M = 12.8, SIG_T = 15.0, COLD = 15;
+// Margin sigma was validated on the 996-game possession/efficiency replay.
+// Total sigma is intentionally wider than the launch value: the larger
+// walk-forward score replay measured roughly 13.5-14.2 points of total MAE,
+// while launch tracking showed that 15.0 overstated O/U confidence.
+const HFA = 65, K = 20, PPE = 25, SIG_M = 12.8, SIG_T = 18.0, COLD = 15;
 
 // ── math ──
 const dexp = (d: number) => 1 / (1 + Math.pow(10, d / 400));
@@ -59,7 +63,7 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 
 // ── types ──
 type BdlGame = { id: number; date: string; season: number; postseason: boolean; h: number; a: number; hs: number; as: number };
-type Grade = "Best Angle" | "Lean" | "Watchlist" | "Caution";
+export type Grade = "Best Angle" | "Lean" | "Watchlist" | "Caution";
 export type ModelState = {
   elo: Map<number, number>;
   games: Map<number, number>;
@@ -75,30 +79,54 @@ export type ModelState = {
   computedAt: number;
 };
 
-function moneylineGradeFromPickedEdge(args: {
-  pickedEdge: number | null;
+function americanBreakEvenProbability(odds: number): number {
+  return odds > 0 ? 100 / (odds + 100) : Math.abs(odds) / (Math.abs(odds) + 100);
+}
+
+function americanExpectedReturn(probability: number, odds: number): number {
+  const winProfit = odds > 0 ? odds / 100 : 100 / Math.abs(odds);
+  return probability * winProfit - (1 - probability);
+}
+
+/**
+ * Grade the published WNBA moneyline probability against both the no-vig
+ * market and the actual offered price. The old rule graded the independent
+ * pre-blend edge and only allowed Best Angle for -200..-299 favorites. That
+ * ranked expensive favorites above the value signal members could bet.
+ */
+export function wnbaMoneylineGradeFromValue(args: {
+  finalPickedProbability: number | null;
+  marketPickedProbability: number | null;
   pickedOdds: number | null;
   conflict: boolean;
   marketReliability: number;
   bookCount: number;
-  sharpPresent: boolean;
-  projectedMargin: number;
 }): Grade {
-  const { pickedEdge, pickedOdds, conflict, marketReliability, bookCount, sharpPresent, projectedMargin } = args;
-  if (pickedEdge === null) return "Watchlist";
-  if (pickedEdge <= -0.01) return "Watchlist";
-  if (pickedOdds !== null && pickedOdds <= -300) return "Watchlist";
-  if (conflict && marketReliability >= 0.8 && pickedEdge < 0.04) return "Caution";
+  const {
+    finalPickedProbability,
+    marketPickedProbability,
+    pickedOdds,
+    conflict,
+    marketReliability,
+    bookCount,
+  } = args;
+  if (
+    finalPickedProbability === null ||
+    marketPickedProbability === null ||
+    pickedOdds === null
+  ) return "Watchlist";
+  const pickedEdge = finalPickedProbability - marketPickedProbability;
+  const priceEv = americanExpectedReturn(finalPickedProbability, pickedOdds);
+  if (pickedEdge <= 0 || priceEv < 0) return "Watchlist";
+  if (conflict && marketReliability >= 0.8 && (pickedEdge < 0.04 || priceEv < 0.02)) {
+    return "Caution";
+  }
   if (
     pickedEdge >= 0.04 &&
-    bookCount >= 6 &&
-    sharpPresent &&
-    Math.abs(projectedMargin) >= 3 &&
-    pickedOdds !== null &&
-    pickedOdds <= -200 &&
-    pickedOdds > -300
+    priceEv >= 0.02 &&
+    bookCount >= 4
   ) return "Best Angle";
-  if (pickedEdge >= 0.02 && bookCount >= 4) return "Lean";
+  if (pickedEdge >= 0.02 && priceEv >= 0.02 && bookCount >= 4) return "Lean";
   return "Watchlist";
 }
 
@@ -350,20 +378,24 @@ export function computeWnbaPrediction(
   const mlSide = finalP >= 0.5 ? hN : aN, mlConf = Math.round(Math.max(finalP, 1 - finalP) * 100);
   const mlPrice = median((mlSide === hN ? mlH : mlA).map((z) => z.odds));
   const mlPickIsHome = mlSide === hN;
+  const finalPickedProbability = mlPickIsHome ? finalP : 1 - finalP;
+  const marketPickedProbability =
+    mktPDec == null ? null : mlPickIsHome ? mktPDec : 1 - mktPDec;
   const mlPickedEdge =
-    mktPDec == null
+    marketPickedProbability === null
       ? null
-      : mlPickIsHome
-        ? modelP - mktPDec
-        : (1 - modelP) - (1 - mktPDec);
-  const mlGradeBase: Grade = moneylineGradeFromPickedEdge({
-    pickedEdge: mlPickedEdge,
+      : finalPickedProbability - marketPickedProbability;
+  const mlBreakEvenProbability = mlPrice === null ? null : americanBreakEvenProbability(mlPrice);
+  const mlExpectedReturn = mlPrice === null
+    ? null
+    : americanExpectedReturn(finalPickedProbability, mlPrice);
+  const mlGradeBase: Grade = wnbaMoneylineGradeFromValue({
+    finalPickedProbability,
+    marketPickedProbability,
     pickedOdds: mlPrice,
     conflict,
     marketReliability: marketRel,
     bookCount: mlBooks,
-    sharpPresent,
-    projectedMargin: projMargin,
   });
   const mlSideKey = mlSide === hN ? "home" : "away";
   const mlPublicContext = applyPublicMarketContext({
@@ -469,6 +501,14 @@ export function computeWnbaPrediction(
         home_rest_days: restH,
         away_rest_days: restA,
         market_weight: r1(wMkt),
+        moneyline_final_picked_probability: r1(finalPickedProbability * 100) / 100,
+        moneyline_market_picked_probability:
+          marketPickedProbability === null ? null : r1(marketPickedProbability * 100) / 100,
+        moneyline_final_edge_pp: mlPickedEdge === null ? null : r1(mlPickedEdge * 100),
+        moneyline_price_break_even_probability:
+          mlBreakEvenProbability === null ? null : r1(mlBreakEvenProbability * 100) / 100,
+        moneyline_expected_return_pct:
+          mlExpectedReturn === null ? null : r1(mlExpectedReturn * 100),
       },
     },
     wnba_core_model_calibration: calibrationAudit,
