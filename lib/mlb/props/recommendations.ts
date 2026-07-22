@@ -16,6 +16,7 @@ import {
   predictionProjectionSideIntegrity,
 } from "./projectionSideIntegrity";
 import { assessPropPrice } from "./pricePolicy";
+import { calibratedPropModelWeight } from "./probabilityCalibration";
 
 export type PropRecommendation = {
   status: "recommended" | "no_play";
@@ -86,7 +87,11 @@ export function recommendPropBet(args: {
       return args.prediction.side === "over" ? devig.over : devig.under;
     })()
     : null;
-  const shrinkageWeight = modelWeightForConfidence(args.dataConfidence ?? 0.8);
+  const shrinkageWeight = calibratedPropModelWeight({
+    marketKey: args.prediction.marketKey,
+    side: args.prediction.side,
+    baseWeight: modelWeightForConfidence(args.dataConfidence ?? 0.8),
+  });
   const finalProbability = marketProbability === null
     ? args.prediction.modelProbability
     : clampProbability(args.prediction.modelProbability * shrinkageWeight + marketProbability * (1 - shrinkageWeight));

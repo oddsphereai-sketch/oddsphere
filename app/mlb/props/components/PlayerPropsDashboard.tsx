@@ -867,12 +867,12 @@ function modelPrediction(pair: MarketPair): ModelPrediction | null {
   if (signalPrediction) return {
     side: signalPrediction.side,
     row: signalPrediction,
-    probability: signalPrediction.modelProbability ?? signalPrediction.finalProbability,
+    probability: signalPrediction.finalProbability ?? signalPrediction.modelProbability,
   };
   const modeled = pair.rows
     .filter((row) => row.modelProbability !== null && row.modelProbability >= 0.5)
     .sort((a, b) => (b.modelProbability ?? Number.NEGATIVE_INFINITY) - (a.modelProbability ?? Number.NEGATIVE_INFINITY))[0];
-  if (modeled) return { side: modeled.side, row: modeled, probability: modeled.modelProbability };
+  if (modeled) return { side: modeled.side, row: modeled, probability: modeled.finalProbability ?? modeled.modelProbability };
   return null;
 }
 
@@ -904,7 +904,7 @@ function projectionSideFor(row: PlayerPropPreviewRow): "over" | "under" | null {
 function rowPredictionProbability(row: PlayerPropPreviewRow): number | null {
   const side = rowPredictionSide(row);
   if (!side) return null;
-  if (side === row.side) return row.modelProbability ?? row.finalProbability;
+  if (side === row.side) return row.finalProbability ?? row.modelProbability;
   if (side === "over") return row.overProbability ?? null;
   if (side === "under") return row.underProbability ?? null;
   return null;

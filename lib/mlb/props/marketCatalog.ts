@@ -84,8 +84,8 @@ const MLB_PROP_MARKET_BASE_CATALOG: Record<MlbPropMarketKey, MlbPropMarketBaseDe
     modelFamily: "pitcher_earned_runs_distribution",
     twoWayEligible: true,
     milestone: false,
-    recommendationEligibility: "watchlist_until_context",
-    defaultDisplayStatus: "watchlist",
+    recommendationEligibility: "eligible_now",
+    defaultDisplayStatus: "recommendation_eligible",
     missingFeatureReasons: ["team_total_unavailable", "park_weather_context_unavailable"],
   },
   pitcher_record_a_win: {
@@ -168,8 +168,8 @@ const MLB_PROP_MARKET_BASE_CATALOG: Record<MlbPropMarketKey, MlbPropMarketBaseDe
     modelFamily: "batter_runs_context_opportunity",
     twoWayEligible: true,
     milestone: false,
-    recommendationEligibility: "watchlist_until_context",
-    defaultDisplayStatus: "watchlist",
+    recommendationEligibility: "eligible_now",
+    defaultDisplayStatus: "recommendation_eligible",
     missingFeatureReasons: ["LINEUP_CONTEXT_INSUFFICIENT", "teammate_on_base_context_unavailable"],
   },
   batter_hits_runs_rbis: {

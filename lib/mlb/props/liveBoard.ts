@@ -81,6 +81,7 @@ import {
   syncInternalMlbPropsTracking,
   type MlbPropsTrackingSyncResult,
 } from "./internalTracking";
+import { calibratedPropModelWeight } from "./probabilityCalibration";
 
 type RefreshArgs = {
   slateDate: string;
@@ -107,6 +108,7 @@ type IntegratedPropSignal = {
   side: "over" | "under";
   modelProbability: number;
   finalProbability: number;
+  shrinkageWeight: number;
   overModelProbability: number;
   underModelProbability: number;
   overFinalProbability: number;
@@ -789,6 +791,7 @@ function buildDashboardRows(args: {
       side: scoredPitcherSignal.side,
       modelProbability: scoredPitcherSignal.modelProbability,
       finalProbability: scoredPitcherSignal.finalProbability,
+      shrinkageWeight: scoredPitcherSignal.shrinkageWeight,
       overModelProbability: scoredPitcherSignal.side === "over" ? scoredPitcherSignal.modelProbability : 1 - scoredPitcherSignal.modelProbability,
       underModelProbability: scoredPitcherSignal.side === "under" ? scoredPitcherSignal.modelProbability : 1 - scoredPitcherSignal.modelProbability,
       overFinalProbability: scoredPitcherSignal.side === "over" ? scoredPitcherSignal.finalProbability : 1 - scoredPitcherSignal.finalProbability,
@@ -857,7 +860,7 @@ function buildDashboardRows(args: {
       independentProbability: eligibleModel ? modelProbability : null,
       marketProbability,
       finalProbability,
-      shrinkageWeight: finalProbability === null ? 0 : 1,
+      shrinkageWeight: finalProbability === null ? 0 : signal?.shrinkageWeight ?? 1,
       modelEdge: edge,
       expectedValue,
       fairOdds,
@@ -904,7 +907,8 @@ function buildDashboardRows(args: {
       clvStatus: "pending",
     });
   }
-  return applyHitterSignalDiscipline(applyBestPriceSignalDiscipline(dedupeRows(rows)));
+  const deduped = dedupeRows(rows);
+  return applyHitterSignalDiscipline(applyBestPriceSignalDiscipline(applyHomeRunActionablePromotions(deduped)));
 }
 
 const HITTER_LEAN_ELIGIBLE_MARKETS = new Set([
@@ -914,11 +918,11 @@ const HITTER_LEAN_ELIGIBLE_MARKETS = new Set([
   "batter_walks",
   "batter_hits_runs_rbis",
   "batter_singles",
+  "batter_runs_scored",
 ]);
 
 const HITTER_WATCHLIST_ONLY_MARKETS = new Set([
   "batter_rbis",
-  "batter_runs_scored",
   "batter_doubles",
   "batter_triples",
   "batter_home_runs",
@@ -932,6 +936,40 @@ const HITTER_LONGSHOT_VALUE_MARKETS = new Set([
 const DEFAULT_HITTER_LEAN_MIN_AMERICAN_ODDS = -250;
 const DEFAULT_HITTER_LEANS_PER_PLAYER = 2;
 const DEFAULT_HITTER_LEANS_PER_GAME = 12;
+const HOME_RUN_ACTIONABLE_PROMOTION_LIMIT = 5;
+
+function applyHomeRunActionablePromotions(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
+  const eligible = rows.filter((row) =>
+    row.market === "batter_home_runs"
+    && row.side === "over"
+    && row.playGrade === "WATCHLIST"
+    && row.finalProbability !== null
+    && row.finalProbability >= 0.15
+    && row.finalProbability <= 0.18
+    && (row.expectedValue ?? 0) > 0
+    && row.confidence >= 0.62
+    && assessPropPrice(row.odds).signalEligible,
+  );
+  const bestOfferIds = new Set<string>();
+  for (const offers of groupRows(eligible, signalOfferKey).values()) {
+    const [best] = [...offers].sort(comparePropSignals);
+    if (best) bestOfferIds.add(best.id);
+  }
+  const promotedIds = new Set(
+    eligible
+      .filter((row) => bestOfferIds.has(row.id))
+      .sort((a, b) => (b.finalProbability ?? 0) - (a.finalProbability ?? 0) || comparePropSignals(a, b))
+      .slice(0, HOME_RUN_ACTIONABLE_PROMOTION_LIMIT)
+      .map((row) => row.id),
+  );
+  if (!promotedIds.size) return rows;
+  return rows.map((row) => promotedIds.has(row.id) ? {
+    ...row,
+    playGrade: "LEAN",
+    units: 0.25,
+    reasonCodes: uniqueStrings([...row.reasonCodes, "LONGSHOT_VALUE_CONTEXT"]),
+  } : row);
+}
 
 function applyBestPriceSignalDiscipline(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
   const signalRows = rows.filter((row) => row.playGrade === "BEST_ANGLE" || row.playGrade === "LEAN");
@@ -1155,7 +1193,11 @@ function buildIntegratedHitterSignal(args: {
   const marketSideProbability = args.marketProbability === null
     ? longshotValueRead ? priceProbability : null
     : args.mapped.odds.side === side ? args.marketProbability : 1 - args.marketProbability;
-  const shrinkageWeight = confidence >= 0.78 ? 0.62 : confidence >= 0.68 ? 0.52 : 0.42;
+  const shrinkageWeight = calibratedPropModelWeight({
+    marketKey: market,
+    side,
+    baseWeight: confidence >= 0.78 ? 0.62 : confidence >= 0.68 ? 0.52 : 0.42,
+  });
   const finalProbability = marketSideProbability === null
     ? modelProbability
     : clampProbability(modelProbability * shrinkageWeight + marketSideProbability * (1 - shrinkageWeight));
@@ -1185,6 +1227,7 @@ function buildIntegratedHitterSignal(args: {
     side,
     modelProbability,
     finalProbability,
+    shrinkageWeight,
     overModelProbability,
     underModelProbability,
     overFinalProbability,
@@ -1243,6 +1286,7 @@ function buildDedicatedBatterHitsSignal(
     side,
     modelProbability,
     finalProbability,
+    shrinkageWeight: 1,
     overModelProbability: distribution.overProbability,
     underModelProbability: distribution.underProbability,
     overFinalProbability,
@@ -1302,6 +1346,7 @@ function buildDedicatedBatterHrrSignal(
     side,
     modelProbability,
     finalProbability,
+    shrinkageWeight: 1,
     overModelProbability: distribution.overProbability,
     underModelProbability: distribution.underProbability,
     overFinalProbability: distribution.overProbability,
