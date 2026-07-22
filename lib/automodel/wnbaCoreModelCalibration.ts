@@ -3,9 +3,8 @@ export const WNBA_TOTAL_MARKET_ANCHOR_50 = 0.5;
 export const WNBA_SPREAD_MARKET_ANCHOR_25 = 0.25;
 export const WNBA_SPREAD_MARKET_ANCHOR_50 = 0.5;
 export const WNBA_DIAGNOSTIC_HOME_MARGIN_CORRECTION = 12;
-export const WNBA_EMERGENCY_SPREAD_HOME_BIAS_POINTS = 11.944;
 export const WNBA_EMERGENCY_TOTAL_FORMULA_VERSION = "wnba_total_market_anchor_25_v1";
-export const WNBA_EMERGENCY_SPREAD_FORMULA_VERSION = "wnba_spread_market25_homebias25_2026_06_27";
+export const WNBA_EMERGENCY_SPREAD_FORMULA_VERSION = "wnba_spread_market25_zero_homebias_2026_07_22";
 
 export type WnbaCoreModelCalibrationInput = {
   rawProjectedAwayScore: number | null;
@@ -164,11 +163,13 @@ export function buildWnbaCoreModelCalibrationAudit(
     ? rawProjectedHomeMargin + WNBA_DIAGNOSTIC_HOME_MARGIN_CORRECTION
     : null;
   const emergencyTotal = total25;
-  const emergencySpread = finite(marketImpliedHomeMargin) && finite(spreadEdge)
-    ? marketImpliedHomeMargin +
-      WNBA_SPREAD_MARKET_ANCHOR_25 * spreadEdge +
-      0.25 * WNBA_EMERGENCY_SPREAD_HOME_BIAS_POINTS
-    : null;
+  // The original launch hotfix added 25% of a +11.944 point home bias learned
+  // from only nine settled games. By 2026-07-22 the 72-game replay measured
+  // effectively zero home bias, while production spread sides were 30-42.
+  // Keep the stable 25% market anchor, but remove the stale additive bias.
+  // Because this is a convex blend of the market line and the raw projection,
+  // it cannot select the opposite ATS side from the published score margin.
+  const emergencySpread = spread25;
   const totalReasonCodes = [
     ...(totalEnabled ? ["market_anchor_25_total_available"] : []),
     ...(totalEnabled && !totalRecommendationUse ? ["total_recommendation_use_disabled"] : []),
@@ -176,9 +177,9 @@ export function buildWnbaCoreModelCalibrationAudit(
   ];
   const spreadReasonCodes = [
     ...(spreadEnabled ? ["market_anchor_25_spread_available"] : []),
-    ...(spreadEnabled ? ["home_bias_correction_applied"] : []),
+    ...(spreadEnabled ? ["stale_launch_home_bias_removed"] : []),
     ...(spreadEnabled && !spreadRecommendationUse ? ["spread_recommendation_use_disabled"] : []),
-    ...(spreadRecommendationUse ? ["market_anchor_25_home_bias_spread_used_for_recommendation"] : []),
+    ...(spreadRecommendationUse ? ["market_anchor_25_spread_used_for_recommendation"] : []),
   ];
 
   return {

@@ -322,7 +322,7 @@ export function computeWnbaPrediction(
     finite(calibrationAudit.recommendation_projected_total_used)
       ? calibrationAudit.recommendation_projected_total_used
       : projTotal;
-  const marginForSpreadRecommendation =
+  const requestedMarginForSpreadRecommendation =
     calibrationAudit.recommendation_uses_calibrated_spread &&
     finite(calibrationAudit.recommendation_home_margin_used)
       ? calibrationAudit.recommendation_home_margin_used
@@ -332,6 +332,18 @@ export function computeWnbaPrediction(
   // market, but using its home-bias correction here can make the score imply
   // the opposite ML winner from the model's moneyline prediction.
   const marginForDisplayedScore = projMargin;
+  const spreadProjectionSideConflict =
+    mktSpread != null &&
+    Math.sign(requestedMarginForSpreadRecommendation + mktSpread) !== 0 &&
+    Math.sign(marginForDisplayedScore + mktSpread) !== 0 &&
+    Math.sign(requestedMarginForSpreadRecommendation + mktSpread) !==
+      Math.sign(marginForDisplayedScore + mktSpread);
+  // Member-facing invariant: a spread recommendation cannot oppose the ATS
+  // side implied by the published score projection. This is a final safety
+  // gate for future calibration changes, not a second projection model.
+  const marginForSpreadRecommendation = spreadProjectionSideConflict
+    ? marginForDisplayedScore
+    : requestedMarginForSpreadRecommendation;
   const totalForDisplayedScore =
     calibrationAudit.recommendation_uses_calibrated_total &&
     finite(calibrationAudit.recommendation_projected_total_used)
@@ -429,6 +441,7 @@ export function computeWnbaPrediction(
   if (minG < COLD) flags.push("low_history_team");
   if (outlierTotal) flags.push("total_line_outlier");
   if (outlierSpread) flags.push("spread_line_outlier");
+  if (spreadProjectionSideConflict) flags.push("spread_projection_coherence_override");
 
   return {
     game_id: g.id, date: g.date, start_time: r.find((x) => x)?.date ?? g.date,

@@ -64,7 +64,7 @@ check("WNBA emergency total equals 25% market anchor", auditOnly.emergency_calib
 check("home spread +2.5 implies market home margin -2.5", marketImpliedHomeMarginFromSpread(2.5) === -2.5);
 check("WNBA spread audit computes 25% market anchor", auditOnly.market_anchored_home_margin_25 === -2.9);
 check("WNBA spread audit computes 50% market anchor", auditOnly.market_anchored_home_margin_50 === -3.2);
-check("WNBA emergency spread adds conservative home-bias correction", auditOnly.emergency_calibrated_home_margin === 0.1);
+check("WNBA emergency spread uses the 25% market anchor without stale home bias", auditOnly.emergency_calibrated_home_margin === -2.9);
 check("WNBA diagnostic home correction is additive only", auditOnly.home_bias_corrected_margin === 8);
 check("audit-only total recommendation remains false", auditOnly.recommendation_uses_calibrated_total === false);
 check("audit-only spread recommendation remains false", auditOnly.recommendation_uses_calibrated_spread === false);
@@ -115,11 +115,11 @@ const recommendationEnabled = buildWnbaCoreModelCalibrationAudit({
 check("recommendation-use can activate total only with projection flag", recommendationEnabled.recommendation_uses_calibrated_total === true);
 check("recommendation-use can activate spread only with margin flag", recommendationEnabled.recommendation_uses_calibrated_spread === true);
 check("recommendation total used is recorded", recommendationEnabled.recommendation_projected_total_used === 169);
-check("recommendation spread used is recorded", recommendationEnabled.recommendation_home_margin_used === 0.1);
+check("recommendation spread used is recorded", recommendationEnabled.recommendation_home_margin_used === -2.9);
 check("recommendation mode display hint is explicit", recommendationEnabled.display_hint === "calibrated_projection_used_for_recommendation");
 check(
-  "recommendation audit records spread home-bias reason code",
-  recommendationEnabled.recommendation_reason_codes.spread.includes("home_bias_correction_applied"),
+  "recommendation audit records stale launch-bias removal",
+  recommendationEnabled.recommendation_reason_codes.spread.includes("stale_launch_home_bias_removed"),
 );
 check(
   "recommendation audit records total formula reason code",
@@ -236,7 +236,15 @@ const computeSpreadEnabled = computeWnbaPrediction(
 );
 
 check("compute flags off leaves spread on raw side", computeDisabled.spread.side === "PHX +6.5");
-check("compute spread recommendation flag can move spread to calibrated side", computeSpreadEnabled.spread.side === "TOR -6.5");
+check("compute spread recommendation stays on the displayed projection ATS side", computeSpreadEnabled.spread.side === "PHX +6.5");
+const displayedHomeMargin = computeSpreadEnabled.projected_score.home - computeSpreadEnabled.projected_score.away;
+const displayedHomeCovers = displayedHomeMargin - 6.5 > 0;
+check(
+  "WNBA spread pick cannot oppose the ATS side implied by the displayed score",
+  displayedHomeCovers
+    ? computeSpreadEnabled.spread.side === "TOR -6.5"
+    : computeSpreadEnabled.spread.side === "PHX +6.5",
+);
 check("compute total recommendation flag off leaves total side unchanged", computeSpreadEnabled.total.side === computeDisabled.total.side);
 check("compute moneyline remains unchanged by spread calibration", computeSpreadEnabled.moneyline.side === computeDisabled.moneyline.side);
 check("compute total grade calibration avoids unvalidated total Best Angle", computeSpreadEnabled.total.grade !== "Best Angle");
