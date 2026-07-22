@@ -765,6 +765,19 @@ export class SharpAPIOddsProvider implements IOddsProvider {
             });
             oddsRows = mergeRawOddsRows(oddsRows, targetedTotals);
           }
+          const hasFirstInningTotal = oddsRows.some((row) =>
+            mapMarketType(asStringOrNull(row.market_type)) === "first_inning_total" &&
+            row.is_alternate_line !== true
+          );
+          if (!hasFirstInningTotal && callsUsed < MAX_CALLS_PER_INVOCATION) {
+            callsUsed++;
+            const targetedFirstInningTotals = await this.client.fetchAll<RawOddsRow>({
+              path: "/odds",
+              query: { event_id: effectiveEventId, market_type: "1st_inning_total_runs" },
+              maxPages: 10,
+            });
+            oddsRows = mergeRawOddsRows(oddsRows, targetedFirstInningTotals);
+          }
           bucketStatus = oddsRows.length === 0 ? "empty" : "ok";
         } catch (e) {
           if (e instanceof SharpApiNotFoundError) {
@@ -940,6 +953,19 @@ export class SharpAPIOddsProvider implements IOddsProvider {
               maxPages: 10,
             });
             probeRows = mergeRawOddsRows(probeRows, targetedTotals);
+          }
+          const hasFirstInningTotal = probeRows.some((row) =>
+            mapMarketType(asStringOrNull(row.market_type)) === "first_inning_total" &&
+            row.is_alternate_line !== true
+          );
+          if (!hasFirstInningTotal && probeRows.length > 0 && callsUsed < MAX_CALLS_PER_INVOCATION) {
+            callsUsed++;
+            const targetedFirstInningTotals = await this.client.fetchAll<RawOddsRow>({
+              path: "/odds",
+              query: { event_id: probe.fullId, market_type: "1st_inning_total_runs" },
+              maxPages: 10,
+            });
+            probeRows = mergeRawOddsRows(probeRows, targetedFirstInningTotals);
           }
         } catch (e) {
           if (e instanceof SharpApiNotFoundError) {
