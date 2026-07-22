@@ -20,8 +20,9 @@ import { selectMainTotalLine } from "@/lib/services/selectMainTotalLine";
 import { applyPublicMarketContext, type PublicMarketContext, type PublicMarketSignal } from "@/lib/services/publicMarketContext";
 import {
   buildWnbaCoreModelCalibrationAudit,
-  readWnbaCoreModelCalibrationFlagsFromEnv,
+  type WnbaCoreModelCalibrationInput,
 } from "@/lib/automodel/wnbaCoreModelCalibration";
+import { EXPECTED_WNBA_CALIBRATION_FLAGS } from "@/lib/automodel/wnbaChampionRuntime";
 
 const BDL = "https://api.balldontlie.io/wnba/v1";
 const SHARP = "https://api.sharpapi.io/api/v1";
@@ -256,6 +257,15 @@ export function computeWnbaPrediction(
   g: { id: number; date: string; h: number; a: number },
   r: OddRow[],
   publicSignals: WnbaPublicMarketSignals = {},
+  calibrationFlags: Pick<
+    WnbaCoreModelCalibrationInput,
+    | "coreModelEnabled"
+    | "totalProjectionCalibrationEnabled"
+    | "spreadMarginCalibrationEnabled"
+    | "totalRecommendationUsesCalibratedProjection"
+    | "spreadRecommendationUsesCalibratedMargin"
+    | "gradeCalibrationEnabled"
+  > = EXPECTED_WNBA_CALIBRATION_FLAGS,
 ) {
   const E = (t: number) => M.elo.get(t) ?? 1500;
   const hN = M.nameById.get(g.h) ?? wnbaAbbr(g.h) ?? String(g.h);
@@ -342,7 +352,7 @@ export function computeWnbaPrediction(
     rawProjectedHomeMargin: projMargin,
     marketTotal: mktTotal,
     marketSpreadForHome: mktSpread,
-    ...readWnbaCoreModelCalibrationFlagsFromEnv(),
+    ...calibrationFlags,
   });
   const totalForRecommendation =
     calibrationAudit.recommendation_uses_calibrated_total &&
