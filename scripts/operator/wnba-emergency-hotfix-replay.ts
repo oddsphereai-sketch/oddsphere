@@ -34,6 +34,28 @@ function pct(part: number, total: number): number | null {
   return total === 0 ? null : round((part / total) * 100, 1);
 }
 
+function erf(x: number): number {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return x >= 0 ? y : -y;
+}
+
+function phi(z: number): number {
+  return 0.5 * (1 + erf(z / Math.SQRT2));
+}
+
+function probit(p: number): number {
+  const a = [-3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.38357751867269e2, -3.066479806614716e1, 2.506628277459239e0];
+  const b = [-5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1, -1.328068155288572e1];
+  const c = [-7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838e0, -2.549732539343734e0, 4.374664141464968e0, 2.938163982698783e0];
+  const d = [7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996e0, 3.754408661907416e0];
+  const pl = 0.02425, ph = 1 - pl;
+  let q: number, r: number;
+  if (p < pl) { q = Math.sqrt(-2 * Math.log(p)); return (((((c[0]! * q + c[1]!) * q + c[2]!) * q + c[3]!) * q + c[4]!) * q + c[5]!) / ((((d[0]! * q + d[1]!) * q + d[2]!) * q + d[3]!) * q + 1); }
+  if (p <= ph) { q = p - 0.5; r = q * q; return (((((a[0]! * r + a[1]!) * r + a[2]!) * r + a[3]!) * r + a[4]!) * r + a[5]!) * q / (((((b[0]! * r + b[1]!) * r + b[2]!) * r + b[3]!) * r + b[4]!) * r + 1); }
+  q = Math.sqrt(-2 * Math.log(1 - p)); return -(((((c[0]! * q + c[1]!) * q + c[2]!) * q + c[3]!) * q + c[4]!) * q + c[5]!) / ((((d[0]! * q + d[1]!) * q + d[2]!) * q + d[3]!) * q + 1);
+}
+
 function americanProfit(odds: number | null, result: Result): number | null {
   if (result === "push") return 0;
   if (result !== "win" && result !== "loss") return null;
@@ -99,6 +121,14 @@ function rawHomeMargin(rec: Row): number | null {
   const away = n(rec.snapshot_json?.projected_score?.away);
   const home = n(rec.snapshot_json?.projected_score?.home);
   return away !== null && home !== null ? home - away : null;
+}
+
+function scoreDerivedHomeMargin(rec: Row): number | null {
+  return n(rec.snapshot_json?.model?.components?.raw_model_margin);
+}
+
+function finalPredictionHomeMargin(rec: Row): number | null {
+  return n(rec.snapshot_json?.model?.components?.market_coherent_margin);
 }
 
 function marketTotal(rec: Row): number | null {
@@ -411,6 +441,24 @@ function spreadCandidateRows(records: Row[], lineRows: Row[]) {
   };
 
   add("A_raw_home_margin", "raw_projected_home_margin", "current baseline", rawHomeMargin);
+  add("A2_score_derived_home_margin", "score_derived_home_margin", "independent model component", scoreDerivedHomeMargin);
+  add("A3_final_prediction_implied_margin", "sigM * probit(final_moneyline_probability)", "single-distribution coherence candidate", finalPredictionHomeMargin);
+  add("A4_current_blended_margin_same_cohort", "0.7 * score_margin + 0.3 * final_probability_margin", "same-cohort current margin", (r) =>
+    finalPredictionHomeMargin(r) === null ? null : rawHomeMargin(r));
+  add("A5_market25_current_blended_same_cohort", "market_margin + 0.25 * (current_blended_margin - market_margin)", "same-cohort production calibration", (r) => {
+    const raw = rawHomeMargin(r), market = marketHomeMargin(r);
+    return finalPredictionHomeMargin(r) === null || raw === null || market === null
+      ? null
+      : market + 0.25 * (raw - market);
+  });
+  add("A6_market25_with_ml_winner_guard_same_cohort", "market25_blended_margin; final_probability_margin on winner conflict", "single published score/spread margin with ML-side invariant", (r) => {
+    const raw = rawHomeMargin(r), market = marketHomeMargin(r), mlMargin = finalPredictionHomeMargin(r);
+    if (raw === null || market === null || mlMargin === null) return null;
+    const calibrated = market + 0.25 * (raw - market);
+    return Math.sign(calibrated) !== 0 && Math.sign(mlMargin) !== 0 && Math.sign(calibrated) !== Math.sign(mlMargin)
+      ? mlMargin
+      : calibrated;
+  });
   add("B_market_implied_home_margin_only", "market_implied_home_margin", "no side by construction; projection benchmark only", marketHomeMargin);
   add("C_market_plus_25pct_model_edge", "market_implied_home_margin + 0.25 * (raw_home_margin - market_home_margin)", "low; fixed shrinkage", (r) => {
     const raw = rawHomeMargin(r), market = marketHomeMargin(r);
@@ -447,6 +495,52 @@ function spreadCandidateRows(records: Row[], lineRows: Row[]) {
     regularizedHomeBias: round(regularizedHomeBias, 3),
     learnedAlpha: bestAlpha,
     learnedGamma: bestGamma,
+  };
+}
+
+function moneylineCandidateRows(records: Row[]) {
+  const rows = records.filter((r) => r.market === "moneyline" && finalPredictionHomeMargin(r) !== null);
+  const spreadByGame = new Map(
+    records.filter((r) => r.market === "spread").map((r) => [r.game_id, r]),
+  );
+  const evaluate = (probability: (r: Row) => number | null) => {
+    const values = rows.map((r) => {
+      const p = probability(r);
+      const actual = n(r.actual_home_score)! > n(r.actual_away_score)! ? 1 : 0;
+      return p === null ? null : { p, actual };
+    }).filter((x): x is { p: number; actual: number } => x !== null);
+    const correct = values.filter((x) => (x.p >= 0.5 ? 1 : 0) === x.actual).length;
+    return {
+      sample: values.length,
+      correct,
+      accuracy: pct(correct, values.length),
+      brier: values.length ? round(values.reduce((sum, x) => sum + (x.p - x.actual) ** 2, 0) / values.length, 4) : null,
+    };
+  };
+  const finalProbability = (r: Row) => {
+    const confidence = n(r.confidence);
+    if (confidence === null) return null;
+    return r.side === "home" ? confidence / 100 : 1 - confidence / 100;
+  };
+  const sigma = (r: Row) => {
+    const p = finalProbability(r), margin = finalPredictionHomeMargin(r);
+    if (p === null || margin === null) return null;
+    const z = probit(Math.min(0.99, Math.max(0.01, p)));
+    return Math.abs(z) < 1e-9 ? null : margin / z;
+  };
+  const fromMargin = (marginOf: (r: Row) => number | null) => (r: Row) => {
+    const margin = marginOf(r), s = sigma(r);
+    return margin === null || s === null || s <= 0 ? null : phi(margin / s);
+  };
+  return {
+    final_moneyline_probability: evaluate(finalProbability),
+    score_derived_margin_probability: evaluate(fromMargin(scoreDerivedHomeMargin)),
+    current_blended_margin_probability: evaluate(fromMargin(rawHomeMargin)),
+    market25_blended_margin_probability: evaluate(fromMargin((r) => {
+      const raw = rawHomeMargin(r), spread = spreadByGame.get(r.game_id);
+      const market = spread ? marketHomeMargin(spread) : null;
+      return raw === null || market === null ? null : market + 0.25 * (raw - market);
+    })),
   };
 }
 
@@ -553,6 +647,7 @@ async function main() {
   const spreads = settled.filter((r) => r.market === "spread");
   const totalReplay = totalCandidateRows(settled, lineRows, 0);
   const spreadReplay = spreadCandidateRows(settled, lineRows);
+  const moneylineReplay = moneylineCandidateRows(settled);
 
   const selectedTotalFormula = "no_total_recommendation_hotfix";
   const selectedTotalProject = rawTotal;
@@ -581,6 +676,7 @@ async function main() {
     },
     totalReplay,
     spreadReplay,
+    moneylineReplay,
     selectedEmergencyCandidates: {
       total: {
         recommendation: selectedTotalFormula,

@@ -641,7 +641,19 @@ type PreviewGame = {
   moneyline: PreviewMarket & { price: number | null };
   spread: PreviewMarket & { line: number | null };
   total: PreviewMarket & { line: number | null };
-  model: { home_win_prob: number; margin: number; total: number };
+  model: {
+    home_win_prob: number;
+    final_home_win_prob?: number;
+    margin: number;
+    total: number;
+    components?: {
+      blended_precalibration_margin?: number;
+      calibrated_spread_margin?: number;
+      canonical_home_margin?: number;
+      raw_projected_total?: number;
+      canonical_projected_total?: number;
+    };
+  };
   market: { home_win_prob: number | null; spread: number | null; total: number | null; book_count: number; dispersion: { spread: number; total: number } };
   data_quality: { ml_books: number; spread_books: number; total_books: number; flags: string[] };
   /** Playbook public splits (ML, total, spread) for display; absent on live fallback. */

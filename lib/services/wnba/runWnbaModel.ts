@@ -14,6 +14,7 @@ import { addDaysToSlate, currentSlateDate } from "../../dates/slateDate";
 import { getModel, computeWnbaPrediction, SHARP_BOOKS, type OddRow, type WnbaPublicMarketSignals } from "./buildWnbaDailyEdgePreview";
 import {
   assertWnbaChampionRuntime,
+  EXPECTED_WNBA_DISTRIBUTION_VERSION,
   EXPECTED_WNBA_MODEL_VERSION,
 } from "../../automodel/wnbaChampionRuntime";
 
@@ -198,7 +199,9 @@ export async function runWnbaModel(opts: {
       predicted_home_score: p.projected_score.home, predicted_away_score: p.projected_score.away, predicted_total: Math.round((p.projected_score.home + p.projected_score.away) * 10) / 10,
       // Grades live in sport_specific (avoid any CHECK constraint on the MLB-shaped grade columns).
       sport_specific: {
-        model_version: EXPECTED_WNBA_MODEL_VERSION, model: p.model, market: p.market, trusted: p.trusted, sharp: p.sharp,
+        model_version: EXPECTED_WNBA_MODEL_VERSION,
+        distribution_version: EXPECTED_WNBA_DISTRIBUTION_VERSION,
+        model: p.model, market: p.market, trusted: p.trusted, sharp: p.sharp,
         consensus_source: p.consensus_source, dynamic_market_weight: p.dynamic_market_weight,
         cold_start: p.cold_start, data_quality: p.data_quality,
         wnba_core_model_calibration: p.wnba_core_model_calibration,

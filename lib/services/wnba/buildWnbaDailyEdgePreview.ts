@@ -165,7 +165,6 @@ export async function getModel(): Promise<ModelState> {
   MODEL_CACHE = { elo, games: games_, pf, pa, margins, lastGameDate, leagueAvgScore, leagueAvgTotal: leagueAvgScore * 2, nameById, mascot, rawGames, computedAt: Date.now() };
   return MODEL_CACHE;
 }
-const roll10 = (m: Map<number, number[]>, t: number) => { const x = m.get(t) ?? []; return x.length ? x.slice(-10).reduce((s, v) => s + v, 0) / Math.min(10, x.length) : 82; };
 const rollN = (m: Map<number, number[]> | undefined, t: number, fallback: number, n = 10) => {
   const x = m?.get(t) ?? [];
   return x.length ? x.slice(-n).reduce((s, v) => s + v, 0) / Math.min(n, x.length) : fallback;
@@ -322,28 +321,25 @@ export function computeWnbaPrediction(
     finite(calibrationAudit.recommendation_projected_total_used)
       ? calibrationAudit.recommendation_projected_total_used
       : projTotal;
-  const requestedMarginForSpreadRecommendation =
+  const calibratedMarginForSpreadRecommendation =
     calibrationAudit.recommendation_uses_calibrated_spread &&
     finite(calibrationAudit.recommendation_home_margin_used)
       ? calibrationAudit.recommendation_home_margin_used
       : projMargin;
-  // The displayed score is the model projection, not the calibrated spread
-  // recommendation substrate. Spread calibration can help price the spread
-  // market, but using its home-bias correction here can make the score imply
-  // the opposite ML winner from the model's moneyline prediction.
-  const marginForDisplayedScore = projMargin;
-  const spreadProjectionSideConflict =
-    mktSpread != null &&
-    Math.sign(requestedMarginForSpreadRecommendation + mktSpread) !== 0 &&
-    Math.sign(marginForDisplayedScore + mktSpread) !== 0 &&
-    Math.sign(requestedMarginForSpreadRecommendation + mktSpread) !==
-      Math.sign(marginForDisplayedScore + mktSpread);
-  // Member-facing invariant: a spread recommendation cannot oppose the ATS
-  // side implied by the published score projection. This is a final safety
-  // gate for future calibration changes, not a second projection model.
-  const marginForSpreadRecommendation = spreadProjectionSideConflict
-    ? marginForDisplayedScore
-    : requestedMarginForSpreadRecommendation;
+  const mlWinnerSign = finalP > 0.5 ? 1 : finalP < 0.5 ? -1 : 0;
+  const calibratedWinnerSign = Math.sign(calibratedMarginForSpreadRecommendation);
+  const marginMlWinnerConflict =
+    mlWinnerSign !== 0 && calibratedWinnerSign !== 0 && mlWinnerSign !== calibratedWinnerSign;
+  // Canonical score/spread head. The market-calibrated expected margin is used
+  // by BOTH the displayed score and spread probability. If spread-market
+  // calibration would reverse the final ML winner, fall back to the margin
+  // implied by that final ML probability. This preserves the validated
+  // market-specific heads without allowing member-facing outputs to diverge.
+  const canonicalHomeMargin = marginMlWinnerConflict
+    ? finalPImpliedMargin
+    : calibratedMarginForSpreadRecommendation;
+  const marginForSpreadRecommendation = canonicalHomeMargin;
+  const marginForDisplayedScore = canonicalHomeMargin;
   const totalForDisplayedScore =
     calibrationAudit.recommendation_uses_calibrated_total &&
     finite(calibrationAudit.recommendation_projected_total_used)
@@ -441,7 +437,7 @@ export function computeWnbaPrediction(
   if (minG < COLD) flags.push("low_history_team");
   if (outlierTotal) flags.push("total_line_outlier");
   if (outlierSpread) flags.push("spread_line_outlier");
-  if (spreadProjectionSideConflict) flags.push("spread_projection_coherence_override");
+  if (marginMlWinnerConflict) flags.push("spread_ml_winner_coherence_override");
 
   return {
     game_id: g.id, date: g.date, start_time: r.find((x) => x)?.date ?? g.date,
@@ -453,13 +449,19 @@ export function computeWnbaPrediction(
     total: { side: toSide, line: mktTotal, confidence: toConf, grade: toGrade },
     model: {
       home_win_prob: r1(modelP * 100) / 100,
-      margin: r1(projMargin),
-      total: r1(projTotal),
+      final_home_win_prob: r1(finalP * 100) / 100,
+      margin: r1(canonicalHomeMargin),
+      total: r1(totalForDisplayedScore),
       components: {
         elo_margin: r1(eloMargin),
         stat_margin: r1(statMargin),
         raw_model_margin: r1(rawModelMargin),
         market_coherent_margin: r1(finalPImpliedMargin),
+        blended_precalibration_margin: r1(projMargin),
+        calibrated_spread_margin: r1(calibratedMarginForSpreadRecommendation),
+        canonical_home_margin: r1(canonicalHomeMargin),
+        raw_projected_total: r1(projTotal),
+        canonical_projected_total: r1(totalForDisplayedScore),
         stat_home_score: r1(statHomeScore),
         stat_away_score: r1(statAwayScore),
         margin_form_adjustment: r1(marginForm),
@@ -501,114 +503,10 @@ export async function buildWnbaDailyEdgePreview(dateParam: string | null) {
   const slate = allGames.filter((g) => g.hs === 0 && g.as === 0 && isRealWnbaTeam(g.h) && isRealWnbaTeam(g.a) && g.date >= cutoff && [shiftDate(g.date, -1), g.date, shiftDate(g.date, 1)].some((d) => snapDates.has(d)))
     .sort((x, y) => (x.date < y.date ? -1 : 1)).filter((g) => { const k = [g.h, g.a].sort().join("|") + g.date; if (seen.has(k)) return false; seen.add(k); return true; });
 
-  const E = (t: number) => M.elo.get(t) ?? 1500;
   const games = slate.map((g) => {
     const r = [shiftDate(g.date, -1), g.date, shiftDate(g.date, 1)].flatMap((d) => byGame.get([g.h, g.a].sort().join("|") + "|" + d) ?? []);
     if (!r.length) return null;
-    const hN = M.nameById.get(g.h)!, aN = M.nameById.get(g.a)!, gpH = M.games.get(g.h) ?? 0, gpA = M.games.get(g.a) ?? 0;
-
-    // ---- market consensus (computed first so it can inform the cold-start prior) ----
-    const mlH: { book: string; odds: number }[] = [], mlA: { book: string; odds: number }[] = [], sp: number[] = [], spS: number[] = [], to: number[] = [], toS: number[] = [];
-    for (const x of r) { const homeIsBdlHome = x.h === g.h;
-      if (x.mkt === "moneyline" && x.odds != null) ((x.selType === "home") === homeIsBdlHome ? mlH : mlA).push({ book: x.book, odds: x.odds });
-      if (x.mkt === "point_spread" && x.line != null && Math.abs(x.line) < 40 && (x.selType === "home") === homeIsBdlHome) { sp.push(x.line); if (x.sharp) spS.push(x.line); }
-      if (x.mkt === "total_points" && x.selType === "over" && x.line != null && x.line > 120 && x.line < 220) { to.push(x.line); if (x.sharp) toS.push(x.line); }
-    }
-    const bP: number[] = [], sP: number[] = [];
-    for (const h of mlH) { const a = mlA.find((z) => z.book === h.book); if (a) { const p = amProb(h.odds) / (amProb(h.odds) + amProb(a.odds)); bP.push(p); if (SHARP_BOOKS.has(h.book)) sP.push(p); } }
-    const mktP = median(bP), sharpMktP = median(sP), mlBooks = bP.length;
-    const mktSpread = median(sp), sharpSpread = median(spS), spDisp = sp.length ? r1(Math.max(...sp) - Math.min(...sp)) : 0;
-    const mktTotal = median(to), sharpTotal = median(toS), toDisp = to.length ? r1(Math.max(...to) - Math.min(...to)) : 0;
-
-    // ---- independent model + cold-start prior ----
-    const ehN = E(g.h), eaN = E(g.a), naiveP = platt(dexp(-(ehN + HFA - eaN)));
-    const lm = mktP != null ? 400 * Math.log10(mktP / (1 - mktP)) : null;
-    const coldAdj = (gms: number, isHome: boolean, own: number, opp: number) => {
-      if (gms >= COLD || lm == null) return { rating: own, w: 0, mi: null as number | null };
-      const w = clamp(Math.exp(-gms / 8), 0.1, 0.7); const mi = isHome ? opp - HFA + lm : opp + HFA - lm; return { rating: w * mi + (1 - w) * own, w, mi };
-    };
-    const csH = coldAdj(gpH, true, ehN, eaN), csA = coldAdj(gpA, false, eaN, ehN);
-    const eh = csH.rating, ea = csA.rating;
-    const modelP = platt(dexp(-(eh + HFA - ea)));
-    // projMargin is derived from finalP AFTER the blend (coherence) — see below.
-    const projTotal = (roll10(M.pf, g.h) + roll10(M.pa, g.a)) / 2 + (roll10(M.pf, g.a) + roll10(M.pa, g.h)) / 2;
-    const minG = Math.min(gpH, gpA), unc = 0.5 * Math.exp(-minG / 8), sigM = SIG_M * (1 + unc), sigT = SIG_T * (1 + unc);
-    const coldStart = csH.w > 0 || csA.w > 0;
-
-    // ---- dynamic blend (market = calibrator, not the answer) ----
-    const sharpPresent = sP.length > 0;
-    const marketRel = mktP != null ? clamp((Math.min(mlBooks, 8) / 8) * (spDisp <= 1 ? 1 : spDisp <= 3 ? 0.85 : 0.6) * (sharpPresent ? 1 : 0.85), 0.3, 1) : 0;
-    const modelStab = clamp(minG / 25, 0.4, 1);
-    let wMkt = mktP != null ? clamp(0.55 * marketRel / modelStab, 0.35, 0.75) : 0;
-    const edge = mktP != null ? modelP - mktP : 0;
-    if (Math.abs(edge) >= 0.06 && modelStab >= 0.8) wMkt = Math.max(0.35, wMkt - 0.15); // large explainable edge → model leads
-    let finalP = mktP != null ? wMkt * mktP + (1 - wMkt) * modelP : modelP;
-    const conflict = mktP != null && (modelP >= 0.5) !== (mktP >= 0.5);
-    if (conflict && marketRel >= 0.8 && Math.abs(edge) < 0.04) finalP = 0.5 + (finalP - 0.5) * 0.5; // fighting clean market weakly → damp
-
-    // COHERENCE: the projected margin (→ score + spread basis) is derived from
-    // the SAME blended win prob the ML uses. So the projected winner, the ML
-    // pick, and the spread always tell one story (no ML-on-CHI while the score
-    // says POR). σ = sigM so a pick'em spread maps back exactly to the ML prob.
-    const projMargin = sigM * probit(clp(finalP));
-
-    // ---- sides ----
-    const mlSide = finalP >= 0.5 ? hN : aN, mlConf = Math.round(Math.max(finalP, 1 - finalP) * 100);
-    const mlPrice = median((mlSide === hN ? mlH : mlA).map((z) => z.odds)); // representative consensus price on the pick side
-    const mlPickIsHome = mlSide === hN;
-    const mlPickedEdge =
-      mktP == null
-        ? null
-        : mlPickIsHome
-          ? modelP - mktP
-          : (1 - modelP) - (1 - mktP);
-    const mlGrade: Grade = moneylineGradeFromPickedEdge({
-      pickedEdge: mlPickedEdge,
-      pickedOdds: mlPrice,
-      conflict,
-      marketReliability: marketRel,
-      bookCount: mlBooks,
-      sharpPresent,
-      projectedMargin: projMargin,
-    });
-
-    const pCoverHome = mktSpread != null ? 1 - Phi((-mktSpread - projMargin) / sigM) : null;
-    const spEdge = mktSpread != null ? projMargin - -mktSpread : null;
-    // Use canonical abbreviations (POR/GS/TOR), never BDL mascot names ("Fire").
-  const spHomeAbbr = wnbaAbbr(g.h) ?? hN, spAwayAbbr = wnbaAbbr(g.a) ?? aN;
-  const spSide = mktSpread != null ? (pCoverHome! >= 0.5 ? `${spHomeAbbr} ${mktSpread > 0 ? "+" : ""}${mktSpread}` : `${spAwayAbbr} ${mktSpread > 0 ? "" : "+"}${-mktSpread}`) : null;
-    const spConf = pCoverHome != null ? Math.round(Math.max(pCoverHome, 1 - pCoverHome) * 100) : null;
-    const spGrade = mktSpread != null ? gradeMarket(Math.abs(spEdge!), sp.length, spDisp, sharpSpread != null && Math.sign(sharpSpread - -projMargin) === Math.sign(spEdge!)) : null;
-
-    const pOver = mktTotal != null ? 1 - Phi((mktTotal - projTotal) / sigT) : null;
-    const toEdge = mktTotal != null ? projTotal - mktTotal : null;
-    const toSide = mktTotal != null ? (pOver! >= 0.5 ? `Over ${mktTotal}` : `Under ${mktTotal}`) : null;
-    const toConf = pOver != null ? Math.round(Math.max(pOver, 1 - pOver) * 100) : null;
-    const toGrade = mktTotal != null ? gradeMarket(Math.abs(toEdge!), to.length, toDisp, sharpTotal != null && Math.sign(sharpTotal - projTotal) === -Math.sign(toEdge!)) : null;
-
-    // projected score from total + margin
-    const projHome = r1((projTotal + projMargin) / 2), projAway = r1((projTotal - projMargin) / 2);
-    const flags: string[] = [];
-    if (mlBooks < 3) flags.push("thin_ml_books");
-    if (mktSpread == null) flags.push("no_spread_line");
-    if (mktTotal == null) flags.push("no_total_line");
-    if (minG < COLD) flags.push("low_history_team");
-
-    return {
-      game_id: g.id, date: g.date, start_time: r.find((x) => x)?.date ?? g.date,
-      home_team_id: g.h, away_team_id: g.a, home_abbr: wnbaAbbr(g.h), away_abbr: wnbaAbbr(g.a),
-      home: hN, away: aN,
-      projected_score: { home: projHome, away: projAway },
-      moneyline: { side: mlSide, confidence: mlConf, grade: mlGrade, price: mlPrice },
-      spread: { side: spSide, line: mktSpread, confidence: spConf, grade: spGrade },
-      total: { side: toSide, line: mktTotal, confidence: toConf, grade: toGrade },
-      model: { home_win_prob: r1(modelP * 100) / 100, margin: r1(projMargin), total: r1(projTotal) },
-      market: { home_win_prob: mktP != null ? r1(mktP * 100) / 100 : null, spread: mktSpread, total: mktTotal, book_count: mlBooks, dispersion: { spread: spDisp, total: toDisp } },
-      sharp: sharpMktP != null || sharpSpread != null || sharpTotal != null ? { home_win_prob: sharpMktP != null ? r1(sharpMktP * 100) / 100 : null, spread: sharpSpread, total: sharpTotal } : null,
-      dynamic_market_weight: r1(wMkt * 100) / 100,
-      cold_start: coldStart ? { home: { games: gpH, elo: r1(ehN), market_prior: csH.mi != null ? r1(csH.mi) : null, weight: r1(csH.w * 100) / 100, final_rating: r1(csH.rating) }, away: { games: gpA, elo: r1(eaN), market_prior: csA.mi != null ? r1(csA.mi) : null, weight: r1(csA.w * 100) / 100, final_rating: r1(csA.rating) }, rating_uncertainty: r1(unc * 100) / 100, naive_home_win_prob: r1(naiveP * 100) / 100, learning_rate: "fixed K=20 (dynamic K tested & rejected)" } : null,
-      data_quality: { ml_books: mlBooks, spread_books: sp.length, total_books: to.length, flags },
-    };
+    return computeWnbaPrediction(M, g, r);
   }).filter(Boolean);
 
   return { sport: "wnba", preview: true, slate_date: cutoff, generated_at: new Date().toISOString(), game_count: games.length, games };
