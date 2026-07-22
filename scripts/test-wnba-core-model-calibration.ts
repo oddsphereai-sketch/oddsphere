@@ -2,7 +2,12 @@ import {
   buildWnbaCoreModelCalibrationAudit,
   marketImpliedHomeMarginFromSpread,
 } from "../lib/automodel/wnbaCoreModelCalibration";
-import { computeWnbaPrediction, type ModelState, type OddRow } from "../lib/services/wnba/buildWnbaDailyEdgePreview";
+import {
+  computeWnbaPrediction,
+  wnbaMoneylineGradeFromValue,
+  type ModelState,
+  type OddRow,
+} from "../lib/services/wnba/buildWnbaDailyEdgePreview";
 import { selectPreferredWnbaTipTime } from "../lib/services/wnba/refreshWnbaLines";
 import { gradePrediction } from "../lib/services/predictionGrader";
 
@@ -172,6 +177,40 @@ const totalPush = gradePrediction({
   source: "manual_operator",
 });
 check("WNBA total push remains push", totalPush.result === "push");
+
+check(
+  "WNBA moneyline promotes a final 4pp edge with positive offered-price EV",
+  wnbaMoneylineGradeFromValue({
+    finalPickedProbability: 0.66,
+    marketPickedProbability: 0.61,
+    pickedOdds: -150,
+    conflict: false,
+    marketReliability: 0.9,
+    bookCount: 6,
+  }) === "Best Angle",
+);
+check(
+  "WNBA moneyline does not promote a favorite whose final probability lacks price value",
+  wnbaMoneylineGradeFromValue({
+    finalPickedProbability: 0.7,
+    marketPickedProbability: 0.65,
+    pickedOdds: -300,
+    conflict: false,
+    marketReliability: 0.9,
+    bookCount: 6,
+  }) === "Watchlist",
+);
+check(
+  "WNBA moneyline can promote a playable underdog instead of requiring an expensive favorite",
+  wnbaMoneylineGradeFromValue({
+    finalPickedProbability: 0.55,
+    marketPickedProbability: 0.51,
+    pickedOdds: 105,
+    conflict: false,
+    marketReliability: 0.8,
+    bookCount: 5,
+  }) === "Best Angle",
+);
 
 const oldEnv = {
   WNBA_CORE_MODEL_CALIBRATION_ENABLED: process.env.WNBA_CORE_MODEL_CALIBRATION_ENABLED,
