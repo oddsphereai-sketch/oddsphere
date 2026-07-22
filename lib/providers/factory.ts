@@ -105,6 +105,9 @@ function readRequiredEnv(envKey: string, providerName: string): string {
  * SERVICE_ROLE_KEY so RLS is bypassed.
  */
 function makeSharpApiGameResolver(): SharpApiGameResolver {
+  type Candidate = { external_id: number; game_date: string | null };
+  const candidatesByPair = new Map<string, Promise<Candidate[]>>();
+
   return async (
     sport: Sport,
     date: string,
@@ -113,27 +116,34 @@ function makeSharpApiGameResolver(): SharpApiGameResolver {
     referenceTimeIso?: string,
     gameNumber?: number | null,
   ): Promise<number | null> => {
-    const { data: teams, error: teamsError } = await supabase
-      .from("teams")
-      .select("id, abbreviation")
-      .eq("sport", sport)
-      .in("abbreviation", [homeAbbrev, awayAbbrev]);
-    if (teamsError) return null;
-    if (!teams || teams.length < 2) return null;
-    const homeRow = teams.find((t) => t.abbreviation === homeAbbrev);
-    const awayRow = teams.find((t) => t.abbreviation === awayAbbrev);
-    if (homeRow === undefined || awayRow === undefined) return null;
+    const cacheKey = `${sport}|${date}|${homeAbbrev}|${awayAbbrev}`;
+    let candidatesPromise = candidatesByPair.get(cacheKey);
+    if (candidatesPromise === undefined) {
+      candidatesPromise = (async (): Promise<Candidate[]> => {
+        const { data: teams, error: teamsError } = await supabase
+          .from("teams")
+          .select("id, abbreviation")
+          .eq("sport", sport)
+          .in("abbreviation", [homeAbbrev, awayAbbrev]);
+        if (teamsError || !teams || teams.length < 2) return [];
+        const homeRow = teams.find((t) => t.abbreviation === homeAbbrev);
+        const awayRow = teams.find((t) => t.abbreviation === awayAbbrev);
+        if (homeRow === undefined || awayRow === undefined) return [];
 
-    const { data: games, error: gameError } = await supabase
-      .from("games")
-      .select("external_id, game_date")
-      .eq("sport", sport)
-      .eq("slate_date", date)
-      .eq("home_team_id", homeRow.id)
-      .eq("away_team_id", awayRow.id)
-      .order("game_date", { ascending: true });
-    if (gameError) return null;
-    const candidates = games ?? [];
+        const { data: games, error: gameError } = await supabase
+          .from("games")
+          .select("external_id, game_date")
+          .eq("sport", sport)
+          .eq("slate_date", date)
+          .eq("home_team_id", homeRow.id)
+          .eq("away_team_id", awayRow.id)
+          .order("game_date", { ascending: true });
+        if (gameError) return [];
+        return (games ?? []) as Candidate[];
+      })();
+      candidatesByPair.set(cacheKey, candidatesPromise);
+    }
+    const candidates = await candidatesPromise;
     if (candidates.length === 0) return null;
     if (candidates.length === 1) return candidates[0]?.external_id ?? null;
 

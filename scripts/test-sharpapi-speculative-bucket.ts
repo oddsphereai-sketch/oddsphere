@@ -177,7 +177,7 @@ async function main() {
     const oddsCalls = stub.calls.filter((c) => c.path === "/odds");
     check("speculative — advertised _b0 fetched", oddsCalls.some((c) => c.query.event_id === "mlb_royals_twins_2026-06-05_b0"));
     check("speculative — _b3 also fetched (speculative)", oddsCalls.some((c) => c.query.event_id === "mlb_royals_twins_2026-06-05_b3"));
-    check("speculative — total /odds calls = 2 (advertised + 1 speculative)", oddsCalls.length === 2);
+    check("speculative — all four canonical bucket ids covered", new Set(oddsCalls.map((c) => c.query.event_id)).size === 4);
 
     const books = new Set(result.records.map((r) => r.sportsbook));
     check("speculative — prophetx record made it through (advertised+speculative merge)", books.has("prophetx"));
@@ -227,7 +227,7 @@ async function main() {
     const result = await provider.getGameLinesV2(SLATE, "mlb");
 
     const oddsCalls = stub.calls.filter((c) => c.path === "/odds");
-    check("speculative — both _b3 and _b0 fetched", oddsCalls.length === 2);
+    check("speculative — advertised _b3 plus the other three buckets fetched", new Set(oddsCalls.map((c) => c.query.event_id)).size === 4);
     check("speculative — _b0 fetched as speculative", oddsCalls.some((c) => c.query.event_id === "mlb_royals_twins_2026-06-05_b0"));
 
     const books = new Set(result.records.map((r) => r.sportsbook));
@@ -235,8 +235,12 @@ async function main() {
 
     const pg = result.discovery.perGame[0];
     check(
-      "speculative — speculativeBucketsAttempted = [_b0 full id]",
-      JSON.stringify(pg?.speculativeBucketsAttempted) === JSON.stringify(["mlb_royals_twins_2026-06-05_b0"])
+      "speculative — speculativeBucketsAttempted covers _b0/_b1/_b2",
+      JSON.stringify(pg?.speculativeBucketsAttempted) === JSON.stringify([
+        "mlb_royals_twins_2026-06-05_b0",
+        "mlb_royals_twins_2026-06-05_b1",
+        "mlb_royals_twins_2026-06-05_b2",
+      ])
     );
     check("speculative — speculativeBooksRecovered = ['fliff']", JSON.stringify(pg?.speculativeBooksRecovered) === JSON.stringify(["fliff"]));
     check("speculative — speculativeRowsRecovered = 1", pg?.speculativeRowsRecovered === 1);
@@ -264,7 +268,7 @@ async function main() {
     const result = await provider.getGameLinesV2(SLATE, "mlb");
 
     const pg = result.discovery.perGame[0];
-    check("empty speculative — _b3 attempted", pg?.speculativeBucketsAttempted.length === 1);
+    check("empty speculative — all three unadvertised buckets attempted", pg?.speculativeBucketsAttempted.length === 3);
     check("empty speculative — _b3 NOT in BucketsWithRows (empty response)", pg?.speculativeBucketsWithRows.length === 0);
     check("empty speculative — 0 books recovered", pg?.speculativeBooksRecovered.length === 0);
     check("empty speculative — 0 rows recovered", pg?.speculativeRowsRecovered === 0);
@@ -290,7 +294,7 @@ async function main() {
     const result = await provider.getGameLinesV2(SLATE, "mlb");
 
     const pg = result.discovery.perGame[0];
-    check("404 speculative — _b0 attempted", pg?.speculativeBucketsAttempted.length === 1);
+    check("404 speculative — all three unadvertised buckets attempted", pg?.speculativeBucketsAttempted.length === 3);
     check("404 speculative — _b0 NOT in BucketsWithRows", pg?.speculativeBucketsWithRows.length === 0);
     check("404 speculative — 0 rows recovered", pg?.speculativeRowsRecovered === 0);
     check("404 speculative — advertised record still present", result.records.length === 1);
@@ -368,10 +372,10 @@ async function main() {
     const result = await provider.getGameLinesV2(SLATE, "mlb");
 
     const oddsCalls = stub.calls.filter((c) => c.path === "/odds");
-    check("both-advertised — exactly 2 /odds calls (no speculative)", oddsCalls.length === 2);
+    check("both-advertised — all four canonical bucket ids covered", new Set(oddsCalls.map((c) => c.query.event_id)).size === 4);
 
     const pg = result.discovery.perGame[0];
-    check("both-advertised — speculativeBucketsAttempted is empty", pg?.speculativeBucketsAttempted.length === 0);
+    check("both-advertised — only unadvertised _b1/_b2 attempted speculatively", pg?.speculativeBucketsAttempted.length === 2);
     check("both-advertised — speculativeBucketsWithRows is empty", pg?.speculativeBucketsWithRows.length === 0);
     check("both-advertised — speculativeBucketsCallCapped is empty", pg?.speculativeBucketsCallCapped.length === 0);
     check("both-advertised — speculativeRowsRecovered = 0", pg?.speculativeRowsRecovered === 0);
@@ -415,12 +419,45 @@ async function main() {
       const result = await provider.getGameLinesV2(SLATE, "mlb");
       check("team-guard speculative — kalshi kept; inverted prophetx rejected", result.records.length === 1 && result.records[0]?.sportsbook === "kalshi");
       const pg = result.discovery.perGame[0];
-      check("team-guard speculative — speculativeBucketsAttempted still includes _b3", pg?.speculativeBucketsAttempted.length === 1);
+      check("team-guard speculative — all three unadvertised buckets attempted", pg?.speculativeBucketsAttempted.length === 3);
       check("team-guard speculative — speculativeRowsRecovered = 0 (rejected)", pg?.speculativeRowsRecovered === 0);
       check("team-guard speculative — speculativeBooksRecovered is empty", pg?.speculativeBooksRecovered.length === 0);
     } finally {
       console.warn = origWarn;
     }
+  }
+
+  section("Doubleheader — schedule sibling recovers an undiscovered Game 2");
+  {
+    const base = "mlb_royals_twins_2026-06-05";
+    const oppRows = [oppRow({
+      eventId: `${base}_b2`,
+      away: "Kansas City Royals",
+      home: "Minnesota Twins",
+    })];
+    const oddsMap = new Map<string, Array<Record<string, unknown>>>([
+      [`${base}_b2`, [oddsRow({ market_type: "moneyline", sportsbook: "circa", selection_type: "home" })]],
+      [`${base}_b3_g2`, [oddsRow({ market_type: "moneyline", sportsbook: "fanduel", selection_type: "home" })]],
+    ]);
+    const doubleheaderResolver = async (
+      _sport: string,
+      _date: string,
+      _home: string,
+      _away: string,
+      _reference?: string,
+      gameNumber?: number | null,
+    ): Promise<number | null> => gameNumber === 2 ? 7002 : 7001;
+    const stub = new StubClient(oppRows, oddsMap);
+    const provider = new SharpAPIOddsProvider("stub-key", doubleheaderResolver, { client: stub });
+    const result = await provider.getGameLinesV2(SLATE, "mlb");
+    const game2 = result.discovery.perGame.find((game) => game.gameExternalId === 7002);
+    const eventIds = stub.calls
+      .filter((call) => call.path === "/odds")
+      .map((call) => String(call.query.event_id));
+    check("doubleheader sibling — distinct Game 2 is included", game2?.eventIdSource === "schedule_doubleheader_sibling");
+    check("doubleheader sibling — provider-valid _b3_g2 id is fetched", eventIds.includes(`${base}_b3_g2`));
+    check("doubleheader sibling — invalid _g2_b3 id is never fetched", !eventIds.includes(`${base}_g2_b3`));
+    check("doubleheader sibling — Game 2 real-book row is retained", result.records.some((row) => row.game_external_id === 7002 && row.sportsbook === "fanduel"));
   }
 
   // ── [2F.1-G] call cap behavior on speculative buckets ──
@@ -458,7 +495,7 @@ async function main() {
     const result = await provider.getGameLinesV2(SLATE, "mlb");
 
     const apiCalls = result.discovery.apiCallsMade;
-    check("call-cap — apiCallsMade respects MAX_CALLS_PER_INVOCATION=50", apiCalls <= 50);
+    check("call-cap — apiCallsMade respects MAX_CALLS_PER_INVOCATION=100", apiCalls <= 100);
     // At least one game should have a non-empty speculativeBucketsCallCapped.
     const anyCapped = result.discovery.perGame.some(
       (g) => g.speculativeBucketsCallCapped.length > 0
