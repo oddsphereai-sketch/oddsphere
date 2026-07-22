@@ -40,7 +40,10 @@
 import { supabase } from "../db/supabase";
 import { isBlockedSportsbook } from "../config/blockedSportsbooks";
 import { BOOK_PRIORITY } from "../config/bookPriority";
-import { filterToFreshestTotalLineCluster } from "../services/selectMainTotalLine";
+import {
+  filterToFreshestTotalLineCluster,
+  selectMainTotalLine,
+} from "../services/selectMainTotalLine";
 import type { Sport } from "../types/domain/Sport";
 import type {
   ActiveInjuries,
@@ -624,6 +627,48 @@ function pickListedTotal(linesForGame: LineRow[]): TotalLineResolution {
       agreement_count: chosen.books.size,
       consensus_at_same_line: chosen.consensusMatch,
     };
+  }
+
+  // Thin-but-coherent market fallback. A current real book quoting both
+  // sides at one line is a usable price even when a second book has not
+  // populated yet. We still reject alt-line ladders and wide book conflict:
+  // every eligible book/line must be paired, and the full candidate range
+  // must be no wider than a normal half-run market transition.
+  const pairedRealBookRows = realBook.filter((row) => {
+    const key = `${row.sportsbook.toLowerCase()}::${row.line_value}`;
+    const sides = bookLineSides.get(key);
+    return sides?.has("over") === true && sides.has("under") === true;
+  });
+  const pairedLines = [...new Set(
+    pairedRealBookRows
+      .map((row) => row.line_value)
+      .filter((line): line is number => line !== null),
+  )].sort((a, b) => a - b);
+  const thinRange = pairedLines.length > 0
+    ? pairedLines[pairedLines.length - 1]! - pairedLines[0]!
+    : Number.POSITIVE_INFINITY;
+  if (pairedLines.length > 0 && thinRange <= 0.5) {
+    const selected = selectMainTotalLine(pairedRealBookRows);
+    if (selected !== null) {
+      const books = new Set(
+        pairedRealBookRows
+          .filter((row) => row.line_value === selected)
+          .map((row) => row.sportsbook.toLowerCase()),
+      );
+      const winningBook = [...books].sort((a, b) => {
+        const ia = REAL_BOOK_TOTAL_PRIORITY.indexOf(a);
+        const ib = REAL_BOOK_TOTAL_PRIORITY.indexOf(b);
+        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+      })[0] ?? null;
+      return {
+        listed_total: selected,
+        has_pinnacle_total: books.has("pinnacle"),
+        source: "real_book",
+        book: winningBook,
+        agreement_count: books.size,
+        consensus_at_same_line: false,
+      };
+    }
   }
 
   // No corroborated real-book main line. Fall back to splits_consensus

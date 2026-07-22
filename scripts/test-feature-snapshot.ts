@@ -191,14 +191,12 @@ async function main() {
     );
   }
   {
-    // Mixed real-book disagreement: ballybet at 8.5 (both sides),
-    // betmgm at 9 (both sides) → no line has ≥2 corroborators →
-    // falls to consensus (if any) → here no consensus → unavailable.
+    // A half-run transition between two paired real books is usable but thin.
     const lines = [...ou("ballybet", 8.5), ...ou("betmgm", 9)];
     const r = fs.pickListedTotal(lines);
     check(
-      "pickListedTotal: mixed disagreement, no consensus → unavailable",
-      r.source === "unavailable" && r.listed_total === null
+      "pickListedTotal: half-run disagreement resolves to a thin real-book line",
+      r.source === "real_book" && r.listed_total === 9 && r.book === "betmgm" && r.agreement_count === 1
     );
   }
   {
@@ -226,8 +224,8 @@ async function main() {
     ];
     const r = fs.pickListedTotal(lines);
     check(
-      "pickListedTotal: blocked Kalshi alt-lines cannot corroborate a lone real-book total",
-      r.source === "unavailable" && r.listed_total === null
+      "pickListedTotal: blocked Kalshi alt-lines are ignored while a paired trusted book remains usable",
+      r.source === "real_book" && r.listed_total === 8.5 && r.book === "betmgm"
     );
   }
   {
@@ -243,11 +241,19 @@ async function main() {
     );
   }
   {
-    // Single real-book both-sided line WITHOUT consensus support → fails ≥2 bar → unavailable
+    // A single trusted book with both sides at one line is usable but thin.
     const lines = [...ou("betmgm", 8.5)];
     const r = fs.pickListedTotal(lines);
     check(
-      "pickListedTotal: single real-book without consensus → unavailable (no corroboration)",
+      "pickListedTotal: single paired trusted real-book line is usable",
+      r.source === "real_book" && r.listed_total === 8.5 && r.book === "betmgm" && r.agreement_count === 1
+    );
+  }
+  {
+    const lines = [...ou("ballybet", 7.5), ...ou("betmgm", 9.5)];
+    const r = fs.pickListedTotal(lines);
+    check(
+      "pickListedTotal: wide real-book conflict remains unavailable",
       r.source === "unavailable" && r.listed_total === null
     );
   }
