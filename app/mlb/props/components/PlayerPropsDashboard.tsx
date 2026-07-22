@@ -922,7 +922,8 @@ function pairSignalRow(pair: MarketPair): PlayerPropPreviewRow | null {
 }
 
 function isLongshotValueRow(row: PlayerPropPreviewRow): boolean {
-  return row.reasonCodes.includes("LONGSHOT_VALUE_CONTEXT") && row.playGrade === "WATCHLIST";
+  return row.reasonCodes.includes("LONGSHOT_VALUE_CONTEXT")
+    && (row.playGrade === "WATCHLIST" || row.playGrade === "LEAN");
 }
 
 function isModelSignalSide(row: PlayerPropPreviewRow): boolean {
@@ -1886,6 +1887,13 @@ function enforcePreviewIntegrity(row: PlayerPropPreviewRow): PlayerPropPreviewRo
         : row.reasonCodes,
     };
   }
+  // A rare-event value prediction is about whether the offered Over price is
+  // favorable, not whether the event is more likely than not. Its expected
+  // count can legitimately sit below a 0.5 line while the modeled Over chance
+  // is still materially higher than the sportsbook's implied probability.
+  // Preserve the verified priced-side read and let the reader explain the
+  // difference between average projection and outcome distribution.
+  if (isLongshotValueRow(row)) return row;
   if (isProjectionSideCoherent(row)) return row;
   const alreadyBlocked = row.playGrade === "NO_PLAY" || row.playGrade === "PENDING_DATA" || row.playGrade === "RESEARCH";
   return {
