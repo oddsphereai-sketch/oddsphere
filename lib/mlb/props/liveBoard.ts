@@ -835,7 +835,18 @@ function buildDashboardRows(args: {
       ...(price.reasonCode ? [price.reasonCode] : []),
     ]);
     const finalProbability = eligibleModel ? selectedProbability : null;
-    const edge = finalProbability !== null && marketProbability !== null ? finalProbability - marketProbability : null;
+    // Milestone markets such as home runs are commonly posted as one-sided
+    // offers, so there is no paired no-vig probability. The integrated model
+    // already falls back to this offer's price-implied probability when it
+    // calibrates the final probability; carry that same market reference into
+    // the member row so a legitimately promoted one-sided play has a
+    // verifiable, non-null model edge at the publication data gate.
+    const effectiveMarketProbability = marketProbability ?? (
+      signal && mapped.odds.side === signal.side ? price.impliedProbability : null
+    );
+    const edge = finalProbability !== null && effectiveMarketProbability !== null
+      ? finalProbability - effectiveMarketProbability
+      : null;
     const expectedValue = finalProbability !== null ? safeExpectedValue(finalProbability, mapped.odds.americanOdds) : null;
     const fairOdds = finalProbability !== null ? safeFairOdds(finalProbability) : null;
     const bdlPlayerTeamId = bdlTeamIdFor(mapped, identity);
@@ -858,7 +869,7 @@ function buildDashboardRows(args: {
       book: displayBook(mapped.odds.sportsbook),
       modelProbability: eligibleModel ? modelProbability : null,
       independentProbability: eligibleModel ? modelProbability : null,
-      marketProbability,
+      marketProbability: effectiveMarketProbability,
       finalProbability,
       shrinkageWeight: finalProbability === null ? 0 : signal?.shrinkageWeight ?? 1,
       modelEdge: edge,
