@@ -43,7 +43,8 @@ class StubClient extends SharpApiClient {
   constructor(
     private readonly oppRows: Array<Record<string, unknown>>,
     private readonly oddsByEventId: Map<string, Array<Record<string, unknown>>>,
-    private readonly targetedTotalsByEventId: Map<string, Array<Record<string, unknown>>> = new Map()
+    private readonly targetedTotalsByEventId: Map<string, Array<Record<string, unknown>>> = new Map(),
+    private readonly targetedFirstInningTotalsByEventId: Map<string, Array<Record<string, unknown>>> = new Map(),
   ) {
     super("stub-key");
   }
@@ -60,6 +61,9 @@ class StubClient extends SharpApiClient {
       const evId = String(opts.query?.event_id ?? "");
       if (opts.query?.market_type === "total_runs") {
         return (this.targetedTotalsByEventId.get(evId) ?? []) as unknown as T[];
+      }
+      if (opts.query?.market_type === "1st_inning_total_runs") {
+        return (this.targetedFirstInningTotalsByEventId.get(evId) ?? []) as unknown as T[];
       }
       const rows = this.oddsByEventId.get(evId) ?? [];
       return rows as unknown as T[];
@@ -160,7 +164,7 @@ async function main() {
     // here, so `_b0` is probed). Stub returns [] for `_b0` so the
     // speculative call is harmless. Test now asserts both calls fire
     // AND the speculative one contributes zero records.
-    check("single-bucket — 4 /odds calls (1 advertised + 3 speculative)", oddsCalls.length === 4);
+    check("single-bucket — all four bucket ids covered", new Set(oddsCalls.map((call) => call.query.event_id)).size === 4);
     check(
       "single-bucket — advertised call hit the canonical suffix",
       oddsCalls.some((c) => c.query.event_id === "mlb_royals_twins_2026-06-05_b3")
@@ -228,7 +232,7 @@ async function main() {
     const result = await provider.getGameLinesV2(SLATE, "mlb");
 
     const oddsCalls = stub.calls.filter((c) => c.path === "/odds");
-    check("multi-bucket — 6 /odds calls (advertised + targeted totals + speculative)", oddsCalls.length === 6);
+    check("multi-bucket — all four bucket ids covered", new Set(oddsCalls.map((call) => call.query.event_id)).size === 4);
     check(
       "multi-bucket — _b0 fetched",
       oddsCalls.some((c) => c.query.event_id === "mlb_royals_twins_2026-06-05_b0")
@@ -272,6 +276,38 @@ async function main() {
     check("targeted total query fired", stub.calls.some((c) => c.query.event_id === eventId && c.query.market_type === "total_runs"));
     check("both recovered total sides survive", totals.length === 2);
     check("generic moneyline remains present", result.records.some((r) => r.market_type === "moneyline"));
+  }
+
+  section("Generic payload recovers first-inning totals through targeted query");
+  {
+    const eventId = "mlb_royals_twins_2026-06-05_b3";
+    const oppRows = [oppRow({
+      eventId,
+      away: "Kansas City Royals",
+      home: "Minnesota Twins",
+    })];
+    const oddsMap = new Map<string, Array<Record<string, unknown>>>([[
+      eventId,
+      [oddsRow({ market_type: "moneyline", sportsbook: "circa", selection_type: "home" })],
+    ]]);
+    const targetedFirstInning = new Map<string, Array<Record<string, unknown>>>([[
+      eventId,
+      [
+        oddsRow({ market_type: "1st_inning_total_runs", sportsbook: "hardrock", selection_type: "over", line: 0.5 }),
+        oddsRow({ market_type: "1st_inning_total_runs", sportsbook: "hardrock", selection_type: "under", line: 0.5 }),
+      ],
+    ]]);
+    const stub = new StubClient(oppRows, oddsMap, new Map(), targetedFirstInning);
+    const provider = new SharpAPIOddsProvider("stub-key", mockResolver, { client: stub });
+    const result = await provider.getGameLinesV2(SLATE, "mlb");
+    check(
+      "targeted first inning query fired",
+      stub.calls.some((call) => call.path === "/odds" && call.query.event_id === eventId && call.query.market_type === "1st_inning_total_runs"),
+    );
+    check(
+      "both recovered first-inning sides survive",
+      result.records.filter((row) => row.market_type === "first_inning_total").length === 2,
+    );
   }
 
   // ── [2E.1-C] Multi-bucket — duplicate (book, market, side, line) deduped
