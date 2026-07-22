@@ -3,6 +3,13 @@ import { BATTER_HRR_MODEL_VERSION } from "./batterHrrCountModel";
 import { MLB_PROP_MARKET_KEYS, type MlbPropMarketKey } from "./config";
 import { getMlbPropMarketDefinition } from "./marketCatalog";
 
+// Immutable behavioral release stamp for the complete member-board scoring bundle.
+// Any change that can alter a projection, probability, grade, promotion/demotion,
+// or stake must bump this value before deployment. Per-market versions remain
+// below for attribution; this release id prevents reports from silently mixing
+// boards produced by different combinations of market logic.
+export const MLB_PROPS_MODEL_RELEASE_ID = "mlb_props_2026_07_20_r1";
+
 const DEDICATED_MARKET_MODEL_VERSIONS: Partial<Record<MlbPropMarketKey, string>> = {
   pitcher_strikeouts: "pitcher_strikeouts_distribution_v3_verified",
   pitcher_outs: "pitcher_outs_workload_distribution_v2_verified",

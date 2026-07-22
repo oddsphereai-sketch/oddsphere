@@ -259,9 +259,11 @@ export async function getInternalMlbPropsTrackingReport(args: { startDate?: stri
     byMarket: groupMetrics(actionable, (row) => row.market_key),
     byCategory: groupMetrics(actionable, marketCategory),
     byGrade: groupMetrics(actionable, (row) => row.play_grade),
+    byRelease: groupMetrics(actionable, modelReleaseForTracking),
     oneUnitByMarket: groupMetrics(rows, (row) => row.market_key, oneUnitPerformanceMetrics),
     oneUnitByCategory: groupMetrics(rows, marketCategory, oneUnitPerformanceMetrics),
     oneUnitByGrade: groupMetrics(rows, (row) => row.play_grade, oneUnitPerformanceMetrics),
+    oneUnitByRelease: groupMetrics(rows, modelReleaseForTracking, oneUnitPerformanceMetrics),
     recent: rows.slice(0, 250).map(publicTrackingRow),
   };
 }
@@ -541,6 +543,7 @@ export function trackingInsert(candidate: TrackingCandidate, snapshot: MlbPropsB
     clv_american_delta: 0,
     metadata_json: {
       private: true,
+      modelReleaseId: snapshot.modelContext?.modelReleaseId ?? "mlb_props_release_missing",
       lockPolicy: `T-${targetLockMinutes}`,
       minutesToStart: round(candidate.minutesToStart, 2),
       lateLock: candidate.minutesToStart < Math.max(1, targetLockMinutes - graceMinutes),
@@ -655,6 +658,13 @@ function profitPerUnit(americanOdds: number): number {
 
 function marketCategory(row: TrackingEntry): string {
   return row.market_key.startsWith("pitcher_") ? "Pitcher props" : "Batter props";
+}
+
+function modelReleaseForTracking(row: TrackingEntry): string {
+  const release = row.metadata_json?.modelReleaseId;
+  return typeof release === "string" && release.length > 0
+    ? release
+    : `legacy_unstamped:${row.model_version}`;
 }
 
 function groupMetrics(

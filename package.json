@@ -117,6 +117,7 @@
     "settle-mlb-props": "tsx --env-file=.env.local scripts/mlb-props-command.ts settle-mlb-props",
     "publish-mlb-prop-picks": "tsx --env-file=.env.local scripts/mlb-props-command.ts publish-mlb-prop-picks",
     "test:mlb-props-engine": "tsx scripts/test-mlb-props-engine.ts",
+    "verify:model-change": "tsx --env-file=.env.local scripts/test-mlb-pipeline-safety.ts && tsx --env-file=.env.local scripts/test-automodel-model-version.ts && tsx --env-file=.env.local scripts/test-mlb-prop-market-model-ownership.ts && tsx --env-file=.env.local scripts/test-batter-hits-pa-model.ts && tsx --env-file=.env.local scripts/test-batter-hrr-count-model.ts",
     "verify:mlb-props-engine": "npm run test:mlb-props-engine",
     "readiness:mlb-props": "tsx --env-file=.env.local scripts/mlb-props-readiness.ts",
     "ingest:mlb-props": "tsx --env-file=.env.local scripts/mlb-props-command.ts ingest-mlb-slate",

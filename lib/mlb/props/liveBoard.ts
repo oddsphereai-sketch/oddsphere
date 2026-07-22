@@ -65,7 +65,10 @@ import {
 } from "./boardSnapshotStore";
 import { publishMlbPropsMemberReadSnapshots } from "./memberReadSnapshotStore";
 import { assessPropPrice } from "./pricePolicy";
-import { activeMlbPropMarketModelVersions } from "./marketModelVersions";
+import {
+  activeMlbPropMarketModelVersions,
+  MLB_PROPS_MODEL_RELEASE_ID,
+} from "./marketModelVersions";
 import {
   BATTER_HITS_PA_MODEL_VERSION,
   projectBatterHitsPa,
@@ -270,6 +273,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     validation,
     movement,
     modelContext: {
+      modelReleaseId: MLB_PROPS_MODEL_RELEASE_ID,
       probablePitcherSeasonStats: [...seasonStats.entries()],
       openingPropOdds: openingOdds,
       marketModelVersions: activeMlbPropMarketModelVersions(),
