@@ -71,6 +71,11 @@ check(
   wnbaModelSource.includes("return computeWnbaPrediction(M, g, r);") &&
     (wnbaModelSource.match(/let finalP =/g) ?? []).length === 1,
 );
+check(
+  "WNBA canonical compute cannot drift with preview or dry-run environment flags",
+  wnbaModelSource.includes("= EXPECTED_WNBA_CALIBRATION_FLAGS") &&
+    !wnbaModelSource.includes("readWnbaCoreModelCalibrationFlagsFromEnv()"),
+);
 const wnbaChampionEnv = {
   WNBA_CORE_MODEL_CALIBRATION_ENABLED: "true",
   WNBA_TOTAL_PROJECTION_CALIBRATION_ENABLED: "true",

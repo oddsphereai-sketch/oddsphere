@@ -212,22 +212,6 @@ check(
   }) === "Best Angle",
 );
 
-const oldEnv = {
-  WNBA_CORE_MODEL_CALIBRATION_ENABLED: process.env.WNBA_CORE_MODEL_CALIBRATION_ENABLED,
-  WNBA_TOTAL_PROJECTION_CALIBRATION_ENABLED: process.env.WNBA_TOTAL_PROJECTION_CALIBRATION_ENABLED,
-  WNBA_SPREAD_MARGIN_CALIBRATION_ENABLED: process.env.WNBA_SPREAD_MARGIN_CALIBRATION_ENABLED,
-  WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED: process.env.WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED,
-  WNBA_SPREAD_RECOMMENDATION_USES_CALIBRATED_MARGIN_ENABLED: process.env.WNBA_SPREAD_RECOMMENDATION_USES_CALIBRATED_MARGIN_ENABLED,
-  WNBA_GRADE_CALIBRATION_ENABLED: process.env.WNBA_GRADE_CALIBRATION_ENABLED,
-};
-
-function restoreEnv() {
-  for (const [key, value] of Object.entries(oldEnv)) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-}
-
 const fixtureModel: ModelState = {
   elo: new Map([[10, 1500], [30, 1500]]),
   games: new Map([[10, 30], [30, 30]]),
@@ -248,25 +232,21 @@ const fixtureOdds: OddRow[] = ["draftkings", "betmgm", "caesars", "circa"].flatM
   { book, sharp: true, mkt: "total_points", selType: "under", odds: -110, line: 177.5, date: "2026-06-27", h: 30, a: 10 },
 ]);
 
-restoreEnv();
-process.env.WNBA_CORE_MODEL_CALIBRATION_ENABLED = "false";
-process.env.WNBA_TOTAL_PROJECTION_CALIBRATION_ENABLED = "false";
-process.env.WNBA_SPREAD_MARGIN_CALIBRATION_ENABLED = "false";
-process.env.WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED = "false";
-process.env.WNBA_SPREAD_RECOMMENDATION_USES_CALIBRATED_MARGIN_ENABLED = "false";
-process.env.WNBA_GRADE_CALIBRATION_ENABLED = "false";
 const computeDisabled = computeWnbaPrediction(
   fixtureModel,
   { id: 999, date: "2026-06-27", h: 30, a: 10 },
   fixtureOdds,
+  {},
+  {
+    coreModelEnabled: false,
+    totalProjectionCalibrationEnabled: false,
+    spreadMarginCalibrationEnabled: false,
+    totalRecommendationUsesCalibratedProjection: false,
+    spreadRecommendationUsesCalibratedMargin: false,
+    gradeCalibrationEnabled: false,
+  },
 );
 
-process.env.WNBA_CORE_MODEL_CALIBRATION_ENABLED = "true";
-process.env.WNBA_TOTAL_PROJECTION_CALIBRATION_ENABLED = "true";
-process.env.WNBA_SPREAD_MARGIN_CALIBRATION_ENABLED = "true";
-process.env.WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED = "false";
-process.env.WNBA_SPREAD_RECOMMENDATION_USES_CALIBRATED_MARGIN_ENABLED = "true";
-process.env.WNBA_GRADE_CALIBRATION_ENABLED = "true";
 const computeSpreadEnabled = computeWnbaPrediction(
   fixtureModel,
   { id: 999, date: "2026-06-27", h: 30, a: 10 },
@@ -308,7 +288,6 @@ check(
   selectPreferredWnbaTipTime(["2026-07-03T00:00:00Z", "2026-07-04T00:00:00Z"], "2026-07-03T01:00:00Z") === "2026-07-03T00:00:00Z",
 );
 check("WNBA preferred tip returns null without Playbook schedule", selectPreferredWnbaTipTime([], "2026-07-01T17:35:00Z") === null);
-restoreEnv();
 
 if (fail > 0) {
   console.error(`wnba core model calibration tests: ${pass} passed, ${fail} failed`);
