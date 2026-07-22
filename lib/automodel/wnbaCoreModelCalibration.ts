@@ -2,7 +2,6 @@ export const WNBA_TOTAL_MARKET_ANCHOR_25 = 0.25;
 export const WNBA_TOTAL_MARKET_ANCHOR_50 = 0.5;
 export const WNBA_SPREAD_MARKET_ANCHOR_25 = 0.25;
 export const WNBA_SPREAD_MARKET_ANCHOR_50 = 0.5;
-export const WNBA_DIAGNOSTIC_HOME_MARGIN_CORRECTION = 12;
 export const WNBA_EMERGENCY_TOTAL_FORMULA_VERSION = "wnba_total_market_anchor_25_v1";
 export const WNBA_EMERGENCY_SPREAD_FORMULA_VERSION = "wnba_spread_market25_zero_homebias_2026_07_22";
 
@@ -29,7 +28,6 @@ export type WnbaCoreModelCalibrationAudit = {
     total_50: "market_total + 0.50 * (raw_projected_total - market_total)";
     spread_25: "market_implied_home_margin + 0.25 * (raw_projected_home_margin - market_implied_home_margin)";
     spread_50: "market_implied_home_margin + 0.50 * (raw_projected_home_margin - market_implied_home_margin)";
-    home_bias_diagnostic: "raw_projected_home_margin + 12";
   };
   formula_versions: {
     total_recommendation: typeof WNBA_EMERGENCY_TOTAL_FORMULA_VERSION;
@@ -48,7 +46,6 @@ export type WnbaCoreModelCalibrationAudit = {
   learned_calibrated_projected_total: number | null;
   market_anchored_home_margin_25: number | null;
   market_anchored_home_margin_50: number | null;
-  home_bias_corrected_margin: number | null;
   learned_calibrated_home_margin: number | null;
   emergency_calibrated_projected_total: number | null;
   emergency_calibrated_home_margin: number | null;
@@ -159,9 +156,6 @@ export function buildWnbaCoreModelCalibrationAudit(
   const spread50 = finite(marketImpliedHomeMargin) && finite(spreadEdge)
     ? marketImpliedHomeMargin + WNBA_SPREAD_MARKET_ANCHOR_50 * spreadEdge
     : null;
-  const homeBiasCorrected = finite(rawProjectedHomeMargin)
-    ? rawProjectedHomeMargin + WNBA_DIAGNOSTIC_HOME_MARGIN_CORRECTION
-    : null;
   const emergencyTotal = total25;
   // The original launch hotfix added 25% of a +11.944 point home bias learned
   // from only nine settled games. By 2026-07-22 the 72-game replay measured
@@ -190,7 +184,6 @@ export function buildWnbaCoreModelCalibrationAudit(
       total_50: "market_total + 0.50 * (raw_projected_total - market_total)",
       spread_25: "market_implied_home_margin + 0.25 * (raw_projected_home_margin - market_implied_home_margin)",
       spread_50: "market_implied_home_margin + 0.50 * (raw_projected_home_margin - market_implied_home_margin)",
-      home_bias_diagnostic: "raw_projected_home_margin + 12",
     },
     formula_versions: {
       total_recommendation: WNBA_EMERGENCY_TOTAL_FORMULA_VERSION,
@@ -209,7 +202,6 @@ export function buildWnbaCoreModelCalibrationAudit(
     learned_calibrated_projected_total: null,
     market_anchored_home_margin_25: spreadEnabled ? roundNullable(spread25) : null,
     market_anchored_home_margin_50: spreadEnabled ? roundNullable(spread50) : null,
-    home_bias_corrected_margin: spreadEnabled ? roundNullable(homeBiasCorrected) : null,
     learned_calibrated_home_margin: null,
     emergency_calibrated_projected_total: totalEnabled ? roundNullable(emergencyTotal) : null,
     emergency_calibrated_home_margin: spreadEnabled ? roundNullable(emergencySpread) : null,

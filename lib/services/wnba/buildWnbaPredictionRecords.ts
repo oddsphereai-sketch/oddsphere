@@ -25,6 +25,7 @@ import {
 } from "../../automodel/wnbaCoreModelCalibration";
 import {
   assertWnbaChampionRuntime,
+  EXPECTED_WNBA_DISTRIBUTION_VERSION,
   EXPECTED_WNBA_MODEL_VERSION,
 } from "../../automodel/wnbaChampionRuntime";
 
@@ -189,7 +190,16 @@ export async function buildWnbaPredictionRecords(opts: {
     const ml = ss.moneyline as { side: string; confidence: number; grade: string; price: number | null };
     const tot = ss.total as { side: string | null; line: number | null; confidence: number | null; grade: string | null };
     const spr = ss.spread as { side: string | null; line: number | null; confidence: number | null; grade: string | null };
-    const model = ss.model as { home_win_prob: number; margin: number; total: number };
+    const model = ss.model as {
+      home_win_prob: number;
+      final_home_win_prob?: number;
+      margin: number;
+      total: number;
+      components?: {
+        blended_precalibration_margin?: number;
+        raw_projected_total?: number;
+      };
+    };
     const market = ss.market as { home_win_prob: number | null };
     const trusted = ss.trusted as { home_win_prob: number | null };
     const dq = ss.data_quality as { flags: string[]; ml_books: number };
@@ -217,8 +227,18 @@ export async function buildWnbaPredictionRecords(opts: {
       rawProjectedHomeScore: Number.isFinite(Number((ss.projected_score as { home?: unknown } | undefined)?.home))
         ? Number((ss.projected_score as { home?: unknown }).home)
         : null,
-      rawProjectedTotal: typeof model.total === "number" ? model.total : null,
-      rawProjectedHomeMargin: typeof model.margin === "number" ? model.margin : null,
+      rawProjectedTotal:
+        typeof model.components?.raw_projected_total === "number"
+          ? model.components.raw_projected_total
+          : typeof model.total === "number"
+            ? model.total
+            : null,
+      rawProjectedHomeMargin:
+        typeof model.components?.blended_precalibration_margin === "number"
+          ? model.components.blended_precalibration_margin
+          : typeof model.margin === "number"
+            ? model.margin
+            : null,
       marketTotal: typeof (ss.market as { total?: unknown } | undefined)?.total === "number"
         ? (ss.market as { total: number }).total
         : typeof tot.line === "number"
@@ -247,6 +267,8 @@ export async function buildWnbaPredictionRecords(opts: {
       snapshot_json: {
         market: market_type, side, line: line_value, price: odds, confidence, grade: gradeStr,
         projected_score: ss.projected_score, model, market_consensus: market, trusted_consensus: trusted,
+        model_version: EXPECTED_WNBA_MODEL_VERSION,
+        distribution_version: EXPECTED_WNBA_DISTRIBUTION_VERSION,
         sharp_consensus: ss.sharp, consensus_source: ss.consensus_source, dynamic_market_weight: ss.dynamic_market_weight,
         data_quality: ss.data_quality, cold_start: ss.cold_start,
         wnba_core_model_calibration: wnbaCalibrationAudit,

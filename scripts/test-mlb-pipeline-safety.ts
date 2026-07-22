@@ -11,6 +11,7 @@ import { withPredictionGradeHistory } from "../lib/services/predictionRecordServ
 import { assertMlbChampionRuntime } from "../lib/automodel/mlbChampionRuntime";
 import {
   assertWnbaChampionRuntime,
+  EXPECTED_WNBA_DISTRIBUTION_VERSION,
   EXPECTED_WNBA_MODEL_VERSION,
 } from "../lib/automodel/wnbaChampionRuntime";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
@@ -59,7 +60,17 @@ check("champion runtime accepts resolved defaults", (() => {
 check("champion runtime refuses an explicit old model", (() => {
   try { assertMlbChampionRuntime({ AUTOMODEL_VERSION: "v1" }); return false; } catch { return true; }
 })());
-check("WNBA model version is single-sourced", EXPECTED_WNBA_MODEL_VERSION === "wnba_v1");
+check("WNBA model family is single-sourced", EXPECTED_WNBA_MODEL_VERSION === "wnba_v1");
+check(
+  "WNBA distribution version is explicit",
+  EXPECTED_WNBA_DISTRIBUTION_VERSION === "wnba_market_specific_heads_shared_score_projection_2026_07_22",
+);
+const wnbaModelSource = readFileSync("lib/services/wnba/buildWnbaDailyEdgePreview.ts", "utf8");
+check(
+  "WNBA preview fallback delegates to the canonical compute",
+  wnbaModelSource.includes("return computeWnbaPrediction(M, g, r);") &&
+    (wnbaModelSource.match(/let finalP =/g) ?? []).length === 1,
+);
 const wnbaChampionEnv = {
   WNBA_CORE_MODEL_CALIBRATION_ENABLED: "true",
   WNBA_TOTAL_PROJECTION_CALIBRATION_ENABLED: "true",

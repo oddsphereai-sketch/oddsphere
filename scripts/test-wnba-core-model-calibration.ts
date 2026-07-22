@@ -65,7 +65,6 @@ check("home spread +2.5 implies market home margin -2.5", marketImpliedHomeMargi
 check("WNBA spread audit computes 25% market anchor", auditOnly.market_anchored_home_margin_25 === -2.9);
 check("WNBA spread audit computes 50% market anchor", auditOnly.market_anchored_home_margin_50 === -3.2);
 check("WNBA emergency spread uses the 25% market anchor without stale home bias", auditOnly.emergency_calibrated_home_margin === -2.9);
-check("WNBA diagnostic home correction is additive only", auditOnly.home_bias_corrected_margin === 8);
 check("audit-only total recommendation remains false", auditOnly.recommendation_uses_calibrated_total === false);
 check("audit-only spread recommendation remains false", auditOnly.recommendation_uses_calibrated_spread === false);
 check("audit-only does not mark total as used", auditOnly.recommendation_projected_total_used === null);
@@ -249,7 +248,18 @@ check("compute total recommendation flag off leaves total side unchanged", compu
 check("compute moneyline remains unchanged by spread calibration", computeSpreadEnabled.moneyline.side === computeDisabled.moneyline.side);
 check("compute total grade calibration avoids unvalidated total Best Angle", computeSpreadEnabled.total.grade !== "Best Angle");
 check("compute records spread recommendation-used audit", computeSpreadEnabled.wnba_core_model_calibration.recommendation_uses_calibrated_spread === true);
-check("compute keeps raw model margin for audit", computeSpreadEnabled.model.margin === computeDisabled.model.margin);
+check(
+  "compute keeps the blended pre-calibration margin for audit",
+  computeSpreadEnabled.model.components.blended_precalibration_margin === computeDisabled.model.margin,
+);
+check(
+  "displayed score uses the exact canonical spread margin",
+  Math.abs(displayedHomeMargin - computeSpreadEnabled.model.margin) <= 0.2,
+);
+check(
+  "final ML winner and displayed projection winner agree",
+  (computeSpreadEnabled.moneyline.side === computeSpreadEnabled.home) === (displayedHomeMargin > 0),
+);
 check(
   "WNBA Playbook tip overrides stale provider anchor",
   selectPreferredWnbaTipTime(["2026-07-03T00:00:00Z"], "2026-07-01T17:35:00Z") === "2026-07-03T00:00:00Z",
