@@ -11,7 +11,6 @@
 
 import { supabase } from "../../lib/db/supabase";
 import { currentSlateDate } from "../../lib/dates/slateDate";
-import { WNBA_EMERGENCY_SPREAD_HOME_BIAS_POINTS } from "../../lib/automodel/wnbaCoreModelCalibration";
 
 type Row = Record<string, any>;
 type Side = string;
@@ -335,7 +334,7 @@ function wnbaSpreadRules(rec: Row): Rule[] {
   const raw = wnbaRawHomeMargin(rec);
   const market = homeSpreadLine(rec) === null ? null : -homeSpreadLine(rec)!;
   const emergency = raw !== null && market !== null
-    ? market + 0.25 * (raw - market) + 0.25 * WNBA_EMERGENCY_SPREAD_HOME_BIAS_POINTS
+    ? market + 0.25 * (raw - market)
     : null;
   const sideAt = (margin: number | null, threshold = 0) => sideFromSpreadMargin(margin, rec, threshold) ?? rec.side;
   return [
