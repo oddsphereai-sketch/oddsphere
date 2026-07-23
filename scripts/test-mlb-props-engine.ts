@@ -478,7 +478,15 @@ async function main() {
   check("hitter model reads use integrated evidence stack", liveBoardSource.includes("buildIntegratedHitterSignal") && ["RECENT_FORM_EDGE", "PITCH_MIX_MATCHUP_EDGE", "DIRECT_MATCHUP_CONTEXT", "PARK_WEATHER_CONTEXT", "MARKET_MOVEMENT_CONTEXT"].every((label) => liveBoardSource.includes(label)));
   check("fast hitter refreshes preserve full-season projection inputs", liveBoardSource.includes("recent?.samples?.last5.average") && liveBoardSource.includes("recent?.samples?.last10.average") && liveBoardSource.includes("recent?.samples?.season.average") && liveBoardSource.includes("recent?.samples?.season.count") && !liveBoardSource.includes("const season = averageNumber(logs.map"));
   check("hitter market tiers allow volume leans while capping rare events", liveBoardSource.includes("HITTER_LEAN_ELIGIBLE_MARKETS") && liveBoardSource.includes('"batter_hits"') && liveBoardSource.includes('"batter_total_bases"') && liveBoardSource.includes("HITTER_WATCHLIST_ONLY_MARKETS") && liveBoardSource.includes("HITTER_LONGSHOT_VALUE_MARKETS") && liveBoardSource.includes('"batter_home_runs"') && liveBoardSource.includes("LONGSHOT_VALUE_CONTEXT") && liveBoardSource.includes("RARE_OR_CONTEXT_HEAVY_MARKET_CAPPED"));
-  check("home-run actionable promotion is bounded and probability-gated", liveBoardSource.includes("HOME_RUN_ACTIONABLE_PROMOTION_LIMIT = 5") && liveBoardSource.includes("applyHomeRunActionablePromotions") && liveBoardSource.includes("row.finalProbability >= 0.15") && liveBoardSource.includes("row.finalProbability <= 0.18") && liveBoardSource.includes("(row.expectedValue ?? 0) > 0"));
+  check(
+    "every qualified home-run offer is promoted without an arbitrary slate cap",
+    !liveBoardSource.includes("HOME_RUN_ACTIONABLE_PROMOTION_LIMIT") &&
+      liveBoardSource.includes("applyHomeRunActionablePromotions") &&
+      liveBoardSource.includes("row.finalProbability >= 0.15") &&
+      liveBoardSource.includes("row.finalProbability <= 0.18") &&
+      liveBoardSource.includes("(row.expectedValue ?? 0) > 0") &&
+      liveBoardSource.includes('row.market !== "batter_home_runs"'),
+  );
   check("one-sided actionable markets carry their price-implied edge into the publication gate", liveBoardSource.includes("const effectiveMarketProbability = marketProbability ??") && liveBoardSource.includes("price.impliedProbability") && liveBoardSource.includes("marketProbability: effectiveMarketProbability"));
   check("generic pitcher scorer warnings cannot suppress integrated hitter reads", liveBoardSource.includes('const scoredPitcherSignal = definition.family === "pitcher"') && liveBoardSource.includes("const signal: IntegratedPropSignal | null = scoredPitcherSignal ?") && liveBoardSource.includes("const blockingModelWarnings = (scoredPitcherSignal?.featureWarnings ?? [])"));
   check("positive prop signals collapse duplicate sportsbook rows to the best price", liveBoardSource.includes("applyBestPriceSignalDiscipline") && liveBoardSource.includes("applyHitterSignalDiscipline(applyBestPriceSignalDiscipline(applyHomeRunActionablePromotions(deduped)))") && liveBoardSource.includes("signalOfferKey") && liveBoardSource.includes("BETTER_PRICE_AVAILABLE"));
