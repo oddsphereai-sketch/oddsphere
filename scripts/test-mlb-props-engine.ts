@@ -26,6 +26,7 @@ import { evaluateRealPaperPersistenceGate, isPaperTradingMarketAllowed } from ".
 import { allMlbPropMarketDefinitions, getMlbPropMarketDefinition } from "../lib/mlb/props/marketCatalog";
 import { calibratedPropModelWeight } from "../lib/mlb/props/probabilityCalibration";
 import { checkProjectionSideIntegrity } from "../lib/mlb/props/projectionSideIntegrity";
+import { shouldReplaceBestPriceRow } from "../lib/mlb/props/bestPriceSelection";
 import {
   buildPlayerPitchArsenalEvidence,
   buildPlayerPitchMixMatchupEvidence,
@@ -93,6 +94,20 @@ async function main() {
     fractionalKelly: 0.15,
     maxBankrollFraction: 0.005,
   }) === 0);
+  check(
+    "equal-price promoted Lean survives a newer Watchlist quote",
+    !shouldReplaceBestPriceRow(
+      { odds: 900, playGrade: "LEAN", lastUpdated: "2026-07-23T15:00:00Z" },
+      { odds: 900, playGrade: "WATCHLIST", lastUpdated: "2026-07-23T15:05:00Z" },
+    ),
+  );
+  check(
+    "equal-price promoted Lean replaces an older Watchlist quote",
+    shouldReplaceBestPriceRow(
+      { odds: 900, playGrade: "WATCHLIST", lastUpdated: "2026-07-23T15:05:00Z" },
+      { odds: 900, playGrade: "LEAN", lastUpdated: "2026-07-23T15:00:00Z" },
+    ),
+  );
   check("pitcher strikeout over model uses the chronologically calibrated weight", approx(calibratedPropModelWeight({
     marketKey: "pitcher_strikeouts",
     side: "over",
@@ -466,7 +481,7 @@ async function main() {
   check("member context avoids payload and provider narration", drawerSource.includes("Season opponent tendencies will appear when the team profile is verified.") && !drawerSource.includes("current provider payload"));
   check("member reason and context translators remove operational language", propsUiSource.includes("function memberReason") && propsUiSource.includes('STALE_BDL_ODDS: "Price refresh in progress"') && propsUiSource.includes('FIRST_HR_FIELD_MODEL_NOT_PROMOTED: "Research market only"') && propsUiSource.includes('.replace(/^BDL\\s+/i, "")') && propsUiSource.includes('.replace(/^MLB Stats\\s+/i, "")') && propsUiSource.includes("verified fixture field"));
   check("longshot value rows display the priced side as the prediction", propsUiSource.includes("function isLongshotValueRow") && propsUiSource.includes('row.playGrade === "WATCHLIST" || row.playGrade === "LEAN"') && propsUiSource.includes("const longshotValue = pair.rows") && propsUiSource.includes("if (isLongshotValueRow(row)) return row.side") && propsUiSource.includes("if (isLongshotValueRow(row)) return row;"));
-  check("home-run markets lead with a binary 1+ HR read instead of expected-count line comparison", propsUiSource.includes("function MilestoneProbabilityVisual") && propsUiSource.includes('return isHomeRunMarket(row) ? "1+ Home Run"') && propsUiSource.includes('return isPositiveSignal(row) ? `1+ HR · ${pct(chance)}`') && propsUiSource.includes('if (isHomeRunMarket(row)) return null;'));
+  check("home-run markets lead with the binary milestone and compare model probability with the price", propsUiSource.includes("function MilestoneProbabilityVisual") && propsUiSource.includes('return isHomeRunMarket(row) ? "1+ Home Run"') && propsUiSource.includes('if (isHomeRunMarket(row)) return "Model vs price"') && propsUiSource.includes('`${pct(chance)} vs ${pct(row.marketProbability)}`') && propsUiSource.includes('if (isHomeRunMarket(row)) return null;'));
   check("paired prediction badge cannot contradict the graded model side", propsUiSource.includes("function isModelSignalSide") && propsUiSource.includes(".filter(isModelSignalSide)") && propsUiSource.includes("probability: signalPrediction.finalProbability ?? signalPrediction.modelProbability") && propsUiSource.includes("if (isModelSignalSide(row)) return row.side"));
   check("research cockpit contains decision visuals", ["projection-vs-line", "model-vs-market", "book-price-ladder", "player-stat-snapshot", "market-context"].every((module) => propsUiSource.includes(`data-research-module="${module}"`)));
   check("player stat snapshot uses truthful member-facing labels", propsUiSource.includes('data-visual="player-stat-snapshot"') && propsUiSource.includes('data-stat-available={stat.feature ? "true" : "false"}') && propsUiSource.includes('stat.feature ? "Included in this projection" : "More data coming"') && propsUiSource.includes("playerStatDescriptor"));
@@ -492,6 +507,7 @@ async function main() {
   check("one-sided actionable markets carry their price-implied edge into the publication gate", liveBoardSource.includes("const effectiveMarketProbability = marketProbability ??") && liveBoardSource.includes("price.impliedProbability") && liveBoardSource.includes("marketProbability: effectiveMarketProbability"));
   check("generic pitcher scorer warnings cannot suppress integrated hitter reads", liveBoardSource.includes('const scoredPitcherSignal = definition.family === "pitcher"') && liveBoardSource.includes("const signal: IntegratedPropSignal | null = scoredPitcherSignal ?") && liveBoardSource.includes("const blockingModelWarnings = (scoredPitcherSignal?.featureWarnings ?? [])"));
   check("positive prop signals collapse duplicate sportsbook rows to the best price", liveBoardSource.includes("applyBestPriceSignalDiscipline") && liveBoardSource.includes("applyHitterSignalDiscipline(applyBestPriceSignalDiscipline(applyHomeRunActionablePromotions(deduped)))") && liveBoardSource.includes("signalOfferKey") && liveBoardSource.includes("BETTER_PRICE_AVAILABLE"));
+  check("member board uses grade-aware equal-price selection", liveBoardSource.includes('import { shouldReplaceBestPriceRow } from "./bestPriceSelection"') && liveBoardSource.includes("shouldReplaceBestPriceRow(current, row)"));
   check("pitcher best angles require a material model projection cushion", liveBoardSource.includes("function pitcherSignalGrade") && liveBoardSource.includes("function pitcherBestAngleProjectionGap") && liveBoardSource.includes('market === "pitcher_outs"') && liveBoardSource.includes('market === "pitcher_strikeouts"') && liveBoardSource.includes('if (minGap === null) return "LEAN"') && liveBoardSource.includes("scoredPitcherSignal?.modelProjection ?? projection"));
   check("pitcher board projection uses the model projection when available", realScoringSource.includes("modelProjectionFromExplanation") && realScoringSource.includes("projectedOuts") && realScoringSource.includes("projectedStrikeouts") && realScoringSource.includes("modelProjection: number | null"));
   check("member prediction badges show the calibrated probability", propsUiSource.includes("probability: signalPrediction.finalProbability ?? signalPrediction.modelProbability") && propsUiSource.includes("return row.finalProbability ?? row.modelProbability"));
