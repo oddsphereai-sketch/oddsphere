@@ -485,7 +485,8 @@ async function main() {
       liveBoardSource.includes("row.finalProbability >= 0.15") &&
       liveBoardSource.includes("row.finalProbability <= 0.18") &&
       liveBoardSource.includes("(row.expectedValue ?? 0) > 0") &&
-      liveBoardSource.includes('row.market !== "batter_home_runs"'),
+      liveBoardSource.includes('row.market !== "batter_home_runs"') &&
+      liveBoardSource.includes('|| row.market === "batter_home_runs"'),
   );
   check("one-sided actionable markets carry their price-implied edge into the publication gate", liveBoardSource.includes("const effectiveMarketProbability = marketProbability ??") && liveBoardSource.includes("price.impliedProbability") && liveBoardSource.includes("marketProbability: effectiveMarketProbability"));
   check("generic pitcher scorer warnings cannot suppress integrated hitter reads", liveBoardSource.includes('const scoredPitcherSignal = definition.family === "pitcher"') && liveBoardSource.includes("const signal: IntegratedPropSignal | null = scoredPitcherSignal ?") && liveBoardSource.includes("const blockingModelWarnings = (scoredPitcherSignal?.featureWarnings ?? [])"));
