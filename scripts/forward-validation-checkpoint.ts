@@ -21,6 +21,10 @@
  * window is genuinely forward (preview/in-sample rows are excluded).
  */
 import { supabase } from "../lib/db/supabase";
+import {
+  snapshotHasFinalSideCorrection,
+  snapshotHasTrueMoneylineInversion,
+} from "../lib/services/finalSideDecision";
 
 const PROD_DEPLOY_DATE = "2026-06-22"; // ← update to the actual prod merge date
 const SINCE = process.argv[2] || PROD_DEPLOY_DATE;
@@ -53,7 +57,9 @@ async function main() {
   const settled = (r: Row) => { const g = g1(r); return g && (g.result === "win" || g.result === "loss"); };
 
   // ── 1. ML flipped cohort ──
-  const mlFlipped = ml.filter((r) => (r.snapshot_json?.ml_flip?.flipped === true) && settled(r));
+  const mlFlipped = ml.filter(
+    (r) => snapshotHasTrueMoneylineInversion(r.snapshot_json) && settled(r),
+  );
   let w = 0, l = 0, u = 0, ow = 0, ol = 0, ou = 0;
   const mlHurt: string[] = [];
   for (const r of mlFlipped) {
@@ -68,7 +74,9 @@ async function main() {
   console.log("  " + rec("OLD side (counterfactual)", ow, ol, ou, ow + ol));
 
   // ── 2. Totals mean-side corrected ──
-  const ouFlipped = tot.filter((r) => (r.snapshot_json?.ou_flip?.flipped === true) && settled(r));
+  const ouFlipped = tot.filter(
+    (r) => snapshotHasFinalSideCorrection(r.snapshot_json, "total") && settled(r),
+  );
   let tw = 0, tl = 0, tu = 0, otw = 0, otl = 0, otu = 0, basisDep = 0;
   const ouHurt: string[] = [];
   for (const r of ouFlipped) {

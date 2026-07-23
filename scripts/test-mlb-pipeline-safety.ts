@@ -5,8 +5,14 @@ import {
 } from "../lib/cron/runCron";
 import {
   buildMlbModelLayerVersions,
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID,
   MLB_PUBLIC_CALIBRATION_VERSION,
 } from "../lib/automodel/mlbModelLayerVersions";
+import {
+  didFinalSideChange,
+  snapshotHasFinalSideCorrection,
+  snapshotHasTrueMoneylineInversion,
+} from "../lib/services/finalSideDecision";
 import { withPredictionGradeHistory } from "../lib/services/predictionRecordService";
 import { assertMlbChampionRuntime } from "../lib/automodel/mlbChampionRuntime";
 import {
@@ -53,7 +59,43 @@ check(
 const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
-check("grade policy carries July 20 v3 version", layers.grade_policy.includes("v3_2026_07_20"));
+check("grade policy carries July 23 v4 version", layers.grade_policy.includes("v4_2026_07_23"));
+check(
+  "MLB layer stamp carries one immutable decision release",
+  layers.decision_release_id === MLB_DAILY_EDGE_DECISION_RELEASE_ID &&
+    layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
+);
+check("different final sides are a true correction", didFinalSideChange("home", "away"));
+check("same final side is not a correction", !didFinalSideChange("home", "home"));
+check(
+  "legacy intermediate ML flip reversed downstream is not a final correction",
+  !snapshotHasFinalSideCorrection({
+    ml_flip: { flipped: true, original_side: "home", flipped_side: "home" },
+  }, "moneyline"),
+);
+check(
+  "legacy genuine ML flip remains a final correction",
+  snapshotHasFinalSideCorrection({
+    ml_flip: { flipped: true, original_side: "home", flipped_side: "away" },
+  }, "moneyline"),
+);
+check(
+  "market-aware ML correction is not mislabeled as inversion",
+  !snapshotHasTrueMoneylineInversion({
+    market_aware_side_correction: {
+      applied: true,
+      market: "moneyline",
+      original_side: "home",
+      corrected_side: "away",
+    },
+  }),
+);
+check(
+  "legacy genuine ML inversion is recognized",
+  snapshotHasTrueMoneylineInversion({
+    ml_flip: { flipped: true, original_side: "home", flipped_side: "away" },
+  }),
+);
 check("champion runtime accepts resolved defaults", (() => {
   try { assertMlbChampionRuntime({}); return true; } catch { return false; }
 })());

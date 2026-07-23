@@ -42,8 +42,11 @@ import {
 } from "./pickCalibrationLayer";
 import {
   buildMlbModelLayerVersions,
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID,
+  MLB_DAILY_EDGE_RULE_BUNDLE_VERSION,
   MLB_PUBLIC_CALIBRATION_VERSION,
 } from "../automodel/mlbModelLayerVersions";
+import { didFinalSideChange } from "./finalSideDecision";
 
 const SYNTHETIC_PRICE_BOOKS = new Set(["locked_snapshot", "recommendation_snapshot", "splits_consensus"]);
 const BOOK_PRIORITY: readonly string[] = SHARED_BOOK_PRIORITY.filter(
@@ -2016,12 +2019,17 @@ function buildMlRecord(
     finalMlLineDirection = readLineDirection(finalMlLineMovement);
     finalMlPublicSplitConflict = hasOpposingPublicMoneyConflict(signalsForGame, "moneyline", finalMlPick);
   }
+  const mlFinalSideChanged = didFinalSideChange(pred.predicted_ml_winner, finalMlPick);
   const mlProjectionConflict = projectionContradictsMoneylinePick(pred, v22, finalMlPick);
+  const mlChampionGuardApplies =
+    !mlFlipped &&
+    !mlPickCalibrated &&
+    !mlMarketSideCorrected;
   const mlChampionCorrectionReasons = [
-    !mlMarketSideCorrected && mlProjectionConflict ? "projected_score_contradicts_ml_pick" : null,
-    !mlMarketSideCorrected && readBoolish(v22.ml_requires_market_confirmation) ? "ml_requires_market_confirmation" : null,
-    !mlMarketSideCorrected && finalMlLineDirection === "against_pick" ? "line_movement_against_pick" : null,
-    !mlMarketSideCorrected && finalMlPublicSplitConflict ? "opposing_public_split_conflict" : null,
+    mlChampionGuardApplies && mlProjectionConflict ? "projected_score_contradicts_ml_pick" : null,
+    mlChampionGuardApplies && readBoolish(v22.ml_requires_market_confirmation) ? "ml_requires_market_confirmation" : null,
+    mlChampionGuardApplies && finalMlLineDirection === "against_pick" ? "line_movement_against_pick" : null,
+    mlChampionGuardApplies && finalMlPublicSplitConflict ? "opposing_public_split_conflict" : null,
   ].filter((r): r is string => r !== null);
   const mlChampionStandDownReason =
     mlChampionCorrectionReasons.length > 0
@@ -2029,7 +2037,19 @@ function buildMlRecord(
       : null;
   const mlNoBetReason = readStringOrNull(sp.ml_no_bet_reason);
   const mlNoBet = mlChampionStandDownReason !== null || (!mlFlipped && !mlPickCalibrated && !mlMarketSideCorrected && isExplicitNoBetReason(mlNoBetReason));
-  const finalMlNoBetReason = mlChampionStandDownReason ?? mlNoBetReason;
+  const finalMlNoBetReason = mlNoBet
+    ? mlChampionStandDownReason ?? mlNoBetReason
+    : null;
+  // The final-side audit found 18 genuine historical ML inversions (11-7,
+  // +1.903u at one-unit sizing). Only a genuine final-side change is
+  // actionable; an intermediate inversion later reversed by calibration is
+  // not a flip and receives no correction bet.
+  const mlTrueInversionActionable =
+    mlFlipped &&
+    mlFinalSideChanged &&
+    !mlPickCalibrated &&
+    !mlMarketSideCorrected &&
+    !mlNoBet;
   const mlPublicPlayGrade = readPublicPlayGrade(sp.ml_play_grade);
   const mlMarketAwareCorrectedGrade = mlMarketSideCorrected
     ? resolveMlbMarketAwareCorrectedPlayGrade({
@@ -2127,9 +2147,11 @@ function buildMlRecord(
     expected_value: null,
     // Phase 6B.27 — strip internal V2.2 diagnostic labels (no_bet/held/
     // toss_up) from the public column; raw stays in snapshot.v2_2_audit.
-    // Flipped/calibrated/corrected rows carry no model grade until the separate
-    // grade calibration layer validates a cohort; otherwise they remain Watchlist.
-    play_grade: mlMarketSideCorrected
+    // True final-side inversions have their own validated Lean action. An
+    // intermediate inversion reversed downstream is not actionable.
+    play_grade: mlTrueInversionActionable
+      ? "lean"
+      : mlMarketSideCorrected
       ? mlMarketAwareCorrectedGrade?.playGrade ?? "market_aligned"
       : mlFlipped || mlPickCalibrated || mlChampionStandDownReason !== null
         ? null
@@ -2157,6 +2179,37 @@ function buildMlRecord(
     snapshot_json: {
       ...sp,
       model_layer_versions: buildMlbModelLayerVersions("moneyline"),
+      decision_pipeline: {
+        release_id: MLB_DAILY_EDGE_DECISION_RELEASE_ID,
+        rule_bundle_version: MLB_DAILY_EDGE_RULE_BUNDLE_VERSION,
+        calibration_version: MLB_PUBLIC_CALIBRATION_VERSION,
+        market: "moneyline",
+        original_side: pred.predicted_ml_winner,
+        inversion_triggered: mlFlipped,
+        inversion_candidate_side: mlFlipped ? mlFlip.flippedSide : null,
+        pick_calibration_applied: mlPickCalibrated,
+        market_aware_correction_applied: mlMarketSideCorrected,
+        board_action:
+          mlTrueInversionActionable || trackedMlBestAngle || trackedMlPublicPlayGrade === "lean"
+            ? "bet"
+            : "no_play",
+        actionable_grade: mlTrueInversionActionable
+          ? "lean"
+          : trackedMlBestAngle
+            ? "best_angle"
+            : trackedMlPublicPlayGrade === "lean"
+              ? "lean"
+              : null,
+        action_rule_id: mlTrueInversionActionable
+          ? ML_INVERSION_RULE_ID
+          : mlCleanTightEdgePromoted
+            ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID
+            : mlTightMarketPricePromoted
+              ? ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID
+              : null,
+        final_side: finalMlPick,
+        final_side_changed: mlFinalSideChanged,
+      },
       public_splits: buildPublicSplitsSnapshot(signalsForGame, "moneyline", finalMlPick),
       line_movement: finalMlLineMovement,
       // MLB-P0 — audit trail for the Best Angle confirmation resolution.
@@ -2292,7 +2345,8 @@ function buildMlRecord(
       // game_predictions.predicted_ml_winner (untouched).
       ml_flip: mlFlipped
         ? {
-            flipped: true,
+            triggered: true,
+            flipped: mlFinalSideChanged,
             rule_id: ML_INVERSION_RULE_ID,
             original_side: pred.predicted_ml_winner,
             original_pick: pred.predicted_ml_winner,
@@ -2304,6 +2358,10 @@ function buildMlRecord(
             original_odds: mlOddsAmerican,
             flipped_side: finalMlPick,
             flipped_pick: finalMlPick,
+            inversion_candidate_side: mlFlip.flippedSide,
+            final_side: finalMlPick,
+            final_side_changed: mlFinalSideChanged,
+            reversed_by_pick_calibration: mlPickCalibrated && !mlFinalSideChanged,
             flipped_odds: finalMlOdds,
             // Raw opposite-side probability — AUDIT ONLY, never shown to members.
             flipped_side_model_prob: mlFlip.flippedSideModelProb,
@@ -2620,6 +2678,35 @@ function buildOuRecord(
     );
     ouLineDirection = readLineDirection(finalOuLineMovement);
   }
+  // 2026-07-23 decision release r1 — totals correction rules are not stable
+  // across chronological windows, and their recently shipped actionable rows
+  // materially underperformed. A trigger is now an explicit stand-down action:
+  // keep the original probability side for audit, publish NO_PLAY, and never
+  // expose the candidate as a Lean/Best Angle. No shadow operational mode.
+  const ouCorrectionRejected =
+    ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouMidEdgeFlipped;
+  const ouRejectedCandidate = ouCorrectionRejected
+    ? {
+        side: finalOuPick,
+        odds: finalOuOdds,
+        line: finalOuBetLine,
+        confidence: finalOuConfidence,
+        modelProb: finalOuModelProb,
+        marketProb: finalOuMarketProb,
+        edgePp: finalOuEdge,
+      }
+    : null;
+  if (ouCorrectionRejected) {
+    finalOuPick = pred.predicted_ou_side;
+    finalOuOdds = ouOddsAmerican;
+    finalOuBetLine = ouBetLine;
+    finalOuConfidence = pred.ou_confidence;
+    finalOuModelProb = ouModelProb;
+    finalOuMarketProb = ouMarketProb;
+    finalOuEdge = ouEdgePp;
+    finalOuLineMovement = ouLineMovement;
+    ouLineDirection = readLineDirection(finalOuLineMovement);
+  }
   const ouBaseBestAngle = ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouMidEdgeFlipped || ouDivergenceStandDown
     ? false
     : ouBest.bestAngle;
@@ -2683,11 +2770,14 @@ function buildOuRecord(
       finalOuMarketProb === null);
   const ouNoBet =
     ouMissingActionableMarket ||
+    ouCorrectionRejected ||
     ouChampionStandDownReason !== null ||
     ouDivergenceStandDown ||
     (!ouMarketSideCorrected && isExplicitNoBetReason(explicitOuNoBetReason));
   const ouNoBetReason = ouMissingActionableMarket
     ? "No real-book total price or market-implied probability available; not actionable until the odds refresh provides a priced total."
+    : ouCorrectionRejected
+    ? `Stood down: ${ouCorrectionKind ?? "totals correction"} is not an approved actionable rule in Daily Edge decision release r1.`
     : ouDivergenceStandDown
     ? "Stood down: projected total is on the opposite side of the line from the probability-driven pick, and the flip rule did not qualify (gap/line/odds). Mean/probability divergence hold."
     : ouChampionStandDownReason ?? explicitOuNoBetReason;
@@ -2712,9 +2802,9 @@ function buildOuRecord(
     publicSplitConflict: ouPublicSplitConflict,
   });
   const ouPromotedBestAngle = !ouFinalBestAngle && ouCleanConfirmedBestAngle.bestAngle;
-  const trackedOuFinalBestAngle = ouChampionStandDownReason !== null
+  const trackedOuFinalBestAngle = ouCorrectionRejected
+    || ouChampionStandDownReason !== null
     || ouNoBet
-    || ouMidEdgeFlipped
     ? false
     : ouMarketAwareCorrectedGrade !== null
       ? ouMarketAwareCorrectedGrade.bestAngle
@@ -2737,8 +2827,8 @@ function buildOuRecord(
     !trackedOuFinalBestAngle &&
     finalOuPublicPlayGrade === "lean" &&
     !ouValidatedLean.lean;
-  const trackedOuPublicPlayGrade = ouMidEdgeFlipped
-    ? (ouNoBet ? null : "lean")
+  const trackedOuPublicPlayGrade = ouCorrectionRejected
+    ? null
     : ouMarketAwareCorrectedGrade !== null
     ? ouMarketAwareCorrectedGrade.playGrade
     : ouPromotedBestAngle
@@ -2748,8 +2838,6 @@ function buildOuRecord(
     : ouUnvalidatedLeanCap
       ? "market_aligned"
       : finalOuPublicPlayGrade;
-  const ouUnvalidatedFlipPublicPlayGrade =
-    !ouNoBet && (ouFlipped || ouMarketFlipped) ? "market_aligned" : null;
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -2775,14 +2863,13 @@ function buildOuRecord(
     edge: finalOuEdge,
     expected_value: null,
     // Phase 6B.27 — same translator as ML; see readPublicPlayGrade. Mean-side
-    // and market-opposed flipped rows do not inherit the original side's grade;
-    // when playable, they are explicitly stored as market_aligned/Watchlist.
+    // and rejected correction rows do not inherit the original side's grade.
     play_grade: ouMissingActionableMarket
+      ? null
+      : ouCorrectionRejected
       ? null
       : ouMarketSideCorrected
       ? ouMarketAwareCorrectedGrade?.playGrade ?? "market_aligned"
-      : ouUnvalidatedFlipPublicPlayGrade !== null
-        ? ouUnvalidatedFlipPublicPlayGrade
       : ouChampionStandDownReason !== null
         ? null
         : trackedOuPublicPlayGrade,
@@ -2806,6 +2893,44 @@ function buildOuRecord(
     snapshot_json: {
       ...sp,
       model_layer_versions: buildMlbModelLayerVersions("total"),
+      decision_pipeline: {
+        release_id: MLB_DAILY_EDGE_DECISION_RELEASE_ID,
+        rule_bundle_version: MLB_DAILY_EDGE_RULE_BUNDLE_VERSION,
+        calibration_version: MLB_PUBLIC_CALIBRATION_VERSION,
+        market: "total",
+        original_side: pred.predicted_ou_side,
+        correction_triggered:
+          ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouMidEdgeFlipped,
+        correction_rule_id: ouCorrectionRuleId,
+        correction_kind: ouCorrectionKind,
+        correction_mode: ouCorrectionRejected ? "stand_down" : "none",
+        rejected_rule_id: ouCorrectionRejected ? ouCorrectionRuleId : null,
+        rejected_correction_kind: ouCorrectionRejected ? ouCorrectionKind : null,
+        board_action: ouCorrectionRejected
+          ? "no_play"
+          : trackedOuFinalBestAngle || trackedOuPublicPlayGrade === "lean"
+            ? "bet"
+            : "no_play",
+        actionable_grade: trackedOuFinalBestAngle
+          ? "best_angle"
+          : trackedOuPublicPlayGrade === "lean"
+            ? "lean"
+            : null,
+        promotion_rule_id: ouPromotedBestAngle
+          ? TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID
+          : ouValidatedLean.lean
+            ? TOTAL_VALIDATED_LEAN_RULE_ID
+            : null,
+        paired_policy: {
+          demotion: "unstable_totals_correction_trigger_to_no_play",
+          promotions: [
+            TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID,
+            TOTAL_VALIDATED_LEAN_RULE_ID,
+          ],
+        },
+        final_side: finalOuPick,
+        final_side_changed: didFinalSideChange(pred.predicted_ou_side, finalOuPick),
+      },
       public_splits: buildPublicSplitsSnapshot(signalsForGame, "total", finalOuPick),
       line_movement: finalOuLineMovement,
       // MLB-P0 — audit trail for the Best Angle confirmation resolution.
@@ -2920,20 +3045,16 @@ function buildOuRecord(
               "Normalized MLB replay 2026-06-11..2026-07-10: non-Best-Angle totals with p>=54%, edge>=5pp, price>-145, and projection aligned went 47-35, +7.8662u, +9.59% ROI; stronger gap>=0.75 subset went 17-8, +6.6929u.",
           }
         : null,
-      total_flip_public_grade_resolution: ouFlipped || ouMarketFlipped || ouMidEdgeFlipped
+      total_flip_public_grade_resolution: ouCorrectionRejected
         ? {
             rule_id: ouCorrectionRuleId,
             flip_kind: ouCorrectionKind,
-            action: ouMidEdgeFlipped
-              ? ouNoBet ? "no_public_grade" : "store_as_lean"
-              : ouUnvalidatedFlipPublicPlayGrade !== null ? "store_as_watchlist" : "no_public_grade",
-            public_play_grade: ouMidEdgeFlipped && !ouNoBet ? "lean" : ouUnvalidatedFlipPublicPlayGrade,
+            action: "no_public_grade",
+            public_play_grade: null,
             no_bet: ouNoBet,
             reason: ouNoBet
               ? ouNoBetReason
-              : ouMidEdgeFlipped
-                ? "Chronologically validated 3-5pp totals inversion; priced opposite side is actionable as Lean, never Best Angle."
-                : "Flipped totals are actionable only as market_aligned Watchlist unless a validated correction cohort promotes them.",
+              : "Totals correction rules are not actionable in decision release r1; the row is stood down as No Play.",
           }
         : null,
       champion_candidate_correction: ouChampionStandDownReason === null
@@ -2980,87 +3101,32 @@ function buildOuRecord(
         typeof (v22 as Record<string, unknown>).total_line_consensus_at_same_line === "boolean"
           ? ((v22 as Record<string, unknown>).total_line_consensus_at_same_line as boolean)
           : null,
-      market_aware_side_correction: ouMarketSideCorrection.applied === true
+      market_aware_side_correction: null,
+      totals_correction_rejection: ouCorrectionRejected
         ? {
-            applied: true,
-            rule_id: MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
-            market: "total",
+            action: "stand_down",
+            rule_id: ouCorrectionRuleId,
+            correction_kind: ouCorrectionKind,
+            official_side: finalOuPick,
+            rejected_candidate_side: ouRejectedCandidate?.side ?? null,
+            reason: "Totals correction rule failed chronological stability and is not actionable in decision release r1.",
             original_side: pred.predicted_ou_side,
             original_pick: pred.predicted_ou_side,
             original_odds: ouOddsAmerican,
             original_confidence: pred.ou_confidence,
             original_model_prob: ouModelProb,
             original_market_prob: ouMarketProb,
-            original_line_direction: readLineDirection(ouLineMovement),
-            original_public_split_support: initialOuPublicSplitSupport,
-            original_public_split_conflict: initialOuPublicSplitConflict,
-            corrected_side: finalOuPick,
-            corrected_pick: finalOuPick,
-            corrected_odds: finalOuOdds,
-            corrected_model_prob: finalOuModelProb,
-            corrected_market_prob: finalOuMarketProb,
-            corrected_edge_pp: ouMarketSideCorrection.correctedEdgePp,
-            raw_corrected_side_model_prob: ouMarketSideCorrection.rawCorrectedSideModelProb,
-            raw_corrected_side_market_prob: ouMarketSideCorrection.rawCorrectedSideMarketProb,
-            final_displayed_confidence: finalOuConfidence,
-            reasons: ouMarketSideCorrection.reasons,
-            public_play_grade: ouMarketAwareCorrectedGrade?.playGrade ?? "market_aligned",
-            public_best_angle: ouMarketAwareCorrectedGrade?.bestAngle ?? false,
-            public_grade_reason: ouMarketAwareCorrectedGrade?.reason ?? null,
-            validation_note:
-              "Historical MLB side-correction replay through 2026-07-10: totals split-signal rows improved when flipped before grading; corrected Total Best Angle promotion remains limited to the validated plus-money cohorts.",
+            rejected_candidate_odds: ouRejectedCandidate?.odds ?? null,
+            rejected_candidate_line: ouRejectedCandidate?.line ?? null,
+            rejected_candidate_model_prob: ouRejectedCandidate?.modelProb ?? null,
+            rejected_candidate_market_prob: ouRejectedCandidate?.marketProb ?? null,
+            rejected_candidate_edge_pp: ouRejectedCandidate?.edgePp ?? null,
+            market_aware_reasons:
+              ouMarketSideCorrection.applied === true ? ouMarketSideCorrection.reasons : null,
           }
         : null,
-      // 2026-06-22 / 2026-07-11 — totals side-correction audit. Present only
-      // when a correction fired; preserves the original probability side so the
-      // override is fully reversible. The model's projected total and raw
-      // probability are untouched.
-      ou_flip: ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouMidEdgeFlipped
-        ? {
-            flipped: true,
-            rule_id: ouCorrectionRuleId,
-            flip_kind: ouCorrectionKind,
-            original_probability_side: pred.predicted_ou_side,
-            original_pick: pred.predicted_ou_side,
-            original_confidence: pred.ou_confidence,
-            original_model_prob: ouModelProb,
-            original_odds: ouOddsAmerican,
-            // Bet-line basis: `line` is the corrected side's member-facing
-            // posted line; `original_side_line` preserves the line used before
-            // correction. Internal model totals remain alongside for audit.
-            projected_total: ouScoreSum,
-            line: finalOuBetLine,
-            original_side_line: ouBetLine,
-            market_total_internal: typeof v22.market_total === "number" ? (v22.market_total as number) : null,
-            posterior_total_internal: typeof v22.posterior_total === "number" ? (v22.posterior_total as number) : null,
-            mean_side: ouFlipped ? ouFlip.meanSide : null,
-            mean_gap: ouFlipped ? ouFlip.meanGap : null,
-            market_opposed_side: ouMarketFlipped ? ouMarketFlip.flippedSide : null,
-            market_opposed_max_model_prob: ouMarketFlipped ? ouMarketFlip.maxModelProb : null,
-            opposing_public_split_conflict: ouMarketFlipped ? initialOuPublicSplitConflict : null,
-            market_aware_side_correction: ouMarketSideCorrected,
-            market_aware_reasons: ouMarketSideCorrection.applied === true ? ouMarketSideCorrection.reasons : null,
-            mid_edge_inversion: ouMidEdgeFlipped,
-            mid_edge_original_side: ouMidEdgeFlipped ? ouMidEdgeFlip.originalSide : null,
-            mid_edge_original_edge_pp: ouMidEdgeFlipped ? ouMidEdgeFlip.originalEdgePp : null,
-            mid_edge_min_pp: ouMidEdgeFlipped ? 3 : null,
-            mid_edge_max_pp_exclusive: ouMidEdgeFlipped ? 5 : null,
-            flipped_pick: finalOuPick,
-            flipped_odds: finalOuOdds,
-            // Raw corrected-side probability — AUDIT ONLY, never shown to members.
-            flipped_side_model_prob: ouCorrectedSideModelProb,
-            flipped_side_market_prob: ouCorrectedSideMarketProb,
-            flipped_side_edge_pp: ouCorrectedSideEdgePp,
-            final_displayed_confidence: finalOuConfidence,
-            reason: ouFlipped
-              ? "projected mean/probability divergence, mean-side selector"
-              : ouMarketFlipped
-                ? "market opposed weak total with opposing public split conflict"
-                : ouMarketSideCorrected
-                  ? "market-aware total split signal fade"
-                  : "chronologically validated 3-5pp totals edge inversion",
-          }
-        : null,
+      /* Removed as an official action in decision release r1. */
+      ou_flip: null,
     },
   };
 }

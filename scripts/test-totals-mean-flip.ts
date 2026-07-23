@@ -12,7 +12,10 @@ import {
   TOTALS_MID_EDGE_FLIP_RULE_ID,
   TOTALS_MEAN_FLIP_RULE_ID,
 } from "../lib/services/totalsMeanFlip";
-import { buildPredictionRecordsFromSlate } from "../lib/services/predictionRecordService";
+import {
+  buildPredictionRecordsFromSlate,
+  TOTAL_VALIDATED_LEAN_RULE_ID,
+} from "../lib/services/predictionRecordService";
 
 let pass = 0, fail = 0;
 const failures: string[] = [];
@@ -136,20 +139,22 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   // Divergent (pick under, mean 8.9 > line 8.5), gap 0.4, line<10, odds present → FLIP to over.
   const recs = build(mkPred({}, {}), oddsSnap(-105, -115));
   const ou = recs.find((r) => r.market === "total");
-  check("eligible divergent FLIPS to over (was under)", ou?.pick === "over" && ou?.side === "over");
-  check("flip uses mean-side odds -105", ou?.odds_american === -105);
-  check("flip no_bet=false (real pick, not No Play)", ou?.no_bet === false);
-  check("flip best_angle=false", ou?.best_angle === false);
-  check("flip is retained as a Watchlist-grade market read", ou?.play_grade === "market_aligned");
+  check("eligible divergence keeps original under official", ou?.pick === "under" && ou?.side === "under");
+  check("official side keeps its real odds -115", ou?.odds_american === -115);
+  check("projection-divergent correction stands down from betting", ou?.no_bet === true);
+  check("rejected correction best_angle=false", ou?.best_angle === false);
+  check("rejected correction has no actionable grade", ou?.play_grade === null);
   check("member confidence >=55 (NOT sub-50 raw)", typeof ou?.confidence === "number" && ou!.confidence >= 55 && ou!.confidence <= 60);
   check("member model_probability >=0.5 (presentable)", typeof ou?.model_probability === "number" && ou!.model_probability >= 0.5);
-  check("flipped edge column nulled", ou?.edge === null);
+  check("official side retains its model edge", typeof ou?.edge === "number");
   const f = (ou?.snapshot_json as any)?.ou_flip;
-  check("ou_flip audit + original side=under, mean_side=over", f?.flipped === true && f?.original_probability_side === "under" && f?.mean_side === "over");
-  check("ou_flip records projected_total + gap", f?.projected_total === 8.9 && Math.abs(f?.mean_gap - 0.4) < 1e-9);
-  check("ou_flip preserves RAW mean-side prob in audit (sub-50)", typeof f?.flipped_side_model_prob === "number" && f.flipped_side_model_prob < 0.5);
-  check("ou_flip final_displayed_confidence matches column", f?.final_displayed_confidence === ou?.confidence);
-  check("coherent: pick(over) agrees with projected_total>line", ou?.pick === "over" && 8.9 > Number(ou?.line_value));
+  const rejection = (ou?.snapshot_json as any)?.totals_correction_rejection;
+  check("no official ou_flip is emitted", f == null);
+  check("rejection audit records original under + rejected over", rejection?.action === "stand_down" && rejection?.original_side === "under" && rejection?.rejected_candidate_side === "over");
+  check("rejection audit records the governing rule", rejection?.rule_id === TOTALS_MEAN_FLIP_RULE_ID);
+  check("decision pipeline records no final side change", (ou?.snapshot_json as any)?.decision_pipeline?.final_side_changed === false);
+  check("decision pipeline makes an explicit No Play board action", (ou?.snapshot_json as any)?.decision_pipeline?.board_action === "no_play");
+  check("decision pipeline stamps paired total promotion rules", (ou?.snapshot_json as any)?.decision_pipeline?.paired_policy?.promotions?.includes(TOTAL_VALIDATED_LEAN_RULE_ID));
   // ML + FI unaffected
   check("ML record unaffected by totals flip", recs.find((r) => r.market === "moneyline")?.pick === "home");
 }
@@ -160,7 +165,7 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const pred = mkPred({}, { posterior_total: 8.6 });
   const recs = build(pred, oddsSnap(-105, -115));
   const ou = recs.find((r) => r.market === "total");
-  check("gap<0.3 → flips to over", ou?.no_bet === false && ou?.pick === "over" && (ou?.snapshot_json as any)?.ou_flip?.flipped === true);
+  check("gap<0.3 → original stays under and correction stands down", ou?.no_bet === true && ou?.pick === "under" && (ou?.snapshot_json as any)?.totals_correction_rejection?.action === "stand_down");
 }
 {
   // line>=10 still flips in v2. Score sum 10.6 vs bet line 10 ⇒ divergent
@@ -168,7 +173,7 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const pred = mkPred({}, { market_total: 10, posterior_total: 10.6 });
   const recs = build(pred, oddsSnap(-105, -115));
   const ou = recs.find((r) => r.market === "total");
-  check("line>=10 → flips to over", ou?.no_bet === false && ou?.pick === "over" && (ou?.snapshot_json as any)?.ou_flip?.flipped === true);
+  check("line>=10 → original stays under and correction stands down", ou?.no_bet === true && ou?.pick === "under" && (ou?.snapshot_json as any)?.totals_correction_rejection?.action === "stand_down");
 }
 {
   // missing mean-side (over) odds → stand down.
@@ -197,11 +202,12 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const recs = build(pred, oddsSnap(-110, -105), signals);
   const ou = recs.find((r) => r.market === "total");
   const f = (ou?.snapshot_json as any)?.ou_flip;
-  check("market-opposed public-conflict total flips to under", ou?.pick === "under" && ou?.side === "under");
-  check("market-opposed flip stays a tracked prediction", ou?.no_bet === false);
-  check("market-opposed flip is retained as a Watchlist-grade market read", ou?.play_grade === "market_aligned");
-  check("market-opposed flip audit stamped", f?.flipped === true && f?.rule_id === TOTALS_MARKET_OPPOSED_FLIP_RULE_ID);
-  check("market-opposed flip audit kind stamped", f?.flip_kind === "market_opposed_public_conflict");
+  check("market-opposed candidate leaves original over official", ou?.pick === "over" && ou?.side === "over");
+  const rejection = (ou?.snapshot_json as any)?.totals_correction_rejection;
+  check("market-opposed correction is explicit No Play", ou?.no_bet === true);
+  check("market-opposed correction has no actionable grade", ou?.play_grade === null);
+  check("market-opposed rejection audit stamped", f == null && rejection?.action === "stand_down" && rejection?.rejected_candidate_side === "under" && rejection?.rule_id === TOTALS_MARKET_OPPOSED_FLIP_RULE_ID);
+  check("market-opposed correction kind stamped", rejection?.correction_kind === "market_opposed_public_conflict");
 }
 {
   // LINE BASIS: the bet line (oddsSourceOu.over/under.line) differs from the
@@ -228,12 +234,13 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const recs = build(pred, odds);
   const ou = recs.find((r) => r.market === "total");
   const f = (ou?.snapshot_json as any)?.ou_flip;
+  const rejection = (ou?.snapshot_json as any)?.totals_correction_rejection;
   const gradeResolution = (ou?.snapshot_json as any)?.total_flip_public_grade_resolution;
-  check("3-5pp integration flips uncorrected total to opposite side", ou?.pick === "under" && ou?.odds_american === -105);
-  check("3-5pp integration carries the corrected side's exact line", ou?.line_value === 9);
-  check("3-5pp integration publishes validated Lean, never Best Angle", ou?.play_grade === "lean" && ou?.best_angle === false && ou?.no_bet === false);
-  check("3-5pp integration stamps dedicated audit metadata", f?.rule_id === TOTALS_MID_EDGE_FLIP_RULE_ID && f?.mid_edge_inversion === true && f?.mid_edge_original_edge_pp === 3.8);
-  check("3-5pp integration records Lean resolution", gradeResolution?.action === "store_as_lean" && gradeResolution?.public_play_grade === "lean");
+  check("3-5pp integration leaves original over official", ou?.pick === "over" && ou?.odds_american === -110);
+  check("3-5pp official row keeps the original side's exact line", ou?.line_value === 8.5);
+  check("3-5pp correction is No Play, never actionable", ou?.play_grade === null && ou?.best_angle === false && ou?.no_bet === true);
+  check("3-5pp integration stamps rejection metadata", f == null && rejection?.rule_id === TOTALS_MID_EDGE_FLIP_RULE_ID && rejection?.correction_kind === "mid_edge_inversion");
+  check("3-5pp integration records stand-down resolution", gradeResolution?.action === "no_public_grade" && gradeResolution?.public_play_grade === null);
 }
 {
   const pred = mkPred({}, { ou_model_prob: 0.558, ou_market_prob: 0.52, ou_edge_pct: 3.8, posterior_total: 8.9 });
@@ -246,7 +253,7 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   // Determinism: build twice → identical flipped side (locked snapshot freezes).
   const a = build(mkPred({}, {}), oddsSnap(-105, -115)).find((r) => r.market === "total");
   const b = build(mkPred({}, {}), oddsSnap(-105, -115)).find((r) => r.market === "total");
-  check("flip is deterministic (freezes same side)", a?.pick === b?.pick && a?.pick === "over");
+  check("stand-down policy is deterministic (freezes original side)", a?.pick === b?.pick && a?.pick === "under");
 }
 
 console.log(`\n  ${pass} pass · ${fail} fail · ${pass + fail} total`);

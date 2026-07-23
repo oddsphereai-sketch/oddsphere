@@ -32,6 +32,7 @@ import { filterMockSourceRows } from "@/lib/db/productionFilter";
 import { classifyEvidence } from "@/lib/services/signalEvidenceClassifier";
 import { generateSignalSummary } from "@/lib/services/signalSummaryGenerator";
 import { resolveMlInversionFlip } from "@/lib/services/mlInversionFlip";
+import { snapshotHasFinalSideCorrection } from "@/lib/services/finalSideDecision";
 import {
   resolveTotalsMarketOpposedFlip,
   resolveTotalsMeanFlip,
@@ -472,12 +473,8 @@ function marketWasCorrected(
   sportSpecific: Record<string, unknown> | null | undefined,
   market: "moneyline" | "total" | "first_inning",
 ): boolean {
-  if (marketAwareCorrectionSnapshot(sportSpecific, market) !== null) return true;
-  const key = market === "moneyline" ? "ml_flip" : market === "total" ? "ou_flip" : null;
-  if (key === null) return false;
-  const f = sportSpecific?.[key];
-  if (!f || typeof f !== "object") return false;
-  return (f as { flipped?: unknown }).flipped === true;
+  if (market === "first_inning") return false;
+  return snapshotHasFinalSideCorrection(sportSpecific, market);
 }
 
 function marketAwareCorrectionSnapshot(

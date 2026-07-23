@@ -13,8 +13,10 @@ import { resolveFirstInningModelVersion } from "./firstInningModelVersion";
 
 export type MlbModelLayerMarket = "moneyline" | "total" | "first_inning";
 
-export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v1";
-export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v3_2026_07_20";
+export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v2";
+export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v4_2026_07_23";
+export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_07_23_r1";
+export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v4_2026_07_23";
 
 export const MLB_MODEL_LAYER_VERSION_IDS = {
   projection_core: "mlb_projection_core_v2_2_baseline_2026_07_08",
@@ -23,8 +25,8 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   total_probability_head: "mlb_total_market_read_k04_cap8_thin_gap_guard_2026_07_11",
   first_inning_probability_head: "mlb_first_inning_fi_v2_signed_edge_price_gate_2026_07_11",
   market_calibration_policy: "mlb_model_market_calibration_baseline_2026_07_08",
-  grade_policy: "mlb_public_grade_policy_v3_2026_07_20",
-  correction_policy: "mlb_prediction_corrections_v3_2026_07_20",
+  grade_policy: "mlb_public_grade_policy_v4_2026_07_23",
+  correction_policy: "mlb_prediction_corrections_v4_totals_stand_down_2026_07_23",
   tracking_contract: "member_facing_lock_v2_writer_authority",
 } as const;
 
@@ -36,6 +38,9 @@ const ACTIVE_PROBABILITY_HEAD_BY_MARKET: Record<MlbModelLayerMarket, string> = {
 
 export type MlbModelLayerVersions = typeof MLB_MODEL_LAYER_VERSION_IDS & {
   schema_version: typeof MLB_MODEL_LAYER_VERSION_SCHEMA;
+  decision_release_id: typeof MLB_DAILY_EDGE_DECISION_RELEASE_ID;
+  rule_bundle_version: typeof MLB_DAILY_EDGE_RULE_BUNDLE_VERSION;
+  calibration_version: typeof MLB_PUBLIC_CALIBRATION_VERSION;
   market: MlbModelLayerMarket | null;
   active_probability_head: string | null;
   runtime_env: {
@@ -50,6 +55,9 @@ export function buildMlbModelLayerVersions(
 ): MlbModelLayerVersions {
   return {
     schema_version: MLB_MODEL_LAYER_VERSION_SCHEMA,
+    decision_release_id: MLB_DAILY_EDGE_DECISION_RELEASE_ID,
+    rule_bundle_version: MLB_DAILY_EDGE_RULE_BUNDLE_VERSION,
+    calibration_version: MLB_PUBLIC_CALIBRATION_VERSION,
     ...MLB_MODEL_LAYER_VERSION_IDS,
     market,
     active_probability_head: market === null ? null : ACTIVE_PROBABILITY_HEAD_BY_MARKET[market],

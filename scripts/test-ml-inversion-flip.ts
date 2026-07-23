@@ -80,7 +80,8 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   check("flipped record pick=away (was home)", ml?.pick === "away" && ml?.side === "away");
   check("flipped record uses opposite odds (135)", ml?.odds_american === 135);
   check("flipped record best_angle=false", ml?.best_angle === false);
-  check("flipped record play_grade=null", ml?.play_grade === null);
+  check("genuine final-side flip is an actionable Lean", ml?.play_grade === "lean");
+  check("genuine final-side flip has no stale No Bet reason", ml?.no_bet === false && ml?.no_bet_reason === null);
   check("member confidence >=55 (NOT sub-50 raw)", typeof ml?.confidence === "number" && ml!.confidence >= 55 && ml!.confidence <= 60);
   check("member model_probability >=0.5 (presentable)", typeof ml?.model_probability === "number" && ml!.model_probability >= 0.5);
   check("flipped edge column nulled (no edge claim)", ml?.edge === null);
@@ -90,6 +91,8 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   check("ml_flip preserves RAW opposite-side prob in audit (sub-50)", typeof flip?.flipped_side_model_prob === "number" && flip.flipped_side_model_prob < 0.5);
   check("ml_flip records final_displayed_confidence (matches column)", flip?.final_displayed_confidence === ml?.confidence);
   check("ml_flip rule_id stamped", flip?.rule_id === ML_INVERSION_RULE_ID);
+  check("decision release records a true final-side change", (ml?.snapshot_json as any)?.decision_pipeline?.final_side_changed === true);
+  check("decision release marks a genuine final-side flip as BET", (ml?.snapshot_json as any)?.decision_pipeline?.board_action === "bet");
   // model opinion preserved: snapshot keeps original sp.v2_2_audit, and OU record untouched
   const ou = recs.find((r) => r.market === "total");
   check("TOTALS record unaffected by ML flip", ou?.pick === "over");
@@ -99,6 +102,31 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const recs = build(mkPred({}, { auto_factors: { ml_raw_confidence: 61 } }), oddsSnap(-150, 135));
   const ml = recs.find((r) => r.market === "moneyline");
   check("raw>=60: ML pick stays home (no flip)", ml?.pick === "home" && (ml?.snapshot_json as any)?.ml_flip == null);
+}
+{
+  // The inversion candidate can be reversed by the downstream raw-model-side
+  // calibration. The final published side is then unchanged and must not be
+  // counted or rendered as a correction.
+  const previousGlobal = process.env.MLB_PICK_CALIBRATION_ENABLED;
+  const previousMl = process.env.MLB_ML_PICK_CALIBRATION_ENABLED;
+  process.env.MLB_PICK_CALIBRATION_ENABLED = "true";
+  process.env.MLB_ML_PICK_CALIBRATION_ENABLED = "true";
+  try {
+    const recs = build(mkPred({}, {}), oddsSnap(-150, 135));
+    const ml = recs.find((r) => r.market === "moneyline");
+    const flip = (ml?.snapshot_json as any)?.ml_flip;
+    check("downstream calibration can return the final pick to home", ml?.pick === "home");
+    check("reversed intermediate event is stamped triggered but not flipped", flip?.triggered === true && flip?.flipped === false);
+    check("reversed intermediate event records the candidate away side", flip?.inversion_candidate_side === "away");
+    check("reversed intermediate event records final_side_changed=false", flip?.final_side_changed === false);
+    check("decision pipeline agrees the official side did not change", (ml?.snapshot_json as any)?.decision_pipeline?.final_side_changed === false);
+    check("reversed intermediate event is not actionable", (ml?.snapshot_json as any)?.decision_pipeline?.board_action === "no_play");
+  } finally {
+    if (previousGlobal === undefined) delete process.env.MLB_PICK_CALIBRATION_ENABLED;
+    else process.env.MLB_PICK_CALIBRATION_ENABLED = previousGlobal;
+    if (previousMl === undefined) delete process.env.MLB_ML_PICK_CALIBRATION_ENABLED;
+    else process.env.MLB_ML_PICK_CALIBRATION_ENABLED = previousMl;
+  }
 }
 {
   // market_aligned=true → no flip.
