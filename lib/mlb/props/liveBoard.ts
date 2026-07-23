@@ -77,6 +77,7 @@ import {
   BATTER_HRR_MODEL_VERSION,
   projectBatterHrr,
 } from "./batterHrrCountModel";
+import { shouldReplaceBestPriceRow } from "./bestPriceSelection";
 import {
   syncInternalMlbPropsTracking,
   type MlbPropsTrackingSyncResult,
@@ -2147,7 +2148,7 @@ function selectBestPriceRows(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow
   for (const row of rows) {
     const key = `${mainLineKey(row)}|${row.side}|${row.line}`;
     const current = best.get(key);
-    if (!current || row.odds > current.odds || (row.odds === current.odds && row.lastUpdated > current.lastUpdated)) {
+    if (!current || shouldReplaceBestPriceRow(current, row)) {
       best.set(key, row);
     }
   }
