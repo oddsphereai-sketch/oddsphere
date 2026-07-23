@@ -948,7 +948,6 @@ const HITTER_LONGSHOT_VALUE_MARKETS = new Set([
 const DEFAULT_HITTER_LEAN_MIN_AMERICAN_ODDS = -250;
 const DEFAULT_HITTER_LEANS_PER_PLAYER = 2;
 const DEFAULT_HITTER_LEANS_PER_GAME = 12;
-const HOME_RUN_ACTIONABLE_PROMOTION_LIMIT = 5;
 
 function applyHomeRunActionablePromotions(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
   const eligible = rows.filter((row) =>
@@ -971,7 +970,6 @@ function applyHomeRunActionablePromotions(rows: PlayerPropPreviewRow[]): PlayerP
     eligible
       .filter((row) => bestOfferIds.has(row.id))
       .sort((a, b) => (b.finalProbability ?? 0) - (a.finalProbability ?? 0) || comparePropSignals(a, b))
-      .slice(0, HOME_RUN_ACTIONABLE_PROMOTION_LIMIT)
       .map((row) => row.id),
   );
   if (!promotedIds.size) return rows;
@@ -1006,7 +1004,14 @@ function applyBestPriceSignalDiscipline(rows: PlayerPropPreviewRow[]): PlayerPro
 }
 
 function applyHitterSignalDiscipline(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
-  const hitterLeans = rows.filter((row) => row.marketFamily !== "pitcher" && row.playGrade === "LEAN");
+  // Home-run Leans already pass their own rare-event probability, EV,
+  // confidence, price, and best-offer gates. Do not hide a qualified HR read
+  // behind generic hitter concentration caps.
+  const hitterLeans = rows.filter((row) =>
+    row.marketFamily !== "pitcher"
+    && row.market !== "batter_home_runs"
+    && row.playGrade === "LEAN"
+  );
   if (!hitterLeans.length) return rows;
 
   const minOdds = envInteger("ODDSPHERE_PROPS_HITTER_LEAN_MIN_AMERICAN_ODDS", DEFAULT_HITTER_LEAN_MIN_AMERICAN_ODDS);
