@@ -1663,16 +1663,14 @@ function homeRunProbability(row: PlayerPropPreviewRow): number | null {
 }
 
 function projectionHeadlineLabel(row: PlayerPropPreviewRow): string {
-  if (isHomeRunMarket(row)) return "Model vs price";
+  if (isHomeRunMarket(row)) return isPositiveSignal(row) ? "Model pick" : "Model chance";
   return row.projectionSource === "recent_form" ? "Recent avg" : "Projection";
 }
 
 function projectionHeadlineValue(row: PlayerPropPreviewRow): string {
   const chance = homeRunProbability(row);
   if (chance === null) return formatProjection(row.projection);
-  return row.marketProbability === null
-    ? pct(chance)
-    : `${pct(chance)} vs ${pct(row.marketProbability)}`;
+  return isPositiveSignal(row) ? "1+ Home Run" : pct(chance);
 }
 
 function marketSelectionLabel(row: PlayerPropPreviewRow): string {
