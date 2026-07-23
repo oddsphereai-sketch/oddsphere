@@ -453,6 +453,7 @@ console.log("\n━━━ MLB total clean strong Best Angle promotion ━━━")
   check("clean strong total promotes to Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
   check("clean strong total promotion audit is stamped", promo?.rule_id === "total_clean_strong_best_angle_v4_2026_07_11");
   check("clean strong total final BA resolution reflects promotion", ba?.clean_confirmed_promotion === true && ba?.final_best_angle === true);
+  check("clean strong total decision pipeline is actionable", (ou.snapshot_json as any)?.decision_pipeline?.board_action === "bet");
 }
 {
   const conflictTotalPred = {
@@ -812,15 +813,18 @@ console.log("\n━━━ MLB market-aware final side correction ━━━");
   const ou = recs.find((r) => r.market === "total")!;
   const correction = (ou.snapshot_json as any)?.market_aware_side_correction;
   const flip = (ou.snapshot_json as any)?.ou_flip;
-  check("Total market-aware split signal fades to priced opposite side", ou.pick === "under" && ou.odds_american === 105 && ou.confidence === 56);
-  check("Total market-aware correction persists corrected edge", typeof ou.edge === "number" && ou.edge === correction?.corrected_edge_pp);
-  check("Plus-money total market-aware correction can earn calibrated Best Angle", ou.best_angle === true && ou.play_grade === "best_angle" && ou.no_bet === false);
+  const rejection = (ou.snapshot_json as any)?.totals_correction_rejection;
+  check("Total market-aware candidate leaves original side official", ou.pick === "over" && ou.odds_american === -112);
+  check("Total market-aware stand-down preserves original edge for audit", typeof ou.edge === "number" && ou.edge === 4);
+  check("Total market-aware correction is explicit No Play", ou.best_angle === false && ou.play_grade === null && ou.no_bet === true);
   check(
-    "Total market-aware correction audit is stamped",
-    correction?.rule_id === MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID &&
-      correction?.market === "total" &&
-      correction?.reasons?.includes("total_split_support_fade") &&
-      flip?.rule_id === MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
+    "Total market-aware rejection audit is stamped",
+    correction == null &&
+      flip == null &&
+      rejection?.action === "stand_down" &&
+      rejection?.rule_id === MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID &&
+      rejection?.rejected_candidate_side === "under" &&
+      rejection?.market_aware_reasons?.includes("total_split_support_fade"),
   );
 }
 {
@@ -885,14 +889,18 @@ console.log("\n━━━ MLB market-aware final side correction ━━━");
   });
   const ou = recs.find((r) => r.market === "total")!;
   const flip = (ou.snapshot_json as any)?.ou_flip;
+  const rejection = (ou.snapshot_json as any)?.totals_correction_rejection;
   const gradeResolution = (ou.snapshot_json as any)?.total_flip_public_grade_resolution;
-  check("Market-opposed weak total flips to the priced opposite side", ou.pick === "under" && ou.odds_american === -117);
-  check("Market-opposed total flip stores Watchlist grade", ou.play_grade === "market_aligned" && ou.best_angle === false && ou.no_bet === false);
+  check("Market-opposed weak total leaves original side official", ou.pick === "over" && ou.odds_american === -105);
+  check("Market-opposed total correction is explicit No Play", ou.play_grade === null && ou.best_angle === false && ou.no_bet === true);
   check(
-    "Market-opposed total flip audit stamps Watchlist floor",
-    flip?.rule_id === TOTALS_MARKET_OPPOSED_FLIP_RULE_ID &&
-      gradeResolution?.action === "store_as_watchlist" &&
-      gradeResolution?.public_play_grade === "market_aligned",
+    "Market-opposed total rejection audit stamps No Play",
+    flip == null &&
+      rejection?.rule_id === TOTALS_MARKET_OPPOSED_FLIP_RULE_ID &&
+      rejection?.action === "stand_down" &&
+      rejection?.rejected_candidate_side === "under" &&
+      gradeResolution?.action === "no_public_grade" &&
+      gradeResolution?.public_play_grade === null,
   );
 }
 
@@ -1447,6 +1455,7 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
   const lean = (ou?.snapshot_json as any)?.total_validated_lean;
   check("Total Lean validated profile stays Lean", ou?.play_grade === "lean" && ou?.best_angle === false);
   check("Total Lean validated profile records audit", lean?.rule_id === TOTAL_VALIDATED_LEAN_RULE_ID && lean?.action === "keep_as_lean");
+  check("validated Total Lean decision pipeline is actionable", (ou?.snapshot_json as any)?.decision_pipeline?.board_action === "bet");
 }
 {
   const frictionPred = {
