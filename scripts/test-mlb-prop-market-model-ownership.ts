@@ -17,8 +17,8 @@ assert.equal(versions.pitcher_strikeouts, "pitcher_strikeouts_distribution_v4_ma
 assert.equal(versions.pitcher_outs, "pitcher_outs_workload_distribution_v2_verified");
 assert.equal(versions.pitcher_earned_runs, "pitcher_earned_runs_distribution_v2_actionable_calibrated");
 assert.equal(versions.batter_runs_scored, "batter_runs_context_opportunity_integrated_read_v2_calibrated");
-assert.equal(versions.batter_home_runs, "batter_home_runs_rare_event_integrated_read_v3_all_qualified_actionable");
-assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_07_23_r3");
+assert.equal(versions.batter_home_runs, "batter_home_runs_rare_event_integrated_read_v4_downstream_discipline_fixed");
+assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_07_23_r4");
 assert.match(MLB_PROPS_MODEL_RELEASE_ID, /^mlb_props_\d{4}_\d{2}_\d{2}_r\d+$/);
 
 const liveBoard = readFileSync(resolve(process.cwd(), "lib/mlb/props/liveBoard.ts"), "utf8");

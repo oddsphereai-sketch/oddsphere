@@ -1058,7 +1058,12 @@ function applyHitterSignalDiscipline(rows: PlayerPropPreviewRow[]): PlayerPropPr
   }
 
   return rows.map((row) => {
-    if (row.marketFamily === "pitcher" || row.playGrade !== "LEAN" || keptIds.has(row.id)) return row;
+    if (
+      row.marketFamily === "pitcher"
+      || row.market === "batter_home_runs"
+      || row.playGrade !== "LEAN"
+      || keptIds.has(row.id)
+    ) return row;
     const reasonCode = downgradeReasons.get(row.id) ?? "HITTER_SIGNAL_DISCIPLINE";
     return {
       ...row,
