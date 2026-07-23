@@ -1,5 +1,6 @@
 import { cronHandler } from "@/lib/cron/runCron";
 import { loadLatestMlbPropsBoardSnapshot } from "@/lib/mlb/props/boardSnapshotStore";
+import { publishMlbPropsMemberReadSnapshots } from "@/lib/mlb/props/memberReadSnapshotStore";
 import {
   syncInternalMlbPropsTracking,
   type MlbPropsTrackingSyncResult,
@@ -39,7 +40,10 @@ export async function GET(request: Request) {
       let trackingError: string | null = null;
       if (previous) {
         try {
-          tracking = await syncInternalMlbPropsTracking(previous);
+          tracking = await syncInternalMlbPropsTracking(previous, new Date().toISOString());
+          if (tracking.gameLocksCreated > 0) {
+            await publishMlbPropsMemberReadSnapshots(previous, { forceFull: true });
+          }
         } catch (trackingFailure) {
           trackingError = trackingFailure instanceof Error
             ? trackingFailure.message
@@ -100,5 +104,10 @@ export async function GET(request: Request) {
         lastKnownGoodPreserved: !result.published && result.usedPreviousSnapshot,
       },
     };
-  }, { sport: "mlb", lockMinutes: 8 });
+  }, {
+    sport: "mlb",
+    leaseGroup: "prediction_pipeline",
+    requireLease: true,
+    lockMinutes: 8,
+  });
 }

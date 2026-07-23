@@ -7,16 +7,29 @@ import {
   type HitterGameLogRecord,
   type PitcherGameLogRecord,
 } from "@/lib/providers/real_api/_mlbStatsApiClient";
-import type { MlbPropsBoardSnapshot } from "./boardSnapshotStore";
+import {
+  loadMlbPropsBoardSnapshotAtOrBefore,
+  loadMlbPropsBoardSnapshotById,
+  loadMlbPropsGameLocks,
+  MLB_PROPS_GAME_LOCK_AUDIT_ACTION,
+  revalidateMlbPropsBoardCache,
+  type MlbPropsGameLockPointer,
+  type MlbPropsGameLockScheduleEntry,
+  type MlbPropsBoardSnapshot,
+} from "./boardSnapshotStore";
 import { isPaperTradingMarketAllowed } from "./paperTrading";
 import { assessPropPrice } from "./pricePolicy";
+import {
+  MLB_PROPS_GAME_LOCK_MINUTES,
+  MLB_PROPS_TRACKING_POLICY_RELEASE_ID,
+  mlbPropsGameLockCutoff,
+  mlbPropsGameLockIsDue,
+} from "./lockPolicy";
 import { MLBStatsAPIClient } from "./providerClients";
 import { settlePropPick, type PropSettlementInput } from "./settlement";
 
 const TRACKABLE_GRADES = new Set(["BEST_ANGLE", "LEAN", "WATCHLIST"]);
 const ACTIONABLE_GRADES = new Set(["BEST_ANGLE", "LEAN"]);
-const DEFAULT_LOCK_MINUTES = 60;
-const DEFAULT_LOCK_GRACE_MINUTES = 15;
 const DEFAULT_SETTLEMENT_LOOKBACK_DAYS = 4;
 const DEFAULT_MAX_PENDING_SETTLEMENTS = 500;
 
@@ -26,6 +39,7 @@ export type MlbPropsTrackingSyncResult = {
   candidatesSeen: number;
   candidatesDue: number;
   entriesLocked: number;
+  gameLocksCreated: number;
   closingPricesUpdated: number;
   error: string | null;
 };
@@ -120,8 +134,88 @@ export function internalMlbPropsTrackingEnabled(env: NodeJS.ProcessEnv = process
   return env.ODDSPHERE_PROPS_INTERNAL_TRACKING_ENABLED === "true";
 }
 
+export async function ensureMlbPropsGameLocks(
+  snapshot: MlbPropsBoardSnapshot,
+  observedAt = snapshot.asOfTimestamp,
+): Promise<{ locks: MlbPropsGameLockPointer[]; created: number }> {
+  const games = new Map<string, string>();
+  for (const row of snapshot.data.props) {
+    const gameId = row.providerIds?.gameId;
+    const startMs = Date.parse(row.gameStartTime);
+    if (gameId && Number.isFinite(startMs)) games.set(gameId, row.gameStartTime);
+  }
+  return ensureMlbPropsGameLocksForSchedule({
+    slateDate: snapshot.slateDate,
+    schedule: [...games.entries()].map(([externalGameId, gameStartTimestamp]) => ({
+      externalGameId,
+      gameStartTimestamp,
+    })),
+    observedAt,
+  });
+}
+
+export async function ensureMlbPropsGameLocksForSchedule(args: {
+  slateDate: string;
+  schedule: MlbPropsGameLockScheduleEntry[];
+  observedAt: string;
+}): Promise<{ locks: MlbPropsGameLockPointer[]; created: number }> {
+  if (!internalMlbPropsTrackingEnabled()) return { locks: [], created: 0 };
+  const supabase = getSupabase();
+  const lockMinutes = MLB_PROPS_GAME_LOCK_MINUTES;
+  const dueGames = args.schedule.filter((game) =>
+    mlbPropsGameLockIsDue(game.gameStartTimestamp, args.observedAt));
+  const cutoffSnapshots = new Map<string, MlbPropsBoardSnapshot | null>();
+  const gameLocks = await loadMlbPropsGameLocks(args.slateDate);
+  const lockedGameIds = new Set(gameLocks.map((lock) => lock.external_game_id));
+  let created = 0;
+  for (const { externalGameId: gameId, gameStartTimestamp } of dueGames) {
+    if (lockedGameIds.has(gameId)) continue;
+    const cutoffTimestamp = mlbPropsGameLockCutoff(gameStartTimestamp);
+    if (!cutoffTimestamp) continue;
+    let lockedSnapshot = cutoffSnapshots.get(cutoffTimestamp);
+    if (lockedSnapshot === undefined) {
+      lockedSnapshot = await loadMlbPropsBoardSnapshotAtOrBefore(args.slateDate, cutoffTimestamp);
+      cutoffSnapshots.set(cutoffTimestamp, lockedSnapshot);
+    }
+    if (!lockedSnapshot) continue;
+    const hasGame = lockedSnapshot.data.props.some((row) => row.providerIds?.gameId === gameId);
+    if (!hasGame) continue;
+    const lock: MlbPropsGameLockPointer = {
+      slate_date: args.slateDate,
+      external_game_id: gameId,
+      game_start_timestamp: gameStartTimestamp,
+      lock_cutoff_timestamp: cutoffTimestamp,
+      board_snapshot_id: lockedSnapshot.snapshotId,
+      snapshot_as_of_timestamp: lockedSnapshot.asOfTimestamp,
+      locked_at: cutoffTimestamp,
+      model_release_id: lockedSnapshot.modelContext?.modelReleaseId ?? "mlb_props_release_missing",
+    };
+    const { error } = await supabase.from("admin_audit_log").insert({
+      action_type: MLB_PROPS_GAME_LOCK_AUDIT_ACTION,
+      target_table: "prop_scoring_runs",
+      target_id: `${args.slateDate}:${gameId}`,
+      before_state: null,
+      after_state: {
+        ...lock,
+        lockPolicy: `T-${lockMinutes}`,
+        trackingPolicyReleaseId: MLB_PROPS_TRACKING_POLICY_RELEASE_ID,
+        authoritativeGameLock: true,
+        observedAt: args.observedAt,
+      },
+      source_type: "real_api",
+    });
+    if (error) throw error;
+    gameLocks.push(lock);
+    lockedGameIds.add(gameId);
+    created++;
+  }
+  if (created > 0) revalidateMlbPropsBoardCache();
+  return { locks: gameLocks, created };
+}
+
 export async function syncInternalMlbPropsTracking(
   snapshot: MlbPropsBoardSnapshot,
+  observedAt = snapshot.asOfTimestamp,
 ): Promise<MlbPropsTrackingSyncResult> {
   if (!internalMlbPropsTrackingEnabled()) return disabledSyncResult();
   const supabase = getSupabase();
@@ -172,13 +266,30 @@ export async function syncInternalMlbPropsTracking(
     closingPricesUpdated++;
   }
 
-  const candidates = selectTrackingCandidates(snapshot);
-  const lockMinutes = envPositiveInteger("ODDSPHERE_PROPS_TRACKING_LOCK_MINUTES", DEFAULT_LOCK_MINUTES);
-  const graceMinutes = envPositiveInteger("ODDSPHERE_PROPS_TRACKING_LOCK_GRACE_MINUTES", DEFAULT_LOCK_GRACE_MINUTES);
-  const due = candidates.filter((candidate) => candidate.minutesToStart > 0 && candidate.minutesToStart <= lockMinutes);
+  const lockMinutes = MLB_PROPS_GAME_LOCK_MINUTES;
+  const { locks: gameLocks, created: gameLocksCreated } =
+    await ensureMlbPropsGameLocks(snapshot, observedAt);
+
+  const due: Array<{ candidate: TrackingCandidate; snapshot: MlbPropsBoardSnapshot; lock: MlbPropsGameLockPointer }> = [];
+  const snapshotsById = new Map<string, MlbPropsBoardSnapshot | null>();
+  for (const lock of gameLocks) {
+    let lockedSnapshot = snapshotsById.get(lock.board_snapshot_id);
+    if (lockedSnapshot === undefined) {
+      lockedSnapshot = await loadMlbPropsBoardSnapshotById(snapshot.slateDate, lock.board_snapshot_id);
+      snapshotsById.set(lock.board_snapshot_id, lockedSnapshot);
+    }
+    if (!lockedSnapshot) continue;
+    for (const candidate of selectTrackingCandidates(lockedSnapshot)) {
+      if (candidate.row.providerIds?.gameId === lock.external_game_id) {
+        due.push({ candidate, snapshot: lockedSnapshot, lock });
+      }
+    }
+  }
+
   let entriesLocked = 0;
   if (due.length > 0) {
-    const rows = due.map((candidate) => trackingInsert(candidate, snapshot, lockMinutes, graceMinutes));
+    const rows = due.map(({ candidate, snapshot: lockedSnapshot, lock }) =>
+      trackingInsert(candidate, lockedSnapshot, lockMinutes, lock.locked_at));
     const { data, error } = await supabase
       .from("mlb_prop_tracking_entries")
       .upsert(rows, { onConflict: "tracking_key", ignoreDuplicates: true })
@@ -190,9 +301,10 @@ export async function syncInternalMlbPropsTracking(
   return {
     status: "completed",
     tableAvailable: true,
-    candidatesSeen: candidates.length,
+    candidatesSeen: selectTrackingCandidates(snapshot).length,
     candidatesDue: due.length,
     entriesLocked,
+    gameLocksCreated,
     closingPricesUpdated,
     error: null,
   };
@@ -494,12 +606,20 @@ function candidateRank(candidate: TrackingCandidate): number {
   return grade * 1_000_000 + (candidate.row.expectedValue ?? -1) * 10_000 + (candidate.row.modelEdge ?? -1) * 1_000 + candidate.row.odds / 10_000;
 }
 
-export function trackingInsert(candidate: TrackingCandidate, snapshot: MlbPropsBoardSnapshot, targetLockMinutes: number, graceMinutes: number) {
+export function trackingInsert(
+  candidate: TrackingCandidate,
+  snapshot: MlbPropsBoardSnapshot,
+  targetLockMinutes: number,
+  lockedAt = snapshot.asOfTimestamp,
+) {
   const row = candidate.row;
   const actionable = ACTIONABLE_GRADES.has(row.playGrade) && row.units > 0;
   const bdlPlayerId = row.providerIds?.bdlPlayerId ?? null;
+  const modelReleaseId = snapshot.modelContext?.modelReleaseId ?? "mlb_props_release_missing";
   return {
-    tracking_key: createHash("sha256").update(candidate.naturalKey).digest("hex"),
+    tracking_key: createHash("sha256")
+      .update(`${candidate.naturalKey}|${modelReleaseId}|${MLB_PROPS_TRACKING_POLICY_RELEASE_ID}`)
+      .digest("hex"),
     slate_date: snapshot.slateDate,
     external_game_id: row.providerIds?.gameId,
     mlb_game_pk: candidate.mlbGamePk,
@@ -528,7 +648,7 @@ export function trackingInsert(candidate: TrackingCandidate, snapshot: MlbPropsB
     tracking_cohort: actionable ? "actionable" : "model_observation",
     model_version: snapshot.modelContext?.marketModelVersions?.[row.market] ?? "mlb_props_model_version_missing",
     board_snapshot_id: snapshot.snapshotId,
-    locked_at: snapshot.asOfTimestamp,
+    locked_at: lockedAt,
     latest_line: row.line,
     latest_american_odds: row.odds,
     latest_market_probability: row.marketProbability,
@@ -543,10 +663,13 @@ export function trackingInsert(candidate: TrackingCandidate, snapshot: MlbPropsB
     clv_american_delta: 0,
     metadata_json: {
       private: true,
-      modelReleaseId: snapshot.modelContext?.modelReleaseId ?? "mlb_props_release_missing",
+      modelReleaseId,
+      trackingPolicyReleaseId: MLB_PROPS_TRACKING_POLICY_RELEASE_ID,
       lockPolicy: `T-${targetLockMinutes}`,
       minutesToStart: round(candidate.minutesToStart, 2),
-      lateLock: candidate.minutesToStart < Math.max(1, targetLockMinutes - graceMinutes),
+      lateLock: false,
+      snapshotAsOfTimestamp: snapshot.asOfTimestamp,
+      authoritativeGameLock: true,
       reasonCodes: row.reasonCodes,
       marketModelVersion: snapshot.modelContext?.marketModelVersions?.[row.market] ?? null,
       source: row.source,
@@ -662,9 +785,13 @@ function marketCategory(row: TrackingEntry): string {
 
 function modelReleaseForTracking(row: TrackingEntry): string {
   const release = row.metadata_json?.modelReleaseId;
-  return typeof release === "string" && release.length > 0
+  const modelRelease = typeof release === "string" && release.length > 0
     ? release
     : `legacy_unstamped:${row.model_version}`;
+  const trackingPolicy = row.metadata_json?.trackingPolicyReleaseId;
+  return typeof trackingPolicy === "string" && trackingPolicy.length > 0
+    ? `${modelRelease}|${trackingPolicy}`
+    : `${modelRelease}|legacy_row_lock_policy`;
 }
 
 function groupMetrics(
@@ -712,7 +839,7 @@ function publicTrackingRow(row: TrackingEntry) {
 }
 
 function disabledSyncResult(): MlbPropsTrackingSyncResult {
-  return { status: "disabled", tableAvailable: false, candidatesSeen: 0, candidatesDue: 0, entriesLocked: 0, closingPricesUpdated: 0, error: null };
+  return { status: "disabled", tableAvailable: false, candidatesSeen: 0, candidatesDue: 0, entriesLocked: 0, gameLocksCreated: 0, closingPricesUpdated: 0, error: null };
 }
 
 function prefixedInteger(value: string | null | undefined, prefix: string): number | null {
