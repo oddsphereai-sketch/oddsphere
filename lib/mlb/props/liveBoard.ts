@@ -729,6 +729,11 @@ async function loadProbablePitcherSeasonStats(probables: MlbProbablePitcher[], s
       const value = numberValue(log.stats[key]);
       return total + (value ?? 0);
     }, 0);
+    const recentThree = logs.slice(0, 3);
+    const sumRecentThree = (key: string) => recentThree.reduce((total, log) => {
+      const value = numberValue(log.stats[key]);
+      return total + (value ?? 0);
+    }, 0);
     out.set(probable.playerId, {
       playerId: probable.playerId,
       pitchingGs: stat.games_started,
@@ -740,8 +745,10 @@ async function loadProbablePitcherSeasonStats(probables: MlbProbablePitcher[], s
       pitchingH: stat.hits_allowed,
       pitchingEr: stat.earned_runs,
       recentStarts: logs.length || null,
+      recentThreeStarts: recentThree.length || null,
       recentStrikeouts: logs.length ? sum("strikeouts") : null,
       recentOuts: logs.length ? sum("outs") : null,
+      recentThreeOuts: recentThree.length ? sumRecentThree("outs") : null,
       recentBattersFaced: logs.length ? sum("batters_faced") : null,
       recentPitchCount: logs.length ? sum("pitch_count") : null,
     });
@@ -866,6 +873,7 @@ function buildDashboardRows(args: {
       market: mapped.odds.marketKey,
       marketLabel: definition.label,
       marketFamily: definition.family,
+      offerContract: stringValue(mapped.raw.market_kind) === "milestone" ? "milestone" : "two_way",
       marketGroup: definition.marketGroup,
       side: mapped.odds.side,
       line: mapped.odds.line,

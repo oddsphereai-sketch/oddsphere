@@ -85,6 +85,7 @@ export type PlayerPropPreviewRow = {
   market: string;
   marketLabel: string;
   marketFamily: "pitcher" | "batter" | "milestone";
+  offerContract?: "two_way" | "milestone";
   marketGroup: "Pitcher Strikeouts" | "Batter Strikeouts" | "Outs" | "Hits/Bases" | "Power" | "Walks" | "Runs/RBI" | "Speed" | "Research";
   side: "over" | "under";
   line: number;
@@ -787,8 +788,8 @@ function MarketPairTable({ pairs, selectedId, onSelect }: { pairs: MarketPair[];
       <strong className="text-xs tabular-nums text-white">{pair.primary.line}</strong>
       <span className="text-xs font-bold tabular-nums text-gray-300">{projectionHeadlineValue(pair.primary)}</span>
       <ModelPredictionBadge direction={direction} />
-      <MarketSideQuote row={pair.over} side="over" directionKind={activeSide === "over" ? direction?.kind ?? null : null} onSelect={onSelect} />
-      <MarketSideQuote row={pair.under} side="under" directionKind={activeSide === "under" ? direction?.kind ?? null : null} onSelect={onSelect} />
+      <MarketSideQuote row={pair.over} side="over" offerContract={pair.primary.offerContract} directionKind={activeSide === "over" ? direction?.kind ?? null : null} onSelect={onSelect} />
+      <MarketSideQuote row={pair.under} side="under" offerContract={pair.primary.offerContract} directionKind={activeSide === "under" ? direction?.kind ?? null : null} onSelect={onSelect} />
     </div>})}</div>
   </div>;
 }
@@ -801,13 +802,16 @@ function MarketPairCards({ pairs, selectedId, onSelect }: { pairs: MarketPair[];
     return <article key={pair.key} className={`p-4 ${pair.rows.some((row) => row.id === selectedId) ? "bg-violet-400/10" : ""}`}>
       <div className="flex min-w-0 items-start justify-between gap-3"><span className="flex min-w-0 items-center gap-3"><PlayerAvatar player={pair.primary.player} team={pair.primary.team} headshotUrl={pair.primary.headshotUrl} compact /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.player}</strong><span className="block truncate text-xs text-gray-500">{pair.primary.team} {pair.primary.homeAway === "home" ? "vs" : "@"} {pair.primary.opponent} · {pair.primary.marketLabel}</span></span></span><span className="flex shrink-0 flex-col items-end gap-1">{pair.primary.lockStatus ? <LockStatusBadge lockedAt={pair.primary.lockStatus.lockedAt} /> : null}<ModelPredictionBadge direction={direction} compact /></span></div>
       <div className="mt-3 flex items-center justify-between border-y border-gray-800 py-2 text-xs"><span className="text-gray-500">{isHomeRunMarket(pair.primary) ? "Market" : "Line"} <strong className="ml-1 text-white">{isHomeRunMarket(pair.primary) ? "1+ HR" : pair.primary.line}</strong></span><span className="text-gray-500">{projectionHeadlineLabel(pair.primary)} <strong className="ml-1 text-white">{projectionHeadlineValue(pair.primary)}</strong></span></div>
-      <div className="mt-3 grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" directionKind={activeSide === "over" ? direction?.kind ?? null : null} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" directionKind={activeSide === "under" ? direction?.kind ?? null : null} onSelect={onSelect} /></div>
+      <div className="mt-3 grid grid-cols-2 gap-2"><MarketSideQuote row={pair.over} side="over" offerContract={pair.primary.offerContract} directionKind={activeSide === "over" ? direction?.kind ?? null : null} onSelect={onSelect} /><MarketSideQuote row={pair.under} side="under" offerContract={pair.primary.offerContract} directionKind={activeSide === "under" ? direction?.kind ?? null : null} onSelect={onSelect} /></div>
     </article>;
   })}</div>;
 }
 
-function MarketSideQuote({ row, side, directionKind, onSelect }: { row: PlayerPropPreviewRow | null; side: "over" | "under"; directionKind: MarketDirection["kind"] | null; onSelect: (id: string) => void }) {
-  if (!row) return <span className="flex min-h-[72px] items-center justify-center rounded-md border border-dashed border-gray-800 bg-black/10 px-2 text-center text-[10px] font-semibold text-gray-600">{side === "over" ? "Over" : "Under"}<br />Not offered</span>;
+function MarketSideQuote({ row, side, offerContract, directionKind, onSelect }: { row: PlayerPropPreviewRow | null; side: "over" | "under"; offerContract?: PlayerPropPreviewRow["offerContract"]; directionKind: MarketDirection["kind"] | null; onSelect: (id: string) => void }) {
+  if (!row) {
+    const label = missingMarketSideLabel(side, offerContract);
+    return <span className="flex min-h-[72px] items-center justify-center rounded-md border border-dashed border-gray-800 bg-black/10 px-2 text-center text-[10px] font-semibold text-gray-600">{label.title}<br />{label.detail}</span>;
+  }
   const signal = isPositiveSignal(row);
   const isActiveDirection = directionKind !== null;
   const color = isActiveDirection || signal ? getPropGradeColor(row.playGrade) : null;
@@ -817,6 +821,15 @@ function MarketSideQuote({ row, side, directionKind, onSelect }: { row: PlayerPr
       ? ""
       : "border-gray-800 bg-black/20 hover:border-gray-700 hover:bg-gray-900";
   return <button type="button" onClick={() => onSelect(row.id)} className={`min-w-0 rounded-md border px-2.5 py-2 text-left ${predictionClass}`} style={color ? { borderColor: color.border, background: color.background } : undefined}><span className="flex items-center justify-between gap-2"><strong className="text-xs text-white">{side === "over" ? "O" : "U"} {row.line} · {signed(row.odds)}</strong><PropGradeBadge grade={row.playGrade} compact /></span><span className="mt-0.5 flex items-center justify-between gap-2"><span className="truncate text-[9px] text-gray-600">{row.book}</span>{directionKind ? <span className="shrink-0 text-[9px] font-black uppercase" style={color ? { color: color.text } : undefined}>{directionKind === "prediction" ? "Prediction" : "Projection"}</span> : signal ? <span className="shrink-0 text-[9px] font-black uppercase" style={color ? { color: color.text } : undefined}>{getPropGradeLabel(row.playGrade)}</span> : null}</span><span className="mt-1 flex items-center justify-between gap-2"><OddsMovementTag row={row} />{row.lockStatus ? <LockStatusBadge lockedAt={row.lockStatus.lockedAt} compact /> : null}</span></button>;
+}
+
+export function missingMarketSideLabel(
+  side: "over" | "under",
+  offerContract?: PlayerPropPreviewRow["offerContract"],
+): { title: string; detail: string } {
+  return offerContract === "milestone"
+    ? { title: "Milestone", detail: "One-sided market" }
+    : { title: side === "over" ? "Over" : "Under", detail: "Not offered" };
 }
 
 function LockStatusBadge({ lockedAt, compact = false }: { lockedAt: string; compact?: boolean }) {

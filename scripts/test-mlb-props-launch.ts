@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { selectPrimaryPropLines } from "../app/mlb/props/components/PlayerPropsDashboard";
+import {
+  missingMarketSideLabel,
+  selectPrimaryPropLines,
+} from "../app/mlb/props/components/PlayerPropsDashboard";
 import type { PlayerPropPreviewRow, PlayerPropsDashboardData } from "../app/mlb/props/components/PlayerPropsDashboard";
 import {
   decodeMlbPropsBoardSnapshot,
@@ -26,6 +29,17 @@ import {
 } from "../lib/mlb/props/memberPayload";
 
 const asOf = "2026-07-16T16:00:00.000Z";
+
+assert.deepEqual(
+  missingMarketSideLabel("under", "milestone"),
+  { title: "Milestone", detail: "One-sided market" },
+  "legitimate milestone offers must not imply that an under quote is missing",
+);
+assert.deepEqual(
+  missingMarketSideLabel("under", "two_way"),
+  { title: "Under", detail: "Not offered" },
+  "a genuinely absent side of a two-way contract remains explicit",
+);
 
 function row(overrides: Partial<PlayerPropPreviewRow> = {}): PlayerPropPreviewRow {
   return {
