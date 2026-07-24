@@ -20,7 +20,6 @@ import {
 import { isPaperTradingMarketAllowed } from "./paperTrading";
 import { assessPropPrice } from "./pricePolicy";
 import { MLB_PROPS_MODEL_RELEASE_ID } from "./marketModelVersions";
-import { buildPitcherOutsUnderCalibrationShadow } from "./pitcherCalibrationShadow";
 import {
   MLB_PROPS_GAME_LOCK_MINUTES,
   MLB_PROPS_TRACKING_POLICY_RELEASE_ID,
@@ -704,15 +703,6 @@ export function trackingInsert(
       projection: row.projection,
       projectionSource: row.projectionSource,
       modelInputWarnings: row.modelInputWarnings,
-      pitcherCalibrationShadow: buildPitcherOutsUnderCalibrationShadow({
-        market: row.market,
-        side: row.side,
-        modelProbability: row.modelProbability,
-        marketProbability: row.marketProbability,
-        finalProbability: row.finalProbability,
-        americanOdds: row.odds,
-        playGrade: row.playGrade,
-      }),
       publicDisplayEnabledAtLock: process.env.ODDSPHERE_PROPS_DISPLAY_ENABLED === "true",
     },
   };
