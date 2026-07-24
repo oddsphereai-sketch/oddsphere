@@ -394,6 +394,27 @@ function resolveLockedVerdict(
   }
 }
 
+function shouldCapCorrectedMarketVerdict(args: {
+  correctedMarket: boolean;
+  validatedCorrectedBestAngle: boolean;
+  hasStoredPredictionRecord: boolean;
+  writerOverride: LockedVerdictOverride | null;
+  verdictKey: MarketVerdict;
+}): boolean {
+  // A stored prediction_record is the authoritative public decision. In
+  // particular, a genuine final-side inversion that the writer explicitly
+  // grades Lean must remain Lean in the reader; the generic corrected-market
+  // fallback is only for candidates that do not yet have a writer decision.
+  const authoritativeStoredVerdict =
+    args.hasStoredPredictionRecord && args.writerOverride !== null;
+  return (
+    args.correctedMarket &&
+    !args.validatedCorrectedBestAngle &&
+    !authoritativeStoredVerdict &&
+    (args.verdictKey === "best_angle" || args.verdictKey === "lean")
+  );
+}
+
 /**
  * 2026-06-10 v15.2 — Reads the live writer play_grade for an unlocked
  * row from `sport_specific.v2_2_audit.{ml,ou}_play_grade` or
@@ -4134,18 +4155,22 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           input.sportSpecific ?? null,
           input.market,
         );
-  // Point-6 guarantee: a corrected/flipped market does not auto-inherit the
-  // original side's action grade. Only the validated market-aware corrected
-  // Best Angle cohort can remain Best Angle; every other corrected/flipped row
-  // stays Watchlist.
+  // A corrected/flipped candidate without an authoritative writer decision
+  // cannot auto-inherit the original side's action grade. Once the canonical
+  // prediction_records writer has explicitly stored Lean/No Play/Best Angle,
+  // however, the reader must honor it instead of silently re-grading it.
+  // Inversions remain unable to manufacture Best Angle in the writer.
   const validatedCorrectedBestAngle = correctedMarket && correctedBestAngleBool === true;
   const verdict =
-    correctedMarket &&
-    !validatedCorrectedBestAngle &&
-    (verdictAfterCaution.key === "best_angle" || verdictAfterCaution.key === "lean")
+    shouldCapCorrectedMarketVerdict({
+      correctedMarket,
+      validatedCorrectedBestAngle,
+      hasStoredPredictionRecord,
+      writerOverride,
+      verdictKey: verdictAfterCaution.key,
+    })
       ? { key: "watchlist" as MarketVerdict, label: "Watchlist", warning: verdictAfterCaution.warning }
       : verdictAfterCaution;
-
   // Server-generated copy (banned-terms-linted at output time).
   const modelDriver = pickModelDriver(input.autoFactors, input.market, input.pick, input.sportSpecific ?? null);
   const riskDriver = pickRiskDriver(input.autoFactors, input.market, input.pick, input.sportSpecific ?? null);
@@ -5328,6 +5353,9 @@ function marketAwareBreakdownDto(
 // featureSnapshot.ts). Production callers go through the GET handler.
 export const __TEST__ = {
   buildGameDto,
+  effectivePredictionRecordPlayGrade,
+  resolveLockedVerdict,
+  shouldCapCorrectedMarketVerdict,
   forceIncompleteMlbMarketNoPlay,
   normalizeGameRow,
   extractModelBreakdown,

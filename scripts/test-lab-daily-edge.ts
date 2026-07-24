@@ -95,6 +95,53 @@ const VALID_MARKET_SIGNALS = new Set<MarketSignal>([
 ]);
 
 async function main() {
+  section("Authoritative corrected-market grade");
+  {
+    const leanOverride = { key: "lean" as const, label: "Lean" };
+    const frozenGrade = dailyEdgeTest.effectivePredictionRecordPlayGrade({
+      play_grade: "market_aligned",
+      best_angle: false,
+      snapshot_json: {
+        member_facing_at_lock: { grade: "lean", play_grade: "lean" },
+      },
+    });
+    check("member-facing lock grade wins over the mutable stored fallback", frozenGrade === "lean");
+    check(
+      "frozen inversion Lean resolves to the public Lean verdict",
+      dailyEdgeTest.resolveLockedVerdict(frozenGrade, false, false)?.key === "lean",
+    );
+    check(
+      "stored final-side inversion Lean is not capped back to Watchlist",
+      dailyEdgeTest.shouldCapCorrectedMarketVerdict({
+        correctedMarket: true,
+        validatedCorrectedBestAngle: false,
+        hasStoredPredictionRecord: true,
+        writerOverride: leanOverride,
+        verdictKey: "lean",
+      }) === false,
+    );
+    check(
+      "unresolved corrected candidate remains capped at Watchlist",
+      dailyEdgeTest.shouldCapCorrectedMarketVerdict({
+        correctedMarket: true,
+        validatedCorrectedBestAngle: false,
+        hasStoredPredictionRecord: false,
+        writerOverride: null,
+        verdictKey: "lean",
+      }) === true,
+    );
+    check(
+      "correction status alone still cannot preserve an unvalidated Best Angle",
+      dailyEdgeTest.shouldCapCorrectedMarketVerdict({
+        correctedMarket: true,
+        validatedCorrectedBestAngle: false,
+        hasStoredPredictionRecord: false,
+        writerOverride: null,
+        verdictKey: "best_angle",
+      }) === true,
+    );
+  }
+
   section("Incomplete MLB market safety");
   {
     const healthMonitorSource = readFileSync("lib/services/dailyEdge/dailyEdgeDataHealthMonitor.ts", "utf8");
