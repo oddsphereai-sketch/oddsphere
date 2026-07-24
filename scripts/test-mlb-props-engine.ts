@@ -420,6 +420,7 @@ async function main() {
   const propsConfigSource = readFileSync("lib/mlb/props/config.ts", "utf8");
   const realScoringSource = readFileSync("lib/mlb/props/realScoring.ts", "utf8");
   const internalTrackingSource = readFileSync("lib/mlb/props/internalTracking.ts", "utf8");
+  const propsReviewSource = readFileSync("app/admin/mlb/props-review/page.tsx", "utf8");
   const lockPolicySource = readFileSync("lib/mlb/props/lockPolicy.ts", "utf8");
   const boardSnapshotStoreSource = readFileSync("lib/mlb/props/boardSnapshotStore.ts", "utf8");
   const memberReadSnapshotStoreSource = readFileSync("lib/mlb/props/memberReadSnapshotStore.ts", "utf8");
@@ -520,6 +521,8 @@ async function main() {
   check("launch readiness treats posted lineups as non-critical refresh context", launchReadinessSource.includes("posted lineups refresh the board and are not required to open it") && marketCatalogSource.includes("projected_or_confirmed_lineup") && !marketCatalogSource.includes('"confirmed_lineup"'));
   check("props UI includes member-friendly pending market state", propsUiSource.includes("PendingPropsState") && propsUiSource.includes("Player prop lines have not posted yet.") && propsUiSource.includes("Today’s board will populate automatically"));
   check("internal tracking settles hitter and pitcher markets from the right official game logs", internalTrackingSource.includes("getHitterGameLogs") && internalTrackingSource.includes("getPitcherGameLogs") && internalTrackingSource.includes("gameLogKey") && internalTrackingSource.includes("finalStatsForEntry"));
+  check("pitcher tracking locks retain reproducible model evidence", ["trackingEvidenceSchemaVersion", "projection: row.projection", "projectionSource: row.projectionSource", "modelInputWarnings: row.modelInputWarnings"].every((field) => internalTrackingSource.includes(field)));
+  check("private props control room reports release-separated pitcher calibration", ["pitcherCalibration", "currentReleaseId", "independentModel", "noVigMarket", "finalProbability"].every((field) => internalTrackingSource.includes(field)) && ["Pitcher calibration", "Historical eras are diagnostic only", "Current release by market and side"].every((label) => propsReviewSource.includes(label)));
   check("internal tracking lock window does not open before T-60", lockPolicySource.includes("observedMs >= cutoffMs && observedMs < startMs") && lockPolicySource.includes("startMs - MLB_PROPS_GAME_LOCK_MINUTES * 60_000") && !internalTrackingSource.includes("graceMinutes"));
   check("member props display freezes games from locked board snapshots", boardSnapshotStoreSource.includes("loadLatestMlbPropsDisplaySnapshot") && boardSnapshotStoreSource.includes("applyMlbPropsDisplayLocks") && boardSnapshotStoreSource.includes("mlb_prop_tracking_entries") && boardSnapshotStoreSource.includes("board_snapshot_id") && boardSnapshotStoreSource.includes("lockedRowsByGame") && boardSnapshotStoreSource.includes("lockStatus"));
   check("missing historical lock evidence suppresses only the affected game", boardSnapshotStoreSource.includes("unrecoverableLockedGames") && boardSnapshotStoreSource.includes("if (gameId && unrecoverableLockedGames.has(gameId)) continue") && boardSnapshotStoreSource.includes("maybeSingle()"));

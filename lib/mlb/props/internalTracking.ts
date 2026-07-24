@@ -19,6 +19,7 @@ import {
 } from "./boardSnapshotStore";
 import { isPaperTradingMarketAllowed } from "./paperTrading";
 import { assessPropPrice } from "./pricePolicy";
+import { MLB_PROPS_MODEL_RELEASE_ID } from "./marketModelVersions";
 import {
   MLB_PROPS_GAME_LOCK_MINUTES,
   MLB_PROPS_TRACKING_POLICY_RELEASE_ID,
@@ -362,6 +363,9 @@ export async function getInternalMlbPropsTrackingReport(args: { startDate?: stri
   if (error) throw error;
   const rows = (data ?? []) as TrackingEntry[];
   const actionable = rows.filter((row) => row.tracking_cohort === "actionable");
+  const pitcherRows = rows.filter((row) => row.market_key.startsWith("pitcher_"));
+  const currentReleasePitcherRows = pitcherRows.filter((row) =>
+    row.metadata_json?.modelReleaseId === MLB_PROPS_MODEL_RELEASE_ID);
   return {
     startDate,
     generatedAt: new Date().toISOString(),
@@ -376,6 +380,28 @@ export async function getInternalMlbPropsTrackingReport(args: { startDate?: stri
     oneUnitByCategory: groupMetrics(rows, marketCategory, oneUnitPerformanceMetrics),
     oneUnitByGrade: groupMetrics(rows, (row) => row.play_grade, oneUnitPerformanceMetrics),
     oneUnitByRelease: groupMetrics(rows, modelReleaseForTracking, oneUnitPerformanceMetrics),
+    pitcherCalibration: {
+      currentReleaseId: MLB_PROPS_MODEL_RELEASE_ID,
+      evidencePolicy: "Release eras are never blended into current-release performance. Pushes, voids, and pending rows are excluded from probability scoring.",
+      allReleaseEras: calibrationMetrics(pitcherRows),
+      currentRelease: calibrationMetrics(currentReleasePitcherRows),
+      currentReleaseByMarketSide: groupMetrics(
+        currentReleasePitcherRows,
+        (row) => `${row.market_key}:${row.side}`,
+        calibrationMetrics,
+      ),
+      historicalByMarket: groupMetrics(pitcherRows, (row) => row.market_key, calibrationMetrics),
+      historicalByMarketSide: groupMetrics(
+        pitcherRows,
+        (row) => `${row.market_key}:${row.side}`,
+        calibrationMetrics,
+      ),
+      byReleaseMarketSide: groupMetrics(
+        pitcherRows,
+        (row) => `${modelReleaseForTracking(row)}:${row.market_key}:${row.side}`,
+        calibrationMetrics,
+      ),
+    },
     recent: rows.slice(0, 250).map(publicTrackingRow),
   };
 }
@@ -673,6 +699,10 @@ export function trackingInsert(
       reasonCodes: row.reasonCodes,
       marketModelVersion: snapshot.modelContext?.marketModelVersions?.[row.market] ?? null,
       source: row.source,
+      trackingEvidenceSchemaVersion: "mlb_props_tracking_evidence_v2",
+      projection: row.projection,
+      projectionSource: row.projectionSource,
+      modelInputWarnings: row.modelInputWarnings,
       publicDisplayEnabledAtLock: process.env.ODDSPHERE_PROPS_DISPLAY_ENABLED === "true",
     },
   };
@@ -769,6 +799,70 @@ function oneUnitPerformanceMetrics(rows: TrackingEntry[]) {
   };
 }
 
+function calibrationMetrics(rows: TrackingEntry[]) {
+  const settled = rows.filter((row) =>
+    (row.result_status === "win" || row.result_status === "loss")
+    && Number.isFinite(row.locked_final_probability));
+  const modelRows = settled.filter((row) => Number.isFinite(row.locked_model_probability));
+  const marketRows = settled.filter((row) => Number.isFinite(row.locked_market_probability));
+  const outcome = (row: TrackingEntry) => row.result_status === "win" ? 1 : 0;
+  const mean = (values: number[]) =>
+    values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  const probabilityMetrics = (
+    scoredRows: TrackingEntry[],
+    probabilityFor: (row: TrackingEntry) => number,
+  ) => ({
+    rows: scoredRows.length,
+    meanProbability: nullableRound(mean(scoredRows.map(probabilityFor)), 6),
+    calibrationGap: nullableRound(mean(scoredRows.map((row) =>
+      probabilityFor(row) - outcome(row))), 6),
+    brierScore: nullableRound(mean(scoredRows.map((row) =>
+      (probabilityFor(row) - outcome(row)) ** 2)), 6),
+    logLoss: nullableRound(mean(scoredRows.map((row) => {
+      const probability = Math.max(0.000001, Math.min(0.999999, probabilityFor(row)));
+      return -(outcome(row) * Math.log(probability)
+        + (1 - outcome(row)) * Math.log(1 - probability));
+    })), 6),
+  });
+  const comparableClv = rows.filter((row) =>
+    row.clv_status === "comparable" && row.clv_probability_delta !== null);
+  return {
+    tracked: rows.length,
+    settled: settled.length,
+    pending: rows.filter((row) => row.result_status === "pending").length,
+    wins: settled.filter((row) => row.result_status === "win").length,
+    losses: settled.filter((row) => row.result_status === "loss").length,
+    selectedOver: rows.filter((row) => row.side === "over").length,
+    selectedUnder: rows.filter((row) => row.side === "under").length,
+    underShare: rows.length
+      ? round(rows.filter((row) => row.side === "under").length / rows.length, 6)
+      : null,
+    observedWinRate: settled.length
+      ? round(settled.filter((row) => row.result_status === "win").length / settled.length, 6)
+      : null,
+    averageClvProbabilityDelta: comparableClv.length
+      ? round(comparableClv.reduce((sum, row) =>
+        sum + (row.clv_probability_delta ?? 0), 0) / comparableClv.length, 6)
+      : null,
+    independentModel: probabilityMetrics(
+      modelRows,
+      (row) => row.locked_model_probability as number,
+    ),
+    noVigMarket: probabilityMetrics(
+      marketRows,
+      (row) => row.locked_market_probability as number,
+    ),
+    finalProbability: probabilityMetrics(
+      settled,
+      (row) => row.locked_final_probability,
+    ),
+  };
+}
+
+function nullableRound(value: number | null, digits: number): number | null {
+  return value === null ? null : round(value, digits);
+}
+
 function oneUnitResult(row: TrackingEntry): number {
   if (row.result_status === "win") return profitPerUnit(row.locked_american_odds);
   if (row.result_status === "loss") return -1;
@@ -794,14 +888,16 @@ function modelReleaseForTracking(row: TrackingEntry): string {
     : `${modelRelease}|legacy_row_lock_policy`;
 }
 
-function groupMetrics(
+function groupMetrics<T extends Record<string, unknown> = ReturnType<typeof performanceMetrics>>(
   rows: TrackingEntry[],
   keyFor: (row: TrackingEntry) => string,
-  metricsFor: (rows: TrackingEntry[]) => ReturnType<typeof performanceMetrics> = performanceMetrics,
+  metricsFor: (rows: TrackingEntry[]) => T = performanceMetrics as unknown as (rows: TrackingEntry[]) => T,
 ) {
   const groups = new Map<string, TrackingEntry[]>();
   for (const row of rows) groups.set(keyFor(row), [...(groups.get(keyFor(row)) ?? []), row]);
-  return [...groups.entries()].map(([key, grouped]) => ({ key, ...metricsFor(grouped) })).sort((a, b) => b.tracked - a.tracked);
+  return [...groups.entries()]
+    .map(([key, grouped]) => ({ key, ...metricsFor(grouped) }))
+    .sort((a, b) => Number(b.tracked ?? 0) - Number(a.tracked ?? 0));
 }
 
 function publicTrackingRow(row: TrackingEntry) {

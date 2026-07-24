@@ -47,6 +47,21 @@ async function safeJson(request: Request): Promise<Record<string, unknown>> {
 
 function emptyReport(startDate?: string) {
   const metrics = { tracked: 0, wins: 0, losses: 0, pushes: 0, voids: 0, pending: 0, hitRate: null, units: 0, riskedUnits: 0, roi: null, averageClvProbabilityDelta: null, brierScore: null };
+  const calibration = {
+    tracked: 0,
+    settled: 0,
+    pending: 0,
+    wins: 0,
+    losses: 0,
+    selectedOver: 0,
+    selectedUnder: 0,
+    underShare: null,
+    observedWinRate: null,
+    averageClvProbabilityDelta: null,
+    independentModel: { rows: 0, meanProbability: null, calibrationGap: null, brierScore: null, logLoss: null },
+    noVigMarket: { rows: 0, meanProbability: null, calibrationGap: null, brierScore: null, logLoss: null },
+    finalProbability: { rows: 0, meanProbability: null, calibrationGap: null, brierScore: null, logLoss: null },
+  };
   return {
     startDate: startDate ?? "not-initialized",
     generatedAt: new Date().toISOString(),
@@ -61,6 +76,16 @@ function emptyReport(startDate?: string) {
     oneUnitByCategory: [],
     oneUnitByGrade: [],
     oneUnitByRelease: [],
+    pitcherCalibration: {
+      currentReleaseId: "not-initialized",
+      evidencePolicy: "Release-separated pitcher calibration is unavailable until tracking initializes.",
+      allReleaseEras: calibration,
+      currentRelease: calibration,
+      currentReleaseByMarketSide: [],
+      historicalByMarket: [],
+      historicalByMarketSide: [],
+      byReleaseMarketSide: [],
+    },
     recent: [],
   };
 }
