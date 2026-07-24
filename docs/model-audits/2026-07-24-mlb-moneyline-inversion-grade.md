@@ -2,7 +2,7 @@
 
 ## Decision
 
-Release `mlb_daily_edge_decision_2026_07_24_r3` adopts one authoritative
+Release `mlb_daily_edge_decision_2026_07_24_r4` adopts one authoritative
 inversion-grade contract:
 
 1. The inversion must survive every downstream side selector and change the
@@ -31,7 +31,7 @@ as audit fields; requiring them to be positive would make every inversion
 impossible by definition.
 
 The public inversion recommendation probability is the correction layer's
-bounded `55%`–`60%` probability substrate. Release r3 uses that same displayed
+bounded `55%`–`60%` probability substrate. Release r4 uses that same displayed
 probability consistently for:
 
 - the final-side inversion edge;
@@ -61,7 +61,7 @@ Release grouping uses, in order:
 3. `legacy_unstamped`.
 
 All 18 settled historical rows are `legacy_unstamped`. They must not be called
-performance of r2 or r3.
+performance of r2, r3, or r4.
 
 ### Aggregate
 
@@ -70,6 +70,7 @@ performance of r2 or r3.
 | `legacy_unstamped` | 18 | 11–7 | +1.9034u | +10.57% | -170 to +145 | -118 | 54.05% |
 | `mlb_daily_edge_decision_2026_07_23_r2` | 0 settled | — | — | — | — | — | — |
 | `mlb_daily_edge_decision_2026_07_24_r3` | 0 settled | — | — | — | — | — | — |
+| `mlb_daily_edge_decision_2026_07_24_r4` | 0 settled | — | — | — | — | — | — |
 
 The point result is genuine. Its uncertainty is large:
 
@@ -136,7 +137,7 @@ the member-facing final grade. No grade is reconstructed or invented.
 | `+100 .. +129` | 4 | 2–2 | +0.1000u | +2.50% |
 | `>= +130` | 1 | 0–1 | -1.0000u | -100.00% |
 
-The buckets are too small to justify a tuned price cutoff. Release r3 therefore
+The buckets are too small to justify a tuned price cutoff. Release r4 therefore
 uses the existing ordinary Lean price floor (`> -220`) as a safety invariant,
 not a fitted historical threshold.
 
@@ -162,8 +163,8 @@ On the frozen July 24 r2 board:
 - moneyline rows: 11;
 - actionable moneylines: 3 (2 Best Angles, 1 Lean);
 - genuine inversions: 1;
-- r3 promotions versus the ordinary non-inversion grade: 1 (TOR–BOS to Lean);
-- r3 demotions versus the public r2 board: 0;
+- r4 promotions versus the ordinary non-inversion grade: 1 (TOR–BOS to Lean);
+- r4 demotions versus the public r2 board: 0;
 - net current-board change: 0.
 
 The demotion branch is paired with the tested promotion branch: a
@@ -196,7 +197,7 @@ Locked record `95762`:
 
 Boston was Lean because r2 treated a genuine final-side inversion as its own
 validated action class. It was not Best Angle because inversion status
-explicitly blocks Best Angle. Release r3 makes the missing part explicit:
+explicitly blocks Best Angle. Release r4 makes the missing part explicit:
 Boston clears the inversion-specific positive-edge, positive-EV, price, and
 data-quality Lean gates. A similar inversion that fails those gates is No Play.
 
@@ -210,8 +211,14 @@ data-quality Lean gates. A similar inversion that fails those gates is No Play.
 - `member_facing_at_lock` freezes side, price, grade, and model-layer versions.
 - Daily Edge resolves the locked grade from that frozen substrate.
 - Tracking uses the same `member_facing_at_lock` grade before stored fallbacks.
-- r3 stamps the grade-rule decision, edge, EV, raw audit probability, and exact
+- r4 stamps the grade-rule decision, edge, EV, raw audit probability, and exact
   failure reason into `ml_inversion_grade_resolution`.
+- Production verification of the initial r3 writer release exposed a legacy
+  DTO fallback that capped every corrected/flipped Lean back to Watchlist,
+  even when an authoritative stored record said Lean. Release r4 removes that
+  downstream override only when a stored writer verdict exists. Unresolved
+  corrected candidates remain capped at Watchlist, and inversion Best Angle
+  remains impossible.
 
 ## Strategy boundary
 
@@ -220,8 +227,8 @@ separate betting-strategy release or the `0.25u / $6.25` inversion stake.
 
 The strategy evidence should be described conservatively: the 11–7 result is a
 legacy, unstamped final-side outcome cohort with wide uncertainty, not settled
-performance of r2 or r3. Any future strategy/stake change must be a separate,
-release-versioned decision after r3 accumulates locked settled evidence.
+performance of r2, r3, or r4. Any future strategy/stake change must be a separate,
+release-versioned decision after r4 accumulates locked settled evidence.
 
 ## Rollback
 
