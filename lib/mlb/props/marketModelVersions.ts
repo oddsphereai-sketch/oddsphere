@@ -8,7 +8,7 @@ import { getMlbPropMarketDefinition } from "./marketCatalog";
 // or stake must bump this value before deployment. Per-market versions remain
 // below for attribution; this release id prevents reports from silently mixing
 // boards produced by different combinations of market logic.
-export const MLB_PROPS_MODEL_RELEASE_ID = "mlb_props_2026_07_23_r5";
+export const MLB_PROPS_MODEL_RELEASE_ID = "mlb_props_2026_07_24_r6";
 
 const DEDICATED_MARKET_MODEL_VERSIONS: Partial<Record<MlbPropMarketKey, string>> = {
   pitcher_strikeouts: "pitcher_strikeouts_distribution_v4_market_safety_calibrated",
