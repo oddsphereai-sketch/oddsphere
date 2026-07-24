@@ -17,6 +17,30 @@ type Metrics = {
   brierScore: number | null;
 };
 
+type ProbabilityMetrics = {
+  rows: number;
+  meanProbability: number | null;
+  calibrationGap: number | null;
+  brierScore: number | null;
+  logLoss: number | null;
+};
+
+type CalibrationMetrics = {
+  tracked: number;
+  settled: number;
+  pending: number;
+  wins: number;
+  losses: number;
+  selectedOver: number;
+  selectedUnder: number;
+  underShare: number | null;
+  observedWinRate: number | null;
+  averageClvProbabilityDelta: number | null;
+  independentModel: ProbabilityMetrics;
+  noVigMarket: ProbabilityMetrics;
+  finalProbability: ProbabilityMetrics;
+};
+
 type RecentRow = {
   id: number;
   slateDate: string;
@@ -89,6 +113,16 @@ type TrackingResponse = {
     oneUnitByMarket: Array<{ key: string } & Metrics>;
     oneUnitByCategory: Array<{ key: string } & Metrics>;
     oneUnitByGrade: Array<{ key: string } & Metrics>;
+    pitcherCalibration: {
+      currentReleaseId: string;
+      evidencePolicy: string;
+      allReleaseEras: CalibrationMetrics;
+      currentRelease: CalibrationMetrics;
+      currentReleaseByMarketSide: Array<{ key: string } & CalibrationMetrics>;
+      historicalByMarket: Array<{ key: string } & CalibrationMetrics>;
+      historicalByMarketSide: Array<{ key: string } & CalibrationMetrics>;
+      byReleaseMarketSide: Array<{ key: string } & CalibrationMetrics>;
+    };
     recent: RecentRow[];
   };
 };
@@ -268,6 +302,32 @@ function ControlRoomContent({ data }: { data: TrackingResponse }) {
         <MetricCard label="Actual-unit ROI" value={percent(data.report.summary.roi)} detail="Official actionables" tone="violet" />
       </section>
 
+      <section className="mt-5 rounded-lg border border-slate-800 bg-[#0d1a2b]">
+        <div className="border-b border-slate-800 px-5 py-4">
+          <p className="text-xs font-semibold uppercase text-cyan-300">Model quality</p>
+          <h2 className="mt-1 font-semibold">Pitcher calibration</h2>
+          <p className="mt-1 max-w-4xl text-sm text-slate-400">{data.report.pitcherCalibration.evidencePolicy}</p>
+          <p className="mt-2 text-xs text-amber-300">Current release: {data.report.pitcherCalibration.currentReleaseId}. Historical eras are diagnostic only and never count as current-release evidence.</p>
+        </div>
+        <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-5">
+          <MetricCard label="Current settled" value={String(data.report.pitcherCalibration.currentRelease.settled)} detail={`${data.report.pitcherCalibration.currentRelease.pending} pending`} tone="cyan" />
+          <MetricCard label="Current under share" value={percent(data.report.pitcherCalibration.currentRelease.underShare)} detail={`${data.report.pitcherCalibration.currentRelease.selectedUnder} under · ${data.report.pitcherCalibration.currentRelease.selectedOver} over`} tone="blue" />
+          <MetricCard label="Current hit rate" value={percent(data.report.pitcherCalibration.currentRelease.observedWinRate)} detail="Pushes and voids excluded" tone="green" />
+          <MetricCard label="Final Brier" value={decimal(data.report.pitcherCalibration.currentRelease.finalProbability.brierScore, 4)} detail="Lower is better" tone="violet" />
+          <MetricCard label="Average CLV" value={probabilityPoints(data.report.pitcherCalibration.currentRelease.averageClvProbabilityDelta)} detail="Same line, same book" tone="violet" />
+        </div>
+        <PitcherCalibrationTable
+          title="Current release by market and side"
+          rows={data.report.pitcherCalibration.currentReleaseByMarketSide}
+          emptyMessage="Awaiting settled pitcher locks for the current release."
+        />
+        <PitcherCalibrationTable
+          title="Historical diagnostic by market and side"
+          rows={data.report.pitcherCalibration.historicalByMarketSide}
+          emptyMessage="Awaiting locked pitcher results."
+        />
+      </section>
+
       <section className="mt-5 grid gap-5 xl:grid-cols-[1fr_1fr_1.2fr]">
         <Breakdown title="By market" rows={data.report.byMarket} />
         <Breakdown title="By grade" rows={data.report.byGrade} />
@@ -325,6 +385,46 @@ function Breakdown({ title, rows }: { title: string; rows: Array<{ key: string }
   return <div className="rounded-lg border border-slate-800 bg-[#0d1a2b] p-5"><h2 className="text-sm font-semibold">{title}</h2><div className="mt-3 divide-y divide-slate-800">{rows.map((row) => <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 py-3 text-sm" key={row.key}><span>{labelFor(row.key)}</span><span className="text-slate-400">{row.wins}-{row.losses}</span><span className={`w-16 text-right font-medium ${row.units >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{signed(row.units, 1)}u</span><span className="w-14 text-right font-medium">{percent(row.roi)}</span></div>)}{rows.length === 0 && <div className="py-8 text-center text-sm text-slate-500">Awaiting locked results</div>}</div></div>;
 }
 
+function PitcherCalibrationTable({
+  title,
+  rows,
+  emptyMessage,
+}: {
+  title: string;
+  rows: Array<{ key: string } & CalibrationMetrics>;
+  emptyMessage: string;
+}) {
+  return (
+    <div className="border-t border-slate-800">
+      <div className="px-5 py-3 text-sm font-semibold">{title}</div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1060px] text-left text-sm">
+          <thead className="bg-[#091524] text-xs uppercase text-slate-500">
+            <tr><Th>Market / side</Th><Th>Settled</Th><Th>Model p</Th><Th>Market p</Th><Th>Final p</Th><Th>Actual</Th><Th>Final gap</Th><Th>Model Brier</Th><Th>Market Brier</Th><Th>Final Brier</Th></tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800">
+            {rows.map((row) => (
+              <tr key={row.key} className="hover:bg-white/[0.02]">
+                <td className="px-5 py-3 font-medium">{labelFor(row.key)}</td>
+                <td className="px-5 py-3 text-slate-300">{row.settled}</td>
+                <td className="px-5 py-3 text-slate-300">{percent(row.independentModel.meanProbability)}</td>
+                <td className="px-5 py-3 text-slate-300">{percent(row.noVigMarket.meanProbability)}</td>
+                <td className="px-5 py-3 text-slate-300">{percent(row.finalProbability.meanProbability)}</td>
+                <td className="px-5 py-3 text-slate-300">{percent(row.observedWinRate)}</td>
+                <td className="px-5 py-3 text-slate-300">{probabilityPoints(row.finalProbability.calibrationGap)}</td>
+                <td className="px-5 py-3 text-slate-300">{decimal(row.independentModel.brierScore, 4)}</td>
+                <td className="px-5 py-3 text-slate-300">{decimal(row.noVigMarket.brierScore, 4)}</td>
+                <td className="px-5 py-3 text-slate-300">{decimal(row.finalProbability.brierScore, 4)}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && <tr><td className="px-5 py-10 text-center text-slate-500" colSpan={10}>{emptyMessage}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: string }) { return <div><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 font-medium text-slate-200">{value}</dd></div>; }
 function Th({ children }: { children: ReactNode }) { return <th className="px-5 py-3 font-semibold">{children}</th>; }
 
@@ -344,6 +444,7 @@ function LedgerRow({ row }: { row: RecentRow }) {
 }
 
 function percent(value: number | null) { return value === null ? "--" : `${(value * 100).toFixed(1)}%`; }
+function decimal(value: number | null, digits: number) { return value === null ? "--" : value.toFixed(digits); }
 function probabilityPoints(value: number | null) { return value === null ? "--" : `${value >= 0 ? "+" : ""}${(value * 100).toFixed(1)} pp`; }
 function signed(value: number, digits: number) { return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}`; }
 function american(value: number) { return value > 0 ? `+${value}` : String(value); }
