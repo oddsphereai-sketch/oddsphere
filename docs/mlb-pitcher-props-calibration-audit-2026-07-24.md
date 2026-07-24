@@ -57,6 +57,36 @@ A training-only grid search suggested removing independent-model weight from pit
 
 That change alone fails the required promotion/demotion balance because it removes eight board entries without a tested replacement. Relaxing positive-edge thresholds for strikeout overs and outs overs could numerically replace the eight rows, and those promoted holdout rows went approximately 5–3. But this relies on only two slates, near-zero CLV, and very small edges. It remains a shadow candidate, not a defensible live rule.
 
+## Pre-launch historical reconstruction
+
+Ball Don't Lie's opening-props archive was verified against the existing provider account. A bounded June 15–July 15 reconstruction recovered:
+
+- 31,489 raw historical pitcher offers across six sportsbooks.
+- 216 distinct provider pitcher identities, 207 mapped uniquely to official MLB starter identities.
+- 874 independent consensus-line replay observations after book/line deduplication.
+- 446 pitcher-strikeout observations and 428 pitcher-outs observations.
+
+Official MLB starter identities and pitcher game logs were joined with a strict prior-date cutoff. The replay neutralized opponent, park, and weather multipliers whose exact pregame snapshot was not archived. It therefore evaluates the current core pitcher distribution against genuine historical opening prices; it does not claim exact T−60 runtime fidelity.
+
+Chronological split:
+
+- Train: June 15–30.
+- Calibration: July 1–7.
+- Untouched holdout: July 8–12.
+
+For model-selected pitcher-outs unders, the calibration-only search selected a 0.25 model-weight cap. On the untouched 62-row holdout, that candidate improved final Brier score from 0.2548 to 0.2380 and log loss from 0.7032 to 0.6688. It reduced math-qualified actionables from 32 to 5. Those five went 0–5, and no historically defensible over-side promotion rule replaced the demotions.
+
+This agrees directionally with immutable T−60 tracking. Across 84 settled tracked outs unders, the final probability exceeded observed wins by 11.4 percentage points. A player/game-cluster bootstrap put the 95% interval at approximately +0.8 to +22.2 points, and the final model's Brier score was worse than the no-vig market in 99% of bootstrap samples. The finding survived removing any single slate.
+
+The expanded evidence makes the outs-under calibration concern credible, but it also confirms that immediate live demotion would flatten the board without a qualified replacement. The 0.25 cap is therefore forward-tracked as a separately versioned shadow candidate only.
+
+Shadow release:
+
+- `mlb_pitcher_outs_under_calibration_2026_07_24_shadow_r1`
+- Stored inside future immutable T−60 tracking metadata.
+- Reuses the existing authoritative writer and sport-scoped lease.
+- Adds no provider requests, cron, row, public reader, probability, grade, or stake changes.
+
 ## Research synthesis
 
 Pitcher strikeout and walk rates become informative sooner than many traditional pitching outcomes, but stabilization is not the same as prediction. Baseball Prospectus' reliability work places strikeout rate in the relatively fast-stabilizing group and walk rate later, while explicitly warning against treating stabilization thresholds as automatic forecasting rules:
