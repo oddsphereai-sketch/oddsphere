@@ -25,6 +25,10 @@ import { resolveMlbTeamAlias } from "../lib/mlb/props/mlbTeamAliases";
 import { evaluateRealPaperPersistenceGate, isPaperTradingMarketAllowed } from "../lib/mlb/props/paperTrading";
 import { allMlbPropMarketDefinitions, getMlbPropMarketDefinition } from "../lib/mlb/props/marketCatalog";
 import { calibratedPropModelWeight } from "../lib/mlb/props/probabilityCalibration";
+import {
+  buildPitcherOutsUnderCalibrationShadow,
+  MLB_PITCHER_OUTS_UNDER_CALIBRATION_SHADOW_RELEASE_ID,
+} from "../lib/mlb/props/pitcherCalibrationShadow";
 import { checkProjectionSideIntegrity } from "../lib/mlb/props/projectionSideIntegrity";
 import { shouldReplaceBestPriceRow } from "../lib/mlb/props/bestPriceSelection";
 import {
@@ -522,6 +526,17 @@ async function main() {
   check("props UI includes member-friendly pending market state", propsUiSource.includes("PendingPropsState") && propsUiSource.includes("Player prop lines have not posted yet.") && propsUiSource.includes("Today’s board will populate automatically"));
   check("internal tracking settles hitter and pitcher markets from the right official game logs", internalTrackingSource.includes("getHitterGameLogs") && internalTrackingSource.includes("getPitcherGameLogs") && internalTrackingSource.includes("gameLogKey") && internalTrackingSource.includes("finalStatsForEntry"));
   check("pitcher tracking locks retain reproducible model evidence", ["trackingEvidenceSchemaVersion", "projection: row.projection", "projectionSource: row.projectionSource", "modelInputWarnings: row.modelInputWarnings"].every((field) => internalTrackingSource.includes(field)));
+  const outsUnderShadow = buildPitcherOutsUnderCalibrationShadow({
+    market: "pitcher_outs",
+    side: "under",
+    modelProbability: 0.61,
+    marketProbability: 0.5,
+    finalProbability: 0.5792,
+    americanOdds: -110,
+    playGrade: "LEAN",
+  });
+  check("pitcher outs under shadow is versioned and cannot change public behavior", outsUnderShadow?.releaseId === MLB_PITCHER_OUTS_UNDER_CALIBRATION_SHADOW_RELEASE_ID && outsUnderShadow.modelWeight === 0.25 && outsUnderShadow.candidateFinalProbability === 0.5275 && outsUnderShadow.publicBehaviorChanged === false && internalTrackingSource.includes("pitcherCalibrationShadow"));
+  check("pitcher outs shadow ignores every other market and side", buildPitcherOutsUnderCalibrationShadow({ market: "pitcher_outs", side: "over", modelProbability: 0.61, marketProbability: 0.5, finalProbability: 0.5792, americanOdds: -110, playGrade: "LEAN" }) === null);
   check("private props control room reports release-separated pitcher calibration", ["pitcherCalibration", "currentReleaseId", "independentModel", "noVigMarket", "finalProbability"].every((field) => internalTrackingSource.includes(field)) && ["Pitcher calibration", "Historical eras are diagnostic only", "Current release by market and side"].every((label) => propsReviewSource.includes(label)));
   check("internal tracking lock window does not open before T-60", lockPolicySource.includes("observedMs >= cutoffMs && observedMs < startMs") && lockPolicySource.includes("startMs - MLB_PROPS_GAME_LOCK_MINUTES * 60_000") && !internalTrackingSource.includes("graceMinutes"));
   check("member props display freezes games from locked board snapshots", boardSnapshotStoreSource.includes("loadLatestMlbPropsDisplaySnapshot") && boardSnapshotStoreSource.includes("applyMlbPropsDisplayLocks") && boardSnapshotStoreSource.includes("mlb_prop_tracking_entries") && boardSnapshotStoreSource.includes("board_snapshot_id") && boardSnapshotStoreSource.includes("lockedRowsByGame") && boardSnapshotStoreSource.includes("lockStatus"));
