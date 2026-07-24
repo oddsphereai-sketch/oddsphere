@@ -74,8 +74,10 @@ export type RealPitcherSeasonStat = {
   battersFaced?: number | null;
   pitchCount?: number | null;
   recentStarts?: number | null;
+  recentThreeStarts?: number | null;
   recentStrikeouts?: number | null;
   recentOuts?: number | null;
+  recentThreeOuts?: number | null;
   recentBattersFaced?: number | null;
   recentPitchCount?: number | null;
 };
@@ -434,6 +436,7 @@ export async function scoreRealMlbPropsForPaper(args: {
   }
 
   const groups = groupTwoWayPitcherMarkets(resolved, rejected);
+  const peerConsensusByGroupKey = buildPitcherOutsPeerConsensus(groups);
   const sampleCandidates: RealPropsCandidateSummary[] = [];
   const bdlCandidateTrace: BdlScoringCandidateTrace[] = [];
   const modelComparisonCandidates: ModelComparisonCandidate[] = [];
@@ -453,6 +456,7 @@ export async function scoreRealMlbPropsForPaper(args: {
       asOfTimestamp: args.asOfTimestamp,
       seasonStat: args.seasonStatsByPlayerId?.get(group.playerId) ?? null,
       modelContext: args.modelContextByGameAndPlayer?.get(realPitcherModelContextKey(group.game.id, group.playerId)) ?? null,
+      peerConsensus: peerConsensusByGroupKey.get(group.key) ?? null,
     });
     const warnings = featureWarningCodes(feature, group);
     for (const warning of warnings) inc(featureWarnings, warning);
@@ -473,7 +477,12 @@ export async function scoreRealMlbPropsForPaper(args: {
         (definition.family === "pitcher" && group.starterConfidence < 0.98) ||
         featureConfidence < 0.75 ||
         warnings.includes("weak_pitcher_baseline") ||
-        warnings.includes("bdl_stat_bundle_pending_baseline_used"),
+        warnings.includes("bdl_stat_bundle_pending_baseline_used") ||
+        (group.marketKey === "pitcher_outs" && (
+          warnings.includes("pitcher_outs_peer_consensus_missing") ||
+          warnings.includes("pitcher_outs_recent_three_missing") ||
+          warnings.includes("pitcher_outs_minimum_starts_missing")
+        )),
       dataConfidence: featureConfidence,
       modelVersionActive: true,
       forceNoPlayReasonCodes: [...sanityFlags, ...marketNoPlayCodes],
@@ -986,11 +995,53 @@ export function groupTwoWayPitcherMarkets(rows: ResolvedPropRow[], rejected: Rec
   return out;
 }
 
+function buildPitcherOutsPeerConsensus(
+  groups: GroupedTwoWay[],
+): Map<string, { overProbability: number; books: number }> {
+  const byMarket = new Map<string, GroupedTwoWay[]>();
+  for (const group of groups) {
+    if (group.marketKey !== "pitcher_outs") continue;
+    const key = [group.game.id, group.playerId, group.marketKey, group.line].join("|");
+    const peers = byMarket.get(key) ?? [];
+    peers.push(group);
+    byMarket.set(key, peers);
+  }
+  const out = new Map<string, { overProbability: number; books: number }>();
+  for (const peers of byMarket.values()) {
+    for (const target of peers) {
+      const targetBook = target.sportsbook.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const probabilities: number[] = [];
+      const books = new Set<string>();
+      for (const peer of peers) {
+        const peerBook = peer.sportsbook.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (!peerBook || peerBook === targetBook || books.has(peerBook)) continue;
+        try {
+          probabilities.push(remove_vig_two_way(
+            peer.over.americanOdds,
+            peer.under.americanOdds,
+          ).over);
+          books.add(peerBook);
+        } catch {
+          // Invalid peer prices are excluded; the target fails closed if none remain.
+        }
+      }
+      if (probabilities.length > 0) {
+        out.set(target.key, {
+          overProbability: average(probabilities),
+          books: books.size,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 function buildConservativePitcherFeature(args: {
   group: GroupedTwoWay;
   asOfTimestamp: string;
   seasonStat: RealPitcherSeasonStat | null;
   modelContext: RealPitcherModelContext | null;
+  peerConsensus: { overProbability: number; books: number } | null;
 }): PropFeatureSnapshot {
   const isHome = args.group.game.homeTeamId === args.group.teamId;
   const starterConfirmed = args.group.starterConfidence >= 0.98;
@@ -1007,8 +1058,10 @@ function buildConservativePitcherFeature(args: {
   const battersFaced = positive(args.seasonStat?.battersFaced);
   const pitchCount = positive(args.seasonStat?.pitchCount);
   const recentStarts = positive(args.seasonStat?.recentStarts);
+  const recentThreeStarts = positive(args.seasonStat?.recentThreeStarts);
   const recentStrikeouts = positive(args.seasonStat?.recentStrikeouts);
   const recentOuts = positive(args.seasonStat?.recentOuts);
+  const recentThreeOuts = positive(args.seasonStat?.recentThreeOuts);
   const recentBattersFaced = positive(args.seasonStat?.recentBattersFaced);
   const recentPitchCount = positive(args.seasonStat?.recentPitchCount);
   const hasSeasonPitching = isPitcher && starts !== null && innings !== null && strikeouts !== null;
@@ -1016,6 +1069,8 @@ function buildConservativePitcherFeature(args: {
   const kPerStart = hasSeasonPitching ? strikeouts / starts : 4.8;
   const recentKPerStart = recentStarts && recentStrikeouts !== null ? recentStrikeouts / recentStarts : null;
   const recentOutsPerStart = recentStarts && recentOuts !== null ? recentOuts / recentStarts : null;
+  const recentThreeOutsPerStart =
+    recentThreeStarts && recentThreeOuts !== null ? recentThreeOuts / recentThreeStarts : null;
   const recentBattersFacedPerStart = recentStarts && recentBattersFaced !== null ? recentBattersFaced / recentStarts : null;
   const recentPitchCountPerStart = recentStarts && recentPitchCount !== null ? recentPitchCount / recentStarts : null;
   const recentStrikeoutRate = recentBattersFaced && recentStrikeouts !== null
@@ -1067,6 +1122,8 @@ function buildConservativePitcherFeature(args: {
     pitcher_win_probability_proxy: starterConfirmed ? 0.38 : 0.28,
     recent_strikeout_rate: recentStrikeoutRate,
     recent_outs_per_start: recentOutsPerStart,
+    recent_three_outs_per_start: recentThreeOutsPerStart,
+    peer_consensus_over_probability: args.peerConsensus?.overProbability ?? null,
     outs_per_start_recent: recentOutsPerStart ?? outsPerStart,
     expected_plate_appearances: 4.1,
     batter_strikeouts_per_game: 0.9,
@@ -1108,6 +1165,7 @@ function buildConservativePitcherFeature(args: {
     season_pitching_er: earnedRuns,
     season_batters_faced: battersFaced,
     season_pitch_count: pitchCount,
+    peer_consensus_books: args.peerConsensus?.books ?? 0,
     starts_reliable: starts !== null && starts >= 5,
     starter_confirmed: starterConfirmed,
     line_updated_at_present: Boolean(stringValue(rawObj(args.group.over.rawPayload).updated_at) && stringValue(rawObj(args.group.under.rawPayload).updated_at)),
@@ -1128,7 +1186,9 @@ function buildConservativePitcherFeature(args: {
     marketKey: args.group.marketKey,
     line: args.group.line,
     asOfTimestamp: args.asOfTimestamp,
-    featureVersion: `mlb_props_${definition.modelFamily}_v1`,
+    featureVersion: args.group.marketKey === "pitcher_outs"
+      ? "mlb_props_pitcher_outs_peer_consensus_compact_core_v3"
+      : `mlb_props_${definition.modelFamily}_v1`,
     features,
     dataAvailability,
     leakageGuardHash: createHash("sha256").update(JSON.stringify({ features, dataAvailability })).digest("hex"),
@@ -1143,6 +1203,17 @@ function featureWarningCodes(feature: PropFeatureSnapshot, group: GroupedTwoWay)
   const starterShare = starts !== null && games !== null && games > 0 ? starts / games : null;
   if (starts === null || starts < 5 || (starterShare !== null && starterShare < 0.6)) warnings.push("weak_pitcher_baseline");
   if ((numericAvailability(feature, "recent_logs") ?? 0) === 0) warnings.push("recent_logs_unavailable_non_blocking");
+  if (group.marketKey === "pitcher_outs") {
+    if ((numericAvailability(feature, "peer_consensus_books") ?? 0) < 1) {
+      warnings.push("pitcher_outs_peer_consensus_missing");
+    }
+    if (numericFeature(feature, "recent_three_outs_per_start") === null) {
+      warnings.push("pitcher_outs_recent_three_missing");
+    }
+    if ((numericAvailability(feature, "season_pitching_games_started") ?? 0) < 8) {
+      warnings.push("pitcher_outs_minimum_starts_missing");
+    }
+  }
   if (feature.dataAvailability.opponent_k_profile !== true) warnings.push("opponent_k_profile_unavailable_non_blocking");
   if ((numericAvailability(feature, "feature_confidence") ?? 0) < 0.75) warnings.push("low_feature_confidence");
   if (group.starterConfidence < 0.98) warnings.push(group.starterReasonCode);
@@ -2273,6 +2344,11 @@ function sortedUniqueStrings(values: string[]): string[] {
 
 function numericAvailability(feature: PropFeatureSnapshot, key: string): number | null {
   const value = feature.dataAvailability[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function numericFeature(feature: PropFeatureSnapshot, key: string): number | null {
+  const value = feature.features[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 

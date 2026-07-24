@@ -728,40 +728,45 @@ async function main() {
   const [outsDistribution] = await new PitcherOutsModel().predict_distribution([outsFeature]);
   check("pitcher outs model returns probability", outsPrediction.marketKey === "pitcher_outs" && outsPrediction.modelProbability > 0 && outsPrediction.modelProbability < 1);
   check("pitcher outs model probability valid", typeof outsDistribution.overProbability === "number" && outsDistribution.overProbability >= 0 && outsDistribution.overProbability <= 1);
-  const contextualOutsFeature = {
+  check("pitcher outs compact core falls back to neutral without verified peer/workload inputs", outsDistribution.overProbability === 0.5);
+  const calibratedOutsFeature = {
     ...outsFeature,
     features: {
       ...outsFeature.features,
-      opponent_ops: 0.76,
-      opponent_league_ops: 0.72,
-      park_run_factor: 108,
-      temperature_f: 90,
+      season_outs_per_start: 16,
+      recent_three_outs_per_start: 16,
+      peer_consensus_over_probability: 0.55,
     },
     dataAvailability: {
       ...outsFeature.dataAvailability,
-      opponent_profile: true,
-      park_factor: true,
-      weather: true,
+      bdl_stat_bundle: true,
+      starter_confirmed: true,
+      season_pitching_games_started: 14,
+      peer_consensus_books: 3,
     },
   };
-  const [contextualOutsDistribution] = await new PitcherOutsModel().predict_distribution([contextualOutsFeature]);
-  check("pitcher outs model consumes opponent, park, and weather context", Number(contextualOutsDistribution.opponentMultiplier) !== 1 && Number(contextualOutsDistribution.parkMultiplier) !== 1 && Number(contextualOutsDistribution.weatherMultiplier) !== 1);
-  const recentStartsOnlyOutsFeature = {
-    ...outsFeature,
+  const [calibratedOutsDistribution] = await new PitcherOutsModel().predict_distribution([calibratedOutsFeature]);
+  check("pitcher outs model uses the verified compact-core distribution", calibratedOutsDistribution.distribution === "leave_one_book_out_peer_consensus_compact_core");
+  check("pitcher outs probability is already market anchored", calibratedOutsDistribution.probabilityAlreadyMarketAnchored === true);
+  check("pitcher outs compact-core projection remains on the physical outs scale", Number(calibratedOutsDistribution.projectedOuts) > 14 && Number(calibratedOutsDistribution.projectedOuts) < 21);
+  const recentDeclineOutsFeature = {
+    ...calibratedOutsFeature,
     features: {
-      ...outsFeature.features,
-      recent_logs: null,
-      recent_starts: 10,
-      season_outs_per_start: 19,
-      recent_outs_per_start: 15.6,
-    },
-    dataAvailability: {
-      ...outsFeature.dataAvailability,
-      recent_logs: 10,
+      ...calibratedOutsFeature.features,
+      recent_three_outs_per_start: 13.5,
     },
   };
-  const [recentStartsOnlyOutsDistribution] = await new PitcherOutsModel().predict_distribution([recentStartsOnlyOutsFeature]);
-  check("pitcher models weight recent starts even when recent_logs feature alias is absent", Number(recentStartsOnlyOutsDistribution.recentWeight) === 0.4);
+  const [recentDeclineOutsDistribution] = await new PitcherOutsModel().predict_distribution([recentDeclineOutsFeature]);
+  check("pitcher outs compact core lowers Over probability on a material recent workload decline", Number(recentDeclineOutsDistribution.overProbability) < Number(calibratedOutsDistribution.overProbability));
+  const emergingStarterOutsFeature = {
+    ...calibratedOutsFeature,
+    dataAvailability: {
+      ...calibratedOutsFeature.dataAvailability,
+      season_pitching_games_started: 9,
+    },
+  };
+  const [emergingStarterOutsDistribution] = await new PitcherOutsModel().predict_distribution([emergingStarterOutsFeature]);
+  check("pitcher outs compact core applies the verified 8-to-11-start adjustment", Number(emergingStarterOutsDistribution.overProbability) > Number(calibratedOutsDistribution.overProbability));
 
   const over = odds.find((row) => row.marketKey === "pitcher_strikeouts" && row.side === "over" && row.snapshotRole === "current") ?? null;
   const under = odds.find((row) => row.marketKey === "pitcher_strikeouts" && row.side === "under" && row.snapshotRole === "current") ?? null;
@@ -786,6 +791,23 @@ async function main() {
   check("positive EV candidate accepted", positiveEv.status === "recommended");
   check("market-prior shrinkage creates bounded final probability", positiveEv.finalProbability > 0 && positiveEv.finalProbability < 1 && positiveEv.finalProbability < positiveEv.modelProbability && positiveEv.finalProbability > (positiveEv.marketProbability ?? 0));
   check("recommendation separates model edge and grade", positiveEv.modelEdge === positiveEv.edge && ["BEST_ANGLE", "LEAN"].includes(positiveEv.playGrade));
+  const anchoredPitcherOuts = recommendPropBet({
+    prediction: {
+      ...outsPrediction,
+      side: "over",
+      modelProbability: 0.68,
+      explanation: {
+        ...outsPrediction.explanation,
+        projectedOuts: 18.2,
+        probabilityAlreadyMarketAnchored: true,
+      },
+    },
+    overOdds: over,
+    underOdds: under,
+    asOfTimestamp: "2026-07-07T15:00:00.000Z",
+    config: { maxOddsAgeSeconds: 10_000 },
+  });
+  check("peer-consensus pitcher outs probability is not anchored to the target book twice", anchoredPitcherOuts.shrinkageWeight === 1 && anchoredPitcherOuts.finalProbability === anchoredPitcherOuts.modelProbability);
 
   check("over projection below line is a contradiction", checkProjectionSideIntegrity({ side: "over", line: 5.5, projection: 5.2 }).status === "contradiction");
   check("under projection above line is a contradiction", checkProjectionSideIntegrity({ side: "under", line: 5.5, projection: 5.8 }).status === "contradiction");
@@ -992,14 +1014,33 @@ async function main() {
       sharpNymTor,
       realOdds({ ...oddsSeed(sharpNymTor), side: "under", americanOdds: -120 }),
       realOdds({ ...oddsSeed(sharpNymTor), marketKey: "pitcher_outs", side: "over", line: 17.5, americanOdds: 105 }),
+      realOdds({ ...oddsSeed(sharpNymTor), marketKey: "pitcher_outs", side: "under", line: 17.5, americanOdds: -125 }),
       realOdds({ ...oddsSeed(sharpNymTor), marketKey: "pitcher_outs", side: "under", line: 17.5, americanOdds: -125, sportsbook: "hardrock" }),
       realOdds({ ...oddsSeed(sharpNymTor), marketKey: "pitcher_outs", side: "over", line: 17.5, americanOdds: 105, sportsbook: "hardrock" }),
       realOdds({ ...oddsSeed(sharpNymTor), marketKey: "pitcher_hits_allowed", side: "over", line: 5.5, americanOdds: 100 }),
     ],
+    seasonStatsByPlayerId: new Map([
+      ["mlbstats-player-999", {
+        playerId: "mlbstats-player-999",
+        pitchingGs: 12,
+        pitchingGp: 12,
+        pitchingIp: 64,
+        pitchingK: 72,
+        pitchingKPer9: 10.125,
+        recentStarts: 10,
+        recentThreeStarts: 3,
+        recentOuts: 160,
+        recentThreeOuts: 48,
+      }],
+    ]),
   });
   check("real dry-run scores promoted pitcher markets only", realDryRun.candidatesScored >= 2 && !realDryRun.marketsDetected.includes("batter_hits"));
   check("real dry-run preserves Hard Rock count", realDryRun.hardRockDetected && realDryRun.hardRockRows === 2);
   check("real dry-run remains no-write", realDryRun.noSupabaseWrites === true && realDryRun.dryRun === true);
+  const realPitcherOutsCandidate = realDryRun.sampleCandidates.find((row) => row.marketKey === "pitcher_outs");
+  check("real scorer reuses other cached books for pitcher-outs peer consensus", !realDryRun.featureAvailabilityWarnings.pitcher_outs_peer_consensus_missing);
+  check("real scorer passes recent-three workload into pitcher-outs compact core", !realDryRun.featureAvailabilityWarnings.pitcher_outs_recent_three_missing);
+  check("real scorer does not double-anchor verified pitcher-outs probabilities", realPitcherOutsCandidate?.shrinkageWeight === 1);
   const realPaperScore = await scoreRealMlbPropsForPaper({
     games: realGames,
     probablePitchers: realProbables,

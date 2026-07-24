@@ -87,11 +87,15 @@ export function recommendPropBet(args: {
       return args.prediction.side === "over" ? devig.over : devig.under;
     })()
     : null;
-  const shrinkageWeight = calibratedPropModelWeight({
-    marketKey: args.prediction.marketKey,
-    side: args.prediction.side,
-    baseWeight: modelWeightForConfidence(args.dataConfidence ?? 0.8),
-  });
+  const probabilityAlreadyMarketAnchored =
+    args.prediction.explanation.probabilityAlreadyMarketAnchored === true;
+  const shrinkageWeight = probabilityAlreadyMarketAnchored
+    ? 1
+    : calibratedPropModelWeight({
+        marketKey: args.prediction.marketKey,
+        side: args.prediction.side,
+        baseWeight: modelWeightForConfidence(args.dataConfidence ?? 0.8),
+      });
   const finalProbability = marketProbability === null
     ? args.prediction.modelProbability
     : clampProbability(args.prediction.modelProbability * shrinkageWeight + marketProbability * (1 - shrinkageWeight));

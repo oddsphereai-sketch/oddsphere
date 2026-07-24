@@ -78,7 +78,7 @@ export class PitcherStrikeoutsModel implements BasePropModel {
 }
 
 export class PitcherOutsModel implements BasePropModel {
-  readonly modelName = "pitcher_outs_workload_distribution_v2_verified";
+  readonly modelName = "pitcher_outs_peer_consensus_compact_core_v3_verified";
   readonly marketKey = "pitcher_outs" as const;
 
   async fit(_trainData: PropFeatureSnapshot[]): Promise<void> {
@@ -115,11 +115,13 @@ export class PitcherOutsModel implements BasePropModel {
   }
 
   explain(featureRow: PropFeatureSnapshot): Record<string, unknown> {
+    const distribution = outsDistribution(featureRow);
     return {
       model: this.modelName,
       reasonCodes: pitcherReasonCodes(featureRow),
-      projectedOuts: outsDistribution(featureRow).projectedOuts,
-      distribution: outsDistribution(featureRow),
+      projectedOuts: distribution.projectedOuts,
+      probabilityAlreadyMarketAnchored: distribution.probabilityAlreadyMarketAnchored,
+      distribution,
       featureConfidence: featureConfidence(featureRow),
       recentStarts: featureRow.features.recent_starts,
       rollingOuts: featureRow.features.rolling_10_outs,
@@ -275,48 +277,73 @@ function outsDistribution(row: PropFeatureSnapshot): Record<string, unknown> & {
   overProbability: number;
 } {
   const seasonOuts = numberFeature(row, "season_outs_per_start", numberFeature(row, "rolling_10_outs", 16));
-  const recentOuts = nullableNumberFeature(row, "recent_outs_per_start");
-  const recentWeight = recentOuts === null ? 0 : Math.min(0.4, Math.max(0.12, recentSampleCount(row) / 25));
-  const rest = nullableNumberFeature(row, "days_rest");
-  const restMultiplier = rest === null ? 1 : rest < 4 ? 0.94 : rest > 6 ? 1.03 : 1;
-  const opponentMultiplier = inverseRatioMultiplier(
-    nullableNumberFeature(row, "opponent_ops"),
-    nullableNumberFeature(row, "opponent_league_ops"),
-    0.25,
-    0.94,
-    1.06,
-  );
-  const parkMultiplier = inverseIndexedFactorMultiplier(nullableNumberFeature(row, "park_run_factor"), 0.2, 0.97, 1.03);
-  const weatherMultiplier = temperatureWorkloadMultiplier(nullableNumberFeature(row, "temperature_f"));
-  const projectedOuts = Math.max(3, (seasonOuts * (1 - recentWeight) + (recentOuts ?? seasonOuts) * recentWeight)
-    * restMultiplier * opponentMultiplier * parkMultiplier * weatherMultiplier);
-  const poissonOver = clamp(poissonProbabilityOver(projectedOuts, Math.floor(row.line) + 1));
-  const confidence = featureConfidence(row);
-  const dispersion = row.dataAvailability.recent_logs && Number(row.dataAvailability.recent_logs) > 0 ? 1.12 : 1.25;
-  const overProbability = overdispersedProbability(poissonOver, dispersion, confidence);
+  const recentThreeOuts = nullableNumberFeature(row, "recent_three_outs_per_start");
+  const starts = nullableNumberAvailability(row, "season_pitching_games_started");
+  const peerConsensusOver = nullableNumberFeature(row, "peer_consensus_over_probability");
+  const peerBooks = nullableNumberAvailability(row, "peer_consensus_books") ?? 0;
+  const verified = peerConsensusOver !== null && recentThreeOuts !== null && starts !== null && peerBooks > 0;
+  const inputs = [
+    compactLogit(peerConsensusOver ?? 0.5),
+    row.line - 16.5,
+    inningBoundary(row.line),
+    Number(recentThreeOuts !== null && recentThreeOuts - seasonOuts < -2),
+    Number(starts !== null && starts >= 8 && starts < 12),
+  ];
+  // Frozen after the 2025-26 chronological, leave-one-book-out audit. The
+  // target book is never included in peerConsensusOver.
+  const means = [0.020936, 0.157661, 0.490732, 0.115855, 0.188523];
+  const scales = [0.236239, 1.170401, 0.499914, 0.320051, 0.391129];
+  const coefficients = [0.024798, 0.354516, -0.001393, -0.084415, -0.054405, 0.110578];
+  const standardized = inputs.map((value, index) => (value - means[index]) / scales[index]);
+  const linear =
+    coefficients[0] +
+    standardized.reduce((sum, value, index) => sum + value * coefficients[index + 1], 0);
+  const overProbability = verified ? Math.min(0.99, Math.max(0.01, 1 / (1 + Math.exp(-linear)))) : 0.5;
+  // Chronological point-conversion model; inputs are standardized before the
+  // coefficients are applied.
+  const conversion = [16.269912, 1.230775, 0.506226, -0.441869];
+  const conversionMeans = [16.635126, 0.006622, 0.479578];
+  const conversionScales = [1.202074, 0.303952, 0.499583];
+  const projectionInputs = [row.line, compactLogit(overProbability), inningBoundary(row.line)];
+  const projectedOuts = Math.min(24, Math.max(
+    3,
+    conversion[0] +
+      projectionInputs.reduce(
+        (sum, value, index) =>
+          sum + ((value - conversionMeans[index]) / conversionScales[index]) * conversion[index + 1],
+        0,
+      ),
+  ));
   return {
-    distribution: "workload_poisson_overdispersion_adjusted",
+    distribution: "leave_one_book_out_peer_consensus_compact_core",
     projectedOuts: round(projectedOuts),
     seasonOutsPerStart: round(seasonOuts),
-    recentOutsPerStart: recentOuts === null ? null : round(recentOuts),
-    recentWeight: round(recentWeight),
-    opponentMultiplier: round(opponentMultiplier),
-    parkMultiplier: round(parkMultiplier),
-    weatherMultiplier: round(weatherMultiplier),
-    overdispersion: dispersion,
-    confidence,
-    overProbability,
+    recentThreeOutsPerStart: recentThreeOuts === null ? null : round(recentThreeOuts),
+    seasonStarts: starts,
+    peerConsensusOverProbability: peerConsensusOver === null ? null : round(peerConsensusOver),
+    peerConsensusBooks: peerBooks,
+    recentThreeDown: recentThreeOuts !== null && recentThreeOuts - seasonOuts < -2,
+    startsEightToEleven: starts !== null && starts >= 8 && starts < 12,
+    overProbability: round(overProbability),
     underProbability: round(1 - overProbability),
     line: row.line,
+    probabilityAlreadyMarketAnchored: true,
     verifiedInputs: {
       seasonStats: row.dataAvailability.bdl_stat_bundle === true,
-      recentLogs: Number(row.dataAvailability.recent_logs ?? 0) > 0,
+      recentThreeStarts: recentThreeOuts !== null,
+      peerConsensus: peerConsensusOver !== null && peerBooks > 0,
       starterConfirmed: row.dataAvailability.starter_confirmed === true,
-      opponentProfile: row.dataAvailability.opponent_profile === true,
-      parkFactor: row.dataAvailability.park_factor === true,
-      weather: row.dataAvailability.weather === true,
     },
   };
+}
+
+function compactLogit(value: number): number {
+  const probability = Math.min(0.999, Math.max(0.001, value));
+  return Math.log(probability / (1 - probability));
+}
+
+function inningBoundary(line: number): number {
+  return Number(Math.round(line + 0.5) % 3 === 0);
 }
 
 function conservativeMarketDistribution(row: PropFeatureSnapshot): Record<string, unknown> & {
@@ -377,6 +404,11 @@ function numberFeature(row: PropFeatureSnapshot, key: string, fallback: number):
 
 function nullableNumberFeature(row: PropFeatureSnapshot, key: string): number | null {
   const value = row.features[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function nullableNumberAvailability(row: PropFeatureSnapshot, key: string): number | null {
+  const value = row.dataAvailability[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
