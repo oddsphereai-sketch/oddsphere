@@ -59,7 +59,10 @@ check(
 const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
-check("grade policy carries July 23 v4 version", layers.grade_policy.includes("v4_2026_07_23"));
+check(
+  "grade policy carries July 24 v5 inversion safety version",
+  layers.grade_policy === "mlb_public_grade_policy_v5_inversion_value_safety_2026_07_24",
+);
 check(
   "MLB layer stamp carries one immutable decision release",
   layers.decision_release_id === MLB_DAILY_EDGE_DECISION_RELEASE_ID &&

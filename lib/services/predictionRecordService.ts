@@ -23,7 +23,14 @@ import type {
 } from "../types/domain/Tracking";
 import { BOOK_PRIORITY as SHARED_BOOK_PRIORITY } from "../config/bookPriority";
 import { isBlockedSportsbook } from "../config/blockedSportsbooks";
-import { resolveMlInversionFlip, ML_INVERSION_RULE_ID } from "./mlInversionFlip";
+import {
+  resolveMlInversionFlip,
+  resolveMlInversionPublicGrade,
+  ML_INVERSION_GRADE_RULE_ID,
+  ML_INVERSION_MIN_EDGE_PP,
+  ML_INVERSION_MIN_PRICE_EXCLUSIVE,
+  ML_INVERSION_RULE_ID,
+} from "./mlInversionFlip";
 import {
   resolveTotalsMarketOpposedFlip,
   resolveTotalsMidEdgeFlip,
@@ -2036,9 +2043,30 @@ function buildMlRecord(
       ? `champion_candidate_ml_stand_down: ${mlChampionCorrectionReasons.join(", ")}`
       : null;
   const mlNoBetReason = readStringOrNull(sp.ml_no_bet_reason);
-  const mlNoBet = mlChampionStandDownReason !== null || (!mlFlipped && !mlPickCalibrated && !mlMarketSideCorrected && isExplicitNoBetReason(mlNoBetReason));
+  const mlInversionGrade = resolveMlInversionPublicGrade({
+    inversionTriggered: mlFlipped,
+    finalSideChanged: mlFinalSideChanged,
+    finalOdds: finalMlOdds,
+    recommendationProbability: finalMlModelProb,
+    finalMarketProbability: finalMlMarketProb,
+    dataQualityTier: readStringOrNull(sp.v2_data_quality_tier),
+    provisional: readBoolish(sp.v2_provisional),
+  });
+  const mlInversionGradeBlocked =
+    mlFlipped &&
+    mlFinalSideChanged &&
+    !mlPickCalibrated &&
+    !mlMarketSideCorrected &&
+    !mlInversionGrade.actionable;
+  const mlNoBet =
+    mlChampionStandDownReason !== null ||
+    mlInversionGradeBlocked ||
+    (!mlFlipped && !mlPickCalibrated && !mlMarketSideCorrected && isExplicitNoBetReason(mlNoBetReason));
   const finalMlNoBetReason = mlNoBet
-    ? mlChampionStandDownReason ?? mlNoBetReason
+    ? mlChampionStandDownReason ??
+      (mlInversionGradeBlocked
+        ? `inversion_grade_hold: ${mlInversionGrade.reason}`
+        : mlNoBetReason)
     : null;
   // The final-side audit found 18 genuine historical ML inversions (11-7,
   // +1.903u at one-unit sizing). Only a genuine final-side change is
@@ -2049,7 +2077,8 @@ function buildMlRecord(
     mlFinalSideChanged &&
     !mlPickCalibrated &&
     !mlMarketSideCorrected &&
-    !mlNoBet;
+    !mlNoBet &&
+    mlInversionGrade.actionable;
   const mlPublicPlayGrade = readPublicPlayGrade(sp.ml_play_grade);
   const mlMarketAwareCorrectedGrade = mlMarketSideCorrected
     ? resolveMlbMarketAwareCorrectedPlayGrade({
@@ -2143,8 +2172,8 @@ function buildMlRecord(
     confidence: finalMlConfidence,
     model_probability: finalMlModelProb,
     market_probability: finalMlMarketProb,
-    edge: finalMlEdge,
-    expected_value: null,
+    edge: mlTrueInversionActionable ? mlInversionGrade.edgePp : finalMlEdge,
+    expected_value: mlTrueInversionActionable ? mlInversionGrade.expectedValue : null,
     // Phase 6B.27 — strip internal V2.2 diagnostic labels (no_bet/held/
     // toss_up) from the public column; raw stays in snapshot.v2_2_audit.
     // True final-side inversions have their own validated Lean action. An
@@ -2201,7 +2230,7 @@ function buildMlRecord(
               ? "lean"
               : null,
         action_rule_id: mlTrueInversionActionable
-          ? ML_INVERSION_RULE_ID
+          ? ML_INVERSION_GRADE_RULE_ID
           : mlCleanTightEdgePromoted
             ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID
             : mlTightMarketPricePromoted
@@ -2227,6 +2256,17 @@ function buildMlRecord(
         final_best_angle: trackedMlBestAngle,
       },
       market_aware_corrected_grade: mlMarketAwareCorrectedGrade,
+      ml_inversion_grade_resolution: mlFlipped
+        ? {
+            ...mlInversionGrade,
+            minimum_edge_pp: ML_INVERSION_MIN_EDGE_PP,
+            minimum_price_exclusive: ML_INVERSION_MIN_PRICE_EXCLUSIVE,
+            raw_opposite_side_model_probability: mlFlip.flippedSideModelProb,
+            raw_opposite_side_edge_pp: mlFlip.flippedEdgePp,
+            probability_basis: "inversion_recommendation_probability",
+            raw_model_probability_role: "audit_only",
+          }
+        : null,
       ml_grade_recalibration: {
         rule_id: "ml_grade_recalibration_v3_2026_07_20",
         original_public_play_grade: mlPublicPlayGrade,
