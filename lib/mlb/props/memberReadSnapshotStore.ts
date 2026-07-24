@@ -42,7 +42,10 @@ function playerKey(date: string, playerId: string): string {
   return `mlb-props-player::${date}::${playerId}`;
 }
 
-export async function publishMlbPropsMemberReadSnapshots(snapshot: MlbPropsBoardSnapshot): Promise<void> {
+export async function publishMlbPropsMemberReadSnapshots(
+  snapshot: MlbPropsBoardSnapshot,
+  options?: { forceFull?: boolean; compactOnly?: boolean },
+): Promise<void> {
   // The tracking ledger points at the exact canonical pregame board snapshot
   // for every locked game. Reconcile from that source before building any
   // member payload. Never infer a lock by applying an old timestamp to rows
@@ -98,7 +101,9 @@ export async function publishMlbPropsMemberReadSnapshots(snapshot: MlbPropsBoard
   // Fast odds refreshes update one compact indexed member row only. Rewriting
   // every game and player shard on each price tick creates a connection/write
   // storm on the smallest Supabase tier. Full refreshes rebuild drill-downs.
-  if (snapshot.refreshMode === "full") {
+  const publishFull = options?.compactOnly !== true
+    && (snapshot.refreshMode === "full" || options?.forceFull === true);
+  if (publishFull) {
     boardRows.push({
       ...common,
       snapshot_key: fullBoardKey(displaySnapshot.slateDate),
@@ -106,7 +111,7 @@ export async function publishMlbPropsMemberReadSnapshots(snapshot: MlbPropsBoard
       payload: fullBoardPayload,
     });
   }
-  for (const [gameId, props] of snapshot.refreshMode === "full" ? fullPropsByGame : []) {
+  for (const [gameId, props] of publishFull ? fullPropsByGame : []) {
     boardRows.push({
       ...common,
       snapshot_key: `${fullBoardKey(displaySnapshot.slateDate)}::${gameId}`,
@@ -120,7 +125,7 @@ export async function publishMlbPropsMemberReadSnapshots(snapshot: MlbPropsBoard
     });
   }
   const playerSnapshotRows: Record<string, unknown>[] = [];
-  for (const [playerId, props] of snapshot.refreshMode === "full" ? playerRows : []) {
+  for (const [playerId, props] of publishFull ? playerRows : []) {
     const payload: PlayerPayload = {
       schemaVersion: 1,
       snapshotId: displaySnapshot.snapshotId,

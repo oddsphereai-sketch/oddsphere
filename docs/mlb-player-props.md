@@ -68,8 +68,9 @@ ODDSPHERE_PROPS_PUBLIC_API_ENABLED=false
 ODDSPHERE_PROPS_PAPER_TRADING_ENABLED=false
 ODDSPHERE_PROPS_INTERNAL_TRACKING_ENABLED=false
 MLB_PLAYER_PROPS_SETTLEMENT_CRON_ENABLED=false
-ODDSPHERE_PROPS_TRACKING_LOCK_MINUTES=60
-ODDSPHERE_PROPS_TRACKING_LOCK_GRACE_MINUTES=15
+# Player-prop membership uses one non-configurable, site-wide T-60 game lock.
+# The authoritative snapshot is the last publishable board at or before the
+# cutoff; later refreshes update closing-price evidence only.
 ODDSPHERE_PROPS_LAUNCH_CONSECUTIVE_SNAPSHOTS=3
 ODDSPHERE_PROPS_LAUNCH_MIN_SEQUENCE_SPAN_MINUTES=15
 ```

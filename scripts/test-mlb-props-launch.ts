@@ -19,7 +19,9 @@ import { evaluateMlbPropsLaunchReadiness } from "../lib/mlb/props/launchReadines
 import { outsFromInningsPitched, settlePropPick } from "../lib/mlb/props/settlement";
 import type { PropOddsSnapshot } from "../lib/mlb/props/providers";
 import {
+  buildMlbPropsInitialMemberBoardData,
   buildMlbPropsMemberBoardData,
+  MLB_PROPS_INITIAL_MEMBER_BOARD_MAX_ROWS,
   selectMlbPropsResearchForRows,
 } from "../lib/mlb/props/memberPayload";
 
@@ -155,6 +157,103 @@ assert.deepEqual(
   selectMlbPropsResearchForRows(payloadData, payloadData.props),
   { "research-1": payloadEvidence },
   "player research endpoint returns the exact deferred evidence",
+);
+
+const compactPairInput = [
+  row({ id: "paired-over", side: "over", odds: -110 }),
+  row({ id: "paired-under", side: "under", odds: -105 }),
+  row({
+    id: "milestone-over",
+    player: "Milestone Player",
+    market: "batter_home_runs",
+    marketLabel: "Home Runs",
+    marketGroup: "Power",
+    side: "over",
+    odds: 450,
+  }),
+];
+const compactPairPayload = buildMlbPropsInitialMemberBoardData(data(compactPairInput));
+assert.deepEqual(
+  compactPairPayload.props.filter((item) => item.player === "Test Player").map((item) => item.side).sort(),
+  ["over", "under"],
+  "compact member payload preserves both sides of an available market pair",
+);
+assert.equal(
+  compactPairPayload.props.filter((item) => item.player === "Milestone Player").length,
+  1,
+  "compact member payload preserves genuinely one-sided milestone offers",
+);
+assert.deepEqual(
+  new Set(compactPairPayload.props.map((item) => item.market)),
+  new Set(compactPairInput.map((item) => item.market)),
+  "compact member payload keeps every posted market discoverable",
+);
+
+const oversizedPairs = Array.from({ length: 310 }, (_, index) => {
+  const common = {
+    player: `Player ${index}`,
+    providerIds: {
+      gameId: "mlbstats-game-1",
+      bdlGameId: "10",
+      bdlPropId: `prop-${index}`,
+      bdlPlayerId: 1_000 + index,
+      mlbStatsPlayerId: `mlbstats-player-${2_000 + index}`,
+    },
+  };
+  return [
+    row({
+      ...common,
+      id: `large-${index}-over`,
+      side: "over",
+      playGrade: index === 309 ? "LEAN" : "RESEARCH",
+    }),
+    row({
+      ...common,
+      id: `large-${index}-under`,
+      side: "under",
+      playGrade: "NO_PLAY",
+    }),
+  ];
+}).flat();
+const boundedPairPayload = buildMlbPropsInitialMemberBoardData(data(oversizedPairs));
+assert.ok(
+  boundedPairPayload.props.length <= MLB_PROPS_INITIAL_MEMBER_BOARD_MAX_ROWS,
+  "compact member payload stays within the hard row ceiling",
+);
+assert.ok(
+  boundedPairPayload.props.some((item) => item.id === "large-309-over")
+  && boundedPairPayload.props.some((item) => item.id === "large-309-under"),
+  "compact member payload keeps the complete pair for an actionable row",
+);
+const boundedIds = new Set(boundedPairPayload.props.map((item) => item.id));
+for (let index = 0; index < 310; index += 1) {
+  const selectedSides = Number(boundedIds.has(`large-${index}-over`)) + Number(boundedIds.has(`large-${index}-under`));
+  assert.ok(
+    selectedSides === 0 || selectedSides === 2,
+    `compact member payload never partially selects pair ${index}`,
+  );
+}
+const mixedCoverageRows = [
+  ...oversizedPairs,
+  ...Array.from({ length: 310 }, (_, index) => row({
+    id: `large-${index}-milestone`,
+    player: `Player ${index}`,
+    market: "batter_home_runs",
+    marketLabel: "Home Runs",
+    marketGroup: "Power",
+    side: "over",
+    odds: 400 + index,
+  })),
+];
+const mixedCoveragePayload = buildMlbPropsInitialMemberBoardData(data(mixedCoverageRows));
+assert.equal(
+  new Set(mixedCoveragePayload.props.map((item) => `${item.player}|${item.team}`)).size,
+  310,
+  "compact member payload retains every player when truthful groups fit the row budget",
+);
+assert.ok(
+  mixedCoveragePayload.props.length <= MLB_PROPS_INITIAL_MEMBER_BOARD_MAX_ROWS,
+  "player discovery remains within the compact row ceiling",
 );
 
 const staleResearch = validateMlbPropsBoardData({

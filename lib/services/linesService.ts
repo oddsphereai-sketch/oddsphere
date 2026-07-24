@@ -3,10 +3,10 @@
  * betting provider and write them to lines / line_history / sharp_signals.
  *
  * `lines` has no UNIQUE constraint — strategy is per-(game, market_type,
- * sportsbook) DELETE-then-INSERT (2026-06-10 phantom-thinning fix). A book
- * absent from the latest poll is PRESERVED in `lines` rather than wiped;
- * a book present in the latest poll has its prior rows for that
- * (game, market) replaced atomically.
+ * sportsbook) INSERT-then-delete-prior (2026-07-23 last-known-good fix). A
+ * book absent from the latest poll is PRESERVED in `lines`; a book present in
+ * the latest poll replaces its prior rows only after the complete new group
+ * has inserted successfully.
  *
  * `line_history` is append-only (the change-log archive). `sharp_signals`
  * also gets DELETE-then-INSERT scoped to tonight to handle stale signals
@@ -96,30 +96,179 @@ export function derivePerSignalDeleteKeys(
   return out;
 }
 
+export type GameLineRowValidation = {
+  valid: boolean;
+  reason: string | null;
+};
+
 /**
- * 2026-06-10 phantom-thinning fix — execute per-(game, market, sportsbook)
- * DELETEs against `lines`. Skips the loop entirely when rows is empty
- * (no book got an update → preserve everything as-is).
+ * Mirrors the numeric bounds in public.lines and rejects semantically invalid
+ * probabilities before a provider outlier reaches Postgres. Nullable numeric
+ * columns remain nullable.
  */
-async function deletePerSportsbook(
+export function validateGameLineDatabaseRow(row: Readonly<Record<string, unknown>>): GameLineRowValidation {
+  const finiteWithin = (key: string, min: number, max: number): string | null => {
+    const value = row[key];
+    if (value === null || value === undefined) return null;
+    if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
+      return `${key}_out_of_range`;
+    }
+    return null;
+  };
+  const integerWithin = (key: string): string | null => {
+    const value = row[key];
+    if (value === null || value === undefined) return null;
+    if (typeof value !== "number" || !Number.isInteger(value) || value < -2_147_483_648 || value > 2_147_483_647) {
+      return `${key}_out_of_range`;
+    }
+    return null;
+  };
+  const reason =
+    finiteWithin("line_value", -99_999.99, 99_999.99)
+    ?? integerWithin("odds_american")
+    ?? finiteWithin("odds_decimal", 1, 999.999)
+    ?? finiteWithin("implied_probability", 0, 1)
+    ?? finiteWithin("ev_percent", -999.99, 999.99)
+    ?? integerWithin("fair_odds");
+  return { valid: reason === null, reason };
+}
+
+export function partitionValidGameLineGroups(rows: ReadonlyArray<Record<string, unknown>>): {
+  accepted: Array<Record<string, unknown>>;
+  rejected: Array<Record<string, unknown>>;
+} {
+  const groups = new Map<string, Array<Record<string, unknown>>>();
+  for (const row of rows) {
+    const gameId = row.game_id;
+    const marketType = row.market_type;
+    const sportsbook = row.sportsbook;
+    if (typeof gameId !== "number" || typeof marketType !== "string" || typeof sportsbook !== "string") {
+      const invalid = groups.get("__invalid_identity__") ?? [];
+      invalid.push(row);
+      groups.set("__invalid_identity__", invalid);
+      continue;
+    }
+    const key = `${gameId}::${marketType}::${sportsbook}`;
+    const group = groups.get(key) ?? [];
+    group.push(row);
+    groups.set(key, group);
+  }
+
+  const accepted: Array<Record<string, unknown>> = [];
+  const rejected: Array<Record<string, unknown>> = [];
+  for (const [key, group] of groups) {
+    if (key === "__invalid_identity__") {
+      rejected.push(...group.map((row) => ({ ...row, validation_reason: "invalid_group_identity" })));
+      continue;
+    }
+    const validations = group.map(validateGameLineDatabaseRow);
+    const firstInvalid = validations.find((validation) => !validation.valid);
+    if (!firstInvalid) {
+      accepted.push(...group);
+      continue;
+    }
+    rejected.push(...group.map((row, index) => ({
+      ...row,
+      validation_reason: validations[index].reason ?? `group_contains_${firstInvalid.reason}`,
+    })));
+  }
+  return { accepted, rejected };
+}
+
+function currentLineGroupKey(row: Readonly<Record<string, unknown>>): string | null {
+  return typeof row.game_id === "number"
+    && typeof row.market_type === "string"
+    && typeof row.sportsbook === "string"
+    ? `${row.game_id}::${row.market_type}::${row.sportsbook}`
+    : null;
+}
+
+type CurrentLinesReplaceResult = {
+  attemptedRows: number;
+  insertedRows: number;
+  failedRows: number;
+  failedGroups: number;
+  firstError: string | null;
+  failedSample: Array<Record<string, unknown>>;
+};
+
+/**
+ * Replace one sportsbook's complete game-market group without clearing its
+ * last-known-good rows first. A failed insert leaves the old group untouched;
+ * a successful insert deletes only the IDs observed before that insert.
+ */
+async function replaceCurrentGameLinesSafely(
   rows: ReadonlyArray<Record<string, unknown>>,
   context: string,
-): Promise<void> {
-  const keys = derivePerBookDeleteKeys(rows);
-  for (const k of keys) {
-    const { error } = await supabase
+): Promise<CurrentLinesReplaceResult> {
+  const groups = new Map<string, Array<Record<string, unknown>>>();
+  for (const row of rows) {
+    const gameId = row.game_id;
+    const marketType = row.market_type;
+    const sportsbook = row.sportsbook;
+    if (typeof gameId !== "number" || typeof marketType !== "string" || typeof sportsbook !== "string") continue;
+    const key = `${gameId}::${marketType}::${sportsbook}`;
+    const group = groups.get(key) ?? [];
+    group.push(row);
+    groups.set(key, group);
+  }
+
+  const result: CurrentLinesReplaceResult = {
+    attemptedRows: rows.length,
+    insertedRows: 0,
+    failedRows: 0,
+    failedGroups: 0,
+    firstError: null,
+    failedSample: [],
+  };
+  for (const group of groups.values()) {
+    const first = group[0];
+    const gameId = first.game_id as number;
+    const marketType = first.market_type as string;
+    const sportsbook = first.sportsbook as string;
+    const { data: prior, error: priorError } = await supabase
       .from("lines")
-      .delete()
-      .eq("game_id", k.game_id)
-      .eq("market_type", k.market_type)
-      .eq("sportsbook", k.sportsbook)
+      .select("id")
+      .eq("game_id", gameId)
+      .eq("market_type", marketType)
+      .eq("sportsbook", sportsbook)
       .is("player_id", null);
-    if (error) {
-      throw new Error(
-        `${context} per-(game,market,sportsbook) delete failed for game_id=${k.game_id} market=${k.market_type} sportsbook=${k.sportsbook}: ${error.message}`,
-      );
+    if (priorError) {
+      const message = `${context} prior-row lookup failed for game_id=${gameId} market=${marketType} sportsbook=${sportsbook}: ${priorError.message}`;
+      result.failedGroups++;
+      result.failedRows += group.length;
+      result.firstError ??= message;
+      if (result.failedSample.length < 5) result.failedSample.push({ game_id: gameId, market_type: marketType, sportsbook });
+      continue;
+    }
+
+    const { error: insertError } = await supabase.from("lines").insert(group);
+    if (insertError) {
+      const message = `${context} insert failed for game_id=${gameId} market=${marketType} sportsbook=${sportsbook}: ${insertError.message}`;
+      result.failedGroups++;
+      result.failedRows += group.length;
+      result.firstError ??= message;
+      if (result.failedSample.length < 5) result.failedSample.push({ game_id: gameId, market_type: marketType, sportsbook });
+      continue;
+    }
+    result.insertedRows += group.length;
+
+    const priorIds = (prior ?? [])
+      .map((row) => row.id)
+      .filter((id): id is number | string => typeof id === "number" || typeof id === "string");
+    if (priorIds.length > 0) {
+      const { error: deleteError } = await supabase.from("lines").delete().in("id", priorIds);
+      if (deleteError) {
+        // Both generations remain readable; newest fetched_at wins. Surface
+        // the cleanup failure without destroying either coherent generation.
+        const message = `${context} prior-row cleanup failed for game_id=${gameId} market=${marketType} sportsbook=${sportsbook}: ${deleteError.message}`;
+        result.failedGroups++;
+        result.firstError ??= message;
+        if (result.failedSample.length < 5) result.failedSample.push({ game_id: gameId, market_type: marketType, sportsbook });
+      }
     }
   }
+  return result;
 }
 
 type BaselineHistoryResult = LineHistoryInsertResult & {
@@ -221,13 +370,13 @@ async function ensureLineHistoryBaselinesForPayload(
 export const linesService = {
   /**
    * Refresh game lines (ML / Total / NRFI etc.) for the slate.
-   * DELETE existing rows for tonight's games then INSERT fresh.
+   * Insert fresh sportsbook groups, then remove only their prior row IDs.
    * Also writes an append-only row to line_history per line.
    *
    * `opts.dryRun` (default false) — Phase 4.2.C.1.R-3 operator-script
    * affordance mirroring `refreshSharpSignals`. When true the provider
    * fetch + payload build still run normally so the operator can report
-   * exactly what would land, but the DELETE / INSERT against `lines`
+   * exactly what would land, but the replacement against `lines`
    * and `line_history` is skipped. Behavior for existing callers
    * (crons, tests, services) is unchanged when opts is omitted.
    */
@@ -286,20 +435,23 @@ export const linesService = {
         recorded_at: l.fetched_at,
       });
     }
+    const partitionedLines = partitionValidGameLineGroups(linesPayload);
+    const acceptedGroupKeys = new Set(partitionedLines.accepted.map(currentLineGroupKey).filter((key): key is string => key !== null));
+    linesPayload.splice(0, linesPayload.length, ...partitionedLines.accepted);
+    historyPayload.splice(
+      0,
+      historyPayload.length,
+      ...historyPayload.filter((row) => {
+        const key = currentLineGroupKey(row);
+        return key !== null && acceptedGroupKeys.has(key);
+      }),
+    );
+    const rejectedRows = partitionedLines.rejected;
 
+    let currentInsert: CurrentLinesReplaceResult | null = null;
     if (!dryRun) {
-      // 2026-06-10 phantom-thinning fix — per-(game, market_type, sportsbook)
-      // DELETE scope. A book present in this payload gets its prior rows
-      // for that (game, market) replaced atomically; a book absent from
-      // this payload is preserved. Replaces the prior full-slate wipe
-      // that turned every partial poll into a thinning event.
-      await deletePerSportsbook(linesPayload, "linesService.refreshGameLines");
-
       if (linesPayload.length > 0) {
-        const { error } = await supabase.from("lines").insert(linesPayload);
-        if (error) {
-          throw new Error(`linesService.refreshGameLines insert failed: ${error.message}`);
-        }
+        currentInsert = await replaceCurrentGameLinesSafely(linesPayload, "linesService.refreshGameLines");
       }
       if (historyPayload.length > 0) {
         const flagged = await flagOpenersInHistoryPayload(
@@ -321,9 +473,16 @@ export const linesService = {
     }
 
     return {
-      records_updated: linesPayload.length,
+      records_updated: dryRun ? linesPayload.length : (currentInsert?.insertedRows ?? 0),
       api_calls_made: apiCalls,
-      details: skipped.length > 0 ? { skipped_game_external_ids: skipped } : undefined,
+      partial: rejectedRows.length > 0 || (currentInsert?.failedGroups ?? 0) > 0,
+      error_message: currentInsert?.firstError ?? (rejectedRows.length > 0 ? "Provider game-line rows failed database-bound validation." : null),
+      details: {
+        skipped_game_external_ids: skipped,
+        rejected_rows: rejectedRows.length,
+        rejected_sample: rejectedRows.slice(0, 5),
+        current_insert: currentInsert,
+      },
     };
   },
 
@@ -339,8 +498,8 @@ export const linesService = {
    *     to 5/9 games because `/opportunities/ev` returned 5 events at
    *     refresh time.
    *
-   *  2. DELETE scope is per-game, not full-slate. Games where the provider
-   *     returned at least one valid line row get DELETE-then-INSERT for
+   *  2. Replacement scope is per-game, not full-slate. Games where the provider
+   *     returned at least one valid line row get last-known-good replacement for
    *     that game's game-level rows. Games where the provider returned
    *     nothing (empty / not_found / call-cap-skipped) PRESERVE their
    *     existing rows and surface a warning in the coverage report.
@@ -352,7 +511,7 @@ export const linesService = {
    *
    * `opts.dryRun` (default false) — when true, the provider fetch +
    * payload build + coverage assessment still run normally so the
-   * operator can report exactly what would land, but DELETE / INSERT
+   * operator can report exactly what would land, but current-line replacement
    * are skipped entirely.
    *
    * V2 is real_api-only by design — mock provider doesn't implement the
@@ -420,6 +579,7 @@ export const linesService = {
     const groupKey = (gameId: number, market: string) => `${gameId}::${market}`;
     const groups = new Map<string, MarketGroup>();
     const skippedExternalIds = new Set<number>();
+    const rejectedRows: Array<Record<string, unknown>> = [];
 
     for (const l of records) {
       const gameId = gameIdByExternal.get(l.game_external_id);
@@ -427,19 +587,7 @@ export const linesService = {
         skippedExternalIds.add(l.game_external_id);
         continue;
       }
-      const key = groupKey(gameId, l.market_type);
-      let g = groups.get(key);
-      if (g === undefined) {
-        g = {
-          gameId,
-          externalId: l.game_external_id,
-          marketType: l.market_type,
-          lineRows: [],
-          historyRows: [],
-        };
-        groups.set(key, g);
-      }
-      g.lineRows.push({
+      const lineRow = {
         game_id: gameId,
         market_type: l.market_type,
         player_id: null,
@@ -453,7 +601,20 @@ export const linesService = {
         fair_odds: l.fair_odds,
         is_ev_positive: l.is_ev_positive,
         fetched_at: l.fetched_at,
-      });
+      };
+      const key = groupKey(gameId, l.market_type);
+      let g = groups.get(key);
+      if (g === undefined) {
+        g = {
+          gameId,
+          externalId: l.game_external_id,
+          marketType: l.market_type,
+          lineRows: [],
+          historyRows: [],
+        };
+        groups.set(key, g);
+      }
+      g.lineRows.push(lineRow);
       g.historyRows.push({
         game_id: gameId,
         market_type: l.market_type,
@@ -465,6 +626,22 @@ export const linesService = {
         is_opener: false,
         recorded_at: l.fetched_at,
       });
+    }
+    for (const group of groups.values()) {
+      const partitioned = partitionValidGameLineGroups(group.lineRows);
+      const acceptedGroupKeys = new Set(partitioned.accepted.map(currentLineGroupKey).filter((key): key is string => key !== null));
+      group.lineRows = partitioned.accepted;
+      group.historyRows = group.historyRows.filter((row) => {
+        const key = currentLineGroupKey(row);
+        return key !== null && acceptedGroupKeys.has(key);
+      });
+      rejectedRows.push(...partitioned.rejected.map((row) => ({
+        game_external_id: group.externalId,
+        market_type: row.market_type,
+        sportsbook: row.sportsbook,
+        side: row.side,
+        reason: row.validation_reason,
+      })));
     }
 
     // Per-game decisions. The market-level breakdown lives in
@@ -593,12 +770,13 @@ export const linesService = {
     let historyBaselineInserted = 0;
     let historyBaselineFailed = 0;
     let historyBaselineMissingMarketPairs = 0;
+    let currentInsert: CurrentLinesReplaceResult | null = null;
 
     if (!dryRun && linesPayload.length > 0) {
-      // 2026-06-10 phantom-thinning fix — per-(game, market_type, sportsbook)
-      // DELETE scope, derived from the actual rows being inserted. A book
-      // present in this payload gets its prior rows for that (game, market)
-      // atomically replaced; a book absent from this payload (because
+      // Per-(game, market_type, sportsbook) replacement scope, derived from
+      // the actual rows being inserted. A book present in this payload gets
+      // its prior rows removed only after the new group succeeds; a book
+      // absent from this payload (because
       // SharpAPI's later poll was thinner) is PRESERVED. Replaces the
       // R-16D per-(game, market) wipe that turned every partial poll into
       // a thinning event by deleting all books for a market when only one
@@ -607,14 +785,7 @@ export const linesService = {
       // splits_consensus is a sportsbook like any other under this scope:
       // it can only delete prior splits_consensus rows, never real books.
       // The R-16E /splits fallback therefore augments instead of replaces.
-      await deletePerSportsbook(linesPayload, "linesService.refreshGameLinesV2");
-
-      const { error } = await supabase.from("lines").insert(linesPayload);
-      if (error) {
-        throw new Error(
-          `linesService.refreshGameLinesV2 insert failed: ${error.message}`
-        );
-      }
+      currentInsert = await replaceCurrentGameLinesSafely(linesPayload, "linesService.refreshGameLinesV2");
       if (historyPayload.length > 0) {
         const flagged = await flagOpenersInHistoryPayload(
           historyPayload as unknown as Parameters<typeof flagOpenersInHistoryPayload>[0],
@@ -692,11 +863,21 @@ export const linesService = {
       history_baseline_inserted: historyBaselineInserted,
       history_baseline_failed: historyBaselineFailed,
       history_baseline_missing_market_pairs: historyBaselineMissingMarketPairs,
+      rejected_rows: rejectedRows.length,
+      rejected_sample: rejectedRows.slice(0, 5),
+      current_insert: currentInsert,
     };
 
     return {
-      records_updated: dryRun ? totalLineRowsWritten : totalLineRowsWritten,
+      records_updated: dryRun ? totalLineRowsWritten : (currentInsert?.insertedRows ?? 0),
       api_calls_made: discovery.apiCallsMade,
+      partial: rejectedRows.length > 0
+        || (currentInsert?.failedGroups ?? 0) > 0
+        || historyInsertFailed > 0
+        || historyBaselineFailed > 0,
+      error_message: currentInsert?.firstError
+        ?? historyFirstError
+        ?? (rejectedRows.length > 0 ? "Provider game-line rows failed database-bound validation." : null),
       details: details as unknown as Record<string, unknown>,
     };
   },
@@ -1029,7 +1210,7 @@ export type V2RefreshDetails = {
   coverage_before: V2CoverageSnapshot;
   coverage_after: V2CoverageSnapshot;
   skipped_game_external_ids: number[];
-  /** Total (game, market) DELETE-INSERT pairs the run would write. */
+  /** Total (game, market) replacement targets the run would write. */
   replace_targets_count: number;
   /** Games where ML + Total + Spread all got fresh provider data. */
   games_fully_replaced: number;
@@ -1049,6 +1230,11 @@ export type V2RefreshDetails = {
   history_baseline_failed: number;
   /** (game, market) pairs that had current lines but no history before the safety net ran. */
   history_baseline_missing_market_pairs: number;
+  /** Provider rows rejected before Postgres because they exceed schema/semantic bounds. */
+  rejected_rows: number;
+  rejected_sample: Array<Record<string, unknown>>;
+  /** Last-known-good replacement outcome for current lines. */
+  current_insert: CurrentLinesReplaceResult | null;
 };
 
 /**

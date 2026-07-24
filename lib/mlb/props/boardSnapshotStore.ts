@@ -11,7 +11,9 @@ export const DEFAULT_MLB_PROPS_MAX_SNAPSHOT_GZIP_BYTES = 2_000_000;
 // Keep a short rolling history for movement/debugging. Any snapshot referenced
 // by a locked internal tracking entry is preserved independently, so lowering
 // this bound reduces database pressure without sacrificing lock evidence.
-const DEFAULT_MLB_PROPS_SNAPSHOT_RETENTION_PER_SLATE = 12;
+// Must span comfortably beyond the T-60 cutoff so the first post-cutoff
+// refresh can still bind the last pre-cutoff board before pruning.
+const DEFAULT_MLB_PROPS_SNAPSHOT_RETENTION_PER_SLATE = 24;
 const MLB_PROPS_MEMORY_CACHE_TTL_MS = 60_000;
 
 export type MlbPropsBoardValidation = {
@@ -150,6 +152,33 @@ export async function loadLatestMlbPropsDisplaySnapshot(slateDate: string): Prom
   return applyMlbPropsDisplayLocks(latest).catch(() => latest);
 }
 
+export async function loadMlbPropsBoardSnapshotAtOrBefore(
+  slateDate: string,
+  cutoffTimestamp: string,
+): Promise<MlbPropsBoardSnapshot | null> {
+  const cutoffMs = Date.parse(cutoffTimestamp);
+  if (!Number.isFinite(cutoffMs)) return null;
+  const { data, error } = await getSupabase()
+    .from("prop_scoring_runs")
+    .select("metadata_json")
+    .eq("sport", "mlb")
+    .eq("slate_date", slateDate)
+    .eq("status", "completed")
+    .eq("provider_mode", "real")
+    .eq("odds_provider", "balldontlie")
+    .eq("context_provider", "nws+baseball_savant+balldontlie")
+    .eq("persisted", true)
+    .lte("created_at", cutoffTimestamp)
+    .order("created_at", { ascending: false })
+    .limit(12);
+  if (error) throw error;
+  for (const row of data ?? []) {
+    const snapshot = decodeMlbPropsBoardSnapshot(row.metadata_json);
+    if (snapshot && Date.parse(snapshot.asOfTimestamp) <= cutoffMs) return snapshot;
+  }
+  return null;
+}
+
 export async function loadRecentMlbPropsBoardSnapshots(slateDate: string, limit = 3): Promise<MlbPropsBoardSnapshot[]> {
   const { data, error } = await getSupabase()
     .from("prop_scoring_runs")
@@ -186,6 +215,24 @@ type LockedDisplaySnapshotRef = {
 type LockedDisplaySnapshotPointer = {
   snapshotId: string;
   lockedAt: string;
+};
+
+export const MLB_PROPS_GAME_LOCK_AUDIT_ACTION = "mlb_props.game_locked_t60";
+
+export type MlbPropsGameLockPointer = {
+  slate_date: string;
+  external_game_id: string;
+  game_start_timestamp: string;
+  lock_cutoff_timestamp: string;
+  board_snapshot_id: string;
+  snapshot_as_of_timestamp: string;
+  locked_at: string;
+  model_release_id: string;
+};
+
+export type MlbPropsGameLockScheduleEntry = {
+  externalGameId: string;
+  gameStartTimestamp: string;
 };
 
 const LOCK_REF_PAGE_SIZE = 1_000;
@@ -329,8 +376,13 @@ export async function loadMlbPropsLockedGameTimes(slateDate: string): Promise<Ma
 }
 
 async function loadLockedDisplaySnapshotRows(slateDate: string): Promise<LockedDisplaySnapshotRef[]> {
-  const supabase = getSupabase();
   const rows: LockedDisplaySnapshotRef[] = [];
+  rows.push(...(await loadMlbPropsGameLocks(slateDate)));
+
+  // Retain tracking-entry references for slates produced before the
+  // authoritative game-lock policy. New game-lock rows are loaded first and
+  // therefore win the first-ref map.
+  const supabase = getSupabase();
   for (let page = 0; page < MAX_LOCK_REF_PAGES; page++) {
     const from = page * LOCK_REF_PAGE_SIZE;
     const { data, error } = await supabase
@@ -346,6 +398,83 @@ async function loadLockedDisplaySnapshotRows(slateDate: string): Promise<LockedD
     if (pageRows.length < LOCK_REF_PAGE_SIZE) return rows;
   }
   throw new Error(`MLB props lock reference limit exceeded for ${slateDate}.`);
+}
+
+export async function loadMlbPropsGameLocks(slateDate: string): Promise<MlbPropsGameLockPointer[]> {
+  const { data, error } = await getSupabase()
+    .from("admin_audit_log")
+    .select("after_state,created_at")
+    .eq("action_type", MLB_PROPS_GAME_LOCK_AUDIT_ACTION)
+    .eq("target_table", "prop_scoring_runs")
+    .contains("after_state", { slate_date: slateDate })
+    .order("created_at", { ascending: true })
+    .limit(100);
+  if (error) throw error;
+  const locks: MlbPropsGameLockPointer[] = [];
+  const seen = new Set<string>();
+  for (const row of data ?? []) {
+    const lock = decodeMlbPropsGameLock(row.after_state);
+    if (!lock || lock.slate_date !== slateDate || seen.has(lock.external_game_id)) continue;
+    seen.add(lock.external_game_id);
+    locks.push(lock);
+  }
+  return locks;
+}
+
+export async function loadLatestMlbPropsGameLockSchedule(
+  slateDate: string,
+): Promise<MlbPropsGameLockScheduleEntry[]> {
+  const { data, error } = await getSupabase()
+    .from("admin_audit_log")
+    .select("after_state")
+    .eq("action_type", "mlb_props.board_snapshot_published")
+    .eq("target_table", "prop_scoring_runs")
+    .contains("after_state", { slate_date: slateDate })
+    .order("created_at", { ascending: false })
+    .limit(10);
+  if (error) throw error;
+  for (const row of data ?? []) {
+    if (!isRecord(row.after_state) || row.after_state.slate_date !== slateDate) continue;
+    const value = row.after_state.game_lock_schedule;
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((entry) =>
+      isRecord(entry)
+      && typeof entry.externalGameId === "string"
+      && typeof entry.gameStartTimestamp === "string"
+        ? [{ externalGameId: entry.externalGameId, gameStartTimestamp: entry.gameStartTimestamp }]
+        : []);
+  }
+  return [];
+}
+
+export function deriveMlbPropsGameLockSchedule(
+  snapshot: MlbPropsBoardSnapshot,
+): MlbPropsGameLockScheduleEntry[] {
+  const games = new Map<string, string>();
+  for (const row of snapshot.data.props) {
+    const gameId = row.providerIds?.gameId;
+    if (gameId && Number.isFinite(Date.parse(row.gameStartTime))) games.set(gameId, row.gameStartTime);
+  }
+  return [...games.entries()].map(([externalGameId, gameStartTimestamp]) => ({
+    externalGameId,
+    gameStartTimestamp,
+  }));
+}
+
+function decodeMlbPropsGameLock(value: unknown): MlbPropsGameLockPointer | null {
+  if (!isRecord(value)) return null;
+  const required = [
+    "external_game_id",
+    "slate_date",
+    "game_start_timestamp",
+    "lock_cutoff_timestamp",
+    "board_snapshot_id",
+    "snapshot_as_of_timestamp",
+    "locked_at",
+    "model_release_id",
+  ] as const;
+  if (required.some((key) => typeof value[key] !== "string" || value[key].length === 0)) return null;
+  return value as unknown as MlbPropsGameLockPointer;
 }
 
 export async function loadMlbPropsBoardSnapshotById(slateDate: string, snapshotId: string): Promise<MlbPropsBoardSnapshot | null> {
@@ -412,8 +541,7 @@ function loadMlbPropsSnapshotWithMemoryCache(
   const cached = cache.get(slateDate);
   if (cached && cached.freshUntilMs > now) return cached.value;
 
-  let value: Promise<MlbPropsBoardSnapshot | null>;
-  value = loader(slateDate).catch((error) => {
+  const value: Promise<MlbPropsBoardSnapshot | null> = loader(slateDate).catch((error) => {
     const current = cache.get(slateDate);
     if (current?.value === value) cache.delete(slateDate);
     throw error;
@@ -487,7 +615,11 @@ export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapsh
     target_table: "prop_scoring_runs",
     target_id: String(data.id),
     before_state: null,
-    after_state: { snapshot_id: snapshot.snapshotId, slate_date: snapshot.slateDate },
+    after_state: {
+      snapshot_id: snapshot.snapshotId,
+      slate_date: snapshot.slateDate,
+      game_lock_schedule: deriveMlbPropsGameLockSchedule(snapshot),
+    },
     source_type: "real_api",
   });
   if (indexError) console.warn(`MLB props snapshot index write failed: ${indexError.message}`);
@@ -496,7 +628,7 @@ export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapsh
   return String(data.id);
 }
 
-function revalidateMlbPropsBoardCache(): void {
+export function revalidateMlbPropsBoardCache(): void {
   boardSnapshotMemoryCache.clear();
   displaySnapshotMemoryCache.clear();
 }
@@ -506,7 +638,8 @@ async function pruneOldMlbPropsBoardSnapshots(slateDate: string, currentSnapshot
   const supabase = getSupabase();
   const [
     { data: rows, error: rowsError },
-    { data: lockedRefs, error: refsError },
+    { data: trackingLockedRefs, error: trackingRefsError },
+    { data: gameLockedRefs, error: gameRefsError },
     { data: snapshotIndex, error: indexError },
   ] = await Promise.all([
     supabase
@@ -528,6 +661,14 @@ async function pruneOldMlbPropsBoardSnapshots(slateDate: string, currentSnapshot
       .limit(5000),
     supabase
       .from("admin_audit_log")
+      .select("after_state")
+      .eq("action_type", MLB_PROPS_GAME_LOCK_AUDIT_ACTION)
+      .eq("target_table", "prop_scoring_runs")
+      .contains("after_state", { slate_date: slateDate })
+      .order("created_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("admin_audit_log")
       .select("target_id,after_state")
       .eq("action_type", "mlb_props.board_snapshot_published")
       .eq("target_table", "prop_scoring_runs")
@@ -535,12 +676,17 @@ async function pruneOldMlbPropsBoardSnapshots(slateDate: string, currentSnapshot
       .limit(5000),
   ]);
   if (rowsError) throw rowsError;
-  if (refsError) throw refsError;
+  if (trackingRefsError) throw trackingRefsError;
+  if (gameRefsError) throw gameRefsError;
   if (indexError) throw indexError;
 
   const referencedSnapshotIds = new Set<string>([
     currentSnapshotId,
-    ...((lockedRefs ?? []) as Array<{ board_snapshot_id: string | null }>).map((row) => row.board_snapshot_id).filter((value): value is string => Boolean(value)),
+    ...((trackingLockedRefs ?? []) as Array<{ board_snapshot_id: string | null }>).map((row) => row.board_snapshot_id).filter((value): value is string => Boolean(value)),
+    ...((gameLockedRefs ?? [])
+      .map((row) => decodeMlbPropsGameLock(row.after_state))
+      .filter((lock): lock is MlbPropsGameLockPointer => lock !== null && lock.slate_date === slateDate)
+      .map((lock) => lock.board_snapshot_id)),
   ]);
   const indexedSnapshotByRunId = new Map<string, string>();
   for (const entry of (snapshotIndex ?? []) as Array<{ target_id: string; after_state: unknown }>) {

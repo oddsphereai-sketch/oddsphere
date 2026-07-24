@@ -57,6 +57,12 @@ import { dailyEdgeSnapshotKey } from "@/lib/services/labResponseSnapshots";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { isVoidStatus } from "@/lib/services/gameLifecycle";
 import {
+  loadLatestMlbPropsBoardSnapshot,
+  loadLatestMlbPropsGameLockSchedule,
+} from "@/lib/mlb/props/boardSnapshotStore";
+import { ensureMlbPropsGameLocksForSchedule } from "@/lib/mlb/props/internalTracking";
+import { publishMlbPropsMemberReadSnapshots } from "@/lib/mlb/props/memberReadSnapshotStore";
+import {
   runScheduledMarketIntelligenceV2Collection,
   type ScheduledMarketIntelligenceV2Result,
 } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
@@ -66,7 +72,6 @@ import {
 } from "@/lib/automodel/lockState";
 import type { Sport } from "@/lib/types/domain/Sport";
 import {
-  PREGAME_SWEEP_CRON_ACTIVE_ENV,
   buildPregameSweepBlockedDetails,
   isPregameSweepDryRun,
   isPregameSweepGateActive,
@@ -362,6 +367,45 @@ export async function GET(request: Request) {
         };
       }
 
+      const propsLockSweep: {
+        attempted: boolean;
+        snapshotFound: boolean;
+        gameLocksCreated: number;
+        error: string | null;
+      } = {
+        attempted: sport === "mlb",
+        snapshotFound: false,
+        gameLocksCreated: 0,
+        error: null,
+      };
+      if (sport === "mlb") {
+        try {
+          const propsSchedule = await loadLatestMlbPropsGameLockSchedule(date);
+          propsLockSweep.snapshotFound = propsSchedule.length > 0;
+          if (propsSchedule.length > 0) {
+            const lockResult = await ensureMlbPropsGameLocksForSchedule({
+              slateDate: date,
+              schedule: propsSchedule,
+              observedAt: now.toISOString(),
+            });
+            propsLockSweep.gameLocksCreated = lockResult.created;
+            if (lockResult.created > 0) {
+              // The compact board is the default member entry point. Scoped
+              // detail readers resolve the canonical snapshot directly, so a
+              // lock-only sweep never rewrites every player/game shard.
+              const propsSnapshot = await loadLatestMlbPropsBoardSnapshot(date);
+              if (propsSnapshot) {
+                await publishMlbPropsMemberReadSnapshots(propsSnapshot, { compactOnly: true });
+                records++;
+              }
+              records += lockResult.created;
+            }
+          }
+        } catch (error) {
+          propsLockSweep.error = error instanceof Error ? error.message : String(error);
+        }
+      }
+
       let preLockGameLines: Awaited<ReturnType<typeof linesService.refreshGameLinesV2>> | null = null;
       let preLockSignals: Awaited<ReturnType<typeof linesService.refreshSharpSignals>> | null = null;
       let marketIntelligenceV2: ScheduledMarketIntelligenceV2Result | null = null;
@@ -609,6 +653,7 @@ export async function GET(request: Request) {
           enteringLockModelResult.errors.length > 0 ||
           lockCoherence.errors.length > 0 ||
           missedLockGames.length > 0 ||
+          propsLockSweep.error !== null ||
           (marketIntelligenceV2?.errors.length ?? 0) > 0;
         return {
           records_updated: records,
@@ -622,6 +667,7 @@ export async function GET(request: Request) {
                 ...(missedLockGames.length > 0
                   ? [`${missedLockGames.length} game(s) started without a lock`]
                   : []),
+                ...(propsLockSweep.error ? [`MLB props lock sweep: ${propsLockSweep.error}`] : []),
                 ...(marketIntelligenceV2?.errors ?? []),
               ].slice(0, 5).join(" | ").slice(0, 1500)
             : null,
@@ -631,6 +677,7 @@ export async function GET(request: Request) {
             lock_only: true,
             sport,
             date,
+            mlb_props_lock_sweep: propsLockSweep,
             partition: {
               locked: partition.locked.length,
               entering_lock: partition.entering_lock.length,
@@ -897,6 +944,7 @@ export async function GET(request: Request) {
         enteringLockModelResult.errors.length > 0 ||
         lockCoherence.errors.length > 0 ||
         staleTrigger.errors.length > 0 ||
+        propsLockSweep.error !== null ||
         (marketIntelligenceV2?.errors.length ?? 0) > 0;
 
       return {
@@ -909,6 +957,7 @@ export async function GET(request: Request) {
               ...lockCoherence.errors,
               ...lockResult.errors,
               ...staleTrigger.errors,
+              ...(propsLockSweep.error ? [`MLB props lock sweep: ${propsLockSweep.error}`] : []),
               ...(marketIntelligenceV2?.errors ?? []),
             ].slice(0, 5).join(" | ").slice(0, 1500)
           : null,
@@ -917,6 +966,7 @@ export async function GET(request: Request) {
           pregame_sweep_active: true,
           sport,
           date,
+          mlb_props_lock_sweep: propsLockSweep,
           partition: {
             locked: partition.locked.length,
             entering_lock: partition.entering_lock.length,

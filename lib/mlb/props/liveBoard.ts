@@ -320,6 +320,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       candidatesSeen: 0,
       candidatesDue: 0,
       entriesLocked: 0,
+      gameLocksCreated: 0,
       closingPricesUpdated: 0,
       error: error instanceof Error ? error.message : String(error),
     };
@@ -329,7 +330,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
   // retain the previous last-known-good member snapshot and the next refresh
   // retries automatically.
   try {
-    await publishMlbPropsMemberReadSnapshots(snapshot);
+    await publishMlbPropsMemberReadSnapshots(snapshot, { forceFull: tracking.gameLocksCreated > 0 });
   } catch (error) {
     const detail = error instanceof Error
       ? error.message
@@ -358,6 +359,7 @@ function disabledTrackingResult(): MlbPropsTrackingSyncResult {
     candidatesSeen: 0,
     candidatesDue: 0,
     entriesLocked: 0,
+    gameLocksCreated: 0,
     closingPricesUpdated: 0,
     error: null,
   };
