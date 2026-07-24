@@ -4,7 +4,12 @@
  *   - integration: predictionRecordService.buildPredictionRecordsFromSlate
  * Run: npx tsx scripts/test-ml-inversion-flip.ts
  */
-import { resolveMlInversionFlip, ML_INVERSION_RULE_ID } from "../lib/services/mlInversionFlip";
+import {
+  resolveMlInversionFlip,
+  resolveMlInversionPublicGrade,
+  ML_INVERSION_GRADE_RULE_ID,
+  ML_INVERSION_RULE_ID,
+} from "../lib/services/mlInversionFlip";
 import { buildPredictionRecordsFromSlate } from "../lib/services/predictionRecordService";
 
 let pass = 0, fail = 0;
@@ -38,6 +43,48 @@ check("null predicted side does NOT flip", resolveMlInversionFlip({ ...base, pre
 {
   const r = resolveMlInversionFlip({ ...base, predictedSide: "away", homeOdds: 120, awayOdds: -140 });
   check("away pick flips to home with home odds", r.flipped === true && r.flipped && r.flippedSide === "home" && r.flippedOdds === 120);
+}
+
+console.log("\n━━━ resolveMlInversionPublicGrade ━━━");
+{
+  const grade = resolveMlInversionPublicGrade({
+    inversionTriggered: true,
+    finalSideChanged: true,
+    finalOdds: -130,
+    recommendationProbability: 0.581,
+    finalMarketProbability: 0.542744,
+    dataQualityTier: "high",
+    provisional: false,
+  });
+  check("positive-value high-quality inversion is exactly Lean", grade.actionable && grade.playGrade === "lean");
+  check("inversion grade can never manufacture Best Angle", grade.bestAngle === false);
+  check("inversion Lean records positive edge and EV", (grade.edgePp ?? 0) > 0 && (grade.expectedValue ?? 0) > 0);
+  check("inversion grade rule is versioned", grade.rule_id === ML_INVERSION_GRADE_RULE_ID);
+}
+{
+  const grade = resolveMlInversionPublicGrade({
+    inversionTriggered: true,
+    finalSideChanged: true,
+    finalOdds: -170,
+    recommendationProbability: 0.555,
+    finalMarketProbability: 0.6018,
+    dataQualityTier: "high",
+    provisional: false,
+  });
+  check("negative-EV inversion is non-actionable", !grade.actionable && grade.playGrade === null);
+  check("negative-EV inversion remains blocked from Best Angle", grade.bestAngle === false);
+}
+{
+  const grade = resolveMlInversionPublicGrade({
+    inversionTriggered: true,
+    finalSideChanged: true,
+    finalOdds: 135,
+    recommendationProbability: 0.57,
+    finalMarketProbability: 0.38,
+    dataQualityTier: "low",
+    provisional: false,
+  });
+  check("low-data-quality inversion is non-actionable", !grade.actionable && grade.reason.includes("data_quality"));
 }
 
 // ── integration ────────────────────────────────────────────────────
@@ -84,7 +131,8 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   check("genuine final-side flip has no stale No Bet reason", ml?.no_bet === false && ml?.no_bet_reason === null);
   check("member confidence >=55 (NOT sub-50 raw)", typeof ml?.confidence === "number" && ml!.confidence >= 55 && ml!.confidence <= 60);
   check("member model_probability >=0.5 (presentable)", typeof ml?.model_probability === "number" && ml!.model_probability >= 0.5);
-  check("flipped edge column nulled (no edge claim)", ml?.edge === null);
+  check("flipped edge column uses inversion recommendation value", typeof ml?.edge === "number" && ml.edge > 0);
+  check("flipped expected value is positive and explicit", typeof ml?.expected_value === "number" && ml.expected_value > 0);
   const flip = (ml?.snapshot_json as any)?.ml_flip;
   check("ml_flip audit present + original_side=home", flip?.flipped === true && flip?.original_side === "home" && flip?.flipped_side === "away");
   check("ml_flip records original_raw_confidence + original_odds", flip?.original_raw_confidence === 57 && flip?.original_odds === -150);
@@ -93,9 +141,45 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   check("ml_flip rule_id stamped", flip?.rule_id === ML_INVERSION_RULE_ID);
   check("decision release records a true final-side change", (ml?.snapshot_json as any)?.decision_pipeline?.final_side_changed === true);
   check("decision release marks a genuine final-side flip as BET", (ml?.snapshot_json as any)?.decision_pipeline?.board_action === "bet");
+  check("decision release uses the inversion grade rule", (ml?.snapshot_json as any)?.decision_pipeline?.action_rule_id === ML_INVERSION_GRADE_RULE_ID);
+  check("grade audit preserves raw model probability as audit-only", (ml?.snapshot_json as any)?.ml_inversion_grade_resolution?.raw_model_probability_role === "audit_only");
   // model opinion preserved: snapshot keeps original sp.v2_2_audit, and OU record untouched
   const ou = recs.find((r) => r.market === "total");
   check("TOTALS record unaffected by ML flip", ou?.pick === "over");
+}
+{
+  const recs = build(
+    mkPred(
+      { predicted_ml_winner: "away", ml_confidence: 58.1 },
+      {
+        auto_factors: { ml_raw_confidence: 58.1 },
+        v2_2_audit: {
+          ml_model_prob: 0.4710295964719537,
+          ml_market_prob: 0.457256,
+          market_total: 8.5,
+          posterior_home_diff: 0.3,
+          posterior_total: 8.9,
+          ou_market_prob: 0.5,
+        },
+      },
+    ),
+    oddsSnap(-130, 110),
+  );
+  const ml = recs.find((r) => r.market === "moneyline");
+  check("TOR-BOS shape flips dog to -130 favorite", ml?.pick === "home" && ml?.odds_american === -130);
+  check("TOR-BOS shape remains Lean on positive inversion EV", ml?.play_grade === "lean" && ml?.no_bet === false);
+  check("TOR-BOS shape never becomes Best Angle", ml?.best_angle === false);
+  check("TOR-BOS shape records about +2.8% inversion EV", typeof ml?.expected_value === "number" && Math.abs(ml.expected_value - 0.027923) < 0.0001);
+}
+{
+  const recs = build(
+    mkPred({}, { v2_data_quality_tier: "low" }),
+    oddsSnap(-150, 135),
+  );
+  const ml = recs.find((r) => r.market === "moneyline");
+  check("low-quality final inversion side is preserved for transparency", ml?.pick === "away");
+  check("low-quality inversion is No Play, not Lean", ml?.play_grade === null && ml?.no_bet === true);
+  check("low-quality inversion board action is no_play", (ml?.snapshot_json as any)?.decision_pipeline?.board_action === "no_play");
 }
 {
   // raw>=60 → no flip.

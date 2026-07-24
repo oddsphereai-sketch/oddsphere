@@ -17,6 +17,10 @@
 import { flipRecommendationConfidence } from "./flipConfidence";
 
 export const ML_INVERSION_RULE_ID = "ml_inverted_lowconv_marketdivergent_v1";
+export const ML_INVERSION_GRADE_RULE_ID =
+  "ml_inversion_positive_value_safety_lean_v1_2026_07_24";
+export const ML_INVERSION_MIN_EDGE_PP = 0.5;
+export const ML_INVERSION_MIN_PRICE_EXCLUSIVE = -220;
 
 export type MlSide = "home" | "away";
 
@@ -50,6 +54,16 @@ export type MlFlipResult =
       recommendationConfidence: number;
     }
   | { flipped: false; reason: string };
+
+export type MlInversionPublicGradeResult = {
+  rule_id: typeof ML_INVERSION_GRADE_RULE_ID;
+  actionable: boolean;
+  playGrade: "lean" | null;
+  bestAngle: false;
+  edgePp: number | null;
+  expectedValue: number | null;
+  reason: string;
+};
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
@@ -88,5 +102,85 @@ export function resolveMlInversionFlip(i: MlFlipInput): MlFlipResult {
     flippedMarketProb,
     flippedEdgePp,
     recommendationConfidence: flipRecommendationConfidence(i.confidence),
+  };
+}
+
+function americanDecimalOdds(odds: number): number {
+  return odds > 0 ? 1 + odds / 100 : 1 + 100 / Math.abs(odds);
+}
+
+/**
+ * Resolve the public grade after an inversion has selected the final side.
+ *
+ * The inversion-specific recommendation probability is the public probability
+ * substrate. The base model's opposite-side probability remains audit-only:
+ * requiring positive value from it would make every inversion impossible by
+ * definition. A qualifying inversion is exactly Lean; inversion status alone
+ * can never create a Best Angle.
+ */
+export function resolveMlInversionPublicGrade(args: {
+  inversionTriggered: boolean;
+  finalSideChanged: boolean;
+  finalOdds: number | null;
+  recommendationProbability: number | null;
+  finalMarketProbability: number | null;
+  dataQualityTier: string | null;
+  provisional: boolean;
+}): MlInversionPublicGradeResult {
+  const blocked = (
+    reason: string,
+    edgePp: number | null = null,
+    expectedValue: number | null = null,
+  ): MlInversionPublicGradeResult => ({
+    rule_id: ML_INVERSION_GRADE_RULE_ID,
+    actionable: false,
+    playGrade: null,
+    bestAngle: false,
+    edgePp,
+    expectedValue,
+    reason,
+  });
+  if (!args.inversionTriggered) return blocked("not_an_inversion");
+  if (!args.finalSideChanged) return blocked("inversion_did_not_change_final_side");
+  if (args.dataQualityTier !== "high" || args.provisional) {
+    return blocked("inversion_data_quality_not_actionable");
+  }
+  if (
+    args.finalOdds === null ||
+    !Number.isFinite(args.finalOdds) ||
+    args.finalOdds === 0
+  ) {
+    return blocked("inversion_final_price_missing");
+  }
+  if (args.finalOdds <= ML_INVERSION_MIN_PRICE_EXCLUSIVE) {
+    return blocked("inversion_final_price_outside_lean_policy");
+  }
+  if (
+    args.recommendationProbability === null ||
+    !Number.isFinite(args.recommendationProbability) ||
+    args.finalMarketProbability === null ||
+    !Number.isFinite(args.finalMarketProbability)
+  ) {
+    return blocked("inversion_final_value_missing");
+  }
+  const edgePp = round1(
+    (args.recommendationProbability - args.finalMarketProbability) * 100,
+  );
+  const expectedValue =
+    args.recommendationProbability * americanDecimalOdds(args.finalOdds) - 1;
+  if (edgePp < ML_INVERSION_MIN_EDGE_PP) {
+    return blocked("inversion_final_edge_below_lean_minimum", edgePp, expectedValue);
+  }
+  if (expectedValue <= 0) {
+    return blocked("inversion_final_ev_not_positive", edgePp, expectedValue);
+  }
+  return {
+    rule_id: ML_INVERSION_GRADE_RULE_ID,
+    actionable: true,
+    playGrade: "lean",
+    bestAngle: false,
+    edgePp,
+    expectedValue,
+    reason: "genuine_final_side_inversion_clears_lean_value_and_safety_gates",
   };
 }
