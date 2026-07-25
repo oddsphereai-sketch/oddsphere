@@ -20,6 +20,7 @@ import {
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
   GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
   MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
+  ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID,
   ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID,
   resolveMlTightMarketPriceBestAngle,
 } from "../lib/services/predictionRecordService";
@@ -635,6 +636,81 @@ console.log("\n━━━ MLB tight market-price Best Angle integration ━━━
   const promo = (ml.snapshot_json as any)?.ml_tight_market_price_best_angle_promotion;
   check("tight market-price ML promotes to Best Angle", ml.best_angle === true && ml.play_grade === "best_angle");
   check("tight market-price promotion audit is stamped", promo?.rule_id === ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID);
+}
+
+console.log("\n━━━ MLB generic Lean positive-EV coherence ━━━");
+{
+  const genericLeanPred = {
+    ...basePrediction,
+    predicted_ml_winner: "home",
+    ml_confidence: 55.8,
+    predicted_home_score: 5.0,
+    predicted_away_score: 4.0,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ml_play_grade: "lean",
+      ml_best_angle_eligible: false,
+      v2_2_audit: {
+        ml_play_grade: "lean",
+        ml_model_prob: 0.557562,
+        ml_market_prob: 0.540368,
+        ml_edge_pct: 1.7,
+        posterior_home_diff: 1.0,
+      },
+    },
+  };
+  const buildAtPrice = (mlHomeOdds: number) => {
+    const oddsByGameId = new Map([
+      [14771, {
+        mlHomeOdds,
+        mlAwayOdds: 110,
+        ouOverOdds: -110,
+        ouUnderOdds: -110,
+        oddsSourceMl: {
+          home: { source: "lines" as const, book: "pinnacle", odds: mlHomeOdds, line: null, observedAt: "2026-07-25T16:00:00Z" },
+          away: { source: "lines" as const, book: "pinnacle", odds: 110, line: null, observedAt: "2026-07-25T16:00:00Z" },
+        },
+        oddsSourceOu: {
+          over: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-25T16:00:00Z" },
+          under: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-25T16:00:00Z" },
+        },
+      }],
+    ]);
+    return buildPredictionRecordsFromSlate({
+      sport: "mlb",
+      slateDate: "2026-07-25",
+      launchDay: false,
+      games: [baseGame],
+      predictionByGameId: new Map([[14771, genericLeanPred]]),
+      abbrevByTeamId,
+      oddsByGameId,
+      signalsByGameId: new Map(),
+    }).find((record) => record.market === "moneyline")!;
+  };
+
+  const negativeEv = buildAtPrice(-130);
+  check(
+    "negative-EV generic ML Lean is removed from the actionable board",
+    negativeEv.play_grade !== "lean" &&
+      (negativeEv.snapshot_json as any)?.decision_pipeline?.board_action === "no_play",
+  );
+  check(
+    "demoted generic ML Lean has no action rule stamp",
+    (negativeEv.snapshot_json as any)?.decision_pipeline?.action_rule_id === null,
+  );
+
+  const positiveEv = buildAtPrice(-115);
+  check(
+    "positive-EV generic ML Lean remains actionable",
+    positiveEv.play_grade === "lean" &&
+      (positiveEv.snapshot_json as any)?.decision_pipeline?.board_action === "bet",
+  );
+  check(
+    "positive-EV generic ML Lean receives its immutable rule stamp",
+    (positiveEv.snapshot_json as any)?.decision_pipeline?.action_rule_id ===
+      ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID,
+  );
 }
 
 console.log("\n━━━ MLB market-aware final side correction ━━━");
