@@ -36,8 +36,9 @@ export type MlbOfficialLineupSpot = {
   dbTeamId: number;
   mlbTeamId: number;
   playerMlbId: number;
-  battingPosition: number;
+  battingPosition: number | null;
   startingPosition: string | null;
+  isStartingPitcher: boolean;
   isDh: boolean;
   fullName: string;
   firstName: string;
@@ -55,6 +56,7 @@ export type MlbOfficialLineupRefreshResult = {
     games_seen: number;
     games_matched: number;
     teams_with_official_lineups: number;
+    confirmed_starters_written: number;
     players_created: number;
     skipped_by_reason: Record<string, number>;
   };
@@ -198,6 +200,7 @@ export function parseMlbStatsOfficialLineups(
         playerMlbId,
         battingPosition: i + 1,
         startingPosition: position,
+        isStartingPitcher: false,
         isDh: position === "DH",
         fullName,
         firstName: asString(meta?.firstName) ?? nameParts.firstName,
@@ -209,6 +212,48 @@ export function parseMlbStatsOfficialLineups(
           side,
           player: person ?? {},
           boxscore: boxPlayer ?? {},
+        },
+      });
+    }
+
+    // MLB Stats' official feed posts the batting order and probable starter
+    // together. Once a team has an official batting order, persist that
+    // starter as a confirmed P row too. The feature snapshot intentionally
+    // derives starter confirmation from lineups.is_confirmed; omitting this
+    // row left every MLB starter permanently "probable" and blocked all
+    // data-completeness-gated Best Angles.
+    const probablePitcher = asObject(
+      asObject(asObject(feed.gameData)?.probablePitchers)?.[side],
+    );
+    const pitcherMlbId = asNumber(probablePitcher?.id);
+    if (pitcherMlbId !== null) {
+      const meta = playerObject(feed, pitcherMlbId) ?? probablePitcher;
+      const fullName =
+        asString(meta?.fullName) ??
+        asString(probablePitcher?.fullName) ??
+        `MLB Player ${pitcherMlbId}`;
+      const nameParts = firstLast(fullName);
+      const pitchHand = asObject(meta?.pitchHand);
+      out.push({
+        gamePk,
+        dbGameId: dbGame.id,
+        dbTeamId: dbTeam.id,
+        mlbTeamId,
+        playerMlbId: pitcherMlbId,
+        battingPosition: null,
+        startingPosition: "P",
+        isStartingPitcher: true,
+        isDh: false,
+        fullName,
+        firstName: asString(meta?.firstName) ?? nameParts.firstName,
+        lastName: asString(meta?.lastName) ?? nameParts.lastName,
+        bats: normalizeHand(asObject(meta?.batSide)?.code),
+        throws: normalizeHand(pitchHand?.code),
+        rawPayload: {
+          gamePk,
+          side,
+          probablePitcher,
+          officialBattingOrderSize: battingOrder.length,
         },
       });
     }
@@ -366,6 +411,7 @@ export async function refreshMlbOfficialLineups(date: string): Promise<MlbOffici
     games_seen: 0,
     games_matched: 0,
     teams_with_official_lineups: 0,
+    confirmed_starters_written: 0,
     players_created: 0,
     skipped_by_reason: {} as Record<string, number>,
   };
@@ -410,13 +456,23 @@ export async function refreshMlbOfficialLineups(date: string): Promise<MlbOffici
   }
 
   for (const [key, spots] of officialByTeam) {
-    const ordered = spots
-      .filter((s) => s.battingPosition >= 1 && s.battingPosition <= 9)
-      .sort((a, b) => a.battingPosition - b.battingPosition);
-    if (ordered.length < 8) {
+    const orderedBatters = spots
+      .filter(
+        (s) =>
+          !s.isStartingPitcher &&
+          s.battingPosition !== null &&
+          s.battingPosition >= 1 &&
+          s.battingPosition <= 9,
+      )
+      .sort((a, b) => (a.battingPosition ?? 999) - (b.battingPosition ?? 999));
+    if (orderedBatters.length < 8) {
       bump(details.skipped_by_reason, "lineup_less_than_8");
       continue;
     }
+    const officialStarter = spots.find((s) => s.isStartingPitcher) ?? null;
+    const ordered = officialStarter === null
+      ? orderedBatters
+      : [...orderedBatters, officialStarter];
 
     const [gameIdRaw, teamIdRaw] = key.split("|");
     const gameId = Number(gameIdRaw);
@@ -433,13 +489,14 @@ export async function refreshMlbOfficialLineups(date: string): Promise<MlbOffici
         game_id: gameId,
         team_id: teamId,
         player_id: ensured.playerId,
-        batting_position: spot.battingPosition,
+        batting_position: spot.isStartingPitcher ? null : spot.battingPosition,
         starting_position: spot.startingPosition,
         is_confirmed: true,
         is_dh: spot.isDh,
       });
+      if (spot.isStartingPitcher) details.confirmed_starters_written++;
     }
-    if (rows.length < 8) {
+    if (rows.filter((row) => row.starting_position !== "P").length < 8) {
       bump(details.skipped_by_reason, "mapped_lineup_less_than_8");
       continue;
     }
