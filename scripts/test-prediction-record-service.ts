@@ -21,7 +21,11 @@ import {
   GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
   MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
   ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID,
+  ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID,
+  ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID,
   ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID,
+  resolveMlMidPriceEstablishedPriceBestAngle,
+  resolveMlMidPriceNearMarketLean,
   resolveMlTightMarketPriceBestAngle,
 } from "../lib/services/predictionRecordService";
 import { MLB_MODEL_LAYER_VERSION_SCHEMA } from "../lib/automodel/mlbModelLayerVersions";
@@ -82,6 +86,33 @@ check("edge +1 upper boundary does not promote", resolveMlTightMarketPriceBestAn
 check("movement against pick blocks promotion", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, lineDirection: "against_pick" }).bestAngle === false);
 check("opposing split conflict blocks promotion", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, publicSplitConflict: true }).bestAngle === false);
 check("corrected/blocked row cannot promote", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, blocked: true }).bestAngle === false);
+
+console.log("\n━━━ MLB mid-price Best Angle / Lean tier resolver ━━━");
+const midPriceLeanBase = {
+  blocked: false,
+  side: "home",
+  edgePct: 1.1,
+  oddsAmerican: -141,
+  sameSideProjectionGap: 0.5,
+  lineDirection: "neutral" as const,
+  publicSplitConflict: false,
+  dataStatus: "provisional_starters_pending",
+};
+check("clean -145..-131 established-price moneyline promotes to Best Angle", resolveMlMidPriceEstablishedPriceBestAngle(midPriceLeanBase).bestAngle === true);
+check("-145 Best Angle price boundary promotes", resolveMlMidPriceEstablishedPriceBestAngle({ ...midPriceLeanBase, oddsAmerican: -145 }).bestAngle === true);
+check("-131 Best Angle price boundary promotes", resolveMlMidPriceEstablishedPriceBestAngle({ ...midPriceLeanBase, oddsAmerican: -131 }).bestAngle === true);
+check("-146 does not enter the Best Angle tier", resolveMlMidPriceEstablishedPriceBestAngle({ ...midPriceLeanBase, oddsAmerican: -146 }).bestAngle === false);
+check("-130 does not enter the Best Angle tier", resolveMlMidPriceEstablishedPriceBestAngle({ ...midPriceLeanBase, oddsAmerican: -130 }).bestAngle === false);
+check("projection opposition blocks Best Angle promotion", resolveMlMidPriceEstablishedPriceBestAngle({ ...midPriceLeanBase, sameSideProjectionGap: -0.1 }).bestAngle === false);
+check("incomplete required data blocks Best Angle promotion", resolveMlMidPriceEstablishedPriceBestAngle({ ...midPriceLeanBase, dataStatus: "incomplete_missing_required_data" }).bestAngle === false);
+check("clean -130..-121 near-market moneyline promotes to Lean", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, oddsAmerican: -125 }).lean === true);
+check("-130 Lean price boundary promotes", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, oddsAmerican: -130 }).lean === true);
+check("-121 Lean price boundary promotes", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, oddsAmerican: -121 }).lean === true);
+check("-131 does not enter the Lean tier", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, oddsAmerican: -131 }).lean === false);
+check("-120 does not enter the Lean cohort", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, oddsAmerican: -120 }).lean === false);
+check("edge +2 upper boundary does not promote", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, edgePct: 2 }).lean === false);
+check("projection opposition blocks Lean promotion", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, sameSideProjectionGap: -0.1 }).lean === false);
+check("incomplete required data blocks Lean promotion", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, dataStatus: "incomplete_missing_required_data" }).lean === false);
 
 // ── Game + prediction fixtures ────────────────────────────────────
 const baseGame = {
@@ -638,6 +669,128 @@ console.log("\n━━━ MLB tight market-price Best Angle integration ━━━
   check("tight market-price promotion audit is stamped", promo?.rule_id === ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID);
 }
 
+console.log("\n━━━ MLB mid-price near-market Lean integration ━━━");
+{
+  const midPriceLeanPred = {
+    ...basePrediction,
+    predicted_ml_winner: "home",
+    ml_confidence: 54,
+    predicted_home_score: 4.8,
+    predicted_away_score: 4.2,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ml_play_grade: "market_aligned",
+      ml_best_angle_eligible: false,
+      mlb_data_completeness: { status: "provisional_starters_pending" },
+      v2_2_audit: {
+        ml_play_grade: "market_aligned",
+        ml_model_prob: 0.54,
+        ml_market_prob: 0.532,
+        ml_edge_pct: 0.8,
+        posterior_home_diff: 0.6,
+      },
+    },
+  };
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -125,
+      mlAwayOdds: 105,
+      ouOverOdds: -110,
+      ouUnderOdds: -110,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -125, line: null, observedAt: "2026-07-25T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 105, line: null, observedAt: "2026-07-25T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-25T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-25T16:00:00Z" },
+      },
+    }],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-25",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, midPriceLeanPred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    signalsByGameId: new Map(),
+  });
+  const ml = recs.find((record) => record.market === "moneyline")!;
+  const promo = (ml.snapshot_json as any)?.ml_mid_price_near_market_lean_promotion;
+  check("mid-price near-market ML promotes to Lean", ml.play_grade === "lean" && ml.best_angle === false);
+  check("mid-price Lean promotion audit is stamped", promo?.rule_id === ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID);
+  check("mid-price Lean decision pipeline is actionable", (ml.snapshot_json as any)?.decision_pipeline?.action_rule_id === ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID);
+}
+
+console.log("\n━━━ MLB mid-price established-price Best Angle integration ━━━");
+{
+  const midPriceBestAnglePred = {
+    ...basePrediction,
+    predicted_ml_winner: "home",
+    ml_confidence: 56,
+    predicted_home_score: 4.8,
+    predicted_away_score: 4.2,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ml_play_grade: "market_aligned",
+      ml_best_angle_eligible: false,
+      mlb_data_completeness: { status: "provisional_starters_pending" },
+      v2_2_audit: {
+        ml_play_grade: "market_aligned",
+        ml_model_prob: 0.56,
+        ml_market_prob: 0.544,
+        ml_edge_pct: 1.6,
+        posterior_home_diff: 1.0,
+      },
+    },
+  };
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -134,
+      mlAwayOdds: 114,
+      ouOverOdds: -110,
+      ouUnderOdds: -110,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -134, line: null, observedAt: "2026-07-25T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 114, line: null, observedAt: "2026-07-25T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-25T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-25T16:00:00Z" },
+      },
+    }],
+  ]);
+  const ml = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-25",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, midPriceBestAnglePred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    signalsByGameId: new Map(),
+  }).find((record) => record.market === "moneyline")!;
+  const promo =
+    (ml.snapshot_json as any)?.ml_mid_price_established_price_best_angle_promotion;
+  check(
+    "mid-price established-price ML promotes to Best Angle",
+    ml.play_grade === "best_angle" && ml.best_angle === true,
+  );
+  check(
+    "mid-price Best Angle promotion audit is stamped",
+    promo?.rule_id === ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID,
+  );
+  check(
+    "mid-price Best Angle decision pipeline is actionable",
+    (ml.snapshot_json as any)?.decision_pipeline?.action_rule_id ===
+      ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID,
+  );
+}
+
 console.log("\n━━━ MLB generic Lean positive-EV coherence ━━━");
 {
   const genericLeanPred = {
@@ -689,7 +842,7 @@ console.log("\n━━━ MLB generic Lean positive-EV coherence ━━━");
     }).find((record) => record.market === "moneyline")!;
   };
 
-  const negativeEv = buildAtPrice(-130);
+  const negativeEv = buildAtPrice(-160);
   check(
     "negative-EV generic ML Lean is removed from the actionable board",
     negativeEv.play_grade !== "lean" &&

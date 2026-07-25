@@ -301,6 +301,11 @@ function readStringOrNull(v: unknown): string | null {
 function readNumberOrNull(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
+function readRecordOrNull(v: unknown): Record<string, unknown> | null {
+  return v !== null && typeof v === "object" && !Array.isArray(v)
+    ? v as Record<string, unknown>
+    : null;
+}
 function isExplicitNoBetReason(v: string | null): boolean {
   if (v === null) return false;
   const s = v.toLowerCase();
@@ -398,10 +403,18 @@ export const ML_CLEAN_TIGHT_EDGE_MIN_PRICE_EXCLUSIVE = -220;
 export const ML_CLEAN_TIGHT_EDGE_MAX_ABS_PROJECTION_GAP_EXCLUSIVE = 0.75;
 export const ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID = "ml_tight_market_price_best_angle_v1_2026_07_20";
 export const ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID = "ml_generic_lean_positive_ev_v1_2026_07_25";
+export const ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID = "ml_mid_price_established_price_best_angle_v1_2026_07_25";
+export const ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID = "ml_mid_price_near_market_lean_v1_2026_07_25";
 export const ML_TIGHT_MARKET_PRICE_MIN_EDGE_PCT = -1;
 export const ML_TIGHT_MARKET_PRICE_MAX_EDGE_PCT_EXCLUSIVE = 1;
 export const ML_TIGHT_MARKET_PRICE_MIN_ODDS = -160;
 export const ML_TIGHT_MARKET_PRICE_MAX_ODDS = -131;
+export const ML_MID_PRICE_NEAR_MARKET_LEAN_MIN_EDGE_PCT = -1;
+export const ML_MID_PRICE_NEAR_MARKET_LEAN_MAX_EDGE_PCT_EXCLUSIVE = 2;
+export const ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_MIN_ODDS = -145;
+export const ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_MAX_ODDS = -131;
+export const ML_MID_PRICE_NEAR_MARKET_LEAN_MIN_ODDS = -130;
+export const ML_MID_PRICE_NEAR_MARKET_LEAN_MAX_ODDS = -121;
 export const FI_VALIDATED_BEST_ANGLE_RULE_ID = "fi_validated_best_angle_v1_2026_07_11";
 export const FI_FINAL_BEST_ANGLE_MIN_EDGE = 0.06;
 export const FI_FINAL_BEST_ANGLE_MIN_CONFIDENCE = 56;
@@ -549,6 +562,69 @@ export function resolveMlTightMarketPriceBestAngle(args: {
   return {
     bestAngle: qualified,
     reason: qualified ? ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID : null,
+  };
+}
+
+type MlMidPriceNearMarketArgs = {
+  blocked: boolean;
+  side: string | null;
+  edgePct: number | null;
+  oddsAmerican: number | null;
+  sameSideProjectionGap: number | null;
+  lineDirection: "toward_pick" | "against_pick" | "neutral" | "unknown" | null;
+  publicSplitConflict: boolean;
+  dataStatus: string | null;
+};
+
+function resolveMlMidPriceNearMarketEligibility(
+  args: MlMidPriceNearMarketArgs,
+  minOdds: number,
+  maxOdds: number,
+): boolean {
+  return (
+    !args.blocked &&
+    (args.side === "home" || args.side === "away") &&
+    args.edgePct !== null &&
+    Number.isFinite(args.edgePct) &&
+    args.edgePct >= ML_MID_PRICE_NEAR_MARKET_LEAN_MIN_EDGE_PCT &&
+    args.edgePct < ML_MID_PRICE_NEAR_MARKET_LEAN_MAX_EDGE_PCT_EXCLUSIVE &&
+    args.oddsAmerican !== null &&
+    Number.isFinite(args.oddsAmerican) &&
+    args.oddsAmerican >= minOdds &&
+    args.oddsAmerican <= maxOdds &&
+    args.lineDirection !== "against_pick" &&
+    !args.publicSplitConflict &&
+    (args.sameSideProjectionGap === null || args.sameSideProjectionGap >= 0) &&
+    args.dataStatus !== "incomplete_missing_required_data"
+  );
+}
+
+export function resolveMlMidPriceEstablishedPriceBestAngle(
+  args: MlMidPriceNearMarketArgs,
+): { bestAngle: boolean; reason: string | null } {
+  const qualified = resolveMlMidPriceNearMarketEligibility(
+    args,
+    ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_MIN_ODDS,
+    ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_MAX_ODDS,
+  );
+  return {
+    bestAngle: qualified,
+    reason: qualified ? ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID : null,
+  };
+}
+
+export function resolveMlMidPriceNearMarketLean(
+  args: MlMidPriceNearMarketArgs,
+): { lean: boolean; reason: string | null } {
+  const qualified =
+    resolveMlMidPriceNearMarketEligibility(
+      args,
+      ML_MID_PRICE_NEAR_MARKET_LEAN_MIN_ODDS,
+      ML_MID_PRICE_NEAR_MARKET_LEAN_MAX_ODDS,
+    );
+  return {
+    lean: qualified,
+    reason: qualified ? ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID : null,
   };
 }
 
@@ -2081,6 +2157,9 @@ function buildMlRecord(
     !mlNoBet &&
     mlInversionGrade.actionable;
   const mlPublicPlayGrade = readPublicPlayGrade(sp.ml_play_grade);
+  const mlDataStatus = readStringOrNull(
+    readRecordOrNull(sp.mlb_data_completeness)?.status,
+  );
   const mlMarketAwareCorrectedGrade = mlMarketSideCorrected
     ? resolveMlbMarketAwareCorrectedPlayGrade({
         market: "moneyline",
@@ -2114,10 +2193,31 @@ function buildMlRecord(
     lineDirection: finalMlLineDirection,
     publicSplitConflict: finalMlPublicSplitConflict,
   });
+  const mlMidPriceEstablishedPriceBestAngle =
+    resolveMlMidPriceEstablishedPriceBestAngle({
+      blocked:
+        mlNoBet ||
+        mlFlipped ||
+        mlPickCalibrated ||
+        mlMarketSideCorrected ||
+        mlCleanTightEdgeBestAngle.bestAngle ||
+        mlTightMarketPriceBestAngle.bestAngle,
+      side: finalMlPick,
+      edgePct: finalMlEdge,
+      oddsAmerican: finalMlOdds,
+      sameSideProjectionGap: mlSameSideProjectionGap,
+      lineDirection: finalMlLineDirection,
+      publicSplitConflict: finalMlPublicSplitConflict,
+      dataStatus: mlDataStatus,
+    });
   const mlCalibratedBestAngle =
-    mlCleanTightEdgeBestAngle.bestAngle || mlTightMarketPriceBestAngle.bestAngle;
+    mlCleanTightEdgeBestAngle.bestAngle ||
+    mlTightMarketPriceBestAngle.bestAngle ||
+    mlMidPriceEstablishedPriceBestAngle.bestAngle;
   const mlCleanTightEdgePromoted = !mlBest.bestAngle && mlCleanTightEdgeBestAngle.bestAngle;
   const mlTightMarketPricePromoted = !mlBest.bestAngle && mlTightMarketPriceBestAngle.bestAngle;
+  const mlMidPriceEstablishedPricePromoted =
+    !mlBest.bestAngle && mlMidPriceEstablishedPriceBestAngle.bestAngle;
   const mlDemotedBroadBestAngle = mlBest.bestAngle && !mlCalibratedBestAngle;
   const trackedMlBestAngle =
     mlMarketAwareCorrectedGrade !== null
@@ -2141,6 +2241,21 @@ function buildMlRecord(
     !gateEvNegative(finalMlModelProb, finalMlOdds) &&
     !finalMlPublicSplitConflict &&
     (mlSameSideProjectionGap === null || mlSameSideProjectionGap >= 0);
+  const mlMidPriceNearMarketLean = resolveMlMidPriceNearMarketLean({
+    blocked:
+      trackedMlBestAngle ||
+      mlNoBet ||
+      mlFlipped ||
+      mlPickCalibrated ||
+      mlMarketSideCorrected,
+    side: finalMlPick,
+    edgePct: finalMlEdge,
+    oddsAmerican: finalMlOdds,
+    sameSideProjectionGap: mlSameSideProjectionGap,
+    lineDirection: finalMlLineDirection,
+    publicSplitConflict: finalMlPublicSplitConflict,
+    dataStatus: mlDataStatus,
+  });
   const trackedMlPublicPlayGrade =
     mlPublicPlayGrade === "provisional"
       ? "provisional"
@@ -2148,7 +2263,7 @@ function buildMlRecord(
         ? null
         : trackedMlBestAngle
           ? "best_angle"
-          : mlLeanEligible
+          : mlLeanEligible || mlMidPriceNearMarketLean.lean
             ? "lean"
             : mlPublicPlayGrade !== null && finalMlEdge !== null && finalMlEdge >= 0
               ? "market_aligned"
@@ -2237,7 +2352,11 @@ function buildMlRecord(
             ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID
             : mlTightMarketPricePromoted
               ? ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID
-              : trackedMlPublicPlayGrade === "lean"
+              : mlMidPriceEstablishedPricePromoted
+                ? ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID
+              : mlMidPriceNearMarketLean.lean
+                ? ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID
+                : trackedMlPublicPlayGrade === "lean"
                 ? ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID
                 : null,
         final_side: finalMlPick,
@@ -2256,6 +2375,11 @@ function buildMlRecord(
         clean_tight_edge_promotion_rule_id: mlCleanTightEdgePromoted ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID : null,
         tight_market_price_promotion: mlTightMarketPricePromoted,
         tight_market_price_promotion_rule_id: mlTightMarketPricePromoted ? ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID : null,
+        mid_price_established_price_promotion: mlMidPriceEstablishedPricePromoted,
+        mid_price_established_price_promotion_rule_id:
+          mlMidPriceEstablishedPricePromoted
+            ? ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID
+            : null,
         broad_best_angle_demoted_by_recalibration: mlDemotedBroadBestAngle,
         final_best_angle: trackedMlBestAngle,
       },
@@ -2296,6 +2420,46 @@ function buildMlRecord(
         validation_note:
           "MLB recalibration through 2026-07-19: recently graded market-aware corrected Moneyline Best Angles went 4-4, so v4 caps every corrected Moneyline at Market Aligned. The replacement clean tight-market-price cohort replayed 31-9 across three chronological windows.",
       },
+      ml_mid_price_near_market_lean_promotion: mlMidPriceNearMarketLean.lean
+        ? {
+            rule_id: ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID,
+            action: "promote_to_lean",
+            edge_pct: finalMlEdge,
+            min_edge_pct: ML_MID_PRICE_NEAR_MARKET_LEAN_MIN_EDGE_PCT,
+            max_edge_pct_exclusive: ML_MID_PRICE_NEAR_MARKET_LEAN_MAX_EDGE_PCT_EXCLUSIVE,
+            odds_american: finalMlOdds,
+            min_odds_inclusive: ML_MID_PRICE_NEAR_MARKET_LEAN_MIN_ODDS,
+            max_odds_inclusive: ML_MID_PRICE_NEAR_MARKET_LEAN_MAX_ODDS,
+            same_side_projection_gap: mlSameSideProjectionGap,
+            line_direction: finalMlLineDirection,
+            public_split_conflict: finalMlPublicSplitConflict,
+            data_status: mlDataStatus,
+            validation_note:
+              "Full comparable mid-price sleeve at -130..-121: Moneyline Leans went 3-2 in development and 3-2 in the 2026-07-20..2026-07-24 locked holdout.",
+          }
+        : null,
+      ml_mid_price_established_price_best_angle_promotion:
+        mlMidPriceEstablishedPricePromoted
+          ? {
+              rule_id: ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID,
+              action: "promote_to_best_angle",
+              edge_pct: finalMlEdge,
+              min_edge_pct: ML_MID_PRICE_NEAR_MARKET_LEAN_MIN_EDGE_PCT,
+              max_edge_pct_exclusive:
+                ML_MID_PRICE_NEAR_MARKET_LEAN_MAX_EDGE_PCT_EXCLUSIVE,
+              odds_american: finalMlOdds,
+              min_odds_inclusive:
+                ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_MIN_ODDS,
+              max_odds_inclusive:
+                ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_MAX_ODDS,
+              same_side_projection_gap: mlSameSideProjectionGap,
+              line_direction: finalMlLineDirection,
+              public_split_conflict: finalMlPublicSplitConflict,
+              data_status: mlDataStatus,
+              validation_note:
+                "Full comparable mid-price sleeve at -145..-131: 7-0 in development and 4-2 in the 2026-07-20..2026-07-24 locked holdout.",
+            }
+          : null,
       ml_clean_tight_edge_best_angle_promotion: mlCleanTightEdgePromoted
         ? {
             rule_id: ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID,
