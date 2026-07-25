@@ -165,6 +165,8 @@ function decisionRule(row: Row): string {
       row.snapshot_json?.ml_inversion_grade_resolution?.rule_id ??
       row.snapshot_json?.ml_clean_tight_edge_best_angle_promotion?.rule_id ??
       row.snapshot_json?.ml_tight_market_price_best_angle_promotion?.rule_id ??
+      row.snapshot_json?.ml_mid_price_established_price_best_angle_promotion?.rule_id ??
+      row.snapshot_json?.ml_mid_price_near_market_lean_promotion?.rule_id ??
       row.snapshot_json?.total_validated_lean?.rule_id ??
       row.snapshot_json?.total_clean_confirmed_best_angle_promotion?.rule_id ??
       "unattributed",

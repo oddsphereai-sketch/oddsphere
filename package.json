@@ -30,6 +30,7 @@
     "learning-lab:mlb-truthful-edge-audit": "tsx --env-file=.env.local scripts/mlb-truthful-edge-audit.ts",
     "audit:daily-edge": "tsx --env-file=.env.local scripts/operator/audit-daily-edge-integrity.ts",
     "audit:mlb-unified-candidate": "tsx --env-file=.env.local scripts/operator/audit-mlb-unified-candidate.ts",
+    "audit:mlb-dynamic-price-r8": "tsx --env-file=.env.local scripts/operator/audit-mlb-dynamic-price-r8.ts",
     "test:mlb-official-lineups": "tsx --env-file=.env.local scripts/test-mlb-official-lineup-service.ts",
     "audit:slate-visibility": "tsx --env-file=.env.local scripts/operator/audit-slate-visibility.ts",
     "audit:mlb-workload-replay": "tsx --env-file=.env.local scripts/operator/mlb-workload-pitching-replay.ts",
