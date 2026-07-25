@@ -14,9 +14,9 @@ import { resolveFirstInningModelVersion } from "./firstInningModelVersion";
 export type MlbModelLayerMarket = "moneyline" | "total" | "first_inning";
 
 export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v2";
-export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v5_2026_07_25";
-export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_07_25_r5";
-export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v7_2026_07_25";
+export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v6_2026_07_25";
+export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_07_25_r6";
+export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v8_2026_07_25";
 
 export const MLB_MODEL_LAYER_VERSION_IDS = {
   projection_core: "mlb_projection_core_v2_2_baseline_2026_07_08",
@@ -25,7 +25,7 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   total_probability_head: "mlb_total_market_read_k04_cap8_thin_gap_guard_2026_07_11",
   first_inning_probability_head: "mlb_first_inning_fi_v2_signed_edge_price_gate_2026_07_11",
   market_calibration_policy: "mlb_model_market_calibration_baseline_2026_07_08",
-  grade_policy: "mlb_public_grade_policy_v7_ml_lean_ev_coherence_2026_07_25",
+  grade_policy: "mlb_public_grade_policy_v8_writer_reader_decision_coherence_2026_07_25",
   correction_policy: "mlb_prediction_corrections_v6_inversion_reader_coherence_2026_07_24",
   tracking_contract: "member_facing_lock_v2_writer_authority",
 } as const;

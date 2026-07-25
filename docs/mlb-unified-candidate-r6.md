@@ -1,11 +1,12 @@
-# MLB unified Daily Edge r5 release decision
+# MLB unified Daily Edge r6 release decision
 
-Decision release: `mlb_daily_edge_decision_2026_07_25_r5`
+Decision release: `mlb_daily_edge_decision_2026_07_25_r6`
 
-This release preserves the r4 projection and probability heads and repairs one
-moneyline grade-path contradiction: a generic Lean must have non-negative
-expected value at its stored price. It does not apply that gate to separately
-validated promotion sleeves.
+This release preserves the r4 projection and probability heads and repairs two
+moneyline grade-path contradictions: a generic Lean must have non-negative
+expected value at its stored price, and the reader must honor the writer's
+explicit `decision_pipeline.board_action` when a legacy grade field is null.
+It does not apply the EV gate to separately validated promotion sleeves.
 
 ## Authoritative path
 
@@ -20,15 +21,18 @@ validated promotion sleeves.
 
 ## Release policy
 
-`r4` remains the rollback baseline. `r5` changes only generic moneyline Lean
-eligibility and its audit stamp. Projection, probability, side-selection,
-totals, first-inning, writer, lease, and reader behavior are unchanged.
+`r4` remains the pre-change rollback baseline; r5 is the intermediate writer
+release. `r6` contains the r5 generic moneyline Lean eligibility repair plus
+reader/tracking decision coherence. Projection, probability, side-selection,
+totals, first-inning, writer ownership, and lease behavior are unchanged.
 
 ### Moneyline
 
 - Keep the current probability head.
 - Generic Leans require non-negative expected value at their stored price and
   receive rule stamp `ml_generic_lean_positive_ev_v1_2026_07_25`.
+- A stored `board_action=no_play` is rendered non-actionable even if an older
+  nullable grade field would otherwise make the reader rebuild a Lean.
 - Evaluate genuine final-side inversions, tight-market-price Best Angles, and
   ordinary Moneyline grades as three separate rule families.
 - The 60%+ probability band remains a shadow recalibration target; it must not
@@ -52,8 +56,8 @@ totals, first-inning, writer, lease, and reader behavior are unchanged.
 
 ## Evidence interpretation
 
-- Exact `r5` performance begins at zero and is reported only from rows stamped
-  `r5`. Historical r4 results are never relabeled.
+- Exact `r6` performance begins at zero and is reported only from rows stamped
+  `r6`. Historical r4/r5 results are never relabeled.
 - Broader probability-head evidence may include earlier decision releases only
   when the active probability-head stamp is identical; it is labeled
   current-head evidence, never exact-current evidence.
@@ -92,7 +96,7 @@ regime instability:
   then -2.388 paired units in the week of July 20.
 - Mean-side selector: mixed and small in the current-head period.
 
-Accordingly, no totals flip family is authorized as an automatic bet in `r5`.
+Accordingly, no totals flip family is authorized as an automatic bet in `r6`.
 Correction triggers remain stand-down evidence only.
 
 ## Paired board impact
@@ -108,6 +112,9 @@ promotion rather than a new data-mined promotion:
   +24.2% ROI.
 - Current live-slate dry run: 3 moneyline actions become 2; one negative-EV
   generic Lean is demoted and two tight-price Best Angles remain.
+- Reader coherence removes one additional phantom CIN-STL Lean that the writer
+  already marked `board_action=no_play`; tracked ML/total board count does not
+  change because that row was never an official action.
 - Totals board count and every totals decision are unchanged.
 
 ## Required audit
@@ -125,11 +132,11 @@ released totals sleeves without blending those evidence classes.
 ## Validation status
 
 - Implementation and reader/writer coherence tests pass.
-- r5 has no settled exact-release sample before deployment; it must never be
+- r6 has no settled exact-release sample before deployment; it must never be
   presented as a statistically certain profitability guarantee.
 - The changed rule is supported by current-head forward evidence, improves the
   locked-price counterfactual, and restores the model's own negative-EV gate.
-- Unchanged rules retain their separate evidence classifications; r5 does not
+- Unchanged rules retain their separate evidence classifications; r6 does not
   claim that every rule is independently proven.
 - Unattributed historical rows are excluded from current-rule validation.
 - Probability recalibration and new promotions remain shadow-only.
