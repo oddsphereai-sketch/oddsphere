@@ -80,8 +80,8 @@ check(
 check(
   "lineup-watch is scheduled in Vercel cron",
   VERCEL.includes('"/api/cron/lineup-watch"') &&
-    VERCEL.includes('"*/30 13-23 * * *"') &&
-    VERCEL.includes('"*/30 0-3 * * *"'),
+    VERCEL.includes('"13,43 13-23 * * *"') &&
+    VERCEL.includes('"13,43 0-3 * * *"'),
 );
 
 console.log(`\n━━━ Results ━━━\n  ✓ ${pass}    ✗ ${fail}`);
