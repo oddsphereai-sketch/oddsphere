@@ -67,7 +67,7 @@
     },
     {
       "path": "/api/cron/tracking-refresh",
-      "schedule": "10 * * * *"
+      "schedule": "33 * * * *"
     },
     {
       "path": "/api/cron/mlb-player-props-refresh",

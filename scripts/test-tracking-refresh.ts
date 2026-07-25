@@ -81,7 +81,7 @@ const healthCronSource = readFileSync(new URL("../app/api/cron/daily-edge-data-h
 const soccerCronSource = readFileSync(new URL("../app/api/cron/soccer-daily-refresh/route.ts", import.meta.url), "utf8");
 const dailyEdgeShellSource = readFileSync(new URL("../app/lab/components/daily-edge/DailyEdgeShell.tsx", import.meta.url), "utf8");
 const vercelConfig = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as {
-  crons?: Array<{ path?: string }>;
+  crons?: Array<{ path?: string; schedule?: string }>;
 };
 check(
   "MLB grading excludes records that never reached the persisted lock boundary",
@@ -105,6 +105,14 @@ check(
   "hourly tracking excludes soccer by default but keeps the manual override",
   trackingCronSource.includes('const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba"]') &&
     trackingCronSource.includes("overrideSport") && trackingCronSource.includes("[overrideSport]"),
+);
+check(
+  "hourly tracking runs outside the :05 slate-cycle and :13 lineup-watch lease windows",
+  (vercelConfig.crons ?? []).some(
+    (cron) =>
+      cron.path === "/api/cron/tracking-refresh" &&
+      cron.schedule === "33 * * * *",
+  ),
 );
 check(
   "daily health excludes soccer by default but keeps explicit sports override",
