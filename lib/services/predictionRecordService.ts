@@ -397,6 +397,7 @@ export const ML_CLEAN_TIGHT_EDGE_MIN_EDGE_PCT = 0.5;
 export const ML_CLEAN_TIGHT_EDGE_MIN_PRICE_EXCLUSIVE = -220;
 export const ML_CLEAN_TIGHT_EDGE_MAX_ABS_PROJECTION_GAP_EXCLUSIVE = 0.75;
 export const ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID = "ml_tight_market_price_best_angle_v1_2026_07_20";
+export const ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID = "ml_generic_lean_positive_ev_v1_2026_07_25";
 export const ML_TIGHT_MARKET_PRICE_MIN_EDGE_PCT = -1;
 export const ML_TIGHT_MARKET_PRICE_MAX_EDGE_PCT_EXCLUSIVE = 1;
 export const ML_TIGHT_MARKET_PRICE_MIN_ODDS = -160;
@@ -2137,6 +2138,7 @@ function buildMlRecord(
     finalMlEdge >= ML_CLEAN_TIGHT_EDGE_MIN_EDGE_PCT &&
     finalMlOdds !== null &&
     finalMlOdds > ML_CLEAN_TIGHT_EDGE_MIN_PRICE_EXCLUSIVE &&
+    !gateEvNegative(finalMlModelProb, finalMlOdds) &&
     !finalMlPublicSplitConflict &&
     (mlSameSideProjectionGap === null || mlSameSideProjectionGap >= 0);
   const trackedMlPublicPlayGrade =
@@ -2235,7 +2237,9 @@ function buildMlRecord(
             ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID
             : mlTightMarketPricePromoted
               ? ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID
-              : null,
+              : trackedMlPublicPlayGrade === "lean"
+                ? ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID
+                : null,
         final_side: finalMlPick,
         final_side_changed: mlFinalSideChanged,
       },
