@@ -106,6 +106,37 @@ async function main() {
       },
     });
     check("member-facing lock grade wins over the mutable stored fallback", frozenGrade === "lean");
+    const explicitNoPlay = dailyEdgeTest.effectivePredictionRecordPlayGrade({
+      play_grade: null,
+      best_angle: false,
+      snapshot_json: {
+        member_facing_at_lock: { grade: null, play_grade: null },
+        decision_pipeline: {
+          board_action: "no_play",
+          actionable_grade: null,
+        },
+      },
+    });
+    check(
+      "explicit writer no-play cannot be rebuilt as an actionable reader grade",
+      explicitNoPlay === "market_aligned" &&
+        dailyEdgeTest.resolveLockedVerdict(explicitNoPlay, false, false)?.key === "watchlist",
+    );
+    const explicitLean = dailyEdgeTest.effectivePredictionRecordPlayGrade({
+      play_grade: null,
+      best_angle: false,
+      snapshot_json: {
+        member_facing_at_lock: { grade: null, play_grade: null },
+        decision_pipeline: {
+          board_action: "bet",
+          actionable_grade: "lean",
+        },
+      },
+    });
+    check(
+      "explicit writer actionable grade remains authoritative when legacy grade is null",
+      explicitLean === "lean",
+    );
     check(
       "frozen inversion Lean resolves to the public Lean verdict",
       dailyEdgeTest.resolveLockedVerdict(frozenGrade, false, false)?.key === "lean",

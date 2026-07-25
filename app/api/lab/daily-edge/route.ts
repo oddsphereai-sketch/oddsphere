@@ -343,7 +343,21 @@ function effectivePredictionRecordPlayGrade(row: {
   if (memberGrade !== null) return memberGrade;
   const stored = readPublicRecordGrade(row.play_grade);
   if (stored === "best_angle" && row.best_angle === false) return "lean";
-  return stored;
+  if (stored !== null) return stored;
+  const decision = readRecordObject(snapshot?.decision_pipeline);
+  const actionableGrade = readPublicRecordGrade(decision?.actionable_grade);
+  if (
+    decision?.board_action === "bet" &&
+    (actionableGrade === "best_angle" || actionableGrade === "lean")
+  ) {
+    return actionableGrade;
+  }
+  // A null legacy play_grade does not grant the reader permission to rebuild
+  // a stronger tier. The canonical writer explicitly records board_action for
+  // every current MLB row; map its no_play decision to the non-actionable
+  // Watchlist presentation so the card and public tracking cannot disagree.
+  if (decision?.board_action === "no_play") return "market_aligned";
+  return null;
 }
 
 function resolveLockedVerdict(
