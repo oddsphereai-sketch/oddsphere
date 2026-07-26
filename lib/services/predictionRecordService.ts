@@ -848,20 +848,25 @@ function freshnessReferenceMsForGame(game: GameRow, slateDate: string): number {
  * `splits_consensus` since it carries only a no-vig line, never odds.
  * Returns null when nothing matches.
  */
-function pickPriorityOdds(
+function pickPriorityLineRow(
   rows: ReadonlyArray<LineRowForOdds>,
   marketType: "moneyline" | "total",
   side: string,
-): number | null {
+  nowMs = Date.now(),
+): LineRowForOdds | null {
   const candidates = rows.filter(
     (r) =>
       r.market_type === marketType &&
       r.side === side &&
-      r.odds_american !== null,
+      r.odds_american !== null &&
+      !isBlockedSportsbook(r.sportsbook),
+  );
+  const freshCandidates = candidates.filter((r) =>
+    isFreshLockPriceSource(r.fetched_at, nowMs),
   );
   for (const book of BOOK_PRIORITY) {
-    const hit = candidates.find((r) => r.sportsbook === book);
-    if (hit) return hit.odds_american;
+    const hit = freshCandidates.find((r) => r.sportsbook === book);
+    if (hit) return hit;
   }
   return null;
 }
@@ -1147,10 +1152,12 @@ export function buildLineMovementSnapshot(
   signals: ReadonlyArray<PublicSplitsRow>,
   market: "moneyline" | "total",
   pickedSide: string | null,
+  freshnessReferenceMs = Date.now(),
 ): Record<string, unknown> | null {
   if (pickedSide === null) return null;
   const opener = pickPriorityOpener(openers, market, pickedSide);
-  const currentOdds = pickPriorityOdds(currentLines, market, pickedSide);
+  const currentRow = pickPriorityLineRow(currentLines, market, pickedSide, freshnessReferenceMs);
+  const currentOdds = currentRow?.odds_american ?? null;
   const openImplied = americanToImpliedProb(opener?.odds_american ?? null);
   const currentImplied = americanToImpliedProb(currentOdds);
 
@@ -1169,10 +1176,7 @@ export function buildLineMovementSnapshot(
   let totalCurrent: number | null = null;
   if (market === "total" && opener !== null) {
     totalOpen = opener.line_value ?? null;
-    const cur = currentLines.find(
-      (r) => r.market_type === "total" && r.side === pickedSide,
-    );
-    totalCurrent = (cur as { line_value?: number | null } | undefined)?.line_value ?? null;
+    totalCurrent = currentRow?.line_value ?? null;
   }
 
   // Steam / RLM signals from sharp_signals (per-side, picked side).
@@ -1957,6 +1961,7 @@ function buildMlRecord(
   openersForGame: LineHistoryOpenerRow[],
   currentLinesForGame: LineRowForOdds[],
   sourceAwareSplitsForGame: SourceAwareSplitObservationRow[] = [],
+  freshnessReferenceMs = Date.now(),
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
@@ -2002,6 +2007,7 @@ function buildMlRecord(
   // the same line_movement snapshot is reused below.
   const mlLineMovement = buildLineMovementSnapshot(
     openersForGame, currentLinesForGame, signalsForGame, "moneyline", pred.predicted_ml_winner,
+    freshnessReferenceMs,
   );
   const mlBaseBestAngleEligible = readBoolish(sp.ml_best_angle_eligible);
   // This is tracking/display truth, not legacy market-grade influence. Even
@@ -2068,7 +2074,7 @@ function buildMlRecord(
   let finalMlEdge = mlPickCalibrated ? mlPickCalibration.calibratedEdgePp : baseMlEdge;
   let finalMlLineMovement =
     finalMlPick !== pred.predicted_ml_winner
-      ? buildLineMovementSnapshot(openersForGame, currentLinesForGame, signalsForGame, "moneyline", finalMlPick)
+      ? buildLineMovementSnapshot(openersForGame, currentLinesForGame, signalsForGame, "moneyline", finalMlPick, freshnessReferenceMs)
       : mlLineMovement;
   let finalMlLineDirection = readLineDirection(finalMlLineMovement);
   let finalMlPublicSplitConflict = hasOpposingPublicMoneyConflict(signalsForGame, "moneyline", finalMlPick);
@@ -2099,6 +2105,7 @@ function buildMlRecord(
     finalMlEdge = mlMarketSideCorrection.correctedEdgePp;
     finalMlLineMovement = buildLineMovementSnapshot(
       openersForGame, currentLinesForGame, signalsForGame, "moneyline", finalMlPick,
+      freshnessReferenceMs,
     );
     finalMlLineDirection = readLineDirection(finalMlLineMovement);
     finalMlPublicSplitConflict = hasOpposingPublicMoneyConflict(signalsForGame, "moneyline", finalMlPick);
@@ -2612,6 +2619,7 @@ function buildOuRecord(
   openersForGame: LineHistoryOpenerRow[],
   currentLinesForGame: LineRowForOdds[],
   sourceAwareSplitsForGame: SourceAwareSplitObservationRow[] = [],
+  freshnessReferenceMs = Date.now(),
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
@@ -2660,6 +2668,7 @@ function buildOuRecord(
   // MLB-P0 — same Best Angle confirmation resolution as ML.
   const ouLineMovement = buildLineMovementSnapshot(
     openersForGame, currentLinesForGame, signalsForGame, "total", pred.predicted_ou_side,
+    freshnessReferenceMs,
   );
   const ouBaseBestAngleEligible = readBoolish(sp.ou_best_angle_eligible);
   const initialOuPublicSplitConflict = hasOpposingPublicMoneyConflict(
@@ -2808,7 +2817,7 @@ function buildOuRecord(
   let finalOuEdge = ouFlipped || ouMarketFlipped ? null : ouEdgePp;
   let finalOuLineMovement =
     finalOuPick !== pred.predicted_ou_side
-      ? buildLineMovementSnapshot(openersForGame, currentLinesForGame, signalsForGame, "total", finalOuPick)
+      ? buildLineMovementSnapshot(openersForGame, currentLinesForGame, signalsForGame, "total", finalOuPick, freshnessReferenceMs)
       : ouLineMovement;
   let ouLineDirection = readLineDirection(finalOuLineMovement);
   const ouMarketSideCorrection = !ouFlipped && !ouMarketFlipped && !ouDivergenceStandDown
@@ -2844,6 +2853,7 @@ function buildOuRecord(
     finalOuBetLine = pricedTotalLineForSide(finalOuPick) ?? finalOuBetLine;
     finalOuLineMovement = buildLineMovementSnapshot(
       openersForGame, currentLinesForGame, signalsForGame, "total", finalOuPick,
+      freshnessReferenceMs,
     );
     ouLineDirection = readLineDirection(finalOuLineMovement);
   }
@@ -2883,6 +2893,7 @@ function buildOuRecord(
     finalOuBetLine = pricedTotalLineForSide(finalOuPick) ?? finalOuBetLine;
     finalOuLineMovement = buildLineMovementSnapshot(
       openersForGame, currentLinesForGame, signalsForGame, "total", finalOuPick,
+      freshnessReferenceMs,
     );
     ouLineDirection = readLineDirection(finalOuLineMovement);
   }
@@ -3661,8 +3672,8 @@ export function buildPredictionRecordsFromSlate(args: {
     const currentLines = (args.currentLinesByGameId?.get(g.id) ?? []) as LineRowForOdds[];
     const sourceAwareSplits = (args.sourceAwareSplitsByGameId?.get(g.id) ?? []) as SourceAwareSplitObservationRow[];
     const freshnessReferenceMs = freshnessReferenceMsForGame(g, args.slateDate);
-    const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines, sourceAwareSplits);
-    const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines, sourceAwareSplits);
+    const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines, sourceAwareSplits, freshnessReferenceMs);
+    const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines, sourceAwareSplits, freshnessReferenceMs);
     const fi = buildFiRecord(
       pred,
       g,
@@ -4146,6 +4157,22 @@ export async function createPredictionRecords(
     }
     const proposedKey =
       `${proposedRecord.game_id}::${proposedRecord.market}::${proposedRecord.model_version ?? ""}::${proposedRecord.slate_date}`;
+    if (lockedKeys.has(proposedKey) || (preserveExistingUnlocked && existingKeys.has(proposedKey))) {
+      result.skippedExisting++;
+      continue;
+    }
+    if (
+      (proposedRecord.market === "moneyline" || proposedRecord.market === "total") &&
+      proposedRecord.odds_american === null
+    ) {
+      result.skippedExisting++;
+      result.errors.push({
+        game_id: proposedRecord.game_id,
+        market: proposedRecord.market,
+        reason: "fresh trusted price unavailable; preserved prior authoritative record",
+      });
+      continue;
+    }
     const rec = withPredictionGradeHistory(
       preserveTrackingDisplayGradeOverride(
         proposedRecord,
@@ -4159,10 +4186,6 @@ export async function createPredictionRecords(
       proposed: rec,
       existing: existingMarketRecordByKey.get(key),
     })) {
-      result.skippedExisting++;
-      continue;
-    }
-    if (lockedKeys.has(key) || (preserveExistingUnlocked && existingKeys.has(key))) {
       result.skippedExisting++;
       continue;
     }

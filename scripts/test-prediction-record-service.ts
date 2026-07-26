@@ -1835,6 +1835,33 @@ check("impliedProb(+100) = 0.5", americanToImpliedProb(100) === 0.5);
   check("line_movement: opener -130 → current -120 → against_pick", snap.direction === "against_pick");
 }
 {
+  // A stale high-priority book must not override a fresh trusted book. The
+  // prediction price selector already enforced this freshness contract; line
+  // movement must use the same current reference or grades can contradict the
+  // displayed/stored price.
+  const openers = [
+    { game_id: 1, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -130, line_value: null, recorded_at: "2026-06-07T08:00:00Z" },
+  ];
+  const current = [
+    { game_id: 1, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -120, line_value: null, fetched_at: "2026-01-01T00:00:00Z" },
+    { game_id: 1, market_type: "moneyline", side: "home", sportsbook: "ballybet", odds_american: -150, line_value: null, fetched_at: new Date().toISOString() },
+  ];
+  const snap = buildLineMovementSnapshot(openers, current, [], "moneyline", "home") as any;
+  check("line_movement: stale priority price is ignored", snap.current_odds_american === -150);
+  check("line_movement: fresh trusted price controls direction", snap.direction === "toward_pick");
+}
+{
+  const openers = [
+    { game_id: 1, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -110, line_value: null, recorded_at: "2026-06-07T08:00:00Z" },
+  ];
+  const current = [
+    { game_id: 1, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -120, line_value: null, fetched_at: "2026-01-01T00:00:00Z" },
+  ];
+  const snap = buildLineMovementSnapshot(openers, current, [], "moneyline", "home") as any;
+  check("line_movement: stale-only price is unavailable", snap.current_odds_american === null);
+  check("line_movement: stale-only direction is unknown", snap.direction === "unknown");
+}
+{
   // Steam + RLM on picked side
   const sigs = [
     { market_type: "moneyline", side: "home", public_money_pct: null, public_betting_pct: null, has_steam_move: true, has_reverse_line_movement: true, rlm_direction: "home_to_away", signal_strength: "strong", computed_at: null },
