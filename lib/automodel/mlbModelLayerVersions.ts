@@ -15,7 +15,7 @@ export type MlbModelLayerMarket = "moneyline" | "total" | "first_inning";
 
 export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v2";
 export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v8_2026_07_25";
-export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_07_25_r8";
+export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_07_26_r9";
 export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v10_2026_07_25";
 
 export const MLB_MODEL_LAYER_VERSION_IDS = {
@@ -27,7 +27,7 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   market_calibration_policy: "mlb_model_market_calibration_baseline_2026_07_08",
   grade_policy: "mlb_public_grade_policy_v10_mid_price_ml_ladder_2026_07_25",
   correction_policy: "mlb_prediction_corrections_v6_inversion_reader_coherence_2026_07_24",
-  tracking_contract: "member_facing_lock_v2_writer_authority",
+  tracking_contract: "member_facing_lock_v3_refresh_coherent_writer_authority_2026_07_26",
 } as const;
 
 const ACTIVE_PROBABILITY_HEAD_BY_MARKET: Record<MlbModelLayerMarket, string> = {

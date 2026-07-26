@@ -228,6 +228,24 @@ check(
   sweepSource.includes("if (!lockOnly)") &&
     sweepSource.indexOf("if (lockOnly)") < sweepSource.indexOf('sport === "mlb" && marketIntelligenceV2 === null'),
 );
+check(
+  "unlocked pregame refresh republishes coherent member records and snapshot",
+  sweepSource.includes("member_record_sync") &&
+    sweepSource.includes('source: "pregame_sweep_refresh"') &&
+    sweepSource.includes("createPredictionRecords({"),
+);
+const lineupWatchSource = readFileSync("app/api/cron/lineup-watch/route.ts", "utf8");
+check(
+  "lineup watch synchronizes member records after its automodel write",
+  lineupWatchSource.includes("createPredictionRecords({") &&
+    lineupWatchSource.indexOf("createPredictionRecords({") >
+      lineupWatchSource.indexOf("generatePredictionsForSlate("),
+);
+check(
+  "lineup watch republishes the Daily Edge response snapshot after record sync",
+  lineupWatchSource.includes('source: "lineup_watch"') &&
+    lineupWatchSource.includes("response_snapshot: responseSnapshot"),
+);
 const dailyEdgeSource = readFileSync("app/api/lab/daily-edge/route.ts", "utf8");
 check(
   "Daily Edge uses a stored prediction record as writer authority before lock",

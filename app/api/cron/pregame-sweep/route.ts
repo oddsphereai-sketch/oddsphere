@@ -936,6 +936,59 @@ export async function GET(request: Request) {
         grades.gamePredictionsUpdated + grades.propPredictionsUpdated;
       records += gradeTouched;
 
+      // Keep the member-facing writer and fast reader snapshot in the same
+      // leased transaction sequence as the refreshed prices/predictions.
+      // Locked rows remain immutable inside createPredictionRecords; only
+      // still-unlocked records are replaced with the coherent current tuple.
+      let memberRecordSync: {
+        proposed: number;
+        written: number;
+        skipped_existing: number;
+        errors: unknown[];
+      } | null = null;
+      let responseSnapshot:
+        | Awaited<ReturnType<typeof refreshDailyEdgeResponseSnapshot>>
+        | null = null;
+      const memberPublishErrors: string[] = [];
+      if (sport === "mlb") {
+        try {
+          const sync = await createPredictionRecords({
+            sport: "mlb",
+            slateDate: date,
+            launchDay: false,
+            apply: true,
+            supabase,
+          });
+          records += sync.insertedCount;
+          memberRecordSync = {
+            proposed: sync.proposed.length,
+            written: sync.insertedCount,
+            skipped_existing: sync.skippedExisting,
+            errors: sync.errors,
+          };
+          if (sync.errors.length > 0) {
+            memberPublishErrors.push(
+              `prediction-record sync failed: ${JSON.stringify(sync.errors).slice(0, 800)}`,
+            );
+          } else {
+            responseSnapshot = await refreshDailyEdgeResponseSnapshot({
+              sport,
+              date,
+              source: "pregame_sweep_refresh",
+            });
+            if (!responseSnapshot.ok) {
+              memberPublishErrors.push(
+                `daily-edge snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`,
+              );
+            }
+          }
+        } catch (error) {
+          memberPublishErrors.push(
+            `member publish threw: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+
       // R-19 Phase 5a — partial flag fires when any per-game lock errored
       // OR any t60 model pass errored. The cron-handler wrapper consults
       // this to mark the refresh_log row as 'partial' instead of 'success'.
@@ -944,6 +997,7 @@ export async function GET(request: Request) {
         enteringLockModelResult.errors.length > 0 ||
         lockCoherence.errors.length > 0 ||
         staleTrigger.errors.length > 0 ||
+        memberPublishErrors.length > 0 ||
         propsLockSweep.error !== null ||
         (marketIntelligenceV2?.errors.length ?? 0) > 0;
 
@@ -957,6 +1011,7 @@ export async function GET(request: Request) {
               ...lockCoherence.errors,
               ...lockResult.errors,
               ...staleTrigger.errors,
+              ...memberPublishErrors,
               ...(propsLockSweep.error ? [`MLB props lock sweep: ${propsLockSweep.error}`] : []),
               ...(marketIntelligenceV2?.errors ?? []),
             ].slice(0, 5).join(" | ").slice(0, 1500)
@@ -988,6 +1043,8 @@ export async function GET(request: Request) {
           game_lines: gameLines.records_updated,
           sharp_signals: signals.records_updated,
           stale_snapshot_trigger: staleTrigger,
+          member_record_sync: memberRecordSync,
+          response_snapshot: responseSnapshot,
           market_signals: marketTouched,
           market_signals_perMarket: marketSignals.perMarket,
           grades: gradeTouched,

@@ -12,10 +12,13 @@
 import { cronHandlerPerSport } from "@/lib/cron/runCron";
 import { parseDateFromUrl } from "@/lib/cron/dates";
 import { sportsInSeasonToday } from "@/lib/cron/seasons";
+import { supabase } from "@/lib/db/supabase";
 import { linesService } from "@/lib/services/linesService";
 import { lineupService } from "@/lib/services/lineupService";
 import { predictionService } from "@/lib/services/predictionService";
 import { generatePredictionsForSlate } from "@/lib/services/automodelService";
+import { createPredictionRecords } from "@/lib/services/predictionRecordService";
+import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { runFirstInningCycle } from "@/scripts/operator/backfill-first-inning-stats";
 import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 
@@ -49,6 +52,17 @@ export async function GET(request: Request) {
           }
         | { skipped: true; reason: string }
         | null = null;
+      let memberRecords:
+        | {
+            proposed: number;
+            written: number;
+            skipped_existing: number;
+            errors: unknown[];
+          }
+        | null = null;
+      let responseSnapshot:
+        | Awaited<ReturnType<typeof refreshDailyEdgeResponseSnapshot>>
+        | null = null;
 
       if (sport === "mlb") {
         gameLines = await linesService.refreshGameLinesV2(sport, date);
@@ -79,6 +93,27 @@ export async function GET(request: Request) {
             inserted,
             updated,
           };
+          const sync = await createPredictionRecords({
+            sport: "mlb",
+            slateDate: date,
+            launchDay: false,
+            apply: true,
+            supabase,
+          });
+          records += sync.insertedCount;
+          memberRecords = {
+            proposed: sync.proposed.length,
+            written: sync.insertedCount,
+            skipped_existing: sync.skippedExisting,
+            errors: sync.errors,
+          };
+          if (sync.errors.length === 0) {
+            responseSnapshot = await refreshDailyEdgeResponseSnapshot({
+              sport,
+              date,
+              source: "lineup_watch",
+            });
+          }
         } else {
           automodel = {
             skipped: true,
@@ -100,6 +135,15 @@ export async function GET(request: Request) {
       return {
         records_updated: records,
         api_calls_made: apiCalls,
+        partial:
+          (memberRecords?.errors.length ?? 0) > 0 ||
+          responseSnapshot?.ok === false,
+        error_message:
+          (memberRecords?.errors.length ?? 0) > 0
+            ? `prediction-record sync failed: ${JSON.stringify(memberRecords?.errors).slice(0, 1000)}`
+            : responseSnapshot?.ok === false
+              ? `daily-edge snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`
+              : null,
         details: {
           lineups: lineups.records_updated,
           game_lines: gameLines?.records_updated ?? null,
@@ -111,6 +155,8 @@ export async function GET(request: Request) {
             mlb_api_calls: firstInning.mlb_api_calls,
           },
           automodel,
+          member_records: memberRecords,
+          response_snapshot: responseSnapshot,
           prop_predictions: propPreds.records_updated,
         },
       };
