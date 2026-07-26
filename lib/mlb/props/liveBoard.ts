@@ -931,7 +931,10 @@ function buildDashboardRows(args: {
     });
   }
   const deduped = dedupeRows(rows);
-  return applyHitterSignalDiscipline(applyBestPriceSignalDiscipline(applyHomeRunActionablePromotions(deduped)));
+  const priceDisciplined = applyBestPriceSignalDiscipline(deduped);
+  const concentrationDisciplined = applyHitterSignalDiscipline(priceDisciplined);
+  const underPromoted = applyValidatedUnderActionablePromotions(concentrationDisciplined);
+  return applyValidatedHomeRunActionablePromotions(underPromoted);
 }
 
 const HITTER_LEAN_ELIGIBLE_MARKETS = new Set([
@@ -959,38 +962,14 @@ const HITTER_LONGSHOT_VALUE_MARKETS = new Set([
 const DEFAULT_HITTER_LEAN_MIN_AMERICAN_ODDS = -250;
 const DEFAULT_HITTER_LEANS_PER_PLAYER = 2;
 const DEFAULT_HITTER_LEANS_PER_GAME = 12;
-
-function applyHomeRunActionablePromotions(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
-  const eligible = rows.filter((row) =>
-    row.market === "batter_home_runs"
-    && row.side === "over"
-    && row.playGrade === "WATCHLIST"
-    && row.finalProbability !== null
-    && row.finalProbability >= 0.15
-    && row.finalProbability <= 0.18
-    && (row.expectedValue ?? 0) > 0
-    && row.confidence >= 0.62
-    && assessPropPrice(row.odds).signalEligible,
-  );
-  const bestOfferIds = new Set<string>();
-  for (const offers of groupRows(eligible, signalOfferKey).values()) {
-    const [best] = [...offers].sort(comparePropSignals);
-    if (best) bestOfferIds.add(best.id);
-  }
-  const promotedIds = new Set(
-    eligible
-      .filter((row) => bestOfferIds.has(row.id))
-      .sort((a, b) => (b.finalProbability ?? 0) - (a.finalProbability ?? 0) || comparePropSignals(a, b))
-      .map((row) => row.id),
-  );
-  if (!promotedIds.size) return rows;
-  return rows.map((row) => promotedIds.has(row.id) ? {
-    ...row,
-    playGrade: "LEAN",
-    units: 0.25,
-    reasonCodes: uniqueStrings([...row.reasonCodes, "LONGSHOT_VALUE_CONTEXT"]),
-  } : row);
-}
+const HOME_RUN_PROMOTION_DAILY_CAP = 5;
+const HOME_RUN_PROMOTION_MIN_PROJECTION = 0.08;
+const HOME_RUN_PROMOTION_MIN_RECENT_SURVIVAL = 0.18;
+const HOME_RUN_PROMOTION_MIN_MARKET_PROBABILITY = 0.1;
+const HOME_RUN_PROMOTION_MIN_AMERICAN_ODDS = 200;
+const HOME_RUN_PROMOTION_MAX_AMERICAN_ODDS = 650;
+const HOME_RUN_PROJECTION_PRIOR = 0.095;
+const HOME_RUN_PROJECTION_PRIOR_GAMES = 20;
 
 function applyBestPriceSignalDiscipline(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
   const signalRows = rows.filter((row) => row.playGrade === "BEST_ANGLE" || row.playGrade === "LEAN");
@@ -1083,6 +1062,174 @@ function applyHitterSignalDiscipline(rows: PlayerPropPreviewRow[]): PlayerPropPr
       reasonCodes: uniqueStrings([...row.reasonCodes, reasonCode]),
     };
   });
+}
+
+const VALIDATED_UNDER_PROMOTION_POLICIES = {
+  batter_hits: {
+    minimumModelProbability: 0.56,
+    minimumRawEdge: 0.1,
+    minimumFinalEdge: 0.02,
+    minimumExpectedValue: 0.01,
+  },
+  batter_hits_runs_rbis: {
+    line: 1.5,
+    minimumModelProbability: 0.56,
+    minimumRawEdge: 0.08,
+    minimumFinalEdge: 0.02,
+    minimumExpectedValue: 0.01,
+  },
+  batter_runs_scored: {
+    minimumModelProbability: 0.6,
+    minimumRawEdge: 0.08,
+    minimumFinalEdge: 0.02,
+    minimumExpectedValue: 0.01,
+  },
+} as const;
+
+function applyValidatedUnderActionablePromotions(
+  rows: PlayerPropPreviewRow[],
+): PlayerPropPreviewRow[] {
+  const currentSignals = rows.filter((row) =>
+    row.marketFamily !== "pitcher"
+    && (row.playGrade === "BEST_ANGLE" || row.playGrade === "LEAN"));
+  const currentPlayerCounts = new Map<string, number>();
+  const currentHitProductionPlayers = new Set<string>();
+  for (const row of currentSignals) {
+    const playerKey = hitterPlayerKey(row);
+    currentPlayerCounts.set(playerKey, (currentPlayerCounts.get(playerKey) ?? 0) + 1);
+    if (hitterSignalCluster(row.market) === "hit_production") {
+      currentHitProductionPlayers.add(playerKey);
+    }
+  }
+
+  const eligible = rows.filter((row) => {
+    if (row.playGrade !== "WATCHLIST" || row.side !== "under") return false;
+    const policy = VALIDATED_UNDER_PROMOTION_POLICIES[
+      row.market as keyof typeof VALIDATED_UNDER_PROMOTION_POLICIES
+    ];
+    if (!policy) return false;
+    if ("line" in policy && row.line !== policy.line) return false;
+    if (
+      row.modelProbability === null
+      || row.marketProbability === null
+      || row.modelEdge === null
+      || row.expectedValue === null
+    ) return false;
+    const rawEdge = row.modelProbability - row.marketProbability;
+    if (
+      row.modelProbability < policy.minimumModelProbability
+      || rawEdge < policy.minimumRawEdge
+      || row.modelEdge < policy.minimumFinalEdge
+      || row.expectedValue < policy.minimumExpectedValue
+      || !assessPropPrice(row.odds).signalEligible
+    ) return false;
+    const playerKey = hitterPlayerKey(row);
+    if ((currentPlayerCounts.get(playerKey) ?? 0) >= DEFAULT_HITTER_LEANS_PER_PLAYER) return false;
+    if (
+      hitterSignalCluster(row.market) === "hit_production"
+      && currentHitProductionPlayers.has(playerKey)
+    ) return false;
+    return true;
+  });
+
+  const bestOfferIds = new Set<string>();
+  for (const offers of groupRows(eligible, signalOfferKey).values()) {
+    const [best] = [...offers].sort(comparePropSignals);
+    if (best) bestOfferIds.add(best.id);
+  }
+
+  const promotedIds = new Set<string>();
+  const bestOffers = eligible.filter((row) => bestOfferIds.has(row.id));
+  for (const gameRows of groupRows(
+    bestOffers,
+    (row) => row.providerIds?.gameId ?? row.gameStartTime,
+  ).values()) {
+    const [best] = [...gameRows].sort(compareValidatedPromotionCandidates);
+    if (best) promotedIds.add(best.id);
+  }
+  if (!promotedIds.size) return rows;
+
+  return rows.map((row) => promotedIds.has(row.id) ? {
+    ...row,
+    playGrade: "LEAN",
+    units: 0.25,
+    reasonCodes: uniqueStrings([...row.reasonCodes, "VALIDATED_MARKET_PROMOTION"]),
+  } : row);
+}
+
+function applyValidatedHomeRunActionablePromotions(
+  rows: PlayerPropPreviewRow[],
+): PlayerPropPreviewRow[] {
+  const eligible = rows.filter((row) => {
+    if (
+      row.market !== "batter_home_runs"
+      || row.side !== "over"
+      || row.playGrade !== "WATCHLIST"
+      || row.marketProbability === null
+      || row.expectedValue === null
+      || row.marketProbability < HOME_RUN_PROMOTION_MIN_MARKET_PROBABILITY
+      || row.expectedValue < 0
+      || row.odds < HOME_RUN_PROMOTION_MIN_AMERICAN_ODDS
+      || row.odds > HOME_RUN_PROMOTION_MAX_AMERICAN_ODDS
+    ) return false;
+
+    const seasonValues = row.recentForm?.samples?.season.values
+      .filter((value) => Number.isFinite(value)) ?? [];
+    if (seasonValues.length < 10) return false;
+    const seasonMean = averageNumber(seasonValues);
+    const auditProjection = (
+      seasonMean * seasonValues.length
+      + HOME_RUN_PROJECTION_PRIOR * HOME_RUN_PROJECTION_PRIOR_GAMES
+    ) / (seasonValues.length + HOME_RUN_PROJECTION_PRIOR_GAMES);
+    if (auditProjection < HOME_RUN_PROMOTION_MIN_PROJECTION) return false;
+
+    const recentValues = seasonValues.slice(0, 20);
+    const recentSurvival = (
+      recentValues.filter((value) => value > row.line).length
+      + 2 * row.marketProbability
+    ) / (recentValues.length + 2);
+    return recentSurvival >= HOME_RUN_PROMOTION_MIN_RECENT_SURVIVAL;
+  });
+
+  const bestOfferIds = new Set<string>();
+  for (const offers of groupRows(eligible, signalOfferKey).values()) {
+    const [best] = [...offers].sort(comparePropSignals);
+    if (best) bestOfferIds.add(best.id);
+  }
+
+  const promotedIds = new Set(
+    eligible
+      .filter((row) => bestOfferIds.has(row.id))
+      .sort((a, b) =>
+        (b.expectedValue ?? Number.NEGATIVE_INFINITY)
+        - (a.expectedValue ?? Number.NEGATIVE_INFINITY)
+        || comparePropSignals(a, b))
+      .slice(0, HOME_RUN_PROMOTION_DAILY_CAP)
+      .map((row) => row.id),
+  );
+  if (!promotedIds.size) return rows;
+
+  return rows.map((row) => promotedIds.has(row.id) ? {
+    ...row,
+    playGrade: "LEAN",
+    units: 0.25,
+    reasonCodes: uniqueStrings([...row.reasonCodes, "VALIDATED_HOME_RUN_PROMOTION"]),
+  } : row);
+}
+
+function compareValidatedPromotionCandidates(
+  a: PlayerPropPreviewRow,
+  b: PlayerPropPreviewRow,
+): number {
+  return validatedPromotionTier(b.market) - validatedPromotionTier(a.market)
+    || comparePropSignals(a, b);
+}
+
+function validatedPromotionTier(market: string): number {
+  if (market === "batter_hits") return 3;
+  if (market === "batter_hits_runs_rbis") return 2;
+  if (market === "batter_runs_scored") return 1;
+  return 0;
 }
 
 function groupRows<T>(rows: T[], keyFor: (row: T) => string): Map<string, T[]> {
