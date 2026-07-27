@@ -2650,10 +2650,13 @@ console.log("\n━━━ stale unlocked FI cleanup guard ━━━");
 {
   const src = readFileSync("lib/services/predictionRecordService.ts", "utf8");
   check("sync neutralizes stale unlocked FI rows when fresh-data gate stops proposing FI",
-        src.includes("staleUnlockedFiIds") &&
+        src.includes("staleUnlockedFiRows") &&
         src.includes('r.market === "first_inning"') &&
         src.includes('play_grade: "held"') &&
         src.includes('prediction_type: "toss_up"') &&
+        src.includes("model_layer_versions: currentModelLayers") &&
+        src.includes("calibration_version: MLB_PUBLIC_CALIBRATION_VERSION") &&
+        src.includes("stale_unlocked_fi_cleanup") &&
         src.includes("locked rows are never touched"));
 }
 
