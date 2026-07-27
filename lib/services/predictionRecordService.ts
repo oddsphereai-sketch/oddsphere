@@ -4236,13 +4236,15 @@ export async function createPredictionRecords(
   // gate is correctly refusing to create a new actionable FI row. We update
   // instead of deleting because some rows may already have prediction_grades
   // children; locked rows are never touched.
-  const staleUnlockedFiIds = preserveExistingUnlocked ? [] : ((existingLocks ?? []) as Array<{
+  const staleUnlockedFiRows = preserveExistingUnlocked ? [] : ((existingLocks ?? []) as Array<{
     id: number;
     game_id: number;
     market: string;
     model_version: string | null;
     slate_date: string;
     locked_at: string | null;
+    pick: string | null;
+    snapshot_json: Record<string, unknown> | null;
   }>)
     .filter((r) =>
       r.locked_at === null &&
@@ -4250,8 +4252,13 @@ export async function createPredictionRecords(
       r.market === "first_inning" &&
       !proposedKeys.has(`${r.game_id}::${r.market}::${r.model_version ?? ""}::${r.slate_date}`),
     )
-    .map((r) => r.id);
-  if (staleUnlockedFiIds.length > 0) {
+  for (const staleRow of staleUnlockedFiRows) {
+    const previousSnapshot = staleRow.snapshot_json ?? {};
+    const previousDecisionPipeline =
+      readRecordOrNull(previousSnapshot.decision_pipeline) ?? {};
+    const previousMemberFacing =
+      readRecordOrNull(previousSnapshot.member_facing_at_lock) ?? {};
+    const currentModelLayers = buildMlbModelLayerVersions("first_inning");
     const { error: neutralizeErr } = await supabase
       .from("prediction_records")
       .update({
@@ -4264,11 +4271,50 @@ export async function createPredictionRecords(
         prediction_type: "toss_up",
         held: true,
         hold_reason: "fi_fresh_data_gate_no_current_actionable_prediction",
+        calibration_version: MLB_PUBLIC_CALIBRATION_VERSION,
+        snapshot_json: {
+          ...previousSnapshot,
+          model_layer_versions: currentModelLayers,
+          decision_pipeline: {
+            ...previousDecisionPipeline,
+            release_id: MLB_DAILY_EDGE_DECISION_RELEASE_ID,
+            rule_bundle_version: MLB_DAILY_EDGE_RULE_BUNDLE_VERSION,
+            calibration_version: MLB_PUBLIC_CALIBRATION_VERSION,
+            market: "first_inning",
+            board_action: "no_play",
+            actionable_grade: null,
+            action_rule_id: null,
+            grade_source: null,
+            final_side: "Toss-Up",
+            final_side_changed: staleRow.pick !== "Toss-Up",
+          },
+          member_facing_at_lock: {
+            ...previousMemberFacing,
+            pick: "Toss-Up",
+            side: null,
+            play_grade: "held",
+            best_angle: false,
+            no_bet: true,
+            no_bet_reason: "fi_fresh_data_gate_no_current_actionable_prediction",
+            prediction_type: "toss_up",
+            held: true,
+            hold_reason: "fi_fresh_data_gate_no_current_actionable_prediction",
+            calibration_version: MLB_PUBLIC_CALIBRATION_VERSION,
+            model_layer_versions: currentModelLayers,
+          },
+          stale_unlocked_fi_cleanup: {
+            release_id: MLB_DAILY_EDGE_DECISION_RELEASE_ID,
+            action: "neutralize_to_toss_up",
+            reason: "fi_fresh_data_gate_no_current_actionable_prediction",
+            previous_pick: staleRow.pick,
+          },
+        },
       })
-      .in("id", staleUnlockedFiIds);
+      .eq("id", staleRow.id)
+      .is("locked_at", null);
     if (neutralizeErr) {
       result.errors.push({
-        game_id: 0,
+        game_id: staleRow.game_id,
         market: "first_inning",
         reason: `stale unlocked FI cleanup failed: ${neutralizeErr.message}`,
       });
