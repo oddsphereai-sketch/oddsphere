@@ -1788,7 +1788,7 @@ export function resolveMlbBestAngle(args: {
 }
 
 export const MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID =
-  "mlb_market_aware_final_side_selector_v1_2026_07_11";
+  "mlb_market_aware_final_side_selector_v2_2026_07_27";
 export const MLB_MARKET_AWARE_CORRECTED_GRADE_RULE_ID =
   "mlb_market_aware_corrected_grade_v4_2026_07_20";
 
@@ -1877,11 +1877,15 @@ export function resolveMlbMarketAwareSideCorrection(
     if (args.publicSplitConflict) reasons.push("opposing_public_split_conflict");
     if (args.distanceCapApplied) reasons.push("regularization_distance_cap_applied");
   } else {
-    const splitSignal = args.publicSplitSupport || args.publicSplitConflict;
     if (args.lineDirection === "toward_pick") return { applied: false, reason: "line_movement_confirms_total_pick" };
-    if (splitSignal) {
-      if (args.publicSplitSupport) reasons.push("total_split_support_fade");
-      if (args.publicSplitConflict) reasons.push("total_split_conflict_fade");
+    // r10: supporting split evidence may confirm the model pick, but it must
+    // never manufacture an opposite-side correction that then stands the
+    // original pick down. The retired correction remains available only for
+    // genuine opposing split conflict. The original side must still earn any
+    // public Lean/Best Angle through the existing probability, edge, price,
+    // projection, movement, freshness, and data-quality gates below.
+    if (args.publicSplitConflict) {
+      reasons.push("total_split_conflict_fade");
       if (args.lineDirection === "against_pick") reasons.push("line_movement_against_pick");
     }
   }
