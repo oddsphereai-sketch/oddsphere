@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { predictionRecordFirstInningEdgeToPercentagePoints } from "@/lib/services/dailyEdge/edgeUnits";
 
 export type RehydratedMarketKey = "moneyline" | "total" | "first_inning";
 export type RehydratedMarketRead =
@@ -295,12 +296,19 @@ function fiLockedEdgePct(record: RehydratedPredictionRecord): number | null {
 }
 
 function edgePct(record: RehydratedPredictionRecord, marketImpliedPct: number | null): number | null {
-  if (record.edge !== null && Number.isFinite(record.edge)) return record.edge;
+  const persisted = record.market === "first_inning"
+    ? predictionRecordFirstInningEdgeToPercentagePoints(record.edge)
+    : finiteRecordEdge(record.edge);
+  if (persisted !== null) return persisted;
   const fiEdge = fiLockedEdgePct(record);
   if (fiEdge !== null) return +fiEdge.toFixed(2);
   const model = toPct(record.model_probability);
   if (model !== null && marketImpliedPct !== null) return +(model - marketImpliedPct).toFixed(2);
   return null;
+}
+
+function finiteRecordEdge(edge: number | null): number | null {
+  return typeof edge === "number" && Number.isFinite(edge) ? edge : null;
 }
 
 function dataWarnings(snapshot: Record<string, unknown> | null, market: RehydratedMarketKey): string[] {
