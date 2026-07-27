@@ -585,6 +585,36 @@ function modelLayerFindingSeverity(row: PredictionRecordContractRow): DailyEdgeD
   return row.no_bet === true && row.best_angle !== true ? "medium" : "high";
 }
 
+const MLB_IMMUTABLE_MODEL_LAYER_FIELDS = [
+  "schema_version",
+  "projection_core",
+  "score_distribution",
+  "moneyline_probability_head",
+  "total_probability_head",
+  "first_inning_probability_head",
+  "market_calibration_policy",
+  "market",
+  "active_probability_head",
+] as const;
+
+const MLB_CURRENT_POLICY_LAYER_FIELDS = [
+  "grade_policy",
+  "correction_policy",
+  "tracking_contract",
+] as const;
+
+type MlbComparableModelLayerField =
+  | (typeof MLB_IMMUTABLE_MODEL_LAYER_FIELDS)[number]
+  | (typeof MLB_CURRENT_POLICY_LAYER_FIELDS)[number];
+
+export function mlbModelLayerFieldsToCompare(
+  locked: boolean,
+): readonly MlbComparableModelLayerField[] {
+  return locked
+    ? MLB_IMMUTABLE_MODEL_LAYER_FIELDS
+    : [...MLB_IMMUTABLE_MODEL_LAYER_FIELDS, ...MLB_CURRENT_POLICY_LAYER_FIELDS];
+}
+
 function pushMlbModelLayerContractFinding(
   findings: DailyEdgeDataHealthFinding[],
   row: PredictionRecordContractRow,
@@ -627,20 +657,11 @@ function pushMlbModelLayerContractFinding(
     return;
   }
 
-  const fieldsToCompare = [
-    "schema_version",
-    "projection_core",
-    "score_distribution",
-    "moneyline_probability_head",
-    "total_probability_head",
-    "first_inning_probability_head",
-    "market_calibration_policy",
-    "grade_policy",
-    "correction_policy",
-    "tracking_contract",
-    "market",
-    "active_probability_head",
-  ] as const;
+  // Locked rows are immutable release evidence. Their grade/correction/tracking
+  // policy stamps must remain the policy that actually produced the member
+  // pick, so only model identity is compared to the active contract. Unlocked
+  // rows must carry the complete current policy contract.
+  const fieldsToCompare = mlbModelLayerFieldsToCompare(row.locked_at !== null);
   const mismatches = fieldsToCompare
     .map((field) => ({
       field,
