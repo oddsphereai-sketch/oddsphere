@@ -136,6 +136,7 @@ import {
   type DailyEdgeRenderedCopyFlagOverrides,
 } from "@/lib/services/dailyEdge/memberFacingCopyRenderer";
 import { applyMlbSameDayGradeGuardrails } from "@/lib/services/dailyEdge/mlbSameDayGradeGuardrails";
+import { predictionRecordFirstInningEdgeToPercentagePoints } from "@/lib/services/dailyEdge/edgeUnits";
 // Keep this import relative so standalone operator scripts executed from a
 // linked worktree resolve the worktree implementation, not the primary
 // checkout through the shared node_modules/tsx binary.
@@ -4357,7 +4358,10 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
       marketImpliedPctOverride = +(input.storedMarketProbability * 100).toFixed(1);
     }
     if (typeof input.storedEdgePctPp === "number") {
-      modelMarketGapPct = +input.storedEdgePctPp.toFixed(1);
+      const storedEdgePctPp = input.market === "first_inning"
+        ? predictionRecordFirstInningEdgeToPercentagePoints(input.storedEdgePctPp)
+        : input.storedEdgePctPp;
+      modelMarketGapPct = storedEdgePctPp === null ? null : +storedEdgePctPp.toFixed(1);
     } else if (modelTrustPctOverride !== null && marketImpliedPctOverride !== null) {
       modelMarketGapPct = +(modelTrustPctOverride - marketImpliedPctOverride).toFixed(1);
     }
