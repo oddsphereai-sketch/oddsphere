@@ -934,7 +934,8 @@ function buildDashboardRows(args: {
   const priceDisciplined = applyBestPriceSignalDiscipline(deduped);
   const concentrationDisciplined = applyHitterSignalDiscipline(priceDisciplined);
   const underPromoted = applyValidatedUnderActionablePromotions(concentrationDisciplined);
-  return applyValidatedHomeRunActionablePromotions(underPromoted);
+  const homeRunPromoted = applyValidatedHomeRunActionablePromotions(underPromoted);
+  return applyValidatedPremiumBestAngles(homeRunPromoted);
 }
 
 const HITTER_LEAN_ELIGIBLE_MARKETS = new Set([
@@ -970,6 +971,10 @@ const HOME_RUN_PROMOTION_MIN_AMERICAN_ODDS = 200;
 const HOME_RUN_PROMOTION_MAX_AMERICAN_ODDS = 650;
 const HOME_RUN_PROJECTION_PRIOR = 0.095;
 const HOME_RUN_PROJECTION_PRIOR_GAMES = 20;
+const SINGLES_BEST_ANGLE_MIN_MODEL_PROBABILITY = 0.62;
+const SINGLES_BEST_ANGLE_MIN_FINAL_EDGE = 0.08;
+const SINGLES_BEST_ANGLE_MIN_EXPECTED_VALUE = 0.05;
+const SINGLES_BEST_ANGLE_MIN_AMERICAN_ODDS = -200;
 
 function applyBestPriceSignalDiscipline(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
   const signalRows = rows.filter((row) => row.playGrade === "BEST_ANGLE" || row.playGrade === "LEAN");
@@ -1151,9 +1156,13 @@ function applyValidatedUnderActionablePromotions(
 
   return rows.map((row) => promotedIds.has(row.id) ? {
     ...row,
-    playGrade: "LEAN",
+    playGrade: row.market === "batter_hits" ? "BEST_ANGLE" : "LEAN",
     units: 0.25,
-    reasonCodes: uniqueStrings([...row.reasonCodes, "VALIDATED_MARKET_PROMOTION"]),
+    reasonCodes: uniqueStrings([
+      ...row.reasonCodes,
+      "VALIDATED_MARKET_PROMOTION",
+      ...(row.market === "batter_hits" ? ["VALIDATED_HITS_UNDER_BEST_ANGLE"] : []),
+    ]),
   } : row);
 }
 
@@ -1215,6 +1224,33 @@ function applyValidatedHomeRunActionablePromotions(
     units: 0.25,
     reasonCodes: uniqueStrings([...row.reasonCodes, "VALIDATED_HOME_RUN_PROMOTION"]),
   } : row);
+}
+
+function applyValidatedPremiumBestAngles(
+  rows: PlayerPropPreviewRow[],
+): PlayerPropPreviewRow[] {
+  return rows.map((row) => {
+    if (
+      row.market !== "batter_singles"
+      || row.playGrade !== "LEAN"
+      || row.modelProbability === null
+      || row.modelProbability < SINGLES_BEST_ANGLE_MIN_MODEL_PROBABILITY
+      || row.modelEdge === null
+      || row.modelEdge < SINGLES_BEST_ANGLE_MIN_FINAL_EDGE
+      || row.expectedValue === null
+      || row.expectedValue < SINGLES_BEST_ANGLE_MIN_EXPECTED_VALUE
+      || row.odds < SINGLES_BEST_ANGLE_MIN_AMERICAN_ODDS
+      || !assessPropPrice(row.odds).signalEligible
+    ) return row;
+    return {
+      ...row,
+      playGrade: "BEST_ANGLE",
+      reasonCodes: uniqueStrings([
+        ...row.reasonCodes,
+        "VALIDATED_SINGLES_PREMIUM_BEST_ANGLE",
+      ]),
+    };
+  });
 }
 
 function compareValidatedPromotionCandidates(
@@ -1439,9 +1475,19 @@ function buildDedicatedBatterHitsSignal(
   const marketSideProbability = args.marketProbability === null
     ? null
     : args.mapped.odds.side === side ? args.marketProbability : 1 - args.marketProbability;
-  const finalProbability = modelProbability;
-  const overFinalProbability = distribution.overProbability;
-  const underFinalProbability = distribution.underProbability;
+  const shrinkageWeight = calibratedPropModelWeight({
+    marketKey: "batter_hits",
+    side,
+    baseWeight: 1,
+  });
+  const finalProbability = marketSideProbability === null
+    ? modelProbability
+    : clampProbability(
+      modelProbability * shrinkageWeight
+      + marketSideProbability * (1 - shrinkageWeight),
+    );
+  const overFinalProbability = side === "over" ? finalProbability : round(1 - finalProbability, 4);
+  const underFinalProbability = side === "under" ? finalProbability : round(1 - finalProbability, 4);
   const edge = marketSideProbability === null ? null : finalProbability - marketSideProbability;
   const ev = args.mapped.odds.side === side ? safeExpectedValue(finalProbability, args.currentOdds) : null;
   const confidence = round(Math.min(0.9,
@@ -1466,7 +1512,7 @@ function buildDedicatedBatterHitsSignal(
     side,
     modelProbability,
     finalProbability,
-    shrinkageWeight: 1,
+    shrinkageWeight,
     overModelProbability: distribution.overProbability,
     underModelProbability: distribution.underProbability,
     overFinalProbability,
@@ -1503,7 +1549,17 @@ function buildDedicatedBatterHrrSignal(
   const marketSideProbability = args.marketProbability === null
     ? null
     : args.mapped.odds.side === side ? args.marketProbability : 1 - args.marketProbability;
-  const finalProbability = modelProbability;
+  const shrinkageWeight = calibratedPropModelWeight({
+    marketKey: "batter_hits_runs_rbis",
+    side,
+    baseWeight: 1,
+  });
+  const finalProbability = marketSideProbability === null
+    ? modelProbability
+    : clampProbability(
+      modelProbability * shrinkageWeight
+      + marketSideProbability * (1 - shrinkageWeight),
+    );
   const edge = marketSideProbability === null ? null : finalProbability - marketSideProbability;
   const ev = args.mapped.odds.side === side ? safeExpectedValue(finalProbability, args.currentOdds) : null;
   const confidence = round(Math.min(0.88,
@@ -1526,11 +1582,11 @@ function buildDedicatedBatterHrrSignal(
     side,
     modelProbability,
     finalProbability,
-    shrinkageWeight: 1,
+    shrinkageWeight,
     overModelProbability: distribution.overProbability,
     underModelProbability: distribution.underProbability,
-    overFinalProbability: distribution.overProbability,
-    underFinalProbability: distribution.underProbability,
+    overFinalProbability: side === "over" ? finalProbability : round(1 - finalProbability, 4),
+    underFinalProbability: side === "under" ? finalProbability : round(1 - finalProbability, 4),
     playGrade: canLean ? "LEAN" : "WATCHLIST",
     confidence,
     reasonCodes: uniqueStrings([
