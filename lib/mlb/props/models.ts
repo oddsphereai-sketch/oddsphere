@@ -186,10 +186,15 @@ export class ConservativeCountPropModel implements BasePropModel {
   }
 }
 
-export function modelForMlbPropMarket(marketKey: MlbPropMarketKey): BasePropModel {
+export function modelForRealPitcherMarket(marketKey: MlbPropMarketKey): BasePropModel | null {
   if (marketKey === "pitcher_strikeouts") return new PitcherStrikeoutsModel();
   if (marketKey === "pitcher_outs") return new PitcherOutsModel();
-  return new ConservativeCountPropModel(marketKey);
+  if (
+    marketKey === "pitcher_hits_allowed"
+    || marketKey === "pitcher_walks"
+    || marketKey === "pitcher_earned_runs"
+  ) return new ConservativeCountPropModel(marketKey);
+  return null;
 }
 
 function expectedStrikeouts(row: PropFeatureSnapshot): number {

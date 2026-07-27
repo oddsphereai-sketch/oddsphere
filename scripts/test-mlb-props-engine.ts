@@ -11,7 +11,7 @@ import { MockMLBProvider } from "../lib/mlb/props/providerClients";
 import { parseBallDontLiePlayerProps, parseMlbStatsGames, parseMlbStatsProbablePitchers, parseSharpApiProps } from "../lib/mlb/props/providerClients";
 import { existsSync, readFileSync } from "fs";
 import { buildMlbPropFeatureSnapshot } from "../lib/mlb/props/featureBuilder";
-import { PitcherStrikeoutsModel, modelForMlbPropMarket } from "../lib/mlb/props/models";
+import { PitcherStrikeoutsModel, modelForRealPitcherMarket } from "../lib/mlb/props/models";
 import { PitcherOutsModel } from "../lib/mlb/props/models";
 import { recommendPropBet } from "../lib/mlb/props/recommendations";
 import { runFixtureMlbPropBacktest } from "../lib/mlb/props/backtest";
@@ -118,6 +118,23 @@ async function main() {
     side: "over",
     baseWeight: 0.72,
   }), 0.72));
+  check("dedicated hits and H+R+RBI use separate reliability caps",
+    approx(calibratedPropModelWeight({
+      marketKey: "batter_hits",
+      side: "over",
+      baseWeight: 1,
+    }), 0.3)
+    && approx(calibratedPropModelWeight({
+      marketKey: "batter_hits_runs_rbis",
+      side: "over",
+      baseWeight: 1,
+    }), 0.1));
+  check("singles keep their market-specific actionable weight",
+    approx(calibratedPropModelWeight({
+      marketKey: "batter_singles",
+      side: "under",
+      baseWeight: 0.62,
+    }), 0.5));
   check("total-bases over calibration is stricter than total-bases under", calibratedPropModelWeight({
     marketKey: "batter_total_bases",
     side: "over",
@@ -253,7 +270,15 @@ async function main() {
     away_team: { full_name: "New York Mets" },
   });
   check("all cataloged BDL markets normalize", allMlbPropMarketDefinitions().every((definition) => fullBdlParsed.some((row) => row.marketKey === definition.marketKey)));
-  check("all markets have model families", allMlbPropMarketDefinitions().every((definition) => definition.modelFamily.length > 0 && modelForMlbPropMarket(definition.marketKey).marketKey === definition.marketKey));
+  check("all markets have model families", allMlbPropMarketDefinitions().every((definition) => definition.modelFamily.length > 0));
+  check("real pitcher factory cannot silently own live batter markets",
+    modelForRealPitcherMarket("pitcher_strikeouts")?.marketKey === "pitcher_strikeouts"
+    && modelForRealPitcherMarket("pitcher_outs")?.marketKey === "pitcher_outs"
+    && modelForRealPitcherMarket("pitcher_hits_allowed")?.marketKey === "pitcher_hits_allowed"
+    && modelForRealPitcherMarket("pitcher_walks")?.marketKey === "pitcher_walks"
+    && modelForRealPitcherMarket("pitcher_earned_runs")?.marketKey === "pitcher_earned_runs"
+    && modelForRealPitcherMarket("batter_hits") === null
+    && modelForRealPitcherMarket("batter_singles") === null);
   check("all markets have complete product metadata", allMlbPropMarketDefinitions().every((definition) => definition.marketGroup.length > 0 && definition.displayGroup.length > 0 && definition.requiredFeatures.length > 0 && definition.preferredFeatures.length > 0 && definition.optionalFeatures.length > 0 && definition.confidenceGates.minimum > 0 && isInspectablePropGrade(definition.defaultGrade)));
   const scheduleSample = JSON.parse(readFileSync("tests/fixtures/mlb-props/real-contract-samples/mlbstats-schedule-sample.json", "utf8"));
   check("MLB Stats fixture parser extracts games", parseMlbStatsGames(scheduleSample).length === 1);
@@ -500,7 +525,8 @@ async function main() {
   check("one-sided actionable markets carry their price-implied edge into the publication gate", liveBoardSource.includes("const effectiveMarketProbability = marketProbability ??") && liveBoardSource.includes("price.impliedProbability") && liveBoardSource.includes("marketProbability: effectiveMarketProbability"));
   check("generic pitcher scorer warnings cannot suppress integrated hitter reads", liveBoardSource.includes('const scoredPitcherSignal = definition.family === "pitcher"') && liveBoardSource.includes("const signal: IntegratedPropSignal | null = scoredPitcherSignal ?") && liveBoardSource.includes("const blockingModelWarnings = (scoredPitcherSignal?.featureWarnings ?? [])"));
   check("positive prop signals collapse duplicate sportsbook rows to the best price", liveBoardSource.includes("applyBestPriceSignalDiscipline(deduped)") && liveBoardSource.includes("applyHitterSignalDiscipline(priceDisciplined)") && liveBoardSource.includes("signalOfferKey") && liveBoardSource.includes("BETTER_PRICE_AVAILABLE"));
-  check("validated under promotions are market-specific and game-capped", liveBoardSource.includes("VALIDATED_UNDER_PROMOTION_POLICIES") && liveBoardSource.includes("applyValidatedUnderActionablePromotions") && liveBoardSource.includes("VALIDATED_MARKET_PROMOTION") && propsConfigSource.includes("VALIDATED_MARKET_PROMOTION"));
+  check("validated under promotions are market-specific and game-capped", liveBoardSource.includes("VALIDATED_UNDER_PROMOTION_POLICIES") && liveBoardSource.includes("applyValidatedUnderActionablePromotions") && liveBoardSource.includes("VALIDATED_MARKET_PROMOTION") && liveBoardSource.includes("VALIDATED_HITS_UNDER_BEST_ANGLE") && propsConfigSource.includes("VALIDATED_HITS_UNDER_BEST_ANGLE"));
+  check("validated Singles premium Best Angles are qualification-based rather than count-capped", liveBoardSource.includes("applyValidatedPremiumBestAngles") && liveBoardSource.includes("SINGLES_BEST_ANGLE_MIN_MODEL_PROBABILITY = 0.62") && liveBoardSource.includes("SINGLES_BEST_ANGLE_MIN_FINAL_EDGE = 0.08") && liveBoardSource.includes("SINGLES_BEST_ANGLE_MIN_EXPECTED_VALUE = 0.05") && liveBoardSource.includes("SINGLES_BEST_ANGLE_MIN_AMERICAN_ODDS = -200") && !liveBoardSource.includes("SINGLES_BEST_ANGLE_DAILY_CAP") && propsConfigSource.includes("VALIDATED_SINGLES_PREMIUM_BEST_ANGLE"));
   check("validated home-run promotions are qualified and slate-capped", liveBoardSource.includes("applyValidatedHomeRunActionablePromotions") && liveBoardSource.includes("HOME_RUN_PROMOTION_DAILY_CAP = 5") && liveBoardSource.includes("HOME_RUN_PROMOTION_MIN_RECENT_SURVIVAL = 0.18") && liveBoardSource.includes("VALIDATED_HOME_RUN_PROMOTION") && propsConfigSource.includes("VALIDATED_HOME_RUN_PROMOTION"));
   check("member board uses grade-aware equal-price selection", liveBoardSource.includes('import { shouldReplaceBestPriceRow } from "./bestPriceSelection"') && liveBoardSource.includes("shouldReplaceBestPriceRow(current, row)"));
   check("pitcher best angles require a material model projection cushion", liveBoardSource.includes("function pitcherSignalGrade") && liveBoardSource.includes("function pitcherBestAngleProjectionGap") && liveBoardSource.includes('market === "pitcher_outs"') && liveBoardSource.includes('market === "pitcher_strikeouts"') && liveBoardSource.includes('if (minGap === null) return "LEAN"') && liveBoardSource.includes("scoredPitcherSignal?.modelProjection ?? projection"));

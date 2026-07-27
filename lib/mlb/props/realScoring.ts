@@ -1,7 +1,7 @@
 import { DEFAULT_PROP_RECOMMENDATION_CONFIG, type MlbPropMarketKey, type PropReasonCode } from "./config";
 import type { MlbPropBacktestResult } from "./backtest";
 import { normalizePlayerName } from "./entityResolution";
-import { legacyPitcherBaselineProbability, modelForMlbPropMarket } from "./models";
+import { legacyPitcherBaselineProbability, modelForRealPitcherMarket } from "./models";
 import { recommendPropBet, type PropRecommendation } from "./recommendations";
 import { expected_value, remove_vig_two_way } from "./oddsMath";
 import type { MlbGameEntity, MlbProbablePitcher, PropOddsSnapshot } from "./providers";
@@ -950,6 +950,9 @@ function isPitcherMarket(marketKey: MlbPropMarketKey): boolean {
 export function groupTwoWayPitcherMarkets(rows: ResolvedPropRow[], rejected: Record<string, number> = {}): GroupedTwoWay[] {
   const buckets = new Map<string, { over: ResolvedPropRow[]; under: ResolvedPropRow[]; sample: ResolvedPropRow }>();
   for (const row of rows) {
+    // Batter markets have a separate, authoritative integrated live-board
+    // scorer. Never let them fall through the real-pitcher model factory.
+    if (!isPitcherMarket(row.odds.marketKey)) continue;
     const isAlt = rawObj(row.odds.rawPayload).is_alternate_line === true;
     if (isAlt) {
       inc(rejected, "ALTERNATE_LINE_SEPARATED");
@@ -2357,7 +2360,7 @@ function positive(value: number | null | undefined): number | null {
 }
 
 function modelForMarket(marketKey: MlbPropMarketKey) {
-  return modelForMlbPropMarket(marketKey);
+  return modelForRealPitcherMarket(marketKey);
 }
 
 function inferredOddsProvider(odds: PropOddsSnapshot[]): string {
