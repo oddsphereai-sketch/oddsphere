@@ -559,5 +559,46 @@ function board(market: Record<string, unknown>) {
   check("Positive-edge No Play with cap reason passes", !result.summary.issueCounts.no_play_positive_edge_needs_explanation);
 }
 
+{
+  const lockedBoard: any = board({});
+  lockedBoard.games[0]!.lockState = "locked";
+  lockedBoard.games[0]!.markets = {
+    first_inning: {
+      pick: "Toss-Up",
+      grade: null,
+      verdict: { key: "no_play" },
+      priceAmerican: null,
+      lockedLineAmerican: -148,
+      recommendationConfidence: null,
+      displayReason: "No actionable side.",
+    },
+  };
+  const result = auditDailyEdgeBoards({ mlb: lockedBoard });
+  check(
+    "Locked neutral FI No Play does not require an obsolete side price",
+    !result.summary.issueCounts.locked_price_not_frozen,
+  );
+}
+
+{
+  const lockedBoard: any = board({});
+  lockedBoard.games[0]!.lockState = "locked";
+  lockedBoard.games[0]!.markets = {
+    first_inning: {
+      pick: "NRFI",
+      grade: "model_only",
+      verdict: { key: "lean" },
+      priceAmerican: -135,
+      lockedLineAmerican: -148,
+      recommendationConfidence: 50,
+    },
+  };
+  const result = auditDailyEdgeBoards({ mlb: lockedBoard });
+  check(
+    "Locked actionable FI still fails when its displayed price drifts",
+    result.summary.issueCounts.locked_price_not_frozen === 1,
+  );
+}
+
 console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILED`}`);
 process.exit(failures === 0 ? 0 : 1);
