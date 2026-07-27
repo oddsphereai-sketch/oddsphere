@@ -430,7 +430,13 @@ export function auditDailyEdgeBoards(
         if (market.verdict?.key === "no_play" && n(market.modelMarketGapPct) !== null && (market.modelMarketGapPct as number) > 2) {
           const capReasons = Array.isArray(market.capReasons) ? market.capReasons : [];
           const displayReason = String(market.displayReason ?? market.guidedGuide ?? "").toLowerCase();
-          if (capReasons.length === 0 || !displayReason.includes("because")) {
+          const neutralFirstInningDecision =
+            slot === "first_inning" &&
+            (String(market.pick ?? "").toLowerCase() === "toss-up" ||
+              displayReason.includes("toss-up") ||
+              displayReason.includes("no actionable side") ||
+              displayReason.includes("coin-flip"));
+          if (!neutralFirstInningDecision && (capReasons.length === 0 || !displayReason.includes("because"))) {
             push("no_play_positive_edge_needs_explanation", sport, game, slot, market, {
               modelMarketGapPct: market.modelMarketGapPct,
               capReasons,

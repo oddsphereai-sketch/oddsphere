@@ -20,7 +20,7 @@ import {
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
   GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
   MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
-  ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID,
+  ML_CALIBRATED_MODEL_LEAN_PATH_ID,
   ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID,
   ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID,
   ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID,
@@ -895,9 +895,9 @@ console.log("\n━━━ MLB generic Lean positive-EV coherence ━━━");
       (positiveEv.snapshot_json as any)?.decision_pipeline?.board_action === "bet",
   );
   check(
-    "positive-EV generic ML Lean receives its immutable rule stamp",
+    "positive-EV calibrated-model ML Lean receives its immutable path stamp",
     (positiveEv.snapshot_json as any)?.decision_pipeline?.action_rule_id ===
-      ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID,
+      ML_CALIBRATED_MODEL_LEAN_PATH_ID,
   );
 }
 
@@ -1389,8 +1389,8 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
         (ml.snapshot_json as any)?.champion_candidate_correction?.public_split_conflict === true);
 }
 {
-  // BAL@TOR moneyline with no signals → public-money guard goes neutral, but
-  // the separate ML grade recalibration can still reject the broad raw BA.
+  // BAL@TOR moneyline with no signals → public-money guard goes neutral and
+  // the calibrated model remains the primary Best Angle path.
   const baTorPred = {
     ...basePrediction,
     sport_specific: { ...v21SportSpecific, hold_picks: [], ml_best_angle_eligible: true, ou_best_angle_eligible: false },
@@ -1406,9 +1406,9 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
   check(
-    "ML best_angle demoted by grade recalibration when signals map is absent",
-    ml.best_angle === false &&
-      (ml.snapshot_json as any)?.best_angle_resolution?.broad_best_angle_demoted_by_recalibration === true,
+    "ML calibrated-model Best Angle remains primary when signals map is absent",
+    ml.best_angle === true &&
+      (ml.snapshot_json as any)?.best_angle_resolution?.calibrated_model_path_retained === true,
   );
 }
 {
@@ -1433,9 +1433,9 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
   check(
-    "ML best_angle demoted by grade recalibration when opp.public_money_pct is null (missing ≠ conflict)",
-    ml.best_angle === false &&
-      (ml.snapshot_json as any)?.best_angle_resolution?.broad_best_angle_demoted_by_recalibration === true,
+    "ML calibrated-model Best Angle remains when opposing public money is unknown",
+    ml.best_angle === true &&
+      (ml.snapshot_json as any)?.best_angle_resolution?.calibrated_model_path_retained === true,
   );
 }
 {
@@ -1458,9 +1458,9 @@ console.log("\n━━━ Phase 6B.12 — public-money guard on best_angle ━━
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
   check(
-    "ML best_angle demoted by grade recalibration when opp money <60",
-    ml.best_angle === false &&
-      (ml.snapshot_json as any)?.best_angle_resolution?.broad_best_angle_demoted_by_recalibration === true,
+    "ML calibrated-model Best Angle remains below the validated opposing-money threshold",
+    ml.best_angle === true &&
+      (ml.snapshot_json as any)?.best_angle_resolution?.calibrated_model_path_retained === true,
   );
 }
 {

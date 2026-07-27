@@ -405,6 +405,10 @@ export const ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID = "ml_tight_market_price_b
 export const ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID = "ml_generic_lean_positive_ev_v1_2026_07_25";
 export const ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID = "ml_mid_price_established_price_best_angle_v1_2026_07_25";
 export const ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID = "ml_mid_price_near_market_lean_v1_2026_07_25";
+export const ML_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID =
+  "ml_calibrated_model_best_angle_path_v1_2026_07_27";
+export const ML_CALIBRATED_MODEL_LEAN_PATH_ID =
+  "ml_calibrated_model_lean_path_v1_2026_07_27";
 export const ML_TIGHT_MARKET_PRICE_MIN_EDGE_PCT = -1;
 export const ML_TIGHT_MARKET_PRICE_MAX_EDGE_PCT_EXCLUSIVE = 1;
 export const ML_TIGHT_MARKET_PRICE_MIN_ODDS = -160;
@@ -416,6 +420,10 @@ export const ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_MAX_ODDS = -131;
 export const ML_MID_PRICE_NEAR_MARKET_LEAN_MIN_ODDS = -130;
 export const ML_MID_PRICE_NEAR_MARKET_LEAN_MAX_ODDS = -121;
 export const FI_VALIDATED_BEST_ANGLE_RULE_ID = "fi_validated_best_angle_v1_2026_07_11";
+export const TOTAL_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID =
+  "total_calibrated_model_best_angle_path_v1_2026_07_27";
+export const TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID =
+  "total_calibrated_model_lean_path_v1_2026_07_27";
 export const FI_FINAL_BEST_ANGLE_MIN_EDGE = 0.06;
 export const FI_FINAL_BEST_ANGLE_MIN_CONFIDENCE = 56;
 export const FI_FINAL_BEST_ANGLE_MIN_PRICE_EXCLUSIVE = -130;
@@ -2221,7 +2229,12 @@ function buildMlRecord(
       publicSplitConflict: finalMlPublicSplitConflict,
       dataStatus: mlDataStatus,
     });
+  // The calibrated model grade is the primary path. Named historical sleeves
+  // are additive promotions; they never replace a model Best Angle that has
+  // already survived the final confirmation and safety resolver.
+  const mlModelBestAngleRetained = mlBest.bestAngle;
   const mlCalibratedBestAngle =
+    mlModelBestAngleRetained ||
     mlCleanTightEdgeBestAngle.bestAngle ||
     mlTightMarketPriceBestAngle.bestAngle ||
     mlMidPriceEstablishedPriceBestAngle.bestAngle;
@@ -2236,6 +2249,34 @@ function buildMlRecord(
       : mlFlipped || mlPickCalibrated || mlChampionStandDownReason !== null
       ? false
       : mlCalibratedBestAngle;
+  const mlModelGradeAfterBestAngleResolution = applyMlbBestAngleFinalGate(
+    mlPublicPlayGrade,
+    mlBaseBestAngleEligible,
+    mlBest.bestAngle,
+  );
+  const mlCalibratedModelGrade = applyPlayGradeGate(
+    mlModelGradeAfterBestAngleResolution,
+    {
+      modelProb: finalMlModelProb,
+      americanOdds: finalMlOdds,
+      market: "moneyline",
+      runGapAbs:
+        mlSameSideProjectionGap === null ? null : Math.abs(mlSameSideProjectionGap),
+      totalLine: null,
+    },
+  );
+  const mlModelLeanRetained =
+    !trackedMlBestAngle &&
+    !mlNoBet &&
+    !mlFlipped &&
+    !mlPickCalibrated &&
+    !mlMarketSideCorrected &&
+    mlCalibratedModelGrade === "lean" &&
+    finalMlEdge !== null &&
+    finalMlEdge >= 0 &&
+    finalMlLineDirection !== "against_pick" &&
+    !finalMlPublicSplitConflict &&
+    (mlSameSideProjectionGap === null || mlSameSideProjectionGap >= 0);
   const mlLeanEligible =
     !trackedMlBestAngle &&
     !mlNoBet &&
@@ -2274,11 +2315,13 @@ function buildMlRecord(
         ? null
         : trackedMlBestAngle
           ? "best_angle"
-          : mlLeanEligible || mlMidPriceNearMarketLean.lean
+          : mlModelLeanRetained || mlLeanEligible || mlMidPriceNearMarketLean.lean
             ? "lean"
-            : mlPublicPlayGrade !== null && finalMlEdge !== null && finalMlEdge >= 0
-              ? "market_aligned"
-              : null;
+            : mlCalibratedModelGrade === "provisional"
+              ? "provisional"
+              : mlPublicPlayGrade !== null && finalMlEdge !== null && finalMlEdge >= 0
+                ? "market_aligned"
+                : null;
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -2359,6 +2402,8 @@ function buildMlRecord(
               : null,
         action_rule_id: mlTrueInversionActionable
           ? ML_INVERSION_GRADE_RULE_ID
+          : trackedMlBestAngle && mlModelBestAngleRetained
+            ? ML_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID
           : mlCleanTightEdgePromoted
             ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID
             : mlTightMarketPricePromoted
@@ -2367,8 +2412,22 @@ function buildMlRecord(
                 ? ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID
               : mlMidPriceNearMarketLean.lean
                 ? ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID
+                : mlModelLeanRetained
+                  ? ML_CALIBRATED_MODEL_LEAN_PATH_ID
                 : trackedMlPublicPlayGrade === "lean"
                 ? ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID
+                : null,
+        grade_source:
+          trackedMlBestAngle && mlModelBestAngleRetained
+            ? "calibrated_model"
+            : mlModelLeanRetained
+              ? "calibrated_model"
+              : mlTrueInversionActionable ||
+                  mlCleanTightEdgePromoted ||
+                  mlTightMarketPricePromoted ||
+                  mlMidPriceEstablishedPricePromoted ||
+                  mlMidPriceNearMarketLean.lean
+                ? "additive_rule"
                 : null,
         final_side: finalMlPick,
         final_side_changed: mlFinalSideChanged,
@@ -2382,6 +2441,10 @@ function buildMlRecord(
         requires_confirmation: readBoolish(v22.ml_requires_market_confirmation),
         line_direction: finalMlLineDirection,
         demote_reason: mlBest.demoteReason,
+        calibrated_model_path_retained: mlModelBestAngleRetained,
+        calibrated_model_path_id: mlModelBestAngleRetained
+          ? ML_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID
+          : null,
         clean_tight_edge_promotion: mlCleanTightEdgePromoted,
         clean_tight_edge_promotion_rule_id: mlCleanTightEdgePromoted ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID : null,
         tight_market_price_promotion: mlTightMarketPricePromoted,
@@ -2412,6 +2475,10 @@ function buildMlRecord(
         final_public_play_grade: mlMarketAwareCorrectedGrade?.playGrade ?? trackedMlPublicPlayGrade,
         final_best_angle: trackedMlBestAngle,
         clean_tight_best_angle: mlCalibratedBestAngle,
+        calibrated_model_lean_retained: mlModelLeanRetained,
+        calibrated_model_lean_path_id: mlModelLeanRetained
+          ? ML_CALIBRATED_MODEL_LEAN_PATH_ID
+          : null,
         lean_eligible: mlLeanEligible,
         model_prob: finalMlModelProb,
         min_model_prob: ML_CLEAN_TIGHT_EDGE_MIN_MODEL_PROB,
@@ -2953,15 +3020,19 @@ function buildOuRecord(
     finalOuModelProb < totalBestAngleMinModelProb;
   const ouFinalBestAngle = ouBaseBestAngle && !ouTotalBestAngleDemote;
   const ouRawPublicPlayGrade = readPublicPlayGrade(sp.ou_play_grade);
-  const ouPublicPlayGrade = applyMlbBestAngleFinalGate(
-    legacyMarketSignalGradeInfluenceEnabled
-      ? applyPlayGradeGate(ouRawPublicPlayGrade, {
-          modelProb: finalOuModelProb, americanOdds: finalOuOdds, market: "total",
-          runGapAbs: null, totalLine: finalOuBetLine,
-        })
-      : ouRawPublicPlayGrade,
-    ouRawBestAngleCandidate,
-    ouFinalBestAngle,
+  const ouPublicPlayGrade = applyPlayGradeGate(
+    applyMlbBestAngleFinalGate(
+      ouRawPublicPlayGrade,
+      ouRawBestAngleCandidate,
+      ouFinalBestAngle,
+    ),
+    {
+      modelProb: finalOuModelProb,
+      americanOdds: finalOuOdds,
+      market: "total",
+      runGapAbs: null,
+      totalLine: finalOuBetLine,
+    },
   );
   const ouSameSideProjectionGap = totalProjectionSameSideGap(finalOuPick, ouScoreSum, finalOuBetLine);
   const ouProjectionGapAbs = totalProjectionGapAbs(finalOuPick, ouScoreSum, finalOuBetLine);
@@ -3046,10 +3117,26 @@ function buildOuRecord(
     oddsAmerican: finalOuOdds,
     sameSideProjectionGap: ouSameSideProjectionGap,
   });
+  const ouModelBestAngleRetained = ouFinalBestAngle;
+  const ouModelLeanRetained =
+    !trackedOuFinalBestAngle &&
+    !ouNoBet &&
+    !ouFlipped &&
+    !ouMarketFlipped &&
+    !ouMarketSideCorrected &&
+    !ouMidEdgeFlipped &&
+    finalOuPublicPlayGrade === "lean" &&
+    finalOuModelProb !== null &&
+    finalOuOdds !== null &&
+    !gateEvNegative(finalOuModelProb, finalOuOdds) &&
+    finalOuEdge !== null &&
+    finalOuEdge >= 0 &&
+    (ouSameSideProjectionGap === null || ouSameSideProjectionGap >= 0);
   const ouUnvalidatedLeanCap =
     !trackedOuFinalBestAngle &&
     finalOuPublicPlayGrade === "lean" &&
-    !ouValidatedLean.lean;
+    !ouValidatedLean.lean &&
+    !ouModelLeanRetained;
   const trackedOuPublicPlayGrade = ouCorrectionRejected
     ? null
     : ouMarketAwareCorrectedGrade !== null
@@ -3057,6 +3144,8 @@ function buildOuRecord(
     : ouPromotedBestAngle
     ? "best_angle"
     : ouValidatedLean.lean
+      ? "lean"
+    : ouModelLeanRetained
       ? "lean"
     : ouUnvalidatedLeanCap
       ? "market_aligned"
@@ -3139,11 +3228,29 @@ function buildOuRecord(
           : trackedOuPublicPlayGrade === "lean"
             ? "lean"
             : null,
+        action_rule_id:
+          trackedOuFinalBestAngle && ouModelBestAngleRetained
+            ? TOTAL_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID
+            : ouPromotedBestAngle
+              ? TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID
+              : ouModelLeanRetained
+                ? TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID
+                : ouValidatedLean.lean
+                  ? TOTAL_VALIDATED_LEAN_RULE_ID
+                  : null,
         promotion_rule_id: ouPromotedBestAngle
           ? TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID
           : ouValidatedLean.lean
             ? TOTAL_VALIDATED_LEAN_RULE_ID
             : null,
+        grade_source:
+          trackedOuFinalBestAngle && ouModelBestAngleRetained
+            ? "calibrated_model"
+            : ouModelLeanRetained
+              ? "calibrated_model"
+              : ouPromotedBestAngle || ouValidatedLean.lean
+                ? "additive_rule"
+                : null,
         paired_policy: {
           demotion: "unstable_totals_correction_trigger_to_no_play",
           promotions: [
@@ -3173,6 +3280,10 @@ function buildOuRecord(
         total_min_model_prob: totalBestAngleMinModelProb,
         total_under_min_model_prob: GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
         total_over_min_model_prob: GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
+        calibrated_model_path_retained: ouModelBestAngleRetained,
+        calibrated_model_path_id: ouModelBestAngleRetained
+          ? TOTAL_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID
+          : null,
         clean_confirmed_promotion: ouPromotedBestAngle,
         clean_confirmed_promotion_rule_id: ouPromotedBestAngle ? TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID : null,
         final_best_angle: trackedOuFinalBestAngle,
@@ -3266,6 +3377,20 @@ function buildOuRecord(
             strong_min_projection_gap: TOTAL_VALIDATED_STRONG_LEAN_MIN_PROJECTION_GAP,
             validation_note:
               "Normalized MLB replay 2026-06-11..2026-07-10: non-Best-Angle totals with p>=54%, edge>=5pp, price>-145, and projection aligned went 47-35, +7.8662u, +9.59% ROI; stronger gap>=0.75 subset went 17-8, +6.6929u.",
+          }
+        : null,
+      total_calibrated_model_lean: ouModelLeanRetained
+        ? {
+            path_id: TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID,
+            action: "keep_as_lean",
+            model_prob: finalOuModelProb,
+            edge_pct: finalOuEdge,
+            odds_american: finalOuOdds,
+            projected_total: ouScoreSum,
+            line: finalOuBetLine,
+            same_side_projection_gap: ouSameSideProjectionGap,
+            validation_note:
+              "The calibrated model Lean is the primary grade path after universal probability, price-EV, and projection-alignment safety gates. Historical sleeve rules remain additive.",
           }
         : null,
       total_flip_public_grade_resolution: ouCorrectionRejected
