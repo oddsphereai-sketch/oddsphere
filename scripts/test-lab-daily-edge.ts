@@ -195,6 +195,9 @@ async function main() {
     check("FI starter repair covers the complete slate instead of an unrelated finding-sized prefix", healthRepairSource.includes("limit: Math.max(1, args.report.gameCount)") && !healthRepairSource.includes("limit: Math.max(1, gamesByExternalId.size)"));
     check("Daily Edge repair targets missing ML and total market evidence", ['finding.code === "evidence_blocked"', 'finding.code === "actionable_price_missing"', 'finding.code === "actionable_edge_missing"', 'finding.code === "total_price_missing"'].every((needle) => healthRepairSource.includes(needle)));
     check("refresh pill follows each live league's actual cron", refreshStatusSource.includes('data_source: "wnba_daily_refresh"') && refreshStatusSource.includes('cadence_minutes: 30') && refreshStatusSource.includes('data_source: "soccer_daily_refresh"') && refreshStatusSource.includes('cadence_minutes: 60') && refreshStatusSource.includes("cronConfigsForSport(effectiveSport)"));
+    check("visible Under line drop is classified as market support", dailyEdgeTest.visibleTotalPointMarketReadScore("Under", 9.5, 8.5) === 3);
+    check("visible Over line drop is classified as market resistance", dailyEdgeTest.visibleTotalPointMarketReadScore("Over", 9.5, 8.5) === -3);
+    check("flat total line remains projection-led when price is also flat", dailyEdgeTest.visibleTotalPointMarketReadScore("Under", 8.5, 8.5) === null);
   }
 
   section("Source-aware split sections");

@@ -3604,18 +3604,66 @@ function visibleOddsMarketReadScore(openAmerican: number, currentAmerican: numbe
   return direction === "toward" ? magnitude : -magnitude;
 }
 
+function visibleTotalPointMarketReadScore(
+  pick: string | null,
+  previousLine: number | null,
+  currentLine: number | null,
+): number | null {
+  if (
+    previousLine === null ||
+    currentLine === null ||
+    Math.abs(currentLine - previousLine) < 0.01
+  ) {
+    return null;
+  }
+  const normalizedPick = String(pick ?? "").toLowerCase();
+  const toward =
+    normalizedPick.startsWith("over")
+      ? currentLine > previousLine
+      : normalizedPick.startsWith("under")
+        ? currentLine < previousLine
+        : null;
+  if (toward === null) return null;
+  const delta = Math.abs(currentLine - previousLine);
+  const magnitude = delta >= 1.5 ? 4 : delta >= 1 ? 3 : 1;
+  return toward ? magnitude : -magnitude;
+}
+
 function alignMarketReadV2ToVisibleOdds(opts: {
   read: MarketReadV2Dto | null;
   enabled: boolean;
   market: "moneyline" | "total" | "first_inning";
+  pick: string | null;
   openAmerican: number | null;
   currentAmerican: number | null;
+  previousLine: number | null;
+  currentLine: number | null;
   observedAt: string | null;
   generatedAt: string;
 }): MarketReadV2Dto | null {
   if (!opts.enabled || opts.market === "first_inning") return opts.read;
-  if (opts.openAmerican === null || opts.currentAmerican === null) return opts.read;
-  const score = visibleOddsMarketReadScore(opts.openAmerican, opts.currentAmerican);
+  // For totals, a visible point move is the primary market trail. A price can
+  // remain unchanged while the book moves Under 9.5 to Under 8.5; calling that
+  // "Projection-Led" contradicts the member-visible support.
+  const pointScore =
+    opts.market === "total"
+      ? visibleTotalPointMarketReadScore(
+          opts.pick,
+          opts.previousLine,
+          opts.currentLine,
+        )
+      : null;
+  if (
+    pointScore === null &&
+    (opts.openAmerican === null || opts.currentAmerican === null)
+  ) {
+    return opts.read;
+  }
+  const score =
+    pointScore ??
+    (opts.openAmerican !== null && opts.currentAmerican !== null
+      ? visibleOddsMarketReadScore(opts.openAmerican, opts.currentAmerican)
+      : null);
   if (score === null) {
     return projectionLedMarketRead(opts.read, {
       evidenceAsOf: opts.observedAt ?? opts.read?.evidenceAsOf ?? null,
@@ -4373,10 +4421,16 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   if (correctedMarket) {
     modelMarketGapPct = null;
   }
+  const visibleLastMove =
+    input.lastMove?.nextAmerican !== null &&
+    input.lastMove?.nextAmerican === priceAmerican
+      ? input.lastMove
+      : null;
   const marketReadV2 = alignMarketReadV2ToVisibleOdds({
     read: input.marketReadV2 ?? null,
     enabled: input.marketReadV2Enabled === true,
     market: input.market,
+    pick: input.pick,
     openAmerican:
       openAmerican ??
       input.oddspherePostedAmerican ??
@@ -4387,14 +4441,11 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
       input.lockedPriceAmerican ??
       input.marketReadV2?.movement?.currentPrice ??
       null,
+    previousLine: visibleLastMove?.prevLineValue ?? null,
+    currentLine: visibleLastMove?.nextLineValue ?? null,
     observedAt: priceObservedAt ?? lineOpenObservedAt,
     generatedAt: new Date().toISOString(),
   });
-  const visibleLastMove =
-    input.lastMove?.nextAmerican !== null &&
-    input.lastMove?.nextAmerican === priceAmerican
-      ? input.lastMove
-      : null;
   const displaySelectedSide = resolveDisplaySelectedSide({
     market: input.market,
     modelSide: input.modelSide,
@@ -5383,6 +5434,7 @@ export const __TEST__ = {
   marketAwareBreakdownDto,
   buildSourceAwareSplitSectionsFromRows,
   resolveSharpBookSplitSection,
+  visibleTotalPointMarketReadScore,
   GRADE_RANK,
 };
 
