@@ -445,7 +445,17 @@ export function auditDailyEdgeBoards(
             });
           }
         }
-        if (game.lockState === "locked" && market.lockedLineAmerican !== null && market.priceAmerican !== market.lockedLineAmerican) {
+        const neutralLockedFirstInning =
+          slot === "first_inning" &&
+          market.verdict?.key === "no_play" &&
+          String(market.pick ?? "").toLowerCase() === "toss-up" &&
+          market.priceAmerican === null;
+        if (
+          game.lockState === "locked" &&
+          market.lockedLineAmerican !== null &&
+          market.priceAmerican !== market.lockedLineAmerican &&
+          !neutralLockedFirstInning
+        ) {
           push("locked_price_not_frozen", sport, game, slot, market, {
             priceAmerican: market.priceAmerican,
             lockedLineAmerican: market.lockedLineAmerican,
