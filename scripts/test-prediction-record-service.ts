@@ -27,6 +27,7 @@ import {
   resolveMlMidPriceEstablishedPriceBestAngle,
   resolveMlMidPriceNearMarketLean,
   resolveMlTightMarketPriceBestAngle,
+  resolveMlbMarketAwareSideCorrection,
 } from "../lib/services/predictionRecordService";
 import { MLB_MODEL_LAYER_VERSION_SCHEMA } from "../lib/automodel/mlbModelLayerVersions";
 import { TOTALS_MARKET_OPPOSED_FLIP_RULE_ID } from "../lib/services/totalsMeanFlip";
@@ -113,6 +114,40 @@ check("-120 does not enter the Lean cohort", resolveMlMidPriceNearMarketLean({ .
 check("edge +2 upper boundary does not promote", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, edgePct: 2 }).lean === false);
 check("projection opposition blocks Lean promotion", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, sameSideProjectionGap: -0.1 }).lean === false);
 check("incomplete required data blocks Lean promotion", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, dataStatus: "incomplete_missing_required_data" }).lean === false);
+
+console.log("\n━━━ MLB Total split-signal correction precedence ━━━");
+const totalSplitCorrectionBase = {
+  market: "total" as const,
+  side: "over",
+  modelProb: 0.56,
+  marketProb: 0.5,
+  originalConfidence: 56,
+  lineDirection: "neutral" as const,
+  publicSplitSupport: false,
+  publicSplitConflict: false,
+  distanceCapApplied: false,
+  homeOdds: null,
+  awayOdds: null,
+  overOdds: -112,
+  underOdds: 105,
+};
+check(
+  "supporting split does not manufacture an opposite-side correction",
+  resolveMlbMarketAwareSideCorrection({
+    ...totalSplitCorrectionBase,
+    publicSplitSupport: true,
+  }).applied === false,
+);
+const opposingTotalCorrection = resolveMlbMarketAwareSideCorrection({
+  ...totalSplitCorrectionBase,
+  publicSplitConflict: true,
+});
+check(
+  "opposing split conflict retains the established correction trigger",
+  opposingTotalCorrection.applied === true &&
+    opposingTotalCorrection.correctedSide === "under" &&
+    opposingTotalCorrection.reasons.includes("total_split_conflict_fade"),
+);
 
 // ── Game + prediction fixtures ────────────────────────────────────
 const baseGame = {
@@ -996,8 +1031,8 @@ console.log("\n━━━ MLB market-aware final side correction ━━━");
         market_total: 8.5,
         posterior_total: 9.1,
         ou_model_prob: 0.56,
-        ou_market_prob: 0.52,
-        ou_edge_pct: 4.0,
+        ou_market_prob: 0.50,
+        ou_edge_pct: 6.0,
       },
     },
   };
@@ -1043,17 +1078,16 @@ console.log("\n━━━ MLB market-aware final side correction ━━━");
   const correction = (ou.snapshot_json as any)?.market_aware_side_correction;
   const flip = (ou.snapshot_json as any)?.ou_flip;
   const rejection = (ou.snapshot_json as any)?.totals_correction_rejection;
-  check("Total market-aware candidate leaves original side official", ou.pick === "over" && ou.odds_american === -112);
-  check("Total market-aware stand-down preserves original edge for audit", typeof ou.edge === "number" && ou.edge === 4);
-  check("Total market-aware correction is explicit No Play", ou.best_angle === false && ou.play_grade === null && ou.no_bet === true);
+  const validatedLean = (ou.snapshot_json as any)?.total_validated_lean;
+  check("Supporting total split leaves original side official", ou.pick === "over" && ou.odds_american === -112);
+  check("Supporting total split preserves original edge", typeof ou.edge === "number" && ou.edge === 6);
+  check("Supporting total split can retain validated Lean", ou.best_angle === false && ou.play_grade === "lean" && ou.no_bet === false);
   check(
-    "Total market-aware rejection audit is stamped",
+    "Supporting total split does not create a rejected opposite-side correction",
     correction == null &&
       flip == null &&
-      rejection?.action === "stand_down" &&
-      rejection?.rule_id === MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID &&
-      rejection?.rejected_candidate_side === "under" &&
-      rejection?.market_aware_reasons?.includes("total_split_support_fade"),
+      rejection == null &&
+      validatedLean?.rule_id === "total_validated_lean_v1_2026_07_11",
   );
 }
 {
