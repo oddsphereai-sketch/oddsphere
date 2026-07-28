@@ -120,6 +120,23 @@ async function main() {
   },
   currentLadder: {
     combinedByGrade: groupedMetrics(settled, (row) => row.play_grade),
+    actionableByMarketSide: groupedMetrics(
+      currentActionables,
+      (row) => marketSide(row),
+    ),
+    actionableByWindowAndMarketSide: Object.fromEntries(
+      Object.entries(windows).map(([name, window]) => [
+        name,
+        groupedMetrics(
+          inWindow(currentActionables, window),
+          (row) => marketSide(row),
+        ),
+      ]),
+    ),
+    watchlistByMarketSide: groupedMetrics(
+      settled.filter((row) => row.play_grade === "WATCHLIST"),
+      (row) => marketSide(row),
+    ),
     byWindowAndGrade: Object.fromEntries(
       Object.entries(windows).map(([name, window]) => [
         name,

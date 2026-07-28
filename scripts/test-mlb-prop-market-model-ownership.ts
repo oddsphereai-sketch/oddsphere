@@ -18,20 +18,20 @@ import {
 
 const versions = activeMlbPropMarketModelVersions();
 assert.deepEqual(Object.keys(versions).sort(), [...MLB_PROP_MARKET_KEYS].sort());
-assert.equal(versions.batter_hits, `${BATTER_HITS_PA_MODEL_VERSION}_actionability_v4_market_calibrated_price_edge_best_angle`);
-assert.equal(versions.batter_hits_runs_rbis, `${BATTER_HRR_MODEL_VERSION}_actionability_v3_reliability_calibrated`);
-assert.equal(versions.pitcher_strikeouts, "pitcher_strikeouts_distribution_v3_verified_side_calibrated");
-assert.equal(versions.pitcher_outs, "pitcher_outs_peer_consensus_compact_core_v3_verified");
+assert.equal(versions.batter_hits, `${BATTER_HITS_PA_MODEL_VERSION}_actionability_v5_uncapped_validated_under`);
+assert.equal(versions.batter_hits_runs_rbis, `${BATTER_HRR_MODEL_VERSION}_actionability_v4_uncapped_validated_under`);
+assert.equal(versions.pitcher_strikeouts, "pitcher_strikeouts_distribution_v4_over_actionable_only");
+assert.equal(versions.pitcher_outs, "pitcher_outs_peer_consensus_compact_core_v4_over_actionable_only");
 assert.equal(versions.pitcher_walks, "pitcher_walks_distribution_v1_conservative_over_market_only_calibrated");
-assert.equal(versions.pitcher_earned_runs, "pitcher_earned_runs_distribution_v1_conservative_uncapped");
-assert.equal(versions.batter_runs_scored, "batter_runs_context_opportunity_integrated_read_v3_calibrated_under_promotions");
-assert.equal(versions.batter_home_runs, "batter_home_runs_rare_event_integrated_read_v8_relative_quality_lean_path");
-assert.equal(versions.batter_singles, "batter_singles_event_distribution_integrated_read_v4_reliability_calibrated_lean_only");
+assert.equal(versions.pitcher_earned_runs, "pitcher_earned_runs_distribution_v2_watchlist_only");
+assert.equal(versions.batter_runs_scored, "batter_runs_context_opportunity_integrated_read_v4_unvalidated_special_promotion_removed");
+assert.equal(versions.batter_home_runs, "batter_home_runs_rare_event_integrated_read_v9_standardized_quality_lean_path");
+assert.equal(versions.batter_singles, "batter_singles_event_distribution_integrated_read_v5_under_lean_only");
 assert.equal(versions.batter_doubles, "batter_doubles_event_distribution_integrated_read_v3_reliability_calibrated");
-assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_07_28_r13");
+assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_07_28_r14");
 assert.match(MLB_PROPS_MODEL_RELEASE_ID, /^mlb_props_\d{4}_\d{2}_\d{2}_r\d+$/);
 assert.equal(modelForRealPitcherMarket("pitcher_strikeouts")?.modelName, "pitcher_strikeouts_distribution_v3_verified");
-assert.equal(modelForRealPitcherMarket("pitcher_outs")?.modelName, versions.pitcher_outs);
+assert.equal(modelForRealPitcherMarket("pitcher_outs")?.modelName, "pitcher_outs_peer_consensus_compact_core_v3_verified");
 assert.equal(modelForRealPitcherMarket("pitcher_hits_allowed")?.modelName, "pitcher_hits_allowed_distribution_v1_conservative");
 assert.equal(modelForRealPitcherMarket("pitcher_walks")?.modelName, "pitcher_walks_distribution_v1_conservative");
 assert.equal(modelForRealPitcherMarket("pitcher_earned_runs")?.modelName, "pitcher_earned_runs_distribution_v1_conservative");
@@ -54,8 +54,8 @@ assert.ok(hrrBranch >= 0 && hrrBranch < legacyHitterMath, "H+R+RBI must exit bef
 assert.ok(!liveBoard.includes("applyValidatedPremiumBestAngles"));
 assert.ok(!liveBoard.includes("VALIDATED_SINGLES_PREMIUM_BEST_ANGLE"));
 assert.ok(!liveBoard.includes("HOME_RUN_PROMOTION_DAILY_CAP"));
-assert.ok(liveBoard.includes("selectRelativeQualityCandidateIds"));
-assert.ok(liveBoard.includes("VALIDATED_HOME_RUN_RELATIVE_QUALITY_PROMOTION"));
+assert.ok(liveBoard.includes("selectStandardizedQualityCandidateIds"));
+assert.ok(liveBoard.includes("VALIDATED_HOME_RUN_STANDARDIZED_QUALITY_PROMOTION"));
 assert.ok(realScoring.includes("if (!isPitcherMarket(row.odds.marketKey)) continue;"));
 assert.ok(realScoring.includes("modelForRealPitcherMarket"));
 

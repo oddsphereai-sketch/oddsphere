@@ -1,11 +1,11 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import {
-  HOME_RUN_RELATIVE_QUALITY_POLICY,
+  HOME_RUN_STANDARDIZED_QUALITY_POLICY,
   MLB_PROPS_RECOVERY_POLICY_VERSION,
   projectAuditableCountOverProbability,
   qualifiesHitsUnderPriceEdge,
   scoreHomeRunRelativeQualityCandidate,
-  selectRelativeQualityCandidateIds,
+  selectStandardizedQualityCandidateIds,
 } from "../lib/mlb/props/actionabilityPolicy";
 
 type Observation = {
@@ -96,26 +96,26 @@ const report = {
   homeRuns: {
     qualifiedForRuntime: true,
     observations: homeRunRows.length,
-    policy: HOME_RUN_RELATIVE_QUALITY_POLICY,
+    policy: HOME_RUN_STANDARDIZED_QUALITY_POLICY,
     windows: homeRunWindowResults,
     combined: summarize(recoveredHomeRuns),
     dailyVolume: summarizeDailyVolume(recoveredHomeRuns),
     dateClusterBootstrap: clusterBootstrap(recoveredHomeRuns),
-    qualityFractionSensitivity: [0.12, 0.15, 0.18].map((qualityFraction) => ({
-      qualityFraction,
+    standardizedThresholdSensitivity: [0.75, 1, 1.25, 1.5].map((standardizedThreshold) => ({
+      standardizedThreshold,
       windows: Object.fromEntries(
         Object.entries(windows).map(([name, [from, through]]) => [
           name,
           summarize(selectHomeRuns(
             homeRunRows.filter((row) => row.date >= from && row.date <= through),
-            qualityFraction,
+            standardizedThreshold,
           )),
         ]),
       ),
     })),
     priorVsRecovered: {
       priorRankedSleeve: summarize(priorHomeRuns),
-      recoveredRelativeQuality: summarize(recoveredHomeRuns),
+      recoveredStandardizedQuality: summarize(recoveredHomeRuns),
       retained: recoveredHomeRuns.filter((row) =>
         priorHomeRunKeys.has(decisionKey(row))).length,
       promoted: recoveredHomeRuns.filter((row) =>
@@ -147,7 +147,8 @@ console.log(JSON.stringify(report, null, 2));
 
 function selectHomeRuns(
   source: Observation[],
-  qualityFraction: number = HOME_RUN_RELATIVE_QUALITY_POLICY.actionableQualityFraction,
+  standardizedThreshold: number =
+    HOME_RUN_STANDARDIZED_QUALITY_POLICY.minimumStandardizedExpectedValue,
 ): Decision[] {
   const eligible = source.flatMap((row) => {
     const americanOdds = decimalToAmerican(row.bestOverDecimal);
@@ -169,12 +170,12 @@ function selectHomeRuns(
     }];
   });
   return groupByDate(eligible).flatMap((daily) => {
-    const selectedIds = selectRelativeQualityCandidateIds(
+    const selectedIds = selectStandardizedQualityCandidateIds(
       daily.map((row) => ({
         id: decisionKey(row),
         expectedValue: row.expectedValue,
       })),
-      qualityFraction,
+      standardizedThreshold,
     );
     return daily.filter((row) => selectedIds.has(decisionKey(row)));
   });

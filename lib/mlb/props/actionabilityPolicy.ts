@@ -1,7 +1,7 @@
 import { assessPropPrice } from "./pricePolicy";
 
 export const MLB_PROPS_RECOVERY_POLICY_VERSION =
-  "mlb_props_actionability_recovery_v2_2026_07_28";
+  "mlb_props_actionability_recovery_v3_2026_07_28";
 
 export const HITS_UNDER_PRICE_EDGE_POLICY = {
   minimumMarketProbability: 0.4,
@@ -9,15 +9,31 @@ export const HITS_UNDER_PRICE_EDGE_POLICY = {
   minimumExpectedValue: 0.02,
 } as const;
 
-export const HOME_RUN_RELATIVE_QUALITY_POLICY = {
+export const HOME_RUN_STANDARDIZED_QUALITY_POLICY = {
   minimumProjection: 0.08,
   minimumRecentSurvival: 0.15,
   minimumMarketProbability: 0.08,
-  minimumExpectedValue: 0.04,
+  minimumExpectedValue: 0.12,
+  minimumStandardizedExpectedValue: 1.25,
   minimumAmericanOdds: 200,
   maximumAmericanOdds: 650,
   reliabilityWeight: 0.1,
-  actionableQualityFraction: 0.15,
+} as const;
+
+export const VALIDATED_UNDER_PROMOTION_POLICIES = {
+  batter_hits: {
+    minimumModelProbability: 0.56,
+    minimumRawEdge: 0.1,
+    minimumFinalEdge: 0.02,
+    minimumExpectedValue: 0.01,
+  },
+  batter_hits_runs_rbis: {
+    line: 1.5,
+    minimumModelProbability: 0.56,
+    minimumRawEdge: 0.08,
+    minimumFinalEdge: 0.02,
+    minimumExpectedValue: 0.01,
+  },
 } as const;
 
 export type HomeRunRelativeQualityScore = {
@@ -62,18 +78,17 @@ export function scoreHomeRunRelativeQualityCandidate(args: {
   });
   const finalProbability = clampProbability(
     args.marketProbability
-    + HOME_RUN_RELATIVE_QUALITY_POLICY.reliabilityWeight
+    + HOME_RUN_STANDARDIZED_QUALITY_POLICY.reliabilityWeight
       * (modelProbability - args.marketProbability),
   );
   const expectedValue = expectedValueAtPrice(finalProbability, args.americanOdds);
   return {
     eligible:
-      args.projection >= HOME_RUN_RELATIVE_QUALITY_POLICY.minimumProjection
-      && args.recentSurvival >= HOME_RUN_RELATIVE_QUALITY_POLICY.minimumRecentSurvival
-      && args.marketProbability >= HOME_RUN_RELATIVE_QUALITY_POLICY.minimumMarketProbability
-      && expectedValue >= HOME_RUN_RELATIVE_QUALITY_POLICY.minimumExpectedValue
-      && args.americanOdds >= HOME_RUN_RELATIVE_QUALITY_POLICY.minimumAmericanOdds
-      && args.americanOdds <= HOME_RUN_RELATIVE_QUALITY_POLICY.maximumAmericanOdds
+      args.projection >= HOME_RUN_STANDARDIZED_QUALITY_POLICY.minimumProjection
+      && args.recentSurvival >= HOME_RUN_STANDARDIZED_QUALITY_POLICY.minimumRecentSurvival
+      && args.marketProbability >= HOME_RUN_STANDARDIZED_QUALITY_POLICY.minimumMarketProbability
+      && args.americanOdds >= HOME_RUN_STANDARDIZED_QUALITY_POLICY.minimumAmericanOdds
+      && args.americanOdds <= HOME_RUN_STANDARDIZED_QUALITY_POLICY.maximumAmericanOdds
       && assessPropPrice(args.americanOdds).signalEligible,
     modelProbability,
     finalProbability,
@@ -81,27 +96,55 @@ export function scoreHomeRunRelativeQualityCandidate(args: {
   };
 }
 
-export function selectRelativeQualityCandidateIds<T extends {
+export function selectStandardizedQualityCandidateIds<T extends {
   id: string;
   expectedValue: number;
 }>(
   candidates: readonly T[],
-  qualityFraction: number = HOME_RUN_RELATIVE_QUALITY_POLICY.actionableQualityFraction,
+  minimumStandardizedExpectedValue: number =
+    HOME_RUN_STANDARDIZED_QUALITY_POLICY.minimumStandardizedExpectedValue,
 ): Set<string> {
-  if (!candidates.length) return new Set();
-  const sorted = [...candidates].sort((a, b) =>
-    b.expectedValue - a.expectedValue || a.id.localeCompare(b.id));
-  const thresholdIndex = Math.max(
+  if (candidates.length < 2) return new Set();
+  const mean = candidates.reduce(
+    (sum, candidate) => sum + candidate.expectedValue,
     0,
-    Math.ceil(sorted.length * qualityFraction) - 1,
-  );
-  const threshold = sorted[thresholdIndex]?.expectedValue;
-  if (threshold === undefined) return new Set();
+  ) / candidates.length;
+  const variance = candidates.reduce(
+    (sum, candidate) => sum + (candidate.expectedValue - mean) ** 2,
+    0,
+  ) / candidates.length;
+  const standardDeviation = Math.sqrt(variance);
+  if (standardDeviation <= 0) return new Set();
   return new Set(
-    sorted
-      .filter((candidate) => candidate.expectedValue >= threshold)
+    candidates
+      .filter((candidate) =>
+        candidate.expectedValue
+          >= HOME_RUN_STANDARDIZED_QUALITY_POLICY.minimumExpectedValue
+        && (candidate.expectedValue - mean) / standardDeviation
+          >= minimumStandardizedExpectedValue)
       .map((candidate) => candidate.id),
   );
+}
+
+export function qualifiesValidatedUnderPromotion(args: {
+  market: string;
+  line: number;
+  modelProbability: number;
+  marketProbability: number;
+  finalEdge: number;
+  expectedValue: number;
+  americanOdds: number;
+}): boolean {
+  const policy = VALIDATED_UNDER_PROMOTION_POLICIES[
+    args.market as keyof typeof VALIDATED_UNDER_PROMOTION_POLICIES
+  ];
+  if (!policy) return false;
+  if ("line" in policy && args.line !== policy.line) return false;
+  return args.modelProbability >= policy.minimumModelProbability
+    && args.modelProbability - args.marketProbability >= policy.minimumRawEdge
+    && args.finalEdge >= policy.minimumFinalEdge
+    && args.expectedValue >= policy.minimumExpectedValue
+    && assessPropPrice(args.americanOdds).signalEligible;
 }
 
 function expectedValueAtPrice(probability: number, americanOdds: number): number {
