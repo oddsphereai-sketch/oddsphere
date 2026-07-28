@@ -359,7 +359,8 @@ function flippedRow(row: Row): Row | null {
 
 async function pageAll(): Promise<Row[]> {
   const output: Row[] = [];
-  for (let from = 0; ; from += 1000) {
+  const pageSize = 250;
+  for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
       .from("prediction_records")
       .select([
@@ -373,10 +374,10 @@ async function pageAll(): Promise<Row[]> {
       .gte("slate_date", "2026-06-07")
       .not("locked_at", "is", null)
       .order("id", { ascending: true })
-      .range(from, from + 999);
+      .range(from, from + pageSize - 1);
     if (error) throw new Error(error.message);
     output.push(...((data ?? []) as Row[]));
-    if ((data ?? []).length < 1000) return output;
+    if ((data ?? []).length < pageSize) return output;
   }
 }
 

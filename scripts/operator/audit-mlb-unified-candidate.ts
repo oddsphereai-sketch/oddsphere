@@ -159,6 +159,13 @@ function slateWeek(row: Row): string {
   return value.toISOString().slice(0, 10);
 }
 
+function chronologicalSplit(row: Row): string {
+  const date = String(row.slate_date ?? "");
+  if (date <= "2026-07-17") return "train_2026-07-11_to_17";
+  if (date <= "2026-07-22") return "validation_2026-07-18_to_22";
+  return "untouched_2026-07-23_forward";
+}
+
 function decisionRule(row: Row): string {
   return String(
     row.snapshot_json?.decision_pipeline?.action_rule_id ??
@@ -424,7 +431,7 @@ async function main() {
     ? []
     : daily.filter((row) => row.slate_date === latestDate);
 
-  console.log(JSON.stringify({
+  const report = {
     mode: "read_only_unified_mlb_candidate_audit",
     noWrites: true,
     authority: {
@@ -538,6 +545,18 @@ async function main() {
         currentHeads.filter(actionable),
         (row) => `${row.market}|${decisionRule(row)}`,
       ),
+      currentHeadActionableByMarketRuleAndSide: group(
+        currentHeads.filter(actionable),
+        (row) => `${row.market}|${decisionRule(row)}|${String(row.side ?? row.pick ?? "unknown").toLowerCase()}`,
+      ),
+      currentHeadActionableByMarketGradeAndSide: group(
+        currentHeads.filter(actionable),
+        (row) => `${row.market}|${publicGrade(row)}|${String(row.side ?? row.pick ?? "unknown").toLowerCase()}`,
+      ),
+      currentHeadActionableByRuleAndChronologicalSplit: group(
+        currentHeads.filter(actionable),
+        (row) => `${decisionRule(row)}|${chronologicalSplit(row)}`,
+      ),
       currentHeadActionableByRuleAndWeek: group(
         currentHeads.filter(actionable),
         (row) => `${decisionRule(row)}|week_${slateWeek(row)}`,
@@ -601,7 +620,18 @@ async function main() {
         "each_total_flip_family_independently",
       ],
     },
-  }, null, 2));
+  };
+  const section = process.argv.find((arg) => arg.startsWith("--section="))?.slice("--section=".length);
+  if (section) {
+    console.log(JSON.stringify({
+      mode: report.mode,
+      noWrites: report.noWrites,
+      section,
+      value: (report as Record<string, unknown>)[section] ?? null,
+    }, null, 2));
+    return;
+  }
+  console.log(JSON.stringify(report, null, 2));
 }
 
 main().catch((error) => {

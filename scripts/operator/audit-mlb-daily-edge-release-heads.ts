@@ -129,7 +129,8 @@ async function loadRows(): Promise<Row[]> {
   }
   const { supabase } = await import("../../lib/db/supabase");
   const output: Row[] = [];
-  for (let from = 0; ; from += 1000) {
+  const pageSize = 250;
+  for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
       .from("prediction_records")
       .select([
@@ -153,10 +154,10 @@ async function loadRows(): Promise<Row[]> {
       .in("market", [...markets])
       .gte("slate_date", "2026-06-01")
       .order("id", { ascending: true })
-      .range(from, from + 999);
+      .range(from, from + pageSize - 1);
     if (error) throw new Error(error.message);
     output.push(...((data ?? []) as Row[]));
-    if ((data ?? []).length < 1000) return output;
+    if ((data ?? []).length < pageSize) return output;
   }
 }
 

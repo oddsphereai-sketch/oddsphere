@@ -16,6 +16,7 @@ import {
   applyPlayGradeGate,
   GATE_TOTAL_LEAN_MARKET_FRICTION_MAX_EDGE_PCT,
   FI_VALIDATED_BEST_ANGLE_RULE_ID,
+  FI_LEAN_SIGNED_EDGE_PRICE_BEST_ANGLE_PROMOTION_RULE_ID,
   TOTAL_VALIDATED_LEAN_RULE_ID,
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
   GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
@@ -2490,6 +2491,42 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
   const fi = recs.find((r) => r.market === "first_inning")!;
   check("FI v2 lean below old floor → play_grade='lean'", fi.play_grade === "lean");
   check("FI v2 lean below old floor → best_angle=false", fi.best_angle === false);
+}
+{
+  // An existing FI Lean with a validated final writer edge and playable price
+  // is promoted additively; it is not dependent on a target board count.
+  const fiWriterLeanPromotion = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 60,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "nrfi",
+      fi_v2_audit: {
+        fi_play_grade: "lean",
+        fi_no_bet_reason: null,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fiWriterLeanPromotion]]),
+    abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  const gate = (fi.snapshot_json as any)?.fi_final_grade_resolution;
+  check("validated FI Lean promotion → play_grade='best_angle'", fi.play_grade === "best_angle");
+  check("validated FI Lean promotion → best_angle=true", fi.best_angle === true);
+  check(
+    "validated FI Lean promotion carries additive rule id",
+    gate?.rule_id === FI_LEAN_SIGNED_EDGE_PRICE_BEST_ANGLE_PROMOTION_RULE_ID &&
+      gate?.action === "promote_to_best_angle",
+  );
 }
 {
   const fiWriterNoBet = {
