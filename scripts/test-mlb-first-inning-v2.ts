@@ -357,6 +357,20 @@ async function main() {
       r.reason.startsWith("fi_market_ok"));
   }
 
+  section("FI market baseline rejects non-NRFI 1.5-run prices");
+  {
+    const r = computeFiMarketBaseline([
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "over", line_value: 1.5, odds_american: 200, fetched_at: null },
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "under", line_value: 1.5, odds_american: -275, fetched_at: null },
+      { market_type: "first_inning_total", sportsbook: "pinnacle", side: "over", line_value: 0.5, odds_american: -109, fetched_at: null },
+      { market_type: "first_inning_total", sportsbook: "pinnacle", side: "under", line_value: 0.5, odds_american: -107, fetched_at: null },
+    ]);
+    check("1.5-run Bally Bet price cannot become an NRFI price",
+      r.listed_fi_total === 0.5 && r.nrfi_odds_american === -107 && r.yrfi_odds_american === -109);
+    check("exact half-run two-sided book remains the source",
+      r.reason === "fi_market_ok_pinnacle");
+  }
+
   section("Push 3B-2 — Over=YRFI / Under=NRFI side mapping");
   {
     // YRFI heavy line: over -150 / under +130

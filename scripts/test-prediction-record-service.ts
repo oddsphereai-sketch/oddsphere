@@ -1231,6 +1231,31 @@ console.log("\n━━━ NRFI populated → 3 records ━━━");
 {
   const fullPred = {
     ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 55,
+    sport_specific: { ...v21SportSpecific, hold_picks: [] },
+  };
+  const mixedFiLines = new Map([[14771, [
+    { game_id: 14771, market_type: "first_inning_total", side: "under", sportsbook: "ballybet", odds_american: -275, line_value: 1.5, fetched_at: "2026-06-06T16:11:00Z" },
+    { game_id: 14771, market_type: "first_inning_total", side: "over", sportsbook: "ballybet", odds_american: 200, line_value: 1.5, fetched_at: "2026-06-06T16:11:00Z" },
+    ...freshFiLines,
+  ]]]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, fullPred]]),
+    abbrevByTeamId,
+    currentLinesByGameId: mixedFiLines,
+  });
+  const fi = recs.find((r) => r.market === "first_inning");
+  check("FI writer rejects 1.5-run price contamination", fi?.odds_american === -120);
+  check("FI writer preserves the exact half-run market", fi?.line_value === 0.5);
+}
+{
+  const fullPred = {
+    ...basePrediction,
     predicted_nrfi: false,
     nrfi_confidence: 61,
     sport_specific: { ...v21SportSpecific, hold_picks: [], nrfi_decision_kind: "yrfi" },
