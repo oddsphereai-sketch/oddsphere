@@ -308,6 +308,19 @@ export function refreshDisplayedSplitFreshness(
   now: Date = new Date(),
 ): DailyEdgeGameDto[] {
   const nowMs = now.getTime();
+  const refreshDecision = (
+    decision: MarketEdgeDto["recommendationDecision"] | null | undefined,
+  ): void => {
+    if (!decision) return;
+    for (const section of [decision.consensusSplits, decision.sharpBookSplits]) {
+      if (!section) continue;
+      section.rows = section.rows.map((row) => ({
+        ...row,
+        isStale: observationIsStale(row.observedAt, nowMs),
+      }));
+    }
+  };
+
   for (const game of games) {
     for (const market of ["moneyline", "total"] as Market[]) {
       const dto = (game.markets as Record<string, MarketEdgeDto | undefined>)[market];
@@ -318,15 +331,8 @@ export function refreshDisplayedSplitFreshness(
         isStale: observationIsStale(row.observedAt, nowMs),
       }));
 
-      const decision = dto.recommendationDecision;
-      if (!decision) continue;
-      for (const section of [decision.consensusSplits, decision.sharpBookSplits]) {
-        if (!section) continue;
-        section.rows = section.rows.map((row) => ({
-          ...row,
-          isStale: observationIsStale(row.observedAt, nowMs),
-        }));
-      }
+      refreshDecision(dto.recommendationDecision);
+      refreshDecision(game.recommendationDecision?.markets[market]);
     }
   }
   return games;
