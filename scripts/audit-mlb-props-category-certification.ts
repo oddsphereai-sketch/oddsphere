@@ -75,7 +75,7 @@ const decisions: Record<string, {
     maximumActionableGrade: "BEST_ANGLE",
     actionableDirections: ["under"],
     disposition:
-      "Under has an uncapped validated Lean path; the narrower price-consensus cohort may be Best Angle. Over becomes Watchlist.",
+      "Under has an uncapped threshold path positive in every future window and is the supported Best Angle direction. Over becomes Watchlist.",
   },
   batter_total_bases: {
     maximumActionableGrade: "WATCHLIST",
@@ -86,7 +86,7 @@ const decisions: Record<string, {
     maximumActionableGrade: "LEAN",
     actionableDirections: ["over"],
     disposition:
-      "Cap-free absolute plus within-slate standardized quality threshold passed every chronological period.",
+      "Cap-free multi-book-consensus versus best-price path plus within-slate standardized quality threshold passed every chronological period.",
   },
   batter_rbis: {
     maximumActionableGrade: "WATCHLIST",
@@ -100,10 +100,10 @@ const decisions: Record<string, {
       "Retain as a lower-confidence Under Lean; remove the unvalidated special promotion overlay.",
   },
   batter_hits_runs_rbis: {
-    maximumActionableGrade: "LEAN",
+    maximumActionableGrade: "BEST_ANGLE",
     actionableDirections: ["under"],
     disposition:
-      "Line 1.5 Under has an uncapped threshold path positive in every future window. Over becomes Watchlist.",
+      "Line 1.5 Under has an uncapped threshold path positive in every future window and is promoted to Best Angle. Over becomes Watchlist.",
   },
   batter_singles: {
     maximumActionableGrade: "LEAN",

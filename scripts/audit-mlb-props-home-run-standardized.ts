@@ -143,6 +143,8 @@ const report = {
     noFixedCountOrRelativeFraction: true,
     rule:
       "Promote every eligible row whose expected value clears an absolute threshold and a fixed within-slate z-score threshold.",
+    marketReference:
+      "marketOver is the multi-book consensus probability; bestOverDecimal is the best separately available price. Runtime must preserve that separation.",
     policySelectionUsedThrough: "2026-07-12",
     untouchedValidation: untouchedWindow,
     candidateGridSize: 4 * 4 * 3 * 3 * 5 * 3,

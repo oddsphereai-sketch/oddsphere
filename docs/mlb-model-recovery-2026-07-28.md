@@ -5,20 +5,30 @@
 This audit covers MLB Player Props only. Daily Edge is frozen for a separate
 release-aware audit.
 
-- Champion before this work: `mlb_props_2026_07_27_r11`
-- Audited candidate: `mlb_props_2026_07_28_r14`
+- Champion before this follow-up: `mlb_props_2026_07_28_r14`
+- Audited candidate: `mlb_props_2026_07_28_r15`
 - Daily Edge decision release remains `mlb_daily_edge_decision_2026_07_27_r13`
 - The authoritative writer and shared MLB `prediction_pipeline` lease are
   unchanged.
-- No historical row was rewritten and no candidate release was deployed.
+- No historical row was rewritten. At the time of this report update, r15 had
+  not been deployed.
 
 The prior Singles claim was not an exact production backtest. It omitted live
 pitch-mix, history, weather, lineup, movement, and board-discipline inputs. The
 exact r11 result on 2026-07-27 was 118 settled actionables, 50-68, -31.529
 units, and -26.7% ROI. Singles Best Angles were 10-14 and -6.941 units.
 
-The r14 candidate removes Singles Best Angles and prevents Singles Over from
+The r14 release removed Singles Best Angles and prevents Singles Over from
 remaining actionable. Singles Under can only remain a lower-tier Lean.
+
+The r15 follow-up corrects two r14 attainability defects:
+
+- the Home Run runtime had collapsed multi-book consensus probability and the
+  best offered price into the same quote, making its 12% EV threshold
+  unreachable;
+- the strongest uncapped Hits Under and H+R+RBI Under paths were left at Lean
+  even though they were the board's strongest repeatedly positive
+  chronological cohorts.
 
 ## Evidence inventory
 
@@ -60,7 +70,7 @@ The old labels did not sort historical strength monotonically:
 | Watchlist | 16,710 | -510.42 | -3.1% | 0.226 |
 
 These rows span immutable historical releases; they are diagnostic and are not
-called r14 performance.
+called r14 or r15 performance.
 
 The exact historically unsupported actionable market-side cohorts contained
 1,060 settled rows and lost 98.51 units. r14 corrects those directions to
@@ -100,15 +110,16 @@ at line 1.5. It has no required count and no maximum:
 
 The future-only cohort was 156 bets, +23.36 units, and +15.0% ROI. The
 date-cluster ROI interval was -0.2% to +29.1%, with 97.4% of resamples
-positive. The interval touches zero, so these are Leans rather than guarantees.
+positive. These exact qualifying rows are r15 Best Angles: that label means
+the strongest validated board tier, not a guarantee.
 
 Runs Scored was excluded from the special promotion portfolio because its
 runtime-aligned, shrunken candidate was negative. Its ordinary lower-confidence
 Under Lean path remains, but r14 removes the unvalidated promotion override.
 
-### Hits Under Best Angle
+### Narrow Hits Under price-edge diagnostic
 
-The narrower Best Angle rule is a threshold-only price-consensus cohort:
+The narrower r14 rule was a threshold-only price-consensus cohort:
 
 - consensus probability from 0.40 through 0.60;
 - at least 2% expected value at the best available price;
@@ -123,9 +134,10 @@ The narrower Best Angle rule is a threshold-only price-consensus cohort:
 | Untouched validation | 7 | 3-4 | +0.03 | +0.4% |
 | Combined | 64 | 36-28 | +20.84 | +32.6% |
 
-The date-cluster ROI interval is -0.3% to +64.1%. This is the strongest
-repeated Best Angle evidence currently available, but the interval still
-touches zero.
+The date-cluster ROI interval is -0.3% to +64.1%. It is profitable, but r15 no
+longer makes it the only attainable Best Angle route. Every row passing the
+stronger uncapped Hits Under or H+R+RBI Under policy receives the same top-tier
+classification.
 
 ## Cap-free Home Run Lean path
 
@@ -133,7 +145,7 @@ The old five-play sleeve was profitable in aggregate but was a fixed cap. The
 r13 top-15% rule varied in count but still imposed a relative quota. Neither
 meets the no-cap requirement.
 
-An absolute EV rule alone failed the untouched period. The accepted r14 rule
+An absolute EV rule alone failed the untouched period. The accepted rule
 instead promotes every candidate that clears:
 
 - projection, recent-survival, market-probability, and price-integrity floors;
@@ -143,6 +155,16 @@ instead promotes every candidate that clears:
 
 The z-score normalizes a changing slate-wide price scale. It does not request a
 minimum, maximum, or percentage of plays. Any number may clear it.
+
+The market probability and offered price have distinct meanings. The market
+probability is the mean implied probability across at least two current
+sportsbooks for the same player/game/line. Expected value is then calculated
+at the best separately available price. The r14 runtime mistakenly used the
+best quote's own implied probability as both values. An exact historical replay
+with that defective construction produced zero promotions and a maximum EV of
+8.3%, below the 12% gate. r15 restores the backtested consensus-versus-best-price
+construction using the sportsbook rows already loaded by the authoritative
+refresh.
 
 | Period | Bets | Record | Units | ROI |
 |---|---:|---:|---:|---:|
@@ -181,7 +203,7 @@ Other Over paths failed chronology or sample requirements.
 | Home runs | Lean | Over | Cap-free standardized-quality path |
 | RBIs | Watchlist | — | No validated promotion |
 | Runs scored | Lean | Under | Lower-confidence ordinary Lean; no special promotion |
-| Hits + runs + RBIs | Lean | Under 1.5 | Exact uncapped threshold only |
+| Hits + runs + RBIs | Best Angle | Under 1.5 | Exact uncapped threshold only |
 | Singles | Lean | Under | No Best Angles; Over Watchlist |
 | Doubles | Watchlist | — | Evidence too small/unstable |
 | Triples | Watchlist | — | Sparse two-way data; milestone path failed |
@@ -194,23 +216,25 @@ reason-coded strategy is explicitly certified, such as the Home Run
 standardized-quality path. Watchlists remain evidence-bearing and sortable;
 they are not hidden as No Plays.
 
-## Board impact
+## r15 board impact
 
-The final 2026-07-28 r14 preview was read-only (`persist=false`):
+The 2026-07-28 r15 production-shaped preview was read-only (`persist=false`):
 
-- 15 games, 5,918 member rows, 17 supported markets, and six books;
+- release `mlb_props_2026_07_28_r15`, timestamp
+  `2026-07-28T15:17:30.833Z`;
+- 16 games, 6,135 canonical rows, 17 supported markets, and six books;
 - zero stale-odds rows and no validation errors;
-- 113 Leans, zero Best Angles, and 1,692 Watchlists at 09:53 ET;
-- 73 Singles Under Leans, 22 Runs Under Leans, 14 Walks Under Leans,
-  two validated Hits Under Leans, one Pitcher Outs Over Lean, and one Pitcher
-  Strikeouts Over Lean;
-- no Home Run or H+R+RBI candidate cleared its complete threshold at that
-  timestamp.
+- 2 Best Angles, 119 Leans, and 1,706 Watchlists;
+- both Best Angles were uncapped Hits Under qualifiers;
+- 7 Home Run Leans cleared the multi-book consensus, best-price, absolute-EV,
+  standardized-quality, freshness, lineup, and required-data gates;
+- three additional statistical Home Run qualifiers were withheld because
+  required opposing-starter or pitch-mix inputs were incomplete.
 
-The earlier r13 preview had 145 actionables. r14 therefore reduced the current
-actionable board by 32 while preserving 113 Leans and increasing transparent
-Watchlists. This is a visible correction, not a hidden flat-board side effect.
-No play was forced to create a Best Angle or Home Run list.
+The Home Run correction promotes seven rows from the eligible non-actionable
+pool and demotes none. Reclassifying the supported Under paths from Lean to Best
+Angle changes taxonomy without reducing the actionable count. There is no
+minimum, maximum, or target grade distribution.
 
 ## Reproducible audits
 
@@ -224,14 +248,12 @@ No play was forced to create a Best Angle or Home Run list.
 
 ## Deployment status
 
-This is a candidate only. Local verification completed:
+This is a candidate only. Local verification completed so far:
 
-- `npm run verify:model-change`;
-- 352 Player Props engine checks;
-- 19-market model ownership checks;
+- 356 Player Props engine checks;
 - TypeScript type checking;
-- reproducible recovery, cap-equivalence, grade-ladder, and category audits;
-- read-only r14 live-provider preview.
+- reproducible Home Run standardized-quality and Under cap-equivalence audits;
+- read-only r15 live-provider preview with the normal 81-call budget.
 
 The candidate also closes the delayed-writer rollback path:
 
@@ -246,10 +268,10 @@ The candidate also closes the delayed-writer rollback path:
 - the existing sport-scoped `prediction_pipeline` lease remains the sole
   writer-coordination path.
 
-After r14 first publishes, a delayed invocation from the prior deployment
+After r15 first publishes, a delayed invocation from the prior deployment
 cannot become the canonical current snapshot or a reader-visible compact
 rollback.
 
 Deployment still requires a clean intentional commit, deployment of that exact
 commit, and live release/lease/cron/coverage/reader verification. Nothing in
-this report claims r14 is live.
+this report claims r15 is live.
