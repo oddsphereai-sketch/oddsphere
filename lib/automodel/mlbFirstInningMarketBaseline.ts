@@ -50,6 +50,7 @@ const FI_BOOK_PRIORITY = BOOK_PRIORITY.filter(
   (book) => book !== "locked_snapshot" && book !== "recommendation_snapshot" && book !== "splits_consensus",
 );
 const FI_PRICE_MAX_SOURCE_AGE_MS = 90 * 60 * 1000;
+const NRFI_YRFI_LINE_VALUE = 0.5;
 
 function isFreshFiMarketPriceSource(observedAt: string | null | undefined, nowMs = Date.now()): boolean {
   if (observedAt === null || observedAt === undefined) return true;
@@ -76,6 +77,8 @@ export function computeFiMarketBaseline(linesForGame: FiLineRow[]): FiMarketBase
   const candidates = linesForGame.filter(
     (l) =>
       l.market_type === "first_inning_total" &&
+      l.line_value !== null &&
+      Math.abs(l.line_value - NRFI_YRFI_LINE_VALUE) < 0.001 &&
       !isBlockedSportsbook(l.sportsbook) &&
       isFreshFiMarketPriceSource(l.fetched_at),
   );
@@ -115,7 +118,7 @@ export function computeFiMarketBaseline(linesForGame: FiLineRow[]): FiMarketBase
   void americanToImpliedProb; // marker that helper module is wired
 
   return {
-    listed_fi_total: overRow.line_value ?? 0.5,
+    listed_fi_total: NRFI_YRFI_LINE_VALUE,
     yrfi_odds_american: overRow.odds_american,
     nrfi_odds_american: underRow.odds_american,
     yrfi_no_vig_prob: yrfiNoVig,

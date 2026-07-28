@@ -3928,6 +3928,19 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           "lines",
       }
     : null;
+  const fiPairImpliedSum =
+    fiMarketBoard?.nrfiAmerican != null && fiMarketBoard?.yrfiAmerican != null
+      ? (americanToImpliedProb(fiMarketBoard.nrfiAmerican) ?? 0) +
+        (americanToImpliedProb(fiMarketBoard.yrfiAmerican) ?? 0)
+      : null;
+  const invalidFirstInningMarket =
+    input.market === "first_inning" &&
+    fiMarketBoard !== null &&
+    (
+      fiMarketBoard.line === null ||
+      Math.abs(fiMarketBoard.line - 0.5) >= 0.001 ||
+      (fiPairImpliedSum !== null && fiPairImpliedSum > 1.15)
+    );
 
   // First-seen line for the picked side.
   //
@@ -4509,10 +4522,10 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     })(),
     marketReadV2,
     marketSupportSignal: legacyMarketSupportSignal,
-    hasPick: input.pick !== null && input.pick !== "Held",
-    held: input.held,
+    hasPick: input.pick !== null && input.pick !== "Held" && !invalidFirstInningMarket,
+    held: input.held || invalidFirstInningMarket,
     dataQualityTier: dataQualityTier ?? "fallback",
-    priceAmerican,
+    priceAmerican: invalidFirstInningMarket ? null : priceAmerican,
     priceUnavailableAtLock:
       input.isLockedRow === true && input.modelSide !== null && priceAmerican === null,
     neutralNonActionable: input.market === "first_inning" && input.pick === "Toss-Up",
@@ -4521,7 +4534,18 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // the card tier must not be strengthened by read-time actionability helpers;
   // otherwise members can see a Best Angle that tracking records as a Lean.
   const finalAction =
-    hasStoredPredictionRecord &&
+    invalidFirstInningMarket
+      ? {
+          ...normalizedAction,
+          capReasons: ["invalid_first_inning_market_line"],
+          finalGrade: null,
+          finalVerdict: { key: "no_play" as const, label: "No Play" },
+          finalRecScore: null,
+          actionabilityLabel: "No Play",
+          displayReason:
+            "No Play because the stored first-inning price does not match a valid two-sided 0.5-run NRFI/YRFI market.",
+        }
+      : hasStoredPredictionRecord &&
     writerOverride !== null
       ? (() => {
           const recFloor = recommendationScoreFloorForStoredVerdict(verdict.key);
@@ -4560,7 +4584,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     signalType: input.signalType,
     marketSignal: input.marketSignal,
     sharpStatus: input.sharpStatus,
-    held: input.held,
+    held: input.held || invalidFirstInningMarket,
     verdict: finalAction.finalVerdict,
     rawGrade: finalAction.rawGrade,
     rawRecScore: finalAction.rawRecScore,
@@ -4584,8 +4608,8 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     moneyPct: displayPickedSplit?.moneyPct ?? moneyPct,
     betsPct: displayPickedSplit?.betsPct ?? betsPct,
     publicSplits: displayPublicSplits,
-    priceAmerican,
-    fiMarketBoard,
+    priceAmerican: invalidFirstInningMarket ? null : priceAmerican,
+    fiMarketBoard: invalidFirstInningMarket ? null : fiMarketBoard,
     // Lock-snapshot honesty (2026-06-09 lock-contract fix). Only ever true
     // on locked rows when no usable real-book price exists. With Forward
     // Fix A in place (writer line_history fallback), this flag should
@@ -4610,9 +4634,9 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     // 2026-06-16 line-tracker stops (additive; null until streaming live).
     oddspherePostedAmerican: input.oddspherePostedAmerican ?? null,
     oddspherePostedAt: input.oddspherePostedAt ?? null,
-    lockedLineAmerican: input.lockedPriceAmerican ?? null,
+    lockedLineAmerican: invalidFirstInningMarket ? null : input.lockedPriceAmerican ?? null,
     lockedLineAt: input.lockedPriceAt ?? null,
-    oddsTrail,
+    oddsTrail: invalidFirstInningMarket ? [] : oddsTrail,
     // 2026-06-16 market-intelligence (derived; display/audit only).
     marketInterpretation: input.marketReadV2Enabled === true ? null : marketInterpretation,
     marketReadV2,
@@ -4628,8 +4652,8 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     keyStats,
     // R-14C1 additions
     modelTrustPct: modelTrustPctOverride ?? modelTrustPct,
-    marketImpliedPct: marketImpliedPctOverride ?? marketImpliedPct,
-    modelMarketGapPct,
+    marketImpliedPct: invalidFirstInningMarket ? null : marketImpliedPctOverride ?? marketImpliedPct,
+    modelMarketGapPct: invalidFirstInningMarket ? null : modelMarketGapPct,
     marketSource,
     marketDataQuality,
     reviewFlags: reviewMeta.flags,

@@ -910,6 +910,9 @@ function pickOddsWithFallback(
   side: string,
   nowMs = Date.now(),
 ): OddsSourceDetail {
+  const matchesMarketLine = (line: number | null | undefined): boolean =>
+    marketType !== "first_inning_total" ||
+    (typeof line === "number" && Math.abs(line - 0.5) < 0.001);
   // Tier 1 — current `lines` real-book. Blocked books (fliff, kalshi) are
   // never a valid price source (#39): drop them here so they cannot be the
   // selected lock price even if a writer persisted them to `lines`.
@@ -918,6 +921,7 @@ function pickOddsWithFallback(
       r.market_type === marketType &&
       r.side === side &&
       r.odds_american !== null &&
+      matchesMarketLine(r.line_value) &&
       r.sportsbook !== "splits_consensus" &&
       !isBlockedSportsbook(r.sportsbook) &&
       isFreshLockPriceSource(r.fetched_at, nowMs),
@@ -942,7 +946,10 @@ function pickOddsWithFallback(
   // Drop blocked books (fliff, kalshi) up front so neither the BOOK_PRIORITY
   // pass nor the "first real book" fallback below can surface one (#39).
   const history = (historyByKey.get(historyKey) ?? []).filter(
-    (r) => !isBlockedSportsbook(r.sportsbook) && isFreshLockPriceSource(r.recorded_at, nowMs),
+    (r) =>
+      !isBlockedSportsbook(r.sportsbook) &&
+      matchesMarketLine(r.line_value) &&
+      isFreshLockPriceSource(r.recorded_at, nowMs),
   );
   if (history.length > 0) {
     // History is pre-sorted by recorded_at DESC. Pick the most-recent
@@ -977,15 +984,46 @@ function pickOddsWithFallback(
   return { source: "unavailable", book: null, odds: null, line: null, observedAt: null };
 }
 
-function pickFreshOnlyOdds(
+function pickFreshHalfRunFiPair(
   lines: ReadonlyArray<LineRowForOdds>,
-  gameId: number,
-  marketType: "first_inning_total",
-  side: string,
   nowMs = Date.now(),
-): OddsSourceDetail {
-  const picked = pickOddsWithFallback(lines, new Map(), gameId, marketType, side, nowMs);
-  return picked.source === "lines" ? picked : { source: "unavailable", book: null, odds: null, line: null, observedAt: null };
+): { under: OddsSourceDetail; over: OddsSourceDetail } | null {
+  const candidates = lines.filter(
+    (row) =>
+      row.market_type === "first_inning_total" &&
+      row.odds_american !== null &&
+      typeof row.line_value === "number" &&
+      Math.abs(row.line_value - 0.5) < 0.001 &&
+      row.sportsbook !== "splits_consensus" &&
+      !isBlockedSportsbook(row.sportsbook) &&
+      isFreshLockPriceSource(row.fetched_at, nowMs),
+  );
+  const books = [
+    ...BOOK_PRIORITY.filter((book) => book !== "splits_consensus"),
+    ...candidates.map((row) => row.sportsbook),
+  ];
+  for (const book of new Set(books)) {
+    const under = candidates.find((row) => row.sportsbook === book && row.side === "under");
+    const over = candidates.find((row) => row.sportsbook === book && row.side === "over");
+    if (!under || !over) continue;
+    return {
+      under: {
+        source: "lines",
+        book,
+        odds: under.odds_american,
+        line: under.line_value ?? null,
+        observedAt: under.fetched_at ?? null,
+      },
+      over: {
+        source: "lines",
+        book,
+        odds: over.odds_american,
+        line: over.line_value ?? null,
+        observedAt: over.fetched_at ?? null,
+      },
+    };
+  }
+  return null;
 }
 
 function fiAuditFreshDataReady(sp: Record<string, unknown>): { ready: boolean; blockers: string[] } {
@@ -3575,13 +3613,26 @@ function buildFiRecord(
   // first_inning_total prices. Unlike ML/totals, FI does not use line_history
   // fallback for actionable tracking because stale FI prices can create a play
   // users should never have seen.
-  const fiPicked = sideValue === null
+  const fiPair = sideValue === null
     ? null
-    : pickFreshOnlyOdds(currentLines, game.id, "first_inning_total", internalSide, freshnessReferenceMs);
-  const fiOpposite = sideValue === null
+    : pickFreshHalfRunFiPair(currentLines, freshnessReferenceMs);
+  const fiPicked = fiPair === null ? null : fiPair[internalSide];
+  const fiOpposite = fiPair === null
     ? null
-    : pickFreshOnlyOdds(currentLines, game.id, "first_inning_total", internalSide === "under" ? "over" : "under", freshnessReferenceMs);
-  if (sideValue !== null && (fiPicked?.source !== "lines" || fiOpposite?.source !== "lines")) {
+    : fiPair[internalSide === "under" ? "over" : "under"];
+  if (
+    sideValue !== null &&
+    (
+      fiPicked?.source !== "lines" ||
+      fiOpposite?.source !== "lines" ||
+      fiPicked.book === null ||
+      fiPicked.book !== fiOpposite.book ||
+      fiPicked.line === null ||
+      fiOpposite.line === null ||
+      Math.abs(fiPicked.line - 0.5) >= 0.001 ||
+      Math.abs(fiOpposite.line - 0.5) >= 0.001
+    )
+  ) {
     return null;
   }
   const fiOddsAmerican = fiPicked?.odds ?? null;
