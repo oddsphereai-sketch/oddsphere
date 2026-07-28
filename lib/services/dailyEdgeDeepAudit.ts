@@ -64,6 +64,19 @@ function n(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
+function isPlausibleDisplayedAmericanOdds(sport: string, american: number | null): boolean {
+  if (isDisplayableAmericanOdds(american)) return true;
+  // WNBA favorite prices can legitimately exceed the generic streaming guard
+  // (the 2026-07-28 MIN market was -1400 to -1800 across independent books).
+  // This only prevents the read-only coherence audit from calling a verified
+  // consensus price corrupt; it does not admit the price into any model input.
+  return sport === "wnba" &&
+    american !== null &&
+    Number.isInteger(american) &&
+    Math.abs(american) >= 100 &&
+    Math.abs(american) <= 2500;
+}
+
 function implied(american: number | null): number | null {
   if (american === null || american === 0) return null;
   return american > 0 ? 100 / (american + 100) : Math.abs(american) / (Math.abs(american) + 100);
@@ -285,7 +298,7 @@ export function auditDailyEdgeBoards(
           ["readCurrent", n(read?.movement?.currentPrice)],
         ] as const;
         for (const [field, value] of displayedOdds) {
-          if (!isDisplayableAmericanOdds(value) && value !== null) {
+          if (!isPlausibleDisplayedAmericanOdds(sport, value) && value !== null) {
             push("implausible_displayed_american_odds", sport, game, slot, market, { field, value });
           }
         }

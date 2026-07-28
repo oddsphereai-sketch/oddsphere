@@ -45,6 +45,20 @@ function board(market: Record<string, unknown>) {
 
 {
   const result = auditDailyEdgeBoards({
+    wnba: board({
+      priceAmerican: -1587,
+      lineOpenAmerican: -1400,
+      marketReadV2: { label: "Projection-Led", sourceSummary: {}, movement: { currentPrice: -1587 } },
+    }),
+  });
+  check(
+    "verified-range WNBA heavy-favorite prices are not rejected by the read-only audit",
+    (result.summary.issueCounts.implausible_displayed_american_odds ?? 0) === 0,
+  );
+}
+
+{
+  const result = auditDailyEdgeBoards({
     mlb: board({
       priceAmerican: -177,
       lineOpenAmerican: -225,
