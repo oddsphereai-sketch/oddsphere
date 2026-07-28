@@ -140,7 +140,10 @@ import { predictionRecordFirstInningEdgeToPercentagePoints } from "@/lib/service
 // Keep this import relative so standalone operator scripts executed from a
 // linked worktree resolve the worktree implementation, not the primary
 // checkout through the shared node_modules/tsx binary.
-import { alignMarketReadsToDisplayedPublicSplits } from "../../../../lib/services/publicSplitsDisplayOverlay";
+import {
+  alignMarketReadsToDisplayedPublicSplits,
+  refreshDisplayedSplitFreshness,
+} from "../../../../lib/services/publicSplitsDisplayOverlay";
 import type { MarketDecision, MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 
 export const dynamic = "force-dynamic";
@@ -1465,7 +1468,9 @@ function buildSourceAwareSplitSectionsFromRows(
           moneyPct: pctFromFraction(row.money_pct),
           betsPct: pctFromFraction(row.bets_pct),
           observedAt: row.source_observed_at ?? row.fetched_at ?? null,
-          isStale: false,
+          isStale: isObservationStale(
+            row.source_observed_at ?? row.fetched_at ?? null,
+          ),
         }];
       });
       if (sectionRows.length === 0) return null;
@@ -5497,7 +5502,10 @@ export async function GET(request: Request) {
       // Stored snapshots may predate the latest provider display overlay. Keep
       // the cached fast path coherent too; this is an in-memory display-only
       // normalization and does not rebuild the board or touch model outputs.
-      if (sport === "mlb") alignMarketReadsToDisplayedPublicSplits(snapshot.payload.games);
+      if (sport === "mlb") {
+        refreshDisplayedSplitFreshness(snapshot.payload.games);
+        alignMarketReadsToDisplayedPublicSplits(snapshot.payload.games);
+      }
       return Response.json(snapshot.payload, {
         headers: {
           "Cache-Control": "private, max-age=30, stale-while-revalidate=300",

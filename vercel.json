@@ -39,11 +39,11 @@
     },
     {
       "path": "/api/cron/public-splits-observations-refresh",
-      "schedule": "12,42 13-23 * * *"
+      "schedule": "*/15 13-23 * * *"
     },
     {
       "path": "/api/cron/public-splits-observations-refresh",
-      "schedule": "12,42 0-3 * * *"
+      "schedule": "*/15 0-3 * * *"
     },
     {
       "path": "/api/cron/daily-edge-data-health",
