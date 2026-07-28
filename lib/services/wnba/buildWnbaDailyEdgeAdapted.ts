@@ -44,6 +44,7 @@ import { marketReadV2DtoFromSnapshot } from "@/lib/services/marketIntelligenceV2
 import { projectionLedMarketRead, withConfirmedSharpMoney } from "@/lib/services/marketIntelligenceV2/displayCoherence";
 import type { MarketReadV2Dto } from "@/lib/types/domain/MarketIntelligenceV2";
 import { buildRecommendationDecision } from "@/lib/services/recommendationDecision";
+import { wnbaObservedConsensusPrices } from "./wnbaPriceTrail";
 import {
   applyDailyEdgeRenderedCopyFlags,
   type DailyEdgeRenderedCopyFlagOverrides,
@@ -529,15 +530,14 @@ function latestPickedPrice(rows: WnbaLineRow[], market: string, side: string | n
 }
 
 function firstObservedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
-  const candidates = pickedRows(rows, market, side, line);
-  return candidates.length > 0 ? (candidates[0]!.odds_american as number) : null;
+  return wnbaObservedConsensusPrices(rows, market, side, line)[0] ?? null;
 }
 
 function previousObservedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null, current: number | null): number | null {
   if (current === null) return null;
-  const candidates = pickedRows(rows, market, side, line);
-  for (let i = candidates.length - 1; i >= 0; i--) {
-    const price = candidates[i]!.odds_american as number;
+  const prices = wnbaObservedConsensusPrices(rows, market, side, line);
+  for (let i = prices.length - 1; i >= 0; i--) {
+    const price = prices[i]!;
     if (price !== current) return price;
   }
   return null;
