@@ -163,6 +163,11 @@ agingSnapshot.markets.moneyline!.recommendationDecision = {
     lastUpdated: "2026-07-28T16:10:00.000Z",
   },
 } as NonNullable<typeof agingSnapshot.markets.moneyline>["recommendationDecision"];
+agingSnapshot.recommendationDecision = {
+  markets: {
+    moneyline: structuredClone(agingSnapshot.markets.moneyline!.recommendationDecision),
+  },
+} as DailyEdgeGameDto["recommendationDecision"];
 refreshDisplayedSplitFreshness(
   [agingSnapshot],
   new Date("2026-07-28T16:40:00.000Z"),
@@ -171,6 +176,8 @@ const agedMl = agingSnapshot.markets.moneyline!;
 check("cached collapsed split rows become stale after the observation TTL", agedMl.publicSplits.every((row) => row.isStale === true));
 check("cached canonical consensus rows become stale after the observation TTL", agedMl.recommendationDecision?.consensusSplits?.rows.every((row) => row.isStale === true) === true);
 check("cached sharp-book rows become stale after the observation TTL", agedMl.recommendationDecision?.sharpBookSplits?.rows.every((row) => row.isStale === true) === true);
+check("cached game-level recommendation consensus rows become stale after the observation TTL", agingSnapshot.recommendationDecision?.markets.moneyline?.consensusSplits?.rows.every((row) => row.isStale === true) === true);
+check("cached game-level recommendation sharp rows become stale after the observation TTL", agingSnapshot.recommendationDecision?.markets.moneyline?.sharpBookSplits?.rows.every((row) => row.isStale === true) === true);
 check("read-time freshness repair never changes the pick", agedMl.pick === "WSH");
 
 const splitCron = readFileSync("app/api/cron/public-splits-observations-refresh/route.ts", "utf8");
