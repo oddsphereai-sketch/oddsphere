@@ -118,12 +118,20 @@ async function main() {
   if (schedules.length < 2) {
     fail("T8 feature cron scheduled", "feature-coverage-refresh must be scheduled for daytime and late-game windows");
   }
-  if (!schedules.includes("55 7,9,11,12-23 * * *") || !schedules.includes("55 0-2 * * *")) {
+  if (!schedules.includes("55 7,9,11,13,15,17,19,21,23 * * *") || !schedules.includes("55 0-2 * * *")) {
     fail("T8 feature cron scheduled", `unexpected schedules: ${schedules.join(", ")}`);
   }
   ok("T8 feature-coverage-refresh scheduled before slate-cycle");
 
-  console.log(`\n  result: 8/8 pass\n`);
+  if (
+    !src.includes('leaseGroup: "prediction_pipeline"') ||
+    !src.includes("requireLease: true")
+  ) {
+    fail("T9 shared writer lease", "feature refresh must use the required prediction_pipeline lease");
+  }
+  ok("T9 feature refresh shares the required MLB prediction writer lease");
+
+  console.log(`\n  result: 9/9 pass\n`);
 }
 
 main().catch((e) => { console.error("FATAL:", e); process.exit(1); });

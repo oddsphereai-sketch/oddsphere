@@ -78,10 +78,24 @@ check(
 );
 
 check(
+  "MLB props delegate to the authoritative writer while non-MLB stays intact",
+  ROUTE.includes('writer: "mlb_player_props_refresh"') &&
+    ROUTE.includes('} else {') &&
+    ROUTE.includes("predictionService.generatePropPredictions(sport, date)"),
+);
+
+check(
   "lineup-watch is scheduled in Vercel cron",
   VERCEL.includes('"/api/cron/lineup-watch"') &&
     VERCEL.includes('"13,43 13-23 * * *"') &&
     VERCEL.includes('"13,43 0-3 * * *"'),
+);
+
+check(
+  "full props refresh does not collide with the :05 slate rebuild",
+  VERCEL.includes('"/api/cron/mlb-player-props-refresh?full=true"') &&
+    VERCEL.includes('"27 1,4,10,13,16,19,22 * * *"') &&
+    !VERCEL.includes('"2 1,4,10,13,16,19,22 * * *"'),
 );
 
 console.log(`\n━━━ Results ━━━\n  ✓ ${pass}    ✗ ${fail}`);
