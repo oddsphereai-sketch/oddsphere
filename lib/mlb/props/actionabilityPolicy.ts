@@ -1,7 +1,7 @@
 import { assessPropPrice } from "./pricePolicy";
 
 export const MLB_PROPS_RECOVERY_POLICY_VERSION =
-  "mlb_props_actionability_recovery_v3_2026_07_28";
+  "mlb_props_actionability_recovery_v4_2026_07_28";
 
 export const HITS_UNDER_PRICE_EDGE_POLICY = {
   minimumMarketProbability: 0.4,
@@ -42,6 +42,17 @@ export type HomeRunRelativeQualityScore = {
   finalProbability: number;
   expectedValue: number;
 };
+
+export function consensusMarketProbabilityFromAmericanOdds(
+  americanOdds: readonly number[],
+): number | null {
+  const probabilities = americanOdds
+    .map((odds) => assessPropPrice(odds).impliedProbability)
+    .filter((value): value is number => value !== null);
+  if (probabilities.length < 2) return null;
+  return probabilities.reduce((sum, value) => sum + value, 0)
+    / probabilities.length;
+}
 
 export function projectAuditableCountOverProbability(args: {
   projection: number;

@@ -84,6 +84,8 @@ import {
 } from "./internalTracking";
 import { calibratedPropModelWeight } from "./probabilityCalibration";
 import {
+  consensusMarketProbabilityFromAmericanOdds,
+  HOME_RUN_STANDARDIZED_QUALITY_POLICY,
   qualifiesHitsUnderPriceEdge,
   qualifiesValidatedUnderPromotion,
   scoreHomeRunRelativeQualityCandidate,
@@ -1148,28 +1150,17 @@ function applyValidatedUnderActionablePromotions(
 
   const promotedIds = new Set<string>();
   const bestOffers = eligible.filter((row) => bestOfferIds.has(row.id));
-  const hitsPriceEdgeIds = new Set(
-    bestOffers
-      .filter((row) =>
-        row.market === "batter_hits"
-        && row.marketProbability !== null
-        && qualifiesHitsUnderPriceEdge({
-          marketProbability: row.marketProbability,
-          americanOdds: row.odds,
-        }))
-      .map((row) => row.id),
-  );
   for (const row of bestOffers) promotedIds.add(row.id);
   if (!promotedIds.size) return rows;
 
   return rows.map((row) => promotedIds.has(row.id) ? {
     ...row,
-    playGrade: hitsPriceEdgeIds.has(row.id) ? "BEST_ANGLE" : "LEAN",
+    playGrade: "BEST_ANGLE",
     units: 0.25,
     reasonCodes: uniqueStrings([
       ...row.reasonCodes,
       "VALIDATED_MARKET_PROMOTION",
-      ...(hitsPriceEdgeIds.has(row.id) ? ["VALIDATED_HITS_UNDER_BEST_ANGLE"] : []),
+      "VALIDATED_UNDER_BEST_ANGLE",
     ]),
   } : row);
 }
@@ -1177,52 +1168,59 @@ function applyValidatedUnderActionablePromotions(
 function applyValidatedHomeRunActionablePromotions(
   rows: PlayerPropPreviewRow[],
 ): PlayerPropPreviewRow[] {
-  const eligible = rows.flatMap((row) => {
-    if (
-      row.market !== "batter_home_runs"
-      || row.side !== "over"
-      || row.playGrade !== "WATCHLIST"
-      || row.marketProbability === null
-    ) return [];
+  const freshOffers = rows.filter((row) =>
+    row.market === "batter_home_runs"
+    && row.side === "over"
+    && row.line === 0.5
+    && row.playGrade !== "PENDING_DATA"
+    && row.lineupStatus?.status !== "not_in_lineup"
+    && row.missingFeatures.every(isSignalOptionalMemberFeature)
+    && !row.reasonCodes.includes("STALE_ODDS")
+    && !row.reasonCodes.includes("MODEL_CONTEXT_NOT_INTEGRATED")
+    && !row.reasonCodes.includes("INVALID_PRICE_FORMAT"));
+  const eligible = [...groupRows(freshOffers, signalOfferKey).values()]
+    .flatMap((offers) => {
+      const distinctBooks = new Set(offers.map((row) => row.book));
+      if (distinctBooks.size < 2) return [];
+      const marketProbability = consensusMarketProbabilityFromAmericanOdds(
+        offers.map((row) => row.odds),
+      );
+      if (marketProbability === null) return [];
+      const [bestOffer] = [...offers].sort((a, b) =>
+        b.odds - a.odds || comparePropSignals(a, b));
+      if (!bestOffer) return [];
 
-    const seasonValues = row.recentForm?.samples?.season.values
-      .filter((value) => Number.isFinite(value)) ?? [];
-    if (seasonValues.length < 10) return [];
-    const seasonMean = averageNumber(seasonValues);
-    const auditProjection = (
-      seasonMean * seasonValues.length
-      + HOME_RUN_PROJECTION_PRIOR * HOME_RUN_PROJECTION_PRIOR_GAMES
-    ) / (seasonValues.length + HOME_RUN_PROJECTION_PRIOR_GAMES);
+      const seasonValues = bestOffer.recentForm?.samples?.season.values
+        .filter((value) => Number.isFinite(value)) ?? [];
+      if (seasonValues.length < 10) return [];
+      const seasonMean = averageNumber(seasonValues);
+      const auditProjection = (
+        seasonMean * seasonValues.length
+        + HOME_RUN_PROJECTION_PRIOR * HOME_RUN_PROJECTION_PRIOR_GAMES
+      ) / (seasonValues.length + HOME_RUN_PROJECTION_PRIOR_GAMES);
 
-    const recentValues = seasonValues.slice(0, 20);
-    const recentSurvival = (
-      recentValues.filter((value) => value > row.line).length
-      + 2 * row.marketProbability
-    ) / (recentValues.length + 2);
-    const score = scoreHomeRunRelativeQualityCandidate({
-      projection: auditProjection,
-      recentSurvival,
-      marketProbability: row.marketProbability,
-      americanOdds: row.odds,
-      line: row.line,
+      const recentValues = seasonValues.slice(0, 20);
+      const recentSurvival = (
+        recentValues.filter((value) => value > bestOffer.line).length
+        + 2 * marketProbability
+      ) / (recentValues.length + 2);
+      const score = scoreHomeRunRelativeQualityCandidate({
+        projection: auditProjection,
+        recentSurvival,
+        marketProbability,
+        americanOdds: bestOffer.odds,
+        line: bestOffer.line,
+      });
+      return score.eligible ? [{
+        row: bestOffer,
+        score,
+        auditProjection,
+        marketProbability,
+      }] : [];
     });
-    return score.eligible ? [{ row, score }] : [];
-  });
-
-  const bestOfferIds = new Set<string>();
-  for (const offers of groupRows(
-    eligible,
-    (candidate) => signalOfferKey(candidate.row),
-  ).values()) {
-    const [best] = [...offers].sort((a, b) =>
-      b.score.expectedValue - a.score.expectedValue
-      || comparePropSignals(a.row, b.row));
-    if (best) bestOfferIds.add(best.row.id);
-  }
 
   const promotedIds = selectStandardizedQualityCandidateIds(
     eligible
-      .filter(({ row }) => bestOfferIds.has(row.id))
       .map(({ row, score }) => ({
         id: row.id,
         expectedValue: score.expectedValue,
@@ -1230,15 +1228,38 @@ function applyValidatedHomeRunActionablePromotions(
   );
   if (!promotedIds.size) return rows;
 
-  return rows.map((row) => promotedIds.has(row.id) ? {
-    ...row,
-    playGrade: "LEAN",
-    units: 0.25,
-    reasonCodes: uniqueStrings([
-      ...row.reasonCodes,
-      "VALIDATED_HOME_RUN_STANDARDIZED_QUALITY_PROMOTION",
-    ]),
-  } : row);
+  const promotedById = new Map(
+    eligible
+      .filter(({ row }) => promotedIds.has(row.id))
+      .map((candidate) => [candidate.row.id, candidate]),
+  );
+  return rows.map((row) => {
+    const promoted = promotedById.get(row.id);
+    if (!promoted) return row;
+    const { score, auditProjection, marketProbability } = promoted;
+    return {
+      ...row,
+      modelProbability: score.modelProbability,
+      independentProbability: score.modelProbability,
+      marketProbability,
+      finalProbability: score.finalProbability,
+      shrinkageWeight: HOME_RUN_STANDARDIZED_QUALITY_POLICY.reliabilityWeight,
+      modelEdge: score.finalProbability - marketProbability,
+      expectedValue: score.expectedValue,
+      fairOdds: safeFairOdds(score.finalProbability),
+      projection: auditProjection,
+      projectionSource: "model",
+      overProbability: score.finalProbability,
+      underProbability: 1 - score.finalProbability,
+      playGrade: "LEAN",
+      units: 0.25,
+      reasonCodes: uniqueStrings([
+        ...row.reasonCodes.filter((code) => code !== "MARKET_RESEARCH_ONLY"),
+        "LONGSHOT_VALUE_CONTEXT",
+        "VALIDATED_HOME_RUN_CONSENSUS_BEST_PRICE_PROMOTION",
+      ]),
+    };
+  });
 }
 
 function groupRows<T>(rows: T[], keyFor: (row: T) => string): Map<string, T[]> {
