@@ -51,6 +51,11 @@ function fresh(o: ObsRow | undefined, now: number): boolean {
   return Boolean(o && ageMin(o.observed_at, now) <= STALE_AGE_MINUTES);
 }
 
+function observationIsStale(observedAt: string | null | undefined, now: number): boolean {
+  if (!observedAt) return false;
+  return ageMin(observedAt, now) > STALE_AGE_MINUTES;
+}
+
 /** Display pick: fresh Playbook > fresh SharpAPI > freshest-complete (stale). */
 function pickDisplay(playbook: ObsRow | undefined, sharpapi: ObsRow | undefined, now: number):
   { betsPct: number | null; moneyPct: number | null; booksUsed?: number | null; observedAt: string | null; isStale: boolean } | null {
@@ -280,6 +285,47 @@ export function alignMarketReadsToDisplayedPublicSplits(
           betsPct: pickedRow.betsPct,
           observedAt: pickedRow.observedAt ?? null,
         });
+      }
+    }
+  }
+  return games;
+}
+
+/**
+ * Re-evaluate split freshness at response-read time.
+ *
+ * Daily Edge response snapshots are intentionally reused between writer
+ * cycles. A row that was fresh when the snapshot was published can cross the
+ * observation TTL before the next publish. Never preserve the old `isStale`
+ * boolean in that case: recompute it from the immutable observation timestamp
+ * for both the collapsed display and the canonical recommendation evidence.
+ *
+ * Display-only. Picks, probabilities, grades, prices, and locked decisions are
+ * untouched.
+ */
+export function refreshDisplayedSplitFreshness(
+  games: DailyEdgeGameDto[],
+  now: Date = new Date(),
+): DailyEdgeGameDto[] {
+  const nowMs = now.getTime();
+  for (const game of games) {
+    for (const market of ["moneyline", "total"] as Market[]) {
+      const dto = (game.markets as Record<string, MarketEdgeDto | undefined>)[market];
+      if (!dto) continue;
+
+      dto.publicSplits = dto.publicSplits.map((row) => ({
+        ...row,
+        isStale: observationIsStale(row.observedAt, nowMs),
+      }));
+
+      const decision = dto.recommendationDecision;
+      if (!decision) continue;
+      for (const section of [decision.consensusSplits, decision.sharpBookSplits]) {
+        if (!section) continue;
+        section.rows = section.rows.map((row) => ({
+          ...row,
+          isStale: observationIsStale(row.observedAt, nowMs),
+        }));
       }
     }
   }
