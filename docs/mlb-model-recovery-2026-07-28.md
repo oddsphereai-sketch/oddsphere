@@ -2,11 +2,11 @@
 
 ## Scope and release ownership
 
-This audit covers MLB Player Props and the MLB Daily Edge moneyline, full-game
-total, and First Inning markets.
+This recovery now covers MLB Player Props only. Daily Edge is deliberately
+frozen for a separate clean audit.
 
 - Player Props champion before this work: `mlb_props_2026_07_27_r11`
-- Player Props candidate: `mlb_props_2026_07_28_r12`
+- Player Props candidate: `mlb_props_2026_07_28_r13`
 - Daily Edge decision champion: `mlb_daily_edge_decision_2026_07_27_r13`
 - Authoritative writers and the sport-scoped `prediction_pipeline` lease are
   unchanged.
@@ -21,9 +21,9 @@ inputs. The exact r11 result on 2026-07-27 was 118 settled actionables, 50-68,
 
 The previous Home Run research did not test the exact production actionability
 contract either. It used a 0.62 model weight and an uncapped selection while the
-runtime used a 0.10 weight and a ranked five-play sleeve.
-
-Those prior claims must not be used as evidence for the next release.
+runtime used a 0.10 weight and a ranked five-play sleeve. The old ranked sleeve
+was genuinely profitable in aggregate, but that did not validate betting every
+uncapped candidate. This distinction is reconciled below.
 
 ## Chronological Player Props evaluation
 
@@ -32,6 +32,24 @@ The reproducible audit is
 official results, and pregame-only prior statistics. Policy selection uses data
 through 2026-07-12. The final period, 2026-07-16 through 2026-07-23, is not used
 to choose the rule.
+
+The separate reproducible direction audit is
+`scripts/audit-mlb-props-two-sided.mjs`. It searches Over and Under
+independently for every two-way market and selects each direction using only
+discovery and calibration data.
+
+### Over-versus-Under result
+
+The search is not restricted to Unders. Batter Hits Under was the only
+two-way cohort with both adequate development sample and positive performance
+in all three later periods.
+
+It also found a Hits+Runs+RBIs Over candidate that was positive in every period,
+but its three validation samples contained only 3, 3, and 2 bets. Eight later
+bets are not enough evidence to alter the live board, so it remains a documented
+Over candidate rather than a promotion. Total Bases Over failed Validation 2;
+Singles Under failed Validation 2 and the untouched period; no other direction
+passed the selection minimums.
 
 ### Batter Hits Under
 
@@ -77,21 +95,45 @@ Angle rule. It would be inaccurate to manufacture one to preserve the label.
 
 ### Home Runs
 
-No new Home Run cap is introduced.
+The old five-ranked-play sleeve really did show an aggregate profit: 240 bets,
+44 wins, +29.55 units, and +12.3% ROI. It was not stable in every period,
+however: Validation 1 was -11.9% and Validation 2 was -25.2%. More importantly,
+the same eligibility rule without ranking was 2,145 bets and negative in every
+period. The honest conclusion is that ranking carried the historical result;
+it was never evidence that every broadly eligible Home Run candidate was good.
 
-The development-selected uncapped threshold candidate produced 277 bets and
-+22.3% ROI through 2026-07-12, then failed the untouched period:
+The replacement is a relative-quality Lean path selected without looking at the
+untouched period. It applies pregame projection, recent-survival, market-price,
+expected-value, and price-integrity eligibility, then takes the highest 15% of
+eligible expected values on that slate, including threshold ties.
 
-- 180 bets;
-- 29-151;
-- -3.07 units;
-- -1.7% ROI;
-- volume expanded from about seven to about 26 bets per active day.
+This is not a fixed play count. Historical daily counts ranged from 1 to 15,
+averaging 7.6 on active dates. A larger qualified slate produces more Leans and
+a smaller slate produces fewer. There is no minimum, maximum, or forced quota.
 
-Other thresholds looked better only after the untouched results were inspected.
-Choosing one now would tune on the holdout, so none is promoted. The existing
-production Home Run behavior is unchanged in r12 while an uncapped replacement
-remains unvalidated.
+| Period | Bets | Record | Units | ROI |
+|---|---:|---:|---:|---:|
+| Discovery | 122 | 27-95 | +44.45 | +36.4% |
+| Calibration | 77 | 15-62 | +17.35 | +22.5% |
+| Validation 1 | 52 | 11-41 | +13.25 | +25.5% |
+| Validation 2 | 43 | 8-35 | +9.35 | +21.7% |
+| Untouched validation | 70 | 12-58 | +4.15 | +5.9% |
+| Combined | 364 | 73-291 | +88.55 | +24.3% |
+
+Nearby quality fractions of 12%, 15%, and 18% were positive in every
+chronological period. The date-cluster bootstrap 95% ROI interval is -1.2% to
++51.5%, with 96.9% of resamples positive. The interval crosses zero, so the
+proper claim is a historically supported Lean strategy, not guaranteed profit.
+Across the combined cohort, mean predicted probability was 19.1% versus a
+20.1% observed rate (calibration gap -1.0 percentage point), with 0.161 Brier
+score and 0.504 log loss. The untouched period's calibration gap was +3.5
+percentage points.
+
+Against the former five-play sleeve, the recovered policy retained 191 actions,
+promoted 173, demoted 49, and added a net 124 historical actions. Every Home Run
+Lean generated by this reason code belongs to this exact cohort, so “bet every
+Home Run Lean” is now a coherent historical strategy rather than a request to
+bet every raw model candidate.
 
 ### Other prop markets
 
@@ -100,78 +142,35 @@ markets retain their r11 runtime behavior and market versions. Exploratory
 demotions were withdrawn because they did not have enough tested replacement
 promotions and would have flattened the board.
 
-## Daily Edge release-aware audit
+## Daily Edge boundary
 
-The read-only audit is
-`scripts/operator/audit-mlb-daily-edge-release-heads.ts`. It separates the
-active probability head, decision release, and public grade. It never blends
-legacy heads and calls the blend current.
-
-### Exact current probability heads
-
-| Market | Settled | Record | Units | ROI | Brier |
-|---|---:|---:|---:|---:|---:|
-| Moneyline | 178 | 104-74 | +6.187 | +3.5% | 0.2417 |
-| Full-game total | 176 | 92-84 | -1.312 | -0.7% | 0.2523 |
-| First Inning | 111 | 67-44 | +13.065 | +11.8% | 0.2440 |
-
-Grade diagnostics:
-
-- Moneyline Best Angles: 20, 14-6, +4.408 units, +22.0% ROI.
-- Moneyline Leans: 12, 5-7, -3.309 units, -27.6% ROI.
-- Total Best Angles: 22, 11-11, -0.883 units, -4.0% ROI.
-- Total Leans: 25, 13-12, +0.089 units, +0.4% ROI.
-- First Inning Best Angles: 15, 8-7, +0.086 units, +0.6% ROI.
-- First Inning Leans: 76, 45-31, +9.146 units, +12.0% ROI.
-
-The r13 decision release itself has only one settled day: ten moneylines and
-ten totals. Its -29.6% moneyline ROI and -3.8% total ROI are disclosed but are
-not treated as a stable estimate.
-
-### Daily Edge decision
-
-A broad chronological rule search selected candidates using training and
-validation only, then evaluated the untouched holdout:
-
-- selected Moneyline candidate: -2.6% holdout ROI;
-- selected Total candidate: -23.1% holdout ROI;
-- selected First Inning candidate: -9.9% holdout ROI.
-
-All three candidates are rejected. Therefore this recovery does not change the
-Daily Edge probability heads, sides, totals, First Inning probabilities,
-grades, or stakes. In particular:
-
-- the profitable Moneyline Best Angle path is retained;
-- the weak Moneyline Lean diagnostic is not used to justify a new whitelist;
-- Totals are not loosened merely to create board volume;
-- profitable First Inning Leans remain intact;
-- First Inning Best Angles are not demoted without a validated replacement.
-
-Keeping the Daily Edge champion unchanged is the evidence-backed correction to
-the prior over-editing. New Daily Edge changes require a candidate that passes
-the untouched period and reports paired promotion/demotion board impact.
+No moneyline, full-game total, First Inning probability, side, grade, flip,
+promotion, demotion, or stake is changed by this Player Props recovery. Daily
+Edge will receive its own fresh release-aware audit next.
 
 ## Current-board dry run
 
-The 2026-07-28 r12 Player Props dry run was read-only (`persist=false`):
+The 2026-07-28 r13 Player Props dry run was read-only (`persist=false`):
 
-- 15 games, 5,746 rows, 17 supported markets, six books;
+- 15 games, 5,739 research rows, 17 supported markets, six books;
 - zero stale odds rows;
 - publishable with no validation errors;
-- 149 actionable Leans at the preview timestamp;
+- 145 actionable Leans at the preview timestamp;
+- one naturally qualifying Home Run Lean at that timestamp;
 - no qualifying recovered Hits Under Best Angle at that timestamp.
 
-The lack of a qualifying Best Angle on one timestamp is not hidden. The release
-does not convert a failing row into a Best Angle to fill a quota.
+The one Home Run Lean is not the result of a cap. Only one row cleared both
+eligibility and the relative-quality boundary at that timestamp. The release
+does not force extra rows to fill a quota.
 
 ## Verification and deployment status
 
 Completed locally:
 
 - Player Props market ownership test;
-- Player Props engine test (348 passing);
+- Player Props engine test (350 passing);
 - release-aware Player Props audit;
-- release-aware Daily Edge audit;
+- independent Over-versus-Under audit;
 - read-only current-board Player Props preview.
 
 This report does not claim deployment. Before production, the release still

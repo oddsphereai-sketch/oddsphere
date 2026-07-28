@@ -1,8 +1,11 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import {
+  HOME_RUN_RELATIVE_QUALITY_POLICY,
   MLB_PROPS_RECOVERY_POLICY_VERSION,
   projectAuditableCountOverProbability,
   qualifiesHitsUnderPriceEdge,
+  scoreHomeRunRelativeQualityCandidate,
+  selectRelativeQualityCandidateIds,
 } from "../lib/mlb/props/actionabilityPolicy";
 
 type Observation = {
@@ -56,21 +59,14 @@ const hitsRows = bestOfferPerPlayerGame(
   "under",
 ).filter(validHitsObservation);
 
-const uncappedHomeRunCandidate = {
-  minimumProjection: 0.1,
-  minimumRecentSurvival: 0.15,
-  minimumMarketProbability: 0.08,
-  minimumExpectedValue: 0.12,
-  minimumAmericanOdds: 200,
-  maximumAmericanOdds: 650,
-  reliabilityWeight: 0.1,
-} as const;
-
-const uncappedHomeRuns = selectHomeRuns(homeRunRows, uncappedHomeRunCandidate);
+const recoveredHomeRuns = selectHomeRuns(homeRunRows);
+const priorHomeRuns = selectPriorRankedHomeRuns(homeRunRows);
+const recoveredHomeRunKeys = new Set(recoveredHomeRuns.map(decisionKey));
+const priorHomeRunKeys = new Set(priorHomeRuns.map(decisionKey));
 const homeRunWindowResults = Object.fromEntries(
   Object.entries(windows).map(([name, [from, through]]) => [
     name,
-    summarize(uncappedHomeRuns.filter((row) => row.date >= from && row.date <= through)),
+    summarize(recoveredHomeRuns.filter((row) => row.date >= from && row.date <= through)),
   ]),
 );
 
@@ -98,14 +94,36 @@ const report = {
     untouchedValidation: windows.untouchedValidation,
   },
   homeRuns: {
-    qualifiedForRuntime: false,
-    rejectionReason:
-      "Development-selected uncapped threshold failed the untouched validation period.",
+    qualifiedForRuntime: true,
     observations: homeRunRows.length,
-    candidate: uncappedHomeRunCandidate,
+    policy: HOME_RUN_RELATIVE_QUALITY_POLICY,
     windows: homeRunWindowResults,
-    combined: summarize(uncappedHomeRuns),
-    dateClusterBootstrap: clusterBootstrap(uncappedHomeRuns),
+    combined: summarize(recoveredHomeRuns),
+    dailyVolume: summarizeDailyVolume(recoveredHomeRuns),
+    dateClusterBootstrap: clusterBootstrap(recoveredHomeRuns),
+    qualityFractionSensitivity: [0.12, 0.15, 0.18].map((qualityFraction) => ({
+      qualityFraction,
+      windows: Object.fromEntries(
+        Object.entries(windows).map(([name, [from, through]]) => [
+          name,
+          summarize(selectHomeRuns(
+            homeRunRows.filter((row) => row.date >= from && row.date <= through),
+            qualityFraction,
+          )),
+        ]),
+      ),
+    })),
+    priorVsRecovered: {
+      priorRankedSleeve: summarize(priorHomeRuns),
+      recoveredRelativeQuality: summarize(recoveredHomeRuns),
+      retained: recoveredHomeRuns.filter((row) =>
+        priorHomeRunKeys.has(decisionKey(row))).length,
+      promoted: recoveredHomeRuns.filter((row) =>
+        !priorHomeRunKeys.has(decisionKey(row))).length,
+      demoted: priorHomeRuns.filter((row) =>
+        !recoveredHomeRunKeys.has(decisionKey(row))).length,
+      netActions: recoveredHomeRuns.length - priorHomeRuns.length,
+    },
   },
   hitsUnder: {
     observations: hitsRows.length,
@@ -129,32 +147,55 @@ console.log(JSON.stringify(report, null, 2));
 
 function selectHomeRuns(
   source: Observation[],
-  policy: {
-    minimumProjection: number;
-    minimumRecentSurvival: number;
-    minimumMarketProbability: number;
-    minimumExpectedValue: number;
-    minimumAmericanOdds: number;
-    maximumAmericanOdds: number;
-    reliabilityWeight: number;
-  },
+  qualityFraction: number = HOME_RUN_RELATIVE_QUALITY_POLICY.actionableQualityFraction,
 ): Decision[] {
-  return source.flatMap((row) => {
+  const eligible = source.flatMap((row) => {
+    const americanOdds = decimalToAmerican(row.bestOverDecimal);
+    const score = scoreHomeRunRelativeQualityCandidate({
+      projection: row.projection,
+      recentSurvival: row.recentSurvival,
+      marketProbability: row.marketOver,
+      americanOdds,
+      line: row.line,
+    });
+    if (!score.eligible) return [];
+    return [{
+      ...row,
+      side: "over" as const,
+      probability: score.finalProbability,
+      expectedValue: score.expectedValue,
+      americanOdds,
+      profit: row.overWon ? row.bestOverDecimal - 1 : -1,
+    }];
+  });
+  return groupByDate(eligible).flatMap((daily) => {
+    const selectedIds = selectRelativeQualityCandidateIds(
+      daily.map((row) => ({
+        id: decisionKey(row),
+        expectedValue: row.expectedValue,
+      })),
+      qualityFraction,
+    );
+    return daily.filter((row) => selectedIds.has(decisionKey(row)));
+  });
+}
+
+function selectPriorRankedHomeRuns(source: Observation[]): Decision[] {
+  const eligible = source.flatMap((row) => {
     const modelProbability = projectAuditableCountOverProbability({
       projection: row.projection,
       line: row.line,
     });
-    const probability = row.marketOver
-      + policy.reliabilityWeight * (modelProbability - row.marketOver);
-    const americanOdds = decimalToAmerican(row.bestOverDecimal);
+    const probability = row.marketOver + 0.1 * (modelProbability - row.marketOver);
     const expectedValue = probability * row.bestOverDecimal - 1;
+    const americanOdds = decimalToAmerican(row.bestOverDecimal);
     if (
-      row.projection < policy.minimumProjection
-      || row.recentSurvival < policy.minimumRecentSurvival
-      || row.marketOver < policy.minimumMarketProbability
-      || expectedValue < policy.minimumExpectedValue
-      || americanOdds < policy.minimumAmericanOdds
-      || americanOdds > policy.maximumAmericanOdds
+      row.projection < 0.08
+      || row.recentSurvival < 0.18
+      || row.marketOver < 0.1
+      || expectedValue < 0
+      || americanOdds < 200
+      || americanOdds > 650
     ) return [];
     return [{
       ...row,
@@ -165,6 +206,8 @@ function selectHomeRuns(
       profit: row.overWon ? row.bestOverDecimal - 1 : -1,
     }];
   });
+  return groupByDate(eligible).flatMap((daily) =>
+    [...daily].sort((a, b) => b.expectedValue - a.expectedValue).slice(0, 5));
 }
 
 function selectHitsUnder(source: Observation[]): Decision[] {
@@ -217,11 +260,41 @@ function selectPriorHitsUnder(source: Observation[]): Decision[] {
 function summarize(rows: Decision[]) {
   const units = rows.reduce((sum, row) => sum + row.profit, 0);
   const days = new Set(rows.map((row) => row.date)).size;
+  const outcomes = rows.map((row) => row.profit > 0 ? 1 : 0);
+  const brier = rows.length
+    ? rows.reduce((sum, row) => {
+      const outcome = row.profit > 0 ? 1 : 0;
+      return sum + (row.probability - outcome) ** 2;
+    }, 0) / rows.length
+    : null;
+  const logLoss = rows.length
+    ? rows.reduce((sum, row) => {
+      const probability = Math.min(1 - 1e-9, Math.max(1e-9, row.probability));
+      const outcome = row.profit > 0 ? 1 : 0;
+      return sum - (
+        outcome * Math.log(probability)
+        + (1 - outcome) * Math.log(1 - probability)
+      );
+    }, 0) / rows.length
+    : null;
+  const meanProbability = rows.length
+    ? rows.reduce((sum, row) => sum + row.probability, 0) / rows.length
+    : null;
+  const observedRate = rows.length
+    ? outcomes.reduce<number>((sum, outcome) => sum + outcome, 0) / rows.length
+    : null;
   return {
     count: rows.length,
-    wins: rows.filter((row) => row.profit > 0).length,
+    wins: outcomes.filter(Boolean).length,
     units: round(units),
     roi: rows.length ? round(units / rows.length) : null,
+    brier: brier === null ? null : round(brier),
+    logLoss: logLoss === null ? null : round(logLoss),
+    meanProbability: meanProbability === null ? null : round(meanProbability),
+    observedRate: observedRate === null ? null : round(observedRate),
+    calibrationGap: meanProbability === null || observedRate === null
+      ? null
+      : round(meanProbability - observedRate),
     activeDays: days,
     averagePerActiveDay: days ? round(rows.length / days) : null,
   };
@@ -260,6 +333,18 @@ function groupByDate(rows: Decision[]): Decision[][] {
     grouped.set(row.date, group);
   }
   return [...grouped.values()];
+}
+
+function summarizeDailyVolume(rows: Decision[]) {
+  const counts = groupByDate(rows).map((daily) => daily.length);
+  return {
+    activeDates: counts.length,
+    minimum: counts.length ? Math.min(...counts) : null,
+    maximum: counts.length ? Math.max(...counts) : null,
+    average: counts.length
+      ? round(counts.reduce((sum, count) => sum + count, 0) / counts.length)
+      : null,
+  };
 }
 
 function groupByDateAndGame(rows: Decision[]): Decision[][] {

@@ -26,8 +26,11 @@ import { evaluateRealPaperPersistenceGate, isPaperTradingMarketAllowed } from ".
 import { allMlbPropMarketDefinitions, getMlbPropMarketDefinition } from "../lib/mlb/props/marketCatalog";
 import { calibratedPropModelWeight } from "../lib/mlb/props/probabilityCalibration";
 import {
+  HOME_RUN_RELATIVE_QUALITY_POLICY,
   projectAuditableCountOverProbability,
   qualifiesHitsUnderPriceEdge,
+  scoreHomeRunRelativeQualityCandidate,
+  selectRelativeQualityCandidateIds,
 } from "../lib/mlb/props/actionabilityPolicy";
 import { checkProjectionSideIntegrity } from "../lib/mlb/props/projectionSideIntegrity";
 import { shouldReplaceBestPriceRow } from "../lib/mlb/props/bestPriceSelection";
@@ -153,6 +156,31 @@ async function main() {
   check("Hits Under price-edge rule requires a playable consensus price",
     qualifiesHitsUnderPriceEdge({ marketProbability: 0.55, americanOdds: 100 })
     && !qualifiesHitsUnderPriceEdge({ marketProbability: 0.55, americanOdds: -125 }));
+  const homeRunQualityScore = scoreHomeRunRelativeQualityCandidate({
+    projection: 0.3,
+    recentSurvival: 0.25,
+    marketProbability: 0.15,
+    americanOdds: 650,
+    line: 0.5,
+  });
+  check("home-run relative-quality scorer uses the shared eligible probability path",
+    homeRunQualityScore.eligible
+    && homeRunQualityScore.expectedValue
+      >= HOME_RUN_RELATIVE_QUALITY_POLICY.minimumExpectedValue);
+  const relativeQualityIds = selectRelativeQualityCandidateIds(
+    Array.from({ length: 20 }, (_, index) => ({
+      id: `hr-${index}`,
+      expectedValue: 20 - index,
+    })),
+  );
+  check("home-run relative-quality selection varies with slate size instead of a fixed count",
+    relativeQualityIds.size === 3
+    && selectRelativeQualityCandidateIds(
+      Array.from({ length: 40 }, (_, index) => ({
+        id: `hr-large-${index}`,
+        expectedValue: 40 - index,
+      })),
+    ).size === 6);
   check("total-bases over calibration is stricter than total-bases under", calibratedPropModelWeight({
     marketKey: "batter_total_bases",
     side: "over",
@@ -545,7 +573,7 @@ async function main() {
   check("positive prop signals collapse duplicate sportsbook rows to the best price", liveBoardSource.includes("applyBestPriceSignalDiscipline(deduped)") && liveBoardSource.includes("applyHitterSignalDiscipline(priceDisciplined)") && liveBoardSource.includes("signalOfferKey") && liveBoardSource.includes("BETTER_PRICE_AVAILABLE"));
   check("validated Hits Under promotions use the shared uncapped price-edge rule", liveBoardSource.includes("VALIDATED_UNDER_PROMOTION_POLICIES") && liveBoardSource.includes("applyValidatedUnderActionablePromotions") && liveBoardSource.includes("qualifiesHitsUnderPriceEdge") && liveBoardSource.includes("hitsPriceEdgeIds.has(row.id)") && liveBoardSource.includes("VALIDATED_HITS_UNDER_BEST_ANGLE") && propsConfigSource.includes("VALIDATED_HITS_UNDER_BEST_ANGLE"));
   check("unvalidated Singles premium Best Angle promotion is removed", !liveBoardSource.includes("applyValidatedPremiumBestAngles") && !liveBoardSource.includes("SINGLES_BEST_ANGLE_MIN_MODEL_PROBABILITY") && !liveBoardSource.includes("VALIDATED_SINGLES_PREMIUM_BEST_ANGLE"));
-  check("existing home-run sleeve is unchanged pending a validated uncapped rule", liveBoardSource.includes("applyValidatedHomeRunActionablePromotions") && liveBoardSource.includes("HOME_RUN_PROMOTION_DAILY_CAP = 5") && liveBoardSource.includes("VALIDATED_HOME_RUN_PROMOTION") && propsConfigSource.includes("VALIDATED_HOME_RUN_PROMOTION") && !liveBoardSource.includes("VALIDATED_HOME_RUN_PORTFOLIO_PROMOTION"));
+  check("home-run sleeve uses the shared variable-count relative-quality path", liveBoardSource.includes("applyValidatedHomeRunActionablePromotions") && liveBoardSource.includes("scoreHomeRunRelativeQualityCandidate") && liveBoardSource.includes("selectRelativeQualityCandidateIds") && !liveBoardSource.includes("HOME_RUN_PROMOTION_DAILY_CAP") && liveBoardSource.includes("VALIDATED_HOME_RUN_RELATIVE_QUALITY_PROMOTION") && propsConfigSource.includes("VALIDATED_HOME_RUN_RELATIVE_QUALITY_PROMOTION"));
   check("member board uses grade-aware equal-price selection", liveBoardSource.includes('import { shouldReplaceBestPriceRow } from "./bestPriceSelection"') && liveBoardSource.includes("shouldReplaceBestPriceRow(current, row)"));
   check("pitcher best angles require a material model projection cushion", liveBoardSource.includes("function pitcherSignalGrade") && liveBoardSource.includes("function pitcherBestAngleProjectionGap") && liveBoardSource.includes('market === "pitcher_outs"') && liveBoardSource.includes('market === "pitcher_strikeouts"') && liveBoardSource.includes('if (minGap === null) return "LEAN"') && liveBoardSource.includes("scoredPitcherSignal?.modelProjection ?? projection"));
   check("pitcher board projection uses the model projection when available", realScoringSource.includes("modelProjectionFromExplanation") && realScoringSource.includes("projectedOuts") && realScoringSource.includes("projectedStrikeouts") && realScoringSource.includes("modelProjection: number | null"));

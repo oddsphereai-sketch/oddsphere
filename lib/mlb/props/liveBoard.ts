@@ -85,6 +85,8 @@ import {
 import { calibratedPropModelWeight } from "./probabilityCalibration";
 import {
   qualifiesHitsUnderPriceEdge,
+  scoreHomeRunRelativeQualityCandidate,
+  selectRelativeQualityCandidateIds,
 } from "./actionabilityPolicy";
 
 type RefreshArgs = {
@@ -965,12 +967,6 @@ const HITTER_LONGSHOT_VALUE_MARKETS = new Set([
 const DEFAULT_HITTER_LEAN_MIN_AMERICAN_ODDS = -250;
 const DEFAULT_HITTER_LEANS_PER_PLAYER = 2;
 const DEFAULT_HITTER_LEANS_PER_GAME = 12;
-const HOME_RUN_PROMOTION_DAILY_CAP = 5;
-const HOME_RUN_PROMOTION_MIN_PROJECTION = 0.08;
-const HOME_RUN_PROMOTION_MIN_RECENT_SURVIVAL = 0.18;
-const HOME_RUN_PROMOTION_MIN_MARKET_PROBABILITY = 0.1;
-const HOME_RUN_PROMOTION_MIN_AMERICAN_ODDS = 200;
-const HOME_RUN_PROMOTION_MAX_AMERICAN_ODDS = 650;
 const HOME_RUN_PROJECTION_PRIOR = 0.095;
 const HOME_RUN_PROJECTION_PRIOR_GAMES = 20;
 
@@ -1193,52 +1189,56 @@ function applyValidatedUnderActionablePromotions(
 function applyValidatedHomeRunActionablePromotions(
   rows: PlayerPropPreviewRow[],
 ): PlayerPropPreviewRow[] {
-  const eligible = rows.filter((row) => {
+  const eligible = rows.flatMap((row) => {
     if (
       row.market !== "batter_home_runs"
       || row.side !== "over"
       || row.playGrade !== "WATCHLIST"
       || row.marketProbability === null
-      || row.expectedValue === null
-      || row.marketProbability < HOME_RUN_PROMOTION_MIN_MARKET_PROBABILITY
-      || row.expectedValue < 0
-      || row.odds < HOME_RUN_PROMOTION_MIN_AMERICAN_ODDS
-      || row.odds > HOME_RUN_PROMOTION_MAX_AMERICAN_ODDS
-    ) return false;
+    ) return [];
 
     const seasonValues = row.recentForm?.samples?.season.values
       .filter((value) => Number.isFinite(value)) ?? [];
-    if (seasonValues.length < 10) return false;
+    if (seasonValues.length < 10) return [];
     const seasonMean = averageNumber(seasonValues);
     const auditProjection = (
       seasonMean * seasonValues.length
       + HOME_RUN_PROJECTION_PRIOR * HOME_RUN_PROJECTION_PRIOR_GAMES
     ) / (seasonValues.length + HOME_RUN_PROJECTION_PRIOR_GAMES);
-    if (auditProjection < HOME_RUN_PROMOTION_MIN_PROJECTION) return false;
 
     const recentValues = seasonValues.slice(0, 20);
     const recentSurvival = (
       recentValues.filter((value) => value > row.line).length
       + 2 * row.marketProbability
     ) / (recentValues.length + 2);
-    return recentSurvival >= HOME_RUN_PROMOTION_MIN_RECENT_SURVIVAL;
+    const score = scoreHomeRunRelativeQualityCandidate({
+      projection: auditProjection,
+      recentSurvival,
+      marketProbability: row.marketProbability,
+      americanOdds: row.odds,
+      line: row.line,
+    });
+    return score.eligible ? [{ row, score }] : [];
   });
 
   const bestOfferIds = new Set<string>();
-  for (const offers of groupRows(eligible, signalOfferKey).values()) {
-    const [best] = [...offers].sort(comparePropSignals);
-    if (best) bestOfferIds.add(best.id);
+  for (const offers of groupRows(
+    eligible,
+    (candidate) => signalOfferKey(candidate.row),
+  ).values()) {
+    const [best] = [...offers].sort((a, b) =>
+      b.score.expectedValue - a.score.expectedValue
+      || comparePropSignals(a.row, b.row));
+    if (best) bestOfferIds.add(best.row.id);
   }
 
-  const promotedIds = new Set(
+  const promotedIds = selectRelativeQualityCandidateIds(
     eligible
-      .filter((row) => bestOfferIds.has(row.id))
-      .sort((a, b) =>
-        (b.expectedValue ?? Number.NEGATIVE_INFINITY)
-        - (a.expectedValue ?? Number.NEGATIVE_INFINITY)
-        || comparePropSignals(a, b))
-      .slice(0, HOME_RUN_PROMOTION_DAILY_CAP)
-      .map((row) => row.id),
+      .filter(({ row }) => bestOfferIds.has(row.id))
+      .map(({ row, score }) => ({
+        id: row.id,
+        expectedValue: score.expectedValue,
+      })),
   );
   if (!promotedIds.size) return rows;
 
@@ -1246,7 +1246,10 @@ function applyValidatedHomeRunActionablePromotions(
     ...row,
     playGrade: "LEAN",
     units: 0.25,
-    reasonCodes: uniqueStrings([...row.reasonCodes, "VALIDATED_HOME_RUN_PROMOTION"]),
+    reasonCodes: uniqueStrings([
+      ...row.reasonCodes,
+      "VALIDATED_HOME_RUN_RELATIVE_QUALITY_PROMOTION",
+    ]),
   } : row);
 }
 

@@ -8,7 +8,7 @@ import { getMlbPropMarketDefinition } from "./marketCatalog";
 // or stake must bump this value before deployment. Per-market versions remain
 // below for attribution; this release id prevents reports from silently mixing
 // boards produced by different combinations of market logic.
-export const MLB_PROPS_MODEL_RELEASE_ID = "mlb_props_2026_07_28_r12";
+export const MLB_PROPS_MODEL_RELEASE_ID = "mlb_props_2026_07_28_r13";
 
 const DEDICATED_MARKET_MODEL_VERSIONS: Partial<Record<MlbPropMarketKey, string>> = {
   pitcher_strikeouts: "pitcher_strikeouts_distribution_v3_verified_side_calibrated",
@@ -18,7 +18,7 @@ const DEDICATED_MARKET_MODEL_VERSIONS: Partial<Record<MlbPropMarketKey, string>>
   batter_hits: `${BATTER_HITS_PA_MODEL_VERSION}_actionability_v4_market_calibrated_price_edge_best_angle`,
   batter_hits_runs_rbis: `${BATTER_HRR_MODEL_VERSION}_actionability_v3_reliability_calibrated`,
   batter_total_bases: "batter_total_bases_event_distribution_integrated_read_v2_calibrated",
-  batter_home_runs: "batter_home_runs_rare_event_integrated_read_v7_reliability_calibrated_ranked_lean_sleeve",
+  batter_home_runs: "batter_home_runs_rare_event_integrated_read_v8_relative_quality_lean_path",
   batter_rbis: "batter_rbi_context_opportunity_integrated_read_v2_calibrated",
   batter_runs_scored: "batter_runs_context_opportunity_integrated_read_v3_calibrated_under_promotions",
   batter_singles: "batter_singles_event_distribution_integrated_read_v4_reliability_calibrated_lean_only",
