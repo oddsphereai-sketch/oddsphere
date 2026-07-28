@@ -405,6 +405,9 @@ export const ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID = "ml_tight_market_price_b
 export const ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID = "ml_generic_lean_positive_ev_v1_2026_07_25";
 export const ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID = "ml_mid_price_established_price_best_angle_v1_2026_07_25";
 export const ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID = "ml_mid_price_near_market_lean_v1_2026_07_25";
+export const ML_MARKET_DIVERGENCE_LEAN_RULE_ID =
+  "ml_market_money_over_tickets_lean_v1_2026_07_28";
+export const ML_MARKET_DIVERGENCE_MIN_GAP = 10;
 export const ML_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID =
   "ml_calibrated_model_best_angle_path_v1_2026_07_27";
 export const ML_CALIBRATED_MODEL_LEAN_PATH_ID =
@@ -635,6 +638,39 @@ export function resolveMlMidPriceNearMarketLean(
   return {
     lean: qualified,
     reason: qualified ? ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID : null,
+  };
+}
+
+export function resolveMlMarketDivergenceLean(args: {
+  blocked: boolean;
+  side: string | null;
+  oddsAmerican: number | null;
+  pickedBetsPct: number | null;
+  pickedMoneyPct: number | null;
+  lineDirection: "toward_pick" | "against_pick" | "neutral" | "unknown" | null;
+  publicSplitConflict: boolean;
+}): {
+  lean: boolean;
+  reason: string | null;
+  moneyOverTicketsGap: number | null;
+} {
+  const moneyOverTicketsGap =
+    args.pickedMoneyPct !== null && args.pickedBetsPct !== null
+      ? args.pickedMoneyPct - args.pickedBetsPct
+      : null;
+  const qualified =
+    !args.blocked &&
+    (args.side === "home" || args.side === "away") &&
+    args.oddsAmerican !== null &&
+    Number.isFinite(args.oddsAmerican) &&
+    moneyOverTicketsGap !== null &&
+    moneyOverTicketsGap >= ML_MARKET_DIVERGENCE_MIN_GAP &&
+    args.lineDirection !== "against_pick" &&
+    !args.publicSplitConflict;
+  return {
+    lean: qualified,
+    reason: qualified ? ML_MARKET_DIVERGENCE_LEAN_RULE_ID : null,
+    moneyOverTicketsGap,
   };
 }
 
@@ -1569,6 +1605,19 @@ function hasSupportingPublicMoneyConfirmation(
   return true;
 }
 
+function pickedPublicSplit(
+  signals: PublicSplitsRow[],
+  market: "moneyline" | "total",
+  pickSide: string | null,
+): { betsPct: number | null; moneyPct: number | null } {
+  if (pickSide === null) return { betsPct: null, moneyPct: null };
+  const picked = signals.find((s) => s.market_type === market && s.side === pickSide);
+  return {
+    betsPct: picked?.public_betting_pct ?? null,
+    moneyPct: picked?.public_money_pct ?? null,
+  };
+}
+
 /** Read the line-movement direction off a buildLineMovementSnapshot result. */
 function readLineDirection(
   snap: Record<string, unknown> | null,
@@ -2364,6 +2413,23 @@ function buildMlRecord(
     publicSplitConflict: finalMlPublicSplitConflict,
     dataStatus: mlDataStatus,
   });
+  const mlPickedPublicSplit = pickedPublicSplit(signalsForGame, "moneyline", finalMlPick);
+  const mlMarketDivergenceLean = resolveMlMarketDivergenceLean({
+    blocked:
+      trackedMlBestAngle ||
+      mlNoBet ||
+      mlFlipped ||
+      mlPickCalibrated ||
+      mlMarketSideCorrected ||
+      mlPublicPlayGrade === "provisional" ||
+      mlDataStatus === "incomplete_missing_required_data",
+    side: finalMlPick,
+    oddsAmerican: finalMlOdds,
+    pickedBetsPct: mlPickedPublicSplit.betsPct,
+    pickedMoneyPct: mlPickedPublicSplit.moneyPct,
+    lineDirection: finalMlLineDirection,
+    publicSplitConflict: finalMlPublicSplitConflict,
+  });
   const trackedMlPublicPlayGrade =
     mlPublicPlayGrade === "provisional"
       ? "provisional"
@@ -2371,7 +2437,10 @@ function buildMlRecord(
         ? null
         : trackedMlBestAngle
           ? "best_angle"
-          : mlModelLeanRetained || mlLeanEligible || mlMidPriceNearMarketLean.lean
+          : mlModelLeanRetained ||
+              mlLeanEligible ||
+              mlMidPriceNearMarketLean.lean ||
+              mlMarketDivergenceLean.lean
             ? "lean"
             : mlCalibratedModelGrade === "provisional"
               ? "provisional"
@@ -2468,6 +2537,8 @@ function buildMlRecord(
                 ? ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID
               : mlMidPriceNearMarketLean.lean
                 ? ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID
+                : mlMarketDivergenceLean.lean
+                  ? ML_MARKET_DIVERGENCE_LEAN_RULE_ID
                 : mlModelLeanRetained
                   ? ML_CALIBRATED_MODEL_LEAN_PATH_ID
                 : trackedMlPublicPlayGrade === "lean"
@@ -2482,7 +2553,8 @@ function buildMlRecord(
                   mlCleanTightEdgePromoted ||
                   mlTightMarketPricePromoted ||
                   mlMidPriceEstablishedPricePromoted ||
-                  mlMidPriceNearMarketLean.lean
+                  mlMidPriceNearMarketLean.lean ||
+                  mlMarketDivergenceLean.lean
                 ? "additive_rule"
                 : null,
         final_side: finalMlPick,
@@ -2570,6 +2642,20 @@ function buildMlRecord(
             data_status: mlDataStatus,
             validation_note:
               "Full comparable mid-price sleeve at -130..-121: Moneyline Leans went 3-2 in development and 3-2 in the 2026-07-20..2026-07-24 locked holdout.",
+          }
+        : null,
+      ml_market_divergence_lean_promotion: mlMarketDivergenceLean.lean
+        ? {
+            rule_id: ML_MARKET_DIVERGENCE_LEAN_RULE_ID,
+            action: "promote_to_lean",
+            picked_bets_pct: mlPickedPublicSplit.betsPct,
+            picked_money_pct: mlPickedPublicSplit.moneyPct,
+            money_over_tickets_gap: mlMarketDivergenceLean.moneyOverTicketsGap,
+            minimum_gap: ML_MARKET_DIVERGENCE_MIN_GAP,
+            line_direction: finalMlLineDirection,
+            public_split_conflict: finalMlPublicSplitConflict,
+            validation_note:
+              "Selected on pre-2026-07-11 locked discovery rows (36-14, +15.73u, +31.5% ROI). Exact active moneyline-head non-provisional holdout through 2026-07-27 went 22-12 at locked prices. Adds Leans only; never flips or creates a Best Angle.",
           }
         : null,
       ml_mid_price_established_price_best_angle_promotion:

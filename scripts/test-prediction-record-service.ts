@@ -22,11 +22,13 @@ import {
   GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
   MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
   ML_CALIBRATED_MODEL_LEAN_PATH_ID,
+  ML_MARKET_DIVERGENCE_LEAN_RULE_ID,
   ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID,
   ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID,
   ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID,
   resolveMlMidPriceEstablishedPriceBestAngle,
   resolveMlMidPriceNearMarketLean,
+  resolveMlMarketDivergenceLean,
   resolveMlTightMarketPriceBestAngle,
   resolveMlbMarketAwareSideCorrection,
 } from "../lib/services/predictionRecordService";
@@ -115,6 +117,40 @@ check("-120 does not enter the Lean cohort", resolveMlMidPriceNearMarketLean({ .
 check("edge +2 upper boundary does not promote", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, edgePct: 2 }).lean === false);
 check("projection opposition blocks Lean promotion", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, sameSideProjectionGap: -0.1 }).lean === false);
 check("incomplete required data blocks Lean promotion", resolveMlMidPriceNearMarketLean({ ...midPriceLeanBase, dataStatus: "incomplete_missing_required_data" }).lean === false);
+
+console.log("\n━━━ MLB market-divergence Lean resolver ━━━");
+const marketDivergenceLeanBase = {
+  blocked: false,
+  side: "home",
+  oddsAmerican: -118,
+  pickedBetsPct: 47,
+  pickedMoneyPct: 57,
+  lineDirection: "neutral" as const,
+  publicSplitConflict: false,
+};
+const marketDivergenceLean = resolveMlMarketDivergenceLean(marketDivergenceLeanBase);
+check(
+  "10-point money-over-ticket gap promotes to Lean",
+  marketDivergenceLean.lean === true &&
+    marketDivergenceLean.reason === ML_MARKET_DIVERGENCE_LEAN_RULE_ID &&
+    marketDivergenceLean.moneyOverTicketsGap === 10,
+);
+check(
+  "gap below 10 does not promote",
+  resolveMlMarketDivergenceLean({ ...marketDivergenceLeanBase, pickedMoneyPct: 56.9 }).lean === false,
+);
+check(
+  "movement against the pick blocks promotion",
+  resolveMlMarketDivergenceLean({ ...marketDivergenceLeanBase, lineDirection: "against_pick" }).lean === false,
+);
+check(
+  "missing real picked-side price blocks promotion",
+  resolveMlMarketDivergenceLean({ ...marketDivergenceLeanBase, oddsAmerican: null }).lean === false,
+);
+check(
+  "explicit data-quality/prior-correction block is preserved",
+  resolveMlMarketDivergenceLean({ ...marketDivergenceLeanBase, blocked: true }).lean === false,
+);
 
 console.log("\n━━━ MLB Total split-signal correction precedence ━━━");
 const totalSplitCorrectionBase = {
@@ -759,6 +795,68 @@ console.log("\n━━━ MLB mid-price near-market Lean integration ━━━");
   check("mid-price near-market ML promotes to Lean", ml.play_grade === "lean" && ml.best_angle === false);
   check("mid-price Lean promotion audit is stamped", promo?.rule_id === ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID);
   check("mid-price Lean decision pipeline is actionable", (ml.snapshot_json as any)?.decision_pipeline?.action_rule_id === ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID);
+}
+
+console.log("\n━━━ MLB market-divergence Lean integration ━━━");
+{
+  const marketDivergencePred = {
+    ...basePrediction,
+    predicted_ml_winner: "home",
+    ml_confidence: 52,
+    predicted_home_score: 4.3,
+    predicted_away_score: 4.1,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ml_play_grade: "market_aligned",
+      ml_best_angle_eligible: false,
+      mlb_data_completeness: { status: "complete" },
+      v2_2_audit: {
+        ml_play_grade: "market_aligned",
+        ml_model_prob: 0.52,
+        ml_market_prob: 0.54,
+        ml_edge_pct: -2,
+        posterior_home_diff: 0.2,
+      },
+    },
+  };
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: 110,
+      mlAwayOdds: -130,
+      ouOverOdds: -110,
+      ouUnderOdds: -110,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: 110, line: null, observedAt: "2026-07-28T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: -130, line: null, observedAt: "2026-07-28T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-28T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-28T16:00:00Z" },
+      },
+    }],
+  ]);
+  const signalsByGameId = new Map([
+    [14771, [
+      { market_type: "moneyline", side: "home", public_money_pct: 57, public_betting_pct: 47, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+      { market_type: "moneyline", side: "away", public_money_pct: 43, public_betting_pct: 53, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+    ]],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-28",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, marketDivergencePred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    signalsByGameId,
+  });
+  const ml = recs.find((r) => r.market === "moneyline")!;
+  const promo = (ml.snapshot_json as any)?.ml_market_divergence_lean_promotion;
+  check("market-divergence path promotes a Watchlist to Lean", ml.play_grade === "lean" && ml.best_angle === false);
+  check("market-divergence Lean audit is stamped", promo?.rule_id === ML_MARKET_DIVERGENCE_LEAN_RULE_ID);
+  check("market-divergence Lean becomes the decision action rule", (ml.snapshot_json as any)?.decision_pipeline?.action_rule_id === ML_MARKET_DIVERGENCE_LEAN_RULE_ID);
 }
 
 console.log("\n━━━ MLB mid-price established-price Best Angle integration ━━━");
