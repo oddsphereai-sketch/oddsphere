@@ -233,6 +233,23 @@ This is a candidate only. Local verification completed:
 - reproducible recovery, cap-equivalence, grade-ladder, and category audits;
 - read-only r14 live-provider preview.
 
+The candidate also closes the delayed-writer rollback path:
+
+- canonical snapshot indexes carry `model_release_id` and `as_of_timestamp`;
+- canonical reads prefer the highest valid release before write time;
+- an older release cannot publish over a newer release;
+- an older timestamp cannot replace a newer snapshot within one release;
+- compact member payloads carry their release and are ignored when the
+  canonical release head is newer;
+- the member check uses a small 60-second-cached audit-index read rather than
+  downloading the multi-megabyte canonical snapshot;
+- the existing sport-scoped `prediction_pipeline` lease remains the sole
+  writer-coordination path.
+
+After r14 first publishes, a delayed invocation from the prior deployment
+cannot become the canonical current snapshot or a reader-visible compact
+rollback.
+
 Deployment still requires a clean intentional commit, deployment of that exact
 commit, and live release/lease/cron/coverage/reader verification. Nothing in
 this report claims r14 is live.

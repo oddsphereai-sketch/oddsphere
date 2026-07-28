@@ -4,6 +4,11 @@ import { createClient } from "@supabase/supabase-js";
 import type { PlayerPropPreviewRow, PlayerPropsDashboardData } from "@/app/mlb/props/components/PlayerPropsDashboard";
 import type { RealPitcherSeasonStat } from "./realScoring";
 import type { PropOddsSnapshot } from "./providers";
+import {
+  assertMlbPropsReleaseDoesNotRegress,
+  compareMlbPropsReleaseIds,
+  parseMlbPropsReleaseOrder,
+} from "./releaseOrdering";
 
 export const MLB_PROPS_BOARD_SNAPSHOT_KIND = "member_board_snapshot_v1";
 export const DEFAULT_MLB_PROPS_MAX_SNAPSHOT_JSON_BYTES = 40_000_000;
@@ -78,6 +83,18 @@ export type MlbPropsBoardSnapshotSize = {
   gzipBytes: number;
 };
 
+export type MlbPropsPublishedReleaseHead = {
+  runId: string;
+  snapshotId: string;
+  releaseId: string;
+  asOfTimestamp: string;
+};
+
+const publishedReleaseHeadCache = new Map<string, {
+  freshUntilMs: number;
+  value: Promise<MlbPropsPublishedReleaseHead | null>;
+}>();
+
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -129,13 +146,30 @@ async function loadIndexedMlbPropsBoardSnapshot(slateDate: string): Promise<MlbP
   const supabase = getSupabase();
   const { data: indexRows, error: indexError } = await supabase
     .from("admin_audit_log")
-    .select("target_id,after_state")
+    .select("target_id,after_state,created_at")
     .eq("action_type", "mlb_props.board_snapshot_published")
     .eq("target_table", "prop_scoring_runs")
+    .contains("after_state", { slate_date: slateDate })
     .order("created_at", { ascending: false })
     .limit(100);
   if (indexError) throw indexError;
-  const index = (indexRows ?? []).find((row) => isRecord(row.after_state) && row.after_state.slate_date === slateDate);
+  const matching = (indexRows ?? []).filter(
+    (row) => isRecord(row.after_state) && row.after_state.slate_date === slateDate,
+  );
+  const indexed = matching.filter(
+    (row) => isRecord(row.after_state) && parseMlbPropsReleaseOrder(indexedReleaseId(row.after_state)),
+  );
+  indexed.sort((left, right) => {
+    const leftState = isRecord(left.after_state) ? left.after_state : {};
+    const rightState = isRecord(right.after_state) ? right.after_state : {};
+    const releaseComparison = compareMlbPropsReleaseIds(
+      indexedReleaseId(rightState),
+      indexedReleaseId(leftState),
+    ) ?? 0;
+    if (releaseComparison !== 0) return releaseComparison;
+    return Date.parse(String(right.created_at ?? "")) - Date.parse(String(left.created_at ?? ""));
+  });
+  const index = indexed[0] ?? matching[0];
   if (!index?.target_id) return null;
   const { data, error } = await supabase
     .from("prop_scoring_runs")
@@ -144,6 +178,66 @@ async function loadIndexedMlbPropsBoardSnapshot(slateDate: string): Promise<MlbP
     .single();
   if (error) throw error;
   return decodeMlbPropsBoardSnapshot(data?.metadata_json) ?? null;
+}
+
+export async function loadHighestIndexedMlbPropsReleaseHead(
+  slateDate: string,
+): Promise<MlbPropsPublishedReleaseHead | null> {
+  const now = Date.now();
+  const cached = publishedReleaseHeadCache.get(slateDate);
+  if (cached && cached.freshUntilMs > now) return cached.value;
+  const value = loadHighestIndexedMlbPropsReleaseHeadUncached(slateDate).catch((error) => {
+    const current = publishedReleaseHeadCache.get(slateDate);
+    if (current?.value === value) publishedReleaseHeadCache.delete(slateDate);
+    throw error;
+  });
+  publishedReleaseHeadCache.set(slateDate, {
+    freshUntilMs: now + MLB_PROPS_MEMORY_CACHE_TTL_MS,
+    value,
+  });
+  return value;
+}
+
+async function loadHighestIndexedMlbPropsReleaseHeadUncached(
+  slateDate: string,
+): Promise<MlbPropsPublishedReleaseHead | null> {
+  const { data, error } = await getSupabase()
+    .from("admin_audit_log")
+    .select("target_id,after_state,created_at")
+    .eq("action_type", "mlb_props.board_snapshot_published")
+    .eq("target_table", "prop_scoring_runs")
+    .contains("after_state", { slate_date: slateDate })
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  const candidates = (data ?? []).flatMap((row) => {
+    if (!isRecord(row.after_state)) return [];
+    const releaseId = indexedReleaseId(row.after_state);
+    const snapshotId = typeof row.after_state.snapshot_id === "string" ? row.after_state.snapshot_id : null;
+    const asOfTimestamp = typeof row.after_state.as_of_timestamp === "string"
+      ? row.after_state.as_of_timestamp
+      : null;
+    if (!parseMlbPropsReleaseOrder(releaseId) || !snapshotId || !asOfTimestamp) return [];
+    return [{
+      runId: String(row.target_id),
+      snapshotId,
+      releaseId: releaseId as string,
+      asOfTimestamp,
+      createdAt: String(row.created_at ?? ""),
+    }];
+  });
+  candidates.sort((left, right) => {
+    const releaseComparison = compareMlbPropsReleaseIds(right.releaseId, left.releaseId) ?? 0;
+    if (releaseComparison !== 0) return releaseComparison;
+    return Date.parse(right.createdAt) - Date.parse(left.createdAt);
+  });
+  const selected = candidates[0];
+  return selected ? {
+    runId: selected.runId,
+    snapshotId: selected.snapshotId,
+    releaseId: selected.releaseId,
+    asOfTimestamp: selected.asOfTimestamp,
+  } : null;
 }
 
 export async function loadLatestMlbPropsDisplaySnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
@@ -576,6 +670,14 @@ export function assertSnapshotSizeWithinLimits(size: MlbPropsBoardSnapshotSize):
 
 export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapshot): Promise<string> {
   if (!snapshot.validation.publishable) throw new Error("Refusing to publish an invalid MLB props board snapshot.");
+  const indexedHead = await loadHighestIndexedMlbPropsReleaseHead(snapshot.slateDate);
+  const current = indexedHead ? null : await loadLatestMlbPropsBoardSnapshot(snapshot.slateDate);
+  assertMlbPropsReleaseDoesNotRegress({
+    candidateReleaseId: snapshot.modelContext?.modelReleaseId,
+    currentReleaseId: indexedHead?.releaseId ?? current?.modelContext?.modelReleaseId,
+    candidateTimestamp: snapshot.asOfTimestamp,
+    currentTimestamp: indexedHead?.asOfTimestamp ?? current?.asOfTimestamp,
+  });
   const metadata = encodeMlbPropsBoardSnapshot(snapshot);
   const supabase = getSupabase();
   const { data, error } = await supabase
@@ -618,6 +720,8 @@ export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapsh
     after_state: {
       snapshot_id: snapshot.snapshotId,
       slate_date: snapshot.slateDate,
+      model_release_id: snapshot.modelContext?.modelReleaseId ?? null,
+      as_of_timestamp: snapshot.asOfTimestamp,
       game_lock_schedule: deriveMlbPropsGameLockSchedule(snapshot),
     },
     source_type: "real_api",
@@ -631,6 +735,7 @@ export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapsh
 export function revalidateMlbPropsBoardCache(): void {
   boardSnapshotMemoryCache.clear();
   displaySnapshotMemoryCache.clear();
+  publishedReleaseHeadCache.clear();
 }
 
 async function pruneOldMlbPropsBoardSnapshots(slateDate: string, currentSnapshotId: string): Promise<void> {
@@ -712,6 +817,10 @@ async function pruneOldMlbPropsBoardSnapshots(slateDate: string, currentSnapshot
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function indexedReleaseId(value: Record<string, unknown>): string | null {
+  return typeof value.model_release_id === "string" ? value.model_release_id : null;
 }
 
 function envPositiveInteger(name: string, fallback: number): number {

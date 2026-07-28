@@ -89,6 +89,7 @@ import {
   scoreHomeRunRelativeQualityCandidate,
   selectStandardizedQualityCandidateIds,
 } from "./actionabilityPolicy";
+import { assertMlbPropsReleaseDoesNotRegress } from "./releaseOrdering";
 
 type RefreshArgs = {
   slateDate: string;
@@ -160,6 +161,12 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
   const asOfTimestamp = args.asOfTimestamp ?? new Date().toISOString();
   const requestedMode = args.refreshMode ?? "fast";
   const previous = await loadLatestMlbPropsBoardSnapshot(args.slateDate).catch(() => null);
+  assertMlbPropsReleaseDoesNotRegress({
+    candidateReleaseId: MLB_PROPS_MODEL_RELEASE_ID,
+    currentReleaseId: previous?.modelContext?.modelReleaseId,
+    candidateTimestamp: asOfTimestamp,
+    currentTimestamp: previous?.asOfTimestamp,
+  });
   const apiKey = process.env.BALLDONTLIE_API_KEY;
   if (!apiKey) throw new Error("BALLDONTLIE_API_KEY is required for the live MLB props board.");
 
