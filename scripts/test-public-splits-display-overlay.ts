@@ -1,6 +1,7 @@
 import {
   alignMarketReadsToDisplayedPublicSplits,
   overlayResolvedPublicSplits,
+  refreshDisplayedSplitFreshness,
   type ResolvedDisplayByExtId,
 } from "../lib/services/publicSplitsDisplayOverlay";
 import type { DailyEdgeGameDto } from "../app/lab/lib/labTypes";
@@ -135,6 +136,41 @@ const expandedMl = expandedReaderAuthority.markets.moneyline!;
 check("canonical recommendation consensus replaces stale collapsed bars", expandedMl.publicSplits[1]?.moneyPct === 63 && expandedMl.publicSplits[1]?.betsPct === 59);
 check("Market Read follows canonical recommendation consensus", expandedMl.marketReadV2?.consensus?.moneyPct === 0.63 && expandedMl.marketReadV2?.consensus?.betsPct === 0.59);
 check("canonical consensus alignment leaves the pick unchanged", expandedMl.pick === "WSH");
+
+const agingSnapshot = game();
+agingSnapshot.markets.moneyline!.publicSplits = [
+  { side: "home", label: "BAL", moneyPct: 45, betsPct: 44, observedAt: "2026-07-28T16:20:00.000Z", isStale: false },
+  { side: "away", label: "WSH", moneyPct: 55, betsPct: 56, observedAt: "2026-07-28T16:20:00.000Z", isStale: false },
+];
+agingSnapshot.markets.moneyline!.recommendationDecision = {
+  consensusSplits: {
+    label: "Consensus Splits",
+    rows: [
+      { side: "home", label: "BAL", moneyPct: 45, betsPct: 44, observedAt: "2026-07-28T16:20:00.000Z", isStale: false },
+      { side: "away", label: "WSH", moneyPct: 55, betsPct: 56, observedAt: "2026-07-28T16:20:00.000Z", isStale: false },
+    ],
+    signal: null,
+    lastUpdated: "2026-07-28T16:20:00.000Z",
+  },
+  sharpBookSplits: {
+    label: "Sharp Book Splits",
+    rows: [
+      { side: "home", label: "BAL", moneyPct: 40, betsPct: 42, observedAt: "2026-07-28T16:10:00.000Z", isStale: false },
+      { side: "away", label: "WSH", moneyPct: 60, betsPct: 58, observedAt: "2026-07-28T16:10:00.000Z", isStale: false },
+    ],
+    signal: null,
+    lastUpdated: "2026-07-28T16:10:00.000Z",
+  },
+} as NonNullable<typeof agingSnapshot.markets.moneyline>["recommendationDecision"];
+refreshDisplayedSplitFreshness(
+  [agingSnapshot],
+  new Date("2026-07-28T16:40:00.000Z"),
+);
+const agedMl = agingSnapshot.markets.moneyline!;
+check("cached collapsed split rows become stale after the observation TTL", agedMl.publicSplits.every((row) => row.isStale === true));
+check("cached canonical consensus rows become stale after the observation TTL", agedMl.recommendationDecision?.consensusSplits?.rows.every((row) => row.isStale === true) === true);
+check("cached sharp-book rows become stale after the observation TTL", agedMl.recommendationDecision?.sharpBookSplits?.rows.every((row) => row.isStale === true) === true);
+check("read-time freshness repair never changes the pick", agedMl.pick === "WSH");
 
 if (fail > 0) {
   console.error(`public splits display overlay tests: ${pass} passed, ${fail} failed`);

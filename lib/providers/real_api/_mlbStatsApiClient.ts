@@ -199,6 +199,32 @@ export type MlbTeamHittingProfile = {
   raw_source: "mlb_stats_api";
 };
 
+export type MlbHitterSeasonStatsRecord = {
+  mlb_person_id: number;
+  season: number;
+  team_id: number | null;
+  games_played: number | null;
+  at_bats: number | null;
+  runs: number | null;
+  hits: number | null;
+  batting_average: number | null;
+  doubles: number | null;
+  triples: number | null;
+  home_runs: number | null;
+  rbis: number | null;
+  total_bases: number | null;
+  walks: number | null;
+  strikeouts: number | null;
+  stolen_bases: number | null;
+  on_base_percentage: number | null;
+  slugging_percentage: number | null;
+  ops: number | null;
+  plate_appearances: number | null;
+  hit_by_pitch: number | null;
+  sacrifice_flies: number | null;
+  raw_source: "mlb_stats_api";
+};
+
 type Opts = { quiet?: boolean; signal?: AbortSignal };
 
 function log(opts: Opts | undefined, message: string): void {
@@ -604,6 +630,120 @@ export function parseMlbTeamHittingProfiles(
     },
     league_average: leagueAverage,
   }));
+}
+
+/** Parse the one-call, all-MLB current-season hitter aggregate response. */
+export function parseMlbHitterSeasonStats(
+  payload: unknown,
+  season: number,
+): MlbHitterSeasonStatsRecord[] {
+  if (!isObject(payload) || !Array.isArray(payload.stats)) return [];
+  const block = payload.stats.find((candidate) => {
+    if (!isObject(candidate) || !isObject(candidate.group)) return false;
+    return candidate.group.displayName === "hitting";
+  }) ?? payload.stats[0];
+  if (!isObject(block) || !Array.isArray(block.splits)) return [];
+
+  const rows: MlbHitterSeasonStatsRecord[] = [];
+  for (const candidate of block.splits) {
+    if (!isObject(candidate) || !isObject(candidate.player) || !isObject(candidate.stat)) continue;
+    const personId = parseIntSafe(candidate.player.id);
+    if (personId === null) continue;
+    const team = isObject(candidate.team) ? candidate.team : null;
+    const stat = candidate.stat;
+    rows.push({
+      mlb_person_id: personId,
+      season,
+      team_id: parseIntSafe(team?.id),
+      games_played: parseIntSafe(stat.gamesPlayed),
+      at_bats: parseIntSafe(stat.atBats),
+      runs: parseIntSafe(stat.runs),
+      hits: parseIntSafe(stat.hits),
+      batting_average: parseFloatSafe(stat.avg),
+      doubles: parseIntSafe(stat.doubles),
+      triples: parseIntSafe(stat.triples),
+      home_runs: parseIntSafe(stat.homeRuns),
+      rbis: parseIntSafe(stat.rbi),
+      total_bases: parseIntSafe(stat.totalBases),
+      walks: parseIntSafe(stat.baseOnBalls),
+      strikeouts: parseIntSafe(stat.strikeOuts),
+      stolen_bases: parseIntSafe(stat.stolenBases),
+      on_base_percentage: parseFloatSafe(stat.obp),
+      slugging_percentage: parseFloatSafe(stat.slg),
+      ops: parseFloatSafe(stat.ops),
+      plate_appearances: parseIntSafe(stat.plateAppearances),
+      hit_by_pitch: parseIntSafe(stat.hitByPitch),
+      sacrifice_flies: parseIntSafe(stat.sacFlies),
+      raw_source: "mlb_stats_api",
+    });
+  }
+  return rows;
+}
+
+/**
+ * Read all MLB hitter season aggregates in one request. `playerPool=ALL`
+ * avoids the 150-player qualified-only truncation while keeping the slate
+ * cycle to a single provider call.
+ */
+export async function getMlbHitterSeasonStats(
+  season: number,
+  opts?: Opts,
+): Promise<MlbHitterSeasonStatsRecord[] | null> {
+  const url =
+    `${BASE_URL}/stats?stats=season&group=hitting&season=${season}` +
+    "&gameType=R&sportId=1&playerPool=ALL&limit=2000";
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: HEADERS, signal: opts?.signal });
+  } catch {
+    log(opts, "network error on all-hitter season stats");
+    return null;
+  }
+  if (!res.ok) {
+    log(opts, `non-200 on all-hitter season stats: HTTP ${res.status}`);
+    return null;
+  }
+  try {
+    return parseMlbHitterSeasonStats(await res.json(), season);
+  } catch {
+    log(opts, "JSON parse error on all-hitter season stats");
+    return null;
+  }
+}
+
+/**
+ * Read leakage-safe hitter aggregates through an explicit historical date.
+ * Used by the model-input replay audit so every slate is evaluated with only
+ * statistics that were available before that slate began.
+ */
+export async function getMlbHitterStatsByDateRange(
+  season: number,
+  startDate: string,
+  endDate: string,
+  opts?: Opts,
+): Promise<MlbHitterSeasonStatsRecord[] | null> {
+  const url =
+    `${BASE_URL}/stats?stats=byDateRange&group=hitting` +
+    `&startDate=${encodeURIComponent(startDate)}` +
+    `&endDate=${encodeURIComponent(endDate)}` +
+    "&gameType=R&sportId=1&playerPool=ALL&limit=2000";
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: HEADERS, signal: opts?.signal });
+  } catch {
+    log(opts, "network error on historical all-hitter stats");
+    return null;
+  }
+  if (!res.ok) {
+    log(opts, `non-200 on historical all-hitter stats: HTTP ${res.status}`);
+    return null;
+  }
+  try {
+    return parseMlbHitterSeasonStats(await res.json(), season);
+  } catch {
+    log(opts, "JSON parse error on historical all-hitter stats");
+    return null;
+  }
 }
 
 /** Read-only all-team season hitting profiles for opponent research. */

@@ -15,44 +15,66 @@
  *   • MLB + WNBA current ET slate, live Playbook /splits.
  */
 
-import { cronHandler } from "@/lib/cron/runCron";
+import { cronHandlerPerSport } from "@/lib/cron/runCron";
 import { supabase } from "@/lib/db/supabase";
 import { syncPublicSplitsObservations } from "@/lib/services/syncPublicSplitsObservations";
 import { currentSlateDate } from "@/lib/dates/slateDate";
 import type { Sport } from "@/lib/types/domain/Sport";
+import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 
 const ENV = "PUBLIC_SPLITS_OBSERVATIONS_ENABLED";
 const SPORTS: Sport[] = ["mlb", "wnba"];
 
 export async function GET(request: Request): Promise<Response> {
-  return cronHandler(
+  return cronHandlerPerSport(
     request,
     "public_splits_observations_refresh",
-    async () => {
+    SPORTS,
+    async ({ sport }) => {
       if (process.env[ENV] !== "true") {
         return { records_updated: 0, details: { disabled: true, reason: `${ENV}!=true` } };
       }
-      let upserted = 0;
-      const errors: string[] = [];
-      const details: Record<string, unknown> = {};
-      for (const sport of SPORTS) {
-        // Current ET slate, live Playbook /splits (todayUtc=slate -> live path).
-        const slate = currentSlateDate(sport);
-        try {
-          const r = await syncPublicSplitsObservations({
-            supabase, sport, slateDate: slate, apply: true, todayUtc: slate,
-          });
-          upserted += r.upserted;
-          if (r.skippedTableMissing) errors.push(`${sport} ${slate}: table not applied`);
-          errors.push(...r.errors);
-          details[`${sport}_${slate}`] = { sharpapi: r.sharpapiRows, playbook: r.playbookRows, upserted: r.upserted };
-        } catch (e) {
-          errors.push(`${sport} ${slate}: ${e instanceof Error ? e.message : String(e)}`);
-        }
+      const slate = currentSlateDate(sport);
+      const result = await syncPublicSplitsObservations({
+        supabase,
+        sport,
+        slateDate: slate,
+        apply: true,
+        todayUtc: slate,
+      });
+      const errors = [
+        ...(result.skippedTableMissing ? [`${sport} ${slate}: table not applied`] : []),
+        ...result.errors,
+      ];
+      const responseSnapshot = errors.length === 0
+        ? await refreshDailyEdgeResponseSnapshot({
+            sport,
+            date: slate,
+            source: "public_splits_observations_refresh",
+          })
+        : null;
+      if (responseSnapshot?.ok === false) {
+        errors.push(`daily-edge snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`);
       }
-      if (errors.length) details.errors = errors.slice(0, 20);
-      return { records_updated: upserted, partial: errors.length > 0, details };
+      return {
+        records_updated: result.upserted + (responseSnapshot?.ok ? 1 : 0),
+        api_calls_made: 1,
+        partial: errors.length > 0,
+        error_message: errors.length ? errors.slice(0, 5).join(" | ").slice(0, 1500) : null,
+        details: {
+          slate,
+          sharpapi: result.sharpapiRows,
+          playbook: result.playbookRows,
+          upserted: result.upserted,
+          response_snapshot: responseSnapshot,
+          errors: errors.slice(0, 20),
+        },
+      };
     },
-    { sport: "mlb" },
+    {
+      leaseGroup: "prediction_pipeline",
+      requireLease: true,
+      lockMinutes: 5,
+    },
   );
 }
