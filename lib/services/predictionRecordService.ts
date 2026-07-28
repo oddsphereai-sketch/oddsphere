@@ -420,6 +420,8 @@ export const ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_MAX_ODDS = -131;
 export const ML_MID_PRICE_NEAR_MARKET_LEAN_MIN_ODDS = -130;
 export const ML_MID_PRICE_NEAR_MARKET_LEAN_MAX_ODDS = -121;
 export const FI_VALIDATED_BEST_ANGLE_RULE_ID = "fi_validated_best_angle_v1_2026_07_11";
+export const FI_LEAN_SIGNED_EDGE_PRICE_BEST_ANGLE_PROMOTION_RULE_ID =
+  "fi_lean_signed_edge_price_best_angle_promotion_v1_2026_07_28";
 export const TOTAL_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID =
   "total_calibrated_model_best_angle_path_v1_2026_07_27";
 export const TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID =
@@ -1695,22 +1697,23 @@ function resolveFiFinalGrade(args: {
     };
   }
 
-  if (baseGrade !== "best_angle") {
-    return {
-      playGrade: baseGrade,
-      bestAngle: false,
-      noBet: args.baseNoBet,
-      noBetReason: args.baseNoBetReason,
-      audit: null,
-    };
-  }
-
   const confidenceOk =
     args.confidence !== null &&
     args.confidence >= FI_FINAL_BEST_ANGLE_MIN_CONFIDENCE;
   const edgeOk = args.edge >= FI_FINAL_BEST_ANGLE_MIN_EDGE;
   const priceOk = args.oddsAmerican > FI_FINAL_BEST_ANGLE_MIN_PRICE_EXCLUSIVE;
-  const validated = !args.baseNoBet && confidenceOk && edgeOk && priceOk;
+  const retainedExistingBestAngle =
+    baseGrade === "best_angle" &&
+    !args.baseNoBet &&
+    confidenceOk &&
+    edgeOk &&
+    priceOk;
+  const promotedLean =
+    baseGrade === "lean" &&
+    !args.baseNoBet &&
+    edgeOk &&
+    priceOk;
+  const validated = retainedExistingBestAngle || promotedLean;
   if (validated) {
     return {
       playGrade: "best_angle",
@@ -1718,8 +1721,11 @@ function resolveFiFinalGrade(args: {
       noBet: false,
       noBetReason: null,
       audit: {
-        rule_id: FI_VALIDATED_BEST_ANGLE_RULE_ID,
-        action: "keep_as_best_angle",
+        rule_id: promotedLean
+          ? FI_LEAN_SIGNED_EDGE_PRICE_BEST_ANGLE_PROMOTION_RULE_ID
+          : FI_VALIDATED_BEST_ANGLE_RULE_ID,
+        action: promotedLean ? "promote_to_best_angle" : "keep_as_best_angle",
+        original_play_grade: baseGrade,
         edge: args.edge,
         min_edge: FI_FINAL_BEST_ANGLE_MIN_EDGE,
         odds_american: args.oddsAmerican,
@@ -1727,8 +1733,20 @@ function resolveFiFinalGrade(args: {
         confidence: args.confidence,
         min_confidence: FI_FINAL_BEST_ANGLE_MIN_CONFIDENCE,
         validation_note:
-          "MLB FI replay 2026-06-11..2026-07-10: signed edge >=6pp with price > -130 replayed 25-12, +11.7767u. The 5-6pp tier replayed near-flat and is Lean only.",
+          promotedLean
+            ? "Exact active-head locked replay 2026-07-11..2026-07-27: existing FI Leans with final writer edge >=6pp and price > -130 went 20-10, +9.936u, +33.1% ROI across 12 dates; train, validation, and untouched windows were each positive and combined leave-one-date-out ROI stayed +27.7% to +40.2%."
+            : "MLB FI replay 2026-06-11..2026-07-10: signed edge >=6pp with price > -130 replayed 25-12, +11.7767u. The 5-6pp tier replayed near-flat and is Lean only.",
       },
+    };
+  }
+
+  if (baseGrade === "lean") {
+    return {
+      playGrade: "lean",
+      bestAngle: false,
+      noBet: args.baseNoBet,
+      noBetReason: args.baseNoBetReason,
+      audit: null,
     };
   }
 

@@ -3,12 +3,25 @@
  * approximate re-run. No writes. */
 import { supabase } from "../../lib/db/supabase";
 const START = "2026-06-07";
+const END = "2026-07-27";
 
 async function main(): Promise<void> {
-  const { data } = await supabase.from("prediction_records")
-    .select("market, snapshot_json, launch_day, no_bet")
-    .eq("sport", "mlb").gte("slate_date", START);
-  const rows = (data ?? []).filter((r: any) => r.launch_day !== true && r.no_bet !== true);
+  const data: any[] = [];
+  const pageSize = 250;
+  for (let from = 0; ; from += pageSize) {
+    const { data: page, error } = await supabase.from("prediction_records")
+      .select("market,slate_date,locked_at,snapshot_json,launch_day,no_bet")
+      .eq("sport", "mlb")
+      .in("market", ["moneyline", "total", "first_inning"])
+      .gte("slate_date", START)
+      .lte("slate_date", END)
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    data.push(...(page ?? []));
+    if ((page ?? []).length < pageSize) break;
+  }
+  const rows = data.filter((r: any) => r.launch_day !== true && r.locked_at !== null);
   const ml = rows.filter((r: any) => r.market === "moneyline");
   const tot = rows.filter((r: any) => r.market === "total");
   const fi = rows.filter((r: any) => r.market === "first_inning");
@@ -58,6 +71,18 @@ async function main(): Promise<void> {
   console.log(`\n=== FI re-run input coverage (n=${fi.length}) ===`);
   for (const [name, path] of [["posterior_p_nrfi", (a: any) => a.posterior_p_nrfi ?? a.posterior_nrfi], ["p_nrfi(independent)", (a: any) => a.p_nrfi ?? a.independent_p_nrfi], ["nrfi_market_prob", (a: any) => a.nrfi_market_prob ?? a.market_nrfi_prob], ["away_lambda", (a: any) => a.away_lambda], ["home_lambda", (a: any) => a.home_lambda], ["data_quality_tier", (a: any) => a.data_quality_tier]] as any[]) {
     console.log(`  ${name.padEnd(26)} ${covfi(fi, path)}/${fi.length}`);
+  }
+  const snapshotCoverage = (arr: any[], test: (snapshot: any) => boolean) =>
+    arr.filter((r: any) => test(r.snapshot_json ?? {})).length;
+  console.log(`\n=== FULL-RUNTIME / DECISION-REPLAY SUBSTRATE ===`);
+  for (const [name, arr] of [["ML", ml], ["TOT", tot], ["FI", fi]] as const) {
+    console.log(`  ${name} n=${arr.length}`);
+    console.log(`    v2 feature_capture:       ${snapshotCoverage(arr, s => s.v2_2_audit?.feature_capture != null)}/${arr.length}`);
+    console.log(`    FI feature capture:       ${snapshotCoverage(arr, s => s.fi_v2_audit?.feature_capture != null)}/${arr.length}`);
+    console.log(`    locked lines:             ${snapshotCoverage(arr, s => Array.isArray(s.lines_at_lock) && s.lines_at_lock.length > 0)}/${arr.length}`);
+    console.log(`    locked signals:           ${snapshotCoverage(arr, s => Array.isArray(s.signal_rows_at_lock) && s.signal_rows_at_lock.length > 0)}/${arr.length}`);
+    console.log(`    locked member read:       ${snapshotCoverage(arr, s => s.member_facing_at_lock?.schema_version != null)}/${arr.length}`);
+    console.log(`    model layer stamp:        ${snapshotCoverage(arr, s => s.model_layer_versions?.active_probability_head != null)}/${arr.length}`);
   }
   // sample one full v2_2_audit to eyeball
   const sampleTot: any = tot.find((r: any) => r.snapshot_json?.v2_2_audit);

@@ -15,17 +15,19 @@
 
 import { supabase } from "../../lib/db/supabase";
 import {
+  homeWinProbabilityPoisson,
   overProbabilityNegativeBinomial,
   overProbabilityPoisson,
   overProbabilityZeroInflatedPoisson,
 } from "../../lib/automodel/runDistribution";
 import { regularizeProbability } from "../../lib/automodel/mlbProbabilityRegularization";
+import { computePlayGrade } from "../../lib/automodel/playGrade";
 
 type Market = "moneyline" | "total" | "first_inning";
 type Side = "home" | "away" | "over" | "under" | null;
 type Result = "win" | "loss" | "push" | "void" | "pending" | "";
 
-type Opts = { dateFrom: string; dateTo: string; json: boolean };
+type Opts = { dateFrom: string; dateTo: string; json: boolean; section: string | null };
 
 type Rec = {
   id: number;
@@ -43,6 +45,7 @@ type Rec = {
   play_grade: string | null;
   best_angle: boolean | null;
   no_bet: boolean | null;
+  held: boolean | null;
   model_version: string | null;
   calibration_version: string | null;
   locked_at: string | null;
@@ -77,12 +80,14 @@ function parseArgs(argv: string[]): Opts {
   let dateFrom = "2026-06-07";
   let dateTo = "2026-07-08";
   let json = false;
+  let section: string | null = null;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--date-from" && argv[i + 1]) dateFrom = argv[++i]!;
     else if (argv[i] === "--date-to" && argv[i + 1]) dateTo = argv[++i]!;
     else if (argv[i] === "--json") json = true;
+    else if (argv[i]?.startsWith("--section=")) section = argv[i]!.slice("--section=".length);
   }
-  return { dateFrom, dateTo, json };
+  return { dateFrom, dateTo, json, section };
 }
 
 function addDays(date: string, days: number): string {
@@ -212,6 +217,13 @@ function totalResult(side: "over" | "under", line: number | null, game: Game | u
   return side === "over" ? (overWon ? "win" : "loss") : overWon ? "loss" : "win";
 }
 
+function mlResult(side: "home" | "away", game: Game | undefined): Result {
+  if (!game || game.home_score === null || game.away_score === null) return "";
+  if (game.home_score === game.away_score) return "push";
+  const homeWon = game.home_score > game.away_score;
+  return side === "home" ? (homeWon ? "win" : "loss") : homeWon ? "loss" : "win";
+}
+
 function fiResult(side: "nrfi" | "yrfi", game: Game | undefined, shipped: Result): Result {
   if (game?.first_inning_runs !== null && game?.first_inning_runs !== undefined) {
     const nrfiWon = game.first_inning_runs === 0;
@@ -228,7 +240,33 @@ function sideOdds(row: Rec, side: Side | "nrfi" | "yrfi"): number | null {
   if (side === "under") return num(v22.under_odds_american) ?? (row.side === "under" ? row.odds_american : null);
   if (side === "nrfi") return num(fi.market_nrfi_odds_american) ?? (row.pick === "NRFI" ? row.odds_american : null);
   if (side === "yrfi") return num(fi.market_yrfi_odds_american) ?? (row.pick === "YRFI" ? row.odds_american : null);
+  if (side === "home" || side === "away") {
+    const locked = obj(nested(snap, `odds_source_at_lock_ml.${side}`));
+    return num(locked.odds) ?? (row.side === side ? row.odds_american : null);
+  }
   return row.odds_american;
+}
+
+function chronologicalWindow(date: string): "train" | "calibration" | "validation" | "untouched" {
+  if (date <= "2026-06-30") return "train";
+  if (date <= "2026-07-10") return "calibration";
+  if (date <= "2026-07-22") return "validation";
+  return "untouched";
+}
+
+function addSplit(
+  groups: Map<string, Agg>,
+  label: string,
+  row: Rec,
+  odds: number | null,
+  r: Result,
+  prob: number | null,
+): void {
+  for (const key of [`${label}::all`, `${label}::${chronologicalWindow(row.slate_date)}`]) {
+    const agg = groups.get(key) ?? newAgg();
+    add(agg, odds, r, prob, clvBeat(row));
+    groups.set(key, agg);
+  }
 }
 
 function clvBeat(row: Rec): boolean | null {
@@ -279,14 +317,16 @@ async function loadRecords(opts: Opts): Promise<Rec[]> {
     const rows = await withRetry<Rec[]>(`prediction_records ${slateDate}`, async () =>
       await supabase
         .from("prediction_records")
-        .select("id,game_id,slate_date,market,pick,side,line_value,odds_american,confidence,model_probability,market_probability,edge,play_grade,best_angle,no_bet,model_version,calibration_version,locked_at,snapshot_json,prediction_grades:prediction_grades!prediction_record_id(result)")
+        .select("id,game_id,slate_date,market,pick,side,line_value,odds_american,confidence,model_probability,market_probability,edge,play_grade,best_angle,no_bet,held,model_version,calibration_version,locked_at,snapshot_json,prediction_grades:prediction_grades!prediction_record_id(result)")
         .eq("sport", "mlb")
         .in("market", ["moneyline", "total", "first_inning"])
         .eq("slate_date", slateDate)
         .limit(500),
     );
     all.push(...rows);
-    console.log(`  loaded ${slateDate}: ${rows.length} records`);
+    if (!(opts.json && opts.section)) {
+      console.log(`  loaded ${slateDate}: ${rows.length} records`);
+    }
     await sleep(150);
   }
   return all;
@@ -315,6 +355,9 @@ function sortedEntries(groups: Map<string, Agg>, min = 1): Array<[string, Agg]> 
 function auditTotals(records: Rec[], games: Map<number, Game>): Record<string, unknown> {
   const candidates = new Map<string, Agg>();
   const buckets = new Map<string, Map<string, Agg>>();
+  const exactHead = new Map<string, Agg>();
+  const exactCoverage = { eligible: 0, sideMismatchVsStored: 0, withExactSideOdds: 0, distanceCapApplied: 0 };
+  const capGradeImpact = new Map<string, number>();
   const totalRows = records.filter((r) => r.market === "total" && (r.side === "over" || r.side === "under"));
   const addCandidate = (label: string, row: Rec, probOver: number | null, game: Game | undefined) => {
     if (probOver === null) return;
@@ -334,14 +377,99 @@ function auditTotals(records: Rec[], games: Map<number, Game>): Record<string, u
     const away = num(v22.posterior_away_runs);
     const line = row.line_value ?? num(v22.market_total);
     if (home === null || away === null || line === null) continue;
-    const marketOver = row.side === "over"
-      ? row.market_probability
-      : row.market_probability !== null
-        ? 1 - row.market_probability
-        : num(v22.ou_market_prob) !== null
-          ? row.side === "over" ? num(v22.ou_market_prob) : 1 - (num(v22.ou_market_prob) as number)
-          : null;
+    const storedPickedSide = row.side === "over" || row.side === "under" ? row.side : null;
+    const storedMarketPicked = row.market_probability ?? num(v22.ou_market_prob);
+    const marketOver = storedPickedSide === "over"
+      ? storedMarketPicked
+      : storedPickedSide === "under" && storedMarketPicked !== null
+        ? 1 - storedMarketPicked
+        : null;
     const rawPoisson = overProbabilityPoisson(home, away, line);
+    // Production chooses the side from RAW Poisson probability and only then
+    // regularizes the picked-side probability. Regularization never flips it.
+    const exactSide = rawPoisson >= 0.5 ? "over" : "under";
+    const exactRawPicked = exactSide === "over" ? rawPoisson : 1 - rawPoisson;
+    // v2_2_audit.ou_market_prob is already oriented to the raw model's
+    // picked side, which is exactly the side reconstructed above.
+    const exactMarketPicked = num(v22.ou_market_prob) ?? (
+      marketOver === null ? null : exactSide === "over" ? marketOver : 1 - marketOver
+    );
+    const exactRegularized = regularizeProbability({
+      rawProb: exactRawPicked,
+      marketProb: exactMarketPicked,
+      k: 0.4,
+      maxDistancePp: 8,
+    });
+    const noDistanceCap = regularizeProbability({
+      rawProb: exactRawPicked,
+      marketProb: exactMarketPicked,
+      k: 0.4,
+      maxDistancePp: 100,
+    });
+    const exactProb = exactRegularized.regularizedProb;
+    const exactResult = totalResult(exactSide, line, game);
+    const tier = String(v22.data_quality_tier ?? "fallback");
+    const dataQualityTier: "high" | "medium" | "low" | "fallback" =
+      tier === "high" || tier === "medium" || tier === "low" || tier === "fallback"
+        ? tier
+        : "fallback";
+    const commonGradeInputs = {
+      marketProb: exactMarketPicked,
+      americanOdds: sideOdds(row, exactSide),
+      dataQualityTier,
+      provisional: v22.provisional === true,
+      isHeld: row.held === true,
+      minBestAngleEdgePct: 5,
+      minBestAngleConfidencePct: 56,
+      sharpAgreement: "neutral" as const,
+      marketProbIsFallback: exactMarketPicked === null,
+      bestAngleHardBlockReason:
+        typeof v22.ou_best_angle_block_reason === "string"
+          ? v22.ou_best_angle_block_reason
+          : null,
+    };
+    const capGrade = computePlayGrade({ ...commonGradeInputs, modelProb: exactProb }).grade;
+    const noCapGrade = computePlayGrade({
+      ...commonGradeInputs,
+      modelProb: noDistanceCap.regularizedProb,
+    }).grade;
+    const transition = `${capGrade}->${noCapGrade}`;
+    capGradeImpact.set(transition, (capGradeImpact.get(transition) ?? 0) + 1);
+    if (exactResult === "win" || exactResult === "loss" || exactResult === "push") {
+      const exactOdds = sideOdds(row, exactSide);
+      exactCoverage.eligible++;
+      if (storedPickedSide !== exactSide) exactCoverage.sideMismatchVsStored++;
+      if (exactOdds !== null) exactCoverage.withExactSideOdds++;
+      if (exactRegularized.capApplied) exactCoverage.distanceCapApplied++;
+      addSplit(exactHead, `total_k04_cap8::${exactSide}`, row, exactOdds, exactResult, exactProb);
+      addSplit(exactHead, "total_k04_cap8", row, exactOdds, exactResult, exactProb);
+      addSplit(
+        exactHead,
+        "total_k04_no_distance_cap",
+        row,
+        exactOdds,
+        exactResult,
+        noDistanceCap.regularizedProb,
+      );
+      if (capGrade === "lean" && noCapGrade === "best_angle") {
+        addSplit(
+          exactHead,
+          `total_no_cap_promoted_lean_to_best::${exactSide}`,
+          row,
+          exactOdds,
+          exactResult,
+          noDistanceCap.regularizedProb,
+        );
+        addSplit(
+          exactHead,
+          "total_no_cap_promoted_lean_to_best",
+          row,
+          exactOdds,
+          exactResult,
+          noDistanceCap.regularizedProb,
+        );
+      }
+    }
     addCandidate("poisson_raw", row, rawPoisson, game);
     for (const alpha of [0.08, 0.12, 0.18, 0.25]) {
       addCandidate(`negative_binomial_alpha_${alpha}`, row, overProbabilityNegativeBinomial(home, away, line, alpha), game);
@@ -349,7 +477,7 @@ function auditTotals(records: Rec[], games: Map<number, Game>): Record<string, u
     for (const pi of [0.015, 0.03, 0.05]) {
       addCandidate(`zero_inflated_poisson_pi_${pi}`, row, overProbabilityZeroInflatedPoisson(home, away, line, pi), game);
     }
-    for (const k of [0.15, 0.25, 0.35, 0.5]) {
+    for (const k of [0.15, 0.25, 0.35, 0.4, 0.5]) {
       for (const cap of [3, 5, 8]) {
         const p = regularizeProbability({ rawProb: rawPoisson, marketProb: marketOver, k, maxDistancePp: cap }).regularizedProb ?? rawPoisson;
         addCandidate(`poisson_regularized_k_${k}_cap_${cap}`, row, p, game);
@@ -368,6 +496,11 @@ function auditTotals(records: Rec[], games: Map<number, Game>): Record<string, u
   }
 
   return {
+    exactReplayCoverage: exactCoverage,
+    distanceCapBaseGradeImpact: Object.fromEntries(capGradeImpact),
+    exactCurrentProbabilityHeadReplay: Object.fromEntries(
+      [...exactHead.entries()].map(([k, v]) => [k, summarize(v)]),
+    ),
     candidates: Object.fromEntries(sortedEntries(candidates).map(([k, v]) => [k, summarize(v)])),
     situationBuckets: Object.fromEntries(
       [...buckets.entries()].map(([bucket, group]) => [
@@ -378,9 +511,11 @@ function auditTotals(records: Rec[], games: Map<number, Game>): Record<string, u
   };
 }
 
-function auditMoneylineProbability(records: Rec[]): Record<string, unknown> {
+function auditMoneylineProbability(records: Rec[], games: Map<number, Game>): Record<string, unknown> {
   const candidates = new Map<string, Agg>();
   const positiveEvCandidates = new Map<string, Agg>();
+  const exactHead = new Map<string, Agg>();
+  const exactCoverage = { eligible: 0, sideMismatchVsStored: 0, withExactSideOdds: 0, distanceCapApplied: 0 };
   const mlRows = records.filter((r) => r.market === "moneyline");
   const addCandidate = (label: string, row: Rec, prob: number | null, r: Result) => {
     if (prob === null) return;
@@ -399,6 +534,38 @@ function auditMoneylineProbability(records: Rec[]): Record<string, unknown> {
     const r = result(row.prediction_grades);
     if (r !== "win" && r !== "loss") continue;
     const v22 = obj(obj(row.snapshot_json).v2_2_audit);
+    const posteriorHome = num(v22.posterior_home_runs);
+    const posteriorAway = num(v22.posterior_away_runs);
+    const rawHome = posteriorHome !== null && posteriorAway !== null
+      ? homeWinProbabilityPoisson(posteriorHome, posteriorAway)
+      : null;
+    const exactSide = rawHome === null ? null : rawHome >= 0.5 ? "home" : "away";
+    const exactRawPicked = rawHome === null || exactSide === null
+      ? null
+      : exactSide === "home" ? rawHome : 1 - rawHome;
+    const marketHome = num(v22.market_home_win_prob);
+    const exactMarketPicked = marketHome === null || exactSide === null
+      ? null
+      : exactSide === "home" ? marketHome : 1 - marketHome;
+    if (exactSide !== null && exactRawPicked !== null) {
+      const exactRegularized = regularizeProbability({
+        rawProb: exactRawPicked,
+        marketProb: exactMarketPicked,
+        k: 0.1,
+        maxDistancePp: 6,
+      });
+      const exactProb = exactRegularized.regularizedProb;
+      const exactResult = mlResult(exactSide, games.get(row.game_id));
+      if (exactResult === "win" || exactResult === "loss") {
+        const exactOdds = sideOdds(row, exactSide);
+        exactCoverage.eligible++;
+        if (row.side !== exactSide) exactCoverage.sideMismatchVsStored++;
+        if (exactOdds !== null) exactCoverage.withExactSideOdds++;
+        if (exactRegularized.capApplied) exactCoverage.distanceCapApplied++;
+        addSplit(exactHead, `moneyline_k01_cap6::${exactSide}`, row, exactOdds, exactResult, exactProb);
+        addSplit(exactHead, "moneyline_k01_cap6", row, exactOdds, exactResult, exactProb);
+      }
+    }
     const rawProb = num(v22.ml_raw_model_prob) ?? row.model_probability;
     const currentProb = row.model_probability ?? num(v22.ml_model_prob) ?? num(v22.ml_regularized_model_prob);
     const marketProb = row.market_probability ?? num(v22.ml_market_prob);
@@ -406,8 +573,8 @@ function auditMoneylineProbability(records: Rec[]): Record<string, unknown> {
     addCandidate("raw_model_probability", row, rawProb, r);
     addCandidate("market_probability", row, marketProb, r);
     if (rawProb === null || marketProb === null) continue;
-    for (const k of [0.15, 0.25, 0.35, 0.5, 0.65]) {
-      for (const cap of [3, 5, 8]) {
+    for (const k of [0.1, 0.15, 0.25, 0.35, 0.5, 0.65]) {
+      for (const cap of [3, 5, 6, 8]) {
         const p = regularizeProbability({ rawProb, marketProb, k, maxDistancePp: cap }).regularizedProb;
         addCandidate(`regularized_k_${k}_cap_${cap}`, row, p, r);
       }
@@ -415,6 +582,10 @@ function auditMoneylineProbability(records: Rec[]): Record<string, unknown> {
   }
 
   return {
+    exactReplayCoverage: exactCoverage,
+    exactCurrentProbabilityHeadReplay: Object.fromEntries(
+      [...exactHead.entries()].map(([k, v]) => [k, summarize(v)]),
+    ),
     allRows: Object.fromEntries(
       [...candidates.entries()]
         .sort((a, b) => (summarize(a[1]).logLoss as number) - (summarize(b[1]).logLoss as number))
@@ -587,7 +758,7 @@ async function main(): Promise<void> {
   const games = await loadGames(records);
   const report = {
     scope: { sport: "mlb", dateFrom: opts.dateFrom, dateTo: opts.dateTo, rows: records.length },
-    moneylineProbabilityCalibration: auditMoneylineProbability(records),
+    moneylineProbabilityCalibration: auditMoneylineProbability(records, games),
     totalsDistributionAndRegularization: auditTotals(records, games),
     firstInningEmpiricalBayes: auditFi(records, games),
     playGradeMonotonicity: auditGrades(records),
@@ -603,7 +774,31 @@ async function main(): Promise<void> {
   };
 
   if (opts.json) {
-    console.log(JSON.stringify(report, null, 2));
+    if (opts.section === "exact-coverage") {
+      console.log(JSON.stringify({
+        scope: report.scope,
+        moneyline: (report.moneylineProbabilityCalibration as Record<string, unknown>).exactReplayCoverage,
+        total: {
+          coverage: (report.totalsDistributionAndRegularization as Record<string, unknown>).exactReplayCoverage,
+          baseGradeImpact:
+            (report.totalsDistributionAndRegularization as Record<string, unknown>).distanceCapBaseGradeImpact,
+        },
+      }, null, 2));
+    } else if (opts.section === "exact-heads") {
+      console.log(JSON.stringify({
+        scope: report.scope,
+        moneyline: {
+          coverage: (report.moneylineProbabilityCalibration as Record<string, unknown>).exactReplayCoverage,
+          replay: (report.moneylineProbabilityCalibration as Record<string, unknown>).exactCurrentProbabilityHeadReplay,
+        },
+        total: {
+          coverage: (report.totalsDistributionAndRegularization as Record<string, unknown>).exactReplayCoverage,
+          replay: (report.totalsDistributionAndRegularization as Record<string, unknown>).exactCurrentProbabilityHeadReplay,
+        },
+      }, null, 2));
+    } else {
+      console.log(JSON.stringify(report, null, 2));
+    }
     return;
   }
 
