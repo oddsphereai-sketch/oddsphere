@@ -60,8 +60,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries July 28 v14 additive ML market-divergence promotion version",
-  layers.grade_policy === "mlb_public_grade_policy_v14_ml_market_divergence_lean_2026_07_28",
+  "grade policy carries July 28 v15 FI provisional-precedence version",
+  layers.grade_policy === "mlb_public_grade_policy_v15_fi_provisional_precedence_2026_07_28",
 );
 check(
   "MLB layer stamp carries one immutable decision release",
@@ -69,8 +69,8 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB market-divergence Lean promotion is versioned as decision release r17",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_07_28_r17",
+  "MLB FI grade-health correction is versioned as decision release r18",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_07_28_r18",
 );
 check("different final sides are a true correction", didFinalSideChange("home", "away"));
 check("same final side is not a correction", !didFinalSideChange("home", "home"));

@@ -17,6 +17,7 @@ import {
   GATE_TOTAL_LEAN_MARKET_FRICTION_MAX_EDGE_PCT,
   FI_VALIDATED_BEST_ANGLE_RULE_ID,
   FI_LEAN_SIGNED_EDGE_PRICE_BEST_ANGLE_PROMOTION_RULE_ID,
+  FI_PROVISIONAL_BEST_ANGLE_BLOCK_RULE_ID,
   TOTAL_VALIDATED_LEAN_RULE_ID,
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
   GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
@@ -2650,6 +2651,89 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
     gate?.rule_id === FI_LEAN_SIGNED_EDGE_PRICE_BEST_ANGLE_PROMOTION_RULE_ID &&
       gate?.action === "promote_to_best_angle",
   );
+}
+{
+  // An explicit provisional "Lean only" decision must win over the later
+  // signed-edge promotion. This is paired with the clean promotion fixture
+  // immediately above so the safety change does not disable the validated
+  // additive path.
+  const provisionalFiWriterLean = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 60,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "nrfi",
+      fi_v2_audit: {
+        fi_play_grade: "lean",
+        fi_no_bet_reason: "Provisional / key feature missing; lean only.",
+        provisional: true,
+        fresh_data_ready: true,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, provisionalFiWriterLean]]),
+    abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  const gate = (fi.snapshot_json as any)?.fi_final_grade_resolution;
+  check("provisional FI Lean cannot be promoted to Best Angle",
+        fi.play_grade === "lean" && fi.best_angle === false && fi.no_bet === false);
+  check("provisional FI Best Angle block is audited",
+        gate?.rule_id === FI_PROVISIONAL_BEST_ANGLE_BLOCK_RULE_ID &&
+          gate?.action === "keep_as_lean" &&
+          gate?.reason === "provisional_fi_audit");
+}
+{
+  // A stale scratch marker may be cleared only when the fresh FI audit has
+  // confirmed both starters and is no longer provisional.
+  const resolvedScratchFi = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 60,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "nrfi",
+      nrfi_hold_reason: "starter_scratch_nrfi",
+      fi_v2_audit: {
+        fi_play_grade: "lean",
+        fi_no_bet_reason: null,
+        provisional: false,
+        fresh_data_ready: true,
+        feature_capture: {
+          starter: {
+            away: { confirmed: true },
+            home: { confirmed: true },
+          },
+        },
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, resolvedScratchFi]]),
+    abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  const resolution = (fi.snapshot_json as any)?.fi_hold_reason_resolution;
+  check("fresh confirmed starters clear stale scratch hold reason",
+        (fi.snapshot_json as any)?.nrfi_hold_reason === null);
+  check("scratch hold resolution is audited",
+        resolution?.original_hold_reason === "starter_scratch_nrfi" &&
+          resolution?.final_hold_reason === null &&
+          resolution?.scratch_resolved_by_fresh_confirmed_starters === true);
 }
 {
   const fiWriterNoBet = {
