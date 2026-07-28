@@ -573,7 +573,7 @@ function marketHasBlockingFriction(
 }
 
 function forceIncompleteMlbMarketNoPlay(market: MarketEdgeDto): MarketEdgeDto {
-  const reason = "Required market prices or verified game inputs are not available yet.";
+  const reason = "No Play because required market prices or verified game inputs are not available yet.";
   const cappedGrade = gradeForStoredVerdict("no_play", market.rawGrade ?? market.grade ?? null);
   return {
     ...market,
