@@ -63,6 +63,12 @@ export async function GET(request: Request) {
       let responseSnapshot:
         | Awaited<ReturnType<typeof refreshDailyEdgeResponseSnapshot>>
         | null = null;
+      let propPredictions:
+        | { delegated: true; writer: "mlb_player_props_refresh" }
+        | { delegated: false; records_updated: number } = {
+          delegated: true,
+          writer: "mlb_player_props_refresh",
+        };
 
       if (sport === "mlb") {
         gameLines = await linesService.refreshGameLinesV2(sport, date);
@@ -120,17 +126,17 @@ export async function GET(request: Request) {
             reason: "AUTOMODEL_DB_WRITES_ENABLED!=true; skipped MLB automodel rerun after lineup refresh",
           };
         }
+      } else {
+        // Preserve the legacy generator for sports that do not yet have the
+        // dedicated MLB props snapshot pipeline.
+        const propPreds = await predictionService.generatePropPredictions(sport, date);
+        records += propPreds.records_updated ?? 0;
+        apiCalls += propPreds.api_calls_made ?? 0;
+        propPredictions = {
+          delegated: false,
+          records_updated: propPreds.records_updated ?? 0,
+        };
       }
-
-      // Idempotent prop regeneration — caught scratches drop affected
-      // predictions naturally because the underlying lineup row no longer
-      // exists for that player.
-      const propPreds = await predictionService.generatePropPredictions(sport, date);
-      records += propPreds.records_updated ?? 0;
-      apiCalls += propPreds.api_calls_made ?? 0;
-
-      // Fix 4.1: regenerateSharpVerdicts removed. Legacy pipeline deleted;
-      // signal text derives at API response time.
 
       return {
         records_updated: records,
@@ -157,7 +163,9 @@ export async function GET(request: Request) {
           automodel,
           member_records: memberRecords,
           response_snapshot: responseSnapshot,
-          prop_predictions: propPreds.records_updated,
+          // MLB's member props board has one authoritative refresh writer.
+          // Non-MLB sports retain their legacy generator above.
+          prop_predictions: propPredictions,
         },
       };
     },

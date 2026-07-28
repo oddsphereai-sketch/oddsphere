@@ -7,10 +7,9 @@
  *   1. weather_forecasts (via weatherService.refreshForecasts)
  *   2. lineups            (via lineupService.refreshLineups)
  *
- * Runs OUTSIDE the slate-cycle orchestrator so it can't accidentally
- * break the lines / starter / pitcher / season-stats chain that
- * V2.1 currently depends on. Both services are idempotent (delete-by-
- * game_id then insert).
+ * Runs as a separate route from the slate-cycle orchestrator but uses the
+ * same sport-scoped prediction_pipeline lease. This keeps feature writes
+ * from overlapping a slate rebuild while preserving refresh frequency.
  *
  * Auth: CRON_SECRET via cronHandler wrapper (same pattern as
  * /api/cron/slate-cycle and /api/cron/tracking-refresh).
@@ -32,7 +31,7 @@
  *   • prediction grades
  *
  * Schedule (vercel.json, UTC):
- *   `55 7,9,11,12-23 * * *` and `55 0-2 * * *`.
+ *   `55 7,9,11,13,15,17,19,21,23 * * *` and `55 0-2 * * *`.
  *
  * Runs shortly before slate-cycle so lineups, weather, player mappings,
  * and starter stats are available before predictions are rebuilt. This is
@@ -194,6 +193,11 @@ export async function GET(request: Request) {
         partial,
         details,
       };
+    },
+    {
+      leaseGroup: "prediction_pipeline",
+      requireLease: true,
+      lockMinutes: 4,
     },
   );
 }

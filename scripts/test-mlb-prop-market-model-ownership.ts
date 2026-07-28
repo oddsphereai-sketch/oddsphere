@@ -28,7 +28,7 @@ assert.equal(versions.batter_runs_scored, "batter_runs_context_opportunity_integ
 assert.equal(versions.batter_home_runs, "batter_home_runs_rare_event_integrated_read_v10_consensus_best_price_lean_path");
 assert.equal(versions.batter_singles, "batter_singles_event_distribution_integrated_read_v5_under_lean_only");
 assert.equal(versions.batter_doubles, "batter_doubles_event_distribution_integrated_read_v3_reliability_calibrated");
-assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_07_28_r15");
+assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_07_28_r16");
 assert.match(MLB_PROPS_MODEL_RELEASE_ID, /^mlb_props_\d{4}_\d{2}_\d{2}_r\d+$/);
 assert.equal(modelForRealPitcherMarket("pitcher_strikeouts")?.modelName, "pitcher_strikeouts_distribution_v3_verified");
 assert.equal(modelForRealPitcherMarket("pitcher_outs")?.modelName, "pitcher_outs_peer_consensus_compact_core_v3_verified");

@@ -129,8 +129,9 @@ async function main() {
   // ─── lineup-watch ────────────────────────────────────────────────────────
   section("/api/cron/lineup-watch");
   check("lineup-watch: bad auth → 401", (await lineupWatch(unauthed())).status === 401);
-  // lineups (84) + prop_predictions (39) = 123
-  await runAuthedFor(lineupWatch, "lineup-watch", 120, ["lineups", "prop_predictions"]);
+  // MLB legacy prop_predictions are intentionally excluded. The MLB member
+  // props board has one authoritative writer: mlb-player-props-refresh.
+  await runAuthedFor(lineupWatch, "lineup-watch", 80, ["lineups"]);
 
   // ─── pregame-sweep ───────────────────────────────────────────────────────
   section("/api/cron/pregame-sweep");
