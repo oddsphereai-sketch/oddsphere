@@ -142,6 +142,50 @@ markets retain their r11 runtime behavior and market versions. Exploratory
 demotions were withdrawn because they did not have enough tested replacement
 promotions and would have flattened the board.
 
+## Full grade-ladder audit
+
+Best Angles were not audited in isolation. The read-only
+`scripts/audit-mlb-props-grade-ladder.ts` audit paginates the complete T-60
+tracking ledger, evaluates Best Angle, Lean, and Watchlist separately, and
+reports every release era separately.
+
+Across 18,358 settled locked observations from 2026-07-16 through 2026-07-27,
+the historical labels were not monotonic:
+
+| Historical label | Settled | Units | ROI | Brier |
+|---|---:|---:|---:|---:|
+| Best Angle | 71 | -15.32 | -21.6% | 0.267 |
+| Lean | 1,577 | -70.03 | -4.4% | 0.252 |
+| Watchlist | 16,710 | -510.42 | -3.1% | 0.226 |
+
+These combined rows span multiple immutable releases and are not presented as
+current-r13 performance. Their purpose is to prove that the former label ladder
+did not reliably sort strength. The release-separated results are retained in
+the machine-readable audit.
+
+The audit then tested the exact Watchlist rows that had previously been
+demoted by player, game, correlation, or short-price count discipline. Candidate
+promotion policies were selected with discovery and calibration only, then
+checked in two validation periods and the final period. No broad additional
+Lean promotion survived all three later periods. In particular, the promising
+aggregate 4%-to-6% edge band was positive in the first four windows but -3.4%
+in the last window. It is not promoted.
+
+Therefore r13 does not target a percentage for any grade and does not force
+Watchlists into Leans for appearance. Its supported tier corrections are:
+
+- unsupported Singles premium Best Angles become Singles Leans;
+- the exact Hits Under price cohort becomes Best Angle;
+- the relative-quality Home Run cohort becomes Lean;
+- other evidence-bearing rows remain sortable Watchlists instead of being
+  hidden as No Plays;
+- broad cap-based Watchlist promotion remains rejected until it passes
+  chronological validation.
+
+The member payload already orders Best Angle, Lean, then Watchlist, and sorts
+within each tier using expected value, model edge, and price. No fixed grade
+distribution is introduced.
+
 ## Daily Edge boundary
 
 No moneyline, full-game total, First Inning probability, side, grade, flip,
@@ -156,6 +200,7 @@ The 2026-07-28 r13 Player Props dry run was read-only (`persist=false`):
 - zero stale odds rows;
 - publishable with no validation errors;
 - 145 actionable Leans at the preview timestamp;
+- 1,649 evidence-bearing Watchlists;
 - one naturally qualifying Home Run Lean at that timestamp;
 - no qualifying recovered Hits Under Best Angle at that timestamp.
 
