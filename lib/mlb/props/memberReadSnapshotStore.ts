@@ -2,6 +2,7 @@ import { supabase } from "@/lib/db/supabase";
 import type { PlayerPropsDashboardData } from "@/app/mlb/props/components/PlayerPropsDashboard";
 import {
   applyMlbPropsDisplayLocks,
+  loadHighestIndexedMlbPropsReleaseHead,
   loadMlbPropsLockedGameTimes,
   type MlbPropsBoardSnapshot,
 } from "./boardSnapshotStore";
@@ -9,6 +10,11 @@ import {
   buildMlbPropsInitialMemberBoardData,
   selectMlbPropsResearchForRows,
 } from "./memberPayload";
+import { MLB_PROPS_MODEL_RELEASE_ID } from "./marketModelVersions";
+import {
+  assertMlbPropsReleaseDoesNotRegress,
+  compareMlbPropsReleaseIds,
+} from "./releaseOrdering";
 
 const BOARD_TTL_MS = 40 * 60 * 1000;
 const STALE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -17,6 +23,7 @@ type BoardPayload = {
   schemaVersion: 1;
   snapshotId: string;
   asOfTimestamp: string;
+  modelReleaseId?: string;
   data: PlayerPropsDashboardData;
   shardKeys?: string[];
 };
@@ -25,6 +32,7 @@ type PlayerPayload = {
   schemaVersion: 1;
   snapshotId: string;
   asOfTimestamp: string;
+  modelReleaseId?: string;
   playerId: string;
   props?: PlayerPropsDashboardData["props"];
   research: NonNullable<PlayerPropsDashboardData["research"]>;
@@ -46,6 +54,17 @@ export async function publishMlbPropsMemberReadSnapshots(
   snapshot: MlbPropsBoardSnapshot,
   options?: { forceFull?: boolean; compactOnly?: boolean },
 ): Promise<void> {
+  assertMlbPropsReleaseDoesNotRegress({
+    candidateReleaseId: snapshot.modelContext?.modelReleaseId,
+    currentReleaseId: MLB_PROPS_MODEL_RELEASE_ID,
+  });
+  const current = await loadHighestIndexedMlbPropsReleaseHead(snapshot.slateDate);
+  assertMlbPropsReleaseDoesNotRegress({
+    candidateReleaseId: snapshot.modelContext?.modelReleaseId,
+    currentReleaseId: current?.releaseId,
+    candidateTimestamp: snapshot.asOfTimestamp,
+    currentTimestamp: current?.asOfTimestamp,
+  });
   // The tracking ledger points at the exact canonical pregame board snapshot
   // for every locked game. Reconcile from that source before building any
   // member payload. Never infer a lock by applying an old timestamp to rows
@@ -69,12 +88,14 @@ export async function publishMlbPropsMemberReadSnapshots(
     schemaVersion: 1,
     snapshotId: displaySnapshot.snapshotId,
     asOfTimestamp: displaySnapshot.asOfTimestamp,
+    modelReleaseId: displaySnapshot.modelContext?.modelReleaseId,
     data: boundedBoard,
   };
   const fullBoardPayload: BoardPayload = {
     schemaVersion: 1,
     snapshotId: displaySnapshot.snapshotId,
     asOfTimestamp: displaySnapshot.asOfTimestamp,
+    modelReleaseId: displaySnapshot.modelContext?.modelReleaseId,
     data: { ...displaySnapshot.data, research: undefined, props: [] },
   };
   const fullProps = displaySnapshot.data.props;
@@ -120,6 +141,7 @@ export async function publishMlbPropsMemberReadSnapshots(
         schemaVersion: 1,
         snapshotId: displaySnapshot.snapshotId,
         asOfTimestamp: displaySnapshot.asOfTimestamp,
+        modelReleaseId: displaySnapshot.modelContext?.modelReleaseId,
         data: { ...displaySnapshot.data, research: undefined, props },
       } satisfies BoardPayload,
     });
@@ -130,6 +152,7 @@ export async function publishMlbPropsMemberReadSnapshots(
       schemaVersion: 1,
       snapshotId: displaySnapshot.snapshotId,
       asOfTimestamp: displaySnapshot.asOfTimestamp,
+      modelReleaseId: displaySnapshot.modelContext?.modelReleaseId,
       playerId,
       props,
       research: selectMlbPropsResearchForRows(displaySnapshot.data, props),
@@ -187,6 +210,7 @@ export async function loadMlbPropsMemberBoardSnapshot(date: string, full = false
   if (error) throw error;
   if (!validBoardPayload(data?.payload)) return null;
   const manifest = data.payload;
+  if (!await memberPayloadIsCurrent(date, manifest.modelReleaseId, manifest.asOfTimestamp)) return null;
   if (!full || !manifest.shardKeys?.length) return manifest;
   const shards: Array<BoardPayload | null> = [];
   // Full-board reads are operator/fallback paths now. Fetch bounded batches
@@ -223,7 +247,22 @@ export async function loadMlbPropsPlayerReadSnapshot(date: string, playerId: str
     .gt("stale_until", new Date().toISOString())
     .maybeSingle();
   if (error) throw error;
-  return validPlayerPayload(data?.payload) ? data.payload : null;
+  if (!validPlayerPayload(data?.payload)) return null;
+  return await memberPayloadIsCurrent(date, data.payload.modelReleaseId, data.payload.asOfTimestamp)
+    ? data.payload
+    : null;
+}
+
+async function memberPayloadIsCurrent(
+  date: string,
+  modelReleaseId: string | undefined,
+  asOfTimestamp: string,
+): Promise<boolean> {
+  const canonical = await loadHighestIndexedMlbPropsReleaseHead(date).catch(() => null);
+  if (!canonical) return true;
+  const releaseComparison = compareMlbPropsReleaseIds(modelReleaseId, canonical.releaseId);
+  if (releaseComparison === null || releaseComparison < 0) return false;
+  return releaseComparison > 0 || Date.parse(asOfTimestamp) >= Date.parse(canonical.asOfTimestamp);
 }
 
 function validBoardPayload(value: unknown): value is BoardPayload {
