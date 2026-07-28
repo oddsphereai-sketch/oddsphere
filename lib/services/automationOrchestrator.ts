@@ -109,6 +109,7 @@ export {
   shouldSoftenAlignmentForModelGate,
   isReconciliationHardBlock,
 } from "./automationOrchestratorGates";
+import { refreshSlateSeasonBattingStats } from "./seasonBattingStatsService";
 export type {
   AutomationEnv,
   PerStepKey,
@@ -147,6 +148,7 @@ export type AutomationStepName =
   | "s3_starter_refresh_first"
   | "s4_missing_pitcher_ingest"
   | "s5_season_pitching"
+  | "s5_1_season_batting"
   // Phase 6B.31b — first-inning splits refresh for slate probable
   // starters. Reuses the same operator helper as the standalone
   // backfill CLI. Writer is scoped to first_inning_* columns only
@@ -769,6 +771,35 @@ export async function runSlateCycleAutomated(opts: {
         errors: res.errors,
       },
       reason: seasonReasonFromStatus(res.status, res, writeMode),
+    };
+  }));
+
+  // ── S5.1. Current-season batting stats ───────────────────────────────
+  //
+  // One league-wide MLB Stats request, filtered to active batters on the
+  // slate and persisted before feature construction. Reuses the S5 provider
+  // and write gate; it is not a separate writer or schedule.
+  steps.push(await runStep("s5_1_season_batting", effectiveWriteMode.season, "season", async (writeMode) => {
+    const res = await refreshSlateSeasonBattingStats({
+      sport: opts.sport,
+      date: opts.date,
+      writeMode,
+    });
+    return {
+      details: {
+        status: res.status,
+        teams_checked: res.teams_checked,
+        players_mapped: res.players_mapped,
+        provider_rows: res.provider_rows,
+        records_updated: res.rows_written,
+        api_calls: res.api_calls,
+      },
+      reason:
+        res.status === "fresh"
+          ? "current-season batting coverage already fresh"
+          : res.status === "refreshed"
+            ? `refreshed ${res.rows_written} current-season batter row(s) in one provider call`
+            : `${res.status}; rows_written=${res.rows_written}`,
     };
   }));
 

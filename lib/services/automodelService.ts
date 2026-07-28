@@ -190,6 +190,12 @@ export type AutoModelRunOpts = {
    * When undefined, reads AUTOMODEL_VERSION env (default MLB champion "v2_2").
    */
   modelVersion?: AutomodelVersion;
+  /**
+   * Read-only audit hook for old-versus-new input comparisons. It may alter
+   * in-memory snapshots only and is rejected whenever `writeToDb=true`.
+   * Scheduled writers never set this option.
+   */
+  auditSnapshotTransform?: (snapshots: GameSnapshot[]) => GameSnapshot[];
 };
 
 /**
@@ -495,6 +501,12 @@ export async function generatePredictionsForSlate(
         "Both opt-ins must be present (defense in depth) before any DB write."
     );
   }
+  if (wantWrite && opts.auditSnapshotTransform !== undefined) {
+    throw new Error(
+      "automodelService.generatePredictionsForSlate: auditSnapshotTransform " +
+        "is dry-run only and cannot be combined with writeToDb=true."
+    );
+  }
   if (!wantWrite && envEnabled) {
     // Informational only — operator may have left the env flag set after
     // a smoke test. Proceeding with dry-run is the safe choice.
@@ -620,6 +632,10 @@ export async function generatePredictionsForSlate(
         }. Proceeding with DB feature snapshots.`,
       );
     }
+  }
+
+  if (opts.auditSnapshotTransform !== undefined) {
+    snapshots = opts.auditSnapshotTransform(snapshots);
   }
 
   // Phase 6B.1.7 — load FI line rows once per slate so the FI V2 writer
