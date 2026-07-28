@@ -5,6 +5,7 @@ import {
   type ResolvedDisplayByExtId,
 } from "../lib/services/publicSplitsDisplayOverlay";
 import type { DailyEdgeGameDto } from "../app/lab/lib/labTypes";
+import { readFileSync } from "node:fs";
 
 let pass = 0;
 let fail = 0;
@@ -162,6 +163,11 @@ agingSnapshot.markets.moneyline!.recommendationDecision = {
     lastUpdated: "2026-07-28T16:10:00.000Z",
   },
 } as NonNullable<typeof agingSnapshot.markets.moneyline>["recommendationDecision"];
+agingSnapshot.recommendationDecision = {
+  markets: {
+    moneyline: structuredClone(agingSnapshot.markets.moneyline!.recommendationDecision),
+  },
+} as DailyEdgeGameDto["recommendationDecision"];
 refreshDisplayedSplitFreshness(
   [agingSnapshot],
   new Date("2026-07-28T16:40:00.000Z"),
@@ -170,7 +176,16 @@ const agedMl = agingSnapshot.markets.moneyline!;
 check("cached collapsed split rows become stale after the observation TTL", agedMl.publicSplits.every((row) => row.isStale === true));
 check("cached canonical consensus rows become stale after the observation TTL", agedMl.recommendationDecision?.consensusSplits?.rows.every((row) => row.isStale === true) === true);
 check("cached sharp-book rows become stale after the observation TTL", agedMl.recommendationDecision?.sharpBookSplits?.rows.every((row) => row.isStale === true) === true);
+check("cached game-level recommendation consensus rows become stale after the observation TTL", agingSnapshot.recommendationDecision?.markets.moneyline?.consensusSplits?.rows.every((row) => row.isStale === true) === true);
+check("cached game-level recommendation sharp rows become stale after the observation TTL", agingSnapshot.recommendationDecision?.markets.moneyline?.sharpBookSplits?.rows.every((row) => row.isStale === true) === true);
 check("read-time freshness repair never changes the pick", agedMl.pick === "WSH");
+
+const splitCron = readFileSync("app/api/cron/public-splits-observations-refresh/route.ts", "utf8");
+const vercel = readFileSync("vercel.json", "utf8");
+check("split refresh republishes the coherent Daily Edge snapshot", splitCron.includes("refreshDailyEdgeResponseSnapshot"));
+check("split refresh uses the shared prediction-pipeline lease", splitCron.includes('leaseGroup: "prediction_pipeline"') && splitCron.includes("requireLease: true"));
+check("split refresh is sport-scoped rather than writing MLB and WNBA under one lease", splitCron.includes("cronHandlerPerSport") && splitCron.includes("async ({ sport })"));
+check("split observations refresh every 15 minutes", (vercel.match(/"schedule": "\*\/15/g) ?? []).length === 2);
 
 if (fail > 0) {
   console.error(`public splits display overlay tests: ${pass} passed, ${fail} failed`);
