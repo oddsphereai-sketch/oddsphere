@@ -425,6 +425,8 @@ export const ML_MID_PRICE_NEAR_MARKET_LEAN_MAX_ODDS = -121;
 export const FI_VALIDATED_BEST_ANGLE_RULE_ID = "fi_validated_best_angle_v1_2026_07_11";
 export const FI_LEAN_SIGNED_EDGE_PRICE_BEST_ANGLE_PROMOTION_RULE_ID =
   "fi_lean_signed_edge_price_best_angle_promotion_v1_2026_07_28";
+export const FI_PROVISIONAL_BEST_ANGLE_BLOCK_RULE_ID =
+  "fi_provisional_best_angle_block_v1_2026_07_28";
 export const TOTAL_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID =
   "total_calibrated_model_best_angle_path_v1_2026_07_27";
 export const TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID =
@@ -1728,6 +1730,7 @@ function resolveFiFinalGrade(args: {
   basePlayGrade: string | null;
   baseNoBet: boolean;
   baseNoBetReason: string | null;
+  bestAngleBlockedReason: string | null;
   edge: number | null;
   oddsAmerican: number | null;
   confidence: number | null;
@@ -1776,6 +1779,27 @@ function resolveFiFinalGrade(args: {
         rule_id: FI_VALIDATED_BEST_ANGLE_RULE_ID,
         action: "block_to_no_bet",
         reason: "negative_final_edge",
+        original_play_grade: baseGrade,
+        edge: args.edge,
+        odds_american: args.oddsAmerican,
+        confidence: args.confidence,
+      },
+    };
+  }
+
+  // A later value promotion must never override the FI writer's explicit
+  // provisional/hold restriction. These rows remain actionable Leans; the
+  // block changes only Best Angle eligibility.
+  if (args.bestAngleBlockedReason !== null) {
+    return {
+      playGrade: "lean",
+      bestAngle: false,
+      noBet: args.baseNoBet,
+      noBetReason: args.baseNoBetReason,
+      audit: {
+        rule_id: FI_PROVISIONAL_BEST_ANGLE_BLOCK_RULE_ID,
+        action: baseGrade === "best_angle" ? "demote_to_lean" : "keep_as_lean",
+        reason: args.bestAngleBlockedReason,
         original_play_grade: baseGrade,
         edge: args.edge,
         odds_american: args.oddsAmerican,
@@ -3732,6 +3756,41 @@ function buildFiRecord(
   const fiModelProb = pred.nrfi_confidence !== null ? pred.nrfi_confidence / 100 : null;
   const fiEdge = fiModelProb !== null && fiMarketProb !== null ? fiModelProb - fiMarketProb : null;
   const fiWriterNoBetReason = readStringOrNull(fiAudit?.fi_no_bet_reason);
+  const fiAuditProvisional = readBoolish(fiAudit?.provisional);
+  const fiAuditFresh = readBoolish(fiAudit?.fresh_data_ready);
+  const fiFeatureCapture =
+    fiAudit?.feature_capture && typeof fiAudit.feature_capture === "object"
+      ? fiAudit.feature_capture as Record<string, unknown>
+      : null;
+  const fiStarterCapture =
+    fiFeatureCapture?.starter && typeof fiFeatureCapture.starter === "object"
+      ? fiFeatureCapture.starter as Record<string, unknown>
+      : null;
+  const fiAwayStarterCapture =
+    fiStarterCapture?.away && typeof fiStarterCapture.away === "object"
+      ? fiStarterCapture.away as Record<string, unknown>
+      : null;
+  const fiHomeStarterCapture =
+    fiStarterCapture?.home && typeof fiStarterCapture.home === "object"
+      ? fiStarterCapture.home as Record<string, unknown>
+      : null;
+  const rawNrfiHoldReason = readStringOrNull(sp.nrfi_hold_reason);
+  const scratchHoldResolved =
+    rawNrfiHoldReason === "starter_scratch_nrfi" &&
+    fiAuditFresh &&
+    !fiAuditProvisional &&
+    readBoolish(fiAwayStarterCapture?.confirmed) &&
+    readBoolish(fiHomeStarterCapture?.confirmed);
+  const effectiveNrfiHoldReason = scratchHoldResolved
+    ? null
+    : rawNrfiHoldReason;
+  const fiBestAngleBlockedReason = fiAuditProvisional
+    ? "provisional_fi_audit"
+    : fiWriterNoBetReason?.toLowerCase().includes("lean only")
+      ? "explicit_lean_only_restriction"
+      : effectiveNrfiHoldReason !== null
+        ? `unresolved_hold_reason:${effectiveNrfiHoldReason}`
+        : null;
   const noBetValue = isTossUp;
   const noBetReasonValue = isTossUp
     ? "non-actionable: locked pill was Toss-Up"
@@ -3786,6 +3845,7 @@ function buildFiRecord(
     basePlayGrade: fiChampionStandDown ? null : fiPlayGrade,
     baseNoBet: baseFiNoBet,
     baseNoBetReason: baseFiNoBetReason,
+    bestAngleBlockedReason: fiBestAngleBlockedReason,
     edge: finalFiEdge,
     oddsAmerican: finalFiOdds,
     confidence: finalFiConfidence,
@@ -3841,6 +3901,14 @@ function buildFiRecord(
        "unknown" rather than absent. */
     snapshot_json: {
       ...sp,
+      nrfi_hold_reason: effectiveNrfiHoldReason,
+      fi_hold_reason_resolution: rawNrfiHoldReason === null
+        ? null
+        : {
+            original_hold_reason: rawNrfiHoldReason,
+            final_hold_reason: effectiveNrfiHoldReason,
+            scratch_resolved_by_fresh_confirmed_starters: scratchHoldResolved,
+          },
       model_layer_versions: buildMlbModelLayerVersions("first_inning"),
       public_splits: null,
       line_movement: null,
