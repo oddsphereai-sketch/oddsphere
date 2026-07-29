@@ -4,6 +4,11 @@ import {
   type MlbHitterSeasonStatsRecord,
 } from "../providers/real_api/_mlbStatsApiClient";
 import type { Sport } from "../types/domain/Sport";
+import {
+  completeSeasonStatsDailyRefresh,
+  hasSuccessfulSeasonStatsDailyRefresh,
+  startSeasonStatsDailyRefresh,
+} from "./seasonStatsDailyRefreshMarker";
 
 const MIN_FRESH_QUALIFIED_BATTERS_PER_TEAM = 3;
 export const MLB_STATS_UPSERT_BATCH_SIZE = 250;
@@ -134,6 +139,22 @@ export async function refreshSlateSeasonBattingStats(args: {
     .eq("is_pitcher", false);
   if (playerError) throw new Error(`season batting players query failed: ${playerError.message}`);
   const players = (playerData ?? []) as SlateBatter[];
+  const playersMapped = players.filter((player) => effectiveMlbId(player) !== null).length;
+  if (await hasSuccessfulSeasonStatsDailyRefresh({
+    kind: "batting",
+    sport: args.sport,
+    slateDate: args.date,
+  })) {
+    return {
+      status: "fresh",
+      teams_checked: teamIds.length,
+      players_mapped: playersMapped,
+      provider_rows: 0,
+      rows_written: 0,
+      api_calls: 0,
+      db_batches: 0,
+    };
+  }
   const playerIds = players.map((player) => player.id);
   const { data: statData, error: statError } = playerIds.length
     ? await supabase
@@ -155,7 +176,7 @@ export async function refreshSlateSeasonBattingStats(args: {
     return {
       status: "fresh",
       teams_checked: teamIds.length,
-      players_mapped: players.filter((player) => effectiveMlbId(player) !== null).length,
+      players_mapped: playersMapped,
       provider_rows: 0,
       rows_written: 0,
       api_calls: 0,
@@ -167,7 +188,7 @@ export async function refreshSlateSeasonBattingStats(args: {
     return {
       status: "dry_run",
       teams_checked: teamIds.length,
-      players_mapped: players.filter((player) => effectiveMlbId(player) !== null).length,
+      players_mapped: playersMapped,
       provider_rows: 0,
       rows_written: 0,
       api_calls: 0,
@@ -180,7 +201,7 @@ export async function refreshSlateSeasonBattingStats(args: {
     return {
       status: "provider_empty",
       teams_checked: teamIds.length,
-      players_mapped: players.filter((player) => effectiveMlbId(player) !== null).length,
+      players_mapped: playersMapped,
       provider_rows: 0,
       rows_written: 0,
       api_calls: 1,
@@ -224,19 +245,39 @@ export async function refreshSlateSeasonBattingStats(args: {
       updated_at: now.toISOString(),
     });
   }
+  const markerLogId = await startSeasonStatsDailyRefresh({
+    kind: "batting",
+    sport: args.sport,
+    slateDate: args.date,
+  });
   let dbBatches = 0;
-  for (let offset = 0; offset < payload.length; offset += MLB_STATS_UPSERT_BATCH_SIZE) {
-    const batch = payload.slice(offset, offset + MLB_STATS_UPSERT_BATCH_SIZE);
-    const { error } = await supabase
-      .from("player_season_stats")
-      .upsert(batch, { onConflict: "player_id,season,season_type" });
-    if (error) throw new Error(`season batting upsert failed: ${error.message}`);
-    dbBatches++;
+  try {
+    for (let offset = 0; offset < payload.length; offset += MLB_STATS_UPSERT_BATCH_SIZE) {
+      const batch = payload.slice(offset, offset + MLB_STATS_UPSERT_BATCH_SIZE);
+      const { error } = await supabase
+        .from("player_season_stats")
+        .upsert(batch, { onConflict: "player_id,season,season_type" });
+      if (error) throw new Error(`season batting upsert failed: ${error.message}`);
+      dbBatches++;
+    }
+    await completeSeasonStatsDailyRefresh({
+      logId: markerLogId,
+      success: true,
+      rowsWritten: payload.length,
+    });
+  } catch (error) {
+    await completeSeasonStatsDailyRefresh({
+      logId: markerLogId,
+      success: false,
+      rowsWritten: 0,
+      error: error instanceof Error ? error.message : String(error),
+    }).catch(() => undefined);
+    throw error;
   }
   return {
     status: "refreshed",
     teams_checked: teamIds.length,
-    players_mapped: players.filter((player) => effectiveMlbId(player) !== null).length,
+    players_mapped: playersMapped,
     provider_rows: providerRows.length,
     rows_written: payload.length,
     api_calls: 1,

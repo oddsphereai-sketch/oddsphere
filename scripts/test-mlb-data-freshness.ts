@@ -10,6 +10,9 @@ import {
 import {
   hasFreshSlatePitchingCoverage,
 } from "../lib/services/seasonPitchingRosterStatsService";
+import {
+  seasonStatsDailyRefreshSource,
+} from "../lib/services/seasonStatsDailyRefreshMarker";
 
 const parsed = parseMlbHitterSeasonStats({
   stats: [{
@@ -159,5 +162,17 @@ assert.equal(hasFreshSlatePitchingCoverage({
 
 const vercel = readFileSync("vercel.json", "utf8");
 assert.doesNotMatch(vercel, /season-batting|batting-refresh/);
+assert.equal(
+  seasonStatsDailyRefreshSource("batting", "2026-07-28"),
+  "mlb_season_batting_bulk:2026-07-28",
+);
+assert.equal(
+  seasonStatsDailyRefreshSource("pitching", "2026-07-28"),
+  "mlb_season_pitching_bulk:2026-07-28",
+);
+assert.match(battingService, /hasSuccessfulSeasonStatsDailyRefresh/);
+const pitchingService = readFileSync("lib/services/seasonPitchingRosterStatsService.ts", "utf8");
+assert.match(pitchingService, /hasSuccessfulSeasonStatsDailyRefresh/);
+assert.doesNotMatch(vercel, /mlb_season_(batting|pitching)_bulk/);
 
 console.log("MLB data freshness tests passed");
