@@ -7,7 +7,9 @@ import {
 } from "@/lib/services/labResponseSnapshots";
 
 const DAILY_EDGE_SNAPSHOT_TTL_MS = Number(
-  process.env.DAILY_EDGE_DB_SNAPSHOT_TTL_MS ?? 10 * 60 * 1000,
+  // The lightest regular publisher runs every 15 minutes. Keep a five-minute
+  // scheduling buffer so a healthy board does not appear stale between runs.
+  process.env.DAILY_EDGE_DB_SNAPSHOT_TTL_MS ?? 20 * 60 * 1000,
 );
 const DAILY_EDGE_SNAPSHOT_STALE_MS = Number(
   process.env.DAILY_EDGE_DB_SNAPSHOT_STALE_MS ?? 24 * 60 * 60 * 1000,

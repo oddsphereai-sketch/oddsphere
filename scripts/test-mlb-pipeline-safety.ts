@@ -69,8 +69,8 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB FI and stats health correction is versioned as decision release r20",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_07_29_r20",
+  "MLB late-player stats health correction is versioned as decision release r21",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_07_29_r21",
 );
 check("different final sides are a true correction", didFinalSideChange("home", "away"));
 check("same final side is not a correction", !didFinalSideChange("home", "home"));

@@ -35,6 +35,16 @@ Final release:
 - grade policy:
   `mlb_public_grade_policy_v17_fi_paired_ladder_daily_stats_marker_2026_07_29`
 
+Operational follow-up release:
+
+- decision: `mlb_daily_edge_decision_2026_07_29_r21`
+- rule bundle: `mlb_daily_edge_rule_bundle_v21_2026_07_29`
+- public calibration: `mlb_public_calibration_v18_2026_07_29`
+- grade policy remains
+  `mlb_public_grade_policy_v17_fi_paired_ladder_daily_stats_marker_2026_07_29`
+- no prediction, probability, grade, promotion, demotion, stake, or market
+  selection rule changed from r20.
+
 ## Locked First Inning replay
 
 Population: 125 settled, locked rows from 2026-07-11 through 2026-07-28
@@ -95,12 +105,18 @@ picks.
 - Both steps run once per slate day, before feature/model construction, under
   the existing orchestrator write gate and `prediction_pipeline` lease.
 - Each successful league-wide refresh writes a date-scoped lifecycle marker
-  to the existing `data_refresh_log`. Later cycles on the same slate date use
-  that exact success marker and make zero season-stat provider calls. This
-  avoids treating legacy/unmapped roster rows as proof that the current bulk
-  request failed, without relabeling old stat values as freshly fetched.
+  to the existing `data_refresh_log`, keyed by a deterministic signature of
+  the exact mapped player cohort. Later cycles with the same cohort make zero
+  season-stat provider calls. A player mapped after the initial refresh
+  changes the signature and causes exactly one new league-wide reconciliation
+  through the same leased pipeline. Unavailable provider players remain in
+  the signature, so they do not cause repeated requests.
 - No prediction, tracking, odds, or First Inning split columns are written by
   these aggregate-stat refreshes.
+- The Daily Edge response snapshot remains published by the existing cron
+  paths. Its operational freshness TTL is 20 minutes, five minutes longer
+  than the lightest regular 15-minute publisher cadence, preventing a
+  deterministic stale-indicator gap without adding load or a new schedule.
 
 Provider probes on 2026-07-29 returned 672 hitter rows and 761 pitcher rows.
 The no-write live-data check correctly reported both current batting and
