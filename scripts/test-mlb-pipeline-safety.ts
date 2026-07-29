@@ -60,8 +60,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries July 29 v16 paired FI ladder version",
-  layers.grade_policy === "mlb_public_grade_policy_v16_fi_paired_ladder_2026_07_29",
+  "grade policy carries July 29 v17 paired FI ladder and daily stats marker version",
+  layers.grade_policy === "mlb_public_grade_policy_v17_fi_paired_ladder_daily_stats_marker_2026_07_29",
 );
 check(
   "MLB layer stamp carries one immutable decision release",
@@ -69,8 +69,8 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB FI grade-health correction is versioned as decision release r19",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_07_29_r19",
+  "MLB FI and stats health correction is versioned as decision release r20",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_07_29_r20",
 );
 check("different final sides are a true correction", didFinalSideChange("home", "away"));
 check("same final side is not a correction", !didFinalSideChange("home", "home"));

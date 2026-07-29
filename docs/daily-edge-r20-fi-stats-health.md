@@ -1,4 +1,4 @@
-# MLB Daily Edge r19 — FI grade ladder and daily stats health
+# MLB Daily Edge r20 — FI grade ladder and daily stats health
 
 Date: 2026-07-29
 
@@ -20,12 +20,20 @@ Previous release:
 - rule bundle: `mlb_daily_edge_rule_bundle_v18_2026_07_28`
 - public calibration: `mlb_public_calibration_v15_2026_07_28`
 
-New release:
+Intermediate release:
 
 - decision: `mlb_daily_edge_decision_2026_07_29_r19`
 - rule bundle: `mlb_daily_edge_rule_bundle_v19_2026_07_29`
 - public calibration: `mlb_public_calibration_v16_2026_07_29`
 - grade policy: `mlb_public_grade_policy_v16_fi_paired_ladder_2026_07_29`
+
+Final release:
+
+- decision: `mlb_daily_edge_decision_2026_07_29_r20`
+- rule bundle: `mlb_daily_edge_rule_bundle_v20_2026_07_29`
+- public calibration: `mlb_public_calibration_v17_2026_07_29`
+- grade policy:
+  `mlb_public_grade_policy_v17_fi_paired_ladder_daily_stats_marker_2026_07_29`
 
 ## Locked First Inning replay
 
@@ -57,15 +65,15 @@ Combined grade replay:
 | Policy | Best Angle | Record | Units | ROI | Untouched |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | r18 | 36 | 20-16 | +3.167 | +8.8% | 6-8, -16.2% |
-| r19 | 23 | 13-10 | +3.125 | +13.6% | 4-5, -10.0% |
+| r20 | 23 | 13-10 | +3.125 | +13.6% | 4-5, -10.0% |
 
-The untouched Best Angle result remains a small losing sample, so r19 is not
+The untouched Best Angle result remains a small losing sample, so r20 is not
 represented as a guarantee or a solved probability model. It does improve the
 same locked holdout from 6-8 / -16.2% to 4-5 / -10.0%, while each new rule's
 own held-out cohort moves in the intended direction. The unchanged FI
 probability head remains 72-51, +8.57% ROI across all settled priced rows.
 
-Actionable board count is invariant: r18 and r19 each produce 105 actionable
+Actionable board count is invariant: r18 and r20 each produce 105 actionable
 historical rows. No daily cap or target count is used. On the 2026-07-29
 current slate, NYY@CWS NRFI moves from Best Angle to Lean. BOS@ATH NRFI +107
 does not promote because its FI snapshot is provisional. The slate moves from
@@ -86,6 +94,11 @@ picks.
   processed; this is a transport/load bound, not a model or board cap.
 - Both steps run once per slate day, before feature/model construction, under
   the existing orchestrator write gate and `prediction_pipeline` lease.
+- Each successful league-wide refresh writes a date-scoped lifecycle marker
+  to the existing `data_refresh_log`. Later cycles on the same slate date use
+  that exact success marker and make zero season-stat provider calls. This
+  avoids treating legacy/unmapped roster rows as proof that the current bulk
+  request failed, without relabeling old stat values as freshly fetched.
 - No prediction, tracking, odds, or First Inning split columns are written by
   these aggregate-stat refreshes.
 
