@@ -130,7 +130,11 @@ export async function GET(request: Request) {
         },
       };
     },
-    { lockMinutes: 10 },
+    {
+      leaseGroup: "prediction_pipeline",
+      requireLease: true,
+      lockMinutes: 10,
+    },
   );
 }
 

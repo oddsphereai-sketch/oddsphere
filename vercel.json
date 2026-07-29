@@ -51,7 +51,7 @@
     },
     {
       "path": "/api/cron/ai-daily-edge-shadow?sport=mlb&markets=ML,TOTAL",
-      "schedule": "22 9 * * *"
+      "schedule": "45 8 * * *"
     },
     {
       "path": "/api/cron/cleanup-stream-tables",
@@ -59,11 +59,11 @@
     },
     {
       "path": "/api/cron/wnba-daily-refresh",
-      "schedule": "20,50 13-23 * * *"
+      "schedule": "23,53 13-23 * * *"
     },
     {
       "path": "/api/cron/wnba-daily-refresh",
-      "schedule": "20,50 0-3 * * *"
+      "schedule": "23,53 0-3 * * *"
     },
     {
       "path": "/api/cron/tracking-refresh",
@@ -79,11 +79,11 @@
     },
     {
       "path": "/api/cron/mlb-player-props-settlement",
-      "schedule": "20,50 0-8 * * *"
+      "schedule": "27,57 0-8 * * *"
     },
     {
       "path": "/api/cron/mlb-player-props-settlement",
-      "schedule": "20 12 * * *"
+      "schedule": "27 12 * * *"
     }
   ]
 }
