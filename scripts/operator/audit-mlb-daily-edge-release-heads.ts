@@ -92,6 +92,7 @@ function metrics(rows: Row[]) {
 function decisionRelease(row: Row): string {
   return String(
     row.snapshot_json?.decision_pipeline?.release_id ??
+    row.snapshot_json?.model_layer_versions?.decision_release_id ??
     "legacy_unstamped_decision_release",
   );
 }

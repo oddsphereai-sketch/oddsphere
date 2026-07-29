@@ -63,7 +63,6 @@ import {
 } from "./morningSlatePublishPolicy";
 import { runStarterRefreshCycle } from "../../scripts/operator/refresh-starters";
 import { runMissingPitcherCycle } from "../../scripts/operator/ingest-missing-pitchers";
-import { runSeasonPitchingCycle } from "../../scripts/operator/backfill-season-pitching-stats";
 import { runFirstInningCycle } from "../../scripts/operator/backfill-first-inning-stats";
 // Push 3B-6 — model readiness audit + repair (in-cycle guardrail).
 import { auditMlbModelReadiness, repairMlbModelReadiness } from "./modelReadinessService";
@@ -110,6 +109,7 @@ export {
   isReconciliationHardBlock,
 } from "./automationOrchestratorGates";
 import { refreshSlateSeasonBattingStats } from "./seasonBattingStatsService";
+import { refreshSlateSeasonPitchingStats } from "./seasonPitchingRosterStatsService";
 export type {
   AutomationEnv,
   PerStepKey,
@@ -754,23 +754,32 @@ export async function runSlateCycleAutomated(opts: {
   }));
 
   // ── S5. Season-pitching stats ─────────────────────────────────────────
+  //
+  // One league-wide request refreshes both starters and bullpen arms once
+  // per slate day. This replaces the scheduled per-starter fan-out and keeps
+  // all writes inside the existing prediction_pipeline lease.
   steps.push(await runStep("s5_season_pitching", effectiveWriteMode.season, "season", async (writeMode) => {
-    const res = await runSeasonPitchingCycle({
+    const res = await refreshSlateSeasonPitchingStats({
       sport: opts.sport,
-      slateDate: opts.date,
+      date: opts.date,
       writeMode,
-      log: () => undefined,
     });
     return {
       details: {
         status: res.status,
-        planned_inserts: res.planned_inserts,
-        planned_updates: res.planned_updates,
+        teams_checked: res.teams_checked,
+        players_mapped: res.players_mapped,
+        provider_rows: res.provider_rows,
         rows_written: res.rows_written,
-        rows_dry_run: res.rows_dry_run,
-        errors: res.errors,
+        api_calls: res.api_calls,
+        db_batches: res.db_batches,
       },
-      reason: seasonReasonFromStatus(res.status, res, writeMode),
+      reason:
+        res.status === "fresh"
+          ? "current-season starter and bullpen coverage already fresh for this slate day"
+          : res.status === "refreshed"
+            ? `refreshed ${res.rows_written} starter/bullpen row(s) in one provider call`
+            : `${res.status}; rows_written=${res.rows_written}`,
     };
   }));
 
@@ -793,6 +802,7 @@ export async function runSlateCycleAutomated(opts: {
         provider_rows: res.provider_rows,
         records_updated: res.rows_written,
         api_calls: res.api_calls,
+        db_batches: res.db_batches,
       },
       reason:
         res.status === "fresh"
@@ -1785,24 +1795,6 @@ function pitcherReasonFromStatus(
     return `dry-run; would insert ${res.planned_inserts_after_limit ?? 0} of ${res.planned_inserts_total ?? 0} planned`;
   }
   if (status === "no_changes") return "every probable starter already in players";
-  if (status === "cancelled") return "cancelled (confirm returned false)";
-  if (status === "failed") return `failed: ${res.message ?? "unknown"}`;
-  return status;
-}
-
-function seasonReasonFromStatus(
-  status: string,
-  res: { planned_inserts?: number; planned_updates?: number; rows_written?: number; rows_dry_run?: number; errors?: number; message?: string },
-  _writeMode: boolean
-): string {
-  if (status === "wrote") {
-    return `inserted/updated ${res.rows_written ?? 0} season row(s); errors=${res.errors ?? 0}`;
-  }
-  if (status === "dry_run") {
-    return `dry-run; would write ${res.rows_dry_run ?? 0} row(s) (${res.planned_inserts ?? 0} INSERT + ${res.planned_updates ?? 0} UPDATE)`;
-  }
-  if (status === "no_changes") return "every slate starter already has a fresh season row";
-  if (status === "empty_slate") return "no slate starters resolved";
   if (status === "cancelled") return "cancelled (confirm returned false)";
   if (status === "failed") return `failed: ${res.message ?? "unknown"}`;
   return status;

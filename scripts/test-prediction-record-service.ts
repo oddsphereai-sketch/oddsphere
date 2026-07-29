@@ -18,6 +18,8 @@ import {
   FI_VALIDATED_BEST_ANGLE_RULE_ID,
   FI_LEAN_SIGNED_EDGE_PRICE_BEST_ANGLE_PROMOTION_RULE_ID,
   FI_PROVISIONAL_BEST_ANGLE_BLOCK_RULE_ID,
+  FI_NRFI_MIDBAND_BEST_ANGLE_DEMOTION_RULE_ID,
+  FI_PLUS_MONEY_LEAN_BEST_ANGLE_PROMOTION_RULE_ID,
   TOTAL_VALIDATED_LEAN_RULE_ID,
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
   GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
@@ -2491,7 +2493,7 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
   const fiBestAngle = {
     ...basePrediction,
     predicted_nrfi: true,
-    nrfi_confidence: 60,
+    nrfi_confidence: 65,
     sport_specific: {
       ...v21SportSpecific,
       hold_picks: [],
@@ -2622,7 +2624,7 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
   const fiWriterLeanPromotion = {
     ...basePrediction,
     predicted_nrfi: true,
-    nrfi_confidence: 60,
+    nrfi_confidence: 65,
     sport_specific: {
       ...v21SportSpecific,
       hold_picks: [],
@@ -2660,7 +2662,7 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
   const provisionalFiWriterLean = {
     ...basePrediction,
     predicted_nrfi: true,
-    nrfi_confidence: 60,
+    nrfi_confidence: 65,
     sport_specific: {
       ...v21SportSpecific,
       hold_picks: [],
@@ -2690,6 +2692,103 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
         gate?.rule_id === FI_PROVISIONAL_BEST_ANGLE_BLOCK_RULE_ID &&
           gate?.action === "keep_as_lean" &&
           gate?.reason === "provisional_fi_audit");
+}
+{
+  const nrfiMidbandBestAngle = {
+    ...basePrediction,
+    predicted_nrfi: true,
+    nrfi_confidence: 60,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "nrfi",
+      fi_v2_audit: {
+        fi_play_grade: "best_angle",
+        fi_no_bet_reason: null,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, nrfiMidbandBestAngle]]),
+    abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  const gate = (fi.snapshot_json as any)?.fi_final_grade_resolution;
+  check("NRFI 57%-63% posterior band stays actionable as Lean",
+        fi.play_grade === "lean" && fi.best_angle === false && fi.no_bet === false);
+  check("NRFI midband demotion carries its immutable rule id",
+        gate?.rule_id === FI_NRFI_MIDBAND_BEST_ANGLE_DEMOTION_RULE_ID);
+}
+{
+  const cleanPlusMoneyYrfiLean = {
+    ...basePrediction,
+    predicted_nrfi: false,
+    nrfi_confidence: 54,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "yrfi",
+      fi_v2_audit: {
+        fi_play_grade: "lean",
+        fi_no_bet_reason: null,
+        provisional: false,
+        fresh_data_ready: true,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, cleanPlusMoneyYrfiLean]]),
+    abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  const gate = (fi.snapshot_json as any)?.fi_final_grade_resolution;
+  check("positive-edge plus-money FI Lean promotes without a board quota",
+        fi.play_grade === "best_angle" && fi.best_angle === true && fi.no_bet === false);
+  check("plus-money FI promotion carries its immutable rule id",
+        gate?.rule_id === FI_PLUS_MONEY_LEAN_BEST_ANGLE_PROMOTION_RULE_ID);
+}
+{
+  const provisionalPlusMoneyYrfiLean = {
+    ...basePrediction,
+    predicted_nrfi: false,
+    nrfi_confidence: 54,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "yrfi",
+      fi_v2_audit: {
+        fi_play_grade: "lean",
+        fi_no_bet_reason: "Provisional / key feature missing; lean only.",
+        provisional: true,
+        fresh_data_ready: true,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, provisionalPlusMoneyYrfiLean]]),
+    abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning")!;
+  const gate = (fi.snapshot_json as any)?.fi_final_grade_resolution;
+  check("plus-money promotion cannot bypass a provisional FI restriction",
+        fi.play_grade === "lean" && fi.best_angle === false && fi.no_bet === false);
+  check("provisional plus-money FI remains stamped by the block rule",
+        gate?.rule_id === FI_PROVISIONAL_BEST_ANGLE_BLOCK_RULE_ID);
 }
 {
   // A stale scratch marker may be cleared only when the fresh FI audit has

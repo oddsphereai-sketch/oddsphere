@@ -140,6 +140,75 @@ function fiEdgePp(row: Row): number | null {
   );
 }
 
+function baseFiGrade(row: Row): string | null {
+  const value = String(fi(row).fi_play_grade ?? "").toLowerCase();
+  return value === "best_angle" || value === "lean" ? value : null;
+}
+
+function nrfiPosterior(row: Row): number | null {
+  return finite(fi(row).posterior_p_nrfi);
+}
+
+function isNrfiMidband(row: Row): boolean {
+  const probability = nrfiPosterior(row);
+  return row.pick === "NRFI" &&
+    probability !== null &&
+    probability >= 0.57 &&
+    probability < 0.63;
+}
+
+function isFallbackBlocked(row: Row): boolean {
+  return fi(row).provisional === true ||
+    String(fi(row).fi_no_bet_reason ?? "").toLowerCase().includes("lean only");
+}
+
+function replayR18Grade(row: Row): "best_angle" | "lean" | "no_play" {
+  const baseGrade = baseFiGrade(row);
+  const edge = finite(row.edge);
+  const price = finite(row.odds_american);
+  if (baseGrade === null || edge === null || price === null || edge < 0) return "no_play";
+  if (isFallbackBlocked(row)) return "lean";
+  const edgeOk = edge >= 0.06;
+  const priceOk = price > -130;
+  const confidenceOk = (finite(row.confidence) ?? -Infinity) >= 56;
+  if (
+    (baseGrade === "best_angle" && edgeOk && priceOk && confidenceOk) ||
+    (baseGrade === "lean" && edgeOk && priceOk)
+  ) {
+    return "best_angle";
+  }
+  return "lean";
+}
+
+function replayR19Grade(row: Row): "best_angle" | "lean" | "no_play" {
+  const current = replayR18Grade(row);
+  if (current === "no_play") return current;
+  if (isNrfiMidband(row)) return "lean";
+  if (
+    baseFiGrade(row) === "lean" &&
+    !isFallbackBlocked(row) &&
+    (finite(row.edge) ?? -Infinity) >= 0 &&
+    (finite(row.odds_american) ?? -Infinity) >= 100
+  ) {
+    return "best_angle";
+  }
+  return current;
+}
+
+function gradeCountsByDate(rows: Row[], resolver: (row: Row) => string) {
+  return Object.fromEntries([...new Set(rows.map((row) => String(row.slate_date)))].sort().map((date) => {
+    const dateRows = rows.filter((row) => String(row.slate_date) === date);
+    const counts = { best_angle: 0, lean: 0, no_play: 0 };
+    for (const row of dateRows) {
+      const resolved = resolver(row);
+      if (resolved === "best_angle") counts.best_angle++;
+      else if (resolved === "lean") counts.lean++;
+      else counts.no_play++;
+    }
+    return [date, counts];
+  }));
+}
+
 function edgeBand(row: Row): string {
   const edge = fiEdgePp(row);
   if (edge === null) return "missing";
@@ -196,6 +265,10 @@ async function main() {
       MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head
   );
   const actionable = rows.filter((row) => grade(row) === "best_angle" || grade(row) === "lean");
+  const r18BestAngles = rows.filter((row) => replayR18Grade(row) === "best_angle");
+  const r18Leans = rows.filter((row) => replayR18Grade(row) === "lean");
+  const r19BestAngles = rows.filter((row) => replayR19Grade(row) === "best_angle");
+  const r19Leans = rows.filter((row) => replayR19Grade(row) === "lean");
   const candidates = {
     existingBestAngles: rows.filter((row) => grade(row) === "best_angle"),
     existingLeans: rows.filter((row) => grade(row) === "lean"),
@@ -219,6 +292,43 @@ async function main() {
       ((finite(row.edge) ?? -Infinity) * 100) >= 6 &&
       (finite(row.odds_american) ?? -Infinity) > -130 &&
       (finite(row.confidence) ?? -Infinity) >= 56
+    ),
+    baseLeanEightPlusPriceAboveMinus130OutsideNrfiMidband: rows.filter((row) =>
+      baseFiGrade(row) === "lean" &&
+      ((finite(row.edge) ?? -Infinity) * 100) >= 8 &&
+      (finite(row.odds_american) ?? -Infinity) > -130 &&
+      !isNrfiMidband(row)
+    ),
+    fallbackBaseLeanEightPlusPriceAboveMinus130OutsideNrfiMidband: rows.filter((row) =>
+      baseFiGrade(row) === "lean" &&
+      isFallbackBlocked(row) &&
+      ((finite(row.edge) ?? -Infinity) * 100) >= 8 &&
+      (finite(row.odds_american) ?? -Infinity) > -130 &&
+      !isNrfiMidband(row)
+    ),
+    nrfiMidbandBaseBestAngle: rows.filter((row) =>
+      baseFiGrade(row) === "best_angle" && isNrfiMidband(row)
+    ),
+    storedLeanPlusMoney: rows.filter((row) =>
+      grade(row) === "lean" &&
+      (finite(row.odds_american) ?? -Infinity) >= 100
+    ),
+    baseLeanPlusMoney: rows.filter((row) =>
+      baseFiGrade(row) === "lean" &&
+      (finite(row.edge) ?? -Infinity) >= 0 &&
+      (finite(row.odds_american) ?? -Infinity) >= 100
+    ),
+    fallbackBaseLeanPlusMoney: rows.filter((row) =>
+      baseFiGrade(row) === "lean" &&
+      isFallbackBlocked(row) &&
+      (finite(row.edge) ?? -Infinity) >= 0 &&
+      (finite(row.odds_american) ?? -Infinity) >= 100
+    ),
+    cleanBaseLeanPlusMoney: rows.filter((row) =>
+      baseFiGrade(row) === "lean" &&
+      !isFallbackBlocked(row) &&
+      (finite(row.edge) ?? -Infinity) >= 0 &&
+      (finite(row.odds_american) ?? -Infinity) >= 100
     ),
     lowEdgeNoPlayQualifiedPrice: rows.filter((row) =>
       grade(row) === "no_play" &&
@@ -247,6 +357,24 @@ async function main() {
     },
     population: metrics(rows),
     actionable: metrics(actionable),
+    pairedPolicyReplay: {
+      r18: {
+        bestAngles: splitMetrics(r18BestAngles),
+        leans: splitMetrics(r18Leans),
+        actionable: splitMetrics([...r18BestAngles, ...r18Leans]),
+        countsByDate: gradeCountsByDate(rows, replayR18Grade),
+      },
+      r19Candidate: {
+        bestAngles: splitMetrics(r19BestAngles),
+        leans: splitMetrics(r19Leans),
+        actionable: splitMetrics([...r19BestAngles, ...r19Leans]),
+        countsByDate: gradeCountsByDate(rows, replayR19Grade),
+      },
+      demotionRule: "NRFI posterior in [0.57, 0.63): Best Angle -> Lean",
+      promotionRule: "clean positive-edge FI base Lean at plus-money price: Lean -> Best Angle",
+      actionableCountInvariant:
+        r18BestAngles.length + r18Leans.length === r19BestAngles.length + r19Leans.length,
+    },
     byGradeSide: group(rows, (row) => `${grade(row)}|${String(row.pick ?? "none").toLowerCase()}`),
     actionableByGradeEdgeBand: group(actionable, (row) => `${grade(row)}|${edgeBand(row)}`),
     actionableByGradePriceBand: group(actionable, (row) => `${grade(row)}|${priceBand(row)}`),

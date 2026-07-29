@@ -928,6 +928,84 @@ export type PitcherSeasonStatsRecord = {
   raw_source: "mlb_stats_api" | "empty";
 };
 
+export function parseMlbPitcherSeasonStats(
+  payload: unknown,
+  season: number,
+): PitcherSeasonStatsRecord[] {
+  if (!isObject(payload) || !Array.isArray(payload.stats)) return [];
+  const block = payload.stats.find((candidate) => {
+    if (!isObject(candidate) || !isObject(candidate.group)) return false;
+    return candidate.group.displayName === "pitching";
+  }) ?? payload.stats[0];
+  if (!isObject(block) || !Array.isArray(block.splits)) return [];
+
+  const byPlayer = new Map<number, PitcherSeasonStatsRecord>();
+  for (const candidate of block.splits) {
+    if (!isObject(candidate) || !isObject(candidate.player) || !isObject(candidate.stat)) continue;
+    const personId = parseIntSafe(candidate.player.id);
+    if (personId === null) continue;
+    const stat = candidate.stat;
+    const ip = parseBaseballInningsPitched(stat.inningsPitched);
+    const strikeouts = parseIntSafe(stat.strikeOuts);
+    let strikeoutsPer9 = parseFloatSafe(stat.strikeoutsPer9Inn);
+    if (strikeoutsPer9 === null && strikeouts !== null && ip !== null && ip > 0) {
+      strikeoutsPer9 = (strikeouts * 9) / ip;
+    }
+    byPlayer.set(personId, {
+      mlb_person_id: personId,
+      season,
+      games_played: parseIntSafe(stat.gamesPlayed),
+      games_started: parseIntSafe(stat.gamesStarted),
+      wins: parseIntSafe(stat.wins),
+      losses: parseIntSafe(stat.losses),
+      era: parseFloatSafe(stat.era),
+      whip: parseFloatSafe(stat.whip),
+      innings_pitched: ip,
+      hits_allowed: parseIntSafe(stat.hits),
+      earned_runs: parseIntSafe(stat.earnedRuns),
+      home_runs_allowed: parseIntSafe(stat.homeRuns),
+      walks: parseIntSafe(stat.baseOnBalls),
+      strikeouts,
+      strikeouts_per_9: strikeoutsPer9,
+      saves: parseIntSafe(stat.saves),
+      holds: parseIntSafe(stat.holds),
+      raw_source: "mlb_stats_api",
+    });
+  }
+  return [...byPlayer.values()];
+}
+
+/**
+ * Read every MLB pitcher's current-season aggregate in one request. This is
+ * the scheduled path for starter and bullpen freshness; callers filter the
+ * response to players on the active slate before writing.
+ */
+export async function getMlbPitcherSeasonStats(
+  season: number,
+  opts?: Opts,
+): Promise<PitcherSeasonStatsRecord[] | null> {
+  const url =
+    `${BASE_URL}/stats?stats=season&group=pitching&season=${season}` +
+    "&gameType=R&sportId=1&playerPool=ALL&limit=2000";
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: HEADERS, signal: opts?.signal });
+  } catch {
+    log(opts, "network error on all-pitcher season stats");
+    return null;
+  }
+  if (!res.ok) {
+    log(opts, `non-200 on all-pitcher season stats: HTTP ${res.status}`);
+    return null;
+  }
+  try {
+    return parseMlbPitcherSeasonStats(await res.json(), season);
+  } catch {
+    log(opts, "JSON parse error on all-pitcher season stats");
+    return null;
+  }
+}
+
 function emptySeasonRecord(personId: number, season: number): PitcherSeasonStatsRecord {
   return {
     mlb_person_id: personId,
