@@ -99,5 +99,12 @@ check(
     !VERCEL.includes('"2 1,4,10,13,16,19,22 * * *"'),
 );
 
+check(
+  "fast props refresh starts after the morning full-build and tracking window",
+  VERCEL.includes('"/api/cron/mlb-player-props-refresh"') &&
+    VERCEL.includes('"17,47 0-4,11-23 * * *"') &&
+    !VERCEL.includes('"17,47 0-4,10-23 * * *"'),
+);
+
 console.log(`\n━━━ Results ━━━\n  ✓ ${pass}    ✗ ${fail}`);
 if (fail > 0) process.exit(1);
