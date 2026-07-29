@@ -7,6 +7,7 @@ import type { Sport } from "../types/domain/Sport";
 import {
   completeSeasonStatsDailyRefresh,
   hasSuccessfulSeasonStatsDailyRefresh,
+  seasonStatsMappedCohortSignature,
   startSeasonStatsDailyRefresh,
 } from "./seasonStatsDailyRefreshMarker";
 
@@ -139,11 +140,17 @@ export async function refreshSlateSeasonBattingStats(args: {
     .eq("is_pitcher", false);
   if (playerError) throw new Error(`season batting players query failed: ${playerError.message}`);
   const players = (playerData ?? []) as SlateBatter[];
-  const playersMapped = players.filter((player) => effectiveMlbId(player) !== null).length;
+  const mappedPlayers = players.flatMap((player) => {
+    const mlbId = effectiveMlbId(player);
+    return mlbId === null ? [] : [{ id: player.id, mlbId }];
+  });
+  const playersMapped = mappedPlayers.length;
+  const cohortSignature = seasonStatsMappedCohortSignature(mappedPlayers);
   if (await hasSuccessfulSeasonStatsDailyRefresh({
     kind: "batting",
     sport: args.sport,
     slateDate: args.date,
+    cohortSignature,
   })) {
     return {
       status: "fresh",
@@ -249,6 +256,7 @@ export async function refreshSlateSeasonBattingStats(args: {
     kind: "batting",
     sport: args.sport,
     slateDate: args.date,
+    cohortSignature,
   });
   let dbBatches = 0;
   try {

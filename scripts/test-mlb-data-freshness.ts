@@ -12,6 +12,7 @@ import {
 } from "../lib/services/seasonPitchingRosterStatsService";
 import {
   seasonStatsDailyRefreshSource,
+  seasonStatsMappedCohortSignature,
 } from "../lib/services/seasonStatsDailyRefreshMarker";
 
 const parsed = parseMlbHitterSeasonStats({
@@ -170,9 +171,30 @@ assert.equal(
   seasonStatsDailyRefreshSource("pitching", "2026-07-28"),
   "mlb_season_pitching_bulk:2026-07-28",
 );
+const cohortA = seasonStatsMappedCohortSignature([
+  { id: 2, mlbId: 202 },
+  { id: 1, mlbId: 101 },
+]);
+const cohortAReordered = seasonStatsMappedCohortSignature([
+  { id: 1, mlbId: 101 },
+  { id: 2, mlbId: 202 },
+]);
+const cohortB = seasonStatsMappedCohortSignature([
+  { id: 1, mlbId: 101 },
+  { id: 2, mlbId: 202 },
+  { id: 3, mlbId: 303 },
+]);
+assert.equal(cohortA, cohortAReordered);
+assert.notEqual(cohortA, cohortB);
+assert.equal(
+  seasonStatsDailyRefreshSource("batting", "2026-07-28", cohortA),
+  `mlb_season_batting_bulk:2026-07-28:${cohortA}`,
+);
 assert.match(battingService, /hasSuccessfulSeasonStatsDailyRefresh/);
 const pitchingService = readFileSync("lib/services/seasonPitchingRosterStatsService.ts", "utf8");
 assert.match(pitchingService, /hasSuccessfulSeasonStatsDailyRefresh/);
 assert.doesNotMatch(vercel, /mlb_season_(batting|pitching)_bulk/);
+const snapshotWriter = readFileSync("lib/services/labResponseSnapshotWriter.ts", "utf8");
+assert.match(snapshotWriter, /DAILY_EDGE_DB_SNAPSHOT_TTL_MS \?\? 20 \* 60 \* 1000/);
 
 console.log("MLB data freshness tests passed");
