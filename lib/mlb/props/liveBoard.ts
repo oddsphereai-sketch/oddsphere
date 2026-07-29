@@ -70,6 +70,11 @@ import {
   MLB_PROPS_MODEL_RELEASE_ID,
 } from "./marketModelVersions";
 import {
+  compareMlbPropsMatchupHistoryCandidates,
+  selectMlbPropsMatchupHistoryCandidates,
+  type MlbPropsMatchupHistoryCandidate,
+} from "./matchupHistoryPriority";
+import {
   BATTER_HITS_PA_MODEL_VERSION,
   projectBatterHitsPa,
 } from "./batterHitsPaModel";
@@ -670,7 +675,13 @@ async function loadBatterPitcherHistories(args: {
   asOfTimestamp: string;
 }): Promise<Map<string, PlayerBatterPitcherHistoryEvidence>> {
   const histories = matchupHistoriesFromPrevious(args.previous);
-  const pairs = new Map<string, { hitterId: number; pitcherId: number; hitterName: string; pitcherName: string }>();
+  const previousPriority = previousMatchupHistoryPriority(args.previous);
+  const pairs = new Map<string, MlbPropsMatchupHistoryCandidate<{
+    hitterId: number;
+    pitcherId: number;
+    hitterName: string;
+    pitcherName: string;
+  }>>();
   for (const row of args.mappedOdds) {
     const definition = getMlbPropMarketDefinition(row.odds.marketKey);
     if (definition.family === "pitcher") continue;
@@ -681,14 +692,30 @@ async function loadBatterPitcherHistories(args: {
     const key = mlbMatchupKey(identity?.mlbStatsPlayerId ?? null, opposingProbable?.playerId ?? null);
     const pitcherName = opposingProbable ? probablePitcherName(opposingProbable) : null;
     if (!key || hitterId === null || pitcherId === null || !identity || !pitcherName || histories.has(key)) continue;
-    pairs.set(key, { hitterId, pitcherId, hitterName: identity.player.fullName, pitcherName });
+    const priorityKey = `${row.game.id}|${row.bdlPlayerId}`;
+    const candidate: MlbPropsMatchupHistoryCandidate<{
+      hitterId: number;
+      pitcherId: number;
+      hitterName: string;
+      pitcherName: string;
+    }> = {
+      key,
+      value: { hitterId, pitcherId, hitterName: identity.player.fullName, pitcherName },
+      actionablePriority: previousPriority.get(priorityKey) ?? 0,
+      gameStartTime: row.game.scheduledStart,
+      upcoming: Date.parse(row.game.scheduledStart) > Date.parse(args.asOfTimestamp),
+    };
+    const current = pairs.get(key);
+    if (!current || compareMlbPropsMatchupHistoryCandidates(candidate, current) < 0) {
+      pairs.set(key, candidate);
+    }
   }
 
   const maxNewPairs = envPositiveInteger("ODDSPHERE_PROPS_MAX_NEW_MATCHUP_HISTORY_CALLS", 60);
   const concurrency = Math.min(8, envPositiveInteger("ODDSPHERE_PROPS_MATCHUP_HISTORY_CONCURRENCY", 4));
   const timeoutMs = envPositiveInteger("ODDSPHERE_PROPS_MATCHUP_HISTORY_TIMEOUT_MS", 7_000);
-  const pending = [...pairs.entries()].slice(0, maxNewPairs);
-  await mapWithConcurrency(pending, concurrency, async ([key, pair]) => {
+  const pending = selectMlbPropsMatchupHistoryCandidates([...pairs.values()], maxNewPairs);
+  await mapWithConcurrency(pending, concurrency, async ({ key, value: pair }) => {
     const record = await getBatterVsPitcherStats(pair.hitterId, pair.pitcherId, {
       quiet: true,
       signal: AbortSignal.timeout(timeoutMs),
@@ -702,6 +729,26 @@ async function loadBatterPitcherHistories(args: {
     }));
   });
   return histories;
+}
+
+function previousMatchupHistoryPriority(previous: MlbPropsBoardSnapshot | null): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!previous) return out;
+  for (const row of previous.data.props) {
+    const gameId = row.providerIds?.gameId;
+    const playerId = row.providerIds?.bdlPlayerId;
+    if (!gameId || playerId === undefined) continue;
+    const priority = row.playGrade === "BEST_ANGLE"
+      ? 3
+      : row.playGrade === "LEAN"
+        ? 2
+        : row.playGrade === "WATCHLIST"
+          ? 1
+          : 0;
+    const key = `${gameId}|${playerId}`;
+    out.set(key, Math.max(out.get(key) ?? 0, priority));
+  }
+  return out;
 }
 
 function matchupHistoriesFromPrevious(previous: MlbPropsBoardSnapshot | null): Map<string, PlayerBatterPitcherHistoryEvidence> {

@@ -1136,7 +1136,7 @@ function PitchArsenalPanel({ row }: { row: PlayerPropPreviewRow }) {
 function BatterPitcherHistoryPanel({ row }: { row: PlayerPropPreviewRow }) {
   const history = row.matchupHistory;
   if (!history) {
-    return <div data-research-module="batter-pitcher-history" className="overflow-hidden rounded-lg border border-gray-800"><ResearchModulePending title="Direct matchup history" note="Official batter-versus-pitcher totals are loading for this probable matchup." /></div>;
+    return <div data-research-module="batter-pitcher-history" data-state="not-in-snapshot" className="overflow-hidden rounded-lg border border-gray-800"><ResearchModulePending title="Direct matchup history" note="Direct batter-versus-pitcher history is not available in this research snapshot. Recent form and pitch-mix context are shown separately below." /></div>;
   }
   if (history.status === "no_history") {
     return <div data-research-module="batter-pitcher-history" data-state="no-history" className="rounded-lg border border-gray-800 bg-black/20 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-black text-white">{history.hitterName} vs {history.pitcherName}</p><p className="mt-1 text-xs text-gray-500">No prior MLB plate appearances</p></div><span className="rounded border border-gray-700 px-2 py-1 text-[9px] font-bold text-gray-400">Career matchup</span></div><p className="mt-3 text-xs leading-5 text-gray-500">There is no direct history to evaluate yet. The pitch-mix profile below provides the broader matchup context.</p><ResearchSource source={history.source} asOfTimestamp={history.asOfTimestamp} note="Research context only" /></div>;
