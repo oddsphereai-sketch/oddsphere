@@ -92,9 +92,10 @@ check(
 );
 
 check(
-  "full props refresh does not collide with the :05 slate rebuild",
+  "full props research refresh runs once daily outside the live writer cluster",
   VERCEL.includes('"/api/cron/mlb-player-props-refresh?full=true"') &&
-    VERCEL.includes('"27 1,4,10,13,16,19,22 * * *"') &&
+    VERCEL.includes('"27 9 * * *"') &&
+    !VERCEL.includes('"27 1,4,10,13,16,19,22 * * *"') &&
     !VERCEL.includes('"2 1,4,10,13,16,19,22 * * *"'),
 );
 
