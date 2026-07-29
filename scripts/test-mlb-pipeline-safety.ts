@@ -150,6 +150,12 @@ check(
   resolveCronLeaseJobName("wnba_daily_refresh", "wnba", "prediction_pipeline") ===
     resolveCronLeaseJobName("tracking_refresh", "wnba", "prediction_pipeline"),
 );
+const dailyEdgeHealthSource = readFileSync("app/api/cron/daily-edge-data-health/route.ts", "utf8");
+check(
+  "Daily Edge auto-repair joins the required shared prediction lease",
+  dailyEdgeHealthSource.includes('leaseGroup: "prediction_pipeline"') &&
+    dailyEdgeHealthSource.includes("requireLease: true"),
+);
 check("BDL maps postponed explicitly", normalizeGameStatus("Postponed") === "STATUS_POSTPONED");
 check("BDL maps canceled explicitly", normalizeGameStatus("Cancelled") === "STATUS_CANCELED");
 check(
@@ -261,6 +267,28 @@ check(
   dailyEdgeSource.includes("storedModelProbability: lockedMl?.modelProbability") &&
     dailyEdgeSource.includes("storedMarketProbability: lockedOu?.marketProbability") &&
     dailyEdgeSource.includes("if (hasStoredPredictionRecord)"),
+);
+
+const vercelSource = readFileSync("vercel.json", "utf8");
+check(
+  "AI shadow completes well before the full props build",
+  vercelSource.includes('"45 8 * * *"') &&
+    vercelSource.includes('"27 9 * * *"') &&
+    !vercelSource.includes('"22 9 * * *"'),
+);
+check(
+  "WNBA refreshes are offset from five-minute MLB lock sweeps",
+  vercelSource.includes('"23,53 13-23 * * *"') &&
+    vercelSource.includes('"23,53 0-3 * * *"') &&
+    !vercelSource.includes('"20,50 13-23 * * *"') &&
+    !vercelSource.includes('"20,50 0-3 * * *"'),
+);
+check(
+  "props settlement is offset from WNBA and fast props writers",
+  vercelSource.includes('"27,57 0-8 * * *"') &&
+    vercelSource.includes('"27 12 * * *"') &&
+    !vercelSource.includes('"20,50 0-8 * * *"') &&
+    !vercelSource.includes('"20 12 * * *"'),
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);
