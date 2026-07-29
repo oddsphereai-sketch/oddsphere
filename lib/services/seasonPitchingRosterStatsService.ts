@@ -1,24 +1,22 @@
 import { supabase } from "../db/supabase";
 import {
-  getMlbHitterSeasonStats,
-  type MlbHitterSeasonStatsRecord,
+  getMlbPitcherSeasonStats,
+  type PitcherSeasonStatsRecord,
 } from "../providers/real_api/_mlbStatsApiClient";
 import type { Sport } from "../types/domain/Sport";
+import { MLB_STATS_UPSERT_BATCH_SIZE } from "./seasonBattingStatsService";
 
-const MIN_FRESH_QUALIFIED_BATTERS_PER_TEAM = 3;
-export const MLB_STATS_UPSERT_BATCH_SIZE = 250;
-
-type SlateBatter = {
+type SlatePitcher = {
   id: number;
   team_id: number | null;
   mlb_person_id: number | null;
   provider_ids: Record<string, unknown> | null;
 };
 
-type ExistingBattingRow = {
+type ExistingPitchingRow = {
   player_id: number;
-  batting_ops: number | null;
-  batting_pa: number | null;
+  pitching_era: number | null;
+  pitching_ip: number | null;
   updated_at: string | null;
 };
 
@@ -30,19 +28,19 @@ function providerMlbId(providerIds: Record<string, unknown> | null): number | nu
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function effectiveMlbId(player: SlateBatter): number | null {
+function effectiveMlbId(player: SlatePitcher): number | null {
   return providerMlbId(player.provider_ids) ?? player.mlb_person_id;
 }
 
-function easternDate(value: string | number | Date): string | null {
-  const date = value instanceof Date ? value : new Date(value);
-  if (!Number.isFinite(date.getTime())) return null;
+function easternDate(iso: string): string | null {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return null;
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).formatToParts(date);
+  }).formatToParts(new Date(ms));
   const part = (type: string) => parts.find((item) => item.type === type)?.value;
   const year = part("year");
   const month = part("month");
@@ -50,44 +48,23 @@ function easternDate(value: string | number | Date): string | null {
   return year && month && day ? `${year}-${month}-${day}` : null;
 }
 
-export function hasFreshTeamBattingCoverage(args: {
-  teamIds: number[];
-  players: SlateBatter[];
-  stats: ExistingBattingRow[];
-  slateDate?: string;
-  nowMs?: number;
+export function hasFreshSlatePitchingCoverage(args: {
+  players: SlatePitcher[];
+  stats: ExistingPitchingRow[];
+  slateDate: string;
 }): boolean {
-  const nowMs = args.nowMs ?? Date.now();
-  const slateDate = args.slateDate ?? easternDate(nowMs);
-  if (slateDate === null) return false;
-  const playerById = new Map(args.players.map((player) => [player.id, player]));
-  const counts = new Map<number, number>();
-  let usableRows = 0;
-  let freshUsableRows = 0;
-  for (const row of args.stats) {
-    const player = playerById.get(row.player_id);
-    if (player?.team_id === null || player?.team_id === undefined) continue;
-    const usable =
-      typeof row.batting_ops === "number" &&
-      typeof row.batting_pa === "number" &&
-      (row.batting_pa ?? 0) > 0;
-    if (!usable) continue;
-    usableRows++;
-    const updatedDate = row.updated_at ? easternDate(row.updated_at) : null;
-    if (updatedDate !== slateDate) continue;
-    freshUsableRows++;
-    if ((row.batting_pa ?? 0) >= 100) {
-      counts.set(player.team_id, (counts.get(player.team_id) ?? 0) + 1);
-    }
-  }
-  return usableRows > 0 &&
-    freshUsableRows === usableRows &&
-    args.teamIds.every(
-    (teamId) => (counts.get(teamId) ?? 0) >= MIN_FRESH_QUALIFIED_BATTERS_PER_TEAM,
+  const playerIds = new Set(args.players.map((player) => player.id));
+  const usable = args.stats.filter((row) =>
+    playerIds.has(row.player_id) &&
+    typeof row.pitching_era === "number" &&
+    typeof row.pitching_ip === "number" &&
+    row.pitching_ip > 0
   );
+  return usable.length > 0 &&
+    usable.every((row) => row.updated_at !== null && easternDate(row.updated_at) === args.slateDate);
 }
 
-export type SeasonBattingRefreshResult = {
+export type SeasonPitchingRosterRefreshResult = {
   status: "fresh" | "refreshed" | "provider_empty" | "no_slate" | "dry_run";
   teams_checked: number;
   players_mapped: number;
@@ -97,17 +74,48 @@ export type SeasonBattingRefreshResult = {
   db_batches: number;
 };
 
+function payloadFor(
+  player: SlatePitcher,
+  row: PitcherSeasonStatsRecord,
+  season: number,
+  updatedAt: string,
+): Record<string, unknown> {
+  return {
+    player_id: player.id,
+    team_id: player.team_id,
+    season,
+    season_type: "regular",
+    postseason: false,
+    pitching_gp: row.games_played,
+    pitching_gs: row.games_started,
+    pitching_w: row.wins,
+    pitching_l: row.losses,
+    pitching_era: row.era,
+    pitching_whip: row.whip,
+    pitching_ip: row.innings_pitched,
+    pitching_h: row.hits_allowed,
+    pitching_er: row.earned_runs,
+    pitching_hr: row.home_runs_allowed,
+    pitching_bb: row.walks,
+    pitching_k: row.strikeouts,
+    pitching_k_per_9: row.strikeouts_per_9,
+    pitching_sv: row.saves,
+    pitching_hld: row.holds,
+    updated_at: updatedAt,
+  };
+}
+
 /**
- * Refresh current-season batting aggregates for the active batters on today's
- * MLB teams. The provider read is one league-wide request, then a single
- * partial-column upsert. It runs inside the existing slate-cycle lease.
+ * Once-per-slate-day starter and bullpen season refresh. One league-wide
+ * provider request and one partial-column upsert replace the scheduled
+ * per-starter fan-out while remaining inside the existing MLB pipeline lease.
  */
-export async function refreshSlateSeasonBattingStats(args: {
+export async function refreshSlateSeasonPitchingStats(args: {
   sport: Sport;
   date: string;
   writeMode: boolean;
   now?: Date;
-}): Promise<SeasonBattingRefreshResult> {
+}): Promise<SeasonPitchingRosterRefreshResult> {
   const season = Number(args.date.slice(0, 4));
   const now = args.now ?? new Date();
   const { data: games, error: gamesError } = await supabase
@@ -115,11 +123,9 @@ export async function refreshSlateSeasonBattingStats(args: {
     .select("home_team_id, away_team_id")
     .eq("sport", args.sport)
     .eq("slate_date", args.date);
-  if (gamesError) throw new Error(`season batting games query failed: ${gamesError.message}`);
-
+  if (gamesError) throw new Error(`season pitching games query failed: ${gamesError.message}`);
   const teamIds = Array.from(new Set(
-    (games ?? [])
-      .flatMap((game) => [game.home_team_id, game.away_team_id])
+    (games ?? []).flatMap((game) => [game.home_team_id, game.away_team_id])
       .filter((id): id is number => typeof id === "number"),
   ));
   if (teamIds.length === 0) {
@@ -131,26 +137,23 @@ export async function refreshSlateSeasonBattingStats(args: {
     .select("id, team_id, mlb_person_id, provider_ids")
     .in("team_id", teamIds)
     .eq("active", true)
-    .eq("is_pitcher", false);
-  if (playerError) throw new Error(`season batting players query failed: ${playerError.message}`);
-  const players = (playerData ?? []) as SlateBatter[];
+    .eq("is_pitcher", true);
+  if (playerError) throw new Error(`season pitching players query failed: ${playerError.message}`);
+  const players = (playerData ?? []) as SlatePitcher[];
   const playerIds = players.map((player) => player.id);
   const { data: statData, error: statError } = playerIds.length
-    ? await supabase
-        .from("player_season_stats")
-        .select("player_id, batting_ops, batting_pa, updated_at")
+    ? await supabase.from("player_season_stats")
+        .select("player_id, pitching_era, pitching_ip, updated_at")
         .in("player_id", playerIds)
         .eq("season", season)
         .eq("season_type", "regular")
     : { data: [], error: null };
-  if (statError) throw new Error(`season batting freshness query failed: ${statError.message}`);
+  if (statError) throw new Error(`season pitching freshness query failed: ${statError.message}`);
 
-  if (hasFreshTeamBattingCoverage({
-    teamIds,
+  if (hasFreshSlatePitchingCoverage({
     players,
-    stats: (statData ?? []) as ExistingBattingRow[],
+    stats: (statData ?? []) as ExistingPitchingRow[],
     slateDate: args.date,
-    nowMs: now.getTime(),
   })) {
     return {
       status: "fresh",
@@ -162,7 +165,6 @@ export async function refreshSlateSeasonBattingStats(args: {
       db_batches: 0,
     };
   }
-
   if (!args.writeMode) {
     return {
       status: "dry_run",
@@ -175,7 +177,7 @@ export async function refreshSlateSeasonBattingStats(args: {
     };
   }
 
-  const providerRows = await getMlbHitterSeasonStats(season, { quiet: true });
+  const providerRows = await getMlbPitcherSeasonStats(season, { quiet: true });
   if (!providerRows?.length) {
     return {
       status: "provider_empty",
@@ -187,50 +189,19 @@ export async function refreshSlateSeasonBattingStats(args: {
       db_batches: 0,
     };
   }
-
-  const byMlbId = new Map<number, MlbHitterSeasonStatsRecord>(
-    providerRows.map((row) => [row.mlb_person_id, row]),
-  );
-  const payload: Array<Record<string, unknown>> = [];
-  for (const player of players) {
+  const byMlbId = new Map(providerRows.map((row) => [row.mlb_person_id, row]));
+  const payload = players.flatMap((player) => {
     const mlbId = effectiveMlbId(player);
     const row = mlbId === null ? undefined : byMlbId.get(mlbId);
-    if (!row) continue;
-    payload.push({
-      player_id: player.id,
-      team_id: player.team_id,
-      season,
-      season_type: "regular",
-      postseason: false,
-      batting_gp: row.games_played,
-      batting_ab: row.at_bats,
-      batting_r: row.runs,
-      batting_h: row.hits,
-      batting_avg: row.batting_average,
-      batting_2b: row.doubles,
-      batting_3b: row.triples,
-      batting_hr: row.home_runs,
-      batting_rbi: row.rbis,
-      batting_tb: row.total_bases,
-      batting_bb: row.walks,
-      batting_so: row.strikeouts,
-      batting_sb: row.stolen_bases,
-      batting_obp: row.on_base_percentage,
-      batting_slg: row.slugging_percentage,
-      batting_ops: row.ops,
-      batting_pa: row.plate_appearances,
-      batting_hbp: row.hit_by_pitch,
-      batting_sf: row.sacrifice_flies,
-      updated_at: now.toISOString(),
-    });
-  }
+    return row ? [payloadFor(player, row, season, now.toISOString())] : [];
+  });
   let dbBatches = 0;
   for (let offset = 0; offset < payload.length; offset += MLB_STATS_UPSERT_BATCH_SIZE) {
     const batch = payload.slice(offset, offset + MLB_STATS_UPSERT_BATCH_SIZE);
     const { error } = await supabase
       .from("player_season_stats")
       .upsert(batch, { onConflict: "player_id,season,season_type" });
-    if (error) throw new Error(`season batting upsert failed: ${error.message}`);
+    if (error) throw new Error(`season pitching roster upsert failed: ${error.message}`);
     dbBatches++;
   }
   return {

@@ -19,6 +19,10 @@ import {
   cronHandler,
   cronHandlerPerSport,
 } from "../lib/cron/runCron";
+import {
+  acquireCronJobLease,
+  releaseCronJobLease,
+} from "../lib/cron/leases";
 import { supabase } from "../lib/db/supabase";
 
 let pass = 0;
@@ -348,24 +352,28 @@ function authedRequest(): Request {
 // Lock skip
 {
   await supabase.from("data_refresh_log").delete().eq("data_source", "test_cron_lock");
-  // Pre-seed an in_progress row to simulate a previous run still active
-  await supabase.from("data_refresh_log").insert({
-    data_source: "test_cron_lock",
-    sport: null,
-    refresh_started_at: new Date(Date.now() - 2 * 60_000).toISOString(),  // 2 min ago
-    refresh_status: "in_progress",
+  const existingRunId = `test-existing-${Date.now()}`;
+  const lease = await acquireCronJobLease({
+    jobName: "test_cron_lock",
+    runId: existingRunId,
+    leaseSeconds: 300,
   });
+  check("lock fixture acquires production lease", lease.mode === "acquired");
   let handlerCalled = false;
-  const res = await cronHandler(
-    authedRequest(),
-    "test_cron_lock",
-    async () => { handlerCalled = true; return {}; }
-  );
-  check("locked → handler NOT called", !handlerCalled);
-  check("locked → 200 with skipped:true", res.status === 200);
-  const body = (await res.json()) as { skipped?: boolean; reason?: string };
-  check("response.skipped=true", body.skipped === true);
-  await supabase.from("data_refresh_log").delete().eq("data_source", "test_cron_lock");
+  try {
+    const res = await cronHandler(
+      authedRequest(),
+      "test_cron_lock",
+      async () => { handlerCalled = true; return {}; }
+    );
+    check("locked → handler NOT called", !handlerCalled);
+    check("locked → 200 with skipped:true", res.status === 200);
+    const body = (await res.json()) as { skipped?: boolean; reason?: string };
+    check("response.skipped=true", body.skipped === true);
+  } finally {
+    await releaseCronJobLease({ jobName: "test_cron_lock", runId: existingRunId });
+    await supabase.from("data_refresh_log").delete().eq("data_source", "test_cron_lock");
+  }
 }
 
 // Partial result

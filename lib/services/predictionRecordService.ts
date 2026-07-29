@@ -427,6 +427,10 @@ export const FI_LEAN_SIGNED_EDGE_PRICE_BEST_ANGLE_PROMOTION_RULE_ID =
   "fi_lean_signed_edge_price_best_angle_promotion_v1_2026_07_28";
 export const FI_PROVISIONAL_BEST_ANGLE_BLOCK_RULE_ID =
   "fi_provisional_best_angle_block_v1_2026_07_28";
+export const FI_NRFI_MIDBAND_BEST_ANGLE_DEMOTION_RULE_ID =
+  "fi_nrfi_midband_best_angle_demotion_v1_2026_07_29";
+export const FI_PLUS_MONEY_LEAN_BEST_ANGLE_PROMOTION_RULE_ID =
+  "fi_plus_money_lean_best_angle_promotion_v1_2026_07_29";
 export const TOTAL_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID =
   "total_calibrated_model_best_angle_path_v1_2026_07_27";
 export const TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID =
@@ -434,6 +438,8 @@ export const TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID =
 export const FI_FINAL_BEST_ANGLE_MIN_EDGE = 0.06;
 export const FI_FINAL_BEST_ANGLE_MIN_CONFIDENCE = 56;
 export const FI_FINAL_BEST_ANGLE_MIN_PRICE_EXCLUSIVE = -130;
+export const FI_NRFI_MIDBAND_MIN_PROBABILITY = 0.57;
+export const FI_NRFI_MIDBAND_MAX_PROBABILITY_EXCLUSIVE = 0.63;
 export interface PlayGradeGateInputs {
   modelProb: number | null;
   americanOdds: number | null;
@@ -1734,6 +1740,8 @@ function resolveFiFinalGrade(args: {
   edge: number | null;
   oddsAmerican: number | null;
   confidence: number | null;
+  pick: string | null;
+  modelProbability: number | null;
 }): {
   playGrade: string | null;
   bestAngle: boolean;
@@ -1783,6 +1791,55 @@ function resolveFiFinalGrade(args: {
         edge: args.edge,
         odds_american: args.oddsAmerican,
         confidence: args.confidence,
+      },
+    };
+  }
+
+  const nrfiMidband =
+    args.pick === "NRFI" &&
+    args.modelProbability !== null &&
+    args.modelProbability >= FI_NRFI_MIDBAND_MIN_PROBABILITY &&
+    args.modelProbability < FI_NRFI_MIDBAND_MAX_PROBABILITY_EXCLUSIVE;
+  if (nrfiMidband) {
+    return {
+      playGrade: "lean",
+      bestAngle: false,
+      noBet: false,
+      noBetReason: null,
+      audit: {
+        rule_id: FI_NRFI_MIDBAND_BEST_ANGLE_DEMOTION_RULE_ID,
+        action: baseGrade === "best_angle" ? "demote_to_lean" : "keep_as_lean",
+        reason: "nrfi_midband_is_lean_only",
+        original_play_grade: baseGrade,
+        model_probability: args.modelProbability,
+        min_probability_inclusive: FI_NRFI_MIDBAND_MIN_PROBABILITY,
+        max_probability_exclusive: FI_NRFI_MIDBAND_MAX_PROBABILITY_EXCLUSIVE,
+        validation_note:
+          "Locked active-head replay 2026-07-11..2026-07-28: base NRFI Best Angles in the 57%-63% posterior band went 6-6, -0.843u, -7.0% ROI; validation and untouched windows were negative. The pick remains actionable as a Lean.",
+      },
+    };
+  }
+
+  const plusMoneyLeanPromotion =
+    baseGrade === "lean" &&
+    !args.baseNoBet &&
+    args.edge >= 0 &&
+    args.oddsAmerican >= 100 &&
+    args.bestAngleBlockedReason === null;
+  if (plusMoneyLeanPromotion) {
+    return {
+      playGrade: "best_angle",
+      bestAngle: true,
+      noBet: false,
+      noBetReason: null,
+      audit: {
+        rule_id: FI_PLUS_MONEY_LEAN_BEST_ANGLE_PROMOTION_RULE_ID,
+        action: "promote_to_best_angle",
+        original_play_grade: baseGrade,
+        edge: args.edge,
+        odds_american: args.oddsAmerican,
+        validation_note:
+          "Locked active-head replay 2026-07-11..2026-07-28: clean non-provisional positive-edge FI base Leans at plus money went 6-3, +3.450u, +38.3% ROI across 6 dates. Train (1-1, +4.0% ROI), validation (2-0), untouched (3-2, +23.0% ROI), and every leave-one-date-out replay remained positive.",
       },
     };
   }
@@ -3849,6 +3906,8 @@ function buildFiRecord(
     edge: finalFiEdge,
     oddsAmerican: finalFiOdds,
     confidence: finalFiConfidence,
+    pick: finalFiPick,
+    modelProbability: finalFiModelProb,
   });
   const finalFiNoBet = fiFinalGrade.noBet;
   const finalFiNoBetReason = fiFinalGrade.noBetReason;
