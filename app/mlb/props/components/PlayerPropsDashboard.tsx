@@ -43,6 +43,7 @@ type MarketFamilyFilter = "all" | "pitcher" | "batter";
 type RadarItem = { row: PlayerPropPreviewRow; label: string; note: string };
 type DashboardMode = "preview" | "live-preview" | "admin" | "member" | "member-disabled";
 const RADAR_ITEM_LIMIT = 6;
+const MLB_DISPLAY_TIME_ZONE = "America/New_York";
 
 export type PlayerPropOddsMovement = {
   openingLine: number;
@@ -325,7 +326,7 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
       if (oddsRange === "favorite" && row.odds >= 0) return false;
       if (oddsRange === "plus" && row.odds <= 0) return false;
       if (oddsRange === "short" && (row.odds < -130 || row.odds > 130)) return false;
-      const startHour = new Date(row.gameStartTime).getHours();
+      const startHour = easternHour(row.gameStartTime);
       if (startRange === "early" && startHour >= 20) return false;
       if (startRange === "late" && startHour < 20) return false;
       return !query || [row.player, row.team, row.opponent, row.marketLabel, row.marketGroup, rowMarketFilterLabel(row), row.book]
@@ -1752,15 +1753,39 @@ function signedDecimal(value: number): string {
 }
 
 function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: MLB_DISPLAY_TIME_ZONE,
+  }).format(new Date(value));
 }
 
 function formatSlateDate(value: string): string {
-  return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" }).format(new Date(`${value}T12:00:00`));
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T12:00:00.000Z`));
 }
 
 function formatTime(value: string): string {
-  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: MLB_DISPLAY_TIME_ZONE,
+  }).format(new Date(value));
+}
+
+function easternHour(value: string): number {
+  const hour = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    hourCycle: "h23",
+    timeZone: MLB_DISPLAY_TIME_ZONE,
+  }).format(new Date(value));
+  return Number(hour);
 }
 
 function formatGameLogDate(value: string): string {
