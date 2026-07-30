@@ -43,6 +43,14 @@ export function compareMlbPropsReleaseIds(
   return leftOrder.revision - rightOrder.revision;
 }
 
+export function mlbPropsReleaseIsCurrentOrNewer(
+  candidateReleaseId: string | null | undefined,
+  currentReleaseId: string | null | undefined,
+): boolean {
+  const comparison = compareMlbPropsReleaseIds(candidateReleaseId, currentReleaseId);
+  return comparison !== null && comparison >= 0;
+}
+
 export function assertMlbPropsReleaseDoesNotRegress(args: {
   candidateReleaseId: string | null | undefined;
   currentReleaseId: string | null | undefined;

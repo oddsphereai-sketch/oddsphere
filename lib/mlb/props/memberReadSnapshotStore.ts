@@ -14,6 +14,7 @@ import { MLB_PROPS_MODEL_RELEASE_ID } from "./marketModelVersions";
 import {
   assertMlbPropsReleaseDoesNotRegress,
   compareMlbPropsReleaseIds,
+  mlbPropsReleaseIsCurrentOrNewer,
 } from "./releaseOrdering";
 
 const BOARD_TTL_MS = 40 * 60 * 1000;
@@ -248,9 +249,22 @@ export async function loadMlbPropsPlayerReadSnapshot(date: string, playerId: str
     .maybeSingle();
   if (error) throw error;
   if (!validPlayerPayload(data?.payload)) return null;
-  return await memberPayloadIsCurrent(date, data.payload.modelReleaseId, data.payload.asOfTimestamp)
+  return await memberPlayerPayloadIsCurrent(date, data.payload.modelReleaseId)
     ? data.payload
     : null;
+}
+
+async function memberPlayerPayloadIsCurrent(
+  date: string,
+  modelReleaseId: string | undefined,
+): Promise<boolean> {
+  const canonical = await loadHighestIndexedMlbPropsReleaseHead(date).catch(() => null);
+  if (!canonical) return true;
+  // Full player research shards intentionally refresh less often than the
+  // compact odds board. A later fast refresh within the same release must not
+  // invalidate those shards; the client already refuses to merge older prop
+  // prices, projections, grades, or lock state over current board rows.
+  return mlbPropsReleaseIsCurrentOrNewer(modelReleaseId, canonical.releaseId);
 }
 
 async function memberPayloadIsCurrent(

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   assertMlbPropsReleaseDoesNotRegress,
   compareMlbPropsReleaseIds,
+  mlbPropsReleaseIsCurrentOrNewer,
   parseMlbPropsReleaseOrder,
 } from "../lib/mlb/props/releaseOrdering";
 
@@ -14,6 +15,10 @@ assert.equal(parseMlbPropsReleaseOrder("mlb_props_2026_02_30_r1"), null);
 assert.equal(compareMlbPropsReleaseIds("mlb_props_2026_07_28_r14", "mlb_props_2026_07_27_r99"), 1);
 assert.equal(compareMlbPropsReleaseIds("mlb_props_2026_07_28_r14", "mlb_props_2026_07_28_r13"), 1);
 assert.equal(compareMlbPropsReleaseIds("mlb_props_2026_07_28_r13", "mlb_props_2026_07_28_r14"), -1);
+assert.equal(mlbPropsReleaseIsCurrentOrNewer("mlb_props_2026_07_29_r17", "mlb_props_2026_07_29_r17"), true);
+assert.equal(mlbPropsReleaseIsCurrentOrNewer("mlb_props_2026_07_30_r18", "mlb_props_2026_07_29_r17"), true);
+assert.equal(mlbPropsReleaseIsCurrentOrNewer("mlb_props_2026_07_28_r16", "mlb_props_2026_07_29_r17"), false);
+assert.equal(mlbPropsReleaseIsCurrentOrNewer("invalid", "mlb_props_2026_07_29_r17"), false);
 
 assert.doesNotThrow(() => assertMlbPropsReleaseDoesNotRegress({
   candidateReleaseId: "mlb_props_2026_07_28_r14",
