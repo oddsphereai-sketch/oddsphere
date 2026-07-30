@@ -35,10 +35,12 @@ function formatAgo(ageSeconds: number | null): string {
   return `${days}d ago`;
 }
 
-function formatUntil(nextScheduled: string | null): string | null {
-  if (!nextScheduled) return null;
+function formatUntil(nextScheduled: string | null, referenceTimestamp: string | null): string | null {
+  if (!nextScheduled || !referenceTimestamp) return null;
   const target = new Date(nextScheduled).getTime();
-  const deltaSeconds = Math.floor((target - Date.now()) / 1000);
+  const reference = new Date(referenceTimestamp).getTime();
+  if (!Number.isFinite(target) || !Number.isFinite(reference)) return null;
+  const deltaSeconds = Math.floor((target - reference) / 1000);
   if (deltaSeconds <= 0) return "imminent";
   if (deltaSeconds < 60) return `${deltaSeconds}s`;
   const minutes = Math.floor(deltaSeconds / 60);
@@ -155,7 +157,13 @@ export default function RefreshIndicator({ sport }: { sport?: Sport }) {
 
   const style = STATE_STYLES[state];
   const ageStr = formatAgo(data?.overall.age_seconds ?? null);
-  const untilStr = formatUntil(data?.overall.next_scheduled_at ?? null);
+  // Use the API snapshot time for the initial countdown. Date.now() can cross
+  // a minute boundary between server render and hydration, producing different
+  // text for otherwise identical data. SWR advances `as_of` on each poll.
+  const untilStr = formatUntil(
+    data?.overall.next_scheduled_at ?? null,
+    data?.as_of ?? null,
+  );
 
   // Detail text. Phase 6B.4 — uniform "<ageStr>" format across live /
   // stale / error so the pill always reads as a "Last updated" time,
