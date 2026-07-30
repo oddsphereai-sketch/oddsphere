@@ -334,12 +334,16 @@ export async function runSlateCycleAutomated(opts: {
   const blockingReasons: string[] = [];
   const warnings: string[] = [];
   let officialScheduledGameCount: number | null = null;
+  let officialMlbScheduleRaw: unknown = null;
   if (opts.sport === "mlb") {
     try {
-      const schedule = await fetchMlbStatsScheduleRaw(opts.date, {
+      officialMlbScheduleRaw = await fetchMlbStatsScheduleRaw(opts.date, {
         quiet: true,
         signal: AbortSignal.timeout(6_000),
-      }) as { dates?: Array<{ games?: Array<{ gameType?: string }> }> } | null;
+      });
+      const schedule = officialMlbScheduleRaw as {
+        dates?: Array<{ games?: Array<{ gameType?: string }> }>;
+      } | null;
       const officialGames = schedule?.dates?.flatMap((day) => day.games ?? []) ?? [];
       officialScheduledGameCount = officialGames.filter((game) =>
         game.gameType !== "A" && game.gameType !== "S" && game.gameType !== "E"
@@ -701,9 +705,14 @@ export async function runSlateCycleAutomated(opts: {
   steps.push(await runStep("s1_slate_ingest", effectiveWriteMode.slate, "slate", async (writeMode) => {
     const res = await slateService.refreshGames(opts.sport, opts.date, undefined, {
       dryRun: !writeMode,
+      officialMlbScheduleRaw,
     });
     return {
-      details: { records_updated: res.records_updated, api_calls: res.api_calls_made },
+      details: {
+        records_updated: res.records_updated,
+        api_calls: res.api_calls_made,
+        ...(res.details ?? {}),
+      },
       reason: writeMode
         ? `wrote ${res.records_updated} game row(s); api_calls=${res.api_calls_made}`
         : `dry-run; would write ${res.records_updated} game row(s)`,
