@@ -6,6 +6,7 @@ import {
 import {
   buildMlbModelLayerVersions,
   MLB_DAILY_EDGE_DECISION_RELEASE_ID,
+  MLB_MODEL_LAYER_VERSION_SCHEMA,
   MLB_PUBLIC_CALIBRATION_VERSION,
 } from "../lib/automodel/mlbModelLayerVersions";
 import {
@@ -22,7 +23,11 @@ import {
 } from "../lib/automodel/wnbaChampionRuntime";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import { normalizeGameStatus } from "../lib/providers/real_api/BallDontLieSlateProvider";
-import { preserveAuthoritativeGameStatus } from "../lib/services/slateService";
+import {
+  preserveAuthoritativeGameStatus,
+  resolveCanonicalGameDate,
+  resolveOfficialMlbScheduleGame,
+} from "../lib/services/slateService";
 
 let passed = 0;
 let failed = 0;
@@ -69,8 +74,10 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB late-player stats health correction is versioned as decision release r21",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_07_29_r21",
+  "MLB official schedule-time correction is versioned as decision release r22",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_07_30_r22" &&
+    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v3" &&
+    layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
 check("different final sides are a true correction", didFinalSideChange("home", "away"));
 check("same final side is not a correction", !didFinalSideChange("home", "home"));
@@ -169,6 +176,100 @@ check(
 check(
   "slate refresh can advance scheduled to live",
   preserveAuthoritativeGameStatus("STATUS_SCHEDULED", "STATUS_IN_PROGRESS") === "STATUS_IN_PROGRESS",
+);
+const officialScheduleGames = [
+  {
+    gamePk: 824894,
+    gameDate: "2026-07-30T23:15:00Z",
+    gameNumber: 1,
+    doubleHeader: "N" as const,
+    status: "scheduled" as const,
+    homeTeamId: 144,
+    awayTeamId: 120,
+    homeProbable: null,
+    awayProbable: null,
+  },
+];
+check(
+  "official MLB schedule time overrides a lower-authority exact team match",
+  resolveOfficialMlbScheduleGame({
+    providerGameDate: "2026-07-30T23:00:00Z",
+    homeMlbTeamId: 144,
+    awayMlbTeamId: 120,
+    officialScheduleGames,
+  })?.gameDate === "2026-07-30T23:15:00Z",
+);
+check(
+  "official schedule matching fails closed for a different matchup",
+  resolveOfficialMlbScheduleGame({
+    providerGameDate: "2026-07-30T23:00:00Z",
+    homeMlbTeamId: 144,
+    awayMlbTeamId: 121,
+    officialScheduleGames,
+  }) === null,
+);
+check(
+  "malformed official schedule time cannot replace the provider time",
+  resolveOfficialMlbScheduleGame({
+    providerGameDate: "2026-07-30T23:00:00Z",
+    homeMlbTeamId: 144,
+    awayMlbTeamId: 120,
+    officialScheduleGames: [{ ...officialScheduleGames[0]!, gameDate: "" }],
+  }) === null,
+);
+check(
+  "doubleheader reconciliation chooses the official game nearest the provider time",
+  resolveOfficialMlbScheduleGame({
+    providerGameDate: "2026-07-30T23:00:00Z",
+    homeMlbTeamId: 144,
+    awayMlbTeamId: 120,
+    officialScheduleGames: [
+      {
+        ...officialScheduleGames[0]!,
+        gamePk: 824893,
+        gameDate: "2026-07-30T17:10:00Z",
+        gameNumber: 1,
+        doubleHeader: "Y",
+      },
+      {
+        ...officialScheduleGames[0]!,
+        gamePk: 824894,
+        gameDate: "2026-07-30T23:15:00Z",
+        gameNumber: 2,
+        doubleHeader: "Y",
+      },
+    ],
+  })?.gamePk === 824894,
+);
+check(
+  "ambiguous doubleheader with invalid provider time fails closed",
+  resolveOfficialMlbScheduleGame({
+    providerGameDate: "invalid",
+    homeMlbTeamId: 144,
+    awayMlbTeamId: 120,
+    officialScheduleGames: [
+      officialScheduleGames[0]!,
+      { ...officialScheduleGames[0]!, gamePk: 824895, gameDate: "2026-07-31T02:00:00Z" },
+    ],
+  }) === null,
+);
+check(
+  "lower-authority MLB refresh cannot overwrite an existing verified game time",
+  resolveCanonicalGameDate({
+    providerGameDate: "2026-07-30T23:00:00Z",
+    officialGameDate: null,
+    existingGameDate: "2026-07-30T23:15:00Z",
+    preserveExistingWithoutOfficialMatch: true,
+  }) === "2026-07-30T23:15:00Z",
+);
+check(
+  "official MLB time can advance an existing lower-authority game time",
+  resolveCanonicalGameDate({
+    providerGameDate: "2026-07-30T23:00:00Z",
+    officialGameDate: "2026-07-30T23:15:00Z",
+    existingGameDate: "2026-07-30T23:00:00Z",
+    preserveExistingWithoutOfficialMatch: true,
+  }) === "2026-07-30T23:15:00Z",
 );
 
 const base: PredictionRecordRow = {
