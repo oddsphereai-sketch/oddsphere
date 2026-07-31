@@ -242,11 +242,15 @@ function alignMarketReadToResolvedConsensus(
 /**
  * Final response-coherence pass. Some source-aware recommendation inputs and
  * the optional dual-provider display overlay are resolved after the initial
- * Market Read snapshot. The source-aware consensus stored on the canonical
- * recommendation decision is the authority when it has a complete two-sided
- * section because that is the consensus the recommendation actually used.
- * Mirror it into the collapsed bars/scalars and Market Read copy. If that
- * section is absent, retain the resolved public-splits display as the fallback.
+ * Market Read snapshot. The already-resolved `publicSplits` rows are the
+ * display authority: mirror their picked-side values into the collapsed
+ * scalars and Market Read copy.
+ *
+ * Do not copy `recommendationDecision.consensusSplits` back over these rows.
+ * That section records the evidence used when the recommendation was built;
+ * it may legitimately be older than a later display-only observation. Making
+ * it authoritative here silently undoes the freshness overlay.
+ *
  * This never changes a pick, model value, price, probability, edge, verdict,
  * or grade.
  */
@@ -258,16 +262,6 @@ export function alignMarketReadsToDisplayedPublicSplits(
       const dto = (game.markets as Record<string, MarketEdgeDto | undefined>)[market];
       if (!dto) continue;
       const picked = pickedDisplaySide(market, dto, game.homeTeam, game.awayTeam);
-      const expectedSides = SIDES[market];
-      const recommendationRows = dto.recommendationDecision?.consensusSplits?.rows ?? [];
-      const recommendationIsComplete = expectedSides.every((side) =>
-        recommendationRows.some((row) =>
-          row.side === side && (isPct(row.moneyPct) || isPct(row.betsPct)),
-        ),
-      );
-      if (recommendationIsComplete) {
-        dto.publicSplits = recommendationRows.map((row) => ({ ...row }));
-      }
       const pickedRow = picked
         ? dto.publicSplits.find((row) => row.side === picked)
         : null;

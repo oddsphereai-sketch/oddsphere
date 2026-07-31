@@ -134,9 +134,10 @@ expandedReaderAuthority.markets.moneyline!.recommendationDecision = {
 } as NonNullable<typeof expandedReaderAuthority.markets.moneyline>["recommendationDecision"];
 alignMarketReadsToDisplayedPublicSplits([expandedReaderAuthority]);
 const expandedMl = expandedReaderAuthority.markets.moneyline!;
-check("canonical recommendation consensus replaces stale collapsed bars", expandedMl.publicSplits[1]?.moneyPct === 63 && expandedMl.publicSplits[1]?.betsPct === 59);
-check("Market Read follows canonical recommendation consensus", expandedMl.marketReadV2?.consensus?.moneyPct === 0.63 && expandedMl.marketReadV2?.consensus?.betsPct === 0.59);
-check("canonical consensus alignment leaves the pick unchanged", expandedMl.pick === "WSH");
+check("older recommendation evidence does not overwrite resolved display bars", expandedMl.publicSplits[1]?.moneyPct === 65 && expandedMl.publicSplits[1]?.betsPct === 61);
+check("Market Read follows resolved display bars", expandedMl.marketReadV2?.consensus?.moneyPct === 0.65 && expandedMl.marketReadV2?.consensus?.betsPct === 0.61);
+check("display alignment leaves recorded recommendation evidence unchanged", expandedMl.recommendationDecision?.consensusSplits?.rows[1]?.moneyPct === 63);
+check("resolved display alignment leaves the pick unchanged", expandedMl.pick === "WSH");
 
 const agingSnapshot = game();
 agingSnapshot.markets.moneyline!.publicSplits = [

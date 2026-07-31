@@ -39,9 +39,12 @@ function splitsOf(game: any): string {
 (async () => {
   const { GET } = await import("../../app/api/lab/daily-edge/route");
   const call = async (on: boolean) => {
-    if (on) process.env.DUAL_SOURCE_PUBLIC_SPLITS_DISPLAY_ENABLED = "true";
-    else delete process.env.DUAL_SOURCE_PUBLIC_SPLITS_DISPLAY_ENABLED;
-    const res = await GET(new Request(`http://x/api/lab/daily-edge?sport=mlb&date=${date}`));
+    process.env.DUAL_SOURCE_PUBLIC_SPLITS_DISPLAY_ENABLED = on ? "true" : "false";
+    // snapshotBypass uses the cron writer's live assembly path instead of the
+    // production DB response snapshot, while remaining read-only itself.
+    const res = await GET(new Request(
+      `http://x/api/lab/daily-edge?sport=mlb&date=${date}&snapshotBypass=true`,
+    ));
     return (await res.json()) as { games: any[] };
   };
   const off = await call(false);
