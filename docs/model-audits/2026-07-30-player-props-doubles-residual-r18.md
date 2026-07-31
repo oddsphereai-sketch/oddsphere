@@ -98,10 +98,43 @@ the board when it does not.
 - TypeScript `--noEmit`: pass.
 - Focused ESLint: pass.
 
-## Deployment status
+## Deployment and live proof
 
-Implemented and verified in the isolated branch
-`codex/mlb-props-residual-r18`. It has not been committed, pushed, deployed, or written to
-production. Production must not be called r18 until a clean intentional commit is deployed
-and the live release identifier, lease health, provider coverage, snapshot coherence, reader
-snapshot, and next lock sweep are verified.
+Deployed from the clean, intentional squash commit
+`487596b57012a66872f43fd84b270062dd36e7b3` after PR #140 passed its Vercel check.
+
+The first canonical full refresh completed successfully under the existing
+`prediction_pipeline:mlb` lease:
+
+- refresh log: `26274`;
+- scoring run: `3c56a080-1041-435b-bfa0-4c7185914f08`;
+- snapshot: `d1cf47aa-7678-4e93-abe9-a2a333212aa1`;
+- release: `mlb_props_2026_07_30_r18`;
+- 2,038 board rows and 28 actionables;
+- 149 doubles residual reads and zero promotions;
+- zero stale odds and zero validation errors;
+- canonical, indexed-head, and compact member snapshots matched;
+- tracking completed without error;
+- the lease released with no overlapping writer.
+
+The release then survived autonomous scheduled operation. Successful scheduled props
+refreshes completed at 01:47, 02:17, and 02:47 UTC, followed by successful five-minute
+pregame lock sweeps. The latest verified scheduled snapshot was:
+
+- snapshot: `1727892f-411d-448b-b89b-1c8197db5a59`;
+- timestamp: `2026-07-31T02:47:43.460Z`;
+- release: `mlb_props_2026_07_30_r18`;
+- publishable with zero errors and zero stale odds;
+- 4,755 source rows and 4,755 mapped rows;
+- six sportsbook vendors;
+- 1,200 board rows and 18 actionables;
+- 101 doubles residual reads and zero promotions;
+- canonical, indexed-head, and compact member snapshots matched;
+- no active `prediction_pipeline:mlb` lease remained after completion.
+
+Zero doubles promotions were correct. The highest-EV residual candidates either missed the
+frozen minimum decimal price of 1.25 or the minimum expected-value gate; the absence of an
+action was not caused by missing residual features, release drift, stale odds, or a failed
+writer.
+
+Rollback remains r17 and its last coherent reader snapshot. No rollback criterion occurred.
