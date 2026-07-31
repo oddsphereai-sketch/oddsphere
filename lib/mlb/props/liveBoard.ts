@@ -118,6 +118,7 @@ type PlayerIdentity = {
   bdlPlayerId: number;
   player: BdlResearchPlayer;
   mlbStatsPlayerId: string | null;
+  resolvedTeamAbbreviation: string | null;
 };
 
 type MappedOddsRow = {
@@ -200,12 +201,12 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
   }
 
   const boardSourceOdds = sourceOdds.filter((row) => !isMemberExcludedSourceOdds(row));
-  const mappedOdds = mapOddsToMlbGames(boardSourceOdds, games);
+  const gameMappedOdds = mapOddsToMlbGames(boardSourceOdds, games);
   const previousIdentities = identitiesFromPrevious(previous);
-  const requiredPlayerIds = [...new Set(mappedOdds.map((row) => row.bdlPlayerId))];
+  const requiredPlayerIds = [...new Set(gameMappedOdds.map((row) => row.bdlPlayerId))];
   const starterContextChangedGameIds = new Set([
     ...probablePitcherSlateChangedGames(previous, games, probablePitchers),
-    ...bdlOpposingPitcherChangedGames(previous, mappedOdds, previousIdentities),
+    ...bdlOpposingPitcherChangedGames(previous, gameMappedOdds, previousIdentities),
   ]);
   const needsFullResearch = requestedMode === "full" || !previous;
   const refreshMode: "fast" | "full" = needsFullResearch ? "full" : "fast";
@@ -219,12 +220,31 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
 
   const researchClient = new BallDontLieResearchClient(apiKey);
   const identities = new Map(previousIdentities);
-  const missingIdentityIds = requiredPlayerIds.filter((id) => !identities.has(id));
-  if (missingIdentityIds.length) {
-    for (const [id, identity] of await loadPlayerIdentities(missingIdentityIds, researchClient, probablePitchers, games)) {
+  const identityIdsToLoad = needsFullResearch
+    ? requiredPlayerIds
+    : requiredPlayerIds.filter((id) => !identities.has(id));
+  if (identityIdsToLoad.length) {
+    for (const [id, identity] of await loadPlayerIdentities(identityIdsToLoad, researchClient, probablePitchers, games)) {
       identities.set(id, identity);
     }
   }
+
+  // Provider game identity and player identity arrive from separate payloads.
+  // Fail closed when a player profile points to a team that is not in the
+  // mapped game; otherwise a stale team can be silently treated as the away
+  // side and create a phantom matchup on the member board. The official MLB
+  // probable-pitcher assignment remains authoritative for pitcher markets.
+  const mappedOdds = gameMappedOdds.filter((row) => playerBelongsToMappedGame({
+    game: row.game,
+    marketFamily: getMlbPropMarketDefinition(row.odds.marketKey).family,
+    playerName: identities.get(row.bdlPlayerId)?.player.fullName ?? null,
+    playerTeamAbbreviation: eventScopedPlayerTeam(row)?.abbreviation
+      ?? identities.get(row.bdlPlayerId)?.resolvedTeamAbbreviation
+      ?? identities.get(row.bdlPlayerId)?.player.teamAbbreviation
+      ?? null,
+    probablePitchers,
+  }));
+  const playerGameIdentityConflictRows = gameMappedOdds.length - mappedOdds.length;
 
   const lineupResult = await loadLineups(mappedOdds, apiKey);
   const lineupRows = lineupResult.rows;
@@ -243,7 +263,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     ? await loadProbablePitcherSeasonStats(probablePitchers, args.slateDate)
     : new Map(previous?.modelContext?.probablePitcherSeasonStats ?? []);
   const pitcherModelContext = buildPitcherModelContext({ mappedOdds, identities, researchByKey });
-  const scoringOdds = boardSourceOdds.map((odds) => {
+  const scoringOdds = mappedOdds.map(({ odds }) => {
     const raw = record(odds.rawPayload);
     const bdlPlayerId = numberValue(raw.bdl_player_id ?? odds.playerId.replace(/^balldontlie-player-/, ""));
     const identity = bdlPlayerId === null ? null : identities.get(bdlPlayerId);
@@ -251,7 +271,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       ? { ...odds, rawPayload: { ...raw, player_name: identity.player.fullName } }
       : odds;
   });
-  const scoring = boardSourceOdds.length
+  const scoring = scoringOdds.length
     ? await scoreRealMlbPropsForPaper({
       games,
       probablePitchers,
@@ -263,7 +283,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       providerContext: {
         selectedOddsProvider: "balldontlie",
         sharpApiPropRows: 0,
-        bdlPropRows: boardSourceOdds.length,
+        bdlPropRows: scoringOdds.length,
         fallbackReason: null,
       },
     })
@@ -293,6 +313,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     mappedRows: mappedOdds.length,
     asOfTimestamp,
     providerCoverage,
+    playerGameIdentityConflictRows,
   });
   const movement = compareMlbPropsBoardMovement(previous, data.props);
   const snapshotOpeningOdds = compactOpeningPropOddsForSnapshot(openingOdds, data.props);
@@ -418,6 +439,47 @@ function mapOddsToMlbGames(odds: PropOddsSnapshot[], games: MlbGameEntity[]): Ma
   return rows;
 }
 
+function eventScopedPlayerTeam(row: MappedOddsRow) {
+  return resolveEventScopedPlayerTeam({
+    game: row.game,
+    playerTeamId: numberValue(row.raw.bdl_player_team_id),
+    providerAwayTeamId: numberValue(row.raw.bdl_away_team_id),
+    providerHomeTeamId: numberValue(row.raw.bdl_home_team_id),
+  });
+}
+
+export function resolveEventScopedPlayerTeam(args: {
+  game: MlbGameEntity;
+  playerTeamId: number | null;
+  providerAwayTeamId: number | null;
+  providerHomeTeamId: number | null;
+}) {
+  const { playerTeamId, providerAwayTeamId, providerHomeTeamId } = args;
+  if (playerTeamId === null) return null;
+  if (playerTeamId === providerAwayTeamId) return resolveMlbStatsTeamId(args.game.awayTeamId);
+  if (playerTeamId === providerHomeTeamId) return resolveMlbStatsTeamId(args.game.homeTeamId);
+  return null;
+}
+
+export function playerBelongsToMappedGame(args: {
+  game: MlbGameEntity;
+  marketFamily: "batter" | "pitcher" | "milestone";
+  playerName: string | null;
+  playerTeamAbbreviation: string | null;
+  probablePitchers: MlbProbablePitcher[];
+}): boolean {
+  if (!args.playerName) return false;
+  const officialPitcher = args.marketFamily === "pitcher"
+    ? probableForPlayer(args.probablePitchers, args.game.id, args.playerName)
+    : null;
+  const playerTeam = officialPitcher
+    ? resolveMlbStatsTeamId(officialPitcher.teamId)
+    : resolveMlbTeamAlias(args.playerTeamAbbreviation);
+  const homeTeam = resolveMlbStatsTeamId(args.game.homeTeamId);
+  const awayTeam = resolveMlbStatsTeamId(args.game.awayTeamId);
+  return Boolean(playerTeam && (playerTeam.id === homeTeam?.id || playerTeam.id === awayTeam?.id));
+}
+
 async function loadPlayerIdentities(
   ids: number[],
   researchClient: BallDontLieResearchClient,
@@ -432,34 +494,64 @@ async function loadPlayerIdentities(
   await mapWithConcurrency(ids, 8, async (id) => {
     const player = players.get(id) ?? null;
     if (!player) return;
-    const mlbStatsPlayerId = await resolveMlbStatsPlayerId(player, probablePitchers, rosterIndex);
-    out.set(id, { bdlPlayerId: id, player, mlbStatsPlayerId });
+    const resolved = await resolveMlbStatsIdentity(player, probablePitchers, rosterIndex);
+    out.set(id, {
+      bdlPlayerId: id,
+      player,
+      mlbStatsPlayerId: resolved.playerId,
+      resolvedTeamAbbreviation: resolved.teamAbbreviation,
+    });
   });
   return out;
 }
 
-async function resolveMlbStatsPlayerId(
+async function resolveMlbStatsIdentity(
   player: BdlResearchPlayer,
   probablePitchers: MlbProbablePitcher[],
   rosterIndex: Map<string, MlbRosterEntry[]>,
-): Promise<string | null> {
+): Promise<{ playerId: string | null; teamAbbreviation: string | null }> {
   const probable = probablePitchers.find((row) => {
     const name = probablePitcherName(row);
     return row.playerId && name && normalizePlayerName(name) === normalizePlayerName(player.fullName);
   });
-  if (probable?.playerId) return probable.playerId;
+  if (probable?.playerId) {
+    return {
+      playerId: probable.playerId,
+      teamAbbreviation: resolveMlbStatsTeamId(probable.teamId)?.abbreviation ?? null,
+    };
+  }
   const team = resolveMlbTeamAlias(player.teamAbbreviation);
   const rosterMatches = (team ? rosterIndex.get(team.id) ?? [] : [])
     .filter((row) => normalizePlayerName(row.fullName) === normalizePlayerName(player.fullName));
-  if (rosterMatches.length === 1) return `mlbstats-player-${rosterMatches[0].personId}`;
+  if (rosterMatches.length === 1) {
+    return {
+      playerId: `mlbstats-player-${rosterMatches[0].personId}`,
+      teamAbbreviation: team?.abbreviation ?? null,
+    };
+  }
+  const slateRosterMatches = [...rosterIndex.entries()].flatMap(([teamId, roster]) => roster
+    .filter((row) => normalizePlayerName(row.fullName) === normalizePlayerName(player.fullName))
+    .map((row) => ({ teamId, row })));
+  if (slateRosterMatches.length === 1) {
+    const match = slateRosterMatches[0];
+    return {
+      playerId: `mlbstats-player-${match.row.personId}`,
+      teamAbbreviation: resolveMlbTeamAlias(match.teamId)?.abbreviation ?? null,
+    };
+  }
   const matches = (await searchPersonsByName(player.fullName, { quiet: true }))
     .filter((row) => normalizePlayerName(row.fullName) === normalizePlayerName(player.fullName));
   const teamMatches = matches.filter((row) => {
-    const team = row.currentTeamId ? resolveMlbStatsTeamId(row.currentTeamId) : null;
-    return team?.abbreviation === player.teamAbbreviation;
+    const currentTeam = row.currentTeamId ? resolveMlbStatsTeamId(row.currentTeamId) : null;
+    return currentTeam?.id === team?.id;
   });
   const selected = teamMatches.length === 1 ? teamMatches[0] : matches.length === 1 ? matches[0] : null;
-  return selected ? `mlbstats-player-${selected.id}` : null;
+  return selected ? {
+    playerId: `mlbstats-player-${selected.id}`,
+    teamAbbreviation: selected.currentTeamId
+      ? resolveMlbStatsTeamId(selected.currentTeamId)?.abbreviation ?? null
+      : null,
+  } : { playerId: null, teamAbbreviation: null };
 }
 
 async function loadSlateRosterIndex(games: MlbGameEntity[]): Promise<Map<string, MlbRosterEntry[]>> {
@@ -853,7 +945,8 @@ function buildDashboardRows(args: {
       : null;
     const playerTeam = officialPitcher
       ? resolveMlbStatsTeamId(officialPitcher.teamId)
-      : resolveMlbTeamAlias(identity.player.teamAbbreviation);
+      : eventScopedPlayerTeam(mapped)
+        ?? resolveMlbTeamAlias(identity.resolvedTeamAbbreviation ?? identity.player.teamAbbreviation);
     const homeTeam = resolveMlbStatsTeamId(mapped.game.homeTeamId);
     const awayTeam = resolveMlbStatsTeamId(mapped.game.awayTeamId);
     const team = playerTeam?.abbreviation ?? awayTeam?.abbreviation ?? "MLB";
@@ -2017,6 +2110,7 @@ export function validateMlbPropsBoardData(args: {
   mappedRows: number;
   asOfTimestamp: string;
   providerCoverage?: ReturnType<BallDontLieMlbPropsClient["getCoverageSummary"]>;
+  playerGameIdentityConflictRows?: number;
 }): MlbPropsBoardValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -2044,6 +2138,9 @@ export function validateMlbPropsBoardData(args: {
   }
   if (args.mappedRows === 0 && args.sourceRows > 0) errors.push("NO_ODDS_ROWS_MAPPED_TO_MLB_GAMES");
   if (args.sourceRows > 0 && args.mappedRows / args.sourceRows < 0.9) errors.push("ODDS_GAME_MAPPING_BELOW_90_PERCENT");
+  if ((args.playerGameIdentityConflictRows ?? 0) > 0) {
+    warnings.push(`${args.playerGameIdentityConflictRows}_PLAYER_GAME_IDENTITY_CONFLICT_ROWS_EXCLUDED`);
+  }
   if (args.data.props.length === 0 && args.sourceRows > 0) errors.push("NO_MEMBER_ROWS_WITH_VERIFIED_PLAYER_HISTORY");
   const maxBoardRows = envPositiveInteger("ODDSPHERE_PROPS_MAX_BOARD_ROWS", DEFAULT_MAX_BOARD_ROWS);
   if (args.data.props.length > maxBoardRows) errors.push(`BOARD_ROW_LIMIT_EXCEEDED_${args.data.props.length}_OF_${maxBoardRows}`);
@@ -2263,6 +2360,7 @@ function identitiesFromPrevious(previous: MlbPropsBoardSnapshot | null): Map<num
     out.set(id, {
       bdlPlayerId: id,
       mlbStatsPlayerId: row.providerIds?.mlbStatsPlayerId ?? null,
+      resolvedTeamAbbreviation: row.team,
       player: {
         playerId: id,
         fullName: row.player,
@@ -2296,13 +2394,15 @@ function opponentTeamFor(
     : null;
   const playerTeam = officialPitcher
     ? resolveMlbStatsTeamId(officialPitcher.teamId)
-    : resolveMlbTeamAlias(identity?.player.teamAbbreviation);
+    : eventScopedPlayerTeam(row)
+      ?? resolveMlbTeamAlias(identity?.resolvedTeamAbbreviation ?? identity?.player.teamAbbreviation);
   const home = resolveMlbStatsTeamId(row.game.homeTeamId);
   return playerTeam?.id === home?.id ? row.game.awayTeamId : row.game.homeTeamId;
 }
 
 function opposingPitcherId(row: MappedOddsRow, identity: PlayerIdentity | undefined): number | null {
-  const playerTeam = resolveMlbTeamAlias(identity?.player.teamAbbreviation);
+  const playerTeam = eventScopedPlayerTeam(row)
+    ?? resolveMlbTeamAlias(identity?.resolvedTeamAbbreviation ?? identity?.player.teamAbbreviation);
   const home = resolveMlbTeamAlias(stringValue(row.raw.event_home_team));
   const value = playerTeam?.id === home?.id ? row.raw.bdl_away_pitcher_id : row.raw.bdl_home_pitcher_id;
   return numberValue(value);
@@ -2330,7 +2430,8 @@ function mlbPersonNumber(playerId: string | null): number | null {
 function bdlTeamIdFor(row: MappedOddsRow, identity: PlayerIdentity): number | null {
   const direct = numberValue(row.raw.bdl_player_team_id);
   if (direct !== null) return direct;
-  const playerTeam = resolveMlbTeamAlias(identity.player.teamAbbreviation);
+  const playerTeam = eventScopedPlayerTeam(row)
+    ?? resolveMlbTeamAlias(identity.resolvedTeamAbbreviation ?? identity.player.teamAbbreviation);
   const home = resolveMlbTeamAlias(stringValue(row.raw.event_home_team));
   return numberValue(playerTeam?.id === home?.id ? row.raw.bdl_home_team_id : row.raw.bdl_away_team_id);
 }
