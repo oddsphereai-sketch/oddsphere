@@ -170,6 +170,7 @@ function dailyEdgeWarmCacheKey(args: {
   requestedDate: string;
   allowStale: boolean;
   copyPreview: boolean;
+  dualSourcePublicSplitsDisplay: boolean;
   renderedCopyFlags: DailyEdgeRenderedCopyFlagOverrides;
 }): string {
   return [
@@ -177,6 +178,7 @@ function dailyEdgeWarmCacheKey(args: {
     args.requestedDate,
     args.allowStale ? "allowStale" : "noStale",
     args.copyPreview ? "copyPreview" : "normalCopy",
+    args.dualSourcePublicSplitsDisplay ? "dualSplits1" : "dualSplits0",
     args.renderedCopyFlags.quickRead ? "qr1" : "qr0",
     args.renderedCopyFlags.marketRead ? "mr1" : "mr0",
     args.renderedCopyFlags.supportingEvidence ? "se1" : "se0",
@@ -5539,11 +5541,14 @@ export async function GET(request: Request) {
     }
   }
 
+  const dualSourcePublicSplitsDisplay = sport === "mlb"
+    && process.env.DUAL_SOURCE_PUBLIC_SPLITS_DISPLAY_ENABLED !== "false";
   const warmCacheKey = dailyEdgeWarmCacheKey({
     sport,
     requestedDate,
     allowStale,
     copyPreview,
+    dualSourcePublicSplitsDisplay,
     renderedCopyFlags: renderedCopyFlagOverrides,
   });
   if (sport === "mlb") {
@@ -6798,13 +6803,14 @@ export async function GET(request: Request) {
     }
   }
 
-  // Dual-source public splits (Phase 2 DISPLAY) — flagged, MLB only, additive.
+  // Dual-source public splits (Phase 2 DISPLAY) — MLB only, additive.
   // Overlays moneyline/total publicSplits with the provider-resolved read
   // (Playbook preferred fresh+complete, SharpAPI fallback, stale-but-valid so
   // bars never disappear; never blended). Touches ONLY publicSplits — grades,
-  // predictions, model, and sharp_signals are unchanged. Default OFF; never
-  // breaks the response on error.
-  if (process.env.DUAL_SOURCE_PUBLIC_SPLITS_DISPLAY_ENABLED === "true" && sport === "mlb") {
+  // predictions, model, and sharp_signals are unchanged. Default ON after the
+  // provider/date matcher rollout; an explicit false remains the kill switch.
+  // Never break the response on an overlay error.
+  if (dualSourcePublicSplitsDisplay) {
     try {
       const { loadResolvedPublicSplitsForDisplay, overlayResolvedPublicSplits } = await import(
         "@/lib/services/publicSplitsDisplayOverlay"
