@@ -35,4 +35,30 @@ const ambiguous = matchPlaybookSplitsToSlateGames(games, [
 ], "mlb");
 assert.equal(ambiguous.size, 0);
 
+// Playbook returns today and tomorrow together. Repeated team matchups must
+// select the row near the requested slate game instead of rejecting both.
+const todayGame = [{ id: 37261, key: "CWS@TB", gameDate: "2026-07-31T23:10:00Z" }];
+const todayRow: PlaybookSplitGame = {
+  gameId: "pb-today",
+  awayTeamName: "Chicago White Sox",
+  homeTeamName: "Tampa Bay Rays",
+  startTime: "2026-07-31T23:11:00Z",
+};
+const tomorrowRow: PlaybookSplitGame = {
+  ...todayRow,
+  gameId: "pb-tomorrow",
+  startTime: "2026-08-01T20:11:00Z",
+};
+const repeatedDateMatch = matchPlaybookSplitsToSlateGames(
+  todayGame,
+  [tomorrowRow, todayRow],
+  "mlb",
+);
+assert.equal(repeatedDateMatch.get(37261)?.gameId, "pb-today");
+
+// Never attach tomorrow's row to today's game merely because it is the only
+// remaining provider row after today's event disappears from the feed.
+const wrongDateOnly = matchPlaybookSplitsToSlateGames(todayGame, [tomorrowRow], "mlb");
+assert.equal(wrongDateOnly.size, 0);
+
 console.log("mlb-doubleheader-public-splits: all assertions passed");
