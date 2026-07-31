@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { BATTER_HITS_PA_MODEL_VERSION } from "../lib/mlb/props/batterHitsPaModel";
 import { BATTER_HRR_MODEL_VERSION } from "../lib/mlb/props/batterHrrCountModel";
+import { BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION } from "../lib/mlb/props/batterHomeRunsResidualModel";
 import { MLB_PROP_MARKET_KEYS } from "../lib/mlb/props/config";
 import {
   activeMlbPropMarketModelVersions,
@@ -25,10 +26,10 @@ assert.equal(versions.pitcher_outs, "pitcher_outs_peer_consensus_compact_core_v4
 assert.equal(versions.pitcher_walks, "pitcher_walks_distribution_v1_conservative_over_market_only_calibrated");
 assert.equal(versions.pitcher_earned_runs, "pitcher_earned_runs_distribution_v2_watchlist_only");
 assert.equal(versions.batter_runs_scored, "batter_runs_context_opportunity_integrated_read_v4_unvalidated_special_promotion_removed");
-assert.equal(versions.batter_home_runs, "batter_home_runs_rare_event_integrated_read_v10_consensus_best_price_lean_path");
+assert.equal(versions.batter_home_runs, BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION);
 assert.equal(versions.batter_singles, "batter_singles_event_distribution_integrated_read_v5_under_lean_only");
 assert.equal(versions.batter_doubles, "batter_doubles_market_residual_v1_validated_under_best_angle");
-assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_07_30_r18");
+assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_07_31_r19");
 assert.match(MLB_PROPS_MODEL_RELEASE_ID, /^mlb_props_\d{4}_\d{2}_\d{2}_r\d+$/);
 assert.equal(modelForRealPitcherMarket("pitcher_strikeouts")?.modelName, "pitcher_strikeouts_distribution_v3_verified");
 assert.equal(modelForRealPitcherMarket("pitcher_outs")?.modelName, "pitcher_outs_peer_consensus_compact_core_v3_verified");
@@ -49,13 +50,17 @@ const realScoring = readFileSync(resolve(process.cwd(), "lib/mlb/props/realScori
 const hitsBranch = liveBoard.indexOf('args.definition.marketKey === "batter_hits"');
 const hrrBranch = liveBoard.indexOf('args.definition.marketKey === "batter_hits_runs_rbis"');
 const doublesBranch = liveBoard.indexOf('args.definition.marketKey === "batter_doubles"');
+const homeRunsBranch = liveBoard.indexOf('args.definition.marketKey === "batter_home_runs"');
 const legacyHitterMath = liveBoard.indexOf("const l5 = recent", hitsBranch);
 assert.ok(hitsBranch >= 0 && hitsBranch < legacyHitterMath, "Batter Hits must exit before legacy hitter math");
 assert.ok(hrrBranch >= 0 && hrrBranch < legacyHitterMath, "H+R+RBI must exit before legacy hitter math");
 assert.ok(doublesBranch >= 0 && doublesBranch < legacyHitterMath, "Batter Doubles must exit before legacy hitter math");
+assert.ok(homeRunsBranch >= 0 && homeRunsBranch < legacyHitterMath, "Batter Home Runs must exit before legacy hitter math");
 assert.ok(liveBoard.includes("projectBatterDoublesResidual"));
 assert.ok(liveBoard.includes("qualifiesBatterDoublesResidualPromotion"));
 assert.ok(liveBoard.includes("VALIDATED_DOUBLES_RESIDUAL_BEST_ANGLE"));
+assert.ok(liveBoard.includes("projectBatterHomeRunsResidual"));
+assert.ok(liveBoard.includes("HOME_RUN_MARKET_RESIDUAL_READ"));
 assert.ok(!liveBoard.includes("applyValidatedPremiumBestAngles"));
 assert.ok(!liveBoard.includes("VALIDATED_SINGLES_PREMIUM_BEST_ANGLE"));
 assert.ok(!liveBoard.includes("HOME_RUN_PROMOTION_DAILY_CAP"));

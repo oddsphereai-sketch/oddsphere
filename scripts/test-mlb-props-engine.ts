@@ -25,6 +25,7 @@ import { resolveMlbTeamAlias } from "../lib/mlb/props/mlbTeamAliases";
 import { evaluateRealPaperPersistenceGate, isPaperTradingMarketAllowed } from "../lib/mlb/props/paperTrading";
 import { allMlbPropMarketDefinitions, getMlbPropMarketDefinition } from "../lib/mlb/props/marketCatalog";
 import { calibratedPropModelWeight } from "../lib/mlb/props/probabilityCalibration";
+import { projectBatterHomeRunsResidual } from "../lib/mlb/props/batterHomeRunsResidualModel";
 import {
   consensusMarketProbabilityFromAmericanOdds,
   HOME_RUN_STANDARDIZED_QUALITY_POLICY,
@@ -144,6 +145,17 @@ async function main() {
       side: "under",
       baseWeight: 0.62,
     }), 0.5));
+  const homeRunResidual = projectBatterHomeRunsResidual({
+    marketOverProbability: 0.12,
+    line: 0.5,
+    home: true,
+    homeRunsLast20: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  });
+  check("home-run residual model returns coherent market-anchored probabilities",
+    homeRunResidual !== null
+    && homeRunResidual.overProbability > 0
+    && homeRunResidual.overProbability < 1
+    && approx(homeRunResidual.overProbability + homeRunResidual.underProbability, 1));
   const auditableHrProbability = projectAuditableCountOverProbability({
     projection: 0.2,
     line: 0.5,
