@@ -82,6 +82,10 @@ import {
   BATTER_HRR_MODEL_VERSION,
   projectBatterHrr,
 } from "./batterHrrCountModel";
+import {
+  BATTER_DOUBLES_RESIDUAL_MODEL_VERSION,
+  projectBatterDoublesResidual,
+} from "./batterDoublesResidualModel";
 import { shouldReplaceBestPriceRow } from "./bestPriceSelection";
 import {
   syncInternalMlbPropsTracking,
@@ -91,6 +95,7 @@ import { calibratedPropModelWeight } from "./probabilityCalibration";
 import {
   consensusMarketProbabilityFromAmericanOdds,
   HOME_RUN_STANDARDIZED_QUALITY_POLICY,
+  qualifiesBatterDoublesResidualPromotion,
   qualifiesHitsUnderPriceEdge,
   qualifiesValidatedUnderPromotion,
   scoreHomeRunRelativeQualityCandidate,
@@ -1176,6 +1181,15 @@ function applyValidatedUnderActionablePromotions(
         marketProbability: row.marketProbability,
         americanOdds: row.odds,
       });
+    const doublesResidual =
+      row.market === "batter_doubles"
+      && row.reasonCodes.includes("DOUBLES_MARKET_RESIDUAL_READ")
+      && qualifiesBatterDoublesResidualPromotion({
+        modelProbability: row.modelProbability,
+        marketProbability: row.marketProbability,
+        expectedValue: row.expectedValue,
+        americanOdds: row.odds,
+      });
     const genericEligible = qualifiesValidatedUnderPromotion({
       market: row.market,
       line: row.line,
@@ -1186,6 +1200,7 @@ function applyValidatedUnderActionablePromotions(
       americanOdds: row.odds,
     });
     if (hitsPriceEdge) return true;
+    if (doublesResidual) return true;
     return row.playGrade === "WATCHLIST" && genericEligible;
   });
 
@@ -1208,6 +1223,9 @@ function applyValidatedUnderActionablePromotions(
       ...row.reasonCodes,
       "VALIDATED_MARKET_PROMOTION",
       "VALIDATED_UNDER_BEST_ANGLE",
+      ...(row.market === "batter_doubles"
+        ? ["VALIDATED_DOUBLES_RESIDUAL_BEST_ANGLE"]
+        : []),
     ]),
   } : row);
 }
@@ -1382,6 +1400,9 @@ function buildIntegratedHitterSignal(args: {
   if (args.definition.marketKey === "batter_hits_runs_rbis") {
     return buildDedicatedBatterHrrSignal(args, logs);
   }
+  if (args.definition.marketKey === "batter_doubles") {
+    return buildDedicatedBatterDoublesResidualSignal(args);
+  }
 
   // Published snapshots intentionally keep only the ten display logs. The
   // sample summaries still contain the full-season aggregates, so fast
@@ -1494,6 +1515,58 @@ function buildIntegratedHitterSignal(args: {
     reasonCodes: uniqueStrings(reasons),
     projection,
     modelFamily: `${args.definition.modelFamily}_integrated_read_v1`,
+  };
+}
+
+function buildDedicatedBatterDoublesResidualSignal(
+  args: Parameters<typeof buildIntegratedHitterSignal>[0],
+): IntegratedPropSignal | null {
+  const features = args.research?.evidence.recentForm?.doublesResidualFeatures;
+  if (!features || features.doublesLast20.length < 10 || args.marketProbability === null) {
+    return null;
+  }
+  const marketOverProbability = args.mapped.odds.side === "over"
+    ? args.marketProbability
+    : 1 - args.marketProbability;
+  const residual = projectBatterDoublesResidual({
+    marketOverProbability,
+    plateAppearancesLast5: features.plateAppearancesLast5,
+    rbisLast5: features.rbisLast5,
+    rbisSeason: features.rbisSeason,
+    runsLast10: features.runsLast10,
+    walksLast20: features.walksLast20,
+    walksSeason: features.walksSeason,
+    doublesOverRateLast20: features.doublesLast20.filter(
+      (value) => value > args.mapped.odds.line,
+    ).length / features.doublesLast20.length,
+  });
+  if (!residual) return null;
+  const side = residual.overProbability >= residual.underProbability
+    ? "over"
+    : "under";
+  const modelProbability = side === "over"
+    ? residual.overProbability
+    : residual.underProbability;
+  return {
+    side,
+    modelProbability,
+    finalProbability: modelProbability,
+    shrinkageWeight: 1,
+    overModelProbability: residual.overProbability,
+    underModelProbability: residual.underProbability,
+    overFinalProbability: residual.overProbability,
+    underFinalProbability: residual.underProbability,
+    playGrade: "WATCHLIST",
+    confidence: 0.72,
+    reasonCodes: [
+      "HITTER_INTEGRATED_MODEL_READ",
+      "RECENT_FORM_EDGE",
+      "MARKET_PRIOR_SHRINKAGE",
+      "DOUBLES_MARKET_RESIDUAL_READ",
+      "RARE_OR_CONTEXT_HEAVY_MARKET_CAPPED",
+    ],
+    projection: args.projection,
+    modelFamily: BATTER_DOUBLES_RESIDUAL_MODEL_VERSION,
   };
 }
 
