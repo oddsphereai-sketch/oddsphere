@@ -86,6 +86,10 @@ import {
   BATTER_DOUBLES_RESIDUAL_MODEL_VERSION,
   projectBatterDoublesResidual,
 } from "./batterDoublesResidualModel";
+import {
+  BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION,
+  projectBatterHomeRunsResidual,
+} from "./batterHomeRunsResidualModel";
 import { shouldReplaceBestPriceRow } from "./bestPriceSelection";
 import {
   syncInternalMlbPropsTracking,
@@ -863,7 +867,7 @@ function buildDashboardRows(args: {
     const price = assessPropPrice(mapped.odds.americanOdds);
     if (!price.displayEligible) continue;
     const memberReady = Boolean(research?.memberReady);
-    const hitterSignal = buildIntegratedHitterSignal({ mapped, definition, research, lineupStatus, marketProbability, currentOdds: mapped.odds.americanOdds, projection });
+    const hitterSignal = buildIntegratedHitterSignal({ mapped, definition, research, lineupStatus, marketProbability, currentOdds: mapped.odds.americanOdds, projection, homeAway });
     const pitcherModelProjection = scoredPitcherSignal?.modelProjection ?? projection;
     const signal: IntegratedPropSignal | null = scoredPitcherSignal ? {
       side: scoredPitcherSignal.side,
@@ -1386,6 +1390,7 @@ function buildIntegratedHitterSignal(args: {
   marketProbability: number | null;
   currentOdds: number;
   projection: number;
+  homeAway: "home" | "away";
 }): IntegratedPropSignal | null {
   if (args.definition.family !== "batter") return null;
   if (!HITTER_LEAN_ELIGIBLE_MARKETS.has(args.definition.marketKey) && !HITTER_WATCHLIST_ONLY_MARKETS.has(args.definition.marketKey)) return null;
@@ -1402,6 +1407,9 @@ function buildIntegratedHitterSignal(args: {
   }
   if (args.definition.marketKey === "batter_doubles") {
     return buildDedicatedBatterDoublesResidualSignal(args);
+  }
+  if (args.definition.marketKey === "batter_home_runs") {
+    return buildDedicatedBatterHomeRunsResidualSignal(args);
   }
 
   // Published snapshots intentionally keep only the ten display logs. The
@@ -1515,6 +1523,53 @@ function buildIntegratedHitterSignal(args: {
     reasonCodes: uniqueStrings(reasons),
     projection,
     modelFamily: `${args.definition.modelFamily}_integrated_read_v1`,
+  };
+}
+
+function buildDedicatedBatterHomeRunsResidualSignal(
+  args: Parameters<typeof buildIntegratedHitterSignal>[0],
+): IntegratedPropSignal | null {
+  const seasonValues = args.research?.evidence.recentForm?.samples?.season.values
+    .filter((value) => Number.isFinite(value)) ?? [];
+  const priceProbability = assessPropPrice(args.currentOdds).impliedProbability;
+  const marketOverProbability = args.marketProbability === null
+    ? priceProbability
+    : args.mapped.odds.side === "over"
+      ? args.marketProbability
+      : 1 - args.marketProbability;
+  if (marketOverProbability === null || seasonValues.length < 10) return null;
+  const residual = projectBatterHomeRunsResidual({
+    marketOverProbability,
+    line: args.mapped.odds.line,
+    home: args.homeAway === "home",
+    homeRunsLast20: seasonValues.slice(0, 20),
+  });
+  if (!residual) return null;
+  const seasonMean = averageNumber(seasonValues);
+  const projection = (
+    seasonMean * seasonValues.length
+    + HOME_RUN_PROJECTION_PRIOR * HOME_RUN_PROJECTION_PRIOR_GAMES
+  ) / (seasonValues.length + HOME_RUN_PROJECTION_PRIOR_GAMES);
+  return {
+    side: "over",
+    modelProbability: residual.overProbability,
+    finalProbability: residual.overProbability,
+    shrinkageWeight: 1,
+    overModelProbability: residual.overProbability,
+    underModelProbability: residual.underProbability,
+    overFinalProbability: residual.overProbability,
+    underFinalProbability: residual.underProbability,
+    playGrade: "WATCHLIST",
+    confidence: 0.74,
+    reasonCodes: [
+      "HITTER_INTEGRATED_MODEL_READ",
+      "RECENT_FORM_EDGE",
+      "MARKET_PRIOR_SHRINKAGE",
+      "HOME_RUN_MARKET_RESIDUAL_READ",
+      "RARE_OR_CONTEXT_HEAVY_MARKET_CAPPED",
+    ],
+    projection: round(projection, 3),
+    modelFamily: BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION,
   };
 }
 
