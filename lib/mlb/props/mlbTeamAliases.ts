@@ -7,7 +7,7 @@ export type MlbTeamAlias = {
 
 const TEAM_ALIASES: MlbTeamAlias[] = [
   team("ari", "ARI", "Arizona Diamondbacks", ["arizona", "diamondbacks", "dbacks", "d backs", "az"]),
-  team("ath", "ATH", "Athletics", ["athletics", "oakland athletics", "a's", "as", "oakland", "sacramento athletics"]),
+  team("ath", "ATH", "Athletics", ["athletics", "oakland athletics", "a's", "as", "oak", "oakland", "sacramento athletics"]),
   team("atl", "ATL", "Atlanta Braves", ["atlanta", "braves"]),
   team("bal", "BAL", "Baltimore Orioles", ["baltimore", "orioles", "os", "o's"]),
   team("bos", "BOS", "Boston Red Sox", ["boston", "red sox", "redsox"]),
