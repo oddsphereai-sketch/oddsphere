@@ -66,6 +66,8 @@ function providerStartMs(row: PlaybookSplitGame): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
+const PLAYBOOK_GAME_TIME_TOLERANCE_MS = 6 * 60 * 60 * 1000;
+
 /**
  * Assign Playbook rows one-to-one. A matchup-only map is unsafe for a
  * doubleheader: its second row overwrites the first and then gets copied to
@@ -95,24 +97,41 @@ export function matchPlaybookSplitsToSlateGames(
   const matched = new Map<number, PlaybookSplitGame>();
   for (const [key, slateGames] of gamesByKey) {
     const providerRows = rowsByKey.get(key) ?? [];
-    if (slateGames.length === 1 && providerRows.length === 1) {
+    const slateTimes = slateGames
+      .map((game) => game.gameDate ? Date.parse(game.gameDate) : NaN)
+      .filter(Number.isFinite);
+    const timedProviderRows = providerRows
+      .map((row) => ({ row, ms: providerStartMs(row) }))
+      .filter((entry): entry is { row: PlaybookSplitGame; ms: number } => entry.ms !== null);
+    const compatibleProviderRows = slateTimes.length === slateGames.length
+      ? timedProviderRows.filter((entry) => slateTimes.some((gameMs) => (
+        Math.abs(gameMs - entry.ms) <= PLAYBOOK_GAME_TIME_TOLERANCE_MS
+      )))
+      : timedProviderRows;
+
+    if (slateGames.length === 1 && compatibleProviderRows.length === 1) {
+      matched.set(slateGames[0]!.id, compatibleProviderRows[0]!.row);
+      continue;
+    }
+    // A single untimed provider row is usable only when there is no competing
+    // row for the same matchup. With repeated dates or a doubleheader, missing
+    // time evidence is ambiguous and must fail closed.
+    if (slateGames.length === 1 && providerRows.length === 1 && timedProviderRows.length === 0) {
       matched.set(slateGames[0]!.id, providerRows[0]!);
       continue;
     }
-    if (slateGames.length !== providerRows.length || slateGames.length === 0) continue;
+    if (slateGames.length !== compatibleProviderRows.length || slateGames.length === 0) continue;
     const orderedGames = slateGames
       .map((game) => ({ game, ms: game.gameDate ? Date.parse(game.gameDate) : NaN }))
       .filter((x) => Number.isFinite(x.ms))
       .sort((a, b) => a.ms - b.ms);
-    const orderedRows = providerRows
-      .map((row) => ({ row, ms: providerStartMs(row) }))
-      .filter((x): x is { row: PlaybookSplitGame; ms: number } => x.ms !== null)
+    const orderedRows = compatibleProviderRows
       .sort((a, b) => a.ms - b.ms);
-    if (orderedGames.length !== slateGames.length || orderedRows.length !== providerRows.length) continue;
+    if (orderedGames.length !== slateGames.length || orderedRows.length !== compatibleProviderRows.length) continue;
     for (let i = 0; i < orderedGames.length; i++) {
       // Six hours permits ordinary provider clock drift while preventing a
       // morning/evening doubleheader row from crossing to the other game.
-      if (Math.abs(orderedGames[i]!.ms - orderedRows[i]!.ms) > 6 * 60 * 60 * 1000) continue;
+      if (Math.abs(orderedGames[i]!.ms - orderedRows[i]!.ms) > PLAYBOOK_GAME_TIME_TOLERANCE_MS) continue;
       matched.set(orderedGames[i]!.game.id, orderedRows[i]!.row);
     }
   }
