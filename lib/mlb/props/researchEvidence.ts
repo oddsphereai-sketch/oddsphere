@@ -15,6 +15,15 @@ export type PlayerPropRecentForm = {
     last10: PlayerPropRecentFormSample;
     season: PlayerPropRecentFormSample;
   };
+  doublesResidualFeatures?: {
+    plateAppearancesLast5: number;
+    rbisLast5: number;
+    rbisSeason: number;
+    runsLast10: number;
+    walksLast20: number;
+    walksSeason: number;
+    doublesLast20: number[];
+  };
   logs: Array<{
     gameId: string;
     date: string;
@@ -222,13 +231,16 @@ export function buildPlayerPropRecentForm(args: {
   const descriptor = PITCHER_LOG_MARKETS[args.marketKey];
   if (!descriptor) return null;
   const asOf = new Date(args.asOfTimestamp).getTime();
-  const logs = args.logs
+  const priorLogs = args.logs
     .filter((row) => new Date(row.asOfTimestamp ?? `${row.gameDate}T23:59:59.999Z`).getTime() < asOf)
+    .sort((a, b) => b.gameDate.localeCompare(a.gameDate));
+  const sourceLogs = priorLogs
     .filter((row) => {
       if (!BATTER_MARKETS_REQUIRING_PLATE_APPEARANCE.has(args.marketKey)) return true;
       const plateAppearances = row.stats.plate_appearances;
       return typeof plateAppearances !== "number" || plateAppearances > 0;
-    })
+    });
+  const logs = sourceLogs
     .map((row) => {
       const value = row.stats[descriptor.statKey];
       if (typeof value !== "number" || !Number.isFinite(value)) return null;
@@ -247,8 +259,7 @@ export function buildPlayerPropRecentForm(args: {
         secondaryLabel: buildSecondaryLabel(row, descriptor),
       } satisfies PlayerPropRecentForm["logs"][number];
     })
-    .filter((row): row is NonNullable<typeof row> => row !== null)
-    .sort((a, b) => b.date.localeCompare(a.date));
+    .filter((row): row is NonNullable<typeof row> => row !== null);
   if (!logs.length) return null;
   return {
     statLabel: descriptor.statLabel,
@@ -261,8 +272,38 @@ export function buildPlayerPropRecentForm(args: {
       last10: recentFormSample(logs.slice(0, 10).map((row) => row.value)),
       season: recentFormSample(logs.map((row) => row.value)),
     },
+    doublesResidualFeatures: args.marketKey === "batter_doubles"
+      ? buildDoublesResidualFeatures(priorLogs)
+      : undefined,
     logs,
   };
+}
+
+function buildDoublesResidualFeatures(
+  logs: MlbHistoricalStatRow[],
+): NonNullable<PlayerPropRecentForm["doublesResidualFeatures"]> {
+  return {
+    plateAppearancesLast5: statAverage(logs.slice(0, 5), "plate_appearances"),
+    rbisLast5: statAverage(logs.slice(0, 5), "rbis"),
+    rbisSeason: statAverage(logs, "rbis"),
+    runsLast10: statAverage(logs.slice(0, 10), "runs"),
+    walksLast20: statAverage(logs.slice(0, 20), "walks"),
+    walksSeason: statAverage(logs, "walks"),
+    doublesLast20: logs.slice(0, 20)
+      .map((row) => row.stats.doubles)
+      .filter((value): value is number =>
+        typeof value === "number" && Number.isFinite(value)),
+  };
+}
+
+function statAverage(logs: MlbHistoricalStatRow[], key: string): number {
+  const values = logs
+    .map((row) => row.stats[key])
+    .filter((value): value is number =>
+      typeof value === "number" && Number.isFinite(value));
+  return values.length
+    ? values.reduce((sum, value) => sum + value, 0) / values.length
+    : 0;
 }
 
 function recentFormSample(values: number[]): PlayerPropRecentFormSample {

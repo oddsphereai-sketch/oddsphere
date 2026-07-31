@@ -1,7 +1,7 @@
 import { assessPropPrice } from "./pricePolicy";
 
 export const MLB_PROPS_RECOVERY_POLICY_VERSION =
-  "mlb_props_actionability_recovery_v4_2026_07_28";
+  "mlb_props_actionability_recovery_v5_2026_07_30";
 
 export const HITS_UNDER_PRICE_EDGE_POLICY = {
   minimumMarketProbability: 0.4,
@@ -34,6 +34,13 @@ export const VALIDATED_UNDER_PROMOTION_POLICIES = {
     minimumFinalEdge: 0.02,
     minimumExpectedValue: 0.01,
   },
+} as const;
+
+export const BATTER_DOUBLES_RESIDUAL_PROMOTION_POLICY = {
+  minimumModelProbability: 0.52,
+  minimumEdge: 0.005,
+  minimumExpectedValue: 0.005,
+  minimumDecimalOdds: 1.25,
 } as const;
 
 export type HomeRunRelativeQualityScore = {
@@ -155,6 +162,25 @@ export function qualifiesValidatedUnderPromotion(args: {
     && args.modelProbability - args.marketProbability >= policy.minimumRawEdge
     && args.finalEdge >= policy.minimumFinalEdge
     && args.expectedValue >= policy.minimumExpectedValue
+    && assessPropPrice(args.americanOdds).signalEligible;
+}
+
+export function qualifiesBatterDoublesResidualPromotion(args: {
+  modelProbability: number;
+  marketProbability: number;
+  expectedValue: number;
+  americanOdds: number;
+}): boolean {
+  const decimalOdds = args.americanOdds > 0
+    ? 1 + args.americanOdds / 100
+    : 1 + 100 / Math.abs(args.americanOdds);
+  return args.modelProbability
+      >= BATTER_DOUBLES_RESIDUAL_PROMOTION_POLICY.minimumModelProbability
+    && args.modelProbability - args.marketProbability
+      >= BATTER_DOUBLES_RESIDUAL_PROMOTION_POLICY.minimumEdge
+    && args.expectedValue
+      >= BATTER_DOUBLES_RESIDUAL_PROMOTION_POLICY.minimumExpectedValue
+    && decimalOdds >= BATTER_DOUBLES_RESIDUAL_PROMOTION_POLICY.minimumDecimalOdds
     && assessPropPrice(args.americanOdds).signalEligible;
 }
 
