@@ -80,6 +80,21 @@ check("SEA@WSH has all 3 rows", sea.length, 3);
 check("SEA Bullpen away formats normally", rowFor(sea, "Bullpen quality")?.awayValue, "20% better than league avg");
 check("SEA Bullpen home formats normally", rowFor(sea, "Bullpen quality")?.homeValue, "league average");
 
+const rookie = formatKeyStats(
+  {
+    away_starter_era: null,
+    home_starter_era: 4.51,
+    away_bullpen_factor: 1.01,
+    home_bullpen_factor: 1,
+  },
+  "moneyline",
+);
+check(
+  "mapped starter with no MLB ERA shows an explicit no-record state",
+  rowFor(rookie, "Starter ERA")?.awayValue,
+  "No MLB ERA on file",
+);
+
 // ── Bullpen genuinely absent (both raw null) → row omitted, no fake — ─
 const noBp = formatKeyStats(
   {

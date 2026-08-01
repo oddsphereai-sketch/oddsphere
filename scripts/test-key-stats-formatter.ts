@@ -257,6 +257,18 @@ console.log("━━━ Missing data drops rows ━━━");
   const rows = formatKeyStats(partial, "moneyline");
   check("2 rows available → returns both (not 3)", rows.length === 2);
 }
+{
+  const rookieStarter = {
+    home_starter_era: 4.51,
+    away_starter_era: null,
+    home_bullpen_factor: 1,
+    away_bullpen_factor: 1.01,
+  };
+  const rows = formatKeyStats(rookieStarter, "moneyline");
+  const starterEra = rows.find((row) => row.label === "Starter ERA");
+  check("mapped starter without an MLB record is explicit", starterEra?.awayValue === "No MLB ERA on file");
+  check("opposing starter ERA remains intact", starterEra?.homeValue === "4.51");
+}
 
 console.log();
 console.log("━━━ Null/undefined auto_factors ━━━");
