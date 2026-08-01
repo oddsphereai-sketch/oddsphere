@@ -3055,12 +3055,12 @@ function MarketNotes({
                     <div className="space-y-0">
                       <TeamStatRow
                         abbr={awayAbbr}
-                        value={s.awayValue ?? "—"}
+                        value={s.awayValue ?? (s.label === "Starter ERA" ? "No MLB ERA on file" : "—")}
                         highlight={interp.winner === "away"}
                       />
                       <TeamStatRow
                         abbr={homeAbbr}
-                        value={s.homeValue ?? "—"}
+                        value={s.homeValue ?? (s.label === "Starter ERA" ? "No MLB ERA on file" : "—")}
                         highlight={interp.winner === "home"}
                       />
                     </div>

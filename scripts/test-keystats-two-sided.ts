@@ -130,6 +130,11 @@ check(
   shellSrc.includes("keyStatIsTwoSided(label, awayValue, homeValue)"),
   true,
 );
+check(
+  "shell explains a null MLB starter ERA in an already-published snapshot",
+  shellSrc.includes('s.label === "Starter ERA" ? "No MLB ERA on file" : "—"'),
+  true,
+);
 
 if (failures > 0) {
   console.error(`\n${failures} assertion(s) failed.`);
