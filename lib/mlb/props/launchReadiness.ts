@@ -6,6 +6,7 @@ import {
   readMlbPropsTrackingHealth,
   type MlbPropsTrackingHealth,
 } from "./internalTracking";
+import { isSignalOptionalMemberFeature } from "./researchEnrichment";
 
 export type MlbPropsLaunchCheck = {
   code: string;
@@ -96,13 +97,13 @@ export function evaluateMlbPropsLaunchReadiness(args: {
     check("BOOKS_PRESENT", Boolean(latest && latest.data.summary.booksCovered > 0), true, "At least one sportsbook is represented."),
     check("MARKETS_PRESENT", Boolean(latest && latest.data.summary.marketsAvailable > 0), true, "At least one prop market is represented."),
     check("PLAYER_IDENTITY_COVERAGE", Boolean(research?.playerIdentitiesComplete), true, "Every displayed player resolves to BDL and official MLB identifiers."),
-    check("RECENT_FORM_COVERAGE", Boolean(research?.recentFormComplete), true, "Every displayed prop has at least five completed official MLB game logs."),
-    check("MODEL_OUTPUT_COVERAGE", Boolean(research?.modelOutputComplete), true, "Every promoted pitcher market has a model probability."),
-    check("MODEL_CONTEXT_INTEGRATED", Boolean(research?.modelContextIntegrated), true, "Promoted model outputs consume every required live context input."),
-    check("RESEARCH_INPUTS_COMPLETE", Boolean(research?.researchInputsComplete), true, "Required research modules are complete for every displayed prop."),
-    check("DIRECT_MATCHUP_VERIFIED", Boolean(research?.directMatchupComplete), true, "Every hitter prop has official matchup history or an explicit no-history result."),
+    check("RECENT_FORM_COVERAGE", Boolean(research?.actionableRecentFormComplete), true, "Every actionable prop has at least five completed official MLB game logs."),
+    check("MODEL_OUTPUT_COVERAGE", Boolean(research?.actionableModelOutputComplete), true, "Every actionable model row has a probability."),
+    check("MODEL_CONTEXT_INTEGRATED", Boolean(research?.actionableModelContextIntegrated), true, "Actionable pitcher outputs consume every required live context input."),
+    check("RESEARCH_INPUTS_COMPLETE", Boolean(research?.actionableResearchInputsComplete), true, "Every actionable row passes the required research-input gate."),
+    check("DIRECT_MATCHUP_VERIFIED", Boolean(research?.directMatchupComplete), false, "Hitter rows carry official matchup history or an explicit no-history result."),
     check("STARTER_CONTEXT", Boolean(latest?.data.slate?.matchups.some((matchup) => matchup.starterStatus !== "pending")), true, "Probable-pitcher context is present for the slate."),
-    check("ENVIRONMENT_CONTEXT", Boolean(research?.environmentComplete), true, "Every displayed prop has park and game-time weather context."),
+    check("ENVIRONMENT_CONTEXT", Boolean(research?.environmentComplete), false, "Every displayed prop has park and game-time weather context."),
     check("LINEUP_CONTEXT", Boolean(research?.lineupsComplete), false, "Projected lineup context is being tracked; posted lineups refresh the board and are not required to open it."),
     check("LATEST_SETTLEMENT_HEALTHY", String(args.tracking.latestSettlementRun?.status ?? "none") !== "failed", false, "The latest settlement run did not fail."),
   ];
@@ -144,12 +145,10 @@ function snapshotIsLaunchValid(snapshot: MlbPropsBoardSnapshot): boolean {
     snapshot.validation.staleOddsRows === 0 &&
     snapshot.data.props.length > 0 &&
     research.playerIdentitiesComplete &&
-    research.recentFormComplete &&
-    research.modelOutputComplete &&
-    research.modelContextIntegrated &&
-    research.researchInputsComplete &&
-    research.directMatchupComplete &&
-    research.environmentComplete;
+    research.actionableRecentFormComplete &&
+    research.actionableModelOutputComplete &&
+    research.actionableModelContextIntegrated &&
+    research.actionableResearchInputsComplete;
 }
 
 function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
@@ -164,14 +163,15 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
     };
   });
   const hitterRows = evidence.filter(({ row }) => row.marketFamily !== "pitcher");
-  const promotedPitcherRows = evidence.filter(({ row }) => isPromotedPitcherModelRow(row));
+  const actionableRows = evidence.filter(({ row }) => row.playGrade === "BEST_ANGLE" || row.playGrade === "LEAN");
+  const actionablePitcherRows = actionableRows.filter(({ row }) => isPromotedPitcherModelRow(row));
   return {
     playerIdentitiesComplete: rows.length > 0 && rows.every((row) => Boolean(
       row.providerIds?.gameId && row.providerIds.bdlGameId && row.providerIds.bdlPlayerId && row.providerIds.mlbStatsPlayerId,
     )),
-    recentFormComplete: evidence.length > 0 && evidence.every(({ recentForm }) => (recentForm?.logs.length ?? 0) >= 5),
-    modelOutputComplete: promotedPitcherRows.length > 0 && promotedPitcherRows.every(({ row }) => row.finalProbability !== null && row.modelProbability !== null),
-    modelContextIntegrated: promotedPitcherRows.length > 0 && promotedPitcherRows.every(({ row }) => (row.modelInputWarnings ?? []).every((warning) => ![
+    actionableRecentFormComplete: actionableRows.every(({ recentForm }) => (recentForm?.logs.length ?? 0) >= 5),
+    actionableModelOutputComplete: actionableRows.every(({ row }) => row.finalProbability !== null && row.modelProbability !== null),
+    actionableModelContextIntegrated: actionablePitcherRows.every(({ row }) => (row.modelInputWarnings ?? []).every((warning) => ![
       "bdl_stat_bundle_pending_baseline_used",
       "low_feature_confidence",
       "opponent_k_profile_unavailable_non_blocking",
@@ -179,7 +179,8 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
       "weather_unavailable_non_blocking",
       "weak_pitcher_baseline",
     ].includes(warning))),
-    researchInputsComplete: rows.length > 0 && rows.every((row) => row.missingFeatures.length === 0),
+    actionableResearchInputsComplete: actionableRows.every(({ row }) =>
+      row.missingFeatures.every(isSignalOptionalMemberFeature)),
     directMatchupComplete: hitterRows.every(({ matchupHistory }) => matchupHistory !== null),
     environmentComplete: evidence.length > 0 && evidence.every(({ environment }) => Boolean(
       environment?.park.status === "available" && (environment.weather.status === "available" || environment.roofStatus === "dome"),

@@ -372,10 +372,15 @@ check(
 
 const vercelSource = readFileSync("vercel.json", "utf8");
 check(
-  "AI shadow completes well before the full props build",
+  "AI shadow completes well before the first full props build",
   vercelSource.includes('"45 8 * * *"') &&
-    vercelSource.includes('"27 9 * * *"') &&
+    vercelSource.includes('"27 9,13,17,21 * * *"') &&
     !vercelSource.includes('"22 9 * * *"'),
+);
+check(
+  "full props rebuilds stay bounded to four staggered runs per day",
+  vercelSource.includes('"27 9,13,17,21 * * *"') &&
+    !vercelSource.includes('"27 * * * *"'),
 );
 check(
   "WNBA refreshes are offset from five-minute MLB lock sweeps",

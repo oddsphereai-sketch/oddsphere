@@ -43,6 +43,7 @@ import {
 import { BallDontLieResearchClient, type BdlResearchPlayer } from "./ballDontLieResearch";
 import {
   enrichPlayerPropResearchRows,
+  isSignalOptionalMemberFeature,
   isSignalOptionalResearchModule,
   type PlayerPropResearchEnrichment,
 } from "./researchEnrichment";
@@ -2180,11 +2181,6 @@ export function validateMlbPropsBoardData(args: {
     errors,
     warnings,
   };
-}
-
-function isSignalOptionalMemberFeature(feature: string): boolean {
-  const normalized = feature.trim().toLowerCase().replaceAll("_", " ");
-  return normalized === "park factor" || normalized === "game time weather";
 }
 
 export function compareMlbPropsBoardMovement(

@@ -95,6 +95,11 @@ export function isSignalOptionalResearchModule(module: PlayerPropResearchModule)
   return SIGNAL_OPTIONAL_RESEARCH_MODULES.has(module);
 }
 
+export function isSignalOptionalMemberFeature(feature: string): boolean {
+  const normalized = feature.trim().toLowerCase().replaceAll("_", " ");
+  return normalized === "park factor" || normalized === "game time weather";
+}
+
 const ALL_RESEARCH_MODULES: PlayerPropResearchModule[] = [
   "player_identity",
   "recent_form",

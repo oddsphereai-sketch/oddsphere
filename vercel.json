@@ -50,6 +50,10 @@
       "schedule": "35 8 * * *"
     },
     {
+      "path": "/api/cron/daily-edge-data-health?repair=false",
+      "schedule": "35 0,2,10,12,14,16,18,20,22 * * *"
+    },
+    {
       "path": "/api/cron/ai-daily-edge-shadow?sport=mlb&markets=ML,TOTAL",
       "schedule": "45 8 * * *"
     },
@@ -75,7 +79,7 @@
     },
     {
       "path": "/api/cron/mlb-player-props-refresh?full=true",
-      "schedule": "27 9 * * *"
+      "schedule": "27 9,13,17,21 * * *"
     },
     {
       "path": "/api/cron/mlb-player-props-settlement",

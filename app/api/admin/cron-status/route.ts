@@ -44,7 +44,7 @@ const CRON_CONFIGS: CronCfg[] = [
   { data_source: "evening_refresh",     per_sport: true,  cadence_minutes: 1440,  display_name: "Evening refresh",        schedule: "7pm ET daily" },
   { data_source: "lineup_watch",        per_sport: true,  cadence_minutes: 30,    display_name: "Lineup watch",           schedule: "Every 30m · 6–10pm ET" },
   { data_source: "pregame_sweep",       per_sport: true,  cadence_minutes: 15,    display_name: "Pre-game sweep",         schedule: "Every 15m · final 90m" },
-  { data_source: "daily_edge_data_health", per_sport: true, cadence_minutes: 1440, display_name: "Daily Edge data health", schedule: "08:35 UTC daily · evidence/package monitor" },
+  { data_source: "daily_edge_data_health", per_sport: true, cadence_minutes: 120, display_name: "Daily Edge data health", schedule: "Every 2hrs in active windows · one daily repair + audit-only follow-ups" },
   { data_source: "post_game_results",   per_sport: false, cadence_minutes: 1440,  display_name: "Post-game results",      schedule: "1am ET daily" },
   { data_source: "weekly_park_factors", per_sport: false, cadence_minutes: 10080, display_name: "Weekly park factors",    schedule: "Mondays · 4am ET" },
   { data_source: "weekly_calibration",  per_sport: false, cadence_minutes: 10080, display_name: "Weekly calibration",     schedule: "Sundays · 3am ET" },
