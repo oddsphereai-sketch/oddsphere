@@ -688,6 +688,12 @@ export type DailyEdgeGameDto = {
   homeTeamLogo: string | null;
   /** Display string in ET (e.g., "7:10 PM"). */
   gameTime: string;
+  /**
+   * Canonical ISO 8601 start timestamp. Client surfaces use this to render
+   * game time in the member's browser timezone without changing locks,
+   * ordering, or the official slate date. Optional for legacy snapshots.
+   */
+  gameStartAt?: string | null;
   /** Minutes-from-midnight-ET for sort stability. */
   gameStartMinutes: number;
   /**

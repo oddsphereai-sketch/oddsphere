@@ -2573,6 +2573,7 @@ function buildGameDto(
     homeTeam: home,
     homeTeamLogo: homeLogo,
     gameTime: formatTimeET(row.game_date),
+    gameStartAt: row.game_date,
     gameStartMinutes: minutesFromMidnightET(row.game_date),
     // Phase 4.2.B — actual lock-time ISO + per-game lock state from
     // game_predictions.locked_at. Pre-4.2.B these were placeholders.

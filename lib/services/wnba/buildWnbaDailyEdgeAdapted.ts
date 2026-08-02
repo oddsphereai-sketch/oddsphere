@@ -1285,6 +1285,7 @@ function adaptGame(
     homeTeam: homeAbbr,
     homeTeamLogo: wnbaLogoUrl(homeAbbr),
     gameTime: tipDisplayEt(game.start_time),
+    gameStartAt: game.start_time,
     gameStartMinutes: 0,
     scheduledLockAt: game.start_time,
     lockState: game.lockedAt ? "locked" : "open",

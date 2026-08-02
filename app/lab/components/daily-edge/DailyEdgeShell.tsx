@@ -52,6 +52,11 @@ import { isContextOnlyDisplayMarket } from "@/lib/config/officialTrackingMarkets
 import { TWO_SIDED_KEY_STAT_LABELS, keyStatIsTwoSided } from "@/lib/services/keyStatsFormatter";
 import { teamPrimaryColor } from "./teamColors";
 import { LockBadge } from "./LockBadge";
+import {
+  LocalTime,
+  formatZonedDateTime,
+  useUserTimeZone,
+} from "../UserTimeZone";
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -2550,7 +2555,7 @@ function SplitSection({ section }: { section: NonNullable<MarketDecision["consen
       <div className="flex items-center justify-between gap-2">
         <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-gray-300">{section.label}</p>
         {section.lastUpdated ? (
-          <p className="text-[9px] text-gray-500">{formatStaleStamp(section.lastUpdated) ?? ""}</p>
+          <p className="text-[9px] text-gray-500">Last updated <LocalTime value={section.lastUpdated} /></p>
         ) : null}
       </div>
       {section.rows.length > 0 ? (
@@ -2584,22 +2589,6 @@ function SplitSection({ section }: { section: NonNullable<MarketDecision["consen
  * timestamp — i.e. the value was hydrated from history because the
  * latest provider refresh dropped it. Fresh data has no annotation.
  */
-function formatStaleStamp(observedAt: string | null): string | null {
-  if (observedAt === null) return null;
-  try {
-    const d = new Date(observedAt);
-    if (!Number.isFinite(d.getTime())) return null;
-    const t = d.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: "America/New_York",
-    });
-    return `Last updated ${t}`;
-  } catch {
-    return null;
-  }
-}
-
 function SideSplitsBlock({
   label,
   moneyPct,
@@ -2615,7 +2604,7 @@ function SideSplitsBlock({
   /** Phase 7I — true when observedAt is older than 15 min. */
   isStale?: boolean;
 }) {
-  const stamp = isStale === true ? formatStaleStamp(observedAt ?? null) : null;
+  const showStaleStamp = isStale === true && observedAt != null;
   return (
     <div className="space-y-1">
       <p className="text-[10.5px] uppercase tracking-[0.14em] font-bold text-gray-300">{label}</p>
@@ -2637,9 +2626,9 @@ function SideSplitsBlock({
           <span />
         </div>
       )}
-      {stamp !== null && (
+      {showStaleStamp && (
         <p className="text-[9px] tracking-[0.06em] text-gray-500/85 italic pl-[42px]">
-          {stamp}
+          Last updated <LocalTime value={observedAt} />
         </p>
       )}
     </div>
@@ -4741,8 +4730,15 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   // Desktop reader element — used to smooth-scroll the reader back into view
   // when the user picks a game from the board below (no more scroll-up loop).
   const readerRef = useRef<HTMLDivElement>(null);
+  const userTimeZone = useUserTimeZone();
 
-  const games = data?.games ?? [];
+  const games = useMemo(
+    () => (data?.games ?? []).map((game) => {
+      const localGameTime = formatZonedDateTime(game.gameStartAt, userTimeZone);
+      return localGameTime ? { ...game, gameTime: localGameTime } : game;
+    }),
+    [data?.games, userTimeZone],
+  );
   const verdictCounts = useMemo(() => computeVerdictCounts(games), [games]);
   const filteredGames = useMemo(
     () =>
