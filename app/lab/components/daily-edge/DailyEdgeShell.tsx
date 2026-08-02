@@ -4734,7 +4734,14 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
 
   const games = useMemo(
     () => (data?.games ?? []).map((game) => {
-      const localGameTime = formatZonedDateTime(game.gameStartAt, userTimeZone);
+      // Existing published snapshots predate gameStartAt. scheduledLockAt is
+      // the same canonical game-start instant for those snapshots, so using
+      // it as a fallback localizes the already-live slate immediately instead
+      // of waiting for the next writer cycle.
+      const localGameTime = formatZonedDateTime(
+        game.gameStartAt ?? game.scheduledLockAt,
+        userTimeZone,
+      );
       return localGameTime ? { ...game, gameTime: localGameTime } : game;
     }),
     [data?.games, userTimeZone],

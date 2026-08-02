@@ -36,10 +36,15 @@ check("invalid timezones fail safely", formatZonedDateTime(summerGame, "Not/AZon
 check("missing timestamps fail safely", formatZonedDateTime(null, "America/Chicago") === null);
 
 const dailyEdgeRoute = readFileSync("app/api/lab/daily-edge/route.ts", "utf8");
+const dailyEdgeUi = readFileSync("app/lab/components/daily-edge/DailyEdgeShell.tsx", "utf8");
 const propsUi = readFileSync("app/mlb/props/components/PlayerPropsDashboard.tsx", "utf8");
 const provider = readFileSync("app/lab/components/UserTimeZone.tsx", "utf8");
 
 check("Daily Edge publishes the canonical game timestamp", dailyEdgeRoute.includes("gameStartAt: row.game_date"));
+check(
+  "Daily Edge localizes legacy cached snapshots from their existing lock timestamp",
+  dailyEdgeUi.includes("game.gameStartAt ?? game.scheduledLockAt"),
+);
 check("Player Props uses shared local-time rendering", propsUi.includes("<LocalTime") && propsUi.includes("hourInZone(row.gameStartTime, userTimeZone)"));
 check("timezone detection runs after hydration", provider.includes("useSyncExternalStore(") && provider.includes("resolvedOptions().timeZone"));
 check("server fallback is deterministic", provider.includes("serverTimeZone") && provider.includes("return DEFAULT_DISPLAY_TIME_ZONE"));
