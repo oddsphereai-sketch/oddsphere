@@ -28,6 +28,7 @@ import {
   EXPECTED_WNBA_DISTRIBUTION_VERSION,
   EXPECTED_WNBA_MODEL_VERSION,
 } from "../../automodel/wnbaChampionRuntime";
+import { resolveWnbaMoneylineSide } from "./wnbaTeams";
 
 const PLAY_GRADE: Record<string, string> = { "Best Angle": "best_angle", "Lean": "lean", "Watchlist": "watchlist", "Caution": "caution" };
 const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]! : null);
@@ -204,7 +205,14 @@ export async function buildWnbaPredictionRecords(opts: {
     const trusted = ss.trusted as { home_win_prob: number | null };
     const dq = ss.data_quality as { flags: string[]; ml_books: number };
     const homeName = tById.get(g.home_team_id as number)?.name as string;
-    const mlSideHome = ml.side === homeName;
+    const homeAbbr = ab(g.home_team_id as number);
+    const awayAbbr = ab(g.away_team_id as number);
+    const mlSelection = resolveWnbaMoneylineSide(ml.side, homeAbbr, awayAbbr);
+    if (mlSelection === null) {
+      result.withheld.push({ matchup, slate, reason: `unresolved ML team identity (${ml.side}) — withheld` });
+      continue;
+    }
+    const mlSideHome = mlSelection === "home";
     const mlPrice = ml.price ?? priceAt(g.id as number, "moneyline", mlSideHome ? "home" : "away", null);
 
     // ML must have side + price to be eligible.
@@ -292,8 +300,6 @@ export async function buildWnbaPredictionRecords(opts: {
 
     // ── Spread record (if available) — first-class market='spread' ──
     if (spr.side && spr.line != null) {
-      const homeAbbr = ab(g.home_team_id as number);
-      const awayAbbr = ab(g.away_team_id as number);
       const awayName = tById.get(g.away_team_id as number)?.name as string;
       const sprSideHome = spr.side.startsWith(homeName) || spr.side.startsWith(homeAbbr);
       const sprSideAway = spr.side.startsWith(awayName) || spr.side.startsWith(awayAbbr);

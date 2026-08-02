@@ -116,12 +116,15 @@ check("champion runtime accepts resolved defaults", (() => {
 check("champion runtime refuses an explicit old model", (() => {
   try { assertMlbChampionRuntime({ AUTOMODEL_VERSION: "v1" }); return false; } catch { return true; }
 })());
-check("WNBA model family is single-sourced", EXPECTED_WNBA_MODEL_VERSION === "wnba_v1");
+check("WNBA model family is single-sourced", EXPECTED_WNBA_MODEL_VERSION === "wnba_v1_1_team_identity");
 check(
   "WNBA distribution version is explicit",
-  EXPECTED_WNBA_DISTRIBUTION_VERSION === "wnba_market_heads_value_calibrated_2026_07_22_v2",
+  EXPECTED_WNBA_DISTRIBUTION_VERSION === "wnba_market_heads_value_calibrated_2026_08_02_v3",
 );
 const wnbaModelSource = readFileSync("lib/services/wnba/buildWnbaDailyEdgePreview.ts", "utf8");
+const wnbaModelWriterSource = readFileSync("lib/services/wnba/runWnbaModel.ts", "utf8");
+const wnbaRecordWriterSource = readFileSync("lib/services/wnba/buildWnbaPredictionRecords.ts", "utf8");
+const wnbaReaderSource = readFileSync("lib/services/wnba/buildWnbaDailyEdgeAdapted.ts", "utf8");
 check(
   "WNBA preview fallback delegates to the canonical compute",
   wnbaModelSource.includes("return computeWnbaPrediction(M, g, r);") &&
@@ -131,6 +134,15 @@ check(
   "WNBA canonical compute cannot drift with preview or dry-run environment flags",
   wnbaModelSource.includes("= EXPECTED_WNBA_CALIBRATION_FLAGS") &&
     !wnbaModelSource.includes("readWnbaCoreModelCalibrationFlagsFromEnv()"),
+);
+check(
+  "WNBA moneyline identity is canonical across model writer, record writer, and reader",
+  [wnbaModelWriterSource, wnbaRecordWriterSource, wnbaReaderSource]
+    .every((source) => source.includes("resolveWnbaMoneylineSide")),
+);
+check(
+  "WNBA reader only lets genuinely locked records override the current model payload",
+  wnbaReaderSource.includes("if (r.locked_at === null) continue;"),
 );
 const wnbaChampionEnv = {
   WNBA_CORE_MODEL_CALIBRATION_ENABLED: "true",

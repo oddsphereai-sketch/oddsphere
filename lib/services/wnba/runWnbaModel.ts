@@ -12,6 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDaysToSlate, currentSlateDate } from "../../dates/slateDate";
 import { getModel, computeWnbaPrediction, SHARP_BOOKS, type OddRow, type WnbaPublicMarketSignals } from "./buildWnbaDailyEdgePreview";
+import { resolveWnbaMoneylineSide } from "./wnbaTeams";
 import {
   assertWnbaChampionRuntime,
   EXPECTED_WNBA_DISTRIBUTION_VERSION,
@@ -170,9 +171,12 @@ export async function runWnbaModel(opts: {
     const p = computeWnbaPrediction(M, { id: g.id as number, date: g.slate_date as string, h: homeBdl, a: awayBdl }, oddRows, publicByGame.get(g.id as number) ?? {});
     result.gamesPredicted++;
     const matchup = `${p.away_abbr}@${p.home_abbr}`;
+    const mlSide = p.home_abbr && p.away_abbr
+      ? resolveWnbaMoneylineSide(p.moneyline.side, p.home_abbr, p.away_abbr)
+      : null;
 
     const missing: string[] = [];
-    if (!p.moneyline.side) missing.push("ml");
+    if (!p.moneyline.side || mlSide === null) missing.push("ml");
     if (!p.total.side) missing.push("total");
     if (!p.spread.side) missing.push("spread");
     if (missing.length) result.missingMarkets.push({ matchup, missing });
@@ -187,12 +191,16 @@ export async function runWnbaModel(opts: {
       proj: `${p.projected_score.away}-${p.projected_score.home}`, coldStart: !!p.cold_start, flags: p.data_quality.flags,
     });
 
+    if (mlSide === null) {
+      errors.push(`${matchup}: unresolved ML team identity (${p.moneyline.side}) — prediction withheld`);
+      continue;
+    }
     if (lockedSet.has(g.id as number)) { result.skippedLocked++; continue; }
 
     payloads.push({
       game_id: g.id, prediction_source: "auto_v1_wnba", source_type: "real_api", is_override: false,
       model_version: EXPECTED_WNBA_MODEL_VERSION, computed_at: computedAt,
-      predicted_ml_winner: p.moneyline.side === p.home ? "home" : "away",
+      predicted_ml_winner: mlSide,
       ml_confidence: p.moneyline.confidence,
       predicted_ou_side: p.total.side ? (p.total.side.startsWith("Over") ? "over" : "under") : null,
       ou_confidence: p.total.confidence,

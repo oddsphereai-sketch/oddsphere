@@ -29,7 +29,7 @@ import type { Grade, MarketSignal, SignalType } from "../../../lib/types/domain/
 import type { Verdict } from "../verdictDerivation";
 import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
-import { wnbaLogoUrl } from "./wnbaTeams";
+import { resolveWnbaMoneylineSide, wnbaLogoUrl } from "./wnbaTeams";
 import { supabase } from "@/lib/db/supabase";
 import { computeSlateDate, currentSlateDate } from "@/lib/dates/slateDate";
 import {
@@ -148,6 +148,10 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
   const gpByGame = new Map((gps ?? []).map((r) => [r.game_id as number, r]));
   const recordsByGame = new Map<number, Map<string, WnbaLockedRecord>>();
   for (const r of retainedRecords) {
+    // Only a genuinely locked record may override the current coherent model
+    // payload. Unlocked records are a tracking mirror and can briefly lag the
+    // game_predictions writer during a partial refresh.
+    if (r.locked_at === null) continue;
     const gid = r.game_id;
     const byMarket = recordsByGame.get(gid) ?? new Map<string, WnbaLockedRecord>();
     byMarket.set(r.market, r);
@@ -592,10 +596,7 @@ function buildWnbaPickedPrices(
   const lockedMl = lockedRecords.get("moneyline");
   const lockedTotal = lockedRecords.get("total");
   const lockedSpread = lockedRecords.get("spread");
-  const mlSide =
-    ml.side === homeAbbr || ml.side === homeName ? "home" :
-    ml.side === awayAbbr || ml.side === awayName ? "away" :
-    null;
+  const mlSide = resolveWnbaMoneylineSide(ml.side, homeAbbr, awayAbbr);
   const totalSide =
     total.side?.toLowerCase().startsWith("over") ? "over" :
     total.side?.toLowerCase().startsWith("under") ? "under" :
@@ -1073,14 +1074,18 @@ function adaptGame(
   const awayAbbr = game.away_abbr ?? game.away.slice(0, 3).toUpperCase();
 
   // ── ML ──
-  const mlPickIsHome = game.moneyline.side === game.home;
+  const mlSelection = resolveWnbaMoneylineSide(
+    game.moneyline.side,
+    homeAbbr,
+    awayAbbr,
+  );
+  const mlPickIsHome = mlSelection === "home";
   const mlModelProb =
     wnbaPickProbabilityFromConfidence(game.moneyline.confidence) ??
     (mlPickIsHome ? game.model.home_win_prob : 1 - game.model.home_win_prob);
   const mlMarketFair = game.market.home_win_prob !== null ? (mlPickIsHome ? game.market.home_win_prob : 1 - game.market.home_win_prob) : null;
   const mlAligned = game.market.home_win_prob !== null ? mlPickIsHome === game.market.home_win_prob >= 0.5 : null;
-  const mlSelectedSide =
-    game.moneyline.side === game.home ? "home" : game.moneyline.side === game.away ? "away" : null;
+  const mlSelectedSide = mlSelection;
   const totalSelectedSide =
     game.total.side?.toLowerCase().startsWith("over") === true
       ? "over"
@@ -1101,7 +1106,7 @@ function adaptGame(
   });
   const ml = buildMarket({
     slot: "ml",
-    pick: game.moneyline.side === game.home ? homeAbbr : game.moneyline.side === game.away ? awayAbbr : game.moneyline.side,
+    pick: mlSelection === "home" ? homeAbbr : mlSelection === "away" ? awayAbbr : null,
     confFrac: game.moneyline.confidence !== null ? game.moneyline.confidence / 100 : null,
     grade: game.moneyline.grade,
     modelProbPick: mlModelProb,

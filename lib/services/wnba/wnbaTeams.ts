@@ -54,6 +54,51 @@ export function wnbaAbbr(bdlId: number): string | null {
   return WNBA_TEAMS_BY_BDL_ID[bdlId]?.abbr ?? null;
 }
 
+export type WnbaMoneylineSide = "home" | "away";
+
+function normalizeTeamIdentity(value: string): string {
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function normalizedTeamAliases(abbr: string): Set<string> {
+  const normalizedAbbr = abbr.trim().toUpperCase();
+  const meta = Object.values(WNBA_TEAMS_BY_BDL_ID).find(
+    (team) => team.abbr === normalizedAbbr,
+  );
+  const aliases = new Set<string>([normalizeTeamIdentity(normalizedAbbr)]);
+  if (!meta) return aliases;
+
+  const fullName = meta.name.trim();
+  aliases.add(normalizeTeamIdentity(fullName));
+  const words = fullName.split(/\s+/);
+  const nickname = words.at(-1);
+  if (nickname) aliases.add(normalizeTeamIdentity(nickname));
+  if (words.length > 1) {
+    aliases.add(normalizeTeamIdentity(words.slice(0, -1).join(" ")));
+  }
+  return aliases;
+}
+
+/**
+ * Resolve a model-provided WNBA club label to a canonical home/away key.
+ * BallDontLie can emit only a nickname for expansion teams (for example,
+ * "Fire") while our DB stores the full name ("Portland Fire"). Team identity
+ * must therefore flow through canonical abbreviations, never full-name
+ * equality.
+ */
+export function resolveWnbaMoneylineSide(
+  side: string | null | undefined,
+  homeAbbr: string,
+  awayAbbr: string,
+): WnbaMoneylineSide | null {
+  if (!side) return null;
+  const normalizedSide = normalizeTeamIdentity(side);
+  const homeMatch = normalizedTeamAliases(homeAbbr).has(normalizedSide);
+  const awayMatch = normalizedTeamAliases(awayAbbr).has(normalizedSide);
+  if (homeMatch === awayMatch) return null;
+  return homeMatch ? "home" : "away";
+}
+
 /** ESPN WNBA logo CDN — keyed by lowercase canonical abbreviation. */
 export function wnbaLogoUrl(abbr: string): string {
   return `https://a.espncdn.com/i/teamlogos/wnba/500/${abbr.toLowerCase()}.png`;

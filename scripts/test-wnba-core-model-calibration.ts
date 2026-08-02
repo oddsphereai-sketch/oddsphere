@@ -10,6 +10,7 @@ import {
 } from "../lib/services/wnba/buildWnbaDailyEdgePreview";
 import { selectPreferredWnbaTipTime } from "../lib/services/wnba/refreshWnbaLines";
 import { gradePrediction } from "../lib/services/predictionGrader";
+import { resolveWnbaMoneylineSide } from "../lib/services/wnba/wnbaTeams";
 
 let pass = 0;
 let fail = 0;
@@ -23,6 +24,31 @@ function check(name: string, ok: boolean, details = "") {
     console.error(`not ok - ${name}${details ? ` (${details})` : ""}`);
   }
 }
+
+check(
+  "WNBA expansion nickname resolves to the canonical home side",
+  resolveWnbaMoneylineSide("Fire", "POR", "LA") === "home",
+);
+check(
+  "WNBA full expansion name resolves to the canonical home side",
+  resolveWnbaMoneylineSide("Portland Fire", "POR", "LA") === "home",
+);
+check(
+  "WNBA away nickname resolves to the canonical away side",
+  resolveWnbaMoneylineSide("Sparks", "POR", "LA") === "away",
+);
+check(
+  "WNBA abbreviation resolves without fragile display-name equality",
+  resolveWnbaMoneylineSide("POR", "POR", "LA") === "home",
+);
+check(
+  "WNBA city-only provider identity resolves canonically",
+  resolveWnbaMoneylineSide("Portland", "POR", "LA") === "home",
+);
+check(
+  "unknown WNBA team identity fails closed",
+  resolveWnbaMoneylineSide("Unknown Club", "POR", "LA") === null,
+);
 
 const disabled = buildWnbaCoreModelCalibrationAudit({
   rawProjectedAwayScore: 88,
