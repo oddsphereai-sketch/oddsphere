@@ -53,9 +53,11 @@ import { TWO_SIDED_KEY_STAT_LABELS, keyStatIsTwoSided } from "@/lib/services/key
 import { teamPrimaryColor } from "./teamColors";
 import { LockBadge } from "./LockBadge";
 import {
+  DEFAULT_DISPLAY_TIME_ZONE,
   LocalTime,
   formatZonedDateTime,
   useUserTimeZone,
+  zonedWallTimeToIso,
 } from "../UserTimeZone";
 
 // ─── Types ─────────────────────────────────────────────────────────────
@@ -4735,16 +4737,20 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   const games = useMemo(
     () => (data?.games ?? []).map((game) => {
       // Existing published snapshots predate gameStartAt. scheduledLockAt is
-      // the same canonical game-start instant for those snapshots, so using
-      // it as a fallback localizes the already-live slate immediately instead
-      // of waiting for the next writer cycle.
+      // a betting lock rather than first pitch, so reconstruct the canonical
+      // start from the official ET slate date/time for legacy snapshots.
+      const legacyGameStartAt = zonedWallTimeToIso(
+        data?.date,
+        game.gameTime,
+        DEFAULT_DISPLAY_TIME_ZONE,
+      );
       const localGameTime = formatZonedDateTime(
-        game.gameStartAt ?? game.scheduledLockAt,
+        game.gameStartAt ?? legacyGameStartAt,
         userTimeZone,
       );
       return localGameTime ? { ...game, gameTime: localGameTime } : game;
     }),
-    [data?.games, userTimeZone],
+    [data?.date, data?.games, userTimeZone],
   );
   const verdictCounts = useMemo(() => computeVerdictCounts(games), [games]);
   const filteredGames = useMemo(
