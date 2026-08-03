@@ -435,6 +435,28 @@ function shouldCapCorrectedMarketVerdict(args: {
   );
 }
 
+function shouldHonorLiveMissingPriceCap(args: {
+  storedVerdict: { key: string; label?: string };
+  normalizedVerdict: { key: string; label?: string };
+  normalizedCapReasons: string[];
+}): boolean {
+  const storedActionable =
+    args.storedVerdict.key === "lean" || args.storedVerdict.key === "best_angle";
+  const normalizedActionable =
+    args.normalizedVerdict.key === "lean" || args.normalizedVerdict.key === "best_angle";
+
+  // prediction_records remain the authority for the writer's decision, but a
+  // member-facing actionable grade is never safe without a current displayed
+  // price. This cap is reversible: as soon as a reliable price is present,
+  // normalizeDailyEdgeActionability removes missing_price and the stored grade
+  // is restored without a second writer or refresh path.
+  return (
+    storedActionable &&
+    !normalizedActionable &&
+    args.normalizedCapReasons.includes("missing_price")
+  );
+}
+
 /**
  * 2026-06-10 v15.2 — Reads the live writer play_grade for an unlocked
  * row from `sport_specific.v2_2_audit.{ml,ou}_play_grade` or
@@ -4551,6 +4573,15 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
       : hasStoredPredictionRecord &&
     writerOverride !== null
       ? (() => {
+          if (
+            shouldHonorLiveMissingPriceCap({
+              storedVerdict: verdict,
+              normalizedVerdict: normalizedAction.finalVerdict,
+              normalizedCapReasons: normalizedAction.capReasons,
+            })
+          ) {
+            return normalizedAction;
+          }
           const recFloor = recommendationScoreFloorForStoredVerdict(verdict.key);
           const finalRecScore =
             recFloor === null
@@ -5457,6 +5488,7 @@ export const __TEST__ = {
   effectivePredictionRecordPlayGrade,
   resolveLockedVerdict,
   shouldCapCorrectedMarketVerdict,
+  shouldHonorLiveMissingPriceCap,
   forceIncompleteMlbMarketNoPlay,
   normalizeGameRow,
   extractModelBreakdown,

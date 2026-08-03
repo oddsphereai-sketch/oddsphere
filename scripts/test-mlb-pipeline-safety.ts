@@ -65,8 +65,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries July 29 v17 paired FI ladder and daily stats marker version",
-  layers.grade_policy === "mlb_public_grade_policy_v17_fi_paired_ladder_daily_stats_marker_2026_07_29",
+  "grade policy carries the August 3 missing-price stored-override safety version",
+  layers.grade_policy === "mlb_public_grade_policy_v18_missing_price_stored_override_2026_08_03",
 );
 check(
   "MLB layer stamp carries one immutable decision release",
@@ -74,8 +74,8 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB official schedule-time correction is versioned as decision release r22",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_07_30_r22" &&
+  "MLB Daily Edge decision behavior is versioned as release r23",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_03_r23" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v3" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );

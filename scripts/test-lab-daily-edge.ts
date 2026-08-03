@@ -171,6 +171,22 @@ async function main() {
         verdictKey: "best_angle",
       }) === true,
     );
+    check(
+      "stored Lean is capped when its current price is missing",
+      dailyEdgeTest.shouldHonorLiveMissingPriceCap({
+        storedVerdict: leanOverride,
+        normalizedVerdict: { key: "watchlist", label: "Watchlist" },
+        normalizedCapReasons: ["missing_price"],
+      }) === true,
+    );
+    check(
+      "stored Lean is restored when a reliable current price is available",
+      dailyEdgeTest.shouldHonorLiveMissingPriceCap({
+        storedVerdict: leanOverride,
+        normalizedVerdict: leanOverride,
+        normalizedCapReasons: [],
+      }) === false,
+    );
   }
 
   section("Incomplete MLB market safety");
