@@ -118,6 +118,7 @@ import {
   type LastMove,
 } from "@/lib/services/streamOverlay";
 import { interpretMarket } from "@/lib/streaming/marketInterpretation";
+import { isDisplayableAmericanOdds } from "@/lib/streaming/oddsSanity";
 import { selectTotalLine } from "@/app/lab/lib/selectTotalLine";
 import { selectMainTotalLine } from "@/lib/services/selectMainTotalLine";
 import {
@@ -2778,6 +2779,40 @@ function isCurrentPriceStale(
   return ageMin > CURRENT_PRICE_STALE_AGE_MINUTES;
 }
 
+function currentPriceFromMarketRead(args: {
+  read: MarketReadV2Dto | null;
+  market: "moneyline" | "total" | "first_inning";
+  expectedLine: number | null;
+  locked: boolean;
+  nowMs?: number;
+}): StreamCurrent | null {
+  if (args.locked || args.market === "first_inning") return null;
+  const movement = args.read?.movement ?? null;
+  if (
+    movement === null ||
+    !isDisplayableAmericanOdds(movement.currentPrice) ||
+    movement.observedAt === null ||
+    isCurrentPriceStale(movement.observedAt, args.nowMs)
+  ) {
+    return null;
+  }
+  if (
+    args.market === "total" &&
+    (
+      args.expectedLine === null ||
+      movement.currentLine === null ||
+      !sameLineValue(args.expectedLine, movement.currentLine)
+    )
+  ) {
+    return null;
+  }
+  return {
+    american: movement.currentPrice,
+    line: movement.currentLine,
+    observedAt: movement.observedAt,
+  };
+}
+
 function hasFreshConsensusTotalLinePair(
   rows: ReadonlyArray<{ sportsbook: string; side: string | null; line_value: number | null; fetched_at?: string | null }>,
   line: number | null,
@@ -3890,12 +3925,30 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // lines row; UI renders normally.
   const cronPriceObservedAt: string | null =
     priceRow?.odds_american_observed_at ?? priceRow?.fetched_at ?? null;
+  const totalExpectedLine =
+    input.market === "total" ? input.totalsExtras?.sportsbookLine ?? null : null;
+  // Market Intelligence V2 is selected for this exact game, market, and model
+  // side. When the cron `lines` row has aged out but that canonical snapshot
+  // carries a newer, sane price on the same total line, use it as the current
+  // display price instead of silently dropping an available quote. Locked rows
+  // remain frozen and never take this live fallback.
+  const marketReadCurrent = currentPriceFromMarketRead({
+    read: input.marketReadV2 ?? null,
+    market: input.market,
+    expectedLine: totalExpectedLine,
+    locked: input.isLockedRow === true,
+  });
+  const cronOrMarketReadCurrent = pickFresherCurrent(
+    { american: cronPriceAmerican, observedAt: cronPriceObservedAt },
+    marketReadCurrent,
+    Date.now(),
+  );
   // 2026-06-16 — overlay the live odds_current_stream price ONLY when it is
   // fresher than the cron `lines` value. No-op until the stream tables are
   // populated (input.streamCurrent is absent today), so existing behavior is
   // unchanged. This makes the displayed "Current" reflect the freshest source.
   const overlaidCurrent = pickFresherCurrent(
-    { american: cronPriceAmerican, observedAt: cronPriceObservedAt },
+    cronOrMarketReadCurrent,
     input.streamCurrent ?? null,
     Date.now(),
   );
@@ -5489,6 +5542,7 @@ export const __TEST__ = {
   resolveLockedVerdict,
   shouldCapCorrectedMarketVerdict,
   shouldHonorLiveMissingPriceCap,
+  currentPriceFromMarketRead,
   forceIncompleteMlbMarketNoPlay,
   normalizeGameRow,
   extractModelBreakdown,

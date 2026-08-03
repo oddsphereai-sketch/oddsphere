@@ -187,6 +187,60 @@ async function main() {
         normalizedCapReasons: [],
       }) === false,
     );
+    const freshPriceAt = new Date(Date.now() - 10 * 60_000).toISOString();
+    const marketReadWithPrice = {
+      label: "Projection-Led",
+      score: 0,
+      tone: "gray" as const,
+      explanation: "Current exact-line price is available.",
+      copyMode: "context_only_not_pick_changing" as const,
+      exactLineEvidenceStatus: "available",
+      evidenceAsOf: freshPriceAt,
+      generatedAt: freshPriceAt,
+      validityStatus: "valid_nondirectional" as const,
+      movement: {
+        firstTrackedLine: 8.5,
+        firstTrackedPrice: -106,
+        currentLine: 8.5,
+        currentPrice: -104,
+        directionRelativeToPick: "neutral" as const,
+        observedAt: freshPriceAt,
+      },
+      consensus: null,
+      sourceSummary: {
+        priceAction: null,
+        playbookConsensus: null,
+        sharpApiSourceSpecific: null,
+        sharpMoney: null,
+      },
+    };
+    check(
+      "fresh canonical market read restores the exact-line total price",
+      dailyEdgeTest.currentPriceFromMarketRead({
+        read: marketReadWithPrice,
+        market: "total",
+        expectedLine: 8.5,
+        locked: false,
+      })?.american === -104,
+    );
+    check(
+      "canonical market read cannot price a different total line",
+      dailyEdgeTest.currentPriceFromMarketRead({
+        read: marketReadWithPrice,
+        market: "total",
+        expectedLine: 9,
+        locked: false,
+      }) === null,
+    );
+    check(
+      "canonical live price never overrides a locked market",
+      dailyEdgeTest.currentPriceFromMarketRead({
+        read: marketReadWithPrice,
+        market: "total",
+        expectedLine: 8.5,
+        locked: true,
+      }) === null,
+    );
   }
 
   section("Incomplete MLB market safety");
