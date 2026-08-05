@@ -27,7 +27,7 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   market_calibration_policy: "mlb_model_market_calibration_baseline_2026_07_08",
   grade_policy: "mlb_public_grade_policy_v4_2026_07_23",
   correction_policy: "mlb_prediction_corrections_v4_totals_stand_down_2026_07_23",
-  tracking_contract: "member_facing_lock_v2_writer_authority",
+  tracking_contract: "member_facing_lock_v3_locked_only_status_normalized_2026_08_05",
 } as const;
 
 const ACTIVE_PROBABILITY_HEAD_BY_MARKET: Record<MlbModelLayerMarket, string> = {

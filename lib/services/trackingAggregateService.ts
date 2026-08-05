@@ -209,6 +209,16 @@ function isTossUp(r: PredictionRecordRow): boolean {
   );
 }
 
+/**
+ * MLB's official public record begins at the immutable member-facing lock.
+ * The grader enforces the same boundary and refuses to settle unlocked MLB
+ * rows, so the tracker must not admit rows that can never receive a grade.
+ * Other sports retain their existing eligibility rules.
+ */
+export function isTrackingRecordEligible(record: PredictionRecordRow): boolean {
+  return record.sport !== "mlb" || record.locked_at !== null;
+}
+
 type Row = {
   record: PredictionRecordRow;
   grade: PredictionGradeRow | null;
@@ -602,7 +612,8 @@ export async function computeTrackingAggregate(opts: {
   //
   // ROI is a SEPARATE (HQ-only) metric and is where null-odds rows get dropped —
   // never conflate "ROI-ineligible" with "doesn't count for accuracy".
-  const records = dedupePredictionRecordsForTracking(publicStartFiltered).filter((r) => !isTossUp(r));
+  const trackingEligible = publicStartFiltered.filter(isTrackingRecordEligible);
+  const records = dedupePredictionRecordsForTracking(trackingEligible).filter((r) => !isTossUp(r));
   result.rowsCounted = records.length;
   if (records.length === 0) return result;
 

@@ -3,6 +3,7 @@ import {
   computeTrackingAggregate,
   dedupePredictionRecordsForTracking,
   effectiveTrackingPlayGrade,
+  isTrackingRecordEligible,
   type AggregateMetrics,
   type SportMarketBucket,
 } from "@/lib/services/trackingAggregateService";
@@ -269,6 +270,7 @@ async function main() {
     (record) =>
       !record.launch_day &&
       isPublicallyTracked(record.sport, record.slate_date) &&
+      isTrackingRecordEligible(record) &&
       !isTossUp(record),
   );
   const records = dedupePredictionRecordsForTracking(sourceRecords);

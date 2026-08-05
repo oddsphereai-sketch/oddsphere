@@ -58,6 +58,25 @@ const TARGET_DATE = DATE_ARG ?? ET_TODAY;
 type ProblemSeverity = "INFO" | "WARN" | "FAIL";
 type Problem = { severity: ProblemSeverity; matchup: string; rec_id?: number; market?: string; detail: string };
 
+function selectMlbStatsGame(
+  candidates: MlbStatsRawGame[],
+  dbGameDate: string | null,
+): MlbStatsRawGame | null {
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0]!;
+
+  const dbTime = dbGameDate === null ? Number.NaN : Date.parse(dbGameDate);
+  if (!Number.isFinite(dbTime)) return null;
+
+  const ranked = candidates
+    .map((game) => ({ game, distance: Math.abs(Date.parse(game.gameDate ?? "") - dbTime) }))
+    .filter((entry) => Number.isFinite(entry.distance))
+    .sort((a, b) => a.distance - b.distance);
+  if (ranked.length === 0) return null;
+  if (ranked.length > 1 && ranked[0]!.distance === ranked[1]!.distance) return null;
+  return ranked[0]!.game;
+}
+
 async function main(): Promise<void> {
   if (APPLY_REQUESTED) {
     console.error("ERROR: --apply not supported. This operator is read-only.");
@@ -83,7 +102,8 @@ async function main(): Promise<void> {
     .from("prediction_records")
     .select("*")
     .eq("sport", "mlb")
-    .eq("slate_date", TARGET_DATE);
+    .eq("slate_date", TARGET_DATE)
+    .not("locked_at", "is", null);
   const recs = (prRows ?? []) as Array<{
     id: number;
     game_id: number;
@@ -108,7 +128,7 @@ async function main(): Promise<void> {
   const gameIds = Array.from(new Set(recs.map((r) => r.game_id)));
   const { data: gameRows } = await sb
     .from("games")
-    .select("id, external_id, status, home_team_id, away_team_id, home_score, away_score, first_inning_runs, inning_scores")
+    .select("id, external_id, game_date, status, home_team_id, away_team_id, home_score, away_score, first_inning_runs, inning_scores")
     .in("id", gameIds);
   const dbGameById = new Map<number, any>((gameRows ?? []).map((g: any) => [g.id, g]));
 
@@ -124,11 +144,16 @@ async function main(): Promise<void> {
   );
 
   // ── 3. Build MLB Stats lookup keyed by (homeAbbrev, awayAbbrev) ──
-  const mlbByPair = new Map<string, MlbStatsRawGame>();
+  // Keep every game for a pair: doubleheaders and postponed makeups can put
+  // the same clubs on the same schedule date. Match the DB game by start time.
+  const mlbByPair = new Map<string, MlbStatsRawGame[]>();
   for (const m of mlbGames) {
     const h = normalizeMlbTeamName(m.teams?.home?.team?.name);
     const a = normalizeMlbTeamName(m.teams?.away?.team?.name);
-    if (h && a) mlbByPair.set(`${h}|${a}`, m);
+    if (h && a) {
+      const key = `${h}|${a}`;
+      mlbByPair.set(key, [...(mlbByPair.get(key) ?? []), m]);
+    }
   }
 
   // ── 4. Verify each settled grade row ─────────────────────────────
@@ -158,14 +183,17 @@ async function main(): Promise<void> {
     const awayAbbrev = abbrevByTeamId.get(dbGame.away_team_id) ?? "?";
 
     // ── 4a. Identity reconciliation ────────────────────────────────
-    const mlb = mlbByPair.get(`${homeAbbrev}|${awayAbbrev}`);
+    const mlb = selectMlbStatsGame(
+      mlbByPair.get(`${homeAbbrev}|${awayAbbrev}`) ?? [],
+      typeof dbGame.game_date === "string" ? dbGame.game_date : null,
+    );
     if (!mlb) {
       problems.push({
         severity: "WARN",
         matchup: `${awayAbbrev}@${homeAbbrev}`,
         rec_id: r.id,
         market: r.market,
-        detail: `MLB Stats has NO game matching DB team pair (${awayAbbrev}@${homeAbbrev}). Grade can't be independently verified.`,
+        detail: `MLB Stats has no unambiguous game matching DB team pair/time (${awayAbbrev}@${homeAbbrev}, ${dbGame.game_date ?? "unknown time"}). Grade can't be independently verified.`,
       });
       continue;
     }
@@ -308,7 +336,10 @@ async function main(): Promise<void> {
     const dbGame = dbGameById.get(gid);
     const homeAbbrev = abbrevByTeamId.get(dbGame.home_team_id) ?? "?";
     const awayAbbrev = abbrevByTeamId.get(dbGame.away_team_id) ?? "?";
-    const mlb = mlbByPair.get(`${homeAbbrev}|${awayAbbrev}`);
+    const mlb = selectMlbStatsGame(
+      mlbByPair.get(`${homeAbbrev}|${awayAbbrev}`) ?? [],
+      typeof dbGame.game_date === "string" ? dbGame.game_date : null,
+    );
     if (!mlb) continue;
     const mlbStatus = normalizeMlbStatsStatus(mlb);
     const mlbHome = mlb.teams?.home?.score ?? null;

@@ -61,6 +61,10 @@ check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_ver
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check("grade policy carries July 23 v4 version", layers.grade_policy.includes("v4_2026_07_23"));
 check(
+  "tracking contract carries the locked-only status-normalized release",
+  layers.tracking_contract === "member_facing_lock_v3_locked_only_status_normalized_2026_08_05",
+);
+check(
   "MLB layer stamp carries one immutable decision release",
   layers.decision_release_id === MLB_DAILY_EDGE_DECISION_RELEASE_ID &&
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
