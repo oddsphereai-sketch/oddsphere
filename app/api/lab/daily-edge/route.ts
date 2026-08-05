@@ -69,6 +69,7 @@ import type {
 } from "@/lib/types/domain/Grade";
 import { currentSlateDate, currentSoccerBoardDate, isSlateDate } from "@/lib/dates/slateDate";
 import { BOOK_PRIORITY } from "@/lib/config/bookPriority";
+import { selectBestCoherentPlayablePrice } from "@/lib/services/dailyEdge/bestPlayablePrice";
 import { determineSlateState } from "@/lib/services/dailyEdgeSlateResolution";
 import { isVoidStatus } from "@/lib/services/gameLifecycle";
 import {
@@ -1612,6 +1613,7 @@ function buildGameDto(
   signals: SignalRow[],
   sportsbookTotalLine: number | null,
   currentLinesByGameMarket: Map<string, LineRow[]>,
+  bestAvailableLinesByGameMarket: Map<string, LineRow[]>,
   openLinesByGameMarket: Map<string, LineHistoryRow[]>,
   lockedPlayGradeByGameMarket: Map<string, {
     pick: string | null;
@@ -1640,6 +1642,12 @@ function buildGameDto(
   sourceAwareSplits: SourceAwareSplitLookup = new Map(),
   renderedCopyFlagOverrides: DailyEdgeRenderedCopyFlagOverrides | null = null,
 ): DailyEdgeGameDto | null {
+  const scheduledStartMs = Date.parse(row.game_date);
+  const allowLiveBestPrice = Number.isFinite(scheduledStartMs) && scheduledStartMs > Date.now();
+  const liveBestPriceLines = (market: string): LineRow[] =>
+    allowLiveBestPrice
+      ? bestAvailableLinesByGameMarket.get(`${row.id}::${market}`) ?? []
+      : [];
   const home = row.home_team?.abbreviation ?? "—";
   const away = row.away_team?.abbreviation ?? "—";
   const homeLogo = row.home_team?.logo_url ?? null;
@@ -2226,6 +2234,7 @@ function buildGameDto(
     modelSide: pred.predicted_ml_winner as Side | null,
     signals,
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::moneyline`) ?? [],
+    bestAvailableLinesCurrent: liveBestPriceLines("moneyline"),
     lineOpenCandidates:
       openLinesByGameMarket.get(
         `${row.id}::moneyline::${pred.predicted_ml_winner ?? "null"}`
@@ -2269,6 +2278,9 @@ function buildGameDto(
     // like a lone Pinnacle 9.5/10) so the displayed odds match the displayed line.
     // null-line rows are price-only synthesized rows — keep them.
     linesCurrent: (currentLinesByGameMarket.get(`${row.id}::total`) ?? []).filter(
+      (r) => totalLine === null || r.line_value === totalLine || r.line_value === null,
+    ),
+    bestAvailableLinesCurrent: liveBestPriceLines("total").filter(
       (r) => totalLine === null || r.line_value === totalLine || r.line_value === null,
     ),
     // Opener candidates constrained to the consensus line too (so line-movement
@@ -2322,6 +2334,7 @@ function buildGameDto(
     modelSide: fiEffectiveSide,
     signals,
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::first_inning_total`) ?? [],
+    bestAvailableLinesCurrent: liveBestPriceLines("first_inning_total"),
     lineOpenCandidates:
       fiEffectiveSide === null
         ? [
@@ -3453,6 +3466,8 @@ type BuildMarketEdgeInput = {
   modelSide: Side | null;
   signals: SignalRow[];
   linesCurrent: LineRow[];
+  /** Fresh live lines retained separately from immutable writer/lock substrate. */
+  bestAvailableLinesCurrent: LineRow[];
   /**
    * P7-B3 (2026-06-11) — ALL line_history rows for this (game, market, side),
    * sorted by recorded_at ASC. buildMarketEdge resolves the picked-side
@@ -3927,6 +3942,15 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     priceRow?.odds_american_observed_at ?? priceRow?.fetched_at ?? null;
   const totalExpectedLine =
     input.market === "total" ? input.totalsExtras?.sportsbookLine ?? null : null;
+  const bestAvailablePriceRow = selectBestCoherentPlayablePrice({
+    rows: input.bestAvailableLinesCurrent,
+    preferredSide:
+      input.modelSide === "home" || input.modelSide === "away" ||
+      input.modelSide === "over" || input.modelSide === "under"
+        ? input.modelSide as "home" | "away" | "over" | "under"
+        : null,
+    expectedLine: input.market === "first_inning" ? 0.5 : totalExpectedLine,
+  });
   // Market Intelligence V2 is selected for this exact game, market, and model
   // side. When the cron `lines` row has aged out but that canonical snapshot
   // carries a newer, sane price on the same total line, use it as the current
@@ -4696,6 +4720,17 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     betsPct: displayPickedSplit?.betsPct ?? betsPct,
     publicSplits: displayPublicSplits,
     priceAmerican: invalidFirstInningMarket ? null : priceAmerican,
+    bestAvailablePriceAmerican:
+      invalidFirstInningMarket ? null : bestAvailablePriceRow?.odds_american ?? null,
+    bestAvailableSportsbook:
+      invalidFirstInningMarket ? null : bestAvailablePriceRow?.sportsbook ?? null,
+    bestAvailableObservedAt:
+      invalidFirstInningMarket ? null : bestAvailablePriceRow === null ? null : lineRowObservedAt(bestAvailablePriceRow),
+    bestAvailablePricePolicy:
+      invalidFirstInningMarket || bestAvailablePriceRow === null
+        ? null
+        : "daily_edge_best_coherent_price_v1_2026_08_05",
+    gradePriceAmerican: invalidFirstInningMarket ? null : priceAmerican,
     fiMarketBoard: invalidFirstInningMarket ? null : fiMarketBoard,
     // Lock-snapshot honesty (2026-06-09 lock-contract fix). Only ever true
     // on locked rows when no usable real-book price exists. With Forward
@@ -5964,6 +5999,7 @@ export async function GET(request: Request) {
   const totalLineByGame = new Map<number, number>();
   // 4.1.10 — per-market price + open price for the v13.1 Edge Stack.
   const currentLinesByGameMarket = new Map<string, LineRow[]>();
+  const bestAvailableLinesByGameMarket = new Map<string, LineRow[]>();
   // P7-B3 (2026-06-11) — value is the full array of line_history rows for
   // each (game, market, side), sorted by recorded_at ASC. buildMarketEdge
   // walks this list to pick the OLDEST entry whose sportsbook matches the
@@ -6572,6 +6608,15 @@ export async function GET(request: Request) {
         }
       }
     }
+    // Preserve the fresh live market separately before the writer/lock
+    // substrate swap below. Grades, copy, movement, and tracking continue to
+    // use the immutable substrate; the member price-shop overlay reads only
+    // this clone so a locked card can show a better current playable quote
+    // without mutating its official decision evidence.
+    for (const [key, rows] of currentLinesByGameMarket.entries()) {
+      bestAvailableLinesByGameMarket.set(key, rows.map((row) => ({ ...row })));
+    }
+
     // Phase 6B.28 — rehydrate sharp_signals + lines from the lock
     // substrate for locked games. The pre-6B.28 route fed LIVE
     // sharp_signals and live `lines` rows into the DTO build for
@@ -6857,6 +6902,7 @@ export async function GET(request: Request) {
       signalsByGame.get(g.id) ?? [],
       totalLineByGame.get(g.id) ?? null,
       currentLinesByGameMarket,
+      bestAvailableLinesByGameMarket,
       openLinesByGameMarket,
       lockedPlayGradeByGameMarket,
       streamCurrentByGameMarket,

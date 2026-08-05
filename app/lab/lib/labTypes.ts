@@ -274,6 +274,19 @@ export type MarketEdgeDto = {
   }>;
   priceAmerican: number | null;
   /**
+   * Fresh best bettor price from a coherent two-sided book pair. This is
+   * display-only and never rewrites the immutable grade/lock price above.
+   * The reader rejects stale, one-sided, implausible-vig, and consensus-
+   * divergent quotes before populating these fields.
+   */
+  bestAvailablePriceAmerican?: number | null;
+  bestAvailableSportsbook?: string | null;
+  bestAvailableObservedAt?: string | null;
+  /** Versioned reader-only policy; this does not identify the grading release. */
+  bestAvailablePricePolicy?: "daily_edge_best_coherent_price_v1_2026_08_05" | null;
+  /** Price used by the authoritative writer/lock when it differs from best available. */
+  gradePriceAmerican?: number | null;
+  /**
    * First-inning market-board context when the model does not choose a side.
    * This is display-only: it must not be treated as a picked-side price,
    * edge, grade input, or tracking price.

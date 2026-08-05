@@ -415,6 +415,16 @@ function formatAmerican(price: number | null): string {
   return price > 0 ? `+${price}` : String(price);
 }
 
+function displayPriceAmerican(market: MarketEdgeDto): number | null {
+  return market.bestAvailablePriceAmerican ?? market.priceAmerican;
+}
+
+function displayPriceBook(market: MarketEdgeDto): string | null {
+  return market.bestAvailablePriceAmerican === null || market.bestAvailablePriceAmerican === undefined
+    ? null
+    : market.bestAvailableSportsbook ?? null;
+}
+
 function formatFiMarketBoard(board: MarketEdgeDto["fiMarketBoard"] | undefined | null): string | null {
   if (!board || (board.nrfiAmerican === null && board.yrfiAmerican === null)) return null;
   const parts = [
@@ -1555,12 +1565,17 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
                 </span>
               </>
             )}
-            {marketData.priceAmerican !== null ? (
+            {displayPriceAmerican(marketData) !== null ? (
               <>
                 <span className="text-gray-700">·</span>
                 <span className="text-[12.5px] tabular-nums font-semibold text-gray-300">
-                  {formatAmerican(marketData.priceAmerican)}
+                  {formatAmerican(displayPriceAmerican(marketData))}
                 </span>
+                {displayPriceBook(marketData) !== null && (
+                  <span className="text-[9px] uppercase tracking-[0.1em] font-bold text-gray-600">
+                    {displayPriceBook(marketData)}
+                  </span>
+                )}
               </>
             ) : market === "first_inning" && formatFiMarketBoard(marketData.fiMarketBoard) !== null ? (
               <>
@@ -3319,9 +3334,10 @@ function SlateCard({
               ? "—"
               : `${Math.round(displayPctForMarket(headlineMarketData)! * 100)}%`}
           </span>
-          {headlineMarketData.priceAmerican !== null ? (
+          {displayPriceAmerican(headlineMarketData) !== null ? (
             <span className="text-[12px] tabular-nums font-medium text-gray-500 ml-1">
-              {formatAmerican(headlineMarketData.priceAmerican)}
+              {formatAmerican(displayPriceAmerican(headlineMarketData))}
+              {displayPriceBook(headlineMarketData) !== null ? ` · ${displayPriceBook(headlineMarketData)}` : ""}
             </span>
           ) : headlineMarket === "first_inning" && formatFiMarketBoard(headlineMarketData.fiMarketBoard) !== null ? (
             <span className="text-[11px] tabular-nums font-medium text-gray-500 ml-1">
@@ -3672,11 +3688,12 @@ function SelectedEdgeReader({
                         ? "—"
                         : `${Math.round(displayPctForMarket(marketData)! * 100)}%`}
                     </span>
-                    {marketData.priceAmerican !== null ? (
+                    {displayPriceAmerican(marketData) !== null ? (
                       <>
                         <span aria-hidden="true" className="text-gray-700 text-[10px]">·</span>
                         <span className="text-[11px] tabular-nums font-medium text-gray-400">
-                          {formatAmerican(marketData.priceAmerican)}
+                          {formatAmerican(displayPriceAmerican(marketData))}
+                          {displayPriceBook(marketData) !== null ? ` · ${displayPriceBook(marketData)}` : ""}
                         </span>
                       </>
                     ) : market === "first_inning" && formatFiMarketBoard(marketData.fiMarketBoard) !== null ? (
