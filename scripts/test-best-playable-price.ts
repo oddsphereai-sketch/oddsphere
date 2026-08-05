@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { selectBestCoherentPlayablePrice } from "../lib/services/dailyEdge/bestPlayablePrice";
+import { summarizePersistedOddsTrail } from "../app/lab/lib/oddsMovementTrail";
 
 const now = Date.parse("2026-08-05T18:15:00.000Z");
 const fresh = "2026-08-05T18:10:00.000Z";
@@ -77,4 +78,29 @@ assert.equal(
   "price shopping never crosses to a different total line",
 );
 
-console.log("PASS coherent best-playable price selection");
+const movementTrail = summarizePersistedOddsTrail(
+  [
+    { american: -175, line: null, observedAt: "2026-08-05T16:00:00.000Z", sportsbook: "ballybet", source: "line_history", label: "first" },
+    { american: -180, line: null, observedAt: "2026-08-05T17:00:00.000Z", sportsbook: "ballybet", source: "line_history", label: "current" },
+    { american: -182, line: null, observedAt: "2026-08-05T18:00:00.000Z", sportsbook: "ballybet", source: "locked_snapshot", label: "locked" },
+    { american: -164, line: null, observedAt: "2026-08-05T18:10:00.000Z", sportsbook: "saba", source: "current_line", label: "current" },
+  ],
+  { open: -175, prev: -180, current: -164, locked: true, hasLiveCurrentAfterLock: true },
+);
+assert.deepEqual(
+  movementTrail.map(({ american, label }) => ({ american, label })),
+  [
+    { american: -175, label: "first" },
+    { american: -182, label: "locked" },
+    { american: -164, label: "current" },
+  ],
+  "a locked reader preserves the lock and appends the newest coherent current price",
+);
+
+const lockedOnlyTrail = summarizePersistedOddsTrail(
+  movementTrail.slice(0, 2),
+  { open: -175, prev: null, current: -182, locked: true, hasLiveCurrentAfterLock: false },
+);
+assert.equal(lockedOnlyTrail.at(-1)?.label, "locked", "a locked reader without a distinct live price still ends at lock");
+
+console.log("PASS coherent best-playable price selection and locked movement display");
