@@ -41,11 +41,7 @@ function lastWithLabel(
   return undefined;
 }
 
-/**
- * Keep the immutable lock stop visible while adding a distinct fresh current
- * stop after lock. This is display-only and never rewrites the price used by
- * the decision engine.
- */
+/** Keep a locked recommendation's final trail stop immutable. */
 export function summarizePersistedOddsTrail(
   trail: NonNullable<MarketEdgeDto["oddsTrail"]>,
   fallback: {
@@ -53,7 +49,6 @@ export function summarizePersistedOddsTrail(
     prev: number | null;
     current: number | null;
     locked: boolean;
-    hasLiveCurrentAfterLock: boolean;
   },
 ): NonNullable<MarketEdgeDto["oddsTrail"]> {
   const orderedTrail = sortTrailByObservedAt(trail);
@@ -70,11 +65,8 @@ export function summarizePersistedOddsTrail(
 
   const first = deduped.find((stop) => stop.label === "first") ?? fallbackOpen ?? deduped[0] ?? null;
   const last =
-    (fallback.hasLiveCurrentAfterLock
-      ? lastWithLabel(deduped, "current")
-      : lastWithLabel(deduped, "locked")) ??
-    lastWithLabel(deduped, "current") ??
     lastWithLabel(deduped, "locked") ??
+    lastWithLabel(deduped, "current") ??
     fallbackCurrent ??
     deduped[deduped.length - 1] ??
     null;
@@ -91,8 +83,6 @@ export function summarizePersistedOddsTrail(
         const aTime = a.observedAt ? Date.parse(a.observedAt) : Number.NaN;
         const bTime = b.observedAt ? Date.parse(b.observedAt) : Number.NaN;
         if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) return bTime - aTime;
-        if (a.label === "locked" && b.label !== "locked") return -1;
-        if (a.label !== "locked" && b.label === "locked") return 1;
         if (a.label === "move" && b.label !== "move") return -1;
         if (a.label !== "move" && b.label === "move") return 1;
         return 0;
@@ -100,15 +90,11 @@ export function summarizePersistedOddsTrail(
 
   const summary = [
     first ? { ...first, label: "first" as const } : null,
-    middle
-      ? { ...middle, label: middle.label === "locked" ? "locked" as const : "move" as const }
-      : null,
+    middle ? { ...middle, label: "move" as const } : null,
     last
       ? {
           ...last,
-          label: fallback.hasLiveCurrentAfterLock
-            ? "current" as const
-            : fallback.locked ? "locked" as const : "current" as const,
+          label: fallback.locked ? "locked" as const : "current" as const,
         }
       : null,
   ].filter((stop): stop is DisplayOddsTrailStop => stop !== null);

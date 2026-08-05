@@ -73,7 +73,10 @@ export function selectBestCoherentPlayablePrice<T extends PlayablePriceRow>(args
   expectedLine: number | null;
   nowMs?: number;
   maxAgeMinutes?: number;
+  /** Locked recommendations are immutable snapshots and cannot expose live prices. */
+  locked?: boolean;
 }): T | null {
+  if (args.locked === true) return null;
   if (args.preferredSide === null) return null;
   const nowMs = args.nowMs ?? Date.now();
   const maxAgeMinutes = args.maxAgeMinutes ?? 60;

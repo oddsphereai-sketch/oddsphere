@@ -17,6 +17,11 @@ assert.equal(
   -164,
   "selects the better coherent TB moneyline price",
 );
+assert.equal(
+  selectBestCoherentPlayablePrice({ rows: tbMoneyline, preferredSide: "away", expectedLine: null, nowMs: now, locked: true }),
+  null,
+  "a locked recommendation never exposes a post-lock best price",
+);
 
 const flippedOutlier = [
   ...tbMoneyline,
@@ -85,21 +90,21 @@ const movementTrail = summarizePersistedOddsTrail(
     { american: -182, line: null, observedAt: "2026-08-05T18:00:00.000Z", sportsbook: "ballybet", source: "locked_snapshot", label: "locked" },
     { american: -164, line: null, observedAt: "2026-08-05T18:10:00.000Z", sportsbook: "saba", source: "current_line", label: "current" },
   ],
-  { open: -175, prev: -180, current: -164, locked: true, hasLiveCurrentAfterLock: true },
+  { open: -175, prev: -180, current: -164, locked: true },
 );
 assert.deepEqual(
   movementTrail.map(({ american, label }) => ({ american, label })),
   [
     { american: -175, label: "first" },
+    { american: -180, label: "move" },
     { american: -182, label: "locked" },
-    { american: -164, label: "current" },
   ],
-  "a locked reader preserves the lock and appends the newest coherent current price",
+  "a locked reader ignores a later current quote and terminates at lock",
 );
 
 const lockedOnlyTrail = summarizePersistedOddsTrail(
   movementTrail.slice(0, 2),
-  { open: -175, prev: null, current: -182, locked: true, hasLiveCurrentAfterLock: false },
+  { open: -175, prev: null, current: -182, locked: true },
 );
 assert.equal(lockedOnlyTrail.at(-1)?.label, "locked", "a locked reader without a distinct live price still ends at lock");
 

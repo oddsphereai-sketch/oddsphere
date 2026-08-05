@@ -3950,6 +3950,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
         ? input.modelSide as "home" | "away" | "over" | "under"
         : null,
     expectedLine: input.market === "first_inning" ? 0.5 : totalExpectedLine,
+    locked: input.isLockedRow === true,
   });
   // Market Intelligence V2 is selected for this exact game, market, and model
   // side. When the cron `lines` row has aged out but that canonical snapshot
