@@ -9,7 +9,9 @@
 import {
   bucketForConfidence,
   CONFIDENCE_BUCKET_RANGES,
+  type PredictionRecordRow,
 } from "../lib/types/domain/Tracking";
+import { isTrackingRecordEligible } from "../lib/services/trackingAggregateService";
 
 let pass = 0;
 let fail = 0;
@@ -38,6 +40,15 @@ check("6 buckets defined", CONFIDENCE_BUCKET_RANGES.length === 6);
 check("first bucket = lt_50", CONFIDENCE_BUCKET_RANGES[0].label === "lt_50");
 check("last bucket = gte_63", CONFIDENCE_BUCKET_RANGES[CONFIDENCE_BUCKET_RANGES.length - 1].label === "gte_63");
 check("display strings non-empty", CONFIDENCE_BUCKET_RANGES.every((b) => b.display.length > 0));
+
+console.log("\n━━━ Official lock boundary ━━━");
+const trackingRecord = (sport: PredictionRecordRow["sport"], locked_at: string | null) => ({
+  sport,
+  locked_at,
+} as PredictionRecordRow);
+check("locked MLB row is tracking-eligible", isTrackingRecordEligible(trackingRecord("mlb", "2026-08-05T12:00:00Z")));
+check("unlocked MLB row is excluded from tracking", !isTrackingRecordEligible(trackingRecord("mlb", null)));
+check("non-MLB eligibility is unchanged", isTrackingRecordEligible(trackingRecord("wnba", null)));
 
 console.log("\n━━━ Brier score sanity (manual computation) ━━━");
 // Brier = mean((p - outcome)^2)

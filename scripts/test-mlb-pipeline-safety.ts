@@ -69,6 +69,10 @@ check(
   layers.grade_policy === "mlb_public_grade_policy_v19_market_read_price_fallback_2026_08_03",
 );
 check(
+  "tracking contract carries the locked-only status-normalized release",
+  layers.tracking_contract === "member_facing_lock_v7_locked_only_status_normalized_2026_08_05",
+);
+check(
   "MLB layer stamp carries one immutable decision release",
   layers.decision_release_id === MLB_DAILY_EDGE_DECISION_RELEASE_ID &&
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
