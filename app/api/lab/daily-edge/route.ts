@@ -161,6 +161,11 @@ const DAILY_EDGE_NO_STORE_HEADERS = {
 const DAILY_EDGE_ERROR_CACHE_CONTROL = "no-store";
 const DAILY_EDGE_WARM_CACHE_TTL_MS = 30 * 1000;
 const CURRENT_PRICE_STALE_AGE_MINUTES = 60;
+// Source-aware splits are collected by the hourly slate cycle. Give that
+// collector one full cadence plus 15 minutes of scheduler/runtime grace.
+// `source_observed_at` remains the honest last-change timestamp; freshness is
+// evaluated from `fetched_at`, which records when we last verified the value.
+const SOURCE_AWARE_SPLIT_STALE_AGE_MINUTES = 75;
 type DailyEdgeWarmCacheEntry = {
   body: DailyEdgeResponse;
   freshUntilMs: number;
@@ -1494,9 +1499,16 @@ function buildSourceAwareSplitSectionsFromRows(
           moneyPct: pctFromFraction(row.money_pct),
           betsPct: pctFromFraction(row.bets_pct),
           observedAt: row.source_observed_at ?? row.fetched_at ?? null,
-          isStale: isObservationStale(
-            row.source_observed_at ?? row.fetched_at ?? null,
-          ),
+          freshnessCheckedAt: row.fetched_at ?? row.source_observed_at ?? null,
+          staleAfterMinutes: SOURCE_AWARE_SPLIT_STALE_AGE_MINUTES,
+          isStale: (() => {
+            const checkedAt = row.fetched_at ?? row.source_observed_at ?? null;
+            if (checkedAt === null) return false;
+            const checkedAtMs = Date.parse(checkedAt);
+            return Number.isFinite(checkedAtMs)
+              ? (Date.now() - checkedAtMs) / 60_000 > SOURCE_AWARE_SPLIT_STALE_AGE_MINUTES
+              : false;
+          })(),
         }];
       });
       if (sectionRows.length === 0) return null;

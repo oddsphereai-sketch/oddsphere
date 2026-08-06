@@ -269,6 +269,10 @@ export type MarketEdgeDto = {
      * the UI to render "Last updated …" copy on stale-but-valid values.
      */
     observedAt?: string | null;
+    /** When the collector last verified this value, if different from observedAt. */
+    freshnessCheckedAt?: string | null;
+    /** Source-specific collection cadence plus scheduling grace. */
+    staleAfterMinutes?: number;
     /** Phase 7I — true when observedAt is older than the stale threshold. */
     isStale?: boolean;
   }>;

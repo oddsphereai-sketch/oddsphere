@@ -51,9 +51,13 @@ function fresh(o: ObsRow | undefined, now: number): boolean {
   return Boolean(o && ageMin(o.observed_at, now) <= STALE_AGE_MINUTES);
 }
 
-function observationIsStale(observedAt: string | null | undefined, now: number): boolean {
+function observationIsStale(
+  observedAt: string | null | undefined,
+  now: number,
+  staleAfterMinutes: number = STALE_AGE_MINUTES,
+): boolean {
   if (!observedAt) return false;
-  return ageMin(observedAt, now) > STALE_AGE_MINUTES;
+  return ageMin(observedAt, now) > staleAfterMinutes;
 }
 
 /** Display pick: fresh Playbook > fresh SharpAPI > freshest-complete (stale). */
@@ -310,7 +314,11 @@ export function refreshDisplayedSplitFreshness(
       if (!section) continue;
       section.rows = section.rows.map((row) => ({
         ...row,
-        isStale: observationIsStale(row.observedAt, nowMs),
+        isStale: observationIsStale(
+          row.freshnessCheckedAt ?? row.observedAt,
+          nowMs,
+          row.staleAfterMinutes,
+        ),
       }));
     }
   };

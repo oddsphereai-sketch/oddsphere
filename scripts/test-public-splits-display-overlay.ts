@@ -181,6 +181,44 @@ check("cached game-level recommendation consensus rows become stale after the ob
 check("cached game-level recommendation sharp rows become stale after the observation TTL", agingSnapshot.recommendationDecision?.markets.moneyline?.sharpBookSplits?.rows.every((row) => row.isStale === true) === true);
 check("read-time freshness repair never changes the pick", agedMl.pick === "WSH");
 
+const hourlyVerifiedSnapshot = game();
+hourlyVerifiedSnapshot.markets.moneyline!.recommendationDecision = {
+  consensusSplits: null,
+  sharpBookSplits: {
+    label: "Sharp Book Splits",
+    rows: [
+      {
+        side: "away",
+        label: "WSH",
+        moneyPct: 60,
+        betsPct: 58,
+        observedAt: "2026-07-28T14:00:00.000Z",
+        freshnessCheckedAt: "2026-07-28T16:00:00.000Z",
+        staleAfterMinutes: 75,
+        isStale: true,
+      },
+    ],
+    signal: null,
+    lastUpdated: "2026-07-28T14:00:00.000Z",
+  },
+} as NonNullable<typeof hourlyVerifiedSnapshot.markets.moneyline>["recommendationDecision"];
+refreshDisplayedSplitFreshness(
+  [hourlyVerifiedSnapshot],
+  new Date("2026-07-28T17:00:00.000Z"),
+);
+check(
+  "hourly source-aware splits stay fresh inside the collection cadence plus grace",
+  hourlyVerifiedSnapshot.markets.moneyline!.recommendationDecision?.sharpBookSplits?.rows[0]?.isStale === false,
+);
+refreshDisplayedSplitFreshness(
+  [hourlyVerifiedSnapshot],
+  new Date("2026-07-28T17:16:00.000Z"),
+);
+check(
+  "hourly source-aware splits become stale after the collection cadence plus grace",
+  hourlyVerifiedSnapshot.markets.moneyline!.recommendationDecision?.sharpBookSplits?.rows[0]?.isStale === true,
+);
+
 const splitCron = readFileSync("app/api/cron/public-splits-observations-refresh/route.ts", "utf8");
 const vercel = readFileSync("vercel.json", "utf8");
 check("split refresh republishes the coherent Daily Edge snapshot", splitCron.includes("refreshDailyEdgeResponseSnapshot"));
