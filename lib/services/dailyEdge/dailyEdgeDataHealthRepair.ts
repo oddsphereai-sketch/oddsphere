@@ -5,6 +5,7 @@ import { generatePredictionsForSlate } from "@/lib/services/automodelService";
 import { linesService } from "@/lib/services/linesService";
 import { lineupService } from "@/lib/services/lineupService";
 import { repairMlbModelReadiness } from "@/lib/services/modelReadinessService";
+import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { weatherService } from "@/lib/services/weatherService";
 import { runStarterRefreshCycle } from "../../../scripts/operator/refresh-starters";
 import type {
@@ -58,6 +59,7 @@ export type DailyEdgeDataHealthRepairReport = {
     starterRefresh?: Record<string, unknown>;
     sharpSignals?: Record<string, unknown>;
     automodel?: Record<string, unknown>;
+    responseSnapshot?: Record<string, unknown>;
   };
   errors: string[];
   attempts: DailyEdgeDataHealthRepairAttempt[];
@@ -584,6 +586,22 @@ export async function runDailyEdgeDataHealthRepair(args: {
       };
       errors.push(`automodel: ${message}`);
     }
+  }
+
+  try {
+    const responseSnapshot = await refreshDailyEdgeResponseSnapshot({
+      sport: args.report.sport,
+      date: args.report.date,
+      source: "daily_edge_data_health_repair",
+    });
+    steps.responseSnapshot = responseSnapshot;
+    if (!responseSnapshot.ok) {
+      errors.push(`response_snapshot: ${responseSnapshot.error ?? "publish failed"}`);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    steps.responseSnapshot = { ok: false, error: message };
+    errors.push(`response_snapshot: ${message}`);
   }
 
   let postRepairHealth: DailyEdgeDataHealthRepairReport["postRepairHealth"];
