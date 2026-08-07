@@ -36,15 +36,3 @@ export const LAST_UPDATED = "May 18, 2026";
 export const WHOP_URL = "https://whop.com/oddsphereai";
 export const X_HANDLE = "OddSphereAI";
 export const X_URL = "https://x.com/OddSphereAI";
-
-// Charter pricing.
-export const CHARTER_PRICE = "$25";
-export const STANDARD_PRICE = "$35";
-
-// DEPRECATED 2026-05-19: live spots-taken/spots-left counters were removed
-// from the UI to avoid the maintenance burden of updating them as members
-// fluctuate. The remaining copy hardcodes "first 50 members". Constants
-// kept here in case we re-introduce a live counter later.
-export const CHARTER_SPOTS_TOTAL = 50;
-export const CHARTER_SPOTS_TAKEN = 20;
-export const CHARTER_SPOTS_LEFT = CHARTER_SPOTS_TOTAL - CHARTER_SPOTS_TAKEN;

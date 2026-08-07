@@ -25,6 +25,7 @@
  */
 
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { sanitizeNext } from "@/lib/auth/betaSession";
 import {
@@ -32,7 +33,7 @@ import {
   isBetaLoginPubliclyVisible,
   isWhopAccessEnabled,
 } from "@/lib/auth/whopConfig";
-import { TRIAL_CHECKOUT_URL } from "@/lib/marketing/trialOffer";
+import { PRICING_PAGE_URL } from "@/lib/marketing/trialOffer";
 
 export const metadata: Metadata = {
   title: "Log In — OddSphere AI",
@@ -205,14 +206,12 @@ export default async function LoginPage({
 
         <p className="text-[11px] text-gray-500 leading-relaxed pt-2 border-t border-gray-800/60">
           Not a member yet?{" "}
-          <a
-            href={TRIAL_CHECKOUT_URL}
+          <Link
+            href={PRICING_PAGE_URL}
             className="text-violet-300 hover:text-violet-200 font-semibold underline underline-offset-2"
-            rel="noopener noreferrer"
-            target="_blank"
           >
             Start your 7-day free trial
-          </a>
+          </Link>
           .
         </p>
       </div>

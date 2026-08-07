@@ -258,7 +258,7 @@ async function main() {
     console.log("      Whop store. If you ever ship a free or different paid product,");
     console.log("      those members would unlock the Lab too.");
     console.log("    • prod_xxx ties access strictly to OddSphereAI Premium subscribers.");
-    console.log("      That's what we want for the $25/$35 membership gate.");
+    console.log("      That's what we want for the OddSphere Premium membership gate.");
     console.log("");
   } else {
     console.log(`  ✗ No product matched route="${slug}" in company ${preferredCompany.id}.`);

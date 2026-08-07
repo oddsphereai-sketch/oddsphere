@@ -395,12 +395,14 @@ check("Login page shows neither-enabled fallback copy",
 
 // ── Pricing CTA wires checkout URL when configured ───────────────────
 
-check("Pricing imports the canonical trial checkout URL",
-  PRICING_PAGE.includes("TRIAL_CHECKOUT_URL"));
-check("Pricing CTA opens the canonical checkout in a new tab",
-  /href=\{TRIAL_CHECKOUT_URL\}[\s\S]{0,200}target="_blank"/.test(PRICING_PAGE));
-check("Pricing CTA uses safe external-link attributes",
-  /rel="noopener noreferrer"[\s\S]{0,100}target="_blank"/.test(PRICING_PAGE));
+check("Pricing imports both canonical checkout URLs",
+  PRICING_PAGE.includes("MONTHLY_CHECKOUT_URL") &&
+  PRICING_PAGE.includes("ANNUAL_CHECKOUT_URL"));
+check("Pricing renders both monthly and annual checkout URLs",
+  PRICING_PAGE.includes("checkoutUrl: MONTHLY_CHECKOUT_URL") &&
+  PRICING_PAGE.includes("checkoutUrl: ANNUAL_CHECKOUT_URL"));
+check("Pricing CTAs use safe external-link attributes",
+  /href=\{plan\.checkoutUrl\}[\s\S]{0,1000}rel="noopener noreferrer"[\s\S]{0,100}target="_blank"/.test(PRICING_PAGE));
 
 // ── Cookie attribute safety ──────────────────────────────────────────
 
