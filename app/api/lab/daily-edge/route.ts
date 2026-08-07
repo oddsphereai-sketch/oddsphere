@@ -1397,6 +1397,12 @@ function splitPairScore(
   return fields === 0 ? Number.POSITIVE_INFINITY : score;
 }
 
+function splitTimestampMs(value: string | null | undefined): number {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+}
+
 async function loadSourceAwareSplitSections(opts: {
   eventIds: string[];
   games: GameRow[];
@@ -1465,21 +1471,50 @@ function buildSourceAwareSplitSectionsFromRows(
         const leftRows = candidates.filter((candidate) => candidate.side === leftSide);
         const rightRows = candidates.filter((candidate) => candidate.side === rightSide);
         const hasBothSides = leftRows.length > 0 && rightRows.length > 0;
-        let bestPair: { left: (typeof candidates)[number]; right: (typeof candidates)[number]; score: number; indexGap: number } | null = null;
+        let bestPair: {
+          left: (typeof candidates)[number];
+          right: (typeof candidates)[number];
+          score: number;
+          indexGap: number;
+          fetchedAtMs: number;
+          sourceObservedGapMs: number;
+          sourceObservedAtMs: number;
+        } | null = null;
         for (const left of leftRows) {
           for (const right of rightRows) {
             const score = splitPairScore(left.row, right.row);
+            if (score > 2) continue;
             const indexGap = Math.abs(left.index - right.index);
+            const leftFetchedAtMs = splitTimestampMs(left.row.fetched_at ?? left.row.source_observed_at);
+            const rightFetchedAtMs = splitTimestampMs(right.row.fetched_at ?? right.row.source_observed_at);
+            const fetchedAtMs = Math.min(leftFetchedAtMs, rightFetchedAtMs);
+            const leftObservedAtMs = splitTimestampMs(left.row.source_observed_at ?? left.row.fetched_at);
+            const rightObservedAtMs = splitTimestampMs(right.row.source_observed_at ?? right.row.fetched_at);
+            const sourceObservedGapMs = Number.isFinite(leftObservedAtMs) && Number.isFinite(rightObservedAtMs)
+              ? Math.abs(leftObservedAtMs - rightObservedAtMs)
+              : Number.POSITIVE_INFINITY;
+            const sourceObservedAtMs = Math.min(leftObservedAtMs, rightObservedAtMs);
             if (
               bestPair === null ||
-              score < bestPair.score ||
-              (score === bestPair.score && indexGap < bestPair.indexGap)
+              fetchedAtMs > bestPair.fetchedAtMs ||
+              (fetchedAtMs === bestPair.fetchedAtMs && sourceObservedGapMs < bestPair.sourceObservedGapMs) ||
+              (fetchedAtMs === bestPair.fetchedAtMs && sourceObservedGapMs === bestPair.sourceObservedGapMs && sourceObservedAtMs > bestPair.sourceObservedAtMs) ||
+              (fetchedAtMs === bestPair.fetchedAtMs && sourceObservedGapMs === bestPair.sourceObservedGapMs && sourceObservedAtMs === bestPair.sourceObservedAtMs && score < bestPair.score) ||
+              (fetchedAtMs === bestPair.fetchedAtMs && sourceObservedGapMs === bestPair.sourceObservedGapMs && sourceObservedAtMs === bestPair.sourceObservedAtMs && score === bestPair.score && indexGap < bestPair.indexGap)
             ) {
-              bestPair = { left, right, score, indexGap };
+              bestPair = {
+                left,
+                right,
+                score,
+                indexGap,
+                fetchedAtMs,
+                sourceObservedGapMs,
+                sourceObservedAtMs,
+              };
             }
           }
         }
-        if (bestPair !== null && bestPair.score <= 2) {
+        if (bestPair !== null) {
           latestBySide.set(leftSide!, bestPair.left.row);
           latestBySide.set(rightSide!, bestPair.right.row);
         } else if (hasBothSides) {

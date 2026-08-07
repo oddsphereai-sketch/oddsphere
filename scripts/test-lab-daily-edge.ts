@@ -314,6 +314,72 @@ async function main() {
     check("Circa source rows normalize percentages", sharpBook?.rows[0]?.moneyPct === 58 && sharpBook.rows[1]?.moneyPct === 42);
   }
   {
+    const common = {
+      canonical_event_id: "24680",
+      market_type: "moneyline",
+      provider: "sharpapi",
+      source_book: "circa",
+      source_type: "sharp_adjacent_book",
+    } as const;
+    const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
+      [
+        {
+          ...common,
+          selection_key: "24680:moneyline:away",
+          bets_pct: 0.47,
+          money_pct: 0.52,
+          source_observed_at: "2026-08-07T14:09:00Z",
+          fetched_at: "2026-08-07T14:07:00Z",
+        },
+        {
+          ...common,
+          selection_key: "24680:moneyline:home",
+          bets_pct: 0.53,
+          money_pct: 0.48,
+          source_observed_at: "2026-08-07T14:09:00Z",
+          fetched_at: "2026-08-07T14:07:00Z",
+        },
+        {
+          ...common,
+          selection_key: "24680:moneyline:away",
+          bets_pct: 0.45,
+          money_pct: 0.61,
+          source_observed_at: "2026-08-07T15:04:00Z",
+          fetched_at: "2026-08-07T15:07:00Z",
+        },
+        {
+          ...common,
+          selection_key: "24680:moneyline:away",
+          bets_pct: 0.46,
+          money_pct: 0.62,
+          source_observed_at: "2026-08-07T14:59:00Z",
+          fetched_at: "2026-08-07T15:07:00Z",
+        },
+        {
+          ...common,
+          selection_key: "24680:moneyline:home",
+          bets_pct: 0.54,
+          money_pct: 0.38,
+          source_observed_at: "2026-08-07T14:59:00Z",
+          fetched_at: "2026-08-07T15:07:00Z",
+        },
+        {
+          ...common,
+          selection_key: "24680:moneyline:home",
+          bets_pct: 0.55,
+          money_pct: 0.39,
+          source_observed_at: "2026-08-07T15:04:00Z",
+          fetched_at: "2026-08-07T15:07:00Z",
+        },
+      ],
+      [{ external_id: 24680, away_team: { abbreviation: "TB" }, home_team: { abbreviation: "SEA" } }] as never,
+    );
+    const sharpBook = sections.get("24680::moneyline")?.sharpBook ?? null;
+    check("source-aware split selection prefers the newest verified ingestion batch", sharpBook?.rows.every((row) => row.freshnessCheckedAt === "2026-08-07T15:07:00Z") === true);
+    check("source-aware split selection keeps the newest coherent source pair", sharpBook?.rows[0]?.moneyPct === 61 && sharpBook.rows[1]?.moneyPct === 39);
+    check("source-aware split selection uses matching latest source timestamps", sharpBook?.rows.every((row) => row.observedAt === "2026-08-07T15:04:00Z") === true);
+  }
+  {
     const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
       [
         {
