@@ -43,8 +43,10 @@ import { getAttribution } from "../app/lab/lib/gradeAttribution";
 import {
   displayedConsensusSection,
   splitLeanStrength,
+  splitSectionSignal,
 } from "../app/lab/lib/marketPulsePresentation";
 import type { MarketSplitDisplaySection } from "../lib/types/domain/RecommendationDecision";
+import { firstInningSupportTone } from "../app/lab/lib/firstInningPresentation";
 import type {
   Grade,
   MarketSignal,
@@ -122,11 +124,24 @@ async function main() {
         { side: "under", label: "Under", moneyPct: 53, betsPct: 52, observedAt: "2026-08-10T18:02:00Z", isStale: false },
       ], signal: null, lastUpdated: "2026-08-10T18:02:00Z" }, "Under") === "slight",
     );
+    const internallySplitConsensus = splitSectionSignal({
+      label: "Consensus Splits",
+      rows: olderDecisionRows,
+      signal: null,
+      lastUpdated: "2026-08-10T18:05:00Z",
+    });
+    check(
+      "51% Under money / 62% Over tickets is mixed consensus, not an Over lean",
+      internallySplitConsensus.internallySplit && internallySplitConsensus.direction === null && internallySplitConsensus.moneyLeader === "Under" && internallySplitConsensus.ticketLeader === "Over",
+    );
     const previewSource = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
     check(
       "mobile hides the persistent top reader while desktop retains it",
       previewSource.includes('className="hidden scroll-mt-4 sm:block"'),
     );
+    check("each FI side independently supports the pick at 6/10 or better", firstInningSupportTone(6, 10) === "support");
+    check("each FI side independently challenges the pick at 4/10 or worse", firstInningSupportTone(4, 10) === "challenge");
+    check("FI context remains neutral in the middle band", firstInningSupportTone(5, 10) === "neutral");
   }
 
   section("Authoritative corrected-market grade");

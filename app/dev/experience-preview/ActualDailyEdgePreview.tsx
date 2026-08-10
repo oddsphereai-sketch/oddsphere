@@ -26,7 +26,9 @@ import {
 import {
   displayedConsensusSection,
   splitLeanStrength,
+  splitSectionSignal,
 } from "@/app/lab/lib/marketPulsePresentation";
+import { firstInningSupportTone } from "@/app/lab/lib/firstInningPresentation";
 
 type DeepView = "case" | "market" | "matchup" | "trend" | "model";
 
@@ -514,9 +516,15 @@ function FirstInningEvidenceSide({ team, rows, starter, sample, pick }: { team: 
   const opposingLabel = supportsYrfi ? "Games with a scoreless first" : "Games with 1+ first-inning run";
   const chronologicalOutcomes = [...rows].reverse().map((row) => supportsYrfi ? (row.firstInningRuns ?? 0) > 0 : row.firstInningRuns === 0);
   const average = rows.length > 0 ? rows.reduce((sum, row) => sum + (row.firstInningRuns ?? 0), 0) / rows.length : null;
+  const teamTone = hasDirectionalPick ? firstInningSupportTone(supportingCount, rows.length) : "neutral";
+  const teamToneClass = teamTone === "support"
+    ? "border-emerald-400/25 bg-emerald-400/[0.045]"
+    : teamTone === "challenge"
+      ? "border-rose-400/20 bg-rose-500/[0.035]"
+      : "border-white/[0.10] bg-white/[0.025]";
   return (
-    <div className="rounded-xl border border-white/[0.10] bg-white/[0.025] p-4 xl:p-5">
-      <div className="flex items-center justify-between gap-3"><span className="text-base font-black text-white">{team}</span><span className="text-[9px] font-black uppercase tracking-wider text-gray-500">Team · {rows.length} games</span></div>
+    <div className={`rounded-xl border p-4 xl:p-5 ${teamToneClass}`}>
+      <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><span className="text-base font-black text-white">{team}</span>{hasDirectionalPick && teamTone !== "neutral" ? <span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-wider ${teamTone === "support" ? "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-200" : "border-rose-400/20 bg-rose-400/[0.07] text-rose-200"}`}>{teamTone === "support" ? `Supports ${pick}` : `Challenges ${pick}`}</span> : null}</div><span className="text-[9px] font-black uppercase tracking-wider text-gray-500">Team · {rows.length} games</span></div>
       <div className="mt-4 grid gap-3 xl:grid-cols-2">
         <div className="rounded-lg border border-white/[0.07] bg-black/20 p-4">
           <div className="flex items-end justify-between gap-3"><div><p className={`font-mono text-3xl font-black ${hasDirectionalPick ? "text-emerald-300" : "text-sky-200"}`}>{rows.length === 0 ? "—" : `${supportingCount}/${rows.length}`}</p><p className="mt-1 text-[9px] font-black uppercase tracking-wider text-gray-300">{supportingLabel}</p></div><div className="text-right"><p className={`font-mono text-xl font-black ${hasDirectionalPick ? "text-rose-300" : "text-gray-300"}`}>{rows.length === 0 ? "—" : `${opposingCount}/${rows.length}`}</p><p className="mt-1 text-[8px] text-gray-500">{opposingLabel}</p></div></div>
@@ -524,18 +532,26 @@ function FirstInningEvidenceSide({ team, rows, starter, sample, pick }: { team: 
           {rows.length > 0 ? <p className="mt-2 text-[8px] leading-relaxed text-gray-500">Each tile is one completed game. Oldest → newest · {hasDirectionalPick ? `green = supports ${pick} · red = opposes ${pick}` : "blue/gray = result context"}.</p> : <p className="mt-2 text-[8px] text-gray-500">No completed first-inning team sample is available.</p>}
           <div className="mt-4 flex items-center justify-between border-t border-white/[0.07] pt-3"><span className="text-[9px] text-gray-500">Avg first-inning runs</span><strong className="font-mono text-base text-gray-100">{average === null ? "—" : average.toFixed(1)}</strong></div>
         </div>
-        <PitcherFirstInningRate starter={starter} sample={sample} />
+        <PitcherFirstInningRate starter={starter} sample={sample} pick={pick} />
       </div>
     </div>
   );
 }
 
-function PitcherFirstInningRate({ starter, sample }: { starter: PreviewPitcherFirstInningSide; sample: 5 | 10 }) {
+function PitcherFirstInningRate({ starter, sample, pick }: { starter: PreviewPitcherFirstInningSide; sample: 5 | 10; pick: string | null }) {
   const points = (starter?.points ?? []).slice(0, sample);
   const scorelessStarts = points.filter((point) => point.runsAllowed === 0).length;
   const average = points.length > 0 ? points.reduce((sum, point) => sum + point.runsAllowed, 0) / points.length : null;
   if (points.length === 0) return <div className="rounded-lg border border-dashed border-gray-700 bg-black/20 p-4"><p className="text-[8px] font-black uppercase tracking-[0.14em] text-sky-300">Starter opening frames</p><p className="mt-1 text-sm font-black text-white">{starter?.name ?? "Starter unavailable"}</p><p className="mt-3 text-[10px] font-black text-gray-300">No verified recent sample</p><p className="mt-1.5 text-[9px] leading-relaxed text-gray-500">{starter?.name ? `No completed starter games were linked to ${starter.name} in this snapshot. This is a data-availability gap, not a 0% result.` : "The probable starter was not available, so starter-specific first-inning history cannot be shown."}</p></div>;
-  return <div className="rounded-lg border border-sky-400/15 bg-sky-400/[0.035] p-4"><p className="text-[8px] font-black uppercase tracking-[0.14em] text-sky-300">Starter opening frames</p><p className="mt-1 text-sm font-black text-white">{starter?.name ?? "Starter unavailable"}</p><div className="mt-3 flex items-end justify-between gap-3"><div><p className="font-mono text-xl font-black text-white">{scorelessStarts}/{points.length}</p><p className="mt-0.5 text-[8px] text-gray-500">Starts with no first-inning run allowed</p></div><div className="text-right"><p className="font-mono text-sm font-black text-gray-200">{average === null ? "—" : average.toFixed(2)}</p><p className="mt-0.5 text-[8px] text-gray-500">Avg FI runs allowed</p></div></div><p className="mt-3 border-t border-white/[0.07] pt-3 text-[9px] leading-relaxed text-gray-500">{scorelessStarts} of {points.length} completed games started by {starter?.name ?? "this pitcher"} had no first-inning run allowed by his team.</p></div>;
+  const supportsYrfi = /yrfi/i.test(pick ?? "");
+  const supportsNrfi = /nrfi/i.test(pick ?? "");
+  const hasDirectionalPick = supportsYrfi || supportsNrfi;
+  const supportingStarts = supportsYrfi ? points.length - scorelessStarts : scorelessStarts;
+  const tone = hasDirectionalPick ? firstInningSupportTone(supportingStarts, points.length) : "neutral";
+  const toneClass = tone === "support" ? "border-emerald-400/25 bg-emerald-400/[0.045]" : tone === "challenge" ? "border-rose-400/20 bg-rose-500/[0.035]" : "border-sky-400/15 bg-sky-400/[0.035]";
+  const primaryCount = supportsYrfi ? points.length - scorelessStarts : scorelessStarts;
+  const primaryLabel = supportsYrfi ? "Starts with 1+ first-inning run allowed" : "Starts with no first-inning run allowed";
+  return <div className={`rounded-lg border p-4 ${toneClass}`}><div className="flex items-start justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.14em] text-sky-300">Starter opening frames</p><p className="mt-1 text-sm font-black text-white">{starter?.name ?? "Starter unavailable"}</p></div>{hasDirectionalPick && tone !== "neutral" ? <span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-wider ${tone === "support" ? "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-200" : "border-rose-400/20 bg-rose-400/[0.07] text-rose-200"}`}>{tone === "support" ? `Supports ${pick}` : `Challenges ${pick}`}</span> : null}</div><div className="mt-3 flex items-end justify-between gap-3"><div><p className={`font-mono text-xl font-black ${tone === "support" ? "text-emerald-300" : tone === "challenge" ? "text-rose-300" : "text-white"}`}>{primaryCount}/{points.length}</p><p className="mt-0.5 text-[8px] text-gray-500">{primaryLabel}</p></div><div className="text-right"><p className="font-mono text-sm font-black text-gray-200">{average === null ? "—" : average.toFixed(2)}</p><p className="mt-0.5 text-[8px] text-gray-500">Avg FI runs allowed</p></div></div><p className="mt-3 border-t border-white/[0.07] pt-3 text-[9px] leading-relaxed text-gray-500">{primaryCount} of {points.length} recent starts supported {pick ?? "the displayed FI read"}. Each starter is judged against the prediction independently, so both starters can support the same read.</p></div>;
 }
 
 function DecisionMetricGrid({ market }: { market: MarketEdgeDto }) {
@@ -726,8 +742,10 @@ function sourceCoherentMarketPulse(market: MarketEdgeDto, movement: CoherentMove
   // The pulse and the bars must describe the same current snapshot.
   const consensus = displayedConsensusSection(market);
   const sharp = decision?.sharpBookSplits ?? null;
-  const consensusLeader = splitLeader(consensus, "moneyPct");
-  const sharpLeader = splitLeader(sharp, "moneyPct");
+  const consensusSignal = splitSectionSignal(consensus);
+  const sharpSignal = splitSectionSignal(sharp);
+  const consensusLeader = consensusSignal.direction;
+  const sharpLeader = sharpSignal.direction;
   const splitConflict = splitSourcesConflict(consensus, sharp);
   const staleSplits = splitSectionIsStale(consensus) || splitSectionIsStale(sharp);
   const movementDirection = coherentMovementDirection(market, movement);
@@ -750,6 +768,25 @@ function sourceCoherentMarketPulse(market: MarketEdgeDto, movement: CoherentMove
   }
   if (movementDirection === "resistance") {
     return { chip: "Price movement resists our side", detail: [movementCopy, freshnessCopy].filter(Boolean).join(" "), tone: "amber" };
+  }
+
+  if (consensusSignal.internallySplit || sharpSignal.internallySplit) {
+    const sections = [
+      consensusSignal.internallySplit && consensusSignal.moneyLeader && consensusSignal.ticketLeader
+        ? `Public money leans ${consensusSignal.moneyLeader}, while public tickets lean ${consensusSignal.ticketLeader}.`
+        : null,
+      sharpSignal.internallySplit && sharpSignal.moneyLeader && sharpSignal.ticketLeader
+        ? `Sharp-book money leans ${sharpSignal.moneyLeader}, while sharp-book tickets lean ${sharpSignal.ticketLeader}.`
+        : null,
+      !sharpSignal.internallySplit && sharpLeader
+        ? `The sharp-book snapshot ${splitLeanStrength(sharp, market.pick ?? "") === "slight" ? "slightly " : ""}leans ${sharpLeader}.`
+        : null,
+    ];
+    return {
+      chip: consensusSignal.internallySplit ? "Public consensus is split" : "Sharp-book splits are mixed",
+      detail: [movementCopy, ...sections, freshnessCopy].filter(Boolean).join(" "),
+      tone: "gray",
+    };
   }
 
   if (sharpLeader && market.pick && !splitSectionIsStale(sharp)) {
@@ -878,8 +915,8 @@ function CrossSourceSplitRead({ consensus, sharp }: { consensus: MarketSplitDisp
 }
 
 function splitSourcesConflict(consensus: MarketSplitDisplaySection | null, sharp: MarketSplitDisplaySection | null): boolean {
-  const consensusLeader = splitLeader(consensus, "moneyPct");
-  const sharpLeader = splitLeader(sharp, "moneyPct");
+  const consensusLeader = splitSectionSignal(consensus).direction;
+  const sharpLeader = splitSectionSignal(sharp).direction;
   return consensusLeader !== null && sharpLeader !== null && consensusLeader.toLowerCase() !== sharpLeader.toLowerCase();
 }
 
@@ -908,23 +945,32 @@ function RelevantTrend({ game, market, marketKey, history, sample, setSample }: 
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-sky-200">Relevant trends</p><p className="mt-1 text-xs font-black text-gray-300">{title}</p><p className="mt-1 text-[8px] text-gray-600">Past results are context—not standalone proof of today&rsquo;s edge.</p></div><div className="inline-flex rounded-lg border border-gray-800 bg-black/25 p-1">{([5, 10] as const).map((value) => <button key={value} type="button" onClick={() => setSample(value)} className={`rounded-md px-3 py-1.5 text-[8px] font-black ${sample === value ? "bg-violet-500/20 text-violet-200" : "text-gray-600"}`}>L{value}</button>)}</div></div>
       <section className="mt-4 rounded-xl border border-sky-400/15 bg-sky-400/[0.035] p-4"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-sky-200">What the recent sample says</p><p className="mt-2 text-[11px] leading-relaxed text-gray-300">{interpretation}</p></section>
-      {rows.length > 0 ? <MarketSpecificTrend rows={rows} threshold={threshold} away={game.awayTeam} home={game.homeTeam} marketKey={marketKey} /> : <p className="mt-4 rounded-lg border border-gray-800 bg-black/20 p-4 text-[10px] text-gray-600">Completed-game history is unavailable for one or both teams.</p>}
+      {rows.length > 0 ? <MarketSpecificTrend rows={rows} threshold={threshold} away={game.awayTeam} home={game.homeTeam} marketKey={marketKey} pick={market.pick} /> : <p className="mt-4 rounded-lg border border-gray-800 bg-black/20 p-4 text-[10px] text-gray-600">Completed-game history is unavailable for one or both teams.</p>}
     </div>
   );
 }
 
-function MarketSpecificTrend({ rows, threshold, away, home, marketKey }: { rows: Array<{ away: number; home: number }>; threshold: number | null; away: string; home: string; marketKey: MarketKey }) {
-  if (marketKey === "moneyline") return <BinaryResultRows rows={rows} away={away} home={home} mode="moneyline" />;
-  if (marketKey === "first_inning") return <BinaryResultRows rows={rows} away={away} home={home} mode="first_inning" />;
+function MarketSpecificTrend({ rows, threshold, away, home, marketKey, pick }: { rows: Array<{ away: number; home: number }>; threshold: number | null; away: string; home: string; marketKey: MarketKey; pick: string | null }) {
+  if (marketKey === "moneyline") return <BinaryResultRows rows={rows} away={away} home={home} mode="moneyline" pick={pick} />;
+  if (marketKey === "first_inning") return <BinaryResultRows rows={rows} away={away} home={home} mode="first_inning" pick={pick} />;
   return <TotalResultRows rows={rows} line={threshold} away={away} home={home} />;
 }
 
-function BinaryResultRows({ rows, away, home, mode }: { rows: Array<{ away: number; home: number }>; away: string; home: string; mode: "moneyline" | "first_inning" }) {
+function BinaryResultRows({ rows, away, home, mode, pick }: { rows: Array<{ away: number; home: number }>; away: string; home: string; mode: "moneyline" | "first_inning"; pick: string | null }) {
+  const supportsYrfi = mode === "first_inning" && /yrfi/i.test(pick ?? "");
+  const supportsNrfi = mode === "first_inning" && /nrfi/i.test(pick ?? "");
+  const hasDirectionalFiPick = supportsYrfi || supportsNrfi;
+  const supportsRead = (value: number) => mode === "moneyline" ? value > 0 : supportsNrfi ? value === 0 : value > 0;
   const renderRow = (team: string, key: "away" | "home") => {
-    const hits = rows.filter((row) => row[key] > 0).length;
-    return <div className="grid grid-cols-[42px_1fr_auto] items-center gap-2"><span className="text-[9px] font-black text-gray-400">{team}</span><div className="flex gap-1">{rows.map((row, index) => { const hit = row[key] > 0; return <span key={index} title={`${team}: ${mode === "moneyline" ? (hit ? "win" : "loss") : (hit ? "run scored in first" : "scoreless first")}`} className={`flex h-7 min-w-6 flex-1 items-center justify-center rounded border text-[8px] font-black ${hit ? "border-emerald-300/30 bg-emerald-400/20 text-emerald-200" : "border-rose-300/25 bg-rose-500/15 text-rose-200"}`}>{mode === "moneyline" ? (hit ? "W" : "L") : (hit ? "1+" : "0")}</span>; })}</div><span className="w-10 text-right text-[8px] font-black text-gray-400">{mode === "moneyline" ? `${hits}-${rows.length - hits}` : `${hits}/${rows.length}`}</span></div>;
+    const hits = rows.filter((row) => supportsRead(row[key])).length;
+    return <div className="grid grid-cols-[42px_1fr_auto] items-center gap-2"><span className="text-[9px] font-black text-gray-400">{team}</span><div className="flex gap-1">{rows.map((row, index) => { const hit = supportsRead(row[key]); const rawRun = row[key] > 0; const directionalStyle = hit ? "border-emerald-300/30 bg-emerald-400/20 text-emerald-200" : "border-rose-300/25 bg-rose-500/15 text-rose-200"; const neutralStyle = rawRun ? "border-sky-300/30 bg-sky-400/20 text-sky-200" : "border-gray-500/30 bg-gray-600/20 text-gray-300"; return <span key={index} title={`${team}: ${mode === "moneyline" ? (hit ? "win" : "loss") : (rawRun ? "1+ run in first" : "scoreless first")}${hasDirectionalFiPick ? ` · ${hit ? "supports" : "challenges"} ${pick}` : ""}`} className={`flex h-7 min-w-6 flex-1 items-center justify-center rounded border text-[8px] font-black ${mode === "first_inning" && !hasDirectionalFiPick ? neutralStyle : directionalStyle}`}>{mode === "moneyline" ? (hit ? "W" : "L") : (rawRun ? "1+" : "0")}</span>; })}</div><span className="w-10 text-right text-[8px] font-black text-gray-400">{mode === "moneyline" ? `${hits}-${rows.length - hits}` : `${hits}/${rows.length}`}</span></div>;
   };
-  return <div className="mt-4 space-y-2">{renderRow(away, "away")}{renderRow(home, "home")}<p className="text-right text-[8px] text-gray-600">Oldest → newest · green = {mode === "moneyline" ? "win" : "1+ run"} · red = {mode === "moneyline" ? "loss" : "scoreless first"}</p></div>;
+  const legend = mode === "moneyline"
+    ? "green = win · red = loss"
+    : hasDirectionalFiPick
+      ? `green = supports ${pick} · red = challenges ${pick}`
+      : "blue = 1+ run · gray = scoreless first";
+  return <div className="mt-4 space-y-2">{renderRow(away, "away")}{renderRow(home, "home")}<p className="text-right text-[8px] text-gray-600">Oldest → newest · {legend}</p></div>;
 }
 
 function TotalResultRows({ rows, line, away, home }: { rows: Array<{ away: number; home: number }>; line: number | null; away: string; home: string }) {
