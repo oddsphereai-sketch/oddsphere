@@ -1967,6 +1967,30 @@ async function main() {
   // ─── Summary ──────────────────────────────────────────────────────────────
   section("Locked movement keeps the sportsbook identity captured at lock");
   {
+    const recommendationSnapshot = { game_id: 2, market_type: "moneyline", sportsbook: "recommendation_snapshot", side: "home", line_value: null, odds_american: -152, fetched_at: "2026-08-10T17:44:00Z" };
+    const currentBallybet = { game_id: 2, market_type: "moneyline", sportsbook: "ballybet", side: "home", line_value: null, odds_american: -152, fetched_at: "2026-08-10T17:43:00Z" };
+    const resolvedTrailRow = dailyEdgeTest.resolveTrailPriceRow({
+      priceRow: recommendationSnapshot,
+      bestAvailablePriceRow: currentBallybet,
+      currentAmerican: -152,
+      currentLine: null,
+      locked: false,
+    });
+    check(
+      "recommendation-snapshot current price recovers a matching real-book trail identity",
+      resolvedTrailRow?.sportsbook === "ballybet" && resolvedTrailRow?.odds_american === -152,
+    );
+    check(
+      "recommendation-snapshot price never borrows a mismatched real-book quote",
+      dailyEdgeTest.resolveTrailPriceRow({
+        priceRow: recommendationSnapshot,
+        bestAvailablePriceRow: { ...currentBallybet, odds_american: -141 },
+        currentAmerican: -152,
+        currentLine: null,
+        locked: false,
+      })?.sportsbook === "recommendation_snapshot",
+    );
+
     const sportsbook = dailyEdgeTest.readLockedSnapshotSportsbook(
       { odds_source_at_lock_ou: { under: { book: "pinnacle", line: 9.5, odds: -130 } } },
       "total",
@@ -1990,6 +2014,24 @@ async function main() {
     check(
       "locked trail excludes cross-book opener fallbacks",
       trail.length === 3 && trail.every((stop) => stop.sportsbook === "pinnacle") && trail[0]?.american === -120 && trail[2]?.american === -130,
+    );
+
+    const currentTrail = dailyEdgeTest.buildPersistedOddsTrail({
+      candidates: [
+        { id: 11, game_id: 2, market_type: "moneyline", sportsbook: "ballybet", side: "home", line_value: null, odds_american: -152, recorded_at: "2026-08-10T08:06:00Z" },
+        { id: 12, game_id: 2, market_type: "moneyline", sportsbook: "ballybet", side: "home", line_value: null, odds_american: -141, recorded_at: "2026-08-10T15:43:00Z" },
+      ],
+      priceRow: { game_id: 2, market_type: "moneyline", sportsbook: "ballybet", side: "home", line_value: null, odds_american: -152, fetched_at: "2026-08-10T17:43:00Z" },
+      currentAmerican: -152,
+      currentLine: null,
+      currentObservedAt: "2026-08-10T17:43:00Z",
+      lockedAmerican: null,
+      lockedAt: null,
+      terminalSportsbook: "ballybet",
+    });
+    check(
+      "unlocked same-book trail ends at the verified current quote, not the last historical move",
+      currentTrail.length === 3 && currentTrail[1]?.american === -141 && currentTrail[1]?.label === "move" && currentTrail[2]?.american === -152 && currentTrail[2]?.label === "current" && currentTrail[2]?.sportsbook === "ballybet",
     );
   }
 

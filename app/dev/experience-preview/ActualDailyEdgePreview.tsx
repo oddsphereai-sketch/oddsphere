@@ -654,7 +654,11 @@ function resolveCoherentMovement(market: MarketEdgeDto): { open: number | null; 
     groups.set(key, group);
   }
   const coherent = Array.from(groups.values())
-    .filter((group) => group.length >= 2)
+    // A historical same-book sequence is not a current trail unless that
+    // same book also owns the terminal current/locked endpoint. Without this
+    // guard an older `move` row can be mislabeled "Current" simply because it
+    // is the last observation available for that sportsbook.
+    .filter((group) => group.length >= 2 && group.some((stop) => stop.label === "current" || stop.label === "locked"))
     .sort((a, b) => b.length - a.length)[0];
   if (coherent) {
     const first = coherent[0]!;

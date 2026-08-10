@@ -3080,6 +3080,27 @@ function sameLineValue(a: number | null | undefined, b: number | null | undefine
   return Math.abs(a - b) < 0.001;
 }
 
+function resolveTrailPriceRow(args: {
+  priceRow: LineRow | null;
+  bestAvailablePriceRow: LineRow | null;
+  currentAmerican: number | null;
+  currentLine: number | null;
+  locked: boolean;
+}): LineRow | null {
+  if (args.locked || args.priceRow?.sportsbook !== "recommendation_snapshot") {
+    return args.priceRow;
+  }
+  const candidate = args.bestAvailablePriceRow;
+  if (
+    candidate !== null &&
+    candidate.odds_american === args.currentAmerican &&
+    sameLineValue(candidate.line_value, args.currentLine)
+  ) {
+    return candidate;
+  }
+  return args.priceRow;
+}
+
 function buildPersistedOddsTrail(args: {
   candidates: LineHistoryRow[];
   priceRow: LineRow | null;
@@ -4317,15 +4338,33 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     lineOpenObservedAt !== null && openAmerican !== null
       ? isObservationStale(lineOpenObservedAt)
       : false;
-  const oddsTrail = buildPersistedOddsTrail({
-    candidates: input.lineOpenCandidates,
+  // A recommendation snapshot can carry the freshest selected-side price
+  // without retaining the originating book. When the separately validated
+  // best-available row has the exact same price/line, use its real sportsbook
+  // identity to cap the persisted trail. This prevents an older historical
+  // stop at that book from being mislabeled as "Current" while the card shows
+  // a newer recommendation-snapshot price. It is display-only: grade, pick,
+  // probability, verdict, tracking and lock inputs continue to use
+  // `priceAmerican` above.
+  const trailPriceRow = resolveTrailPriceRow({
     priceRow,
+    bestAvailablePriceRow,
     currentAmerican: priceAmerican,
     currentLine: priceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null,
+    locked: input.isLockedRow === true,
+  });
+  const oddsTrail = buildPersistedOddsTrail({
+    candidates: input.lineOpenCandidates,
+    priceRow: trailPriceRow,
+    currentAmerican: priceAmerican,
+    currentLine: trailPriceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null,
     currentObservedAt: priceObservedAt,
     lockedAmerican: input.lockedPriceAmerican ?? null,
     lockedAt: input.lockedPriceAt ?? null,
-    terminalSportsbook: input.lockedPriceSportsbook ?? priceRow?.sportsbook ?? null,
+    terminalSportsbook:
+      input.isLockedRow === true
+        ? input.lockedPriceSportsbook ?? trailPriceRow?.sportsbook ?? null
+        : trailPriceRow?.sportsbook ?? null,
   });
 
   // Per-market signal-derived quantitative fields. Pick the +EV signal on
@@ -5804,6 +5843,7 @@ export const __TEST__ = {
   resolveSharpBookSplitSection,
   visibleTotalPointMarketReadScore,
   suppressIncomparableLineMovePrices,
+  resolveTrailPriceRow,
   buildPersistedOddsTrail,
   readLockedSnapshotSportsbook,
   GRADE_RANK,
