@@ -1242,27 +1242,30 @@ function CoverageGap({ text }: { text: string }) {
 function TeamLogo({ src, label }: { src: string | null; label: string }) {
   // The response owns team identity. Several WNBA abbreviations overlap MLB
   // (ATL, CHI, SEA, TOR), so an MLB-first fallback silently replaced correct
-  // WNBA assets in the candidate reader. Only synthesize an MLB URL when the
-  // authoritative response did not supply any logo at all.
-  const resolvedSrc = src ?? mlbLogoUrl(label);
+  // WNBA assets in the candidate reader. Legacy MLB rows still contain the
+  // retired mlbstatic.com `*-72.png` URLs, which now return 404. Replace only
+  // that known MLB format (or a blank value) with the working ESPN team mark
+  // used by the previous product surface; valid league-owned assets stay put.
+  const suppliedSrc = src?.trim() || null;
+  const resolvedSrc = !suppliedSrc || suppliedSrc.includes("mlbstatic.com/team-logos/")
+    ? mlbLogoUrl(label)
+    : suppliedSrc;
   const [imageFailed, setImageFailed] = useState(!resolvedSrc);
-  const [imageLoaded, setImageLoaded] = useState(false);
   const theme = teamTheme(label);
   const accent = teamAccent(label);
   return (
-    <span className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[#f7f8fb] text-[7px] font-black shadow-[0_4px_14px_rgba(0,0,0,0.28)]" style={{ borderColor: `${accent}99`, color: theme.primary }}>
-      {!imageLoaded ? <span className="relative z-10 tracking-tight">{label.slice(0, 3)}</span> : null}
+    <span className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[#f7f8fb] text-[7px] font-black shadow-[0_4px_14px_rgba(0,0,0,0.28)]" style={{ borderColor: `${accent}99`, color: theme.primary }}>
+      <span className="relative z-10 tracking-tight">{label.slice(0, 3)}</span>
       {resolvedSrc && !imageFailed ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={resolvedSrc}
           alt=""
-          onLoad={() => setImageLoaded(true)}
           onError={() => setImageFailed(true)}
-          className={`absolute inset-0 h-full w-full object-contain p-1 transition-opacity ${imageLoaded ? "opacity-100" : "opacity-0"}`}
+          className="absolute inset-0 z-20 h-full w-full bg-[#f7f8fb] object-contain p-0.5"
         />
       ) : null}
-      <span className="absolute inset-x-0 bottom-0 h-1" style={{ backgroundColor: accent }} />
+      <span className="absolute inset-x-0 bottom-0 z-30 h-1" style={{ backgroundColor: accent }} />
     </span>
   );
 }
