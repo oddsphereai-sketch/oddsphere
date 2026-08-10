@@ -95,6 +95,21 @@ export function isSignalOptionalResearchModule(module: PlayerPropResearchModule)
   return SIGNAL_OPTIONAL_RESEARCH_MODULES.has(module);
 }
 
+// A near-complete pitch-mix join can still be a substantial verified sample
+// even when it narrowly misses the 70% label used for full visual coverage.
+// Keep the model's existing conservative `partial` weighting intact, but do
+// not classify a 60%+ / 3-pitch / 100-pitch sample as missing ingestion. This
+// also makes full rebuilds and fast reuse apply the same readiness contract.
+export function pitchMixResearchSampleIsUsable(
+  evidence: PlayerPitchMixMatchupEvidence | null,
+): boolean {
+  if (evidence === null) return false;
+  if (evidence.coverageStatus === "available") return true;
+  return evidence.pitchMixCoveragePercent >= 60
+    && evidence.matchedPitchTypes >= 3
+    && evidence.hitterPitchesSeen >= 100;
+}
+
 const ALL_RESEARCH_MODULES: PlayerPropResearchModule[] = [
   "player_identity",
   "recent_form",
@@ -256,7 +271,7 @@ function moduleAvailable(
     case "opponent_profile": return evidence.opponentProfile !== null;
     case "pitch_arsenal": return evidence.pitchArsenal !== null;
     case "opposing_starter": return Boolean(candidate.opposingPitcherBdlId);
-    case "pitch_mix_matchup": return evidence.pitchMatchup !== null && evidence.pitchMatchup.coverageStatus === "available";
+    case "pitch_mix_matchup": return pitchMixResearchSampleIsUsable(evidence.pitchMatchup);
     case "park_factor": return evidence.environment?.park.status === "available";
     case "game_time_weather": return evidence.environment?.weather.status === "available";
   }

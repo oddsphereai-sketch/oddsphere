@@ -139,7 +139,10 @@ async function auditSport(sport: Sport, date: string): Promise<SportReport> {
       linesByMarket: {},
       publicSplitsByMarket: {},
       predictionRecordsByMarket: {},
-      expectedMarketsMissingRecords: [...EXPECTED_MARKETS[sport]],
+      // An inactive/offseason slate is not missing model output. The product
+      // should show "No games today," and the audit should not manufacture
+      // missing-market findings for games that do not exist.
+      expectedMarketsMissingRecords: [],
       records: { total: 0, locked: 0, missingOdds: 0, missingLineValue: 0, held: 0, noBet: 0 },
       notes: ["no games on slate"],
     };
@@ -176,8 +179,10 @@ async function auditSport(sport: Sport, date: string): Promise<SportReport> {
     if (s.public_betting_pct !== null || s.public_money_pct !== null) inc(publicSplitsByMarket, s.market_type);
   }
 
-  const scheduled = games.filter((g) => g.status === "scheduled").length;
-  const final = games.filter((g) => g.status === "final").length;
+  const normalizedStatus = (value: string | null) =>
+    String(value ?? "").trim().toLowerCase().replace(/^status_/, "");
+  const scheduled = games.filter((g) => normalizedStatus(g.status) === "scheduled").length;
+  const final = games.filter((g) => ["final", "completed"].includes(normalizedStatus(g.status))).length;
 
   if (sport === "soccer") notes.push("World Cup/soccer public splits are not expected unless provider coverage is verified.");
   if (sport === "wnba") notes.push("WNBA total/spread fallback may have line values without odds when Playbook fills a SharpAPI market gap.");

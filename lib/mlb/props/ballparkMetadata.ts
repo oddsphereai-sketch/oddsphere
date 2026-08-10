@@ -11,6 +11,7 @@ const VENUE_ALIASES: Record<string, string> = {
   "american family field": "miller park",
   "daikin park": "minute maid park",
   "rate field": "guaranteed rate field",
+  "uniqlo field at dodger stadium": "dodger stadium",
 };
 
 export function resolveMlbBallparkMetadata(venue: string | null | undefined): MlbBallparkMetadata | null {

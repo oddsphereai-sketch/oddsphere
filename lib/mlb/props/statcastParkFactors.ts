@@ -35,12 +35,33 @@ export class StatcastParkFactorClient {
   }
 
   private async fetchParkFactors(season: number): Promise<StatcastParkFactor[]> {
+    const [multiYear, singleYear] = await Promise.all([
+      this.fetchParkFactorsForRolling(season, 3),
+      // A new venue cannot appear in the three-year table until it has a
+      // multi-season sample. Merge only missing venues from the current-year
+      // official table (for example Sutter Health Park) while preserving the
+      // established three-year factors everywhere else.
+      this.fetchParkFactorsForRolling(season, 1),
+    ]);
+    const knownTeams = new Set(multiYear.map((row) => row.teamId));
+    const knownVenues = new Set(multiYear.map((row) => normalizeVenue(row.venue)));
+    return [
+      ...multiYear,
+      ...singleYear.filter((row) => !knownTeams.has(row.teamId) && !knownVenues.has(normalizeVenue(row.venue))),
+    ];
+  }
+
+  private async fetchParkFactorsForRolling(season: number, rolling: 1 | 3): Promise<StatcastParkFactor[]> {
     const url = new URL("https://baseballsavant.mlb.com/leaderboard/statcast-park-factors");
     url.searchParams.set("type", "year");
     url.searchParams.set("year", String(season));
+    url.searchParams.set("condition", "All");
+    url.searchParams.set("batSide", "");
+    url.searchParams.set("stat", "index_wOBA");
+    url.searchParams.set("rolling", String(rolling));
     const response = await this.fetcher(url, {
       headers: { Accept: "text/html" },
-      next: { revalidate: 86_400, tags: [`mlb-statcast-park-factors-${season}`] },
+      next: { revalidate: 86_400, tags: [`mlb-statcast-park-factors-${season}-${rolling}`] },
     });
     if (!response.ok) throw new Error(`Baseball Savant park factors failed ${response.status}`);
     return parseStatcastParkFactorsHtml(await response.text(), season);

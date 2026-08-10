@@ -164,6 +164,7 @@ type DailyEdgeWarmCacheEntry = {
   freshUntilMs: number;
 };
 const dailyEdgeWarmCache = new Map<string, DailyEdgeWarmCacheEntry>();
+const dailyEdgeStaleRecovery = new Map<string, Promise<DailyEdgeResponse | null>>();
 
 function dailyEdgeWarmCacheKey(args: {
   sport: Sport;
@@ -184,12 +185,64 @@ function dailyEdgeWarmCacheKey(args: {
 }
 
 function cachedDailyEdgeResponse(body: DailyEdgeResponse, cacheStatus: "hit" | "miss"): Response {
+  suppressIncomparableLineMovePrices(body);
   return Response.json(body, {
     headers: {
       ...DAILY_EDGE_NO_STORE_HEADERS,
       "X-Oddsphere-Daily-Edge-Cache": cacheStatus,
     },
   });
+}
+
+async function recoverExpiredDailyEdgeSnapshot(
+  snapshotKey: string,
+  requestUrl: URL,
+): Promise<DailyEdgeResponse | null> {
+  const existing = dailyEdgeStaleRecovery.get(snapshotKey);
+  if (existing) return existing;
+  const recovery = (async () => {
+    try {
+      const bypassUrl = new URL(requestUrl);
+      bypassUrl.searchParams.set("snapshotBypass", "true");
+      const response = await GET(new Request(bypassUrl));
+      if (!response.ok) return null;
+      return await response.json() as DailyEdgeResponse;
+    } catch (error) {
+      console.warn(`Daily Edge stale-snapshot recovery failed for ${snapshotKey}: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  })();
+  dailyEdgeStaleRecovery.set(snapshotKey, recovery);
+  try {
+    return await recovery;
+  } finally {
+    if (dailyEdgeStaleRecovery.get(snapshotKey) === recovery) {
+      dailyEdgeStaleRecovery.delete(snapshotKey);
+    }
+  }
+}
+
+/**
+ * A price before/after a total or spread number change is not an apples-to-
+ * apples odds move. Keep the number move, but clear the price pair at the
+ * response boundary. This also sanitizes older stored response snapshots.
+ */
+function suppressIncomparableLineMovePrices(body: DailyEdgeResponse): DailyEdgeResponse {
+  for (const game of body.games) {
+    for (const market of Object.values(game.markets)) {
+      const previousLine = market.lastMoveLinePrev;
+      const nextLine = market.lastMoveLineNext;
+      if (
+        previousLine !== null && previousLine !== undefined &&
+        nextLine !== null && nextLine !== undefined &&
+        !sameLineValue(previousLine, nextLine)
+      ) {
+        market.lastMovePrevAmerican = null;
+        market.lastMoveNextAmerican = null;
+      }
+    }
+  }
+  return body;
 }
 
 function countMlbDailyEdgeSupportedGames(rawSchedule: unknown): number | null {
@@ -1250,7 +1303,7 @@ function readMlbDataCompletenessDto(
  * earlier minimal shape ({ american, at }). Defensive: returns empty per-market
  * when the JSONB path is absent, so the First Published stop is simply omitted.
  */
-type PostedLine = { american: number | null; at: string | null };
+type PostedLine = { american: number | null; at: string | null; side: string | null };
 type MarketReadV2Lookup = {
   enabled: boolean;
   responseAsOf: string;
@@ -1283,10 +1336,11 @@ function readPostedLines(
   for (const key of ["moneyline", "total", "first_inning"] as const) {
     const v = obj[key];
     if (v !== null && typeof v === "object") {
-      const e = v as { odds_american?: unknown; american?: unknown; observed_at?: unknown; at?: unknown };
+      const e = v as { odds_american?: unknown; american?: unknown; observed_at?: unknown; at?: unknown; side?: unknown };
       const odds = typeof e.odds_american === "number" ? e.odds_american : typeof e.american === "number" ? e.american : null;
       const ts = typeof e.observed_at === "string" ? e.observed_at : typeof e.at === "string" ? e.at : null;
-      out[key] = { american: odds, at: ts };
+      const side = typeof e.side === "string" ? e.side.toLowerCase() : null;
+      out[key] = { american: odds, at: ts, side };
     }
   }
   return out;
@@ -1481,12 +1535,16 @@ function buildSourceAwareSplitSectionsFromRows(
       return { label, rows: sectionRows, signal: null, lastUpdated };
     };
     const consensus = buildSection("Consensus Splits", (row) => row.provider === "playbook" || row.source_type === "multi_book_consensus");
-    const sharpBook = buildSection(
+    const sharpBookCandidate = buildSection(
       "Sharp Book Splits",
       (row) =>
         row.provider === "sharpapi" &&
         (row.source_book === "circa" || row.source_type === "sharp_adjacent_book"),
     );
+    const sharpBook = sharpBookCandidate?.rows.length === 2
+      && sharpBookCandidate.rows.every((row) => row.moneyPct !== null && row.betsPct !== null)
+      ? sharpBookCandidate
+      : null;
     if (consensus || sharpBook) result.set(key, { consensus, sharpBook });
   }
   return result;
@@ -1538,7 +1596,9 @@ function legacySharpSplitSection(args: {
     .filter((value): value is string => typeof value === "string" && value.length > 0)
     .sort()
     .at(-1) ?? null;
-  if (sectionRows.length > 0) {
+  const hasCompleteTwoSidedSplit = sectionRows.length === 2
+    && sectionRows.every((row) => row.moneyPct !== null && row.betsPct !== null);
+  if (hasCompleteTwoSidedSplit) {
     return {
       label: "Sharp Book Splits",
       rows: sectionRows,
@@ -1563,22 +1623,13 @@ function legacySharpSplitSection(args: {
 function resolveSharpBookSplitSection(
   sourceAware: { sharpBook: MarketSplitDisplaySection | null } | undefined,
   legacyArgs: Parameters<typeof legacySharpSplitSection>[0],
-  effectiveSplitRows: MarketSplitDisplaySection["rows"] = [],
 ): MarketSplitDisplaySection | null {
   if (sourceAware?.sharpBook) return sourceAware.sharpBook;
-  if (effectiveSplitRows.length > 0) {
-    const lastUpdated = effectiveSplitRows
-      .map((row) => row.observedAt)
-      .filter((value): value is string => typeof value === "string" && value.length > 0)
-      .sort()
-      .at(-1) ?? null;
-    return {
-      label: "Sharp Book Splits",
-      rows: effectiveSplitRows,
-      signal: null,
-      lastUpdated,
-    };
-  }
+  // Consensus rows are never a sharp-book fallback. Reusing them here made
+  // the member reader show the same Playbook percentages twice under two
+  // different source labels. If a source-specific sharp pair is absent, the
+  // only safe fallback is the legacy sharp signal path below (which can render
+  // a qualitative signal without inventing sharp money percentages).
   return legacySharpSplitSection(legacyArgs);
 }
 
@@ -1605,6 +1656,7 @@ function buildGameDto(
     // 2026-06-16 — picked-side price frozen at T-60 lock (Locked stop).
     lockedPriceAmerican: number | null;
     lockedPriceAt: string | null;
+    lockedPriceSportsbook: string | null;
   }>,
   // 2026-06-16 — live stream prices keyed streamKey(gameId, dbMarket, side).
   // Empty map until the v24 table is populated → overlay is a no-op.
@@ -2225,8 +2277,10 @@ function buildGameDto(
     lastMove: lastMoveFor("moneyline", pred.predicted_ml_winner),
     oddspherePostedAmerican: postedLines.moneyline?.american ?? null,
     oddspherePostedAt: postedLines.moneyline?.at ?? null,
+    oddspherePostedSide: postedLines.moneyline?.side ?? null,
     lockedPriceAmerican: lockedMl?.lockedPriceAmerican ?? null,
     lockedPriceAt: lockedMl?.lockedPriceAt ?? null,
+    lockedPriceSportsbook: lockedMl?.lockedPriceSportsbook ?? null,
     marketReadV2: mlMarketReadV2,
     marketReadV2Enabled: marketReadV2Lookup?.enabled === true,
   });
@@ -2281,8 +2335,10 @@ function buildGameDto(
     lastMove: lastMoveFor("total", pred.predicted_ou_side),
     oddspherePostedAmerican: postedLines.total?.american ?? null,
     oddspherePostedAt: postedLines.total?.at ?? null,
+    oddspherePostedSide: postedLines.total?.side ?? null,
     lockedPriceAmerican: lockedOu?.lockedPriceAmerican ?? null,
     lockedPriceAt: lockedOu?.lockedPriceAt ?? null,
+    lockedPriceSportsbook: lockedOu?.lockedPriceSportsbook ?? null,
     marketReadV2: totalMarketReadV2,
     marketReadV2Enabled: marketReadV2Lookup?.enabled === true,
   });
@@ -2306,6 +2362,10 @@ function buildGameDto(
         : openLinesByGameMarket.get(
             `${row.id}::first_inning_total::${fiEffectiveSide}`
           ) ?? [],
+    fiBoardLineOpenCandidates: [
+      ...(openLinesByGameMarket.get(`${row.id}::first_inning_total::over`) ?? []),
+      ...(openLinesByGameMarket.get(`${row.id}::first_inning_total::under`) ?? []),
+    ].sort((a, b) => a.recorded_at.localeCompare(b.recorded_at) || a.id - b.id),
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
@@ -2335,8 +2395,10 @@ function buildGameDto(
     lastMove: lastMoveFor("first_inning_total", fiEffectiveSide),
     oddspherePostedAmerican: postedLines.first_inning?.american ?? null,
     oddspherePostedAt: postedLines.first_inning?.at ?? null,
+    oddspherePostedSide: postedLines.first_inning?.side ?? null,
     lockedPriceAmerican: lockedFi?.lockedPriceAmerican ?? null,
     lockedPriceAt: lockedFi?.lockedPriceAt ?? null,
+    lockedPriceSportsbook: lockedFi?.lockedPriceSportsbook ?? null,
     marketReadV2: null,
     marketReadV2Enabled: marketReadV2Lookup?.enabled === true,
   });
@@ -2427,7 +2489,7 @@ function buildGameDto(
     market: "moneyline",
     homeAbbr: home,
     awayAbbr: away,
-  }, ml.publicSplits);
+  });
   const totalSharpBookSplits = resolveSharpBookSplitSection(totalSourceAwareSplits, {
     direction: deriveSharpDirection(signals, "total", totalSelectedSide),
     pick: total.pick,
@@ -2436,7 +2498,7 @@ function buildGameDto(
     market: "total",
     homeAbbr: home,
     awayAbbr: away,
-  }, total.publicSplits);
+  });
   const buildSourceAwareRecommendationDecision = () =>
     applyDailyEdgeRenderedCopyFlags(buildRecommendationDecision({
       sport: row.sport,
@@ -2742,6 +2804,36 @@ function readRecommendationSnapshotObservedAt(
   return typeof observedAt === "string" && observedAt.length > 0 ? observedAt : null;
 }
 
+function readLockedSnapshotSportsbook(
+  snapshot: Record<string, unknown> | null,
+  market: string,
+  side: string | null,
+): string | null {
+  if (snapshot === null) return null;
+  const sourceKey =
+    market === "moneyline"
+      ? "odds_source_at_lock_ml"
+      : market === "total"
+        ? "odds_source_at_lock_ou"
+        : market === "first_inning"
+          ? "odds_source_at_lock_fi"
+          : null;
+  if (sourceKey === null) return null;
+  const source = snapshot[sourceKey];
+  if (source === null || typeof source !== "object") return null;
+  const sourceObj = source as Record<string, unknown>;
+  const selectedSource = market === "first_inning"
+    ? sourceObj.picked
+    : side === null
+      ? null
+      : sourceObj[side];
+  if (selectedSource === null || typeof selectedSource !== "object") return null;
+  const book = (selectedSource as Record<string, unknown>).book;
+  return typeof book === "string" && book.length > 0 && !isBlockedSportsbook(book)
+    ? book
+    : null;
+}
+
 function isCurrentPriceStale(
   observedAtIso: string | null,
   nowMs: number = Date.now(),
@@ -2876,15 +2968,17 @@ function buildPersistedOddsTrail(args: {
   currentObservedAt: string | null;
   lockedAmerican: number | null;
   lockedAt: string | null;
+  terminalSportsbook?: string | null;
 }): OddsTrailStop[] {
   if (args.currentAmerican === null && args.lockedAmerican === null) return [];
   const trustedCandidates = args.candidates.filter(
     (row) => !isBlockedSportsbook(row.sportsbook),
   );
+  const terminalSportsbook = args.terminalSportsbook ?? args.priceRow?.sportsbook ?? null;
   const matchingBook =
-    args.priceRow === null
+    terminalSportsbook === null
       ? []
-      : trustedCandidates.filter((row) => row.sportsbook === args.priceRow!.sportsbook);
+      : trustedCandidates.filter((row) => row.sportsbook === terminalSportsbook);
   const sameDisplayedLine = (rows: LineHistoryRow[]) =>
     args.currentLine === null
       ? rows
@@ -2932,7 +3026,8 @@ function buildPersistedOddsTrail(args: {
     if (
       prev !== undefined &&
       prev.american === stop.american &&
-      sameLineValue(prev.line, stop.line)
+      sameLineValue(prev.line, stop.line) &&
+      prev.observedAt === stop.observedAt
     ) {
       return;
     }
@@ -2966,7 +3061,7 @@ function buildPersistedOddsTrail(args: {
       american: terminalAmerican,
       line: args.currentLine,
       observedAt: terminalObservedAt,
-      sportsbook: args.priceRow?.sportsbook ?? null,
+      sportsbook: terminalSportsbook,
       source: terminalSource,
     });
   }
@@ -3403,6 +3498,8 @@ type BuildMarketEdgeInput = {
    * null and the line-move chip is suppressed (no fabrication).
    */
   lineOpenCandidates: LineHistoryRow[];
+  /** Both FI sides for the presentation-only two-sided price board. */
+  fiBoardLineOpenCandidates?: LineHistoryRow[];
   autoFactors: Record<string, unknown> | null;
   homeAbbr: string;
   awayAbbr: string;
@@ -3502,13 +3599,71 @@ type BuildMarketEdgeInput = {
   streamCurrent?: { american: number | null; line: number | null; observedAt: string | null } | null;
   oddspherePostedAmerican?: number | null;
   oddspherePostedAt?: string | null;
+  oddspherePostedSide?: string | null;
   lockedPriceAmerican?: number | null;
   lockedPriceAt?: string | null;
+  lockedPriceSportsbook?: string | null;
   /** Most-recent picked-side move (line_movements) for the market-read chip. */
   lastMove?: LastMove | null;
   marketReadV2?: MarketReadV2Dto | null;
   marketReadV2Enabled?: boolean;
 };
+
+function readTeamOpsDisplayProxy(
+  sportSpecific: Record<string, unknown> | null | undefined,
+  side: "away" | "home",
+): number | null {
+  const record = (value: unknown): Record<string, unknown> | null =>
+    value !== null && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
+  const audit = record(sportSpecific?.v2_2_audit);
+  const capture = record(audit?.feature_capture);
+  const teams = record(capture?.team);
+  const team = record(teams?.[side]);
+  const value = team?.team_avg_batter_ops;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readGameTimeWeatherDisplay(
+  sportSpecific: Record<string, unknown> | null | undefined,
+): string | null {
+  const audit = readRecordObject(sportSpecific?.v2_2_audit);
+  const overlay =
+    readRecordObject(sportSpecific?.playbook_venue_weather) ??
+    readRecordObject(audit?.playbook_venue_weather);
+  const capture = readRecordObject(audit?.feature_capture);
+  const capturedWeather = readRecordObject(capture?.weather);
+
+  const finite = (...values: unknown[]): number | null => {
+    for (const value of values) {
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+    }
+    return null;
+  };
+  const cleanToken = (value: unknown): string | null =>
+    typeof value === "string" && value.trim() && value !== "N_A"
+      ? value.trim()
+      : null;
+
+  const temp = finite(overlay?.temp_f, capturedWeather?.temperature_f);
+  const humidity = finite(capturedWeather?.humidity_pct);
+  const wind = finite(overlay?.wind_mph, capturedWeather?.wind_speed_mph);
+  const windType = cleanToken(overlay?.wind_type)?.toLowerCase().replaceAll("_", " ") ?? null;
+  const roof = cleanToken(overlay?.roof_status)?.toLowerCase().replaceAll("_", " ") ?? null;
+  const notable = cleanToken(capturedWeather?.notable_reason)?.toLowerCase() ?? null;
+
+  const parts: string[] = [];
+  if (roof === "closed") parts.push("Roof closed");
+  if (temp !== null) parts.push(`${Math.round(temp)}°F`);
+  if (notable?.includes("rain")) parts.push("Rain possible");
+  if (wind !== null) {
+    parts.push(`Wind ${Math.round(wind)} mph${windType ? ` ${windType}` : ""}`);
+  }
+  if (humidity !== null && roof !== "closed") parts.push(`${Math.round(humidity)}% humidity`);
+  if (roof && roof !== "closed") parts.push(`Roof ${roof}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
 
 function displayMarketReadLabel(score: number): string {
   if (score >= 4) return "Strong Market Support";
@@ -3893,13 +4048,13 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     fiAuditForBoard?.market_nrfi_odds_american ?? fiNrfiCurrentRow?.odds_american ?? null;
   const fiBoardSportsbook = fiBoardSportsbookFromReason(fiAuditForBoard?.market_reason ?? null);
   const fiYrfiHistory = fiBoardHistorySide({
-    candidates: input.lineOpenCandidates,
+    candidates: input.fiBoardLineOpenCandidates ?? input.lineOpenCandidates,
     side: "over",
     sportsbook: fiBoardSportsbook ?? fiYrfiCurrentRow?.sportsbook ?? null,
     currentAmerican: fiYrfiCurrentAmerican,
   });
   const fiNrfiHistory = fiBoardHistorySide({
-    candidates: input.lineOpenCandidates,
+    candidates: input.fiBoardLineOpenCandidates ?? input.lineOpenCandidates,
     side: "under",
     sportsbook: fiBoardSportsbook ?? fiNrfiCurrentRow?.sportsbook ?? null,
     currentAmerican: fiNrfiCurrentAmerican,
@@ -4020,6 +4175,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     currentObservedAt: priceObservedAt,
     lockedAmerican: input.lockedPriceAmerican ?? null,
     lockedAt: input.lockedPriceAt ?? null,
+    terminalSportsbook: input.lockedPriceSportsbook ?? priceRow?.sportsbook ?? null,
   });
 
   // Per-market signal-derived quantitative fields. Pick the +EV signal on
@@ -4289,7 +4445,11 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   });
 
   // KeyStats.
-  const keyStats = formatKeyStats(input.autoFactors, input.market);
+  const keyStats = formatKeyStats(input.autoFactors, input.market, {
+    awayTeamOpsProxy: readTeamOpsDisplayProxy(input.sportSpecific, "away"),
+    homeTeamOpsProxy: readTeamOpsDisplayProxy(input.sportSpecific, "home"),
+    gameTimeWeather: readGameTimeWeatherDisplay(input.sportSpecific),
+  });
 
   // Phase R-13C — two-sided publicSplits. The pre-R-13C scalars
   // (moneyPct / betsPct above) carry only the picked side's data, so
@@ -4440,8 +4600,11 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     modelMarketGapPct = null;
   }
   const visibleLastMove =
-    input.lastMove?.nextAmerican !== null &&
-    input.lastMove?.nextAmerican === priceAmerican
+    input.lastMove !== null && input.lastMove !== undefined &&
+    ((input.lastMove.nextAmerican !== null && input.lastMove.nextAmerican === priceAmerican) ||
+      (input.market === "total" &&
+        input.lastMove.nextLineValue !== null &&
+        sameLineValue(input.lastMove.nextLineValue, totalDisplayLine)))
       ? input.lastMove
       : null;
   const marketReadV2 = alignMarketReadV2ToVisibleOdds({
@@ -4634,6 +4797,10 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     // 2026-06-16 line-tracker stops (additive; null until streaming live).
     oddspherePostedAmerican: input.oddspherePostedAmerican ?? null,
     oddspherePostedAt: input.oddspherePostedAt ?? null,
+    oddspherePostedMatchesPick:
+      input.oddspherePostedSide === null || input.oddspherePostedSide === undefined
+        ? null
+        : input.modelSide !== null && input.oddspherePostedSide.toLowerCase() === input.modelSide.toLowerCase(),
     lockedLineAmerican: invalidFirstInningMarket ? null : input.lockedPriceAmerican ?? null,
     lockedLineAt: input.lockedPriceAt ?? null,
     oddsTrail: invalidFirstInningMarket ? [] : oddsTrail,
@@ -5464,6 +5631,9 @@ export const __TEST__ = {
   buildSourceAwareSplitSectionsFromRows,
   resolveSharpBookSplitSection,
   visibleTotalPointMarketReadScore,
+  suppressIncomparableLineMovePrices,
+  buildPersistedOddsTrail,
+  readLockedSnapshotSportsbook,
   GRADE_RANK,
 };
 
@@ -5520,20 +5690,30 @@ export async function GET(request: Request) {
       "@/lib/services/labResponseSnapshots"
     );
     const snapshotKey = dailyEdgeSnapshotKey({ sport, requestedDate, allowStale, copyPreview });
-    const snapshot = await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "fresh")
-      ?? await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "stale");
-    if (snapshot) {
+    const freshSnapshot = await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "fresh");
+    const staleSnapshot = freshSnapshot
+      ? null
+      : await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "stale");
+    const recoveredPayload = staleSnapshot
+      ? await recoverExpiredDailyEdgeSnapshot(snapshotKey, url)
+      : null;
+    const snapshot = freshSnapshot ?? staleSnapshot;
+    const payload = recoveredPayload ?? snapshot?.payload ?? null;
+    if (payload) {
       // Stored snapshots may predate the latest provider display overlay. Keep
       // the cached fast path coherent too; this is an in-memory display-only
       // normalization and does not rebuild the board or touch model outputs.
       if (sport === "mlb") {
-        refreshDisplayedSplitFreshness(snapshot.payload.games);
-        alignMarketReadsToDisplayedPublicSplits(snapshot.payload.games);
+        refreshDisplayedSplitFreshness(payload.games);
+        alignMarketReadsToDisplayedPublicSplits(payload.games);
       }
-      return Response.json(snapshot.payload, {
+      suppressIncomparableLineMovePrices(payload);
+      return Response.json(payload, {
         headers: {
           "Cache-Control": "private, max-age=30, stale-while-revalidate=300",
-          "X-Oddsphere-Response-Source": snapshot.cacheState,
+          "X-Oddsphere-Response-Source": recoveredPayload
+            ? "STALE_RECOVERED_FRESH"
+            : snapshot?.cacheState ?? "DYNAMIC",
         },
       });
     }
@@ -5565,7 +5745,7 @@ export async function GET(request: Request) {
   if (sport === "nba") {
     try {
       const adapted = await buildNbaDailyEdgeAdapted(requestedDate);
-      return Response.json(adapted, {
+      return Response.json(suppressIncomparableLineMovePrices(adapted), {
         headers: DAILY_EDGE_NO_STORE_HEADERS,
       });
     } catch (e) {
@@ -5603,7 +5783,7 @@ export async function GET(request: Request) {
         "@/lib/services/wnba/buildWnbaDailyEdgeAdapted"
       );
       const adapted = await buildWnbaDailyEdgeAdapted(requestedDate, renderedCopyFlagOverrides);
-      return Response.json(adapted, {
+      return Response.json(suppressIncomparableLineMovePrices(adapted), {
         headers: DAILY_EDGE_NO_STORE_HEADERS,
       });
     } catch (e) {
@@ -5629,7 +5809,7 @@ export async function GET(request: Request) {
         "@/lib/services/nhl/buildNhlDailyEdgeAdapted"
       );
       const adapted = await buildNhlDailyEdgeAdapted(requestedDate);
-      return Response.json(adapted, {
+      return Response.json(suppressIncomparableLineMovePrices(adapted), {
         headers: DAILY_EDGE_NO_STORE_HEADERS,
       });
     } catch (e) {
@@ -5662,7 +5842,7 @@ export async function GET(request: Request) {
         "@/lib/services/soccer/buildSoccerDailyEdgeAdapted"
       );
       const adapted = await buildSoccerDailyEdgeAdapted(requestedDate, renderedCopyFlagOverrides);
-      return Response.json(adapted, {
+      return Response.json(suppressIncomparableLineMovePrices(adapted), {
         headers: DAILY_EDGE_NO_STORE_HEADERS,
       });
     } catch (e) {
@@ -5920,6 +6100,7 @@ export async function GET(request: Request) {
       // 2026-06-16 — picked-side price frozen at T-60 lock (Locked stop).
       lockedPriceAmerican: number | null;
       lockedPriceAt: string | null;
+      lockedPriceSportsbook: string | null;
     }
   >();
   if (gameIds.length > 0) {
@@ -6240,6 +6421,11 @@ export async function GET(request: Request) {
         // 2026-06-16 — Locked stop: the picked-side price frozen at T-60.
         lockedPriceAmerican: effectiveRow.odds_american,
         lockedPriceAt: effectiveRow.locked_at,
+        lockedPriceSportsbook: readLockedSnapshotSportsbook(
+          effectiveRow.snapshot_json,
+          effectiveRow.market,
+          effectiveRow.side,
+        ),
       });
     }
 
@@ -6348,6 +6534,7 @@ export async function GET(request: Request) {
         // Unlocked rows have no T-60 Locked stop yet.
         lockedPriceAmerican: null,
         lockedPriceAt: null,
+        lockedPriceSportsbook: null,
       });
     }
 

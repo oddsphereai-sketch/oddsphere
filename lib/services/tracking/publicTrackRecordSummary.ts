@@ -3,6 +3,11 @@ import type {
   TrackedMarketV17,
   TrackedSport,
 } from "@/lib/types/domain/Tracking";
+import type { TrackingResponse } from "@/app/lab/lib/labTypes";
+import {
+  readLabResponseSnapshot,
+  trackingSnapshotKey,
+} from "@/lib/services/labResponseSnapshots";
 
 export type PublicTrackRecordMetric = {
   picks: number;
@@ -46,6 +51,16 @@ export type PublicTrackRecordSummary = {
   sports: PublicTrackRecordSport[];
   markets: PublicTrackRecordMarket[];
   lastUpdatedLabel: string;
+  currentOfficial?: {
+    asOf: string;
+    latestActivityDate: string;
+    wins: number;
+    losses: number;
+    pushes: number;
+    totalPredictions: number;
+    /** Percentage on a 0..100 scale for direct public presentation. */
+    hitRate: number;
+  };
   unavailableReason?: string;
 };
 
@@ -84,18 +99,6 @@ const SPORT_ORDER: TrackedSport[] = [
   "soccer",
   "ucl",
 ];
-
-const MARKET_LABEL: Record<TrackedMarketV17, string> = {
-  moneyline: "Moneyline",
-  total: "Totals",
-  first_inning: "First Inning",
-  nrfi: "NRFI",
-  yrfi: "YRFI",
-  spread: "Spread",
-  match_result: "Match Result",
-  double_chance: "Double Chance",
-  btts: "BTTS",
-};
 
 function metric(wins: number, total: number): PublicTrackRecordMetric {
   const losses = Math.max(0, total - wins);
@@ -160,6 +163,8 @@ function compareSport(a: TrackedSport, b: TrackedSport): number {
 
 export async function getPublicTrackRecordSummary(): Promise<PublicTrackRecordSummary> {
   const asOf = new Date().toISOString();
+  const currentSnapshot = await readLabResponseSnapshot<TrackingResponse>(trackingSnapshotKey(), "fresh")
+    ?? await readLabResponseSnapshot<TrackingResponse>(trackingSnapshotKey(), "stale");
   let overall = ZERO_METRIC;
   const sportMap = new Map<TrackedSport, PublicTrackRecordMetric>();
 
@@ -206,5 +211,14 @@ export async function getPublicTrackRecordSummary(): Promise<PublicTrackRecordSu
     sports,
     markets,
     lastUpdatedLabel: LAST_UPDATED,
+    currentOfficial: currentSnapshot ? {
+      asOf: currentSnapshot.payload.as_of,
+      latestActivityDate: currentSnapshot.payload.yesterdayRecap.date,
+      wins: currentSnapshot.payload.allTimeAggregate.wins,
+      losses: currentSnapshot.payload.allTimeAggregate.losses,
+      pushes: currentSnapshot.payload.allTimeAggregate.pushes,
+      totalPredictions: currentSnapshot.payload.allTimeAggregate.totalPredictions,
+      hitRate: Math.round(currentSnapshot.payload.allTimeAggregate.hitRate * 1_000) / 10,
+    } : undefined,
   };
 }

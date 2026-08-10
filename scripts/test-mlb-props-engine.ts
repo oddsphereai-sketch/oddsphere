@@ -45,10 +45,15 @@ import {
   buildPlayerPropRecentForm,
 } from "../lib/mlb/props/researchEvidence";
 import { parseBdlHitterPitchTypeStats, parseBdlPitchTypeStats, parseBdlResearchPlayer } from "../lib/mlb/props/ballDontLieResearch";
-import { enrichPlayerPropResearchRows } from "../lib/mlb/props/researchEnrichment";
+import {
+  enrichPlayerPropResearchRows,
+  pitchMixResearchSampleIsUsable,
+} from "../lib/mlb/props/researchEnrichment";
 import { parseNwsHourlyForecast } from "../lib/mlb/props/nwsWeatherClient";
-import { parseStatcastParkFactorsHtml } from "../lib/mlb/props/statcastParkFactors";
+import { parseOpenMeteoHourlyForecast } from "../lib/mlb/props/openMeteoWeatherClient";
+import { parseStatcastParkFactorsHtml, StatcastParkFactorClient } from "../lib/mlb/props/statcastParkFactors";
 import { loadSlateEnvironmentResearch } from "../lib/mlb/props/environmentResearch";
+import { resolveMlbBallparkMetadata } from "../lib/mlb/props/ballparkMetadata";
 import type { MlbTeamHittingProfile } from "../lib/providers/real_api/_mlbStatsApiClient";
 import {
   PROP_GRADES,
@@ -334,7 +339,7 @@ async function main() {
   check("BDL pitcher_outs normalization works", bdlParsed.filter((row) => row.marketKey === "pitcher_outs").length === 2);
   check("BDL generic outs alias remains a supported pitcher-outs market", readFileSync("lib/mlb/props/providerClients.ts", "utf8").includes('outs: "pitcher_outs"'));
   check("BDL milestone markets preserved as research-only", bdlParsed.some((row) => (row.rawPayload as { provider_prop_id?: unknown; market_kind?: unknown; recommendation_eligibility?: unknown }).provider_prop_id === "103" && (row.rawPayload as { market_kind?: unknown }).market_kind === "milestone" && (row.rawPayload as { recommendation_eligibility?: unknown }).recommendation_eligibility === "eligible_now"));
-  check("BDL vendors and updated_at preserved", bdlParsed.some((row) => row.sportsbook === "draftkings" && row.asOfTimestamp === "2026-07-07T14:45:00.000Z"));
+  check("BDL current quotes use fetch time while preserving provider updated_at for audit", bdlParsed.some((row) => row.sportsbook === "draftkings" && row.asOfTimestamp === "2026-07-07T15:00:00.000Z" && (row.rawPayload as { updated_at?: unknown }).updated_at === "2026-07-07T14:45:00.000Z"));
   check("BDL missing over/under pair preserved with reason", bdlParsed.some((row) => (row.rawPayload as { provider_prop_id?: unknown; reason_codes?: string[] }).provider_prop_id === "104" && ((row.rawPayload as { reason_codes?: string[] }).reason_codes ?? []).includes("MISSING_TWO_WAY_PAIR")));
   const bdlOpeningParsed = parseBallDontLiePlayerProps({ data: [{ ...bdlPropsSample.data[0], opened_at: "2026-07-07T12:00:00.000Z", updated_at: undefined }] }, "2026-07-07T15:00:00.000Z", undefined, "opening");
   check("BDL opening props preserve opened_at and opening role", bdlOpeningParsed.length === 2 && bdlOpeningParsed.every((row) => row.snapshotRole === "opening" && row.asOfTimestamp === "2026-07-07T12:00:00.000Z"));
@@ -463,6 +468,22 @@ async function main() {
   check("pitch-mix matchup blocks future rows and reports matched coverage", pitchMixEvidence?.pitches.length === 2 && pitchMixEvidence.matchedPitchTypes === 2 && pitchMixEvidence.hitterPitchesSeen === 280 && pitchMixEvidence.researchOnly);
   check("pitch-mix matchup weights hitter outcomes by opposing arsenal usage", pitchMixEvidence !== null && approx(pitchMixEvidence.weighted.xwoba ?? 0, (0.390 * 36.06 + 0.240 * 14.59) / (36.06 + 14.59), 0.000001));
   check("pitch-mix matchup stays distinct from direct BvP history", pitchMixEvidence?.summary.includes("season pitch mix") === true && pitchMixEvidence?.coverageStatus === "available");
+  const robustPartialPitchMix = pitchMixEvidence ? {
+    ...pitchMixEvidence,
+    coverageStatus: "partial" as const,
+    pitchMixCoveragePercent: 66.7,
+    matchedPitchTypes: 5,
+    hitterPitchesSeen: 264,
+  } : null;
+  const thinPartialPitchMix = pitchMixEvidence ? {
+    ...pitchMixEvidence,
+    coverageStatus: "partial" as const,
+    pitchMixCoveragePercent: 45,
+    matchedPitchTypes: 2,
+    hitterPitchesSeen: 48,
+  } : null;
+  check("verified robust partial pitch mix satisfies the research gate without changing its partial model weight", pitchMixResearchSampleIsUsable(robustPartialPitchMix));
+  check("thin partial pitch mix remains an explicit research gap", !pitchMixResearchSampleIsUsable(thinPartialPitchMix));
   const domeEnvironment = buildPlayerPropEnvironmentEvidence({ venue: "Indoor Park", roofStatus: "dome", asOfTimestamp: "2026-07-15T22:05:00.000Z" });
   check("environment adapter creates controlled dome context", domeEnvironment.weather.status === "available" && domeEnvironment.weather.conditions === "Controlled indoors" && domeEnvironment.weather.windSpeedMph === 0);
   const completeEnvironment = buildPlayerPropEnvironmentEvidence({
@@ -513,8 +534,27 @@ async function main() {
     { startTime: "2026-07-16T18:00:00-04:00", endTime: "2026-07-16T19:00:00-04:00", temperature: 88, temperatureUnit: "F", windSpeed: "7 to 12 mph", windDirection: "SW", shortForecast: "Chance Showers", probabilityOfPrecipitation: { value: 40 } },
   ] } }, "2026-07-16T22:30:00.000Z");
   check("NWS hourly parser selects the game-time period and normalizes forecast fields", nwsForecast?.temperatureF === 88 && nwsForecast.windSpeedMph === 12 && nwsForecast.windDirection === "SW" && nwsForecast.precipitationProbability === 40);
+  const globalForecast = parseOpenMeteoHourlyForecast({ hourly: {
+    time: ["2026-07-16T22:00", "2026-07-16T23:00"],
+    temperature_2m: [77, 75],
+    precipitation_probability: [20, 30],
+    weather_code: [2, 61],
+    wind_speed_10m: [8, 10],
+    wind_direction_10m: [225, 270],
+  } }, "2026-07-16T22:30:00.000Z");
+  check("global weather fallback resolves international game-time conditions", globalForecast?.temperatureF === 77 && globalForecast.conditions === "Partly cloudy" && globalForecast.windDirection === "SW" && globalForecast.precipitationProbability === 20);
+  check("renamed Dodger Stadium venue resolves to the canonical weather coordinates", resolveMlbBallparkMetadata("UNIQLO Field at Dodger Stadium")?.name === "Dodger Stadium");
   const statcastRows = parseStatcastParkFactorsHtml('<script>var data = [{"grouping_venue_conditions":"All","key_bat_side":"All","key_year":"2026","venue_id":"2681","venue_name":"Citizens Bank Park","main_team_id":"143","name_display_club":"Phillies","n_pa":"47727","index_runs":"104","index_hr":"115","index_so":"104","index_woba":"102","year_range":"2024-2026"}];</script>', 2026);
   check("Statcast park-factor parser reads structured official factors", statcastRows.length === 1 && statcastRows[0]?.venue === "Citizens Bank Park" && statcastRows[0]?.runFactor === 104 && statcastRows[0]?.homeRunFactor === 115 && statcastRows[0]?.strikeoutFactor === 104);
+  const statcastWithNewVenue = new StatcastParkFactorClient(async (input) => {
+    const rolling = new URL(String(input)).searchParams.get("rolling");
+    const rows = rolling === "1"
+      ? '[{"grouping_venue_conditions":"All","key_bat_side":"All","key_year":"2026","venue_id":"2529","venue_name":"Sutter Health Park","main_team_id":"133","name_display_club":"Athletics","n_pa":"12043","index_runs":"128","index_hr":"125","index_so":"93","index_woba":"113","year_range":"2026"}]'
+      : '[{"grouping_venue_conditions":"All","key_bat_side":"All","key_year":"2026","venue_id":"2681","venue_name":"Citizens Bank Park","main_team_id":"143","name_display_club":"Phillies","n_pa":"47727","index_runs":"104","index_hr":"115","index_so":"104","index_woba":"102","year_range":"2024-2026"}]';
+    return new Response(`<script>var data = ${rows};</script>`, { status: 200 });
+  });
+  const combinedParkFactors = await statcastWithNewVenue.getParkFactors(2026);
+  check("Statcast coverage adds new venues from the official current-year table without replacing established multi-year parks", combinedParkFactors.length === 2 && combinedParkFactors.some((row) => row.venue === "Sutter Health Park" && row.runFactor === 128) && combinedParkFactors.some((row) => row.venue === "Citizens Bank Park" && row.yearRange === "2024-2026"));
   const environmentCoverage = await loadSlateEnvironmentResearch({
     games: [{ id: "game-1", providerIds: { mlbstats: "1" }, season: 2026, gameDate: "2026-07-16", scheduledStart: "2026-07-16T23:00:00.000Z", homeTeamId: "mlbstats-team-143", awayTeamId: "mlbstats-team-121", venue: "Citizens Bank Park", roofStatus: "outdoor", gameStatus: "scheduled" }],
     asOfTimestamp: "2026-07-15T22:05:00.000Z",
@@ -523,6 +563,13 @@ async function main() {
   });
   const gameEnvironment = environmentCoverage.byGameId.get("game-1");
   check("slate environment loader joins park and game-time weather by game", gameEnvironment?.park.status === "available" && gameEnvironment.park.runFactor === 104 && gameEnvironment.weather.status === "available" && gameEnvironment.weather.conditions === "Chance Showers");
+  const renamedVenueCoverage = await loadSlateEnvironmentResearch({
+    games: [{ id: "game-2", providerIds: { mlbstats: "2" }, season: 2026, gameDate: "2026-07-16", scheduledStart: "2026-07-16T23:00:00.000Z", homeTeamId: "mlbstats-team-143", awayTeamId: "mlbstats-team-121", venue: "Sponsor-Renamed Ballpark", roofStatus: "outdoor", gameStatus: "scheduled" }],
+    asOfTimestamp: "2026-07-15T22:05:00.000Z",
+    parkFactors: { getParkFactors: async () => statcastRows },
+    weather: { getWeather: async () => [] },
+  });
+  check("park-factor research survives a schedule venue rename by matching the official home team", renamedVenueCoverage.byGameId.get("game-2")?.park.runFactor === 104);
   check("fixture has no projection-side contradictions", previewFixture.props.every((row) => checkProjectionSideIntegrity(row).status === "coherent"));
   check("fixture selected-side probability matches model probability", previewFixture.props.every((row) => approx(row.side === "over" ? row.overProbability : row.underProbability, row.modelProbability)));
   check("fixture actionable rows are coherent and plausible", previewFixture.props.filter((row) => isActionablePropGrade(row.playGrade)).every((row) => checkProjectionSideIntegrity(row).status === "coherent" && row.modelProbability > 0.5 && (row.modelEdge ?? 0) > 0 && (row.expectedValue ?? 0) > 0 && Math.abs(row.expectedValue ?? 0) <= 0.15));
@@ -542,7 +589,7 @@ async function main() {
   const propsRefreshRouteSource = readFileSync("app/api/cron/mlb-player-props-refresh/route.ts", "utf8");
   const pregameSweepRouteSource = readFileSync("app/api/cron/pregame-sweep/route.ts", "utf8");
   const vercelConfigSource = readFileSync("vercel.json", "utf8");
-  check("preview UI clearly discloses simulated data", propsUiSource.includes("Design preview · Simulated board") && propsUiSource.includes("not live, bettable, or sourced from today&apos;s BDL response") && propsUiSource.includes("Fixture timestamp") && propsUiSource.includes("Sample options"));
+  check("preview UI clearly discloses simulated data", propsUiSource.includes("Design preview · Simulated board") && propsUiSource.includes("not live, bettable, or sourced from today&apos;s BDL response") && propsUiSource.includes('mode === "preview" ? <PreviewDataNotice />'));
   check("pregame lock sweep runs every 5 minutes during active windows", vercelConfigSource.includes('"schedule": "*/5 14-23 * * *"') && vercelConfigSource.includes('"schedule": "*/5 0-2 * * *"'));
   check("props source-row guard accommodates healthy late-day provider expansion", liveBoardSource.includes("DEFAULT_MAX_SOURCE_ODDS_ROWS = 35_000"));
   check("props refresh failure still attempts T-60 lock from last-known-good board", propsRefreshRouteSource.includes("loadLatestMlbPropsBoardSnapshot") && propsRefreshRouteSource.includes("syncInternalMlbPropsTracking(previous, new Date().toISOString())") && propsRefreshRouteSource.includes("lockFallbackAttempted"));
@@ -562,12 +609,12 @@ async function main() {
   check("radar surfaces multiple research questions instead of ranked picks", ["Projection gap", "Book spread", "Context watch", "Model signal"].every((label) => propsUiSource.includes(label)) && radarSource.includes("Open Reader") && !radarSource.includes("Best bet"));
   check("player directory opens a focused player workspace", radarSource.includes("PlayerDirectory") && propsUiSource.includes("playerDirectorySummaries") && playerViewSource.includes('data-product-zone="player-workspace"') && playerViewSource.includes("Clear player search") && playerViewSource.includes("MarketSideQuote"));
   check("price comparison uses one exclusive segmented mode", propsUiSource.includes("type PriceMode = \"best\" | \"all\"") && propsUiSource.includes("PriceModeControl") && ["Best odds", "All prices"].every((label) => propsUiSource.includes(`>${label}<`)));
-  check("compact slate header has one clear contextual purpose", ["PropsSlateHeader", "SlateGameNavigator", "Players priced", "Prop options", "Updated"].every((label) => propsUiSource.includes(label)) && !propsUiSource.includes("Top value"));
+  check("compact slate header has one clear contextual purpose", ["PropsSlateHeader", "SlateGameNavigator", "Board status", "Prices updated", "Today’s games"].every((label) => propsUiSource.includes(label)) && !propsUiSource.includes("Top value"));
   check("props researcher is ready for future league switching", propsUiSource.includes("PropLeagueRail") && propsUiSource.includes('aria-label="Player props leagues"') && ["MLB", "NFL", "CFB", "NBA", "WNBA", "CBB", "NHL", "Soccer"].every((label) => propsUiSource.includes(`label: "${label}"`)) && propsUiSource.includes("Coming soon"));
   check("product zones are explicit and ordered", ["slate-intelligence", "research-entry", "today-radar", "player-directory", "board-controls", "full-board", "player-workspace"].every((zone) => propsUiSource.includes(`data-product-zone="${zone}"`)) && propsUiSource.indexOf("<PropsSlateHeader") < propsUiSource.indexOf('data-product-zone="research-entry"'));
   check("player discovery is native to the researcher", researchEntrySource.includes("Search a player, team, market, or sportsbook") && ["row.player", "row.team", "row.opponent", "row.marketLabel", "row.book"].every((label) => propsUiSource.includes(label)));
   check("props UI exposes provider health", propsUiSource.includes("Provider Health") && ["BDL odds", "Sharp audit", "Splits/context", "Probable starters"].every((label) => propsUiSource.includes(label)));
-  check("props UI includes progressive board controls", ["Main lines", "All lines", "Best odds", "All prices", "Hide Research", "More filters"].every((label) => propsUiSource.includes(label)) && propsUiSource.includes('<details className="group mt-2'));
+  check("props UI includes progressive board controls", ["Main lines", "All lines", "Best odds", "All prices", "Hide Research", "Advanced filters & board options"].every((label) => propsUiSource.includes(label)) && propsUiSource.includes("<details className="));
   check("props UI includes responsive full board", propsUiSource.includes("PropsTable") && propsUiSource.includes("max-xl:hidden") && propsUiSource.includes("xl:grid"));
   check("market board exposes model-tool comparison columns", ["Player", "Market", "Side / Line", "Book / Odds", "Edge", "EV", "Evidence", "Model Signal", "Reader"].every((label) => boardSource.includes(`>${label}<`)) && boardSource.includes("projectionLabel") && boardSource.includes('"Recent avg" : "Projection"') && !boardSource.includes(">Reason<"));
   check("market board is continuous rather than grouped by recommendation grade", !propsUiSource.includes("sections = PROP_GRADES.map") && propsUiSource.includes("<PropsTable rows={visibleRows}"));
@@ -609,6 +656,7 @@ async function main() {
   check("lineup context is status not a board blocker", liveBoardSource.indexOf('definition.recommendationEligibility === "research_only" || !eligibleModel ? "RESEARCH"') >= 0 && liveBoardSource.indexOf('definition.recommendationEligibility === "research_only" || !eligibleModel ? "RESEARCH"') < liveBoardSource.indexOf(': !memberReady ? "PENDING_DATA"') && liveBoardSource.includes("HITTER_ROWS_PROJECTED_LINEUP") && !liveBoardSource.includes("HITTER_ROWS_AWAITING_LINEUP"));
   check("hitter model reads use integrated evidence stack", liveBoardSource.includes("buildIntegratedHitterSignal") && ["RECENT_FORM_EDGE", "PITCH_MIX_MATCHUP_EDGE", "DIRECT_MATCHUP_CONTEXT", "PARK_WEATHER_CONTEXT", "MARKET_MOVEMENT_CONTEXT"].every((label) => liveBoardSource.includes(label)));
   check("fast hitter refreshes preserve full-season projection inputs", liveBoardSource.includes("recent?.samples?.last5.average") && liveBoardSource.includes("recent?.samples?.last10.average") && liveBoardSource.includes("recent?.samples?.season.average") && liveBoardSource.includes("recent?.samples?.season.count") && !liveBoardSource.includes("const season = averageNumber(logs.map"));
+  check("fast refreshes converge missing research and rebuild changed-starter rows", liveBoardSource.includes("async function refreshFastResearch") && liveBoardSource.includes("loadBatterPitcherHistories") && liveBoardSource.includes("starterContextChangedGameIds.has(row.game.id)") && liveBoardSource.includes("attachFastMatchupHistories"));
   check("hitter market tiers allow volume leans while capping rare events", liveBoardSource.includes("HITTER_LEAN_ELIGIBLE_MARKETS") && liveBoardSource.includes('"batter_hits"') && liveBoardSource.includes('"batter_total_bases"') && liveBoardSource.includes("HITTER_WATCHLIST_ONLY_MARKETS") && liveBoardSource.includes("HITTER_LONGSHOT_VALUE_MARKETS") && liveBoardSource.includes('"batter_home_runs"') && liveBoardSource.includes("LONGSHOT_VALUE_CONTEXT") && liveBoardSource.includes("RARE_OR_CONTEXT_HEAVY_MARKET_CAPPED"));
   check("home-run model output is watchlist-first before the validated ranked sleeve", liveBoardSource.includes("HITTER_WATCHLIST_ONLY_MARKETS") && liveBoardSource.includes('"batter_home_runs"') && liveBoardSource.includes("applyValidatedHomeRunActionablePromotions"));
   check("one-sided actionable markets carry their price-implied edge into the publication gate", liveBoardSource.includes("const effectiveMarketProbability = marketProbability ??") && liveBoardSource.includes("price.impliedProbability") && liveBoardSource.includes("marketProbability: effectiveMarketProbability"));
@@ -661,6 +709,7 @@ async function main() {
   check("dev preview supports a validated Reader deep link", readFileSync("app/dev/mlb-props-preview/page.tsx", "utf8").includes("searchParams: Promise") && readFileSync("app/dev/mlb-props-preview/page.tsx", "utf8").includes("initialSelectedId"));
   const productNavSource = readFileSync("app/lab/components/LabAppNav.tsx", "utf8");
   const productFrameSource = readFileSync("app/lab/components/ProductAppFrame.tsx", "utf8");
+  const productExperienceSource = readFileSync("lib/config/productExperience.ts", "utf8");
   const devPreviewSource = readFileSync("app/dev/mlb-props-preview/page.tsx", "utf8");
   const memberPropsSource = readFileSync("app/mlb/props/page.tsx", "utf8");
   const memberPropsApiSource = readFileSync("app/api/mlb/props/picks/route.ts", "utf8");
@@ -672,8 +721,9 @@ async function main() {
   check("product nav presents Player Props as a first-class member product", productNavSource.includes("/lab/daily-edge") && productNavSource.includes("/mlb/props") && !productNavSource.includes("gated: true") && !productNavSource.includes("(gated)"));
   check("preview renders inside product shell", devPreviewSource.includes("ProductAppFrame") && productFrameSource.includes("LabAppNav"));
   check("player props preserves the shared product shell", productFrameSource.includes("max-w-7xl") && !productFrameSource.includes("wide") && productNavSource.includes("{t.icon}") && productNavSource.includes("max-w-7xl"));
-  check("dev preview stays production-disabled but supports Vercel Preview", devPreviewSource.includes('process.env.VERCEL_ENV === "production"') && devPreviewSource.includes('process.env.VERCEL_ENV === undefined') && devPreviewSource.includes('process.env.NODE_ENV === "production"') && devPreviewSource.includes("notFound()"));
-  check("hosted dev preview reads the latest private live snapshot", devPreviewSource.includes("loadLatestMlbPropsBoardSnapshot") && devPreviewSource.includes('process.env.VERCEL_ENV !== "preview"'));
+  check("dev preview stays production-disabled unless an explicit preview/candidate gate opens it", devPreviewSource.includes("isProductExperiencePreviewAvailable()") && devPreviewSource.includes("notFound()") && productExperienceSource.includes('if (env.NODE_ENV !== "production") return true') && productExperienceSource.includes("PRODUCT_EXPERIENCE_PREVIEW_FLAG"));
+  check("candidate preview uses the production member read path and behavior", devPreviewSource.includes("loadMlbPropsMemberBoardSnapshot") && devPreviewSource.includes('mode="member"') && devPreviewSource.includes("loadMlbPropsLivePreviewSnapshot") && !devPreviewSource.includes("loadLatestMlbPropsBoardSnapshot") && !devPreviewSource.includes('process.env.VERCEL_ENV !== "preview"'));
+  check("candidate presentation contains no internal review banners", !propsUiSource.includes("Private product candidate") && devPreviewSource.includes('presentation="candidate"') && devPreviewSource.includes('mode="member"'));
   check("props routes use only the authenticated product shell", [marketingNavSource, marketingFooterSource].every((source) => source.includes('pathname === "/mlb/props"') && source.includes('pathname === "/dev/mlb-props-preview"')));
   check("member route scaffold is gated and fixture-free", memberPropsSource.includes("getPublicPicksMode") && memberPropsSource.includes("ProductAppFrame") && !memberPropsSource.includes("player-props-preview-full.json"));
   check("member routes read cached display-locked props snapshots", memberPropsSource.includes("loadCachedLatestMlbPropsDisplaySnapshot") && memberPropsApiSource.includes("loadCachedLatestMlbPropsDisplaySnapshot") && playerPropsApiSource.includes("loadCachedLatestMlbPropsDisplaySnapshot") && !memberPropsSource.includes("loadCachedLatestMlbPropsBoardSnapshot"));

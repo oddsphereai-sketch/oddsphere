@@ -33,6 +33,7 @@ import {
   isWhopAccessEnabled,
 } from "@/lib/auth/whopConfig";
 import { TRIAL_CHECKOUT_URL } from "@/lib/marketing/trialOffer";
+import { isLoginExperienceCandidateEnabled } from "@/lib/config/productExperience";
 
 export const metadata: Metadata = {
   title: "Log In — OddSphere AI",
@@ -111,6 +112,20 @@ export default async function LoginPage({
     ? isBetaLoginPubliclyVisible()
     : betaEnabledServerSide;
   const whopStartHref = `/api/auth/whop/start?next=${encodeURIComponent(nextValue)}`;
+
+  if (isLoginExperienceCandidateEnabled()) {
+    return (
+      <CandidateLogin
+        betaEnabled={betaEnabled}
+        errorMessage={errorMessage}
+        nextValue={nextValue}
+        whopDescription={whopDescription}
+        whopDetail={whopDetail}
+        whopEnabled={whopEnabled}
+        whopStartHref={whopStartHref}
+      />
+    );
+  }
 
   return (
     <main className="max-w-md mx-auto px-4 sm:px-6 py-16 sm:py-24">
@@ -215,6 +230,82 @@ export default async function LoginPage({
           </a>
           .
         </p>
+      </div>
+    </main>
+  );
+}
+
+function CandidateLogin({
+  betaEnabled,
+  errorMessage,
+  nextValue,
+  whopDescription,
+  whopDetail,
+  whopEnabled,
+  whopStartHref,
+}: {
+  betaEnabled: boolean;
+  errorMessage: string | null;
+  nextValue: string;
+  whopDescription: string | null;
+  whopDetail: string | null;
+  whopEnabled: boolean;
+  whopStartHref: string;
+}) {
+  return (
+    <main className="relative overflow-hidden px-4 py-10 sm:px-6 sm:py-16 lg:px-8">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_24%_18%,rgba(124,58,237,0.20),transparent_34%),radial-gradient(circle_at_78%_64%,rgba(52,211,153,0.08),transparent_34%)]" />
+      <div className="mx-auto grid max-w-6xl overflow-hidden rounded-3xl border border-white/[0.09] bg-[#090a10]/95 shadow-[0_30px_120px_-50px_rgba(124,58,237,0.85)] lg:grid-cols-[1.08fr_0.92fr]">
+        <section className="border-b border-white/[0.07] bg-[linear-gradient(145deg,rgba(124,58,237,0.13),rgba(255,255,255,0.015)_52%,rgba(16,185,129,0.04))] p-7 sm:p-10 lg:border-b-0 lg:border-r lg:p-12">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-200">OddSphere member access</p>
+          <h1 className="mt-4 max-w-xl text-4xl font-black tracking-tight text-white sm:text-5xl">Your Daily Edge is ready.</h1>
+          <p className="mt-5 max-w-xl text-base leading-7 text-gray-300">Sign in to scan today&rsquo;s slate, open the complete game reader, research player props, and review graded results in one OddSphere workspace.</p>
+          <div className="mt-8 grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+            {[["Daily Edge", "Model, market and matchup"], ["Player Props", "Fast board, deeper research"], ["Tracking", "Transparent graded results"]].map(([title, body]) => (
+              <div key={title} className="rounded-xl border border-white/[0.08] bg-black/20 p-4">
+                <p className="text-sm font-black text-white">{title}</p>
+                <p className="mt-1 text-xs leading-5 text-gray-500">{body}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-8 rounded-2xl border border-violet-400/20 bg-[#0e0d17] p-4">
+            <p className="text-[9px] font-black uppercase tracking-[0.17em] text-violet-200">Today&rsquo;s workflow</p>
+            <p className="mt-1 text-sm font-black text-white">Scan → open → understand</p>
+            <div className="mt-4 grid grid-cols-3 gap-2" aria-hidden="true"><span className="h-2 rounded-full bg-violet-400/75" /><span className="h-2 rounded-full bg-sky-400/65" /><span className="h-2 rounded-full bg-emerald-400/70" /></div>
+          </div>
+        </section>
+
+        <section className="flex items-center p-7 sm:p-10 lg:p-12">
+          <div className="w-full">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-500">Welcome back</p>
+            <h2 className="mt-2 text-3xl font-black tracking-tight text-white">Member Login</h2>
+            <p className="mt-3 text-sm leading-6 text-gray-400">{whopEnabled ? "Use the Whop account connected to your OddSphere membership or trial." : "Enter your beta access password to continue."}</p>
+
+            {errorMessage !== null ? (
+              <div role="alert" className="mt-5 space-y-1.5 rounded-xl border border-amber-300/25 bg-amber-300/[0.07] p-3 text-xs leading-5 text-amber-100">
+                <div>{errorMessage}</div>
+                {whopDetail !== null ? <div className="break-all font-mono text-[11px] text-amber-200/80">Whop responded: <span className="font-semibold">{whopDetail}</span>{whopDescription !== null ? <span className="text-amber-200/60"> — {whopDescription}</span> : null}</div> : null}
+              </div>
+            ) : null}
+
+            {whopEnabled ? <a href={whopStartHref} className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3.5 text-sm font-black text-white shadow-[0_12px_35px_-18px_rgba(124,58,237,0.95)] transition hover:bg-violet-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"><span aria-hidden="true">◇</span>Sign in with Whop</a> : null}
+
+            {whopEnabled && betaEnabled ? <div className="mt-5 flex items-center gap-3 text-[10px] font-black uppercase tracking-wider text-gray-600"><span className="h-px flex-1 bg-white/[0.08]" /><span>or beta access</span><span className="h-px flex-1 bg-white/[0.08]" /></div> : null}
+
+            {betaEnabled ? (
+              <form action="/api/auth/login" method="POST" className="mt-5 space-y-3" aria-label="Beta access sign-in form">
+                <input type="hidden" name="next" value={nextValue} />
+                <label className="block"><span className="sr-only">Beta access password</span><input type="password" name="password" placeholder="Beta access password" required autoComplete="current-password" autoFocus={!whopEnabled} className="w-full rounded-xl border border-white/[0.09] bg-black/25 px-4 py-3.5 text-base text-white placeholder:text-gray-600 focus:border-violet-400 focus:outline-none" /></label>
+                <button type="submit" className="inline-flex w-full items-center justify-center rounded-xl border border-white/[0.09] bg-white/[0.07] px-4 py-3.5 text-sm font-black text-white transition hover:bg-white/[0.11] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400">Continue with beta password</button>
+              </form>
+            ) : null}
+
+            {!whopEnabled && !betaEnabled ? <div className="mt-6 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 text-sm text-amber-100">Member access is temporarily unavailable. Please contact support if this persists.</div> : null}
+
+            {whopEnabled ? <div className="mt-5 rounded-xl border border-white/[0.07] bg-white/[0.025] p-4 text-xs leading-5 text-gray-500">Secure membership verification is handled through Whop. OddSphere does not receive your Whop password.</div> : null}
+            <p className="mt-6 text-sm text-gray-400">Not a member yet? <a href={TRIAL_CHECKOUT_URL} target="_blank" rel="noopener noreferrer" className="font-black text-emerald-300 underline decoration-emerald-300/40 underline-offset-4 hover:text-emerald-200">Start your free trial</a>.</p>
+          </div>
+        </section>
       </div>
     </main>
   );

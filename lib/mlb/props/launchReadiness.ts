@@ -6,6 +6,7 @@ import {
   readMlbPropsTrackingHealth,
   type MlbPropsTrackingHealth,
 } from "./internalTracking";
+import { MLB_PROPS_MODEL_RELEASE_ID } from "./marketModelVersions";
 
 export type MlbPropsLaunchCheck = {
   code: string;
@@ -86,6 +87,7 @@ export function evaluateMlbPropsLaunchReadiness(args: {
     check("PUBLIC_FLAGS_COHERENT", publicState !== "misconfigured", true, "Display, API, and real-publish flags move together."),
     check("SNAPSHOT_PRESENT", latest !== null, true, "A persisted valid board snapshot exists."),
     check("SNAPSHOT_FRESH", latest !== null && ageMinutes >= 0 && ageMinutes <= maxAge, true, `Latest snapshot is no older than ${maxAge} minutes.`),
+    check("MODEL_RELEASE_COHERENT", latest?.modelContext?.modelReleaseId === MLB_PROPS_MODEL_RELEASE_ID, true, `Latest snapshot uses the active ${MLB_PROPS_MODEL_RELEASE_ID} release.`),
     check("CONSECUTIVE_VALID_SNAPSHOTS", recent.length >= required && recent.every(snapshotIsLaunchValid), true, `${required} consecutive persisted snapshots contain live, publishable odds.`),
     check("SNAPSHOT_SEQUENCE_SPAN", recent.length >= required && new Set(recent.map((snapshot) => snapshot.snapshotId)).size === required && sequenceSpanMinutes >= minimumSequenceSpan, true, `The valid snapshot sequence spans at least ${minimumSequenceSpan} minutes of scheduled refreshes.`),
     check("SOURCE_ODDS_PRESENT", Boolean(latest && latest.validation.sourceRows > 0), true, "The provider returned player-prop prices."),
@@ -95,14 +97,14 @@ export function evaluateMlbPropsLaunchReadiness(args: {
     check("GAMES_PRESENT", Boolean(latest && latest.data.summary.gamesWithProps > 0), true, "At least one game has mapped prop markets."),
     check("BOOKS_PRESENT", Boolean(latest && latest.data.summary.booksCovered > 0), true, "At least one sportsbook is represented."),
     check("MARKETS_PRESENT", Boolean(latest && latest.data.summary.marketsAvailable > 0), true, "At least one prop market is represented."),
-    check("PLAYER_IDENTITY_COVERAGE", Boolean(research?.playerIdentitiesComplete), true, "Every displayed player resolves to BDL and official MLB identifiers."),
-    check("RECENT_FORM_COVERAGE", Boolean(research?.recentFormComplete), true, "Every displayed prop has at least five completed official MLB game logs."),
+    check("PLAYER_IDENTITY_COVERAGE", Boolean(research?.playerIdentitiesComplete), true, "Every active pregame player resolves to BDL and official MLB identifiers."),
+    check("RECENT_FORM_COVERAGE", Boolean(research?.recentFormComplete), true, "Every active pregame prop has five official MLB logs or a verified shorter full-season sample."),
     check("MODEL_OUTPUT_COVERAGE", Boolean(research?.modelOutputComplete), true, "Every promoted pitcher market has a model probability."),
     check("MODEL_CONTEXT_INTEGRATED", Boolean(research?.modelContextIntegrated), true, "Promoted model outputs consume every required live context input."),
-    check("RESEARCH_INPUTS_COMPLETE", Boolean(research?.researchInputsComplete), true, "Required research modules are complete for every displayed prop."),
-    check("DIRECT_MATCHUP_VERIFIED", Boolean(research?.directMatchupComplete), true, "Every hitter prop has official matchup history or an explicit no-history result."),
+    check("RESEARCH_INPUTS_COMPLETE", Boolean(research?.researchInputsComplete), true, "Required research modules are complete for every active pregame prop."),
+    check("DIRECT_MATCHUP_VERIFIED", Boolean(research?.directMatchupComplete), true, "Every active pregame hitter prop has official matchup history or an explicit no-history result."),
     check("STARTER_CONTEXT", Boolean(latest?.data.slate?.matchups.some((matchup) => matchup.starterStatus !== "pending")), true, "Probable-pitcher context is present for the slate."),
-    check("ENVIRONMENT_CONTEXT", Boolean(research?.environmentComplete), true, "Every displayed prop has park and game-time weather context."),
+    check("ENVIRONMENT_CONTEXT", Boolean(research?.environmentComplete), true, "Every active pregame prop has park and game-time weather context."),
     check("LINEUP_CONTEXT", Boolean(research?.lineupsComplete), false, "Projected lineup context is being tracked; posted lineups refresh the board and are not required to open it."),
     check("LATEST_SETTLEMENT_HEALTHY", String(args.tracking.latestSettlementRun?.status ?? "none") !== "failed", false, "The latest settlement run did not fail."),
   ];
@@ -138,6 +140,7 @@ export function evaluateMlbPropsLaunchReadiness(args: {
 function snapshotIsLaunchValid(snapshot: MlbPropsBoardSnapshot): boolean {
   const research = summarizeSnapshotResearch(snapshot);
   return snapshot.validation.publishable &&
+    snapshot.modelContext?.modelReleaseId === MLB_PROPS_MODEL_RELEASE_ID &&
     snapshot.validation.errors.length === 0 &&
     snapshot.validation.sourceRows > 0 &&
     snapshot.validation.mappedRows / snapshot.validation.sourceRows >= 0.9 &&
@@ -153,7 +156,15 @@ function snapshotIsLaunchValid(snapshot: MlbPropsBoardSnapshot): boolean {
 }
 
 function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
-  const rows = snapshot.data.props;
+  const snapshotTime = Date.parse(snapshot.asOfTimestamp);
+  // Started games are rendered from their immutable pregame lock snapshot.
+  // The canonical refresh may no longer carry weather, probable-starter, or
+  // matchup inputs for those games, so launch health must judge only rows
+  // that are still eligible to change before first pitch.
+  const rows = snapshot.data.props.filter((row) => {
+    const start = Date.parse(row.gameStartTime);
+    return Number.isFinite(start) && Number.isFinite(snapshotTime) && start > snapshotTime;
+  });
   const evidence = rows.map((row) => {
     const shared = row.researchKey ? snapshot.data.research?.[row.researchKey] : null;
     return {
@@ -166,12 +177,15 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
   const hitterRows = evidence.filter(({ row }) => row.marketFamily !== "pitcher");
   const promotedPitcherRows = evidence.filter(({ row }) => isPromotedPitcherModelRow(row));
   return {
-    playerIdentitiesComplete: rows.length > 0 && rows.every((row) => Boolean(
+    playerIdentitiesComplete: rows.every((row) => Boolean(
       row.providerIds?.gameId && row.providerIds.bdlGameId && row.providerIds.bdlPlayerId && row.providerIds.mlbStatsPlayerId,
     )),
-    recentFormComplete: evidence.length > 0 && evidence.every(({ recentForm }) => (recentForm?.logs.length ?? 0) >= 5),
-    modelOutputComplete: promotedPitcherRows.length > 0 && promotedPitcherRows.every(({ row }) => row.finalProbability !== null && row.modelProbability !== null),
-    modelContextIntegrated: promotedPitcherRows.length > 0 && promotedPitcherRows.every(({ row }) => (row.modelInputWarnings ?? []).every((warning) => ![
+    recentFormComplete: evidence.every(({ recentForm }) => {
+      const logCount = recentForm?.logs.length ?? 0;
+      return logCount >= 5 || (logCount > 0 && recentForm?.coverage === "full_season");
+    }),
+    modelOutputComplete: promotedPitcherRows.every(({ row }) => row.finalProbability !== null && row.modelProbability !== null),
+    modelContextIntegrated: promotedPitcherRows.every(({ row }) => (row.modelInputWarnings ?? []).every((warning) => ![
       "bdl_stat_bundle_pending_baseline_used",
       "low_feature_confidence",
       "opponent_k_profile_unavailable_non_blocking",
@@ -179,9 +193,9 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
       "weather_unavailable_non_blocking",
       "weak_pitcher_baseline",
     ].includes(warning))),
-    researchInputsComplete: rows.length > 0 && rows.every((row) => row.missingFeatures.length === 0),
+    researchInputsComplete: rows.every((row) => row.missingFeatures.length === 0),
     directMatchupComplete: hitterRows.every(({ matchupHistory }) => matchupHistory !== null),
-    environmentComplete: evidence.length > 0 && evidence.every(({ environment }) => Boolean(
+    environmentComplete: evidence.every(({ environment }) => Boolean(
       environment?.park.status === "available" && (environment.weather.status === "available" || environment.roofStatus === "dome"),
     )),
     lineupsComplete: hitterRows.every(({ row }) => row.lineupStatus?.status === "posted" || row.lineupStatus?.status === "confirmed"),
@@ -190,6 +204,7 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
 
 function isPromotedPitcherModelRow(row: MlbPropsBoardSnapshot["data"]["props"][number]): boolean {
   return (row.market === "pitcher_strikeouts" || row.market === "pitcher_outs") &&
+    (row.playGrade === "BEST_ANGLE" || row.playGrade === "LEAN") &&
     !row.reasonCodes.includes("MARKET_RESEARCH_ONLY");
 }
 

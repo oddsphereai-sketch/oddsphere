@@ -40,10 +40,12 @@ check(
   /modelMarketGapPct > 0 \? "\+" : ""/.test(SHELL),
 );
 
-// T3 — Strip enabled for FI when modelTrustPct present, else honest-empty.
+// T3 — FI edge display is enabled when the required pair exists and otherwise
+// falls through honestly. The former ModelMarketTakeStrip was consolidated
+// into the headline evidence block, so guard the current rendering contract.
 check(
-  "T3 ModelMarketTakeStrip falls through to honest-empty for FI without trust",
-  /if \(market === "first_inning" && marketData\.modelTrustPct === null\) return null;/.test(SHELL),
+  "T3 FI edge display falls through to honest-empty without a complete probability pair",
+  SHELL.includes("marketData.modelMarketGapPct !== null && marketData.modelProb !== null"),
 );
 check(
   "T3 ModelMarketTakeStrip no longer hard-suppresses FI",

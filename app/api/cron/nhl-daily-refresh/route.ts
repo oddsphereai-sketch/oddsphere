@@ -212,6 +212,11 @@ export async function GET(request: Request): Promise<Response> {
         details: stepDetails,
       };
     },
-    { sport: "nhl" },
+    {
+      sport: "nhl",
+      leaseGroup: "prediction_pipeline",
+      requireLease: true,
+      lockMinutes: 10,
+    },
   );
 }

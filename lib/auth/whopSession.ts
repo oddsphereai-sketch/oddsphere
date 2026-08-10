@@ -2,7 +2,7 @@
  * Whop lab-session cookie helper (Phase 6B.3a).
  *
  * Issued by /api/auth/whop/callback after a successful OAuth → access
- * check sequence. Recognised by middleware.ts alongside the beta
+ * check sequence. Recognised by proxy.ts alongside the beta
  * session as "this user can enter the Lab."
  *
  * Cookie shape:

@@ -5,8 +5,8 @@
  *   • No hero metric cards on top
  *   • Yesterday is the lead content section
  *   • This Week is a single chart (CategoryBars)
- *   • Best Angles is a per-category list
- *   • Recent Results sits below the analytical sections
+ *   • Best Angles is grouped by sport and model category
+ *   • Latest Results is the candidate's only member-facing activity feed
  *   • Method consolidates glossary + baselines +
  *     a secondary "all tracked actionable picks" footer
  *   • No standalone "Overall record" / "All picks" hero
@@ -22,14 +22,16 @@
 
 import { existsSync, readFileSync } from "node:fs";
 
-const PAGE = readFileSync("app/lab/tracking/page.tsx", "utf8");
+const PAGE = readFileSync("app/lab/tracking/TrackingClient.tsx", "utf8");
 const CHARTS = readFileSync("app/lab/tracking/components/TrackingCharts.tsx", "utf8");
 const API = readFileSync("app/api/lab/tracking-foundation/route.ts", "utf8");
+const TRACKING_PRIMER = readFileSync("scripts/operator/prime-tracking-experience-snapshot.ts", "utf8");
 const TRACK_RECORD = readFileSync("app/lab/track-record/page.tsx", "utf8");
 const LAB_NAV = readFileSync("app/lab/components/LabAppNav.tsx", "utf8");
 const SERVICE = readFileSync("lib/services/trackingAggregateService.ts", "utf8");
 const TRACKING_LOADING = readFileSync("app/lab/tracking/loading.tsx", "utf8");
 const PROPS_LOADING = readFileSync("app/mlb/props/loading.tsx", "utf8");
+const PUBLIC_TRACKING_SUMMARY = readFileSync("lib/services/tracking/publicTrackRecordSummary.ts", "utf8");
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean, msg?: string) {
@@ -38,6 +40,11 @@ function check(name: string, cond: boolean, msg?: string) {
 }
 
 console.log(`\n━━━ tracking page tests (6B.2e — design reset) ━━━\n`);
+
+check(
+  "Homepage current tracking converts the canonical 0..1 hit rate to a display percentage",
+  PUBLIC_TRACKING_SUMMARY.includes("currentSnapshot.payload.allTimeAggregate.hitRate * 1_000) / 10"),
+);
 
 // ── Page no longer leads with hero metric cards ─────────────────────
 
@@ -52,6 +59,11 @@ check(
 check(
   "Page does NOT render a 4-up HeroCard grid",
   !/HeroCard/.test(PAGE),
+);
+check(
+  "Candidate uses a compact product header instead of marketing hero copy",
+  /presentation === "candidate"[\s\S]{0,500}OddSphere[\s\S]{0,300}>Tracking</.test(PAGE) &&
+    PAGE.includes("Results by sport, model, and prediction category."),
 );
 check(
   "Page does NOT render the deprecated 14-day TrendChart",
@@ -117,7 +129,7 @@ check("Page order: Yesterday → Tracking by category → Best Angles → Latest
 
 // ── This Week uses the single CategoryBars chart, not multiple ──────
 
-check("Tracking by category section uses CategoryBars chart", /Tracking by category[\s\S]{0,1600}CategoryBars/.test(PAGE));
+check("Tracking by category section uses the grouped CategoryBars chart", /Tracking by category[\s\S]{0,1800}CategoryTrackingBoard/.test(PAGE) && /function CategoryTrackingBoard[\s\S]{0,1800}<CategoryBars/.test(PAGE));
 check("CategoryBars chart component exists", CHARTS.includes("export function CategoryBars"));
 check(
   "CategoryBars renders progress-bar rows",
@@ -135,18 +147,19 @@ check(
   /YesterdayBoard[\s\S]{0,800}divide-y/.test(PAGE),
 );
 check(
-  "Lifetime Tracking uses the same Card and CategoryBars visual as weekly/monthly",
-  /LifetimeTrackingBoard[\s\S]{0,1200}<Card>[\s\S]{0,500}<CategoryBars/.test(PAGE),
+  "Weekly, monthly, and lifetime share the sport-grouped CategoryTrackingBoard",
+  /trackWindow === "lifetime"[\s\S]{0,1800}<CategoryTrackingBoard/.test(PAGE) &&
+    /LifetimeTrackingBoard[\s\S]{0,900}<CategoryTrackingBoard/.test(PAGE),
 );
 check(
   "Lifetime Tracking preserves honest historical/live source labels",
   /lifetimeSourceLabel[\s\S]{0,500}Lifetime · live \+\$\{record\.live_decided_contribution\}[\s\S]{0,300}Since launch/.test(PAGE),
 );
 check(
-  "Lifetime Tracking adds a subtle separator only when the sport group changes",
-  /group:\s*record\.sport/.test(PAGE) &&
-    /startsGroup\s*=\s*index\s*>\s*0\s*&&\s*r\.group\s*!==\s*rows\[index\s*-\s*1\]\?\.group/.test(CHARTS) &&
-    /border-t border-white\/\[0\.08\] pt-4/.test(CHARTS),
+  "Category tracking visibly groups models by sport with restrained separators",
+  /function CategoryTrackingBoard/.test(PAGE) &&
+    /divide-y divide-white\/\[0\.07\]/.test(PAGE) &&
+    /\{prettySport\(group\.sport\)\} models/.test(PAGE),
 );
 check(
   "Lifetime records expose numeric metrics without replacing merged history",
@@ -193,12 +206,17 @@ check(
   /MLB updates automatically as games grade[\s\S]{0,200}Other sports are maintained/.test(PAGE),
 );
 check(
-  "Best Angles board renders divider-list rows, not card grid",
-  /BestAnglesBoard[\s\S]{0,800}divide-y/.test(PAGE),
+  "Best Angles groups model categories inside separate sport sections",
+  /BestAnglesBoard[\s\S]{0,1800}groups\.map[\s\S]{0,700}\{prettySport\(group\.sport\)\} models/.test(PAGE) &&
+    /BestAnglesBoard[\s\S]{0,2600}group\.rows\.map/.test(PAGE),
 );
 check(
   "Best Angles section surfaces per-category records",
   /BestAnglesBoard[\s\S]{0,2000}bestAngles[\s\S]{0,400}leans/.test(PAGE),
+);
+check(
+  "Best Angles is visible without another disclosure click",
+  /title="Best Angles by category"[\s\S]{0,120}<BestAnglesBoard/.test(PAGE),
 );
 
 // ── MLB categories distinct ─────────────────────────────────────────
@@ -234,6 +252,11 @@ check(
   /Method[\s\S]{0,2000}<Glossary/.test(PAGE),
 );
 check(
+  "Candidate Method is an always-visible bottom reference",
+  /title="Method">[\s\S]{0,300}<Card>/.test(PAGE) &&
+    !/title="Method"[^>]*collapsible/.test(PAGE),
+);
+check(
   "Method section does NOT expose model versions",
   !/Method[\s\S]{0,2000}<ModelVersions/.test(PAGE),
 );
@@ -263,12 +286,12 @@ check(
   !/<Baselines/.test(PAGE),
 );
 check(
-  "Method section ends with secondary 'All tracked actionable picks' footer",
+  "Method section ends with secondary 'All tracked predictions' footer",
   /Method[\s\S]{0,2400}<AllActionableFooter/.test(PAGE),
 );
 check(
-  "Blended overall is labeled 'All tracked actionable picks'",
-  PAGE.includes("All tracked actionable picks"),
+  "Blended overall is labeled 'All tracked predictions'",
+  PAGE.includes("All tracked predictions"),
 );
 check(
   "Blended overall lives at the bottom of Method, not as a hero",
@@ -327,6 +350,14 @@ check(
   "Recent Predictions empty state uses 'predictions' language",
   /Recent predictions appear once the first slate has run/.test(PAGE),
 );
+check(
+  "Candidate hides the internal Recent Predictions activity stream",
+  /presentation === "current" \? \([\s\S]{0,160}<Section eyebrow="Latest activity" title="Recent Predictions">/.test(PAGE),
+);
+check(
+  "Candidate keeps Latest Results as its member-facing graded feed",
+  /title="Latest Results"[\s\S]{0,500}RecentlySettledCard/.test(PAGE),
+);
 
 // ── Mobile / layout ─────────────────────────────────────────────────
 
@@ -344,6 +375,12 @@ check(
   SERVICE.includes("TRACKING_PAGE_SIZE") &&
     SERVICE.includes("fetchAllPredictionRecords") &&
     /\.range\(fromRow, fromRow \+ TRACKING_PAGE_SIZE - 1\)/.test(SERVICE),
+);
+check(
+  "Member Tracking projects grade labels instead of downloading full audit snapshots",
+  SERVICE.includes("tracking_display_grade_override:snapshot_json->>tracking_display_grade_override") &&
+    SERVICE.includes("member_facing_grade:snapshot_json->member_facing_at_lock->>grade") &&
+    !/TRACKING_RECORD_SELECT[\s\S]{0,2200}\n\s*"snapshot_json",/.test(SERVICE),
 );
 check(
   "Service chunks prediction_grades loads so all paged records can grade",
@@ -384,6 +421,25 @@ check("API surfaces thisWeek",                    API.includes("thisWeek: result
 check("API surfaces recentPicks",                 API.includes("recentPicks: result.recentPicks"));
 check("API surfaces recentlySettled (6B.21)",     API.includes("recentlySettled: result.recentlySettled"));
 check("API does not expose raw audit fields",     !/sport_specific|fi_v2_audit|v2_2_audit|snapshot_json/.test(API));
+check(
+  "member tracking reads a cron-published fast snapshot before the expensive aggregate",
+  API.includes("trackingFoundationSnapshotKey") &&
+    API.includes("readLabResponseSnapshot") &&
+    API.includes('snapshotBypass") !== "true"'),
+);
+check(
+  "Tracking cutover primer is read-only unless explicitly applied",
+  TRACKING_PRIMER.includes('process.argv.includes("--apply")') &&
+    TRACKING_PRIMER.includes("buildTrackingFoundationSnapshotBody") &&
+    TRACKING_PRIMER.includes("No snapshot was written") &&
+    TRACKING_PRIMER.includes("refreshTrackingFoundationResponseSnapshot"),
+);
+check(
+  "background Tracking snapshot builds have a cron-safe budget while member requests still fail fast",
+  API.includes("TRACKING_AGGREGATE_TIMEOUT_MS = 30000") &&
+    API.includes("TRACKING_SNAPSHOT_BUILD_TIMEOUT_MS = 120000") &&
+    API.includes("input.timeoutMs ?? TRACKING_SNAPSHOT_BUILD_TIMEOUT_MS"),
+);
 check("API does not expose model-version breakdowns to members", !API.includes("byModelVersion"));
 check("API excludes launch-day picks",            API.includes("includeLaunchDay: false"));
 check(
@@ -408,6 +464,13 @@ check(
   "Slow member routes provide immediate loading states",
   TRACKING_LOADING.includes("Loading verified tracking results") &&
     PROPS_LOADING.includes("Loading the latest player props"),
+);
+check(
+  "Tracking retries one transient cold load and leaves a manual recovery action",
+  PAGE.includes("loadAttempt === 0") &&
+    PAGE.includes("setLoadAttempt(1)") &&
+    PAGE.includes("Retry tracking") &&
+    PAGE.includes("setLoadAttempt((attempt) => attempt + 1)"),
 );
 check(
   "Lab navigation shows pending feedback without changing destinations",

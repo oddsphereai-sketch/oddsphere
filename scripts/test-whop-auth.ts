@@ -27,7 +27,7 @@ const CONFIG = readFileSync("lib/auth/whopConfig.ts", "utf8");
 const SESSION = readFileSync("lib/auth/whopSession.ts", "utf8");
 const OAUTH = readFileSync("lib/auth/whopOAuth.ts", "utf8");
 const ACCESS = readFileSync("lib/auth/whopAccess.ts", "utf8");
-const MIDDLEWARE = readFileSync("middleware.ts", "utf8");
+const MIDDLEWARE = readFileSync("proxy.ts", "utf8");
 const LOGIN_PAGE = readFileSync("app/login/page.tsx", "utf8");
 const PRICING_PAGE = readFileSync("app/pricing/page.tsx", "utf8");
 const START_ROUTE = readFileSync("app/api/auth/whop/start/route.ts", "utf8");
@@ -272,7 +272,7 @@ async function whopMiddlewareRequest(opts: {
   fetchImpl: typeof fetch;
 }) {
   const sess = await import("../lib/auth/whopSession");
-  const { middleware } = await import("../middleware");
+  const { proxy } = await import("../proxy");
   const { NextRequest } = await import("next/server");
   const originalFetch = globalThis.fetch;
 
@@ -292,7 +292,7 @@ async function whopMiddlewareRequest(opts: {
       const request = new NextRequest("https://oddsphereai.com/api/lab/test", {
         headers: { Cookie: `${sess.WHOP_SESSION_COOKIE_NAME}=${cookie}` },
       });
-      return await middleware(request);
+      return await proxy(request);
     } finally {
       globalThis.fetch = originalFetch;
     }

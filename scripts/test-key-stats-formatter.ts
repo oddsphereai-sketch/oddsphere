@@ -87,6 +87,16 @@ console.log("━━━ Total: full fixture ━━━");
 }
 
 console.log();
+console.log("━━━ Total: member-facing game-time weather ━━━");
+{
+  const forecast = "72°F · Rain possible · Wind 6 mph cross · 73% humidity · Roof open";
+  const rows = formatKeyStats(FULL, "total", { gameTimeWeather: forecast });
+  const weather = rows.find((row) => row.label === "Game-time weather");
+  check("actual forecast replaces the opaque weather adjustment", weather?.homeValue === forecast);
+  check("weather-adjust model plumbing is hidden when a forecast is available", !rows.some((row) => row.label === "Weather adjust"));
+}
+
+console.log();
 console.log("━━━ First-inning: full fixture (FI stats present, all above sample gate) ━━━");
 {
   const rows = formatKeyStats(FULL, "first_inning");
@@ -189,6 +199,25 @@ console.log("━━━ First-inning: one starter has FI data, other does not ━
   // Season ERA fallback should NOT fire — at least one side has FI ERA
   check("no season-ERA fallback when one side has FI data",
     !rows.some((r) => r.label === "Starter ERA (season)"));
+}
+
+console.log();
+console.log("━━━ Verified team-offense fallback remains visible and labeled ━━━");
+{
+  const missingAwayLineup = {
+    ...FULL,
+    away_lineup_weighted_ops: null,
+    away_top_order_ops: null,
+  };
+  const fallbacks = { awayTeamOpsProxy: 0.763, homeTeamOpsProxy: null };
+  const moneylineRows = formatKeyStats(missingAwayLineup, "moneyline", fallbacks);
+  const firstInningRows = formatKeyStats(missingAwayLineup, "first_inning", fallbacks);
+  check("moneyline shows the verified away team OPS proxy instead of a blank",
+    moneylineRows.find((row) => row.label === "Lineup OPS (weighted)")?.awayValue === "0.763 team proxy");
+  check("first inning shows the verified away team OPS proxy instead of 'no OPS sample'",
+    firstInningRows.find((row) => row.label === "Top-of-order OPS")?.awayValue === "0.763 team OPS proxy");
+  check("a true home top-order sample remains distinct from the team proxy",
+    firstInningRows.find((row) => row.label === "Top-of-order OPS")?.homeValue === "0.852 vs LHP");
 }
 
 console.log();

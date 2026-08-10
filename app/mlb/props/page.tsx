@@ -5,6 +5,7 @@ import { easternSlateDate, mlbPropsSnapshotIsFresh } from "@/lib/mlb/props/liveB
 import { getPublicPicksMode } from "@/lib/mlb/props/publicPicksSafety";
 import { buildMlbPropsMemberBoardData } from "@/lib/mlb/props/memberPayload";
 import { loadMlbPropsMemberBoardSnapshot } from "@/lib/mlb/props/memberReadSnapshotStore";
+import { isPlayerPropsExperienceCandidateEnabled } from "@/lib/config/productExperience";
 
 export const dynamic = "force-dynamic";
 
@@ -21,10 +22,11 @@ export default async function MlbPropsMemberPage({
   const mode = getPublicPicksMode();
   const query = await searchParams;
   const requestedReader = typeof query.reader === "string" ? query.reader : null;
+  const presentation = isPlayerPropsExperienceCandidateEnabled() ? "candidate" : "current";
   if (mode.mode === "display_enabled") {
     const memberSnapshot = await loadMlbPropsMemberBoardSnapshot(easternSlateDate()).catch(() => null);
     if (memberSnapshot && (!requestedReader || memberSnapshot.data.props.some((row) => row.id === requestedReader))) {
-      return <ProductAppFrame><PlayerPropsDashboard data={memberSnapshot.data} mode="member" initialSelectedId={requestedReader} /></ProductAppFrame>;
+      return <ProductAppFrame><PlayerPropsDashboard data={memberSnapshot.data} mode="member" initialSelectedId={requestedReader} presentation={presentation} /></ProductAppFrame>;
     }
     const snapshot = await loadCachedLatestMlbPropsDisplaySnapshot(easternSlateDate()).catch(() => null);
     if (snapshot && mlbPropsSnapshotIsFresh(snapshot)) {
@@ -33,7 +35,7 @@ export default async function MlbPropsMemberPage({
       // rendered after a prop is opened. Keep the board's price/model rows
       // byte-for-byte intact and load that evidence on demand per player.
       const memberData = buildMlbPropsMemberBoardData(snapshot.data);
-      return <ProductAppFrame><PlayerPropsDashboard data={memberData} mode="member" initialSelectedId={initialSelectedId} /></ProductAppFrame>;
+      return <ProductAppFrame><PlayerPropsDashboard data={memberData} mode="member" initialSelectedId={initialSelectedId} presentation={presentation} /></ProductAppFrame>;
     }
   }
 

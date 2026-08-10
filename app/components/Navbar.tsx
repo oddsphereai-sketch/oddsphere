@@ -8,6 +8,8 @@ import { TRIAL_CHECKOUT_URL } from "@/lib/marketing/trialOffer";
 
 export default function Navbar() {
   const pathname = usePathname();
+  const isPublicExperiencePreview =
+    pathname === "/dev/homepage-preview" || pathname === "/dev/login-preview";
 
   // 6.2a: hide the public marketing Navbar on premium + admin shells. /lab/*
   // gets its own LabAppNav (app-style header); /admin/* uses its scoped chrome.
@@ -16,16 +18,20 @@ export default function Navbar() {
     pathname.startsWith("/lab") ||
     pathname.startsWith("/admin") ||
     pathname === "/mlb/props" ||
-    pathname === "/dev/mlb-props-preview"
+    pathname === "/dev/mlb-props-preview" ||
+    pathname === "/dev/experience-preview" ||
+    pathname === "/dev/tracking-preview" ||
+    pathname === "/dev/relaunch-review" ||
+    pathname === "/dev/device-review"
   ) {
     return null;
   }
 
   const navLinks: Array<{ href: string; label: string }> = [
-    { href: "/", label: "Home" },
+    { href: isPublicExperiencePreview ? "/dev/homepage-preview" : "/", label: "Home" },
     { href: "/track-record", label: "Track Record" },
     { href: "/pricing", label: "Pricing" },
-    { href: "/login", label: "Log In" },
+    { href: isPublicExperiencePreview ? "/dev/login-preview" : "/login", label: "Log In" },
   ];
 
   return (
@@ -33,7 +39,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20 sm:h-24">
           <Link
-            href="/"
+            href={isPublicExperiencePreview ? "/dev/homepage-preview" : "/"}
             aria-label="Oddsphere AI — Home"
             className="flex items-center shrink-0 transition-all duration-200 hover:brightness-110 hover:scale-105"
           >

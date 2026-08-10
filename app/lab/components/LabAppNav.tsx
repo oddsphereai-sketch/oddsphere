@@ -27,11 +27,13 @@ import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import RefreshIndicator from "./RefreshIndicator";
 import { useSportSelection } from "../hooks/useSportSelection";
+import { DAILY_EDGE_REVIEW_SLATES } from "../lib/dailyEdgeReviewSlates";
 
 type Tab = {
   href: string;
   label: string;
   icon: string;
+  activeHref?: string;
 };
 
 const TABS: Tab[] = [
@@ -41,14 +43,22 @@ const TABS: Tab[] = [
   { href: "/lab/my-bets",      label: "My Bets",      icon: "📊" },
 ];
 
+const PRIVATE_REVIEW_TABS: Tab[] = [
+  { href: `/dev/experience-preview?sport=mlb&date=${DAILY_EDGE_REVIEW_SLATES.mlb?.date ?? ""}&fresh=1`, label: "Daily Edge", icon: "🎯", activeHref: "/lab/daily-edge" },
+  { href: "/dev/mlb-props-preview", label: "Player Props", icon: "🎮", activeHref: "/mlb/props" },
+  { href: "/dev/tracking-preview", label: "Tracking", icon: "📈", activeHref: "/lab/tracking" },
+];
+
 // Routes that should highlight a given tab even if their own pathname
 // doesn't start with the tab's href. /lab/design-preview is the
 // in-progress Daily Edge prototype, so the Daily Edge tab should read
 // as active while we're reviewing it.
 const ALIASED_AS: Record<string, string> = {
   "/lab/design-preview": "/lab/daily-edge",
+  "/dev/experience-preview": "/lab/daily-edge",
   "/lab/player-props": "/mlb/props",
   "/dev/mlb-props-preview": "/mlb/props",
+  "/dev/tracking-preview": "/lab/tracking",
 };
 
 function isActive(currentPath: string, tabHref: string): boolean {
@@ -59,7 +69,12 @@ function isActive(currentPath: string, tabHref: string): boolean {
 export default function LabAppNav() {
   const pathname = usePathname() ?? "";
   const { sport } = useSportSelection();
-  const isPropsPreview = pathname === "/dev/mlb-props-preview";
+  const isPrivatePreview =
+    pathname === "/dev/mlb-props-preview" ||
+    pathname === "/dev/experience-preview" ||
+    pathname === "/dev/tracking-preview" ||
+    pathname === "/dev/relaunch-review";
+  const tabs = isPrivatePreview ? PRIVATE_REVIEW_TABS : TABS;
 
   return (
     <header className="sticky top-0 z-40 bg-gray-950/85 backdrop-blur-md border-b border-gray-800">
@@ -68,7 +83,7 @@ export default function LabAppNav() {
           {/* Left: real OddSphere brand mark — matches production Navbar
               pattern (icon-logo on mobile, full wordmark on sm+). */}
           <Link
-            href="/lab/daily-edge"
+            href={isPrivatePreview ? "/dev/relaunch-review" : "/lab/daily-edge"}
             className="inline-flex items-center transition-all duration-200 hover:brightness-110 hover:scale-[1.02] whitespace-nowrap"
             aria-label="OddSphere AI Lab"
           >
@@ -97,8 +112,8 @@ export default function LabAppNav() {
             className="flex-1 flex justify-start sm:justify-center -mx-2 sm:mx-0 overflow-x-auto sm:overflow-visible"
           >
             <div className="flex gap-0.5 sm:gap-1 pl-1 sm:px-0 min-w-max">
-              {TABS.map((t) => {
-                const active = isActive(pathname, t.href);
+              {tabs.map((t) => {
+                const active = isActive(pathname, t.activeHref ?? t.href);
                 return (
                   <Link
                     key={t.href}
@@ -136,18 +151,18 @@ export default function LabAppNav() {
           {/* Right: status pill + account placeholder */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="hidden sm:block">
-              {isPropsPreview ? <PreviewStatus /> : <RefreshIndicator sport={sport} />}
+              {isPrivatePreview ? <PreviewStatus /> : <RefreshIndicator sport={sport} />}
             </div>
             <Link
-              href="/lab/account"
+              href={isPrivatePreview ? "/dev/relaunch-review" : "/lab/account"}
               className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 min-h-10 rounded-md text-[11px] sm:text-xs font-bold uppercase tracking-[0.1em] transition-colors focus-visible:outline-none focus-visible:bg-gray-900/60 focus-visible:text-white ${
-                isActive(pathname, "/lab/account")
+                isPrivatePreview || isActive(pathname, "/lab/account")
                   ? "text-white"
                   : "text-gray-400 hover:text-violet-300"
               }`}
             >
-              <span aria-hidden="true" className="text-sm leading-none">👤</span>
-              <span className="hidden sm:inline">Account</span>
+              <span aria-hidden="true" className="text-sm leading-none">{isPrivatePreview ? "◈" : "👤"}</span>
+              <span className="hidden sm:inline">{isPrivatePreview ? "Review Hub" : "Account"}</span>
             </Link>
           </div>
         </div>
@@ -155,7 +170,7 @@ export default function LabAppNav() {
         {/* Mobile-only: RefreshIndicator stacks below the row so the pill stays
             thumb-reachable without horizontal scroll. */}
         <div className="sm:hidden pb-2 -mt-1 flex justify-end">
-          {isPropsPreview ? <PreviewStatus /> : <RefreshIndicator sport={sport} />}
+          {isPrivatePreview ? <PreviewStatus /> : <RefreshIndicator sport={sport} />}
         </div>
       </div>
     </header>

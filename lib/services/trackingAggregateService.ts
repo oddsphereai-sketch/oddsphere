@@ -214,6 +214,11 @@ type Row = {
   grade: PredictionGradeRow | null;
 };
 
+type TrackingRecordProjection = PredictionRecordRow & {
+  tracking_display_grade_override?: string | null;
+  member_facing_grade?: string | null;
+};
+
 const TRACKING_PAGE_SIZE = 1000;
 const TRACKING_GRADE_ID_CHUNK_SIZE = 500;
 const TRACKING_RECORD_SELECT = [
@@ -255,7 +260,11 @@ const TRACKING_RECORD_SELECT = [
   "locked_at",
   "published_at",
   "created_at",
-  "snapshot_json",
+  // Pull only the two member-grade values used by this aggregate. Selecting
+  // the complete snapshot_json blob for every historical record made a cold
+  // member Tracking request transfer thousands of large audit payloads.
+  "tracking_display_grade_override:snapshot_json->>tracking_display_grade_override",
+  "member_facing_grade:snapshot_json->member_facing_at_lock->>grade",
   "calibration_version",
 ].join(",");
 const TRACKING_GRADE_SELECT = [
@@ -284,6 +293,20 @@ function storedGrade(record: PredictionRecordRow): string {
 }
 
 function displayGradeOverride(record: PredictionRecordRow): string | null {
+  const projected = (record as TrackingRecordProjection).tracking_display_grade_override;
+  if (typeof projected === "string") {
+    const grade = projected.trim().toLowerCase();
+    if (
+      grade === "best_angle" ||
+      grade === "lean" ||
+      grade === "watchlist" ||
+      grade === "caution" ||
+      grade === "no_play" ||
+      grade === "market_aligned" ||
+      grade === "provisional" ||
+      grade === "held"
+    ) return grade;
+  }
   const snapshot = record.snapshot_json;
   if (snapshot === null || typeof snapshot !== "object") return null;
   const value = (snapshot as Record<string, unknown>).tracking_display_grade_override;
@@ -305,6 +328,20 @@ function displayGradeOverride(record: PredictionRecordRow): string | null {
 }
 
 function memberFacingGradeAtLock(record: PredictionRecordRow): string | null {
+  const projected = (record as TrackingRecordProjection).member_facing_grade;
+  if (typeof projected === "string") {
+    const grade = projected.trim().toLowerCase();
+    if (
+      grade === "best_angle" ||
+      grade === "lean" ||
+      grade === "watchlist" ||
+      grade === "caution" ||
+      grade === "no_play" ||
+      grade === "market_aligned" ||
+      grade === "provisional" ||
+      grade === "held"
+    ) return grade;
+  }
   const snapshot = record.snapshot_json;
   if (snapshot === null || typeof snapshot !== "object") return null;
   const memberFacing = (snapshot as Record<string, unknown>).member_facing_at_lock;

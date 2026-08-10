@@ -19,6 +19,13 @@ import {
 
 const BOARD_TTL_MS = 40 * 60 * 1000;
 const STALE_TTL_MS = 24 * 60 * 60 * 1000;
+const MEMBER_READ_TIMEOUT_MS = Number(process.env.ODDSPHERE_PROPS_MEMBER_READ_TIMEOUT_MS ?? 2_000);
+
+function memberReadAbortSignal(): AbortSignal {
+  return AbortSignal.timeout(Number.isFinite(MEMBER_READ_TIMEOUT_MS) && MEMBER_READ_TIMEOUT_MS > 0
+    ? MEMBER_READ_TIMEOUT_MS
+    : 2_000);
+}
 
 type BoardPayload = {
   schemaVersion: 1;
@@ -207,6 +214,7 @@ export async function loadMlbPropsMemberBoardSnapshot(date: string, full = false
     .select("payload")
     .eq("snapshot_key", full ? fullBoardKey(date) : boardKey(date))
     .gt("stale_until", new Date().toISOString())
+    .abortSignal(memberReadAbortSignal())
     .maybeSingle();
   if (error) throw error;
   if (!validBoardPayload(data?.payload)) return null;
@@ -222,7 +230,8 @@ export async function loadMlbPropsMemberBoardSnapshot(date: string, full = false
       .from("lab_response_snapshots")
       .select("snapshot_key,payload")
       .in("snapshot_key", keys)
-      .gt("stale_until", new Date().toISOString());
+      .gt("stale_until", new Date().toISOString())
+      .abortSignal(memberReadAbortSignal());
     if (shardError) throw shardError;
     const byKey = new Map((rows ?? []).map((row) => [row.snapshot_key, row.payload]));
     for (const key of keys) {
@@ -246,6 +255,7 @@ export async function loadMlbPropsPlayerReadSnapshot(date: string, playerId: str
     .select("payload")
     .eq("snapshot_key", playerKey(date, playerId))
     .gt("stale_until", new Date().toISOString())
+    .abortSignal(memberReadAbortSignal())
     .maybeSingle();
   if (error) throw error;
   if (!validPlayerPayload(data?.payload)) return null;

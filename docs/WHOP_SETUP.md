@@ -119,7 +119,7 @@ app/api/auth/whop/start/route.ts     OAuth start
 app/api/auth/whop/callback/route.ts  OAuth callback → access check → mint cookie
 app/api/auth/whop/status/route.ts    Public flag probe (debug)
 app/api/auth/logout/route.ts         Clears both sessions
-middleware.ts                        Accepts Whop OR beta session
+proxy.ts                             Accepts Whop OR beta session
 app/login/page.tsx                   Surfaces Whop button when enabled
 app/pricing/page.tsx                 CTA → Whop checkout when configured
 ```

@@ -33,6 +33,16 @@ async function main() {
     "SNAPSHOT_SEQUENCE_SPAN",
     "LATEST_SETTLEMENT_HEALTHY",
   ].includes(check.code));
+  const missingResearch = new Map<string, { rows: number; examples: string[] }>();
+  for (const row of result.snapshot.data.props) {
+    for (const feature of row.missingFeatures) {
+      const current = missingResearch.get(feature) ?? { rows: 0, examples: [] };
+      current.rows += 1;
+      const example = `${row.player} · ${row.marketLabel}`;
+      if (current.examples.length < 5 && !current.examples.includes(example)) current.examples.push(example);
+      missingResearch.set(feature, current);
+    }
+  }
   console.log(JSON.stringify({
     date,
     persist,
@@ -50,6 +60,7 @@ async function main() {
     publishable: result.snapshot.validation.publishable,
     errors: result.snapshot.validation.errors,
     warnings: result.snapshot.validation.warnings,
+    missingResearch: Object.fromEntries([...missingResearch.entries()].sort((a, b) => b[1].rows - a[1].rows)),
     movement: result.snapshot.movement,
     trackingSync: result.tracking,
     providerCalls: result.providerCalls,

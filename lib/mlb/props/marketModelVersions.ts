@@ -9,11 +9,11 @@ import { getMlbPropMarketDefinition } from "./marketCatalog";
 // or stake must bump this value before deployment. Per-market versions remain
 // below for attribution; this release id prevents reports from silently mixing
 // boards produced by different combinations of market logic.
-export const MLB_PROPS_MODEL_RELEASE_ID = "mlb_props_2026_07_31_r20";
+export const MLB_PROPS_MODEL_RELEASE_ID = "mlb_props_2026_08_10_r23";
 
 const DEDICATED_MARKET_MODEL_VERSIONS: Partial<Record<MlbPropMarketKey, string>> = {
-  pitcher_strikeouts: "pitcher_strikeouts_distribution_v4_over_actionable_only",
-  pitcher_outs: "pitcher_outs_peer_consensus_compact_core_v4_over_actionable_only",
+  pitcher_strikeouts: "pitcher_strikeouts_distribution_v5_global_weather_context",
+  pitcher_outs: "pitcher_outs_peer_consensus_compact_core_v5_global_weather_context",
   pitcher_walks: "pitcher_walks_distribution_v1_conservative_over_market_only_calibrated",
   pitcher_earned_runs: "pitcher_earned_runs_distribution_v2_watchlist_only",
   batter_hits: `${BATTER_HITS_PA_MODEL_VERSION}_actionability_v6_uncapped_validated_under_best_angle`,

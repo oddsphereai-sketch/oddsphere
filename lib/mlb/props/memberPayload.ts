@@ -174,3 +174,32 @@ export function selectMlbPropsResearchForRows(
     return evidence ? [[row.researchKey, evidence] as const] : [];
   }));
 }
+
+export function mlbPropsPlayerResearchGaps(
+  rows: PlayerPropPreviewRow[],
+  research: PlayerPropsDashboardData["research"],
+): string[] {
+  const gaps = new Set<string>();
+  const uniqueRows = new Map(rows.map((row) => [row.researchKey ?? row.id, row]));
+  for (const row of uniqueRows.values()) {
+    if (!row.researchKey) {
+      gaps.add(`${row.id}:research_key`);
+      continue;
+    }
+    const evidence = research?.[row.researchKey];
+    if (!evidence) {
+      gaps.add(`${row.researchKey}:evidence`);
+      continue;
+    }
+    if (!evidence.recentForm?.logs.length) gaps.add(`${row.researchKey}:recent_form`);
+    if (!evidence.environment) gaps.add(`${row.researchKey}:environment`);
+    if (row.marketFamily === "pitcher") {
+      if (!evidence.opponentProfile) gaps.add(`${row.researchKey}:opponent_profile`);
+      if (!evidence.pitchArsenal) gaps.add(`${row.researchKey}:pitch_arsenal`);
+    } else {
+      if (!evidence.pitchMatchup) gaps.add(`${row.researchKey}:pitch_matchup`);
+      if (!evidence.matchupHistory) gaps.add(`${row.researchKey}:matchup_history`);
+    }
+  }
+  return [...gaps];
+}

@@ -332,6 +332,8 @@ export type MarketEdgeDto = {
    */
   oddspherePostedAmerican?: number | null;
   oddspherePostedAt?: string | null;
+  /** True only when the stored first-published price belongs to this displayed pick side. */
+  oddspherePostedMatchesPick?: boolean | null;
   lockedLineAmerican?: number | null;
   lockedLineAt?: string | null;
   /**

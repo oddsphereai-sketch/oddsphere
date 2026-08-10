@@ -129,11 +129,20 @@ export async function loadLastMovesForSlate(
       return Date.parse(b.moved_at) - Date.parse(a.moved_at);
     });
     const latest = rows[0];
+    // A total/spread number change and an odds-price change are different
+    // observations. Prices on 8.0 and 7.5 are not comparable cents, even when
+    // they arrive in the same row (for example -234 at 8.0 → -123 at 7.5).
+    // Preserve the line move, but fail the price move closed so no consumer can
+    // accidentally present the two prices as a continuous odds trail.
+    const lineChanged =
+      latest.prev_line_value !== null &&
+      latest.next_line_value !== null &&
+      Math.abs(latest.prev_line_value - latest.next_line_value) >= 0.001;
     const booksMoved = new Set(rows.filter((r) => nowMs - Date.parse(r.moved_at) <= 30 * 60000).map((r) => r.sportsbook)).size;
     const totalBooks = new Set(rows.filter((r) => nowMs - Date.parse(r.moved_at) <= 60 * 60000).map((r) => r.sportsbook)).size;
     map.set(key, {
-      prevAmerican: latest.prev_odds_american,
-      nextAmerican: latest.next_odds_american,
+      prevAmerican: lineChanged ? null : latest.prev_odds_american,
+      nextAmerican: lineChanged ? null : latest.next_odds_american,
       movedAtIso: latest.moved_at,
       booksMoved: booksMoved > 0 ? booksMoved : null,
       totalBooks: totalBooks > 0 ? totalBooks : null,

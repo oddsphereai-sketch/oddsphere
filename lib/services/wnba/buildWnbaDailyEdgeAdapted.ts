@@ -29,7 +29,7 @@ import type { Grade, MarketSignal, SignalType } from "../../../lib/types/domain/
 import type { Verdict } from "../verdictDerivation";
 import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
-import { wnbaLogoUrl } from "./wnbaTeams";
+import { resolveWnbaMoneylineSide, wnbaLogoUrl } from "./wnbaTeams";
 import { supabase } from "@/lib/db/supabase";
 import { computeSlateDate, currentSlateDate } from "@/lib/dates/slateDate";
 import {
@@ -44,7 +44,7 @@ import { marketReadV2DtoFromSnapshot } from "@/lib/services/marketIntelligenceV2
 import { projectionLedMarketRead, withConfirmedSharpMoney } from "@/lib/services/marketIntelligenceV2/displayCoherence";
 import type { MarketReadV2Dto } from "@/lib/types/domain/MarketIntelligenceV2";
 import { buildRecommendationDecision } from "@/lib/services/recommendationDecision";
-import { wnbaObservedConsensusPrices } from "./wnbaPriceTrail";
+import { wnbaPredictionReleaseMismatches } from "@/lib/automodel/wnbaChampionRuntime";
 import {
   applyDailyEdgeRenderedCopyFlags,
   type DailyEdgeRenderedCopyFlagOverrides,
@@ -148,6 +148,9 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
   const gpByGame = new Map((gps ?? []).map((r) => [r.game_id as number, r]));
   const recordsByGame = new Map<number, Map<string, WnbaLockedRecord>>();
   for (const r of retainedRecords) {
+    // Unlocked records are a tracking mirror and may briefly lag the current
+    // coherent game_predictions payload during an hourly refresh.
+    if (r.locked_at === null) continue;
     const gid = r.game_id;
     const byMarket = recordsByGame.get(gid) ?? new Map<string, WnbaLockedRecord>();
     byMarket.set(r.market, r);
@@ -167,7 +170,7 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
   }
   const { data: lineRows } = await supabase
     .from("lines")
-    .select("game_id, market_type, side, line_value, odds_american")
+    .select("game_id, market_type, side, sportsbook, line_value, odds_american")
     .in("game_id", ids)
     .in("market_type", ["moneyline", "total", "spread"]);
   const linesByGame = new Map<number, NonNullable<typeof lineRows>>();
@@ -187,7 +190,7 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
   for (let from = 0; ; from += HISTORY_PAGE_SIZE) {
     const { data: page } = await supabase
       .from("line_history")
-      .select("game_id, market_type, side, line_value, odds_american, recorded_at")
+      .select("game_id, market_type, side, sportsbook, line_value, odds_american, recorded_at")
       .in("game_id", ids)
       .in("market_type", ["moneyline", "total", "spread"])
       .order("recorded_at", { ascending: true })
@@ -213,7 +216,6 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
     if (!gp || !home || !away || !ss.moneyline) continue;
     const extId = (g.external_id as number) ?? (g.id as number);
     if (seen.has(extId)) continue; // no duplicate games
-    seen.add(extId);
     const ml = ss.moneyline as PreviewGame["moneyline"];
     const lockedRecordsForGame = recordsByGame.get(g.id as number) ?? new Map<string, WnbaLockedRecord>();
     const lockedMl = lockedRecordsForGame.get("moneyline");
@@ -223,6 +225,12 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
       gp.locked_at ??
       Array.from(lockedRecordsForGame.values()).find((r) => r.locked_at !== null)?.locked_at ??
       null;
+    // Locked recommendations remain immutable historical truth. Unlocked rows,
+    // however, must match the exact champion contract before member display;
+    // deployment order or a catch-up cron cannot expose an older payload under
+    // the new runtime.
+    if (lockedAt === null && wnbaPredictionReleaseMismatches(ss).length > 0) continue;
+    seen.add(extId);
     const lockedMoneyline =
       lockedMl === undefined
         ? ml
@@ -391,6 +399,7 @@ function buildWnbaPublicSplits(
 type WnbaLineRow = {
   market_type: string;
   side: string;
+  sportsbook?: string | null;
   line_value: number | null;
   odds_american: number | null;
   recorded_at?: string | null;
@@ -529,25 +538,93 @@ function latestPickedPrice(rows: WnbaLineRow[], market: string, side: string | n
   );
 }
 
-function firstObservedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
-  return wnbaObservedConsensusPrices(rows, market, side, line)[0] ?? null;
-}
+const WNBA_MOVEMENT_BOOK_PRIORITY = [
+  "fanduel",
+  "betmgm",
+  "hardrock",
+  "pinnacle",
+  "caesars",
+  "betonline",
+  "thescorebet",
+];
 
-function previousObservedPrice(rows: WnbaLineRow[], market: string, side: string | null, line: number | null, current: number | null): number | null {
-  if (current === null) return null;
-  const prices = wnbaObservedConsensusPrices(rows, market, side, line);
-  for (let i = prices.length - 1; i >= 0; i--) {
-    const price = prices[i]!;
-    if (price !== current) return price;
+function coherentPriceTrail(
+  liveRows: WnbaLineRow[],
+  historyRows: WnbaLineRow[],
+  market: string,
+  side: string | null,
+  currentLine: number | null,
+  fallbackCurrent: number | null,
+): WnbaPriceTrail {
+  if (side === null) return { current: fallbackCurrent, open: null, previous: null, coherent: false };
+  const books = new Set(
+    [...historyRows, ...liveRows]
+      .filter((row) => row.market_type === market && row.side === side && row.sportsbook)
+      .map((row) => row.sportsbook as string),
+  );
+  const rankedBooks = [...books].sort((a, b) => {
+    const aRank = WNBA_MOVEMENT_BOOK_PRIORITY.indexOf(a);
+    const bRank = WNBA_MOVEMENT_BOOK_PRIORITY.indexOf(b);
+    return (aRank < 0 ? 999 : aRank) - (bRank < 0 ? 999 : bRank) || a.localeCompare(b);
+  });
+
+  for (const sportsbook of rankedBooks) {
+    const history = historyRows
+      .filter((row) => row.market_type === market && row.side === side && row.sportsbook === sportsbook && typeof row.odds_american === "number")
+      .sort((a, b) => new Date(a.recorded_at ?? 0).getTime() - new Date(b.recorded_at ?? 0).getTime());
+    const liveCandidates = liveRows.filter((row) =>
+      row.market_type === market &&
+      row.side === side &&
+      row.sportsbook === sportsbook &&
+      typeof row.odds_american === "number",
+    );
+    const currentLineCandidates = currentLine === null
+      ? liveCandidates
+      : liveCandidates.filter((row) => closeLine(row.line_value, currentLine));
+    // line_history is loaded oldest → newest. The terminal stop must be the
+    // latest observation at this same book/side/line; selecting index 0 sent a
+    // completed trail back to its opener and made the UI correctly reject it.
+    const live = currentLineCandidates[currentLineCandidates.length - 1] ?? null;
+    if (history.length === 0 || !live) continue;
+
+    const stops: WnbaPriceTrailStop[] = [];
+    for (const row of [...history, live]) {
+      const stop = {
+        american: row.odds_american as number,
+        line: row.line_value,
+        observedAt: row.recorded_at ?? null,
+      };
+      const prior = stops[stops.length - 1];
+      // A repeated price at a later timestamp is still a real prior
+      // observation. Preserve it so the reader can distinguish "steady across
+      // several checks" from "only one price was ever captured". Only discard
+      // an exact duplicate row.
+      if (
+        prior &&
+        prior.american === stop.american &&
+        prior.line === stop.line &&
+        prior.observedAt === stop.observedAt
+      ) continue;
+      stops.push(stop);
+    }
+    if (stops.length < 2) continue;
+    const open = stops[0]!;
+    const current = stops[stops.length - 1]!;
+    const previous = stops.length > 2 ? stops[stops.length - 2]! : null;
+    return {
+      current: fallbackCurrent,
+      open: open.american,
+      previous: previous?.american ?? null,
+      movementCurrent: current.american,
+      openLine: open.line,
+      previousLine: previous?.line ?? null,
+      currentLine: current.line,
+      sportsbook,
+      coherent: true,
+      stops,
+    };
   }
-  return null;
-}
-
-function priceTrail(rows: WnbaLineRow[], market: string, side: string | null, line: number | null, current: number | null): WnbaPriceTrail {
-  const open = firstObservedPrice(rows, market, side, line);
-  const previousRaw = previousObservedPrice(rows, market, side, line, current);
-  const previous = previousRaw !== null && previousRaw !== open ? previousRaw : null;
-  return { current, open, previous };
+  return { current: fallbackCurrent, open: null, previous: null, currentLine, coherent: false };
 }
 
 function currentLineValue(rows: WnbaLineRow[], market: string, side: string | null, line: number | null): number | null {
@@ -559,19 +636,6 @@ function currentLineValue(rows: WnbaLineRow[], market: string, side: string | nu
     if (exact.length > 0) return medianNumber(exact.map((r) => r.line_value as number));
   }
   return medianNumber(sideRows.map((r) => r.line_value as number));
-}
-
-function lineMove(rows: WnbaLineRow[], market: string, side: string | null, currentLine: number | null): { prev: number | null; next: number | null } {
-  if (side === null || currentLine === null) return { prev: null, next: currentLine };
-  const vals: number[] = [];
-  for (const r of rows) {
-    if (r.market_type !== market || r.side !== side || r.line_value === null) continue;
-    if (vals.length === 0 || !closeLine(vals[vals.length - 1]!, r.line_value)) vals.push(r.line_value);
-  }
-  for (let i = vals.length - 1; i >= 0; i--) {
-    if (!closeLine(vals[i]!, currentLine)) return { prev: vals[i]!, next: currentLine };
-  }
-  return { prev: null, next: currentLine };
 }
 
 function buildWnbaPickedPrices(
@@ -592,10 +656,7 @@ function buildWnbaPickedPrices(
   const lockedMl = lockedRecords.get("moneyline");
   const lockedTotal = lockedRecords.get("total");
   const lockedSpread = lockedRecords.get("spread");
-  const mlSide =
-    ml.side === homeAbbr || ml.side === homeName ? "home" :
-    ml.side === awayAbbr || ml.side === awayName ? "away" :
-    null;
+  const mlSide = resolveWnbaMoneylineSide(ml.side, homeAbbr, awayAbbr);
   const totalSide =
     total.side?.toLowerCase().startsWith("over") ? "over" :
     total.side?.toLowerCase().startsWith("under") ? "under" :
@@ -615,17 +676,28 @@ function buildWnbaPickedPrices(
   const spreadCurrent = lockedSpread?.odds_american ?? pickedPrice(liveRows, "spread", spreadSide, spreadLockedLine) ?? latestPickedPrice(cappedHistoryRows, "spread", spreadSide, spreadLockedLine);
   const totalCurrentLine = lockedTotal?.line_value ?? currentLineValue(liveRows, "total", totalSide, totalLockedLine) ?? totalLockedLine;
   const spreadCurrentLine = lockedSpread?.line_value ?? currentLineValue(liveRows, "spread", spreadSide, spreadLockedLine) ?? spreadLockedLine;
-  const totalLineMove = lineMove(cappedHistoryRows, "total", totalSide, totalCurrentLine);
-  const spreadLineMove = lineMove(cappedHistoryRows, "spread", spreadSide, spreadCurrentLine);
   return {
-    ml: { ...priceTrail(cappedHistoryRows, "moneyline", mlSide, null, mlCurrent), marketProb: pickedNoVigProb(liveRows, "moneyline", mlSide, null), lineMovePrev: null, lineMoveNext: null },
-    total: { ...priceTrail(cappedHistoryRows, "total", totalSide, totalLockedLine, totalCurrent), marketProb: pickedNoVigProb(liveRows, "total", totalSide, totalLockedLine), lineMovePrev: totalLineMove.prev, lineMoveNext: totalLineMove.next },
-    spread: { ...priceTrail(cappedHistoryRows, "spread", spreadSide, spreadLockedLine, spreadCurrent), marketProb: pickedNoVigProb(liveRows, "spread", spreadSide, spreadLockedLine), lineMovePrev: spreadLineMove.prev, lineMoveNext: spreadLineMove.next },
+    ml: { ...coherentPriceTrail(liveRows, cappedHistoryRows, "moneyline", mlSide, null, mlCurrent), marketProb: pickedNoVigProb(liveRows, "moneyline", mlSide, null) },
+    total: { ...coherentPriceTrail(liveRows, cappedHistoryRows, "total", totalSide, totalCurrentLine, totalCurrent), marketProb: pickedNoVigProb(liveRows, "total", totalSide, totalLockedLine) },
+    spread: { ...coherentPriceTrail(liveRows, cappedHistoryRows, "spread", spreadSide, spreadCurrentLine, spreadCurrent), marketProb: pickedNoVigProb(liveRows, "spread", spreadSide, spreadLockedLine) },
   };
 }
 
 type PreviewMarket = { side: string | null; confidence: number | null; grade: PreviewModelGrade | null };
-type WnbaPriceTrail = { current: number | null; open: number | null; previous: number | null; marketProb?: number | null; lineMovePrev?: number | null; lineMoveNext?: number | null };
+type WnbaPriceTrailStop = { american: number; line: number | null; observedAt: string | null };
+type WnbaPriceTrail = {
+  current: number | null;
+  open: number | null;
+  previous: number | null;
+  movementCurrent?: number | null;
+  openLine?: number | null;
+  previousLine?: number | null;
+  currentLine?: number | null;
+  sportsbook?: string | null;
+  coherent: boolean;
+  stops?: WnbaPriceTrailStop[];
+  marketProb?: number | null;
+};
 type WnbaPickedPrices = { ml: WnbaPriceTrail; total: WnbaPriceTrail; spread: WnbaPriceTrail };
 type PreviewGame = {
   game_id: number;
@@ -801,7 +873,7 @@ function priceTrailMovementRead(
   trail: WnbaPriceTrail | undefined,
   generatedAt: string | null,
 ): MarketReadV2Dto | null {
-  if (!trail || pick === null) return null;
+  if (!trail?.coherent || pick === null) return null;
   let direction: "support" | "resistance" | null = null;
   let strength = 0;
   let firstLine: number | null = null;
@@ -812,8 +884,8 @@ function priceTrailMovementRead(
     // improve while the main line moves away from the pick; member-facing
     // Market Read should follow the main line and leave bettor price value to
     // the Odds Move row.
-    firstLine = trail.lineMovePrev ?? null;
-    currentLine = trail.lineMoveNext ?? null;
+    firstLine = trail.openLine ?? null;
+    currentLine = trail.currentLine ?? null;
     if (firstLine !== null && currentLine !== null && !closeLine(firstLine, currentLine)) {
       const delta = currentLine - firstLine;
       const p = pick.toLowerCase();
@@ -833,8 +905,9 @@ function priceTrailMovementRead(
 
   if (direction === null) {
     const firstProb = impliedProb(trail.open);
-    const currentProb = impliedProb(trail.current);
-    if (firstProb !== null && currentProb !== null && trail.open !== null && trail.current !== null) {
+    const movementCurrent = trail.movementCurrent ?? trail.current;
+    const currentProb = impliedProb(movementCurrent);
+    if (firstProb !== null && currentProb !== null && trail.open !== null && movementCurrent !== null) {
       const delta = currentProb - firstProb;
       if (Math.abs(delta) >= 0.01) {
         direction = delta > 0 ? "support" : "resistance";
@@ -859,7 +932,7 @@ function priceTrailMovementRead(
       firstTrackedLine: firstLine,
       firstTrackedPrice: trail.open,
       currentLine,
-      currentPrice: trail.current,
+      currentPrice: trail.movementCurrent ?? trail.current,
       directionRelativeToPick: direction,
       observedAt: generatedAt,
     },
@@ -882,10 +955,22 @@ function withVisiblePriceTrailMarketRead(opts: {
 }): MarketReadV2Dto | null {
   const trailRead = priceTrailMovementRead(opts.slot, opts.pick, opts.trail, opts.generatedAt);
   if (!trailRead) {
-    return projectionLedMarketRead(opts.existing, {
+    const projectionLed = projectionLedMarketRead(opts.existing, {
       evidenceAsOf: opts.generatedAt,
       generatedAt: opts.generatedAt ?? new Date().toISOString(),
     });
+    if (!projectionLed) return null;
+    return {
+      ...projectionLed,
+      movement: {
+        firstTrackedLine: null,
+        firstTrackedPrice: null,
+        currentLine: opts.trail?.currentLine ?? null,
+        currentPrice: opts.trail?.current ?? null,
+        directionRelativeToPick: "neutral",
+        observedAt: opts.generatedAt,
+      },
+    };
   }
   const existingDirection = opts.existing?.movement?.directionRelativeToPick ?? "neutral";
   if (!opts.existing || opts.existing.label === "Projection-Led" || existingDirection === "neutral") {
@@ -1034,8 +1119,18 @@ function buildMarket(opts: {
     lockedLineAmerican: opts.lockedAt ? priceAmerican : null,
     lockedLineAt: opts.lockedAt ?? null,
     lastMovePrevAmerican: opts.priceTrail?.previous ?? null,
-    lastMoveLinePrev: opts.priceTrail?.lineMovePrev ?? null,
-    lastMoveLineNext: opts.priceTrail?.lineMoveNext ?? null,
+    lastMoveLinePrev: opts.priceTrail?.previousLine ?? null,
+    lastMoveLineNext: opts.priceTrail?.currentLine ?? null,
+    oddsTrail: opts.priceTrail?.coherent
+      ? (opts.priceTrail.stops ?? []).map((stop, index, stops) => ({
+          american: stop.american,
+          line: stop.line,
+          observedAt: stop.observedAt,
+          sportsbook: opts.priceTrail?.sportsbook ?? null,
+          source: index === stops.length - 1 ? "current_line" as const : "line_history" as const,
+          label: index === 0 ? "first" as const : index === stops.length - 1 ? "current" as const : "move" as const,
+        }))
+      : undefined,
     modelTotal: slot === "total" ? modelTotal : null,
     marketTotal: slot === "total" ? marketTotal : null,
     line: slot === "ml" ? null : line,
@@ -1073,14 +1168,18 @@ function adaptGame(
   const awayAbbr = game.away_abbr ?? game.away.slice(0, 3).toUpperCase();
 
   // ── ML ──
-  const mlPickIsHome = game.moneyline.side === game.home;
+  const mlSelection = resolveWnbaMoneylineSide(
+    game.moneyline.side,
+    homeAbbr,
+    awayAbbr,
+  );
+  const mlPickIsHome = mlSelection === "home";
   const mlModelProb =
     wnbaPickProbabilityFromConfidence(game.moneyline.confidence) ??
     (mlPickIsHome ? game.model.home_win_prob : 1 - game.model.home_win_prob);
   const mlMarketFair = game.market.home_win_prob !== null ? (mlPickIsHome ? game.market.home_win_prob : 1 - game.market.home_win_prob) : null;
   const mlAligned = game.market.home_win_prob !== null ? mlPickIsHome === game.market.home_win_prob >= 0.5 : null;
-  const mlSelectedSide =
-    game.moneyline.side === game.home ? "home" : game.moneyline.side === game.away ? "away" : null;
+  const mlSelectedSide = mlSelection;
   const totalSelectedSide =
     game.total.side?.toLowerCase().startsWith("over") === true
       ? "over"
@@ -1101,7 +1200,7 @@ function adaptGame(
   });
   const ml = buildMarket({
     slot: "ml",
-    pick: game.moneyline.side === game.home ? homeAbbr : game.moneyline.side === game.away ? awayAbbr : game.moneyline.side,
+    pick: mlSelection === "home" ? homeAbbr : mlSelection === "away" ? awayAbbr : null,
     confFrac: game.moneyline.confidence !== null ? game.moneyline.confidence / 100 : null,
     grade: game.moneyline.grade,
     modelProbPick: mlModelProb,

@@ -52,6 +52,8 @@ import { isContextOnlyDisplayMarket } from "@/lib/config/officialTrackingMarkets
 import { TWO_SIDED_KEY_STAT_LABELS, keyStatIsTwoSided } from "@/lib/services/keyStatsFormatter";
 import { teamPrimaryColor } from "./teamColors";
 import { LockBadge } from "./LockBadge";
+import { DAILY_EDGE_SPORTS } from "../../lib/dailyEdgeSports";
+import { primaryDailyEdgeMarket } from "../../lib/dailyEdgeReaderState";
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -577,21 +579,7 @@ function buildCardEdgeChip(m: MarketEdgeDto): { label: string; tone: EdgeRow["to
 }
 
 function headlineMarketFor(game: DailyEdgeGameDto): MarketKey {
-  // Pick the market with the strongest verdict, ML > Total > 1st on ties.
-  const rank: Record<VerdictKey, number> = {
-    best_angle: 4,
-    lean: 3,
-    watchlist: 2,
-    caution: 1,
-    no_play: 0,
-  };
-  const candidates: Array<{ key: MarketKey; r: number }> = [
-    { key: "moneyline", r: rank[marketVerdictKey(game.markets.moneyline)] },
-    { key: "total", r: rank[marketVerdictKey(game.markets.total)] },
-    { key: "first_inning", r: rank[marketVerdictKey(game.markets.first_inning)] },
-  ];
-  candidates.sort((a, b) => b.r - a.r);
-  return candidates[0]!.key;
+  return primaryDailyEdgeMarket(game);
 }
 
 // ─── Parts ─────────────────────────────────────────────────────────────
@@ -1134,10 +1122,9 @@ function SportIcon({ sport, size = 18, active }: { sport: Sport; size?: number; 
 
 /**
  * Top-of-page sports rail. Full-width inside the standard max-w-7xl
- * gutter so the page reads as a multi-sport platform — MLB is the only
- * live model right now but the other leagues are visible as "Coming
- * <Month>" placeholders. League glyphs are inline SVGs (no licensing
- * concerns + no remote asset fetches).
+ * gutter so the page reads as a multi-sport platform. Availability and
+ * season labels come from the shared Daily Edge presentation registry;
+ * league glyphs are inline SVGs (no licensing concerns + no remote fetches).
  */
 export function SportRail({ sport }: { sport: Sport }) {
   // WC-4 — soccer renders here as "World Cup" (live). UCL is a separate
@@ -1145,26 +1132,9 @@ export function SportRail({ sport }: { sport: Sport }) {
   // with WC on the same tab. Internal sport key for soccer stays
   // `soccer` (matches the WC-3 TrackedSport contract); the
   // member-facing label is "World Cup".
-  // Ordered so the models that are ACTIVE / in-season surface first (left),
-  // then live-but-offseason models, then not-yet-ready (right). `inSeason`
-  // drives the subtitle ("Active" / "Live" / "Offseason" / "Coming Soon").
-  // 2026-07: World Cup has moved to offseason. The tab stays accessible for
-  // its completed slate/history while its recurring model work is dormant.
-  const ROW: Array<{ key: Sport; label: string; live: boolean; inSeason?: boolean }> = [
-    { key: "mlb", label: "MLB", live: true, inSeason: true },
-    // WNBA sits with the in-season group (next to World Cup), ahead of the
-    // offseason NBA/NHL, per Daniel — but stays "Coming Soon" (live:false)
-    // until its forward-evidence + tracking gate clears. Flip live:true to
-    // launch it in place.
-    { key: "wnba", label: "WNBA", live: true, inSeason: true },
-    { key: "soccer", label: "World Cup", live: true, inSeason: false },
-    { key: "nba", label: "NBA", live: true, inSeason: false },
-    { key: "nhl", label: "NHL", live: true, inSeason: false },
-    { key: "nfl", label: "NFL", live: false },
-    { key: "cfb", label: "CFB", live: false },
-    { key: "cbb", label: "CBB", live: false },
-    { key: "ucl", label: "UCL", live: false },
-  ];
+  // The shared registry orders active/in-season surfaces first, followed by
+  // available offseason surfaces and then planned models. `inSeason` drives
+  // the subtitle ("Active" / "Live" / "Offseason" / "Coming Soon").
   // Clickable nav: use useSportSelection so live tabs swap the URL's
   // ?sport= param and the parent page re-renders with the new sport.
   const { setSport } = useSportSelection();
@@ -1172,9 +1142,9 @@ export function SportRail({ sport }: { sport: Sport }) {
     <div className="border-b border-white/[0.05] bg-gradient-to-b from-white/[0.015] to-transparent">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5">
         <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto -mx-1 px-1">
-          {ROW.map((s) => {
-            const isActive = s.key === sport && s.live;
-            const isClickable = s.live;
+          {DAILY_EDGE_SPORTS.map((s) => {
+            const isActive = s.key === sport && s.memberAvailable;
+            const isClickable = s.memberAvailable;
             const isActiveInSeason = isActive && s.inSeason === true;
             const Tag = isClickable ? "button" : "div";
             const clickHandler = isClickable && !isActive ? () => setSport(s.key) : undefined;
@@ -1190,7 +1160,7 @@ export function SportRail({ sport }: { sport: Sport }) {
                       ? "border-white/[0.06] bg-white/[0.02] text-gray-400 hover:border-violet-400/30 hover:bg-violet-500/[0.06] cursor-pointer"
                       : "border-white/[0.06] bg-white/[0.02] text-gray-400"
                 }`}
-                aria-label={`${s.label} — ${s.live && !s.inSeason ? "offseason model" : isActive ? "active model" : isClickable ? "switch to this sport" : "coming soon"}`}
+                aria-label={`${s.label} — ${s.memberAvailable && !s.inSeason ? "offseason model" : isActive ? "active model" : isClickable ? "switch to this sport" : "coming soon"}`}
               >
                 {/* Circular icon container — tinted violet for active,
                     neutral for inactive. The container itself, not just
@@ -1222,7 +1192,7 @@ export function SportRail({ sport }: { sport: Sport }) {
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(110,231,183,0.6)]" />
                         Active
                       </span>
-                    ) : s.live ? (
+                    ) : s.memberAvailable ? (
                       s.inSeason ? "Live" : "Offseason"
                     ) : (
                       "Coming Soon"

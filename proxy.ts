@@ -1,5 +1,5 @@
 /**
- * Edge middleware — pre-launch V1 access gate (Fix 5.1).
+ * Request proxy — pre-launch V1 access gate (Fix 5.1).
  *
  * Gates `/lab/*` + `/admin/*` page routes and `/api/lab/*` API routes
  * behind a shared beta-password cookie. The cookie is set by
@@ -49,7 +49,18 @@ import { checkWhopAccess } from "@/lib/auth/whopAccess";
  * Page-route prefixes that require the beta session cookie. On miss,
  * unauthenticated visitors are redirected to /login?next=<encoded-path>.
  */
-const PROTECTED_PAGE_PREFIXES = ["/lab", "/admin", "/mlb/props"];
+const PROTECTED_PAGE_PREFIXES = [
+  "/lab",
+  "/admin",
+  "/mlb/props",
+  "/dev/experience-preview",
+  "/dev/mlb-props-preview",
+  "/dev/tracking-preview",
+  "/dev/homepage-preview",
+  "/dev/login-preview",
+  "/dev/relaunch-review",
+  "/dev/device-review",
+];
 
 /**
  * API-route prefixes that require the beta session cookie. On miss,
@@ -109,6 +120,10 @@ function accessCheckUnavailableResponse(request: NextRequest, isApi: boolean): N
   return NextResponse.redirect(loginUrl, { status: 302 });
 }
 
+function authenticatedPageResponse(request: NextRequest): NextResponse {
+  return NextResponse.next();
+}
+
 // ─── TEMPORARY: nba-v0a preview-branch bypass ─────────────────────────
 //
 // !!!  REMOVE BEFORE MERGING nba-v0a -> main  !!!
@@ -144,7 +159,7 @@ function isNbaPreviewBranchBypass(pathname: string): boolean {
   );
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // TEMPORARY nba-v0a preview-branch bypass — REMOVE BEFORE MERGING TO MAIN.
@@ -165,7 +180,9 @@ export async function middleware(request: NextRequest) {
   let whopAccessCheckUnavailable = false;
 
   if (whopPayload !== null) {
-    if (!shouldRefreshWhopAccess(whopPayload)) return NextResponse.next();
+    if (!shouldRefreshWhopAccess(whopPayload)) {
+      return authenticatedPageResponse(request);
+    }
 
     const access = await checkWhopAccess({ userId: whopPayload.uid });
     if (access.has_access) {
@@ -177,7 +194,7 @@ export async function middleware(request: NextRequest) {
       };
       const refreshedCookie = await signWhopSession(refreshedPayload);
       if (refreshedCookie !== null) {
-        const response = NextResponse.next();
+        const response = authenticatedPageResponse(request);
         response.headers.append("Set-Cookie", buildWhopSessionSetCookie(refreshedCookie));
         return response;
       }
@@ -194,7 +211,7 @@ export async function middleware(request: NextRequest) {
   const betaCookie = request.cookies.get(BETA_SESSION_COOKIE_NAME)?.value;
   const betaAuthenticated = await isValidBetaSession(betaCookie);
   if (betaAuthenticated) {
-    const response = NextResponse.next();
+    const response = authenticatedPageResponse(request);
     return clearWhopSession ? withClearedWhopSession(response) : response;
   }
 

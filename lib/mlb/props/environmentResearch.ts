@@ -34,7 +34,14 @@ export async function loadSlateEnvironmentResearch(args: {
   for (const game of args.games) {
     const venue = game.venue ?? null;
     const metadata = resolveMlbBallparkMetadata(venue);
-    const factor = parkFactors.find((row) => normalizeVenue(row.venue) === normalizeVenue(venue ?? "")) ?? null;
+    const homeTeamId = numericProviderId(game.homeTeamId);
+    const factor = parkFactors.find((row) => normalizeVenue(row.venue) === normalizeVenue(venue ?? ""))
+      // Statcast can retain a former or sponsor-neutral venue name after the
+      // schedule feed changes a ballpark label. The home-team id is the
+      // authoritative same-season fallback and fixes legitimate parks such as
+      // the Athletics' Sutter Health Park without inventing a neutral factor.
+      ?? parkFactors.find((row) => homeTeamId !== null && row.teamId === homeTeamId)
+      ?? null;
     const weather = weatherByGame.get(game.id) ?? null;
     const roofStatus = normalizeRoofStatus(game.roofStatus, metadata?.roofStatus);
     byGameId.set(game.id, buildPlayerPropEnvironmentEvidence({
@@ -77,6 +84,11 @@ function normalizeRoofStatus(
 
 function normalizeVenue(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function numericProviderId(value: string | number | null | undefined): number | null {
+  const parsed = Number(String(value ?? "").replace(/^mlbstats-team-/, ""));
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 function message(error: unknown): string {

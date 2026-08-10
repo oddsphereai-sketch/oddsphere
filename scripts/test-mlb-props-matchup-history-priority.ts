@@ -59,6 +59,7 @@ assert.deepEqual(
 
 const reader = readFileSync("app/mlb/props/components/PlayerPropsDashboard.tsx", "utf8");
 assert.ok(!reader.includes("Official batter-versus-pitcher totals are loading for this probable matchup."));
-assert.ok(reader.includes("Direct batter-versus-pitcher history is not available in this research snapshot."));
+assert.ok(reader.includes("No verified batter-versus-pitcher record was attached to this snapshot."));
+assert.ok(reader.includes("this gap is not treated as a zero"));
 
 console.log("PASS MLB props matchup-history priority: upcoming actionable pairs are bounded and deterministic");

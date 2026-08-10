@@ -2,6 +2,7 @@ import type { DailyEdgeResponse, TrackingResponse } from "@/app/lab/lib/labTypes
 import type { Sport } from "@/lib/types/domain/Sport";
 import {
   dailyEdgeSnapshotKey,
+  trackingFoundationSnapshotKey,
   trackingSnapshotKey,
   upsertLabResponseSnapshot,
 } from "@/lib/services/labResponseSnapshots";
@@ -15,7 +16,9 @@ const DAILY_EDGE_SNAPSHOT_STALE_MS = Number(
   process.env.DAILY_EDGE_DB_SNAPSHOT_STALE_MS ?? 24 * 60 * 60 * 1000,
 );
 const TRACKING_SNAPSHOT_TTL_MS = Number(
-  process.env.TRACKING_DB_SNAPSHOT_TTL_MS ?? 30 * 60 * 1000,
+  // Tracking publishes hourly at :33. Keep a ten-minute scheduling buffer so
+  // a healthy hourly publisher is not labeled stale for half of every hour.
+  process.env.TRACKING_DB_SNAPSHOT_TTL_MS ?? 70 * 60 * 1000,
 );
 const TRACKING_SNAPSHOT_STALE_MS = Number(
   process.env.TRACKING_DB_SNAPSHOT_STALE_MS ?? 7 * 24 * 60 * 60 * 1000,
@@ -129,5 +132,34 @@ export async function refreshTrackingResponseSnapshot(input: {
     };
   } catch (e) {
     return { ok: false, snapshotKey, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function refreshTrackingFoundationResponseSnapshot(input: {
+  source?: string;
+} = {}): Promise<SnapshotWriteResult> {
+  const date = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const snapshotKey = trackingFoundationSnapshotKey({ date });
+  try {
+    const { buildTrackingFoundationSnapshotBody } = await import("@/app/api/lab/tracking-foundation/route");
+    const body = await buildTrackingFoundationSnapshotBody();
+    const write = await upsertLabResponseSnapshot({
+      snapshotKey,
+      kind: "tracking",
+      payload: body,
+      ttlMs: TRACKING_SNAPSHOT_TTL_MS,
+      staleMs: TRACKING_SNAPSHOT_STALE_MS,
+      source: input.source ?? "cron",
+      payloadVersion: "tracking-foundation-v1",
+    });
+    if (!write.ok) return { ok: false, snapshotKey, error: write.error };
+    return {
+      ok: true,
+      snapshotKey,
+      expiresAt: write.expiresAt,
+      staleUntil: write.staleUntil,
+    };
+  } catch (error) {
+    return { ok: false, snapshotKey, error: error instanceof Error ? error.message : String(error) };
   }
 }

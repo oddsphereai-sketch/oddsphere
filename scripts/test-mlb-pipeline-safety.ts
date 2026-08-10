@@ -19,6 +19,7 @@ import { assertMlbChampionRuntime } from "../lib/automodel/mlbChampionRuntime";
 import {
   assertWnbaChampionRuntime,
   EXPECTED_WNBA_DISTRIBUTION_VERSION,
+  EXPECTED_WNBA_GRADE_POLICY_VERSION,
   EXPECTED_WNBA_MODEL_VERSION,
 } from "../lib/automodel/wnbaChampionRuntime";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
@@ -65,8 +66,12 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries July 29 v17 paired FI ladder and daily stats marker version",
-  layers.grade_policy === "mlb_public_grade_policy_v17_fi_paired_ladder_daily_stats_marker_2026_07_29",
+  "grade policy carries August 10 v20 guarded signed side-specific market evidence",
+  layers.grade_policy === "mlb_public_grade_policy_v20_guarded_signed_side_market_evidence_2026_08_10",
+);
+check(
+  "tracking contract carries the locked-only status-normalized release",
+  layers.tracking_contract === "member_facing_lock_v7_locked_only_status_normalized_2026_08_05",
 );
 check(
   "MLB layer stamp carries one immutable decision release",
@@ -74,8 +79,8 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB official schedule-time correction is versioned as decision release r22",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_07_30_r22" &&
+  "MLB guarded signed market-evidence correction is versioned as decision release r26",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_10_r26" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v3" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
@@ -116,12 +121,20 @@ check("champion runtime accepts resolved defaults", (() => {
 check("champion runtime refuses an explicit old model", (() => {
   try { assertMlbChampionRuntime({ AUTOMODEL_VERSION: "v1" }); return false; } catch { return true; }
 })());
-check("WNBA model family is single-sourced", EXPECTED_WNBA_MODEL_VERSION === "wnba_v1");
+check("WNBA model family is single-sourced", EXPECTED_WNBA_MODEL_VERSION === "wnba_v1_1_team_identity");
 check(
   "WNBA distribution version is explicit",
-  EXPECTED_WNBA_DISTRIBUTION_VERSION === "wnba_market_heads_value_calibrated_2026_07_22_v2",
+  EXPECTED_WNBA_DISTRIBUTION_VERSION === "wnba_market_heads_value_calibrated_2026_08_02_v3",
+);
+check(
+  "WNBA market-read grade policy is an immutable August 10 release",
+  EXPECTED_WNBA_GRADE_POLICY_VERSION ===
+    "wnba_grade_policy_v4_market_resistance_and_elo_stat_agreement_2026_08_10",
 );
 const wnbaModelSource = readFileSync("lib/services/wnba/buildWnbaDailyEdgePreview.ts", "utf8");
+const wnbaModelWriterSource = readFileSync("lib/services/wnba/runWnbaModel.ts", "utf8");
+const wnbaRecordWriterSource = readFileSync("lib/services/wnba/buildWnbaPredictionRecords.ts", "utf8");
+const wnbaReaderSource = readFileSync("lib/services/wnba/buildWnbaDailyEdgeAdapted.ts", "utf8");
 check(
   "WNBA preview fallback delegates to the canonical compute",
   wnbaModelSource.includes("return computeWnbaPrediction(M, g, r);") &&
@@ -131,6 +144,24 @@ check(
   "WNBA canonical compute cannot drift with preview or dry-run environment flags",
   wnbaModelSource.includes("= EXPECTED_WNBA_CALIBRATION_FLAGS") &&
     !wnbaModelSource.includes("readWnbaCoreModelCalibrationFlagsFromEnv()"),
+);
+check(
+  "WNBA moneyline identity is canonical across model writer, record writer, and reader",
+  [wnbaModelWriterSource, wnbaRecordWriterSource, wnbaReaderSource]
+    .every((source) => source.includes("resolveWnbaMoneylineSide")),
+);
+check(
+  "WNBA reader only lets genuinely locked records override the current model payload",
+  wnbaReaderSource.includes("if (r.locked_at === null) continue;"),
+);
+check(
+  "WNBA tracking writer fails closed on stale source release identifiers",
+  wnbaRecordWriterSource.includes("wnbaPredictionReleaseMismatches(ss)") &&
+    wnbaRecordWriterSource.includes("prediction release mismatch"),
+);
+check(
+  "WNBA member reader hides only stale unlocked source releases",
+  wnbaReaderSource.includes("lockedAt === null && wnbaPredictionReleaseMismatches(ss).length > 0"),
 );
 const wnbaChampionEnv = {
   WNBA_CORE_MODEL_CALIBRATION_ENABLED: "true",
@@ -372,10 +403,15 @@ check(
 
 const vercelSource = readFileSync("vercel.json", "utf8");
 check(
-  "AI shadow completes well before the full props build",
+  "AI shadow completes well before the first full props build",
   vercelSource.includes('"45 8 * * *"') &&
-    vercelSource.includes('"27 9 * * *"') &&
+    vercelSource.includes('"27 9,13,17,21 * * *"') &&
     !vercelSource.includes('"22 9 * * *"'),
+);
+check(
+  "full props rebuilds stay bounded to four staggered runs per day",
+  vercelSource.includes('"27 9,13,17,21 * * *"') &&
+    !vercelSource.includes('"27 * * * *"'),
 );
 check(
   "WNBA refreshes are offset from five-minute MLB lock sweeps",

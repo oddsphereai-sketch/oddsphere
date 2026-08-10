@@ -52,7 +52,10 @@ import {
   computeRefreshDates,
 } from "@/lib/services/trackingRefreshService";
 import { revalidateTag } from "next/cache";
-import { refreshTrackingResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
+import {
+  refreshTrackingFoundationResponseSnapshot,
+  refreshTrackingResponseSnapshot,
+} from "@/lib/services/labResponseSnapshotWriter";
 import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 
 export const maxDuration = 180;
@@ -99,7 +102,10 @@ export async function GET(request: Request) {
       // after the final sport instead of making every user request aggregate
       // the full historical ledger.
       const responseSnapshot = apply && sport === sports.at(-1)
-        ? await refreshTrackingResponseSnapshot({ source: "tracking_refresh" })
+        ? {
+            legacy: await refreshTrackingResponseSnapshot({ source: "tracking_refresh" }),
+            member: await refreshTrackingFoundationResponseSnapshot({ source: "tracking_refresh" }),
+          }
         : null;
 
       return {

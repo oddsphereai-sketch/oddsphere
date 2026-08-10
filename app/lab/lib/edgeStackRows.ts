@@ -89,9 +89,13 @@ function effectivePriceTrail(marketData: MarketEdgeDto): {
   locked: number | null;
 } {
   const movement = marketData.marketReadV2?.movement ?? null;
+  const numberChanged =
+    marketData.lastMoveLinePrev != null &&
+    marketData.lastMoveLineNext != null &&
+    Math.abs(marketData.lastMoveLinePrev - marketData.lastMoveLineNext) >= 0.001;
   return {
     open: marketData.lineOpenAmerican ?? movement?.firstTrackedPrice ?? null,
-    previous: marketData.lastMovePrevAmerican ?? null,
+    previous: numberChanged ? null : marketData.lastMovePrevAmerican ?? null,
     current: marketData.priceAmerican ?? movement?.currentPrice ?? null,
     locked: marketData.lockedLineAmerican ?? null,
   };

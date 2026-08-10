@@ -200,6 +200,22 @@ async function main() {
     check("flat total line remains projection-led when price is also flat", dailyEdgeTest.visibleTotalPointMarketReadScore("Under", 8.5, 8.5) === null);
   }
 
+  section("Odds movement coherence");
+  {
+    const market = {
+      lastMovePrevAmerican: -234,
+      lastMoveNextAmerican: -123,
+      lastMoveLinePrev: 8,
+      lastMoveLineNext: 7.5,
+    };
+    const response = {
+      games: [{ markets: { moneyline: { ...market }, total: market, first_inning: { ...market } } }],
+    } as unknown as DailyEdgeResponse;
+    dailyEdgeTest.suppressIncomparableLineMovePrices(response);
+    check("line-number changes suppress incomparable price pairs", response.games[0]?.markets.total.lastMovePrevAmerican === null && response.games[0]?.markets.total.lastMoveNextAmerican === null);
+    check("line-number changes remain available as 8 → 7.5", response.games[0]?.markets.total.lastMoveLinePrev === 8 && response.games[0]?.markets.total.lastMoveLineNext === 7.5);
+  }
+
   section("Source-aware split sections");
   {
     const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
@@ -310,16 +326,20 @@ async function main() {
       market: "moneyline",
       homeAbbr: "BOS",
       awayAbbr: "NYY",
-    }, legacySignals.map((row) => ({
-      side: row.side as "away" | "home",
-      label: row.side === "away" ? "NYY" : "BOS",
-      betsPct: row.public_betting_pct,
-      moneyPct: row.public_money_pct,
-      observedAt: row.computed_at,
-      isStale: false,
-    })));
-    check("Legacy SharpAPI percentages fill Sharp Book Splits when source-aware rows are absent", fallback?.rows.length === 2);
-    check("Legacy SharpAPI fallback preserves the current-side percentages", fallback?.rows[0]?.betsPct === 61 && fallback.rows[1]?.betsPct === 39);
+    });
+    check("Consensus percentages are not relabeled as Sharp Book Splits", fallback === null);
+
+    const legacyFallback = dailyEdgeTest.resolveSharpBookSplitSection(undefined, {
+      direction: "support",
+      pick: "BOS",
+      signals: legacySignals as never,
+      dbMarket: "moneyline",
+      market: "moneyline",
+      homeAbbr: "BOS",
+      awayAbbr: "NYY",
+    });
+    check("Ticket-only legacy data does not claim complete Sharp Book Splits", legacyFallback?.label === "Sharp Book Signal" && legacyFallback.rows.length === 0);
+    check("Ticket-only legacy data preserves a qualitative sharp signal", typeof legacyFallback?.signal === "string" && legacyFallback.signal.length > 0);
 
     const sourceAware = { label: "Sharp Book Splits" as const, rows: [], signal: "source-aware", lastUpdated: null };
     const preferred = dailyEdgeTest.resolveSharpBookSplitSection({ sharpBook: sourceAware }, {
@@ -1807,6 +1827,34 @@ async function main() {
   }
 
   // ─── Summary ──────────────────────────────────────────────────────────────
+  section("Locked movement keeps the sportsbook identity captured at lock");
+  {
+    const sportsbook = dailyEdgeTest.readLockedSnapshotSportsbook(
+      { odds_source_at_lock_ou: { under: { book: "pinnacle", line: 9.5, odds: -130 } } },
+      "total",
+      "under",
+    );
+    const trail = dailyEdgeTest.buildPersistedOddsTrail({
+      candidates: [
+        { id: 1, game_id: 1, market_type: "total", sportsbook: "sx_bet", side: "under", line_value: 9.5, odds_american: -118, recorded_at: "2026-08-09T10:00:00Z" },
+        { id: 2, game_id: 1, market_type: "total", sportsbook: "pinnacle", side: "under", line_value: 9.5, odds_american: -120, recorded_at: "2026-08-09T10:01:00Z" },
+        { id: 3, game_id: 1, market_type: "total", sportsbook: "pinnacle", side: "under", line_value: 9.5, odds_american: -117, recorded_at: "2026-08-09T10:02:00Z" },
+      ],
+      priceRow: { game_id: 1, market_type: "total", sportsbook: "locked_snapshot", side: "under", line_value: 9.5, odds_american: -130, fetched_at: "2026-08-09T10:03:00Z" },
+      currentAmerican: -130,
+      currentLine: 9.5,
+      currentObservedAt: "2026-08-09T10:03:00Z",
+      lockedAmerican: -130,
+      lockedAt: "2026-08-09T10:03:00Z",
+      terminalSportsbook: sportsbook,
+    });
+    check("locked total source resolves the selected side's book", sportsbook === "pinnacle");
+    check(
+      "locked trail excludes cross-book opener fallbacks",
+      trail.length === 3 && trail.every((stop) => stop.sportsbook === "pinnacle") && trail[0]?.american === -120 && trail[2]?.american === -130,
+    );
+  }
+
   console.log(`\n${"━".repeat(70)}`);
   console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
   if (fail > 0) {

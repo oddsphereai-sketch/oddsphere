@@ -19,7 +19,8 @@
  */
 
 import { NextRequest } from "next/server";
-import { middleware } from "../middleware";
+import { readFileSync } from "node:fs";
+import { proxy } from "../proxy";
 import { POST as loginPost } from "../app/api/auth/login/route";
 import { POST as logoutPost } from "../app/api/auth/logout/route";
 import {
@@ -52,6 +53,10 @@ function section(t: string) {
 }
 
 const ORIGINAL_PASSWORD = process.env.LAB_BETA_PASSWORD;
+const ORIGINAL_DAILY_EDGE_CANDIDATE = process.env.DAILY_EDGE_EXPERIENCE_CANDIDATE_ENABLED;
+const ORIGINAL_PROPS_CANDIDATE = process.env.PLAYER_PROPS_EXPERIENCE_CANDIDATE_ENABLED;
+const ORIGINAL_TRACKING_CANDIDATE = process.env.TRACKING_EXPERIENCE_CANDIDATE_ENABLED;
+const ORIGINAL_HOMEPAGE_CANDIDATE = process.env.HOMEPAGE_EXPERIENCE_CANDIDATE_ENABLED;
 const TEST_PASSWORD = "test-beta-password-fix-5-1";
 
 function setPassword(value: string | undefined) {
@@ -61,6 +66,16 @@ function setPassword(value: string | undefined) {
 
 function restorePassword() {
   setPassword(ORIGINAL_PASSWORD);
+}
+
+function setDailyEdgeCandidate(value: string | undefined) {
+  if (value === undefined) delete process.env.DAILY_EDGE_EXPERIENCE_CANDIDATE_ENABLED;
+  else process.env.DAILY_EDGE_EXPERIENCE_CANDIDATE_ENABLED = value;
+}
+
+function setCandidate(name: string, value: string | undefined) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
 }
 
 /**
@@ -81,6 +96,10 @@ function makeRequest(
 
 async function main() {
   setPassword(TEST_PASSWORD);
+  setDailyEdgeCandidate(undefined);
+  setCandidate("PLAYER_PROPS_EXPERIENCE_CANDIDATE_ENABLED", undefined);
+  setCandidate("TRACKING_EXPERIENCE_CANDIDATE_ENABLED", undefined);
+  setCandidate("HOMEPAGE_EXPERIENCE_CANDIDATE_ENABLED", undefined);
   const VALID_COOKIE = (await expectedCookieValue()) ?? "";
 
   // ─── sanitizeNext (open-redirect protection) ───────────────────────────
@@ -188,7 +207,7 @@ async function main() {
     "/api/admin/cron-status",
   ]) {
     const req = makeRequest(publicPath);
-    const res = await middleware(req);
+    const res = await proxy(req);
     // Public routes either return NextResponse.next() (status 200 with
     // "x-middleware-next" header) or undefined — both indicate no
     // intervention. We assert NOT a redirect (not 302) and NOT a JSON 401.
@@ -213,12 +232,19 @@ async function main() {
     "/lab/tracking",
     "/lab/account",
     "/mlb/props",
+    "/dev/experience-preview",
+    "/dev/mlb-props-preview",
+    "/dev/tracking-preview",
+    "/dev/homepage-preview",
+    "/dev/login-preview",
+    "/dev/relaunch-review",
+    "/dev/device-review",
     "/admin",
     "/admin/scores-model",
     "/admin/cron-status",
   ]) {
     const req = makeRequest(protectedPath);
-    const res = await middleware(req);
+    const res = await proxy(req);
     const isRedirect =
       res !== undefined && (res.status === 302 || res.status === 307);
     const location = res?.headers.get("location") ?? "";
@@ -245,7 +271,7 @@ async function main() {
     "/api/mlb/props/player/123",
   ]) {
     const req = makeRequest(apiPath);
-    const res = await middleware(req);
+    const res = await proxy(req);
     const is401 = res?.status === 401;
     const contentType = res?.headers.get("content-type") ?? "";
     const isJson = contentType.includes("application/json");
@@ -264,12 +290,19 @@ async function main() {
   for (const path of [
     "/lab/daily-edge",
     "/mlb/props",
+    "/dev/experience-preview",
+    "/dev/mlb-props-preview",
+    "/dev/tracking-preview",
+    "/dev/homepage-preview",
+    "/dev/login-preview",
+    "/dev/relaunch-review",
+    "/dev/device-review",
     "/api/lab/daily-edge",
     "/api/mlb/props/picks",
     "/admin/scores-model",
   ]) {
     const req = makeRequest(path, { cookieValue: VALID_COOKIE });
-    const res = await middleware(req);
+    const res = await proxy(req);
     const isRedirect =
       res !== undefined &&
       (res.status === 302 || res.status === 303 || res.status === 307);
@@ -280,17 +313,78 @@ async function main() {
     );
   }
 
+  // ─── product release-candidate switches ─────────────────────────────
+  section("middleware — product candidate routes keep production identity");
+  const routeSources = [
+    ["Player Props", "app/mlb/props/page.tsx", "isPlayerPropsExperienceCandidateEnabled"],
+    ["Tracking", "app/lab/tracking/page.tsx", "isTrackingExperienceCandidateEnabled"],
+    ["Homepage", "app/page.tsx", "isHomepageExperienceCandidateEnabled"],
+    ["Login", "app/login/page.tsx", "isLoginExperienceCandidateEnabled"],
+  ] as const;
+  for (const [label, file, switchName] of routeSources) {
+    check(`${label} selects its presentation at the real route`, readFileSync(file, "utf8").includes(switchName));
+  }
+  const homepageSource = readFileSync("app/page.tsx", "utf8");
+  const homepagePreviewSource = readFileSync("app/components/HomepageDashboardPrototype.tsx", "utf8");
+  check(
+    "candidate homepage leads with a readable Moneyline product surface",
+    homepageSource.includes("HomepageMoneylinePreview compact")
+      && homepagePreviewSource.includes("Moneyline quick read"),
+  );
+  check(
+    "candidate dashboard walkthrough switches between multiple sample games",
+    homepagePreviewSource.includes("MARKETING_MONEYLINE_GAMES.map")
+      && homepagePreviewSource.includes("setSelectedId(item.id)")
+      && homepagePreviewSource.includes('aria-pressed={selected}'),
+  );
+  check(
+    "candidate dashboard separates public and sharp-book sample signals",
+    homepagePreviewSource.includes('label="Public consensus"')
+      && homepagePreviewSource.includes('label="Sharp book"'),
+  );
+  for (const path of ["/mlb/props", "/lab/tracking"]) {
+    const response = await proxy(makeRequest(path, { cookieValue: VALID_COOKIE, search: "?source=founder-qa" }));
+    check(`${path} remains on its authenticated production route`, response?.headers.get("x-middleware-rewrite") === null);
+  }
+
   // ─── middleware: invalid cookie still blocks ───────────────────────────
   section("middleware — invalid cookie blocks (fail-closed)");
 
   const reqBadCookie = makeRequest("/lab/daily-edge", {
     cookieValue: "wrong-hash-value",
   });
-  const resBadCookie = await middleware(reqBadCookie);
+  const resBadCookie = await proxy(reqBadCookie);
   check(
     "invalid cookie value → redirect to /login (not pass through)",
     resBadCookie?.status === 302
   );
+
+  // ─── Daily Edge candidate is selected inside the member page ─────────
+  section("middleware — Daily Edge member route remains stable");
+
+  {
+    const req = makeRequest("/lab/daily-edge", {
+      cookieValue: VALID_COOKIE,
+      search: "?sport=wnba&source=founder-qa",
+    });
+    const offResponse = await proxy(req);
+    setDailyEdgeCandidate("true");
+    const onResponse = await proxy(req);
+    check(
+      "Daily Edge cutover keeps the authenticated member URL instead of exposing preview chrome",
+      offResponse?.headers.get("x-middleware-rewrite") === null &&
+        onResponse?.headers.get("x-middleware-rewrite") === null,
+    );
+
+    const trackingResponse = await proxy(
+      makeRequest("/lab/tracking", { cookieValue: VALID_COOKIE }),
+    );
+    check(
+      "candidate switch does not rewrite other OddSphere products",
+      trackingResponse?.headers.get("x-middleware-rewrite") === null,
+    );
+    setDailyEdgeCandidate(undefined);
+  }
 
   // ─── middleware: missing LAB_BETA_PASSWORD → fail closed ───────────────
   section("middleware — missing LAB_BETA_PASSWORD env fails closed");
@@ -299,7 +393,7 @@ async function main() {
   const reqEnvMissing = makeRequest("/lab/daily-edge", {
     cookieValue: "any-value-at-all",
   });
-  const resEnvMissing = await middleware(reqEnvMissing);
+  const resEnvMissing = await proxy(reqEnvMissing);
   check(
     "LAB_BETA_PASSWORD unset + valid-looking cookie → still blocks (fail-closed)",
     resEnvMissing?.status === 302
@@ -469,9 +563,23 @@ async function main() {
 
   // ─── Cleanup ───────────────────────────────────────────────────────────
   restorePassword();
+  setDailyEdgeCandidate(ORIGINAL_DAILY_EDGE_CANDIDATE);
+  setCandidate("PLAYER_PROPS_EXPERIENCE_CANDIDATE_ENABLED", ORIGINAL_PROPS_CANDIDATE);
+  setCandidate("TRACKING_EXPERIENCE_CANDIDATE_ENABLED", ORIGINAL_TRACKING_CANDIDATE);
+  setCandidate("HOMEPAGE_EXPERIENCE_CANDIDATE_ENABLED", ORIGINAL_HOMEPAGE_CANDIDATE);
   check(
     "afterAll restored LAB_BETA_PASSWORD",
     process.env.LAB_BETA_PASSWORD === ORIGINAL_PASSWORD
+  );
+  check(
+    "afterAll restored remaining product candidate flags",
+    process.env.PLAYER_PROPS_EXPERIENCE_CANDIDATE_ENABLED === ORIGINAL_PROPS_CANDIDATE &&
+      process.env.TRACKING_EXPERIENCE_CANDIDATE_ENABLED === ORIGINAL_TRACKING_CANDIDATE &&
+      process.env.HOMEPAGE_EXPERIENCE_CANDIDATE_ENABLED === ORIGINAL_HOMEPAGE_CANDIDATE,
+  );
+  check(
+    "afterAll restored DAILY_EDGE_EXPERIENCE_CANDIDATE_ENABLED",
+    process.env.DAILY_EDGE_EXPERIENCE_CANDIDATE_ENABLED === ORIGINAL_DAILY_EDGE_CANDIDATE,
   );
 
   // ─── Summary ────────────────────────────────────────────────────────────
@@ -488,6 +596,10 @@ async function main() {
 main().catch((e) => {
   // Always restore env on crash.
   restorePassword();
+  setDailyEdgeCandidate(ORIGINAL_DAILY_EDGE_CANDIDATE);
+  setCandidate("PLAYER_PROPS_EXPERIENCE_CANDIDATE_ENABLED", ORIGINAL_PROPS_CANDIDATE);
+  setCandidate("TRACKING_EXPERIENCE_CANDIDATE_ENABLED", ORIGINAL_TRACKING_CANDIDATE);
+  setCandidate("HOMEPAGE_EXPERIENCE_CANDIDATE_ENABLED", ORIGINAL_HOMEPAGE_CANDIDATE);
   console.error("\n❌ test-auth-gate failed:", (e as Error).message);
   if ((e as Error).stack) console.error((e as Error).stack);
   process.exit(1);

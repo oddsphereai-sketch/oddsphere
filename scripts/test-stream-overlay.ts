@@ -182,6 +182,20 @@ eq("streamKey", streamKey(777, "moneyline", "home"), "777::moneyline::home");
       ]), [G2], NOW2);
       ok("line move prefers sharper trusted book (pinnacle)", m.get(key2)?.nextLineValue === 9);
     }
+    // When the betting number changes, the prices belong to different
+    // contracts and must never be exposed as a comparable odds move.
+    {
+      const m = await loadLastMovesForSlate(mockLM([
+        {
+          ...mvRow("pinnacle", 8, 7.5, "2026-06-17T16:20:00Z"),
+          prev_odds_american: -234,
+          next_odds_american: -123,
+        },
+      ]), [G2], NOW2);
+      const move = m.get(key2);
+      ok("line-number change preserves 8 → 7.5", move?.prevLineValue === 8 && move.nextLineValue === 7.5);
+      ok("line-number change suppresses incomparable -234 → -123 price move", move?.prevAmerican === null && move.nextAmerican === null);
+    }
     // implausible one-tick odds moves are omitted, even from trusted books.
     {
       const badMove = {

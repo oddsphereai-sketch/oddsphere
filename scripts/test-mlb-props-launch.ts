@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   missingMarketSideLabel,
   selectPrimaryPropLines,
@@ -19,16 +20,24 @@ import { buildPlayerPropRecentForm } from "../lib/mlb/props/researchEvidence";
 import { assessPropPrice } from "../lib/mlb/props/pricePolicy";
 import { parseBatterVsPitcherStatsPayload } from "../lib/providers/real_api/_mlbStatsApiClient";
 import { evaluateMlbPropsLaunchReadiness } from "../lib/mlb/props/launchReadiness";
+import { MLB_PROPS_MODEL_RELEASE_ID } from "../lib/mlb/props/marketModelVersions";
 import { outsFromInningsPitched, settlePropPick } from "../lib/mlb/props/settlement";
 import type { PropOddsSnapshot } from "../lib/mlb/props/providers";
 import {
   buildMlbPropsInitialMemberBoardData,
   buildMlbPropsMemberBoardData,
+  mlbPropsPlayerResearchGaps,
   MLB_PROPS_INITIAL_MEMBER_BOARD_MAX_ROWS,
   selectMlbPropsResearchForRows,
 } from "../lib/mlb/props/memberPayload";
 
 const asOf = "2026-07-16T16:00:00.000Z";
+const dashboardSource = readFileSync("app/mlb/props/components/PlayerPropsDashboard.tsx", "utf8");
+assert.ok(
+  dashboardSource.includes('url.searchParams.set("reader", selectedId)') &&
+    dashboardSource.includes("window.history.replaceState"),
+  "candidate prop readers must retain an addressable reader id without changing the live presentation",
+);
 
 assert.deepEqual(
   missingMarketSideLabel("under", "milestone"),
@@ -147,6 +156,7 @@ function snapshot(props = [row()]): MlbPropsBoardSnapshot {
       warnings: [],
     },
     movement: { comparedWith: null, changedPrices: 0, changedLines: 0, addedRows: props.length, removedRows: 0 },
+    modelContext: { modelReleaseId: MLB_PROPS_MODEL_RELEASE_ID, probablePitcherSeasonStats: [] },
   };
 }
 
@@ -171,6 +181,48 @@ assert.deepEqual(
   selectMlbPropsResearchForRows(payloadData, payloadData.props),
   { "research-1": payloadEvidence },
   "player research endpoint returns the exact deferred evidence",
+);
+const completePitcherResearch = {
+  "research-1": {
+    ...payloadEvidence,
+    recentForm: { logs: [{ gameId: "game-1" }] },
+    opponentProfile: { teamAbbreviation: "PHI" },
+    pitchArsenal: { pitches: [{ code: "FF" }] },
+    environment: { venueName: "Test Park" },
+  },
+} as unknown as NonNullable<PlayerPropsDashboardData["research"]>;
+assert.deepEqual(
+  mlbPropsPlayerResearchGaps(payloadData.props.map((item) => ({ ...item, marketFamily: "pitcher" })), completePitcherResearch),
+  [],
+  "a complete established-player research shard is accepted",
+);
+assert.ok(
+  mlbPropsPlayerResearchGaps(payloadData.props.map((item) => ({ ...item, marketFamily: "pitcher" })), payloadData.research).some((gap) => gap.endsWith(":recent_form")),
+  "an incomplete player shard is detected instead of being treated as complete research",
+);
+const completeBatterResearch = {
+  "research-1": {
+    ...completePitcherResearch["research-1"],
+    pitchMatchup: { coverageStatus: "available" },
+    matchupHistory: { status: "no_history" },
+  },
+} as unknown as NonNullable<PlayerPropsDashboardData["research"]>;
+assert.deepEqual(
+  mlbPropsPlayerResearchGaps(payloadData.props.map((item) => ({ ...item, marketFamily: "batter" })), completeBatterResearch),
+  [],
+  "a batter research shard includes recent form, pitch-mix matchup, direct-matchup status, and environment",
+);
+assert.ok(
+  mlbPropsPlayerResearchGaps(payloadData.props.map((item) => ({ ...item, marketFamily: "batter" })), completePitcherResearch).some((gap) => gap.endsWith(":pitch_matchup")),
+  "an incomplete batter shard falls through to canonical research instead of rendering empty matchup cards",
+);
+const playerResearchRouteSource = readFileSync(new URL("../app/api/mlb/props/player/[player_id]/route.ts", import.meta.url), "utf8");
+assert.ok(
+  playerResearchRouteSource.includes('!gap.endsWith(":matchup_history")') &&
+    playerResearchRouteSource.includes("coverageGaps: readSnapshotGaps") &&
+    playerResearchRouteSource.includes('searchParams.get("preview") === "1"') &&
+    dashboardSource.includes('candidatePresentation ? "?preview=1" : ""'),
+  "a direct-history-only gap cannot block verified recent form, pitch mix, and environment on the member request path",
 );
 
 const compactPairInput = [
@@ -527,6 +579,26 @@ const launchReady = evaluateMlbPropsLaunchReadiness({
   },
 });
 assert.equal(launchReady.readyToOpen, true, "three valid snapshots plus private tracking satisfy the launch gate");
+const releaseBlocked = evaluateMlbPropsLaunchReadiness({
+  slateDate: "2026-07-16",
+  snapshots: launchSnapshots.map((item) => ({
+    ...item,
+    modelContext: {
+      ...item.modelContext,
+      modelReleaseId: "older_release",
+      probablePitcherSeasonStats: item.modelContext?.probablePitcherSeasonStats ?? [],
+    },
+  })),
+  tracking: trackingHealth,
+  now: new Date("2026-07-16T16:10:00.000Z"),
+  env: {
+    ...process.env,
+    MLB_PLAYER_PROPS_CRON_ENABLED: "true",
+    ODDSPHERE_PROPS_INTERNAL_TRACKING_ENABLED: "true",
+    MLB_PLAYER_PROPS_SETTLEMENT_CRON_ENABLED: "true",
+  },
+});
+assert.ok(releaseBlocked.blockers.includes("MODEL_RELEASE_COHERENT"), "launch fails closed when persisted and source model releases differ");
 const trackingBlocked = evaluateMlbPropsLaunchReadiness({
   slateDate: "2026-07-16",
   snapshots: launchSnapshots,

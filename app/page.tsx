@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { HomepageDashboardPrototype } from "@/app/components/HomepageDashboardPrototype";
+import { HomepageDashboardPrototype, HomepageMoneylinePreview } from "@/app/components/HomepageDashboardPrototype";
+import { isHomepageExperienceCandidateEnabled } from "@/lib/config/productExperience";
 import {
   getPublicTrackRecordSummary,
   type PublicTrackRecordSummary,
@@ -242,6 +243,16 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
         </p>
       ) : (
         <div className="p-5 sm:p-6">
+          {summary.currentOfficial ? (
+            <div className="mb-5 grid gap-3 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.055] p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">Current verified tracking</p>
+                <p className="mt-1 text-xs leading-relaxed text-gray-400">Latest settled activity · {summary.currentOfficial.latestActivityDate}</p>
+              </div>
+              <p className="text-sm tabular-nums text-gray-300"><strong className="text-lg text-white">{summary.currentOfficial.wins}-{summary.currentOfficial.losses}{summary.currentOfficial.pushes ? `-${summary.currentOfficial.pushes}` : ""}</strong><span className="ml-2 text-gray-500">official model results</span></p>
+              <p className="text-lg font-black tabular-nums text-emerald-200">{summary.currentOfficial.hitRate.toFixed(1)}%</p>
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-3">
             <MetricTile label="Lifetime record" value={`${summary.overall.wins.toLocaleString()}-${summary.overall.losses.toLocaleString()}`} />
             <MetricTile label="Win rate" value={pct} />
@@ -269,31 +280,35 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
   );
 }
 
-function DailyEdgePreview() {
+function DailyEdgePreview({ candidate = false }: { candidate?: boolean }) {
   return (
     <div aria-label="Daily Edge product preview" className="relative">
       <div className="absolute -inset-5 rounded-[2rem] bg-violet-700/20 blur-3xl" />
       <div className="relative overflow-hidden rounded-2xl border border-violet-400/30 bg-[#080712] shadow-[0_0_90px_rgba(124,58,237,0.22)]">
         <div className="flex items-center justify-between gap-4 border-b border-white/10 bg-white/[0.035] px-4 py-3 sm:px-5">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-200">Daily Edge reader</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-200">
+            {candidate ? "OddSphere Daily Edge · Complete reader" : "Daily Edge reader"}
+          </p>
           <div className="flex gap-1.5" aria-hidden="true">
             <span className="h-2 w-2 rounded-full bg-emerald-300/80" />
             <span className="h-2 w-2 rounded-full bg-violet-300/70" />
             <span className="h-2 w-2 rounded-full bg-white/30" />
           </div>
         </div>
-        <div className="relative aspect-[1.18/1] overflow-hidden bg-black">
-          <Image
-            src="/marketing/daily-edge-expanded-reader.jpg"
-            alt="OddSphere Daily Edge selected edge, supporting evidence, odds movement, and market pulse"
-            fill
-            priority
-            sizes="(min-width: 1024px) 58vw, 100vw"
-            className="object-cover object-[46%_26%]"
-          />
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(3,2,12,0.08),rgba(3,2,12,0)_20%,rgba(3,2,12,0)_78%,rgba(3,2,12,0.16))]" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#080712] to-transparent" />
-        </div>
+        {candidate ? <div className="p-3 sm:p-4"><HomepageMoneylinePreview compact /></div> : (
+          <div className="relative aspect-[1.18/1] overflow-hidden bg-black">
+            <Image
+              src="/marketing/daily-edge-expanded-reader.jpg"
+              alt="OddSphere Daily Edge selected edge, supporting evidence, odds movement, and market pulse"
+              fill
+              priority
+              sizes="(min-width: 1024px) 58vw, 100vw"
+              className="object-cover object-[46%_26%]"
+            />
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(3,2,12,0.08),rgba(3,2,12,0)_20%,rgba(3,2,12,0)_78%,rgba(3,2,12,0.16))]" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#080712] to-transparent" />
+          </div>
+        )}
       </div>
       <div className="relative mx-auto -mt-5 flex max-w-xl flex-wrap justify-center gap-2 px-4">
         {["Quick Read", "Odds Move", "Market Pulse", "Supporting Evidence"].map((label) => (
@@ -306,8 +321,22 @@ function DailyEdgePreview() {
   );
 }
 
-export default async function HomePage() {
+export async function HomePageContent({ presentation = "current" }: { presentation?: "current" | "candidate" }) {
   const trackingSummary = await getPublicTrackRecordSummary();
+  const candidate = presentation === "candidate";
+  const displayedFeatures = candidate
+    ? [
+        memberFeatures[0],
+        memberFeatures[2],
+        memberFeatures[1],
+        {
+          title: "MLB Player Prop Research",
+          body: "Filter the prop board quickly, then open recent results, matchup evidence, pricing, and deeper supporting context only when you need it.",
+        },
+        memberFeatures[4],
+        memberFeatures[5],
+      ]
+    : memberFeatures;
 
   return (
     <main className="overflow-hidden">
@@ -316,17 +345,21 @@ export default async function HomePage() {
       <section className="mx-auto grid max-w-7xl items-center gap-10 px-4 pb-14 pt-10 sm:px-6 sm:pb-16 sm:pt-12 lg:grid-cols-[0.88fr_1.12fr] lg:px-8">
         <div>
           <p className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-200">
-            7-Day Free Trial · OddSphere Daily Edge
+            {candidate ? "OddSphere Sports Intelligence" : "7-Day Free Trial · OddSphere Daily Edge"}
           </p>
           <h1 className="mt-5 max-w-3xl text-4xl font-black tracking-tight text-white sm:text-5xl xl:text-6xl">
-            Cut Through the Noise. Find the Plays Worth Your Attention.
+            {candidate
+              ? "The Full Game Read—From Model Edge to Market Pulse."
+              : "Cut Through the Noise. Find the Plays Worth Your Attention."}
           </h1>
           <p className="mt-5 max-w-2xl text-lg leading-relaxed text-gray-200">
-            Model projections, market movement, Play Grades, and tracking — organized into one Daily Edge dashboard built to show the why behind every pick.
+            {candidate
+              ? "Make clearer moneyline, totals, and first-inning decisions with model projections, real price movement, public consensus, verified sharp-book splits where available, matchup evidence, and tracking in one OddSphere workflow."
+              : "Model projections, market movement, Play Grades, and tracking — organized into one Daily Edge dashboard built to show the why behind every pick."}
           </p>
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <TrialButton />
-            <HomepageDashboardPrototype />
+            <HomepageDashboardPrototype candidate={candidate} />
           </div>
           <p className="mt-4 text-sm font-semibold text-violet-100">
             {TRIAL_DISCLOSURE}
@@ -352,15 +385,17 @@ export default async function HomePage() {
         </div>
 
         <div id="product-preview">
-          <DailyEdgePreview />
+          <DailyEdgePreview candidate={candidate} />
         </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
         <SectionHeader
           eyebrow="Inside the Daily Edge"
-          title="The slate, the selected edge, and the accountability layer."
-          body="OddSphere is designed around the actual decision flow: scan the board, open the strongest reads, and understand why each grade exists."
+          title={candidate ? "Scan the slate. Open the read. Go as deep as you need." : "The slate, the selected edge, and the accountability layer."}
+          body={candidate
+            ? "The first layer stays fast and readable. The complete reader keeps projections, price movement, public-versus-sharp splits, matchup stats, and supporting evidence available without crowding the board."
+            : "OddSphere is designed around the actual decision flow: scan the board, open the strongest reads, and understand why each grade exists."}
         />
         <div className="grid gap-4 md:grid-cols-3">
           {[
@@ -392,7 +427,9 @@ export default async function HomePage() {
             <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">A sharper read than a pick alone.</h2>
           </div>
           <p className="text-base leading-relaxed text-gray-300">
-            Most betting content gives you a pick and asks you to trust it. OddSphere shows the full read: the model projection, the market context, the grade, the risk, and the tracking behind the system.
+            {candidate
+              ? "OddSphere does more than surface a pick or trend. It connects the model projection to the live betting number, keeps public consensus separate from verified sharper-market signals where available, explains the matchup evidence, and tracks what the system actually posted."
+              : "Most betting content gives you a pick and asks you to trust it. OddSphere shows the full read: the model projection, the market context, the grade, the risk, and the tracking behind the system."}
           </p>
         </div>
       </section>
@@ -400,11 +437,13 @@ export default async function HomePage() {
       <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
         <SectionHeader
           eyebrow="What members get"
-          title="Everything needed to understand the slate."
-          body="Daily Edge is built to make the board easier to scan, compare, and judge without exposing users to noisy tout-style copy."
+          title={candidate ? "Daily Edge first, with deeper research when it matters." : "Everything needed to understand the slate."}
+          body={candidate
+            ? "Daily Edge remains the center of OddSphere. Player Props and Tracking extend the same workflow instead of turning the product into a wall of disconnected statistics."
+            : "Daily Edge is built to make the board easier to scan, compare, and judge without exposing users to noisy tout-style copy."}
         />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {memberFeatures.map((feature) => (
+          {displayedFeatures.map((feature) => (
             <div key={feature.title} className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
               <h3 className="text-lg font-black text-white">{feature.title}</h3>
               <p className="mt-3 text-sm leading-relaxed text-gray-300">{feature.body}</p>
@@ -476,5 +515,13 @@ export default async function HomePage() {
         </div>
       </section>
     </main>
+  );
+}
+
+export default async function HomePage() {
+  return (
+    <HomePageContent
+      presentation={isHomepageExperienceCandidateEnabled() ? "candidate" : "current"}
+    />
   );
 }

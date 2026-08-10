@@ -6,6 +6,7 @@ import {
   SharpApiPropsClient,
 } from "./providerClients";
 import { NwsWeatherClient } from "./nwsWeatherClient";
+import { FallbackMlbWeatherClient, OpenMeteoWeatherClient } from "./openMeteoWeatherClient";
 import { StatcastParkFactorClient } from "./statcastParkFactors";
 
 export type MlbPropsProviderMode = "mock" | "real";
@@ -42,7 +43,11 @@ export function buildRealProviderClients() {
     },
     mlbStats,
     statcast: new MLBStatsGameLogClient(),
-    weather: new NwsWeatherClient(mlbStats),
+    weather: new FallbackMlbWeatherClient(
+      mlbStats,
+      new NwsWeatherClient(mlbStats),
+      new OpenMeteoWeatherClient(mlbStats),
+    ),
     parkFactors: new StatcastParkFactorClient(),
   };
 }

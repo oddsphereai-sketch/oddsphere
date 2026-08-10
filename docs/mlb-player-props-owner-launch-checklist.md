@@ -79,8 +79,8 @@ Expected result: the final JSON contains `"ok": true`.
    ODDSPHERE_PROPS_SIGNAL_MIN_AMERICAN_ODDS=-500
    ODDSPHERE_PROPS_SIGNAL_MAX_AMERICAN_ODDS=1000
    ODDSPHERE_PROPS_DISPLAY_ODDS_ABSOLUTE_LIMIT=10000
-   ODDSPHERE_PROPS_MAX_SOURCE_ODDS_ROWS=8000
-   ODDSPHERE_PROPS_MAX_BOARD_ROWS=4000
+   ODDSPHERE_PROPS_MAX_SOURCE_ODDS_ROWS=35000
+   ODDSPHERE_PROPS_MAX_BOARD_ROWS=7500
    ODDSPHERE_PROPS_MAX_SNAPSHOT_JSON_BYTES=16000000
    ODDSPHERE_PROPS_MAX_SNAPSHOT_GZIP_BYTES=1250000
    ODDSPHERE_PROPS_MAX_BDL_CALLS_PER_REFRESH=300
@@ -103,7 +103,8 @@ All three public variables must remain `false` during this phase.
 2. Confirm Vercel creates a successful Production deployment. Environment
    variable changes only affect a new deployment.
 3. Leave the public flags closed and wait for at least three scheduled
-   ten-minute refreshes. Allow about 25 minutes.
+   half-hour refreshes. The launch gate also requires the three-snapshot
+   sequence to span at least 15 minutes.
 
 ## 4. Verify the launch gate
 

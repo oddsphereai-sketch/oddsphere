@@ -53,7 +53,7 @@ type CronCfg = {
 //
 // Current truth (vercel.json):
 //   • /api/cron/slate-cycle          → writes data_source=slate_cycle_automation
-//                                       schedule: cold runs 08/10/12 UTC,
+//                                       schedule: cold runs 08/10/11/12 UTC,
 //                                       hourly intraday 13–02 UTC
 //   • /api/cron/tracking-refresh     → writes data_source=tracking_refresh
 //                                       schedule: hourly (0 * * * *)

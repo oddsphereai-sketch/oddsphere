@@ -26,6 +26,12 @@ export type KeyStatRow = {
 
 export type AutoFactors = Record<string, unknown>;
 export type KeyStatsMarket = "moneyline" | "total" | "first_inning";
+export type KeyStatsDisplayFallbacks = {
+  awayTeamOpsProxy?: number | null;
+  homeTeamOpsProxy?: number | null;
+  /** Human-readable, game-time forecast captured with this prediction. */
+  gameTimeWeather?: string | null;
+};
 
 /**
  * Labels that are inherently two-sided (one value per team). The Key Stats
@@ -132,7 +138,7 @@ function fmtWeatherDelta(v: number | null): string | null {
 // Per-market builders
 // ───────────────────────────────────────────────────────────────────
 
-function moneylineRows(af: AutoFactors): KeyStatRow[] {
+function moneylineRows(af: AutoFactors, fallbacks: KeyStatsDisplayFallbacks): KeyStatRow[] {
   const rows: KeyStatRow[] = [];
 
   // Row 1 — Starter ERA (raw)
@@ -150,11 +156,13 @@ function moneylineRows(af: AutoFactors): KeyStatRow[] {
   // Row 2 — Lineup weighted OPS (raw)
   const aOps = num(af.away_lineup_weighted_ops);
   const hOps = num(af.home_lineup_weighted_ops);
-  if (aOps !== null || hOps !== null) {
+  const aOpsProxy = num(fallbacks.awayTeamOpsProxy);
+  const hOpsProxy = num(fallbacks.homeTeamOpsProxy);
+  if (aOps !== null || hOps !== null || aOpsProxy !== null || hOpsProxy !== null) {
     rows.push({
       label: "Lineup OPS (weighted)",
-      awayValue: fmtRaw(aOps, 3),
-      homeValue: fmtRaw(hOps, 3),
+      awayValue: aOps !== null ? fmtRaw(aOps, 3) : aOpsProxy !== null ? `${aOpsProxy.toFixed(3)} team proxy` : null,
+      homeValue: hOps !== null ? fmtRaw(hOps, 3) : hOpsProxy !== null ? `${hOpsProxy.toFixed(3)} team proxy` : null,
       source: "feature_snapshot",
     });
   }
@@ -182,7 +190,7 @@ function moneylineRows(af: AutoFactors): KeyStatRow[] {
   return rows;
 }
 
-function totalRows(af: AutoFactors): KeyStatRow[] {
+function totalRows(af: AutoFactors, fallbacks: KeyStatsDisplayFallbacks): KeyStatRow[] {
   const rows: KeyStatRow[] = [];
 
   // Row 1 — Park factor (single value, not split home/away)
@@ -196,9 +204,18 @@ function totalRows(af: AutoFactors): KeyStatRow[] {
     });
   }
 
-  // Row 2 — Weather adjust (single value)
+  // Row 2 — actual game-time weather when the prediction snapshot carries it.
+  // The run adjustment is model plumbing, not useful weather information for
+  // a member. Keep it only as a legacy fallback for older snapshots.
   const weather = num(af.weather_total_adjust);
-  if (weather !== null) {
+  if (fallbacks.gameTimeWeather) {
+    rows.push({
+      label: "Game-time weather",
+      awayValue: null,
+      homeValue: fallbacks.gameTimeWeather,
+      source: "feature_snapshot",
+    });
+  } else if (weather !== null) {
     rows.push({
       label: "Weather adjust",
       awayValue: null,
@@ -254,7 +271,7 @@ function fmtFiStarterValue(
   return `${rawValue.toFixed(decimals)}${startsStr}`;
 }
 
-function firstInningRows(af: AutoFactors): KeyStatRow[] {
+function firstInningRows(af: AutoFactors, fallbacks: KeyStatsDisplayFallbacks): KeyStatRow[] {
   const rows: KeyStatRow[] = [];
 
   // Row 1 — Projected first-inning runs (model output, unchanged).
@@ -317,7 +334,9 @@ function firstInningRows(af: AutoFactors): KeyStatRow[] {
   // starter's throws.
   const aTopOps = num(af.away_top_order_ops);
   const hTopOps = num(af.home_top_order_ops);
-  if (aTopOps !== null || hTopOps !== null) {
+  const aTopOpsProxy = num(fallbacks.awayTeamOpsProxy);
+  const hTopOpsProxy = num(fallbacks.homeTeamOpsProxy);
+  if (aTopOps !== null || hTopOps !== null || aTopOpsProxy !== null || hTopOpsProxy !== null) {
     const homeThrows = af.home_starter_throws;
     const awayThrows = af.away_starter_throws;
     // The HOME lineup faces the AWAY starter; if we know the away
@@ -331,8 +350,8 @@ function firstInningRows(af: AutoFactors): KeyStatRow[] {
       label: "Top-of-order OPS",
       // Phase 6B.1.6j: explicit per-side sentinel so renderer shows
       // both team labels even when one side has no top-order data.
-      awayValue: aTopOps !== null ? `${aTopOps.toFixed(3)}${awayContext}` : "no OPS sample",
-      homeValue: hTopOps !== null ? `${hTopOps.toFixed(3)}${homeContext}` : "no OPS sample",
+      awayValue: aTopOps !== null ? `${aTopOps.toFixed(3)}${awayContext}` : aTopOpsProxy !== null ? `${aTopOpsProxy.toFixed(3)} team OPS proxy` : "no OPS sample",
+      homeValue: hTopOps !== null ? `${hTopOps.toFixed(3)}${homeContext}` : hTopOpsProxy !== null ? `${hTopOpsProxy.toFixed(3)} team OPS proxy` : "no OPS sample",
       source: "feature_snapshot",
     });
   }
@@ -392,14 +411,15 @@ function firstInningRows(af: AutoFactors): KeyStatRow[] {
 
 export function formatKeyStats(
   autoFactors: AutoFactors | null | undefined,
-  market: KeyStatsMarket
+  market: KeyStatsMarket,
+  displayFallbacks: KeyStatsDisplayFallbacks = {},
 ): KeyStatRow[] {
   if (autoFactors === null || autoFactors === undefined) return [];
 
   let rows: KeyStatRow[];
-  if (market === "moneyline") rows = moneylineRows(autoFactors);
-  else if (market === "total") rows = totalRows(autoFactors);
-  else rows = firstInningRows(autoFactors);
+  if (market === "moneyline") rows = moneylineRows(autoFactors, displayFallbacks);
+  else if (market === "total") rows = totalRows(autoFactors, displayFallbacks);
+  else rows = firstInningRows(autoFactors, displayFallbacks);
 
   // Drop rows where BOTH away and home values are null (no data at all)
   rows = rows.filter((r) => r.awayValue !== null || r.homeValue !== null);

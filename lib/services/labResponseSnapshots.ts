@@ -36,6 +36,13 @@ export function trackingSnapshotKey(): string {
   return "tracking::all";
 }
 
+export function trackingFoundationSnapshotKey(input: {
+  sport?: string | null;
+  date: string;
+}): string {
+  return ["tracking-foundation", input.sport ?? "all", input.date].join("::");
+}
+
 export async function readLabResponseSnapshot<T extends LabResponseSnapshotPayload>(
   snapshotKey: string,
   mode: "fresh" | "stale" = "fresh",

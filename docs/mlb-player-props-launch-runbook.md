@@ -29,8 +29,8 @@ ODDSPHERE_PROPS_MAX_ODDS_AGE_MINUTES=45
 ODDSPHERE_PROPS_MAX_SNAPSHOT_AGE_MINUTES=25
 ODDSPHERE_PROPS_SIGNAL_MIN_AMERICAN_ODDS=-500
 ODDSPHERE_PROPS_SIGNAL_MAX_AMERICAN_ODDS=1000
-ODDSPHERE_PROPS_MAX_SOURCE_ODDS_ROWS=8000
-ODDSPHERE_PROPS_MAX_BOARD_ROWS=4000
+ODDSPHERE_PROPS_MAX_SOURCE_ODDS_ROWS=35000
+ODDSPHERE_PROPS_MAX_BOARD_ROWS=7500
 ODDSPHERE_PROPS_MAX_SNAPSHOT_JSON_BYTES=16000000
 ODDSPHERE_PROPS_MAX_SNAPSHOT_GZIP_BYTES=1250000
 ODDSPHERE_PROPS_MAX_NEW_MATCHUP_HISTORY_CALLS=60
@@ -38,13 +38,13 @@ ODDSPHERE_PROPS_MATCHUP_HISTORY_CONCURRENCY=4
 ODDSPHERE_PROPS_MATCHUP_HISTORY_TIMEOUT_MS=7000
 ```
 
-The fast cron refreshes odds, starters, lineups, and weather every ten minutes from 6 AM through midnight ET. Park factors use a daily server cache, NWS point metadata uses a weekly cache, and member snapshot reads use a one-minute server cache. The full cron refreshes player identities, game logs, opponent profiles, pitch research, and missing official batter-versus-pitcher totals hourly. A starter change invalidates hitter matchup evidence for that game until the next bounded full refresh instead of turning a ten-minute price run into a full-slate rebuild. A full refresh also admits a same-day game log only after MLB Stats marks that game final. The daily cleanup job retains two days of compressed member-board snapshots; immutable result tracking remains in the private ledger.
+The fast cron refreshes odds, starters, lineups, and weather twice per hour during the configured active windows. Park factors use a daily server cache, NWS point metadata uses a weekly cache, and member snapshot reads use a one-minute server cache. Bounded full refreshes run four times per day and refresh player identities, game logs, opponent profiles, pitch research, and missing official batter-versus-pitcher totals. A starter change invalidates hitter matchup evidence for that game until the next bounded full refresh instead of turning a price refresh into a full-slate rebuild. A full refresh also admits a same-day game log only after MLB Stats marks that game final. The daily cleanup job retains two days of compressed member-board snapshots; immutable result tracking remains in the private ledger.
 
 The hourly full refresh also reads BDL's official opening player-prop endpoint once per game. Opening quotes are stored in compact form and joined to the current feed by game, player, sportsbook, market, side, and line. Ten-minute snapshots preserve the intermediate audit trail without adding opening-feed calls to normal fast refreshes. If the opening endpoint is temporarily unavailable, the board remains valid and movement begins with the first verified OddSphere snapshot instead of fabricating an opener.
 
 The 16-game request-budget fixture covers 320 player identities, 40 pitchers, 280 hitters, all 16 lineups, and one opening-feed request per game. With an already-warm snapshot, a normal 16-game fast refresh is expected to use about 20 BDL requests and an hourly full refresh about 49. Across the configured 19-hour window, that is roughly 3,200 BDL requests on a full-slate day, with no single refresh allowed past the 300-request circuit breaker.
 
-Direct batter-versus-pitcher history is descriptive research only and never blocks the board or enters the model. Verified empty responses display `No prior MLB plate appearances`; provider failures display an updating state.
+Direct batter-versus-pitcher history is descriptive research only and never blocks the board or enters the model. Verified empty responses display `No prior MLB plate appearances`; provider failures display an updating state. The full board is held when required recent form, player identity, opposing-starter context, pitch-mix research, or environment context is missing for an active pregame prop.
 
 Valid extreme quotes remain visible with implied probability and payout context. Prices shorter than `-500` or longer than `+1000` are excluded from Radar and positive model signals by default. This is a product risk policy, not a claim that the sportsbook quote is invalid.
 

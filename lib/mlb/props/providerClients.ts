@@ -415,9 +415,15 @@ export function parseBallDontLiePlayerProps(
     if (marketKind === "milestone" && !Number.isFinite(milestoneOdds)) continue;
     const playerName = readPlayerName(prop);
     const playerTeamId = firstStringDeep(prop, ["team_id", "player_team_id"]);
+    // The current endpoint returning an offer is a fresh observation even
+    // when the book has not changed that price recently. `updated_at` is the
+    // provider's last-change timestamp, not the time at which we observed the
+    // current quote. Using it as row freshness incorrectly expires unchanged
+    // but still-active offers. Preserve it in rawPayload for movement/audit
+    // context and stamp current rows with this fetch's observation time.
     const timestamp = snapshotRole === "opening"
       ? stringOrNull(prop.opened_at) ?? stringOrNull(prop.updated_at) ?? asOfTimestamp
-      : stringOrNull(prop.updated_at) ?? asOfTimestamp;
+      : asOfTimestamp;
     const baseRawPayload = {
       provider: "balldontlie",
       provider_prop_id: stringOrNull(prop.id),

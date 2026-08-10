@@ -80,7 +80,10 @@ const SPORT_MARKETS: Record<Sport, string[]> = {
 // — kept out of V1 by design to match the mock UI).
 const MARKET_DB_TO_UI: Record<string, string> = {
   ml: "ML",
+  moneyline: "ML",
   total: "O/U",
+  spread: "Spread",
+  point_spread: "Spread",
   nrfi: "NRFI",
   yrfi: "YRFI",
   // Soccer (World Cup) markets — surfaced from prediction_grades, see
@@ -578,7 +581,12 @@ export async function GET(request: Request) {
         .range(from, from + PAGE - 1)
     );
     if (error) return Response.json({ error: error.message }, { status: 500 });
-    const rows = (data ?? []) as ResultRow[];
+    // Player Props has its own evidence/ROI tracking product. Keep prop rows
+    // out of the game-level Tracking headline and windows, matching the
+    // member-page contract and the category matrix below.
+    const rows = ((data ?? []) as ResultRow[]).filter(
+      (row) => row.prediction_type !== "prop",
+    );
     allRows.push(...rows);
     if (rows.length < PAGE) break;
     from += PAGE;

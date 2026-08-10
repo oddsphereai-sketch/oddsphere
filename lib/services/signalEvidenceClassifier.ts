@@ -210,8 +210,10 @@ export function classifyRlm(
  *   strong     [15, 25)          → "strong"
  *   very strong ≥ 25pp           → "very_strong"
  *
- * The `aligned` resolution: the signal row's `side` reflects the side
- * with the higher money% (sharp side). Aligned = signal.side === modelSide.
+ * Alignment is resolved from the SIGNED gap. The table stores one row per
+ * selection side, so `signal.side` is not necessarily the higher-money side.
+ * Money above tickets supports `signal.side`; money below tickets supports
+ * the opposite side.
  */
 export function classifySharpDivergenceTier(
   public_betting_pct: number | null,
@@ -223,6 +225,17 @@ export function classifySharpDivergenceTier(
   if (gap >= T.SHARP_DIVERGENCE_STRONG) return "strong";
   if (gap >= T.MIN_SHARP_MONEY_DIVERGENCE_PP) return "moderate";
   return null;
+}
+
+export function sharpDivergenceAlignedWithModel(
+  modelSide: Side,
+  signal: Pick<MarketSignalSource, "side" | "public_betting_pct" | "public_money_pct">
+): boolean | null {
+  if (signal.public_betting_pct === null || signal.public_money_pct === null) return null;
+  if (signal.public_money_pct === signal.public_betting_pct) return null;
+  const rowSideIsModelSide = signal.side === modelSide;
+  const moneySupportsRowSide = signal.public_money_pct > signal.public_betting_pct;
+  return moneySupportsRowSide ? rowSideIsModelSide : !rowSideIsModelSide;
 }
 
 /**
@@ -260,7 +273,8 @@ export function detectPublicSmoke(signal: MarketSignalSource): boolean {
  */
 export function classifyEvidence(
   modelSide: Side,
-  signal: MarketSignalSource | null
+  signal: MarketSignalSource | null,
+  options: { signedSharpDivergence?: boolean } = {},
 ): SignalEvidence {
   if (signal === null) {
     return {
@@ -296,8 +310,11 @@ export function classifyEvidence(
     signal.public_betting_pct,
     signal.public_money_pct
   );
+  const sdAligned = options.signedSharpDivergence === true
+    ? sharpDivergenceAlignedWithModel(modelSide, signal)
+    : null;
   const sharpDivergence: AlignedTier | null = sdTier
-    ? { tier: sdTier, aligned }
+    ? { tier: sdTier, aligned: sdAligned ?? aligned }
     : null;
 
   // Fix 3.1 (Flag F1): publicSmoke carries alignment for the Gap-17 bar.
@@ -308,4 +325,38 @@ export function classifyEvidence(
     : null;
 
   return { ev, steam, rlm, sharpDivergence, publicSmoke };
+}
+
+function strongerEvidence(
+  first: AlignedTier | null,
+  second: AlignedTier | null
+): AlignedTier | null {
+  if (first === null) return second;
+  if (second === null) return first;
+  const firstRank = TIER_ORDER[first.tier];
+  const secondRank = TIER_ORDER[second.tier];
+  if (firstRank !== secondRank) return firstRank > secondRank ? first : second;
+  if (first.aligned !== second.aligned) return { tier: first.tier, aligned: false };
+  return first;
+}
+
+/** Resolve both rows for an explicitly enabled MLB market policy. */
+export function classifyEvidenceFromSides(
+  modelSide: Side,
+  pickedSignal: MarketSignalSource | null,
+  oppositeSignal: MarketSignalSource | null,
+  options: { signedSharpDivergence?: boolean } = {},
+): SignalEvidence {
+  const picked = classifyEvidence(modelSide, pickedSignal, options);
+  const opposite = classifyEvidence(modelSide, oppositeSignal, options);
+  const publicSmoke = picked.publicSmoke?.aligned === false || opposite.publicSmoke?.aligned === false
+    ? { aligned: false }
+    : picked.publicSmoke ?? opposite.publicSmoke;
+  return {
+    ev: strongerEvidence(picked.ev, opposite.ev),
+    steam: strongerEvidence(picked.steam, opposite.steam),
+    rlm: strongerEvidence(picked.rlm, opposite.rlm),
+    sharpDivergence: picked.sharpDivergence ?? opposite.sharpDivergence,
+    publicSmoke,
+  };
 }

@@ -23,11 +23,16 @@ import { supabase } from "@/lib/db/supabase";
 import { computeTrackingAggregate } from "@/lib/services/trackingAggregateService";
 import type { TrackedSport } from "@/lib/types/domain/Tracking";
 import { unstable_cache } from "next/cache";
+import {
+  readLabResponseSnapshot,
+  trackingFoundationSnapshotKey,
+} from "@/lib/services/labResponseSnapshots";
 
 export const maxDuration = 60;
 
 const MEMBER_TRACKING_FROM = "2026-06-07";
 const TRACKING_AGGREGATE_TIMEOUT_MS = 30000;
+const TRACKING_SNAPSHOT_BUILD_TIMEOUT_MS = 120000;
 const TRACKING_RESPONSE_CACHE_TTL_MS = 5 * 60 * 1000;
 const TRACKING_RESPONSE_STALE_TTL_MS = 30 * 60 * 1000;
 // The expensive aggregate is cached server-side with unstable_cache. Do not
@@ -36,6 +41,7 @@ const TRACKING_RESPONSE_STALE_TTL_MS = 30 * 60 * 1000;
 const TRACKING_RESPONSE_CACHE_CONTROL = "private, no-store";
 
 type TrackingResponseBody = Record<string, unknown>;
+type TrackingAggregateResult = Awaited<ReturnType<typeof computeTrackingAggregate>>;
 
 type TrackingResponseCacheEntry = {
   body: TrackingResponseBody;
@@ -103,6 +109,61 @@ function trackingJson(
   );
 }
 
+function trackingResponseBody(
+  result: TrackingAggregateResult,
+  sport: TrackedSport | undefined,
+): TrackingResponseBody {
+  const safeBaselines = result.baselines.map((b) => ({
+    sport: b.sport,
+    market: b.market,
+    source_label: b.source_label,
+    model_family: b.model_family,
+    lifetime_wins: b.lifetime_wins,
+    lifetime_total: b.lifetime_total,
+    lifetime_pct: b.lifetime_pct,
+    current_season_wins: b.current_season_wins,
+    current_season_total: b.current_season_total,
+    current_season_pct: b.current_season_pct,
+  }));
+  return {
+    sport: sport ?? "all",
+    baselines: safeBaselines,
+    overall: result.overall,
+    bySport: result.bySport,
+    byMarket: result.byMarket,
+    bySportMarket: result.bySportMarket,
+    byPlayGrade: result.byPlayGrade,
+    bestAngles: result.bestAngles,
+    leans: result.leans,
+    yesterday: result.yesterday,
+    thisWeek: result.thisWeek,
+    thisMonth: result.thisMonth,
+    dailyTrend: result.dailyTrend,
+    recentPicks: result.recentPicks,
+    recentlySettled: result.recentlySettled,
+    tablesInitialized: result.tablesInitialized,
+    freshTrackingStarted: result.overall.picks > 0,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+export async function buildTrackingFoundationSnapshotBody(input: {
+  timeoutMs?: number;
+} = {}): Promise<TrackingResponseBody> {
+  const today = todayEt();
+  const result = await withTimeout(
+    computeTrackingAggregate({
+      supabase,
+      from: MEMBER_TRACKING_FROM,
+      to: today,
+      includeLaunchDay: false,
+    }),
+    input.timeoutMs ?? TRACKING_SNAPSHOT_BUILD_TIMEOUT_MS,
+    "tracking aggregate",
+  );
+  return trackingResponseBody(result, undefined);
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const sportRaw = url.searchParams.get("sport");
@@ -119,6 +180,16 @@ export async function GET(request: Request) {
       : undefined;
 
   const today = todayEt();
+  if (url.searchParams.get("snapshotBypass") !== "true") {
+    const snapshotKey = trackingFoundationSnapshotKey({ sport, date: today });
+    const snapshot = await readLabResponseSnapshot<Record<string, unknown>>(snapshotKey, "fresh")
+      ?? await readLabResponseSnapshot<Record<string, unknown>>(snapshotKey, "stale");
+    if (snapshot) {
+      return trackingJson(snapshot.payload, {
+        cacheStatus: snapshot.cacheState === "DB_SNAPSHOT" ? "hit" : "stale",
+      });
+    }
+  }
   const cacheKey = cacheKeyFor(sport, today);
   const nowMs = Date.now();
   const cached = trackingResponseCache.get(cacheKey);
@@ -148,19 +219,6 @@ export async function GET(request: Request) {
     );
   }
 
-  const safeBaselines = result.baselines.map((b) => ({
-    sport: b.sport,
-    market: b.market,
-    source_label: b.source_label,
-    model_family: b.model_family,
-    lifetime_wins: b.lifetime_wins,
-    lifetime_total: b.lifetime_total,
-    lifetime_pct: b.lifetime_pct,
-    current_season_wins: b.current_season_wins,
-    current_season_total: b.current_season_total,
-    current_season_pct: b.current_season_pct,
-  }));
-
   // Phase 6B.2d — member tracking expansion. Surfaces additional safe
   // aggregations the redesigned page needs:
   //   • bySportMarket — joint MLB-ML / MLB-O-U / MLB-NRFI / MLB-YRFI
@@ -178,26 +236,7 @@ export async function GET(request: Request) {
   //     preserved so the daily/weekly/lifetime rollups stay correct.
   // Toss-Up / Held remain as state counts only. No raw model audit
   // or model-version labels leak to the member API.
-  const body: TrackingResponseBody = {
-    sport: sport ?? "all",
-    baselines: safeBaselines,
-    overall: result.overall,
-    bySport: result.bySport,
-    byMarket: result.byMarket,
-    bySportMarket: result.bySportMarket,
-    byPlayGrade: result.byPlayGrade,
-    bestAngles: result.bestAngles,
-    leans: result.leans,
-    yesterday: result.yesterday,
-    thisWeek: result.thisWeek,
-    thisMonth: result.thisMonth,
-    dailyTrend: result.dailyTrend,
-    recentPicks: result.recentPicks,
-    recentlySettled: result.recentlySettled,
-    tablesInitialized: result.tablesInitialized,
-    freshTrackingStarted: result.overall.picks > 0,
-    generatedAt: new Date().toISOString(),
-  };
+  const body = trackingResponseBody(result, sport);
 
   const cacheWrittenAtMs = Date.now();
   trackingResponseCache.set(cacheKey, {

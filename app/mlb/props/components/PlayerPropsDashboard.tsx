@@ -41,7 +41,7 @@ type LineMode = "main" | "all";
 type MarketFilter = string;
 type MarketFamilyFilter = "all" | "pitcher" | "batter";
 type RadarItem = { row: PlayerPropPreviewRow; label: string; note: string };
-type DashboardMode = "preview" | "live-preview" | "admin" | "member" | "member-disabled";
+type DashboardMode = "preview" | "admin" | "member" | "member-disabled";
 const RADAR_ITEM_LIMIT = 6;
 const MLB_DISPLAY_TIME_ZONE = "America/New_York";
 
@@ -265,7 +265,7 @@ const MARKET_FAMILY_FILTERS: Array<{ id: MarketFamilyFilter; label: string }> = 
   { id: "batter", label: "Batter props" },
 ];
 
-export function PlayerPropsDashboard({ data: initialData, mode = "preview", initialSelectedId = null }: { data: PlayerPropsDashboardData; mode?: DashboardMode; initialSelectedId?: string | null }) {
+export function PlayerPropsDashboard({ data: initialData, mode = "preview", initialSelectedId = null, presentation = "current" }: { data: PlayerPropsDashboardData; mode?: DashboardMode; initialSelectedId?: string | null; presentation?: "current" | "candidate" }) {
   const [fullData, setFullData] = useState<PlayerPropsDashboardData | null>(null);
   const data = fullData ?? initialData;
   const [search, setSearch] = useState("");
@@ -338,10 +338,20 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
   }, [book, confidence, displayProps, edgeRange, evRange, grade, hideResearch, lineMode, marketFamilyFilter, marketFilter, oddsRange, priceMode, search, selectedGame, sort, startRange, team]);
 
   const selected = selectedId ? displayProps.find((row) => row.id === selectedId) ?? null : null;
+  const selectedResearchPending = Boolean(selected?.researchKey && !availableResearch[selected.researchKey]);
   const selectedPlayer = players.find((player) => player.toLowerCase() === search.trim().toLowerCase()) ?? null;
   const isSearching = search.trim().length > 0;
   const activeFilterCount = [selectedGame, grade, marketFamilyFilter, marketFilter, book, team, confidence, evRange, edgeRange, oddsRange, startRange]
     .filter((value) => value !== "all").length + (hideResearch ? 1 : 0) + (lineMode === "all" ? 1 : 0);
+  const candidatePresentation = presentation === "candidate";
+
+  useEffect(() => {
+    if (!candidatePresentation) return;
+    const url = new URL(window.location.href);
+    if (selectedId) url.searchParams.set("reader", selectedId);
+    else url.searchParams.delete("reader");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [candidatePresentation, selectedId]);
 
   const clearFilters = () => {
     setSelectedGame("all");
@@ -417,7 +427,7 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
     setResearchLoadingPlayerId(playerId);
     // Player research is repaired independently from the immutable board. Do
     // not reuse an older private response after a shard republish.
-    fetch(`/api/mlb/props/player/${encodeURIComponent(playerId)}`, {
+    fetch(`/api/mlb/props/player/${encodeURIComponent(playerId)}${candidatePresentation ? "?preview=1" : ""}`, {
       signal: controller.signal,
       cache: "no-store",
     })
@@ -458,19 +468,19 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
   }, [availableResearch, data, mode, selectedId, selectedPlayer]);
 
   if (displayProps.length === 0) {
-    return <PendingPropsState data={data} mode={mode} matchups={matchups} />;
+    return <PendingPropsState data={data} mode={mode} matchups={matchups} candidatePresentation={candidatePresentation} />;
   }
 
   return (
     <div className="w-full pb-8">
       <PropLeagueRail />
       {mode === "preview" ? <PreviewDataNotice /> : null}
-      {mode === "live-preview" ? <LivePreviewDataNotice /> : null}
-      <PropsSlateHeader data={displayData} mode={mode} matchups={matchups} selectedGame={selectedGame} onSelectGame={setSelectedGame} />
+      <PropsSlateHeader data={displayData} mode={mode} matchups={matchups} selectedGame={selectedGame} onSelectGame={setSelectedGame} candidatePresentation={candidatePresentation} />
       {mode === "admin" ? <ProviderHealthStrip data={displayData} matchups={matchups} /> : null}
+
       {!isSearching ? <TodayRadar rows={displayProps} onSelect={setSelectedId} /> : null}
 
-      <section data-product-zone="research-entry" className="z-30 -mx-4 border-y border-gray-800 bg-[#07090d]/95 px-4 py-4 shadow-[0_12px_30px_rgba(0,0,0,0.3)] backdrop-blur sm:sticky sm:top-16 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <section data-product-zone="research-entry" className={`z-30 -mx-4 border-y border-gray-800 bg-[#07090d]/95 px-4 py-4 shadow-[0_12px_30px_rgba(0,0,0,0.3)] backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 ${candidatePresentation ? "" : "sm:sticky sm:top-16"}`}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="shrink-0 lg:w-40"><p className="text-[10px] font-black uppercase text-violet-300">Research workspace</p><h2 className="mt-1 text-lg font-black text-white">Explore the board</h2></div>
           <label className="relative block min-w-0 flex-1">
@@ -494,19 +504,17 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
         </div> : null}
         <div data-product-zone="board-controls" className="mt-3 border-t border-gray-800 pt-3">
           <div className="flex flex-wrap items-center gap-2">
-          <FilterSelect label="Model signal" value={grade} onChange={(value) => setGrade(value as PropGrade | "all")} options={gradeOptions} includeAll />
-          <FilterSelect label="Team / game" value={team} onChange={setTeam} options={teams} includeAll />
-          <FilterSelect label="Book" value={book} onChange={setBook} options={books} includeAll />
-          <FilterSelect label="Sort" value={sort} onChange={(value) => setSort(value as SortKey)} options={[
-            { value: "signal", label: "Signal first" }, { value: "player", label: "Player A–Z" }, { value: "market", label: "Market" }, { value: "start", label: "Start time" },
-            { value: "ev", label: "Highest EV" }, { value: "edge", label: "Highest model edge" }, { value: "probability", label: "Model probability" },
-            { value: "confidence", label: "Evidence strength" }, { value: "book", label: "Book" }, { value: "updated", label: "Last updated" },
-          ]} />
-          <LineModeControl value={lineMode} onChange={setLineMode} />
-          <PriceModeControl value={priceMode} onChange={setPriceMode} />
-          {activeFilterCount > 0 ? <button type="button" onClick={clearFilters} className="h-9 px-2 text-xs font-bold text-sky-300 hover:text-white">Clear {activeFilterCount}</button> : null}
+            <FilterSelect label="Model signal" value={grade} onChange={(value) => setGrade(value as PropGrade | "all")} options={gradeOptions} includeAll />
+            <FilterSelect label="Sort" value={sort} onChange={(value) => setSort(value as SortKey)} options={[
+              { value: "signal", label: "Signal first" }, { value: "player", label: "Player A–Z" }, { value: "market", label: "Market" }, { value: "start", label: "Start time" },
+              { value: "ev", label: "Highest EV" }, { value: "edge", label: "Highest model edge" }, { value: "probability", label: "Model probability" },
+              { value: "confidence", label: "Evidence strength" }, { value: "book", label: "Book" }, { value: "updated", label: "Last updated" },
+            ]} />
+            {!candidatePresentation ? <><FilterSelect label="Team / game" value={team} onChange={setTeam} options={teams} includeAll /><FilterSelect label="Book" value={book} onChange={setBook} options={books} includeAll /><LineModeControl value={lineMode} onChange={setLineMode} /><PriceModeControl value={priceMode} onChange={setPriceMode} /></> : null}
+            {activeFilterCount > 0 ? <button type="button" onClick={clearFilters} className="h-9 px-2 text-xs font-bold text-sky-300 hover:text-white">Clear {activeFilterCount}</button> : null}
           </div>
-          <details className="group mt-2"><summary className="flex h-8 w-fit cursor-pointer list-none items-center gap-2 text-xs font-bold text-gray-500 hover:text-white">More filters <span className="transition-transform group-open:rotate-180">⌄</span></summary><div className="mt-2 flex flex-wrap items-center gap-2">
+          <details className={`group ${candidatePresentation ? "mt-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3" : "mt-2"}`}><summary className={`flex h-9 w-fit cursor-pointer list-none items-center gap-2 text-xs font-bold hover:text-white ${candidatePresentation ? "text-gray-300" : "text-gray-500"}`}>{candidatePresentation ? `Advanced filters & board options${activeFilterCount ? ` · ${activeFilterCount} active` : ""}` : "More filters"} <span className="transition-transform group-open:rotate-180">⌄</span></summary><div className="mb-3 mt-2 flex flex-wrap items-center gap-2">
+            {candidatePresentation ? <><FilterSelect label="Team / game" value={team} onChange={setTeam} options={teams} includeAll /><FilterSelect label="Book" value={book} onChange={setBook} options={books} includeAll /><LineModeControl value={lineMode} onChange={setLineMode} /><PriceModeControl value={priceMode} onChange={setPriceMode} /></> : null}
             <FilterSelect label="Evidence strength" value={confidence} onChange={setConfidence} options={["high", "medium", "low"]} includeAll />
             <FilterSelect label="EV range" value={evRange} onChange={setEvRange} options={[{ value: "0", label: "EV 0%+" }, { value: "0.05", label: "EV 5%+" }, { value: "0.10", label: "EV 10%+" }]} includeAll />
             <FilterSelect label="Model-edge range" value={edgeRange} onChange={setEdgeRange} options={[{ value: "0", label: "Edge 0%+" }, { value: "0.03", label: "Edge 3%+" }, { value: "0.05", label: "Edge 5%+" }]} includeAll />
@@ -524,7 +532,7 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
         ? <PlayerDirectory rows={displayProps} onSelectPlayer={setSearch} />
         : null}
       {selected && researchLoadingPlayerId ? <p className="mt-3 text-xs text-violet-200">Loading verified player research…</p> : null}
-      {selected ? <PropDetailDrawer row={selected} comparisons={displayProps.filter((row) => sameProp(row, selected))} onClose={() => setSelectedId(null)} showDiagnostics={mode === "admin"} /> : null}
+      {selected ? <PropDetailDrawer row={selected} comparisons={displayProps.filter((row) => sameProp(row, selected))} onClose={() => setSelectedId(null)} showDiagnostics={mode === "admin"} researchPending={selectedResearchPending} /> : null}
     </div>
   );
 }
@@ -533,13 +541,6 @@ function PreviewDataNotice() {
   return <aside role="status" className="mb-5 border border-amber-400/40 bg-amber-400/[0.08] px-4 py-3 sm:px-5">
     <p className="text-[10px] font-black uppercase text-amber-300">Design preview · Simulated board</p>
     <p className="mt-1 max-w-4xl text-sm leading-6 text-amber-50/80">Lines, projections, grades, prices, and results on this page are static test data. They are not live, bettable, or sourced from today&apos;s BDL response.</p>
-  </aside>;
-}
-
-function LivePreviewDataNotice() {
-  return <aside role="status" className="mb-5 border border-emerald-400/35 bg-emerald-400/[0.07] px-4 py-3 sm:px-5">
-    <p className="text-[10px] font-black uppercase text-emerald-300">Live internal preview</p>
-    <p className="mt-1 max-w-4xl text-sm leading-6 text-emerald-50/80">Current sportsbook markets and official MLB research data from the latest private refresh. Public member access remains off.</p>
   </aside>;
 }
 
@@ -568,49 +569,49 @@ function PropLeagueRail() {
   </nav>;
 }
 
-function PropsSlateHeader({ data, mode, matchups, selectedGame, onSelectGame }: { data: PlayerPropsDashboardData; mode: DashboardMode; matchups: SlateMatchup[]; selectedGame: string; onSelectGame: (value: string) => void }) {
+function PropsSlateHeader({ data, mode, matchups, selectedGame, onSelectGame, candidatePresentation = false }: { data: PlayerPropsDashboardData; mode: DashboardMode; matchups: SlateMatchup[]; selectedGame: string; onSelectGame: (value: string) => void; candidatePresentation?: boolean }) {
   const uniqueProps = dedupeBestPrices(data.props);
-  const playerCount = unique(data.props.map((row) => row.player)).length;
+  const bestAngles = uniqueProps.filter((row) => row.playGrade === "BEST_ANGLE").length;
+  const leans = uniqueProps.filter((row) => row.playGrade === "LEAN").length;
   const navigableMatchups = data.props.length
     ? matchups.filter((matchup) => data.props.some((row) => gameKeyForRow(row) === gameKeyForMatchup(matchup)))
     : matchups;
   const isPreview = mode === "preview";
-  const isLivePreview = mode === "live-preview";
   return <header data-product-zone="slate-intelligence" className="border-b border-gray-800 pb-6">
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <div>{mode === "admin" ? <span className="mb-2 inline-flex rounded border border-violet-400/30 px-2 py-1 text-[10px] font-black uppercase text-violet-200">Admin review</span> : isLivePreview ? <span className="mb-2 inline-flex rounded border border-emerald-400/30 px-2 py-1 text-[10px] font-black uppercase text-emerald-200">Live data preview</span> : isPreview ? <span className="mb-2 inline-flex rounded border border-amber-400/30 px-2 py-1 text-[10px] font-black uppercase text-amber-200">Simulated data</span> : null}<p className="text-[11px] font-bold text-emerald-300">MLB · {formatSlateDate(data.date)}</p><h1 className="mt-1 text-2xl font-black text-white sm:text-3xl">Prop Researcher</h1></div>
-      <p className="pb-1 text-xs text-gray-500">{isPreview ? "Fixture timestamp" : "Updated"} {formatTime(data.lastUpdated)}</p>
-    </div>
-    <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800 sm:grid-cols-4">
-      <SlateMetric label={data.summary.gamesWithProps === 1 ? "Game with props" : "Games with props"} value={String(data.summary.gamesWithProps)} />
-      <SlateMetric label="Players priced" value={String(playerCount)} />
-      <SlateMetric label={isPreview ? "Sample options" : "Prop options"} value={String(uniqueProps.length)} />
-      <SlateMetric label={isPreview ? "Sample books" : "Sportsbooks"} value={String(data.summary.booksCovered)} />
+    <div className="overflow-hidden rounded-xl border border-violet-400/20 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.14),transparent_42%),linear-gradient(145deg,#11151d,#090b10_68%)] p-5 sm:p-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>{mode === "admin" ? <span className="mb-2 inline-flex rounded border border-violet-400/30 px-2 py-1 text-[10px] font-black uppercase text-violet-200">Admin review</span> : isPreview ? <span className="mb-2 inline-flex rounded border border-amber-400/30 px-2 py-1 text-[10px] font-black uppercase text-amber-200">Simulated data</span> : null}<p className="text-[11px] font-bold text-emerald-300">MLB · {formatSlateDate(data.date)}</p><h1 className="mt-1 text-3xl font-black text-white sm:text-4xl">{candidatePresentation ? "Player Props" : "Prop Researcher"}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">Start with today&apos;s strongest model reads, compare the best available price, then open the full OddSphere research before making a decision.</p></div>
+        <div className="rounded-lg border border-white/[0.08] bg-black/25 px-4 py-3 text-right"><p className="text-[9px] font-black uppercase tracking-wider text-gray-600">Board status</p><p className="mt-1 text-sm font-black text-emerald-300">Prices updated {formatTime(data.lastUpdated)}</p><p className="mt-1 text-[10px] text-gray-600">Best available prices across {data.summary.booksCovered} books</p></div>
+      </div>
+      <div className="mt-5 grid grid-cols-3 gap-2">
+        <SlateSignalMetric label="Best angles" value={String(bestAngles)} tone="best" />
+        <SlateSignalMetric label="Model leans" value={String(leans)} tone="lean" />
+        <SlateSignalMetric label="Today’s games" value={String(navigableMatchups.length)} tone="slate" />
+      </div>
     </div>
     {navigableMatchups.length ? <SlateGameNavigator data={data} matchups={navigableMatchups} selectedGame={selectedGame} onSelectGame={onSelectGame} isPreview={isPreview} /> : null}
   </header>;
 }
 
-function SlateMetric({ label, value }: { label: string; value: string }) {
-  return <div className="bg-[#0d1015] px-4 py-3"><strong className="block text-xl font-black tabular-nums text-white">{value}</strong><span className="mt-0.5 block text-[9px] font-bold uppercase text-gray-600">{label}</span></div>;
+function SlateSignalMetric({ label, value, tone }: { label: string; value: string; tone: "best" | "lean" | "slate" }) {
+  const colors = tone === "best" ? "border-emerald-400/25 bg-emerald-400/[0.07] text-emerald-200" : tone === "lean" ? "border-sky-400/25 bg-sky-400/[0.07] text-sky-200" : "border-violet-400/25 bg-violet-400/[0.07] text-violet-200";
+  return <div className={`rounded-lg border px-3 py-3 sm:px-4 ${colors}`}><strong className="block text-xl font-black tabular-nums sm:text-2xl">{value}</strong><span className="mt-0.5 block text-[8px] font-black uppercase tracking-wider text-gray-500 sm:text-[9px]">{label}</span></div>;
 }
 
 function SlateGameNavigator({ data, matchups, selectedGame, onSelectGame, isPreview }: { data: PlayerPropsDashboardData; matchups: SlateMatchup[]; selectedGame: string; onSelectGame: (value: string) => void; isPreview: boolean }) {
   return <div className="mt-3">
-    <div className="mb-2 flex items-center justify-between gap-3"><p className="text-[9px] font-black uppercase text-gray-600">{matchups.length === 1 ? "Today’s matchup" : "Filter by game"}</p>{selectedGame !== "all" && matchups.length > 1 ? <button type="button" onClick={() => onSelectGame("all")} className="text-[10px] font-bold text-sky-300 hover:text-white">Show full slate</button> : null}</div>
+    <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-[9px] font-black uppercase text-violet-300">{matchups.length === 1 ? "Today’s matchup" : "Choose a matchup"}</p><p className="mt-0.5 text-[10px] text-gray-600">Select a game to filter every model read and market below.</p></div>{selectedGame !== "all" && matchups.length > 1 ? <button type="button" onClick={() => onSelectGame("all")} className="text-[10px] font-bold text-sky-300 hover:text-white">Show full slate</button> : null}</div>
     <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Slate games">
-      {matchups.length > 1 ? <button type="button" onClick={() => onSelectGame("all")} aria-pressed={selectedGame === "all"} className={`w-[180px] shrink-0 rounded-lg border px-4 py-3 text-left ${selectedGame === "all" ? "border-sky-400 bg-sky-400/[0.08]" : "border-gray-800 bg-[#0d1015] hover:border-gray-700"}`}><span className="text-[10px] font-black uppercase text-gray-500">Full slate</span><strong className="mt-1 block text-base text-white">All {matchups.length} games</strong><span className="mt-1 block text-[10px] text-gray-600">{dedupeBestPrices(data.props).length} prop options</span></button> : null}
+      {matchups.length > 1 ? <button type="button" onClick={() => onSelectGame("all")} aria-pressed={selectedGame === "all"} className={`group w-[190px] shrink-0 rounded-lg border px-4 py-3 text-left transition ${selectedGame === "all" ? "border-violet-400 bg-violet-400/[0.10] shadow-[0_0_0_1px_rgba(167,139,250,0.12)_inset]" : "border-gray-800 bg-[#0d1015] hover:-translate-y-0.5 hover:border-violet-400/50"}`}><span className="text-[10px] font-black uppercase text-violet-300">Full slate</span><strong className="mt-1 block text-base text-white">All {matchups.length} games</strong><span className="mt-3 block border-t border-white/[0.06] pt-2 text-[10px] font-black text-gray-400 group-hover:text-violet-200">View complete board →</span></button> : null}
       {matchups.map((matchup) => {
         const key = gameKeyForMatchup(matchup);
         const gameRows = data.props.filter((row) => gameKeyForRow(row) === key);
-        const gameProps = dedupeBestPrices(gameRows).length;
-        const gamePlayers = unique(gameRows.map((row) => row.player)).length;
-        const gameBooks = unique(gameRows.map((row) => row.book)).length;
+        const gameSignals = dedupeBestPrices(gameRows).filter(isPositiveSignal).length;
         const active = selectedGame === key || (matchups.length === 1 && selectedGame === "all");
-        return <button key={key} type="button" onClick={() => onSelectGame(matchups.length === 1 ? "all" : key)} aria-pressed={active} className={`w-[330px] shrink-0 rounded-lg border p-3 text-left ${active ? "border-sky-400/70 bg-sky-400/[0.07]" : "border-gray-800 bg-[#0d1015] hover:border-gray-700"}`}>
+        return <button key={key} type="button" onClick={() => onSelectGame(matchups.length === 1 ? "all" : key)} aria-pressed={active} className={`group w-[330px] shrink-0 rounded-lg border p-3 text-left transition ${active ? "border-violet-400/70 bg-violet-400/[0.09] shadow-[0_0_0_1px_rgba(167,139,250,0.10)_inset]" : "border-gray-800 bg-[#0d1015] hover:-translate-y-0.5 hover:border-violet-400/45"}`}>
           <span className="flex items-center gap-2"><ProductTeamBadge abbreviation={matchup.awayTeam} size={28} /><strong className="text-sm text-white">{matchup.awayTeam}</strong><span className="text-[9px] font-bold text-gray-600">AT</span><ProductTeamBadge abbreviation={matchup.homeTeam} size={28} /><strong className="text-sm text-white">{matchup.homeTeam}</strong><span className="ml-auto text-xs font-black text-white">{formatTime(matchup.gameStartTime)}</span></span>
           <span className="mt-3 block truncate border-t border-gray-800 pt-2 text-[10px] text-gray-500">{matchup.awayProbablePitcher ?? "Starter TBD"} <span className="text-gray-700">vs</span> {matchup.homeProbablePitcher ?? "Starter TBD"}</span>
-          <span className="mt-1 block text-[10px] text-gray-600">{gamePlayers} players · {gameProps} {isPreview ? "sample options" : "prop options"} · {gameBooks} books</span>
+          <span className="mt-2 flex items-center justify-between border-t border-gray-800 pt-2"><span className="text-[10px] font-bold text-emerald-300">{gameSignals} model read{gameSignals === 1 ? "" : "s"}</span><span className="text-[10px] font-black text-gray-400 group-hover:text-violet-200">{active ? "Selected ✓" : "View game →"}</span></span>
         </button>;
       })}
     </div>
@@ -656,8 +657,8 @@ function PriceModeControl({ value, onChange }: { value: PriceMode; onChange: (va
 function TodayRadar({ rows, onSelect }: { rows: PlayerPropPreviewRow[]; onSelect: (id: string) => void }) {
   const items = buildRadarItems(rows);
   return <section data-product-zone="today-radar" className="border-b border-gray-800 py-7">
-    <div className="flex items-end justify-between gap-4"><div><p className="text-[10px] font-black uppercase text-emerald-300">Today&apos;s Radar</p><h2 className="mt-1 text-2xl font-black text-white">Top model predictions</h2></div><span className="text-xs text-gray-500">{items.length} reads</span></div>
-    <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2" aria-label="Top model prediction cards">{items.map((item) => <RadarCard key={`${item.label}-${item.row.id}`} item={item} onSelect={onSelect} />)}</div>
+    <div className="flex items-end justify-between gap-4"><div><p className="text-[10px] font-black uppercase text-emerald-300">Today&apos;s Radar</p><h2 className="mt-1 text-2xl font-black text-white">Model reads worth a look</h2></div><span className="text-xs text-gray-500">{items.length} reads</span></div>
+    <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2" aria-label="Model reads worth a look">{items.map((item) => <RadarCard key={`${item.label}-${item.row.id}`} item={item} onSelect={onSelect} />)}</div>
   </section>;
 }
 
@@ -1006,7 +1007,7 @@ function PlayerSummaryMetric({ label, value }: { label: string; value: string })
   return <div className="border-r border-gray-800 px-3 last:border-r-0"><p className="text-[9px] font-bold uppercase text-gray-600">{label}</p><p className="mt-1 text-lg font-black tabular-nums text-white">{value}</p></div>;
 }
 
-export function PropDetailDrawer({ row, comparisons, onClose, showDiagnostics = false }: { row: PlayerPropPreviewRow; comparisons: PlayerPropPreviewRow[]; onClose: () => void; showDiagnostics?: boolean }) {
+export function PropDetailDrawer({ row, comparisons, onClose, showDiagnostics = false, researchPending = false }: { row: PlayerPropPreviewRow; comparisons: PlayerPropPreviewRow[]; onClose: () => void; showDiagnostics?: boolean; researchPending?: boolean }) {
   const prices = [...comparisons].sort((a, b) => b.odds - a.odds);
   return <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 sm:items-center sm:p-6" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
     <aside role="dialog" aria-modal="true" aria-label={`${row.player} prop details`} className="h-[100dvh] w-full overflow-y-auto border-gray-800 bg-gray-950 shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:max-w-[980px] sm:rounded-lg sm:border">
@@ -1014,8 +1015,8 @@ export function PropDetailDrawer({ row, comparisons, onClose, showDiagnostics = 
       <div className="grid min-w-0 gap-4 p-4 sm:p-6 lg:grid-cols-2">
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Prop Summary"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><MarketChip row={row} /><span className="truncate text-sm text-gray-400">{row.marketLabel}</span>{row.lockStatus ? <LockStatusBadge lockedAt={row.lockStatus.lockedAt} /> : null}</div><p className="mt-3 text-2xl font-black text-white">{marketSelectionLabel(row)}{" "}<span className={assessPropPrice(row.odds).signalEligible ? "text-emerald-300" : "text-sky-300"}>{signed(row.odds)}</span></p><p className="mt-1 text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {formatTime(row.gameStartTime)} · {row.book}</p><ReaderDirectionTag row={row} /></div><PropGradeBadge grade={row.playGrade} /></div><PriceContextLine odds={row.odds} /></DrawerSection></div>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Reader Summary"><p className="max-w-3xl text-base font-semibold leading-7 text-gray-100">{propReaderSummary(row, prices)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-gray-800 pt-3 text-xs"><span className="text-gray-500">Signal <strong className="ml-1 text-gray-200">{getPropGradeLabel(row.playGrade)}</strong></span><span className="text-gray-500">Evidence strength <strong className="ml-1 capitalize text-gray-200">{row.confidenceBucket}</strong></span><span className="text-gray-500">Updated <strong className="ml-1 text-gray-200">{formatTime(row.lastUpdated)}</strong></span>{row.lockStatus ? <span className="text-gray-500">Locked <strong className="ml-1 text-gray-200">{formatTime(row.lockStatus.lockedAt)}</strong></span> : null}</div></DrawerSection></div>
-        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Recent Form"><RecentFormPanel row={row} /></DrawerSection></div>
-        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Matchup Context">{row.marketFamily === "pitcher" ? <div className="grid min-w-0 overflow-hidden rounded-lg border border-gray-800 lg:grid-cols-2 lg:divide-x lg:divide-gray-800"><OpponentProfilePanel row={row} /><PitchArsenalPanel row={row} /></div> : <div className="space-y-3"><BatterPitcherHistoryPanel row={row} /><PitchMixMatchupPanel row={row} /></div>}</DrawerSection></div>
+        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Recent Form">{researchPending ? <ResearchLoadingState title={`${row.player} recent results`} /> : <RecentFormPanel row={row} />}</DrawerSection></div>
+        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Matchup Context">{researchPending ? <ResearchLoadingState title={`${row.player} matchup research`} /> : row.marketFamily === "pitcher" ? <div className="grid min-w-0 overflow-hidden rounded-lg border border-gray-800 lg:grid-cols-2 lg:divide-x lg:divide-gray-800"><OpponentProfilePanel row={row} /><PitchArsenalPanel row={row} /></div> : <div className="space-y-3"><BatterPitcherHistoryPanel row={row} /><PitchMixMatchupPanel row={row} /></div>}</DrawerSection></div>
         <DrawerSection title="Model Comparison"><ModelVsMarketVisual row={row} /><div className="mt-3 grid grid-cols-3 gap-2"><Metric label="Model edge" value={row.modelEdge === null ? "-" : pct(row.modelEdge, true)} /><Metric label="Expected value" value={row.expectedValue === null ? "-" : pct(row.expectedValue, true)} /><Metric label="Fair price" value={row.fairOdds === null ? "-" : signed(row.fairOdds)} /></div></DrawerSection>
         <DrawerSection title={isHomeRunMarket(row) ? "Home Run Probability" : "Projection vs Line"}><ProjectionIntegrityNotice row={row} />{isHomeRunMarket(row) ? <MilestoneProbabilityVisual row={row} /> : <ProjectionVsLineVisual projection={row.projection} line={row.line} side={row.side} label={row.projectionSource === "recent_form" ? "Recent average" : "Projection"} />}{!isHomeRunMarket(row) ? <div className="mt-3 grid grid-cols-2 gap-2"><Metric label="Over probability" value={row.overProbability === null ? "-" : pct(row.overProbability)} /><Metric label="Under probability" value={row.underProbability === null ? "-" : pct(row.underProbability)} /></div> : null}</DrawerSection>
         <DrawerSection title="Best Available Price"><BookPriceLadder prices={prices} allBooks={unique(comparisons.map((price) => price.book))} /></DrawerSection>
@@ -1023,7 +1024,7 @@ export function PropDetailDrawer({ row, comparisons, onClose, showDiagnostics = 
         <DrawerSection title="Signal Context"><p className="text-sm leading-6 text-gray-200">{cardReason(row)}</p><p className="mt-3 text-xs leading-5 text-gray-500">{memberGradeDescription(row.playGrade)}</p></DrawerSection>
         <DrawerSection title="Evidence Strength"><ConfidenceMeter row={row} /><FeatureConfidenceChecklist row={row} /></DrawerSection>
         <DrawerSection title="What Could Change"><DetailList title="Still watching" items={row.missingFeatures.map(memberFeatureLabel)} empty="No major pregame questions are currently flagged." /></DrawerSection>
-        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Game Environment"><EnvironmentPanel row={row} /></DrawerSection></div>
+        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Game Environment">{researchPending ? <ResearchLoadingState title="Verified venue and game-time conditions" /> : <EnvironmentPanel row={row} />}</DrawerSection></div>
         {showDiagnostics ? <div className="min-w-0 lg:col-span-2"><details className="group border-t border-violet-400/20 pt-4"><summary className="cursor-pointer text-xs font-black uppercase text-violet-300">Admin diagnostics</summary><div className="mt-4 grid gap-4 lg:grid-cols-2"><DrawerSection title="Reason Codes"><DetailList title="Raw flags" items={row.reasonCodes} mono /></DrawerSection><DrawerSection title="Feature Inputs"><DetailList title="Verified model inputs" items={row.keyFeatures} /></DrawerSection><DrawerSection title="Missing Features"><DetailList title="Unavailable inputs" items={row.missingFeatures} /><div className="mt-3 text-xs text-gray-500">Odds sanity: {row.oddsSanity.length ? row.oddsSanity.join(", ") : "Passed"}</div></DrawerSection><DrawerSection title="Model Diagnostics"><div className="grid grid-cols-2 gap-2"><Metric label="Independent probability" value={row.independentProbability === null ? "-" : pct(row.independentProbability)} /><Metric label="Market probability" value={row.marketProbability === null ? "-" : pct(row.marketProbability)} /><Metric label="Shrinkage weight" value={pct(row.shrinkageWeight)} /><Metric label="Settlement / CLV" value={`${sentenceCase(row.settlementStatus)} / ${sentenceCase(row.clvStatus)}`} /></div><p className="mt-3 text-xs text-gray-500">Source {row.source} · Updated {formatDateTime(row.lastUpdated)}</p></DrawerSection></div></details></div> : null}
       </div>
     </aside>
@@ -1137,7 +1138,7 @@ function PitchArsenalPanel({ row }: { row: PlayerPropPreviewRow }) {
 function BatterPitcherHistoryPanel({ row }: { row: PlayerPropPreviewRow }) {
   const history = row.matchupHistory;
   if (!history) {
-    return <div data-research-module="batter-pitcher-history" data-state="not-in-snapshot" className="overflow-hidden rounded-lg border border-gray-800"><ResearchModulePending title="Direct matchup history" note="Direct batter-versus-pitcher history is not available in this research snapshot. Recent form and pitch-mix context are shown separately below." /></div>;
+    return <div data-research-module="batter-pitcher-history" data-state="coverage-gap" className="overflow-hidden rounded-lg border border-gray-800"><ResearchModulePending title="Direct matchup history" note="No verified batter-versus-pitcher record was attached to this snapshot. Recent form and pitch-mix context remain available below; this gap is not treated as a zero or used as proof of no prior history." /></div>;
   }
   if (history.status === "no_history") {
     return <div data-research-module="batter-pitcher-history" data-state="no-history" className="rounded-lg border border-gray-800 bg-black/20 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-black text-white">{history.hitterName} vs {history.pitcherName}</p><p className="mt-1 text-xs text-gray-500">No prior MLB plate appearances</p></div><span className="rounded border border-gray-700 px-2 py-1 text-[9px] font-bold text-gray-400">Career matchup</span></div><p className="mt-3 text-xs leading-5 text-gray-500">There is no direct history to evaluate yet. The pitch-mix profile below provides the broader matchup context.</p><ResearchSource source={history.source} asOfTimestamp={history.asOfTimestamp} note="Research context only" /></div>;
@@ -1200,6 +1201,10 @@ function EnvironmentItem({ label, value, detail, status }: { label: string; valu
 
 function ResearchModulePending({ title, note }: { title: string; note: string }) {
   return <div data-state="pending" className="flex min-h-56 flex-col justify-center bg-black/20 p-5"><p className="text-sm font-black text-gray-300">{title}</p><p className="mt-2 max-w-sm text-xs leading-5 text-gray-500">{note}</p><span className="mt-4 w-fit rounded border border-gray-700 px-2 py-1 text-[9px] font-bold text-gray-500">Research check</span></div>;
+}
+
+function ResearchLoadingState({ title }: { title: string }) {
+  return <div role="status" className="rounded-lg border border-violet-400/20 bg-violet-500/[0.05] p-4 sm:p-5"><div className="flex items-center gap-3"><span className="h-2.5 w-2.5 animate-pulse rounded-full bg-violet-300" /><div><p className="text-sm font-black text-white">Loading {title}</p><p className="mt-1 text-xs leading-5 text-gray-400">OddSphere is attaching the verified player and matchup research to this market.</p></div></div></div>;
 }
 
 function ResearchSource({ source, asOfTimestamp, note }: { source: string; asOfTimestamp: string; note: string }) {
@@ -1300,7 +1305,7 @@ function playerStatDescriptor(row: PlayerPropPreviewRow): { label: string; featu
   };
   const label = labels[row.market] ?? "Market-relevant season stat";
   const feature = row.keyFeatures.find((item) => /(season|rate|baseline|per start|\/ip|\/pa|\/ab|proxy)/i.test(item)) ?? null;
-  return { label, feature, missing: `No verified ${label.toLowerCase()} is exposed by this preview row.` };
+  return { label, feature, missing: `No verified ${label.toLowerCase()} is available for this market.` };
 }
 
 function ConfidenceMeter({ row }: { row: PlayerPropPreviewRow }) {
@@ -1329,13 +1334,13 @@ function DrawerSection({ title, children }: { title: string; children: React.Rea
   return <section className="min-w-0"><h3 className="mb-3 border-b border-gray-800 pb-2 text-xs font-black uppercase text-gray-400">{title}</h3>{children}</section>;
 }
 
-function PendingPropsState({ data, mode, matchups }: { data: PlayerPropsDashboardData; mode: DashboardMode; matchups: SlateMatchup[] }) {
+function PendingPropsState({ data, mode, matchups, candidatePresentation = false }: { data: PlayerPropsDashboardData; mode: DashboardMode; matchups: SlateMatchup[]; candidatePresentation?: boolean }) {
   const probablePitcherStatus = matchups.length > 0 && matchups.every((item) => item.starterStatus === "confirmed")
     ? "Confirmed"
     : matchups.some((item) => item.starterStatus !== "pending")
       ? "Partially confirmed"
       : "Projected";
-  return <div className="w-full pb-8"><PropLeagueRail />{mode === "live-preview" ? <LivePreviewDataNotice /> : null}<PropsSlateHeader data={data} mode={mode} matchups={matchups} selectedGame="all" onSelectGame={() => undefined} />{mode === "admin" ? <ProviderHealthStrip data={data} matchups={matchups} /> : null}<section className="mt-7 border-y border-gray-800 py-8 sm:py-10"><span className="inline-flex rounded border border-gray-600 px-2.5 py-1 text-[11px] font-bold text-gray-300">Markets opening soon</span><h2 className="mt-4 text-2xl font-black text-white">Player prop lines have not posted yet.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">Today’s board will populate automatically as sportsbooks publish their first prices.</p><div className="mt-6 grid gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800 md:grid-cols-3"><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Games scheduled</p><p className="mt-2 text-lg font-black text-white">{matchups.length}</p></div><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Probable pitchers</p><p className="mt-2 text-sm font-semibold text-gray-200">{probablePitcherStatus}</p></div><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Next update</p><p className="mt-2 text-sm font-semibold text-gray-200">{data.slate?.nextCheckLabel ?? "When player markets open"}</p></div></div></section></div>;
+  return <div className="w-full pb-8"><PropLeagueRail /><PropsSlateHeader data={data} mode={mode} matchups={matchups} selectedGame="all" onSelectGame={() => undefined} candidatePresentation={candidatePresentation} />{mode === "admin" ? <ProviderHealthStrip data={data} matchups={matchups} /> : null}<section className="mt-7 border-y border-gray-800 py-8 sm:py-10"><span className="inline-flex rounded border border-gray-600 px-2.5 py-1 text-[11px] font-bold text-gray-300">Markets opening soon</span><h2 className="mt-4 text-2xl font-black text-white">Player prop lines have not posted yet.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">Today’s board will populate automatically as sportsbooks publish their first prices.</p><div className="mt-6 grid gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800 md:grid-cols-3"><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Games scheduled</p><p className="mt-2 text-lg font-black text-white">{matchups.length}</p></div><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Probable pitchers</p><p className="mt-2 text-sm font-semibold text-gray-200">{probablePitcherStatus}</p></div><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Next update</p><p className="mt-2 text-sm font-semibold text-gray-200">{data.slate?.nextCheckLabel ?? "When player markets open"}</p></div></div></section></div>;
 }
 
 export function PropGradeBadge({ grade, compact = false }: { grade: PropGrade; compact?: boolean }) {

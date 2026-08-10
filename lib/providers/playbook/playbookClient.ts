@@ -71,16 +71,18 @@ export interface PlaybookResult<T> {
 
 export class PlaybookClient {
   private readonly apiKey: string;
+  private readonly timeoutMs: number;
   private quota: PlaybookQuotaSnapshot = {
     requestsRemaining: null,
     monthlyLimit: null,
   };
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, options?: { timeoutMs?: number }) {
     if (typeof apiKey !== "string" || apiKey.length === 0) {
       throw new Error("PlaybookClient: apiKey must be a non-empty string");
     }
     this.apiKey = apiKey;
+    this.timeoutMs = Math.max(500, options?.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   }
 
   /** Strip the key (and any api_key=… param) from an arbitrary string. */
@@ -117,7 +119,7 @@ export class PlaybookClient {
       res = await globalThis.fetch(this.buildUrl(path, query), {
         method: "GET",
         headers: { accept: "application/json" },
-        signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (e) {
       throw new PlaybookClientError(

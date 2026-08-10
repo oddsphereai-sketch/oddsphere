@@ -17,6 +17,7 @@ import { loadSlateEnvironmentResearch } from "./environmentResearch";
 import { allMlbPropMarketDefinitions, getMlbPropMarketDefinition } from "./marketCatalog";
 import { resolveMlbStatsTeamId, resolveMlbTeamAlias } from "./mlbTeamAliases";
 import { NwsWeatherClient } from "./nwsWeatherClient";
+import { FallbackMlbWeatherClient, OpenMeteoWeatherClient } from "./openMeteoWeatherClient";
 import {
   american_to_implied_probability,
   expected_value,
@@ -44,6 +45,7 @@ import { BallDontLieResearchClient, type BdlResearchPlayer } from "./ballDontLie
 import {
   enrichPlayerPropResearchRows,
   isSignalOptionalResearchModule,
+  pitchMixResearchSampleIsUsable,
   type PlayerPropResearchEnrichment,
 } from "./researchEnrichment";
 import {
@@ -252,12 +254,26 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     games,
     asOfTimestamp,
     parkFactors: new StatcastParkFactorClient(),
-    weather: new NwsWeatherClient(mlbStats),
+    weather: new FallbackMlbWeatherClient(
+      mlbStats,
+      new NwsWeatherClient(mlbStats),
+      new OpenMeteoWeatherClient(mlbStats),
+    ),
   });
 
   const researchByKey = needsFullResearch
     ? await loadFullResearch({ mappedOdds, identities, games, probablePitchers, previous, environmentByGame: environment.byGameId, asOfTimestamp, researchClient })
-    : reusePreviousResearch(previous as MlbPropsBoardSnapshot, environment.byGameId, starterContextChangedGameIds);
+    : await refreshFastResearch({
+        mappedOdds,
+        identities,
+        games,
+        probablePitchers,
+        previous: previous as MlbPropsBoardSnapshot,
+        environmentByGame: environment.byGameId,
+        starterContextChangedGameIds,
+        asOfTimestamp,
+        researchClient,
+      });
 
   const seasonStats = needsFullResearch
     ? await loadProbablePitcherSeasonStats(probablePitchers, args.slateDate)
@@ -314,6 +330,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     asOfTimestamp,
     providerCoverage,
     playerGameIdentityConflictRows,
+    previousSnapshot: previous,
   });
   const movement = compareMlbPropsBoardMovement(previous, data.props);
   const snapshotOpeningOdds = compactOpeningPropOddsForSnapshot(openingOdds, data.props);
@@ -587,6 +604,7 @@ async function loadFullResearch(args: {
   environmentByGame: Map<string, NonNullable<PlayerPropPreviewRow["environment"]>>;
   asOfTimestamp: string;
   researchClient: BallDontLieResearchClient;
+  matchupHistories?: Map<string, PlayerBatterPitcherHistoryEvidence>;
 }): Promise<Map<string, PlayerPropResearchEnrichment>> {
   const gameLogs = new MLBStatsGameLogClient();
   const profiles = await getMlbTeamHittingProfiles(Number(args.asOfTimestamp.slice(0, 4)), { quiet: true }).catch(() => null) ?? [];
@@ -596,7 +614,7 @@ async function loadFullResearch(args: {
     .filter((game) => game.gameDate === slateDate && isFinalGameStatus(game.gameStatus))
     .map((game) => game.id));
   const logCache = await loadRecentLogCache(unique, args.identities, gameLogs, slateDate);
-  const matchupHistories = await loadBatterPitcherHistories({
+  const matchupHistories = args.matchupHistories ?? await loadBatterPitcherHistories({
     mappedOdds: unique,
     identities: args.identities,
     probablePitchers: args.probablePitchers,
@@ -663,6 +681,92 @@ async function loadFullResearch(args: {
     teamHittingProfiles: profiles,
   });
   return new Map(report.rows.map((row) => [row.rowId, row]));
+}
+
+/**
+ * Fast refreshes still need to converge research coverage. Price-only reuse
+ * previously meant that missing batter/pitcher history advanced only during
+ * the single daily full refresh, while newly posted players or a changed
+ * probable starter could remain partial for the rest of the slate.
+ *
+ * Keep the fast path bounded: reuse the complete prior bundle, fetch only the
+ * next prioritized matchup-history batch, and fully rebuild only research
+ * keys that are new or belong to a game whose starter changed.
+ */
+async function refreshFastResearch(args: {
+  mappedOdds: MappedOddsRow[];
+  identities: Map<number, PlayerIdentity>;
+  games: MlbGameEntity[];
+  probablePitchers: MlbProbablePitcher[];
+  previous: MlbPropsBoardSnapshot;
+  environmentByGame: Map<string, NonNullable<PlayerPropPreviewRow["environment"]>>;
+  starterContextChangedGameIds: Set<string>;
+  asOfTimestamp: string;
+  researchClient: BallDontLieResearchClient;
+}): Promise<Map<string, PlayerPropResearchEnrichment>> {
+  const reused = reusePreviousResearch(
+    args.previous,
+    args.environmentByGame,
+    args.starterContextChangedGameIds,
+  );
+  const matchupHistories = await loadBatterPitcherHistories({
+    mappedOdds: uniqueResearchRows(args.mappedOdds),
+    identities: args.identities,
+    probablePitchers: args.probablePitchers,
+    previous: args.previous,
+    asOfTimestamp: args.asOfTimestamp,
+  });
+  attachFastMatchupHistories({
+    researchByKey: reused,
+    mappedOdds: args.mappedOdds,
+    identities: args.identities,
+    probablePitchers: args.probablePitchers,
+    matchupHistories,
+  });
+
+  const targeted = args.mappedOdds.filter((row) => {
+    const key = researchKey(row.bdlPlayerId, row.odds.marketKey, row.game.id);
+    return !reused.has(key) || args.starterContextChangedGameIds.has(row.game.id);
+  });
+  if (targeted.length === 0) return reused;
+
+  const rebuilt = await loadFullResearch({
+    mappedOdds: targeted,
+    identities: args.identities,
+    games: args.games,
+    probablePitchers: args.probablePitchers,
+    previous: args.previous,
+    environmentByGame: args.environmentByGame,
+    asOfTimestamp: args.asOfTimestamp,
+    researchClient: args.researchClient,
+    matchupHistories,
+  });
+  for (const [key, value] of rebuilt) reused.set(key, value);
+  return reused;
+}
+
+function attachFastMatchupHistories(args: {
+  researchByKey: Map<string, PlayerPropResearchEnrichment>;
+  mappedOdds: MappedOddsRow[];
+  identities: Map<number, PlayerIdentity>;
+  probablePitchers: MlbProbablePitcher[];
+  matchupHistories: Map<string, PlayerBatterPitcherHistoryEvidence>;
+}): void {
+  for (const row of args.mappedOdds) {
+    if (getMlbPropMarketDefinition(row.odds.marketKey).family === "pitcher") continue;
+    const identity = args.identities.get(row.bdlPlayerId);
+    const opposingProbable = opposingProbableFor(row, identity, args.probablePitchers);
+    const matchupKey = mlbMatchupKey(identity?.mlbStatsPlayerId ?? null, opposingProbable?.playerId ?? null);
+    const history = matchupKey ? args.matchupHistories.get(matchupKey) ?? null : null;
+    if (!history) continue;
+    const key = researchKey(row.bdlPlayerId, row.odds.marketKey, row.game.id);
+    const existing = args.researchByKey.get(key);
+    if (!existing || existing.evidence.matchupHistory) continue;
+    args.researchByKey.set(key, {
+      ...existing,
+      evidence: { ...existing.evidence, matchupHistory: history },
+    });
+  }
 }
 
 function buildPitcherModelContext(args: {
@@ -741,7 +845,9 @@ function reusePreviousResearch(
       environment: environmentByGame.get(row.providerIds?.gameId ?? "") ?? previousEvidence.environment,
     };
     const missingModules = [
-      ...(hitterMatchupInvalid ? ["pitch_mix_matchup" as const] : []),
+      ...(row.marketFamily !== "pitcher" && (hitterMatchupInvalid || !pitchMixResearchSampleIsUsable(evidence.pitchMatchup))
+        ? ["pitch_mix_matchup" as const]
+        : []),
       ...(evidence.environment?.park.status === "available" ? [] : ["park_factor" as const]),
       ...(evidence.environment?.weather.status === "available" || evidence.environment?.roofStatus === "dome" ? [] : ["game_time_weather" as const]),
     ];
@@ -749,7 +855,7 @@ function reusePreviousResearch(
       ...(evidence.recentForm ? ["recent_form" as const] : []),
       ...(evidence.opponentProfile ? ["opponent_profile" as const] : []),
       ...(evidence.pitchArsenal ? ["pitch_arsenal" as const] : []),
-      ...(evidence.pitchMatchup ? ["pitch_mix_matchup" as const] : []),
+      ...(pitchMixResearchSampleIsUsable(evidence.pitchMatchup) ? ["pitch_mix_matchup" as const] : []),
       ...(evidence.environment?.park.status === "available" ? ["park_factor" as const] : []),
       ...(evidence.environment?.weather.status === "available" || evidence.environment?.roofStatus === "dome" ? ["game_time_weather" as const] : []),
       "player_identity" as const,
@@ -2111,6 +2217,7 @@ export function validateMlbPropsBoardData(args: {
   asOfTimestamp: string;
   providerCoverage?: ReturnType<BallDontLieMlbPropsClient["getCoverageSummary"]>;
   playerGameIdentityConflictRows?: number;
+  previousSnapshot?: MlbPropsBoardSnapshot | null;
 }): MlbPropsBoardValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -2150,6 +2257,10 @@ export function validateMlbPropsBoardData(args: {
     errors.push("STALE_ODDS_PRESENT");
     warnings.push(`${staleOddsRows}_STALE_ODDS_ROWS_WITHHELD_FROM_SIGNALS`);
   }
+  const incompleteResearchRows = args.data.props.filter((row) => row.missingFeatures.length > 0);
+  if (incompleteResearchRows.length > 0) {
+    errors.push(`REQUIRED_RESEARCH_INCOMPLETE_${incompleteResearchRows.length}`);
+  }
   const pendingLineups = args.data.props.filter((row) => row.marketFamily !== "pitcher" && row.lineupStatus?.status === "pending").length;
   if (pendingLineups > 0) warnings.push(`${pendingLineups}_HITTER_ROWS_PROJECTED_LINEUP`);
   const actionableRows = args.data.props.filter((row) => ACTIONABLE_GRADES.has(row.playGrade)).length;
@@ -2161,6 +2272,27 @@ export function validateMlbPropsBoardData(args: {
     || !assessPropPrice(row.odds).signalEligible
   ));
   if (invalidActionable.length) errors.push("ACTIONABLE_ROWS_FAILED_DATA_GATE");
+  const previous = args.previousSnapshot;
+  if (previous && previous.validation.sourceRows > 0 && args.sourceRows >= previous.validation.sourceRows * 0.9) {
+    // Normalize an older snapshot through the current member-board compaction
+    // contract before comparing counts. Otherwise a release that removes
+    // duplicate books/alternate lines looks like a catastrophic board/model
+    // contraction even when the underlying provider and unique plays grew.
+    const comparablePreviousRows = compactMemberBoardRows(
+      previous.data.props,
+      previous.asOfTimestamp,
+    );
+    const previousRows = comparablePreviousRows.length;
+    if (previousRows >= 20 && args.data.props.length < previousRows * 0.75) {
+      errors.push(`UNEXPECTED_BOARD_CONTRACTION_${args.data.props.length}_OF_${previousRows}`);
+    }
+    const previousActionable = comparablePreviousRows.filter((row) =>
+      ACTIONABLE_GRADES.has(row.playGrade)
+    ).length;
+    if (previousActionable >= 10 && actionableRows < previousActionable * 0.5) {
+      errors.push(`UNEXPECTED_ACTIONABLE_CONTRACTION_${actionableRows}_OF_${previousActionable}`);
+    }
+  }
   return {
     publishable: errors.length === 0,
     actionableRows,

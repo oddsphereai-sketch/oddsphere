@@ -4,12 +4,21 @@ import {
 } from "../lib/automodel/wnbaCoreModelCalibration";
 import {
   computeWnbaPrediction,
+  resolveWnbaSpreadEloStatAgreementLean,
+  WNBA_SPREAD_ELO_STAT_AGREEMENT_RULE_ID,
   wnbaMoneylineGradeFromValue,
   type ModelState,
   type OddRow,
 } from "../lib/services/wnba/buildWnbaDailyEdgePreview";
 import { selectPreferredWnbaTipTime } from "../lib/services/wnba/refreshWnbaLines";
+import {
+  resolveWnbaPickedMoneylineProbabilities,
+  WNBA_PREDICTION_RECORD_CONTRACT_VERSION,
+} from "../lib/services/wnba/buildWnbaPredictionRecords";
+import { wnbaPredictionReleaseMismatches } from "../lib/automodel/wnbaChampionRuntime";
 import { gradePrediction } from "../lib/services/predictionGrader";
+import { resolveWnbaMoneylineSide } from "../lib/services/wnba/wnbaTeams";
+import { applyPublicMarketContext } from "../lib/services/publicMarketContext";
 
 let pass = 0;
 let fail = 0;
@@ -23,6 +32,31 @@ function check(name: string, ok: boolean, details = "") {
     console.error(`not ok - ${name}${details ? ` (${details})` : ""}`);
   }
 }
+
+check(
+  "WNBA expansion nickname resolves to the canonical home side",
+  resolveWnbaMoneylineSide("Fire", "POR", "LA") === "home",
+);
+check(
+  "WNBA full expansion name resolves to the canonical home side",
+  resolveWnbaMoneylineSide("Portland Fire", "POR", "LA") === "home",
+);
+check(
+  "WNBA away nickname resolves to the canonical away side",
+  resolveWnbaMoneylineSide("Sparks", "POR", "LA") === "away",
+);
+check(
+  "WNBA abbreviation resolves without fragile display-name equality",
+  resolveWnbaMoneylineSide("POR", "POR", "LA") === "home",
+);
+check(
+  "WNBA city-only provider identity resolves canonically",
+  resolveWnbaMoneylineSide("Portland", "POR", "LA") === "home",
+);
+check(
+  "unknown WNBA team identity fails closed",
+  resolveWnbaMoneylineSide("Unknown Club", "POR", "LA") === null,
+);
 
 const disabled = buildWnbaCoreModelCalibrationAudit({
   rawProjectedAwayScore: 88,
@@ -211,6 +245,51 @@ check(
     bookCount: 5,
   }) === "Best Angle",
 );
+check(
+  "WNBA total/spread public money cannot create action from a Watchlist",
+  applyPublicMarketContext({
+    grade: "Watchlist",
+    picked: { public_betting_pct: 50, public_money_pct: 65 },
+    opposite: { public_betting_pct: 50, public_money_pct: 35 },
+    minGradeForBoost: "Best Angle",
+    maxBoostGrade: "Best Angle",
+  }).gradeAfter === "Watchlist",
+);
+check(
+  "WNBA moneyline retains its established public-money promotion behavior",
+  applyPublicMarketContext({
+    grade: "Watchlist",
+    picked: { public_betting_pct: 50, public_money_pct: 65 },
+    opposite: { public_betting_pct: 50, public_money_pct: 35 },
+  }).gradeAfter === "Lean",
+);
+const spreadAgreementPromotion = resolveWnbaSpreadEloStatAgreementLean({
+  grade: "Watchlist",
+  selectedSide: "home",
+  eloMargin: 4.5,
+  statMargin: 2,
+  bookCount: 10,
+  pickedOdds: -110,
+  publicConflict: "none",
+});
+check(
+  "WNBA home spread Elo/stat agreement promotes a priced 10-book Watchlist to Lean",
+  spreadAgreementPromotion.promoted && spreadAgreementPromotion.grade === "Lean" && spreadAgreementPromotion.gap === 2.5,
+);
+check(
+  "WNBA spread agreement rule refuses away sides",
+  !resolveWnbaSpreadEloStatAgreementLean({
+    grade: "Watchlist", selectedSide: "away", eloMargin: 4.5, statMargin: 2,
+    bookCount: 10, pickedOdds: -110, publicConflict: "none",
+  }).promoted,
+);
+check(
+  "WNBA spread agreement rule fails closed below 10 books or under public resistance",
+  !resolveWnbaSpreadEloStatAgreementLean({
+    grade: "Watchlist", selectedSide: "home", eloMargin: 4.5, statMargin: 2,
+    bookCount: 9, pickedOdds: -110, publicConflict: "opposing_money",
+  }).promoted,
+);
 const fixtureModel: ModelState = {
   elo: new Map([[10, 1500], [30, 1500]]),
   games: new Map([[10, 30], [30, 30]]),
@@ -252,6 +331,25 @@ const computeSpreadEnabled = computeWnbaPrediction(
   fixtureOdds,
 );
 
+const agreementOdds: OddRow[] = Array.from({ length: 10 }).flatMap((_, index) => {
+  const book = `book${index}`;
+  return [
+    { book, sharp: index < 4, mkt: "moneyline", selType: "home", odds: -110, line: null, date: "2026-06-27", h: 30, a: 10 },
+    { book, sharp: index < 4, mkt: "moneyline", selType: "away", odds: -110, line: null, date: "2026-06-27", h: 30, a: 10 },
+    { book, sharp: index < 4, mkt: "point_spread", selType: "home", odds: -110, line: 6.5, date: "2026-06-27", h: 30, a: 10 },
+    { book, sharp: index < 4, mkt: "point_spread", selType: "away", odds: -110, line: -6.5, date: "2026-06-27", h: 30, a: 10 },
+    { book, sharp: index < 4, mkt: "total_points", selType: "over", odds: -110, line: 172.5, date: "2026-06-27", h: 30, a: 10 },
+    { book, sharp: index < 4, mkt: "total_points", selType: "under", odds: -110, line: 172.5, date: "2026-06-27", h: 30, a: 10 },
+  ];
+});
+const agreementCompute = computeWnbaPrediction(fixtureModel, { id: 1000, date: "2026-06-27", h: 30, a: 10 }, agreementOdds);
+check(
+  "WNBA spread agreement promotion is integrated and stamped",
+  agreementCompute.spread.grade === "Lean" &&
+    agreementCompute.spread_grade_policy.promoted === true &&
+    agreementCompute.spread_grade_policy.rule_id === WNBA_SPREAD_ELO_STAT_AGREEMENT_RULE_ID,
+);
+
 check("compute flags off leaves spread on raw side", computeDisabled.spread.side === "PHX +6.5");
 check("compute spread recommendation stays on the displayed projection ATS side", computeSpreadEnabled.spread.side === "PHX +6.5");
 const displayedHomeMargin = computeSpreadEnabled.projected_score.home - computeSpreadEnabled.projected_score.away;
@@ -287,6 +385,41 @@ check(
   selectPreferredWnbaTipTime(["2026-07-03T00:00:00Z", "2026-07-04T00:00:00Z"], "2026-07-03T01:00:00Z") === "2026-07-03T00:00:00Z",
 );
 check("WNBA preferred tip returns null without Playbook schedule", selectPreferredWnbaTipTime([], "2026-07-01T17:35:00Z") === null);
+
+const homeProbabilityContract = resolveWnbaPickedMoneylineProbabilities({
+  pickedHome: true, independentHomeProbability: 0.58, finalHomeProbability: 0.54,
+});
+check(
+  "WNBA tracking stores the final published home probability",
+  homeProbabilityContract.publishedPickedProbability === 0.54 && homeProbabilityContract.independentPickedProbability === 0.58,
+);
+const awayProbabilityContract = resolveWnbaPickedMoneylineProbabilities({
+  pickedHome: false, independentHomeProbability: 0.58, finalHomeProbability: 0.54,
+});
+check(
+  "WNBA tracking complements both probability layers for an away pick",
+  Math.abs(awayProbabilityContract.publishedPickedProbability - 0.46) < 1e-12 &&
+    Math.abs(awayProbabilityContract.independentPickedProbability - 0.42) < 1e-12,
+);
+check(
+  "WNBA prediction-record probability contract has a new immutable identifier",
+  WNBA_PREDICTION_RECORD_CONTRACT_VERSION === "wnba_prediction_record_contract_v2_published_probability_2026_08_10",
+);
+check(
+  "WNBA record writer accepts only the exact current source release",
+  wnbaPredictionReleaseMismatches({
+    model_version: "wnba_v1_1_team_identity",
+    distribution_version: "wnba_market_heads_value_calibrated_2026_08_02_v3",
+    grade_policy_version: "wnba_grade_policy_v4_market_resistance_and_elo_stat_agreement_2026_08_10",
+  }).length === 0,
+);
+check(
+  "WNBA record writer refuses stale or incomplete source releases",
+  wnbaPredictionReleaseMismatches({
+    model_version: "wnba_v1",
+    distribution_version: "wnba_market_heads_value_calibrated_2026_08_02_v3",
+  }).length === 2,
+);
 
 if (fail > 0) {
   console.error(`wnba core model calibration tests: ${pass} passed, ${fail} failed`);

@@ -1,7 +1,7 @@
 /**
  * betaSession — pre-launch V1 access gate session helper.
  *
- * Pure functions used by both the Edge middleware (middleware.ts) and the
+ * Pure functions used by both the request proxy (proxy.ts) and the
  * /api/auth/login + /api/auth/logout route handlers. Runs in both Edge and
  * Node runtimes — uses Web Crypto API (crypto.subtle.digest) for SHA-256
  * so the same helper works in both environments without import branching.
