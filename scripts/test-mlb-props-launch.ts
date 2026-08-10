@@ -579,6 +579,24 @@ const launchReady = evaluateMlbPropsLaunchReadiness({
   },
 });
 assert.equal(launchReady.readyToOpen, true, "three valid snapshots plus private tracking satisfy the launch gate");
+const cadenceCompatibleReady = evaluateMlbPropsLaunchReadiness({
+  slateDate: "2026-07-16",
+  snapshots: launchSnapshots,
+  tracking: trackingHealth,
+  now: new Date("2026-07-16T16:30:00.000Z"),
+  env: {
+    ...process.env,
+    MLB_PLAYER_PROPS_CRON_ENABLED: "true",
+    ODDSPHERE_PROPS_INTERNAL_TRACKING_ENABLED: "true",
+    MLB_PLAYER_PROPS_SETTLEMENT_CRON_ENABLED: "true",
+    ODDSPHERE_PROPS_MAX_SNAPSHOT_AGE_MINUTES: undefined,
+  },
+});
+assert.equal(
+  cadenceCompatibleReady.checks.find((item) => item.code === "SNAPSHOT_FRESH")?.ok,
+  true,
+  "default snapshot freshness covers the scheduled 30-minute fast-refresh cadence",
+);
 const releaseBlocked = evaluateMlbPropsLaunchReadiness({
   slateDate: "2026-07-16",
   snapshots: launchSnapshots.map((item) => ({

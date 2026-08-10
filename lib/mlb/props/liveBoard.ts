@@ -2861,7 +2861,10 @@ export function easternSlateDate(now = new Date()): string {
 }
 
 export function mlbPropsSnapshotIsFresh(snapshot: MlbPropsBoardSnapshot, now = new Date()): boolean {
-  const maxMinutes = Number(process.env.ODDSPHERE_PROPS_MAX_SNAPSHOT_AGE_MINUTES ?? 25);
+  // The canonical fast writer runs every 30 minutes. The five-minute margin
+  // covers normal scheduler jitter; stale quote rows are still rejected by
+  // the independent 45-minute odds-age policy.
+  const maxMinutes = Number(process.env.ODDSPHERE_PROPS_MAX_SNAPSHOT_AGE_MINUTES ?? 35);
   const age = now.getTime() - Date.parse(snapshot.asOfTimestamp);
   return Number.isFinite(age) && age >= 0 && age <= maxMinutes * 60_000;
 }

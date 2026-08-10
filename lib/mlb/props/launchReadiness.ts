@@ -65,7 +65,11 @@ export function evaluateMlbPropsLaunchReadiness(args: {
   const required = envPositiveIntegerFrom(env, "ODDSPHERE_PROPS_LAUNCH_CONSECUTIVE_SNAPSHOTS", 3);
   const latest = args.snapshots[0] ?? null;
   const ageMinutes = latest ? (now.getTime() - Date.parse(latest.asOfTimestamp)) / 60_000 : Number.POSITIVE_INFINITY;
-  const maxAge = envPositiveIntegerFrom(env, "ODDSPHERE_PROPS_MAX_SNAPSHOT_AGE_MINUTES", 25);
+  // Fast production refreshes run every 30 minutes. Keep a small cron-jitter
+  // allowance so a healthy board does not disappear for five minutes before
+  // each scheduled refresh. Individual quote freshness remains stricter and
+  // is validated separately by NO_STALE_BOARD_ODDS.
+  const maxAge = envPositiveIntegerFrom(env, "ODDSPHERE_PROPS_MAX_SNAPSHOT_AGE_MINUTES", 35);
   const recent = args.snapshots.slice(0, required);
   const minimumSequenceSpan = envPositiveIntegerFrom(env, "ODDSPHERE_PROPS_LAUNCH_MIN_SEQUENCE_SPAN_MINUTES", 15);
   const sequenceSpanMinutes = recent.length >= required

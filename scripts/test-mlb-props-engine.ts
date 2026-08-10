@@ -67,6 +67,7 @@ import {
 } from "../lib/mlb/props/propGrades";
 import type { MlbGameEntity, MlbHistoricalStatRow, MlbProbablePitcher, PropOddsSnapshot } from "../lib/mlb/props/providers";
 import { evaluateMlbPropsLaunchReadiness } from "../lib/mlb/props/launchReadiness";
+import { MLB_PROPS_MODEL_RELEASE_ID } from "../lib/mlb/props/marketModelVersions";
 
 let pass = 0;
 let fail = 0;
@@ -722,6 +723,7 @@ async function main() {
       props: [{
         market: "batter_hits",
         marketFamily: "batter",
+        gameStartTime: "2026-08-01T23:00:00Z",
         playGrade: "LEAN",
         finalProbability: 0.56,
         modelProbability: 0.57,
@@ -729,27 +731,35 @@ async function main() {
         missingFeatures,
         providerIds: { gameId: "g1", bdlGameId: 1, bdlPlayerId: 2, mlbStatsPlayerId: "3" },
         recentForm: { logs: [{}, {}, {}, {}, {}] },
-        matchupHistory: null,
-        environment: null,
+        matchupHistory: { matchups: [], source: "MLB Stats" },
+        environment: {
+          park: { status: "available", runFactor: 100 },
+          weather: { status: "available" },
+          roofStatus: "open",
+        },
         lineupStatus: { status: "projected" },
       }],
       research: {},
       slate: { matchups: [{ starterStatus: "probable" }] },
       summary: { gamesWithProps: 1, booksCovered: 1, marketsAvailable: 1 },
     },
+    modelContext: {
+      modelReleaseId: MLB_PROPS_MODEL_RELEASE_ID,
+      probablePitcherSeasonStats: [],
+    },
   });
   const safeLaunch = evaluateMlbPropsLaunchReadiness({
     slateDate: "2026-08-01",
     snapshots: [
-      launchSnapshot("s3", "2026-08-01T13:40:00Z", ["park factor"]),
-      launchSnapshot("s2", "2026-08-01T13:30:00Z", ["game time weather"]),
+      launchSnapshot("s3", "2026-08-01T13:40:00Z", []),
+      launchSnapshot("s2", "2026-08-01T13:30:00Z", []),
       launchSnapshot("s1", "2026-08-01T13:20:00Z", []),
     ] as never,
     tracking: readinessTracking,
     now: new Date("2026-08-01T13:41:00Z"),
     env: readinessEnv,
   });
-  check("optional context gaps warn without closing a data-safe actionable board", safeLaunch.readyToOpen && safeLaunch.warnings.includes("DIRECT_MATCHUP_VERIFIED") && safeLaunch.warnings.includes("ENVIRONMENT_CONTEXT"));
+  check("projected lineup status warns without closing a fully researched actionable board", safeLaunch.readyToOpen && safeLaunch.warnings.includes("LINEUP_CONTEXT"));
   const unsafeLaunch = evaluateMlbPropsLaunchReadiness({
     slateDate: "2026-08-01",
     snapshots: [
