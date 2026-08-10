@@ -22,7 +22,10 @@ import {
   buildWnbaCoreModelCalibrationAudit,
   type WnbaCoreModelCalibrationInput,
 } from "@/lib/automodel/wnbaCoreModelCalibration";
-import { EXPECTED_WNBA_CALIBRATION_FLAGS } from "@/lib/automodel/wnbaChampionRuntime";
+import {
+  EXPECTED_WNBA_CALIBRATION_FLAGS,
+  EXPECTED_WNBA_GRADE_POLICY_VERSION,
+} from "@/lib/automodel/wnbaChampionRuntime";
 
 const BDL = "https://api.balldontlie.io/wnba/v1";
 const SHARP = "https://api.sharpapi.io/api/v1";
@@ -129,6 +132,31 @@ export function wnbaMoneylineGradeFromValue(args: {
   ) return "Best Angle";
   if (pickedEdge >= 0.02 && priceEv >= 0.02 && bookCount >= 4) return "Lean";
   return "Watchlist";
+}
+
+export const WNBA_SPREAD_ELO_STAT_AGREEMENT_RULE_ID =
+  "wnba_home_spread_elo_stat_agreement_lean_v1_2026_08_10";
+export const WNBA_SPREAD_ELO_STAT_MAX_GAP_EXCLUSIVE = 3;
+export const WNBA_SPREAD_ELO_STAT_MIN_BOOKS = 10;
+
+export function resolveWnbaSpreadEloStatAgreementLean(args: {
+  grade: Grade | null;
+  selectedSide: "home" | "away" | null;
+  eloMargin: number;
+  statMargin: number;
+  bookCount: number;
+  pickedOdds: number | null;
+  publicConflict: PublicMarketContext["conflict"];
+}): { grade: Grade | null; promoted: boolean; gap: number } {
+  const gap = Math.abs(args.eloMargin - args.statMargin);
+  const promoted =
+    args.grade === "Watchlist" &&
+    args.selectedSide === "home" &&
+    gap < WNBA_SPREAD_ELO_STAT_MAX_GAP_EXCLUSIVE &&
+    args.bookCount >= WNBA_SPREAD_ELO_STAT_MIN_BOOKS &&
+    args.pickedOdds !== null &&
+    args.publicConflict === "none";
+  return { grade: promoted ? "Lean" : args.grade, promoted, gap };
 }
 
 // ── BDL fetch (cursor) ──
@@ -274,12 +302,12 @@ export function computeWnbaPrediction(
 
   // market consensus: all non-blocked books (storage/audit) + sharp subset (decision)
   const mlH: { book: string; odds: number }[] = [], mlA: { book: string; odds: number }[] = [];
-  const spBooks: { sportsbook: string; line_value: number }[] = [], spS: number[] = [];
+  const spBooks: { sportsbook: string; line_value: number; odds_american: number | null }[] = [], spS: number[] = [];
   const toBooks: { sportsbook: string; line_value: number }[] = [], toS: number[] = [];
   for (const x of r) {
     const homeIsBdlHome = x.h === g.h;
     if (x.mkt === "moneyline" && x.odds != null) ((x.selType === "home") === homeIsBdlHome ? mlH : mlA).push({ book: x.book, odds: x.odds });
-    if (x.mkt === "point_spread" && x.line != null && Math.abs(x.line) < 40 && (x.selType === "home") === homeIsBdlHome) { spBooks.push({ sportsbook: x.book, line_value: x.line }); if (x.sharp) spS.push(x.line); }
+    if (x.mkt === "point_spread" && x.line != null && Math.abs(x.line) < 40 && (x.selType === "home") === homeIsBdlHome) { spBooks.push({ sportsbook: x.book, line_value: x.line, odds_american: x.odds }); if (x.sharp) spS.push(x.line); }
     if (x.mkt === "total_points" && (x.selType === "over" || x.selType === "under") && x.line != null && x.line > 120 && x.line < 220) { toBooks.push({ sportsbook: x.book, line_value: x.line }); if (x.sharp) toS.push(x.line); }
   }
   const bP: number[] = [], sP: number[] = [];
@@ -432,12 +460,31 @@ export function computeWnbaPrediction(
     spGradeBase = "Watchlist";
   }
   const spSideKey = pCoverHome == null ? null : pCoverHome >= 0.5 ? "home" : "away";
+  const spPickedOdds = spSideKey === "home" && mktSpread !== null
+    ? median(
+        spBooks
+          .filter((book) => book.line_value === mktSpread)
+          .map((book) => book.odds_american)
+          .filter(finite),
+      )
+    : null;
   const spPublicContext = spGradeBase !== null && spSideKey !== null ? applyPublicMarketContext({
     grade: spGradeBase,
     picked: publicSignals.spread?.[spSideKey] ?? null,
     opposite: publicSignals.spread?.[spSideKey === "home" ? "away" : "home"] ?? null,
+    minGradeForBoost: "Best Angle",
+    maxBoostGrade: "Best Angle",
   }) : null;
-  const spGrade = spPublicContext?.gradeAfter ?? spGradeBase;
+  const spAgreementLean = resolveWnbaSpreadEloStatAgreementLean({
+    grade: spPublicContext?.gradeAfter ?? spGradeBase,
+    selectedSide: spSideKey,
+    eloMargin,
+    statMargin,
+    bookCount: spVals.length,
+    pickedOdds: spPickedOdds,
+    publicConflict: spPublicContext?.conflict ?? "none",
+  });
+  const spGrade = spAgreementLean.grade;
 
   const pOver = mktTotal != null ? 1 - Phi((mktTotal - totalForRecommendation) / sigT) : null;
   const toEdge = mktTotal != null ? totalForRecommendation - mktTotal : null;
@@ -465,6 +512,8 @@ export function computeWnbaPrediction(
     grade: toGradeBase,
     picked: publicSignals.total?.[totalSideKey] ?? null,
     opposite: publicSignals.total?.[totalSideKey === "over" ? "under" : "over"] ?? null,
+    minGradeForBoost: "Best Angle",
+    maxBoostGrade: "Best Angle",
   }) : null;
   const toGrade = totalPublicContext?.gradeAfter ?? toGradeBase;
 
@@ -522,6 +571,16 @@ export function computeWnbaPrediction(
       },
     },
     wnba_core_model_calibration: calibrationAudit,
+    grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
+    spread_grade_policy: {
+      rule_id: WNBA_SPREAD_ELO_STAT_AGREEMENT_RULE_ID,
+      promoted: spAgreementLean.promoted,
+      elo_stat_gap: r1(spAgreementLean.gap),
+      maximum_gap_exclusive: WNBA_SPREAD_ELO_STAT_MAX_GAP_EXCLUSIVE,
+      minimum_books: WNBA_SPREAD_ELO_STAT_MIN_BOOKS,
+      picked_odds: spPickedOdds,
+      public_conflict: spPublicContext?.conflict ?? "none",
+    },
     market: { home_win_prob: mktP != null ? r1(mktP * 100) / 100 : null, spread: mktSpread, total: mktTotal, book_count: mlBooks, dispersion: { spread: spDisp, total: toDisp } },
     consensus_source: (sharpMktP != null ? "sharp" : "all_books") as "sharp" | "all_books",
     trusted: { home_win_prob: sharpMktP != null ? r1(sharpMktP * 100) / 100 : null, spread: sharpSpread, total: sharpTotal, trusted_book_count: trustedBooks },

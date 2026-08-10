@@ -26,12 +26,15 @@ import {
   MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
   ML_CALIBRATED_MODEL_LEAN_PATH_ID,
   ML_MARKET_DIVERGENCE_LEAN_RULE_ID,
+  ML_MARKET_DIVERGENCE_MIN_MODEL_PROB,
+  ML_SIGNED_MARKET_RESISTANCE_RULE_ID,
   ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID,
   ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID,
   ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID,
   resolveMlMidPriceEstablishedPriceBestAngle,
   resolveMlMidPriceNearMarketLean,
   resolveMlMarketDivergenceLean,
+  resolveMlSignedMarketResistance,
   resolveMlTightMarketPriceBestAngle,
   resolveMlbMarketAwareSideCorrection,
 } from "../lib/services/predictionRecordService";
@@ -126,6 +129,7 @@ const marketDivergenceLeanBase = {
   blocked: false,
   side: "home",
   oddsAmerican: -118,
+  modelProb: 0.54,
   pickedBetsPct: 47,
   pickedMoneyPct: 57,
   lineDirection: "neutral" as const,
@@ -143,6 +147,13 @@ check(
   resolveMlMarketDivergenceLean({ ...marketDivergenceLeanBase, pickedMoneyPct: 56.9 }).lean === false,
 );
 check(
+  "model probability below the guarded 54% boundary does not promote",
+  resolveMlMarketDivergenceLean({
+    ...marketDivergenceLeanBase,
+    modelProb: ML_MARKET_DIVERGENCE_MIN_MODEL_PROB - 0.001,
+  }).lean === false,
+);
+check(
   "movement against the pick blocks promotion",
   resolveMlMarketDivergenceLean({ ...marketDivergenceLeanBase, lineDirection: "against_pick" }).lean === false,
 );
@@ -153,6 +164,27 @@ check(
 check(
   "explicit data-quality/prior-correction block is preserved",
   resolveMlMarketDivergenceLean({ ...marketDivergenceLeanBase, blocked: true }).lean === false,
+);
+const signedResistance = resolveMlSignedMarketResistance({
+  blocked: false,
+  side: "home",
+  pickedBetsPct: 60,
+  pickedMoneyPct: 50,
+});
+check(
+  "signed 10-point money-below-tickets resistance stands down without selecting an opposite side",
+  signedResistance.standDown === true &&
+    signedResistance.reason === ML_SIGNED_MARKET_RESISTANCE_RULE_ID &&
+    signedResistance.moneyOverTicketsGap === -10,
+);
+check(
+  "signed resistance cannot override an existing inversion, calibration, or side correction",
+  resolveMlSignedMarketResistance({
+    blocked: true,
+    side: "home",
+    pickedBetsPct: 60,
+    pickedMoneyPct: 40,
+  }).standDown === false,
 );
 
 console.log("\n━━━ MLB Total split-signal correction precedence ━━━");
@@ -805,7 +837,7 @@ console.log("\n━━━ MLB market-divergence Lean integration ━━━");
   const marketDivergencePred = {
     ...basePrediction,
     predicted_ml_winner: "home",
-    ml_confidence: 52,
+    ml_confidence: 54,
     predicted_home_score: 4.3,
     predicted_away_score: 4.1,
     sport_specific: {
@@ -816,9 +848,9 @@ console.log("\n━━━ MLB market-divergence Lean integration ━━━");
       mlb_data_completeness: { status: "complete" },
       v2_2_audit: {
         ml_play_grade: "market_aligned",
-        ml_model_prob: 0.52,
+        ml_model_prob: 0.54,
         ml_market_prob: 0.54,
-        ml_edge_pct: -2,
+        ml_edge_pct: 0,
         posterior_home_diff: 0.2,
       },
     },
@@ -860,6 +892,27 @@ console.log("\n━━━ MLB market-divergence Lean integration ━━━");
   check("market-divergence path promotes a Watchlist to Lean", ml.play_grade === "lean" && ml.best_angle === false);
   check("market-divergence Lean audit is stamped", promo?.rule_id === ML_MARKET_DIVERGENCE_LEAN_RULE_ID);
   check("market-divergence Lean becomes the decision action rule", (ml.snapshot_json as any)?.decision_pipeline?.action_rule_id === ML_MARKET_DIVERGENCE_LEAN_RULE_ID);
+
+  const resistanceRecords = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-28",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, marketDivergencePred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    signalsByGameId: new Map([
+      [14771, [
+        { market_type: "moneyline", side: "home", public_money_pct: 50, public_betting_pct: 60, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+        { market_type: "moneyline", side: "away", public_money_pct: 50, public_betting_pct: 40, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+      ]],
+    ]),
+  });
+  const resistedMl = resistanceRecords.find((record) => record.market === "moneyline")!;
+  const resistanceAudit = (resistedMl.snapshot_json as any)?.ml_signed_market_resistance_standdown;
+  check("signed market resistance stands down the unchanged original side", resistedMl.pick === "home" && resistedMl.no_bet === true);
+  check("signed market resistance never enters a flip path", (resistedMl.snapshot_json as any)?.decision_pipeline?.final_side_changed === false);
+  check("signed market resistance audit is stamped", resistanceAudit?.rule_id === ML_SIGNED_MARKET_RESISTANCE_RULE_ID);
 }
 
 console.log("\n━━━ MLB mid-price established-price Best Angle integration ━━━");
