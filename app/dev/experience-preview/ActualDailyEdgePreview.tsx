@@ -82,6 +82,7 @@ export default function ActualDailyEdgePreview({
   sport,
   freshContractRead,
   reviewMode = true,
+  embeddedSample = false,
 }: {
   snapshot: DailyEdgeResponse;
   history: PreviewHistoryByTeam;
@@ -89,6 +90,7 @@ export default function ActualDailyEdgePreview({
   sport: Sport;
   freshContractRead: boolean;
   reviewMode?: boolean;
+  embeddedSample?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -115,6 +117,7 @@ export default function ActualDailyEdgePreview({
   const readerRef = useRef<HTMLDivElement>(null);
 
   function switchSport(next: Sport) {
+    if (embeddedSample) return;
     setReaderOpen(false);
     setMobileSheetOpen(false);
     const params = new URLSearchParams(searchParams.toString());
@@ -158,7 +161,7 @@ export default function ActualDailyEdgePreview({
   }, [mobileSheetOpen]);
 
   useEffect(() => {
-    if ((sport !== "mlb" && sport !== "wnba") || displaySnapshot.games.length === 0) return;
+    if (embeddedSample || (sport !== "mlb" && sport !== "wnba") || displaySnapshot.games.length === 0) return;
     const controller = new AbortController();
     const params = new URLSearchParams({ sport, date: displaySnapshot.date });
     for (const matchup of displaySnapshot.games) {
@@ -174,7 +177,7 @@ export default function ActualDailyEdgePreview({
         // remain usable through provider, network, and authentication errors.
       });
     return () => controller.abort();
-  }, [displaySnapshot.date, displaySnapshot.games, sport]);
+  }, [displaySnapshot.date, displaySnapshot.games, embeddedSample, sport]);
 
   if (!game) {
     return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} /><EmptyPreview snapshot={displaySnapshot} sport={sport} /></div>;
@@ -198,7 +201,7 @@ export default function ActualDailyEdgePreview({
     setReaderOpen(true);
     setDeepOpen(false);
     setDeepView("case");
-    replaceReaderUrl(sport, next.id, nextMarket);
+    if (!embeddedSample) replaceReaderUrl(sport, next.id, nextMarket);
     if (isMobileViewport()) setMobileSheetOpen(true);
     else scrollReaderIntoView();
   }
@@ -206,7 +209,7 @@ export default function ActualDailyEdgePreview({
   function selectMarket(nextMarket: MarketKey) {
     setMarketKey(nextMarket);
     setDeepOpen(false);
-    replaceReaderUrl(sport, game.id, nextMarket);
+    if (!embeddedSample) replaceReaderUrl(sport, game.id, nextMarket);
   }
 
   function selectAdjacentGame(direction: -1 | 1) {
@@ -226,12 +229,12 @@ export default function ActualDailyEdgePreview({
     const params = new URLSearchParams(window.location.search);
     params.delete("game");
     params.delete("market");
-    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    if (!embeddedSample) window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }
 
   return (
     <div className="space-y-5 pb-16">
-      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} />
+      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} sample={embeddedSample} />
 
       <div ref={readerRef} className="scroll-mt-4">
         {readerOpen ? <div className="hidden sm:block">
@@ -374,11 +377,11 @@ function replaceReaderUrl(sport: Sport, gameId: string, market: MarketKey) {
   );
 }
 
-function SlateHeader({ snapshot, sport, onSportChange }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void }) {
+function SlateHeader({ snapshot, sport, onSportChange, sample = false }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; sample?: boolean }) {
   return (
     <div>
       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {sportLabel(sport)}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{snapshot.date} · {snapshot.games.length} {sportLabel(sport)} {snapshot.games.length === 1 ? "game" : "games"} · updated {formatTimestamp(snapshot.as_of)}</p></div>
+        <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {sportLabel(sport)}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {snapshot.games.length} {sportLabel(sport)} {snapshot.games.length === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(snapshot.as_of)}`}</p></div>
         <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · hourly board · separate market feeds · five-minute lock checks</p>
       </div>
       <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} sports={DAILY_EDGE_SPORT_KEYS} showCounts={false} showPendingState availability={DAILY_EDGE_SPORT_AVAILABILITY} /></div>
@@ -1172,7 +1175,7 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
   const headlineKey = headlineMarket;
   const headline = game.markets[headlineKey];
   const marketKeys: MarketKey[] = ["moneyline", "total", "first_inning"];
-  return <article role="button" tabIndex={0} data-game-id={game.id} aria-pressed={active} onClick={() => selectGame(game, headlineKey)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectGame(game, headlineKey); } }} className={`group relative cursor-pointer overflow-hidden rounded-xl border bg-[#0D0D14] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)] transition ${active ? "border-white/35 outline outline-2 outline-violet-400/25 outline-offset-2" : boardCardBorder(headline.verdict.key)}`}><div className="h-[3px] w-full" style={{ background: `linear-gradient(to right, ${teamTheme(game.awayTeam).primary} 0%, ${teamTheme(game.awayTeam).primary} 28%, rgba(255,255,255,0.06) 50%, ${teamTheme(game.homeTeam).primary} 72%, ${teamTheme(game.homeTeam).primary} 100%)` }} /><div className="p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><TeamLogo src={game.awayTeamLogo} label={game.awayTeam} /><span className="text-sm font-black text-white">{game.awayTeam}</span><span className="text-[10px] text-gray-700">@</span><span className="text-sm font-black text-white">{game.homeTeam}</span><TeamLogo src={game.homeTeamLogo} label={game.homeTeam} /></div><div className="flex items-center gap-2"><VerdictBadge market={headline} /><span className="text-[9px] text-gray-600">{game.gameTime}</span></div></div><div className="mt-4 flex flex-wrap items-baseline gap-2"><span className="text-[27px] font-black leading-none tracking-tight text-white">{displayPick(headline, headlineKey)}</span><span className="text-[9px] font-black uppercase tracking-wider text-gray-600">{marketLabelFor(headlineKey, sport)}</span><span className="text-xs font-black text-gray-300">{formatProbability(headline.modelProb)}</span><span className="font-mono text-[11px] font-bold text-gray-500">{formatAmerican(headline.priceAmerican)}</span></div><p className="mt-3 line-clamp-2 text-[11px] leading-relaxed text-gray-500">{headline.guidedGuide || game.decisionLine}</p><div className="mt-3 flex items-baseline gap-2"><span className="text-[8px] font-black uppercase tracking-wider text-gray-600">Proj</span><span className="text-[10px] text-gray-500">{game.awayTeam} <strong className="text-white">{formatNumber(game.projected.away)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-white">{formatNumber(game.projected.home)}</strong></span></div><div className="mt-3 flex items-center justify-between gap-1 overflow-hidden text-[8px] font-black uppercase tracking-wider">{marketKeys.map((key, index) => { const item = game.markets[key]; return <span key={key} className="inline-flex min-w-0 items-center gap-1">{index > 0 ? <span className="mr-1 text-gray-700">·</span> : null}<span className="text-gray-600">{marketShortLabelFor(key, sport)}</span><span className={boardVerdictText(item.verdict.key)}>{verdictSymbol(item.verdict.key)} {item.verdict.label}</span></span>; })}</div><div className="mt-3 grid grid-cols-3 gap-1.5">{marketKeys.map((key) => { const item = game.markets[key]; const selected = active && activeMarket === key; return <button key={key} type="button" data-market={key} onClick={(event) => { event.stopPropagation(); selectGame(game, key); }} className={`rounded-md border px-2.5 py-2 text-left transition ${boardMarketPill(item.verdict.key)} ${selected ? "ring-2 ring-white/45 ring-offset-1 ring-offset-[#0D0D14]" : ""}`}><span className={`block text-[8px] font-black uppercase tracking-wider ${boardVerdictText(item.verdict.key)}`}>{marketShortLabelFor(key, sport)}</span><span className="mt-1 block truncate text-[11px] font-black text-gray-100">{displayPick(item, key)}</span></button>; })}</div><div className="mt-4 flex justify-end"><span className={`text-[9px] font-black uppercase tracking-[0.14em] ${active ? "text-white" : "text-violet-200/70"}`}>{active ? "Open in reader ↑" : "View breakdown ↑"}</span></div></div></article>;
+  return <article role="button" tabIndex={0} data-game-id={game.id} aria-pressed={active} onClick={() => selectGame(game, headlineKey)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectGame(game, headlineKey); } }} className={`group relative cursor-pointer overflow-hidden rounded-xl border bg-[#0D0D14] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)] transition ${active ? "border-white/35 outline outline-2 outline-violet-400/25 outline-offset-2" : boardCardBorder(headline.verdict.key)}`}><div className="h-[3px] w-full" style={{ background: `linear-gradient(to right, ${teamTheme(game.awayTeam).primary} 0%, ${teamTheme(game.awayTeam).primary} 28%, rgba(255,255,255,0.06) 50%, ${teamTheme(game.homeTeam).primary} 72%, ${teamTheme(game.homeTeam).primary} 100%)` }} /><div className="p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2.5"><TeamLogo src={game.awayTeamLogo} label={game.awayTeam} /><span className="text-base font-black text-white">{game.awayTeam}</span><span className="text-[11px] text-gray-700">@</span><span className="text-base font-black text-white">{game.homeTeam}</span><TeamLogo src={game.homeTeamLogo} label={game.homeTeam} /></div><div className="flex items-center gap-2"><VerdictBadge market={headline} large /><span className="text-[10px] text-gray-500">{game.gameTime}</span></div></div><div className="mt-5 flex flex-wrap items-baseline gap-2"><span className="text-[30px] font-black leading-none tracking-tight text-white sm:text-[34px]">{displayPick(headline, headlineKey)}</span><span className="text-[10px] font-black uppercase tracking-wider text-gray-500">{marketLabelFor(headlineKey, sport)}</span><span className="text-[15px] font-black text-gray-200">{formatProbability(headline.modelProb)}</span><span className="font-mono text-[12px] font-bold text-gray-500">{formatAmerican(headline.priceAmerican)}</span></div><p className="mt-3 line-clamp-2 text-[12px] leading-relaxed text-gray-400">{headline.guidedGuide || game.decisionLine}</p><div className="mt-3 flex items-baseline gap-2"><span className="text-[9px] font-black uppercase tracking-wider text-gray-600">Proj</span><span className="text-[12px] text-gray-400">{game.awayTeam} <strong className="text-[13px] text-white">{formatNumber(game.projected.away)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-[13px] text-white">{formatNumber(game.projected.home)}</strong></span></div><div className="mt-3 flex items-center justify-between gap-1 overflow-hidden text-[9px] font-black uppercase tracking-[0.06em]">{marketKeys.map((key, index) => { const item = game.markets[key]; return <span key={key} className="inline-flex min-w-0 items-center gap-1">{index > 0 ? <span className="mr-1 text-gray-700">·</span> : null}<span className="text-gray-600">{marketShortLabelFor(key, sport)}</span><span className={boardVerdictText(item.verdict.key)}>{verdictSymbol(item.verdict.key)} {item.verdict.label}</span></span>; })}</div><div className="mt-4 grid grid-cols-3 gap-2">{marketKeys.map((key) => { const item = game.markets[key]; const selected = active && activeMarket === key; return <button key={key} type="button" data-market={key} onClick={(event) => { event.stopPropagation(); selectGame(game, key); }} className={`min-h-[70px] rounded-lg border px-3 py-3 text-left transition sm:min-h-[76px] sm:px-3.5 ${boardMarketPill(item.verdict.key)} ${selected ? "ring-2 ring-white/45 ring-offset-1 ring-offset-[#0D0D14]" : ""}`}><span className={`block text-[9.5px] font-black uppercase tracking-[0.1em] ${boardVerdictText(item.verdict.key)}`}>{marketShortLabelFor(key, sport)}</span><span className="mt-1.5 block truncate text-[14px] font-black text-gray-100 sm:text-[15px]">{displayPick(item, key)}</span></button>; })}</div><div className="mt-2 flex min-h-3 justify-end"><span className={`text-[8px] font-black uppercase tracking-[0.1em] ${active ? "text-gray-300" : "text-violet-200/60"}`}>{active ? "Open in reader ↑" : "View breakdown ↑"}</span></div></div></article>;
 }
 
 function boardCardBorder(verdict: string): string {

@@ -27,6 +27,7 @@
 
 import { Fragment, createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
+import ActualDailyEdgePreview from "@/app/dev/experience-preview/ActualDailyEdgePreview";
 import { useDailyEdge } from "../../hooks/useDailyEdge";
 import { useSportSelection } from "../../hooks/useSportSelection";
 import {
@@ -43,6 +44,7 @@ import {
 import type {
   DailyEdgePredictionDto,
   DailyEdgeGameDto,
+  DailyEdgeResponse,
   MarketEdgeDto,
 } from "../../lib/labTypes";
 import type {
@@ -4551,72 +4553,31 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
   }),
 ];
 
+const marketingPreviewSnapshot: DailyEdgeResponse = {
+  as_of: "2026-08-10T16:30:00.000Z",
+  sport: "mlb",
+  date: "2026-08-10",
+  requested_date: "2026-08-10",
+  fallback_used: false,
+  slateState: "today_published",
+  slate_status: "published",
+  last_slate_update_at: "2026-08-10T16:30:00.000Z",
+  games: marketingPreviewGames,
+};
+
 export function MarketingDailyEdgePreviewSurface(): ReactNode {
-  const [selectedGameId, setSelectedGameId] = useState(marketingPreviewGames[0]!.id);
-  const [selectedMarket, setSelectedMarket] = useState<MarketKey>("moneyline");
-  const [readerMode, setReaderMode] = useState<"compact" | "full">("compact");
-  const selectedGame = marketingPreviewGames.find((g) => g.id === selectedGameId) ?? marketingPreviewGames[0]!;
-  const selectedMarketData = pickMarket(selectedGame, selectedMarket) ?? selectedGame.markets.moneyline;
-  const selectedIndex = marketingPreviewGames.findIndex((g) => g.id === selectedGame.id);
-
-  function selectGame(game: DailyEdgeGameDto) {
-    setSelectedGameId(game.id);
-    setSelectedMarket(headlineMarketFor(game));
-  }
-
-  function selectMarket(game: DailyEdgeGameDto, market: MarketKey) {
-    setSelectedGameId(game.id);
-    setSelectedMarket(market);
-  }
-
-  function goToAdjacentGame(dir: -1 | 1) {
-    const nextIdx = selectedIndex + dir;
-    if (nextIdx < 0 || nextIdx >= marketingPreviewGames.length) return;
-    const next = marketingPreviewGames[nextIdx]!;
-    selectGame(next);
-  }
-
   return (
-    <ShellSportContext.Provider value="mlb">
-      <div className="bg-[#0A0A0F] text-gray-200 rounded-xl overflow-hidden border border-violet-400/35">
-        <div className="px-4 sm:px-6 pt-4 pb-6">
-          <SelectedEdgeReader
-            game={selectedGame}
-            market={selectedMarket}
-            marketData={selectedMarketData}
-            mode={readerMode}
-            onMarketChange={setSelectedMarket}
-            onExpand={() => setReaderMode("full")}
-            onCollapse={() => setReaderMode("compact")}
-            onPrev={selectedIndex > 0 ? () => goToAdjacentGame(-1) : null}
-            onNext={selectedIndex < marketingPreviewGames.length - 1 ? () => goToAdjacentGame(1) : null}
-            index={selectedIndex + 1}
-            total={marketingPreviewGames.length}
-          />
-        </div>
-
-        <SlateBoardHeader
-          totalGames={marketingPreviewGames.length}
-          counts={computeVerdictCounts(marketingPreviewGames)}
-          active="all"
-          onFilterChange={() => undefined}
-        />
-        <main className="px-4 sm:px-6 pb-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {marketingPreviewGames.map((game) => (
-              <SlateCard
-                key={game.id}
-                game={game}
-                active={game.id === selectedGameId}
-                activeMarket={game.id === selectedGameId ? selectedMarket : null}
-                onSelectGame={() => selectGame(game)}
-                onSelectMarket={(market) => selectMarket(game, market)}
-              />
-            ))}
-          </div>
-        </main>
-      </div>
-    </ShellSportContext.Provider>
+    <div className="rounded-xl border border-violet-400/25 bg-[#0A0A0F] p-3 text-gray-200 sm:p-5">
+      <ActualDailyEdgePreview
+        snapshot={marketingPreviewSnapshot}
+        history={{}}
+        pitcherFirstInningHistory={{}}
+        sport="mlb"
+        freshContractRead={false}
+        reviewMode={false}
+        embeddedSample
+      />
+    </div>
   );
 }
 
