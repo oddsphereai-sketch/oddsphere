@@ -3174,15 +3174,15 @@ function SlateCard({
             layout is unchanged when there's room to fit on one line. */}
         <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-2 mb-3.5">
           <div className="flex items-center gap-2.5 min-w-0">
-            <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={36} />
-            <span className="text-[16px] font-bold text-gray-100 tabular-nums" style={{ letterSpacing: "-0.01em" }}>
+            <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={38} />
+            <span className="text-[16px] sm:text-[17px] font-bold text-gray-100 tabular-nums" style={{ letterSpacing: "-0.01em" }}>
               {game.awayTeam}
             </span>
             <span className="text-gray-700 text-[13px]">@</span>
-            <span className="text-[16px] font-bold text-gray-100 tabular-nums" style={{ letterSpacing: "-0.01em" }}>
+            <span className="text-[16px] sm:text-[17px] font-bold text-gray-100 tabular-nums" style={{ letterSpacing: "-0.01em" }}>
               {game.homeTeam}
             </span>
-            <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={36} />
+            <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={38} />
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <VerdictChip verdict={headlineVerdict} />
@@ -3217,7 +3217,7 @@ function SlateCard({
             data ("+2.6% value", "Model edge", "Market support"). */}
         <div className="flex items-baseline gap-2 mb-2.5 flex-wrap">
           <span
-            className="text-[28px] font-black tabular-nums leading-none text-white"
+            className="text-[29px] sm:text-[31px] font-black tabular-nums leading-none text-white"
             style={{ letterSpacing: "-0.03em" }}
           >
             {formatPickWithLine(headlineMarket, headlineMarketData.pick, headlineMarketData.line, shellSport, game.awayTeam, game.homeTeam)}
@@ -3225,7 +3225,7 @@ function SlateCard({
           <span className="text-[11px] uppercase tracking-[0.14em] text-gray-500 font-bold">
             {marketShortLabelFor(headlineMarket, shellSport)}
           </span>
-          <span className="text-[13px] tabular-nums font-bold text-gray-300">
+          <span className="text-[14px] tabular-nums font-black text-gray-200">
             {displayPctForMarket(headlineMarketData) === null
               ? "—"
               : `${Math.round(displayPctForMarket(headlineMarketData)! * 100)}%`}
@@ -3278,7 +3278,7 @@ function SlateCard({
           <span className="text-[9px] uppercase tracking-[0.14em] font-bold text-gray-500/85 shrink-0">
             Proj
           </span>
-          <span className="text-[11px] tabular-nums">
+          <span className="text-[12px] tabular-nums">
             <span className="text-gray-500 mr-1">{game.awayTeam}</span>
             <span className="text-white font-black">{game.projected.away.toFixed(1)}</span>
             <span aria-hidden="true" className="text-gray-700 mx-1.5">·</span>
@@ -3292,7 +3292,7 @@ function SlateCard({
             headline chip is one market of three. The market label is
             muted; the verdict glyph + label carries the tone. Subtle
             saturation keeps three different tones from feeling busy. */}
-        <div className="flex items-center justify-between gap-1 mb-3 px-0.5 text-[10px] uppercase tracking-[0.10em] font-bold whitespace-nowrap overflow-hidden">
+        <div className="flex items-center justify-between gap-1 mb-3 px-0.5 text-[10.5px] uppercase tracking-[0.08em] font-bold whitespace-nowrap overflow-hidden">
           {marketKeysFor(shellSport).map((m, i) => {
             const v = marketVerdictKey(game.markets[m]);
             const isContext = isContextOnlyMarket(m, shellSport);
@@ -3324,7 +3324,7 @@ function SlateCard({
             ring; mobile opens the detail sheet and needs no persistent
             selected-market treatment. Total pill includes the line. */}
         <div
-          className="grid gap-1.5 mb-3.5"
+          className="grid gap-2 mb-2"
           style={{ gridTemplateColumns: `repeat(${marketKeysFor(shellSport).length}, minmax(0, 1fr))` }}
         >
           {marketKeysFor(shellSport).map((m) => {
@@ -3340,18 +3340,18 @@ function SlateCard({
                   e.stopPropagation();
                   onSelectMarket(m);
                 }}
-                className={`text-left px-2.5 py-1.5 rounded-md border transition-colors ${VERDICT_PILL_TINT[mv]} ${
+                className={`text-left px-3 py-2.5 rounded-md border transition-colors ${VERDICT_PILL_TINT[mv]} ${
                   isActiveMarket
                     ? "sm:ring-2 sm:ring-white/40 sm:ring-offset-1 sm:ring-offset-[#0D0D14]"
                     : ""
                 } ${isContext && !isActiveMarket ? "opacity-80" : ""}`}
               >
                 <span
-                  className={`block text-[9.5px] uppercase tracking-[0.14em] font-bold mb-0.5 ${VERDICT_TEXT_COLOR[mv]}`}
+                  className={`block text-[10px] uppercase tracking-[0.12em] font-bold mb-1 ${VERDICT_TEXT_COLOR[mv]}`}
                 >
                   {marketShortLabelFor(m, shellSport)}
                 </span>
-                <span className="block text-[12.5px] font-bold tabular-nums text-gray-100 truncate">
+                <span className="block text-[14px] font-black tabular-nums text-gray-100 truncate">
                   {formatPickWithLine(m, md.pick, md.line, shellSport, game.awayTeam, game.homeTeam)}
                 </span>
               </button>
@@ -3372,21 +3372,21 @@ function SlateCard({
 
         {/* Action affordance — slimmer, link-style. The whole card is a
             click target anyway; this is just the eye-cue. */}
-        <div className="flex items-center justify-end">
+        <div className="flex min-h-3 items-center justify-end">
           {active ? (
             <>
-              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/[0.07] px-2 py-1 text-[10px] uppercase tracking-[0.16em] font-bold text-white">
-                <span aria-hidden="true" className="text-[9px]">●</span>
+              <span className="hidden sm:inline-flex items-center gap-1 text-[8.5px] uppercase tracking-[0.12em] font-bold text-gray-400">
+                <span aria-hidden="true" className="text-[7px] text-violet-300">●</span>
                 Open in reader
-                <span aria-hidden="true" className="text-[11px]">↑</span>
+                <span aria-hidden="true" className="text-[9px]">↑</span>
               </span>
-              <span className="sm:hidden inline-flex items-center gap-1 text-[10.5px] uppercase tracking-[0.16em] font-bold text-violet-200/70 group-hover:text-violet-200">
+              <span className="sm:hidden inline-flex items-center gap-1 text-[9px] uppercase tracking-[0.12em] font-bold text-violet-200/65 group-hover:text-violet-200">
                 View breakdown
                 <span aria-hidden="true" className="text-[11px]">↑</span>
               </span>
             </>
           ) : (
-            <span className="inline-flex items-center gap-1 text-[10.5px] uppercase tracking-[0.16em] font-bold text-violet-200/70 group-hover:text-violet-200 transition-colors">
+            <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-[0.12em] font-bold text-violet-200/65 group-hover:text-violet-200 transition-colors">
               View breakdown
               <span aria-hidden="true" className="text-[11px]">↑</span>
             </span>
@@ -4554,7 +4554,7 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
 export function MarketingDailyEdgePreviewSurface(): ReactNode {
   const [selectedGameId, setSelectedGameId] = useState(marketingPreviewGames[0]!.id);
   const [selectedMarket, setSelectedMarket] = useState<MarketKey>("moneyline");
-  const [readerMode, setReaderMode] = useState<"compact" | "full">("full");
+  const [readerMode, setReaderMode] = useState<"compact" | "full">("compact");
   const selectedGame = marketingPreviewGames.find((g) => g.id === selectedGameId) ?? marketingPreviewGames[0]!;
   const selectedMarketData = pickMarket(selectedGame, selectedMarket) ?? selectedGame.markets.moneyline;
   const selectedIndex = marketingPreviewGames.findIndex((g) => g.id === selectedGame.id);

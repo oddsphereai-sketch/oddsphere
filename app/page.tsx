@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { HomepageDashboardPrototype, HomepageMoneylinePreview } from "@/app/components/HomepageDashboardPrototype";
+import { HomepageDashboardPrototype } from "@/app/components/HomepageDashboardPrototype";
+import { MarketingDailyEdgePreviewSurface } from "@/app/lab/components/daily-edge/DailyEdgeShell";
 import { isHomepageExperienceCandidateEnabled } from "@/lib/config/productExperience";
 import {
   getPublicTrackRecordSummary,
@@ -305,7 +306,7 @@ function DailyEdgePreview({ candidate = false }: { candidate?: boolean }) {
             <span className="h-2 w-2 rounded-full bg-white/30" />
           </div>
         </div>
-        {candidate ? <div className="p-3 sm:p-4"><HomepageMoneylinePreview compact /></div> : (
+        {candidate ? <div className="p-2 sm:p-3"><MarketingDailyEdgePreviewSurface /></div> : (
           <div className="relative aspect-[1.18/1] overflow-hidden bg-black">
             <Image
               src="/marketing/daily-edge-expanded-reader.jpg"
@@ -352,8 +353,8 @@ export async function HomePageContent({ presentation = "current" }: { presentati
     <main className="overflow-hidden">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      <section className="mx-auto grid max-w-7xl items-center gap-10 px-4 pb-14 pt-10 sm:px-6 sm:pb-16 sm:pt-12 lg:grid-cols-[0.88fr_1.12fr] lg:px-8">
-        <div>
+      <section className={`mx-auto grid max-w-7xl items-center gap-10 px-4 pb-14 pt-10 sm:px-6 sm:pb-16 sm:pt-12 lg:px-8 ${candidate ? "" : "lg:grid-cols-[0.88fr_1.12fr]"}`}>
+        <div className={candidate ? "max-w-4xl" : undefined}>
           <p className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-200">
             {candidate ? "OddSphere Sports Intelligence" : "7-Day Free Trial · OddSphere Daily Edge"}
           </p>

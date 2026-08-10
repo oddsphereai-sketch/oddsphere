@@ -235,9 +235,7 @@ export function HomepageDashboardPrototype({ candidate = false }: { candidate?: 
                 Close
               </button>
             </div>
-            {candidate ? (
-              <HomepageMoneylinePreview />
-            ) : <MarketingDailyEdgePreviewSurface />}
+            <MarketingDailyEdgePreviewSurface />
           </div>
         </div>
       ) : null}
