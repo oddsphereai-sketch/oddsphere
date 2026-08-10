@@ -19,6 +19,7 @@ import { assertMlbChampionRuntime } from "../lib/automodel/mlbChampionRuntime";
 import {
   assertWnbaChampionRuntime,
   EXPECTED_WNBA_DISTRIBUTION_VERSION,
+  EXPECTED_WNBA_GRADE_POLICY_VERSION,
   EXPECTED_WNBA_MODEL_VERSION,
 } from "../lib/automodel/wnbaChampionRuntime";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
@@ -65,8 +66,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries the August 3 canonical market-read price fallback version",
-  layers.grade_policy === "mlb_public_grade_policy_v19_market_read_price_fallback_2026_08_03",
+  "grade policy carries August 10 v20 guarded signed side-specific market evidence",
+  layers.grade_policy === "mlb_public_grade_policy_v20_guarded_signed_side_market_evidence_2026_08_10",
 );
 check(
   "tracking contract carries the locked-only status-normalized release",
@@ -78,8 +79,8 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB Daily Edge decision behavior is versioned as release r25",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_07_r25" &&
+  "MLB guarded signed market-evidence correction is versioned as decision release r26",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_10_r26" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v3" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
@@ -125,6 +126,11 @@ check(
   "WNBA distribution version is explicit",
   EXPECTED_WNBA_DISTRIBUTION_VERSION === "wnba_market_heads_value_calibrated_2026_08_02_v3",
 );
+check(
+  "WNBA market-read grade policy is an immutable August 10 release",
+  EXPECTED_WNBA_GRADE_POLICY_VERSION ===
+    "wnba_grade_policy_v4_market_resistance_and_elo_stat_agreement_2026_08_10",
+);
 const wnbaModelSource = readFileSync("lib/services/wnba/buildWnbaDailyEdgePreview.ts", "utf8");
 const wnbaModelWriterSource = readFileSync("lib/services/wnba/runWnbaModel.ts", "utf8");
 const wnbaRecordWriterSource = readFileSync("lib/services/wnba/buildWnbaPredictionRecords.ts", "utf8");
@@ -147,6 +153,15 @@ check(
 check(
   "WNBA reader only lets genuinely locked records override the current model payload",
   wnbaReaderSource.includes("if (r.locked_at === null) continue;"),
+);
+check(
+  "WNBA tracking writer fails closed on stale source release identifiers",
+  wnbaRecordWriterSource.includes("wnbaPredictionReleaseMismatches(ss)") &&
+    wnbaRecordWriterSource.includes("prediction release mismatch"),
+);
+check(
+  "WNBA member reader hides only stale unlocked source releases",
+  wnbaReaderSource.includes("lockedAt === null && wnbaPredictionReleaseMismatches(ss).length > 0"),
 );
 const wnbaChampionEnv = {
   WNBA_CORE_MODEL_CALIBRATION_ENABLED: "true",

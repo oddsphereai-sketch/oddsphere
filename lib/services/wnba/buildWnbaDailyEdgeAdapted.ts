@@ -30,6 +30,7 @@ import type { Verdict } from "../verdictDerivation";
 import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
 import { resolveWnbaMoneylineSide, wnbaLogoUrl } from "./wnbaTeams";
+import { wnbaPredictionReleaseMismatches } from "@/lib/automodel/wnbaChampionRuntime";
 import { supabase } from "@/lib/db/supabase";
 import { computeSlateDate, currentSlateDate } from "@/lib/dates/slateDate";
 import {
@@ -217,7 +218,6 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
     if (!gp || !home || !away || !ss.moneyline) continue;
     const extId = (g.external_id as number) ?? (g.id as number);
     if (seen.has(extId)) continue; // no duplicate games
-    seen.add(extId);
     const ml = ss.moneyline as PreviewGame["moneyline"];
     const lockedRecordsForGame = recordsByGame.get(g.id as number) ?? new Map<string, WnbaLockedRecord>();
     const lockedMl = lockedRecordsForGame.get("moneyline");
@@ -227,6 +227,10 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
       gp.locked_at ??
       Array.from(lockedRecordsForGame.values()).find((r) => r.locked_at !== null)?.locked_at ??
       null;
+    // Preserve locked history, but never display an unlocked payload from an
+    // older model/distribution/grade-policy release under the new runtime.
+    if (lockedAt === null && wnbaPredictionReleaseMismatches(ss).length > 0) continue;
+    seen.add(extId);
     const lockedMoneyline =
       lockedMl === undefined
         ? ml

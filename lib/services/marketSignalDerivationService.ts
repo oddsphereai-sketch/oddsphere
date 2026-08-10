@@ -111,7 +111,8 @@ export type MarketSignalSource = Pick<
  */
 export function deriveMarketSignal(
   modelSide: Side,
-  signal: MarketSignalSource | null
+  signal: MarketSignalSource | null,
+  options: { signedSharpDivergence?: boolean } = {},
 ): MarketSignal {
   if (signal === null) return "market_neutral";
 
@@ -157,7 +158,20 @@ export function deriveMarketSignal(
     return aligned ? "market_confirmed" : "market_resistance";
   }
 
-  // ── 4. public_smoke — alignment-agnostic by nature ─────────────────────
+  // ── 4. signed sharp-money divergence ──────────────────────────────────
+  if (
+    options.signedSharpDivergence === true &&
+    signal.public_betting_pct !== null &&
+    signal.public_money_pct !== null &&
+    Math.abs(signal.public_money_pct - signal.public_betting_pct) >=
+      SHARP_SIGNAL_THRESHOLDS.MIN_SHARP_MONEY_DIVERGENCE_PP
+  ) {
+    const moneySupportsRowSide = signal.public_money_pct > signal.public_betting_pct;
+    const moneySupportsModel = moneySupportsRowSide ? aligned : !aligned;
+    return moneySupportsModel ? "market_confirmed" : "market_resistance";
+  }
+
+  // ── 5. public_smoke — alignment-agnostic by nature ─────────────────────
   // Heavy public tickets with flat money flow and no Pinnacle EV. Public
   // action is a property of the market state, not a directional verdict on
   // our pick. Framework Signal 5: tickets ≥ 65% (PUBLIC_SMOKE_TICKET_
@@ -176,8 +190,28 @@ export function deriveMarketSignal(
     return "public_smoke";
   }
 
-  // ── 5. market_neutral — none of the above tripped ──────────────────────
+  // ── 6. market_neutral — none of the above tripped ──────────────────────
   return "market_neutral";
+}
+
+function combineSideVerdicts(picked: MarketSignal, opposite: MarketSignal): MarketSignal {
+  if (picked === "market_resistance" || opposite === "market_resistance") return "market_resistance";
+  if (picked === "steam_alert" || opposite === "steam_alert") return "steam_alert";
+  if (picked === "market_confirmed" || opposite === "market_confirmed") return "market_confirmed";
+  if (picked === "public_smoke" || opposite === "public_smoke") return "public_smoke";
+  return "market_neutral";
+}
+
+export function deriveMlbMarketSignalFromSides(
+  modelSide: Side,
+  pickedSignal: MarketSignalSource | null,
+  oppositeSignal: MarketSignalSource | null,
+  options: { signedSharpDivergence?: boolean } = {},
+): MarketSignal {
+  return combineSideVerdicts(
+    deriveMarketSignal(modelSide, pickedSignal, options),
+    deriveMarketSignal(modelSide, oppositeSignal, options)
+  );
 }
 
 // ─── Batch derivation over a slate ────────────────────────────────────────
@@ -253,6 +287,17 @@ function picksFromRow(row: GamePredRow): Record<
  */
 function marketKey(game_id: number, market: string): string {
   return `${game_id}:${market}`;
+}
+
+function marketSideKey(game_id: number, market: string, side: string): string {
+  return `${game_id}:${market}:${side}`;
+}
+
+function oppositeSide(side: Side): Side {
+  if (side === "home") return "away";
+  if (side === "away") return "home";
+  if (side === "over") return "under";
+  return "over";
 }
 
 /**
@@ -343,11 +388,11 @@ export async function deriveMarketSignalsForSlate(
     )
     .in("game_id", gameIds);
   const signalByMarket = new Map<string, MarketSignalSource>();
+  const signalByMarketSide = new Map<string, MarketSignalSource>();
   for (const raw of (signalsRaw ?? []) as SharpSignalRow[]) {
-    signalByMarket.set(
-      marketKey(raw.game_id, raw.market_type),
-      normalizeSignal(raw)
-    );
+    const normalized = normalizeSignal(raw);
+    signalByMarket.set(marketKey(raw.game_id, raw.market_type), normalized);
+    signalByMarketSide.set(marketSideKey(raw.game_id, raw.market_type, raw.side), normalized);
   }
 
   // ── 3. Derive per-pick market_signal for each game_predictions row ──
@@ -366,12 +411,24 @@ export async function deriveMarketSignalsForSlate(
     for (const key of GAME_MARKET_KEYS) {
       const pick = picks[key];
       if (pick === null) continue;
-      // 6.3.5e-fix: lookup by (game_id, market) ignores which side the
-      // signal was recorded for. The pure function classifies alignment
-      // via signal.side vs modelSide.
-      const signal =
-        signalByMarket.get(marketKey(row.game_id, pick.market)) ?? null;
-      result.games[key].set(row.id, deriveMarketSignal(pick.side, signal));
+      // Only the validated MLB moneyline policy resolves both side rows.
+      // Every other market and sport retains its established single-row path.
+      if (sport === "mlb" && pick.market === "moneyline") {
+        const pickedSignal = signalByMarketSide.get(marketSideKey(row.game_id, pick.market, pick.side)) ?? null;
+        const oppositeSignal = signalByMarketSide.get(marketSideKey(row.game_id, pick.market, oppositeSide(pick.side))) ?? null;
+        result.games[key].set(
+          row.id,
+          deriveMlbMarketSignalFromSides(
+            pick.side,
+            pickedSignal,
+            oppositeSignal,
+            { signedSharpDivergence: true },
+          ),
+        );
+      } else {
+        const signal = signalByMarket.get(marketKey(row.game_id, pick.market)) ?? null;
+        result.games[key].set(row.id, deriveMarketSignal(pick.side, signal));
+      }
     }
   }
 

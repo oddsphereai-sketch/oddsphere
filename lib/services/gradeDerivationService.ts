@@ -64,6 +64,7 @@ import type { Side } from "../types/domain/Lines";
 import type { Grade, MarketSignal, SignalType } from "../types/domain/Grade";
 import {
   classifyEvidence,
+  classifyEvidenceFromSides,
   tierAtLeast,
   type SignalEvidence,
   type SignalTier,
@@ -954,6 +955,17 @@ function evKey(game_id: number, market: string): string {
   return `${game_id}:${market}`;
 }
 
+function evSideKey(game_id: number, market: string, side: string): string {
+  return `${game_id}:${market}:${side}`;
+}
+
+function oppositeSide(side: Side): Side {
+  if (side === "home") return "away";
+  if (side === "away") return "home";
+  if (side === "over") return "under";
+  return "over";
+}
+
 /**
  * Return the model's edge from a sharp_signals row. When the signal's side
  * matches the model's pick, return ev_pct (Pinnacle agrees with our pick).
@@ -1041,8 +1053,10 @@ export async function deriveGradesForSlate(
     )
     .in("game_id", gameIds);
   const evByKey = new Map<string, SharpSignalEvRow>();
+  const evBySideKey = new Map<string, SharpSignalEvRow>();
   for (const row of (signalsRaw ?? []) as SharpSignalEvRow[]) {
     evByKey.set(evKey(row.game_id, row.market_type), row);
+    evBySideKey.set(evSideKey(row.game_id, row.market_type, row.side), row);
   }
 
   const result: SlateGrades = {
@@ -1076,17 +1090,26 @@ export async function deriveGradesForSlate(
     for (const key of GAME_MARKET_KEYS) {
       const pick = picks[key];
       if (pick === null) continue;
-      // 6.3.5e-fix: look up by (game_id, market); edgeForModelSide attributes
-      // EV only when signal.side matches modelSide, returning null when
-      // opposing (Pinnacle's EV is on the other side from our pick).
-      const sig = evByKey.get(evKey(row.game_id, pick.market));
-      const modelEdgePct = edgeForModelSide(sig, pick.side);
+      // Only the validated MLB moneyline policy resolves both side rows.
+      // Every other market and sport retains its established evidence path.
+      const useMlbSideAwareEvidence = sport === "mlb" && pick.market === "moneyline";
+      const pickedSig = useMlbSideAwareEvidence
+        ? evBySideKey.get(evSideKey(row.game_id, pick.market, pick.side))
+        : evByKey.get(evKey(row.game_id, pick.market));
+      const oppositeSig = useMlbSideAwareEvidence
+        ? evBySideKey.get(evSideKey(row.game_id, pick.market, oppositeSide(pick.side)))
+        : undefined;
+      const modelEdgePct = edgeForModelSide(pickedSig, pick.side);
       // Fix 2.1 (Gap-9): build tier-aware evidence for the grade engine's
       // Sharp Conflict bar. classifyEvidence handles null signals cleanly.
-      const evidence = classifyEvidence(
-        pick.side,
-        sig ? toEvidenceSource(sig) : null
-      );
+      const evidence = useMlbSideAwareEvidence
+        ? classifyEvidenceFromSides(
+            pick.side,
+            pickedSig ? toEvidenceSource(pickedSig) : null,
+            oppositeSig ? toEvidenceSource(oppositeSig) : null,
+            { signedSharpDivergence: true },
+          )
+        : classifyEvidence(pick.side, pickedSig ? toEvidenceSource(pickedSig) : null);
       // Phase 2: per-pick confidence routed to the EV-axis helpers as a
       // confidence-edge proxy. Phase 3B: starterConfirmed +
       // opposingDeterministicWarning are now sourced from

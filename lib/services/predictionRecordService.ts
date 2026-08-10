@@ -406,8 +406,11 @@ export const ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID = "ml_generic_lean_positive_ev_
 export const ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID = "ml_mid_price_established_price_best_angle_v1_2026_07_25";
 export const ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID = "ml_mid_price_near_market_lean_v1_2026_07_25";
 export const ML_MARKET_DIVERGENCE_LEAN_RULE_ID =
-  "ml_market_money_over_tickets_lean_v1_2026_07_28";
+  "ml_guarded_signed_money_over_tickets_lean_v2_2026_08_10";
 export const ML_MARKET_DIVERGENCE_MIN_GAP = 10;
+export const ML_MARKET_DIVERGENCE_MIN_MODEL_PROB = 0.54;
+export const ML_SIGNED_MARKET_RESISTANCE_RULE_ID =
+  "ml_signed_money_below_tickets_standdown_v1_2026_08_10";
 export const ML_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID =
   "ml_calibrated_model_best_angle_path_v1_2026_07_27";
 export const ML_CALIBRATED_MODEL_LEAN_PATH_ID =
@@ -653,6 +656,7 @@ export function resolveMlMarketDivergenceLean(args: {
   blocked: boolean;
   side: string | null;
   oddsAmerican: number | null;
+  modelProb: number | null;
   pickedBetsPct: number | null;
   pickedMoneyPct: number | null;
   lineDirection: "toward_pick" | "against_pick" | "neutral" | "unknown" | null;
@@ -671,6 +675,8 @@ export function resolveMlMarketDivergenceLean(args: {
     (args.side === "home" || args.side === "away") &&
     args.oddsAmerican !== null &&
     Number.isFinite(args.oddsAmerican) &&
+    args.modelProb !== null &&
+    args.modelProb >= ML_MARKET_DIVERGENCE_MIN_MODEL_PROB &&
     moneyOverTicketsGap !== null &&
     moneyOverTicketsGap >= ML_MARKET_DIVERGENCE_MIN_GAP &&
     args.lineDirection !== "against_pick" &&
@@ -678,6 +684,32 @@ export function resolveMlMarketDivergenceLean(args: {
   return {
     lean: qualified,
     reason: qualified ? ML_MARKET_DIVERGENCE_LEAN_RULE_ID : null,
+    moneyOverTicketsGap,
+  };
+}
+
+export function resolveMlSignedMarketResistance(args: {
+  blocked: boolean;
+  side: string | null;
+  pickedBetsPct: number | null;
+  pickedMoneyPct: number | null;
+}): {
+  standDown: boolean;
+  reason: string | null;
+  moneyOverTicketsGap: number | null;
+} {
+  const moneyOverTicketsGap =
+    args.pickedMoneyPct !== null && args.pickedBetsPct !== null
+      ? args.pickedMoneyPct - args.pickedBetsPct
+      : null;
+  const standDown =
+    !args.blocked &&
+    (args.side === "home" || args.side === "away") &&
+    moneyOverTicketsGap !== null &&
+    moneyOverTicketsGap <= -ML_MARKET_DIVERGENCE_MIN_GAP;
+  return {
+    standDown,
+    reason: standDown ? ML_SIGNED_MARKET_RESISTANCE_RULE_ID : null,
     moneyOverTicketsGap,
   };
 }
@@ -2314,11 +2346,19 @@ function buildMlRecord(
     !mlFlipped &&
     !mlPickCalibrated &&
     !mlMarketSideCorrected;
+  const mlPickedPublicSplit = pickedPublicSplit(signalsForGame, "moneyline", finalMlPick);
+  const mlSignedMarketResistance = resolveMlSignedMarketResistance({
+    blocked: !mlChampionGuardApplies,
+    side: finalMlPick,
+    pickedBetsPct: mlPickedPublicSplit.betsPct,
+    pickedMoneyPct: mlPickedPublicSplit.moneyPct,
+  });
   const mlChampionCorrectionReasons = [
     mlChampionGuardApplies && mlProjectionConflict ? "projected_score_contradicts_ml_pick" : null,
     mlChampionGuardApplies && readBoolish(v22.ml_requires_market_confirmation) ? "ml_requires_market_confirmation" : null,
     mlChampionGuardApplies && finalMlLineDirection === "against_pick" ? "line_movement_against_pick" : null,
     mlChampionGuardApplies && finalMlPublicSplitConflict ? "opposing_public_split_conflict" : null,
+    mlSignedMarketResistance.standDown ? ML_SIGNED_MARKET_RESISTANCE_RULE_ID : null,
   ].filter((r): r is string => r !== null);
   const mlChampionStandDownReason =
     mlChampionCorrectionReasons.length > 0
@@ -2494,7 +2534,6 @@ function buildMlRecord(
     publicSplitConflict: finalMlPublicSplitConflict,
     dataStatus: mlDataStatus,
   });
-  const mlPickedPublicSplit = pickedPublicSplit(signalsForGame, "moneyline", finalMlPick);
   const mlMarketDivergenceLean = resolveMlMarketDivergenceLean({
     blocked:
       trackedMlBestAngle ||
@@ -2506,6 +2545,7 @@ function buildMlRecord(
       mlDataStatus === "incomplete_missing_required_data",
     side: finalMlPick,
     oddsAmerican: finalMlOdds,
+    modelProb: finalMlModelProb,
     pickedBetsPct: mlPickedPublicSplit.betsPct,
     pickedMoneyPct: mlPickedPublicSplit.moneyPct,
     lineDirection: finalMlLineDirection,
@@ -2733,10 +2773,26 @@ function buildMlRecord(
             picked_money_pct: mlPickedPublicSplit.moneyPct,
             money_over_tickets_gap: mlMarketDivergenceLean.moneyOverTicketsGap,
             minimum_gap: ML_MARKET_DIVERGENCE_MIN_GAP,
+            model_probability: finalMlModelProb,
+            minimum_model_probability: ML_MARKET_DIVERGENCE_MIN_MODEL_PROB,
             line_direction: finalMlLineDirection,
             public_split_conflict: finalMlPublicSplitConflict,
             validation_note:
-              "Selected on pre-2026-07-11 locked discovery rows (36-14, +15.73u, +31.5% ROI). Exact active moneyline-head non-provisional holdout through 2026-07-27 went 22-12 at locked prices. Adds Leans only; never flips or creates a Best Angle.",
+              "August 10 paired replay: the 54% guard removed the adverse unguarded August promotions. This rule grades the already-selected side only; it never flips or creates a Best Angle.",
+          }
+        : null,
+      ml_signed_market_resistance_standdown: mlSignedMarketResistance.standDown
+        ? {
+            rule_id: ML_SIGNED_MARKET_RESISTANCE_RULE_ID,
+            action: "stand_down_unchanged_side",
+            picked_bets_pct: mlPickedPublicSplit.betsPct,
+            picked_money_pct: mlPickedPublicSplit.moneyPct,
+            money_over_tickets_gap: mlSignedMarketResistance.moneyOverTicketsGap,
+            maximum_gap: -ML_MARKET_DIVERGENCE_MIN_GAP,
+            final_side: finalMlPick,
+            final_side_changed: mlFinalSideChanged,
+            validation_note:
+              "Paired August 10 replay demotes signed market resistance without entering the side-correction or flip paths.",
           }
         : null,
       ml_mid_price_established_price_best_angle_promotion:

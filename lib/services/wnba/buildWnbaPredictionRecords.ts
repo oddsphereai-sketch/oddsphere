@@ -26,7 +26,9 @@ import {
 import {
   assertWnbaChampionRuntime,
   EXPECTED_WNBA_DISTRIBUTION_VERSION,
+  EXPECTED_WNBA_GRADE_POLICY_VERSION,
   EXPECTED_WNBA_MODEL_VERSION,
+  wnbaPredictionReleaseMismatches,
 } from "../../automodel/wnbaChampionRuntime";
 import { resolveWnbaMoneylineSide } from "./wnbaTeams";
 
@@ -35,6 +37,29 @@ const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.fl
 const toDecimal = (o: number | null) => (o == null ? null : o > 0 ? o / 100 + 1 : 100 / Math.abs(o) + 1);
 const HISTORY_PAGE_SIZE = 1000;
 const LOCK_WINDOW_MS = 60 * 60 * 1000;
+export const WNBA_PREDICTION_RECORD_CONTRACT_VERSION =
+  "wnba_prediction_record_contract_v2_published_probability_2026_08_10";
+
+export function resolveWnbaPickedMoneylineProbabilities(input: {
+  pickedHome: boolean;
+  independentHomeProbability: number;
+  finalHomeProbability?: number;
+}): {
+  publishedPickedProbability: number;
+  independentPickedProbability: number;
+  finalPickedProbability: number;
+} {
+  const finalHomeProbability = Number.isFinite(input.finalHomeProbability)
+    ? input.finalHomeProbability!
+    : input.independentHomeProbability;
+  return {
+    publishedPickedProbability: input.pickedHome ? finalHomeProbability : 1 - finalHomeProbability,
+    independentPickedProbability: input.pickedHome
+      ? input.independentHomeProbability
+      : 1 - input.independentHomeProbability,
+    finalPickedProbability: input.pickedHome ? finalHomeProbability : 1 - finalHomeProbability,
+  };
+}
 
 function isBeforeLockWindow(gameDate: unknown, nowMs: number): boolean {
   if (typeof gameDate !== "string") return false;
@@ -188,6 +213,15 @@ export async function buildWnbaPredictionRecords(opts: {
     // unmatched twin (no prediction) was withheld above.
 
     const ss = gp.sport_specific as Record<string, unknown>;
+    const releaseMismatches = wnbaPredictionReleaseMismatches(ss);
+    if (releaseMismatches.length > 0) {
+      result.withheld.push({
+        matchup,
+        slate,
+        reason: `prediction release mismatch (${releaseMismatches.join("; ")}) — withheld`,
+      });
+      continue;
+    }
     const ml = ss.moneyline as { side: string; confidence: number; grade: string; price: number | null };
     const tot = ss.total as { side: string | null; line: number | null; confidence: number | null; grade: string | null };
     const spr = ss.spread as { side: string | null; line: number | null; confidence: number | null; grade: string | null };
@@ -277,16 +311,39 @@ export async function buildWnbaPredictionRecords(opts: {
         projected_score: ss.projected_score, model, market_consensus: market, trusted_consensus: trusted,
         model_version: EXPECTED_WNBA_MODEL_VERSION,
         distribution_version: EXPECTED_WNBA_DISTRIBUTION_VERSION,
+        grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
+        spread_grade_policy: ss.spread_grade_policy ?? null,
+        prediction_record_contract_version: WNBA_PREDICTION_RECORD_CONTRACT_VERSION,
+        moneyline_probability_contract: null as null | {
+          published_picked_probability: number;
+          independent_picked_probability: number;
+          final_picked_probability: number;
+        },
         sharp_consensus: ss.sharp, consensus_source: ss.consensus_source, dynamic_market_weight: ss.dynamic_market_weight,
+        public_market_context: ss.public_market_context ?? null,
         data_quality: ss.data_quality, cold_start: ss.cold_start,
         wnba_core_model_calibration: wnbaCalibrationAudit,
       },
     });
 
     // ── ML record ──
-    const mlModelProb = mlSideHome ? model.home_win_prob : 1 - model.home_win_prob;
+    const mlProbabilities = resolveWnbaPickedMoneylineProbabilities({
+      pickedHome: mlSideHome,
+      independentHomeProbability: model.home_win_prob,
+      finalHomeProbability: model.final_home_win_prob,
+    });
+    const mlModelProb = mlProbabilities.publishedPickedProbability;
     const mlMktProb = (trusted.home_win_prob ?? market.home_win_prob) != null ? (mlSideHome ? (trusted.home_win_prob ?? market.home_win_prob)! : 1 - (trusted.home_win_prob ?? market.home_win_prob)!) : null;
-    result.records.push(baseRec("moneyline", mlSideHome ? "home" : "away", ab(mlSideHome ? (g.home_team_id as number) : (g.away_team_id as number)), null, mlPrice, ml.confidence, ml.grade, mlModelProb, mlMktProb));
+    const mlRecord = baseRec("moneyline", mlSideHome ? "home" : "away", ab(mlSideHome ? (g.home_team_id as number) : (g.away_team_id as number)), null, mlPrice, ml.confidence, ml.grade, mlModelProb, mlMktProb);
+    mlRecord.snapshot_json = {
+      ...mlRecord.snapshot_json,
+      moneyline_probability_contract: {
+        published_picked_probability: mlProbabilities.publishedPickedProbability,
+        independent_picked_probability: mlProbabilities.independentPickedProbability,
+        final_picked_probability: mlProbabilities.finalPickedProbability,
+      },
+    };
+    result.records.push(mlRecord);
     result.counts.moneyline++;
 
     // ── O/U record (if available) ──
