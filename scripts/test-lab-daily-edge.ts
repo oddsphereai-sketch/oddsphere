@@ -139,6 +139,16 @@ async function main() {
       "mobile hides the persistent top reader while desktop retains it",
       previewSource.includes('className="hidden scroll-mt-4 sm:block"'),
     );
+    check(
+      "FI recent-result color labels remain distinct from the calibrated model grade",
+      previewSource.includes("Recent context aligns with ${pick}") &&
+        previewSource.includes("This is recent-result context, not the model grade itself"),
+    );
+    check(
+      "FI odds-board explanation distinguishes a directional pick from a Toss-Up",
+      previewSource.includes("Both outcomes are shown for context. Directional support for ${market.pick}") &&
+        previewSource.includes("Both outcomes are shown because a Toss-Up has no selected side"),
+    );
     check("each FI side independently supports the pick at 6/10 or better", firstInningSupportTone(6, 10) === "support");
     check("each FI side independently challenges the pick at 4/10 or worse", firstInningSupportTone(4, 10) === "challenge");
     check("FI context remains neutral in the middle band", firstInningSupportTone(5, 10) === "neutral");

@@ -353,12 +353,12 @@ export async function HomePageContent({ presentation = "current" }: { presentati
     <main className="overflow-hidden">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      <section className={`mx-auto grid max-w-7xl items-center gap-10 px-4 pb-14 pt-10 sm:px-6 sm:pb-16 sm:pt-12 lg:px-8 ${candidate ? "" : "lg:grid-cols-[0.88fr_1.12fr]"}`}>
-        <div className={candidate ? "max-w-4xl" : undefined}>
+      <section className={`mx-auto grid max-w-7xl items-center gap-10 px-4 pb-14 pt-10 sm:px-6 sm:pb-16 sm:pt-12 lg:px-8 ${candidate ? "grid-cols-[minmax(0,1fr)]" : "lg:grid-cols-[0.88fr_1.12fr]"}`}>
+        <div className={candidate ? "min-w-0 max-w-4xl" : undefined}>
           <p className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-200">
             {candidate ? "OddSphere Sports Intelligence" : "7-Day Free Trial · OddSphere Daily Edge"}
           </p>
-          <h1 className="mt-5 max-w-3xl text-4xl font-black tracking-tight text-white sm:text-5xl xl:text-6xl">
+          <h1 className="mt-5 max-w-3xl break-words text-4xl font-black tracking-tight text-white sm:text-5xl xl:text-6xl">
             {candidate
               ? "The Full Game Read—From Model Edge to Market Pulse."
               : "Cut Through the Noise. Find the Plays Worth Your Attention."}
@@ -368,8 +368,8 @@ export async function HomePageContent({ presentation = "current" }: { presentati
               ? "Make clearer moneyline, totals, and first-inning decisions with model projections, real price movement, public consensus, verified sharp-book splits where available, matchup evidence, and tracking in one OddSphere workflow."
               : "Model projections, market movement, Play Grades, and tracking — organized into one Daily Edge dashboard built to show the why behind every pick."}
           </p>
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <TrialButton />
+          <div className="mt-6 flex min-w-0 flex-col gap-3 sm:flex-row">
+            <TrialButton className="w-full sm:w-auto" />
             <HomepageDashboardPrototype candidate={candidate} />
           </div>
           <p className="mt-4 text-sm font-semibold text-violet-100">
@@ -395,7 +395,7 @@ export async function HomePageContent({ presentation = "current" }: { presentati
           </div>
         </div>
 
-        <div id="product-preview">
+        <div id="product-preview" className="min-w-0 max-w-full overflow-hidden">
           <DailyEdgePreview candidate={candidate} />
         </div>
       </section>
