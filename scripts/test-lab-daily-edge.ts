@@ -40,6 +40,11 @@ import {
   headlinePrimaryMarket,
 } from "../app/lab/lib/perPickHeadline";
 import { getAttribution } from "../app/lab/lib/gradeAttribution";
+import {
+  displayedConsensusSection,
+  splitLeanStrength,
+} from "../app/lab/lib/marketPulsePresentation";
+import type { MarketSplitDisplaySection } from "../lib/types/domain/RecommendationDecision";
 import type {
   Grade,
   MarketSignal,
@@ -95,6 +100,35 @@ const VALID_MARKET_SIGNALS = new Set<MarketSignal>([
 ]);
 
 async function main() {
+  section("Market Pulse presentation coherence");
+  {
+    const currentRows: MarketSplitDisplaySection["rows"] = [
+      { side: "over", label: "Over", moneyPct: 54, betsPct: 57, observedAt: "2026-08-10T18:30:00Z", isStale: false },
+      { side: "under", label: "Under", moneyPct: 46, betsPct: 43, observedAt: "2026-08-10T18:30:00Z", isStale: false },
+    ];
+    const olderDecisionRows: MarketSplitDisplaySection["rows"] = [
+      { side: "over", label: "Over", moneyPct: 49, betsPct: 62, observedAt: "2026-08-10T18:05:00Z", isStale: false },
+      { side: "under", label: "Under", moneyPct: 51, betsPct: 38, observedAt: "2026-08-10T18:05:00Z", isStale: false },
+    ];
+    const displayed = displayedConsensusSection({
+      publicSplits: currentRows,
+      recommendationDecision: { consensusSplits: { label: "Consensus Splits", rows: olderDecisionRows, signal: null, lastUpdated: "2026-08-10T18:05:00Z" } } as never,
+    });
+    check("response-time consensus rows override older recommendation-time display evidence", displayed?.rows === currentRows);
+    check(
+      "53% money / 52% tickets is labeled a slight sharp-book lean, not full support",
+      splitLeanStrength({ label: "Sharp Book Splits", rows: [
+        { side: "over", label: "Over", moneyPct: 47, betsPct: 48, observedAt: "2026-08-10T18:02:00Z", isStale: false },
+        { side: "under", label: "Under", moneyPct: 53, betsPct: 52, observedAt: "2026-08-10T18:02:00Z", isStale: false },
+      ], signal: null, lastUpdated: "2026-08-10T18:02:00Z" }, "Under") === "slight",
+    );
+    const previewSource = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
+    check(
+      "mobile hides the persistent top reader while desktop retains it",
+      previewSource.includes('className="hidden scroll-mt-4 sm:block"'),
+    );
+  }
+
   section("Authoritative corrected-market grade");
   {
     const leanOverride = { key: "lean" as const, label: "Lean" };
