@@ -1037,6 +1037,7 @@ function fiHoldFindingCode(diagnostic: FiHoldDiagnostic | undefined): string {
   }
   if (diagnostic.classification === "publishable_degraded_stats") return "fi_publishable_degraded_stats";
   if (diagnostic.classification === "sparse_starter_history") return "fi_sparse_starter_history";
+  if (hasOnlyStarterStatsGap(diagnostic)) return "fi_sparse_starter_history";
   if (hasActualStarterIngestionGap(diagnostic)) {
     return "fi_starter_ingestion_miss";
   }
@@ -1061,6 +1062,7 @@ function fiHoldFindingCode(diagnostic: FiHoldDiagnostic | undefined): string {
 
 function fiHoldFindingSeverity(diagnostic: FiHoldDiagnostic | undefined): DailyEdgeDataHealthSeverity {
   if (diagnostic && fiHoldFindingCode(diagnostic) === "fi_legit_model_toss_up") return "info";
+  if (diagnostic && fiHoldFindingCode(diagnostic) === "fi_sparse_starter_history") return "medium";
   if (diagnostic?.officialProbableStarters?.classification === "official_probable_starter_unannounced") return "medium";
   if (diagnostic && fiHoldFindingCode(diagnostic) === "fi_model_hold_provider_gap") return "medium";
   if (diagnostic?.materiality === "medium") return "medium";
@@ -1076,7 +1078,7 @@ function fiHoldFindingMessage(diagnostic: FiHoldDiagnostic | undefined): string 
   if (diagnostic?.classification === "publishable_degraded_stats") {
     return "FI side is held on degraded fallback stats; the card can publish normally as No Play.";
   }
-  if (diagnostic?.classification === "sparse_starter_history") {
+  if (diagnostic && fiHoldFindingCode(diagnostic) === "fi_sparse_starter_history") {
     return "FI side is held because the official starter is known but lacks enough first-inning starter history for a normal side.";
   }
   if (diagnostic && hasActualStarterIngestionGap(diagnostic)) {
@@ -1094,8 +1096,19 @@ function fiHoldFindingMessage(diagnostic: FiHoldDiagnostic | undefined): string 
 function hasActualStarterIngestionGap(diagnostic: FiHoldDiagnostic): boolean {
   if (diagnostic.classification !== "missing_inputs") return false;
   if (diagnostic.officialProbableStarters?.classification !== "official_probables_complete") return false;
+  if (hasOnlyStarterStatsGap(diagnostic)) return false;
   return diagnostic.featureReasonCodes.includes("fi_starter_missing") ||
     diagnostic.degradedFields.some((field) => /probable_pitcher|starter_missing/i.test(field));
+}
+
+function hasOnlyStarterStatsGap(diagnostic: FiHoldDiagnostic): boolean {
+  if (diagnostic.classification !== "missing_inputs") return false;
+  if (diagnostic.officialProbableStarters?.classification !== "official_probables_complete") return false;
+  const starterFields = diagnostic.degradedFields.filter((field) => /starter/i.test(field));
+  if (!starterFields.some((field) => /starter_season_stats/i.test(field))) return false;
+  return starterFields.every((field) =>
+    /starter_season_stats|starter_confirmation/i.test(field),
+  );
 }
 
 function collectFindings(

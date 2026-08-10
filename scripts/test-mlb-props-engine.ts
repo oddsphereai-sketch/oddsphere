@@ -66,6 +66,7 @@ import {
   type PropGrade,
 } from "../lib/mlb/props/propGrades";
 import type { MlbGameEntity, MlbHistoricalStatRow, MlbProbablePitcher, PropOddsSnapshot } from "../lib/mlb/props/providers";
+import { evaluateMlbPropsLaunchReadiness } from "../lib/mlb/props/launchReadiness";
 
 let pass = 0;
 let fail = 0;
@@ -680,6 +681,87 @@ async function main() {
   check("projected lineups do not change hitter signal confidence versus posted lineups", liveBoardSource.includes("confidence += 0.04;\n  reasons.push(args.lineupStatus.status === \"posted\" || args.lineupStatus.status === \"confirmed\"") && liveBoardSource.includes("LINEUP_STATUS_POSTED") && liveBoardSource.includes("PROJECTED_LINEUP_CONTEXT"));
   check("pre-lineup props use projected member wording", propsUiSource.includes("function lineupDisplayStatus") && propsUiSource.includes('return "Projected"') && propsUiSource.includes('LINEUP_CONTEXT_INSUFFICIENT: "Projected lineup context"') && !propsUiSource.includes("Waiting for lineup confirmation"));
   check("launch readiness treats posted lineups as non-critical refresh context", launchReadinessSource.includes("posted lineups refresh the board and are not required to open it") && marketCatalogSource.includes("projected_or_confirmed_lineup") && !marketCatalogSource.includes('"confirmed_lineup"'));
+  check("bounded full props refresh runs four times daily", vercelConfigSource.includes('"schedule": "27 9,13,17,21 * * *"'));
+  check("Daily Edge follow-up health sweeps remain audit-only", vercelConfigSource.includes('"/api/cron/daily-edge-data-health?repair=false"'));
+  const readinessTracking = {
+    enabled: true,
+    settlementEnabled: true,
+    tableAvailable: true,
+    totalEntries: 1,
+    pendingEntries: 0,
+    settledEntries: 1,
+    actionableEntries: 1,
+    latestLockedAt: null,
+    latestSettlementRun: { status: "completed" },
+    error: null,
+  };
+  const readinessEnv = env({
+    MLB_PLAYER_PROPS_CRON_ENABLED: "true",
+    ODDSPHERE_PROPS_DISPLAY_ENABLED: "true",
+    ODDSPHERE_PROPS_PUBLIC_API_ENABLED: "true",
+    ODDSPHERE_PROPS_REAL_PUBLISH_ENABLED: "true",
+  });
+  const launchSnapshot = (snapshotId: string, asOfTimestamp: string, missingFeatures: string[]) => ({
+    schemaVersion: 1,
+    snapshotId,
+    slateDate: "2026-08-01",
+    asOfTimestamp,
+    refreshMode: "fast",
+    validation: {
+      publishable: true,
+      actionableRows: 1,
+      researchRows: 0,
+      mappedRows: 2,
+      sourceRows: 2,
+      staleOddsRows: 0,
+      errors: [],
+      warnings: [],
+    },
+    movement: { comparedWith: null, changedPrices: 0, changedLines: 0, addedRows: 0, removedRows: 0 },
+    data: {
+      props: [{
+        market: "batter_hits",
+        marketFamily: "batter",
+        playGrade: "LEAN",
+        finalProbability: 0.56,
+        modelProbability: 0.57,
+        modelInputWarnings: [],
+        missingFeatures,
+        providerIds: { gameId: "g1", bdlGameId: 1, bdlPlayerId: 2, mlbStatsPlayerId: "3" },
+        recentForm: { logs: [{}, {}, {}, {}, {}] },
+        matchupHistory: null,
+        environment: null,
+        lineupStatus: { status: "projected" },
+      }],
+      research: {},
+      slate: { matchups: [{ starterStatus: "probable" }] },
+      summary: { gamesWithProps: 1, booksCovered: 1, marketsAvailable: 1 },
+    },
+  });
+  const safeLaunch = evaluateMlbPropsLaunchReadiness({
+    slateDate: "2026-08-01",
+    snapshots: [
+      launchSnapshot("s3", "2026-08-01T13:40:00Z", ["park factor"]),
+      launchSnapshot("s2", "2026-08-01T13:30:00Z", ["game time weather"]),
+      launchSnapshot("s1", "2026-08-01T13:20:00Z", []),
+    ] as never,
+    tracking: readinessTracking,
+    now: new Date("2026-08-01T13:41:00Z"),
+    env: readinessEnv,
+  });
+  check("optional context gaps warn without closing a data-safe actionable board", safeLaunch.readyToOpen && safeLaunch.warnings.includes("DIRECT_MATCHUP_VERIFIED") && safeLaunch.warnings.includes("ENVIRONMENT_CONTEXT"));
+  const unsafeLaunch = evaluateMlbPropsLaunchReadiness({
+    slateDate: "2026-08-01",
+    snapshots: [
+      launchSnapshot("s3", "2026-08-01T13:40:00Z", ["opposing starter"]),
+      launchSnapshot("s2", "2026-08-01T13:30:00Z", []),
+      launchSnapshot("s1", "2026-08-01T13:20:00Z", []),
+    ] as never,
+    tracking: readinessTracking,
+    now: new Date("2026-08-01T13:41:00Z"),
+    env: readinessEnv,
+  });
+  check("required actionable research gaps still close player props", !unsafeLaunch.readyToOpen && unsafeLaunch.blockers.includes("RESEARCH_INPUTS_COMPLETE"));
   check("props UI includes member-friendly pending market state", propsUiSource.includes("PendingPropsState") && propsUiSource.includes("Player prop lines have not posted yet.") && propsUiSource.includes("Today’s board will populate automatically"));
   check("internal tracking settles hitter and pitcher markets from the right official game logs", internalTrackingSource.includes("getHitterGameLogs") && internalTrackingSource.includes("getPitcherGameLogs") && internalTrackingSource.includes("gameLogKey") && internalTrackingSource.includes("finalStatsForEntry"));
   check("pitcher tracking locks retain reproducible model evidence", ["trackingEvidenceSchemaVersion", "projection: row.projection", "projectionSource: row.projectionSource", "modelInputWarnings: row.modelInputWarnings"].every((field) => internalTrackingSource.includes(field)));
@@ -696,7 +778,7 @@ async function main() {
   check("fallback full-board reads use bounded Supabase batches", memberReadSnapshotStoreSource.includes("index += 4") && memberReadSnapshotStoreSource.includes('.in("snapshot_key", keys)') && !memberReadSnapshotStoreSource.includes("Promise.all(\n    manifest.shardKeys"));
   check("props snapshot retention is bounded while locked references are preserved", boardSnapshotStoreSource.includes("DEFAULT_MLB_PROPS_SNAPSHOT_RETENTION_PER_SLATE = 24") && boardSnapshotStoreSource.includes("referencedSnapshotIds") && boardSnapshotStoreSource.includes("board_snapshot_id"));
   check("props cron reports actual database writes instead of embedded display-row count", propsRefreshRouteSource.includes("result.tracking.entriesLocked") && propsRefreshRouteSource.includes("result.tracking.closingPricesUpdated") && !propsRefreshRouteSource.includes("records_updated: result.published ? result.snapshot.data.props.length"));
-  check("member props UI marks locked rows on cards and reader", propsUiSource.includes("function LockStatusBadge") && propsUiSource.includes("row.lockStatus") && propsUiSource.includes("Locked <span") && propsUiSource.includes("lockedAt={row.lockStatus.lockedAt}"));
+  check("member props UI marks locked rows on cards and reader", propsUiSource.includes("function LockStatusBadge") && propsUiSource.includes("row.lockStatus") && propsUiSource.includes("Locked <LocalTime") && propsUiSource.includes("lockedAt={row.lockStatus.lockedAt}"));
   check("props UI exposes search/filter data shape", ["type=\"search\"", "Model signal", "Market groups", "Specific market filters", "Book", "Team / game", "Evidence strength", "EV range", "Model-edge range", "Odds range", "Start time", "Sort"].every((label) => propsUiSource.includes(label)));
   check("positive model signals retain actionable backend semantics", isActionablePropGrade("BEST_ANGLE") && isActionablePropGrade("LEAN") && !isActionablePropGrade("WATCHLIST"));
   check("all props grades are inspectable", PROP_GRADES.every(isInspectablePropGrade));

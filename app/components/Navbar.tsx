@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { TRIAL_CHECKOUT_URL } from "@/lib/marketing/trialOffer";
+import { PRICING_PAGE_URL } from "@/lib/marketing/trialOffer";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -95,14 +95,12 @@ export default function Navbar() {
                 </Link>
               );
             })}
-            <a
-              href={TRIAL_CHECKOUT_URL}
+            <Link
+              href={PRICING_PAGE_URL}
               className="ml-1 sm:ml-2 px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-all duration-200 whitespace-nowrap shadow-sm shadow-violet-900/40 hover:shadow-[0_0_15px_rgba(167,139,250,0.45)] hover:scale-[1.03]"
-              rel="noopener noreferrer"
-              target="_blank"
             >
               Start Free Trial
-            </a>
+            </Link>
           </div>
         </div>
       </div>

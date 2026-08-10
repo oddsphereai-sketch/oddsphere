@@ -69,6 +69,7 @@ import type {
 } from "@/lib/types/domain/Grade";
 import { currentSlateDate, currentSoccerBoardDate, isSlateDate } from "@/lib/dates/slateDate";
 import { BOOK_PRIORITY } from "@/lib/config/bookPriority";
+import { selectBestCoherentPlayablePrice } from "@/lib/services/dailyEdge/bestPlayablePrice";
 import { determineSlateState } from "@/lib/services/dailyEdgeSlateResolution";
 import { isVoidStatus } from "@/lib/services/gameLifecycle";
 import {
@@ -118,6 +119,7 @@ import {
   type LastMove,
 } from "@/lib/services/streamOverlay";
 import { interpretMarket } from "@/lib/streaming/marketInterpretation";
+import { isDisplayableAmericanOdds } from "@/lib/streaming/oddsSanity";
 import { selectTotalLine } from "@/app/lab/lib/selectTotalLine";
 import { selectMainTotalLine } from "@/lib/services/selectMainTotalLine";
 import {
@@ -159,6 +161,11 @@ const DAILY_EDGE_NO_STORE_HEADERS = {
 const DAILY_EDGE_ERROR_CACHE_CONTROL = "no-store";
 const DAILY_EDGE_WARM_CACHE_TTL_MS = 30 * 1000;
 const CURRENT_PRICE_STALE_AGE_MINUTES = 60;
+// Source-aware splits are collected by the hourly slate cycle. Give that
+// collector one full cadence plus 15 minutes of scheduler/runtime grace.
+// `source_observed_at` remains the honest last-change timestamp; freshness is
+// evaluated from `fetched_at`, which records when we last verified the value.
+const SOURCE_AWARE_SPLIT_STALE_AGE_MINUTES = 75;
 type DailyEdgeWarmCacheEntry = {
   body: DailyEdgeResponse;
   freshUntilMs: number;
@@ -171,6 +178,7 @@ function dailyEdgeWarmCacheKey(args: {
   requestedDate: string;
   allowStale: boolean;
   copyPreview: boolean;
+  dualSourcePublicSplitsDisplay: boolean;
   renderedCopyFlags: DailyEdgeRenderedCopyFlagOverrides;
 }): string {
   return [
@@ -178,6 +186,7 @@ function dailyEdgeWarmCacheKey(args: {
     args.requestedDate,
     args.allowStale ? "allowStale" : "noStale",
     args.copyPreview ? "copyPreview" : "normalCopy",
+    args.dualSourcePublicSplitsDisplay ? "dualSplits1" : "dualSplits0",
     args.renderedCopyFlags.quickRead ? "qr1" : "qr0",
     args.renderedCopyFlags.marketRead ? "mr1" : "mr0",
     args.renderedCopyFlags.supportingEvidence ? "se1" : "se0",
@@ -483,6 +492,28 @@ function shouldCapCorrectedMarketVerdict(args: {
     !args.validatedCorrectedBestAngle &&
     !authoritativeStoredVerdict &&
     (args.verdictKey === "best_angle" || args.verdictKey === "lean")
+  );
+}
+
+function shouldHonorLiveMissingPriceCap(args: {
+  storedVerdict: { key: string; label?: string };
+  normalizedVerdict: { key: string; label?: string };
+  normalizedCapReasons: string[];
+}): boolean {
+  const storedActionable =
+    args.storedVerdict.key === "lean" || args.storedVerdict.key === "best_angle";
+  const normalizedActionable =
+    args.normalizedVerdict.key === "lean" || args.normalizedVerdict.key === "best_angle";
+
+  // prediction_records remain the authority for the writer's decision, but a
+  // member-facing actionable grade is never safe without a current displayed
+  // price. This cap is reversible: as soon as a reliable price is present,
+  // normalizeDailyEdgeActionability removes missing_price and the stored grade
+  // is restored without a second writer or refresh path.
+  return (
+    storedActionable &&
+    !normalizedActionable &&
+    args.normalizedCapReasons.includes("missing_price")
   );
 }
 
@@ -1420,6 +1451,12 @@ function splitPairScore(
   return fields === 0 ? Number.POSITIVE_INFINITY : score;
 }
 
+function splitTimestampMs(value: string | null | undefined): number {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+}
+
 async function loadSourceAwareSplitSections(opts: {
   eventIds: string[];
   games: GameRow[];
@@ -1488,21 +1525,50 @@ function buildSourceAwareSplitSectionsFromRows(
         const leftRows = candidates.filter((candidate) => candidate.side === leftSide);
         const rightRows = candidates.filter((candidate) => candidate.side === rightSide);
         const hasBothSides = leftRows.length > 0 && rightRows.length > 0;
-        let bestPair: { left: (typeof candidates)[number]; right: (typeof candidates)[number]; score: number; indexGap: number } | null = null;
+        let bestPair: {
+          left: (typeof candidates)[number];
+          right: (typeof candidates)[number];
+          score: number;
+          indexGap: number;
+          fetchedAtMs: number;
+          sourceObservedGapMs: number;
+          sourceObservedAtMs: number;
+        } | null = null;
         for (const left of leftRows) {
           for (const right of rightRows) {
             const score = splitPairScore(left.row, right.row);
+            if (score > 2) continue;
             const indexGap = Math.abs(left.index - right.index);
+            const leftFetchedAtMs = splitTimestampMs(left.row.fetched_at ?? left.row.source_observed_at);
+            const rightFetchedAtMs = splitTimestampMs(right.row.fetched_at ?? right.row.source_observed_at);
+            const fetchedAtMs = Math.min(leftFetchedAtMs, rightFetchedAtMs);
+            const leftObservedAtMs = splitTimestampMs(left.row.source_observed_at ?? left.row.fetched_at);
+            const rightObservedAtMs = splitTimestampMs(right.row.source_observed_at ?? right.row.fetched_at);
+            const sourceObservedGapMs = Number.isFinite(leftObservedAtMs) && Number.isFinite(rightObservedAtMs)
+              ? Math.abs(leftObservedAtMs - rightObservedAtMs)
+              : Number.POSITIVE_INFINITY;
+            const sourceObservedAtMs = Math.min(leftObservedAtMs, rightObservedAtMs);
             if (
               bestPair === null ||
-              score < bestPair.score ||
-              (score === bestPair.score && indexGap < bestPair.indexGap)
+              fetchedAtMs > bestPair.fetchedAtMs ||
+              (fetchedAtMs === bestPair.fetchedAtMs && sourceObservedGapMs < bestPair.sourceObservedGapMs) ||
+              (fetchedAtMs === bestPair.fetchedAtMs && sourceObservedGapMs === bestPair.sourceObservedGapMs && sourceObservedAtMs > bestPair.sourceObservedAtMs) ||
+              (fetchedAtMs === bestPair.fetchedAtMs && sourceObservedGapMs === bestPair.sourceObservedGapMs && sourceObservedAtMs === bestPair.sourceObservedAtMs && score < bestPair.score) ||
+              (fetchedAtMs === bestPair.fetchedAtMs && sourceObservedGapMs === bestPair.sourceObservedGapMs && sourceObservedAtMs === bestPair.sourceObservedAtMs && score === bestPair.score && indexGap < bestPair.indexGap)
             ) {
-              bestPair = { left, right, score, indexGap };
+              bestPair = {
+                left,
+                right,
+                score,
+                indexGap,
+                fetchedAtMs,
+                sourceObservedGapMs,
+                sourceObservedAtMs,
+              };
             }
           }
         }
-        if (bestPair !== null && bestPair.score <= 2) {
+        if (bestPair !== null) {
           latestBySide.set(leftSide!, bestPair.left.row);
           latestBySide.set(rightSide!, bestPair.right.row);
         } else if (hasBothSides) {
@@ -1522,9 +1588,16 @@ function buildSourceAwareSplitSectionsFromRows(
           moneyPct: pctFromFraction(row.money_pct),
           betsPct: pctFromFraction(row.bets_pct),
           observedAt: row.source_observed_at ?? row.fetched_at ?? null,
-          isStale: isObservationStale(
-            row.source_observed_at ?? row.fetched_at ?? null,
-          ),
+          freshnessCheckedAt: row.fetched_at ?? row.source_observed_at ?? null,
+          staleAfterMinutes: SOURCE_AWARE_SPLIT_STALE_AGE_MINUTES,
+          isStale: (() => {
+            const checkedAt = row.fetched_at ?? row.source_observed_at ?? null;
+            if (checkedAt === null) return false;
+            const checkedAtMs = Date.parse(checkedAt);
+            return Number.isFinite(checkedAtMs)
+              ? (Date.now() - checkedAtMs) / 60_000 > SOURCE_AWARE_SPLIT_STALE_AGE_MINUTES
+              : false;
+          })(),
         }];
       });
       if (sectionRows.length === 0) return null;
@@ -1638,6 +1711,7 @@ function buildGameDto(
   signals: SignalRow[],
   sportsbookTotalLine: number | null,
   currentLinesByGameMarket: Map<string, LineRow[]>,
+  bestAvailableLinesByGameMarket: Map<string, LineRow[]>,
   openLinesByGameMarket: Map<string, LineHistoryRow[]>,
   lockedPlayGradeByGameMarket: Map<string, {
     pick: string | null;
@@ -1667,6 +1741,12 @@ function buildGameDto(
   sourceAwareSplits: SourceAwareSplitLookup = new Map(),
   renderedCopyFlagOverrides: DailyEdgeRenderedCopyFlagOverrides | null = null,
 ): DailyEdgeGameDto | null {
+  const scheduledStartMs = Date.parse(row.game_date);
+  const allowLiveBestPrice = Number.isFinite(scheduledStartMs) && scheduledStartMs > Date.now();
+  const liveBestPriceLines = (market: string): LineRow[] =>
+    allowLiveBestPrice
+      ? bestAvailableLinesByGameMarket.get(`${row.id}::${market}`) ?? []
+      : [];
   const home = row.home_team?.abbreviation ?? "—";
   const away = row.away_team?.abbreviation ?? "—";
   const homeLogo = row.home_team?.logo_url ?? null;
@@ -2253,6 +2333,7 @@ function buildGameDto(
     modelSide: pred.predicted_ml_winner as Side | null,
     signals,
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::moneyline`) ?? [],
+    bestAvailableLinesCurrent: liveBestPriceLines("moneyline"),
     lineOpenCandidates:
       openLinesByGameMarket.get(
         `${row.id}::moneyline::${pred.predicted_ml_winner ?? "null"}`
@@ -2298,6 +2379,9 @@ function buildGameDto(
     // like a lone Pinnacle 9.5/10) so the displayed odds match the displayed line.
     // null-line rows are price-only synthesized rows — keep them.
     linesCurrent: (currentLinesByGameMarket.get(`${row.id}::total`) ?? []).filter(
+      (r) => totalLine === null || r.line_value === totalLine || r.line_value === null,
+    ),
+    bestAvailableLinesCurrent: liveBestPriceLines("total").filter(
       (r) => totalLine === null || r.line_value === totalLine || r.line_value === null,
     ),
     // Opener candidates constrained to the consensus line too (so line-movement
@@ -2353,6 +2437,7 @@ function buildGameDto(
     modelSide: fiEffectiveSide,
     signals,
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::first_inning_total`) ?? [],
+    bestAvailableLinesCurrent: liveBestPriceLines("first_inning_total"),
     lineOpenCandidates:
       fiEffectiveSide === null
         ? [
@@ -2633,6 +2718,7 @@ function buildGameDto(
     homeTeam: home,
     homeTeamLogo: homeLogo,
     gameTime: formatTimeET(row.game_date),
+    gameStartAt: row.game_date,
     gameStartMinutes: minutesFromMidnightET(row.game_date),
     // Phase 4.2.B — actual lock-time ISO + per-game lock state from
     // game_predictions.locked_at. Pre-4.2.B these were placeholders.
@@ -2843,6 +2929,40 @@ function isCurrentPriceStale(
   if (!Number.isFinite(t)) return false;
   const ageMin = (nowMs - t) / 60_000;
   return ageMin > CURRENT_PRICE_STALE_AGE_MINUTES;
+}
+
+function currentPriceFromMarketRead(args: {
+  read: MarketReadV2Dto | null;
+  market: "moneyline" | "total" | "first_inning";
+  expectedLine: number | null;
+  locked: boolean;
+  nowMs?: number;
+}): StreamCurrent | null {
+  if (args.locked || args.market === "first_inning") return null;
+  const movement = args.read?.movement ?? null;
+  if (
+    movement === null ||
+    !isDisplayableAmericanOdds(movement.currentPrice) ||
+    movement.observedAt === null ||
+    isCurrentPriceStale(movement.observedAt, args.nowMs)
+  ) {
+    return null;
+  }
+  if (
+    args.market === "total" &&
+    (
+      args.expectedLine === null ||
+      movement.currentLine === null ||
+      !sameLineValue(args.expectedLine, movement.currentLine)
+    )
+  ) {
+    return null;
+  }
+  return {
+    american: movement.currentPrice,
+    line: movement.currentLine,
+    observedAt: movement.observedAt,
+  };
 }
 
 function hasFreshConsensusTotalLinePair(
@@ -3488,6 +3608,8 @@ type BuildMarketEdgeInput = {
   modelSide: Side | null;
   signals: SignalRow[];
   linesCurrent: LineRow[];
+  /** Fresh live lines retained separately from immutable writer/lock substrate. */
+  bestAvailableLinesCurrent: LineRow[];
   /**
    * P7-B3 (2026-06-11) — ALL line_history rows for this (game, market, side),
    * sorted by recorded_at ASC. buildMarketEdge resolves the picked-side
@@ -4020,12 +4142,40 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // lines row; UI renders normally.
   const cronPriceObservedAt: string | null =
     priceRow?.odds_american_observed_at ?? priceRow?.fetched_at ?? null;
+  const totalExpectedLine =
+    input.market === "total" ? input.totalsExtras?.sportsbookLine ?? null : null;
+  const bestAvailablePriceRow = selectBestCoherentPlayablePrice({
+    rows: input.bestAvailableLinesCurrent,
+    preferredSide:
+      input.modelSide === "home" || input.modelSide === "away" ||
+      input.modelSide === "over" || input.modelSide === "under"
+        ? input.modelSide as "home" | "away" | "over" | "under"
+        : null,
+    expectedLine: input.market === "first_inning" ? 0.5 : totalExpectedLine,
+    locked: input.isLockedRow === true,
+  });
+  // Market Intelligence V2 is selected for this exact game, market, and model
+  // side. When the cron `lines` row has aged out but that canonical snapshot
+  // carries a newer, sane price on the same total line, use it as the current
+  // display price instead of silently dropping an available quote. Locked rows
+  // remain frozen and never take this live fallback.
+  const marketReadCurrent = currentPriceFromMarketRead({
+    read: input.marketReadV2 ?? null,
+    market: input.market,
+    expectedLine: totalExpectedLine,
+    locked: input.isLockedRow === true,
+  });
+  const cronOrMarketReadCurrent = pickFresherCurrent(
+    { american: cronPriceAmerican, observedAt: cronPriceObservedAt },
+    marketReadCurrent,
+    Date.now(),
+  );
   // 2026-06-16 — overlay the live odds_current_stream price ONLY when it is
   // fresher than the cron `lines` value. No-op until the stream tables are
   // populated (input.streamCurrent is absent today), so existing behavior is
   // unchanged. This makes the displayed "Current" reflect the freshest source.
   const overlaidCurrent = pickFresherCurrent(
-    { american: cronPriceAmerican, observedAt: cronPriceObservedAt },
+    cronOrMarketReadCurrent,
     input.streamCurrent ?? null,
     Date.now(),
   );
@@ -4711,6 +4861,15 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
       : hasStoredPredictionRecord &&
     writerOverride !== null
       ? (() => {
+          if (
+            shouldHonorLiveMissingPriceCap({
+              storedVerdict: verdict,
+              normalizedVerdict: normalizedAction.finalVerdict,
+              normalizedCapReasons: normalizedAction.capReasons,
+            })
+          ) {
+            return normalizedAction;
+          }
           const recFloor = recommendationScoreFloorForStoredVerdict(verdict.key);
           const finalRecScore =
             recFloor === null
@@ -4772,6 +4931,17 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     betsPct: displayPickedSplit?.betsPct ?? betsPct,
     publicSplits: displayPublicSplits,
     priceAmerican: invalidFirstInningMarket ? null : priceAmerican,
+    bestAvailablePriceAmerican:
+      invalidFirstInningMarket ? null : bestAvailablePriceRow?.odds_american ?? null,
+    bestAvailableSportsbook:
+      invalidFirstInningMarket ? null : bestAvailablePriceRow?.sportsbook ?? null,
+    bestAvailableObservedAt:
+      invalidFirstInningMarket ? null : bestAvailablePriceRow === null ? null : lineRowObservedAt(bestAvailablePriceRow),
+    bestAvailablePricePolicy:
+      invalidFirstInningMarket || bestAvailablePriceRow === null
+        ? null
+        : "daily_edge_best_coherent_price_v1_2026_08_05",
+    gradePriceAmerican: invalidFirstInningMarket ? null : priceAmerican,
     fiMarketBoard: invalidFirstInningMarket ? null : fiMarketBoard,
     // Lock-snapshot honesty (2026-06-09 lock-contract fix). Only ever true
     // on locked rows when no usable real-book price exists. With Forward
@@ -5621,6 +5791,8 @@ export const __TEST__ = {
   effectivePredictionRecordPlayGrade,
   resolveLockedVerdict,
   shouldCapCorrectedMarketVerdict,
+  shouldHonorLiveMissingPriceCap,
+  currentPriceFromMarketRead,
   forceIncompleteMlbMarketNoPlay,
   normalizeGameRow,
   extractModelBreakdown,
@@ -5719,11 +5891,14 @@ export async function GET(request: Request) {
     }
   }
 
+  const dualSourcePublicSplitsDisplay = sport === "mlb"
+    && process.env.DUAL_SOURCE_PUBLIC_SPLITS_DISPLAY_ENABLED !== "false";
   const warmCacheKey = dailyEdgeWarmCacheKey({
     sport,
     requestedDate,
     allowStale,
     copyPreview,
+    dualSourcePublicSplitsDisplay,
     renderedCopyFlags: renderedCopyFlagOverrides,
   });
   if (sport === "mlb") {
@@ -6052,6 +6227,7 @@ export async function GET(request: Request) {
   const totalLineByGame = new Map<number, number>();
   // 4.1.10 — per-market price + open price for the v13.1 Edge Stack.
   const currentLinesByGameMarket = new Map<string, LineRow[]>();
+  const bestAvailableLinesByGameMarket = new Map<string, LineRow[]>();
   // P7-B3 (2026-06-11) — value is the full array of line_history rows for
   // each (game, market, side), sorted by recorded_at ASC. buildMarketEdge
   // walks this list to pick the OLDEST entry whose sportsbook matches the
@@ -6667,6 +6843,15 @@ export async function GET(request: Request) {
         }
       }
     }
+    // Preserve the fresh live market separately before the writer/lock
+    // substrate swap below. Grades, copy, movement, and tracking continue to
+    // use the immutable substrate; the member price-shop overlay reads only
+    // this clone so a locked card can show a better current playable quote
+    // without mutating its official decision evidence.
+    for (const [key, rows] of currentLinesByGameMarket.entries()) {
+      bestAvailableLinesByGameMarket.set(key, rows.map((row) => ({ ...row })));
+    }
+
     // Phase 6B.28 — rehydrate sharp_signals + lines from the lock
     // substrate for locked games. The pre-6B.28 route fed LIVE
     // sharp_signals and live `lines` rows into the DTO build for
@@ -6952,6 +7137,7 @@ export async function GET(request: Request) {
       signalsByGame.get(g.id) ?? [],
       totalLineByGame.get(g.id) ?? null,
       currentLinesByGameMarket,
+      bestAvailableLinesByGameMarket,
       openLinesByGameMarket,
       lockedPlayGradeByGameMarket,
       streamCurrentByGameMarket,
@@ -6985,13 +7171,14 @@ export async function GET(request: Request) {
     }
   }
 
-  // Dual-source public splits (Phase 2 DISPLAY) — flagged, MLB only, additive.
+  // Dual-source public splits (Phase 2 DISPLAY) — MLB only, additive.
   // Overlays moneyline/total publicSplits with the provider-resolved read
   // (Playbook preferred fresh+complete, SharpAPI fallback, stale-but-valid so
   // bars never disappear; never blended). Touches ONLY publicSplits — grades,
-  // predictions, model, and sharp_signals are unchanged. Default OFF; never
-  // breaks the response on error.
-  if (process.env.DUAL_SOURCE_PUBLIC_SPLITS_DISPLAY_ENABLED === "true" && sport === "mlb") {
+  // predictions, model, and sharp_signals are unchanged. Default ON after the
+  // provider/date matcher rollout; an explicit false remains the kill switch.
+  // Never break the response on an overlay error.
+  if (dualSourcePublicSplitsDisplay) {
     try {
       const { loadResolvedPublicSplitsForDisplay, overlayResolvedPublicSplits } = await import(
         "@/lib/services/publicSplitsDisplayOverlay"

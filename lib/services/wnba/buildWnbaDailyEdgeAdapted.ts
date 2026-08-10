@@ -30,6 +30,7 @@ import type { Verdict } from "../verdictDerivation";
 import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
 import { resolveWnbaMoneylineSide, wnbaLogoUrl } from "./wnbaTeams";
+import { wnbaPredictionReleaseMismatches } from "@/lib/automodel/wnbaChampionRuntime";
 import { supabase } from "@/lib/db/supabase";
 import { computeSlateDate, currentSlateDate } from "@/lib/dates/slateDate";
 import {
@@ -44,7 +45,6 @@ import { marketReadV2DtoFromSnapshot } from "@/lib/services/marketIntelligenceV2
 import { projectionLedMarketRead, withConfirmedSharpMoney } from "@/lib/services/marketIntelligenceV2/displayCoherence";
 import type { MarketReadV2Dto } from "@/lib/types/domain/MarketIntelligenceV2";
 import { buildRecommendationDecision } from "@/lib/services/recommendationDecision";
-import { wnbaPredictionReleaseMismatches } from "@/lib/automodel/wnbaChampionRuntime";
 import {
   applyDailyEdgeRenderedCopyFlags,
   type DailyEdgeRenderedCopyFlagOverrides,
@@ -148,8 +148,9 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
   const gpByGame = new Map((gps ?? []).map((r) => [r.game_id as number, r]));
   const recordsByGame = new Map<number, Map<string, WnbaLockedRecord>>();
   for (const r of retainedRecords) {
-    // Unlocked records are a tracking mirror and may briefly lag the current
-    // coherent game_predictions payload during an hourly refresh.
+    // Only a genuinely locked record may override the current coherent model
+    // payload. Unlocked records are a tracking mirror and can briefly lag the
+    // game_predictions writer during a partial refresh.
     if (r.locked_at === null) continue;
     const gid = r.game_id;
     const byMarket = recordsByGame.get(gid) ?? new Map<string, WnbaLockedRecord>();
@@ -225,10 +226,8 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
       gp.locked_at ??
       Array.from(lockedRecordsForGame.values()).find((r) => r.locked_at !== null)?.locked_at ??
       null;
-    // Locked recommendations remain immutable historical truth. Unlocked rows,
-    // however, must match the exact champion contract before member display;
-    // deployment order or a catch-up cron cannot expose an older payload under
-    // the new runtime.
+    // Preserve locked history, but never display an unlocked payload from an
+    // older model/distribution/grade-policy release under the new runtime.
     if (lockedAt === null && wnbaPredictionReleaseMismatches(ss).length > 0) continue;
     seen.add(extId);
     const lockedMoneyline =
@@ -1384,6 +1383,7 @@ function adaptGame(
     homeTeam: homeAbbr,
     homeTeamLogo: wnbaLogoUrl(homeAbbr),
     gameTime: tipDisplayEt(game.start_time),
+    gameStartAt: game.start_time,
     gameStartMinutes: 0,
     scheduledLockAt: game.start_time,
     lockState: game.lockedAt ? "locked" : "open",

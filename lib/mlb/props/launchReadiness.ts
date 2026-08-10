@@ -7,6 +7,7 @@ import {
   type MlbPropsTrackingHealth,
 } from "./internalTracking";
 import { MLB_PROPS_MODEL_RELEASE_ID } from "./marketModelVersions";
+import { isSignalOptionalMemberFeature } from "./researchEnrichment";
 
 export type MlbPropsLaunchCheck = {
   code: string;
@@ -147,12 +148,10 @@ function snapshotIsLaunchValid(snapshot: MlbPropsBoardSnapshot): boolean {
     snapshot.validation.staleOddsRows === 0 &&
     snapshot.data.props.length > 0 &&
     research.playerIdentitiesComplete &&
-    research.recentFormComplete &&
-    research.modelOutputComplete &&
-    research.modelContextIntegrated &&
-    research.researchInputsComplete &&
-    research.directMatchupComplete &&
-    research.environmentComplete;
+    research.actionableRecentFormComplete &&
+    research.actionableModelOutputComplete &&
+    research.actionableModelContextIntegrated &&
+    research.actionableResearchInputsComplete;
 }
 
 function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
@@ -175,7 +174,8 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
     };
   });
   const hitterRows = evidence.filter(({ row }) => row.marketFamily !== "pitcher");
-  const promotedPitcherRows = evidence.filter(({ row }) => isPromotedPitcherModelRow(row));
+  const actionableRows = evidence.filter(({ row }) => row.playGrade === "BEST_ANGLE" || row.playGrade === "LEAN");
+  const actionablePitcherRows = actionableRows.filter(({ row }) => isPromotedPitcherModelRow(row));
   return {
     playerIdentitiesComplete: rows.every((row) => Boolean(
       row.providerIds?.gameId && row.providerIds.bdlGameId && row.providerIds.bdlPlayerId && row.providerIds.mlbStatsPlayerId,
@@ -184,8 +184,8 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
       const logCount = recentForm?.logs.length ?? 0;
       return logCount >= 5 || (logCount > 0 && recentForm?.coverage === "full_season");
     }),
-    modelOutputComplete: promotedPitcherRows.every(({ row }) => row.finalProbability !== null && row.modelProbability !== null),
-    modelContextIntegrated: promotedPitcherRows.every(({ row }) => (row.modelInputWarnings ?? []).every((warning) => ![
+    modelOutputComplete: actionablePitcherRows.every(({ row }) => row.finalProbability !== null && row.modelProbability !== null),
+    modelContextIntegrated: actionablePitcherRows.every(({ row }) => (row.modelInputWarnings ?? []).every((warning) => ![
       "bdl_stat_bundle_pending_baseline_used",
       "low_feature_confidence",
       "opponent_k_profile_unavailable_non_blocking",
@@ -194,6 +194,18 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
       "weak_pitcher_baseline",
     ].includes(warning))),
     researchInputsComplete: rows.every((row) => row.missingFeatures.length === 0),
+    actionableRecentFormComplete: actionableRows.every(({ recentForm }) => (recentForm?.logs.length ?? 0) >= 5),
+    actionableModelOutputComplete: actionableRows.every(({ row }) => row.finalProbability !== null && row.modelProbability !== null),
+    actionableModelContextIntegrated: actionablePitcherRows.every(({ row }) => (row.modelInputWarnings ?? []).every((warning) => ![
+      "bdl_stat_bundle_pending_baseline_used",
+      "low_feature_confidence",
+      "opponent_k_profile_unavailable_non_blocking",
+      "recent_logs_unavailable_non_blocking",
+      "weather_unavailable_non_blocking",
+      "weak_pitcher_baseline",
+    ].includes(warning))),
+    actionableResearchInputsComplete: actionableRows.every(({ row }) =>
+      row.missingFeatures.every(isSignalOptionalMemberFeature)),
     directMatchupComplete: hitterRows.every(({ matchupHistory }) => matchupHistory !== null),
     environmentComplete: evidence.every(({ environment }) => Boolean(
       environment?.park.status === "available" && (environment.weather.status === "available" || environment.roofStatus === "dome"),

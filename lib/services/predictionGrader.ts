@@ -93,7 +93,8 @@ function isFinalStatus(s: string): boolean {
 }
 
 function isVoidStatus(s: string): boolean {
-  return VOID_STATUSES.has(s.toLowerCase());
+  const normalized = s.trim().toLowerCase().replace(/^status_/, "");
+  return VOID_STATUSES.has(normalized);
 }
 
 function isPendingStatus(s: string): boolean {

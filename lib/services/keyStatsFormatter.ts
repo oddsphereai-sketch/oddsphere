@@ -147,8 +147,11 @@ function moneylineRows(af: AutoFactors, fallbacks: KeyStatsDisplayFallbacks): Ke
   if (aSe !== null || hSe !== null) {
     rows.push({
       label: "Starter ERA",
-      awayValue: fmtRaw(aSe, 2),
-      homeValue: fmtRaw(hSe, 2),
+      // Keep an official starter with no MLB season record visible and
+      // explicit. A bare em dash made a correctly mapped debuting starter
+      // look like a failed lookup in the member reader.
+      awayValue: fmtRaw(aSe, 2) ?? "No MLB ERA on file",
+      homeValue: fmtRaw(hSe, 2) ?? "No MLB ERA on file",
       source: "feature_snapshot",
     });
   }

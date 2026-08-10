@@ -73,11 +73,19 @@ function normalizedTeamAliases(abbr: string): Set<string> {
   const words = fullName.split(/\s+/);
   const nickname = words.at(-1);
   if (nickname) aliases.add(normalizeTeamIdentity(nickname));
-  if (words.length > 1) aliases.add(normalizeTeamIdentity(words.slice(0, -1).join(" ")));
+  if (words.length > 1) {
+    aliases.add(normalizeTeamIdentity(words.slice(0, -1).join(" ")));
+  }
   return aliases;
 }
 
-/** Resolve provider/model club labels through canonical WNBA identities. */
+/**
+ * Resolve a model-provided WNBA club label to a canonical home/away key.
+ * BallDontLie can emit only a nickname for expansion teams (for example,
+ * "Fire") while our DB stores the full name ("Portland Fire"). Team identity
+ * must therefore flow through canonical abbreviations, never full-name
+ * equality.
+ */
 export function resolveWnbaMoneylineSide(
   side: string | null | undefined,
   homeAbbr: string,

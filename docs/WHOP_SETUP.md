@@ -15,6 +15,19 @@ the login page surfaces only the beta-password fallback.
 4. Copy the public checkout URL (the "Get Access" link). This goes into
    `WHOP_CHECKOUT_URL`.
 
+### Current public pricing
+
+OddSphere Premium uses two public recurring plans on the same product:
+
+- Monthly: 7 days free, then $19.99 every 30 days.
+- Yearly: $199 every 365 days, charged immediately with no free trial.
+
+The website's canonical direct-checkout URLs live in
+`lib/marketing/trialOffer.ts`. General marketing CTAs route through `/pricing`
+so customers can choose a billing cadence. Legacy monthly plans may remain
+hidden while they still have active memberships; never delete or move the
+product itself because the product ID is the access-control resource.
+
 If you'd rather gate on the company (any product in your Whop store)
 or a specific experience, use a `biz_XXX` or `exp_XXX` id instead.
 Whichever id you choose goes into `WHOP_RESOURCE_ID` and is what every
@@ -121,7 +134,8 @@ app/api/auth/whop/status/route.ts    Public flag probe (debug)
 app/api/auth/logout/route.ts         Clears both sessions
 proxy.ts                             Accepts Whop OR beta session
 app/login/page.tsx                   Surfaces Whop button when enabled
-app/pricing/page.tsx                 CTA → Whop checkout when configured
+app/pricing/page.tsx                 monthly + yearly CTAs → Whop checkout
+lib/marketing/trialOffer.ts          canonical prices + direct-checkout URLs
 ```
 
 All of these fail closed if `WHOP_OAUTH_ENABLED` is anything other than

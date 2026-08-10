@@ -1,9 +1,10 @@
 import { Suspense, type ReactNode } from "react";
 import LabAppNav from "./LabAppNav";
+import { UserTimeZoneProvider } from "./UserTimeZone";
 
 export default function ProductAppFrame({ children }: { children: ReactNode }) {
   return (
-    <>
+    <UserTimeZoneProvider>
       <Suspense fallback={null}>
         <LabAppNav />
       </Suspense>
@@ -12,6 +13,6 @@ export default function ProductAppFrame({ children }: { children: ReactNode }) {
           {children}
         </Suspense>
       </main>
-    </>
+    </UserTimeZoneProvider>
   );
 }

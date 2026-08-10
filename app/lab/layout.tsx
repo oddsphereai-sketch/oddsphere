@@ -12,6 +12,7 @@
 
 import { Suspense } from "react";
 import LabAppNav from "./components/LabAppNav";
+import { UserTimeZoneProvider } from "./components/UserTimeZone";
 
 export const metadata = {
   title: "The Lab — Oddsphere AI",
@@ -24,7 +25,7 @@ export default function LabLayout({
   children: React.ReactNode;
 }) {
   return (
-    <>
+    <UserTimeZoneProvider>
       <Suspense fallback={null}>
         <LabAppNav />
       </Suspense>
@@ -37,6 +38,6 @@ export default function LabLayout({
           {children}
         </Suspense>
       </main>
-    </>
+    </UserTimeZoneProvider>
   );
 }

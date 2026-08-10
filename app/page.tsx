@@ -8,7 +8,7 @@ import {
   type PublicTrackRecordSummary,
 } from "@/lib/services/tracking/publicTrackRecordSummary";
 import {
-  TRIAL_CHECKOUT_URL,
+  PRICING_PAGE_URL,
   TRIAL_DISCLOSURE,
 } from "@/lib/marketing/trialOffer";
 
@@ -116,7 +116,7 @@ const faq: FaqItem[] = [
   },
   {
     q: "When am I charged?",
-    a: "The trial is free for 7 days. After that, membership renews at $25/month unless canceled before the trial ends.",
+    a: "The monthly plan is free for 7 days, then renews at $19.99/month unless canceled before the trial ends. The annual plan is $199 charged immediately and does not include a free trial.",
   },
   {
     q: "Can I cancel before the trial ends?",
@@ -170,28 +170,38 @@ const jsonLd = {
       description:
         "A subscription sports analytics dashboard with model projections, market movement analysis, Play Grades, supporting evidence, responsible-use disclosures, and tracked results.",
       brand: { "@id": `${SITE_URL}/#organization` },
-      offers: {
-        "@type": "Offer",
-        price: "25",
-        priceCurrency: "USD",
-        availability: "https://schema.org/InStock",
-        url: TRIAL_CHECKOUT_URL,
-        category: "Subscription",
-      },
+      offers: [
+        {
+          "@type": "Offer",
+          name: "Monthly membership",
+          price: "19.99",
+          priceCurrency: "USD",
+          availability: "https://schema.org/InStock",
+          url: `${SITE_URL}${PRICING_PAGE_URL}`,
+          category: "Subscription",
+        },
+        {
+          "@type": "Offer",
+          name: "Annual membership",
+          price: "199",
+          priceCurrency: "USD",
+          availability: "https://schema.org/InStock",
+          url: `${SITE_URL}${PRICING_PAGE_URL}`,
+          category: "Subscription",
+        },
+      ],
     },
   ],
 };
 
 function TrialButton({ className = "" }: { className?: string }) {
   return (
-    <a
-      href={TRIAL_CHECKOUT_URL}
+    <Link
+      href={PRICING_PAGE_URL}
       className={`inline-flex items-center justify-center rounded-lg bg-emerald-400 px-7 py-3.5 text-sm font-black text-gray-950 shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 ${className}`}
-      rel="noopener noreferrer"
-      target="_blank"
     >
       Start Free Trial
-    </a>
+    </Link>
   );
 }
 

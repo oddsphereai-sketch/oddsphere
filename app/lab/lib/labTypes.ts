@@ -269,10 +269,27 @@ export type MarketEdgeDto = {
      * the UI to render "Last updated …" copy on stale-but-valid values.
      */
     observedAt?: string | null;
+    /** When the collector last verified this value, if different from observedAt. */
+    freshnessCheckedAt?: string | null;
+    /** Source-specific collection cadence plus scheduling grace. */
+    staleAfterMinutes?: number;
     /** Phase 7I — true when observedAt is older than the stale threshold. */
     isStale?: boolean;
   }>;
   priceAmerican: number | null;
+  /**
+   * Fresh best bettor price from a coherent two-sided book pair. This is
+   * display-only and never rewrites the immutable grade/lock price above.
+   * The reader rejects stale, one-sided, implausible-vig, and consensus-
+   * divergent quotes before populating these fields.
+   */
+  bestAvailablePriceAmerican?: number | null;
+  bestAvailableSportsbook?: string | null;
+  bestAvailableObservedAt?: string | null;
+  /** Versioned reader-only policy; this does not identify the grading release. */
+  bestAvailablePricePolicy?: "daily_edge_best_coherent_price_v1_2026_08_05" | null;
+  /** Price used by the authoritative writer/lock when it differs from best available. */
+  gradePriceAmerican?: number | null;
   /**
    * First-inning market-board context when the model does not choose a side.
    * This is display-only: it must not be treated as a picked-side price,
@@ -690,6 +707,12 @@ export type DailyEdgeGameDto = {
   homeTeamLogo: string | null;
   /** Display string in ET (e.g., "7:10 PM"). */
   gameTime: string;
+  /**
+   * Canonical ISO 8601 start timestamp. Client surfaces use this to render
+   * game time in the member's browser timezone without changing locks,
+   * ordering, or the official slate date. Optional for legacy snapshots.
+   */
+  gameStartAt?: string | null;
   /** Minutes-from-midnight-ET for sort stability. */
   gameStartMinutes: number;
   /**

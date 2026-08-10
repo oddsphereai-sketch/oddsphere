@@ -440,6 +440,7 @@ function adaptGame(
     homeTeam: game.home_abbr,
     homeTeamLogo: nbaLogoUrl(game.home_abbr),
     gameTime: tipDisplayShortEt(game.tip_iso_utc),
+    gameStartAt: game.tip_iso_utc,
     gameStartMinutes: tipStartMinutesEt(game.tip_iso_utc),
     scheduledLockAt: game.tip_iso_utc ?? asOf,
     lockState: "open",

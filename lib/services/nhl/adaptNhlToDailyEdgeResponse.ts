@@ -455,6 +455,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
     homeTeam: input.homeAbbr,
     homeTeamLogo: logoFor(input.homeAbbr),
     gameTime: timeShortEt(input.gameDateIso),
+    gameStartAt: input.gameDateIso,
     gameStartMinutes: startMinutesEt(input.gameDateIso),
     scheduledLockAt: input.gameDateIso,
     lockState,

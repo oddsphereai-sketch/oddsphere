@@ -36,6 +36,10 @@ import {
 } from "../../lib/edgeStackRows";
 import { classifyPickRelativeLineMove } from "../../lib/lineMoveTone";
 import { reviewActionLabel } from "../../lib/reviewActionLabel";
+import {
+  summarizePersistedOddsTrail,
+  type DisplayOddsTrailStop,
+} from "../../lib/oddsMovementTrail";
 import type {
   DailyEdgePredictionDto,
   DailyEdgeGameDto,
@@ -54,6 +58,13 @@ import { teamPrimaryColor } from "./teamColors";
 import { LockBadge } from "./LockBadge";
 import { DAILY_EDGE_SPORTS } from "../../lib/dailyEdgeSports";
 import { primaryDailyEdgeMarket } from "../../lib/dailyEdgeReaderState";
+import {
+  DEFAULT_DISPLAY_TIME_ZONE,
+  LocalTime,
+  formatZonedDateTime,
+  useUserTimeZone,
+  zonedWallTimeToIso,
+} from "../UserTimeZone";
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -408,6 +419,22 @@ function espnLogoUrl(abbr: string, sport: Sport = "mlb"): string {
 function formatAmerican(price: number | null): string {
   if (price === null) return "—";
   return price > 0 ? `+${price}` : String(price);
+}
+
+function isLockedMarket(market: MarketEdgeDto): boolean {
+  return market.lockedLineAt != null || market.lockedLineAmerican != null || market.priceUnavailableAtLock === true;
+}
+
+function displayPriceAmerican(market: MarketEdgeDto): number | null {
+  if (isLockedMarket(market)) return market.priceAmerican;
+  return market.bestAvailablePriceAmerican ?? market.priceAmerican;
+}
+
+function displayPriceBook(market: MarketEdgeDto): string | null {
+  if (isLockedMarket(market)) return null;
+  return market.bestAvailablePriceAmerican === null || market.bestAvailablePriceAmerican === undefined
+    ? null
+    : market.bestAvailableSportsbook ?? null;
 }
 
 function formatFiMarketBoard(board: MarketEdgeDto["fiMarketBoard"] | undefined | null): string | null {
@@ -1518,12 +1545,17 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
                 </span>
               </>
             )}
-            {marketData.priceAmerican !== null ? (
+            {displayPriceAmerican(marketData) !== null ? (
               <>
                 <span className="text-gray-700">·</span>
                 <span className="text-[12.5px] tabular-nums font-semibold text-gray-300">
-                  {formatAmerican(marketData.priceAmerican)}
+                  {formatAmerican(displayPriceAmerican(marketData))}
                 </span>
+                {displayPriceBook(marketData) !== null && (
+                  <span className="text-[9px] uppercase tracking-[0.1em] font-bold text-gray-600">
+                    {displayPriceBook(marketData)}
+                  </span>
+                )}
               </>
             ) : market === "first_inning" && formatFiMarketBoard(marketData.fiMarketBoard) !== null ? (
               <>
@@ -1695,96 +1727,6 @@ function cleanTrailLabel(label: NonNullable<MarketEdgeDto["oddsTrail"]>[number][
   return "MOVE";
 }
 
-type DisplayOddsTrailStop = NonNullable<MarketEdgeDto["oddsTrail"]>[number];
-
-function sameOddsStop(a: DisplayOddsTrailStop | undefined, b: DisplayOddsTrailStop): boolean {
-  return a !== undefined && a.american === b.american && a.line === b.line;
-}
-
-function makeFallbackOddsStop(
-  american: number | null,
-  label: DisplayOddsTrailStop["label"],
-  source: DisplayOddsTrailStop["source"],
-): DisplayOddsTrailStop | null {
-  if (typeof american !== "number" || !Number.isFinite(american)) return null;
-  return {
-    american,
-    line: null,
-    observedAt: null,
-    sportsbook: null,
-    source,
-    label,
-  };
-}
-
-function sortTrailByObservedAt(
-  stops: DisplayOddsTrailStop[],
-): DisplayOddsTrailStop[] {
-  return [...stops].sort((a, b) => {
-    const aTime = a.observedAt ? Date.parse(a.observedAt) : Number.NaN;
-    const bTime = b.observedAt ? Date.parse(b.observedAt) : Number.NaN;
-    if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) return aTime - bTime;
-    return 0;
-  });
-}
-
-function summarizePersistedOddsTrail(
-  trail: NonNullable<MarketEdgeDto["oddsTrail"]>,
-  fallback: {
-    open: number | null;
-    prev: number | null;
-    current: number | null;
-    locked: boolean;
-  },
-): NonNullable<MarketEdgeDto["oddsTrail"]> {
-  const orderedTrail = sortTrailByObservedAt(trail);
-  const deduped = orderedTrail.filter((stop, index) => {
-    return !sameOddsStop(orderedTrail[index - 1], stop);
-  });
-  const fallbackOpen = makeFallbackOddsStop(fallback.open, "first", "line_history");
-  const fallbackPrev = makeFallbackOddsStop(fallback.prev, "move", "line_history");
-  const fallbackCurrent = makeFallbackOddsStop(
-    fallback.current,
-    fallback.locked ? "locked" : "current",
-    fallback.locked ? "locked_snapshot" : "current_line",
-  );
-
-  const first = deduped.find((stop) => stop.label === "first") ?? fallbackOpen ?? deduped[0] ?? null;
-  const last =
-    deduped.find((stop) => stop.label === "locked") ??
-    deduped.find((stop) => stop.label === "current") ??
-    fallbackCurrent ??
-    deduped[deduped.length - 1] ??
-    null;
-  if (first === null && last === null) return [];
-
-  const middleCandidates = [
-    ...deduped.filter((stop) => !sameOddsStop(first ?? undefined, stop) && !sameOddsStop(last ?? undefined, stop)),
-    fallbackPrev,
-  ].filter((stop): stop is DisplayOddsTrailStop => stop !== null);
-  const middle =
-    middleCandidates
-      .filter((stop) => !sameOddsStop(first ?? undefined, stop) && !sameOddsStop(last ?? undefined, stop))
-      .sort((a, b) => {
-        const aTime = a.observedAt ? Date.parse(a.observedAt) : Number.NaN;
-        const bTime = b.observedAt ? Date.parse(b.observedAt) : Number.NaN;
-        if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) return bTime - aTime;
-        if (a.label === "move" && b.label !== "move") return -1;
-        if (a.label !== "move" && b.label === "move") return 1;
-        return 0;
-      })[0] ?? null;
-
-  const summary = [
-    first ? { ...first, label: "first" as const } : null,
-    middle ? { ...middle, label: "move" as const } : null,
-    last ? { ...last, label: fallback.locked ? "locked" as const : "current" as const } : null,
-  ].filter((stop): stop is DisplayOddsTrailStop => stop !== null);
-  return summary.filter((stop, index, arr) => {
-    const prev = arr[index - 1];
-    return prev === undefined || !sameOddsStop(prev, stop) || prev.label !== stop.label;
-  });
-}
-
 function CleanPersistedOddsTrail({
   trail,
   open,
@@ -1798,7 +1740,12 @@ function CleanPersistedOddsTrail({
   current: number | null;
   locked: boolean;
 }) {
-  const displayTrail = summarizePersistedOddsTrail(trail, { open, prev, current, locked });
+  const displayTrail = summarizePersistedOddsTrail(trail, {
+    open,
+    prev,
+    current,
+    locked,
+  });
   if (displayTrail.length === 0) return null;
   return (
     <div className="flex w-full items-start px-2 pb-1">
@@ -1978,6 +1925,7 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
     fiBoardTrail?.open ??
     null;
   const oddsTrailPrev = marketData.lastMovePrevAmerican ?? fiBoardTrail?.prev ?? null;
+  const marketLocked = isLockedMarket(marketData);
   const oddsTrailCurrent =
     marketData.priceAmerican ??
     marketData.marketReadV2?.movement?.currentPrice ??
@@ -1988,7 +1936,7 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
     persistedOddsTrail.length > 0 ||
     oddsTrailOpen != null ||
     oddsTrailCurrent != null ||
-    marketData.lockedLineAmerican != null ||
+    marketLocked ||
     showFiBoardOddsTrail;
   const showLineNumberSection = market === "total" || (shellSport === "wnba" && market === "first_inning");
   const lineNumberLabel = market === "total" ? "Total Line" : "Spread Line";
@@ -2054,19 +2002,19 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
               open={oddsTrailOpen}
               prev={oddsTrailPrev}
               current={oddsTrailCurrent}
-              locked={marketData.lockedLineAmerican != null}
+              locked={marketLocked}
             />
           ) : showFiBoardOddsTrail ? (
             <CleanFiBoardOddsTrail
               marketData={marketData}
-              locked={marketData.lockedLineAmerican != null}
+              locked={marketLocked}
             />
           ) : (
             <CleanOddsTrail
               open={oddsTrailOpen}
               prev={oddsTrailPrev}
               current={oddsTrailCurrent}
-              locked={marketData.lockedLineAmerican != null}
+              locked={marketLocked}
             />
           )}
           {marketData.priceAmerican == null && oddsTrailCurrent != null && (
@@ -2520,7 +2468,7 @@ function SplitSection({ section }: { section: NonNullable<MarketDecision["consen
       <div className="flex items-center justify-between gap-2">
         <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-gray-300">{section.label}</p>
         {section.lastUpdated ? (
-          <p className="text-[9px] text-gray-500">{formatStaleStamp(section.lastUpdated) ?? ""}</p>
+          <p className="text-[9px] text-gray-500">Last updated <LocalTime value={section.lastUpdated} /></p>
         ) : null}
       </div>
       {section.rows.length > 0 ? (
@@ -2554,22 +2502,6 @@ function SplitSection({ section }: { section: NonNullable<MarketDecision["consen
  * timestamp — i.e. the value was hydrated from history because the
  * latest provider refresh dropped it. Fresh data has no annotation.
  */
-function formatStaleStamp(observedAt: string | null): string | null {
-  if (observedAt === null) return null;
-  try {
-    const d = new Date(observedAt);
-    if (!Number.isFinite(d.getTime())) return null;
-    const t = d.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: "America/New_York",
-    });
-    return `Last updated ${t}`;
-  } catch {
-    return null;
-  }
-}
-
 function SideSplitsBlock({
   label,
   moneyPct,
@@ -2585,7 +2517,7 @@ function SideSplitsBlock({
   /** Phase 7I — true when observedAt is older than 15 min. */
   isStale?: boolean;
 }) {
-  const stamp = isStale === true ? formatStaleStamp(observedAt ?? null) : null;
+  const showStaleStamp = isStale === true && observedAt != null;
   return (
     <div className="space-y-1">
       <p className="text-[10.5px] uppercase tracking-[0.14em] font-bold text-gray-300">{label}</p>
@@ -2607,9 +2539,9 @@ function SideSplitsBlock({
           <span />
         </div>
       )}
-      {stamp !== null && (
+      {showStaleStamp && (
         <p className="text-[9px] tracking-[0.06em] text-gray-500/85 italic pl-[42px]">
-          {stamp}
+          Last updated <LocalTime value={observedAt} />
         </p>
       )}
     </div>
@@ -3025,12 +2957,12 @@ function MarketNotes({
                     <div className="space-y-0">
                       <TeamStatRow
                         abbr={awayAbbr}
-                        value={s.awayValue ?? "—"}
+                        value={s.awayValue ?? (s.label === "Starter ERA" ? "No MLB ERA on file" : "—")}
                         highlight={interp.winner === "away"}
                       />
                       <TeamStatRow
                         abbr={homeAbbr}
-                        value={s.homeValue ?? "—"}
+                        value={s.homeValue ?? (s.label === "Starter ERA" ? "No MLB ERA on file" : "—")}
                         highlight={interp.winner === "home"}
                       />
                     </div>
@@ -3298,9 +3230,10 @@ function SlateCard({
               ? "—"
               : `${Math.round(displayPctForMarket(headlineMarketData)! * 100)}%`}
           </span>
-          {headlineMarketData.priceAmerican !== null ? (
+          {displayPriceAmerican(headlineMarketData) !== null ? (
             <span className="text-[12px] tabular-nums font-medium text-gray-500 ml-1">
-              {formatAmerican(headlineMarketData.priceAmerican)}
+              {formatAmerican(displayPriceAmerican(headlineMarketData))}
+              {displayPriceBook(headlineMarketData) !== null ? ` · ${displayPriceBook(headlineMarketData)}` : ""}
             </span>
           ) : headlineMarket === "first_inning" && formatFiMarketBoard(headlineMarketData.fiMarketBoard) !== null ? (
             <span className="text-[11px] tabular-nums font-medium text-gray-500 ml-1">
@@ -3651,11 +3584,12 @@ function SelectedEdgeReader({
                         ? "—"
                         : `${Math.round(displayPctForMarket(marketData)! * 100)}%`}
                     </span>
-                    {marketData.priceAmerican !== null ? (
+                    {displayPriceAmerican(marketData) !== null ? (
                       <>
                         <span aria-hidden="true" className="text-gray-700 text-[10px]">·</span>
                         <span className="text-[11px] tabular-nums font-medium text-gray-400">
-                          {formatAmerican(marketData.priceAmerican)}
+                          {formatAmerican(displayPriceAmerican(marketData))}
+                          {displayPriceBook(marketData) !== null ? ` · ${displayPriceBook(marketData)}` : ""}
                         </span>
                       </>
                     ) : market === "first_inning" && formatFiMarketBoard(marketData.fiMarketBoard) !== null ? (
@@ -4711,8 +4645,26 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
   // Desktop reader element — used to smooth-scroll the reader back into view
   // when the user picks a game from the board below (no more scroll-up loop).
   const readerRef = useRef<HTMLDivElement>(null);
+  const userTimeZone = useUserTimeZone();
 
-  const games = data?.games ?? [];
+  const games = useMemo(
+    () => (data?.games ?? []).map((game) => {
+      // Existing published snapshots predate gameStartAt. scheduledLockAt is
+      // a betting lock rather than first pitch, so reconstruct the canonical
+      // start from the official ET slate date/time for legacy snapshots.
+      const legacyGameStartAt = zonedWallTimeToIso(
+        data?.date,
+        game.gameTime,
+        DEFAULT_DISPLAY_TIME_ZONE,
+      );
+      const localGameTime = formatZonedDateTime(
+        game.gameStartAt ?? legacyGameStartAt,
+        userTimeZone,
+      );
+      return localGameTime ? { ...game, gameTime: localGameTime } : game;
+    }),
+    [data?.date, data?.games, userTimeZone],
+  );
   const verdictCounts = useMemo(() => computeVerdictCounts(games), [games]);
   const filteredGames = useMemo(
     () =>

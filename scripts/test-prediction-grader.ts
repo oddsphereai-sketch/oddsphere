@@ -189,6 +189,21 @@ console.log("\n━━━ Void / postponed ━━━");
   });
   check("canceled → void", g.result === "void");
 }
+{
+  const r = makeRecord({ market: "moneyline", pick: "home" });
+  const postponed = gradePrediction({
+    record: r,
+    game: { status: "STATUS_POSTPONED", home_score: null, away_score: null, first_inning_runs: null },
+    source: "auto_score_ingest",
+  });
+  const canceled = gradePrediction({
+    record: r,
+    game: { status: "STATUS_CANCELED", home_score: null, away_score: null, first_inning_runs: null },
+    source: "auto_score_ingest",
+  });
+  check("provider STATUS_POSTPONED → void", postponed.result === "void");
+  check("provider STATUS_CANCELED → void", canceled.result === "void");
+}
 
 // ── Pending (game not final) ──────────────────────────────────────
 console.log("\n━━━ Pending ━━━");
@@ -220,8 +235,8 @@ console.log("\n━━━ Pending ━━━");
   check("in_progress → pending (don't grade live)", g.result === "pending");
 }
 
-// ── Phase 6B.20 — no_bet=true rows grade as void (excluded) ──
-console.log("\n━━━ Phase 6B.20 — no_bet=true → void (excluded from public tally) ━━━");
+// ── no_bet guidance vs genuine Toss-Up tracking exclusion ──
+console.log("\n━━━ no_bet guidance vs genuine Toss-Up exclusion ━━━");
 {
   // Toss-Up FI row with no_bet=true should NOT be graded as W/L even
   // when first_inning_runs is populated.
@@ -235,14 +250,15 @@ console.log("\n━━━ Phase 6B.20 — no_bet=true → void (excluded from pub
   check("void carries the no_bet_reason in grade_notes", typeof g.grade_notes === "string" && /non-actionable/i.test(g.grade_notes!));
 }
 {
-  // Same for a final game — even at status=final, no_bet=true stays void.
+  // A real-sided stand-down still counts toward accuracy; no_bet only means
+  // it was not recommended as an actionable wager.
   const r = makeRecord({ market: "moneyline", pick: "home", no_bet: true, no_bet_reason: "test" } as any);
   const g = gradePrediction({
     record: r,
     game: { status: "final", home_score: 5, away_score: 3, first_inning_runs: null },
     source: "auto_score_ingest",
   });
-  check("no_bet=true ML at status=final → void (excluded)", g.result === "void");
+  check("no_bet=true real-sided ML at status=final → graded win", g.result === "win");
 }
 
 // ── Phase 6B.19 — FI markets grade mid-game once inning 1 complete ──

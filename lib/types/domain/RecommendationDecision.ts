@@ -15,6 +15,10 @@ export type SplitSideDisplay = {
   moneyPct: number | null;
   betsPct: number | null;
   observedAt?: string | null;
+  /** When the collector last verified this source value, if different from its last-change time. */
+  freshnessCheckedAt?: string | null;
+  /** Source-specific collection cadence plus scheduling grace. Defaults to the shared split TTL. */
+  staleAfterMinutes?: number;
   isStale?: boolean;
 };
 

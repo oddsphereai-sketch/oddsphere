@@ -134,9 +134,10 @@ expandedReaderAuthority.markets.moneyline!.recommendationDecision = {
 } as NonNullable<typeof expandedReaderAuthority.markets.moneyline>["recommendationDecision"];
 alignMarketReadsToDisplayedPublicSplits([expandedReaderAuthority]);
 const expandedMl = expandedReaderAuthority.markets.moneyline!;
-check("canonical recommendation consensus replaces stale collapsed bars", expandedMl.publicSplits[1]?.moneyPct === 63 && expandedMl.publicSplits[1]?.betsPct === 59);
-check("Market Read follows canonical recommendation consensus", expandedMl.marketReadV2?.consensus?.moneyPct === 0.63 && expandedMl.marketReadV2?.consensus?.betsPct === 0.59);
-check("canonical consensus alignment leaves the pick unchanged", expandedMl.pick === "WSH");
+check("older recommendation evidence does not overwrite resolved display bars", expandedMl.publicSplits[1]?.moneyPct === 65 && expandedMl.publicSplits[1]?.betsPct === 61);
+check("Market Read follows resolved display bars", expandedMl.marketReadV2?.consensus?.moneyPct === 0.65 && expandedMl.marketReadV2?.consensus?.betsPct === 0.61);
+check("display alignment leaves recorded recommendation evidence unchanged", expandedMl.recommendationDecision?.consensusSplits?.rows[1]?.moneyPct === 63);
+check("resolved display alignment leaves the pick unchanged", expandedMl.pick === "WSH");
 
 const agingSnapshot = game();
 agingSnapshot.markets.moneyline!.publicSplits = [
@@ -179,6 +180,44 @@ check("cached sharp-book rows become stale after the observation TTL", agedMl.re
 check("cached game-level recommendation consensus rows become stale after the observation TTL", agingSnapshot.recommendationDecision?.markets.moneyline?.consensusSplits?.rows.every((row) => row.isStale === true) === true);
 check("cached game-level recommendation sharp rows become stale after the observation TTL", agingSnapshot.recommendationDecision?.markets.moneyline?.sharpBookSplits?.rows.every((row) => row.isStale === true) === true);
 check("read-time freshness repair never changes the pick", agedMl.pick === "WSH");
+
+const hourlyVerifiedSnapshot = game();
+hourlyVerifiedSnapshot.markets.moneyline!.recommendationDecision = {
+  consensusSplits: null,
+  sharpBookSplits: {
+    label: "Sharp Book Splits",
+    rows: [
+      {
+        side: "away",
+        label: "WSH",
+        moneyPct: 60,
+        betsPct: 58,
+        observedAt: "2026-07-28T14:00:00.000Z",
+        freshnessCheckedAt: "2026-07-28T16:00:00.000Z",
+        staleAfterMinutes: 75,
+        isStale: true,
+      },
+    ],
+    signal: null,
+    lastUpdated: "2026-07-28T14:00:00.000Z",
+  },
+} as NonNullable<typeof hourlyVerifiedSnapshot.markets.moneyline>["recommendationDecision"];
+refreshDisplayedSplitFreshness(
+  [hourlyVerifiedSnapshot],
+  new Date("2026-07-28T17:00:00.000Z"),
+);
+check(
+  "hourly source-aware splits stay fresh inside the collection cadence plus grace",
+  hourlyVerifiedSnapshot.markets.moneyline!.recommendationDecision?.sharpBookSplits?.rows[0]?.isStale === false,
+);
+refreshDisplayedSplitFreshness(
+  [hourlyVerifiedSnapshot],
+  new Date("2026-07-28T17:16:00.000Z"),
+);
+check(
+  "hourly source-aware splits become stale after the collection cadence plus grace",
+  hourlyVerifiedSnapshot.markets.moneyline!.recommendationDecision?.sharpBookSplits?.rows[0]?.isStale === true,
+);
 
 const splitCron = readFileSync("app/api/cron/public-splits-observations-refresh/route.ts", "utf8");
 const vercel = readFileSync("vercel.json", "utf8");

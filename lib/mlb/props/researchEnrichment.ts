@@ -110,6 +110,11 @@ export function pitchMixResearchSampleIsUsable(
     && evidence.hitterPitchesSeen >= 100;
 }
 
+export function isSignalOptionalMemberFeature(feature: string): boolean {
+  const normalized = feature.trim().toLowerCase().replaceAll("_", " ");
+  return normalized === "park factor" || normalized === "game time weather";
+}
+
 const ALL_RESEARCH_MODULES: PlayerPropResearchModule[] = [
   "player_identity",
   "recent_form",

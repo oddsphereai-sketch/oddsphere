@@ -11,6 +11,12 @@ stake, calibration, market selection, or model input must follow
 [`docs/model-change-safety.md`](docs/model-change-safety.md). This applies to every sport,
 market, operator script, cron, and Codex thread.
 
+Before auditing or changing MLB or WNBA models, read
+[`docs/current-model-releases.md`](docs/current-model-releases.md) and confirm its identifiers
+against the exported runtime constants. That registry is the handoff contract for future Codex
+threads: never restore a superseded rule or release merely because it appears in older audit notes.
+Update the registry in the same commit as every production model change.
+
 At minimum, before deployment:
 
 1. Bump the affected model/calibration release identifier; never change model behavior under

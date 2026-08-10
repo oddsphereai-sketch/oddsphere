@@ -8,6 +8,11 @@ import {
   type PropGrade,
 } from "@/lib/mlb/props/propGrades";
 import ProductTeamBadge from "@/app/lab/components/daily-edge/ProductTeamBadge";
+import {
+  LocalTime,
+  formatZonedDateTime,
+  useUserTimeZone,
+} from "@/app/lab/components/UserTimeZone";
 import { teamPrimaryColor } from "@/app/lab/components/daily-edge/teamColors";
 import { SportIcon } from "@/app/lab/components/SportIcon";
 import type { Sport } from "@/lib/types/domain/Sport";
@@ -43,7 +48,6 @@ type MarketFamilyFilter = "all" | "pitcher" | "batter";
 type RadarItem = { row: PlayerPropPreviewRow; label: string; note: string };
 type DashboardMode = "preview" | "admin" | "member" | "member-disabled";
 const RADAR_ITEM_LIMIT = 6;
-const MLB_DISPLAY_TIME_ZONE = "America/New_York";
 
 export type PlayerPropOddsMovement = {
   openingLine: number;
@@ -290,6 +294,7 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
   const [boardScopeLoading, setBoardScopeLoading] = useState(false);
   const requestedResearchPlayers = useRef(new Set<string>());
   const requestedBoardScopes = useRef(new Set<string>());
+  const userTimeZone = useUserTimeZone();
 
   const availableResearch = useMemo(() => ({ ...(data.research ?? {}), ...loadedResearch }), [data.research, loadedResearch]);
   const hydratedProps = useMemo(() => data.props.map((row) => enforcePreviewIntegrity(hydrateResearchEvidence(row, availableResearch))), [availableResearch, data.props]);
@@ -326,7 +331,7 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
       if (oddsRange === "favorite" && row.odds >= 0) return false;
       if (oddsRange === "plus" && row.odds <= 0) return false;
       if (oddsRange === "short" && (row.odds < -130 || row.odds > 130)) return false;
-      const startHour = easternHour(row.gameStartTime);
+      const startHour = hourInZone(row.gameStartTime, userTimeZone);
       if (startRange === "early" && startHour >= 20) return false;
       if (startRange === "late" && startHour < 20) return false;
       return !query || [row.player, row.team, row.opponent, row.marketLabel, row.marketGroup, rowMarketFilterLabel(row), row.book]
@@ -335,7 +340,7 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
     if (lineMode === "main") next = selectPrimaryPropLines(next);
     if (priceMode === "best") next = dedupeBestPrices(next);
     return [...next].sort(sortRows(sort));
-  }, [book, confidence, displayProps, edgeRange, evRange, grade, hideResearch, lineMode, marketFamilyFilter, marketFilter, oddsRange, priceMode, search, selectedGame, sort, startRange, team]);
+  }, [book, confidence, displayProps, edgeRange, evRange, grade, hideResearch, lineMode, marketFamilyFilter, marketFilter, oddsRange, priceMode, search, selectedGame, sort, startRange, team, userTimeZone]);
 
   const selected = selectedId ? displayProps.find((row) => row.id === selectedId) ?? null : null;
   const selectedResearchPending = Boolean(selected?.researchKey && !availableResearch[selected.researchKey]);
@@ -581,7 +586,7 @@ function PropsSlateHeader({ data, mode, matchups, selectedGame, onSelectGame, ca
     <div className="overflow-hidden rounded-xl border border-violet-400/20 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.14),transparent_42%),linear-gradient(145deg,#11151d,#090b10_68%)] p-5 sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>{mode === "admin" ? <span className="mb-2 inline-flex rounded border border-violet-400/30 px-2 py-1 text-[10px] font-black uppercase text-violet-200">Admin review</span> : isPreview ? <span className="mb-2 inline-flex rounded border border-amber-400/30 px-2 py-1 text-[10px] font-black uppercase text-amber-200">Simulated data</span> : null}<p className="text-[11px] font-bold text-emerald-300">MLB · {formatSlateDate(data.date)}</p><h1 className="mt-1 text-3xl font-black text-white sm:text-4xl">{candidatePresentation ? "Player Props" : "Prop Researcher"}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">Start with today&apos;s strongest model reads, compare the best available price, then open the full OddSphere research before making a decision.</p></div>
-        <div className="rounded-lg border border-white/[0.08] bg-black/25 px-4 py-3 text-right"><p className="text-[9px] font-black uppercase tracking-wider text-gray-600">Board status</p><p className="mt-1 text-sm font-black text-emerald-300">Prices updated {formatTime(data.lastUpdated)}</p><p className="mt-1 text-[10px] text-gray-600">Best available prices across {data.summary.booksCovered} books</p></div>
+        <div className="rounded-lg border border-white/[0.08] bg-black/25 px-4 py-3 text-right"><p className="text-[9px] font-black uppercase tracking-wider text-gray-600">Board status</p><p className="mt-1 text-sm font-black text-emerald-300">Prices updated <LocalTime value={data.lastUpdated} /></p><p className="mt-1 text-[10px] text-gray-600">Best available prices across {data.summary.booksCovered} books</p></div>
       </div>
       <div className="mt-5 grid grid-cols-3 gap-2">
         <SlateSignalMetric label="Best angles" value={String(bestAngles)} tone="best" />
@@ -609,7 +614,7 @@ function SlateGameNavigator({ data, matchups, selectedGame, onSelectGame, isPrev
         const gameSignals = dedupeBestPrices(gameRows).filter(isPositiveSignal).length;
         const active = selectedGame === key || (matchups.length === 1 && selectedGame === "all");
         return <button key={key} type="button" onClick={() => onSelectGame(matchups.length === 1 ? "all" : key)} aria-pressed={active} className={`group w-[330px] shrink-0 rounded-lg border p-3 text-left transition ${active ? "border-violet-400/70 bg-violet-400/[0.09] shadow-[0_0_0_1px_rgba(167,139,250,0.10)_inset]" : "border-gray-800 bg-[#0d1015] hover:-translate-y-0.5 hover:border-violet-400/45"}`}>
-          <span className="flex items-center gap-2"><ProductTeamBadge abbreviation={matchup.awayTeam} size={28} /><strong className="text-sm text-white">{matchup.awayTeam}</strong><span className="text-[9px] font-bold text-gray-600">AT</span><ProductTeamBadge abbreviation={matchup.homeTeam} size={28} /><strong className="text-sm text-white">{matchup.homeTeam}</strong><span className="ml-auto text-xs font-black text-white">{formatTime(matchup.gameStartTime)}</span></span>
+          <span className="flex items-center gap-2"><ProductTeamBadge abbreviation={matchup.awayTeam} size={28} /><strong className="text-sm text-white">{matchup.awayTeam}</strong><span className="text-[9px] font-bold text-gray-600">AT</span><ProductTeamBadge abbreviation={matchup.homeTeam} size={28} /><strong className="text-sm text-white">{matchup.homeTeam}</strong><LocalTime className="ml-auto text-xs font-black text-white" value={matchup.gameStartTime} /></span>
           <span className="mt-3 block truncate border-t border-gray-800 pt-2 text-[10px] text-gray-500">{matchup.awayProbablePitcher ?? "Starter TBD"} <span className="text-gray-700">vs</span> {matchup.homeProbablePitcher ?? "Starter TBD"}</span>
           <span className="mt-2 flex items-center justify-between border-t border-gray-800 pt-2"><span className="text-[10px] font-bold text-emerald-300">{gameSignals} model read{gameSignals === 1 ? "" : "s"}</span><span className="text-[10px] font-black text-gray-400 group-hover:text-violet-200">{active ? "Selected ✓" : "View game →"}</span></span>
         </button>;
@@ -720,10 +725,10 @@ function FeaturedPropCard({ row, onSelect }: { row: PlayerPropPreviewRow; onSele
   const best = row.playGrade === "BEST_ANGLE";
   return <article data-featured-card data-card-chip-count="2" className={`relative grid min-h-[420px] overflow-hidden rounded-lg border bg-[#101319] transition-colors sm:grid-cols-[220px_minmax(0,1fr)] ${best ? "border-emerald-500/35" : "border-sky-500/25"}`}>
     <PlayerEditorialVisual row={row} />
-    <div className="flex min-w-0 flex-col p-5 sm:p-7"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase text-emerald-300">OddSphere featured read</p><h3 className="mt-1 text-2xl font-black text-white">{row.player}</h3><p className="mt-1 text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {formatTime(row.gameStartTime)}</p></div><PropGradeBadge grade={row.playGrade} /></div>
+    <div className="flex min-w-0 flex-col p-5 sm:p-7"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase text-emerald-300">OddSphere featured read</p><h3 className="mt-1 text-2xl font-black text-white">{row.player}</h3><p className="mt-1 text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · <LocalTime value={row.gameStartTime} /></p></div><PropGradeBadge grade={row.playGrade} /></div>
     <p className="mt-8 text-[10px] font-black uppercase text-gray-600">{row.marketLabel}</p><p className="mt-1 text-4xl font-black leading-none text-white">{row.side === "over" ? "Over" : "Under"} {row.line}</p><p className="mt-2 text-sm font-semibold text-gray-300">{pickMarketLabel(row)} · <span className="font-black text-white">{row.book} {signed(row.odds)}</span> <span className="text-gray-600">best price</span></p>
     <div className="mt-6 grid grid-cols-3 border-y border-gray-800 py-4 text-xs font-bold tabular-nums"><span><span className="block text-[9px] uppercase text-gray-600">Model edge</span><strong className="mt-1 block text-lg text-emerald-300">{row.modelEdge === null ? "-" : pct(row.modelEdge, true)}</strong></span><span><span className="block text-[9px] uppercase text-gray-600">Expected value</span><strong className="mt-1 block text-lg text-emerald-300">{row.expectedValue === null ? "-" : pct(row.expectedValue, true)}</strong></span><span><span className="block text-[9px] uppercase text-gray-600">Evidence</span><strong className="mt-1 block text-lg capitalize text-white">{row.confidenceBucket}</strong></span></div>
-    <p className="mt-5 text-sm leading-6 text-gray-300">{cardReason(row)}</p><footer className="mt-auto flex items-center justify-between gap-3 pt-6"><span className="text-[10px] text-gray-600">Updated {formatTime(row.lastUpdated)}</span><button type="button" onClick={() => onSelect(row.id)} className="h-10 rounded-md bg-white px-4 text-xs font-black text-black hover:bg-emerald-200">Open Reader</button></footer></div>
+    <p className="mt-5 text-sm leading-6 text-gray-300">{cardReason(row)}</p><footer className="mt-auto flex items-center justify-between gap-3 pt-6"><span className="text-[10px] text-gray-600">Updated <LocalTime value={row.lastUpdated} /></span><button type="button" onClick={() => onSelect(row.id)} className="h-10 rounded-md bg-white px-4 text-xs font-black text-black hover:bg-emerald-200">Open Reader</button></footer></div>
   </article>;
 }
 
@@ -835,9 +840,11 @@ export function missingMarketSideLabel(
 }
 
 function LockStatusBadge({ lockedAt, compact = false }: { lockedAt: string; compact?: boolean }) {
-  return <span className={`inline-flex w-fit items-center gap-1 rounded border border-gray-600 bg-gray-800/70 font-black uppercase text-gray-200 ${compact ? "px-1.5 py-0.5 text-[8px]" : "px-2 py-1 text-[9px]"}`} title={`Locked at ${formatTime(lockedAt)}`}>
+  const userTimeZone = useUserTimeZone();
+  const lockedLabel = formatZonedDateTime(lockedAt, userTimeZone) ?? "—";
+  return <span className={`inline-flex w-fit items-center gap-1 rounded border border-gray-600 bg-gray-800/70 font-black uppercase text-gray-200 ${compact ? "px-1.5 py-0.5 text-[8px]" : "px-2 py-1 text-[9px]"}`} title={`Locked at ${lockedLabel}`}>
     <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
-    Locked <span className="hidden sm:inline">{formatTime(lockedAt)}</span>
+    Locked <LocalTime className="hidden sm:inline" value={lockedAt} />
   </span>;
 }
 
@@ -989,7 +996,7 @@ function PlayerView({ rows, player, selectedId, onSelect, onClear }: { rows: Pla
   if (!primary) return <div className="mt-5"><EmptyBoard label={`No markets match for ${player}.`} /></div>;
   return <div data-product-zone="player-workspace" className="mt-5">
     <button type="button" onClick={onClear} className="mb-3 inline-flex h-8 items-center gap-2 text-xs font-bold text-gray-500 hover:text-white"><span aria-hidden="true">←</span> Clear player search</button>
-    <header className="rounded-lg border border-gray-800 bg-[#0b0e14] p-5"><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div className="flex items-center gap-4"><PlayerAvatar player={player} team={primary.team} headshotUrl={primary.headshotUrl} large /><div><p className="text-[11px] font-bold uppercase text-violet-300">Player workspace</p><h2 className="mt-1 text-2xl font-black text-white">{player}</h2><p className="mt-1 text-sm text-gray-400">{primary.team} {primary.homeAway === "home" ? "vs" : "@"} {primary.opponent} · {formatTime(primary.gameStartTime)}</p></div></div><div className="grid grid-cols-3 border-t border-gray-800 pt-4 lg:min-w-[360px] lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0"><PlayerSummaryMetric label="Markets" value={String(marketPairs.length)} /><PlayerSummaryMetric label="Top model gap" value={pct(topModelGap, true)} /><PlayerSummaryMetric label="Books" value={String(playerBooks)} /></div></div></header>
+    <header className="rounded-lg border border-gray-800 bg-[#0b0e14] p-5"><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div className="flex items-center gap-4"><PlayerAvatar player={player} team={primary.team} headshotUrl={primary.headshotUrl} large /><div><p className="text-[11px] font-bold uppercase text-violet-300">Player workspace</p><h2 className="mt-1 text-2xl font-black text-white">{player}</h2><p className="mt-1 text-sm text-gray-400">{primary.team} {primary.homeAway === "home" ? "vs" : "@"} {primary.opponent} · <LocalTime value={primary.gameStartTime} /></p></div></div><div className="grid grid-cols-3 border-t border-gray-800 pt-4 lg:min-w-[360px] lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0"><PlayerSummaryMetric label="Markets" value={String(marketPairs.length)} /><PlayerSummaryMetric label="Top model gap" value={pct(topModelGap, true)} /><PlayerSummaryMetric label="Books" value={String(playerBooks)} /></div></div></header>
     <div className="mt-3 divide-y divide-gray-800 overflow-hidden rounded-lg border border-gray-800 bg-gray-950">{marketPairs.map((pair) => {
       const direction = marketDirection(pair);
       const activeSide = direction?.side ?? null;
@@ -1013,8 +1020,8 @@ export function PropDetailDrawer({ row, comparisons, onClose, showDiagnostics = 
     <aside role="dialog" aria-modal="true" aria-label={`${row.player} prop details`} className="h-[100dvh] w-full overflow-y-auto border-gray-800 bg-gray-950 shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:max-w-[980px] sm:rounded-lg sm:border">
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-800 bg-gray-950/95 px-4 py-3 backdrop-blur sm:px-6"><div className="flex min-w-0 items-center gap-3"><PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} compact /><div className="min-w-0"><p className="text-[10px] font-bold uppercase text-violet-300">Prop Reader</p><h2 className="truncate font-black text-white">{row.player}</h2></div></div><button type="button" onClick={onClose} aria-label="Close reader" className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-700 text-lg text-gray-300 hover:border-gray-500 hover:text-white">×</button></div>
       <div className="grid min-w-0 gap-4 p-4 sm:p-6 lg:grid-cols-2">
-        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Prop Summary"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><MarketChip row={row} /><span className="truncate text-sm text-gray-400">{row.marketLabel}</span>{row.lockStatus ? <LockStatusBadge lockedAt={row.lockStatus.lockedAt} /> : null}</div><p className="mt-3 text-2xl font-black text-white">{marketSelectionLabel(row)}{" "}<span className={assessPropPrice(row.odds).signalEligible ? "text-emerald-300" : "text-sky-300"}>{signed(row.odds)}</span></p><p className="mt-1 text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {formatTime(row.gameStartTime)} · {row.book}</p><ReaderDirectionTag row={row} /></div><PropGradeBadge grade={row.playGrade} /></div><PriceContextLine odds={row.odds} /></DrawerSection></div>
-        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Reader Summary"><p className="max-w-3xl text-base font-semibold leading-7 text-gray-100">{propReaderSummary(row, prices)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-gray-800 pt-3 text-xs"><span className="text-gray-500">Signal <strong className="ml-1 text-gray-200">{getPropGradeLabel(row.playGrade)}</strong></span><span className="text-gray-500">Evidence strength <strong className="ml-1 capitalize text-gray-200">{row.confidenceBucket}</strong></span><span className="text-gray-500">Updated <strong className="ml-1 text-gray-200">{formatTime(row.lastUpdated)}</strong></span>{row.lockStatus ? <span className="text-gray-500">Locked <strong className="ml-1 text-gray-200">{formatTime(row.lockStatus.lockedAt)}</strong></span> : null}</div></DrawerSection></div>
+        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Prop Summary"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><MarketChip row={row} /><span className="truncate text-sm text-gray-400">{row.marketLabel}</span>{row.lockStatus ? <LockStatusBadge lockedAt={row.lockStatus.lockedAt} /> : null}</div><p className="mt-3 text-2xl font-black text-white">{marketSelectionLabel(row)}{" "}<span className={assessPropPrice(row.odds).signalEligible ? "text-emerald-300" : "text-sky-300"}>{signed(row.odds)}</span></p><p className="mt-1 text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · <LocalTime value={row.gameStartTime} /> · {row.book}</p><ReaderDirectionTag row={row} /></div><PropGradeBadge grade={row.playGrade} /></div><PriceContextLine odds={row.odds} /></DrawerSection></div>
+        <div className="min-w-0 lg:col-span-2"><DrawerSection title="Reader Summary"><p className="max-w-3xl text-base font-semibold leading-7 text-gray-100">{propReaderSummary(row, prices)}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-gray-800 pt-3 text-xs"><span className="text-gray-500">Signal <strong className="ml-1 text-gray-200">{getPropGradeLabel(row.playGrade)}</strong></span><span className="text-gray-500">Evidence strength <strong className="ml-1 capitalize text-gray-200">{row.confidenceBucket}</strong></span><span className="text-gray-500">Updated <strong className="ml-1 text-gray-200"><LocalTime value={row.lastUpdated} /></strong></span>{row.lockStatus ? <span className="text-gray-500">Locked <strong className="ml-1 text-gray-200"><LocalTime value={row.lockStatus.lockedAt} /></strong></span> : null}</div></DrawerSection></div>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Recent Form">{researchPending ? <ResearchLoadingState title={`${row.player} recent results`} /> : <RecentFormPanel row={row} />}</DrawerSection></div>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Matchup Context">{researchPending ? <ResearchLoadingState title={`${row.player} matchup research`} /> : row.marketFamily === "pitcher" ? <div className="grid min-w-0 overflow-hidden rounded-lg border border-gray-800 lg:grid-cols-2 lg:divide-x lg:divide-gray-800"><OpponentProfilePanel row={row} /><PitchArsenalPanel row={row} /></div> : <div className="space-y-3"><BatterPitcherHistoryPanel row={row} /><PitchMixMatchupPanel row={row} /></div>}</DrawerSection></div>
         <DrawerSection title="Model Comparison"><ModelVsMarketVisual row={row} /><div className="mt-3 grid grid-cols-3 gap-2"><Metric label="Model edge" value={row.modelEdge === null ? "-" : pct(row.modelEdge, true)} /><Metric label="Expected value" value={row.expectedValue === null ? "-" : pct(row.expectedValue, true)} /><Metric label="Fair price" value={row.fairOdds === null ? "-" : signed(row.fairOdds)} /></div></DrawerSection>
@@ -1025,7 +1032,7 @@ export function PropDetailDrawer({ row, comparisons, onClose, showDiagnostics = 
         <DrawerSection title="Evidence Strength"><ConfidenceMeter row={row} /><FeatureConfidenceChecklist row={row} /></DrawerSection>
         <DrawerSection title="What Could Change"><DetailList title="Still watching" items={row.missingFeatures.map(memberFeatureLabel)} empty="No major pregame questions are currently flagged." /></DrawerSection>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Game Environment">{researchPending ? <ResearchLoadingState title="Verified venue and game-time conditions" /> : <EnvironmentPanel row={row} />}</DrawerSection></div>
-        {showDiagnostics ? <div className="min-w-0 lg:col-span-2"><details className="group border-t border-violet-400/20 pt-4"><summary className="cursor-pointer text-xs font-black uppercase text-violet-300">Admin diagnostics</summary><div className="mt-4 grid gap-4 lg:grid-cols-2"><DrawerSection title="Reason Codes"><DetailList title="Raw flags" items={row.reasonCodes} mono /></DrawerSection><DrawerSection title="Feature Inputs"><DetailList title="Verified model inputs" items={row.keyFeatures} /></DrawerSection><DrawerSection title="Missing Features"><DetailList title="Unavailable inputs" items={row.missingFeatures} /><div className="mt-3 text-xs text-gray-500">Odds sanity: {row.oddsSanity.length ? row.oddsSanity.join(", ") : "Passed"}</div></DrawerSection><DrawerSection title="Model Diagnostics"><div className="grid grid-cols-2 gap-2"><Metric label="Independent probability" value={row.independentProbability === null ? "-" : pct(row.independentProbability)} /><Metric label="Market probability" value={row.marketProbability === null ? "-" : pct(row.marketProbability)} /><Metric label="Shrinkage weight" value={pct(row.shrinkageWeight)} /><Metric label="Settlement / CLV" value={`${sentenceCase(row.settlementStatus)} / ${sentenceCase(row.clvStatus)}`} /></div><p className="mt-3 text-xs text-gray-500">Source {row.source} · Updated {formatDateTime(row.lastUpdated)}</p></DrawerSection></div></details></div> : null}
+        {showDiagnostics ? <div className="min-w-0 lg:col-span-2"><details className="group border-t border-violet-400/20 pt-4"><summary className="cursor-pointer text-xs font-black uppercase text-violet-300">Admin diagnostics</summary><div className="mt-4 grid gap-4 lg:grid-cols-2"><DrawerSection title="Reason Codes"><DetailList title="Raw flags" items={row.reasonCodes} mono /></DrawerSection><DrawerSection title="Feature Inputs"><DetailList title="Verified model inputs" items={row.keyFeatures} /></DrawerSection><DrawerSection title="Missing Features"><DetailList title="Unavailable inputs" items={row.missingFeatures} /><div className="mt-3 text-xs text-gray-500">Odds sanity: {row.oddsSanity.length ? row.oddsSanity.join(", ") : "Passed"}</div></DrawerSection><DrawerSection title="Model Diagnostics"><div className="grid grid-cols-2 gap-2"><Metric label="Independent probability" value={row.independentProbability === null ? "-" : pct(row.independentProbability)} /><Metric label="Market probability" value={row.marketProbability === null ? "-" : pct(row.marketProbability)} /><Metric label="Shrinkage weight" value={pct(row.shrinkageWeight)} /><Metric label="Settlement / CLV" value={`${sentenceCase(row.settlementStatus)} / ${sentenceCase(row.clvStatus)}`} /></div><p className="mt-3 text-xs text-gray-500">Source {row.source} · Updated <LocalTime style="date-time" value={row.lastUpdated} /></p></DrawerSection></div></details></div> : null}
       </div>
     </aside>
   </div>;
@@ -1208,7 +1215,7 @@ function ResearchLoadingState({ title }: { title: string }) {
 }
 
 function ResearchSource({ source, asOfTimestamp, note }: { source: string; asOfTimestamp: string; note: string }) {
-  return <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-gray-800 pt-3 text-[9px] text-gray-600"><span>{source} · updated {formatTime(asOfTimestamp)}</span><span>{note}</span></div>;
+  return <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-gray-800 pt-3 text-[9px] text-gray-600"><span>{source} · updated <LocalTime value={asOfTimestamp} /></span><span>{note}</span></div>;
 }
 
 function propResult(value: number, line: number, side: "over" | "under"): "hit" | "miss" | "push" {
@@ -1435,8 +1442,8 @@ function OddsMovementPanel({ row }: { row: PlayerPropPreviewRow }) {
   const sourceLabel = movement.openingSource === "balldontlie_opening" ? "Sportsbook opening feed" : "First OddSphere snapshot";
   return <div className="overflow-hidden rounded-lg border border-gray-800 bg-black/20">
     <div className="grid grid-cols-2 gap-px bg-gray-800">
-      <div className="bg-gray-950 p-4"><p className="text-[9px] font-bold uppercase text-gray-600">Opening</p><p className="mt-1 text-lg font-black text-white">{row.side === "over" ? "Over" : "Under"} {movement.openingLine}</p><p className="mt-0.5 text-sm font-bold text-gray-300">{signed(movement.openingOdds)}</p><p className="mt-2 text-[9px] text-gray-600">{formatDateTime(movement.openingTimestamp)}</p></div>
-      <div className="p-4" style={{ background: color.background }}><p className="text-[9px] font-bold uppercase text-gray-500">Current</p><p className="mt-1 text-lg font-black text-white">{row.side === "over" ? "Over" : "Under"} {movement.currentLine}</p><p className="mt-0.5 text-sm font-bold" style={{ color: color.text }}>{signed(movement.currentOdds)}</p><p className="mt-2 text-[9px] text-gray-600">{formatDateTime(movement.currentTimestamp)}</p></div>
+      <div className="bg-gray-950 p-4"><p className="text-[9px] font-bold uppercase text-gray-600">Opening</p><p className="mt-1 text-lg font-black text-white">{row.side === "over" ? "Over" : "Under"} {movement.openingLine}</p><p className="mt-0.5 text-sm font-bold text-gray-300">{signed(movement.openingOdds)}</p><p className="mt-2 text-[9px] text-gray-600"><LocalTime style="date-time" value={movement.openingTimestamp} /></p></div>
+      <div className="p-4" style={{ background: color.background }}><p className="text-[9px] font-bold uppercase text-gray-500">Current</p><p className="mt-1 text-lg font-black text-white">{row.side === "over" ? "Over" : "Under"} {movement.currentLine}</p><p className="mt-0.5 text-sm font-bold" style={{ color: color.text }}>{signed(movement.currentOdds)}</p><p className="mt-2 text-[9px] text-gray-600"><LocalTime style="date-time" value={movement.currentTimestamp} /></p></div>
     </div>
     <div className="p-4"><p className="text-xs font-semibold" style={{ color: movement.hasMoved ? color.text : undefined }}>{movement.hasMoved ? `${movement.lineDelta === 0 ? "Price changed" : `Line changed by ${signedDecimal(movement.lineDelta)}`} · implied probability ${probabilityShift >= 0 ? "+" : ""}${probabilityShift.toFixed(1)} pts` : "No change from the opening quote"}</p><p className="mt-1 text-[10px] text-gray-600">{sourceLabel} · {row.book}</p></div>
   </div>;
@@ -1757,16 +1764,6 @@ function signedDecimal(value: number): string {
   return `${value > 0 ? "+" : ""}${Number.isInteger(value) ? value : value.toFixed(1)}`;
 }
 
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: MLB_DISPLAY_TIME_ZONE,
-  }).format(new Date(value));
-}
-
 function formatSlateDate(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -1776,21 +1773,18 @@ function formatSlateDate(value: string): string {
   }).format(new Date(`${value}T12:00:00.000Z`));
 }
 
-function formatTime(value: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: MLB_DISPLAY_TIME_ZONE,
-  }).format(new Date(value));
-}
-
-function easternHour(value: string): number {
-  const hour = new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    hourCycle: "h23",
-    timeZone: MLB_DISPLAY_TIME_ZONE,
-  }).format(new Date(value));
-  return Number(hour);
+function hourInZone(value: string, timeZone: string): number {
+  try {
+    const hour = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      hourCycle: "h23",
+      timeZone,
+    }).format(new Date(value));
+    const parsed = Number(hour);
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
 }
 
 function formatGameLogDate(value: string): string {

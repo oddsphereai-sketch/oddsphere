@@ -82,7 +82,6 @@ actionables retained. The candidate was publishable with all 16 supported
 markets, zero stale displayed odds, complete required research, and no public
 flags enabled. Full details are recorded in
 `docs/model-audits/2026-08-10-player-props-current-observation-r23.md`.
-
 New WNBA records store the final published picked-side moneyline probability while retaining the
 independent and final layers separately. Tracking refuses a source payload whose model,
 distribution, or grade-policy identifier differs from the champion. The reader hides stale

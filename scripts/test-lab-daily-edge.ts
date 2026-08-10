@@ -171,6 +171,76 @@ async function main() {
         verdictKey: "best_angle",
       }) === true,
     );
+    check(
+      "stored Lean is capped when its current price is missing",
+      dailyEdgeTest.shouldHonorLiveMissingPriceCap({
+        storedVerdict: leanOverride,
+        normalizedVerdict: { key: "watchlist", label: "Watchlist" },
+        normalizedCapReasons: ["missing_price"],
+      }) === true,
+    );
+    check(
+      "stored Lean is restored when a reliable current price is available",
+      dailyEdgeTest.shouldHonorLiveMissingPriceCap({
+        storedVerdict: leanOverride,
+        normalizedVerdict: leanOverride,
+        normalizedCapReasons: [],
+      }) === false,
+    );
+    const freshPriceAt = new Date(Date.now() - 10 * 60_000).toISOString();
+    const marketReadWithPrice = {
+      label: "Projection-Led",
+      score: 0,
+      tone: "gray" as const,
+      explanation: "Current exact-line price is available.",
+      copyMode: "context_only_not_pick_changing" as const,
+      exactLineEvidenceStatus: "available",
+      evidenceAsOf: freshPriceAt,
+      generatedAt: freshPriceAt,
+      validityStatus: "valid_nondirectional" as const,
+      movement: {
+        firstTrackedLine: 8.5,
+        firstTrackedPrice: -106,
+        currentLine: 8.5,
+        currentPrice: -104,
+        directionRelativeToPick: "neutral" as const,
+        observedAt: freshPriceAt,
+      },
+      consensus: null,
+      sourceSummary: {
+        priceAction: null,
+        playbookConsensus: null,
+        sharpApiSourceSpecific: null,
+        sharpMoney: null,
+      },
+    };
+    check(
+      "fresh canonical market read restores the exact-line total price",
+      dailyEdgeTest.currentPriceFromMarketRead({
+        read: marketReadWithPrice,
+        market: "total",
+        expectedLine: 8.5,
+        locked: false,
+      })?.american === -104,
+    );
+    check(
+      "canonical market read cannot price a different total line",
+      dailyEdgeTest.currentPriceFromMarketRead({
+        read: marketReadWithPrice,
+        market: "total",
+        expectedLine: 9,
+        locked: false,
+      }) === null,
+    );
+    check(
+      "canonical live price never overrides a locked market",
+      dailyEdgeTest.currentPriceFromMarketRead({
+        read: marketReadWithPrice,
+        market: "total",
+        expectedLine: 8.5,
+        locked: true,
+      }) === null,
+    );
   }
 
   section("Incomplete MLB market safety");
@@ -191,8 +261,10 @@ async function main() {
     check("incomplete unlocked markets fail closed", held.held === true && held.verdict.key === "no_play" && held.actionabilityLabel === "No Play" && held.capReasons?.includes("incomplete_required_data_no_play") === true);
     check("incomplete-market safety runs after all support promotions", dailyEdgeRouteSource.indexOf("if (forceIncompleteNoPlay)") > dailyEdgeRouteSource.indexOf("applyHighConvictionTotalPromotion") && dailyEdgeRouteSource.indexOf("if (forceIncompleteNoPlay)") < dailyEdgeRouteSource.indexOf("ml.recommendationDecision = recommendationDecision.markets.moneyline"));
     check("FI health requires a real starter gap before reporting ingestion failure", healthMonitorSource.includes("hasActualStarterIngestionGap") && healthMonitorSource.includes('featureReasonCodes.includes("fi_starter_missing")') && healthMonitorSource.includes('return "fi_model_hold_provider_gap"') && healthMonitorSource.includes('return "fi_legit_model_toss_up"'));
+    check("FI health treats mapped starters without MLB history as sparse data", healthMonitorSource.includes("hasOnlyStarterStatsGap") && healthMonitorSource.includes('return "fi_sparse_starter_history"'));
     check("FI repair reruns canonical starter reconciliation after player readiness", healthRepairSource.includes("runStarterRefreshCycle") && healthRepairSource.indexOf("const readiness = await repairMlbModelReadiness") < healthRepairSource.indexOf("const starterRefresh = await runStarterRefreshCycle"));
     check("FI starter repair covers the complete slate instead of an unrelated finding-sized prefix", healthRepairSource.includes("limit: Math.max(1, args.report.gameCount)") && !healthRepairSource.includes("limit: Math.max(1, gamesByExternalId.size)"));
+    check("Daily Edge repair republishes the coherent member snapshot before post-repair health", healthRepairSource.includes("refreshDailyEdgeResponseSnapshot") && healthRepairSource.includes('source: "daily_edge_data_health_repair"') && healthRepairSource.indexOf("await refreshDailyEdgeResponseSnapshot") < healthRepairSource.indexOf("if (args.postRepairMonitor)"));
     check("Daily Edge repair targets missing ML and total market evidence", ['finding.code === "evidence_blocked"', 'finding.code === "actionable_price_missing"', 'finding.code === "actionable_edge_missing"', 'finding.code === "total_price_missing"'].every((needle) => healthRepairSource.includes(needle)));
     check("refresh pill follows each live league's actual cron", refreshStatusSource.includes('data_source: "wnba_daily_refresh"') && refreshStatusSource.includes('cadence_minutes: 30') && refreshStatusSource.includes('data_source: "soccer_daily_refresh"') && refreshStatusSource.includes('cadence_minutes: 60') && refreshStatusSource.includes("cronConfigsForSport(effectiveSport)"));
     check("visible Under line drop is classified as market support", dailyEdgeTest.visibleTotalPointMarketReadScore("Under", 9.5, 8.5) === 3);
@@ -257,6 +329,72 @@ async function main() {
     check("Circa source rows render Sharp Book Splits", sharpBook?.label === "Sharp Book Splits");
     check("Circa source rows keep both sides", sharpBook?.rows.length === 2, `got: ${sharpBook?.rows.length ?? 0}`);
     check("Circa source rows normalize percentages", sharpBook?.rows[0]?.moneyPct === 58 && sharpBook.rows[1]?.moneyPct === 42);
+  }
+  {
+    const common = {
+      canonical_event_id: "24680",
+      market_type: "moneyline",
+      provider: "sharpapi",
+      source_book: "circa",
+      source_type: "sharp_adjacent_book",
+    } as const;
+    const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
+      [
+        {
+          ...common,
+          selection_key: "24680:moneyline:away",
+          bets_pct: 0.47,
+          money_pct: 0.52,
+          source_observed_at: "2026-08-07T14:09:00Z",
+          fetched_at: "2026-08-07T14:07:00Z",
+        },
+        {
+          ...common,
+          selection_key: "24680:moneyline:home",
+          bets_pct: 0.53,
+          money_pct: 0.48,
+          source_observed_at: "2026-08-07T14:09:00Z",
+          fetched_at: "2026-08-07T14:07:00Z",
+        },
+        {
+          ...common,
+          selection_key: "24680:moneyline:away",
+          bets_pct: 0.45,
+          money_pct: 0.61,
+          source_observed_at: "2026-08-07T15:04:00Z",
+          fetched_at: "2026-08-07T15:07:00Z",
+        },
+        {
+          ...common,
+          selection_key: "24680:moneyline:away",
+          bets_pct: 0.46,
+          money_pct: 0.62,
+          source_observed_at: "2026-08-07T14:59:00Z",
+          fetched_at: "2026-08-07T15:07:00Z",
+        },
+        {
+          ...common,
+          selection_key: "24680:moneyline:home",
+          bets_pct: 0.54,
+          money_pct: 0.38,
+          source_observed_at: "2026-08-07T14:59:00Z",
+          fetched_at: "2026-08-07T15:07:00Z",
+        },
+        {
+          ...common,
+          selection_key: "24680:moneyline:home",
+          bets_pct: 0.55,
+          money_pct: 0.39,
+          source_observed_at: "2026-08-07T15:04:00Z",
+          fetched_at: "2026-08-07T15:07:00Z",
+        },
+      ],
+      [{ external_id: 24680, away_team: { abbreviation: "TB" }, home_team: { abbreviation: "SEA" } }] as never,
+    );
+    const sharpBook = sections.get("24680::moneyline")?.sharpBook ?? null;
+    check("source-aware split selection prefers the newest verified ingestion batch", sharpBook?.rows.every((row) => row.freshnessCheckedAt === "2026-08-07T15:07:00Z") === true);
+    check("source-aware split selection keeps the newest coherent source pair", sharpBook?.rows[0]?.moneyPct === 61 && sharpBook.rows[1]?.moneyPct === 39);
+    check("source-aware split selection uses matching latest source timestamps", sharpBook?.rows.every((row) => row.observedAt === "2026-08-07T15:04:00Z") === true);
   }
   {
     const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
