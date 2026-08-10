@@ -25,7 +25,7 @@
  * Visual review with Daniel after this lands, then iterate on detail.
  */
 
-import { Fragment, createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, Suspense, createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import ActualDailyEdgePreview from "@/app/dev/experience-preview/ActualDailyEdgePreview";
 import { useDailyEdge } from "../../hooks/useDailyEdge";
@@ -4567,17 +4567,19 @@ const marketingPreviewSnapshot: DailyEdgeResponse = {
 
 export function MarketingDailyEdgePreviewSurface(): ReactNode {
   return (
-    <div className="rounded-xl border border-violet-400/25 bg-[#0A0A0F] p-3 text-gray-200 sm:p-5">
-      <ActualDailyEdgePreview
-        snapshot={marketingPreviewSnapshot}
-        history={{}}
-        pitcherFirstInningHistory={{}}
-        sport="mlb"
-        freshContractRead={false}
-        reviewMode={false}
-        embeddedSample
-      />
-    </div>
+    <Suspense fallback={<div className="min-h-[520px] animate-pulse rounded-xl border border-violet-400/20 bg-[#0A0A0F]" aria-label="Loading interactive Daily Edge preview" />}>
+      <div className="rounded-xl border border-violet-400/25 bg-[#0A0A0F] p-3 text-gray-200 sm:p-5">
+        <ActualDailyEdgePreview
+          snapshot={marketingPreviewSnapshot}
+          history={{}}
+          pitcherFirstInningHistory={{}}
+          sport="mlb"
+          freshContractRead={false}
+          reviewMode={false}
+          embeddedSample
+        />
+      </div>
+    </Suspense>
   );
 }
 
