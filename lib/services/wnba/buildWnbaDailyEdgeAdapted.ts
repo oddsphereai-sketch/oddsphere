@@ -1328,6 +1328,10 @@ function adaptGame(
         publicSplits: ml.publicSplits,
         marketReadV2: ml.marketReadV2 ?? null,
         marketReadV2Enabled: ml.marketReadV2Enabled === true,
+        // The WNBA writer has already applied its versioned market-aware
+        // grade policy. The shared presentation builder must describe that
+        // authoritative grade, not silently downgrade it a second time.
+        allowBestAngleMarketConflict: ml.verdict.key === "best_angle",
       },
       {
         key: "total",
@@ -1343,6 +1347,7 @@ function adaptGame(
         publicSplits: total.publicSplits,
         marketReadV2: total.marketReadV2 ?? null,
         marketReadV2Enabled: total.marketReadV2Enabled === true,
+        allowBestAngleMarketConflict: total.verdict.key === "best_angle",
       },
       {
         key: "firstInning",
@@ -1358,6 +1363,7 @@ function adaptGame(
         publicSplits: spread.publicSplits,
         marketReadV2: spread.marketReadV2 ?? null,
         marketReadV2Enabled: spread.marketReadV2Enabled === true,
+        allowBestAngleMarketConflict: spread.verdict.key === "best_angle",
       },
     ],
   }), renderedCopyFlagOverrides);
