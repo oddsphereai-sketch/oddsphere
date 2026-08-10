@@ -673,7 +673,19 @@ function resolveCoherentMovement(market: MarketEdgeDto): { open: number | null; 
   if (coherent) {
     const first = coherent[0]!;
     const terminal = coherent[coherent.length - 1]!;
-    const previous = coherent.length > 2 ? coherent[coherent.length - 2]! : null;
+    // Prefer the latest genuinely different quote so Prior communicates a
+    // movement rather than repeating Current. If the book has multiple timed
+    // observations but the quote never changed, retain the latest observation
+    // as Prior so the timestamped three-point history remains honest.
+    let previous: OddsTrailStop | null = null;
+    for (let index = coherent.length - 2; index > 0; index -= 1) {
+      const candidate = coherent[index]!;
+      if (candidate.american !== terminal.american || !sameTrackedLine(candidate.line, terminal.line)) {
+        previous = candidate;
+        break;
+      }
+    }
+    if (previous === null && coherent.length > 2) previous = coherent[coherent.length - 2]!;
     return { open: first.american, previous: previous?.american ?? null, current: terminal.american, openLine: first.line, previousLine: previous?.line ?? null, currentLine: terminal.line ?? first.line, sportsbook: terminal.sportsbook, coherentTrail: true };
   }
   const canonical = market.marketReadV2?.movement;

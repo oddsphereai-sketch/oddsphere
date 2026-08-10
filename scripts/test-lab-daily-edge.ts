@@ -2033,6 +2033,26 @@ async function main() {
       "unlocked same-book trail ends at the verified current quote, not the last historical move",
       currentTrail.length === 3 && currentTrail[1]?.american === -141 && currentTrail[1]?.label === "move" && currentTrail[2]?.american === -152 && currentTrail[2]?.label === "current" && currentTrail[2]?.sportsbook === "ballybet",
     );
+
+    const noCrossBookTrail = dailyEdgeTest.buildPersistedOddsTrail({
+      candidates: [
+        { id: 21, game_id: 3, market_type: "total", sportsbook: "fanduel", side: "over", line_value: 9, odds_american: -110, recorded_at: "2026-08-10T10:00:00Z" },
+        { id: 22, game_id: 3, market_type: "total", sportsbook: "pinnacle", side: "over", line_value: 9, odds_american: -108, recorded_at: "2026-08-10T10:01:00Z" },
+        { id: 23, game_id: 3, market_type: "total", sportsbook: "pinnacle", side: "over", line_value: 9, odds_american: -105, recorded_at: "2026-08-10T10:02:00Z" },
+        { id: 24, game_id: 3, market_type: "total", sportsbook: "pinnacle", side: "over", line_value: 9, odds_american: -102, recorded_at: "2026-08-10T10:03:00Z" },
+      ],
+      priceRow: { game_id: 3, market_type: "total", sportsbook: "fanduel", side: "over", line_value: 9, odds_american: -107, fetched_at: "2026-08-10T10:04:00Z" },
+      currentAmerican: -107,
+      currentLine: 9,
+      currentObservedAt: "2026-08-10T10:04:00Z",
+      lockedAmerican: null,
+      lockedAt: null,
+      terminalSportsbook: "fanduel",
+    });
+    check(
+      "thin selected-book history never borrows a richer trail from another book",
+      noCrossBookTrail.length === 2 && noCrossBookTrail.every((stop) => stop.sportsbook === "fanduel"),
+    );
   }
 
   console.log(`\n${"━".repeat(70)}`);

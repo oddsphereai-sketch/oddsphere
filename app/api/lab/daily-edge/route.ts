@@ -3124,41 +3124,16 @@ function buildPersistedOddsTrail(args: {
     args.currentLine === null
       ? rows
       : rows.filter((row) => sameLineValue(row.line_value, args.currentLine));
-  const distinctOddsCount = (rows: LineHistoryRow[]) =>
-    new Set(
-      rows
-        .filter((row) => typeof row.odds_american === "number" && Number.isFinite(row.odds_american))
-        .map((row) => `${row.odds_american}:${row.line_value ?? "noline"}`),
-    ).size;
-  const richestBookRows = (rows: LineHistoryRow[]) => {
-    const byBook = new Map<string, LineHistoryRow[]>();
-    for (const row of rows) {
-      const arr = byBook.get(row.sportsbook) ?? [];
-      arr.push(row);
-      byBook.set(row.sportsbook, arr);
-    }
-    let best: LineHistoryRow[] = [];
-    let bestScore = 0;
-    for (const bookRows of byBook.values()) {
-      const score = distinctOddsCount(bookRows);
-      if (score > bestScore || (score === bestScore && bookRows.length > best.length)) {
-        best = bookRows;
-        bestScore = score;
-      }
-    }
-    return best;
-  };
   const sameBookSameLine = sameDisplayedLine(matchingBook);
-  const anyBookSameLine = sameDisplayedLine(trustedCandidates);
-  const richSameBookSameLine = distinctOddsCount(sameBookSameLine) >= 2;
+  // Movement must stay on the book that owns the current endpoint. Never
+  // borrow a richer history from another sportsbook: doing so can produce a
+  // plausible-looking but false First → Prior → Current sequence. The caller
+  // now loads both the oldest and newest bounded history windows, so the
+  // selected book normally has an opener and a recent pre-current observation.
   const sourceRows =
-    richSameBookSameLine
+    sameBookSameLine.length > 0
       ? sameBookSameLine
-      : anyBookSameLine.length > 0
-        ? richestBookRows(anyBookSameLine)
-        : matchingBook.length > 0
-          ? matchingBook
-          : trustedCandidates;
+      : matchingBook;
   const stops: OddsTrailStop[] = [];
 
   const pushStop = (stop: Omit<OddsTrailStop, "label">) => {
@@ -7098,37 +7073,64 @@ export async function GET(request: Request) {
     // filter with a global order, so it scans huge swaths and blows past the
     // statement_timeout (~200s) → the route hangs → "tonight's slate stuck
     // loading". A PER-GAME `.eq(game_id) + ORDER + LIMIT` uses the game_id index
-    // and is bounded; all games in parallel = ~400ms total, and stays fast as
-    // the table grows (the durable fix). We only need the OLDEST rows (an opener
-    // is the FIRST recorded per key), so LIMIT is safe. DEGRADE per game: an
-    // errored game just loses its openers ("Line Move unavailable"), never 500.
-    const HIST_PER_GAME = 400;
+    // and is bounded; all games run in parallel and stay fast as the table
+    // grows. Movement needs both ends of the history: the oldest window owns
+    // First observed, while the newest window owns Prior observed and Current.
+    // Merge the two bounded windows instead of scanning the full table or
+    // silently truncating the recent observations. DEGRADE per window: one
+    // failed end still leaves the other usable and never fails the slate.
+    const HIST_WINDOW_PER_GAME = 300;
     const histResults = await Promise.all(
-      gameIds.map((gid) =>
-        supabase
+      gameIds.map(async (gid) => {
+        const select = "game_id, market_type, sportsbook, side, line_value, odds_american, recorded_at, id";
+        const [oldest, newest] = await Promise.all([
+          supabase
           .from("line_history")
-          .select("game_id, market_type, sportsbook, side, line_value, odds_american, recorded_at, id")
+          .select(select)
           .eq("game_id", gid)
           .in("market_type", ["moneyline", "total", "first_inning_total"])
           .is("player_id", null)
           .order("recorded_at", { ascending: true })
           .order("id", { ascending: true })
-          .limit(HIST_PER_GAME)
+          .limit(HIST_WINDOW_PER_GAME)
           .then(
             (r) => r as { data: LineHistoryRow[] | null; error: { message: string } | null },
             () => ({ data: null, error: { message: "exception" } }),
           ),
-      ),
+          supabase
+          .from("line_history")
+          .select(select)
+          .eq("game_id", gid)
+          .in("market_type", ["moneyline", "total", "first_inning_total"])
+          .is("player_id", null)
+          .order("recorded_at", { ascending: false })
+          .order("id", { ascending: false })
+          .limit(HIST_WINDOW_PER_GAME)
+          .then(
+            (r) => r as { data: LineHistoryRow[] | null; error: { message: string } | null },
+            () => ({ data: null, error: { message: "exception" } }),
+          ),
+        ]);
+        const merged = new Map<number, LineHistoryRow>();
+        for (const row of [...(oldest.data ?? []), ...(newest.data ?? [])]) merged.set(row.id, row);
+        return {
+          data: Array.from(merged.values()).sort((a, b) => {
+            const byTime = Date.parse(a.recorded_at) - Date.parse(b.recorded_at);
+            return byTime !== 0 ? byTime : a.id - b.id;
+          }),
+          failedWindows: Number(Boolean(oldest.error)) + Number(Boolean(newest.error)),
+        };
+      }),
     );
     const histData: LineHistoryRow[] = [];
     let histDegraded = 0;
     for (const r of histResults) {
-      if (r.error) { histDegraded++; continue; }
-      histData.push(...((r.data ?? []) as LineHistoryRow[]));
+      histDegraded += r.failedWindows;
+      histData.push(...r.data);
     }
     if (histDegraded > 0) {
       console.warn(
-        `daily-edge: ${histDegraded}/${gameIds.length} games' line_history openers unavailable (degraded, slate still served)`,
+        `daily-edge: ${histDegraded}/${gameIds.length * 2} line_history windows unavailable (degraded, slate still served)`,
       );
     }
     for (const row of histData) {
