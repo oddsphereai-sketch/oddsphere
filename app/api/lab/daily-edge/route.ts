@@ -4175,6 +4175,27 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     expectedLine: input.market === "first_inning" ? 0.5 : totalExpectedLine,
     locked: input.isLockedRow === true,
   });
+  const memberPriceExpectedLine =
+    input.market === "first_inning" ? 0.5 : totalExpectedLine;
+  const primaryFreshRealPriceRow = input.isLockedRow === true
+    ? null
+    : pickPriceRow(
+        input.bestAvailableLinesCurrent.filter((row) =>
+          row.sportsbook !== "locked_snapshot" &&
+          row.sportsbook !== "recommendation_snapshot" &&
+          row.sportsbook !== "splits_consensus" &&
+          (memberPriceExpectedLine === null || sameLineValue(row.line_value, memberPriceExpectedLine))
+        ),
+        input.modelSide,
+        { allowStaleFallback: false },
+      );
+  // Keep the recommendation/grade price immutable, but give members the best
+  // validated live quote when one exists. When the two-book best-price gate
+  // cannot be satisfied (common for first inning), fall back to a fresh real
+  // book on the exact selected line. Synthetic recommendation snapshots are
+  // never presented as a sportsbook.
+  const currentMemberPriceRow =
+    bestAvailablePriceRow ?? primaryFreshRealPriceRow;
   // Market Intelligence V2 is selected for this exact game, market, and model
   // side. When the cron `lines` row has aged out but that canonical snapshot
   // carries a newer, sane price on the same total line, use it as the current
@@ -4347,18 +4368,25 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // probability, verdict, tracking and lock inputs continue to use
   // `priceAmerican` above.
   const trailPriceRow = resolveTrailPriceRow({
-    priceRow,
+    priceRow: currentMemberPriceRow ?? priceRow,
     bestAvailablePriceRow,
-    currentAmerican: priceAmerican,
-    currentLine: priceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null,
+    currentAmerican: currentMemberPriceRow?.odds_american ?? priceAmerican,
+    currentLine:
+      currentMemberPriceRow?.line_value ??
+      priceRow?.line_value ??
+      input.totalsExtras?.sportsbookLine ??
+      null,
     locked: input.isLockedRow === true,
   });
   const oddsTrail = buildPersistedOddsTrail({
     candidates: input.lineOpenCandidates,
     priceRow: trailPriceRow,
-    currentAmerican: priceAmerican,
+    currentAmerican: currentMemberPriceRow?.odds_american ?? priceAmerican,
     currentLine: trailPriceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null,
-    currentObservedAt: priceObservedAt,
+    currentObservedAt:
+      currentMemberPriceRow === null
+        ? priceObservedAt
+        : lineRowObservedAt(currentMemberPriceRow),
     lockedAmerican: input.lockedPriceAmerican ?? null,
     lockedAt: input.lockedPriceAt ?? null,
     terminalSportsbook:
@@ -4970,6 +4998,18 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     betsPct: displayPickedSplit?.betsPct ?? betsPct,
     publicSplits: displayPublicSplits,
     priceAmerican: invalidFirstInningMarket ? null : priceAmerican,
+    currentPriceAmerican:
+      invalidFirstInningMarket
+        ? null
+        : currentMemberPriceRow?.odds_american ?? priceAmerican,
+    currentPriceSportsbook:
+      invalidFirstInningMarket
+        ? null
+        : currentMemberPriceRow?.sportsbook ?? null,
+    currentPriceObservedAt:
+      invalidFirstInningMarket || currentMemberPriceRow === null
+        ? priceObservedAt
+        : lineRowObservedAt(currentMemberPriceRow),
     bestAvailablePriceAmerican:
       invalidFirstInningMarket ? null : bestAvailablePriceRow?.odds_american ?? null,
     bestAvailableSportsbook:

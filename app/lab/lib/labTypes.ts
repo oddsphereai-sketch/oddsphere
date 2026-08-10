@@ -278,6 +278,16 @@ export type MarketEdgeDto = {
   }>;
   priceAmerican: number | null;
   /**
+   * Fresh member-facing quote for the displayed pick. This is deliberately
+   * separate from `priceAmerican`, which remains the authoritative
+   * recommendation/grade price for backwards compatibility and tracking.
+   * The reader may therefore show a current bettable quote without silently
+   * re-grading a published recommendation as books move.
+   */
+  currentPriceAmerican?: number | null;
+  currentPriceSportsbook?: string | null;
+  currentPriceObservedAt?: string | null;
+  /**
    * Fresh best bettor price from a coherent two-sided book pair. This is
    * display-only and never rewrites the immutable grade/lock price above.
    * The reader rejects stale, one-sided, implausible-vig, and consensus-
