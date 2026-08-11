@@ -202,6 +202,23 @@ function bestAngleCopyExplainsFriction(row: PredictionEvidenceObject): boolean {
   return /override|edge|value|model|price|despite|mixed|resistance|friction/.test(text);
 }
 
+function watchlistCapIsExplicitlyExplained(row: PredictionEvidenceObject): boolean {
+  const text = readerText(row);
+  return row.identity.originalPlayGrade === "Watchlist" &&
+    /watchlist/i.test(text) &&
+    /market resistance|movement against|conflict|corrected side|keeps? (?:this|the (?:pick|read)) on watchlist/i.test(text);
+}
+
+function rawExpectedValuePct(row: PredictionEvidenceObject): number | null {
+  const price = row.priceValueEvidence.priceAmerican;
+  const probabilityRaw = row.modelStatsEvidence.modelProbability;
+  if (price === null || probabilityRaw === null || price === 0) return null;
+  const probability = probabilityRaw > 1 ? probabilityRaw / 100 : probabilityRaw;
+  if (probability <= 0 || probability >= 1) return null;
+  const decimal = price > 0 ? 1 + price / 100 : 1 + 100 / Math.abs(price);
+  return Number(((probability * decimal - 1) * 100).toFixed(1));
+}
+
 function hasMaterialMarketFriction(row: PredictionEvidenceObject): boolean {
   const market = interpretMarketIntelligence(row);
   if (row.marketEvidence.sourceConflict) return true;
@@ -355,7 +372,12 @@ function auditRow(row: PredictionEvidenceObject): Finding[] {
   }
 
   if (isPublicGrade(row.identity.originalPlayGrade) && row.priceValueEvidence.heavyJuiceWarning && (row.modelStatsEvidence.edge ?? 0) < 5) {
-    push(findings, row, "public_play_heavy_juice_thin_edge", "medium", "Lean/Best Angle has heavy favorite price with thin model edge.");
+    push(findings, row, "public_play_heavy_juice_thin_edge", "medium", "Lean/Best Angle has heavy favorite price with thin model edge.", {
+      ...diagnosticDetails(row),
+      rawExpectedValuePct: rawExpectedValuePct(row),
+      primaryConcern: "heavy price requires enough probability advantage after vig",
+      reviewBucket: "price-risk monitor",
+    });
   }
 
   if (gradeRank(row.identity.originalPlayGrade) >= gradeRank("Lean") && row.priceValueEvidence.priceBecameUnplayable) {
@@ -369,13 +391,21 @@ function auditRow(row: PredictionEvidenceObject): Finding[] {
   if (row.identity.originalPlayGrade === "Lean" && dimensions.bettingValueStrengthScore < 45 && dimensions.winCaseStrengthScore < 55) {
     push(findings, row, "lean_without_actionable_value", "medium", "Lean should be reasonably actionable, but win case/value dimensions are weak.", {
       ...diagnosticDetails(row),
+      rawExpectedValuePct: rawExpectedValuePct(row),
       primaryConcern: "weak win-case/value dimensions for current Lean",
-      reviewBucket: "human-review issue",
+      reviewBucket: "price-risk monitor",
     });
   }
 
   if (row.identity.originalPlayGrade === "Watchlist" && dimensions.bettingValueStrengthScore >= 65 && dimensions.winCaseStrengthScore >= 60 && dimensions.riskPenaltyScore < 30) {
-    push(findings, row, "watchlist_with_strong_actionable_value", "medium", "Watchlist has strong actionable value dimensions and may deserve Lean review.");
+    if (watchlistCapIsExplicitlyExplained(row)) {
+      push(findings, row, "watchlist_strong_value_intentionally_capped", "info", "Watchlist has strong model/value dimensions, but the reader explicitly explains the validated market-resistance cap.", {
+        ...diagnosticDetails(row),
+        reviewBucket: "expected validated cap",
+      });
+    } else {
+      push(findings, row, "watchlist_with_strong_actionable_value", "medium", "Watchlist has strong actionable value dimensions without an explicit cap explanation and may deserve Lean review.");
+    }
   }
 
   if (row.identity.originalPlayGrade === "Best Angle" && !bestAngleCopyExplainsFriction(row)) {
