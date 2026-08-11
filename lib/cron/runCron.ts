@@ -40,6 +40,7 @@ import {
   releaseCronJobLease,
   type CronLeaseAcquireResult,
 } from "./leases";
+import { acquireCronJobLeaseWithRetry } from "./leaseRetry";
 
 export type CronHandlerResult = {
   records_updated?: number;
@@ -80,6 +81,10 @@ export type CronHandlerOptions = {
   requireLease?: boolean;
   /** Suppress duplicate schedulers after a healthy recent completion. */
   minIntervalMinutes?: number;
+  /** Bounded wait for a shared lease before treating the invocation as skipped. */
+  leaseRetryMaxWaitMs?: number;
+  /** Poll interval while waiting for a shared lease. */
+  leaseRetryIntervalMs?: number;
 };
 
 /**
@@ -199,6 +204,8 @@ async function runOneStructured(
   const lockMinutes = options.lockMinutes ?? 5;
   const jobName = resolveCronLeaseJobName(dataSource, sport, options.leaseGroup);
   let lease: CronLeaseAcquireResult | null = null;
+  let leaseAttempts = 0;
+  let leaseWaitedMs = 0;
 
   if ((options.minIntervalMinutes ?? 0) > 0) {
     let lastHealthy: Date | null;
@@ -226,11 +233,18 @@ async function runOneStructured(
   }
 
   try {
-    lease = await acquireCronJobLease({
+    const acquisition = await acquireCronJobLeaseWithRetry({
       jobName,
       runId,
       leaseSeconds: lockMinutes * 60,
+      maxWaitMs: options.leaseRetryMaxWaitMs,
+      retryIntervalMs: options.leaseRetryIntervalMs,
+    }, {
+      acquire: acquireCronJobLease,
     });
+    lease = acquisition.lease;
+    leaseAttempts = acquisition.attempts;
+    leaseWaitedMs = acquisition.waitedMs;
   } catch (e) {
     return {
       status: "failed",
@@ -263,6 +277,8 @@ async function runOneStructured(
         run_id: runId,
         existing_run_id: lease.existingRunId,
         lease_expires_at: lease.leaseExpiresAt,
+        lease_attempts: leaseAttempts,
+        lease_waited_ms: leaseWaitedMs,
         overlap_skip: true,
       },
     };
@@ -345,6 +361,8 @@ async function runOneStructured(
           run_id: runId,
           mode: lease.mode,
           lease_expires_at: lease.mode === "acquired" ? lease.leaseExpiresAt : null,
+          attempts: leaseAttempts,
+          waited_ms: leaseWaitedMs,
         },
       },
     };

@@ -247,6 +247,12 @@ check(
     candidateSource.includes('activeId={game.id}'),
 );
 check(
+  "candidate visibly renders authoritative lock state on board and reader surfaces",
+  candidateSource.includes('import { LockBadge }') &&
+    candidateSource.includes("minute lock checks") &&
+    (candidateSource.match(/<LockBadge/g) ?? []).length === 4,
+);
+check(
   "a game, market, or expand action opens the full reader and it can collapse again",
     candidateSource.includes("setReaderOpen(true)") &&
     candidateSource.includes("function collapseReader()") &&

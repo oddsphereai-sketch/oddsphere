@@ -1,8 +1,9 @@
 /**
  * /api/cron/pregame-sweep — Phase 4.2.B: per-game lock-on-write
  *
- * Runs every 15 min during the slate-active window (Phase 4.2.D will
- * schedule this on Vercel). Each invocation:
+ * Runs every minute during the slate-active window. Each invocation stays
+ * targeted to games entering the lock window; ordinary sweeps are read-only
+ * no-ops after classification. Each invocation:
  *
  *   1. Reads today's slate + per-game lock state via classifyLockState
  *   2. Partitions games into four buckets: locked, entering_lock,
@@ -78,7 +79,7 @@ import {
   isPregameSweepLockOnly,
 } from "@/lib/cron/pregameSweepSafety";
 
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 // ─────────────────────────────────────────────────────────────
 // R-19 Phase 5a — Launch-safety controls
@@ -193,8 +194,8 @@ async function applyLocks(
 
   // Per-game UPDATE so we can audit each transition individually. The
   // count of transitioning games per invocation is typically 0-2 so a
-  // small loop is fine here; pregame-sweep runs every 15 min so we're
-  // not batching dozens of writes.
+  // small loop is fine here; the minute sweep remains targeted and does not
+  // batch dozens of writes.
   //
   // Phase 6B.18 — IDEMPOTENCY. Only UPDATE locked_at when it is
   // currently NULL. The pre-6B.18 unconditional UPDATE advanced
@@ -1059,9 +1060,16 @@ export async function GET(request: Request) {
       leaseGroup: "prediction_pipeline",
       requireLease: true,
       lockMinutes: 6,
-      // Suppress near-simultaneous duplicate schedulers without skipping the
-      // intended five-minute lock cadence. Diagnostics remain repeatable.
-      minIntervalMinutes: !dryRun && gateActive ? 4 : undefined,
+      // Lock sweeps are latency-sensitive. Wait briefly when another
+      // prediction writer owns the shared lease, then rely on the next
+      // minute sweep if contention lasts longer. This preserves the single
+      // authoritative prediction_pipeline lease without leaving games open
+      // for an entire five-minute interval.
+      leaseRetryMaxWaitMs: !dryRun && gateActive ? 20_000 : undefined,
+      leaseRetryIntervalMs: 1_000,
+      // Suppress only near-simultaneous duplicate invocations; never suppress
+      // the next intended minute-level lock check.
+      minIntervalMinutes: !dryRun && gateActive ? 0.75 : undefined,
     }
   );
 }

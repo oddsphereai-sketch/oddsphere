@@ -55,7 +55,7 @@ Player Props, Tracking, My Bets, and Account remain separate products in the exi
 - Local development can open the candidate directly. Production-mode and Vercel preview builds require the server-only `DAILY_EDGE_EXPERIENCE_PREVIEW_ENABLED=true` flag, and the route remains behind the normal member/beta session gate.
 - A private staging deployment can set `DAILY_EDGE_EXPERIENCE_CANDIDATE_ENABLED=true` to render the candidate underneath the real `/lab/daily-edge` URL. The browser URL, member authentication, and surrounding product navigation remain unchanged; the switch defaults off and does not affect other products.
 - Forecast boards publish on their scheduled cadence; the browser may check more frequently without implying a model rerun.
-- Lock windows are checked every five minutes. Lineup and split feeds have their own refresh schedules.
+- Lock windows are checked every minute with bounded shared-lease retry. Lineup and split feeds have their own refresh schedules.
 - A first-published price is labeled `Published` only when its stored side matches the displayed pick side.
 - Odds-price movement is compared only within one named sportsbook and selected side. When a total/spread number changes, every stop displays both the point line and price so the main line move is not hidden behind juice.
 - If a continuous same-book trail cannot be verified, the reader shows the current endpoint for context and withholds a supporting/resisting directional claim.

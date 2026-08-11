@@ -31,11 +31,11 @@
     },
     {
       "path": "/api/cron/pregame-sweep?lockOnly=true",
-      "schedule": "*/5 14-23 * * *"
+      "schedule": "* 14-23 * * *"
     },
     {
       "path": "/api/cron/pregame-sweep?lockOnly=true",
-      "schedule": "*/5 0-2 * * *"
+      "schedule": "* 0-2 * * *"
     },
     {
       "path": "/api/cron/public-splits-observations-refresh",

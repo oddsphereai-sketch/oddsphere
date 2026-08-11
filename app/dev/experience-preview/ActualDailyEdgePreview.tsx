@@ -12,6 +12,7 @@ import type {
   DailyEdgeTeamAvailability,
 } from "@/lib/services/dailyEdge/gameAvailability";
 import SportSelector from "@/app/lab/components/SportSelector";
+import { LockBadge } from "@/app/lab/components/daily-edge/LockBadge";
 import {
   DAILY_EDGE_SPORT_AVAILABILITY,
   DAILY_EDGE_SPORT_KEYS,
@@ -311,7 +312,52 @@ type ReaderSurfaceProps = {
 };
 
 function CollapsedReader({ game, market, marketKey, sport, onOpen, onOpenMarket, index, total }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: Sport; onOpen: () => void; onOpenMarket: (market: MarketKey) => void; index: number; total: number }) {
-  return <section aria-label="Selected Edge collapsed reader" className="overflow-hidden rounded-2xl border border-violet-400/35 bg-gradient-to-b from-violet-500/[0.06] via-[#100e18] to-[#0d0c13] shadow-[0_12px_42px_-24px_rgba(124,58,237,0.75),inset_0_1px_0_rgba(255,255,255,0.04)]"><div className="border-b border-white/[0.07] px-4 py-3 sm:px-5"><div className="flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><span className="h-4 w-1 shrink-0 rounded-full bg-violet-400" /><p className="shrink-0 text-[9px] font-black uppercase tracking-[0.2em] text-violet-200">Selected Edge</p><span className="hidden truncate text-[9px] text-gray-500 sm:inline">Compact read · click any game or market below to open the full reader.</span></div><button type="button" onClick={onOpen} aria-label="Expand full read" className="shrink-0 rounded-full border border-violet-400/45 bg-violet-500/[0.15] px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.13em] text-violet-100 transition hover:border-violet-300/70 hover:bg-violet-500/[0.25]">Expand full read ↓</button></div><div className="mt-3 flex flex-wrap items-center gap-2"><div className="flex items-center gap-2"><TeamLogo src={game.awayTeamLogo} label={game.awayTeam} /><strong className="text-sm text-white">{game.awayTeam}</strong><span className="text-[9px] text-gray-700">@</span><strong className="text-sm text-white">{game.homeTeam}</strong><TeamLogo src={game.homeTeamLogo} label={game.homeTeam} /></div><VerdictBadge market={market} /><span className="text-[9px] text-gray-600">{game.gameTime}</span><span className="ml-auto text-[8px] font-black uppercase tracking-wider text-gray-600">{index + 1} / {total}</span></div></div><MarketStrip game={game} sport={sport} active={marketKey} setActive={onOpenMarket} /><button type="button" onClick={onOpen} className="grid w-full gap-3 border-t border-white/[0.06] px-4 py-3 text-left transition hover:bg-white/[0.025] sm:grid-cols-[0.8fr_0.7fr_1.5fr] sm:px-5"><div><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Pick</p><div className="mt-1 flex items-baseline gap-2"><strong className="text-base font-black text-white">{displayPick(market, marketKey)}</strong><span className="font-mono text-[10px] font-black text-gray-500">{formatAmerican(currentDisplayedPrice(market))}</span>{market.currentPriceSportsbook ? <span className="text-[7px] font-bold text-gray-600">{formatSportsbook(market.currentPriceSportsbook)}</span> : null}</div></div><div><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Model</p><strong className="mt-1 block text-base font-black text-white">{formatProbability(market.modelProb)}</strong></div><div className="min-w-0"><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Quick take</p><p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-gray-400">{currentAwareGuidedGuide(market, game.decisionLine)}</p></div></button></section>;
+  return (
+    <section aria-label="Selected Edge collapsed reader" className="overflow-hidden rounded-2xl border border-violet-400/35 bg-gradient-to-b from-violet-500/[0.06] via-[#100e18] to-[#0d0c13] shadow-[0_12px_42px_-24px_rgba(124,58,237,0.75),inset_0_1px_0_rgba(255,255,255,0.04)]">
+      <div className="border-b border-white/[0.07] px-4 py-3 sm:px-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="h-4 w-1 shrink-0 rounded-full bg-violet-400" />
+            <p className="shrink-0 text-[9px] font-black uppercase tracking-[0.2em] text-violet-200">Selected Edge</p>
+            <span className="hidden truncate text-[9px] text-gray-500 sm:inline">Compact read · click any game or market below to open the full reader.</span>
+          </div>
+          <button type="button" onClick={onOpen} aria-label="Expand full read" className="shrink-0 rounded-full border border-violet-400/45 bg-violet-500/[0.15] px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.13em] text-violet-100 transition hover:border-violet-300/70 hover:bg-violet-500/[0.25]">Expand full read ↓</button>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
+            <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} />
+            <strong className="text-sm text-white">{game.awayTeam}</strong>
+            <span className="text-[9px] text-gray-700">@</span>
+            <strong className="text-sm text-white">{game.homeTeam}</strong>
+            <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} />
+          </div>
+          <VerdictBadge market={market} />
+          <span className="text-[9px] text-gray-600">{game.gameTime}</span>
+          <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
+          <span className="ml-auto text-[8px] font-black uppercase tracking-wider text-gray-600">{index + 1} / {total}</span>
+        </div>
+      </div>
+      <MarketStrip game={game} sport={sport} active={marketKey} setActive={onOpenMarket} />
+      <button type="button" onClick={onOpen} className="grid w-full gap-3 border-t border-white/[0.06] px-4 py-3 text-left transition hover:bg-white/[0.025] sm:grid-cols-[0.8fr_0.7fr_1.5fr] sm:px-5">
+        <div>
+          <p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Pick</p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <strong className="text-base font-black text-white">{displayPick(market, marketKey)}</strong>
+            <span className="font-mono text-[10px] font-black text-gray-500">{formatAmerican(currentDisplayedPrice(market))}</span>
+            {market.currentPriceSportsbook ? <span className="text-[7px] font-bold text-gray-600">{formatSportsbook(market.currentPriceSportsbook)}</span> : null}
+          </div>
+        </div>
+        <div>
+          <p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Model</p>
+          <strong className="mt-1 block text-base font-black text-white">{formatProbability(market.modelProb)}</strong>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Quick take</p>
+          <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-gray-400">{currentAwareGuidedGuide(market, game.decisionLine)}</p>
+        </div>
+      </button>
+    </section>
+  );
 }
 
 function ReaderSurface({ game, market, marketKey, sport, history, pitcherFirstInningHistory, availability, sample, setSample, deepOpen, setDeepOpen, deepView, setDeepView, setMarket, onCollapse, index, total }: ReaderSurfaceProps) {
@@ -355,7 +401,7 @@ function MobileReaderSheet({ onClose, onPrev, onNext, ...reader }: ReaderSurface
       <div className="absolute inset-x-0 bottom-0 top-12 flex flex-col overflow-hidden rounded-t-2xl border-t border-violet-400/35 bg-[#0a0910] shadow-[0_-24px_80px_-35px_rgba(124,58,237,0.85)]">
         <div className="shrink-0 border-b border-white/[0.07] bg-[#100e18] px-3 pb-2 pt-3">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2"><TeamLogo src={reader.game.awayTeamLogo} label={reader.game.awayTeam} /><span className="text-sm font-black text-white">{reader.game.awayTeam}</span><span className="text-[9px] text-gray-700">@</span><span className="text-sm font-black text-white">{reader.game.homeTeam}</span><TeamLogo src={reader.game.homeTeamLogo} label={reader.game.homeTeam} /><span className="truncate text-[9px] text-gray-600">{reader.game.gameTime}</span></div>
+            <div className="flex min-w-0 items-center gap-2"><TeamLogo src={reader.game.awayTeamLogo} label={reader.game.awayTeam} /><span className="text-sm font-black text-white">{reader.game.awayTeam}</span><span className="text-[9px] text-gray-700">@</span><span className="text-sm font-black text-white">{reader.game.homeTeam}</span><TeamLogo src={reader.game.homeTeamLogo} label={reader.game.homeTeam} /><span className="truncate text-[9px] text-gray-600">{reader.game.gameTime}</span><LockBadge lockState={reader.game.lockState} lockedAt={reader.game.lockedAt} scheduledLockAt={reader.game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></div>
             <button type="button" onClick={onClose} aria-label="Close reader" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.035] text-xl text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">×</button>
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
@@ -388,7 +434,7 @@ function SlateHeader({ snapshot, sport, onSportChange, sample = false }: { snaps
     <div>
       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between">
         <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {sportLabel(sport)}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {snapshot.games.length} {sportLabel(sport)} {snapshot.games.length === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(snapshot.as_of)}`}</p></div>
-        <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · hourly board · separate market feeds · five-minute lock checks</p>
+        <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · hourly board · separate market feeds · minute lock checks</p>
       </div>
       <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} sports={DAILY_EDGE_SPORT_KEYS} showCounts={false} showPendingState availability={DAILY_EDGE_SPORT_AVAILABILITY} /></div>
     </div>
@@ -404,7 +450,7 @@ function ReaderHeader({ game, market, onCollapse, index, total }: { game: DailyE
           <h2 className="text-lg font-black tracking-tight text-white sm:text-xl">{game.awayTeam} <span className="text-gray-600">@</span> {game.homeTeam}</h2>
           <VerdictBadge market={market} />
           <span className="text-[10px] text-gray-600">{game.gameTime}</span>
-          <span className="text-[8px] font-bold uppercase tracking-wider text-gray-700">{game.lockState}</span>
+          <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
         </div>
       </div>
       <div className="flex items-center gap-3"><span className="text-[9px] font-black uppercase tracking-wider text-gray-700">{index + 1} / {total}</span>{onCollapse ? <button type="button" onClick={onCollapse} aria-label="Collapse reader" className="rounded-full border border-violet-400/45 bg-violet-500/[0.14] px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.13em] text-violet-100 transition hover:border-violet-300/70 hover:bg-violet-500/[0.24]">Collapse read ↑</button> : null}</div>
@@ -1274,7 +1320,67 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
     priceAmerican: currentDisplayedPrice(headlineMarketData),
   };
   const marketKeys: MarketKey[] = ["moneyline", "total", "first_inning"];
-  return <article role="button" tabIndex={0} data-game-id={game.id} aria-pressed={active} onClick={() => selectGame(game, headlineKey)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectGame(game, headlineKey); } }} className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[#0D0D14] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)] transition ${active ? "border-white/35 outline outline-2 outline-violet-400/25 outline-offset-2" : boardCardBorder(headline.verdict.key)}`}><div className="h-[3px] w-full shrink-0" style={{ background: `linear-gradient(to right, ${teamTheme(game.awayTeam).primary} 0%, ${teamTheme(game.awayTeam).primary} 28%, rgba(255,255,255,0.06) 50%, ${teamTheme(game.homeTeam).primary} 72%, ${teamTheme(game.homeTeam).primary} 100%)` }} /><div className="flex flex-1 flex-col p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2.5"><TeamLogo src={game.awayTeamLogo} label={game.awayTeam} /><span className="text-base font-black text-white">{game.awayTeam}</span><span className="text-[11px] text-gray-700">@</span><span className="text-base font-black text-white">{game.homeTeam}</span><TeamLogo src={game.homeTeamLogo} label={game.homeTeam} /></div><div className="flex items-center gap-2"><VerdictBadge market={headline} large /><span className="text-[10px] text-gray-500">{game.gameTime}</span></div></div><div className="mt-5 flex flex-wrap items-baseline gap-2"><span className="text-[30px] font-black leading-none tracking-tight text-white sm:text-[34px]">{displayPick(headline, headlineKey)}</span><span className="text-[10px] font-black uppercase tracking-wider text-gray-500">{marketLabelFor(headlineKey, sport)}</span><span className="text-[15px] font-black text-gray-200">{formatProbability(headline.modelProb)}</span><span className="font-mono text-[12px] font-bold text-gray-500">{formatAmerican(headline.priceAmerican)}</span></div><p className="mt-3 line-clamp-2 text-[12px] leading-relaxed text-gray-400">{currentAwareGuidedGuide(headline, game.decisionLine)}</p><div className="mt-3 flex items-baseline gap-2"><span className="text-[9px] font-black uppercase tracking-wider text-gray-600">Proj</span><span className="text-[12px] text-gray-400">{game.awayTeam} <strong className="text-[13px] text-white">{formatNumber(game.projected.away)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-[13px] text-white">{formatNumber(game.projected.home)}</strong></span></div><div className="mt-auto pt-3"><div className="flex items-center justify-between gap-1 overflow-hidden text-[9px] font-black uppercase tracking-[0.06em]">{marketKeys.map((key, index) => { const item = game.markets[key]; return <span key={key} className="inline-flex min-w-0 items-center gap-1">{index > 0 ? <span className="mr-1 text-gray-700">·</span> : null}<span className="text-gray-600">{marketShortLabelFor(key, sport)}</span><span className={boardVerdictText(item.verdict.key)}>{verdictSymbol(item.verdict.key)} {item.verdict.label}</span></span>; })}</div><div className="mt-4 grid grid-cols-3 gap-2">{marketKeys.map((key) => { const item = game.markets[key]; const selected = active && activeMarket === key; return <button key={key} type="button" data-market={key} onClick={(event) => { event.stopPropagation(); selectGame(game, key); }} className={`min-h-[70px] rounded-lg border px-3 py-3 text-left transition sm:min-h-[76px] sm:px-3.5 ${boardMarketPill(item.verdict.key)} ${selected ? "ring-2 ring-white/45 ring-offset-1 ring-offset-[#0D0D14]" : ""}`}><span className={`block text-[9.5px] font-black uppercase tracking-[0.1em] ${boardVerdictText(item.verdict.key)}`}>{marketShortLabelFor(key, sport)}</span><span className="mt-1.5 block truncate text-[14px] font-black text-gray-100 sm:text-[15px]">{displayPick(item, key)}</span></button>; })}</div><div className="mt-2 flex min-h-3 justify-end"><span className={`text-[8px] font-black uppercase tracking-[0.1em] ${active ? "text-gray-300" : "text-violet-200/60"}`}>{active ? "Open in reader ↑" : "View breakdown ↑"}</span></div></div></div></article>;
+  return (
+    <article
+      role="button"
+      tabIndex={0}
+      data-game-id={game.id}
+      aria-pressed={active}
+      onClick={() => selectGame(game, headlineKey)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          selectGame(game, headlineKey);
+        }
+      }}
+      className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[#0D0D14] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)] transition ${active ? "border-white/35 outline outline-2 outline-violet-400/25 outline-offset-2" : boardCardBorder(headline.verdict.key)}`}
+    >
+      <div className="h-[3px] w-full shrink-0" style={{ background: `linear-gradient(to right, ${teamTheme(game.awayTeam).primary} 0%, ${teamTheme(game.awayTeam).primary} 28%, rgba(255,255,255,0.06) 50%, ${teamTheme(game.homeTeam).primary} 72%, ${teamTheme(game.homeTeam).primary} 100%)` }} />
+      <div className="flex flex-1 flex-col p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} />
+            <span className="text-base font-black text-white">{game.awayTeam}</span>
+            <span className="text-[11px] text-gray-700">@</span>
+            <span className="text-base font-black text-white">{game.homeTeam}</span>
+            <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} />
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <VerdictBadge market={headline} large />
+            <span className="text-[10px] text-gray-500">{game.gameTime}</span>
+            <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
+          </div>
+        </div>
+        <div className="mt-5 flex flex-wrap items-baseline gap-2">
+          <span className="text-[30px] font-black leading-none tracking-tight text-white sm:text-[34px]">{displayPick(headline, headlineKey)}</span>
+          <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">{marketLabelFor(headlineKey, sport)}</span>
+          <span className="text-[15px] font-black text-gray-200">{formatProbability(headline.modelProb)}</span>
+          <span className="font-mono text-[12px] font-bold text-gray-500">{formatAmerican(headline.priceAmerican)}</span>
+        </div>
+        <p className="mt-3 line-clamp-2 text-[12px] leading-relaxed text-gray-400">{currentAwareGuidedGuide(headline, game.decisionLine)}</p>
+        <div className="mt-3 flex items-baseline gap-2">
+          <span className="text-[9px] font-black uppercase tracking-wider text-gray-600">Proj</span>
+          <span className="text-[12px] text-gray-400">{game.awayTeam} <strong className="text-[13px] text-white">{formatNumber(game.projected.away)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-[13px] text-white">{formatNumber(game.projected.home)}</strong></span>
+        </div>
+        <div className="mt-auto pt-3">
+          <div className="flex items-center justify-between gap-1 overflow-hidden text-[9px] font-black uppercase tracking-[0.06em]">
+            {marketKeys.map((key, index) => {
+              const item = game.markets[key];
+              return <span key={key} className="inline-flex min-w-0 items-center gap-1">{index > 0 ? <span className="mr-1 text-gray-700">·</span> : null}<span className="text-gray-600">{marketShortLabelFor(key, sport)}</span><span className={boardVerdictText(item.verdict.key)}>{verdictSymbol(item.verdict.key)} {item.verdict.label}</span></span>;
+            })}
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {marketKeys.map((key) => {
+              const item = game.markets[key];
+              const selected = active && activeMarket === key;
+              return <button key={key} type="button" data-market={key} onClick={(event) => { event.stopPropagation(); selectGame(game, key); }} className={`min-h-[70px] rounded-lg border px-3 py-3 text-left transition sm:min-h-[76px] sm:px-3.5 ${boardMarketPill(item.verdict.key)} ${selected ? "ring-2 ring-white/45 ring-offset-1 ring-offset-[#0D0D14]" : ""}`}><span className={`block text-[9.5px] font-black uppercase tracking-[0.1em] ${boardVerdictText(item.verdict.key)}`}>{marketShortLabelFor(key, sport)}</span><span className="mt-1.5 block truncate text-[14px] font-black text-gray-100 sm:text-[15px]">{displayPick(item, key)}</span></button>;
+            })}
+          </div>
+          <div className="mt-2 flex min-h-3 justify-end"><span className={`text-[8px] font-black uppercase tracking-[0.1em] ${active ? "text-gray-300" : "text-violet-200/60"}`}>{active ? "Open in reader ↑" : "View breakdown ↑"}</span></div>
+        </div>
+      </div>
+    </article>
+  );
 }
 
 function boardCardBorder(verdict: string): string {

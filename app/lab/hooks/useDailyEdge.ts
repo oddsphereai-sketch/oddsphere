@@ -3,10 +3,9 @@
 /**
  * useDailyEdge — SWR hook for /api/lab/daily-edge.
  *
- * Polls every 5 minutes (300_000 ms) — between cron refresh cycles the
- * underlying data only changes on (a) sharp action mid-day and (b) Daniel
- * publishing scores model updates. 5 min is a reasonable midpoint between
- * "fresh enough" and "don't hammer Supabase".
+ * Polls every minute so a newly published T-60 lock reaches an already-open
+ * member board promptly. Reads use the prebuilt response snapshot, so this
+ * does not rerun a model or provider refresh in the browser.
  *
  * Per-(sport, date) keying so switching sports doesn't ghost-render the
  * previous sport's data through SWR's stale-while-revalidate.
@@ -35,7 +34,7 @@ export type UseDailyEdgeOptions = {
    * fallback_used/slateState so the UI stays honest instead of blank.
    */
   allowStale?: boolean;
-  /** Poll interval in ms. Default 300_000 (5 min). Set to 0 to disable polling. */
+  /** Poll interval in ms. Default 60_000 (1 min). Set to 0 to disable polling. */
   refreshIntervalMs?: number;
   /** Local/admin visual preview for deterministic member copy. */
   copyPreview?: boolean;
@@ -49,7 +48,7 @@ export type UseDailyEdgeResult = {
 };
 
 export function useDailyEdge(options: UseDailyEdgeOptions): UseDailyEdgeResult {
-  const { sport, date, allowStale = false, refreshIntervalMs = 300_000, copyPreview = false } = options;
+  const { sport, date, allowStale = false, refreshIntervalMs = 60_000, copyPreview = false } = options;
   const key = buildLabUrl("/api/lab/daily-edge", { sport, date, allowStale, copyPreview: copyPreview ? 1 : undefined });
 
   const { data, error, isLoading, mutate } = useSWR<DailyEdgeResponse>(

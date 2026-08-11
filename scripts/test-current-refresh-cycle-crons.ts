@@ -44,6 +44,8 @@ assert.match(source("app/api/cron/mlb-player-props-refresh/route.ts"), /refreshM
 const coldSlateSchedules = crons.filter((cron) => cron.path === "/api/cron/slate-cycle").map((cron) => cron.schedule);
 assert.ok(coldSlateSchedules.includes("5 8,10-12 * * *"), "cold slate schedule includes the 11:05 UTC freshness run");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/tracking-refresh" && cron.schedule === "33 * * * *"), "Tracking publishes hourly");
-assert.ok(crons.some((cron) => cron.path === "/api/cron/pregame-sweep?lockOnly=true" && cron.schedule?.startsWith("*/5")), "lock sweep remains targeted at five minutes");
+assert.ok(crons.some((cron) => cron.path === "/api/cron/pregame-sweep?lockOnly=true" && cron.schedule?.startsWith("* ")), "lock sweep runs every minute while remaining targeted");
+assert.match(source("app/api/cron/pregame-sweep/route.ts"), /leaseRetryMaxWaitMs:\s*!dryRun && gateActive \? 20_000/, "lock sweep briefly waits for the shared lease before deferring");
+assert.match(source("app/lab/hooks/useDailyEdge.ts"), /refreshIntervalMs = 60_000/, "an open member board observes a newly published lock within a minute");
 
 console.log("PASS current refresh-cycle schedules use the authoritative leased writers and republish member snapshots");

@@ -592,7 +592,7 @@ async function main() {
   const pregameSweepRouteSource = readFileSync("app/api/cron/pregame-sweep/route.ts", "utf8");
   const vercelConfigSource = readFileSync("vercel.json", "utf8");
   check("preview UI clearly discloses simulated data", propsUiSource.includes("Design preview · Simulated board") && propsUiSource.includes("not live, bettable, or sourced from today&apos;s BDL response") && propsUiSource.includes('mode === "preview" ? <PreviewDataNotice />'));
-  check("pregame lock sweep runs every 5 minutes during active windows", vercelConfigSource.includes('"schedule": "*/5 14-23 * * *"') && vercelConfigSource.includes('"schedule": "*/5 0-2 * * *"'));
+  check("pregame lock sweep runs every minute during active windows", vercelConfigSource.includes('"schedule": "* 14-23 * * *"') && vercelConfigSource.includes('"schedule": "* 0-2 * * *"'));
   check("props source-row guard accommodates healthy late-day provider expansion", liveBoardSource.includes("DEFAULT_MAX_SOURCE_ODDS_ROWS = 35_000"));
   check("props refresh failure still attempts T-60 lock from last-known-good board", propsRefreshRouteSource.includes("loadLatestMlbPropsBoardSnapshot") && propsRefreshRouteSource.includes("syncInternalMlbPropsTracking(previous, new Date().toISOString())") && propsRefreshRouteSource.includes("lockFallbackAttempted"));
   check("successful game locks republish the fast Daily Edge response snapshot", pregameSweepRouteSource.includes("refreshDailyEdgeResponseSnapshot") && pregameSweepRouteSource.includes('source: "pregame_sweep_lock"') && pregameSweepRouteSource.includes("response_snapshot: responseSnapshot"));

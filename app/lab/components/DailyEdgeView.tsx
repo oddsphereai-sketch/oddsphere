@@ -110,7 +110,7 @@ export default function DailyEdgeView({ sport, onSportChange }: Props) {
     date: requestedDate,
     // Skip the request entirely for sports without coverage — hook returns
     // a placeholder shape; pass a poll interval of 0 to also avoid polling.
-    refreshIntervalMs: isLive ? 300_000 : 0,
+    refreshIntervalMs: isLive ? 60_000 : 0,
   });
 
   const games = data?.games ?? [];

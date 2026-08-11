@@ -28,7 +28,7 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   market_calibration_policy: "mlb_model_market_calibration_baseline_2026_07_08",
   grade_policy: "mlb_public_grade_policy_v25_sharpapi_split_source_alignment_2026_08_11",
   correction_policy: "mlb_prediction_corrections_v11_totals_rejected_candidate_original_side_2026_08_11",
-  tracking_contract: "member_facing_lock_v7_locked_only_status_normalized_2026_08_05",
+  tracking_contract: "member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11",
   schedule_time_policy: "mlb_official_schedule_time_v1_2026_07_30",
 } as const;
 

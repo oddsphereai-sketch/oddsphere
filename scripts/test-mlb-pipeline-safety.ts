@@ -70,8 +70,8 @@ check(
   layers.grade_policy === "mlb_public_grade_policy_v25_sharpapi_split_source_alignment_2026_08_11",
 );
 check(
-  "tracking contract carries the locked-only status-normalized release",
-  layers.tracking_contract === "member_facing_lock_v7_locked_only_status_normalized_2026_08_05",
+  "tracking contract carries the priority-retry minute-lock release",
+  layers.tracking_contract === "member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11",
 );
 check(
   "MLB layer stamp carries one immutable decision release",
@@ -362,8 +362,9 @@ check(
     sweepSource.includes("failedEnteringLockExternalIds"),
 );
 check(
-  "pregame duplicate cooldown preserves the five-minute lock cadence",
-  sweepSource.includes("minIntervalMinutes: !dryRun && gateActive ? 4 : undefined"),
+  "pregame duplicate cooldown preserves the minute lock cadence",
+  sweepSource.includes("minIntervalMinutes: !dryRun && gateActive ? 0.75 : undefined") &&
+    sweepSource.includes("leaseRetryMaxWaitMs: !dryRun && gateActive ? 20_000 : undefined"),
 );
 check(
   "lock-only sweep avoids full market intelligence collection",
