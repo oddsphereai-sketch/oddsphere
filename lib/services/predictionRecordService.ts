@@ -422,8 +422,8 @@ export const ML_MARKET_DIVERGENCE_MIN_MODEL_PROB = 0.54;
 export const ML_SIGNED_MARKET_RESISTANCE_RULE_ID =
   "ml_signed_money_below_tickets_standdown_v1_2026_08_10";
 export const ML_SHARP_PORTFOLIO_LEAN_RULE_ID =
-  "ml_sharp_portfolio_top1_lean_v1_train_2026_07_31";
-export const ML_SHARP_PORTFOLIO_MIN_MODEL_PROB = 0.55;
+  "ml_sharp_portfolio_top1_lean_v2_selected_side_floor_2026_08_11";
+export const ML_SHARP_PORTFOLIO_MIN_MODEL_PROB = 0.50;
 export const ML_SHARP_PORTFOLIO_MIN_ODDS = -220;
 export const ML_SHARP_PORTFOLIO_MAX_ODDS = 200;
 export const ML_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID =
@@ -1716,8 +1716,10 @@ export function applyMlbSharpPortfolioLean(records: PredictionRecordRow[]): Pred
           picked_money_pct: selected.score.pickedMoneyPct,
           movement_direction: selected.score.movementDirection,
           trained_through: "2026-07-31",
+          model_probability_floor_basis:
+            "50% is the structural binary selected-side floor; learned market probability must still clear offered break-even and rank first on the slate.",
           validation_note:
-            "Daily walk-forward top-one MLB moneyline ranker: 20-5 with positive locked-price ROI; frozen July 31 coefficients went 6-2 on untouched August 1-8 rows. Additional second/third selections were not promoted.",
+            "Current-probability-head daily walk-forward top-one MLB moneyline ranker: 20-5 with positive locked-price ROI across July 11-August 8. Exact floor sensitivity showed no validated 55% cliff; additional second/third selections were not promoted.",
         },
       },
     };

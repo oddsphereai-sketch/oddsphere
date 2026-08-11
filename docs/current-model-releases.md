@@ -11,9 +11,9 @@ Last reviewed: 2026-08-11
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2`
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_11_r31`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v30_2026_08_11`
-- Grade policy: `mlb_public_grade_policy_v22_sharp_portfolio_and_total_resistance_2026_08_11`
+- Decision release: `mlb_daily_edge_decision_2026_08_11_r32`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v31_2026_08_11`
+- Grade policy: `mlb_public_grade_policy_v23_sharp_portfolio_selected_side_floor_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
@@ -54,23 +54,26 @@ qualifiers, so r30 changes no current recommendation while enabling the validate
 Evidence and rollback details are recorded in
 `docs/model-audits/2026-08-11-mlb-total-under-low-ticket-resistance-r30.md`.
 
-The August 11 r31 release adds a slate-level MLB Moneyline portfolio ranker after all existing
+The August 11 r32 release adds a slate-level MLB Moneyline portfolio ranker after all existing
 side selection, correction, no-bet, price, freshness, and data-quality gates. It jointly scores
 the frozen model probability, offered-price break-even, model-versus-price edge, picked-side
 ticket and money shares, their gap, price shape, and captured opener-to-lock market behavior.
 It may promote at most the highest-ranked qualifying Watchlist to Lean; it is not a quota and
-may add no play. A qualifying row needs at least 55% model probability, a price from -220 through
+may add no play. A qualifying row needs at least 50% model probability—the structural boundary
+at which the binary model prefers the selected side—a price from -220 through
 +200, a learned probability at least equal to the offered break-even, complete high-quality
 market evidence, and no movement against the pick. It never changes the side, probability,
 projection, price, Best Angle status, or stake.
 
-Daily walk-forward selection produced 25 plays over 30 test slates at 20-5 and +37.4% locked-price
-ROI. Allowing a second or third daily selection degraded materially, so only rank one is live.
-Coefficients frozen through July 31 went 6-2 on untouched August 1-8 rows. The paired August 11
+Exact-record floor sensitivity found no defensible 55% cliff: under the current probability head,
+the 50-52%, 52-54%, 54-55%, 55-56%, and 56-58% non-actionable bands were not monotonic. With the
+50% selected-side floor, current-head daily walk-forward selection produced 25 plays at 20-5 and
++40.9% locked-price ROI across July 11-August 8. Allowing a second or third daily selection
+degraded materially, so only rank one is live. The paired August 11
 replay adds one Moneyline Lean (Cincinnati at the then-current +135) to the previously zero-action
 Moneyline board; totals and first-inning decisions are unchanged by this ranker. Evidence and
 rollback details are recorded in
-`docs/model-audits/2026-08-11-mlb-sharp-portfolio-ranker-r31.md`.
+`docs/model-audits/2026-08-11-mlb-sharp-portfolio-selected-side-floor-r32.md`.
 
 The August 11 r28 first-inning availability release keeps MLB Stats as the authoritative starter
 source and fills only an empty side through the existing ESPN probable-pitcher fallback. The

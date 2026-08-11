@@ -377,6 +377,15 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
     "movement against the pick remains ineligible despite strong other inputs",
     ranked.find((record) => record.matchup === "LAA@LAD")?.play_grade === "market_aligned",
   );
+  const selectedSideFloor = applyMlbSharpPortfolioLean([
+    portfolioRecord(4, "LOW@FLOOR", 150, 0.51, 20, 65, "neutral"),
+  ]);
+  check(
+    "50%-plus model side can qualify when the joint market score clears price",
+    selectedSideFloor[0]?.play_grade === "lean" &&
+      (selectedSideFloor[0]?.snapshot_json as any)?.decision_pipeline?.action_rule_id ===
+        ML_SHARP_PORTFOLIO_LEAN_RULE_ID,
+  );
 }
 
 // ── Standard slate: 1 game, NRFI held → 2 records ────────────────
@@ -2843,7 +2852,7 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
   check("FI v2 best_angle → final signed-edge gate stamped",
         gate?.rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID && gate?.action === "keep_as_best_angle");
   check("FI Best Angle decision pipeline stamps current release and validated rule",
-        (fi.snapshot_json as any)?.decision_pipeline?.release_id === "mlb_daily_edge_decision_2026_08_11_r31" &&
+        (fi.snapshot_json as any)?.decision_pipeline?.release_id === "mlb_daily_edge_decision_2026_08_11_r32" &&
         (fi.snapshot_json as any)?.decision_pipeline?.board_action === "bet" &&
         (fi.snapshot_json as any)?.decision_pipeline?.actionable_grade === "best_angle" &&
         (fi.snapshot_json as any)?.decision_pipeline?.action_rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID);

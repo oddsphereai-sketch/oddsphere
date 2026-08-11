@@ -1,5 +1,7 @@
 # MLB sharp portfolio Moneyline ranker — r31
 
+Status: superseded before production deployment by r32 after exact floor-sensitivity review.
+
 Date: 2026-08-11
 
 Scope: MLB full-game Moneylines, member-facing `prediction_records` writer only

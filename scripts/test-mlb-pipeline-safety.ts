@@ -66,8 +66,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries August 11 v22 sharp portfolio and total resistance",
-  layers.grade_policy === "mlb_public_grade_policy_v22_sharp_portfolio_and_total_resistance_2026_08_11",
+  "grade policy carries August 11 v23 sharp portfolio selected-side floor",
+  layers.grade_policy === "mlb_public_grade_policy_v23_sharp_portfolio_selected_side_floor_2026_08_11",
 );
 check(
   "tracking contract carries the locked-only status-normalized release",
@@ -79,8 +79,8 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB sharp portfolio and low-ticket Under Leans are versioned as decision release r31",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_11_r31" &&
+  "MLB sharp portfolio selected-side floor is versioned as decision release r32",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_11_r32" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v3" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
