@@ -624,13 +624,13 @@ function SlateGameNavigator({ data, matchups, selectedGame, onSelectGame, isPrev
 }
 
 function ProviderHealthStrip({ data, matchups }: { data: PlayerPropsDashboardData; matchups: SlateMatchup[] }) {
-  const starters = matchups.every((item) => item.starterStatus === "confirmed") ? "Confirmed" : matchups.some((item) => item.starterStatus === "partial") ? "Partial" : "Projected";
+  const starters = matchups.every((item) => item.starterStatus === "confirmed") ? "Available" : matchups.some((item) => item.starterStatus === "partial") ? "Partial" : "Projected";
   const context = data.slate?.contextStatus ?? "unavailable";
   const items: Array<[string, string, "good" | "warn" | "bad"]> = [
     ["BDL odds", humanStatus(data.providerStatus.bdl), data.providerStatus.bdl.includes("flow") ? "good" : "warn"],
     ["Sharp audit", humanStatus(data.providerStatus.sharpApi), data.providerStatus.sharpApi.includes("no_player") ? "warn" : "good"],
     ["Splits/context", context, context === "available" ? "good" : "warn"],
-    ["Probable starters", starters, starters === "Confirmed" ? "good" : "warn"],
+    ["Probable starters", starters, starters === "Available" ? "good" : "warn"],
   ];
   const healthy = items.filter(([, , tone]) => tone === "good").length;
   return <section aria-label="Provider Health" className="border-b border-gray-900"><details className="group"><summary className="flex cursor-pointer list-none items-center justify-between py-3 text-xs"><span className="flex items-center gap-2 font-bold text-gray-400"><span className="h-2 w-2 rounded-full bg-amber-400" />Data status</span><span className="text-gray-600">{healthy} ready · {items.length - healthy} partial <span className="ml-2 inline-block transition-transform group-open:rotate-180">⌄</span></span></summary><div className="grid grid-cols-2 gap-x-6 gap-y-3 pb-4 lg:grid-cols-4">{items.map(([label, value, tone]) => (
@@ -1343,9 +1343,9 @@ function DrawerSection({ title, children }: { title: string; children: React.Rea
 
 function PendingPropsState({ data, mode, matchups, candidatePresentation = false }: { data: PlayerPropsDashboardData; mode: DashboardMode; matchups: SlateMatchup[]; candidatePresentation?: boolean }) {
   const probablePitcherStatus = matchups.length > 0 && matchups.every((item) => item.starterStatus === "confirmed")
-    ? "Confirmed"
+    ? "Available"
     : matchups.some((item) => item.starterStatus !== "pending")
-      ? "Partially confirmed"
+      ? "Partially available"
       : "Projected";
   return <div className="w-full pb-8"><PropLeagueRail /><PropsSlateHeader data={data} mode={mode} matchups={matchups} selectedGame="all" onSelectGame={() => undefined} candidatePresentation={candidatePresentation} />{mode === "admin" ? <ProviderHealthStrip data={data} matchups={matchups} /> : null}<section className="mt-7 border-y border-gray-800 py-8 sm:py-10"><span className="inline-flex rounded border border-gray-600 px-2.5 py-1 text-[11px] font-bold text-gray-300">Markets opening soon</span><h2 className="mt-4 text-2xl font-black text-white">Player prop lines have not posted yet.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">Today’s board will populate automatically as sportsbooks publish their first prices.</p><div className="mt-6 grid gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800 md:grid-cols-3"><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Games scheduled</p><p className="mt-2 text-lg font-black text-white">{matchups.length}</p></div><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Probable pitchers</p><p className="mt-2 text-sm font-semibold text-gray-200">{probablePitcherStatus}</p></div><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Next update</p><p className="mt-2 text-sm font-semibold text-gray-200">{data.slate?.nextCheckLabel ?? "When player markets open"}</p></div></div></section></div>;
 }

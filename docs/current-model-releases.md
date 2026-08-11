@@ -62,11 +62,26 @@ holdout.
 
 ## MLB Player Props candidate
 
-- Release: `mlb_props_2026_08_11_r26`
+- Release: `mlb_props_2026_08_11_r27`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: private launch candidate; not publicly enabled
+
+The r27 probable-pitcher contract uses MLB Stats as the authoritative starter source and fills
+only an empty game side from ESPN's published probable, provided the name resolves to exactly
+one active pitcher on the corresponding MLB roster and exactly one Ball Don't Lie player on the
+same team. MLB Stats automatically supersedes the fallback on the next authoritative refresh.
+Team-pair ESPN identity is never used to guess between doubleheader games, ambiguous mappings
+remain held, and an operator kill switch can revert immediately to official-only behavior.
+
+The paired August 11 shadow rebuild held all 5,874 offer rows and the same live prices constant.
+Fallbacks for Jake Irvin and Carson Whisenhunt restored opposing-starter and pitch-mix research
+to 370 rows. Required-research holds fell from 402 to 32, all of which had verified but
+insufficient pitch-mix samples. The actionable board moved from 107 to 116 through 11 promotions
+and 2 demotions (net +9); 105 actionables were retained. No stale odds, missing prices, mapping
+errors, or publication errors were present. Full details are in
+`docs/model-audits/2026-08-11-player-props-probable-fallback-r27.md`.
 
 The r26 publication and launch-readiness contract preserves every research-quality gate at row
 level. A row missing required opposing-starter or pitch-mix evidence must be

@@ -172,6 +172,28 @@ export class BallDontLieResearchClient {
     return exact.length === 1 ? exact[0] : null;
   }
 
+  async findPlayerByFullName(fullName: string): Promise<BdlResearchPlayer | null> {
+    const normalized = normalizeResearchPlayerName(fullName);
+    if (!normalized) return null;
+    const rows = await this.client.fetchAll<Record<string, unknown>>({
+      path: "/players",
+      query: { search: fullName.trim(), per_page: 100 },
+      maxPages: 2,
+    });
+    const exact = rows
+      .map(parseBdlResearchPlayer)
+      .filter((row): row is BdlResearchPlayer => row !== null)
+      .filter((row) => normalizeResearchPlayerName(row.fullName) === normalized);
+    if (exact.length === 1) return exact[0];
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length < 2) return null;
+    const byFields = await this.findPlayer({
+      firstName: parts[0],
+      lastName: parts[parts.length - 1],
+    });
+    return byFields && normalizeResearchPlayerName(byFields.fullName) === normalized ? byFields : null;
+  }
+
   async getPlayerById(playerId: number): Promise<BdlResearchPlayer | null> {
     const response = await this.client.fetch<Record<string, unknown> | Record<string, unknown>[]>({
       path: `/players/${playerId}`,
@@ -266,6 +288,16 @@ export class BallDontLieResearchClient {
     }
     return out;
   }
+}
+
+function normalizeResearchPlayerName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/\b(jr|sr|ii|iii|iv)\b\.?/gi, "")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .toLowerCase();
 }
 
 function uniquePositiveIntegers(values: number[]): number[] {
