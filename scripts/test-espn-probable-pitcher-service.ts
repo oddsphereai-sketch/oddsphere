@@ -351,6 +351,30 @@ async function main() {
     check(`T18 fetch — Bassitt present`, out.get("SEA@BAL")?.home?.fullName === "Chris Bassitt");
   }
 
+  // Test 18b: an empty primary response retries ESPN's equivalent official
+  // host. This is the production-serverless failure mode from 2026-08-11.
+  {
+    const calls: string[] = [];
+    const body = JSON.stringify({
+      events: [buildEspnEvent({
+        eventId: 401815676,
+        homeAbbr: "BAL",
+        awayAbbr: "SEA",
+        homeProbable: { id: 33148, name: "Chris Bassitt" },
+        awayProbable: null,
+      })],
+    });
+    const fakeFetch = async (input: URL | RequestInfo) => {
+      calls.push(String(input));
+      return calls.length === 1
+        ? new Response(JSON.stringify({ events: [] }), { status: 200, headers: { "content-type": "application/json" } })
+        : new Response(body, { status: 200, headers: { "content-type": "application/json" } });
+    };
+    const out = await fetchEspnProbablePitchers("2026-06-08", { log: () => {}, fetchImpl: fakeFetch as typeof fetch });
+    check(`T18b fetch — empty primary retries alternate official host`, calls.length === 2 && calls[1]?.includes("site.web.api.espn.com"));
+    check(`T18b fetch — alternate host result is returned`, out.get("SEA@BAL")?.home?.fullName === "Chris Bassitt");
+  }
+
   // ──────────────────────────────────────────────────────────────────
   section("isEspnSecondarySourceEnabled — env master switch");
 

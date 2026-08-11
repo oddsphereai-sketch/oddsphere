@@ -304,14 +304,33 @@ export function runMlbFirstInningModelV2(
     freshDataBlockers.push(`home_lineup_${indep.feature_audit.home_lineup.source}`);
   }
   const freshDataReady = freshDataBlockers.length === 0;
-  if (!freshDataReady) {
+  const starterIdentityPresent =
+    snap.away_starter !== null &&
+    snap.home_starter !== null &&
+    snap.away_starter.is_scratched !== true &&
+    snap.home_starter.is_scratched !== true;
+  const starterHistoryOnlyBlockers =
+    freshDataBlockers.length > 0 &&
+    freshDataBlockers.every((reason) => reason.includes("opposing_starter_fi_"));
+  const sparseNamedStarterTossUp =
+    hasMarket &&
+    starterIdentityPresent &&
+    awayLineupPublishable &&
+    homeLineupPublishable &&
+    starterHistoryOnlyBlockers;
+  if (sparseNamedStarterTossUp) {
+    integrityNotes.push("Named probable starters are present but FI/season history is sparse; prediction degraded to Toss-Up.");
+  } else if (!freshDataReady) {
     integrityNotes.push(`FI held for fresh data: ${freshDataBlockers.join(", ")}.`);
   }
 
   // Layer 4 — classification
   let fi_pick: FiPick;
   let fi_pick_reason: string;
-  if (!freshDataReady) {
+  if (sparseNamedStarterTossUp) {
+    fi_pick = "Toss-Up";
+    fi_pick_reason = "fi_toss_up_sparse_named_starter_history";
+  } else if (!freshDataReady) {
     fi_pick = "Held";
     fi_pick_reason = "fi_waiting_for_fresh_data";
   } else if (indep.data_quality_tier === "fallback" || indep.feature_audit.missing_count >= 6) {
@@ -369,8 +388,10 @@ export function runMlbFirstInningModelV2(
     fi_no_bet_reason = "Held — data quality insufficient.";
   } else if (fi_pick === "Toss-Up") {
     fi_play_grade = "toss_up";
-    fi_play_grade_reason = "fi_toss_up_probability";
-    fi_no_bet_reason = "Toss-Up — model probability in the neutral band.";
+    fi_play_grade_reason = fi_pick_reason;
+    fi_no_bet_reason = sparseNamedStarterTossUp
+      ? "Toss-Up — named probable starters are available, but verified starter history is too sparse for a directional play."
+      : "Toss-Up — model probability in the neutral band.";
   } else if (!hasMarket) {
     fi_play_grade = "lean";
     fi_play_grade_reason = "fi_best_angle_blocked_missing_market";

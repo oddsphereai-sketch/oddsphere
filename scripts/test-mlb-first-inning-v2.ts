@@ -464,6 +464,28 @@ async function main() {
     check("missing starter → BA eligible=false", out.fiV2Audit.fi_best_angle_eligible === false);
   }
   {
+    // A published/named probable without enough verified FI or season history
+    // must remain visible on the board as a non-actionable Toss-Up. It is not
+    // equivalent to an unknown starter and must not silently disappear.
+    const snap = buildSnapshot({
+      homeStarter: { player_name: "Named Home Probable", season_era: null, first_inning_era: null, first_inning_starts: null },
+      awayStarter: { player_name: "Named Away Probable", season_era: null, first_inning_era: null, first_inning_starts: null },
+    });
+    const out = runMlbFirstInningModelV2(snap, buildFiLines(-150, +116));
+    check("named probable starters with sparse history → Toss-Up", out.fiV2Audit.fi_pick === "Toss-Up");
+    check("sparse named-starter Toss-Up remains non-actionable", out.fiV2Audit.fi_play_grade === "toss_up" && out.fiV2Audit.fi_best_angle_eligible === false);
+    check("sparse named-starter Toss-Up carries explicit reason", out.fiV2Audit.fi_pick_reason === "fi_toss_up_sparse_named_starter_history");
+    check("sparse named-starter Toss-Up retains blockers for audit", out.fiV2Audit.fresh_data_ready === false && out.fiV2Audit.fresh_data_blockers.length === 2);
+  }
+  {
+    const snap = buildSnapshot({
+      homeStarter: { player_name: "Scratched Home Starter", is_scratched: true, season_era: null, first_inning_era: null, first_inning_starts: null },
+      awayStarter: { player_name: "Named Away Probable", season_era: null, first_inning_era: null, first_inning_starts: null },
+    });
+    const out = runMlbFirstInningModelV2(snap, buildFiLines(-150, +116));
+    check("scratched starter cannot use sparse named-starter Toss-Up path", out.fiV2Audit.fi_pick === "Held");
+  }
+  {
     // Real season ERA is an intentional FI proxy. It is sufficient to
     // publish a direction, but must remain provisional/Lean-only until
     // preferred first-inning history is available.

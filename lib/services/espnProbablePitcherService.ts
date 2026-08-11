@@ -179,28 +179,35 @@ export async function fetchEspnProbablePitchers(
     log(`[espnProbablePitcherService] Invalid slate date "${slateDate}". Returning empty map.`);
     return new Map();
   }
-  const url = `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${yyyymmdd}`;
-  try {
-    const res = await fetchFn(url, {
-      headers: { "User-Agent": "Mozilla/5.0 oddsphere/refresh-starters" },
-    });
-    if (!res.ok) {
-      log(`[espnProbablePitcherService] ESPN scoreboard returned HTTP ${res.status} for ${slateDate}; returning empty map.`);
-      return new Map();
+  const hosts = ["site.api.espn.com", "site.web.api.espn.com"] as const;
+  for (const [index, host] of hosts.entries()) {
+    const url = `https://${host}/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${yyyymmdd}`;
+    try {
+      const res = await fetchFn(url, {
+        headers: { "User-Agent": "Mozilla/5.0 oddsphere/refresh-starters" },
+      });
+      if (!res.ok) {
+        log(`[espnProbablePitcherService] ESPN scoreboard host=${host} returned HTTP ${res.status} for ${slateDate}.`);
+        continue;
+      }
+      const ct = res.headers.get("content-type") ?? "";
+      if (!ct.includes("json")) {
+        log(`[espnProbablePitcherService] ESPN scoreboard host=${host} returned non-JSON content-type=${ct}.`);
+        continue;
+      }
+      const body = (await res.json()) as unknown;
+      const parsed = parseEspnScoreboardEvents(body);
+      log(`[espnProbablePitcherService] ESPN scoreboard host=${host} parsed: ${parsed.size} game(s) on ${slateDate}.`);
+      if (parsed.size > 0) return parsed;
+      if (index === 0) {
+        log(`[espnProbablePitcherService] Primary ESPN host returned an empty slate; retrying the equivalent official host.`);
+      }
+    } catch (e) {
+      log(`[espnProbablePitcherService] ESPN scoreboard host=${host} fetch threw: ${(e as Error).message}.`);
     }
-    const ct = res.headers.get("content-type") ?? "";
-    if (!ct.includes("json")) {
-      log(`[espnProbablePitcherService] ESPN scoreboard returned non-JSON content-type=${ct}; returning empty map.`);
-      return new Map();
-    }
-    const body = (await res.json()) as unknown;
-    const parsed = parseEspnScoreboardEvents(body);
-    log(`[espnProbablePitcherService] ESPN scoreboard parsed: ${parsed.size} game(s) on ${slateDate}.`);
-    return parsed;
-  } catch (e) {
-    log(`[espnProbablePitcherService] ESPN scoreboard fetch threw: ${(e as Error).message}; returning empty map.`);
-    return new Map();
   }
+  log(`[espnProbablePitcherService] Both official ESPN scoreboard hosts were empty or unavailable for ${slateDate}; returning empty map.`);
+  return new Map();
 }
 
 /**

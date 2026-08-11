@@ -11,8 +11,8 @@ Last reviewed: 2026-08-11
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2`
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_10_r26`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v25_2026_08_10`
+- Decision release: `mlb_daily_edge_decision_2026_08_11_r27`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v26_2026_08_11`
 - Grade policy: `mlb_public_grade_policy_v20_guarded_signed_side_market_evidence_2026_08_10`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
@@ -33,6 +33,15 @@ public conflict, complete data, and no prior side change. It never creates a Bes
 Historical paired replay: 282 actions at -1.5% ROI became 285 at +9.3%; the holdout moved from
 47 at +11.9% to 53 at +18.9%. The guarded promotion cohort was 67 plays at +29.4%; the demotion
 cohort was 64 plays at -17.1%. Board delta: +3.
+
+The August 11 r27 first-inning availability release keeps MLB Stats as the authoritative starter
+source and fills only an empty side through the existing ESPN probable-pitcher fallback. The
+shared service retries ESPN's equivalent official site API host when its primary host is empty or
+unavailable from production. A game with named probable starters, a complete two-sided FI market,
+and publishable offense context now degrades to a non-actionable Toss-Up when verified starter
+history is sparse; an actually unknown starter or missing FI market remains an explicit hold.
+The paired live-slate replay is recorded in
+`docs/model-audits/2026-08-11-daily-edge-fi-probable-availability-r27.md`.
 
 ## WNBA champion
 
