@@ -15,8 +15,8 @@ export type MlbModelLayerMarket = "moneyline" | "total" | "first_inning";
 
 export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v3";
 export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10";
-export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_08_11_r32";
-export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v31_2026_08_11";
+export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_08_11_r33";
+export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v32_2026_08_11";
 
 export const MLB_MODEL_LAYER_VERSION_IDS = {
   projection_core: "mlb_projection_core_v2_2_baseline_2026_07_08",
@@ -26,7 +26,7 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   total_probability_head: "mlb_total_market_read_k04_cap8_thin_gap_guard_2026_07_11",
   first_inning_probability_head: "mlb_first_inning_fi_v2_probable_degrade_2026_08_11",
   market_calibration_policy: "mlb_model_market_calibration_baseline_2026_07_08",
-  grade_policy: "mlb_public_grade_policy_v23_sharp_portfolio_selected_side_floor_2026_08_11",
+  grade_policy: "mlb_public_grade_policy_v24_sharpapi_total_source_alignment_2026_08_11",
   correction_policy: "mlb_prediction_corrections_v11_totals_rejected_candidate_original_side_2026_08_11",
   tracking_contract: "member_facing_lock_v7_locked_only_status_normalized_2026_08_05",
   schedule_time_policy: "mlb_official_schedule_time_v1_2026_07_30",

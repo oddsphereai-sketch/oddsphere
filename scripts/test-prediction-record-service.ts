@@ -2210,6 +2210,10 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
       },
     }],
   ]);
+  const resistanceSharpSplits = [
+    { canonical_event_id: "5058728", market_type: "total", selection_key: "5058728:total:under", provider: "sharpapi", source_book: "sharp_adjacent", source_type: "sharp_adjacent_book", bets_pct: 30, money_pct: 20, source_observed_at: "2026-07-10T16:00:00Z", fetched_at: "2026-07-10T16:00:00Z" },
+    { canonical_event_id: "5058728", market_type: "total", selection_key: "5058728:total:over", provider: "sharpapi", source_book: "sharp_adjacent", source_type: "sharp_adjacent_book", bets_pct: 70, money_pct: 80, source_observed_at: "2026-07-10T16:00:00Z", fetched_at: "2026-07-10T16:00:00Z" },
+  ] as any;
   const resistanceRecords = buildPredictionRecordsFromSlate({
     sport: "mlb",
     slateDate: "2026-07-10",
@@ -2218,12 +2222,14 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
     predictionByGameId: new Map([[14771, resistancePred]]),
     abbrevByTeamId,
     signalsByGameId: new Map([[14771, resistanceSignals]]),
+    sourceAwareSplitsByGameId: new Map([[14771, resistanceSharpSplits]]),
     oddsByGameId: resistanceOdds,
   });
   const resistanceTotal = resistanceRecords.find((record) => record.market === "total");
   const resistanceAudit = (resistanceTotal?.snapshot_json as any)?.total_under_low_ticket_resistance_lean;
   check("low-ticket Under resistance promotes a guarded Watchlist to Lean", resistanceTotal?.play_grade === "lean" && resistanceTotal?.best_angle === false);
   check("low-ticket Under resistance records the additive rule", resistanceAudit?.rule_id === TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID && resistanceAudit?.money_minus_bets_pct === -10);
+  check("low-ticket Under resistance records the validated SharpAPI provider", resistanceAudit?.split_provider === "sharpapi");
   check("low-ticket Under resistance is actionable in the decision pipeline", (resistanceTotal?.snapshot_json as any)?.decision_pipeline?.action_rule_id === TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID && (resistanceTotal?.snapshot_json as any)?.decision_pipeline?.board_action === "bet");
 
   const highTicketRecords = buildPredictionRecordsFromSlate({
@@ -2233,11 +2239,26 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
     games: [baseGame],
     predictionByGameId: new Map([[14771, resistancePred]]),
     abbrevByTeamId,
-    signalsByGameId: new Map([[14771, resistanceSignals.map((signal: any) => signal.side === "under" ? { ...signal, public_betting_pct: 36 } : signal)]]),
+    signalsByGameId: new Map([[14771, resistanceSignals]]),
+    sourceAwareSplitsByGameId: new Map([[14771, resistanceSharpSplits.map((split: any) => split.selection_key.endsWith(":under") ? { ...split, bets_pct: 36 } : split)]]),
     oddsByGameId: resistanceOdds,
   });
   const highTicketTotal = highTicketRecords.find((record) => record.market === "total");
   check("ticket share above 35 percent cannot earn the resistance Lean", highTicketTotal?.play_grade !== "lean" && (highTicketTotal?.snapshot_json as any)?.total_under_low_ticket_resistance_lean === null);
+
+  const playbookOnlyRecords = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-10",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, resistancePred]]),
+    abbrevByTeamId,
+    signalsByGameId: new Map([[14771, resistanceSignals]]),
+    sourceAwareSplitsByGameId: new Map([[14771, resistanceSharpSplits.map((split: any) => ({ ...split, provider: "playbook", source_type: "multi_book_consensus" }))]]),
+    oddsByGameId: resistanceOdds,
+  });
+  const playbookOnlyTotal = playbookOnlyRecords.find((record) => record.market === "total");
+  check("Playbook-only splits cannot activate the SharpAPI-validated resistance sleeve", playbookOnlyTotal?.play_grade !== "lean" && (playbookOnlyTotal?.snapshot_json as any)?.total_under_low_ticket_resistance_lean === null);
 }
 
 // ── Phase 6B.22 — pure helpers for snapshot context ──────────────────
@@ -2852,7 +2873,7 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
   check("FI v2 best_angle → final signed-edge gate stamped",
         gate?.rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID && gate?.action === "keep_as_best_angle");
   check("FI Best Angle decision pipeline stamps current release and validated rule",
-        (fi.snapshot_json as any)?.decision_pipeline?.release_id === "mlb_daily_edge_decision_2026_08_11_r32" &&
+        (fi.snapshot_json as any)?.decision_pipeline?.release_id === "mlb_daily_edge_decision_2026_08_11_r33" &&
         (fi.snapshot_json as any)?.decision_pipeline?.board_action === "bet" &&
         (fi.snapshot_json as any)?.decision_pipeline?.actionable_grade === "best_angle" &&
         (fi.snapshot_json as any)?.decision_pipeline?.action_rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID);

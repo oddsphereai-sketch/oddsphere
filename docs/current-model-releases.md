@@ -11,9 +11,9 @@ Last reviewed: 2026-08-11
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2`
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_11_r32`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v31_2026_08_11`
-- Grade policy: `mlb_public_grade_policy_v23_sharp_portfolio_selected_side_floor_2026_08_11`
+- Decision release: `mlb_daily_edge_decision_2026_08_11_r33`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v32_2026_08_11`
+- Grade policy: `mlb_public_grade_policy_v24_sharpapi_total_source_alignment_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
@@ -47,12 +47,22 @@ The August 11 r30 grade policy adds one additive full-game Total Lean sleeve fou
 walk-forward market search: a high-quality, projection-aligned Under with at least 55% model
 probability, nonnegative but sub-5-point offered-price edge, a price from -145 through -105,
 at most 35% of tickets, and picked-side money at least five points below picked-side tickets.
+Those two split fields must come from the SharpAPI sharp-adjacent source on which the sleeve was
+validated; a consensus/Playbook row cannot activate it.
 It never changes the selected side, probability, projection, price, Best Angle status, or stake;
 missing/stale data and every existing no-bet gate retain priority. The member board gains a Lean
 only when this complete joint configuration is present. The current August 11 slate has zero
 qualifiers, so r30 changes no current recommendation while enabling the validated future sleeve.
 Evidence and rollback details are recorded in
 `docs/model-audits/2026-08-11-mlb-total-under-low-ticket-resistance-r30.md`.
+
+The August 11 r33 source-alignment release fixes a pre-activation contract mismatch discovered by
+the broader sharp-decision audit. The r30 Under sleeve was validated on latest-at-lock SharpAPI
+splits, while its first implementation read the legacy aggregate split row. r33 reads the frozen
+source-aware SharpAPI pair directly and fails closed when that provider is absent. The August 11
+board still has zero qualifiers for this sleeve, so the correction changes no current pick or
+grade. Full evidence and rollback details are in
+`docs/model-audits/2026-08-11-mlb-total-under-sharpapi-source-alignment-r33.md`.
 
 The August 11 r32 release adds a slate-level MLB Moneyline portfolio ranker after all existing
 side selection, correction, no-bet, price, freshness, and data-quality gates. It jointly scores

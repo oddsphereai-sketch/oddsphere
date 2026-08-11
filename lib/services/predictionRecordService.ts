@@ -1843,6 +1843,25 @@ function pickedPublicSplit(
   };
 }
 
+function pickedSourceAwareSplit(
+  rows: ReadonlyArray<SourceAwareSplitObservationRow>,
+  market: "moneyline" | "total",
+  pickSide: string | null,
+  provider: "sharpapi" | "playbook",
+): { betsPct: number | null; moneyPct: number | null; provider: string | null } {
+  if (pickSide === null) return { betsPct: null, moneyPct: null, provider: null };
+  const picked = rows.find((row) =>
+    row.market_type === market &&
+    sourceAwareSide(row) === pickSide &&
+    (row.provider ?? "").toLowerCase() === provider
+  );
+  return {
+    betsPct: sourceAwarePct(picked?.bets_pct ?? null),
+    moneyPct: sourceAwarePct(picked?.money_pct ?? null),
+    provider: picked ? provider : null,
+  };
+}
+
 /** Read the line-movement direction off a buildLineMovementSnapshot result. */
 function readLineDirection(
   snap: Record<string, unknown> | null,
@@ -3576,6 +3595,12 @@ function buildOuRecord(
     : ouChampionStandDownReason ?? explicitOuNoBetReason;
   const ouPublicSplitSupport = hasSupportingPublicMoneyConfirmation(signalsForGame, "total", finalOuPick);
   const ouPickedPublicSplit = pickedPublicSplit(signalsForGame, "total", finalOuPick);
+  const ouValidatedSharpPublicSplit = pickedSourceAwareSplit(
+    sourceAwareSplitsForGame,
+    "total",
+    finalOuPick,
+    "sharpapi",
+  );
   const ouMarketAwareCorrectedGrade = ouMarketSideCorrected && ouCorrectionAccepted
     ? resolveMlbMarketAwareCorrectedPlayGrade({
         market: "total",
@@ -3621,8 +3646,8 @@ function buildOuRecord(
     edgePct: finalOuEdge,
     oddsAmerican: finalOuOdds,
     sameSideProjectionGap: ouSameSideProjectionGap,
-    pickedBetsPct: ouPickedPublicSplit.betsPct,
-    pickedMoneyPct: ouPickedPublicSplit.moneyPct,
+    pickedBetsPct: ouValidatedSharpPublicSplit.betsPct,
+    pickedMoneyPct: ouValidatedSharpPublicSplit.moneyPct,
     dataQualityTier: readStringOrNull(sp.v2_data_quality_tier),
   });
   const ouModelBestAngleRetained = ouFinalBestAngle;
@@ -3902,9 +3927,10 @@ function buildOuRecord(
             odds_american: finalOuOdds,
             min_odds: TOTAL_UNDER_LOW_TICKET_RESISTANCE_MIN_ODDS,
             max_odds: TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_ODDS,
-            picked_bets_pct: ouPickedPublicSplit.betsPct,
+            picked_bets_pct: ouValidatedSharpPublicSplit.betsPct,
             max_picked_bets_pct: TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_BETS_PCT,
-            picked_money_pct: ouPickedPublicSplit.moneyPct,
+            picked_money_pct: ouValidatedSharpPublicSplit.moneyPct,
+            split_provider: ouValidatedSharpPublicSplit.provider,
             money_minus_bets_pct: ouUnderLowTicketResistanceLean.moneyMinusBetsPct,
             max_money_minus_bets_pct: TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_MONEY_MINUS_BETS_PCT,
             projected_total: ouScoreSum,
