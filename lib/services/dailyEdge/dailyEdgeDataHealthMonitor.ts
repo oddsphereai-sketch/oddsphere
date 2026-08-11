@@ -437,11 +437,16 @@ function isFiTossUp(row: PredictionEvidenceObject): boolean {
   return row.identity.marketType === "FI" && /toss[\s-]*up/i.test(String(row.identity.pick ?? ""));
 }
 
+export function isDailyEdgeActionableGrade(grade: string | null | undefined): boolean {
+  const normalized = String(grade ?? "").trim().toLowerCase();
+  return normalized === "lean" || normalized === "best angle" || normalized === "best_angle";
+}
+
 function isActionableRow(row: PredictionEvidenceObject): boolean {
   if (row.identity.noBet === true) return false;
-  if (/^no\s*play$/i.test(String(row.identity.originalPlayGrade ?? ""))) return false;
   if (row.identity.marketType === "FI" && (isFiTossUp(row) || row.identity.pick === null)) return false;
-  return row.identity.pick !== null;
+  if (row.identity.pick === null) return false;
+  return isDailyEdgeActionableGrade(row.identity.originalPlayGrade);
 }
 
 function isFiHeldNoSide(row: PredictionEvidenceObject): boolean {

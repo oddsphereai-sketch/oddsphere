@@ -1102,16 +1102,28 @@ function pickFreshHalfRunFiPair(
   return null;
 }
 
-function fiAuditFreshDataReady(sp: Record<string, unknown>): { ready: boolean; blockers: string[] } {
+function fiAuditFreshDataReady(sp: Record<string, unknown>): {
+  ready: boolean;
+  blockers: string[];
+  sparseNamedStarterTossUp: boolean;
+} {
   const audit = sp.fi_v2_audit && typeof sp.fi_v2_audit === "object"
     ? sp.fi_v2_audit as Record<string, unknown>
     : null;
-  if (audit === null) return { ready: true, blockers: [] };
+  if (audit === null) return { ready: true, blockers: [], sparseNamedStarterTossUp: false };
   const blockers = Array.isArray(audit.fresh_data_blockers)
     ? audit.fresh_data_blockers.filter((v): v is string => typeof v === "string")
     : [];
-  if (audit.fresh_data_ready === false) return { ready: false, blockers };
-  return { ready: true, blockers };
+  const sparseNamedStarterTossUp =
+    audit.fi_pick === "Toss-Up" &&
+    audit.fi_pick_reason === "fi_toss_up_sparse_named_starter_history" &&
+    audit.fi_play_grade === "toss_up" &&
+    blockers.length > 0 &&
+    blockers.every((reason) => reason.includes("opposing_starter_fi_"));
+  if (audit.fresh_data_ready === false) {
+    return { ready: false, blockers, sparseNamedStarterTossUp };
+  }
+  return { ready: true, blockers, sparseNamedStarterTossUp: false };
 }
 
 /**
@@ -3774,7 +3786,7 @@ function buildFiRecord(
   const held = holdPicks.includes("nrfi") || pred.predicted_nrfi === null;
   if (held) return null;
   const freshAudit = fiAuditFreshDataReady(sp);
-  if (!freshAudit.ready) return null;
+  if (!freshAudit.ready && !freshAudit.sparseNamedStarterTossUp) return null;
 
   // Phase 6B.20 — preserve the member-facing FI pill. Daily Edge
   // (`app/api/lab/daily-edge/route.ts:584-597`) displays "Toss-Up"

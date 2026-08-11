@@ -1,5 +1,16 @@
 import assert from "node:assert/strict";
-import { classifyFiHoldDiagnostic } from "../lib/services/dailyEdge/dailyEdgeDataHealthMonitor";
+import {
+  classifyFiHoldDiagnostic,
+  isDailyEdgeActionableGrade,
+} from "../lib/services/dailyEdge/dailyEdgeDataHealthMonitor";
+
+assert.equal(isDailyEdgeActionableGrade("Lean"), true);
+assert.equal(isDailyEdgeActionableGrade("Best Angle"), true);
+assert.equal(isDailyEdgeActionableGrade("best_angle"), true);
+assert.equal(isDailyEdgeActionableGrade("Watchlist"), false);
+assert.equal(isDailyEdgeActionableGrade("market_aligned"), false);
+assert.equal(isDailyEdgeActionableGrade("No Play"), false);
+assert.equal(isDailyEdgeActionableGrade(null), false);
 
 const sparseKnownStarter = classifyFiHoldDiagnostic({
   fi_v2_audit: {
@@ -86,4 +97,4 @@ assert.equal(
 );
 assert.equal(trulyMissingStarter.materiality, "high");
 
-console.log("PASS Daily Edge FI health distinguishes sparse starter history from missing ingestion");
+console.log("PASS Daily Edge health classifies actionable grades and distinguishes sparse starter history from missing ingestion");

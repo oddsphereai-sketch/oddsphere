@@ -79,8 +79,8 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB FI probable-pitcher degradation is versioned as decision release r27",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_11_r27" &&
+  "MLB FI probable-pitcher tracking coherence is versioned as decision release r28",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_11_r28" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v3" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
