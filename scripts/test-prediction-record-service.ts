@@ -21,6 +21,8 @@ import {
   FI_NRFI_MIDBAND_BEST_ANGLE_DEMOTION_RULE_ID,
   FI_PLUS_MONEY_LEAN_BEST_ANGLE_PROMOTION_RULE_ID,
   TOTAL_VALIDATED_LEAN_RULE_ID,
+  TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID,
+  TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID,
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
   GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
   MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
@@ -1310,16 +1312,84 @@ console.log("\n━━━ MLB market-aware final side correction ━━━");
   const rejection = (ou.snapshot_json as any)?.totals_correction_rejection;
   const gradeResolution = (ou.snapshot_json as any)?.total_flip_public_grade_resolution;
   check("Market-opposed weak total leaves original side official", ou.pick === "over" && ou.odds_american === -105);
-  check("Market-opposed total correction is explicit No Play", ou.play_grade === null && ou.best_angle === false && ou.no_bet === true);
+  check("Market-opposed weak total remains non-actionable on its original side", ou.play_grade === "market_aligned" && ou.best_angle === false && ou.no_bet === false);
   check(
-    "Market-opposed total rejection audit stamps No Play",
+    "Market-opposed total rejection audit preserves the rejected candidate without grading it",
     flip == null &&
       rejection?.rule_id === TOTALS_MARKET_OPPOSED_FLIP_RULE_ID &&
-      rejection?.action === "stand_down" &&
+      rejection?.action === "reject_candidate_evaluate_original" &&
+      rejection?.restoration_rule_id === TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID &&
       rejection?.rejected_candidate_side === "under" &&
-      gradeResolution?.action === "no_public_grade" &&
-      gradeResolution?.public_play_grade === null,
+      gradeResolution?.action === "reject_candidate_evaluate_original" &&
+      gradeResolution?.public_play_grade === "market_aligned",
   );
+}
+{
+  const strongOriginalTotalPred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 58.8,
+    predicted_home_score: 3.4,
+    predicted_away_score: 3.46,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "lean",
+      ou_best_angle_eligible: false,
+      v2_2_audit: {
+        ou_play_grade: "lean",
+        market_total: 8.5,
+        posterior_total: 6.86,
+        ou_model_prob: 0.588,
+        ou_market_prob: 0.508,
+        ou_edge_pct: 8.0,
+      },
+    },
+  };
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -120,
+      mlAwayOdds: 110,
+      ouOverOdds: -103,
+      ouUnderOdds: -110,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -120, line: null, observedAt: "2026-08-11T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 110, line: null, observedAt: "2026-08-11T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -103, line: 8.5, observedAt: "2026-08-11T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-08-11T16:00:00Z" },
+      },
+    }],
+  ]);
+  const currentLinesByGameId = new Map([
+    [14771, [
+      { game_id: 14771, market_type: "total", side: "over", sportsbook: "pinnacle", odds_american: -103, line_value: 8.5, fetched_at: "2026-08-11T16:00:00Z" },
+      { game_id: 14771, market_type: "total", side: "under", sportsbook: "pinnacle", odds_american: -110, line_value: 8.5, fetched_at: "2026-08-11T16:00:00Z" },
+    ]],
+  ]);
+  const signalsByGameId = new Map([
+    [14771, [
+      { market_type: "total", side: "over", public_money_pct: 83, public_betting_pct: 57, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+    ]],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-08-11",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, strongOriginalTotalPred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    currentLinesByGameId,
+    signalsByGameId,
+  });
+  const ou = recs.find((r) => r.market === "total")!;
+  const rejection = (ou.snapshot_json as any)?.totals_correction_rejection;
+  const decision = (ou.snapshot_json as any)?.decision_pipeline;
+  check("Rejected total correction restores a strong original side as Lean", ou.pick === "under" && ou.play_grade === "lean" && ou.best_angle === false && ou.no_bet === false);
+  check("Rejected opposite total side remains hidden", rejection?.rejected_candidate_side === "over" && ou.pick !== rejection?.rejected_candidate_side);
+  check("Restored original total uses the calibrated-model Lean path", decision?.board_action === "bet" && decision?.action_rule_id === TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID && decision?.original_side_restoration_rule_id === TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID);
 }
 
 // ── launch_day flag ─────────────────────────────────────────────────

@@ -391,6 +391,8 @@ export const TOTAL_VALIDATED_LEAN_MIN_PRICE_EXCLUSIVE = -145;
 export const TOTAL_VALIDATED_STRONG_LEAN_MIN_MODEL_PROB = 0.57;
 export const TOTAL_VALIDATED_STRONG_LEAN_MIN_PROJECTION_GAP = 0.75;
 export const TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID = "total_clean_strong_best_angle_v4_2026_07_11";
+export const TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID =
+  "total_rejected_correction_original_side_validation_v1_2026_08_11";
 export const TOTAL_BEST_ANGLE_MIN_MODEL_PROB = 0.57;
 export const TOTAL_BEST_ANGLE_MIN_EDGE_PCT = 5.0;
 export const TOTAL_BEST_ANGLE_STRONG_ABS_PROJECTION_GAP = 0.75;
@@ -3259,13 +3261,17 @@ function buildOuRecord(
     );
     ouLineDirection = readLineDirection(finalOuLineMovement);
   }
-  // 2026-07-23 decision release r1 — totals correction rules are not stable
-  // across chronological windows, and their recently shipped actionable rows
-  // materially underperformed. A trigger is now an explicit stand-down action:
-  // keep the original probability side for audit, publish NO_PLAY, and never
-  // expose the candidate as a Lean/Best Angle. No shadow operational mode.
+  // Totals correction candidates remain non-actionable because they failed
+  // chronological stability. r29 rejects and preserves the candidate for
+  // audit, restores the original probability side, and lets that original
+  // side pass through the ordinary price/EV/projection/grade gates. The
+  // rejected opposite side can never inherit a public grade.
   const ouCorrectionRejected =
     ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouMidEdgeFlipped;
+  // No totals correction family is approved as an actionable side selector
+  // in r29. Keep this explicit so a future accepted family requires a new
+  // versioned release instead of silently changing this rejection contract.
+  const ouCorrectionAccepted: boolean = false;
   const ouRejectedCandidate = ouCorrectionRejected
     ? {
         side: finalOuPick,
@@ -3288,15 +3294,9 @@ function buildOuRecord(
     finalOuLineMovement = ouLineMovement;
     ouLineDirection = readLineDirection(finalOuLineMovement);
   }
-  const ouBaseBestAngle = ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouMidEdgeFlipped || ouDivergenceStandDown
-    ? false
-    : ouBest.bestAngle;
+  const ouBaseBestAngle = ouDivergenceStandDown ? false : ouBest.bestAngle;
   const ouRawBestAngleCandidate =
     ouBaseBestAngleEligible &&
-    !ouFlipped &&
-    !ouMarketFlipped &&
-    !ouMarketSideCorrected &&
-    !ouMidEdgeFlipped &&
     !ouDivergenceStandDown;
   const totalBestAngleMinModelProb =
     finalOuPick === "over"
@@ -3340,11 +3340,11 @@ function buildOuRecord(
     finalOuEdge < GATE_TOTAL_LEAN_MARKET_FRICTION_MAX_EDGE_PCT &&
     ouMarketFriction;
   const finalOuPublicPlayGrade = ouThinProjectionLeanCap || ouThinEdgeMarketFrictionCap ? "market_aligned" : ouPublicPlayGrade;
-  const ouProjectionConflict =
-    !ouMarketFlipped &&
-    !ouMarketSideCorrected &&
-    !ouMidEdgeFlipped &&
-    projectionContradictsTotalPick(ouScoreSum, finalOuBetLine, finalOuPick);
+  const ouProjectionConflict = projectionContradictsTotalPick(
+    ouScoreSum,
+    finalOuBetLine,
+    finalOuPick,
+  );
   const ouChampionStandDownReason = ouProjectionConflict
     ? "champion_candidate_total_projection_conflict: projected_total_contradicts_total_pick"
     : null;
@@ -3355,19 +3355,16 @@ function buildOuRecord(
       finalOuMarketProb === null);
   const ouNoBet =
     ouMissingActionableMarket ||
-    ouCorrectionRejected ||
     ouChampionStandDownReason !== null ||
     ouDivergenceStandDown ||
-    (!ouMarketSideCorrected && isExplicitNoBetReason(explicitOuNoBetReason));
+    ((!ouMarketSideCorrected || ouCorrectionRejected) && isExplicitNoBetReason(explicitOuNoBetReason));
   const ouNoBetReason = ouMissingActionableMarket
     ? "No real-book total price or market-implied probability available; not actionable until the odds refresh provides a priced total."
-    : ouCorrectionRejected
-    ? `Stood down: ${ouCorrectionKind ?? "totals correction"} is not an approved actionable rule in Daily Edge decision release r1.`
     : ouDivergenceStandDown
     ? "Stood down: projected total is on the opposite side of the line from the probability-driven pick, and the flip rule did not qualify (gap/line/odds). Mean/probability divergence hold."
     : ouChampionStandDownReason ?? explicitOuNoBetReason;
   const ouPublicSplitSupport = hasSupportingPublicMoneyConfirmation(signalsForGame, "total", finalOuPick);
-  const ouMarketAwareCorrectedGrade = ouMarketSideCorrected
+  const ouMarketAwareCorrectedGrade = ouMarketSideCorrected && ouCorrectionAccepted
     ? resolveMlbMarketAwareCorrectedPlayGrade({
         market: "total",
         correctedOdds: finalOuOdds,
@@ -3387,21 +3384,14 @@ function buildOuRecord(
     publicSplitConflict: ouPublicSplitConflict,
   });
   const ouPromotedBestAngle = !ouFinalBestAngle && ouCleanConfirmedBestAngle.bestAngle;
-  const trackedOuFinalBestAngle = ouCorrectionRejected
-    || ouChampionStandDownReason !== null
+  const trackedOuFinalBestAngle = ouChampionStandDownReason !== null
     || ouNoBet
     ? false
     : ouMarketAwareCorrectedGrade !== null
       ? ouMarketAwareCorrectedGrade.bestAngle
       : (ouFinalBestAngle || ouPromotedBestAngle);
   const ouValidatedLean = resolveTotalValidatedLean({
-    blocked:
-      trackedOuFinalBestAngle ||
-      ouNoBet ||
-      ouFlipped ||
-      ouMarketFlipped ||
-      ouMarketSideCorrected ||
-      ouMidEdgeFlipped,
+    blocked: trackedOuFinalBestAngle || ouNoBet,
     side: finalOuPick,
     modelProb: finalOuModelProb,
     edgePct: finalOuEdge,
@@ -3412,10 +3402,6 @@ function buildOuRecord(
   const ouModelLeanRetained =
     !trackedOuFinalBestAngle &&
     !ouNoBet &&
-    !ouFlipped &&
-    !ouMarketFlipped &&
-    !ouMarketSideCorrected &&
-    !ouMidEdgeFlipped &&
     finalOuPublicPlayGrade === "lean" &&
     finalOuModelProb !== null &&
     finalOuOdds !== null &&
@@ -3428,9 +3414,7 @@ function buildOuRecord(
     finalOuPublicPlayGrade === "lean" &&
     !ouValidatedLean.lean &&
     !ouModelLeanRetained;
-  const trackedOuPublicPlayGrade = ouCorrectionRejected
-    ? null
-    : ouMarketAwareCorrectedGrade !== null
+  const trackedOuPublicPlayGrade = ouMarketAwareCorrectedGrade !== null
     ? ouMarketAwareCorrectedGrade.playGrade
     : ouPromotedBestAngle
     ? "best_angle"
@@ -3465,13 +3449,12 @@ function buildOuRecord(
     market_probability: finalOuMarketProb,
     edge: finalOuEdge,
     expected_value: null,
-    // Phase 6B.27 — same translator as ML; see readPublicPlayGrade. Mean-side
-    // and rejected correction rows do not inherit the original side's grade.
+    // Phase 6B.27 — same translator as ML; see readPublicPlayGrade. Rejected
+    // correction candidates never inherit a grade; r29 evaluates the restored
+    // original side through the normal grade gates above.
     play_grade: ouMissingActionableMarket
       ? null
-      : ouCorrectionRejected
-      ? null
-      : ouMarketSideCorrected
+      : ouMarketSideCorrected && ouCorrectionAccepted
       ? ouMarketAwareCorrectedGrade?.playGrade ?? "market_aligned"
       : ouChampionStandDownReason !== null
         ? null
@@ -3506,12 +3489,14 @@ function buildOuRecord(
           ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouMidEdgeFlipped,
         correction_rule_id: ouCorrectionRuleId,
         correction_kind: ouCorrectionKind,
-        correction_mode: ouCorrectionRejected ? "stand_down" : "none",
+        correction_mode: ouCorrectionRejected ? "reject_candidate_evaluate_original" : "none",
         rejected_rule_id: ouCorrectionRejected ? ouCorrectionRuleId : null,
         rejected_correction_kind: ouCorrectionRejected ? ouCorrectionKind : null,
-        board_action: ouCorrectionRejected
-          ? "no_play"
-          : trackedOuFinalBestAngle || trackedOuPublicPlayGrade === "lean"
+        original_side_restoration_rule_id: ouCorrectionRejected
+          ? TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID
+          : null,
+        board_action:
+          trackedOuFinalBestAngle || trackedOuPublicPlayGrade === "lean"
             ? "bet"
             : "no_play",
         actionable_grade: trackedOuFinalBestAngle
@@ -3543,7 +3528,7 @@ function buildOuRecord(
                 ? "additive_rule"
                 : null,
         paired_policy: {
-          demotion: "unstable_totals_correction_trigger_to_no_play",
+          demotion: "unstable_totals_correction_candidate_rejected",
           promotions: [
             TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID,
             TOTAL_VALIDATED_LEAN_RULE_ID,
@@ -3688,12 +3673,11 @@ function buildOuRecord(
         ? {
             rule_id: ouCorrectionRuleId,
             flip_kind: ouCorrectionKind,
-            action: "no_public_grade",
-            public_play_grade: null,
+            action: "reject_candidate_evaluate_original",
+            restoration_rule_id: TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID,
+            public_play_grade: trackedOuPublicPlayGrade,
             no_bet: ouNoBet,
-            reason: ouNoBet
-              ? ouNoBetReason
-              : "Totals correction rules are not actionable in decision release r1; the row is stood down as No Play.",
+            reason: "The correction candidate is non-actionable; the original side is evaluated by the standard total grade gates.",
           }
         : null,
       champion_candidate_correction: ouChampionStandDownReason === null
@@ -3743,12 +3727,13 @@ function buildOuRecord(
       market_aware_side_correction: null,
       totals_correction_rejection: ouCorrectionRejected
         ? {
-            action: "stand_down",
+            action: "reject_candidate_evaluate_original",
             rule_id: ouCorrectionRuleId,
             correction_kind: ouCorrectionKind,
+            restoration_rule_id: TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID,
             official_side: finalOuPick,
             rejected_candidate_side: ouRejectedCandidate?.side ?? null,
-            reason: "Totals correction rule failed chronological stability and is not actionable in decision release r1.",
+            reason: "Totals correction candidate failed chronological stability and remains non-actionable; the original side proceeds through standard validation.",
             original_side: pred.predicted_ou_side,
             original_pick: pred.predicted_ou_side,
             original_odds: ouOddsAmerican,
