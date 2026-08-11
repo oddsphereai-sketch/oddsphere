@@ -106,7 +106,7 @@ export function evaluateMlbPropsLaunchReadiness(args: {
     check("RECENT_FORM_COVERAGE", Boolean(research?.recentFormComplete), true, "Every active pregame prop has five official MLB logs or a verified shorter full-season sample."),
     check("MODEL_OUTPUT_COVERAGE", Boolean(research?.modelOutputComplete), true, "Every promoted pitcher market has a model probability."),
     check("MODEL_CONTEXT_INTEGRATED", Boolean(research?.modelContextIntegrated), true, "Promoted model outputs consume every required live context input."),
-    check("RESEARCH_INPUTS_COMPLETE", Boolean(research?.researchInputsComplete), true, "Required research modules are complete for every active pregame prop."),
+    check("RESEARCH_HOLDS_FAIL_CLOSED", Boolean(research?.researchHoldsFailClosed), true, "Every active pregame row with missing required research is explicitly held as Pending Data or Research."),
     check("DIRECT_MATCHUP_VERIFIED", Boolean(research?.directMatchupComplete), true, "Every active pregame hitter prop has official matchup history or an explicit no-history result."),
     check("STARTER_CONTEXT", Boolean(latest?.data.slate?.matchups.some((matchup) => matchup.starterStatus !== "pending")), true, "Probable-pitcher context is present for the slate."),
     check("ENVIRONMENT_CONTEXT", Boolean(research?.environmentComplete), true, "Every active pregame prop has park and game-time weather context."),
@@ -197,7 +197,9 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
       "weather_unavailable_non_blocking",
       "weak_pitcher_baseline",
     ].includes(warning))),
-    researchInputsComplete: rows.every((row) => row.missingFeatures.length === 0),
+    researchHoldsFailClosed: rows.every((row) =>
+      row.missingFeatures.length === 0 || row.playGrade === "PENDING_DATA" || row.playGrade === "RESEARCH"
+    ),
     actionableRecentFormComplete: actionableRows.every(({ recentForm }) => (recentForm?.logs.length ?? 0) >= 5),
     actionableModelOutputComplete: actionableRows.every(({ row }) => row.finalProbability !== null && row.modelProbability !== null),
     actionableModelContextIntegrated: actionablePitcherRows.every(({ row }) => (row.modelInputWarnings ?? []).every((warning) => ![

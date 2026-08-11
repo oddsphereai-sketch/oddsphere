@@ -771,7 +771,7 @@ async function main() {
     now: new Date("2026-08-01T13:41:00Z"),
     env: readinessEnv,
   });
-  check("required actionable research gaps still close player props", !unsafeLaunch.readyToOpen && unsafeLaunch.blockers.includes("RESEARCH_INPUTS_COMPLETE"));
+  check("required actionable research gaps still close player props", !unsafeLaunch.readyToOpen && unsafeLaunch.blockers.includes("RESEARCH_HOLDS_FAIL_CLOSED"));
   check("props UI includes member-friendly pending market state", propsUiSource.includes("PendingPropsState") && propsUiSource.includes("Player prop lines have not posted yet.") && propsUiSource.includes("Today’s board will populate automatically"));
   check("internal tracking settles hitter and pitcher markets from the right official game logs", internalTrackingSource.includes("getHitterGameLogs") && internalTrackingSource.includes("getPitcherGameLogs") && internalTrackingSource.includes("gameLogKey") && internalTrackingSource.includes("finalStatsForEntry"));
   check("pitcher tracking locks retain reproducible model evidence", ["trackingEvidenceSchemaVersion", "projection: row.projection", "projectionSource: row.projectionSource", "modelInputWarnings: row.modelInputWarnings"].every((field) => internalTrackingSource.includes(field)));

@@ -2272,6 +2272,26 @@ export function validateMlbPropsBoardData(args: {
     errors.push(`REQUIRED_RESEARCH_INCOMPLETE_${unsafeIncompleteResearchRows.length}`);
   } else if (incompleteResearchRows.length > 0) {
     warnings.push(`REQUIRED_RESEARCH_HELD_ROWS_${incompleteResearchRows.length}`);
+    const starterUnavailableRows = incompleteResearchRows.filter((row) =>
+      row.missingFeatures.includes("opposing starter")
+    );
+    if (starterUnavailableRows.length > 0) {
+      warnings.push(`OPPOSING_STARTER_UNAVAILABLE_ROWS_${starterUnavailableRows.length}`);
+    }
+    const isolatedPitchMixRows = incompleteResearchRows.filter((row) =>
+      row.missingFeatures.includes("pitch mix matchup") && !row.missingFeatures.includes("opposing starter")
+    );
+    const pitchMixSampleRows = isolatedPitchMixRows.filter((row) => {
+      const shared = row.researchKey ? args.data.research?.[row.researchKey] : null;
+      return Boolean(row.pitchMatchup ?? shared?.pitchMatchup);
+    });
+    if (pitchMixSampleRows.length > 0) {
+      warnings.push(`PITCH_MIX_SAMPLE_INSUFFICIENT_ROWS_${pitchMixSampleRows.length}`);
+    }
+    const pitchMixUnavailableRows = isolatedPitchMixRows.length - pitchMixSampleRows.length;
+    if (pitchMixUnavailableRows > 0) {
+      warnings.push(`PITCH_MIX_DATA_UNAVAILABLE_ROWS_${pitchMixUnavailableRows}`);
+    }
   }
   const pendingLineups = args.data.props.filter((row) => row.marketFamily !== "pitcher" && row.lineupStatus?.status === "pending").length;
   if (pendingLineups > 0) warnings.push(`${pendingLineups}_HITTER_ROWS_PROJECTED_LINEUP`);

@@ -179,7 +179,53 @@ assert.equal(
   "row-scoped PENDING_DATA research holds do not freeze a coherent slate",
 );
 assert.ok(heldMissingResearch.warnings.includes("REQUIRED_RESEARCH_HELD_ROWS_1"));
+assert.ok(heldMissingResearch.warnings.includes("OPPOSING_STARTER_UNAVAILABLE_ROWS_1"));
 assert.ok(!heldMissingResearch.errors.some((error) => error.startsWith("REQUIRED_RESEARCH_INCOMPLETE_")));
+
+const partialPitchMixData = data([row({
+  playGrade: "RESEARCH",
+  researchKey: "partial-pitch-mix",
+  missingFeatures: ["pitch mix matchup"],
+  reasonCodes: ["PITCH_MIX_SAMPLE_INSUFFICIENT"],
+})]);
+partialPitchMixData.research = {
+  "partial-pitch-mix": {
+    recentForm: null,
+    opponentProfile: null,
+    pitchArsenal: null,
+    pitchMatchup: {
+      hitterId: 1,
+      hitterName: "Test Player",
+      hitterBats: "R",
+      pitcherId: 2,
+      pitcherName: "Test Pitcher",
+      pitcherThrows: "L",
+      season: 2026,
+      coverageStatus: "partial",
+      pitchMixCoveragePercent: 69,
+      matchedPitchTypes: 3,
+      hitterPitchesSeen: 59,
+      weighted: { battingAverage: null, slugging: null, xwoba: null, whiffPercent: null },
+      pitches: [],
+      summary: "Verified partial pitch-mix sample.",
+      source: "Ball Don't Lie",
+      lastGameDate: "2026-07-15",
+      asOfTimestamp: asOf,
+      researchOnly: true,
+    },
+    matchupHistory: null,
+    environment: null,
+  },
+};
+const heldPartialPitchMix = validateMlbPropsBoardData({
+  data: partialPitchMixData,
+  sourceRows: 1,
+  mappedRows: 1,
+  asOfTimestamp: asOf,
+});
+assert.equal(heldPartialPitchMix.publishable, true);
+assert.ok(heldPartialPitchMix.warnings.includes("PITCH_MIX_SAMPLE_INSUFFICIENT_ROWS_1"));
+assert.ok(!heldPartialPitchMix.warnings.some((warning) => warning.startsWith("PITCH_MIX_DATA_UNAVAILABLE_ROWS_")));
 
 const leakedMissingResearch = validateMlbPropsBoardData({
   data: data([row({
@@ -614,6 +660,57 @@ const launchReady = evaluateMlbPropsLaunchReadiness({
   },
 });
 assert.equal(launchReady.readyToOpen, true, "three valid snapshots plus private tracking satisfy the launch gate");
+const heldResearchLaunch = evaluateMlbPropsLaunchReadiness({
+  slateDate: "2026-07-16",
+  snapshots: launchSnapshots.map((item) => ({
+    ...item,
+    data: {
+      ...item.data,
+      props: item.data.props.map((prop, index) => index === 1 ? {
+        ...prop,
+        playGrade: "PENDING_DATA" as const,
+        missingFeatures: ["opposing starter", "pitch mix matchup"],
+      } : prop),
+    },
+  })),
+  tracking: trackingHealth,
+  now: new Date("2026-07-16T16:10:00.000Z"),
+  env: {
+    ...process.env,
+    MLB_PLAYER_PROPS_CRON_ENABLED: "true",
+    ODDSPHERE_PROPS_INTERNAL_TRACKING_ENABLED: "true",
+    MLB_PLAYER_PROPS_SETTLEMENT_CRON_ENABLED: "true",
+  },
+});
+assert.equal(
+  heldResearchLaunch.readyToOpen,
+  true,
+  "launch readiness accepts missing research only when the affected row is explicitly held",
+);
+const leakedResearchLaunch = evaluateMlbPropsLaunchReadiness({
+  slateDate: "2026-07-16",
+  snapshots: launchSnapshots.map((item) => ({
+    ...item,
+    data: {
+      ...item.data,
+      props: item.data.props.map((prop, index) => index === 1 ? {
+        ...prop,
+        playGrade: "WATCHLIST" as const,
+        missingFeatures: ["opposing starter"],
+      } : prop),
+    },
+  })),
+  tracking: trackingHealth,
+  now: new Date("2026-07-16T16:10:00.000Z"),
+  env: {
+    ...process.env,
+    MLB_PLAYER_PROPS_CRON_ENABLED: "true",
+    ODDSPHERE_PROPS_INTERNAL_TRACKING_ENABLED: "true",
+    MLB_PLAYER_PROPS_SETTLEMENT_CRON_ENABLED: "true",
+  },
+});
+assert.equal(leakedResearchLaunch.readyToOpen, false, "launch readiness still blocks missing evidence in an ordinary grade");
+assert.ok(leakedResearchLaunch.blockers.includes("RESEARCH_HOLDS_FAIL_CLOSED"));
 const cadenceCompatibleReady = evaluateMlbPropsLaunchReadiness({
   slateDate: "2026-07-16",
   snapshots: launchSnapshots,
