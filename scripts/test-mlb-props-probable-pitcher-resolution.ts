@@ -68,6 +68,20 @@ const disabled = await resolveMlbPropsProbablePitchers({
   dependencies: { fetchEspn: espn, loadRoster: roster },
 });
 assert.equal(disabled.fallbackAssignments.length, 0, "operator kill switch preserves the official-only slate");
+
+const recoveredHost = await resolveMlbPropsProbablePitchers({
+  games: [game],
+  mlbStatsProbablePitchers: [probable(game.awayTeamId, "mlbstats-player-684007", "Shota Imanaga"), probable(game.homeTeamId, null)],
+  slateDate: "2026-08-11",
+  asOfTimestamp: "2026-08-11T14:08:00.000Z",
+  dependencies: {
+    fetchEspn: async () => new Map(),
+    fetchAlternativeEspn: espn,
+    loadRoster: roster,
+    resolveBdlPlayerId: async () => 555,
+  },
+});
+assert.equal(recoveredHost.fallbackAssignments.length, 1, "equivalent official ESPN host recovers an empty primary response");
 assert.equal(filled.probablePitchers.find((row) => row.teamId === game.awayTeamId)?.provider, "mlbstats");
 
 let fallbackFetches = 0;
@@ -115,7 +129,7 @@ const doubleheader = await resolveMlbPropsProbablePitchers({
 });
 assert.equal(doubleheader.fallbackAssignments.length, 0, "team-pair fallback never guesses between doubleheader games");
 
-console.log("MLB props probable-pitcher resolution: 9 checks passed");
+console.log("MLB props probable-pitcher resolution: 10 checks passed");
 }
 
 main().catch((error) => {

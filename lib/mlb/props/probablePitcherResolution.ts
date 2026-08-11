@@ -23,6 +23,7 @@ export type MlbPropsProbablePitcherResolution = {
 
 type ResolutionDependencies = {
   fetchEspn?: typeof fetchEspnProbablePitchers;
+  fetchAlternativeEspn?: typeof fetchEspnProbablePitchers;
   loadRoster?: typeof getActiveRoster;
   resolveBdlPlayerId?: (fullName: string, teamAbbreviation: string) => Promise<number | null>;
 };
@@ -54,7 +55,22 @@ export async function resolveMlbPropsProbablePitchers(args: {
 
   const fetchEspn = args.dependencies?.fetchEspn ?? fetchEspnProbablePitchers;
   const loadRoster = args.dependencies?.loadRoster ?? getActiveRoster;
-  const espnByGame = await fetchEspn(args.slateDate, { log: () => undefined });
+  let espnByGame = await fetchEspn(args.slateDate, { log: () => undefined });
+  // ESPN's two official site API hosts serve the same scoreboard contract,
+  // but the primary host can return an empty/failure response from some
+  // serverless egress ranges. Retry only when the primary produced no slate;
+  // never blend or override a valid primary response.
+  if (espnByGame.size === 0 && (!args.dependencies?.fetchEspn || args.dependencies.fetchAlternativeEspn)) {
+    const fetchAlternativeEspn = args.dependencies?.fetchAlternativeEspn
+      ?? ((slateDate: string) => fetchEspnProbablePitchers(slateDate, {
+        log: () => undefined,
+        fetchImpl: (input, init) => {
+          const url = String(input).replace("https://site.api.espn.com/", "https://site.web.api.espn.com/");
+          return fetch(url, init);
+        },
+      }));
+    espnByGame = await fetchAlternativeEspn(args.slateDate, { log: () => undefined });
+  }
   if (espnByGame.size === 0) {
     return { probablePitchers: args.mlbStatsProbablePitchers, fallbackAssignments: [], findings: ["PROBABLE_FALLBACK_ESPN_SLATE_EMPTY"] };
   }
