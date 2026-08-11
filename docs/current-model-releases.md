@@ -11,9 +11,9 @@ Last reviewed: 2026-08-11
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2`
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_11_r29`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v28_2026_08_11`
-- Grade policy: `mlb_public_grade_policy_v20_guarded_signed_side_market_evidence_2026_08_10`
+- Decision release: `mlb_daily_edge_decision_2026_08_11_r31`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v30_2026_08_11`
+- Grade policy: `mlb_public_grade_policy_v22_sharp_portfolio_and_total_resistance_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
@@ -42,6 +42,35 @@ gates. The forward correction audit found that the prior blanket stand-down remo
 sides that went 7-2 (+4.04 units, +44.9% ROI), while the rejected candidates went 2-7 (-5.09
 units, -56.6% ROI). The paired current-slate replay and rollback evidence are recorded in
 `docs/model-audits/2026-08-11-mlb-totals-rejected-correction-original-side-r29.md`.
+
+The August 11 r30 grade policy adds one additive full-game Total Lean sleeve found by a nested
+walk-forward market search: a high-quality, projection-aligned Under with at least 55% model
+probability, nonnegative but sub-5-point offered-price edge, a price from -145 through -105,
+at most 35% of tickets, and picked-side money at least five points below picked-side tickets.
+It never changes the selected side, probability, projection, price, Best Angle status, or stake;
+missing/stale data and every existing no-bet gate retain priority. The member board gains a Lean
+only when this complete joint configuration is present. The current August 11 slate has zero
+qualifiers, so r30 changes no current recommendation while enabling the validated future sleeve.
+Evidence and rollback details are recorded in
+`docs/model-audits/2026-08-11-mlb-total-under-low-ticket-resistance-r30.md`.
+
+The August 11 r31 release adds a slate-level MLB Moneyline portfolio ranker after all existing
+side selection, correction, no-bet, price, freshness, and data-quality gates. It jointly scores
+the frozen model probability, offered-price break-even, model-versus-price edge, picked-side
+ticket and money shares, their gap, price shape, and captured opener-to-lock market behavior.
+It may promote at most the highest-ranked qualifying Watchlist to Lean; it is not a quota and
+may add no play. A qualifying row needs at least 55% model probability, a price from -220 through
++200, a learned probability at least equal to the offered break-even, complete high-quality
+market evidence, and no movement against the pick. It never changes the side, probability,
+projection, price, Best Angle status, or stake.
+
+Daily walk-forward selection produced 25 plays over 30 test slates at 20-5 and +37.4% locked-price
+ROI. Allowing a second or third daily selection degraded materially, so only rank one is live.
+Coefficients frozen through July 31 went 6-2 on untouched August 1-8 rows. The paired August 11
+replay adds one Moneyline Lean (Cincinnati at the then-current +135) to the previously zero-action
+Moneyline board; totals and first-inning decisions are unchanged by this ranker. Evidence and
+rollback details are recorded in
+`docs/model-audits/2026-08-11-mlb-sharp-portfolio-ranker-r31.md`.
 
 The August 11 r28 first-inning availability release keeps MLB Stats as the authoritative starter
 source and fills only an empty side through the existing ESPN probable-pitcher fallback. The

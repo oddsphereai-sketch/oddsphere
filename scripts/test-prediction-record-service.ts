@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import {
   buildPredictionRecordsFromSlate,
+  applyMlbSharpPortfolioLean,
   americanToImpliedProb,
   buildPublicSplitsSnapshot,
   buildLineMovementSnapshot,
@@ -22,6 +23,7 @@ import {
   FI_PLUS_MONEY_LEAN_BEST_ANGLE_PROMOTION_RULE_ID,
   FI_CALIBRATED_MODEL_LEAN_PATH_ID,
   TOTAL_VALIDATED_LEAN_RULE_ID,
+  TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID,
   TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID,
   TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID,
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
@@ -31,6 +33,7 @@ import {
   ML_MARKET_DIVERGENCE_LEAN_RULE_ID,
   ML_MARKET_DIVERGENCE_MIN_MODEL_PROB,
   ML_SIGNED_MARKET_RESISTANCE_RULE_ID,
+  ML_SHARP_PORTFOLIO_LEAN_RULE_ID,
   ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID,
   ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID,
   ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID,
@@ -41,6 +44,7 @@ import {
   resolveMlTightMarketPriceBestAngle,
   resolveMlbMarketAwareSideCorrection,
 } from "../lib/services/predictionRecordService";
+import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import { MLB_MODEL_LAYER_VERSION_SCHEMA } from "../lib/automodel/mlbModelLayerVersions";
 import { TOTALS_MARKET_OPPOSED_FLIP_RULE_ID } from "../lib/services/totalsMeanFlip";
 
@@ -286,6 +290,94 @@ const basePrediction = {
 
 const abbrevByTeamId = new Map<number, string>([[771, "CHC"], [780, "SF"]]);
 const predictionByGameId = new Map<number, typeof basePrediction>([[14771, basePrediction]]);
+
+console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━");
+{
+  const portfolioRecord = (
+    gameId: number,
+    matchup: string,
+    odds: number,
+    probability: number,
+    bets: number,
+    money: number,
+    movementDirection: "neutral" | "toward_pick" | "against_pick",
+  ): PredictionRecordRow => ({
+    game_prediction_id: gameId,
+    game_id: gameId,
+    external_id: gameId,
+    sport: "mlb",
+    slate_date: "2026-08-11",
+    game_date: "2026-08-11T23:10:00Z",
+    matchup,
+    market: "moneyline",
+    pick: "away",
+    side: "away",
+    line_value: null,
+    odds_american: odds,
+    odds_decimal: odds > 0 ? 1 + odds / 100 : 1 + 100 / Math.abs(odds),
+    model_used: "v2_2",
+    model_version: "auto_v2.2_mlb_full_game_projection",
+    prediction_source: "auto_v2.2",
+    confidence: probability * 100,
+    model_probability: probability,
+    market_probability: americanToImpliedProb(odds),
+    edge: null,
+    expected_value: null,
+    play_grade: "market_aligned",
+    prediction_type: null,
+    best_angle: false,
+    no_bet: false,
+    no_bet_reason: null,
+    market_aligned: true,
+    data_quality_tier: "high",
+    source_quality: "sharpapi_splits",
+    provisional: false,
+    held: false,
+    hold_reason: null,
+    launch_day: false,
+    manual_outcome_expected: false,
+    locked_at: null,
+    published_at: null,
+    snapshot_json: {
+      public_splits: {
+        picked_bets_pct: bets,
+        picked_money_pct: money,
+      },
+      line_movement: {
+        direction: movementDirection,
+        magnitude_pp: movementDirection === "neutral" ? 0 : 1,
+        has_reverse_line_movement: false,
+        has_steam_move: false,
+      },
+      data_integrity: {
+        stale: "no",
+        market_baseline_valid: "yes",
+      },
+      decision_pipeline: {
+        board_action: "no_play",
+        actionable_grade: null,
+        action_rule_id: null,
+      },
+    },
+  });
+  const ranked = applyMlbSharpPortfolioLean([
+    portfolioRecord(1, "CIN@CWS", 135, 0.60, 17, 61, "neutral"),
+    portfolioRecord(2, "SEA@BAL", 108, 0.58, 30, 45, "neutral"),
+    portfolioRecord(3, "LAA@LAD", 150, 0.65, 10, 80, "against_pick"),
+  ]);
+  const promoted = ranked.filter((record) => record.play_grade === "lean");
+  check("sharp portfolio promotes at most one qualifying Moneyline", promoted.length === 1);
+  check("sharp portfolio ranks the stronger qualified slate candidate first", promoted[0]?.matchup === "CIN@CWS");
+  check(
+    "sharp portfolio stamps its immutable action rule",
+    (promoted[0]?.snapshot_json as any)?.decision_pipeline?.action_rule_id ===
+      ML_SHARP_PORTFOLIO_LEAN_RULE_ID,
+  );
+  check(
+    "movement against the pick remains ineligible despite strong other inputs",
+    ranked.find((record) => record.matchup === "LAA@LAD")?.play_grade === "market_aligned",
+  );
+}
 
 // ── Standard slate: 1 game, NRFI held → 2 records ────────────────
 console.log("━━━ Slate with 1 game (NRFI held) → 2 records ━━━");
@@ -2067,6 +2159,78 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
   );
 }
 
+{
+  const resistancePred = {
+    ...basePrediction,
+    predicted_ou_side: "under",
+    ou_confidence: 57,
+    predicted_home_score: 3.6,
+    predicted_away_score: 3.6,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "market_aligned",
+      ou_best_angle_eligible: false,
+      v2_2_audit: {
+        ou_play_grade: "market_aligned",
+        market_total: 8,
+        posterior_total: 7.2,
+        ou_model_prob: 0.57,
+        ou_market_prob: 0.54,
+        ou_edge_pct: 3,
+      },
+    },
+  };
+  const resistanceSignals = [
+    { market_type: "total", side: "under", public_money_pct: 20, public_betting_pct: 30, has_steam_move: false, has_reverse_line_movement: false, rlm_direction: null, signal_strength: null, computed_at: "2026-07-10T16:00:00Z", pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+    { market_type: "total", side: "over", public_money_pct: 80, public_betting_pct: 70, has_steam_move: false, has_reverse_line_movement: false, rlm_direction: null, signal_strength: null, computed_at: "2026-07-10T16:00:00Z", pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+  ] as any;
+  const resistanceOdds = new Map([
+    [14771, {
+      mlHomeOdds: -120,
+      mlAwayOdds: 110,
+      ouOverOdds: -105,
+      ouUnderOdds: -115,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -120, line: null, observedAt: "2026-07-10T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 110, line: null, observedAt: "2026-07-10T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -105, line: 8, observedAt: "2026-07-10T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -115, line: 8, observedAt: "2026-07-10T16:00:00Z" },
+      },
+    }],
+  ]);
+  const resistanceRecords = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-10",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, resistancePred]]),
+    abbrevByTeamId,
+    signalsByGameId: new Map([[14771, resistanceSignals]]),
+    oddsByGameId: resistanceOdds,
+  });
+  const resistanceTotal = resistanceRecords.find((record) => record.market === "total");
+  const resistanceAudit = (resistanceTotal?.snapshot_json as any)?.total_under_low_ticket_resistance_lean;
+  check("low-ticket Under resistance promotes a guarded Watchlist to Lean", resistanceTotal?.play_grade === "lean" && resistanceTotal?.best_angle === false);
+  check("low-ticket Under resistance records the additive rule", resistanceAudit?.rule_id === TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID && resistanceAudit?.money_minus_bets_pct === -10);
+  check("low-ticket Under resistance is actionable in the decision pipeline", (resistanceTotal?.snapshot_json as any)?.decision_pipeline?.action_rule_id === TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID && (resistanceTotal?.snapshot_json as any)?.decision_pipeline?.board_action === "bet");
+
+  const highTicketRecords = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-10",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, resistancePred]]),
+    abbrevByTeamId,
+    signalsByGameId: new Map([[14771, resistanceSignals.map((signal: any) => signal.side === "under" ? { ...signal, public_betting_pct: 36 } : signal)]]),
+    oddsByGameId: resistanceOdds,
+  });
+  const highTicketTotal = highTicketRecords.find((record) => record.market === "total");
+  check("ticket share above 35 percent cannot earn the resistance Lean", highTicketTotal?.play_grade !== "lean" && (highTicketTotal?.snapshot_json as any)?.total_under_low_ticket_resistance_lean === null);
+}
+
 // ── Phase 6B.22 — pure helpers for snapshot context ──────────────────
 console.log("\n━━━ Phase 6B.22 — context snapshot helpers ━━━");
 
@@ -2679,7 +2843,7 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
   check("FI v2 best_angle → final signed-edge gate stamped",
         gate?.rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID && gate?.action === "keep_as_best_angle");
   check("FI Best Angle decision pipeline stamps current release and validated rule",
-        (fi.snapshot_json as any)?.decision_pipeline?.release_id === "mlb_daily_edge_decision_2026_08_11_r29" &&
+        (fi.snapshot_json as any)?.decision_pipeline?.release_id === "mlb_daily_edge_decision_2026_08_11_r31" &&
         (fi.snapshot_json as any)?.decision_pipeline?.board_action === "bet" &&
         (fi.snapshot_json as any)?.decision_pipeline?.actionable_grade === "best_angle" &&
         (fi.snapshot_json as any)?.decision_pipeline?.action_rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID);
