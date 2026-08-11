@@ -237,6 +237,7 @@ async function recoverExpiredDailyEdgeSnapshot(
  * response boundary. This also sanitizes older stored response snapshots.
  */
 function suppressIncomparableLineMovePrices(body: DailyEdgeResponse): DailyEdgeResponse {
+  enforceLockedCardCutoff(body);
   for (const game of body.games) {
     for (const market of Object.values(game.markets)) {
       const previousLine = market.lastMoveLinePrev;
@@ -248,6 +249,78 @@ function suppressIncomparableLineMovePrices(body: DailyEdgeResponse): DailyEdgeR
       ) {
         market.lastMovePrevAmerican = null;
         market.lastMoveNextAmerican = null;
+      }
+    }
+  }
+  return body;
+}
+
+function isoAfter(iso: string | null | undefined, cutoffMs: number): boolean {
+  if (!iso) return false;
+  const parsed = Date.parse(iso);
+  return Number.isFinite(parsed) && parsed > cutoffMs;
+}
+
+/**
+ * Final response-boundary defense for both freshly built and stored snapshots.
+ * Recommendation content may never carry evidence observed/generated after
+ * the card's authoritative lock instant. Game status and grading remain free
+ * to update elsewhere; this only freezes the betting card and reader.
+ */
+function enforceLockedCardCutoff(body: DailyEdgeResponse): DailyEdgeResponse {
+  for (const game of body.games) {
+    if (game.lockState !== "locked" || !game.lockedAt) continue;
+    const cutoffMs = Date.parse(game.lockedAt);
+    if (!Number.isFinite(cutoffMs)) continue;
+    game.generatedAt = game.lockedAt;
+    game.updatedAt = game.lockedAt;
+
+    for (const market of Object.values(game.markets)) {
+      const trail = (market.oddsTrail ?? []).filter((stop) => !isoAfter(stop.observedAt, cutoffMs));
+      market.oddsTrail = trail;
+      const comparable = trail.filter((stop) => typeof stop.american === "number");
+      market.lastMovePrevAmerican = comparable.length >= 2 ? comparable[comparable.length - 2]!.american : null;
+      market.lastMoveNextAmerican = comparable.length >= 1 ? comparable[comparable.length - 1]!.american : null;
+
+      const read = market.marketReadV2;
+      if (
+        read &&
+        (isoAfter(read.generatedAt, cutoffMs) ||
+          isoAfter(read.evidenceAsOf, cutoffMs) ||
+          isoAfter(read.movement?.observedAt, cutoffMs))
+      ) {
+        market.marketReadV2 = null;
+      }
+
+      const decision = market.recommendationDecision;
+      const frozenConsensus = decision?.consensusSplits?.rows ?? [];
+      const usableFrozenConsensus = frozenConsensus.length > 0 &&
+        frozenConsensus.every((row) => !isoAfter(row.observedAt, cutoffMs));
+      const displaySplitsArePostLock = market.publicSplits.some((row) => isoAfter(row.observedAt, cutoffMs));
+      // The named Consensus Splits section is the source-aware lock authority.
+      // Generic signal rows can carry a different provider's percentages, so
+      // locked top-level bars must mirror this section even when the legacy
+      // signal rows lacked timestamps.
+      if (usableFrozenConsensus || displaySplitsArePostLock) {
+        market.publicSplits = usableFrozenConsensus
+          ? frozenConsensus.map((row) => ({ ...row }))
+          : [];
+        const selected = market.publicSplits.find((row) => {
+          const pick = market.pick?.toLowerCase() ?? "";
+          return row.label.toLowerCase() === pick || pick.includes(row.label.toLowerCase());
+        }) ?? null;
+        market.moneyPct = selected?.moneyPct ?? null;
+        market.betsPct = selected?.betsPct ?? null;
+        market.moneyPctObservedAt = selected?.observedAt ?? null;
+        market.betsPctObservedAt = selected?.observedAt ?? null;
+      }
+
+      for (const target of [decision, game.recommendationDecision?.markets.moneyline, game.recommendationDecision?.markets.total, game.recommendationDecision?.markets.firstInning]) {
+        if (!target) continue;
+        for (const key of ["consensusSplits", "sharpBookSplits"] as const) {
+          const section = target[key];
+          if (section?.rows.some((row) => isoAfter(row.observedAt, cutoffMs))) target[key] = null;
+        }
       }
     }
   }
@@ -3112,8 +3185,18 @@ function buildPersistedOddsTrail(args: {
   terminalSportsbook?: string | null;
 }): OddsTrailStop[] {
   if (args.currentAmerican === null && args.lockedAmerican === null) return [];
+  const lockedCutoffMs = args.lockedAt === null ? null : Date.parse(args.lockedAt);
   const trustedCandidates = args.candidates.filter(
-    (row) => !isBlockedSportsbook(row.sportsbook),
+    (row) => {
+      if (isBlockedSportsbook(row.sportsbook)) return false;
+      // A locked reader is a pregame record. line_history continues to ingest
+      // after T-60 and can contain in-game prices (for example a favorite
+      // becoming +460 after falling behind). Those observations must never
+      // become First/Prior stops in the frozen pregame trail.
+      if (lockedCutoffMs === null || !Number.isFinite(lockedCutoffMs)) return true;
+      const observedMs = Date.parse(row.recorded_at);
+      return Number.isFinite(observedMs) && observedMs <= lockedCutoffMs;
+    },
   );
   const terminalSportsbook = args.terminalSportsbook ?? args.priceRow?.sportsbook ?? null;
   const matchingBook =
@@ -5858,6 +5941,7 @@ export const __TEST__ = {
   resolveSharpBookSplitSection,
   visibleTotalPointMarketReadScore,
   suppressIncomparableLineMovePrices,
+  enforceLockedCardCutoff,
   resolveTrailPriceRow,
   buildPersistedOddsTrail,
   readLockedSnapshotSportsbook,
@@ -7254,10 +7338,11 @@ export async function GET(request: Request) {
   }
 
   // Dual-source public splits (Phase 2 DISPLAY) — MLB only, additive.
-  // Overlays moneyline/total publicSplits with the provider-resolved read
+  // Overlays OPEN moneyline/total publicSplits with the provider-resolved read
   // (Playbook preferred fresh+complete, SharpAPI fallback, stale-but-valid so
   // bars never disappear; never blended). Touches ONLY publicSplits — grades,
-  // predictions, model, and sharp_signals are unchanged. Default ON after the
+  // predictions, model, and sharp_signals are unchanged. Locked cards retain
+  // the split rows persisted in their recommendation snapshot. Default ON after the
   // provider/date matcher rollout; an explicit false remains the kill switch.
   // Never break the response on an overlay error.
   if (dualSourcePublicSplitsDisplay) {

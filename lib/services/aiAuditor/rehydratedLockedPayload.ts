@@ -76,7 +76,7 @@ export type RehydratedLockedMarketPayload = {
   consensusSplits: {
     available: boolean;
     rows: RehydratedSplitRow[];
-    source: "snapshot_source_aware_split_rows_at_lock" | "snapshot_signal_rows_at_lock" | "historical_source_not_persisted";
+    source: "snapshot_source_aware_split_rows_at_lock" | "snapshot_signal_rows_at_lock" | "snapshot_public_market_context" | "historical_source_not_persisted";
     freshness: "fresh_at_lock" | "historical_source_not_persisted";
   };
   sharpBookSplitsOrSignal: {
@@ -212,7 +212,7 @@ function splitRows(record: RehydratedPredictionRecord): RehydratedSplitRow[] {
   const sourceAwareConsensus = snapshotSourceAwareRows(record.snapshot_json, record.market, "consensus")
     .map((row) => ({ ...row, label: sideLabel(row.side, record.market, record.matchup) }));
   if (sourceAwareConsensus.length > 0) return sourceAwareConsensus;
-  return snapshotSignalRows(record.snapshot_json, record.market).map((row) => ({
+  const signalRows = snapshotSignalRows(record.snapshot_json, record.market).map((row) => ({
     side: str(row.side) ?? "unknown",
     label: sideLabel(str(row.side), record.market, record.matchup),
     moneyPct: num(row.public_money_pct),
@@ -220,6 +220,38 @@ function splitRows(record: RehydratedPredictionRecord): RehydratedSplitRow[] {
     observedAt: str(row.computed_at),
     isStale: false,
   })).filter((row) => row.moneyPct !== null || row.betsPct !== null);
+  if (signalRows.length > 0) return signalRows;
+
+  // WNBA stores the exact picked/opposite public percentages used by the
+  // versioned recommendation inside public_market_context. Rehydrate those
+  // values for locked-card audits instead of misclassifying the sport-specific
+  // snapshot as a missing consensus source.
+  const allContext = record.snapshot_json?.public_market_context;
+  const context = allContext && typeof allContext === "object"
+    ? (allContext as Record<string, unknown>)[record.market]
+    : null;
+  if (!context || typeof context !== "object" || !record.side) return [];
+  const values = context as Record<string, unknown>;
+  const opposite = record.side === "home" ? "away" : record.side === "away" ? "home" : record.side === "over" ? "under" : record.side === "under" ? "over" : null;
+  if (!opposite) return [];
+  return [
+    {
+      side: record.side,
+      label: sideLabel(record.side, record.market, record.matchup),
+      moneyPct: pctFromStoredSplit(values.pickedMoneyPct),
+      betsPct: pctFromStoredSplit(values.pickedBetsPct),
+      observedAt: record.locked_at,
+      isStale: false,
+    },
+    {
+      side: opposite,
+      label: sideLabel(opposite, record.market, record.matchup),
+      moneyPct: pctFromStoredSplit(values.oppositeMoneyPct),
+      betsPct: pctFromStoredSplit(values.oppositeBetsPct),
+      observedAt: record.locked_at,
+      isStale: false,
+    },
+  ].filter((row) => row.moneyPct !== null || row.betsPct !== null);
 }
 
 function pickedSplit(rows: RehydratedSplitRow[], selectedSide: string | null): RehydratedSplitRow | null {
@@ -605,7 +637,11 @@ export function buildRehydratedLockedMarketPayload(record: RehydratedPredictionR
       rows: splits,
       source: sourceAwareConsensus.length > 0
         ? "snapshot_source_aware_split_rows_at_lock" as const
-        : splits.length > 0 ? "snapshot_signal_rows_at_lock" as const : "historical_source_not_persisted" as const,
+        : splits.length > 0
+          ? record.snapshot_json?.public_market_context && typeof record.snapshot_json.public_market_context === "object"
+            ? "snapshot_public_market_context" as const
+            : "snapshot_signal_rows_at_lock" as const
+          : "historical_source_not_persisted" as const,
       freshness: splits.length > 0 ? "fresh_at_lock" as const : "historical_source_not_persisted" as const,
     },
     sharpBookSplitsOrSignal: {

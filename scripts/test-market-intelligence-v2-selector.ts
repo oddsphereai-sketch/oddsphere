@@ -99,7 +99,7 @@ function row(id: number, overrides: Partial<MarketIntelligenceSnapshotV2Row> = {
     marketType: "moneyline",
     selectionKey: "game-1:moneyline:home",
   });
-  check("locked can use post-lock generated snapshot when evidence is pre-lock", selected?.id === 1, String(selected?.id));
+  check("locked rejects post-lock generated snapshots even when evidence is pre-lock", selected === null, String(selected?.id));
 }
 
 console.log(`\nmarket-intelligence-v2-selector: ${pass} passed, ${fail} failed`);

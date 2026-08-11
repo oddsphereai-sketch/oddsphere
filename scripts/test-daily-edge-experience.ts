@@ -306,7 +306,9 @@ check(
 );
 check(
   "authoritative sport-specific logos win over overlapping MLB abbreviations",
-  candidateSource.includes("const resolvedSrc = src ?? mlbLogoUrl(label)") &&
+  candidateSource.includes("const suppliedSrc = src?.trim() || null") &&
+    candidateSource.includes('suppliedSrc.includes("mlbstatic.com/team-logos/")') &&
+    candidateSource.includes(": suppliedSrc") &&
     !candidateSource.includes("const resolvedSrc = mlbLogoUrl(label) ?? src"),
 );
 check(
@@ -316,9 +318,9 @@ check(
 );
 check(
   "different primary and tracked-book prices are labeled instead of mixed",
-  candidateSource.includes("The reader’s displayed price is") &&
-    candidateSource.includes("so sources are not mixed") &&
-    candidateSource.includes(".filter((group) => group.length >= 2)"),
+  candidateSource.includes("displayedBook !== null") &&
+    candidateSource.includes("displayedPrice === stop.american") &&
+    candidateSource.includes(".filter((group) => group.length >= 2 && group.some"),
 );
 check(
   "total and spread summaries preserve both point lines instead of comparing unlike prices at one line",

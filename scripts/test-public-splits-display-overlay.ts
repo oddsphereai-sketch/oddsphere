@@ -104,6 +104,15 @@ check("moneyline Market Read consensus summary mirrors final resolved bars", mon
 check("moneyline qualitative consensus copy follows the resolved side", moneyline.marketReadV2?.explanation === "Consensus leans our way, but the line has not confirmed the move.");
 check("consensus overlay never changes the pick", moneyline.pick === "WSH");
 
+const lockedGame = game();
+lockedGame.lockState = "locked";
+const lockedMoneyBefore = lockedGame.markets.moneyline!.publicSplits.map((row) => ({ ...row }));
+overlayResolvedPublicSplits([lockedGame], resolved);
+check(
+  "response-time split overlay never rewrites a locked card",
+  JSON.stringify(lockedGame.markets.moneyline!.publicSplits) === JSON.stringify(lockedMoneyBefore),
+);
+
 const sourceAwareOnly = game();
 sourceAwareOnly.markets.moneyline!.publicSplits = [
   { side: "home", label: "BAL", moneyPct: 58, betsPct: 54, observedAt: "2026-06-27T17:00:00.000Z" },

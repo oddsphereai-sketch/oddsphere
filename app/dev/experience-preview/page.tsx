@@ -124,7 +124,7 @@ export async function loadTeamHistory(snapshot: DailyEdgeResponse, sport: Sport)
 
 const loadCachedTeamHistory = unstable_cache(
   queryTeamHistory,
-  ["daily-edge-experience-team-history-v2"],
+  ["daily-edge-experience-team-history-v3"],
   { revalidate: 5 * 60, tags: ["daily-edge-experience-team-history"] },
 );
 
@@ -150,13 +150,14 @@ async function queryTeamHistory(
   const teamIds = Array.from(abbreviationById.keys());
   if (teamIds.length === 0) return {};
 
-  const dateCeiling = `${slateDate}T23:59:59Z`;
   const idList = teamIds.join(",");
   const { data: rows, error: gamesError } = await supabase
     .from("games")
     .select("game_date, home_team_id, away_team_id, home_score, away_score, total_runs, first_inning_runs")
     .eq("sport", sport)
-    .lt("game_date", dateCeiling)
+    // Recent form is pre-slate context. Excluding the current slate keeps a
+    // completed game from entering its own L10 reader after the card locks.
+    .lt("slate_date", slateDate)
     .not("home_score", "is", null)
     .not("away_score", "is", null)
     .or(`home_team_id.in.(${idList}),away_team_id.in.(${idList})`)

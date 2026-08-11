@@ -350,6 +350,11 @@ export function overlayResolvedPublicSplits(
   resolved: ResolvedDisplayByExtId,
 ): DailyEdgeGameDto[] {
   for (const game of games) {
+    // The dual-provider overlay is response-time context for open cards only.
+    // A locked card must continue to render the split rows persisted in its
+    // recommendation snapshot; otherwise consensus can drift after T-60 even
+    // though the pick, grade, and price are frozen.
+    if (game.lockState === "locked") continue;
     const r = resolved.get(game.external_id);
     if (!r) continue;
     for (const market of ["moneyline", "total"] as Market[]) {

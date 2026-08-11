@@ -738,9 +738,9 @@ type CoherentMovement = ReturnType<typeof resolveCoherentMovement>;
 
 function sourceCoherentMarketPulse(market: MarketEdgeDto, movement: CoherentMovement): { chip: string; detail: string; tone: MarketPulseTone } {
   const decision = market.recommendationDecision;
-  // `publicSplits` is the response-time display authority and can be newer
-  // than the recommendation-time evidence preserved inside the decision.
-  // The pulse and the bars must describe the same current snapshot.
+  // `publicSplits` is the display authority: response-time provider data on
+  // open cards and the persisted recommendation snapshot after lock. The
+  // pulse and the bars must describe the same coherent snapshot.
   const consensus = displayedConsensusSection(market);
   const sharp = decision?.sharpBookSplits ?? null;
   const consensusSignal = splitSectionSignal(consensus);

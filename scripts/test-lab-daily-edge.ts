@@ -2060,6 +2060,7 @@ async function main() {
         { id: 1, game_id: 1, market_type: "total", sportsbook: "sx_bet", side: "under", line_value: 9.5, odds_american: -118, recorded_at: "2026-08-09T10:00:00Z" },
         { id: 2, game_id: 1, market_type: "total", sportsbook: "pinnacle", side: "under", line_value: 9.5, odds_american: -120, recorded_at: "2026-08-09T10:01:00Z" },
         { id: 3, game_id: 1, market_type: "total", sportsbook: "pinnacle", side: "under", line_value: 9.5, odds_american: -117, recorded_at: "2026-08-09T10:02:00Z" },
+        { id: 4, game_id: 1, market_type: "total", sportsbook: "pinnacle", side: "under", line_value: 9.5, odds_american: 460, recorded_at: "2026-08-09T10:04:00Z" },
       ],
       priceRow: { game_id: 1, market_type: "total", sportsbook: "locked_snapshot", side: "under", line_value: 9.5, odds_american: -130, fetched_at: "2026-08-09T10:03:00Z" },
       currentAmerican: -130,
@@ -2074,6 +2075,46 @@ async function main() {
       "locked trail excludes cross-book opener fallbacks",
       trail.length === 3 && trail.every((stop) => stop.sportsbook === "pinnacle") && trail[0]?.american === -120 && trail[2]?.american === -130,
     );
+    check(
+      "locked trail excludes every post-lock line-history observation",
+      trail.every((stop) =>
+        stop.american !== 460 &&
+        (stop.observedAt === null || Date.parse(stop.observedAt) <= Date.parse("2026-08-09T10:03:00Z"))
+      ),
+    );
+
+    const cachedLockedBody = {
+      games: [{
+        lockState: "locked",
+        lockedAt: "2026-08-09T10:03:00Z",
+        generatedAt: "2026-08-09T10:10:00Z",
+        updatedAt: "2026-08-09T10:10:00Z",
+        markets: {
+          moneyline: {
+            pick: "ATL",
+            oddsTrail: [
+              { american: -155, line: null, observedAt: "2026-08-09T10:02:00Z", sportsbook: "ballybet", source: "line_history", label: "first" },
+              { american: 460, line: null, observedAt: "2026-08-09T10:04:00Z", sportsbook: "ballybet", source: "line_history", label: "move" },
+              { american: -155, line: null, observedAt: "2026-08-09T10:03:00Z", sportsbook: "ballybet", source: "locked_snapshot", label: "locked" },
+            ],
+            publicSplits: [
+              { side: "home", label: "ATL", moneyPct: 72, betsPct: 64, observedAt: "2026-08-09T10:04:00Z" },
+              { side: "away", label: "NYM", moneyPct: 28, betsPct: 36, observedAt: "2026-08-09T10:04:00Z" },
+            ],
+            marketReadV2: { generatedAt: "2026-08-09T10:04:00Z", evidenceAsOf: "2026-08-09T10:04:00Z", movement: { observedAt: "2026-08-09T10:04:00Z" } },
+            recommendationDecision: { consensusSplits: { rows: [
+              { side: "home", label: "ATL", moneyPct: 59, betsPct: 55, observedAt: "2026-08-09T10:02:00Z" },
+              { side: "away", label: "NYM", moneyPct: 41, betsPct: 45, observedAt: "2026-08-09T10:02:00Z" },
+            ] } },
+          },
+        },
+      }],
+    } as any;
+    dailyEdgeTest.enforceLockedCardCutoff(cachedLockedBody);
+    const sanitized = cachedLockedBody.games[0].markets.moneyline;
+    check("cached locked cards discard post-lock in-game odds", sanitized.oddsTrail.every((stop: any) => stop.american !== 460));
+    check("cached locked cards restore persisted pre-lock consensus splits", sanitized.publicSplits[0]?.moneyPct === 59 && sanitized.publicSplits[1]?.moneyPct === 41);
+    check("cached locked cards discard post-lock generated market reads", sanitized.marketReadV2 === null);
 
     const currentTrail = dailyEdgeTest.buildPersistedOddsTrail({
       candidates: [

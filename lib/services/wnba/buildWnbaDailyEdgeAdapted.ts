@@ -116,7 +116,7 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
   const allIds = games.map((g) => g.id as number);
   const { data: predictionRecords } = await supabase
     .from("prediction_records")
-    .select("game_id, market, pick, side, line_value, odds_american, confidence, play_grade, locked_at")
+    .select("game_id, market, pick, side, line_value, odds_american, confidence, play_grade, locked_at, snapshot_json")
     .eq("sport", "wnba")
     .eq("slate_date", date)
     .in("game_id", allIds);
@@ -290,13 +290,20 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
       model: (ss.model as PreviewGame["model"]) ?? { home_win_prob: 0.5, margin: 0, total: gp.predicted_total ?? 0 },
       market: (ss.market as PreviewGame["market"]) ?? { home_win_prob: null, spread: null, total: null, book_count: 0, dispersion: { spread: 0, total: 0 } },
       data_quality: (ss.data_quality as PreviewGame["data_quality"]) ?? { ml_books: 0, spread_books: 0, total_books: 0, flags: [] },
-      publicSplits: buildWnbaPublicSplits(
-        signalsByGame.get(g.id as number) ?? [],
-        linesByGame.get(g.id as number) ?? [],
-        home.abbreviation as string,
-        away.abbreviation as string,
-        splitsAsOf,
-      ),
+      publicSplits: lockedAt
+        ? buildLockedWnbaPublicSplits(
+            lockedRecordsForGame,
+            home.abbreviation as string,
+            away.abbreviation as string,
+            lockedAt,
+          )
+        : buildWnbaPublicSplits(
+            signalsByGame.get(g.id as number) ?? [],
+            linesByGame.get(g.id as number) ?? [],
+            home.abbreviation as string,
+            away.abbreviation as string,
+            splitsAsOf,
+          ),
       pickedPrices: buildWnbaPickedPrices(
         linesByGame.get(g.id as number) ?? [],
         historyByGame.get(g.id as number) ?? [],
@@ -414,7 +421,60 @@ type WnbaLockedRecord = {
   confidence: number | null;
   play_grade: string | null;
   locked_at: string | null;
+  snapshot_json: Record<string, unknown> | null;
 };
+
+type WnbaLockedPublicContext = {
+  pickedBetsPct?: number | null;
+  pickedMoneyPct?: number | null;
+  oppositeBetsPct?: number | null;
+  oppositeMoneyPct?: number | null;
+};
+
+/** Rehydrate the public split bars from the recommendation evidence frozen at lock. */
+function buildLockedWnbaPublicSplits(
+  records: ReadonlyMap<string, WnbaLockedRecord>,
+  homeAbbr: string,
+  awayAbbr: string,
+  lockedAt: string,
+): { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[]; spread: WnbaPublicSplit[] } {
+  const build = (market: "moneyline" | "total" | "spread"): WnbaPublicSplit[] => {
+    const record = records.get(market);
+    if (!record || (record.side !== "home" && record.side !== "away" && record.side !== "over" && record.side !== "under")) return [];
+    const allContext = record.snapshot_json?.public_market_context;
+    if (!allContext || typeof allContext !== "object") return [];
+    const context = (allContext as Record<string, unknown>)[market] as WnbaLockedPublicContext | null | undefined;
+    if (!context || typeof context !== "object") return [];
+    const selectedSide = record.side;
+    const oppositeSide = selectedSide === "home" ? "away" : selectedSide === "away" ? "home" : selectedSide === "over" ? "under" : "over";
+    const labelFor = (side: string): string => {
+      if (market === "total") return side === "over" ? "Over" : "Under";
+      const abbr = side === "home" ? homeAbbr : awayAbbr;
+      if (market !== "spread" || record.line_value === null) return abbr;
+      const selectedLine = selectedSide === side ? record.line_value : -record.line_value;
+      return `${abbr} ${selectedLine > 0 ? "+" : ""}${selectedLine}`;
+    };
+    return [
+      {
+        side: selectedSide as WnbaPublicSplit["side"],
+        label: labelFor(selectedSide),
+        moneyPct: context.pickedMoneyPct ?? null,
+        betsPct: context.pickedBetsPct ?? null,
+        observedAt: lockedAt,
+        isStale: false,
+      },
+      {
+        side: oppositeSide as WnbaPublicSplit["side"],
+        label: labelFor(oppositeSide),
+        moneyPct: context.oppositeMoneyPct ?? null,
+        betsPct: context.oppositeBetsPct ?? null,
+        observedAt: lockedAt,
+        isStale: false,
+      },
+    ].filter((row) => row.moneyPct !== null || row.betsPct !== null);
+  };
+  return { ml: build("moneyline"), total: build("total"), spread: build("spread") };
+}
 
 function normalizePctConfidence(value: number | null): number | null {
   if (value === null) return null;
@@ -1087,6 +1147,28 @@ function buildMarket(opts: {
   const finalVerdict = held
     ? { key: "no_play" as Verdict, label: "No Play" }
     : verdict;
+  const oddsTrail: MarketEdgeDto["oddsTrail"] = opts.priceTrail?.coherent
+    ? (opts.priceTrail.stops ?? []).map((stop, index, stops) => ({
+        american: stop.american,
+        line: stop.line,
+        observedAt: stop.observedAt,
+        sportsbook: opts.priceTrail?.sportsbook ?? null,
+        source: index === stops.length - 1 ? "current_line" as const : "line_history" as const,
+        label: index === 0 ? "first" as const : index === stops.length - 1 ? "current" as const : "move" as const,
+      }))
+    : undefined;
+  if (oddsTrail && opts.lockedAt && priceAmerican !== null) {
+    const priorTerminal = oddsTrail[oddsTrail.length - 1];
+    if (priorTerminal?.american === priceAmerican && priorTerminal.line === line) oddsTrail.pop();
+    oddsTrail.push({
+      american: priceAmerican,
+      line,
+      observedAt: opts.lockedAt,
+      sportsbook: opts.priceTrail?.sportsbook ?? null,
+      source: "locked_snapshot",
+      label: "locked",
+    });
+  }
   return {
     pick,
     confidence: confFrac,
@@ -1120,16 +1202,7 @@ function buildMarket(opts: {
     lastMovePrevAmerican: opts.priceTrail?.previous ?? null,
     lastMoveLinePrev: opts.priceTrail?.previousLine ?? null,
     lastMoveLineNext: opts.priceTrail?.currentLine ?? null,
-    oddsTrail: opts.priceTrail?.coherent
-      ? (opts.priceTrail.stops ?? []).map((stop, index, stops) => ({
-          american: stop.american,
-          line: stop.line,
-          observedAt: stop.observedAt,
-          sportsbook: opts.priceTrail?.sportsbook ?? null,
-          source: index === stops.length - 1 ? "current_line" as const : "line_history" as const,
-          label: index === 0 ? "first" as const : index === stops.length - 1 ? "current" as const : "move" as const,
-        }))
-      : undefined,
+    oddsTrail,
     modelTotal: slot === "total" ? modelTotal : null,
     marketTotal: slot === "total" ? marketTotal : null,
     line: slot === "ml" ? null : line,
@@ -1195,7 +1268,7 @@ function adaptGame(
     slot: "ml",
     pick: game.moneyline.side,
     trail: game.pickedPrices?.ml,
-    generatedAt: asOf,
+    generatedAt: game.lockedAt ?? asOf,
   });
   const ml = buildMarket({
     slot: "ml",
@@ -1227,7 +1300,7 @@ function adaptGame(
     slot: "total",
     pick: game.total.side,
     trail: game.pickedPrices?.total,
-    generatedAt: asOf,
+    generatedAt: game.lockedAt ?? asOf,
   });
   const total = buildMarket({
     slot: "total",
@@ -1276,7 +1349,7 @@ function adaptGame(
     slot: "spread",
     pick: spreadPick,
     trail: game.pickedPrices?.spread,
-    generatedAt: asOf,
+    generatedAt: game.lockedAt ?? asOf,
   });
   const spread = buildMarket({
     slot: "spread",
@@ -1394,8 +1467,8 @@ function adaptGame(
     scheduledLockAt: game.start_time,
     lockState: game.lockedAt ? "locked" : "open",
     lockedAt: game.lockedAt ?? null,
-    updatedAt: asOf,
-    generatedAt: asOf,
+    updatedAt: game.lockedAt ?? asOf,
+    generatedAt: game.lockedAt ?? asOf,
     holdReason: null,
     homeStarter: null,
     awayStarter: null,

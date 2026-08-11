@@ -69,7 +69,10 @@ export function selectMarketIntelligenceSnapshotV2(opts: {
     if (row.market_type !== opts.marketType) return false;
     if (row.selection_key !== opts.selectionKey) return false;
     if (!isValidStatus(row.validity_status)) return false;
-    if (opts.mode.kind === "unlocked" && !atOrBefore(row.generated_at, cutoff)) return false;
+    // Lock means the rendered market read existed by the lock instant—not
+    // merely that a later-generated read reused older evidence. Otherwise a
+    // post-lock resolver run can rewrite the frozen card and its split copy.
+    if (!atOrBefore(row.generated_at, cutoff)) return false;
     if (!evidenceOrGeneratedAtOrBefore(row, cutoff)) return false;
 
     const start = timeMs(row.event_start_time);
