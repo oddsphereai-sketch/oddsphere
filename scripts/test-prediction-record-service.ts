@@ -301,6 +301,7 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
     bets: number,
     money: number,
     movementDirection: "neutral" | "toward_pick" | "against_pick",
+    splitProvider = "sharpapi",
   ): PredictionRecordRow => ({
     game_prediction_id: gameId,
     game_id: gameId,
@@ -340,9 +341,35 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
     published_at: null,
     snapshot_json: {
       public_splits: {
-        picked_bets_pct: bets,
-        picked_money_pct: money,
+        picked_bets_pct: 50,
+        picked_money_pct: 50,
       },
+      source_aware_split_rows_at_lock: [
+        {
+          canonical_event_id: String(gameId),
+          market_type: "moneyline",
+          selection_key: `${gameId}:moneyline:away`,
+          provider: splitProvider,
+          source_book: splitProvider === "sharpapi" ? "sharp_adjacent" : "consensus",
+          source_type: splitProvider === "sharpapi" ? "sharp_adjacent_book" : "multi_book_consensus",
+          bets_pct: bets,
+          money_pct: money,
+          source_observed_at: "2026-08-11T16:00:00Z",
+          fetched_at: "2026-08-11T16:00:00Z",
+        },
+        {
+          canonical_event_id: String(gameId),
+          market_type: "moneyline",
+          selection_key: `${gameId}:moneyline:home`,
+          provider: splitProvider,
+          source_book: splitProvider === "sharpapi" ? "sharp_adjacent" : "consensus",
+          source_type: splitProvider === "sharpapi" ? "sharp_adjacent_book" : "multi_book_consensus",
+          bets_pct: 100 - bets,
+          money_pct: 100 - money,
+          source_observed_at: "2026-08-11T16:00:00Z",
+          fetched_at: "2026-08-11T16:00:00Z",
+        },
+      ],
       line_movement: {
         direction: movementDirection,
         magnitude_pp: movementDirection === "neutral" ? 0 : 1,
@@ -384,7 +411,14 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
     "50%-plus model side can qualify when the joint market score clears price",
     selectedSideFloor[0]?.play_grade === "lean" &&
       (selectedSideFloor[0]?.snapshot_json as any)?.decision_pipeline?.action_rule_id ===
-        ML_SHARP_PORTFOLIO_LEAN_RULE_ID,
+      ML_SHARP_PORTFOLIO_LEAN_RULE_ID,
+  );
+  const playbookOnly = applyMlbSharpPortfolioLean([
+    portfolioRecord(5, "NO@SHARP", 150, 0.65, 10, 80, "neutral", "playbook"),
+  ]);
+  check(
+    "portfolio ranker fails closed when its validated SharpAPI split is absent",
+    playbookOnly[0]?.play_grade === "market_aligned",
   );
 }
 
@@ -977,10 +1011,14 @@ console.log("\n━━━ MLB market-divergence Lean integration ━━━");
   ]);
   const signalsByGameId = new Map([
     [14771, [
-      { market_type: "moneyline", side: "home", public_money_pct: 57, public_betting_pct: 47, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
-      { market_type: "moneyline", side: "away", public_money_pct: 43, public_betting_pct: 53, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+      { market_type: "moneyline", side: "home", public_money_pct: 50, public_betting_pct: 50, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+      { market_type: "moneyline", side: "away", public_money_pct: 50, public_betting_pct: 50, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
     ]],
   ]);
+  const sharpMoneylineSupport = [
+    { canonical_event_id: "5058728", market_type: "moneyline", selection_key: "5058728:moneyline:home", provider: "sharpapi", source_book: "sharp_adjacent", source_type: "sharp_adjacent_book", bets_pct: 47, money_pct: 57, source_observed_at: "2026-07-28T16:00:00Z", fetched_at: "2026-07-28T16:00:00Z" },
+    { canonical_event_id: "5058728", market_type: "moneyline", selection_key: "5058728:moneyline:away", provider: "sharpapi", source_book: "sharp_adjacent", source_type: "sharp_adjacent_book", bets_pct: 53, money_pct: 43, source_observed_at: "2026-07-28T16:00:00Z", fetched_at: "2026-07-28T16:00:00Z" },
+  ] as any;
   const recs = buildPredictionRecordsFromSlate({
     sport: "mlb",
     slateDate: "2026-07-28",
@@ -990,11 +1028,13 @@ console.log("\n━━━ MLB market-divergence Lean integration ━━━");
     abbrevByTeamId,
     oddsByGameId,
     signalsByGameId,
+    sourceAwareSplitsByGameId: new Map([[14771, sharpMoneylineSupport]]),
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
   const promo = (ml.snapshot_json as any)?.ml_market_divergence_lean_promotion;
   check("market-divergence path promotes a Watchlist to Lean", ml.play_grade === "lean" && ml.best_angle === false);
   check("market-divergence Lean audit is stamped", promo?.rule_id === ML_MARKET_DIVERGENCE_LEAN_RULE_ID);
+  check("market-divergence Lean records its validated SharpAPI provider", promo?.split_provider === "sharpapi");
   check("market-divergence Lean becomes the decision action rule", (ml.snapshot_json as any)?.decision_pipeline?.action_rule_id === ML_MARKET_DIVERGENCE_LEAN_RULE_ID);
 
   const resistanceRecords = buildPredictionRecordsFromSlate({
@@ -1007,16 +1047,43 @@ console.log("\n━━━ MLB market-divergence Lean integration ━━━");
     oddsByGameId,
     signalsByGameId: new Map([
       [14771, [
-        { market_type: "moneyline", side: "home", public_money_pct: 50, public_betting_pct: 60, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
-        { market_type: "moneyline", side: "away", public_money_pct: 50, public_betting_pct: 40, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+        { market_type: "moneyline", side: "home", public_money_pct: 50, public_betting_pct: 50, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
+        { market_type: "moneyline", side: "away", public_money_pct: 50, public_betting_pct: 50, has_steam_move: null, has_reverse_line_movement: null, rlm_direction: null, signal_strength: null, computed_at: null, pinnacle_fair_probability: null, is_plus_ev: null, ev_pct: null, steam_detected_at: null, steam_books_count: null },
       ]],
     ]),
+    sourceAwareSplitsByGameId: new Map([[14771, sharpMoneylineSupport.map((split: any) =>
+      split.selection_key.endsWith(":home")
+        ? { ...split, bets_pct: 60, money_pct: 50 }
+        : { ...split, bets_pct: 40, money_pct: 50 }
+    )]]),
   });
   const resistedMl = resistanceRecords.find((record) => record.market === "moneyline")!;
   const resistanceAudit = (resistedMl.snapshot_json as any)?.ml_signed_market_resistance_standdown;
   check("signed market resistance stands down the unchanged original side", resistedMl.pick === "home" && resistedMl.no_bet === true);
   check("signed market resistance never enters a flip path", (resistedMl.snapshot_json as any)?.decision_pipeline?.final_side_changed === false);
   check("signed market resistance audit is stamped", resistanceAudit?.rule_id === ML_SIGNED_MARKET_RESISTANCE_RULE_ID);
+  check("signed market resistance records its validated SharpAPI provider", resistanceAudit?.split_provider === "sharpapi");
+
+  const playbookOnlyResistance = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-28",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, marketDivergencePred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    signalsByGameId,
+    sourceAwareSplitsByGameId: new Map([[14771, sharpMoneylineSupport.map((split: any) => ({
+      ...split,
+      provider: "playbook",
+      source_type: "multi_book_consensus",
+    }))]]),
+  });
+  const playbookOnlyMl = playbookOnlyResistance.find((record) => record.market === "moneyline")!;
+  check(
+    "Playbook-only splits cannot activate SharpAPI-validated Moneyline promotion or stand-down",
+    playbookOnlyMl.play_grade !== "lean" && playbookOnlyMl.no_bet !== true,
+  );
 }
 
 console.log("\n━━━ MLB mid-price established-price Best Angle integration ━━━");
@@ -2873,7 +2940,7 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
   check("FI v2 best_angle → final signed-edge gate stamped",
         gate?.rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID && gate?.action === "keep_as_best_angle");
   check("FI Best Angle decision pipeline stamps current release and validated rule",
-        (fi.snapshot_json as any)?.decision_pipeline?.release_id === "mlb_daily_edge_decision_2026_08_11_r33" &&
+        (fi.snapshot_json as any)?.decision_pipeline?.release_id === "mlb_daily_edge_decision_2026_08_11_r34" &&
         (fi.snapshot_json as any)?.decision_pipeline?.board_action === "bet" &&
         (fi.snapshot_json as any)?.decision_pipeline?.actionable_grade === "best_angle" &&
         (fi.snapshot_json as any)?.decision_pipeline?.action_rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID);

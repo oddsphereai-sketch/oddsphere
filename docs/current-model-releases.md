@@ -11,9 +11,9 @@ Last reviewed: 2026-08-11
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2`
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_11_r33`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v32_2026_08_11`
-- Grade policy: `mlb_public_grade_policy_v24_sharpapi_total_source_alignment_2026_08_11`
+- Decision release: `mlb_daily_edge_decision_2026_08_11_r34`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v33_2026_08_11`
+- Grade policy: `mlb_public_grade_policy_v25_sharpapi_split_source_alignment_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
@@ -64,6 +64,15 @@ board still has zero qualifiers for this sleeve, so the correction changes no cu
 grade. Full evidence and rollback details are in
 `docs/model-audits/2026-08-11-mlb-total-under-sharpapi-source-alignment-r33.md`.
 
+The August 11 r34 source-alignment release extends that exact-provider contract to the two
+Moneyline decisions that were also validated on reconstructed SharpAPI observations: the signed
+money-minus-ticket promotion/stand-down and the r32 slate portfolio ranker. They now read the
+selected-side SharpAPI pair from the frozen source-aware snapshot and fail closed when that pair
+is absent; Playbook or the legacy aggregate row cannot substitute. This does not change the
+older market-correction and conflict rules that were designed around their existing aggregate
+input. Evidence and rollback details are recorded in
+`docs/model-audits/2026-08-11-mlb-moneyline-sharpapi-source-alignment-r34.md`.
+
 The August 11 r32 release adds a slate-level MLB Moneyline portfolio ranker after all existing
 side selection, correction, no-bet, price, freshness, and data-quality gates. It jointly scores
 the frozen model probability, offered-price break-even, model-versus-price edge, picked-side
@@ -74,6 +83,8 @@ at which the binary model prefers the selected side—a price from -220 through
 +200, a learned probability at least equal to the offered break-even, complete high-quality
 market evidence, and no movement against the pick. It never changes the side, probability,
 projection, price, Best Angle status, or stake.
+Its ticket and money inputs must be the frozen selected-side SharpAPI observations used in the
+training reconstruction; missing SharpAPI data makes the candidate ineligible.
 
 Exact-record floor sensitivity found no defensible 55% cliff: under the current probability head,
 the 50-52%, 52-54%, 54-55%, 55-56%, and 56-58% non-actionable bands were not monotonic. With the

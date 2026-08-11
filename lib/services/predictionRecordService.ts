@@ -1601,12 +1601,17 @@ function mlSharpPortfolioProbability(record: PredictionRecordRow): {
   movementDirection: string | null;
 } {
   const snapshot = readRecordOrNull(record.snapshot_json) ?? {};
-  const splits = readRecordOrNull(snapshot.public_splits);
   const movement = readRecordOrNull(snapshot.line_movement);
   const modelProbability = record.model_probability;
   const price = record.odds_american;
-  const pickedBetsPct = readNumberOrNull(splits?.picked_bets_pct);
-  const pickedMoneyPct = readNumberOrNull(splits?.picked_money_pct);
+  const validatedSplit = pickedSourceAwareSplit(
+    snapshotSourceAwareSplits(snapshot),
+    "moneyline",
+    record.side,
+    "sharpapi",
+  );
+  const pickedBetsPct = validatedSplit.betsPct;
+  const pickedMoneyPct = validatedSplit.moneyPct;
   const marketProbability = americanToImpliedProb(price);
   const movementDirection = readStringOrNull(movement?.direction);
   if (
@@ -1714,6 +1719,7 @@ export function applyMlbSharpPortfolioLean(records: PredictionRecordRow[]): Pred
           odds_american: record.odds_american,
           picked_bets_pct: selected.score.pickedBetsPct,
           picked_money_pct: selected.score.pickedMoneyPct,
+          split_provider: "sharpapi",
           movement_direction: selected.score.movementDirection,
           trained_through: "2026-07-31",
           model_probability_floor_basis:
@@ -1860,6 +1866,14 @@ function pickedSourceAwareSplit(
     moneyPct: sourceAwarePct(picked?.money_pct ?? null),
     provider: picked ? provider : null,
   };
+}
+
+function snapshotSourceAwareSplits(snapshot: Record<string, unknown>): SourceAwareSplitObservationRow[] {
+  const rows = snapshot.source_aware_split_rows_at_lock;
+  if (!Array.isArray(rows)) return [];
+  return rows.filter((row): row is SourceAwareSplitObservationRow => (
+    row !== null && typeof row === "object" && !Array.isArray(row)
+  ));
 }
 
 /** Read the line-movement direction off a buildLineMovementSnapshot result. */
@@ -2590,12 +2604,17 @@ function buildMlRecord(
     !mlFlipped &&
     !mlPickCalibrated &&
     !mlMarketSideCorrected;
-  const mlPickedPublicSplit = pickedPublicSplit(signalsForGame, "moneyline", finalMlPick);
+  const mlValidatedSharpPublicSplit = pickedSourceAwareSplit(
+    sourceAwareSplitsForGame,
+    "moneyline",
+    finalMlPick,
+    "sharpapi",
+  );
   const mlSignedMarketResistance = resolveMlSignedMarketResistance({
     blocked: !mlChampionGuardApplies,
     side: finalMlPick,
-    pickedBetsPct: mlPickedPublicSplit.betsPct,
-    pickedMoneyPct: mlPickedPublicSplit.moneyPct,
+    pickedBetsPct: mlValidatedSharpPublicSplit.betsPct,
+    pickedMoneyPct: mlValidatedSharpPublicSplit.moneyPct,
   });
   const mlChampionCorrectionReasons = [
     mlChampionGuardApplies && mlProjectionConflict ? "projected_score_contradicts_ml_pick" : null,
@@ -2790,8 +2809,8 @@ function buildMlRecord(
     side: finalMlPick,
     oddsAmerican: finalMlOdds,
     modelProb: finalMlModelProb,
-    pickedBetsPct: mlPickedPublicSplit.betsPct,
-    pickedMoneyPct: mlPickedPublicSplit.moneyPct,
+    pickedBetsPct: mlValidatedSharpPublicSplit.betsPct,
+    pickedMoneyPct: mlValidatedSharpPublicSplit.moneyPct,
     lineDirection: finalMlLineDirection,
     publicSplitConflict: finalMlPublicSplitConflict,
   });
@@ -3013,8 +3032,9 @@ function buildMlRecord(
         ? {
             rule_id: ML_MARKET_DIVERGENCE_LEAN_RULE_ID,
             action: "promote_to_lean",
-            picked_bets_pct: mlPickedPublicSplit.betsPct,
-            picked_money_pct: mlPickedPublicSplit.moneyPct,
+            picked_bets_pct: mlValidatedSharpPublicSplit.betsPct,
+            picked_money_pct: mlValidatedSharpPublicSplit.moneyPct,
+            split_provider: mlValidatedSharpPublicSplit.provider,
             money_over_tickets_gap: mlMarketDivergenceLean.moneyOverTicketsGap,
             minimum_gap: ML_MARKET_DIVERGENCE_MIN_GAP,
             model_probability: finalMlModelProb,
@@ -3029,8 +3049,9 @@ function buildMlRecord(
         ? {
             rule_id: ML_SIGNED_MARKET_RESISTANCE_RULE_ID,
             action: "stand_down_unchanged_side",
-            picked_bets_pct: mlPickedPublicSplit.betsPct,
-            picked_money_pct: mlPickedPublicSplit.moneyPct,
+            picked_bets_pct: mlValidatedSharpPublicSplit.betsPct,
+            picked_money_pct: mlValidatedSharpPublicSplit.moneyPct,
+            split_provider: mlValidatedSharpPublicSplit.provider,
             money_over_tickets_gap: mlSignedMarketResistance.moneyOverTicketsGap,
             maximum_gap: -ML_MARKET_DIVERGENCE_MIN_GAP,
             final_side: finalMlPick,
