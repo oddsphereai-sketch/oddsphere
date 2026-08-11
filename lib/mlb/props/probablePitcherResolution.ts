@@ -11,6 +11,7 @@ import type { MlbGameEntity, MlbProbablePitcher } from "./providers";
 
 export type MlbPropsProbablePitcherResolution = {
   probablePitchers: MlbProbablePitcher[];
+  findings: string[];
   fallbackAssignments: Array<{
     gameId: string;
     teamId: string;
@@ -44,18 +45,18 @@ export async function resolveMlbPropsProbablePitchers(args: {
   dependencies?: ResolutionDependencies;
 }): Promise<MlbPropsProbablePitcherResolution> {
   if (args.fallbackEnabled === false) {
-    return { probablePitchers: args.mlbStatsProbablePitchers, fallbackAssignments: [] };
+    return { probablePitchers: args.mlbStatsProbablePitchers, fallbackAssignments: [], findings: ["PROBABLE_FALLBACK_DISABLED"] };
   }
   const missingSides = args.mlbStatsProbablePitchers.filter((row) => !row.playerId);
   if (missingSides.length === 0) {
-    return { probablePitchers: args.mlbStatsProbablePitchers, fallbackAssignments: [] };
+    return { probablePitchers: args.mlbStatsProbablePitchers, fallbackAssignments: [], findings: [] };
   }
 
   const fetchEspn = args.dependencies?.fetchEspn ?? fetchEspnProbablePitchers;
   const loadRoster = args.dependencies?.loadRoster ?? getActiveRoster;
   const espnByGame = await fetchEspn(args.slateDate, { log: () => undefined });
   if (espnByGame.size === 0) {
-    return { probablePitchers: args.mlbStatsProbablePitchers, fallbackAssignments: [] };
+    return { probablePitchers: args.mlbStatsProbablePitchers, fallbackAssignments: [], findings: ["PROBABLE_FALLBACK_ESPN_SLATE_EMPTY"] };
   }
 
   const matchupCounts = new Map<string, number>();
@@ -67,12 +68,16 @@ export async function resolveMlbPropsProbablePitchers(args: {
   const rosterCache = new Map<number, Promise<MlbRosterEntry[] | null>>();
   const resolved = [...args.mlbStatsProbablePitchers];
   const assignments: MlbPropsProbablePitcherResolution["fallbackAssignments"] = [];
+  const findings: string[] = [];
 
   for (const game of args.games) {
     const key = gameKey(game);
     if (!key || matchupCounts.get(key) !== 1) continue;
     const espn = espnByGame.get(key);
-    if (!espn) continue;
+    if (!espn) {
+      findings.push(`PROBABLE_FALLBACK_ESPN_GAME_MISSING_${key}`);
+      continue;
+    }
 
     for (const side of ["away", "home"] as const) {
       const teamId = side === "away" ? game.awayTeamId : game.homeTeamId;
@@ -80,7 +85,10 @@ export async function resolveMlbPropsProbablePitchers(args: {
       const current = currentIndex >= 0 ? resolved[currentIndex] : null;
       if (current?.playerId) continue;
       const candidate = espn[side];
-      if (!candidate) continue;
+      if (!candidate) {
+        findings.push(`PROBABLE_FALLBACK_ESPN_SIDE_MISSING_${key}_${side.toUpperCase()}`);
+        continue;
+      }
 
       const numericTeamId = Number(teamId.replace(/^mlbstats-team-/, ""));
       if (!Number.isInteger(numericTeamId)) continue;
@@ -94,7 +102,10 @@ export async function resolveMlbPropsProbablePitchers(args: {
         normalizePlayerName(row.fullName) === normalizePlayerName(candidate.fullName)
         && (row.positionAbbreviation === "P" || row.positionType === "Pitcher")
       );
-      if (matches.length !== 1) continue;
+      if (matches.length !== 1) {
+        findings.push(`PROBABLE_FALLBACK_ROSTER_MATCHES_${key}_${side.toUpperCase()}_${matches.length}`);
+        continue;
+      }
 
       const match = matches[0];
       const teamAbbreviation = resolveMlbStatsTeamId(teamId)?.abbreviation;
@@ -129,7 +140,7 @@ export async function resolveMlbPropsProbablePitchers(args: {
     }
   }
 
-  return { probablePitchers: resolved, fallbackAssignments: assignments };
+  return { probablePitchers: resolved, fallbackAssignments: assignments, findings };
 }
 
 function gameKey(game: MlbGameEntity): string | null {

@@ -350,6 +350,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     playerGameIdentityConflictRows,
     previousSnapshot: previous,
     probablePitcherFallbackAssignments: probablePitcherResolution.fallbackAssignments.length,
+    probablePitcherFallbackFindings: probablePitcherResolution.findings,
   });
   const movement = compareMlbPropsBoardMovement(previous, data.props);
   const snapshotOpeningOdds = compactOpeningPropOddsForSnapshot(openingOdds, data.props);
@@ -2238,6 +2239,7 @@ export function validateMlbPropsBoardData(args: {
   playerGameIdentityConflictRows?: number;
   previousSnapshot?: MlbPropsBoardSnapshot | null;
   probablePitcherFallbackAssignments?: number;
+  probablePitcherFallbackFindings?: string[];
 }): MlbPropsBoardValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -2271,6 +2273,7 @@ export function validateMlbPropsBoardData(args: {
   if ((args.probablePitcherFallbackAssignments ?? 0) > 0) {
     warnings.push(`PROBABLE_PITCHER_FALLBACK_ASSIGNMENTS_${args.probablePitcherFallbackAssignments}`);
   }
+  warnings.push(...(args.probablePitcherFallbackFindings ?? []));
   if (args.data.props.length === 0 && args.sourceRows > 0) errors.push("NO_MEMBER_ROWS_WITH_VERIFIED_PLAYER_HISTORY");
   const maxBoardRows = envPositiveInteger("ODDSPHERE_PROPS_MAX_BOARD_ROWS", DEFAULT_MAX_BOARD_ROWS);
   if (args.data.props.length > maxBoardRows) errors.push(`BOARD_ROW_LIMIT_EXCEEDED_${args.data.props.length}_OF_${maxBoardRows}`);
