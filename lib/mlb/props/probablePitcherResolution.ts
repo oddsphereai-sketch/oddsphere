@@ -89,6 +89,10 @@ export async function resolveMlbPropsProbablePitchers(args: {
   for (const game of args.games) {
     const key = gameKey(game);
     if (!key || matchupCounts.get(key) !== 1) continue;
+    const gameHasMissingSide = [game.awayTeamId, game.homeTeamId].some((teamId) =>
+      !resolved.find((row) => row.gameId === game.id && row.teamId === teamId)?.playerId
+    );
+    if (!gameHasMissingSide) continue;
     const espn = espnByGame.get(key);
     if (!espn) {
       findings.push(`PROBABLE_FALLBACK_ESPN_GAME_MISSING_${key}`);
