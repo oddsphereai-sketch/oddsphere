@@ -20,6 +20,7 @@ import {
   FI_PROVISIONAL_BEST_ANGLE_BLOCK_RULE_ID,
   FI_NRFI_MIDBAND_BEST_ANGLE_DEMOTION_RULE_ID,
   FI_PLUS_MONEY_LEAN_BEST_ANGLE_PROMOTION_RULE_ID,
+  FI_CALIBRATED_MODEL_LEAN_PATH_ID,
   TOTAL_VALIDATED_LEAN_RULE_ID,
   TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID,
   TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID,
@@ -2677,6 +2678,11 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
   check("FI v2 best_angle → best_angle=true", fi.best_angle === true);
   check("FI v2 best_angle → final signed-edge gate stamped",
         gate?.rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID && gate?.action === "keep_as_best_angle");
+  check("FI Best Angle decision pipeline stamps current release and validated rule",
+        (fi.snapshot_json as any)?.decision_pipeline?.release_id === "mlb_daily_edge_decision_2026_08_11_r29" &&
+        (fi.snapshot_json as any)?.decision_pipeline?.board_action === "bet" &&
+        (fi.snapshot_json as any)?.decision_pipeline?.actionable_grade === "best_angle" &&
+        (fi.snapshot_json as any)?.decision_pipeline?.action_rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID);
   check("FI v2 best_angle → member-facing lock grade is best_angle",
         (fi.snapshot_json as any)?.member_facing_at_lock?.grade === "best_angle");
 }
@@ -2775,6 +2781,11 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
   const fi = recs.find((r) => r.market === "first_inning")!;
   check("FI v2 lean below old floor → play_grade='lean'", fi.play_grade === "lean");
   check("FI v2 lean below old floor → best_angle=false", fi.best_angle === false);
+  check("direct FI model Lean has an explicit immutable action path",
+        (fi.snapshot_json as any)?.decision_pipeline?.board_action === "bet" &&
+        (fi.snapshot_json as any)?.decision_pipeline?.actionable_grade === "lean" &&
+        (fi.snapshot_json as any)?.decision_pipeline?.action_rule_id === FI_CALIBRATED_MODEL_LEAN_PATH_ID &&
+        (fi.snapshot_json as any)?.decision_pipeline?.grade_source === "fi_v2_model");
 }
 {
   // An existing FI Lean with a validated final writer edge and playable price
@@ -2881,6 +2892,10 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
         fi.play_grade === "lean" && fi.best_angle === false && fi.no_bet === false);
   check("NRFI midband demotion carries its immutable rule id",
         gate?.rule_id === FI_NRFI_MIDBAND_BEST_ANGLE_DEMOTION_RULE_ID);
+  check("NRFI midband decision pipeline reports the demotion as its live action rule",
+        (fi.snapshot_json as any)?.decision_pipeline?.board_action === "bet" &&
+        (fi.snapshot_json as any)?.decision_pipeline?.actionable_grade === "lean" &&
+        (fi.snapshot_json as any)?.decision_pipeline?.action_rule_id === FI_NRFI_MIDBAND_BEST_ANGLE_DEMOTION_RULE_ID);
 }
 {
   const cleanPlusMoneyYrfiLean = {

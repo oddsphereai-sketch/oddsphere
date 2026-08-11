@@ -44,6 +44,7 @@
 
 import { supabase } from "@/lib/db/supabase";
 import { computeTrackingAggregate } from "@/lib/services/trackingAggregateService";
+import { isFinalFiGradeCoherent } from "@/lib/services/dailyEdge/fiGradeCoherence";
 import {
   getOfficialTrackingMarkets,
   getContextOnlyDisplayMarkets,
@@ -1486,10 +1487,9 @@ async function check9VerdictAuthorityConsistency(slateDate: string): Promise<Iss
 //                                            wires the FI cases and the
 //                                            FI lockedFi passthrough.
 //   C. Writer-vs-tracking state divergence — for UNLOCKED rows, the
-//                                            live writer state in
-//                                            game_predictions disagrees
-//                                            with prediction_records
-//                                            (the tracked record).
+//                                            base FI writer state plus its
+//                                            frozen final-grade resolution
+//                                            disagrees with prediction_records.
 //   D. Untracked FI display                — game_predictions shows an
 //                                            actionable FI verdict but
 //                                            no prediction_records FI
@@ -1702,7 +1702,10 @@ async function check10FirstInningIntegrity(slateDate: string): Promise<Issue[]> 
     }
 
     // (C) Writer state divergence — UNLOCKED rows where prediction_records
-    //     and game_predictions disagree about fi_play_grade. As of
+    //     disagree with the resolved final grade. game_predictions carries
+    //     the FI model's base grade; prediction_records is allowed to differ
+    //     when snapshot_json.fi_final_grade_resolution records a validated
+    //     final-grade promotion or demotion. As of
     //     2026-06-10 v15.3 this is auto-fixable for the same reason
     //     as (D): the atomic sync now re-upserts unlocked rows on every
     //     model write. Persistent divergence indicates a sync error.
@@ -1714,14 +1717,19 @@ async function check10FirstInningIntegrity(slateDate: string): Promise<Issue[]> 
     //     use snapshot_json only as a legacy fallback.
     if (pr !== null && pr.locked_at === null) {
       const prFiPg = effectiveUnlockedFiPlayGrade(pr);
-      if (prFiPg !== null && liveFiPg !== null && prFiPg !== liveFiPg) {
+      const coherentFinalGrade = isFinalFiGradeCoherent({
+        liveBaseGrade: liveFiPg,
+        recordGrade: prFiPg,
+        snapshot: pr.snapshot_json,
+      });
+      if (prFiPg !== null && liveFiPg !== null && !coherentFinalGrade) {
         pushIssue(issues, {
           code: "FI_STATE_DIVERGENCE",
           severity: "HIGH",
           sport: "mlb",
           affected: {
             game_id: game.id,
-            details: `pr.id=${pr.id} prediction_records.fi_play_grade="${prFiPg}" but game_predictions.fi_play_grade="${liveFiPg}" — unlocked rows must agree`,
+            details: `pr.id=${pr.id} prediction_records.fi_play_grade="${prFiPg}" is not explained by game_predictions base fi_play_grade="${liveFiPg}" plus snapshot_json.fi_final_grade_resolution`,
           },
           user_facing_impact: "Card displays one verdict (live), tracking expects another (recorded). At lock time the recorded one may not match what the member saw.",
           recommended_fix:
@@ -1759,7 +1767,8 @@ async function check10FirstInningIntegrity(slateDate: string): Promise<Issue[]> 
 
     if (liveFiPg !== null && KNOWN_FI_PLAY_GRADES.has(liveFiPg)) {
       mappedCount++;
-      if (liveFiPg === "best_angle" || liveFiPg === "lean" || liveFiPg === "toss_up") displayedFiCount++;
+      const displayedGrade = pr === null ? liveFiPg : effectiveUnlockedFiPlayGrade(pr);
+      if (displayedGrade === "best_angle" || displayedGrade === "lean") displayedFiCount++;
     }
 
     // (F) FI grading gap — first_inning_runs populated but no settled

@@ -436,6 +436,8 @@ export const FI_NRFI_MIDBAND_BEST_ANGLE_DEMOTION_RULE_ID =
   "fi_nrfi_midband_best_angle_demotion_v1_2026_07_29";
 export const FI_PLUS_MONEY_LEAN_BEST_ANGLE_PROMOTION_RULE_ID =
   "fi_plus_money_lean_best_angle_promotion_v1_2026_07_29";
+export const FI_CALIBRATED_MODEL_LEAN_PATH_ID =
+  "fi_v2_calibrated_model_lean_path_v1_2026_08_11";
 export const TOTAL_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID =
   "total_calibrated_model_best_angle_path_v1_2026_07_27";
 export const TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID =
@@ -4022,6 +4024,34 @@ function buildFiRecord(
             scratch_resolved_by_fresh_confirmed_starters: scratchHoldResolved,
           },
       model_layer_versions: buildMlbModelLayerVersions("first_inning"),
+      // Audit-only parity with the ML/total records. The finalized FI fields
+      // above remain authoritative; this block only identifies which frozen
+      // release and validated rule path produced those exact fields.
+      decision_pipeline: {
+        release_id: MLB_DAILY_EDGE_DECISION_RELEASE_ID,
+        rule_bundle_version: MLB_DAILY_EDGE_RULE_BUNDLE_VERSION,
+        calibration_version: MLB_PUBLIC_CALIBRATION_VERSION,
+        market: "first_inning",
+        original_side: actionablePick,
+        board_action:
+          !finalFiNoBet && (finalFiBestAngle || finalFiPlayGrade === "lean")
+            ? "bet"
+            : "no_play",
+        actionable_grade: finalFiBestAngle
+          ? "best_angle"
+          : !finalFiNoBet && finalFiPlayGrade === "lean"
+            ? "lean"
+            : null,
+        action_rule_id:
+          !finalFiNoBet && (finalFiBestAngle || finalFiPlayGrade === "lean")
+            ? readStringOrNull(fiFinalGrade.audit?.rule_id) ??
+              (finalFiPlayGrade === "lean" ? FI_CALIBRATED_MODEL_LEAN_PATH_ID : null)
+            : null,
+        final_grade_rule_id: readStringOrNull(fiFinalGrade.audit?.rule_id),
+        grade_source: fiFinalGrade.audit === null ? "fi_v2_model" : "final_grade_rule",
+        final_side: finalFiPick,
+        final_side_changed: finalFiPick !== actionablePick,
+      },
       public_splits: null,
       line_movement: null,
       data_integrity: buildDataIntegritySnapshot(sp, null, "first_inning"),
