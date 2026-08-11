@@ -66,8 +66,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries August 11 v25 SharpAPI split-source alignment",
-  layers.grade_policy === "mlb_public_grade_policy_v25_sharpapi_split_source_alignment_2026_08_11",
+  "grade policy carries August 11 v26 market-anchored Total Under policy",
+  layers.grade_policy === "mlb_public_grade_policy_v26_market_anchored_total_under_2026_08_11",
 );
 check(
   "tracking contract carries the priority-retry minute-lock release",
@@ -79,8 +79,8 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB SharpAPI split-source alignment is versioned as decision release r34",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_11_r34" &&
+  "MLB market-anchored Total Under policy is versioned as decision release r35",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_11_r35" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v3" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );

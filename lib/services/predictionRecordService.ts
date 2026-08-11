@@ -391,11 +391,9 @@ export const TOTAL_VALIDATED_LEAN_MIN_PRICE_EXCLUSIVE = -145;
 export const TOTAL_VALIDATED_STRONG_LEAN_MIN_MODEL_PROB = 0.57;
 export const TOTAL_VALIDATED_STRONG_LEAN_MIN_PROJECTION_GAP = 0.75;
 export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID =
-  "total_under_low_ticket_resistance_lean_v1_2026_08_11";
-export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_MIN_MODEL_PROB = 0.55;
+  "total_under_low_ticket_resistance_lean_v2_market_anchored_2026_08_11";
 export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_MIN_ODDS = -145;
 export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_ODDS = -105;
-export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_EDGE_PCT_EXCLUSIVE = 5;
 export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_BETS_PCT = 35;
 export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_MONEY_MINUS_BETS_PCT = -5;
 export const TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID = "total_clean_strong_best_angle_v4_2026_07_11";
@@ -2000,11 +1998,6 @@ function resolveTotalUnderLowTicketResistanceLean(args: {
   const lean =
     !args.blocked &&
     args.side === "under" &&
-    args.modelProb !== null &&
-    args.modelProb >= TOTAL_UNDER_LOW_TICKET_RESISTANCE_MIN_MODEL_PROB &&
-    args.edgePct !== null &&
-    args.edgePct >= 0 &&
-    args.edgePct < TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_EDGE_PCT_EXCLUSIVE &&
     args.oddsAmerican !== null &&
     args.oddsAmerican >= TOTAL_UNDER_LOW_TICKET_RESISTANCE_MIN_ODDS &&
     args.oddsAmerican <= TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_ODDS &&
@@ -3940,11 +3933,8 @@ function buildOuRecord(
         ? {
             rule_id: TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID,
             action: "promote_to_lean",
-            model_prob: finalOuModelProb,
-            min_model_prob: TOTAL_UNDER_LOW_TICKET_RESISTANCE_MIN_MODEL_PROB,
-            edge_pct: finalOuEdge,
-            min_edge_pct: 0,
-            max_edge_pct_exclusive: TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_EDGE_PCT_EXCLUSIVE,
+            model_prob_context_only: finalOuModelProb,
+            edge_pct_context_only: finalOuEdge,
             odds_american: finalOuOdds,
             min_odds: TOTAL_UNDER_LOW_TICKET_RESISTANCE_MIN_ODDS,
             max_odds: TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_ODDS,
@@ -3959,7 +3949,7 @@ function buildOuRecord(
             same_side_projection_gap: ouSameSideProjectionGap,
             data_quality_tier: readStringOrNull(sp.v2_data_quality_tier),
             validation_note:
-              "Nested walk-forward MLB market search selected the low-ticket Under resistance family without future leakage. Release-separated replay preserved positive price value across train, validation, and holdout; this guarded sleeve keeps model, EV, projection, price, split-source, and high-quality data requirements.",
+              "The low-ticket SharpAPI Under family stayed positive across chronological train, validation, and holdout. Model-probability and offered-price-edge gates rejected a separately positive incremental cohort, so they are context only; price, projection alignment, exact split source, data quality, and all prior no-bet safeguards remain required.",
           }
         : null,
       total_calibrated_model_lean: ouModelLeanRetained

@@ -45,7 +45,10 @@ import {
   resolveMlbMarketAwareSideCorrection,
 } from "../lib/services/predictionRecordService";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
-import { MLB_MODEL_LAYER_VERSION_SCHEMA } from "../lib/automodel/mlbModelLayerVersions";
+import {
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID,
+  MLB_MODEL_LAYER_VERSION_SCHEMA,
+} from "../lib/automodel/mlbModelLayerVersions";
 import { TOTALS_MARKET_OPPOSED_FLIP_RULE_ID } from "../lib/services/totalsMeanFlip";
 
 // Self-consistent expected-grade helper: apply the production gate to a record's
@@ -2299,6 +2302,37 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
   check("low-ticket Under resistance records the validated SharpAPI provider", resistanceAudit?.split_provider === "sharpapi");
   check("low-ticket Under resistance is actionable in the decision pipeline", (resistanceTotal?.snapshot_json as any)?.decision_pipeline?.action_rule_id === TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID && (resistanceTotal?.snapshot_json as any)?.decision_pipeline?.board_action === "bet");
 
+  const marketAnchoredPred = {
+    ...resistancePred,
+    ou_confidence: 51,
+    sport_specific: {
+      ...resistancePred.sport_specific,
+      v2_2_audit: {
+        ...resistancePred.sport_specific.v2_2_audit,
+        ou_model_prob: 0.51,
+        ou_market_prob: 0.54,
+        ou_edge_pct: -3,
+      },
+    },
+  };
+  const marketAnchoredRecords = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-10",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, marketAnchoredPred]]),
+    abbrevByTeamId,
+    signalsByGameId: new Map([[14771, resistanceSignals]]),
+    sourceAwareSplitsByGameId: new Map([[14771, resistanceSharpSplits]]),
+    oddsByGameId: resistanceOdds,
+  });
+  const marketAnchoredTotal = marketAnchoredRecords.find((record) => record.market === "total");
+  check(
+    "validated low-ticket Under market evidence is not blocked by an arbitrary model-probability or edge floor",
+    marketAnchoredTotal?.play_grade === "lean" &&
+      (marketAnchoredTotal?.snapshot_json as any)?.total_under_low_ticket_resistance_lean?.rule_id === TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID,
+  );
+
   const highTicketRecords = buildPredictionRecordsFromSlate({
     sport: "mlb",
     slateDate: "2026-07-10",
@@ -2940,7 +2974,7 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
   check("FI v2 best_angle → final signed-edge gate stamped",
         gate?.rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID && gate?.action === "keep_as_best_angle");
   check("FI Best Angle decision pipeline stamps current release and validated rule",
-        (fi.snapshot_json as any)?.decision_pipeline?.release_id === "mlb_daily_edge_decision_2026_08_11_r34" &&
+        (fi.snapshot_json as any)?.decision_pipeline?.release_id === MLB_DAILY_EDGE_DECISION_RELEASE_ID &&
         (fi.snapshot_json as any)?.decision_pipeline?.board_action === "bet" &&
         (fi.snapshot_json as any)?.decision_pipeline?.actionable_grade === "best_angle" &&
         (fi.snapshot_json as any)?.decision_pipeline?.action_rule_id === FI_VALIDATED_BEST_ANGLE_RULE_ID);

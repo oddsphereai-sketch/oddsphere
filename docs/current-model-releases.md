@@ -11,9 +11,9 @@ Last reviewed: 2026-08-11
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2`
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_11_r34`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v33_2026_08_11`
-- Grade policy: `mlb_public_grade_policy_v25_sharpapi_split_source_alignment_2026_08_11`
+- Decision release: `mlb_daily_edge_decision_2026_08_11_r35`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v34_2026_08_11`
+- Grade policy: `mlb_public_grade_policy_v26_market_anchored_total_under_2026_08_11`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
@@ -73,6 +73,16 @@ is absent; Playbook or the legacy aggregate row cannot substitute. This does not
 older market-correction and conflict rules that were designed around their existing aggregate
 input. Evidence and rollback details are recorded in
 `docs/model-audits/2026-08-11-mlb-moneyline-sharpapi-source-alignment-r34.md`.
+
+The August 11 r35 grade-policy release makes the existing low-ticket Total Under sleeve genuinely
+market anchored. The same validated SharpAPI split, Under side, -145 through -105 price, at-most
+35% ticket share, five-point money-below-tickets gap, high data quality, and projection-alignment
+requirements remain. Model probability and model-versus-price edge remain visible context but no
+longer veto this market-defined sleeve: the rows they excluded went 8-1 across seven dates and
+were positive in chronological train, validation, and holdout. Existing holds, missing-price
+failures, projection conflict, side corrections, and no-bet gates still have priority. Evidence
+and rollback details are recorded in
+`docs/model-audits/2026-08-11-mlb-total-under-market-anchored-r35.md`.
 
 The August 11 tracking-contract v8 operational release keeps the shared MLB
 `prediction_pipeline` lease authoritative while preventing an ordinary writer collision from
