@@ -964,9 +964,13 @@ function priceTrailMovementRead(
 
   if (direction === null) {
     const firstProb = impliedProb(trail.open);
-    const movementCurrent = trail.movementCurrent ?? trail.current;
-    const currentProb = impliedProb(movementCurrent);
-    if (firstProb !== null && currentProb !== null && trail.open !== null && movementCurrent !== null) {
+    // The market read must resolve against the same terminal price rendered on
+    // the card. For a locked game, `trail.current` is the frozen prediction
+    // price while `movementCurrent` is merely the last pre-lock history row;
+    // using the latter makes the narrative cite a hidden, different price.
+    const visibleCurrent = trail.current;
+    const currentProb = impliedProb(visibleCurrent);
+    if (firstProb !== null && currentProb !== null && trail.open !== null && visibleCurrent !== null) {
       const delta = currentProb - firstProb;
       if (Math.abs(delta) >= 0.01) {
         direction = delta > 0 ? "support" : "resistance";
@@ -991,7 +995,7 @@ function priceTrailMovementRead(
       firstTrackedLine: firstLine,
       firstTrackedPrice: trail.open,
       currentLine,
-      currentPrice: trail.movementCurrent ?? trail.current,
+      currentPrice: trail.current,
       directionRelativeToPick: direction,
       observedAt: generatedAt,
     },

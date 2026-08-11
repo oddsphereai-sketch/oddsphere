@@ -290,6 +290,19 @@ function enforceLockedCardCutoff(body: DailyEdgeResponse): DailyEdgeResponse {
           isoAfter(read.movement?.observedAt, cutoffMs))
       ) {
         market.marketReadV2 = null;
+      } else if (read?.movement) {
+        // Stored response snapshots created by older code can retain a
+        // pre-lock "latest history" price in the narrative even though the
+        // visible card correctly renders the authoritative locked price.
+        // Resolve both surfaces to the same terminal snapshot at read time.
+        const lockedPrice = market.priceAmerican ?? market.lockedLineAmerican;
+        if (typeof lockedPrice === "number" && Number.isFinite(lockedPrice)) {
+          read.movement.currentPrice = lockedPrice;
+        }
+        if (typeof market.line === "number" && Number.isFinite(market.line)) {
+          read.movement.currentLine = market.line;
+        }
+        read.movement.observedAt = game.lockedAt;
       }
 
       const decision = market.recommendationDecision;

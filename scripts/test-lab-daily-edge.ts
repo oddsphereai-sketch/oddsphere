@@ -2107,6 +2107,24 @@ async function main() {
               { side: "away", label: "NYM", moneyPct: 41, betsPct: 45, observedAt: "2026-08-09T10:02:00Z" },
             ] } },
           },
+          total: {
+            pick: "Under 187.5",
+            priceAmerican: -110,
+            lockedLineAmerican: -110,
+            line: 187.5,
+            oddsTrail: [
+              { american: -110, line: 184.5, observedAt: "2026-08-09T09:00:00Z", sportsbook: "fanduel", source: "line_history", label: "first" },
+              { american: -112, line: 187.5, observedAt: "2026-08-09T10:02:00Z", sportsbook: "fanduel", source: "line_history", label: "move" },
+              { american: -110, line: 187.5, observedAt: "2026-08-09T10:03:00Z", sportsbook: "fanduel", source: "locked_snapshot", label: "locked" },
+            ],
+            publicSplits: [],
+            marketReadV2: {
+              generatedAt: "2026-08-09T10:02:00Z",
+              evidenceAsOf: "2026-08-09T10:02:00Z",
+              movement: { currentPrice: -112, currentLine: 187.5, observedAt: "2026-08-09T10:02:00Z" },
+            },
+            recommendationDecision: null,
+          },
         },
       }],
     } as any;
@@ -2115,6 +2133,13 @@ async function main() {
     check("cached locked cards discard post-lock in-game odds", sanitized.oddsTrail.every((stop: any) => stop.american !== 460));
     check("cached locked cards restore persisted pre-lock consensus splits", sanitized.publicSplits[0]?.moneyPct === 59 && sanitized.publicSplits[1]?.moneyPct === 41);
     check("cached locked cards discard post-lock generated market reads", sanitized.marketReadV2 === null);
+    const sanitizedTotal = cachedLockedBody.games[0].markets.total;
+    check(
+      "cached locked market reads use the visible frozen terminal price",
+      sanitizedTotal.marketReadV2?.movement?.currentPrice === -110 &&
+        sanitizedTotal.marketReadV2?.movement?.currentLine === 187.5 &&
+        sanitizedTotal.marketReadV2?.movement?.observedAt === "2026-08-09T10:03:00Z",
+    );
 
     const currentTrail = dailyEdgeTest.buildPersistedOddsTrail({
       candidates: [
