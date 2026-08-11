@@ -2259,8 +2259,19 @@ export function validateMlbPropsBoardData(args: {
     warnings.push(`${staleOddsRows}_STALE_ODDS_ROWS_WITHHELD_FROM_SIGNALS`);
   }
   const incompleteResearchRows = args.data.props.filter((row) => row.missingFeatures.length > 0);
-  if (incompleteResearchRows.length > 0) {
-    errors.push(`REQUIRED_RESEARCH_INCOMPLETE_${incompleteResearchRows.length}`);
+  // Missing required research is a row-scoped hold when the row has already
+  // failed closed to PENDING_DATA/RESEARCH. Do not let those explicitly held
+  // rows freeze an otherwise coherent full-slate snapshot. Conversely, any
+  // incomplete row that escaped into a normal grade remains a publication
+  // error; this prevents missing evidence from masquerading as an ordinary
+  // NO_PLAY/Watchlist or actionable recommendation.
+  const unsafeIncompleteResearchRows = incompleteResearchRows.filter((row) =>
+    row.playGrade !== "PENDING_DATA" && row.playGrade !== "RESEARCH"
+  );
+  if (unsafeIncompleteResearchRows.length > 0) {
+    errors.push(`REQUIRED_RESEARCH_INCOMPLETE_${unsafeIncompleteResearchRows.length}`);
+  } else if (incompleteResearchRows.length > 0) {
+    warnings.push(`REQUIRED_RESEARCH_HELD_ROWS_${incompleteResearchRows.length}`);
   }
   const pendingLineups = args.data.props.filter((row) => row.marketFamily !== "pitcher" && row.lineupStatus?.status === "pending").length;
   if (pendingLineups > 0) warnings.push(`${pendingLineups}_HITTER_ROWS_PROJECTED_LINEUP`);

@@ -903,7 +903,7 @@ async function loadPredictionRecordContractFindings(args: {
   return findings;
 }
 
-function classifyFiHoldDiagnostic(sportSpecific: Record<string, unknown> | null): FiHoldDiagnostic {
+export function classifyFiHoldDiagnostic(sportSpecific: Record<string, unknown> | null): FiHoldDiagnostic {
   if (!sportSpecific) {
     return {
       classification: "mapping_bug_or_missing_audit",
@@ -962,10 +962,10 @@ function classifyFiHoldDiagnostic(sportSpecific: Record<string, unknown> | null)
     classification = "provisional_lineup_pending";
     materiality = "medium";
     reason = "FI side is held while official lineup/top-order context is pending; the card can publish normally and should update through lineup refresh.";
-  } else if (sparseStarterHistory && canPublishNormal === true && repairEligible !== true) {
+  } else if (sparseStarterHistory && canPublishNormal === true) {
     classification = "sparse_starter_history";
     materiality = "medium";
-    reason = "FI side is held because the official starter is known but has too little first-inning starter history to publish a normal side.";
+    reason = "FI side is held because the official starter is known but has too little first-inning starter history to publish a normal side; unrelated repair eligibility must not relabel this as an ingestion miss.";
   } else if (/\b(provider|market|odds|line|price)\b/.test(noBetText) && marketDataQuality !== "ok") {
     classification = "provider_gap";
     materiality = "high";

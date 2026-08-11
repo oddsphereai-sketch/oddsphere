@@ -163,6 +163,41 @@ function snapshot(props = [row()]): MlbPropsBoardSnapshot {
 const valid = validateMlbPropsBoardData({ data: data(), sourceRows: 1, mappedRows: 1, asOfTimestamp: asOf });
 assert.equal(valid.publishable, true, "research-only rows can publish without fake model confidence");
 
+const heldMissingResearch = validateMlbPropsBoardData({
+  data: data([row({
+    playGrade: "PENDING_DATA",
+    missingFeatures: ["opposing starter", "pitch mix matchup"],
+    reasonCodes: ["MISSING_OPPOSING_STARTER", "MISSING_PITCH_MIX_MATCHUP"],
+  })]),
+  sourceRows: 1,
+  mappedRows: 1,
+  asOfTimestamp: asOf,
+});
+assert.equal(
+  heldMissingResearch.publishable,
+  true,
+  "row-scoped PENDING_DATA research holds do not freeze a coherent slate",
+);
+assert.ok(heldMissingResearch.warnings.includes("REQUIRED_RESEARCH_HELD_ROWS_1"));
+assert.ok(!heldMissingResearch.errors.some((error) => error.startsWith("REQUIRED_RESEARCH_INCOMPLETE_")));
+
+const leakedMissingResearch = validateMlbPropsBoardData({
+  data: data([row({
+    playGrade: "WATCHLIST",
+    missingFeatures: ["opposing starter"],
+    reasonCodes: ["MISSING_OPPOSING_STARTER"],
+  })]),
+  sourceRows: 1,
+  mappedRows: 1,
+  asOfTimestamp: asOf,
+});
+assert.equal(
+  leakedMissingResearch.publishable,
+  false,
+  "missing required evidence cannot leak into an ordinary Watchlist grade",
+);
+assert.ok(leakedMissingResearch.errors.includes("REQUIRED_RESEARCH_INCOMPLETE_1"));
+
 const payloadEvidence = {
   recentForm: null,
   opponentProfile: null,

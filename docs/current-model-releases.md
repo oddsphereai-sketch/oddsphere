@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-08-10
+Last reviewed: 2026-08-11
 
 ## MLB champion
 
@@ -62,17 +62,23 @@ holdout.
 
 ## MLB Player Props candidate
 
-- Release: `mlb_props_2026_08_10_r23`
+- Release: `mlb_props_2026_08_11_r24`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: private launch candidate; not publicly enabled
 
-The r23 adapter distinguishes observation time from provider price-change
-time. A current Ball Don’t Lie endpoint response stamps the quote with the
-current fetch observation while retaining `updated_at` in raw evidence for
-movement auditing. This prevents an unchanged but still-listed offer from
-being falsely expired after 45 minutes.
+The r24 publication contract preserves every research-quality gate at row
+level. A row missing required opposing-starter or pitch-mix evidence must be
+explicitly stamped `PENDING_DATA` or `RESEARCH`, remains ineligible for units,
+and is disclosed in snapshot warnings. Those already-held rows no longer
+freeze complete priced rows from unrelated games. Any incomplete row carrying
+an ordinary Watchlist, Lean, or Best Angle grade still blocks publication.
+
+The underlying r23 adapter remains intact: a current Ball Don’t Lie endpoint
+response stamps the quote with the current fetch observation while retaining
+`updated_at` in raw evidence for movement auditing. This prevents an unchanged
+but still-listed offer from being falsely expired after 45 minutes.
 
 The paired August 10 audit compared the latest valid r21 private snapshot with
 an r23 read-only rebuild: 3,789 exact rows matched, 204 rows were added, 45
@@ -82,6 +88,14 @@ actionables retained. The candidate was publishable with all 16 supported
 markets, zero stale displayed odds, complete required research, and no public
 flags enabled. Full details are recorded in
 `docs/model-audits/2026-08-10-player-props-current-observation-r23.md`.
+
+The August 11 paired production dry-run contained 5,821 rows and 103
+actionables with complete research and fresh prices. Exactly 403 unrelated
+rows were already fail-closed (`310 PENDING_DATA`, `93 RESEARCH`): 370 lacked
+an announced opposing starter and all 403 lacked a usable pitch-mix join. The
+r24 contract changes only snapshot availability: it promotes zero incomplete
+rows, demotes zero complete rows, and leaves the actionable count at 103. See
+`docs/model-audits/2026-08-11-player-props-row-scoped-research-holds-r24.md`.
 New WNBA records store the final published picked-side moneyline probability while retaining the
 independent and final layers separately. Tracking refuses a source payload whose model,
 distribution, or grade-policy identifier differs from the champion. The reader hides stale
