@@ -760,6 +760,30 @@ async function main() {
     env: readinessEnv,
   });
   check("projected lineup status warns without closing a fully researched actionable board", safeLaunch.readyToOpen && safeLaunch.warnings.includes("LINEUP_CONTEXT"));
+  const heldResearchLaunch = evaluateMlbPropsLaunchReadiness({
+    slateDate: "2026-08-01",
+    snapshots: [
+      launchSnapshot("s3", "2026-08-01T13:40:00Z", ["opposing starter", "pitch mix matchup"]),
+      launchSnapshot("s2", "2026-08-01T13:30:00Z", ["opposing starter", "pitch mix matchup"]),
+      launchSnapshot("s1", "2026-08-01T13:20:00Z", ["opposing starter", "pitch mix matchup"]),
+    ].map((item) => ({
+      ...item,
+      data: {
+        ...item.data,
+        props: item.data.props.map((row) => ({
+          ...row,
+          playGrade: "PENDING_DATA",
+          recentForm: null,
+          matchupHistory: null,
+          environment: null,
+        })),
+      },
+    })) as never,
+    tracking: readinessTracking,
+    now: new Date("2026-08-01T13:41:00Z"),
+    env: readinessEnv,
+  });
+  check("explicit research holds do not fail unrelated launch coverage checks", heldResearchLaunch.readyToOpen);
   const unsafeLaunch = evaluateMlbPropsLaunchReadiness({
     slateDate: "2026-08-01",
     snapshots: [

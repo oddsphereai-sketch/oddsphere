@@ -182,9 +182,11 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
   const actionablePitcherRows = actionableRows.filter(({ row }) => isPromotedPitcherModelRow(row));
   return {
     playerIdentitiesComplete: rows.every((row) => Boolean(
-      row.providerIds?.gameId && row.providerIds.bdlGameId && row.providerIds.bdlPlayerId && row.providerIds.mlbStatsPlayerId,
+      rowIsResearchHeld(row) ||
+      (row.providerIds?.gameId && row.providerIds.bdlGameId && row.providerIds.bdlPlayerId && row.providerIds.mlbStatsPlayerId),
     )),
-    recentFormComplete: evidence.every(({ recentForm }) => {
+    recentFormComplete: evidence.every(({ row, recentForm }) => {
+      if (rowIsResearchHeld(row)) return true;
       const logCount = recentForm?.logs.length ?? 0;
       return logCount >= 5 || (logCount > 0 && recentForm?.coverage === "full_season");
     }),
@@ -212,12 +214,19 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
     ].includes(warning))),
     actionableResearchInputsComplete: actionableRows.every(({ row }) =>
       row.missingFeatures.every(isSignalOptionalMemberFeature)),
-    directMatchupComplete: hitterRows.every(({ matchupHistory }) => matchupHistory !== null),
-    environmentComplete: evidence.every(({ environment }) => Boolean(
-      environment?.park.status === "available" && (environment.weather.status === "available" || environment.roofStatus === "dome"),
+    directMatchupComplete: hitterRows.every(({ row, matchupHistory }) =>
+      rowIsResearchHeld(row) || matchupHistory !== null
+    ),
+    environmentComplete: evidence.every(({ row, environment }) => Boolean(
+      rowIsResearchHeld(row) ||
+      (environment?.park.status === "available" && (environment.weather.status === "available" || environment.roofStatus === "dome")),
     )),
     lineupsComplete: hitterRows.every(({ row }) => row.lineupStatus?.status === "posted" || row.lineupStatus?.status === "confirmed"),
   };
+}
+
+function rowIsResearchHeld(row: MlbPropsBoardSnapshot["data"]["props"][number]): boolean {
+  return row.playGrade === "PENDING_DATA" || row.playGrade === "RESEARCH";
 }
 
 function isPromotedPitcherModelRow(row: MlbPropsBoardSnapshot["data"]["props"][number]): boolean {

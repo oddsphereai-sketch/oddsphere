@@ -62,13 +62,13 @@ holdout.
 
 ## MLB Player Props candidate
 
-- Release: `mlb_props_2026_08_11_r25`
+- Release: `mlb_props_2026_08_11_r26`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: private launch candidate; not publicly enabled
 
-The r25 publication and launch-readiness contract preserves every research-quality gate at row
+The r26 publication and launch-readiness contract preserves every research-quality gate at row
 level. A row missing required opposing-starter or pitch-mix evidence must be
 explicitly stamped `PENDING_DATA` or `RESEARCH`, remains ineligible for units,
 and is disclosed in snapshot warnings. Those already-held rows no longer
@@ -96,9 +96,9 @@ rows were already fail-closed (`310 PENDING_DATA`, `93 RESEARCH`): 370 lacked
 an announced opposing starter and 33 additional rows had a verified but
 insufficient pitch-mix sample. Operational warnings distinguish source-not-yet-
 published data, insufficient verified samples, and true unavailable data. The
-r25 contract changes only snapshot and launch-gate availability: it promotes zero incomplete
+r26 contract changes only snapshot and launch-gate availability: it promotes zero incomplete
 rows, demotes zero complete rows, and leaves the actionable count at 103. See
-`docs/model-audits/2026-08-11-player-props-launch-gate-coherence-r25.md`.
+`docs/model-audits/2026-08-11-player-props-held-research-readiness-r26.md`.
 New WNBA records store the final published picked-side moneyline probability while retaining the
 independent and final layers separately. Tracking refuses a source payload whose model,
 distribution, or grade-policy identifier differs from the champion. The reader hides stale
