@@ -331,8 +331,10 @@ check(
     candidateSource.includes('label: "Slight against"') &&
     candidateSource.includes("magnitude < 1.25") &&
     candidateSource.includes('tone: "red"') &&
+    candidateSource.includes('tone: "teal"') &&
     candidateSource.includes('tone: "amber"') &&
-    candidateSource.includes("text-red-300"),
+    candidateSource.includes("text-red-300") &&
+    candidateSource.includes("text-teal-300"),
 );
 check(
   "different primary and tracked-book prices are labeled instead of mixed",
