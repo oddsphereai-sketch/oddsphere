@@ -190,6 +190,15 @@ export type KeyStatRow = {
  * copy ("No public split data", "Open price unavailable", etc.) rather
  * than substituting other fields.
  */
+export type OddsTrailStopDto = {
+  american: number;
+  line: number | null;
+  observedAt: string | null;
+  sportsbook: string | null;
+  source: "line_history" | "current_line" | "locked_snapshot";
+  label: "first" | "move" | "current" | "locked";
+};
+
 export type MarketEdgeDto = {
   // ── existing per-pick fields (preserved from DailyEdgePredictionDto) ──
   pick: string | null;
@@ -371,14 +380,17 @@ export type MarketEdgeDto = {
    * display price. Consecutive unchanged snapshots are deduped so the UI shows
    * true price changes instead of repeated polling rows.
    */
-  oddsTrail?: Array<{
-    american: number;
-    line: number | null;
-    observedAt: string | null;
-    sportsbook: string | null;
-    source: "line_history" | "current_line" | "locked_snapshot";
-    label: "first" | "move" | "current" | "locked";
-  }>;
+  oddsTrail?: OddsTrailStopDto[];
+  /**
+   * The other outcome at the same market and, when available, the same book.
+   * This is display/audit context only: it never changes the selected side,
+   * probability, grade, stake, or tracking result.
+   */
+  opposingOddsTrail?: {
+    side: "home" | "away" | "over" | "under";
+    label: string;
+    stops: OddsTrailStopDto[];
+  } | null;
 
   /**
    * Live market-intelligence (2026-06-16). Derived (display/audit only — no

@@ -739,6 +739,9 @@ function buildWnbaPickedPrices(
     ml: { ...coherentPriceTrail(liveRows, cappedHistoryRows, "moneyline", mlSide, null, mlCurrent), marketProb: pickedNoVigProb(liveRows, "moneyline", mlSide, null) },
     total: { ...coherentPriceTrail(liveRows, cappedHistoryRows, "total", totalSide, totalCurrentLine, totalCurrent), marketProb: pickedNoVigProb(liveRows, "total", totalSide, totalLockedLine) },
     spread: { ...coherentPriceTrail(liveRows, cappedHistoryRows, "spread", spreadSide, spreadCurrentLine, spreadCurrent), marketProb: pickedNoVigProb(liveRows, "spread", spreadSide, spreadLockedLine) },
+    opposingMl: coherentPriceTrail(liveRows, cappedHistoryRows, "moneyline", oppositeSide("moneyline", mlSide), null, pickedPrice(liveRows, "moneyline", oppositeSide("moneyline", mlSide), null)),
+    opposingTotal: coherentPriceTrail(liveRows, cappedHistoryRows, "total", oppositeSide("total", totalSide), totalCurrentLine, pickedPrice(liveRows, "total", oppositeSide("total", totalSide), totalCurrentLine)),
+    opposingSpread: coherentPriceTrail(liveRows, cappedHistoryRows, "spread", oppositeSide("spread", spreadSide), oppositeLine("spread", spreadCurrentLine), pickedPrice(liveRows, "spread", oppositeSide("spread", spreadSide), oppositeLine("spread", spreadCurrentLine))),
   };
 }
 
@@ -757,7 +760,14 @@ type WnbaPriceTrail = {
   stops?: WnbaPriceTrailStop[];
   marketProb?: number | null;
 };
-type WnbaPickedPrices = { ml: WnbaPriceTrail; total: WnbaPriceTrail; spread: WnbaPriceTrail };
+type WnbaPickedPrices = {
+  ml: WnbaPriceTrail;
+  total: WnbaPriceTrail;
+  spread: WnbaPriceTrail;
+  opposingMl: WnbaPriceTrail;
+  opposingTotal: WnbaPriceTrail;
+  opposingSpread: WnbaPriceTrail;
+};
 type PreviewGame = {
   game_id: number;
   date: string;
@@ -1107,6 +1117,9 @@ function buildMarket(opts: {
   whyLine: string;
   publicSplits?: WnbaPublicSplit[];
   priceTrail?: WnbaPriceTrail;
+  opposingPriceTrail?: WnbaPriceTrail;
+  opposingSide?: "home" | "away" | "over" | "under" | null;
+  opposingLabel?: string | null;
   lockedAt?: string | null;
   marketReadV2?: MarketReadV2Dto | null;
   marketReadV2Enabled?: boolean;
@@ -1173,6 +1186,16 @@ function buildMarket(opts: {
       label: "locked",
     });
   }
+  const opposingStops: MarketEdgeDto["oddsTrail"] = opts.opposingPriceTrail?.coherent
+    ? (opts.opposingPriceTrail.stops ?? []).map((stop, index, stops) => ({
+        american: stop.american,
+        line: stop.line,
+        observedAt: stop.observedAt,
+        sportsbook: opts.opposingPriceTrail?.sportsbook ?? null,
+        source: index === stops.length - 1 ? "current_line" as const : "line_history" as const,
+        label: index === 0 ? "first" as const : index === stops.length - 1 ? "current" as const : "move" as const,
+      }))
+    : undefined;
   return {
     pick,
     confidence: confFrac,
@@ -1207,6 +1230,10 @@ function buildMarket(opts: {
     lastMoveLinePrev: opts.priceTrail?.previousLine ?? null,
     lastMoveLineNext: opts.priceTrail?.currentLine ?? null,
     oddsTrail,
+    opposingOddsTrail:
+      opts.opposingSide && opts.opposingLabel && opposingStops && opposingStops.length > 0
+        ? { side: opts.opposingSide, label: opts.opposingLabel, stops: opposingStops }
+        : null,
     modelTotal: slot === "total" ? modelTotal : null,
     marketTotal: slot === "total" ? marketTotal : null,
     line: slot === "ml" ? null : line,
@@ -1288,6 +1315,9 @@ function adaptGame(
     whyLine: `Independent model ${Math.round(mlModelProb * 100)}% vs market ${mlMarketFair !== null ? Math.round(mlMarketFair * 100) + "%" : "n/a"} on ${game.moneyline.side}.`,
     publicSplits: game.publicSplits?.ml,
     priceTrail: game.pickedPrices?.ml,
+    opposingPriceTrail: game.pickedPrices?.opposingMl,
+    opposingSide: oppositeSide("moneyline", mlSelectedSide) as "home" | "away" | null,
+    opposingLabel: mlSelectedSide === "home" ? awayAbbr : mlSelectedSide === "away" ? homeAbbr : null,
     lockedAt: game.lockedAt ?? null,
     marketReadV2: mlMarketRead,
     marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.moneyline === true,
@@ -1320,6 +1350,9 @@ function adaptGame(
     whyLine: `Model projects ${game.model.total} pts vs market line ${game.total.line ?? "n/a"}.`,
     publicSplits: game.publicSplits?.total,
     priceTrail: game.pickedPrices?.total,
+    opposingPriceTrail: game.pickedPrices?.opposingTotal,
+    opposingSide: oppositeSide("total", totalSelectedSide) as "over" | "under" | null,
+    opposingLabel: totalSelectedSide === "over" ? "Under" : totalSelectedSide === "under" ? "Over" : null,
     lockedAt: game.lockedAt ?? null,
     marketReadV2: totalMarketRead,
     marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.total === true,
@@ -1369,6 +1402,9 @@ function adaptGame(
     whyLine: `Model margin ${game.model.margin > 0 ? "+" : ""}${game.model.margin} vs market spread ${game.market.spread ?? "n/a"}.`,
     publicSplits: game.publicSplits?.spread,
     priceTrail: game.pickedPrices?.spread,
+    opposingPriceTrail: game.pickedPrices?.opposingSpread,
+    opposingSide: oppositeSide("spread", spreadPickIsHome ? "home" : spreadPickIsAway ? "away" : null) as "home" | "away" | null,
+    opposingLabel: spreadPickIsHome ? awayAbbr : spreadPickIsAway ? homeAbbr : null,
     lockedAt: game.lockedAt ?? null,
     marketReadV2: spreadMarketRead,
     marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.spread === true,

@@ -278,6 +278,11 @@ function enforceLockedCardCutoff(body: DailyEdgeResponse): DailyEdgeResponse {
     for (const market of Object.values(game.markets)) {
       const trail = (market.oddsTrail ?? []).filter((stop) => !isoAfter(stop.observedAt, cutoffMs));
       market.oddsTrail = trail;
+      if (market.opposingOddsTrail) {
+        market.opposingOddsTrail.stops = market.opposingOddsTrail.stops.filter(
+          (stop) => !isoAfter(stop.observedAt, cutoffMs),
+        );
+      }
       const comparable = trail.filter((stop) => typeof stop.american === "number");
       market.lastMovePrevAmerican = comparable.length >= 2 ? comparable[comparable.length - 2]!.american : null;
       market.lastMoveNextAmerican = comparable.length >= 1 ? comparable[comparable.length - 1]!.american : null;
@@ -2424,6 +2429,10 @@ function buildGameDto(
       openLinesByGameMarket.get(
         `${row.id}::moneyline::${pred.predicted_ml_winner ?? "null"}`
       ) ?? [],
+    opposingLineOpenCandidates:
+      openLinesByGameMarket.get(
+        `${row.id}::moneyline::${oppositeDisplaySide(pred.predicted_ml_winner) ?? "null"}`
+      ) ?? [],
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
@@ -2475,6 +2484,11 @@ function buildGameDto(
     lineOpenCandidates: (
       openLinesByGameMarket.get(
         `${row.id}::total::${pred.predicted_ou_side ?? "null"}`
+      ) ?? []
+    ).filter((r) => totalLine === null || r.line_value === totalLine || r.line_value === null),
+    opposingLineOpenCandidates: (
+      openLinesByGameMarket.get(
+        `${row.id}::total::${oppositeDisplaySide(pred.predicted_ou_side) ?? "null"}`
       ) ?? []
     ).filter((r) => totalLine === null || r.line_value === totalLine || r.line_value === null),
     autoFactors,
@@ -3712,6 +3726,8 @@ type BuildMarketEdgeInput = {
    * null and the line-move chip is suppressed (no fabrication).
    */
   lineOpenCandidates: LineHistoryRow[];
+  /** Other outcome's history; presentation/audit only, never a grade input. */
+  opposingLineOpenCandidates?: LineHistoryRow[];
   /** Both FI sides for the presentation-only two-sided price board. */
   fiBoardLineOpenCandidates?: LineHistoryRow[];
   autoFactors: Record<string, unknown> | null;
@@ -4465,6 +4481,64 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
         ? input.lockedPriceSportsbook ?? trailPriceRow?.sportsbook ?? null
         : trailPriceRow?.sportsbook ?? null,
   });
+  const opposingSide =
+    input.market === "first_inning" ? null : oppositeDisplaySide(input.modelSide);
+  const opposingExpectedLine =
+    input.market === "total" ? input.totalsExtras?.sportsbookLine ?? null : null;
+  const opposingCurrentRows = [
+    ...input.bestAvailableLinesCurrent,
+    ...input.linesCurrent,
+  ].filter(
+    (row, index, rows) =>
+      row.side === opposingSide &&
+      (opposingExpectedLine === null ||
+        row.line_value === null ||
+        sameLineValue(row.line_value, opposingExpectedLine)) &&
+      rows.findIndex(
+        (candidate) =>
+          candidate.sportsbook === row.sportsbook &&
+          candidate.side === row.side &&
+          sameLineValue(candidate.line_value, row.line_value) &&
+          candidate.odds_american === row.odds_american,
+      ) === index,
+  );
+  const selectedTrailBook = trailPriceRow?.sportsbook ?? null;
+  const sameBookOpposingRows = selectedTrailBook === null
+    ? []
+    : opposingCurrentRows.filter((row) => row.sportsbook === selectedTrailBook);
+  const opposingPriceRow =
+    pickPriceRow(sameBookOpposingRows, opposingSide as Side | null, {
+      allowStaleFallback: input.isLockedRow === true,
+    }) ??
+    pickPriceRow(opposingCurrentRows, opposingSide as Side | null, {
+      allowStaleFallback: input.isLockedRow === true,
+    }) ??
+    (opposingSide === null || input.isLockedRow !== true
+      ? null
+      : pickHistoryPriceRow(input.opposingLineOpenCandidates ?? []));
+  const opposingOddsStops = opposingSide === null
+    ? []
+    : buildPersistedOddsTrail({
+        candidates: input.opposingLineOpenCandidates ?? [],
+        priceRow: opposingPriceRow,
+        currentAmerican: opposingPriceRow?.odds_american ?? null,
+        currentLine: opposingPriceRow?.line_value ?? opposingExpectedLine,
+        currentObservedAt: opposingPriceRow === null ? null : lineRowObservedAt(opposingPriceRow),
+        lockedAmerican: null,
+        lockedAt: input.isLockedRow === true ? input.lockedPriceAt ?? null : null,
+        terminalSportsbook: opposingPriceRow?.sportsbook ?? null,
+      });
+  const opposingOddsTrail: MarketEdgeDto["opposingOddsTrail"] =
+    opposingSide === null || opposingOddsStops.length === 0
+      ? null
+      : {
+          side: opposingSide as "home" | "away" | "over" | "under",
+          label:
+            opposingSide === "home" ? input.homeAbbr :
+            opposingSide === "away" ? input.awayAbbr :
+            opposingSide === "over" ? "Over" : "Under",
+          stops: opposingOddsStops,
+        };
 
   // Per-market signal-derived quantitative fields. Pick the +EV signal on
   // the model's side (preferred), falling back to ANY signal for this
@@ -5124,6 +5198,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     lockedLineAmerican: invalidFirstInningMarket ? null : input.lockedPriceAmerican ?? null,
     lockedLineAt: input.lockedPriceAt ?? null,
     oddsTrail: invalidFirstInningMarket ? [] : oddsTrail,
+    opposingOddsTrail: invalidFirstInningMarket ? null : opposingOddsTrail,
     // 2026-06-16 market-intelligence (derived; display/audit only).
     marketInterpretation: input.marketReadV2Enabled === true ? null : marketInterpretation,
     marketReadV2,
