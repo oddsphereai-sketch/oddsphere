@@ -24,7 +24,7 @@ import {
 const versions = activeMlbPropMarketModelVersions();
 assert.deepEqual(Object.keys(versions).sort(), [...MLB_PROP_MARKET_KEYS].sort());
 assert.equal(versions.batter_hits, `${BATTER_HITS_PA_MODEL_VERSION}_actionability_v6_uncapped_validated_under_best_angle`);
-assert.equal(versions.batter_hits_runs_rbis, `${BATTER_HRR_MODEL_VERSION}_actionability_v5_uncapped_validated_under_best_angle`);
+assert.equal(versions.batter_hits_runs_rbis, `${BATTER_HRR_MODEL_VERSION}_actionability_v6_empirical_market_anchored_under_accuracy`);
 assert.equal(versions.pitcher_strikeouts, "pitcher_strikeouts_distribution_v6_weak_baseline_market_control");
 assert.equal(versions.pitcher_outs, "pitcher_outs_peer_consensus_compact_core_v6_mixed_role_workload_guard");
 assert.equal(versions.pitcher_walks, "pitcher_walks_distribution_v1_conservative_over_market_only_calibrated");
@@ -33,7 +33,7 @@ assert.equal(versions.batter_runs_scored, "batter_runs_context_opportunity_integ
 assert.equal(versions.batter_home_runs, BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION);
 assert.equal(versions.batter_singles, "batter_singles_event_distribution_integrated_read_v5_under_lean_only");
 assert.equal(versions.batter_doubles, "batter_doubles_market_residual_v1_validated_under_best_angle");
-assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_08_12_r29");
+assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_08_12_r30");
 assert.equal(MLB_PROPS_SHADOW_PITCHER_RELEASE_ID, "mlb_props_shadow_pitcher_2026_08_12_r1");
 assert.equal(MLB_PROPS_SHADOW_PITCHER_FEATURE_VERSION, "mlb_props_shared_pitcher_features_v1_2026_08_12");
 assert.match(MLB_PROPS_MODEL_RELEASE_ID, /^mlb_props_\d{4}_\d{2}_\d{2}_r\d+$/);

@@ -32,6 +32,7 @@ import {
   projectAuditableCountOverProbability,
   qualifiesHitsUnderPriceEdge,
   qualifiesValidatedUnderPromotion,
+  scoreHrrUnderAccuracyCandidate,
   scoreHomeRunRelativeQualityCandidate,
   selectStandardizedQualityCandidateIds,
 } from "../lib/mlb/props/actionabilityPolicy";
@@ -231,6 +232,22 @@ async function main() {
       expectedValue: 0.05,
       americanOdds: 100,
     }));
+  const hrrAccuracy = scoreHrrUnderAccuracyCandidate({
+    line: 1.5,
+    seasonValues: [0, 1, 1, 2, 0, 1, 0, 1, 1, 0],
+    marketProbability: 0.58,
+    americanOdds: -150,
+  });
+  check("H+R+RBI accuracy sleeve uses prior-only survival and a market anchor",
+    hrrAccuracy.eligible
+    && hrrAccuracy.independentProbability > hrrAccuracy.finalProbability
+    && hrrAccuracy.finalProbability > 0.6
+    && !scoreHrrUnderAccuracyCandidate({
+      line: 1.5,
+      seasonValues: [0, 1, 1, 2],
+      marketProbability: 0.58,
+      americanOdds: -150,
+    }).eligible);
   check("total-bases over calibration is stricter than total-bases under", calibratedPropModelWeight({
     marketKey: "batter_total_bases",
     side: "over",

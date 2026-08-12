@@ -36,6 +36,23 @@ export const VALIDATED_UNDER_PROMOTION_POLICIES = {
   },
 } as const;
 
+export const HRR_UNDER_ACCURACY_POLICY = {
+  maximumHistory: 80,
+  empiricalPriorGames: 2,
+  marketWeight: 0.75,
+  minimumFinalProbability: 0.6,
+  minimumFinalEdge: 0.01,
+  minimumExpectedValue: 0.03,
+} as const;
+
+export type HrrUnderAccuracyScore = {
+  eligible: boolean;
+  independentProbability: number;
+  finalProbability: number;
+  finalEdge: number;
+  expectedValue: number;
+};
+
 export const BATTER_DOUBLES_RESIDUAL_PROMOTION_POLICY = {
   minimumModelProbability: 0.52,
   minimumEdge: 0.005,
@@ -163,6 +180,38 @@ export function qualifiesValidatedUnderPromotion(args: {
     && args.finalEdge >= policy.minimumFinalEdge
     && args.expectedValue >= policy.minimumExpectedValue
     && assessPropPrice(args.americanOdds).signalEligible;
+}
+
+export function scoreHrrUnderAccuracyCandidate(args: {
+  line: number;
+  seasonValues: readonly number[];
+  marketProbability: number;
+  americanOdds: number;
+}): HrrUnderAccuracyScore {
+  const values = args.seasonValues
+    .filter((value) => Number.isFinite(value))
+    .slice(0, HRR_UNDER_ACCURACY_POLICY.maximumHistory);
+  const underCount = values.filter((value) => value <= args.line).length;
+  const independentProbability = (
+    underCount + HRR_UNDER_ACCURACY_POLICY.empiricalPriorGames * 0.5
+  ) / (values.length + HRR_UNDER_ACCURACY_POLICY.empiricalPriorGames);
+  const finalProbability = clampProbability(
+    independentProbability * (1 - HRR_UNDER_ACCURACY_POLICY.marketWeight)
+      + args.marketProbability * HRR_UNDER_ACCURACY_POLICY.marketWeight,
+  );
+  const finalEdge = finalProbability - args.marketProbability;
+  const expectedValue = expectedValueAtPrice(finalProbability, args.americanOdds);
+  return {
+    eligible: values.length >= 5
+      && finalProbability >= HRR_UNDER_ACCURACY_POLICY.minimumFinalProbability
+      && finalEdge >= HRR_UNDER_ACCURACY_POLICY.minimumFinalEdge
+      && expectedValue >= HRR_UNDER_ACCURACY_POLICY.minimumExpectedValue
+      && assessPropPrice(args.americanOdds).signalEligible,
+    independentProbability,
+    finalProbability,
+    finalEdge,
+    expectedValue,
+  };
 }
 
 export function qualifiesBatterDoublesResidualPromotion(args: {

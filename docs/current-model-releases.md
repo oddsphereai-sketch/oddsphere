@@ -209,11 +209,22 @@ home Elo/stat agreement rule. It does not alter moneyline or total decisions.
 
 ## MLB Player Props candidate
 
-- Release: `mlb_props_2026_08_12_r29`
+- Release: `mlb_props_2026_08_12_r30`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: private launch candidate; not publicly enabled
+
+The r30 H+R+RBI accuracy sleeve promotes only market-anchored Under candidates
+selected on the July 24-31 validation window. It combines 25% prior-only,
+line-aware empirical survival with 75% target-market probability and requires at
+least 60% final probability, 1 percentage point of final edge, and 3% expected
+value. Validation was 6-3 and the untouched August 1-11 holdout was 15-2 across
+nine dates; date-block bootstrap support was 99.92% for hit rate above 50% and
+99.44% for profitability. It added 17 holdout decisions over r29 with no
+demotions. All broad context regressions and weaker action cohorts remain
+audit-only. Evidence is recorded in
+`docs/model-audits/2026-08-12-player-props-all-market-features-hrr-r30.md`.
 
 The r29 pitcher workload guard prevents total season innings from being divided by a small
 starter count for mixed-role pitchers. When the starter baseline is weak, current official start
@@ -284,7 +295,7 @@ unlocked payloads but preserves locked historical recommendations.
 - Shadow release: `mlb_props_shadow_pitcher_2026_08_12_r1`
 - Feature contract: `mlb_props_shared_pitcher_features_v1_2026_08_12`
 - Scope: prospective T-60 evidence for pitcher strikeouts; pitcher outs retained as a control
-- Production effect: none; active props bundle remains `mlb_props_2026_08_12_r29`
+- Production effect: none; active props bundle remains `mlb_props_2026_08_12_r30`
 - Evidence: `docs/model-audits/2026-08-12-player-props-shared-pitcher-shadow-r1.md`
 
 The shadow path reuses the authoritative props refresh and records its immutable output in lock

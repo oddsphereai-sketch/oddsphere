@@ -105,6 +105,7 @@ import {
   qualifiesBatterDoublesResidualPromotion,
   qualifiesHitsUnderPriceEdge,
   qualifiesValidatedUnderPromotion,
+  scoreHrrUnderAccuracyCandidate,
   scoreHomeRunRelativeQualityCandidate,
   selectStandardizedQualityCandidateIds,
 } from "./actionabilityPolicy";
@@ -1426,6 +1427,7 @@ function applyHitterSignalDiscipline(rows: PlayerPropPreviewRow[]): PlayerPropPr
 function applyValidatedUnderActionablePromotions(
   rows: PlayerPropPreviewRow[],
 ): PlayerPropPreviewRow[] {
+  const hrrScores = new Map<string, ReturnType<typeof scoreHrrUnderAccuracyCandidate>>();
   const eligible = rows.filter((row) => {
     if (
       row.side !== "under"
@@ -1461,8 +1463,19 @@ function applyValidatedUnderActionablePromotions(
       expectedValue: row.expectedValue,
       americanOdds: row.odds,
     });
+    const seasonValues = row.recentForm?.samples?.season.values ?? [];
+    const hrrAccuracy = row.market === "batter_hits_runs_rbis"
+      ? scoreHrrUnderAccuracyCandidate({
+        line: row.line,
+        seasonValues,
+        marketProbability: row.marketProbability,
+        americanOdds: row.odds,
+      })
+      : null;
+    if (hrrAccuracy?.eligible) hrrScores.set(row.id, hrrAccuracy);
     if (hitsPriceEdge) return true;
     if (doublesResidual) return true;
+    if (hrrAccuracy?.eligible) return true;
     return row.playGrade === "WATCHLIST" && genericEligible;
   });
 
@@ -1477,19 +1490,35 @@ function applyValidatedUnderActionablePromotions(
   for (const row of bestOffers) promotedIds.add(row.id);
   if (!promotedIds.size) return rows;
 
-  return rows.map((row) => promotedIds.has(row.id) ? {
-    ...row,
-    playGrade: "BEST_ANGLE",
-    units: 0.25,
-    reasonCodes: uniqueStrings([
-      ...row.reasonCodes,
-      "VALIDATED_MARKET_PROMOTION",
-      "VALIDATED_UNDER_BEST_ANGLE",
-      ...(row.market === "batter_doubles"
-        ? ["VALIDATED_DOUBLES_RESIDUAL_BEST_ANGLE"]
-        : []),
-    ]),
-  } : row);
+  return rows.map((row) => {
+    if (!promotedIds.has(row.id)) return row;
+    const hrrScore = hrrScores.get(row.id);
+    return {
+      ...row,
+      ...(hrrScore ? {
+        modelProbability: hrrScore.independentProbability,
+        independentProbability: hrrScore.independentProbability,
+        finalProbability: hrrScore.finalProbability,
+        shrinkageWeight: 0.25,
+        modelEdge: hrrScore.finalEdge,
+        expectedValue: hrrScore.expectedValue,
+        fairOdds: safeFairOdds(hrrScore.finalProbability),
+        overProbability: 1 - hrrScore.finalProbability,
+        underProbability: hrrScore.finalProbability,
+      } : {}),
+      playGrade: "BEST_ANGLE",
+      units: 0.25,
+      reasonCodes: uniqueStrings([
+        ...row.reasonCodes,
+        "VALIDATED_MARKET_PROMOTION",
+        "VALIDATED_UNDER_BEST_ANGLE",
+        ...(hrrScore ? ["VALIDATED_HRR_UNDER_ACCURACY_BEST_ANGLE"] : []),
+        ...(row.market === "batter_doubles"
+          ? ["VALIDATED_DOUBLES_RESIDUAL_BEST_ANGLE"]
+          : []),
+      ]),
+    };
+  });
 }
 
 function applyValidatedHomeRunActionablePromotions(
