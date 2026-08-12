@@ -348,8 +348,23 @@ function evaluateMarket(rows: Observation[]) {
     current: metrics(holdout, (row) => row.currentOver)!,
     challenger: metrics(holdout, selected.candidate.predict)!,
   };
+  const finalistComparison = Object.fromEntries(finalists.map((candidate) => [candidate.name, {
+    validation: metrics(validation, candidate.predict),
+    holdout: metrics(holdout, candidate.predict),
+    bootstrap: dateBlockBootstrapComparison(holdout, candidate.predict, 2_000),
+    action: (() => {
+      const policy = selectActionPolicy(validation, candidate.predict);
+      return policy ? {
+        policy,
+        validation: actionMetrics(validation, candidate.predict, policy),
+        holdout: actionMetrics(holdout, candidate.predict, policy),
+        holdoutAudit: actionAudit(holdout, candidate.predict, policy),
+      } : null;
+    })(),
+  }]));
   const bootstrap = dateBlockBootstrapComparison(holdout, selected.candidate.predict, 2_000);
   const actionPolicy = selectActionPolicy(validation, selected.candidate.predict);
+  const validationActions = actionPolicy ? actionMetrics(validation, selected.candidate.predict, actionPolicy) : null;
   const holdoutActions = actionPolicy ? actionMetrics(holdout, selected.candidate.predict, actionPolicy) : null;
   const holdoutActionAudit = actionPolicy ? actionAudit(holdout, selected.candidate.predict, actionPolicy) : null;
   const exactHrrProductionPolicy = rows[0]?.market === "batter_hits_runs_rbis"
@@ -377,8 +392,10 @@ function evaluateMarket(rows: Observation[]) {
       challenger: selected.validation,
     },
     holdout: holdoutMetrics,
+    finalistComparison,
     holdoutDateBlockBootstrap: bootstrap,
     actionPolicy,
+    validationActions,
     holdoutActions,
     holdoutActionAudit,
     exactHrrProductionPolicy,
@@ -589,8 +606,10 @@ function compactResult(result: ReturnType<typeof evaluateMarket>) {
     counts: result.counts,
     selected: result.selected,
     holdout: result.holdout,
+    finalistComparison: result.finalistComparison,
     bootstrap: result.holdoutDateBlockBootstrap,
     actionPolicy: result.actionPolicy,
+    validationActions: result.validationActions,
     holdoutActions: result.holdoutActions,
     holdoutActionAudit: result.holdoutActionAudit,
     exactHrrProductionPolicy: result.exactHrrProductionPolicy,

@@ -30,10 +30,11 @@ assert.equal(versions.pitcher_outs, "pitcher_outs_peer_consensus_compact_core_v6
 assert.equal(versions.pitcher_walks, "pitcher_walks_distribution_v1_conservative_over_market_only_calibrated");
 assert.equal(versions.pitcher_earned_runs, "pitcher_earned_runs_distribution_v2_watchlist_only");
 assert.equal(versions.batter_runs_scored, "batter_runs_context_opportunity_integrated_read_v4_unvalidated_special_promotion_removed");
-assert.equal(versions.batter_home_runs, BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION);
+assert.equal(versions.batter_home_runs, `${BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION}_actionability_v2_over_promotion_removed`);
 assert.equal(versions.batter_singles, "batter_singles_event_distribution_integrated_read_v5_under_lean_only");
-assert.equal(versions.batter_doubles, "batter_doubles_market_residual_v1_validated_under_best_angle");
-assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_08_12_r30");
+assert.equal(versions.batter_doubles, "batter_doubles_market_residual_v1_actionability_v2_empirical_market_under_accuracy");
+assert.equal(versions.batter_strikeouts, "batter_strikeouts_event_distribution_integrated_read_v2_empirical_market_over_accuracy");
+assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_08_12_r31");
 assert.equal(MLB_PROPS_SHADOW_PITCHER_RELEASE_ID, "mlb_props_shadow_pitcher_2026_08_12_r1");
 assert.equal(MLB_PROPS_SHADOW_PITCHER_FEATURE_VERSION, "mlb_props_shared_pitcher_features_v1_2026_08_12");
 assert.match(MLB_PROPS_MODEL_RELEASE_ID, /^mlb_props_\d{4}_\d{2}_\d{2}_r\d+$/);
@@ -70,8 +71,10 @@ assert.ok(liveBoard.includes("HOME_RUN_MARKET_RESIDUAL_READ"));
 assert.ok(!liveBoard.includes("applyValidatedPremiumBestAngles"));
 assert.ok(!liveBoard.includes("VALIDATED_SINGLES_PREMIUM_BEST_ANGLE"));
 assert.ok(!liveBoard.includes("HOME_RUN_PROMOTION_DAILY_CAP"));
-assert.ok(liveBoard.includes("selectStandardizedQualityCandidateIds"));
-assert.ok(liveBoard.includes("VALIDATED_HOME_RUN_CONSENSUS_BEST_PRICE_PROMOTION"));
+assert.ok(!liveBoard.includes("applyValidatedHomeRunActionablePromotions"));
+assert.ok(!liveBoard.includes("VALIDATED_HOME_RUN_CONSENSUS_BEST_PRICE_PROMOTION"));
+assert.ok(liveBoard.includes("scoreBatterDoublesUnderAccuracyCandidate"));
+assert.ok(liveBoard.includes("scoreBatterStrikeoutsOverAccuracyCandidate"));
 assert.ok(realScoring.includes("if (!isPitcherMarket(row.odds.marketKey)) continue;"));
 assert.ok(realScoring.includes("modelForRealPitcherMarket"));
 

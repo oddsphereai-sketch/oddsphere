@@ -1,7 +1,7 @@
 import { assessPropPrice } from "./pricePolicy";
 
 export const MLB_PROPS_RECOVERY_POLICY_VERSION =
-  "mlb_props_actionability_recovery_v5_2026_07_30";
+  "mlb_props_actionability_recovery_v6_2026_08_12";
 
 export const HITS_UNDER_PRICE_EDGE_POLICY = {
   minimumMarketProbability: 0.4,
@@ -46,6 +46,33 @@ export const HRR_UNDER_ACCURACY_POLICY = {
 } as const;
 
 export type HrrUnderAccuracyScore = {
+  eligible: boolean;
+  independentProbability: number;
+  finalProbability: number;
+  finalEdge: number;
+  expectedValue: number;
+};
+
+export const BATTER_DOUBLES_UNDER_ACCURACY_POLICY = {
+  maximumHistory: 80,
+  empiricalPriorGames: 2,
+  marketWeight: 0.25,
+  minimumFinalProbability: 0.54,
+  minimumFinalEdge: 0.01,
+  minimumExpectedValue: 0,
+} as const;
+
+export const BATTER_STRIKEOUTS_OVER_ACCURACY_POLICY = {
+  maximumHistory: 80,
+  empiricalPriorGames: 20,
+  marketWeight: 0.5,
+  line: 0.5,
+  minimumFinalProbability: 0.6,
+  minimumFinalEdge: 0.01,
+  minimumExpectedValue: 0,
+} as const;
+
+export type EmpiricalMarketAccuracyScore = {
   eligible: boolean;
   independentProbability: number;
   finalProbability: number;
@@ -209,6 +236,93 @@ export function scoreHrrUnderAccuracyCandidate(args: {
       && assessPropPrice(args.americanOdds).signalEligible,
     independentProbability,
     finalProbability,
+    finalEdge,
+    expectedValue,
+  };
+}
+
+export function scoreBatterDoublesUnderAccuracyCandidate(args: {
+  line: number;
+  seasonValues: readonly number[];
+  marketProbability: number;
+  americanOdds: number;
+}): EmpiricalMarketAccuracyScore {
+  const values = args.seasonValues
+    .filter((value) => Number.isFinite(value))
+    .slice(0, BATTER_DOUBLES_UNDER_ACCURACY_POLICY.maximumHistory);
+  const underCount = values.filter((value) => value <= args.line).length;
+  const independentProbability = (
+    underCount + BATTER_DOUBLES_UNDER_ACCURACY_POLICY.empiricalPriorGames * 0.5
+  ) / (values.length + BATTER_DOUBLES_UNDER_ACCURACY_POLICY.empiricalPriorGames);
+  const finalProbability = clampProbability(
+    independentProbability * (1 - BATTER_DOUBLES_UNDER_ACCURACY_POLICY.marketWeight)
+      + args.marketProbability * BATTER_DOUBLES_UNDER_ACCURACY_POLICY.marketWeight,
+  );
+  return scoreEmpiricalMarketAccuracyCandidate({
+    values,
+    independentProbability,
+    finalProbability,
+    marketProbability: args.marketProbability,
+    americanOdds: args.americanOdds,
+    minimumFinalProbability: BATTER_DOUBLES_UNDER_ACCURACY_POLICY.minimumFinalProbability,
+    minimumFinalEdge: BATTER_DOUBLES_UNDER_ACCURACY_POLICY.minimumFinalEdge,
+    minimumExpectedValue: BATTER_DOUBLES_UNDER_ACCURACY_POLICY.minimumExpectedValue,
+  });
+}
+
+export function scoreBatterStrikeoutsOverAccuracyCandidate(args: {
+  line: number;
+  seasonValues: readonly number[];
+  marketProbability: number;
+  americanOdds: number;
+}): EmpiricalMarketAccuracyScore {
+  const values = args.seasonValues
+    .filter((value) => Number.isFinite(value))
+    .slice(0, BATTER_STRIKEOUTS_OVER_ACCURACY_POLICY.maximumHistory);
+  const overCount = values.filter((value) => value > args.line).length;
+  const independentProbability = (
+    overCount + BATTER_STRIKEOUTS_OVER_ACCURACY_POLICY.empiricalPriorGames * 0.5
+  ) / (values.length + BATTER_STRIKEOUTS_OVER_ACCURACY_POLICY.empiricalPriorGames);
+  const finalProbability = clampProbability(
+    independentProbability * (1 - BATTER_STRIKEOUTS_OVER_ACCURACY_POLICY.marketWeight)
+      + args.marketProbability * BATTER_STRIKEOUTS_OVER_ACCURACY_POLICY.marketWeight,
+  );
+  const scored = scoreEmpiricalMarketAccuracyCandidate({
+    values,
+    independentProbability,
+    finalProbability,
+    marketProbability: args.marketProbability,
+    americanOdds: args.americanOdds,
+    minimumFinalProbability: BATTER_STRIKEOUTS_OVER_ACCURACY_POLICY.minimumFinalProbability,
+    minimumFinalEdge: BATTER_STRIKEOUTS_OVER_ACCURACY_POLICY.minimumFinalEdge,
+    minimumExpectedValue: BATTER_STRIKEOUTS_OVER_ACCURACY_POLICY.minimumExpectedValue,
+  });
+  return {
+    ...scored,
+    eligible: scored.eligible && args.line === BATTER_STRIKEOUTS_OVER_ACCURACY_POLICY.line,
+  };
+}
+
+function scoreEmpiricalMarketAccuracyCandidate(args: {
+  values: readonly number[];
+  independentProbability: number;
+  finalProbability: number;
+  marketProbability: number;
+  americanOdds: number;
+  minimumFinalProbability: number;
+  minimumFinalEdge: number;
+  minimumExpectedValue: number;
+}): EmpiricalMarketAccuracyScore {
+  const finalEdge = args.finalProbability - args.marketProbability;
+  const expectedValue = expectedValueAtPrice(args.finalProbability, args.americanOdds);
+  return {
+    eligible: args.values.length >= 5
+      && args.finalProbability >= args.minimumFinalProbability
+      && finalEdge >= args.minimumFinalEdge
+      && expectedValue >= args.minimumExpectedValue
+      && assessPropPrice(args.americanOdds).signalEligible,
+    independentProbability: args.independentProbability,
+    finalProbability: args.finalProbability,
     finalEdge,
     expectedValue,
   };

@@ -100,14 +100,12 @@ import {
 } from "./internalTracking";
 import { calibratedPropModelWeight } from "./probabilityCalibration";
 import {
-  consensusMarketProbabilityFromAmericanOdds,
-  HOME_RUN_STANDARDIZED_QUALITY_POLICY,
   qualifiesBatterDoublesResidualPromotion,
   qualifiesHitsUnderPriceEdge,
   qualifiesValidatedUnderPromotion,
+  scoreBatterDoublesUnderAccuracyCandidate,
+  scoreBatterStrikeoutsOverAccuracyCandidate,
   scoreHrrUnderAccuracyCandidate,
-  scoreHomeRunRelativeQualityCandidate,
-  selectStandardizedQualityCandidateIds,
 } from "./actionabilityPolicy";
 import { assertMlbPropsReleaseDoesNotRegress } from "./releaseOrdering";
 import { resolveMlbPropsProbablePitchers } from "./probablePitcherResolution";
@@ -1265,7 +1263,7 @@ function buildDashboardRows(args: {
   const concentrationDisciplined = applyHitterSignalDiscipline(priceDisciplined);
   const evidenceGraded = applyEvidenceGradeCorrections(concentrationDisciplined);
   const underPromoted = applyValidatedUnderActionablePromotions(evidenceGraded);
-  return applyValidatedHomeRunActionablePromotions(underPromoted);
+  return applyValidatedBatterStrikeoutsAccuracyPromotions(underPromoted);
 }
 
 const HITTER_LEAN_ELIGIBLE_MARKETS = new Set([
@@ -1428,6 +1426,7 @@ function applyValidatedUnderActionablePromotions(
   rows: PlayerPropPreviewRow[],
 ): PlayerPropPreviewRow[] {
   const hrrScores = new Map<string, ReturnType<typeof scoreHrrUnderAccuracyCandidate>>();
+  const doublesScores = new Map<string, ReturnType<typeof scoreBatterDoublesUnderAccuracyCandidate>>();
   const eligible = rows.filter((row) => {
     if (
       row.side !== "under"
@@ -1472,10 +1471,20 @@ function applyValidatedUnderActionablePromotions(
         americanOdds: row.odds,
       })
       : null;
+    const doublesAccuracy = row.market === "batter_doubles"
+      ? scoreBatterDoublesUnderAccuracyCandidate({
+        line: row.line,
+        seasonValues,
+        marketProbability: row.marketProbability,
+        americanOdds: row.odds,
+      })
+      : null;
     if (hrrAccuracy?.eligible) hrrScores.set(row.id, hrrAccuracy);
+    if (doublesAccuracy?.eligible) doublesScores.set(row.id, doublesAccuracy);
     if (hitsPriceEdge) return true;
     if (doublesResidual) return true;
     if (hrrAccuracy?.eligible) return true;
+    if (doublesAccuracy?.eligible) return true;
     return row.playGrade === "WATCHLIST" && genericEligible;
   });
 
@@ -1493,18 +1502,20 @@ function applyValidatedUnderActionablePromotions(
   return rows.map((row) => {
     if (!promotedIds.has(row.id)) return row;
     const hrrScore = hrrScores.get(row.id);
+    const doublesScore = doublesScores.get(row.id);
+    const accuracyScore = hrrScore ?? doublesScore;
     return {
       ...row,
-      ...(hrrScore ? {
-        modelProbability: hrrScore.independentProbability,
-        independentProbability: hrrScore.independentProbability,
-        finalProbability: hrrScore.finalProbability,
-        shrinkageWeight: 0.25,
-        modelEdge: hrrScore.finalEdge,
-        expectedValue: hrrScore.expectedValue,
-        fairOdds: safeFairOdds(hrrScore.finalProbability),
-        overProbability: 1 - hrrScore.finalProbability,
-        underProbability: hrrScore.finalProbability,
+      ...(accuracyScore ? {
+        modelProbability: accuracyScore.independentProbability,
+        independentProbability: accuracyScore.independentProbability,
+        finalProbability: accuracyScore.finalProbability,
+        shrinkageWeight: hrrScore ? 0.25 : 0.75,
+        modelEdge: accuracyScore.finalEdge,
+        expectedValue: accuracyScore.expectedValue,
+        fairOdds: safeFairOdds(accuracyScore.finalProbability),
+        overProbability: 1 - accuracyScore.finalProbability,
+        underProbability: accuracyScore.finalProbability,
       } : {}),
       playGrade: "BEST_ANGLE",
       units: 0.25,
@@ -1513,6 +1524,7 @@ function applyValidatedUnderActionablePromotions(
         "VALIDATED_MARKET_PROMOTION",
         "VALIDATED_UNDER_BEST_ANGLE",
         ...(hrrScore ? ["VALIDATED_HRR_UNDER_ACCURACY_BEST_ANGLE"] : []),
+        ...(doublesScore ? ["VALIDATED_DOUBLES_UNDER_ACCURACY_BEST_ANGLE"] : []),
         ...(row.market === "batter_doubles"
           ? ["VALIDATED_DOUBLES_RESIDUAL_BEST_ANGLE"]
           : []),
@@ -1521,98 +1533,55 @@ function applyValidatedUnderActionablePromotions(
   });
 }
 
-function applyValidatedHomeRunActionablePromotions(
+function applyValidatedBatterStrikeoutsAccuracyPromotions(
   rows: PlayerPropPreviewRow[],
 ): PlayerPropPreviewRow[] {
-  const freshOffers = rows.filter((row) =>
-    row.market === "batter_home_runs"
-    && row.side === "over"
-    && row.line === 0.5
-    && row.playGrade !== "PENDING_DATA"
-    && row.lineupStatus?.status !== "not_in_lineup"
-    && row.missingFeatures.every(isSignalOptionalMemberFeature)
-    && !row.reasonCodes.includes("STALE_ODDS")
-    && !row.reasonCodes.includes("MODEL_CONTEXT_NOT_INTEGRATED")
-    && !row.reasonCodes.includes("INVALID_PRICE_FORMAT"));
-  const eligible = [...groupRows(freshOffers, signalOfferKey).values()]
-    .flatMap((offers) => {
-      const distinctBooks = new Set(offers.map((row) => row.book));
-      if (distinctBooks.size < 2) return [];
-      const marketProbability = consensusMarketProbabilityFromAmericanOdds(
-        offers.map((row) => row.odds),
-      );
-      if (marketProbability === null) return [];
-      const [bestOffer] = [...offers].sort((a, b) =>
-        b.odds - a.odds || comparePropSignals(a, b));
-      if (!bestOffer) return [];
-
-      const seasonValues = bestOffer.recentForm?.samples?.season.values
-        .filter((value) => Number.isFinite(value)) ?? [];
-      if (seasonValues.length < 10) return [];
-      const seasonMean = averageNumber(seasonValues);
-      const auditProjection = (
-        seasonMean * seasonValues.length
-        + HOME_RUN_PROJECTION_PRIOR * HOME_RUN_PROJECTION_PRIOR_GAMES
-      ) / (seasonValues.length + HOME_RUN_PROJECTION_PRIOR_GAMES);
-
-      const recentValues = seasonValues.slice(0, 20);
-      const recentSurvival = (
-        recentValues.filter((value) => value > bestOffer.line).length
-        + 2 * marketProbability
-      ) / (recentValues.length + 2);
-      const score = scoreHomeRunRelativeQualityCandidate({
-        projection: auditProjection,
-        recentSurvival,
-        marketProbability,
-        americanOdds: bestOffer.odds,
-        line: bestOffer.line,
-      });
-      return score.eligible ? [{
-        row: bestOffer,
-        score,
-        auditProjection,
-        marketProbability,
-      }] : [];
+  const scores = new Map<string, ReturnType<typeof scoreBatterStrikeoutsOverAccuracyCandidate>>();
+  const eligible = rows.filter((row) => {
+    if (
+      row.market !== "batter_strikeouts"
+      || row.side !== "over"
+      || (row.playGrade !== "WATCHLIST" && row.playGrade !== "LEAN")
+      || row.marketProbability === null
+      || row.lineupStatus?.status === "not_in_lineup"
+      || row.reasonCodes.includes("STALE_ODDS")
+      || row.reasonCodes.includes("MODEL_CONTEXT_NOT_INTEGRATED")
+      || row.reasonCodes.includes("INVALID_PRICE_FORMAT")
+    ) return false;
+    const score = scoreBatterStrikeoutsOverAccuracyCandidate({
+      line: row.line,
+      seasonValues: row.recentForm?.samples?.season.values ?? [],
+      marketProbability: row.marketProbability,
+      americanOdds: row.odds,
     });
-
-  const promotedIds = selectStandardizedQualityCandidateIds(
-    eligible
-      .map(({ row, score }) => ({
-        id: row.id,
-        expectedValue: score.expectedValue,
-      })),
-  );
-  if (!promotedIds.size) return rows;
-
-  const promotedById = new Map(
-    eligible
-      .filter(({ row }) => promotedIds.has(row.id))
-      .map((candidate) => [candidate.row.id, candidate]),
-  );
+    if (score.eligible) scores.set(row.id, score);
+    return score.eligible;
+  });
+  const bestOfferIds = new Set<string>();
+  for (const offers of groupRows(eligible, signalOfferKey).values()) {
+    const [best] = [...offers].sort(comparePropSignals);
+    if (best) bestOfferIds.add(best.id);
+  }
   return rows.map((row) => {
-    const promoted = promotedById.get(row.id);
-    if (!promoted) return row;
-    const { score, auditProjection, marketProbability } = promoted;
+    if (!bestOfferIds.has(row.id)) return row;
+    const score = scores.get(row.id)!;
     return {
       ...row,
-      modelProbability: score.modelProbability,
-      independentProbability: score.modelProbability,
-      marketProbability,
+      modelProbability: score.independentProbability,
+      independentProbability: score.independentProbability,
       finalProbability: score.finalProbability,
-      shrinkageWeight: HOME_RUN_STANDARDIZED_QUALITY_POLICY.reliabilityWeight,
-      modelEdge: score.finalProbability - marketProbability,
+      shrinkageWeight: 0.5,
+      modelEdge: score.finalEdge,
       expectedValue: score.expectedValue,
       fairOdds: safeFairOdds(score.finalProbability),
-      projection: auditProjection,
-      projectionSource: "model",
       overProbability: score.finalProbability,
       underProbability: 1 - score.finalProbability,
-      playGrade: "LEAN",
+      playGrade: "BEST_ANGLE",
       units: 0.25,
       reasonCodes: uniqueStrings([
-        ...row.reasonCodes.filter((code) => code !== "MARKET_RESEARCH_ONLY"),
-        "LONGSHOT_VALUE_CONTEXT",
-        "VALIDATED_HOME_RUN_CONSENSUS_BEST_PRICE_PROMOTION",
+        ...row.reasonCodes,
+        "VALIDATED_MARKET_PROMOTION",
+        "VALIDATED_BATTER_STRIKEOUTS_OVER_ACCURACY_BEST_ANGLE",
       ]),
     };
   });

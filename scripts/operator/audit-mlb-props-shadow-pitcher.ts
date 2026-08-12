@@ -92,6 +92,8 @@ function compareBoards(
   let weakStrikeoutProjectionChanges = 0;
   let weakBaselineActionablePromotions = 0;
   let weakBaselineActionableDemotions = 0;
+  const promotions: Array<Record<string, unknown>> = [];
+  const demotions: Array<Record<string, unknown>> = [];
   for (const row of candidate) {
     const before = prior.get(rowKey(row));
     if (!before) continue;
@@ -99,8 +101,13 @@ function compareBoards(
     const beforeActionable = actionable(before);
     const afterActionable = actionable(row);
     if (beforeActionable && afterActionable) retainedActionable++;
-    else if (!beforeActionable && afterActionable) promotedActionable++;
-    else if (beforeActionable && !afterActionable) demotedActionable++;
+    else if (!beforeActionable && afterActionable) {
+      promotedActionable++;
+      promotions.push(changeSummary(before, row));
+    } else if (beforeActionable && !afterActionable) {
+      demotedActionable++;
+      demotions.push(changeSummary(before, row));
+    }
     if (row.modelInputWarnings?.includes("weak_pitcher_baseline")) {
       if (!beforeActionable && afterActionable) weakBaselineActionablePromotions++;
       if (beforeActionable && !afterActionable) weakBaselineActionableDemotions++;
@@ -124,6 +131,24 @@ function compareBoards(
     weakStrikeoutProjectionChanges,
     weakBaselineActionablePromotions,
     weakBaselineActionableDemotions,
+    promotionsByMarket: countBy(promotions, (row) => String(row.market)),
+    demotionsByMarket: countBy(demotions, (row) => String(row.market)),
+    promotions,
+    demotions,
+  };
+}
+
+function changeSummary(before: PlayerPropPreviewRow, after: PlayerPropPreviewRow) {
+  return {
+    player: after.player,
+    market: after.market,
+    side: after.side,
+    line: after.line,
+    odds: after.odds,
+    book: after.book,
+    beforeGrade: before.playGrade,
+    afterGrade: after.playGrade,
+    addedReasons: after.reasonCodes.filter((reason) => !before.reasonCodes.includes(reason)),
   };
 }
 

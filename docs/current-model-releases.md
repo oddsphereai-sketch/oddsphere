@@ -209,11 +209,27 @@ home Elo/stat agreement rule. It does not alter moneyline or total decisions.
 
 ## MLB Player Props candidate
 
-- Release: `mlb_props_2026_08_12_r30`
+- Release: `mlb_props_2026_08_12_r31`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: private launch candidate; not publicly enabled
+
+The r31 accuracy release removes the losing Home Run Over actionable promotion
+while preserving the calibrated Home Runs probability and visible Watchlist
+card. That selector was 7-49 on validation and 8-67 on the untouched August
+holdout. Rich home-run context regressions and a replacement threshold selector
+both failed holdout and remain rejected.
+
+R31 pairs that demotion with two prior-only empirical/market accuracy sleeves.
+Doubles Under 0.5 was 66-14 on validation and 142-32 on holdout; Batter
+Strikeouts Over 0.5 was 12-6 and 27-14. Both require positive model-versus-market
+edge, nonnegative locked-price EV, an eligible price, existing lineup/data
+quality/freshness gates, and the best offer. The current-slate paired replay
+added ten Doubles Unders and two Batter Strikeouts Overs, removed six Home Run
+Overs, and produced an intended +6 actionable-board delta. Evidence and all
+rejected market-by-market challengers are recorded in
+`docs/model-audits/2026-08-12-player-props-market-by-market-accuracy-r31.md`.
 
 The r30 H+R+RBI accuracy sleeve promotes only market-anchored Under candidates
 selected on the July 24-31 validation window. It combines 25% prior-only,

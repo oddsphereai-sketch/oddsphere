@@ -9,7 +9,7 @@ import { getMlbPropMarketDefinition } from "./marketCatalog";
 // or stake must bump this value before deployment. Per-market versions remain
 // below for attribution; this release id prevents reports from silently mixing
 // boards produced by different combinations of market logic.
-export const MLB_PROPS_MODEL_RELEASE_ID = "mlb_props_2026_08_12_r30";
+export const MLB_PROPS_MODEL_RELEASE_ID = "mlb_props_2026_08_12_r31";
 
 const DEDICATED_MARKET_MODEL_VERSIONS: Partial<Record<MlbPropMarketKey, string>> = {
   pitcher_strikeouts: "pitcher_strikeouts_distribution_v6_weak_baseline_market_control",
@@ -19,11 +19,12 @@ const DEDICATED_MARKET_MODEL_VERSIONS: Partial<Record<MlbPropMarketKey, string>>
   batter_hits: `${BATTER_HITS_PA_MODEL_VERSION}_actionability_v6_uncapped_validated_under_best_angle`,
   batter_hits_runs_rbis: `${BATTER_HRR_MODEL_VERSION}_actionability_v6_empirical_market_anchored_under_accuracy`,
   batter_total_bases: "batter_total_bases_event_distribution_integrated_read_v3_watchlist_only",
-  batter_home_runs: BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION,
+  batter_home_runs: `${BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION}_actionability_v2_over_promotion_removed`,
   batter_rbis: "batter_rbi_context_opportunity_integrated_read_v2_calibrated",
   batter_runs_scored: "batter_runs_context_opportunity_integrated_read_v4_unvalidated_special_promotion_removed",
   batter_singles: "batter_singles_event_distribution_integrated_read_v5_under_lean_only",
-  batter_doubles: "batter_doubles_market_residual_v1_validated_under_best_angle",
+  batter_doubles: "batter_doubles_market_residual_v1_actionability_v2_empirical_market_under_accuracy",
+  batter_strikeouts: "batter_strikeouts_event_distribution_integrated_read_v2_empirical_market_over_accuracy",
   batter_walks: "batter_walks_event_distribution_integrated_read_v2_under_lean_only",
 };
 
