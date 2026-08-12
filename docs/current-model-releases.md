@@ -209,11 +209,20 @@ home Elo/stat agreement rule. It does not alter moneyline or total decisions.
 
 ## MLB Player Props candidate
 
-- Release: `mlb_props_2026_08_11_r28`
+- Release: `mlb_props_2026_08_12_r29`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: private launch candidate; not publicly enabled
+
+The r29 pitcher workload guard prevents total season innings from being divided by a small
+starter count for mixed-role pitchers. When the starter baseline is weak, current official start
+logs own workload and the strikeout probability is held to the de-vig target-book market as a
+non-actionable control. In 21 untouched weak-baseline strikeout observations across 10 dates,
+the market control beat r28 on Brier score (`0.232115` vs `0.254888`), log loss (`0.657115` vs
+`0.703085`), and 55% selected-side hit rate (`66.7%` vs `47.1%`). Established starters remain on
+the existing model path. Evidence and board impact are recorded in
+`docs/model-audits/2026-08-12-player-props-weak-pitcher-workload-r29.md`.
 
 The r28 probable-pitcher contract uses MLB Stats as the authoritative starter source and fills
 only an empty game side from ESPN's published probable, provided the name resolves to exactly
@@ -269,6 +278,18 @@ distribution, or grade-policy identifier differs from the champion. The reader h
 unlocked payloads but preserves locked historical recommendations.
 
 ## Explicitly not active
+
+### MLB Player Props pitcher shadow
+
+- Shadow release: `mlb_props_shadow_pitcher_2026_08_12_r1`
+- Feature contract: `mlb_props_shared_pitcher_features_v1_2026_08_12`
+- Scope: prospective T-60 evidence for pitcher strikeouts; pitcher outs retained as a control
+- Production effect: none; active props bundle remains `mlb_props_2026_08_12_r29`
+- Evidence: `docs/model-audits/2026-08-12-player-props-shared-pitcher-shadow-r1.md`
+
+The shadow path reuses the authoritative props refresh and records its immutable output in lock
+metadata. It cannot change a member-visible probability, side, grade, or stake. Promotion requires
+new chronological holdout evidence and a later active release identifier.
 
 The following research findings are not production rules and must not be inferred from older
 audit documents:

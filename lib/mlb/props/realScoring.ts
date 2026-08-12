@@ -1,12 +1,20 @@
 import { DEFAULT_PROP_RECOMMENDATION_CONFIG, type MlbPropMarketKey, type PropReasonCode } from "./config";
 import type { MlbPropBacktestResult } from "./backtest";
 import { normalizePlayerName } from "./entityResolution";
-import { legacyPitcherBaselineProbability, modelForRealPitcherMarket } from "./models";
+import {
+  legacyPitcherBaselineProbability,
+  modelForRealPitcherMarket,
+  type PropModelPrediction,
+} from "./models";
 import { recommendPropBet, type PropRecommendation } from "./recommendations";
-import { expected_value, remove_vig_two_way } from "./oddsMath";
+import { expected_value, fair_american_odds, remove_vig_two_way } from "./oddsMath";
 import type { MlbGameEntity, MlbProbablePitcher, PropOddsSnapshot } from "./providers";
 import { resolveMlbStatsTeamId, resolveMlbTeamAlias } from "./mlbTeamAliases";
 import type { PropFeatureSnapshot } from "./featureBuilder";
+import {
+  scoreShadowPitcherProp,
+  type MlbPropsShadowPitcherPrediction,
+} from "./shadowPitcherModel";
 import { allMlbPropMarketDefinitions, getMlbPropMarketDefinition, marketDisplayStatus } from "./marketCatalog";
 import type { PropGrade } from "./propGrades";
 import { createHash } from "crypto";
@@ -87,6 +95,18 @@ export type RealPitcherModelContext = {
   opponentLeagueStrikeoutRate: number | null;
   opponentOps: number | null;
   opponentLeagueOps: number | null;
+  opponentWalkRate?: number | null;
+  opponentLeagueWalkRate?: number | null;
+  opponentBattingAverage?: number | null;
+  opponentLeagueBattingAverage?: number | null;
+  opponentHomeRunRate?: number | null;
+  opponentLeagueHomeRunRate?: number | null;
+  pitchArsenalWhiffPercent?: number | null;
+  pitchArsenalChasePercent?: number | null;
+  pitchArsenalZonePercent?: number | null;
+  pitchArsenalBattingAverageAllowed?: number | null;
+  pitchArsenalXwobaAllowed?: number | null;
+  pitchArsenalPitchesTracked?: number | null;
   parkStrikeoutFactor: number | null;
   parkRunFactor: number | null;
   temperatureF: number | null;
@@ -128,6 +148,7 @@ export type RealPropsCandidateSummary = {
   starterConfidence?: number;
   starterReasonCode?: string | null;
   featureWarnings: string[];
+  shadowPrediction: MlbPropsShadowPitcherPrediction;
 };
 
 export type RealPropsScoringBundle = {
@@ -460,7 +481,12 @@ export async function scoreRealMlbPropsForPaper(args: {
     });
     const warnings = featureWarningCodes(feature, group);
     for (const warning of warnings) inc(featureWarnings, warning);
-    const [prediction] = await model.predict_proba([feature]);
+    const [independentPrediction] = await model.predict_proba([feature]);
+    const prediction = group.marketKey === "pitcher_strikeouts"
+      && warnings.includes("weak_pitcher_baseline")
+      ? weakPitcherStrikeoutMarketControl(independentPrediction, group)
+      : independentPrediction;
+    const shadowPrediction = scoreShadowPitcherProp(feature);
     const modelProjection = modelProjectionFromExplanation(group.marketKey, prediction.explanation);
     candidatesScored++;
     const featureConfidence = featureConfidenceScore(feature, group);
@@ -591,6 +617,7 @@ export async function scoreRealMlbPropsForPaper(args: {
       featureWarnings: warnings,
       displayStatus: marketDisplayStatus(group.marketKey, featureConfidence, true),
       modelFamily: definition.modelFamily,
+      shadowPrediction,
     });
   }
 
@@ -1039,6 +1066,86 @@ function buildPitcherOutsPeerConsensus(
   return out;
 }
 
+export type PitcherStarterWorkload = {
+  outsPerStart: number;
+  battersFacedPerStart: number;
+  source: "season_starter" | "recent_starts" | "appearance_fallback" | "default";
+};
+
+export function resolvePitcherStarterWorkload(args: {
+  starts: number | null;
+  gamesPitched: number | null;
+  innings: number | null;
+  battersFaced: number | null;
+  recentStarts: number | null;
+  recentOuts: number | null;
+  recentBattersFaced: number | null;
+}): PitcherStarterWorkload {
+  const starterShare = args.starts !== null && args.gamesPitched !== null
+    ? args.starts / args.gamesPitched
+    : null;
+  const seasonStarterReliable = args.starts !== null
+    && args.innings !== null
+    && args.starts >= 5
+    && (starterShare === null || starterShare >= 0.5);
+  if (seasonStarterReliable) {
+    const outsPerStart = args.innings! * 3 / args.starts!;
+    return {
+      outsPerStart,
+      battersFacedPerStart: args.battersFaced !== null
+        ? args.battersFaced / args.starts!
+        : Math.max(12, outsPerStart * 1.42),
+      source: "season_starter",
+    };
+  }
+  if (
+    args.recentStarts !== null
+    && args.recentStarts > 0
+    && args.recentOuts !== null
+    && args.recentBattersFaced !== null
+  ) {
+    return {
+      outsPerStart: args.recentOuts / args.recentStarts,
+      battersFacedPerStart: args.recentBattersFaced / args.recentStarts,
+      source: "recent_starts",
+    };
+  }
+  if (args.gamesPitched !== null && args.innings !== null) {
+    const outsPerAppearance = args.innings * 3 / args.gamesPitched;
+    return {
+      outsPerStart: Math.max(3, outsPerAppearance),
+      battersFacedPerStart: Math.max(12, outsPerAppearance * 1.42),
+      source: "appearance_fallback",
+    };
+  }
+  return { outsPerStart: 15.6, battersFacedPerStart: 22.152, source: "default" };
+}
+
+function weakPitcherStrikeoutMarketControl(
+  prediction: PropModelPrediction,
+  group: GroupedTwoWay,
+): PropModelPrediction {
+  const market = remove_vig_two_way(group.over.americanOdds, group.under.americanOdds);
+  const side = market.over >= market.under ? "over" : "under";
+  const probability = side === "over" ? market.over : market.under;
+  return {
+    ...prediction,
+    side,
+    modelProbability: probability,
+    fairDecimalOdds: 1 / probability,
+    fairAmericanOdds: fair_american_odds(probability),
+    explanation: {
+      ...prediction.explanation,
+      probabilityAlreadyMarketAnchored: true,
+      weakPitcherBaselineMarketControl: true,
+      independentSide: prediction.side,
+      independentProbability: prediction.modelProbability,
+      marketOverProbability: market.over,
+      marketUnderProbability: market.under,
+    },
+  };
+}
+
 function buildConservativePitcherFeature(args: {
   group: GroupedTwoWay;
   asOfTimestamp: string;
@@ -1068,8 +1175,6 @@ function buildConservativePitcherFeature(args: {
   const recentBattersFaced = positive(args.seasonStat?.recentBattersFaced);
   const recentPitchCount = positive(args.seasonStat?.recentPitchCount);
   const hasSeasonPitching = isPitcher && starts !== null && innings !== null && strikeouts !== null;
-  const outsPerStart = hasSeasonPitching ? (innings * 3) / starts : 15.6;
-  const kPerStart = hasSeasonPitching ? strikeouts / starts : 4.8;
   const recentKPerStart = recentStarts && recentStrikeouts !== null ? recentStrikeouts / recentStarts : null;
   const recentOutsPerStart = recentStarts && recentOuts !== null ? recentOuts / recentStarts : null;
   const recentThreeOutsPerStart =
@@ -1079,7 +1184,18 @@ function buildConservativePitcherFeature(args: {
   const recentStrikeoutRate = recentBattersFaced && recentStrikeouts !== null
     ? recentStrikeouts / recentBattersFaced
     : null;
-  const battersFacedProxy = battersFaced && starts ? battersFaced / starts : Math.max(12, outsPerStart * 1.42);
+  const workload = resolvePitcherStarterWorkload({
+    starts,
+    gamesPitched,
+    innings,
+    battersFaced,
+    recentStarts,
+    recentOuts,
+    recentBattersFaced,
+  });
+  const outsPerStart = workload.outsPerStart;
+  const battersFacedProxy = workload.battersFacedPerStart;
+  const kPerStart = hasSeasonPitching ? strikeouts / starts : 4.8;
   const hitsAllowedPerStart = hitsAllowed && starts ? hitsAllowed / starts : 5;
   const walksPerStart = walks && starts ? walks / starts : 1.8;
   const earnedRunsPerStart = earnedRuns && starts ? earnedRuns / starts : 2.6;
@@ -1103,6 +1219,17 @@ function buildConservativePitcherFeature(args: {
     opponent_league_strikeout_rate: args.modelContext?.opponentLeagueStrikeoutRate ?? null,
     opponent_ops: args.modelContext?.opponentOps ?? null,
     opponent_league_ops: args.modelContext?.opponentLeagueOps ?? null,
+    opponent_walk_rate: args.modelContext?.opponentWalkRate ?? null,
+    opponent_league_walk_rate: args.modelContext?.opponentLeagueWalkRate ?? null,
+    opponent_batting_average: args.modelContext?.opponentBattingAverage ?? null,
+    opponent_league_batting_average: args.modelContext?.opponentLeagueBattingAverage ?? null,
+    opponent_home_run_rate: args.modelContext?.opponentHomeRunRate ?? null,
+    opponent_league_home_run_rate: args.modelContext?.opponentLeagueHomeRunRate ?? null,
+    pitch_arsenal_whiff_percent: args.modelContext?.pitchArsenalWhiffPercent ?? null,
+    pitch_arsenal_chase_percent: args.modelContext?.pitchArsenalChasePercent ?? null,
+    pitch_arsenal_zone_percent: args.modelContext?.pitchArsenalZonePercent ?? null,
+    pitch_arsenal_batting_average_allowed: args.modelContext?.pitchArsenalBattingAverageAllowed ?? null,
+    pitch_arsenal_xwoba_allowed: args.modelContext?.pitchArsenalXwobaAllowed ?? null,
     park_strikeout_factor: args.modelContext?.parkStrikeoutFactor ?? null,
     park_run_factor: args.modelContext?.parkRunFactor ?? null,
     temperature_f: args.modelContext?.temperatureF ?? null,
@@ -1168,12 +1295,15 @@ function buildConservativePitcherFeature(args: {
     season_pitching_er: earnedRuns,
     season_batters_faced: battersFaced,
     season_pitch_count: pitchCount,
+    starter_workload_source: workload.source,
     peer_consensus_books: args.peerConsensus?.books ?? 0,
     starts_reliable: starts !== null && starts >= 5,
     starter_confirmed: starterConfirmed,
     line_updated_at_present: Boolean(stringValue(rawObj(args.group.over.rawPayload).updated_at) && stringValue(rawObj(args.group.under.rawPayload).updated_at)),
     opponent_k_profile: typeof args.modelContext?.opponentStrikeoutRate === "number" && typeof args.modelContext.opponentLeagueStrikeoutRate === "number",
     opponent_profile: typeof args.modelContext?.opponentOps === "number" && typeof args.modelContext.opponentLeagueOps === "number",
+    pitch_arsenal: typeof args.modelContext?.pitchArsenalWhiffPercent === "number",
+    pitch_arsenal_pitches_tracked: args.modelContext?.pitchArsenalPitchesTracked ?? 0,
     opponent_projected_lineup: false,
     feature_confidence: confidence,
     feature_confidence_bucket: confidenceBucket(confidence),

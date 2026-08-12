@@ -1320,6 +1320,35 @@ async function main() {
   check("real scorer reuses other cached books for pitcher-outs peer consensus", !realDryRun.featureAvailabilityWarnings.pitcher_outs_peer_consensus_missing);
   check("real scorer passes recent-three workload into pitcher-outs compact core", !realDryRun.featureAvailabilityWarnings.pitcher_outs_recent_three_missing);
   check("real scorer does not double-anchor verified pitcher-outs probabilities", realPitcherOutsCandidate?.shrinkageWeight === 1);
+  const mixedRoleDryRun = await scoreRealMlbPropsDryRun({
+    games: realGames,
+    probablePitchers: realProbables,
+    date: "2026-07-07",
+    asOfTimestamp: "2026-07-07T15:00:00.000Z",
+    odds: [
+      sharpNymTor,
+      realOdds({ ...oddsSeed(sharpNymTor), side: "under", americanOdds: -120 }),
+    ],
+    seasonStatsByPlayerId: new Map([
+      ["mlbstats-player-999", {
+        playerId: "mlbstats-player-999",
+        pitchingGs: 2,
+        pitchingGp: 16,
+        pitchingIp: 34,
+        pitchingK: 36,
+        pitchingKPer9: 9.53,
+        recentStarts: 2,
+        recentStrikeouts: 13,
+        recentOuts: 28,
+        recentBattersFaced: 42,
+        recentPitchCount: 155,
+      }],
+    ]),
+  });
+  const mixedRoleStrikeouts = mixedRoleDryRun.sampleCandidates.find((row) => row.marketKey === "pitcher_strikeouts");
+  check("weak mixed-role strikeout baseline uses recent-start workload", (mixedRoleStrikeouts?.modelProjection ?? 99) < 8);
+  check("weak mixed-role strikeout baseline uses market probability control", mixedRoleStrikeouts?.shrinkageWeight === 1 && mixedRoleStrikeouts.modelProbability === mixedRoleStrikeouts.marketProbability);
+  check("weak mixed-role market control cannot become actionable", mixedRoleStrikeouts?.status === "no_play" && mixedRoleStrikeouts.featureWarnings.includes("weak_pitcher_baseline"));
   const realPaperScore = await scoreRealMlbPropsForPaper({
     games: realGames,
     probablePitchers: realProbables,

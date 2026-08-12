@@ -368,6 +368,14 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       probablePitcherSeasonStats: [...seasonStats.entries()],
       openingPropOdds: snapshotOpeningOdds,
       marketModelVersions: activeMlbPropMarketModelVersions(),
+      shadowPitcherPredictions: scoring?.summary.sampleCandidates.map((candidate) => ({
+        gameId: candidate.gameId,
+        playerId: candidate.playerId,
+        market: candidate.marketKey,
+        line: candidate.line,
+        sportsbook: displayBook(candidate.sportsbook),
+        prediction: candidate.shadowPrediction,
+      })) ?? [],
     },
   };
   enforceSnapshotPayloadLimits(snapshot);
@@ -801,12 +809,25 @@ function buildPitcherModelContext(args: {
     if (!playerId) continue;
     const evidence = args.researchByKey.get(researchKey(row.bdlPlayerId, row.odds.marketKey, row.game.id))?.evidence;
     const opponent = evidence?.opponentProfile ?? null;
+    const pitchArsenal = evidence?.pitchArsenal ?? null;
     const environment = evidence?.environment ?? null;
     out.set(realPitcherModelContextKey(row.game.id, playerId), {
       opponentStrikeoutRate: opponent?.strikeoutRate.value ?? null,
       opponentLeagueStrikeoutRate: opponent?.strikeoutRate.leagueAverage ?? null,
       opponentOps: opponent?.ops.value ?? null,
       opponentLeagueOps: opponent?.ops.leagueAverage ?? null,
+      opponentWalkRate: opponent?.walkRate.value ?? null,
+      opponentLeagueWalkRate: opponent?.walkRate.leagueAverage ?? null,
+      opponentBattingAverage: opponent?.battingAverage.value ?? null,
+      opponentLeagueBattingAverage: opponent?.battingAverage.leagueAverage ?? null,
+      opponentHomeRunRate: opponent?.homeRunRate.value ?? null,
+      opponentLeagueHomeRunRate: opponent?.homeRunRate.leagueAverage ?? null,
+      pitchArsenalWhiffPercent: weightedPitchArsenalMetric(pitchArsenal, "whiffPercent"),
+      pitchArsenalChasePercent: weightedPitchArsenalMetric(pitchArsenal, "chasePercent"),
+      pitchArsenalZonePercent: weightedPitchArsenalMetric(pitchArsenal, "zonePercent"),
+      pitchArsenalBattingAverageAllowed: weightedPitchArsenalMetric(pitchArsenal, "battingAverageAllowed"),
+      pitchArsenalXwobaAllowed: weightedPitchArsenalMetric(pitchArsenal, "xwobaAllowed"),
+      pitchArsenalPitchesTracked: pitchArsenal?.pitchesTracked ?? null,
       parkStrikeoutFactor: environment?.park.status === "available" ? environment.park.strikeoutFactor : null,
       parkRunFactor: environment?.park.status === "available" ? environment.park.runFactor : null,
       temperatureF: environment?.weather.status === "available" ? environment.weather.temperatureF : null,
@@ -817,6 +838,24 @@ function buildPitcherModelContext(args: {
     });
   }
   return out;
+}
+
+function weightedPitchArsenalMetric(
+  arsenal: PlayerPropResearchEnrichment["evidence"]["pitchArsenal"],
+  metric: "whiffPercent" | "chasePercent" | "zonePercent" | "battingAverageAllowed" | "xwobaAllowed",
+): number | null {
+  if (!arsenal) return null;
+  const available = arsenal.pitches.filter((pitch) =>
+    typeof pitch[metric] === "number"
+    && Number.isFinite(pitch[metric])
+    && pitch.usagePercent > 0,
+  );
+  const totalUsage = available.reduce((sum, pitch) => sum + pitch.usagePercent, 0);
+  if (totalUsage <= 0) return null;
+  return available.reduce(
+    (sum, pitch) => sum + (pitch[metric] ?? 0) * pitch.usagePercent,
+    0,
+  ) / totalUsage;
 }
 
 async function loadRecentLogCache(

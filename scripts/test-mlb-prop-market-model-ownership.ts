@@ -11,6 +11,10 @@ import {
 } from "../lib/mlb/props/marketModelVersions";
 import { modelForRealPitcherMarket } from "../lib/mlb/props/models";
 import {
+  MLB_PROPS_SHADOW_PITCHER_FEATURE_VERSION,
+  MLB_PROPS_SHADOW_PITCHER_RELEASE_ID,
+} from "../lib/mlb/props/shadowPitcherModel";
+import {
   MLB_PROPS_GAME_LOCK_MINUTES,
   MLB_PROPS_TRACKING_POLICY_RELEASE_ID,
   mlbPropsGameLockCutoff,
@@ -21,15 +25,17 @@ const versions = activeMlbPropMarketModelVersions();
 assert.deepEqual(Object.keys(versions).sort(), [...MLB_PROP_MARKET_KEYS].sort());
 assert.equal(versions.batter_hits, `${BATTER_HITS_PA_MODEL_VERSION}_actionability_v6_uncapped_validated_under_best_angle`);
 assert.equal(versions.batter_hits_runs_rbis, `${BATTER_HRR_MODEL_VERSION}_actionability_v5_uncapped_validated_under_best_angle`);
-assert.equal(versions.pitcher_strikeouts, "pitcher_strikeouts_distribution_v5_global_weather_context");
-assert.equal(versions.pitcher_outs, "pitcher_outs_peer_consensus_compact_core_v5_global_weather_context");
+assert.equal(versions.pitcher_strikeouts, "pitcher_strikeouts_distribution_v6_weak_baseline_market_control");
+assert.equal(versions.pitcher_outs, "pitcher_outs_peer_consensus_compact_core_v6_mixed_role_workload_guard");
 assert.equal(versions.pitcher_walks, "pitcher_walks_distribution_v1_conservative_over_market_only_calibrated");
 assert.equal(versions.pitcher_earned_runs, "pitcher_earned_runs_distribution_v2_watchlist_only");
 assert.equal(versions.batter_runs_scored, "batter_runs_context_opportunity_integrated_read_v4_unvalidated_special_promotion_removed");
 assert.equal(versions.batter_home_runs, BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION);
 assert.equal(versions.batter_singles, "batter_singles_event_distribution_integrated_read_v5_under_lean_only");
 assert.equal(versions.batter_doubles, "batter_doubles_market_residual_v1_validated_under_best_angle");
-assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_08_11_r28");
+assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_08_12_r29");
+assert.equal(MLB_PROPS_SHADOW_PITCHER_RELEASE_ID, "mlb_props_shadow_pitcher_2026_08_12_r1");
+assert.equal(MLB_PROPS_SHADOW_PITCHER_FEATURE_VERSION, "mlb_props_shared_pitcher_features_v1_2026_08_12");
 assert.match(MLB_PROPS_MODEL_RELEASE_ID, /^mlb_props_\d{4}_\d{2}_\d{2}_r\d+$/);
 assert.equal(modelForRealPitcherMarket("pitcher_strikeouts")?.modelName, "pitcher_strikeouts_distribution_v3_verified");
 assert.equal(modelForRealPitcherMarket("pitcher_outs")?.modelName, "pitcher_outs_peer_consensus_compact_core_v3_verified");
@@ -80,6 +86,8 @@ assert.ok(!tracking.includes("ODDSPHERE_PROPS_TRACKING_LOCK_GRACE_MINUTES"));
 assert.ok(tracking.includes("MLB_PROPS_GAME_LOCK_AUDIT_ACTION"));
 assert.ok(tracking.includes("loadMlbPropsBoardSnapshotAtOrBefore"));
 assert.ok(tracking.includes("authoritativeGameLock: true"));
+assert.ok(tracking.includes("shadowPitcherPrediction"));
+assert.ok(tracking.includes("shadow.sportsbook === row.book"));
 
 const propsCron = readFileSync(resolve(process.cwd(), "app/api/cron/mlb-player-props-refresh/route.ts"), "utf8");
 assert.ok(propsCron.includes('leaseGroup: "prediction_pipeline"'));
@@ -90,5 +98,7 @@ assert.ok(pregameSweep.includes("loadLatestMlbPropsGameLockSchedule(date)"));
 assert.ok(pregameSweep.includes("publishMlbPropsMemberReadSnapshots(propsSnapshot, { compactOnly: true })"));
 
 assert.ok(liveBoard.includes("modelReleaseId: MLB_PROPS_MODEL_RELEASE_ID"));
+assert.ok(liveBoard.includes("shadowPitcherPredictions:"));
+assert.ok(liveBoard.includes("sportsbook: displayBook(candidate.sportsbook)"));
 
 console.log(`PASS market model ownership: ${Object.keys(versions).length} markets versioned; dedicated branches precede legacy hitter math`);

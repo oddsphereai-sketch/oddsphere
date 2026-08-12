@@ -3,6 +3,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { createClient } from "@supabase/supabase-js";
 import type { PlayerPropPreviewRow, PlayerPropsDashboardData } from "@/app/mlb/props/components/PlayerPropsDashboard";
 import type { RealPitcherSeasonStat } from "./realScoring";
+import type { MlbPropsShadowPitcherPrediction } from "./shadowPitcherModel";
 import type { PropOddsSnapshot } from "./providers";
 import {
   assertMlbPropsReleaseDoesNotRegress,
@@ -63,6 +64,14 @@ export type MlbPropsBoardSnapshot = {
     probablePitcherSeasonStats: Array<[string, RealPitcherSeasonStat]>;
     openingPropOdds?: PropOddsSnapshot[];
     marketModelVersions?: Record<string, string>;
+    shadowPitcherPredictions?: Array<{
+      gameId: string;
+      playerId: string;
+      market: string;
+      line: number;
+      sportsbook: string;
+      prediction: MlbPropsShadowPitcherPrediction;
+    }>;
   };
 };
 

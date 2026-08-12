@@ -642,6 +642,13 @@ export function trackingInsert(
   const actionable = ACTIONABLE_GRADES.has(row.playGrade) && row.units > 0;
   const bdlPlayerId = row.providerIds?.bdlPlayerId ?? null;
   const modelReleaseId = snapshot.modelContext?.modelReleaseId ?? "mlb_props_release_missing";
+  const shadowPitcherPrediction = snapshot.modelContext?.shadowPitcherPredictions?.find((shadow) =>
+    shadow.gameId === row.providerIds?.gameId
+    && prefixedInteger(shadow.playerId, "mlbstats-player-") === candidate.mlbPlayerId
+    && shadow.market === row.market
+    && shadow.line === row.line
+    && shadow.sportsbook === row.book,
+  )?.prediction ?? null;
   return {
     tracking_key: createHash("sha256")
       .update(`${candidate.naturalKey}|${modelReleaseId}|${MLB_PROPS_TRACKING_POLICY_RELEASE_ID}`)
@@ -703,6 +710,7 @@ export function trackingInsert(
       projection: row.projection,
       projectionSource: row.projectionSource,
       modelInputWarnings: row.modelInputWarnings,
+      shadowPitcherPrediction,
       publicDisplayEnabledAtLock: process.env.ODDSPHERE_PROPS_DISPLAY_ENABLED === "true",
     },
   };
