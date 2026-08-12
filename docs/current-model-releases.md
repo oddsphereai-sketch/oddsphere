@@ -4,16 +4,16 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-08-11
+Last reviewed: 2026-08-12
 
 ## MLB champion
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2`
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_11_r35`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v34_2026_08_11`
-- Grade policy: `mlb_public_grade_policy_v26_market_anchored_total_under_2026_08_11`
+- Decision release: `mlb_daily_edge_decision_2026_08_12_r36`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v35_2026_08_12`
+- Grade policy: `mlb_public_grade_policy_v27_market_led_moneyline_lean_2026_08_12`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
@@ -83,6 +83,19 @@ were positive in chronological train, validation, and holdout. Existing holds, m
 failures, projection conflict, side corrections, and no-bet gates still have priority. Evidence
 and rollback details are recorded in
 `docs/model-audits/2026-08-11-mlb-total-under-market-anchored-r35.md`.
+
+The August 12 r36 grade-policy release adds an independent, market-anchored Moneyline Lean
+sleeve after the existing top-one portfolio ranker. It can promote an otherwise non-actionable,
+unchanged final side only with complete high-quality/fresh data, a selected-side price from -120
+through +200, at least a one-point opener-to-current implied-probability move toward that side,
+and a frozen selected-side SharpAPI money-minus-ticket gap below 20 points. The recorded model
+probability must remain in the observed 50%-plus selected-side range; 50% is an evidence-coverage
+boundary, not a calibrated confidence claim. No 53%, 54%, or 55% grade threshold applies. It never
+changes the selected side, probability, price, Best Angle flag, or stake, and it cannot bypass a
+hold, no-bet, stale-data, missing-price, or side-correction gate. Current-head evidence was 23-11
+at +40.5% locked-price ROI across 15 dates; after removing overlap with the existing ranker it was
+22-11 at +36.5%. The August 12 paired dry run adds no current play. Evidence and rollback details
+are recorded in `docs/model-audits/2026-08-12-mlb-market-led-moneyline-lean-r36.md`.
 
 The August 11 tracking-contract v8 operational release keeps the shared MLB
 `prediction_pipeline` lease authoritative while preventing an ordinary writer collision from

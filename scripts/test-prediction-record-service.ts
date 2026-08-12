@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import {
   buildPredictionRecordsFromSlate,
+  applyMlbMarketLedMovementLean,
   applyMlbSharpPortfolioLean,
   americanToImpliedProb,
   buildPublicSplitsSnapshot,
@@ -34,6 +35,7 @@ import {
   ML_MARKET_DIVERGENCE_MIN_MODEL_PROB,
   ML_SIGNED_MARKET_RESISTANCE_RULE_ID,
   ML_SHARP_PORTFOLIO_LEAN_RULE_ID,
+  ML_MARKET_LED_MOVEMENT_LEAN_RULE_ID,
   ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID,
   ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID,
   ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID,
@@ -422,6 +424,30 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
   check(
     "portfolio ranker fails closed when its validated SharpAPI split is absent",
     playbookOnly[0]?.play_grade === "market_aligned",
+  );
+  const marketLed = applyMlbMarketLedMovementLean([
+    portfolioRecord(6, "MARKET@LED", -110, 0.51, 60, 75, "toward_pick"),
+    portfolioRecord(7, "PILE@ON", -110, 0.60, 50, 70, "toward_pick"),
+    portfolioRecord(8, "NO@MOVE", 105, 0.60, 40, 45, "neutral"),
+    portfolioRecord(9, "OUT@OF_SAMPLE", 105, 0.49, 40, 45, "toward_pick"),
+  ]);
+  check(
+    "market-led movement sleeve promotes a qualifying unchanged side without a 53/54/55% cutoff",
+    marketLed[0]?.play_grade === "lean" &&
+      (marketLed[0]?.snapshot_json as any)?.decision_pipeline?.action_rule_id ===
+        ML_MARKET_LED_MOVEMENT_LEAN_RULE_ID,
+  );
+  check(
+    "market-led movement sleeve rejects a 20-point SharpAPI money-ticket pile-on",
+    marketLed[1]?.play_grade === "market_aligned",
+  );
+  check(
+    "market-led movement sleeve requires a captured move toward the pick",
+    marketLed[2]?.play_grade === "market_aligned",
+  );
+  check(
+    "market-led movement sleeve does not extrapolate below its observed probability range",
+    marketLed[3]?.play_grade === "market_aligned",
   );
 }
 

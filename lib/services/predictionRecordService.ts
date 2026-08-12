@@ -424,6 +424,13 @@ export const ML_SHARP_PORTFOLIO_LEAN_RULE_ID =
 export const ML_SHARP_PORTFOLIO_MIN_MODEL_PROB = 0.50;
 export const ML_SHARP_PORTFOLIO_MIN_ODDS = -220;
 export const ML_SHARP_PORTFOLIO_MAX_ODDS = 200;
+export const ML_MARKET_LED_MOVEMENT_LEAN_RULE_ID =
+  "ml_market_led_toward_move_playable_price_lean_v1_2026_08_12";
+export const ML_MARKET_LED_MOVEMENT_MIN_OBSERVED_MODEL_PROB = 0.50;
+export const ML_MARKET_LED_MOVEMENT_MIN_ODDS = -120;
+export const ML_MARKET_LED_MOVEMENT_MAX_ODDS = 200;
+export const ML_MARKET_LED_MOVEMENT_MIN_MAGNITUDE_PP = 1;
+export const ML_MARKET_LED_MOVEMENT_MAX_MONEY_OVER_TICKETS_GAP_EXCLUSIVE = 20;
 export const ML_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID =
   "ml_calibrated_model_best_angle_path_v1_2026_07_27";
 export const ML_CALIBRATED_MODEL_LEAN_PATH_ID =
@@ -1724,6 +1731,88 @@ export function applyMlbSharpPortfolioLean(records: PredictionRecordRow[]): Pred
             "50% is the structural binary selected-side floor; learned market probability must still clear offered break-even and rank first on the slate.",
           validation_note:
             "Current-probability-head daily walk-forward top-one MLB moneyline ranker: 20-5 with positive locked-price ROI across July 11-August 8. Exact floor sensitivity showed no validated 55% cliff; additional second/third selections were not promoted.",
+        },
+      },
+    };
+  });
+}
+
+export function applyMlbMarketLedMovementLean(records: PredictionRecordRow[]): PredictionRecordRow[] {
+  return records.map((record) => {
+    if (
+      record.sport !== "mlb" ||
+      record.market !== "moneyline" ||
+      record.best_angle ||
+      record.play_grade === "lean" ||
+      record.play_grade === "best_angle" ||
+      record.no_bet ||
+      record.held ||
+      record.model_probability === null ||
+      record.model_probability < ML_MARKET_LED_MOVEMENT_MIN_OBSERVED_MODEL_PROB ||
+      record.odds_american === null ||
+      record.odds_american < ML_MARKET_LED_MOVEMENT_MIN_ODDS ||
+      record.odds_american > ML_MARKET_LED_MOVEMENT_MAX_ODDS ||
+      record.data_quality_tier !== "high"
+    ) return record;
+    const snapshot = readRecordOrNull(record.snapshot_json) ?? {};
+    const decision = readRecordOrNull(snapshot.decision_pipeline) ?? {};
+    const movement = readRecordOrNull(snapshot.line_movement);
+    const integrity = readRecordOrNull(snapshot.data_integrity);
+    if (
+      decision.final_side_changed === true ||
+      movement?.direction !== "toward_pick" ||
+      (readNumberOrNull(movement?.magnitude_pp) ?? -Infinity) <
+        ML_MARKET_LED_MOVEMENT_MIN_MAGNITUDE_PP ||
+      integrity?.stale !== "no" ||
+      integrity?.market_baseline_valid !== "yes"
+    ) return record;
+    const validatedSplit = pickedSourceAwareSplit(
+      snapshotSourceAwareSplits(snapshot),
+      "moneyline",
+      record.side,
+      "sharpapi",
+    );
+    if (validatedSplit.betsPct === null || validatedSplit.moneyPct === null) return record;
+    const moneyOverTicketsGap = validatedSplit.moneyPct - validatedSplit.betsPct;
+    if (moneyOverTicketsGap >= ML_MARKET_LED_MOVEMENT_MAX_MONEY_OVER_TICKETS_GAP_EXCLUSIVE) {
+      return record;
+    }
+    return {
+      ...record,
+      play_grade: "lean",
+      best_angle: false,
+      snapshot_json: {
+        ...snapshot,
+        decision_pipeline: {
+          ...decision,
+          board_action: "bet",
+          actionable_grade: "lean",
+          action_rule_id: ML_MARKET_LED_MOVEMENT_LEAN_RULE_ID,
+          promotion_rule_id: ML_MARKET_LED_MOVEMENT_LEAN_RULE_ID,
+          grade_source: "additive_market_rule",
+        },
+        ml_market_led_movement_lean: {
+          rule_id: ML_MARKET_LED_MOVEMENT_LEAN_RULE_ID,
+          action: "promote_unchanged_selected_side_to_lean",
+          odds_american: record.odds_american,
+          minimum_odds_inclusive: ML_MARKET_LED_MOVEMENT_MIN_ODDS,
+          maximum_odds_inclusive: ML_MARKET_LED_MOVEMENT_MAX_ODDS,
+          movement_direction: movement.direction,
+          movement_magnitude_pp: movement.magnitude_pp,
+          minimum_movement_magnitude_pp: ML_MARKET_LED_MOVEMENT_MIN_MAGNITUDE_PP,
+          picked_bets_pct: validatedSplit.betsPct,
+          picked_money_pct: validatedSplit.moneyPct,
+          money_over_tickets_gap: moneyOverTicketsGap,
+          maximum_gap_exclusive:
+            ML_MARKET_LED_MOVEMENT_MAX_MONEY_OVER_TICKETS_GAP_EXCLUSIVE,
+          split_provider: "sharpapi",
+          model_probability: record.model_probability,
+          minimum_observed_model_probability:
+            ML_MARKET_LED_MOVEMENT_MIN_OBSERVED_MODEL_PROB,
+          model_probability_role:
+            "historical_support_boundary_not_calibrated_confidence_cutoff",
+          validation_note:
+            "Current-head nonactionable MLB Moneylines: 23-11 overall and 10-5 in the later chronological segment; the rule is market anchored and never changes the selected side, probability, price, or stake.",
         },
       },
     };
@@ -4478,7 +4567,9 @@ export function buildPredictionRecordsFromSlate(args: {
     if (ou) proposed.push(ou);
     if (fi) proposed.push(fi);
   }
-  const ranked = args.sport === "mlb" ? applyMlbSharpPortfolioLean(proposed) : proposed;
+  const ranked = args.sport === "mlb"
+    ? applyMlbMarketLedMovementLean(applyMlbSharpPortfolioLean(proposed))
+    : proposed;
   return ranked.map(withMemberFacingAtLock);
 }
 
