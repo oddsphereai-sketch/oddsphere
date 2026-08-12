@@ -662,8 +662,8 @@ function CompactOddsMovement({ market, tone, lineClass }: { market: MarketEdgeDt
   const evaluationDiffers = evaluatedPrice !== null && currentPrice !== null && evaluatedPrice !== currentPrice;
   const movementRow = (label: string, value: CoherentMovement, selected: boolean) => {
     const direction = movementRowDirection(market, value, selected);
-    const directionClass = direction.tone === "emerald" ? "text-emerald-300" : direction.tone === "red" ? "text-red-300" : "text-gray-600";
-    const connectorClass = direction.tone === "emerald" ? "from-gray-700 via-emerald-500/50 to-emerald-400/50" : direction.tone === "red" ? "from-gray-700 via-red-500/55 to-red-400/55" : selected ? lineClass : "from-gray-700 via-violet-500/40 to-gray-600";
+    const directionClass = direction.tone === "emerald" ? "text-emerald-300" : direction.tone === "red" ? "text-red-300" : direction.tone === "amber" ? "text-amber-300" : "text-gray-600";
+    const connectorClass = direction.tone === "emerald" ? "from-gray-700 via-emerald-500/50 to-emerald-400/50" : direction.tone === "red" ? "from-gray-700 via-red-500/55 to-red-400/55" : direction.tone === "amber" ? "from-gray-700 via-amber-500/45 to-amber-400/45" : selected ? lineClass : "from-gray-700 via-violet-500/40 to-gray-600";
     return <div className="rounded-lg border border-white/[0.08] bg-black/20 p-3"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black text-gray-200">{label}</p><div className="flex items-center gap-2"><span className={`text-[7px] font-black uppercase tracking-wider ${directionClass}`}>{direction.label}</span><p className="text-[7px] font-semibold text-gray-600">{value.sportsbook ? formatSportsbook(value.sportsbook) : "book unavailable"}</p></div></div><div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2"><PricePoint label="First observed" value={formatAmerican(value.open)} line={value.openLine} /><div className={`h-px bg-gradient-to-r ${connectorClass}`} /><PricePoint label="Prior observed" value={formatAmerican(value.previous)} line={value.previousLine} /><div className={`h-px bg-gradient-to-r ${connectorClass}`} /><PricePoint label="Current" value={formatAmerican(value.current)} line={value.currentLine} tone={direction.tone} /></div>{value.coherentTrail ? null : <p className="mt-2 text-[7px] leading-relaxed text-gray-600">{selected ? "Directional movement is unavailable because a continuous same-book trail could not be verified. The current price is shown for context only." : "Current quote only; a continuous same-book movement trail is not available."}</p>}</div>;
   };
   return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Odds movement</p>{context ? <p className="mt-0.5 text-[7px] font-semibold text-gray-600">{context}</p> : null}</div><span className={`text-[7px] font-black uppercase tracking-wider ${tone === "emerald" ? "text-emerald-300" : tone === "amber" ? "text-amber-300" : "text-gray-500"}`}>{tone === "emerald" ? "Supporting" : tone === "amber" ? "Resisting" : "Neutral"}</span></div><div className="mt-3 grid gap-2">{movementRow(market.pick ?? "Picked side", movement, true)}{opposingMovement && market.opposingOddsTrail ? movementRow(market.opposingOddsTrail.label, opposingMovement, false) : null}</div>{evaluationDiffers ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">Current quote {formatAmerican(currentPrice)}{market.currentPriceSportsbook ? ` at ${formatSportsbook(market.currentPriceSportsbook)}` : ""}; recommendation evaluated at {formatAmerican(evaluatedPrice)}. Live movement does not silently re-grade the pick.</p> : null}{market.oddspherePostedAmerican != null && !publishedIsVerified ? <p className="mt-1 text-[7px] leading-relaxed text-gray-600">Published price omitted because its selected side was not explicitly verified.</p> : null}</section>;
@@ -818,7 +818,7 @@ function sameTrackedLine(first: number | null, current: number | null): boolean 
 type MarketPulseTone = "emerald" | "amber" | "gray";
 type CoherentMovement = ReturnType<typeof resolveCoherentMovement>;
 
-function movementRowDirection(market: MarketEdgeDto, movement: CoherentMovement, selected: boolean): { label: "Toward pick" | "Against pick" | "Flat" | "Unverified"; tone: "emerald" | "red" | "gray" } {
+function movementRowDirection(market: MarketEdgeDto, movement: CoherentMovement, selected: boolean): { label: "Toward pick" | "Against pick" | "Slight toward" | "Slight against" | "Flat" | "Unverified"; tone: "emerald" | "red" | "amber" | "gray" } {
   if (!movement.coherentTrail || movement.open === null || movement.current === null) return { label: "Unverified", tone: "gray" };
   if (!sameTrackedLine(movement.openLine, movement.currentLine)) {
     if (!selected) return { label: "Unverified", tone: "gray" };
@@ -826,8 +826,14 @@ function movementRowDirection(market: MarketEdgeDto, movement: CoherentMovement,
     return direction === "support" ? { label: "Toward pick", tone: "emerald" } : direction === "resistance" ? { label: "Against pick", tone: "red" } : { label: "Flat", tone: "gray" };
   }
   const impliedDelta = americanImpliedPct(movement.current) - americanImpliedPct(movement.open);
-  if (Math.abs(impliedDelta) < 0.05) return { label: "Flat", tone: "gray" };
+  const magnitude = Math.abs(impliedDelta);
+  if (magnitude < 0.1) return { label: "Flat", tone: "gray" };
   const helpsPick = selected ? impliedDelta > 0 : impliedDelta < 0;
+  // The Market Pulse already uses 1.25 implied-probability points as the
+  // boundary for a meaningful directional move. Keep the row-level visual
+  // language on that same scale: real but sub-threshold changes are amber,
+  // while only material resistance is red and material support is green.
+  if (magnitude < 1.25) return helpsPick ? { label: "Slight toward", tone: "amber" } : { label: "Slight against", tone: "amber" };
   return helpsPick ? { label: "Toward pick", tone: "emerald" } : { label: "Against pick", tone: "red" };
 }
 

@@ -327,7 +327,11 @@ check(
   candidateSource.includes("function movementRowDirection") &&
     candidateSource.includes('label: "Toward pick"') &&
     candidateSource.includes('label: "Against pick"') &&
+    candidateSource.includes('label: "Slight toward"') &&
+    candidateSource.includes('label: "Slight against"') &&
+    candidateSource.includes("magnitude < 1.25") &&
     candidateSource.includes('tone: "red"') &&
+    candidateSource.includes('tone: "amber"') &&
     candidateSource.includes("text-red-300"),
 );
 check(
