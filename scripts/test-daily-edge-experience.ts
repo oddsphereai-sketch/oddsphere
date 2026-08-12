@@ -323,6 +323,14 @@ check(
     candidateSource.includes("Group by book—not by point line"),
 );
 check(
+  "each verified movement row labels favorable and adverse direction independently",
+  candidateSource.includes("function movementRowDirection") &&
+    candidateSource.includes('label: "Toward pick"') &&
+    candidateSource.includes('label: "Against pick"') &&
+    candidateSource.includes('tone: "red"') &&
+    candidateSource.includes("text-red-300"),
+);
+check(
   "different primary and tracked-book prices are labeled instead of mixed",
   candidateSource.includes("displayedBook !== null") &&
     candidateSource.includes("displayedPrice === stop.american") &&

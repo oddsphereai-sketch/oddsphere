@@ -92,6 +92,11 @@ async function main() {
       if (!gameId) { failures.push(`${sport}/${game.id}: internal game id missing`); continue; }
       for (const [key, market] of Object.entries(game.markets ?? {}) as Array<[string, Row]>) {
         const marketType = dbMarket(sport, key);
+        const marketLineTrail = (market.lineTrail ?? []) as TrailStop[];
+        const terminalTrackedLine = marketLineTrail[marketLineTrail.length - 1]?.line ?? null;
+        const hasPointLineTransition = key === "total" && marketLineTrail.some(
+          (stop) => stop.line !== null && terminalTrackedLine !== null && !close(stop.line, terminalTrackedLine),
+        );
         const trails = [
           { name: "selected", side: selectedSide(game, key, market), stops: market.oddsTrail ?? [] },
           { name: "opposing", side: market.opposingOddsTrail?.side ?? null, stops: market.opposingOddsTrail?.stops ?? [] },
@@ -100,8 +105,8 @@ async function main() {
           if (trail.stops.length === 0) continue;
           verifiedTrails += 1;
           const terminal = trail.stops[trail.stops.length - 1] as TrailStop | undefined;
-          if (trail.stops.length < 3) failures.push(`${sport}/${game.id}/${key}/${trail.name}: fewer than first/prior/current observations`);
-          if (trail.stops[0]?.label !== "first") failures.push(`${sport}/${game.id}/${key}/${trail.name}: first observation is not labeled first`);
+          if (trail.stops.length < 3 && !hasPointLineTransition) failures.push(`${sport}/${game.id}/${key}/${trail.name}: fewer than first/prior/current observations`);
+          if (trail.stops.length > 1 && trail.stops[0]?.label !== "first") failures.push(`${sport}/${game.id}/${key}/${trail.name}: first observation is not labeled first`);
           if (terminal?.label !== "current" && terminal?.label !== "locked") failures.push(`${sport}/${game.id}/${key}/${trail.name}: terminal observation is not current/locked`);
           const books = new Set(trail.stops.map((stop: TrailStop) => stop.sportsbook).filter(Boolean));
           if (books.size !== 1) failures.push(`${sport}/${game.id}/${key}/${trail.name}: mixed or missing sportsbook`);
@@ -123,7 +128,7 @@ async function main() {
             }
           }
         }
-        const lineTrail = (market.lineTrail ?? []) as TrailStop[];
+        const lineTrail = marketLineTrail;
         if (lineTrail.length > 0) {
           verifiedLineTrails += 1;
           if (key !== "total") failures.push(`${sport}/${game.id}/${key}: unexpected total line trail`);
