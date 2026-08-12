@@ -614,6 +614,7 @@ function coherentPriceTrail(
   side: string | null,
   currentLine: number | null,
   fallbackCurrent: number | null,
+  allowLineChanges = false,
 ): WnbaPriceTrail {
   if (side === null) return { current: fallbackCurrent, open: null, previous: null, coherent: false };
   const books = new Set(
@@ -644,10 +645,13 @@ function coherentPriceTrail(
     // latest observation at this same book/side/line; selecting index 0 sent a
     // completed trail back to its opener and made the UI correctly reject it.
     const live = currentLineCandidates[currentLineCandidates.length - 1] ?? null;
-    if (history.length === 0 || !live) continue;
+    const trackedHistory = allowLineChanges || currentLine === null
+      ? history
+      : history.filter((row) => closeLine(row.line_value, currentLine));
+    if (trackedHistory.length === 0 || !live) continue;
 
     const stops: WnbaPriceTrailStop[] = [];
-    for (const row of [...history, live]) {
+    for (const row of [...trackedHistory, live]) {
       const stop = {
         american: row.odds_american as number,
         line: row.line_value,
@@ -735,10 +739,14 @@ function buildWnbaPickedPrices(
   const spreadCurrent = lockedSpread?.odds_american ?? pickedPrice(liveRows, "spread", spreadSide, spreadLockedLine) ?? latestPickedPrice(cappedHistoryRows, "spread", spreadSide, spreadLockedLine);
   const totalCurrentLine = lockedTotal?.line_value ?? currentLineValue(liveRows, "total", totalSide, totalLockedLine) ?? totalLockedLine;
   const spreadCurrentLine = lockedSpread?.line_value ?? currentLineValue(liveRows, "spread", spreadSide, spreadLockedLine) ?? spreadLockedLine;
+  const mlTrail = coherentPriceTrail(liveRows, cappedHistoryRows, "moneyline", mlSide, null, mlCurrent);
+  const totalTrail = coherentPriceTrail(liveRows, cappedHistoryRows, "total", totalSide, totalCurrentLine, totalCurrent);
+  const spreadTrail = coherentPriceTrail(liveRows, cappedHistoryRows, "spread", spreadSide, spreadCurrentLine, spreadCurrent);
   return {
-    ml: { ...coherentPriceTrail(liveRows, cappedHistoryRows, "moneyline", mlSide, null, mlCurrent), marketProb: pickedNoVigProb(liveRows, "moneyline", mlSide, null) },
-    total: { ...coherentPriceTrail(liveRows, cappedHistoryRows, "total", totalSide, totalCurrentLine, totalCurrent), marketProb: pickedNoVigProb(liveRows, "total", totalSide, totalLockedLine) },
-    spread: { ...coherentPriceTrail(liveRows, cappedHistoryRows, "spread", spreadSide, spreadCurrentLine, spreadCurrent), marketProb: pickedNoVigProb(liveRows, "spread", spreadSide, spreadLockedLine) },
+    ml: { ...mlTrail, current: lockedMl?.odds_american ?? mlTrail.movementCurrent ?? mlCurrent, marketProb: pickedNoVigProb(liveRows, "moneyline", mlSide, null) },
+    total: { ...totalTrail, current: lockedTotal?.odds_american ?? totalTrail.movementCurrent ?? totalCurrent, marketProb: pickedNoVigProb(liveRows, "total", totalSide, totalLockedLine) },
+    spread: { ...spreadTrail, current: lockedSpread?.odds_american ?? spreadTrail.movementCurrent ?? spreadCurrent, marketProb: pickedNoVigProb(liveRows, "spread", spreadSide, spreadLockedLine) },
+    totalLine: coherentPriceTrail(liveRows, cappedHistoryRows, "total", totalSide, totalCurrentLine, totalCurrent, true),
     opposingMl: coherentPriceTrail(liveRows, cappedHistoryRows, "moneyline", oppositeSide("moneyline", mlSide), null, pickedPrice(liveRows, "moneyline", oppositeSide("moneyline", mlSide), null)),
     opposingTotal: coherentPriceTrail(liveRows, cappedHistoryRows, "total", oppositeSide("total", totalSide), totalCurrentLine, pickedPrice(liveRows, "total", oppositeSide("total", totalSide), totalCurrentLine)),
     opposingSpread: coherentPriceTrail(liveRows, cappedHistoryRows, "spread", oppositeSide("spread", spreadSide), oppositeLine("spread", spreadCurrentLine), pickedPrice(liveRows, "spread", oppositeSide("spread", spreadSide), oppositeLine("spread", spreadCurrentLine))),
@@ -767,6 +775,7 @@ type WnbaPickedPrices = {
   opposingMl: WnbaPriceTrail;
   opposingTotal: WnbaPriceTrail;
   opposingSpread: WnbaPriceTrail;
+  totalLine: WnbaPriceTrail;
 };
 type PreviewGame = {
   game_id: number;
@@ -1117,6 +1126,7 @@ function buildMarket(opts: {
   whyLine: string;
   publicSplits?: WnbaPublicSplit[];
   priceTrail?: WnbaPriceTrail;
+  lineTrail?: WnbaPriceTrail;
   opposingPriceTrail?: WnbaPriceTrail;
   opposingSide?: "home" | "away" | "over" | "under" | null;
   opposingLabel?: string | null;
@@ -1196,6 +1206,16 @@ function buildMarket(opts: {
         label: index === 0 ? "first" as const : index === stops.length - 1 ? "current" as const : "move" as const,
       }))
     : undefined;
+  const lineTrail: MarketEdgeDto["lineTrail"] = opts.lineTrail?.coherent
+    ? (opts.lineTrail.stops ?? []).map((stop, index, stops) => ({
+        american: stop.american,
+        line: stop.line,
+        observedAt: stop.observedAt,
+        sportsbook: opts.lineTrail?.sportsbook ?? null,
+        source: index === stops.length - 1 ? "current_line" as const : "line_history" as const,
+        label: index === 0 ? "first" as const : index === stops.length - 1 ? "current" as const : "move" as const,
+      }))
+    : undefined;
   return {
     pick,
     confidence: confFrac,
@@ -1230,6 +1250,7 @@ function buildMarket(opts: {
     lastMoveLinePrev: opts.priceTrail?.previousLine ?? null,
     lastMoveLineNext: opts.priceTrail?.currentLine ?? null,
     oddsTrail,
+    lineTrail,
     opposingOddsTrail:
       opts.opposingSide && opts.opposingLabel && opposingStops && opposingStops.length > 0
         ? { side: opts.opposingSide, label: opts.opposingLabel, stops: opposingStops }
@@ -1350,6 +1371,7 @@ function adaptGame(
     whyLine: `Model projects ${game.model.total} pts vs market line ${game.total.line ?? "n/a"}.`,
     publicSplits: game.publicSplits?.total,
     priceTrail: game.pickedPrices?.total,
+    lineTrail: game.pickedPrices?.totalLine,
     opposingPriceTrail: game.pickedPrices?.opposingTotal,
     opposingSide: oppositeSide("total", totalSelectedSide) as "over" | "under" | null,
     opposingLabel: totalSelectedSide === "over" ? "Under" : totalSelectedSide === "under" ? "Over" : null,

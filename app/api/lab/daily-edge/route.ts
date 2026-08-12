@@ -278,6 +278,7 @@ function enforceLockedCardCutoff(body: DailyEdgeResponse): DailyEdgeResponse {
     for (const market of Object.values(game.markets)) {
       const trail = (market.oddsTrail ?? []).filter((stop) => !isoAfter(stop.observedAt, cutoffMs));
       market.oddsTrail = trail;
+      market.lineTrail = (market.lineTrail ?? []).filter((stop) => !isoAfter(stop.observedAt, cutoffMs));
       if (market.opposingOddsTrail) {
         market.opposingOddsTrail.stops = market.opposingOddsTrail.stops.filter(
           (stop) => !isoAfter(stop.observedAt, cutoffMs),
@@ -2486,6 +2487,10 @@ function buildGameDto(
         `${row.id}::total::${pred.predicted_ou_side ?? "null"}`
       ) ?? []
     ).filter((r) => totalLine === null || r.line_value === totalLine || r.line_value === null),
+    lineMovementCandidates:
+      openLinesByGameMarket.get(
+        `${row.id}::total::${pred.predicted_ou_side ?? "null"}`
+      ) ?? [],
     opposingLineOpenCandidates: (
       openLinesByGameMarket.get(
         `${row.id}::total::${oppositeDisplaySide(pred.predicted_ou_side) ?? "null"}`
@@ -3210,6 +3215,7 @@ function buildPersistedOddsTrail(args: {
   lockedAmerican: number | null;
   lockedAt: string | null;
   terminalSportsbook?: string | null;
+  allowLineChanges?: boolean;
 }): OddsTrailStop[] {
   if (args.currentAmerican === null && args.lockedAmerican === null) return [];
   const lockedCutoffMs = args.lockedAt === null ? null : Date.parse(args.lockedAt);
@@ -3241,9 +3247,11 @@ function buildPersistedOddsTrail(args: {
   // now loads both the oldest and newest bounded history windows, so the
   // selected book normally has an opener and a recent pre-current observation.
   const sourceRows =
-    sameBookSameLine.length > 0
-      ? sameBookSameLine
-      : matchingBook;
+    args.allowLineChanges === true
+      ? matchingBook
+      : sameBookSameLine.length > 0
+        ? sameBookSameLine
+        : matchingBook;
   const stops: OddsTrailStop[] = [];
 
   const pushStop = (stop: Omit<OddsTrailStop, "label">) => {
@@ -3465,8 +3473,14 @@ function fiBoardHistorySide(args: {
   side: "over" | "under";
   sportsbook: string | null;
   currentAmerican: number | null;
+  lineValue: number | null;
 }): { openAmerican: number | null; previousAmerican: number | null } {
-  const sideRows = args.candidates.filter((row) => row.side === args.side && row.odds_american !== null);
+  const sideRows = args.candidates.filter(
+    (row) =>
+      row.side === args.side &&
+      row.odds_american !== null &&
+      (args.lineValue === null || sameLineValue(row.line_value, args.lineValue)),
+  );
   const sameBookRows = args.sportsbook !== null
     ? sideRows.filter((row) => row.sportsbook === args.sportsbook)
     : [];
@@ -3726,6 +3740,8 @@ type BuildMarketEdgeInput = {
    * null and the line-move chip is suppressed (no fabrication).
    */
   lineOpenCandidates: LineHistoryRow[];
+  /** Full selected-side totals history, including prior point lines. */
+  lineMovementCandidates?: LineHistoryRow[];
   /** Other outcome's history; presentation/audit only, never a grade input. */
   opposingLineOpenCandidates?: LineHistoryRow[];
   /** Both FI sides for the presentation-only two-sided price board. */
@@ -4315,28 +4331,36 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const fiAuditForBoard = input.market === "first_inning"
     ? readFiV2Audit(input.sportSpecific ?? null)
     : null;
+  const fiHalfRunRows = input.linesCurrent.filter((row) => sameLineValue(row.line_value, 0.5));
   const fiYrfiCurrentRow = input.market === "first_inning"
-    ? pickPriceRow(input.linesCurrent, "over")
+    ? pickPriceRow(fiHalfRunRows, "over")
     : null;
   const fiNrfiCurrentRow = input.market === "first_inning"
-    ? pickPriceRow(input.linesCurrent, "under")
+    ? pickPriceRow(fiHalfRunRows, "under")
     : null;
   const fiYrfiCurrentAmerican =
     fiAuditForBoard?.market_yrfi_odds_american ?? fiYrfiCurrentRow?.odds_american ?? null;
   const fiNrfiCurrentAmerican =
     fiAuditForBoard?.market_nrfi_odds_american ?? fiNrfiCurrentRow?.odds_american ?? null;
+  const fiBoardLine =
+    fiAuditForBoard?.market_listed_fi_total ??
+    fiYrfiCurrentRow?.line_value ??
+    fiNrfiCurrentRow?.line_value ??
+    null;
   const fiBoardSportsbook = fiBoardSportsbookFromReason(fiAuditForBoard?.market_reason ?? null);
   const fiYrfiHistory = fiBoardHistorySide({
     candidates: input.fiBoardLineOpenCandidates ?? input.lineOpenCandidates,
     side: "over",
     sportsbook: fiBoardSportsbook ?? fiYrfiCurrentRow?.sportsbook ?? null,
     currentAmerican: fiYrfiCurrentAmerican,
+    lineValue: fiBoardLine,
   });
   const fiNrfiHistory = fiBoardHistorySide({
     candidates: input.fiBoardLineOpenCandidates ?? input.lineOpenCandidates,
     side: "under",
     sportsbook: fiBoardSportsbook ?? fiNrfiCurrentRow?.sportsbook ?? null,
     currentAmerican: fiNrfiCurrentAmerican,
+    lineValue: fiBoardLine,
   });
   const fiMarketBoard = input.market === "first_inning" && (
     fiAuditForBoard !== null ||
@@ -4344,11 +4368,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     fiYrfiCurrentAmerican !== null
   )
     ? {
-        line:
-          fiAuditForBoard?.market_listed_fi_total ??
-          fiYrfiCurrentRow?.line_value ??
-          fiNrfiCurrentRow?.line_value ??
-          null,
+        line: fiBoardLine,
         nrfiAmerican: fiNrfiCurrentAmerican,
         yrfiAmerican: fiYrfiCurrentAmerican,
         nrfiOpenAmerican: fiNrfiHistory.openAmerican,
@@ -4481,6 +4501,25 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
         ? input.lockedPriceSportsbook ?? trailPriceRow?.sportsbook ?? null
         : trailPriceRow?.sportsbook ?? null,
   });
+  const lineTrail = input.market === "total"
+    ? buildPersistedOddsTrail({
+        candidates: input.lineMovementCandidates ?? input.lineOpenCandidates,
+        priceRow: trailPriceRow,
+        currentAmerican: currentMemberPriceRow?.odds_american ?? priceAmerican,
+        currentLine: trailPriceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null,
+        currentObservedAt:
+          currentMemberPriceRow === null
+            ? priceObservedAt
+            : lineRowObservedAt(currentMemberPriceRow),
+        lockedAmerican: input.lockedPriceAmerican ?? null,
+        lockedAt: input.lockedPriceAt ?? null,
+        terminalSportsbook:
+          input.isLockedRow === true
+            ? input.lockedPriceSportsbook ?? trailPriceRow?.sportsbook ?? null
+            : trailPriceRow?.sportsbook ?? null,
+        allowLineChanges: true,
+      })
+    : [];
   const opposingSide =
     input.market === "first_inning" ? null : oppositeDisplaySide(input.modelSide);
   const opposingExpectedLine =
@@ -5198,6 +5237,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     lockedLineAmerican: invalidFirstInningMarket ? null : input.lockedPriceAmerican ?? null,
     lockedLineAt: input.lockedPriceAt ?? null,
     oddsTrail: invalidFirstInningMarket ? [] : oddsTrail,
+    lineTrail: invalidFirstInningMarket ? [] : lineTrail,
     opposingOddsTrail: invalidFirstInningMarket ? null : opposingOddsTrail,
     // 2026-06-16 market-intelligence (derived; display/audit only).
     marketInterpretation: input.marketReadV2Enabled === true ? null : marketInterpretation,
@@ -6032,6 +6072,7 @@ export const __TEST__ = {
   enforceLockedCardCutoff,
   resolveTrailPriceRow,
   buildPersistedOddsTrail,
+  fiBoardHistorySide,
   readLockedSnapshotSportsbook,
   GRADE_RANK,
 };

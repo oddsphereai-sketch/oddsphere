@@ -345,6 +345,18 @@ async function main() {
     dailyEdgeTest.suppressIncomparableLineMovePrices(response);
     check("line-number changes suppress incomparable price pairs", response.games[0]?.markets.total.lastMovePrevAmerican === null && response.games[0]?.markets.total.lastMoveNextAmerican === null);
     check("line-number changes remain available as 8 → 7.5", response.games[0]?.markets.total.lastMoveLinePrev === 8 && response.games[0]?.markets.total.lastMoveLineNext === 7.5);
+    const fiHalfRunHistory = dailyEdgeTest.fiBoardHistorySide({
+      candidates: [
+        { id: 1, game_id: 1, market_type: "first_inning_total", sportsbook: "ballybet", side: "under", line_value: 0.5, odds_american: -110, recorded_at: "2026-08-12T10:00:00Z" },
+        { id: 2, game_id: 1, market_type: "first_inning_total", sportsbook: "ballybet", side: "under", line_value: 1.5, odds_american: -265, recorded_at: "2026-08-12T10:30:00Z" },
+        { id: 3, game_id: 1, market_type: "first_inning_total", sportsbook: "ballybet", side: "under", line_value: 0.5, odds_american: -113, recorded_at: "2026-08-12T11:00:00Z" },
+      ],
+      side: "under",
+      sportsbook: "ballybet",
+      currentAmerican: -113,
+      lineValue: 0.5,
+    });
+    check("FI half-run history excludes 1.5-run alternate prices", fiHalfRunHistory.openAmerican === -110 && fiHalfRunHistory.previousAmerican === -110);
   }
 
   section("Source-aware split sections");

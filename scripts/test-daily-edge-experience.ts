@@ -334,6 +334,12 @@ check(
     candidateSource.includes("to ${formatNumber(movement.currentLine)}"),
 );
 check(
+  "totals render a dedicated line tracker after price movement and before market splits",
+  candidateSource.includes("function CompactTotalLineMovement") &&
+    candidateSource.indexOf("<CompactOddsMovement market={market}") < candidateSource.indexOf("<CompactTotalLineMovement market={market}") &&
+    candidateSource.indexOf("<CompactTotalLineMovement market={market}") < candidateSource.indexOf("<DefaultSplitSummary market={market}"),
+);
+check(
   "Market Pulse keeps public consensus, sharp-book splits, and price movement source-coherent",
   candidateSource.includes("function sourceCoherentMarketPulse") &&
     candidateSource.includes('chip: "Split sources disagree"') &&
@@ -508,6 +514,12 @@ check(
   "WNBA same-book trails terminate at the latest observation instead of looping back to the opener",
   wnbaAdapterSource.includes("currentLineCandidates[currentLineCandidates.length - 1]") &&
     !wnbaAdapterSource.includes("? liveCandidates[0]"),
+);
+check(
+  "WNBA price trails stay on the current point line while the total line trail retains line changes",
+  wnbaAdapterSource.includes("history.filter((row) => closeLine(row.line_value, currentLine))") &&
+    wnbaAdapterSource.includes('totalLine: coherentPriceTrail(liveRows, cappedHistoryRows, "total"') &&
+    wnbaAdapterSource.includes("totalCurrent, true"),
 );
 check(
   "WNBA preserves repeated observations so steady markets still have a verified prior stop",
