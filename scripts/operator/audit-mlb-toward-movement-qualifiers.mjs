@@ -40,6 +40,8 @@ function features(row) {
     lineupConfirmed: integrity.lineup_confirmed === "yes",
     modelPreferredSide: row.model_probability >= .5,
     finalSideChanged: decision.final_side_changed === true,
+    marketAwareCorrectionApplied: decision.market_aware_correction_applied === true,
+    inversionTriggered: decision.inversion_triggered === true,
   };
 }
 function metrics(rows) {
@@ -87,7 +89,7 @@ function rollingThresholdReplay(rows) {
   };
 }
 function marketLedSensitivity(rows) {
-  const priceFloors = [-160, -150, -140, -130, -120, -110, 100];
+  const priceFloors = [-220, -200, -180, -170, -160, -150, -140, -130, -120, -110, 100];
   const movementFloors = [0, .5, 1, 1.5, 2, 3];
   return priceFloors.flatMap((priceFloor) => movementFloors.map((movementFloor) => {
     const sample = rows.filter((row) => row.odds >= priceFloor && row.f.magnitude >= movementFloor);
@@ -115,6 +117,28 @@ function gapSensitivity(rows) {
     ...windows(rows.filter((row) => row.f.gap !== null && row.f.gap < gapExclusive)),
   }));
 }
+function tierGrid(rows) {
+  const priceFloors = [-220, -200, -180, -170, -160, -150, -140, -130, -120];
+  const movementFloors = [.5, 1, 1.5, 2, 3];
+  const gapCaps = [10, 15, 20, 25, 30];
+  return priceFloors.flatMap((priceFloor) => movementFloors.flatMap((movementFloor) =>
+    gapCaps.map((gapCapExclusive) => {
+      const sample = rows.filter((row) =>
+        row.odds >= priceFloor &&
+        row.f.magnitude >= movementFloor &&
+        row.f.gap !== null &&
+        row.f.gap < gapCapExclusive
+      );
+      return {
+        priceFloor,
+        movementFloor,
+        gapCapExclusive,
+        ...windows(sample),
+        uncertainty: clusterBootstrap(sample, 5000),
+      };
+    })
+  ));
+}
 function clusterBootstrap(rows, iterations = 10000) {
   const dates = [...new Set(rows.map((row) => row.slate_date))];
   const byDate = new Map(dates.map((date) => [date, rows.filter((row) => row.slate_date === date)]));
@@ -137,6 +161,15 @@ function clusterBootstrap(rows, iterations = 10000) {
     iterations,
     roiPct95: [rois[Math.floor(iterations * .025)], rois[Math.floor(iterations * .975)]],
   };
+}
+function dailyTop(rows, compare) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const day = grouped.get(row.slate_date) ?? [];
+    day.push(row);
+    grouped.set(row.slate_date, day);
+  }
+  return [...grouped.values()].map((day) => [...day].sort(compare)[0]);
 }
 const atom = (id, kind, test) => ({ id, kind, test });
 const atoms = [
@@ -189,6 +222,30 @@ const robust=candidates.filter((c)=>c.train.roiPct>0&&c.validation.roiPct>0&&c.h
 const longRun=candidates.filter((c)=>c.all.n>=20&&c.all.roiPct>=8&&c.holdout.roiPct>=0).sort((a,b)=>b.all.roiPct-a.all.roiPct||b.all.n-a.all.n);
 const highQuality = base.filter((row) => row.f.highQuality);
 const marketLedCandidate = highQuality.filter((row) => row.odds >= -120 && row.f.magnitude >= 1);
+const correctionSafeHighQuality = highQuality.filter((row) =>
+  !row.f.marketAwareCorrectionApplied && !row.f.inversionTriggered
+);
+const unchangedCorrectionSafeHighQuality = correctionSafeHighQuality.filter((row) =>
+  !row.f.finalSideChanged
+);
+const broadMarketLedLean = unchangedCorrectionSafeHighQuality.filter((row) =>
+  row.odds >= -200 && row.f.magnitude >= 1 && row.f.gap !== null && row.f.gap < 10
+);
+const strongMarketLedTier = unchangedCorrectionSafeHighQuality.filter((row) =>
+  row.odds >= -200 && row.f.magnitude >= 1.5 && row.f.gap !== null && row.f.gap < 10
+);
+const changedStrongMarketLedTier = correctionSafeHighQuality.filter((row) =>
+  row.f.finalSideChanged && row.odds >= -200 && row.f.magnitude >= 1.5 &&
+  row.f.gap !== null && row.f.gap < 10
+);
+const strongMarketLedDailyTop = dailyTop(
+  strongMarketLedTier,
+  (left, right) => right.f.probability - left.f.probability,
+);
+const changedStrongMarketLedDailyTop = dailyTop(
+  changedStrongMarketLedTier,
+  (left, right) => right.f.probability - left.f.probability,
+);
 let existingRankerIds = new Set();
 try {
   const ranker = JSON.parse(await readFile(RANKER_OUTPUT, "utf8"));
@@ -219,6 +276,7 @@ const comparisonRules = [
   existingRankerOverlap: metrics(rows.filter((row) => existingRankerIds.has(row.id))),
   incrementalOutsideExistingRanker: windows(rows.filter((row) => !existingRankerIds.has(row.id))),
 }));
-const output={generatedAt:new Date().toISOString(),databaseWrites:false,base:windows(base),baseRows:base.map((row)=>({id:row.id,date:row.slate_date,odds:row.odds,result:row.result,probability:row.f.probability,edge:row.f.edge,magnitude:row.f.magnitude,highQuality:row.f.highQuality,side:row.side})),probabilityAudit:{highQualitySensitivity:thresholdSensitivity(highQuality),rollingPriorOnlySelection:rollingThresholdReplay(highQuality)},marketLedAudit:{sensitivity:marketLedSensitivity(highQuality),splitDiagnostics:splitDiagnostics(marketLedCandidate),gapSensitivity:gapSensitivity(marketLedCandidate)},existingRankerComparison:comparisonRules,uniqueRowSets:seen.size,positiveOverall:candidates.length,robust:robust.slice(0,100),longRun:longRun.slice(0,100)};
+const strongMarketLedIncremental = strongMarketLedTier.filter((row) => !existingRankerIds.has(row.id));
+const output={generatedAt:new Date().toISOString(),databaseWrites:false,base:windows(base),baseRows:base.map((row)=>({id:row.id,date:row.slate_date,odds:row.odds,result:row.result,probability:row.f.probability,edge:row.f.edge,magnitude:row.f.magnitude,tickets:row.f.tickets,money:row.f.money,gap:row.f.gap,projection:row.f.projection,highQuality:row.f.highQuality,finalSideChanged:row.f.finalSideChanged,marketAwareCorrectionApplied:row.f.marketAwareCorrectionApplied,inversionTriggered:row.f.inversionTriggered,side:row.side})),probabilityAudit:{highQualitySensitivity:thresholdSensitivity(highQuality),rollingPriorOnlySelection:rollingThresholdReplay(highQuality)},marketLedAudit:{sensitivity:marketLedSensitivity(highQuality),splitDiagnostics:splitDiagnostics(marketLedCandidate),gapSensitivity:gapSensitivity(marketLedCandidate),tierGrid:tierGrid(highQuality),finalSideChangeDiagnostics:{unchanged:windows(correctionSafeHighQuality.filter((row)=>!row.f.finalSideChanged)),changed:windows(correctionSafeHighQuality.filter((row)=>row.f.finalSideChanged)),changedStrongPool:{...windows(changedStrongMarketLedTier),uncertainty:clusterBootstrap(changedStrongMarketLedTier),rowIds:changedStrongMarketLedTier.map((row)=>row.id)},changedStrongDailyTop:{...windows(changedStrongMarketLedDailyTop),uncertainty:clusterBootstrap(changedStrongMarketLedDailyTop),rowIds:changedStrongMarketLedDailyTop.map((row)=>row.id)}},proposedTiering:{lean:{criteria:{price:[-200,200],minimumMovementPp:1,maximumSharpapiGapExclusive:10,marketAwareCorrectionApplied:false,inversionTriggered:false},...windows(broadMarketLedLean),uncertainty:clusterBootstrap(broadMarketLedLean),rowIds:broadMarketLedLean.map((row)=>row.id)},strongPool:{criteria:{price:[-200,200],minimumMovementPp:1.5,maximumSharpapiGapExclusive:10,marketAwareCorrectionApplied:false,inversionTriggered:false},...windows(strongMarketLedTier),uncertainty:clusterBootstrap(strongMarketLedTier),rowIds:strongMarketLedTier.map((row)=>row.id),existingRankerOverlap:metrics(strongMarketLedTier.filter((row)=>existingRankerIds.has(row.id))),incrementalOutsideExistingRanker:{...windows(strongMarketLedIncremental),uncertainty:clusterBootstrap(strongMarketLedIncremental),rowIds:strongMarketLedIncremental.map((row)=>row.id)}},bestAngleDailyTop:{ranking:"highest model probability among correction-safe strong-pool qualifiers; no absolute probability cutoff beyond observed 50% range",...windows(strongMarketLedDailyTop),uncertainty:clusterBootstrap(strongMarketLedDailyTop),rowIds:strongMarketLedDailyTop.map((row)=>row.id)}}},existingRankerComparison:comparisonRules,uniqueRowSets:seen.size,positiveOverall:candidates.length,robust:robust.slice(0,100),longRun:longRun.slice(0,100)};
 await writeFile(OUTPUT,JSON.stringify(output,null,2));
 console.log(JSON.stringify({output,summary:{base:output.base,uniqueRowSets:output.uniqueRowSets,positiveOverall:output.positiveOverall,robust:output.robust.length,longRun:output.longRun.length},topRobust:output.robust.slice(0,12),topLongRun:output.longRun.slice(0,12)},null,2));

@@ -396,6 +396,11 @@ export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_MIN_ODDS = -145;
 export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_ODDS = -105;
 export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_BETS_PCT = 35;
 export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_MONEY_MINUS_BETS_PCT = -5;
+export const TOTAL_SHARPAPI_SUPPORT_LEAN_RULE_ID =
+  "total_sharpapi_money_over_tickets_support_lean_v1_2026_08_12";
+export const TOTAL_SHARPAPI_SUPPORT_MIN_ODDS = -145;
+export const TOTAL_SHARPAPI_SUPPORT_MAX_ODDS = 145;
+export const TOTAL_SHARPAPI_SUPPORT_MIN_MONEY_MINUS_BETS_PCT = 10;
 export const TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID = "total_clean_strong_best_angle_v4_2026_07_11";
 export const TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID =
   "total_rejected_correction_original_side_validation_v1_2026_08_11";
@@ -425,12 +430,18 @@ export const ML_SHARP_PORTFOLIO_MIN_MODEL_PROB = 0.50;
 export const ML_SHARP_PORTFOLIO_MIN_ODDS = -220;
 export const ML_SHARP_PORTFOLIO_MAX_ODDS = 200;
 export const ML_MARKET_LED_MOVEMENT_LEAN_RULE_ID =
-  "ml_market_led_toward_move_playable_price_lean_v1_2026_08_12";
+  "ml_market_led_toward_move_playable_price_lean_v2_2026_08_12";
 export const ML_MARKET_LED_MOVEMENT_MIN_OBSERVED_MODEL_PROB = 0.50;
-export const ML_MARKET_LED_MOVEMENT_MIN_ODDS = -120;
+export const ML_MARKET_LED_MOVEMENT_MIN_ODDS = -200;
 export const ML_MARKET_LED_MOVEMENT_MAX_ODDS = 200;
-export const ML_MARKET_LED_MOVEMENT_MIN_MAGNITUDE_PP = 1;
-export const ML_MARKET_LED_MOVEMENT_MAX_MONEY_OVER_TICKETS_GAP_EXCLUSIVE = 20;
+export const ML_MARKET_LED_MOVEMENT_MIN_MAGNITUDE_PP = 1.5;
+export const ML_MARKET_LED_MOVEMENT_MAX_MONEY_OVER_TICKETS_GAP_EXCLUSIVE = 10;
+export const ML_NEUTRAL_CONSENSUS_RULE_ID =
+  "ml_sharpapi_neutral_consensus_tier_v1_2026_08_12";
+export const ML_NEUTRAL_CONSENSUS_MIN_ODDS = -200;
+export const ML_NEUTRAL_CONSENSUS_MAX_ODDS = 200;
+export const ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_BETS_PCT = 70;
+export const ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_MONEY_PCT = 70;
 export const ML_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID =
   "ml_calibrated_model_best_angle_path_v1_2026_07_27";
 export const ML_CALIBRATED_MODEL_LEAN_PATH_ID =
@@ -1819,6 +1830,78 @@ export function applyMlbMarketLedMovementLean(records: PredictionRecordRow[]): P
   });
 }
 
+export function applyMlbNeutralConsensusGrades(records: PredictionRecordRow[]): PredictionRecordRow[] {
+  return records.map((record) => {
+    if (
+      record.sport !== "mlb" ||
+      record.market !== "moneyline" ||
+      record.best_angle ||
+      record.play_grade === "lean" ||
+      record.play_grade === "best_angle" ||
+      record.no_bet ||
+      record.held ||
+      record.odds_american === null ||
+      record.odds_american < ML_NEUTRAL_CONSENSUS_MIN_ODDS ||
+      record.odds_american > ML_NEUTRAL_CONSENSUS_MAX_ODDS ||
+      record.data_quality_tier !== "high"
+    ) return record;
+    const snapshot = readRecordOrNull(record.snapshot_json) ?? {};
+    const decision = readRecordOrNull(snapshot.decision_pipeline) ?? {};
+    const movement = readRecordOrNull(snapshot.line_movement);
+    const integrity = readRecordOrNull(snapshot.data_integrity);
+    if (
+      movement?.direction !== "neutral" ||
+      decision.market_aware_correction_applied === true ||
+      decision.inversion_triggered === true ||
+      integrity?.stale !== "no" ||
+      integrity?.market_baseline_valid !== "yes"
+    ) return record;
+    const validatedSplit = pickedSourceAwareSplit(
+      snapshotSourceAwareSplits(snapshot),
+      "moneyline",
+      record.side,
+      "sharpapi",
+    );
+    if (validatedSplit.betsPct === null || validatedSplit.moneyPct === null) return record;
+    const bestAngle =
+      validatedSplit.betsPct >= ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_BETS_PCT &&
+      validatedSplit.moneyPct >= ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_MONEY_PCT;
+    if (!bestAngle) return record;
+    const grade = "best_angle";
+    return {
+      ...record,
+      play_grade: grade,
+      best_angle: bestAngle,
+      snapshot_json: {
+        ...snapshot,
+        decision_pipeline: {
+          ...decision,
+          board_action: "bet",
+          actionable_grade: grade,
+          action_rule_id: ML_NEUTRAL_CONSENSUS_RULE_ID,
+          promotion_rule_id: ML_NEUTRAL_CONSENSUS_RULE_ID,
+          grade_source: "additive_market_rule",
+        },
+        ml_neutral_consensus_grade: {
+          rule_id: ML_NEUTRAL_CONSENSUS_RULE_ID,
+          action: "promote_to_best_angle",
+          odds_american: record.odds_american,
+          minimum_odds_inclusive: ML_NEUTRAL_CONSENSUS_MIN_ODDS,
+          maximum_odds_inclusive: ML_NEUTRAL_CONSENSUS_MAX_ODDS,
+          movement_direction: movement.direction,
+          picked_bets_pct: validatedSplit.betsPct,
+          picked_money_pct: validatedSplit.moneyPct,
+          best_angle_minimum_bets_pct: ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_BETS_PCT,
+          best_angle_minimum_money_pct: ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_MONEY_PCT,
+          split_provider: "sharpapi",
+          model_probability_context_only: record.model_probability,
+          validation_note: "Correction-safe high-quality MLB Moneylines with neutral movement, a -200 through +200 price, and at least 70% selected-side SharpAPI tickets and money went 45-15 with positive ROI in train, validation, and holdout. The lower incremental bands were rejected; no model-probability cutoff is used.",
+        },
+      },
+    };
+  });
+}
+
 function projectedScoresForConflict(
   pred: PredictionRow,
   v22: Record<string, unknown>,
@@ -2010,7 +2093,7 @@ function resolveTotalCleanConfirmedBestAngle(args: {
     args.oddsAmerican > TOTAL_BEST_ANGLE_MIN_PRICE_EXCLUSIVE;
   const qualified =
     !args.blocked &&
-    (args.side === "over" || args.side === "under") &&
+    args.side === "under" &&
     args.modelProb !== null &&
     args.modelProb >= TOTAL_BEST_ANGLE_MIN_MODEL_PROB &&
     args.edgePct !== null &&
@@ -2100,6 +2183,36 @@ function resolveTotalUnderLowTicketResistanceLean(args: {
   return {
     lean,
     reason: lean ? TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID : null,
+    moneyMinusBetsPct,
+  };
+}
+
+function resolveTotalSharpapiSupportLean(args: {
+  blocked: boolean;
+  side: string | null;
+  oddsAmerican: number | null;
+  lineDirection: "toward_pick" | "against_pick" | "neutral" | "unknown" | null;
+  pickedBetsPct: number | null;
+  pickedMoneyPct: number | null;
+  dataQualityTier: string | null;
+}): { lean: boolean; reason: string | null; moneyMinusBetsPct: number | null } {
+  const moneyMinusBetsPct =
+    args.pickedMoneyPct !== null && args.pickedBetsPct !== null
+      ? args.pickedMoneyPct - args.pickedBetsPct
+      : null;
+  const lean =
+    !args.blocked &&
+    (args.side === "over" || args.side === "under") &&
+    args.oddsAmerican !== null &&
+    args.oddsAmerican >= TOTAL_SHARPAPI_SUPPORT_MIN_ODDS &&
+    args.oddsAmerican <= TOTAL_SHARPAPI_SUPPORT_MAX_ODDS &&
+    args.lineDirection !== "against_pick" &&
+    moneyMinusBetsPct !== null &&
+    moneyMinusBetsPct >= TOTAL_SHARPAPI_SUPPORT_MIN_MONEY_MINUS_BETS_PCT &&
+    args.dataQualityTier === "high";
+  return {
+    lean,
+    reason: lean ? TOTAL_SHARPAPI_SUPPORT_LEAN_RULE_ID : null,
     moneyMinusBetsPct,
   };
 }
@@ -3753,6 +3866,20 @@ function buildOuRecord(
     pickedMoneyPct: ouValidatedSharpPublicSplit.moneyPct,
     dataQualityTier: readStringOrNull(sp.v2_data_quality_tier),
   });
+  const ouSharpapiSupportLean = resolveTotalSharpapiSupportLean({
+    blocked:
+      trackedOuFinalBestAngle ||
+      ouNoBet ||
+      ouValidatedLean.lean ||
+      ouUnderLowTicketResistanceLean.lean ||
+      finalOuPublicPlayGrade === "lean",
+    side: finalOuPick,
+    oddsAmerican: finalOuOdds,
+    lineDirection: ouLineDirection,
+    pickedBetsPct: ouValidatedSharpPublicSplit.betsPct,
+    pickedMoneyPct: ouValidatedSharpPublicSplit.moneyPct,
+    dataQualityTier: readStringOrNull(sp.v2_data_quality_tier),
+  });
   const ouModelBestAngleRetained = ouFinalBestAngle;
   const ouModelLeanRetained =
     !trackedOuFinalBestAngle &&
@@ -3769,6 +3896,7 @@ function buildOuRecord(
     finalOuPublicPlayGrade === "lean" &&
     !ouValidatedLean.lean &&
     !ouUnderLowTicketResistanceLean.lean &&
+    !ouSharpapiSupportLean.lean &&
     !ouModelLeanRetained;
   const trackedOuPublicPlayGrade = ouMarketAwareCorrectedGrade !== null
     ? ouMarketAwareCorrectedGrade.playGrade
@@ -3777,6 +3905,8 @@ function buildOuRecord(
     : ouValidatedLean.lean
       ? "lean"
     : ouUnderLowTicketResistanceLean.lean
+      ? "lean"
+    : ouSharpapiSupportLean.lean
       ? "lean"
     : ouModelLeanRetained
       ? "lean"
@@ -3873,6 +4003,8 @@ function buildOuRecord(
                   ? TOTAL_VALIDATED_LEAN_RULE_ID
                   : ouUnderLowTicketResistanceLean.lean
                     ? TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID
+                  : ouSharpapiSupportLean.lean
+                    ? TOTAL_SHARPAPI_SUPPORT_LEAN_RULE_ID
                   : null,
         promotion_rule_id: ouPromotedBestAngle
           ? TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID
@@ -3880,13 +4012,15 @@ function buildOuRecord(
             ? TOTAL_VALIDATED_LEAN_RULE_ID
             : ouUnderLowTicketResistanceLean.lean
               ? TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID
+            : ouSharpapiSupportLean.lean
+              ? TOTAL_SHARPAPI_SUPPORT_LEAN_RULE_ID
             : null,
         grade_source:
           trackedOuFinalBestAngle && ouModelBestAngleRetained
             ? "calibrated_model"
             : ouModelLeanRetained
               ? "calibrated_model"
-              : ouPromotedBestAngle || ouValidatedLean.lean || ouUnderLowTicketResistanceLean.lean
+              : ouPromotedBestAngle || ouValidatedLean.lean || ouUnderLowTicketResistanceLean.lean || ouSharpapiSupportLean.lean
                 ? "additive_rule"
                 : null,
         paired_policy: {
@@ -3895,6 +4029,7 @@ function buildOuRecord(
             TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID,
             TOTAL_VALIDATED_LEAN_RULE_ID,
             TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID,
+            TOTAL_SHARPAPI_SUPPORT_LEAN_RULE_ID,
           ],
         },
         final_side: finalOuPick,
@@ -4039,6 +4174,24 @@ function buildOuRecord(
             data_quality_tier: readStringOrNull(sp.v2_data_quality_tier),
             validation_note:
               "The low-ticket SharpAPI Under family stayed positive across chronological train, validation, and holdout. Model-probability and offered-price-edge gates rejected a separately positive incremental cohort, so they are context only; price, projection alignment, exact split source, data quality, and all prior no-bet safeguards remain required.",
+          }
+        : null,
+      total_sharpapi_support_lean: ouSharpapiSupportLean.lean
+        ? {
+            rule_id: TOTAL_SHARPAPI_SUPPORT_LEAN_RULE_ID,
+            action: "promote_to_lean",
+            odds_american: finalOuOdds,
+            min_odds: TOTAL_SHARPAPI_SUPPORT_MIN_ODDS,
+            max_odds: TOTAL_SHARPAPI_SUPPORT_MAX_ODDS,
+            line_direction: ouLineDirection,
+            picked_bets_pct: ouValidatedSharpPublicSplit.betsPct,
+            picked_money_pct: ouValidatedSharpPublicSplit.moneyPct,
+            split_provider: ouValidatedSharpPublicSplit.provider,
+            money_minus_bets_pct: ouSharpapiSupportLean.moneyMinusBetsPct,
+            min_money_minus_bets_pct: TOTAL_SHARPAPI_SUPPORT_MIN_MONEY_MINUS_BETS_PCT,
+            data_quality_tier: readStringOrNull(sp.v2_data_quality_tier),
+            validation_note:
+              "Historically nonactionable high-quality MLB Unders with exact selected-side SharpAPI money at least 10 points above tickets, no movement against the pick, and a -145 through +145 price went 17-5 and remained positive in train, validation, and holdout. The Over branch was rejected after flat validation and holdout.",
           }
         : null,
       total_calibrated_model_lean: ouModelLeanRetained
@@ -4568,7 +4721,9 @@ export function buildPredictionRecordsFromSlate(args: {
     if (fi) proposed.push(fi);
   }
   const ranked = args.sport === "mlb"
-    ? applyMlbMarketLedMovementLean(applyMlbSharpPortfolioLean(proposed))
+    ? applyMlbNeutralConsensusGrades(
+        applyMlbMarketLedMovementLean(applyMlbSharpPortfolioLean(proposed)),
+      )
     : proposed;
   return ranked.map(withMemberFacingAtLock);
 }

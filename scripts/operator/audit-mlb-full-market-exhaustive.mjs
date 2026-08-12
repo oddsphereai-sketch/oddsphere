@@ -52,6 +52,7 @@ function enrich(row, record) {
   const bets = finite(split?.betsPct);
   const money = finite(split?.moneyPct);
   const movement = String(snapshot?.line_movement?.direction ?? "unknown");
+  const decision = snapshot?.decision_pipeline ?? {};
   const projection = snapshotProjection(row, snapshot);
   const modelP = finite(row.modelProbability);
   const price = finite(row.lockedPrice);
@@ -64,6 +65,9 @@ function enrich(row, record) {
     gap: bets === null || money === null ? null : money - bets,
     splitAge: finite(split?.ageMinutes),
     movement,
+    finalSideChanged: decision.final_side_changed === true,
+    marketAwareCorrectionApplied: decision.market_aware_correction_applied === true,
+    inversionTriggered: decision.inversion_triggered === true,
     projection,
     projectionAligned: projection !== null && projection > 0,
     highQuality: snapshot?.v2_data_quality_tier === "high",
@@ -76,10 +80,14 @@ function enrich(row, record) {
     modelEdgeToPrice: modelP === null || price === null ? null : modelP - implied(price),
     sharp,
     playbook,
+    sharpGap: sharp ? sharp.money - sharp.bets : null,
+    playbookGap: playbook ? playbook.money - playbook.bets : null,
     crossSourceMoneyAgreement: sharp && playbook ? (sharp.money - 50) * (playbook.money - 50) > 0 : null,
     crossSourceTicketAgreement: sharp && playbook ? (sharp.bets - 50) * (playbook.bets - 50) > 0 : null,
     result: row.result,
     y: row.result === "win" ? 1 : row.result === "loss" ? 0 : null,
+    noBet: record?.no_bet === true,
+    held: record?.held === true || snapshot?.held === true,
   };
 }
 
@@ -160,6 +168,25 @@ function namedCandidate(rows, id, test) {
     bootstrap: clusterBootstrap(matched, 20000),
     byProbabilityHead,
     byDecisionRelease,
+  };
+}
+
+function namedMarketCandidate(rows, id, test) {
+  const candidate = namedCandidate(rows, id, test);
+  const matched = rows.filter(test);
+  const split = partitions(rows);
+  return {
+    ...candidate,
+    bySide: Object.fromEntries([...Map.groupBy(matched, (row) => row.side).entries()].map(([side, values]) => [side, metrics(values)])),
+    bySideChronology: Object.fromEntries([...Map.groupBy(matched, (row) => row.side).entries()].map(([side, values]) => [side, {
+      train: metrics(values.filter((row) => split.train.includes(row))),
+      validation: metrics(values.filter((row) => split.validation.includes(row))),
+      holdout: metrics(values.filter((row) => split.holdout.includes(row))),
+    }])),
+    byFinalSideChanged: Object.fromEntries([...Map.groupBy(matched, (row) => String(row.finalSideChanged)).entries()].map(([changed, values]) => [changed, metrics(values)])),
+    byCorrectionState: Object.fromEntries([...Map.groupBy(matched, (row) => row.marketAwareCorrectionApplied || row.inversionTriggered ? "corrected_or_inverted" : "correction_safe").entries()].map(([state, values]) => [state, metrics(values)])),
+    bySplitSource: Object.fromEntries([...Map.groupBy(matched, (row) => row.split?.source ?? "missing").entries()].map(([source, values]) => [source, metrics(values)])),
+    rowIds: matched.map((row) => row.id),
   };
 }
 
@@ -302,6 +329,15 @@ function atomsFor(market) {
     atom("split_age_lte_60", "age", (row) => row.splitAge !== null && row.splitAge <= 60),
     atom("cross_source_money_agree", "source", (row) => row.crossSourceMoneyAgreement === true),
     atom("cross_source_both_agree", "source", (row) => row.crossSourceMoneyAgreement === true && row.crossSourceTicketAgreement === true),
+    atom("sharp_gap_lte_minus_5", "sharp_split", (row) => row.sharpGap !== null && row.sharpGap <= -5),
+    atom("sharp_gap_lte_minus_10", "sharp_split", (row) => row.sharpGap !== null && row.sharpGap <= -10),
+    atom("sharp_gap_lte_minus_15", "sharp_split", (row) => row.sharpGap !== null && row.sharpGap <= -15),
+    atom("sharp_gap_gte_5", "sharp_split", (row) => row.sharpGap !== null && row.sharpGap >= 5),
+    atom("sharp_gap_gte_10", "sharp_split", (row) => row.sharpGap !== null && row.sharpGap >= 10),
+    atom("playbook_gap_lte_minus_5", "playbook_split", (row) => row.playbookGap !== null && row.playbookGap <= -5),
+    atom("playbook_gap_lte_minus_10", "playbook_split", (row) => row.playbookGap !== null && row.playbookGap <= -10),
+    atom("playbook_gap_gte_5", "playbook_split", (row) => row.playbookGap !== null && row.playbookGap >= 5),
+    atom("playbook_gap_gte_10", "playbook_split", (row) => row.playbookGap !== null && row.playbookGap >= 10),
   ];
   const priceBands = market === "moneyline" ? [
     [-220, -181], [-180, -161], [-160, -141], [-140, -121], [-120, -101], [-100, 120], [121, 160], [161, 200],
@@ -509,10 +545,11 @@ const output = {
 };
 for (const market of ["moneyline", "total"]) {
   const rows = allRows.filter((row) => row.market === market);
-  const nonactionable = rows.filter((row) => !row.actionable);
+  const nonactionable = rows.filter((row) => !row.actionable && !row.noBet && !row.held);
   output.featureCoverage[market] = {
     rows: rows.length,
     nonactionable: nonactionable.length,
+    excludedNoBetOrHeld: rows.filter((row) => !row.actionable && (row.noBet || row.held)).length,
     dates: new Set(rows.map((row) => row.date)).size,
     movement: rows.filter((row) => row.movement !== "unknown").length,
     projection: rows.filter((row) => row.projection !== null).length,
@@ -528,7 +565,42 @@ for (const market of ["moneyline", "total"]) {
     ...(market === "total" ? {
       focusedTotalUnder: focusedTotalUnderSearch(nonactionable.filter((row) => row.side === "under")),
       totalUnderNamedSensitivity: totalUnderNamedSensitivity(nonactionable),
-    } : {}),
+      namedMarketCandidates: [
+        namedMarketCandidate(nonactionable, "sharpapi_money_over_tickets_10__movement_not_against__high_quality__playable_price", (row) =>
+          row.gap >= 10 && row.movement !== "against_pick" && row.highQuality && row.price >= -145 && row.price <= 145
+        ),
+        namedMarketCandidate(nonactionable, "sharpapi_money_over_tickets_5__movement_not_against__high_quality__playable_price", (row) =>
+          row.gap >= 5 && row.movement !== "against_pick" && row.highQuality && row.price >= -145 && row.price <= 145
+        ),
+      ],
+    } : {
+      namedMarketCandidates: [
+        namedMarketCandidate(nonactionable, "sharpapi_money_gte_55__movement_neutral__high_quality__price_minus200_to_plus200", (row) =>
+          row.money >= 55 && row.movement === "neutral" && row.highQuality && row.price >= -200 && row.price <= 200 && !row.marketAwareCorrectionApplied && !row.inversionTriggered
+        ),
+        namedMarketCandidate(nonactionable, "sharpapi_money_and_tickets_gte_55__movement_neutral__high_quality__price_minus200_to_plus200", (row) =>
+          row.money >= 55 && row.bets >= 55 && row.movement === "neutral" && row.highQuality && row.price >= -200 && row.price <= 200 && !row.marketAwareCorrectionApplied && !row.inversionTriggered
+        ),
+        namedMarketCandidate(nonactionable, "sharpapi_money_and_tickets_gte_60__movement_neutral__high_quality__price_minus200_to_plus200", (row) =>
+          row.money >= 60 && row.bets >= 60 && row.movement === "neutral" && row.highQuality && row.price >= -200 && row.price <= 200 && !row.marketAwareCorrectionApplied && !row.inversionTriggered
+        ),
+        namedMarketCandidate(nonactionable, "sharpapi_money_and_tickets_gte_65__movement_neutral__high_quality__price_minus200_to_plus200", (row) =>
+          row.money >= 65 && row.bets >= 65 && row.movement === "neutral" && row.highQuality && row.price >= -200 && row.price <= 200 && !row.marketAwareCorrectionApplied && !row.inversionTriggered
+        ),
+        namedMarketCandidate(nonactionable, "sharpapi_tickets_gte_70__movement_neutral__high_quality__price_minus200_to_plus200", (row) =>
+          row.bets >= 70 && row.movement === "neutral" && row.highQuality && row.price >= -200 && row.price <= 200 && !row.marketAwareCorrectionApplied && !row.inversionTriggered
+        ),
+        namedMarketCandidate(nonactionable, "sharpapi_money_and_tickets_gte_70__movement_neutral__high_quality__price_minus200_to_plus200", (row) =>
+          row.money >= 70 && row.bets >= 70 && row.movement === "neutral" && row.highQuality && row.price >= -200 && row.price <= 200 && !row.marketAwareCorrectionApplied && !row.inversionTriggered
+        ),
+        namedMarketCandidate(nonactionable, "sharpapi_money_and_tickets_gte_75__movement_neutral__high_quality__price_minus200_to_plus200", (row) =>
+          row.money >= 75 && row.bets >= 75 && row.movement === "neutral" && row.highQuality && row.price >= -200 && row.price <= 200 && !row.marketAwareCorrectionApplied && !row.inversionTriggered
+        ),
+        namedMarketCandidate(nonactionable, "sharpapi_money_and_tickets_gte_80__movement_neutral__high_quality__price_minus200_to_plus200", (row) =>
+          row.money >= 80 && row.bets >= 80 && row.movement === "neutral" && row.highQuality && row.price >= -200 && row.price <= 200 && !row.marketAwareCorrectionApplied && !row.inversionTriggered
+        ),
+      ],
+    }),
   };
 }
 

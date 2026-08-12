@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import {
   buildPredictionRecordsFromSlate,
   applyMlbMarketLedMovementLean,
+  applyMlbNeutralConsensusGrades,
   applyMlbSharpPortfolioLean,
   americanToImpliedProb,
   buildPublicSplitsSnapshot,
@@ -25,6 +26,7 @@ import {
   FI_CALIBRATED_MODEL_LEAN_PATH_ID,
   TOTAL_VALIDATED_LEAN_RULE_ID,
   TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID,
+  TOTAL_SHARPAPI_SUPPORT_LEAN_RULE_ID,
   TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID,
   TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID,
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
@@ -36,6 +38,7 @@ import {
   ML_SIGNED_MARKET_RESISTANCE_RULE_ID,
   ML_SHARP_PORTFOLIO_LEAN_RULE_ID,
   ML_MARKET_LED_MOVEMENT_LEAN_RULE_ID,
+  ML_NEUTRAL_CONSENSUS_RULE_ID,
   ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID,
   ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID,
   ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID,
@@ -307,6 +310,7 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
     money: number,
     movementDirection: "neutral" | "toward_pick" | "against_pick",
     splitProvider = "sharpapi",
+    movementMagnitude = movementDirection === "neutral" ? 0 : 1,
   ): PredictionRecordRow => ({
     game_prediction_id: gameId,
     game_id: gameId,
@@ -377,7 +381,7 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
       ],
       line_movement: {
         direction: movementDirection,
-        magnitude_pp: movementDirection === "neutral" ? 0 : 1,
+        magnitude_pp: movementMagnitude,
         has_reverse_line_movement: false,
         has_steam_move: false,
       },
@@ -426,10 +430,10 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
     playbookOnly[0]?.play_grade === "market_aligned",
   );
   const marketLed = applyMlbMarketLedMovementLean([
-    portfolioRecord(6, "MARKET@LED", -110, 0.51, 60, 75, "toward_pick"),
-    portfolioRecord(7, "PILE@ON", -110, 0.60, 50, 70, "toward_pick"),
+    portfolioRecord(6, "MARKET@LED", -165, 0.51, 60, 65, "toward_pick", "sharpapi", 1.5),
+    portfolioRecord(7, "PILE@ON", -110, 0.60, 50, 60, "toward_pick", "sharpapi", 1.5),
     portfolioRecord(8, "NO@MOVE", 105, 0.60, 40, 45, "neutral"),
-    portfolioRecord(9, "OUT@OF_SAMPLE", 105, 0.49, 40, 45, "toward_pick"),
+    portfolioRecord(9, "OUT@OF_SAMPLE", 105, 0.49, 40, 45, "toward_pick", "sharpapi", 1.5),
   ]);
   check(
     "market-led movement sleeve promotes a qualifying unchanged side without a 53/54/55% cutoff",
@@ -438,7 +442,7 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
         ML_MARKET_LED_MOVEMENT_LEAN_RULE_ID,
   );
   check(
-    "market-led movement sleeve rejects a 20-point SharpAPI money-ticket pile-on",
+    "market-led movement sleeve rejects a 10-point SharpAPI money-ticket pile-on",
     marketLed[1]?.play_grade === "market_aligned",
   );
   check(
@@ -449,6 +453,20 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
     "market-led movement sleeve does not extrapolate below its observed probability range",
     marketLed[3]?.play_grade === "market_aligned",
   );
+  const neutralConsensus = applyMlbNeutralConsensusGrades([
+    portfolioRecord(10, "STRONG@CONSENSUS", -185, 0.51, 90, 97, "neutral"),
+    portfolioRecord(11, "LOWER@CONSENSUS", -130, 0.51, 60, 58, "neutral"),
+    portfolioRecord(12, "BELOW@CONSENSUS", -130, 0.60, 54, 90, "neutral"),
+    portfolioRecord(13, "MOVING@CONSENSUS", -130, 0.60, 90, 90, "toward_pick", "sharpapi", 2),
+  ]);
+  check(
+    "70/70 neutral SharpAPI consensus promotes to Best Angle",
+    neutralConsensus[0]?.play_grade === "best_angle" && neutralConsensus[0]?.best_angle === true &&
+      (neutralConsensus[0]?.snapshot_json as any)?.decision_pipeline?.action_rule_id === ML_NEUTRAL_CONSENSUS_RULE_ID,
+  );
+  check("lower neutral-consensus bands do not borrow strength from the 70/70 tier", neutralConsensus[1]?.play_grade === "market_aligned");
+  check("neutral consensus requires both ticket and money floors", neutralConsensus[2]?.play_grade === "market_aligned");
+  check("neutral consensus does not overlap moving prices", neutralConsensus[3]?.play_grade === "market_aligned");
 }
 
 // ── Standard slate: 1 game, NRFI held → 2 records ────────────────
@@ -2386,6 +2404,49 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
   });
   const playbookOnlyTotal = playbookOnlyRecords.find((record) => record.market === "total");
   check("Playbook-only splits cannot activate the SharpAPI-validated resistance sleeve", playbookOnlyTotal?.play_grade !== "lean" && (playbookOnlyTotal?.snapshot_json as any)?.total_under_low_ticket_resistance_lean === null);
+
+  const supportPred = {
+    ...resistancePred,
+    predicted_ou_side: "under",
+    ou_confidence: 51,
+    sport_specific: {
+      ...resistancePred.sport_specific,
+      v2_2_audit: {
+        ...resistancePred.sport_specific.v2_2_audit,
+        ou_play_grade: "market_aligned",
+        posterior_total: 7.3,
+        ou_model_prob: 0.51,
+        ou_market_prob: 0.54,
+        ou_edge_pct: -3,
+      },
+    },
+  };
+  const supportRecords = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-10",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, supportPred]]),
+    abbrevByTeamId,
+    signalsByGameId: new Map([[14771, resistanceSignals]]),
+    sourceAwareSplitsByGameId: new Map([[14771, resistanceSharpSplits.map((split: any) =>
+      split.selection_key.endsWith(":under")
+        ? { ...split, bets_pct: 30, money_pct: 40 }
+        : { ...split, bets_pct: 70, money_pct: 60 }
+    )]]),
+    oddsByGameId: resistanceOdds,
+  });
+  const supportTotal = supportRecords.find((record) => record.market === "total");
+  check(
+    "10-point selected-side SharpAPI money support promotes a guarded total to Lean",
+    supportTotal?.play_grade === "lean" &&
+      (supportTotal?.snapshot_json as any)?.decision_pipeline?.action_rule_id === TOTAL_SHARPAPI_SUPPORT_LEAN_RULE_ID,
+  );
+  check(
+    "total support Lean records exact provider and gap",
+    (supportTotal?.snapshot_json as any)?.total_sharpapi_support_lean?.split_provider === "sharpapi" &&
+      (supportTotal?.snapshot_json as any)?.total_sharpapi_support_lean?.money_minus_bets_pct === 10,
+  );
 }
 
 // ── Phase 6B.22 — pure helpers for snapshot context ──────────────────

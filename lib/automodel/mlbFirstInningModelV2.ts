@@ -309,6 +309,10 @@ export function runMlbFirstInningModelV2(
     snap.home_starter !== null &&
     snap.away_starter.is_scratched !== true &&
     snap.home_starter.is_scratched !== true;
+  const starterIdentityUnpublished =
+    (snap.away_starter === null || snap.home_starter === null) &&
+    snap.away_starter?.is_scratched !== true &&
+    snap.home_starter?.is_scratched !== true;
   const starterHistoryOnlyBlockers =
     freshDataBlockers.length > 0 &&
     freshDataBlockers.every((reason) => reason.includes("opposing_starter_fi_"));
@@ -318,9 +322,15 @@ export function runMlbFirstInningModelV2(
     awayLineupPublishable &&
     homeLineupPublishable &&
     starterHistoryOnlyBlockers;
+  const marketBackedUnpublishedStarterTossUp =
+    hasMarket &&
+    starterIdentityUnpublished &&
+    awayLineupPublishable &&
+    homeLineupPublishable &&
+    starterHistoryOnlyBlockers;
   if (sparseNamedStarterTossUp) {
     integrityNotes.push("Named probable starters are present but FI/season history is sparse; prediction degraded to Toss-Up.");
-  } else if (!freshDataReady) {
+  } else if (!marketBackedUnpublishedStarterTossUp && !freshDataReady) {
     integrityNotes.push(`FI held for fresh data: ${freshDataBlockers.join(", ")}.`);
   }
 
@@ -330,6 +340,9 @@ export function runMlbFirstInningModelV2(
   if (sparseNamedStarterTossUp) {
     fi_pick = "Toss-Up";
     fi_pick_reason = "fi_toss_up_sparse_named_starter_history";
+  } else if (marketBackedUnpublishedStarterTossUp) {
+    fi_pick = "Toss-Up";
+    fi_pick_reason = "fi_toss_up_market_backed_probable_unpublished";
   } else if (!freshDataReady) {
     fi_pick = "Held";
     fi_pick_reason = "fi_waiting_for_fresh_data";

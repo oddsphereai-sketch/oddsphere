@@ -9,11 +9,11 @@ Last reviewed: 2026-08-12
 ## MLB champion
 
 - Projection runtime: resolved automodel `v2_2`
-- First-inning runtime: `fi_v2`
+- First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_12_r36`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v35_2026_08_12`
-- Grade policy: `mlb_public_grade_policy_v27_market_led_moneyline_lean_2026_08_12`
+- Decision release: `mlb_daily_edge_decision_2026_08_12_r37`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v36_2026_08_12`
+- Grade policy: `mlb_public_grade_policy_v28_unified_market_tiers_2026_08_12`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
@@ -97,6 +97,29 @@ at +40.5% locked-price ROI across 15 dates; after removing overlap with the exis
 22-11 at +36.5%. The August 12 paired dry run adds no current play. Evidence and rollback details
 are recorded in `docs/model-audits/2026-08-12-mlb-market-led-moneyline-lean-r36.md`.
 
+The August 12 r37 combined release supersedes the not-yet-deployed r36 sleeve and incorporates
+the full MLB/WNBA market-pattern search. For MLB Moneylines, a movement Lean now requires at
+least a 1.5-point opener-to-current implied-probability move, a -200 through +200 price, a
+selected-side SharpAPI money-minus-ticket gap below 10, and an unchanged, correction-safe final
+side. The full cohort was 15-5; after the existing r32 ranker was removed, the incremental cohort
+was 11-5, with the recent validation and holdout periods going 9-2. The broader one-point rule was
+rejected after final-side changes were separated and its early period was negative.
+
+R37 also adds a neutral-movement Moneyline Best Angle only when both selected-side SharpAPI
+tickets and money are at least 70%, data quality is high, the price is -200 through +200, and no
+market correction or inversion fired. It went 45-15 (+26.4% ROI): 27-9 train, 14-5 validation,
+and 4-1 holdout. Sensitivity at 70%, 75%, and 80% was stable; lower incremental bands were not
+promoted because they borrowed most of their strength from this 70% cohort. No model-probability
+floor is used.
+
+For MLB totals, r37 adds an Under-only SharpAPI support Lean at -145 through +145 when selected-
+side money exceeds tickets by at least 10 points, movement is not against the pick, and quality is
+high. It went 17-5: 8-1 train, 5-3 validation, and 4-1 holdout. The corresponding Over branch was
+rejected after going 6-6 in both validation and holdout. R37 also preserves a complete two-sided
+first-inning market as a non-actionable Toss-Up when lineups are publishable but a probable
+starter has genuinely not yet been published; an absent FI market, lineup problem, or scratch
+still holds.
+
 The August 11 tracking-contract v8 operational release keeps the shared MLB
 `prediction_pipeline` lease authoritative while preventing an ordinary writer collision from
 leaving a game visibly open for another five-minute interval. The targeted pregame sweep now
@@ -149,7 +172,7 @@ The paired live-slate replay is recorded in
 - Model: `wnba_v1_1_team_identity`
 - Distribution: `wnba_market_heads_value_calibrated_2026_08_02_v3`
 - Calibration schema: `wnba_core_calibration_v1`
-- Grade policy: `wnba_grade_policy_v4_market_resistance_and_elo_stat_agreement_2026_08_10`
+- Grade policy: `wnba_grade_policy_v5_projection_rest_spread_agreement_2026_08_12`
 - Prediction-record contract: `wnba_prediction_record_contract_v2_published_probability_2026_08_10`
 - Machine registry: `lib/automodel/wnbaChampionRuntime.ts`
 - Authoritative model writer: `lib/services/wnba/runWnbaModel.ts`
@@ -169,6 +192,12 @@ Exact current-release attribution removed five total/spread public promotions th
 added six spread agreement promotions that went 5-1 (+3.421 units), for a +1 board delta. The
 broader historical promotion cohort reproduced at 14-3: 2-1 train, 6-1 validation, and 6-1
 holdout.
+
+The August 12 v5 policy adds a second, side-agnostic spread Lean path when the selected side has a
+positive canonical projection gap, rest is not against that side, at least ten books quote the
+spread, an exact selected-side price exists, and public conflict is absent. The cohort went 22-10
+(+29.7% ROI): 9-6 train, 7-2 validation, and 6-2 holdout; 11-7 was incremental outside the v4
+home Elo/stat agreement rule. It does not alter moneyline or total decisions.
 
 ## MLB Player Props candidate
 

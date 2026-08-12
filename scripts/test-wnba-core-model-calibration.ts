@@ -5,7 +5,9 @@ import {
 import {
   computeWnbaPrediction,
   resolveWnbaSpreadEloStatAgreementLean,
+  resolveWnbaSpreadProjectionRestLean,
   WNBA_SPREAD_ELO_STAT_AGREEMENT_RULE_ID,
+  WNBA_SPREAD_PROJECTION_REST_RULE_ID,
   wnbaMoneylineGradeFromValue,
   type ModelState,
   type OddRow,
@@ -349,6 +351,47 @@ check(
     agreementCompute.spread_grade_policy.promoted === true &&
     agreementCompute.spread_grade_policy.rule_id === WNBA_SPREAD_ELO_STAT_AGREEMENT_RULE_ID,
 );
+const projectionRestLean = resolveWnbaSpreadProjectionRestLean({
+  grade: "Watchlist",
+  selectedSide: "away",
+  selectedProjectionGap: 1.2,
+  restDifference: -1,
+  bookCount: 10,
+  pickedOdds: -110,
+  publicConflict: "none",
+});
+check(
+  "WNBA side-agnostic projection/rest agreement promotes Watchlist spread to Lean",
+  projectionRestLean.grade === "Lean" && projectionRestLean.promoted === true,
+);
+check(
+  "WNBA projection/rest rule is stamped in the integrated policy audit",
+  agreementCompute.spread_grade_policy.projection_rest_rule_id === WNBA_SPREAD_PROJECTION_REST_RULE_ID,
+);
+check(
+  "WNBA projection/rest agreement rejects rest against the selected side",
+  resolveWnbaSpreadProjectionRestLean({
+    grade: "Watchlist",
+    selectedSide: "away",
+    selectedProjectionGap: 1.2,
+    restDifference: 1,
+    bookCount: 10,
+    pickedOdds: -110,
+    publicConflict: "none",
+  }).promoted === false,
+);
+check(
+  "WNBA projection/rest agreement requires an exact selected-side price",
+  resolveWnbaSpreadProjectionRestLean({
+    grade: "Watchlist",
+    selectedSide: "away",
+    selectedProjectionGap: 1.2,
+    restDifference: -1,
+    bookCount: 10,
+    pickedOdds: null,
+    publicConflict: "none",
+  }).promoted === false,
+);
 
 check("compute flags off leaves spread on raw side", computeDisabled.spread.side === "PHX +6.5");
 check("compute spread recommendation stays on the displayed projection ATS side", computeSpreadEnabled.spread.side === "PHX +6.5");
@@ -410,7 +453,7 @@ check(
   wnbaPredictionReleaseMismatches({
     model_version: "wnba_v1_1_team_identity",
     distribution_version: "wnba_market_heads_value_calibrated_2026_08_02_v3",
-    grade_policy_version: "wnba_grade_policy_v4_market_resistance_and_elo_stat_agreement_2026_08_10",
+    grade_policy_version: "wnba_grade_policy_v5_projection_rest_spread_agreement_2026_08_12",
   }).length === 0,
 );
 check(

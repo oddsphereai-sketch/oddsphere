@@ -66,8 +66,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries August 12 v27 market-led Moneyline Lean policy",
-  layers.grade_policy === "mlb_public_grade_policy_v27_market_led_moneyline_lean_2026_08_12",
+  "grade policy carries August 12 v28 unified market tier policy",
+  layers.grade_policy === "mlb_public_grade_policy_v28_unified_market_tiers_2026_08_12",
 );
 check(
   "tracking contract carries the priority-retry minute-lock release",
@@ -79,8 +79,8 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB market-led Moneyline Lean policy is versioned as decision release r36",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_12_r36" &&
+  "MLB unified market tier policy is versioned as decision release r37",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_12_r37" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v3" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
@@ -127,9 +127,9 @@ check(
   EXPECTED_WNBA_DISTRIBUTION_VERSION === "wnba_market_heads_value_calibrated_2026_08_02_v3",
 );
 check(
-  "WNBA market-read grade policy is an immutable August 10 release",
+  "WNBA projection/rest spread policy is an immutable August 12 release",
   EXPECTED_WNBA_GRADE_POLICY_VERSION ===
-    "wnba_grade_policy_v4_market_resistance_and_elo_stat_agreement_2026_08_10",
+    "wnba_grade_policy_v5_projection_rest_spread_agreement_2026_08_12",
 );
 const wnbaModelSource = readFileSync("lib/services/wnba/buildWnbaDailyEdgePreview.ts", "utf8");
 const wnbaModelWriterSource = readFileSync("lib/services/wnba/runWnbaModel.ts", "utf8");

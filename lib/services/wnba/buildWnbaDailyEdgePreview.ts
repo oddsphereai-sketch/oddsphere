@@ -138,6 +138,9 @@ export const WNBA_SPREAD_ELO_STAT_AGREEMENT_RULE_ID =
   "wnba_home_spread_elo_stat_agreement_lean_v1_2026_08_10";
 export const WNBA_SPREAD_ELO_STAT_MAX_GAP_EXCLUSIVE = 3;
 export const WNBA_SPREAD_ELO_STAT_MIN_BOOKS = 10;
+export const WNBA_SPREAD_PROJECTION_REST_RULE_ID =
+  "wnba_spread_projection_rest_agreement_lean_v1_2026_08_12";
+export const WNBA_SPREAD_PROJECTION_REST_MIN_BOOKS = 10;
 
 export function resolveWnbaSpreadEloStatAgreementLean(args: {
   grade: Grade | null;
@@ -157,6 +160,31 @@ export function resolveWnbaSpreadEloStatAgreementLean(args: {
     args.pickedOdds !== null &&
     args.publicConflict === "none";
   return { grade: promoted ? "Lean" : args.grade, promoted, gap };
+}
+
+export function resolveWnbaSpreadProjectionRestLean(args: {
+  grade: Grade | null;
+  selectedSide: "home" | "away" | null;
+  selectedProjectionGap: number | null;
+  restDifference: number | null;
+  bookCount: number;
+  pickedOdds: number | null;
+  publicConflict: PublicMarketContext["conflict"];
+}): { grade: Grade | null; promoted: boolean } {
+  const restNotAgainst =
+    args.selectedSide !== null &&
+    (args.restDifference === null ||
+      (args.selectedSide === "home" ? args.restDifference >= 0 : args.restDifference <= 0));
+  const promoted =
+    args.grade === "Watchlist" &&
+    args.selectedSide !== null &&
+    args.selectedProjectionGap !== null &&
+    args.selectedProjectionGap > 0 &&
+    args.bookCount >= WNBA_SPREAD_PROJECTION_REST_MIN_BOOKS &&
+    args.pickedOdds !== null &&
+    restNotAgainst &&
+    args.publicConflict === "none";
+  return { grade: promoted ? "Lean" : args.grade, promoted };
 }
 
 // ── BDL fetch (cursor) ──
@@ -460,11 +488,18 @@ export function computeWnbaPrediction(
     spGradeBase = "Watchlist";
   }
   const spSideKey = pCoverHome == null ? null : pCoverHome >= 0.5 ? "home" : "away";
-  const spPickedOdds = spSideKey === "home" && mktSpread !== null
+  const spPickedOdds = spSideKey !== null && mktSpread !== null
     ? median(
-        spBooks
-          .filter((book) => book.line_value === mktSpread)
-          .map((book) => book.odds_american)
+        r
+          .filter((book) => {
+            if (book.mkt !== "point_spread" || book.odds === null || book.line === null) return false;
+            const homeIsBdlHome = book.h === g.h;
+            const selectionIsCanonicalHome = (book.selType === "home") === homeIsBdlHome;
+            return spSideKey === "home"
+              ? selectionIsCanonicalHome && book.line === mktSpread
+              : !selectionIsCanonicalHome && book.line === -mktSpread;
+          })
+          .map((book) => book.odds)
           .filter(finite),
       )
     : null;
@@ -484,7 +519,22 @@ export function computeWnbaPrediction(
     pickedOdds: spPickedOdds,
     publicConflict: spPublicContext?.conflict ?? "none",
   });
-  const spGrade = spAgreementLean.grade;
+  const spSelectedProjectionGap =
+    mktSpread === null || spSideKey === null
+      ? null
+      : spSideKey === "home"
+        ? canonicalHomeMargin + mktSpread
+        : -canonicalHomeMargin - mktSpread;
+  const spProjectionRestLean = resolveWnbaSpreadProjectionRestLean({
+    grade: spAgreementLean.grade,
+    selectedSide: spSideKey,
+    selectedProjectionGap: spSelectedProjectionGap,
+    restDifference: Number.isFinite(restH) && Number.isFinite(restA) ? restH - restA : null,
+    bookCount: spVals.length,
+    pickedOdds: spPickedOdds,
+    publicConflict: spPublicContext?.conflict ?? "none",
+  });
+  const spGrade = spProjectionRestLean.grade;
 
   const pOver = mktTotal != null ? 1 - Phi((mktTotal - totalForRecommendation) / sigT) : null;
   const toEdge = mktTotal != null ? totalForRecommendation - mktTotal : null;
@@ -580,6 +630,11 @@ export function computeWnbaPrediction(
       minimum_books: WNBA_SPREAD_ELO_STAT_MIN_BOOKS,
       picked_odds: spPickedOdds,
       public_conflict: spPublicContext?.conflict ?? "none",
+      projection_rest_rule_id: WNBA_SPREAD_PROJECTION_REST_RULE_ID,
+      projection_rest_promoted: spProjectionRestLean.promoted,
+      selected_projection_gap: spSelectedProjectionGap,
+      rest_difference: Number.isFinite(restH) && Number.isFinite(restA) ? restH - restA : null,
+      projection_rest_minimum_books: WNBA_SPREAD_PROJECTION_REST_MIN_BOOKS,
     },
     market: { home_win_prob: mktP != null ? r1(mktP * 100) / 100 : null, spread: mktSpread, total: mktTotal, book_count: mlBooks, dispersion: { spread: spDisp, total: toDisp } },
     consensus_source: (sharpMktP != null ? "sharp" : "all_books") as "sharp" | "all_books",

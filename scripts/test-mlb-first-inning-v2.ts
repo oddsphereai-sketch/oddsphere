@@ -455,13 +455,14 @@ async function main() {
       ["Toss-Up", "NRFI", "YRFI"].includes(out2.fiV2Audit.fi_pick));
   }
   {
-    // Missing starter → Held
+    // A complete two-sided FI market plus publishable lineups should remain
+    // visible as a non-actionable Toss-Up while a probable is unpublished.
     const snap = buildSnapshot({ homeStarter: null });
     const out = runMlbFirstInningModelV2(snap, buildFiLines(110, -130));
-    check("missing starter → fi_pick=Held", out.fiV2Audit.fi_pick === "Held");
-    check("missing starter → predicted_nrfi=null (held)", out.predicted_nrfi === null);
-    check("missing starter → fi_no_bet_reason set", out.fiV2Audit.fi_no_bet_reason !== null);
-    check("missing starter → BA eligible=false", out.fiV2Audit.fi_best_angle_eligible === false);
+    check("unpublished probable with complete FI market → Toss-Up", out.fiV2Audit.fi_pick === "Toss-Up");
+    check("unpublished-probable Toss-Up remains non-actionable", out.fiV2Audit.fi_play_grade === "toss_up" && out.fiV2Audit.fi_best_angle_eligible === false);
+    check("unpublished-probable Toss-Up carries explicit reason", out.fiV2Audit.fi_pick_reason === "fi_toss_up_market_backed_probable_unpublished");
+    check("unpublished-probable Toss-Up retains only starter blockers", out.fiV2Audit.fresh_data_ready === false && out.fiV2Audit.fresh_data_blockers.length === 1);
   }
   {
     // A published/named probable without enough verified FI or season history
