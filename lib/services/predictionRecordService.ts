@@ -1147,9 +1147,12 @@ function fiAuditFreshDataReady(sp: Record<string, unknown>): {
   const blockers = Array.isArray(audit.fresh_data_blockers)
     ? audit.fresh_data_blockers.filter((v): v is string => typeof v === "string")
     : [];
+  const permittedFreshDataTossUpReason =
+    audit.fi_pick_reason === "fi_toss_up_sparse_named_starter_history" ||
+    audit.fi_pick_reason === "fi_toss_up_market_backed_probable_unpublished";
   const sparseNamedStarterTossUp =
     audit.fi_pick === "Toss-Up" &&
-    audit.fi_pick_reason === "fi_toss_up_sparse_named_starter_history" &&
+    permittedFreshDataTossUpReason &&
     audit.fi_play_grade === "toss_up" &&
     blockers.length > 0 &&
     blockers.every((reason) => reason.includes("opposing_starter_fi_"));

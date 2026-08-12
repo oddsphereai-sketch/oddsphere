@@ -108,10 +108,21 @@ its market/lineup gates are complete. The WNBA dry run adds no current play.
 
 ## Release checklist
 
-- Superseding MLB release: `mlb_daily_edge_decision_2026_08_12_r37`.
+- Superseding MLB release: `mlb_daily_edge_decision_2026_08_12_r38` (r37 rules plus the
+  first-inning unpublished-probable writer-handoff repair).
 - Superseding WNBA grade policy: `wnba_grade_policy_v5_projection_rest_spread_agreement_2026_08_12`.
 - One authoritative writer per sport and the existing sport-scoped `prediction_pipeline` leases
   are preserved.
 - No new rule changes a side, projection, probability, price, or stake, and no rule bypasses
   hold, no-bet, freshness, missing-price, or data-quality gates.
 - Props are explicitly outside this task and are not included in this release.
+
+## Production handoff repair
+
+The first r37 production refresh exposed one integration-only mismatch on HOU@SF: FI V2 correctly
+returned a market-backed `Toss-Up` for a genuinely unpublished probable starter, while
+`predictionRecordService` still whitelisted only the older sparse-named-starter Toss-Up reason.
+The result was one missing non-actionable FI row despite a complete two-sided 0.5-run market.
+R38 expands that exact writer allowlist to the r37 reason and adds a regression fixture. The gate
+still requires `Toss-Up`, a `toss_up` writer grade, and exclusively opposing-starter FI blockers;
+no actionable count, side, price, probability, projection, or stake is changed.

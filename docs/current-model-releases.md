@@ -11,8 +11,8 @@ Last reviewed: 2026-08-12
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_12_r37`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v36_2026_08_12`
+- Decision release: `mlb_daily_edge_decision_2026_08_12_r38`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v37_2026_08_12`
 - Grade policy: `mlb_public_grade_policy_v28_unified_market_tiers_2026_08_12`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
@@ -119,6 +119,14 @@ rejected after going 6-6 in both validation and holdout. R37 also preserves a co
 first-inning market as a non-actionable Toss-Up when lineups are publishable but a probable
 starter has genuinely not yet been published; an absent FI market, lineup problem, or scratch
 still holds.
+
+The August 12 r38 integration release preserves every r37 side, probability, grade, price, and
+stake rule while fixing the authoritative record writer's handoff for that unpublished-probable
+first-inning case. R37 correctly produced a market-backed non-actionable Toss-Up in
+`game_predictions`, but the record writer still allowed only the older sparse-named-starter
+reason and omitted the public `prediction_records` row. R38 recognizes both explicitly approved
+Toss-Up reasons. It cannot create an actionable FI play and still fails closed for an absent FI
+market, lineup failure, scratch, or any blocker outside opposing-starter FI availability.
 
 The August 11 tracking-contract v8 operational release keeps the shared MLB
 `prediction_pipeline` lease authoritative while preventing an ordinary writer collision from

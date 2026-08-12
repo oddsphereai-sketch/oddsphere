@@ -1788,6 +1788,39 @@ console.log("\n━━━ Phase 6B.20 — Toss-Up FI rows ━━━");
   check("sparse named-starter tracking row preserves audit blockers", (fi?.snapshot_json as any)?.fi_v2_audit?.fresh_data_ready === false);
 }
 {
+  const unpublishedProbableTossUp = {
+    ...basePrediction,
+    predicted_nrfi: false,
+    nrfi_confidence: 50,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "toss_up",
+      fi_v2_audit: {
+        fi_pick: "Toss-Up",
+        fi_pick_reason: "fi_toss_up_market_backed_probable_unpublished",
+        fi_play_grade: "toss_up",
+        fi_no_bet_reason: "Toss-Up — model probability in the neutral band.",
+        fresh_data_ready: false,
+        fresh_data_blockers: ["away_batting_opposing_starter_fi_missing"],
+        market_data_quality: "ok",
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, unpublishedProbableTossUp]]),
+    abbrevByTeamId,
+  });
+  const fi = recs.find((r) => r.market === "first_inning");
+  check("unpublished-probable market-backed Toss-Up writes a tracking row", fi?.pick === "Toss-Up");
+  check("unpublished-probable tracking row remains non-actionable", fi?.no_bet === true && fi?.play_grade === "toss_up");
+  check("unpublished-probable tracking row is stamped with current release", (fi?.snapshot_json as any)?.model_layer_versions?.decision_release_id === MLB_DAILY_EDGE_DECISION_RELEASE_ID);
+}
+{
   // Actionable NRFI: nrfi_decision_kind='nrfi' → unchanged path
   const actionablePred = {
     ...basePrediction,
