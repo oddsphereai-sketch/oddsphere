@@ -280,9 +280,24 @@ function enforceLockedCardCutoff(body: DailyEdgeResponse): DailyEdgeResponse {
       market.oddsTrail = trail;
       market.lineTrail = (market.lineTrail ?? []).filter((stop) => !isoAfter(stop.observedAt, cutoffMs));
       if (market.opposingOddsTrail) {
-        market.opposingOddsTrail.stops = market.opposingOddsTrail.stops.filter(
+        const opposingStops = market.opposingOddsTrail.stops.filter(
           (stop) => !isoAfter(stop.observedAt, cutoffMs),
         );
+        // Only the selected side is persisted in prediction_records at lock.
+        // The other side's most recent verified pre-lock line_history quote is
+        // therefore the truthful terminal point for its frozen reader trail.
+        // Mark that terminal as locked so the presentation does not discard a
+        // complete same-book history merely because a post-lock live quote was
+        // removed above. Never synthesize an earlier observation when history
+        // is genuinely thin.
+        if (opposingStops.length >= 2) {
+          opposingStops[0] = { ...opposingStops[0]!, label: "first" };
+          opposingStops[opposingStops.length - 1] = {
+            ...opposingStops[opposingStops.length - 1]!,
+            label: "locked",
+          };
+        }
+        market.opposingOddsTrail.stops = opposingStops;
       }
       const comparable = trail.filter((stop) => typeof stop.american === "number");
       market.lastMovePrevAmerican = comparable.length >= 2 ? comparable[comparable.length - 2]!.american : null;

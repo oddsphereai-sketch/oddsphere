@@ -99,6 +99,10 @@ async function main() {
         for (const trail of trails) {
           if (trail.stops.length === 0) continue;
           verifiedTrails += 1;
+          const terminal = trail.stops[trail.stops.length - 1] as TrailStop | undefined;
+          if (trail.stops.length < 3) failures.push(`${sport}/${game.id}/${key}/${trail.name}: fewer than first/prior/current observations`);
+          if (trail.stops[0]?.label !== "first") failures.push(`${sport}/${game.id}/${key}/${trail.name}: first observation is not labeled first`);
+          if (terminal?.label !== "current" && terminal?.label !== "locked") failures.push(`${sport}/${game.id}/${key}/${trail.name}: terminal observation is not current/locked`);
           const books = new Set(trail.stops.map((stop: TrailStop) => stop.sportsbook).filter(Boolean));
           if (books.size !== 1) failures.push(`${sport}/${game.id}/${key}/${trail.name}: mixed or missing sportsbook`);
           let priorTime = -Infinity;
@@ -128,12 +132,15 @@ async function main() {
         }
         if (sport === "mlb" && key === "first_inning" && market.fiMarketBoard) {
           const board = market.fiMarketBoard as Row;
-          const sportsbook = String(board.source ?? "").replace(/^fi_market_ok_/, "").replaceAll(" ", "_").toLowerCase();
+          const rawSource = String(board.source ?? "");
+          const sportsbook = rawSource.startsWith("fi_market_ok_")
+            ? rawSource.replace(/^fi_market_ok_/, "").replaceAll(" ", "_").toLowerCase()
+            : null;
           for (const [side, currentPrice, openPrice, previousPrice] of [
             ["under", board.nrfiAmerican, board.nrfiOpenAmerican, board.nrfiPreviousAmerican],
             ["over", board.yrfiAmerican, board.yrfiOpenAmerican, board.yrfiPreviousAmerican],
           ] as const) {
-            const identity = (row: Row, price: unknown) => row.game_id === gameId && row.market_type === "first_inning_total" && row.side === side && row.sportsbook === sportsbook && row.odds_american === price && close(row.line_value, board.line);
+            const identity = (row: Row, price: unknown) => row.game_id === gameId && row.market_type === "first_inning_total" && row.side === side && (sportsbook === null || row.sportsbook === sportsbook) && row.odds_american === price && close(row.line_value, board.line);
             if (currentPrice !== null && !(current ?? []).some((row) => identity(row, currentPrice)) && !history.some((row) => identity(row, currentPrice))) failures.push(`${sport}/${game.id}/first_inning/${side}: board current not found`);
             else if (currentPrice !== null) verifiedFirstInningBoardPrices += 1;
             for (const [label, price] of [["open", openPrice], ["previous", previousPrice]] as const) {

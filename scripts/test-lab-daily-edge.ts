@@ -2114,6 +2114,7 @@ async function main() {
               label: "NYM",
               stops: [
                 { american: 135, line: null, observedAt: "2026-08-09T10:02:00Z", sportsbook: "ballybet", source: "line_history", label: "first" },
+                { american: 138, line: null, observedAt: "2026-08-09T10:02:30Z", sportsbook: "ballybet", source: "line_history", label: "move" },
                 { american: -550, line: null, observedAt: "2026-08-09T10:04:00Z", sportsbook: "ballybet", source: "line_history", label: "move" },
               ],
             },
@@ -2151,7 +2152,8 @@ async function main() {
     dailyEdgeTest.enforceLockedCardCutoff(cachedLockedBody);
     const sanitized = cachedLockedBody.games[0].markets.moneyline;
     check("cached locked cards discard post-lock in-game odds", sanitized.oddsTrail.every((stop: any) => stop.american !== 460));
-    check("cached locked cards also discard post-lock opposite-side odds", sanitized.opposingOddsTrail.stops.length === 1 && sanitized.opposingOddsTrail.stops[0]?.american === 135);
+    check("cached locked cards also discard post-lock opposite-side odds", sanitized.opposingOddsTrail.stops.length === 2 && sanitized.opposingOddsTrail.stops.every((stop: any) => stop.american !== -550));
+    check("cached locked cards retain a coherent opposite-side terminal", sanitized.opposingOddsTrail.stops[0]?.label === "first" && sanitized.opposingOddsTrail.stops[1]?.label === "locked" && sanitized.opposingOddsTrail.stops[1]?.american === 138);
     check("cached locked cards restore persisted pre-lock consensus splits", sanitized.publicSplits[0]?.moneyPct === 59 && sanitized.publicSplits[1]?.moneyPct === 41);
     check("cached locked cards discard post-lock generated market reads", sanitized.marketReadV2 === null);
     const sanitizedTotal = cachedLockedBody.games[0].markets.total;
