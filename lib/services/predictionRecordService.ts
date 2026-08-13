@@ -443,11 +443,13 @@ export const ML_MARKET_LED_MOVEMENT_MAX_ODDS = 200;
 export const ML_MARKET_LED_MOVEMENT_MIN_MAGNITUDE_PP = 1.5;
 export const ML_MARKET_LED_MOVEMENT_MAX_MONEY_OVER_TICKETS_GAP_EXCLUSIVE = 10;
 export const ML_NEUTRAL_CONSENSUS_RULE_ID =
-  "ml_sharpapi_neutral_consensus_tier_v1_2026_08_12";
+  "ml_sharpapi_consensus_grade_continuity_v2_2026_08_13";
 export const ML_NEUTRAL_CONSENSUS_MIN_ODDS = -200;
 export const ML_NEUTRAL_CONSENSUS_MAX_ODDS = 200;
 export const ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_BETS_PCT = 70;
 export const ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_MONEY_PCT = 70;
+export const ML_CONSENSUS_SUPPORT_CONTINUITY_LEAN_RULE_ID =
+  "ml_sharpapi_consensus_toward_continuity_lean_v1_2026_08_13";
 export const ML_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID =
   "ml_calibrated_model_best_angle_path_v1_2026_07_27";
 export const ML_CALIBRATED_MODEL_LEAN_PATH_ID =
@@ -1859,7 +1861,7 @@ export function applyMlbNeutralConsensusGrades(records: PredictionRecordRow[]): 
     const movement = readRecordOrNull(snapshot.line_movement);
     const integrity = readRecordOrNull(snapshot.data_integrity);
     if (
-      movement?.direction !== "neutral" ||
+      (movement?.direction !== "neutral" && movement?.direction !== "toward_pick") ||
       decision.market_aware_correction_applied === true ||
       decision.inversion_triggered === true ||
       integrity?.stale !== "no" ||
@@ -1872,11 +1874,15 @@ export function applyMlbNeutralConsensusGrades(records: PredictionRecordRow[]): 
       "sharpapi",
     );
     if (validatedSplit.betsPct === null || validatedSplit.moneyPct === null) return record;
-    const bestAngle =
+    const strongConsensus =
       validatedSplit.betsPct >= ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_BETS_PCT &&
       validatedSplit.moneyPct >= ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_MONEY_PCT;
-    if (!bestAngle) return record;
-    const grade = "best_angle";
+    if (!strongConsensus) return record;
+    const bestAngle = movement.direction === "neutral";
+    const grade = bestAngle ? "best_angle" : "lean";
+    const ruleId = bestAngle
+      ? ML_NEUTRAL_CONSENSUS_RULE_ID
+      : ML_CONSENSUS_SUPPORT_CONTINUITY_LEAN_RULE_ID;
     return {
       ...record,
       play_grade: grade,
@@ -1887,13 +1893,13 @@ export function applyMlbNeutralConsensusGrades(records: PredictionRecordRow[]): 
           ...decision,
           board_action: "bet",
           actionable_grade: grade,
-          action_rule_id: ML_NEUTRAL_CONSENSUS_RULE_ID,
-          promotion_rule_id: ML_NEUTRAL_CONSENSUS_RULE_ID,
+          action_rule_id: ruleId,
+          promotion_rule_id: ruleId,
           grade_source: "additive_market_rule",
         },
         ml_neutral_consensus_grade: {
-          rule_id: ML_NEUTRAL_CONSENSUS_RULE_ID,
-          action: "promote_to_best_angle",
+          rule_id: ruleId,
+          action: bestAngle ? "promote_to_best_angle" : "promote_to_continuity_lean",
           odds_american: record.odds_american,
           minimum_odds_inclusive: ML_NEUTRAL_CONSENSUS_MIN_ODDS,
           maximum_odds_inclusive: ML_NEUTRAL_CONSENSUS_MAX_ODDS,
@@ -1904,7 +1910,9 @@ export function applyMlbNeutralConsensusGrades(records: PredictionRecordRow[]): 
           best_angle_minimum_money_pct: ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_MONEY_PCT,
           split_provider: "sharpapi",
           model_probability_context_only: record.model_probability,
-          validation_note: "Correction-safe high-quality MLB Moneylines with neutral movement, a -200 through +200 price, and at least 70% selected-side SharpAPI tickets and money went 45-15 with positive ROI in train, validation, and holdout. The lower incremental bands were rejected; no model-probability cutoff is used.",
+          validation_note: bestAngle
+            ? "Correction-safe high-quality MLB Moneylines with neutral movement, a -200 through +200 price, and at least 70% selected-side SharpAPI tickets and money retain the validated Best Angle tier."
+            : "The same 70/70 SharpAPI support with movement toward the pick is graded Lean for continuity: 40-18 overall, while the previously nonactionable incremental cohort went 24-8 and was positive in train, validation, and holdout. Favorable movement does not preserve Best Angle status.",
         },
       },
     };

@@ -39,6 +39,7 @@ import {
   ML_SHARP_PORTFOLIO_LEAN_RULE_ID,
   ML_MARKET_LED_MOVEMENT_LEAN_RULE_ID,
   ML_NEUTRAL_CONSENSUS_RULE_ID,
+  ML_CONSENSUS_SUPPORT_CONTINUITY_LEAN_RULE_ID,
   ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID,
   ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID,
   ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID,
@@ -466,7 +467,12 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
   );
   check("lower neutral-consensus bands do not borrow strength from the 70/70 tier", neutralConsensus[1]?.play_grade === "market_aligned");
   check("neutral consensus requires both ticket and money floors", neutralConsensus[2]?.play_grade === "market_aligned");
-  check("neutral consensus does not overlap moving prices", neutralConsensus[3]?.play_grade === "market_aligned");
+  check(
+    "70/70 consensus steps down only to Lean when price movement turns favorable",
+    neutralConsensus[3]?.play_grade === "lean" && neutralConsensus[3]?.best_angle === false &&
+      (neutralConsensus[3]?.snapshot_json as any)?.decision_pipeline?.action_rule_id ===
+        ML_CONSENSUS_SUPPORT_CONTINUITY_LEAN_RULE_ID,
+  );
 }
 
 // ── Standard slate: 1 game, NRFI held → 2 records ────────────────

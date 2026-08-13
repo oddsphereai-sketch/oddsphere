@@ -11,9 +11,9 @@ Last reviewed: 2026-08-13
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_13_r39`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v38_2026_08_13`
-- Grade policy: `mlb_public_grade_policy_v29_total_mean_selector_under_replacement_2026_08_13`
+- Decision release: `mlb_daily_edge_decision_2026_08_13_r40`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v39_2026_08_13`
+- Grade policy: `mlb_public_grade_policy_v30_consensus_grade_continuity_2026_08_13`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
@@ -140,6 +140,18 @@ branch was rejected at 1-7. Historical paired impact removes 13 old-sleeve Leans
 Under Leans (net +13); the August 13 paired board adds four Leans with no current old-sleeve
 demotion. Rollback is the exact r38 release and v28 grade policy. Full evidence is recorded in
 `docs/model-audits/2026-08-13-mlb-total-mean-selector-original-under-r39.md`.
+
+The August 13 r40 Moneyline continuity release closes the interaction gap between r37's
+neutral-consensus Best Angle and its movement Lean. A high-quality, fresh, correction-safe
+Moneyline with a -200 through +200 price and exact selected-side SharpAPI tickets and money both
+at least 70% remains a Best Angle only while movement is neutral. If movement becomes favorable,
+the same evidence now produces a Lean rather than falling to Watchlist; movement against the pick
+still receives no protection. The rule does not change the side, probability, projection, price,
+or stake. Historical favorable-movement rows went 40-18 (+11.0% ROI); the previously
+nonactionable incremental cohort went 24-8 (+17.8% ROI) and was positive in train, validation,
+and holdout. The paired August 13 board adds one Lean—Texas at the current snapshot—with no
+demotions. Evidence and rollback details are in
+`docs/model-audits/2026-08-13-mlb-consensus-grade-continuity-r40.md`.
 
 The August 11 tracking-contract v8 operational release keeps the shared MLB
 `prediction_pipeline` lease authoritative while preventing an ordinary writer collision from
