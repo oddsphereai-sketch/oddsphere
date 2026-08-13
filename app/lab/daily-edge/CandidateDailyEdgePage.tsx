@@ -7,6 +7,7 @@ import {
 } from "@/app/dev/experience-preview/page";
 import { DAILY_EDGE_SPORT_KEYS } from "@/app/lab/lib/dailyEdgeSports";
 import type { Sport } from "@/lib/types/domain/Sport";
+import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 
 export default async function CandidateDailyEdgePage({
   searchParams,
@@ -25,14 +26,17 @@ export default async function CandidateDailyEdgePage({
   ]);
 
   return (
-    <ActualDailyEdgePreview
-      key={`${sport}-${snapshot.date}`}
-      snapshot={snapshot}
-      history={history}
-      pitcherFirstInningHistory={pitcherFirstInningHistory}
-      sport={sport}
-      freshContractRead={false}
-      reviewMode={false}
-    />
+    <>
+      <DailyEdgeLiveRefresh />
+      <ActualDailyEdgePreview
+        key={`${sport}-${snapshot.date}`}
+        snapshot={snapshot}
+        history={history}
+        pitcherFirstInningHistory={pitcherFirstInningHistory}
+        sport={sport}
+        freshContractRead={false}
+        reviewMode={false}
+      />
+    </>
   );
 }

@@ -21,6 +21,18 @@ const snapshotPrimerSource = readFileSync(
   "utf8",
 );
 const privateNavSource = readFileSync("app/lab/components/LabAppNav.tsx", "utf8");
+const liveRefreshSource = readFileSync(
+  "app/lab/daily-edge/DailyEdgeLiveRefresh.tsx",
+  "utf8",
+);
+const candidateMemberPageSource = readFileSync(
+  "app/lab/daily-edge/CandidateDailyEdgePage.tsx",
+  "utf8",
+);
+const dailyEdgeRouteSource = readFileSync(
+  "app/lab/daily-edge/page.tsx",
+  "utf8",
+);
 
 let passed = 0;
 let failed = 0;
@@ -117,6 +129,23 @@ check(
   "private Player Props navigation prefers the real read-only snapshot over fixture data",
   privateNavSource.includes('{ href: "/dev/mlb-props-preview", label: "Player Props"') &&
     !privateNavSource.includes('{ href: "/dev/mlb-props-preview?source=fixture", label: "Player Props"'),
+);
+check(
+  "member Daily Edge refreshes while open and recovers on focus, reconnect, and back-forward restore",
+  candidateMemberPageSource.includes("<DailyEdgeLiveRefresh />") &&
+    liveRefreshSource.includes("router.refresh()") &&
+    liveRefreshSource.includes('document.addEventListener("visibilitychange"') &&
+    liveRefreshSource.includes('window.addEventListener("focus"') &&
+    liveRefreshSource.includes('window.addEventListener("online"') &&
+    liveRefreshSource.includes('window.addEventListener("pageshow"') &&
+    liveRefreshSource.includes("window.clearInterval(interval)"),
+);
+check(
+  "member Daily Edge is request-rendered so refreshes cannot reuse a deployment-time slate",
+  dailyEdgeRouteSource.includes('import { connection } from "next/server"') &&
+    dailyEdgeRouteSource.includes("await connection()") &&
+    dailyEdgeRouteSource.indexOf("await connection()") <
+      dailyEdgeRouteSource.indexOf("isDailyEdgeExperienceCandidateEnabled()"),
 );
 
 console.log("\n━━━ Reader selection contract ━━━");
