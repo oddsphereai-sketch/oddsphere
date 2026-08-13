@@ -3326,6 +3326,21 @@ function buildPersistedOddsTrail(args: {
   return stops;
 }
 
+function terminalOddsMoveFromTrail(trail: OddsTrailStop[]): {
+  previousAmerican: number | null;
+  currentAmerican: number | null;
+  observedAt: string | null;
+} {
+  const comparable = trail.filter((stop) => typeof stop.american === "number" && Number.isFinite(stop.american));
+  const current = comparable[comparable.length - 1] ?? null;
+  const previous = comparable.length >= 2 ? comparable[comparable.length - 2] ?? null : null;
+  return {
+    previousAmerican: previous?.american ?? null,
+    currentAmerican: current?.american ?? null,
+    observedAt: current?.observedAt ?? null,
+  };
+}
+
 function extractAutoFactors(
   ss: Record<string, unknown> | null | undefined
 ): Record<string, unknown> | null {
@@ -5023,6 +5038,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
         sameLineValue(input.lastMove.nextLineValue, totalDisplayLine)))
       ? input.lastMove
       : null;
+  const visibleTerminalOddsMove = terminalOddsMoveFromTrail(oddsTrail);
   const marketReadV2 = alignMarketReadV2ToVisibleOdds({
     read: input.marketReadV2 ?? null,
     enabled: input.marketReadV2Enabled === true,
@@ -5258,9 +5274,9 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     marketInterpretation: input.marketReadV2Enabled === true ? null : marketInterpretation,
     marketReadV2,
     marketReadV2Enabled: input.marketReadV2Enabled === true,
-    lastMovePrevAmerican: visibleLastMove?.prevAmerican ?? null,
-    lastMoveNextAmerican: visibleLastMove?.nextAmerican ?? null,
-    lastMoveAtIso: visibleLastMove?.movedAtIso ?? null,
+    lastMovePrevAmerican: visibleTerminalOddsMove.previousAmerican,
+    lastMoveNextAmerican: visibleTerminalOddsMove.currentAmerican,
+    lastMoveAtIso: visibleTerminalOddsMove.observedAt,
     lastMoveLinePrev: visibleLastMove?.prevLineValue ?? null,
     lastMoveLineNext: visibleLastMove?.nextLineValue ?? null,
     modelTotal: input.totalsExtras?.modelTotal ?? null,
@@ -6087,6 +6103,7 @@ export const __TEST__ = {
   enforceLockedCardCutoff,
   resolveTrailPriceRow,
   buildPersistedOddsTrail,
+  terminalOddsMoveFromTrail,
   fiBoardHistorySide,
   readLockedSnapshotSportsbook,
   GRADE_RANK,

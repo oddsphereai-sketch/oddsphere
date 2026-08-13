@@ -2211,6 +2211,11 @@ section("Market Pulse presentation coherence");
       "unlocked same-book trail ends at the verified current quote, not the last historical move",
       currentTrail.length === 3 && currentTrail[1]?.american === -141 && currentTrail[1]?.label === "move" && currentTrail[2]?.american === -152 && currentTrail[2]?.label === "current" && currentTrail[2]?.sportsbook === "ballybet",
     );
+    const terminalMove = dailyEdgeTest.terminalOddsMoveFromTrail(currentTrail);
+    check(
+      "movement summary uses the same terminal quote shown by the selected-side trail",
+      terminalMove.previousAmerican === -141 && terminalMove.currentAmerican === -152 && terminalMove.observedAt === "2026-08-10T17:43:00Z",
+    );
 
     const noCrossBookTrail = dailyEdgeTest.buildPersistedOddsTrail({
       candidates: [
