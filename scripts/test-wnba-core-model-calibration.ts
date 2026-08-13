@@ -17,10 +17,14 @@ import {
   resolveWnbaPickedMoneylineProbabilities,
   WNBA_PREDICTION_RECORD_CONTRACT_VERSION,
 } from "../lib/services/wnba/buildWnbaPredictionRecords";
-import { wnbaPredictionReleaseMismatches } from "../lib/automodel/wnbaChampionRuntime";
+import {
+  EXPECTED_WNBA_GRADE_POLICY_VERSION,
+  wnbaPredictionReleaseMismatches,
+} from "../lib/automodel/wnbaChampionRuntime";
 import { gradePrediction } from "../lib/services/predictionGrader";
 import { resolveWnbaMoneylineSide } from "../lib/services/wnba/wnbaTeams";
 import { applyPublicMarketContext } from "../lib/services/publicMarketContext";
+import { resolveWnbaReaderGrade } from "../lib/services/wnba/buildWnbaDailyEdgeAdapted";
 
 let pass = 0;
 let fail = 0;
@@ -453,8 +457,28 @@ check(
   wnbaPredictionReleaseMismatches({
     model_version: "wnba_v1_1_team_identity",
     distribution_version: "wnba_market_heads_value_calibrated_2026_08_02_v3",
-    grade_policy_version: "wnba_grade_policy_v5_projection_rest_spread_agreement_2026_08_12",
+    grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
   }).length === 0,
+);
+check(
+  "WNBA v6 reader preserves the authoritative writer Lean",
+  resolveWnbaReaderGrade({
+    gradePolicyVersion: EXPECTED_WNBA_GRADE_POLICY_VERSION,
+    grade: "Lean",
+    modelProbPick: 0.52,
+    marketFairProbPick: 0.522,
+    aligned: null,
+  }) === "Lean",
+);
+check(
+  "WNBA reader preserves the legacy cap for locked v5 history",
+  resolveWnbaReaderGrade({
+    gradePolicyVersion: "wnba_grade_policy_v5_projection_rest_spread_agreement_2026_08_12",
+    grade: "Lean",
+    modelProbPick: 0.52,
+    marketFairProbPick: 0.522,
+    aligned: null,
+  }) === "Watchlist",
 );
 check(
   "WNBA record writer refuses stale or incomplete source releases",

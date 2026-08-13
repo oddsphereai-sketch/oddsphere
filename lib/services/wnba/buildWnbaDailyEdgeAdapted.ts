@@ -30,7 +30,10 @@ import type { Verdict } from "../verdictDerivation";
 import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
 import { resolveWnbaMoneylineSide, wnbaLogoUrl } from "./wnbaTeams";
-import { wnbaPredictionReleaseMismatches } from "@/lib/automodel/wnbaChampionRuntime";
+import {
+  EXPECTED_WNBA_GRADE_POLICY_VERSION,
+  wnbaPredictionReleaseMismatches,
+} from "@/lib/automodel/wnbaChampionRuntime";
 import { supabase } from "@/lib/db/supabase";
 import { computeSlateDate, currentSlateDate } from "@/lib/dates/slateDate";
 import {
@@ -290,6 +293,12 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
       model: (ss.model as PreviewGame["model"]) ?? { home_win_prob: 0.5, margin: 0, total: gp.predicted_total ?? 0 },
       market: (ss.market as PreviewGame["market"]) ?? { home_win_prob: null, spread: null, total: null, book_count: 0, dispersion: { spread: 0, total: 0 } },
       data_quality: (ss.data_quality as PreviewGame["data_quality"]) ?? { ml_books: 0, spread_books: 0, total_books: 0, flags: [] },
+      grade_policy_version:
+        (lockedMl?.snapshot_json?.grade_policy_version as string | undefined) ??
+        (lockedTotal?.snapshot_json?.grade_policy_version as string | undefined) ??
+        (lockedSpread?.snapshot_json?.grade_policy_version as string | undefined) ??
+        (ss.grade_policy_version as string | undefined) ??
+        null,
       publicSplits: lockedAt
         ? buildLockedWnbaPublicSplits(
             lockedRecordsForGame,
@@ -806,6 +815,7 @@ type PreviewGame = {
   };
   market: { home_win_prob: number | null; spread: number | null; total: number | null; book_count: number; dispersion: { spread: number; total: number } };
   data_quality: { ml_books: number; spread_books: number; total_books: number; flags: string[] };
+  grade_policy_version?: string | null;
   /** Playbook public splits (ML, total, spread) for display; absent on live fallback. */
   publicSplits?: { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[]; spread: WnbaPublicSplit[] };
   /** Current picked-side prices from `lines`; absent on live fallback. */
@@ -1104,6 +1114,30 @@ function capWnbaGradeForPickedEdge(
   return grade;
 }
 
+/**
+ * New WNBA releases treat the versioned writer grade as authoritative. The
+ * legacy reader cap compared rounded display confidence with a separately
+ * reconstructed no-vig probability and could silently demote a valid writer
+ * Lean. Preserve that legacy behavior for locked historical releases, but do
+ * not apply it to the v6 coherence contract or later explicitly versioned
+ * successors.
+ */
+export function resolveWnbaReaderGrade(args: {
+  gradePolicyVersion: string | null | undefined;
+  grade: PreviewModelGrade | null;
+  modelProbPick: number | null;
+  marketFairProbPick: number | null;
+  aligned: boolean | null;
+}): PreviewModelGrade | null {
+  if (args.gradePolicyVersion === EXPECTED_WNBA_GRADE_POLICY_VERSION) return args.grade;
+  return capWnbaGradeForPickedEdge(
+    args.grade,
+    args.modelProbPick,
+    args.marketFairProbPick,
+    args.aligned,
+  );
+}
+
 function wnbaPickProbabilityFromConfidence(confidence: number | null): number | null {
   if (confidence === null) return null;
   return Math.max(0, Math.min(1, confidence / 100));
@@ -1133,9 +1167,16 @@ function buildMarket(opts: {
   lockedAt?: string | null;
   marketReadV2?: MarketReadV2Dto | null;
   marketReadV2Enabled?: boolean;
+  gradePolicyVersion?: string | null;
 }): MarketEdgeDto {
   const { slot, pick, confFrac, grade, modelProbPick, marketFairProbPick, priceAmerican, line, modelTotal, marketTotal, bookCount, aligned, whyLine } = opts;
-  const effectiveGrade = capWnbaGradeForPickedEdge(grade, modelProbPick, marketFairProbPick, aligned);
+  const effectiveGrade = resolveWnbaReaderGrade({
+    gradePolicyVersion: opts.gradePolicyVersion,
+    grade,
+    modelProbPick,
+    marketFairProbPick,
+    aligned,
+  });
   const held = pick === null || effectiveGrade === null;
   const g: PreviewModelGrade = effectiveGrade ?? "Watchlist";
   const verdict: { key: Verdict; label: string } = { key: gradeToVerdict(g), label: verdictLabel(g) };
@@ -1342,6 +1383,7 @@ function adaptGame(
     lockedAt: game.lockedAt ?? null,
     marketReadV2: mlMarketRead,
     marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.moneyline === true,
+    gradePolicyVersion: game.grade_policy_version,
   });
 
   // ── Total ──
@@ -1378,6 +1420,7 @@ function adaptGame(
     lockedAt: game.lockedAt ?? null,
     marketReadV2: totalMarketRead,
     marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.total === true,
+    gradePolicyVersion: game.grade_policy_version,
   });
 
   // ── Spread (rendered on the first_inning slot, relabeled "Sprd*") ──
@@ -1430,6 +1473,7 @@ function adaptGame(
     lockedAt: game.lockedAt ?? null,
     marketReadV2: spreadMarketRead,
     marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.spread === true,
+    gradePolicyVersion: game.grade_policy_version,
   });
 
   // Top grade across the three markets drives the card verdict pill.

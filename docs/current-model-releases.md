@@ -193,7 +193,7 @@ The paired live-slate replay is recorded in
 - Model: `wnba_v1_1_team_identity`
 - Distribution: `wnba_market_heads_value_calibrated_2026_08_02_v3`
 - Calibration schema: `wnba_core_calibration_v1`
-- Grade policy: `wnba_grade_policy_v5_projection_rest_spread_agreement_2026_08_12`
+- Grade policy: `wnba_grade_policy_v6_authoritative_reader_grade_2026_08_13`
 - Prediction-record contract: `wnba_prediction_record_contract_v2_published_probability_2026_08_10`
 - Machine registry: `lib/automodel/wnbaChampionRuntime.ts`
 - Authoritative model writer: `lib/services/wnba/runWnbaModel.ts`
@@ -219,6 +219,16 @@ positive canonical projection gap, rest is not against that side, at least ten b
 spread, an exact selected-side price exists, and public conflict is absent. The cohort went 22-10
 (+29.7% ROI): 9-6 train, 7-2 validation, and 6-2 holdout; 11-7 was incremental outside the v4
 home Elo/stat agreement rule. It does not alter moneyline or total decisions.
+
+The August 13 v6 coherence release preserves all v5 selection, projection, probability, price,
+and grading rules, but makes the versioned WNBA writer grade authoritative in the member reader.
+It removes a second, unversioned reader comparison between rounded display confidence and a
+separately reconstructed no-vig probability that could silently demote an official Lean. Locked
+v5-and-older rows retain their historical reader behavior. The current-slate paired dry run has
+zero promotions and zero demotions; an August 1-14 diagnostic found four historical writer/reader
+Lean-to-Watchlist mismatches that demonstrate the forward risk without rewriting that history.
+Evidence and rollback details are recorded in
+`docs/model-audits/2026-08-13-wnba-authoritative-reader-grade-v6.md`.
 
 ## MLB Player Props candidate
 
