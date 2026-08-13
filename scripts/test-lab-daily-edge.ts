@@ -2124,6 +2124,27 @@ section("Market Pulse presentation coherence");
         (stop.observedAt === null || Date.parse(stop.observedAt) <= Date.parse("2026-08-09T10:03:00Z"))
       ),
     );
+    const opposingHistoryTrail = dailyEdgeTest.buildPersistedOddsTrail({
+      candidates: [
+        { id: 5, game_id: 1, market_type: "total", sportsbook: "pinnacle", side: "over", line_value: 9.5, odds_american: 104, recorded_at: "2026-08-09T10:01:00Z" },
+        { id: 6, game_id: 1, market_type: "total", sportsbook: "pinnacle", side: "over", line_value: 9.5, odds_american: 108, recorded_at: "2026-08-09T10:02:00Z" },
+      ],
+      priceRow: { game_id: 1, market_type: "total", sportsbook: "pinnacle", side: "over", line_value: 9.5, odds_american: 108, fetched_at: null, odds_american_observed_at: "2026-08-09T10:02:00Z" },
+      currentAmerican: 108,
+      currentLine: 9.5,
+      currentObservedAt: "2026-08-09T10:02:00Z",
+      lockedAmerican: null,
+      lockedAt: "2026-08-09T10:03:00Z",
+      terminalSportsbook: "pinnacle",
+      terminalSource: "line_history",
+    });
+    check(
+      "locked opposing trails retain a truthful history-backed terminal",
+      opposingHistoryTrail.length === 2 &&
+        opposingHistoryTrail[1]?.source === "line_history" &&
+        opposingHistoryTrail[1]?.label === "current" &&
+        opposingHistoryTrail[1]?.american === 108,
+    );
 
     const cachedLockedBody = {
       games: [{

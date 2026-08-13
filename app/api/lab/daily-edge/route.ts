@@ -3244,6 +3244,7 @@ function buildPersistedOddsTrail(args: {
   lockedAt: string | null;
   terminalSportsbook?: string | null;
   allowLineChanges?: boolean;
+  terminalSource?: "current_line" | "line_history";
 }): OddsTrailStop[] {
   if (args.currentAmerican === null && args.lockedAmerican === null) return [];
   const lockedCutoffMs = args.lockedAt === null ? null : Date.parse(args.lockedAt);
@@ -3314,7 +3315,7 @@ function buildPersistedOddsTrail(args: {
   const terminalSource: OddsTrailStop["source"] =
     args.lockedAmerican !== null && args.lockedAmerican !== undefined
       ? "locked_snapshot"
-      : "current_line";
+      : args.terminalSource ?? "current_line";
   const terminalObservedAt = args.lockedAmerican !== null && args.lockedAmerican !== undefined
     ? args.lockedAt
     : args.currentObservedAt;
@@ -4528,16 +4529,36 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
       null,
     locked: input.isLockedRow === true,
   });
+  // The member card displays the validated best/current real-book quote when
+  // one is available. Build the movement trail around that same endpoint,
+  // rather than around the older recommendation price. Otherwise a perfectly
+  // valid newer quote fails the equality check below, loses its sportsbook,
+  // and collapses First/Prior/Current to a source-less Current-only stop.
+  const trailCurrentAmerican =
+    input.isLockedRow === true
+      ? priceAmerican
+      : currentMemberPriceRow?.odds_american ?? priceAmerican;
+  const trailCurrentLine =
+    input.isLockedRow === true
+      ? priceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null
+      : currentMemberPriceRow?.line_value ??
+        priceRow?.line_value ??
+        input.totalsExtras?.sportsbookLine ??
+        null;
+  const trailCurrentObservedAt =
+    input.isLockedRow === true || currentMemberPriceRow === null
+      ? priceObservedAt
+      : lineRowObservedAt(currentMemberPriceRow);
   const coherentTrailPriceRow =
-    trailPriceRow !== null && trailPriceRow.odds_american === priceAmerican
+    trailPriceRow !== null && trailPriceRow.odds_american === trailCurrentAmerican
       ? trailPriceRow
       : null;
   const oddsTrail = buildPersistedOddsTrail({
     candidates: input.lineOpenCandidates,
     priceRow: coherentTrailPriceRow,
-    currentAmerican: priceAmerican,
-    currentLine: coherentTrailPriceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null,
-    currentObservedAt: priceObservedAt,
+    currentAmerican: trailCurrentAmerican,
+    currentLine: trailCurrentLine,
+    currentObservedAt: trailCurrentObservedAt,
     lockedAmerican: input.lockedPriceAmerican ?? null,
     lockedAt: input.lockedPriceAt ?? null,
     terminalSportsbook:
@@ -4549,9 +4570,9 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     ? buildPersistedOddsTrail({
         candidates: input.lineMovementCandidates ?? input.lineOpenCandidates,
         priceRow: coherentTrailPriceRow,
-        currentAmerican: priceAmerican,
-        currentLine: coherentTrailPriceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null,
-        currentObservedAt: priceObservedAt,
+        currentAmerican: trailCurrentAmerican,
+        currentLine: trailCurrentLine,
+        currentObservedAt: trailCurrentObservedAt,
         lockedAmerican: input.lockedPriceAmerican ?? null,
         lockedAt: input.lockedPriceAt ?? null,
         terminalSportsbook:
@@ -4582,24 +4603,40 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           candidate.odds_american === row.odds_american,
       ) === index,
   );
-  const selectedTrailBook = coherentTrailPriceRow?.sportsbook ?? null;
+  const selectedTrailBook =
+    input.isLockedRow === true
+      ? input.lockedPriceSportsbook ?? coherentTrailPriceRow?.sportsbook ?? null
+      : coherentTrailPriceRow?.sportsbook ?? null;
   const sameBookOpposingRows = selectedTrailBook === null
     ? []
     : opposingCurrentRows.filter((row) => row.sportsbook === selectedTrailBook);
+  // A locked card may only terminate an opposing-side trail with evidence
+  // observed at or before the lock. Choosing the newest history row first and
+  // filtering only inside buildPersistedOddsTrail could append a post-lock row
+  // as the terminal endpoint and make an otherwise valid trail incoherent.
+  const opposingHistoryCandidates =
+    input.isLockedRow === true && input.lockedPriceAt
+      ? (input.opposingLineOpenCandidates ?? []).filter(
+          (row) => Date.parse(row.recorded_at) <= Date.parse(input.lockedPriceAt!),
+        )
+      : input.opposingLineOpenCandidates ?? [];
+  const sameBookOpposingHistoryCandidates = selectedTrailBook === null
+    ? []
+    : opposingHistoryCandidates.filter((row) => row.sportsbook === selectedTrailBook);
   const opposingPriceRow =
-    pickPriceRow(sameBookOpposingRows, opposingSide as Side | null, {
-      allowStaleFallback: input.isLockedRow === true,
-    }) ??
-    pickPriceRow(opposingCurrentRows, opposingSide as Side | null, {
-      allowStaleFallback: input.isLockedRow === true,
-    }) ??
-    (opposingSide === null || input.isLockedRow !== true
-      ? null
-      : pickHistoryPriceRow(input.opposingLineOpenCandidates ?? []));
+    input.isLockedRow === true
+      ? pickHistoryPriceRow(sameBookOpposingHistoryCandidates) ??
+        pickHistoryPriceRow(opposingHistoryCandidates)
+      : pickPriceRow(sameBookOpposingRows, opposingSide as Side | null, {
+          allowStaleFallback: false,
+        }) ??
+        pickPriceRow(opposingCurrentRows, opposingSide as Side | null, {
+          allowStaleFallback: false,
+        });
   const opposingOddsStops = opposingSide === null
     ? []
     : buildPersistedOddsTrail({
-        candidates: input.opposingLineOpenCandidates ?? [],
+        candidates: opposingHistoryCandidates,
         priceRow: opposingPriceRow,
         currentAmerican: opposingPriceRow?.odds_american ?? null,
         currentLine: opposingPriceRow?.line_value ?? opposingExpectedLine,
@@ -4607,6 +4644,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
         lockedAmerican: null,
         lockedAt: input.isLockedRow === true ? input.lockedPriceAt ?? null : null,
         terminalSportsbook: opposingPriceRow?.sportsbook ?? null,
+        terminalSource: input.isLockedRow === true ? "line_history" : "current_line",
       });
   const opposingOddsTrail: MarketEdgeDto["opposingOddsTrail"] =
     opposingSide === null || opposingOddsStops.length === 0
@@ -5231,11 +5269,9 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     currentPriceSportsbook:
       invalidFirstInningMarket
         ? null
-        : currentMemberPriceRow?.sportsbook ?? null,
+        : currentMemberPriceRow?.sportsbook ?? input.lockedPriceSportsbook ?? null,
     currentPriceObservedAt:
-      invalidFirstInningMarket || currentMemberPriceRow === null
-        ? priceObservedAt
-        : lineRowObservedAt(currentMemberPriceRow),
+      invalidFirstInningMarket ? priceObservedAt : trailCurrentObservedAt,
     bestAvailablePriceAmerican:
       invalidFirstInningMarket ? null : bestAvailablePriceRow?.odds_american ?? null,
     bestAvailableSportsbook:

@@ -709,7 +709,7 @@ function CompactTotalLineMovement({ market }: { market: MarketEdgeDto }) {
         break;
       }
     }
-    if (previous === null && sameBook.length > 2) previous = sameBook[sameBook.length - 2]?.line ?? null;
+    if (previous === null && sameBook.length >= 2) previous = sameBook[sameBook.length - 2]?.line ?? null;
   }
   const direction = first === null || sameTrackedLine(first, current) ? "Unchanged" : current > first ? "Moved up" : "Moved down";
   const point = (label: string, value: number | null, currentPoint = false) => <div className="min-w-0"><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">{label}</p><p className={`mt-0.5 font-mono text-sm font-black ${currentPoint ? "text-violet-200" : "text-gray-200"}`}>{value === null ? "—" : formatNumber(value)}</p></div>;
@@ -807,7 +807,7 @@ function resolveCoherentMovement(market: MarketEdgeDto): { open: number | null; 
         break;
       }
     }
-    if (previous === null && coherent.length > 2) previous = coherent[coherent.length - 2]!;
+    if (previous === null && coherent.length >= 2) previous = coherent[coherent.length - 2]!;
     return { open: first.american, previous: previous?.american ?? null, current: terminal.american, openLine: first.line, previousLine: previous?.line ?? null, currentLine: terminal.line ?? first.line, sportsbook: terminal.sportsbook, coherentTrail: true };
   }
   const canonical = market.marketReadV2?.movement;
@@ -876,7 +876,7 @@ function resolveOpposingMovement(market: MarketEdgeDto): CoherentMovement | null
         break;
       }
     }
-    if (previous === null && sameBook.length > 2) previous = sameBook[sameBook.length - 2]!;
+    if (previous === null && sameBook.length >= 2) previous = sameBook[sameBook.length - 2]!;
   }
   return {
     open: first?.american ?? null,

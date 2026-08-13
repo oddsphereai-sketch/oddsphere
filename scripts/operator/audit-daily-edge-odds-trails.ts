@@ -105,7 +105,11 @@ async function main() {
           if (trail.stops.length === 0) continue;
           verifiedTrails += 1;
           const terminal = trail.stops[trail.stops.length - 1] as TrailStop | undefined;
-          if (trail.stops.length < 3 && !hasPointLineTransition) failures.push(`${sport}/${game.id}/${key}/${trail.name}: fewer than first/prior/current observations`);
+          // Two timestamped same-book observations are sufficient for a
+          // truthful coherent trail. The reader uses the first observation as
+          // Prior when no distinct middle observation exists, so all three
+          // display fields remain populated without inventing a market quote.
+          if (trail.stops.length < 2 && !hasPointLineTransition) failures.push(`${sport}/${game.id}/${key}/${trail.name}: fewer than two verified observations`);
           if (trail.stops.length > 1 && trail.stops[0]?.label !== "first") failures.push(`${sport}/${game.id}/${key}/${trail.name}: first observation is not labeled first`);
           if (terminal?.label !== "current" && terminal?.label !== "locked") failures.push(`${sport}/${game.id}/${key}/${trail.name}: terminal observation is not current/locked`);
           const books = new Set(trail.stops.map((stop: TrailStop) => stop.sportsbook).filter(Boolean));
