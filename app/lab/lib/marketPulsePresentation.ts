@@ -1,5 +1,33 @@
 import type { MarketEdgeDto } from "@/app/lab/lib/labTypes";
-import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
+import type {
+  MarketSplitDisplaySection,
+  SplitSideDisplay,
+} from "@/lib/types/domain/RecommendationDecision";
+
+const SPLIT_DISPLAY_ORDER: Record<SplitSideDisplay["side"], number> = {
+  away: 0,
+  home: 1,
+  over: 0,
+  under: 1,
+};
+
+/**
+ * Keep every split source in the same visual order regardless of the order
+ * returned by its provider: away above home for team markets, Over above
+ * Under for totals. This is presentation-only and never mutates evidence.
+ */
+export function canonicalSplitRows(
+  section: MarketSplitDisplaySection | null,
+): SplitSideDisplay[] {
+  if (!section) return [];
+  return section.rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) =>
+      SPLIT_DISPLAY_ORDER[a.row.side] - SPLIT_DISPLAY_ORDER[b.row.side] ||
+      a.index - b.index
+    )
+    .map(({ row }) => row);
+}
 
 export function displayedConsensusSection(
   market: Pick<MarketEdgeDto, "publicSplits" | "recommendationDecision">,

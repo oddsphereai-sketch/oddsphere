@@ -41,6 +41,7 @@ import {
 } from "../app/lab/lib/perPickHeadline";
 import { getAttribution } from "../app/lab/lib/gradeAttribution";
 import {
+  canonicalSplitRows,
   displayedConsensusSection,
   splitLeanStrength,
   splitSectionSignal,
@@ -102,7 +103,36 @@ const VALID_MARKET_SIGNALS = new Set<MarketSignal>([
 ]);
 
 async function main() {
-  section("Market Pulse presentation coherence");
+section("Market Pulse presentation coherence");
+
+{
+  const moneylineRows = canonicalSplitRows({
+    label: "Sharp Book Splits",
+    rows: [
+      { side: "home", label: "CLE", moneyPct: 62, betsPct: 58 },
+      { side: "away", label: "DET", moneyPct: 38, betsPct: 42 },
+    ],
+    signal: null,
+    lastUpdated: null,
+  });
+  const totalRows = canonicalSplitRows({
+    label: "Consensus Splits",
+    rows: [
+      { side: "under", label: "Under", moneyPct: 45, betsPct: 48 },
+      { side: "over", label: "Over", moneyPct: 55, betsPct: 52 },
+    ],
+    signal: null,
+    lastUpdated: null,
+  });
+  check(
+    "all team split sources render away above home regardless of provider row order",
+    moneylineRows.map((row) => row.label).join(",") === "DET,CLE",
+  );
+  check(
+    "all total split sources render Over above Under regardless of provider row order",
+    totalRows.map((row) => row.label).join(",") === "Over,Under",
+  );
+}
   {
     const currentRows: MarketSplitDisplaySection["rows"] = [
       { side: "over", label: "Over", moneyPct: 54, betsPct: 57, observedAt: "2026-08-10T18:30:00Z", isStale: false },
