@@ -7368,14 +7368,16 @@ export async function GET(request: Request) {
     // and is bounded; all games run in parallel and stay fast as the table
     // grows. Movement needs both ends of the history: the oldest window owns
     // First observed, while the newest window owns Prior observed and Current.
-    // Merge the two bounded windows instead of scanning the full table or
-    // silently truncating the recent observations. DEGRADE per window: one
-    // failed end still leaves the other usable and never fails the slate.
+    // Locked games also need a window ending at lock; hours of in-game rows can
+    // otherwise push the final pre-lock line out of the newest 300 records.
+    // Merge the bounded windows instead of scanning the full table. DEGRADE per
+    // window: one failed end still leaves the others usable.
     const HIST_WINDOW_PER_GAME = 300;
     const histResults = await Promise.all(
       gameIds.map(async (gid) => {
         const select = "game_id, market_type, sportsbook, side, line_value, odds_american, recorded_at, id";
-        const [oldest, newest] = await Promise.all([
+        const lockedAt = gamePredictionLockedAtByGame.get(gid) ?? null;
+        const [oldest, newest, preLock] = await Promise.all([
           supabase
           .from("line_history")
           .select(select)
@@ -7402,15 +7404,38 @@ export async function GET(request: Request) {
             (r) => r as { data: LineHistoryRow[] | null; error: { message: string } | null },
             () => ({ data: null, error: { message: "exception" } }),
           ),
+          lockedAt === null
+            ? Promise.resolve({ data: [] as LineHistoryRow[], error: null })
+            : supabase
+                .from("line_history")
+                .select(select)
+                .eq("game_id", gid)
+                .in("market_type", ["moneyline", "total", "first_inning_total"])
+                .is("player_id", null)
+                .lte("recorded_at", lockedAt)
+                .order("recorded_at", { ascending: false })
+                .order("id", { ascending: false })
+                .limit(HIST_WINDOW_PER_GAME)
+                .then(
+                  (r) => r as { data: LineHistoryRow[] | null; error: { message: string } | null },
+                  () => ({ data: null, error: { message: "exception" } }),
+                ),
         ]);
         const merged = new Map<number, LineHistoryRow>();
-        for (const row of [...(oldest.data ?? []), ...(newest.data ?? [])]) merged.set(row.id, row);
+        for (const row of [
+          ...(oldest.data ?? []),
+          ...(newest.data ?? []),
+          ...(preLock.data ?? []),
+        ]) merged.set(row.id, row);
         return {
           data: Array.from(merged.values()).sort((a, b) => {
             const byTime = Date.parse(a.recorded_at) - Date.parse(b.recorded_at);
             return byTime !== 0 ? byTime : a.id - b.id;
           }),
-          failedWindows: Number(Boolean(oldest.error)) + Number(Boolean(newest.error)),
+          failedWindows:
+            Number(Boolean(oldest.error)) +
+            Number(Boolean(newest.error)) +
+            Number(Boolean(preLock.error)),
         };
       }),
     );
@@ -7422,7 +7447,7 @@ export async function GET(request: Request) {
     }
     if (histDegraded > 0) {
       console.warn(
-        `daily-edge: ${histDegraded}/${gameIds.length * 2} line_history windows unavailable (degraded, slate still served)`,
+        `daily-edge: ${histDegraded}/${gameIds.length * 3} line_history windows unavailable (degraded, slate still served)`,
       );
     }
     for (const row of histData) {
