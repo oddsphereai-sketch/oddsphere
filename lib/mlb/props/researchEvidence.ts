@@ -30,6 +30,7 @@ export type PlayerPropRecentForm = {
     opponent: string;
     homeAway: "home" | "away";
     value: number;
+    plateAppearances?: number | null;
     secondaryLabel?: string | null;
   }>;
 };
@@ -256,6 +257,9 @@ export function buildPlayerPropRecentForm(args: {
         opponent,
         homeAway,
         value,
+        plateAppearances: typeof row.stats.plate_appearances === "number"
+          ? row.stats.plate_appearances
+          : null,
         secondaryLabel: buildSecondaryLabel(row, descriptor),
       } satisfies PlayerPropRecentForm["logs"][number];
     })

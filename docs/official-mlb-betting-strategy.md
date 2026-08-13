@@ -4,12 +4,12 @@ Strategy release: `oddsphere_mlb_betting_strategy_2026_07_23_r6`
 
 Daily Edge decision release: `mlb_daily_edge_decision_2026_07_23_r2`
 
-Player Props release: `mlb_props_2026_07_24_r7`
+Player Props release: `mlb_props_2026_08_13_r33`
 
 Reference unit: **1u = $25**
 
-This is an all-qualifier strategy. It has no ticket maximum, top-N rule,
-sleeve cap, game cap, or same-day proportional scaling. The approximately
+This is an all-qualifier strategy except for the released rare-event Home Run
+portfolio, which has its own slate and game diversification caps. The approximately
 $250 daily preference is a target for the strategy's typical slate, not a
 ceiling that removes or shrinks otherwise qualifying wagers.
 
@@ -25,12 +25,15 @@ of these rules.
 | MLB Moneyline | Genuine final-side inversion Lean | **0.25u / $6.25** |
 | MLB Total | Best Angle | **0.50u / $12.50** |
 | MLB Total | Lean carrying the released validated-Lean rule | **0.25u / $6.25** |
-| MLB Player Props — batter home runs | Final qualified actionable Over | **0.10u / $2.50** |
+| MLB Player Props — batter home runs | Up to three released portfolio Leans, max one hitter per game | **0.10u / $2.50 each** |
 | MLB Player Props — pitcher earned runs | Final qualified actionable Lean/Best Angle | **0.50u / $12.50** |
 | MLB Player Props — batter runs scored | Final qualified actionable Lean/Best Angle | **0.10u / $2.50** |
 
-The home-run rule requires final probability 15%–18%, positive locked EV,
-confidence of at least 62%, an approved price, and the best available offer.
+The home-run rule uses a prior-only 20-game HR-per-plate-appearance projection,
+a 100-PA league prior, batting-order and verified environment opportunity
+adjustments, and a 25% multi-book market anchor. It requires nonnegative edge
+and EV at +150 through +1000, uses the best available price, and ranks up to
+three Leans by EV with at most one hitter per game.
 The earned-runs rule requires an approved price and at least 5% locked EV. The
 runs-scored rule requires the released price, confidence, probability, edge,
 and EV gates.

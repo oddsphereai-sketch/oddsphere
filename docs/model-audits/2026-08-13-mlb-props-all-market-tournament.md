@@ -17,8 +17,9 @@ holdout. The r31/r32 production changes remain supported:
 - Batter Strikeouts Over: validation 12-6, holdout 29-14, +4.7% ROI.
 - Doubles Under remained highly accurate but price-heavy: holdout 95-22 at
   approximately flat ROI under the selected policy.
-- Home Runs: no replacement actionable selector qualified. The removed broad
-  rule remains rejected.
+- Home Runs: the original equal-game broad selector remained rejected. A
+  subsequent target-corrected HR-per-plate-appearance portfolio qualified r33;
+  see `2026-08-13-player-props-home-run-pa-portfolio-r33.md`.
 
 ## Market-by-market verdict
 
@@ -27,7 +28,7 @@ holdout. The r31/r32 production changes remain supported:
 | Batter doubles | 61-6, +11.5% ROI | 95-22, +0.4% | Existing accuracy sleeve only |
 | Batter hits | 13-2, +29.2% | 17-10, -2.8% | Reject selected policy |
 | Hits + runs + RBIs | 7-3, +15.1% | 17-3, +38.5% | Existing live sleeve retained |
-| Home runs | none | none | Watchlist only; no selector |
+| Home runs | 5-19, +53.7% portfolio ROI | 8-28, +108.5% | r33 three-play HR/PA Lean portfolio |
 | Batter RBIs | 172-56, +5.3% | 300-116, -0.3% | Reject |
 | Runs scored | 133-54, +8.2% | 170-101, -5.1% | Reject |
 | Singles | none | none | Reject |

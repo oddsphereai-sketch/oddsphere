@@ -1,5 +1,74 @@
 export const BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION =
-  "batter_home_runs_market_residual_v1_2026_07_31";
+  "batter_home_runs_pa_portfolio_v2_2026_08_13";
+
+export const BATTER_HOME_RUNS_PORTFOLIO_POLICY = {
+  recentGames: 20,
+  priorPlateAppearances: 100,
+  leagueHomeRunsPerPlateAppearance: 0.032,
+  marketWeight: 0.25,
+  playsPerSlate: 3,
+  minimumAmericanOdds: 150,
+  maximumAmericanOdds: 1000,
+  maximumPerGame: 1,
+  stakeUnits: 0.1,
+} as const;
+
+export type BatterHomeRunsPortfolioInputs = {
+  marketOverProbability: number;
+  battingOrder: number | null;
+  recentLogs: ReadonlyArray<{ homeRuns: number; plateAppearances: number }>;
+  parkHomeRunFactor: number | null;
+  temperatureF: number | null;
+  outdoor: boolean;
+};
+
+export type BatterHomeRunsPortfolioProjection = {
+  overProbability: number;
+  underProbability: number;
+  independentOverProbability: number;
+  projectedPlateAppearances: number;
+  projectedHomeRuns: number;
+};
+
+export function projectBatterHomeRunsPortfolio(
+  inputs: BatterHomeRunsPortfolioInputs,
+): BatterHomeRunsPortfolioProjection | null {
+  const logs = inputs.recentLogs
+    .filter((row) => Number.isFinite(row.homeRuns) && Number.isFinite(row.plateAppearances) && row.plateAppearances > 0)
+    .slice(0, BATTER_HOME_RUNS_PORTFOLIO_POLICY.recentGames);
+  if (!Number.isFinite(inputs.marketOverProbability) || logs.length < 5) return null;
+  const homeRuns = logs.reduce((sum, row) => sum + row.homeRuns, 0);
+  const plateAppearances = logs.reduce((sum, row) => sum + row.plateAppearances, 0);
+  const rate = (
+    homeRuns
+    + BATTER_HOME_RUNS_PORTFOLIO_POLICY.leagueHomeRunsPerPlateAppearance
+      * BATTER_HOME_RUNS_PORTFOLIO_POLICY.priorPlateAppearances
+  ) / (plateAppearances + BATTER_HOME_RUNS_PORTFOLIO_POLICY.priorPlateAppearances);
+  const projectedPlateAppearances = inputs.battingOrder === null
+    ? 4.15
+    : Math.max(3.65, Math.min(4.75, 4.85 - (inputs.battingOrder - 1) * 0.13));
+  const parkDelta = inputs.parkHomeRunFactor === null
+    ? 0
+    : (inputs.parkHomeRunFactor - 100) / 100;
+  const temperatureDelta = !inputs.outdoor || inputs.temperatureF === null
+    ? 0
+    : (inputs.temperatureF - 70) * 0.003;
+  const environmentMultiplier = Math.max(0.75, Math.min(1.3, 1 + parkDelta + temperatureDelta));
+  const projectedHomeRuns = rate * projectedPlateAppearances * environmentMultiplier;
+  const independentOverProbability = clampProbability(1 - Math.exp(-projectedHomeRuns));
+  const marketOverProbability = clampProbability(inputs.marketOverProbability);
+  const overProbability = clampProbability(
+    independentOverProbability * (1 - BATTER_HOME_RUNS_PORTFOLIO_POLICY.marketWeight)
+      + marketOverProbability * BATTER_HOME_RUNS_PORTFOLIO_POLICY.marketWeight,
+  );
+  return {
+    overProbability,
+    underProbability: 1 - overProbability,
+    independentOverProbability,
+    projectedPlateAppearances,
+    projectedHomeRuns,
+  };
+}
 
 export type BatterHomeRunsResidualInputs = {
   marketOverProbability: number;

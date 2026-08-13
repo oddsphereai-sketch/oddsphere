@@ -222,25 +222,35 @@ home Elo/stat agreement rule. It does not alter moneyline or total decisions.
 
 ## MLB Player Props candidate
 
-- Release: `mlb_props_2026_08_13_r32`
+- Release: `mlb_props_2026_08_13_r33`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: private launch candidate; not publicly enabled
 
-The August 13 r32 operational-data release adds the missing outdoor weather
+The August 13 r33 model release retains r32's missing outdoor weather
 coordinates for MLB's neutral-site Field of Dreams venue. The PHI-MIN slate
 arrived with that official venue name, so r31 could not resolve required
-game-time weather and correctly held the entire snapshot. R32 changes no model
-formula, threshold, market selector, grade policy, or stake rule; it restores
-the existing weather input contract for this venue. Paired current-slate output
-and launch-gate evidence are recorded in
-`docs/model-audits/2026-08-13-player-props-field-of-dreams-weather-r32.md`.
+game-time weather and correctly held the entire snapshot.
+
+R33 adds the validated Batter Home Runs portfolio Lean. It estimates the
+hitter's home-run rate per plate appearance from the 20 most recent prior-only
+games, shrinks with a 100-PA league prior, adjusts expected opportunities for
+batting order and the verified park/outdoor-temperature environment, then
+anchors 25% to the multi-book market consensus. Eligible 0.5 Over offers must
+have nonnegative edge and EV at +150 through +1000. The three highest-EV best
+prices are Leans at 0.10u with at most one hitter per game. Validation was 5-19
+(+53.7% ROI); untouched holdout was 8-28 (+108.5% ROI), with date-block
+P(profitable)=0.9698. The 4-play variant also stayed positive in both windows,
+while 5 plays was flat in validation, supporting the three-play boundary.
+Evidence and current-board impact are recorded in
+`docs/model-audits/2026-08-13-player-props-home-run-pa-portfolio-r33.md`.
 
 The complete August 13 all-market tournament covered 45,320 settled observations across 16
 markets. It retained the r31 HRR Under, Doubles Under, and Batter Strikeouts Over accuracy
-sleeves, rejected a Home Run replacement and every broad probability challenger, and kept
-holdout-sensitive total-bases and pitcher finalists out of production. The complete matrix is in
+sleeves, rejected every broad probability challenger, and kept holdout-sensitive total-bases and
+pitcher finalists out of production. A subsequent target-corrected Home Run portfolio test fixed
+the tournament's equal-games/equal-opportunities defect and qualified the r33 release. The complete matrix is in
 `docs/model-audits/2026-08-13-mlb-props-all-market-tournament.md`.
 
 The r31 accuracy release removes the losing Home Run Over actionable promotion

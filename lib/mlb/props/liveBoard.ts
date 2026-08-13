@@ -91,7 +91,8 @@ import {
 } from "./batterDoublesResidualModel";
 import {
   BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION,
-  projectBatterHomeRunsResidual,
+  BATTER_HOME_RUNS_PORTFOLIO_POLICY,
+  projectBatterHomeRunsPortfolio,
 } from "./batterHomeRunsResidualModel";
 import { shouldReplaceBestPriceRow } from "./bestPriceSelection";
 import {
@@ -322,7 +323,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     })
     : null;
 
-  const props = compactMemberBoardRows(attachMlbPropOddsMovement(buildDashboardRows({
+  const props = applyValidatedHomeRunPortfolioPromotions(compactMemberBoardRows(attachMlbPropOddsMovement(buildDashboardRows({
     mappedOdds,
     identities,
     probablePitchers,
@@ -330,7 +331,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     researchByKey,
     scoringCandidates: scoring?.summary.sampleCandidates ?? [],
     asOfTimestamp,
-  }), openingOdds, previous), asOfTimestamp);
+  }), openingOdds, previous), asOfTimestamp));
   const data = buildDashboardData({
     slateDate: args.slateDate,
     asOfTimestamp,
@@ -1093,6 +1094,7 @@ function buildDashboardRows(args: {
   asOfTimestamp: string;
 }): PlayerPropPreviewRow[] {
   const pairs = twoWayMarketProbabilities(args.mappedOdds);
+  const consensus = marketConsensusProbabilities(args.mappedOdds, pairs);
   const rows: PlayerPropPreviewRow[] = [];
   for (const mapped of args.mappedOdds) {
     const identity = args.identities.get(mapped.bdlPlayerId);
@@ -1120,7 +1122,12 @@ function buildDashboardRows(args: {
     const lineupStatus = lineupStatusFor(mapped, identity, args.lineupRows.get(mapped.bdlGameId) ?? [], args.asOfTimestamp);
     const scored = findScoringCandidate(args.scoringCandidates, mapped, identity.player.fullName);
     const scoredPitcherSignal = definition.family === "pitcher" && definition.recommendationEligibility !== "research_only" ? scored : null;
-    const marketProbability = pairs.get(oddsPairKey(mapped))?.[mapped.odds.side] ?? null;
+    const pairedMarketProbability = pairs.get(oddsPairKey(mapped))?.[mapped.odds.side] ?? null;
+    const marketProbability = pairedMarketProbability ?? (
+      mapped.odds.marketKey === "batter_home_runs"
+        ? consensus.get(marketConsensusKey(mapped)) ?? null
+        : null
+    );
     const price = assessPropPrice(mapped.odds.americanOdds);
     if (!price.displayEligible) continue;
     const memberReady = Boolean(research?.memberReady);
@@ -1291,8 +1298,6 @@ const HITTER_LONGSHOT_VALUE_MARKETS = new Set([
 const DEFAULT_HITTER_LEAN_MIN_AMERICAN_ODDS = -250;
 const DEFAULT_HITTER_LEANS_PER_PLAYER = 2;
 const DEFAULT_HITTER_LEANS_PER_GAME = 12;
-const HOME_RUN_PROJECTION_PRIOR = 0.095;
-const HOME_RUN_PROJECTION_PRIOR_GAMES = 20;
 const HISTORICALLY_UNSUPPORTED_ACTIONABLE_MARKET_SIDES = new Set([
   "batter_hits|over",
   "batter_hits|under",
@@ -1587,6 +1592,66 @@ function applyValidatedBatterStrikeoutsAccuracyPromotions(
   });
 }
 
+function applyValidatedHomeRunPortfolioPromotions(
+  rows: PlayerPropPreviewRow[],
+): PlayerPropPreviewRow[] {
+  const eligible = rows.filter((row) =>
+    row.market === "batter_home_runs"
+    && row.side === "over"
+    && row.line === 0.5
+    && row.playGrade === "WATCHLIST"
+    && row.odds >= BATTER_HOME_RUNS_PORTFOLIO_POLICY.minimumAmericanOdds
+    && row.odds <= BATTER_HOME_RUNS_PORTFOLIO_POLICY.maximumAmericanOdds
+    && row.modelProbability !== null
+    && row.marketProbability !== null
+    && row.modelEdge !== null
+    && row.modelEdge >= 0
+    && row.expectedValue !== null
+    && row.expectedValue >= 0
+    && !row.reasonCodes.includes("STALE_ODDS")
+    && !row.reasonCodes.includes("MODEL_CONTEXT_NOT_INTEGRATED")
+    && !row.reasonCodes.includes("INVALID_PRICE_FORMAT")
+  );
+  const bestOffers: PlayerPropPreviewRow[] = [];
+  for (const offers of groupRows(eligible, signalOfferKey).values()) {
+    const [best] = [...offers].sort((left, right) =>
+      (right.expectedValue ?? -99) - (left.expectedValue ?? -99)
+      || (right.modelEdge ?? -99) - (left.modelEdge ?? -99)
+      || (right.modelProbability ?? -99) - (left.modelProbability ?? -99)
+      || right.odds - left.odds
+    );
+    if (best) bestOffers.push(best);
+  }
+  const ranked = bestOffers.sort((left, right) =>
+    (right.expectedValue ?? -99) - (left.expectedValue ?? -99)
+    || (right.modelEdge ?? -99) - (left.modelEdge ?? -99)
+    || (right.modelProbability ?? -99) - (left.modelProbability ?? -99)
+    || left.id.localeCompare(right.id)
+  );
+  const promotedIds = new Set<string>();
+  const perGame = new Map<string, number>();
+  for (const row of ranked) {
+    if (promotedIds.size >= BATTER_HOME_RUNS_PORTFOLIO_POLICY.playsPerSlate) break;
+    const gameId = row.providerIds?.gameId ?? row.gameStartTime;
+    if ((perGame.get(gameId) ?? 0) >= BATTER_HOME_RUNS_PORTFOLIO_POLICY.maximumPerGame) continue;
+    promotedIds.add(row.id);
+    perGame.set(gameId, (perGame.get(gameId) ?? 0) + 1);
+  }
+  if (!promotedIds.size) return rows;
+  return rows.map((row) => promotedIds.has(row.id)
+    ? {
+      ...row,
+      playGrade: "LEAN",
+      units: BATTER_HOME_RUNS_PORTFOLIO_POLICY.stakeUnits,
+      reasonCodes: uniqueStrings([
+        ...row.reasonCodes,
+        "VALIDATED_MARKET_PROMOTION",
+        "VALIDATED_HOME_RUN_PA_PORTFOLIO_LEAN",
+      ]),
+    }
+    : row);
+}
+
 function groupRows<T>(rows: T[], keyFor: (row: T) => string): Map<string, T[]> {
   const out = new Map<string, T[]>();
   for (const row of rows) {
@@ -1785,27 +1850,30 @@ function buildIntegratedHitterSignal(args: {
 function buildDedicatedBatterHomeRunsResidualSignal(
   args: Parameters<typeof buildIntegratedHitterSignal>[0],
 ): IntegratedPropSignal | null {
-  const seasonValues = args.research?.evidence.recentForm?.samples?.season.values
-    .filter((value) => Number.isFinite(value)) ?? [];
+  const recentLogs = args.research?.evidence.recentForm?.logs ?? [];
   const priceProbability = assessPropPrice(args.currentOdds).impliedProbability;
   const marketOverProbability = args.marketProbability === null
     ? priceProbability
     : args.mapped.odds.side === "over"
       ? args.marketProbability
       : 1 - args.marketProbability;
-  if (marketOverProbability === null || seasonValues.length < 10) return null;
-  const residual = projectBatterHomeRunsResidual({
+  if (marketOverProbability === null || args.mapped.odds.line !== 0.5) return null;
+  const residual = projectBatterHomeRunsPortfolio({
     marketOverProbability,
-    line: args.mapped.odds.line,
-    home: args.homeAway === "home",
-    homeRunsLast20: seasonValues.slice(0, 20),
+    battingOrder: args.lineupStatus.battingOrder,
+    recentLogs: recentLogs.map((row) => ({
+      homeRuns: row.value,
+      plateAppearances: row.plateAppearances ?? 0,
+    })),
+    parkHomeRunFactor: args.research?.evidence.environment?.park.status === "available"
+      ? args.research.evidence.environment.park.homeRunFactor
+      : null,
+    temperatureF: args.research?.evidence.environment?.weather.status === "available"
+      ? args.research.evidence.environment.weather.temperatureF
+      : null,
+    outdoor: args.research?.evidence.environment?.roofStatus === "outdoor",
   });
   if (!residual) return null;
-  const seasonMean = averageNumber(seasonValues);
-  const projection = (
-    seasonMean * seasonValues.length
-    + HOME_RUN_PROJECTION_PRIOR * HOME_RUN_PROJECTION_PRIOR_GAMES
-  ) / (seasonValues.length + HOME_RUN_PROJECTION_PRIOR_GAMES);
   return {
     side: "over",
     modelProbability: residual.overProbability,
@@ -1821,10 +1889,10 @@ function buildDedicatedBatterHomeRunsResidualSignal(
       "HITTER_INTEGRATED_MODEL_READ",
       "RECENT_FORM_EDGE",
       "MARKET_PRIOR_SHRINKAGE",
-      "HOME_RUN_MARKET_RESIDUAL_READ",
+      "HOME_RUN_PA_PORTFOLIO_READ",
       "RARE_OR_CONTEXT_HEAVY_MARKET_CAPPED",
     ],
-    projection: round(projection, 3),
+    projection: round(residual.projectedHomeRuns, 3),
     modelFamily: BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION,
   };
 }
@@ -2713,6 +2781,28 @@ function twoWayMarketProbabilities(rows: MappedOddsRow[]): Map<string, { over: n
     }
   }
   return out;
+}
+
+function marketConsensusProbabilities(
+  rows: MappedOddsRow[],
+  pairs: Map<string, { over: number; under: number }>,
+): Map<string, number> {
+  const groups = new Map<string, number[]>();
+  for (const row of rows) {
+    const probability = pairs.get(oddsPairKey(row))?.[row.odds.side]
+      ?? assessPropPrice(row.odds.americanOdds).impliedProbability;
+    if (probability === null) continue;
+    const key = marketConsensusKey(row);
+    groups.set(key, [...(groups.get(key) ?? []), probability]);
+  }
+  return new Map([...groups.entries()].map(([key, probabilities]) => [
+    key,
+    probabilities.reduce((sum, probability) => sum + probability, 0) / probabilities.length,
+  ]));
+}
+
+function marketConsensusKey(row: MappedOddsRow): string {
+  return `${row.game.id}|${row.bdlPlayerId}|${row.odds.marketKey}|${row.odds.side}|${row.odds.line}`;
 }
 
 function oddsPairKey(row: MappedOddsRow): string {

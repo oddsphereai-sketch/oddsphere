@@ -298,6 +298,38 @@ function buildCandidates(discovery: Observation[], validation: Observation[]): {
     }
   }
   const selectedRidge: Candidate[] = [];
+  if (discovery[0]?.market === "batter_home_runs") {
+    for (const window of [20, 40, 80]) {
+      for (const priorPa of [50, 100, 200]) {
+        for (const marketWeight of [0, 0.25, 0.5, 0.75]) {
+          candidates.push({
+            name: `hr_pa_w${window}_p${priorPa}_m${marketWeight}`,
+            predict: (row) => {
+              const logs = row.prior
+                .filter((log) => (numeric(log.stats.plate_appearances) ?? 0) > 0)
+                .slice(0, window);
+              const homeRuns = logs.reduce((sum, log) => sum + (numeric(log.stats.home_runs) ?? 0), 0);
+              const plateAppearances = logs.reduce((sum, log) => sum + (numeric(log.stats.plate_appearances) ?? 0), 0);
+              const leagueRate = 0.032;
+              const rate = (homeRuns + leagueRate * priorPa) / Math.max(1, plateAppearances + priorPa);
+              const battingOrder = numeric(row.context?.battingOrder);
+              const expectedPlateAppearances = battingOrder === null
+                ? 4.15
+                : Math.max(3.65, Math.min(4.75, 4.85 - (battingOrder - 1) * 0.13));
+              const parkDelta = numeric(row.context?.parkHomeRunFactor) ?? 0;
+              const temperature = numeric(row.context?.temperatureF);
+              const outdoor = row.context?.roofStatus === "outdoor";
+              const environmentMultiplier = Math.max(0.75, Math.min(1.3,
+                1 + parkDelta + (!outdoor || temperature === null ? 0 : (temperature - 70) * 0.003),
+              ));
+              const independent = 1 - Math.exp(-rate * expectedPlateAppearances * environmentMultiplier);
+              return clamp(independent * (1 - marketWeight) + row.marketOver * marketWeight);
+            },
+          });
+        }
+      }
+    }
+  }
   for (const mode of ["independent", "market_plus"] as const) {
     const fitted = [1, 20, 100].map((lambda) => {
       const model = fitLogistic(discovery, mode, lambda);
@@ -393,6 +425,17 @@ function evaluateMarket(rows: Observation[]) {
       policy: { probability: 0.6, edge: 0.01, ev: 0.03 },
     })
     : null;
+  const homeRunPortfolio = rows[0]?.market === "batter_home_runs"
+    ? evaluateHomeRunPortfolio({
+        validation,
+        holdout,
+        candidates: [
+          candidates.find((candidate) => candidate.name === "market")!,
+          candidates.find((candidate) => candidate.name === "current")!,
+          ...candidates.filter((candidate) => candidate.name.startsWith("hr_pa_")),
+        ],
+      })
+    : null;
   const qualifiesProbability = holdoutMetrics.challenger.brier < holdoutMetrics.market.brier
     && holdoutMetrics.challenger.logLoss < holdoutMetrics.market.logLoss
     && holdoutMetrics.challenger.brier < holdoutMetrics.current.brier
@@ -417,7 +460,161 @@ function evaluateMarket(rows: Observation[]) {
     holdoutActions,
     holdoutActionAudit,
     exactHrrProductionPolicy,
+    homeRunPortfolio,
   };
+}
+
+type HomeRunPortfolioPolicy = {
+  playsPerSlate: number;
+  minimumEdge: number;
+  minimumExpectedValue: number;
+  minimumOdds: number;
+  maximumOdds: number;
+  maximumPerGame: number;
+};
+
+function evaluateHomeRunPortfolio(args: {
+  validation: Observation[];
+  holdout: Observation[];
+  candidates: Candidate[];
+}) {
+  const policies: HomeRunPortfolioPolicy[] = [];
+  for (const playsPerSlate of [3, 4, 5, 6])
+    for (const minimumEdge of [0, 0.02, 0.04])
+      for (const minimumExpectedValue of [0, 0.05, 0.1]) {
+        policies.push({
+          playsPerSlate,
+          minimumEdge,
+          minimumExpectedValue,
+          minimumOdds: 150,
+          maximumOdds: 1000,
+          maximumPerGame: 1,
+        });
+      }
+  const validationCandidates = args.candidates.flatMap((candidate) => policies.map((policy) => {
+    const selections = homeRunPortfolioSelections(args.validation, candidate.predict, policy);
+    return { candidate, policy, selections, metrics: portfolioMetrics(selections) };
+  })).filter((item) =>
+    item.metrics.decisions >= 16 &&
+    item.metrics.dates >= 5 &&
+    item.metrics.roi !== null &&
+    item.metrics.roi > 0
+  ).sort((left, right) =>
+    right.metrics.units - left.metrics.units ||
+    (right.metrics.roi ?? 0) - (left.metrics.roi ?? 0) ||
+    right.metrics.decisions - left.metrics.decisions
+  );
+  const selected = validationCandidates[0] ?? null;
+  if (selected === null) return {
+    status: "no_positive_validation_portfolio",
+    policiesTested: args.candidates.length * policies.length,
+    selected: null,
+  };
+  const holdoutSelections = homeRunPortfolioSelections(
+    args.holdout,
+    selected.candidate.predict,
+    selected.policy,
+  );
+  const fixedPolicySensitivity = [3, 4, 5, 6].map((playsPerSlate) => {
+    const policy = { ...selected.policy, playsPerSlate };
+    const validationSelections = homeRunPortfolioSelections(args.validation, selected.candidate.predict, policy);
+    const candidateHoldoutSelections = homeRunPortfolioSelections(args.holdout, selected.candidate.predict, policy);
+    return {
+      playsPerSlate,
+      validation: portfolioMetrics(validationSelections),
+      holdout: portfolioMetrics(candidateHoldoutSelections),
+      holdoutBootstrap: actionDateBootstrap(candidateHoldoutSelections, 5_000),
+    };
+  });
+  return {
+    status: "holdout_evaluated",
+    policiesTested: args.candidates.length * policies.length,
+    selected: {
+      model: selected.candidate.name,
+      policy: selected.policy,
+      validation: selected.metrics,
+      holdout: portfolioMetrics(holdoutSelections),
+      holdoutBootstrap: actionDateBootstrap(holdoutSelections, 5_000),
+      holdoutDaily: portfolioDaily(holdoutSelections),
+      fixedPolicySensitivity,
+      holdoutSelections: holdoutSelections.map((item) => ({
+        date: item.row.date,
+        gameId: item.row.gameId,
+        playerId: item.row.playerId,
+        odds: item.odds,
+        marketProbability: round(item.row.marketOver),
+        modelProbability: round(selected.candidate.predict(item.row)),
+        outcome: item.won ? "win" : "loss",
+        units: round(item.units),
+      })),
+    },
+    validationLeaderboard: validationCandidates.slice(0, 20).map((item) => ({
+      model: item.candidate.name,
+      policy: item.policy,
+      validation: item.metrics,
+      holdout: portfolioMetrics(homeRunPortfolioSelections(args.holdout, item.candidate.predict, item.policy)),
+    })),
+  };
+}
+
+function homeRunPortfolioSelections(
+  rows: Observation[],
+  probability: (row: Observation) => number,
+  policy: HomeRunPortfolioPolicy,
+) {
+  const selections: ReturnType<typeof actionSelections> = [];
+  for (const date of [...new Set(rows.map((row) => row.date))].sort()) {
+    const ranked = rows.filter((row) => row.date === date).flatMap((row) => {
+      const odds = row.bestOverOdds;
+      if (odds === null || odds < policy.minimumOdds || odds > policy.maximumOdds) return [];
+      const predicted = clamp(probability(row));
+      const expectedValue = predicted * decimalOdds(odds) - 1;
+      const edge = predicted - row.marketOver;
+      if (edge < policy.minimumEdge || expectedValue < policy.minimumExpectedValue) return [];
+      return [{ row, odds, predicted, expectedValue, edge }];
+    }).sort((left, right) =>
+      right.expectedValue - left.expectedValue ||
+      right.edge - left.edge ||
+      right.predicted - left.predicted ||
+      left.row.key.localeCompare(right.row.key)
+    );
+    const perGame = new Map<string, number>();
+    for (const candidate of ranked) {
+      if (selections.filter((item) => item.row.date === date).length >= policy.playsPerSlate) break;
+      if ((perGame.get(candidate.row.gameId) ?? 0) >= policy.maximumPerGame) continue;
+      perGame.set(candidate.row.gameId, (perGame.get(candidate.row.gameId) ?? 0) + 1);
+      const won = candidate.row.outcomeOver === 1;
+      selections.push({
+        row: candidate.row,
+        side: "over",
+        odds: candidate.odds,
+        won,
+        units: won ? candidate.odds / 100 : -1,
+      });
+    }
+  }
+  return selections;
+}
+
+function portfolioMetrics(selections: ReturnType<typeof actionSelections>) {
+  const decisions = selections.length;
+  const wins = selections.filter((item) => item.won).length;
+  const units = selections.reduce((sum, item) => sum + item.units, 0);
+  return {
+    dates: new Set(selections.map((item) => item.row.date)).size,
+    decisions,
+    record: `${wins}-${decisions - wins}`,
+    hitRate: decisions ? round(wins / decisions) : null,
+    units: round(units),
+    roi: decisions ? round(units / decisions) : null,
+  };
+}
+
+function portfolioDaily(selections: ReturnType<typeof actionSelections>) {
+  return Object.fromEntries([...new Set(selections.map((item) => item.row.date))].sort().map((date) => {
+    const slate = selections.filter((item) => item.row.date === date);
+    return [date, portfolioMetrics(slate)];
+  }));
 }
 
 function exactActionPolicyAudit(args: {
@@ -658,6 +855,7 @@ function compactResult(result: ReturnType<typeof evaluateMarket>) {
     holdoutActions: result.holdoutActions,
     holdoutActionAudit: result.holdoutActionAudit,
     exactHrrProductionPolicy: result.exactHrrProductionPolicy,
+    homeRunPortfolio: result.homeRunPortfolio,
   };
 }
 
