@@ -589,6 +589,8 @@ async function main() {
   } }, "2026-07-16T22:30:00.000Z");
   check("global weather fallback resolves international game-time conditions", globalForecast?.temperatureF === 77 && globalForecast.conditions === "Partly cloudy" && globalForecast.windDirection === "SW" && globalForecast.precipitationProbability === 20);
   check("renamed Dodger Stadium venue resolves to the canonical weather coordinates", resolveMlbBallparkMetadata("UNIQLO Field at Dodger Stadium")?.name === "Dodger Stadium");
+  const fieldOfDreams = resolveMlbBallparkMetadata("Field of Dreams");
+  check("neutral-site Field of Dreams resolves required game-time weather coordinates", fieldOfDreams?.name === "Field of Dreams" && fieldOfDreams.roofStatus === "outdoor" && fieldOfDreams.latitude === 42.4952072 && fieldOfDreams.longitude === -91.0546726);
   const statcastRows = parseStatcastParkFactorsHtml('<script>var data = [{"grouping_venue_conditions":"All","key_bat_side":"All","key_year":"2026","venue_id":"2681","venue_name":"Citizens Bank Park","main_team_id":"143","name_display_club":"Phillies","n_pa":"47727","index_runs":"104","index_hr":"115","index_so":"104","index_woba":"102","year_range":"2024-2026"}];</script>', 2026);
   check("Statcast park-factor parser reads structured official factors", statcastRows.length === 1 && statcastRows[0]?.venue === "Citizens Bank Park" && statcastRows[0]?.runFactor === 104 && statcastRows[0]?.homeRunFactor === 115 && statcastRows[0]?.strikeoutFactor === 104);
   const statcastWithNewVenue = new StatcastParkFactorClient(async (input) => {

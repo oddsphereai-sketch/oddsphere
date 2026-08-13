@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-13
 
 ## MLB champion
 
@@ -209,11 +209,20 @@ home Elo/stat agreement rule. It does not alter moneyline or total decisions.
 
 ## MLB Player Props candidate
 
-- Release: `mlb_props_2026_08_12_r31`
+- Release: `mlb_props_2026_08_13_r32`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: private launch candidate; not publicly enabled
+
+The August 13 r32 operational-data release adds the missing outdoor weather
+coordinates for MLB's neutral-site Field of Dreams venue. The PHI-MIN slate
+arrived with that official venue name, so r31 could not resolve required
+game-time weather and correctly held the entire snapshot. R32 changes no model
+formula, threshold, market selector, grade policy, or stake rule; it restores
+the existing weather input contract for this venue. Paired current-slate output
+and launch-gate evidence are recorded in
+`docs/model-audits/2026-08-13-player-props-field-of-dreams-weather-r32.md`.
 
 The r31 accuracy release removes the losing Home Run Over actionable promotion
 while preserving the calibrated Home Runs probability and visible Watchlist
@@ -311,7 +320,7 @@ unlocked payloads but preserves locked historical recommendations.
 - Shadow release: `mlb_props_shadow_pitcher_2026_08_12_r1`
 - Feature contract: `mlb_props_shared_pitcher_features_v1_2026_08_12`
 - Scope: prospective T-60 evidence for pitcher strikeouts; pitcher outs retained as a control
-- Production effect: none; active props bundle remains `mlb_props_2026_08_12_r30`
+- Production effect: none; active props bundle remains `mlb_props_2026_08_13_r32`
 - Evidence: `docs/model-audits/2026-08-12-player-props-shared-pitcher-shadow-r1.md`
 
 The shadow path reuses the authoritative props refresh and records its immutable output in lock
