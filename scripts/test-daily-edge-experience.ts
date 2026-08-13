@@ -429,6 +429,13 @@ check(
     candidateSource.includes('row("YRFI"'),
 );
 check(
+  "first-inning odds stack both sides and always expose First, Prior, and Current",
+  candidateSource.includes('<div className="mt-3 grid gap-2">{row("NRFI"') &&
+    candidateSource.includes('<PricePoint label="First observed"') &&
+    candidateSource.includes('<PricePoint label="Prior observed"') &&
+    candidateSource.includes('<PricePoint label="Current"'),
+);
+check(
   "finite recent-game rates use a segmented game tally instead of a continuous bar",
   candidateSource.includes('kind: "rate" | "record" | "average"') &&
     candidateSource.includes('comparison.kind === "rate"') &&
