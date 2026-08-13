@@ -51,6 +51,15 @@ type Observation = {
 type Candidate = {
   name: string;
   predict: (row: Observation) => number;
+  modelSpec?: LogisticModelSpec;
+};
+
+type LogisticModelSpec = {
+  mode: "independent" | "market_plus";
+  lambda: number;
+  means: number[];
+  scales: number[];
+  coefficients: number[];
 };
 
 const DISCOVERY_THROUGH = "2026-07-23";
@@ -292,7 +301,11 @@ function buildCandidates(discovery: Observation[], validation: Observation[]): {
   for (const mode of ["independent", "market_plus"] as const) {
     const fitted = [1, 20, 100].map((lambda) => {
       const model = fitLogistic(discovery, mode, lambda);
-      const candidate = { name: `ridge_${mode}_l${lambda}`, predict: model.predict };
+      const candidate = {
+        name: `ridge_${mode}_l${lambda}`,
+        predict: model.predict,
+        modelSpec: { mode, lambda, ...model.spec },
+      };
       return { candidate, validation: metrics(validation, candidate.predict)! };
     }).sort(compareMetrics)[0];
     if (fitted) selectedRidge.push(fitted.candidate);
@@ -324,7 +337,10 @@ function fitLogistic(rows: Observation[], mode: "independent" | "market_plus", l
     coefficients = next;
     if (change < 1e-7) break;
   }
-  return { predict: (row: Observation) => clamp(sigmoid(dot(coefficients, vector(row)))) };
+  return {
+    predict: (row: Observation) => clamp(sigmoid(dot(coefficients, vector(row)))),
+    spec: { means, scales, coefficients },
+  };
 }
 
 function evaluateMarket(rows: Observation[]) {
@@ -349,10 +365,11 @@ function evaluateMarket(rows: Observation[]) {
     challenger: metrics(holdout, selected.candidate.predict)!,
   };
   const finalistComparison = Object.fromEntries(finalists.map((candidate) => [candidate.name, {
-    validation: metrics(validation, candidate.predict),
-    holdout: metrics(holdout, candidate.predict),
-    bootstrap: dateBlockBootstrapComparison(holdout, candidate.predict, 2_000),
-    action: (() => {
+      validation: metrics(validation, candidate.predict),
+      holdout: metrics(holdout, candidate.predict),
+      bootstrap: dateBlockBootstrapComparison(holdout, candidate.predict, 2_000),
+      modelSpec: candidate.modelSpec ?? null,
+      action: (() => {
       const policy = selectActionPolicy(validation, candidate.predict);
       return policy ? {
         policy,
@@ -361,6 +378,7 @@ function evaluateMarket(rows: Observation[]) {
         holdoutAudit: actionAudit(holdout, candidate.predict, policy),
       } : null;
     })(),
+      actionPolicySensitivity: actionPolicySensitivity(validation, holdout, candidate.predict),
   }]));
   const bootstrap = dateBlockBootstrapComparison(holdout, selected.candidate.predict, 2_000);
   const actionPolicy = selectActionPolicy(validation, selected.candidate.predict);
@@ -461,6 +479,33 @@ function selectActionPolicy(rows: Observation[], probability: (row: Observation)
     (right.result.hitRate ?? 0) - (left.result.hitRate ?? 0)
     || (right.result.roi ?? 0) - (left.result.roi ?? 0)
     || right.result.decisions - left.result.decisions)[0]?.policy ?? null;
+}
+
+function actionPolicySensitivity(
+  validation: Observation[],
+  holdout: Observation[],
+  probability: (row: Observation) => number,
+) {
+  const rows = [];
+  for (const minimumProbability of [0.54, 0.56, 0.58, 0.6])
+    for (const minimumEdge of [0.01, 0.02, 0.03, 0.05])
+      for (const minimumEv of [0, 0.01, 0.03, 0.05]) {
+        const policy = { probability: minimumProbability, edge: minimumEdge, ev: minimumEv };
+        const validationMetrics = actionMetrics(validation, probability, policy);
+        if (
+          validationMetrics.decisions < 10
+          || validationMetrics.hitRate === null
+          || validationMetrics.roi === null
+          || validationMetrics.hitRate <= 0.5
+          || validationMetrics.roi <= 0
+        ) continue;
+        rows.push({
+          policy,
+          validation: validationMetrics,
+          holdout: actionMetrics(holdout, probability, policy),
+        });
+      }
+  return rows;
 }
 
 function actionMetrics(rows: Observation[], probability: (row: Observation) => number, policy: ActionPolicy) {

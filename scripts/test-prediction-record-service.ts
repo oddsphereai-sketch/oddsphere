@@ -1451,16 +1451,16 @@ console.log("\n━━━ MLB market-aware final side correction ━━━");
   const correction = (ou.snapshot_json as any)?.market_aware_side_correction;
   const flip = (ou.snapshot_json as any)?.ou_flip;
   const rejection = (ou.snapshot_json as any)?.totals_correction_rejection;
-  const validatedLean = (ou.snapshot_json as any)?.total_validated_lean;
+  const validatedLeanStanddown = (ou.snapshot_json as any)?.total_validated_lean_forward_standdown;
   check("Supporting total split leaves original side official", ou.pick === "over" && ou.odds_american === -112);
   check("Supporting total split preserves original edge", typeof ou.edge === "number" && ou.edge === 6);
-  check("Supporting total split can retain validated Lean", ou.best_angle === false && ou.play_grade === "lean" && ou.no_bet === false);
+  check("Forward-failed generic Total Lean is capped", ou.best_angle === false && ou.play_grade !== "lean");
   check(
     "Supporting total split does not create a rejected opposite-side correction",
     correction == null &&
       flip == null &&
       rejection == null &&
-      validatedLean?.rule_id === "total_validated_lean_v1_2026_07_11",
+      validatedLeanStanddown?.superseded_rule_id === "total_validated_lean_v1_2026_07_11",
   );
 }
 {
@@ -2249,10 +2249,10 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
     currentLinesByGameId,
   });
   const ou = recs.find((r) => r.market === "total");
-  const lean = (ou?.snapshot_json as any)?.total_validated_lean;
-  check("Total Lean validated profile stays Lean", ou?.play_grade === "lean" && ou?.best_angle === false);
-  check("Total Lean validated profile records audit", lean?.rule_id === TOTAL_VALIDATED_LEAN_RULE_ID && lean?.action === "keep_as_lean");
-  check("validated Total Lean decision pipeline is actionable", (ou?.snapshot_json as any)?.decision_pipeline?.board_action === "bet");
+  const standdown = (ou?.snapshot_json as any)?.total_validated_lean_forward_standdown;
+  check("Forward-failed Total Lean profile stands down", ou?.play_grade !== "lean" && ou?.best_angle === false);
+  check("Total Lean standdown records the superseded rule", standdown?.superseded_rule_id === TOTAL_VALIDATED_LEAN_RULE_ID && standdown?.action === "stand_down_from_lean");
+  check("superseded Total Lean decision pipeline is nonactionable", (ou?.snapshot_json as any)?.decision_pipeline?.board_action === "no_play");
 }
 {
   const frictionPred = {

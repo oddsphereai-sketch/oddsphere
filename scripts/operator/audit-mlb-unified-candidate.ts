@@ -142,6 +142,45 @@ function group(rows: Row[], key: (row: Row) => string) {
   );
 }
 
+function dateBlockBootstrap(rows: Row[], iterations = 5_000) {
+  const dates = [...new Set(rows.map((row) => String(row.slate_date)))].sort();
+  const byDate = new Map(dates.map((date) => [date, rows.filter((row) => row.slate_date === date)]));
+  if (!dates.length) return null;
+  let state = 0x9e3779b9;
+  const random = () => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return (state >>> 0) / 4294967296;
+  };
+  let profitable = 0;
+  let winRateAboveHalf = 0;
+  for (let iteration = 0; iteration < iterations; iteration++) {
+    const sample = Array.from({ length: dates.length }, () =>
+      byDate.get(dates[Math.floor(random() * dates.length)]!) ?? []).flat();
+    let wins = 0;
+    let losses = 0;
+    let units = 0;
+    for (const row of sample) {
+      const settled = result(row);
+      if (settled === null || settled === "push") continue;
+      const value = profit(settled, finite(row.odds_american));
+      if (value === null) continue;
+      if (settled === "win") wins++;
+      else losses++;
+      units += value;
+    }
+    if (units > 0) profitable++;
+    if (wins + losses > 0 && wins / (wins + losses) > 0.5) winRateAboveHalf++;
+  }
+  return {
+    iterations,
+    dates: dates.length,
+    profitableProbability: Number((profitable / iterations).toFixed(4)),
+    winRateAboveHalfProbability: Number((winRateAboveHalf / iterations).toFixed(4)),
+  };
+}
+
 function countGroup(rows: Row[], key: (row: Row) => string) {
   return Object.fromEntries(
     [...new Set(rows.map(key))]
@@ -164,6 +203,46 @@ function chronologicalSplit(row: Row): string {
   if (date <= "2026-07-17") return "train_2026-07-11_to_17";
   if (date <= "2026-07-22") return "validation_2026-07-18_to_22";
   return "untouched_2026-07-23_forward";
+}
+
+function priceBucket(row: Row): string {
+  const odds = finite(row.odds_american);
+  if (odds === null) return "missing";
+  if (odds < -145) return "shorter_than_-145";
+  if (odds <= -120) return "-145_to_-120";
+  if (odds < 100) return "-119_to_+99";
+  return "+100_or_longer";
+}
+
+function probabilityBucket(row: Row): string {
+  const probability = finite(row.model_probability);
+  if (probability === null) return "missing";
+  if (probability < 0.5) return "below_50";
+  if (probability < 0.52) return "50_to_52";
+  if (probability < 0.54) return "52_to_54";
+  return "54_plus";
+}
+
+function movementBucket(row: Row): string {
+  return String(row.snapshot_json?.line_movement?.direction ?? "missing");
+}
+
+function sharpApiSplitGapBucket(row: Row): string {
+  const rows = Array.isArray(row.snapshot_json?.source_aware_split_rows_at_lock)
+    ? row.snapshot_json.source_aware_split_rows_at_lock as Row[]
+    : [];
+  const side = String(row.side ?? row.pick ?? "").toLowerCase();
+  const selected = rows.find((candidate) =>
+    String(candidate.provider ?? "").toLowerCase() === "sharpapi"
+    && candidate.market_type === "total"
+    && String(candidate.selection_key ?? "").split(":").at(-1) === side);
+  const bets = finite(selected?.bets_pct);
+  const money = finite(selected?.money_pct);
+  if (bets === null || money === null) return "missing";
+  const gap = (money <= 1 ? money * 100 : money) - (bets <= 1 ? bets * 100 : bets);
+  if (gap >= 10) return "money_10_plus_over_tickets";
+  if (gap > -10) return "within_10";
+  return "money_10_plus_below_tickets";
 }
 
 function decisionRule(row: Row): string {
@@ -585,6 +664,70 @@ async function main() {
         ),
         currentStandDownTriggers: metrics(totalCorrectionStandDowns),
         standDownTriggersByRule: group(totalCorrectionStandDowns, totalCorrectionRule),
+        nonActionableStandDownTriggersByRule: group(
+          totalCorrectionStandDowns.filter((row) => !actionable(row)),
+          totalCorrectionRule,
+        ),
+        nonActionableStandDownTriggersByRuleAndChronologicalSplit: group(
+          totalCorrectionStandDowns.filter((row) => !actionable(row)),
+          (row) => `${totalCorrectionRule(row)}|${chronologicalSplit(row)}`,
+        ),
+        meanSelectorSensitivity: (() => {
+          const rows = totalCorrectionStandDowns.filter((row) =>
+            !actionable(row)
+            && totalCorrectionRule(row) === "totals_mean_side_selector_v2_2026_07_11");
+          return {
+            all: metrics(rows),
+            byWeek: group(rows, slateWeek),
+            bySide: group(rows, (row) => String(row.side ?? row.pick ?? "unknown")),
+            underByWeek: group(
+              rows.filter((row) => String(row.side ?? row.pick ?? "").toLowerCase() === "under"),
+              slateWeek,
+            ),
+            underBySharpApiGap: group(
+              rows.filter((row) => String(row.side ?? row.pick ?? "").toLowerCase() === "under"),
+              sharpApiSplitGapBucket,
+            ),
+            underDateBlockBootstrap: dateBlockBootstrap(
+              rows.filter((row) => String(row.side ?? row.pick ?? "").toLowerCase() === "under"),
+            ),
+            byPrice: group(rows, priceBucket),
+            byProbability: group(rows, probabilityBucket),
+            byMovement: group(rows, movementBucket),
+            bySharpApiGap: group(rows, sharpApiSplitGapBucket),
+          };
+        })(),
+        currentSlateStandDownTriggers: currentSlate
+          .filter((row) => row.market === "total" && row.snapshot_json?.totals_correction_rejection != null)
+          .map((row) => ({
+            id: row.id,
+            gameId: row.game_id,
+            pick: row.pick,
+            line: row.line_value,
+            odds: row.odds_american,
+            probability: row.model_probability,
+            grade: publicGrade(row),
+            actionable: actionable(row),
+            rule: totalCorrectionRule(row),
+          })),
+        nonActionableMeanSelectorRows: totalCorrectionStandDowns
+          .filter((row) =>
+            !actionable(row)
+            && totalCorrectionRule(row) === "totals_mean_side_selector_v2_2026_07_11")
+          .map((row) => ({
+            id: row.id,
+            date: row.slate_date,
+            side: row.side ?? row.pick,
+            line: row.line_value,
+            odds: row.odds_american,
+            probability: row.model_probability,
+            marketProbability: row.market_probability,
+            result: result(row),
+            units: result(row) === null ? null : profit(result(row)!, finite(row.odds_american)),
+            movement: row.snapshot_json?.line_movement ?? null,
+            aggregateSplits: row.snapshot_json?.public_splits ?? null,
+            sourceAwareSplits: row.snapshot_json?.source_aware_split_rows_at_lock ?? null,
+          })),
       },
       totalsReleasedSleeves: {
         validatedLean: metrics(validatedTotalLeans),
@@ -623,11 +766,16 @@ async function main() {
   };
   const section = process.argv.find((arg) => arg.startsWith("--section="))?.slice("--section=".length);
   if (section) {
+    const path = section.split(".");
+    const value = path.reduce<unknown>((current, key) =>
+      current && typeof current === "object"
+        ? (current as Record<string, unknown>)[key]
+        : null, report);
     console.log(JSON.stringify({
       mode: report.mode,
       noWrites: report.noWrites,
       section,
-      value: (report as Record<string, unknown>)[section] ?? null,
+      value: value ?? null,
     }, null, 2));
     return;
   }

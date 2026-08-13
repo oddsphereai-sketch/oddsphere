@@ -14,7 +14,7 @@ import {
 } from "../lib/services/totalsMeanFlip";
 import {
   buildPredictionRecordsFromSlate,
-  TOTAL_VALIDATED_LEAN_RULE_ID,
+  TOTAL_MEAN_SELECTOR_ORIGINAL_UNDER_LEAN_RULE_ID,
 } from "../lib/services/predictionRecordService";
 
 let pass = 0, fail = 0;
@@ -130,8 +130,8 @@ function mkPred(spOver: Record<string, any>, audit: Record<string, any>) {
     },
   };
 }
-function build(pred: any, odds: any, signals: Map<number, any[]> = new Map()) {
-  return buildPredictionRecordsFromSlate({ sport: "mlb", slateDate: "2026-06-22", launchDay: false, games: [baseGame], predictionByGameId: new Map([[800, pred]]), abbrevByTeamId, signalsByGameId: signals, oddsByGameId: new Map([[800, odds as any]]) });
+function build(pred: any, odds: any, signals: Map<number, any[]> = new Map(), sourceAwareSplits: any[] = []) {
+  return buildPredictionRecordsFromSlate({ sport: "mlb", slateDate: "2026-06-22", launchDay: false, games: [baseGame], predictionByGameId: new Map([[800, pred]]), abbrevByTeamId, signalsByGameId: signals, sourceAwareSplitsByGameId: new Map([[800, sourceAwareSplits]]), oddsByGameId: new Map([[800, odds as any]]) });
 }
 
 console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━");
@@ -150,13 +150,28 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const f = (ou?.snapshot_json as any)?.ou_flip;
   const rejection = (ou?.snapshot_json as any)?.totals_correction_rejection;
   check("no official ou_flip is emitted", f == null);
-  check("rejection audit records original under + rejected over", rejection?.action === "stand_down" && rejection?.original_side === "under" && rejection?.rejected_candidate_side === "over");
+  check("rejection audit records original under + rejected over", rejection?.action === "reject_candidate_evaluate_original" && rejection?.original_side === "under" && rejection?.rejected_candidate_side === "over");
   check("rejection audit records the governing rule", rejection?.rule_id === TOTALS_MEAN_FLIP_RULE_ID);
   check("decision pipeline records no final side change", (ou?.snapshot_json as any)?.decision_pipeline?.final_side_changed === false);
   check("decision pipeline makes an explicit No Play board action", (ou?.snapshot_json as any)?.decision_pipeline?.board_action === "no_play");
-  check("decision pipeline stamps paired total promotion rules", (ou?.snapshot_json as any)?.decision_pipeline?.paired_policy?.promotions?.includes(TOTAL_VALIDATED_LEAN_RULE_ID));
+  check("decision pipeline stamps paired total promotion rules", (ou?.snapshot_json as any)?.decision_pipeline?.paired_policy?.promotions?.includes(TOTAL_MEAN_SELECTOR_ORIGINAL_UNDER_LEAN_RULE_ID));
   // ML + FI unaffected
   check("ML record unaffected by totals flip", recs.find((r) => r.market === "moneyline")?.pick === "home");
+}
+{
+  const sharpSplits = [
+    { canonical_event_id: "9100", market_type: "total", selection_key: "9100:total:under", provider: "sharpapi", source_book: "sharp_adjacent", source_type: "sharp_adjacent_book", bets_pct: 44, money_pct: 51, source_observed_at: "2026-06-22T16:00:00Z", fetched_at: "2026-06-22T16:00:00Z" },
+    { canonical_event_id: "9100", market_type: "total", selection_key: "9100:total:over", provider: "sharpapi", source_book: "sharp_adjacent", source_type: "sharp_adjacent_book", bets_pct: 56, money_pct: 49, source_observed_at: "2026-06-22T16:00:00Z", fetched_at: "2026-06-22T16:00:00Z" },
+  ];
+  const recs = build(mkPred({}, {}), oddsSnap(-105, -115), new Map(), sharpSplits);
+  const ou = recs.find((r) => r.market === "total");
+  const sleeve = (ou?.snapshot_json as any)?.total_mean_selector_original_under_lean;
+  check("rejected mean selector promotes the unchanged original Under with exact SharpAPI context", ou?.pick === "under" && ou?.play_grade === "lean" && ou?.no_bet === false);
+  check("original-Under sleeve stamps the release rule", sleeve?.rule_id === TOTAL_MEAN_SELECTOR_ORIGINAL_UNDER_LEAN_RULE_ID && sleeve?.split_provider === "sharpapi");
+  check("original-Under sleeve is the actionable decision rule", (ou?.snapshot_json as any)?.decision_pipeline?.action_rule_id === TOTAL_MEAN_SELECTOR_ORIGINAL_UNDER_LEAN_RULE_ID);
+  const incomplete = build(mkPred({}, {}), oddsSnap(-105, -115), new Map(), sharpSplits.slice(0, 1))
+    .find((record) => record.market === "total");
+  check("one-sided SharpAPI data cannot activate the original-Under sleeve", incomplete?.no_bet === true && (incomplete?.snapshot_json as any)?.total_mean_selector_original_under_lean == null);
 }
 {
   // gap < 0.3 still flips in v2. Score sum 8.6 vs bet line 8.5 ⇒ divergent
@@ -165,7 +180,7 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const pred = mkPred({}, { posterior_total: 8.6 });
   const recs = build(pred, oddsSnap(-105, -115));
   const ou = recs.find((r) => r.market === "total");
-  check("gap<0.3 → original stays under and correction stands down", ou?.no_bet === true && ou?.pick === "under" && (ou?.snapshot_json as any)?.totals_correction_rejection?.action === "stand_down");
+  check("gap<0.3 → original stays under and rejected candidate is audited", ou?.no_bet === true && ou?.pick === "under" && (ou?.snapshot_json as any)?.totals_correction_rejection?.action === "reject_candidate_evaluate_original");
 }
 {
   // line>=10 still flips in v2. Score sum 10.6 vs bet line 10 ⇒ divergent
@@ -173,7 +188,7 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const pred = mkPred({}, { market_total: 10, posterior_total: 10.6 });
   const recs = build(pred, oddsSnap(-105, -115));
   const ou = recs.find((r) => r.market === "total");
-  check("line>=10 → original stays under and correction stands down", ou?.no_bet === true && ou?.pick === "under" && (ou?.snapshot_json as any)?.totals_correction_rejection?.action === "stand_down");
+  check("line>=10 → original stays under and rejected candidate is audited", ou?.no_bet === true && ou?.pick === "under" && (ou?.snapshot_json as any)?.totals_correction_rejection?.action === "reject_candidate_evaluate_original");
 }
 {
   // missing mean-side (over) odds → stand down.
@@ -204,9 +219,9 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const f = (ou?.snapshot_json as any)?.ou_flip;
   check("market-opposed candidate leaves original over official", ou?.pick === "over" && ou?.side === "over");
   const rejection = (ou?.snapshot_json as any)?.totals_correction_rejection;
-  check("market-opposed correction is explicit No Play", ou?.no_bet === true);
-  check("market-opposed correction has no actionable grade", ou?.play_grade === null);
-  check("market-opposed rejection audit stamped", f == null && rejection?.action === "stand_down" && rejection?.rejected_candidate_side === "under" && rejection?.rule_id === TOTALS_MARKET_OPPOSED_FLIP_RULE_ID);
+  check("market-opposed candidate is rejected while original side is evaluated", ou?.no_bet === false);
+  check("market-opposed original side retains its qualified grade", ou?.play_grade != null);
+  check("market-opposed rejection audit stamped", f == null && rejection?.action === "reject_candidate_evaluate_original" && rejection?.rejected_candidate_side === "under" && rejection?.rule_id === TOTALS_MARKET_OPPOSED_FLIP_RULE_ID);
   check("market-opposed correction kind stamped", rejection?.correction_kind === "market_opposed_public_conflict");
 }
 {
@@ -238,9 +253,9 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const gradeResolution = (ou?.snapshot_json as any)?.total_flip_public_grade_resolution;
   check("3-5pp integration leaves original over official", ou?.pick === "over" && ou?.odds_american === -110);
   check("3-5pp official row keeps the original side's exact line", ou?.line_value === 8.5);
-  check("3-5pp correction is No Play, never actionable", ou?.play_grade === null && ou?.best_angle === false && ou?.no_bet === true);
+  check("3-5pp rejected correction leaves the original side eligible", ou?.play_grade === "lean" && ou?.best_angle === false && ou?.no_bet === false);
   check("3-5pp integration stamps rejection metadata", f == null && rejection?.rule_id === TOTALS_MID_EDGE_FLIP_RULE_ID && rejection?.correction_kind === "mid_edge_inversion");
-  check("3-5pp integration records stand-down resolution", gradeResolution?.action === "no_public_grade" && gradeResolution?.public_play_grade === null);
+  check("3-5pp integration records original-side evaluation", gradeResolution?.action === "reject_candidate_evaluate_original" && gradeResolution?.public_play_grade === "lean");
 }
 {
   const pred = mkPred({}, { ou_model_prob: 0.558, ou_market_prob: 0.52, ou_edge_pct: 3.8, posterior_total: 8.9 });

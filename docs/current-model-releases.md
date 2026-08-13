@@ -11,9 +11,9 @@ Last reviewed: 2026-08-13
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_12_r38`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v37_2026_08_12`
-- Grade policy: `mlb_public_grade_policy_v28_unified_market_tiers_2026_08_12`
+- Decision release: `mlb_daily_edge_decision_2026_08_13_r39`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v38_2026_08_13`
+- Grade policy: `mlb_public_grade_policy_v29_total_mean_selector_under_replacement_2026_08_13`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
@@ -128,6 +128,19 @@ reason and omitted the public `prediction_records` row. R38 recognizes both expl
 Toss-Up reasons. It cannot create an actionable FI play and still fails closed for an absent FI
 market, lineup failure, scratch, or any blocker outside opposing-starter FI availability.
 
+The August 13 r39 totals replacement release stands down the older generic validated-Lean sleeve
+after its exact post-launch cohort went 5-8 (-23.5% locked-price ROI). It replaces that sleeve
+with a narrower, market-confirmed original-Under path: when the mean-side correction is rejected,
+the unchanged original Under may become a Lean only with an exact two-sided SharpAPI split, high
+data quality, a real -145 through +145 selected-side price, and every missing-market, divergence,
+or explicit no-bet safeguard clear. It never flips the side or changes the price, probability,
+projection, Best Angle status, or stake. Frozen-context forward replay was 19-6-1 (+41.1% ROI),
+positive in all four chronological weeks; date-block bootstrap P(profitable) was 0.9952. The Over
+branch was rejected at 1-7. Historical paired impact removes 13 old-sleeve Leans and adds 26 new
+Under Leans (net +13); the August 13 paired board adds four Leans with no current old-sleeve
+demotion. Rollback is the exact r38 release and v28 grade policy. Full evidence is recorded in
+`docs/model-audits/2026-08-13-mlb-total-mean-selector-original-under-r39.md`.
+
 The August 11 tracking-contract v8 operational release keeps the shared MLB
 `prediction_pipeline` lease authoritative while preventing an ordinary writer collision from
 leaving a game visibly open for another five-minute interval. The targeted pregame sweep now
@@ -223,6 +236,12 @@ formula, threshold, market selector, grade policy, or stake rule; it restores
 the existing weather input contract for this venue. Paired current-slate output
 and launch-gate evidence are recorded in
 `docs/model-audits/2026-08-13-player-props-field-of-dreams-weather-r32.md`.
+
+The complete August 13 all-market tournament covered 45,320 settled observations across 16
+markets. It retained the r31 HRR Under, Doubles Under, and Batter Strikeouts Over accuracy
+sleeves, rejected a Home Run replacement and every broad probability challenger, and kept
+holdout-sensitive total-bases and pitcher finalists out of production. The complete matrix is in
+`docs/model-audits/2026-08-13-mlb-props-all-market-tournament.md`.
 
 The r31 accuracy release removes the losing Home Run Over actionable promotion
 while preserving the calibrated Home Runs probability and visible Watchlist
