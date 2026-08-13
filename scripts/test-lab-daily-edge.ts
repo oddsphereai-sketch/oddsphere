@@ -2216,6 +2216,32 @@ section("Market Pulse presentation coherence");
       "movement summary uses the same terminal quote shown by the selected-side trail",
       terminalMove.previousAmerican === -141 && terminalMove.currentAmerican === -152 && terminalMove.observedAt === "2026-08-10T17:43:00Z",
     );
+    const cachedUnlockedBody = {
+      games: [{ lockState: "unlocked", markets: { total: {
+        priceAmerican: -152,
+        priceObservedAt: "2026-08-10T17:43:00Z",
+        oddsTrail: currentTrail,
+        lastMovePrevAmerican: -141,
+        lastMoveNextAmerican: -140,
+        lastMoveAtIso: "2026-08-10T15:43:00Z",
+        lastMoveLinePrev: 9,
+        lastMoveLineNext: 9,
+      } } }],
+    } as any;
+    dailyEdgeTest.suppressIncomparableLineMovePrices(cachedUnlockedBody);
+    check(
+      "stored unlocked responses repair movement summary to the visible trail terminal",
+      cachedUnlockedBody.games[0].markets.total.lastMovePrevAmerican === -141 &&
+        cachedUnlockedBody.games[0].markets.total.lastMoveNextAmerican === -152 &&
+        cachedUnlockedBody.games[0].markets.total.lastMoveAtIso === "2026-08-10T17:43:00Z",
+    );
+    cachedUnlockedBody.games[0].markets.total.priceAmerican = -149;
+    dailyEdgeTest.suppressIncomparableLineMovePrices(cachedUnlockedBody);
+    check(
+      "unknown-source current quote suppresses a false cross-source prior stop",
+      cachedUnlockedBody.games[0].markets.total.lastMovePrevAmerican === null &&
+        cachedUnlockedBody.games[0].markets.total.lastMoveNextAmerican === -149,
+    );
 
     const noCrossBookTrail = dailyEdgeTest.buildPersistedOddsTrail({
       candidates: [

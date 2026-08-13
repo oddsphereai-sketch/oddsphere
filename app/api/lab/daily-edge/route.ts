@@ -240,6 +240,19 @@ function suppressIncomparableLineMovePrices(body: DailyEdgeResponse): DailyEdgeR
   enforceLockedCardCutoff(body);
   for (const game of body.games) {
     for (const market of Object.values(game.markets)) {
+      const terminalOddsMove = terminalOddsMoveFromTrail(market.oddsTrail ?? []);
+      const displayedCurrent = market.priceAmerican ?? market.lockedLineAmerican ?? null;
+      if (displayedCurrent !== null && terminalOddsMove.currentAmerican !== displayedCurrent) {
+        // A stored snapshot may have a newer current quote whose originating
+        // book was not retained. Do not attach another book's prior stop to it.
+        market.lastMovePrevAmerican = null;
+        market.lastMoveNextAmerican = displayedCurrent;
+        market.lastMoveAtIso = market.priceObservedAt ?? market.lockedLineAt ?? null;
+      } else if (terminalOddsMove.currentAmerican !== null) {
+        market.lastMovePrevAmerican = terminalOddsMove.previousAmerican;
+        market.lastMoveNextAmerican = terminalOddsMove.currentAmerican;
+        market.lastMoveAtIso = terminalOddsMove.observedAt;
+      }
       const previousLine = market.lastMoveLinePrev;
       const nextLine = market.lastMoveLineNext;
       if (
@@ -4515,38 +4528,36 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
       null,
     locked: input.isLockedRow === true,
   });
+  const coherentTrailPriceRow =
+    trailPriceRow !== null && trailPriceRow.odds_american === priceAmerican
+      ? trailPriceRow
+      : null;
   const oddsTrail = buildPersistedOddsTrail({
     candidates: input.lineOpenCandidates,
-    priceRow: trailPriceRow,
-    currentAmerican: currentMemberPriceRow?.odds_american ?? priceAmerican,
-    currentLine: trailPriceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null,
-    currentObservedAt:
-      currentMemberPriceRow === null
-        ? priceObservedAt
-        : lineRowObservedAt(currentMemberPriceRow),
+    priceRow: coherentTrailPriceRow,
+    currentAmerican: priceAmerican,
+    currentLine: coherentTrailPriceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null,
+    currentObservedAt: priceObservedAt,
     lockedAmerican: input.lockedPriceAmerican ?? null,
     lockedAt: input.lockedPriceAt ?? null,
     terminalSportsbook:
       input.isLockedRow === true
-        ? input.lockedPriceSportsbook ?? trailPriceRow?.sportsbook ?? null
-        : trailPriceRow?.sportsbook ?? null,
+        ? input.lockedPriceSportsbook ?? coherentTrailPriceRow?.sportsbook ?? null
+        : coherentTrailPriceRow?.sportsbook ?? null,
   });
   const lineTrail = input.market === "total"
     ? buildPersistedOddsTrail({
         candidates: input.lineMovementCandidates ?? input.lineOpenCandidates,
-        priceRow: trailPriceRow,
-        currentAmerican: currentMemberPriceRow?.odds_american ?? priceAmerican,
-        currentLine: trailPriceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null,
-        currentObservedAt:
-          currentMemberPriceRow === null
-            ? priceObservedAt
-            : lineRowObservedAt(currentMemberPriceRow),
+        priceRow: coherentTrailPriceRow,
+        currentAmerican: priceAmerican,
+        currentLine: coherentTrailPriceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null,
+        currentObservedAt: priceObservedAt,
         lockedAmerican: input.lockedPriceAmerican ?? null,
         lockedAt: input.lockedPriceAt ?? null,
         terminalSportsbook:
           input.isLockedRow === true
-            ? input.lockedPriceSportsbook ?? trailPriceRow?.sportsbook ?? null
-            : trailPriceRow?.sportsbook ?? null,
+            ? input.lockedPriceSportsbook ?? coherentTrailPriceRow?.sportsbook ?? null
+            : coherentTrailPriceRow?.sportsbook ?? null,
         allowLineChanges: true,
       })
     : [];
@@ -4571,7 +4582,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           candidate.odds_american === row.odds_american,
       ) === index,
   );
-  const selectedTrailBook = trailPriceRow?.sportsbook ?? null;
+  const selectedTrailBook = coherentTrailPriceRow?.sportsbook ?? null;
   const sameBookOpposingRows = selectedTrailBook === null
     ? []
     : opposingCurrentRows.filter((row) => row.sportsbook === selectedTrailBook);
