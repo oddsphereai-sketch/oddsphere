@@ -28,6 +28,7 @@
 import { Fragment, Suspense, createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import ActualDailyEdgePreview from "@/app/dev/experience-preview/ActualDailyEdgePreview";
+import { canonicalSplitRows } from "@/app/lab/lib/marketPulsePresentation";
 import { useDailyEdge } from "../../hooks/useDailyEdge";
 import { useSportSelection } from "../../hooks/useSportSelection";
 import {
@@ -2465,6 +2466,7 @@ function SourceAwareMarketPulse({ decision }: { decision: MarketDecision }) {
 }
 
 function SplitSection({ section }: { section: NonNullable<MarketDecision["consensusSplits"]> }) {
+  const displayRows = canonicalSplitRows(section);
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -2473,9 +2475,9 @@ function SplitSection({ section }: { section: NonNullable<MarketDecision["consen
           <p className="text-[9px] text-gray-500">Last updated <LocalTime value={section.lastUpdated} /></p>
         ) : null}
       </div>
-      {section.rows.length > 0 ? (
+      {displayRows.length > 0 ? (
         <div className="space-y-2">
-          {section.rows.map((s) => (
+          {displayRows.map((s) => (
             <SideSplitsBlock
               key={s.side}
               label={s.label}

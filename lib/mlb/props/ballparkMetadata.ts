@@ -14,9 +14,23 @@ const VENUE_ALIASES: Record<string, string> = {
   "uniqlo field at dodger stadium": "dodger stadium",
 };
 
+// Neutral-site MLB venues do not belong in the team-owned park-factor fixture,
+// but they still need coordinates so required game-time weather can resolve.
+// Field of Dreams uses MLB's published Dyersville address (28995 Lansing Rd).
+const SPECIAL_VENUES: Record<string, MlbBallparkMetadata> = {
+  "field of dreams": {
+    name: "Field of Dreams",
+    latitude: 42.4952072,
+    longitude: -91.0546726,
+    roofStatus: "outdoor",
+  },
+};
+
 export function resolveMlbBallparkMetadata(venue: string | null | undefined): MlbBallparkMetadata | null {
   if (!venue) return null;
   const requested = VENUE_ALIASES[normalizeVenue(venue)] ?? normalizeVenue(venue);
+  const specialVenue = SPECIAL_VENUES[requested];
+  if (specialVenue) return specialVenue;
   const row = ballparks.find((candidate) => normalizeVenue(candidate.name) === requested);
   if (!row || !Number.isFinite(row.latitude) || !Number.isFinite(row.longitude)) return null;
   return {
