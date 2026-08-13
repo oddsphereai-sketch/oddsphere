@@ -389,10 +389,28 @@ function ReaderEvidence({ game, market, marketKey, sport, history, pitcherFirstI
 
 function MobileReaderSheet({ onClose, onPrev, onNext, ...reader }: ReaderSurfaceProps & { onClose: () => void; onPrev: (() => void) | null; onNext: (() => void) | null }) {
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const phoneViewport = window.matchMedia("(max-width: 639px)");
+    let previousOverflow: string | null = null;
+
+    function syncBodyScrollLock() {
+      if (phoneViewport.matches && previousOverflow === null) {
+        previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return;
+      }
+      if (!phoneViewport.matches && previousOverflow !== null) {
+        document.body.style.overflow = previousOverflow;
+        previousOverflow = null;
+      }
+    }
+
+    syncBodyScrollLock();
+    phoneViewport.addEventListener("change", syncBodyScrollLock);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      phoneViewport.removeEventListener("change", syncBodyScrollLock);
+      if (previousOverflow !== null) {
+        document.body.style.overflow = previousOverflow;
+      }
     };
   }, []);
 

@@ -276,6 +276,14 @@ check(
     candidateSource.includes('activeId={game.id}'),
 );
 check(
+  "a URL-restored mobile reader cannot lock desktop page scrolling",
+  candidateSource.includes('const phoneViewport = window.matchMedia("(max-width: 639px)")') &&
+    candidateSource.includes("if (phoneViewport.matches && previousOverflow === null)") &&
+    candidateSource.includes("if (!phoneViewport.matches && previousOverflow !== null)") &&
+    candidateSource.includes('phoneViewport.addEventListener("change", syncBodyScrollLock)') &&
+    candidateSource.includes('phoneViewport.removeEventListener("change", syncBodyScrollLock)'),
+);
+check(
   "candidate visibly renders authoritative lock state on board and reader surfaces",
   candidateSource.includes('import { LockBadge }') &&
     candidateSource.includes("minute lock checks") &&
