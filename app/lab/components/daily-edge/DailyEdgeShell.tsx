@@ -1790,7 +1790,7 @@ function CleanFiBoardOddsTrail({
   );
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       {hasYrfi && <Row label="YRFI" trail={yrfi} />}
       {hasNrfi && <Row label="NRFI" trail={nrfi} />}
     </div>
@@ -1920,7 +1920,6 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const showFiBoardOddsTrail =
     market === "first_inning" &&
     shellSport === "mlb" &&
-    fiBoardTrail === null &&
     marketData.fiMarketBoard != null;
   const oddsTrailOpen =
     marketData.lineOpenAmerican ??
@@ -1999,17 +1998,17 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
               <span className={"text-[14px] font-black leading-none " + cleanDeltaClass(oddsMove.tone)}>{oddsMove.delta}</span>
             )}
           </div>
-          {persistedOddsTrail.length > 0 ? (
+          {showFiBoardOddsTrail ? (
+            <CleanFiBoardOddsTrail
+              marketData={marketData}
+              locked={marketLocked}
+            />
+          ) : persistedOddsTrail.length > 0 ? (
             <CleanPersistedOddsTrail
               trail={persistedOddsTrail}
               open={oddsTrailOpen}
               prev={oddsTrailPrev}
               current={oddsTrailCurrent}
-              locked={marketLocked}
-            />
-          ) : showFiBoardOddsTrail ? (
-            <CleanFiBoardOddsTrail
-              marketData={marketData}
               locked={marketLocked}
             />
           ) : (

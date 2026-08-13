@@ -33,6 +33,10 @@ const dailyEdgeRouteSource = readFileSync(
   "app/lab/daily-edge/page.tsx",
   "utf8",
 );
+const legacyDailyEdgeSource = readFileSync(
+  "app/lab/components/daily-edge/DailyEdgeShell.tsx",
+  "utf8",
+);
 
 let passed = 0;
 let failed = 0;
@@ -430,10 +434,20 @@ check(
 );
 check(
   "first-inning odds stack both sides and always expose First, Prior, and Current",
-  candidateSource.includes('<div className="mt-3 grid gap-2">{row("NRFI"') &&
+  candidateSource.includes('<div className="mt-3 flex flex-col gap-2">{row("NRFI"') &&
     candidateSource.includes('<PricePoint label="First observed"') &&
     candidateSource.includes('<PricePoint label="Prior observed"') &&
     candidateSource.includes('<PricePoint label="Current"'),
+);
+check(
+  "legacy reader also prioritizes the vertically stacked two-sided FI board",
+  legacyDailyEdgeSource.includes('<div className="flex flex-col gap-2">') &&
+    legacyDailyEdgeSource.includes("{showFiBoardOddsTrail ? (") &&
+    legacyDailyEdgeSource.includes(": persistedOddsTrail.length > 0 ? (") &&
+    legacyDailyEdgeSource.indexOf("{showFiBoardOddsTrail ? (") <
+      legacyDailyEdgeSource.indexOf(": persistedOddsTrail.length > 0 ? (") &&
+    legacyDailyEdgeSource.includes('{hasYrfi && <Row label="YRFI" trail={yrfi} />}') &&
+    legacyDailyEdgeSource.includes('{hasNrfi && <Row label="NRFI" trail={nrfi} />}'),
 );
 check(
   "finite recent-game rates use a segmented game tally instead of a continuous bar",
