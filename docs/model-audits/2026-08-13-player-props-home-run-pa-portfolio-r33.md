@@ -38,7 +38,7 @@ Discovery ended July 23. Model and portfolio selection used July 24-31. August
 | Validation (Jul 24-31) | 8 | 24 | 5-19 | +12.88 | +53.7% |
 | Holdout (Aug 1-12) | 12 | 36 | 8-28 | +39.05 | +108.5% |
 
-The holdout date-block bootstrap estimated P(profitable)=0.9698. Eight of the
+The holdout date-block bootstrap estimated P(profitable)=0.9698. Seven of the
 12 holdout slates were profitable. Returns are volatile because prices are
 long; this is why the grade is Lean and the stake is 0.10u rather than a Best
 Angle or a larger straight-prop stake.

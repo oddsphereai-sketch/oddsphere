@@ -72,6 +72,15 @@ export const BATTER_STRIKEOUTS_OVER_ACCURACY_POLICY = {
   minimumExpectedValue: 0,
 } as const;
 
+export const BATTER_RBI_VALUE_PORTFOLIO_POLICY = {
+  playsPerSlate: 1,
+  minimumFinalEdge: 0,
+  minimumExpectedValue: 0,
+  minimumAmericanOdds: -200,
+  maximumAmericanOdds: 300,
+  stakeUnits: 0.1,
+} as const;
+
 export type EmpiricalMarketAccuracyScore = {
   eligible: boolean;
   independentProbability: number;

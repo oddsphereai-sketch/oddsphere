@@ -90,6 +90,7 @@ import {
   projectBatterDoublesResidual,
 } from "./batterDoublesResidualModel";
 import {
+  BATTER_HOME_RUNS_COMPLEMENT_POLICY,
   BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION,
   BATTER_HOME_RUNS_PORTFOLIO_POLICY,
   projectBatterHomeRunsPortfolio,
@@ -101,6 +102,7 @@ import {
 } from "./internalTracking";
 import { calibratedPropModelWeight } from "./probabilityCalibration";
 import {
+  BATTER_RBI_VALUE_PORTFOLIO_POLICY,
   qualifiesBatterDoublesResidualPromotion,
   qualifiesHitsUnderPriceEdge,
   qualifiesValidatedUnderPromotion,
@@ -323,7 +325,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     })
     : null;
 
-  const props = applyValidatedHomeRunPortfolioPromotions(compactMemberBoardRows(attachMlbPropOddsMovement(buildDashboardRows({
+  const props = applyValidatedHomeRunPortfolioPromotions(applyValidatedValuePortfolioPromotions(compactMemberBoardRows(attachMlbPropOddsMovement(buildDashboardRows({
     mappedOdds,
     identities,
     probablePitchers,
@@ -331,7 +333,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     researchByKey,
     scoringCandidates: scoring?.summary.sampleCandidates ?? [],
     asOfTimestamp,
-  }), openingOdds, previous), asOfTimestamp));
+  }), openingOdds, previous), asOfTimestamp)));
   const data = buildDashboardData({
     slateDate: args.slateDate,
     asOfTimestamp,
@@ -1592,6 +1594,54 @@ function applyValidatedBatterStrikeoutsAccuracyPromotions(
   });
 }
 
+function applyValidatedValuePortfolioPromotions(
+  rows: PlayerPropPreviewRow[],
+): PlayerPropPreviewRow[] {
+  const blocked = (row: PlayerPropPreviewRow) =>
+    row.reasonCodes.includes("STALE_ODDS")
+    || row.reasonCodes.includes("MODEL_CONTEXT_NOT_INTEGRATED")
+    || row.reasonCodes.includes("INVALID_PRICE_FORMAT");
+  const rbiEligible = rows.filter((row) =>
+    row.market === "batter_rbis"
+    && row.playGrade === "WATCHLIST"
+    && row.modelProbability !== null
+    && row.marketProbability !== null
+    && row.modelEdge !== null
+    && row.modelEdge >= BATTER_RBI_VALUE_PORTFOLIO_POLICY.minimumFinalEdge
+    && row.expectedValue !== null
+    && row.expectedValue >= BATTER_RBI_VALUE_PORTFOLIO_POLICY.minimumExpectedValue
+    && row.odds >= BATTER_RBI_VALUE_PORTFOLIO_POLICY.minimumAmericanOdds
+    && row.odds <= BATTER_RBI_VALUE_PORTFOLIO_POLICY.maximumAmericanOdds
+    && !blocked(row)
+  );
+  const rbiBestOffers: PlayerPropPreviewRow[] = [];
+  for (const offers of groupRows(rbiEligible, signalOfferKey).values()) {
+    const [best] = [...offers].sort(comparePropSignals);
+    if (best) rbiBestOffers.push(best);
+  }
+  const rbiPromoted = new Set(rbiBestOffers.sort((left, right) =>
+    (right.expectedValue ?? -99) - (left.expectedValue ?? -99)
+    || (right.modelEdge ?? -99) - (left.modelEdge ?? -99)
+    || (right.modelProbability ?? -99) - (left.modelProbability ?? -99)
+    || left.id.localeCompare(right.id)
+  ).slice(0, BATTER_RBI_VALUE_PORTFOLIO_POLICY.playsPerSlate).map((row) => row.id));
+
+  if (!rbiPromoted.size) return rows;
+  return rows.map((row) => {
+    if (rbiPromoted.has(row.id)) return {
+      ...row,
+      playGrade: "LEAN",
+      units: BATTER_RBI_VALUE_PORTFOLIO_POLICY.stakeUnits,
+      reasonCodes: uniqueStrings([
+        ...row.reasonCodes,
+        "VALIDATED_MARKET_PROMOTION",
+        "VALIDATED_RBI_VALUE_PORTFOLIO_LEAN",
+      ]),
+    };
+    return row;
+  });
+}
+
 function applyValidatedHomeRunPortfolioPromotions(
   rows: PlayerPropPreviewRow[],
 ): PlayerPropPreviewRow[] {
@@ -1629,6 +1679,7 @@ function applyValidatedHomeRunPortfolioPromotions(
     || left.id.localeCompare(right.id)
   );
   const promotedIds = new Set<string>();
+  const complementIds = new Set<string>();
   const perGame = new Map<string, number>();
   for (const row of ranked) {
     if (promotedIds.size >= BATTER_HOME_RUNS_PORTFOLIO_POLICY.playsPerSlate) break;
@@ -1637,16 +1688,42 @@ function applyValidatedHomeRunPortfolioPromotions(
     promotedIds.add(row.id);
     perGame.set(gameId, (perGame.get(gameId) ?? 0) + 1);
   }
-  if (!promotedIds.size) return rows;
-  return rows.map((row) => promotedIds.has(row.id)
+  const complementRanked = bestOffers.filter((row) => {
+    const gameId = row.providerIds?.gameId ?? row.gameStartTime;
+    return !promotedIds.has(row.id)
+      && (perGame.get(gameId) ?? 0) < BATTER_HOME_RUNS_COMPLEMENT_POLICY.maximumPerGame
+      && row.odds >= BATTER_HOME_RUNS_COMPLEMENT_POLICY.minimumAmericanOdds
+      && row.odds <= BATTER_HOME_RUNS_COMPLEMENT_POLICY.maximumAmericanOdds
+      && (row.modelProbability ?? -99) >= BATTER_HOME_RUNS_COMPLEMENT_POLICY.minimumModelProbability
+      && (row.modelEdge ?? -99) >= BATTER_HOME_RUNS_COMPLEMENT_POLICY.minimumModelEdge
+      && (row.expectedValue ?? -99) >= BATTER_HOME_RUNS_COMPLEMENT_POLICY.minimumExpectedValue;
+  }).sort((left, right) =>
+    (right.modelProbability ?? -99) - (left.modelProbability ?? -99)
+    || (right.expectedValue ?? -99) - (left.expectedValue ?? -99)
+    || (right.modelEdge ?? -99) - (left.modelEdge ?? -99)
+    || left.id.localeCompare(right.id)
+  );
+  for (const row of complementRanked) {
+    if (complementIds.size >= BATTER_HOME_RUNS_COMPLEMENT_POLICY.playsPerSlate) break;
+    const gameId = row.providerIds?.gameId ?? row.gameStartTime;
+    if ((perGame.get(gameId) ?? 0) >= BATTER_HOME_RUNS_COMPLEMENT_POLICY.maximumPerGame) continue;
+    complementIds.add(row.id);
+    perGame.set(gameId, (perGame.get(gameId) ?? 0) + 1);
+  }
+  if (!promotedIds.size && !complementIds.size) return rows;
+  return rows.map((row) => promotedIds.has(row.id) || complementIds.has(row.id)
     ? {
       ...row,
       playGrade: "LEAN",
-      units: BATTER_HOME_RUNS_PORTFOLIO_POLICY.stakeUnits,
+      units: complementIds.has(row.id)
+        ? BATTER_HOME_RUNS_COMPLEMENT_POLICY.stakeUnits
+        : BATTER_HOME_RUNS_PORTFOLIO_POLICY.stakeUnits,
       reasonCodes: uniqueStrings([
         ...row.reasonCodes,
         "VALIDATED_MARKET_PROMOTION",
-        "VALIDATED_HOME_RUN_PA_PORTFOLIO_LEAN",
+        complementIds.has(row.id)
+          ? "VALIDATED_HOME_RUN_MEDIUM_PRICE_COMPLEMENT_LEAN"
+          : "VALIDATED_HOME_RUN_PA_PORTFOLIO_LEAN",
       ]),
     }
     : row);

@@ -18,8 +18,11 @@ holdout. The r31/r32 production changes remain supported:
 - Doubles Under remained highly accurate but price-heavy: holdout 95-22 at
   approximately flat ROI under the selected policy.
 - Home Runs: the original equal-game broad selector remained rejected. A
-  subsequent target-corrected HR-per-plate-appearance portfolio qualified r33;
-  see `2026-08-13-player-props-home-run-pa-portfolio-r33.md`.
+  subsequent target-corrected HR-per-plate-appearance portfolio qualified r33,
+  and a disjoint medium-price complement qualified r34; see the r33 and r34
+  audit documents.
+- A separate value-ranking layer qualified one Batter RBI Lean per slate. It
+  does not reinstate the rejected broad RBI threshold policy.
 
 ## Market-by-market verdict
 
@@ -28,8 +31,8 @@ holdout. The r31/r32 production changes remain supported:
 | Batter doubles | 61-6, +11.5% ROI | 95-22, +0.4% | Existing accuracy sleeve only |
 | Batter hits | 13-2, +29.2% | 17-10, -2.8% | Reject selected policy |
 | Hits + runs + RBIs | 7-3, +15.1% | 17-3, +38.5% | Existing live sleeve retained |
-| Home runs | 5-19, +53.7% portfolio ROI | 8-28, +108.5% | r33 three-play HR/PA Lean portfolio |
-| Batter RBIs | 172-56, +5.3% | 300-116, -0.3% | Reject |
+| Home runs | Core 5-19, +53.7%; complement 5-7 across two positive validation halves | Core 8-28, +108.5%; complement 5-19, +12.2% | r34 core-plus-two HR Lean portfolio |
+| Batter RBIs | Ranked top one 6-2, +111.1% | 5-7, +47.1% | r34 top-one value Lean; broad threshold policy remains rejected |
 | Runs scored | 133-54, +8.2% | 170-101, -5.1% | Reject |
 | Singles | none | none | Reject |
 | Stolen bases | none | none | Reject |
@@ -37,7 +40,7 @@ holdout. The r31/r32 production changes remain supported:
 | Total bases | selected model produced no policy | none | Ridge finalist is research-only; broad probability failed |
 | Batter walks | none | none | Reject |
 | Pitcher earned runs | 7-4, +10.8% | 13-14, -16.1% | Reject |
-| Pitcher hits allowed | 22-14, +7.8% | 33-34, -10.1% | Reject |
+| Pitcher hits allowed | Ranked top two 8-7, +10.4% | 14-10, +17.0% | Not live: current paired candidates failed the existing data-confidence gate |
 | Pitcher outs | selected policy failed 10-17 | -33.5% | Reject; favorable threshold cells were holdout-sensitive |
 | Pitcher strikeouts | selected model produced no policy | none | Ridge finalist research-only; no production promotion |
 | Pitcher walks | 10-3, +37.2% | 13-10, +5.5% | Insufficient certainty (P(profitable)=0.5858) |

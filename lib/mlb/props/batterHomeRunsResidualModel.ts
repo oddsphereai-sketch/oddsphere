@@ -13,6 +13,17 @@ export const BATTER_HOME_RUNS_PORTFOLIO_POLICY = {
   stakeUnits: 0.1,
 } as const;
 
+export const BATTER_HOME_RUNS_COMPLEMENT_POLICY = {
+  playsPerSlate: 2,
+  minimumModelProbability: 0.1,
+  minimumModelEdge: 0.02,
+  minimumExpectedValue: 0.05,
+  minimumAmericanOdds: 351,
+  maximumAmericanOdds: 650,
+  maximumPerGame: 1,
+  stakeUnits: 0.1,
+} as const;
+
 export type BatterHomeRunsPortfolioInputs = {
   marketOverProbability: number;
   battingOrder: number | null;

@@ -4,7 +4,7 @@ Strategy release: `oddsphere_mlb_betting_strategy_2026_07_23_r6`
 
 Daily Edge decision release: `mlb_daily_edge_decision_2026_07_23_r2`
 
-Player Props release: `mlb_props_2026_08_13_r33`
+Player Props release: `mlb_props_2026_08_13_r34`
 
 Reference unit: **1u = $25**
 
@@ -25,7 +25,8 @@ of these rules.
 | MLB Moneyline | Genuine final-side inversion Lean | **0.25u / $6.25** |
 | MLB Total | Best Angle | **0.50u / $12.50** |
 | MLB Total | Lean carrying the released validated-Lean rule | **0.25u / $6.25** |
-| MLB Player Props — batter home runs | Up to three released portfolio Leans, max one hitter per game | **0.10u / $2.50 each** |
+| MLB Player Props — batter home runs | Up to three core portfolio Leans plus two qualified medium-price complements, max one hitter per game | **0.10u / $2.50 each** |
+| MLB Player Props — batter RBIs | Highest-ranked released value Lean, when qualified | **0.10u / $2.50** |
 | MLB Player Props — pitcher earned runs | Final qualified actionable Lean/Best Angle | **0.50u / $12.50** |
 | MLB Player Props — batter runs scored | Final qualified actionable Lean/Best Angle | **0.10u / $2.50** |
 
@@ -33,7 +34,12 @@ The home-run rule uses a prior-only 20-game HR-per-plate-appearance projection,
 a 100-PA league prior, batting-order and verified environment opportunity
 adjustments, and a 25% multi-book market anchor. It requires nonnegative edge
 and EV at +150 through +1000, uses the best available price, and ranks up to
-three Leans by EV with at most one hitter per game.
+three Leans by EV with at most one hitter per game. A separate complement may
+add up to two hitters from unselected games at +351 through +650 when model
+edge is at least two points and EV is at least 5%; it ranks by model probability.
+The RBI rule uses the existing final side and best price from -200 through
++300, requires nonnegative model edge and EV, and releases at most the
+highest-EV qualifier.
 The earned-runs rule requires an approved price and at least 5% locked EV. The
 runs-scored rule requires the released price, confidence, probability, edge,
 and EV gates.

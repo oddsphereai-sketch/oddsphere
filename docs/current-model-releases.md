@@ -222,13 +222,33 @@ home Elo/stat agreement rule. It does not alter moneyline or total decisions.
 
 ## MLB Player Props candidate
 
-- Release: `mlb_props_2026_08_13_r33`
+- Release: `mlb_props_2026_08_13_r34`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: private launch candidate; not publicly enabled
 
-The August 13 r33 model release retains r32's missing outdoor weather
+The August 13 r34 model release retains r33's weather and three-play Home Run
+portfolio and adds two capped Lean sleeves selected chronologically from the
+all-market value tournament. The Home Run complement excludes every hitter
+and game already selected by the r33 basket, requires +351 through +650, at
+least two points of model edge and 5% EV, ranks by model probability, and may
+add up to two 0.10u Leans. Validation halves were 3-4 (+9.47u) and 2-3
+(+5.11u); untouched August holdout was 5-19 (+2.93u, +12.2% ROI). This is a
+diversified basket decision: rank one was strongly positive on holdout, while
+rank two was negative independently, so no third complement is live.
+
+R34 also adds at most the highest-EV Batter RBI Watchlist as a 0.10u Lean when
+its existing final side has nonnegative edge and EV and a best price from -200
+through +300. Validation was 6-2 (+8.89u); untouched holdout was 5-7 (+5.65u).
+Ranks two and three failed validation and are not live. The paired August 13
+rebuild adds two Home Run Leans and one RBI Lean, with no demotions. A Pitcher
+Hits Allowed candidate stayed out of production because the full member-board
+rebuild showed its current candidates carried the existing low-data-confidence
+flag. Evidence is in
+`docs/model-audits/2026-08-13-player-props-incremental-value-portfolios-r34.md`.
+
+The August 13 r33 model release retained r32's missing outdoor weather
 coordinates for MLB's neutral-site Field of Dreams venue. The PHI-MIN slate
 arrived with that official venue name, so r31 could not resolve required
 game-time weather and correctly held the entire snapshot.
