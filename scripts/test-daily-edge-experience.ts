@@ -37,6 +37,10 @@ const legacyDailyEdgeSource = readFileSync(
   "app/lab/components/daily-edge/DailyEdgeShell.tsx",
   "utf8",
 );
+const candidateDailyEdgeSource = readFileSync(
+  "app/dev/experience-preview/ActualDailyEdgePreview.tsx",
+  "utf8",
+);
 
 let passed = 0;
 let failed = 0;
@@ -101,6 +105,12 @@ check(
     NODE_ENV: "production",
     DAILY_EDGE_EXPERIENCE_PREVIEW_ENABLED: "true",
   }),
+);
+check(
+  "candidate slate cards reserve a consistent row for Play Grade and time",
+  candidateDailyEdgeSource.includes('<div className="grid gap-3">') &&
+    candidateDailyEdgeSource.includes('<div className="flex min-h-8 items-center gap-2">') &&
+    !candidateDailyEdgeSource.includes('className="flex flex-wrap items-center justify-between gap-3">\n          <div className="flex min-w-0 items-center gap-2.5"'),
 );
 check(
   "truth-like flag values do not accidentally open production",

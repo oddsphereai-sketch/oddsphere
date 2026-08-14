@@ -1466,7 +1466,7 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
     >
       <div className="h-[3px] w-full shrink-0" style={{ background: `linear-gradient(to right, ${teamTheme(game.awayTeam).primary} 0%, ${teamTheme(game.awayTeam).primary} 28%, rgba(255,255,255,0.06) 50%, ${teamTheme(game.homeTeam).primary} 72%, ${teamTheme(game.homeTeam).primary} 100%)` }} />
       <div className="flex flex-1 flex-col p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="grid gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} />
             <span className="text-base font-black text-white">{game.awayTeam}</span>
@@ -1474,7 +1474,7 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
             <span className="text-base font-black text-white">{game.homeTeam}</span>
             <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} />
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex min-h-8 items-center gap-2">
             <VerdictBadge market={headline} large />
             <span className="text-[10px] text-gray-500">{game.gameTime}</span>
             <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
