@@ -11,9 +11,9 @@ Last reviewed: 2026-08-14
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_14_r45`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v44_2026_08_14`
-- Grade policy: `mlb_public_grade_policy_v35_first_inning_rendered_market_read_coherence_2026_08_14`
+- Decision release: `mlb_daily_edge_decision_2026_08_14_r46`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v45_2026_08_14`
+- Grade policy: `mlb_public_grade_policy_v36_first_inning_board_endpoint_coherence_2026_08_14`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
@@ -47,6 +47,14 @@ as “effectively flat” beside “Slight Market Resistance.” It changes no o
 threshold in the authoritative classifier, prediction, grade, side,
 probability, projection, or stake. Evidence is recorded in
 `docs/model-audits/2026-08-14-mlb-first-inning-rendered-market-read-r45.md`.
+
+The August 14 r46 endpoint-coherence follow-up recognizes a verified 0.5-run
+NRFI/YRFI board even when the canonical Market Read omits redundant line-number
+fields. Exact selected-side first/current price equality remains required.
+Full-game totals and spreads retain strict point-line matching. This changes no
+prediction, grade, side, probability, projection, stake, or movement threshold.
+Evidence is recorded in
+`docs/model-audits/2026-08-14-mlb-first-inning-board-endpoint-coherence-r46.md`.
 
 1. Existing inversion logic.
 2. Existing pick calibration.

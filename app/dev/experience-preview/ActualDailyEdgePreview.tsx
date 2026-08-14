@@ -984,13 +984,22 @@ function coherentMovementDirection(market: MarketEdgeDto, movement: CoherentMove
   if (!movement.coherentTrail || movement.open === null || movement.current === null) return "neutral";
   const canonical = market.marketReadV2?.movement;
   const canonicalDirection = canonical?.directionRelativeToPick;
+  const isVerifiedFirstInningPriceBoard =
+    market.fiMarketBoard !== null &&
+    market.fiMarketBoard !== undefined &&
+    /^(NRFI|YRFI)$/i.test(market.pick?.trim() ?? "");
+  const canonicalLineMatchesVisibleTrail =
+    isVerifiedFirstInningPriceBoard ||
+    (
+      sameTrackedLine(canonical?.firstTrackedLine ?? null, movement.openLine) &&
+      sameTrackedLine(canonical?.currentLine ?? null, movement.currentLine)
+    );
   const canonicalMatchesVisibleTrail =
     canonical !== null &&
     canonical !== undefined &&
     canonical.firstTrackedPrice === movement.open &&
     canonical.currentPrice === movement.current &&
-    sameTrackedLine(canonical.firstTrackedLine, movement.openLine) &&
-    sameTrackedLine(canonical.currentLine, movement.currentLine);
+    canonicalLineMatchesVisibleTrail;
   if (
     canonicalMatchesVisibleTrail &&
     (canonicalDirection === "support" || canonicalDirection === "resistance")
