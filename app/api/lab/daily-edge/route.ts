@@ -4096,7 +4096,26 @@ function alignMarketReadV2ToVisibleOdds(opts: {
   observedAt: string | null;
   generatedAt: string;
 }): MarketReadV2Dto | null {
-  if (!opts.enabled || opts.market === "first_inning") return opts.read;
+  if (!opts.enabled) return opts.read;
+  const projectionLedFromVisibleTrail = (): MarketReadV2Dto | null => {
+    const aligned = projectionLedMarketRead(opts.read, {
+      evidenceAsOf: opts.observedAt ?? opts.read?.evidenceAsOf ?? null,
+      generatedAt: opts.generatedAt,
+    });
+    if (aligned === null) return null;
+    return {
+      ...aligned,
+      exactLineEvidenceStatus: "display_price_trail",
+      movement: {
+        firstTrackedLine: aligned.movement?.firstTrackedLine ?? null,
+        firstTrackedPrice: opts.openAmerican,
+        currentLine: aligned.movement?.currentLine ?? null,
+        currentPrice: opts.currentAmerican,
+        directionRelativeToPick: "neutral",
+        observedAt: aligned.movement?.observedAt ?? opts.observedAt,
+      },
+    };
+  };
   // For totals, a visible point move is the primary market trail. A price can
   // remain unchanged while the book moves Under 9.5 to Under 8.5; calling that
   // "Projection-Led" contradicts the member-visible support.
@@ -4112,7 +4131,9 @@ function alignMarketReadV2ToVisibleOdds(opts: {
     pointScore === null &&
     (opts.openAmerican === null || opts.currentAmerican === null)
   ) {
-    return opts.read;
+    return opts.market === "first_inning"
+      ? projectionLedFromVisibleTrail()
+      : opts.read;
   }
   const score =
     pointScore ??
@@ -4120,10 +4141,7 @@ function alignMarketReadV2ToVisibleOdds(opts: {
       ? visibleOddsMarketReadScore(opts.openAmerican, opts.currentAmerican)
       : null);
   if (score === null) {
-    return projectionLedMarketRead(opts.read, {
-      evidenceAsOf: opts.observedAt ?? opts.read?.evidenceAsOf ?? null,
-      generatedAt: opts.generatedAt,
-    });
+    return projectionLedFromVisibleTrail();
   }
   const visibleDirection = score > 0 ? "support" : "resistance";
   const label = displayMarketReadLabel(score);
@@ -5093,21 +5111,39 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
       ? input.lastMove
       : null;
   const visibleTerminalOddsMove = terminalOddsMoveFromTrail(oddsTrail);
+  const fiSelectedOddsTrail =
+    input.market === "first_inning" && fiMarketBoard !== null
+      ? input.pick?.toUpperCase().includes("YRFI")
+        ? {
+            open: fiMarketBoard.yrfiOpenAmerican,
+            current: fiMarketBoard.yrfiAmerican,
+          }
+        : input.pick?.toUpperCase().includes("NRFI")
+          ? {
+              open: fiMarketBoard.nrfiOpenAmerican,
+              current: fiMarketBoard.nrfiAmerican,
+            }
+          : null
+      : null;
   const marketReadV2 = alignMarketReadV2ToVisibleOdds({
     read: input.marketReadV2 ?? null,
     enabled: input.marketReadV2Enabled === true,
     market: input.market,
     pick: input.pick,
     openAmerican:
-      openAmerican ??
-      input.oddspherePostedAmerican ??
-      input.marketReadV2?.movement?.firstTrackedPrice ??
-      null,
+      input.market === "first_inning"
+        ? fiSelectedOddsTrail?.open ?? null
+        : openAmerican ??
+          input.oddspherePostedAmerican ??
+          input.marketReadV2?.movement?.firstTrackedPrice ??
+          null,
     currentAmerican:
-      priceAmerican ??
-      input.lockedPriceAmerican ??
-      input.marketReadV2?.movement?.currentPrice ??
-      null,
+      input.market === "first_inning"
+        ? fiSelectedOddsTrail?.current ?? null
+        : priceAmerican ??
+          input.lockedPriceAmerican ??
+          input.marketReadV2?.movement?.currentPrice ??
+          null,
     previousLine: visibleLastMove?.prevLineValue ?? null,
     currentLine: visibleLastMove?.nextLineValue ?? null,
     observedAt: priceObservedAt ?? lineOpenObservedAt,
@@ -6151,6 +6187,7 @@ export const __TEST__ = {
   buildSourceAwareSplitSectionsFromRows,
   resolveSharpBookSplitSection,
   visibleTotalPointMarketReadScore,
+  alignMarketReadV2ToVisibleOdds,
   suppressIncomparableLineMovePrices,
   enforceLockedCardCutoff,
   resolveTrailPriceRow,

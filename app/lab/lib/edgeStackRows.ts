@@ -88,6 +88,17 @@ function effectivePriceTrail(marketData: MarketEdgeDto): {
   current: number | null;
   locked: number | null;
 } {
+  const board = marketData.fiMarketBoard;
+  const pick = (marketData.pick ?? "").toUpperCase();
+  if (board && (pick.includes("YRFI") || pick.includes("NRFI"))) {
+    const yrfi = pick.includes("YRFI");
+    return {
+      open: (yrfi ? board.yrfiOpenAmerican : board.nrfiOpenAmerican) ?? null,
+      previous: (yrfi ? board.yrfiPreviousAmerican : board.nrfiPreviousAmerican) ?? null,
+      current: yrfi ? board.yrfiAmerican : board.nrfiAmerican,
+      locked: marketData.lockedLineAmerican ?? null,
+    };
+  }
   const movement = marketData.marketReadV2?.movement ?? null;
   const numberChanged =
     marketData.lastMoveLinePrev != null &&

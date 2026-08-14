@@ -11,9 +11,9 @@ Last reviewed: 2026-08-14
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_14_r43`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v42_2026_08_14`
-- Grade policy: `mlb_public_grade_policy_v33_complete_sharpapi_event_discovery_2026_08_14`
+- Decision release: `mlb_daily_edge_decision_2026_08_14_r44`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v43_2026_08_14`
+- Grade policy: `mlb_public_grade_policy_v34_first_inning_visible_market_read_alignment_2026_08_14`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
@@ -28,6 +28,16 @@ qualifying opportunity row exists at a poll. The r42 aggregate-splits
 slate-identity guard remains in force; mismatched SharpAPI public percentages
 are never used. See
 `docs/model-audits/2026-08-14-mlb-complete-sharpapi-event-discovery-r43.md`.
+
+The August 14 r44 reader-coherence release makes MLB first-inning Market Read
+consume the same selected-side, same-book price trail displayed in the
+two-sided NRFI/YRFI movement tracker. It removes the first-inning exception
+from the existing visible-odds alignment path without changing its movement
+thresholds, prediction side, probability, projection, writer ownership, or
+stake. The authoritative stored prediction grade remains authoritative; the
+paired current-board impact is zero promotions and zero demotions. Evidence
+and rollback details are recorded in
+`docs/model-audits/2026-08-14-mlb-first-inning-market-read-alignment-r44.md`.
 
 1. Existing inversion logic.
 2. Existing pick calibration.

@@ -359,6 +359,25 @@ section("Market Pulse presentation coherence");
     check("visible Under line drop is classified as market support", dailyEdgeTest.visibleTotalPointMarketReadScore("Under", 9.5, 8.5) === 3);
     check("visible Over line drop is classified as market resistance", dailyEdgeTest.visibleTotalPointMarketReadScore("Over", 9.5, 8.5) === -3);
     check("flat total line remains projection-led when price is also flat", dailyEdgeTest.visibleTotalPointMarketReadScore("Under", 8.5, 8.5) === null);
+    const alignedFiResistance = dailyEdgeTest.alignMarketReadV2ToVisibleOdds({
+      read: null,
+      enabled: true,
+      market: "first_inning",
+      pick: "NRFI",
+      openAmerican: -120,
+      currentAmerican: -114,
+      previousLine: null,
+      currentLine: null,
+      observedAt: "2026-08-14T13:00:00Z",
+      generatedAt: "2026-08-14T13:00:00Z",
+    });
+    check(
+      "FI Market Read classifies the displayed selected-side price trail",
+      alignedFiResistance?.movement?.firstTrackedPrice === -120 &&
+        alignedFiResistance.movement.currentPrice === -114 &&
+        alignedFiResistance.movement.directionRelativeToPick === "resistance" &&
+        alignedFiResistance.label === "Slight Market Resistance",
+    );
   }
 
   section("Odds movement coherence");

@@ -487,9 +487,9 @@ function testUnchangedRows() {
     },
   });
   const sharpRows = buildEdgeStackRows("moneyline", sharpMoneyRead);
-  const sharpMoney = sharpRows.find((r) => r.label === "Sharp Money");
+  const sharpMoney = sharpRows.find((r) => r.label === "Sharp Book Splits");
   check(
-    `Sharp Money: renders explicit member-facing row when strict evidence exists`,
+    `Sharp Book Splits: renders explicit member-facing row when strict evidence exists`,
     sharpMoney?.evidence === "sharp-book price action moved with our pick." && sharpMoney.tone === "emerald",
     `got ${sharpMoney?.evidence ?? "missing"} / ${sharpMoney?.tone ?? "missing"}`
   );
@@ -526,6 +526,28 @@ function testUnchangedRows() {
     `Money vs Bets: model-label picks use visible split row when scalars are missing`,
     personaMoneyBets?.evidence === "Money 61% / Bets 53%",
     `got ${personaMoneyBets?.evidence ?? "missing"}`
+  );
+
+  const fiRows = buildEdgeStackRows("first_inning", baseMarket({
+    pick: "NRFI",
+    lineOpenAmerican: -155,
+    priceAmerican: -150,
+    fiMarketBoard: {
+      line: 0.5,
+      nrfiAmerican: -114,
+      yrfiAmerican: -117,
+      nrfiOpenAmerican: -120,
+      yrfiOpenAmerican: -112,
+      nrfiPreviousAmerican: -116,
+      yrfiPreviousAmerican: -115,
+      source: "fi_market_ok_betrivers",
+    },
+  }));
+  const fiLineMove = fiRows.find((r) => r.label === "Line Move");
+  check(
+    `FI Line Move reads the same selected-side board trail shown in the two-sided tracker`,
+    fiLineMove?.evidence === "First seen -120 · Previous -116 · Current -114" && fiLineMove.tone === "amber",
+    `got ${fiLineMove?.evidence ?? "missing"} / ${fiLineMove?.tone ?? "missing"}`,
   );
 }
 
