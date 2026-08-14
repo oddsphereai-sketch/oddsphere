@@ -982,9 +982,25 @@ function currentAwareGuidedGuide(market: MarketEdgeDto, fallback: string): strin
 
 function coherentMovementDirection(market: MarketEdgeDto, movement: CoherentMovement): "support" | "resistance" | "neutral" {
   if (!movement.coherentTrail || movement.open === null || movement.current === null) return "neutral";
+  const canonical = market.marketReadV2?.movement;
+  const canonicalDirection = canonical?.directionRelativeToPick;
+  const canonicalMatchesVisibleTrail =
+    canonical !== null &&
+    canonical !== undefined &&
+    canonical.firstTrackedPrice === movement.open &&
+    canonical.currentPrice === movement.current &&
+    sameTrackedLine(canonical.firstTrackedLine, movement.openLine) &&
+    sameTrackedLine(canonical.currentLine, movement.currentLine);
+  if (
+    canonicalMatchesVisibleTrail &&
+    (canonicalDirection === "support" || canonicalDirection === "resistance")
+  ) {
+    return canonicalDirection;
+  }
   if (!sameTrackedLine(movement.openLine, movement.currentLine)) {
-    const direction = market.marketReadV2?.movement?.directionRelativeToPick;
-    return direction === "support" || direction === "resistance" ? direction : "neutral";
+    return canonicalDirection === "support" || canonicalDirection === "resistance"
+      ? canonicalDirection
+      : "neutral";
   }
   const impliedDelta = americanImpliedPct(movement.current) - americanImpliedPct(movement.open);
   if (Math.abs(impliedDelta) < 1.25) return "neutral";

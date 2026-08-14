@@ -11,9 +11,9 @@ Last reviewed: 2026-08-14
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_14_r44`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v43_2026_08_14`
-- Grade policy: `mlb_public_grade_policy_v34_first_inning_visible_market_read_alignment_2026_08_14`
+- Decision release: `mlb_daily_edge_decision_2026_08_14_r45`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v44_2026_08_14`
+- Grade policy: `mlb_public_grade_policy_v35_first_inning_rendered_market_read_coherence_2026_08_14`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
@@ -38,6 +38,15 @@ stake. The authoritative stored prediction grade remains authoritative; the
 paired current-board impact is zero promotions and zero demotions. Evidence
 and rollback details are recorded in
 `docs/model-audits/2026-08-14-mlb-first-inning-market-read-alignment-r44.md`.
+
+The August 14 r45 rendered-coherence follow-up removes the redesigned reader's
+independent 1.25-point movement cutoff when the canonical Market Read endpoints
+exactly match the visible same-book trail. The renderer now consumes the
+versioned canonical direction in that case, preventing contradictory copy such
+as “effectively flat” beside “Slight Market Resistance.” It changes no odds,
+threshold in the authoritative classifier, prediction, grade, side,
+probability, projection, or stake. Evidence is recorded in
+`docs/model-audits/2026-08-14-mlb-first-inning-rendered-market-read-r45.md`.
 
 1. Existing inversion logic.
 2. Existing pick calibration.

@@ -397,6 +397,9 @@ check(
 check(
   "Market Pulse keeps public consensus, sharp-book splits, and price movement source-coherent",
   candidateSource.includes("function sourceCoherentMarketPulse") &&
+    candidateSource.includes("canonicalMatchesVisibleTrail") &&
+    candidateSource.includes("canonical.firstTrackedPrice === movement.open") &&
+    candidateSource.includes("canonical.currentPrice === movement.current") &&
     candidateSource.includes('chip: "Split sources disagree"') &&
     candidateSource.includes("Public consensus money leans") &&
     candidateSource.includes("sharp-book split snapshot leans") &&
