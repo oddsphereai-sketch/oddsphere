@@ -3164,18 +3164,11 @@ function SlateCard({
       />
 
       <div className="p-5">
-        {/* Team row + verdict + time. Cleaner: logos and abbrs only, no
-            Away/Home micro-labels. The order conveys it.
-
-            R-16H: previously the row could visually crowd on narrow
-            viewports — fixed-size TeamBadges + abbreviation spans on
-            the left + VerdictChip / time / lock on the right couldn't
-            shrink past their minimums and ended up touching or
-            overlapping. `flex-wrap` lets the right group drop to its
-            own line when horizontal room runs out; `gap-y-2` gives
-            vertical breathing room when wrapping happens. Desktop
-            layout is unchanged when there's room to fit on one line. */}
-        <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-2 mb-3.5">
+        {/* Matchup identity and decision status use two fixed rows. Keeping
+            verdict + time in their own reserved row prevents matchup width
+            (or a longer verdict label) from moving the Play Grade between
+            the right side and a wrapped second line from card to card. */}
+        <div className="mb-3.5 grid gap-y-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={38} />
             <span className="text-[16px] sm:text-[17px] font-bold text-gray-100 tabular-nums" style={{ letterSpacing: "-0.01em" }}>
@@ -3187,7 +3180,7 @@ function SlateCard({
             </span>
             <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={38} />
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex min-h-7 items-center gap-2">
             <VerdictChip verdict={headlineVerdict} />
             <span className="text-[11px] text-gray-500 tabular-nums">{game.gameTime}</span>
             <LockBadge

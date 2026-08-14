@@ -18,6 +18,9 @@ const checks: Array<[string, boolean]> = [
   ["mobile keeps the normal breakdown affordance", shell.includes('className="sm:hidden inline-flex')],
   ["legacy violet active ring is removed", !shell.includes("const ACTIVE_RING")],
   ["selection no longer recolors the market violet", !shell.includes('isActiveMarket ? "text-violet')],
+  ["slate card reserves a fixed row for matchup status", shell.includes('className="mb-3.5 grid gap-y-2"')],
+  ["slate card verdict row has stable height", shell.includes('className="flex min-h-7 items-center gap-2"')],
+  ["slate card header no longer conditionally wraps verdict beside matchup", !shell.includes('className="flex items-center justify-between flex-wrap gap-x-3 gap-y-2 mb-3.5"')],
 ];
 
 let failures = 0;
