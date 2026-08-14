@@ -4,16 +4,16 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-08-13
+Last reviewed: 2026-08-14
 
 ## MLB champion
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_13_r40`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v39_2026_08_13`
-- Grade policy: `mlb_public_grade_policy_v30_consensus_grade_continuity_2026_08_13`
+- Decision release: `mlb_daily_edge_decision_2026_08_14_r41`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v40_2026_08_14`
+- Grade policy: `mlb_public_grade_policy_v31_sharp_slate_identity_2026_08_14`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
@@ -152,6 +152,21 @@ nonactionable incremental cohort went 24-8 (+17.8% ROI) and was positive in trai
 and holdout. The paired August 13 board adds one Lean—Texas at the current snapshot—with no
 demotions. Evidence and rollback details are in
 `docs/model-audits/2026-08-13-mlb-consensus-grade-continuity-r40.md`.
+
+The August 14 r41 data-identity release prevents SharpAPI slate-rollover
+contamination. The provider's event-id date is no longer trusted by itself:
+before any split is merged, at least 70% of unique matchup identities must
+resolve on the requested slate and the payload must fit that slate better than
+the prior slate. Partial, stale, and ambiguous payloads fail closed. This does
+not add or change a predictive rule, side, probability, projection, price, or
+stake. At the incident snapshot, the provider returned ten matchup rows: only
+two matched August 14 while nine matched August 13. The repeated MIL-LAD pair
+had therefore received August 13 splits and incorrectly activated one Total
+Lean; removing that false input changes exactly that action and manufactures no
+replacement. The member reader separately recovers verified both-side movement
+from canonical append-only price observations without feeding that recovery
+into prediction decisions. Evidence and rollback details are in
+`docs/model-audits/2026-08-14-mlb-sharp-slate-identity-and-reader-price-history-r41.md`.
 
 The August 11 tracking-contract v8 operational release keeps the shared MLB
 `prediction_pipeline` lease authoritative while preventing an ordinary writer collision from

@@ -346,6 +346,77 @@ function buildSplitsMap(
   return { map, stats };
 }
 
+type SplitsSlateAlignment = {
+  aligned: boolean;
+  validPairs: number;
+  currentSlateMatches: number;
+  previousSlateMatches: number;
+  currentCoverage: number;
+};
+
+function previousSlateDate(date: string): string | null {
+  const parsed = Date.parse(`${date}T00:00:00.000Z`);
+  if (!Number.isFinite(parsed)) return null;
+  return new Date(parsed - 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * SharpAPI's /splits `event_id` date can advance before the matchup payload
+ * advances. A repeated series matchup can therefore pass the old date guard
+ * and bind yesterday's percentages to today's game. Verify the payload as a
+ * slate before trusting any row: most unique pairs must resolve on the
+ * requested slate, and the payload must fit it better than the prior slate.
+ * Ambiguous/partial rollover data fails closed; percentages are never copied
+ * across slates.
+ */
+async function assessSplitsSlateAlignment(
+  rows: RawSplitsRow[],
+  sport: Sport,
+  date: string,
+  resolveGame: SharpApiGameResolver,
+  referenceTimeIso: string,
+): Promise<SplitsSlateAlignment> {
+  const previousDate = previousSlateDate(date);
+  const pairs = new Map<string, { home: MlbTeamAbbrev; away: MlbTeamAbbrev; gameNumber: number | null }>();
+  for (const row of rows) {
+    const leagueTag = asStringOrNull(row.league)?.toLowerCase();
+    if (leagueTag !== null && leagueTag !== "mlb") continue;
+    const home = normalizeMlbTeamName(row.home_team);
+    const away = normalizeMlbTeamName(row.away_team);
+    if (home === null || away === null) continue;
+    const gameNumber = extractDoubleheaderGameNumberFromEventId(asStringOrNull(row.event_id));
+    const key = `${home}|${away}|${gameNumber ?? "single"}`;
+    if (!pairs.has(key)) pairs.set(key, { home, away, gameNumber });
+  }
+
+  let currentSlateMatches = 0;
+  let previousSlateMatches = 0;
+  await Promise.all(
+    Array.from(pairs.values()).map(async ({ home, away, gameNumber }) => {
+      const [current, previous] = await Promise.all([
+        resolveGame(sport, date, home, away, referenceTimeIso, gameNumber),
+        previousDate === null
+          ? Promise.resolve(null)
+          : resolveGame(sport, previousDate, home, away, referenceTimeIso, gameNumber),
+      ]);
+      if (current !== null) currentSlateMatches += 1;
+      if (previous !== null) previousSlateMatches += 1;
+    }),
+  );
+  const validPairs = pairs.size;
+  const currentCoverage = validPairs === 0 ? 0 : currentSlateMatches / validPairs;
+  return {
+    aligned:
+      validPairs > 0 &&
+      currentCoverage >= 0.7 &&
+      currentSlateMatches > previousSlateMatches,
+    validPairs,
+    currentSlateMatches,
+    previousSlateMatches,
+    currentCoverage,
+  };
+}
+
 /**
  * Phase 1.6: given a SharpSignalRecord (already-mapped) and the
  * matching /splits row for the game, plus the bookkeeping context
@@ -709,10 +780,23 @@ export class SharpAPISignalProvider implements ISharpSignalProvider {
           splitsRows = [];
         }
       }
-      const { map: splitsByPair, stats: splitsStats } = buildSplitsMap(
+      const splitsAlignment = await assessSplitsSlateAlignment(
         splitsRows,
-        date
+        sportKey,
+        date,
+        this.resolveGame,
+        fallbackComputedAt,
       );
+      if (splitsRows.length > 0 && !splitsAlignment.aligned) {
+        console.warn(
+          `[SharpAPISignalProvider] /splits slate alignment rejected: requested=${date}, ` +
+            `current=${splitsAlignment.currentSlateMatches}/${splitsAlignment.validPairs}, ` +
+            `previous=${splitsAlignment.previousSlateMatches}/${splitsAlignment.validPairs}. ` +
+            `Provider appears partial, stale, or ambiguous; failing closed to prevent cross-slate contamination.`,
+        );
+        splitsRows = [];
+      }
+      const { map: splitsByPair, stats: splitsStats } = buildSplitsMap(splitsRows, date);
       if (splitsStats.skippedWrongDate > 0) {
         console.warn(
           `[SharpAPISignalProvider] /splits date guard: skipped ${splitsStats.skippedWrongDate} row(s) with event_id date != ${date} ` +
@@ -812,4 +896,6 @@ export const __TEST__ = {
   publicPctsFromSplits,
   buildSplitsOnlySignalsForRow,
   extractSlateDateFromEventId,
+  assessSplitsSlateAlignment,
+  previousSlateDate,
 };

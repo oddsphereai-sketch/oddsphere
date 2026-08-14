@@ -44,6 +44,10 @@ import {
 } from "@/lib/services/predictionRecordService";
 import { reconcileDisplayProjection } from "@/lib/services/displayProjectionReconciliation";
 import {
+  mergeCanonicalPriceHistoryForDisplay,
+  type CanonicalPriceObservationRow,
+} from "@/lib/services/dailyEdge/marketPriceHistoryFallback";
+import {
   deriveVerdict,
   VERDICT_LABEL,
   isStrongOpposingSharpMoney,
@@ -1833,6 +1837,7 @@ function buildGameDto(
   currentLinesByGameMarket: Map<string, LineRow[]>,
   bestAvailableLinesByGameMarket: Map<string, LineRow[]>,
   openLinesByGameMarket: Map<string, LineHistoryRow[]>,
+  displayOpenLinesByGameMarket: Map<string, LineHistoryRow[]>,
   lockedPlayGradeByGameMarket: Map<string, {
     pick: string | null;
     side: string | null;
@@ -2455,11 +2460,11 @@ function buildGameDto(
     linesCurrent: currentLinesByGameMarket.get(`${row.id}::moneyline`) ?? [],
     bestAvailableLinesCurrent: liveBestPriceLines("moneyline"),
     lineOpenCandidates:
-      openLinesByGameMarket.get(
+      displayOpenLinesByGameMarket.get(
         `${row.id}::moneyline::${pred.predicted_ml_winner ?? "null"}`
       ) ?? [],
     opposingLineOpenCandidates:
-      openLinesByGameMarket.get(
+      displayOpenLinesByGameMarket.get(
         `${row.id}::moneyline::${oppositeDisplaySide(pred.predicted_ml_winner) ?? "null"}`
       ) ?? [],
     autoFactors,
@@ -2511,16 +2516,16 @@ function buildGameDto(
     // Opener candidates constrained to the consensus line too (so line-movement
     // doesn't open from a divergent/alt-line book — e.g. a lone Pinnacle 10/−206).
     lineOpenCandidates: (
-      openLinesByGameMarket.get(
+      displayOpenLinesByGameMarket.get(
         `${row.id}::total::${pred.predicted_ou_side ?? "null"}`
       ) ?? []
     ).filter((r) => totalLine === null || r.line_value === totalLine || r.line_value === null),
     lineMovementCandidates:
-      openLinesByGameMarket.get(
+      displayOpenLinesByGameMarket.get(
         `${row.id}::total::${pred.predicted_ou_side ?? "null"}`
       ) ?? [],
     opposingLineOpenCandidates: (
-      openLinesByGameMarket.get(
+      displayOpenLinesByGameMarket.get(
         `${row.id}::total::${oppositeDisplaySide(pred.predicted_ou_side) ?? "null"}`
       ) ?? []
     ).filter((r) => totalLine === null || r.line_value === totalLine || r.line_value === null),
@@ -2574,15 +2579,15 @@ function buildGameDto(
     lineOpenCandidates:
       fiEffectiveSide === null
         ? [
-            ...(openLinesByGameMarket.get(`${row.id}::first_inning_total::over`) ?? []),
-            ...(openLinesByGameMarket.get(`${row.id}::first_inning_total::under`) ?? []),
+            ...(displayOpenLinesByGameMarket.get(`${row.id}::first_inning_total::over`) ?? []),
+            ...(displayOpenLinesByGameMarket.get(`${row.id}::first_inning_total::under`) ?? []),
           ].sort((a, b) => a.recorded_at.localeCompare(b.recorded_at) || a.id - b.id)
-        : openLinesByGameMarket.get(
+        : displayOpenLinesByGameMarket.get(
             `${row.id}::first_inning_total::${fiEffectiveSide}`
           ) ?? [],
     fiBoardLineOpenCandidates: [
-      ...(openLinesByGameMarket.get(`${row.id}::first_inning_total::over`) ?? []),
-      ...(openLinesByGameMarket.get(`${row.id}::first_inning_total::under`) ?? []),
+      ...(displayOpenLinesByGameMarket.get(`${row.id}::first_inning_total::over`) ?? []),
+      ...(displayOpenLinesByGameMarket.get(`${row.id}::first_inning_total::under`) ?? []),
     ].sort((a, b) => a.recorded_at.localeCompare(b.recorded_at) || a.id - b.id),
     autoFactors,
     homeAbbr: home,
@@ -7474,6 +7479,43 @@ export async function GET(request: Request) {
     }
   }
 
+  // Reader-only recovery lane. `market_price_observations_v2` is the
+  // canonical append-only price history and often has both sides even when
+  // the legacy `line_history` poll was sparse. Keep this separate from
+  // `openLinesByGameMarket`: pre-lock side corrections above must continue to
+  // use the writer's authoritative legacy inputs, while the reader may show
+  // verified observed movement without changing a prediction or grade.
+  let displayOpenLinesByGameMarket = openLinesByGameMarket;
+  if (games.length > 0) {
+    const eventToGameId = new Map(
+      games.map((game) => [String(game.external_id), game.id] as const),
+    );
+    // One bounded, index-aligned read per board request. This table records
+    // distinct observed prices (not every poll), so 1,000 rows is ample for a
+    // slate while preventing old high-churn events from slowing the reader.
+    const { data: canonicalData, error: canonicalError } = await supabase
+      .from("market_price_observations_v2")
+      .select(
+        "id, canonical_event_id, market_type, selection_key, sportsbook, american_price, line, provider_timestamp, fetched_at",
+      )
+      .in("canonical_event_id", Array.from(eventToGameId.keys()))
+      .in("market_type", ["moneyline", "total"])
+      .order("fetched_at", { ascending: false })
+      .limit(1000);
+    if (canonicalError) {
+      console.warn(
+        `daily-edge: canonical price-history fallback unavailable: ${canonicalError.message}`,
+      );
+    }
+    const canonicalRows = (canonicalData ?? []) as CanonicalPriceObservationRow[];
+    displayOpenLinesByGameMarket = mergeCanonicalPriceHistoryForDisplay({
+      legacy: openLinesByGameMarket,
+      eventToGameId,
+      observations: canonicalRows,
+      blockedSportsbook: isBlockedSportsbook,
+    });
+  }
+
   // ─── Assemble DTOs ───────────────────────────────────────────────────────
   // 2026-06-16 — live stream-price overlay map. Defensive: returns empty when
   // the v24 `odds_current_stream` table is absent/unpopulated, so the line
@@ -7538,6 +7580,7 @@ export async function GET(request: Request) {
       currentLinesByGameMarket,
       bestAvailableLinesByGameMarket,
       openLinesByGameMarket,
+      displayOpenLinesByGameMarket,
       lockedPlayGradeByGameMarket,
       streamCurrentByGameMarket,
       lastMoveByGameMarket,

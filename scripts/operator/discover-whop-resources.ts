@@ -1,3 +1,5 @@
+export {};
+
 /**
  * Phase 6B.3a.1 — Whop resource discovery (read-only).
  *

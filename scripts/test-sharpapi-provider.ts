@@ -311,6 +311,60 @@ async function main() {
     );
   }
 
+  // Provider event-id dates are not sufficient during slate rollover: the
+  // payload can carry today's date while still listing yesterday's matchups.
+  // Verify whole-payload schedule alignment before merging any split.
+  {
+    const rows = [
+      { event_id: "mlb_marlins_mets_2026-06-02", league: "mlb", home_team: "New York Mets", away_team: "Miami Marlins" },
+      { event_id: "mlb_red_sox_yankees_2026-06-02", league: "mlb", home_team: "New York Yankees", away_team: "Boston Red Sox" },
+      { event_id: "mlb_brewers_dodgers_2026-06-02", league: "mlb", home_team: "Los Angeles Dodgers", away_team: "Milwaukee Brewers" },
+    ];
+    const makeResolver = (currentPairs: Set<string>, previousPairs: Set<string>) =>
+      async (_sport: Sport, date: string, home: MlbTeamAbbrev, away: MlbTeamAbbrev) => {
+        const pairs = date === "2026-06-02" ? currentPairs : previousPairs;
+        return pairs.has(`${home}|${away}`) ? 123 : null;
+      };
+    const all = new Set(["NYM|MIA", "NYY|BOS", "LAD|MIL"]);
+    const stale = await SignalProviderTest.assessSplitsSlateAlignment(
+      rows,
+      "mlb",
+      "2026-06-02",
+      makeResolver(new Set(["LAD|MIL"]), all),
+      "2026-06-02T12:00:00.000Z",
+    );
+    check(
+      "slate alignment rejects a payload whose event ids say today but matchups fit yesterday",
+      !stale.aligned && stale.currentSlateMatches === 1 && stale.previousSlateMatches === 3,
+    );
+    const aligned = await SignalProviderTest.assessSplitsSlateAlignment(
+      rows,
+      "mlb",
+      "2026-06-02",
+      makeResolver(all, new Set(["LAD|MIL"])),
+      "2026-06-02T12:00:00.000Z",
+    );
+    check(
+      "slate alignment accepts a payload with broad current-slate coverage and a better current fit",
+      aligned.aligned && aligned.currentSlateMatches === 3 && aligned.previousSlateMatches === 1,
+    );
+    const partial = await SignalProviderTest.assessSplitsSlateAlignment(
+      rows,
+      "mlb",
+      "2026-06-02",
+      makeResolver(new Set(["NYM|MIA", "LAD|MIL"]), new Set()),
+      "2026-06-02T12:00:00.000Z",
+    );
+    check(
+      "slate alignment rejects a partial rollover below the 70% identity floor",
+      !partial.aligned && partial.currentCoverage < 0.7,
+    );
+    check(
+      "previousSlateDate subtracts one UTC calendar day",
+      SignalProviderTest.previousSlateDate("2026-06-02") === "2026-06-01",
+    );
+  }
+
   // publicPctsFromSplits — exercises every market × side path plus the
   // first_inning_total skip rule.
   {
@@ -796,10 +850,10 @@ async function main() {
     );
 
     // ── Phase 1.6 — /splits merge assertions ─────────────────────────
-    // We expect AT LEAST ONE ML / spread / total signal to receive a
-    // non-null public_betting_pct or public_money_pct via the /splits
-    // merge when SharpAPI returns a populated splits row for the
-    // matching team pair. Empty-slate cases are still acceptable.
+    // A live payload may populate these fields, or the slate-alignment gate
+    // may intentionally reject the whole payload during provider rollover.
+    // The deterministic alignment behavior is asserted by the offline tests
+    // above; here we validate only any values that survived that gate.
     const gameMarketSignals = signals.filter((s) =>
       s.market_type === "moneyline" ||
       s.market_type === "spread" ||
@@ -812,11 +866,6 @@ async function main() {
       `  Phase 1.6 splits-merge: ${splitsMergedCount} / ${gameMarketSignals.length} ML/spread/total signals received public splits data`
     );
     if (gameMarketSignals.length > 0) {
-      check(
-        `Phase 1.6: at least one ML/spread/total signal carries public_betting_pct or public_money_pct from /splits merge (got ${splitsMergedCount}/${gameMarketSignals.length})`,
-        splitsMergedCount > 0
-      );
-
       // Scale assertion: when populated, public_betting_pct and
       // public_money_pct must be on the 0-100 scale (the SharpSignal
       // table column convention). /splits returns 0-1 floats; the
