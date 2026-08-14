@@ -55,6 +55,49 @@ type SharpSplitRowWithTeams = RawSharpApiSplitRowV2 & {
   away_team?: string | null;
 };
 
+export type SharpSplitSlateAlignment = {
+  aligned: boolean;
+  validPairs: number;
+  currentSlateMatches: number;
+  previousSlateMatches: number;
+  currentCoverage: number;
+};
+
+/**
+ * Whole-payload identity gate for the Market Intelligence observation writer.
+ * SharpAPI can advance event-id dates before advancing matchup rows, so a
+ * repeated series alone is not proof that the payload belongs to this slate.
+ */
+export function assessSharpApiSplitSlateAlignment(
+  rows: readonly SharpSplitRowWithTeams[],
+  currentGames: readonly Pick<GameRef, "awayAbbr" | "homeAbbr">[],
+  previousGames: readonly Pick<GameRef, "awayAbbr" | "homeAbbr">[],
+): SharpSplitSlateAlignment {
+  const rowPairs = new Set<string>();
+  for (const row of rows) {
+    const league = String(row.league ?? "").toLowerCase();
+    if (league && league !== "mlb") continue;
+    const key = marketIntelligenceGameKey("mlb", row.away_team, row.home_team);
+    if (key !== null) rowPairs.add(key);
+  }
+  const currentPairs = new Set(currentGames.map((game) => `${game.awayAbbr}@${game.homeAbbr}`));
+  const previousPairs = new Set(previousGames.map((game) => `${game.awayAbbr}@${game.homeAbbr}`));
+  const currentSlateMatches = Array.from(rowPairs).filter((key) => currentPairs.has(key)).length;
+  const previousSlateMatches = Array.from(rowPairs).filter((key) => previousPairs.has(key)).length;
+  const validPairs = rowPairs.size;
+  const currentCoverage = validPairs === 0 ? 0 : currentSlateMatches / validPairs;
+  return {
+    aligned:
+      validPairs > 0 &&
+      currentCoverage >= 0.7 &&
+      currentSlateMatches > previousSlateMatches,
+    validPairs,
+    currentSlateMatches,
+    previousSlateMatches,
+    currentCoverage,
+  };
+}
+
 export type MarketIntelligenceV2ShadowSyncResult = {
   apply: boolean;
   sport: Sport;
@@ -502,6 +545,7 @@ async function collectSharpApiSplits(opts: {
   sport: Sport;
   slateDate: string;
   games: readonly GameRef[];
+  previousGames: readonly GameRef[];
   apiKey: string | undefined;
   now: Date;
   ingestionRunId: string;
@@ -529,6 +573,34 @@ async function collectSharpApiSplits(opts: {
   } catch (e) {
     if (e instanceof SharpApiNotFoundError) rows = [];
     else throw e;
+  }
+
+  const slateAlignment = assessSharpApiSplitSlateAlignment(
+    rows,
+    opts.games,
+    opts.previousGames,
+  );
+  if (rows.length > 0 && !slateAlignment.aligned) {
+    return {
+      fetchedRows: rows.length,
+      observations: [],
+      rejected: rows.map((row) => ({
+        provider: "sharpapi" as const,
+        provider_event_id:
+          row.event_id === undefined || row.event_id === null ? null : String(row.event_id),
+        market_type: null,
+        selection_key: null,
+        reason:
+          `SharpAPI split slate alignment rejected: current=${slateAlignment.currentSlateMatches}/${slateAlignment.validPairs}, ` +
+          `previous=${slateAlignment.previousSlateMatches}/${slateAlignment.validPairs}`,
+      })),
+      errors: [],
+      details: {
+        slate_alignment: slateAlignment,
+        stale_or_ambiguous_payload_rejected: true,
+        history_requests_made: 0,
+      },
+    };
   }
 
   const gamesByKey = new Map<string, GameRef[]>();
@@ -835,6 +907,9 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
   if (playbookGames.length !== games.length) {
     result.details.playbook_games_loaded = playbookGames.length;
   }
+  const previousSharpApiGames = opts.sport === "mlb"
+    ? await loadGames(opts.supabase, opts.sport, offsetDate(opts.slateDate, -1))
+    : [];
 
   const [playbook, sharpapi, prices] = await Promise.all([
     collectPlaybookSplits({
@@ -851,6 +926,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
       sport: opts.sport,
       slateDate: opts.slateDate,
       games,
+      previousGames: previousSharpApiGames,
       apiKey: opts.sharpApiKey ?? process.env.SHARPAPI_KEY,
       now,
       ingestionRunId,

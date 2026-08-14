@@ -1,5 +1,6 @@
 import {
   dedupeSharpApiHistorySplitObservations,
+  assessSharpApiSplitSlateAlignment,
   isSharpApiHistoryUniqueConflict,
   marketIntelligenceGameKey,
   writeRows,
@@ -22,6 +23,40 @@ check(
   "MLB key normalizes full team names",
   marketIntelligenceGameKey("mlb", "Houston Astros", "Detroit Tigers") === "HOU@DET",
 );
+
+{
+  const rows = [
+    { event_id: "mlb_marlins_mets_2026-08-14", league: "mlb", away_team: "Miami Marlins", home_team: "New York Mets" },
+    { event_id: "mlb_red_sox_yankees_2026-08-14", league: "mlb", away_team: "Boston Red Sox", home_team: "New York Yankees" },
+    { event_id: "mlb_brewers_dodgers_2026-08-14", league: "mlb", away_team: "Milwaukee Brewers", home_team: "Los Angeles Dodgers" },
+  ];
+  const stale = assessSharpApiSplitSlateAlignment(
+    rows,
+    [{ awayAbbr: "MIL", homeAbbr: "LAD" }],
+    [
+      { awayAbbr: "MIA", homeAbbr: "NYM" },
+      { awayAbbr: "BOS", homeAbbr: "NYY" },
+      { awayAbbr: "MIL", homeAbbr: "LAD" },
+    ],
+  );
+  check(
+    "Market Intelligence rejects date-advanced rows whose matchups fit the previous slate",
+    !stale.aligned && stale.currentSlateMatches === 1 && stale.previousSlateMatches === 3,
+  );
+  const aligned = assessSharpApiSplitSlateAlignment(
+    rows,
+    [
+      { awayAbbr: "MIA", homeAbbr: "NYM" },
+      { awayAbbr: "BOS", homeAbbr: "NYY" },
+      { awayAbbr: "MIL", homeAbbr: "LAD" },
+    ],
+    [{ awayAbbr: "MIL", homeAbbr: "LAD" }],
+  );
+  check(
+    "Market Intelligence accepts broad current-slate coverage with a better current fit",
+    aligned.aligned && aligned.currentSlateMatches === 3 && aligned.previousSlateMatches === 1,
+  );
+}
 check(
   "MLB key rejects unknown teams",
   marketIntelligenceGameKey("mlb", "Not A Team", "Detroit Tigers") === null,

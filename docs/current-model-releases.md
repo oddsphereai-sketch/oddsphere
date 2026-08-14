@@ -11,9 +11,9 @@ Last reviewed: 2026-08-14
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_14_r41`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v40_2026_08_14`
-- Grade policy: `mlb_public_grade_policy_v31_sharp_slate_identity_2026_08_14`
+- Decision release: `mlb_daily_edge_decision_2026_08_14_r42`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v41_2026_08_14`
+- Grade policy: `mlb_public_grade_policy_v32_all_writer_sharp_slate_identity_2026_08_14`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
@@ -167,6 +167,16 @@ replacement. The member reader separately recovers verified both-side movement
 from canonical append-only price observations without feeding that recovery
 into prediction decisions. Evidence and rollback details are in
 `docs/model-audits/2026-08-14-mlb-sharp-slate-identity-and-reader-price-history-r41.md`.
+
+The August 14 r42 completion release applies r41's same whole-payload schedule
+identity gate to the separate Market Intelligence observation writer. The
+post-r41 live audit proved that the recommendation signal path failed closed,
+but the observation writer could still persist the stale repeated-matchup
+payload and expose it to source-aware reader/history consumers. R42 rejects
+that payload before current or history observations are built. No predictive
+formula, side, probability, projection, valid price, or stake changes. Evidence
+is recorded in
+`docs/model-audits/2026-08-14-mlb-all-writer-sharp-slate-identity-r42.md`.
 
 The August 11 tracking-contract v8 operational release keeps the shared MLB
 `prediction_pipeline` lease authoritative while preventing an ordinary writer collision from
