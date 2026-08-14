@@ -1,3 +1,5 @@
+import { MLB_PROPS_HOME_RUN_STAKE_UNITS } from "./actionabilityPolicy";
+
 export const BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION =
   "batter_home_runs_pa_portfolio_v2_2026_08_13";
 
@@ -10,7 +12,7 @@ export const BATTER_HOME_RUNS_PORTFOLIO_POLICY = {
   minimumAmericanOdds: 150,
   maximumAmericanOdds: 1000,
   maximumPerGame: 1,
-  stakeUnits: 0.1,
+  stakeUnits: MLB_PROPS_HOME_RUN_STAKE_UNITS,
 } as const;
 
 export const BATTER_HOME_RUNS_COMPLEMENT_POLICY = {
@@ -21,7 +23,7 @@ export const BATTER_HOME_RUNS_COMPLEMENT_POLICY = {
   minimumAmericanOdds: 351,
   maximumAmericanOdds: 650,
   maximumPerGame: 1,
-  stakeUnits: 0.1,
+  stakeUnits: MLB_PROPS_HOME_RUN_STAKE_UNITS,
 } as const;
 
 export type BatterHomeRunsPortfolioInputs = {

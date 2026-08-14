@@ -29,6 +29,8 @@ import { projectBatterHomeRunsResidual } from "../lib/mlb/props/batterHomeRunsRe
 import {
   consensusMarketProbabilityFromAmericanOdds,
   HOME_RUN_STANDARDIZED_QUALITY_POLICY,
+  MLB_PROPS_HOME_RUN_STAKE_UNITS,
+  MLB_PROPS_STANDARD_STAKE_UNITS,
   projectAuditableCountOverProbability,
   qualifiesHitsUnderPriceEdge,
   qualifiesValidatedUnderPromotion,
@@ -128,6 +130,8 @@ async function main() {
       { odds: 900, playGrade: "LEAN", lastUpdated: "2026-07-23T15:00:00Z" },
     ),
   );
+  check("standard actionable player props use the 1u stake contract", MLB_PROPS_STANDARD_STAKE_UNITS === 1);
+  check("home-run longshots alone use the reduced 0.25u stake contract", MLB_PROPS_HOME_RUN_STAKE_UNITS === 0.25);
   check("pitcher strikeout over model uses the chronologically calibrated weight", approx(calibratedPropModelWeight({
     marketKey: "pitcher_strikeouts",
     side: "over",
@@ -716,6 +720,7 @@ async function main() {
   check("historically losing market directions are corrected before paired promotions", liveBoardSource.includes("applyEvidenceGradeCorrections") && liveBoardSource.includes("HISTORICALLY_UNSUPPORTED_ACTIONABLE_MARKET_SIDES") && liveBoardSource.includes("HISTORICALLY_UNSUPPORTED_ACTIONABLE_PATH") && propsConfigSource.includes("HISTORICALLY_UNSUPPORTED_ACTIONABLE_PATH"));
   check("unvalidated Singles premium Best Angle promotion is removed", !liveBoardSource.includes("applyValidatedPremiumBestAngles") && !liveBoardSource.includes("SINGLES_BEST_ANGLE_MIN_MODEL_PROBABILITY") && !liveBoardSource.includes("VALIDATED_SINGLES_PREMIUM_BEST_ANGLE"));
   check("losing home-run actionable promotion is absent from the live board path", !liveBoardSource.includes("applyValidatedHomeRunActionablePromotions") && !liveBoardSource.includes("VALIDATED_HOME_RUN_CONSENSUS_BEST_PRICE_PROMOTION"));
+  check("member board applies the shared 1u standard stake instead of an embedded fractional stake", liveBoardSource.includes("MLB_PROPS_STANDARD_STAKE_UNITS") && !liveBoardSource.includes("units: 0.25"));
   check("member board uses grade-aware equal-price selection", liveBoardSource.includes('import { shouldReplaceBestPriceRow } from "./bestPriceSelection"') && liveBoardSource.includes("shouldReplaceBestPriceRow(current, row)"));
   check("canonical props publication blocks older model releases and stale same-release snapshots", liveBoardSource.includes("assertMlbPropsReleaseDoesNotRegress") && boardSnapshotStoreSource.includes("assertMlbPropsReleaseDoesNotRegress") && boardSnapshotStoreSource.includes("model_release_id") && boardSnapshotStoreSource.includes("as_of_timestamp"));
   check("release-aware canonical selection ignores delayed older snapshot indexes", boardSnapshotStoreSource.includes("compareMlbPropsReleaseIds") && boardSnapshotStoreSource.includes("loadHighestIndexedMlbPropsReleaseHead") && boardSnapshotStoreSource.includes("publishedReleaseHeadCache"));

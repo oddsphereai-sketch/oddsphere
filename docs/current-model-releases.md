@@ -305,11 +305,24 @@ Evidence and rollback details are recorded in
 
 ## MLB Player Props candidate
 
-- Release: `mlb_props_2026_08_13_r34`
+- Release: `mlb_props_2026_08_14_r35`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: private launch candidate; not publicly enabled
+
+The August 14 r35 stake-contract correction restores the owner-approved unit
+definition: every non-Home Run Lean or Best Angle is 1.00u, while the
+diversified Home Run longshot portfolio is 0.25u. R34 had incorrectly stamped
+ordinary actionables at 0.25u and the Home Run and RBI portfolios at 0.10u.
+R35 changes no selected side, line, price, probability, projection, grade,
+promotion/demotion rule, or actionable count. Historical locked rows retain
+their original r34 stake metadata; reporting may normalize them explicitly but
+must not rewrite them. The no-write August 14 rebuild was publishable with
+5,631 rows, 146 actionables (141 standard and five Home Runs), zero stake-policy
+mismatches, and zero grade changes attributable to this correction. Evidence
+and rollback details are recorded in
+`docs/model-audits/2026-08-14-player-props-unit-stake-contract-r35.md`.
 
 The August 13 r34 model release retains r33's weather and three-play Home Run
 portfolio and adds two capped Lean sleeves selected chronologically from the

@@ -3,6 +3,12 @@ import { assessPropPrice } from "./pricePolicy";
 export const MLB_PROPS_RECOVERY_POLICY_VERSION =
   "mlb_props_actionability_recovery_v6_2026_08_12";
 
+// Member-facing stake contract. Standard actionable props are graded at a
+// flat 1u risk; only the explicitly diversified home-run longshot portfolio
+// uses the reduced stake below.
+export const MLB_PROPS_STANDARD_STAKE_UNITS = 1;
+export const MLB_PROPS_HOME_RUN_STAKE_UNITS = 0.25;
+
 export const HITS_UNDER_PRICE_EDGE_POLICY = {
   minimumMarketProbability: 0.4,
   maximumMarketProbability: 0.6,
@@ -78,7 +84,7 @@ export const BATTER_RBI_VALUE_PORTFOLIO_POLICY = {
   minimumExpectedValue: 0,
   minimumAmericanOdds: -200,
   maximumAmericanOdds: 300,
-  stakeUnits: 0.1,
+  stakeUnits: MLB_PROPS_STANDARD_STAKE_UNITS,
 } as const;
 
 export type EmpiricalMarketAccuracyScore = {

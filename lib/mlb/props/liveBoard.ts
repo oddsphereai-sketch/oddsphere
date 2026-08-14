@@ -103,6 +103,7 @@ import {
 import { calibratedPropModelWeight } from "./probabilityCalibration";
 import {
   BATTER_RBI_VALUE_PORTFOLIO_POLICY,
+  MLB_PROPS_STANDARD_STAKE_UNITS,
   qualifiesBatterDoublesResidualPromotion,
   qualifiesHitsUnderPriceEdge,
   qualifiesValidatedUnderPromotion,
@@ -1224,7 +1225,9 @@ function buildDashboardRows(args: {
       modelEdge: edge,
       expectedValue,
       fairOdds,
-      units: canSignal && (playGrade === "BEST_ANGLE" || playGrade === "LEAN") ? 0.25 : 0,
+      units: canSignal && (playGrade === "BEST_ANGLE" || playGrade === "LEAN")
+        ? MLB_PROPS_STANDARD_STAKE_UNITS
+        : 0,
       confidence: signal?.confidence ?? (memberReady ? 0.65 : 0.35),
       confidenceBucket: (signal?.confidence ?? 0) >= 0.8 ? "high" : (signal?.confidence ?? 0) >= 0.6 ? "medium" : "low",
       playGrade,
@@ -1525,7 +1528,7 @@ function applyValidatedUnderActionablePromotions(
         underProbability: accuracyScore.finalProbability,
       } : {}),
       playGrade: "BEST_ANGLE",
-      units: 0.25,
+      units: MLB_PROPS_STANDARD_STAKE_UNITS,
       reasonCodes: uniqueStrings([
         ...row.reasonCodes,
         "VALIDATED_MARKET_PROMOTION",
@@ -1584,7 +1587,7 @@ function applyValidatedBatterStrikeoutsAccuracyPromotions(
       overProbability: score.finalProbability,
       underProbability: 1 - score.finalProbability,
       playGrade: "BEST_ANGLE",
-      units: 0.25,
+      units: MLB_PROPS_STANDARD_STAKE_UNITS,
       reasonCodes: uniqueStrings([
         ...row.reasonCodes,
         "VALIDATED_MARKET_PROMOTION",

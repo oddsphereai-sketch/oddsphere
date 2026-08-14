@@ -1,10 +1,10 @@
 # OddSphere MLB betting strategy
 
-Strategy release: `oddsphere_mlb_betting_strategy_2026_07_23_r6`
+Strategy release: `oddsphere_mlb_betting_strategy_2026_08_14_r7`
 
-Daily Edge decision release: `mlb_daily_edge_decision_2026_07_23_r2`
+Daily Edge decision release: `mlb_daily_edge_decision_2026_08_14_r46`
 
-Player Props release: `mlb_props_2026_08_13_r34`
+Player Props release: `mlb_props_2026_08_14_r35`
 
 Reference unit: **1u = $25**
 
@@ -25,10 +25,8 @@ of these rules.
 | MLB Moneyline | Genuine final-side inversion Lean | **0.25u / $6.25** |
 | MLB Total | Best Angle | **0.50u / $12.50** |
 | MLB Total | Lean carrying the released validated-Lean rule | **0.25u / $6.25** |
-| MLB Player Props — batter home runs | Up to three core portfolio Leans plus two qualified medium-price complements, max one hitter per game | **0.10u / $2.50 each** |
-| MLB Player Props — batter RBIs | Highest-ranked released value Lean, when qualified | **0.10u / $2.50** |
-| MLB Player Props — pitcher earned runs | Final qualified actionable Lean/Best Angle | **0.50u / $12.50** |
-| MLB Player Props — batter runs scored | Final qualified actionable Lean/Best Angle | **0.10u / $2.50** |
+| MLB Player Props — batter home runs | Qualified portfolio Lean, with the released slate/game diversification | **0.25u / $6.25 each** |
+| MLB Player Props — every other market | Final qualified Lean or Best Angle | **1.00u / $25 each** |
 
 The home-run rule uses a prior-only 20-game HR-per-plate-appearance projection,
 a 100-PA league prior, batting-order and verified environment opportunity
@@ -40,9 +38,9 @@ edge is at least two points and EV is at least 5%; it ranks by model probability
 The RBI rule uses the existing final side and best price from -200 through
 +300, requires nonnegative model edge and EV, and releases at most the
 highest-EV qualifier.
-The earned-runs rule requires an approved price and at least 5% locked EV. The
-runs-scored rule requires the released price, confidence, probability, edge,
-and EV gates.
+Every non-Home Run market retains its released market-specific price,
+confidence, probability, edge, EV, data-quality, lineup, and freshness gates.
+The 1.00u stake contract does not promote a Watchlist or bypass any gate.
 
 Pitcher-outs `r7` improves the site's probability and projection layer but
 does not add pitcher outs to this official wagering card. Historical action
@@ -89,11 +87,11 @@ prescribed singles.
 
 ## How the $250 preference works
 
-The proposed stakes produced approximately **12.5u per active slate** when
-applied to the July 16–22 frozen-field evidence for the included first-inning,
-total, home-run, earned-runs, and runs-scored rules. At $25 per unit, that is
-about **$312 typical daily risk**. Individual slates can be materially higher
-or lower.
+The r35 prop stake correction intentionally restores 1.00u as the standard
+reporting risk for non-Home Run actionables and 0.25u for Home Runs. Because
+the number of qualifying props varies materially by slate, the earlier 12.5u
+typical-slate estimate from the superseded fractional-prop strategy no longer
+describes current risk. Individual slates can be materially higher or lower.
 
 To target approximately $250 in typical daily risk, use an initial operating
 unit of **$20** while retaining $25 as the reporting reference unit. Once per
@@ -150,18 +148,20 @@ slate should set a smaller operating unit before the slate begins.
   the best day.
 - Nonqualifying Watchlists were negative over the same window.
 - A one-unit home-run return was about three times as volatile as a typical
-  straight market return. The official stake is therefore 0.10u, not the same
+  straight market return. The current stake is therefore 0.25u, not the same
   stake as a total, first-inning bet, or ordinary pitcher prop.
 
 ### Pitcher earned runs
 
 - Current-rule replay: 83 bets, 53–30, **+18.376u and +22.1% ROI** over seven
   slates; six slates were profitable.
-- At 0.25u, the included-props portfolio returned 9.71u with 1.16u maximum
+- At 0.25u, the historical included-props portfolio returned 9.71u with 1.16u maximum
   daily drawdown. Raising earned runs alone to 0.50u increased return to
   14.30u while maximum drawdown rose to 2.61u. At 0.75u, return increased
   mechanically to 18.90u but drawdown rose to 4.06u and concentration was not
-  justified by only seven slates. The released stake is therefore 0.50u.
+  justified by only seven slates. Those figures describe the superseded
+  market-specific stake experiment; r35 uses the owner-approved 1.00u standard
+  unit for every qualified non-Home Run prop.
 - The chronological calibration/holdout split was positive on both sides:
   44 calibration bets at +14.0%, then 23 holdout bets at +37.6%.
 - The exact first displayed component slate was 11 bets at +7.8%.
@@ -171,7 +171,8 @@ slate should set a smaller operating unit before the slate begins.
 - Released-rule replay: 227 bets, **+14.56u and +6.4% ROI** over seven slates.
 - The chronological split was 137 calibration bets at +3.4%, followed by 61
   holdout bets at +17.6%.
-- This is lower-edge and higher-volume than earned runs, so it receives 0.10u.
+- This remains lower-edge and higher-volume than earned runs, but r35 applies
+  the same 1.00u standard reporting unit to every qualified non-Home Run prop.
 
 ## Markets not in the card
 
@@ -181,21 +182,13 @@ slate should set a smaller operating unit before the slate begins.
 | Ordinary Moneyline Best Angle or Lean | Larger locked-price history is negative or near flat; exact r2 is immature |
 | Generic Total Lean | –13.9% over 144 bets |
 | Any corrected/flip Total | Correction families were unstable; r2 stands them down |
-| Batter hits | Current actionables barely positive; preceding component actionables negative |
-| Hits + runs + RBIs | Negative in current and earlier component evidence |
-| Batter singles | +11.2% over only three current-component slates; preceding component was negative |
-| Batter walks | Positive in both component summaries, but only three current-component settled slates |
-| Total bases and RBIs | Broader actionable evidence negative |
-| Doubles, triples, stolen bases, batter strikeouts | No stable profitable released qualification |
-| Pitcher outs | Best Angles lost while a small Lean subset won; grade ordering is not reliable |
-| Pitcher strikeouts, walks, hits allowed, pitcher win | Insufficient or unstable actionable evidence |
-| First home run | No validated actionable rule |
-| Watchlists | Not a released portfolio qualification |
+| Player Props Watchlist, No Play, Pending Data, or Research | Not a released actionable grade |
+| First home run and other research-only milestones | No validated actionable rule |
+| Pitcher shadow output | Prospective evidence only; it cannot create a member-facing wager |
 
-Singles and walks are the leading candidates for addition. They must first
-remain positive for at least seven settled current-component slates and 25
-settled wagers, with clustered uncertainty reported. If either is added, the
-whole released qualification enters; there will be no daily top-N selection.
+For Player Props, market-specific model rules decide whether a row reaches
+Lean or Best Angle. Once it does, r35 applies 1.00u to every non-Home Run row
+and 0.25u to Home Runs. This stake contract does not manufacture a grade.
 
 ## Review and release discipline
 
