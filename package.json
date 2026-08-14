@@ -78,6 +78,7 @@
     "test:mlb-doubleheader-public-splits": "tsx scripts/test-mlb-doubleheader-public-splits.ts",
     "test:public-market-context": "tsx scripts/test-public-market-context.ts",
     "test:recommendation-decision": "tsx scripts/test-recommendation-decision.ts",
+    "test:unified-market-state": "tsx scripts/test-unified-market-state.ts",
     "test:ai-audit-cost-control": "tsx scripts/test-ai-audit-cost-control.ts",
     "test:ai-auditor-cost-preview": "tsx scripts/test-ai-auditor-cost-preview.ts",
     "test:ai-auditor-guarded-live-qc": "tsx scripts/test-ai-auditor-guarded-live-qc.ts",
