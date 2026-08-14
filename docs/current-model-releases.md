@@ -11,14 +11,23 @@ Last reviewed: 2026-08-14
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_14_r42`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v41_2026_08_14`
-- Grade policy: `mlb_public_grade_policy_v32_all_writer_sharp_slate_identity_2026_08_14`
+- Decision release: `mlb_daily_edge_decision_2026_08_14_r43`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v42_2026_08_14`
+- Grade policy: `mlb_public_grade_policy_v33_complete_sharpapi_event_discovery_2026_08_14`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
 Moneyline precedence is immutable unless a later versioned release explicitly replaces it:
+
+The August 14 r43 completion release expands SharpAPI event discovery to the
+union of the verified `+EV` and `low_hold` feeds, then directly probes
+deterministic provider event IDs for any game still missing from the
+authoritative database slate. This restores current event odds even when no
+qualifying opportunity row exists at a poll. The r42 aggregate-splits
+slate-identity guard remains in force; mismatched SharpAPI public percentages
+are never used. See
+`docs/model-audits/2026-08-14-mlb-complete-sharpapi-event-discovery-r43.md`.
 
 1. Existing inversion logic.
 2. Existing pick calibration.

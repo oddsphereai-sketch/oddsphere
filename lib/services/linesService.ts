@@ -23,6 +23,8 @@ import type { CronHandlerResult } from "../cron/runCron";
 import { loadGameIdMap, loadPlayerIdMap } from "./_idMaps";
 import { SharpAPIOddsProvider } from "../providers/real_api/SharpAPIOddsProvider";
 import type { V2DiscoveryReport } from "../providers/real_api/SharpAPIOddsProvider";
+import type { SharpApiSlateGame } from "../providers/real_api/SharpAPIOddsProvider";
+import type { MlbTeamAbbrev } from "../providers/real_api/_teamNameNormalizer";
 import { flagOpenersInHistoryPayload } from "./_lineHistoryOpenerHelper";
 import { insertLineHistoryResilient, logLineHistoryInsertFailure } from "./lineHistoryWriter";
 import type { LineHistoryInsertResult } from "./lineHistoryWriter";
@@ -561,8 +563,48 @@ export const linesService = {
     const preCoverage = preSnap.aggregate;
     const preCoveragePerGame = preSnap.perGame;
 
+    // The scheduled slate is the authoritative discovery inventory. Do not
+    // make full-board odds coverage depend on whether SharpAPI currently
+    // classifies a game as +EV or low-hold.
+    const { data: slateRows, error: slateRowsError } = await supabase
+      .from("games")
+      .select(
+        `id, external_id, game_date,
+         home_team:teams!games_home_team_id_fkey(abbreviation),
+         away_team:teams!games_away_team_id_fkey(abbreviation)`,
+      )
+      .in("id", slateGameIds)
+      .order("game_date", { ascending: true });
+    if (slateRowsError) {
+      throw new Error(`refreshGameLinesV2 slate identity read failed: ${slateRowsError.message}`);
+    }
+    type SlateIdentityRaw = {
+      id: number;
+      external_id: number;
+      game_date: string;
+      home_team: Array<{ abbreviation: string }> | { abbreviation: string } | null;
+      away_team: Array<{ abbreviation: string }> | { abbreviation: string } | null;
+    };
+    const pairCounts = new Map<string, number>();
+    const slateGames: SharpApiSlateGame[] = [];
+    for (const row of (slateRows ?? []) as unknown as SlateIdentityRaw[]) {
+      const home = Array.isArray(row.home_team) ? row.home_team[0] : row.home_team;
+      const away = Array.isArray(row.away_team) ? row.away_team[0] : row.away_team;
+      if (!home?.abbreviation || !away?.abbreviation) continue;
+      const pair = `${away.abbreviation}|${home.abbreviation}`;
+      const gameNumber = (pairCounts.get(pair) ?? 0) + 1;
+      pairCounts.set(pair, gameNumber);
+      slateGames.push({
+        externalId: row.external_id,
+        home: home.abbreviation as MlbTeamAbbrev,
+        away: away.abbreviation as MlbTeamAbbrev,
+        gameNumber,
+      });
+    }
+
     const { records, discovery } = await odds.getGameLinesV2(date, sport, {
       externalIdsFilter: opts?.externalIdsFilter,
+      slateGames,
     });
 
     // Partition provider rows by (game_id, market_type). This is the

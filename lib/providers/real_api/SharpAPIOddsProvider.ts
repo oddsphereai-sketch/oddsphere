@@ -54,6 +54,7 @@ import {
   type DiscoveryStats as SplitsDiscoveryStats,
   type RawSplitsRow,
 } from "./_splitsDiscovery";
+import { generateMlbEventIdCandidates } from "./sharpApiEventIdCandidates";
 // Pure value mappers extracted to a worker-safe module (2026-06-16). Imported
 // for internal use AND re-exported below so every existing importer of these
 // symbols from this file keeps working unchanged.
@@ -102,6 +103,13 @@ export type SharpApiGameResolver = (
   referenceTimeIso?: string,
   gameNumber?: number | null,
 ) => Promise<number | null>;
+
+export type SharpApiSlateGame = {
+  externalId: number;
+  home: MlbTeamAbbrev;
+  away: MlbTeamAbbrev;
+  gameNumber?: number | null;
+};
 
 /** Hard cap on SharpAPI calls per getGameLines invocation (safety net). */
 // R-17 Step 2E.1 — raised 30 → 50 to handle multi-bucket /odds harvest.
@@ -476,7 +484,10 @@ export class SharpAPIOddsProvider implements IOddsProvider {
   async getGameLinesV2(
     date: string,
     sport?: Sport,
-    opts?: { externalIdsFilter?: readonly number[] }
+    opts?: {
+      externalIdsFilter?: readonly number[];
+      slateGames?: readonly SharpApiSlateGame[];
+    }
   ): Promise<{ records: LineRecord[]; discovery: V2DiscoveryReport }> {
     const sportKey = sport ?? "mlb";
     if (sportKey !== "mlb") {
@@ -503,7 +514,9 @@ export class SharpAPIOddsProvider implements IOddsProvider {
       sportKey,
       date
     );
-    callsUsed += 1;
+    // Discovery unions /opportunities/ev and /opportunities/low_hold so a
+    // game with no current +EV offer does not lose its provider event id.
+    callsUsed += 2;
 
     // Pre-Step-2B variable name kept for downstream readability — the
     // shape is the same {events[], rows[]} contract.
@@ -570,6 +583,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         | "opportunities_suffixed"
         | "splits_stripped"
         | "splits_discovery_fallback"
+        | "schedule_direct_probe"
         | "schedule_doubleheader_sibling";
     };
 
@@ -643,6 +657,37 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         eventIdSource: "splits_discovery_fallback",
       });
       resolvedExternalIds.add(gameExtId);
+    }
+
+    // R-43 — the database slate, not a qualifying-opportunity feed, is the
+    // authoritative inventory of games we must price. SharpAPI can publish
+    // fresh event-scoped /odds while omitting that game from BOTH opportunity
+    // discovery endpoints. Construct and probe the provider's deterministic
+    // event ids for every still-missing scheduled game so no offered game is
+    // silently excluded merely because it has no +EV/low-hold row right now.
+    for (const game of opts?.slateGames ?? []) {
+      if (resolvedExternalIds.has(game.externalId)) continue;
+      let candidates = generateMlbEventIdCandidates(
+        game.home,
+        game.away,
+        date,
+      );
+      if ((game.gameNumber ?? 1) > 1) {
+        candidates = candidates.map((id) =>
+          id.replace(/(_b\d+)$/, `_g${game.gameNumber}$1`),
+        );
+      }
+      const stripped = candidates[0]?.replace(/_b\d+$/, "") ??
+        `mlb_${game.home.toLowerCase()}_${game.away.toLowerCase()}_${date}`;
+      resolved.push({
+        home: game.home,
+        away: game.away,
+        gameExternalId: game.externalId,
+        splitsEventId: stripped,
+        effectiveEventIds: candidates,
+        eventIdSource: "schedule_direct_probe",
+      });
+      resolvedExternalIds.add(game.externalId);
     }
 
     // A second game can be absent from both discovery feeds even while
@@ -1299,6 +1344,7 @@ export type V2DiscoveryPerGame = {
     | "opportunities_suffixed"
     | "splits_stripped"
     | "splits_discovery_fallback"
+    | "schedule_direct_probe"
     | "schedule_doubleheader_sibling";
   oddsCallStatus: V2OddsCallStatus;
   /** Combined row counts (real /odds + R-16E /splits fallback). */

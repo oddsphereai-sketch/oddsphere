@@ -11,6 +11,7 @@
 
 import {
   buildDiscoveryFromOpportunitiesRows,
+  discoverEventsFromOpportunities,
   stripEventBucketSuffix,
   extractSlateDateFromEventId,
   extractDoubleheaderGameNumberFromEventId,
@@ -53,7 +54,7 @@ function row(overrides: Partial<RawOpportunityRow>): RawOpportunityRow {
 
 const DATE = "2026-06-05";
 
-function main() {
+async function main() {
   section("Helper — stripEventBucketSuffix");
   check(
     "strips _b0 suffix",
@@ -605,6 +606,38 @@ function main() {
     );
   }
 
+  section("R-43 — +EV and low-hold event discovery union");
+  {
+    const requestedPaths: string[] = [];
+    const stubClient = {
+      async fetchAll<T>(opts: { path: string }): Promise<T[]> {
+        requestedPaths.push(opts.path);
+        if (opts.path === "/opportunities/ev") {
+          return [row({ event_id: "mlb_royals_twins_2026-06-05_b3" })] as T[];
+        }
+        if (opts.path === "/opportunities/low_hold") {
+          return [
+            row({ event_id: "mlb_royals_twins_2026-06-05_b3" }),
+            row({
+              event_id: "mlb_pirates_redsox_2026-06-05_b3",
+              home_team: "Pittsburgh Pirates",
+              away_team: "Boston Red Sox",
+            }),
+          ] as T[];
+        }
+        return [];
+      },
+    };
+    const res = await discoverEventsFromOpportunities(
+      stubClient as never,
+      "mlb",
+      DATE,
+    );
+    check("queries both verified discovery feeds", requestedPaths.join(",") === "/opportunities/ev,/opportunities/low_hold");
+    check("recovers a low-hold-only game", res.events.some((event) => event.home === "PIT" && event.away === "BOS"));
+    check("deduplicates the event shared by both feeds", res.events.filter((event) => event.home === "MIN" && event.away === "KC").length === 1);
+  }
+
   // ── Summary ──────────────────────────────────────────────────────
   console.log(`\n${"━".repeat(70)}`);
   console.log(`  ${pass} pass · ${fail} fail · ${pass + fail} total`);
@@ -616,4 +649,4 @@ function main() {
   console.log(`\n✅ All opportunities-discovery tests passed.`);
 }
 
-main();
+void main();

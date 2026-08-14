@@ -116,7 +116,7 @@ export type DiscoveryStats = {
   multiBucketEvents: Array<{ sharpEventId: string; suffixes: string[] }>;
 };
 
-const OPPORTUNITIES_PATH = "/opportunities/ev";
+const OPPORTUNITIES_PATHS = ["/opportunities/ev", "/opportunities/low_hold"] as const;
 
 /**
  * Strip the `_b\d+` market-bucket suffix that `/opportunities/*`
@@ -407,10 +407,11 @@ export function buildDiscoveryFromOpportunitiesRows(
 }
 
 /**
- * Fetch `/opportunities/ev?sport=mlb` live and run the canonical
- * discovery filter. The caller passes the configured `SharpApiClient`
- * (tests can pass a stub). Returns an empty event list on 404 (treated
- * as "no slate") — same pattern as the other SharpAPI providers.
+ * Fetch both verified current-event feeds and run the canonical discovery
+ * filter over their union. `/opportunities/ev` can omit a game whenever no
+ * current offer qualifies as +EV; `/opportunities/low_hold` still carries
+ * the provider event id for those games. Neither feed is allowed to bypass
+ * the existing league/date/team identity guards.
  */
 export async function discoverEventsFromOpportunities(
   client: SharpApiClient,
@@ -441,17 +442,21 @@ export async function discoverEventsFromOpportunities(
     };
   }
 
-  let rows: RawOpportunityRow[];
-  try {
-    rows = await client.fetchAll<RawOpportunityRow>({
-      path: OPPORTUNITIES_PATH,
-      query: { sport: "mlb" },
-      maxPages: 5,
-    });
-  } catch (e) {
-    if (e instanceof SharpApiNotFoundError) rows = [];
-    else throw e;
-  }
+  const fetched = await Promise.all(
+    OPPORTUNITIES_PATHS.map(async (path) => {
+      try {
+        return await client.fetchAll<RawOpportunityRow>({
+          path,
+          query: { sport: "mlb" },
+          maxPages: 5,
+        });
+      } catch (e) {
+        if (e instanceof SharpApiNotFoundError) return [];
+        throw e;
+      }
+    }),
+  );
+  const rows = fetched.flat();
 
   const { events, stats } = buildDiscoveryFromOpportunitiesRows(rows, date);
   return { events, stats, rows };
