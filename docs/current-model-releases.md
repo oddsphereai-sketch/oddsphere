@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-08-14
+Last reviewed: 2026-08-15
 
 ## MLB champion
 
@@ -267,13 +267,29 @@ The paired live-slate replay is recorded in
 - Distribution: `wnba_market_heads_value_calibrated_2026_08_02_v3`
 - Calibration schema: `wnba_core_calibration_v1`
 - Grade policy: `wnba_grade_policy_v6_authoritative_reader_grade_2026_08_13`
-- Prediction-record contract: `wnba_prediction_record_contract_v2_published_probability_2026_08_10`
+- Prediction-record contract: `wnba_prediction_record_contract_v3_paired_market_snapshot_2026_08_15`
 - Machine registry: `lib/automodel/wnbaChampionRuntime.ts`
 - Authoritative model writer: `lib/services/wnba/runWnbaModel.ts`
 - Tracking writer: `lib/services/wnba/buildWnbaPredictionRecords.ts`
 - Member reader: `lib/services/wnba/buildWnbaDailyEdgeAdapted.ts`
 - Scheduled owner: `/api/cron/wnba-daily-refresh` under the WNBA-scoped shared
   `prediction_pipeline` lease
+
+The August 15 v3 prediction-record contract adds a production-neutral paired
+market snapshot to every newly written WNBA moneyline, total, and spread
+record. It freezes the selected and opposite sides, their matched lines and
+prices, and the selected-side no-vig probability. The selected record price is
+preserved as written; the opposite price is the best currently offered price at
+the exact opposite line, while no-vig probability is aggregated only from
+same-sportsbook, exact-line pairs and records its contributing book count. It
+never uses the writer's nearest-line or history fallback for paired evidence.
+This changes no model, projection, probability, side, grade, actionability,
+stake, writer, cron, or reader. It
+closes the historical evidence gap that prevented honest opposite-side and
+price-adjusted market-diagnosis validation for totals and spreads. Locked v2
+records remain unchanged; missing historical paired prices are reported as
+missing rather than reconstructed from post-lock state. Rollback is the v2
+contract identifier and omission of `paired_market_snapshot`.
 
 WNBA moneyline selection and its established public-support grade behavior are preserved.
 Public support cannot promote total or spread Watchlists. Public resistance remains active in all

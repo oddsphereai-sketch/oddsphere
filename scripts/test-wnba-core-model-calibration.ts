@@ -450,7 +450,7 @@ check(
 );
 check(
   "WNBA prediction-record probability contract has a new immutable identifier",
-  WNBA_PREDICTION_RECORD_CONTRACT_VERSION === "wnba_prediction_record_contract_v2_published_probability_2026_08_10",
+  WNBA_PREDICTION_RECORD_CONTRACT_VERSION === "wnba_prediction_record_contract_v3_paired_market_snapshot_2026_08_15",
 );
 check(
   "WNBA record writer accepts only the exact current source release",

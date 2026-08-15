@@ -38,7 +38,108 @@ const toDecimal = (o: number | null) => (o == null ? null : o > 0 ? o / 100 + 1 
 const HISTORY_PAGE_SIZE = 1000;
 const LOCK_WINDOW_MS = 60 * 60 * 1000;
 export const WNBA_PREDICTION_RECORD_CONTRACT_VERSION =
-  "wnba_prediction_record_contract_v2_published_probability_2026_08_10";
+  "wnba_prediction_record_contract_v3_paired_market_snapshot_2026_08_15";
+
+export type WnbaPairedMarketSnapshot = {
+  contract_version: "wnba_paired_market_snapshot_v2";
+  market: "moneyline" | "total" | "spread";
+  selected_side: "home" | "away" | "over" | "under";
+  selected_line: number | null;
+  selected_odds_american: number | null;
+  opposite_side: "home" | "away" | "over" | "under";
+  opposite_line: number | null;
+  opposite_odds_american: number | null;
+  selected_no_vig_probability: number | null;
+  paired_book_count: number;
+  source: "current_exact_line_same_book_pairs";
+};
+
+function impliedProbability(odds: number | null): number | null {
+  if (odds === null || odds === 0) return null;
+  return odds > 0 ? 100 / (odds + 100) : Math.abs(odds) / (Math.abs(odds) + 100);
+}
+
+export function buildWnbaPairedMarketSnapshot(input: {
+  market: WnbaPairedMarketSnapshot["market"];
+  selectedSide: WnbaPairedMarketSnapshot["selected_side"];
+  selectedLine: number | null;
+  selectedOddsAmerican: number | null;
+  oppositeOddsAmerican: number | null;
+  selectedNoVigProbability: number | null;
+  pairedBookCount: number;
+}): WnbaPairedMarketSnapshot {
+  const oppositeSide = input.selectedSide === "home" ? "away"
+    : input.selectedSide === "away" ? "home"
+      : input.selectedSide === "over" ? "under" : "over";
+  const oppositeLine = input.market === "spread" && input.selectedLine !== null
+    ? -input.selectedLine
+    : input.selectedLine;
+  return {
+    contract_version: "wnba_paired_market_snapshot_v2",
+    market: input.market,
+    selected_side: input.selectedSide,
+    selected_line: input.selectedLine,
+    selected_odds_american: input.selectedOddsAmerican,
+    opposite_side: oppositeSide,
+    opposite_line: oppositeLine,
+    opposite_odds_american: input.oppositeOddsAmerican,
+    selected_no_vig_probability: input.selectedNoVigProbability,
+    paired_book_count: input.pairedBookCount,
+    source: "current_exact_line_same_book_pairs",
+  };
+}
+
+export function resolveWnbaExactPairedMarketEvidence(input: {
+  rows: Record<string, unknown>[];
+  market: WnbaPairedMarketSnapshot["market"];
+  selectedSide: WnbaPairedMarketSnapshot["selected_side"];
+  selectedLine: number | null;
+}): {
+  oppositeOddsAmerican: number | null;
+  selectedNoVigProbability: number | null;
+  pairedBookCount: number;
+} {
+  const oppositeSide = input.selectedSide === "home" ? "away"
+    : input.selectedSide === "away" ? "home"
+      : input.selectedSide === "over" ? "under" : "over";
+  const oppositeLine = input.market === "spread" && input.selectedLine !== null
+    ? -input.selectedLine
+    : input.selectedLine;
+  const exactRows = (side: string, line: number | null) => input.rows.filter((row) => {
+    if (row.market_type !== input.market || row.side !== side || typeof row.odds_american !== "number") return false;
+    return line === null ? row.line_value == null : Number(row.line_value) === line;
+  });
+  const selectedRows = exactRows(input.selectedSide, input.selectedLine);
+  const oppositeRows = exactRows(oppositeSide, oppositeLine);
+  const pricesByBook = (rows: Record<string, unknown>[]) => {
+    const grouped = new Map<string, number[]>();
+    for (const row of rows) {
+      if (typeof row.sportsbook !== "string" || !row.sportsbook) continue;
+      const prices = grouped.get(row.sportsbook) ?? [];
+      prices.push(row.odds_american as number);
+      grouped.set(row.sportsbook, prices);
+    }
+    return grouped;
+  };
+  const selectedByBook = pricesByBook(selectedRows);
+  const oppositeByBook = pricesByBook(oppositeRows);
+  const pairedNoVigProbabilities: number[] = [];
+  for (const [sportsbook, selectedPrices] of selectedByBook) {
+    const oppositePrices = oppositeByBook.get(sportsbook);
+    if (!oppositePrices) continue;
+    const selectedRaw = impliedProbability(median(selectedPrices));
+    const oppositeRaw = impliedProbability(median(oppositePrices));
+    if (selectedRaw === null || oppositeRaw === null || selectedRaw + oppositeRaw <= 0) continue;
+    pairedNoVigProbabilities.push(selectedRaw / (selectedRaw + oppositeRaw));
+  }
+  return {
+    oppositeOddsAmerican: oppositeRows.length
+      ? Math.max(...oppositeRows.map((row) => row.odds_american as number))
+      : null,
+    selectedNoVigProbability: median(pairedNoVigProbabilities),
+    pairedBookCount: pairedNoVigProbabilities.length,
+  };
+}
 
 export function resolveWnbaPickedMoneylineProbabilities(input: {
   pickedHome: boolean;
@@ -113,7 +214,7 @@ export async function buildWnbaPredictionRecords(opts: {
   const ids = allGames.map((g) => g.id as number);
   const { data: gps } = ids.length ? await supabase.from("game_predictions").select("id, game_id, locked_at, sport_specific").in("game_id", ids) : { data: [] as Record<string, unknown>[] };
   const gpByGame = new Map((gps ?? []).map((r) => [r.game_id as number, r]));
-  const { data: lineRows } = ids.length ? await supabase.from("lines").select("game_id, market_type, side, line_value, odds_american").in("game_id", ids).is("player_id", null) : { data: [] as Record<string, unknown>[] };
+  const { data: lineRows } = ids.length ? await supabase.from("lines").select("game_id, market_type, side, line_value, odds_american, sportsbook").in("game_id", ids).is("player_id", null) : { data: [] as Record<string, unknown>[] };
   const historyRows: Record<string, unknown>[] = [];
   if (ids.length) {
     for (let from = 0; ; from += HISTORY_PAGE_SIZE) {
@@ -185,6 +286,30 @@ export async function buildWnbaPredictionRecords(opts: {
     return median(historyMatches
       .filter((r) => new Date(r.recorded_at as string).getTime() === latestAt)
       .map((r) => r.odds_american as number));
+  };
+
+  const pairedSnapshotAt = (
+    gid: number,
+    market: WnbaPairedMarketSnapshot["market"],
+    selectedSide: WnbaPairedMarketSnapshot["selected_side"],
+    selectedLine: number | null,
+    selectedRecordOdds: number | null,
+  ) => {
+    const evidence = resolveWnbaExactPairedMarketEvidence({
+      rows: linesByGame.get(gid) ?? [],
+      market,
+      selectedSide,
+      selectedLine,
+    });
+    return buildWnbaPairedMarketSnapshot({
+      market,
+      selectedSide,
+      selectedLine,
+      selectedOddsAmerican: selectedRecordOdds,
+      oppositeOddsAmerican: evidence.oppositeOddsAmerican,
+      selectedNoVigProbability: evidence.selectedNoVigProbability,
+      pairedBookCount: evidence.pairedBookCount,
+    });
   };
 
   for (const g of allGames) {
@@ -323,7 +448,7 @@ export async function buildWnbaPredictionRecords(opts: {
         public_market_context: ss.public_market_context ?? null,
         data_quality: ss.data_quality, cold_start: ss.cold_start,
         wnba_core_model_calibration: wnbaCalibrationAudit,
-      },
+      } as Record<string, unknown>,
     });
 
     // ── ML record ──
@@ -335,6 +460,7 @@ export async function buildWnbaPredictionRecords(opts: {
     const mlModelProb = mlProbabilities.publishedPickedProbability;
     const mlMktProb = (trusted.home_win_prob ?? market.home_win_prob) != null ? (mlSideHome ? (trusted.home_win_prob ?? market.home_win_prob)! : 1 - (trusted.home_win_prob ?? market.home_win_prob)!) : null;
     const mlRecord = baseRec("moneyline", mlSideHome ? "home" : "away", ab(mlSideHome ? (g.home_team_id as number) : (g.away_team_id as number)), null, mlPrice, ml.confidence, ml.grade, mlModelProb, mlMktProb);
+    const mlSelectedSide = mlSideHome ? "home" as const : "away" as const;
     mlRecord.snapshot_json = {
       ...mlRecord.snapshot_json,
       moneyline_probability_contract: {
@@ -342,6 +468,7 @@ export async function buildWnbaPredictionRecords(opts: {
         independent_picked_probability: mlProbabilities.independentPickedProbability,
         final_picked_probability: mlProbabilities.finalPickedProbability,
       },
+      paired_market_snapshot: pairedSnapshotAt(g.id as number, "moneyline", mlSelectedSide, null, mlPrice),
     };
     result.records.push(mlRecord);
     result.counts.moneyline++;
@@ -351,7 +478,12 @@ export async function buildWnbaPredictionRecords(opts: {
       const ouSide = tot.side.startsWith("Over") ? "over" : "under";
       const ouPrice = priceAt(g.id as number, "total", ouSide, tot.line);
       if (ouPrice == null) result.missingLinePrice.push(`${matchup} (O/U price@${tot.line})`);
-      result.records.push(baseRec("total", ouSide, tot.side, tot.line, ouPrice, tot.confidence, tot.grade, tot.confidence != null ? tot.confidence / 100 : null, null));
+      const totalRecord = baseRec("total", ouSide, tot.side, tot.line, ouPrice, tot.confidence, tot.grade, tot.confidence != null ? tot.confidence / 100 : null, null);
+      totalRecord.snapshot_json = {
+        ...totalRecord.snapshot_json,
+        paired_market_snapshot: pairedSnapshotAt(g.id as number, "total", ouSide, tot.line, ouPrice),
+      };
+      result.records.push(totalRecord);
       result.counts.total++;
     }
 
@@ -365,7 +497,12 @@ export async function buildWnbaPredictionRecords(opts: {
       const sprPrice = sprLine === null || sprSide === null ? null : priceAt(g.id as number, "spread", sprSide, sprLine);
       if (sprPrice == null) result.missingLinePrice.push(`${matchup} (Spread price@${sprLine})`);
       if (sprSide !== null && sprLine !== null) {
-        result.records.push(baseRec("spread", sprSide, spr.side, sprLine, sprPrice, spr.confidence, spr.grade, spr.confidence != null ? spr.confidence / 100 : null, null));
+        const spreadRecord = baseRec("spread", sprSide, spr.side, sprLine, sprPrice, spr.confidence, spr.grade, spr.confidence != null ? spr.confidence / 100 : null, null);
+        spreadRecord.snapshot_json = {
+          ...spreadRecord.snapshot_json,
+          paired_market_snapshot: pairedSnapshotAt(g.id as number, "spread", sprSide, sprLine, sprPrice),
+        };
+        result.records.push(spreadRecord);
         result.counts.spread++;
       }
     }
