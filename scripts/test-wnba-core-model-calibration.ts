@@ -409,6 +409,15 @@ check(
     : computeSpreadEnabled.spread.side === "PHX +6.5",
 );
 check("compute total recommendation flag off leaves total side unchanged", computeSpreadEnabled.total.side === computeDisabled.total.side);
+check("WNBA total reflected-projection champion is applied", computeSpreadEnabled.total_champion_policy.applied === true);
+check("WNBA total reflected side remains tracking-only", computeSpreadEnabled.total.grade === "Watchlist");
+check(
+  "WNBA displayed total equals the coherent reflected projection",
+  Math.abs(
+    (computeSpreadEnabled.projected_score.home + computeSpreadEnabled.projected_score.away)
+      - computeSpreadEnabled.total_champion_policy.champion_projected_total
+  ) <= 0.2,
+);
 check("compute moneyline remains unchanged by spread calibration", computeSpreadEnabled.moneyline.side === computeDisabled.moneyline.side);
 check("compute total grade calibration avoids unvalidated total Best Angle", computeSpreadEnabled.total.grade !== "Best Angle");
 check("compute records spread recommendation-used audit", computeSpreadEnabled.wnba_core_model_calibration.recommendation_uses_calibrated_spread === true);
@@ -456,8 +465,8 @@ check(
 check(
   "WNBA record writer accepts only the exact current source release",
   wnbaPredictionReleaseMismatches({
-    model_version: "wnba_v1_2_market_champion",
-    distribution_version: "wnba_market_heads_value_calibrated_2026_08_15_v4",
+    model_version: "wnba_v1_3_total_projection_champion",
+    distribution_version: "wnba_market_heads_value_calibrated_2026_08_15_v5",
     grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
   }).length === 0,
 );
@@ -485,7 +494,7 @@ check(
   "WNBA record writer refuses stale or incomplete source releases",
   wnbaPredictionReleaseMismatches({
     model_version: "wnba_v1",
-    distribution_version: "wnba_market_heads_value_calibrated_2026_08_15_v4",
+    distribution_version: "wnba_market_heads_value_calibrated_2026_08_15_v5",
   }).length === 2,
 );
 

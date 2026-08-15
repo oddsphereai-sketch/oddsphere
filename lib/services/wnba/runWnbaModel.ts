@@ -212,6 +212,7 @@ export async function runWnbaModel(opts: {
         grade_policy_version: p.grade_policy_version,
         spread_grade_policy: p.spread_grade_policy,
         moneyline_champion_policy: p.moneyline_champion_policy,
+        total_champion_policy: p.total_champion_policy,
         model: p.model, market: p.market, trusted: p.trusted, sharp: p.sharp,
         consensus_source: p.consensus_source, dynamic_market_weight: p.dynamic_market_weight,
         cold_start: p.cold_start, data_quality: p.data_quality,

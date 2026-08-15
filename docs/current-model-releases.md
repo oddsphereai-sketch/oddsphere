@@ -321,10 +321,10 @@ The paired live-slate replay is recorded in
 
 ## WNBA champion
 
-- Model: `wnba_v1_2_market_champion`
-- Distribution: `wnba_market_heads_value_calibrated_2026_08_15_v4`
-- Calibration schema: `wnba_core_calibration_v2`
-- Grade policy: `wnba_grade_policy_v7_market_champion_actions_2026_08_15`
+- Model: `wnba_v1_3_total_projection_champion`
+- Distribution: `wnba_market_heads_value_calibrated_2026_08_15_v5`
+- Calibration schema: `wnba_core_calibration_v3`
+- Grade policy: `wnba_grade_policy_v8_total_projection_champion_2026_08_15`
 - Prediction-record contract: `wnba_prediction_record_contract_v3_paired_market_snapshot_2026_08_15`
 - Machine registry: `lib/automodel/wnbaChampionRuntime.ts`
 - Authoritative model writer: `lib/services/wnba/runWnbaModel.ts`
@@ -332,6 +332,22 @@ The paired live-slate replay is recorded in
 - Member reader: `lib/services/wnba/buildWnbaDailyEdgeAdapted.ts`
 - Scheduled owner: `/api/cron/wnba-daily-refresh` under the WNBA-scoped shared
   `prediction_pipeline` lease
+
+The August 15 v1.3 completion release changes only the WNBA Total upstream
+projection and selected-side head. It reflects the raw projected total around
+the locked market line and publishes the chronologically calibrated opposite
+side only when an exact current price exists. Validation accuracy improved
+40% to 60% and latest improved 45% to 60%. Validation/latest projection RMSE
+improved 16.8978/11.8714 to 16.1237/11.2214; latest MAE also improved, while
+validation MAE worsened and remains disclosed. No exact-price historical
+action policy qualified, so changed Totals remain Watchlist/`no_bet`.
+
+WNBA Moneyline and Spread retain their v1.2 upstream heads and released action
+policies because no safer new upstream challenger qualified. MLB First Inning
+also remains on r48: market consensus improved raw accuracy but would reverse
+66 sides without a qualified balanced action replacement. Complete evidence
+and rollback are in
+`docs/model-audits/2026-08-15-six-market-completion-wnba-v1-3.md`.
 
 The August 15 v7 six-market champion release retains the WNBA Moneyline
 probability and every existing action, then adds any otherwise eligible side

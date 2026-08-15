@@ -446,6 +446,7 @@ export async function buildWnbaPredictionRecords(opts: {
         grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
         spread_grade_policy: ss.spread_grade_policy ?? null,
         moneyline_champion_policy: ss.moneyline_champion_policy ?? null,
+        total_champion_policy: ss.total_champion_policy ?? null,
         prediction_record_contract_version: WNBA_PREDICTION_RECORD_CONTRACT_VERSION,
         moneyline_probability_contract: null as null | {
           published_picked_probability: number;
@@ -503,8 +504,13 @@ export async function buildWnbaPredictionRecords(opts: {
       const ouPrice = priceAt(g.id as number, "total", ouSide, tot.line);
       if (ouPrice == null) result.missingLinePrice.push(`${matchup} (O/U price@${tot.line})`);
       const totalRecord = baseRec("total", ouSide, tot.side, tot.line, ouPrice, tot.confidence, tot.grade, tot.confidence != null ? tot.confidence / 100 : null, null);
+      const totalChampionPolicy = ss.total_champion_policy && typeof ss.total_champion_policy === "object"
+        ? ss.total_champion_policy as Record<string, unknown>
+        : null;
+      if (totalChampionPolicy?.applied === true) totalRecord.no_bet = true;
       totalRecord.snapshot_json = {
         ...totalRecord.snapshot_json,
+        total_champion_policy: totalChampionPolicy,
         paired_market_snapshot: pairedSnapshotAt(g.id as number, "total", ouSide, tot.line, ouPrice),
       };
       result.records.push(totalRecord);

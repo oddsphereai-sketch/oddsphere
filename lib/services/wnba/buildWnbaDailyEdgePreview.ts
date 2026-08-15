@@ -31,6 +31,7 @@ import {
   IMMEDIATE_MARKET_CHAMPION_POLICY_VERSION,
   resolveWnbaMoneylineChampionAction,
   resolveWnbaSpreadChampionAction,
+  resolveWnbaTotalReflectedProjectionChampion,
 } from "@/lib/automodel/immediateMarketChampion";
 
 const BDL = "https://api.balldontlie.io/wnba/v1";
@@ -440,7 +441,7 @@ export function computeWnbaPrediction(
     : calibratedMarginForSpreadRecommendation;
   const marginForSpreadRecommendation = canonicalHomeMargin;
   const marginForDisplayedScore = canonicalHomeMargin;
-  const totalForDisplayedScore =
+  let totalForDisplayedScore =
     calibrationAudit.recommendation_uses_calibrated_total &&
     finite(calibrationAudit.recommendation_projected_total_used)
       ? calibrationAudit.recommendation_projected_total_used
@@ -566,7 +567,24 @@ export function computeWnbaPrediction(
       ? "Lean"
       : "Watchlist";
 
-  const pOver = mktTotal != null ? 1 - Phi((mktTotal - totalForRecommendation) / sigT) : null;
+  const totalOverOdds = mktTotal === null ? null : median(r
+    .filter((book) => book.mkt === "total_points" && book.selType === "over" && book.line === mktTotal)
+    .map((book) => book.odds)
+    .filter(finite));
+  const totalUnderOdds = mktTotal === null ? null : median(r
+    .filter((book) => book.mkt === "total_points" && book.selType === "under" && book.line === mktTotal)
+    .map((book) => book.odds)
+    .filter(finite));
+  const totalRawChampion = resolveWnbaTotalReflectedProjectionChampion({
+    rawProjectedTotal: projTotal,
+    marketTotal: mktTotal,
+    overOdds: totalOverOdds,
+    underOdds: totalUnderOdds,
+  });
+  if (totalRawChampion.applied) totalForDisplayedScore = totalRawChampion.projectedTotal;
+  const pOver = totalRawChampion.applied
+    ? totalRawChampion.overProbability
+    : mktTotal != null ? 1 - Phi((mktTotal - totalForRecommendation) / sigT) : null;
   const toEdge = mktTotal != null ? totalForRecommendation - mktTotal : null;
   const toSide = mktTotal != null ? (pOver! >= 0.5 ? `Over ${mktTotal}` : `Under ${mktTotal}`) : null;
   const toConf = pOver != null ? Math.round(Math.max(pOver, 1 - pOver) * 100) : null;
@@ -595,7 +613,9 @@ export function computeWnbaPrediction(
     minGradeForBoost: "Best Angle",
     maxBoostGrade: "Best Angle",
   }) : null;
-  const toGrade = totalPublicContext?.gradeAfter ?? toGradeBase;
+  const toGrade = totalRawChampion.applied
+    ? "Watchlist"
+    : totalPublicContext?.gradeAfter ?? toGradeBase;
 
   const projHome = r1((totalForDisplayedScore + marginForDisplayedScore) / 2), projAway = r1((totalForDisplayedScore - marginForDisplayedScore) / 2);
   const outlierTotal = mktTotal != null && toVals.some((v) => Math.abs(v - mktTotal) >= 2);
@@ -679,6 +699,17 @@ export function computeWnbaPrediction(
       rule_id: mlChampionAction.ruleId,
       promoted: mlChampionAction.promoted,
       actionable: mlChampionAction.actionable,
+    },
+    total_champion_policy: {
+      policy_version: IMMEDIATE_MARKET_CHAMPION_POLICY_VERSION,
+      rule_id: totalRawChampion.applied ? totalRawChampion.ruleId : null,
+      applied: totalRawChampion.applied,
+      action: "no_bet",
+      raw_projected_total: r1(projTotal),
+      champion_projected_total: r1(totalForDisplayedScore),
+      selected_probability: totalRawChampion.applied
+        ? r1(totalRawChampion.selectedProbability * 100) / 100
+        : null,
     },
     market: { home_win_prob: mktP != null ? r1(mktP * 100) / 100 : null, spread: mktSpread, total: mktTotal, book_count: mlBooks, dispersion: { spread: spDisp, total: toDisp } },
     consensus_source: (sharpMktP != null ? "sharp" : "all_books") as "sharp" | "all_books",

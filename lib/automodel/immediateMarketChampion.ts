@@ -15,6 +15,8 @@ export const WNBA_MONEYLINE_POSITIVE_EV_ADDITION_RULE_ID =
   "wnba_moneyline_positive_ev_addition_v1_2026_08_15" as const;
 export const WNBA_SPREAD_PRICE_CHAMPION_RULE_ID =
   "wnba_spread_price_champion_v1_2026_08_15" as const;
+export const WNBA_TOTAL_REFLECTED_PROJECTION_CHAMPION_RULE_ID =
+  "wnba_total_market_reflected_projection_v1_2026_08_15" as const;
 
 export const WNBA_SPREAD_POLICY_MIN_EDGE = 0.02;
 
@@ -255,6 +257,47 @@ export function resolveWnbaMoneylineChampionAction(args: {
     actionable: promoted,
     promoted,
     ruleId: promoted ? WNBA_MONEYLINE_POSITIVE_EV_ADDITION_RULE_ID : null,
+  };
+}
+
+export function resolveWnbaTotalReflectedProjectionChampion(args: {
+  rawProjectedTotal: number | null;
+  marketTotal: number | null;
+  overOdds: number | null;
+  underOdds: number | null;
+}):
+  | {
+      applied: true;
+      ruleId: typeof WNBA_TOTAL_REFLECTED_PROJECTION_CHAMPION_RULE_ID;
+      side: "over" | "under";
+      oddsAmerican: number;
+      projectedTotal: number;
+      selectedProbability: number;
+      overProbability: number;
+    }
+  | { applied: false; reason: string } {
+  if (!finite(args.rawProjectedTotal) || !finite(args.marketTotal)) {
+    return { applied: false, reason: "missing_projection_or_market_total" };
+  }
+  const rawEdge = args.rawProjectedTotal - args.marketTotal;
+  if (Math.abs(rawEdge) < 1e-9) return { applied: false, reason: "zero_projection_edge" };
+  const incumbentSide: "over" | "under" = rawEdge > 0 ? "over" : "under";
+  const incumbentProbability = clampProbability(sigmoid(-0.30122681 + 0.0380106 * Math.abs(rawEdge)));
+  if (incumbentProbability >= 0.5) {
+    return { applied: false, reason: "incumbent_projection_side_retained" };
+  }
+  const side = incumbentSide === "over" ? "under" : "over";
+  const oddsAmerican = side === "over" ? args.overOdds : args.underOdds;
+  if (!finite(oddsAmerican)) return { applied: false, reason: "missing_exact_opposite_price" };
+  const selectedProbability = 1 - incumbentProbability;
+  return {
+    applied: true,
+    ruleId: WNBA_TOTAL_REFLECTED_PROJECTION_CHAMPION_RULE_ID,
+    side,
+    oddsAmerican,
+    projectedTotal: 2 * args.marketTotal - args.rawProjectedTotal,
+    selectedProbability,
+    overProbability: side === "over" ? selectedProbability : 1 - selectedProbability,
   };
 }
 

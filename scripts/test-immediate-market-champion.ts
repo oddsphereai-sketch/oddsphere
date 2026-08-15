@@ -10,6 +10,7 @@ import {
   resolveMlbTotalRuntimeResidualChampion,
   resolveWnbaMoneylineChampionAction,
   resolveWnbaSpreadChampionAction,
+  resolveWnbaTotalReflectedProjectionChampion,
   WNBA_MONEYLINE_POSITIVE_EV_ADDITION_RULE_ID,
   WNBA_SPREAD_PRICE_CHAMPION_RULE_ID,
 } from "../lib/automodel/immediateMarketChampion";
@@ -145,6 +146,26 @@ assert.equal(resolveMlbTotalRuntimeResidualChampion({
   overLine: 8.5,
   underLine: 8.5,
 }).applied, false, "the totals challenger changes only strong sub-40% disagreements");
+
+const wnbaTotalChampion = resolveWnbaTotalReflectedProjectionChampion({
+  rawProjectedTotal: 172,
+  marketTotal: 176,
+  overOdds: -108,
+  underOdds: -112,
+});
+assert.equal(wnbaTotalChampion.applied, true);
+if (wnbaTotalChampion.applied) {
+  assert.equal(wnbaTotalChampion.side, "over");
+  assert.equal(wnbaTotalChampion.oddsAmerican, -108);
+  assert.equal(wnbaTotalChampion.projectedTotal, 180);
+  assert.ok(wnbaTotalChampion.selectedProbability > 0.5);
+}
+assert.equal(resolveWnbaTotalReflectedProjectionChampion({
+  rawProjectedTotal: 172,
+  marketTotal: 176,
+  overOdds: null,
+  underOdds: -112,
+}).applied, false, "WNBA total side changes require the exact opposite-side price");
 
 const calibratedTotalUnder = calibrateMlbTotalPickedProbability({
   rawPickedProbability: 0.56,
