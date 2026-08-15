@@ -26,6 +26,12 @@ import {
   EXPECTED_WNBA_CALIBRATION_FLAGS,
   EXPECTED_WNBA_GRADE_POLICY_VERSION,
 } from "@/lib/automodel/wnbaChampionRuntime";
+import {
+  calibrateWnbaSpreadPickedProbability,
+  IMMEDIATE_MARKET_CHAMPION_POLICY_VERSION,
+  resolveWnbaMoneylineChampionAction,
+  resolveWnbaSpreadChampionAction,
+} from "@/lib/automodel/immediateMarketChampion";
 
 const BDL = "https://api.balldontlie.io/wnba/v1";
 const SHARP = "https://api.sharpapi.io/api/v1";
@@ -469,14 +475,23 @@ export function computeWnbaPrediction(
     picked: publicSignals.moneyline?.[mlSideKey] ?? null,
     opposite: publicSignals.moneyline?.[mlSideKey === "home" ? "away" : "home"] ?? null,
   });
-  const mlGrade = mlPublicContext.gradeAfter;
+  const mlChampionAction = resolveWnbaMoneylineChampionAction({
+    currentActionable:
+      mlPublicContext.gradeAfter === "Best Angle"
+      || mlPublicContext.gradeAfter === "Lean",
+    modelProbability: finalPickedProbability,
+    oddsAmerican: mlPrice,
+  });
+  const mlGrade: Grade = mlChampionAction.promoted
+    ? "Lean"
+    : mlPublicContext.gradeAfter;
 
   const pCoverHome = mktSpread != null ? 1 - Phi((-mktSpread - marginForSpreadRecommendation) / sigM) : null;
   const spEdge = mktSpread != null ? marginForSpreadRecommendation - -mktSpread : null;
   // Use canonical abbreviations (POR/GS/TOR), never BDL mascot names ("Fire").
   const spHomeAbbr = wnbaAbbr(g.h) ?? hN, spAwayAbbr = wnbaAbbr(g.a) ?? aN;
   const spSide = mktSpread != null ? (pCoverHome! >= 0.5 ? `${spHomeAbbr} ${mktSpread > 0 ? "+" : ""}${mktSpread}` : `${spAwayAbbr} ${mktSpread > 0 ? "" : "+"}${-mktSpread}`) : null;
-  const spConf = pCoverHome != null ? Math.round(Math.max(pCoverHome, 1 - pCoverHome) * 100) : null;
+  let spConf = pCoverHome != null ? Math.round(Math.max(pCoverHome, 1 - pCoverHome) * 100) : null;
   const rawSpEdge = mktSpread != null ? projMargin - -mktSpread : null;
   const spGradeEdge = calibrationAudit.grade_calibration_enabled ? spEdge : rawSpEdge;
   let spGradeBase = mktSpread != null ? gradeMarket(Math.abs(spGradeEdge!), spVals.length, spDisp, sharpSpread != null && Math.sign(sharpSpread - -marginForSpreadRecommendation) === Math.sign(spEdge!)) : null;
@@ -503,6 +518,13 @@ export function computeWnbaPrediction(
           .filter(finite),
       )
     : null;
+  const spRawPickedProbability = pCoverHome === null ? null : Math.max(pCoverHome, 1 - pCoverHome);
+  const spChampionProbability = calibrateWnbaSpreadPickedProbability({
+    rawPickedProbability: spRawPickedProbability,
+    oddsAmerican: spPickedOdds,
+    selectedSide: spSideKey,
+  });
+  if (spChampionProbability !== null) spConf = Math.round(spChampionProbability * 100);
   const spPublicContext = spGradeBase !== null && spSideKey !== null ? applyPublicMarketContext({
     grade: spGradeBase,
     picked: publicSignals.spread?.[spSideKey] ?? null,
@@ -534,7 +556,15 @@ export function computeWnbaPrediction(
     pickedOdds: spPickedOdds,
     publicConflict: spPublicContext?.conflict ?? "none",
   });
-  const spGrade = spProjectionRestLean.grade;
+  const spChampionAction = resolveWnbaSpreadChampionAction({
+    calibratedProbability: spChampionProbability,
+    oddsAmerican: spPickedOdds,
+  });
+  const spGrade: Grade | null = spProjectionRestLean.grade === null
+    ? null
+    : spChampionAction.actionable
+      ? "Lean"
+      : "Watchlist";
 
   const pOver = mktTotal != null ? 1 - Phi((mktTotal - totalForRecommendation) / sigT) : null;
   const toEdge = mktTotal != null ? totalForRecommendation - mktTotal : null;
@@ -618,6 +648,10 @@ export function computeWnbaPrediction(
           mlBreakEvenProbability === null ? null : r1(mlBreakEvenProbability * 100) / 100,
         moneyline_expected_return_pct:
           mlExpectedReturn === null ? null : r1(mlExpectedReturn * 100),
+        spread_raw_picked_probability:
+          spRawPickedProbability === null ? null : r1(spRawPickedProbability * 100) / 100,
+        spread_champion_picked_probability:
+          spChampionProbability === null ? null : r1(spChampionProbability * 100) / 100,
       },
     },
     wnba_core_model_calibration: calibrationAudit,
@@ -635,6 +669,16 @@ export function computeWnbaPrediction(
       selected_projection_gap: spSelectedProjectionGap,
       rest_difference: Number.isFinite(restH) && Number.isFinite(restA) ? restH - restA : null,
       projection_rest_minimum_books: WNBA_SPREAD_PROJECTION_REST_MIN_BOOKS,
+      champion_policy_version: IMMEDIATE_MARKET_CHAMPION_POLICY_VERSION,
+      champion_action_rule_id: spChampionAction.ruleId,
+      champion_actionable: spChampionAction.actionable,
+      champion_probability: spChampionProbability,
+    },
+    moneyline_champion_policy: {
+      policy_version: IMMEDIATE_MARKET_CHAMPION_POLICY_VERSION,
+      rule_id: mlChampionAction.ruleId,
+      promoted: mlChampionAction.promoted,
+      actionable: mlChampionAction.actionable,
     },
     market: { home_win_prob: mktP != null ? r1(mktP * 100) / 100 : null, spread: mktSpread, total: mktTotal, book_count: mlBooks, dispersion: { spread: spDisp, total: toDisp } },
     consensus_source: (sharpMktP != null ? "sharp" : "all_books") as "sharp" | "all_books",

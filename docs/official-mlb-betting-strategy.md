@@ -1,8 +1,8 @@
 # OddSphere MLB betting strategy
 
-Strategy release: `oddsphere_mlb_betting_strategy_2026_08_14_r7`
+Strategy release: `oddsphere_mlb_betting_strategy_2026_08_15_r8`
 
-Daily Edge decision release: `mlb_daily_edge_decision_2026_08_14_r46`
+Daily Edge decision release: `mlb_daily_edge_decision_2026_08_15_r47`
 
 Player Props release: `mlb_props_2026_08_14_r35`
 
@@ -23,6 +23,7 @@ of these rules.
 | MLB First Inning | Lean — YRFI | **0.50u / $12.50** |
 | MLB First Inning | Lean — NRFI | **0.25u / $6.25** |
 | MLB Moneyline | Genuine final-side inversion Lean | **0.25u / $6.25** |
+| MLB Moneyline | r47 positive-EV favorite Lean | **0.25u / $6.25** |
 | MLB Total | Best Angle | **0.50u / $12.50** |
 | MLB Total | Lean carrying the released validated-Lean rule | **0.25u / $6.25** |
 | MLB Player Props — batter home runs | Qualified portfolio Lean, with the released slate/game diversification | **0.25u / $6.25 each** |
@@ -46,10 +47,12 @@ Pitcher-outs `r7` improves the site's probability and projection layer but
 does not add pitcher outs to this official wagering card. Historical action
 returns remain too uncertain to make that separate strategy claim.
 
-An ordinary Moneyline Best Angle is not yet in the official card. The exact r2
-release has no settled sample, while the broader historical label was
-unprofitable. A genuine inversion is different: it means the inversion
-survived every downstream decision layer and changed the final published side.
+An ordinary Moneyline Best Angle is not in the official card. The r47 addition
+is narrower: it retains every current action and promotes an otherwise eligible
+favorite only when the model probability meets the actual offered-price
+break-even probability. It has no artificial `-120` or `-200` ceiling; a more
+expensive favorite must earn its higher break-even requirement. A genuine
+inversion remains separate and must survive every downstream decision layer.
 
 ## Daily procedure
 
@@ -138,7 +141,12 @@ slate should set a smaller operating unit before the slate begins.
   start, but the exact r2 release has no settled bets. That is not enough to
   overrule the larger locked-price record.
 - Eighteen genuine historical final-side inversions were 11–7,
-  **+1.903u and +10.6% ROI**. Only that narrow final-side rule qualifies.
+  **+1.903u and +10.6% ROI**. Among flip candidates, only that narrow
+  final-side rule qualifies.
+- The r47 additive favorite cohort was 10–5 (+3.992u) in validation and 5–2
+  (+2.582u) in the latest partition. It remained improved after removing the
+  best date in both partitions and added 15 and 7 actions respectively without
+  demoting the existing board.
 
 ### Home runs
 
@@ -179,7 +187,7 @@ slate should set a smaller operating unit before the slate begins.
 | Market or decision | Reason |
 |---|---|
 | First-inning Best Angle | Negative in the available locked sample; Leans were the demonstrated signal |
-| Ordinary Moneyline Best Angle or Lean | Larger locked-price history is negative or near flat; exact r2 is immature |
+| Ordinary Moneyline Best Angle or Lean outside r47/inversion rules | The generic labels did not qualify; only the released market-specific sleeves are actionable |
 | Generic Total Lean | –13.9% over 144 bets |
 | Any corrected/flip Total | Correction families were unstable; r2 stands them down |
 | Player Props Watchlist, No Play, Pending Data, or Research | Not a released actionable grade |

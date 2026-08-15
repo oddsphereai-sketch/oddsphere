@@ -10,13 +10,34 @@ Last reviewed: 2026-08-15
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
-- Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_14_r46`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v45_2026_08_14`
-- Grade policy: `mlb_public_grade_policy_v36_first_inning_board_endpoint_coherence_2026_08_14`
+- Public calibration: `mlb_public_calibration_v20_total_price_stack_2026_08_15`
+- Decision release: `mlb_daily_edge_decision_2026_08_15_r47`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v46_2026_08_15`
+- Grade policy: `mlb_public_grade_policy_v37_market_champion_actions_2026_08_15`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The August 15 r47 six-market champion release is the first clean-slate
+probability-and-action tournament under the immediate rebuild contract. MLB
+Moneyline keeps its incumbent probability and all existing actions, then adds
+an otherwise eligible favorite when the selected-side probability clears the
+actual offered-price break-even probability. This rule has no `-120` or `-200`
+ceiling: every negative price is evaluated on its own break-even requirement.
+Validation moved from 39 actions and +5.090u to 54 and +9.082u; the latest
+partition moved from 37 and -6.129u to 44 and -3.547u.
+
+MLB Total adopts the selected-side-coherent price calibration recorded in the
+r47 evidence, improving combined Brier from 0.2487 to 0.2481 and log loss from
+0.6905 to 0.6894; the latest partition improved from 0.2544/0.7020 to
+0.2510/0.6951. No Total action replacement passed the final tournament, so the
+existing action rules and board count remain authoritative. First Inning keeps
+its current probability and action system because no side-coherent challenger
+qualified and historical movement/split capture is still absent. No MLB
+opposite-side cohort qualified with an exact locked opposite price. Rollback is
+the r46 decision, v45 rule bundle, v36 grade policy, and v19 calibration.
+Complete evidence is in
+`docs/model-audits/2026-08-15-six-market-champion-rebuild-r47-v7.md`.
 
 Moneyline precedence is immutable unless a later versioned release explicitly replaces it:
 
@@ -263,10 +284,10 @@ The paired live-slate replay is recorded in
 
 ## WNBA champion
 
-- Model: `wnba_v1_1_team_identity`
-- Distribution: `wnba_market_heads_value_calibrated_2026_08_02_v3`
-- Calibration schema: `wnba_core_calibration_v1`
-- Grade policy: `wnba_grade_policy_v6_authoritative_reader_grade_2026_08_13`
+- Model: `wnba_v1_2_market_champion`
+- Distribution: `wnba_market_heads_value_calibrated_2026_08_15_v4`
+- Calibration schema: `wnba_core_calibration_v2`
+- Grade policy: `wnba_grade_policy_v7_market_champion_actions_2026_08_15`
 - Prediction-record contract: `wnba_prediction_record_contract_v3_paired_market_snapshot_2026_08_15`
 - Machine registry: `lib/automodel/wnbaChampionRuntime.ts`
 - Authoritative model writer: `lib/services/wnba/runWnbaModel.ts`
@@ -274,6 +295,31 @@ The paired live-slate replay is recorded in
 - Member reader: `lib/services/wnba/buildWnbaDailyEdgeAdapted.ts`
 - Scheduled owner: `/api/cron/wnba-daily-refresh` under the WNBA-scoped shared
   `prediction_pipeline` lease
+
+The August 15 v7 six-market champion release retains the WNBA Moneyline
+probability and every existing action, then adds any otherwise eligible side
+whose probability clears the exact offered-price break-even probability.
+Validation moved from 9 actions and -3.275u to 12 and -1.716u; the latest
+partition moved from 7 and +2.185u to 11 and +2.671u. There is no fixed favorite
+odds ceiling.
+
+WNBA Spread adopts the side-floored price calibration and replaces the old
+grade selection with an exact-price two-point EV margin. Combined Brier/log
+loss improved from 0.2483/0.6898 to 0.2356/0.6618 and the latest partition from
+0.2473/0.6876 to 0.2329/0.6546. Validation changed from zero actions to eight
+at +3.073u; the latest partition changed from four at -2.130u to eight at
++1.142u, with one demotion and five promotions. The authoritative tracking
+writer recalculates probability and actionability at the exact record price,
+not a preview median.
+
+WNBA Total retains production. Its best side-preserving candidate collapsed to
+a constant 50%, which is a useful diagnosis of the current head but fails the
+non-degenerate champion requirement; the stronger unconstrained candidate
+assigned the displayed side below 50% and cannot authorize an unpriced flip.
+Historical opposite prices are absent, so no WNBA opposite-side action was
+promoted. Rollback is model v1.1, distribution v3, calibration schema v1, and
+grade policy v6. Complete evidence is in
+`docs/model-audits/2026-08-15-six-market-champion-rebuild-r47-v7.md`.
 
 The August 15 v3 prediction-record contract adds a production-neutral paired
 market snapshot to every newly written WNBA moneyline, total, and spread

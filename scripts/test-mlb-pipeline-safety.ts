@@ -66,8 +66,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries August 14 v36 first-inning board endpoint coherence policy",
-  layers.grade_policy === "mlb_public_grade_policy_v36_first_inning_board_endpoint_coherence_2026_08_14",
+  "grade policy carries August 15 v37 market champion policy",
+  layers.grade_policy === "mlb_public_grade_policy_v37_market_champion_actions_2026_08_15",
 );
 check(
   "tracking contract carries the priority-retry minute-lock release",
@@ -79,8 +79,8 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB first-inning board endpoint coherence is versioned as decision release r46",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_14_r46" &&
+  "MLB six-market champion is versioned as decision release r47",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_15_r47" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v3" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
@@ -121,15 +121,15 @@ check("champion runtime accepts resolved defaults", (() => {
 check("champion runtime refuses an explicit old model", (() => {
   try { assertMlbChampionRuntime({ AUTOMODEL_VERSION: "v1" }); return false; } catch { return true; }
 })());
-check("WNBA model family is single-sourced", EXPECTED_WNBA_MODEL_VERSION === "wnba_v1_1_team_identity");
+check("WNBA model family is single-sourced", EXPECTED_WNBA_MODEL_VERSION === "wnba_v1_2_market_champion");
 check(
   "WNBA distribution version is explicit",
-  EXPECTED_WNBA_DISTRIBUTION_VERSION === "wnba_market_heads_value_calibrated_2026_08_02_v3",
+  EXPECTED_WNBA_DISTRIBUTION_VERSION === "wnba_market_heads_value_calibrated_2026_08_15_v4",
 );
 check(
   "WNBA authoritative-reader grade policy is an immutable August 13 release",
   EXPECTED_WNBA_GRADE_POLICY_VERSION ===
-    "wnba_grade_policy_v6_authoritative_reader_grade_2026_08_13",
+    "wnba_grade_policy_v7_market_champion_actions_2026_08_15",
 );
 const wnbaModelSource = readFileSync("lib/services/wnba/buildWnbaDailyEdgePreview.ts", "utf8");
 const wnbaModelWriterSource = readFileSync("lib/services/wnba/runWnbaModel.ts", "utf8");

@@ -54,6 +54,12 @@ import {
   MLB_PUBLIC_CALIBRATION_VERSION,
 } from "../automodel/mlbModelLayerVersions";
 import { didFinalSideChange } from "./finalSideDecision";
+import {
+  calibrateMlbTotalPickedProbability,
+  IMMEDIATE_MARKET_CHAMPION_POLICY_VERSION,
+  MLB_TOTAL_PRICE_CALIBRATION_RULE_ID,
+  resolveMlbMoneylineChampionAction,
+} from "../automodel/immediateMarketChampion";
 
 const SYNTHETIC_PRICE_BOOKS = new Set(["locked_snapshot", "recommendation_snapshot", "splits_consensus"]);
 const BOOK_PRIORITY: readonly string[] = SHARED_BOOK_PRIORITY.filter(
@@ -3084,6 +3090,22 @@ function buildMlRecord(
               : mlPublicPlayGrade !== null && finalMlEdge !== null && finalMlEdge >= 0
                 ? "market_aligned"
                 : null;
+  const mlChampionAction = resolveMlbMoneylineChampionAction({
+    currentActionable: trackedMlBestAngle || trackedMlPublicPlayGrade === "lean",
+    blocked:
+      mlNoBet
+      || mlFlipped
+      || mlPickCalibrated
+      || mlMarketSideCorrected
+      || mlChampionStandDownReason !== null
+      || mlDataStatus === "incomplete_missing_required_data"
+      || mlPublicPlayGrade === "provisional",
+    modelProbability: finalMlModelProb,
+    oddsAmerican: finalMlOdds,
+  });
+  const mlChampionPublicPlayGrade = mlChampionAction.promoted
+    ? "lean"
+    : trackedMlPublicPlayGrade;
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -3117,7 +3139,7 @@ function buildMlRecord(
       ? mlMarketAwareCorrectedGrade?.playGrade ?? "market_aligned"
       : mlFlipped || mlPickCalibrated || mlChampionStandDownReason !== null
         ? null
-        : trackedMlPublicPlayGrade,
+        : mlChampionPublicPlayGrade,
     prediction_type: readStringOrNull(sp.ml_prediction_type),
     // Phase 6B.11 + MLB-P0 — public-money guard PLUS line-movement /
     // large-edge confirmation (see resolveMlbBestAngle). Tracking pending
@@ -3152,14 +3174,14 @@ function buildMlRecord(
         pick_calibration_applied: mlPickCalibrated,
         market_aware_correction_applied: mlMarketSideCorrected,
         board_action:
-          mlTrueInversionActionable || trackedMlBestAngle || trackedMlPublicPlayGrade === "lean"
+          mlTrueInversionActionable || mlChampionAction.actionable
             ? "bet"
             : "no_play",
         actionable_grade: mlTrueInversionActionable
           ? "lean"
-          : trackedMlBestAngle
+          : mlChampionAction.actionable && trackedMlBestAngle
             ? "best_angle"
-            : trackedMlPublicPlayGrade === "lean"
+            : mlChampionAction.actionable && mlChampionPublicPlayGrade === "lean"
               ? "lean"
               : null,
         action_rule_id: mlTrueInversionActionable
@@ -3178,7 +3200,9 @@ function buildMlRecord(
                   ? ML_MARKET_DIVERGENCE_LEAN_RULE_ID
                 : mlModelLeanRetained
                   ? ML_CALIBRATED_MODEL_LEAN_PATH_ID
-                : trackedMlPublicPlayGrade === "lean"
+                : mlChampionAction.promoted
+                  ? mlChampionAction.ruleId
+                : mlChampionPublicPlayGrade === "lean"
                 ? ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID
                 : null,
         grade_source:
@@ -3191,9 +3215,12 @@ function buildMlRecord(
                   mlTightMarketPricePromoted ||
                   mlMidPriceEstablishedPricePromoted ||
                   mlMidPriceNearMarketLean.lean ||
-                  mlMarketDivergenceLean.lean
+                  mlMarketDivergenceLean.lean ||
+                  mlChampionAction.promoted
                 ? "additive_rule"
                 : null,
+        champion_policy_version: IMMEDIATE_MARKET_CHAMPION_POLICY_VERSION,
+        champion_action_promoted: mlChampionAction.promoted,
         final_side: finalMlPick,
         final_side_changed: mlFinalSideChanged,
       },
@@ -3237,7 +3264,7 @@ function buildMlRecord(
       ml_grade_recalibration: {
         rule_id: "ml_grade_recalibration_v3_2026_07_20",
         original_public_play_grade: mlPublicPlayGrade,
-        final_public_play_grade: mlMarketAwareCorrectedGrade?.playGrade ?? trackedMlPublicPlayGrade,
+        final_public_play_grade: mlMarketAwareCorrectedGrade?.playGrade ?? mlChampionPublicPlayGrade,
         final_best_angle: trackedMlBestAngle,
         clean_tight_best_angle: mlCalibratedBestAngle,
         calibrated_model_lean_retained: mlModelLeanRetained,
@@ -3988,6 +4015,19 @@ function buildOuRecord(
     : ouUnvalidatedLeanCap
       ? "market_aligned"
       : finalOuPublicPlayGrade;
+  const ouPreChampionModelProb = finalOuModelProb;
+  const ouChampionModelProb = calibrateMlbTotalPickedProbability({
+    rawPickedProbability: ouPreChampionModelProb,
+    oddsAmerican: finalOuOdds,
+    selectedSide: finalOuPick === "over" || finalOuPick === "under" ? finalOuPick : null,
+  });
+  if (ouChampionModelProb !== null) {
+    finalOuModelProb = ouChampionModelProb;
+    finalOuConfidence = Math.round(ouChampionModelProb * 100);
+    finalOuEdge = finalOuMarketProb === null
+      ? null
+      : roundEdgePp((ouChampionModelProb - finalOuMarketProb) * 100);
+  }
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -4017,8 +4057,6 @@ function buildOuRecord(
     // original side through the normal grade gates above.
     play_grade: ouMissingActionableMarket
       ? null
-      : ouMarketSideCorrected && ouCorrectionAccepted
-      ? ouMarketAwareCorrectedGrade?.playGrade ?? "market_aligned"
       : ouChampionStandDownReason !== null
         ? null
         : trackedOuPublicPlayGrade,
@@ -4081,6 +4119,9 @@ function buildOuRecord(
                   : ouSharpapiSupportLean.lean
                     ? TOTAL_SHARPAPI_SUPPORT_LEAN_RULE_ID
                   : null,
+        champion_policy_version: IMMEDIATE_MARKET_CHAMPION_POLICY_VERSION,
+        champion_probability_rule_id: MLB_TOTAL_PRICE_CALIBRATION_RULE_ID,
+        champion_action_policy: "retain_current_production_action_selection",
         promotion_rule_id: ouPromotedBestAngle
           ? TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID
           : ouMeanSelectorOriginalUnderLean.lean

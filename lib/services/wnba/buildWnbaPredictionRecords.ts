@@ -30,6 +30,12 @@ import {
   EXPECTED_WNBA_MODEL_VERSION,
   wnbaPredictionReleaseMismatches,
 } from "../../automodel/wnbaChampionRuntime";
+import {
+  calibrateWnbaSpreadPickedProbability,
+  IMMEDIATE_MARKET_CHAMPION_POLICY_VERSION,
+  resolveWnbaMoneylineChampionAction,
+  resolveWnbaSpreadChampionAction,
+} from "../../automodel/immediateMarketChampion";
 import { resolveWnbaMoneylineSide } from "./wnbaTeams";
 
 const PLAY_GRADE: Record<string, string> = { "Best Angle": "best_angle", "Lean": "lean", "Watchlist": "watchlist", "Caution": "caution" };
@@ -358,6 +364,7 @@ export async function buildWnbaPredictionRecords(opts: {
       components?: {
         blended_precalibration_margin?: number;
         raw_projected_total?: number;
+        spread_raw_picked_probability?: number;
       };
     };
     const market = ss.market as { home_win_prob: number | null };
@@ -438,6 +445,7 @@ export async function buildWnbaPredictionRecords(opts: {
         distribution_version: EXPECTED_WNBA_DISTRIBUTION_VERSION,
         grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
         spread_grade_policy: ss.spread_grade_policy ?? null,
+        moneyline_champion_policy: ss.moneyline_champion_policy ?? null,
         prediction_record_contract_version: WNBA_PREDICTION_RECORD_CONTRACT_VERSION,
         moneyline_probability_contract: null as null | {
           published_picked_probability: number;
@@ -459,7 +467,16 @@ export async function buildWnbaPredictionRecords(opts: {
     });
     const mlModelProb = mlProbabilities.publishedPickedProbability;
     const mlMktProb = (trusted.home_win_prob ?? market.home_win_prob) != null ? (mlSideHome ? (trusted.home_win_prob ?? market.home_win_prob)! : 1 - (trusted.home_win_prob ?? market.home_win_prob)!) : null;
-    const mlRecord = baseRec("moneyline", mlSideHome ? "home" : "away", ab(mlSideHome ? (g.home_team_id as number) : (g.away_team_id as number)), null, mlPrice, ml.confidence, ml.grade, mlModelProb, mlMktProb);
+    const mlCurrentActionable = ml.grade === "Best Angle" || ml.grade === "Lean";
+    const mlChampionAction = resolveWnbaMoneylineChampionAction({
+      currentActionable: mlCurrentActionable,
+      modelProbability: mlModelProb,
+      oddsAmerican: mlPrice,
+    });
+    const mlChampionGrade = mlChampionAction.actionable
+      ? (mlCurrentActionable ? ml.grade : "Lean")
+      : ml.grade;
+    const mlRecord = baseRec("moneyline", mlSideHome ? "home" : "away", ab(mlSideHome ? (g.home_team_id as number) : (g.away_team_id as number)), null, mlPrice, Math.round(mlModelProb * 100), mlChampionGrade, mlModelProb, mlMktProb);
     const mlSelectedSide = mlSideHome ? "home" as const : "away" as const;
     mlRecord.snapshot_json = {
       ...mlRecord.snapshot_json,
@@ -467,6 +484,13 @@ export async function buildWnbaPredictionRecords(opts: {
         published_picked_probability: mlProbabilities.publishedPickedProbability,
         independent_picked_probability: mlProbabilities.independentPickedProbability,
         final_picked_probability: mlProbabilities.finalPickedProbability,
+      },
+      moneyline_champion_policy: {
+        policy_version: IMMEDIATE_MARKET_CHAMPION_POLICY_VERSION,
+        rule_id: mlChampionAction.ruleId,
+        promoted: mlChampionAction.promoted,
+        actionable: mlChampionAction.actionable,
+        evaluated_odds_american: mlPrice,
       },
       paired_market_snapshot: pairedSnapshotAt(g.id as number, "moneyline", mlSelectedSide, null, mlPrice),
     };
@@ -497,9 +521,35 @@ export async function buildWnbaPredictionRecords(opts: {
       const sprPrice = sprLine === null || sprSide === null ? null : priceAt(g.id as number, "spread", sprSide, sprLine);
       if (sprPrice == null) result.missingLinePrice.push(`${matchup} (Spread price@${sprLine})`);
       if (sprSide !== null && sprLine !== null) {
-        const spreadRecord = baseRec("spread", sprSide, spr.side, sprLine, sprPrice, spr.confidence, spr.grade, spr.confidence != null ? spr.confidence / 100 : null, null);
+        const rawSpreadProbability = typeof model.components?.spread_raw_picked_probability === "number"
+          ? model.components.spread_raw_picked_probability
+          : null;
+        const spreadChampionProbability = calibrateWnbaSpreadPickedProbability({
+          rawPickedProbability: rawSpreadProbability,
+          oddsAmerican: sprPrice,
+          selectedSide: sprSide,
+        });
+        const spreadChampionAction = resolveWnbaSpreadChampionAction({
+          calibratedProbability: spreadChampionProbability,
+          oddsAmerican: sprPrice,
+        });
+        const spreadChampionGrade = spreadChampionAction.actionable ? "Lean" : "Watchlist";
+        const spreadConfidence = spreadChampionProbability === null
+          ? spr.confidence
+          : Math.round(spreadChampionProbability * 100);
+        const spreadModelProbability = spreadChampionProbability
+          ?? (spr.confidence != null ? spr.confidence / 100 : null);
+        const spreadRecord = baseRec("spread", sprSide, spr.side, sprLine, sprPrice, spreadConfidence, spreadChampionGrade, spreadModelProbability, null);
         spreadRecord.snapshot_json = {
           ...spreadRecord.snapshot_json,
+          spread_champion_policy: {
+            policy_version: IMMEDIATE_MARKET_CHAMPION_POLICY_VERSION,
+            rule_id: spreadChampionAction.ruleId,
+            actionable: spreadChampionAction.actionable,
+            raw_picked_probability: rawSpreadProbability,
+            calibrated_picked_probability: spreadChampionProbability,
+            evaluated_odds_american: sprPrice,
+          },
           paired_market_snapshot: pairedSnapshotAt(g.id as number, "spread", sprSide, sprLine, sprPrice),
         };
         result.records.push(spreadRecord);

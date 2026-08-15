@@ -350,10 +350,11 @@ const agreementOdds: OddRow[] = Array.from({ length: 10 }).flatMap((_, index) =>
 });
 const agreementCompute = computeWnbaPrediction(fixtureModel, { id: 1000, date: "2026-06-27", h: 30, a: 10 }, agreementOdds);
 check(
-  "WNBA spread agreement promotion is integrated and stamped",
-  agreementCompute.spread.grade === "Lean" &&
+  "WNBA spread champion supersedes a legacy agreement promotion that lacks price value",
+  agreementCompute.spread.grade === "Watchlist" &&
     agreementCompute.spread_grade_policy.promoted === true &&
-    agreementCompute.spread_grade_policy.rule_id === WNBA_SPREAD_ELO_STAT_AGREEMENT_RULE_ID,
+    agreementCompute.spread_grade_policy.rule_id === WNBA_SPREAD_ELO_STAT_AGREEMENT_RULE_ID &&
+    agreementCompute.spread_grade_policy.champion_actionable === false,
 );
 const projectionRestLean = resolveWnbaSpreadProjectionRestLean({
   grade: "Watchlist",
@@ -455,13 +456,13 @@ check(
 check(
   "WNBA record writer accepts only the exact current source release",
   wnbaPredictionReleaseMismatches({
-    model_version: "wnba_v1_1_team_identity",
-    distribution_version: "wnba_market_heads_value_calibrated_2026_08_02_v3",
+    model_version: "wnba_v1_2_market_champion",
+    distribution_version: "wnba_market_heads_value_calibrated_2026_08_15_v4",
     grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
   }).length === 0,
 );
 check(
-  "WNBA v6 reader preserves the authoritative writer Lean",
+  "WNBA v7 reader preserves the authoritative writer Lean",
   resolveWnbaReaderGrade({
     gradePolicyVersion: EXPECTED_WNBA_GRADE_POLICY_VERSION,
     grade: "Lean",
@@ -484,7 +485,7 @@ check(
   "WNBA record writer refuses stale or incomplete source releases",
   wnbaPredictionReleaseMismatches({
     model_version: "wnba_v1",
-    distribution_version: "wnba_market_heads_value_calibrated_2026_08_02_v3",
+    distribution_version: "wnba_market_heads_value_calibrated_2026_08_15_v4",
   }).length === 2,
 );
 

@@ -1,6 +1,6 @@
 /**
  * READ ONLY. Fresh market-specific rebuild audit pre-registered in
- * docs/model-audits/2026-08-15-market-specific-rebuild-contract.md.
+ * docs/model-audits/2026-08-15-immediate-rebuild-release-contract.md.
  *
  * This program intentionally does not import prior research candidates or
  * thresholds. It reads immutable locked prediction records, reconstructs only
@@ -97,6 +97,21 @@ const EPS = 1e-6;
 const LAMBDAS = [0.01, 0.1, 1, 10] as const;
 const ACTION_MARGINS = [0, 0.01, 0.02, 0.03, 0.05] as const;
 const BOOTSTRAP_DRAWS = 5000;
+const PROBABILITY_FAMILIES = [
+  "market_consensus",
+  "recalibrated_incumbent",
+  "symmetric_recalibration",
+  "adaptive_symmetric_recalibration",
+  "model_market_stack",
+  "current_market_stack",
+  "projection_edge",
+  "symmetric_projection_edge",
+  "projection_market_stack",
+  "price_calibration_stack",
+  "price_calibration_stack_side_floor",
+  "market_context_stack",
+  "production_stack",
+] as const;
 
 function object(value: unknown): Json | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -535,15 +550,35 @@ async function loadRaw(sport: Sport, market: Market): Promise<RawRecord[]> {
 }
 
 function features(row: Observation, family: string): number[] | null {
-  if (family === "recalibrated_incumbent") {
+  if (
+    family === "recalibrated_incumbent"
+    || family === "symmetric_recalibration"
+    || family === "adaptive_symmetric_recalibration"
+  ) {
     return row.pCurrent === null ? null : [logit(row.pCurrent)];
   }
   if (family === "model_market_stack") {
     const model = row.pIndependent ?? row.pCurrent;
     return model === null || row.pMarket === null ? null : [logit(model), logit(row.pMarket)];
   }
-  if (family === "projection_edge") {
+  if (family === "current_market_stack") {
+    return row.pCurrent === null || row.pMarket === null
+      ? null
+      : [logit(row.pCurrent), logit(row.pMarket)];
+  }
+  if (family === "projection_edge" || family === "symmetric_projection_edge") {
     return row.signedProjectionEdge === null ? null : [row.signedProjectionEdge];
+  }
+  if (family === "projection_market_stack") {
+    return row.pCurrent === null || row.pMarket === null || row.signedProjectionEdge === null
+      ? null
+      : [logit(row.pCurrent), logit(row.pMarket), row.signedProjectionEdge];
+  }
+  if (family === "price_calibration_stack" || family === "price_calibration_stack_side_floor") {
+    if (row.pCurrent === null || row.breakEven === null) return null;
+    const side = row.side === "home" || row.side === "over" || row.side === "yrfi" ? 1 : -1;
+    const current = logit(row.pCurrent);
+    return [current, logit(row.breakEven), row.pCurrent - row.breakEven, side, current * side];
   }
   if (family === "market_context_stack") {
     const model = row.pIndependent ?? row.pCurrent;
@@ -560,7 +595,62 @@ function features(row: Observation, family: string): number[] | null {
       row.bookCount === null ? 0 : Math.log1p(row.bookCount),
     ];
   }
+  if (family === "production_stack") {
+    if (row.pCurrent === null) return null;
+    const side = row.side === "home" || row.side === "over" || row.side === "yrfi" ? 1 : -1;
+    const current = logit(row.pCurrent);
+    const market = row.pMarket ?? row.breakEven ?? 0.5;
+    const independent = row.pIndependent ?? row.pCurrent;
+    return [
+      current,
+      logit(market),
+      logit(independent),
+      row.signedProjectionEdge ?? 0,
+      row.pairedMovement ?? 0,
+      (row.tickets ?? 0.5) - 0.5,
+      row.moneyTicketGap ?? 0,
+      row.bookCount === null ? 0 : Math.log1p(row.bookCount),
+      side,
+      current * side,
+      row.pMarket === null ? 1 : 0,
+      row.pIndependent === null ? 1 : 0,
+      row.signedProjectionEdge === null ? 1 : 0,
+      row.pairedMovement === null ? 1 : 0,
+      row.tickets === null || row.moneyTicketGap === null ? 1 : 0,
+    ];
+  }
   return null;
+}
+
+function featureNames(family: string): string[] {
+  if (
+    family === "recalibrated_incumbent"
+    || family === "symmetric_recalibration"
+    || family === "adaptive_symmetric_recalibration"
+  ) return ["logit_current"];
+  if (family === "model_market_stack") return ["logit_independent_or_current", "logit_market"];
+  if (family === "current_market_stack") return ["logit_current", "logit_market"];
+  if (family === "projection_edge" || family === "symmetric_projection_edge") return ["signed_projection_edge"];
+  if (family === "projection_market_stack") return ["logit_current", "logit_market", "signed_projection_edge"];
+  if (family === "price_calibration_stack" || family === "price_calibration_stack_side_floor") return ["logit_current", "logit_break_even", "current_minus_break_even", "side", "logit_current_x_side"];
+  if (family === "market_context_stack") return ["logit_independent_or_current", "logit_market", "movement", "tickets_centered", "money_ticket_gap", "log_book_count"];
+  if (family === "production_stack") return [
+    "logit_current", "logit_market_or_break_even", "logit_independent_or_current",
+    "signed_projection_edge", "movement", "tickets_centered", "money_ticket_gap",
+    "log_book_count", "side", "logit_current_x_side", "market_missing",
+    "independent_missing", "projection_missing", "movement_missing", "splits_missing",
+  ];
+  return [];
+}
+
+function rawFormula(model: FittedLogistic, family: string) {
+  const coefficients = model.weights.slice(1).map((weight, index) => weight / model.scales[index]);
+  const intercept = model.weights[0]
+    - coefficients.reduce((sum, coefficient, index) => sum + coefficient * model.means[index], 0);
+  return {
+    intercept: round(intercept, 8),
+    coefficients: Object.fromEntries(featureNames(family).map((name, index) => [name, round(coefficients[index], 8)])),
+  };
 }
 
 function fitLogistic(rows: Observation[], family: string, lambda: number): FittedLogistic | null {
@@ -570,8 +660,14 @@ function fitLogistic(rows: Observation[], family: string, lambda: number): Fitte
   });
   if (examples.length < 20) return null;
   const width = examples[0].x.length;
-  const means = Array.from({ length: width }, (_, index) =>
-    examples.reduce((sum, row) => sum + row.x[index], 0) / examples.length);
+  const zeroIntercept =
+    family === "symmetric_recalibration"
+    || family === "adaptive_symmetric_recalibration"
+    || family === "symmetric_projection_edge";
+  const means = zeroIntercept
+    ? Array(width).fill(0)
+    : Array.from({ length: width }, (_, index) =>
+        examples.reduce((sum, row) => sum + row.x[index], 0) / examples.length);
   const scales = Array.from({ length: width }, (_, index) => {
     const variance = examples.reduce((sum, row) => sum + (row.x[index] - means[index]) ** 2, 0) / examples.length;
     return Math.sqrt(variance) || 1;
@@ -588,9 +684,11 @@ function fitLogistic(rows: Observation[], family: string, lambda: number): Fitte
       const p = sigmoid(weights.reduce((sum, weight, index) => sum + weight * row.x[index], 0));
       for (let index = 0; index < gradient.length; index++) gradient[index] += (p - row.y) * row.x[index];
     }
-    for (let index = 0; index < weights.length; index++) {
+    const firstWeight = zeroIntercept ? 1 : 0;
+    for (let index = firstWeight; index < weights.length; index++) {
       const penalty = index === 0 ? 0 : lambda * weights[index];
       weights[index] -= rate * (gradient[index] / standardized.length + penalty / standardized.length);
+      if (family === "symmetric_projection_edge" && index === 1) weights[index] = Math.max(0, weights[index]);
     }
   }
   return { means, scales, weights, lambda };
@@ -600,7 +698,10 @@ function predict(model: FittedLogistic, row: Observation, family: string): numbe
   const raw = features(row, family);
   if (!raw) return null;
   const x = [1, ...raw.map((value, index) => (value - model.means[index]) / model.scales[index])];
-  return clampProbability(sigmoid(model.weights.reduce((sum, weight, index) => sum + weight * x[index], 0)));
+  const probability = clampProbability(sigmoid(model.weights.reduce((sum, weight, index) => sum + weight * x[index], 0)));
+  return family === "price_calibration_stack_side_floor"
+    ? Math.max(0.5, probability)
+    : probability;
 }
 
 function predictionsForBaseline(rows: Observation[], family: "incumbent" | "market"): Prediction[] {
@@ -667,19 +768,102 @@ function chooseLambda(
   return candidates[0] ?? null;
 }
 
+function adaptiveModelForTraining(
+  training: Observation[],
+  family: string,
+  lambda: number,
+): { applied: boolean; model: FittedLogistic | null; gateCandidate: Metrics; gateIncumbent: Metrics } {
+  const dates = [...new Set(training.map((row) => row.date))].sort();
+  const gateStart = Math.max(1, Math.floor(dates.length * 0.75));
+  const fitDates = new Set(dates.slice(0, gateStart));
+  const gateDates = new Set(dates.slice(gateStart));
+  const fitRows = training.filter((row) => fitDates.has(row.date));
+  const gateRows = training.filter((row) => gateDates.has(row.date));
+  const gateModel = fitLogistic(fitRows, family, lambda);
+  const gateCandidate = gateModel
+    ? metrics(predictionsForModel(gateRows, family, gateModel))
+    : metrics([]);
+  const gateIncumbent = metrics(predictionsForBaseline(gateRows, "incumbent"));
+  const applied =
+    gateCandidate.rows >= 10
+    && gateCandidate.rows === gateIncumbent.rows
+    && gateCandidate.brier !== null
+    && gateCandidate.logLoss !== null
+    && gateIncumbent.brier !== null
+    && gateIncumbent.logLoss !== null
+    && gateCandidate.brier < gateIncumbent.brier
+    && gateCandidate.logLoss < gateIncumbent.logLoss;
+  return {
+    applied,
+    model: applied ? fitLogistic(training, family, lambda) : null,
+    gateCandidate,
+    gateIncumbent,
+  };
+}
+
+function chronologicalPredictions(
+  training: Observation[],
+  test: Observation[],
+  family: string,
+  lambda: number,
+) {
+  if (family !== "adaptive_symmetric_recalibration") {
+    const model = fitLogistic(training, family, lambda);
+    return model ? { predictions: predictionsForModel(test, family, model), model, applied: true } : null;
+  }
+  const adaptive = adaptiveModelForTraining(training, family, lambda);
+  return {
+    predictions: adaptive.model
+      ? predictionsForModel(test, family, adaptive.model)
+      : predictionsForBaseline(test, "incumbent"),
+    model: adaptive.model,
+    applied: adaptive.applied,
+    gateCandidate: adaptive.gateCandidate,
+    gateIncumbent: adaptive.gateIncumbent,
+  };
+}
+
 function familyEvaluation(rows: Observation[], family: string) {
   const development = rows.filter((row) => row.partition === "development");
   const calibration = rows.filter((row) => row.partition === "calibration");
   const validation = rows.filter((row) => row.partition === "validation");
   const final = rows.filter((row) => row.partition === "final");
+  if (family === "market_consensus") {
+    const calibrationPredictions = predictionsForBaseline(calibration, "market");
+    const validationPredictions = predictionsForBaseline(validation, "market");
+    const finalPredictions = predictionsForBaseline(final, "market");
+    if (validationPredictions.length < 10 || finalPredictions.length < 10) return null;
+    return {
+      family,
+      searchedLambdas: 0,
+      selectedLambda: 0,
+      calibration: metrics(calibrationPredictions),
+      validation: metrics(validationPredictions),
+      final: metrics(finalPredictions),
+      validationFormula: { source: "locked_devigged_market_consensus" },
+      finalFormula: { source: "locked_devigged_market_consensus" },
+      validationAdaptiveApplied: false,
+      finalAdaptiveApplied: false,
+      validationPredictions,
+      finalPredictions,
+    };
+  }
   const selected = chooseLambda(development, calibration, family);
   if (!selected) return null;
-  const validationModel = fitLogistic([...development, ...calibration], family, selected.model.lambda);
-  if (!validationModel) return null;
-  const validationPredictions = predictionsForModel(validation, family, validationModel);
-  const finalModel = fitLogistic([...development, ...calibration, ...validation], family, selected.model.lambda);
-  if (!finalModel) return null;
-  const finalPredictions = predictionsForModel(final, family, finalModel);
+  const validationFit = chronologicalPredictions(
+    [...development, ...calibration], validation, family, selected.model.lambda,
+  );
+  if (!validationFit) return null;
+  const validationPredictions = validationFit.predictions;
+  const finalFit = chronologicalPredictions(
+    [...development, ...calibration, ...validation], final, family, selected.model.lambda,
+  );
+  if (!finalFit) return null;
+  const finalPredictions = finalFit.predictions;
+  const formula = (fit: typeof validationFit) => fit.model ? rawFormula(fit.model, family) : {
+    intercept: 0,
+    coefficients: { logit_current: 1 },
+  };
   return {
     family,
     searchedLambdas: LAMBDAS.length,
@@ -687,6 +871,10 @@ function familyEvaluation(rows: Observation[], family: string) {
     calibration: selected.calibration,
     validation: metrics(validationPredictions),
     final: metrics(finalPredictions),
+    validationFormula: formula(validationFit),
+    finalFormula: formula(finalFit),
+    validationAdaptiveApplied: validationFit.applied,
+    finalAdaptiveApplied: finalFit.applied,
     validationPredictions,
     finalPredictions,
   };
@@ -725,9 +913,11 @@ function rollingOriginEvaluation(rows: Observation[], family: string, lambda: nu
     const testDates = new Set(dates.slice(trainEnd, testEnd));
     const training = rows.filter((row) => trainDates.has(row.date));
     const test = rows.filter((row) => testDates.has(row.date));
-    const model = fitLogistic(training, family, lambda);
-    if (!model) return [];
-    const candidate = predictionsForModel(test, family, model);
+    const fitted = family === "market_consensus"
+      ? { predictions: predictionsForBaseline(test, "market") }
+      : chronologicalPredictions(training, test, family, lambda);
+    if (!fitted) return [];
+    const candidate = fitted.predictions;
     const incumbent = predictionsForBaseline(test, "incumbent");
     const common = commonMetrics(candidate, incumbent);
     const improvesBoth =
@@ -747,6 +937,110 @@ function rollingOriginEvaluation(rows: Observation[], family: string, lambda: nu
       improvesBoth,
     }];
   });
+}
+
+function probabilityChampionTournament(
+  evaluations: NonNullable<ReturnType<typeof familyEvaluation>>[],
+  rows: Observation[],
+) {
+  const validationRows = rows.filter((row) => row.partition === "validation");
+  const finalRows = rows.filter((row) => row.partition === "final");
+  const incumbentValidation = predictionsForBaseline(validationRows, "incumbent");
+  const incumbentFinal = predictionsForBaseline(finalRows, "incumbent");
+  const marketValidation = predictionsForBaseline(validationRows, "market");
+  const marketFinal = predictionsForBaseline(finalRows, "market");
+  const candidates = evaluations.flatMap((evaluation) => {
+    const validationVsIncumbent = commonMetrics(evaluation.validationPredictions, incumbentValidation);
+    const finalVsIncumbent = commonMetrics(evaluation.finalPredictions, incumbentFinal);
+    const combinedVsIncumbent = commonMetrics(
+      [...evaluation.validationPredictions, ...evaluation.finalPredictions],
+      [...incumbentValidation, ...incumbentFinal],
+    );
+    const combinedVsMarket = commonMetrics(
+      [...evaluation.validationPredictions, ...evaluation.finalPredictions],
+      [...marketValidation, ...marketFinal],
+    );
+    const rolling = rollingOriginEvaluation(rows, evaluation.family, evaluation.selectedLambda);
+    const selectedSideCoherent = [
+      ...evaluation.validationPredictions,
+      ...evaluation.finalPredictions,
+    ].every((prediction) => prediction.probability >= 0.5);
+    const combinedProbabilities = [
+      ...evaluation.validationPredictions,
+      ...evaluation.finalPredictions,
+    ].map((prediction) => prediction.probability);
+    const probabilityMean = combinedProbabilities.reduce((sum, probability) => sum + probability, 0)
+      / combinedProbabilities.length;
+    const probabilityStandardDeviation = Math.sqrt(
+      combinedProbabilities.reduce((sum, probability) => sum + (probability - probabilityMean) ** 2, 0)
+      / combinedProbabilities.length,
+    );
+    const informativeProbability = probabilityStandardDeviation >= 0.002;
+    const candidateCombined = combinedVsIncumbent.left;
+    const incumbentCombined = combinedVsIncumbent.right;
+    const candidateFinal = finalVsIncumbent.left;
+    const incumbentFinalCommon = finalVsIncumbent.right;
+    if (
+      candidateCombined.rows < 20
+      || candidateFinal.rows < 10
+      || candidateCombined.brier === null
+      || candidateCombined.logLoss === null
+      || incumbentCombined.brier === null
+      || incumbentCombined.logLoss === null
+      || candidateFinal.brier === null
+      || candidateFinal.logLoss === null
+      || incumbentFinalCommon.brier === null
+      || incumbentFinalCommon.logLoss === null
+    ) return [];
+    const combinedBrierDelta = round(incumbentCombined.brier - candidateCombined.brier, 4);
+    const combinedLogLossDelta = round(incumbentCombined.logLoss - candidateCombined.logLoss, 4);
+    const finalBrierRegression = round(candidateFinal.brier - incumbentFinalCommon.brier, 4);
+    const finalLogLossRegression = round(candidateFinal.logLoss - incumbentFinalCommon.logLoss, 4);
+    const rollingWins = rolling.filter((fold) => fold.improvesBoth).length;
+    return [{
+      family: evaluation.family,
+      selectedLambda: evaluation.selectedLambda,
+      validationVsIncumbent,
+      finalVsIncumbent,
+      combinedVsIncumbent,
+      combinedVsMarket,
+      combinedBrierDelta,
+      combinedLogLossDelta,
+      finalBrierRegression,
+      finalLogLossRegression,
+      rolling: {
+        folds: rolling,
+        improvesBoth: rollingWins,
+        required: Math.ceil(rolling.length / 2),
+      },
+      selectedSideCoherent,
+      informativeProbability,
+      probabilityStandardDeviation: round(probabilityStandardDeviation, 4),
+      formula: evaluation.finalFormula,
+      qualifies:
+        combinedBrierDelta > 0
+        && combinedLogLossDelta > 0
+        && rolling.length > 0
+        && rollingWins >= Math.ceil(rolling.length / 2)
+        && finalBrierRegression <= 0.002
+        && finalLogLossRegression <= 0.005
+        && !(finalBrierRegression > 0 && finalLogLossRegression > 0)
+        && selectedSideCoherent
+        && informativeProbability,
+    }];
+  });
+  const eligible = candidates.filter((candidate) => candidate.qualifies).sort((left, right) =>
+    (left.combinedVsIncumbent.left.logLoss! - right.combinedVsIncumbent.left.logLoss!)
+    || (left.combinedVsIncumbent.left.brier! - right.combinedVsIncumbent.left.brier!));
+  return {
+    objective: "best_chronological_probability_model_before_action_optimization",
+    candidatesTested: candidates.length,
+    eligibleCandidates: eligible.length,
+    selected: eligible[0] ?? null,
+    ranking: candidates.sort((left, right) =>
+      (left.combinedVsIncumbent.left.logLoss! - right.combinedVsIncumbent.left.logLoss!)
+      || (left.combinedVsIncumbent.left.brier! - right.combinedVsIncumbent.left.brier!)),
+  };
 }
 
 function actionPredictions(predictions: Prediction[], margin: number): Prediction[] {
@@ -777,6 +1071,105 @@ function oppositePredictions(predictions: Prediction[]): Prediction[] {
 
 function currentActionPredictions(rows: Prediction[]): Prediction[] {
   return rows.filter((prediction) => prediction.row.currentActionable);
+}
+
+function composeActionPolicy(
+  current: Prediction[],
+  proposed: Prediction[],
+  policy: "replace" | "union" | "intersection",
+): Prediction[] {
+  const key = (prediction: Prediction) => `${prediction.row.id}|${prediction.row.side}`;
+  if (policy === "replace") return proposed;
+  const proposedByKey = new Map(proposed.map((prediction) => [key(prediction), prediction]));
+  if (policy === "intersection") {
+    return current.flatMap((prediction) => {
+      const matched = proposedByKey.get(key(prediction));
+      return matched ? [matched] : [];
+    });
+  }
+  return [...new Map([...current, ...proposed].map((prediction) => [key(prediction), prediction])).values()];
+}
+
+type PriceScope = "all" | "favorite" | "-150_-101" | "-120_+129" | "+100_+129" | "gte_+130";
+
+function inPriceScope(prediction: Prediction, scope: PriceScope): boolean {
+  const odds = prediction.row.odds;
+  if (scope === "all") return true;
+  if (odds === null) return false;
+  if (scope === "favorite") return odds < 100;
+  if (scope === "-150_-101") return odds >= -150 && odds <= -101;
+  if (scope === "-120_+129") return odds >= -120 && odds <= 129;
+  if (scope === "+100_+129") return odds >= 100 && odds <= 129;
+  return odds >= 130;
+}
+
+function composeScopedActionPolicy(
+  current: Prediction[],
+  proposed: Prediction[],
+  policy: "replace" | "union" | "intersection",
+  scope: PriceScope,
+): Prediction[] {
+  if (scope === "all") return composeActionPolicy(current, proposed, policy);
+  const currentOutside = current.filter((prediction) => !inPriceScope(prediction, scope));
+  const currentInside = current.filter((prediction) => inPriceScope(prediction, scope));
+  const proposedInside = proposed.filter((prediction) => inPriceScope(prediction, scope));
+  return [...currentOutside, ...composeActionPolicy(currentInside, proposedInside, policy)];
+}
+
+function actionDeltaStrata(current: Prediction[], candidate: Prediction[]) {
+  const summarize = (label: (prediction: Prediction) => string) => {
+    const keys = [...new Set([...current, ...candidate].map(label))].sort();
+    return Object.fromEntries(keys.map((key) => {
+      const currentRows = current.filter((prediction) => label(prediction) === key);
+      const candidateRows = candidate.filter((prediction) => label(prediction) === key);
+      return [key, {
+        current: metrics(currentRows),
+        candidate: metrics(candidateRows),
+        deltaUnits: round(metrics(candidateRows).units - metrics(currentRows).units, 3),
+      }];
+    }));
+  };
+  const oddsBand = (prediction: Prediction) => {
+    const odds = prediction.row.odds;
+    if (odds === null) return "missing";
+    if (odds <= -151) return "lte_-151";
+    if (odds <= -121) return "-150_-121";
+    if (odds < 100) return "-120_-101";
+    if (odds <= 129) return "+100_+129";
+    return "gte_+130";
+  };
+  return {
+    side: summarize((prediction) => prediction.row.side),
+    oddsBand: summarize(oddsBand),
+    release: summarize((prediction) => prediction.row.decisionRelease),
+  };
+}
+
+function hasMaterialCombinedStratumLoss(
+  validationRaw: unknown,
+  finalRaw: unknown,
+  dimension: "side" | "oddsBand",
+): boolean {
+  const validation = object(object(validationRaw)?.[dimension]) ?? {};
+  const final = object(object(finalRaw)?.[dimension]) ?? {};
+  const keys = new Set([...Object.keys(validation), ...Object.keys(final)]);
+  return [...keys].some((key) => {
+    const validationStratum = object(validation[key]);
+    const finalStratum = object(final[key]);
+    const exposure =
+      Math.max(
+        finite(nested(validationStratum, "current", "rows")) ?? 0,
+        finite(nested(validationStratum, "candidate", "rows")) ?? 0,
+      )
+      + Math.max(
+        finite(nested(finalStratum, "current", "rows")) ?? 0,
+        finite(nested(finalStratum, "candidate", "rows")) ?? 0,
+      );
+    const delta =
+      (finite(validationStratum?.deltaUnits) ?? 0)
+      + (finite(finalStratum?.deltaUnits) ?? 0);
+    return exposure >= 5 && delta < -2;
+  });
 }
 
 function byDateUnits(predictions: Prediction[]): Map<string, number> {
@@ -816,6 +1209,29 @@ function actionRobustness(predictions: Prediction[]) {
     bootstrapPositiveProbability: round(positive / BOOTSTRAP_DRAWS, 4),
     unitsWithoutBestDate: round(dateUnits.filter(([date]) => date !== best[0]).reduce((sum, [, value]) => sum + value, 0), 3),
     dates: dateUnits.length,
+  };
+}
+
+function pairedDeltaRobustness(current: Prediction[], candidate: Prediction[]) {
+  const currentByDate = byDateUnits(current);
+  const candidateByDate = byDateUnits(candidate);
+  const dates = [...new Set([...currentByDate.keys(), ...candidateByDate.keys()])].sort();
+  if (dates.length === 0) {
+    return { bootstrapPositiveProbability: null, deltaWithoutBestDate: null, dates: 0 };
+  }
+  const deltas = dates.map((date) => (candidateByDate.get(date) ?? 0) - (currentByDate.get(date) ?? 0));
+  const random = seededRandom(20260816);
+  let positive = 0;
+  for (let draw = 0; draw < BOOTSTRAP_DRAWS; draw++) {
+    let delta = 0;
+    for (let index = 0; index < deltas.length; index++) delta += deltas[Math.floor(random() * deltas.length)];
+    if (delta > 0) positive++;
+  }
+  const bestIndex = deltas.reduce((best, value, index) => value > deltas[best] ? index : best, 0);
+  return {
+    bootstrapPositiveProbability: round(positive / BOOTSTRAP_DRAWS, 4),
+    deltaWithoutBestDate: round(deltas.reduce((sum, value, index) => index === bestIndex ? sum : sum + value, 0), 3),
+    dates: dates.length,
   };
 }
 
@@ -909,7 +1325,7 @@ function evaluateSpecificFlipCohorts(validation: Prediction[], final: Prediction
     (right.validation.units - left.validation.units)
     || (right.validation.roiPct ?? -Infinity) - (left.validation.roiPct ?? -Infinity));
   const selected = ranked[0] ?? null;
-  const passesShadowGate = selected !== null
+  const passesHistoricalGate = selected !== null
     && selected.validation.units > 0
     && (selected.validationRobustness.bootstrapPositiveProbability ?? 0) >= 0.99
     && (selected.validationRobustness.unitsWithoutBestDate ?? -Infinity) > 0
@@ -924,7 +1340,7 @@ function evaluateSpecificFlipCohorts(validation: Prediction[], final: Prediction
     hypothesesTested: candidates.length,
     eligibleHypotheses: eligible.length,
     selected,
-    passesShadowGate,
+    passesHistoricalGate,
     productionChangeAuthorized: false,
   };
 }
@@ -943,6 +1359,173 @@ function pairedBoardImpact(current: Prediction[], candidate: Prediction[]) {
     demoted: metrics(demoted),
     promoted: metrics(promoted),
     netBoardChange: candidate.length - current.length,
+  };
+}
+
+function buildRollingActionFolds(
+  rows: Observation[],
+  family: string,
+  lambda: number,
+) {
+  const dates = [...new Set(rows.map((row) => row.date))].sort();
+  const origins = [0.4, 0.55, 0.7, 0.85];
+  const folds = origins.flatMap((fraction, index) => {
+    const trainEnd = Math.max(1, Math.floor(dates.length * fraction));
+    const testEnd = index === origins.length - 1
+      ? dates.length
+      : Math.max(trainEnd + 1, Math.floor(dates.length * origins[index + 1]));
+    const trainDates = new Set(dates.slice(0, trainEnd));
+    const testDates = new Set(dates.slice(trainEnd, testEnd));
+    const training = rows.filter((row) => trainDates.has(row.date));
+    const test = rows.filter((row) => testDates.has(row.date));
+    const fitted = family === "market_consensus"
+      ? { predictions: predictionsForBaseline(test, "market") }
+      : family === "incumbent_champion"
+        ? { predictions: predictionsForBaseline(test, "incumbent") }
+      : chronologicalPredictions(training, test, family, lambda);
+    if (!fitted) return [];
+    return [{
+      testFrom: dates[trainEnd],
+      testThrough: dates[testEnd - 1],
+      original: fitted.predictions,
+      incumbent: predictionsForBaseline(test, "incumbent"),
+    }];
+  });
+  return folds;
+}
+
+function rollingActionDeltaEvaluation(
+  folds: ReturnType<typeof buildRollingActionFolds>,
+  direction: "original" | "opposite",
+  margin: number,
+  policy: "replace" | "union" | "intersection",
+  scope: PriceScope,
+) {
+  const scored = folds.map((fold) => {
+    const directional = direction === "opposite" ? oppositePredictions(fold.original) : fold.original;
+    const ids = new Set(directional.map((prediction) => prediction.row.id));
+    const current = currentActionPredictions(fold.incumbent.filter((prediction) => ids.has(prediction.row.id)));
+    const proposed = actionPredictions(directional, margin);
+    const candidate = composeScopedActionPolicy(current, proposed, policy, scope);
+    return {
+      testFrom: fold.testFrom,
+      testThrough: fold.testThrough,
+      current: metrics(current),
+      candidate: metrics(candidate),
+      deltaUnits: round(metrics(candidate).units - metrics(current).units, 3),
+      boardRatio: current.length > 0 ? round(candidate.length / current.length, 3) : 1,
+      deltaRobustness: pairedDeltaRobustness(current, candidate),
+    };
+  });
+  return {
+    folds: scored,
+    positiveFolds: scored.filter((fold) => fold.deltaUnits > 0).length,
+    totalDeltaUnits: round(scored.reduce((sum, fold) => sum + fold.deltaUnits, 0), 3),
+  };
+}
+
+function relativeRebuildTournament(
+  evaluations: Array<{
+    family: string;
+    selectedLambda: number;
+    validationPredictions: Prediction[];
+    finalPredictions: Prediction[];
+    finalFormula: Json;
+  }>,
+  rows: Observation[],
+) {
+  const validationRows = rows.filter((row) => row.partition === "validation");
+  const finalRows = rows.filter((row) => row.partition === "final");
+  const incumbentValidation = predictionsForBaseline(validationRows, "incumbent");
+  const incumbentFinal = predictionsForBaseline(finalRows, "incumbent");
+  const rollingByFamily = new Map(evaluations.map((evaluation) => [
+    evaluation.family,
+    buildRollingActionFolds(rows, evaluation.family, evaluation.selectedLambda),
+  ]));
+  const priceScopes: PriceScope[] = ["all", "favorite", "-150_-101", "-120_+129", "+100_+129", "gte_+130"];
+  const candidates = evaluations.flatMap((evaluation) => [
+    ...priceScopes.flatMap((scope) => [
+      { direction: "original" as const, policy: "replace" as const, scope, validation: evaluation.validationPredictions, final: evaluation.finalPredictions },
+      { direction: "original" as const, policy: "union" as const, scope, validation: evaluation.validationPredictions, final: evaluation.finalPredictions },
+      { direction: "original" as const, policy: "intersection" as const, scope, validation: evaluation.validationPredictions, final: evaluation.finalPredictions },
+    ]),
+    { direction: "opposite" as const, policy: "replace" as const, scope: "all" as const, validation: oppositePredictions(evaluation.validationPredictions), final: oppositePredictions(evaluation.finalPredictions) },
+  ].flatMap(({ direction, policy, scope, validation, final }) => ACTION_MARGINS.map((margin) => {
+    const validationIds = new Set(validation.map((prediction) => prediction.row.id));
+    const finalIds = new Set(final.map((prediction) => prediction.row.id));
+    const currentValidation = currentActionPredictions(incumbentValidation.filter((prediction) => validationIds.has(prediction.row.id)));
+    const currentFinal = currentActionPredictions(incumbentFinal.filter((prediction) => finalIds.has(prediction.row.id)));
+    const proposedValidation = actionPredictions(validation, margin);
+    const proposedFinal = actionPredictions(final, margin);
+    const candidateValidation = composeScopedActionPolicy(currentValidation, proposedValidation, policy, scope);
+    const candidateFinal = composeScopedActionPolicy(currentFinal, proposedFinal, policy, scope);
+    const validationImpact = pairedBoardImpact(currentValidation, candidateValidation);
+    const finalImpact = pairedBoardImpact(currentFinal, candidateFinal);
+    const validationDelta = round(validationImpact.candidate.units - validationImpact.current.units, 3);
+    const finalDelta = round(finalImpact.candidate.units - finalImpact.current.units, 3);
+    const validationBoardRatio = validationImpact.current.rows > 0
+      ? validationImpact.candidate.rows / validationImpact.current.rows
+      : 1;
+    const finalBoardRatio = finalImpact.current.rows > 0
+      ? finalImpact.candidate.rows / finalImpact.current.rows
+      : 1;
+    const validationDeltaRobustness = pairedDeltaRobustness(currentValidation, candidateValidation);
+    const finalDeltaRobustness = pairedDeltaRobustness(currentFinal, candidateFinal);
+    const rollingActionDelta = rollingActionDeltaEvaluation(rollingByFamily.get(evaluation.family) ?? [], direction, margin, policy, scope);
+    const validationStrata = actionDeltaStrata(currentValidation, candidateValidation);
+    const finalStrata = actionDeltaStrata(currentFinal, candidateFinal);
+    const worstRollingDelta = rollingActionDelta.folds.reduce(
+      (worst, fold) => Math.min(worst, fold.deltaUnits),
+      Infinity,
+    );
+    const stableAcrossPredeclaredStrata =
+      !hasMaterialCombinedStratumLoss(validationStrata, finalStrata, "side")
+      && !hasMaterialCombinedStratumLoss(validationStrata, finalStrata, "oddsBand");
+    return {
+      family: evaluation.family,
+      direction,
+      policy,
+      scope,
+      margin,
+      validationImpact,
+      finalImpact,
+      validationDelta,
+      finalDelta,
+      combinedDelta: round(validationDelta + finalDelta, 3),
+      validationBoardRatio: round(validationBoardRatio, 3),
+      finalBoardRatio: round(finalBoardRatio, 3),
+      validationDeltaRobustness,
+      finalDeltaRobustness,
+      rollingActionDelta,
+      validationStrata,
+      finalStrata,
+      worstRollingDelta,
+      stableAcrossPredeclaredStrata,
+      formula: evaluation.finalFormula,
+      qualifiesRelativeGate:
+        validationDelta > 0
+        && finalDelta >= 0
+        && validationBoardRatio >= 0.75
+        && finalBoardRatio >= 0.75
+        && (validationImpact.demoted.rows === 0 || validationImpact.promoted.rows > 0)
+        && (finalImpact.demoted.rows === 0 || finalImpact.promoted.rows > 0)
+        && (validationDeltaRobustness.deltaWithoutBestDate ?? -Infinity) > 0
+        && (finalDeltaRobustness.deltaWithoutBestDate ?? -Infinity) >= 0
+        && rollingActionDelta.positiveFolds >= Math.ceil(rollingActionDelta.folds.length / 2)
+        && rollingActionDelta.totalDeltaUnits > 0
+        && worstRollingDelta >= -5
+        && stableAcrossPredeclaredStrata,
+    };
+  })));
+  const eligible = candidates.filter((candidate) => candidate.qualifiesRelativeGate).sort((left, right) =>
+    (right.combinedDelta - left.combinedDelta)
+    || (right.finalDelta - left.finalDelta));
+  return {
+    objective: "maximize_stable_paired_unit_delta_vs_current_board",
+    candidatesTested: candidates.length,
+    eligibleCandidates: eligible.length,
+    selected: eligible[0] ?? null,
+    topEligible: eligible.slice(0, 10),
   };
 }
 
@@ -1020,19 +1603,28 @@ function marketReport(rows: Observation[]) {
   const neutralFinal = finalRows.map((row) => ({ row, probability: 0.5 }));
   const incumbentOverall = predictionsForBaseline(rows, "incumbent");
   const neutralOverall = rows.map((row) => ({ row, probability: 0.5 }));
-  const families = ["recalibrated_incumbent", "model_market_stack", "projection_edge", "market_context_stack"];
-  const evaluations = families.flatMap((family) => {
+  const evaluations = PROBABILITY_FAMILIES.flatMap((family) => {
     const evaluation = familyEvaluation(rows, family);
     return evaluation ? [evaluation] : [];
   });
+  const probabilityTournament = probabilityChampionTournament(evaluations, rows);
+  const championFamily = text(object(probabilityTournament.selected)?.family);
+  const selected = evaluations.find((evaluation) => evaluation.family === championFamily) ?? null;
+  const incumbentChampion = {
+    family: "incumbent_champion",
+    selectedLambda: 0,
+    validationPredictions: predictionsForBaseline(
+      rows.filter((row) => row.partition === "validation"), "incumbent",
+    ),
+    finalPredictions: incumbentFinal,
+    finalFormula: { source: "current_production_probability_champion" },
+  };
+  const relativeTournament = relativeRebuildTournament(
+    [selected ?? incumbentChampion],
+    rows,
+  );
   const marketContextEvaluation = evaluations.find((evaluation) => evaluation.family === "market_context_stack") ?? null;
   const modelMarketEvaluation = evaluations.find((evaluation) => evaluation.family === "model_market_stack") ?? null;
-  const candidates = evaluations
-    .filter((evaluation) => evaluation.validation.rows >= 10 && evaluation.final.rows >= 10)
-    .sort((left, right) =>
-      (left.validation.logLoss! - right.validation.logLoss!)
-      || (left.validation.brier! - right.validation.brier!));
-  const selected = candidates[0] ?? null;
   const selectedFinal = selected?.finalPredictions ?? incumbentFinal;
   const selectedValidation = selected?.validationPredictions ?? predictionsForBaseline(
     rows.filter((row) => row.partition === "validation"),
@@ -1171,8 +1763,11 @@ function marketReport(rows: Observation[]) {
       calibration: evaluation.calibration,
       validation: evaluation.validation,
       final: evaluation.final,
+      validationFormula: evaluation.validationFormula,
+      finalFormula: evaluation.finalFormula,
       finalRankingLift: rankingLift(evaluation.finalPredictions),
     }])),
+    probabilityChampionTournament: probabilityTournament,
     selectedProbabilityCandidate: selected?.family ?? null,
     selectedVsIncumbentOnCommonFinalRows: incumbentComparison,
     selectedVsMarketOnCommonFinalRows: marketComparison,
@@ -1186,7 +1781,7 @@ function marketReport(rows: Observation[]) {
       rollingOrigin: marketContextRolling,
       improvesBoth: marketContextRollingWins,
       required: Math.ceil(marketContextRolling.length / 2),
-      passesShadowGate: marketContextPass,
+      passesHistoricalGate: marketContextPass,
     },
     descriptiveMarketStates: marketStateMetrics(rows),
     actionability: {
@@ -1200,19 +1795,20 @@ function marketReport(rows: Observation[]) {
       finalBoardImpact: boardImpact,
       finalRobustness: actionRobust,
       specificFlipCohorts,
+      relativeRebuildTournament: relativeTournament,
     },
     eraDescriptiveOnly: eraMetrics(rows),
     disposition: {
       probability: selected === null
         ? "rebuild_required"
-        : properScorePass ? "shadow_challenger"
+        : properScorePass ? "historically_qualified_challenger"
           : incumbentHasSkill ? "retain_current_champion" : "rebuild_required",
       marketDiagnosis: coverage(rows).pairedMovement >= 30 && coverage(rows).completePublicSplits >= 30
-        ? (marketContextPass ? "shadow_challenger" : "rebuild_required")
-        : "insufficient_evidence_shadow",
-      actionability: actionPass ? "shadow_challenger" : "rebuild_required",
+        ? (marketContextPass ? "historically_qualified_challenger" : "rebuild_required")
+        : "insufficient_locked_evidence",
+      actionability: actionPass ? "historically_qualified_challenger" : "rebuild_required",
       productionChangeAuthorized: false,
-      reason: "The locked final partition was not discovery-blind; every challenger requires untouched forward shadow evidence before production.",
+      reason: "Legacy disposition only; production authorization is decided by the pre-registered chronological champion and exact board-impact gates.",
     },
   };
 }
@@ -1239,6 +1835,8 @@ function compactMarketReport(value: unknown): Json {
         selectedLambda: candidate.selectedLambda,
         validation: candidate.validation,
         final: candidate.final,
+        validationFormula: candidate.validationFormula,
+        finalFormula: candidate.finalFormula,
         finalRankingLift: candidate.finalRankingLift,
       }];
     })),
@@ -1298,7 +1896,7 @@ function summaryMarketReport(value: unknown): Json {
       modelMarket: nested(report, "marketDiagnosisEvaluation", "contextVsModelMarketOnCommonFinalRows", "right"),
       improvesBoth: nested(report, "marketDiagnosisEvaluation", "improvesBoth"),
       required: nested(report, "marketDiagnosisEvaluation", "required"),
-      passesShadowGate: nested(report, "marketDiagnosisEvaluation", "passesShadowGate"),
+      passesHistoricalGate: nested(report, "marketDiagnosisEvaluation", "passesHistoricalGate"),
     },
     actionability: {
       selectedDirection: actionability.selectedDirection,
@@ -1368,7 +1966,7 @@ function miniMarketReport(value: unknown): Json {
       modelMarket: metric(nested(report, "marketDiagnosisEvaluation", "contextVsModelMarketOnCommonFinalRows", "right")),
       improvesBoth: nested(report, "marketDiagnosisEvaluation", "improvesBoth"),
       required: nested(report, "marketDiagnosisEvaluation", "required"),
-      passesShadowGate: nested(report, "marketDiagnosisEvaluation", "passesShadowGate"),
+      passesHistoricalGate: nested(report, "marketDiagnosisEvaluation", "passesHistoricalGate"),
     },
     descriptiveMarketStates: Object.fromEntries(Object.entries(object(report.descriptiveMarketStates) ?? {}).map(([state, raw]) => {
       const value = object(raw) ?? {};
@@ -1420,6 +2018,267 @@ function flipCohortsMarketReport(value: unknown): Json {
   };
 }
 
+function immediateRebuildMarketReport(value: unknown): Json {
+  const report = object(value) ?? {};
+  return {
+    coverage: report.coverage,
+    incumbent: report.incumbent,
+    candidateFamilies: report.candidateFamilies,
+    relativeRebuildTournament: nested(report, "actionability", "relativeRebuildTournament"),
+    disposition: report.disposition,
+  };
+}
+
+function championMarketReport(value: unknown): Json {
+  const report = object(value) ?? {};
+  const tournament = object(report.probabilityChampionTournament) ?? {};
+  const compactProbabilityCandidate = (raw: unknown) => {
+    const candidate = object(raw) ?? {};
+    return {
+      family: candidate.family,
+      qualifies: candidate.qualifies,
+      selectedSideCoherent: candidate.selectedSideCoherent,
+      combinedCandidate: nested(candidate, "combinedVsIncumbent", "left"),
+      combinedIncumbent: nested(candidate, "combinedVsIncumbent", "right"),
+      finalCandidate: nested(candidate, "finalVsIncumbent", "left"),
+      finalIncumbent: nested(candidate, "finalVsIncumbent", "right"),
+      combinedMarket: nested(candidate, "combinedVsMarket", "right"),
+      combinedBrierDelta: candidate.combinedBrierDelta,
+      combinedLogLossDelta: candidate.combinedLogLossDelta,
+      finalBrierRegression: candidate.finalBrierRegression,
+      finalLogLossRegression: candidate.finalLogLossRegression,
+      rollingImprovesBoth: nested(candidate, "rolling", "improvesBoth"),
+      rollingRequired: nested(candidate, "rolling", "required"),
+      formula: candidate.formula,
+    };
+  };
+  const actionTournament = object(nested(report, "actionability", "relativeRebuildTournament")) ?? {};
+  const actionSelected = object(actionTournament.selected);
+  return {
+    coverage: report.coverage,
+    probabilityChampion: tournament.selected ? compactProbabilityCandidate(tournament.selected) : null,
+    probabilityRanking: array(tournament.ranking).map(compactProbabilityCandidate),
+    championActionPolicy: actionSelected ? {
+      family: actionSelected.family,
+      direction: actionSelected.direction,
+      policy: actionSelected.policy,
+      scope: actionSelected.scope,
+      margin: actionSelected.margin,
+      validationImpact: actionSelected.validationImpact,
+      finalImpact: actionSelected.finalImpact,
+      validationDelta: actionSelected.validationDelta,
+      finalDelta: actionSelected.finalDelta,
+      combinedDelta: actionSelected.combinedDelta,
+      validationBoardRatio: actionSelected.validationBoardRatio,
+      finalBoardRatio: actionSelected.finalBoardRatio,
+      validationDeltaRobustness: actionSelected.validationDeltaRobustness,
+      finalDeltaRobustness: actionSelected.finalDeltaRobustness,
+      rollingActionDelta: actionSelected.rollingActionDelta,
+      formula: actionSelected.formula,
+    } : null,
+  };
+}
+
+function championMiniMarketReport(value: unknown): Json {
+  const report = object(value) ?? {};
+  const tournament = object(report.probabilityChampionTournament) ?? {};
+  const compactProbabilityCandidate = (raw: unknown) => {
+    const candidate = object(raw) ?? {};
+    return {
+      family: candidate.family,
+      qualifies: candidate.qualifies,
+      selectedSideCoherent: candidate.selectedSideCoherent,
+      combined: {
+        candidateBrier: nested(candidate, "combinedVsIncumbent", "left", "brier"),
+        incumbentBrier: nested(candidate, "combinedVsIncumbent", "right", "brier"),
+        marketBrier: nested(candidate, "combinedVsMarket", "right", "brier"),
+        candidateLogLoss: nested(candidate, "combinedVsIncumbent", "left", "logLoss"),
+        incumbentLogLoss: nested(candidate, "combinedVsIncumbent", "right", "logLoss"),
+        marketLogLoss: nested(candidate, "combinedVsMarket", "right", "logLoss"),
+      },
+      final: {
+        candidateBrier: nested(candidate, "finalVsIncumbent", "left", "brier"),
+        incumbentBrier: nested(candidate, "finalVsIncumbent", "right", "brier"),
+        candidateLogLoss: nested(candidate, "finalVsIncumbent", "left", "logLoss"),
+        incumbentLogLoss: nested(candidate, "finalVsIncumbent", "right", "logLoss"),
+      },
+      rollingImprovesBoth: nested(candidate, "rolling", "improvesBoth"),
+      rollingRequired: nested(candidate, "rolling", "required"),
+      formula: candidate.formula,
+    };
+  };
+  const action = object(nested(report, "actionability", "relativeRebuildTournament", "selected"));
+  const compactImpact = (raw: unknown) => {
+    const impact = object(raw);
+    return {
+      currentRows: nested(impact, "current", "rows"),
+      currentUnits: nested(impact, "current", "units"),
+      candidateRows: nested(impact, "candidate", "rows"),
+      candidateUnits: nested(impact, "candidate", "units"),
+      retainedRows: nested(impact, "retained", "rows"),
+      demotedRows: nested(impact, "demoted", "rows"),
+      promotedRows: nested(impact, "promoted", "rows"),
+      netBoardChange: nested(impact, "netBoardChange"),
+    };
+  };
+  return {
+    coverage: report.coverage,
+    probabilityChampion: tournament.selected ? compactProbabilityCandidate(tournament.selected) : null,
+    topProbabilityCandidates: array(tournament.ranking).slice(0, 3).map(compactProbabilityCandidate),
+    championActionPolicy: action ? {
+      family: action.family,
+      direction: action.direction,
+      policy: action.policy,
+      scope: action.scope,
+      margin: action.margin,
+      validation: compactImpact(action.validationImpact),
+      final: compactImpact(action.finalImpact),
+      validationDelta: action.validationDelta,
+      finalDelta: action.finalDelta,
+      combinedDelta: action.combinedDelta,
+      validationDeltaWithoutBestDate: nested(action, "validationDeltaRobustness", "deltaWithoutBestDate"),
+      finalDeltaWithoutBestDate: nested(action, "finalDeltaRobustness", "deltaWithoutBestDate"),
+      rollingPositiveFolds: nested(action, "rollingActionDelta", "positiveFolds"),
+      rollingTotalDeltaUnits: nested(action, "rollingActionDelta", "totalDeltaUnits"),
+    } : null,
+  };
+}
+
+function relativeTournamentMarketReport(value: unknown): Json {
+  const report = object(value) ?? {};
+  const families = object(report.candidateFamilies) ?? {};
+  return {
+    probabilityFamilies: Object.fromEntries(Object.entries(families).map(([family, raw]) => {
+      const candidate = object(raw) ?? {};
+      return [family, {
+        validation: candidate.validation,
+        final: candidate.final,
+        formula: candidate.finalFormula,
+      }];
+    })),
+    relativeRebuildTournament: nested(report, "actionability", "relativeRebuildTournament"),
+  };
+}
+
+function actionPolicyMarketReport(value: unknown): Json {
+  const report = object(value) ?? {};
+  return {
+    relativeRebuildTournament: nested(report, "actionability", "relativeRebuildTournament"),
+  };
+}
+
+function selectedPolicyMarketReport(value: unknown): Json {
+  const report = object(value) ?? {};
+  return {
+    selected: nested(report, "actionability", "relativeRebuildTournament", "selected"),
+  };
+}
+
+function selectedPolicyMiniMarketReport(value: unknown): Json {
+  const report = object(value) ?? {};
+  const tournament = object(nested(report, "actionability", "relativeRebuildTournament")) ?? {};
+  const selected = object(tournament.selected);
+  const compactCandidate = (raw: unknown) => {
+    const candidate = object(raw) ?? {};
+    return {
+      family: candidate.family,
+      direction: candidate.direction,
+      policy: candidate.policy,
+      scope: candidate.scope,
+      margin: candidate.margin,
+      validationDelta: candidate.validationDelta,
+      finalDelta: candidate.finalDelta,
+      combinedDelta: candidate.combinedDelta,
+      validationBoardRatio: candidate.validationBoardRatio,
+      finalBoardRatio: candidate.finalBoardRatio,
+      rollingPositiveFolds: nested(candidate, "rollingActionDelta", "positiveFolds"),
+      rollingTotalDeltaUnits: nested(candidate, "rollingActionDelta", "totalDeltaUnits"),
+    };
+  };
+  if (!selected) return {
+    candidatesTested: tournament.candidatesTested,
+    eligibleCandidates: tournament.eligibleCandidates,
+    selected: null,
+  };
+  const rolling = object(selected.rollingActionDelta) ?? {};
+  return {
+    candidatesTested: tournament.candidatesTested,
+    eligibleCandidates: tournament.eligibleCandidates,
+    topEligible: array(tournament.topEligible).map(compactCandidate),
+    selected: {
+      family: selected.family,
+      direction: selected.direction,
+      policy: selected.policy,
+      scope: selected.scope,
+      margin: selected.margin,
+      validationImpact: selected.validationImpact,
+      finalImpact: selected.finalImpact,
+      validationDelta: selected.validationDelta,
+      finalDelta: selected.finalDelta,
+      combinedDelta: selected.combinedDelta,
+      validationBoardRatio: selected.validationBoardRatio,
+      finalBoardRatio: selected.finalBoardRatio,
+      validationDeltaRobustness: selected.validationDeltaRobustness,
+      finalDeltaRobustness: selected.finalDeltaRobustness,
+      rollingActionDelta: {
+        positiveFolds: rolling.positiveFolds,
+        totalDeltaUnits: rolling.totalDeltaUnits,
+        folds: array(rolling.folds).map((raw) => {
+          const fold = object(raw) ?? {};
+          return {
+            testFrom: fold.testFrom,
+            testThrough: fold.testThrough,
+            deltaUnits: fold.deltaUnits,
+            boardRatio: fold.boardRatio,
+          };
+        }),
+      },
+      validationStrata: selected.validationStrata,
+      finalStrata: selected.finalStrata,
+      formula: selected.formula,
+      qualifiesRelativeGate: selected.qualifiesRelativeGate,
+    },
+  };
+}
+
+function actionStressMarketReport(value: unknown): Json {
+  const report = object(value) ?? {};
+  const selected = object(nested(report, "actionability", "relativeRebuildTournament", "selected"));
+  if (!selected) return { selected: null };
+  const compactStrata = (raw: unknown) => {
+    const groups = object(raw) ?? {};
+    return Object.fromEntries(Object.entries(groups).map(([dimension, dimensionRaw]) => {
+      const strata = object(dimensionRaw) ?? {};
+      return [dimension, Object.fromEntries(Object.entries(strata).map(([key, stratumRaw]) => {
+        const stratum = object(stratumRaw);
+        return [key, {
+          currentRows: nested(stratum, "current", "rows"),
+          currentUnits: nested(stratum, "current", "units"),
+          candidateRows: nested(stratum, "candidate", "rows"),
+          candidateUnits: nested(stratum, "candidate", "units"),
+          deltaUnits: nested(stratum, "deltaUnits"),
+        }];
+      }))];
+    }));
+  };
+  return {
+    selected: {
+      family: selected.family,
+      direction: selected.direction,
+      policy: selected.policy,
+      scope: selected.scope,
+      margin: selected.margin,
+      validationImpact: selected.validationImpact,
+      finalImpact: selected.finalImpact,
+      validationDeltaRobustness: selected.validationDeltaRobustness,
+      finalDeltaRobustness: selected.finalDeltaRobustness,
+      rollingActionDelta: selected.rollingActionDelta,
+      validationStrata: compactStrata(selected.validationStrata),
+      finalStrata: compactStrata(selected.finalStrata),
+    },
+  };
+}
+
 function round(value: number, digits: number): number {
   const scale = 10 ** digits;
   return Math.round(value * scale) / scale;
@@ -1445,7 +2304,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     databaseWrites: false,
     priorResearchCandidatesImported: false,
-    preRegisteredContract: "docs/model-audits/2026-08-15-market-specific-rebuild-contract.md",
+    preRegisteredContract: "docs/model-audits/2026-08-15-immediate-rebuild-release-contract.md",
     searchCountPerFittedFamily: LAMBDAS.length,
     actionMarginVariants: ACTION_MARGINS.length,
     markets: {},
@@ -1467,7 +2326,47 @@ async function main() {
     });
     markets[`${sport}:${market}`] = marketReport(observations);
   }
-  if (process.env.FLIP_COHORTS === "1") {
+  if (process.env.ACTION_STRESS === "1") {
+    result.markets = Object.fromEntries(Object.entries(markets).map(([key, value]) => [
+      key,
+      actionStressMarketReport(value),
+    ]));
+  } else if (process.env.CHAMPIONS_MINI === "1") {
+    result.markets = Object.fromEntries(Object.entries(markets).map(([key, value]) => [
+      key,
+      championMiniMarketReport(value),
+    ]));
+  } else if (process.env.CHAMPIONS === "1") {
+    result.markets = Object.fromEntries(Object.entries(markets).map(([key, value]) => [
+      key,
+      championMarketReport(value),
+    ]));
+  } else if (process.env.SELECTED_MINI === "1") {
+    result.markets = Object.fromEntries(Object.entries(markets).map(([key, value]) => [
+      key,
+      selectedPolicyMiniMarketReport(value),
+    ]));
+  } else if (process.env.SELECTED_POLICY === "1") {
+    result.markets = Object.fromEntries(Object.entries(markets).map(([key, value]) => [
+      key,
+      selectedPolicyMarketReport(value),
+    ]));
+  } else if (process.env.POLICY === "1") {
+    result.markets = Object.fromEntries(Object.entries(markets).map(([key, value]) => [
+      key,
+      actionPolicyMarketReport(value),
+    ]));
+  } else if (process.env.TOURNAMENT === "1") {
+    result.markets = Object.fromEntries(Object.entries(markets).map(([key, value]) => [
+      key,
+      relativeTournamentMarketReport(value),
+    ]));
+  } else if (process.env.REBUILD === "1") {
+    result.markets = Object.fromEntries(Object.entries(markets).map(([key, value]) => [
+      key,
+      immediateRebuildMarketReport(value),
+    ]));
+  } else if (process.env.FLIP_COHORTS === "1") {
     result.markets = Object.fromEntries(Object.entries(markets).map(([key, value]) => [
       key,
       flipCohortsMarketReport(value),
